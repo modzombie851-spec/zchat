@@ -1,10 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Paperclip, Search, Mail, ShieldCheck, AtSign, LogOut, Eye, EyeOff, Lock, Flag, X } from 'lucide-react';
+import { Send, Paperclip, Search, Mail, ShieldCheck, AtSign, LogOut, Eye, EyeOff, Lock, Flag, X, Trash2 } from 'lucide-react';
 import {
   supabase, registerWithEmail, verifyOtp, setPassword, signInWithPassword,
   sendPasswordReset, signOut, getSession, createProfile, checkUsernameTaken,
   searchByUsername, getProfile, sendMessage, getConversation, subscribeToMessages,
-  reportUser, uploadMedia,
+  reportUser, uploadMedia, deleteMessage,
 } from './supabaseClient.js';
 
 const G = {
@@ -106,6 +106,53 @@ function ForgotStep({ onBack }) {
   );
 }
 
+function ResendRow({ email, onResend }) {
+  const CODE_LIFETIME = 120; // matches Supabase's OTP expiry, in seconds (2 minutes)
+  const RESEND_COOLDOWN = 60; // how long before the user can request a new code
+  const [secondsLeft, setSecondsLeft] = useState(CODE_LIFETIME);
+  const [cooldown, setCooldown] = useState(RESEND_COOLDOWN);
+  const [sending, setSending] = useState(false);
+
+  useEffect(() => {
+    const t = setInterval(() => {
+      setSecondsLeft((s) => (s > 0 ? s - 1 : 0));
+      setCooldown((c) => (c > 0 ? c - 1 : 0));
+    }, 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  const formatTime = (total) => {
+    const m = Math.floor(total / 60);
+    const s = total % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
+
+  const handleResend = async () => {
+    setSending(true);
+    await onResend();
+    setSending(false);
+    setSecondsLeft(CODE_LIFETIME);
+    setCooldown(RESEND_COOLDOWN);
+  };
+
+  return (
+    <div style={{ textAlign: 'center', marginTop: 16 }}>
+      <div style={{ fontSize: 12, color: secondsLeft < 60 ? G.red : G.muted }}>
+        {secondsLeft > 0 ? `Code expires in ${formatTime(secondsLeft)}` : 'Code has expired'}
+      </div>
+      <div style={{ marginTop: 8 }}>
+        {cooldown > 0 ? (
+          <span style={{ fontSize: 12.5, color: G.muted }}>Resend code in {cooldown}s</span>
+        ) : (
+          <span style={ghost()} onClick={sending ? undefined : handleResend}>
+            {sending ? 'Sending...' : 'Resend code'}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function RegisterFlow({ onDone, onBack }) {
   const [stage, setStage] = useState('email');
   const [email, setEmail] = useState('');
@@ -185,12 +232,13 @@ function RegisterFlow({ onDone, onBack }) {
           <ShieldCheck size={18} color={G.muted} /><span style={{ fontSize: 13.5, color: G.muted }}>Enter the code sent to</span>
         </div>
         <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 14 }}>{email}</div>
-        <input style={{ ...input(), letterSpacing: 4, fontSize: 18, textAlign: 'center' }} placeholder="••••••" maxLength={6}
+        <input style={{ ...input(), letterSpacing: 4, fontSize: 18, textAlign: 'center' }} placeholder="••••••••" maxLength={8}
           value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))} />
         {err && <div style={{ color: G.red, fontSize: 12.5, marginTop: 8 }}>{err}</div>}
-        <button style={primaryBtn(code.length !== 6 || loading)} disabled={code.length !== 6 || loading} onClick={verify}>
+        <button style={primaryBtn(code.length < 6 || loading)} disabled={code.length < 6 || loading} onClick={verify}>
           {loading ? 'Verifying...' : 'Verify'}
         </button>
+        <ResendRow email={email} onResend={sendCode} />
       </div>
     );
   }
@@ -296,6 +344,13 @@ function ChatApp({ session, onLogout }) {
     setReportReason('');
   };
 
+  const handleDelete = async (messageId) => {
+    const { data } = await deleteMessage(messageId);
+    if (data) {
+      setMessages((prev) => prev.map((m) => (m.id === messageId ? data : m)));
+    }
+  };
+
   return (
     <div style={{ fontFamily: 'system-ui, sans-serif', height: '100vh', width: '100%', background: '#EDEFF5', display: 'flex', justifyContent: 'center', alignItems: 'center', padding: 14, boxSizing: 'border-box' }}>
       <div style={{ width: '100%', maxWidth: 900, height: '100%', maxHeight: 800, display: 'flex', background: 'white', borderRadius: 20, overflow: 'hidden', boxShadow: '0 20px 50px rgba(0,0,0,0.15)', position: 'relative' }}>
@@ -352,11 +407,21 @@ function ChatApp({ session, onLogout }) {
                 {messages.map((m) => {
                   const isMe = m.sender_id === session.user.id;
                   return (
-                    <div key={m.id} style={{ display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start', marginBottom: 6 }}>
-                      <div style={{ maxWidth: '70%', background: isMe ? '#DCEBFF' : '#F2F2F5', borderRadius: 12, padding: 8 }}>
-                        {m.type === 'image' && <img src={m.media_url} alt="" style={{ width: '100%', borderRadius: 8, marginBottom: 4 }} />}
-                        {m.type === 'video' && <video src={m.media_url} controls style={{ width: '100%', borderRadius: 8, marginBottom: 4 }} />}
-                        {m.content && <div style={{ fontSize: 14 }}>{m.content}</div>}
+                    <div key={m.id} style={{ display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start', marginBottom: 6, alignItems: 'center', gap: 6 }}>
+                      {isMe && !m.deleted && (
+                        <Trash2 size={14} color={G.muted} style={{ cursor: 'pointer', flexShrink: 0 }}
+                          onClick={() => handleDelete(m.id)} />
+                      )}
+                      <div style={{ maxWidth: '70%', background: m.deleted ? '#EAEAEA' : (isMe ? '#DCEBFF' : '#F2F2F5'), borderRadius: 12, padding: 8 }}>
+                        {m.deleted ? (
+                          <div style={{ fontSize: 13.5, color: G.muted, fontStyle: 'italic' }}>This message was deleted</div>
+                        ) : (
+                          <>
+                            {m.type === 'image' && <img src={m.media_url} alt="" style={{ width: '100%', borderRadius: 8, marginBottom: 4 }} />}
+                            {m.type === 'video' && <video src={m.media_url} controls style={{ width: '100%', borderRadius: 8, marginBottom: 4 }} />}
+                            {m.content && <div style={{ fontSize: 14 }}>{m.content}</div>}
+                          </>
+                        )}
                       </div>
                     </div>
                   );
@@ -405,4 +470,4 @@ export default function App() {
       {screen === 'register' && <RegisterFlow onBack={() => setScreen('login')} onDone={() => setScreen('login')} />}
     </AuthShell>
   );
-  }
+}
