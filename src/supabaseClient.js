@@ -77,6 +77,16 @@ export async function getProfile(userId) {
   return { data, error };
 }
 
+export async function updateProfile(userId, fields) {
+  const { data, error } = await supabase
+    .from('profiles')
+    .update(fields)
+    .eq('id', userId)
+    .select()
+    .single();
+  return { data, error };
+}
+
 /* ---------------- Messages ---------------- */
 
 export async function sendMessage(senderId, receiverId, type, content, mediaUrl) {
@@ -106,6 +116,16 @@ export function subscribeToMessages(userId, callback) {
       (payload) => callback(payload.new)
     )
     .subscribe();
+}
+
+export async function deleteMessage(messageId) {
+  const { data, error } = await supabase
+    .from('messages')
+    .update({ deleted: true, content: null, media_url: null })
+    .eq('id', messageId)
+    .select()
+    .single();
+  return { data, error };
 }
 
 /* ---------------- Reports ---------------- */
