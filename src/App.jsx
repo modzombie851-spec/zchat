@@ -3,7 +3,7 @@ import {
   Send, Paperclip, Search, Mail, ShieldCheck, AtSign, LogOut, Eye, EyeOff, Lock,
   Flag, X, Trash2, User, Phone, MoreVertical, Image as ImageIcon, Video as VideoIcon,
   Smile, ArrowLeft, Check, CheckCheck, Settings as SettingsIcon, Moon, Sun, UserPlus,
-  FileText, HelpCircle, ChevronRight, Compass, Bell, Volume2, VolumeX, Palette,
+  FileText, HelpCircle, ChevronRight, Compass, Bell, Volume2, VolumeX, Palette, Mic, Play, Pause, Download,
 } from 'lucide-react';
 import {
   supabase, registerWithEmail, verifyOtp, setPassword, signInWithPassword,
@@ -919,6 +919,45 @@ function DiscoverPanel({ myId, onClose, onOpenProfile }) {
 
 /* ============================= Reactions & emoji picker ============================= */
 
+/* ============================= Message context menu (long-press) ============================= */
+
+function IconDownload({ size = 15, color = 'currentColor' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3v12" /><path d="M7 10l5 5 5-5" /><path d="M4 20h16" />
+    </svg>
+  );
+}
+
+function MessageContextMenu({ message, isMine, canEditText, onClose, onReact, onReply, onCopy, onEdit, onForward, onReport, onDeleteForMe, onDeleteForEveryone, onSelectMultiple }) {
+  const { theme } = useTheme();
+  const row = { display: 'flex', alignItems: 'center', gap: 12, padding: '11px 6px', cursor: 'pointer', fontSize: 14, fontWeight: 600, color: theme.ink };
+  return (
+    <div onClick={onClose} style={{
+      position: 'absolute', inset: 0, background: 'rgba(20,16,14,0.5)', zIndex: 95,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+    }} className="zchat-fade">
+      <div onClick={(e) => e.stopPropagation()} style={{ background: theme.panelBg, borderRadius: 22, padding: 16, width: '100%', maxWidth: 300 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-around', padding: '4px 0 14px' }}>
+          {REACTION_EMOJIS.map((e) => (
+            <div key={e} onClick={() => onReact(e)} style={{ fontSize: 24, cursor: 'pointer' }}>{e}</div>
+          ))}
+        </div>
+        <div style={{ borderTop: `1px solid ${theme.border}`, paddingTop: 4 }}>
+          <div style={row} onClick={onReply}><Send size={16} style={{ transform: 'scaleX(-1)' }} /> Reply</div>
+          {!message.deleted && message.type === 'text' && <div style={row} onClick={onCopy}><Check size={16} /> Copy</div>}
+          {!message.deleted && canEditText && <div style={row} onClick={onEdit}><FileText size={16} /> Edit</div>}
+          <div style={row} onClick={onForward}><Send size={16} /> Forward</div>
+          <div style={row} onClick={onSelectMultiple}><Check size={16} /> Select multiple</div>
+          {!isMine && <div style={{ ...row, color: theme.danger }} onClick={onReport}><Flag size={16} color={theme.danger} /> Report</div>}
+          <div style={{ ...row, color: theme.danger }} onClick={onDeleteForMe}><Trash2 size={16} color={theme.danger} /> Delete for me</div>
+          {isMine && !message.deleted && <div style={{ ...row, color: theme.danger }} onClick={onDeleteForEveryone}><Trash2 size={16} color={theme.danger} /> Delete for everyone</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function EmojiPickerBar({ onPick, onClose }) {
   const { theme } = useTheme();
   return (
@@ -1164,7 +1203,7 @@ function AvatarCropper({ file, onCancel, onConfirm }) {
     </div>
   );
 }
-function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, onSaved, onOpenSettings, onOpenProfile }) {
+function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, onSaved, onOpenSettings, onOpenProfile, onMessage }) {
   const { theme } = useTheme();
   const [reportOpen, setReportOpen] = useState(false);
   const [reportReason, setReportReason] = useState('');
@@ -1340,13 +1379,16 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
 
           {!isSelf && !editing && (
             nicknameEditing ? (
-              <div style={{ display: 'flex', gap: 6, marginTop: 10, justifyContent: 'center' }} onClick={(e) => e.stopPropagation()}>
-                <input value={nickname} onChange={(e) => setNickname(e.target.value.slice(0, 30))} placeholder="Custom nickname"
-                  style={{ ...inputStyle(theme), padding: '7px 10px', fontSize: 12.5, width: 160 }} />
-                <button onClick={saveNickname} disabled={nicknameSaving} style={{
-                  padding: '7px 12px', borderRadius: 10, border: 'none', background: theme.coral, color: 'white',
-                  fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: FONT,
-                }}>{nicknameSaving ? <Spinner size={11} /> : 'Save'}</button>
+              <div style={{ marginTop: 10 }} onClick={(e) => e.stopPropagation()}>
+                <div style={{ fontSize: 11, color: theme.muted, marginBottom: 5 }}>Nickname for {profile.realName || profile.name}</div>
+                <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
+                  <input value={nickname} onChange={(e) => setNickname(e.target.value.slice(0, 30))} placeholder="Custom nickname"
+                    style={{ ...inputStyle(theme), padding: '7px 10px', fontSize: 12.5, width: 160 }} />
+                  <button onClick={saveNickname} disabled={nicknameSaving} style={{
+                    padding: '7px 12px', borderRadius: 10, border: 'none', background: theme.coral, color: 'white',
+                    fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: FONT,
+                  }}>{nicknameSaving ? <Spinner size={11} /> : 'Save'}</button>
+                </div>
               </div>
             ) : (
               <div onClick={() => setNicknameEditing(true)} style={{ marginTop: 8, fontSize: 11.5, color: theme.coralDeep, fontWeight: 700, cursor: 'pointer' }}>
@@ -1466,15 +1508,24 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
           )}
 
           {!isSelf && !editing && (
-            <button onClick={toggleFollow} disabled={followBusy} style={{
-              marginTop: 20, padding: '9px 26px', borderRadius: 22, cursor: followBusy ? 'default' : 'pointer', fontFamily: FONT,
-              border: followState !== 'none' ? `1.5px solid ${theme.border}` : 'none',
-              background: followState !== 'none' ? 'transparent' : theme.coral,
-              color: followState !== 'none' ? theme.ink : 'white', fontSize: 12.5, fontWeight: 700,
-            }}>
-              {followBusy ? <Spinner size={12} color={followState !== 'none' ? theme.ink : 'white'} /> :
-                followState === 'accepted' ? 'Following' : followState === 'pending' ? 'Requested' : 'Follow'}
-            </button>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 20 }}>
+              <button onClick={toggleFollow} disabled={followBusy} style={{
+                padding: '9px 22px', borderRadius: 22, cursor: followBusy ? 'default' : 'pointer', fontFamily: FONT,
+                border: followState !== 'none' ? `1.5px solid ${theme.border}` : 'none',
+                background: followState !== 'none' ? 'transparent' : theme.coral,
+                color: followState !== 'none' ? theme.ink : 'white', fontSize: 12.5, fontWeight: 700,
+              }}>
+                {followBusy ? <Spinner size={12} color={followState !== 'none' ? theme.ink : 'white'} /> :
+                  followState === 'accepted' ? 'Following' : followState === 'pending' ? 'Requested' : 'Follow'}
+              </button>
+              <button onClick={() => onMessage(profile)} style={{
+                padding: '9px 22px', borderRadius: 22, border: 'none', background: theme.ink,
+                color: theme.dark ? '#121319' : 'white', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT,
+                display: 'flex', alignItems: 'center', gap: 6,
+              }}>
+                <Send size={13} /> Message
+              </button>
+            </div>
           )}
 
           {!isSelf && !editing && !reportSent && !reportOpen && (
@@ -1525,6 +1576,49 @@ function StatusTicks({ status }) {
 }
 
 const REACTION_EMOJIS = ['❤️', '😂', '😮', '😢', '👍', '🔥'];
+
+function AudioBubble({ url, isMe }) {
+  const { theme } = useTheme();
+  const audioRef = useRef(null);
+  const [playing, setPlaying] = useState(false);
+  const [duration, setDuration] = useState(0);
+  const [progress, setProgress] = useState(0);
+
+  const toggle = (e) => {
+    e.stopPropagation();
+    const el = audioRef.current;
+    if (!el) return;
+    if (playing) { el.pause(); } else { el.play(); }
+  };
+
+  const fmt = (s) => `${Math.floor(s / 60)}:${Math.floor(s % 60).toString().padStart(2, '0')}`;
+  const pct = duration ? (progress / duration) * 100 : 0;
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', minWidth: 190 }}>
+      <audio ref={audioRef} src={url}
+        onLoadedMetadata={(e) => setDuration(e.target.duration)}
+        onTimeUpdate={(e) => setProgress(e.target.currentTime)}
+        onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)}
+        onEnded={() => { setPlaying(false); setProgress(0); }} />
+      <div onClick={toggle} style={{
+        width: 32, height: 32, borderRadius: '50%', background: isMe ? theme.coral : theme.coralDeep,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0,
+      }}>
+        {playing ? <Pause size={14} color="white" /> : <Play size={14} color="white" style={{ marginLeft: 1 }} />}
+      </div>
+      <div style={{ flex: 1 }}>
+        <div style={{ height: 4, borderRadius: 2, background: theme.rowBg, overflow: 'hidden' }}>
+          <div style={{ height: '100%', width: `${pct}%`, background: theme.coral, borderRadius: 2 }} />
+        </div>
+        <div style={{ fontSize: 10, color: theme.muted, marginTop: 3 }}>{fmt(playing || progress ? progress : duration)}</div>
+      </div>
+      <a href={url} download onClick={(e) => e.stopPropagation()} style={{ color: theme.muted, flexShrink: 0 }}>
+        <Download size={14} />
+      </a>
+    </div>
+  );
+}
 
 function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSelect, onLongPress, onOpenImage, reactions, onReact, onOpenWhoReacted, replyPreview, onSwipeReply }) {
   const { theme } = useTheme();
@@ -1631,9 +1725,25 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
             <div style={{ fontSize: 13, color: theme.muted, fontStyle: 'italic' }}>This message was deleted</div>
           ) : (
             <>
-              {m.type === 'image' && <img src={m.media_url} alt="" style={{ width: '100%', maxWidth: 260, borderRadius: 12, display: 'block', marginBottom: m.content ? 4 : 2 }} />}
-              {m.type === 'video' && <video src={m.media_url} controls style={{ width: '100%', maxWidth: 260, borderRadius: 12, display: 'block', marginBottom: m.content ? 4 : 2, background: '#000' }} />}
-              {m.type === 'audio' && <audio src={m.media_url} controls style={{ display: 'block', marginBottom: m.content ? 4 : 2, maxWidth: 220 }} />}
+              {m.type === 'image' && (
+                <div style={{ position: 'relative' }}>
+                  <img src={m.media_url} alt="" style={{ width: '100%', maxWidth: 260, borderRadius: 12, display: 'block', marginBottom: m.content ? 4 : 2 }} />
+                  <a href={m.media_url} download onClick={(e) => e.stopPropagation()} style={{
+                    position: 'absolute', top: 6, right: 6, width: 26, height: 26, borderRadius: '50%',
+                    background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}><Download size={13} color="white" /></a>
+                </div>
+              )}
+              {m.type === 'video' && (
+                <div style={{ position: 'relative' }}>
+                  <video src={m.media_url} controls style={{ width: '100%', maxWidth: 260, borderRadius: 12, display: 'block', marginBottom: m.content ? 4 : 2, background: '#000' }} />
+                  <a href={m.media_url} download onClick={(e) => e.stopPropagation()} style={{
+                    position: 'absolute', top: 6, right: 6, width: 26, height: 26, borderRadius: '50%',
+                    background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}><Download size={13} color="white" /></a>
+                </div>
+              )}
+              {m.type === 'audio' && <AudioBubble url={m.media_url} isMe={isMe} />}
               {m.content && <div style={{ fontSize: 15, color: theme.ink, padding: m.type !== 'text' ? '0 4px' : 0, wordBreak: 'break-word', lineHeight: 1.4 }}>{m.content}</div>}
             </>
           )}
@@ -1723,20 +1833,16 @@ function ImageViewer({ url, onClose, onForward, onReport }) {
 
 /* ============================= Selection action bar ============================= */
 
-function MessageActionBar({ count, canEditActions, onCancel, onCopy, onForward, onDeleteForMe, onDeleteForEveryone, onReport, onEdit, onReact, onReply }) {
+function MessageActionBar({ count, canEditActions, onCancel, onForward, onDeleteForMe, onDeleteForEveryone, onReport }) {
   const { theme } = useTheme();
   const btn = { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer', color: theme.ink, fontSize: 10, fontWeight: 600, flexShrink: 0, minWidth: 52 };
   return (
-    <div style={{ borderBottom: `1px solid ${theme.border}`, background: theme.rowBg }} className="zchat-fade">
+    <div style={{ background: theme.rowBg }} className="zchat-fade">
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px 6px' }}>
         <X size={18} style={{ cursor: 'pointer', color: theme.ink, flexShrink: 0 }} onClick={onCancel} />
         <span style={{ fontWeight: 800, fontSize: 14, color: theme.ink }}>{count} selected</span>
       </div>
-      <div style={{ display: 'flex', gap: 14, padding: '2px 16px 10px', overflowX: 'auto' }}>
-        {count === 1 && <div style={btn} onClick={onReply}><Send size={16} style={{ transform: 'scaleX(-1)' }} /><span>Reply</span></div>}
-        {count === 1 && <div style={btn} onClick={onReact}><Smile size={16} /><span>React</span></div>}
-        {count === 1 && canEditActions.copy && <div style={btn} onClick={onCopy}><Check size={16} /><span>Copy</span></div>}
-        {count === 1 && canEditActions.canEditText && <div style={btn} onClick={onEdit}><FileText size={16} /><span>Edit</span></div>}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, padding: '2px 16px 10px' }}>
         <div style={btn} onClick={onForward}><Send size={16} /><span>Forward</span></div>
         {canEditActions.canReport && <div style={btn} onClick={onReport}><Flag size={16} color={theme.danger} /><span style={{ color: theme.danger }}>Report</span></div>}
         <div style={btn} onClick={onDeleteForMe}><Trash2 size={16} /><span style={{ whiteSpace: 'nowrap' }}>Delete me</span></div>
@@ -1748,24 +1854,56 @@ function MessageActionBar({ count, canEditActions, onCancel, onCopy, onForward, 
 
 /* ============================= Forward picker ============================= */
 
-function ForwardPicker({ conversations, onCancel, onPick }) {
+function ForwardPicker({ conversations, onCancel, onPick, myId }) {
   const { theme } = useTheme();
+  const [q, setQ] = useState('');
+  const [results, setResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const timer = useRef(null);
+
+  const doSearch = (val) => {
+    setQ(val);
+    clearTimeout(timer.current);
+    if (val.trim().length < 2) { setResults([]); return; }
+    setSearching(true);
+    timer.current = setTimeout(async () => {
+      const { data } = await searchByUsername(val.trim());
+      setResults((data || []).filter((u) => u.id !== myId));
+      setSearching(false);
+    }, 300);
+  };
+
+  const list = q.trim().length >= 2 ? results : conversations.map((c) => c.otherProfile);
+
   return (
     <div style={{
       position: 'absolute', inset: 0, background: 'rgba(20,16,14,0.5)', zIndex: 90,
       display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 18,
     }} className="zchat-fade">
-      <div style={{ background: theme.panelBg, borderRadius: 22, padding: 20, width: '100%', maxWidth: 340, maxHeight: '70vh', overflowY: 'auto' }}>
-        <div style={{ fontWeight: 800, fontSize: 16, color: theme.ink, marginBottom: 14 }}>Forward to...</div>
-        {conversations.length === 0 && <div style={{ fontSize: 13, color: theme.muted, textAlign: 'center', padding: 20 }}>No conversations yet</div>}
-        {conversations.map((c) => (
-          <div key={c.id} onClick={() => onPick(c.otherProfile)} style={{
-            display: 'flex', alignItems: 'center', gap: 12, padding: '10px 6px', cursor: 'pointer', borderRadius: 12,
-          }}>
-            <Avatar emoji={c.otherProfile.avatar} name={c.otherProfile.name} size={38} />
-            <div style={{ fontWeight: 700, fontSize: 14, color: theme.ink }}>{c.otherProfile.name}</div>
-          </div>
-        ))}
+      <div style={{ background: theme.panelBg, borderRadius: 22, padding: 20, width: '100%', maxWidth: 340, maxHeight: '75vh', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ fontWeight: 800, fontSize: 16, color: theme.ink, marginBottom: 12 }}>Forward to...</div>
+        <div style={{ position: 'relative', marginBottom: 12 }}>
+          <Search size={15} color={theme.muted} style={{ position: 'absolute', left: 12, top: 12 }} />
+          <input value={q} onChange={(e) => doSearch(e.target.value)} placeholder="Search username" autoCapitalize="none"
+            style={{ ...inputStyle(theme), padding: '9px 12px 9px 34px', fontSize: 13.5 }} />
+          {searching && <div style={{ position: 'absolute', right: 12, top: 11 }}><Spinner size={13} color={theme.muted} /></div>}
+        </div>
+        <div style={{ overflowY: 'auto', flex: 1 }}>
+          {list.length === 0 && <div style={{ fontSize: 13, color: theme.muted, textAlign: 'center', padding: 20 }}>
+            {q.trim().length >= 2 ? 'No one found' : 'No conversations yet'}
+          </div>}
+          {list.map((p) => (
+            <div key={p.id} onClick={() => onPick(p)} style={{
+              display: 'flex', alignItems: 'center', gap: 12, padding: '10px 6px', cursor: 'pointer', borderRadius: 12,
+            }}>
+              <Avatar emoji={p.avatar} name={p.name} size={38} />
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 14, color: theme.ink }}>{p.name}</div>
+                <div style={{ fontSize: 11.5, color: theme.muted }}>@{p.username}</div>
+              </div>
+            </div>
+          ))}
+        </div>
         <button onClick={onCancel} style={{
           width: '100%', marginTop: 12, padding: 11, borderRadius: 13, border: `1.5px solid ${theme.border}`,
           background: 'transparent', color: theme.ink, fontWeight: 700, fontSize: 13.5, cursor: 'pointer', fontFamily: FONT,
@@ -1864,6 +2002,10 @@ function ChatApp({ session, onLogout, onNeedsProfile }) {
   const [replyingTo, setReplyingTo] = useState(null);
   const [editingMessage, setEditingMessage] = useState(null);
   const [reactionPickerFor, setReactionPickerFor] = useState(null);
+  const [contextMenuFor, setContextMenuFor] = useState(null);
+  const [pendingForwardItems, setPendingForwardItems] = useState([]);
+  const [activeFollowState, setActiveFollowState] = useState('none');
+  const [activeFollowBusy, setActiveFollowBusy] = useState(false);
   const [whoReactedFor, setWhoReactedFor] = useState(null);
   const [showArchived, setShowArchived] = useState(false);
   const [archivedConversations, setArchivedConversations] = useState([]);
@@ -2055,7 +2197,10 @@ function ChatApp({ session, onLogout, onNeedsProfile }) {
     setSelectedIds(new Set());
     setReplyingTo(null);
     setEditingMessage(null);
+    setPendingForwardItems([]);
     if (convId) markRead(convId);
+    const { data: followRow } = await supabase.from('follows').select('status').eq('follower_id', session.user.id).eq('following_id', profile.id).maybeSingle();
+    setActiveFollowState(followRow ? followRow.status : 'none');
     const { data } = await getConversation(session.user.id, profile.id);
     const hidden = getHiddenMsgIds();
     const visible = (data || []).filter((m) => !hidden.has(m.id));
@@ -2080,14 +2225,30 @@ function ChatApp({ session, onLogout, onNeedsProfile }) {
   const findMessageById = (id) => messages.find((m) => m.id === id);
 
   const send = async () => {
-    if (!draft.trim() || !activeProfile) return;
+    if (!activeProfile) return;
+    const items = pendingForwardItems;
+    if (items.length) {
+      setPendingForwardItems([]);
+      for (const item of items) {
+        const { data } = await sendMessage(session.user.id, activeProfile.id, item.type, item.content || null, item.media_url || null);
+        if (data) {
+          await supabase.from('messages').update({ forwarded: true }).eq('id', data.id);
+          data.forwarded = true;
+          setMessages((prev) => [...prev, data]);
+          upsertConversation(activeProfile.id, item.content, item.type);
+        }
+      }
+    }
+    if (!draft.trim()) return;
     const text = draft.trim().slice(0, MAX_CHARS);
     setDraft('');
     const replyId = replyingTo?.id || null;
     setReplyingTo(null);
+    const wasForward = items.length === 1 && items[0].type === 'text';
     const { data } = await sendMessage(session.user.id, activeProfile.id, 'text', text, null);
     if (data) {
       if (replyId) { await supabase.from('messages').update({ reply_to_id: replyId }).eq('id', data.id); data.reply_to_id = replyId; }
+      if (wasForward) { await supabase.from('messages').update({ forwarded: true }).eq('id', data.id); data.forwarded = true; }
       setMessages((prev) => [...prev, data]);
       upsertConversation(activeProfile.id, text, 'text');
     }
@@ -2223,19 +2384,25 @@ function ChatApp({ session, onLogout, onNeedsProfile }) {
   };
 
   const doForward = async (targetProfile) => {
-    for (const m of forwardTargets) {
-      const { data } = await sendMessage(session.user.id, targetProfile.id, m.type, m.content || null, m.media_url || null);
-      if (data) {
-        await supabase.from('messages').update({ forwarded: true }).eq('id', data.id);
-        data.forwarded = true;
-        if (activeProfile?.id === targetProfile.id) setMessages((prev) => [...prev, data]);
-      }
-    }
-    await upsertConversation(targetProfile.id, forwardTargets[0]?.content, forwardTargets[0]?.type || 'text');
     setForwardOpen(false);
-    cancelSelection();
     setViewerUrl(null);
+    cancelSelection();
+    await openChat(targetProfile, null);
+    setPendingForwardItems(forwardTargets);
+    if (forwardTargets.length === 1 && forwardTargets[0].type === 'text') {
+      setDraft(forwardTargets[0].content || '');
+    }
   };
+
+  const doCopySingle = (m) => { if (m.content) navigator.clipboard?.writeText(m.content); setContextMenuFor(null); };
+  const doStartEditSingle = (m) => { setEditingMessage(m); setDraft(m.content || ''); setReplyingTo(null); setContextMenuFor(null); };
+  const doStartReplySingle = (m) => { setReplyingTo(m); setEditingMessage(null); setContextMenuFor(null); };
+  const doDeleteForMeSingle = (m) => { hideMessagesLocally([m.id]); setMessages((prev) => prev.filter((x) => x.id !== m.id)); setContextMenuFor(null); };
+  const doDeleteForEveryoneSingle = async (m) => { await deleteMessage(m.id); setMessages((prev) => prev.map((x) => (x.id === m.id ? { ...x, deleted: true } : x))); setContextMenuFor(null); };
+  const openForwardSingle = (m) => { setForwardTargets([m]); setForwardOpen(true); setContextMenuFor(null); };
+  const doReportSingle = (m) => { setReportModalFor(m.id); setContextMenuFor(null); };
+  const doSelectMultipleFrom = (m) => { setContextMenuFor(null); toggleSelect(m.id); };
+  const doReactSingle = (m, emoji) => { reactToMessage(m.id, emoji); setContextMenuFor(null); };
 
   const doReportMessage = async (reason) => {
     const id = reportModalFor || selectedMessages[0]?.id;
@@ -2266,6 +2433,20 @@ function ChatApp({ session, onLogout, onNeedsProfile }) {
     if (deleteConvoTarget && activeProfile?.id === deleteConvoTarget.otherProfile.id) { setActiveProfile(null); setMessages([]); }
     setDeleteConvoTarget(null);
     loadConversations();
+  };
+
+  const toggleActiveFollow = async () => {
+    if (!activeProfile || activeFollowBusy) return;
+    setActiveFollowBusy(true);
+    if (activeFollowState !== 'none') {
+      await supabase.from('follows').delete().eq('follower_id', session.user.id).eq('following_id', activeProfile.id);
+      setActiveFollowState('none');
+    } else {
+      const status = activeProfile.is_private ? 'pending' : 'accepted';
+      await supabase.from('follows').insert({ follower_id: session.user.id, following_id: activeProfile.id, status });
+      setActiveFollowState(status);
+    }
+    setActiveFollowBusy(false);
   };
 
   const sendTyping = () => {
@@ -2317,6 +2498,7 @@ function ChatApp({ session, onLogout, onNeedsProfile }) {
             onReport={handleReport}
             onOpenSettings={() => setShowSettings(true)}
             onOpenProfile={(p) => setProfileOf(p)}
+            onMessage={(p) => { setProfileOf(null); openChat(p, null); }}
             onSaved={(updated) => { setMe(updated.id === me.id ? { ...updated, email: me.email } : me); if (activeProfile?.id === updated.id) setActiveProfile(updated); }}
           />
         )}
@@ -2493,6 +2675,15 @@ function ChatApp({ session, onLogout, onNeedsProfile }) {
                       {typingFrom ? 'typing...' : `@${activeProfile.username}`}
                     </div>
                   </div>
+                  <button onClick={(e) => { e.stopPropagation(); toggleActiveFollow(); }} disabled={activeFollowBusy} style={{
+                    padding: '6px 14px', borderRadius: 18, fontSize: 11.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, flexShrink: 0,
+                    border: activeFollowState !== 'none' ? `1.5px solid ${theme.border}` : 'none',
+                    background: activeFollowState !== 'none' ? 'transparent' : theme.coral,
+                    color: activeFollowState !== 'none' ? theme.ink : 'white',
+                  }}>
+                    {activeFollowBusy ? <Spinner size={11} color={activeFollowState !== 'none' ? theme.ink : 'white'} /> :
+                      activeFollowState === 'accepted' ? 'Following' : activeFollowState === 'pending' ? 'Requested' : 'Follow'}
+                  </button>
                 </div>
               )}
               <div ref={scrollRef} style={{
@@ -2514,7 +2705,7 @@ function ChatApp({ session, onLogout, onNeedsProfile }) {
                     <MessageBubble
                       key={m.id} m={m} isMe={m.sender_id === session.user.id} onDelete={handleDelete}
                       selectionMode={selectionMode} selected={selectedIds.has(m.id)} onToggleSelect={toggleSelect}
-                      onLongPress={toggleSelect}
+                      onLongPress={(id) => setContextMenuFor(id)}
                       onOpenImage={setViewerUrl}
                       reactions={messageLikes[m.id] || []}
                       onReact={reactToMessage}
@@ -2529,6 +2720,17 @@ function ChatApp({ session, onLogout, onNeedsProfile }) {
                   ))
                 )}
               </div>
+              {pendingForwardItems.length > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderTop: `1px solid ${theme.border}`, background: theme.rowBg }}>
+                  <Send size={14} color={theme.coral} />
+                  <div style={{ flex: 1, fontSize: 12, color: theme.ink, fontWeight: 700 }}>
+                    {pendingForwardItems.length === 1
+                      ? `Forwarding: ${pendingForwardItems[0].type === 'text' ? pendingForwardItems[0].content : pendingForwardItems[0].type === 'image' ? '📷 Photo' : pendingForwardItems[0].type === 'audio' ? '🎤 Voice message' : '🎥 Video'}`
+                      : `Forwarding ${pendingForwardItems.length} messages`}
+                  </div>
+                  <X size={16} style={{ cursor: 'pointer', color: theme.muted }} onClick={() => { setPendingForwardItems([]); setDraft(''); }} />
+                </div>
+              )}
               {replyingTo && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderTop: `1px solid ${theme.border}`, background: theme.rowBg }}>
                   <div style={{ flex: 1, borderLeft: `3px solid ${theme.coral}`, paddingLeft: 8, fontSize: 12, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -2577,16 +2779,16 @@ function ChatApp({ session, onLogout, onNeedsProfile }) {
                         onKeyDown={(e) => { if (e.key === 'Enter') (editingMessage ? saveEdit() : send()); }}
                         placeholder={uploading ? 'Uploading...' : editingMessage ? 'Edit message' : 'Type a message'} disabled={uploading}
                         style={{ ...inputStyle(theme), flex: 1, borderRadius: 22, padding: '11px 16px' }} />
-                      {!draft.trim() && !editingMessage ? (
+                      {!draft.trim() && !editingMessage && !pendingForwardItems.length ? (
                         <button onClick={startRecording} style={{
                           width: 42, height: 42, borderRadius: '50%', background: theme.coral,
                           border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0,
-                        }}><Mail size={18} color="white" style={{ display: 'none' }} /><span style={{ fontSize: 18 }}>🎤</span></button>
+                        }}><Mic size={19} color="white" /></button>
                       ) : (
-                        <button onClick={editingMessage ? saveEdit : send} disabled={!draft.trim()} style={{
-                          width: 42, height: 42, borderRadius: '50%', background: draft.trim() ? theme.coral : theme.rowBg,
+                        <button onClick={editingMessage ? saveEdit : send} disabled={!draft.trim() && !pendingForwardItems.length} style={{
+                          width: 42, height: 42, borderRadius: '50%', background: (draft.trim() || pendingForwardItems.length) ? theme.coral : theme.rowBg,
                           border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          cursor: draft.trim() ? 'pointer' : 'default', flexShrink: 0,
+                          cursor: (draft.trim() || pendingForwardItems.length) ? 'pointer' : 'default', flexShrink: 0,
                         }}>
                           {editingMessage ? <Check size={18} color="white" /> : <Send size={18} color="white" />}
                         </button>
@@ -2607,7 +2809,7 @@ function ChatApp({ session, onLogout, onNeedsProfile }) {
             onReport={() => setReportModalFor('__viewer__')} />
         )}
         {forwardOpen && (
-          <ForwardPicker conversations={conversations} onCancel={() => setForwardOpen(false)} onPick={doForward} />
+          <ForwardPicker conversations={conversations} myId={session.user.id} onCancel={() => setForwardOpen(false)} onPick={doForward} />
         )}
         {reportModalFor && (
           <ReportMessageModal onCancel={() => setReportModalFor(null)} onSubmit={doReportMessage} />
@@ -2626,6 +2828,26 @@ function ChatApp({ session, onLogout, onNeedsProfile }) {
             onOpenChat={(c) => { setShowArchived(false); openChat(c.otherProfile, c.id); }}
             onUnarchive={(id) => toggleArchive(id, false)} />
         )}
+        {contextMenuFor && (() => {
+          const m = findMessageById(contextMenuFor);
+          if (!m) return null;
+          const isMine = m.sender_id === session.user.id;
+          return (
+            <MessageContextMenu
+              message={m} isMine={isMine} canEditText={isMine && m.type === 'text' && !m.deleted}
+              onClose={() => setContextMenuFor(null)}
+              onReact={(emoji) => doReactSingle(m, emoji)}
+              onReply={() => doStartReplySingle(m)}
+              onCopy={() => doCopySingle(m)}
+              onEdit={() => doStartEditSingle(m)}
+              onForward={() => openForwardSingle(m)}
+              onReport={() => doReportSingle(m)}
+              onDeleteForMe={() => doDeleteForMeSingle(m)}
+              onDeleteForEveryone={() => doDeleteForEveryoneSingle(m)}
+              onSelectMultiple={() => doSelectMultipleFrom(m)}
+            />
+          );
+        })()}
       </div>
       <style>{`
         @media (max-width: 760px) {
