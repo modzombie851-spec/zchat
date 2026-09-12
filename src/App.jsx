@@ -853,11 +853,11 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
   const [followBusy, setFollowBusy] = useState(false);
 
   useEffect(() => {
-    if (isSelf) return;
     let cancelled = false;
     (async () => {
       const { count } = await supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', profile.id);
       if (!cancelled) setFollowerCount(count || 0);
+      if (isSelf) return;
       const { data } = await supabase.from('follows').select('id').eq('follower_id', userId).eq('following_id', profile.id).maybeSingle();
       if (!cancelled) setIsFollowing(!!data);
     })();
@@ -996,7 +996,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
                 display: 'flex', justifyContent: 'center', gap: 10, marginTop: 20,
               }}>
                 <div style={{ flex: profile.gender ? 1 : 'none', minWidth: 90, background: theme.rowBg, borderRadius: 16, padding: '10px 16px' }}>
-                  <div style={{ fontWeight: 800, fontSize: 16, color: theme.ink }}>{isSelf ? (profile.followers ?? 0) : followerCount}</div>
+                  <div style={{ fontWeight: 800, fontSize: 16, color: theme.ink }}>{followerCount}</div>
                   <div style={{ fontSize: 10.5, color: theme.muted, fontWeight: 600, marginTop: 1 }}>Followers</div>
                 </div>
                 {profile.gender && (
@@ -1251,8 +1251,11 @@ function ChatApp({ session, onLogout, onNeedsProfile }) {
   }, [me]);
 
   useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [messages.length, activeProfile]);
+    const t = setTimeout(() => {
+      if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }, 30);
+    return () => clearTimeout(t);
+  }, [messages.length, activeProfile, loadingConvo]);
 
   const doSearch = (val) => {
     setSearch(val);
@@ -1392,8 +1395,8 @@ function ChatApp({ session, onLogout, onNeedsProfile }) {
                   const unread = existingConv ? isUnread(existingConv) : false;
                   return (
                     <div key={u.id} onClick={() => { openChat(u, existingConv?.id); setSearch(''); setResults([]); }} style={{
-                      display: 'flex', alignItems: 'center', gap: 12, padding: '11px 10px', cursor: 'pointer',
-                      borderRadius: 14, marginBottom: 2,
+                      display: 'flex', alignItems: 'center', gap: 12, padding: '12px 10px', cursor: 'pointer',
+                      borderRadius: 14, marginBottom: 2, borderBottom: `1px solid ${theme.border}`,
                       background: activeProfile?.id === u.id ? theme.rowBg : 'transparent',
                     }}>
                       <Avatar emoji={u.avatar} name={u.name} online={onlineIds.has(u.id)} size={44} />
@@ -1420,8 +1423,8 @@ function ChatApp({ session, onLogout, onNeedsProfile }) {
                 const unread = isUnread(c);
                 return (
                   <div key={c.id} onClick={() => openChat(c.otherProfile, c.id)} style={{
-                    display: 'flex', alignItems: 'center', gap: 12, padding: '11px 10px', cursor: 'pointer',
-                    borderRadius: 14, marginBottom: 2,
+                    display: 'flex', alignItems: 'center', gap: 12, padding: '12px 10px', cursor: 'pointer',
+                    borderRadius: 14, marginBottom: 2, borderBottom: `1px solid ${theme.border}`,
                     background: activeProfile?.id === c.otherProfile.id ? theme.rowBg : 'transparent',
                   }}>
                     <Avatar emoji={c.otherProfile.avatar} name={c.otherProfile.name} online={onlineIds.has(c.otherProfile.id)} size={44} />
