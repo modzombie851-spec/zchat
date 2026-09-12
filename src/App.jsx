@@ -1155,9 +1155,12 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
   const [hover, setHover] = useState(false);
   const [burstHeart, setBurstHeart] = useState(false);
   const lastTapRef = useRef(0);
+  const pressTimerRef = useRef(null);
+  const longPressFiredRef = useRef(false);
   const time = m.created_at ? new Date(m.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
 
   const handleTap = () => {
+    if (longPressFiredRef.current) { longPressFiredRef.current = false; return; }
     if (selectionMode) { onToggleSelect(m.id); return; }
     const now = Date.now();
     if (now - lastTapRef.current < 300) {
@@ -1170,15 +1173,22 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
     lastTapRef.current = now;
   };
 
-  let pressTimer = null;
-  const startPress = () => { pressTimer = setTimeout(() => onLongPress(m.id), 450); };
-  const cancelPress = () => { if (pressTimer) clearTimeout(pressTimer); };
+  const startPress = () => {
+    setHover(true);
+    clearTimeout(pressTimerRef.current);
+    pressTimerRef.current = setTimeout(() => {
+      longPressFiredRef.current = true;
+      onLongPress(m.id);
+    }, 450);
+  };
+  const cancelPress = () => { clearTimeout(pressTimerRef.current); };
 
   return (
     <div
       style={{ display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start', alignItems: 'center', gap: 8, marginBottom: 10 }}
-      onTouchStart={() => { setHover(true); startPress(); }}
+      onTouchStart={startPress}
       onTouchEnd={cancelPress}
+      onTouchMove={cancelPress}
       onMouseDown={startPress}
       onMouseUp={cancelPress}
       onMouseLeave={cancelPress}
@@ -1204,6 +1214,14 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
           border: selected ? `2px solid ${theme.coral}` : m.deleted ? `1px dashed ${theme.border}` : `1px solid ${theme.border}`,
           cursor: 'pointer',
         })}>
+          {m.forwarded && !m.deleted && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 4, fontSize: 10.5, color: theme.muted, fontStyle: 'italic',
+              marginBottom: 3, padding: m.type !== 'text' ? '0 4px' : 0,
+            }}>
+              <Send size={10} style={{ transform: 'scaleX(-1)' }} /> Forwarded
+            </div>
+          )}
           {m.deleted ? (
             <div style={{ fontSize: 13, color: theme.muted, fontStyle: 'italic' }}>This message was deleted</div>
           ) : (
@@ -1297,22 +1315,19 @@ function ImageViewer({ url, onClose, onForward, onReport }) {
 
 function MessageActionBar({ count, canEditActions, onCancel, onCopy, onForward, onDeleteForMe, onDeleteForEveryone, onReport }) {
   const { theme } = useTheme();
-  const btn = { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer', color: theme.ink, fontSize: 10, fontWeight: 600 };
+  const btn = { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer', color: theme.ink, fontSize: 10, fontWeight: 600, flexShrink: 0, minWidth: 52 };
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px',
-      borderBottom: `1px solid ${theme.border}`, background: theme.rowBg,
-    }} className="zchat-fade">
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <X size={18} style={{ cursor: 'pointer', color: theme.ink }} onClick={onCancel} />
+    <div style={{ borderBottom: `1px solid ${theme.border}`, background: theme.rowBg }} className="zchat-fade">
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px 6px' }}>
+        <X size={18} style={{ cursor: 'pointer', color: theme.ink, flexShrink: 0 }} onClick={onCancel} />
         <span style={{ fontWeight: 800, fontSize: 14, color: theme.ink }}>{count} selected</span>
       </div>
-      <div style={{ display: 'flex', gap: 18 }}>
+      <div style={{ display: 'flex', gap: 14, padding: '2px 16px 10px', overflowX: 'auto' }}>
         {count === 1 && canEditActions.copy && <div style={btn} onClick={onCopy}><Check size={16} /><span>Copy</span></div>}
         <div style={btn} onClick={onForward}><Send size={16} /><span>Forward</span></div>
         {canEditActions.canReport && <div style={btn} onClick={onReport}><Flag size={16} color={theme.danger} /><span style={{ color: theme.danger }}>Report</span></div>}
-        <div style={btn} onClick={onDeleteForMe}><Trash2 size={16} /><span>Delete for me</span></div>
-        {canEditActions.allMine && <div style={btn} onClick={onDeleteForEveryone}><Trash2 size={16} color={theme.danger} /><span style={{ color: theme.danger }}>Delete all</span></div>}
+        <div style={btn} onClick={onDeleteForMe}><Trash2 size={16} /><span style={{ whiteSpace: 'nowrap' }}>Delete me</span></div>
+        {canEditActions.allMine && <div style={btn} onClick={onDeleteForEveryone}><Trash2 size={16} color={theme.danger} /><span style={{ color: theme.danger, whiteSpace: 'nowrap' }}>Delete all</span></div>}
       </div>
     </div>
   );
@@ -1690,7 +1705,11 @@ function ChatApp({ session, onLogout, onNeedsProfile }) {
   const doForward = async (targetProfile) => {
     for (const m of forwardTargets) {
       const { data } = await sendMessage(session.user.id, targetProfile.id, m.type, m.content || null, m.media_url || null);
-      if (data && activeProfile?.id === targetProfile.id) setMessages((prev) => [...prev, data]);
+      if (data) {
+        await supabase.from('messages').update({ forwarded: true }).eq('id', data.id);
+        data.forwarded = true;
+        if (activeProfile?.id === targetProfile.id) setMessages((prev) => [...prev, data]);
+      }
     }
     await upsertConversation(targetProfile.id, forwardTargets[0]?.content, forwardTargets[0]?.type || 'text');
     setForwardOpen(false);
@@ -2138,3 +2157,4 @@ export default function App() {
     </ThemeProvider>
   );
 }
+
