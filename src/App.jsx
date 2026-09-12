@@ -3,7 +3,7 @@ import {
   Send, Paperclip, Search, Mail, ShieldCheck, AtSign, LogOut, Eye, EyeOff, Lock,
   Flag, X, Trash2, User, Phone, MoreVertical, Image as ImageIcon, Video as VideoIcon,
   Smile, ArrowLeft, Check, CheckCheck, Settings as SettingsIcon, Moon, Sun, UserPlus,
-  FileText, HelpCircle, ChevronRight,
+  FileText, HelpCircle, ChevronRight, Compass, Bell, Volume2, VolumeX, Palette,
 } from 'lucide-react';
 import {
   supabase, registerWithEmail, verifyOtp, setPassword, signInWithPassword,
@@ -14,13 +14,12 @@ import {
 
 /* ============================= THEME ============================= */
 
-const ACCENT = {
-  coral: '#FF6B4A',
-  coralDeep: '#E8502F',
-  gold: '#F3B54C',
-  teal: '#29C7B3',
-  danger: '#FF4D5E',
+const ACCENT_PALETTES = {
+  coral: { coral: '#FF6B4A', coralDeep: '#E8502F', gold: '#F3B54C', teal: '#29C7B3', danger: '#FF4D5E' },
+  ocean: { coral: '#3DA5F5', coralDeep: '#2178C9', gold: '#5FD9C4', teal: '#29C7B3', danger: '#FF4D5E' },
+  berry: { coral: '#C15CFC', coralDeep: '#9B3AE0', gold: '#FF8AC2', teal: '#29C7B3', danger: '#FF4D5E' },
 };
+const ACCENT = ACCENT_PALETTES.coral;
 
 const THEMES = {
   light: {
@@ -56,11 +55,34 @@ function ThemeProvider({ children }) {
   const [dark, setDark] = useState(() => {
     try { return localStorage.getItem('zchat-theme') === 'dark'; } catch { return false; }
   });
+  const [accentName, setAccentName] = useState(() => {
+    try { return localStorage.getItem('zchat-accent') || 'coral'; } catch { return 'coral'; }
+  });
+  const [soundOn, setSoundOn] = useState(() => {
+    try { return localStorage.getItem('zchat-sound') !== 'off'; } catch { return true; }
+  });
+  const [bgPatternOn, setBgPatternOn] = useState(() => {
+    try { return localStorage.getItem('zchat-bgpattern') === 'on'; } catch { return false; }
+  });
   useEffect(() => {
     try { localStorage.setItem('zchat-theme', dark ? 'dark' : 'light'); } catch {}
   }, [dark]);
-  const theme = { ...THEMES[dark ? 'dark' : 'light'], ...ACCENT, dark };
-  return <ThemeContext.Provider value={{ theme, dark, setDark }}>{children}</ThemeContext.Provider>;
+  useEffect(() => {
+    try { localStorage.setItem('zchat-accent', accentName); } catch {}
+  }, [accentName]);
+  useEffect(() => {
+    try { localStorage.setItem('zchat-sound', soundOn ? 'on' : 'off'); } catch {}
+  }, [soundOn]);
+  useEffect(() => {
+    try { localStorage.setItem('zchat-bgpattern', bgPatternOn ? 'on' : 'off'); } catch {}
+  }, [bgPatternOn]);
+  const accent = ACCENT_PALETTES[accentName] || ACCENT_PALETTES.coral;
+  const theme = { ...THEMES[dark ? 'dark' : 'light'], ...accent, dark };
+  return (
+    <ThemeContext.Provider value={{ theme, dark, setDark, accentName, setAccentName, soundOn, setSoundOn, bgPatternOn, setBgPatternOn }}>
+      {children}
+    </ThemeContext.Provider>
+  );
 }
 
 const glass = (theme, extra = {}) => ({
@@ -302,14 +324,14 @@ function OtpBoxes({ value, onChange, onSubmit }) {
   };
 
   return (
-    <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between' }}>
+    <div style={{ display: 'flex', gap: '2.5%', justifyContent: 'space-between', width: '100%' }}>
       {digits.map((d, i) => (
         <input key={i} ref={(el) => (refs.current[i] = el)} maxLength={1} inputMode="numeric" value={d}
           onChange={(e) => setDigit(i, e.target.value)} onKeyDown={(e) => handleKeyDown(i, e)} onPaste={handlePaste}
           style={{
-            width: 44, height: 54, textAlign: 'center', fontSize: 21, fontWeight: 800,
+            flex: '1 1 0', minWidth: 0, maxWidth: 48, aspectRatio: '1 / 1.15', textAlign: 'center', fontSize: '5.5vw', fontWeight: 800,
             borderRadius: 14, border: `1.5px solid ${theme.border}`, background: theme.inputBg,
-            color: theme.ink, outline: 'none', fontFamily: FONT,
+            color: theme.ink, outline: 'none', fontFamily: FONT, boxSizing: 'border-box', padding: 0,
           }} />
       ))}
     </div>
@@ -676,8 +698,9 @@ function ToggleSwitch({ on, onClick }) {
   );
 }
 
-function SettingsPanel({ onClose, onOpenPrivacy, onLogout }) {
-  const { theme, dark, setDark } = useTheme();
+function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout }) {
+  const { theme, dark, setDark, accentName, setAccentName, soundOn, setSoundOn, bgPatternOn, setBgPatternOn } = useTheme();
+  const accentLabels = { coral: 'Coral', ocean: 'Ocean', berry: 'Berry' };
   return (
     <div style={{
       position: 'absolute', inset: 0, background: 'rgba(28,29,33,0.4)',
@@ -692,8 +715,25 @@ function SettingsPanel({ onClose, onOpenPrivacy, onLogout }) {
 
         <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.muted, margin: '4px 0 6px 2px' }}>Appearance</div>
         <SettingsRow icon={dark ? <Sun size={16} /> : <Moon size={16} />} label="Dark mode" right={<ToggleSwitch on={dark} onClick={() => setDark((d) => !d)} />} />
+        <div style={{ padding: '10px 4px', borderBottom: `1px solid ${theme.border}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+            <div style={{ width: 34, height: 34, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', background: `${theme.coral}1F`, color: theme.coralDeep }}><Palette size={16} /></div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: theme.ink }}>Theme color</div>
+          </div>
+          <div style={{ display: 'flex', gap: 8, paddingLeft: 44 }}>
+            {Object.keys(ACCENT_PALETTES).map((key) => (
+              <div key={key} onClick={() => setAccentName(key)} style={{
+                width: 30, height: 30, borderRadius: '50%', background: ACCENT_PALETTES[key].coral, cursor: 'pointer',
+                border: accentName === key ? `3px solid ${theme.ink}` : '3px solid transparent',
+              }} title={accentLabels[key]} />
+            ))}
+          </div>
+        </div>
+        <SettingsRow icon={<ImageIcon size={16} />} label="Chat background pattern" right={<ToggleSwitch on={bgPatternOn} onClick={() => setBgPatternOn((s) => !s)} />} />
+        <SettingsRow icon={soundOn ? <Volume2 size={16} /> : <VolumeX size={16} />} label="Message sound" right={<ToggleSwitch on={soundOn} onClick={() => setSoundOn((s) => !s)} />} />
 
         <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.muted, margin: '16px 0 6px 2px' }}>Accounts</div>
+        <SettingsRow icon={<Bell size={16} />} label="Follow requests" onClick={onOpenRequests} />
         <SettingsRow icon={<UserPlus size={16} />} label="Add another account" onClick={() => {}} />
 
         <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.muted, margin: '16px 0 6px 2px' }}>About</div>
@@ -728,6 +768,220 @@ function PrivacyPanel({ onBack }) {
           <p>Solely to operate the chat service. We don't sell your data to third parties.</p>
           <h3 style={{ color: theme.ink, fontSize: 14, margin: '16px 0 4px' }}>Your controls</h3>
           <p>You can delete messages, update your profile, or close your account at any time.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ============================= User list rows (followers/following/discover) ============================= */
+
+function UserListRow({ profile, rightContent, onClick }) {
+  const { theme } = useTheme();
+  return (
+    <div onClick={onClick} style={{
+      display: 'flex', alignItems: 'center', gap: 12, padding: '10px 4px', cursor: onClick ? 'pointer' : 'default',
+      borderBottom: `1px solid ${theme.border}`,
+    }}>
+      <Avatar emoji={profile.avatar} name={profile.name} size={40} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontWeight: 700, fontSize: 14, color: theme.ink }}>{profile.name}</div>
+        <div style={{ fontSize: 12, color: theme.muted }}>@{profile.username}</div>
+      </div>
+      {rightContent}
+    </div>
+  );
+}
+
+function ListModal({ title, onClose, children }) {
+  const { theme } = useTheme();
+  return (
+    <div style={{
+      position: 'absolute', inset: 0, background: 'rgba(20,16,14,0.5)', zIndex: 40,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 18,
+    }} className="zchat-fade">
+      <div style={{ background: theme.panelBg, borderRadius: 22, padding: 22, width: '100%', maxWidth: 340, maxHeight: '75vh', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+          <div style={{ fontWeight: 800, fontSize: 16, color: theme.ink }}>{title}</div>
+          <X size={19} style={{ cursor: 'pointer', color: theme.muted }} onClick={onClose} />
+        </div>
+        <div style={{ overflowY: 'auto', flex: 1 }}>{children}</div>
+      </div>
+    </div>
+  );
+}
+
+function FollowListModal({ userId, mode, onClose, onOpenProfile }) {
+  const [list, setList] = useState(null);
+
+  useEffect(() => {
+    (async () => {
+      const col = mode === 'followers' ? 'following_id' : 'follower_id';
+      const otherCol = mode === 'followers' ? 'follower_id' : 'following_id';
+      const { data } = await supabase.from('follows').select('*').eq(col, userId).eq('status', 'accepted');
+      const ids = (data || []).map((r) => r[otherCol]);
+      if (!ids.length) { setList([]); return; }
+      const { data: profs } = await supabase.from('profiles').select('*').in('id', ids);
+      setList(profs || []);
+    })();
+  }, [userId, mode]);
+
+  return (
+    <ListModal title={mode === 'followers' ? 'Followers' : 'Following'} onClose={onClose}>
+      {list === null ? (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: 20 }}><Spinner color="#888" /></div>
+      ) : list.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: 20, fontSize: 13, color: '#888' }}>Nobody here yet</div>
+      ) : (
+        list.map((p) => <UserListRow key={p.id} profile={p} onClick={() => onOpenProfile(p)} />)
+      )}
+    </ListModal>
+  );
+}
+
+function FollowRequestsPanel({ userId, onClose, onOpenProfile }) {
+  const { theme } = useTheme();
+  const [requests, setRequests] = useState(null);
+
+  const load = async () => {
+    const { data } = await supabase.from('follows').select('*').eq('following_id', userId).eq('status', 'pending');
+    const ids = (data || []).map((r) => r.follower_id);
+    if (!ids.length) { setRequests([]); return; }
+    const { data: profs } = await supabase.from('profiles').select('*').in('id', ids);
+    setRequests((profs || []).map((p) => ({ profile: p })));
+  };
+  useEffect(() => { load(); }, [userId]);
+
+  const respond = async (followerId, accept) => {
+    if (accept) await supabase.from('follows').update({ status: 'accepted' }).eq('follower_id', followerId).eq('following_id', userId);
+    else await supabase.from('follows').delete().eq('follower_id', followerId).eq('following_id', userId);
+    load();
+  };
+
+  return (
+    <ListModal title="Follow requests" onClose={onClose}>
+      {requests === null ? (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: 20 }}><Spinner color="#888" /></div>
+      ) : requests.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: 20, fontSize: 13, color: theme.muted }}>No pending requests</div>
+      ) : (
+        requests.map(({ profile: p }) => (
+          <UserListRow key={p.id} profile={p} onClick={() => onOpenProfile(p)} rightContent={
+            <div style={{ display: 'flex', gap: 6 }} onClick={(e) => e.stopPropagation()}>
+              <button onClick={() => respond(p.id, true)} style={{
+                padding: '6px 12px', borderRadius: 10, border: 'none', background: theme.coral, color: 'white',
+                fontWeight: 700, fontSize: 11.5, cursor: 'pointer', fontFamily: FONT,
+              }}>Accept</button>
+              <button onClick={() => respond(p.id, false)} style={{
+                padding: '6px 12px', borderRadius: 10, border: `1px solid ${theme.border}`, background: 'transparent', color: theme.ink,
+                fontWeight: 700, fontSize: 11.5, cursor: 'pointer', fontFamily: FONT,
+              }}>Decline</button>
+            </div>
+          } />
+        ))
+      )}
+    </ListModal>
+  );
+}
+
+function DiscoverPanel({ myId, onClose, onOpenProfile }) {
+  const { theme } = useTheme();
+  const [people, setPeople] = useState(null);
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from('profiles').select('*').eq('is_private', false).neq('id', myId).limit(40);
+      setPeople(data || []);
+    })();
+  }, [myId]);
+
+  return (
+    <div style={{
+      position: 'absolute', inset: 0, background: theme.panelBg, zIndex: 25,
+      display: 'flex', flexDirection: 'column',
+    }} className="zchat-fade">
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 18px', borderBottom: `1px solid ${theme.border}` }}>
+        <ArrowLeft size={20} style={{ cursor: 'pointer', color: theme.ink }} onClick={onClose} />
+        <div style={{ fontWeight: 800, fontSize: 17, color: theme.ink }}>Discover people</div>
+      </div>
+      <div style={{ overflowY: 'auto', flex: 1, padding: '4px 18px' }}>
+        {people === null ? (
+          <div style={{ display: 'flex', justifyContent: 'center', padding: 30 }}><Spinner color={theme.ink} /></div>
+        ) : people.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: 30, fontSize: 13, color: theme.muted }}>No one to discover yet</div>
+        ) : (
+          people.map((p) => <UserListRow key={p.id} profile={p} onClick={() => onOpenProfile(p)} />)
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ============================= Account privacy settings ============================= */
+
+function PrivacyField({ label, hidden, onToggle }) {
+  const { theme } = useTheme();
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 2px', borderBottom: `1px solid ${theme.border}` }}>
+      <span style={{ fontSize: 13.5, fontWeight: 600, color: theme.ink }}>{label}</span>
+      <ToggleSwitch on={!hidden} onClick={onToggle} />
+    </div>
+  );
+}
+
+function AccountPrivacyPanel({ profile, onClose, onSaved }) {
+  const { theme } = useTheme();
+  const [isPrivate, setIsPrivate] = useState(profile.is_private || false);
+  const [hidePhoto, setHidePhoto] = useState(profile.hide_photo || false);
+  const [hideBio, setHideBio] = useState(profile.hide_bio || false);
+  const [hideGender, setHideGender] = useState(profile.hide_gender || false);
+  const [hideAge, setHideAge] = useState(profile.hide_age || false);
+  const [hideCountry, setHideCountry] = useState(profile.hide_country || false);
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    setSaving(true);
+    const { data } = await updateProfile(profile.id, {
+      is_private: isPrivate, hide_photo: hidePhoto, hide_bio: hideBio,
+      hide_gender: hideGender, hide_age: hideAge, hide_country: hideCountry,
+    });
+    setSaving(false);
+    if (data) { onSaved(data); onClose(); }
+  };
+
+  return (
+    <div style={{
+      position: 'absolute', inset: 0, background: 'rgba(28,29,33,0.4)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 32, padding: 18,
+    }} className="zchat-fade">
+      <div style={{ background: theme.panelBg, borderRadius: 24, padding: 26, width: '100%', maxWidth: 340, maxHeight: '85vh', overflowY: 'auto' }}>
+        <div style={{ fontWeight: 800, fontSize: 17, color: theme.ink, marginBottom: 16 }}>Privacy</div>
+
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 2px', marginBottom: 6, borderBottom: `1px solid ${theme.border}` }}>
+          <div>
+            <div style={{ fontSize: 13.5, fontWeight: 700, color: theme.ink }}>Private account</div>
+            <div style={{ fontSize: 11, color: theme.muted }}>New followers need your approval</div>
+          </div>
+          <ToggleSwitch on={isPrivate} onClick={() => setIsPrivate((s) => !s)} />
+        </div>
+
+        <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.muted, margin: '14px 0 4px 2px' }}>
+          Visible to others
+        </div>
+        <PrivacyField label="Profile photo" hidden={hidePhoto} onToggle={() => setHidePhoto((s) => !s)} />
+        <PrivacyField label="Bio" hidden={hideBio} onToggle={() => setHideBio((s) => !s)} />
+        <PrivacyField label="Gender" hidden={hideGender} onToggle={() => setHideGender((s) => !s)} />
+        <PrivacyField label="Age" hidden={hideAge} onToggle={() => setHideAge((s) => !s)} />
+        <PrivacyField label="Country" hidden={hideCountry} onToggle={() => setHideCountry((s) => !s)} />
+
+        <div style={{ display: 'flex', gap: 8, marginTop: 20 }}>
+          <button onClick={onClose} style={{
+            flex: 1, padding: 12, borderRadius: 13, border: `1.5px solid ${theme.border}`,
+            background: 'transparent', color: theme.ink, fontWeight: 700, fontSize: 13.5, cursor: 'pointer', fontFamily: FONT,
+          }}>Cancel</button>
+          <button onClick={save} disabled={saving} style={{ ...primaryBtn(theme, saving), marginTop: 0, flex: 1 }}>
+            {saving ? <Spinner /> : 'Save'}
+          </button>
         </div>
       </div>
     </div>
@@ -835,8 +1089,7 @@ function AvatarCropper({ file, onCancel, onConfirm }) {
     </div>
   );
 }
-
-function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, onSaved, onOpenSettings }) {
+function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, onSaved, onOpenSettings, onOpenProfile }) {
   const { theme } = useTheme();
   const [reportOpen, setReportOpen] = useState(false);
   const [reportReason, setReportReason] = useState('');
@@ -844,19 +1097,24 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
   const [editing, setEditing] = useState(false);
   const [bio, setBio] = useState(profile.bio || '');
   const [gender, setGender] = useState(profile.gender || '');
+  const [age, setAge] = useState(profile.age != null ? String(profile.age) : '');
+  const [country, setCountry] = useState(profile.country || '');
   const [avatar, setAvatar] = useState(profile.avatar || '');
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [cropFile, setCropFile] = useState(null);
   const [saving, setSaving] = useState(false);
   const [showEmail, setShowEmail] = useState(false);
-  const [isFollowing, setIsFollowing] = useState(false);
-  const [followerCount, setFollowerCount] = useState(profile.followers ?? 0);
+  const [followState, setFollowState] = useState('none'); // none | pending | accepted
+  const [followerCount, setFollowerCount] = useState(0);
+  const [followingCount, setFollowingCount] = useState(0);
   const [followBusy, setFollowBusy] = useState(false);
   const [username, setUsername] = useState(profile.username || '');
   const [usernameErr, setUsernameErr] = useState('');
   const [nickname, setNickname] = useState('');
   const [nicknameEditing, setNicknameEditing] = useState(false);
   const [nicknameSaving, setNicknameSaving] = useState(false);
+  const [listModal, setListModal] = useState(null); // 'followers' | 'following'
+  const [showPrivacySettings, setShowPrivacySettings] = useState(false);
 
   const cooldownDaysLeft = (() => {
     if (!profile.username_changed_at) return 0;
@@ -886,11 +1144,13 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const { count } = await supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', profile.id);
-      if (!cancelled) setFollowerCount(count || 0);
+      const { count: followers } = await supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', profile.id).eq('status', 'accepted');
+      if (!cancelled) setFollowerCount(followers || 0);
+      const { count: following } = await supabase.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', profile.id).eq('status', 'accepted');
+      if (!cancelled) setFollowingCount(following || 0);
       if (isSelf) return;
-      const { data } = await supabase.from('follows').select('id').eq('follower_id', userId).eq('following_id', profile.id).maybeSingle();
-      if (!cancelled) setIsFollowing(!!data);
+      const { data } = await supabase.from('follows').select('status').eq('follower_id', userId).eq('following_id', profile.id).maybeSingle();
+      if (!cancelled) setFollowState(data ? data.status : 'none');
     })();
     return () => { cancelled = true; };
   }, [profile.id, isSelf]);
@@ -898,14 +1158,15 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
   const toggleFollow = async () => {
     if (followBusy) return;
     setFollowBusy(true);
-    if (isFollowing) {
+    if (followState === 'accepted' || followState === 'pending') {
       await supabase.from('follows').delete().eq('follower_id', userId).eq('following_id', profile.id);
-      setIsFollowing(false);
-      setFollowerCount((c) => Math.max(0, c - 1));
+      if (followState === 'accepted') setFollowerCount((c) => Math.max(0, c - 1));
+      setFollowState('none');
     } else {
-      await supabase.from('follows').insert({ follower_id: userId, following_id: profile.id });
-      setIsFollowing(true);
-      setFollowerCount((c) => c + 1);
+      const status = profile.is_private ? 'pending' : 'accepted';
+      await supabase.from('follows').insert({ follower_id: userId, following_id: profile.id, status });
+      if (status === 'accepted') setFollowerCount((c) => c + 1);
+      setFollowState(status);
     }
     setFollowBusy(false);
   };
@@ -922,12 +1183,14 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
     const namedFile = new File([blob], 'avatar.jpg', { type: 'image/jpeg' });
     const { url, error } = await uploadMedia(namedFile, userId);
     if (!error && url) setAvatar(url);
+
     setAvatarUploading(false);
   };
 
   const save = async () => {
     const cleanUsername = username.toLowerCase().replace(/[^a-z0-9._]/g, '');
-    const fields = { bio, gender, avatar };
+    const parsedAge = age.trim() === '' ? null : parseInt(age, 10);
+    const fields = { bio, gender, avatar, age: Number.isFinite(parsedAge) ? parsedAge : null, country: country.trim() || null };
     if (cleanUsername !== profile.username) {
       if (cooldownDaysLeft > 0) { setUsernameErr(`You can change your username again in ${cooldownDaysLeft} day${cooldownDaysLeft === 1 ? '' : 's'}.`); return; }
       if (cleanUsername.length < 3) { setUsernameErr('Username must be at least 3 characters.'); return; }
@@ -990,7 +1253,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
             </div>
           ) : (
             <div style={{ width: 92, height: 92, borderRadius: '50%', padding: 4, background: theme.panelBg, margin: '0 auto', boxShadow: '0 4px 16px rgba(0,0,0,0.15)' }}>
-              <Avatar emoji={profile.avatar} name={profile.name} online={isOnline} size={84} />
+              <Avatar emoji={(isSelf || !profile.hide_photo) ? profile.avatar : ''} name={profile.name} online={isOnline} size={84} />
             </div>
           )}
 
@@ -1025,6 +1288,12 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
               }}>
                 Edit profile
               </button>
+              <button onClick={() => setShowPrivacySettings(true)} style={{
+                marginLeft: 8, padding: '9px 16px', borderRadius: 22, border: `1.5px solid ${theme.border}`,
+                background: 'transparent', color: theme.ink, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT,
+              }}>
+                Privacy
+              </button>
             </div>
           )}
 
@@ -1044,6 +1313,18 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
               <textarea value={bio} onChange={(e) => setBio(e.target.value.slice(0, 140))}
                 placeholder="Tell people about yourself"
                 style={{ ...inputStyle(theme), height: 64, resize: 'none', fontFamily: FONT, marginBottom: 14 }} />
+              <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 11.5, color: theme.muted, marginBottom: 5, fontWeight: 800, letterSpacing: '0.04em' }}>AGE</div>
+                  <input value={age} onChange={(e) => setAge(e.target.value.replace(/[^0-9]/g, '').slice(0, 3))}
+                    inputMode="numeric" placeholder="Age" style={inputStyle(theme)} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 11.5, color: theme.muted, marginBottom: 5, fontWeight: 800, letterSpacing: '0.04em' }}>COUNTRY</div>
+                  <input value={country} onChange={(e) => setCountry(e.target.value.slice(0, 56))}
+                    placeholder="Country" style={inputStyle(theme)} />
+                </div>
+              </div>
               <div style={{ fontSize: 11.5, color: theme.muted, marginBottom: 5, fontWeight: 800, letterSpacing: '0.04em' }}>GENDER</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>
                 {GENDERS.map((g) => (
@@ -1063,21 +1344,29 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
             </div>
           ) : (
             <>
-              <div style={{
-                display: 'flex', justifyContent: 'center', gap: 10, marginTop: 20,
-              }}>
-                <div style={{ flex: profile.gender ? 1 : 'none', minWidth: 90, background: theme.rowBg, borderRadius: 16, padding: '10px 16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 20 }}>
+                <div onClick={() => setListModal('followers')} style={{ flex: 1, minWidth: 80, background: theme.rowBg, borderRadius: 16, padding: '10px 12px', cursor: 'pointer' }}>
                   <div style={{ fontWeight: 800, fontSize: 16, color: theme.ink }}>{followerCount}</div>
                   <div style={{ fontSize: 10.5, color: theme.muted, fontWeight: 600, marginTop: 1 }}>Followers</div>
                 </div>
-                {profile.gender && (
-                  <div style={{ flex: 1, minWidth: 90, background: theme.rowBg, borderRadius: 16, padding: '10px 16px' }}>
-                    <div style={{ fontWeight: 800, fontSize: 16, color: theme.ink }}>{profile.gender}</div>
+                <div onClick={() => setListModal('following')} style={{ flex: 1, minWidth: 80, background: theme.rowBg, borderRadius: 16, padding: '10px 12px', cursor: 'pointer' }}>
+                  <div style={{ fontWeight: 800, fontSize: 16, color: theme.ink }}>{followingCount}</div>
+                  <div style={{ fontSize: 10.5, color: theme.muted, fontWeight: 600, marginTop: 1 }}>Following</div>
+                </div>
+                {(isSelf || (!profile.hide_gender && profile.gender)) && (
+                  <div style={{ flex: 1, minWidth: 80, background: theme.rowBg, borderRadius: 16, padding: '10px 12px' }}>
+                    <div style={{ fontWeight: 800, fontSize: 16, color: theme.ink }}>{profile.gender || '—'}</div>
                     <div style={{ fontSize: 10.5, color: theme.muted, fontWeight: 600, marginTop: 1 }}>Gender</div>
                   </div>
                 )}
               </div>
-              {profile.bio && (
+              {(isSelf || !profile.hide_age || !profile.hide_country) && (profile.age || profile.country) && (
+                <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginTop: 10, fontSize: 12, color: theme.muted }}>
+                  {profile.age != null && (isSelf || !profile.hide_age) && <span>{profile.age} yrs</span>}
+                  {profile.country && (isSelf || !profile.hide_country) && <span>{profile.country}</span>}
+                </div>
+              )}
+              {profile.bio && (isSelf || !profile.hide_bio) && (
                 <div style={{ fontSize: 13.5, color: theme.ink, marginTop: 18, lineHeight: 1.6, padding: '0 4px' }}>{profile.bio}</div>
               )}
               {isSelf && (
@@ -1104,11 +1393,12 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
           {!isSelf && !editing && (
             <button onClick={toggleFollow} disabled={followBusy} style={{
               marginTop: 20, padding: '9px 26px', borderRadius: 22, cursor: followBusy ? 'default' : 'pointer', fontFamily: FONT,
-              border: isFollowing ? `1.5px solid ${theme.border}` : 'none',
-              background: isFollowing ? 'transparent' : theme.coral,
-              color: isFollowing ? theme.ink : 'white', fontSize: 12.5, fontWeight: 700,
+              border: followState !== 'none' ? `1.5px solid ${theme.border}` : 'none',
+              background: followState !== 'none' ? 'transparent' : theme.coral,
+              color: followState !== 'none' ? theme.ink : 'white', fontSize: 12.5, fontWeight: 700,
             }}>
-              {followBusy ? <Spinner size={12} color={isFollowing ? theme.ink : 'white'} /> : (isFollowing ? 'Following' : 'Follow')}
+              {followBusy ? <Spinner size={12} color={followState !== 'none' ? theme.ink : 'white'} /> :
+                followState === 'accepted' ? 'Following' : followState === 'pending' ? 'Requested' : 'Follow'}
             </button>
           )}
 
@@ -1140,9 +1430,18 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
         </div>
       </div>
       {cropFile && <AvatarCropper file={cropFile} onCancel={() => setCropFile(null)} onConfirm={uploadCropped} />}
+      {listModal && (
+        <FollowListModal userId={profile.id} mode={listModal} onClose={() => setListModal(null)}
+          onOpenProfile={(p) => { setListModal(null); onOpenProfile(p); }} />
+      )}
+      {showPrivacySettings && (
+        <AccountPrivacyPanel profile={profile} onClose={() => setShowPrivacySettings(false)}
+          onSaved={(updated) => { onSaved(updated); setShowPrivacySettings(false); }} />
+      )}
     </div>
   );
 }
+
 function StatusTicks({ status }) {
   const { theme } = useTheme();
   const color = status === 'read' ? theme.coral : theme.muted;
@@ -1157,6 +1456,7 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
   const lastTapRef = useRef(0);
   const pressTimerRef = useRef(null);
   const longPressFiredRef = useRef(false);
+  const startPosRef = useRef({ x: 0, y: 0 });
   const time = m.created_at ? new Date(m.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
 
   const handleTap = () => {
@@ -1173,25 +1473,31 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
     lastTapRef.current = now;
   };
 
-  const startPress = () => {
+  const clearPressTimer = () => { clearTimeout(pressTimerRef.current); pressTimerRef.current = null; setHover(false); };
+
+  const handlePointerDown = (e) => {
     setHover(true);
+    startPosRef.current = { x: e.clientX, y: e.clientY };
     clearTimeout(pressTimerRef.current);
     pressTimerRef.current = setTimeout(() => {
       longPressFiredRef.current = true;
       onLongPress(m.id);
-    }, 450);
+    }, 3000);
   };
-  const cancelPress = () => { clearTimeout(pressTimerRef.current); };
+  const handlePointerMove = (e) => {
+    const dx = Math.abs(e.clientX - startPosRef.current.x);
+    const dy = Math.abs(e.clientY - startPosRef.current.y);
+    if (dx > 8 || dy > 8) clearPressTimer();
+  };
 
   return (
     <div
       style={{ display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start', alignItems: 'center', gap: 8, marginBottom: 10 }}
-      onTouchStart={startPress}
-      onTouchEnd={cancelPress}
-      onTouchMove={cancelPress}
-      onMouseDown={startPress}
-      onMouseUp={cancelPress}
-      onMouseLeave={cancelPress}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={clearPressTimer}
+      onPointerCancel={clearPressTimer}
+      onPointerLeave={clearPressTimer}
     >
       {selectionMode && (
         <div onClick={() => onToggleSelect(m.id)} style={{
@@ -1256,6 +1562,7 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
 
 function playPing() {
   try {
+    if (localStorage.getItem('zchat-sound') === 'off') return;
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
     const o = ctx.createOscillator();
     const g = ctx.createGain();
@@ -1416,9 +1723,8 @@ function DeleteChatConfirm({ name, onCancel, onConfirm }) {
     </div>
   );
 }
-
 function ChatApp({ session, onLogout, onNeedsProfile }) {
-  const { theme } = useTheme();
+  const { theme, bgPatternOn } = useTheme();
   const [me, setMe] = useState(null);
   const [profileCheckFailed, setProfileCheckFailed] = useState(false);
   const [results, setResults] = useState([]);
@@ -1432,6 +1738,8 @@ function ChatApp({ session, onLogout, onNeedsProfile }) {
   const [showSettings, setShowSettings] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [showFollowRequests, setShowFollowRequests] = useState(false);
+  const [showDiscover, setShowDiscover] = useState(false);
   const [mobileShowChat, setMobileShowChat] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [loadingConvo, setLoadingConvo] = useState(false);
@@ -1792,6 +2100,7 @@ function ChatApp({ session, onLogout, onNeedsProfile }) {
             onClose={() => setProfileOf(null)}
             onReport={handleReport}
             onOpenSettings={() => setShowSettings(true)}
+            onOpenProfile={(p) => setProfileOf(p)}
             onSaved={(updated) => { setMe(updated.id === me.id ? { ...updated, email: me.email } : me); if (activeProfile?.id === updated.id) setActiveProfile(updated); }}
           />
         )}
@@ -1799,10 +2108,19 @@ function ChatApp({ session, onLogout, onNeedsProfile }) {
           <SettingsPanel
             onClose={() => setShowSettings(false)}
             onOpenPrivacy={() => setShowPrivacy(true)}
+            onOpenRequests={() => setShowFollowRequests(true)}
             onLogout={() => setShowLogoutConfirm(true)}
           />
         )}
         {showPrivacy && <PrivacyPanel onBack={() => setShowPrivacy(false)} />}
+        {showFollowRequests && (
+          <FollowRequestsPanel userId={session.user.id} onClose={() => setShowFollowRequests(false)}
+            onOpenProfile={(p) => { setShowFollowRequests(false); setShowSettings(false); setProfileOf(p); }} />
+        )}
+        {showDiscover && (
+          <DiscoverPanel myId={session.user.id} onClose={() => setShowDiscover(false)}
+            onOpenProfile={(p) => { setShowDiscover(false); setProfileOf(p); }} />
+        )}
         {showLogoutConfirm && (
           <LogoutConfirm onCancel={() => setShowLogoutConfirm(false)} onConfirm={onLogout} />
         )}
@@ -1821,6 +2139,7 @@ function ChatApp({ session, onLogout, onNeedsProfile }) {
                 </div>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <Compass size={18} style={{ cursor: 'pointer', color: theme.muted }} onClick={() => setShowDiscover(true)} />
                 <ThemeToggleIcon size={16} />
                 <LogOut size={18} style={{ cursor: 'pointer', color: theme.muted }} onClick={() => setShowLogoutConfirm(true)} />
               </div>
@@ -1949,7 +2268,16 @@ function ChatApp({ session, onLogout, onNeedsProfile }) {
                   </div>
                 </div>
               )}
-              <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '16px 18px' }}>
+              <div ref={scrollRef} style={{
+                flex: 1, overflowY: 'auto', padding: '16px 18px',
+                ...(bgPatternOn ? {
+                  backgroundSize: '130px 130px',
+                  backgroundRepeat: 'repeat',
+                  backgroundImage: theme.dark
+                    ? "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='130' height='130' viewBox='0 0 130 130'%3E%3Cg fill='none' stroke='%23FF6B4A' stroke-width='1.6' opacity='0.14'%3E%3Cpath d='M20 20 q0 -8 8 -8 h14 q8 0 8 8 v10 q0 8 -8 8 h-8 l-6 6 v-6 h0 q-8 0 -8 -8 z'/%3E%3C/g%3E%3Cg fill='none' stroke='%23F3B54C' stroke-width='1.6' opacity='0.14'%3E%3Cpath d='M95 15 l2.5 6 6.5 0.5 -5 4.3 1.6 6.4 -5.6 -3.6 -5.6 3.6 1.6 -6.4 -5 -4.3 6.5 -0.5 z'/%3E%3C/g%3E%3Cg fill='none' stroke='%2329C7B3' stroke-width='1.6' opacity='0.14'%3E%3Ccircle cx='30' cy='75' r='7'/%3E%3Cpath d='M30 70 v10 M25 75 h10'/%3E%3C/g%3E%3Cg fill='none' stroke='%23FF6B4A' stroke-width='1.6' opacity='0.12'%3E%3Cpath d='M85 70 l14 -7 -5 14 -3 -5 z'/%3E%3C/g%3E%3Cg fill='none' stroke='%23F3B54C' stroke-width='1.6' opacity='0.12'%3E%3Cpath d='M55 105 c0 -14 20 -14 20 0 c0 8 -6 10 -10 14 c-4 -4 -10 -6 -10 -14 z'/%3E%3C/g%3E%3Cg fill='none' stroke='%2329C7B3' stroke-width='1.6' opacity='0.12'%3E%3Crect x='10' y='105' width='16' height='12' rx='3'/%3E%3Ccircle cx='18' cy='111' r='3'/%3E%3C/g%3E%3C/svg%3E\")"
+                    : "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='130' height='130' viewBox='0 0 130 130'%3E%3Cg fill='none' stroke='%23FF6B4A' stroke-width='1.6' opacity='0.16'%3E%3Cpath d='M20 20 q0 -8 8 -8 h14 q8 0 8 8 v10 q0 8 -8 8 h-8 l-6 6 v-6 h0 q-8 0 -8 -8 z'/%3E%3C/g%3E%3Cg fill='none' stroke='%23F3B54C' stroke-width='1.6' opacity='0.16'%3E%3Cpath d='M95 15 l2.5 6 6.5 0.5 -5 4.3 1.6 6.4 -5.6 -3.6 -5.6 3.6 1.6 -6.4 -5 -4.3 6.5 -0.5 z'/%3E%3C/g%3E%3Cg fill='none' stroke='%2329C7B3' stroke-width='1.6' opacity='0.16'%3E%3Ccircle cx='30' cy='75' r='7'/%3E%3Cpath d='M30 70 v10 M25 75 h10'/%3E%3C/g%3E%3Cg fill='none' stroke='%23FF6B4A' stroke-width='1.6' opacity='0.14'%3E%3Cpath d='M85 70 l14 -7 -5 14 -3 -5 z'/%3E%3C/g%3E%3Cg fill='none' stroke='%23F3B54C' stroke-width='1.6' opacity='0.14'%3E%3Cpath d='M55 105 c0 -14 20 -14 20 0 c0 8 -6 10 -10 14 c-4 -4 -10 -6 -10 -14 z'/%3E%3C/g%3E%3Cg fill='none' stroke='%2329C7B3' stroke-width='1.6' opacity='0.14'%3E%3Crect x='10' y='105' width='16' height='12' rx='3'/%3E%3Ccircle cx='18' cy='111' r='3'/%3E%3C/g%3E%3C/svg%3E\")",
+                } : {}),
+              }}>
                 {loadingConvo ? (
                   <div style={{ display: 'flex', justifyContent: 'center', marginTop: 30 }}><Spinner color={theme.ink} /></div>
                 ) : messages.length === 0 ? (
@@ -2157,4 +2485,5 @@ export default function App() {
     </ThemeProvider>
   );
 }
+
 
