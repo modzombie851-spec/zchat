@@ -625,6 +625,68 @@ function RegisterFlow({ onDone, onBack, onStart }) {
 
 const GENDERS = ['Male', 'Female', 'Other', 'Prefer not to say'];
 
+const COUNTRIES = [
+  ['AF','Afghanistan'],['AL','Albania'],['DZ','Algeria'],['AD','Andorra'],['AO','Angola'],['AR','Argentina'],['AM','Armenia'],['AU','Australia'],['AT','Austria'],['AZ','Azerbaijan'],
+  ['BH','Bahrain'],['BD','Bangladesh'],['BY','Belarus'],['BE','Belgium'],['BZ','Belize'],['BJ','Benin'],['BT','Bhutan'],['BO','Bolivia'],['BA','Bosnia and Herzegovina'],['BW','Botswana'],
+  ['BR','Brazil'],['BN','Brunei'],['BG','Bulgaria'],['BF','Burkina Faso'],['BI','Burundi'],['KH','Cambodia'],['CM','Cameroon'],['CA','Canada'],['CV','Cape Verde'],['CF','Central African Republic'],
+  ['TD','Chad'],['CL','Chile'],['CN','China'],['CO','Colombia'],['KM','Comoros'],['CG','Congo'],['CD','DR Congo'],['CR','Costa Rica'],['HR','Croatia'],['CU','Cuba'],
+  ['CY','Cyprus'],['CZ','Czechia'],['DK','Denmark'],['DJ','Djibouti'],['DO','Dominican Republic'],['EC','Ecuador'],['EG','Egypt'],['SV','El Salvador'],['EE','Estonia'],['ET','Ethiopia'],
+  ['FJ','Fiji'],['FI','Finland'],['FR','France'],['GA','Gabon'],['GM','Gambia'],['GE','Georgia'],['DE','Germany'],['GH','Ghana'],['GR','Greece'],['GT','Guatemala'],
+  ['GN','Guinea'],['GY','Guyana'],['HT','Haiti'],['HN','Honduras'],['HK','Hong Kong'],['HU','Hungary'],['IS','Iceland'],['IN','India'],['ID','Indonesia'],['IR','Iran'],
+  ['IQ','Iraq'],['IE','Ireland'],['IL','Israel'],['IT','Italy'],['JM','Jamaica'],['JP','Japan'],['JO','Jordan'],['KZ','Kazakhstan'],['KE','Kenya'],['KW','Kuwait'],
+  ['KG','Kyrgyzstan'],['LA','Laos'],['LV','Latvia'],['LB','Lebanon'],['LS','Lesotho'],['LR','Liberia'],['LY','Libya'],['LI','Liechtenstein'],['LT','Lithuania'],['LU','Luxembourg'],
+  ['MO','Macao'],['MG','Madagascar'],['MW','Malawi'],['MY','Malaysia'],['MV','Maldives'],['ML','Mali'],['MT','Malta'],['MR','Mauritania'],['MU','Mauritius'],['MX','Mexico'],
+  ['MD','Moldova'],['MC','Monaco'],['MN','Mongolia'],['ME','Montenegro'],['MA','Morocco'],['MZ','Mozambique'],['MM','Myanmar'],['NA','Namibia'],['NP','Nepal'],['NL','Netherlands'],
+  ['NZ','New Zealand'],['NI','Nicaragua'],['NE','Niger'],['NG','Nigeria'],['NO','Norway'],['OM','Oman'],['PK','Pakistan'],['PA','Panama'],['PG','Papua New Guinea'],['PY','Paraguay'],
+  ['PE','Peru'],['PH','Philippines'],['PL','Poland'],['PT','Portugal'],['QA','Qatar'],['RO','Romania'],['RU','Russia'],['RW','Rwanda'],['SA','Saudi Arabia'],['SN','Senegal'],
+  ['RS','Serbia'],['SG','Singapore'],['SK','Slovakia'],['SI','Slovenia'],['SO','Somalia'],['ZA','South Africa'],['KR','South Korea'],['SS','South Sudan'],['ES','Spain'],['LK','Sri Lanka'],
+  ['SD','Sudan'],['SR','Suriname'],['SE','Sweden'],['CH','Switzerland'],['SY','Syria'],['TW','Taiwan'],['TJ','Tajikistan'],['TZ','Tanzania'],['TH','Thailand'],['TG','Togo'],
+  ['TT','Trinidad and Tobago'],['TN','Tunisia'],['TR','Turkey'],['TM','Turkmenistan'],['UG','Uganda'],['UA','Ukraine'],['AE','United Arab Emirates'],['GB','United Kingdom'],['US','United States'],['UY','Uruguay'],
+  ['UZ','Uzbekistan'],['VE','Venezuela'],['VN','Vietnam'],['YE','Yemen'],['ZM','Zambia'],['ZW','Zimbabwe'],
+];
+const countryFlag = (code) => code.split('').map((c) => String.fromCodePoint(127397 + c.charCodeAt(0))).join('');
+
+/* Blank out a person's avatar if they've hidden it and we're not looking at ourselves — applied once
+   at the source so every screen (list rows, chat header, forward picker, discover, etc.) respects it. */
+function sanitizeAvatar(profile, myId) {
+  if (!profile) return profile;
+  if (profile.hide_photo && profile.id !== myId) return { ...profile, avatar: '' };
+  return profile;
+}
+function sanitizeAvatarList(list, myId) {
+  return (list || []).map((p) => sanitizeAvatar(p, myId));
+}
+
+
+function CountryPicker({ value, onSelect, onClose }) {
+  const { theme } = useTheme();
+  const [q, setQ] = useState('');
+  const filtered = COUNTRIES.filter(([, name]) => name.toLowerCase().includes(q.toLowerCase()));
+  return (
+    <div onClick={onClose} style={{
+      position: 'absolute', inset: 0, background: 'rgba(20,16,14,0.5)', zIndex: 96,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 18,
+    }} className="zchat-fade">
+      <div onClick={(e) => e.stopPropagation()} style={{ background: theme.panelBg, borderRadius: 22, padding: 18, width: '100%', maxWidth: 320, maxHeight: '70vh', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ fontWeight: 800, fontSize: 15, color: theme.ink, marginBottom: 10 }}>Choose your country</div>
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search"
+          style={{ ...inputStyle(theme), padding: '8px 12px', fontSize: 13, marginBottom: 10 }} />
+        <div style={{ overflowY: 'auto', flex: 1 }}>
+          {filtered.map(([code, name]) => (
+            <div key={code} onClick={() => { onSelect(code); onClose(); }} style={{
+              display: 'flex', alignItems: 'center', gap: 10, padding: '8px 4px', cursor: 'pointer',
+              background: value === code ? theme.rowBg : 'transparent', borderRadius: 10,
+            }}>
+              <span style={{ fontSize: 20 }}>{countryFlag(code)}</span>
+              <span style={{ fontSize: 13, color: theme.ink }}>{name}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ============================= Logout confirm modal ============================= */
 
 function LogoutConfirm({ onCancel, onConfirm }) {
@@ -775,7 +837,6 @@ function PrivacyPanel({ onBack }) {
 }
 
 /* ============================= User list rows (followers/following/discover) ============================= */
-
 function UserListRow({ profile, rightContent, onClick }) {
   const { theme } = useTheme();
   return (
@@ -811,7 +872,7 @@ function ListModal({ title, onClose, children }) {
   );
 }
 
-function FollowListModal({ userId, mode, onClose, onOpenProfile }) {
+function FollowListModal({ userId, viewerId, mode, onClose, onOpenProfile }) {
   const [list, setList] = useState(null);
 
   useEffect(() => {
@@ -822,7 +883,7 @@ function FollowListModal({ userId, mode, onClose, onOpenProfile }) {
       const ids = (data || []).map((r) => r[otherCol]);
       if (!ids.length) { setList([]); return; }
       const { data: profs } = await supabase.from('profiles').select('*').in('id', ids);
-      setList(profs || []);
+      setList(sanitizeAvatarList(profs, viewerId));
     })();
   }, [userId, mode]);
 
@@ -848,9 +909,18 @@ function FollowRequestsPanel({ userId, onClose, onOpenProfile }) {
     const ids = (data || []).map((r) => r.follower_id);
     if (!ids.length) { setRequests([]); return; }
     const { data: profs } = await supabase.from('profiles').select('*').in('id', ids);
-    setRequests((profs || []).map((p) => ({ profile: p })));
+    setRequests(sanitizeAvatarList(profs, userId).map((p) => ({ profile: p })));
   };
-  useEffect(() => { load(); }, [userId]);
+  useEffect(() => {
+    load();
+    const channel = supabase.channel('requests-watch-' + userId)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'follows' }, (payload) => {
+        const row = payload.new || payload.old;
+        if (row.following_id === userId) load();
+      })
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, [userId]);
 
   const respond = async (followerId, accept) => {
     if (accept) await supabase.from('follows').update({ status: 'accepted' }).eq('follower_id', followerId).eq('following_id', userId);
@@ -891,7 +961,7 @@ function DiscoverPanel({ myId, onClose, onOpenProfile }) {
   useEffect(() => {
     (async () => {
       const { data } = await supabase.from('profiles').select('*').eq('is_private', false).neq('id', myId).limit(40);
-      setPeople(data || []);
+      setPeople(sanitizeAvatarList(data, myId));
     })();
   }, [myId]);
 
@@ -1028,6 +1098,243 @@ function ArchivedChatsPanel({ conversations, onClose, onOpenChat, onUnarchive })
         )}
       </div>
     </div>
+  );
+}
+
+/* ============================= Per-chat wallpaper ============================= */
+
+const WALLPAPER_PRESETS = ['default', 'coral', 'ocean', 'berry', 'solid-dark', 'solid-light'];
+const WALLPAPER_COLORS = { coral: '#FF6B4A', ocean: '#3DA5F5', berry: '#C15CFC' };
+
+function wallpaperBgStyle(key, theme) {
+  if (!key || key === 'default') return null;
+  if (key === 'solid-dark') return { backgroundColor: '#121319', backgroundImage: 'none' };
+  if (key === 'solid-light') return { backgroundColor: '#F6F3EE', backgroundImage: 'none' };
+  const color = WALLPAPER_COLORS[key] || WALLPAPER_COLORS.coral;
+  const hex = color.replace('#', '%23');
+  return {
+    backgroundColor: theme.dark ? '#16171F' : '#F6F3EE',
+    backgroundSize: '130px 130px',
+    backgroundRepeat: 'repeat',
+    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='130' height='130' viewBox='0 0 130 130'%3E%3Cg fill='none' stroke='${hex}' stroke-width='1.6' opacity='0.18'%3E%3Ccircle cx='30' cy='30' r='10'/%3E%3Ccircle cx='95' cy='75' r='7'/%3E%3Cpath d='M70 15 l16 8 -16 8 -16 -8 z'/%3E%3C/g%3E%3C/svg%3E")`,
+  };
+}
+
+function WallpaperPicker({ value, onSelect, onClose }) {
+  const { theme } = useTheme();
+  return (
+    <div onClick={onClose} style={{
+      position: 'absolute', inset: 0, background: 'rgba(20,16,14,0.5)', zIndex: 96,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 18,
+    }} className="zchat-fade">
+      <div onClick={(e) => e.stopPropagation()} style={{ background: theme.panelBg, borderRadius: 22, padding: 20, width: '100%', maxWidth: 320 }}>
+        <div style={{ fontWeight: 800, fontSize: 15, color: theme.ink, marginBottom: 14 }}>Chat wallpaper</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+          {WALLPAPER_PRESETS.map((key) => (
+            <div key={key} onClick={() => { onSelect(key); onClose(); }} style={{
+              height: 64, borderRadius: 14, cursor: 'pointer',
+              border: value === key || (!value && key === 'default') ? `2.5px solid ${theme.coral}` : `1.5px solid ${theme.border}`,
+              ...(key === 'default' ? { background: theme.bgGradient, display: 'flex', alignItems: 'center', justifyContent: 'center' } : wallpaperBgStyle(key, theme)),
+            }}>
+              {key === 'default' && <span style={{ fontSize: 10, fontWeight: 700, color: theme.ink }}>Default</span>}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ============================= Chat lock ============================= */
+
+async function hashPin(pin) {
+  const enc = new TextEncoder().encode(pin);
+  const buf = await crypto.subtle.digest('SHA-256', enc);
+  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+function PinPad({ value, onChange, length = 4 }) {
+  const { theme } = useTheme();
+  return (
+    <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginBottom: 18 }}>
+      {Array.from({ length }).map((_, i) => (
+        <div key={i} style={{
+          width: 16, height: 16, borderRadius: '50%',
+          background: i < value.length ? theme.coral : theme.rowBg, border: `1.5px solid ${theme.border}`,
+        }} />
+      ))}
+    </div>
+  );
+}
+
+function PinKeypad({ onDigit, onBackspace }) {
+  const { theme } = useTheme();
+  const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', '⌫'];
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+      {keys.map((k, i) => (
+        <div key={i} onClick={() => { if (k === '⌫') onBackspace(); else if (k) onDigit(k); }} style={{
+          height: 50, borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 18, fontWeight: 700, color: theme.ink, background: k ? theme.rowBg : 'transparent',
+          cursor: k ? 'pointer' : 'default',
+        }}>{k}</div>
+      ))}
+    </div>
+  );
+}
+
+function ChatLockSetup({ onCancel, onConfirm }) {
+  const { theme } = useTheme();
+  const [pin, setPin] = useState('');
+  const [confirmPin, setConfirmPin] = useState('');
+  const [stage, setStage] = useState('enter');
+  const [err, setErr] = useState('');
+
+  const handleDigit = (d) => {
+    if (stage === 'enter') {
+      if (pin.length < 4) {
+        const next = pin + d;
+        setPin(next);
+        if (next.length === 4) setTimeout(() => setStage('confirm'), 150);
+      }
+    } else {
+      if (confirmPin.length < 4) {
+        const next = confirmPin + d;
+        setConfirmPin(next);
+        if (next.length === 4) {
+          if (next === pin) onConfirm(pin);
+          else { setErr('PINs did not match'); setTimeout(() => { setPin(''); setConfirmPin(''); setStage('enter'); setErr(''); }, 700); }
+        }
+      }
+    }
+  };
+  const handleBackspace = () => { if (stage === 'enter') setPin((p) => p.slice(0, -1)); else setConfirmPin((p) => p.slice(0, -1)); };
+
+  return (
+    <div style={{
+      position: 'absolute', inset: 0, background: theme.panelBg, zIndex: 97,
+      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 30,
+    }} className="zchat-fade">
+      <Lock size={28} color={theme.coral} style={{ marginBottom: 10 }} />
+      <div style={{ fontWeight: 800, fontSize: 16, color: theme.ink, marginBottom: 4 }}>
+        {stage === 'enter' ? 'Set a PIN' : 'Confirm your PIN'}
+      </div>
+      <div style={{ fontSize: 12, color: err ? theme.danger : theme.muted, marginBottom: 18, minHeight: 16 }}>{err || 'Only you can unlock this chat'}</div>
+      <PinPad value={stage === 'enter' ? pin : confirmPin} />
+      <div style={{ width: '100%', maxWidth: 220 }}>
+        <PinKeypad onDigit={handleDigit} onBackspace={handleBackspace} />
+      </div>
+      <span style={{ ...ghostBtn(theme), marginTop: 22 }} onClick={onCancel}>Cancel</span>
+    </div>
+  );
+}
+
+function ChatLockUnlock({ onCancel, onUnlock, correctHash }) {
+  const { theme } = useTheme();
+  const [pin, setPin] = useState('');
+  const [err, setErr] = useState('');
+
+  const handleDigit = async (d) => {
+    if (pin.length >= 4) return;
+    const next = pin + d;
+    setPin(next);
+    if (next.length === 4) {
+      const h = await hashPin(next);
+      if (h === correctHash) onUnlock();
+      else { setErr('Incorrect PIN'); setTimeout(() => { setPin(''); setErr(''); }, 600); }
+    }
+  };
+
+  return (
+    <div style={{
+      position: 'absolute', inset: 0, background: theme.panelBg, zIndex: 97,
+      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 30,
+    }} className="zchat-fade">
+      <Lock size={28} color={theme.coral} style={{ marginBottom: 10 }} />
+      <div style={{ fontWeight: 800, fontSize: 16, color: theme.ink, marginBottom: 4 }}>Enter PIN</div>
+      <div style={{ fontSize: 12, color: err ? theme.danger : theme.muted, marginBottom: 18, minHeight: 16 }}>{err || 'This chat is locked'}</div>
+      <PinPad value={pin} />
+      <div style={{ width: '100%', maxWidth: 220 }}>
+        <PinKeypad onDigit={handleDigit} onBackspace={() => setPin((p) => p.slice(0, -1))} />
+      </div>
+      <span style={{ ...ghostBtn(theme), marginTop: 22 }} onClick={onCancel}>Back</span>
+    </div>
+  );
+}
+
+/* ============================= Chat settings screen ============================= */
+
+function ChatSettingsPanel({ conv, myId, isPinned, isLocked, wallpaper, onClose, onTogglePin, onToggleArchive, onSetWallpaper, onEnableLock, onDisableLock, onDeleteChat, onNicknameSaved }) {
+  const { theme } = useTheme();
+  const [nickname, setNickname] = useState('');
+  const [nicknameSaving, setNicknameSaving] = useState(false);
+  const [showWallpaper, setShowWallpaper] = useState(false);
+  const [showLockSetup, setShowLockSetup] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from('contact_nicknames').select('nickname').eq('owner_id', myId).eq('contact_id', conv.otherProfile.id).maybeSingle();
+      if (data) setNickname(data.nickname);
+    })();
+  }, [conv.otherProfile.id]);
+
+  const saveNickname = async (val) => {
+    setNicknameSaving(true);
+    if (val.trim()) await supabase.from('contact_nicknames').upsert({ owner_id: myId, contact_id: conv.otherProfile.id, nickname: val.trim() }, { onConflict: 'owner_id,contact_id' });
+    else await supabase.from('contact_nicknames').delete().eq('owner_id', myId).eq('contact_id', conv.otherProfile.id);
+    setNicknameSaving(false);
+    onNicknameSaved();
+  };
+
+  return (
+    <div style={{
+      position: 'absolute', inset: 0, background: theme.panelBg, zIndex: 33,
+      display: 'flex', flexDirection: 'column',
+    }} className="zchat-fade">
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 18px', borderBottom: `1px solid ${theme.border}` }}>
+        <ArrowLeft size={20} style={{ cursor: 'pointer', color: theme.ink }} onClick={onClose} />
+        <div style={{ fontWeight: 800, fontSize: 17, color: theme.ink }}>Chat settings</div>
+      </div>
+      <div style={{ overflowY: 'auto', flex: 1, padding: '14px 18px' }}>
+        <div style={{ textAlign: 'center', marginBottom: 18 }}>
+          <Avatar emoji={conv.otherProfile.avatar} name={conv.realName || conv.otherProfile.name} size={64} />
+          <div style={{ fontWeight: 800, fontSize: 15, color: theme.ink, marginTop: 8 }}>{conv.realName || conv.otherProfile.name}</div>
+          <div style={{ fontSize: 12, color: theme.muted }}>@{conv.otherProfile.username}</div>
+        </div>
+
+        <div style={{ fontSize: 11, color: theme.muted, marginBottom: 5, fontWeight: 800 }}>NICKNAME</div>
+        <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
+          <input value={nickname} onChange={(e) => setNickname(e.target.value.slice(0, 30))} placeholder="Custom nickname"
+            style={{ ...inputStyle(theme), fontSize: 13 }} />
+          <button onClick={() => saveNickname(nickname)} disabled={nicknameSaving} style={{
+            padding: '0 16px', borderRadius: 13, border: 'none', background: theme.coral, color: 'white',
+            fontWeight: 700, fontSize: 12.5, cursor: 'pointer', fontFamily: FONT,
+          }}>{nicknameSaving ? <Spinner size={12} /> : 'Save'}</button>
+        </div>
+
+        <SettingsRow icon={<Pin_ />} label={isPinned ? 'Unpin chat' : 'Pin chat'} onClick={onTogglePin} />
+        <SettingsRow icon={<FileText size={16} />} label="Archive chat" onClick={onToggleArchive} />
+        <SettingsRow icon={<ImageIcon size={16} />} label="Chat wallpaper" onClick={() => setShowWallpaper(true)} />
+        <SettingsRow icon={<Lock size={16} />} label={isLocked ? 'Remove chat lock' : 'Lock this chat'}
+          onClick={() => (isLocked ? onDisableLock() : setShowLockSetup(true))} />
+        <div style={{ height: 10 }} />
+        <SettingsRow icon={<Trash2 size={16} />} label="Delete chat" danger onClick={onDeleteChat} />
+      </div>
+      {showWallpaper && (
+        <WallpaperPicker value={wallpaper} onSelect={onSetWallpaper} onClose={() => setShowWallpaper(false)} />
+      )}
+      {showLockSetup && (
+        <ChatLockSetup onCancel={() => setShowLockSetup(false)} onConfirm={(pin) => { setShowLockSetup(false); onEnableLock(pin); }} />
+      )}
+    </div>
+  );
+}
+
+function Pin_({ size = 16 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="12" y1="17" x2="12" y2="22" /><path d="M5 17h14l-1.5-9a2 2 0 00-2-1.7H8.5a2 2 0 00-2 1.7z" />
+    </svg>
   );
 }
 
@@ -1203,6 +1510,7 @@ function AvatarCropper({ file, onCancel, onConfirm }) {
     </div>
   );
 }
+
 function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, onSaved, onOpenSettings, onOpenProfile, onMessage }) {
   const { theme } = useTheme();
   const [reportOpen, setReportOpen] = useState(false);
@@ -1213,6 +1521,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
   const [gender, setGender] = useState(profile.gender || '');
   const [age, setAge] = useState(profile.age != null ? String(profile.age) : '');
   const [country, setCountry] = useState(profile.country || '');
+  const [showCountryPicker, setShowCountryPicker] = useState(false);
   const [avatar, setAvatar] = useState(profile.avatar || '');
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [cropFile, setCropFile] = useState(null);
@@ -1257,7 +1566,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+    const loadCounts = async () => {
       const { count: followers } = await supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', profile.id).eq('status', 'accepted');
       if (!cancelled) setFollowerCount(followers || 0);
       const { count: following } = await supabase.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', profile.id).eq('status', 'accepted');
@@ -1265,8 +1574,15 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
       if (isSelf) return;
       const { data } = await supabase.from('follows').select('status').eq('follower_id', userId).eq('following_id', profile.id).maybeSingle();
       if (!cancelled) setFollowState(data ? data.status : 'none');
-    })();
-    return () => { cancelled = true; };
+    };
+    loadCounts();
+    const channel = supabase.channel('profile-follows-' + profile.id)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'follows' }, (payload) => {
+        const row = payload.new || payload.old;
+        if (row.following_id === profile.id || row.follower_id === profile.id) loadCounts();
+      })
+      .subscribe();
+    return () => { cancelled = true; supabase.removeChannel(channel); };
   }, [profile.id, isSelf]);
 
   const toggleFollow = async () => {
@@ -1438,8 +1754,9 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
                 </div>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 11.5, color: theme.muted, marginBottom: 5, fontWeight: 800, letterSpacing: '0.04em' }}>COUNTRY</div>
-                  <input value={country} onChange={(e) => setCountry(e.target.value.slice(0, 56))}
-                    placeholder="Country" style={inputStyle(theme)} />
+                  <div onClick={() => setShowCountryPicker(true)} style={{ ...inputStyle(theme), cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {country ? <><span style={{ fontSize: 18 }}>{countryFlag(country)}</span></> : <span style={{ color: theme.muted }}>Choose</span>}
+                  </div>
                 </div>
               </div>
               <div style={{ fontSize: 11.5, color: theme.muted, marginBottom: 5, fontWeight: 800, letterSpacing: '0.04em' }}>GENDER</div>
@@ -1480,7 +1797,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
               {(isSelf || !profile.hide_age || !profile.hide_country) && (profile.age || profile.country) && (
                 <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginTop: 10, fontSize: 12, color: theme.muted }}>
                   {profile.age != null && (isSelf || !profile.hide_age) && <span>{profile.age} yrs</span>}
-                  {profile.country && (isSelf || !profile.hide_country) && <span>{profile.country}</span>}
+                  {profile.country && (isSelf || !profile.hide_country) && <span style={{ fontSize: 15 }}>{countryFlag(profile.country)}</span>}
                 </div>
               )}
               {profile.bio && (isSelf || !profile.hide_bio) && (
@@ -1557,12 +1874,15 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
       </div>
       {cropFile && <AvatarCropper file={cropFile} onCancel={() => setCropFile(null)} onConfirm={uploadCropped} />}
       {listModal && (
-        <FollowListModal userId={profile.id} mode={listModal} onClose={() => setListModal(null)}
+        <FollowListModal userId={profile.id} viewerId={userId} mode={listModal} onClose={() => setListModal(null)}
           onOpenProfile={(p) => { setListModal(null); onOpenProfile(p); }} />
       )}
       {showPrivacySettings && (
         <AccountPrivacyPanel profile={profile} onClose={() => setShowPrivacySettings(false)}
           onSaved={(updated) => { onSaved(updated); setShowPrivacySettings(false); }} />
+      )}
+      {showCountryPicker && (
+        <CountryPicker value={country} onSelect={setCountry} onClose={() => setShowCountryPicker(false)} />
       )}
     </div>
   );
@@ -1868,7 +2188,7 @@ function ForwardPicker({ conversations, onCancel, onPick, myId }) {
     setSearching(true);
     timer.current = setTimeout(async () => {
       const { data } = await searchByUsername(val.trim());
-      setResults((data || []).filter((u) => u.id !== myId));
+      setResults(sanitizeAvatarList(data, myId).filter((u) => u.id !== myId));
       setSearching(false);
     }, 300);
   };
@@ -1967,6 +2287,7 @@ function DeleteChatConfirm({ name, onCancel, onConfirm }) {
     </div>
   );
 }
+
 function ChatApp({ session, onLogout, onNeedsProfile }) {
   const { theme, bgPatternOn } = useTheme();
   const [me, setMe] = useState(null);
@@ -2009,6 +2330,10 @@ function ChatApp({ session, onLogout, onNeedsProfile }) {
   const [whoReactedFor, setWhoReactedFor] = useState(null);
   const [showArchived, setShowArchived] = useState(false);
   const [archivedConversations, setArchivedConversations] = useState([]);
+  const [showChatSettings, setShowChatSettings] = useState(false);
+  const [myLocks, setMyLocks] = useState({});
+  const [unlockedChats, setUnlockedChats] = useState(new Set());
+  const [lockPromptFor, setLockPromptFor] = useState(null);
   const [recording, setRecording] = useState(false);
   const [recordSeconds, setRecordSeconds] = useState(0);
   const scrollRef = useRef(null);
@@ -2062,6 +2387,32 @@ function ChatApp({ session, onLogout, onNeedsProfile }) {
     loadConversations();
   };
 
+  const myWallpaperField = (conv) => (conv.user_a === session.user.id ? 'wallpaper_a' : 'wallpaper_b');
+  const myWallpaper = (conv) => conv[myWallpaperField(conv)];
+  const setWallpaper = async (conv, key) => {
+    await supabase.from('conversations').update({ [myWallpaperField(conv)]: key }).eq('id', conv.id);
+    setActiveProfile((p) => p); // no-op trigger
+    loadConversations();
+  };
+
+  const loadMyLocks = async () => {
+    const { data } = await supabase.from('chat_locks').select('*').eq('owner_id', session.user.id);
+    const map = {};
+    (data || []).forEach((l) => { map[l.conversation_id] = l.pin_hash; });
+    setMyLocks(map);
+  };
+
+  const enableChatLock = async (conv, pin) => {
+    const hash = await hashPin(pin);
+    await supabase.from('chat_locks').upsert({ conversation_id: conv.id, owner_id: session.user.id, pin_hash: hash }, { onConflict: 'conversation_id,owner_id' });
+    setMyLocks((prev) => ({ ...prev, [conv.id]: hash }));
+    setUnlockedChats((prev) => new Set(prev).add(conv.id));
+  };
+  const disableChatLock = async (conv) => {
+    await supabase.from('chat_locks').delete().eq('conversation_id', conv.id).eq('owner_id', session.user.id);
+    setMyLocks((prev) => { const n = { ...prev }; delete n[conv.id]; return n; });
+  };
+
   const loadConversations = async () => {
     const hidden = getHiddenChatIds();
     const archived = getArchivedChatIds();
@@ -2071,7 +2422,8 @@ function ChatApp({ session, onLogout, onNeedsProfile }) {
     if (!data || data.length === 0) { setConversations([]); setArchivedConversations([]); return; }
     const visible = data.filter((c) => !hidden.has(c.id));
     const otherIds = visible.map((c) => (c.user_a === session.user.id ? c.user_b : c.user_a));
-    const { data: profs } = await supabase.from('profiles').select('*').in('id', otherIds.length ? otherIds : ['00000000-0000-0000-0000-000000000000']);
+    const { data: profsRaw } = await supabase.from('profiles').select('*').in('id', otherIds.length ? otherIds : ['00000000-0000-0000-0000-000000000000']);
+    const profs = sanitizeAvatarList(profsRaw, session.user.id);
     const { data: nicks } = await supabase.from('contact_nicknames').select('*').eq('owner_id', session.user.id);
     const mergedAll = visible
       .map((c) => {
@@ -2119,7 +2471,7 @@ function ChatApp({ session, onLogout, onNeedsProfile }) {
   }, [profileCheckFailed]);
 
   useEffect(() => {
-    if (me) loadConversations();
+    if (me) { loadConversations(); loadMyLocks(); }
   }, [me]);
 
   useEffect(() => {
@@ -2159,6 +2511,52 @@ function ChatApp({ session, onLogout, onNeedsProfile }) {
   }, [me]);
 
   useEffect(() => {
+    if (!me || !activeProfile) return;
+    const channel = supabase.channel('reactions-' + activeProfile.id)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'message_likes' }, (payload) => {
+        const row = payload.new || payload.old;
+        const msgId = row.message_id;
+        if (!findMessageById(msgId)) return;
+        setMessageLikes((prev) => {
+          const next = { ...prev };
+          const list = (next[msgId] || []).filter((r) => r.user_id !== row.user_id);
+          if (payload.eventType !== 'DELETE') list.push({ user_id: row.user_id, emoji: row.emoji });
+          next[msgId] = list;
+          return next;
+        });
+      })
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, [me, activeProfile, messages]);
+
+  useEffect(() => {
+    if (!me || !activeProfile) return;
+    const channel = supabase.channel('follow-watch-' + activeProfile.id)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'follows' }, (payload) => {
+        const row = payload.new || payload.old;
+        if (row.follower_id === session.user.id && row.following_id === activeProfile.id) {
+          setActiveFollowState(payload.eventType === 'DELETE' ? 'none' : row.status);
+        }
+      })
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, [me, activeProfile]);
+
+  useEffect(() => {
+    if (!me) return;
+    const channel = supabase.channel('profile-watch-' + me.id)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles' }, (payload) => {
+        const rowRaw = payload.new;
+        const row = sanitizeAvatar(rowRaw, session.user.id);
+        if (row.id === me.id) setMe((prev) => ({ ...prev, ...rowRaw, email: prev.email }));
+        if (activeProfile && row.id === activeProfile.id) setActiveProfile((prev) => ({ ...prev, ...row }));
+        setProfileOf((prev) => (prev && prev.id === row.id ? { ...prev, ...row } : prev));
+      })
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, [me, activeProfile]);
+
+  useEffect(() => {
     if (!me) return;
     const channel = supabase.channel('presence-global', { config: { presence: { key: me.id } } });
     channel.on('presence', { event: 'sync' }, () => {
@@ -2184,12 +2582,16 @@ function ChatApp({ session, onLogout, onNeedsProfile }) {
     setSearching(true);
     searchTimer.current = setTimeout(async () => {
       const { data } = await searchByUsername(val.trim());
-      setResults((data || []).filter((u) => u.id !== session.user.id));
+      setResults(sanitizeAvatarList(data, session.user.id).filter((u) => u.id !== session.user.id));
       setSearching(false);
     }, 300);
   };
 
   const openChat = async (profile, convId) => {
+    if (convId && myLocks[convId] && !unlockedChats.has(convId)) {
+      setLockPromptFor({ profile, convId });
+      return;
+    }
     setActiveProfile(profile);
     setMobileShowChat(true);
     setLoadingConvo(true);
@@ -2587,6 +2989,7 @@ function ChatApp({ session, onLogout, onNeedsProfile }) {
               conversations.map((c) => {
                 const unread = isUnread(c);
                 const pinned = isPinnedByMe(c);
+                const locked = !!myLocks[c.id];
                 return (
                   <div key={c.id} style={{
                     display: 'flex', alignItems: 'center', gap: 12, padding: '12px 10px', cursor: 'pointer',
@@ -2598,13 +3001,14 @@ function ChatApp({ session, onLogout, onNeedsProfile }) {
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                           {pinned && <span style={{ fontSize: 11 }}>📌</span>}
+                          {locked && <Lock size={11} color={theme.muted} />}
                           <div style={{ fontWeight: unread ? 800 : 700, fontSize: 14.5, color: theme.ink }}>{c.otherProfile.name}</div>
                         </div>
                         <div style={{
                           fontSize: 12, color: unread ? theme.ink : theme.muted, fontWeight: unread ? 700 : 400,
                           whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                         }}>
-                          {c.last_sender_id === session.user.id ? 'You: ' : ''}{c.last_message}
+                          {locked && !unlockedChats.has(c.id) ? 'Locked chat' : `${c.last_sender_id === session.user.id ? 'You: ' : ''}${c.last_message}`}
                         </div>
                       </div>
                       {unread && <div style={{ width: 10, height: 10, borderRadius: '50%', background: theme.coral, flexShrink: 0 }} />}
@@ -2684,10 +3088,18 @@ function ChatApp({ session, onLogout, onNeedsProfile }) {
                     {activeFollowBusy ? <Spinner size={11} color={activeFollowState !== 'none' ? theme.ink : 'white'} /> :
                       activeFollowState === 'accepted' ? 'Following' : activeFollowState === 'pending' ? 'Requested' : 'Follow'}
                   </button>
+                  <MoreVertical size={19} color={theme.muted} style={{ cursor: 'pointer', flexShrink: 0, marginLeft: 6 }}
+                    onClick={(e) => { e.stopPropagation(); setShowChatSettings(true); }} />
                 </div>
               )}
               <div ref={scrollRef} style={{
                 flex: 1, overflowY: 'auto', padding: '16px 18px',
+                ...((() => {
+                  const activeConv = conversations.find((c) => c.otherProfile.id === activeProfile.id) || archivedConversations.find((c) => c.otherProfile.id === activeProfile.id);
+                  const wp = activeConv ? myWallpaper(activeConv) : null;
+                  if (wp && wp !== 'default') return wallpaperBgStyle(wp, theme);
+                  return {};
+                })()),
                 ...(bgPatternOn ? {
                   backgroundSize: '130px 130px',
                   backgroundRepeat: 'repeat',
@@ -2848,6 +3260,38 @@ function ChatApp({ session, onLogout, onNeedsProfile }) {
             />
           );
         })()}
+        {showChatSettings && activeProfile && (() => {
+          const activeConv = conversations.find((c) => c.otherProfile.id === activeProfile.id) || archivedConversations.find((c) => c.otherProfile.id === activeProfile.id);
+          if (!activeConv) return null;
+          return (
+            <ChatSettingsPanel
+              conv={activeConv} myId={session.user.id}
+              isPinned={isPinnedByMe(activeConv)}
+              isLocked={!!myLocks[activeConv.id]}
+              wallpaper={myWallpaper(activeConv)}
+              onClose={() => setShowChatSettings(false)}
+              onTogglePin={() => { togglePin(activeConv); }}
+              onToggleArchive={() => { setShowChatSettings(false); toggleArchive(activeConv.id, true); setActiveProfile(null); }}
+              onSetWallpaper={(key) => setWallpaper(activeConv, key)}
+              onEnableLock={(pin) => enableChatLock(activeConv, pin)}
+              onDisableLock={() => disableChatLock(activeConv)}
+              onDeleteChat={() => { setShowChatSettings(false); setDeleteConvoTarget(activeConv); }}
+              onNicknameSaved={() => { loadConversations(); setActiveProfile((p) => ({ ...p })); }}
+            />
+          );
+        })()}
+        {lockPromptFor && (
+          <ChatLockUnlock
+            correctHash={myLocks[lockPromptFor.convId]}
+            onCancel={() => setLockPromptFor(null)}
+            onUnlock={() => {
+              setUnlockedChats((prev) => new Set(prev).add(lockPromptFor.convId));
+              const { profile, convId } = lockPromptFor;
+              setLockPromptFor(null);
+              openChat(profile, convId);
+            }}
+          />
+        )}
       </div>
       <style>{`
         @media (max-width: 760px) {
@@ -2982,4 +3426,5 @@ export default function App() {
     </ThemeProvider>
   );
 }
+
 
