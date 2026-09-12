@@ -419,7 +419,15 @@ function RegisterFlow({ onDone, onBack, onStart }) {
     const userId = sessionData.session.user.id;
     const { error } = await createProfile(userId, username.toLowerCase(), name.trim());
     setLoading(false);
-    if (error) { setErr(error.message); return; }
+    if (error) {
+      const msg = (error.message || '').toLowerCase();
+      if (msg.includes('duplicate') || msg.includes('unique') || error.code === '23505') {
+        setErr('That username was just taken. Try a different one.');
+      } else {
+        setErr(error.message);
+      }
+      return;
+    }
     onDone();
   };
 
@@ -899,9 +907,26 @@ function MessageBubble({ m, isMe, onDelete }) {
   );
 }
 
-function ChatApp({ session, onLogout }) {
+function playPing() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = 'sine'; o.frequency.value = 880;
+    g.gain.setValueAtTime(0.0001, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.16, ctx.currentTime + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.28);
+    o.connect(g); g.connect(ctx.destination);
+    o.start(); o.stop(ctx.currentTime + 0.3);
+  } catch {}
+}
+
+function pairKey(a, b) { return a < b ? [a, b] : [b, a]; }
+
+function ChatApp({ session, onLogout, onNeedsProfile }) {
   const { theme } = useTheme();
   const [me, setMe] = useState(null);
+  const [profileCheckFailed, setProfileCheckFailed] = useState(false);
   const [results, setResults] = useState([]);
   const [search, setSearch] = useState('');
   const [searching, setSearching] = useState(false);
@@ -916,16 +941,86 @@ function ChatApp({ session, onLogout }) {
   const [mobileShowChat, setMobileShowChat] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [loadingConvo, setLoadingConvo] = useState(false);
+  const [conversations, setConversations] = useState([]);
   const scrollRef = useRef(null);
   const searchTimer = useRef(null);
 
+  const readKey = (convId) => `zchat-read-${session.user.id}-${convId}`;
+  const markRead = (convId) => { try { localStorage.setItem(readKey(convId), Date.now().toString()); } catch {} };
+  const isUnread = (conv) => {
+    if (conv.last_sender_id === session.user.id) return false;
+    try {
+      const last = localStorage.getItem(readKey(conv.id));
+      if (!last) return true;
+      return new Date(conv.last_message_at).getTime() > parseInt(last, 10);
+    } catch { return false; }
+  };
+
+  const loadConversations = async () => {
+    const { data } = await supabase.from('conversations').select('*')
+      .or(`user_a.eq.${session.user.id},user_b.eq.${session.user.id}`)
+      .order('last_message_at', { ascending: false });
+    if (!data || data.length === 0) { setConversations([]); return; }
+    const otherIds = data.map((c) => (c.user_a === session.user.id ? c.user_b : c.user_a));
+    const { data: profs } = await supabase.from('profiles').select('*').in('id', otherIds);
+    const merged = data
+      .map((c) => {
+        const otherId = c.user_a === session.user.id ? c.user_b : c.user_a;
+        const profile = profs?.find((p) => p.id === otherId);
+        return profile ? { ...c, otherProfile: profile } : null;
+      })
+      .filter(Boolean);
+    setConversations(merged);
+  };
+
+  const upsertConversation = async (otherId, text, type) => {
+    const [a, b] = pairKey(session.user.id, otherId);
+    const preview = type === 'text' ? text : type === 'image' ? '📷 Photo' : '🎥 Video';
+    await supabase.from('conversations').upsert(
+      { user_a: a, user_b: b, last_message: preview, last_message_at: new Date().toISOString(), last_sender_id: session.user.id },
+      { onConflict: 'user_a,user_b' }
+    );
+  };
+
   useEffect(() => {
-    getProfile(session.user.id).then(({ data }) => setMe(data ? { ...data, email: session.user.email } : null));
+    let cancelled = false;
+    getProfile(session.user.id)
+      .then(({ data }) => {
+        if (cancelled) return;
+        if (data) { setMe({ ...data, email: session.user.email }); return; }
+        // Session exists but profile was never finished (e.g. backed out mid-signup).
+        // Don't spin forever — sign out and send back to login with an explanation.
+        setProfileCheckFailed(true);
+      })
+      .catch(() => { if (!cancelled) setProfileCheckFailed(true); });
+    return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => {
+    if (profileCheckFailed) onNeedsProfile();
+  }, [profileCheckFailed]);
+
+  useEffect(() => {
+    if (me) loadConversations();
+  }, [me]);
+
+  useEffect(() => {
+    if (!me) return;
+    const channel = supabase.channel('conversations-watch-' + me.id)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations' }, (payload) => {
+        const row = payload.new || payload.old;
+        if (row && (row.user_a === me.id || row.user_b === me.id)) loadConversations();
+      })
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, [me]);
 
   useEffect(() => {
     if (!me) return;
     const sub = subscribeToMessages(me.id, (msg) => {
+      if (msg.sender_id !== me.id) {
+        if (msg.sender_id !== activeProfile?.id) playPing();
+      }
       setMessages((prev) => (activeProfile && msg.sender_id === activeProfile.id ? [...prev, msg] : prev));
     });
     return () => supabase.removeChannel(sub);
@@ -947,10 +1042,11 @@ function ChatApp({ session, onLogout }) {
     }, 300);
   };
 
-  const openChat = async (profile) => {
+  const openChat = async (profile, convId) => {
     setActiveProfile(profile);
     setMobileShowChat(true);
     setLoadingConvo(true);
+    if (convId) markRead(convId);
     const { data } = await getConversation(session.user.id, profile.id);
     setMessages(data || []);
     setLoadingConvo(false);
@@ -961,7 +1057,10 @@ function ChatApp({ session, onLogout }) {
     const text = draft.trim().slice(0, MAX_CHARS);
     setDraft('');
     const { data } = await sendMessage(session.user.id, activeProfile.id, 'text', text, null);
-    if (data) setMessages((prev) => [...prev, data]);
+    if (data) {
+      setMessages((prev) => [...prev, data]);
+      upsertConversation(activeProfile.id, text, 'text');
+    }
   };
 
   const handleFile = async (e, kind) => {
@@ -973,7 +1072,10 @@ function ChatApp({ session, onLogout }) {
     setShowAttach(false);
     if (!error && url) {
       const { data } = await sendMessage(session.user.id, activeProfile.id, kind, null, url);
-      if (data) setMessages((prev) => [...prev, data]);
+      if (data) {
+        setMessages((prev) => [...prev, data]);
+        upsertConversation(activeProfile.id, null, kind);
+      }
     }
     setUploading(false);
   };
@@ -1055,27 +1157,53 @@ function ChatApp({ session, onLogout }) {
             </div>
           </div>
           <div style={{ overflowY: 'auto', flex: 1, padding: '0 8px' }}>
-            {search.length >= 2 && !searching && results.length === 0 && (
-              <div style={{ padding: 24, textAlign: 'center', color: theme.muted, fontSize: 13 }}>No one found with that username</div>
-            )}
-            {search.length < 2 && (
+            {search.length >= 2 ? (
+              <>
+                {!searching && results.length === 0 && (
+                  <div style={{ padding: 24, textAlign: 'center', color: theme.muted, fontSize: 13 }}>No one found with that username</div>
+                )}
+                {results.map((u) => (
+                  <div key={u.id} onClick={() => { openChat(u); setSearch(''); setResults([]); }} style={{
+                    display: 'flex', alignItems: 'center', gap: 12, padding: '11px 10px', cursor: 'pointer',
+                    borderRadius: 14, marginBottom: 2,
+                    background: activeProfile?.id === u.id ? theme.rowBg : 'transparent',
+                  }}>
+                    <Avatar emoji={u.avatar} size={40} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 700, fontSize: 14.5, color: theme.ink }}>{u.name}</div>
+                      <div style={{ fontSize: 12, color: theme.muted }}>@{u.username}</div>
+                    </div>
+                  </div>
+                ))}
+              </>
+            ) : conversations.length === 0 ? (
               <div style={{ padding: '24px 16px', textAlign: 'center', color: theme.muted, fontSize: 12.5, lineHeight: 1.6 }}>
                 Search a username above to start a new conversation
               </div>
+            ) : (
+              conversations.map((c) => {
+                const unread = isUnread(c);
+                return (
+                  <div key={c.id} onClick={() => openChat(c.otherProfile, c.id)} style={{
+                    display: 'flex', alignItems: 'center', gap: 12, padding: '11px 10px', cursor: 'pointer',
+                    borderRadius: 14, marginBottom: 2,
+                    background: activeProfile?.id === c.otherProfile.id ? theme.rowBg : 'transparent',
+                  }}>
+                    <Avatar emoji={c.otherProfile.avatar} size={44} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: unread ? 800 : 700, fontSize: 14.5, color: theme.ink }}>{c.otherProfile.name}</div>
+                      <div style={{
+                        fontSize: 12, color: unread ? theme.ink : theme.muted, fontWeight: unread ? 700 : 400,
+                        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                      }}>
+                        {c.last_sender_id === session.user.id ? 'You: ' : ''}{c.last_message}
+                      </div>
+                    </div>
+                    {unread && <div style={{ width: 10, height: 10, borderRadius: '50%', background: theme.coral, flexShrink: 0 }} />}
+                  </div>
+                );
+              })
             )}
-            {results.map((u) => (
-              <div key={u.id} onClick={() => openChat(u)} style={{
-                display: 'flex', alignItems: 'center', gap: 12, padding: '11px 10px', cursor: 'pointer',
-                borderRadius: 14, marginBottom: 2,
-                background: activeProfile?.id === u.id ? theme.rowBg : 'transparent',
-              }}>
-                <Avatar emoji={u.avatar} size={40} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 700, fontSize: 14.5, color: theme.ink }}>{u.name}</div>
-                  <div style={{ fontSize: 12, color: theme.muted }}>@{u.username}</div>
-                </div>
-              </div>
-            ))}
           </div>
         </div>
 
@@ -1159,18 +1287,73 @@ function ChatApp({ session, onLogout }) {
   );
 }
 
+function ResetPasswordScreen({ onDone }) {
+  const { theme } = useTheme();
+  const [pw, setPw] = useState('');
+  const [pw2, setPw2] = useState('');
+  const [err, setErr] = useState('');
+  const [loading, setLoading] = useState(false);
+  const okPw = pw.length >= 6 && pw === pw2;
+
+  const submit = async () => {
+    if (!okPw || loading) return;
+    setLoading(true); setErr('');
+    const { error } = await setPassword(pw);
+    setLoading(false);
+    if (error) { setErr(error.message); return; }
+    onDone();
+  };
+
+  return (
+    <div className="zchat-fade">
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+        <Lock size={18} color={theme.muted} /><span style={{ fontSize: 13.5, color: theme.muted }}>Set a new password</span>
+      </div>
+      <input style={{ ...inputStyle(theme), marginBottom: 10 }} type="password" placeholder="New password (min 6 characters)"
+        value={pw} onChange={(e) => setPw(e.target.value)} />
+      <input style={inputStyle(theme)} type="password" placeholder="Confirm new password"
+        value={pw2} onChange={(e) => setPw2(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && submit()} />
+      {pw2 && !okPw && pw !== pw2 && <div style={{ color: theme.danger, fontSize: 12, marginTop: 8 }}>Passwords don't match</div>}
+      {err && <div style={{ color: theme.danger, fontSize: 12.5, marginTop: 8 }}>{err}</div>}
+      <button style={primaryBtn(theme, !okPw || loading)} disabled={!okPw || loading} onClick={submit}>
+        {loading ? <Spinner /> : 'Update password'}
+      </button>
+    </div>
+  );
+}
+
 function AppInner() {
   const [session, setSession] = useState(null);
   const [checked, setChecked] = useState(false);
   const [screen, setScreen] = useState('login');
   const [registering, setRegistering] = useState(false);
+  const [resumeNotice, setResumeNotice] = useState('');
+  const [passwordRecovery, setPasswordRecovery] = useState(false);
   const { theme } = useTheme();
+
+  const handleNeedsProfile = async () => {
+    await signOut();
+    setSession(null);
+    setResumeNotice('Your last signup didn\u2019t finish. Sign in again to pick up where you left off, or create a new account.');
+    setScreen('login');
+  };
+
+  const handlePasswordUpdated = async () => {
+    await signOut();
+    setSession(null);
+    setPasswordRecovery(false);
+    setResumeNotice('Password updated. Sign in with your new password.');
+    setScreen('login');
+  };
 
   useEffect(() => {
     getSession().then((s) => { setSession(s); setChecked(true); });
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, s) => setSession(s));
+    const { data: listener } = supabase.auth.onAuthStateChange((event, s) => {
+      if (event === 'PASSWORD_RECOVERY') { setPasswordRecovery(true); setSession(s); return; }
+      if (!passwordRecovery) setSession(s);
+    });
     return () => listener.subscription.unsubscribe();
-  }, []);
+  }, [passwordRecovery]);
 
   if (!checked) {
     return (
@@ -1180,13 +1363,33 @@ function AppInner() {
     );
   }
 
+  if (passwordRecovery) {
+    return (
+      <AuthShell>
+        <ResetPasswordScreen onDone={handlePasswordUpdated} />
+      </AuthShell>
+    );
+  }
+
   if (session && !registering) {
-    return <ChatApp session={session} onLogout={async () => { await signOut(); setSession(null); setScreen('login'); }} />;
+    return (
+      <ChatApp
+        session={session}
+        onLogout={async () => { await signOut(); setSession(null); setScreen('login'); }}
+        onNeedsProfile={handleNeedsProfile}
+      />
+    );
   }
 
   return (
     <AuthShell>
-      {screen === 'login' && <LoginStep onSuccess={setSession} onForgot={() => setScreen('forgot')} onGoRegister={() => setScreen('register')} />}
+      {resumeNotice && screen === 'login' && (
+        <div style={{
+          fontSize: 12.5, color: theme.coralDeep, background: `${theme.coral}14`, borderRadius: 12,
+          padding: '10px 12px', marginBottom: 16, lineHeight: 1.5,
+        }} className="zchat-fade">{resumeNotice}</div>
+      )}
+      {screen === 'login' && <LoginStep onSuccess={(s) => { setResumeNotice(''); setSession(s); }} onForgot={() => setScreen('forgot')} onGoRegister={() => { setResumeNotice(''); setScreen('register'); }} />}
       {screen === 'forgot' && <ForgotStep onBack={() => setScreen('login')} />}
       {screen === 'register' && (
         <RegisterFlow
