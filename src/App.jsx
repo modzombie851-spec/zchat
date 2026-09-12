@@ -770,6 +770,7 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout }) {
       })}>
         <X size={20} style={{ position: 'absolute', top: 18, right: 18, cursor: 'pointer', color: theme.muted }} onClick={onClose} />
         <div style={{ fontWeight: 800, fontSize: 19, color: theme.ink, marginBottom: 18 }}>Settings</div>
+
         <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.muted, margin: '4px 0 6px 2px' }}>Appearance</div>
         <SettingsRow icon={dark ? <Sun size={16} /> : <Moon size={16} />} label="Dark mode" right={<ToggleSwitch on={dark} onClick={() => setDark((d) => !d)} />} />
         <div style={{ padding: '10px 4px', borderBottom: `1px solid ${theme.border}` }}>
@@ -981,7 +982,6 @@ function DiscoverPanel({ myId, onClose, onOpenProfile }) {
     </div>
   );
 }
-
 
 
 function IconDownload({ size = 15, color = 'currentColor' }) {
@@ -1355,6 +1355,7 @@ function CreateGroupPanel({ myId, onClose, onCreated }) {
   const [avatarPreview, setAvatarPreview] = useState(null);
   const [cropFile, setCropFile] = useState(null);
   const [creating, setCreating] = useState(false);
+  const [err, setErr] = useState('');
   const timer = useRef(null);
 
   const doSearch = (val) => {
@@ -1374,16 +1375,19 @@ function CreateGroupPanel({ myId, onClose, onCreated }) {
   const create = async () => {
     if (!name.trim() || creating) return;
     setCreating(true);
+    setErr('');
     let avatarUrl = null;
     if (avatarFile) {
       const { url } = await uploadMedia(avatarFile, myId);
       avatarUrl = url || null;
     }
     const { data: group, error } = await supabase.from('groups').insert({ name: name.trim().slice(0, 50), bio: bio.trim() || null, avatar: avatarUrl, created_by: myId }).select().single();
-    if (error || !group) { setCreating(false); return; }
-    await supabase.from('group_members').insert({ group_id: group.id, user_id: myId, role: 'admin' });
+    if (error || !group) { setCreating(false); setErr(error?.message || 'Could not create the group.'); return; }
+    const { error: memberErr } = await supabase.from('group_members').insert({ group_id: group.id, user_id: myId, role: 'admin' });
+    if (memberErr) { setCreating(false); setErr(memberErr.message); return; }
     if (selected.length) {
-      await supabase.from('group_members').insert(selected.slice(0, 49).map((p) => ({ group_id: group.id, user_id: p.id, role: 'member' })));
+      const { error: inviteErr } = await supabase.from('group_members').insert(selected.slice(0, 49).map((p) => ({ group_id: group.id, user_id: p.id, role: 'member' })));
+      if (inviteErr) { setCreating(false); setErr(inviteErr.message); return; }
     }
     setCreating(false);
     onCreated(group);
@@ -1458,6 +1462,7 @@ function CreateGroupPanel({ myId, onClose, onCreated }) {
           <button onClick={create} disabled={!name.trim() || creating} style={primaryBtn(theme, !name.trim() || creating)}>
             {creating ? <Spinner size={14} /> : 'Create group'}
           </button>
+          {err && <div style={{ color: theme.danger, fontSize: 12.5, marginTop: 10, textAlign: 'center' }}>{err}</div>}
         </div>
       )}
       {cropFile && (
@@ -1557,6 +1562,7 @@ function GroupInfoPanel({ group, members, myId, myRole, isOwner, onClose, onProm
     </div>
   );
 }
+
 
 function PrivacyField({ label, hidden, onToggle }) {
   const { theme } = useTheme();
@@ -1932,7 +1938,6 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
               </div>
             )
           )}
-
           {isSelf && !editing && (
             <div style={{ marginTop: 16 }}>
               <button onClick={() => setEditing(true)} style={{
@@ -2320,6 +2325,7 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
     </div>
   );
 }
+
 function playPing() {
   try {
     if (localStorage.getItem('zchat-sound') === 'off') return;
@@ -2896,7 +2902,6 @@ function ChatApp({ session, onLogout, onNeedsProfile }) {
     setLoadingConvo(false);
     loadGroupMembers(group.id);
   };
-
   const sendGroupMessage = async (type, content, mediaUrl) => {
     const { data, error } = await supabase.from('messages').insert({
       sender_id: session.user.id, group_id: activeGroup.id, type, content: content || null, media_url: mediaUrl || null,
@@ -3092,6 +3097,7 @@ function ChatApp({ session, onLogout, onNeedsProfile }) {
     }
   };
   const stopRecording = () => { mediaRecorderRef.current?.stop(); };
+
   const handleDelete = async (messageId) => {
     const { data } = await deleteMessage(messageId);
     if (data) setMessages((prev) => prev.map((m) => (m.id === messageId ? data : m)));
@@ -3865,5 +3871,6 @@ export default function App() {
     </ThemeProvider>
   );
 }
+
 
 
