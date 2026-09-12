@@ -2045,4 +2045,99 @@ function ResetPasswordScreen({ onDone }) {
         value={pw2} onChange={(e) => setPw2(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && submit()} />
       {pw2 && !okPw && pw !== pw2 && <div style={{ color: theme.danger, fontSize: 12, marginTop: 8 }}>Passwords don't match</div>}
       {err && <div style={{ color: theme.danger, fontSize: 12.5, marginTop: 8 }}>{err}</div>}
-      <button style={primaryBt
+      <button style={primaryBt      {pw2 && !okPw && pw !== pw2 && <div style={{ color: theme.danger, fontSize: 12, marginTop: 8 }}>Passwords don't match</div>}
+      {err && <div style={{ color: theme.danger, fontSize: 12.5, marginTop: 8 }}>{err}</div>}
+      <button style={primaryBtn(theme, !okPw || loading)} disabled={!okPw || loading} onClick={submit}>
+        {loading ? <Spinner /> : 'Update password'}
+      </button>
+    </div>
+  );
+}
+
+function AppInner() {
+  const [session, setSession] = useState(null);
+  const [checked, setChecked] = useState(false);
+  const [screen, setScreen] = useState('login');
+  const [registering, setRegistering] = useState(false);
+  const [resumeNotice, setResumeNotice] = useState('');
+  const [passwordRecovery, setPasswordRecovery] = useState(false);
+  const { theme } = useTheme();
+
+  const handleNeedsProfile = async () => {
+    await signOut();
+    setSession(null);
+    setResumeNotice('Your last signup didn\u2019t finish. Sign in again to pick up where you left off, or create a new account.');
+    setScreen('login');
+  };
+
+  const handlePasswordUpdated = async () => {
+    await signOut();
+    setSession(null);
+    setPasswordRecovery(false);
+    setResumeNotice('Password updated. Sign in with your new password.');
+    setScreen('login');
+  };
+
+  useEffect(() => {
+    getSession().then((s) => { setSession(s); setChecked(true); });
+    const { data: listener } = supabase.auth.onAuthStateChange((event, s) => {
+      if (event === 'PASSWORD_RECOVERY') { setPasswordRecovery(true); setSession(s); return; }
+      if (!passwordRecovery) setSession(s);
+    });
+    return () => listener.subscription.unsubscribe();
+  }, [passwordRecovery]);
+
+  if (!checked) {
+    return (
+      <div style={{ height: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: theme.bgGradient }}>
+        <Spinner size={28} color={theme.ink} />
+      </div>
+    );
+  }
+
+  if (passwordRecovery) {
+    return (
+      <AuthShell>
+        <ResetPasswordScreen onDone={handlePasswordUpdated} />
+      </AuthShell>
+    );
+  }
+
+  if (session && !registering) {
+    return (
+      <ChatApp
+        session={session}
+        onLogout={async () => { await signOut(); setSession(null); setScreen('login'); }}
+        onNeedsProfile={handleNeedsProfile}
+      />
+    );
+  }
+
+  return (
+    <AuthShell>
+      {resumeNotice && screen === 'login' && (
+        <div style={{
+          fontSize: 12.5, color: theme.coralDeep, background: `${theme.coral}14`, borderRadius: 12,
+          padding: '10px 12px', marginBottom: 16, lineHeight: 1.5,
+        }} className="zchat-fade">{resumeNotice}</div>
+      )}
+      {screen === 'login' && <LoginStep onSuccess={(s) => { setResumeNotice(''); setSession(s); }} onForgot={() => setScreen('forgot')} onGoRegister={() => { setResumeNotice(''); setScreen('register'); }} />}
+      {screen === 'forgot' && <ForgotStep onBack={() => setScreen('login')} />}
+      {screen === 'register' && (
+        <RegisterFlow
+          onStart={() => setRegistering(true)}
+          onBack={() => { setRegistering(false); setScreen('login'); }}
+          onDone={() => setRegistering(false)}
+        />
+      )}
+    </AuthShell>
+  );
+}
+
+export default function App() {
+  return (
+    <ThemeProvider>
+      <AppInner />
+    </ThemeProvider>
+  );
+}
