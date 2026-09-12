@@ -1143,7 +1143,6 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
     </div>
   );
 }
-
 function StatusTicks({ status }) {
   const { theme } = useTheme();
   const color = status === 'read' ? theme.coral : theme.muted;
@@ -2044,8 +2043,6 @@ function ResetPasswordScreen({ onDone }) {
       <input style={inputStyle(theme)} type="password" placeholder="Confirm new password"
         value={pw2} onChange={(e) => setPw2(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && submit()} />
       {pw2 && !okPw && pw !== pw2 && <div style={{ color: theme.danger, fontSize: 12, marginTop: 8 }}>Passwords don't match</div>}
-      {err && <div style={{ color: theme.danger, fontSize: 12.5, marginTop: 8 }}>{err}</div>}
-      <button style={primaryBt      {pw2 && !okPw && pw !== pw2 && <div style={{ color: theme.danger, fontSize: 12, marginTop: 8 }}>Passwords don't match</div>}
       {err && <div style={{ color: theme.danger, fontSize: 12.5, marginTop: 8 }}>{err}</div>}
       <button style={primaryBtn(theme, !okPw || loading)} disabled={!okPw || loading} onClick={submit}>
         {loading ? <Spinner /> : 'Update password'}
