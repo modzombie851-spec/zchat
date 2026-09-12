@@ -26,7 +26,7 @@ const THEMES = {
   light: {
     bgGradient: 'linear-gradient(160deg, #F6F3EE 0%, #FBF3EF 45%, #F3EEF6 100%)',
     glass: 'rgba(255,255,255,0.65)',
-    panelBg: 'rgba(255,255,255,0.9)',
+    panelBg: 'rgba(255,255,255,0.92)',
     border: 'rgba(27,27,31,0.08)',
     ink: '#1B1B1F',
     muted: '#83808A',
@@ -38,7 +38,7 @@ const THEMES = {
   dark: {
     bgGradient: 'linear-gradient(160deg, #121319 0%, #16171F 45%, #1A1720 100%)',
     glass: 'rgba(30,31,40,0.65)',
-    panelBg: 'rgba(27,29,38,0.95)',
+    panelBg: 'rgba(24,26,34,0.96)',
     border: 'rgba(255,255,255,0.08)',
     ink: '#F2F1F6',
     muted: '#8D8FA0',
@@ -127,9 +127,11 @@ function ThemeToggleIcon({ size = 18 }) {
   );
 }
 
+/* Avatar now falls back gracefully if the image URL is broken */
 function Avatar({ emoji = '🙂', online, size = 40 }) {
   const { theme } = useTheme();
-  const isImage = typeof emoji === 'string' && emoji.startsWith('http');
+  const [imgFailed, setImgFailed] = useState(false);
+  const isImage = typeof emoji === 'string' && emoji.startsWith('http') && !imgFailed;
   return (
     <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
       <div style={{
@@ -139,7 +141,9 @@ function Avatar({ emoji = '🙂', online, size = 40 }) {
         fontSize: size * 0.5, boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.4)',
         overflow: 'hidden',
       }}>
-        {isImage ? <img src={emoji} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : emoji}
+        {isImage
+          ? <img src={emoji} alt="" onError={() => setImgFailed(true)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          : '🙂'}
       </div>
       {online != null && (
         <div style={{
@@ -260,7 +264,7 @@ function ForgotStep({ onBack }) {
   );
 }
 
-/* ============================= OTP (redesigned) ============================= */
+/* ============================= OTP ============================= */
 
 function OtpBoxes({ value, onChange, onSubmit }) {
   const { theme } = useTheme();
@@ -338,7 +342,7 @@ function ResendRow({ onResend }) {
       </div>
       <div style={{ minHeight: 18 }}>
         {justSent ? (
-          <span style={{ fontSize: 12.5, color: theme.teal, fontWeight: 700 }}>Sent ✓</span>
+          <span style={{ fontSize: 12.5, color: theme.teal, fontWeight: 700 }}>Sent</span>
         ) : cooldown > 0 ? (
           <span style={{ fontSize: 12.5, color: theme.muted }}>Resend in {cooldown}s</span>
         ) : (
@@ -648,9 +652,7 @@ function PrivacyPanel({ onBack }) {
           <div style={{ fontWeight: 800, fontSize: 17, color: theme.ink }}>Privacy policy</div>
         </div>
         <div style={{ fontSize: 13, lineHeight: 1.7, color: theme.muted }}>
-          <p>This is placeholder text — replace it with your actual privacy policy before launch.</p>
-          <h3 style={{ color: theme.ink, fontSize: 14, margin: '16px 0 4px' }}>What we collect</h3>
-          <p>Your username, profile details, and the messages you send through ZChat.</p>
+          <p>This is placeholder text. Replace it with your actual privacy policy before launch.</p>
           <h3 style={{ color: theme.ink, fontSize: 14, margin: '16px 0 4px' }}>How it's used</h3>
           <p>Solely to operate the chat service. We don't sell your data to third parties.</p>
           <h3 style={{ color: theme.ink, fontSize: 14, margin: '16px 0 4px' }}>Your controls</h3>
@@ -661,7 +663,7 @@ function PrivacyPanel({ onBack }) {
   );
 }
 
-/* ============================= Profile panel ============================= */
+/* ============================= Profile panel (premium redesign) ============================= */
 
 function ProfilePanel({ profile, isSelf, userId, onClose, onReport, onSaved, onOpenSettings }) {
   const { theme } = useTheme();
@@ -693,62 +695,79 @@ function ProfilePanel({ profile, isSelf, userId, onClose, onReport, onSaved, onO
     if (data) { onSaved(data); setEditing(false); }
   };
 
-  const maskedEmail = (e) => {
-    if (!e) return '';
-    const [user, domain] = e.split('@');
-    if (!domain) return '•'.repeat(e.length);
-    return `${user.slice(0, 2)}${'•'.repeat(Math.max(user.length - 2, 3))}@${domain}`;
-  };
-
   return (
     <div style={{
-      position: 'absolute', inset: 0, background: 'rgba(28,29,33,0.4)',
+      position: 'absolute', inset: 0, background: 'rgba(20,16,14,0.5)',
       display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 30, padding: 18,
     }} className="zchat-fade">
-      <div style={glass(theme, {
-        background: theme.panelBg, borderRadius: 24, padding: 28,
-        width: '100%', maxWidth: 340, position: 'relative', maxHeight: '85vh', overflowY: 'auto',
-      })}>
-        <X size={20} style={{ position: 'absolute', top: 18, right: 18, cursor: 'pointer', color: theme.muted }} onClick={onClose} />
-        {isSelf && (
-          <SettingsIcon size={19} style={{ position: 'absolute', top: 19, left: 20, cursor: 'pointer', color: theme.muted }} onClick={onOpenSettings} />
-        )}
-        <div style={{ textAlign: 'center' }}>
+      <div style={{
+        background: theme.panelBg, borderRadius: 28,
+        width: '100%', maxWidth: 360, position: 'relative', maxHeight: '88vh', overflowY: 'auto',
+        boxShadow: '0 30px 80px rgba(0,0,0,0.3)',
+      }}>
+        {/* Header banner */}
+        <div style={{
+          height: 100, borderRadius: '28px 28px 0 0', position: 'relative',
+          background: `linear-gradient(135deg, ${theme.coral} 0%, ${theme.gold} 100%)`,
+        }}>
+          <div onClick={onClose} style={{
+            position: 'absolute', top: 16, right: 16, width: 30, height: 30, borderRadius: '50%',
+            background: 'rgba(0,0,0,0.22)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+          }}><X size={16} color="white" /></div>
+          {isSelf && (
+            <div onClick={onOpenSettings} style={{
+              position: 'absolute', top: 16, left: 16, width: 30, height: 30, borderRadius: '50%',
+              background: 'rgba(0,0,0,0.22)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+            }}><SettingsIcon size={15} color="white" /></div>
+          )}
+        </div>
+
+        <div style={{ padding: '0 26px 28px', textAlign: 'center', marginTop: -46 }}>
           {editing ? (
-            <div style={{ position: 'relative', width: 76, height: 76, margin: '0 auto' }}>
-              <Avatar emoji={avatar} size={76} />
+            <div style={{ position: 'relative', width: 92, height: 92, margin: '0 auto' }}>
+              <div style={{ width: 92, height: 92, borderRadius: '50%', padding: 4, background: theme.panelBg, boxShadow: '0 4px 16px rgba(0,0,0,0.15)' }}>
+                <Avatar emoji={avatar} size={84} />
+              </div>
               <label style={{
-                position: 'absolute', bottom: -2, right: -2, width: 26, height: 26, borderRadius: '50%',
+                position: 'absolute', bottom: 0, right: 0, width: 28, height: 28, borderRadius: '50%',
                 background: theme.coral, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                cursor: 'pointer', border: '2px solid white',
+                cursor: 'pointer', border: `3px solid ${theme.panelBg}`,
               }}>
                 {avatarUploading ? <Spinner size={12} /> : <ImageIcon size={13} color="white" />}
                 <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleAvatarChange} />
               </label>
             </div>
           ) : (
-            <Avatar emoji={profile.avatar} online={profile.online} size={76} />
+            <div style={{ width: 92, height: 92, borderRadius: '50%', padding: 4, background: theme.panelBg, margin: '0 auto', boxShadow: '0 4px 16px rgba(0,0,0,0.15)' }}>
+              <Avatar emoji={profile.avatar} online={profile.online} size={84} />
+            </div>
           )}
-          <div style={{ fontWeight: 800, fontSize: 19, marginTop: 12, color: theme.ink }}>{profile.name}</div>
-          <div style={{ fontSize: 13.5, color: theme.muted }}>@{profile.username}</div>
+
+          <div style={{ fontWeight: 800, fontSize: 20, marginTop: 14, color: theme.ink, letterSpacing: '-0.01em' }}>{profile.name}</div>
+          <div style={{
+            display: 'inline-block', fontSize: 12.5, color: theme.coralDeep, fontWeight: 700, marginTop: 4,
+            background: `${theme.coral}16`, padding: '3px 12px', borderRadius: 20,
+          }}>@{profile.username}</div>
 
           {isSelf && !editing && (
-            <button onClick={() => setEditing(true)} style={{
-              marginTop: 14, padding: '8px 18px', borderRadius: 20, border: `1px solid ${theme.border}`,
-              background: theme.rowBg, fontSize: 12.5, fontWeight: 700, color: theme.ink, cursor: 'pointer', fontFamily: FONT,
-            }}>
-              Edit profile
-            </button>
+            <div style={{ marginTop: 16 }}>
+              <button onClick={() => setEditing(true)} style={{
+                padding: '9px 22px', borderRadius: 22, border: 'none',
+                background: theme.ink, color: theme.dark ? '#121319' : 'white', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT,
+              }}>
+                Edit profile
+              </button>
+            </div>
           )}
 
           {editing ? (
-            <div style={{ marginTop: 18, textAlign: 'left' }}>
-              <div style={{ fontSize: 12, color: theme.muted, marginBottom: 4, fontWeight: 700 }}>BIO</div>
+            <div style={{ marginTop: 22, textAlign: 'left' }}>
+              <div style={{ fontSize: 11.5, color: theme.muted, marginBottom: 5, fontWeight: 800, letterSpacing: '0.04em' }}>BIO</div>
               <textarea value={bio} onChange={(e) => setBio(e.target.value.slice(0, 140))}
                 placeholder="Tell people about yourself"
-                style={{ ...inputStyle(theme), height: 64, resize: 'none', fontFamily: FONT, marginBottom: 12 }} />
-              <div style={{ fontSize: 12, color: theme.muted, marginBottom: 4, fontWeight: 700 }}>GENDER</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
+                style={{ ...inputStyle(theme), height: 64, resize: 'none', fontFamily: FONT, marginBottom: 14 }} />
+              <div style={{ fontSize: 11.5, color: theme.muted, marginBottom: 5, fontWeight: 800, letterSpacing: '0.04em' }}>GENDER</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>
                 {GENDERS.map((g) => (
                   <div key={g} onClick={() => setGender(g)} style={{
                     padding: '6px 12px', borderRadius: 16, fontSize: 12, cursor: 'pointer',
@@ -766,28 +785,39 @@ function ProfilePanel({ profile, isSelf, userId, onClose, onReport, onSaved, onO
             </div>
           ) : (
             <>
-              <div style={{ display: 'flex', justifyContent: 'center', gap: 28, marginTop: 16 }}>
-                <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontWeight: 800, fontSize: 15, color: theme.ink }}>{profile.followers ?? 0}</div>
-                  <div style={{ fontSize: 11, color: theme.muted }}>Followers</div>
+              <div style={{
+                display: 'flex', justifyContent: 'center', gap: 10, marginTop: 20,
+              }}>
+                <div style={{ flex: profile.gender ? 1 : 'none', minWidth: 90, background: theme.rowBg, borderRadius: 16, padding: '10px 16px' }}>
+                  <div style={{ fontWeight: 800, fontSize: 16, color: theme.ink }}>{profile.followers ?? 0}</div>
+                  <div style={{ fontSize: 10.5, color: theme.muted, fontWeight: 600, marginTop: 1 }}>Followers</div>
                 </div>
                 {profile.gender && (
-                  <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontWeight: 800, fontSize: 15, color: theme.ink }}>{profile.gender}</div>
-                    <div style={{ fontSize: 11, color: theme.muted }}>Gender</div>
+                  <div style={{ flex: 1, minWidth: 90, background: theme.rowBg, borderRadius: 16, padding: '10px 16px' }}>
+                    <div style={{ fontWeight: 800, fontSize: 16, color: theme.ink }}>{profile.gender}</div>
+                    <div style={{ fontSize: 10.5, color: theme.muted, fontWeight: 600, marginTop: 1 }}>Gender</div>
                   </div>
                 )}
               </div>
-              {profile.bio && <div style={{ fontSize: 13.5, color: theme.ink, marginTop: 16, lineHeight: 1.5 }}>{profile.bio}</div>}
+              {profile.bio && (
+                <div style={{ fontSize: 13.5, color: theme.ink, marginTop: 18, lineHeight: 1.6, padding: '0 4px' }}>{profile.bio}</div>
+              )}
               {isSelf && (
-                <div style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
-                  fontSize: 11.5, color: theme.muted, marginTop: 16, padding: '9px 12px', background: theme.rowBg, borderRadius: 12,
-                }}>
-                  <span style={{ fontWeight: 700 }}>{showEmail ? profile.email : maskedEmail(profile.email)}</span>
-                  <span onClick={() => setShowEmail((s) => !s)} style={{ color: theme.coralDeep, fontWeight: 800, fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                    {showEmail ? 'Hide' : 'Show'}
-                  </span>
+                <div style={{ marginTop: 20, paddingTop: 16, borderTop: `1px solid ${theme.border}` }}>
+                  {!showEmail ? (
+                    <button onClick={() => setShowEmail(true)} style={{
+                      display: 'flex', alignItems: 'center', gap: 6, margin: '0 auto',
+                      background: 'none', border: 'none', cursor: 'pointer', fontFamily: FONT,
+                      color: theme.coralDeep, fontSize: 12.5, fontWeight: 700,
+                    }}>
+                      <Mail size={13} /> Show your email
+                    </button>
+                  ) : (
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: 12.5, fontWeight: 700, color: theme.ink }}>{profile.email}</span>
+                      <span onClick={() => setShowEmail(false)} style={{ color: theme.coralDeep, fontWeight: 800, fontSize: 11, cursor: 'pointer' }}>Hide</span>
+                    </div>
+                  )}
                 </div>
               )}
             </>
@@ -795,8 +825,8 @@ function ProfilePanel({ profile, isSelf, userId, onClose, onReport, onSaved, onO
 
           {!isSelf && !editing && !reportSent && !reportOpen && (
             <button onClick={() => setReportOpen(true)} style={{
-              marginTop: 20, display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center',
-              width: '100%', padding: 11, borderRadius: 12, border: 'none', background: `${theme.danger}1A`,
+              marginTop: 22, display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center',
+              width: '100%', padding: 12, borderRadius: 14, border: 'none', background: `${theme.danger}14`,
               color: theme.danger, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT,
             }}>
               <Flag size={14} /> Report this account
