@@ -12,7 +12,6 @@ import {
   subscribeToMessages, reportUser, uploadMedia, deleteMessage,
 } from './supabaseClient.js';
 
-/* ============================= THEME ============================= */
 
 const ACCENT_PALETTES = {
   coral: { coral: '#FF6B4A', coralDeep: '#E8502F', gold: '#F3B54C', teal: '#29C7B3', danger: '#FF4D5E' },
@@ -296,7 +295,6 @@ function ForgotStep({ onBack }) {
   );
 }
 
-/* ============================= OTP ============================= */
 
 function OtpBoxes({ value, onChange, onSubmit }) {
   const { theme } = useTheme();
@@ -687,7 +685,6 @@ function CountryPicker({ value, onSelect, onClose }) {
   );
 }
 
-/* ============================= Logout confirm modal ============================= */
 
 function LogoutConfirm({ onCancel, onConfirm }) {
   const { theme } = useTheme();
@@ -725,7 +722,6 @@ function LogoutConfirm({ onCancel, onConfirm }) {
   );
 }
 
-/* ============================= Settings & Privacy panels ============================= */
 
 function SettingsRow({ icon, label, onClick, danger, right }) {
   const { theme } = useTheme();
@@ -774,7 +770,6 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout }) {
       })}>
         <X size={20} style={{ position: 'absolute', top: 18, right: 18, cursor: 'pointer', color: theme.muted }} onClick={onClose} />
         <div style={{ fontWeight: 800, fontSize: 19, color: theme.ink, marginBottom: 18 }}>Settings</div>
-
         <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.muted, margin: '4px 0 6px 2px' }}>Appearance</div>
         <SettingsRow icon={dark ? <Sun size={16} /> : <Moon size={16} />} label="Dark mode" right={<ToggleSwitch on={dark} onClick={() => setDark((d) => !d)} />} />
         <div style={{ padding: '10px 4px', borderBottom: `1px solid ${theme.border}` }}>
@@ -836,7 +831,6 @@ function PrivacyPanel({ onBack }) {
   );
 }
 
-/* ============================= User list rows (followers/following/discover) ============================= */
 
 function UserListRow({ profile, rightContent, onClick }) {
   const { theme } = useTheme();
@@ -988,9 +982,7 @@ function DiscoverPanel({ myId, onClose, onOpenProfile }) {
   );
 }
 
-/* ============================= Reactions & emoji picker ============================= */
 
-/* ============================= Message context menu (long-press) ============================= */
 
 function IconDownload({ size = 15, color = 'currentColor' }) {
   return (
@@ -1071,7 +1063,6 @@ function WhoReactedModal({ reactions, onClose }) {
   );
 }
 
-/* ============================= Archived chats ============================= */
 
 function ArchivedChatsPanel({ conversations, onClose, onOpenChat, onUnarchive }) {
   const { theme } = useTheme();
@@ -1102,7 +1093,6 @@ function ArchivedChatsPanel({ conversations, onClose, onOpenChat, onUnarchive })
   );
 }
 
-/* ============================= Per-chat wallpaper ============================= */
 
 const WALLPAPER_PRESETS = ['default', 'coral', 'ocean', 'berry', 'solid-dark', 'solid-light'];
 const WALLPAPER_COLORS = { coral: '#FF6B4A', ocean: '#3DA5F5', berry: '#C15CFC' };
@@ -1146,7 +1136,6 @@ function WallpaperPicker({ value, onSelect, onClose }) {
   );
 }
 
-/* ============================= Chat lock ============================= */
 
 async function hashPin(pin) {
   const enc = new TextEncoder().encode(pin);
@@ -1263,7 +1252,6 @@ function ChatLockUnlock({ onCancel, onUnlock, correctHash }) {
   );
 }
 
-/* ============================= Chat settings screen ============================= */
 
 function ChatSettingsPanel({ conv, myId, isPinned, isLocked, wallpaper, onClose, onTogglePin, onToggleArchive, onSetWallpaper, onEnableLock, onDisableLock, onDeleteChat, onNicknameSaved }) {
   const { theme } = useTheme();
@@ -1339,7 +1327,6 @@ function Pin_({ size = 16 }) {
   );
 }
 
-/* ============================= Groups ============================= */
 
 function GroupAvatar({ avatar, name, size = 44 }) {
   const { theme } = useTheme();
@@ -1571,8 +1558,6 @@ function GroupInfoPanel({ group, members, myId, myRole, isOwner, onClose, onProm
   );
 }
 
-/* ============================= Account privacy settings ============================= */
-
 function PrivacyField({ label, hidden, onToggle }) {
   const { theme } = useTheme();
   return (
@@ -1642,9 +1627,7 @@ function AccountPrivacyPanel({ profile, onClose, onSaved }) {
   );
 }
 
-/* ============================= Profile panel (premium redesign) ============================= */
 
-/* ============================= Avatar crop tool ============================= */
 
 function AvatarCropper({ file, onCancel, onConfirm }) {
   const { theme } = useTheme();
@@ -2337,7 +2320,6 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
     </div>
   );
 }
-
 function playPing() {
   try {
     if (localStorage.getItem('zchat-sound') === 'off') return;
@@ -2355,7 +2337,6 @@ function playPing() {
 
 function pairKey(a, b) { return a < b ? [a, b] : [b, a]; }
 
-/* ============================= Full-screen image viewer ============================= */
 
 function ImageViewer({ url, onClose, onForward, onReport }) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -2396,7 +2377,6 @@ function ImageViewer({ url, onClose, onForward, onReport }) {
   );
 }
 
-/* ============================= Selection action bar ============================= */
 
 function MessageActionBar({ count, canEditActions, onCancel, onForward, onDeleteForMe, onDeleteForEveryone, onReport }) {
   const { theme } = useTheme();
@@ -2417,7 +2397,6 @@ function MessageActionBar({ count, canEditActions, onCancel, onForward, onDelete
   );
 }
 
-/* ============================= Forward picker ============================= */
 
 function ForwardPicker({ conversations, onCancel, onPick, myId }) {
   const { theme } = useTheme();
@@ -2478,7 +2457,6 @@ function ForwardPicker({ conversations, onCancel, onPick, myId }) {
   );
 }
 
-/* ============================= Report message modal ============================= */
 
 function ReportMessageModal({ onCancel, onSubmit }) {
   const { theme } = useTheme();
@@ -2504,7 +2482,6 @@ function ReportMessageModal({ onCancel, onSubmit }) {
   );
 }
 
-/* ============================= Delete conversation confirm ============================= */
 
 function DeleteChatConfirm({ name, onCancel, onConfirm }) {
   const { theme } = useTheme();
@@ -3115,7 +3092,6 @@ function ChatApp({ session, onLogout, onNeedsProfile }) {
     }
   };
   const stopRecording = () => { mediaRecorderRef.current?.stop(); };
-
   const handleDelete = async (messageId) => {
     const { data } = await deleteMessage(messageId);
     if (data) setMessages((prev) => prev.map((m) => (m.id === messageId ? data : m)));
@@ -3364,7 +3340,7 @@ function ChatApp({ session, onLogout, onNeedsProfile }) {
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontWeight: 700, fontSize: 14.5, color: theme.ink }}>{g.name}</div>
                       <div style={{ fontSize: 12, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {g.last_message ? g.last_message : (g.last_message_type ? `${g.last_message_type === 'image' ? '📷 Photo' : g.last_message_type === 'video' ? '🎥 Video' : g.last_message_type === 'audio' ? '🎤 Voice message' : ''}`) : 'No messages yet'}
+                        {g.last_message ? g.last_message : (g.last_message_type ? `${g.last_message_type === 'image' ? '📷 Photo' : g.last_message_type === 'video' ? '🎥 Video' : g.last_message_type === 'audio' ? '🎤 Voice message' : ''}` : 'No messages yet')}
                       </div>
                     </div>
                   </div>
@@ -3889,4 +3865,5 @@ export default function App() {
     </ThemeProvider>
   );
 }
+
 
