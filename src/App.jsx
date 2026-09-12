@@ -74,15 +74,17 @@ function GlobalStyle() {
 }
 
 function Avatar({ emoji = '🙂', online, size = 40 }) {
+  const isImage = typeof emoji === 'string' && emoji.startsWith('http');
   return (
     <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
       <div style={{
         width: size, height: size, borderRadius: '50%',
-        background: 'linear-gradient(135deg, #C9CEDC, #A9B3D6)',
+        background: isImage ? 'transparent' : 'linear-gradient(135deg, #C9CEDC, #A9B3D6)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         fontSize: size * 0.5, boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.5)',
+        overflow: 'hidden',
       }}>
-        {emoji}
+        {isImage ? <img src={emoji} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : emoji}
       </div>
       {online != null && (
         <div style={{
@@ -424,18 +426,30 @@ function RegisterFlow({ onDone, onBack, onStart }) {
 
 const GENDERS = ['Male', 'Female', 'Other', 'Prefer not to say'];
 
-function ProfilePanel({ profile, isSelf, onClose, onReport, onSaved }) {
+function ProfilePanel({ profile, isSelf, userId, onClose, onReport, onSaved }) {
   const [reportOpen, setReportOpen] = useState(false);
   const [reportReason, setReportReason] = useState('');
   const [reportSent, setReportSent] = useState(false);
   const [editing, setEditing] = useState(false);
   const [bio, setBio] = useState(profile.bio || '');
   const [gender, setGender] = useState(profile.gender || '');
+  const [avatar, setAvatar] = useState(profile.avatar || '🙂');
+  const [avatarUploading, setAvatarUploading] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  const handleAvatarChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setAvatarUploading(true);
+    const { url, error } = await uploadMedia(file, userId);
+    e.target.value = '';
+    if (!error && url) setAvatar(url);
+    setAvatarUploading(false);
+  };
 
   const save = async () => {
     setSaving(true);
-    const { data } = await updateProfile(profile.id, { bio, gender });
+    const { data } = await updateProfile(profile.id, { bio, gender, avatar });
     setSaving(false);
     if (data) { onSaved(data); setEditing(false); }
   };
@@ -451,7 +465,21 @@ function ProfilePanel({ profile, isSelf, onClose, onReport, onSaved }) {
       })}>
         <X size={20} style={{ position: 'absolute', top: 18, right: 18, cursor: 'pointer', color: G.muted }} onClick={onClose} />
         <div style={{ textAlign: 'center' }}>
-          <Avatar emoji={profile.avatar} online={profile.online} size={76} />
+          {editing ? (
+            <div style={{ position: 'relative', width: 76, height: 76, margin: '0 auto' }}>
+              <Avatar emoji={avatar} size={76} />
+              <label style={{
+                position: 'absolute', bottom: -2, right: -2, width: 26, height: 26, borderRadius: '50%',
+                background: G.blue, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                cursor: 'pointer', border: '2px solid white',
+              }}>
+                {avatarUploading ? <Spinner size={12} /> : <ImageIcon size={13} color="white" />}
+                <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleAvatarChange} />
+              </label>
+            </div>
+          ) : (
+            <Avatar emoji={profile.avatar} online={profile.online} size={76} />
+          )}
           <div style={{ fontWeight: 700, fontSize: 19, marginTop: 12, color: G.ink }}>{profile.name}</div>
           <div style={{ fontSize: 13.5, color: G.muted }}>@{profile.username}</div>
 
@@ -691,6 +719,7 @@ function ChatApp({ session, onLogout }) {
           <ProfilePanel
             profile={profileOf.id === me.id ? me : profileOf}
             isSelf={profileOf.id === me.id}
+            userId={session.user.id}
             onClose={() => setProfileOf(null)}
             onReport={handleReport}
             onSaved={(updated) => { setMe(updated.id === me.id ? { ...updated, email: me.email } : me); if (activeProfile?.id === updated.id) setActiveProfile(updated); }}
