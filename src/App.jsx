@@ -139,7 +139,7 @@ async function subscribeToPush(userId) {
 
 async function sendPushNotification(userId, title, body, url) {
   try {
-    await supabase.functions.invoke('hyper-worker', { body: { user_id: userId, title, body, url: url || '/' } });
+    await supabase.functions.invoke('send-push', { body: { user_id: userId, title, body, url: url || '/' } });
   } catch (err) {
     console.error('Push notify failed:', err);
   }
@@ -2089,7 +2089,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
       await supabase.from('follows').insert({ follower_id: userId, following_id: profile.id, status });
       if (status === 'accepted') setFollowerCount((c) => c + 1);
       setFollowState(status);
-      sendPushNotification(profile.id, 'ZChat', status === 'pending' ? 'Someone requested to follow you' : 'Someone started following you', '/');
+      sendPushNotification(profile.id, 'ZChat', status === 'pending' ? `${(await getProfile(userId)).data?.name || 'Someone'} requested to follow you` : `${(await getProfile(userId)).data?.name || 'Someone'} started following you`, `/?profile=${userId}`);
     }
     setFollowBusy(false);
   };
@@ -2470,7 +2470,7 @@ function AudioBubble({ url, isMe }) {
   );
 }
 
-function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSelect, onLongPress, onOpenImage, reactions, onReact, onOpenWhoReacted, replyPreview, onSwipeReply, senderLabel, senderAvatar, hideReadStatus, onOpenSenderProfile }) {
+function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSelect, onLongPress, onOpenImage, reactions, onReact, onOpenWhoReacted, replyPreview, onSwipeReply, senderLabel, senderAvatar, hideReadStatus, onOpenSenderProfile, canModerate }) {
   const { theme, fontScale } = useTheme();
   const [hover, setHover] = useState(false);
   const [burstHeart, setBurstHeart] = useState(false);
@@ -2543,7 +2543,7 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
           {selected && <Check size={12} color="white" />}
         </div>
       )}
-      {isMe && !m.deleted && !selectionMode && (
+      {(isMe || canModerate) && !m.deleted && !selectionMode && (
         <Trash2 size={14} color={theme.muted} style={{ cursor: 'pointer', flexShrink: 0, opacity: hover ? 1 : 0.35, transition: 'opacity 0.15s' }}
           onClick={() => onDelete(m.id)} />
       )}
@@ -2891,6 +2891,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [recording, setRecording] = useState(false);
   const [recordSeconds, setRecordSeconds] = useState(0);
   const scrollRef = useRef(null);
+  const composerRef = useRef(null);
   const searchTimer = useRef(null);
   const typingChannelRef = useRef(null);
   const typingTimeoutRef = useRef(null);
@@ -3050,6 +3051,34 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
   useEffect(() => {
     if (me) { loadConversations(); loadMyLocks(); loadGroups(); loadMyBlocks(); subscribeToPush(session.user.id); }
+  }, [me]);
+
+  useEffect(() => {
+    if (!me) return;
+    const params = new URLSearchParams(window.location.search);
+    const dmId = params.get('dm');
+    const groupId = params.get('group');
+    const profileId = params.get('profile');
+    if (dmId) {
+      (async () => {
+        const { data } = await getProfile(dmId);
+        if (data) {
+          await openChat(sanitizeAvatar(data, session.user.id), null);
+          setTimeout(() => composerRef.current?.focus(), 300);
+        }
+      })();
+    } else if (groupId) {
+      (async () => {
+        const { data } = await supabase.from('groups').select('*').eq('id', groupId).maybeSingle();
+        if (data) await openGroup(data);
+      })();
+    } else if (profileId) {
+      (async () => {
+        const { data } = await getProfile(profileId);
+        if (data) setProfileOf(sanitizeAvatar(data, session.user.id));
+      })();
+    }
+    if (dmId || groupId || profileId) window.history.replaceState({}, '', window.location.pathname);
   }, [me]);
 
   useEffect(() => {
@@ -3263,7 +3292,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       if (type !== 'system') {
         const preview = type === 'text' ? content : type === 'image' ? '📷 Photo' : type === 'audio' ? '🎤 Voice message' : '🎥 Video';
         groupMembers.filter((m) => m.user_id !== session.user.id && !m.muted).forEach((m) => {
-          sendPushNotification(m.user_id, `${me.name} in ${activeGroup.name}`, preview, '/');
+          sendPushNotification(m.user_id, `${me.name} in ${activeGroup.name}`, preview, `/?group=${activeGroup.id}`);
         });
       }
     }
@@ -3446,7 +3475,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       }
       setMessages((prev) => [...prev, data]);
       upsertConversation(activeProfile.id, text, 'text');
-      sendPushNotification(activeProfile.id, me.name, text, '/');
+      sendPushNotification(activeProfile.id, me.name, text, `/?dm=${session.user.id}`);
     }
   };
 
@@ -3474,7 +3503,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         if (activeGroup) { await sendGroupMessage(kind, null, url); }
         else {
           const { data } = await sendMessage(session.user.id, activeProfile.id, kind, null, url);
-          if (data) { setMessages((prev) => [...prev, data]); sendPushNotification(activeProfile.id, me.name, kind === 'image' ? '📷 Photo' : kind === 'video' ? '🎥 Video' : 'New message', '/'); }
+          if (data) { setMessages((prev) => [...prev, data]); sendPushNotification(activeProfile.id, me.name, kind === 'image' ? '📷 Photo' : kind === 'video' ? '🎥 Video' : 'New message', `/?dm=${session.user.id}`); }
         }
       }
     }
@@ -3502,7 +3531,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             await sendGroupMessage('audio', null, url);
           } else {
             const { data } = await sendMessage(session.user.id, activeProfile.id, 'audio', null, url);
-            if (data) { setMessages((prev) => [...prev, data]); upsertConversation(activeProfile.id, null, 'audio'); }
+            if (data) { setMessages((prev) => [...prev, data]); upsertConversation(activeProfile.id, null, 'audio'); sendPushNotification(activeProfile.id, me.name, '🎤 Voice message', `/?dm=${session.user.id}`); }
           }
         }
         setUploading(false);
@@ -3615,6 +3644,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   };
 
   const reactToMessage = async (messageId, emoji) => {
+    const targetMessage = findMessageById(messageId);
     const mine = (messageLikes[messageId] || []).find((r) => r.user_id === session.user.id);
     setMessageLikes((prev) => {
       const next = { ...prev };
@@ -3627,6 +3657,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       await supabase.from('message_likes').delete().eq('message_id', messageId).eq('user_id', session.user.id);
     } else {
       await supabase.from('message_likes').upsert({ message_id: messageId, user_id: session.user.id, emoji }, { onConflict: 'message_id,user_id' });
+      if (targetMessage && targetMessage.sender_id !== session.user.id) {
+        const destUrl = activeGroup ? `/?group=${activeGroup.id}` : `/?dm=${session.user.id}`;
+        sendPushNotification(targetMessage.sender_id, me.name, `reacted ${emoji} to your message`, destUrl);
+      }
     }
     setReactionPickerFor(null);
   };
@@ -3648,7 +3682,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       const status = activeProfile.is_private ? 'pending' : 'accepted';
       await supabase.from('follows').insert({ follower_id: session.user.id, following_id: activeProfile.id, status });
       setActiveFollowState(status);
-      sendPushNotification(activeProfile.id, 'ZChat', status === 'pending' ? `${me.name} requested to follow you` : `${me.name} started following you`, '/');
+      sendPushNotification(activeProfile.id, 'ZChat', status === 'pending' ? `${me.name} requested to follow you` : `${me.name} started following you`, `/?profile=${session.user.id}`);
     }
     setActiveFollowBusy(false);
   };
@@ -3970,6 +4004,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                     return (
                       <MessageBubble
                         key={m.id} m={m} isMe={m.sender_id === session.user.id} onDelete={handleDelete}
+                        canModerate={!!(activeGroup && groupMembers.find((gm) => gm.user_id === session.user.id)?.role === 'admin')}
                         selectionMode={selectionMode} selected={selectedIds.has(m.id)} onToggleSelect={toggleSelect}
                         onLongPress={(id) => setContextMenuFor(id)}
                         onOpenImage={setViewerUrl}
@@ -4050,7 +4085,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <Paperclip size={21} color={theme.muted} style={{ cursor: 'pointer', transform: showAttach ? 'rotate(45deg)' : 'none', transition: 'transform 0.15s', flexShrink: 0 }}
                         onClick={() => setShowAttach((s) => !s)} />
-                      <textarea value={draft} onChange={(e) => {
+                      <textarea ref={composerRef} value={draft} onChange={(e) => {
                         setDraft(e.target.value.slice(0, MAX_CHARS)); sendTyping();
                         e.target.style.height = 'auto';
                         e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
