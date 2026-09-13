@@ -120,10 +120,10 @@ function ZBrand({ size = 22, showTag = false }) {
 }
 
 const CHAT_THEMES = {
-  classic: { label: 'Classic', bubbleRadius: 18, borderStyle: 'solid', glow: false, bg: 'none' },
-  glass: { label: 'Frosted Glass', bubbleRadius: 22, borderStyle: 'solid', glow: false, bg: 'blobs' },
-  love: { label: 'Love', bubbleRadius: 26, borderStyle: 'gradient', glow: 'pink', bg: 'hearts' },
-  neon: { label: 'Neon', bubbleRadius: 22, borderStyle: 'solid', glow: 'cyan', bg: 'neon' },
+  classic: { label: 'Classic', bubbleRadius: 16, borderStyle: 'solid', glow: false, bg: 'none' },
+  glass: { label: 'Frosted Glass', bubbleRadius: 16, borderStyle: 'solid', glow: false, bg: 'blobs' },
+  love: { label: 'Love', bubbleRadius: 16, borderStyle: 'thin', glow: false, bg: 'hearts' },
+  neon: { label: 'Neon', bubbleRadius: 16, borderStyle: 'thin', glow: false, bg: 'neon' },
 };
 
 function AnimatedChatBackground({ chatTheme }) {
@@ -182,21 +182,12 @@ function AnimatedChatBackground({ chatTheme }) {
 function bubbleThemeStyle(chatTheme, isMe, theme) {
   const spec = CHAT_THEMES[chatTheme] || CHAT_THEMES.classic;
   const base = { borderRadius: spec.bubbleRadius };
-  if (spec.borderStyle === 'gradient') {
-    base.border = 'none';
-    base.backgroundImage = isMe
-      ? `linear-gradient(${theme.bubbleMe}, ${theme.bubbleMe}), linear-gradient(135deg, #FF7AA2, #FF4D8D)`
-      : `linear-gradient(${theme.bubbleThem}, ${theme.bubbleThem}), linear-gradient(135deg, #FFB6C9, #FF8FAE)`;
-    base.backgroundOrigin = 'border-box';
-    base.backgroundClip = 'padding-box, border-box';
-    base.border = '2px solid transparent';
+  if (chatTheme === 'love') {
+    base.border = `1px solid ${isMe ? 'rgba(255,77,141,0.4)' : 'rgba(255,182,201,0.3)'}`;
   }
   if (chatTheme === 'neon') {
-    base.border = `1.5px solid ${isMe ? '#00FFDC' : '#B026FF'}`;
-    base.background = isMe ? 'rgba(0,255,220,0.10)' : 'rgba(176,38,255,0.10)';
+    base.border = `1px solid ${isMe ? 'rgba(0,255,220,0.4)' : 'rgba(176,38,255,0.35)'}`;
   }
-  if (spec.glow === 'pink') base.boxShadow = `0 0 16px ${isMe ? 'rgba(255,77,141,0.35)' : 'rgba(255,182,201,0.25)'}`;
-  if (spec.glow === 'cyan') base.boxShadow = `0 0 14px ${isMe ? 'rgba(0,255,220,0.30)' : 'rgba(190,0,255,0.22)'}`;
   return base;
 }
 
@@ -2715,7 +2706,12 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
 
   return (
     <div
-      style={{ display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start', alignItems: 'center', gap: 8, marginBottom: 10, touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}
+      style={{
+        display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start', alignItems: 'center', gap: 8, marginBottom: 10,
+        touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent',
+        background: selected ? `${theme.coral}14` : 'transparent',
+        marginLeft: -18, marginRight: -18, paddingLeft: 18, paddingRight: 18, paddingTop: 2, paddingBottom: 2,
+      }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={clearPressTimer}
@@ -2748,13 +2744,13 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
             <Reply size={13} color={theme.muted} />
           </div>
         )}
-        <div onClick={handleTap} className={!m.deleted && chatTheme === 'love' ? 'zchat-bubble-love' : !m.deleted && chatTheme === 'neon' ? 'zchat-bubble-neon' : undefined} style={glass(theme, {
+        <div onClick={handleTap} style={glass(theme, {
           background: m.deleted ? theme.rowBg : (isMe ? theme.bubbleMe : theme.bubbleThem),
           borderRadius: 18,
           borderBottomRightRadius: isMe && !m.deleted ? 4 : 18,
           borderBottomLeftRadius: !isMe && !m.deleted ? 4 : 18,
           padding: m.type === 'text' || m.deleted ? '9px 13px' : 5,
-          border: selected ? `2px solid ${theme.coral}` : m.deleted ? `1px dashed ${theme.border}` : `1px solid ${theme.border}`,
+          border: m.deleted ? `1px dashed ${theme.border}` : `1px solid ${theme.border}`,
           cursor: 'pointer',
           ...(m.deleted ? {} : bubbleThemeStyle(chatTheme, isMe, theme)),
         })}>
