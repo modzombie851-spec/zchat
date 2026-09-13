@@ -2,6 +2,18 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App.jsx';
 
+function setAppHeight() {
+  const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+  document.documentElement.style.setProperty('--app-height', `${vh}px`);
+}
+setAppHeight();
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', setAppHeight);
+  window.visualViewport.addEventListener('scroll', setAppHeight);
+}
+window.addEventListener('resize', setAppHeight);
+window.addEventListener('orientationchange', setAppHeight);
+
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
     try {
