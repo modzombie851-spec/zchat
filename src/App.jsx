@@ -2320,9 +2320,10 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
       position: 'absolute', inset: 0, background: 'rgba(20,16,14,0.5)',
       display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 18,
     }} className="zchat-fade">
+      <div className="zchat-fire-ring" style={{ borderRadius: 31, padding: 3, width: '100%', maxWidth: 366, maxHeight: '89vh' }}>
       <div style={{
         background: theme.panelBg, borderRadius: 28,
-        width: '100%', maxWidth: 360, position: 'relative', maxHeight: '88vh', overflowY: 'auto',
+        width: '100%', maxHeight: '100%', position: 'relative', overflowY: 'auto',
         boxShadow: '0 30px 80px rgba(0,0,0,0.3)',
       }}>
         {/* Header banner */}
@@ -2362,10 +2363,8 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
               </label>
             </div>
           ) : (
-            <div style={{ width: 98, height: 98, borderRadius: '50%', margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 3 }} className="zchat-fire-ring">
-              <div style={{ width: '100%', height: '100%', borderRadius: '50%', padding: 4, background: theme.panelBg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Avatar emoji={(isSelf || !profile.hide_photo) ? profile.avatar : ''} name={profile.name} online={isOnline} size={84} />
-              </div>
+            <div style={{ width: 92, height: 92, borderRadius: '50%', padding: 4, background: 'white', margin: '0 auto', boxShadow: '0 4px 16px rgba(0,0,0,0.2), 0 0 0 1px rgba(0,0,0,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Avatar emoji={(isSelf || !profile.hide_photo) ? profile.avatar : ''} name={profile.name} online={isOnline} size={84} />
             </div>
           )}
 
@@ -2589,6 +2588,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
             </div>
           )}
         </div>
+      </div>
       </div>
       {cropFile && <AvatarCropper file={cropFile} onCancel={() => setCropFile(null)} onConfirm={uploadCropped} />}
       {listModal && (
@@ -3436,6 +3436,21 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       updateLastSeen();
     };
   }, [me]);
+
+  useEffect(() => {
+    if (!activeProfile) return;
+    const poll = setInterval(async () => {
+      const myIds = messages.filter((m) => m.sender_id === session.user.id && !m.deleted).map((m) => m.id);
+      if (!myIds.length) return;
+      const { data } = await supabase.from('messages').select('id, read, delivered').in('id', myIds);
+      if (!data) return;
+      setMessages((prev) => prev.map((m) => {
+        const fresh = data.find((d) => d.id === m.id);
+        return fresh ? { ...m, read: fresh.read, delivered: fresh.delivered } : m;
+      }));
+    }, 4000);
+    return () => clearInterval(poll);
+  }, [activeProfile, messages.length]);
 
   useEffect(() => {
     const t = setTimeout(() => {
