@@ -14,36 +14,36 @@ import {
 
 
 const ACCENT_PALETTES = {
-  coral: { coral: '#FF5A36', coralDeep: '#E8452A', gold: '#FFB238', teal: '#00C2A8', danger: '#ED4956' },
-  ocean: { coral: '#0095F6', coralDeep: '#1877C9', gold: '#5FD9C4', teal: '#00C2A8', danger: '#ED4956' },
-  berry: { coral: '#B24CF0', coralDeep: '#8E2FD1', gold: '#FF8AC2', teal: '#00C2A8', danger: '#ED4956' },
+  coral: { coral: '#2E7CF6', coralDeep: '#1B5FD1', gold: '#5FA8FF', teal: '#00C2A8', danger: '#ED4956' },
+  ocean: { coral: '#00B4FF', coralDeep: '#0089CC', gold: '#5FD9C4', teal: '#00C2A8', danger: '#ED4956' },
+  berry: { coral: '#7C5CFC', coralDeep: '#5E3AE0', gold: '#B98CFF', teal: '#00C2A8', danger: '#ED4956' },
 };
 const ACCENT = ACCENT_PALETTES.coral;
 
 const THEMES = {
   light: {
-    bgGradient: '#FAFAFA',
+    bgGradient: '#F5F7FB',
     glass: 'rgba(255,255,255,0.85)',
     panelBg: '#FFFFFF',
-    border: 'rgba(0,0,0,0.09)',
-    ink: '#0A0A0A',
-    muted: '#8E8E8E',
-    bubbleMe: '#EFF7FF',
-    bubbleThem: '#F0F0F0',
-    inputBg: '#FAFAFA',
-    rowBg: 'rgba(0,0,0,0.035)',
+    border: 'rgba(20,30,60,0.09)',
+    ink: '#0B1220',
+    muted: '#6E7688',
+    bubbleMe: '#E9F2FF',
+    bubbleThem: '#F1F3F7',
+    inputBg: '#F5F7FB',
+    rowBg: 'rgba(30,60,120,0.045)',
   },
   dark: {
-    bgGradient: '#000000',
-    glass: 'rgba(18,18,18,0.85)',
-    panelBg: '#121212',
-    border: 'rgba(255,255,255,0.09)',
-    ink: '#FAFAFA',
-    muted: '#A8A8A8',
-    bubbleMe: '#1A2C3D',
-    bubbleThem: '#262626',
-    inputBg: '#1A1A1A',
-    rowBg: 'rgba(255,255,255,0.05)',
+    bgGradient: '#050810',
+    glass: 'rgba(13,18,32,0.85)',
+    panelBg: '#0C1120',
+    border: 'rgba(120,160,255,0.12)',
+    ink: '#F1F4FF',
+    muted: '#8892A8',
+    bubbleMe: '#123259',
+    bubbleThem: '#151A2C',
+    inputBg: '#0F1424',
+    rowBg: 'rgba(120,160,255,0.07)',
   },
 };
 
@@ -52,7 +52,7 @@ const useTheme = () => useContext(ThemeContext);
 
 function ThemeProvider({ children }) {
   const [dark, setDark] = useState(() => {
-    try { return localStorage.getItem('zchat-theme') === 'dark'; } catch { return false; }
+    try { const v = localStorage.getItem('zchat-theme'); return v ? v === 'dark' : true; } catch { return true; }
   });
   const [accentName, setAccentName] = useState(() => {
     try { return localStorage.getItem('zchat-accent') || 'coral'; } catch { return 'coral'; }
@@ -63,6 +63,12 @@ function ThemeProvider({ children }) {
   const [bgPatternOn, setBgPatternOn] = useState(() => {
     try { return localStorage.getItem('zchat-bgpattern') === 'on'; } catch { return false; }
   });
+  const [fontScale, setFontScale] = useState(() => {
+    try { return parseFloat(localStorage.getItem('zchat-fontscale')) || 1; } catch { return 1; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem('zchat-fontscale', String(fontScale)); } catch {}
+  }, [fontScale]);
   useEffect(() => {
     try { localStorage.setItem('zchat-theme', dark ? 'dark' : 'light'); } catch {}
   }, [dark]);
@@ -78,7 +84,7 @@ function ThemeProvider({ children }) {
   const accent = ACCENT_PALETTES[accentName] || ACCENT_PALETTES.coral;
   const theme = { ...THEMES[dark ? 'dark' : 'light'], ...accent, dark };
   return (
-    <ThemeContext.Provider value={{ theme, dark, setDark, accentName, setAccentName, soundOn, setSoundOn, bgPatternOn, setBgPatternOn }}>
+    <ThemeContext.Provider value={{ theme, dark, setDark, accentName, setAccentName, soundOn, setSoundOn, bgPatternOn, setBgPatternOn, fontScale, setFontScale }}>
       {children}
     </ThemeContext.Provider>
   );
@@ -812,7 +818,7 @@ function ToggleSwitch({ on, onClick }) {
 }
 
 function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideActivity, onToggleActivity, onOpenAccounts, onOpenDelete }) {
-  const { theme, dark, setDark, accentName, setAccentName, soundOn, setSoundOn, bgPatternOn, setBgPatternOn } = useTheme();
+  const { theme, dark, setDark, accentName, setAccentName, soundOn, setSoundOn, bgPatternOn, setBgPatternOn, fontScale, setFontScale } = useTheme();
   const accentLabels = { coral: 'Coral', ocean: 'Ocean', berry: 'Berry' };
   return (
     <div style={{
@@ -847,6 +853,17 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
 
         <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.muted, margin: '16px 0 6px 2px' }}>Privacy</div>
         <SettingsRow icon={<EyeOff size={16} />} label="Hide activity status" right={<ToggleSwitch on={hideActivity} onClick={onToggleActivity} />} />
+
+        <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.muted, margin: '16px 0 6px 2px' }}>Text size</div>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
+          {[{ v: 0.88, l: 'Small' }, { v: 1, l: 'Default' }, { v: 1.18, l: 'Large' }].map((opt) => (
+            <div key={opt.l} onClick={() => setFontScale(opt.v)} style={{
+              flex: 1, padding: '10px 0', borderRadius: 12, textAlign: 'center', cursor: 'pointer', fontFamily: FONT,
+              border: fontScale === opt.v ? `2px solid ${theme.coral}` : `1.5px solid ${theme.border}`,
+              color: theme.ink, fontSize: 13 * opt.v, fontWeight: 700,
+            }}>{opt.l}</div>
+          ))}
+        </div>
         <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.muted, margin: '16px 0 6px 2px' }}>Accounts</div>
         <SettingsRow icon={<Bell size={16} />} label="Follow requests" onClick={onOpenRequests} />
         <SettingsRow icon={<UserPlus size={16} />} label="Switch account" onClick={onOpenAccounts} />
@@ -2404,8 +2421,8 @@ function AudioBubble({ url, isMe }) {
   );
 }
 
-function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSelect, onLongPress, onOpenImage, reactions, onReact, onOpenWhoReacted, replyPreview, onSwipeReply, senderLabel, hideReadStatus, onOpenSenderProfile }) {
-  const { theme } = useTheme();
+function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSelect, onLongPress, onOpenImage, reactions, onReact, onOpenWhoReacted, replyPreview, onSwipeReply, senderLabel, senderAvatar, hideReadStatus, onOpenSenderProfile }) {
+  const { theme, fontScale } = useTheme();
   const [hover, setHover] = useState(false);
   const [burstHeart, setBurstHeart] = useState(false);
   const lastTapRef = useRef(0);
@@ -2481,6 +2498,11 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
         <Trash2 size={14} color={theme.muted} style={{ cursor: 'pointer', flexShrink: 0, opacity: hover ? 1 : 0.35, transition: 'opacity 0.15s' }}
           onClick={() => onDelete(m.id)} />
       )}
+      {senderLabel && !m.deleted && (
+        <div onClick={onOpenSenderProfile} style={{ cursor: onOpenSenderProfile ? 'pointer' : 'default', flexShrink: 0, alignSelf: 'flex-end', marginBottom: 4 }}>
+          <Avatar emoji={senderAvatar} name={senderLabel} size={26} />
+        </div>
+      )}
       <div style={{ position: 'relative', maxWidth: '72%' }}>
         {!selectionMode && !m.deleted && (
           <div onClick={() => onSwipeReply(m)} style={{
@@ -2491,7 +2513,9 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
         )}
         <div onClick={handleTap} style={glass(theme, {
           background: m.deleted ? theme.rowBg : (isMe ? theme.bubbleMe : theme.bubbleThem),
-          borderRadius: 16,
+          borderRadius: 18,
+          borderBottomRightRadius: isMe && !m.deleted ? 4 : 18,
+          borderBottomLeftRadius: !isMe && !m.deleted ? 4 : 18,
           padding: m.type === 'text' || m.deleted ? '9px 13px' : 5,
           border: selected ? `2px solid ${theme.coral}` : m.deleted ? `1px dashed ${theme.border}` : `1px solid ${theme.border}`,
           cursor: 'pointer',
@@ -2543,7 +2567,7 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
                 </div>
               )}
               {m.type === 'audio' && <AudioBubble url={m.media_url} isMe={isMe} />}
-              {m.content && <div style={{ fontSize: 15, color: theme.ink, padding: m.type !== 'text' ? '0 4px' : 0, wordBreak: 'break-word', lineHeight: 1.4 }}>{m.content}</div>}
+              {m.content && <div style={{ fontSize: 15 * fontScale, color: theme.ink, padding: m.type !== 'text' ? '0 4px' : 0, wordBreak: 'break-word', lineHeight: 1.4 }}>{m.content}</div>}
             </>
           )}
           <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 4, marginTop: 3, padding: m.type !== 'text' && !m.deleted ? '0 4px 2px' : 0 }}>
@@ -3192,6 +3216,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   };
 
   const memberName = (userId) => (userId === session.user.id ? 'You' : (groupMembers.find((m) => m.user_id === userId)?.profile.name || 'Someone'));
+  const realName = (userId) => (userId === session.user.id ? (me?.name || 'Someone') : (groupMembers.find((m) => m.user_id === userId)?.profile.name || 'Someone'));
 
   const transferOwnership = async (userId) => {
     if (activeGroup.created_by !== session.user.id) return;
@@ -3201,7 +3226,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       setActiveGroup((prev) => ({ ...prev, created_by: userId }));
       loadGroupMembers(activeGroup.id);
       loadGroups();
-      sendGroupMessage('system', `${memberName(session.user.id)} made ${memberName(userId)} the group owner`, null);
+      sendGroupMessage('system', `${realName(session.user.id)} made ${realName(userId)} the group owner`, null);
     }
   };
 
@@ -3209,13 +3234,13 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (activeGroup.created_by !== session.user.id) return;
     await supabase.from('group_members').update({ role: 'admin' }).eq('group_id', activeGroup.id).eq('user_id', userId);
     loadGroupMembers(activeGroup.id);
-    sendGroupMessage('system', `${memberName(session.user.id)} made ${memberName(userId)} an admin`, null);
+    sendGroupMessage('system', `${realName(session.user.id)} made ${realName(userId)} an admin`, null);
   };
   const demoteMember = async (userId) => {
     if (activeGroup.created_by !== session.user.id) return;
     await supabase.from('group_members').update({ role: 'member' }).eq('group_id', activeGroup.id).eq('user_id', userId);
     loadGroupMembers(activeGroup.id);
-    sendGroupMessage('system', `${memberName(session.user.id)} removed ${memberName(userId)} as admin`, null);
+    sendGroupMessage('system', `${realName(session.user.id)} removed ${realName(userId)} as admin`, null);
   };
   const muteMember = async (userId) => {
     await supabase.from('group_members').update({ muted: true }).eq('group_id', activeGroup.id).eq('user_id', userId);
@@ -3242,7 +3267,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     await supabase.from('groups').update({ name: name.trim() }).eq('id', activeGroup.id);
     setActiveGroup((prev) => ({ ...prev, name: name.trim() }));
     loadGroups();
-    sendGroupMessage('system', `${memberName(session.user.id)} changed the group name from "${oldName}" to "${name.trim()}"`, null);
+    sendGroupMessage('system', `${realName(session.user.id)} changed the group name from "${oldName}" to "${name.trim()}"`, null);
   };
   const saveGroupAvatar = async (blob) => {
     const file = new File([blob], 'group.jpg', { type: 'image/jpeg' });
@@ -3251,23 +3276,23 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       await supabase.from('groups').update({ avatar: url }).eq('id', activeGroup.id);
       setActiveGroup((prev) => ({ ...prev, avatar: url }));
       loadGroups();
-      sendGroupMessage('system', `${memberName(session.user.id)} changed the group photo`, null);
+      sendGroupMessage('system', `${realName(session.user.id)} changed the group photo`, null);
     }
   };
   const addGroupMembers = async (people) => {
     if (!people.length) return;
     await supabase.from('group_members').insert(people.map((p) => ({ group_id: activeGroup.id, user_id: p.id, role: 'member', added_by: session.user.id })));
     loadGroupMembers(activeGroup.id);
-    sendGroupMessage('system', `${memberName(session.user.id)} added ${people.map((p) => p.name).join(', ')}`, null);
+    sendGroupMessage('system', `${realName(session.user.id)} added ${people.map((p) => p.name).join(', ')}`, null);
   };
   const kickMember = async (userId) => {
-    const name = memberName(userId);
+    const name = realName(userId);
     await supabase.from('group_members').delete().eq('group_id', activeGroup.id).eq('user_id', userId);
     loadGroupMembers(activeGroup.id);
-    sendGroupMessage('system', `${memberName(session.user.id)} removed ${name}`, null);
+    sendGroupMessage('system', `${realName(session.user.id)} removed ${name}`, null);
   };
   const leaveGroup = async () => {
-    const name = memberName(session.user.id);
+    const name = realName(session.user.id);
     await supabase.from('group_members').delete().eq('group_id', activeGroup.id).eq('user_id', session.user.id);
     await supabase.from('messages').insert({ sender_id: session.user.id, group_id: activeGroup.id, type: 'system', content: `${name} left the group` });
     setShowGroupInfo(false);
@@ -3400,6 +3425,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (activeProfile) await upsertConversation(activeProfile.id, null, kind);
     setUploading(false);
   };
+
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -3435,7 +3461,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     }
   };
   const stopRecording = () => { mediaRecorderRef.current?.stop(); };
-
   const handleDelete = async (messageId) => {
     const { data } = await deleteMessage(messageId);
     if (data) setMessages((prev) => prev.map((m) => (m.id === messageId ? data : m)));
@@ -3893,6 +3918,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                         onSwipeReply={(msg) => { setReplyingTo(msg); setEditingMessage(null); }}
                         senderLabel={activeGroup && m.sender_id !== session.user.id ? (senderMember?.profile.name || 'Member') : null}
                         onOpenSenderProfile={activeGroup && senderMember ? () => setProfileOf(senderMember.profile) : undefined}
+                        senderAvatar={activeGroup ? senderMember?.profile.avatar : undefined}
                         hideReadStatus={!!activeProfile?.hide_activity}
                         replyPreview={m.reply_to_id ? (() => {
                           const rm = findMessageById(m.reply_to_id);
@@ -3963,10 +3989,15 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <Paperclip size={21} color={theme.muted} style={{ cursor: 'pointer', transform: showAttach ? 'rotate(45deg)' : 'none', transition: 'transform 0.15s', flexShrink: 0 }}
                         onClick={() => setShowAttach((s) => !s)} />
-                      <input value={draft} onChange={(e) => { setDraft(e.target.value.slice(0, MAX_CHARS)); sendTyping(); }}
-                        onKeyDown={(e) => { if (e.key === 'Enter') (editingMessage ? saveEdit() : send()); }}
+                      <textarea value={draft} onChange={(e) => {
+                        setDraft(e.target.value.slice(0, MAX_CHARS)); sendTyping();
+                        e.target.style.height = 'auto';
+                        e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
+                      }}
+                        onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); (editingMessage ? saveEdit() : send()); } }}
                         placeholder={uploading ? 'Uploading...' : editingMessage ? 'Edit message' : 'Type a message'} disabled={uploading}
-                        style={{ ...inputStyle(theme), flex: 1, borderRadius: 22, padding: '11px 16px' }} />
+                        rows={1}
+                        style={{ ...inputStyle(theme), flex: 1, borderRadius: 22, padding: '11px 16px', resize: 'none', fontFamily: FONT, maxHeight: 120, overflowY: 'auto', lineHeight: 1.4 }} />
                       {!draft.trim() && !editingMessage && !pendingForwardItems.length ? (
                         <button onClick={startRecording} style={{
                           width: 42, height: 42, borderRadius: '50%', background: theme.coral,
