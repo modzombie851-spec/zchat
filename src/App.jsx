@@ -14,36 +14,36 @@ import {
 
 
 const ACCENT_PALETTES = {
-  coral: { coral: '#FF6B4A', coralDeep: '#E8502F', gold: '#F3B54C', teal: '#29C7B3', danger: '#FF4D5E' },
-  ocean: { coral: '#3DA5F5', coralDeep: '#2178C9', gold: '#5FD9C4', teal: '#29C7B3', danger: '#FF4D5E' },
-  berry: { coral: '#C15CFC', coralDeep: '#9B3AE0', gold: '#FF8AC2', teal: '#29C7B3', danger: '#FF4D5E' },
+  coral: { coral: '#FF5A36', coralDeep: '#E8452A', gold: '#FFB238', teal: '#00C2A8', danger: '#ED4956' },
+  ocean: { coral: '#0095F6', coralDeep: '#1877C9', gold: '#5FD9C4', teal: '#00C2A8', danger: '#ED4956' },
+  berry: { coral: '#B24CF0', coralDeep: '#8E2FD1', gold: '#FF8AC2', teal: '#00C2A8', danger: '#ED4956' },
 };
 const ACCENT = ACCENT_PALETTES.coral;
 
 const THEMES = {
   light: {
-    bgGradient: 'linear-gradient(160deg, #F6F3EE 0%, #FBF3EF 45%, #F3EEF6 100%)',
-    glass: 'rgba(255,255,255,0.65)',
-    panelBg: 'rgba(255,255,255,0.92)',
-    border: 'rgba(27,27,31,0.08)',
-    ink: '#1B1B1F',
-    muted: '#83808A',
-    bubbleMe: '#FFE3D9',
-    bubbleThem: 'rgba(255,255,255,0.9)',
-    inputBg: 'rgba(255,255,255,0.9)',
-    rowBg: 'rgba(0,0,0,0.03)',
+    bgGradient: '#FAFAFA',
+    glass: 'rgba(255,255,255,0.85)',
+    panelBg: '#FFFFFF',
+    border: 'rgba(0,0,0,0.09)',
+    ink: '#0A0A0A',
+    muted: '#8E8E8E',
+    bubbleMe: '#EFF7FF',
+    bubbleThem: '#F0F0F0',
+    inputBg: '#FAFAFA',
+    rowBg: 'rgba(0,0,0,0.035)',
   },
   dark: {
-    bgGradient: 'linear-gradient(160deg, #121319 0%, #16171F 45%, #1A1720 100%)',
-    glass: 'rgba(30,31,40,0.65)',
-    panelBg: 'rgba(24,26,34,0.96)',
-    border: 'rgba(255,255,255,0.08)',
-    ink: '#F2F1F6',
-    muted: '#8D8FA0',
-    bubbleMe: '#3A2A34',
-    bubbleThem: '#23252F',
-    inputBg: 'rgba(255,255,255,0.06)',
-    rowBg: 'rgba(255,255,255,0.04)',
+    bgGradient: '#000000',
+    glass: 'rgba(18,18,18,0.85)',
+    panelBg: '#121212',
+    border: 'rgba(255,255,255,0.09)',
+    ink: '#FAFAFA',
+    muted: '#A8A8A8',
+    bubbleMe: '#1A2C3D',
+    bubbleThem: '#262626',
+    inputBg: '#1A1A1A',
+    rowBg: 'rgba(255,255,255,0.05)',
   },
 };
 
@@ -1483,6 +1483,10 @@ function CreateGroupPanel({ myId, onClose, onCreated }) {
       const { error: inviteErr } = await supabase.from('group_members').insert(selected.slice(0, 49).map((p) => ({ group_id: group.id, user_id: p.id, role: 'member', added_by: myId })));
       if (inviteErr) { setCreating(false); setErr(inviteErr.message); return; }
     }
+    await supabase.from('messages').insert({
+      sender_id: myId, group_id: group.id, type: 'system',
+      content: selected.length ? `Group created and ${selected.map((p) => p.name).join(', ')} added` : 'Group created',
+    });
     setCreating(false);
     onCreated(group);
   };
@@ -1571,7 +1575,7 @@ function CreateGroupPanel({ myId, onClose, onCreated }) {
   );
 }
 
-function GroupInfoPanel({ group, members, myId, myRole, isOwner, onClose, onPromote, onDemote, onMute, onUnmute, onKick, onLeave, onOpenProfile, onSaveBio, onSaveName, onSaveAvatar, onAddMembers }) {
+function GroupInfoPanel({ group, members, myId, myRole, isOwner, onClose, onPromote, onDemote, onMute, onUnmute, onKick, onLeave, onOpenProfile, onSaveBio, onSaveName, onSaveAvatar, onAddMembers, onTransferOwnership }) {
   const { theme } = useTheme();
   const isAdmin = myRole === 'admin';
   const [menuFor, setMenuFor] = useState(null);
@@ -1650,7 +1654,9 @@ function GroupInfoPanel({ group, members, myId, myRole, isOwner, onClose, onProm
                   {m.profile.name}{m.user_id === myId && <span style={{ color: theme.muted, fontWeight: 500 }}>(you)</span>}
                 </div>
                 <div style={{ display: 'flex', gap: 6, marginBottom: 2 }}>
-                  {m.role === 'admin' && <span style={{ fontSize: 10.5, color: theme.coral, fontWeight: 700 }}>Admin</span>}
+                  {m.user_id === group.created_by ? (
+                    <span style={{ fontSize: 10.5, color: theme.coral, fontWeight: 700 }}>Owner</span>
+                  ) : m.role === 'admin' && <span style={{ fontSize: 10.5, color: theme.coral, fontWeight: 700 }}>Admin</span>}
                   {m.muted && <span style={{ fontSize: 10.5, color: theme.muted, fontWeight: 700 }}>Muted</span>}
                 </div>
                 <div style={{ fontSize: 10.5, color: theme.muted }}>
@@ -1659,11 +1665,11 @@ function GroupInfoPanel({ group, members, myId, myRole, isOwner, onClose, onProm
                 </div>
               </div>
             </div>
-            {isAdmin && m.user_id !== myId && (
+            {isAdmin && m.user_id !== myId && m.user_id !== group.created_by && (
               <MoreVertical size={16} color={theme.muted} style={{ cursor: 'pointer' }}
                 onClick={(e) => { e.stopPropagation(); setMenuFor(menuFor === m.user_id ? null : m.user_id); }} />
             )}
-            {menuFor === m.user_id && (
+            {menuFor === m.user_id && m.user_id !== group.created_by && (
               <div style={{
                 position: 'absolute', right: 0, top: 36, background: theme.panelBg, borderRadius: 14,
                 boxShadow: '0 8px 24px rgba(0,0,0,0.2)', border: `1px solid ${theme.border}`, zIndex: 5, overflow: 'hidden', minWidth: 170,
@@ -1673,6 +1679,9 @@ function GroupInfoPanel({ group, members, myId, myRole, isOwner, onClose, onProm
                 ) : (
                   <div onClick={() => { onPromote(m.user_id); setMenuFor(null); }} style={{ padding: '11px 14px', fontSize: 13, fontWeight: 600, color: theme.ink, cursor: 'pointer', borderBottom: `1px solid ${theme.border}` }}>Make admin</div>
                 ))}
+                {isOwner && (
+                  <div onClick={() => { onTransferOwnership(m.user_id); setMenuFor(null); }} style={{ padding: '11px 14px', fontSize: 13, fontWeight: 600, color: theme.coral, cursor: 'pointer', borderBottom: `1px solid ${theme.border}` }}>Make owner</div>
+                )}
                 {m.muted ? (
                   <div onClick={() => { onUnmute(m.user_id); setMenuFor(null); }} style={{ padding: '11px 14px', fontSize: 13, fontWeight: 600, color: theme.ink, cursor: 'pointer', borderBottom: `1px solid ${theme.border}` }}>Unmute in group</div>
                 ) : (
@@ -1685,9 +1694,9 @@ function GroupInfoPanel({ group, members, myId, myRole, isOwner, onClose, onProm
         ))}
       </div>
       <div style={{ padding: 18, borderTop: `1px solid ${theme.border}` }}>
-        <span style={{ ...ghostBtn(theme), color: theme.danger, borderColor: theme.danger, display: 'block', textAlign: 'center', opacity: soleAdmin ? 0.5 : 1, cursor: soleAdmin ? 'default' : 'pointer' }}
-          onClick={() => { if (!soleAdmin) onLeave(); }}>
-          {soleAdmin ? 'Leave group (assign a new admin first)' : 'Leave group'}
+        <span style={{ ...ghostBtn(theme), color: theme.danger, borderColor: theme.danger, display: 'block', textAlign: 'center', opacity: (soleAdmin || isOwner) ? 0.5 : 1, cursor: (soleAdmin || isOwner) ? 'default' : 'pointer' }}
+          onClick={() => { if (!soleAdmin && !isOwner) onLeave(); }}>
+          {isOwner ? 'Transfer ownership before leaving' : soleAdmin ? 'Leave group (assign a new admin first)' : 'Leave group'}
         </span>
       </div>
       {cropFile && (
@@ -2064,7 +2073,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
   return (profile.is_deleted && !isSelf) ? (
     <div style={{
       position: 'absolute', inset: 0, background: 'rgba(20,16,14,0.5)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 30, padding: 18,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 18,
     }} className="zchat-fade">
       <div style={{
         background: theme.panelBg, borderRadius: 28, padding: 30, textAlign: 'center',
@@ -2085,7 +2094,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
   ) : (
     <div style={{
       position: 'absolute', inset: 0, background: 'rgba(20,16,14,0.5)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 30, padding: 18,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 18,
     }} className="zchat-fade">
       <div style={{
         background: theme.panelBg, borderRadius: 28,
@@ -2395,7 +2404,7 @@ function AudioBubble({ url, isMe }) {
   );
 }
 
-function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSelect, onLongPress, onOpenImage, reactions, onReact, onOpenWhoReacted, replyPreview, onSwipeReply, senderLabel, hideReadStatus }) {
+function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSelect, onLongPress, onOpenImage, reactions, onReact, onOpenWhoReacted, replyPreview, onSwipeReply, senderLabel, hideReadStatus, onOpenSenderProfile }) {
   const { theme } = useTheme();
   const [hover, setHover] = useState(false);
   const [burstHeart, setBurstHeart] = useState(false);
@@ -2404,6 +2413,16 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
   const longPressFiredRef = useRef(false);
   const startPosRef = useRef({ x: 0, y: 0 });
   const time = m.created_at ? new Date(m.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
+
+  if (m.type === 'system') {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 10 }}>
+        <div style={{ background: theme.rowBg, color: theme.muted, fontSize: 11.5, fontWeight: 600, padding: '6px 14px', borderRadius: 14, textAlign: 'center', maxWidth: '80%' }}>
+          {m.content}
+        </div>
+      </div>
+    );
+  }
 
   const grouped = {};
   (reactions || []).forEach((r) => { grouped[r.emoji] = (grouped[r.emoji] || 0) + 1; });
@@ -2478,7 +2497,7 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
           cursor: 'pointer',
         })}>
           {senderLabel && !m.deleted && (
-            <div style={{ fontSize: 11.5, fontWeight: 700, color: theme.coralDeep, marginBottom: 3, padding: m.type !== 'text' ? '0 4px' : 0 }}>
+            <div onClick={(e) => { e.stopPropagation(); onOpenSenderProfile && onOpenSenderProfile(); }} style={{ fontSize: 11.5, fontWeight: 700, color: theme.coralDeep, marginBottom: 3, padding: m.type !== 'text' ? '0 4px' : 0, cursor: onOpenSenderProfile ? 'pointer' : 'default', display: 'inline-block' }}>
               {senderLabel}
             </div>
           )}
@@ -3172,15 +3191,31 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     return data;
   };
 
+  const memberName = (userId) => (userId === session.user.id ? 'You' : (groupMembers.find((m) => m.user_id === userId)?.profile.name || 'Someone'));
+
+  const transferOwnership = async (userId) => {
+    if (activeGroup.created_by !== session.user.id) return;
+    await supabase.from('group_members').update({ role: 'admin' }).eq('group_id', activeGroup.id).eq('user_id', userId);
+    const { error } = await supabase.from('groups').update({ created_by: userId }).eq('id', activeGroup.id);
+    if (!error) {
+      setActiveGroup((prev) => ({ ...prev, created_by: userId }));
+      loadGroupMembers(activeGroup.id);
+      loadGroups();
+      sendGroupMessage('system', `${memberName(session.user.id)} made ${memberName(userId)} the group owner`, null);
+    }
+  };
+
   const promoteMember = async (userId) => {
     if (activeGroup.created_by !== session.user.id) return;
     await supabase.from('group_members').update({ role: 'admin' }).eq('group_id', activeGroup.id).eq('user_id', userId);
     loadGroupMembers(activeGroup.id);
+    sendGroupMessage('system', `${memberName(session.user.id)} made ${memberName(userId)} an admin`, null);
   };
   const demoteMember = async (userId) => {
     if (activeGroup.created_by !== session.user.id) return;
     await supabase.from('group_members').update({ role: 'member' }).eq('group_id', activeGroup.id).eq('user_id', userId);
     loadGroupMembers(activeGroup.id);
+    sendGroupMessage('system', `${memberName(session.user.id)} removed ${memberName(userId)} as admin`, null);
   };
   const muteMember = async (userId) => {
     await supabase.from('group_members').update({ muted: true }).eq('group_id', activeGroup.id).eq('user_id', userId);
@@ -3203,9 +3238,11 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   };
   const saveGroupName = async (name) => {
     if (!name.trim()) return;
+    const oldName = activeGroup.name;
     await supabase.from('groups').update({ name: name.trim() }).eq('id', activeGroup.id);
     setActiveGroup((prev) => ({ ...prev, name: name.trim() }));
     loadGroups();
+    sendGroupMessage('system', `${memberName(session.user.id)} changed the group name from "${oldName}" to "${name.trim()}"`, null);
   };
   const saveGroupAvatar = async (blob) => {
     const file = new File([blob], 'group.jpg', { type: 'image/jpeg' });
@@ -3214,19 +3251,25 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       await supabase.from('groups').update({ avatar: url }).eq('id', activeGroup.id);
       setActiveGroup((prev) => ({ ...prev, avatar: url }));
       loadGroups();
+      sendGroupMessage('system', `${memberName(session.user.id)} changed the group photo`, null);
     }
   };
   const addGroupMembers = async (people) => {
     if (!people.length) return;
     await supabase.from('group_members').insert(people.map((p) => ({ group_id: activeGroup.id, user_id: p.id, role: 'member', added_by: session.user.id })));
     loadGroupMembers(activeGroup.id);
+    sendGroupMessage('system', `${memberName(session.user.id)} added ${people.map((p) => p.name).join(', ')}`, null);
   };
   const kickMember = async (userId) => {
+    const name = memberName(userId);
     await supabase.from('group_members').delete().eq('group_id', activeGroup.id).eq('user_id', userId);
     loadGroupMembers(activeGroup.id);
+    sendGroupMessage('system', `${memberName(session.user.id)} removed ${name}`, null);
   };
   const leaveGroup = async () => {
+    const name = memberName(session.user.id);
     await supabase.from('group_members').delete().eq('group_id', activeGroup.id).eq('user_id', session.user.id);
+    await supabase.from('messages').insert({ sender_id: session.user.id, group_id: activeGroup.id, type: 'system', content: `${name} left the group` });
     setShowGroupInfo(false);
     setActiveGroup(null);
     setMobileShowChat(false);
@@ -3357,7 +3400,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (activeProfile) await upsertConversation(activeProfile.id, null, kind);
     setUploading(false);
   };
-
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -3398,6 +3440,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const { data } = await deleteMessage(messageId);
     if (data) setMessages((prev) => prev.map((m) => (m.id === messageId ? data : m)));
   };
+
   const handleReport = async (profile, reason) => {
     await reportUser(session.user.id, profile.id, reason);
   };
@@ -3599,11 +3642,11 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         {showPrivacy && <PrivacyPanel onBack={() => setShowPrivacy(false)} />}
         {showFollowRequests && (
           <FollowRequestsPanel userId={session.user.id} onClose={() => setShowFollowRequests(false)}
-            onOpenProfile={(p) => { setShowFollowRequests(false); setShowSettings(false); setProfileOf(p); }} />
+            onOpenProfile={(p) => setProfileOf(p)} />
         )}
         {showDiscover && (
           <DiscoverPanel myId={session.user.id} blockedIds={myBlockedIds} onClose={() => setShowDiscover(false)}
-            onOpenProfile={(p) => { setShowDiscover(false); setProfileOf(p); }} />
+            onOpenProfile={(p) => setProfileOf(p)} />
         )}
         {showLogoutConfirm && (
           <LogoutConfirm onCancel={() => setShowLogoutConfirm(false)} onConfirm={onLogout} />
@@ -3849,6 +3892,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                         onOpenWhoReacted={(id) => setWhoReactedFor(messageLikes[id] || [])}
                         onSwipeReply={(msg) => { setReplyingTo(msg); setEditingMessage(null); }}
                         senderLabel={activeGroup && m.sender_id !== session.user.id ? (senderMember?.profile.name || 'Member') : null}
+                        onOpenSenderProfile={activeGroup && senderMember ? () => setProfileOf(senderMember.profile) : undefined}
                         hideReadStatus={!!activeProfile?.hide_activity}
                         replyPreview={m.reply_to_id ? (() => {
                           const rm = findMessageById(m.reply_to_id);
@@ -4037,11 +4081,12 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             onPromote={promoteMember} onDemote={demoteMember}
             onMute={muteMember} onUnmute={unmuteMember}
             onKick={kickMember} onLeave={leaveGroup}
-            onOpenProfile={(p) => { setShowGroupInfo(false); setProfileOf(p); }}
+            onOpenProfile={(p) => setProfileOf(p)}
             onSaveBio={saveGroupBio}
             onSaveName={saveGroupName}
             onSaveAvatar={saveGroupAvatar}
             onAddMembers={addGroupMembers}
+            onTransferOwnership={transferOwnership}
           />
         )}
         {showAccountSwitcher && (
