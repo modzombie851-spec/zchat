@@ -66,6 +66,9 @@ function ThemeProvider({ children }) {
   const [fontScale, setFontScale] = useState(() => {
     try { return parseFloat(localStorage.getItem('zchat-fontscale')) || 1; } catch { return 1; }
   });
+  const [chatTheme, setChatTheme] = useState(() => {
+    try { return localStorage.getItem('zchat-chattheme') || 'classic'; } catch { return 'classic'; }
+  });
   useEffect(() => {
     try { localStorage.setItem('zchat-fontscale', String(fontScale)); } catch {}
   }, [fontScale]);
@@ -81,10 +84,13 @@ function ThemeProvider({ children }) {
   useEffect(() => {
     try { localStorage.setItem('zchat-bgpattern', bgPatternOn ? 'on' : 'off'); } catch {}
   }, [bgPatternOn]);
+  useEffect(() => {
+    try { localStorage.setItem('zchat-chattheme', chatTheme); } catch {}
+  }, [chatTheme]);
   const accent = ACCENT_PALETTES[accentName] || ACCENT_PALETTES.coral;
   const theme = { ...THEMES[dark ? 'dark' : 'light'], ...accent, dark };
   return (
-    <ThemeContext.Provider value={{ theme, dark, setDark, accentName, setAccentName, soundOn, setSoundOn, bgPatternOn, setBgPatternOn, fontScale, setFontScale }}>
+    <ThemeContext.Provider value={{ theme, dark, setDark, accentName, setAccentName, soundOn, setSoundOn, bgPatternOn, setBgPatternOn, fontScale, setFontScale, chatTheme, setChatTheme }}>
       {children}
     </ThemeContext.Provider>
   );
@@ -97,6 +103,81 @@ const glass = (theme, extra = {}) => ({
   border: `1px solid ${theme.border}`,
   ...extra,
 });
+
+const CHAT_THEMES = {
+  classic: { label: 'Classic', bubbleRadius: 18, borderStyle: 'solid', glow: false, bg: 'none' },
+  glass: { label: 'Frosted Glass', bubbleRadius: 22, borderStyle: 'solid', glow: false, bg: 'blobs' },
+  love: { label: 'Love', bubbleRadius: 26, borderStyle: 'gradient', glow: 'pink', bg: 'hearts' },
+  neon: { label: 'Neon', bubbleRadius: 10, borderStyle: 'solid', glow: 'cyan', bg: 'neon' },
+};
+
+function AnimatedChatBackground({ chatTheme }) {
+  const spec = CHAT_THEMES[chatTheme] || CHAT_THEMES.classic;
+  if (spec.bg === 'none') return null;
+  if (spec.bg === 'hearts') {
+    return (
+      <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: -1 }}>
+        {Array.from({ length: 14 }).map((_, i) => (
+          <span key={i} style={{
+            position: 'absolute', left: `${(i * 37) % 100}%`, bottom: -30,
+            fontSize: 12 + (i % 5) * 6, opacity: 0.18 + (i % 3) * 0.06,
+            animation: `zchat-float-up ${8 + (i % 6)}s linear infinite`, animationDelay: `${i * 1.3}s`,
+          }}>💗</span>
+        ))}
+      </div>
+    );
+  }
+  if (spec.bg === 'blobs') {
+    return (
+      <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: -1 }}>
+        <div style={{
+          position: 'absolute', width: 340, height: 340, borderRadius: '50%', top: '-10%', left: '-15%',
+          background: 'radial-gradient(circle, rgba(255,255,255,0.14), transparent 70%)',
+          animation: 'zchat-drift-a 18s ease-in-out infinite',
+        }} />
+        <div style={{
+          position: 'absolute', width: 280, height: 280, borderRadius: '50%', bottom: '-10%', right: '-10%',
+          background: 'radial-gradient(circle, rgba(255,255,255,0.10), transparent 70%)',
+          animation: 'zchat-drift-b 22s ease-in-out infinite',
+        }} />
+      </div>
+    );
+  }
+  if (spec.bg === 'neon') {
+    return (
+      <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: -1 }}>
+        <div style={{
+          position: 'absolute', width: 260, height: 260, borderRadius: '50%', top: '10%', right: '-8%',
+          background: 'radial-gradient(circle, rgba(0,255,220,0.16), transparent 70%)',
+          animation: 'zchat-drift-a 14s ease-in-out infinite',
+        }} />
+        <div style={{
+          position: 'absolute', width: 220, height: 220, borderRadius: '50%', bottom: '5%', left: '-8%',
+          background: 'radial-gradient(circle, rgba(190,0,255,0.14), transparent 70%)',
+          animation: 'zchat-drift-b 17s ease-in-out infinite',
+        }} />
+      </div>
+    );
+  }
+  return null;
+}
+
+function bubbleThemeStyle(chatTheme, isMe, theme) {
+  const spec = CHAT_THEMES[chatTheme] || CHAT_THEMES.classic;
+  const base = { borderRadius: spec.bubbleRadius };
+  if (spec.borderStyle === 'gradient') {
+    base.border = 'none';
+    base.backgroundImage = isMe
+      ? `linear-gradient(${theme.bubbleMe}, ${theme.bubbleMe}), linear-gradient(135deg, #FF7AA2, #FF4D8D)`
+      : `linear-gradient(${theme.bubbleThem}, ${theme.bubbleThem}), linear-gradient(135deg, #FFB6C9, #FF8FAE)`;
+    base.backgroundOrigin = 'border-box';
+    base.backgroundClip = 'padding-box, border-box';
+    base.border = '2px solid transparent';
+  }
+  if (spec.glow === 'pink') base.boxShadow = `0 0 16px ${isMe ? 'rgba(255,77,141,0.35)' : 'rgba(255,182,201,0.25)'}`;
+  if (spec.glow === 'cyan') base.boxShadow = `0 0 14px ${isMe ? 'rgba(0,255,220,0.30)' : 'rgba(190,0,255,0.22)'}`;
+  return base;
+}
 
 const FONT = "'Manrope', -apple-system, BlinkMacSystemFont, system-ui, sans-serif";
 const MAX_CHARS = 1000;
@@ -181,6 +262,9 @@ function GlobalStyle() {
       @keyframes zchat-spin { to { transform: rotate(360deg); } }
       @keyframes zchat-fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
       @keyframes zchat-heart-burst { 0% { opacity: 0; transform: scale(0.3); } 30% { opacity: 1; transform: scale(1.2); } 100% { opacity: 0; transform: scale(1.6); } }
+      @keyframes zchat-float-up { 0% { transform: translateY(0) translateX(0); opacity: 0; } 10% { opacity: 1; } 100% { transform: translateY(-620px) translateX(18px); opacity: 0; } }
+      @keyframes zchat-drift-a { 0%, 100% { transform: translate(0,0); } 50% { transform: translate(30px, 20px); } }
+      @keyframes zchat-drift-b { 0%, 100% { transform: translate(0,0); } 50% { transform: translate(-24px, -18px); } }
       .zchat-fade { animation: zchat-fade 0.25s ease; }
       * { font-family: ${FONT}; }
     `}</style>
@@ -866,19 +950,33 @@ function ToggleSwitch({ on, onClick }) {
 }
 
 function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideActivity, onToggleActivity, onOpenAccounts, onOpenDelete }) {
-  const { theme, dark, setDark, accentName, setAccentName, soundOn, setSoundOn, bgPatternOn, setBgPatternOn, fontScale, setFontScale } = useTheme();
+  const { theme, dark, setDark, accentName, setAccentName, soundOn, setSoundOn, bgPatternOn, setBgPatternOn, fontScale, setFontScale, chatTheme, setChatTheme } = useTheme();
   const accentLabels = { coral: 'Coral', ocean: 'Ocean', berry: 'Berry' };
+  const [accountOpen, setAccountOpen] = useState(false);
   return (
     <div style={{
-      position: 'absolute', inset: 0, background: 'rgba(28,29,33,0.4)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 30, padding: 18,
-    }} className="zchat-fade">
-      <div style={glass(theme, {
-        background: theme.panelBg, borderRadius: 24, padding: 26,
-        width: '100%', maxWidth: 340, position: 'relative', maxHeight: '85vh', overflowY: 'auto',
+      position: 'absolute', inset: 0, background: 'rgba(10,10,14,0.45)',
+      display: 'flex', alignItems: 'stretch', justifyContent: 'flex-start', zIndex: 30,
+    }} className="zchat-fade" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} style={glass(theme, {
+        background: theme.panelBg, borderRadius: '0 24px 24px 0', padding: 26,
+        width: '86%', maxWidth: 360, height: '100%', position: 'relative', overflowY: 'auto',
       })}>
         <X size={20} style={{ position: 'absolute', top: 18, right: 18, cursor: 'pointer', color: theme.muted }} onClick={onClose} />
         <div style={{ fontWeight: 800, fontSize: 19, color: theme.ink, marginBottom: 18 }}>Settings</div>
+
+        <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.muted, margin: '4px 0 6px 2px' }}>Chat theme</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+          {Object.entries(CHAT_THEMES).map(([key, spec]) => (
+            <div key={key} onClick={() => setChatTheme(key)} style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', borderRadius: 14,
+              border: chatTheme === key ? `2px solid ${theme.coral}` : `1.5px solid ${theme.border}`, cursor: 'pointer',
+            }}>
+              <span style={{ fontSize: 13.5, fontWeight: 700, color: theme.ink }}>{spec.label}</span>
+              {chatTheme === key && <Check size={16} color={theme.coral} />}
+            </div>
+          ))}
+        </div>
 
         <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.muted, margin: '4px 0 6px 2px' }}>Appearance</div>
         <SettingsRow icon={dark ? <Sun size={16} /> : <Moon size={16} />} label="Dark mode" right={<ToggleSwitch on={dark} onClick={() => setDark((d) => !d)} />} />
@@ -912,17 +1010,31 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
             }}>{opt.l}</div>
           ))}
         </div>
-        <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.muted, margin: '16px 0 6px 2px' }}>Accounts</div>
-        <SettingsRow icon={<Bell size={16} />} label="Follow requests" onClick={onOpenRequests} />
-        <SettingsRow icon={<UserPlus size={16} />} label="Switch account" onClick={onOpenAccounts} />
 
         <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.muted, margin: '16px 0 6px 2px' }}>About</div>
         <SettingsRow icon={<FileText size={16} />} label="Privacy policy" onClick={onOpenPrivacy} />
         <SettingsRow icon={<HelpCircle size={16} />} label="Help & support" onClick={() => {}} />
 
         <div style={{ height: 10 }} />
-        <SettingsRow icon={<Trash2 size={16} />} label="Delete my account" danger onClick={onOpenDelete} />
-        <SettingsRow icon={<LogOut size={16} />} label="Log out" danger onClick={onLogout} />
+        <div onClick={() => setAccountOpen((s) => !s)} style={{
+          display: 'flex', alignItems: 'center', gap: 12, padding: '13px 4px', cursor: 'pointer',
+          fontSize: 14, fontWeight: 600, color: theme.ink,
+        }}>
+          <div style={{
+            width: 34, height: 34, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: `${theme.coral}1F`, color: theme.coralDeep, flexShrink: 0,
+          }}><User size={16} /></div>
+          <div style={{ flex: 1 }}>Account</div>
+          <ChevronRight size={17} color={theme.muted} style={{ transform: accountOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }} />
+        </div>
+        {accountOpen && (
+          <div className="zchat-fade" style={{ paddingLeft: 4 }}>
+            <SettingsRow icon={<Bell size={16} />} label="Follow requests" onClick={onOpenRequests} />
+            <SettingsRow icon={<UserPlus size={16} />} label="Switch account" onClick={onOpenAccounts} />
+            <SettingsRow icon={<Trash2 size={16} />} label="Delete my account" danger onClick={onOpenDelete} />
+            <SettingsRow icon={<LogOut size={16} />} label="Log out" danger onClick={onLogout} />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1386,7 +1498,7 @@ function ChatLockUnlock({ onCancel, onUnlock, correctHash }) {
   const handleDigit = async (d) => {
     if (pin.length >= 4) return;
     const next = pin + d;
-    setPin(next);
+        setPin(next);
     if (next.length === 4) {
       const h = await hashPin(next);
       if (h === correctHash) onUnlock();
@@ -2030,6 +2142,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
   const [nicknameSaving, setNicknameSaving] = useState(false);
   const [listModal, setListModal] = useState(null); // 'followers' | 'following'
   const [showPrivacySettings, setShowPrivacySettings] = useState(false);
+  const [showMoreDetails, setShowMoreDetails] = useState(false);
 
   const cooldownDaysLeft = (() => {
     if (!profile.username_changed_at) return 0;
@@ -2309,21 +2422,34 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
                   <div style={{ fontWeight: 800, fontSize: 16, color: theme.ink }}>{followingCount}</div>
                   <div style={{ fontSize: 10.5, color: theme.muted, fontWeight: 600, marginTop: 1 }}>Following</div>
                 </div>
-                {(isSelf || (!profile.hide_gender && profile.gender)) && (
-                  <div style={{ flex: 1, minWidth: 80, background: theme.rowBg, borderRadius: 16, padding: '10px 12px' }}>
-                    <div style={{ fontWeight: 800, fontSize: 16, color: theme.ink }}>{profile.gender || '—'}</div>
-                    <div style={{ fontSize: 10.5, color: theme.muted, fontWeight: 600, marginTop: 1 }}>Gender</div>
-                  </div>
-                )}
               </div>
-              {(isSelf || !profile.hide_age || !profile.hide_country) && (profile.age || profile.country) && (
-                <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginTop: 10, fontSize: 12, color: theme.muted }}>
-                  {profile.age != null && (isSelf || !profile.hide_age) && <span>{profile.age} yrs</span>}
-                  {profile.country && (isSelf || !profile.hide_country) && <span style={{ fontSize: 15 }}>{countryFlag(profile.country)}</span>}
+              {!showMoreDetails ? (
+                <div onClick={() => setShowMoreDetails(true)} style={{ textAlign: 'center', marginTop: 14, fontSize: 12, color: theme.coralDeep, fontWeight: 700, cursor: 'pointer' }}>
+                  Show details
                 </div>
-              )}
-              {profile.bio && (isSelf || !profile.hide_bio) && (
-                <div style={{ fontSize: 13.5, color: theme.ink, marginTop: 18, lineHeight: 1.6, padding: '0 4px' }}>{profile.bio}</div>
+              ) : (
+                <div className="zchat-fade">
+                  {(isSelf || (!profile.hide_gender && profile.gender)) && (
+                    <div style={{ display: 'flex', justifyContent: 'center', marginTop: 14 }}>
+                      <div style={{ minWidth: 100, background: theme.rowBg, borderRadius: 16, padding: '10px 12px', textAlign: 'center' }}>
+                        <div style={{ fontWeight: 800, fontSize: 15, color: theme.ink }}>{profile.gender || '—'}</div>
+                        <div style={{ fontSize: 10.5, color: theme.muted, fontWeight: 600, marginTop: 1 }}>Gender</div>
+                      </div>
+                    </div>
+                  )}
+                  {(isSelf || !profile.hide_age || !profile.hide_country) && (profile.age || profile.country) && (
+                    <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginTop: 10, fontSize: 12, color: theme.muted }}>
+                      {profile.age != null && (isSelf || !profile.hide_age) && <span>{profile.age} yrs</span>}
+                      {profile.country && (isSelf || !profile.hide_country) && <span style={{ fontSize: 15 }}>{countryFlag(profile.country)}</span>}
+                    </div>
+                  )}
+                  {profile.bio && (isSelf || !profile.hide_bio) && (
+                    <div style={{ fontSize: 13.5, color: theme.ink, marginTop: 18, lineHeight: 1.6, padding: '0 4px' }}>{profile.bio}</div>
+                  )}
+                  <div onClick={() => setShowMoreDetails(false)} style={{ textAlign: 'center', marginTop: 14, fontSize: 12, color: theme.muted, fontWeight: 700, cursor: 'pointer' }}>
+                    Hide details
+                  </div>
+                </div>
               )}
               {isSelf && (
                 <div style={{ marginTop: 20, paddingTop: 16, borderTop: `1px solid ${theme.border}` }}>
@@ -2349,13 +2475,18 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
           {!isSelf && !editing && (
             <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 20 }}>
               <button onClick={toggleFollow} disabled={followBusy} style={{
-                padding: '9px 22px', borderRadius: 22, cursor: followBusy ? 'default' : 'pointer', fontFamily: FONT,
+                padding: '9px 20px', borderRadius: 22, cursor: followBusy ? 'default' : 'pointer', fontFamily: FONT,
                 border: followState !== 'none' ? `1.5px solid ${theme.border}` : 'none',
-                background: followState !== 'none' ? 'transparent' : theme.coral,
-                color: followState !== 'none' ? theme.ink : 'white', fontSize: 12.5, fontWeight: 700,
+                background: followState === 'accepted' ? `${theme.coral}18` : followState === 'pending' ? 'transparent' : theme.coral,
+                color: followState === 'accepted' ? theme.coralDeep : followState === 'pending' ? theme.ink : 'white',
+                fontSize: 12.5, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6,
               }}>
-                {followBusy ? <Spinner size={12} color={followState !== 'none' ? theme.ink : 'white'} /> :
-                  followState === 'accepted' ? 'Following' : followState === 'pending' ? 'Requested' : 'Follow'}
+                {followBusy ? <Spinner size={12} color={followState !== 'none' ? theme.ink : 'white'} /> : (
+                  <>
+                    {followState === 'accepted' ? <Check size={13} /> : followState === 'pending' ? null : <UserPlus size={13} />}
+                    {followState === 'accepted' ? 'Following' : followState === 'pending' ? 'Requested' : 'Follow'}
+                  </>
+                )}
               </button>
               <button onClick={() => onMessage(profile)} style={{
                 padding: '9px 22px', borderRadius: 22, border: 'none', background: theme.ink,
@@ -2472,7 +2603,7 @@ function AudioBubble({ url, isMe }) {
 }
 
 function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSelect, onLongPress, onOpenImage, reactions, onReact, onOpenWhoReacted, replyPreview, onSwipeReply, senderLabel, senderAvatar, hideReadStatus, onOpenSenderProfile, canModerate }) {
-  const { theme, fontScale } = useTheme();
+  const { theme, fontScale, chatTheme } = useTheme();
   const [hover, setHover] = useState(false);
   const [burstHeart, setBurstHeart] = useState(false);
   const lastTapRef = useRef(0);
@@ -2569,6 +2700,7 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
           padding: m.type === 'text' || m.deleted ? '9px 13px' : 5,
           border: selected ? `2px solid ${theme.coral}` : m.deleted ? `1px dashed ${theme.border}` : `1px solid ${theme.border}`,
           cursor: 'pointer',
+          ...(m.deleted ? {} : bubbleThemeStyle(chatTheme, isMe, theme)),
         })}>
           {senderLabel && !m.deleted && (
             <div onClick={(e) => { e.stopPropagation(); onOpenSenderProfile && onOpenSenderProfile(); }} style={{ fontSize: 11.5, fontWeight: 700, color: theme.coralDeep, marginBottom: 3, padding: m.type !== 'text' ? '0 4px' : 0, cursor: onOpenSenderProfile ? 'pointer' : 'default', display: 'inline-block' }}>
@@ -2836,7 +2968,7 @@ function DeleteChatConfirm({ name, onCancel, onConfirm }) {
 }
 
 function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAccount, onAddAccount, onRemoveAccount }) {
-  const { theme, bgPatternOn } = useTheme();
+  const { theme, bgPatternOn, chatTheme } = useTheme();
   const [me, setMe] = useState(null);
   const [profileCheckFailed, setProfileCheckFailed] = useState(false);
   const [results, setResults] = useState([]);
@@ -3790,7 +3922,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                 <Users size={18} style={{ cursor: 'pointer', color: theme.muted }} onClick={() => setShowCreateGroup(true)} />
                 <Compass size={18} style={{ cursor: 'pointer', color: theme.muted }} onClick={() => setShowDiscover(true)} />
                 <ThemeToggleIcon size={16} />
-                <LogOut size={18} style={{ cursor: 'pointer', color: theme.muted }} onClick={() => setShowLogoutConfirm(true)} />
+                <SettingsIcon size={18} style={{ cursor: 'pointer', color: theme.muted }} onClick={() => setShowSettings(true)} />
               </div>
             </div>
             <div style={{ position: 'relative' }}>
@@ -3865,7 +3997,19 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                     background: activeProfile?.id === c.otherProfile.id ? theme.rowBg : (pinned ? `${theme.coral}0A` : 'transparent'),
                   }}>
                     <div onClick={() => openChat(c.otherProfile, c.id)} style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 }}>
-                      <Avatar emoji={c.otherProfile.avatar} name={c.otherProfile.name} online={!c.otherProfile.hide_activity && onlineIds.has(c.otherProfile.id)} size={44} />
+                      {pinned && chatTheme === 'love' ? (
+                        <div style={{ position: 'relative', width: 44, height: 44, flexShrink: 0 }}>
+                          <div style={{ position: 'absolute', top: 0, left: 0 }}>
+                            <Avatar emoji={c.otherProfile.avatar} name={c.otherProfile.name} size={32} />
+                          </div>
+                          <div style={{ position: 'absolute', bottom: 0, right: 0, border: `2px solid ${theme.panelBg}`, borderRadius: '50%' }}>
+                            <Avatar emoji={me?.avatar} name={me?.name} size={26} />
+                          </div>
+                          <span style={{ position: 'absolute', top: -4, right: -4, fontSize: 12 }}>💗</span>
+                        </div>
+                      ) : (
+                        <Avatar emoji={c.otherProfile.avatar} name={c.otherProfile.name} online={!c.otherProfile.hide_activity && onlineIds.has(c.otherProfile.id)} size={44} />
+                      )}
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                           {pinned && <span style={{ fontSize: 11 }}>📌</span>}
@@ -3913,7 +4057,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         </div>
 
 
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }} className="zchat-panel">
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, position: 'relative' }} className="zchat-panel">
+          <AnimatedChatBackground chatTheme={chatTheme} />
           {!activeProfile && !activeGroup ? (
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: theme.muted, fontSize: 14, textAlign: 'center', padding: 24 }}>
               <div style={{ fontSize: 40, marginBottom: 10 }}>💬</div>
@@ -3963,11 +4108,15 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                   <button onClick={(e) => { e.stopPropagation(); toggleActiveFollow(); }} disabled={activeFollowBusy} style={{
                     padding: '6px 14px', borderRadius: 18, fontSize: 11.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, flexShrink: 0,
                     border: activeFollowState !== 'none' ? `1.5px solid ${theme.border}` : 'none',
-                    background: activeFollowState !== 'none' ? 'transparent' : theme.coral,
-                    color: activeFollowState !== 'none' ? theme.ink : 'white',
+                    background: activeFollowState === 'accepted' ? `${theme.coral}18` : activeFollowState === 'pending' ? 'transparent' : theme.coral,
+                    color: activeFollowState === 'accepted' ? theme.coralDeep : activeFollowState === 'pending' ? theme.ink : 'white',
+                    display: 'flex', alignItems: 'center', gap: 5,
                   }}>
                     {activeFollowBusy ? <Spinner size={11} color={activeFollowState !== 'none' ? theme.ink : 'white'} /> :
-                      activeFollowState === 'accepted' ? 'Following' : activeFollowState === 'pending' ? 'Requested' : 'Follow'}
+                      (<>{activeFollowState === 'accepted' ? <Check size={11} /> : activeFollowState === 'pending' ? null : <UserPlus size={11} />}</>)}
+                    {!activeFollowBusy && (
+                      activeFollowState === 'accepted' ? 'Following' : activeFollowState === 'pending' ? 'Requested' : 'Follow'
+                    )}
                   </button>
                   <MoreVertical size={19} color={theme.muted} style={{ cursor: 'pointer', flexShrink: 0, marginLeft: 6 }}
                     onClick={(e) => { e.stopPropagation(); setShowChatSettings(true); }} />
@@ -4348,7 +4497,6 @@ function AppInner() {
       setSavedAccounts(getSavedAccounts());
     })();
   }, [session?.access_token]);
-
   if (!checked) {
     return (
       <div style={{ height: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: theme.bgGradient }}>
@@ -4407,4 +4555,5 @@ export default function App() {
     </ThemeProvider>
   );
 }
+
 
