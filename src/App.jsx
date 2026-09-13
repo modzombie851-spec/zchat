@@ -355,7 +355,6 @@ function AuthShell({ children }) {
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       fontFamily: FONT, padding: 20, boxSizing: 'border-box', overflowY: 'auto', position: 'relative',
       paddingTop: 'calc(20px + env(safe-area-inset-top))',
-      paddingBottom: 'calc(20px + env(safe-area-inset-bottom))',
       paddingLeft: 'calc(20px + env(safe-area-inset-left))',
       paddingRight: 'calc(20px + env(safe-area-inset-right))',
     }}>
@@ -810,15 +809,19 @@ const countryFlag = (code) => code.split('').map((c) => String.fromCodePoint(127
 
 function formatLastSeen(iso) {
   if (!iso) return null;
-  const then = new Date(iso).getTime();
-  const diffMin = Math.round((Date.now() - then) / 60000);
+  const then = new Date(iso);
+  const now = new Date();
+  const time = then.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  const isToday = then.toDateString() === now.toDateString();
+  const yesterday = new Date(now); yesterday.setDate(now.getDate() - 1);
+  const isYesterday = then.toDateString() === yesterday.toDateString();
+  const diffMin = Math.round((now.getTime() - then.getTime()) / 60000);
   if (diffMin < 1) return 'Last seen just now';
-  if (diffMin < 60) return `Last seen ${diffMin} min ago`;
-  const diffHr = Math.round(diffMin / 60);
-  if (diffHr < 24) return `Last seen ${diffHr} hr${diffHr === 1 ? '' : 's'} ago`;
-  const diffDay = Math.round(diffHr / 24);
+  if (isToday) return `Last seen today at ${time}`;
+  if (isYesterday) return `Last seen yesterday at ${time}`;
+  const diffDay = Math.round(diffMin / 1440);
   if (diffDay < 7) return `Last seen ${diffDay} day${diffDay === 1 ? '' : 's'} ago`;
-  return `Last seen ${new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
+  return `Last seen ${then.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
 }
 
 function getSavedAccounts() {
@@ -856,8 +859,9 @@ function CountryPicker({ value, onSelect, onClose }) {
       position: 'absolute', inset: 0, background: 'rgba(20,16,14,0.5)', zIndex: 96,
       display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 18,
     }} className="zchat-fade">
-      <div onClick={(e) => e.stopPropagation()} style={{ background: theme.panelBg, borderRadius: 22, padding: 18, width: '100%', maxWidth: 320, maxHeight: '70vh', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ fontWeight: 800, fontSize: 15, color: theme.ink, marginBottom: 10 }}>Choose your country</div>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: theme.panelBg, borderRadius: 22, padding: 18, width: '100%', maxWidth: 320, maxHeight: '70vh', display: 'flex', flexDirection: 'column', position: 'relative' }}>
+        <X size={19} style={{ position: 'absolute', top: 16, right: 16, cursor: 'pointer', color: theme.muted }} onClick={onClose} />
+        <div style={{ fontWeight: 800, fontSize: 15, color: theme.ink, marginBottom: 10, paddingRight: 24 }}>Choose your country</div>
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search"
           style={{ ...inputStyle(theme), padding: '8px 12px', fontSize: 13, marginBottom: 10 }} />
         <div style={{ overflowY: 'auto', flex: 1 }}>
@@ -1430,8 +1434,9 @@ function WallpaperPicker({ value, onSelect, onClose }) {
       position: 'absolute', inset: 0, background: 'rgba(20,16,14,0.5)', zIndex: 96,
       display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 18,
     }} className="zchat-fade">
-      <div onClick={(e) => e.stopPropagation()} style={{ background: theme.panelBg, borderRadius: 22, padding: 20, width: '100%', maxWidth: 320 }}>
-        <div style={{ fontWeight: 800, fontSize: 15, color: theme.ink, marginBottom: 14 }}>Chat wallpaper</div>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: theme.panelBg, borderRadius: 22, padding: 20, width: '100%', maxWidth: 320, position: 'relative' }}>
+        <X size={19} style={{ position: 'absolute', top: 16, right: 16, cursor: 'pointer', color: theme.muted }} onClick={onClose} />
+        <div style={{ fontWeight: 800, fontSize: 15, color: theme.ink, marginBottom: 14, paddingRight: 24 }}>Chat wallpaper</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
           {WALLPAPER_PRESETS.map((key) => (
             <div key={key} onClick={() => { onSelect(key); onClose(); }} style={{
@@ -2157,7 +2162,7 @@ function AvatarCropper({ file, onCancel, onConfirm }) {
 }
 
 function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, onSaved, onOpenSettings, onOpenProfile, onMessage, isBlocked, onBlock, onUnblock }) {
-  const { theme } = useTheme();
+  const { theme, chatTheme } = useTheme();
   const [reportOpen, setReportOpen] = useState(false);
   const [reportReason, setReportReason] = useState('');
   const [reportSent, setReportSent] = useState(false);
@@ -2325,7 +2330,11 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
         {/* Header banner */}
         <div style={{
           height: 100, borderRadius: '28px 28px 0 0', position: 'relative',
-          background: `linear-gradient(135deg, ${theme.coral} 0%, ${theme.gold} 100%)`,
+          background: chatTheme === 'love'
+            ? 'linear-gradient(135deg, #FF7AA2 0%, #FF4D8D 100%)'
+            : chatTheme === 'neon'
+              ? 'linear-gradient(135deg, #00FFDC 0%, #B026FF 100%)'
+              : `linear-gradient(135deg, ${theme.coral} 0%, ${theme.gold} 100%)`,
         }}>
           <div onClick={onClose} style={{
             position: 'absolute', top: 16, right: 16, width: 30, height: 30, borderRadius: '50%',
@@ -2366,7 +2375,10 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
             background: `${theme.coral}16`, padding: '3px 12px', borderRadius: 20,
           }}>@{profile.username}</div>
           {!isSelf && !isOnline && !profile.hide_activity && formatLastSeen(profile.last_seen) && (
-            <div style={{ fontSize: 11.5, color: theme.muted, marginTop: 6 }}>{formatLastSeen(profile.last_seen)}</div>
+            <div style={{
+              display: 'inline-block', fontSize: 11, color: theme.muted, fontWeight: 600, marginTop: 7,
+              background: theme.rowBg, padding: '3px 10px', borderRadius: 12,
+            }}>{formatLastSeen(profile.last_seen)}</div>
           )}
 
           {!isSelf && !editing && (
@@ -2775,8 +2787,8 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
           ) : (
             <>
               {m.type === 'image' && (
-                <div style={{ position: 'relative' }}>
-                  <img src={m.media_url} alt="" style={{ width: '100%', maxWidth: 260, borderRadius: 12, display: 'block', marginBottom: m.content ? 4 : 2 }} />
+                <div style={{ position: 'relative', width: 220, height: 220, borderRadius: 12, overflow: 'hidden', marginBottom: m.content ? 4 : 2 }}>
+                  <img src={m.media_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
                   <a href={m.media_url} download onClick={(e) => e.stopPropagation()} style={{
                     position: 'absolute', top: 6, right: 6, width: 26, height: 26, borderRadius: '50%',
                     background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -2784,8 +2796,8 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
                 </div>
               )}
               {m.type === 'video' && (
-                <div style={{ position: 'relative' }}>
-                  <video src={m.media_url} controls style={{ width: '100%', maxWidth: 260, borderRadius: 12, display: 'block', marginBottom: m.content ? 4 : 2, background: '#000' }} />
+                <div style={{ position: 'relative', width: 220, height: 220, borderRadius: 12, overflow: 'hidden', marginBottom: m.content ? 4 : 2, background: '#000' }}>
+                  <video src={m.media_url} controls style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
                   <a href={m.media_url} download onClick={(e) => e.stopPropagation()} style={{
                     position: 'absolute', top: 6, right: 6, width: 26, height: 26, borderRadius: '50%',
                     background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -3235,7 +3247,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   }, [profileCheckFailed]);
 
   useEffect(() => {
-    if (me) { loadConversations(); loadMyLocks(); loadGroups(); loadMyBlocks(); subscribeToPush(session.user.id); loadFollowRequestCount(); }
+    if (me) { loadConversations(); loadMyLocks(); loadGroups(); loadMyBlocks(); subscribeToPush(session.user.id); loadFollowRequestCount(); supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', me.id); }
   }, [me]);
 
   useEffect(() => {
@@ -3949,7 +3961,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       fontFamily: FONT, height: '100dvh', width: '100%', background: theme.bgGradient,
       display: 'flex', justifyContent: 'center', alignItems: 'center', boxSizing: 'border-box',
       paddingTop: 'env(safe-area-inset-top)',
-      paddingBottom: 'env(safe-area-inset-bottom)',
       paddingLeft: 'env(safe-area-inset-left)',
       paddingRight: 'env(safe-area-inset-right)',
     }}>
@@ -4397,7 +4408,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                           border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0,
                         }}><Mic size={17} color="white" /></button>
                       ) : (
-                        <button onClick={editingMessage ? saveEdit : send} disabled={!draft.trim() && !pendingForwardItems.length && !pendingMedia.length} style={{
+                        <button onClick={() => { (editingMessage ? saveEdit() : send()); composerRef.current?.blur(); }} disabled={!draft.trim() && !pendingForwardItems.length && !pendingMedia.length} style={{
                           width: 38, height: 38, borderRadius: '50%', background: (draft.trim() || pendingForwardItems.length || pendingMedia.length) ? theme.coral : theme.rowBg,
                           border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center',
                           cursor: (draft.trim() || pendingForwardItems.length || pendingMedia.length) ? 'pointer' : 'default', flexShrink: 0,
@@ -4406,9 +4417,11 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                         </button>
                       )}
                     </div>
-                    <div style={{ textAlign: 'right', fontSize: 10.5, color: draft.length > MAX_CHARS - 50 ? theme.danger : theme.muted, marginTop: 4, paddingRight: 4 }}>
-                      {draft.length}/{MAX_CHARS}
-                    </div>
+                    {draft.length > MAX_CHARS - 50 && (
+                      <div style={{ textAlign: 'right', fontSize: 10.5, color: theme.danger, marginTop: 4, paddingRight: 4 }}>
+                        {draft.length}/{MAX_CHARS}
+                      </div>
+                    )}
                   </>
                 )}
               </div>
