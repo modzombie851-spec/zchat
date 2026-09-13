@@ -265,6 +265,10 @@ function GlobalStyle() {
       @keyframes zchat-float-up { 0% { transform: translateY(0) translateX(0); opacity: 0; } 10% { opacity: 1; } 100% { transform: translateY(-620px) translateX(18px); opacity: 0; } }
       @keyframes zchat-drift-a { 0%, 100% { transform: translate(0,0); } 50% { transform: translate(30px, 20px); } }
       @keyframes zchat-drift-b { 0%, 100% { transform: translate(0,0); } 50% { transform: translate(-24px, -18px); } }
+      @keyframes zchat-love-pulse { 0%, 100% { box-shadow: 0 0 10px rgba(255,77,141,0.28); } 50% { box-shadow: 0 0 20px rgba(255,77,141,0.55); } }
+      @keyframes zchat-neon-pulse { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.18); } }
+      .zchat-bubble-love { animation: zchat-love-pulse 2.6s ease-in-out infinite; }
+      .zchat-bubble-neon { animation: zchat-neon-pulse 2.2s ease-in-out infinite; }
       .zchat-fade { animation: zchat-fade 0.25s ease; }
       * { font-family: ${FONT}; }
     `}</style>
@@ -1263,7 +1267,7 @@ function IconDownload({ size = 15, color = 'currentColor' }) {
   );
 }
 
-function MessageContextMenu({ message, isMine, canEditText, onClose, onReact, onReply, onCopy, onEdit, onForward, onReport, onDeleteForMe, onDeleteForEveryone, onSelectMultiple }) {
+function MessageContextMenu({ message, isMine, canEditText, canModerate, onClose, onReact, onReply, onCopy, onEdit, onForward, onReport, onDeleteForMe, onDeleteForEveryone, onSelectMultiple }) {
   const { theme } = useTheme();
   const row = { display: 'flex', alignItems: 'center', gap: 12, padding: '11px 6px', cursor: 'pointer', fontSize: 14, fontWeight: 600, color: theme.ink };
   return (
@@ -1285,7 +1289,7 @@ function MessageContextMenu({ message, isMine, canEditText, onClose, onReact, on
           <div style={row} onClick={onSelectMultiple}><Check size={16} /> Select multiple</div>
           {!isMine && <div style={{ ...row, color: theme.danger }} onClick={onReport}><Flag size={16} color={theme.danger} /> Report</div>}
           <div style={{ ...row, color: theme.danger }} onClick={onDeleteForMe}><Trash2 size={16} color={theme.danger} /> Delete for me</div>
-          {isMine && !message.deleted && <div style={{ ...row, color: theme.danger }} onClick={onDeleteForEveryone}><Trash2 size={16} color={theme.danger} /> Delete for everyone</div>}
+          {(isMine || canModerate) && !message.deleted && <div style={{ ...row, color: theme.danger }} onClick={onDeleteForEveryone}><Trash2 size={16} color={theme.danger} /> Delete for everyone</div>}
         </div>
       </div>
     </div>
@@ -1494,11 +1498,11 @@ function ChatLockUnlock({ onCancel, onUnlock, correctHash }) {
   const { theme } = useTheme();
   const [pin, setPin] = useState('');
   const [err, setErr] = useState('');
-
+  
   const handleDigit = async (d) => {
     if (pin.length >= 4) return;
     const next = pin + d;
-        setPin(next);
+    setPin(next);
     if (next.length === 4) {
       const h = await hashPin(next);
       if (h === correctHash) onUnlock();
@@ -2675,7 +2679,7 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
           {selected && <Check size={12} color="white" />}
         </div>
       )}
-      {(isMe || canModerate) && !m.deleted && !selectionMode && (
+      {isMe && !m.deleted && !selectionMode && (
         <Trash2 size={14} color={theme.muted} style={{ cursor: 'pointer', flexShrink: 0, opacity: hover ? 1 : 0.35, transition: 'opacity 0.15s' }}
           onClick={() => onDelete(m.id)} />
       )}
@@ -2692,7 +2696,7 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
             <Send size={13} color={theme.muted} style={{ transform: isMe ? 'scaleX(-1)' : 'none' }} />
           </div>
         )}
-        <div onClick={handleTap} style={glass(theme, {
+        <div onClick={handleTap} className={!m.deleted && chatTheme === 'love' ? 'zchat-bubble-love' : !m.deleted && chatTheme === 'neon' ? 'zchat-bubble-neon' : undefined} style={glass(theme, {
           background: m.deleted ? theme.rowBg : (isMe ? theme.bubbleMe : theme.bubbleThem),
           borderRadius: 18,
           borderBottomRightRadius: isMe && !m.deleted ? 4 : 18,
@@ -3004,6 +3008,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [reactionPickerFor, setReactionPickerFor] = useState(null);
   const [contextMenuFor, setContextMenuFor] = useState(null);
   const [pendingForwardItems, setPendingForwardItems] = useState([]);
+  const [pendingMedia, setPendingMedia] = useState([]);
   const [activeFollowState, setActiveFollowState] = useState('none');
   const [activeFollowBusy, setActiveFollowBusy] = useState(false);
   const [whoReactedFor, setWhoReactedFor] = useState(null);
@@ -3013,6 +3018,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [showAccountSwitcher, setShowAccountSwitcher] = useState(false);
   const [showDeleteAccount, setShowDeleteAccount] = useState(false);
   const [myBlockedIds, setMyBlockedIds] = useState(new Set());
+  const [followRequestCount, setFollowRequestCount] = useState(0);
   const [groups, setGroups] = useState([]);
   const [activeGroup, setActiveGroup] = useState(null);
   const [groupMembers, setGroupMembers] = useState([]);
@@ -3093,6 +3099,11 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const loadMyBlocks = async () => {
     const { data } = await supabase.from('blocks').select('blocked_id').eq('blocker_id', session.user.id);
     setMyBlockedIds(new Set((data || []).map((b) => b.blocked_id)));
+  };
+
+  const loadFollowRequestCount = async () => {
+    const { count } = await supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', session.user.id).eq('status', 'pending');
+    setFollowRequestCount(count || 0);
   };
 
   const blockUser = async (userId) => {
@@ -3183,7 +3194,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   }, [profileCheckFailed]);
 
   useEffect(() => {
-    if (me) { loadConversations(); loadMyLocks(); loadGroups(); loadMyBlocks(); subscribeToPush(session.user.id); }
+    if (me) { loadConversations(); loadMyLocks(); loadGroups(); loadMyBlocks(); subscribeToPush(session.user.id); loadFollowRequestCount(); }
   }, [me]);
 
   useEffect(() => {
@@ -3565,6 +3576,32 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
   const send = async () => {
     if (!activeProfile && !activeGroup) return;
+    if (pendingMedia.length) {
+      const items = pendingMedia;
+      setPendingMedia([]);
+      const caption = draft.trim().slice(0, MAX_CHARS);
+      setDraft('');
+      setUploading(true);
+      for (let i = 0; i < items.length; i++) {
+        const { url, error } = await uploadMedia(items[i].file, session.user.id);
+        if (!error && url) {
+          const captionForThis = i === 0 ? (caption || null) : null;
+          if (activeGroup) {
+            await sendGroupMessage(items[i].kind, captionForThis, url);
+          } else {
+            const { data } = await sendMessage(session.user.id, activeProfile.id, items[i].kind, captionForThis, url);
+            if (data) {
+              setMessages((prev) => [...prev, data]);
+              sendPushNotification(activeProfile.id, me.name, captionForThis || (items[i].kind === 'image' ? '📷 Photo' : '🎥 Video'), `/?dm=${session.user.id}`, me.avatar);
+            }
+          }
+        }
+        URL.revokeObjectURL(items[i].url);
+      }
+      if (activeProfile) await upsertConversation(activeProfile.id, caption || null, items[items.length - 1].kind);
+      setUploading(false);
+      return;
+    }
     if (activeGroup) {
       const items = pendingForwardItems;
       if (items.length) {
@@ -3623,25 +3660,22 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
   const MAX_PHOTOS_PER_SEND = 10;
 
-  const handleFile = async (e, kind) => {
+  const removePendingMedia = (idx) => {
+    setPendingMedia((prev) => {
+      const removed = prev[idx];
+      if (removed) URL.revokeObjectURL(removed.url);
+      return prev.filter((_, i) => i !== idx);
+    });
+  };
+
+  const handleFile = (e, kind) => {
     const files = Array.from(e.target.files || []);
     e.target.value = '';
     if (!files.length || (!activeProfile && !activeGroup)) return;
     setShowAttach(false);
-    const capped = files.slice(0, MAX_PHOTOS_PER_SEND);
-    setUploading(true);
-    for (const file of capped) {
-      const { url, error } = await uploadMedia(file, session.user.id);
-      if (!error && url) {
-        if (activeGroup) { await sendGroupMessage(kind, null, url); }
-        else {
-          const { data } = await sendMessage(session.user.id, activeProfile.id, kind, null, url);
-          if (data) { setMessages((prev) => [...prev, data]); sendPushNotification(activeProfile.id, me.name, kind === 'image' ? '📷 Photo' : kind === 'video' ? '🎥 Video' : 'New message', `/?dm=${session.user.id}`, me.avatar); }
-        }
-      }
-    }
-    if (activeProfile) await upsertConversation(activeProfile.id, null, kind);
-    setUploading(false);
+    const capped = files.slice(0, MAX_PHOTOS_PER_SEND - pendingMedia.length);
+    const staged = capped.map((file) => ({ file, url: URL.createObjectURL(file), kind }));
+    setPendingMedia((prev) => [...prev, ...staged]);
   };
 
   const startRecording = async () => {
@@ -3894,7 +3928,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         )}
         {showPrivacy && <PrivacyPanel onBack={() => setShowPrivacy(false)} />}
         {showFollowRequests && (
-          <FollowRequestsPanel userId={session.user.id} onClose={() => setShowFollowRequests(false)}
+          <FollowRequestsPanel userId={session.user.id} onClose={() => { setShowFollowRequests(false); loadFollowRequestCount(); }}
             onOpenProfile={(p) => setProfileOf(p)} />
         )}
         {showDiscover && (
@@ -3918,11 +3952,29 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                   <div style={{ fontSize: 11.5, color: theme.muted }}>@{me.username}</div>
                 </div>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <Users size={18} style={{ cursor: 'pointer', color: theme.muted }} onClick={() => setShowCreateGroup(true)} />
-                <Compass size={18} style={{ cursor: 'pointer', color: theme.muted }} onClick={() => setShowDiscover(true)} />
-                <ThemeToggleIcon size={16} />
-                <SettingsIcon size={18} style={{ cursor: 'pointer', color: theme.muted }} onClick={() => setShowSettings(true)} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div onClick={() => { setShowFollowRequests(true); }} style={{
+                  position: 'relative', width: 34, height: 34, borderRadius: '50%', display: 'flex',
+                  alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: theme.rowBg,
+                }}>
+                  <Bell size={16} color={theme.muted} />
+                  {followRequestCount > 0 && (
+                    <span style={{
+                      position: 'absolute', top: -2, right: -2, minWidth: 15, height: 15, borderRadius: 8,
+                      background: theme.danger, color: 'white', fontSize: 9.5, fontWeight: 800,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px',
+                    }}>{followRequestCount > 9 ? '9+' : followRequestCount}</span>
+                  )}
+                </div>
+                <div onClick={() => setShowCreateGroup(true)} style={{ width: 34, height: 34, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: theme.rowBg }}>
+                  <Users size={16} color={theme.muted} />
+                </div>
+                <div onClick={() => setShowDiscover(true)} style={{ width: 34, height: 34, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: theme.rowBg }}>
+                  <Compass size={16} color={theme.muted} />
+                </div>
+                <div onClick={() => setShowSettings(true)} style={{ width: 34, height: 34, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: theme.rowBg }}>
+                  <SettingsIcon size={16} color={theme.muted} />
+                </div>
               </div>
             </div>
             <div style={{ position: 'relative' }}>
@@ -4176,6 +4228,23 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                   })
                 )}
               </div>
+              {pendingMedia.length > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderTop: `1px solid ${theme.border}`, background: theme.rowBg, overflowX: 'auto' }}>
+                  {pendingMedia.map((item, idx) => (
+                    <div key={idx} style={{ position: 'relative', flexShrink: 0 }}>
+                      {item.kind === 'image' ? (
+                        <img src={item.url} alt="" style={{ width: 52, height: 52, borderRadius: 10, objectFit: 'cover' }} />
+                      ) : (
+                        <video src={item.url} style={{ width: 52, height: 52, borderRadius: 10, objectFit: 'cover', background: '#000' }} />
+                      )}
+                      <div onClick={() => removePendingMedia(idx)} style={{
+                        position: 'absolute', top: -5, right: -5, width: 18, height: 18, borderRadius: '50%',
+                        background: theme.danger, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+                      }}><X size={11} color="white" /></div>
+                    </div>
+                  ))}
+                </div>
+              )}
               {pendingForwardItems.length > 0 && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderTop: `1px solid ${theme.border}`, background: theme.rowBg }}>
                   <Send size={14} color={theme.coral} />
@@ -4202,24 +4271,24 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                 </div>
               )}
               {showAttach && (
-                <div style={{ display: 'flex', gap: 18, padding: '12px 20px', borderTop: `1px solid ${theme.border}` }} className="zchat-fade">
-                  <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, cursor: 'pointer' }}>
-                    <div style={{ width: 46, height: 46, borderRadius: '50%', background: theme.gold, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <ImageIcon size={22} color="#1B1B1F" />
+                <div style={{ display: 'flex', gap: 14, padding: '10px 16px', borderTop: `1px solid ${theme.border}` }} className="zchat-fade">
+                  <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
+                    <div style={{ width: 38, height: 38, borderRadius: '50%', background: theme.gold, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <ImageIcon size={18} color="#1B1B1F" />
                     </div>
-                    <span style={{ fontSize: 11.5, color: theme.muted }}>Photo</span>
+                    <span style={{ fontSize: 10.5, color: theme.muted }}>Photo</span>
                     <input type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={(e) => handleFile(e, 'image')} />
                   </label>
-                  <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, cursor: 'pointer' }}>
-                    <div style={{ width: 46, height: 46, borderRadius: '50%', background: theme.coral, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <VideoIcon size={22} color="white" />
+                  <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
+                    <div style={{ width: 38, height: 38, borderRadius: '50%', background: theme.coral, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <VideoIcon size={18} color="white" />
                     </div>
-                    <span style={{ fontSize: 11.5, color: theme.muted }}>Video</span>
+                    <span style={{ fontSize: 10.5, color: theme.muted }}>Video</span>
                     <input type="file" accept="video/*" style={{ display: 'none' }} onChange={(e) => handleFile(e, 'video')} />
                   </label>
                 </div>
               )}
-              <div style={{ padding: '10px 14px', borderTop: `1px solid ${theme.border}` }}>
+              <div style={{ padding: '8px 14px', borderTop: `1px solid ${theme.border}` }}>
                 {activeGroup && groupMembers.find((gm) => gm.user_id === session.user.id)?.muted ? (
                   <div style={{ textAlign: 'center', padding: '10px 4px', fontSize: 13, color: theme.muted, fontWeight: 600 }}>
                     You've been muted in this group by an admin
@@ -4241,21 +4310,21 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                         e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
                       }}
                         onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); (editingMessage ? saveEdit() : send()); } }}
-                        placeholder={uploading ? 'Uploading...' : editingMessage ? 'Edit message' : 'Type a message'} disabled={uploading}
+                        placeholder={uploading ? 'Uploading...' : editingMessage ? 'Edit message' : pendingMedia.length ? 'Add a caption...' : 'Type a message'} disabled={uploading}
                         rows={1}
-                        style={{ ...inputStyle(theme), flex: 1, borderRadius: 22, padding: '11px 16px', resize: 'none', fontFamily: FONT, maxHeight: 120, overflowY: 'auto', lineHeight: 1.4 }} />
-                      {!draft.trim() && !editingMessage && !pendingForwardItems.length ? (
+                        style={{ ...inputStyle(theme), flex: 1, borderRadius: 20, padding: '9px 14px', resize: 'none', fontFamily: FONT, maxHeight: 120, overflowY: 'auto', lineHeight: 1.35, fontSize: 14.5 }} />
+                      {!draft.trim() && !editingMessage && !pendingForwardItems.length && !pendingMedia.length ? (
                         <button onClick={startRecording} style={{
-                          width: 42, height: 42, borderRadius: '50%', background: theme.coral,
+                          width: 38, height: 38, borderRadius: '50%', background: theme.coral,
                           border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0,
-                        }}><Mic size={19} color="white" /></button>
+                        }}><Mic size={17} color="white" /></button>
                       ) : (
-                        <button onClick={editingMessage ? saveEdit : send} disabled={!draft.trim() && !pendingForwardItems.length} style={{
-                          width: 42, height: 42, borderRadius: '50%', background: (draft.trim() || pendingForwardItems.length) ? theme.coral : theme.rowBg,
+                        <button onClick={editingMessage ? saveEdit : send} disabled={!draft.trim() && !pendingForwardItems.length && !pendingMedia.length} style={{
+                          width: 38, height: 38, borderRadius: '50%', background: (draft.trim() || pendingForwardItems.length || pendingMedia.length) ? theme.coral : theme.rowBg,
                           border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          cursor: (draft.trim() || pendingForwardItems.length) ? 'pointer' : 'default', flexShrink: 0,
+                          cursor: (draft.trim() || pendingForwardItems.length || pendingMedia.length) ? 'pointer' : 'default', flexShrink: 0,
                         }}>
-                          {editingMessage ? <Check size={18} color="white" /> : <Send size={18} color="white" />}
+                          {editingMessage ? <Check size={16} color="white" /> : <Send size={16} color="white" />}
                         </button>
                       )}
                     </div>
@@ -4300,6 +4369,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           return (
             <MessageContextMenu
               message={m} isMine={isMine} canEditText={isMine && m.type === 'text' && !m.deleted}
+              canModerate={!!(activeGroup && groupMembers.find((gm) => gm.user_id === session.user.id)?.role === 'admin')}
               onClose={() => setContextMenuFor(null)}
               onReact={(emoji) => doReactSingle(m, emoji)}
               onReply={() => doStartReplySingle(m)}
@@ -4497,6 +4567,7 @@ function AppInner() {
       setSavedAccounts(getSavedAccounts());
     })();
   }, [session?.access_token]);
+
   if (!checked) {
     return (
       <div style={{ height: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: theme.bgGradient }}>
@@ -4555,5 +4626,4 @@ export default function App() {
     </ThemeProvider>
   );
 }
-
 
