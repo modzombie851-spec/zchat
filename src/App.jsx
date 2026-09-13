@@ -279,6 +279,11 @@ function GlobalStyle() {
       @keyframes zchat-drift-b { 0%, 100% { transform: translate(0,0); } 50% { transform: translate(-24px, -18px); } }
       @keyframes zchat-love-pulse { 0%, 100% { box-shadow: 0 0 10px rgba(255,77,141,0.28); } 50% { box-shadow: 0 0 20px rgba(255,77,141,0.55); } }
       @keyframes zchat-neon-pulse { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.18); } }
+      @keyframes zchat-fire-spin { to { transform: rotate(360deg); } }
+      .zchat-fire-ring {
+        background: conic-gradient(from 0deg, #FFD23F, #FF6B00, #FF2D55, #FF6B00, #FFD23F);
+        animation: zchat-fire-spin 3.5s linear infinite;
+      }
       .zchat-bubble-love { animation: zchat-love-pulse 2.6s ease-in-out infinite; }
       .zchat-bubble-neon { animation: zchat-neon-pulse 2.2s ease-in-out infinite; }
       .zchat-fade { animation: zchat-fade 0.25s ease; }
@@ -1594,7 +1599,9 @@ function ChatSettingsPanel({ conv, myId, isPinned, isLocked, wallpaper, onClose,
       </div>
       <div style={{ overflowY: 'auto', flex: 1, padding: '14px 18px' }}>
         <div style={{ textAlign: 'center', marginBottom: 18 }}>
-          <Avatar emoji={conv.otherProfile.avatar} name={conv.realName || conv.otherProfile.name} size={64} />
+          <div style={{ display: 'flex', justifyContent: 'center' }}>
+            <Avatar emoji={conv.otherProfile.avatar} name={conv.realName || conv.otherProfile.name} size={64} />
+          </div>
           <div style={{ fontWeight: 800, fontSize: 15, color: theme.ink, marginTop: 8 }}>{conv.realName || conv.otherProfile.name}</div>
           <div style={{ fontSize: 12, color: theme.muted }}>@{conv.otherProfile.username}</div>
         </div>
@@ -2355,8 +2362,10 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
               </label>
             </div>
           ) : (
-            <div style={{ width: 92, height: 92, borderRadius: '50%', padding: 4, background: 'white', margin: '0 auto', boxShadow: '0 4px 16px rgba(0,0,0,0.2), 0 0 0 1px rgba(0,0,0,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Avatar emoji={(isSelf || !profile.hide_photo) ? profile.avatar : ''} name={profile.name} online={isOnline} size={84} />
+            <div style={{ width: 98, height: 98, borderRadius: '50%', margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 3 }} className="zchat-fire-ring">
+              <div style={{ width: '100%', height: '100%', borderRadius: '50%', padding: 4, background: theme.panelBg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Avatar emoji={(isSelf || !profile.hide_photo) ? profile.avatar : ''} name={profile.name} online={isOnline} size={84} />
+              </div>
             </div>
           )}
 
@@ -2599,9 +2608,9 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
 
 function StatusTicks({ status }) {
   const { theme } = useTheme();
-  const color = status === 'read' ? theme.coral : theme.muted;
-  if (status === 'sent') return <Check size={14} color={color} />;
-  return <CheckCheck size={14} color={color} />;
+  if (status === 'sent') return <Check size={14} color={theme.muted} />;
+  if (status === 'read') return <CheckCheck size={14} color={theme.coral} />;
+  return <CheckCheck size={14} color={theme.muted} />;
 }
 
 const REACTION_EMOJIS = ['❤️', '😂', '😮', '😢', '👍', '🔥'];
@@ -2749,7 +2758,7 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
           borderRadius: 18,
           borderBottomRightRadius: isMe && !m.deleted ? 4 : 18,
           borderBottomLeftRadius: !isMe && !m.deleted ? 4 : 18,
-          padding: m.type === 'text' || m.deleted ? '9px 13px' : 5,
+          padding: m.type === 'text' || m.deleted ? '7px 12px' : 5,
           border: m.deleted ? `1px dashed ${theme.border}` : `1px solid ${theme.border}`,
           cursor: 'pointer',
           ...(m.deleted ? {} : bubbleThemeStyle(chatTheme, isMe, theme)),
@@ -2801,13 +2810,13 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
                 </div>
               )}
               {m.type === 'audio' && <AudioBubble url={m.media_url} isMe={isMe} />}
-              {m.content && <div style={{ fontSize: 15 * fontScale, color: theme.ink, padding: m.type !== 'text' ? '0 4px' : 0, wordBreak: 'break-word', lineHeight: 1.4 }}>{m.content}</div>}
+              {m.content && <div style={{ fontSize: 15 * fontScale, color: theme.ink, padding: m.type !== 'text' ? '0 4px' : 0, wordBreak: 'break-word', lineHeight: 1.32 }}>{m.content}</div>}
             </>
           )}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 4, marginTop: 3, padding: m.type !== 'text' && !m.deleted ? '0 4px 2px' : 0 }}>
-            {m.edited && !m.deleted && <span style={{ fontSize: 10, color: theme.muted, fontStyle: 'italic' }}>edited</span>}
-            <span style={{ fontSize: 10.5, color: theme.muted }}>{time}</span>
-            {isMe && !m.deleted && <StatusTicks status={(!hideReadStatus && m.read) ? 'read' : 'sent'} />}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 4, marginTop: 2, padding: m.type !== 'text' && !m.deleted ? '0 4px 2px' : 0 }}>
+            {m.edited && !m.deleted && <span style={{ fontSize: 9.5, color: theme.muted, fontStyle: 'italic' }}>edited</span>}
+            <span style={{ fontSize: 10, color: theme.muted }}>{time}</span>
+            {isMe && !m.deleted && <StatusTicks status={(!hideReadStatus && m.read) ? 'read' : m.delivered ? 'delivered' : 'sent'} />}
           </div>
         </div>
         {groupedEntries.length > 0 && !m.deleted && (
@@ -3289,8 +3298,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (!me) return;
     const sub = subscribeToMessages(me.id, (msg) => {
       if (msg.sender_id !== me.id) {
-        if (msg.sender_id !== activeProfile?.id) playPing();
-        else supabase.from('messages').update({ read: true }).eq('id', msg.id);
+        if (msg.sender_id !== activeProfile?.id) { playPing(); supabase.from('messages').update({ delivered: true }).eq('id', msg.id); }
+        else supabase.from('messages').update({ read: true, delivered: true }).eq('id', msg.id);
       }
       setMessages((prev) => (activeProfile && msg.sender_id === activeProfile.id ? [...prev, msg] : prev));
     });
@@ -3303,7 +3312,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, (payload) => {
         const row = payload.new;
         if (row.sender_id === me.id) {
-          setMessages((prev) => prev.map((m) => (m.id === row.id ? { ...m, read: row.read, edited: row.edited, deleted: row.deleted } : m)));
+          setMessages((prev) => prev.map((m) => (m.id === row.id ? { ...m, read: row.read, delivered: row.delivered, edited: row.edited, deleted: row.deleted } : m)));
         }
       })
       .subscribe();
@@ -3365,7 +3374,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
         const row = payload.new;
         if (!row.group_id || !myGroupIds.includes(row.group_id)) return;
-        if (row.sender_id !== me.id && (!activeGroup || row.group_id !== activeGroup.id)) playPing();
+        if (row.sender_id !== me.id && (!activeGroup || row.group_id !== activeGroup.id)) { playPing(); supabase.from('messages').update({ delivered: true }).eq('id', row.id); }
+        if (row.sender_id !== me.id && activeGroup && row.group_id === activeGroup.id) { supabase.from('messages').update({ read: true, delivered: true }).eq('id', row.id); }
         setMessages((prev) => {
           if (!activeGroup || row.group_id !== activeGroup.id) return prev;
           if (prev.some((m) => m.id === row.id)) return prev;
@@ -3613,8 +3623,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     setLoadingConvo(false);
     const unreadIds = visible.filter((m) => m.sender_id === profile.id && !m.read).map((m) => m.id);
     if (unreadIds.length) {
-      await supabase.from('messages').update({ read: true }).in('id', unreadIds);
-      setMessages((prev) => prev.map((m) => (unreadIds.includes(m.id) ? { ...m, read: true } : m)));
+      await supabase.from('messages').update({ read: true, delivered: true }).in('id', unreadIds);
+      setMessages((prev) => prev.map((m) => (unreadIds.includes(m.id) ? { ...m, read: true, delivered: true } : m)));
     }
     if (visible.length) {
       const ids = visible.map((m) => m.id);
@@ -4220,8 +4230,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               ) : activeGroup ? (
                 <div style={{ padding: '13px 18px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: `1px solid ${theme.border}`, cursor: 'pointer' }}
                   onClick={() => setShowGroupInfo(true)}>
-                  <ArrowLeft size={20} style={{ cursor: 'pointer', display: 'none' }} className="zchat-back"
-                    onClick={(e) => { e.stopPropagation(); setMobileShowChat(false); }} />
+                  <div className="zchat-back" style={{ display: 'none', cursor: 'pointer', margin: '-10px -6px -10px -10px', padding: '10px 6px 10px 10px' }}
+                    onClick={(e) => { e.stopPropagation(); setMobileShowChat(false); }}>
+                    <ArrowLeft size={22} />
+                  </div>
                   <GroupAvatar avatar={activeGroup.avatar} name={activeGroup.name} size={38} />
                   <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: 800, fontSize: 15, color: theme.ink }}>{activeGroup.name}</div>
@@ -4233,8 +4245,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               ) : (
                 <div style={{ padding: '13px 18px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: `1px solid ${theme.border}`, cursor: 'pointer' }}
                   onClick={() => setProfileOf(activeProfile)}>
-                  <ArrowLeft size={20} style={{ cursor: 'pointer', display: 'none' }} className="zchat-back"
-                    onClick={(e) => { e.stopPropagation(); setMobileShowChat(false); }} />
+                  <div className="zchat-back" style={{ display: 'none', cursor: 'pointer', margin: '-10px -6px -10px -10px', padding: '10px 6px 10px 10px' }}
+                    onClick={(e) => { e.stopPropagation(); setMobileShowChat(false); }}>
+                    <ArrowLeft size={22} />
+                  </div>
                   <Avatar emoji={activeProfile.avatar} name={activeProfile.name} online={!activeProfile.hide_activity && onlineIds.has(activeProfile.id)} size={38} ring />
                   <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: 800, fontSize: 15, color: theme.ink }}>{activeProfile.name}</div>
