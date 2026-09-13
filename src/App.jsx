@@ -4243,7 +4243,11 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                   <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: 800, fontSize: 15, color: theme.ink }}>{activeProfile.name}</div>
                     <div style={{ fontSize: 12, color: typingFrom ? theme.coral : theme.muted, fontWeight: typingFrom ? 700 : 400 }}>
-                      {typingFrom ? 'typing...' : `@${activeProfile.username}`}
+                      {typingFrom
+                        ? 'typing...'
+                        : (!activeProfile.hide_activity && onlineIds.has(activeProfile.id))
+                          ? 'Online'
+                          : (!activeProfile.hide_activity && formatLastSeen(activeProfile.last_seen)) || `@${activeProfile.username}`}
                     </div>
                   </div>
                   <button onClick={(e) => { e.stopPropagation(); toggleActiveFollow(); }} disabled={activeFollowBusy} style={{
