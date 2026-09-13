@@ -318,11 +318,11 @@ function colorForName(name) {
 
 /* WhatsApp-style: real photo if uploaded, otherwise a colored circle with the first initial */
 function Avatar({ emoji, name = '', online, size = 40, ring = false }) {
-  const { chatTheme } = useTheme();
+  const { chatTheme, theme } = useTheme();
   const [imgFailed, setImgFailed] = useState(false);
   const isImage = typeof emoji === 'string' && emoji.startsWith('http') && !imgFailed;
   const initial = (name || '?').trim().charAt(0).toUpperCase() || '?';
-  const ringColor = chatTheme === 'love' ? '#FF4D8D' : chatTheme === 'neon' ? '#00FFDC' : null;
+  const ringColor = chatTheme === 'love' ? '#FF4D8D' : chatTheme === 'neon' ? '#00FFDC' : theme.coral;
   return (
     <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
       <div style={{
@@ -3041,6 +3041,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [showDeleteAccount, setShowDeleteAccount] = useState(false);
   const [myBlockedIds, setMyBlockedIds] = useState(new Set());
   const [followRequestCount, setFollowRequestCount] = useState(0);
+  const [listFilter, setListFilter] = useState('all');
   const [groups, setGroups] = useState([]);
   const [activeGroup, setActiveGroup] = useState(null);
   const [groupMembers, setGroupMembers] = useState([]);
@@ -3965,50 +3966,65 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           width: 320, minWidth: 320, display: mobileShowChat ? 'none' : 'flex',
           flexDirection: 'column', borderRight: `1px solid ${theme.border}`,
         }} className="zchat-sidebar">
-          <div style={{ padding: '18px 18px 14px' }}>
-            <div style={{ marginBottom: 14 }}><ZBrand size={22} /></div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }} onClick={() => setProfileOf(me)}>
-                <Avatar emoji={me.avatar} name={me.name} size={38} />
-                <div>
-                  <div style={{ fontWeight: 800, fontSize: 15, color: theme.ink }}>{me.name}</div>
-                  <div style={{ fontSize: 11.5, color: theme.muted }}>@{me.username}</div>
+          <div style={{ padding: '16px 16px 12px' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 14 }}>
+              <ZBrand size={22} showTag />
+              <div onClick={() => setProfileOf(me)} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', maxWidth: 130 }}>
+                <div style={{ textAlign: 'right', minWidth: 0 }}>
+                  <div style={{ fontWeight: 800, fontSize: 12, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{me.name}</div>
+                  <div style={{ fontSize: 10, color: theme.teal, fontWeight: 600 }}>Online</div>
+                  {me.bio && <div style={{ fontSize: 9.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 110 }}>"{me.bio}"</div>}
                 </div>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <div onClick={() => { setShowFollowRequests(true); }} style={{
-                  position: 'relative', width: 34, height: 34, borderRadius: '50%', display: 'flex',
-                  alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: theme.rowBg,
-                }}>
-                  <Bell size={16} color={theme.muted} />
-                  {followRequestCount > 0 && (
-                    <span style={{
-                      position: 'absolute', top: -2, right: -2, minWidth: 15, height: 15, borderRadius: 8,
-                      background: theme.danger, color: 'white', fontSize: 9.5, fontWeight: 800,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px',
-                    }}>{followRequestCount > 9 ? '9+' : followRequestCount}</span>
-                  )}
-                </div>
-                <div onClick={() => setShowCreateGroup(true)} style={{ width: 34, height: 34, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: theme.rowBg }}>
-                  <Users size={16} color={theme.muted} />
-                </div>
-                <div onClick={() => setShowDiscover(true)} style={{ width: 34, height: 34, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: theme.rowBg }}>
-                  <Compass size={16} color={theme.muted} />
-                </div>
-                <div onClick={() => setShowSettings(true)} style={{ width: 34, height: 34, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: theme.rowBg }}>
-                  <SettingsIcon size={16} color={theme.muted} />
-                </div>
+                <Avatar emoji={me.avatar} name={me.name} size={34} ring />
               </div>
             </div>
-            <div style={{ position: 'relative' }}>
-              <Search size={15} color={theme.muted} style={{ position: 'absolute', left: 13, top: 12 }} />
-              <input value={search} onChange={(e) => doSearch(e.target.value)} placeholder="Find by username" autoCapitalize="none"
-                style={{ ...inputStyle(theme), padding: '10px 12px 10px 36px' }} />
-              {searching && <div style={{ position: 'absolute', right: 13, top: 12 }}><Spinner size={14} color={theme.muted} /></div>}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
+              <div onClick={() => { setShowFollowRequests(true); }} style={{
+                position: 'relative', width: 32, height: 32, borderRadius: '50%', display: 'flex',
+                alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: theme.rowBg,
+              }}>
+                <Bell size={15} color={theme.muted} />
+                {followRequestCount > 0 && (
+                  <span style={{
+                    position: 'absolute', top: -2, right: -2, minWidth: 15, height: 15, borderRadius: 8,
+                    background: theme.danger, color: 'white', fontSize: 9.5, fontWeight: 800,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px',
+                  }}>{followRequestCount > 9 ? '9+' : followRequestCount}</span>
+                )}
+              </div>
+              <div onClick={() => setShowCreateGroup(true)} style={{ width: 32, height: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: theme.rowBg }}>
+                <Users size={15} color={theme.muted} />
+              </div>
+              <div onClick={() => setShowDiscover(true)} style={{ width: 32, height: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: theme.rowBg }}>
+                <Compass size={15} color={theme.muted} />
+              </div>
+              <div onClick={() => setShowSettings(true)} style={{ width: 32, height: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: theme.rowBg }}>
+                <SettingsIcon size={15} color={theme.muted} />
+              </div>
+            </div>
+            <div style={{ position: 'relative', marginBottom: 12 }}>
+              <Search size={15} color={theme.muted} style={{ position: 'absolute', left: 15, top: 13 }} />
+              <input value={search} onChange={(e) => doSearch(e.target.value)} placeholder="Search chats, people..." autoCapitalize="none"
+                style={{ ...inputStyle(theme), padding: '11px 14px 11px 38px', borderRadius: 24, background: theme.rowBg, border: `1.5px solid ${theme.border}` }} />
+              {searching && <div style={{ position: 'absolute', right: 15, top: 13 }}><Spinner size={14} color={theme.muted} /></div>}
+            </div>
+            <div style={{ display: 'flex', gap: 7, overflowX: 'auto' }}>
+              {[
+                { key: 'all', label: 'All' },
+                { key: 'unread', label: 'Unread' },
+                { key: 'groups', label: 'Groups' },
+                { key: 'dms', label: 'DMs' },
+              ].map((f) => (
+                <div key={f.key} onClick={() => setListFilter(f.key)} style={{
+                  padding: '6px 14px', borderRadius: 16, fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
+                  background: listFilter === f.key ? theme.coral : theme.rowBg,
+                  color: listFilter === f.key ? 'white' : theme.muted,
+                }}>{f.label}</div>
+              ))}
             </div>
           </div>
           <div style={{ overflowY: 'auto', flex: 1, padding: '0 8px' }}>
-            {search.length < 2 && groups.length > 0 && (
+            {search.length < 2 && groups.length > 0 && listFilter !== 'dms' && listFilter !== 'unread' && (
               <div style={{ marginBottom: 6 }}>
                 {groups.map((g) => (
                   <div key={g.id} onClick={() => openGroup(g)} style={{
@@ -4056,12 +4072,12 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                   );
                 })}
               </>
-            ) : conversations.length === 0 ? (
+            ) : (listFilter === 'groups' ? [] : listFilter === 'unread' ? conversations.filter(isUnread) : conversations).length === 0 ? (
               <div style={{ padding: '24px 16px', textAlign: 'center', color: theme.muted, fontSize: 12.5, lineHeight: 1.6 }}>
-                Search a username above to start a new conversation
+                {listFilter === 'groups' ? 'No groups yet' : listFilter === 'unread' ? 'No unread chats' : 'Search a username above to start a new conversation'}
               </div>
             ) : (
-              conversations.map((c) => {
+              (listFilter === 'groups' ? [] : listFilter === 'unread' ? conversations.filter(isUnread) : conversations).map((c) => {
                 const unread = isUnread(c);
                 const pinned = isPinnedByMe(c);
                 const locked = !!myLocks[c.id];
