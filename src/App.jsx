@@ -350,8 +350,8 @@ function Avatar({ emoji, name = '', online, size = 40, ring = false }) {
 function AuthShell({ children }) {
   const { theme } = useTheme();
   return (
-    <div style={{
-      height: 'var(--app-height, 100%)', width: '100%', background: theme.bgGradient,
+    <div id="zapp-root" style={{
+      height: '100dvh', width: '100%', background: theme.bgGradient,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       fontFamily: FONT, padding: 20, boxSizing: 'border-box', overflowY: 'auto', position: 'relative',
       paddingTop: 'calc(20px + env(safe-area-inset-top))',
@@ -3938,15 +3938,15 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
   if (!me) {
     return (
-      <div style={{ height: 'var(--app-height, 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', background: theme.bgGradient }}>
+      <div style={{ height: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: theme.bgGradient }}>
         <Spinner size={28} color={theme.ink} />
       </div>
     );
   }
 
   return (
-    <div style={{
-      fontFamily: FONT, height: 'var(--app-height, 100%)', width: '100%', background: theme.bgGradient,
+    <div id="zapp-root" style={{
+      fontFamily: FONT, height: '100dvh', width: '100%', background: theme.bgGradient,
       display: 'flex', justifyContent: 'center', alignItems: 'center', boxSizing: 'border-box',
       paddingTop: 'env(safe-area-inset-top)',
       paddingBottom: 'env(safe-area-inset-bottom)',
@@ -4648,7 +4648,7 @@ function AppInner() {
 
   if (!checked) {
     return (
-      <div style={{ height: 'var(--app-height, 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', background: theme.bgGradient }}>
+      <div style={{ height: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: theme.bgGradient }}>
         <Spinner size={28} color={theme.ink} />
       </div>
     );
