@@ -137,9 +137,9 @@ async function subscribeToPush(userId) {
   }
 }
 
-async function sendPushNotification(userId, title, body, url) {
+async function sendPushNotification(userId, title, body, url, icon) {
   try {
-    await supabase.functions.invoke('send-push', { body: { user_id: userId, title, body, url: url || '/' } });
+    await supabase.functions.invoke('hyper-worker', { body: { user_id: userId, title, body, url: url || '/', icon: icon || undefined } });
   } catch (err) {
     console.error('Push notify failed:', err);
   }
@@ -2089,7 +2089,8 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
       await supabase.from('follows').insert({ follower_id: userId, following_id: profile.id, status });
       if (status === 'accepted') setFollowerCount((c) => c + 1);
       setFollowState(status);
-      sendPushNotification(profile.id, 'ZChat', status === 'pending' ? `${(await getProfile(userId)).data?.name || 'Someone'} requested to follow you` : `${(await getProfile(userId)).data?.name || 'Someone'} started following you`, `/?profile=${userId}`);
+      { const viewerProfile = (await getProfile(userId)).data;
+      sendPushNotification(profile.id, 'ZChat', status === 'pending' ? `${viewerProfile?.name || 'Someone'} requested to follow you` : `${viewerProfile?.name || 'Someone'} started following you`, `/?profile=${userId}`, viewerProfile?.avatar); }
     }
     setFollowBusy(false);
   };
@@ -3292,7 +3293,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       if (type !== 'system') {
         const preview = type === 'text' ? content : type === 'image' ? '📷 Photo' : type === 'audio' ? '🎤 Voice message' : '🎥 Video';
         groupMembers.filter((m) => m.user_id !== session.user.id && !m.muted).forEach((m) => {
-          sendPushNotification(m.user_id, `${me.name} in ${activeGroup.name}`, preview, `/?group=${activeGroup.id}`);
+          sendPushNotification(m.user_id, `${me.name} in ${activeGroup.name}`, preview, `/?group=${activeGroup.id}`, me.avatar);
         });
       }
     }
@@ -3475,7 +3476,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       }
       setMessages((prev) => [...prev, data]);
       upsertConversation(activeProfile.id, text, 'text');
-      sendPushNotification(activeProfile.id, me.name, text, `/?dm=${session.user.id}`);
+      sendPushNotification(activeProfile.id, me.name, text, `/?dm=${session.user.id}`, me.avatar);
     }
   };
 
@@ -3503,7 +3504,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         if (activeGroup) { await sendGroupMessage(kind, null, url); }
         else {
           const { data } = await sendMessage(session.user.id, activeProfile.id, kind, null, url);
-          if (data) { setMessages((prev) => [...prev, data]); sendPushNotification(activeProfile.id, me.name, kind === 'image' ? '📷 Photo' : kind === 'video' ? '🎥 Video' : 'New message', `/?dm=${session.user.id}`); }
+          if (data) { setMessages((prev) => [...prev, data]); sendPushNotification(activeProfile.id, me.name, kind === 'image' ? '📷 Photo' : kind === 'video' ? '🎥 Video' : 'New message', `/?dm=${session.user.id}`, me.avatar); }
         }
       }
     }
@@ -3531,7 +3532,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             await sendGroupMessage('audio', null, url);
           } else {
             const { data } = await sendMessage(session.user.id, activeProfile.id, 'audio', null, url);
-            if (data) { setMessages((prev) => [...prev, data]); upsertConversation(activeProfile.id, null, 'audio'); sendPushNotification(activeProfile.id, me.name, '🎤 Voice message', `/?dm=${session.user.id}`); }
+            if (data) { setMessages((prev) => [...prev, data]); upsertConversation(activeProfile.id, null, 'audio'); sendPushNotification(activeProfile.id, me.name, '🎤 Voice message', `/?dm=${session.user.id}`, me.avatar); }
           }
         }
         setUploading(false);
@@ -3659,7 +3660,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       await supabase.from('message_likes').upsert({ message_id: messageId, user_id: session.user.id, emoji }, { onConflict: 'message_id,user_id' });
       if (targetMessage && targetMessage.sender_id !== session.user.id) {
         const destUrl = activeGroup ? `/?group=${activeGroup.id}` : `/?dm=${session.user.id}`;
-        sendPushNotification(targetMessage.sender_id, me.name, `reacted ${emoji} to your message`, destUrl);
+        sendPushNotification(targetMessage.sender_id, me.name, `reacted ${emoji} to your message`, destUrl, me.avatar);
       }
     }
     setReactionPickerFor(null);
@@ -3682,7 +3683,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       const status = activeProfile.is_private ? 'pending' : 'accepted';
       await supabase.from('follows').insert({ follower_id: session.user.id, following_id: activeProfile.id, status });
       setActiveFollowState(status);
-      sendPushNotification(activeProfile.id, 'ZChat', status === 'pending' ? `${me.name} requested to follow you` : `${me.name} started following you`, `/?profile=${session.user.id}`);
+      sendPushNotification(activeProfile.id, 'ZChat', status === 'pending' ? `${me.name} requested to follow you` : `${me.name} started following you`, `/?profile=${session.user.id}`, me.avatar);
     }
     setActiveFollowBusy(false);
   };
@@ -4406,3 +4407,4 @@ export default function App() {
     </ThemeProvider>
   );
 }
+
