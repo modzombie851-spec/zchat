@@ -351,7 +351,7 @@ function AuthShell({ children }) {
   const { theme } = useTheme();
   return (
     <div style={{
-      height: 'var(--app-height, 100dvh)', width: '100vw', background: theme.bgGradient,
+      height: 'var(--app-height, 100%)', width: '100%', background: theme.bgGradient,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       fontFamily: FONT, padding: 20, boxSizing: 'border-box', overflowY: 'auto', position: 'relative',
       paddingTop: 'calc(20px + env(safe-area-inset-top))',
@@ -3938,7 +3938,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
   if (!me) {
     return (
-      <div style={{ height: 'var(--app-height, 100dvh)', display: 'flex', alignItems: 'center', justifyContent: 'center', background: theme.bgGradient }}>
+      <div style={{ height: 'var(--app-height, 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', background: theme.bgGradient }}>
         <Spinner size={28} color={theme.ink} />
       </div>
     );
@@ -3946,7 +3946,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
   return (
     <div style={{
-      fontFamily: FONT, height: 'var(--app-height, 100dvh)', width: '100vw', background: theme.bgGradient,
+      fontFamily: FONT, height: 'var(--app-height, 100%)', width: '100%', background: theme.bgGradient,
       display: 'flex', justifyContent: 'center', alignItems: 'center', boxSizing: 'border-box',
       paddingTop: 'env(safe-area-inset-top)',
       paddingBottom: 'env(safe-area-inset-bottom)',
@@ -4648,7 +4648,7 @@ function AppInner() {
 
   if (!checked) {
     return (
-      <div style={{ height: 'var(--app-height, 100dvh)', display: 'flex', alignItems: 'center', justifyContent: 'center', background: theme.bgGradient }}>
+      <div style={{ height: 'var(--app-height, 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', background: theme.bgGradient }}>
         <Spinner size={28} color={theme.ink} />
       </div>
     );
