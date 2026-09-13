@@ -4187,7 +4187,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         </div>
 
 
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, position: 'relative' }} className="zchat-panel">
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0, position: 'relative' }} className="zchat-panel">
           <AnimatedChatBackground chatTheme={chatTheme} />
           {!activeProfile && !activeGroup ? (
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: theme.muted, fontSize: 14, textAlign: 'center', padding: 24 }}>
@@ -4253,7 +4253,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                 </div>
               )}
               <div ref={scrollRef} style={{
-                flex: 1, overflowY: 'auto', padding: '16px 18px',
+                flex: 1, minHeight: 0, overflowY: 'auto', padding: '16px 18px',
                 WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain',
                 ...((() => {
                   if (!activeProfile) return {};
