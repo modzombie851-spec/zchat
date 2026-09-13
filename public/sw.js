@@ -1,13 +1,13 @@
 self.addEventListener('push', (event) => {
-  let data = { title: 'ZChat', body: 'You have a new message', url: '/' };
+  let data = { title: 'ZChat', body: 'You have a new message', url: '/', icon: '/icon-192.png' };
   try {
-    data = event.data.json();
+    data = { ...data, ...event.data.json() };
   } catch (e) {}
 
   event.waitUntil(
     self.registration.showNotification(data.title, {
       body: data.body,
-      icon: '/icon-192.png',
+      icon: data.icon || '/icon-192.png',
       badge: '/icon-192.png',
       data: { url: data.url },
     })
