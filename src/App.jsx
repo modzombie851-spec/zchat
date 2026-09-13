@@ -279,10 +279,8 @@ function GlobalStyle() {
       @keyframes zchat-drift-b { 0%, 100% { transform: translate(0,0); } 50% { transform: translate(-24px, -18px); } }
       @keyframes zchat-love-pulse { 0%, 100% { box-shadow: 0 0 10px rgba(255,77,141,0.28); } 50% { box-shadow: 0 0 20px rgba(255,77,141,0.55); } }
       @keyframes zchat-neon-pulse { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.18); } }
-      @keyframes zchat-fire-spin { to { transform: rotate(360deg); } }
       .zchat-fire-ring {
-        background: conic-gradient(from 0deg, #FFD23F, #FF6B00, #FF2D55, #FF6B00, #FFD23F);
-        animation: zchat-fire-spin 3.5s linear infinite;
+        background: linear-gradient(135deg, #FFD23F, #FF6B00, #FF2D55);
       }
       .zchat-bubble-love { animation: zchat-love-pulse 2.6s ease-in-out infinite; }
       .zchat-bubble-neon { animation: zchat-neon-pulse 2.2s ease-in-out infinite; }
