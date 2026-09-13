@@ -644,6 +644,20 @@ const COUNTRIES = [
 ];
 const countryFlag = (code) => code.split('').map((c) => String.fromCodePoint(127397 + c.charCodeAt(0))).join('');
 
+function getSavedAccounts() {
+  try { return JSON.parse(localStorage.getItem('zchat-accounts') || '[]'); } catch { return []; }
+}
+function saveAccountEntry(entry) {
+  const list = getSavedAccounts().filter((a) => a.id !== entry.id);
+  list.push(entry);
+  try { localStorage.setItem('zchat-accounts', JSON.stringify(list)); } catch {}
+}
+function removeAccountEntry(id) {
+  const list = getSavedAccounts().filter((a) => a.id !== id);
+  try { localStorage.setItem('zchat-accounts', JSON.stringify(list)); } catch {}
+}
+
+
 /* Blank out a person's avatar if they've hidden it and we're not looking at ourselves — applied once
    at the source so every screen (list rows, chat header, forward picker, discover, etc.) respects it. */
 function sanitizeAvatar(profile, myId) {
@@ -723,6 +737,47 @@ function LogoutConfirm({ onCancel, onConfirm }) {
 }
 
 
+function DeleteAccountConfirm({ onCancel, onConfirm }) {
+  const { theme } = useTheme();
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const ok = text.trim().toUpperCase() === 'DELETE';
+  return (
+    <div style={{
+      position: 'absolute', inset: 0, background: 'rgba(10,8,6,0.45)', backdropFilter: 'blur(3px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 60, padding: 24,
+    }} className="zchat-fade">
+      <div style={{
+        background: theme.panelBg, borderRadius: 20, padding: '24px 22px', width: '100%', maxWidth: 300,
+        textAlign: 'center', boxShadow: '0 20px 50px rgba(0,0,0,0.3)',
+      }}>
+        <div style={{
+          width: 52, height: 52, borderRadius: '50%', margin: '0 auto 14px',
+          background: `${theme.danger}20`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.danger,
+        }}>
+          <Trash2 size={22} />
+        </div>
+        <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 6, color: theme.ink }}>Delete your account?</div>
+        <div style={{ fontSize: 12.5, marginBottom: 16, lineHeight: 1.5, color: theme.muted }}>
+          Your profile disappears everywhere, no one can message you, and this can't be undone. Type DELETE to confirm.
+        </div>
+        <input value={text} onChange={(e) => setText(e.target.value)} placeholder="DELETE"
+          style={{ ...inputStyle(theme), textAlign: 'center', marginBottom: 14, fontWeight: 700 }} />
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={onCancel} style={{
+            flex: 1, padding: 11, borderRadius: 13, border: `1.5px solid ${theme.border}`,
+            background: 'transparent', color: theme.ink, fontWeight: 700, fontSize: 13.5, cursor: 'pointer', fontFamily: FONT,
+          }}>Cancel</button>
+          <button onClick={async () => { setBusy(true); await onConfirm(); }} disabled={!ok || busy} style={{
+            flex: 1, padding: 11, borderRadius: 13, border: 'none', background: theme.danger, opacity: (!ok || busy) ? 0.5 : 1,
+            color: 'white', fontWeight: 700, fontSize: 13.5, cursor: (!ok || busy) ? 'default' : 'pointer', fontFamily: FONT,
+          }}>{busy ? <Spinner size={13} /> : 'Delete'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SettingsRow({ icon, label, onClick, danger, right }) {
   const { theme } = useTheme();
   return (
@@ -756,7 +811,7 @@ function ToggleSwitch({ on, onClick }) {
   );
 }
 
-function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout }) {
+function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideActivity, onToggleActivity, onOpenAccounts, onOpenDelete }) {
   const { theme, dark, setDark, accentName, setAccentName, soundOn, setSoundOn, bgPatternOn, setBgPatternOn } = useTheme();
   const accentLabels = { coral: 'Coral', ocean: 'Ocean', berry: 'Berry' };
   return (
@@ -790,16 +845,54 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout }) {
         <SettingsRow icon={<ImageIcon size={16} />} label="Chat background pattern" right={<ToggleSwitch on={bgPatternOn} onClick={() => setBgPatternOn((s) => !s)} />} />
         <SettingsRow icon={soundOn ? <Volume2 size={16} /> : <VolumeX size={16} />} label="Message sound" right={<ToggleSwitch on={soundOn} onClick={() => setSoundOn((s) => !s)} />} />
 
+        <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.muted, margin: '16px 0 6px 2px' }}>Privacy</div>
+        <SettingsRow icon={<EyeOff size={16} />} label="Hide activity status" right={<ToggleSwitch on={hideActivity} onClick={onToggleActivity} />} />
         <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.muted, margin: '16px 0 6px 2px' }}>Accounts</div>
         <SettingsRow icon={<Bell size={16} />} label="Follow requests" onClick={onOpenRequests} />
-        <SettingsRow icon={<UserPlus size={16} />} label="Add another account" onClick={() => {}} />
+        <SettingsRow icon={<UserPlus size={16} />} label="Switch account" onClick={onOpenAccounts} />
 
         <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.muted, margin: '16px 0 6px 2px' }}>About</div>
         <SettingsRow icon={<FileText size={16} />} label="Privacy policy" onClick={onOpenPrivacy} />
         <SettingsRow icon={<HelpCircle size={16} />} label="Help & support" onClick={() => {}} />
 
         <div style={{ height: 10 }} />
+        <SettingsRow icon={<Trash2 size={16} />} label="Delete my account" danger onClick={onOpenDelete} />
         <SettingsRow icon={<LogOut size={16} />} label="Log out" danger onClick={onLogout} />
+      </div>
+    </div>
+  );
+}
+
+function AccountSwitcherPanel({ accounts, currentId, onBack, onSwitch, onRemove, onAdd }) {
+  const { theme } = useTheme();
+  return (
+    <div style={{
+      position: 'absolute', inset: 0, background: 'rgba(28,29,33,0.4)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 31, padding: 18,
+    }} className="zchat-fade">
+      <div style={glass(theme, {
+        background: theme.panelBg, borderRadius: 24, padding: 26,
+        width: '100%', maxWidth: 340, position: 'relative', maxHeight: '85vh', overflowY: 'auto',
+      })}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+          <ArrowLeft size={19} style={{ cursor: 'pointer', color: theme.ink }} onClick={onBack} />
+          <div style={{ fontWeight: 800, fontSize: 17, color: theme.ink }}>Switch account</div>
+        </div>
+        {accounts.map((a) => (
+          <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 4px', borderBottom: `1px solid ${theme.border}` }}>
+            <div onClick={() => a.id !== currentId && onSwitch(a)} style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, cursor: a.id !== currentId ? 'pointer' : 'default', minWidth: 0 }}>
+              <Avatar emoji={a.avatar} name={a.name} size={40} />
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: 13.5, color: theme.ink }}>
+                  {a.name}{a.id === currentId && <span style={{ color: theme.coral, fontWeight: 700 }}> · Active</span>}
+                </div>
+                <div style={{ fontSize: 11.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.email}</div>
+              </div>
+            </div>
+            {a.id !== currentId && <X size={16} color={theme.muted} style={{ cursor: 'pointer', flexShrink: 0 }} onClick={() => onRemove(a.id)} />}
+          </div>
+        ))}
+        <button onClick={onAdd} style={{ ...primaryBtn(theme, false), marginTop: 16 }}>+ Add another account</button>
       </div>
     </div>
   );
@@ -950,14 +1043,14 @@ function FollowRequestsPanel({ userId, onClose, onOpenProfile }) {
   );
 }
 
-function DiscoverPanel({ myId, onClose, onOpenProfile }) {
+function DiscoverPanel({ myId, blockedIds, onClose, onOpenProfile }) {
   const { theme } = useTheme();
   const [people, setPeople] = useState(null);
 
   useEffect(() => {
     (async () => {
-      const { data } = await supabase.from('profiles').select('*').eq('is_private', false).neq('id', myId).limit(40);
-      setPeople(sanitizeAvatarList(data, myId));
+      const { data } = await supabase.from('profiles').select('*').eq('is_private', false).eq('is_deleted', false).neq('id', myId).limit(40);
+      setPeople(sanitizeAvatarList(data, myId).filter((p) => !blockedIds.has(p.id)));
     })();
   }, [myId]);
 
@@ -982,6 +1075,7 @@ function DiscoverPanel({ myId, onClose, onOpenProfile }) {
     </div>
   );
 }
+
 
 
 function IconDownload({ size = 15, color = 'currentColor' }) {
@@ -1383,10 +1477,10 @@ function CreateGroupPanel({ myId, onClose, onCreated }) {
     }
     const { data: group, error } = await supabase.from('groups').insert({ name: name.trim().slice(0, 50), bio: bio.trim() || null, avatar: avatarUrl, created_by: myId }).select().single();
     if (error || !group) { setCreating(false); setErr(error?.message || 'Could not create the group.'); return; }
-    const { error: memberErr } = await supabase.from('group_members').insert({ group_id: group.id, user_id: myId, role: 'admin' });
+    const { error: memberErr } = await supabase.from('group_members').insert({ group_id: group.id, user_id: myId, role: 'admin', added_by: myId });
     if (memberErr) { setCreating(false); setErr(memberErr.message); return; }
     if (selected.length) {
-      const { error: inviteErr } = await supabase.from('group_members').insert(selected.slice(0, 49).map((p) => ({ group_id: group.id, user_id: p.id, role: 'member' })));
+      const { error: inviteErr } = await supabase.from('group_members').insert(selected.slice(0, 49).map((p) => ({ group_id: group.id, user_id: p.id, role: 'member', added_by: myId })));
       if (inviteErr) { setCreating(false); setErr(inviteErr.message); return; }
     }
     setCreating(false);
@@ -1477,12 +1571,16 @@ function CreateGroupPanel({ myId, onClose, onCreated }) {
   );
 }
 
-function GroupInfoPanel({ group, members, myId, myRole, isOwner, onClose, onPromote, onDemote, onMute, onUnmute, onKick, onLeave, onOpenProfile, onSaveBio }) {
+function GroupInfoPanel({ group, members, myId, myRole, isOwner, onClose, onPromote, onDemote, onMute, onUnmute, onKick, onLeave, onOpenProfile, onSaveBio, onSaveName, onSaveAvatar, onAddMembers }) {
   const { theme } = useTheme();
   const isAdmin = myRole === 'admin';
   const [menuFor, setMenuFor] = useState(null);
   const [editingBio, setEditingBio] = useState(false);
   const [bio, setBio] = useState(group.bio || '');
+  const [editingName, setEditingName] = useState(false);
+  const [name, setName] = useState(group.name);
+  const [cropFile, setCropFile] = useState(null);
+  const [showAddMembers, setShowAddMembers] = useState(false);
   const soleAdmin = isAdmin && members.filter((m) => m.role === 'admin').length === 1 && members.length > 1;
   return (
     <div style={{ position: 'absolute', inset: 0, background: theme.panelBg, zIndex: 40, display: 'flex', flexDirection: 'column' }} className="zchat-fade">
@@ -1492,8 +1590,32 @@ function GroupInfoPanel({ group, members, myId, myRole, isOwner, onClose, onProm
       </div>
       <div style={{ overflowY: 'auto', flex: 1, padding: '14px 18px' }}>
         <div style={{ textAlign: 'center', marginBottom: 14 }}>
-          <GroupAvatar avatar={group.avatar} name={group.name} size={72} />
-          <div style={{ fontWeight: 800, fontSize: 16, color: theme.ink, marginTop: 8 }}>{group.name}</div>
+          <div onClick={() => isAdmin && document.getElementById('group-info-avatar-input').click()} style={{ display: 'inline-block', cursor: isAdmin ? 'pointer' : 'default', position: 'relative' }}>
+            <GroupAvatar avatar={group.avatar} name={group.name} size={72} />
+            {isAdmin && (
+              <div style={{ position: 'absolute', bottom: 0, right: 0, width: 24, height: 24, borderRadius: '50%', background: theme.coral, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Camera size={12} color="white" />
+              </div>
+            )}
+          </div>
+          {isAdmin && (
+            <input id="group-info-avatar-input" type="file" accept="image/*" style={{ display: 'none' }}
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) setCropFile(f); e.target.value = ''; }} />
+          )}
+          {editingName ? (
+            <div style={{ display: 'flex', gap: 6, marginTop: 8, justifyContent: 'center' }}>
+              <input value={name} onChange={(e) => setName(e.target.value.slice(0, 50))}
+                style={{ ...inputStyle(theme), fontSize: 13, width: 160 }} />
+              <button onClick={() => { onSaveName(name); setEditingName(false); }} style={{
+                padding: '0 14px', borderRadius: 12, border: 'none', background: theme.coral, color: 'white',
+                fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: FONT,
+              }}>Save</button>
+            </div>
+          ) : (
+            <div onClick={() => isAdmin && setEditingName(true)} style={{ fontWeight: 800, fontSize: 16, color: theme.ink, marginTop: 8, cursor: isAdmin ? 'pointer' : 'default' }}>
+              {group.name}
+            </div>
+          )}
           <div style={{ fontSize: 12, color: theme.muted }}>{members.length} members</div>
         </div>
 
@@ -1513,7 +1635,12 @@ function GroupInfoPanel({ group, members, myId, myRole, isOwner, onClose, onProm
           </div>
         )}
 
-        <div style={{ fontSize: 11, color: theme.muted, marginBottom: 8, fontWeight: 800 }}>MEMBERS</div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+          <div style={{ fontSize: 11, color: theme.muted, fontWeight: 800 }}>MEMBERS</div>
+          {isAdmin && (
+            <div onClick={() => setShowAddMembers(true)} style={{ fontSize: 12, color: theme.coral, fontWeight: 700, cursor: 'pointer' }}>+ Add</div>
+          )}
+        </div>
         {members.map((m) => (
           <div key={m.user_id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 2px', position: 'relative' }}>
             <div onClick={() => onOpenProfile(m.profile)} style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, cursor: 'pointer', minWidth: 0 }}>
@@ -1522,9 +1649,13 @@ function GroupInfoPanel({ group, members, myId, myRole, isOwner, onClose, onProm
                 <div style={{ fontWeight: 700, fontSize: 13.5, color: theme.ink, display: 'flex', alignItems: 'center', gap: 6 }}>
                   {m.profile.name}{m.user_id === myId && <span style={{ color: theme.muted, fontWeight: 500 }}>(you)</span>}
                 </div>
-                <div style={{ display: 'flex', gap: 6 }}>
+                <div style={{ display: 'flex', gap: 6, marginBottom: 2 }}>
                   {m.role === 'admin' && <span style={{ fontSize: 10.5, color: theme.coral, fontWeight: 700 }}>Admin</span>}
                   {m.muted && <span style={{ fontSize: 10.5, color: theme.muted, fontWeight: 700 }}>Muted</span>}
+                </div>
+                <div style={{ fontSize: 10.5, color: theme.muted }}>
+                  Added by {m.added_by === m.user_id ? 'themself' : (members.find((x) => x.user_id === m.added_by)?.profile.name || 'someone who left')}
+                  {' · '}{m.joined_at ? new Date(m.joined_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) + ' ' + new Date(m.joined_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : ''}
                 </div>
               </div>
             </div>
@@ -1558,6 +1689,71 @@ function GroupInfoPanel({ group, members, myId, myRole, isOwner, onClose, onProm
           onClick={() => { if (!soleAdmin) onLeave(); }}>
           {soleAdmin ? 'Leave group (assign a new admin first)' : 'Leave group'}
         </span>
+      </div>
+      {cropFile && (
+        <AvatarCropper file={cropFile} onCancel={() => setCropFile(null)} onConfirm={(blob) => { onSaveAvatar(blob); setCropFile(null); }} />
+      )}
+      {showAddMembers && (
+        <AddMembersPanel myId={myId} existingIds={members.map((m) => m.user_id)}
+          onClose={() => setShowAddMembers(false)}
+          onAdd={(people) => { onAddMembers(people); setShowAddMembers(false); }} />
+      )}
+    </div>
+  );
+}
+function AddMembersPanel({ myId, existingIds, onClose, onAdd }) {
+  const { theme } = useTheme();
+  const [q, setQ] = useState('');
+  const [results, setResults] = useState([]);
+  const [selected, setSelected] = useState([]);
+  const timer = useRef(null);
+
+  const doSearch = (val) => {
+    setQ(val);
+    clearTimeout(timer.current);
+    if (val.trim().length < 2) { setResults([]); return; }
+    timer.current = setTimeout(async () => {
+      const { data } = await searchByUsername(val.trim());
+      setResults(sanitizeAvatarList(data, myId).filter((u) => u.id !== myId && !existingIds.includes(u.id) && !selected.find((s) => s.id === u.id)));
+    }, 300);
+  };
+
+  const toggleSelect = (p) => {
+    setSelected((prev) => (prev.find((s) => s.id === p.id) ? prev.filter((s) => s.id !== p.id) : [...prev, p]));
+  };
+
+  return (
+    <div style={{ position: 'absolute', inset: 0, background: theme.panelBg, zIndex: 45, display: 'flex', flexDirection: 'column' }} className="zchat-fade">
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 18px', borderBottom: `1px solid ${theme.border}` }}>
+        <ArrowLeft size={20} style={{ cursor: 'pointer', color: theme.ink }} onClick={onClose} />
+        <div style={{ fontWeight: 800, fontSize: 17, color: theme.ink }}>Add members{selected.length ? ` (${selected.length})` : ''}</div>
+      </div>
+      <div style={{ padding: '14px 18px 8px' }}>
+        <div style={{ position: 'relative' }}>
+          <Search size={15} color={theme.muted} style={{ position: 'absolute', left: 12, top: 12 }} />
+          <input value={q} onChange={(e) => doSearch(e.target.value)} placeholder="Search username" autoCapitalize="none"
+            style={{ ...inputStyle(theme), padding: '9px 12px 9px 34px', fontSize: 13.5 }} />
+        </div>
+      </div>
+      <div style={{ overflowY: 'auto', flex: 1, padding: '0 18px' }}>
+        {results.map((p) => (
+          <div key={p.id} onClick={() => toggleSelect(p)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 4px', cursor: 'pointer' }}>
+            <Avatar emoji={p.avatar} name={p.name} size={40} />
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 700, fontSize: 14, color: theme.ink }}>{p.name}</div>
+              <div style={{ fontSize: 11.5, color: theme.muted }}>@{p.username}</div>
+            </div>
+            <div style={{
+              width: 20, height: 20, borderRadius: '50%', border: `2px solid ${selected.find((s) => s.id === p.id) ? theme.coral : theme.border}`,
+              background: selected.find((s) => s.id === p.id) ? theme.coral : 'transparent',
+            }} />
+          </div>
+        ))}
+      </div>
+      <div style={{ padding: 18 }}>
+        <button onClick={() => onAdd(selected)} disabled={selected.length === 0} style={primaryBtn(theme, selected.length === 0)}>
+          Add {selected.length || ''}
+        </button>
       </div>
     </div>
   );
@@ -1733,7 +1929,7 @@ function AvatarCropper({ file, onCancel, onConfirm }) {
   );
 }
 
-function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, onSaved, onOpenSettings, onOpenProfile, onMessage }) {
+function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, onSaved, onOpenSettings, onOpenProfile, onMessage, isBlocked, onBlock, onUnblock }) {
   const { theme } = useTheme();
   const [reportOpen, setReportOpen] = useState(false);
   const [reportReason, setReportReason] = useState('');
@@ -1865,7 +2061,28 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
     if (data) { onSaved(data); setEditing(false); }
   };
 
-  return (
+  return (profile.is_deleted && !isSelf) ? (
+    <div style={{
+      position: 'absolute', inset: 0, background: 'rgba(20,16,14,0.5)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 30, padding: 18,
+    }} className="zchat-fade">
+      <div style={{
+        background: theme.panelBg, borderRadius: 28, padding: 30, textAlign: 'center',
+        width: '100%', maxWidth: 320, boxShadow: '0 30px 80px rgba(0,0,0,0.3)',
+      }}>
+        <div onClick={onClose} style={{
+          position: 'absolute', top: 16, right: 16, width: 30, height: 30, borderRadius: '50%',
+          background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+        }}><X size={16} color={theme.ink} /></div>
+        <div style={{
+          width: 64, height: 64, borderRadius: '50%', margin: '10px auto 14px', background: theme.rowBg,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.muted,
+        }}><User size={28} /></div>
+        <div style={{ fontWeight: 800, fontSize: 16, color: theme.ink, marginBottom: 6 }}>User not found</div>
+        <div style={{ fontSize: 12.5, color: theme.muted }}>This account no longer exists.</div>
+      </div>
+    </div>
+  ) : (
     <div style={{
       position: 'absolute', inset: 0, background: 'rgba(20,16,14,0.5)',
       display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 30, padding: 18,
@@ -1938,6 +2155,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
               </div>
             )
           )}
+
           {isSelf && !editing && (
             <div style={{ marginTop: 16 }}>
               <button onClick={() => setEditing(true)} style={{
@@ -2082,6 +2300,15 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
               <Flag size={14} /> Report this account
             </button>
           )}
+          {!isSelf && !editing && (
+            <button onClick={() => (isBlocked ? onUnblock(profile.id) : onBlock(profile.id))} style={{
+              marginTop: 8, display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center',
+              width: '100%', padding: 12, borderRadius: 14, border: `1.5px solid ${theme.border}`, background: 'transparent',
+              color: theme.ink, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT,
+            }}>
+              {isBlocked ? 'Unblock this account' : 'Block this account'}
+            </button>
+          )}
           {!isSelf && reportOpen && !reportSent && (
             <div style={{ marginTop: 16, textAlign: 'left' }} className="zchat-fade">
               <textarea value={reportReason} onChange={(e) => setReportReason(e.target.value)}
@@ -2168,7 +2395,7 @@ function AudioBubble({ url, isMe }) {
   );
 }
 
-function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSelect, onLongPress, onOpenImage, reactions, onReact, onOpenWhoReacted, replyPreview, onSwipeReply, senderLabel }) {
+function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSelect, onLongPress, onOpenImage, reactions, onReact, onOpenWhoReacted, replyPreview, onSwipeReply, senderLabel, hideReadStatus }) {
   const { theme } = useTheme();
   const [hover, setHover] = useState(false);
   const [burstHeart, setBurstHeart] = useState(false);
@@ -2260,7 +2487,7 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
               display: 'flex', alignItems: 'center', gap: 4, fontSize: 10.5, color: theme.muted, fontStyle: 'italic',
               marginBottom: 3, padding: m.type !== 'text' ? '0 4px' : 0,
             }}>
-              <Send size={10} style={{ transform: 'scaleX(-1)' }} /> Forwarded
+              <Send size={10} style={{ transform: 'scaleX(-1)' }} /> {m.forwarded_from_name ? `Forwarded from ${m.forwarded_from_name}` : 'Forwarded'}
             </div>
           )}
           {replyPreview && !m.deleted && (
@@ -2303,7 +2530,7 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
           <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 4, marginTop: 3, padding: m.type !== 'text' && !m.deleted ? '0 4px 2px' : 0 }}>
             {m.edited && !m.deleted && <span style={{ fontSize: 10, color: theme.muted, fontStyle: 'italic' }}>edited</span>}
             <span style={{ fontSize: 10.5, color: theme.muted }}>{time}</span>
-            {isMe && !m.deleted && <StatusTicks status={m.read ? 'read' : 'sent'} />}
+            {isMe && !m.deleted && <StatusTicks status={(!hideReadStatus && m.read) ? 'read' : 'sent'} />}
           </div>
         </div>
         {groupedEntries.length > 0 && !m.deleted && (
@@ -2325,7 +2552,6 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
     </div>
   );
 }
-
 function playPing() {
   try {
     if (localStorage.getItem('zchat-sound') === 'off') return;
@@ -2516,7 +2742,7 @@ function DeleteChatConfirm({ name, onCancel, onConfirm }) {
   );
 }
 
-function ChatApp({ session, onLogout, onNeedsProfile }) {
+function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAccount, onAddAccount, onRemoveAccount }) {
   const { theme, bgPatternOn } = useTheme();
   const [me, setMe] = useState(null);
   const [profileCheckFailed, setProfileCheckFailed] = useState(false);
@@ -2559,6 +2785,9 @@ function ChatApp({ session, onLogout, onNeedsProfile }) {
   const [showArchived, setShowArchived] = useState(false);
   const [archivedConversations, setArchivedConversations] = useState([]);
   const [showChatSettings, setShowChatSettings] = useState(false);
+  const [showAccountSwitcher, setShowAccountSwitcher] = useState(false);
+  const [showDeleteAccount, setShowDeleteAccount] = useState(false);
+  const [myBlockedIds, setMyBlockedIds] = useState(new Set());
   const [groups, setGroups] = useState([]);
   const [activeGroup, setActiveGroup] = useState(null);
   const [groupMembers, setGroupMembers] = useState([]);
@@ -2635,6 +2864,29 @@ function ChatApp({ session, onLogout, onNeedsProfile }) {
     setMyLocks(map);
   };
 
+  const loadMyBlocks = async () => {
+    const { data } = await supabase.from('blocks').select('blocked_id').eq('blocker_id', session.user.id);
+    setMyBlockedIds(new Set((data || []).map((b) => b.blocked_id)));
+  };
+
+  const blockUser = async (userId) => {
+    await supabase.from('blocks').insert({ blocker_id: session.user.id, blocked_id: userId });
+    setMyBlockedIds((prev) => new Set(prev).add(userId));
+    if (activeProfile?.id === userId) { setActiveProfile(null); setMobileShowChat(false); }
+    setProfileOf(null);
+    loadConversations();
+  };
+  const unblockUser = async (userId) => {
+    await supabase.from('blocks').delete().eq('blocker_id', session.user.id).eq('blocked_id', userId);
+    setMyBlockedIds((prev) => { const n = new Set(prev); n.delete(userId); return n; });
+  };
+
+  const deleteMyAccount = async () => {
+    await supabase.from('profiles').update({ is_deleted: true }).eq('id', session.user.id);
+    removeAccountEntry(session.user.id);
+    onLogout();
+  };
+
   const enableChatLock = async (conv, pin) => {
     const hash = await hashPin(pin);
     await supabase.from('chat_locks').upsert({ conversation_id: conv.id, owner_id: session.user.id, pin_hash: hash }, { onConflict: 'conversation_id,owner_id' });
@@ -2661,6 +2913,7 @@ function ChatApp({ session, onLogout, onNeedsProfile }) {
     const mergedAll = visible
       .map((c) => {
         const otherId = c.user_a === session.user.id ? c.user_b : c.user_a;
+        if (myBlockedIds.has(otherId)) return null;
         const profile = profs?.find((p) => p.id === otherId);
         const nick = nicks?.find((n) => n.contact_id === otherId);
         if (!profile) return null;
@@ -2704,7 +2957,7 @@ function ChatApp({ session, onLogout, onNeedsProfile }) {
   }, [profileCheckFailed]);
 
   useEffect(() => {
-    if (me) { loadConversations(); loadMyLocks(); loadGroups(); }
+    if (me) { loadConversations(); loadMyLocks(); loadGroups(); loadMyBlocks(); }
   }, [me]);
 
   useEffect(() => {
@@ -2799,7 +3052,11 @@ function ChatApp({ session, onLogout, onNeedsProfile }) {
         const row = payload.new;
         if (!row.group_id || !myGroupIds.includes(row.group_id)) return;
         if (row.sender_id !== me.id && (!activeGroup || row.group_id !== activeGroup.id)) playPing();
-        setMessages((prev) => (activeGroup && row.group_id === activeGroup.id ? [...prev, row] : prev));
+        setMessages((prev) => {
+          if (!activeGroup || row.group_id !== activeGroup.id) return prev;
+          if (prev.some((m) => m.id === row.id)) return prev;
+          return [...prev, row];
+        });
         loadGroups();
       })
       .subscribe();
@@ -2859,7 +3116,7 @@ function ChatApp({ session, onLogout, onNeedsProfile }) {
     setSearching(true);
     searchTimer.current = setTimeout(async () => {
       const { data } = await searchByUsername(val.trim());
-      setResults(sanitizeAvatarList(data, session.user.id).filter((u) => u.id !== session.user.id));
+      setResults(sanitizeAvatarList(data, session.user.id).filter((u) => u.id !== session.user.id && !u.is_deleted && !myBlockedIds.has(u.id)));
       setSearching(false);
     }, 300);
   };
@@ -2902,9 +3159,11 @@ function ChatApp({ session, onLogout, onNeedsProfile }) {
     setLoadingConvo(false);
     loadGroupMembers(group.id);
   };
-  const sendGroupMessage = async (type, content, mediaUrl) => {
+
+  const sendGroupMessage = async (type, content, mediaUrl, forwardedFromName) => {
     const { data, error } = await supabase.from('messages').insert({
       sender_id: session.user.id, group_id: activeGroup.id, type, content: content || null, media_url: mediaUrl || null,
+      forwarded: !!forwardedFromName, forwarded_from_name: forwardedFromName || null,
     }).select().single();
     if (!error && data) {
       setMessages((prev) => [...prev, data]);
@@ -2931,10 +3190,36 @@ function ChatApp({ session, onLogout, onNeedsProfile }) {
     await supabase.from('group_members').update({ muted: false }).eq('group_id', activeGroup.id).eq('user_id', userId);
     loadGroupMembers(activeGroup.id);
   };
+  const toggleHideActivity = async () => {
+    const next = !me.hide_activity;
+    setMe((prev) => ({ ...prev, hide_activity: next }));
+    await supabase.from('profiles').update({ hide_activity: next }).eq('id', session.user.id);
+  };
+
   const saveGroupBio = async (bio) => {
     await supabase.from('groups').update({ bio: bio.trim() || null }).eq('id', activeGroup.id);
     setActiveGroup((prev) => ({ ...prev, bio: bio.trim() || null }));
     loadGroups();
+  };
+  const saveGroupName = async (name) => {
+    if (!name.trim()) return;
+    await supabase.from('groups').update({ name: name.trim() }).eq('id', activeGroup.id);
+    setActiveGroup((prev) => ({ ...prev, name: name.trim() }));
+    loadGroups();
+  };
+  const saveGroupAvatar = async (blob) => {
+    const file = new File([blob], 'group.jpg', { type: 'image/jpeg' });
+    const { url, error } = await uploadMedia(file, session.user.id);
+    if (!error && url) {
+      await supabase.from('groups').update({ avatar: url }).eq('id', activeGroup.id);
+      setActiveGroup((prev) => ({ ...prev, avatar: url }));
+      loadGroups();
+    }
+  };
+  const addGroupMembers = async (people) => {
+    if (!people.length) return;
+    await supabase.from('group_members').insert(people.map((p) => ({ group_id: activeGroup.id, user_id: p.id, role: 'member', added_by: session.user.id })));
+    loadGroupMembers(activeGroup.id);
   };
   const kickMember = async (userId) => {
     await supabase.from('group_members').delete().eq('group_id', activeGroup.id).eq('user_id', userId);
@@ -2987,6 +3272,11 @@ function ChatApp({ session, onLogout, onNeedsProfile }) {
   };
 
   const findMessageById = (id) => messages.find((m) => m.id === id);
+  const labelForSender = (senderId) => {
+    if (senderId === session.user.id) return 'You';
+    if (activeGroup) return groupMembers.find((gm) => gm.user_id === senderId)?.profile.name || 'Member';
+    return activeProfile?.name || 'Unknown';
+  };
 
   const send = async () => {
     if (!activeProfile && !activeGroup) return;
@@ -2994,12 +3284,13 @@ function ChatApp({ session, onLogout, onNeedsProfile }) {
       const items = pendingForwardItems;
       if (items.length) {
         setPendingForwardItems([]);
-        for (const item of items) await sendGroupMessage(item.type, item.content, item.media_url);
+        for (const item of items) await sendGroupMessage(item.type, item.content, item.media_url, item.forwarded_from_name);
       }
       if (!draft.trim()) return;
       const text = draft.trim().slice(0, MAX_CHARS);
       setDraft('');
-      await sendGroupMessage('text', text, null);
+      const soloForwardName = items.length === 1 && items[0].type === 'text' ? items[0].forwarded_from_name : null;
+      await sendGroupMessage('text', text, null, soloForwardName);
       return;
     }
     const items = pendingForwardItems;
@@ -3008,8 +3299,9 @@ function ChatApp({ session, onLogout, onNeedsProfile }) {
       for (const item of items) {
         const { data } = await sendMessage(session.user.id, activeProfile.id, item.type, item.content || null, item.media_url || null);
         if (data) {
-          await supabase.from('messages').update({ forwarded: true }).eq('id', data.id);
+          await supabase.from('messages').update({ forwarded: true, forwarded_from_name: item.forwarded_from_name || null }).eq('id', data.id);
           data.forwarded = true;
+          data.forwarded_from_name = item.forwarded_from_name || null;
           setMessages((prev) => [...prev, data]);
           upsertConversation(activeProfile.id, item.content, item.type);
         }
@@ -3024,7 +3316,11 @@ function ChatApp({ session, onLogout, onNeedsProfile }) {
     const { data } = await sendMessage(session.user.id, activeProfile.id, 'text', text, null);
     if (data) {
       if (replyId) { await supabase.from('messages').update({ reply_to_id: replyId }).eq('id', data.id); data.reply_to_id = replyId; }
-      if (wasForward) { await supabase.from('messages').update({ forwarded: true }).eq('id', data.id); data.forwarded = true; }
+      if (wasForward) {
+        await supabase.from('messages').update({ forwarded: true, forwarded_from_name: items[0].forwarded_from_name || null }).eq('id', data.id);
+        data.forwarded = true;
+        data.forwarded_from_name = items[0].forwarded_from_name || null;
+      }
       setMessages((prev) => [...prev, data]);
       upsertConversation(activeProfile.id, text, 'text');
     }
@@ -3102,7 +3398,6 @@ function ChatApp({ session, onLogout, onNeedsProfile }) {
     const { data } = await deleteMessage(messageId);
     if (data) setMessages((prev) => prev.map((m) => (m.id === messageId ? data : m)));
   };
-
   const handleReport = async (profile, reason) => {
     await reportUser(session.user.id, profile.id, reason);
   };
@@ -3162,7 +3457,8 @@ function ChatApp({ session, onLogout, onNeedsProfile }) {
   };
 
   const openForward = () => {
-    setForwardTargets(selectedMessages.length ? selectedMessages : (viewerUrl ? [{ type: 'image', media_url: viewerUrl, content: null }] : []));
+    const targets = selectedMessages.length ? selectedMessages : (viewerUrl ? [{ type: 'image', media_url: viewerUrl, content: null }] : []);
+    setForwardTargets(targets.map((m) => (m.sender_id ? { ...m, forwarded_from_name: labelForSender(m.sender_id) } : m)));
     setForwardOpen(true);
   };
 
@@ -3182,7 +3478,7 @@ function ChatApp({ session, onLogout, onNeedsProfile }) {
   const doStartReplySingle = (m) => { setReplyingTo(m); setEditingMessage(null); setContextMenuFor(null); };
   const doDeleteForMeSingle = (m) => { hideMessagesLocally([m.id]); setMessages((prev) => prev.filter((x) => x.id !== m.id)); setContextMenuFor(null); };
   const doDeleteForEveryoneSingle = async (m) => { await deleteMessage(m.id); setMessages((prev) => prev.map((x) => (x.id === m.id ? { ...x, deleted: true } : x))); setContextMenuFor(null); };
-  const openForwardSingle = (m) => { setForwardTargets([m]); setForwardOpen(true); setContextMenuFor(null); };
+  const openForwardSingle = (m) => { setForwardTargets([{ ...m, forwarded_from_name: labelForSender(m.sender_id) }]); setForwardOpen(true); setContextMenuFor(null); };
   const doReportSingle = (m) => { setReportModalFor(m.id); setContextMenuFor(null); };
   const doSelectMultipleFrom = (m) => { setContextMenuFor(null); toggleSelect(m.id); };
   const doReactSingle = (m, emoji) => { reactToMessage(m.id, emoji); setContextMenuFor(null); };
@@ -3233,7 +3529,7 @@ function ChatApp({ session, onLogout, onNeedsProfile }) {
   };
 
   const sendTyping = () => {
-    if (!typingChannelRef.current) return;
+    if (!typingChannelRef.current || me?.hide_activity) return;
     typingChannelRef.current.send({ type: 'broadcast', event: 'typing', payload: { from: session.user.id } });
   };
 
@@ -3276,13 +3572,16 @@ function ChatApp({ session, onLogout, onNeedsProfile }) {
             profile={profileOf.id === me.id ? me : profileOf}
             isSelf={profileOf.id === me.id}
             userId={session.user.id}
-            isOnline={onlineIds.has(profileOf.id)}
+            isOnline={!profileOf.hide_activity && onlineIds.has(profileOf.id)}
             onClose={() => setProfileOf(null)}
             onReport={handleReport}
             onOpenSettings={() => setShowSettings(true)}
             onOpenProfile={(p) => setProfileOf(p)}
             onMessage={(p) => { setProfileOf(null); openChat(p, null); }}
             onSaved={(updated) => { setMe(updated.id === me.id ? { ...updated, email: me.email } : me); if (activeProfile?.id === updated.id) setActiveProfile(updated); }}
+            isBlocked={myBlockedIds.has(profileOf.id)}
+            onBlock={blockUser}
+            onUnblock={unblockUser}
           />
         )}
         {showSettings && !showPrivacy && (
@@ -3291,6 +3590,10 @@ function ChatApp({ session, onLogout, onNeedsProfile }) {
             onOpenPrivacy={() => setShowPrivacy(true)}
             onOpenRequests={() => setShowFollowRequests(true)}
             onLogout={() => setShowLogoutConfirm(true)}
+            hideActivity={!!me.hide_activity}
+            onToggleActivity={toggleHideActivity}
+            onOpenAccounts={() => setShowAccountSwitcher(true)}
+            onOpenDelete={() => setShowDeleteAccount(true)}
           />
         )}
         {showPrivacy && <PrivacyPanel onBack={() => setShowPrivacy(false)} />}
@@ -3299,7 +3602,7 @@ function ChatApp({ session, onLogout, onNeedsProfile }) {
             onOpenProfile={(p) => { setShowFollowRequests(false); setShowSettings(false); setProfileOf(p); }} />
         )}
         {showDiscover && (
-          <DiscoverPanel myId={session.user.id} onClose={() => setShowDiscover(false)}
+          <DiscoverPanel myId={session.user.id} blockedIds={myBlockedIds} onClose={() => setShowDiscover(false)}
             onOpenProfile={(p) => { setShowDiscover(false); setProfileOf(p); }} />
         )}
         {showLogoutConfirm && (
@@ -3367,7 +3670,7 @@ function ChatApp({ session, onLogout, onNeedsProfile }) {
                       borderRadius: 14, marginBottom: 2, borderBottom: `1px solid ${theme.border}`,
                       background: activeProfile?.id === u.id ? theme.rowBg : 'transparent',
                     }}>
-                      <Avatar emoji={u.avatar} name={u.name} online={onlineIds.has(u.id)} size={44} />
+                      <Avatar emoji={u.avatar} name={u.name} online={!u.hide_activity && onlineIds.has(u.id)} size={44} />
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontWeight: unread ? 800 : 700, fontSize: 14.5, color: theme.ink }}>{u.name}</div>
                         <div style={{
@@ -3398,7 +3701,7 @@ function ChatApp({ session, onLogout, onNeedsProfile }) {
                     background: activeProfile?.id === c.otherProfile.id ? theme.rowBg : (pinned ? `${theme.coral}0A` : 'transparent'),
                   }}>
                     <div onClick={() => openChat(c.otherProfile, c.id)} style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 }}>
-                      <Avatar emoji={c.otherProfile.avatar} name={c.otherProfile.name} online={onlineIds.has(c.otherProfile.id)} size={44} />
+                      <Avatar emoji={c.otherProfile.avatar} name={c.otherProfile.name} online={!c.otherProfile.hide_activity && onlineIds.has(c.otherProfile.id)} size={44} />
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                           {pinned && <span style={{ fontSize: 11 }}>📌</span>}
@@ -3486,7 +3789,7 @@ function ChatApp({ session, onLogout, onNeedsProfile }) {
                   onClick={() => setProfileOf(activeProfile)}>
                   <ArrowLeft size={20} style={{ cursor: 'pointer', display: 'none' }} className="zchat-back"
                     onClick={(e) => { e.stopPropagation(); setMobileShowChat(false); }} />
-                  <Avatar emoji={activeProfile.avatar} name={activeProfile.name} online={onlineIds.has(activeProfile.id)} size={38} />
+                  <Avatar emoji={activeProfile.avatar} name={activeProfile.name} online={!activeProfile.hide_activity && onlineIds.has(activeProfile.id)} size={38} />
                   <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: 800, fontSize: 15, color: theme.ink }}>{activeProfile.name}</div>
                     <div style={{ fontSize: 12, color: typingFrom ? theme.coral : theme.muted, fontWeight: typingFrom ? 700 : 400 }}>
@@ -3546,6 +3849,7 @@ function ChatApp({ session, onLogout, onNeedsProfile }) {
                         onOpenWhoReacted={(id) => setWhoReactedFor(messageLikes[id] || [])}
                         onSwipeReply={(msg) => { setReplyingTo(msg); setEditingMessage(null); }}
                         senderLabel={activeGroup && m.sender_id !== session.user.id ? (senderMember?.profile.name || 'Member') : null}
+                        hideReadStatus={!!activeProfile?.hide_activity}
                         replyPreview={m.reply_to_id ? (() => {
                           const rm = findMessageById(m.reply_to_id);
                           if (!rm) return null;
@@ -3735,7 +4039,22 @@ function ChatApp({ session, onLogout, onNeedsProfile }) {
             onKick={kickMember} onLeave={leaveGroup}
             onOpenProfile={(p) => { setShowGroupInfo(false); setProfileOf(p); }}
             onSaveBio={saveGroupBio}
+            onSaveName={saveGroupName}
+            onSaveAvatar={saveGroupAvatar}
+            onAddMembers={addGroupMembers}
           />
+        )}
+        {showAccountSwitcher && (
+          <AccountSwitcherPanel
+            accounts={savedAccounts} currentId={session.user.id}
+            onBack={() => setShowAccountSwitcher(false)}
+            onSwitch={onSwitchAccount}
+            onRemove={onRemoveAccount}
+            onAdd={onAddAccount}
+          />
+        )}
+        {showDeleteAccount && (
+          <DeleteAccountConfirm onCancel={() => setShowDeleteAccount(false)} onConfirm={deleteMyAccount} />
         )}
       </div>
       <style>{`
@@ -3791,6 +4110,7 @@ function AppInner() {
   const [registering, setRegistering] = useState(false);
   const [resumeNotice, setResumeNotice] = useState('');
   const [passwordRecovery, setPasswordRecovery] = useState(false);
+  const [savedAccounts, setSavedAccounts] = useState(getSavedAccounts());
   const { theme } = useTheme();
 
   const handleNeedsProfile = async () => {
@@ -3808,6 +4128,28 @@ function AppInner() {
     setScreen('login');
   };
 
+  const handleAddAccount = async () => {
+    await supabase.auth.signOut({ scope: 'local' });
+    setSession(null);
+    setScreen('login');
+  };
+
+  const handleSwitchAccount = async (account) => {
+    const { data, error } = await supabase.auth.setSession({ access_token: account.access_token, refresh_token: account.refresh_token });
+    if (!error && data.session) {
+      setSession(data.session);
+    } else {
+      removeAccountEntry(account.id);
+      setSavedAccounts(getSavedAccounts());
+      alert('That account session expired. Please log in again.');
+    }
+  };
+
+  const handleRemoveAccount = (id) => {
+    removeAccountEntry(id);
+    setSavedAccounts(getSavedAccounts());
+  };
+
   useEffect(() => {
     getSession().then((s) => { setSession(s); setChecked(true); });
     const { data: listener } = supabase.auth.onAuthStateChange((event, s) => {
@@ -3816,6 +4158,23 @@ function AppInner() {
     });
     return () => listener.subscription.unsubscribe();
   }, [passwordRecovery]);
+
+  useEffect(() => {
+    if (!session?.user) return;
+    (async () => {
+      const { data: profile } = await getProfile(session.user.id);
+      saveAccountEntry({
+        id: session.user.id,
+        email: session.user.email,
+        name: profile?.name || session.user.email,
+        username: profile?.username || '',
+        avatar: profile?.avatar || '',
+        access_token: session.access_token,
+        refresh_token: session.refresh_token,
+      });
+      setSavedAccounts(getSavedAccounts());
+    })();
+  }, [session?.access_token]);
 
   if (!checked) {
     return (
@@ -3839,6 +4198,10 @@ function AppInner() {
         session={session}
         onLogout={async () => { await signOut(); setSession(null); setScreen('login'); }}
         onNeedsProfile={handleNeedsProfile}
+        savedAccounts={savedAccounts}
+        onSwitchAccount={handleSwitchAccount}
+        onAddAccount={handleAddAccount}
+        onRemoveAccount={handleRemoveAccount}
       />
     );
   }
@@ -3871,6 +4234,4 @@ export default function App() {
     </ThemeProvider>
   );
 }
-
-
 
