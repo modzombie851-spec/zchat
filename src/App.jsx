@@ -101,6 +101,50 @@ const glass = (theme, extra = {}) => ({
 const FONT = "'Manrope', -apple-system, BlinkMacSystemFont, system-ui, sans-serif";
 const MAX_CHARS = 1000;
 
+const VAPID_PUBLIC_KEY = 'BPQngcM9FnRSK09G8_WBfzP_Gx6HXtYhtaIvXYLuGVFbojePmdVS-KUYUU63n6kFky3WBcbJLoZ48IvBmfoutAk';
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; i++) outputArray[i] = rawData.charCodeAt(i);
+  return outputArray;
+}
+
+async function subscribeToPush(userId) {
+  try {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') return;
+    const registration = await navigator.serviceWorker.ready;
+    let subscription = await registration.pushManager.getSubscription();
+    if (!subscription) {
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+      });
+    }
+    const json = subscription.toJSON();
+    await supabase.from('push_subscriptions').upsert({
+      user_id: userId,
+      endpoint: json.endpoint,
+      p256dh: json.keys.p256dh,
+      auth: json.keys.auth,
+    }, { onConflict: 'endpoint' });
+  } catch (err) {
+    console.error('Push subscription failed:', err);
+  }
+}
+
+async function sendPushNotification(userId, title, body, url) {
+  try {
+    await supabase.functions.invoke('send-push', { body: { user_id: userId, title, body, url: url || '/' } });
+  } catch (err) {
+    console.error('Push notify failed:', err);
+  }
+}
+
 function inputStyle(theme) {
   return {
     width: '100%', padding: '13px 14px', borderRadius: 13,
@@ -199,6 +243,10 @@ function AuthShell({ children }) {
       height: '100dvh', width: '100vw', background: theme.bgGradient,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       fontFamily: FONT, padding: 20, boxSizing: 'border-box', overflowY: 'auto', position: 'relative',
+      paddingTop: 'calc(20px + env(safe-area-inset-top))',
+      paddingBottom: 'calc(20px + env(safe-area-inset-bottom))',
+      paddingLeft: 'calc(20px + env(safe-area-inset-left))',
+      paddingRight: 'calc(20px + env(safe-area-inset-right))',
     }}>
       <GlobalStyle />
       <div style={{ position: 'absolute', top: 18, right: 18 }}><ThemeToggleIcon /></div>
@@ -2041,6 +2089,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
       await supabase.from('follows').insert({ follower_id: userId, following_id: profile.id, status });
       if (status === 'accepted') setFollowerCount((c) => c + 1);
       setFollowState(status);
+      sendPushNotification(profile.id, 'ZChat', status === 'pending' ? 'Someone requested to follow you' : 'Someone started following you', '/');
     }
     setFollowBusy(false);
   };
@@ -3000,7 +3049,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   }, [profileCheckFailed]);
 
   useEffect(() => {
-    if (me) { loadConversations(); loadMyLocks(); loadGroups(); loadMyBlocks(); }
+    if (me) { loadConversations(); loadMyLocks(); loadGroups(); loadMyBlocks(); subscribeToPush(session.user.id); }
   }, [me]);
 
   useEffect(() => {
@@ -3211,6 +3260,12 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (!error && data) {
       setMessages((prev) => [...prev, data]);
       loadGroups();
+      if (type !== 'system') {
+        const preview = type === 'text' ? content : type === 'image' ? '📷 Photo' : type === 'audio' ? '🎤 Voice message' : '🎥 Video';
+        groupMembers.filter((m) => m.user_id !== session.user.id && !m.muted).forEach((m) => {
+          sendPushNotification(m.user_id, `${me.name} in ${activeGroup.name}`, preview, '/');
+        });
+      }
     }
     return data;
   };
@@ -3391,6 +3446,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       }
       setMessages((prev) => [...prev, data]);
       upsertConversation(activeProfile.id, text, 'text');
+      sendPushNotification(activeProfile.id, me.name, text, '/');
     }
   };
 
@@ -3418,7 +3474,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         if (activeGroup) { await sendGroupMessage(kind, null, url); }
         else {
           const { data } = await sendMessage(session.user.id, activeProfile.id, kind, null, url);
-          if (data) setMessages((prev) => [...prev, data]);
+          if (data) { setMessages((prev) => [...prev, data]); sendPushNotification(activeProfile.id, me.name, kind === 'image' ? '📷 Photo' : kind === 'video' ? '🎥 Video' : 'New message', '/'); }
         }
       }
     }
@@ -3592,6 +3648,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       const status = activeProfile.is_private ? 'pending' : 'accepted';
       await supabase.from('follows').insert({ follower_id: session.user.id, following_id: activeProfile.id, status });
       setActiveFollowState(status);
+      sendPushNotification(activeProfile.id, 'ZChat', status === 'pending' ? `${me.name} requested to follow you` : `${me.name} started following you`, '/');
     }
     setActiveFollowBusy(false);
   };
@@ -3627,7 +3684,11 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   return (
     <div style={{
       fontFamily: FONT, height: '100dvh', width: '100vw', background: theme.bgGradient,
-      display: 'flex', justifyContent: 'center', alignItems: 'center', padding: 0, boxSizing: 'border-box',
+      display: 'flex', justifyContent: 'center', alignItems: 'center', boxSizing: 'border-box',
+      paddingTop: 'env(safe-area-inset-top)',
+      paddingBottom: 'env(safe-area-inset-bottom)',
+      paddingLeft: 'env(safe-area-inset-left)',
+      paddingRight: 'env(safe-area-inset-right)',
     }}>
       <GlobalStyle />
       <div style={glass(theme, {
@@ -4310,4 +4371,3 @@ export default function App() {
     </ThemeProvider>
   );
 }
-
