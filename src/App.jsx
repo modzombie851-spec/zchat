@@ -104,11 +104,26 @@ const glass = (theme, extra = {}) => ({
   ...extra,
 });
 
+function ZBrand({ size = 22, showTag = false }) {
+  const { theme, chatTheme } = useTheme();
+  const dotColor = chatTheme === 'love' ? '#FF4D8D' : chatTheme === 'neon' ? '#00FFDC' : theme.teal;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ fontFamily: 'Georgia, serif', fontWeight: 800, fontSize: size, color: theme.coral, letterSpacing: -0.5 }}>Z</span>
+        <span style={{ fontFamily: 'Georgia, serif', fontWeight: 700, fontSize: size * 0.86, color: theme.ink }}>chat</span>
+        <span style={{ width: size * 0.24, height: size * 0.24, borderRadius: '50%', background: dotColor, boxShadow: `0 0 8px ${dotColor}`, flexShrink: 0 }} />
+      </div>
+      {showTag && <div style={{ fontSize: size * 0.28, letterSpacing: 1.5, color: theme.muted, marginTop: 2, textTransform: 'uppercase' }}>More than messages</div>}
+    </div>
+  );
+}
+
 const CHAT_THEMES = {
   classic: { label: 'Classic', bubbleRadius: 18, borderStyle: 'solid', glow: false, bg: 'none' },
   glass: { label: 'Frosted Glass', bubbleRadius: 22, borderStyle: 'solid', glow: false, bg: 'blobs' },
   love: { label: 'Love', bubbleRadius: 26, borderStyle: 'gradient', glow: 'pink', bg: 'hearts' },
-  neon: { label: 'Neon', bubbleRadius: 10, borderStyle: 'solid', glow: 'cyan', bg: 'neon' },
+  neon: { label: 'Neon', bubbleRadius: 22, borderStyle: 'solid', glow: 'cyan', bg: 'neon' },
 };
 
 function AnimatedChatBackground({ chatTheme }) {
@@ -117,6 +132,7 @@ function AnimatedChatBackground({ chatTheme }) {
   if (spec.bg === 'hearts') {
     return (
       <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: -1 }}>
+        <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse at 30% 20%, rgba(120,20,80,0.35), transparent 60%), radial-gradient(ellipse at 80% 80%, rgba(60,10,60,0.3), transparent 55%)' }} />
         {Array.from({ length: 14 }).map((_, i) => (
           <span key={i} style={{
             position: 'absolute', left: `${(i * 37) % 100}%`, bottom: -30,
@@ -146,6 +162,7 @@ function AnimatedChatBackground({ chatTheme }) {
   if (spec.bg === 'neon') {
     return (
       <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: -1 }}>
+        <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse at 20% 10%, rgba(0,50,60,0.4), transparent 60%), radial-gradient(ellipse at 85% 85%, rgba(40,0,60,0.35), transparent 55%)' }} />
         <div style={{
           position: 'absolute', width: 260, height: 260, borderRadius: '50%', top: '10%', right: '-8%',
           background: 'radial-gradient(circle, rgba(0,255,220,0.16), transparent 70%)',
@@ -173,6 +190,10 @@ function bubbleThemeStyle(chatTheme, isMe, theme) {
     base.backgroundOrigin = 'border-box';
     base.backgroundClip = 'padding-box, border-box';
     base.border = '2px solid transparent';
+  }
+  if (chatTheme === 'neon') {
+    base.border = `1.5px solid ${isMe ? '#00FFDC' : '#B026FF'}`;
+    base.background = isMe ? 'rgba(0,255,220,0.10)' : 'rgba(176,38,255,0.10)';
   }
   if (spec.glow === 'pink') base.boxShadow = `0 0 16px ${isMe ? 'rgba(255,77,141,0.35)' : 'rgba(255,182,201,0.25)'}`;
   if (spec.glow === 'cyan') base.boxShadow = `0 0 14px ${isMe ? 'rgba(0,255,220,0.30)' : 'rgba(190,0,255,0.22)'}`;
@@ -296,10 +317,12 @@ function colorForName(name) {
 }
 
 /* WhatsApp-style: real photo if uploaded, otherwise a colored circle with the first initial */
-function Avatar({ emoji, name = '', online, size = 40 }) {
+function Avatar({ emoji, name = '', online, size = 40, ring = false }) {
+  const { chatTheme } = useTheme();
   const [imgFailed, setImgFailed] = useState(false);
   const isImage = typeof emoji === 'string' && emoji.startsWith('http') && !imgFailed;
   const initial = (name || '?').trim().charAt(0).toUpperCase() || '?';
+  const ringColor = chatTheme === 'love' ? '#FF4D8D' : chatTheme === 'neon' ? '#00FFDC' : null;
   return (
     <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
       <div style={{
@@ -307,7 +330,7 @@ function Avatar({ emoji, name = '', online, size = 40 }) {
         background: isImage ? 'transparent' : colorForName(name),
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         fontSize: size * 0.42, fontWeight: 800, color: 'white', fontFamily: FONT,
-        boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.25)',
+        boxShadow: (ring && ringColor) ? `0 0 0 2.5px ${ringColor}, 0 0 10px ${ringColor}88` : 'inset 0 0 0 1px rgba(255,255,255,0.25)',
         overflow: 'hidden',
       }}>
         {isImage
@@ -340,8 +363,7 @@ function AuthShell({ children }) {
       <div style={{ position: 'absolute', top: 18, right: 18 }}><ThemeToggleIcon /></div>
       <div style={{ width: '100%', maxWidth: 380 }} className="zchat-fade">
         <div style={{ textAlign: 'center', marginBottom: 26 }}>
-          <div style={{ fontFamily: 'Georgia, serif', fontSize: 32, color: theme.ink, letterSpacing: 0.3 }}>ZChat</div>
-          <div style={{ color: theme.muted, fontSize: 13.5, marginTop: 4 }}>Message people, your way.</div>
+          <div style={{ display: 'inline-flex' }}><ZBrand size={34} showTag /></div>
         </div>
         <div style={glass(theme, { borderRadius: 26, padding: 28, boxShadow: '0 12px 40px rgba(31,20,15,0.14)' })}>
           {children}
@@ -1498,7 +1520,7 @@ function ChatLockUnlock({ onCancel, onUnlock, correctHash }) {
   const { theme } = useTheme();
   const [pin, setPin] = useState('');
   const [err, setErr] = useState('');
-  
+
   const handleDigit = async (d) => {
     if (pin.length >= 4) return;
     const next = pin + d;
@@ -3944,6 +3966,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           flexDirection: 'column', borderRight: `1px solid ${theme.border}`,
         }} className="zchat-sidebar">
           <div style={{ padding: '18px 18px 14px' }}>
+            <div style={{ marginBottom: 14 }}><ZBrand size={22} /></div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }} onClick={() => setProfileOf(me)}>
                 <Avatar emoji={me.avatar} name={me.name} size={38} />
@@ -4060,7 +4083,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                           <span style={{ position: 'absolute', top: -4, right: -4, fontSize: 12 }}>💗</span>
                         </div>
                       ) : (
-                        <Avatar emoji={c.otherProfile.avatar} name={c.otherProfile.name} online={!c.otherProfile.hide_activity && onlineIds.has(c.otherProfile.id)} size={44} />
+                        <Avatar emoji={c.otherProfile.avatar} name={c.otherProfile.name} online={!c.otherProfile.hide_activity && onlineIds.has(c.otherProfile.id)} size={44} ring />
                       )}
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -4150,7 +4173,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                   onClick={() => setProfileOf(activeProfile)}>
                   <ArrowLeft size={20} style={{ cursor: 'pointer', display: 'none' }} className="zchat-back"
                     onClick={(e) => { e.stopPropagation(); setMobileShowChat(false); }} />
-                  <Avatar emoji={activeProfile.avatar} name={activeProfile.name} online={!activeProfile.hide_activity && onlineIds.has(activeProfile.id)} size={38} />
+                  <Avatar emoji={activeProfile.avatar} name={activeProfile.name} online={!activeProfile.hide_activity && onlineIds.has(activeProfile.id)} size={38} ring />
                   <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: 800, fontSize: 15, color: theme.ink }}>{activeProfile.name}</div>
                     <div style={{ fontSize: 12, color: typingFrom ? theme.coral : theme.muted, fontWeight: typingFrom ? 700 : 400 }}>
