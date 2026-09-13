@@ -8,7 +8,7 @@ self.addEventListener('push', (event) => {
     self.registration.showNotification(data.title, {
       body: data.body,
       icon: data.icon || '/icon-192.png',
-      badge: '/icon-192.png',
+      badge: '/badge-192.png',
       data: { url: data.url },
     })
   );
@@ -28,4 +28,12 @@ self.addEventListener('notificationclick', (event) => {
       if (clients.openWindow) return clients.openWindow(url);
     })
   );
+});
+
+self.addEventListener('install', () => {
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(self.clients.claim());
 });
