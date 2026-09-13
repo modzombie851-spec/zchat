@@ -3,7 +3,7 @@ import {
   Send, Paperclip, Search, Mail, ShieldCheck, AtSign, LogOut, Eye, EyeOff, Lock,
   Flag, X, Trash2, User, Phone, MoreVertical, Image as ImageIcon, Video as VideoIcon,
   Smile, ArrowLeft, Check, CheckCheck, Settings as SettingsIcon, Moon, Sun, UserPlus,
-  FileText, HelpCircle, ChevronRight, Compass, Bell, Volume2, VolumeX, Palette, Mic, Play, Pause, Download, Users, Camera,
+  FileText, HelpCircle, ChevronRight, Compass, Bell, Volume2, VolumeX, Palette, Mic, Play, Pause, Download, Users, Camera, Reply, Forward,
 } from 'lucide-react';
 import {
   supabase, registerWithEmail, verifyOtp, setPassword, signInWithPassword,
@@ -351,7 +351,7 @@ function AuthShell({ children }) {
   const { theme } = useTheme();
   return (
     <div style={{
-      height: '100dvh', width: '100vw', background: theme.bgGradient,
+      height: 'var(--app-height, 100dvh)', width: '100vw', background: theme.bgGradient,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       fontFamily: FONT, padding: 20, boxSizing: 'border-box', overflowY: 'auto', position: 'relative',
       paddingTop: 'calc(20px + env(safe-area-inset-top))',
@@ -808,6 +808,19 @@ const COUNTRIES = [
 ];
 const countryFlag = (code) => code.split('').map((c) => String.fromCodePoint(127397 + c.charCodeAt(0))).join('');
 
+function formatLastSeen(iso) {
+  if (!iso) return null;
+  const then = new Date(iso).getTime();
+  const diffMin = Math.round((Date.now() - then) / 60000);
+  if (diffMin < 1) return 'Last seen just now';
+  if (diffMin < 60) return `Last seen ${diffMin} min ago`;
+  const diffHr = Math.round(diffMin / 60);
+  if (diffHr < 24) return `Last seen ${diffHr} hr${diffHr === 1 ? '' : 's'} ago`;
+  const diffDay = Math.round(diffHr / 24);
+  if (diffDay < 7) return `Last seen ${diffDay} day${diffDay === 1 ? '' : 's'} ago`;
+  return `Last seen ${new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
+}
+
 function getSavedAccounts() {
   try { return JSON.parse(localStorage.getItem('zchat-accounts') || '[]'); } catch { return []; }
 }
@@ -987,6 +1000,8 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
       <div onClick={(e) => e.stopPropagation()} style={glass(theme, {
         background: theme.panelBg, borderRadius: '0 24px 24px 0', padding: 26,
         width: '86%', maxWidth: 360, height: '100%', position: 'relative', overflowY: 'auto',
+        WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain',
+        paddingBottom: 'calc(26px + env(safe-area-inset-bottom))',
       })}>
         <X size={20} style={{ position: 'absolute', top: 18, right: 18, cursor: 'pointer', color: theme.muted }} onClick={onClose} />
         <div style={{ fontWeight: 800, fontSize: 19, color: theme.ink, marginBottom: 18 }}>Settings</div>
@@ -1304,10 +1319,10 @@ function MessageContextMenu({ message, isMine, canEditText, canModerate, onClose
           ))}
         </div>
         <div style={{ borderTop: `1px solid ${theme.border}`, paddingTop: 4 }}>
-          <div style={row} onClick={onReply}><Send size={16} style={{ transform: 'scaleX(-1)' }} /> Reply</div>
+          <div style={row} onClick={onReply}><Reply size={16} /> Reply</div>
           {!message.deleted && message.type === 'text' && <div style={row} onClick={onCopy}><Check size={16} /> Copy</div>}
           {!message.deleted && canEditText && <div style={row} onClick={onEdit}><FileText size={16} /> Edit</div>}
-          <div style={row} onClick={onForward}><Send size={16} /> Forward</div>
+          <div style={row} onClick={onForward}><Forward size={16} /> Forward</div>
           <div style={row} onClick={onSelectMultiple}><Check size={16} /> Select multiple</div>
           {!isMine && <div style={{ ...row, color: theme.danger }} onClick={onReport}><Flag size={16} color={theme.danger} /> Report</div>}
           <div style={{ ...row, color: theme.danger }} onClick={onDeleteForMe}><Trash2 size={16} color={theme.danger} /> Delete for me</div>
@@ -2350,6 +2365,9 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
             display: 'inline-block', fontSize: 12.5, color: theme.coralDeep, fontWeight: 700, marginTop: 4,
             background: `${theme.coral}16`, padding: '3px 12px', borderRadius: 20,
           }}>@{profile.username}</div>
+          {!isSelf && !isOnline && !profile.hide_activity && formatLastSeen(profile.last_seen) && (
+            <div style={{ fontSize: 11.5, color: theme.muted, marginTop: 6 }}>{formatLastSeen(profile.last_seen)}</div>
+          )}
 
           {!isSelf && !editing && (
             nicknameEditing ? (
@@ -2715,7 +2733,7 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
           <div onClick={() => onSwipeReply(m)} style={{
             position: 'absolute', top: 6, [isMe ? 'left' : 'right']: -26, cursor: 'pointer', opacity: hover ? 1 : 0, transition: 'opacity 0.15s',
           }}>
-            <Send size={13} color={theme.muted} style={{ transform: isMe ? 'scaleX(-1)' : 'none' }} />
+            <Reply size={13} color={theme.muted} />
           </div>
         )}
         <div onClick={handleTap} className={!m.deleted && chatTheme === 'love' ? 'zchat-bubble-love' : !m.deleted && chatTheme === 'neon' ? 'zchat-bubble-neon' : undefined} style={glass(theme, {
@@ -2738,7 +2756,7 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
               display: 'flex', alignItems: 'center', gap: 4, fontSize: 10.5, color: theme.muted, fontStyle: 'italic',
               marginBottom: 3, padding: m.type !== 'text' ? '0 4px' : 0,
             }}>
-              <Send size={10} style={{ transform: 'scaleX(-1)' }} /> {m.forwarded_from_name ? `Forwarded from ${m.forwarded_from_name}` : 'Forwarded'}
+              <Forward size={10} color={theme.muted} /> {m.forwarded_from_name ? `Forwarded from ${m.forwarded_from_name}` : 'Forwarded'}
             </div>
           )}
           {replyPreview && !m.deleted && (
@@ -2871,7 +2889,7 @@ function MessageActionBar({ count, canEditActions, onCancel, onForward, onDelete
         <span style={{ fontWeight: 800, fontSize: 14, color: theme.ink }}>{count} selected</span>
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, padding: '2px 16px 10px' }}>
-        <div style={btn} onClick={onForward}><Send size={16} /><span>Forward</span></div>
+        <div style={btn} onClick={onForward}><Forward size={16} /><span>Forward</span></div>
         {canEditActions.canReport && <div style={btn} onClick={onReport}><Flag size={16} color={theme.danger} /><span style={{ color: theme.danger }}>Report</span></div>}
         <div style={btn} onClick={onDeleteForMe}><Trash2 size={16} /><span style={{ whiteSpace: 'nowrap' }}>Delete me</span></div>
         {canEditActions.allMine && <div style={btn} onClick={onDeleteForEveryone}><Trash2 size={16} color={theme.danger} /><span style={{ color: theme.danger, whiteSpace: 'nowrap' }}>Delete all</span></div>}
@@ -3387,7 +3405,18 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     channel.subscribe(async (status) => {
       if (status === 'SUBSCRIBED') await channel.track({ online_at: new Date().toISOString() });
     });
-    return () => supabase.removeChannel(channel);
+    const updateLastSeen = () => { supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', me.id); };
+    const heartbeat = setInterval(updateLastSeen, 45000);
+    const onVisibility = () => { if (document.visibilityState === 'hidden') updateLastSeen(); };
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('pagehide', updateLastSeen);
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(heartbeat);
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pagehide', updateLastSeen);
+      updateLastSeen();
+    };
   }, [me]);
 
   useEffect(() => {
@@ -3597,7 +3626,17 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     return activeProfile?.name || 'Unknown';
   };
 
+  const sendingRef = useRef(false);
   const send = async () => {
+    if (sendingRef.current) return;
+    sendingRef.current = true;
+    try {
+      await sendInner();
+    } finally {
+      sendingRef.current = false;
+    }
+  };
+  const sendInner = async () => {
     if (!activeProfile && !activeGroup) return;
     if (pendingMedia.length) {
       const items = pendingMedia;
@@ -3899,7 +3938,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
   if (!me) {
     return (
-      <div style={{ height: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: theme.bgGradient }}>
+      <div style={{ height: 'var(--app-height, 100dvh)', display: 'flex', alignItems: 'center', justifyContent: 'center', background: theme.bgGradient }}>
         <Spinner size={28} color={theme.ink} />
       </div>
     );
@@ -3907,7 +3946,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
   return (
     <div style={{
-      fontFamily: FONT, height: '100dvh', width: '100vw', background: theme.bgGradient,
+      fontFamily: FONT, height: 'var(--app-height, 100dvh)', width: '100vw', background: theme.bgGradient,
       display: 'flex', justifyContent: 'center', alignItems: 'center', boxSizing: 'border-box',
       paddingTop: 'env(safe-area-inset-top)',
       paddingBottom: 'env(safe-area-inset-bottom)',
@@ -4215,6 +4254,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               )}
               <div ref={scrollRef} style={{
                 flex: 1, overflowY: 'auto', padding: '16px 18px',
+                WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain',
                 ...((() => {
                   if (!activeProfile) return {};
                   const activeConv = conversations.find((c) => c.otherProfile.id === activeProfile.id) || archivedConversations.find((c) => c.otherProfile.id === activeProfile.id);
@@ -4286,7 +4326,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               )}
               {pendingForwardItems.length > 0 && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderTop: `1px solid ${theme.border}`, background: theme.rowBg }}>
-                  <Send size={14} color={theme.coral} />
+                  <Forward size={14} color={theme.coral} />
                   <div style={{ flex: 1, fontSize: 12, color: theme.ink, fontWeight: 700 }}>
                     {pendingForwardItems.length === 1
                       ? `Forwarding: ${pendingForwardItems[0].type === 'text' ? pendingForwardItems[0].content : pendingForwardItems[0].type === 'image' ? '📷 Photo' : pendingForwardItems[0].type === 'audio' ? '🎤 Voice message' : '🎥 Video'}`
@@ -4343,12 +4383,11 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <Paperclip size={21} color={theme.muted} style={{ cursor: 'pointer', transform: showAttach ? 'rotate(45deg)' : 'none', transition: 'transform 0.15s', flexShrink: 0 }}
                         onClick={() => setShowAttach((s) => !s)} />
-                      <textarea ref={composerRef} value={draft} onChange={(e) => {
+                      <textarea ref={composerRef} value={draft} enterKeyHint="enter" onChange={(e) => {
                         setDraft(e.target.value.slice(0, MAX_CHARS)); sendTyping();
                         e.target.style.height = 'auto';
                         e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
                       }}
-                        onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); (editingMessage ? saveEdit() : send()); } }}
                         placeholder={uploading ? 'Uploading...' : editingMessage ? 'Edit message' : pendingMedia.length ? 'Add a caption...' : 'Type a message'} disabled={uploading}
                         rows={1}
                         style={{ ...inputStyle(theme), flex: 1, borderRadius: 20, padding: '9px 14px', resize: 'none', fontFamily: FONT, maxHeight: 120, overflowY: 'auto', lineHeight: 1.35, fontSize: 14.5 }} />
@@ -4609,7 +4648,7 @@ function AppInner() {
 
   if (!checked) {
     return (
-      <div style={{ height: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: theme.bgGradient }}>
+      <div style={{ height: 'var(--app-height, 100dvh)', display: 'flex', alignItems: 'center', justifyContent: 'center', background: theme.bgGradient }}>
         <Spinner size={28} color={theme.ink} />
       </div>
     );
