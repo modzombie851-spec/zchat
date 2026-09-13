@@ -139,7 +139,7 @@ async function subscribeToPush(userId) {
 
 async function sendPushNotification(userId, title, body, url) {
   try {
-    await supabase.functions.invoke('send-push', { body: { user_id: userId, title, body, url: url || '/' } });
+    await supabase.functions.invoke('hyper-worker', { body: { user_id: userId, title, body, url: url || '/' } });
   } catch (err) {
     console.error('Push notify failed:', err);
   }
