@@ -7,6 +7,9 @@ import App from './App.jsx';
 // force-quit. Rather than fighting the shrink, we detect it after the
 // keyboard closes and force WebKit to re-measure by briefly toggling the
 // full-height root element's display off/on (a synchronous reflow).
+// Scoped ONLY to the main chat composer (data-keyboard-heal="true") so
+// blurring other inputs (search bars, PIN pads, settings fields) never
+// triggers this — that was causing an unrelated full-app flicker.
 let maxVH = window.innerHeight;
 window.addEventListener('resize', () => {
   maxVH = Math.max(maxVH, window.innerHeight);
@@ -18,6 +21,8 @@ veil.style.cssText =
   'background:rgba(5,8,16,0.4);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);' +
   'transition:opacity .2s ease-out;';
 document.addEventListener('DOMContentLoaded', () => document.body.appendChild(veil));
+
+let pendingHeal = null;
 
 function healViewport() {
   if (maxVH - window.innerHeight <= 4) return; // not actually stuck
@@ -37,9 +42,16 @@ function healViewport() {
 }
 
 document.addEventListener('focusout', (e) => {
-  const tag = e.target && e.target.tagName;
-  if (tag === 'INPUT' || tag === 'TEXTAREA') {
-    setTimeout(healViewport, 140);
+  if (e.target && e.target.getAttribute && e.target.getAttribute('data-keyboard-heal') === 'true') {
+    if (pendingHeal) clearTimeout(pendingHeal);
+    pendingHeal = setTimeout(healViewport, 140);
+  }
+});
+document.addEventListener('focusin', (e) => {
+  // Cancel a queued heal if the user moved to something else entirely
+  // (e.g. navigated into a PIN screen) before it fired.
+  if (!(e.target && e.target.getAttribute && e.target.getAttribute('data-keyboard-heal') === 'true')) {
+    if (pendingHeal) { clearTimeout(pendingHeal); pendingHeal = null; }
   }
 });
 
