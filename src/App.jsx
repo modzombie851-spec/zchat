@@ -138,7 +138,7 @@ function AnimatedChatBackground({ chatTheme }) {
             position: 'absolute', left: `${(i * 37) % 100}%`, bottom: -30,
             fontSize: 12 + (i % 5) * 6, opacity: 0.18 + (i % 3) * 0.06,
             animation: `zchat-float-up ${8 + (i % 6)}s linear infinite`, animationDelay: `${i * 1.3}s`,
-          }}>💗</span>
+          }}>ðŸ’—</span>
         ))}
       </div>
     );
@@ -832,7 +832,7 @@ function removeAccountEntry(id) {
 }
 
 
-/* Blank out a person's avatar if they've hidden it and we're not looking at ourselves — applied once
+/* Blank out a person's avatar if they've hidden it and we're not looking at ourselves â€” applied once
    at the source so every screen (list rows, chat header, forward picker, discover, etc.) respects it. */
 function sanitizeAvatar(profile, myId) {
   if (!profile) return profile;
@@ -1100,7 +1100,7 @@ function AccountSwitcherPanel({ accounts, currentId, onBack, onSwitch, onRemove,
               <Avatar emoji={a.avatar} name={a.name} size={40} />
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontWeight: 700, fontSize: 13.5, color: theme.ink }}>
-                  {a.name}{a.id === currentId && <span style={{ color: theme.coral, fontWeight: 700 }}> · Active</span>}
+                  {a.name}{a.id === currentId && <span style={{ color: theme.coral, fontWeight: 700 }}> Â· Active</span>}
                 </div>
                 <div style={{ fontSize: 11.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.email}</div>
               </div>
@@ -1449,27 +1449,26 @@ function WallpaperPicker({ value, onSelect, onClose }) {
 }
 
 /* Name Bar: a decorative banner shown behind the avatar+name in a DM header.
-   All 10 designs live in one sprite image (public/name-bars.jpg) arranged 2 cols x 5 rows,
-   so picking one is just a backgroundPosition offset — no need to ship 10 separate files. */
+   Each design is its own image file in /public â€” no sprite math needed. */
 const NAME_BAR_PRESETS = [
-  { key: 'ice', label: 'Ice Wolf', col: 0, row: 0 },
-  { key: 'inferno', label: 'Inferno Wolf', col: 1, row: 0 },
-  { key: 'arctic', label: 'Arctic Wolf', col: 0, row: 1 },
-  { key: 'cosmic', label: 'Cosmic Purple', col: 1, row: 1 },
-  { key: 'emerald', label: 'Emerald Forest', col: 0, row: 2 },
-  { key: 'crimson', label: 'Crimson Eyes', col: 1, row: 2 },
-  { key: 'moonlit', label: 'Moonlit Night', col: 0, row: 3 },
-  { key: 'cherry', label: 'Cherry Blossom', col: 1, row: 3 },
-  { key: 'golden', label: 'Golden Crown', col: 0, row: 4 },
-  { key: 'ocean', label: 'Deep Ocean', col: 1, row: 4 },
+  { key: 'ice', label: 'Ice Wolf', file: '/name-bar-ice-wolf.png' },
+  { key: 'eclipse', label: 'Eclipse Night', file: '/name-bar-eclipse-night.png' },
+  { key: 'ocean', label: 'Ocean Heart', file: '/name-bar-ocean-heart.png' },
+  { key: 'together', label: 'Together Forever', file: '/name-bar-together-forever.png' },
+  { key: 'whale', label: 'Cosmic Whale', file: '/name-bar-cosmic-whale.png' },
+  { key: 'inferno', label: 'Inferno Wolf', file: '/name-bar-inferno-wolf.png' },
+  { key: 'blossom', label: 'Cherry Blossom', file: '/name-bar-cherry-blossom.png' },
+  { key: 'forest', label: 'Emerald Forest', file: '/name-bar-emerald-forest.png' },
+  { key: 'horizon', label: 'Golden Horizon', file: '/name-bar-golden-horizon.png' },
+  { key: 'aurora', label: 'Aurora Nights', file: '/name-bar-aurora-nights.png' },
 ];
 function nameBarBgStyle(key) {
   const preset = NAME_BAR_PRESETS.find((p) => p.key === key);
   if (!preset) return null;
   return {
-    backgroundImage: "url('/name-bars.jpg')",
-    backgroundSize: '200% 500%',
-    backgroundPosition: `${preset.col * 100}% ${preset.row * 25}%`,
+    backgroundImage: `url('${preset.file}')`,
+    backgroundSize: 'cover',
+    backgroundPosition: 'center',
     backgroundRepeat: 'no-repeat',
   };
 }
@@ -1532,11 +1531,11 @@ function PinPad({ value, onChange, length = 4 }) {
 
 function PinKeypad({ onDigit, onBackspace }) {
   const { theme } = useTheme();
-  const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', '⌫'];
+  const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', 'âŒ«'];
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
       {keys.map((k, i) => (
-        <div key={i} onClick={() => { if (k === '⌫') onBackspace(); else if (k) onDigit(k); }} style={{
+        <div key={i} onClick={() => { if (k === 'âŒ«') onBackspace(); else if (k) onDigit(k); }} style={{
           height: 50, borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: 18, fontWeight: 700, color: theme.ink, background: k ? theme.rowBg : 'transparent',
           cursor: k ? 'pointer' : 'default',
@@ -4483,16 +4482,32 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                 }}
                   onClick={() => setProfileOf(activeProfile)}>
                   {activeConvNameBar && (
-                    <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(90deg, rgba(0,0,0,0.6), rgba(0,0,0,0.2))', pointerEvents: 'none' }} />
+                    <div style={{
+                      position: 'absolute', inset: 0, pointerEvents: 'none',
+                      background: 'linear-gradient(90deg, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.55) 45%, rgba(0,0,0,0.3) 75%, rgba(0,0,0,0.15) 100%)',
+                    }} />
                   )}
-                  <div className="zchat-back" style={{ display: 'none', cursor: 'pointer', margin: '-10px -6px -10px -10px', padding: '10px 6px 10px 10px', position: 'relative' }}
+                  <div className="zchat-back" style={{
+                    display: 'none', cursor: 'pointer', margin: '-10px -6px -10px -10px', padding: '10px 6px 10px 10px', position: 'relative',
+                    ...(activeConvNameBar ? { borderRadius: '50%', background: 'rgba(0,0,0,0.35)', margin: '-4px 0 -4px -4px', padding: 8 } : {}),
+                  }}
                     onClick={(e) => { e.stopPropagation(); setMobileShowChat(false); }}>
                     <ArrowLeft size={22} color={activeConvNameBar ? 'white' : undefined} />
                   </div>
-                  <Avatar emoji={activeProfile.avatar} name={activeProfile.name} online={!activeProfile.hide_activity && onlineIds.has(activeProfile.id)} size={38} ring />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 800, fontSize: 15, color: activeConvNameBar ? 'white' : theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{activeProfile.name}</div>
-                    <div style={{ fontSize: 12, color: typingFrom ? theme.coral : (activeConvNameBar ? 'rgba(255,255,255,0.75)' : theme.muted), fontWeight: typingFrom ? 700 : 400 }}>
+                  <div style={{ position: 'relative' }}>
+                    <Avatar emoji={activeProfile.avatar} name={activeProfile.name} online={!activeProfile.hide_activity && onlineIds.has(activeProfile.id)} size={38} ring />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
+                    <div style={{
+                      fontWeight: 800, fontSize: 15, color: activeConvNameBar ? 'white' : theme.ink,
+                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                      textShadow: activeConvNameBar ? '0 1px 3px rgba(0,0,0,0.95), 0 1px 10px rgba(0,0,0,0.6)' : 'none',
+                    }}>{activeProfile.name}</div>
+                    <div style={{
+                      fontSize: 12, fontWeight: typingFrom ? 700 : 400,
+                      color: typingFrom ? theme.coral : (activeConvNameBar ? 'rgba(255,255,255,0.92)' : theme.muted),
+                      textShadow: activeConvNameBar ? '0 1px 3px rgba(0,0,0,0.9), 0 1px 8px rgba(0,0,0,0.5)' : 'none',
+                    }}>
                       {typingFrom
                         ? 'typing...'
                         : (!activeProfile.hide_activity && onlineIds.has(activeProfile.id))
@@ -4503,19 +4518,33 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                   <button onClick={(e) => { e.stopPropagation(); if (activeFollowState !== null) toggleActiveFollow(); }} disabled={activeFollowBusy || activeFollowState === null} style={{
                     padding: '6px 14px', borderRadius: 18, fontSize: 11.5, fontWeight: 700, cursor: activeFollowState === null ? 'default' : 'pointer', fontFamily: FONT, flexShrink: 0,
                     opacity: activeFollowState === null ? 0 : 1, visibility: activeFollowState === null ? 'hidden' : 'visible',
-                    border: activeFollowState !== 'none' && activeFollowState !== null ? `1.5px solid ${theme.border}` : 'none',
-                    background: activeFollowState === 'accepted' ? `${theme.coral}18` : activeFollowState === 'pending' ? 'transparent' : theme.coral,
-                    color: activeFollowState === 'accepted' ? theme.coralDeep : activeFollowState === 'pending' ? theme.ink : 'white',
+                    position: 'relative',
+                    border: activeConvNameBar
+                      ? '1.5px solid rgba(255,255,255,0.5)'
+                      : (activeFollowState !== 'none' && activeFollowState !== null ? `1.5px solid ${theme.border}` : 'none'),
+                    background: activeConvNameBar
+                      ? (activeFollowState === 'accepted' ? 'rgba(0,0,0,0.45)' : activeFollowState === 'pending' ? 'rgba(0,0,0,0.35)' : theme.coral)
+                      : (activeFollowState === 'accepted' ? `${theme.coral}18` : activeFollowState === 'pending' ? 'transparent' : theme.coral),
+                    color: activeConvNameBar
+                      ? 'white'
+                      : (activeFollowState === 'accepted' ? theme.coralDeep : activeFollowState === 'pending' ? theme.ink : 'white'),
                     display: 'flex', alignItems: 'center', gap: 5,
+                    backdropFilter: activeConvNameBar ? 'blur(6px)' : 'none',
+                    WebkitBackdropFilter: activeConvNameBar ? 'blur(6px)' : 'none',
                   }}>
-                    {activeFollowBusy ? <Spinner size={11} color={activeFollowState !== 'none' ? theme.ink : 'white'} /> :
+                    {activeFollowBusy ? <Spinner size={11} color={activeConvNameBar ? 'white' : (activeFollowState !== 'none' ? theme.ink : 'white')} /> :
                       (<>{activeFollowState === 'accepted' ? <Check size={11} /> : activeFollowState === 'pending' ? null : <UserPlus size={11} />}</>)}
                     {!activeFollowBusy && (
                       activeFollowState === 'accepted' ? 'Following' : activeFollowState === 'pending' ? 'Requested' : 'Follow'
                     )}
                   </button>
-                  <MoreVertical size={19} color={activeConvNameBar ? 'white' : theme.muted} style={{ cursor: 'pointer', flexShrink: 0, marginLeft: 6 }}
-                    onClick={(e) => { e.stopPropagation(); setShowChatSettings(true); }} />
+                  <div style={{
+                    position: 'relative', flexShrink: 0, marginLeft: 6, cursor: 'pointer',
+                    ...(activeConvNameBar ? { borderRadius: '50%', background: 'rgba(0,0,0,0.35)', padding: 6, display: 'flex' } : {}),
+                  }}
+                    onClick={(e) => { e.stopPropagation(); setShowChatSettings(true); }}>
+                    <MoreVertical size={19} color={activeConvNameBar ? 'white' : theme.muted} />
+                  </div>
                 </div>
               )}
               <div ref={scrollRef} style={{
@@ -4982,4 +5011,5 @@ export default function App() {
       <AppInner />
     </ThemeProvider>
   );
-                                                                                                                                      }
+}
+
