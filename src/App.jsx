@@ -1448,6 +1448,67 @@ function WallpaperPicker({ value, onSelect, onClose }) {
   );
 }
 
+/* Name Bar: a decorative banner shown behind the avatar+name in a DM header.
+   All 10 designs live in one sprite image (public/name-bars.jpg) arranged 2 cols x 5 rows,
+   so picking one is just a backgroundPosition offset — no need to ship 10 separate files. */
+const NAME_BAR_PRESETS = [
+  { key: 'ice', label: 'Ice Wolf', col: 0, row: 0 },
+  { key: 'inferno', label: 'Inferno Wolf', col: 1, row: 0 },
+  { key: 'arctic', label: 'Arctic Wolf', col: 0, row: 1 },
+  { key: 'cosmic', label: 'Cosmic Purple', col: 1, row: 1 },
+  { key: 'emerald', label: 'Emerald Forest', col: 0, row: 2 },
+  { key: 'crimson', label: 'Crimson Eyes', col: 1, row: 2 },
+  { key: 'moonlit', label: 'Moonlit Night', col: 0, row: 3 },
+  { key: 'cherry', label: 'Cherry Blossom', col: 1, row: 3 },
+  { key: 'golden', label: 'Golden Crown', col: 0, row: 4 },
+  { key: 'ocean', label: 'Deep Ocean', col: 1, row: 4 },
+];
+function nameBarBgStyle(key) {
+  const preset = NAME_BAR_PRESETS.find((p) => p.key === key);
+  if (!preset) return null;
+  return {
+    backgroundImage: "url('/name-bars.jpg')",
+    backgroundSize: '200% 500%',
+    backgroundPosition: `${preset.col * 100}% ${preset.row * 25}%`,
+    backgroundRepeat: 'no-repeat',
+  };
+}
+
+function NameBarPicker({ value, onSelect, onClose }) {
+  const { theme } = useTheme();
+  return (
+    <div onClick={onClose} style={{
+      position: 'absolute', inset: 0, background: 'rgba(20,16,14,0.5)', zIndex: 96,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 18,
+    }} className="zchat-fade">
+      <div onClick={(e) => e.stopPropagation()} style={{ background: theme.panelBg, borderRadius: 22, padding: 20, width: '100%', maxWidth: 340, maxHeight: '75vh', display: 'flex', flexDirection: 'column' }}>
+        <X size={19} style={{ position: 'absolute', top: 16, right: 16, cursor: 'pointer', color: theme.muted }} onClick={onClose} />
+        <div style={{ fontWeight: 800, fontSize: 15, color: theme.ink, marginBottom: 14, paddingRight: 24 }}>Name bar</div>
+        <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div onClick={() => { onSelect(null); onClose(); }} style={{
+            height: 44, borderRadius: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            border: !value ? `2.5px solid ${theme.coral}` : `1.5px solid ${theme.border}`, background: theme.rowBg,
+          }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: theme.ink }}>None</span>
+          </div>
+          {NAME_BAR_PRESETS.map((p) => (
+            <div key={p.key} onClick={() => { onSelect(p.key); onClose(); }} style={{
+              height: 56, borderRadius: 12, cursor: 'pointer', position: 'relative', overflow: 'hidden',
+              border: value === p.key ? `2.5px solid ${theme.coral}` : `1.5px solid ${theme.border}`,
+              ...nameBarBgStyle(p.key),
+            }}>
+              <span style={{
+                position: 'absolute', left: 10, bottom: 6, fontSize: 11, fontWeight: 800, color: 'white',
+                textShadow: '0 1px 4px rgba(0,0,0,0.9)',
+              }}>{p.label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 async function hashPin(pin) {
   const enc = new TextEncoder().encode(pin);
@@ -1565,7 +1626,7 @@ function ChatLockUnlock({ onCancel, onUnlock, correctHash }) {
 }
 
 
-function ChatSettingsPanel({ conv, myId, isPinned, isLocked, wallpaper, chatLockAvailable, onClose, onTogglePin, onToggleArchive, onSetWallpaper, onEnableLock, onDisableLock, onDeleteChat, onNicknameSaved }) {
+function ChatSettingsPanel({ conv, myId, isPinned, isLocked, wallpaper, nameBar, chatLockAvailable, onClose, onTogglePin, onToggleArchive, onSetWallpaper, onSetNameBar, onEnableLock, onDisableLock, onDeleteChat, onNicknameSaved }) {
   const { theme } = useTheme();
   const [nickname, setNickname] = useState('');
   const [nicknameSaving, setNicknameSaving] = useState(false);
@@ -1574,6 +1635,7 @@ function ChatSettingsPanel({ conv, myId, isPinned, isLocked, wallpaper, chatLock
   const [myAliasSaving, setMyAliasSaving] = useState(false);
   const [myAliasJustSaved, setMyAliasJustSaved] = useState(false);
   const [showWallpaper, setShowWallpaper] = useState(false);
+  const [showNameBar, setShowNameBar] = useState(false);
   const [showLockSetup, setShowLockSetup] = useState(false);
 
   useEffect(() => {
@@ -1597,7 +1659,6 @@ function ChatSettingsPanel({ conv, myId, isPinned, isLocked, wallpaper, chatLock
     setMyAliasJustSaved(true);
     setTimeout(() => setMyAliasJustSaved(false), 2000);
   };
-
   const saveNickname = async (val) => {
     setNicknameSaving(true);
     if (val.trim()) {
@@ -1634,6 +1695,7 @@ function ChatSettingsPanel({ conv, myId, isPinned, isLocked, wallpaper, chatLock
           <div style={{ fontWeight: 800, fontSize: 15, color: theme.ink, marginTop: 8 }}>{conv.realName || conv.otherProfile.name}</div>
           <div style={{ fontSize: 12, color: theme.muted }}>@{conv.otherProfile.username}</div>
         </div>
+
         <div style={{ fontSize: 11, color: theme.muted, marginBottom: 5, fontWeight: 800 }}>NICKNAME</div>
         <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
           <input value={nickname} onChange={(e) => setNickname(e.target.value.slice(0, 30))} placeholder="Custom nickname"
@@ -1660,6 +1722,7 @@ function ChatSettingsPanel({ conv, myId, isPinned, isLocked, wallpaper, chatLock
         <SettingsRow icon={<Pin_ />} label={isPinned ? 'Unpin chat' : 'Pin chat'} onClick={onTogglePin} />
         <SettingsRow icon={<FileText size={16} />} label="Archive chat" onClick={onToggleArchive} />
         <SettingsRow icon={<ImageIcon size={16} />} label="Chat wallpaper" onClick={() => setShowWallpaper(true)} />
+        <SettingsRow icon={<ImageIcon size={16} />} label="Name bar" onClick={() => setShowNameBar(true)} />
         <SettingsRow icon={<Lock size={16} />} label={isLocked ? 'Remove chat lock' : 'Lock this chat'}
           onClick={() => { if (isLocked) onDisableLock(); else if (chatLockAvailable) onEnableLock(); }} />
         {!isLocked && !chatLockAvailable && (
@@ -1670,6 +1733,9 @@ function ChatSettingsPanel({ conv, myId, isPinned, isLocked, wallpaper, chatLock
       </div>
       {showWallpaper && (
         <WallpaperPicker value={wallpaper} onSelect={onSetWallpaper} onClose={() => setShowWallpaper(false)} />
+      )}
+      {showNameBar && (
+        <NameBarPicker value={nameBar} onSelect={onSetNameBar} onClose={() => setShowNameBar(false)} />
       )}
     </div>
   );
@@ -3152,6 +3218,15 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     loadConversations();
   };
 
+  const setNameBar = async (conv, key) => {
+    const { error } = await supabase.from('conversations').update({ name_bar: key }).eq('id', conv.id);
+    if (error) { alert('Could not change name bar: ' + error.message); return; }
+    setConversations((prev) => prev.map((c) => (c.id === conv.id ? { ...c, name_bar: key } : c)));
+    const label = key ? (NAME_BAR_PRESETS.find((p) => p.key === key)?.label || key) : 'None';
+    await sendMessage(session.user.id, conv.otherProfile.id, 'system', `Name bar changed to ${label}`, null);
+    loadConversations();
+  };
+
   const loadMyLocks = async () => {
     const { data } = await supabase.from('chat_locks').select('*').eq('owner_id', session.user.id);
     const map = {};
@@ -3246,7 +3321,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         const pa = isPinnedByMe(a) ? 1 : 0, pb = isPinnedByMe(b) ? 1 : 0;
         if (pa !== pb) return pb - pa;
         return new Date(b.last_message_at) - new Date(a.last_message_at);
-      });
+        });
     setConversations(mergedAll.filter((c) => !archived.has(c.id)));
     setArchivedConversations(mergedAll.filter((c) => archived.has(c.id)));
   };
@@ -3734,6 +3809,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   };
 
   const findMessageById = (id) => messages.find((m) => m.id === id);
+  const activeConvForBar = activeProfile ? (conversations.find((c) => c.otherProfile.id === activeProfile.id) || archivedConversations.find((c) => c.otherProfile.id === activeProfile.id)) : null;
+  const activeConvNameBar = activeConvForBar?.name_bar || null;
   const labelForSender = (senderId) => {
     if (senderId === session.user.id) return 'You';
     if (activeGroup) return groupMembers.find((gm) => gm.user_id === senderId)?.profile.name || 'Member';
@@ -4399,16 +4476,23 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                     onClick={(e) => { e.stopPropagation(); setShowGroupInfo(true); }} />
                 </div>
               ) : (
-                <div style={{ padding: '13px 18px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: `1px solid ${theme.border}`, cursor: 'pointer' }}
+                <div style={{
+                  padding: '13px 18px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: `1px solid ${theme.border}`,
+                  cursor: 'pointer', position: 'relative', overflow: 'hidden',
+                  ...(activeConvNameBar ? nameBarBgStyle(activeConvNameBar) : {}),
+                }}
                   onClick={() => setProfileOf(activeProfile)}>
-                  <div className="zchat-back" style={{ display: 'none', cursor: 'pointer', margin: '-10px -6px -10px -10px', padding: '10px 6px 10px 10px' }}
+                  {activeConvNameBar && (
+                    <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(90deg, rgba(0,0,0,0.6), rgba(0,0,0,0.2))', pointerEvents: 'none' }} />
+                  )}
+                  <div className="zchat-back" style={{ display: 'none', cursor: 'pointer', margin: '-10px -6px -10px -10px', padding: '10px 6px 10px 10px', position: 'relative' }}
                     onClick={(e) => { e.stopPropagation(); setMobileShowChat(false); }}>
-                    <ArrowLeft size={22} />
+                    <ArrowLeft size={22} color={activeConvNameBar ? 'white' : undefined} />
                   </div>
                   <Avatar emoji={activeProfile.avatar} name={activeProfile.name} online={!activeProfile.hide_activity && onlineIds.has(activeProfile.id)} size={38} ring />
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 800, fontSize: 15, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{activeProfile.name}</div>
-                    <div style={{ fontSize: 12, color: typingFrom ? theme.coral : theme.muted, fontWeight: typingFrom ? 700 : 400 }}>
+                    <div style={{ fontWeight: 800, fontSize: 15, color: activeConvNameBar ? 'white' : theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{activeProfile.name}</div>
+                    <div style={{ fontSize: 12, color: typingFrom ? theme.coral : (activeConvNameBar ? 'rgba(255,255,255,0.75)' : theme.muted), fontWeight: typingFrom ? 700 : 400 }}>
                       {typingFrom
                         ? 'typing...'
                         : (!activeProfile.hide_activity && onlineIds.has(activeProfile.id))
@@ -4430,7 +4514,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                       activeFollowState === 'accepted' ? 'Following' : activeFollowState === 'pending' ? 'Requested' : 'Follow'
                     )}
                   </button>
-                  <MoreVertical size={19} color={theme.muted} style={{ cursor: 'pointer', flexShrink: 0, marginLeft: 6 }}
+                  <MoreVertical size={19} color={activeConvNameBar ? 'white' : theme.muted} style={{ cursor: 'pointer', flexShrink: 0, marginLeft: 6 }}
                     onClick={(e) => { e.stopPropagation(); setShowChatSettings(true); }} />
                 </div>
               )}
@@ -4654,11 +4738,13 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               isPinned={isPinnedByMe(activeConv)}
               isLocked={!!myLocks[activeConv.id]}
               wallpaper={myWallpaper(activeConv)}
+              nameBar={activeConv.name_bar}
               chatLockAvailable={!!me.chat_lock_hash}
               onClose={() => setShowChatSettings(false)}
               onTogglePin={() => { togglePin(activeConv); }}
               onToggleArchive={() => { setShowChatSettings(false); toggleArchive(activeConv.id, true); setActiveProfile(null); }}
               onSetWallpaper={(key) => setWallpaper(activeConv, key)}
+              onSetNameBar={(key) => setNameBar(activeConv, key)}
               onEnableLock={() => enableChatLock(activeConv)}
               onDisableLock={() => disableChatLock(activeConv)}
               onDeleteChat={() => { setShowChatSettings(false); setDeleteConvoTarget(activeConv); }}
@@ -4896,4 +4982,4 @@ export default function App() {
       <AppInner />
     </ThemeProvider>
   );
-                                                                                   }
+                                                                                                                                      }
