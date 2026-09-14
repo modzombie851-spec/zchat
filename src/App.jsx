@@ -4,7 +4,7 @@ import {
   Send, Paperclip, Search, Mail, ShieldCheck, AtSign, LogOut, Eye, EyeOff, Lock,
   Flag, X, Trash2, User, Phone, MoreVertical, Image as ImageIcon, Video as VideoIcon,
   Smile, ArrowLeft, Check, CheckCheck, Settings as SettingsIcon, Moon, Sun, UserPlus,
-  FileText, HelpCircle, ChevronRight, Compass, Bell, Volume2, VolumeX, Palette, Mic, Play, Pause, Download, Users, Camera, Reply, Forward, Ban, Edit3,
+  FileText, HelpCircle, ChevronRight, Compass, Bell, Volume2, VolumeX, Palette, Mic, Play, Pause, Download, Users, Camera, Reply, Forward, Ban, Edit3, Archive, Sparkles,
 } from 'lucide-react';
 import {
   supabase, registerWithEmail, verifyOtp, setPassword, signInWithPassword,
@@ -61,6 +61,9 @@ function ThemeProvider({ children }) {
   const [soundOn, setSoundOn] = useState(() => {
     try { return localStorage.getItem('zchat-sound') !== 'off'; } catch { return true; }
   });
+  const [reactionSoundOn, setReactionSoundOn] = useState(() => {
+    try { return localStorage.getItem('zchat-reaction-sound') !== 'off'; } catch { return true; }
+  });
   const [bgPatternOn, setBgPatternOn] = useState(() => {
     try { return localStorage.getItem('zchat-bgpattern') === 'on'; } catch { return false; }
   });
@@ -83,6 +86,9 @@ function ThemeProvider({ children }) {
     try { localStorage.setItem('zchat-sound', soundOn ? 'on' : 'off'); } catch {}
   }, [soundOn]);
   useEffect(() => {
+    try { localStorage.setItem('zchat-reaction-sound', reactionSoundOn ? 'on' : 'off'); } catch {}
+  }, [reactionSoundOn]);
+  useEffect(() => {
     try { localStorage.setItem('zchat-bgpattern', bgPatternOn ? 'on' : 'off'); } catch {}
   }, [bgPatternOn]);
   useEffect(() => {
@@ -91,7 +97,7 @@ function ThemeProvider({ children }) {
   const accent = ACCENT_PALETTES[accentName] || ACCENT_PALETTES.coral;
   const theme = { ...THEMES[dark ? 'dark' : 'light'], ...accent, dark };
   return (
-    <ThemeContext.Provider value={{ theme, dark, setDark, accentName, setAccentName, soundOn, setSoundOn, bgPatternOn, setBgPatternOn, fontScale, setFontScale, chatTheme, setChatTheme }}>
+    <ThemeContext.Provider value={{ theme, dark, setDark, accentName, setAccentName, soundOn, setSoundOn, reactionSoundOn, setReactionSoundOn, bgPatternOn, setBgPatternOn, fontScale, setFontScale, chatTheme, setChatTheme }}>
       {children}
     </ThemeContext.Provider>
   );
@@ -998,10 +1004,35 @@ function ToggleSwitch({ on, onClick }) {
 }
 
 function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideActivity, onToggleActivity, onOpenAccounts, onOpenDelete, chatLockSet, chatLockHash, onSetChatLockPassword, onTurnOffChatLock }) {
-  const { theme, dark, setDark, accentName, setAccentName, soundOn, setSoundOn, bgPatternOn, setBgPatternOn, fontScale, setFontScale, chatTheme, setChatTheme } = useTheme();
+  const { theme, dark, setDark, accentName, setAccentName, soundOn, setSoundOn, reactionSoundOn, setReactionSoundOn, bgPatternOn, setBgPatternOn, fontScale, setFontScale, chatTheme, setChatTheme } = useTheme();
   const accentLabels = { coral: 'Coral', ocean: 'Ocean', berry: 'Berry' };
-  const [accountOpen, setAccountOpen] = useState(false);
   const [lockFlow, setLockFlow] = useState(null);
+  const [section, setSection] = useState('main');
+
+  const CategoryRow = ({ icon, label, sub, onClick }) => (
+    <div onClick={onClick} style={{
+      display: 'flex', alignItems: 'center', gap: 12, padding: '14px 4px', cursor: 'pointer',
+      borderBottom: `1px solid ${theme.border}`,
+    }}>
+      <div style={{
+        width: 36, height: 36, borderRadius: 11, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: `${theme.coral}1F`, color: theme.coralDeep, flexShrink: 0,
+      }}>{icon}</div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: theme.ink }}>{label}</div>
+        {sub && <div style={{ fontSize: 11.5, color: theme.muted, marginTop: 1 }}>{sub}</div>}
+      </div>
+      <ChevronRight size={17} color={theme.muted} />
+    </div>
+  );
+
+  const SectionHeader = ({ title }) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
+      <ArrowLeft size={19} style={{ cursor: 'pointer', color: theme.ink }} onClick={() => setSection('main')} />
+      <div style={{ fontWeight: 800, fontSize: 17, color: theme.ink }}>{title}</div>
+    </div>
+  );
+
   return (
     <div style={{
       position: 'absolute', inset: 0, background: 'rgba(10,10,14,0.45)',
@@ -1014,68 +1045,101 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
         paddingBottom: 'calc(26px + env(safe-area-inset-bottom))',
       })}>
         <X size={20} style={{ position: 'absolute', top: 18, right: 18, cursor: 'pointer', color: theme.muted }} onClick={onClose} />
-        <div style={{ fontWeight: 800, fontSize: 19, color: theme.ink, marginBottom: 18 }}>Settings</div>
 
-        <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.muted, margin: '4px 0 6px 2px' }}>Chat theme</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
-          {Object.entries(CHAT_THEMES).map(([key, spec]) => (
-            <div key={key} onClick={() => setChatTheme(key)} style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', borderRadius: 14,
-              border: chatTheme === key ? `2px solid ${theme.coral}` : `1.5px solid ${theme.border}`, cursor: 'pointer',
-            }}>
-              <span style={{ fontSize: 13.5, fontWeight: 700, color: theme.ink }}>{spec.label}</span>
-              {chatTheme === key && <Check size={16} color={theme.coral} />}
-            </div>
-          ))}
-        </div>
-
-        <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.muted, margin: '4px 0 6px 2px' }}>Appearance</div>
-        <SettingsRow icon={dark ? <Sun size={16} /> : <Moon size={16} />} label="Dark mode" right={<ToggleSwitch on={dark} onClick={() => setDark((d) => !d)} />} />
-        <div style={{ padding: '10px 4px', borderBottom: `1px solid ${theme.border}` }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-            <div style={{ width: 34, height: 34, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', background: `${theme.coral}1F`, color: theme.coralDeep }}><Palette size={16} /></div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: theme.ink }}>Theme color</div>
-          </div>
-          <div style={{ display: 'flex', gap: 8, paddingLeft: 44 }}>
-            {Object.keys(ACCENT_PALETTES).map((key) => (
-              <div key={key} onClick={() => setAccentName(key)} style={{
-                width: 30, height: 30, borderRadius: '50%', background: ACCENT_PALETTES[key].coral, cursor: 'pointer',
-                border: accentName === key ? `3px solid ${theme.ink}` : '3px solid transparent',
-              }} title={accentLabels[key]} />
-            ))}
-          </div>
-        </div>
-        <SettingsRow icon={<ImageIcon size={16} />} label="Chat background pattern" right={<ToggleSwitch on={bgPatternOn} onClick={() => setBgPatternOn((s) => !s)} />} />
-        <SettingsRow icon={soundOn ? <Volume2 size={16} /> : <VolumeX size={16} />} label="Message sound" right={<ToggleSwitch on={soundOn} onClick={() => setSoundOn((s) => !s)} />} />
-
-        <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.muted, margin: '16px 0 6px 2px' }}>Privacy</div>
-        <SettingsRow icon={<EyeOff size={16} />} label="Hide activity status" right={<ToggleSwitch on={hideActivity} onClick={onToggleActivity} />} />
-        <SettingsRow icon={<Lock size={16} />} label={chatLockSet ? 'Change Chat Lock password' : 'Set Chat Lock password'} onClick={() => setLockFlow(chatLockSet ? 'verify-then-change' : 'set')} />
-        {chatLockSet && (
-          <SettingsRow icon={<Lock size={16} />} label="Turn off Chat Lock" danger onClick={() => setLockFlow('verify-then-off')} />
+        {section === 'main' && (
+          <>
+            <div style={{ fontWeight: 800, fontSize: 19, color: theme.ink, marginBottom: 18 }}>Settings</div>
+            <CategoryRow icon={<Palette size={17} />} label="Appearance" sub="Theme, chat style, text size" onClick={() => setSection('appearance')} />
+            <CategoryRow icon={<EyeOff size={17} />} label="Privacy & Security" sub="Activity status, Chat Lock" onClick={() => setSection('privacy')} />
+            <CategoryRow icon={<Bell size={17} />} label="Notifications" sub="Sounds, alerts" onClick={() => setSection('notifications')} />
+            <CategoryRow icon={<HelpCircle size={17} />} label="About" sub="Privacy policy, help" onClick={() => setSection('about')} />
+            <CategoryRow icon={<UserPlus size={17} />} label="Account" sub="Follow requests, switch, delete" onClick={() => setSection('account')} />
+            <div style={{ height: 4 }} />
+            <SettingsRow icon={<LogOut size={16} />} label="Log out" danger onClick={onLogout} />
+          </>
         )}
 
-        <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.muted, margin: '16px 0 6px 2px' }}>Text size</div>
-        <div style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
-          {[{ v: 0.88, l: 'Small' }, { v: 1, l: 'Default' }, { v: 1.18, l: 'Large' }].map((opt) => (
-            <div key={opt.l} onClick={() => setFontScale(opt.v)} style={{
-              flex: 1, padding: '10px 0', borderRadius: 12, textAlign: 'center', cursor: 'pointer', fontFamily: FONT,
-              border: fontScale === opt.v ? `2px solid ${theme.coral}` : `1.5px solid ${theme.border}`,
-              color: theme.ink, fontSize: 13 * opt.v, fontWeight: 700,
-            }}>{opt.l}</div>
-          ))}
-        </div>
+        {section === 'appearance' && (
+          <>
+            <SectionHeader title="Appearance" />
+            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.muted, margin: '4px 0 6px 2px' }}>Chat theme</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+              {Object.entries(CHAT_THEMES).map(([key, spec]) => (
+                <div key={key} onClick={() => setChatTheme(key)} style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', borderRadius: 14,
+                  border: chatTheme === key ? `2px solid ${theme.coral}` : `1.5px solid ${theme.border}`, cursor: 'pointer',
+                }}>
+                  <span style={{ fontSize: 13.5, fontWeight: 700, color: theme.ink }}>{spec.label}</span>
+                  {chatTheme === key && <Check size={16} color={theme.coral} />}
+                </div>
+              ))}
+            </div>
+            <SettingsRow icon={dark ? <Sun size={16} /> : <Moon size={16} />} label="Dark mode" right={<ToggleSwitch on={dark} onClick={() => setDark((d) => !d)} />} />
+            <div style={{ padding: '10px 4px', borderBottom: `1px solid ${theme.border}` }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                <div style={{ width: 34, height: 34, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', background: `${theme.coral}1F`, color: theme.coralDeep }}><Palette size={16} /></div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: theme.ink }}>Theme color</div>
+              </div>
+              <div style={{ display: 'flex', gap: 8, paddingLeft: 44 }}>
+                {Object.keys(ACCENT_PALETTES).map((key) => (
+                  <div key={key} onClick={() => setAccentName(key)} style={{
+                    width: 30, height: 30, borderRadius: '50%', background: ACCENT_PALETTES[key].coral, cursor: 'pointer',
+                    border: accentName === key ? `3px solid ${theme.ink}` : '3px solid transparent',
+                  }} title={accentLabels[key]} />
+                ))}
+              </div>
+            </div>
+            <SettingsRow icon={<ImageIcon size={16} />} label="Chat background pattern" right={<ToggleSwitch on={bgPatternOn} onClick={() => setBgPatternOn((s) => !s)} />} />
+            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.muted, margin: '16px 0 6px 2px' }}>Text size</div>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
+              {[{ v: 0.88, l: 'Small' }, { v: 1, l: 'Default' }, { v: 1.18, l: 'Large' }].map((opt) => (
+                <div key={opt.l} onClick={() => setFontScale(opt.v)} style={{
+                  flex: 1, padding: '10px 0', borderRadius: 12, textAlign: 'center', cursor: 'pointer', fontFamily: FONT,
+                  border: fontScale === opt.v ? `2px solid ${theme.coral}` : `1.5px solid ${theme.border}`,
+                  color: theme.ink, fontSize: 13 * opt.v, fontWeight: 700,
+                }}>{opt.l}</div>
+              ))}
+            </div>
+          </>
+        )}
 
-        <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.muted, margin: '16px 0 6px 2px' }}>About</div>
-        <SettingsRow icon={<FileText size={16} />} label="Privacy policy" onClick={onOpenPrivacy} />
-        <SettingsRow icon={<HelpCircle size={16} />} label="Help & support" onClick={() => {}} />
+        {section === 'privacy' && (
+          <>
+            <SectionHeader title="Privacy & Security" />
+            <SettingsRow icon={<EyeOff size={16} />} label="Hide activity status" right={<ToggleSwitch on={hideActivity} onClick={onToggleActivity} />} />
+            <SettingsRow icon={<Lock size={16} />} label={chatLockSet ? 'Change Chat Lock password' : 'Set Chat Lock password'} onClick={() => setLockFlow(chatLockSet ? 'verify-then-change' : 'set')} />
+            {chatLockSet && (
+              <SettingsRow icon={<Lock size={16} />} label="Turn off Chat Lock" danger onClick={() => setLockFlow('verify-then-off')} />
+            )}
+          </>
+        )}
 
-        <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.muted, margin: '16px 0 6px 2px' }}>Account</div>
-        <SettingsRow icon={<Bell size={16} />} label="Follow requests" onClick={onOpenRequests} />
-        <SettingsRow icon={<UserPlus size={16} />} label="Switch account" onClick={onOpenAccounts} />
-        <SettingsRow icon={<Trash2 size={16} />} label="Delete my account" danger onClick={onOpenDelete} />
-        <SettingsRow icon={<LogOut size={16} />} label="Log out" danger onClick={onLogout} />
-        <div style={{ height: 40 }} />
+        {section === 'notifications' && (
+          <>
+            <SectionHeader title="Notifications" />
+            <SettingsRow icon={soundOn ? <Volume2 size={16} /> : <VolumeX size={16} />} label="Message sound" right={<ToggleSwitch on={soundOn} onClick={() => setSoundOn((s) => !s)} />} />
+            <SettingsRow icon={reactionSoundOn ? <Volume2 size={16} /> : <VolumeX size={16} />} label="Reaction sound" right={<ToggleSwitch on={reactionSoundOn} onClick={() => setReactionSoundOn((s) => !s)} />} />
+          </>
+        )}
+
+        {section === 'about' && (
+          <>
+            <SectionHeader title="About" />
+            <SettingsRow icon={<FileText size={16} />} label="Privacy policy" onClick={onOpenPrivacy} />
+            <SettingsRow icon={<HelpCircle size={16} />} label="Help & support" onClick={() => {}} />
+          </>
+        )}
+
+        {section === 'account' && (
+          <>
+            <SectionHeader title="Account" />
+            <SettingsRow icon={<Bell size={16} />} label="Follow requests" onClick={onOpenRequests} />
+            <SettingsRow icon={<UserPlus size={16} />} label="Switch account" onClick={onOpenAccounts} />
+            <SettingsRow icon={<Trash2 size={16} />} label="Delete my account" danger onClick={onOpenDelete} />
+          </>
+        )}
+
+        <div style={{ height: 20 }} />
       </div>
       {lockFlow === 'set' && (
         <ChatLockSetup onCancel={() => setLockFlow(null)} onConfirm={(pin) => { onSetChatLockPassword(pin); setLockFlow(null); }} />
@@ -1460,7 +1524,7 @@ function WallpaperPicker({ value, onSelect, onClose }) {
 }
 
 /* Name Bar: a decorative banner shown behind the avatar+name in a DM header.
-   Each design is its own image file in /public â€” no sprite math needed. */
+   Each design is its own image file in /public — no sprite math needed. */
 const NAME_BAR_PRESETS = [
   { key: 'ice', label: 'Ice Wolf', file: '/name-bar-ice-wolf.png' },
   { key: 'eclipse', label: 'Eclipse Night', file: '/name-bar-eclipse-night.png' },
@@ -1493,7 +1557,7 @@ function NameBarPicker({ value, onSelect, onClose }) {
     }} className="zchat-fade">
       <div onClick={(e) => e.stopPropagation()} style={{ background: theme.panelBg, borderRadius: 22, padding: 20, width: '100%', maxWidth: 340, maxHeight: '75vh', display: 'flex', flexDirection: 'column' }}>
         <X size={19} style={{ position: 'absolute', top: 16, right: 16, cursor: 'pointer', color: theme.muted }} onClick={onClose} />
-        <div style={{ fontWeight: 800, fontSize: 15, color: theme.ink, marginBottom: 14, paddingRight: 24 }}>Name bar</div>
+        <div style={{ fontWeight: 800, fontSize: 15, color: theme.ink, marginBottom: 14, paddingRight: 24 }}>Header style</div>
         <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div onClick={() => { onSelect(null); onClose(); }} style={{
             height: 44, borderRadius: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -1542,11 +1606,11 @@ function PinPad({ value, onChange, length = 4 }) {
 
 function PinKeypad({ onDigit, onBackspace }) {
   const { theme } = useTheme();
-  const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', 'âŒ«'];
+  const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', '⌫'];
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
       {keys.map((k, i) => (
-        <div key={i} onClick={() => { if (k === 'âŒ«') onBackspace(); else if (k) onDigit(k); }} style={{
+        <div key={i} onClick={() => { if (k === '⌫') onBackspace(); else if (k) onDigit(k); }} style={{
           height: 50, borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: 18, fontWeight: 700, color: theme.ink, background: k ? theme.rowBg : 'transparent',
           cursor: k ? 'pointer' : 'default',
@@ -1636,41 +1700,96 @@ function ChatLockUnlock({ onCancel, onUnlock, correctHash }) {
 }
 
 
-function ChatSettingsPanel({ conv, myId, isPinned, isLocked, wallpaper, nameBar, chatLockAvailable, onClose, onTogglePin, onToggleArchive, onSetWallpaper, onSetNameBar, onEnableLock, onDisableLock, onDeleteChat, onNicknameSaved }) {
+function NicknameEditRow({ avatar, label, currentValue, placeholder, onSave }) {
+  const { theme } = useTheme();
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState('');
+  const [saving, setSaving] = useState(false);
+  return (
+    <div style={{ padding: '14px 4px' }}>
+      <div onClick={() => !editing && setEditing(true)} style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: editing ? 'default' : 'pointer' }}>
+        <Avatar emoji={avatar} name={label} size={44} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 11, color: theme.muted, fontWeight: 700, marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.03em' }}>{label}</div>
+          {editing ? (
+            <input autoFocus value={val} onChange={(e) => setVal(e.target.value.slice(0, 30))} placeholder={placeholder}
+              style={{ ...inputStyle(theme), fontSize: 13.5, padding: '7px 10px' }} />
+          ) : (
+            <div style={{ fontSize: 14.5, fontWeight: 700, color: currentValue ? theme.ink : theme.muted, fontStyle: currentValue ? 'normal' : 'italic' }}>
+              {currentValue || placeholder}
+            </div>
+          )}
+        </div>
+      </div>
+      {editing && (
+        <div style={{ display: 'flex', gap: 8, marginTop: 10, justifyContent: 'flex-end' }}>
+          <span style={ghostBtn(theme)} onClick={() => { setVal(''); setEditing(false); }}>Cancel</span>
+          <button disabled={saving} onClick={async () => { setSaving(true); await onSave(val); setSaving(false); setVal(''); setEditing(false); }} style={{
+            padding: '7px 16px', borderRadius: 12, border: 'none', background: theme.coral, color: 'white',
+            fontWeight: 700, fontSize: 12.5, cursor: 'pointer', fontFamily: FONT,
+          }}>{saving ? <Spinner size={12} /> : 'Save'}</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NicknamesModal({ conv, myAvatar, myName, currentNickname, currentAlias, onSaveNickname, onSaveAlias, onClose }) {
+  const { theme } = useTheme();
+  const otherRealName = conv.realName || conv.otherProfile.name;
+  return (
+    <div style={{
+      position: 'absolute', inset: 0, background: 'rgba(20,16,14,0.5)', zIndex: 34,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 18,
+    }} className="zchat-fade">
+      <div style={{ background: theme.panelBg, borderRadius: 22, padding: '18px 20px', width: '100%', maxWidth: 340 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+          <div style={{ fontWeight: 800, fontSize: 16, color: theme.ink }}>Nicknames</div>
+          <X size={19} style={{ cursor: 'pointer', color: theme.muted }} onClick={onClose} />
+        </div>
+        <div style={{ fontSize: 12, color: theme.muted, marginBottom: 4 }}>Tap either name to change it. Only visible to you.</div>
+        <NicknameEditRow avatar={conv.otherProfile.avatar} label={otherRealName} currentValue={currentNickname} placeholder={otherRealName} onSave={onSaveNickname} />
+        <div style={{ height: 1, background: theme.border }} />
+        <NicknameEditRow avatar={myAvatar} label="You" currentValue={currentAlias} placeholder={myName} onSave={onSaveAlias} />
+      </div>
+    </div>
+  );
+}
+
+function ChatSettingsPanel({ conv, myId, meAvatar, meName, isPinned, isLocked, wallpaper, nameBar, chatLockAvailable, onClose, onTogglePin, onToggleArchive, onSetWallpaper, onSetNameBar, onEnableLock, onDisableLock, onDeleteChat, onReportUser, onNicknameSaved }) {
   const { theme } = useTheme();
   const [nickname, setNickname] = useState('');
-  const [nicknameSaving, setNicknameSaving] = useState(false);
-  const [nicknameJustSaved, setNicknameJustSaved] = useState(false);
   const [myAlias, setMyAlias] = useState('');
-  const [myAliasSaving, setMyAliasSaving] = useState(false);
-  const [myAliasJustSaved, setMyAliasJustSaved] = useState(false);
   const [showWallpaper, setShowWallpaper] = useState(false);
   const [showNameBar, setShowNameBar] = useState(false);
-  const [showLockSetup, setShowLockSetup] = useState(false);
+  const [showNicknames, setShowNicknames] = useState(false);
+  const [showReportUser, setShowReportUser] = useState(false);
+  const [followerCount, setFollowerCount] = useState(0);
+  const [followingCount, setFollowingCount] = useState(0);
 
   useEffect(() => {
     (async () => {
       const { data } = await supabase.from('contact_nicknames').select('nickname').eq('owner_id', myId).eq('contact_id', conv.otherProfile.id).maybeSingle();
-      if (data) setNickname(data.nickname);
+      setNickname(data ? data.nickname : '');
       const { data: aliasRow } = await supabase.from('self_aliases').select('alias').eq('user_id', myId).eq('viewer_id', conv.otherProfile.id).maybeSingle();
-      if (aliasRow) setMyAlias(aliasRow.alias);
+      setMyAlias(aliasRow ? aliasRow.alias : '');
+      const { count: followers } = await supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', conv.otherProfile.id).eq('status', 'accepted');
+      setFollowerCount(followers || 0);
+      const { count: following } = await supabase.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', conv.otherProfile.id).eq('status', 'accepted');
+      setFollowingCount(following || 0);
     })();
   }, [conv.otherProfile.id]);
 
   const saveMyAlias = async (val) => {
-    setMyAliasSaving(true);
     if (val.trim()) {
       await supabase.from('self_aliases').upsert({ user_id: myId, viewer_id: conv.otherProfile.id, alias: val.trim() }, { onConflict: 'user_id,viewer_id' });
     } else {
       await supabase.from('self_aliases').delete().eq('user_id', myId).eq('viewer_id', conv.otherProfile.id);
     }
     await sendMessage(myId, conv.otherProfile.id, 'system', val.trim() ? `Now appears as "${val.trim()}" to you` : 'Reverted to their real name', null);
-    setMyAliasSaving(false);
-    setMyAliasJustSaved(true);
-    setTimeout(() => setMyAliasJustSaved(false), 2000);
+    setMyAlias(val.trim());
   };
   const saveNickname = async (val) => {
-    setNicknameSaving(true);
     if (val.trim()) {
       await supabase.from('contact_nicknames').upsert({ owner_id: myId, contact_id: conv.otherProfile.id, nickname: val.trim() }, { onConflict: 'owner_id,contact_id' });
       await sendMessage(myId, conv.otherProfile.id, 'system', `Nickname updated to "${val.trim()}"`, null);
@@ -1678,11 +1797,13 @@ function ChatSettingsPanel({ conv, myId, isPinned, isLocked, wallpaper, nameBar,
       await supabase.from('contact_nicknames').delete().eq('owner_id', myId).eq('contact_id', conv.otherProfile.id);
       await sendMessage(myId, conv.otherProfile.id, 'system', 'Nickname removed', null);
     }
-    setNicknameSaving(false);
-    setNicknameJustSaved(true);
-    setTimeout(() => setNicknameJustSaved(false), 2000);
+    setNickname(val.trim());
     onNicknameSaved(val.trim() || null, conv.otherProfile.id);
   };
+
+  const otherName = conv.realName || conv.otherProfile.name;
+  const card = { ...glass(theme, { borderRadius: 18, overflow: 'hidden', marginBottom: 16 }) };
+  const rowNoBorder = { borderBottom: 'none' };
 
   return (
     <div style={{
@@ -1697,55 +1818,70 @@ function ChatSettingsPanel({ conv, myId, isPinned, isLocked, wallpaper, nameBar,
         <ArrowLeft size={20} style={{ cursor: 'pointer', color: theme.ink }} onClick={onClose} />
         <div style={{ fontWeight: 800, fontSize: 17, color: theme.ink }}>Chat settings</div>
       </div>
-      <div style={{ overflowY: 'auto', flex: 1, padding: '14px 18px' }}>
-        <div style={{ textAlign: 'center', marginBottom: 18 }}>
+      <div style={{ overflowY: 'auto', flex: 1, padding: '14px 18px', position: 'relative' }}>
+        <div style={{ textAlign: 'center', marginBottom: 16 }}>
           <div style={{ display: 'flex', justifyContent: 'center' }}>
-            <Avatar emoji={conv.otherProfile.avatar} name={conv.realName || conv.otherProfile.name} size={64} />
+            <Avatar emoji={conv.otherProfile.avatar} name={otherName} size={64} />
           </div>
-          <div style={{ fontWeight: 800, fontSize: 15, color: theme.ink, marginTop: 8 }}>{conv.realName || conv.otherProfile.name}</div>
-          <div style={{ fontSize: 12, color: theme.muted }}>@{conv.otherProfile.username}</div>
+          <div style={{ fontWeight: 800, fontSize: 15, color: theme.ink, marginTop: 8 }}>{otherName}</div>
+          <div style={{ fontSize: 12, color: theme.muted, marginBottom: 10 }}>@{conv.otherProfile.username}</div>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 8 }}>
+            <div style={{ flex: 1, maxWidth: 130, background: theme.rowBg, borderRadius: 14, padding: '9px 10px' }}>
+              <div style={{ fontWeight: 800, fontSize: 15, color: theme.ink }}>{followerCount}</div>
+              <div style={{ fontSize: 10, color: theme.muted, fontWeight: 600 }}>Followers</div>
+            </div>
+            <div style={{ flex: 1, maxWidth: 130, background: theme.rowBg, borderRadius: 14, padding: '9px 10px' }}>
+              <div style={{ fontWeight: 800, fontSize: 15, color: theme.ink }}>{followingCount}</div>
+              <div style={{ fontSize: 10, color: theme.muted, fontWeight: 600 }}>Following</div>
+            </div>
+          </div>
         </div>
 
-        <div style={{ fontSize: 11, color: theme.muted, marginBottom: 5, fontWeight: 800 }}>NICKNAME</div>
-        <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
-          <input value={nickname} onChange={(e) => setNickname(e.target.value.slice(0, 30))} placeholder="Custom nickname"
-            style={{ ...inputStyle(theme), fontSize: 13 }} />
-          <button onClick={() => saveNickname(nickname)} disabled={nicknameSaving} style={{
-            padding: '0 16px', borderRadius: 13, border: 'none', background: theme.coral, color: 'white',
-            fontWeight: 700, fontSize: 12.5, cursor: 'pointer', fontFamily: FONT,
-          }}>{nicknameSaving ? <Spinner size={12} /> : 'Save'}</button>
+        <div style={card}>
+          <SettingsRow icon={<AtSign size={16} />} label="Nicknames" onClick={() => setShowNicknames(true)} />
         </div>
-        {nicknameJustSaved && <div className="zchat-fade" style={{ fontSize: 11.5, color: theme.teal, fontWeight: 700, marginTop: -10, marginBottom: 14 }}>Saved ✓</div>}
 
-        <div style={{ fontSize: 11, color: theme.muted, marginBottom: 5, fontWeight: 800 }}>YOUR NAME SHOWN TO {(conv.realName || conv.otherProfile.name).toUpperCase()}</div>
-        <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
-          <input value={myAlias} onChange={(e) => setMyAlias(e.target.value.slice(0, 30))} placeholder="Your real name"
-            style={{ ...inputStyle(theme), fontSize: 13 }} />
-          <button onClick={() => saveMyAlias(myAlias)} disabled={myAliasSaving} style={{
-            padding: '0 16px', borderRadius: 13, border: 'none', background: theme.coral, color: 'white',
-            fontWeight: 700, fontSize: 12.5, cursor: 'pointer', fontFamily: FONT,
-          }}>{myAliasSaving ? <Spinner size={12} /> : 'Save'}</button>
+        <div style={card}>
+          <SettingsRow icon={<Pin_ />} label={isPinned ? 'Unpin chat' : 'Pin chat'} onClick={onTogglePin} />
+          <SettingsRow icon={<Archive size={16} />} label="Archive chat" onClick={onToggleArchive} />
+          <SettingsRow icon={<ImageIcon size={16} />} label="Chat wallpaper" onClick={() => setShowWallpaper(true)} />
+          <SettingsRow icon={<Sparkles size={16} />} label="Header style" onClick={() => setShowNameBar(true)} />
+          <div style={rowNoBorder}>
+            <SettingsRow icon={<Lock size={16} />} label={isLocked ? 'Remove chat lock' : 'Lock this chat'}
+              onClick={() => { if (isLocked) onDisableLock(); else if (chatLockAvailable) onEnableLock(); }} />
+          </div>
+          {!isLocked && !chatLockAvailable && (
+            <div style={{ fontSize: 11, color: theme.muted, padding: '0 14px 12px' }}>Set a Chat Lock password in Settings first.</div>
+          )}
         </div>
-        {myAliasJustSaved && <div className="zchat-fade" style={{ fontSize: 11.5, color: theme.teal, fontWeight: 700, marginBottom: 14 }}>Saved ✓</div>}
-        {!myAliasJustSaved && <div style={{ height: 8 }} />}
 
-        <SettingsRow icon={<Pin_ />} label={isPinned ? 'Unpin chat' : 'Pin chat'} onClick={onTogglePin} />
-        <SettingsRow icon={<FileText size={16} />} label="Archive chat" onClick={onToggleArchive} />
-        <SettingsRow icon={<ImageIcon size={16} />} label="Chat wallpaper" onClick={() => setShowWallpaper(true)} />
-        <SettingsRow icon={<ImageIcon size={16} />} label="Name bar" onClick={() => setShowNameBar(true)} />
-        <SettingsRow icon={<Lock size={16} />} label={isLocked ? 'Remove chat lock' : 'Lock this chat'}
-          onClick={() => { if (isLocked) onDisableLock(); else if (chatLockAvailable) onEnableLock(); }} />
-        {!isLocked && !chatLockAvailable && (
-          <div style={{ fontSize: 11, color: theme.muted, padding: '2px 4px 10px' }}>Set a Chat Lock password in Settings first.</div>
-        )}
-        <div style={{ height: 10 }} />
-        <SettingsRow icon={<Trash2 size={16} />} label="Delete chat" danger onClick={onDeleteChat} />
+        <div style={card}>
+          <SettingsRow icon={<Flag size={16} />} label={`Report ${otherName}`} danger onClick={() => setShowReportUser(true)} />
+          <div style={rowNoBorder}>
+            <SettingsRow icon={<Trash2 size={16} />} label={`Delete chat with ${otherName}`} danger onClick={onDeleteChat} />
+          </div>
+        </div>
       </div>
       {showWallpaper && (
         <WallpaperPicker value={wallpaper} onSelect={onSetWallpaper} onClose={() => setShowWallpaper(false)} />
       )}
       {showNameBar && (
         <NameBarPicker value={nameBar} onSelect={onSetNameBar} onClose={() => setShowNameBar(false)} />
+      )}
+      {showNicknames && (
+        <NicknamesModal
+          conv={conv} myAvatar={meAvatar} myName={meName}
+          currentNickname={nickname} currentAlias={myAlias}
+          onSaveNickname={saveNickname} onSaveAlias={saveMyAlias}
+          onClose={() => setShowNicknames(false)}
+        />
+      )}
+      {showReportUser && (
+        <ReportMessageModal
+          title={`Report ${otherName}`}
+          onCancel={() => setShowReportUser(false)}
+          onSubmit={(reason) => { onReportUser(reason); setShowReportUser(false); }}
+        />
       )}
     </div>
   );
@@ -2988,6 +3124,20 @@ function playPing() {
     o.start(); o.stop(ctx.currentTime + 0.3);
   } catch {}
 }
+function playReactionPing() {
+  try {
+    if (localStorage.getItem('zchat-reaction-sound') === 'off') return;
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = 'sine'; o.frequency.value = 1320;
+    g.gain.setValueAtTime(0.0001, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.13, ctx.currentTime + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.16);
+    o.connect(g); g.connect(ctx.destination);
+    o.start(); o.stop(ctx.currentTime + 0.18);
+  } catch {}
+}
 
 function pairKey(a, b) { return a < b ? [a, b] : [b, a]; }
 
@@ -3112,7 +3262,7 @@ function ForwardPicker({ conversations, onCancel, onPick, myId }) {
 }
 
 
-function ReportMessageModal({ onCancel, onSubmit }) {
+function ReportMessageModal({ onCancel, onSubmit, title = 'Report message' }) {
   const { theme } = useTheme();
   const [reason, setReason] = useState('');
   return (
@@ -3121,7 +3271,7 @@ function ReportMessageModal({ onCancel, onSubmit }) {
       display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 18,
     }} className="zchat-fade">
       <div style={{ background: theme.panelBg, borderRadius: 22, padding: 22, width: '100%', maxWidth: 320 }}>
-        <div style={{ fontWeight: 800, fontSize: 16, color: theme.ink, marginBottom: 12 }}>Report message</div>
+        <div style={{ fontWeight: 800, fontSize: 16, color: theme.ink, marginBottom: 12 }}>{title}</div>
         <textarea value={reason} onChange={(e) => setReason(e.target.value)} placeholder="What's wrong with this message?"
           style={{ ...inputStyle(theme), height: 64, resize: 'none', fontFamily: FONT, marginBottom: 12 }} />
         <div style={{ display: 'flex', gap: 8 }}>
@@ -3158,6 +3308,55 @@ function DeleteChatConfirm({ name, onCancel, onConfirm }) {
             flex: 1, padding: 11, borderRadius: 13, border: 'none', background: theme.danger,
             color: 'white', fontWeight: 700, fontSize: 13.5, cursor: 'pointer', fontFamily: FONT,
           }}>Delete</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const PREFETCH_ASSET_VERSION = 'v1';
+function useAssetPrefetch() {
+  const [progress, setProgress] = useState(null);
+  useEffect(() => {
+    const doneKey = 'zchat-assets-cached-' + PREFETCH_ASSET_VERSION;
+    try { if (localStorage.getItem(doneKey) === '1') return; } catch {}
+    const urls = [...NAME_BAR_PRESETS.map((p) => p.file), '/chat-bg.jpg'];
+    let done = 0;
+    let cancelled = false;
+    setProgress({ done: 0, total: urls.length });
+    Promise.all(urls.map((url) => new Promise((resolve) => {
+      const img = new Image();
+      img.onload = img.onerror = () => {
+        done += 1;
+        if (!cancelled) setProgress({ done, total: urls.length });
+        resolve();
+      };
+      img.src = url;
+    }))).then(() => {
+      if (cancelled) return;
+      try { localStorage.setItem(doneKey, '1'); } catch {}
+      setTimeout(() => { if (!cancelled) setProgress(null); }, 600);
+    });
+    return () => { cancelled = true; };
+  }, []);
+  return progress;
+}
+
+function AssetDownloadBar({ progress }) {
+  const { theme } = useTheme();
+  if (!progress) return null;
+  const pct = progress.total ? Math.round((progress.done / progress.total) * 100) : 0;
+  return (
+    <div style={{
+      position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)', zIndex: 15,
+      background: theme.panelBg, borderRadius: 14, padding: '8px 14px', boxShadow: '0 6px 20px rgba(0,0,0,0.22)',
+      display: 'flex', alignItems: 'center', gap: 10, minWidth: 210, border: `1px solid ${theme.border}`,
+    }} className="zchat-fade">
+      <Spinner size={13} color={theme.coral} />
+      <div style={{ flex: 1 }}>
+        <div style={{ fontSize: 10.5, fontWeight: 700, color: theme.ink, marginBottom: 3 }}>Downloading theme assets {progress.done}/{progress.total}</div>
+        <div style={{ height: 4, borderRadius: 2, background: theme.rowBg, overflow: 'hidden' }}>
+          <div style={{ height: '100%', width: `${pct}%`, background: theme.coral, borderRadius: 2, transition: 'width 0.2s' }} />
         </div>
       </div>
     </div>
@@ -3226,6 +3425,7 @@ function DeleteMessageConfirm({ onCancel, onConfirm }) {
 
 function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAccount, onAddAccount, onRemoveAccount }) {
   const { theme, bgPatternOn, chatTheme } = useTheme();
+  const assetProgress = useAssetPrefetch();
   const [me, setMe] = useState(null);
   const [profileCheckFailed, setProfileCheckFailed] = useState(false);
   const [results, setResults] = useState([]);
@@ -3351,7 +3551,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (error) { alert('Could not change name bar: ' + error.message); return; }
     setConversations((prev) => prev.map((c) => (c.id === conv.id ? { ...c, name_bar: key } : c)));
     const label = key ? (NAME_BAR_PRESETS.find((p) => p.key === key)?.label || key) : 'None';
-    await sendMessage(session.user.id, conv.otherProfile.id, 'system', `Name bar changed to ${label}`, null);
+    await sendMessage(session.user.id, conv.otherProfile.id, 'system', `Header style changed to ${label}`, null);
     loadConversations();
   };
 
@@ -3465,7 +3665,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
   const upsertConversation = async (otherId, text, type) => {
     const [a, b] = pairKey(session.user.id, otherId);
-    const preview = type === 'text' ? text : type === 'image' ? 'ðŸ“· Photo' : 'ðŸŽ¥ Video';
+    const preview = type === 'text' ? text : type === 'image' ? '📷 Photo' : '🎥 Video';
     await supabase.from('conversations').upsert(
       { user_a: a, user_b: b, last_message: preview, last_message_at: new Date().toISOString(), last_sender_id: session.user.id },
       { onConflict: 'user_a,user_b' }
@@ -3479,7 +3679,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         if (cancelled) return;
         if (data) { setMe({ ...data, email: session.user.email }); return; }
         // Session exists but profile was never finished (e.g. backed out mid-signup).
-        // Don't spin forever â€” sign out and send back to login with an explanation.
+        // Don't spin forever — sign out and send back to login with an explanation.
         setProfileCheckFailed(true);
       })
       .catch(() => { if (!cancelled) setProfileCheckFailed(true); });
@@ -3565,7 +3765,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       .on('postgres_changes', { event: '*', schema: 'public', table: 'message_likes' }, (payload) => {
         const row = payload.new || payload.old;
         const msgId = row.message_id;
-        if (!findMessageById(msgId)) return;
+        const targetMsg = findMessageById(msgId);
+        if (!targetMsg) return;
+        if (payload.eventType === 'INSERT' && row.user_id !== me.id && targetMsg.sender_id === me.id) playReactionPing();
         setMessageLikes((prev) => {
           const next = { ...prev };
           const list = (next[msgId] || []).filter((r) => r.user_id !== row.user_id);
@@ -3807,7 +4009,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       setMessages((prev) => [...prev, data]);
       loadGroups();
       if (type !== 'system') {
-        const preview = type === 'text' ? content : type === 'image' ? 'ðŸ“· Photo' : type === 'audio' ? 'ðŸŽ¤ Voice message' : 'ðŸŽ¥ Video';
+        const preview = type === 'text' ? content : type === 'image' ? '📷 Photo' : type === 'audio' ? '🎤 Voice message' : '🎥 Video';
         groupMembers.filter((m) => m.user_id !== session.user.id && !m.muted).forEach((m) => {
           sendPushNotification(m.user_id, `${me.name} in ${activeGroup.name}`, preview, `/?group=${activeGroup.id}`, me.avatar);
         });
@@ -4302,6 +4504,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       paddingRight: 'env(safe-area-inset-right)',
     }}>
       <GlobalStyle />
+      <AssetDownloadBar progress={assetProgress} />
       <div style={glass(theme, {
         width: '100%', maxWidth: '100%', height: '100%', maxHeight: '100%', display: 'flex',
         borderRadius: 0, overflow: 'hidden', boxShadow: 'none', border: 'none',
@@ -4949,6 +5152,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           return (
             <ChatSettingsPanel
               conv={activeConv} myId={session.user.id}
+              meAvatar={me.avatar} meName={me.name}
               isPinned={isPinnedByMe(activeConv)}
               isLocked={!!myLocks[activeConv.id]}
               wallpaper={myWallpaper(activeConv)}
@@ -4962,6 +5166,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               onEnableLock={() => enableChatLock(activeConv)}
               onDisableLock={() => disableChatLock(activeConv)}
               onDeleteChat={() => { setShowChatSettings(false); setDeleteConvoTarget(activeConv); }}
+              onReportUser={(reason) => handleReport(activeConv.otherProfile, reason)}
               onNicknameSaved={async (newNick, contactId) => {
                 loadConversations();
                 if (newNick) {
