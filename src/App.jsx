@@ -1630,7 +1630,6 @@ function ChatSettingsPanel({ conv, myId, isPinned, isLocked, wallpaper, chatLock
           <div style={{ fontWeight: 800, fontSize: 15, color: theme.ink, marginTop: 8 }}>{conv.realName || conv.otherProfile.name}</div>
           <div style={{ fontSize: 12, color: theme.muted }}>@{conv.otherProfile.username}</div>
         </div>
-
         <div style={{ fontSize: 11, color: theme.muted, marginBottom: 5, fontWeight: 800 }}>NICKNAME</div>
         <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
           <input value={nickname} onChange={(e) => setNickname(e.target.value.slice(0, 30))} placeholder="Custom nickname"
@@ -3099,6 +3098,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const recordTimerRef = useRef(null);
+  const recordStartRef = useRef(0);
+  const [unreadCounts, setUnreadCounts] = useState({});
 
   const archivedChatsKey = () => `zchat-archived-chats-${session.user.id}`;
   const getArchivedChatIds = () => { try { return new Set(JSON.parse(localStorage.getItem(archivedChatsKey()) || '[]')); } catch { return new Set(); } };
@@ -3127,14 +3128,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
   const readKey = (convId) => `zchat-read-${session.user.id}-${convId}`;
   const markRead = (convId) => { try { localStorage.setItem(readKey(convId), Date.now().toString()); } catch {} };
-  const isUnread = (conv) => {
-    if (conv.last_sender_id === session.user.id) return false;
-    try {
-      const last = localStorage.getItem(readKey(conv.id));
-      if (!last) return true;
-      return new Date(conv.last_message_at).getTime() > parseInt(last, 10);
-    } catch { return false; }
-  };
+  const isUnread = (conv) => (unreadCounts[conv.otherProfile.id] || 0) > 0;
 
   const isPinnedByMe = (conv) => (conv.user_a === session.user.id ? conv.pinned_by_a : conv.pinned_by_b);
   const togglePin = async (conv) => {
@@ -3211,6 +3205,14 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     setMyLocks({});
   };
 
+  const loadUnreadCounts = async () => {
+    const { data } = await supabase.from('messages').select('sender_id')
+      .eq('receiver_id', session.user.id).eq('read', false).not('deleted', 'is', true);
+    const map = {};
+    (data || []).forEach((m) => { map[m.sender_id] = (map[m.sender_id] || 0) + 1; });
+    setUnreadCounts(map);
+  };
+
   const loadConversations = async () => {
     const hidden = getHiddenChatIds();
     const archived = getArchivedChatIds();
@@ -3273,7 +3275,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   }, [profileCheckFailed]);
 
   useEffect(() => {
-    if (me) { loadConversations(); loadMyLocks(); loadGroups(); loadMyBlocks(); subscribeToPush(session.user.id); loadFollowRequestCount(); supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', me.id); }
+    if (me) { loadConversations(); loadUnreadCounts(); loadMyLocks(); loadGroups(); loadMyBlocks(); subscribeToPush(session.user.id); loadFollowRequestCount(); supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', me.id); }
   }, [me]);
 
   useEffect(() => {
@@ -3321,6 +3323,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       if (msg.sender_id !== me.id) {
         if (msg.sender_id !== activeProfile?.id || !mobileShowChatRef.current) { playPing(); supabase.from('messages').update({ delivered: true }).eq('id', msg.id); }
         else supabase.from('messages').update({ read: true, delivered: true }).eq('id', msg.id);
+        loadUnreadCounts();
       }
       setMessages((prev) => (activeProfile && msg.sender_id === activeProfile.id ? [...prev, msg] : prev));
     });
@@ -3379,8 +3382,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         const rowRaw = payload.new;
         const row = sanitizeAvatar(rowRaw, session.user.id);
         if (row.id === me.id) setMe((prev) => ({ ...prev, ...rowRaw, email: prev.email }));
-        if (activeProfile && row.id === activeProfile.id) setActiveProfile((prev) => ({ ...prev, ...row }));
-        setProfileOf((prev) => (prev && prev.id === row.id ? { ...prev, ...row } : prev));
+        if (activeProfile && row.id === activeProfile.id) setActiveProfile((prev) => ({ ...prev, ...row, name: prev.name }));
+        setProfileOf((prev) => (prev && prev.id === row.id ? { ...prev, ...row, name: prev.name } : prev));
+        setConversations((prev) => prev.map((c) => (c.otherProfile.id === row.id ? { ...c, otherProfile: { ...c.otherProfile, ...row, name: c.otherProfile.name }, realName: row.name } : c)));
+        setArchivedConversations((prev) => prev.map((c) => (c.otherProfile.id === row.id ? { ...c, otherProfile: { ...c.otherProfile, ...row, name: c.otherProfile.name }, realName: row.name } : c)));
       })
       .subscribe();
     return () => supabase.removeChannel(channel);
@@ -3464,6 +3469,21 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   useEffect(() => { mobileShowChatRef.current = mobileShowChat; }, [mobileShowChat]);
 
   useEffect(() => {
+    if (composerRef.current && draft === '') {
+      composerRef.current.style.height = 'auto';
+    }
+  }, [draft]);
+
+  useEffect(() => {
+    if (!profileOf || profileOf.id === me?.id) return;
+    let cancelled = false;
+    getProfile(profileOf.id).then(({ data }) => {
+      if (!cancelled && data) setProfileOf((prev) => (prev && prev.id === data.id ? { ...prev, ...sanitizeAvatar(data, session.user.id), name: prev.name } : prev));
+    });
+    return () => { cancelled = true; };
+  }, [profileOf?.id]);
+
+  useEffect(() => {
     if (!activeProfile) return;
     const poll = setInterval(async () => {
       const currentMessages = messagesRef.current;
@@ -3482,6 +3502,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       if (theirUnreadIds.length) {
         await supabase.from('messages').update({ read: true, delivered: true }).in('id', theirUnreadIds);
         setMessages((prev) => prev.map((m) => (theirUnreadIds.includes(m.id) ? { ...m, read: true, delivered: true } : m)));
+        loadUnreadCounts();
       }
     }, 1000);
     return () => clearInterval(poll);
@@ -3671,6 +3692,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       return;
     }
     setActiveProfile(profile);
+    getProfile(profile.id).then(({ data }) => {
+      if (data) setActiveProfile((prev) => (prev && prev.id === data.id ? { ...prev, ...sanitizeAvatar(data, session.user.id), name: prev.name } : prev));
+    });
     setActiveFollowState(null);
     setActiveGroup(null);
     setMobileShowChat(true);
@@ -3692,6 +3716,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (unreadIds.length) {
       await supabase.from('messages').update({ read: true, delivered: true }).in('id', unreadIds);
       setMessages((prev) => prev.map((m) => (unreadIds.includes(m.id) ? { ...m, read: true, delivered: true } : m)));
+      loadUnreadCounts();
     }
     if (visible.length) {
       const ids = visible.map((m) => m.id);
@@ -3825,6 +3850,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     setPendingMedia((prev) => [...prev, ...staged]);
   };
 
+  const MIN_RECORDING_MS = 700;
+
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -3834,13 +3861,17 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       const actualMime = recorder.mimeType || supportedMime || 'audio/webm';
       const ext = actualMime.includes('mp4') ? 'm4a' : actualMime.includes('ogg') ? 'ogg' : actualMime.includes('aac') ? 'aac' : 'webm';
       audioChunksRef.current = [];
-      recorder.ondataavailable = (e) => audioChunksRef.current.push(e.data);
+      recorder.ondataavailable = (e) => { if (e.data && e.data.size > 0) audioChunksRef.current.push(e.data); };
       recorder.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
         clearInterval(recordTimerRef.current);
         setRecording(false);
         if (!activeProfile && !activeGroup) return;
         const blob = new Blob(audioChunksRef.current, { type: actualMime });
+        if (blob.size < 1000) {
+          alert('That recording was too short or got cut off — please try again.');
+          return;
+        }
         const file = new File([blob], `voice.${ext}`, { type: actualMime });
         setUploading(true);
         const { url, error } = await uploadMedia(file, session.user.id);
@@ -3855,7 +3886,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         setUploading(false);
       };
       mediaRecorderRef.current = recorder;
-      recorder.start();
+      recorder.start(250);
+      recordStartRef.current = Date.now();
       setRecording(true);
       setRecordSeconds(0);
       recordTimerRef.current = setInterval(() => setRecordSeconds((s) => s + 1), 1000);
@@ -3863,7 +3895,15 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       alert('Microphone access is needed to send a voice message.');
     }
   };
-  const stopRecording = () => { mediaRecorderRef.current?.stop(); };
+
+  const stopRecording = () => {
+    const elapsed = Date.now() - recordStartRef.current;
+    if (elapsed < MIN_RECORDING_MS) {
+      setTimeout(() => mediaRecorderRef.current?.stop(), MIN_RECORDING_MS - elapsed);
+    } else {
+      mediaRecorderRef.current?.stop();
+    }
+  };
   const handleDelete = async (messageId) => {
     const { data } = await deleteMessage(messageId);
     if (data) setMessages((prev) => prev.map((m) => (m.id === messageId ? data : m)));
@@ -4276,7 +4316,13 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                           {locked && !unlockedChats.has(c.id) ? 'Locked chat' : `${c.last_sender_id === session.user.id ? 'You: ' : ''}${c.last_message}`}
                         </div>
                       </div>
-                      {unread && <div style={{ width: 10, height: 10, borderRadius: '50%', background: theme.coral, flexShrink: 0 }} />}
+                      {unreadCounts[c.otherProfile.id] > 0 && (
+                        <div style={{
+                          minWidth: 20, height: 20, borderRadius: 10, background: theme.coral, color: 'white',
+                          fontSize: 11, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          padding: '0 6px', flexShrink: 0,
+                        }}>{unreadCounts[c.otherProfile.id] > 9 ? '9+' : unreadCounts[c.otherProfile.id]}</div>
+                      )}
                     </div>
                     <div onClick={(e) => { e.stopPropagation(); setRowMenuFor(rowMenuFor === c.id ? null : c.id); }} style={{ padding: 6, cursor: 'pointer', flexShrink: 0 }}>
                       <MoreVertical size={16} color={theme.muted} />
@@ -4341,8 +4387,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                     <ArrowLeft size={22} />
                   </div>
                   <GroupAvatar avatar={activeGroup.avatar} name={activeGroup.name} size={38} />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 800, fontSize: 15, color: theme.ink }}>{activeGroup.name}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 800, fontSize: 15, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{activeGroup.name}</div>
                     <div style={{ fontSize: 12, color: theme.muted }}>{groupMembers.length} members</div>
                   </div>
                   <MoreVertical size={19} color={theme.muted} style={{ cursor: 'pointer', flexShrink: 0, marginLeft: 6 }}
@@ -4356,8 +4402,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                     <ArrowLeft size={22} />
                   </div>
                   <Avatar emoji={activeProfile.avatar} name={activeProfile.name} online={!activeProfile.hide_activity && onlineIds.has(activeProfile.id)} size={38} ring />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 800, fontSize: 15, color: theme.ink }}>{activeProfile.name}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 800, fontSize: 15, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{activeProfile.name}</div>
                     <div style={{ fontSize: 12, color: typingFrom ? theme.coral : theme.muted, fontWeight: typingFrom ? 700 : 400 }}>
                       {typingFrom
                         ? 'typing...'
@@ -4846,5 +4892,4 @@ export default function App() {
       <AppInner />
     </ThemeProvider>
   );
-}
-
+                                                                                   }
