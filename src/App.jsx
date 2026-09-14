@@ -1565,11 +1565,14 @@ function ChatLockUnlock({ onCancel, onUnlock, correctHash }) {
 }
 
 
-function ChatSettingsPanel({ conv, myId, isPinned, isLocked, wallpaper, onClose, onTogglePin, onToggleArchive, onSetWallpaper, onEnableLock, onDisableLock, onDeleteChat, onNicknameSaved }) {
+function ChatSettingsPanel({ conv, myId, isPinned, isLocked, wallpaper, chatLockAvailable, onClose, onTogglePin, onToggleArchive, onSetWallpaper, onEnableLock, onDisableLock, onDeleteChat, onNicknameSaved }) {
   const { theme } = useTheme();
   const [nickname, setNickname] = useState('');
   const [nicknameSaving, setNicknameSaving] = useState(false);
   const [nicknameJustSaved, setNicknameJustSaved] = useState(false);
+  const [myAlias, setMyAlias] = useState('');
+  const [myAliasSaving, setMyAliasSaving] = useState(false);
+  const [myAliasJustSaved, setMyAliasJustSaved] = useState(false);
   const [showWallpaper, setShowWallpaper] = useState(false);
   const [showLockSetup, setShowLockSetup] = useState(false);
 
@@ -1577,8 +1580,23 @@ function ChatSettingsPanel({ conv, myId, isPinned, isLocked, wallpaper, onClose,
     (async () => {
       const { data } = await supabase.from('contact_nicknames').select('nickname').eq('owner_id', myId).eq('contact_id', conv.otherProfile.id).maybeSingle();
       if (data) setNickname(data.nickname);
+      const { data: aliasRow } = await supabase.from('self_aliases').select('alias').eq('user_id', myId).eq('viewer_id', conv.otherProfile.id).maybeSingle();
+      if (aliasRow) setMyAlias(aliasRow.alias);
     })();
   }, [conv.otherProfile.id]);
+
+  const saveMyAlias = async (val) => {
+    setMyAliasSaving(true);
+    if (val.trim()) {
+      await supabase.from('self_aliases').upsert({ user_id: myId, viewer_id: conv.otherProfile.id, alias: val.trim() }, { onConflict: 'user_id,viewer_id' });
+    } else {
+      await supabase.from('self_aliases').delete().eq('user_id', myId).eq('viewer_id', conv.otherProfile.id);
+    }
+    await sendMessage(myId, conv.otherProfile.id, 'system', val.trim() ? `Now appears as "${val.trim()}" to you` : 'Reverted to their real name', null);
+    setMyAliasSaving(false);
+    setMyAliasJustSaved(true);
+    setTimeout(() => setMyAliasJustSaved(false), 2000);
+  };
 
   const saveNickname = async (val) => {
     setNicknameSaving(true);
@@ -1624,11 +1642,26 @@ function ChatSettingsPanel({ conv, myId, isPinned, isLocked, wallpaper, onClose,
         </div>
         {nicknameJustSaved && <div className="zchat-fade" style={{ fontSize: 11.5, color: theme.teal, fontWeight: 700, marginTop: -10, marginBottom: 14 }}>Saved ✓</div>}
 
+        <div style={{ fontSize: 11, color: theme.muted, marginBottom: 5, fontWeight: 800 }}>YOUR NAME SHOWN TO {(conv.realName || conv.otherProfile.name).toUpperCase()}</div>
+        <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+          <input value={myAlias} onChange={(e) => setMyAlias(e.target.value.slice(0, 30))} placeholder="Your real name"
+            style={{ ...inputStyle(theme), fontSize: 13 }} />
+          <button onClick={() => saveMyAlias(myAlias)} disabled={myAliasSaving} style={{
+            padding: '0 16px', borderRadius: 13, border: 'none', background: theme.coral, color: 'white',
+            fontWeight: 700, fontSize: 12.5, cursor: 'pointer', fontFamily: FONT,
+          }}>{myAliasSaving ? <Spinner size={12} /> : 'Save'}</button>
+        </div>
+        {myAliasJustSaved && <div className="zchat-fade" style={{ fontSize: 11.5, color: theme.teal, fontWeight: 700, marginBottom: 14 }}>Saved ✓</div>}
+        {!myAliasJustSaved && <div style={{ height: 8 }} />}
+
         <SettingsRow icon={<Pin_ />} label={isPinned ? 'Unpin chat' : 'Pin chat'} onClick={onTogglePin} />
         <SettingsRow icon={<FileText size={16} />} label="Archive chat" onClick={onToggleArchive} />
         <SettingsRow icon={<ImageIcon size={16} />} label="Chat wallpaper" onClick={() => setShowWallpaper(true)} />
         <SettingsRow icon={<Lock size={16} />} label={isLocked ? 'Remove chat lock' : 'Lock this chat'}
-          onClick={() => (isLocked ? onDisableLock() : onEnableLock())} />
+          onClick={() => { if (isLocked) onDisableLock(); else if (chatLockAvailable) onEnableLock(); }} />
+        {!isLocked && !chatLockAvailable && (
+          <div style={{ fontSize: 11, color: theme.muted, padding: '2px 4px 10px' }}>Set a Chat Lock password in Settings first.</div>
+        )}
         <div style={{ height: 10 }} />
         <SettingsRow icon={<Trash2 size={16} />} label="Delete chat" danger onClick={onDeleteChat} />
       </div>
@@ -2387,26 +2420,6 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
             }}>{formatLastSeen(profile.last_seen)}</div>
           )}
 
-          {!isSelf && !editing && (
-            nicknameEditing ? (
-              <div style={{ marginTop: 10 }} onClick={(e) => e.stopPropagation()}>
-                <div style={{ fontSize: 11, color: theme.muted, marginBottom: 5 }}>Nickname for {profile.realName || profile.name}</div>
-                <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
-                  <input value={nickname} onChange={(e) => setNickname(e.target.value.slice(0, 30))} placeholder="Custom nickname"
-                    style={{ ...inputStyle(theme), padding: '7px 10px', fontSize: 12.5, width: 160 }} />
-                  <button onClick={saveNickname} disabled={nicknameSaving} style={{
-                    padding: '7px 12px', borderRadius: 10, border: 'none', background: theme.coral, color: 'white',
-                    fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: FONT,
-                  }}>{nicknameSaving ? <Spinner size={11} /> : 'Save'}</button>
-                </div>
-              </div>
-            ) : (
-              <div onClick={() => setNicknameEditing(true)} style={{ marginTop: 8, fontSize: 11.5, color: theme.coralDeep, fontWeight: 700, cursor: 'pointer' }}>
-                {nickname ? `Nickname: ${nickname} (edit)` : 'Set a nickname'}
-              </div>
-            )
-          )}
-
           {isSelf && !editing && (
             <div style={{ marginTop: 16 }}>
               <button onClick={() => setEditing(true)} style={{
@@ -2468,8 +2481,8 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button onClick={() => { setEditing(false); setUsername(profile.username || ''); setUsernameErr(''); }} style={{ ...primaryBtn(theme, false, theme.rowBg), color: theme.ink, marginTop: 0, flex: 1, boxShadow: 'none' }}>Cancel</button>
-                <button onClick={save} disabled={saving} style={{ ...primaryBtn(theme, saving), marginTop: 0, flex: 1 }}>
-                  {saving ? <Spinner /> : 'Save'}
+                <button onClick={save} disabled={saving || avatarUploading} style={{ ...primaryBtn(theme, saving || avatarUploading), marginTop: 0, flex: 1 }}>
+                  {(saving || avatarUploading) ? <Spinner /> : 'Save'}
                 </button>
               </div>
             </div>
@@ -3177,7 +3190,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   };
 
   const enableChatLock = async (conv) => {
-    if (!me?.chat_lock_hash) { alert('Set a Chat Lock password in Settings first.'); return; }
+    if (!me?.chat_lock_hash) return;
     await supabase.from('chat_locks').upsert({ conversation_id: conv.id, owner_id: session.user.id, pin_hash: 'master' }, { onConflict: 'conversation_id,owner_id' });
     setMyLocks((prev) => ({ ...prev, [conv.id]: true }));
     setUnlockedChats((prev) => new Set(prev).add(conv.id));
@@ -3210,14 +3223,17 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const { data: profsRaw } = await supabase.from('profiles').select('*').in('id', otherIds.length ? otherIds : ['00000000-0000-0000-0000-000000000000']);
     const profs = sanitizeAvatarList(profsRaw, session.user.id);
     const { data: nicks } = await supabase.from('contact_nicknames').select('*').eq('owner_id', session.user.id);
+    const { data: aliasesForMe } = await supabase.from('self_aliases').select('*').eq('viewer_id', session.user.id);
     const mergedAll = visible
       .map((c) => {
         const otherId = c.user_a === session.user.id ? c.user_b : c.user_a;
         if (myBlockedIds.has(otherId)) return null;
         const profile = profs?.find((p) => p.id === otherId);
         const nick = nicks?.find((n) => n.contact_id === otherId);
+        const theirAlias = aliasesForMe?.find((a) => a.user_id === otherId);
+        const baseName = theirAlias ? theirAlias.alias : profile?.name;
         if (!profile) return null;
-        return { ...c, otherProfile: nick ? { ...profile, name: nick.nickname } : profile, realName: profile.name };
+        return { ...c, otherProfile: nick ? { ...profile, name: nick.nickname } : { ...profile, name: baseName }, realName: profile.name };
       })
       .filter(Boolean)
       .sort((a, b) => {
@@ -4350,21 +4366,20 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                           : (!activeProfile.hide_activity && formatLastSeen(activeProfile.last_seen)) || `@${activeProfile.username}`}
                     </div>
                   </div>
-                  {activeFollowState !== null && (
-                    <button onClick={(e) => { e.stopPropagation(); toggleActiveFollow(); }} disabled={activeFollowBusy} style={{
-                      padding: '6px 14px', borderRadius: 18, fontSize: 11.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, flexShrink: 0,
-                      border: activeFollowState !== 'none' ? `1.5px solid ${theme.border}` : 'none',
-                      background: activeFollowState === 'accepted' ? `${theme.coral}18` : activeFollowState === 'pending' ? 'transparent' : theme.coral,
-                      color: activeFollowState === 'accepted' ? theme.coralDeep : activeFollowState === 'pending' ? theme.ink : 'white',
-                      display: 'flex', alignItems: 'center', gap: 5,
-                    }}>
-                      {activeFollowBusy ? <Spinner size={11} color={activeFollowState !== 'none' ? theme.ink : 'white'} /> :
-                        (<>{activeFollowState === 'accepted' ? <Check size={11} /> : activeFollowState === 'pending' ? null : <UserPlus size={11} />}</>)}
-                      {!activeFollowBusy && (
-                        activeFollowState === 'accepted' ? 'Following' : activeFollowState === 'pending' ? 'Requested' : 'Follow'
-                      )}
-                    </button>
-                  )}
+                  <button onClick={(e) => { e.stopPropagation(); if (activeFollowState !== null) toggleActiveFollow(); }} disabled={activeFollowBusy || activeFollowState === null} style={{
+                    padding: '6px 14px', borderRadius: 18, fontSize: 11.5, fontWeight: 700, cursor: activeFollowState === null ? 'default' : 'pointer', fontFamily: FONT, flexShrink: 0,
+                    opacity: activeFollowState === null ? 0 : 1, visibility: activeFollowState === null ? 'hidden' : 'visible',
+                    border: activeFollowState !== 'none' && activeFollowState !== null ? `1.5px solid ${theme.border}` : 'none',
+                    background: activeFollowState === 'accepted' ? `${theme.coral}18` : activeFollowState === 'pending' ? 'transparent' : theme.coral,
+                    color: activeFollowState === 'accepted' ? theme.coralDeep : activeFollowState === 'pending' ? theme.ink : 'white',
+                    display: 'flex', alignItems: 'center', gap: 5,
+                  }}>
+                    {activeFollowBusy ? <Spinner size={11} color={activeFollowState !== 'none' ? theme.ink : 'white'} /> :
+                      (<>{activeFollowState === 'accepted' ? <Check size={11} /> : activeFollowState === 'pending' ? null : <UserPlus size={11} />}</>)}
+                    {!activeFollowBusy && (
+                      activeFollowState === 'accepted' ? 'Following' : activeFollowState === 'pending' ? 'Requested' : 'Follow'
+                    )}
+                  </button>
                   <MoreVertical size={19} color={theme.muted} style={{ cursor: 'pointer', flexShrink: 0, marginLeft: 6 }}
                     onClick={(e) => { e.stopPropagation(); setShowChatSettings(true); }} />
                 </div>
@@ -4500,7 +4515,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <Paperclip size={21} color={theme.muted} style={{ cursor: 'pointer', transform: showAttach ? 'rotate(45deg)' : 'none', transition: 'transform 0.15s', flexShrink: 0 }}
                         onClick={() => setShowAttach((s) => !s)} />
-                      <textarea ref={composerRef} value={draft} enterKeyHint="enter" onChange={(e) => {
+                      <textarea ref={composerRef} value={draft} enterKeyHint="enter" data-keyboard-heal="true" onChange={(e) => {
                         setDraft(e.target.value.slice(0, MAX_CHARS)); sendTyping();
                         e.target.style.height = 'auto';
                         e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
@@ -4589,6 +4604,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               isPinned={isPinnedByMe(activeConv)}
               isLocked={!!myLocks[activeConv.id]}
               wallpaper={myWallpaper(activeConv)}
+              chatLockAvailable={!!me.chat_lock_hash}
               onClose={() => setShowChatSettings(false)}
               onTogglePin={() => { togglePin(activeConv); }}
               onToggleArchive={() => { setShowChatSettings(false); toggleArchive(activeConv.id, true); setActiveProfile(null); }}
