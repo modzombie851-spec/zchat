@@ -1003,11 +1003,19 @@ function ToggleSwitch({ on, onClick }) {
   );
 }
 
-function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideActivity, onToggleActivity, onOpenAccounts, onOpenDelete, chatLockSet, chatLockHash, onSetChatLockPassword, onTurnOffChatLock }) {
+function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideActivity, onToggleActivity, onOpenAccounts, onOpenDelete, chatLockSet, chatLockHash, onSetChatLockPassword, onTurnOffChatLock, autoOpenLockSetup, onConsumedAutoOpen }) {
   const { theme, dark, setDark, accentName, setAccentName, soundOn, setSoundOn, reactionSoundOn, setReactionSoundOn, bgPatternOn, setBgPatternOn, fontScale, setFontScale, chatTheme, setChatTheme } = useTheme();
   const accentLabels = { coral: 'Coral', ocean: 'Ocean', berry: 'Berry' };
   const [lockFlow, setLockFlow] = useState(null);
   const [section, setSection] = useState('main');
+
+  useEffect(() => {
+    if (autoOpenLockSetup) {
+      setSection('privacy');
+      setLockFlow('set');
+      onConsumedAutoOpen();
+    }
+  }, [autoOpenLockSetup]);
 
   const CategoryRow = ({ icon, label, sub, onClick }) => (
     <div onClick={onClick} style={{
@@ -1154,7 +1162,7 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
   );
 }
 
-function AccountSwitcherPanel({ accounts, currentId, onBack, onSwitch, onRemove, onAdd }) {
+function AccountSwitcherPanel({ accounts, currentId, switchingId, onBack, onSwitch, onRemove, onAdd }) {
   const { theme } = useTheme();
   return (
     <div style={{
@@ -1170,8 +1178,8 @@ function AccountSwitcherPanel({ accounts, currentId, onBack, onSwitch, onRemove,
           <div style={{ fontWeight: 800, fontSize: 17, color: theme.ink }}>Switch account</div>
         </div>
         {accounts.map((a) => (
-          <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 4px', borderBottom: `1px solid ${theme.border}` }}>
-            <div onClick={() => a.id !== currentId && onSwitch(a)} style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, cursor: a.id !== currentId ? 'pointer' : 'default', minWidth: 0 }}>
+          <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 4px', borderBottom: `1px solid ${theme.border}`, opacity: switchingId && switchingId !== a.id ? 0.5 : 1 }}>
+            <div onClick={() => a.id !== currentId && !switchingId && onSwitch(a)} style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, cursor: a.id !== currentId && !switchingId ? 'pointer' : 'default', minWidth: 0 }}>
               <Avatar emoji={a.avatar} name={a.name} size={40} />
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontWeight: 700, fontSize: 13.5, color: theme.ink }}>
@@ -1179,8 +1187,9 @@ function AccountSwitcherPanel({ accounts, currentId, onBack, onSwitch, onRemove,
                 </div>
                 <div style={{ fontSize: 11.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.email}</div>
               </div>
+              {switchingId === a.id && <Spinner size={14} color={theme.coral} />}
             </div>
-            {a.id !== currentId && <X size={16} color={theme.muted} style={{ cursor: 'pointer', flexShrink: 0 }} onClick={() => onRemove(a.id)} />}
+            {a.id !== currentId && !switchingId && <X size={16} color={theme.muted} style={{ cursor: 'pointer', flexShrink: 0 }} onClick={() => onRemove(a.id)} />}
           </div>
         ))}
         <button onClick={onAdd} style={{ ...primaryBtn(theme, false), marginTop: 16 }}>+ Add another account</button>
@@ -1377,8 +1386,35 @@ function IconDownload({ size = 15, color = 'currentColor' }) {
   );
 }
 
+const EXTRA_EMOJIS = ['ðŸ˜€', 'ðŸ˜', 'ðŸ˜‚', 'ðŸ¤£', 'ðŸ˜Š', 'ðŸ˜', 'ðŸ˜˜', 'ðŸ˜œ', 'ðŸ¤”', 'ðŸ˜Ž', 'ðŸ˜´', 'ðŸ˜­', 'ðŸ˜¡', 'ðŸ¥³', 'ðŸ¤¯', 'ðŸ¥°', 'ðŸ˜‡', 'ðŸ™„', 'ðŸ˜¬', 'ðŸ¤—', 'ðŸ¤©', 'ðŸ˜', 'ðŸ˜¢', 'ðŸ˜±', 'ðŸ¤', 'ðŸ‘', 'ðŸ™', 'ðŸ’ª', 'ðŸ‘', 'ðŸ‘Ž', 'ðŸ‘Œ', 'âœŒï¸', 'ðŸ¤™', 'ðŸ‘‹', 'ðŸ’¯', 'ðŸ”¥', 'âœ¨', 'ðŸŽ‰', 'ðŸŽ‚', 'â¤ï¸', 'ðŸ§¡', 'ðŸ’›', 'ðŸ’š', 'ðŸ’™', 'ðŸ’œ', 'ðŸ–¤', 'ðŸ’”', 'ðŸ˜¢', 'ðŸ˜¤', 'ðŸ¤¡', 'ðŸ’€', 'ðŸ‘€', 'ðŸ™ˆ', 'ðŸ¶', 'ðŸ±'];
+
+function FullEmojiPicker({ onPick, onClose }) {
+  const { theme } = useTheme();
+  return (
+    <div style={{
+      position: 'absolute', inset: 0, background: 'rgba(20,16,14,0.5)', zIndex: 92,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 18,
+    }} className="zchat-fade" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} style={{
+        background: theme.panelBg, borderRadius: 22, padding: 18, width: '100%', maxWidth: 340, maxHeight: '60vh', display: 'flex', flexDirection: 'column',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+          <div style={{ fontWeight: 800, fontSize: 15, color: theme.ink }}>React with</div>
+          <X size={18} style={{ cursor: 'pointer', color: theme.muted }} onClick={onClose} />
+        </div>
+        <div style={{ overflowY: 'auto', display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 6 }}>
+          {EXTRA_EMOJIS.map((e, i) => (
+            <div key={e + i} onClick={() => onPick(e)} style={{ fontSize: 24, cursor: 'pointer', textAlign: 'center', padding: '6px 0' }}>{e}</div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function MessageContextMenu({ message, isMine, canEditText, canModerate, onClose, onReact, onReply, onCopy, onEdit, onForward, onReport, onDeleteForMe, onDeleteForEveryone, onSelectMultiple }) {
   const { theme } = useTheme();
+  const [showFullEmoji, setShowFullEmoji] = useState(false);
   const row = { display: 'flex', alignItems: 'center', gap: 12, padding: '11px 6px', cursor: 'pointer', fontSize: 14, fontWeight: 600, color: theme.ink };
   return (
     <div onClick={onClose} style={{
@@ -1386,10 +1422,14 @@ function MessageContextMenu({ message, isMine, canEditText, canModerate, onClose
       display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
     }} className="zchat-fade">
       <div onClick={(e) => e.stopPropagation()} style={{ background: theme.panelBg, borderRadius: 22, padding: 16, width: '100%', maxWidth: 300 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-around', padding: '4px 0 14px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'center', padding: '4px 0 14px' }}>
           {REACTION_EMOJIS.map((e) => (
             <div key={e} onClick={() => onReact(e)} style={{ fontSize: 24, cursor: 'pointer' }}>{e}</div>
           ))}
+          <div onClick={() => setShowFullEmoji(true)} style={{
+            width: 26, height: 26, borderRadius: '50%', background: theme.rowBg, display: 'flex',
+            alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0,
+          }}><span style={{ fontSize: 16, fontWeight: 800, color: theme.muted, lineHeight: 1 }}>+</span></div>
         </div>
         <div style={{ borderTop: `1px solid ${theme.border}`, paddingTop: 4 }}>
           <div style={row} onClick={onReply}><Reply size={16} /> Reply</div>
@@ -1402,24 +1442,35 @@ function MessageContextMenu({ message, isMine, canEditText, canModerate, onClose
           {(isMine || canModerate) && !message.deleted && <div style={{ ...row, color: theme.danger }} onClick={onDeleteForEveryone}><Trash2 size={16} color={theme.danger} /> Delete for everyone</div>}
         </div>
       </div>
+      {showFullEmoji && (
+        <FullEmojiPicker onClose={() => setShowFullEmoji(false)} onPick={(e) => { onReact(e); setShowFullEmoji(false); }} />
+      )}
     </div>
   );
 }
 
 function EmojiPickerBar({ onPick, onClose }) {
   const { theme } = useTheme();
+  const [showFullEmoji, setShowFullEmoji] = useState(false);
   return (
     <div style={{
       position: 'absolute', inset: 0, background: 'rgba(20,16,14,0.5)', zIndex: 91,
       display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 18,
     }} className="zchat-fade" onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} style={{
-        background: theme.panelBg, borderRadius: 22, padding: '14px 18px', display: 'flex', gap: 14,
+        background: theme.panelBg, borderRadius: 22, padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 14,
       }}>
         {REACTION_EMOJIS.map((e) => (
           <div key={e} onClick={() => onPick(e)} style={{ fontSize: 26, cursor: 'pointer' }}>{e}</div>
         ))}
+        <div onClick={() => setShowFullEmoji(true)} style={{
+          width: 30, height: 30, borderRadius: '50%', background: theme.rowBg, display: 'flex',
+          alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0,
+        }}><span style={{ fontSize: 18, fontWeight: 800, color: theme.muted, lineHeight: 1 }}>+</span></div>
       </div>
+      {showFullEmoji && (
+        <FullEmojiPicker onClose={() => setShowFullEmoji(false)} onPick={(e) => { onPick(e); setShowFullEmoji(false); }} />
+      )}
     </div>
   );
 }
@@ -1447,7 +1498,6 @@ function WhoReactedModal({ reactions, onClose }) {
     </ListModal>
   );
 }
-
 
 function ArchivedChatsPanel({ conversations, onClose, onOpenChat, onUnarchive }) {
   const { theme } = useTheme();
@@ -1684,7 +1734,7 @@ function ChatLockSetup({ onCancel, onConfirm }) {
   const handleBackspace = () => { if (stage === 'enter') setPin((p) => p.slice(0, -1)); else setConfirmPin((p) => p.slice(0, -1)); };
 
   return (
-    <div style={{
+    <div onClick={(e) => e.stopPropagation()} style={{
       position: 'absolute', inset: 0, background: theme.panelBg, zIndex: 97,
       display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 30,
     }} className="zchat-fade">
@@ -1719,7 +1769,7 @@ function ChatLockUnlock({ onCancel, onUnlock, correctHash }) {
   };
 
   return (
-    <div style={{
+    <div onClick={(e) => e.stopPropagation()} style={{
       position: 'absolute', inset: 0, background: theme.panelBg, zIndex: 97,
       display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 30,
     }} className="zchat-fade">
@@ -1792,7 +1842,27 @@ function NicknamesModal({ conv, myAvatar, myName, currentNickname, currentAlias,
   );
 }
 
-function ChatSettingsPanel({ conv, myId, meAvatar, meName, isPinned, isLocked, wallpaper, nameBar, chatLockAvailable, onClose, onTogglePin, onToggleArchive, onSetWallpaper, onSetNameBar, onEnableLock, onDisableLock, onDeleteChat, onReportUser, onNicknameSaved }) {
+function PillRow({ icon, label, onClick, danger }) {
+  const { theme } = useTheme();
+  return (
+    <div onClick={onClick} style={{
+      display: 'flex', alignItems: 'center', gap: 12, padding: '11px 16px', marginBottom: 8,
+      borderRadius: 999, cursor: 'pointer',
+      background: theme.dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.035)',
+      border: `1px solid ${theme.dark ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.06)'}`,
+      backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
+    }}>
+      <div style={{
+        width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: danger ? `${theme.danger}1F` : `${theme.coral}1F`, color: danger ? theme.danger : theme.coralDeep, flexShrink: 0,
+      }}>{icon}</div>
+      <div style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 700, color: danger ? theme.danger : theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</div>
+      {!danger && <ChevronRight size={14} color={theme.muted} style={{ flexShrink: 0 }} />}
+    </div>
+  );
+}
+
+function ChatSettingsPanel({ conv, myId, meAvatar, meName, isPinned, isLocked, wallpaper, nameBar, chatLockAvailable, onClose, onTogglePin, onToggleArchive, onSetWallpaper, onSetNameBar, onEnableLock, onDisableLock, onDeleteChat, onReportUser, onNicknameSaved, onNeedChatLockSetup, onOpenProfile }) {
   const { theme } = useTheme();
   const [nickname, setNickname] = useState('');
   const [myAlias, setMyAlias] = useState('');
@@ -1802,6 +1872,7 @@ function ChatSettingsPanel({ conv, myId, meAvatar, meName, isPinned, isLocked, w
   const [showReportUser, setShowReportUser] = useState(false);
   const [followerCount, setFollowerCount] = useState(0);
   const [followingCount, setFollowingCount] = useState(0);
+  const [listModal, setListModal] = useState(null);
 
   useEffect(() => {
     (async () => {
@@ -1838,8 +1909,13 @@ function ChatSettingsPanel({ conv, myId, meAvatar, meName, isPinned, isLocked, w
   };
 
   const otherName = conv.realName || conv.otherProfile.name;
-  const card = { ...glass(theme, { borderRadius: 18, overflow: 'hidden', marginBottom: 16 }) };
-  const rowNoBorder = { borderBottom: 'none' };
+  const p = conv.otherProfile;
+  const infoBits = [
+    p.gender && !p.hide_gender ? p.gender : null,
+    p.age != null && !p.hide_age ? `${p.age} yrs` : null,
+    p.country && !p.hide_country ? countryFlag(p.country) : null,
+  ].filter(Boolean);
+  const showBio = p.bio && !p.hide_bio;
 
   return (
     <div style={{
@@ -1850,52 +1926,44 @@ function ChatSettingsPanel({ conv, myId, meAvatar, meName, isPinned, isLocked, w
         position: 'absolute', inset: 0, backgroundImage: "url('/chat-bg.jpg')",
         backgroundSize: 'cover', backgroundPosition: 'center', opacity: 0.35, pointerEvents: 'none',
       }} />
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 18px', borderBottom: `1px solid ${theme.border}`, position: 'relative' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 18px', borderBottom: `1px solid ${theme.border}`, position: 'relative', flexShrink: 0 }}>
         <ArrowLeft size={20} style={{ cursor: 'pointer', color: theme.ink }} onClick={onClose} />
         <div style={{ fontWeight: 800, fontSize: 17, color: theme.ink }}>Chat settings</div>
       </div>
-      <div style={{ overflowY: 'auto', flex: 1, padding: '14px 18px', position: 'relative' }}>
-        <div style={{ textAlign: 'center', marginBottom: 16 }}>
+      <div style={{ flex: 1, overflow: 'hidden', padding: '12px 18px', position: 'relative', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ textAlign: 'center', marginBottom: 12, flexShrink: 0 }}>
           <div style={{ display: 'flex', justifyContent: 'center' }}>
-            <Avatar emoji={conv.otherProfile.avatar} name={otherName} size={64} />
+            <Avatar emoji={conv.otherProfile.avatar} name={otherName} size={56} />
           </div>
-          <div style={{ fontWeight: 800, fontSize: 15, color: theme.ink, marginTop: 8 }}>{otherName}</div>
-          <div style={{ fontSize: 12, color: theme.muted, marginBottom: 10 }}>@{conv.otherProfile.username}</div>
-          <div style={{ display: 'flex', justifyContent: 'center', gap: 8 }}>
-            <div style={{ flex: 1, maxWidth: 130, background: theme.rowBg, borderRadius: 14, padding: '9px 10px' }}>
-              <div style={{ fontWeight: 800, fontSize: 15, color: theme.ink }}>{followerCount}</div>
-              <div style={{ fontSize: 10, color: theme.muted, fontWeight: 600 }}>Followers</div>
+          <div style={{ fontWeight: 800, fontSize: 14.5, color: theme.ink, marginTop: 7 }}>{otherName}</div>
+          <div style={{ fontSize: 11.5, color: theme.muted }}>@{conv.otherProfile.username}</div>
+          {(infoBits.length > 0 || showBio) && (
+            <div style={{ fontSize: 11, color: theme.muted, marginTop: 4, padding: '0 20px', lineHeight: 1.4 }}>
+              {[infoBits.join(' · '), showBio ? p.bio : null].filter(Boolean).join(' — ')}
             </div>
-            <div style={{ flex: 1, maxWidth: 130, background: theme.rowBg, borderRadius: 14, padding: '9px 10px' }}>
-              <div style={{ fontWeight: 800, fontSize: 15, color: theme.ink }}>{followingCount}</div>
-              <div style={{ fontSize: 10, color: theme.muted, fontWeight: 600 }}>Following</div>
-            </div>
-          </div>
-        </div>
-
-        <div style={card}>
-          <SettingsRow icon={<AtSign size={16} />} label="Nicknames" onClick={() => setShowNicknames(true)} />
-        </div>
-
-        <div style={card}>
-          <SettingsRow icon={<Pin_ />} label={isPinned ? 'Unpin chat' : 'Pin chat'} onClick={onTogglePin} />
-          <SettingsRow icon={<Archive size={16} />} label="Archive chat" onClick={onToggleArchive} />
-          <SettingsRow icon={<ImageIcon size={16} />} label="Chat wallpaper" onClick={() => setShowWallpaper(true)} />
-          <SettingsRow icon={<Sparkles size={16} />} label="Header style" onClick={() => setShowNameBar(true)} />
-          <div style={rowNoBorder}>
-            <SettingsRow icon={<Lock size={16} />} label={isLocked ? 'Remove chat lock' : 'Lock this chat'}
-              onClick={() => { if (isLocked) onDisableLock(); else if (chatLockAvailable) onEnableLock(); }} />
-          </div>
-          {!isLocked && !chatLockAvailable && (
-            <div style={{ fontSize: 11, color: theme.muted, padding: '0 14px 12px' }}>Set a Chat Lock password in Settings first.</div>
           )}
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 10 }}>
+            <div onClick={() => setListModal('followers')} style={{ flex: 1, maxWidth: 130, background: theme.rowBg, borderRadius: 14, padding: '8px 10px', cursor: 'pointer' }}>
+              <div style={{ fontWeight: 800, fontSize: 14, color: theme.ink }}>{followerCount}</div>
+              <div style={{ fontSize: 9.5, color: theme.muted, fontWeight: 600 }}>Followers</div>
+            </div>
+            <div onClick={() => setListModal('following')} style={{ flex: 1, maxWidth: 130, background: theme.rowBg, borderRadius: 14, padding: '8px 10px', cursor: 'pointer' }}>
+              <div style={{ fontWeight: 800, fontSize: 14, color: theme.ink }}>{followingCount}</div>
+              <div style={{ fontSize: 9.5, color: theme.muted, fontWeight: 600 }}>Following</div>
+            </div>
+          </div>
         </div>
 
-        <div style={card}>
-          <SettingsRow icon={<Flag size={16} />} label={`Report ${otherName}`} danger onClick={() => setShowReportUser(true)} />
-          <div style={rowNoBorder}>
-            <SettingsRow icon={<Trash2 size={16} />} label={`Delete chat with ${otherName}`} danger onClick={onDeleteChat} />
-          </div>
+        <div style={{ flex: 1, overflow: 'hidden' }}>
+          <PillRow icon={<AtSign size={14} />} label="Nicknames" onClick={() => setShowNicknames(true)} />
+          <PillRow icon={<Pin_ size={14} />} label={isPinned ? 'Unpin chat' : 'Pin chat'} onClick={onTogglePin} />
+          <PillRow icon={<Archive size={14} />} label="Archive chat" onClick={onToggleArchive} />
+          <PillRow icon={<ImageIcon size={14} />} label="Chat wallpaper" onClick={() => setShowWallpaper(true)} />
+          <PillRow icon={<Sparkles size={14} />} label="Header style" onClick={() => setShowNameBar(true)} />
+          <PillRow icon={<Lock size={14} />} label={isLocked ? 'Remove chat lock' : 'Lock this chat'}
+            onClick={() => { if (isLocked) onDisableLock(); else if (chatLockAvailable) onEnableLock(); else onNeedChatLockSetup(); }} />
+          <PillRow icon={<Flag size={14} />} label={`Report ${otherName}`} danger onClick={() => setShowReportUser(true)} />
+          <PillRow icon={<Trash2 size={14} />} label={`Delete chat with ${otherName}`} danger onClick={onDeleteChat} />
         </div>
       </div>
       {showWallpaper && (
@@ -1918,6 +1986,10 @@ function ChatSettingsPanel({ conv, myId, meAvatar, meName, isPinned, isLocked, w
           onCancel={() => setShowReportUser(false)}
           onSubmit={(reason) => { onReportUser(reason); setShowReportUser(false); }}
         />
+      )}
+      {listModal && (
+        <FollowListModal userId={conv.otherProfile.id} viewerId={myId} mode={listModal} onClose={() => setListModal(null)}
+          onOpenProfile={(pf) => { setListModal(null); onOpenProfile(pf); }} />
       )}
     </div>
   );
@@ -2958,7 +3030,7 @@ function AudioBubble({ url, isMe }) {
   );
 }
 
-function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSelect, onLongPress, onOpenImage, reactions, onReact, onOpenWhoReacted, replyPreview, onSwipeReply, senderLabel, senderAvatar, hideReadStatus, onOpenSenderProfile, canModerate }) {
+function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSelect, onLongPress, onOpenImage, onOpenVideo, reactions, onReact, onOpenWhoReacted, replyPreview, onSwipeReply, senderLabel, senderAvatar, hideReadStatus, onOpenSenderProfile, canModerate }) {
   const { theme, fontScale, chatTheme } = useTheme();
   const [hover, setHover] = useState(false);
   const [burstHeart, setBurstHeart] = useState(false);
@@ -2968,6 +3040,7 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
   const startPosRef = useRef({ x: 0, y: 0 });
   const [dragX, setDragX] = useState(0);
   const draggingRef = useRef(false);
+  const swipeFiredRef = useRef(false);
   const time = m.created_at ? new Date(m.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
 
   if (m.type === 'system') {
@@ -2988,12 +3061,14 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
     if (longPressFiredRef.current) { longPressFiredRef.current = false; return; }
     if (selectionMode) { onToggleSelect(m.id); return; }
     const now = Date.now();
-    if (now - lastTapRef.current < 300) {
+    if (now - lastTapRef.current < 350) {
       onReact(m.id, '❤️');
       setBurstHeart(true);
       setTimeout(() => setBurstHeart(false), 650);
     } else if (m.type === 'image') {
       onOpenImage(m.media_url);
+    } else if (m.type === 'video') {
+      onOpenVideo({ url: m.media_url, trimStart: m.trim_start, trimEnd: m.trim_end });
     }
     lastTapRef.current = now;
   };
@@ -3003,25 +3078,31 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
   const handlePointerDown = (e) => {
     setHover(true);
     startPosRef.current = { x: e.clientX, y: e.clientY };
+    swipeFiredRef.current = false;
     clearTimeout(pressTimerRef.current);
     pressTimerRef.current = setTimeout(() => {
       longPressFiredRef.current = true;
       onLongPress(m.id);
-    }, 500);
+    }, 350);
   };
   const handlePointerMove = (e) => {
     const dx = e.clientX - startPosRef.current.x;
     const dy = e.clientY - startPosRef.current.y;
     if (Math.abs(dx) > 8 || Math.abs(dy) > 8) clearPressTimer();
-    if (!m.deleted && !selectionMode && Math.abs(dx) > Math.abs(dy) && dx < 0) {
+    if (!m.deleted && !selectionMode && Math.abs(dx) > Math.abs(dy) && dx > 0) {
       draggingRef.current = true;
-      setDragX(Math.max(dx, -70));
+      const clamped = Math.min(dx, 50);
+      setDragX(clamped);
+      if (clamped >= 32 && !swipeFiredRef.current) {
+        swipeFiredRef.current = true;
+        onSwipeReply(m);
+        setTimeout(() => { setDragX(0); draggingRef.current = false; }, 150);
+      }
     }
   };
   const finalizeDrag = () => {
     clearPressTimer();
-    if (draggingRef.current) {
-      if (dragX <= -50) onSwipeReply(m);
+    if (draggingRef.current && !swipeFiredRef.current) {
       draggingRef.current = false;
       setDragX(0);
     }
@@ -3030,8 +3111,8 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
   return (
     <div
       style={{
-        display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start', alignItems: 'center', gap: 8, marginBottom: 10,
-        touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent',
+        display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start', alignItems: 'flex-start', gap: 8, marginBottom: 14,
+        touchAction: 'pan-y', WebkitTapHighlightColor: 'transparent', overscrollBehaviorX: 'none',
         background: selected ? `${theme.coral}14` : 'transparent',
         marginLeft: -18, marginRight: -18, paddingLeft: 18, paddingRight: 18, paddingTop: 2, paddingBottom: 2,
       }}
@@ -3045,25 +3126,25 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
         <div onClick={() => onToggleSelect(m.id)} style={{
           width: 20, height: 20, borderRadius: '50%', border: `2px solid ${selected ? theme.coral : theme.border}`,
           background: selected ? theme.coral : 'transparent', flexShrink: 0, cursor: 'pointer',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: 2,
         }}>
           {selected && <Check size={12} color="white" />}
         </div>
       )}
       {isMe && !m.deleted && !selectionMode && (
-        <Trash2 size={14} color={theme.muted} style={{ cursor: 'pointer', flexShrink: 0, opacity: hover ? 1 : 0.35, transition: 'opacity 0.15s' }}
+        <Trash2 size={14} color={theme.muted} style={{ cursor: 'pointer', flexShrink: 0, opacity: hover ? 1 : 0.35, transition: 'opacity 0.15s', marginTop: 4 }}
           onClick={() => onDelete(m.id)} />
       )}
       {senderLabel && !m.deleted && (
-        <div onClick={onOpenSenderProfile} style={{ cursor: onOpenSenderProfile ? 'pointer' : 'default', flexShrink: 0, alignSelf: 'flex-end', marginBottom: 4 }}>
+        <div onClick={onOpenSenderProfile} style={{ cursor: onOpenSenderProfile ? 'pointer' : 'default', flexShrink: 0 }}>
           <Avatar emoji={senderAvatar} name={senderLabel} size={26} />
         </div>
       )}
       <div style={{ position: 'relative', maxWidth: '72%' }}>
         {!selectionMode && !m.deleted && (
           <div style={{
-            position: 'absolute', top: '50%', right: -34, transform: 'translateY(-50%)',
-            opacity: Math.min(1, Math.abs(dragX) / 55), pointerEvents: 'none',
+            position: 'absolute', top: 10, left: -30, transform: 'translateY(-50%)',
+            opacity: Math.min(1, dragX / 32), pointerEvents: 'none',
           }}>
             <Reply size={16} color={theme.coral} />
           </div>
@@ -3078,11 +3159,12 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
         )}
         <div onClick={handleTap} style={glass(theme, {
           background: m.deleted ? theme.rowBg : (isMe ? theme.bubbleMe : theme.bubbleThem),
-          borderRadius: 18,
-          borderBottomRightRadius: isMe && !m.deleted ? 4 : 18,
-          borderBottomLeftRadius: !isMe && !m.deleted ? 4 : 18,
-          padding: m.type === 'text' || m.deleted ? '7px 12px' : 5,
-          border: m.deleted ? `1px dashed ${theme.border}` : `1px solid ${theme.border}`,
+          borderRadius: 19,
+          borderBottomRightRadius: isMe && !m.deleted ? 5 : 19,
+          borderBottomLeftRadius: !isMe && !m.deleted ? 5 : 19,
+          padding: m.type === 'text' || m.deleted ? '6px 11px' : 4,
+          border: m.deleted ? `1px dashed ${theme.border}` : `1px solid ${theme.dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)'}`,
+          boxShadow: m.deleted ? 'none' : '0 1px 2px rgba(0,0,0,0.06)',
           cursor: 'pointer',
           ...(m.deleted ? {} : bubbleThemeStyle(chatTheme, isMe, theme)),
         })}>
@@ -3115,7 +3197,7 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
           ) : (
             <>
               {m.type === 'image' && (
-                <div style={{ position: 'relative', width: 220, height: 220, borderRadius: 12, overflow: 'hidden', marginBottom: m.content ? 4 : 2 }}>
+                <div style={{ position: 'relative', width: 220, height: 220, borderRadius: 14, overflow: 'hidden', marginBottom: m.content ? 4 : 2 }}>
                   <img src={m.media_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
                   <a href={m.media_url} download onClick={(e) => e.stopPropagation()} style={{
                     position: 'absolute', top: 6, right: 6, width: 26, height: 26, borderRadius: '50%',
@@ -3124,8 +3206,16 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
                 </div>
               )}
               {m.type === 'video' && (
-                <div style={{ position: 'relative', width: 220, height: 220, borderRadius: 12, overflow: 'hidden', marginBottom: m.content ? 4 : 2, background: '#000' }}>
-                  <video src={m.media_url} controls style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                <div onClick={(e) => { e.stopPropagation(); onOpenVideo({ url: m.media_url, trimStart: m.trim_start, trimEnd: m.trim_end }); }} style={{ position: 'relative', width: 220, height: 220, borderRadius: 14, overflow: 'hidden', marginBottom: m.content ? 4 : 2, background: '#000', cursor: 'pointer' }}>
+                  <video src={m.media_url} preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none' }} />
+                  <div style={{
+                    position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none',
+                    background: 'rgba(0,0,0,0.18)',
+                  }}>
+                    <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Play size={20} color="white" style={{ marginLeft: 2 }} />
+                    </div>
+                  </div>
                   <a href={m.media_url} download onClick={(e) => e.stopPropagation()} style={{
                     position: 'absolute', top: 6, right: 6, width: 26, height: 26, borderRadius: '50%',
                     background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -3136,15 +3226,20 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
               {m.content && <div style={{ fontSize: 15 * fontScale, color: theme.ink, padding: m.type !== 'text' ? '0 4px' : 0, wordBreak: 'break-word', lineHeight: 1.32 }}>{linkifyText(m.content)}</div>}
             </>
           )}
-          <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 4, marginTop: 2, padding: m.type !== 'text' && !m.deleted ? '0 4px 2px' : 0 }}>
-            {m.edited && !m.deleted && <span style={{ fontSize: 9.5, color: theme.muted, fontStyle: 'italic' }}>edited</span>}
-            <span style={{ fontSize: 10, color: theme.muted }}>{time}</span>
-            {isMe && !m.deleted && <StatusTicks status={(!hideReadStatus && m.read) ? 'read' : m.delivered ? 'delivered' : 'sent'} />}
-          </div>
         </div>
+        {!m.deleted && (
+          <div style={{
+            display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start', alignItems: 'center', gap: 3,
+            marginTop: 2, padding: isMe ? '0 3px 0 0' : '0 0 0 3px',
+          }}>
+            {m.edited && <span style={{ fontSize: 8.5, color: theme.muted, fontStyle: 'italic' }}>edited</span>}
+            <span style={{ fontSize: 9.5, color: theme.muted }}>{time}</span>
+            {isMe && <StatusTicks status={(!hideReadStatus && m.read) ? 'read' : m.delivered ? 'delivered' : 'sent'} />}
+          </div>
+        )}
         {groupedEntries.length > 0 && !m.deleted && (
           <div onClick={() => onOpenWhoReacted(m.id)} style={{
-            position: 'absolute', bottom: -8, [isMe ? 'left' : 'right']: 6, cursor: 'pointer',
+            position: 'absolute', bottom: 14, [isMe ? 'left' : 'right']: 6, cursor: 'pointer',
             background: theme.panelBg, borderRadius: 10, padding: '1px 6px', fontSize: 10.5,
             display: 'flex', alignItems: 'center', gap: 3, boxShadow: '0 1px 4px rgba(0,0,0,0.15)',
           }}>
@@ -3233,6 +3328,51 @@ function ImageViewer({ url, onClose, onForward, onReport }) {
   );
 }
 
+function VideoViewer({ url, trimStart, trimEnd, onClose, onForward }) {
+  const videoRef = useRef(null);
+  const seekedRef = useRef(false);
+  const save = () => {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'zchat-video.mp4';
+    a.target = '_blank';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+  const onLoadedMetadata = (e) => {
+    if (trimStart && !seekedRef.current) { e.target.currentTime = trimStart; seekedRef.current = true; }
+  };
+  const onTimeUpdate = (e) => {
+    if (trimEnd && e.target.currentTime >= trimEnd) {
+      e.target.pause();
+      e.target.currentTime = trimStart || 0;
+    }
+  };
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.96)', zIndex: 200,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
+    }} className="zchat-fade">
+      <div onClick={onClose} style={{
+        position: 'absolute', top: 18, left: 18, width: 36, height: 36, borderRadius: '50%',
+        background: 'rgba(255,255,255,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 2,
+      }}><X size={18} color="white" /></div>
+      <div style={{ position: 'absolute', top: 18, right: 18, display: 'flex', gap: 10, zIndex: 2 }}>
+        <div onClick={save} style={{
+          width: 36, height: 36, borderRadius: '50%', background: 'rgba(255,255,255,0.12)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+        }}><Download size={17} color="white" /></div>
+        <div onClick={onForward} style={{
+          width: 36, height: 36, borderRadius: '50%', background: 'rgba(255,255,255,0.12)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+        }}><Forward size={17} color="white" /></div>
+      </div>
+      <video ref={videoRef} src={url} controls autoPlay playsInline onLoadedMetadata={onLoadedMetadata} onTimeUpdate={onTimeUpdate}
+        style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+    </div>
+  );
+}
 
 function MessageActionBar({ count, canEditActions, onCancel, onForward, onDeleteForMe, onDeleteForEveryone, onReport }) {
   const { theme } = useTheme();
@@ -3415,6 +3555,53 @@ function AssetDownloadBar({ progress }) {
   );
 }
 
+function NotificationHelpModal({ onClose }) {
+  const { theme } = useTheme();
+  const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+  const isIOS = /iPhone|iPad|iPod/.test(ua);
+  const isAndroid = /Android/.test(ua);
+  const steps = isIOS
+    ? ['Open the iPhone Settings app', 'Scroll down and tap Safari (or Chrome)', 'Tap Notifications', 'Find ZChat and turn it on']
+    : isAndroid
+      ? ['Tap the lock or info icon next to the web address', 'Tap Permissions (or Site settings)', 'Turn Notifications on', 'Reload the page']
+      : ['Click the lock or info icon next to the web address', 'Find Notifications in the site settings', 'Change it to Allow', 'Reload the page'];
+  return (
+    <div style={{
+      position: 'absolute', inset: 0, background: 'rgba(20,16,14,0.5)', zIndex: 97,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 18,
+    }} className="zchat-fade">
+      <div style={{ background: theme.panelBg, borderRadius: 22, padding: 22, width: '100%', maxWidth: 320 }}>
+        <div style={{ fontWeight: 800, fontSize: 16, color: theme.ink, marginBottom: 6 }}>Turn notifications back on</div>
+        <div style={{ fontSize: 12.5, color: theme.muted, marginBottom: 14, lineHeight: 1.5 }}>
+          Notifications were blocked for ZChat. Since your browser controls this permission, ZChat can't turn it back on for you — but here's how:
+        </div>
+        <ol style={{ margin: 0, paddingLeft: 18, marginBottom: 18 }}>
+          {steps.map((s, i) => (
+            <li key={i} style={{ fontSize: 12.5, color: theme.ink, marginBottom: 6, lineHeight: 1.4 }}>{s}</li>
+          ))}
+        </ol>
+        <button onClick={onClose} style={primaryBtn(theme, false)}>Got it</button>
+      </div>
+    </div>
+  );
+}
+
+function NotificationPermissionBanner({ onOpenHelp, onDismiss, top }) {
+  const { theme } = useTheme();
+  return (
+    <div style={{
+      position: 'absolute', top, left: 10, right: 10, zIndex: 14, maxWidth: 340, margin: '0 auto',
+      background: theme.panelBg, borderRadius: 14, padding: '10px 12px', boxShadow: '0 6px 20px rgba(0,0,0,0.22)',
+      border: `1px solid ${theme.border}`, display: 'flex', alignItems: 'center', gap: 10,
+    }} className="zchat-fade">
+      <Bell size={16} color={theme.danger} style={{ flexShrink: 0 }} />
+      <div style={{ flex: 1, fontSize: 11, color: theme.ink, fontWeight: 600 }}>Notifications are off for ZChat</div>
+      <span onClick={onOpenHelp} style={{ fontSize: 11.5, color: theme.coral, fontWeight: 800, cursor: 'pointer', flexShrink: 0 }}>Fix</span>
+      <X size={15} color={theme.muted} style={{ cursor: 'pointer', flexShrink: 0 }} onClick={onDismiss} />
+    </div>
+  );
+}
+
 function SmartMenu({ anchorEl, open, onClose, children, width = 170 }) {
   const [pos, setPos] = useState(null);
   useEffect(() => {
@@ -3475,9 +3662,218 @@ function DeleteMessageConfirm({ onCancel, onConfirm }) {
   );
 }
 
-function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAccount, onAddAccount, onRemoveAccount }) {
+function PhotoCropEditor({ file, onCancel, onConfirm }) {
+  const { theme } = useTheme();
+  const [imgEl, setImgEl] = useState(null);
+  const [zoom, setZoom] = useState(1);
+  const [pos, setPos] = useState({ x: 0, y: 0 });
+  const [saving, setSaving] = useState(false);
+  const [caption, setCaption] = useState('');
+  const dragRef = useRef(null);
+
+  useEffect(() => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => setImgEl(img);
+    img.src = url;
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+
+  if (!imgEl) {
+    return (
+      <div style={{ position: 'absolute', inset: 0, background: 'rgba(10,8,6,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 90 }}>
+        <Spinner size={26} color="white" />
+      </div>
+    );
+  }
+
+  const maxW = 300, maxH = 400;
+  let frameW = maxW;
+  let frameH = frameW * (imgEl.naturalHeight / imgEl.naturalWidth);
+  if (frameH > maxH) { frameH = maxH; frameW = frameH * (imgEl.naturalWidth / imgEl.naturalHeight); }
+
+  const baseScale = Math.max(frameW / imgEl.naturalWidth, frameH / imgEl.naturalHeight);
+  const scale = baseScale * zoom;
+  const drawnW = imgEl.naturalWidth * scale;
+  const drawnH = imgEl.naturalHeight * scale;
+  const maxX = Math.max(0, (drawnW - frameW) / 2);
+  const maxY = Math.max(0, (drawnH - frameH) / 2);
+  const clampedX = Math.min(maxX, Math.max(-maxX, pos.x));
+  const clampedY = Math.min(maxY, Math.max(-maxY, pos.y));
+  const left = (frameW - drawnW) / 2 + clampedX;
+  const top = (frameH - drawnH) / 2 + clampedY;
+
+  const startDrag = (clientX, clientY) => { dragRef.current = { startX: clientX, startY: clientY, origX: pos.x, origY: pos.y }; };
+  const moveDrag = (clientX, clientY) => {
+    if (!dragRef.current) return;
+    const dx = clientX - dragRef.current.startX;
+    const dy = clientY - dragRef.current.startY;
+    setPos({ x: dragRef.current.origX + dx, y: dragRef.current.origY + dy });
+  };
+  const endDrag = () => { dragRef.current = null; };
+
+  const confirm = () => {
+    setSaving(true);
+    const outW = 1080;
+    const k = outW / frameW;
+    const outH = Math.round(frameH * k);
+    const canvas = document.createElement('canvas');
+    canvas.width = outW; canvas.height = outH;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(imgEl, 0, 0, imgEl.naturalWidth, imgEl.naturalHeight, left * k, top * k, drawnW * k, drawnH * k);
+    canvas.toBlob((blob) => { setSaving(false); if (blob) onConfirm(blob, caption.trim()); }, 'image/jpeg', 0.9);
+  };
+
+  return (
+    <div style={{
+      position: 'absolute', inset: 0, background: 'rgba(10,8,6,0.9)', display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center', zIndex: 90, padding: 20,
+    }} className="zchat-fade">
+      <div style={{ fontWeight: 800, fontSize: 15, color: 'white', marginBottom: 14 }}>Edit photo</div>
+      <div
+        style={{
+          width: frameW, height: frameH, borderRadius: 18, overflow: 'hidden', position: 'relative',
+          touchAction: 'none', cursor: 'grab', border: '3px solid white', marginBottom: 14,
+        }}
+        onMouseDown={(e) => startDrag(e.clientX, e.clientY)}
+        onMouseMove={(e) => e.buttons === 1 && moveDrag(e.clientX, e.clientY)}
+        onMouseUp={endDrag}
+        onMouseLeave={endDrag}
+        onTouchStart={(e) => startDrag(e.touches[0].clientX, e.touches[0].clientY)}
+        onTouchMove={(e) => moveDrag(e.touches[0].clientX, e.touches[0].clientY)}
+        onTouchEnd={endDrag}
+      >
+        <img src={imgEl.src} alt="" draggable={false} style={{
+          position: 'absolute', left, top, width: drawnW, height: drawnH, userSelect: 'none', pointerEvents: 'none',
+        }} />
+      </div>
+      <input type="range" min="1" max="3" step="0.01" value={zoom} onChange={(e) => setZoom(parseFloat(e.target.value))}
+        style={{ width: frameW, accentColor: theme.coral, marginBottom: 14 }} />
+      <input value={caption} onChange={(e) => setCaption(e.target.value.slice(0, 1000))} placeholder="Add a caption..."
+        style={{ width: frameW, padding: '10px 14px', borderRadius: 20, border: '1px solid rgba(255,255,255,0.3)', background: 'rgba(255,255,255,0.1)', color: 'white', fontFamily: FONT, fontSize: 14, outline: 'none', marginBottom: 14, boxSizing: 'border-box' }} />
+      <div style={{ display: 'flex', gap: 10, width: frameW }}>
+        <button onClick={onCancel} style={{
+          flex: 1, padding: 12, borderRadius: 13, border: '1.5px solid rgba(255,255,255,0.3)',
+          background: 'transparent', color: 'white', fontWeight: 700, fontSize: 13.5, cursor: 'pointer', fontFamily: FONT,
+        }}>Cancel</button>
+        <button onClick={confirm} disabled={saving} style={{
+          flex: 1, padding: 12, borderRadius: 13, border: 'none', background: theme.coral, color: 'white',
+          fontWeight: 700, fontSize: 13.5, cursor: 'pointer', fontFamily: FONT,
+        }}>{saving ? <Spinner size={14} /> : 'Done'}</button>
+      </div>
+    </div>
+  );
+}
+
+function VideoTrimEditor({ file, onCancel, onConfirm }) {
+  const { theme } = useTheme();
+  const [url, setUrl] = useState(null);
+  const [duration, setDuration] = useState(0);
+  const [start, setStart] = useState(0);
+  const [end, setEnd] = useState(0);
+  const [caption, setCaption] = useState('');
+  const [dragging, setDragging] = useState(null);
+  const barRef = useRef(null);
+
+  useEffect(() => {
+    const u = URL.createObjectURL(file);
+    setUrl(u);
+    return () => URL.revokeObjectURL(u);
+  }, [file]);
+
+  const onLoadedMetadata = (e) => {
+    const d = e.target.duration;
+    setDuration(d);
+    setEnd(d);
+  };
+
+  const pctFromEvent = (clientX) => {
+    if (!barRef.current) return 0;
+    const rect = barRef.current.getBoundingClientRect();
+    return Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+  };
+  const handleMove = (clientX) => {
+    if (!dragging || !duration) return;
+    const t = pctFromEvent(clientX) * duration;
+    if (dragging === 'start') setStart(Math.min(t, end - 0.5));
+    else setEnd(Math.max(t, start + 0.5));
+  };
+
+  const fmt = (s) => `${Math.floor(s / 60)}:${Math.floor(s % 60).toString().padStart(2, '0')}`;
+  const trimmedTooShort = duration > 0 && end - start < 1;
+
+  if (!url) {
+    return (
+      <div style={{ position: 'absolute', inset: 0, background: 'rgba(10,8,6,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 90 }}>
+        <Spinner size={26} color="white" />
+      </div>
+    );
+  }
+
+  return (
+    <div
+      style={{ position: 'absolute', inset: 0, background: 'rgba(10,8,6,0.9)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', zIndex: 90, padding: 20 }}
+      className="zchat-fade"
+      onMouseMove={(e) => handleMove(e.clientX)} onMouseUp={() => setDragging(null)} onMouseLeave={() => setDragging(null)}
+      onTouchMove={(e) => handleMove(e.touches[0].clientX)} onTouchEnd={() => setDragging(null)}
+    >
+      <div style={{ fontWeight: 800, fontSize: 15, color: 'white', marginBottom: 14 }}>Trim video</div>
+      <video src={url} onLoadedMetadata={onLoadedMetadata} controls playsInline
+        style={{ width: 280, maxHeight: 340, borderRadius: 16, marginBottom: 16, background: '#000' }} />
+      {duration > 0 && (
+        <>
+          <div ref={barRef} style={{ position: 'relative', width: 280, height: 30, marginBottom: 6 }}>
+            <div style={{ position: 'absolute', top: 11, left: 0, right: 0, height: 8, borderRadius: 4, background: 'rgba(255,255,255,0.25)' }} />
+            <div style={{
+              position: 'absolute', top: 11, height: 8, borderRadius: 4, background: theme.coral,
+              left: `${(start / duration) * 100}%`, width: `${((end - start) / duration) * 100}%`,
+            }} />
+            <div onMouseDown={(e) => { e.stopPropagation(); setDragging('start'); }} onTouchStart={(e) => { e.stopPropagation(); setDragging('start'); }} style={{
+              position: 'absolute', top: 1, left: `calc(${(start / duration) * 100}% - 11px)`, width: 22, height: 22, borderRadius: '50%',
+              background: 'white', border: `3px solid ${theme.coral}`, cursor: 'grab',
+            }} />
+            <div onMouseDown={(e) => { e.stopPropagation(); setDragging('end'); }} onTouchStart={(e) => { e.stopPropagation(); setDragging('end'); }} style={{
+              position: 'absolute', top: 1, left: `calc(${(end / duration) * 100}% - 11px)`, width: 22, height: 22, borderRadius: '50%',
+              background: 'white', border: `3px solid ${theme.coral}`, cursor: 'grab',
+            }} />
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', width: 280, fontSize: 11.5, color: 'rgba(255,255,255,0.8)', marginBottom: 14 }}>
+            <span>{fmt(start)}</span>
+            <span>{fmt(end - start)} selected</span>
+            <span>{fmt(end)}</span>
+          </div>
+        </>
+      )}
+      <input value={caption} onChange={(e) => setCaption(e.target.value.slice(0, 1000))} placeholder="Add a caption..."
+        style={{ width: 280, padding: '10px 14px', borderRadius: 20, border: '1px solid rgba(255,255,255,0.3)', background: 'rgba(255,255,255,0.1)', color: 'white', fontFamily: FONT, fontSize: 14, outline: 'none', marginBottom: 14, boxSizing: 'border-box' }} />
+      <div style={{ display: 'flex', gap: 10, width: 280 }}>
+        <button onClick={onCancel} style={{
+          flex: 1, padding: 12, borderRadius: 13, border: '1.5px solid rgba(255,255,255,0.3)',
+          background: 'transparent', color: 'white', fontWeight: 700, fontSize: 13.5, cursor: 'pointer', fontFamily: FONT,
+        }}>Cancel</button>
+        <button onClick={() => onConfirm(file, url, start, end, caption.trim())} disabled={trimmedTooShort} style={{
+          flex: 1, padding: 12, borderRadius: 13, border: 'none', background: theme.coral, color: 'white',
+          fontWeight: 700, fontSize: 13.5, cursor: trimmedTooShort ? 'default' : 'pointer', fontFamily: FONT, opacity: trimmedTooShort ? 0.5 : 1,
+        }}>{trimmedTooShort ? 'Too short' : 'Done'}</button>
+      </div>
+    </div>
+  );
+}
+
+function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAccount, onAddAccount, onRemoveAccount, switchingAccountId }) {
   const { theme, bgPatternOn, chatTheme } = useTheme();
   const assetProgress = useAssetPrefetch();
+  const [notifPermission, setNotifPermission] = useState(typeof Notification !== 'undefined' ? Notification.permission : 'default');
+  const [notifBannerDismissed, setNotifBannerDismissed] = useState(() => {
+    try { return sessionStorage.getItem('zchat-notif-banner-dismissed') === '1'; } catch { return false; }
+  });
+  const [showNotifHelp, setShowNotifHelp] = useState(false);
+  useEffect(() => {
+    const check = () => { if (typeof Notification !== 'undefined') setNotifPermission(Notification.permission); };
+    document.addEventListener('visibilitychange', check);
+    window.addEventListener('focus', check);
+    return () => { document.removeEventListener('visibilitychange', check); window.removeEventListener('focus', check); };
+  }, []);
   const [me, setMe] = useState(null);
   const [profileCheckFailed, setProfileCheckFailed] = useState(false);
   const [results, setResults] = useState([]);
@@ -3489,6 +3885,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [showAttach, setShowAttach] = useState(false);
   const [profileOf, setProfileOf] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [autoOpenLockSetup, setAutoOpenLockSetup] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showFollowRequests, setShowFollowRequests] = useState(false);
@@ -3501,6 +3898,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [viewerUrl, setViewerUrl] = useState(null);
+  const [viewerVideoUrl, setViewerVideoUrl] = useState(null);
   const [forwardOpen, setForwardOpen] = useState(false);
   const [forwardTargets, setForwardTargets] = useState([]);
   const [reportModalFor, setReportModalFor] = useState(null);
@@ -3518,6 +3916,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [pendingQuickDelete, setPendingQuickDelete] = useState(null);
   const [pendingForwardItems, setPendingForwardItems] = useState([]);
   const [pendingMedia, setPendingMedia] = useState([]);
+  const [photoEditQueue, setPhotoEditQueue] = useState([]);
+  const [videoEditQueue, setVideoEditQueue] = useState([]);
   const [activeFollowState, setActiveFollowState] = useState('none');
   const [activeFollowBusy, setActiveFollowBusy] = useState(false);
   const [whoReactedFor, setWhoReactedFor] = useState(null);
@@ -4250,14 +4650,22 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         const { url, error } = await uploadMedia(items[i].file, session.user.id);
         if (!error && url) {
           const captionForThis = i === 0 ? (caption || null) : null;
+          let insertedRow = null;
           if (activeGroup) {
-            await sendGroupMessage(items[i].kind, captionForThis, url);
+            insertedRow = await sendGroupMessage(items[i].kind, captionForThis, url);
           } else {
             const { data } = await sendMessage(session.user.id, activeProfile.id, items[i].kind, captionForThis, url);
+            insertedRow = data;
             if (data) {
               setMessages((prev) => [...prev, data]);
               sendPushNotification(activeProfile.id, me.name, captionForThis || (items[i].kind === 'image' ? 'ðŸ“· Photo' : 'ðŸŽ¥ Video'), `/?dm=${session.user.id}`, me.avatar);
             }
+          }
+          if (insertedRow && items[i].kind === 'video' && (items[i].trimStart != null || items[i].trimEnd != null)) {
+            const trimStart = items[i].trimStart || 0;
+            const trimEnd = items[i].trimEnd || null;
+            await supabase.from('messages').update({ trim_start: trimStart, trim_end: trimEnd }).eq('id', insertedRow.id);
+            setMessages((prev) => prev.map((m) => (m.id === insertedRow.id ? { ...m, trim_start: trimStart, trim_end: trimEnd } : m)));
           }
         }
         URL.revokeObjectURL(items[i].url);
@@ -4338,8 +4746,11 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (!files.length || (!activeProfile && !activeGroup)) return;
     setShowAttach(false);
     const capped = files.slice(0, MAX_PHOTOS_PER_SEND - pendingMedia.length);
-    const staged = capped.map((file) => ({ file, url: URL.createObjectURL(file), kind }));
-    setPendingMedia((prev) => [...prev, ...staged]);
+    if (kind === 'image') {
+      setPhotoEditQueue((prev) => [...prev, ...capped]);
+    } else {
+      setVideoEditQueue((prev) => [...prev, ...capped]);
+    }
   };
 
   const MIN_RECORDING_MS = 700;
@@ -4577,11 +4988,21 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     }}>
       <GlobalStyle />
       <AssetDownloadBar progress={assetProgress} />
-      <div style={glass(theme, {
+      {notifPermission === 'denied' && !notifBannerDismissed && (
+        <NotificationPermissionBanner
+          top={assetProgress ? 66 : 10}
+          onOpenHelp={() => setShowNotifHelp(true)}
+          onDismiss={() => { setNotifBannerDismissed(true); try { sessionStorage.setItem('zchat-notif-banner-dismissed', '1'); } catch {} }}
+        />
+      )}
+      {showNotifHelp && (
+        <NotificationHelpModal onClose={() => setShowNotifHelp(false)} />
+      )}
+      <div style={{
         width: '100%', maxWidth: '100%', height: '100%', maxHeight: '100%', display: 'flex',
         borderRadius: 0, overflow: 'hidden', boxShadow: 'none', border: 'none',
-        position: 'relative',
-      })}>
+        position: 'relative', background: theme.panelBg,
+      }}>
         {profileOf && !showSettings && !showPrivacy && (
           <ProfilePanel
             profile={profileOf.id === me.id ? me : profileOf}
@@ -4613,6 +5034,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             chatLockHash={me.chat_lock_hash}
             onSetChatLockPassword={setChatLockPassword}
             onTurnOffChatLock={turnOffChatLock}
+            autoOpenLockSetup={autoOpenLockSetup}
+            onConsumedAutoOpen={() => setAutoOpenLockSetup(false)}
           />
         )}
         {showPrivacy && <PrivacyPanel onBack={() => setShowPrivacy(false)} />}
@@ -4857,7 +5280,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                   padding: '13px 18px', display: 'flex', alignItems: 'center', gap: 10, minHeight: 64, boxSizing: 'border-box',
                   borderBottom: activeGroup.name_bar ? 'none' : `1px solid ${theme.border}`,
                   cursor: 'pointer', position: 'relative', overflow: 'hidden',
-                  boxShadow: activeGroup.name_bar ? '0 2px 16px rgba(0,0,0,0.28)' : 'none',
+                  boxShadow: activeGroup.name_bar ? '0 2px 16px rgba(0,0,0,0.28), inset 0 0 0 1px rgba(255,255,255,0.16)' : 'none',
                   ...(activeGroup.name_bar ? nameBarBgStyle(activeGroup.name_bar) : {}),
                 }}
                   onClick={() => setShowGroupInfo(true)}>
@@ -4902,7 +5325,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                   padding: '13px 18px', display: 'flex', alignItems: 'center', gap: 10, minHeight: 64, boxSizing: 'border-box',
                   borderBottom: activeConvNameBar ? 'none' : `1px solid ${theme.border}`,
                   cursor: 'pointer', position: 'relative', overflow: 'hidden',
-                  boxShadow: activeConvNameBar ? '0 2px 16px rgba(0,0,0,0.28)' : 'none',
+                  boxShadow: activeConvNameBar ? '0 2px 16px rgba(0,0,0,0.28), inset 0 0 0 1px rgba(255,255,255,0.16)' : 'none',
                   ...(activeConvNameBar ? nameBarBgStyle(activeConvNameBar) : {}),
                 }}
                   onClick={() => setProfileOf(activeProfile)}>
@@ -4975,25 +5398,22 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               )}
               <div ref={scrollRef} style={{
                 flex: 1, minHeight: 0, overflowY: 'auto', padding: '16px 18px',
-                WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain',
+                WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain', overscrollBehaviorX: 'none', touchAction: 'pan-y',
                 ...((() => {
-                  if (activeGroup) {
-                    if (activeGroup.wallpaper) return wallpaperBgStyle(activeGroup.wallpaper);
-                    return {};
-                  }
-                  if (!activeProfile) return {};
-                  const activeConv = conversations.find((c) => c.otherProfile.id === activeProfile.id) || archivedConversations.find((c) => c.otherProfile.id === activeProfile.id);
-                  const wp = activeConv ? myWallpaper(activeConv) : null;
+                  const activeConv = activeProfile ? (conversations.find((c) => c.otherProfile.id === activeProfile.id) || archivedConversations.find((c) => c.otherProfile.id === activeProfile.id)) : null;
+                  const wp = activeGroup ? activeGroup.wallpaper : (activeConv ? myWallpaper(activeConv) : null);
                   if (wp) return wallpaperBgStyle(wp);
+                  if (bgPatternOn) {
+                    return {
+                      backgroundSize: '130px 130px',
+                      backgroundRepeat: 'repeat',
+                      backgroundImage: theme.dark
+                        ? "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='130' height='130' viewBox='0 0 130 130'%3E%3Cg fill='none' stroke='%23FF6B4A' stroke-width='1.6' opacity='0.14'%3E%3Cpath d='M20 20 q0 -8 8 -8 h14 q8 0 8 8 v10 q0 8 -8 8 h-8 l-6 6 v-6 h0 q-8 0 -8 -8 z'/%3E%3C/g%3E%3Cg fill='none' stroke='%23F3B54C' stroke-width='1.6' opacity='0.14'%3E%3Cpath d='M95 15 l2.5 6 6.5 0.5 -5 4.3 1.6 6.4 -5.6 -3.6 -5.6 3.6 1.6 -6.4 -5 -4.3 6.5 -0.5 z'/%3E%3C/g%3E%3Cg fill='none' stroke='%2329C7B3' stroke-width='1.6' opacity='0.14'%3E%3Ccircle cx='30' cy='75' r='7'/%3E%3Cpath d='M30 70 v10 M25 75 h10'/%3E%3C/g%3E%3Cg fill='none' stroke='%23FF6B4A' stroke-width='1.6' opacity='0.12'%3E%3Cpath d='M85 70 l14 -7 -5 14 -3 -5 z'/%3E%3C/g%3E%3Cg fill='none' stroke='%23F3B54C' stroke-width='1.6' opacity='0.12'%3E%3Cpath d='M55 105 c0 -14 20 -14 20 0 c0 8 -6 10 -10 14 c-4 -4 -10 -6 -10 -14 z'/%3E%3C/g%3E%3Cg fill='none' stroke='%2329C7B3' stroke-width='1.6' opacity='0.12'%3E%3Crect x='10' y='105' width='16' height='12' rx='3'/%3E%3Ccircle cx='18' cy='111' r='3'/%3E%3C/g%3E%3C/svg%3E\")"
+                        : "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='130' height='130' viewBox='0 0 130 130'%3E%3Cg fill='none' stroke='%23FF6B4A' stroke-width='1.6' opacity='0.16'%3E%3Cpath d='M20 20 q0 -8 8 -8 h14 q8 0 8 8 v10 q0 8 -8 8 h-8 l-6 6 v-6 h0 q-8 0 -8 -8 z'/%3E%3C/g%3E%3Cg fill='none' stroke='%23F3B54C' stroke-width='1.6' opacity='0.16'%3E%3Cpath d='M95 15 l2.5 6 6.5 0.5 -5 4.3 1.6 6.4 -5.6 -3.6 -5.6 3.6 1.6 -6.4 -5 -4.3 6.5 -0.5 z'/%3E%3C/g%3E%3Cg fill='none' stroke='%2329C7B3' stroke-width='1.6' opacity='0.16'%3E%3Ccircle cx='30' cy='75' r='7'/%3E%3Cpath d='M30 70 v10 M25 75 h10'/%3E%3C/g%3E%3Cg fill='none' stroke='%23FF6B4A' stroke-width='1.6' opacity='0.14'%3E%3Cpath d='M85 70 l14 -7 -5 14 -3 -5 z'/%3E%3C/g%3E%3Cg fill='none' stroke='%23F3B54C' stroke-width='1.6' opacity='0.14'%3E%3Cpath d='M55 105 c0 -14 20 -14 20 0 c0 8 -6 10 -10 14 c-4 -4 -10 -6 -10 -14 z'/%3E%3C/g%3E%3Cg fill='none' stroke='%2329C7B3' stroke-width='1.6' opacity='0.14'%3E%3Crect x='10' y='105' width='16' height='12' rx='3'/%3E%3Ccircle cx='18' cy='111' r='3'/%3E%3C/g%3E%3C/svg%3E\")",
+                    };
+                  }
                   return {};
                 })()),
-                ...(bgPatternOn ? {
-                  backgroundSize: '130px 130px',
-                  backgroundRepeat: 'repeat',
-                  backgroundImage: theme.dark
-                    ? "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='130' height='130' viewBox='0 0 130 130'%3E%3Cg fill='none' stroke='%23FF6B4A' stroke-width='1.6' opacity='0.14'%3E%3Cpath d='M20 20 q0 -8 8 -8 h14 q8 0 8 8 v10 q0 8 -8 8 h-8 l-6 6 v-6 h0 q-8 0 -8 -8 z'/%3E%3C/g%3E%3Cg fill='none' stroke='%23F3B54C' stroke-width='1.6' opacity='0.14'%3E%3Cpath d='M95 15 l2.5 6 6.5 0.5 -5 4.3 1.6 6.4 -5.6 -3.6 -5.6 3.6 1.6 -6.4 -5 -4.3 6.5 -0.5 z'/%3E%3C/g%3E%3Cg fill='none' stroke='%2329C7B3' stroke-width='1.6' opacity='0.14'%3E%3Ccircle cx='30' cy='75' r='7'/%3E%3Cpath d='M30 70 v10 M25 75 h10'/%3E%3C/g%3E%3Cg fill='none' stroke='%23FF6B4A' stroke-width='1.6' opacity='0.12'%3E%3Cpath d='M85 70 l14 -7 -5 14 -3 -5 z'/%3E%3C/g%3E%3Cg fill='none' stroke='%23F3B54C' stroke-width='1.6' opacity='0.12'%3E%3Cpath d='M55 105 c0 -14 20 -14 20 0 c0 8 -6 10 -10 14 c-4 -4 -10 -6 -10 -14 z'/%3E%3C/g%3E%3Cg fill='none' stroke='%2329C7B3' stroke-width='1.6' opacity='0.12'%3E%3Crect x='10' y='105' width='16' height='12' rx='3'/%3E%3Ccircle cx='18' cy='111' r='3'/%3E%3C/g%3E%3C/svg%3E\")"
-                    : "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='130' height='130' viewBox='0 0 130 130'%3E%3Cg fill='none' stroke='%23FF6B4A' stroke-width='1.6' opacity='0.16'%3E%3Cpath d='M20 20 q0 -8 8 -8 h14 q8 0 8 8 v10 q0 8 -8 8 h-8 l-6 6 v-6 h0 q-8 0 -8 -8 z'/%3E%3C/g%3E%3Cg fill='none' stroke='%23F3B54C' stroke-width='1.6' opacity='0.16'%3E%3Cpath d='M95 15 l2.5 6 6.5 0.5 -5 4.3 1.6 6.4 -5.6 -3.6 -5.6 3.6 1.6 -6.4 -5 -4.3 6.5 -0.5 z'/%3E%3C/g%3E%3Cg fill='none' stroke='%2329C7B3' stroke-width='1.6' opacity='0.16'%3E%3Ccircle cx='30' cy='75' r='7'/%3E%3Cpath d='M30 70 v10 M25 75 h10'/%3E%3C/g%3E%3Cg fill='none' stroke='%23FF6B4A' stroke-width='1.6' opacity='0.14'%3E%3Cpath d='M85 70 l14 -7 -5 14 -3 -5 z'/%3E%3C/g%3E%3Cg fill='none' stroke='%23F3B54C' stroke-width='1.6' opacity='0.14'%3E%3Cpath d='M55 105 c0 -14 20 -14 20 0 c0 8 -6 10 -10 14 c-4 -4 -10 -6 -10 -14 z'/%3E%3C/g%3E%3Cg fill='none' stroke='%2329C7B3' stroke-width='1.6' opacity='0.14'%3E%3Crect x='10' y='105' width='16' height='12' rx='3'/%3E%3Ccircle cx='18' cy='111' r='3'/%3E%3C/g%3E%3C/svg%3E\")",
-                } : {}),
               }}>
                 {loadingConvo ? (
                   <div style={{ display: 'flex', justifyContent: 'center', marginTop: 30 }}><Spinner color={theme.ink} /></div>
@@ -5014,10 +5434,11 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                         selectionMode={selectionMode} selected={selectedIds.has(m.id)} onToggleSelect={toggleSelect}
                         onLongPress={(id) => setContextMenuFor(id)}
                         onOpenImage={setViewerUrl}
+                        onOpenVideo={setViewerVideoUrl}
                         reactions={messageLikes[m.id] || []}
                         onReact={reactToMessage}
                         onOpenWhoReacted={(id) => setWhoReactedFor(messageLikes[id] || [])}
-                        onSwipeReply={(msg) => { setReplyingTo(msg); setEditingMessage(null); }}
+                        onSwipeReply={(msg) => { setReplyingTo(msg); setEditingMessage(null); setTimeout(() => composerRef.current?.focus(), 50); }}
                         senderLabel={activeGroup && m.sender_id !== session.user.id ? (senderMember?.profile.name || 'Member') : null}
                         onOpenSenderProfile={activeGroup && senderMember ? () => setProfileOf(senderMember.profile) : undefined}
                         senderAvatar={activeGroup ? senderMember?.profile.avatar : undefined}
@@ -5205,6 +5626,33 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             onForward={() => { setForwardTargets([{ type: 'image', media_url: viewerUrl, content: null }]); setForwardOpen(true); }}
             onReport={() => setReportModalFor('__viewer__')} />
         )}
+        {viewerVideoUrl && (
+          <VideoViewer url={viewerVideoUrl.url} trimStart={viewerVideoUrl.trimStart} trimEnd={viewerVideoUrl.trimEnd} onClose={() => setViewerVideoUrl(null)}
+            onForward={() => { setForwardTargets([{ type: 'video', media_url: viewerVideoUrl.url, content: null }]); setForwardOpen(true); }} />
+        )}
+        {photoEditQueue.length > 0 && (
+          <PhotoCropEditor
+            file={photoEditQueue[0]}
+            onCancel={() => setPhotoEditQueue((q) => q.slice(1))}
+            onConfirm={(blob, caption) => {
+              const namedFile = new File([blob], 'photo.jpg', { type: 'image/jpeg' });
+              setPendingMedia((prev) => [...prev, { file: namedFile, url: URL.createObjectURL(blob), kind: 'image' }]);
+              if (caption) setDraft(caption);
+              setPhotoEditQueue((q) => q.slice(1));
+            }}
+          />
+        )}
+        {photoEditQueue.length === 0 && videoEditQueue.length > 0 && (
+          <VideoTrimEditor
+            file={videoEditQueue[0]}
+            onCancel={() => setVideoEditQueue((q) => q.slice(1))}
+            onConfirm={(file, url, trimStart, trimEnd, caption) => {
+              setPendingMedia((prev) => [...prev, { file, url, kind: 'video', trimStart, trimEnd }]);
+              if (caption) setDraft(caption);
+              setVideoEditQueue((q) => q.slice(1));
+            }}
+          />
+        )}
         {forwardOpen && (
           <ForwardPicker conversations={conversations} myId={session.user.id} onCancel={() => setForwardOpen(false)} onPick={doForward} />
         )}
@@ -5273,6 +5721,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               onDisableLock={() => disableChatLock(activeConv)}
               onDeleteChat={() => { setShowChatSettings(false); setDeleteConvoTarget(activeConv); }}
               onReportUser={(reason) => handleReport(activeConv.otherProfile, reason)}
+              onOpenProfile={(p) => setProfileOf(p)}
+              onNeedChatLockSetup={() => { setShowChatSettings(false); setAutoOpenLockSetup(true); setShowSettings(true); }}
               onNicknameSaved={async (newNick, contactId) => {
                 loadConversations();
                 if (newNick) {
@@ -5322,7 +5772,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         )}
         {showAccountSwitcher && (
           <AccountSwitcherPanel
-            accounts={savedAccounts} currentId={session.user.id}
+            accounts={savedAccounts} currentId={session.user.id} switchingId={switchingAccountId}
             onBack={() => setShowAccountSwitcher(false)}
             onSwitch={onSwitchAccount}
             onRemove={onRemoveAccount}
@@ -5404,6 +5854,8 @@ function AppInner() {
     setScreen('login');
   };
 
+  const [switchingAccountId, setSwitchingAccountId] = useState(null);
+
   const handleAddAccount = async () => {
     await supabase.auth.signOut({ scope: 'local' });
     setSession(null);
@@ -5411,13 +5863,23 @@ function AppInner() {
   };
 
   const handleSwitchAccount = async (account) => {
-    const { data, error } = await supabase.auth.setSession({ access_token: account.access_token, refresh_token: account.refresh_token });
-    if (!error && data.session) {
-      setSession(data.session);
-    } else {
-      removeAccountEntry(account.id);
-      setSavedAccounts(getSavedAccounts());
-      alert('That account session expired. Please log in again.');
+    if (switchingAccountId) return;
+    setSwitchingAccountId(account.id);
+    try {
+      const { data, error } = await supabase.auth.setSession({ access_token: account.access_token, refresh_token: account.refresh_token });
+      if (!error && data.session) {
+        saveAccountEntry({ ...account, access_token: data.session.access_token, refresh_token: data.session.refresh_token });
+        setSavedAccounts(getSavedAccounts());
+        setSession(data.session);
+      } else {
+        removeAccountEntry(account.id);
+        setSavedAccounts(getSavedAccounts());
+        alert('That account session expired â€” you\u2019ll need to log in to it again.');
+      }
+    } catch {
+      alert('Could not switch accounts right now. Please try again.');
+    } finally {
+      setSwitchingAccountId(null);
     }
   };
 
@@ -5478,6 +5940,7 @@ function AppInner() {
         onSwitchAccount={handleSwitchAccount}
         onAddAccount={handleAddAccount}
         onRemoveAccount={handleRemoveAccount}
+        switchingAccountId={switchingAccountId}
       />
     );
   }
@@ -5510,4 +5973,3 @@ export default function App() {
     </ThemeProvider>
   );
 }
-
