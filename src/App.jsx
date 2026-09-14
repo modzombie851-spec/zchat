@@ -986,10 +986,11 @@ function ToggleSwitch({ on, onClick }) {
   );
 }
 
-function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideActivity, onToggleActivity, onOpenAccounts, onOpenDelete }) {
+function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideActivity, onToggleActivity, onOpenAccounts, onOpenDelete, chatLockSet, chatLockHash, onSetChatLockPassword, onTurnOffChatLock }) {
   const { theme, dark, setDark, accentName, setAccentName, soundOn, setSoundOn, bgPatternOn, setBgPatternOn, fontScale, setFontScale, chatTheme, setChatTheme } = useTheme();
   const accentLabels = { coral: 'Coral', ocean: 'Ocean', berry: 'Berry' };
   const [accountOpen, setAccountOpen] = useState(false);
+  const [lockFlow, setLockFlow] = useState(null);
   return (
     <div style={{
       position: 'absolute', inset: 0, background: 'rgba(10,10,14,0.45)',
@@ -1038,6 +1039,10 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
 
         <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.muted, margin: '16px 0 6px 2px' }}>Privacy</div>
         <SettingsRow icon={<EyeOff size={16} />} label="Hide activity status" right={<ToggleSwitch on={hideActivity} onClick={onToggleActivity} />} />
+        <SettingsRow icon={<Lock size={16} />} label={chatLockSet ? 'Change Chat Lock password' : 'Set Chat Lock password'} onClick={() => setLockFlow(chatLockSet ? 'verify-then-change' : 'set')} />
+        {chatLockSet && (
+          <SettingsRow icon={<Lock size={16} />} label="Turn off Chat Lock" danger onClick={() => setLockFlow('verify-then-off')} />
+        )}
 
         <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.muted, margin: '16px 0 6px 2px' }}>Text size</div>
         <div style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
@@ -1061,6 +1066,15 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
         <SettingsRow icon={<LogOut size={16} />} label="Log out" danger onClick={onLogout} />
         <div style={{ height: 40 }} />
       </div>
+      {lockFlow === 'set' && (
+        <ChatLockSetup onCancel={() => setLockFlow(null)} onConfirm={(pin) => { onSetChatLockPassword(pin); setLockFlow(null); }} />
+      )}
+      {lockFlow === 'verify-then-change' && (
+        <ChatLockUnlock correctHash={chatLockHash} onCancel={() => setLockFlow(null)} onUnlock={() => setLockFlow('set')} />
+      )}
+      {lockFlow === 'verify-then-off' && (
+        <ChatLockUnlock correctHash={chatLockHash} onCancel={() => setLockFlow(null)} onUnlock={() => { onTurnOffChatLock(); setLockFlow(null); }} />
+      )}
     </div>
   );
 }
@@ -1555,6 +1569,7 @@ function ChatSettingsPanel({ conv, myId, isPinned, isLocked, wallpaper, onClose,
   const { theme } = useTheme();
   const [nickname, setNickname] = useState('');
   const [nicknameSaving, setNicknameSaving] = useState(false);
+  const [nicknameJustSaved, setNicknameJustSaved] = useState(false);
   const [showWallpaper, setShowWallpaper] = useState(false);
   const [showLockSetup, setShowLockSetup] = useState(false);
 
@@ -1575,7 +1590,9 @@ function ChatSettingsPanel({ conv, myId, isPinned, isLocked, wallpaper, onClose,
       await sendMessage(myId, conv.otherProfile.id, 'system', 'Nickname removed', null);
     }
     setNicknameSaving(false);
-    onNicknameSaved();
+    setNicknameJustSaved(true);
+    setTimeout(() => setNicknameJustSaved(false), 2000);
+    onNicknameSaved(val.trim() || null, conv.otherProfile.id);
   };
 
   return (
@@ -1605,20 +1622,18 @@ function ChatSettingsPanel({ conv, myId, isPinned, isLocked, wallpaper, onClose,
             fontWeight: 700, fontSize: 12.5, cursor: 'pointer', fontFamily: FONT,
           }}>{nicknameSaving ? <Spinner size={12} /> : 'Save'}</button>
         </div>
+        {nicknameJustSaved && <div className="zchat-fade" style={{ fontSize: 11.5, color: theme.teal, fontWeight: 700, marginTop: -10, marginBottom: 14 }}>Saved ✓</div>}
 
         <SettingsRow icon={<Pin_ />} label={isPinned ? 'Unpin chat' : 'Pin chat'} onClick={onTogglePin} />
         <SettingsRow icon={<FileText size={16} />} label="Archive chat" onClick={onToggleArchive} />
         <SettingsRow icon={<ImageIcon size={16} />} label="Chat wallpaper" onClick={() => setShowWallpaper(true)} />
         <SettingsRow icon={<Lock size={16} />} label={isLocked ? 'Remove chat lock' : 'Lock this chat'}
-          onClick={() => (isLocked ? onDisableLock() : setShowLockSetup(true))} />
+          onClick={() => (isLocked ? onDisableLock() : onEnableLock())} />
         <div style={{ height: 10 }} />
         <SettingsRow icon={<Trash2 size={16} />} label="Delete chat" danger onClick={onDeleteChat} />
       </div>
       {showWallpaper && (
         <WallpaperPicker value={wallpaper} onSelect={onSetWallpaper} onClose={() => setShowWallpaper(false)} />
-      )}
-      {showLockSetup && (
-        <ChatLockSetup onCancel={() => setShowLockSetup(false)} onConfirm={(pin) => { setShowLockSetup(false); onEnableLock(pin); }} />
       )}
     </div>
   );
@@ -3129,7 +3144,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const loadMyLocks = async () => {
     const { data } = await supabase.from('chat_locks').select('*').eq('owner_id', session.user.id);
     const map = {};
-    (data || []).forEach((l) => { map[l.conversation_id] = l.pin_hash; });
+    (data || []).forEach((l) => { map[l.conversation_id] = true; });
     setMyLocks(map);
   };
 
@@ -3161,15 +3176,26 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     onLogout();
   };
 
-  const enableChatLock = async (conv, pin) => {
-    const hash = await hashPin(pin);
-    await supabase.from('chat_locks').upsert({ conversation_id: conv.id, owner_id: session.user.id, pin_hash: hash }, { onConflict: 'conversation_id,owner_id' });
-    setMyLocks((prev) => ({ ...prev, [conv.id]: hash }));
+  const enableChatLock = async (conv) => {
+    if (!me?.chat_lock_hash) { alert('Set a Chat Lock password in Settings first.'); return; }
+    await supabase.from('chat_locks').upsert({ conversation_id: conv.id, owner_id: session.user.id, pin_hash: 'master' }, { onConflict: 'conversation_id,owner_id' });
+    setMyLocks((prev) => ({ ...prev, [conv.id]: true }));
     setUnlockedChats((prev) => new Set(prev).add(conv.id));
   };
   const disableChatLock = async (conv) => {
     await supabase.from('chat_locks').delete().eq('conversation_id', conv.id).eq('owner_id', session.user.id);
     setMyLocks((prev) => { const n = { ...prev }; delete n[conv.id]; return n; });
+  };
+  const setChatLockPassword = async (pin) => {
+    const hash = await hashPin(pin);
+    await supabase.from('profiles').update({ chat_lock_hash: hash, chat_lock_enabled: true }).eq('id', session.user.id);
+    setMe((p) => ({ ...p, chat_lock_hash: hash, chat_lock_enabled: true }));
+  };
+  const turnOffChatLock = async () => {
+    await supabase.from('profiles').update({ chat_lock_hash: null, chat_lock_enabled: false }).eq('id', session.user.id);
+    await supabase.from('chat_locks').delete().eq('owner_id', session.user.id);
+    setMe((p) => ({ ...p, chat_lock_hash: null, chat_lock_enabled: false }));
+    setMyLocks({});
   };
 
   const loadConversations = async () => {
@@ -3277,7 +3303,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (!me) return;
     const sub = subscribeToMessages(me.id, (msg) => {
       if (msg.sender_id !== me.id) {
-        if (msg.sender_id !== activeProfile?.id) { playPing(); supabase.from('messages').update({ delivered: true }).eq('id', msg.id); }
+        if (msg.sender_id !== activeProfile?.id || !mobileShowChatRef.current) { playPing(); supabase.from('messages').update({ delivered: true }).eq('id', msg.id); }
         else supabase.from('messages').update({ read: true, delivered: true }).eq('id', msg.id);
       }
       setMessages((prev) => (activeProfile && msg.sender_id === activeProfile.id ? [...prev, msg] : prev));
@@ -3418,6 +3444,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
   const messagesRef = useRef(messages);
   useEffect(() => { messagesRef.current = messages; }, [messages]);
+  const mobileShowChatRef = useRef(mobileShowChat);
+  useEffect(() => { mobileShowChatRef.current = mobileShowChat; }, [mobileShowChat]);
 
   useEffect(() => {
     if (!activeProfile) return;
@@ -3433,6 +3461,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           }));
         }
       }
+      if (!mobileShowChatRef.current) return;
       const theirUnreadIds = currentMessages.filter((m) => m.sender_id === activeProfile.id && !m.read).map((m) => m.id);
       if (theirUnreadIds.length) {
         await supabase.from('messages').update({ read: true, delivered: true }).in('id', theirUnreadIds);
@@ -4029,6 +4058,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             onToggleActivity={toggleHideActivity}
             onOpenAccounts={() => setShowAccountSwitcher(true)}
             onOpenDelete={() => setShowDeleteAccount(true)}
+            chatLockSet={!!me.chat_lock_hash}
+            chatLockHash={me.chat_lock_hash}
+            onSetChatLockPassword={setChatLockPassword}
+            onTurnOffChatLock={turnOffChatLock}
           />
         )}
         {showPrivacy && <PrivacyPanel onBack={() => setShowPrivacy(false)} />}
@@ -4481,7 +4514,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                           border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0,
                         }}><Mic size={17} color="white" /></button>
                       ) : (
-                        <button onClick={() => { (editingMessage ? saveEdit() : send()); composerRef.current?.blur(); }} disabled={!draft.trim() && !pendingForwardItems.length && !pendingMedia.length} style={{
+                        <button onClick={() => { (editingMessage ? saveEdit() : send()); }} disabled={!draft.trim() && !pendingForwardItems.length && !pendingMedia.length} style={{
                           width: 38, height: 38, borderRadius: '50%', background: (draft.trim() || pendingForwardItems.length || pendingMedia.length) ? theme.coral : theme.rowBg,
                           border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center',
                           cursor: (draft.trim() || pendingForwardItems.length || pendingMedia.length) ? 'pointer' : 'default', flexShrink: 0,
@@ -4560,16 +4593,24 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               onTogglePin={() => { togglePin(activeConv); }}
               onToggleArchive={() => { setShowChatSettings(false); toggleArchive(activeConv.id, true); setActiveProfile(null); }}
               onSetWallpaper={(key) => setWallpaper(activeConv, key)}
-              onEnableLock={(pin) => enableChatLock(activeConv, pin)}
+              onEnableLock={() => enableChatLock(activeConv)}
               onDisableLock={() => disableChatLock(activeConv)}
               onDeleteChat={() => { setShowChatSettings(false); setDeleteConvoTarget(activeConv); }}
-              onNicknameSaved={() => { loadConversations(); setActiveProfile((p) => ({ ...p })); }}
+              onNicknameSaved={async (newNick, contactId) => {
+                loadConversations();
+                if (newNick) {
+                  setActiveProfile((p) => (p && p.id === contactId ? { ...p, name: newNick } : p));
+                } else {
+                  const { data: fresh } = await supabase.from('profiles').select('name').eq('id', contactId).single();
+                  if (fresh) setActiveProfile((p) => (p && p.id === contactId ? { ...p, name: fresh.name } : p));
+                }
+              }}
             />
           );
         })()}
         {lockPromptFor && (
           <ChatLockUnlock
-            correctHash={myLocks[lockPromptFor.convId]}
+            correctHash={me.chat_lock_hash}
             onCancel={() => setLockPromptFor(null)}
             onUnlock={() => {
               setUnlockedChats((prev) => new Set(prev).add(lockPromptFor.convId));
