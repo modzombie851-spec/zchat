@@ -1618,17 +1618,10 @@ function ChatSettingsPanel({ conv, myId, isPinned, isLocked, wallpaper, chatLock
       position: 'absolute', inset: 0, background: theme.panelBg, zIndex: 33,
       display: 'flex', flexDirection: 'column', overflow: 'hidden',
     }} className="zchat-fade">
-      <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none' }}>
-        <div style={{
-          position: 'absolute', top: -130, right: -130, width: 320, height: 320, borderRadius: '50%',
-          border: '2px solid rgba(61,165,245,0.35)', boxShadow: '0 0 70px 14px rgba(61,165,245,0.22)',
-        }} />
-        <svg style={{ position: 'absolute', bottom: -6, left: 0, width: '100%', height: 130 }} viewBox="0 0 400 130" preserveAspectRatio="none">
-          <path d="M0,85 C70,40 130,115 210,65 C290,18 330,95 400,55 L400,130 L0,130 Z"
-            fill="none" stroke="rgba(61,165,245,0.45)" strokeWidth="2"
-            style={{ filter: 'drop-shadow(0 0 8px rgba(61,165,245,0.5))' }} />
-        </svg>
-      </div>
+      <div style={{
+        position: 'absolute', inset: 0, backgroundImage: "url('/chat-bg.jpg')",
+        backgroundSize: 'cover', backgroundPosition: 'center', opacity: 0.35, pointerEvents: 'none',
+      }} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 18px', borderBottom: `1px solid ${theme.border}`, position: 'relative' }}>
         <ArrowLeft size={20} style={{ cursor: 'pointer', color: theme.ink }} onClick={onClose} />
         <div style={{ fontWeight: 800, fontSize: 17, color: theme.ink }}>Chat settings</div>
