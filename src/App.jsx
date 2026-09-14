@@ -1479,42 +1479,78 @@ function ArchivedChatsPanel({ conversations, onClose, onOpenChat, onUnarchive })
 }
 
 
-const WALLPAPER_PRESETS = ['default', 'coral', 'ocean', 'berry', 'solid-dark', 'solid-light'];
-const WALLPAPER_PRESETS_LABELS = { default: 'Default', coral: 'Coral', ocean: 'Ocean', berry: 'Berry', 'solid-dark': 'Dark', 'solid-light': 'Light' };
-const WALLPAPER_COLORS = { coral: '#FF6B4A', ocean: '#3DA5F5', berry: '#C15CFC' };
+const WALLPAPER_PRESETS = [
+  { key: 'elements-duel', label: 'Elements Duel', file: '/wallpaper-elements-duel.jpg' },
+  { key: 'rain-reflection', label: 'Rain Reflection', file: '/wallpaper-rain-reflection.jpg' },
+  { key: 'inner-flame', label: 'Inner Flame', file: '/wallpaper-inner-flame.jpg' },
+  { key: 'blue-eyes', label: 'Blue Eyes', file: '/wallpaper-blue-eyes.jpg' },
+  { key: 'cherry-night', label: 'Cherry Night', file: '/wallpaper-cherry-night.jpg' },
+  { key: 'shadow-knight', label: 'Shadow Knight', file: '/wallpaper-shadow-knight.jpg' },
+  { key: 'moonlit-bench', label: 'Moonlit Bench', file: '/wallpaper-moonlit-bench.jpg' },
+  { key: 'sunset-hearts', label: 'Sunset Hearts', file: '/wallpaper-sunset-hearts.jpg' },
+  { key: 'day-and-night', label: 'Day and Night', file: '/wallpaper-day-and-night.jpg' },
+  { key: 'red-lantern', label: 'Red Lantern', file: '/wallpaper-red-lantern.jpg' },
+  { key: 'forest-rain', label: 'Forest Rain', file: '/wallpaper-forest-rain.jpg' },
+  { key: 'umbrella-hearts', label: 'Umbrella Hearts', file: '/wallpaper-umbrella-hearts.jpg' },
+  { key: 'moon-leaves', label: 'Moon Leaves', file: '/wallpaper-moon-leaves.jpg' },
+  { key: 'you-mean-the-world', label: 'You Mean The World', file: '/wallpaper-you-mean-the-world.jpg' },
+  { key: 'lonely-walk', label: 'Lonely Walk', file: '/wallpaper-lonely-walk.jpg' },
+  { key: 'leaf-rain', label: 'Leaf Rain', file: '/wallpaper-leaf-rain.jpg' },
+  { key: 'squad-hands', label: 'Squad Hands', file: '/wallpaper-squad-hands.jpg' },
+  { key: 'rainy-street', label: 'Rainy Street', file: '/wallpaper-rainy-street.jpg' },
+  { key: 'two-friends-night', label: 'Two Friends Night', file: '/wallpaper-two-friends-night.jpg' },
+  { key: 'rooftop-moon', label: 'Rooftop Moon', file: '/wallpaper-rooftop-moon.jpg' },
+  { key: 'sunset-cheers', label: 'Sunset Cheers', file: '/wallpaper-sunset-cheers.jpg' },
+  { key: 'river-sunset', label: 'River Sunset', file: '/wallpaper-river-sunset.jpg' },
+  { key: 'storm-embrace', label: 'Storm Embrace', file: '/wallpaper-storm-embrace.jpg' },
+  { key: 'balcony-moon', label: 'Balcony Moon', file: '/wallpaper-balcony-moon.jpg' },
+  { key: 'girls-sky', label: 'Girls Sky', file: '/wallpaper-girls-sky.jpg' },
+  { key: 'friend-circle', label: 'Friend Circle', file: '/wallpaper-friend-circle.jpg' },
+  { key: 'cat-squad', label: 'Cat Squad', file: '/wallpaper-cat-squad.jpg' },
+];
 
-function wallpaperBgStyle(key, theme) {
-  if (!key || key === 'default') return null;
-  if (key === 'solid-dark') return { backgroundColor: '#121319', backgroundImage: 'none' };
-  if (key === 'solid-light') return { backgroundColor: '#F6F3EE', backgroundImage: 'none' };
-  const color = WALLPAPER_COLORS[key] || WALLPAPER_COLORS.coral;
-  const hex = color.replace('#', '%23');
+function wallpaperBgStyle(key) {
+  const preset = WALLPAPER_PRESETS.find((p) => p.key === key);
+  if (!preset) return null;
   return {
-    backgroundColor: theme.dark ? '#16171F' : '#F6F3EE',
-    backgroundSize: '130px 130px',
-    backgroundRepeat: 'repeat',
-    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='130' height='130' viewBox='0 0 130 130'%3E%3Cg fill='none' stroke='${hex}' stroke-width='1.6' opacity='0.18'%3E%3Ccircle cx='30' cy='30' r='10'/%3E%3Ccircle cx='95' cy='75' r='7'/%3E%3Cpath d='M70 15 l16 8 -16 8 -16 -8 z'/%3E%3C/g%3E%3C/svg%3E")`,
+    backgroundImage: `url('${preset.file}')`,
+    backgroundSize: 'cover',
+    backgroundPosition: 'center',
+    backgroundRepeat: 'no-repeat',
   };
 }
 
 function WallpaperPicker({ value, onSelect, onClose }) {
   const { theme } = useTheme();
   return (
-    <div onClick={onClose} style={{
-      position: 'absolute', inset: 0, background: 'rgba(20,16,14,0.5)', zIndex: 96,
-      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 18,
+    <div style={{
+      position: 'absolute', inset: 0, background: theme.panelBg, zIndex: 96,
+      display: 'flex', flexDirection: 'column',
     }} className="zchat-fade">
-      <div onClick={(e) => e.stopPropagation()} style={{ background: theme.panelBg, borderRadius: 22, padding: 20, width: '100%', maxWidth: 320, position: 'relative' }}>
-        <X size={19} style={{ position: 'absolute', top: 16, right: 16, cursor: 'pointer', color: theme.muted }} onClick={onClose} />
-        <div style={{ fontWeight: 800, fontSize: 15, color: theme.ink, marginBottom: 14, paddingRight: 24 }}>Chat wallpaper</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 18px', borderBottom: `1px solid ${theme.border}` }}>
+        <ArrowLeft size={20} style={{ cursor: 'pointer', color: theme.ink }} onClick={onClose} />
+        <div style={{ fontWeight: 800, fontSize: 17, color: theme.ink }}>Chat wallpaper</div>
+      </div>
+      <div style={{ overflowY: 'auto', flex: 1, padding: 16 }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
-          {WALLPAPER_PRESETS.map((key) => (
-            <div key={key} onClick={() => { onSelect(key); onClose(); }} style={{
-              height: 64, borderRadius: 14, cursor: 'pointer',
-              border: value === key || (!value && key === 'default') ? `2.5px solid ${theme.coral}` : `1.5px solid ${theme.border}`,
-              ...(key === 'default' ? { background: theme.bgGradient, display: 'flex', alignItems: 'center', justifyContent: 'center' } : wallpaperBgStyle(key, theme)),
+          <div onClick={() => { onSelect(null); onClose(); }} style={{
+            aspectRatio: '9 / 16', borderRadius: 14, cursor: 'pointer', background: theme.bgGradient,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            border: !value ? `2.5px solid ${theme.coral}` : `1.5px solid ${theme.border}`,
+          }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: theme.ink }}>Default</span>
+          </div>
+          {WALLPAPER_PRESETS.map((p) => (
+            <div key={p.key} onClick={() => { onSelect(p.key); onClose(); }} style={{
+              aspectRatio: '9 / 16', borderRadius: 14, cursor: 'pointer', position: 'relative', overflow: 'hidden',
+              border: value === p.key ? `2.5px solid ${theme.coral}` : `1.5px solid ${theme.border}`,
+              ...wallpaperBgStyle(p.key),
             }}>
-              {key === 'default' && <span style={{ fontSize: 10, fontWeight: 700, color: theme.ink }}>Default</span>}
+              <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, transparent 60%, rgba(0,0,0,0.65) 100%)' }} />
+              <span style={{
+                position: 'absolute', left: 6, bottom: 5, right: 6, fontSize: 10, fontWeight: 700, color: 'white',
+                lineHeight: 1.2,
+              }}>{p.label}</span>
             </div>
           ))}
         </div>
@@ -2049,7 +2085,7 @@ function CreateGroupPanel({ myId, onClose, onCreated }) {
   );
 }
 
-function GroupInfoPanel({ group, members, myId, myRole, isOwner, onClose, onPromote, onDemote, onMute, onUnmute, onKick, onLeave, onOpenProfile, onSaveBio, onSaveName, onSaveAvatar, onAddMembers, onTransferOwnership }) {
+function GroupInfoPanel({ group, members, myId, myRole, isOwner, onClose, onPromote, onDemote, onMute, onUnmute, onKick, onLeave, onOpenProfile, onSaveBio, onSaveName, onSaveAvatar, onAddMembers, onTransferOwnership, onSetWallpaper, onSetHeaderStyle }) {
   const { theme } = useTheme();
   const isAdmin = myRole === 'admin';
   const [menuFor, setMenuFor] = useState(null);
@@ -2060,6 +2096,8 @@ function GroupInfoPanel({ group, members, myId, myRole, isOwner, onClose, onProm
   const [name, setName] = useState(group.name);
   const [cropFile, setCropFile] = useState(null);
   const [showAddMembers, setShowAddMembers] = useState(false);
+  const [showWallpaper, setShowWallpaper] = useState(false);
+  const [showHeaderStyle, setShowHeaderStyle] = useState(false);
   const soleAdmin = isAdmin && members.filter((m) => m.role === 'admin').length === 1 && members.length > 1;
   return (
     <div style={{ position: 'absolute', inset: 0, background: theme.panelBg, zIndex: 40, display: 'flex', flexDirection: 'column' }} className="zchat-fade">
@@ -2112,6 +2150,14 @@ function GroupInfoPanel({ group, members, myId, myRole, isOwner, onClose, onProm
           <div onClick={() => isAdmin && setEditingBio(true)} style={{ fontSize: 13, color: group.bio ? theme.ink : theme.muted, marginBottom: 18, cursor: isAdmin ? 'pointer' : 'default' }}>
             {group.bio || (isAdmin ? 'Add a group bio' : 'No bio yet')}
           </div>
+        )}
+
+        {isAdmin && (
+          <>
+            <SettingsRow icon={<ImageIcon size={16} />} label="Chat wallpaper" onClick={() => setShowWallpaper(true)} />
+            <SettingsRow icon={<Sparkles size={16} />} label="Header style" onClick={() => setShowHeaderStyle(true)} />
+            <div style={{ height: 12 }} />
+          </>
         )}
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
@@ -2179,6 +2225,12 @@ function GroupInfoPanel({ group, members, myId, myRole, isOwner, onClose, onProm
       </div>
       {cropFile && (
         <AvatarCropper file={cropFile} onCancel={() => setCropFile(null)} onConfirm={(blob) => { onSaveAvatar(blob); setCropFile(null); }} />
+      )}
+      {showWallpaper && (
+        <WallpaperPicker value={group.wallpaper} onSelect={onSetWallpaper} onClose={() => setShowWallpaper(false)} />
+      )}
+      {showHeaderStyle && (
+        <NameBarPicker value={group.name_bar} onSelect={onSetHeaderStyle} onClose={() => setShowHeaderStyle(false)} />
       )}
       {showAddMembers && (
         <AddMembersPanel myId={myId} existingIds={members.map((m) => m.user_id)}
@@ -3541,7 +3593,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const { error } = await supabase.from('conversations').update({ wallpaper_a: key, wallpaper_b: key }).eq('id', conv.id);
     if (error) { alert('Could not change wallpaper: ' + error.message); return; }
     setConversations((prev) => prev.map((c) => (c.id === conv.id ? { ...c, wallpaper_a: key, wallpaper_b: key } : c)));
-    const label = WALLPAPER_PRESETS_LABELS[key] || key;
+    const label = key ? (WALLPAPER_PRESETS.find((p) => p.key === key)?.label || key) : 'Default';
     await sendMessage(session.user.id, conv.otherProfile.id, 'system', `Wallpaper changed to ${label}`, null);
     loadConversations();
   };
@@ -3553,6 +3605,26 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const label = key ? (NAME_BAR_PRESETS.find((p) => p.key === key)?.label || key) : 'None';
     await sendMessage(session.user.id, conv.otherProfile.id, 'system', `Header style changed to ${label}`, null);
     loadConversations();
+  };
+
+  const setGroupWallpaper = async (key) => {
+    if (!activeGroup || groupMembers.find((gm) => gm.user_id === session.user.id)?.role !== 'admin') return;
+    const { error } = await supabase.from('groups').update({ wallpaper: key }).eq('id', activeGroup.id);
+    if (error) { alert('Could not change wallpaper: ' + error.message); return; }
+    setActiveGroup((prev) => ({ ...prev, wallpaper: key }));
+    const label = key ? (WALLPAPER_PRESETS.find((p) => p.key === key)?.label || key) : 'Default';
+    sendGroupMessage('system', `${realName(session.user.id)} changed the wallpaper to ${label}`, null);
+    loadGroups();
+  };
+
+  const setGroupHeaderStyle = async (key) => {
+    if (!activeGroup || groupMembers.find((gm) => gm.user_id === session.user.id)?.role !== 'admin') return;
+    const { error } = await supabase.from('groups').update({ name_bar: key }).eq('id', activeGroup.id);
+    if (error) { alert('Could not change header style: ' + error.message); return; }
+    setActiveGroup((prev) => ({ ...prev, name_bar: key }));
+    const label = key ? (NAME_BAR_PRESETS.find((p) => p.key === key)?.label || key) : 'None';
+    sendGroupMessage('system', `${realName(session.user.id)} changed the header style to ${label}`, null);
+    loadGroups();
   };
 
   const loadMyLocks = async () => {
@@ -4781,19 +4853,49 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                   onReact={() => setReactionPickerFor(selectedMessages[0]?.id)}
                 />
               ) : activeGroup ? (
-                <div style={{ padding: '13px 18px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: `1px solid ${theme.border}`, cursor: 'pointer' }}
+                <div style={{
+                  padding: '13px 18px', display: 'flex', alignItems: 'center', gap: 10, minHeight: 64, boxSizing: 'border-box',
+                  borderBottom: activeGroup.name_bar ? 'none' : `1px solid ${theme.border}`,
+                  cursor: 'pointer', position: 'relative', overflow: 'hidden',
+                  boxShadow: activeGroup.name_bar ? '0 2px 16px rgba(0,0,0,0.28)' : 'none',
+                  ...(activeGroup.name_bar ? nameBarBgStyle(activeGroup.name_bar) : {}),
+                }}
                   onClick={() => setShowGroupInfo(true)}>
-                  <div className="zchat-back" style={{ display: 'none', cursor: 'pointer', margin: '-10px -6px -10px -10px', padding: '10px 6px 10px 10px' }}
+                  {activeGroup.name_bar && (
+                    <div style={{
+                      position: 'absolute', inset: 0, pointerEvents: 'none',
+                      background: 'linear-gradient(90deg, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.55) 45%, rgba(0,0,0,0.3) 75%, rgba(0,0,0,0.14) 100%), linear-gradient(180deg, rgba(0,0,0,0.05) 0%, rgba(0,0,0,0) 45%, rgba(0,0,0,0.22) 100%)',
+                    }} />
+                  )}
+                  <div className="zchat-back" style={{
+                    display: 'none', cursor: 'pointer', margin: '-10px -6px -10px -10px', padding: '10px 6px 10px 10px', position: 'relative',
+                    ...(activeGroup.name_bar ? { borderRadius: '50%', background: 'rgba(0,0,0,0.35)', margin: '-4px 0 -4px -4px', padding: 8 } : {}),
+                  }}
                     onClick={(e) => { e.stopPropagation(); setMobileShowChat(false); }}>
-                    <ArrowLeft size={22} />
+                    <ArrowLeft size={22} color={activeGroup.name_bar ? 'white' : undefined} />
                   </div>
-                  <GroupAvatar avatar={activeGroup.avatar} name={activeGroup.name} size={38} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 800, fontSize: 15, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{activeGroup.name}</div>
-                    <div style={{ fontSize: 12, color: theme.muted }}>{groupMembers.length} members</div>
+                  <div style={{ position: 'relative' }}>
+                    <GroupAvatar avatar={activeGroup.avatar} name={activeGroup.name} size={38} />
                   </div>
-                  <MoreVertical size={19} color={theme.muted} style={{ cursor: 'pointer', flexShrink: 0, marginLeft: 6 }}
-                    onClick={(e) => { e.stopPropagation(); setShowGroupInfo(true); }} />
+                  <div style={{ flex: '1 1 0%', minWidth: 0, maxWidth: '100%', overflow: 'hidden', position: 'relative' }}>
+                    <div style={{
+                      fontWeight: 800, fontSize: 15, color: activeGroup.name_bar ? 'white' : theme.ink,
+                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', width: '100%',
+                      textShadow: activeGroup.name_bar ? '0 1px 3px rgba(0,0,0,0.95), 0 1px 10px rgba(0,0,0,0.6)' : 'none',
+                    }}>{activeGroup.name}</div>
+                    <div style={{
+                      fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', width: '100%',
+                      color: activeGroup.name_bar ? 'rgba(255,255,255,0.92)' : theme.muted,
+                      textShadow: activeGroup.name_bar ? '0 1px 3px rgba(0,0,0,0.9), 0 1px 8px rgba(0,0,0,0.5)' : 'none',
+                    }}>{groupMembers.length} members</div>
+                  </div>
+                  <div style={{
+                    position: 'relative', flexShrink: 0, marginLeft: 6, cursor: 'pointer',
+                    ...(activeGroup.name_bar ? { borderRadius: '50%', background: 'rgba(0,0,0,0.35)', padding: 6, display: 'flex' } : {}),
+                  }}
+                    onClick={(e) => { e.stopPropagation(); setShowGroupInfo(true); }}>
+                    <MoreVertical size={19} color={activeGroup.name_bar ? 'white' : theme.muted} />
+                  </div>
                 </div>
               ) : (
                 <div style={{
@@ -4875,10 +4977,14 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                 flex: 1, minHeight: 0, overflowY: 'auto', padding: '16px 18px',
                 WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain',
                 ...((() => {
+                  if (activeGroup) {
+                    if (activeGroup.wallpaper) return wallpaperBgStyle(activeGroup.wallpaper);
+                    return {};
+                  }
                   if (!activeProfile) return {};
                   const activeConv = conversations.find((c) => c.otherProfile.id === activeProfile.id) || archivedConversations.find((c) => c.otherProfile.id === activeProfile.id);
                   const wp = activeConv ? myWallpaper(activeConv) : null;
-                  if (wp && wp !== 'default') return wallpaperBgStyle(wp, theme);
+                  if (wp) return wallpaperBgStyle(wp);
                   return {};
                 })()),
                 ...(bgPatternOn ? {
@@ -5210,6 +5316,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             onSaveAvatar={saveGroupAvatar}
             onAddMembers={addGroupMembers}
             onTransferOwnership={transferOwnership}
+            onSetWallpaper={setGroupWallpaper}
+            onSetHeaderStyle={setGroupHeaderStyle}
           />
         )}
         {showAccountSwitcher && (
