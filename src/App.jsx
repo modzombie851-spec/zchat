@@ -161,7 +161,7 @@ function AnimatedChatBackground({ chatTheme }) {
             position: 'absolute', left: `${(i * 37) % 100}%`, bottom: -30,
             fontSize: 12 + (i % 5) * 6, opacity: 0.18 + (i % 3) * 0.06,
             animation: `zchat-float-up ${8 + (i % 6)}s linear infinite`, animationDelay: `${i * 1.3}s`,
-          }}>💗</span>
+          }}>ðŸ’—</span>
         ))}
       </div>
     );
@@ -303,6 +303,9 @@ function GlobalStyle() {
       @keyframes zchat-love-pulse { 0%, 100% { box-shadow: 0 0 10px rgba(255,77,141,0.28); } 50% { box-shadow: 0 0 20px rgba(255,77,141,0.55); } }
       @keyframes zchat-neon-pulse { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.18); } }
       @keyframes zchat-wave-pop { 0% { opacity: 0; transform: scale(0.4) translateY(10px); } 60% { opacity: 1; transform: scale(1.08) translateY(-2px); } 100% { opacity: 1; transform: scale(1) translateY(0); } }
+      @keyframes zchat-panel-zoom-in { 0% { opacity: 0; transform: scale(0.92); } 100% { opacity: 1; transform: scale(1); } }
+      @keyframes zchat-panel-slide-in { 0% { opacity: 0; transform: translateX(14px) scale(0.985); } 100% { opacity: 1; transform: translateX(0) scale(1); } }
+      @keyframes zchat-pull-spin { to { transform: rotate(360deg); } }
       .zchat-fire-ring {
         background: linear-gradient(135deg, #FFD23F, #FF6B00, #FF2D55);
       }
@@ -310,6 +313,8 @@ function GlobalStyle() {
       .zchat-bubble-neon { animation: zchat-neon-pulse 2.2s ease-in-out infinite; }
       .zchat-fade { animation: zchat-fade 0.25s ease; }
       .zchat-wave-pop { animation: zchat-wave-pop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1); }
+      .zchat-panel-open { animation: zchat-panel-zoom-in 0.24s cubic-bezier(0.16, 1, 0.3, 1); }
+      .zchat-msglist { scroll-behavior: smooth; }
       * { font-family: ${FONT}; }
       *:not(input):not(textarea) {
         -webkit-user-select: none;
@@ -349,7 +354,6 @@ function colorForName(name) {
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
 }
 
-/* WhatsApp-style: real photo if uploaded, otherwise a colored circle with the first initial */
 function Avatar({ emoji, name = '', online, size = 40, ring = false }) {
   const { chatTheme, theme } = useTheme();
   const [imgFailed, setImgFailed] = useState(false);
@@ -870,9 +874,6 @@ function removeAccountEntry(id) {
   try { localStorage.setItem('zchat-accounts', JSON.stringify(list)); } catch {}
 }
 
-
-/* Blank out a person's avatar if they've hidden it and we're not looking at ourselves -- applied once
-   at the source so every screen (list rows, chat header, forward picker, discover, etc.) respects it. */
 function sanitizeAvatar(profile, myId) {
   if (!profile) return profile;
   if (profile.hide_photo && profile.id !== myId) return { ...profile, avatar: '' };
@@ -881,7 +882,6 @@ function sanitizeAvatar(profile, myId) {
 function sanitizeAvatarList(list, myId) {
   return (list || []).map((p) => sanitizeAvatar(p, myId));
 }
-
 
 function CountryPicker({ value, onSelect, onClose }) {
   const { theme } = useTheme();
@@ -1426,7 +1426,6 @@ function IconDownload({ size = 15, color = 'currentColor' }) {
 
 const EXTRA_EMOJIS = ['\u{1F600}', '\u{1F601}', '\u{1F602}', '\u{1F923}', '\u{1F60A}', '\u{1F60D}', '\u{1F618}', '\u{1F61C}', '\u{1F914}', '\u{1F60E}', '\u{1F634}', '\u{1F62D}', '\u{1F621}', '\u{1F973}', '\u{1F92F}', '\u{1F970}', '\u{1F607}', '\u{1F644}', '\u{1F62C}', '\u{1F917}', '\u{1F929}', '\u{1F61D}', '\u{1F622}', '\u{1F631}', '\u{1F91D}', '\u{1F44D}', '\u{1F64F}', '\u{1F4AA}', '\u{1F44F}', '\u{1F44E}', '\u{1F44C}', '\u{270C}\u{FE0F}', '\u{1F919}', '\u{1F44B}', '\u{1F4AF}', '\u{1F525}', '\u{2728}', '\u{1F389}', '\u{1F382}', '\u{2764}\u{FE0F}', '\u{1F9E1}', '\u{1F49B}', '\u{1F49A}', '\u{1F499}', '\u{1F49C}', '\u{1F5A4}', '\u{1F494}', '\u{1F624}', '\u{1F921}', '\u{1F480}', '\u{1F440}', '\u{1F648}', '\u{1F436}', '\u{1F431}'];
 
-/* Wave / quick-sticker reactions for saying hi at a glance (item request: Discord-style big emoji stickers). */
 const WAVE_STICKERS = [
   { key: 'wave', emoji: '\u{1F44B}', label: 'Wave' },
   { key: 'hi', emoji: '\u{1F600}', label: 'Hi!' },
@@ -1457,7 +1456,7 @@ function FullEmojiPicker({ onPick, onClose }) {
       </div>
     </div>
   );
-          }
+}
 function MessageContextMenu({ message, isMine, canEditText, canModerate, onClose, onReact, onReply, onCopy, onEdit, onForward, onReport, onDeleteForMe, onDeleteForEveryone, onSelectMultiple }) {
   const { theme } = useTheme();
   const [showFullEmoji, setShowFullEmoji] = useState(false);
@@ -1574,7 +1573,6 @@ function ArchivedChatsPanel({ conversations, onClose, onOpenChat, onUnarchive })
   );
 }
 
-
 const WALLPAPER_PRESETS = [
   { key: 'elements-duel', label: 'Elements Duel', file: '/wallpaper-elements-duel.jpg' },
   { key: 'rain-reflection', label: 'Rain Reflection', file: '/wallpaper-rain-reflection.jpg' },
@@ -1655,8 +1653,6 @@ function WallpaperPicker({ value, onSelect, onClose }) {
   );
 }
 
-/* Header style: a decorative banner shown behind the avatar+name in a DM header.
-   Each design is its own image file in /public. */
 const NAME_BAR_PRESETS = [
   { key: 'ice', label: 'Ice Wolf', file: '/name-bar-ice-wolf.png' },
   { key: 'eclipse', label: 'Eclipse Night', file: '/name-bar-eclipse-night.png' },
@@ -2494,13 +2490,6 @@ function AccountPrivacyPanel({ profile, onClose, onSaved }) {
   );
 }
 
-
-/* WhatsApp-style crop: a resizable frame with corner handles you drag on any side,
-   instead of a fixed frame + zoom slider. No backdrop blur anywhere in this component
-   (Android Chrome/WebView has a known bug where backdrop-filter blur can get stuck
-   frozen on screen) -- uses a plain solid dark overlay instead, which is reliable
-   on both platforms. Close button respects the safe-area inset so it's never hidden
-   under the iPhone notch/status bar. */
 function PhotoCropEditor({ file, isAvatar = false, onCancel, onConfirm }) {
   const { theme } = useTheme();
   const [imgEl, setImgEl] = useState(null);
@@ -3163,9 +3152,6 @@ function AudioBubble({ url, isMe }) {
   );
 }
 
-/* Downloads a file directly via blob, without ever navigating to or exposing
-   the site's own URL structure in a visible link/tab -- addresses the request
-   to keep the download silent and not reveal what site/app served the file. */
 async function silentDownload(url, filename) {
   try {
     const res = await fetch(url);
@@ -3217,9 +3203,6 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
   (reactions || []).forEach((r) => { grouped[r.emoji] = (grouped[r.emoji] || 0) + 1; });
   const groupedEntries = Object.entries(grouped);
 
-  /* The whole row is one tap target now (item request: entire message line should
-     work for select/react, not just the bubble itself) -- this handler lives on the
-     outer row div rather than just the inner bubble div. */
   const handleRowTap = (e) => {
     if (longPressFiredRef.current) { longPressFiredRef.current = false; return; }
     if (selectionMode) { onToggleSelect(m.id); return; }
@@ -3259,12 +3242,6 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
       swipedPastThresholdRef.current = clamped >= 40;
     }
   };
-  /* Fire the reply only on release (matches WhatsApp -- the icon fills in as you drag,
-     but the actual reply/keyboard-focus action only happens once you lift your finger,
-     so dragging back and forth doesn't repeatedly trigger anything). The composer focus
-     call happens synchronously in this same pointerup handler (a real user gesture),
-     which is required for iOS Safari to actually open the keyboard -- a focus() call
-     made inside a setTimeout loses that gesture context and iOS silently ignores it. */
   const finalizeDrag = () => {
     clearPressTimer();
     if (draggingRef.current) {
@@ -3538,7 +3515,6 @@ function MessageActionBar({ count, canEditActions, onCancel, onForward, onDelete
     </div>
   );
 }
-
 
 function ForwardPicker({ conversations, onCancel, onPick, myId }) {
   const { theme } = useTheme();
@@ -3987,6 +3963,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [lockPromptFor, setLockPromptFor] = useState(null);
   const [recording, setRecording] = useState(false);
   const [recordSeconds, setRecordSeconds] = useState(0);
+  const [pullDistance, setPullDistance] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const pullStartYRef = useRef(null);
+  const sidebarListRef = useRef(null);
   const scrollRef = useRef(null);
   const composerRef = useRef(null);
   const searchTimer = useRef(null);
@@ -4023,11 +4003,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     cur.add(convId);
     try { localStorage.setItem(hiddenChatsKey(), JSON.stringify([...cur])); } catch {}
   };
-  /* Item #7 fix: deleting a chat used to just hide the conversation row forever --
-     even brand-new incoming messages stayed invisible because the same conversation id
-     was permanently on the "hidden" list. Un-hiding here (called whenever a fresh
-     message arrives) makes a deleted chat reappear as a clean, fresh conversation,
-     the way WhatsApp's "delete chat" behaves. */
   const unhideChatLocally = (convId) => {
     const cur = getHiddenChatIds();
     if (!cur.has(convId)) return;
@@ -4054,6 +4029,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     setConversations((prev) => prev.map((c) => (c.id === conv.id ? { ...c, wallpaper_a: key, wallpaper_b: key } : c)));
     const label = key ? (WALLPAPER_PRESETS.find((p) => p.key === key)?.label || key) : 'Default';
     await sendMessage(session.user.id, conv.otherProfile.id, 'system', `Wallpaper changed to ${label}`, null);
+    await upsertConversation(conv.otherProfile.id, `Wallpaper changed to ${label}`, 'system');
     loadConversations();
   };
 
@@ -4063,6 +4039,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     setConversations((prev) => prev.map((c) => (c.id === conv.id ? { ...c, name_bar: key } : c)));
     const label = key ? (NAME_BAR_PRESETS.find((p) => p.key === key)?.label || key) : 'None';
     await sendMessage(session.user.id, conv.otherProfile.id, 'system', `Header style changed to ${label}`, null);
+    await upsertConversation(conv.otherProfile.id, `Header style changed to ${label}`, 'system');
     loadConversations();
   };
 
@@ -4196,7 +4173,12 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
   const upsertConversation = async (otherId, text, type) => {
     const [a, b] = pairKey(session.user.id, otherId);
-    const preview = type === 'text' ? text : type === 'image' ? 'Photo' : type === 'sticker' ? text : 'Video';
+    const preview = type === 'text' ? text
+      : type === 'image' ? 'Photo'
+      : type === 'audio' ? 'Voice message'
+      : type === 'sticker' ? text
+      : type === 'system' ? text
+      : 'Video';
     await supabase.from('conversations').upsert(
       { user_a: a, user_b: b, last_message: preview, last_message_at: new Date().toISOString(), last_sender_id: session.user.id },
       { onConflict: 'user_a,user_b' }
@@ -4266,8 +4248,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (!me) return;
     const sub = subscribeToMessages(me.id, (msg) => {
       if (msg.sender_id !== me.id) {
-        /* Item #7: a new message from someone whose chat we'd deleted should bring
-           the conversation back as a fresh thread, instead of staying invisible forever. */
         unhideChatLocally(pairKey(me.id, msg.sender_id).join('-'));
         if (msg.sender_id !== activeProfile?.id || !mobileShowChatRef.current) { playPing(); supabase.from('messages').update({ delivered: true }).eq('id', msg.id); }
         else supabase.from('messages').update({ read: true, delivered: true }).eq('id', msg.id);
@@ -4636,9 +4616,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     loadGroups();
   };
 
-  /* Item #2 fix: openChat used to trust a locally-cached "myLocks" map that might not
-     have finished loading yet, letting a locked chat open without a password prompt.
-     Now it checks the database directly, at the moment you tap the chat, every time. */
   const openChat = async (profile, convId) => {
     if (convId) {
       const { data: lockRow } = await supabase.from('chat_locks').select('conversation_id').eq('conversation_id', convId).eq('owner_id', session.user.id).maybeSingle();
@@ -4705,8 +4682,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     }
   };
 
-  /* Item #8: quick wave/sticker reactions -- sends a big standalone emoji as its own
-     message bubble (type 'sticker'), rendered oversized in MessageBubble. */
   const sendSticker = async (emoji) => {
     setShowStickers(false);
     if (!activeProfile && !activeGroup) return;
@@ -5012,10 +4987,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     setReactionPickerFor(null);
   };
 
-  /* Item #7 fix: deleting now also clears the local message history for that chat
-     (so if it reappears later from a new incoming message, it's a genuinely fresh
-     start, not the old conversation still sitting there) alongside un-hiding it
-     automatically once a new message arrives (see the message-subscribe effect above). */
   const confirmDeleteChat = () => {
     if (deleteConvoTarget) {
       hideChatLocally(deleteConvoTarget.id);
@@ -5062,6 +5033,32 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     return () => { supabase.removeChannel(channel); typingChannelRef.current = null; setTypingFrom(false); };
   }, [activeProfile?.id]);
 
+  const handlePullTouchStart = (e) => {
+    if (sidebarListRef.current && sidebarListRef.current.scrollTop <= 0) {
+      pullStartYRef.current = e.touches[0].clientY;
+    } else {
+      pullStartYRef.current = null;
+    }
+  };
+  const handlePullTouchMove = (e) => {
+    if (pullStartYRef.current == null || refreshing) return;
+    const dy = e.touches[0].clientY - pullStartYRef.current;
+    if (dy > 0 && sidebarListRef.current && sidebarListRef.current.scrollTop <= 0) {
+      setPullDistance(Math.min(dy * 0.5, 70));
+    }
+  };
+  const handlePullTouchEnd = async () => {
+    if (pullDistance > 45 && !refreshing) {
+      setRefreshing(true);
+      setPullDistance(50);
+      await Promise.all([loadConversations(), loadGroups(), loadUnreadCounts(), loadFollowRequestCount()]);
+      setTimeout(() => { setRefreshing(false); setPullDistance(0); }, 400);
+    } else {
+      setPullDistance(0);
+    }
+    pullStartYRef.current = null;
+  };
+
   if (!me) {
     return (
       <div style={{ height: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: theme.bgGradient }}>
@@ -5070,12 +5067,20 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     );
   }
 
+  const displayListSortByPin = (a, b, getPinned) => {
+    const pa = getPinned(a) ? 1 : 0, pb = getPinned(b) ? 1 : 0;
+    if (pa !== pb) return pb - pa;
+    return new Date(b.last_message_at) - new Date(a.last_message_at);
+  };
+
   const displayList = listFilter === 'groups'
-    ? groups.filter((g) => !g.archived)
+    ? groups.filter((g) => !g.archived).sort((a, b) => displayListSortByPin(a, b, (x) => x.pinned))
     : listFilter === 'dms'
       ? conversations
-      : [...conversations.map((c) => ({ ...c, __kind: 'dm' })), ...groups.filter((g) => !g.archived).map((g) => ({ ...g, __kind: 'group' }))]
-          .sort((a, b) => new Date(b.last_message_at) - new Date(a.last_message_at));
+      : listFilter === 'unread'
+        ? conversations.filter(isUnread)
+        : [...conversations.map((c) => ({ ...c, __kind: 'dm' })), ...groups.filter((g) => !g.archived).map((g) => ({ ...g, __kind: 'group' }))]
+            .sort((a, b) => displayListSortByPin(a, b, (x) => (x.__kind === 'dm' ? isPinnedByMe(x) : x.pinned)));
 
   const activeWallpaperKey = activeGroup ? activeGroup.wallpaper : (activeConvForBar ? myWallpaper(activeConvForBar) : null);
   const activeNameBarKey = activeGroup ? activeGroup.name_bar : activeConvNameBar;
@@ -5096,11 +5101,16 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       }} className="zchat-sidebar-desktop">
         <div style={{
           padding: '14px 16px 10px', paddingTop: 'calc(14px + env(safe-area-inset-top))',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0,
+          display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexShrink: 0,
         }}>
-          <ZBrand size={22} />
-          <div onClick={() => setProfileOf(me)} style={{ cursor: 'pointer' }}>
-            <Avatar emoji={me.avatar} name={me.name} size={34} />
+          <ZBrand size={22} showTag />
+          <div onClick={() => setProfileOf(me)} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', maxWidth: 160 }}>
+            <div style={{ textAlign: 'right', minWidth: 0 }}>
+              <div style={{ fontWeight: 800, fontSize: 12, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{me.name}</div>
+              <div style={{ fontSize: 10, color: theme.teal, fontWeight: 600 }}>Online</div>
+              {me.bio && <div style={{ fontSize: 9.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 130 }}>"{me.bio}"</div>}
+            </div>
+            <Avatar emoji={me.avatar} name={me.name} size={34} ring />
           </div>
         </div>
 
@@ -5113,8 +5123,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           </div>
         </div>
 
-        {/* Icon row: item #18 fix -- was previously packed to the left with uneven gaps;
-            now evenly distributed and centered across the full row width. */}
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-around', padding: '2px 10px 12px', flexShrink: 0,
         }}>
@@ -5160,18 +5168,34 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           </div>
         ) : (
           <>
-            <div style={{ display: 'flex', gap: 8, padding: '0 16px 10px', flexShrink: 0 }}>
-              {[{ k: 'all', l: 'All' }, { k: 'dms', l: 'Chats' }, { k: 'groups', l: 'Groups' }].map((f) => (
+            <div style={{ display: 'flex', gap: 6, padding: '0 16px 10px', flexShrink: 0, overflowX: 'auto' }}>
+              {[{ k: 'all', l: 'All' }, { k: 'unread', l: 'Unread' }, { k: 'groups', l: 'Groups' }, { k: 'dms', l: 'Chats' }].map((f) => (
                 <div key={f.k} onClick={() => setListFilter(f.k)} style={{
-                  padding: '6px 14px', borderRadius: 20, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                  padding: '6px 14px', borderRadius: 20, fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
                   background: listFilter === f.k ? theme.coral : theme.rowBg, color: listFilter === f.k ? 'white' : theme.muted,
                 }}>{f.l}</div>
               ))}
             </div>
-            <div style={{ overflowY: 'auto', flex: 1, padding: '0 10px' }}>
+            <div
+              ref={sidebarListRef}
+              onTouchStart={handlePullTouchStart}
+              onTouchMove={handlePullTouchMove}
+              onTouchEnd={handlePullTouchEnd}
+              style={{
+                overflowY: 'auto', flex: 1, padding: '0 10px', position: 'relative',
+                transform: pullDistance ? `translateY(${pullDistance}px)` : 'none',
+                transition: pullStartYRef.current ? 'none' : 'transform 0.25s ease',
+                scrollBehavior: 'smooth', WebkitOverflowScrolling: 'touch',
+              }}
+            >
+              {(refreshing || pullDistance > 4) && (
+                <div style={{ position: 'absolute', top: -38, left: '50%', transform: `translateX(-50%) rotate(${refreshing ? 0 : pullDistance * 4}deg)`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Spinner size={18} color={theme.coral} />
+                </div>
+              )}
               {displayList.length === 0 && (
                 <div style={{ textAlign: 'center', padding: 30, fontSize: 13, color: theme.muted }}>
-                  Search a username above to start chatting, or create a group.
+                  {listFilter === 'unread' ? 'No unread chats' : 'Search a username above to start chatting, or create a group.'}
                 </div>
               )}
               {displayList.map((item) => {
@@ -5198,11 +5222,11 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                       </div>
                       <MoreVertical size={15} color={theme.muted} style={{ cursor: 'pointer', flexShrink: 0 }}
                         onClick={(e) => { e.stopPropagation(); setGroupRowMenuAnchor(e.currentTarget); setGroupRowMenuFor(groupRowMenuFor === g.id ? null : g.id); }} />
-                      <SmartMenu anchorEl={groupRowMenuAnchor} open={groupRowMenuFor === g.id} onClose={() => setGroupRowMenuFor(null)} width={170}>
+                      <SmartMenu anchorEl={groupRowMenuAnchor} open={groupRowMenuFor === g.id} onClose={() => setGroupRowMenuFor(null)} width={190}>
                         <div style={{ background: theme.panelBg, borderRadius: 14, boxShadow: '0 8px 24px rgba(0,0,0,0.2)', border: `1px solid ${theme.border}`, overflow: 'hidden' }}>
-                          <div onClick={() => { toggleGroupPin(g); setGroupRowMenuFor(null); }} style={{ padding: '11px 14px', fontSize: 13, fontWeight: 600, color: theme.ink, cursor: 'pointer', borderBottom: `1px solid ${theme.border}` }}>{g.pinned ? 'Unpin' : 'Pin'}</div>
-                          <div onClick={() => { toggleGroupArchive(g); setGroupRowMenuFor(null); }} style={{ padding: '11px 14px', fontSize: 13, fontWeight: 600, color: theme.ink, cursor: 'pointer', borderBottom: `1px solid ${theme.border}` }}>Archive</div>
-                          <div onClick={() => { leaveGroupById(g); setGroupRowMenuFor(null); }} style={{ padding: '11px 14px', fontSize: 13, fontWeight: 600, color: theme.danger, cursor: 'pointer' }}>Leave group</div>
+                          <div onClick={() => { toggleGroupPin(g); setGroupRowMenuFor(null); }} style={{ padding: '11px 14px', fontSize: 13, fontWeight: 600, color: theme.ink, cursor: 'pointer', borderBottom: `1px solid ${theme.border}` }}>{g.pinned ? `Unpin ${g.name}` : `Pin ${g.name}`}</div>
+                          <div onClick={() => { toggleGroupArchive(g); setGroupRowMenuFor(null); }} style={{ padding: '11px 14px', fontSize: 13, fontWeight: 600, color: theme.ink, cursor: 'pointer', borderBottom: `1px solid ${theme.border}` }}>{`Archive ${g.name}`}</div>
+                          <div onClick={() => { leaveGroupById(g); setGroupRowMenuFor(null); }} style={{ padding: '11px 14px', fontSize: 13, fontWeight: 600, color: theme.danger, cursor: 'pointer' }}>{`Leave ${g.name}`}</div>
                         </div>
                       </SmartMenu>
                     </div>
@@ -5234,11 +5258,11 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                     {unread && <div style={{ width: 20, height: 20, borderRadius: 10, background: theme.coral, color: 'white', fontSize: 10.5, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{unreadCounts[c.otherProfile.id]}</div>}
                     <MoreVertical size={15} color={theme.muted} style={{ cursor: 'pointer', flexShrink: 0 }}
                       onClick={(e) => { e.stopPropagation(); setRowMenuAnchor(e.currentTarget); setRowMenuFor(rowMenuFor === c.id ? null : c.id); }} />
-                    <SmartMenu anchorEl={rowMenuAnchor} open={rowMenuFor === c.id} onClose={() => setRowMenuFor(null)} width={170}>
+                    <SmartMenu anchorEl={rowMenuAnchor} open={rowMenuFor === c.id} onClose={() => setRowMenuFor(null)} width={190}>
                       <div style={{ background: theme.panelBg, borderRadius: 14, boxShadow: '0 8px 24px rgba(0,0,0,0.2)', border: `1px solid ${theme.border}`, overflow: 'hidden' }}>
-                        <div onClick={() => { togglePin(c); setRowMenuFor(null); }} style={{ padding: '11px 14px', fontSize: 13, fontWeight: 600, color: theme.ink, cursor: 'pointer', borderBottom: `1px solid ${theme.border}` }}>{isPinnedByMe(c) ? 'Unpin' : 'Pin'}</div>
-                        <div onClick={() => { toggleArchive(c.id, true); setRowMenuFor(null); }} style={{ padding: '11px 14px', fontSize: 13, fontWeight: 600, color: theme.ink, cursor: 'pointer', borderBottom: `1px solid ${theme.border}` }}>Archive</div>
-                        <div onClick={() => { setDeleteConvoTarget(c); setRowMenuFor(null); }} style={{ padding: '11px 14px', fontSize: 13, fontWeight: 600, color: theme.danger, cursor: 'pointer' }}>Delete</div>
+                        <div onClick={() => { togglePin(c); setRowMenuFor(null); }} style={{ padding: '11px 14px', fontSize: 13, fontWeight: 600, color: theme.ink, cursor: 'pointer', borderBottom: `1px solid ${theme.border}` }}>{isPinnedByMe(c) ? `Unpin ${c.otherProfile.name}` : `Pin ${c.otherProfile.name}`}</div>
+                        <div onClick={() => { toggleArchive(c.id, true); setRowMenuFor(null); }} style={{ padding: '11px 14px', fontSize: 13, fontWeight: 600, color: theme.ink, cursor: 'pointer', borderBottom: `1px solid ${theme.border}` }}>{`Archive ${c.otherProfile.name}`}</div>
+                        <div onClick={() => { setDeleteConvoTarget(c); setRowMenuFor(null); }} style={{ padding: '11px 14px', fontSize: 13, fontWeight: 600, color: theme.danger, cursor: 'pointer' }}>{`Delete ${c.otherProfile.name}`}</div>
                       </div>
                     </SmartMenu>
                   </div>
@@ -5252,25 +5276,16 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       {/* Chat panel */}
       <div style={{
         flex: 1, display: mobileShowChat ? 'flex' : 'none', flexDirection: 'column', minWidth: 0, position: 'relative',
-        ...(wallpaperBgStyle(activeWallpaperKey) || {}),
-      }} className="zchat-chat-panel">
-        {!activeWallpaperKey && <AnimatedChatBackground chatTheme={chatTheme} />}
-        {bgPatternOn && !activeWallpaperKey && (
-          <div style={{
-            position: 'absolute', inset: 0, opacity: theme.dark ? 0.05 : 0.04, pointerEvents: 'none',
-            backgroundImage: 'radial-gradient(circle, currentColor 1px, transparent 1px)', backgroundSize: '18px 18px', color: theme.ink,
-          }} />
-        )}
+        paddingTop: 'env(safe-area-inset-top)',
+      }} className={mobileShowChat ? 'zchat-chat-panel zchat-panel-open' : 'zchat-chat-panel'}>
         {(activeProfile || activeGroup) ? (
           <>
             <div style={{
-              display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', flexShrink: 0, position: 'relative',
-              paddingTop: 'calc(12px + env(safe-area-inset-top))',
+              display: 'flex', alignItems: 'center', gap: 10, padding: '13px 18px', flexShrink: 0, position: 'relative',
+              minHeight: 64, boxSizing: 'border-box',
               ...(nameBarBgStyle(activeNameBarKey) || {}),
-              /* Item #9: a subtle seam between the header-style banner image and the
-                 wallpaper below it, instead of the two images just touching edge-to-edge. */
+              border: activeNameBarKey ? `1px solid rgba(255,255,255,0.16)` : 'none',
               borderBottom: activeNameBarKey ? `1px solid rgba(255,255,255,0.16)` : `1px solid ${theme.border}`,
-              boxShadow: activeNameBarKey ? '0 1px 0 rgba(0,0,0,0.25)' : 'none',
               background: activeNameBarKey ? undefined : theme.glass,
               backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
             }}>
@@ -5298,7 +5313,18 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                 onReport={() => setReportModalFor('__selection__')} />
             )}
 
-            <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '14px 18px', position: 'relative' }}>
+            <div ref={scrollRef} className="zchat-msglist" style={{
+              flex: 1, overflowY: 'auto', padding: '14px 18px', position: 'relative',
+              WebkitOverflowScrolling: 'touch',
+              ...(wallpaperBgStyle(activeWallpaperKey) || {}),
+            }}>
+              {!activeWallpaperKey && <AnimatedChatBackground chatTheme={chatTheme} />}
+              {bgPatternOn && !activeWallpaperKey && (
+                <div style={{
+                  position: 'absolute', inset: 0, opacity: theme.dark ? 0.05 : 0.04, pointerEvents: 'none',
+                  backgroundImage: 'radial-gradient(circle, currentColor 1px, transparent 1px)', backgroundSize: '18px 18px', color: theme.ink,
+                }} />
+              )}
               {loadingConvo ? (
                 <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 40 }}><Spinner size={22} color={theme.ink} /></div>
               ) : messages.length === 0 ? (
@@ -5689,10 +5715,6 @@ function AppInner() {
     }
   }, [session?.user?.id]);
 
-  /* Item #3 fix: adding a second account used to call supabase.auth.signOut(), which
-     revokes the current session's refresh token server-side -- so switching back to the
-     first account later failed with "session expired". Now we just clear local screen
-     state and let the existing session's tokens stay valid in storage. */
   const handleAddAccount = () => {
     setSession(null);
     setScreen('login');
@@ -5789,4 +5811,4 @@ export default function App() {
       <AppInner />
     </ThemeProvider>
   );
-        }
+}
