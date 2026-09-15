@@ -1456,30 +1456,48 @@ function FollowRequestsPanel({ userId, onClose, onOpenProfile }) {
 function DiscoverPanel({ myId, blockedIds, onClose, onOpenProfile }) {
   const { theme } = useTheme();
   const [people, setPeople] = useState(null);
+  const [iFollow, setIFollow] = useState(new Set());
+  const [followsMe, setFollowsMe] = useState(new Set());
 
   useEffect(() => {
     (async () => {
       const { data } = await supabase.from('profiles').select('*').eq('is_private', false).eq('is_deleted', false).neq('id', myId).limit(40);
-      setPeople(sanitizeAvatarList(data, myId).filter((p) => !blockedIds.has(p.id)));
+      const list = sanitizeAvatarList(data, myId).filter((p) => !blockedIds.has(p.id));
+      setPeople(list);
+      const ids = list.map((p) => p.id);
+      if (!ids.length) return;
+      const { data: mine } = await supabase.from('follows').select('following_id').eq('follower_id', myId).eq('status', 'accepted').in('following_id', ids);
+      setIFollow(new Set((mine || []).map((r) => r.following_id)));
+      const { data: theirs } = await supabase.from('follows').select('follower_id').eq('following_id', myId).eq('status', 'accepted').in('follower_id', ids);
+      setFollowsMe(new Set((theirs || []).map((r) => r.follower_id)));
     })();
   }, [myId]);
 
+  const handleChanged = (theirId, nowFollowing) => {
+    setIFollow((prev) => { const n = new Set(prev); if (nowFollowing) n.add(theirId); else n.delete(theirId); return n; });
+  };
+
   return (
     <div style={{
-      position: 'absolute', inset: 0, background: theme.panelBg, zIndex: 25,
+      position: 'fixed', inset: 0, background: theme.panelBg, zIndex: 25,
       display: 'flex', flexDirection: 'column',
     }} className="zchat-fade">
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 18px', borderBottom: `1px solid ${theme.border}` }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 18px', paddingTop: 'calc(16px + env(safe-area-inset-top))', borderBottom: `1px solid ${theme.border}`, flexShrink: 0 }}>
         <ArrowLeft size={20} style={{ cursor: 'pointer', color: theme.ink }} onClick={onClose} />
         <div style={{ fontWeight: 800, fontSize: 17, color: theme.ink }}>Discover people</div>
       </div>
-      <div style={{ overflowY: 'auto', flex: 1, padding: '4px 18px' }}>
+      <div style={{ overflowY: 'auto', flex: 1, minHeight: 0, padding: '4px 18px', paddingBottom: 'calc(4px + env(safe-area-inset-bottom))' }}>
         {people === null ? (
           <div style={{ display: 'flex', justifyContent: 'center', padding: 30 }}><Spinner color={theme.ink} /></div>
         ) : people.length === 0 ? (
           <div style={{ textAlign: 'center', padding: 30, fontSize: 13, color: theme.muted }}>No one to discover yet</div>
         ) : (
-          people.map((p) => <UserListRow key={p.id} profile={p} onClick={() => onOpenProfile(p)} />)
+          people.map((p) => (
+            <UserListRow key={p.id} profile={p} onClick={() => onOpenProfile(p)} rightContent={
+              <FollowStatusPill theirId={p.id} viewerId={myId} viewerFollowsThem={iFollow.has(p.id)} theyFollowViewer={followsMe.has(p.id)}
+                theirIsPrivate={p.is_private} onChanged={handleChanged} />
+            } />
+          ))
         )}
       </div>
     </div>
@@ -1634,9 +1652,9 @@ function StickerPicker({ onPick, onClose }) {
         {!query.trim() && (
           <div style={{ display: 'flex', gap: 6, marginBottom: 10, overflowX: 'auto', flexShrink: 0 }}>
             {STICKER_CATEGORIES.map((c) => (
-              <div key={c.key} onClick={() => setCategory(c.key)} style={{
+            <div key={c.key} onClick={() => setCategory(c.key)} style={{
                 padding: '6px 13px', borderRadius: 16, fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
-background: category === c.key ? theme.coral : theme.rowBg, color: category === c.key ? 'white' : theme.muted,
+                background: category === c.key ? theme.coral : theme.rowBg, color: category === c.key ? 'white' : theme.muted,
                 display: 'flex', alignItems: 'center', gap: 4,
               }}>{c.key === 'favorites' && <Star_ size={11} color={category === c.key ? 'white' : '#FFB800'} filled />}{c.label}</div>
             ))}
@@ -1910,14 +1928,14 @@ function ArchivedChatsPanel({ conversations, onClose, onOpenChat, onUnarchive })
   const { theme } = useTheme();
   return (
     <div style={{
-      position: 'absolute', inset: 0, background: theme.panelBg, zIndex: 26,
+      position: 'fixed', inset: 0, background: theme.panelBg, zIndex: 26,
       display: 'flex', flexDirection: 'column',
     }} className="zchat-fade">
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 18px', borderBottom: `1px solid ${theme.border}` }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 18px', paddingTop: 'calc(16px + env(safe-area-inset-top))', borderBottom: `1px solid ${theme.border}`, flexShrink: 0 }}>
         <ArrowLeft size={20} style={{ cursor: 'pointer', color: theme.ink }} onClick={onClose} />
         <div style={{ fontWeight: 800, fontSize: 17, color: theme.ink }}>Archived chats</div>
       </div>
-      <div style={{ overflowY: 'auto', flex: 1, padding: '4px 18px' }}>
+      <div style={{ overflowY: 'auto', flex: 1, minHeight: 0, padding: '4px 18px', paddingBottom: 'calc(4px + env(safe-area-inset-bottom))' }}>
         {conversations.length === 0 ? (
           <div style={{ textAlign: 'center', padding: 30, fontSize: 13, color: theme.muted }}>No archived chats</div>
         ) : (
@@ -2556,8 +2574,8 @@ function CreateGroupPanel({ myId, onClose, onCreated }) {
   };
 
   return (
-    <div style={{ position: 'absolute', inset: 0, background: theme.panelBg, zIndex: 40, display: 'flex', flexDirection: 'column' }} className="zchat-fade">
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 18px', borderBottom: `1px solid ${theme.border}` }}>
+    <div style={{ position: 'fixed', inset: 0, background: theme.panelBg, zIndex: 40, display: 'flex', flexDirection: 'column' }} className="zchat-fade">
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 18px', paddingTop: 'calc(16px + env(safe-area-inset-top))', borderBottom: `1px solid ${theme.border}`, flexShrink: 0 }}>
         <ArrowLeft size={20} style={{ cursor: 'pointer', color: theme.ink }} onClick={() => (step === 'details' ? setStep('members') : onClose())} />
         <div style={{ fontWeight: 800, fontSize: 17, color: theme.ink }}>{step === 'members' ? `Add participants${selected.length ? ` (${selected.length})` : ''}` : 'New group'}</div>
       </div>
@@ -2596,12 +2614,12 @@ function CreateGroupPanel({ myId, onClose, onCreated }) {
               </div>
             ))}
           </div>
-          <div style={{ padding: 18 }}>
+          <div style={{ padding: 18, paddingBottom: 'calc(18px + env(safe-area-inset-bottom))' }}>
             <button onClick={() => setStep('details')} disabled={selected.length === 0} style={primaryBtn(theme, selected.length === 0)}>Next</button>
           </div>
         </>
       ) : (
-        <div style={{ padding: 20, flex: 1 }}>
+        <div style={{ padding: 20, paddingBottom: 'calc(20px + env(safe-area-inset-bottom))', flex: 1, overflowY: 'auto' }}>
           <div style={{ textAlign: 'center', marginBottom: 20 }}>
             <div onClick={() => document.getElementById('group-avatar-input').click()} style={{ display: 'inline-block', cursor: 'pointer', position: 'relative' }}>
               {avatarPreview ? (
@@ -2654,12 +2672,12 @@ function GroupInfoPanel({ group, members, myId, myRole, isOwner, onClose, onProm
   const [showHeaderStyle, setShowHeaderStyle] = useState(false);
   const soleAdmin = isAdmin && members.filter((m) => m.role === 'admin').length === 1 && members.length > 1;
   return (
-    <div style={{ position: 'absolute', inset: 0, background: theme.panelBg, zIndex: 40, display: 'flex', flexDirection: 'column' }} className="zchat-fade">
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 18px', borderBottom: `1px solid ${theme.border}` }}>
+    <div style={{ position: 'fixed', inset: 0, background: theme.panelBg, zIndex: 40, display: 'flex', flexDirection: 'column' }} className="zchat-fade">
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 18px', paddingTop: 'calc(16px + env(safe-area-inset-top))', borderBottom: `1px solid ${theme.border}`, flexShrink: 0 }}>
         <ArrowLeft size={20} style={{ cursor: 'pointer', color: theme.ink }} onClick={onClose} />
         <div style={{ fontWeight: 800, fontSize: 17, color: theme.ink }}>Group info</div>
       </div>
-      <div style={{ overflowY: 'auto', flex: 1, padding: '14px 18px' }}>
+      <div style={{ overflowY: 'auto', flex: 1, minHeight: 0, padding: '14px 18px', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))' }}>
         <div style={{ textAlign: 'center', marginBottom: 14 }}>
           <div onClick={() => isAdmin && document.getElementById('group-info-avatar-input').click()} style={{ display: 'inline-block', cursor: isAdmin ? 'pointer' : 'default', position: 'relative' }}>
             <GroupAvatar avatar={group.avatar} name={group.name} size={72} />
@@ -2771,7 +2789,7 @@ function GroupInfoPanel({ group, members, myId, myRole, isOwner, onClose, onProm
           })()}
         </SmartMenu>
       </div>
-      <div style={{ padding: 18, borderTop: `1px solid ${theme.border}` }}>
+      <div style={{ padding: 18, paddingBottom: 'calc(18px + env(safe-area-inset-bottom))', borderTop: `1px solid ${theme.border}` }}>
         <span style={{ ...ghostBtn(theme), color: theme.danger, borderColor: theme.danger, display: 'block', textAlign: 'center', opacity: (soleAdmin || isOwner) ? 0.5 : 1, cursor: (soleAdmin || isOwner) ? 'default' : 'pointer' }}
           onClick={() => { if (!soleAdmin && !isOwner) onLeave(); }}>
           {isOwner ? 'Transfer ownership before leaving' : soleAdmin ? 'Leave group (assign a new admin first)' : 'Leave group'}
@@ -2816,8 +2834,8 @@ function AddMembersPanel({ myId, existingIds, onClose, onAdd }) {
   };
 
   return (
-    <div style={{ position: 'absolute', inset: 0, background: theme.panelBg, zIndex: 45, display: 'flex', flexDirection: 'column' }} className="zchat-fade">
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 18px', borderBottom: `1px solid ${theme.border}` }}>
+    <div style={{ position: 'fixed', inset: 0, background: theme.panelBg, zIndex: 45, display: 'flex', flexDirection: 'column' }} className="zchat-fade">
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 18px', paddingTop: 'calc(16px + env(safe-area-inset-top))', borderBottom: `1px solid ${theme.border}`, flexShrink: 0 }}>
         <ArrowLeft size={20} style={{ cursor: 'pointer', color: theme.ink }} onClick={onClose} />
         <div style={{ fontWeight: 800, fontSize: 17, color: theme.ink }}>Add members{selected.length ? ` (${selected.length})` : ''}</div>
       </div>
@@ -2843,7 +2861,7 @@ function AddMembersPanel({ myId, existingIds, onClose, onAdd }) {
           </div>
         ))}
       </div>
-      <div style={{ padding: 18 }}>
+      <div style={{ padding: 18, paddingBottom: 'calc(18px + env(safe-area-inset-bottom))' }}>
         <button onClick={() => onAdd(selected)} disabled={selected.length === 0} style={primaryBtn(theme, selected.length === 0)}>
           Add {selected.length || ''}
         </button>
@@ -3274,7 +3292,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
         }}>
           <div onClick={onClose} style={{
             position: 'absolute', top: 16, right: 16, width: 30, height: 30, borderRadius: '50%',
-      background: 'rgba(0,0,0,0.22)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+            background: 'rgba(0,0,0,0.22)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
           }}><X size={16} color="white" /></div>
           {isSelf && (
             <div onClick={onOpenSettings} style={{
@@ -3288,7 +3306,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
           {editing ? (
             <div style={{ position: 'relative', width: 92, height: 92, margin: '0 auto' }}>
               <div style={{ width: 92, height: 92, borderRadius: '50%', padding: 4, background: theme.panelBg, boxShadow: '0 4px 16px rgba(0,0,0,0.2), 0 0 0 1px rgba(0,0,0,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Avatar emoji={avatar} name={profile.name} size={84} />
+<Avatar emoji={avatar} name={profile.name} size={84} />
               </div>
               <label style={{
                 position: 'absolute', bottom: 0, right: 0, width: 28, height: 28, borderRadius: '50%',
@@ -4415,26 +4433,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     return () => { document.removeEventListener('visibilitychange', check); window.removeEventListener('focus', check); };
   }, []);
   const [deferredInstallPrompt, setDeferredInstallPrompt] = useState(null);
-  const [liveViewportHeight, setLiveViewportHeight] = useState(null);
-  const [keyboardOpen, setKeyboardOpen] = useState(false);
-  useEffect(() => {
-    const vv = window.visualViewport;
-    if (!vv) return;
-    const update = () => {
-      /* iOS keeps 100dvh reporting the full pre-keyboard height while the
-         keyboard is open in standalone/PWA mode, which is why the composer
-         floats above the keyboard with a gap instead of sitting flush against
-         it. window.visualViewport.height tracks the REAL visible area, so we
-         drive the app's actual height from that instead. */
-      setLiveViewportHeight(vv.height);
-      setKeyboardOpen(window.innerHeight - vv.height > 120);
-    };
-    update();
-    vv.addEventListener('resize', update);
-    vv.addEventListener('scroll', update);
-    return () => { vv.removeEventListener('resize', update); vv.removeEventListener('scroll', update); };
-  }, []);
-
   const [isStandaloneApp, setIsStandaloneApp] = useState(false);
   const [installBannerDismissed, setInstallBannerDismissed] = useState(() => {
     try { return localStorage.getItem('zchat-install-banner-dismissed') === '1'; } catch { return false; }
@@ -4458,6 +4456,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [results, setResults] = useState([]);
   const [search, setSearch] = useState('');
   const [searching, setSearching] = useState(false);
+  const [searchIFollow, setSearchIFollow] = useState(new Set());
+  const [searchFollowsMe, setSearchFollowsMe] = useState(new Set());
   const [activeProfile, setActiveProfile] = useState(null);
   const [messages, setMessages] = useState([]);
   const [draft, setDraft] = useState('');
@@ -4519,6 +4519,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [showGroupInfo, setShowGroupInfo] = useState(false);
   const [myLocks, setMyLocks] = useState({});
   const [unlockedChats, setUnlockedChats] = useState(new Set());
+  const lastLeftChatAtRef = useRef({});
   const [lockPromptFor, setLockPromptFor] = useState(null);
   const [deletedAccountAlertFor, setDeletedAccountAlertFor] = useState(null);
   const [recording, setRecording] = useState(false);
@@ -4750,14 +4751,18 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       .map((c) => {
         const otherId = c.user_a === session.user.id ? c.user_b : c.user_a;
         if (myBlockedIds.has(otherId)) return null;
-        const profile = profs?.find((p) => p.id === otherId);
         const nick = nicks?.find((n) => n.contact_id === otherId);
         const theirAlias = aliasesForMe?.find((a) => a.user_id === otherId);
-        const baseName = theirAlias ? theirAlias.alias : profile?.name;
-        if (!profile) return null;
+        /* If the profile lookup comes back empty -- the account was deleted, or
+           an RLS policy is hiding it -- don't drop the whole conversation. Fall
+           back to a placeholder identity so the chat and its history stay in
+           the list, same as WhatsApp does for a deleted account. */
+        const foundProfile = profs?.find((p) => p.id === otherId);
+        const profile = foundProfile || { id: otherId, name: 'Deleted Account', username: 'deleted', avatar: '', is_deleted: true };
+        const baseName = theirAlias ? theirAlias.alias : profile.name;
         const lastMine = lastMineByReceiver[otherId];
         return {
-          ...c, otherProfile: nick ? { ...profile, name: nick.nickname } : { ...profile, name: baseName }, realName: profile.name,
+          ...c, otherProfile: nick && foundProfile ? { ...profile, name: nick.nickname } : { ...profile, name: baseName }, realName: profile.name,
           lastMineRead: lastMine?.read || false, lastMineDelivered: lastMine?.delivered || false,
         };
       })
@@ -4954,7 +4959,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           return [...prev, row];
         });
         loadGroups();
-      })
+        })
       .subscribe();
     return () => supabase.removeChannel(channel);
   }, [me, myGroupIdsKey, activeGroup]);
@@ -5101,8 +5106,15 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     setSearching(true);
     searchTimer.current = setTimeout(async () => {
       const { data } = await searchByUsername(val.trim());
-      setResults(sanitizeAvatarList(data, session.user.id).filter((u) => u.id !== session.user.id && !u.is_deleted && !myBlockedIds.has(u.id)));
+      const list = sanitizeAvatarList(data, session.user.id).filter((u) => u.id !== session.user.id && !u.is_deleted && !myBlockedIds.has(u.id));
+      setResults(list);
       setSearching(false);
+      const ids = list.map((u) => u.id);
+      if (!ids.length) { setSearchIFollow(new Set()); setSearchFollowsMe(new Set()); return; }
+      const { data: mine } = await supabase.from('follows').select('following_id').eq('follower_id', session.user.id).eq('status', 'accepted').in('following_id', ids);
+      setSearchIFollow(new Set((mine || []).map((r) => r.following_id)));
+      const { data: theirs } = await supabase.from('follows').select('follower_id').eq('following_id', session.user.id).eq('status', 'accepted').in('follower_id', ids);
+      setSearchFollowsMe(new Set((theirs || []).map((r) => r.follower_id)));
     }, 300);
   };
 
@@ -5266,10 +5278,21 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   };
 
   const openChat = async (profile, convId) => {
-    const { data: freshCheck } = await getProfile(profile.id);
-    if (freshCheck?.is_deleted) {
-      setDeletedAccountAlertFor(profile.name || 'This person');
-      return;
+    /* Record that we're leaving whichever locked chat was active, so the
+       5-second grace window (below) has an accurate "left at" time. */
+    if (activeConvForBar && activeConvForBar.otherProfile.id !== profile.id && myLocks[activeConvForBar.id]) {
+      lastLeftChatAtRef.current[activeConvForBar.id] = Date.now();
+    }
+    if (!convId) {
+      /* Only block a brand-new attempt to start a chat with a deleted account
+         (e.g. from search, a profile, or a stale link). If we're opening a
+         conversation that already exists, let it through so the history is
+         still viewable, same as WhatsApp does. */
+      const { data: freshCheck } = await getProfile(profile.id);
+      if (freshCheck?.is_deleted) {
+        setDeletedAccountAlertFor(profile.name || 'This person');
+        return;
+      }
     }
     if (convId) {
       /* Check the locally-cached lock map first (instant, and not dependent on
@@ -5281,9 +5304,20 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         const { data: lockRow } = await supabase.from('chat_locks').select('conversation_id').eq('conversation_id', convId).eq('owner_id', session.user.id).maybeSingle();
         isLocked = !!lockRow;
       }
-      if (isLocked && !unlockedChats.has(convId)) {
-        setLockPromptFor({ profile, convId });
-        return;
+      if (isLocked) {
+        /* Chat Lock stays unlocked for as long as you keep moving around the
+           app -- it only re-locks if you've been away from THIS chat for more
+           than 5 seconds. Coming back within 5s never re-prompts. */
+        const lastLeft = lastLeftChatAtRef.current[convId];
+        const graceExpired = lastLeft != null && (Date.now() - lastLeft) >= 5000;
+        if (graceExpired && unlockedChats.has(convId)) {
+          setUnlockedChats((prev) => { const n = new Set(prev); n.delete(convId); return n; });
+        }
+        const stillUnlocked = unlockedChats.has(convId) && !graceExpired;
+        if (!stillUnlocked) {
+          setLockPromptFor({ profile, convId });
+          return;
+        }
       }
     }
     setActiveProfile(profile);
@@ -5766,7 +5800,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
   return (
     <div id="zapp-root" style={{
-      height: liveViewportHeight ? `${liveViewportHeight}px` : '100dvh', width: '100%', background: theme.bgGradient, fontFamily: FONT,
+      height: '100dvh', width: '100%', background: theme.bgGradient, fontFamily: FONT,
       display: 'flex', overflow: 'hidden', position: 'relative', boxSizing: 'border-box',
       paddingTop: 'env(safe-area-inset-top)',
       paddingLeft: 'env(safe-area-inset-left)',
@@ -5816,7 +5850,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         </div>
 
         <div style={{
-          display: 'flex', alignItems: 'center', gap: 14, padding: '2px 16px 12px', flexShrink: 0, overflowX: 'auto',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '2px 14px 12px', flexShrink: 0,
         }}>
           <div onClick={() => setShowMail(true)} style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer', flexShrink: 0 }}>
             <div style={{ width: 38, height: 38, borderRadius: 12, background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.coralDeep }}><Mail size={16} /></div>
@@ -5858,10 +5892,12 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                 display: 'flex', alignItems: 'center', gap: 12, padding: '10px 8px', cursor: 'pointer', borderRadius: 14,
               }}>
                 <Avatar emoji={p.avatar} name={p.name} size={42} />
-                <div>
+                <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 700, fontSize: 14, color: theme.ink }}>{p.name}</div>
                   <div style={{ fontSize: 11.5, color: theme.muted }}>@{p.username}</div>
                 </div>
+                <FollowStatusPill theirId={p.id} viewerId={session.user.id} viewerFollowsThem={searchIFollow.has(p.id)} theyFollowViewer={searchFollowsMe.has(p.id)}
+                  theirIsPrivate={p.is_private} onChanged={(id, now) => setSearchIFollow((prev) => { const n = new Set(prev); if (now) n.add(id); else n.delete(id); return n; })} />
               </div>
             ))}
           </div>
@@ -6001,7 +6037,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                 }} />
               )}
               <ArrowLeft size={20} style={{ cursor: 'pointer', color: activeNameBarKey ? 'white' : theme.ink, flexShrink: 0, filter: activeNameBarKey ? 'drop-shadow(0 1px 3px rgba(0,0,0,0.6))' : 'none', position: 'relative' }}
-                onClick={(e) => { e.stopPropagation(); setMobileShowChat(false); setActiveProfile(null); setActiveGroup(null); }} />
+                onClick={(e) => { e.stopPropagation(); if (activeConvForBar && myLocks[activeConvForBar.id]) lastLeftChatAtRef.current[activeConvForBar.id] = Date.now(); setMobileShowChat(false); setActiveProfile(null); setActiveGroup(null); }} />
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, position: 'relative' }}>
                 {activeGroup ? <GroupAvatar avatar={activeGroup.avatar} name={activeGroup.name} size={38} /> : <Avatar emoji={activeProfile.avatar} name={activeProfile.name} online={isUserOnline(activeProfile) && !activeProfile.hide_activity} size={38} />}
                 <div style={{ minWidth: 0 }}>
@@ -6130,8 +6166,12 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               </div>
             )}
 
-            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, padding: '6px 14px', flexShrink: 0, paddingBottom: keyboardOpen ? 6 : 'calc(6px + env(safe-area-inset-bottom))' }}>
-              {recording ? (
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, padding: '6px 14px', flexShrink: 0, paddingBottom: 'calc(6px + env(safe-area-inset-bottom))' }}>
+              {activeProfile?.is_deleted ? (
+                <div style={{ flex: 1, textAlign: 'center', padding: '10px 4px', fontSize: 12.5, color: theme.muted, fontWeight: 600 }}>
+                  This account no longer exists. You can't send new messages here.
+                </div>
+              ) : recording ? (
                 <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 10, background: theme.inputBg, borderRadius: 22, padding: '9px 16px' }}>
                   <div style={{ width: 9, height: 9, borderRadius: '50%', background: theme.danger, animation: 'zchat-love-pulse 1s infinite' }} />
                   <span style={{ fontSize: 13, color: theme.ink, fontWeight: 700 }}>Recording {Math.floor(recordSeconds / 60)}:{(recordSeconds % 60).toString().padStart(2, '0')}</span>
@@ -6460,6 +6500,11 @@ function AppInner() {
 
   const handleSwitchAccount = async (account) => {
     setSwitchingAccountId(account.id);
+    /* Keep hold of whichever account is currently active, so a failed switch
+       can restore it instead of leaving the user logged out entirely -- that
+       was the actual bug: switching to a stale saved session was wiping out
+       a perfectly working current session too. */
+    const previousUserId = session?.user?.id;
     const savedSessionRaw = (() => { try { return localStorage.getItem(`zchat-session-${account.id}`); } catch { return null; } })();
     if (savedSessionRaw) {
       try {
@@ -6469,6 +6514,23 @@ function AppInner() {
       } catch {}
     }
     setSwitchingAccountId(null);
+    /* That account's saved session is stale -- try to restore whichever
+       account was active before we touched anything, rather than forcing
+       a full logout of a session that was working fine. */
+    if (previousUserId && previousUserId !== account.id) {
+      const previousRaw = (() => { try { return localStorage.getItem(`zchat-session-${previousUserId}`); } catch { return null; } })();
+      if (previousRaw) {
+        try {
+          const previousSaved = JSON.parse(previousRaw);
+          const { data, error } = await supabase.auth.setSession({ access_token: previousSaved.access_token, refresh_token: previousSaved.refresh_token });
+          if (!error && data.session) {
+            setSession(data.session);
+            alert("That account's saved session expired. Remove it and sign in again to reconnect it -- you're still on your current account.");
+            return;
+          }
+        } catch {}
+      }
+    }
     alert("Couldn't switch to that account automatically. Please sign in again.");
     setSession(null);
     setScreen('login');
@@ -6549,4 +6611,4 @@ export default function App() {
       <AppInner />
     </ThemeProvider>
   );
-                  }
+                                                                   }
