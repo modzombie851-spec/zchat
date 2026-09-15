@@ -1697,7 +1697,7 @@ function toggleFavoriteSticker(key) {
   const cur = getFavoriteStickerKeys();
   if (cur.has(key)) cur.delete(key); else cur.add(key);
   try { localStorage.setItem('zchat-fav-stickers', JSON.stringify([...cur])); } catch {}
-return cur;
+  return cur;
 }
 
 function StickerPicker({ onPick, onClose }) {
@@ -2656,8 +2656,9 @@ function ChatSettingsPanel({ conv, myId, meAvatar, meName, isPinned, isLocked, w
 function Pin_({ size = 16, color = '#FF3B30' }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <circle cx="8" cy="8" r="4.2" fill={color} />
-      <line x1="10.8" y1="10.8" x2="19" y2="19" stroke={color} strokeWidth="3" strokeLinecap="round" />
+      <path d="M10.7 12.4 L19.5 19.5 L12.4 10.7 Z" fill={color} />
+      <circle cx="8" cy="8" r="5.4" fill={color} />
+      <circle cx="6.2" cy="6.2" r="1.8" fill="white" opacity="0.4" />
     </svg>
   );
 }
@@ -3395,7 +3396,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
       if (cleanUsername.length < 3) { setUsernameErr('Username must be at least 3 characters.'); return; }
       fields.username = cleanUsername;
       fields.username_changed_at = new Date().toISOString();
-}
+    }
     setUsernameErr('');
     setSaving(true);
     const { data, error } = await updateProfile(profile.id, fields);
@@ -3427,7 +3428,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
         }}><User size={28} /></div>
         <div style={{ fontWeight: 800, fontSize: 16, color: theme.ink, marginBottom: 6 }}>User not found</div>
         <div style={{ fontSize: 12.5, color: theme.muted }}>This account no longer exists.</div>
-      </div>
+        </div>
     </div>
   ) : (
     <div style={{
@@ -3797,7 +3798,9 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
   const pressTimerRef = useRef(null);
   const longPressFiredRef = useRef(false);
   const startPosRef = useRef({ x: 0, y: 0 });
-  const [dragX, setDragX] = useState(0);
+  const dragXRef = useRef(0);
+  const bubbleWrapRef = useRef(null);
+  const replyArrowRef = useRef(null);
   const draggingRef = useRef(false);
   const swipedPastThresholdRef = useRef(false);
   const time = m.created_at ? new Date(m.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
@@ -3839,6 +3842,9 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
     setHover(true);
     startPosRef.current = { x: e.clientX, y: e.clientY };
     swipedPastThresholdRef.current = false;
+    /* Starting a fresh gesture -- make sure any leftover snap-back transition
+       from a previous swipe doesn't slow down this new one. */
+    if (bubbleWrapRef.current) bubbleWrapRef.current.style.transition = 'none';
     clearTimeout(pressTimerRef.current);
     pressTimerRef.current = setTimeout(() => {
       longPressFiredRef.current = true;
@@ -3852,7 +3858,14 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
     if (!m.deleted && !selectionMode && Math.abs(dx) > Math.abs(dy) && dx > 0) {
       draggingRef.current = true;
       const clamped = Math.min(dx, 60);
-      setDragX(clamped);
+      dragXRef.current = clamped;
+      /* Write straight to the DOM instead of going through React state --
+         setState here meant a full component re-render on every single
+         pointermove event (which can fire well over 60 times a second),
+         which is exactly what made the swipe feel laggy instead of
+         tracking the finger instantly. */
+      if (bubbleWrapRef.current) bubbleWrapRef.current.style.transform = `translateX(${clamped}px)`;
+      if (replyArrowRef.current) replyArrowRef.current.style.opacity = Math.min(1, clamped / 40);
       swipedPastThresholdRef.current = clamped >= 40;
     }
   };
@@ -3861,7 +3874,12 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
     if (draggingRef.current) {
       const shouldFire = swipedPastThresholdRef.current;
       draggingRef.current = false;
-      setDragX(0);
+      dragXRef.current = 0;
+      if (bubbleWrapRef.current) {
+        bubbleWrapRef.current.style.transition = 'transform 0.2s ease';
+        bubbleWrapRef.current.style.transform = 'translateX(0px)';
+      }
+      if (replyArrowRef.current) replyArrowRef.current.style.opacity = 0;
       if (shouldFire) onSwipeReply(m);
     }
   };
@@ -3905,14 +3923,14 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
       )}
       <div style={{ position: 'relative', maxWidth: '72%' }}>
         {!selectionMode && !m.deleted && (
-          <div style={{
+          <div ref={replyArrowRef} style={{
             position: 'absolute', top: 10, left: -30, transform: 'translateY(-50%)',
-            opacity: Math.min(1, dragX / 40), pointerEvents: 'none',
+            opacity: 0, pointerEvents: 'none',
           }}>
             <Reply size={16} color={theme.coral} />
           </div>
         )}
-        <div style={{ transform: `translateX(${dragX}px)`, transition: draggingRef.current ? 'none' : 'transform 0.2s ease' }}>
+        <div ref={bubbleWrapRef} style={{ transform: 'translateX(0px)' }}>
         <div style={{ position: 'relative' }}>
         <div style={glass(theme, {
           background: bubbleBg,
@@ -3987,7 +4005,16 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
                   <div className="zchat-wave-pop" style={{ fontSize: 64, lineHeight: 1, padding: '4px 10px' }}>{m.content}</div>
                 )
               )}
-              {m.type === 'text' && m.content && <div style={{ fontSize: 15 * fontScale, color: theme.ink, wordBreak: 'break-word', lineHeight: 1.32, paddingRight: 44 }}>{linkifyText(m.content)}</div>}
+              {m.type === 'text' && m.content && (
+                <div style={{ fontSize: 15 * fontScale, color: theme.ink, wordBreak: 'break-word', lineHeight: 1.32 }}>
+                  {linkifyText(m.content)}
+                  {/* Floated spacer reserves room for the timestamp badge only on the
+                      LAST line of text (the line it wraps around), instead of the old
+                      flat paddingRight which narrowed every line and caused short
+                      messages to wrap early into a bubble that was mostly empty space. */}
+                  <span style={{ display: 'inline-block', float: 'right', width: 46, height: 17 }} />
+                </div>
+              )}
             </>
           )}
           {!m.deleted && (
@@ -4593,6 +4620,22 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   }, []);
   const [deferredInstallPrompt, setDeferredInstallPrompt] = useState(null);
   const [isStandaloneApp, setIsStandaloneApp] = useState(false);
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+  useEffect(() => {
+    /* Scoped to exactly one thing: knowing whether the on-screen keyboard is
+       open, so the composer's safe-area-bottom padding (the home-indicator
+       clearance) can be skipped while it is. env(safe-area-inset-bottom)
+       doesn't reliably zero itself out on iOS once the keyboard is covering
+       that area, which is what was leaving a gap between the composer and
+       the keyboard. This does NOT touch #zapp-root's height or any other
+       sizing -- that's what went wrong last time. */
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => setKeyboardOpen(window.innerHeight - vv.height > 120);
+    update();
+    vv.addEventListener('resize', update);
+    return () => vv.removeEventListener('resize', update);
+  }, []);
   const [installBannerDismissed, setInstallBannerDismissed] = useState(() => {
     try { return localStorage.getItem('zchat-install-banner-dismissed') === '1'; } catch { return false; }
   });
@@ -4855,18 +4898,11 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (!me?.chat_lock_hash) return;
     await supabase.from('chat_locks').upsert({ conversation_id: conv.id, owner_id: session.user.id, pin_hash: 'master' }, { onConflict: 'conversation_id,owner_id' });
     setMyLocks((prev) => ({ ...prev, [conv.id]: true }));
-    /* Locking a chat must re-lock it immediately -- it should NOT be added to
-       unlockedChats here (that used to make every newly-locked chat silently
-       stay "unlocked" for the rest of the session, so the PIN prompt never
-       showed again until the app was reloaded). If you're actively looking at
-       this chat when you lock it, back out of it right away so the content
-       isn't left on screen. */
+    /* Enabling the lock takes effect the next time this chat is opened from
+       scratch -- it should NOT boot you out to the main list right now just
+       because you turned it on from Chat Settings. Just confirm it's active
+       and stay right where you are. */
     setUnlockedChats((prev) => { const n = new Set(prev); n.delete(conv.id); return n; });
-    if (activeProfile?.id === conv.otherProfile.id) {
-      setActiveProfile(null);
-      setMobileShowChat(false);
-      setMessages([]);
-    }
   };
   const disableChatLock = async (conv) => {
     await supabase.from('chat_locks').delete().eq('conversation_id', conv.id).eq('owner_id', session.user.id);
@@ -5094,7 +5130,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       })
       .subscribe();
     return () => supabase.removeChannel(channel);
-    }, [me, activeProfile]);
+  }, [me, activeProfile]);
 
   useEffect(() => {
     if (!me) return;
@@ -5107,7 +5143,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         setProfileOf((prev) => (prev && prev.id === row.id ? { ...prev, ...row, name: prev.name } : prev));
         setConversations((prev) => prev.map((c) => (c.otherProfile.id === row.id ? { ...c, otherProfile: { ...c.otherProfile, ...row, name: c.otherProfile.name }, realName: row.name } : c)));
         setArchivedConversations((prev) => prev.map((c) => (c.otherProfile.id === row.id ? { ...c, otherProfile: { ...c.otherProfile, ...row, name: c.otherProfile.name }, realName: row.name } : c)));
-      })
+        })
       .subscribe();
     return () => supabase.removeChannel(channel);
   }, [me, activeProfile]);
@@ -5248,20 +5284,30 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const el = scrollRef.current;
     if (!el) return;
     const isNewConversation = lastScrollKeyRef.current !== key;
-    const t = setTimeout(() => {
-      if (isNewConversation) {
-        /* Always open a chat scrolled to the newest message at the bottom. */
-        el.scrollTop = el.scrollHeight;
-        lastScrollKeyRef.current = key;
-      } else {
-        /* Already in this chat and a new message came in -- only snap to
-           the bottom if you were already near it, so a new message doesn't
-           yank you away from something you were reading further up. */
+    const timers = [];
+    if (isNewConversation) {
+      /* Always open a chat scrolled to the newest message at the bottom.
+         A single scroll right after messages load isn't enough when the last
+         message is an image or video -- it hasn't finished loading yet, so
+         the bubble is still short, and once the media pops in and the layout
+         grows taller, the "bottom" we scrolled to is no longer the real
+         bottom. Re-snap a few more times as media has a chance to load in. */
+      lastScrollKeyRef.current = key;
+      [30, 250, 600, 1200].forEach((delay) => {
+        timers.push(setTimeout(() => {
+          if (lastScrollKeyRef.current === key) el.scrollTop = el.scrollHeight;
+        }, delay));
+      });
+    } else {
+      /* Already in this chat and a new message came in -- only snap to
+         the bottom if you were already near it, so a new message doesn't
+         yank you away from something you were reading further up. */
+      timers.push(setTimeout(() => {
         const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
         if (distanceFromBottom < 200) el.scrollTop = el.scrollHeight;
-      }
-    }, 30);
-    return () => clearTimeout(t);
+      }, 30));
+    }
+    return () => timers.forEach(clearTimeout);
   }, [messages.length, activeProfile, activeGroup, loadingConvo]);
 
   const handleChatScroll = () => {
@@ -5861,6 +5907,24 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     });
     if (mine && mine.emoji === emoji) {
       await supabase.from('message_likes').delete().eq('message_id', messageId).eq('user_id', session.user.id);
+      /* Un-reacting has to revert the main list preview back to whatever the
+         real last message actually was -- otherwise "Reacted X" stays stuck
+         there forever even though the reaction is gone. */
+      if (activeProfile) {
+        const { data: lastReal } = await supabase.from('messages').select('*')
+          .or(`and(sender_id.eq.${session.user.id},receiver_id.eq.${activeProfile.id}),and(sender_id.eq.${activeProfile.id},receiver_id.eq.${session.user.id})`)
+          .eq('deleted', false).order('created_at', { ascending: false }).limit(1).maybeSingle();
+        if (lastReal) {
+          const preview = lastReal.type === 'text' ? lastReal.content
+            : lastReal.type === 'image' ? 'Photo'
+            : lastReal.type === 'audio' ? 'Voice message'
+            : lastReal.type === 'sticker' ? 'Sticker'
+            : lastReal.type === 'system' ? lastReal.content
+            : 'Video';
+          const [a, b] = pairKey(session.user.id, activeProfile.id);
+          await supabase.from('conversations').update({ last_message: preview, last_message_at: lastReal.created_at, last_sender_id: lastReal.sender_id }).eq('user_a', a).eq('user_b', b);
+        }
+      }
     } else {
       await supabase.from('message_likes').upsert({ message_id: messageId, user_id: session.user.id, emoji }, { onConflict: 'message_id,user_id' });
       if (targetMessage && targetMessage.sender_id !== session.user.id) {
@@ -6346,7 +6410,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               </div>
             )}
 
-            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, padding: '4px 14px', flexShrink: 0, paddingBottom: 'max(4px, env(safe-area-inset-bottom))' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, padding: '4px 14px', flexShrink: 0, paddingBottom: keyboardOpen ? 4 : 'max(4px, env(safe-area-inset-bottom))' }}>
               {activeProfile?.is_deleted ? (
                 <div style={{ flex: 1, textAlign: 'center', padding: '10px 4px', fontSize: 12.5, color: theme.muted, fontWeight: 600 }}>
                   This account no longer exists. You can't send new messages here.
@@ -6773,6 +6837,7 @@ function AppInner() {
 
   return (
     <ChatApp
+      key={session.user.id}
       session={session}
       onLogout={handleLogout}
       onNeedsProfile={() => setNeedsProfile(true)}
@@ -6791,4 +6856,4 @@ export default function App() {
       <AppInner />
     </ThemeProvider>
   );
-      }
+              }
