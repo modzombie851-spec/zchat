@@ -431,12 +431,6 @@ function GoogleLogo({ size = 18 }) {
   );
 }
 
-/* Google One Tap / native sign-in -- this renders a small floating card right
-   on the page and hands Supabase an ID token directly (signInWithIdToken).
-   Deliberately NOT using signInWithOAuth here: that method does a full-page
-   navigation away to accounts.google.com and back, which is what was showing
-   people the raw "etcmbghcmlgeezwgnwuz.supabase.co" address -- a jarring,
-   unbranded full-screen wall. This way nobody ever leaves the app. */
 const GOOGLE_CLIENT_ID = '103023880766-q4ok0uqj8pndf72vr3mrgg9r4sgnjhu9.apps.googleusercontent.com';
 
 let googleScriptPromise = null;
@@ -657,12 +651,6 @@ function OtpBoxes({ value, onChange, onSubmit }) {
 function ResendRow({ onResend }) {
   const { theme } = useTheme();
   const CODE_LIFETIME = 120;
-  /* Supabase's own server-side rule is one OTP request per 60 seconds for the
-     same email, regardless of what our UI says. The cooldown here was set to
-     30s, which let people tap "Resend" before the server would actually
-     accept it -- the request got silently rejected, but the UI still showed
-     "Sent" and reset the countdown as if a fresh code was on its way. That's
-     exactly what "the next code never arrives" looks like from their side. */
   const RESEND_COOLDOWN = 62;
   const [secondsLeft, setSecondsLeft] = useState(CODE_LIFETIME);
   const [cooldown, setCooldown] = useState(RESEND_COOLDOWN);
@@ -681,10 +669,6 @@ function ResendRow({ onResend }) {
 
   const handleResend = async () => {
     setSending(true);
-    /* Only celebrate and reset the timers if the resend actually succeeded --
-       previously this ran unconditionally, so a rejected request (rate limit,
-       network error, anything) still showed a confident "Sent" with no way
-       for the person to know nothing was actually emailed to them. */
     const ok = await onResend();
     setSending(false);
     if (ok) {
@@ -736,10 +720,6 @@ function RegisterFlow({ onDone, onBack, onStart, initialStage = 'email' }) {
   const [cropFile, setCropFile] = useState(null);
 
   useEffect(() => {
-    /* Landing straight on the username step means we got here from an OAuth
-       sign-in (Google etc.) rather than the email/OTP path -- pull whatever
-       name and photo Google already gave us so picking a username is the
-       only thing left to do, instead of starting from a blank profile. */
     if (initialStage !== 'username') return;
     (async () => {
       const { data } = await supabase.auth.getUser();
@@ -1502,9 +1482,6 @@ function FollowListModal({ userId, viewerId, mode, onClose, onOpenProfile }) {
     if (!ids.length) { setList([]); return; }
     const { data: profs } = await supabase.from('profiles').select('*').in('id', ids);
     setList(sanitizeAvatarList(profs, viewerId));
-    /* Relationship between the person browsing (viewerId) and everyone in this
-       list -- so "Follow back" / "Following" / "Follow" reads correctly no
-       matter whose followers/following list this is. */
     const { data: mine } = await supabase.from('follows').select('following_id').eq('follower_id', viewerId).eq('status', 'accepted').in('following_id', ids);
     setIFollow(new Set((mine || []).map((r) => r.following_id)));
     const { data: theirs } = await supabase.from('follows').select('follower_id').eq('following_id', viewerId).eq('status', 'accepted').in('follower_id', ids);
@@ -1649,7 +1626,17 @@ function IconDownload({ size = 15, color = 'currentColor' }) {
   );
 }
 
-const EXTRA_EMOJIS = ['\u{1F600}', '\u{1F601}', '\u{1F602}', '\u{1F923}', '\u{1F60A}', '\u{1F60D}', '\u{1F618}', '\u{1F61C}', '\u{1F914}', '\u{1F60E}', '\u{1F634}', '\u{1F62D}', '\u{1F621}', '\u{1F973}', '\u{1F92F}', '\u{1F970}', '\u{1F607}', '\u{1F644}', '\u{1F62C}', '\u{1F917}', '\u{1F929}', '\u{1F61D}', '\u{1F622}', '\u{1F631}', '\u{1F91D}', '\u{1F44D}', '\u{1F64F}', '\u{1F4AA}', '\u{1F44F}', '\u{1F44E}', '\u{1F44C}', '\u{270C}\u{FE0F}', '\u{1F919}', '\u{1F44B}', '\u{1F4AF}', '\u{1F525}', '\u{2728}', '\u{1F389}', '\u{1F382}', '\u{2764}\u{FE0F}', '\u{1F9E1}', '\u{1F49B}', '\u{1F49A}', '\u{1F499}', '\u{1F49C}', '\u{1F5A4}', '\u{1F494}', '\u{1F624}', '\u{1F921}', '\u{1F480}', '\u{1F440}', '\u{1F648}', '\u{1F436}', '\u{1F431}'];
+const EXTRA_EMOJIS = [
+  '\u{1F600}', '\u{1F601}', '\u{1F602}', '\u{1F923}', '\u{1F60A}', '\u{1F60D}',
+  '\u{1F618}', '\u{1F61C}', '\u{1F914}', '\u{1F60E}', '\u{1F634}', '\u{1F62D}',
+  '\u{1F621}', '\u{1F973}', '\u{1F92F}', '\u{1F970}', '\u{1F607}', '\u{1F644}',
+  '\u{1F62C}', '\u{1F917}', '\u{1F929}', '\u{1F61D}', '\u{1F622}', '\u{1F631}',
+  '\u{1F91D}', '\u{1F44D}', '\u{1F64F}', '\u{1F4AA}', '\u{1F44F}', '\u{1F44E}',
+  '\u{1F44C}', '\u{270C}\u{FE0F}', '\u{1F919}', '\u{1F44B}', '\u{1F4AF}', '\u{1F525}',
+  '\u{2728}', '\u{1F389}', '\u{1F382}', '\u{2764}\u{FE0F}', '\u{1F9E1}', '\u{1F49B}',
+  '\u{1F49A}', '\u{1F499}', '\u{1F49C}', '\u{1F5A4}', '\u{1F494}', '\u{1F624}',
+  '\u{1F921}', '\u{1F480}', '\u{1F440}', '\u{1F648}', '\u{1F436}', '\u{1F431}'
+];
 
 const STICKERS = [
   { key: 'goma-showingaffectiongoma-20787', label: 'Affectionate', file: '/goma-showingaffectiongoma-20787.gif', category: 'goma' },
@@ -1891,7 +1878,7 @@ function StickerPicker({ onPick, onClose }) {
         <div style={{ overflowY: 'auto', flex: 1, minHeight: 0, display: 'flex', flexWrap: 'wrap', gap: 14, alignContent: 'flex-start' }}>
           {filtered.length === 0 && (
             <div style={{ width: '100%', textAlign: 'center', padding: 20, fontSize: 12.5, color: theme.muted }}>
-              {category === 'favorites' ? 'No favorites yet -- tap the star on any sticker' : 'No stickers found'}
+              {category === 'favorites' ? 'No favorites yet, tap the star on any sticker' : 'No stickers found'}
             </div>
           )}
           {filtered.map((s) => (
@@ -2396,16 +2383,13 @@ const REPORT_REASONS = [
   'Scam or fraud',
   'Violence or dangerous organizations',
   'Sale of illegal or regulated goods',
-  'Suicide, self-harm or eating disorders',
+  'Suicide, self harm or eating disorders',
   "I just don't like it",
   'Something else',
 ];
 
 const MAX_MAILS_PER_USER = 100;
 
-/* Sends the warning mail to the REPORTED person -- never reveals who filed the
-   report. Also trims that inbox down to the most recent 100 mails so it never
-   grows unbounded. */
 async function sendReportMail(reportedUserId, reasonLabel) {
   if (!reportedUserId) return;
   const title = 'Account warning';
@@ -3462,7 +3446,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
     }
     setNicknameSaving(false);
     setNicknameEditing(false);
-  };
+    };
 
   useEffect(() => {
     let cancelled = false;
@@ -3499,6 +3483,13 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
       setFollowState(status);
       { const viewerProfile = (await getProfile(userId)).data;
       sendPushNotification(profile.id, 'ZChat', status === 'pending' ? `${viewerProfile?.name || 'Someone'} requested to follow you` : `${viewerProfile?.name || 'Someone'} started following you`, `/?profile=${userId}`, viewerProfile?.avatar); }
+    }
+    setFollowBusy(false);
+  };
+
+  const handleAvatarChange = (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
     if (file) setCropFile(file);
   };
 
@@ -3570,7 +3561,6 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
         width: '100%', maxHeight: '100%', position: 'relative', overflowY: 'auto',
         boxShadow: '0 30px 80px rgba(0,0,0,0.3)',
       }}>
-        {/* Header banner */}
         <div style={{
           height: 100, borderRadius: '28px 28px 0 0', position: 'relative',
           background: chatTheme === 'love'
@@ -3971,8 +3961,6 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
     setHover(true);
     startPosRef.current = { x: e.clientX, y: e.clientY };
     swipedPastThresholdRef.current = false;
-    /* Starting a fresh gesture -- make sure any leftover snap-back transition
-       from a previous swipe doesn't slow down this new one. */
     if (bubbleWrapRef.current) bubbleWrapRef.current.style.transition = 'none';
     clearTimeout(pressTimerRef.current);
     pressTimerRef.current = setTimeout(() => {
@@ -3988,11 +3976,6 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
       draggingRef.current = true;
       const clamped = Math.min(dx, 60);
       dragXRef.current = clamped;
-      /* Write straight to the DOM instead of going through React state --
-         setState here meant a full component re-render on every single
-         pointermove event (which can fire well over 60 times a second),
-         which is exactly what made the swipe feel laggy instead of
-         tracking the finger instantly. */
       if (bubbleWrapRef.current) bubbleWrapRef.current.style.transform = `translateX(${clamped}px)`;
       if (replyArrowRef.current) replyArrowRef.current.style.opacity = Math.min(1, clamped / 40);
       swipedPastThresholdRef.current = clamped >= 40;
@@ -4137,10 +4120,6 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
               {m.type === 'text' && m.content && (
                 <div style={{ fontSize: 15 * fontScale, color: theme.ink, wordBreak: 'break-word', lineHeight: 1.32 }}>
                   {linkifyText(m.content)}
-                  {/* Floated spacer reserves room for the timestamp badge only on the
-                      LAST line of text (the line it wraps around), instead of the old
-                      flat paddingRight which narrowed every line and caused short
-                      messages to wrap early into a bubble that was mostly empty space. */}
                   <span style={{ display: 'inline-block', float: 'right', width: 46, height: 17 }} />
                 </div>
               )}
@@ -4677,8 +4656,8 @@ function InstallAppHelpModal({ onClose }) {
   const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
   const isIOS = /iPhone|iPad|iPod/.test(ua);
   const steps = isIOS
-    ? ['Tap the Share icon at the bottom of Safari (the square with an arrow)', 'Scroll down and tap "Add to Home Screen"', 'Tap "Add" in the top right', 'ZChat now opens full-screen from your home screen, just like any other app']
-    : ['Tap the 3-dot menu in the top right of your browser', 'Tap "Add to Home screen" or "Install app"', 'Confirm by tapping "Add" or "Install"', 'ZChat now opens full-screen from your home screen, just like any other app'];
+    ? ['Tap the Share icon at the bottom of Safari (the square with an arrow)', 'Scroll down and tap "Add to Home Screen"', 'Tap "Add" in the top right', 'ZChat now opens full screen from your home screen, just like any other app']
+    : ['Tap the three dot menu in the top right of your browser', 'Tap "Add to Home screen" or "Install app"', 'Confirm by tapping "Add" or "Install"', 'ZChat now opens full screen from your home screen, just like any other app'];
   return (
     <div style={{
       position: 'absolute', inset: 0, background: 'rgba(20,16,14,0.5)', zIndex: 97,
@@ -4751,13 +4730,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [isStandaloneApp, setIsStandaloneApp] = useState(false);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   useEffect(() => {
-    /* Scoped to exactly one thing: knowing whether the on-screen keyboard is
-       open, so the composer's safe-area-bottom padding (the home-indicator
-       clearance) can be skipped while it is. env(safe-area-inset-bottom)
-       doesn't reliably zero itself out on iOS once the keyboard is covering
-       that area, which is what was leaving a gap between the composer and
-       the keyboard. This does NOT touch #zapp-root's height or any other
-       sizing -- that's what went wrong last time. */
     const vv = window.visualViewport;
     if (!vv) return;
     const update = () => setKeyboardOpen(window.innerHeight - vv.height > 120);
@@ -4901,10 +4873,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
   const hiddenChatsKey = () => `zchat-hidden-chats-${session.user.id}`;
   const getHiddenChatIds = () => { try { return new Set(JSON.parse(localStorage.getItem(hiddenChatsKey()) || '[]')); } catch { return new Set(); } };
-  /* Keyed by the OTHER PERSON's user id, not the conversation row's own id --
-     that mismatch (delete stored the row id, receiving a message tried to
-     clear a fabricated "id1-id2" string) was why a deleted chat could never
-     come back on its own. */
   const hideChatLocally = (otherUserId) => {
     const cur = getHiddenChatIds();
     cur.add(otherUserId);
@@ -4920,10 +4888,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const readKey = (convId) => `zchat-read-${session.user.id}-${convId}`;
   const markRead = (convId) => { try { localStorage.setItem(readKey(convId), Date.now().toString()); } catch {} };
   const isUnread = (conv) => (unreadCounts[conv.otherProfile.id] || 0) > 0;
-  /* Presence via the realtime channel can miss people briefly (a missed sync
-     event, a reconnect, etc), especially on Android. Fall back to last_seen:
-     anyone whose heartbeat landed in the last 60s (heartbeat interval is 45s)
-     counts as online even if the presence channel hasn't caught up. */
   const isUserOnline = (profile) => {
     if (!profile) return false;
     if (onlineIds.has(profile.id)) return true;
@@ -5027,10 +4991,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (!me?.chat_lock_hash) return;
     await supabase.from('chat_locks').upsert({ conversation_id: conv.id, owner_id: session.user.id, pin_hash: 'master' }, { onConflict: 'conversation_id,owner_id' });
     setMyLocks((prev) => ({ ...prev, [conv.id]: true }));
-    /* Enabling the lock takes effect the next time this chat is opened from
-       scratch -- it should NOT boot you out to the main list right now just
-       because you turned it on from Chat Settings. Just confirm it's active
-       and stay right where you are. */
     setUnlockedChats((prev) => { const n = new Set(prev); n.delete(conv.id); return n; });
   };
   const disableChatLock = async (conv) => {
@@ -5084,10 +5044,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         if (myBlockedIds.has(otherId)) return null;
         const nick = nicks?.find((n) => n.contact_id === otherId);
         const theirAlias = aliasesForMe?.find((a) => a.user_id === otherId);
-        /* If the profile lookup comes back empty -- the account was deleted, or
-           an RLS policy is hiding it -- don't drop the whole conversation. Fall
-           back to a placeholder identity so the chat and its history stay in
-           the list, same as WhatsApp does for a deleted account. */
         const foundProfile = profs?.find((p) => p.id === otherId);
         const profile = foundProfile || { id: otherId, name: 'Deleted Account', username: 'deleted', avatar: '', is_deleted: true };
         const baseName = theirAlias ? theirAlias.alias : profile.name;
@@ -5108,9 +5064,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   };
 
   const upsertConversation = async (otherId, text, type) => {
-    /* If this person's chat was deleted before, sending them a fresh message
-       (e.g. found again via search) should bring the conversation back into
-       the list too, not just receiving a message from them. */
     unhideChatLocally(otherId);
     const [a, b] = pairKey(session.user.id, otherId);
     const preview = type === 'text' ? text
@@ -5215,10 +5168,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const channel = supabase.channel('read-receipts-' + me.id)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, (payload) => {
         const row = payload.new;
-        /* This has to fire for messages where I'm either side of the conversation --
-           it was only updating when I was the sender, which is why deleting or editing
-           a message never reached the OTHER person live; they only saw it after leaving
-           and reopening the chat, which re-fetches everything fresh from the server. */
         if (row.sender_id === me.id || row.receiver_id === me.id) {
           setMessages((prev) => prev.map((m) => (m.id === row.id ? { ...m, read: row.read, delivered: row.delivered, edited: row.edited, deleted: row.deleted, content: row.deleted ? m.content : row.content } : m)));
         }
@@ -5252,7 +5201,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (!me || !activeProfile) return;
     const channel = supabase.channel('follow-watch-' + activeProfile.id)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'follows' }, (payload) => {
-const row = payload.new || payload.old;
+        const row = payload.new || payload.old;
         if (row.follower_id === session.user.id && row.following_id === activeProfile.id) {
           setActiveFollowState(payload.eventType === 'DELETE' ? 'none' : row.status);
         }
@@ -5360,10 +5309,6 @@ const row = payload.new || payload.old;
   }, [draft]);
 
   useEffect(() => {
-    /* Populating the draft programmatically (tapping Edit on a message, or a
-       forwarded caption) doesn't fire the textarea's own onChange handler, so the
-       auto-grow logic there never runs -- a long message being edited would stay
-       squashed into one line instead of expanding to show it. */
     if (composerRef.current && editingMessage) {
       const el = composerRef.current;
       requestAnimationFrame(() => {
@@ -5415,12 +5360,6 @@ const row = payload.new || payload.old;
     const isNewConversation = lastScrollKeyRef.current !== key;
     const timers = [];
     if (isNewConversation) {
-      /* Always open a chat scrolled to the newest message at the bottom.
-         A single scroll right after messages load isn't enough when the last
-         message is an image or video -- it hasn't finished loading yet, so
-         the bubble is still short, and once the media pops in and the layout
-         grows taller, the "bottom" we scrolled to is no longer the real
-         bottom. Re-snap a few more times as media has a chance to load in. */
       lastScrollKeyRef.current = key;
       [30, 250, 600, 1200].forEach((delay) => {
         timers.push(setTimeout(() => {
@@ -5428,9 +5367,6 @@ const row = payload.new || payload.old;
         }, delay));
       });
     } else {
-      /* Already in this chat and a new message came in -- only snap to
-         the bottom if you were already near it, so a new message doesn't
-         yank you away from something you were reading further up. */
       timers.push(setTimeout(() => {
         const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
         if (distanceFromBottom < 200) el.scrollTop = el.scrollHeight;
@@ -5623,16 +5559,10 @@ const row = payload.new || payload.old;
   };
 
   const openChat = async (profile, convId) => {
-    /* Record that we're leaving whichever locked chat was active, so the
-       5-second grace window (below) has an accurate "left at" time. */
     if (activeConvForBar && activeConvForBar.otherProfile.id !== profile.id && myLocks[activeConvForBar.id]) {
       lastLeftChatAtRef.current[activeConvForBar.id] = Date.now();
     }
     if (!convId) {
-      /* Only block a brand-new attempt to start a chat with a deleted account
-         (e.g. from search, a profile, or a stale link). If we're opening a
-         conversation that already exists, let it through so the history is
-         still viewable, same as WhatsApp does. */
       const { data: freshCheck } = await getProfile(profile.id);
       if (freshCheck?.is_deleted) {
         setDeletedAccountAlertFor(profile.name || 'This person');
@@ -5640,19 +5570,12 @@ const row = payload.new || payload.old;
       }
     }
     if (convId) {
-      /* Check the locally-cached lock map first (instant, and not dependent on
-         a fresh round-trip succeeding) and fall back to a live DB check in case
-         the chat was locked elsewhere and myLocks hasn't caught up yet. Either
-         one finding a lock is enough to require the PIN. */
       let isLocked = !!myLocks[convId];
       if (!isLocked) {
         const { data: lockRow } = await supabase.from('chat_locks').select('conversation_id').eq('conversation_id', convId).eq('owner_id', session.user.id).maybeSingle();
         isLocked = !!lockRow;
       }
       if (isLocked) {
-        /* Chat Lock stays unlocked for as long as you keep moving around the
-           app -- it only re-locks if you've been away from THIS chat for more
-           than 5 seconds. Coming back within 5s never re-prompts. */
         const lastLeft = lastLeftChatAtRef.current[convId];
         const graceExpired = lastLeft != null && (Date.now() - lastLeft) >= 5000;
         if (graceExpired && unlockedChats.has(convId)) {
@@ -5665,12 +5588,6 @@ const row = payload.new || payload.old;
         }
       }
     }
-    /* Everything past this point is the actual "load and show this chat" work,
-       independent of the lock check above -- pulled into its own function so
-       the unlock flow can jump straight here instead of calling back into
-       openChat(), which re-ran the lock check against a stale unlockedChats
-       value (state updates aren't visible synchronously) and looked like
-       entering the correct PIN did nothing. */
     await actuallyOpenChat(profile, convId);
   };
 
@@ -6036,9 +5953,6 @@ const row = payload.new || payload.old;
     });
     if (mine && mine.emoji === emoji) {
       await supabase.from('message_likes').delete().eq('message_id', messageId).eq('user_id', session.user.id);
-      /* Un-reacting has to revert the main list preview back to whatever the
-         real last message actually was -- otherwise "Reacted X" stays stuck
-         there forever even though the reaction is gone. */
       if (activeProfile) {
         const { data: lastReal } = await supabase.from('messages').select('*')
           .or(`and(sender_id.eq.${session.user.id},receiver_id.eq.${activeProfile.id}),and(sender_id.eq.${activeProfile.id},receiver_id.eq.${session.user.id})`)
@@ -6060,9 +5974,6 @@ const row = payload.new || payload.old;
         const destUrl = activeGroup ? `/?group=${activeGroup.id}` : `/?dm=${session.user.id}`;
         sendPushNotification(targetMessage.sender_id, me.name, `reacted ${emoji} to your message`, destUrl, me.avatar);
       }
-      /* A reaction counts as the latest activity in the chat too -- without this the
-         main list never reflected that someone just reacted until an actual new
-         message came in. */
       if (activeProfile) upsertConversation(activeProfile.id, `Reacted ${emoji}`, 'text');
     }
     setReactionPickerFor(null);
@@ -6073,10 +5984,6 @@ const row = payload.new || payload.old;
     setDeleteConvoTarget(null);
     if (!target) return;
     hideChatLocally(target.otherProfile.id);
-    /* Always fetch the full message history fresh from the server before hiding it --
-       relying on whatever happened to already be loaded in `messages` meant deleting a
-       chat straight from the list (without opening it first) hid nothing, so the entire
-       old history came back the moment they messaged again. */
     const { data: allMsgs } = await getConversation(session.user.id, target.otherProfile.id);
     const allIds = (allMsgs || []).map((m) => m.id);
     if (allIds.length) hideMessagesLocally(allIds);
@@ -6192,7 +6099,6 @@ const row = payload.new || payload.old;
           onDismiss={() => { setInstallBannerDismissed(true); try { localStorage.setItem('zchat-install-banner-dismissed', '1'); } catch {} }} />
       )}
       {showInstallHelp && <InstallAppHelpModal onClose={() => setShowInstallHelp(false)} />}
-      {/* Sidebar */}
       <div style={{
         width: mobileShowChat ? 0 : '100%', maxWidth: mobileShowChat ? 0 : '100%', overflow: 'hidden',
         borderRight: `1px solid ${theme.border}`, display: 'flex', flexDirection: 'column', flexShrink: 0,
@@ -6381,7 +6287,6 @@ const row = payload.new || payload.old;
         )}
       </div>
 
-      {/* Chat panel */}
       <div style={{
         flex: 1, display: mobileShowChat ? 'flex' : 'none', flexDirection: 'column', minWidth: 0, minHeight: 0, position: 'relative',
         paddingTop: (activeProfile || activeGroup) ? 64 : 0,
@@ -6850,12 +6755,6 @@ function AppInner() {
   const [needsProfile, setNeedsProfile] = useState(false);
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
   const [switchingAccountId, setSwitchingAccountId] = useState(null);
-  /* Set the instant the OTP verifies (before password/username/avatar steps
-     run) so a valid-but-incomplete session doesn't get treated as a normal
-     login. Without this, verifying the code created a real session, the app
-     immediately tried to jump to the main chat screen, found no profile yet,
-     and dumped the person into a fresh, blank RegisterFlow -- which is what
-     looked like "entering the code sends you to a broken page." */
   const [registering, setRegistering] = useState(false);
 
   useEffect(() => {
@@ -6883,10 +6782,6 @@ function AppInner() {
 
   const handleSwitchAccount = async (account) => {
     setSwitchingAccountId(account.id);
-    /* Keep hold of whichever account is currently active, so a failed switch
-       can restore it instead of leaving the user logged out entirely -- that
-       was the actual bug: switching to a stale saved session was wiping out
-       a perfectly working current session too. */
     const previousUserId = session?.user?.id;
     const savedSessionRaw = (() => { try { return localStorage.getItem(`zchat-session-${account.id}`); } catch { return null; } })();
     if (savedSessionRaw) {
@@ -6897,9 +6792,6 @@ function AppInner() {
       } catch {}
     }
     setSwitchingAccountId(null);
-    /* That account's saved session is stale -- try to restore whichever
-       account was active before we touched anything, rather than forcing
-       a full logout of a session that was working fine. */
     if (previousUserId && previousUserId !== account.id) {
       const previousRaw = (() => { try { return localStorage.getItem(`zchat-session-${previousUserId}`); } catch { return null; } })();
       if (previousRaw) {
@@ -6908,7 +6800,7 @@ function AppInner() {
           const { data, error } = await supabase.auth.setSession({ access_token: previousSaved.access_token, refresh_token: previousSaved.refresh_token });
           if (!error && data.session) {
             setSession(data.session);
-            alert("That account's saved session expired. Remove it and sign in again to reconnect it -- you're still on your current account.");
+            alert("That account's saved session expired. Remove it and sign in again to reconnect it. You're still on your current account.");
             return;
           }
         } catch {}
@@ -6953,11 +6845,6 @@ function AppInner() {
 
   if (!session || needsProfile || registering) {
     if (needsProfile) {
-      /* A Google sign-in already verified the email and needs no password --
-         jump straight to picking a username instead of asking them to type
-         an email and OTP they already handled via Google. An email/OTP user
-         who abandoned mid-signup still needs the normal flow so they end up
-         with a working password, not just a bare profile. */
       const isGoogleUser = session?.user?.app_metadata?.provider === 'google';
       return (
         <AuthShell>
@@ -7004,4 +6891,4 @@ export default function App() {
       <AppInner />
     </ThemeProvider>
   );
-}
+      }
