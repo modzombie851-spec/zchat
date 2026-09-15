@@ -3498,7 +3498,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
       if (status === 'accepted') setFollowerCount((c) => c + 1);
       setFollowState(status);
       { const viewerProfile = (await getProfile(userId)).data;
-      sendPushNotification(profile.id, 'ZChat', status === 'pending' ? `${viewerProfile?.name || 'Someone'} requested to follow you` : `${viewerProfile?.name || 'Someone'} started following you`, `/?profile=${userId}`, viewerProfile
+      sendPushNotification(profile.id, 'ZChat', status === 'pending' ? `${viewerProfile?.name || 'Someone'} requested to follow you` : `${viewerProfile?.name || 'Someone'} started following you`, `/?profile=${userId}`, viewerProfile?.avatar); }
     if (file) setCropFile(file);
   };
 
