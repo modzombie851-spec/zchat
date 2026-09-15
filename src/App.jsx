@@ -550,7 +550,13 @@ function OtpBoxes({ value, onChange, onSubmit }) {
 function ResendRow({ onResend }) {
   const { theme } = useTheme();
   const CODE_LIFETIME = 120;
-  const RESEND_COOLDOWN = 30;
+  /* Supabase's own server-side rule is one OTP request per 60 seconds for the
+     same email, regardless of what our UI says. The cooldown here was set to
+     30s, which let people tap "Resend" before the server would actually
+     accept it -- the request got silently rejected, but the UI still showed
+     "Sent" and reset the countdown as if a fresh code was on its way. That's
+     exactly what "the next code never arrives" looks like from their side. */
+  const RESEND_COOLDOWN = 62;
   const [secondsLeft, setSecondsLeft] = useState(CODE_LIFETIME);
   const [cooldown, setCooldown] = useState(RESEND_COOLDOWN);
   const [sending, setSending] = useState(false);
@@ -568,12 +574,20 @@ function ResendRow({ onResend }) {
 
   const handleResend = async () => {
     setSending(true);
-    await onResend();
+    /* Only celebrate and reset the timers if the resend actually succeeded --
+       previously this ran unconditionally, so a rejected request (rate limit,
+       network error, anything) still showed a confident "Sent" with no way
+       for the person to know nothing was actually emailed to them. */
+    const ok = await onResend();
     setSending(false);
-    setSecondsLeft(CODE_LIFETIME);
-    setCooldown(RESEND_COOLDOWN);
-    setJustSent(true);
-    setTimeout(() => setJustSent(false), 2500);
+    if (ok) {
+      setSecondsLeft(CODE_LIFETIME);
+      setCooldown(RESEND_COOLDOWN);
+      setJustSent(true);
+      setTimeout(() => setJustSent(false), 2500);
+    } else {
+      setCooldown(10);
+    }
   };
 
   return (
@@ -619,8 +633,9 @@ function RegisterFlow({ onDone, onBack, onStart }) {
     setLoading(true); setErr('');
     const { error } = await registerWithEmail(email);
     setLoading(false);
-    if (error) { setErr(error.message); return; }
+    if (error) { setErr(error.message); return false; }
     setStage('otp');
+    return true;
   };
 
   const verify = async (codeOverride) => {
@@ -1703,7 +1718,7 @@ function toggleFavoriteSticker(key) {
 function StickerPicker({ onPick, onClose }) {
   const { theme } = useTheme();
   const [favKeys, setFavKeys] = useState(() => getFavoriteStickerKeys());
-  const [query, setQuery] = useState('');
+const [query, setQuery] = useState('');
   const [category, setCategory] = useState(() => (getFavoriteStickerKeys().size > 0 ? 'favorites' : 'goma'));
 
   const toggleFav = (e, key) => {
@@ -3428,7 +3443,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
         }}><User size={28} /></div>
         <div style={{ fontWeight: 800, fontSize: 16, color: theme.ink, marginBottom: 6 }}>User not found</div>
         <div style={{ fontSize: 12.5, color: theme.muted }}>This account no longer exists.</div>
-        </div>
+      </div>
     </div>
   ) : (
     <div style={{
@@ -5143,7 +5158,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         setProfileOf((prev) => (prev && prev.id === row.id ? { ...prev, ...row, name: prev.name } : prev));
         setConversations((prev) => prev.map((c) => (c.otherProfile.id === row.id ? { ...c, otherProfile: { ...c.otherProfile, ...row, name: c.otherProfile.name }, realName: row.name } : c)));
         setArchivedConversations((prev) => prev.map((c) => (c.otherProfile.id === row.id ? { ...c, otherProfile: { ...c.otherProfile, ...row, name: c.otherProfile.name }, realName: row.name } : c)));
-        })
+      })
       .subscribe();
     return () => supabase.removeChannel(channel);
   }, [me, activeProfile]);
@@ -6259,6 +6274,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       }} className={mobileShowChat ? 'zchat-chat-panel zchat-panel-open' : 'zchat-chat-panel'}>
         {(activeProfile || activeGroup) ? (
           <>
+            {ReactDOM.createPortal(
             <div style={{
               position: 'fixed', top: 0, left: 0, right: 0, zIndex: 15,
               borderBottom: activeNameBarKey ? 'none' : `1px solid ${theme.border}`,
@@ -6318,7 +6334,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               <MoreVertical size={19} style={{ cursor: 'pointer', color: activeNameBarKey ? 'white' : theme.ink, flexShrink: 0, filter: activeNameBarKey ? 'drop-shadow(0 1px 3px rgba(0,0,0,0.6))' : 'none', position: 'relative' }}
                 onClick={(e) => { e.stopPropagation(); (activeGroup ? setShowGroupInfo(true) : setShowChatSettings(true)); }} />
               </div>
-            </div>
+            </div>,
+            document.body
+            )}
 
             {selectionMode && (
               <MessageActionBar count={selectedIds.size} canEditActions={selectionInfo} onCancel={cancelSelection}
@@ -6856,4 +6874,4 @@ export default function App() {
       <AppInner />
     </ThemeProvider>
   );
-              }
+  }
