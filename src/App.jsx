@@ -161,7 +161,7 @@ function AnimatedChatBackground({ chatTheme }) {
             position: 'absolute', left: `${(i * 37) % 100}%`, bottom: -30,
             fontSize: 12 + (i % 5) * 6, opacity: 0.18 + (i % 3) * 0.06,
             animation: `zchat-float-up ${8 + (i % 6)}s linear infinite`, animationDelay: `${i * 1.3}s`,
-          }}>ðŸ’—</span>
+          }}>💗</span>
         ))}
       </div>
     );
@@ -1426,13 +1426,180 @@ function IconDownload({ size = 15, color = 'currentColor' }) {
 
 const EXTRA_EMOJIS = ['\u{1F600}', '\u{1F601}', '\u{1F602}', '\u{1F923}', '\u{1F60A}', '\u{1F60D}', '\u{1F618}', '\u{1F61C}', '\u{1F914}', '\u{1F60E}', '\u{1F634}', '\u{1F62D}', '\u{1F621}', '\u{1F973}', '\u{1F92F}', '\u{1F970}', '\u{1F607}', '\u{1F644}', '\u{1F62C}', '\u{1F917}', '\u{1F929}', '\u{1F61D}', '\u{1F622}', '\u{1F631}', '\u{1F91D}', '\u{1F44D}', '\u{1F64F}', '\u{1F4AA}', '\u{1F44F}', '\u{1F44E}', '\u{1F44C}', '\u{270C}\u{FE0F}', '\u{1F919}', '\u{1F44B}', '\u{1F4AF}', '\u{1F525}', '\u{2728}', '\u{1F389}', '\u{1F382}', '\u{2764}\u{FE0F}', '\u{1F9E1}', '\u{1F49B}', '\u{1F49A}', '\u{1F499}', '\u{1F49C}', '\u{1F5A4}', '\u{1F494}', '\u{1F624}', '\u{1F921}', '\u{1F480}', '\u{1F440}', '\u{1F648}', '\u{1F436}', '\u{1F431}'];
 
-const WAVE_STICKERS = [
-  { key: 'wave', emoji: '\u{1F44B}', label: 'Wave' },
-  { key: 'hi', emoji: '\u{1F600}', label: 'Hi!' },
-  { key: 'heart-wave', emoji: '\u{1F60D}', label: 'Love it' },
-  { key: 'fire', emoji: '\u{1F525}', label: 'Fire' },
-  { key: 'party', emoji: '\u{1F389}', label: 'Party' },
+const STICKERS = [
+  { key: 'goma-showingaffectiongoma-20787', label: 'Affectionate', file: '/goma-showingaffectiongoma-20787.gif', category: 'goma' },
+  { key: 'goma-angygoma-373337', label: 'Angry', file: '/goma-angygoma-373337.gif', category: 'goma' },
+  { key: 'goma-gomabeingcute-617073', label: 'Being Cute', file: '/goma-gomabeingcute-617073.gif', category: 'goma' },
+  { key: 'goma-beingcute-672399', label: 'Being Cute 2', file: '/goma-beingcute-672399.gif', category: 'goma' },
+  { key: 'goma-blowingkissgoma-373625', label: 'Blowing Kiss', file: '/goma-blowingkissgoma-373625.gif', category: 'goma' },
+  { key: 'goma-bouncinggomahead-541389', label: 'Bouncing', file: '/goma-bouncinggomahead-541389.gif', category: 'goma' },
+  { key: 'goma-drinkingbubbleteagoma-849455', label: 'Bubble Tea', file: '/goma-drinkingbubbleteagoma-849455.gif', category: 'goma' },
+  { key: 'goma-confessinggoma-894554', label: 'Confessing', file: '/goma-confessinggoma-894554.gif', category: 'goma' },
+  { key: 'goma-confusedgoma-256952', label: 'Confused', file: '/goma-confusedgoma-256952.gif', category: 'goma' },
+  { key: 'goma-cutiegoma-984704', label: 'Cutie', file: '/goma-cutiegoma-984704.gif', category: 'goma' },
+  { key: 'goma-excitedgoma-36564', label: 'Excited', file: '/goma-excitedgoma-36564.gif', category: 'goma' },
+  { key: 'goma-frustratedgoma-987352', label: 'Frustrated', file: '/goma-frustratedgoma-987352.gif', category: 'goma' },
+  { key: 'goma-furiousbutcutegoma-783456', label: 'Furious but Cute', file: '/goma-furiousbutcutegoma-783456.gif', category: 'goma' },
+  { key: 'goma-heartbrokengoma-680541', label: 'Heartbroken', file: '/goma-heartbrokengoma-680541.gif', category: 'goma' },
+  { key: 'goma-hidinggoma-36286', label: 'Hiding', file: '/goma-hidinggoma-36286.gif', category: 'goma' },
+  { key: 'goma-kawaiigoma-46218', label: 'Kawaii', file: '/goma-kawaiigoma-46218.gif', category: 'goma' },
+  { key: 'goma-laughinggoma-327651', label: 'Laughing', file: '/goma-laughinggoma-327651.gif', category: 'goma' },
+  { key: 'goma-mischievousgoma-452331', label: 'Mischievous', file: '/goma-mischievousgoma-452331.gif', category: 'goma' },
+  { key: 'goma-nervousgoma-647040', label: 'Nervous', file: '/goma-nervousgoma-647040.gif', category: 'goma' },
+  { key: 'goma-noddinggoma-326592', label: 'Nodding', file: '/goma-noddinggoma-326592.gif', category: 'goma' },
+  { key: 'goma-posingforpicturegoma-484835', label: 'Posing', file: '/goma-posingforpicturegoma-484835.gif', category: 'goma' },
+  { key: 'goma-gettingscolded-688067', label: 'Scolded', file: '/goma-gettingscolded-688067.gif', category: 'goma' },
+  { key: 'goma-sideeyesgoma-429768', label: 'Side Eyes', file: '/goma-sideeyesgoma-429768.gif', category: 'goma' },
+  { key: 'goma-sleepygoma-411565', label: 'Sleepy', file: '/goma-sleepygoma-411565.gif', category: 'goma' },
+  { key: 'goma-smirkinggoma-860750', label: 'Smirking', file: '/goma-smirkinggoma-860750.gif', category: 'goma' },
+  { key: 'goma-sobbinggoma-173681', label: 'Sobbing', file: '/goma-sobbinggoma-173681.gif', category: 'goma' },
+  { key: 'goma-tauntgoma-15819', label: 'Taunting', file: '/goma-tauntgoma-15819.gif', category: 'goma' },
+  { key: 'goma-tauntinggoma-642299', label: 'Taunting 2', file: '/goma-tauntinggoma-642299.gif', category: 'goma' },
+  { key: 'goma-affectionatetearyeyedgoma-826928', label: 'Teary Eyed', file: '/goma-affectionatetearyeyedgoma-826928.gif', category: 'goma' },
+  { key: 'goma-upsetgoma-256743', label: 'Upset', file: '/goma-upsetgoma-256743.gif', category: 'goma' },
+  { key: 'goma-wavinggoma-957027', label: 'Waving', file: '/goma-wavinggoma-957027.gif', category: 'goma' },
+  { key: 'teto-tetobaka-490591', label: 'Baka', file: '/teto-tetobaka-490591.gif', category: 'teto' },
+  { key: 'teto-tetohaha-782312', label: 'Haha', file: '/teto-tetohaha-782312.png', category: 'teto' },
+  { key: 'teto-terohi-298969', label: 'Hi', file: '/teto-terohi-298969.png', category: 'teto' },
+  { key: 'teto-tetojudge-985315', label: 'Judging', file: '/teto-tetojudge-985315.png', category: 'teto' },
+  { key: 'teto-tetolove-837749', label: 'Love', file: '/teto-tetolove-837749.png', category: 'teto' },
+  { key: 'teto-tetolurk-448100', label: 'Lurk', file: '/teto-tetolurk-448100.png', category: 'teto' },
+  { key: 'teto-tetosadd-40814', label: 'Sad', file: '/teto-tetosadd-40814.png', category: 'teto' },
+  { key: 'teto-tetosing-759707', label: 'Singing', file: '/teto-tetosing-759707.png', category: 'teto' },
+  { key: 'teto-tetosmug-422535', label: 'Smug', file: '/teto-tetosmug-422535.png', category: 'teto' },
+  { key: 'teto-tetosurprised-590968', label: 'Surprised', file: '/teto-tetosurprised-590968.png', category: 'teto' },
+  { key: 'hearts-blowingkisses-731843', label: 'Blowing Kisses', file: '/hearts-blowingkisses-731843.gif', category: 'hearts' },
+  { key: 'hearts-heartsparkle-209871', label: 'Heart Sparkle', file: '/hearts-heartsparkle-209871.gif', category: 'hearts' },
+  { key: 'hearts-heartbeat-546809', label: 'Heartbeat', file: '/hearts-heartbeat-546809.gif', category: 'hearts' },
+  { key: 'hearts-pastelhearts-823826', label: 'Pastel Hearts', file: '/hearts-pastelhearts-823826.gif', category: 'hearts' },
+  { key: 'hearts-pinkbow-35911', label: 'Pink Bow', file: '/hearts-pinkbow-35911.png', category: 'hearts' },
+  { key: 'hearts-pinkheart-500819', label: 'Pink Heart', file: '/hearts-pinkheart-500819.gif', category: 'hearts' },
+  { key: 'hearts-pinkheartservertag-166596', label: 'Pink Heart Tag', file: '/hearts-pinkheartservertag-166596.png', category: 'hearts' },
+  { key: 'hearts-pinkroll-227721', label: 'Pink Roll', file: '/hearts-pinkroll-227721.png', category: 'hearts' },
+  { key: 'hearts-greysparkles-725335', label: 'Sparkles', file: '/hearts-greysparkles-725335.gif', category: 'hearts' },
+  { key: 'hearts-torolove-549764', label: 'Toro Love', file: '/hearts-torolove-549764.gif', category: 'hearts' },
+  { key: 'red-redbutterflywingleft-5507', label: 'Butterfly Left', file: '/red-redbutterflywingleft-5507.png', category: 'red' },
+  { key: 'red-redbutterflywingright-7840', label: 'Butterfly Right', file: '/red-redbutterflywingright-7840.png', category: 'red' },
+  { key: 'red-redcandycane-1768', label: 'Candy Cane', file: '/red-redcandycane-1768.gif', category: 'red' },
+  { key: 'red-redcheesecakez-44395', label: 'Cheesecake', file: '/red-redcheesecakez-44395.png', category: 'red' },
+  { key: 'red-redcrystalball-4533', label: 'Crystal Ball', file: '/red-redcrystalball-4533.png', category: 'red' },
+  { key: 'red-joobi-red-disappearing-46032', label: 'Disappearing', file: '/red-joobi-red-disappearing-46032.png', category: 'red' },
+  { key: 'red-gothred-36852', label: 'Goth', file: '/red-gothred-36852.gif', category: 'red' },
+  { key: 'red-red-heart-guild-tag-14405', label: 'Heart Tag', file: '/red-red-heart-guild-tag-14405.png', category: 'red' },
+  { key: 'red-joobi-red-kitty-face-99645', label: 'Kitty Face', file: '/red-joobi-red-kitty-face-99645.png', category: 'red' },
+  { key: 'red-red-11042', label: 'Red', file: '/red-red-11042.gif', category: 'red' },
+  { key: 'red-red-33111', label: 'Red', file: '/red-red-33111.png', category: 'red' },
+  { key: 'red-red-50876', label: 'Red', file: '/red-red-50876.png', category: 'red' },
+  { key: 'red-ruby-4015', label: 'Ruby', file: '/red-ruby-4015.png', category: 'red' },
+  { key: 'red-joobi-red-silly-happy-10374', label: 'Silly Happy', file: '/red-joobi-red-silly-happy-10374.png', category: 'red' },
+  { key: 'red-spider-lily-3967', label: 'Spider Lily', file: '/red-spider-lily-3967.png', category: 'red' },
+  { key: 'red-redstar-30379', label: 'Star', file: '/red-redstar-30379.png', category: 'red' },
+  { key: 'cute-cinnamoroll-635595', label: 'Cinnamoroll', file: '/cute-cinnamoroll-635595.png', category: 'cute' },
+  { key: 'cute-hellokittybeg-600386', label: 'Hello Kitty', file: '/cute-hellokittybeg-600386.gif', category: 'cute' },
+  { key: 'cute-sakura-685984', label: 'Sakura', file: '/cute-sakura-685984.gif', category: 'cute' },
+  { key: 'cute-uwu-263966', label: 'UwU', file: '/cute-uwu-263966.png', category: 'cute' },
 ];
+
+const STICKER_CATEGORIES = [
+  { key: 'favorites', label: 'Favorites' },
+  { key: 'goma', label: 'Goma' },
+  { key: 'teto', label: 'Teto' },
+  { key: 'hearts', label: 'Hearts' },
+  { key: 'red', label: 'Red Pack' },
+  { key: 'cute', label: 'Cute' },
+];
+
+function getFavoriteStickerKeys() {
+  try { return new Set(JSON.parse(localStorage.getItem('zchat-fav-stickers') || '[]')); } catch { return new Set(); }
+}
+function toggleFavoriteSticker(key) {
+  const cur = getFavoriteStickerKeys();
+  if (cur.has(key)) cur.delete(key); else cur.add(key);
+  try { localStorage.setItem('zchat-fav-stickers', JSON.stringify([...cur])); } catch {}
+  return cur;
+}
+
+function StickerPicker({ onPick, onClose }) {
+  const { theme } = useTheme();
+  const [favKeys, setFavKeys] = useState(() => getFavoriteStickerKeys());
+  const [query, setQuery] = useState('');
+  const [category, setCategory] = useState(() => (getFavoriteStickerKeys().size > 0 ? 'favorites' : 'goma'));
+
+  const toggleFav = (e, key) => {
+    e.stopPropagation();
+    setFavKeys(new Set(toggleFavoriteSticker(key)));
+  };
+
+  const filtered = STICKERS.filter((s) => {
+    if (query.trim()) return s.label.toLowerCase().includes(query.trim().toLowerCase());
+    if (category === 'favorites') return favKeys.has(s.key);
+    return s.category === category;
+  });
+
+  return (
+    <div style={{
+      position: 'absolute', inset: 0, background: 'rgba(20,16,14,0.5)', zIndex: 93,
+      display: 'flex', alignItems: 'flex-end', justifyContent: 'center', padding: 0,
+    }} className="zchat-fade" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} style={{
+        background: theme.panelBg, borderRadius: '22px 22px 0 0', padding: '16px 14px', width: '100%', maxWidth: 460,
+        maxHeight: '62vh', display: 'flex', flexDirection: 'column',
+        paddingBottom: 'calc(14px + env(safe-area-inset-bottom))',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+          <div style={{ fontWeight: 800, fontSize: 15, color: theme.ink }}>Stickers</div>
+          <X size={18} style={{ cursor: 'pointer', color: theme.muted }} onClick={onClose} />
+        </div>
+        <div style={{ position: 'relative', marginBottom: 10 }}>
+          <Search size={14} color={theme.muted} style={{ position: 'absolute', left: 11, top: 10 }} />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search stickers"
+            style={{ ...inputStyle(theme), padding: '8px 12px 8px 32px', fontSize: 13 }} />
+        </div>
+        {!query.trim() && (
+          <div style={{ display: 'flex', gap: 6, marginBottom: 10, overflowX: 'auto', flexShrink: 0 }}>
+            {STICKER_CATEGORIES.map((c) => (
+              <div key={c.key} onClick={() => setCategory(c.key)} style={{
+                padding: '6px 13px', borderRadius: 16, fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
+                background: category === c.key ? theme.coral : theme.rowBg, color: category === c.key ? 'white' : theme.muted,
+                display: 'flex', alignItems: 'center', gap: 4,
+              }}>{c.key === 'favorites' && <Star_ size={11} color={category === c.key ? 'white' : '#FFB800'} filled />}{c.label}</div>
+            ))}
+          </div>
+        )}
+        <div style={{ overflowY: 'auto', flex: 1, display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+          {filtered.length === 0 && (
+            <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: 20, fontSize: 12.5, color: theme.muted }}>
+              {category === 'favorites' ? 'No favorites yet -- tap the star on any sticker' : 'No stickers found'}
+            </div>
+          )}
+          {filtered.map((s) => (
+            <div key={s.key} onClick={() => onPick(s)} style={{
+              position: 'relative', borderRadius: 14, background: theme.rowBg, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', aspectRatio: '1 / 1', overflow: 'hidden',
+            }}>
+              <img src={s.file} alt={s.label} loading="lazy" draggable={false} onContextMenu={(e) => e.preventDefault()}
+                style={{ width: '78%', height: '78%', objectFit: 'contain' }} />
+              <div onClick={(e) => toggleFav(e, s.key)} style={{
+                position: 'absolute', top: 3, right: 3, width: 20, height: 20, borderRadius: '50%',
+                background: 'rgba(0,0,0,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+              }}>
+                <Star_ size={11} color={favKeys.has(s.key) ? '#FFB800' : 'white'} filled={favKeys.has(s.key)} />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Star_({ size = 14, color = '#FFB800', filled = false }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill={filled ? color : 'none'} stroke={color} strokeWidth="1.6" strokeLinejoin="round">
+      <path d="M12 2.5l2.9 6.4 6.9.7-5.2 4.7 1.5 6.8L12 17.8l-6.1 3.3 1.5-6.8-5.2-4.7 6.9-.7z" />
+    </svg>
+  );
+}
 
 function FullEmojiPicker({ onPick, onClose }) {
   const { theme } = useTheme();
@@ -1966,7 +2133,11 @@ function ChatSettingsPanel({ conv, myId, meAvatar, meName, isPinned, isLocked, w
     }} className="zchat-fade">
       <div style={{
         position: 'absolute', inset: 0, backgroundImage: "url('/chat-bg.jpg')",
-        backgroundSize: 'cover', backgroundPosition: 'center', opacity: 0.35, pointerEvents: 'none',
+        backgroundSize: 'cover', backgroundPosition: 'center', opacity: theme.dark ? 0.5 : 0.6, pointerEvents: 'none',
+      }} />
+      <div style={{
+        position: 'absolute', inset: 0, pointerEvents: 'none',
+        background: theme.dark ? 'rgba(12,17,32,0.35)' : 'rgba(255,255,255,0.25)',
       }} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 18px', borderBottom: `1px solid ${theme.border}`, position: 'relative', flexShrink: 0 }}>
         <ArrowLeft size={20} style={{ cursor: 'pointer', color: theme.ink }} onClick={onClose} />
@@ -2045,10 +2216,11 @@ function ChatSettingsPanel({ conv, myId, meAvatar, meName, isPinned, isLocked, w
   );
 }
 
-function Pin_({ size = 16 }) {
+function Pin_({ size = 16, color = '#FF3B30' }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="12" y1="17" x2="12" y2="22" /><path d="M5 17h14l-1.5-9a2 2 0 00-2-1.7H8.5a2 2 0 00-2 1.7z" />
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <path d="M12 2c-3.6 0-6.5 2.9-6.5 6.5 0 4.9 6.5 12.5 6.5 12.5s6.5-7.6 6.5-12.5C18.5 4.9 15.6 2 12 2z" fill={color} stroke={color} strokeWidth="1" strokeLinejoin="round" />
+      <circle cx="12" cy="8.4" r="2.6" fill="white" opacity="0.92" />
     </svg>
   );
 }
@@ -2858,7 +3030,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
             <div style={{ position: 'relative', width: 92, height: 92, margin: '0 auto' }}>
               <div style={{ width: 92, height: 92, borderRadius: '50%', padding: 4, background: theme.panelBg, boxShadow: '0 4px 16px rgba(0,0,0,0.2), 0 0 0 1px rgba(0,0,0,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <Avatar emoji={avatar} name={profile.name} size={84} />
-              </div>
+</div>
               <label style={{
                 position: 'absolute', bottom: 0, right: 0, width: 28, height: 28, borderRadius: '50%',
                 background: theme.coral, display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -3297,6 +3469,7 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
           </div>
         )}
         <div style={{ transform: `translateX(${dragX}px)`, transition: draggingRef.current ? 'none' : 'transform 0.2s ease' }}>
+        <div style={{ position: 'relative' }}>
         <div style={glass(theme, {
           background: bubbleBg,
           borderRadius: 19,
@@ -3327,7 +3500,7 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
             }}>
               <div style={{ fontWeight: 700, color: theme.coralDeep, fontSize: 10.5 }}>{replyPreview.senderLabel}</div>
               <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {replyPreview.type === 'text' ? replyPreview.content : replyPreview.type === 'image' ? 'Photo' : replyPreview.type === 'audio' ? 'Voice message' : 'Video'}
+                {replyPreview.type === 'text' ? replyPreview.content : replyPreview.type === 'image' ? 'Photo' : replyPreview.type === 'audio' ? 'Voice message' : replyPreview.type === 'sticker' ? 'Sticker' : 'Video'}
               </div>
             </div>
           )}
@@ -3363,22 +3536,17 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
               )}
               {m.type === 'audio' && <AudioBubble url={m.media_url} isMe={isMe} />}
               {m.type === 'sticker' && (
-                <div className="zchat-wave-pop" style={{ fontSize: 64, lineHeight: 1, padding: '4px 10px' }}>{m.content}</div>
+                m.content && m.content.startsWith('/') ? (
+                  <img src={m.content} alt="sticker" className="zchat-wave-pop" onContextMenu={(e) => e.preventDefault()} draggable={false}
+                    style={{ width: 96, height: 96, objectFit: 'contain', display: 'block' }} />
+                ) : (
+                  <div className="zchat-wave-pop" style={{ fontSize: 64, lineHeight: 1, padding: '4px 10px' }}>{m.content}</div>
+                )
               )}
               {m.type === 'text' && m.content && <div style={{ fontSize: 15 * fontScale, color: theme.ink, wordBreak: 'break-word', lineHeight: 1.32 }}>{linkifyText(m.content)}</div>}
             </>
           )}
         </div>
-        {!m.deleted && (
-          <div style={{
-            display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start', alignItems: 'center', gap: 3,
-            marginTop: 2, padding: isMe ? '0 3px 0 0' : '0 0 0 3px',
-          }}>
-            {m.edited && <span style={{ fontSize: 8.5, color: theme.muted, fontStyle: 'italic' }}>edited</span>}
-            <span style={{ fontSize: 9.5, color: theme.muted }}>{time}</span>
-            {isMe && <StatusTicks status={(!hideReadStatus && m.read) ? 'read' : m.delivered ? 'delivered' : 'sent'} />}
-          </div>
-        )}
         {groupedEntries.length > 0 && !m.deleted && (
           <div onClick={(e) => { e.stopPropagation(); onOpenWhoReacted(m.id); }} style={{
             position: 'absolute', bottom: -10, [isMe ? 'left' : 'right']: 6, cursor: 'pointer',
@@ -3393,6 +3561,17 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
             position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontSize: 44, pointerEvents: 'none', animation: 'zchat-heart-burst 0.6s ease',
           }}>{'\u2764\u{FE0F}'}</div>
+        )}
+        </div>
+        {!m.deleted && (
+          <div style={{
+            display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start', alignItems: 'center', gap: 3,
+            marginTop: groupedEntries.length > 0 ? 10 : 2, padding: isMe ? '0 3px 0 0' : '0 0 0 3px',
+          }}>
+            {m.edited && <span style={{ fontSize: 8.5, color: theme.muted, fontStyle: 'italic' }}>edited</span>}
+            <span style={{ fontSize: 9.5, color: theme.muted }}>{time}</span>
+            {isMe && <StatusTicks status={(!hideReadStatus && m.read) ? 'read' : m.delivered ? 'delivered' : 'sent'} />}
+          </div>
         )}
         </div>
       </div>
@@ -3967,6 +4146,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [refreshing, setRefreshing] = useState(false);
   const pullStartYRef = useRef(null);
   const sidebarListRef = useRef(null);
+  const chatScrollPositions = useRef({});
+  const lastScrollKeyRef = useRef(null);
   const scrollRef = useRef(null);
   const composerRef = useRef(null);
   const searchTimer = useRef(null);
@@ -4013,6 +4194,19 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const readKey = (convId) => `zchat-read-${session.user.id}-${convId}`;
   const markRead = (convId) => { try { localStorage.setItem(readKey(convId), Date.now().toString()); } catch {} };
   const isUnread = (conv) => (unreadCounts[conv.otherProfile.id] || 0) > 0;
+  /* Presence via the realtime channel can miss people briefly (a missed sync
+     event, a reconnect, etc), especially on Android. Fall back to last_seen:
+     anyone whose heartbeat landed in the last 60s (heartbeat interval is 45s)
+     counts as online even if the presence channel hasn't caught up. */
+  const isUserOnline = (profile) => {
+    if (!profile) return false;
+    if (onlineIds.has(profile.id)) return true;
+    if (profile.last_seen) {
+      const age = Date.now() - new Date(profile.last_seen).getTime();
+      if (age >= 0 && age < 60000) return true;
+    }
+    return false;
+  };
 
   const isPinnedByMe = (conv) => (conv.user_a === session.user.id ? conv.pinned_by_a : conv.pinned_by_b);
   const togglePin = async (conv) => {
@@ -4102,7 +4296,18 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (!me?.chat_lock_hash) return;
     await supabase.from('chat_locks').upsert({ conversation_id: conv.id, owner_id: session.user.id, pin_hash: 'master' }, { onConflict: 'conversation_id,owner_id' });
     setMyLocks((prev) => ({ ...prev, [conv.id]: true }));
-    setUnlockedChats((prev) => new Set(prev).add(conv.id));
+    /* Locking a chat must re-lock it immediately -- it should NOT be added to
+       unlockedChats here (that used to make every newly-locked chat silently
+       stay "unlocked" for the rest of the session, so the PIN prompt never
+       showed again until the app was reloaded). If you're actively looking at
+       this chat when you lock it, back out of it right away so the content
+       isn't left on screen. */
+    setUnlockedChats((prev) => { const n = new Set(prev); n.delete(conv.id); return n; });
+    if (activeProfile?.id === conv.otherProfile.id) {
+      setActiveProfile(null);
+      setMobileShowChat(false);
+      setMessages([]);
+    }
   };
   const disableChatLock = async (conv) => {
     await supabase.from('chat_locks').delete().eq('conversation_id', conv.id).eq('owner_id', session.user.id);
@@ -4176,7 +4381,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const preview = type === 'text' ? text
       : type === 'image' ? 'Photo'
       : type === 'audio' ? 'Voice message'
-      : type === 'sticker' ? text
+      : type === 'sticker' ? 'Sticker'
       : type === 'system' ? text
       : 'Video';
     await supabase.from('conversations').upsert(
@@ -4439,11 +4644,34 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   }, [activeProfile]);
 
   useEffect(() => {
+    const key = activeGroup?.id || activeProfile?.id;
+    if (!key || loadingConvo) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    const isNewConversation = lastScrollKeyRef.current !== key;
     const t = setTimeout(() => {
-      if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      if (isNewConversation) {
+        /* Just opened this chat -- resume where you left off last time
+           instead of always jumping to the newest message, unless this
+           is the first time you've opened it this session. */
+        const saved = chatScrollPositions.current[key];
+        el.scrollTop = (saved != null) ? saved : el.scrollHeight;
+        lastScrollKeyRef.current = key;
+      } else {
+        /* Already in this chat and a new message came in -- only snap to
+           the bottom if you were already near it, so a new message doesn't
+           yank you away from something you were reading further up. */
+        const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+        if (distanceFromBottom < 200) el.scrollTop = el.scrollHeight;
+      }
     }, 30);
     return () => clearTimeout(t);
-  }, [messages.length, activeProfile, loadingConvo]);
+  }, [messages.length, activeProfile, activeGroup, loadingConvo]);
+
+  const handleChatScroll = () => {
+    const key = activeGroup?.id || activeProfile?.id;
+    if (key && scrollRef.current) chatScrollPositions.current[key] = scrollRef.current.scrollTop;
+  };
 
   const doSearch = (val) => {
     setSearch(val);
@@ -4521,7 +4749,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       setMessages((prev) => [...prev, data]);
       loadGroups();
       if (type !== 'system') {
-        const preview = type === 'text' ? content : type === 'image' ? 'Photo' : type === 'audio' ? 'Voice message' : type === 'sticker' ? content : 'Video';
+        const preview = type === 'text' ? content : type === 'image' ? 'Photo' : type === 'audio' ? 'Voice message' : type === 'sticker' ? 'Sticker' : 'Video';
         groupMembers.filter((m) => m.user_id !== session.user.id && !m.muted).forEach((m) => {
           sendPushNotification(m.user_id, `${me.name} in ${activeGroup.name}`, preview, `/?group=${activeGroup.id}`, me.avatar);
         });
@@ -4618,8 +4846,16 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
   const openChat = async (profile, convId) => {
     if (convId) {
-      const { data: lockRow } = await supabase.from('chat_locks').select('conversation_id').eq('conversation_id', convId).eq('owner_id', session.user.id).maybeSingle();
-      if (lockRow && !unlockedChats.has(convId)) {
+      /* Check the locally-cached lock map first (instant, and not dependent on
+         a fresh round-trip succeeding) and fall back to a live DB check in case
+         the chat was locked elsewhere and myLocks hasn't caught up yet. Either
+         one finding a lock is enough to require the PIN. */
+      let isLocked = !!myLocks[convId];
+      if (!isLocked) {
+        const { data: lockRow } = await supabase.from('chat_locks').select('conversation_id').eq('conversation_id', convId).eq('owner_id', session.user.id).maybeSingle();
+        isLocked = !!lockRow;
+      }
+      if (isLocked && !unlockedChats.has(convId)) {
         setLockPromptFor({ profile, convId });
         return;
       }
@@ -4682,18 +4918,19 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     }
   };
 
-  const sendSticker = async (emoji) => {
+  const sendSticker = async (sticker) => {
     setShowStickers(false);
     if (!activeProfile && !activeGroup) return;
+    const filePath = sticker.file;
     if (activeGroup) {
-      await sendGroupMessage('sticker', emoji, null);
+      await sendGroupMessage('sticker', filePath, null);
       return;
     }
-    const { data } = await sendMessage(session.user.id, activeProfile.id, 'sticker', emoji, null);
+    const { data } = await sendMessage(session.user.id, activeProfile.id, 'sticker', filePath, null);
     if (data) {
       setMessages((prev) => [...prev, data]);
-      upsertConversation(activeProfile.id, emoji, 'sticker');
-      sendPushNotification(activeProfile.id, me.name, emoji, `/?dm=${session.user.id}`, me.avatar);
+      upsertConversation(activeProfile.id, filePath, 'sticker');
+      sendPushNotification(activeProfile.id, me.name, 'Sticker', `/?dm=${session.user.id}`, me.avatar);
     }
   };
 
@@ -5086,8 +5323,21 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const activeNameBarKey = activeGroup ? activeGroup.name_bar : activeConvNameBar;
 
   return (
-    <div id="zapp-root" style={{ height: '100dvh', width: '100%', background: theme.bgGradient, fontFamily: FONT, display: 'flex', overflow: 'hidden', position: 'relative' }}>
+    <div id="zapp-root" style={{
+      height: '100dvh', width: '100%', background: theme.bgGradient, fontFamily: FONT,
+      display: 'flex', overflow: 'hidden', position: 'relative', boxSizing: 'border-box',
+      paddingTop: 'env(safe-area-inset-top)',
+      paddingLeft: 'env(safe-area-inset-left)',
+      paddingRight: 'env(safe-area-inset-right)',
+    }}>
       <GlobalStyle />
+      {(activeProfile || activeGroup) && mobileShowChat && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, height: 'env(safe-area-inset-top)', zIndex: 40, pointerEvents: 'none',
+          ...(nameBarBgStyle(activeNameBarKey) || {}),
+          background: activeNameBarKey ? undefined : theme.glass,
+        }} />
+      )}
       <AssetDownloadBar progress={assetProgress} />
       {notifPermission === 'denied' && !notifBannerDismissed && (
         <NotificationPermissionBanner top="calc(10px + env(safe-area-inset-top))" onOpenHelp={() => setShowNotifHelp(true)}
@@ -5212,12 +5462,12 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <span style={{ fontWeight: 700, fontSize: 14, color: theme.ink, display: 'flex', alignItems: 'center', gap: 4 }}>
-                            {g.pinned && <Pin_ size={11} color={theme.muted} />}{g.name}
+                            {g.pinned && <Pin_ size={13} />}{g.name}
                           </span>
                           {g.last_message_at && <span style={{ fontSize: 10.5, color: theme.muted, flexShrink: 0 }}>{new Date(g.last_message_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>}
                         </div>
                         <div style={{ fontSize: 12, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {g.last_message_type === 'image' ? 'Photo' : g.last_message_type === 'audio' ? 'Voice message' : g.last_message_type === 'video' ? 'Video' : g.last_message_type === 'sticker' ? g.last_message : (g.last_message || 'No messages yet')}
+                          {g.last_message_type === 'image' ? 'Photo' : g.last_message_type === 'audio' ? 'Voice message' : g.last_message_type === 'video' ? 'Video' : g.last_message_type === 'sticker' ? 'Sticker' : (g.last_message || 'No messages yet')}
                         </div>
                       </div>
                       <MoreVertical size={15} color={theme.muted} style={{ cursor: 'pointer', flexShrink: 0 }}
@@ -5240,11 +5490,11 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                     display: 'flex', alignItems: 'center', gap: 12, padding: '10px 8px', cursor: 'pointer', borderRadius: 16,
                     background: isActive ? theme.rowBg : 'transparent', position: 'relative',
                   }}>
-                    <Avatar emoji={c.otherProfile.avatar} name={c.otherProfile.name} online={onlineIds.has(c.otherProfile.id) && !c.otherProfile.hide_activity} size={46} />
+                    <Avatar emoji={c.otherProfile.avatar} name={c.otherProfile.name} online={isUserOnline(c.otherProfile) && !c.otherProfile.hide_activity} size={46} />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <span style={{ fontWeight: unread ? 800 : 700, fontSize: 14, color: theme.ink, display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 150 }}>
-                          {isPinnedByMe(c) && <Pin_ size={11} color={theme.muted} />}{c.otherProfile.name}
+                          {isPinnedByMe(c) && <Pin_ size={13} />}{c.otherProfile.name}
                         </span>
                         {c.last_message_at && <span style={{ fontSize: 10.5, color: unread ? theme.coral : theme.muted, fontWeight: unread ? 700 : 400, flexShrink: 0 }}>{new Date(c.last_message_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>}
                       </div>
@@ -5276,34 +5526,40 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       {/* Chat panel */}
       <div style={{
         flex: 1, display: mobileShowChat ? 'flex' : 'none', flexDirection: 'column', minWidth: 0, position: 'relative',
-        paddingTop: 'env(safe-area-inset-top)',
       }} className={mobileShowChat ? 'zchat-chat-panel zchat-panel-open' : 'zchat-chat-panel'}>
         {(activeProfile || activeGroup) ? (
           <>
             <div style={{
-              display: 'flex', alignItems: 'center', gap: 10, padding: '13px 18px', flexShrink: 0, position: 'relative',
+              flexShrink: 0, position: 'relative', zIndex: 2,
+              display: 'flex', alignItems: 'center', gap: 10, padding: '13px 18px',
               minHeight: 64, boxSizing: 'border-box',
               ...(nameBarBgStyle(activeNameBarKey) || {}),
-              border: activeNameBarKey ? `1px solid rgba(255,255,255,0.16)` : 'none',
-              borderBottom: activeNameBarKey ? `1px solid rgba(255,255,255,0.16)` : `1px solid ${theme.border}`,
               background: activeNameBarKey ? undefined : theme.glass,
               backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
+              borderBottom: activeNameBarKey ? '1px solid rgba(255,255,255,0.2)' : `1px solid ${theme.border}`,
+              boxShadow: activeNameBarKey ? '0 2px 10px rgba(0,0,0,0.28)' : 'none',
             }}>
-              <ArrowLeft size={20} style={{ cursor: 'pointer', color: activeNameBarKey ? 'white' : theme.ink, flexShrink: 0, filter: activeNameBarKey ? 'drop-shadow(0 1px 3px rgba(0,0,0,0.6))' : 'none' }}
+              {activeNameBarKey && (
+                <div style={{
+                  position: 'absolute', inset: 0, pointerEvents: 'none',
+                  background: 'linear-gradient(90deg, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.55) 45%, rgba(0,0,0,0.3) 75%, rgba(0,0,0,0.14) 100%), linear-gradient(180deg, rgba(0,0,0,0.05) 0%, rgba(0,0,0,0) 45%, rgba(0,0,0,0.22) 100%)',
+                }} />
+              )}
+              <ArrowLeft size={20} style={{ cursor: 'pointer', color: activeNameBarKey ? 'white' : theme.ink, flexShrink: 0, filter: activeNameBarKey ? 'drop-shadow(0 1px 3px rgba(0,0,0,0.6))' : 'none', position: 'relative' }}
                 onClick={() => { setMobileShowChat(false); setActiveProfile(null); setActiveGroup(null); }} />
-              <div onClick={() => (activeGroup ? setShowGroupInfo(true) : setProfileOf(activeProfile))} style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, cursor: 'pointer' }}>
-                {activeGroup ? <GroupAvatar avatar={activeGroup.avatar} name={activeGroup.name} size={38} /> : <Avatar emoji={activeProfile.avatar} name={activeProfile.name} online={onlineIds.has(activeProfile.id) && !activeProfile.hide_activity} size={38} />}
+              <div onClick={() => (activeGroup ? setShowGroupInfo(true) : setProfileOf(activeProfile))} style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, cursor: 'pointer', position: 'relative' }}>
+                {activeGroup ? <GroupAvatar avatar={activeGroup.avatar} name={activeGroup.name} size={38} /> : <Avatar emoji={activeProfile.avatar} name={activeProfile.name} online={isUserOnline(activeProfile) && !activeProfile.hide_activity} size={38} />}
                 <div style={{ minWidth: 0 }}>
                   <div style={{
                     fontWeight: 800, fontSize: 14.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                     color: activeNameBarKey ? 'white' : theme.ink, textShadow: activeNameBarKey ? '0 1px 4px rgba(0,0,0,0.7)' : 'none',
                   }}>{activeGroup ? activeGroup.name : activeProfile.name}</div>
                   <div style={{ fontSize: 11, color: activeNameBarKey ? 'rgba(255,255,255,0.85)' : theme.muted, textShadow: activeNameBarKey ? '0 1px 4px rgba(0,0,0,0.7)' : 'none' }}>
-                    {activeGroup ? `${groupMembers.length} members` : typingFrom ? 'typing...' : (onlineIds.has(activeProfile.id) ? 'Online' : (!activeProfile.hide_activity && formatLastSeen(activeProfile.last_seen)) || '')}
+                    {activeGroup ? `${groupMembers.length} members` : typingFrom ? 'typing...' : (isUserOnline(activeProfile) ? 'Online' : (!activeProfile.hide_activity && formatLastSeen(activeProfile.last_seen)) || '')}
                   </div>
                 </div>
               </div>
-              <MoreVertical size={19} style={{ cursor: 'pointer', color: activeNameBarKey ? 'white' : theme.ink, flexShrink: 0, filter: activeNameBarKey ? 'drop-shadow(0 1px 3px rgba(0,0,0,0.6))' : 'none' }}
+              <MoreVertical size={19} style={{ cursor: 'pointer', color: activeNameBarKey ? 'white' : theme.ink, flexShrink: 0, filter: activeNameBarKey ? 'drop-shadow(0 1px 3px rgba(0,0,0,0.6))' : 'none', position: 'relative' }}
                 onClick={() => (activeGroup ? setShowGroupInfo(true) : setShowChatSettings(true))} />
             </div>
 
@@ -5313,9 +5569,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                 onReport={() => setReportModalFor('__selection__')} />
             )}
 
-            <div ref={scrollRef} className="zchat-msglist" style={{
+            <div ref={scrollRef} className="zchat-msglist" onScroll={handleChatScroll} style={{
               flex: 1, overflowY: 'auto', padding: '14px 18px', position: 'relative',
-              WebkitOverflowScrolling: 'touch',
+              WebkitOverflowScrolling: 'touch', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end',
               ...(wallpaperBgStyle(activeWallpaperKey) || {}),
             }}>
               {!activeWallpaperKey && <AnimatedChatBackground chatTheme={chatTheme} />}
@@ -5394,7 +5650,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               </div>
             )}
 
-            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, padding: 14, flexShrink: 0, paddingBottom: 'calc(14px + env(safe-area-inset-bottom))' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, padding: '8px 14px', flexShrink: 0, paddingBottom: 'calc(8px + env(safe-area-inset-bottom))' }}>
               {recording ? (
                 <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 10, background: theme.inputBg, borderRadius: 22, padding: '9px 16px' }}>
                   <div style={{ width: 9, height: 9, borderRadius: '50%', background: theme.danger, animation: 'zchat-love-pulse 1s infinite' }} />
@@ -5464,14 +5720,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             )}
 
             {showStickers && (
-              <div style={{ position: 'absolute', bottom: 76, left: 14, right: 14, zIndex: 12, display: 'flex', gap: 10, justifyContent: 'center', background: theme.panelBg, borderRadius: 20, padding: '12px 10px', boxShadow: '0 10px 30px rgba(0,0,0,0.22)', border: `1px solid ${theme.border}` }} className="zchat-fade">
-                {WAVE_STICKERS.map((s) => (
-                  <div key={s.key} onClick={() => sendSticker(s.emoji)} style={{ textAlign: 'center', cursor: 'pointer', flex: 1 }}>
-                    <div style={{ fontSize: 32, lineHeight: 1 }}>{s.emoji}</div>
-                    <div style={{ fontSize: 9.5, color: theme.muted, fontWeight: 700, marginTop: 3 }}>{s.label}</div>
-                  </div>
-                ))}
-              </div>
+              <StickerPicker onPick={sendSticker} onClose={() => setShowStickers(false)} />
             )}
           </>
         ) : (
@@ -5485,7 +5734,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       {profileOf && (
         <ProfilePanel
           profile={profileOf} isSelf={profileOf.id === session.user.id} userId={session.user.id}
-          isOnline={onlineIds.has(profileOf.id)} onClose={() => setProfileOf(null)}
+          isOnline={isUserOnline(profileOf)} onClose={() => setProfileOf(null)}
           onReport={handleReport} onSaved={(updated) => setProfileOf(updated)}
           onOpenSettings={() => { setProfileOf(null); setShowSettings(true); }}
           onOpenProfile={(p) => setProfileOf(p)}
@@ -5811,5 +6060,4 @@ export default function App() {
       <AppInner />
     </ThemeProvider>
   );
-}
-
+        }
