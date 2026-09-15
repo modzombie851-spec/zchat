@@ -1090,19 +1090,20 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
 
   return (
     <div style={{
-      position: 'absolute', inset: 0, background: 'rgba(10,10,14,0.45)',
+      position: 'fixed', inset: 0, background: 'rgba(10,10,14,0.45)',
       display: 'flex', alignItems: 'stretch', justifyContent: 'flex-start', zIndex: 30,
     }} className="zchat-fade" onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} style={glass(theme, {
         background: theme.panelBg, borderRadius: '0 24px 24px 0', padding: 26,
         width: '86%', maxWidth: 360, height: '100%', position: 'relative', overflowY: 'auto',
         WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain',
+        paddingTop: 'calc(26px + env(safe-area-inset-top))',
         paddingBottom: 'calc(26px + env(safe-area-inset-bottom))',
         transform: `translateX(${dragX}px)`, transition: draggingRef.current ? 'none' : 'transform 0.25s ease',
       })}
         onTouchStart={onDragStart} onTouchMove={onDragMove} onTouchEnd={onDragEnd} onTouchCancel={onDragEnd}
       >
-        <X size={20} style={{ position: 'absolute', top: 18, right: 18, cursor: 'pointer', color: theme.muted }} onClick={onClose} />
+        <X size={20} style={{ position: 'absolute', top: 'calc(18px + env(safe-area-inset-top))', right: 18, cursor: 'pointer', color: theme.muted }} onClick={onClose} />
 
         {section === 'main' && (
           <>
@@ -1576,6 +1577,7 @@ const STICKER_CATEGORIES = [
   { key: 'red', label: 'Red Pack' },
   { key: 'cute', label: 'Cute' },
 ];
+
 function getFavoriteStickerKeys() {
   try { return new Set(JSON.parse(localStorage.getItem('zchat-fav-stickers') || '[]')); } catch { return new Set(); }
 }
@@ -1608,14 +1610,19 @@ function StickerPicker({ onPick, onClose }) {
       position: 'absolute', inset: 0, background: 'rgba(20,16,14,0.5)', zIndex: 93,
       display: 'flex', alignItems: 'flex-end', justifyContent: 'center', padding: 0,
     }} className="zchat-fade" onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} style={{
-        background: theme.panelBg, borderRadius: '22px 22px 0 0', padding: '16px 14px', width: '100%', maxWidth: 460,
+      <div onClick={(e) => e.stopPropagation()} style={glass(theme, {
+        borderRadius: '26px 26px 0 0', padding: '18px 18px 16px', width: '100%', maxWidth: 460,
         height: '40vh', maxHeight: 360, minHeight: 300, display: 'flex', flexDirection: 'column',
-        paddingBottom: 'calc(14px + env(safe-area-inset-bottom))',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, flexShrink: 0 }}>
+        paddingBottom: 'calc(16px + env(safe-area-inset-bottom))',
+        border: 'none', borderTop: `1px solid ${theme.border}`,
+        boxShadow: '0 -8px 40px rgba(0,0,0,0.18)',
+      })}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexShrink: 0 }}>
           <div style={{ fontWeight: 800, fontSize: 15, color: theme.ink }}>Stickers</div>
-          <X size={18} style={{ cursor: 'pointer', color: theme.muted }} onClick={onClose} />
+          <div onClick={onClose} style={{
+            width: 26, height: 26, borderRadius: '50%', background: theme.rowBg,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+          }}><X size={14} color={theme.muted} /></div>
         </div>
         <div style={{ position: 'relative', marginBottom: 10, flexShrink: 0 }}>
           <Search size={14} color={theme.muted} style={{ position: 'absolute', left: 11, top: 10 }} />
@@ -1633,7 +1640,7 @@ function StickerPicker({ onPick, onClose }) {
             ))}
           </div>
         )}
-        <div style={{ overflowY: 'auto', flex: 1, minHeight: 0, alignContent: 'flex-start', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+        <div style={{ overflowY: 'auto', flex: 1, minHeight: 0, alignContent: 'flex-start', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
           {filtered.length === 0 && (
             <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: 20, fontSize: 12.5, color: theme.muted }}>
               {category === 'favorites' ? 'No favorites yet -- tap the star on any sticker' : 'No stickers found'}
@@ -1641,13 +1648,14 @@ function StickerPicker({ onPick, onClose }) {
           )}
           {filtered.map((s) => (
             <div key={s.key} onClick={() => onPick(s)} style={{
-              position: 'relative', borderRadius: 14, background: theme.rowBg, cursor: 'pointer',
+              position: 'relative', borderRadius: 16, background: theme.rowBg, cursor: 'pointer',
+              border: `1px solid ${theme.border}`, boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
               display: 'flex', alignItems: 'center', justifyContent: 'center', aspectRatio: '1 / 1', overflow: 'hidden',
             }}>
               <img src={s.file} alt={s.label} loading="lazy" draggable={false} onContextMenu={(e) => e.preventDefault()}
-                style={{ width: '78%', height: '78%', objectFit: 'contain' }} />
+                style={{ width: '72%', height: '72%', objectFit: 'contain' }} />
               <div onClick={(e) => toggleFav(e, s.key)} style={{
-                position: 'absolute', top: 3, right: 3, width: 20, height: 20, borderRadius: '50%',
+                position: 'absolute', top: 4, right: 4, width: 20, height: 20, borderRadius: '50%',
                 background: 'rgba(0,0,0,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
               }}>
                 <Star_ size={11} color={favKeys.has(s.key) ? '#FFB800' : 'white'} filled={favKeys.has(s.key)} />
@@ -2195,18 +2203,18 @@ function ChatSettingsPanel({ conv, myId, meAvatar, meName, isPinned, isLocked, w
 
   return (
     <div style={{
-      position: 'absolute', inset: 0, background: theme.panelBg, zIndex: 33,
+      position: 'fixed', inset: 0, background: theme.panelBg, zIndex: 33,
       display: 'flex', flexDirection: 'column', overflow: 'hidden',
     }} className="zchat-fade">
       <div style={{
         position: 'absolute', inset: 0, backgroundImage: "url('/chat-bg.jpg')",
         backgroundSize: 'cover', backgroundPosition: 'center', opacity: 0.35, pointerEvents: 'none',
       }} />
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 18px', borderBottom: `1px solid ${theme.border}`, position: 'relative', flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 18px', paddingTop: 'calc(16px + env(safe-area-inset-top))', borderBottom: `1px solid ${theme.border}`, position: 'relative', flexShrink: 0 }}>
         <ArrowLeft size={20} style={{ cursor: 'pointer', color: theme.ink }} onClick={onClose} />
         <div style={{ fontWeight: 800, fontSize: 17, color: theme.ink }}>Chat settings</div>
       </div>
-      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '12px 18px', position: 'relative', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '12px 18px', paddingBottom: 'calc(12px + env(safe-area-inset-bottom))', position: 'relative', display: 'flex', flexDirection: 'column' }}>
         <div style={{ textAlign: 'center', marginBottom: 12, flexShrink: 0 }}>
           <div style={{ display: 'flex', justifyContent: 'center' }}>
             <Avatar emoji={conv.otherProfile.avatar} name={otherName} size={56} />
@@ -2281,9 +2289,10 @@ function ChatSettingsPanel({ conv, myId, meAvatar, meName, isPinned, isLocked, w
 
 function Pin_({ size = 16, color = '#FF3B30' }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" transform="rotate(45)">
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <path d="M14.5 2.5a1 1 0 0 1 1.4 0l5.6 5.6a1 1 0 0 1 0 1.4l-3 3a1 1 0 0 1-1.3.1l-1-.7-3.6 3.6.6 2.7a1 1 0 0 1-.3.9l-1 1a1 1 0 0 1-1.4 0l-3.1-3.1-4.3 4.3a.75.75 0 0 1-1-1l4.3-4.3-3.1-3.1a1 1 0 0 1 0-1.4l1-1a1 1 0 0 1 .9-.3l2.7.6 3.6-3.6-.7-1a1 1 0 0 1 .1-1.3z"
-        fill={color} stroke={color} strokeWidth="0.6" strokeLinejoin="round" strokeLinecap="round" />
+        fill={color} stroke={color} strokeWidth="0.6" strokeLinejoin="round" strokeLinecap="round"
+        transform="rotate(45 12 12)" />
     </svg>
   );
 }
@@ -3153,7 +3162,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
               <textarea value={bio} onChange={(e) => setBio(e.target.value.slice(0, 140))}
                 placeholder="Tell people about yourself"
                 style={{ ...inputStyle(theme), height: 64, resize: 'none', fontFamily: FONT, marginBottom: 14 }} />
-<div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
+              <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 11.5, color: theme.muted, marginBottom: 5, fontWeight: 800, letterSpacing: '0.04em' }}>AGE</div>
                   <input value={age} onChange={(e) => {
@@ -4730,7 +4739,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       })
       .subscribe();
     return () => supabase.removeChannel(channel);
-  }, [me, myGroupIdsKey, activeGroup]);
+    }, [me, myGroupIdsKey, activeGroup]);
   useEffect(() => {
     if (!me) return;
     const channel = supabase.channel('group-members-watch-' + me.id)
@@ -5544,13 +5553,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       paddingRight: 'env(safe-area-inset-right)',
     }}>
       <GlobalStyle />
-      {(activeProfile || activeGroup) && mobileShowChat && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, height: 'env(safe-area-inset-top)', zIndex: 40, pointerEvents: 'none',
-          ...(nameBarBgStyle(activeNameBarKey) || {}),
-          background: activeNameBarKey ? undefined : theme.glass,
-        }} />
-      )}
       <AssetDownloadBar progress={assetProgress} />
       {notifPermission === 'denied' && !notifBannerDismissed && (
         <NotificationPermissionBanner top="calc(10px + env(safe-area-inset-top))" onOpenHelp={() => setShowNotifHelp(true)}
@@ -5601,7 +5603,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             {followRequestCount > 0 && (
               <div style={{ position: 'absolute', top: -3, right: -3, background: theme.danger, color: 'white', fontSize: 9, fontWeight: 800, borderRadius: 8, minWidth: 15, height: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px' }}>{followRequestCount}</div>
             )}
-            <span style={{ fontSize: 9, color: theme.muted, fontWeight: 600 }}>Alerts</span>
+            <span style={{ fontSize: 9, color: theme.muted, fontWeight: 600 }}>Requests</span>
           </div>
           <div onClick={() => setShowCreateGroup(true)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer' }}>
             <div style={{ width: 38, height: 38, borderRadius: 12, background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.coralDeep }}><Users size={16} /></div>
@@ -5746,18 +5748,25 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       {/* Chat panel */}
       <div style={{
         flex: 1, display: mobileShowChat ? 'flex' : 'none', flexDirection: 'column', minWidth: 0, minHeight: 0, position: 'relative',
+        paddingTop: (activeProfile || activeGroup) ? 64 : 0,
       }} className={mobileShowChat ? 'zchat-chat-panel zchat-panel-open' : 'zchat-chat-panel'}>
         {(activeProfile || activeGroup) ? (
           <>
             <div style={{
-              padding: '13px 18px', display: 'flex', alignItems: 'center', gap: 10,
-              minHeight: 64, boxSizing: 'border-box', flexShrink: 0,
+              position: 'fixed', top: 0, left: 0, right: 0, zIndex: 15,
               borderBottom: activeNameBarKey ? 'none' : `1px solid ${theme.border}`,
-              cursor: 'pointer', position: 'relative', overflow: 'hidden',
               boxShadow: activeNameBarKey ? '0 2px 16px rgba(0,0,0,0.28), inset 0 0 0 1px rgba(255,255,255,0.16)' : 'none',
+              background: activeNameBarKey ? undefined : theme.panelBg,
               ...(nameBarBgStyle(activeNameBarKey) || {}),
-            }}
-              onClick={() => (activeGroup ? setShowGroupInfo(true) : setProfileOf(activeProfile))}>
+            }}>
+              <div style={{ height: 'env(safe-area-inset-top)', width: '100%' }} />
+              <div
+                style={{
+                  padding: '13px 18px', display: 'flex', alignItems: 'center', gap: 10,
+                  minHeight: 64, boxSizing: 'border-box',
+                  cursor: 'pointer', position: 'relative', overflow: 'hidden',
+                }}
+                onClick={() => (activeGroup ? setShowGroupInfo(true) : setProfileOf(activeProfile))}>
               {activeNameBarKey && (
                 <div style={{
                   position: 'absolute', inset: 0, pointerEvents: 'none',
@@ -5801,6 +5810,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               )}
               <MoreVertical size={19} style={{ cursor: 'pointer', color: activeNameBarKey ? 'white' : theme.ink, flexShrink: 0, filter: activeNameBarKey ? 'drop-shadow(0 1px 3px rgba(0,0,0,0.6))' : 'none', position: 'relative' }}
                 onClick={(e) => { e.stopPropagation(); (activeGroup ? setShowGroupInfo(true) : setShowChatSettings(true)); }} />
+              </div>
             </div>
 
             {selectionMode && (
@@ -5812,9 +5822,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             <div ref={scrollRef} className="zchat-msglist" onScroll={handleChatScroll} style={{
               flex: 1, minHeight: 0, overflowY: 'auto', padding: '14px 18px', position: 'relative',
               WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain', touchAction: 'pan-y',
-              display: 'flex', flexDirection: 'column', justifyContent: 'flex-end',
               ...(wallpaperBgStyle(activeWallpaperKey) || {}),
             }}>
+              <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
               {!activeWallpaperKey && <AnimatedChatBackground chatTheme={chatTheme} />}
               {bgPatternOn && !activeWallpaperKey && (
                 <div style={{
@@ -5856,6 +5866,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                   );
                 })
               )}
+              </div>
             </div>
 
             {(replyingTo || editingMessage) && (
@@ -5892,7 +5903,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               </div>
             )}
 
-            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, padding: '8px 14px', flexShrink: 0, paddingBottom: 'calc(8px + env(safe-area-inset-bottom))' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, padding: '6px 14px', flexShrink: 0, paddingBottom: 'calc(6px + env(safe-area-inset-bottom))' }}>
               {recording ? (
                 <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 10, background: theme.inputBg, borderRadius: 22, padding: '9px 16px' }}>
                   <div style={{ width: 9, height: 9, borderRadius: '50%', background: theme.danger, animation: 'zchat-love-pulse 1s infinite' }} />
@@ -6307,4 +6318,4 @@ export default function App() {
       <AppInner />
     </ThemeProvider>
   );
-            }
+        }
