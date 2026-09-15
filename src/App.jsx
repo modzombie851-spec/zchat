@@ -465,46 +465,51 @@ function randomNonce() {
 
 function GoogleButton({ onError }) {
   const { theme } = useTheme();
-  const containerRef = useRef(null);
-  const [ready, setReady] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const rawNonce = randomNonce();
-        const hashedNonce = await sha256Hex(rawNonce);
-        await loadGoogleIdentityScript();
-        if (cancelled || !containerRef.current || !window.google?.accounts?.id) return;
-        window.google.accounts.id.initialize({
-          client_id: GOOGLE_CLIENT_ID,
-          nonce: hashedNonce,
-          use_fedcm_for_prompt: true,
-          callback: async (response) => {
-            const { error } = await supabase.auth.signInWithIdToken({
-              provider: 'google', token: response.credential, nonce: rawNonce,
-            });
-            if (error && onError) onError(error.message);
-          },
-        });
-        window.google.accounts.id.renderButton(containerRef.current, {
-          theme: theme.dark ? 'filled_black' : 'outline',
-          size: 'large', shape: 'pill', text: 'continue_with',
-          width: Math.min(containerRef.current.offsetWidth || 320, 400),
-        });
-        if (!cancelled) setReady(true);
-      } catch {
-        if (!cancelled && onError) onError("Couldn't load Google sign-in. Check your connection and try again.");
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [theme.dark]);
+  const handleClick = async () => {
+    setLoading(true);
+    try {
+      const rawNonce = randomNonce();
+      const hashedNonce = await sha256Hex(rawNonce);
+      await loadGoogleIdentityScript();
+      if (!window.google?.accounts?.id) throw new Error('unavailable');
+      window.google.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        nonce: hashedNonce,
+        use_fedcm_for_prompt: true,
+        callback: async (response) => {
+          setLoading(false);
+          const { error } = await supabase.auth.signInWithIdToken({
+            provider: 'google', token: response.credential, nonce: rawNonce,
+          });
+          if (error && onError) onError(error.message);
+        },
+      });
+      window.google.accounts.id.prompt((notification) => {
+        if (notification.isNotDisplayed?.() || notification.isSkippedMoment?.()) {
+          setLoading(false);
+          supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } });
+        }
+      });
+    } catch {
+      setLoading(false);
+      if (onError) onError("Couldn't load Google sign-in. Check your connection and try again.");
+    }
+  };
 
   return (
-    <div style={{ width: '100%', minHeight: 44, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-      {!ready && <Spinner size={15} color={theme.ink} />}
-      <div ref={containerRef} style={{ width: '100%', display: ready ? 'flex' : 'none', justifyContent: 'center' }} />
-    </div>
+    <button
+      onClick={handleClick}
+      disabled={loading}
+      style={{
+        width: '100%', padding: '13px', borderRadius: 15, border: `1.5px solid ${theme.border}`,
+        background: theme.dark ? 'rgba(255,255,255,0.04)' : 'white', color: theme.ink,
+        fontSize: 14.5, fontWeight: 700, cursor: loading ? 'default' : 'pointer', fontFamily: FONT,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+      }}>
+      {loading ? <Spinner size={15} color={theme.ink} /> : (<><GoogleLogo size={17} />Continue with Google</>)}
+    </button>
   );
 }
 
@@ -3442,11 +3447,11 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
       await sendMessage(userId, profile.id, 'system', `Nickname updated to "${nickname.trim()}"`, null);
     } else {
       await supabase.from('contact_nicknames').delete().eq('owner_id', userId).eq('contact_id', profile.id);
-      await sendMessage(userId, profile.id, 'system', 'Nickname removed', null);
-    }
+      await sendMessage(
+        }
     setNicknameSaving(false);
     setNicknameEditing(false);
-    };
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -6891,4 +6896,4 @@ export default function App() {
       <AppInner />
     </ThemeProvider>
   );
-      }
+    }
