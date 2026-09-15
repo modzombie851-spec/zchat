@@ -305,7 +305,7 @@ function GlobalStyle() {
       @keyframes zchat-love-pulse { 0%, 100% { box-shadow: 0 0 10px rgba(255,77,141,0.28); } 50% { box-shadow: 0 0 20px rgba(255,77,141,0.55); } }
       @keyframes zchat-neon-pulse { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.18); } }
       @keyframes zchat-wave-pop { 0% { opacity: 0; transform: scale(0.4) translateY(10px); } 60% { opacity: 1; transform: scale(1.08) translateY(-2px); } 100% { opacity: 1; transform: scale(1) translateY(0); } }
-      @keyframes zchat-panel-zoom-in { 0% { opacity: 0; transform: scale(0.92); } 100% { opacity: 1; transform: scale(1); } }
+      @keyframes zchat-panel-zoom-in { 0% { opacity: 0; } 100% { opacity: 1; } }
       @keyframes zchat-panel-slide-in { 0% { opacity: 0; transform: translateX(14px) scale(0.985); } 100% { opacity: 1; transform: translateX(0) scale(1); } }
       @keyframes zchat-pull-spin { to { transform: rotate(360deg); } }
       .zchat-fire-ring {
@@ -1239,8 +1239,8 @@ function AccountSwitcherPanel({ accounts, currentId, switchingId, onBack, onSwit
             <div onClick={() => a.id !== currentId && !switchingId && onSwitch(a)} style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, cursor: a.id !== currentId && !switchingId ? 'pointer' : 'default', minWidth: 0 }}>
               <Avatar emoji={a.avatar} name={a.name} size={40} />
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontWeight: 700, fontSize: 13.5, color: theme.ink }}>
-                  {a.name}{a.id === currentId && <span style={{ color: theme.coral, fontWeight: 700 }}> Active</span>}
+                <div style={{ fontWeight: 700, fontSize: 13.5, color: theme.ink, display: 'flex', alignItems: 'center', minWidth: 0 }}>
+                  <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{a.name}</span>{a.id === currentId && <span style={{ color: theme.coral, fontWeight: 700, flexShrink: 0 }}>&nbsp;Active</span>}
                 </div>
                 <div style={{ fontSize: 11.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.email}</div>
               </div>
@@ -1327,10 +1327,10 @@ function UserListRow({ profile, rightContent, onClick }) {
     }}>
       <Avatar emoji={profile.avatar} name={profile.name} size={40} />
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontWeight: 700, fontSize: 14, color: theme.ink }}>{profile.name}</div>
-        <div style={{ fontSize: 12, color: theme.muted }}>@{profile.username}</div>
+        <div style={{ fontWeight: 700, fontSize: 14, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{profile.name}</div>
+        <div style={{ fontSize: 12, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>@{profile.username}</div>
       </div>
-      {rightContent}
+      {rightContent && <div style={{ flexShrink: 0 }}>{rightContent}</div>}
     </div>
   );
 }
@@ -1587,6 +1587,93 @@ const STICKERS = [
   { key: 'cute-hellokittybeg-600386', label: 'Hello Kitty', file: '/cute-hellokittybeg-600386.gif', category: 'cute' },
   { key: 'cute-sakura-685984', label: 'Sakura', file: '/cute-sakura-685984.gif', category: 'cute' },
   { key: 'cute-uwu-263966', label: 'UwU', file: '/cute-uwu-263966.png', category: 'cute' },
+  { key: 'new-gtacoolguy-11111', label: 'Gtacoolguy', file: '/new-gtacoolguy-11111.png', category: 'cool' },
+  { key: 'new-wot-11158', label: 'Wot', file: '/new-wot-11158.png', category: 'reactions' },
+  { key: 'new-huh-12583', label: 'Huh', file: '/new-huh-12583.png', category: 'reactions' },
+  { key: 'new-eyes-12705', label: 'Eyes', file: '/new-eyes-12705.gif', category: 'reactions' },
+  { key: 'new-penguread-13316', label: 'Penguread', file: '/new-penguread-13316.png', category: 'reactions' },
+  { key: 'new-pepe-studying-1498', label: 'Pepe Studying', file: '/new-pepe-studying-1498.png', category: 'frogs' },
+  { key: 'new-topaz-15004', label: 'Topaz', file: '/new-topaz-15004.png', category: 'reactions' },
+  { key: 'new-fbm-sunglasses-1509', label: 'Fbm Sunglasses', file: '/new-fbm-sunglasses-1509.png', category: 'cool' },
+  { key: 'new-happycat-15177', label: 'Happycat', file: '/new-happycat-15177.png', category: 'cats' },
+  { key: 'new-alta-portal-turret-cry-15297', label: 'Alta Portal Turret Cry', file: '/new-alta-portal-turret-cry-15297.png', category: 'reactions' },
+  { key: 'new-alta-portal-turret-atomic-15446', label: 'Alta Portal Turret Atomic', file: '/new-alta-portal-turret-atomic-15446.png', category: 'reactions' },
+  { key: 'new-sunglasses-yum-15484', label: 'Sunglasses Yum', file: '/new-sunglasses-yum-15484.png', category: 'cool' },
+  { key: 'new-pepestare-15959', label: 'Pepestare', file: '/new-pepestare-15959.png', category: 'frogs' },
+  { key: 'new-vday-bye-17285', label: 'Vday Bye', file: '/new-vday-bye-17285.png', category: 'reactions' },
+  { key: 'new-console-18794', label: 'Console', file: '/new-console-18794.png', category: 'reactions' },
+  { key: 'new-coolturtle-18891', label: 'Coolturtle', file: '/new-coolturtle-18891.png', category: 'cool' },
+  { key: 'new-sunglasses-sob-18994', label: 'Sunglasses Sob', file: '/new-sunglasses-sob-18994.png', category: 'cool' },
+  { key: 'new-treecool-20039', label: 'Treecool', file: '/new-treecool-20039.png', category: 'cool' },
+  { key: 'new-gtayoga-20562', label: 'Gtayoga', file: '/new-gtayoga-20562.png', category: 'gta' },
+  { key: 'new-notsure-21094', label: 'Notsure', file: '/new-notsure-21094.png', category: 'reactions' },
+  { key: 'new-simp-23337', label: 'Simp', file: '/new-simp-23337.png', category: 'reactions' },
+  { key: 'new-elonsunglasses-24420', label: 'Elonsunglasses', file: '/new-elonsunglasses-24420.png', category: 'cool' },
+  { key: 'new-zad-2817', label: 'Zad', file: '/new-zad-2817.png', category: 'reactions' },
+  { key: 'new-peachconfused-2921', label: 'Peachconfused', file: '/new-peachconfused-2921.gif', category: 'reactions' },
+  { key: 'new-thumbs-up-glasses-31522', label: 'Thumbs Up Glasses', file: '/new-thumbs-up-glasses-31522.png', category: 'cool' },
+  { key: 'new-head-shaking-verticallyandroid10-31966', label: 'Head Shaking Verticallyandroid10', file: '/new-head-shaking-verticallyandroid10-31966.png', category: 'reactions' },
+  { key: 'new-penguquestionmark-32092', label: 'Penguquestionmark', file: '/new-penguquestionmark-32092.gif', category: 'reactions' },
+  { key: 'new-animal-jam-cool-3322', label: 'Animal Jam Cool', file: '/new-animal-jam-cool-3322.png', category: 'cool' },
+  { key: 'new-imvu-01-34819', label: 'Imvu 01', file: '/new-imvu-01-34819.png', category: 'reactions' },
+  { key: 'new-mochicatshy-3489', label: 'Mochicatshy', file: '/new-mochicatshy-3489.gif', category: 'cats' },
+  { key: 'new-happy-ghast-pixel-38985', label: 'Happy Ghast Pixel', file: '/new-happy-ghast-pixel-38985.png', category: 'reactions' },
+  { key: 'new-catsmile-39143', label: 'Catsmile', file: '/new-catsmile-39143.png', category: 'cats' },
+  { key: 'new-happemonke-40236', label: 'Happemonke', file: '/new-happemonke-40236.png', category: 'reactions' },
+  { key: 'new-cat-blush-42127', label: 'Cat Blush', file: '/new-cat-blush-42127.png', category: 'cats' },
+  { key: 'new-animal-jam-glasses-white-42873', label: 'Animal Jam Glasses White', file: '/new-animal-jam-glasses-white-42873.png', category: 'cool' },
+  { key: 'new-demonfire-ability-brawlstars-43431', label: 'Demonfire Ability Brawlstars', file: '/new-demonfire-ability-brawlstars-43431.png', category: 'reactions' },
+  { key: 'new-witchycauldron-44270', label: 'Witchycauldron', file: '/new-witchycauldron-44270.png', category: 'reactions' },
+  { key: 'new-kokomi-reading-4613', label: 'Kokomi Reading', file: '/new-kokomi-reading-4613.png', category: 'reactions' },
+  { key: 'new-catvogue-47473', label: 'Catvogue', file: '/new-catvogue-47473.png', category: 'cats' },
+  { key: 'new-sugar-apple-47824', label: 'Sugar Apple', file: '/new-sugar-apple-47824.png', category: 'reactions' },
+  { key: 'new-drained-48594', label: 'Drained', file: '/new-drained-48594.png', category: 'reactions' },
+  { key: 'new-behindthemask-49741', label: 'Behindthemask', file: '/new-behindthemask-49741.png', category: 'reactions' },
+  { key: 'new-sad-sponge-49747', label: 'Sad Sponge', file: '/new-sad-sponge-49747.png', category: 'reactions' },
+  { key: 'new-tejo-love-50557', label: 'Tejo Love', file: '/new-tejo-love-50557.png', category: 'reactions' },
+  { key: 'new-crycat-53368', label: 'Crycat', file: '/new-crycat-53368.gif', category: 'cats' },
+  { key: 'new-nerdpengu-54180', label: 'Nerdpengu', file: '/new-nerdpengu-54180.gif', category: 'reactions' },
+  { key: 'new-pepe-dab-5450', label: 'Pepe Dab', file: '/new-pepe-dab-5450.png', category: 'frogs' },
+  { key: 'new-lunasnowcreditcard-54970', label: 'Lunasnowcreditcard', file: '/new-lunasnowcreditcard-54970.png', category: 'reactions' },
+  { key: 'new-huhcat-5560', label: 'Huhcat', file: '/new-huhcat-5560.png', category: 'cats' },
+  { key: 'new-pengubook-56005', label: 'Pengubook', file: '/new-pengubook-56005.png', category: 'reactions' },
+  { key: 'new-animal-jam-glasses-rainbow-56794', label: 'Animal Jam Glasses Rainbow', file: '/new-animal-jam-glasses-rainbow-56794.png', category: 'cool' },
+  { key: 'new-akchually-57632', label: 'Akchually', file: '/new-akchually-57632.png', category: 'reactions' },
+  { key: 'new-frogboo-62316', label: 'Frogboo', file: '/new-frogboo-62316.png', category: 'frogs' },
+  { key: 'new-pengupitviper-64344', label: 'Pengupitviper', file: '/new-pengupitviper-64344.gif', category: 'reactions' },
+  { key: 'new-yasifiedkitty-69285', label: 'Yasifiedkitty', file: '/new-yasifiedkitty-69285.png', category: 'reactions' },
+  { key: 'new-cat-hat-69333', label: 'Cat Hat', file: '/new-cat-hat-69333.png', category: 'cats' },
+  { key: 'new-bratz-72434', label: 'Bratz', file: '/new-bratz-72434.png', category: 'reactions' },
+  { key: 'new-gabrielemod-72595', label: 'Gabrielemod', file: '/new-gabrielemod-72595.png', category: 'reactions' },
+  { key: 'new-gag-mimicoctopus-73140', label: 'Gag Mimicoctopus', file: '/new-gag-mimicoctopus-73140.png', category: 'reactions' },
+  { key: 'new-dead-spin-74594', label: 'Dead Spin', file: '/new-dead-spin-74594.gif', category: 'reactions' },
+  { key: 'new-kitsune-77220', label: 'Kitsune', file: '/new-kitsune-77220.png', category: 'reactions' },
+  { key: 'new-catsmirk-78491', label: 'Catsmirk', file: '/new-catsmirk-78491.png', category: 'cats' },
+  { key: 'new-lust-79131', label: 'Lust', file: '/new-lust-79131.png', category: 'reactions' },
+  { key: 'new-ehhehe-80287', label: 'Ehhehe', file: '/new-ehhehe-80287.png', category: 'reactions' },
+  { key: 'new-no34-80374', label: 'No34', file: '/new-no34-80374.png', category: 'reactions' },
+  { key: 'new-catwave-80386', label: 'Catwave', file: '/new-catwave-80386.png', category: 'cats' },
+  { key: 'new-omaga-80492', label: 'Omaga', file: '/new-omaga-80492.gif', category: 'reactions' },
+  { key: 'new-gtarobber-81329', label: 'Gtarobber', file: '/new-gtarobber-81329.png', category: 'gta' },
+  { key: 'new-sunglasses-grin-82026', label: 'Sunglasses Grin', file: '/new-sunglasses-grin-82026.png', category: 'cool' },
+  { key: 'new-frogbutt-82527', label: 'Frogbutt', file: '/new-frogbutt-82527.png', category: 'frogs' },
+  { key: 'new-luffy-83104', label: 'Luffy', file: '/new-luffy-83104.gif', category: 'reactions' },
+  { key: 'new-slaynerdy-8503', label: 'Slaynerdy', file: '/new-slaynerdy-8503.png', category: 'reactions' },
+  { key: 'new-crying-86913', label: 'Crying', file: '/new-crying-86913.png', category: 'reactions' },
+  { key: 'new-eugene-88351', label: 'Eugene', file: '/new-eugene-88351.png', category: 'reactions' },
+  { key: 'new-alta-portal-turret-love-89822', label: 'Alta Portal Turret Love', file: '/new-alta-portal-turret-love-89822.png', category: 'reactions' },
+  { key: 'new-very-cool-90098', label: 'Very Cool', file: '/new-very-cool-90098.png', category: 'cool' },
+  { key: 'new-flashbang-9183', label: 'Flashbang', file: '/new-flashbang-9183.gif', category: 'reactions' },
+  { key: 'new-sunglasses-smirk-91991', label: 'Sunglasses Smirk', file: '/new-sunglasses-smirk-91991.png', category: 'cool' },
+  { key: 'new-shockedcat-93363', label: 'Shockedcat', file: '/new-shockedcat-93363.png', category: 'cats' },
+  { key: 'new-bruhcatsad-9355', label: 'Bruhcatsad', file: '/new-bruhcatsad-9355.png', category: 'cats' },
+  { key: 'new-cathappy-95818', label: 'Cathappy', file: '/new-cathappy-95818.png', category: 'cats' },
+  { key: 'new-pepeglasses-97378', label: 'Pepeglasses', file: '/new-pepeglasses-97378.png', category: 'frogs' },
+  { key: 'new-goldenpray-97521', label: 'Goldenpray', file: '/new-goldenpray-97521.png', category: 'reactions' },
+  { key: 'new-cat-office-99163', label: 'Cat Office', file: '/new-cat-office-99163.png', category: 'cats' },
+  { key: 'new-catsweat-99164', label: 'Catsweat', file: '/new-catsweat-99164.png', category: 'cats' },
+  { key: 'new-growastrawberry-99169', label: 'Growastrawberry', file: '/new-growastrawberry-99169.gif', category: 'reactions' },
+  { key: 'new-gtahandcuffs-99593', label: 'Gtahandcuffs', file: '/new-gtahandcuffs-99593.png', category: 'gta' },
 ];
 
 const STICKER_CATEGORIES = [
@@ -1596,6 +1683,11 @@ const STICKER_CATEGORIES = [
   { key: 'hearts', label: 'Hearts' },
   { key: 'red', label: 'Red Pack' },
   { key: 'cute', label: 'Cute' },
+  { key: 'cats', label: 'Cats' },
+  { key: 'frogs', label: 'Frogs' },
+  { key: 'cool', label: 'Cool' },
+  { key: 'gta', label: 'GTA' },
+  { key: 'reactions', label: 'Reactions' },
 ];
 
 function getFavoriteStickerKeys() {
@@ -1605,7 +1697,7 @@ function toggleFavoriteSticker(key) {
   const cur = getFavoriteStickerKeys();
   if (cur.has(key)) cur.delete(key); else cur.add(key);
   try { localStorage.setItem('zchat-fav-stickers', JSON.stringify([...cur])); } catch {}
-  return cur;
+return cur;
 }
 
 function StickerPicker({ onPick, onClose }) {
@@ -1652,7 +1744,7 @@ function StickerPicker({ onPick, onClose }) {
         {!query.trim() && (
           <div style={{ display: 'flex', gap: 6, marginBottom: 10, overflowX: 'auto', flexShrink: 0 }}>
             {STICKER_CATEGORIES.map((c) => (
-            <div key={c.key} onClick={() => setCategory(c.key)} style={{
+              <div key={c.key} onClick={() => setCategory(c.key)} style={{
                 padding: '6px 13px', borderRadius: 16, fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
                 background: category === c.key ? theme.coral : theme.rowBg, color: category === c.key ? 'white' : theme.muted,
                 display: 'flex', alignItems: 'center', gap: 4,
@@ -1838,6 +1930,23 @@ function MailPanel({ myId, onClose }) {
   const { theme } = useTheme();
   const [mails, setMails] = useState(null);
   const [selected, setSelected] = useState(null);
+  const [pinnedIds, setPinnedIds] = useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem(`zchat-pinned-mails-${myId}`) || '[]')); } catch { return new Set(); }
+  });
+  const [actionFor, setActionFor] = useState(null);
+  const pressTimerRef = useRef(null);
+  const longPressFiredRef = useRef(false);
+
+  const savePinned = (next) => {
+    setPinnedIds(next);
+    try { localStorage.setItem(`zchat-pinned-mails-${myId}`, JSON.stringify([...next])); } catch {}
+  };
+  const togglePin = (id) => {
+    const next = new Set(pinnedIds);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    savePinned(next);
+    setActionFor(null);
+  };
 
   const load = async () => {
     const { data } = await supabase.from('mails').select('*').eq('recipient_id', myId).order('created_at', { ascending: false }).limit(100);
@@ -1845,12 +1954,34 @@ function MailPanel({ myId, onClose }) {
   };
   useEffect(() => { load(); }, [myId]);
 
+  const sortedMails = mails ? [...mails].sort((a, b) => {
+    const pa = pinnedIds.has(a.id) ? 1 : 0, pb = pinnedIds.has(b.id) ? 1 : 0;
+    if (pa !== pb) return pb - pa;
+    return new Date(b.created_at) - new Date(a.created_at);
+  }) : null;
+
   const openMail = async (m) => {
+    if (longPressFiredRef.current) { longPressFiredRef.current = false; return; }
     setSelected(m);
     if (!m.read) {
       await supabase.from('mails').update({ read: true }).eq('id', m.id);
       setMails((prev) => prev.map((x) => (x.id === m.id ? { ...x, read: true } : x)));
     }
+  };
+
+  const startPress = (m) => {
+    longPressFiredRef.current = false;
+    clearTimeout(pressTimerRef.current);
+    pressTimerRef.current = setTimeout(() => { longPressFiredRef.current = true; setActionFor(m); }, 420);
+  };
+  const cancelPress = () => clearTimeout(pressTimerRef.current);
+
+  const deleteMail = async (id) => {
+    setMails((prev) => (prev || []).filter((x) => x.id !== id));
+    const next = new Set(pinnedIds); next.delete(id); savePinned(next);
+    setActionFor(null);
+    if (selected?.id === id) setSelected(null);
+    await supabase.from('mails').delete().eq('id', id);
   };
 
   const timeAgo = (iso) => {
@@ -1881,7 +2012,10 @@ function MailPanel({ myId, onClose }) {
     <div style={{ position: 'fixed', inset: 0, background: theme.panelBg, zIndex: 34, display: 'flex', flexDirection: 'column' }} className="zchat-fade">
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 18px', paddingTop: 'calc(16px + env(safe-area-inset-top))', borderBottom: `1px solid ${theme.border}`, flexShrink: 0 }}>
         <ArrowLeft size={20} style={{ cursor: 'pointer', color: theme.ink }} onClick={() => (selected ? setSelected(null) : onClose())} />
-        <div style={{ fontWeight: 800, fontSize: 17, color: theme.ink }}>{selected ? 'Message' : 'Mail'}</div>
+        <div style={{ fontWeight: 800, fontSize: 17, color: theme.ink, flex: 1 }}>{selected ? 'Message' : 'Mail'}</div>
+        {selected && (
+          <Trash2 size={18} style={{ cursor: 'pointer', color: theme.danger, flexShrink: 0 }} onClick={() => deleteMail(selected.id)} />
+        )}
       </div>
       {selected ? (
         <div key={selected.id} className="zchat-mail-zoom" style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '22px 20px', paddingBottom: 'calc(22px + env(safe-area-inset-bottom))' }}>
@@ -1896,28 +2030,53 @@ function MailPanel({ myId, onClose }) {
         </div>
       ) : (
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '6px 10px', paddingBottom: 'calc(6px + env(safe-area-inset-bottom))' }}>
-          {mails === null ? (
+          {sortedMails === null ? (
             <div style={{ display: 'flex', justifyContent: 'center', padding: 30 }}><Spinner color={theme.ink} /></div>
-          ) : mails.length === 0 ? (
+          ) : sortedMails.length === 0 ? (
             <div style={{ textAlign: 'center', padding: 40, fontSize: 13, color: theme.muted }}>No mail yet</div>
           ) : (
-            mails.map((m) => (
-              <div key={m.id} onClick={() => openMail(m)} style={{
+            sortedMails.map((m) => (
+              <div key={m.id} onClick={() => openMail(m)}
+                onPointerDown={() => startPress(m)} onPointerUp={cancelPress} onPointerLeave={cancelPress} onPointerCancel={cancelPress}
+                style={{
                 display: 'flex', alignItems: 'center', gap: 12, padding: '11px 8px', cursor: 'pointer', borderRadius: 14,
-                background: m.read ? 'transparent' : theme.rowBg,
+                background: pinnedIds.has(m.id) ? `${theme.coral}0F` : m.read ? 'transparent' : theme.rowBg,
               }}>
                 <div style={{ position: 'relative', flexShrink: 0 }}>
                   <MailIcon m={m} size={42} />
                   {!m.read && <div style={{ position: 'absolute', top: -2, right: -2, width: 10, height: 10, borderRadius: '50%', background: theme.coral, border: `2px solid ${theme.panelBg}` }} />}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: m.read ? 600 : 800, fontSize: 13.5, color: theme.ink }}>{m.title}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    {pinnedIds.has(m.id) && <Pin_ size={11} />}
+                    <div style={{ fontWeight: m.read ? 600 : 800, fontSize: 13.5, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.title}</div>
+                  </div>
                   <div style={{ fontSize: 12, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.body}</div>
                 </div>
                 <div style={{ fontSize: 10.5, color: theme.muted, flexShrink: 0 }}>{timeAgo(m.created_at)}</div>
               </div>
             ))
           )}
+        </div>
+      )}
+      {actionFor && (
+        <div onClick={() => setActionFor(null)} style={{
+          position: 'absolute', inset: 0, background: 'rgba(20,16,14,0.5)', zIndex: 2,
+          display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+        }} className="zchat-fade">
+          <div onClick={(e) => e.stopPropagation()} style={{
+            background: theme.panelBg, borderRadius: '22px 22px 0 0', padding: '10px 8px', width: '100%', maxWidth: 460,
+            paddingBottom: 'calc(10px + env(safe-area-inset-bottom))',
+          }}>
+            <div onClick={() => togglePin(actionFor.id)} style={{
+              padding: '13px 10px', fontSize: 14, fontWeight: 600, color: theme.ink, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: 12,
+            }}><Pin_ size={16} /> {pinnedIds.has(actionFor.id) ? 'Unpin' : 'Pin'}</div>
+            <div onClick={() => deleteMail(actionFor.id)} style={{
+              padding: '13px 10px', fontSize: 14, fontWeight: 600, color: theme.danger, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: 12,
+            }}><Trash2 size={16} color={theme.danger} /> Delete</div>
+          </div>
         </div>
       )}
     </div>
@@ -2603,9 +2762,9 @@ function CreateGroupPanel({ myId, onClose, onCreated }) {
             {results.map((p) => (
               <div key={p.id} onClick={() => toggleSelect(p)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 4px', cursor: 'pointer' }}>
                 <Avatar emoji={p.avatar} name={p.name} size={40} />
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 700, fontSize: 14, color: theme.ink }}>{p.name}</div>
-                  <div style={{ fontSize: 11.5, color: theme.muted }}>@{p.username}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: 14, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
+                  <div style={{ fontSize: 11.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>@{p.username}</div>
                 </div>
                 <div style={{
                   width: 20, height: 20, borderRadius: '50%', border: `2px solid ${selected.find((s) => s.id === p.id) ? theme.coral : theme.border}`,
@@ -2743,8 +2902,8 @@ function GroupInfoPanel({ group, members, myId, myRole, isOwner, onClose, onProm
             <div onClick={() => onOpenProfile(m.profile)} style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, cursor: 'pointer', minWidth: 0 }}>
               <Avatar emoji={m.profile.avatar} name={m.profile.name} size={40} />
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontWeight: 700, fontSize: 13.5, color: theme.ink, display: 'flex', alignItems: 'center', gap: 6 }}>
-                  {m.profile.name}{m.user_id === myId && <span style={{ color: theme.muted, fontWeight: 500 }}>(you)</span>}
+                <div style={{ fontWeight: 700, fontSize: 13.5, color: theme.ink, display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                  <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{m.profile.name}</span>{m.user_id === myId && <span style={{ color: theme.muted, fontWeight: 500, flexShrink: 0 }}>(you)</span>}
                 </div>
                 <div style={{ display: 'flex', gap: 6, marginBottom: 2 }}>
                   {m.user_id === group.created_by ? (
@@ -2759,7 +2918,7 @@ function GroupInfoPanel({ group, members, myId, myRole, isOwner, onClose, onProm
               </div>
             </div>
             {isAdmin && m.user_id !== myId && m.user_id !== group.created_by && (
-              <MoreVertical size={16} color={theme.muted} style={{ cursor: 'pointer' }}
+              <MoreVertical size={16} color={theme.muted} style={{ cursor: 'pointer', flexShrink: 0 }}
                 onClick={(e) => { e.stopPropagation(); setMenuAnchor(e.currentTarget); setMenuFor(menuFor === m.user_id ? null : m.user_id); }} />
             )}
           </div>
@@ -2850,9 +3009,9 @@ function AddMembersPanel({ myId, existingIds, onClose, onAdd }) {
         {results.map((p) => (
           <div key={p.id} onClick={() => toggleSelect(p)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 4px', cursor: 'pointer' }}>
             <Avatar emoji={p.avatar} name={p.name} size={40} />
-            <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 700, fontSize: 14, color: theme.ink }}>{p.name}</div>
-              <div style={{ fontSize: 11.5, color: theme.muted }}>@{p.username}</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 700, fontSize: 14, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
+              <div style={{ fontSize: 11.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>@{p.username}</div>
             </div>
             <div style={{
               width: 20, height: 20, borderRadius: '50%', border: `2px solid ${selected.find((s) => s.id === p.id) ? theme.coral : theme.border}`,
@@ -3236,7 +3395,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
       if (cleanUsername.length < 3) { setUsernameErr('Username must be at least 3 characters.'); return; }
       fields.username = cleanUsername;
       fields.username_changed_at = new Date().toISOString();
-    }
+}
     setUsernameErr('');
     setSaving(true);
     const { data, error } = await updateProfile(profile.id, fields);
@@ -3306,7 +3465,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
           {editing ? (
             <div style={{ position: 'relative', width: 92, height: 92, margin: '0 auto' }}>
               <div style={{ width: 92, height: 92, borderRadius: '50%', padding: 4, background: theme.panelBg, boxShadow: '0 4px 16px rgba(0,0,0,0.2), 0 0 0 1px rgba(0,0,0,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-<Avatar emoji={avatar} name={profile.name} size={84} />
+                <Avatar emoji={avatar} name={profile.name} size={84} />
               </div>
               <label style={{
                 position: 'absolute', bottom: 0, right: 0, width: 28, height: 28, borderRadius: '50%',
@@ -4024,9 +4183,9 @@ function ForwardPicker({ conversations, onCancel, onPick, myId }) {
               display: 'flex', alignItems: 'center', gap: 12, padding: '10px 6px', cursor: 'pointer', borderRadius: 12,
             }}>
               <Avatar emoji={p.avatar} name={p.name} size={38} />
-              <div>
-                <div style={{ fontWeight: 700, fontSize: 14, color: theme.ink }}>{p.name}</div>
-                <div style={{ fontSize: 11.5, color: theme.muted }}>@{p.username}</div>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ fontWeight: 700, fontSize: 14, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
+                <div style={{ fontSize: 11.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>@{p.username}</div>
               </div>
             </div>
           ))}
@@ -4570,15 +4729,19 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
   const hiddenChatsKey = () => `zchat-hidden-chats-${session.user.id}`;
   const getHiddenChatIds = () => { try { return new Set(JSON.parse(localStorage.getItem(hiddenChatsKey()) || '[]')); } catch { return new Set(); } };
-  const hideChatLocally = (convId) => {
+  /* Keyed by the OTHER PERSON's user id, not the conversation row's own id --
+     that mismatch (delete stored the row id, receiving a message tried to
+     clear a fabricated "id1-id2" string) was why a deleted chat could never
+     come back on its own. */
+  const hideChatLocally = (otherUserId) => {
     const cur = getHiddenChatIds();
-    cur.add(convId);
+    cur.add(otherUserId);
     try { localStorage.setItem(hiddenChatsKey(), JSON.stringify([...cur])); } catch {}
   };
-  const unhideChatLocally = (convId) => {
+  const unhideChatLocally = (otherUserId) => {
     const cur = getHiddenChatIds();
-    if (!cur.has(convId)) return;
-    cur.delete(convId);
+    if (!cur.has(otherUserId)) return;
+    cur.delete(otherUserId);
     try { localStorage.setItem(hiddenChatsKey(), JSON.stringify([...cur])); } catch {}
   };
 
@@ -4736,7 +4899,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       .or(`user_a.eq.${session.user.id},user_b.eq.${session.user.id}`)
       .order('last_message_at', { ascending: false });
     if (!data || data.length === 0) { setConversations([]); setArchivedConversations([]); return; }
-    const visible = data.filter((c) => !hidden.has(c.id));
+    const visible = data.filter((c) => {
+      const otherId = c.user_a === session.user.id ? c.user_b : c.user_a;
+      return !hidden.has(otherId);
+    });
     const otherIds = visible.map((c) => (c.user_a === session.user.id ? c.user_b : c.user_a));
     const { data: profsRaw } = await supabase.from('profiles').select('*').in('id', otherIds.length ? otherIds : ['00000000-0000-0000-0000-000000000000']);
     const profs = sanitizeAvatarList(profsRaw, session.user.id);
@@ -4777,6 +4943,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   };
 
   const upsertConversation = async (otherId, text, type) => {
+    /* If this person's chat was deleted before, sending them a fresh message
+       (e.g. found again via search) should bring the conversation back into
+       the list too, not just receiving a message from them. */
+    unhideChatLocally(otherId);
     const [a, b] = pairKey(session.user.id, otherId);
     const preview = type === 'text' ? text
       : type === 'image' ? 'Photo'
@@ -4864,7 +5034,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (!me) return;
     const sub = subscribeToMessages(me.id, (msg) => {
       if (msg.sender_id !== me.id) {
-        unhideChatLocally(pairKey(me.id, msg.sender_id).join('-'));
+        unhideChatLocally(msg.sender_id);
         if (msg.sender_id !== activeProfile?.id || !mobileShowChatRef.current) { playPing(); supabase.from('messages').update({ delivered: true }).eq('id', msg.id); }
         else supabase.from('messages').update({ read: true, delivered: true }).eq('id', msg.id);
         loadUnreadCounts();
@@ -4924,7 +5094,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       })
       .subscribe();
     return () => supabase.removeChannel(channel);
-  }, [me, activeProfile]);
+    }, [me, activeProfile]);
 
   useEffect(() => {
     if (!me) return;
@@ -4959,7 +5129,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           return [...prev, row];
         });
         loadGroups();
-        })
+      })
       .subscribe();
     return () => supabase.removeChannel(channel);
   }, [me, myGroupIdsKey, activeGroup]);
@@ -5320,6 +5490,16 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         }
       }
     }
+    /* Everything past this point is the actual "load and show this chat" work,
+       independent of the lock check above -- pulled into its own function so
+       the unlock flow can jump straight here instead of calling back into
+       openChat(), which re-ran the lock check against a stale unlockedChats
+       value (state updates aren't visible synchronously) and looked like
+       entering the correct PIN did nothing. */
+    await actuallyOpenChat(profile, convId);
+  };
+
+  const actuallyOpenChat = async (profile, convId) => {
     setActiveProfile(profile);
     getProfile(profile.id).then(({ data }) => {
       if (data) setActiveProfile((prev) => (prev && prev.id === data.id ? { ...prev, ...sanitizeAvatar(data, session.user.id), name: prev.name } : prev));
@@ -5699,7 +5879,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const target = deleteConvoTarget;
     setDeleteConvoTarget(null);
     if (!target) return;
-    hideChatLocally(target.id);
+    hideChatLocally(target.otherProfile.id);
     /* Always fetch the full message history fresh from the server before hiding it --
        relying on whatever happened to already be loaded in `messages` meant deleting a
        chat straight from the list (without opening it first) hid nothing, so the entire
@@ -5893,8 +6073,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               }}>
                 <Avatar emoji={p.avatar} name={p.name} size={42} />
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 700, fontSize: 14, color: theme.ink }}>{p.name}</div>
-                  <div style={{ fontSize: 11.5, color: theme.muted }}>@{p.username}</div>
+                  <div style={{ fontWeight: 700, fontSize: 14, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
+                  <div style={{ fontSize: 11.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>@{p.username}</div>
                 </div>
                 <FollowStatusPill theirId={p.id} viewerId={session.user.id} viewerFollowsThem={searchIFollow.has(p.id)} theyFollowViewer={searchFollowsMe.has(p.id)}
                   theirIsPrivate={p.is_private} onChanged={(id, now) => setSearchIFollow((prev) => { const n = new Set(prev); if (now) n.add(id); else n.delete(id); return n; })} />
@@ -5946,7 +6126,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                       <GroupAvatar avatar={g.avatar} name={g.name} size={46} />
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ fontWeight: 700, fontSize: 14, color: theme.ink, display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <span style={{ fontWeight: 700, fontSize: 14, color: theme.ink, display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 150 }}>
                             {g.pinned && <Pin_ size={13} />}{g.name}
                           </span>
                           {g.last_message_at && <span style={{ fontSize: 10.5, color: theme.muted, flexShrink: 0 }}>{new Date(g.last_message_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>}
@@ -6166,7 +6346,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               </div>
             )}
 
-            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, padding: '6px 14px', flexShrink: 0, paddingBottom: 'calc(6px + env(safe-area-inset-bottom))' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, padding: '4px 14px', flexShrink: 0, paddingBottom: 'max(4px, env(safe-area-inset-bottom))' }}>
               {activeProfile?.is_deleted ? (
                 <div style={{ flex: 1, textAlign: 'center', padding: '10px 4px', fontSize: 12.5, color: theme.muted, fontWeight: 600 }}>
                   This account no longer exists. You can't send new messages here.
@@ -6388,7 +6568,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       )}
       {lockPromptFor && (
         <ChatLockUnlock correctHash={me.chat_lock_hash} onCancel={() => { setLockPromptFor(null); setMobileShowChat(false); }}
-          onUnlock={() => { const { profile, convId } = lockPromptFor; setUnlockedChats((prev) => new Set(prev).add(convId)); setLockPromptFor(null); openChat(profile, convId); }} />
+          onUnlock={() => { const { profile, convId } = lockPromptFor; setUnlockedChats((prev) => new Set(prev).add(convId)); setLockPromptFor(null); actuallyOpenChat(profile, convId); }} />
       )}
       {deletedAccountAlertFor && (
         <AccountGoneModal name={deletedAccountAlertFor} onOk={() => { setDeletedAccountAlertFor(null); setMobileShowChat(false); loadConversations(); }} />
@@ -6611,4 +6791,4 @@ export default function App() {
       <AppInner />
     </ThemeProvider>
   );
-                                                                   }
+      }
