@@ -431,25 +431,86 @@ function GoogleLogo({ size = 18 }) {
   );
 }
 
-async function signInWithGoogle() {
-  await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } });
+/* Google One Tap / native sign-in -- this renders a small floating card right
+   on the page and hands Supabase an ID token directly (signInWithIdToken).
+   Deliberately NOT using signInWithOAuth here: that method does a full-page
+   navigation away to accounts.google.com and back, which is what was showing
+   people the raw "etcmbghcmlgeezwgnwuz.supabase.co" address -- a jarring,
+   unbranded full-screen wall. This way nobody ever leaves the app. */
+const GOOGLE_CLIENT_ID = '103023880766-q4ok0uqj8pndf72vr3mrgg9r4sgnjhu9.apps.googleusercontent.com';
+
+let googleScriptPromise = null;
+function loadGoogleIdentityScript() {
+  if (googleScriptPromise) return googleScriptPromise;
+  googleScriptPromise = new Promise((resolve, reject) => {
+    if (window.google?.accounts?.id) { resolve(); return; }
+    const existing = document.getElementById('google-identity-script');
+    if (existing) { existing.addEventListener('load', () => resolve()); existing.addEventListener('error', reject); return; }
+    const script = document.createElement('script');
+    script.id = 'google-identity-script';
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.defer = true;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error('load-failed'));
+    document.head.appendChild(script);
+  });
+  return googleScriptPromise;
 }
 
-function GoogleButton({ label = 'Continue with Google' }) {
+async function sha256Hex(input) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input));
+  return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+function randomNonce() {
+  const arr = new Uint8Array(16);
+  crypto.getRandomValues(arr);
+  return Array.from(arr).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+function GoogleButton({ onError }) {
   const { theme } = useTheme();
-  const [loading, setLoading] = useState(false);
+  const containerRef = useRef(null);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const rawNonce = randomNonce();
+        const hashedNonce = await sha256Hex(rawNonce);
+        await loadGoogleIdentityScript();
+        if (cancelled || !containerRef.current || !window.google?.accounts?.id) return;
+        window.google.accounts.id.initialize({
+          client_id: GOOGLE_CLIENT_ID,
+          nonce: hashedNonce,
+          use_fedcm_for_prompt: true,
+          callback: async (response) => {
+            const { error } = await supabase.auth.signInWithIdToken({
+              provider: 'google', token: response.credential, nonce: rawNonce,
+            });
+            if (error && onError) onError(error.message);
+          },
+        });
+        window.google.accounts.id.renderButton(containerRef.current, {
+          theme: theme.dark ? 'filled_black' : 'outline',
+          size: 'large', shape: 'pill', text: 'continue_with',
+          width: Math.min(containerRef.current.offsetWidth || 320, 400),
+        });
+        if (!cancelled) setReady(true);
+      } catch {
+        if (!cancelled && onError) onError("Couldn't load Google sign-in. Check your connection and try again.");
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [theme.dark]);
+
   return (
-    <button
-      onClick={async () => { setLoading(true); await signInWithGoogle(); }}
-      disabled={loading}
-      style={{
-        width: '100%', padding: '13px', borderRadius: 15, border: `1.5px solid ${theme.border}`,
-        background: theme.dark ? 'rgba(255,255,255,0.04)' : 'white', color: theme.ink,
-        fontSize: 14.5, fontWeight: 700, cursor: loading ? 'default' : 'pointer', fontFamily: FONT,
-        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
-      }}>
-      {loading ? <Spinner size={15} color={theme.ink} /> : (<><GoogleLogo size={17} />{label}</>)}
-    </button>
+    <div style={{ width: '100%', minHeight: 44, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+      {!ready && <Spinner size={15} color={theme.ink} />}
+      <div ref={containerRef} style={{ width: '100%', display: ready ? 'flex' : 'none', justifyContent: 'center' }} />
+    </div>
   );
 }
 
@@ -485,7 +546,7 @@ function LoginStep({ onSuccess, onForgot, onGoRegister }) {
   return (
     <div>
       <div style={{ fontSize: 19, fontWeight: 800, marginBottom: 18, color: theme.ink }}>Welcome back</div>
-      <GoogleButton label="Continue with Google" />
+      <GoogleButton onError={setErr} />
       <OrDivider />
       <input style={{ ...inputStyle(theme), marginBottom: 10 }} placeholder="Email" autoCapitalize="none"
         value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && submit()} />
@@ -1737,7 +1798,7 @@ const STICKERS = [
   { key: 'new-crying-86913', label: 'Crying', file: '/new-crying-86913.png', category: 'reactions' },
   { key: 'new-eugene-88351', label: 'Eugene', file: '/new-eugene-88351.png', category: 'reactions' },
   { key: 'new-alta-portal-turret-love-89822', label: 'Alta Portal Turret Love', file: '/new-alta-portal-turret-love-89822.png', category: 'reactions' },
-{ key: 'new-very-cool-90098', label: 'Very Cool', file: '/new-very-cool-90098.png', category: 'cool' },
+  { key: 'new-very-cool-90098', label: 'Very Cool', file: '/new-very-cool-90098.png', category: 'cool' },
   { key: 'new-flashbang-9183', label: 'Flashbang', file: '/new-flashbang-9183.gif', category: 'reactions' },
   { key: 'new-sunglasses-smirk-91991', label: 'Sunglasses Smirk', file: '/new-sunglasses-smirk-91991.png', category: 'cool' },
   { key: 'new-shockedcat-93363', label: 'Shockedcat', file: '/new-shockedcat-93363.png', category: 'cats' },
@@ -3437,14 +3498,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
       if (status === 'accepted') setFollowerCount((c) => c + 1);
       setFollowState(status);
       { const viewerProfile = (await getProfile(userId)).data;
-      sendPushNotification(profile.id, 'ZChat', status === 'pending' ? `${viewerProfile?.name || 'Someone'} requested to follow you` : `${viewerProfile?.name || 'Someone'} started following you`, `/?profile=${userId}`, viewerProfile?.avatar); }
-    }
-    setFollowBusy(false);
-  };
-
-  const handleAvatarChange = (e) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
+      sendPushNotification(profile.id, 'ZChat', status === 'pending' ? `${viewerProfile?.name || 'Someone'} requested to follow you` : `${viewerProfile?.name || 'Someone'} started following you`, `/?profile=${userId}`, viewerProfile
     if (file) setCropFile(file);
   };
 
@@ -5198,7 +5252,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (!me || !activeProfile) return;
     const channel = supabase.channel('follow-watch-' + activeProfile.id)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'follows' }, (payload) => {
-        const row = payload.new || payload.old;
+const row = payload.new || payload.old;
         if (row.follower_id === session.user.id && row.following_id === activeProfile.id) {
           setActiveFollowState(payload.eventType === 'DELETE' ? 'none' : row.status);
         }
