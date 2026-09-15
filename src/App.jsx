@@ -297,6 +297,8 @@ function GlobalStyle() {
       @keyframes zchat-spin { to { transform: rotate(360deg); } }
       @keyframes zchat-fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
       @keyframes zchat-heart-burst { 0% { opacity: 0; transform: scale(0.3); } 30% { opacity: 1; transform: scale(1.2); } 100% { opacity: 0; transform: scale(1.6); } }
+      @keyframes zchat-mail-zoom-in { 0% { opacity: 0; transform: scale(0.82); } 100% { opacity: 1; transform: scale(1); } }
+      .zchat-mail-zoom { animation: zchat-mail-zoom-in 0.22s cubic-bezier(.2,.8,.3,1); }
       @keyframes zchat-float-up { 0% { transform: translateY(0) translateX(0); opacity: 0; } 10% { opacity: 1; } 100% { transform: translateY(-620px) translateX(18px); opacity: 0; } }
       @keyframes zchat-drift-a { 0%, 100% { transform: translate(0,0); } 50% { transform: translate(30px, 20px); } }
       @keyframes zchat-drift-b { 0%, 100% { transform: translate(0,0); } 50% { transform: translate(-24px, -18px); } }
@@ -1585,7 +1587,7 @@ function toggleFavoriteSticker(key) {
   const cur = getFavoriteStickerKeys();
   if (cur.has(key)) cur.delete(key); else cur.add(key);
   try { localStorage.setItem('zchat-fav-stickers', JSON.stringify([...cur])); } catch {}
-return cur;
+  return cur;
 }
 
 function StickerPicker({ onPick, onClose }) {
@@ -1634,7 +1636,7 @@ function StickerPicker({ onPick, onClose }) {
             {STICKER_CATEGORIES.map((c) => (
               <div key={c.key} onClick={() => setCategory(c.key)} style={{
                 padding: '6px 13px', borderRadius: 16, fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
-                background: category === c.key ? theme.coral : theme.rowBg, color: category === c.key ? 'white' : theme.muted,
+background: category === c.key ? theme.coral : theme.rowBg, color: category === c.key ? 'white' : theme.muted,
                 display: 'flex', alignItems: 'center', gap: 4,
               }}>{c.key === 'favorites' && <Star_ size={11} color={category === c.key ? 'white' : '#FFB800'} filled />}{c.label}</div>
             ))}
@@ -1814,6 +1816,96 @@ function WhoReactedModal({ reactions, myId, onClose, onRemoveMine }) {
   );
 }
 
+function MailPanel({ myId, onClose }) {
+  const { theme } = useTheme();
+  const [mails, setMails] = useState(null);
+  const [selected, setSelected] = useState(null);
+
+  const load = async () => {
+    const { data } = await supabase.from('mails').select('*').eq('recipient_id', myId).order('created_at', { ascending: false }).limit(100);
+    setMails(data || []);
+  };
+  useEffect(() => { load(); }, [myId]);
+
+  const openMail = async (m) => {
+    setSelected(m);
+    if (!m.read) {
+      await supabase.from('mails').update({ read: true }).eq('id', m.id);
+      setMails((prev) => prev.map((x) => (x.id === m.id ? { ...x, read: true } : x)));
+    }
+  };
+
+  const timeAgo = (iso) => {
+    const diff = Date.now() - new Date(iso).getTime();
+    const mins = Math.round(diff / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins}m`;
+    const hrs = Math.round(mins / 60);
+    if (hrs < 24) return `${hrs}h`;
+    const days = Math.round(hrs / 24);
+    if (days < 7) return `${days}d`;
+    return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  };
+
+  const MailIcon = ({ m, size }) => (
+    <div style={{
+      width: size, height: size, borderRadius: size * 0.3, flexShrink: 0, overflow: 'hidden',
+      background: m.type === 'report_warning' ? `${theme.danger}18` : theme.rowBg,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative',
+    }}>
+      {m.type === 'report_warning'
+        ? <Flag size={size * 0.44} color={theme.danger} />
+        : <img src="/icon-192.png" alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
+    </div>
+  );
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: theme.panelBg, zIndex: 34, display: 'flex', flexDirection: 'column' }} className="zchat-fade">
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 18px', paddingTop: 'calc(16px + env(safe-area-inset-top))', borderBottom: `1px solid ${theme.border}`, flexShrink: 0 }}>
+        <ArrowLeft size={20} style={{ cursor: 'pointer', color: theme.ink }} onClick={() => (selected ? setSelected(null) : onClose())} />
+        <div style={{ fontWeight: 800, fontSize: 17, color: theme.ink }}>{selected ? 'Message' : 'Mail'}</div>
+      </div>
+      {selected ? (
+        <div key={selected.id} className="zchat-mail-zoom" style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '22px 20px', paddingBottom: 'calc(22px + env(safe-area-inset-bottom))' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+            <MailIcon m={selected} size={44} />
+            <div>
+              <div style={{ fontWeight: 800, fontSize: 15.5, color: theme.ink }}>{selected.title}</div>
+              <div style={{ fontSize: 11, color: theme.muted }}>{new Date(selected.created_at).toLocaleString()}</div>
+            </div>
+          </div>
+          <div style={{ fontSize: 14, color: theme.ink, lineHeight: 1.6, wordBreak: 'break-word' }}>{selected.body}</div>
+        </div>
+      ) : (
+        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '6px 10px', paddingBottom: 'calc(6px + env(safe-area-inset-bottom))' }}>
+          {mails === null ? (
+            <div style={{ display: 'flex', justifyContent: 'center', padding: 30 }}><Spinner color={theme.ink} /></div>
+          ) : mails.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: 40, fontSize: 13, color: theme.muted }}>No mail yet</div>
+          ) : (
+            mails.map((m) => (
+              <div key={m.id} onClick={() => openMail(m)} style={{
+                display: 'flex', alignItems: 'center', gap: 12, padding: '11px 8px', cursor: 'pointer', borderRadius: 14,
+                background: m.read ? 'transparent' : theme.rowBg,
+              }}>
+                <div style={{ position: 'relative', flexShrink: 0 }}>
+                  <MailIcon m={m} size={42} />
+                  {!m.read && <div style={{ position: 'absolute', top: -2, right: -2, width: 10, height: 10, borderRadius: '50%', background: theme.coral, border: `2px solid ${theme.panelBg}` }} />}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: m.read ? 600 : 800, fontSize: 13.5, color: theme.ink }}>{m.title}</div>
+                  <div style={{ fontSize: 12, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.body}</div>
+                </div>
+                <div style={{ fontSize: 10.5, color: theme.muted, flexShrink: 0 }}>{timeAgo(m.created_at)}</div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ArchivedChatsPanel({ conversations, onClose, onOpenChat, onUnarchive }) {
   const { theme } = useTheme();
   return (
@@ -1981,6 +2073,76 @@ function NameBarPicker({ value, onSelect, onClose }) {
   );
 }
 
+
+const REPORT_REASONS = [
+  'Spam',
+  'Nudity or sexual activity',
+  'Hate speech or symbols',
+  'Bullying or harassment',
+  'False information',
+  'Scam or fraud',
+  'Violence or dangerous organizations',
+  'Sale of illegal or regulated goods',
+  'Suicide, self-harm or eating disorders',
+  "I just don't like it",
+  'Something else',
+];
+
+const MAX_MAILS_PER_USER = 100;
+
+/* Sends the warning mail to the REPORTED person -- never reveals who filed the
+   report. Also trims that inbox down to the most recent 100 mails so it never
+   grows unbounded. */
+async function sendReportMail(reportedUserId, reasonLabel) {
+  if (!reportedUserId) return;
+  const title = 'Account warning';
+  const body = `You have been reported for: ${reasonLabel}. Please take a moment to review ZChat's community guidelines and adjust your behavior accordingly. If reports like this continue, we will have to permanently ban your account from ZChat.`;
+  await supabase.from('mails').insert({ recipient_id: reportedUserId, type: 'report_warning', title, body });
+  const { data: rows } = await supabase.from('mails').select('id').eq('recipient_id', reportedUserId).order('created_at', { ascending: false });
+  if (rows && rows.length > MAX_MAILS_PER_USER) {
+    const idsToDelete = rows.slice(MAX_MAILS_PER_USER).map((r) => r.id);
+    await supabase.from('mails').delete().in('id', idsToDelete);
+  }
+}
+
+function ReportReasonPicker({ reportedUserId, onCancel, onSubmit }) {
+  const { theme } = useTheme();
+  const [submitting, setSubmitting] = useState(null);
+
+  const choose = async (reason) => {
+    if (submitting) return;
+    setSubmitting(reason);
+    await onSubmit(reason);
+    if (reportedUserId) await sendReportMail(reportedUserId, reason);
+    setSubmitting(null);
+  };
+
+  return (
+    <div onClick={onCancel} style={{
+      position: 'absolute', inset: 0, background: 'rgba(20,16,14,0.5)', zIndex: 91,
+      display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+    }} className="zchat-fade">
+      <div onClick={(e) => e.stopPropagation()} style={{
+        background: theme.panelBg, borderRadius: '22px 22px 0 0', padding: '20px 18px', width: '100%', maxWidth: 460,
+        maxHeight: '78vh', overflowY: 'auto', WebkitOverflowScrolling: 'touch',
+        paddingBottom: 'calc(20px + env(safe-area-inset-bottom))',
+      }}>
+        <div style={{ fontWeight: 800, fontSize: 16, color: theme.ink, marginBottom: 3 }}>Report</div>
+        <div style={{ fontSize: 12, color: theme.muted, marginBottom: 14 }}>Why are you reporting this?</div>
+        {REPORT_REASONS.map((r) => (
+          <div key={r} onClick={() => choose(r)} style={{
+            padding: '13px 2px', borderBottom: `1px solid ${theme.border}`, fontSize: 14, fontWeight: 600, color: theme.ink,
+            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          }}>
+            {r}
+            {submitting === r ? <Spinner size={14} color={theme.ink} /> : <ChevronRight size={16} color={theme.muted} />}
+          </div>
+        ))}
+        <div onClick={onCancel} style={{ textAlign: 'center', padding: '16px 0 4px', fontWeight: 700, color: theme.muted, cursor: 'pointer' }}>Cancel</div>
+      </div>
+    </div>
+  );
+}
 
 async function hashPin(pin) {
   const enc = new TextEncoder().encode(pin);
@@ -2301,8 +2463,7 @@ function ChatSettingsPanel({ conv, myId, meAvatar, meName, isPinned, isLocked, w
         />
       )}
       {showReportUser && (
-        <ReportMessageModal
-          title={`Report ${otherName}`}
+        <ReportReasonPicker
           onCancel={() => setShowReportUser(false)}
           onSubmit={(reason) => { onReportUser(reason); setShowReportUser(false); }}
         />
@@ -2937,7 +3098,6 @@ function PhotoCropEditor({ file, isAvatar = false, onCancel, onConfirm }) {
 function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, onSaved, onOpenSettings, onOpenProfile, onMessage, isBlocked, onBlock, onUnblock }) {
   const { theme, chatTheme } = useTheme();
   const [reportOpen, setReportOpen] = useState(false);
-  const [reportReason, setReportReason] = useState('');
   const [reportSent, setReportSent] = useState(false);
   const [editing, setEditing] = useState(false);
   const [bio, setBio] = useState(profile.bio || '');
@@ -3114,7 +3274,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
         }}>
           <div onClick={onClose} style={{
             position: 'absolute', top: 16, right: 16, width: 30, height: 30, borderRadius: '50%',
-            background: 'rgba(0,0,0,0.22)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+      background: 'rgba(0,0,0,0.22)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
           }}><X size={16} color="white" /></div>
           {isSelf && (
             <div onClick={onOpenSettings} style={{
@@ -3172,7 +3332,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
                 Privacy
               </button>
             </div>
-      )}
+          )}
           {editing ? (
             <div style={{ marginTop: 22, textAlign: 'left' }}>
               <div style={{ fontSize: 11.5, color: theme.muted, marginBottom: 5, fontWeight: 800, letterSpacing: '0.04em' }}>USERNAME</div>
@@ -3327,17 +3487,6 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
               {isBlocked ? 'Unblock this account' : 'Block this account'}
             </button>
           )}
-          {!isSelf && reportOpen && !reportSent && (
-            <div style={{ marginTop: 16, textAlign: 'left' }} className="zchat-fade">
-              <textarea value={reportReason} onChange={(e) => setReportReason(e.target.value)}
-                placeholder="What's going on with this account?"
-                style={{ ...inputStyle(theme), height: 64, resize: 'none', fontFamily: FONT }} />
-              <button disabled={!reportReason.trim()} style={primaryBtn(theme, !reportReason.trim(), theme.danger)}
-                onClick={() => { onReport(profile, reportReason); setReportSent(true); }}>
-                Send report
-              </button>
-            </div>
-          )}
           {reportSent && (
             <div style={{ marginTop: 16, fontSize: 12.5, color: theme.teal, fontWeight: 700 }} className="zchat-fade">
               Report sent. Thanks for flagging this.
@@ -3357,6 +3506,9 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
       )}
       {showCountryPicker && (
         <CountryPicker value={country} onSelect={setCountry} onClose={() => setShowCountryPicker(false)} />
+      )}
+      {reportOpen && !reportSent && (
+        <ReportReasonPicker onCancel={() => setReportOpen(false)} onSubmit={async (reason) => { await onReport(profile, reason); setReportSent(true); setReportOpen(false); }} />
       )}
     </div>
   );
@@ -3543,7 +3695,7 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
     <div
       id={`msg-${m.id}`}
       style={{
-        display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start', alignItems: 'flex-start', gap: 8, marginBottom: 14,
+        display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start', alignItems: 'flex-start', gap: 8, marginBottom: 7,
         touchAction: 'pan-y', WebkitTapHighlightColor: 'transparent', overscrollBehaviorX: 'none', cursor: 'pointer',
         background: selected ? `${theme.coral}14` : highlighted ? `${theme.coral}22` : 'transparent',
         transition: 'background 0.3s ease',
@@ -4263,6 +4415,26 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     return () => { document.removeEventListener('visibilitychange', check); window.removeEventListener('focus', check); };
   }, []);
   const [deferredInstallPrompt, setDeferredInstallPrompt] = useState(null);
+  const [liveViewportHeight, setLiveViewportHeight] = useState(null);
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => {
+      /* iOS keeps 100dvh reporting the full pre-keyboard height while the
+         keyboard is open in standalone/PWA mode, which is why the composer
+         floats above the keyboard with a gap instead of sitting flush against
+         it. window.visualViewport.height tracks the REAL visible area, so we
+         drive the app's actual height from that instead. */
+      setLiveViewportHeight(vv.height);
+      setKeyboardOpen(window.innerHeight - vv.height > 120);
+    };
+    update();
+    vv.addEventListener('resize', update);
+    vv.addEventListener('scroll', update);
+    return () => { vv.removeEventListener('resize', update); vv.removeEventListener('scroll', update); };
+  }, []);
+
   const [isStandaloneApp, setIsStandaloneApp] = useState(false);
   const [installBannerDismissed, setInstallBannerDismissed] = useState(() => {
     try { return localStorage.getItem('zchat-install-banner-dismissed') === '1'; } catch { return false; }
@@ -4337,6 +4509,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [showDeleteAccount, setShowDeleteAccount] = useState(false);
   const [myBlockedIds, setMyBlockedIds] = useState(new Set());
   const [followRequestCount, setFollowRequestCount] = useState(0);
+  const [showMail, setShowMail] = useState(false);
+  const [unreadMailCount, setUnreadMailCount] = useState(0);
   const [listFilter, setListFilter] = useState('all');
   const [groups, setGroups] = useState([]);
   const [activeGroup, setActiveGroup] = useState(null);
@@ -4490,6 +4664,11 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     setFollowRequestCount(count || 0);
   };
 
+  const loadUnreadMailCount = async () => {
+    const { count } = await supabase.from('mails').select('*', { count: 'exact', head: true }).eq('recipient_id', session.user.id).eq('read', false);
+    setUnreadMailCount(count || 0);
+  };
+
   const blockUser = async (userId) => {
     await supabase.from('blocks').insert({ blocker_id: session.user.id, blocked_id: userId });
     setMyBlockedIds((prev) => new Set(prev).add(userId));
@@ -4623,7 +4802,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   }, [profileCheckFailed]);
 
   useEffect(() => {
-    if (me) { loadConversations(); loadUnreadCounts(); loadMyLocks(); loadGroups(); loadMyBlocks(); subscribeToPush(session.user.id); loadFollowRequestCount(); supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', me.id); }
+    if (me) { loadConversations(); loadUnreadCounts(); loadMyLocks(); loadGroups(); loadMyBlocks(); subscribeToPush(session.user.id); loadFollowRequestCount(); loadUnreadMailCount(); supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', me.id); }
   }, [me]);
 
   useEffect(() => {
@@ -4660,6 +4839,17 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations' }, (payload) => {
         const row = payload.new || payload.old;
         if (row && (row.user_a === me.id || row.user_b === me.id)) loadConversations();
+      })
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, [me]);
+
+  useEffect(() => {
+    if (!me) return;
+    const channel = supabase.channel('mail-watch-' + me.id)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'mails' }, (payload) => {
+        const row = payload.new || payload.old;
+        if (row && row.recipient_id === me.id) loadUnreadMailCount();
       })
       .subscribe();
     return () => supabase.removeChannel(channel);
@@ -5350,6 +5540,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
   const handleReport = async (profile, reason) => {
     await reportUser(session.user.id, profile.id, reason);
+    await sendReportMail(profile.id, reason);
   };
 
   const toggleSelect = (id) => {
@@ -5435,7 +5626,11 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
   const doReportMessage = async (reason) => {
     const id = reportModalFor || selectedMessages[0]?.id;
-    if (id && id !== '__viewer__') await supabase.from('message_reports').insert({ reporter_id: session.user.id, message_id: id, reason });
+    if (id && id !== '__viewer__') {
+      await supabase.from('message_reports').insert({ reporter_id: session.user.id, message_id: id, reason });
+      const reportedMsg = findMessageById(id);
+      if (reportedMsg) await sendReportMail(reportedMsg.sender_id, reason);
+    }
     setReportModalFor(null);
     cancelSelection();
   };
@@ -5571,7 +5766,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
   return (
     <div id="zapp-root" style={{
-      height: '100dvh', width: '100%', background: theme.bgGradient, fontFamily: FONT,
+      height: liveViewportHeight ? `${liveViewportHeight}px` : '100dvh', width: '100%', background: theme.bgGradient, fontFamily: FONT,
       display: 'flex', overflow: 'hidden', position: 'relative', boxSizing: 'border-box',
       paddingTop: 'env(safe-area-inset-top)',
       paddingLeft: 'env(safe-area-inset-left)',
@@ -5621,28 +5816,35 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         </div>
 
         <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-around', padding: '2px 10px 12px', flexShrink: 0,
+          display: 'flex', alignItems: 'center', gap: 14, padding: '2px 16px 12px', flexShrink: 0, overflowX: 'auto',
         }}>
-          <div onClick={() => setShowFollowRequests(true)} style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer' }}>
+          <div onClick={() => setShowMail(true)} style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer', flexShrink: 0 }}>
+            <div style={{ width: 38, height: 38, borderRadius: 12, background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.coralDeep }}><Mail size={16} /></div>
+            {unreadMailCount > 0 && (
+              <div style={{ position: 'absolute', top: -3, right: -3, background: theme.danger, color: 'white', fontSize: 9, fontWeight: 800, borderRadius: 8, minWidth: 15, height: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px' }}>{unreadMailCount > 99 ? '99+' : unreadMailCount}</div>
+            )}
+            <span style={{ fontSize: 9, color: theme.muted, fontWeight: 600 }}>Mail</span>
+          </div>
+          <div onClick={() => setShowFollowRequests(true)} style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer', flexShrink: 0 }}>
             <div style={{ width: 38, height: 38, borderRadius: 12, background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.coralDeep }}><Bell size={16} /></div>
             {followRequestCount > 0 && (
               <div style={{ position: 'absolute', top: -3, right: -3, background: theme.danger, color: 'white', fontSize: 9, fontWeight: 800, borderRadius: 8, minWidth: 15, height: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px' }}>{followRequestCount}</div>
             )}
             <span style={{ fontSize: 9, color: theme.muted, fontWeight: 600 }}>Requests</span>
           </div>
-          <div onClick={() => setShowCreateGroup(true)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer' }}>
+          <div onClick={() => setShowCreateGroup(true)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer', flexShrink: 0 }}>
             <div style={{ width: 38, height: 38, borderRadius: 12, background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.coralDeep }}><Users size={16} /></div>
             <span style={{ fontSize: 9, color: theme.muted, fontWeight: 600 }}>Group</span>
           </div>
-          <div onClick={() => setShowDiscover(true)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer' }}>
+          <div onClick={() => setShowDiscover(true)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer', flexShrink: 0 }}>
             <div style={{ width: 38, height: 38, borderRadius: 12, background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.coralDeep }}><Compass size={16} /></div>
             <span style={{ fontSize: 9, color: theme.muted, fontWeight: 600 }}>Discover</span>
           </div>
-          <div onClick={() => setShowArchived(true)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer' }}>
+          <div onClick={() => setShowArchived(true)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer', flexShrink: 0 }}>
             <div style={{ width: 38, height: 38, borderRadius: 12, background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.coralDeep }}><Archive size={16} /></div>
             <span style={{ fontSize: 9, color: theme.muted, fontWeight: 600 }}>Archive</span>
           </div>
-          <div onClick={() => setShowSettings(true)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer' }}>
+          <div onClick={() => setShowSettings(true)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer', flexShrink: 0 }}>
             <div style={{ width: 38, height: 38, borderRadius: 12, background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.coralDeep }}><SettingsIcon size={16} /></div>
             <span style={{ fontSize: 9, color: theme.muted, fontWeight: 600 }}>Settings</span>
           </div>
@@ -5928,7 +6130,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               </div>
             )}
 
-            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, padding: '6px 14px', flexShrink: 0, paddingBottom: 'calc(6px + env(safe-area-inset-bottom))' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, padding: '6px 14px', flexShrink: 0, paddingBottom: keyboardOpen ? 6 : 'calc(6px + env(safe-area-inset-bottom))' }}>
               {recording ? (
                 <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 10, background: theme.inputBg, borderRadius: 22, padding: '9px 16px' }}>
                   <div style={{ width: 9, height: 9, borderRadius: '50%', background: theme.danger, animation: 'zchat-love-pulse 1s infinite' }} />
@@ -6083,7 +6285,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         <ForwardPicker conversations={conversations} myId={session.user.id} onCancel={() => setForwardOpen(false)} onPick={doForward} />
       )}
       {reportModalFor && (
-        <ReportMessageModal onCancel={() => setReportModalFor(null)} onSubmit={doReportMessage} />
+        <ReportReasonPicker onCancel={() => setReportModalFor(null)} onSubmit={doReportMessage} />
       )}
       {deleteConvoTarget && (
         <DeleteChatConfirm name={deleteConvoTarget.otherProfile.name} onCancel={() => setDeleteConvoTarget(null)} onConfirm={confirmDeleteChat} />
@@ -6102,6 +6304,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         <ArchivedChatsPanel conversations={archivedConversations} onClose={() => setShowArchived(false)}
           onOpenChat={(c) => { setShowArchived(false); openChat(c.otherProfile, c.id); }}
           onUnarchive={(id) => toggleArchive(id, false)} />
+      )}
+      {showMail && (
+        <MailPanel myId={session.user.id} onClose={() => { setShowMail(false); loadUnreadMailCount(); }} />
       )}
       {showChatSettings && activeConvForBar && (
         <ChatSettingsPanel
@@ -6344,4 +6549,4 @@ export default function App() {
       <AppInner />
     </ThemeProvider>
   );
-                               }
+                  }
