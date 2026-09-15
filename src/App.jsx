@@ -73,6 +73,9 @@ function ThemeProvider({ children }) {
   const [chatTheme, setChatTheme] = useState(() => {
     try { return localStorage.getItem('zchat-chattheme') || 'classic'; } catch { return 'classic'; }
   });
+  const [bubbleColor, setBubbleColor] = useState(() => {
+    try { return localStorage.getItem('zchat-bubblecolor') || 'default'; } catch { return 'default'; }
+  });
   useEffect(() => {
     try { localStorage.setItem('zchat-fontscale', String(fontScale)); } catch {}
   }, [fontScale]);
@@ -94,10 +97,13 @@ function ThemeProvider({ children }) {
   useEffect(() => {
     try { localStorage.setItem('zchat-chattheme', chatTheme); } catch {}
   }, [chatTheme]);
+  useEffect(() => {
+    try { localStorage.setItem('zchat-bubblecolor', bubbleColor); } catch {}
+  }, [bubbleColor]);
   const accent = ACCENT_PALETTES[accentName] || ACCENT_PALETTES.coral;
   const theme = { ...THEMES[dark ? 'dark' : 'light'], ...accent, dark };
   return (
-    <ThemeContext.Provider value={{ theme, dark, setDark, accentName, setAccentName, soundOn, setSoundOn, reactionSoundOn, setReactionSoundOn, bgPatternOn, setBgPatternOn, fontScale, setFontScale, chatTheme, setChatTheme }}>
+    <ThemeContext.Provider value={{ theme, dark, setDark, accentName, setAccentName, soundOn, setSoundOn, reactionSoundOn, setReactionSoundOn, bgPatternOn, setBgPatternOn, fontScale, setFontScale, chatTheme, setChatTheme, bubbleColor, setBubbleColor }}>
       {children}
     </ThemeContext.Provider>
   );
@@ -133,6 +139,16 @@ const CHAT_THEMES = {
   neon: { label: 'Neon', bubbleRadius: 16, borderStyle: 'thin', glow: false, bg: 'neon' },
 };
 
+const BUBBLE_COLORS = {
+  default: { label: 'Default', me: null, them: null },
+  coral: { label: 'Coral', me: '#FFDCCB', them: null },
+  mint: { label: 'Mint', me: '#D6F5E3', them: null },
+  lavender: { label: 'Lavender', me: '#E6DEFB', them: null },
+  sunny: { label: 'Sunny', me: '#FFF3C4', them: null },
+  sky: { label: 'Sky', me: '#D6ECFF', them: null },
+  rose: { label: 'Rose', me: '#FBDCE6', them: null },
+};
+
 function AnimatedChatBackground({ chatTheme }) {
   const spec = CHAT_THEMES[chatTheme] || CHAT_THEMES.classic;
   if (spec.bg === 'none') return null;
@@ -145,7 +161,7 @@ function AnimatedChatBackground({ chatTheme }) {
             position: 'absolute', left: `${(i * 37) % 100}%`, bottom: -30,
             fontSize: 12 + (i % 5) * 6, opacity: 0.18 + (i % 3) * 0.06,
             animation: `zchat-float-up ${8 + (i % 6)}s linear infinite`, animationDelay: `${i * 1.3}s`,
-          }}>ðŸ’—</span>
+          }}>💗</span>
         ))}
       </div>
     );
@@ -286,12 +302,14 @@ function GlobalStyle() {
       @keyframes zchat-drift-b { 0%, 100% { transform: translate(0,0); } 50% { transform: translate(-24px, -18px); } }
       @keyframes zchat-love-pulse { 0%, 100% { box-shadow: 0 0 10px rgba(255,77,141,0.28); } 50% { box-shadow: 0 0 20px rgba(255,77,141,0.55); } }
       @keyframes zchat-neon-pulse { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.18); } }
+      @keyframes zchat-wave-pop { 0% { opacity: 0; transform: scale(0.4) translateY(10px); } 60% { opacity: 1; transform: scale(1.08) translateY(-2px); } 100% { opacity: 1; transform: scale(1) translateY(0); } }
       .zchat-fire-ring {
         background: linear-gradient(135deg, #FFD23F, #FF6B00, #FF2D55);
       }
       .zchat-bubble-love { animation: zchat-love-pulse 2.6s ease-in-out infinite; }
       .zchat-bubble-neon { animation: zchat-neon-pulse 2.2s ease-in-out infinite; }
       .zchat-fade { animation: zchat-fade 0.25s ease; }
+      .zchat-wave-pop { animation: zchat-wave-pop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1); }
       * { font-family: ${FONT}; }
       *:not(input):not(textarea) {
         -webkit-user-select: none;
@@ -301,6 +319,11 @@ function GlobalStyle() {
       input, textarea {
         -webkit-user-select: text;
         user-select: text;
+      }
+      img, video {
+        -webkit-touch-callout: none;
+        -webkit-user-drag: none;
+        user-select: none;
       }
     `}</style>
   );
@@ -344,7 +367,7 @@ function Avatar({ emoji, name = '', online, size = 40, ring = false }) {
         overflow: 'hidden',
       }}>
         {isImage
-          ? <img src={emoji} alt="" onError={() => setImgFailed(true)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          ? <img src={emoji} alt="" onError={() => setImgFailed(true)} onContextMenu={(e) => e.preventDefault()} draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           : initial}
       </div>
       {online != null && (
@@ -373,7 +396,6 @@ function AuthShell({ children }) {
       <div style={{ width: '100%', maxWidth: 380 }} className="zchat-fade">
         <div style={{ textAlign: 'center', marginBottom: 26 }}>
           <div style={{ display: 'inline-flex' }}><ZBrand size={34} showTag /></div>
-          <div style={{ fontSize: 10, fontWeight: 700, color: theme.muted, marginTop: 6 }}>v2.6</div>
         </div>
         <div style={glass(theme, { borderRadius: 26, padding: 28, boxShadow: '0 12px 40px rgba(31,20,15,0.14)' })}>
           {children}
@@ -790,7 +812,7 @@ function RegisterFlow({ onDone, onBack, onStart }) {
       <button style={primaryBtn(theme, avatarUploading)} disabled={avatarUploading} onClick={finishOnboarding}>
         {avatarUrl ? 'Continue' : 'Skip for now'}
       </button>
-      {cropFile && <AvatarCropper file={cropFile} onCancel={() => setCropFile(null)} onConfirm={uploadCroppedAvatar} />}
+      {cropFile && <PhotoCropEditor file={cropFile} isAvatar onCancel={() => setCropFile(null)} onConfirm={(blob) => uploadCroppedAvatar(blob)} />}
     </div>
   );
 }
@@ -849,7 +871,7 @@ function removeAccountEntry(id) {
 }
 
 
-/* Blank out a person's avatar if they've hidden it and we're not looking at ourselves â€” applied once
+/* Blank out a person's avatar if they've hidden it and we're not looking at ourselves -- applied once
    at the source so every screen (list rows, chat header, forward picker, discover, etc.) respects it. */
 function sanitizeAvatar(profile, myId) {
   if (!profile) return profile;
@@ -1004,7 +1026,7 @@ function ToggleSwitch({ on, onClick }) {
 }
 
 function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideActivity, onToggleActivity, onOpenAccounts, onOpenDelete, chatLockSet, chatLockHash, onSetChatLockPassword, onTurnOffChatLock, autoOpenLockSetup, onConsumedAutoOpen }) {
-  const { theme, dark, setDark, accentName, setAccentName, soundOn, setSoundOn, reactionSoundOn, setReactionSoundOn, bgPatternOn, setBgPatternOn, fontScale, setFontScale, chatTheme, setChatTheme } = useTheme();
+  const { theme, dark, setDark, accentName, setAccentName, soundOn, setSoundOn, reactionSoundOn, setReactionSoundOn, bgPatternOn, setBgPatternOn, fontScale, setFontScale, chatTheme, setChatTheme, bubbleColor, setBubbleColor } = useTheme();
   const accentLabels = { coral: 'Coral', ocean: 'Ocean', berry: 'Berry' };
   const [lockFlow, setLockFlow] = useState(null);
   const [section, setSection] = useState('main');
@@ -1064,6 +1086,7 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
             <CategoryRow icon={<UserPlus size={17} />} label="Account" sub="Follow requests, switch, delete" onClick={() => setSection('account')} />
             <div style={{ height: 4 }} />
             <SettingsRow icon={<LogOut size={16} />} label="Log out" danger onClick={onLogout} />
+            <div style={{ textAlign: 'center', fontSize: 10.5, color: theme.muted, marginTop: 18, fontWeight: 600 }}>ZChat v2.6</div>
           </>
         )}
 
@@ -1094,6 +1117,22 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
                     width: 30, height: 30, borderRadius: '50%', background: ACCENT_PALETTES[key].coral, cursor: 'pointer',
                     border: accentName === key ? `3px solid ${theme.ink}` : '3px solid transparent',
                   }} title={accentLabels[key]} />
+                ))}
+              </div>
+            </div>
+            <div style={{ padding: '10px 4px', borderBottom: `1px solid ${theme.border}` }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                <div style={{ width: 34, height: 34, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', background: `${theme.coral}1F`, color: theme.coralDeep }}><Sparkles size={16} /></div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: theme.ink }}>Bubble color</div>
+              </div>
+              <div style={{ display: 'flex', gap: 8, paddingLeft: 44, flexWrap: 'wrap' }}>
+                {Object.entries(BUBBLE_COLORS).map(([key, spec]) => (
+                  <div key={key} onClick={() => setBubbleColor(key)} title={spec.label} style={{
+                    width: 30, height: 30, borderRadius: '50%', cursor: 'pointer',
+                    background: spec.me || theme.bubbleMe,
+                    border: bubbleColor === key ? `3px solid ${theme.ink}` : `3px solid transparent`,
+                    boxShadow: `0 0 0 1px ${theme.border}`,
+                  }} />
                 ))}
               </div>
             </div>
@@ -1183,7 +1222,7 @@ function AccountSwitcherPanel({ accounts, currentId, switchingId, onBack, onSwit
               <Avatar emoji={a.avatar} name={a.name} size={40} />
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontWeight: 700, fontSize: 13.5, color: theme.ink }}>
-                  {a.name}{a.id === currentId && <span style={{ color: theme.coral, fontWeight: 700 }}> Â· Active</span>}
+                  {a.name}{a.id === currentId && <span style={{ color: theme.coral, fontWeight: 700 }}> Active</span>}
                 </div>
                 <div style={{ fontSize: 11.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.email}</div>
               </div>
@@ -1377,7 +1416,6 @@ function DiscoverPanel({ myId, blockedIds, onClose, onOpenProfile }) {
 }
 
 
-
 function IconDownload({ size = 15, color = 'currentColor' }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
@@ -1386,7 +1424,16 @@ function IconDownload({ size = 15, color = 'currentColor' }) {
   );
 }
 
-const EXTRA_EMOJIS = ['ðŸ˜€', 'ðŸ˜', 'ðŸ˜‚', 'ðŸ¤£', 'ðŸ˜Š', 'ðŸ˜', 'ðŸ˜˜', 'ðŸ˜œ', 'ðŸ¤”', 'ðŸ˜Ž', 'ðŸ˜´', 'ðŸ˜­', 'ðŸ˜¡', 'ðŸ¥³', 'ðŸ¤¯', 'ðŸ¥°', 'ðŸ˜‡', 'ðŸ™„', 'ðŸ˜¬', 'ðŸ¤—', 'ðŸ¤©', 'ðŸ˜', 'ðŸ˜¢', 'ðŸ˜±', 'ðŸ¤', 'ðŸ‘', 'ðŸ™', 'ðŸ’ª', 'ðŸ‘', 'ðŸ‘Ž', 'ðŸ‘Œ', 'âœŒï¸', 'ðŸ¤™', 'ðŸ‘‹', 'ðŸ’¯', 'ðŸ”¥', 'âœ¨', 'ðŸŽ‰', 'ðŸŽ‚', 'â¤ï¸', 'ðŸ§¡', 'ðŸ’›', 'ðŸ’š', 'ðŸ’™', 'ðŸ’œ', 'ðŸ–¤', 'ðŸ’”', 'ðŸ˜¢', 'ðŸ˜¤', 'ðŸ¤¡', 'ðŸ’€', 'ðŸ‘€', 'ðŸ™ˆ', 'ðŸ¶', 'ðŸ±'];
+const EXTRA_EMOJIS = ['\u{1F600}', '\u{1F601}', '\u{1F602}', '\u{1F923}', '\u{1F60A}', '\u{1F60D}', '\u{1F618}', '\u{1F61C}', '\u{1F914}', '\u{1F60E}', '\u{1F634}', '\u{1F62D}', '\u{1F621}', '\u{1F973}', '\u{1F92F}', '\u{1F970}', '\u{1F607}', '\u{1F644}', '\u{1F62C}', '\u{1F917}', '\u{1F929}', '\u{1F61D}', '\u{1F622}', '\u{1F631}', '\u{1F91D}', '\u{1F44D}', '\u{1F64F}', '\u{1F4AA}', '\u{1F44F}', '\u{1F44E}', '\u{1F44C}', '\u{270C}\u{FE0F}', '\u{1F919}', '\u{1F44B}', '\u{1F4AF}', '\u{1F525}', '\u{2728}', '\u{1F389}', '\u{1F382}', '\u{2764}\u{FE0F}', '\u{1F9E1}', '\u{1F49B}', '\u{1F49A}', '\u{1F499}', '\u{1F49C}', '\u{1F5A4}', '\u{1F494}', '\u{1F624}', '\u{1F921}', '\u{1F480}', '\u{1F440}', '\u{1F648}', '\u{1F436}', '\u{1F431}'];
+
+/* Wave / quick-sticker reactions for saying hi at a glance (item request: Discord-style big emoji stickers). */
+const WAVE_STICKERS = [
+  { key: 'wave', emoji: '\u{1F44B}', label: 'Wave' },
+  { key: 'hi', emoji: '\u{1F600}', label: 'Hi!' },
+  { key: 'heart-wave', emoji: '\u{1F60D}', label: 'Love it' },
+  { key: 'fire', emoji: '\u{1F525}', label: 'Fire' },
+  { key: 'party', emoji: '\u{1F389}', label: 'Party' },
+];
 
 function FullEmojiPicker({ onPick, onClose }) {
   const { theme } = useTheme();
@@ -1410,8 +1457,7 @@ function FullEmojiPicker({ onPick, onClose }) {
       </div>
     </div>
   );
-}
-
+          }
 function MessageContextMenu({ message, isMine, canEditText, canModerate, onClose, onReact, onReply, onCopy, onEdit, onForward, onReport, onDeleteForMe, onDeleteForEveryone, onSelectMultiple }) {
   const { theme } = useTheme();
   const [showFullEmoji, setShowFullEmoji] = useState(false);
@@ -1609,8 +1655,8 @@ function WallpaperPicker({ value, onSelect, onClose }) {
   );
 }
 
-/* Name Bar: a decorative banner shown behind the avatar+name in a DM header.
-   Each design is its own image file in /public — no sprite math needed. */
+/* Header style: a decorative banner shown behind the avatar+name in a DM header.
+   Each design is its own image file in /public. */
 const NAME_BAR_PRESETS = [
   { key: 'ice', label: 'Ice Wolf', file: '/name-bar-ice-wolf.png' },
   { key: 'eclipse', label: 'Eclipse Night', file: '/name-bar-eclipse-night.png' },
@@ -1692,11 +1738,11 @@ function PinPad({ value, onChange, length = 4 }) {
 
 function PinKeypad({ onDigit, onBackspace }) {
   const { theme } = useTheme();
-  const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', '⌫'];
+  const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', '\u232B'];
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
       {keys.map((k, i) => (
-        <div key={i} onClick={() => { if (k === '⌫') onBackspace(); else if (k) onDigit(k); }} style={{
+        <div key={i} onClick={() => { if (k === '\u232B') onBackspace(); else if (k) onDigit(k); }} style={{
           height: 50, borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: 18, fontWeight: 700, color: theme.ink, background: k ? theme.rowBg : 'transparent',
           cursor: k ? 'pointer' : 'default',
@@ -1937,12 +1983,20 @@ function ChatSettingsPanel({ conv, myId, meAvatar, meName, isPinned, isLocked, w
           </div>
           <div style={{ fontWeight: 800, fontSize: 14.5, color: theme.ink, marginTop: 7 }}>{otherName}</div>
           <div style={{ fontSize: 11.5, color: theme.muted }}>@{conv.otherProfile.username}</div>
-          {(infoBits.length > 0 || showBio) && (
-            <div style={{ fontSize: 11, color: theme.muted, marginTop: 4, padding: '0 20px', lineHeight: 1.4 }}>
-              {[infoBits.join(' · '), showBio ? p.bio : null].filter(Boolean).join(' — ')}
+          {infoBits.length > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+              {infoBits.map((bit, i) => (
+                <span key={i} style={{
+                  fontSize: 11, color: theme.ink, fontWeight: 600, background: theme.rowBg,
+                  padding: '3px 10px', borderRadius: 12,
+                }}>{bit}</span>
+              ))}
             </div>
           )}
-          <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 10 }}>
+          {showBio && (
+            <div style={{ fontSize: 12, color: theme.muted, marginTop: 8, padding: '0 24px', lineHeight: 1.5 }}>{p.bio}</div>
+          )}
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 12 }}>
             <div onClick={() => setListModal('followers')} style={{ flex: 1, maxWidth: 130, background: theme.rowBg, borderRadius: 14, padding: '8px 10px', cursor: 'pointer' }}>
               <div style={{ fontWeight: 800, fontSize: 14, color: theme.ink }}>{followerCount}</div>
               <div style={{ fontSize: 9.5, color: theme.muted, fontWeight: 600 }}>Followers</div>
@@ -2007,7 +2061,7 @@ function Pin_({ size = 16 }) {
 function GroupAvatar({ avatar, name, size = 44 }) {
   const { theme } = useTheme();
   if (avatar) {
-    return <img src={avatar} alt="" style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />;
+    return <img src={avatar} alt="" onContextMenu={(e) => e.preventDefault()} draggable={false} style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />;
   }
   return (
     <div style={{
@@ -2123,7 +2177,7 @@ function CreateGroupPanel({ myId, onClose, onCreated }) {
           <div style={{ textAlign: 'center', marginBottom: 20 }}>
             <div onClick={() => document.getElementById('group-avatar-input').click()} style={{ display: 'inline-block', cursor: 'pointer', position: 'relative' }}>
               {avatarPreview ? (
-                <img src={avatarPreview} alt="" style={{ width: 84, height: 84, borderRadius: '50%', objectFit: 'cover' }} />
+                <img src={avatarPreview} alt="" onContextMenu={(e) => e.preventDefault()} draggable={false} style={{ width: 84, height: 84, borderRadius: '50%', objectFit: 'cover' }} />
               ) : (
                 <div style={{ width: 84, height: 84, borderRadius: '50%', background: theme.coral, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <Camera size={28} color="white" />
@@ -2146,7 +2200,7 @@ function CreateGroupPanel({ myId, onClose, onCreated }) {
         </div>
       )}
       {cropFile && (
-        <AvatarCropper file={cropFile} onCancel={() => setCropFile(null)} onConfirm={(blob) => {
+        <PhotoCropEditor file={cropFile} isAvatar onCancel={() => setCropFile(null)} onConfirm={(blob) => {
           const file = new File([blob], 'group.jpg', { type: 'image/jpeg' });
           setAvatarFile(file);
           setAvatarPreview(URL.createObjectURL(blob));
@@ -2254,7 +2308,7 @@ function GroupInfoPanel({ group, members, myId, myRole, isOwner, onClose, onProm
                 </div>
                 <div style={{ fontSize: 10.5, color: theme.muted }}>
                   Added by {m.added_by === m.user_id ? 'themself' : (members.find((x) => x.user_id === m.added_by)?.profile.name || 'someone who left')}
-                  {' · '}{m.joined_at ? new Date(m.joined_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) + ' ' + new Date(m.joined_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : ''}
+                  {m.joined_at ? ` on ${new Date(m.joined_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })} at ${new Date(m.joined_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : ''}
                 </div>
               </div>
             </div>
@@ -2296,7 +2350,7 @@ function GroupInfoPanel({ group, members, myId, myRole, isOwner, onClose, onProm
         </span>
       </div>
       {cropFile && (
-        <AvatarCropper file={cropFile} onCancel={() => setCropFile(null)} onConfirm={(blob) => { onSaveAvatar(blob); setCropFile(null); }} />
+        <PhotoCropEditor file={cropFile} isAvatar onCancel={() => setCropFile(null)} onConfirm={(blob) => { onSaveAvatar(blob); setCropFile(null); }} />
       )}
       {showWallpaper && (
         <WallpaperPicker value={group.wallpaper} onSelect={onSetWallpaper} onClose={() => setShowWallpaper(false)} />
@@ -2441,16 +2495,21 @@ function AccountPrivacyPanel({ profile, onClose, onSaved }) {
 }
 
 
-
-function AvatarCropper({ file, onCancel, onConfirm }) {
+/* WhatsApp-style crop: a resizable frame with corner handles you drag on any side,
+   instead of a fixed frame + zoom slider. No backdrop blur anywhere in this component
+   (Android Chrome/WebView has a known bug where backdrop-filter blur can get stuck
+   frozen on screen) -- uses a plain solid dark overlay instead, which is reliable
+   on both platforms. Close button respects the safe-area inset so it's never hidden
+   under the iPhone notch/status bar. */
+function PhotoCropEditor({ file, isAvatar = false, onCancel, onConfirm }) {
   const { theme } = useTheme();
   const [imgEl, setImgEl] = useState(null);
-  const [zoom, setZoom] = useState(1);
-  const [pos, setPos] = useState({ x: 0, y: 0 });
+  const [caption, setCaption] = useState('');
   const [saving, setSaving] = useState(false);
+  const [rect, setRect] = useState(null);
+  const boxRef = useRef(null);
   const dragRef = useRef(null);
-  const wrapRef = useRef(null);
-  const C = 240;
+  const BOX = 320;
 
   useEffect(() => {
     const url = URL.createObjectURL(file);
@@ -2460,81 +2519,156 @@ function AvatarCropper({ file, onCancel, onConfirm }) {
     return () => URL.revokeObjectURL(url);
   }, [file]);
 
-  if (!imgEl) {
+  const boxW = BOX;
+  const boxH = imgEl ? Math.min(420, BOX * (imgEl.naturalHeight / imgEl.naturalWidth)) : BOX;
+  const displayScale = imgEl ? Math.min(boxW / imgEl.naturalWidth, boxH / imgEl.naturalHeight) : 1;
+  const drawnW = imgEl ? imgEl.naturalWidth * displayScale : boxW;
+  const drawnH = imgEl ? imgEl.naturalHeight * displayScale : boxH;
+  const offsetX = (boxW - drawnW) / 2;
+  const offsetY = (boxH - drawnH) / 2;
+
+  useEffect(() => {
+    if (!imgEl) return;
+    if (isAvatar) {
+      const side = Math.min(drawnW, drawnH) * 0.86;
+      setRect({ x: offsetX + (drawnW - side) / 2, y: offsetY + (drawnH - side) / 2, w: side, h: side });
+    } else {
+      const pad = 0.06;
+      setRect({ x: offsetX + drawnW * pad, y: offsetY + drawnH * pad, w: drawnW * (1 - pad * 2), h: drawnH * (1 - pad * 2) });
+    }
+  }, [imgEl]);
+
+  if (!imgEl || !rect) {
     return (
-      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 80 }}>
+      <div style={{ position: 'absolute', inset: 0, background: 'rgba(10,8,6,0.92)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 90 }}>
         <Spinner size={26} color="white" />
       </div>
     );
   }
 
-  const baseScale = Math.max(C / imgEl.naturalWidth, C / imgEl.naturalHeight);
-  const scale = baseScale * zoom;
-  const drawnW = imgEl.naturalWidth * scale;
-  const drawnH = imgEl.naturalHeight * scale;
-  const maxX = Math.max(0, (drawnW - C) / 2);
-  const maxY = Math.max(0, (drawnH - C) / 2);
-  const clampedX = Math.min(maxX, Math.max(-maxX, pos.x));
-  const clampedY = Math.min(maxY, Math.max(-maxY, pos.y));
-  const left = (C - drawnW) / 2 + clampedX;
-  const top = (C - drawnH) / 2 + clampedY;
+  const MIN_SIZE = 60;
+  const imgBounds = { left: offsetX, top: offsetY, right: offsetX + drawnW, bottom: offsetY + drawnH };
 
-  const startDrag = (clientX, clientY) => { dragRef.current = { startX: clientX, startY: clientY, origX: pos.x, origY: pos.y }; };
+  const clampRect = (r) => {
+    let { x, y, w, h } = r;
+    w = Math.max(MIN_SIZE, Math.min(w, imgBounds.right - imgBounds.left));
+    h = Math.max(MIN_SIZE, Math.min(h, imgBounds.bottom - imgBounds.top));
+    x = Math.max(imgBounds.left, Math.min(x, imgBounds.right - w));
+    y = Math.max(imgBounds.top, Math.min(y, imgBounds.bottom - h));
+    return { x, y, w, h };
+  };
+
+  const startDrag = (mode, clientX, clientY) => {
+    dragRef.current = { mode, startX: clientX, startY: clientY, orig: { ...rect } };
+  };
   const moveDrag = (clientX, clientY) => {
-    if (!dragRef.current) return;
+    if (!dragRef.current || !boxRef.current) return;
     const dx = clientX - dragRef.current.startX;
     const dy = clientY - dragRef.current.startY;
-    setPos({ x: dragRef.current.origX + dx, y: dragRef.current.origY + dy });
+    const o = dragRef.current.orig;
+    const { mode } = dragRef.current;
+    let next = { ...o };
+    if (mode === 'move') {
+      next = { x: o.x + dx, y: o.y + dy, w: o.w, h: o.h };
+    } else if (isAvatar) {
+      const delta = mode.includes('right') || mode.includes('bottom') ? Math.max(dx, dy) : -Math.max(-dx, -dy);
+      const side = Math.max(MIN_SIZE, o.w + delta);
+      if (mode === 'nw') next = { x: o.x + (o.w - side), y: o.y + (o.h - side), w: side, h: side };
+      else if (mode === 'ne') next = { x: o.x, y: o.y + (o.h - side), w: side, h: side };
+      else if (mode === 'sw') next = { x: o.x + (o.w - side), y: o.y, w: side, h: side };
+      else next = { x: o.x, y: o.y, w: side, h: side };
+    } else {
+      if (mode.includes('n')) { next.y = o.y + dy; next.h = o.h - dy; }
+      if (mode.includes('s')) { next.h = o.h + dy; }
+      if (mode.includes('w')) { next.x = o.x + dx; next.w = o.w - dx; }
+      if (mode.includes('e')) { next.w = o.w + dx; }
+    }
+    setRect(clampRect(next));
   };
   const endDrag = () => { dragRef.current = null; };
 
   const confirm = () => {
     setSaving(true);
-    const O = 480;
-    const k = O / C;
+    const outSize = isAvatar ? 480 : 1080;
+    const cropXOnImg = (rect.x - offsetX) / displayScale;
+    const cropYOnImg = (rect.y - offsetY) / displayScale;
+    const cropWOnImg = rect.w / displayScale;
+    const cropHOnImg = rect.h / displayScale;
     const canvas = document.createElement('canvas');
-    canvas.width = O; canvas.height = O;
+    const outW = isAvatar ? outSize : outSize;
+    const outH = isAvatar ? outSize : Math.round(outSize * (cropHOnImg / cropWOnImg));
+    canvas.width = outW; canvas.height = outH;
     const ctx = canvas.getContext('2d');
-    ctx.drawImage(imgEl, 0, 0, imgEl.naturalWidth, imgEl.naturalHeight, left * k, top * k, drawnW * k, drawnH * k);
-    canvas.toBlob((blob) => { setSaving(false); if (blob) onConfirm(blob); }, 'image/jpeg', 0.92);
+    ctx.drawImage(imgEl, cropXOnImg, cropYOnImg, cropWOnImg, cropHOnImg, 0, 0, outW, outH);
+    canvas.toBlob((blob) => { setSaving(false); if (blob) onConfirm(blob, caption.trim()); }, 'image/jpeg', isAvatar ? 0.92 : 0.9);
   };
 
+  const Handle = ({ mode, style }) => (
+    <div
+      onMouseDown={(e) => { e.stopPropagation(); startDrag(mode, e.clientX, e.clientY); }}
+      onTouchStart={(e) => { e.stopPropagation(); startDrag(mode, e.touches[0].clientX, e.touches[0].clientY); }}
+      style={{
+        position: 'absolute', width: 22, height: 22, borderRadius: isAvatar ? '50%' : 6,
+        background: 'white', border: `3px solid ${theme.coral}`, ...style, touchAction: 'none',
+      }}
+    />
+  );
+
   return (
-    <div style={{
-      position: 'absolute', inset: 0, background: 'rgba(10,8,6,0.7)', backdropFilter: 'blur(4px)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 80, padding: 20,
-    }} className="zchat-fade">
-      <div style={{ background: theme.panelBg, borderRadius: 24, padding: 24, width: '100%', maxWidth: 320, textAlign: 'center' }}>
-        <div style={{ fontWeight: 800, fontSize: 16, color: theme.ink, marginBottom: 16 }}>Adjust your photo</div>
+    <div
+      style={{
+        position: 'absolute', inset: 0, background: 'rgba(10,8,6,0.92)', display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center', zIndex: 90, padding: 20,
+        paddingTop: 'calc(20px + env(safe-area-inset-top))',
+      }}
+      className="zchat-fade"
+      onMouseMove={(e) => moveDrag(e.clientX, e.clientY)} onMouseUp={endDrag} onMouseLeave={endDrag}
+      onTouchMove={(e) => moveDrag(e.touches[0].clientX, e.touches[0].clientY)} onTouchEnd={endDrag}
+    >
+      <div onClick={onCancel} style={{
+        position: 'absolute', top: 'calc(16px + env(safe-area-inset-top))', left: 16, width: 34, height: 34, borderRadius: '50%',
+        background: 'rgba(255,255,255,0.14)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 2,
+      }}><X size={18} color="white" /></div>
+      <div style={{ fontWeight: 800, fontSize: 15, color: 'white', marginBottom: 14 }}>{isAvatar ? 'Adjust your photo' : 'Edit photo'}</div>
+      <div ref={boxRef} style={{ width: boxW, height: boxH, position: 'relative', marginBottom: 16, touchAction: 'none' }}>
+        <img src={imgEl.src} alt="" draggable={false} onContextMenu={(e) => e.preventDefault()} style={{
+          position: 'absolute', left: offsetX, top: offsetY, width: drawnW, height: drawnH, userSelect: 'none', pointerEvents: 'none',
+        }} />
+        <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.55)', clipPath: `polygon(0 0, 0 100%, ${rect.x}px 100%, ${rect.x}px ${rect.y}px, ${rect.x + rect.w}px ${rect.y}px, ${rect.x + rect.w}px ${rect.y + rect.h}px, ${rect.x}px ${rect.y + rect.h}px, ${rect.x}px 100%, 100% 100%, 100% 0)` }} />
         <div
-          ref={wrapRef}
+          onMouseDown={(e) => startDrag('move', e.clientX, e.clientY)}
+          onTouchStart={(e) => startDrag('move', e.touches[0].clientX, e.touches[0].clientY)}
           style={{
-            width: C, height: C, borderRadius: '50%', overflow: 'hidden', margin: '0 auto 16px',
-            position: 'relative', touchAction: 'none', cursor: 'grab', border: `3px solid ${theme.coral}`,
+            position: 'absolute', left: rect.x, top: rect.y, width: rect.w, height: rect.h,
+            border: `2px solid ${theme.coral}`, borderRadius: isAvatar ? '50%' : 4, cursor: 'move', touchAction: 'none',
           }}
-          onMouseDown={(e) => startDrag(e.clientX, e.clientY)}
-          onMouseMove={(e) => e.buttons === 1 && moveDrag(e.clientX, e.clientY)}
-          onMouseUp={endDrag}
-          onMouseLeave={endDrag}
-          onTouchStart={(e) => startDrag(e.touches[0].clientX, e.touches[0].clientY)}
-          onTouchMove={(e) => moveDrag(e.touches[0].clientX, e.touches[0].clientY)}
-          onTouchEnd={endDrag}
-        >
-          <img src={imgEl.src} alt="" draggable={false} style={{
-            position: 'absolute', left, top, width: drawnW, height: drawnH, userSelect: 'none', pointerEvents: 'none',
-          }} />
-        </div>
-        <input type="range" min="1" max="3" step="0.01" value={zoom} onChange={(e) => setZoom(parseFloat(e.target.value))}
-          style={{ width: '100%', accentColor: theme.coral, marginBottom: 18 }} />
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={onCancel} style={{
-            flex: 1, padding: 12, borderRadius: 13, border: `1.5px solid ${theme.border}`,
-            background: 'transparent', color: theme.ink, fontWeight: 700, fontSize: 13.5, cursor: 'pointer', fontFamily: FONT,
-          }}>Cancel</button>
-          <button onClick={confirm} disabled={saving} style={{ ...primaryBtn(theme, saving), marginTop: 0, flex: 1 }}>
-            {saving ? <Spinner size={14} /> : 'Use photo'}
-          </button>
-        </div>
+        />
+        <Handle mode="nw" style={{ left: rect.x - 11, top: rect.y - 11, cursor: 'nwse-resize' }} />
+        <Handle mode="ne" style={{ left: rect.x + rect.w - 11, top: rect.y - 11, cursor: 'nesw-resize' }} />
+        <Handle mode="sw" style={{ left: rect.x - 11, top: rect.y + rect.h - 11, cursor: 'nesw-resize' }} />
+        <Handle mode="se" style={{ left: rect.x + rect.w - 11, top: rect.y + rect.h - 11, cursor: 'nwse-resize' }} />
+        {!isAvatar && (
+          <>
+            <Handle mode="n" style={{ left: rect.x + rect.w / 2 - 11, top: rect.y - 11, cursor: 'ns-resize' }} />
+            <Handle mode="s" style={{ left: rect.x + rect.w / 2 - 11, top: rect.y + rect.h - 11, cursor: 'ns-resize' }} />
+            <Handle mode="w" style={{ left: rect.x - 11, top: rect.y + rect.h / 2 - 11, cursor: 'ew-resize' }} />
+            <Handle mode="e" style={{ left: rect.x + rect.w - 11, top: rect.y + rect.h / 2 - 11, cursor: 'ew-resize' }} />
+          </>
+        )}
+      </div>
+      {!isAvatar && (
+        <input value={caption} onChange={(e) => setCaption(e.target.value.slice(0, 1000))} placeholder="Add a caption..."
+          style={{ width: boxW, padding: '10px 14px', borderRadius: 20, border: '1px solid rgba(255,255,255,0.3)', background: 'rgba(255,255,255,0.1)', color: 'white', fontFamily: FONT, fontSize: 14, outline: 'none', marginBottom: 14, boxSizing: 'border-box' }} />
+      )}
+      <div style={{ display: 'flex', gap: 10, width: boxW }}>
+        <button onClick={onCancel} style={{
+          flex: 1, padding: 12, borderRadius: 13, border: '1.5px solid rgba(255,255,255,0.3)',
+          background: 'transparent', color: 'white', fontWeight: 700, fontSize: 13.5, cursor: 'pointer', fontFamily: FONT,
+        }}>Cancel</button>
+        <button onClick={confirm} disabled={saving} style={{
+          flex: 1, padding: 12, borderRadius: 13, border: 'none', background: theme.coral, color: 'white',
+          fontWeight: 700, fontSize: 13.5, cursor: 'pointer', fontFamily: FONT,
+        }}>{saving ? <Spinner size={14} /> : (isAvatar ? 'Use photo' : 'Done')}</button>
       </div>
     </div>
   );
@@ -2779,7 +2913,6 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
               </button>
             </div>
           )}
-
           {editing ? (
             <div style={{ marginTop: 22, textAlign: 'left' }}>
               <div style={{ fontSize: 11.5, color: theme.muted, marginBottom: 5, fontWeight: 800, letterSpacing: '0.04em' }}>USERNAME</div>
@@ -2842,10 +2975,10 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
                 </div>
               </div>
               {(profile.gender || profile.age != null || profile.country || profile.bio) && (
-                <div style={{ display: 'flex', justifyContent: 'center', gap: 14, marginTop: 10, fontSize: 11.5, color: theme.muted, flexWrap: 'wrap' }}>
-                  {profile.gender && (isSelf || !profile.hide_gender) && <span>{profile.gender}</span>}
-                  {profile.age != null && (isSelf || !profile.hide_age) && <span>{profile.age} yrs</span>}
-                  {profile.country && (isSelf || !profile.hide_country) && <span style={{ fontSize: 14 }}>{countryFlag(profile.country)}</span>}
+                <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
+                  {profile.gender && (isSelf || !profile.hide_gender) && <span style={{ fontSize: 11, color: theme.ink, fontWeight: 600, background: theme.rowBg, padding: '3px 10px', borderRadius: 12 }}>{profile.gender}</span>}
+                  {profile.age != null && (isSelf || !profile.hide_age) && <span style={{ fontSize: 11, color: theme.ink, fontWeight: 600, background: theme.rowBg, padding: '3px 10px', borderRadius: 12 }}>{profile.age} yrs</span>}
+                  {profile.country && (isSelf || !profile.hide_country) && <span style={{ fontSize: 14, background: theme.rowBg, padding: '3px 10px', borderRadius: 12 }}>{countryFlag(profile.country)}</span>}
                 </div>
               )}
               {profile.bio && (isSelf || !profile.hide_bio) && (
@@ -2936,7 +3069,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
         </div>
       </div>
       </div>
-      {cropFile && <AvatarCropper file={cropFile} onCancel={() => setCropFile(null)} onConfirm={uploadCropped} />}
+      {cropFile && <PhotoCropEditor file={cropFile} isAvatar onCancel={() => setCropFile(null)} onConfirm={uploadCropped} />}
       {listModal && (
         <FollowListModal userId={profile.id} viewerId={userId} mode={listModal} onClose={() => setListModal(null)}
           onOpenProfile={(p) => { setListModal(null); onOpenProfile(p); }} />
@@ -2959,7 +3092,7 @@ function StatusTicks({ status }) {
   return <CheckCheck size={14} color={theme.muted} />;
 }
 
-const REACTION_EMOJIS = ['❤️', '😂', '😮', '😢', '👍', '🔥'];
+const REACTION_EMOJIS = ['\u{2764}\u{FE0F}', '\u{1F602}', '\u{1F62E}', '\u{1F622}', '\u{1F44D}', '\u{1F525}'];
 
 const LINK_REGEX = /((?:https?:\/\/|www\.)[^\s<]+[^\s<.,:;!?'")\]]|[\w.+-]+@[\w-]+\.[\w.-]+)/gi;
 function linkifyText(text) {
@@ -3023,15 +3156,41 @@ function AudioBubble({ url, isMe }) {
         </div>
         <div style={{ fontSize: 10, color: theme.muted, marginTop: 3 }}>{fmt(playing || progress ? progress : duration)}</div>
       </div>
-      <a href={url} download onClick={(e) => e.stopPropagation()} style={{ color: theme.muted, flexShrink: 0 }}>
+      <div onClick={(e) => { e.stopPropagation(); silentDownload(url, 'zchat-voice.webm'); }} style={{ color: theme.muted, flexShrink: 0, cursor: 'pointer', display: 'flex' }}>
         <Download size={14} />
-      </a>
+      </div>
     </div>
   );
 }
 
+/* Downloads a file directly via blob, without ever navigating to or exposing
+   the site's own URL structure in a visible link/tab -- addresses the request
+   to keep the download silent and not reveal what site/app served the file. */
+async function silentDownload(url, filename) {
+  try {
+    const res = await fetch(url);
+    const blob = await res.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 4000);
+  } catch {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.target = '_blank';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+}
+
 function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSelect, onLongPress, onOpenImage, onOpenVideo, reactions, onReact, onOpenWhoReacted, replyPreview, onSwipeReply, senderLabel, senderAvatar, hideReadStatus, onOpenSenderProfile, canModerate }) {
-  const { theme, fontScale, chatTheme } = useTheme();
+  const { theme, fontScale, chatTheme, bubbleColor } = useTheme();
   const [hover, setHover] = useState(false);
   const [burstHeart, setBurstHeart] = useState(false);
   const lastTapRef = useRef(0);
@@ -3040,8 +3199,9 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
   const startPosRef = useRef({ x: 0, y: 0 });
   const [dragX, setDragX] = useState(0);
   const draggingRef = useRef(false);
-  const swipeFiredRef = useRef(false);
+  const swipedPastThresholdRef = useRef(false);
   const time = m.created_at ? new Date(m.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
+  const bubbleColorSpec = BUBBLE_COLORS[bubbleColor] || BUBBLE_COLORS.default;
 
   if (m.type === 'system') {
     return (
@@ -3057,12 +3217,15 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
   (reactions || []).forEach((r) => { grouped[r.emoji] = (grouped[r.emoji] || 0) + 1; });
   const groupedEntries = Object.entries(grouped);
 
-  const handleTap = () => {
+  /* The whole row is one tap target now (item request: entire message line should
+     work for select/react, not just the bubble itself) -- this handler lives on the
+     outer row div rather than just the inner bubble div. */
+  const handleRowTap = (e) => {
     if (longPressFiredRef.current) { longPressFiredRef.current = false; return; }
     if (selectionMode) { onToggleSelect(m.id); return; }
     const now = Date.now();
     if (now - lastTapRef.current < 350) {
-      onReact(m.id, '❤️');
+      onReact(m.id, '\u2764\u{FE0F}');
       setBurstHeart(true);
       setTimeout(() => setBurstHeart(false), 650);
     } else if (m.type === 'image') {
@@ -3078,7 +3241,7 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
   const handlePointerDown = (e) => {
     setHover(true);
     startPosRef.current = { x: e.clientX, y: e.clientY };
-    swipeFiredRef.current = false;
+    swipedPastThresholdRef.current = false;
     clearTimeout(pressTimerRef.current);
     pressTimerRef.current = setTimeout(() => {
       longPressFiredRef.current = true;
@@ -3091,31 +3254,38 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
     if (Math.abs(dx) > 8 || Math.abs(dy) > 8) clearPressTimer();
     if (!m.deleted && !selectionMode && Math.abs(dx) > Math.abs(dy) && dx > 0) {
       draggingRef.current = true;
-      const clamped = Math.min(dx, 50);
+      const clamped = Math.min(dx, 60);
       setDragX(clamped);
-      if (clamped >= 32 && !swipeFiredRef.current) {
-        swipeFiredRef.current = true;
-        onSwipeReply(m);
-        setTimeout(() => { setDragX(0); draggingRef.current = false; }, 150);
-      }
+      swipedPastThresholdRef.current = clamped >= 40;
     }
   };
+  /* Fire the reply only on release (matches WhatsApp -- the icon fills in as you drag,
+     but the actual reply/keyboard-focus action only happens once you lift your finger,
+     so dragging back and forth doesn't repeatedly trigger anything). The composer focus
+     call happens synchronously in this same pointerup handler (a real user gesture),
+     which is required for iOS Safari to actually open the keyboard -- a focus() call
+     made inside a setTimeout loses that gesture context and iOS silently ignores it. */
   const finalizeDrag = () => {
     clearPressTimer();
-    if (draggingRef.current && !swipeFiredRef.current) {
+    if (draggingRef.current) {
+      const shouldFire = swipedPastThresholdRef.current;
       draggingRef.current = false;
       setDragX(0);
+      if (shouldFire) onSwipeReply(m);
     }
   };
+
+  const bubbleBg = m.deleted ? theme.rowBg : (isMe ? (bubbleColorSpec.me || theme.bubbleMe) : (bubbleColorSpec.them || theme.bubbleThem));
 
   return (
     <div
       style={{
         display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start', alignItems: 'flex-start', gap: 8, marginBottom: 14,
-        touchAction: 'pan-y', WebkitTapHighlightColor: 'transparent', overscrollBehaviorX: 'none',
+        touchAction: 'pan-y', WebkitTapHighlightColor: 'transparent', overscrollBehaviorX: 'none', cursor: 'pointer',
         background: selected ? `${theme.coral}14` : 'transparent',
         marginLeft: -18, marginRight: -18, paddingLeft: 18, paddingRight: 18, paddingTop: 2, paddingBottom: 2,
       }}
+      onClick={handleRowTap}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={finalizeDrag}
@@ -3123,7 +3293,7 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
       onPointerLeave={finalizeDrag}
     >
       {selectionMode && (
-        <div onClick={() => onToggleSelect(m.id)} style={{
+        <div style={{
           width: 20, height: 20, borderRadius: '50%', border: `2px solid ${selected ? theme.coral : theme.border}`,
           background: selected ? theme.coral : 'transparent', flexShrink: 0, cursor: 'pointer',
           display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: 2,
@@ -3133,10 +3303,10 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
       )}
       {isMe && !m.deleted && !selectionMode && (
         <Trash2 size={14} color={theme.muted} style={{ cursor: 'pointer', flexShrink: 0, opacity: hover ? 1 : 0.35, transition: 'opacity 0.15s', marginTop: 4 }}
-          onClick={() => onDelete(m.id)} />
+          onClick={(e) => { e.stopPropagation(); onDelete(m.id); }} />
       )}
       {senderLabel && !m.deleted && (
-        <div onClick={onOpenSenderProfile} style={{ cursor: onOpenSenderProfile ? 'pointer' : 'default', flexShrink: 0 }}>
+        <div onClick={(e) => { e.stopPropagation(); onOpenSenderProfile && onOpenSenderProfile(); }} style={{ cursor: onOpenSenderProfile ? 'pointer' : 'default', flexShrink: 0 }}>
           <Avatar emoji={senderAvatar} name={senderLabel} size={26} />
         </div>
       )}
@@ -3144,32 +3314,24 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
         {!selectionMode && !m.deleted && (
           <div style={{
             position: 'absolute', top: 10, left: -30, transform: 'translateY(-50%)',
-            opacity: Math.min(1, dragX / 32), pointerEvents: 'none',
+            opacity: Math.min(1, dragX / 40), pointerEvents: 'none',
           }}>
             <Reply size={16} color={theme.coral} />
           </div>
         )}
         <div style={{ transform: `translateX(${dragX}px)`, transition: draggingRef.current ? 'none' : 'transform 0.2s ease' }}>
-        {!selectionMode && !m.deleted && (
-          <div onClick={() => onSwipeReply(m)} style={{
-            position: 'absolute', top: 6, [isMe ? 'left' : 'right']: -26, cursor: 'pointer', opacity: hover ? 1 : 0, transition: 'opacity 0.15s',
-          }}>
-            <Reply size={13} color={theme.muted} />
-          </div>
-        )}
-        <div onClick={handleTap} style={glass(theme, {
-          background: m.deleted ? theme.rowBg : (isMe ? theme.bubbleMe : theme.bubbleThem),
+        <div style={glass(theme, {
+          background: bubbleBg,
           borderRadius: 19,
           borderBottomRightRadius: isMe && !m.deleted ? 5 : 19,
           borderBottomLeftRadius: !isMe && !m.deleted ? 5 : 19,
           padding: m.type === 'text' || m.deleted ? '6px 11px' : 4,
           border: m.deleted ? `1px dashed ${theme.border}` : `1px solid ${theme.dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)'}`,
           boxShadow: m.deleted ? 'none' : '0 1px 2px rgba(0,0,0,0.06)',
-          cursor: 'pointer',
           ...(m.deleted ? {} : bubbleThemeStyle(chatTheme, isMe, theme)),
         })}>
           {senderLabel && !m.deleted && (
-            <div onClick={(e) => { e.stopPropagation(); onOpenSenderProfile && onOpenSenderProfile(); }} style={{ fontSize: 11.5, fontWeight: 700, color: theme.coralDeep, marginBottom: 3, padding: m.type !== 'text' ? '0 4px' : 0, cursor: onOpenSenderProfile ? 'pointer' : 'default', display: 'inline-block' }}>
+            <div style={{ fontSize: 11.5, fontWeight: 700, color: theme.coralDeep, marginBottom: 3, padding: m.type !== 'text' ? '0 4px' : 0 }}>
               {senderLabel}
             </div>
           )}
@@ -3188,7 +3350,7 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
             }}>
               <div style={{ fontWeight: 700, color: theme.coralDeep, fontSize: 10.5 }}>{replyPreview.senderLabel}</div>
               <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {replyPreview.type === 'text' ? replyPreview.content : replyPreview.type === 'image' ? '📷 Photo' : replyPreview.type === 'audio' ? '🎤 Voice message' : '🎥 Video'}
+                {replyPreview.type === 'text' ? replyPreview.content : replyPreview.type === 'image' ? 'Photo' : replyPreview.type === 'audio' ? 'Voice message' : 'Video'}
               </div>
             </div>
           )}
@@ -3198,16 +3360,16 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
             <>
               {m.type === 'image' && (
                 <div style={{ position: 'relative', width: 220, height: 220, borderRadius: 14, overflow: 'hidden', marginBottom: m.content ? 4 : 2 }}>
-                  <img src={m.media_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-                  <a href={m.media_url} download onClick={(e) => e.stopPropagation()} style={{
+                  <img src={m.media_url} alt="" onContextMenu={(e) => e.preventDefault()} draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                  <div onClick={(e) => { e.stopPropagation(); silentDownload(m.media_url, 'zchat-photo.jpg'); }} style={{
                     position: 'absolute', top: 6, right: 6, width: 26, height: 26, borderRadius: '50%',
-                    background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  }}><Download size={13} color="white" /></a>
+                    background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+                  }}><Download size={13} color="white" /></div>
                 </div>
               )}
               {m.type === 'video' && (
                 <div onClick={(e) => { e.stopPropagation(); onOpenVideo({ url: m.media_url, trimStart: m.trim_start, trimEnd: m.trim_end }); }} style={{ position: 'relative', width: 220, height: 220, borderRadius: 14, overflow: 'hidden', marginBottom: m.content ? 4 : 2, background: '#000', cursor: 'pointer' }}>
-                  <video src={m.media_url} preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none' }} />
+                  <video src={m.media_url} preload="metadata" onContextMenu={(e) => e.preventDefault()} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none' }} />
                   <div style={{
                     position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none',
                     background: 'rgba(0,0,0,0.18)',
@@ -3216,14 +3378,17 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
                       <Play size={20} color="white" style={{ marginLeft: 2 }} />
                     </div>
                   </div>
-                  <a href={m.media_url} download onClick={(e) => e.stopPropagation()} style={{
+                  <div onClick={(e) => { e.stopPropagation(); silentDownload(m.media_url, 'zchat-video.mp4'); }} style={{
                     position: 'absolute', top: 6, right: 6, width: 26, height: 26, borderRadius: '50%',
-                    background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  }}><Download size={13} color="white" /></a>
+                    background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+                  }}><Download size={13} color="white" /></div>
                 </div>
               )}
               {m.type === 'audio' && <AudioBubble url={m.media_url} isMe={isMe} />}
-              {m.content && <div style={{ fontSize: 15 * fontScale, color: theme.ink, padding: m.type !== 'text' ? '0 4px' : 0, wordBreak: 'break-word', lineHeight: 1.32 }}>{linkifyText(m.content)}</div>}
+              {m.type === 'sticker' && (
+                <div className="zchat-wave-pop" style={{ fontSize: 64, lineHeight: 1, padding: '4px 10px' }}>{m.content}</div>
+              )}
+              {m.type === 'text' && m.content && <div style={{ fontSize: 15 * fontScale, color: theme.ink, wordBreak: 'break-word', lineHeight: 1.32 }}>{linkifyText(m.content)}</div>}
             </>
           )}
         </div>
@@ -3238,10 +3403,10 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
           </div>
         )}
         {groupedEntries.length > 0 && !m.deleted && (
-          <div onClick={() => onOpenWhoReacted(m.id)} style={{
-            position: 'absolute', bottom: 14, [isMe ? 'left' : 'right']: 6, cursor: 'pointer',
+          <div onClick={(e) => { e.stopPropagation(); onOpenWhoReacted(m.id); }} style={{
+            position: 'absolute', bottom: -10, [isMe ? 'left' : 'right']: 6, cursor: 'pointer',
             background: theme.panelBg, borderRadius: 10, padding: '1px 6px', fontSize: 10.5,
-            display: 'flex', alignItems: 'center', gap: 3, boxShadow: '0 1px 4px rgba(0,0,0,0.15)',
+            display: 'flex', alignItems: 'center', gap: 3, boxShadow: '0 1px 4px rgba(0,0,0,0.15)', zIndex: 1,
           }}>
             {groupedEntries.map(([emoji, count]) => <span key={emoji}>{emoji}{count > 1 ? count : ''}</span>)}
           </div>
@@ -3250,7 +3415,7 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
           <div style={{
             position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontSize: 44, pointerEvents: 'none', animation: 'zchat-heart-burst 0.6s ease',
-          }}>❤️</div>
+          }}>{'\u2764\u{FE0F}'}</div>
         )}
         </div>
       </div>
@@ -3291,39 +3456,29 @@ function pairKey(a, b) { return a < b ? [a, b] : [b, a]; }
 
 function ImageViewer({ url, onClose, onForward, onReport }) {
   const [menuOpen, setMenuOpen] = useState(false);
-  const save = () => {
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'zchat-photo.jpg';
-    a.target = '_blank';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setMenuOpen(false);
-  };
   return (
     <div style={{
       position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.94)', zIndex: 200,
       display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
     }} className="zchat-fade">
       <div onClick={onClose} style={{
-        position: 'absolute', top: 18, left: 18, width: 36, height: 36, borderRadius: '50%',
+        position: 'absolute', top: 'calc(18px + env(safe-area-inset-top))', left: 18, width: 36, height: 36, borderRadius: '50%',
         background: 'rgba(255,255,255,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 2,
       }}><X size={18} color="white" /></div>
-      <div style={{ position: 'absolute', top: 18, right: 18, zIndex: 2 }}>
+      <div style={{ position: 'absolute', top: 'calc(18px + env(safe-area-inset-top))', right: 18, zIndex: 2 }}>
         <div onClick={() => setMenuOpen((s) => !s)} style={{
           width: 36, height: 36, borderRadius: '50%', background: 'rgba(255,255,255,0.12)',
           display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
         }}><MoreVertical size={18} color="white" /></div>
         {menuOpen && (
           <div style={{ position: 'absolute', top: 44, right: 0, background: 'white', borderRadius: 14, overflow: 'hidden', width: 180, boxShadow: '0 10px 30px rgba(0,0,0,0.3)' }}>
-            <div onClick={save} style={{ padding: '12px 16px', fontSize: 13.5, fontWeight: 600, color: '#1B1B1F', cursor: 'pointer', borderBottom: '1px solid rgba(0,0,0,0.06)' }}>Save to gallery</div>
+            <div onClick={() => { silentDownload(url, 'zchat-photo.jpg'); setMenuOpen(false); }} style={{ padding: '12px 16px', fontSize: 13.5, fontWeight: 600, color: '#1B1B1F', cursor: 'pointer', borderBottom: '1px solid rgba(0,0,0,0.06)' }}>Save to gallery</div>
             <div onClick={() => { setMenuOpen(false); onForward(); }} style={{ padding: '12px 16px', fontSize: 13.5, fontWeight: 600, color: '#1B1B1F', cursor: 'pointer', borderBottom: '1px solid rgba(0,0,0,0.06)' }}>Forward</div>
             <div onClick={() => { setMenuOpen(false); onReport(); }} style={{ padding: '12px 16px', fontSize: 13.5, fontWeight: 600, color: '#FF4D5E', cursor: 'pointer' }}>Report</div>
           </div>
         )}
       </div>
-      <img src={url} alt="" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: 8 }} />
+      <img src={url} alt="" onContextMenu={(e) => e.preventDefault()} draggable={false} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: 8 }} />
     </div>
   );
 }
@@ -3331,15 +3486,6 @@ function ImageViewer({ url, onClose, onForward, onReport }) {
 function VideoViewer({ url, trimStart, trimEnd, onClose, onForward }) {
   const videoRef = useRef(null);
   const seekedRef = useRef(false);
-  const save = () => {
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'zchat-video.mp4';
-    a.target = '_blank';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  };
   const onLoadedMetadata = (e) => {
     if (trimStart && !seekedRef.current) { e.target.currentTime = trimStart; seekedRef.current = true; }
   };
@@ -3355,11 +3501,11 @@ function VideoViewer({ url, trimStart, trimEnd, onClose, onForward }) {
       display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
     }} className="zchat-fade">
       <div onClick={onClose} style={{
-        position: 'absolute', top: 18, left: 18, width: 36, height: 36, borderRadius: '50%',
+        position: 'absolute', top: 'calc(18px + env(safe-area-inset-top))', left: 18, width: 36, height: 36, borderRadius: '50%',
         background: 'rgba(255,255,255,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 2,
       }}><X size={18} color="white" /></div>
-      <div style={{ position: 'absolute', top: 18, right: 18, display: 'flex', gap: 10, zIndex: 2 }}>
-        <div onClick={save} style={{
+      <div style={{ position: 'absolute', top: 'calc(18px + env(safe-area-inset-top))', right: 18, display: 'flex', gap: 10, zIndex: 2 }}>
+        <div onClick={() => silentDownload(url, 'zchat-video.mp4')} style={{
           width: 36, height: 36, borderRadius: '50%', background: 'rgba(255,255,255,0.12)',
           display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
         }}><Download size={17} color="white" /></div>
@@ -3368,7 +3514,7 @@ function VideoViewer({ url, trimStart, trimEnd, onClose, onForward }) {
           display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
         }}><Forward size={17} color="white" /></div>
       </div>
-      <video ref={videoRef} src={url} controls autoPlay playsInline onLoadedMetadata={onLoadedMetadata} onTimeUpdate={onTimeUpdate}
+      <video ref={videoRef} src={url} controls autoPlay playsInline onContextMenu={(e) => e.preventDefault()} onLoadedMetadata={onLoadedMetadata} onTimeUpdate={onTimeUpdate}
         style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
     </div>
   );
@@ -3489,7 +3635,7 @@ function DeleteChatConfirm({ name, onCancel, onConfirm }) {
       <div style={{ background: theme.panelBg, borderRadius: 20, padding: '24px 22px', width: '100%', maxWidth: 280, textAlign: 'center' }}>
         <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 6, color: theme.ink }}>Delete this chat?</div>
         <div style={{ fontSize: 12.5, marginBottom: 20, lineHeight: 1.5, color: theme.muted }}>
-          Your conversation with {name} will be removed from your list.
+          Your conversation with {name} will be cleared from your list. If they message you again, it'll start fresh.
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={onCancel} style={{
@@ -3506,7 +3652,133 @@ function DeleteChatConfirm({ name, onCancel, onConfirm }) {
   );
 }
 
-const PREFETCH_ASSET_VERSION = 'v1';
+function DeleteMessageConfirm({ onCancel, onConfirm }) {
+  const { theme } = useTheme();
+  return (
+    <div style={{
+      position: 'absolute', inset: 0, background: 'rgba(10,8,6,0.45)', backdropFilter: 'blur(3px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 92, padding: 24,
+    }} className="zchat-fade">
+      <div style={{ background: theme.panelBg, borderRadius: 20, padding: '24px 22px', width: '100%', maxWidth: 280, textAlign: 'center' }}>
+        <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 6, color: theme.ink }}>Delete this message?</div>
+        <div style={{ fontSize: 12.5, marginBottom: 20, lineHeight: 1.5, color: theme.muted }}>
+          This can't be undone.
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={onCancel} style={{
+            flex: 1, padding: 11, borderRadius: 13, border: `1.5px solid ${theme.border}`,
+            background: 'transparent', color: theme.ink, fontWeight: 700, fontSize: 13.5, cursor: 'pointer', fontFamily: FONT,
+          }}>Cancel</button>
+          <button onClick={onConfirm} style={{
+            flex: 1, padding: 11, borderRadius: 13, border: 'none', background: theme.danger,
+            color: 'white', fontWeight: 700, fontSize: 13.5, cursor: 'pointer', fontFamily: FONT,
+          }}>Delete</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function VideoTrimEditor({ file, onCancel, onConfirm }) {
+  const { theme } = useTheme();
+  const [url, setUrl] = useState(null);
+  const [duration, setDuration] = useState(0);
+  const [start, setStart] = useState(0);
+  const [end, setEnd] = useState(0);
+  const [caption, setCaption] = useState('');
+  const [dragging, setDragging] = useState(null);
+  const barRef = useRef(null);
+
+  useEffect(() => {
+    const u = URL.createObjectURL(file);
+    setUrl(u);
+    return () => URL.revokeObjectURL(u);
+  }, [file]);
+
+  const onLoadedMetadata = (e) => {
+    const d = e.target.duration;
+    setDuration(d);
+    setEnd(d);
+  };
+
+  const pctFromEvent = (clientX) => {
+    if (!barRef.current) return 0;
+    const rect = barRef.current.getBoundingClientRect();
+    return Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+  };
+  const handleMove = (clientX) => {
+    if (!dragging || !duration) return;
+    const t = pctFromEvent(clientX) * duration;
+    if (dragging === 'start') setStart(Math.min(t, end - 0.5));
+    else setEnd(Math.max(t, start + 0.5));
+  };
+
+  const fmt = (s) => `${Math.floor(s / 60)}:${Math.floor(s % 60).toString().padStart(2, '0')}`;
+  const trimmedTooShort = duration > 0 && end - start < 1;
+
+  if (!url) {
+    return (
+      <div style={{ position: 'absolute', inset: 0, background: 'rgba(10,8,6,0.92)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 90 }}>
+        <Spinner size={26} color="white" />
+      </div>
+    );
+  }
+
+  return (
+    <div
+      style={{ position: 'absolute', inset: 0, background: 'rgba(10,8,6,0.92)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', zIndex: 90, padding: 20, paddingTop: 'calc(20px + env(safe-area-inset-top))' }}
+      className="zchat-fade"
+      onMouseMove={(e) => handleMove(e.clientX)} onMouseUp={() => setDragging(null)} onMouseLeave={() => setDragging(null)}
+      onTouchMove={(e) => handleMove(e.touches[0].clientX)} onTouchEnd={() => setDragging(null)}
+    >
+      <div onClick={onCancel} style={{
+        position: 'absolute', top: 'calc(16px + env(safe-area-inset-top))', left: 16, width: 34, height: 34, borderRadius: '50%',
+        background: 'rgba(255,255,255,0.14)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 2,
+      }}><X size={18} color="white" /></div>
+      <div style={{ fontWeight: 800, fontSize: 15, color: 'white', marginBottom: 14 }}>Trim video</div>
+      <video src={url} onLoadedMetadata={onLoadedMetadata} controls playsInline onContextMenu={(e) => e.preventDefault()}
+        style={{ width: 280, maxHeight: 340, borderRadius: 16, marginBottom: 16, background: '#000' }} />
+      {duration > 0 && (
+        <>
+          <div ref={barRef} style={{ position: 'relative', width: 280, height: 30, marginBottom: 6 }}>
+            <div style={{ position: 'absolute', top: 11, left: 0, right: 0, height: 8, borderRadius: 4, background: 'rgba(255,255,255,0.25)' }} />
+            <div style={{
+              position: 'absolute', top: 11, height: 8, borderRadius: 4, background: theme.coral,
+              left: `${(start / duration) * 100}%`, width: `${((end - start) / duration) * 100}%`,
+            }} />
+            <div onMouseDown={(e) => { e.stopPropagation(); setDragging('start'); }} onTouchStart={(e) => { e.stopPropagation(); setDragging('start'); }} style={{
+              position: 'absolute', top: 1, left: `calc(${(start / duration) * 100}% - 11px)`, width: 22, height: 22, borderRadius: '50%',
+              background: 'white', border: `3px solid ${theme.coral}`, cursor: 'grab', touchAction: 'none',
+            }} />
+            <div onMouseDown={(e) => { e.stopPropagation(); setDragging('end'); }} onTouchStart={(e) => { e.stopPropagation(); setDragging('end'); }} style={{
+              position: 'absolute', top: 1, left: `calc(${(end / duration) * 100}% - 11px)`, width: 22, height: 22, borderRadius: '50%',
+              background: 'white', border: `3px solid ${theme.coral}`, cursor: 'grab', touchAction: 'none',
+            }} />
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', width: 280, fontSize: 11.5, color: 'rgba(255,255,255,0.8)', marginBottom: 14 }}>
+            <span>{fmt(start)}</span>
+            <span>{fmt(end - start)} selected</span>
+            <span>{fmt(end)}</span>
+          </div>
+        </>
+      )}
+      <input value={caption} onChange={(e) => setCaption(e.target.value.slice(0, 1000))} placeholder="Add a caption..."
+        style={{ width: 280, padding: '10px 14px', borderRadius: 20, border: '1px solid rgba(255,255,255,0.3)', background: 'rgba(255,255,255,0.1)', color: 'white', fontFamily: FONT, fontSize: 14, outline: 'none', marginBottom: 14, boxSizing: 'border-box' }} />
+      <div style={{ display: 'flex', gap: 10, width: 280 }}>
+        <button onClick={onCancel} style={{
+          flex: 1, padding: 12, borderRadius: 13, border: '1.5px solid rgba(255,255,255,0.3)',
+          background: 'transparent', color: 'white', fontWeight: 700, fontSize: 13.5, cursor: 'pointer', fontFamily: FONT,
+        }}>Cancel</button>
+        <button onClick={() => onConfirm(file, url, start, end, caption.trim())} disabled={trimmedTooShort} style={{
+          flex: 1, padding: 12, borderRadius: 13, border: 'none', background: theme.coral, color: 'white',
+          fontWeight: 700, fontSize: 13.5, cursor: trimmedTooShort ? 'default' : 'pointer', fontFamily: FONT, opacity: trimmedTooShort ? 0.5 : 1,
+        }}>{trimmedTooShort ? 'Too short' : 'Done'}</button>
+      </div>
+    </div>
+  );
+}
+
+const PREFETCH_ASSET_VERSION = 'v2';
 function useAssetPrefetch() {
   const [progress, setProgress] = useState(null);
   useEffect(() => {
@@ -3573,7 +3845,7 @@ function NotificationHelpModal({ onClose }) {
       <div style={{ background: theme.panelBg, borderRadius: 22, padding: 22, width: '100%', maxWidth: 320 }}>
         <div style={{ fontWeight: 800, fontSize: 16, color: theme.ink, marginBottom: 6 }}>Turn notifications back on</div>
         <div style={{ fontSize: 12.5, color: theme.muted, marginBottom: 14, lineHeight: 1.5 }}>
-          Notifications were blocked for ZChat. Since your browser controls this permission, ZChat can't turn it back on for you — but here's how:
+          Notifications were blocked for ZChat. Since your browser controls this permission, ZChat can't turn it back on for you, but here's how:
         </div>
         <ol style={{ margin: 0, paddingLeft: 18, marginBottom: 18 }}>
           {steps.map((s, i) => (
@@ -3635,231 +3907,6 @@ function SmartMenu({ anchorEl, open, onClose, children, width = 170 }) {
   );
 }
 
-function DeleteMessageConfirm({ onCancel, onConfirm }) {
-  const { theme } = useTheme();
-  return (
-    <div style={{
-      position: 'absolute', inset: 0, background: 'rgba(10,8,6,0.45)', backdropFilter: 'blur(3px)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 92, padding: 24,
-    }} className="zchat-fade">
-      <div style={{ background: theme.panelBg, borderRadius: 20, padding: '24px 22px', width: '100%', maxWidth: 280, textAlign: 'center' }}>
-        <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 6, color: theme.ink }}>Delete this message?</div>
-        <div style={{ fontSize: 12.5, marginBottom: 20, lineHeight: 1.5, color: theme.muted }}>
-          This can't be undone.
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={onCancel} style={{
-            flex: 1, padding: 11, borderRadius: 13, border: `1.5px solid ${theme.border}`,
-            background: 'transparent', color: theme.ink, fontWeight: 700, fontSize: 13.5, cursor: 'pointer', fontFamily: FONT,
-          }}>Cancel</button>
-          <button onClick={onConfirm} style={{
-            flex: 1, padding: 11, borderRadius: 13, border: 'none', background: theme.danger,
-            color: 'white', fontWeight: 700, fontSize: 13.5, cursor: 'pointer', fontFamily: FONT,
-          }}>Delete</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function PhotoCropEditor({ file, onCancel, onConfirm }) {
-  const { theme } = useTheme();
-  const [imgEl, setImgEl] = useState(null);
-  const [zoom, setZoom] = useState(1);
-  const [pos, setPos] = useState({ x: 0, y: 0 });
-  const [saving, setSaving] = useState(false);
-  const [caption, setCaption] = useState('');
-  const dragRef = useRef(null);
-
-  useEffect(() => {
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = () => setImgEl(img);
-    img.src = url;
-    return () => URL.revokeObjectURL(url);
-  }, [file]);
-
-  if (!imgEl) {
-    return (
-      <div style={{ position: 'absolute', inset: 0, background: 'rgba(10,8,6,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 90 }}>
-        <Spinner size={26} color="white" />
-      </div>
-    );
-  }
-
-  const maxW = 300, maxH = 400;
-  let frameW = maxW;
-  let frameH = frameW * (imgEl.naturalHeight / imgEl.naturalWidth);
-  if (frameH > maxH) { frameH = maxH; frameW = frameH * (imgEl.naturalWidth / imgEl.naturalHeight); }
-
-  const baseScale = Math.max(frameW / imgEl.naturalWidth, frameH / imgEl.naturalHeight);
-  const scale = baseScale * zoom;
-  const drawnW = imgEl.naturalWidth * scale;
-  const drawnH = imgEl.naturalHeight * scale;
-  const maxX = Math.max(0, (drawnW - frameW) / 2);
-  const maxY = Math.max(0, (drawnH - frameH) / 2);
-  const clampedX = Math.min(maxX, Math.max(-maxX, pos.x));
-  const clampedY = Math.min(maxY, Math.max(-maxY, pos.y));
-  const left = (frameW - drawnW) / 2 + clampedX;
-  const top = (frameH - drawnH) / 2 + clampedY;
-
-  const startDrag = (clientX, clientY) => { dragRef.current = { startX: clientX, startY: clientY, origX: pos.x, origY: pos.y }; };
-  const moveDrag = (clientX, clientY) => {
-    if (!dragRef.current) return;
-    const dx = clientX - dragRef.current.startX;
-    const dy = clientY - dragRef.current.startY;
-    setPos({ x: dragRef.current.origX + dx, y: dragRef.current.origY + dy });
-  };
-  const endDrag = () => { dragRef.current = null; };
-
-  const confirm = () => {
-    setSaving(true);
-    const outW = 1080;
-    const k = outW / frameW;
-    const outH = Math.round(frameH * k);
-    const canvas = document.createElement('canvas');
-    canvas.width = outW; canvas.height = outH;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(imgEl, 0, 0, imgEl.naturalWidth, imgEl.naturalHeight, left * k, top * k, drawnW * k, drawnH * k);
-    canvas.toBlob((blob) => { setSaving(false); if (blob) onConfirm(blob, caption.trim()); }, 'image/jpeg', 0.9);
-  };
-
-  return (
-    <div style={{
-      position: 'absolute', inset: 0, background: 'rgba(10,8,6,0.9)', display: 'flex', flexDirection: 'column',
-      alignItems: 'center', justifyContent: 'center', zIndex: 90, padding: 20,
-    }} className="zchat-fade">
-      <div style={{ fontWeight: 800, fontSize: 15, color: 'white', marginBottom: 14 }}>Edit photo</div>
-      <div
-        style={{
-          width: frameW, height: frameH, borderRadius: 18, overflow: 'hidden', position: 'relative',
-          touchAction: 'none', cursor: 'grab', border: '3px solid white', marginBottom: 14,
-        }}
-        onMouseDown={(e) => startDrag(e.clientX, e.clientY)}
-        onMouseMove={(e) => e.buttons === 1 && moveDrag(e.clientX, e.clientY)}
-        onMouseUp={endDrag}
-        onMouseLeave={endDrag}
-        onTouchStart={(e) => startDrag(e.touches[0].clientX, e.touches[0].clientY)}
-        onTouchMove={(e) => moveDrag(e.touches[0].clientX, e.touches[0].clientY)}
-        onTouchEnd={endDrag}
-      >
-        <img src={imgEl.src} alt="" draggable={false} style={{
-          position: 'absolute', left, top, width: drawnW, height: drawnH, userSelect: 'none', pointerEvents: 'none',
-        }} />
-      </div>
-      <input type="range" min="1" max="3" step="0.01" value={zoom} onChange={(e) => setZoom(parseFloat(e.target.value))}
-        style={{ width: frameW, accentColor: theme.coral, marginBottom: 14 }} />
-      <input value={caption} onChange={(e) => setCaption(e.target.value.slice(0, 1000))} placeholder="Add a caption..."
-        style={{ width: frameW, padding: '10px 14px', borderRadius: 20, border: '1px solid rgba(255,255,255,0.3)', background: 'rgba(255,255,255,0.1)', color: 'white', fontFamily: FONT, fontSize: 14, outline: 'none', marginBottom: 14, boxSizing: 'border-box' }} />
-      <div style={{ display: 'flex', gap: 10, width: frameW }}>
-        <button onClick={onCancel} style={{
-          flex: 1, padding: 12, borderRadius: 13, border: '1.5px solid rgba(255,255,255,0.3)',
-          background: 'transparent', color: 'white', fontWeight: 700, fontSize: 13.5, cursor: 'pointer', fontFamily: FONT,
-        }}>Cancel</button>
-        <button onClick={confirm} disabled={saving} style={{
-          flex: 1, padding: 12, borderRadius: 13, border: 'none', background: theme.coral, color: 'white',
-          fontWeight: 700, fontSize: 13.5, cursor: 'pointer', fontFamily: FONT,
-        }}>{saving ? <Spinner size={14} /> : 'Done'}</button>
-      </div>
-    </div>
-  );
-}
-
-function VideoTrimEditor({ file, onCancel, onConfirm }) {
-  const { theme } = useTheme();
-  const [url, setUrl] = useState(null);
-  const [duration, setDuration] = useState(0);
-  const [start, setStart] = useState(0);
-  const [end, setEnd] = useState(0);
-  const [caption, setCaption] = useState('');
-  const [dragging, setDragging] = useState(null);
-  const barRef = useRef(null);
-
-  useEffect(() => {
-    const u = URL.createObjectURL(file);
-    setUrl(u);
-    return () => URL.revokeObjectURL(u);
-  }, [file]);
-
-  const onLoadedMetadata = (e) => {
-    const d = e.target.duration;
-    setDuration(d);
-    setEnd(d);
-  };
-
-  const pctFromEvent = (clientX) => {
-    if (!barRef.current) return 0;
-    const rect = barRef.current.getBoundingClientRect();
-    return Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
-  };
-  const handleMove = (clientX) => {
-    if (!dragging || !duration) return;
-    const t = pctFromEvent(clientX) * duration;
-    if (dragging === 'start') setStart(Math.min(t, end - 0.5));
-    else setEnd(Math.max(t, start + 0.5));
-  };
-
-  const fmt = (s) => `${Math.floor(s / 60)}:${Math.floor(s % 60).toString().padStart(2, '0')}`;
-  const trimmedTooShort = duration > 0 && end - start < 1;
-
-  if (!url) {
-    return (
-      <div style={{ position: 'absolute', inset: 0, background: 'rgba(10,8,6,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 90 }}>
-        <Spinner size={26} color="white" />
-      </div>
-    );
-  }
-
-  return (
-    <div
-      style={{ position: 'absolute', inset: 0, background: 'rgba(10,8,6,0.9)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', zIndex: 90, padding: 20 }}
-      className="zchat-fade"
-      onMouseMove={(e) => handleMove(e.clientX)} onMouseUp={() => setDragging(null)} onMouseLeave={() => setDragging(null)}
-      onTouchMove={(e) => handleMove(e.touches[0].clientX)} onTouchEnd={() => setDragging(null)}
-    >
-      <div style={{ fontWeight: 800, fontSize: 15, color: 'white', marginBottom: 14 }}>Trim video</div>
-      <video src={url} onLoadedMetadata={onLoadedMetadata} controls playsInline
-        style={{ width: 280, maxHeight: 340, borderRadius: 16, marginBottom: 16, background: '#000' }} />
-      {duration > 0 && (
-        <>
-          <div ref={barRef} style={{ position: 'relative', width: 280, height: 30, marginBottom: 6 }}>
-            <div style={{ position: 'absolute', top: 11, left: 0, right: 0, height: 8, borderRadius: 4, background: 'rgba(255,255,255,0.25)' }} />
-            <div style={{
-              position: 'absolute', top: 11, height: 8, borderRadius: 4, background: theme.coral,
-              left: `${(start / duration) * 100}%`, width: `${((end - start) / duration) * 100}%`,
-            }} />
-            <div onMouseDown={(e) => { e.stopPropagation(); setDragging('start'); }} onTouchStart={(e) => { e.stopPropagation(); setDragging('start'); }} style={{
-              position: 'absolute', top: 1, left: `calc(${(start / duration) * 100}% - 11px)`, width: 22, height: 22, borderRadius: '50%',
-              background: 'white', border: `3px solid ${theme.coral}`, cursor: 'grab',
-            }} />
-            <div onMouseDown={(e) => { e.stopPropagation(); setDragging('end'); }} onTouchStart={(e) => { e.stopPropagation(); setDragging('end'); }} style={{
-              position: 'absolute', top: 1, left: `calc(${(end / duration) * 100}% - 11px)`, width: 22, height: 22, borderRadius: '50%',
-              background: 'white', border: `3px solid ${theme.coral}`, cursor: 'grab',
-            }} />
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', width: 280, fontSize: 11.5, color: 'rgba(255,255,255,0.8)', marginBottom: 14 }}>
-            <span>{fmt(start)}</span>
-            <span>{fmt(end - start)} selected</span>
-            <span>{fmt(end)}</span>
-          </div>
-        </>
-      )}
-      <input value={caption} onChange={(e) => setCaption(e.target.value.slice(0, 1000))} placeholder="Add a caption..."
-        style={{ width: 280, padding: '10px 14px', borderRadius: 20, border: '1px solid rgba(255,255,255,0.3)', background: 'rgba(255,255,255,0.1)', color: 'white', fontFamily: FONT, fontSize: 14, outline: 'none', marginBottom: 14, boxSizing: 'border-box' }} />
-      <div style={{ display: 'flex', gap: 10, width: 280 }}>
-        <button onClick={onCancel} style={{
-          flex: 1, padding: 12, borderRadius: 13, border: '1.5px solid rgba(255,255,255,0.3)',
-          background: 'transparent', color: 'white', fontWeight: 700, fontSize: 13.5, cursor: 'pointer', fontFamily: FONT,
-        }}>Cancel</button>
-        <button onClick={() => onConfirm(file, url, start, end, caption.trim())} disabled={trimmedTooShort} style={{
-          flex: 1, padding: 12, borderRadius: 13, border: 'none', background: theme.coral, color: 'white',
-          fontWeight: 700, fontSize: 13.5, cursor: trimmedTooShort ? 'default' : 'pointer', fontFamily: FONT, opacity: trimmedTooShort ? 0.5 : 1,
-        }}>{trimmedTooShort ? 'Too short' : 'Done'}</button>
-      </div>
-    </div>
-  );
-}
-
 function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAccount, onAddAccount, onRemoveAccount, switchingAccountId }) {
   const { theme, bgPatternOn, chatTheme } = useTheme();
   const assetProgress = useAssetPrefetch();
@@ -3883,6 +3930,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [messages, setMessages] = useState([]);
   const [draft, setDraft] = useState('');
   const [showAttach, setShowAttach] = useState(false);
+  const [showStickers, setShowStickers] = useState(false);
   const [profileOf, setProfileOf] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
   const [autoOpenLockSetup, setAutoOpenLockSetup] = useState(false);
@@ -3975,6 +4023,17 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     cur.add(convId);
     try { localStorage.setItem(hiddenChatsKey(), JSON.stringify([...cur])); } catch {}
   };
+  /* Item #7 fix: deleting a chat used to just hide the conversation row forever --
+     even brand-new incoming messages stayed invisible because the same conversation id
+     was permanently on the "hidden" list. Un-hiding here (called whenever a fresh
+     message arrives) makes a deleted chat reappear as a clean, fresh conversation,
+     the way WhatsApp's "delete chat" behaves. */
+  const unhideChatLocally = (convId) => {
+    const cur = getHiddenChatIds();
+    if (!cur.has(convId)) return;
+    cur.delete(convId);
+    try { localStorage.setItem(hiddenChatsKey(), JSON.stringify([...cur])); } catch {}
+  };
 
   const readKey = (convId) => `zchat-read-${session.user.id}-${convId}`;
   const markRead = (convId) => { try { localStorage.setItem(readKey(convId), Date.now().toString()); } catch {} };
@@ -4000,7 +4059,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
   const setNameBar = async (conv, key) => {
     const { error } = await supabase.from('conversations').update({ name_bar: key }).eq('id', conv.id);
-    if (error) { alert('Could not change name bar: ' + error.message); return; }
+    if (error) { alert('Could not change header style: ' + error.message); return; }
     setConversations((prev) => prev.map((c) => (c.id === conv.id ? { ...c, name_bar: key } : c)));
     const label = key ? (NAME_BAR_PRESETS.find((p) => p.key === key)?.label || key) : 'None';
     await sendMessage(session.user.id, conv.otherProfile.id, 'system', `Header style changed to ${label}`, null);
@@ -4137,7 +4196,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
   const upsertConversation = async (otherId, text, type) => {
     const [a, b] = pairKey(session.user.id, otherId);
-    const preview = type === 'text' ? text : type === 'image' ? '📷 Photo' : '🎥 Video';
+    const preview = type === 'text' ? text : type === 'image' ? 'Photo' : type === 'sticker' ? text : 'Video';
     await supabase.from('conversations').upsert(
       { user_a: a, user_b: b, last_message: preview, last_message_at: new Date().toISOString(), last_sender_id: session.user.id },
       { onConflict: 'user_a,user_b' }
@@ -4150,8 +4209,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       .then(({ data }) => {
         if (cancelled) return;
         if (data) { setMe({ ...data, email: session.user.email }); return; }
-        // Session exists but profile was never finished (e.g. backed out mid-signup).
-        // Don't spin forever — sign out and send back to login with an explanation.
         setProfileCheckFailed(true);
       })
       .catch(() => { if (!cancelled) setProfileCheckFailed(true); });
@@ -4209,9 +4266,13 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (!me) return;
     const sub = subscribeToMessages(me.id, (msg) => {
       if (msg.sender_id !== me.id) {
+        /* Item #7: a new message from someone whose chat we'd deleted should bring
+           the conversation back as a fresh thread, instead of staying invisible forever. */
+        unhideChatLocally(pairKey(me.id, msg.sender_id).join('-'));
         if (msg.sender_id !== activeProfile?.id || !mobileShowChatRef.current) { playPing(); supabase.from('messages').update({ delivered: true }).eq('id', msg.id); }
         else supabase.from('messages').update({ read: true, delivered: true }).eq('id', msg.id);
         loadUnreadCounts();
+        loadConversations();
       }
       setMessages((prev) => (activeProfile && msg.sender_id === activeProfile.id ? [...prev, msg] : prev));
     });
@@ -4302,7 +4363,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       .subscribe();
     return () => supabase.removeChannel(channel);
   }, [me, myGroupIdsKey, activeGroup]);
-
   useEffect(() => {
     if (!me) return;
     const channel = supabase.channel('group-members-watch-' + me.id)
@@ -4481,7 +4541,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       setMessages((prev) => [...prev, data]);
       loadGroups();
       if (type !== 'system') {
-        const preview = type === 'text' ? content : type === 'image' ? '📷 Photo' : type === 'audio' ? '🎤 Voice message' : '🎥 Video';
+        const preview = type === 'text' ? content : type === 'image' ? 'Photo' : type === 'audio' ? 'Voice message' : type === 'sticker' ? content : 'Video';
         groupMembers.filter((m) => m.user_id !== session.user.id && !m.muted).forEach((m) => {
           sendPushNotification(m.user_id, `${me.name} in ${activeGroup.name}`, preview, `/?group=${activeGroup.id}`, me.avatar);
         });
@@ -4576,10 +4636,16 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     loadGroups();
   };
 
+  /* Item #2 fix: openChat used to trust a locally-cached "myLocks" map that might not
+     have finished loading yet, letting a locked chat open without a password prompt.
+     Now it checks the database directly, at the moment you tap the chat, every time. */
   const openChat = async (profile, convId) => {
-    if (convId && myLocks[convId] && !unlockedChats.has(convId)) {
-      setLockPromptFor({ profile, convId });
-      return;
+    if (convId) {
+      const { data: lockRow } = await supabase.from('chat_locks').select('conversation_id').eq('conversation_id', convId).eq('owner_id', session.user.id).maybeSingle();
+      if (lockRow && !unlockedChats.has(convId)) {
+        setLockPromptFor({ profile, convId });
+        return;
+      }
     }
     setActiveProfile(profile);
     getProfile(profile.id).then(({ data }) => {
@@ -4638,6 +4704,24 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       sendingRef.current = false;
     }
   };
+
+  /* Item #8: quick wave/sticker reactions -- sends a big standalone emoji as its own
+     message bubble (type 'sticker'), rendered oversized in MessageBubble. */
+  const sendSticker = async (emoji) => {
+    setShowStickers(false);
+    if (!activeProfile && !activeGroup) return;
+    if (activeGroup) {
+      await sendGroupMessage('sticker', emoji, null);
+      return;
+    }
+    const { data } = await sendMessage(session.user.id, activeProfile.id, 'sticker', emoji, null);
+    if (data) {
+      setMessages((prev) => [...prev, data]);
+      upsertConversation(activeProfile.id, emoji, 'sticker');
+      sendPushNotification(activeProfile.id, me.name, emoji, `/?dm=${session.user.id}`, me.avatar);
+    }
+  };
+
   const sendInner = async () => {
     if (!activeProfile && !activeGroup) return;
     if (pendingMedia.length) {
@@ -4658,7 +4742,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             insertedRow = data;
             if (data) {
               setMessages((prev) => [...prev, data]);
-              sendPushNotification(activeProfile.id, me.name, captionForThis || (items[i].kind === 'image' ? 'ðŸ“· Photo' : 'ðŸŽ¥ Video'), `/?dm=${session.user.id}`, me.avatar);
+              sendPushNotification(activeProfile.id, me.name, captionForThis || (items[i].kind === 'image' ? 'Photo' : 'Video'), `/?dm=${session.user.id}`, me.avatar);
             }
           }
           if (insertedRow && items[i].kind === 'video' && (items[i].trimStart != null || items[i].trimEnd != null)) {
@@ -4772,7 +4856,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         if (!activeProfile && !activeGroup) return;
         const blob = new Blob(audioChunksRef.current, { type: actualMime });
         if (blob.size < 1000) {
-          alert('That recording was too short or got cut off â€” please try again.');
+          alert('That recording was too short or got cut off, please try again.');
           return;
         }
         const file = new File([blob], `voice.${ext}`, { type: actualMime });
@@ -4783,7 +4867,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             await sendGroupMessage('audio', null, url);
           } else {
             const { data } = await sendMessage(session.user.id, activeProfile.id, 'audio', null, url);
-            if (data) { setMessages((prev) => [...prev, data]); upsertConversation(activeProfile.id, null, 'audio'); sendPushNotification(activeProfile.id, me.name, 'ðŸŽ¤ Voice message', `/?dm=${session.user.id}`, me.avatar); }
+            if (data) { setMessages((prev) => [...prev, data]); upsertConversation(activeProfile.id, null, 'audio'); sendPushNotification(activeProfile.id, me.name, 'Voice message', `/?dm=${session.user.id}`, me.avatar); }
           }
         }
         setUploading(false);
@@ -4891,7 +4975,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
   const doCopySingle = (m) => { if (m.content) navigator.clipboard?.writeText(m.content); setContextMenuFor(null); };
   const doStartEditSingle = (m) => { setEditingMessage(m); setDraft(m.content || ''); setReplyingTo(null); setContextMenuFor(null); };
-  const doStartReplySingle = (m) => { setReplyingTo(m); setEditingMessage(null); setContextMenuFor(null); };
+  const doStartReplySingle = (m) => { setReplyingTo(m); setEditingMessage(null); setContextMenuFor(null); setTimeout(() => composerRef.current?.focus(), 30); };
   const doDeleteForMeSingle = (m) => { hideMessagesLocally([m.id]); setMessages((prev) => prev.filter((x) => x.id !== m.id)); setContextMenuFor(null); };
   const doDeleteForEveryoneSingle = async (m) => { await deleteMessage(m.id); setMessages((prev) => prev.map((x) => (x.id === m.id ? { ...x, deleted: true } : x))); setContextMenuFor(null); };
   const openForwardSingle = (m) => { setForwardTargets([{ ...m, forwarded_from_name: labelForSender(m.sender_id) }]); setForwardOpen(true); setContextMenuFor(null); };
@@ -4928,8 +5012,16 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     setReactionPickerFor(null);
   };
 
+  /* Item #7 fix: deleting now also clears the local message history for that chat
+     (so if it reappears later from a new incoming message, it's a genuinely fresh
+     start, not the old conversation still sitting there) alongside un-hiding it
+     automatically once a new message arrives (see the message-subscribe effect above). */
   const confirmDeleteChat = () => {
-    if (deleteConvoTarget) hideChatLocally(deleteConvoTarget.id);
+    if (deleteConvoTarget) {
+      hideChatLocally(deleteConvoTarget.id);
+      const allIds = messages.filter((m) => !m.deleted).map((m) => m.id);
+      if (activeProfile?.id === deleteConvoTarget.otherProfile.id && allIds.length) hideMessagesLocally(allIds);
+    }
     if (deleteConvoTarget && activeProfile?.id === deleteConvoTarget.otherProfile.id) { setActiveProfile(null); setMessages([]); }
     setDeleteConvoTarget(null);
     loadConversations();
@@ -4978,818 +5070,550 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     );
   }
 
+  const displayList = listFilter === 'groups'
+    ? groups.filter((g) => !g.archived)
+    : listFilter === 'dms'
+      ? conversations
+      : [...conversations.map((c) => ({ ...c, __kind: 'dm' })), ...groups.filter((g) => !g.archived).map((g) => ({ ...g, __kind: 'group' }))]
+          .sort((a, b) => new Date(b.last_message_at) - new Date(a.last_message_at));
+
+  const activeWallpaperKey = activeGroup ? activeGroup.wallpaper : (activeConvForBar ? myWallpaper(activeConvForBar) : null);
+  const activeNameBarKey = activeGroup ? activeGroup.name_bar : activeConvNameBar;
+
   return (
-    <div id="zapp-root" style={{
-      fontFamily: FONT, height: '100dvh', width: '100%', background: theme.bgGradient,
-      display: 'flex', justifyContent: 'center', alignItems: 'center', boxSizing: 'border-box',
-      paddingTop: 'env(safe-area-inset-top)',
-      paddingLeft: 'env(safe-area-inset-left)',
-      paddingRight: 'env(safe-area-inset-right)',
-    }}>
+    <div id="zapp-root" style={{ height: '100dvh', width: '100%', background: theme.bgGradient, fontFamily: FONT, display: 'flex', overflow: 'hidden', position: 'relative' }}>
       <GlobalStyle />
       <AssetDownloadBar progress={assetProgress} />
       {notifPermission === 'denied' && !notifBannerDismissed && (
-        <NotificationPermissionBanner
-          top={assetProgress ? 66 : 10}
-          onOpenHelp={() => setShowNotifHelp(true)}
-          onDismiss={() => { setNotifBannerDismissed(true); try { sessionStorage.setItem('zchat-notif-banner-dismissed', '1'); } catch {} }}
-        />
+        <NotificationPermissionBanner top="calc(10px + env(safe-area-inset-top))" onOpenHelp={() => setShowNotifHelp(true)}
+          onDismiss={() => { setNotifBannerDismissed(true); try { sessionStorage.setItem('zchat-notif-banner-dismissed', '1'); } catch {} }} />
       )}
-      {showNotifHelp && (
-        <NotificationHelpModal onClose={() => setShowNotifHelp(false)} />
-      )}
+      {/* Sidebar */}
       <div style={{
-        width: '100%', maxWidth: '100%', height: '100%', maxHeight: '100%', display: 'flex',
-        borderRadius: 0, overflow: 'hidden', boxShadow: 'none', border: 'none',
-        position: 'relative', background: theme.panelBg,
-      }}>
-        {profileOf && !showSettings && !showPrivacy && (
-          <ProfilePanel
-            profile={profileOf.id === me.id ? me : profileOf}
-            isSelf={profileOf.id === me.id}
-            userId={session.user.id}
-            isOnline={!profileOf.hide_activity && onlineIds.has(profileOf.id)}
-            onClose={() => setProfileOf(null)}
-            onReport={handleReport}
-            onOpenSettings={() => setShowSettings(true)}
-            onOpenProfile={(p) => setProfileOf(p)}
-            onMessage={(p) => { setProfileOf(null); openChat(p, null); }}
-            onSaved={(updated) => { setMe(updated.id === me.id ? { ...updated, email: me.email } : me); if (activeProfile?.id === updated.id) setActiveProfile(updated); }}
-            isBlocked={myBlockedIds.has(profileOf.id)}
-            onBlock={blockUser}
-            onUnblock={unblockUser}
-          />
-        )}
-        {showSettings && !showPrivacy && (
-          <SettingsPanel
-            onClose={() => setShowSettings(false)}
-            onOpenPrivacy={() => setShowPrivacy(true)}
-            onOpenRequests={() => setShowFollowRequests(true)}
-            onLogout={() => setShowLogoutConfirm(true)}
-            hideActivity={!!me.hide_activity}
-            onToggleActivity={toggleHideActivity}
-            onOpenAccounts={() => setShowAccountSwitcher(true)}
-            onOpenDelete={() => setShowDeleteAccount(true)}
-            chatLockSet={!!me.chat_lock_hash}
-            chatLockHash={me.chat_lock_hash}
-            onSetChatLockPassword={setChatLockPassword}
-            onTurnOffChatLock={turnOffChatLock}
-            autoOpenLockSetup={autoOpenLockSetup}
-            onConsumedAutoOpen={() => setAutoOpenLockSetup(false)}
-          />
-        )}
-        {showPrivacy && <PrivacyPanel onBack={() => setShowPrivacy(false)} />}
-        {showFollowRequests && (
-          <FollowRequestsPanel userId={session.user.id} onClose={() => { setShowFollowRequests(false); loadFollowRequestCount(); }}
-            onOpenProfile={(p) => setProfileOf(p)} />
-        )}
-        {showDiscover && (
-          <DiscoverPanel myId={session.user.id} blockedIds={myBlockedIds} onClose={() => setShowDiscover(false)}
-            onOpenProfile={(p) => setProfileOf(p)} />
-        )}
-        {showLogoutConfirm && (
-          <LogoutConfirm onCancel={() => setShowLogoutConfirm(false)} onConfirm={onLogout} />
-        )}
-
+        width: mobileShowChat ? 0 : '100%', maxWidth: mobileShowChat ? 0 : '100%', overflow: 'hidden',
+        borderRight: `1px solid ${theme.border}`, display: 'flex', flexDirection: 'column', flexShrink: 0,
+        transition: 'none',
+      }} className="zchat-sidebar-desktop">
         <div style={{
-          width: 320, minWidth: 320, display: mobileShowChat ? 'none' : 'flex',
-          flexDirection: 'column', borderRight: `1px solid ${theme.border}`,
-        }} className="zchat-sidebar">
-          <div style={{ padding: '16px 16px 12px' }}>
-            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 14 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <ZBrand size={22} showTag />
-                <span style={{ fontSize: 9, fontWeight: 700, color: theme.muted, background: theme.rowBg, padding: '2px 6px', borderRadius: 8 }}>v2.6</span>
-              </div>
-              <div onClick={() => setProfileOf(me)} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', maxWidth: 130 }}>
-                <div style={{ textAlign: 'right', minWidth: 0 }}>
-                  <div style={{ fontWeight: 800, fontSize: 12, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{me.name}</div>
-                  <div style={{ fontSize: 10, color: theme.teal, fontWeight: 600 }}>Online</div>
-                  {me.bio && <div style={{ fontSize: 9.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 110 }}>"{me.bio}"</div>}
+          padding: '14px 16px 10px', paddingTop: 'calc(14px + env(safe-area-inset-top))',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0,
+        }}>
+          <ZBrand size={22} />
+          <div onClick={() => setProfileOf(me)} style={{ cursor: 'pointer' }}>
+            <Avatar emoji={me.avatar} name={me.name} size={34} />
+          </div>
+        </div>
+
+        <div style={{ padding: '0 16px 10px', flexShrink: 0 }}>
+          <div style={{ position: 'relative' }}>
+            <Search size={15} color={theme.muted} style={{ position: 'absolute', left: 12, top: 11 }} />
+            <input value={search} onChange={(e) => doSearch(e.target.value)} placeholder="Search by username" autoCapitalize="none"
+              style={{ ...inputStyle(theme), padding: '9px 12px 9px 34px', fontSize: 13.5 }} />
+            {searching && <div style={{ position: 'absolute', right: 12, top: 10 }}><Spinner size={13} color={theme.muted} /></div>}
+          </div>
+        </div>
+
+        {/* Icon row: item #18 fix -- was previously packed to the left with uneven gaps;
+            now evenly distributed and centered across the full row width. */}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-around', padding: '2px 10px 12px', flexShrink: 0,
+        }}>
+          <div onClick={() => setShowFollowRequests(true)} style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer' }}>
+            <div style={{ width: 38, height: 38, borderRadius: 12, background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.coralDeep }}><Bell size={16} /></div>
+            {followRequestCount > 0 && (
+              <div style={{ position: 'absolute', top: -3, right: -3, background: theme.danger, color: 'white', fontSize: 9, fontWeight: 800, borderRadius: 8, minWidth: 15, height: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px' }}>{followRequestCount}</div>
+            )}
+            <span style={{ fontSize: 9, color: theme.muted, fontWeight: 600 }}>Alerts</span>
+          </div>
+          <div onClick={() => setShowCreateGroup(true)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer' }}>
+            <div style={{ width: 38, height: 38, borderRadius: 12, background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.coralDeep }}><Users size={16} /></div>
+            <span style={{ fontSize: 9, color: theme.muted, fontWeight: 600 }}>Group</span>
+          </div>
+          <div onClick={() => setShowDiscover(true)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer' }}>
+            <div style={{ width: 38, height: 38, borderRadius: 12, background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.coralDeep }}><Compass size={16} /></div>
+            <span style={{ fontSize: 9, color: theme.muted, fontWeight: 600 }}>Discover</span>
+          </div>
+          <div onClick={() => setShowArchived(true)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer' }}>
+            <div style={{ width: 38, height: 38, borderRadius: 12, background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.coralDeep }}><Archive size={16} /></div>
+            <span style={{ fontSize: 9, color: theme.muted, fontWeight: 600 }}>Archive</span>
+          </div>
+          <div onClick={() => setShowSettings(true)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer' }}>
+            <div style={{ width: 38, height: 38, borderRadius: 12, background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.coralDeep }}><SettingsIcon size={16} /></div>
+            <span style={{ fontSize: 9, color: theme.muted, fontWeight: 600 }}>Settings</span>
+          </div>
+        </div>
+
+        {search.trim().length >= 2 ? (
+          <div style={{ overflowY: 'auto', flex: 1, padding: '0 12px' }}>
+            {results.length === 0 && !searching && <div style={{ textAlign: 'center', padding: 20, fontSize: 13, color: theme.muted }}>No one found</div>}
+            {results.map((p) => (
+              <div key={p.id} onClick={() => { setSearch(''); setResults([]); setProfileOf(p); }} style={{
+                display: 'flex', alignItems: 'center', gap: 12, padding: '10px 8px', cursor: 'pointer', borderRadius: 14,
+              }}>
+                <Avatar emoji={p.avatar} name={p.name} size={42} />
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 14, color: theme.ink }}>{p.name}</div>
+                  <div style={{ fontSize: 11.5, color: theme.muted }}>@{p.username}</div>
                 </div>
-                <Avatar emoji={me.avatar} name={me.name} size={34} ring />
               </div>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 12 }}>
-              <div onClick={() => { setShowFollowRequests(true); }} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer' }}>
-                <div style={{ position: 'relative', width: 32, height: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: theme.rowBg }}>
-                  <Bell size={15} color={theme.muted} />
-                  {followRequestCount > 0 && (
-                    <span style={{
-                      position: 'absolute', top: -2, right: -2, minWidth: 15, height: 15, borderRadius: 8,
-                      background: theme.danger, color: 'white', fontSize: 9.5, fontWeight: 800,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px',
-                    }}>{followRequestCount > 99 ? '+99' : followRequestCount}</span>
-                  )}
-                </div>
-                <span style={{ fontSize: 9.5, color: theme.muted, fontWeight: 600 }}>Notifications</span>
-              </div>
-              <div onClick={() => setShowCreateGroup(true)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer' }}>
-                <div style={{ width: 32, height: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: theme.rowBg }}>
-                  <Users size={15} color={theme.muted} />
-                </div>
-                <span style={{ fontSize: 9.5, color: theme.muted, fontWeight: 600 }}>+Group</span>
-              </div>
-              <div onClick={() => setShowDiscover(true)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer' }}>
-                <div style={{ width: 32, height: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: theme.rowBg }}>
-                  <Compass size={15} color={theme.muted} />
-                </div>
-                <span style={{ fontSize: 9.5, color: theme.muted, fontWeight: 600 }}>Discover</span>
-              </div>
-              <div onClick={() => setShowSettings(true)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer' }}>
-                <div style={{ width: 32, height: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: theme.rowBg }}>
-                  <SettingsIcon size={15} color={theme.muted} />
-                </div>
-                <span style={{ fontSize: 9.5, color: theme.muted, fontWeight: 600 }}>Settings</span>
-              </div>
-            </div>
-            <div style={{ position: 'relative', marginBottom: 12 }}>
-              <Search size={15} color={theme.muted} style={{ position: 'absolute', left: 15, top: 13 }} />
-              <input value={search} onChange={(e) => doSearch(e.target.value)} placeholder="Search chats, people..." autoCapitalize="none"
-                style={{ ...inputStyle(theme), padding: '11px 14px 11px 38px', borderRadius: 24, background: theme.rowBg, border: `1.5px solid ${theme.border}` }} />
-              {searching && <div style={{ position: 'absolute', right: 15, top: 13 }}><Spinner size={14} color={theme.muted} /></div>}
-            </div>
-            <div style={{ display: 'flex', gap: 7, overflowX: 'auto' }}>
-              {[
-                { key: 'all', label: 'All' },
-                { key: 'unread', label: 'Unread' },
-                { key: 'groups', label: 'Groups' },
-                { key: 'dms', label: 'DMs' },
-              ].map((f) => (
-                <div key={f.key} onClick={() => setListFilter(f.key)} style={{
-                  padding: '6px 14px', borderRadius: 16, fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
-                  background: listFilter === f.key ? theme.coral : theme.rowBg,
-                  color: listFilter === f.key ? 'white' : theme.muted,
-                }}>{f.label}</div>
+            ))}
+          </div>
+        ) : (
+          <>
+            <div style={{ display: 'flex', gap: 8, padding: '0 16px 10px', flexShrink: 0 }}>
+              {[{ k: 'all', l: 'All' }, { k: 'dms', l: 'Chats' }, { k: 'groups', l: 'Groups' }].map((f) => (
+                <div key={f.k} onClick={() => setListFilter(f.k)} style={{
+                  padding: '6px 14px', borderRadius: 20, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                  background: listFilter === f.k ? theme.coral : theme.rowBg, color: listFilter === f.k ? 'white' : theme.muted,
+                }}>{f.l}</div>
               ))}
             </div>
-          </div>
-          <div style={{ overflowY: 'auto', flex: 1, padding: '0 8px' }}>
-            {search.length < 2 && groups.length > 0 && listFilter !== 'dms' && listFilter !== 'unread' && (
-              <div style={{ marginBottom: 6 }}>
-                {groups.filter((g) => !g.archived).map((g) => (
-                  <div key={g.id} onClick={() => openGroup(g)} style={{
-                    display: 'flex', alignItems: 'center', gap: 12, padding: '12px 10px', cursor: 'pointer',
-                    borderRadius: 14, marginBottom: 2, borderBottom: `1px solid ${theme.border}`, position: 'relative',
-                    background: activeGroup?.id === g.id ? theme.rowBg : 'transparent',
+            <div style={{ overflowY: 'auto', flex: 1, padding: '0 10px' }}>
+              {displayList.length === 0 && (
+                <div style={{ textAlign: 'center', padding: 30, fontSize: 13, color: theme.muted }}>
+                  Search a username above to start chatting, or create a group.
+                </div>
+              )}
+              {displayList.map((item) => {
+                const isGroup = item.__kind === 'group' || (!item.__kind && listFilter === 'groups');
+                if (isGroup) {
+                  const g = item;
+                  const isActive = activeGroup?.id === g.id;
+                  return (
+                    <div key={'g-' + g.id} onClick={() => openGroup(g)} style={{
+                      display: 'flex', alignItems: 'center', gap: 12, padding: '10px 8px', cursor: 'pointer', borderRadius: 16,
+                      background: isActive ? theme.rowBg : 'transparent', position: 'relative',
+                    }}>
+                      <GroupAvatar avatar={g.avatar} name={g.name} size={46} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontWeight: 700, fontSize: 14, color: theme.ink, display: 'flex', alignItems: 'center', gap: 4 }}>
+                            {g.pinned && <Pin_ size={11} color={theme.muted} />}{g.name}
+                          </span>
+                          {g.last_message_at && <span style={{ fontSize: 10.5, color: theme.muted, flexShrink: 0 }}>{new Date(g.last_message_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>}
+                        </div>
+                        <div style={{ fontSize: 12, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {g.last_message_type === 'image' ? 'Photo' : g.last_message_type === 'audio' ? 'Voice message' : g.last_message_type === 'video' ? 'Video' : g.last_message_type === 'sticker' ? g.last_message : (g.last_message || 'No messages yet')}
+                        </div>
+                      </div>
+                      <MoreVertical size={15} color={theme.muted} style={{ cursor: 'pointer', flexShrink: 0 }}
+                        onClick={(e) => { e.stopPropagation(); setGroupRowMenuAnchor(e.currentTarget); setGroupRowMenuFor(groupRowMenuFor === g.id ? null : g.id); }} />
+                      <SmartMenu anchorEl={groupRowMenuAnchor} open={groupRowMenuFor === g.id} onClose={() => setGroupRowMenuFor(null)} width={170}>
+                        <div style={{ background: theme.panelBg, borderRadius: 14, boxShadow: '0 8px 24px rgba(0,0,0,0.2)', border: `1px solid ${theme.border}`, overflow: 'hidden' }}>
+                          <div onClick={() => { toggleGroupPin(g); setGroupRowMenuFor(null); }} style={{ padding: '11px 14px', fontSize: 13, fontWeight: 600, color: theme.ink, cursor: 'pointer', borderBottom: `1px solid ${theme.border}` }}>{g.pinned ? 'Unpin' : 'Pin'}</div>
+                          <div onClick={() => { toggleGroupArchive(g); setGroupRowMenuFor(null); }} style={{ padding: '11px 14px', fontSize: 13, fontWeight: 600, color: theme.ink, cursor: 'pointer', borderBottom: `1px solid ${theme.border}` }}>Archive</div>
+                          <div onClick={() => { leaveGroupById(g); setGroupRowMenuFor(null); }} style={{ padding: '11px 14px', fontSize: 13, fontWeight: 600, color: theme.danger, cursor: 'pointer' }}>Leave group</div>
+                        </div>
+                      </SmartMenu>
+                    </div>
+                  );
+                }
+                const c = item;
+                const isActive = activeProfile?.id === c.otherProfile.id;
+                const unread = isUnread(c);
+                return (
+                  <div key={'c-' + c.id} onClick={() => openChat(c.otherProfile, c.id)} style={{
+                    display: 'flex', alignItems: 'center', gap: 12, padding: '10px 8px', cursor: 'pointer', borderRadius: 16,
+                    background: isActive ? theme.rowBg : 'transparent', position: 'relative',
                   }}>
-                    <GroupAvatar avatar={g.avatar} name={g.name} size={44} />
+                    <Avatar emoji={c.otherProfile.avatar} name={c.otherProfile.name} online={onlineIds.has(c.otherProfile.id) && !c.otherProfile.hide_activity} size={46} />
                     <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontWeight: unread ? 800 : 700, fontSize: 14, color: theme.ink, display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 150 }}>
+                          {isPinnedByMe(c) && <Pin_ size={11} color={theme.muted} />}{c.otherProfile.name}
+                        </span>
+                        {c.last_message_at && <span style={{ fontSize: 10.5, color: unread ? theme.coral : theme.muted, fontWeight: unread ? 700 : 400, flexShrink: 0 }}>{new Date(c.last_message_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>}
+                      </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        {g.pinned && <span style={{ fontSize: 11 }}>ðŸ“Œ</span>}
-                        <div style={{ fontWeight: 700, fontSize: 14.5, color: theme.ink }}>{g.name}</div>
-                      </div>
-                      <div style={{ fontSize: 12, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {g.last_message ? g.last_message : (g.last_message_type ? `${g.last_message_type === 'image' ? 'ðŸ“· Photo' : g.last_message_type === 'video' ? 'ðŸŽ¥ Video' : g.last_message_type === 'audio' ? 'ðŸŽ¤ Voice message' : ''}` : 'No messages yet')}
+                        {c.last_sender_id === session.user.id && <StatusTicks status={c.lastMineRead ? 'read' : c.lastMineDelivered ? 'delivered' : 'sent'} />}
+                        <div style={{ fontSize: 12, color: unread ? theme.ink : theme.muted, fontWeight: unread ? 700 : 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {c.last_message || 'Say hi \u{1F44B}'}
+                        </div>
                       </div>
                     </div>
-                    <div onClick={(e) => { e.stopPropagation(); setGroupRowMenuAnchor(e.currentTarget); setGroupRowMenuFor(groupRowMenuFor === g.id ? null : g.id); }} style={{ padding: 6, cursor: 'pointer', flexShrink: 0 }}>
-                      <MoreVertical size={16} color={theme.muted} />
-                    </div>
+                    {unread && <div style={{ width: 20, height: 20, borderRadius: 10, background: theme.coral, color: 'white', fontSize: 10.5, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{unreadCounts[c.otherProfile.id]}</div>}
+                    <MoreVertical size={15} color={theme.muted} style={{ cursor: 'pointer', flexShrink: 0 }}
+                      onClick={(e) => { e.stopPropagation(); setRowMenuAnchor(e.currentTarget); setRowMenuFor(rowMenuFor === c.id ? null : c.id); }} />
+                    <SmartMenu anchorEl={rowMenuAnchor} open={rowMenuFor === c.id} onClose={() => setRowMenuFor(null)} width={170}>
+                      <div style={{ background: theme.panelBg, borderRadius: 14, boxShadow: '0 8px 24px rgba(0,0,0,0.2)', border: `1px solid ${theme.border}`, overflow: 'hidden' }}>
+                        <div onClick={() => { togglePin(c); setRowMenuFor(null); }} style={{ padding: '11px 14px', fontSize: 13, fontWeight: 600, color: theme.ink, cursor: 'pointer', borderBottom: `1px solid ${theme.border}` }}>{isPinnedByMe(c) ? 'Unpin' : 'Pin'}</div>
+                        <div onClick={() => { toggleArchive(c.id, true); setRowMenuFor(null); }} style={{ padding: '11px 14px', fontSize: 13, fontWeight: 600, color: theme.ink, cursor: 'pointer', borderBottom: `1px solid ${theme.border}` }}>Archive</div>
+                        <div onClick={() => { setDeleteConvoTarget(c); setRowMenuFor(null); }} style={{ padding: '11px 14px', fontSize: 13, fontWeight: 600, color: theme.danger, cursor: 'pointer' }}>Delete</div>
+                      </div>
+                    </SmartMenu>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Chat panel */}
+      <div style={{
+        flex: 1, display: mobileShowChat ? 'flex' : 'none', flexDirection: 'column', minWidth: 0, position: 'relative',
+        ...(wallpaperBgStyle(activeWallpaperKey) || {}),
+      }} className="zchat-chat-panel">
+        {!activeWallpaperKey && <AnimatedChatBackground chatTheme={chatTheme} />}
+        {bgPatternOn && !activeWallpaperKey && (
+          <div style={{
+            position: 'absolute', inset: 0, opacity: theme.dark ? 0.05 : 0.04, pointerEvents: 'none',
+            backgroundImage: 'radial-gradient(circle, currentColor 1px, transparent 1px)', backgroundSize: '18px 18px', color: theme.ink,
+          }} />
+        )}
+        {(activeProfile || activeGroup) ? (
+          <>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', flexShrink: 0, position: 'relative',
+              paddingTop: 'calc(12px + env(safe-area-inset-top))',
+              ...(nameBarBgStyle(activeNameBarKey) || {}),
+              /* Item #9: a subtle seam between the header-style banner image and the
+                 wallpaper below it, instead of the two images just touching edge-to-edge. */
+              borderBottom: activeNameBarKey ? `1px solid rgba(255,255,255,0.16)` : `1px solid ${theme.border}`,
+              boxShadow: activeNameBarKey ? '0 1px 0 rgba(0,0,0,0.25)' : 'none',
+              background: activeNameBarKey ? undefined : theme.glass,
+              backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
+            }}>
+              <ArrowLeft size={20} style={{ cursor: 'pointer', color: activeNameBarKey ? 'white' : theme.ink, flexShrink: 0, filter: activeNameBarKey ? 'drop-shadow(0 1px 3px rgba(0,0,0,0.6))' : 'none' }}
+                onClick={() => { setMobileShowChat(false); setActiveProfile(null); setActiveGroup(null); }} />
+              <div onClick={() => (activeGroup ? setShowGroupInfo(true) : setProfileOf(activeProfile))} style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, cursor: 'pointer' }}>
+                {activeGroup ? <GroupAvatar avatar={activeGroup.avatar} name={activeGroup.name} size={38} /> : <Avatar emoji={activeProfile.avatar} name={activeProfile.name} online={onlineIds.has(activeProfile.id) && !activeProfile.hide_activity} size={38} />}
+                <div style={{ minWidth: 0 }}>
+                  <div style={{
+                    fontWeight: 800, fontSize: 14.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                    color: activeNameBarKey ? 'white' : theme.ink, textShadow: activeNameBarKey ? '0 1px 4px rgba(0,0,0,0.7)' : 'none',
+                  }}>{activeGroup ? activeGroup.name : activeProfile.name}</div>
+                  <div style={{ fontSize: 11, color: activeNameBarKey ? 'rgba(255,255,255,0.85)' : theme.muted, textShadow: activeNameBarKey ? '0 1px 4px rgba(0,0,0,0.7)' : 'none' }}>
+                    {activeGroup ? `${groupMembers.length} members` : typingFrom ? 'typing...' : (onlineIds.has(activeProfile.id) ? 'Online' : (!activeProfile.hide_activity && formatLastSeen(activeProfile.last_seen)) || '')}
+                  </div>
+                </div>
+              </div>
+              <MoreVertical size={19} style={{ cursor: 'pointer', color: activeNameBarKey ? 'white' : theme.ink, flexShrink: 0, filter: activeNameBarKey ? 'drop-shadow(0 1px 3px rgba(0,0,0,0.6))' : 'none' }}
+                onClick={() => (activeGroup ? setShowGroupInfo(true) : setShowChatSettings(true))} />
+            </div>
+
+            {selectionMode && (
+              <MessageActionBar count={selectedIds.size} canEditActions={selectionInfo} onCancel={cancelSelection}
+                onForward={openForward} onDeleteForMe={doDeleteForMe} onDeleteForEveryone={doDeleteForEveryone}
+                onReport={() => setReportModalFor('__selection__')} />
+            )}
+
+            <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '14px 18px', position: 'relative' }}>
+              {loadingConvo ? (
+                <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 40 }}><Spinner size={22} color={theme.ink} /></div>
+              ) : messages.length === 0 ? (
+                <div style={{ textAlign: 'center', paddingTop: 60, color: theme.muted, fontSize: 13 }}>
+                  {activeGroup ? 'No messages yet. Say hello!' : `No messages yet. Say hi to ${activeProfile.name}!`}
+                </div>
+              ) : (
+                messages.map((m) => {
+                  const replyPreview = m.reply_to_id ? (() => {
+                    const rm = findMessageById(m.reply_to_id);
+                    return rm ? { ...rm, senderLabel: labelForSender(rm.sender_id) } : null;
+                  })() : null;
+                  const isMe = m.sender_id === session.user.id;
+                  const showSenderLabel = activeGroup && !isMe;
+                  return (
+                    <MessageBubble
+                      key={m.id} m={m} isMe={isMe}
+                      selectionMode={selectionMode} selected={selectedIds.has(m.id)} onToggleSelect={toggleSelect}
+                      onLongPress={() => { if (!selectionMode) setContextMenuFor(m.id); }}
+                      onDelete={(id) => setPendingQuickDelete(id)}
+                      onOpenImage={setViewerUrl} onOpenVideo={setViewerVideoUrl}
+                      reactions={messageLikes[m.id]} onReact={(id, emoji) => reactToMessage(id, emoji)}
+                      onOpenWhoReacted={(id) => setWhoReactedFor(messageLikes[id] || [])}
+                      replyPreview={replyPreview} onSwipeReply={(msg) => { setReplyingTo(msg); setEditingMessage(null); setTimeout(() => composerRef.current?.focus(), 0); }}
+                      senderLabel={showSenderLabel ? memberName(m.sender_id) : null}
+                      senderAvatar={showSenderLabel ? groupMembers.find((gm) => gm.user_id === m.sender_id)?.profile.avatar : null}
+                      hideReadStatus={!!activeGroup}
+                      onOpenSenderProfile={showSenderLabel ? () => { const p = groupMembers.find((gm) => gm.user_id === m.sender_id)?.profile; if (p) setProfileOf(p); } : null}
+                      canModerate={activeGroup ? (groupMembers.find((gm) => gm.user_id === session.user.id)?.role === 'admin') : false}
+                    />
+                  );
+                })
+              )}
+            </div>
+
+            {(replyingTo || editingMessage) && (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderTop: `1px solid ${theme.border}`,
+                background: theme.glass, flexShrink: 0,
+              }}>
+                <div style={{ width: 3, alignSelf: 'stretch', background: theme.coral, borderRadius: 2, flexShrink: 0 }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: theme.coralDeep }}>{editingMessage ? 'Editing message' : `Replying to ${labelForSender(replyingTo.sender_id)}`}</div>
+                  <div style={{ fontSize: 12, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {(editingMessage || replyingTo).type === 'text' ? (editingMessage || replyingTo).content : (editingMessage || replyingTo).type === 'image' ? 'Photo' : (editingMessage || replyingTo).type === 'audio' ? 'Voice message' : 'Video'}
+                  </div>
+                </div>
+                <X size={16} style={{ cursor: 'pointer', color: theme.muted, flexShrink: 0 }} onClick={() => { setReplyingTo(null); setEditingMessage(null); setDraft(''); }} />
+              </div>
+            )}
+
+            {pendingMedia.length > 0 && (
+              <div style={{ display: 'flex', gap: 8, padding: '10px 16px 0', overflowX: 'auto', flexShrink: 0 }}>
+                {pendingMedia.map((item, i) => (
+                  <div key={i} style={{ position: 'relative', flexShrink: 0 }}>
+                    {item.kind === 'image' ? (
+                      <img src={item.url} alt="" onContextMenu={(e) => e.preventDefault()} draggable={false} style={{ width: 64, height: 64, borderRadius: 12, objectFit: 'cover' }} />
+                    ) : (
+                      <video src={item.url} onContextMenu={(e) => e.preventDefault()} style={{ width: 64, height: 64, borderRadius: 12, objectFit: 'cover', background: '#000' }} />
+                    )}
+                    <div onClick={() => removePendingMedia(i)} style={{
+                      position: 'absolute', top: -5, right: -5, width: 18, height: 18, borderRadius: '50%',
+                      background: theme.danger, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+                    }}><X size={11} color="white" /></div>
                   </div>
                 ))}
               </div>
             )}
-            {search.length >= 2 ? (
-              <>
-                {!searching && results.length === 0 && (
-                  <div style={{ padding: 24, textAlign: 'center', color: theme.muted, fontSize: 13 }}>No one found with that username</div>
-                )}
-                {results.map((u) => {
-                  const existingConv = conversations.find((c) => c.otherProfile.id === u.id);
-                  const unread = existingConv ? isUnread(existingConv) : false;
-                  return (
-                    <div key={u.id} onClick={() => { openChat(u, existingConv?.id); setSearch(''); setResults([]); }} style={{
-                      display: 'flex', alignItems: 'center', gap: 12, padding: '12px 10px', cursor: 'pointer',
-                      borderRadius: 14, marginBottom: 2, borderBottom: `1px solid ${theme.border}`,
-                      background: activeProfile?.id === u.id ? theme.rowBg : 'transparent',
-                    }}>
-                      <Avatar emoji={u.avatar} name={u.name} online={!u.hide_activity && onlineIds.has(u.id)} size={44} />
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontWeight: unread ? 800 : 700, fontSize: 14.5, color: theme.ink }}>{u.name}</div>
-                        <div style={{
-                          fontSize: 12, color: unread ? theme.ink : theme.muted, fontWeight: unread ? 700 : 400,
-                          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                        }}>
-                          {existingConv ? `${existingConv.last_sender_id === session.user.id ? 'You: ' : ''}${existingConv.last_message}` : `@${u.username}`}
-                        </div>
-                      </div>
-                      {unread && <div style={{ width: 10, height: 10, borderRadius: '50%', background: theme.coral, flexShrink: 0 }} />}
-                    </div>
-                  );
-                })}
-              </>
-            ) : (listFilter === 'groups' ? [] : listFilter === 'unread' ? conversations.filter(isUnread) : conversations).length === 0 ? (
-              <div style={{ padding: '24px 16px', textAlign: 'center', color: theme.muted, fontSize: 12.5, lineHeight: 1.6 }}>
-                {listFilter === 'groups' ? 'No groups yet' : listFilter === 'unread' ? 'No unread chats' : 'Search a username above to start a new conversation'}
-              </div>
-            ) : (
-              (listFilter === 'groups' ? [] : listFilter === 'unread' ? conversations.filter(isUnread) : conversations).map((c) => {
-                const unread = isUnread(c);
-                const pinned = isPinnedByMe(c);
-                const locked = !!myLocks[c.id];
-                return (
-                  <div key={c.id} style={{
-                    display: 'flex', alignItems: 'center', gap: 12, padding: '12px 10px', cursor: 'pointer',
-                    borderRadius: 14, marginBottom: 2, borderBottom: `1px solid ${theme.border}`, position: 'relative',
-                    background: activeProfile?.id === c.otherProfile.id ? theme.rowBg : (pinned ? `${theme.coral}0A` : 'transparent'),
-                  }}>
-                    <div onClick={() => openChat(c.otherProfile, c.id)} style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 }}>
-                      {pinned && chatTheme === 'love' ? (
-                        <div style={{ position: 'relative', width: 44, height: 44, flexShrink: 0 }}>
-                          <div style={{ position: 'absolute', top: 0, left: 0 }}>
-                            <Avatar emoji={c.otherProfile.avatar} name={c.otherProfile.name} size={32} />
-                          </div>
-                          <div style={{ position: 'absolute', bottom: 0, right: 0, border: `2px solid ${theme.panelBg}`, borderRadius: '50%' }}>
-                            <Avatar emoji={me?.avatar} name={me?.name} size={26} />
-                          </div>
-                          <span style={{ position: 'absolute', top: -4, right: -4, fontSize: 12 }}>ðŸ’—</span>
-                        </div>
-                      ) : (
-                        <Avatar emoji={c.otherProfile.avatar} name={c.otherProfile.name} online={!c.otherProfile.hide_activity && onlineIds.has(c.otherProfile.id)} size={44} ring />
-                      )}
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                          {pinned && <span style={{ fontSize: 11 }}>ðŸ“Œ</span>}
-                          {locked && <Lock size={11} color={theme.muted} />}
-                          <div style={{ fontWeight: unread ? 800 : 700, fontSize: 14.5, color: theme.ink }}>{c.otherProfile.name}</div>
-                        </div>
-                        <div style={{
-                          fontSize: 12, color: unread ? theme.ink : theme.muted, fontWeight: unread ? 700 : 400,
-                          display: 'flex', alignItems: 'center', gap: 3, minWidth: 0,
-                        }}>
-                          {!locked && c.last_sender_id === session.user.id && (
-                            <span style={{ flexShrink: 0, display: 'flex' }}>
-                              <StatusTicks status={c.lastMineRead ? 'read' : c.lastMineDelivered ? 'delivered' : 'sent'} />
-                            </span>
-                          )}
-                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {locked && !unlockedChats.has(c.id) ? 'Locked chat' : c.last_message}
-                          </span>
-                        </div>
-                      </div>
-                      {unreadCounts[c.otherProfile.id] > 0 && (
-                        <div style={{
-                          minWidth: 20, height: 20, borderRadius: 10, background: theme.coral, color: 'white',
-                          fontSize: 11, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          padding: '0 6px', flexShrink: 0,
-                        }}>{unreadCounts[c.otherProfile.id] > 9 ? '9+' : unreadCounts[c.otherProfile.id]}</div>
-                      )}
-                    </div>
-                    <div onClick={(e) => { e.stopPropagation(); setRowMenuAnchor(e.currentTarget); setRowMenuFor(rowMenuFor === c.id ? null : c.id); }} style={{ padding: 6, cursor: 'pointer', flexShrink: 0 }}>
-                      <MoreVertical size={16} color={theme.muted} />
-                    </div>
-                  </div>
-                );
-              })
-            )}
-            {archivedConversations.length > 0 && (
-              <div onClick={() => setShowArchived(true)} style={{ textAlign: 'center', padding: '12px 10px', fontSize: 12.5, color: theme.coralDeep, fontWeight: 700, cursor: 'pointer' }}>
-                Archived chats ({archivedConversations.length})
-              </div>
-            )}
-          </div>
-        </div>
 
-
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 0, position: 'relative' }} className="zchat-panel">
-          <AnimatedChatBackground chatTheme={chatTheme} />
-          {!activeProfile && !activeGroup ? (
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: theme.muted, fontSize: 14, textAlign: 'center', padding: 24 }}>
-              <div style={{ fontSize: 40, marginBottom: 10 }}>ðŸ’¬</div>
-              Search a username on the left<br />to start a conversation
-            </div>
-          ) : (
-            <>
-              {selectionMode ? (
-                <MessageActionBar
-                  count={selectedIds.size}
-                  canEditActions={selectionInfo}
-                  onCancel={cancelSelection}
-                  onCopy={doCopy}
-                  onForward={openForward}
-                  onDeleteForMe={doDeleteForMe}
-                  onDeleteForEveryone={doDeleteForEveryone}
-                  onReport={() => setReportModalFor(selectedMessages[0]?.id)}
-                  onEdit={doStartEdit}
-                  onReply={doStartReply}
-                  onReact={() => setReactionPickerFor(selectedMessages[0]?.id)}
-                />
-              ) : activeGroup ? (
-                <div style={{
-                  padding: '13px 18px', display: 'flex', alignItems: 'center', gap: 10, minHeight: 64, boxSizing: 'border-box',
-                  borderBottom: activeGroup.name_bar ? 'none' : `1px solid ${theme.border}`,
-                  cursor: 'pointer', position: 'relative', overflow: 'hidden',
-                  boxShadow: activeGroup.name_bar ? '0 2px 16px rgba(0,0,0,0.28), inset 0 0 0 1px rgba(255,255,255,0.16)' : 'none',
-                  ...(activeGroup.name_bar ? nameBarBgStyle(activeGroup.name_bar) : {}),
-                }}
-                  onClick={() => setShowGroupInfo(true)}>
-                  {activeGroup.name_bar && (
-                    <div style={{
-                      position: 'absolute', inset: 0, pointerEvents: 'none',
-                      background: 'linear-gradient(90deg, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.55) 45%, rgba(0,0,0,0.3) 75%, rgba(0,0,0,0.14) 100%), linear-gradient(180deg, rgba(0,0,0,0.05) 0%, rgba(0,0,0,0) 45%, rgba(0,0,0,0.22) 100%)',
-                    }} />
-                  )}
-                  <div className="zchat-back" style={{
-                    display: 'none', cursor: 'pointer', margin: '-10px -6px -10px -10px', padding: '10px 6px 10px 10px', position: 'relative',
-                    ...(activeGroup.name_bar ? { borderRadius: '50%', background: 'rgba(0,0,0,0.35)', margin: '-4px 0 -4px -4px', padding: 8 } : {}),
-                  }}
-                    onClick={(e) => { e.stopPropagation(); setMobileShowChat(false); }}>
-                    <ArrowLeft size={22} color={activeGroup.name_bar ? 'white' : undefined} />
-                  </div>
-                  <div style={{ position: 'relative' }}>
-                    <GroupAvatar avatar={activeGroup.avatar} name={activeGroup.name} size={38} />
-                  </div>
-                  <div style={{ flex: '1 1 0%', minWidth: 0, maxWidth: '100%', overflow: 'hidden', position: 'relative' }}>
-                    <div style={{
-                      fontWeight: 800, fontSize: 15, color: activeGroup.name_bar ? 'white' : theme.ink,
-                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', width: '100%',
-                      textShadow: activeGroup.name_bar ? '0 1px 3px rgba(0,0,0,0.95), 0 1px 10px rgba(0,0,0,0.6)' : 'none',
-                    }}>{activeGroup.name}</div>
-                    <div style={{
-                      fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', width: '100%',
-                      color: activeGroup.name_bar ? 'rgba(255,255,255,0.92)' : theme.muted,
-                      textShadow: activeGroup.name_bar ? '0 1px 3px rgba(0,0,0,0.9), 0 1px 8px rgba(0,0,0,0.5)' : 'none',
-                    }}>{groupMembers.length} members</div>
-                  </div>
-                  <div style={{
-                    position: 'relative', flexShrink: 0, marginLeft: 6, cursor: 'pointer',
-                    ...(activeGroup.name_bar ? { borderRadius: '50%', background: 'rgba(0,0,0,0.35)', padding: 6, display: 'flex' } : {}),
-                  }}
-                    onClick={(e) => { e.stopPropagation(); setShowGroupInfo(true); }}>
-                    <MoreVertical size={19} color={activeGroup.name_bar ? 'white' : theme.muted} />
-                  </div>
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, padding: 14, flexShrink: 0, paddingBottom: 'calc(14px + env(safe-area-inset-bottom))' }}>
+              {recording ? (
+                <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 10, background: theme.inputBg, borderRadius: 22, padding: '9px 16px' }}>
+                  <div style={{ width: 9, height: 9, borderRadius: '50%', background: theme.danger, animation: 'zchat-love-pulse 1s infinite' }} />
+                  <span style={{ fontSize: 13, color: theme.ink, fontWeight: 700 }}>Recording {Math.floor(recordSeconds / 60)}:{(recordSeconds % 60).toString().padStart(2, '0')}</span>
+                  <div style={{ flex: 1 }} />
+                  <X size={17} color={theme.muted} style={{ cursor: 'pointer' }} onClick={() => { mediaRecorderRef.current?.stream?.getTracks().forEach((t) => t.stop()); clearInterval(recordTimerRef.current); setRecording(false); mediaRecorderRef.current = null; }} />
                 </div>
               ) : (
-                <div style={{
-                  padding: '13px 18px', display: 'flex', alignItems: 'center', gap: 10, minHeight: 64, boxSizing: 'border-box',
-                  borderBottom: activeConvNameBar ? 'none' : `1px solid ${theme.border}`,
-                  cursor: 'pointer', position: 'relative', overflow: 'hidden',
-                  boxShadow: activeConvNameBar ? '0 2px 16px rgba(0,0,0,0.28), inset 0 0 0 1px rgba(255,255,255,0.16)' : 'none',
-                  ...(activeConvNameBar ? nameBarBgStyle(activeConvNameBar) : {}),
-                }}
-                  onClick={() => setProfileOf(activeProfile)}>
-                  {activeConvNameBar && (
-                    <div style={{
-                      position: 'absolute', inset: 0, pointerEvents: 'none',
-                      background: 'linear-gradient(90deg, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.55) 45%, rgba(0,0,0,0.3) 75%, rgba(0,0,0,0.14) 100%), linear-gradient(180deg, rgba(0,0,0,0.05) 0%, rgba(0,0,0,0) 45%, rgba(0,0,0,0.22) 100%)',
-                    }} />
+                <>
+                  <div onClick={() => setShowAttach((s) => !s)} style={{
+                    width: 40, height: 40, borderRadius: '50%', background: theme.rowBg, display: 'flex',
+                    alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, color: theme.coralDeep,
+                  }}><Paperclip size={18} /></div>
+                  <div onClick={() => setShowStickers((s) => !s)} style={{
+                    width: 40, height: 40, borderRadius: '50%', background: theme.rowBg, display: 'flex',
+                    alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, color: theme.coralDeep, fontSize: 18,
+                  }}><Smile size={18} /></div>
+                  <textarea
+                    ref={composerRef}
+                    value={draft}
+                    onChange={(e) => { setDraft(e.target.value.slice(0, MAX_CHARS)); sendTyping(); e.target.style.height = 'auto'; e.target.style.height = Math.min(e.target.scrollHeight, 110) + 'px'; }}
+                    onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); editingMessage ? saveEdit() : send(); } }}
+                    placeholder={editingMessage ? 'Edit message' : 'Message'}
+                    rows={1}
+                    style={{
+                      flex: 1, resize: 'none', maxHeight: 110, padding: '10px 16px', borderRadius: 20,
+                      border: `1px solid ${theme.border}`, background: theme.inputBg, color: theme.ink,
+                      fontFamily: FONT, fontSize: 15, outline: 'none', lineHeight: 1.35,
+                    }}
+                  />
+                  {(draft.trim() || pendingMedia.length > 0) ? (
+                    <div onClick={editingMessage ? saveEdit : send} style={{
+                      width: 40, height: 40, borderRadius: '50%', background: theme.coral, display: 'flex',
+                      alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0,
+                    }}><Send size={17} color="white" style={{ marginLeft: -1 }} /></div>
+                  ) : (
+                    <div
+                      onPointerDown={(e) => { e.preventDefault(); startRecording(); }}
+                      onPointerUp={stopRecording}
+                      onPointerLeave={stopRecording}
+                      style={{
+                        width: 40, height: 40, borderRadius: '50%', background: theme.coral, display: 'flex',
+                        alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, touchAction: 'none',
+                      }}><Mic size={17} color="white" /></div>
                   )}
-                  <div className="zchat-back" style={{
-                    display: 'none', cursor: 'pointer', margin: '-10px -6px -10px -10px', padding: '10px 6px 10px 10px', position: 'relative',
-                    ...(activeConvNameBar ? { borderRadius: '50%', background: 'rgba(0,0,0,0.35)', margin: '-4px 0 -4px -4px', padding: 8 } : {}),
-                  }}
-                    onClick={(e) => { e.stopPropagation(); setMobileShowChat(false); }}>
-                    <ArrowLeft size={22} color={activeConvNameBar ? 'white' : undefined} />
-                  </div>
-                  <div style={{ position: 'relative' }}>
-                    <Avatar emoji={activeProfile.avatar} name={activeProfile.name} online={!activeProfile.hide_activity && onlineIds.has(activeProfile.id)} size={38} ring />
-                  </div>
-                  <div style={{ flex: '1 1 0%', minWidth: 0, maxWidth: '100%', overflow: 'hidden', position: 'relative' }}>
-                    <div style={{
-                      fontWeight: 800, fontSize: 15, color: activeConvNameBar ? 'white' : theme.ink,
-                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', width: '100%',
-                      textShadow: activeConvNameBar ? '0 1px 3px rgba(0,0,0,0.95), 0 1px 10px rgba(0,0,0,0.6)' : 'none',
-                    }}>{activeProfile.name}</div>
-                    <div style={{
-                      fontSize: 12, fontWeight: typingFrom ? 700 : 400,
-                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', width: '100%',
-                      color: typingFrom ? theme.coral : (activeConvNameBar ? 'rgba(255,255,255,0.92)' : theme.muted),
-                      textShadow: activeConvNameBar ? '0 1px 3px rgba(0,0,0,0.9), 0 1px 8px rgba(0,0,0,0.5)' : 'none',
-                    }}>
-                      {typingFrom
-                        ? 'typing...'
-                        : (!activeProfile.hide_activity && onlineIds.has(activeProfile.id))
-                          ? 'Online'
-                          : (!activeProfile.hide_activity && formatLastSeen(activeProfile.last_seen)) || `@${activeProfile.username}`}
-                    </div>
-                  </div>
-                  <button onClick={(e) => { e.stopPropagation(); if (activeFollowState !== null) toggleActiveFollow(); }} disabled={activeFollowBusy || activeFollowState === null} style={{
-                    padding: '6px 14px', borderRadius: 18, fontSize: 11.5, fontWeight: 700, cursor: activeFollowState === null ? 'default' : 'pointer', fontFamily: FONT, flexShrink: 0,
-                    opacity: activeFollowState === null ? 0 : 1, visibility: activeFollowState === null ? 'hidden' : 'visible',
-                    position: 'relative',
-                    border: activeConvNameBar
-                      ? '1.5px solid rgba(255,255,255,0.5)'
-                      : (activeFollowState !== 'none' && activeFollowState !== null ? `1.5px solid ${theme.border}` : 'none'),
-                    background: activeConvNameBar
-                      ? (activeFollowState === 'accepted' ? 'rgba(0,0,0,0.45)' : activeFollowState === 'pending' ? 'rgba(0,0,0,0.35)' : theme.coral)
-                      : (activeFollowState === 'accepted' ? `${theme.coral}18` : activeFollowState === 'pending' ? 'transparent' : theme.coral),
-                    color: activeConvNameBar
-                      ? 'white'
-                      : (activeFollowState === 'accepted' ? theme.coralDeep : activeFollowState === 'pending' ? theme.ink : 'white'),
-                    display: 'flex', alignItems: 'center', gap: 5,
-                    backdropFilter: activeConvNameBar ? 'blur(6px)' : 'none',
-                    WebkitBackdropFilter: activeConvNameBar ? 'blur(6px)' : 'none',
-                  }}>
-                    {activeFollowBusy ? <Spinner size={11} color={activeConvNameBar ? 'white' : (activeFollowState !== 'none' ? theme.ink : 'white')} /> :
-                      (<>{activeFollowState === 'accepted' ? <Check size={11} /> : activeFollowState === 'pending' ? null : <UserPlus size={11} />}</>)}
-                    {!activeFollowBusy && (
-                      activeFollowState === 'accepted' ? 'Following' : activeFollowState === 'pending' ? 'Requested' : 'Follow'
-                    )}
-                  </button>
-                  <div style={{
-                    position: 'relative', flexShrink: 0, marginLeft: 6, cursor: 'pointer',
-                    ...(activeConvNameBar ? { borderRadius: '50%', background: 'rgba(0,0,0,0.35)', padding: 6, display: 'flex' } : {}),
-                  }}
-                    onClick={(e) => { e.stopPropagation(); setShowChatSettings(true); }}>
-                    <MoreVertical size={19} color={activeConvNameBar ? 'white' : theme.muted} />
-                  </div>
-                </div>
+                </>
               )}
-              <div ref={scrollRef} style={{
-                flex: 1, minHeight: 0, overflowY: 'auto', padding: '16px 18px',
-                WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain', overscrollBehaviorX: 'none', touchAction: 'pan-y',
-                ...((() => {
-                  const activeConv = activeProfile ? (conversations.find((c) => c.otherProfile.id === activeProfile.id) || archivedConversations.find((c) => c.otherProfile.id === activeProfile.id)) : null;
-                  const wp = activeGroup ? activeGroup.wallpaper : (activeConv ? myWallpaper(activeConv) : null);
-                  if (wp) return wallpaperBgStyle(wp);
-                  if (bgPatternOn) {
-                    return {
-                      backgroundSize: '130px 130px',
-                      backgroundRepeat: 'repeat',
-                      backgroundImage: theme.dark
-                        ? "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='130' height='130' viewBox='0 0 130 130'%3E%3Cg fill='none' stroke='%23FF6B4A' stroke-width='1.6' opacity='0.14'%3E%3Cpath d='M20 20 q0 -8 8 -8 h14 q8 0 8 8 v10 q0 8 -8 8 h-8 l-6 6 v-6 h0 q-8 0 -8 -8 z'/%3E%3C/g%3E%3Cg fill='none' stroke='%23F3B54C' stroke-width='1.6' opacity='0.14'%3E%3Cpath d='M95 15 l2.5 6 6.5 0.5 -5 4.3 1.6 6.4 -5.6 -3.6 -5.6 3.6 1.6 -6.4 -5 -4.3 6.5 -0.5 z'/%3E%3C/g%3E%3Cg fill='none' stroke='%2329C7B3' stroke-width='1.6' opacity='0.14'%3E%3Ccircle cx='30' cy='75' r='7'/%3E%3Cpath d='M30 70 v10 M25 75 h10'/%3E%3C/g%3E%3Cg fill='none' stroke='%23FF6B4A' stroke-width='1.6' opacity='0.12'%3E%3Cpath d='M85 70 l14 -7 -5 14 -3 -5 z'/%3E%3C/g%3E%3Cg fill='none' stroke='%23F3B54C' stroke-width='1.6' opacity='0.12'%3E%3Cpath d='M55 105 c0 -14 20 -14 20 0 c0 8 -6 10 -10 14 c-4 -4 -10 -6 -10 -14 z'/%3E%3C/g%3E%3Cg fill='none' stroke='%2329C7B3' stroke-width='1.6' opacity='0.12'%3E%3Crect x='10' y='105' width='16' height='12' rx='3'/%3E%3Ccircle cx='18' cy='111' r='3'/%3E%3C/g%3E%3C/svg%3E\")"
-                        : "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='130' height='130' viewBox='0 0 130 130'%3E%3Cg fill='none' stroke='%23FF6B4A' stroke-width='1.6' opacity='0.16'%3E%3Cpath d='M20 20 q0 -8 8 -8 h14 q8 0 8 8 v10 q0 8 -8 8 h-8 l-6 6 v-6 h0 q-8 0 -8 -8 z'/%3E%3C/g%3E%3Cg fill='none' stroke='%23F3B54C' stroke-width='1.6' opacity='0.16'%3E%3Cpath d='M95 15 l2.5 6 6.5 0.5 -5 4.3 1.6 6.4 -5.6 -3.6 -5.6 3.6 1.6 -6.4 -5 -4.3 6.5 -0.5 z'/%3E%3C/g%3E%3Cg fill='none' stroke='%2329C7B3' stroke-width='1.6' opacity='0.16'%3E%3Ccircle cx='30' cy='75' r='7'/%3E%3Cpath d='M30 70 v10 M25 75 h10'/%3E%3C/g%3E%3Cg fill='none' stroke='%23FF6B4A' stroke-width='1.6' opacity='0.14'%3E%3Cpath d='M85 70 l14 -7 -5 14 -3 -5 z'/%3E%3C/g%3E%3Cg fill='none' stroke='%23F3B54C' stroke-width='1.6' opacity='0.14'%3E%3Cpath d='M55 105 c0 -14 20 -14 20 0 c0 8 -6 10 -10 14 c-4 -4 -10 -6 -10 -14 z'/%3E%3C/g%3E%3Cg fill='none' stroke='%2329C7B3' stroke-width='1.6' opacity='0.14'%3E%3Crect x='10' y='105' width='16' height='12' rx='3'/%3E%3Ccircle cx='18' cy='111' r='3'/%3E%3C/g%3E%3C/svg%3E\")",
-                    };
-                  }
-                  return {};
-                })()),
-              }}>
-                {loadingConvo ? (
-                  <div style={{ display: 'flex', justifyContent: 'center', marginTop: 30 }}><Spinner color={theme.ink} /></div>
-                ) : messages.length === 0 ? (
-                  <div style={{ textAlign: 'center', color: theme.muted, marginTop: 40, fontSize: 13.5 }}>No messages yet. Say hi ðŸ‘‹</div>
-                ) : (
-                  messages.map((m) => {
-                    const senderMember = activeGroup ? groupMembers.find((gm) => gm.user_id === m.sender_id) : null;
-                    const nameFor = (senderId) => {
-                      if (senderId === session.user.id) return 'You';
-                      if (activeGroup) return groupMembers.find((gm) => gm.user_id === senderId)?.profile.name || 'Member';
-                      return activeProfile.name;
-                    };
-                    return (
-                      <MessageBubble
-                        key={m.id} m={m} isMe={m.sender_id === session.user.id} onDelete={(id) => setPendingQuickDelete(id)}
-                        canModerate={!!(activeGroup && groupMembers.find((gm) => gm.user_id === session.user.id)?.role === 'admin')}
-                        selectionMode={selectionMode} selected={selectedIds.has(m.id)} onToggleSelect={toggleSelect}
-                        onLongPress={(id) => setContextMenuFor(id)}
-                        onOpenImage={setViewerUrl}
-                        onOpenVideo={setViewerVideoUrl}
-                        reactions={messageLikes[m.id] || []}
-                        onReact={reactToMessage}
-                        onOpenWhoReacted={(id) => setWhoReactedFor(messageLikes[id] || [])}
-                        onSwipeReply={(msg) => { setReplyingTo(msg); setEditingMessage(null); setTimeout(() => composerRef.current?.focus(), 50); }}
-                        senderLabel={activeGroup && m.sender_id !== session.user.id ? (senderMember?.profile.name || 'Member') : null}
-                        onOpenSenderProfile={activeGroup && senderMember ? () => setProfileOf(senderMember.profile) : undefined}
-                        senderAvatar={activeGroup ? senderMember?.profile.avatar : undefined}
-                        hideReadStatus={!!activeProfile?.hide_activity}
-                        replyPreview={m.reply_to_id ? (() => {
-                          const rm = findMessageById(m.reply_to_id);
-                          if (!rm) return null;
-                          return { content: rm.content, type: rm.type, senderLabel: nameFor(rm.sender_id) };
-                        })() : null}
-                      />
-                    );
-                  })
-                )}
+            </div>
+
+            {showAttach && (
+              <div style={{ position: 'absolute', bottom: 76, left: 14, zIndex: 12, display: 'flex', gap: 10 }} className="zchat-fade">
+                <label style={{
+                  width: 52, height: 52, borderRadius: '50%', background: theme.coral, display: 'flex',
+                  alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 6px 16px rgba(0,0,0,0.2)',
+                }}>
+                  <ImageIcon size={20} color="white" />
+                  <input type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={(e) => handleFile(e, 'image')} />
+                </label>
+                <label style={{
+                  width: 52, height: 52, borderRadius: '50%', background: theme.coralDeep, display: 'flex',
+                  alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 6px 16px rgba(0,0,0,0.2)',
+                }}>
+                  <VideoIcon size={20} color="white" />
+                  <input type="file" accept="video/*" style={{ display: 'none' }} onChange={(e) => handleFile(e, 'video')} />
+                </label>
               </div>
-              {pendingMedia.length > 0 && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderTop: `1px solid ${theme.border}`, background: theme.rowBg, overflowX: 'auto' }}>
-                  {pendingMedia.map((item, idx) => (
-                    <div key={idx} style={{ position: 'relative', flexShrink: 0 }}>
-                      {item.kind === 'image' ? (
-                        <img src={item.url} alt="" style={{ width: 52, height: 52, borderRadius: 10, objectFit: 'cover' }} />
-                      ) : (
-                        <video src={item.url} style={{ width: 52, height: 52, borderRadius: 10, objectFit: 'cover', background: '#000' }} />
-                      )}
-                      <div onClick={() => removePendingMedia(idx)} style={{
-                        position: 'absolute', top: -5, right: -5, width: 18, height: 18, borderRadius: '50%',
-                        background: theme.danger, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-                      }}><X size={11} color="white" /></div>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {pendingForwardItems.length > 0 && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderTop: `1px solid ${theme.border}`, background: theme.rowBg }}>
-                  <Forward size={14} color={theme.coral} />
-                  <div style={{ flex: 1, fontSize: 12, color: theme.ink, fontWeight: 700 }}>
-                    {pendingForwardItems.length === 1
-                      ? `Forwarding: ${pendingForwardItems[0].type === 'text' ? pendingForwardItems[0].content : pendingForwardItems[0].type === 'image' ? 'ðŸ“· Photo' : pendingForwardItems[0].type === 'audio' ? 'ðŸŽ¤ Voice message' : 'ðŸŽ¥ Video'}`
-                      : `Forwarding ${pendingForwardItems.length} messages`}
+            )}
+
+            {showStickers && (
+              <div style={{ position: 'absolute', bottom: 76, left: 14, right: 14, zIndex: 12, display: 'flex', gap: 10, justifyContent: 'center', background: theme.panelBg, borderRadius: 20, padding: '12px 10px', boxShadow: '0 10px 30px rgba(0,0,0,0.22)', border: `1px solid ${theme.border}` }} className="zchat-fade">
+                {WAVE_STICKERS.map((s) => (
+                  <div key={s.key} onClick={() => sendSticker(s.emoji)} style={{ textAlign: 'center', cursor: 'pointer', flex: 1 }}>
+                    <div style={{ fontSize: 32, lineHeight: 1 }}>{s.emoji}</div>
+                    <div style={{ fontSize: 9.5, color: theme.muted, fontWeight: 700, marginTop: 3 }}>{s.label}</div>
                   </div>
-                  <X size={16} style={{ cursor: 'pointer', color: theme.muted }} onClick={() => { setPendingForwardItems([]); setDraft(''); }} />
-                </div>
-              )}
-              {replyingTo && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderTop: `1px solid ${theme.border}`, background: theme.rowBg }}>
-                  <div style={{ flex: 1, borderLeft: `3px solid ${theme.coral}`, paddingLeft: 8, fontSize: 12, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    Replying to {replyingTo.sender_id === session.user.id ? 'yourself' : (activeGroup ? (groupMembers.find((gm) => gm.user_id === replyingTo.sender_id)?.profile.name || 'Member') : activeProfile.name)}: {replyingTo.type === 'text' ? replyingTo.content : replyingTo.type === 'image' ? 'ðŸ“· Photo' : replyingTo.type === 'audio' ? 'ðŸŽ¤ Voice message' : 'ðŸŽ¥ Video'}
-                  </div>
-                  <X size={16} style={{ cursor: 'pointer', color: theme.muted }} onClick={() => setReplyingTo(null)} />
-                </div>
-              )}
-              {editingMessage && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderTop: `1px solid ${theme.border}`, background: theme.rowBg }}>
-                  <div style={{ flex: 1, fontSize: 12, color: theme.coralDeep, fontWeight: 700 }}>Editing message</div>
-                  <X size={16} style={{ cursor: 'pointer', color: theme.muted }} onClick={() => { setEditingMessage(null); setDraft(''); }} />
-                </div>
-              )}
-              {showAttach && (
-                <div style={{ display: 'flex', gap: 14, padding: '10px 16px', borderTop: `1px solid ${theme.border}` }} className="zchat-fade">
-                  <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
-                    <div style={{ width: 38, height: 38, borderRadius: '50%', background: theme.gold, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <ImageIcon size={18} color="#1B1B1F" />
-                    </div>
-                    <span style={{ fontSize: 10.5, color: theme.muted }}>Photo</span>
-                    <input type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={(e) => handleFile(e, 'image')} />
-                  </label>
-                  <label style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
-                    <div style={{ width: 38, height: 38, borderRadius: '50%', background: theme.coral, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <VideoIcon size={18} color="white" />
-                    </div>
-                    <span style={{ fontSize: 10.5, color: theme.muted }}>Video</span>
-                    <input type="file" accept="video/*" style={{ display: 'none' }} onChange={(e) => handleFile(e, 'video')} />
-                  </label>
-                </div>
-              )}
-              <div style={{ padding: '8px 14px', borderTop: `1px solid ${theme.border}` }}>
-                {activeGroup && groupMembers.find((gm) => gm.user_id === session.user.id)?.muted ? (
-                  <div style={{ textAlign: 'center', padding: '10px 4px', fontSize: 13, color: theme.muted, fontWeight: 600 }}>
-                    You've been muted in this group by an admin
-                  </div>
-                ) : (
-                  <>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <Paperclip size={21} color={theme.muted} style={{
-                        cursor: recording ? 'default' : 'pointer', opacity: recording ? 0.3 : 1, pointerEvents: recording ? 'none' : 'auto',
-                        transform: showAttach ? 'rotate(45deg)' : 'none', transition: 'transform 0.15s', flexShrink: 0,
-                      }}
-                        onClick={() => setShowAttach((s) => !s)} />
-                      {recording ? (
-                        <div style={{
-                          ...inputStyle(theme), flex: 1, borderRadius: 20, padding: '9px 14px',
-                          display: 'flex', alignItems: 'center', gap: 8,
-                        }}>
-                          <div style={{ width: 9, height: 9, borderRadius: '50%', background: theme.danger, animation: 'zchat-fade 1s infinite alternate', flexShrink: 0 }} />
-                          <span style={{ fontSize: 13.5, color: theme.ink, fontWeight: 700, flexShrink: 0 }}>
-                            {Math.floor(recordSeconds / 60)}:{(recordSeconds % 60).toString().padStart(2, '0')}
-                          </span>
-                          <span style={{ fontSize: 11.5, color: theme.muted, marginLeft: 'auto', whiteSpace: 'nowrap' }}>Release to send</span>
-                        </div>
-                      ) : (
-                        <textarea ref={composerRef} value={draft} enterKeyHint="enter" data-keyboard-heal="true" onChange={(e) => {
-                          setDraft(e.target.value.slice(0, MAX_CHARS)); sendTyping();
-                          e.target.style.height = 'auto';
-                          e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
-                        }}
-                          placeholder={uploading ? 'Uploading...' : editingMessage ? 'Edit message' : pendingMedia.length ? 'Add a caption...' : 'Type a message'} disabled={uploading}
-                          rows={1}
-                          style={{ ...inputStyle(theme), flex: 1, borderRadius: 20, padding: '9px 14px', resize: 'none', fontFamily: FONT, maxHeight: 120, overflowY: 'auto', lineHeight: 1.35, fontSize: 14.5 }} />
-                      )}
-                      {!draft.trim() && !editingMessage && !pendingForwardItems.length && !pendingMedia.length ? (
-                        <button
-                          onPointerDown={(e) => { e.preventDefault(); startRecording(); }}
-                          onPointerUp={stopRecording}
-                          onPointerCancel={stopRecording}
-                          onPointerLeave={() => { if (recording) stopRecording(); }}
-                          onContextMenu={(e) => e.preventDefault()}
-                          style={{
-                            width: 38, height: 38, borderRadius: '50%', background: recording ? theme.danger : theme.coral,
-                            border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0,
-                            touchAction: 'none', WebkitUserSelect: 'none',
-                            transform: recording ? 'scale(1.2)' : 'scale(1)', transition: 'transform 0.15s ease, background 0.15s ease',
-                            boxShadow: recording ? `0 0 0 8px ${theme.danger}22` : 'none',
-                          }}><Mic size={17} color="white" /></button>
-                      ) : (
-                        <button onClick={() => { (editingMessage ? saveEdit() : send()); }} disabled={!draft.trim() && !pendingForwardItems.length && !pendingMedia.length} style={{
-                          width: 38, height: 38, borderRadius: '50%', background: (draft.trim() || pendingForwardItems.length || pendingMedia.length) ? theme.coral : theme.rowBg,
-                          border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          cursor: (draft.trim() || pendingForwardItems.length || pendingMedia.length) ? 'pointer' : 'default', flexShrink: 0,
-                        }}>
-                          {editingMessage ? <Check size={16} color="white" /> : <Send size={16} color="white" />}
-                        </button>
-                      )}
-                    </div>
-                    {draft.length > MAX_CHARS - 50 && (
-                      <div style={{ textAlign: 'right', fontSize: 10.5, color: theme.danger, marginTop: 4, paddingRight: 4 }}>
-                        {draft.length}/{MAX_CHARS}
-                      </div>
-                    )}
-                  </>
-                )}
+                ))}
               </div>
-            </>
-          )}
-        </div>
-        <SmartMenu anchorEl={rowMenuAnchor} open={!!rowMenuFor} onClose={() => setRowMenuFor(null)}>
-          {(() => {
-            const c = conversations.find((x) => x.id === rowMenuFor) || archivedConversations.find((x) => x.id === rowMenuFor);
-            if (!c) return null;
-            const pinnedRow = isPinnedByMe(c);
-            return (
-              <div style={{ background: theme.panelBg, borderRadius: 14, boxShadow: '0 10px 30px rgba(0,0,0,0.2)', overflow: 'hidden' }}>
-                <div onClick={() => { togglePin(c); setRowMenuFor(null); }} style={{ padding: '11px 14px', fontSize: 13, fontWeight: 600, color: theme.ink, cursor: 'pointer', borderBottom: `1px solid ${theme.border}` }}>
-                  {pinnedRow ? 'Unpin chat' : 'Pin chat'}
-                </div>
-                <div onClick={() => { setRowMenuFor(null); toggleArchive(c.id, true); }} style={{ padding: '11px 14px', fontSize: 13, fontWeight: 600, color: theme.ink, cursor: 'pointer', borderBottom: `1px solid ${theme.border}` }}>
-                  Archive chat
-                </div>
-                <div onClick={() => { setRowMenuFor(null); setDeleteConvoTarget(c); }} style={{ padding: '11px 14px', fontSize: 13, fontWeight: 600, color: theme.danger, cursor: 'pointer' }}>
-                  Delete chat
-                </div>
-              </div>
-            );
-          })()}
-        </SmartMenu>
-        <SmartMenu anchorEl={groupRowMenuAnchor} open={!!groupRowMenuFor} onClose={() => setGroupRowMenuFor(null)}>
-          {(() => {
-            const g = groups.find((x) => x.id === groupRowMenuFor);
-            if (!g) return null;
-            return (
-              <div style={{ background: theme.panelBg, borderRadius: 14, boxShadow: '0 10px 30px rgba(0,0,0,0.2)', overflow: 'hidden' }}>
-                <div onClick={() => { toggleGroupPin(g); setGroupRowMenuFor(null); }} style={{ padding: '11px 14px', fontSize: 13, fontWeight: 600, color: theme.ink, cursor: 'pointer', borderBottom: `1px solid ${theme.border}` }}>
-                  {g.pinned ? 'Unpin group' : 'Pin group'}
-                </div>
-                <div onClick={() => { toggleGroupArchive(g); setGroupRowMenuFor(null); }} style={{ padding: '11px 14px', fontSize: 13, fontWeight: 600, color: theme.ink, cursor: 'pointer', borderBottom: `1px solid ${theme.border}` }}>
-                  Archive group
-                </div>
-                <div onClick={() => { setGroupRowMenuFor(null); if (confirm(`Leave "${g.name}"?`)) leaveGroupById(g); }} style={{ padding: '11px 14px', fontSize: 13, fontWeight: 600, color: theme.danger, cursor: 'pointer' }}>
-                  Leave group
-                </div>
-              </div>
-            );
-          })()}
-        </SmartMenu>
-        {viewerUrl && (
-          <ImageViewer url={viewerUrl} onClose={() => setViewerUrl(null)}
-            onForward={() => { setForwardTargets([{ type: 'image', media_url: viewerUrl, content: null }]); setForwardOpen(true); }}
-            onReport={() => setReportModalFor('__viewer__')} />
-        )}
-        {viewerVideoUrl && (
-          <VideoViewer url={viewerVideoUrl.url} trimStart={viewerVideoUrl.trimStart} trimEnd={viewerVideoUrl.trimEnd} onClose={() => setViewerVideoUrl(null)}
-            onForward={() => { setForwardTargets([{ type: 'video', media_url: viewerVideoUrl.url, content: null }]); setForwardOpen(true); }} />
-        )}
-        {photoEditQueue.length > 0 && (
-          <PhotoCropEditor
-            file={photoEditQueue[0]}
-            onCancel={() => setPhotoEditQueue((q) => q.slice(1))}
-            onConfirm={(blob, caption) => {
-              const namedFile = new File([blob], 'photo.jpg', { type: 'image/jpeg' });
-              setPendingMedia((prev) => [...prev, { file: namedFile, url: URL.createObjectURL(blob), kind: 'image' }]);
-              if (caption) setDraft(caption);
-              setPhotoEditQueue((q) => q.slice(1));
-            }}
-          />
-        )}
-        {photoEditQueue.length === 0 && videoEditQueue.length > 0 && (
-          <VideoTrimEditor
-            file={videoEditQueue[0]}
-            onCancel={() => setVideoEditQueue((q) => q.slice(1))}
-            onConfirm={(file, url, trimStart, trimEnd, caption) => {
-              setPendingMedia((prev) => [...prev, { file, url, kind: 'video', trimStart, trimEnd }]);
-              if (caption) setDraft(caption);
-              setVideoEditQueue((q) => q.slice(1));
-            }}
-          />
-        )}
-        {forwardOpen && (
-          <ForwardPicker conversations={conversations} myId={session.user.id} onCancel={() => setForwardOpen(false)} onPick={doForward} />
-        )}
-        {reportModalFor && (
-          <ReportMessageModal onCancel={() => setReportModalFor(null)} onSubmit={doReportMessage} />
-        )}
-        {deleteConvoTarget && (
-          <DeleteChatConfirm name={deleteConvoTarget.otherProfile.name} onCancel={() => setDeleteConvoTarget(null)} onConfirm={confirmDeleteChat} />
-        )}
-        {reactionPickerFor && (
-          <EmojiPickerBar onClose={() => setReactionPickerFor(null)} onPick={(emoji) => reactToMessage(reactionPickerFor, emoji)} />
-        )}
-        {pendingQuickDelete && (
-          <DeleteMessageConfirm
-            onCancel={() => setPendingQuickDelete(null)}
-            onConfirm={async () => { await handleDelete(pendingQuickDelete); setPendingQuickDelete(null); }}
-          />
-        )}
-        {whoReactedFor && (
-          <WhoReactedModal reactions={whoReactedFor} onClose={() => setWhoReactedFor(null)} />
-        )}
-        {showArchived && (
-          <ArchivedChatsPanel conversations={archivedConversations} onClose={() => setShowArchived(false)}
-            onOpenChat={(c) => { setShowArchived(false); openChat(c.otherProfile, c.id); }}
-            onUnarchive={(id) => toggleArchive(id, false)} />
-        )}
-        {contextMenuFor && (() => {
-          const m = findMessageById(contextMenuFor);
-          if (!m) return null;
-          const isMine = m.sender_id === session.user.id;
-          return (
-            <MessageContextMenu
-              message={m} isMine={isMine} canEditText={isMine && m.type === 'text' && !m.deleted}
-              canModerate={!!(activeGroup && groupMembers.find((gm) => gm.user_id === session.user.id)?.role === 'admin')}
-              onClose={() => setContextMenuFor(null)}
-              onReact={(emoji) => doReactSingle(m, emoji)}
-              onReply={() => doStartReplySingle(m)}
-              onCopy={() => doCopySingle(m)}
-              onEdit={() => doStartEditSingle(m)}
-              onForward={() => openForwardSingle(m)}
-              onReport={() => doReportSingle(m)}
-              onDeleteForMe={() => doDeleteForMeSingle(m)}
-              onDeleteForEveryone={() => doDeleteForEveryoneSingle(m)}
-              onSelectMultiple={() => doSelectMultipleFrom(m)}
-            />
-          );
-        })()}
-        {showChatSettings && activeProfile && (() => {
-          const activeConv = conversations.find((c) => c.otherProfile.id === activeProfile.id) || archivedConversations.find((c) => c.otherProfile.id === activeProfile.id);
-          if (!activeConv) return null;
-          return (
-            <ChatSettingsPanel
-              conv={activeConv} myId={session.user.id}
-              meAvatar={me.avatar} meName={me.name}
-              isPinned={isPinnedByMe(activeConv)}
-              isLocked={!!myLocks[activeConv.id]}
-              wallpaper={myWallpaper(activeConv)}
-              nameBar={activeConv.name_bar}
-              chatLockAvailable={!!me.chat_lock_hash}
-              onClose={() => setShowChatSettings(false)}
-              onTogglePin={() => { togglePin(activeConv); }}
-              onToggleArchive={() => { setShowChatSettings(false); toggleArchive(activeConv.id, true); setActiveProfile(null); }}
-              onSetWallpaper={(key) => setWallpaper(activeConv, key)}
-              onSetNameBar={(key) => setNameBar(activeConv, key)}
-              onEnableLock={() => enableChatLock(activeConv)}
-              onDisableLock={() => disableChatLock(activeConv)}
-              onDeleteChat={() => { setShowChatSettings(false); setDeleteConvoTarget(activeConv); }}
-              onReportUser={(reason) => handleReport(activeConv.otherProfile, reason)}
-              onOpenProfile={(p) => setProfileOf(p)}
-              onNeedChatLockSetup={() => { setShowChatSettings(false); setAutoOpenLockSetup(true); setShowSettings(true); }}
-              onNicknameSaved={async (newNick, contactId) => {
-                loadConversations();
-                if (newNick) {
-                  setActiveProfile((p) => (p && p.id === contactId ? { ...p, name: newNick } : p));
-                } else {
-                  const { data: fresh } = await supabase.from('profiles').select('name').eq('id', contactId).single();
-                  if (fresh) setActiveProfile((p) => (p && p.id === contactId ? { ...p, name: fresh.name } : p));
-                }
-              }}
-            />
-          );
-        })()}
-        {lockPromptFor && (
-          <ChatLockUnlock
-            correctHash={me.chat_lock_hash}
-            onCancel={() => setLockPromptFor(null)}
-            onUnlock={() => {
-              setUnlockedChats((prev) => new Set(prev).add(lockPromptFor.convId));
-              const { profile, convId } = lockPromptFor;
-              setLockPromptFor(null);
-              openChat(profile, convId);
-            }}
-          />
-        )}
-        {showCreateGroup && (
-          <CreateGroupPanel myId={session.user.id} onClose={() => setShowCreateGroup(false)}
-            onCreated={(group) => { setShowCreateGroup(false); loadGroups(); openGroup({ ...group, myRole: 'admin' }); }} />
-        )}
-        {showGroupInfo && activeGroup && (
-          <GroupInfoPanel
-            group={activeGroup} members={groupMembers} myId={session.user.id}
-            myRole={groupMembers.find((m) => m.user_id === session.user.id)?.role || 'member'}
-            isOwner={activeGroup.created_by === session.user.id}
-            onClose={() => setShowGroupInfo(false)}
-            onPromote={promoteMember} onDemote={demoteMember}
-            onMute={muteMember} onUnmute={unmuteMember}
-            onKick={kickMember} onLeave={leaveGroup}
-            onOpenProfile={(p) => setProfileOf(p)}
-            onSaveBio={saveGroupBio}
-            onSaveName={saveGroupName}
-            onSaveAvatar={saveGroupAvatar}
-            onAddMembers={addGroupMembers}
-            onTransferOwnership={transferOwnership}
-            onSetWallpaper={setGroupWallpaper}
-            onSetHeaderStyle={setGroupHeaderStyle}
-          />
-        )}
-        {showAccountSwitcher && (
-          <AccountSwitcherPanel
-            accounts={savedAccounts} currentId={session.user.id} switchingId={switchingAccountId}
-            onBack={() => setShowAccountSwitcher(false)}
-            onSwitch={onSwitchAccount}
-            onRemove={onRemoveAccount}
-            onAdd={onAddAccount}
-          />
-        )}
-        {showDeleteAccount && (
-          <DeleteAccountConfirm onCancel={() => setShowDeleteAccount(false)} onConfirm={deleteMyAccount} />
+            )}
+          </>
+        ) : (
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 10, color: theme.muted }}>
+            <ZBrand size={30} />
+            <div style={{ fontSize: 13 }}>Select a conversation to start chatting</div>
+          </div>
         )}
       </div>
-      <style>{`
-        @media (max-width: 760px) {
-          .zchat-sidebar { width: 100% !important; min-width: 100% !important; }
-          .zchat-panel { display: ${mobileShowChat ? 'flex' : 'none'} !important; }
-          .zchat-back { display: block !important; }
-        }
-      `}</style>
+
+      {profileOf && (
+        <ProfilePanel
+          profile={profileOf} isSelf={profileOf.id === session.user.id} userId={session.user.id}
+          isOnline={onlineIds.has(profileOf.id)} onClose={() => setProfileOf(null)}
+          onReport={handleReport} onSaved={(updated) => setProfileOf(updated)}
+          onOpenSettings={() => { setProfileOf(null); setShowSettings(true); }}
+          onOpenProfile={(p) => setProfileOf(p)}
+          onMessage={(p) => { setProfileOf(null); openChat(p, null); }}
+          isBlocked={myBlockedIds.has(profileOf.id)} onBlock={blockUser} onUnblock={unblockUser}
+        />
+      )}
+
+      {showSettings && (
+        <SettingsPanel
+          onClose={() => setShowSettings(false)}
+          onOpenPrivacy={() => setShowPrivacy(true)}
+          onOpenRequests={() => { setShowSettings(false); setShowFollowRequests(true); }}
+          onLogout={() => setShowLogoutConfirm(true)}
+          hideActivity={!!me.hide_activity} onToggleActivity={toggleHideActivity}
+          onOpenAccounts={() => { setShowSettings(false); setShowAccountSwitcher(true); }}
+          onOpenDelete={() => { setShowSettings(false); setShowDeleteAccount(true); }}
+          chatLockSet={!!me.chat_lock_enabled} chatLockHash={me.chat_lock_hash}
+          onSetChatLockPassword={setChatLockPassword} onTurnOffChatLock={turnOffChatLock}
+          autoOpenLockSetup={autoOpenLockSetup} onConsumedAutoOpen={() => setAutoOpenLockSetup(false)}
+        />
+      )}
+      {showPrivacy && <PrivacyPanel onBack={() => setShowPrivacy(false)} />}
+      {showLogoutConfirm && (
+        <LogoutConfirm onCancel={() => setShowLogoutConfirm(false)} onConfirm={onLogout} />
+      )}
+      {showFollowRequests && (
+        <FollowRequestsPanel userId={session.user.id} onClose={() => { setShowFollowRequests(false); loadFollowRequestCount(); }} onOpenProfile={(p) => { setShowFollowRequests(false); setProfileOf(p); }} />
+      )}
+      {showDiscover && (
+        <DiscoverPanel myId={session.user.id} blockedIds={myBlockedIds} onClose={() => setShowDiscover(false)} onOpenProfile={(p) => { setShowDiscover(false); setProfileOf(p); }} />
+      )}
+      {showAccountSwitcher && (
+        <AccountSwitcherPanel accounts={savedAccounts} currentId={session.user.id} switchingId={switchingAccountId}
+          onBack={() => setShowAccountSwitcher(false)} onSwitch={onSwitchAccount} onRemove={onRemoveAccount} onAdd={onAddAccount} />
+      )}
+      {showDeleteAccount && (
+        <DeleteAccountConfirm onCancel={() => setShowDeleteAccount(false)} onConfirm={deleteMyAccount} />
+      )}
+      {contextMenuFor && (() => {
+        const m = findMessageById(contextMenuFor);
+        if (!m) return null;
+        const isMine = m.sender_id === session.user.id;
+        return (
+          <MessageContextMenu
+            message={m} isMine={isMine}
+            canEditText={isMine && m.type === 'text' && !m.deleted}
+            canModerate={activeGroup ? (groupMembers.find((gm) => gm.user_id === session.user.id)?.role === 'admin') : false}
+            onClose={() => setContextMenuFor(null)}
+            onReact={(emoji) => doReactSingle(m, emoji)}
+            onReply={() => doStartReplySingle(m)}
+            onCopy={() => doCopySingle(m)}
+            onEdit={() => doStartEditSingle(m)}
+            onForward={() => openForwardSingle(m)}
+            onReport={() => doReportSingle(m)}
+            onDeleteForMe={() => doDeleteForMeSingle(m)}
+            onDeleteForEveryone={() => doDeleteForEveryoneSingle(m)}
+            onSelectMultiple={() => doSelectMultipleFrom(m)}
+          />
+        );
+      })()}
+      {pendingQuickDelete && (
+        <DeleteMessageConfirm onCancel={() => setPendingQuickDelete(null)} onConfirm={() => { handleDelete(pendingQuickDelete); setPendingQuickDelete(null); }} />
+      )}
+      {forwardOpen && (
+        <ForwardPicker conversations={conversations} myId={session.user.id} onCancel={() => setForwardOpen(false)} onPick={doForward} />
+      )}
+      {reportModalFor && (
+        <ReportMessageModal onCancel={() => setReportModalFor(null)} onSubmit={doReportMessage} />
+      )}
+      {deleteConvoTarget && (
+        <DeleteChatConfirm name={deleteConvoTarget.otherProfile.name} onCancel={() => setDeleteConvoTarget(null)} onConfirm={confirmDeleteChat} />
+      )}
+      {whoReactedFor && (
+        <WhoReactedModal reactions={whoReactedFor} onClose={() => setWhoReactedFor(null)} />
+      )}
+      {viewerUrl && (
+        <ImageViewer url={viewerUrl} onClose={() => setViewerUrl(null)} onForward={() => { openForward(); }} onReport={() => setReportModalFor('__viewer__')} />
+      )}
+      {viewerVideoUrl && (
+        <VideoViewer url={viewerVideoUrl.url} trimStart={viewerVideoUrl.trimStart} trimEnd={viewerVideoUrl.trimEnd} onClose={() => setViewerVideoUrl(null)} onForward={() => { setViewerVideoUrl(null); openForward(); }} />
+      )}
+      {showArchived && (
+        <ArchivedChatsPanel conversations={archivedConversations} onClose={() => setShowArchived(false)}
+          onOpenChat={(c) => { setShowArchived(false); openChat(c.otherProfile, c.id); }}
+          onUnarchive={(id) => toggleArchive(id, false)} />
+      )}
+      {showChatSettings && activeConvForBar && (
+        <ChatSettingsPanel
+          conv={activeConvForBar} myId={session.user.id} meAvatar={me.avatar} meName={me.name}
+          isPinned={isPinnedByMe(activeConvForBar)} isLocked={!!myLocks[activeConvForBar.id]}
+          wallpaper={myWallpaper(activeConvForBar)} nameBar={activeConvForBar.name_bar}
+          chatLockAvailable={!!me.chat_lock_enabled}
+          onClose={() => setShowChatSettings(false)}
+          onTogglePin={() => togglePin(activeConvForBar)}
+          onToggleArchive={() => { toggleArchive(activeConvForBar.id, true); setShowChatSettings(false); setMobileShowChat(false); setActiveProfile(null); }}
+          onSetWallpaper={(key) => setWallpaper(activeConvForBar, key)}
+          onSetNameBar={(key) => setNameBar(activeConvForBar, key)}
+          onEnableLock={() => enableChatLock(activeConvForBar)}
+          onDisableLock={() => disableChatLock(activeConvForBar)}
+          onDeleteChat={() => { setShowChatSettings(false); setDeleteConvoTarget(activeConvForBar); }}
+          onReportUser={(reason) => handleReport(activeConvForBar.otherProfile, reason)}
+          onNicknameSaved={(nick, otherId) => setConversations((prev) => prev.map((c) => (c.otherProfile.id === otherId ? { ...c, otherProfile: { ...c.otherProfile, name: nick || c.realName } } : c)))}
+          onNeedChatLockSetup={() => { setShowChatSettings(false); setShowSettings(true); setAutoOpenLockSetup(true); }}
+          onOpenProfile={(p) => { setShowChatSettings(false); setProfileOf(p); }}
+        />
+      )}
+      {showCreateGroup && (
+        <CreateGroupPanel myId={session.user.id} onClose={() => setShowCreateGroup(false)}
+          onCreated={(g) => { setShowCreateGroup(false); loadGroups(); openGroup({ ...g, myRole: 'admin' }); }} />
+      )}
+      {showGroupInfo && activeGroup && (
+        <GroupInfoPanel
+          group={activeGroup} members={groupMembers} myId={session.user.id}
+          myRole={groupMembers.find((gm) => gm.user_id === session.user.id)?.role || 'member'}
+          isOwner={activeGroup.created_by === session.user.id}
+          onClose={() => setShowGroupInfo(false)}
+          onPromote={promoteMember} onDemote={demoteMember} onMute={muteMember} onUnmute={unmuteMember}
+          onKick={kickMember} onLeave={leaveGroup}
+          onOpenProfile={(p) => { setShowGroupInfo(false); setProfileOf(p); }}
+          onSaveBio={saveGroupBio} onSaveName={saveGroupName} onSaveAvatar={saveGroupAvatar}
+          onAddMembers={addGroupMembers} onTransferOwnership={transferOwnership}
+          onSetWallpaper={setGroupWallpaper} onSetHeaderStyle={setGroupHeaderStyle}
+        />
+      )}
+      {lockPromptFor && (
+        <ChatLockUnlock correctHash={me.chat_lock_hash} onCancel={() => { setLockPromptFor(null); setMobileShowChat(false); }}
+          onUnlock={() => { const { profile, convId } = lockPromptFor; setUnlockedChats((prev) => new Set(prev).add(convId)); setLockPromptFor(null); openChat(profile, convId); }} />
+      )}
+      {showNotifHelp && <NotificationHelpModal onClose={() => setShowNotifHelp(false)} />}
+      {photoEditQueue.length > 0 && (
+        <PhotoCropEditor
+          file={photoEditQueue[0]}
+          onCancel={() => setPhotoEditQueue((prev) => prev.slice(1))}
+          onConfirm={(blob, caption) => {
+            const file = new File([blob], 'photo.jpg', { type: 'image/jpeg' });
+            const url = URL.createObjectURL(blob);
+            setPendingMedia((prev) => [...prev, { file, url, kind: 'image' }]);
+            if (caption) setDraft(caption);
+            setPhotoEditQueue((prev) => prev.slice(1));
+          }}
+        />
+      )}
+      {videoEditQueue.length > 0 && (
+        <VideoTrimEditor
+          file={videoEditQueue[0]}
+          onCancel={() => setVideoEditQueue((prev) => prev.slice(1))}
+          onConfirm={(file, url, trimStart, trimEnd, caption) => {
+            setPendingMedia((prev) => [...prev, { file, url, kind: 'video', trimStart, trimEnd }]);
+            if (caption) setDraft(caption);
+            setVideoEditQueue((prev) => prev.slice(1));
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -5800,6 +5624,7 @@ function ResetPasswordScreen({ onDone }) {
   const [pw2, setPw2] = useState('');
   const [err, setErr] = useState('');
   const [loading, setLoading] = useState(false);
+  const [done, setDone] = useState(false);
   const okPw = pw.length >= 6 && pw === pw2;
 
   const submit = async () => {
@@ -5808,161 +5633,153 @@ function ResetPasswordScreen({ onDone }) {
     const { error } = await setPassword(pw);
     setLoading(false);
     if (error) { setErr(error.message); return; }
-    onDone();
+    setDone(true);
+    setTimeout(onDone, 1400);
   };
 
-  return (
-    <div className="zchat-fade">
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-        <Lock size={18} color={theme.muted} /><span style={{ fontSize: 13.5, color: theme.muted }}>Set a new password</span>
-      </div>
-      <input style={{ ...inputStyle(theme), marginBottom: 10 }} type="password" placeholder="New password (min 6 characters)"
-        value={pw} onChange={(e) => setPw(e.target.value)} />
-      <input style={inputStyle(theme)} type="password" placeholder="Confirm new password"
-        value={pw2} onChange={(e) => setPw2(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && submit()} />
-      {pw2 && !okPw && pw !== pw2 && <div style={{ color: theme.danger, fontSize: 12, marginTop: 8 }}>Passwords don't match</div>}
-      {err && <div style={{ color: theme.danger, fontSize: 12.5, marginTop: 8 }}>{err}</div>}
-      <button style={primaryBtn(theme, !okPw || loading)} disabled={!okPw || loading} onClick={submit}>
-        {loading ? <Spinner /> : 'Update password'}
-      </button>
-    </div>
-  );
-}
-
-function AppInner() {
-  const [session, setSession] = useState(null);
-  const [checked, setChecked] = useState(false);
-  const [screen, setScreen] = useState('login');
-  const [registering, setRegistering] = useState(false);
-  const [resumeNotice, setResumeNotice] = useState('');
-  const [passwordRecovery, setPasswordRecovery] = useState(false);
-  const [savedAccounts, setSavedAccounts] = useState(getSavedAccounts());
-  const { theme } = useTheme();
-
-  const handleNeedsProfile = async () => {
-    await signOut();
-    setSession(null);
-    setResumeNotice('Your last signup didn\u2019t finish. Sign in again to pick up where you left off, or create a new account.');
-    setScreen('login');
-  };
-
-  const handlePasswordUpdated = async () => {
-    await signOut();
-    setSession(null);
-    setPasswordRecovery(false);
-    setResumeNotice('Password updated. Sign in with your new password.');
-    setScreen('login');
-  };
-
-  const [switchingAccountId, setSwitchingAccountId] = useState(null);
-
-  const handleAddAccount = async () => {
-    await supabase.auth.signOut({ scope: 'local' });
-    setSession(null);
-    setScreen('login');
-  };
-
-  const handleSwitchAccount = async (account) => {
-    if (switchingAccountId) return;
-    setSwitchingAccountId(account.id);
-    try {
-      const { data, error } = await supabase.auth.setSession({ access_token: account.access_token, refresh_token: account.refresh_token });
-      if (!error && data.session) {
-        saveAccountEntry({ ...account, access_token: data.session.access_token, refresh_token: data.session.refresh_token });
-        setSavedAccounts(getSavedAccounts());
-        setSession(data.session);
-      } else {
-        removeAccountEntry(account.id);
-        setSavedAccounts(getSavedAccounts());
-        alert('That account session expired â€” you\u2019ll need to log in to it again.');
-      }
-    } catch {
-      alert('Could not switch accounts right now. Please try again.');
-    } finally {
-      setSwitchingAccountId(null);
-    }
-  };
-
-  const handleRemoveAccount = (id) => {
-    removeAccountEntry(id);
-    setSavedAccounts(getSavedAccounts());
-  };
-
-  useEffect(() => {
-    getSession().then((s) => { setSession(s); setChecked(true); });
-    const { data: listener } = supabase.auth.onAuthStateChange((event, s) => {
-      if (event === 'PASSWORD_RECOVERY') { setPasswordRecovery(true); setSession(s); return; }
-      if (!passwordRecovery) setSession(s);
-    });
-    return () => listener.subscription.unsubscribe();
-  }, [passwordRecovery]);
-
-  useEffect(() => {
-    if (!session?.user) return;
-    (async () => {
-      const { data: profile } = await getProfile(session.user.id);
-      saveAccountEntry({
-        id: session.user.id,
-        email: session.user.email,
-        name: profile?.name || session.user.email,
-        username: profile?.username || '',
-        avatar: profile?.avatar || '',
-        access_token: session.access_token,
-        refresh_token: session.refresh_token,
-      });
-      setSavedAccounts(getSavedAccounts());
-    })();
-  }, [session?.access_token]);
-
-  if (!checked) {
-    return (
-      <div style={{ height: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: theme.bgGradient }}>
-        <Spinner size={28} color={theme.ink} />
-      </div>
-    );
-  }
-
-  if (passwordRecovery) {
+  if (done) {
     return (
       <AuthShell>
-        <ResetPasswordScreen onDone={handlePasswordUpdated} />
+        <div style={{ textAlign: 'center' }} className="zchat-fade">
+          <ShieldCheck size={32} color={theme.teal} style={{ marginBottom: 12 }} />
+          <div style={{ fontWeight: 800, fontSize: 16.5, color: theme.ink }}>Password updated</div>
+        </div>
       </AuthShell>
-    );
-  }
-
-  if (session && !registering) {
-    return (
-      <ChatApp
-        session={session}
-        onLogout={async () => { await signOut(); setSession(null); setScreen('login'); }}
-        onNeedsProfile={handleNeedsProfile}
-        savedAccounts={savedAccounts}
-        onSwitchAccount={handleSwitchAccount}
-        onAddAccount={handleAddAccount}
-        onRemoveAccount={handleRemoveAccount}
-        switchingAccountId={switchingAccountId}
-      />
     );
   }
 
   return (
     <AuthShell>
-      {resumeNotice && screen === 'login' && (
-        <div style={{
-          fontSize: 12.5, color: theme.coralDeep, background: `${theme.coral}14`, borderRadius: 12,
-          padding: '10px 12px', marginBottom: 16, lineHeight: 1.5,
-        }} className="zchat-fade">{resumeNotice}</div>
-      )}
-      {screen === 'login' && <LoginStep onSuccess={(s) => { setResumeNotice(''); setSession(s); }} onForgot={() => setScreen('forgot')} onGoRegister={() => { setResumeNotice(''); setScreen('register'); }} />}
-      {screen === 'forgot' && <ForgotStep onBack={() => setScreen('login')} />}
-      {screen === 'register' && (
-        <RegisterFlow
-          onStart={() => setRegistering(true)}
-          onBack={() => { setRegistering(false); setScreen('login'); }}
-          onDone={() => setRegistering(false)}
-        />
-      )}
+      <div style={{ fontSize: 19, fontWeight: 800, marginBottom: 6, color: theme.ink }}>Set a new password</div>
+      <div style={{ fontSize: 13, color: theme.muted, marginBottom: 16 }}>Choose something secure you haven't used before.</div>
+      <input style={{ ...inputStyle(theme), marginBottom: 10 }} type="password" placeholder="New password"
+        value={pw} onChange={(e) => setPw(e.target.value)} />
+      <input style={inputStyle(theme)} type="password" placeholder="Confirm new password"
+        value={pw2} onChange={(e) => setPw2(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && submit()} />
+      {err && <div style={{ color: theme.danger, fontSize: 12.5, marginTop: 8 }}>{err}</div>}
+      <button style={primaryBtn(theme, !okPw || loading)} disabled={!okPw || loading} onClick={submit}>
+        {loading ? <Spinner /> : 'Update password'}
+      </button>
     </AuthShell>
+  );
+}
+
+function AppInner() {
+  const [session, setSession] = useState(undefined);
+  const [screen, setScreen] = useState('login');
+  const [needsProfile, setNeedsProfile] = useState(false);
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
+  const [switchingAccountId, setSwitchingAccountId] = useState(null);
+
+  useEffect(() => {
+    if (window.location.hash.includes('type=recovery')) setIsPasswordRecovery(true);
+    getSession().then(({ data }) => setSession(data.session || null));
+    const { data: listener } = supabase.auth.onAuthStateChange((event, sess) => {
+      if (event === 'PASSWORD_RECOVERY') setIsPasswordRecovery(true);
+      setSession(sess);
+    });
+    return () => listener.subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (session?.user) {
+      getProfile(session.user.id).then(({ data }) => {
+        if (data) saveAccountEntry({ id: session.user.id, name: data.name, avatar: data.avatar, email: session.user.email });
+      });
+    }
+  }, [session?.user?.id]);
+
+  /* Item #3 fix: adding a second account used to call supabase.auth.signOut(), which
+     revokes the current session's refresh token server-side -- so switching back to the
+     first account later failed with "session expired". Now we just clear local screen
+     state and let the existing session's tokens stay valid in storage. */
+  const handleAddAccount = () => {
+    setSession(null);
+    setScreen('login');
+  };
+
+  const handleSwitchAccount = async (account) => {
+    setSwitchingAccountId(account.id);
+    const savedSessionRaw = (() => { try { return localStorage.getItem(`zchat-session-${account.id}`); } catch { return null; } })();
+    if (savedSessionRaw) {
+      try {
+        const savedSession = JSON.parse(savedSessionRaw);
+        const { data, error } = await supabase.auth.setSession({ access_token: savedSession.access_token, refresh_token: savedSession.refresh_token });
+        if (!error && data.session) { setSession(data.session); setSwitchingAccountId(null); return; }
+      } catch {}
+    }
+    setSwitchingAccountId(null);
+    alert("Couldn't switch to that account automatically. Please sign in again.");
+    setSession(null);
+    setScreen('login');
+  };
+
+  useEffect(() => {
+    if (session?.user) {
+      try {
+        localStorage.setItem(`zchat-session-${session.user.id}`, JSON.stringify({ access_token: session.access_token, refresh_token: session.refresh_token }));
+      } catch {}
+    }
+  }, [session?.access_token]);
+
+  const handleRemoveAccount = (id) => {
+    removeAccountEntry(id);
+    try { localStorage.removeItem(`zchat-session-${id}`); } catch {}
+  };
+
+  const handleLogout = async () => {
+    if (session?.user) { try { localStorage.removeItem(`zchat-session-${session.user.id}`); } catch {} removeAccountEntry(session.user.id); }
+    await signOut();
+    setSession(null);
+    setScreen('login');
+  };
+
+  if (isPasswordRecovery) {
+    return <ResetPasswordScreen onDone={() => { setIsPasswordRecovery(false); window.location.hash = ''; }} />;
+  }
+
+  if (session === undefined) {
+    return (
+      <div style={{ height: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Spinner size={26} color="#1B1B1F" />
+      </div>
+    );
+  }
+
+  if (!session || needsProfile) {
+    if (needsProfile) {
+      return (
+        <RegisterFlow
+          onStart={() => {}}
+          onDone={() => { setNeedsProfile(false); }}
+          onBack={() => { setNeedsProfile(false); supabase.auth.signOut(); setSession(null); }}
+        />
+      );
+    }
+    return (
+      <AuthShell>
+        {screen === 'login' && (
+          <LoginStep onSuccess={setSession} onForgot={() => setScreen('forgot')} onGoRegister={() => setScreen('register')} />
+        )}
+        {screen === 'forgot' && <ForgotStep onBack={() => setScreen('login')} />}
+        {screen === 'register' && (
+          <RegisterFlow onStart={() => {}} onDone={() => setScreen('login')} onBack={() => setScreen('login')} />
+        )}
+      </AuthShell>
+    );
+  }
+
+  return (
+    <ChatApp
+      session={session}
+      onLogout={handleLogout}
+      onNeedsProfile={() => setNeedsProfile(true)}
+      savedAccounts={getSavedAccounts()}
+      onSwitchAccount={handleSwitchAccount}
+      onAddAccount={handleAddAccount}
+      onRemoveAccount={handleRemoveAccount}
+      switchingAccountId={switchingAccountId}
+    />
   );
 }
 
@@ -5972,4 +5789,4 @@ export default function App() {
       <AppInner />
     </ThemeProvider>
   );
-}
+        }
