@@ -420,6 +420,50 @@ function AuthShell({ children }) {
   );
 }
 
+function GoogleLogo({ size = 18 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 48 48">
+      <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
+      <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.9-2.26 5.36-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
+      <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
+      <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
+    </svg>
+  );
+}
+
+async function signInWithGoogle() {
+  await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } });
+}
+
+function GoogleButton({ label = 'Continue with Google' }) {
+  const { theme } = useTheme();
+  const [loading, setLoading] = useState(false);
+  return (
+    <button
+      onClick={async () => { setLoading(true); await signInWithGoogle(); }}
+      disabled={loading}
+      style={{
+        width: '100%', padding: '13px', borderRadius: 15, border: `1.5px solid ${theme.border}`,
+        background: theme.dark ? 'rgba(255,255,255,0.04)' : 'white', color: theme.ink,
+        fontSize: 14.5, fontWeight: 700, cursor: loading ? 'default' : 'pointer', fontFamily: FONT,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+      }}>
+      {loading ? <Spinner size={15} color={theme.ink} /> : (<><GoogleLogo size={17} />{label}</>)}
+    </button>
+  );
+}
+
+function OrDivider() {
+  const { theme } = useTheme();
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '16px 0' }}>
+      <div style={{ flex: 1, height: 1, background: theme.border }} />
+      <span style={{ fontSize: 11.5, color: theme.muted, fontWeight: 600 }}>OR</span>
+      <div style={{ flex: 1, height: 1, background: theme.border }} />
+    </div>
+  );
+}
+
 function LoginStep({ onSuccess, onForgot, onGoRegister }) {
   const { theme } = useTheme();
   const [email, setEmail] = useState('');
@@ -441,6 +485,8 @@ function LoginStep({ onSuccess, onForgot, onGoRegister }) {
   return (
     <div>
       <div style={{ fontSize: 19, fontWeight: 800, marginBottom: 18, color: theme.ink }}>Welcome back</div>
+      <GoogleButton label="Continue with Google" />
+      <OrDivider />
       <input style={{ ...inputStyle(theme), marginBottom: 10 }} placeholder="Email" autoCapitalize="none"
         value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && submit()} />
       <div style={{ position: 'relative' }}>
@@ -610,9 +656,9 @@ function ResendRow({ onResend }) {
   );
 }
 
-function RegisterFlow({ onDone, onBack, onStart }) {
+function RegisterFlow({ onDone, onBack, onStart, initialStage = 'email' }) {
   const { theme } = useTheme();
-  const [stage, setStage] = useState('email');
+  const [stage, setStage] = useState(initialStage);
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
   const [pw, setPw] = useState('');
@@ -627,6 +673,20 @@ function RegisterFlow({ onDone, onBack, onStart }) {
   const [avatarUrl, setAvatarUrl] = useState('');
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [cropFile, setCropFile] = useState(null);
+
+  useEffect(() => {
+    /* Landing straight on the username step means we got here from an OAuth
+       sign-in (Google etc.) rather than the email/OTP path -- pull whatever
+       name and photo Google already gave us so picking a username is the
+       only thing left to do, instead of starting from a blank profile. */
+    if (initialStage !== 'username') return;
+    (async () => {
+      const { data } = await supabase.auth.getUser();
+      const meta = data?.user?.user_metadata;
+      if (meta?.full_name && !name) setName(meta.full_name);
+      if (meta?.avatar_url && !avatarUrl) setAvatarUrl(meta.avatar_url);
+    })();
+  }, [initialStage]);
   const usernameTimer = useRef(null);
 
   const sendCode = async () => {
@@ -1677,7 +1737,7 @@ const STICKERS = [
   { key: 'new-crying-86913', label: 'Crying', file: '/new-crying-86913.png', category: 'reactions' },
   { key: 'new-eugene-88351', label: 'Eugene', file: '/new-eugene-88351.png', category: 'reactions' },
   { key: 'new-alta-portal-turret-love-89822', label: 'Alta Portal Turret Love', file: '/new-alta-portal-turret-love-89822.png', category: 'reactions' },
-  { key: 'new-very-cool-90098', label: 'Very Cool', file: '/new-very-cool-90098.png', category: 'cool' },
+{ key: 'new-very-cool-90098', label: 'Very Cool', file: '/new-very-cool-90098.png', category: 'cool' },
   { key: 'new-flashbang-9183', label: 'Flashbang', file: '/new-flashbang-9183.gif', category: 'reactions' },
   { key: 'new-sunglasses-smirk-91991', label: 'Sunglasses Smirk', file: '/new-sunglasses-smirk-91991.png', category: 'cool' },
   { key: 'new-shockedcat-93363', label: 'Shockedcat', file: '/new-shockedcat-93363.png', category: 'cats' },
@@ -1719,6 +1779,8 @@ function StickerPicker({ onPick, onClose }) {
   const { theme } = useTheme();
   const [favKeys, setFavKeys] = useState(() => getFavoriteStickerKeys());
   const [query, setQuery] = useState('');
+  const [category, setCategory] = useState(() => (getFavoriteStickerKeys().size > 0 ? 'favorites' : 'goma'));
+
   const toggleFav = (e, key) => {
     e.stopPropagation();
     setFavKeys(new Set(toggleFavoriteSticker(key)));
@@ -3440,7 +3502,6 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
           display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.muted,
         }}><User size={28} /></div>
         <div style={{ fontWeight: 800, fontSize: 16, color: theme.ink, marginBottom: 6 }}>User not found</div>
-  const [category, setCategory] = useState(() => (getFavoriteStickerKeys().size > 0 ? 'favorites' : 'goma'));
         <div style={{ fontSize: 12.5, color: theme.muted }}>This account no longer exists.</div>
       </div>
     </div>
@@ -5161,6 +5222,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       .subscribe();
     return () => supabase.removeChannel(channel);
   }, [me, activeProfile]);
+
   const myGroupIds = groups.map((g) => g.id);
   const myGroupIdsKey = myGroupIds.join(',');
 
@@ -6837,9 +6899,16 @@ function AppInner() {
 
   if (!session || needsProfile || registering) {
     if (needsProfile) {
+      /* A Google sign-in already verified the email and needs no password --
+         jump straight to picking a username instead of asking them to type
+         an email and OTP they already handled via Google. An email/OTP user
+         who abandoned mid-signup still needs the normal flow so they end up
+         with a working password, not just a bare profile. */
+      const isGoogleUser = session?.user?.app_metadata?.provider === 'google';
       return (
         <AuthShell>
           <RegisterFlow
+            initialStage={isGoogleUser ? 'username' : 'email'}
             onStart={() => setRegistering(true)}
             onDone={() => { setRegistering(false); setNeedsProfile(false); }}
             onBack={() => { setRegistering(false); setNeedsProfile(false); supabase.auth.signOut(); setSession(null); }}
@@ -6881,4 +6950,4 @@ export default function App() {
       <AppInner />
     </ThemeProvider>
   );
-      }
+}
