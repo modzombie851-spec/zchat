@@ -2133,11 +2133,7 @@ function ChatSettingsPanel({ conv, myId, meAvatar, meName, isPinned, isLocked, w
     }} className="zchat-fade">
       <div style={{
         position: 'absolute', inset: 0, backgroundImage: "url('/chat-bg.jpg')",
-        backgroundSize: 'cover', backgroundPosition: 'center', opacity: theme.dark ? 0.5 : 0.6, pointerEvents: 'none',
-      }} />
-      <div style={{
-        position: 'absolute', inset: 0, pointerEvents: 'none',
-        background: theme.dark ? 'rgba(12,17,32,0.35)' : 'rgba(255,255,255,0.25)',
+        backgroundSize: 'cover', backgroundPosition: 'center', opacity: 0.35, pointerEvents: 'none',
       }} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 18px', borderBottom: `1px solid ${theme.border}`, position: 'relative', flexShrink: 0 }}>
         <ArrowLeft size={20} style={{ cursor: 'pointer', color: theme.ink }} onClick={onClose} />
@@ -3030,9 +3026,9 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
             <div style={{ position: 'relative', width: 92, height: 92, margin: '0 auto' }}>
               <div style={{ width: 92, height: 92, borderRadius: '50%', padding: 4, background: theme.panelBg, boxShadow: '0 4px 16px rgba(0,0,0,0.2), 0 0 0 1px rgba(0,0,0,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <Avatar emoji={avatar} name={profile.name} size={84} />
-</div>
+              </div>
               <label style={{
-                position: 'absolute', bottom: 0, right: 0, width: 28, height: 28, borderRadius: '50%',
+              position: 'absolute', bottom: 0, right: 0, width: 28, height: 28, borderRadius: '50%',
                 background: theme.coral, display: 'flex', alignItems: 'center', justifyContent: 'center',
                 cursor: 'pointer', border: `3px solid ${theme.panelBg}`,
               }}>
@@ -4547,7 +4543,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       })
       .subscribe();
     return () => supabase.removeChannel(channel);
-  }, [me, myGroupIdsKey, activeGroup]);
+    }, [me, myGroupIdsKey, activeGroup]);
   useEffect(() => {
     if (!me) return;
     const channel = supabase.channel('group-members-watch-' + me.id)
@@ -5530,15 +5526,14 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         {(activeProfile || activeGroup) ? (
           <>
             <div style={{
-              flexShrink: 0, position: 'relative', zIndex: 2,
-              display: 'flex', alignItems: 'center', gap: 10, padding: '13px 18px',
-              minHeight: 64, boxSizing: 'border-box',
+              padding: '13px 18px', display: 'flex', alignItems: 'center', gap: 10,
+              minHeight: 64, boxSizing: 'border-box', flexShrink: 0,
+              borderBottom: activeNameBarKey ? 'none' : `1px solid ${theme.border}`,
+              cursor: 'pointer', position: 'relative', overflow: 'hidden',
+              boxShadow: activeNameBarKey ? '0 2px 16px rgba(0,0,0,0.28), inset 0 0 0 1px rgba(255,255,255,0.16)' : 'none',
               ...(nameBarBgStyle(activeNameBarKey) || {}),
-              background: activeNameBarKey ? undefined : theme.glass,
-              backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
-              borderBottom: activeNameBarKey ? '1px solid rgba(255,255,255,0.2)' : `1px solid ${theme.border}`,
-              boxShadow: activeNameBarKey ? '0 2px 10px rgba(0,0,0,0.28)' : 'none',
-            }}>
+            }}
+              onClick={() => (activeGroup ? setShowGroupInfo(true) : setProfileOf(activeProfile))}>
               {activeNameBarKey && (
                 <div style={{
                   position: 'absolute', inset: 0, pointerEvents: 'none',
@@ -5546,8 +5541,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                 }} />
               )}
               <ArrowLeft size={20} style={{ cursor: 'pointer', color: activeNameBarKey ? 'white' : theme.ink, flexShrink: 0, filter: activeNameBarKey ? 'drop-shadow(0 1px 3px rgba(0,0,0,0.6))' : 'none', position: 'relative' }}
-                onClick={() => { setMobileShowChat(false); setActiveProfile(null); setActiveGroup(null); }} />
-              <div onClick={() => (activeGroup ? setShowGroupInfo(true) : setProfileOf(activeProfile))} style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, cursor: 'pointer', position: 'relative' }}>
+                onClick={(e) => { e.stopPropagation(); setMobileShowChat(false); setActiveProfile(null); setActiveGroup(null); }} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, position: 'relative' }}>
                 {activeGroup ? <GroupAvatar avatar={activeGroup.avatar} name={activeGroup.name} size={38} /> : <Avatar emoji={activeProfile.avatar} name={activeProfile.name} online={isUserOnline(activeProfile) && !activeProfile.hide_activity} size={38} />}
                 <div style={{ minWidth: 0 }}>
                   <div style={{
@@ -5560,7 +5555,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                 </div>
               </div>
               <MoreVertical size={19} style={{ cursor: 'pointer', color: activeNameBarKey ? 'white' : theme.ink, flexShrink: 0, filter: activeNameBarKey ? 'drop-shadow(0 1px 3px rgba(0,0,0,0.6))' : 'none', position: 'relative' }}
-                onClick={() => (activeGroup ? setShowGroupInfo(true) : setShowChatSettings(true))} />
+                onClick={(e) => { e.stopPropagation(); (activeGroup ? setShowGroupInfo(true) : setShowChatSettings(true)); }} />
             </div>
 
             {selectionMode && (
@@ -5671,12 +5666,14 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                   <textarea
                     ref={composerRef}
                     value={draft}
+                    enterKeyHint="enter"
+                    data-keyboard-heal="true"
                     onChange={(e) => { setDraft(e.target.value.slice(0, MAX_CHARS)); sendTyping(); e.target.style.height = 'auto'; e.target.style.height = Math.min(e.target.scrollHeight, 110) + 'px'; }}
                     onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); editingMessage ? saveEdit() : send(); } }}
                     placeholder={editingMessage ? 'Edit message' : 'Message'}
                     rows={1}
                     style={{
-                      flex: 1, resize: 'none', maxHeight: 110, padding: '10px 16px', borderRadius: 20,
+                      flex: 1, resize: 'none', maxHeight: 110, padding: '9px 14px', borderRadius: 20,
                       border: `1px solid ${theme.border}`, background: theme.inputBg, color: theme.ink,
                       fontFamily: FONT, fontSize: 15, outline: 'none', lineHeight: 1.35,
                     }}
