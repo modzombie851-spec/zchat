@@ -330,6 +330,15 @@ function GlobalStyle() {
         -webkit-user-drag: none;
         user-select: none;
       }
+      * {
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+      }
+      *::-webkit-scrollbar {
+        display: none;
+        width: 0;
+        height: 0;
+      }
     `}</style>
   );
 }
@@ -1030,6 +1039,22 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
   const accentLabels = { coral: 'Coral', ocean: 'Ocean', berry: 'Berry' };
   const [lockFlow, setLockFlow] = useState(null);
   const [section, setSection] = useState('main');
+  const [dragX, setDragX] = useState(0);
+  const dragStartRef = useRef(null);
+  const draggingRef = useRef(false);
+
+  const onDragStart = (e) => { dragStartRef.current = e.touches[0].clientX; draggingRef.current = false; };
+  const onDragMove = (e) => {
+    if (dragStartRef.current == null) return;
+    const dx = e.touches[0].clientX - dragStartRef.current;
+    if (dx < 0) { draggingRef.current = true; setDragX(Math.max(dx, -320)); }
+  };
+  const onDragEnd = () => {
+    if (draggingRef.current && dragX < -70) { onClose(); }
+    setDragX(0);
+    dragStartRef.current = null;
+    draggingRef.current = false;
+  };
 
   useEffect(() => {
     if (autoOpenLockSetup) {
@@ -1073,7 +1098,10 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
         width: '86%', maxWidth: 360, height: '100%', position: 'relative', overflowY: 'auto',
         WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain',
         paddingBottom: 'calc(26px + env(safe-area-inset-bottom))',
-      })}>
+        transform: `translateX(${dragX}px)`, transition: draggingRef.current ? 'none' : 'transform 0.25s ease',
+      })}
+        onTouchStart={onDragStart} onTouchMove={onDragMove} onTouchEnd={onDragEnd} onTouchCancel={onDragEnd}
+      >
         <X size={20} style={{ position: 'absolute', top: 18, right: 18, cursor: 'pointer', color: theme.muted }} onClick={onClose} />
 
         {section === 'main' && (
@@ -1093,18 +1121,6 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
         {section === 'appearance' && (
           <>
             <SectionHeader title="Appearance" />
-            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.muted, margin: '4px 0 6px 2px' }}>Chat theme</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
-              {Object.entries(CHAT_THEMES).map(([key, spec]) => (
-                <div key={key} onClick={() => setChatTheme(key)} style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', borderRadius: 14,
-                  border: chatTheme === key ? `2px solid ${theme.coral}` : `1.5px solid ${theme.border}`, cursor: 'pointer',
-                }}>
-                  <span style={{ fontSize: 13.5, fontWeight: 700, color: theme.ink }}>{spec.label}</span>
-                  {chatTheme === key && <Check size={16} color={theme.coral} />}
-                </div>
-              ))}
-            </div>
             <SettingsRow icon={dark ? <Sun size={16} /> : <Moon size={16} />} label="Dark mode" right={<ToggleSwitch on={dark} onClick={() => setDark((d) => !d)} />} />
             <div style={{ padding: '10px 4px', borderBottom: `1px solid ${theme.border}` }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
@@ -1136,7 +1152,6 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
                 ))}
               </div>
             </div>
-            <SettingsRow icon={<ImageIcon size={16} />} label="Chat background pattern" right={<ToggleSwitch on={bgPatternOn} onClick={() => setBgPatternOn((s) => !s)} />} />
             <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase', color: theme.muted, margin: '16px 0 6px 2px' }}>Text size</div>
             <div style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
               {[{ v: 0.88, l: 'Small' }, { v: 1, l: 'Default' }, { v: 1.18, l: 'Large' }].map((opt) => (
@@ -1265,6 +1280,41 @@ function PrivacyPanel({ onBack }) {
 }
 
 
+function FollowStatusPill({ theirId, viewerId, viewerFollowsThem, theyFollowViewer, theirIsPrivate, onChanged }) {
+  const { theme } = useTheme();
+  const [busy, setBusy] = useState(false);
+  if (theirId === viewerId) return null;
+
+  const label = viewerFollowsThem ? 'Following' : theyFollowViewer ? 'Follow back' : 'Follow';
+
+  const toggle = async (e) => {
+    e.stopPropagation();
+    if (busy) return;
+    setBusy(true);
+    if (viewerFollowsThem) {
+      await supabase.from('follows').delete().eq('follower_id', viewerId).eq('following_id', theirId);
+      onChanged(theirId, false);
+    } else {
+      const status = theirIsPrivate ? 'pending' : 'accepted';
+      await supabase.from('follows').insert({ follower_id: viewerId, following_id: theirId, status });
+      onChanged(theirId, status === 'accepted');
+    }
+    setBusy(false);
+  };
+
+  return (
+    <button onClick={toggle} disabled={busy} style={{
+      padding: '6px 13px', borderRadius: 16, cursor: busy ? 'default' : 'pointer', fontFamily: FONT, flexShrink: 0,
+      border: viewerFollowsThem ? `1.5px solid ${theme.border}` : 'none',
+      background: viewerFollowsThem ? 'transparent' : theme.coral,
+      color: viewerFollowsThem ? theme.ink : 'white',
+      fontSize: 11.5, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4,
+    }}>
+      {busy ? <Spinner size={11} color={viewerFollowsThem ? theme.ink : 'white'} /> : label}
+    </button>
+  );
+}
+
 function UserListRow({ profile, rightContent, onClick }) {
   const { theme } = useTheme();
   return (
@@ -1302,18 +1352,31 @@ function ListModal({ title, onClose, children }) {
 
 function FollowListModal({ userId, viewerId, mode, onClose, onOpenProfile }) {
   const [list, setList] = useState(null);
+  const [iFollow, setIFollow] = useState(new Set());
+  const [followsMe, setFollowsMe] = useState(new Set());
 
-  useEffect(() => {
-    (async () => {
-      const col = mode === 'followers' ? 'following_id' : 'follower_id';
-      const otherCol = mode === 'followers' ? 'follower_id' : 'following_id';
-      const { data } = await supabase.from('follows').select('*').eq(col, userId).eq('status', 'accepted');
-      const ids = (data || []).map((r) => r[otherCol]);
-      if (!ids.length) { setList([]); return; }
-      const { data: profs } = await supabase.from('profiles').select('*').in('id', ids);
-      setList(sanitizeAvatarList(profs, viewerId));
-    })();
-  }, [userId, mode]);
+  const load = async () => {
+    const col = mode === 'followers' ? 'following_id' : 'follower_id';
+    const otherCol = mode === 'followers' ? 'follower_id' : 'following_id';
+    const { data } = await supabase.from('follows').select('*').eq(col, userId).eq('status', 'accepted');
+    const ids = (data || []).map((r) => r[otherCol]);
+    if (!ids.length) { setList([]); return; }
+    const { data: profs } = await supabase.from('profiles').select('*').in('id', ids);
+    setList(sanitizeAvatarList(profs, viewerId));
+    /* Relationship between the person browsing (viewerId) and everyone in this
+       list -- so "Follow back" / "Following" / "Follow" reads correctly no
+       matter whose followers/following list this is. */
+    const { data: mine } = await supabase.from('follows').select('following_id').eq('follower_id', viewerId).eq('status', 'accepted').in('following_id', ids);
+    setIFollow(new Set((mine || []).map((r) => r.following_id)));
+    const { data: theirs } = await supabase.from('follows').select('follower_id').eq('following_id', viewerId).eq('status', 'accepted').in('follower_id', ids);
+    setFollowsMe(new Set((theirs || []).map((r) => r.follower_id)));
+  };
+
+  useEffect(() => { load(); }, [userId, mode]);
+
+  const handleChanged = (theirId, nowFollowing) => {
+    setIFollow((prev) => { const n = new Set(prev); if (nowFollowing) n.add(theirId); else n.delete(theirId); return n; });
+  };
 
   return (
     <ListModal title={mode === 'followers' ? 'Followers' : 'Following'} onClose={onClose}>
@@ -1322,7 +1385,12 @@ function FollowListModal({ userId, viewerId, mode, onClose, onOpenProfile }) {
       ) : list.length === 0 ? (
         <div style={{ textAlign: 'center', padding: 20, fontSize: 13, color: '#888' }}>Nobody here yet</div>
       ) : (
-        list.map((p) => <UserListRow key={p.id} profile={p} onClick={() => onOpenProfile(p)} />)
+        list.map((p) => (
+          <UserListRow key={p.id} profile={p} onClick={() => onOpenProfile(p)} rightContent={
+            <FollowStatusPill theirId={p.id} viewerId={viewerId} viewerFollowsThem={iFollow.has(p.id)} theyFollowViewer={followsMe.has(p.id)}
+              theirIsPrivate={p.is_private} onChanged={handleChanged} />
+          } />
+        ))
       )}
     </ListModal>
   );
@@ -1508,7 +1576,6 @@ const STICKER_CATEGORIES = [
   { key: 'red', label: 'Red Pack' },
   { key: 'cute', label: 'Cute' },
 ];
-
 function getFavoriteStickerKeys() {
   try { return new Set(JSON.parse(localStorage.getItem('zchat-fav-stickers') || '[]')); } catch { return new Set(); }
 }
@@ -1543,14 +1610,14 @@ function StickerPicker({ onPick, onClose }) {
     }} className="zchat-fade" onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} style={{
         background: theme.panelBg, borderRadius: '22px 22px 0 0', padding: '16px 14px', width: '100%', maxWidth: 460,
-        maxHeight: '62vh', display: 'flex', flexDirection: 'column',
+        height: '40vh', maxHeight: 360, minHeight: 300, display: 'flex', flexDirection: 'column',
         paddingBottom: 'calc(14px + env(safe-area-inset-bottom))',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, flexShrink: 0 }}>
           <div style={{ fontWeight: 800, fontSize: 15, color: theme.ink }}>Stickers</div>
           <X size={18} style={{ cursor: 'pointer', color: theme.muted }} onClick={onClose} />
         </div>
-        <div style={{ position: 'relative', marginBottom: 10 }}>
+        <div style={{ position: 'relative', marginBottom: 10, flexShrink: 0 }}>
           <Search size={14} color={theme.muted} style={{ position: 'absolute', left: 11, top: 10 }} />
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search stickers"
             style={{ ...inputStyle(theme), padding: '8px 12px 8px 32px', fontSize: 13 }} />
@@ -1566,7 +1633,7 @@ function StickerPicker({ onPick, onClose }) {
             ))}
           </div>
         )}
-        <div style={{ overflowY: 'auto', flex: 1, display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+        <div style={{ overflowY: 'auto', flex: 1, minHeight: 0, alignContent: 'flex-start', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
           {filtered.length === 0 && (
             <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: 20, fontSize: 12.5, color: theme.muted }}>
               {category === 'favorites' ? 'No favorites yet -- tap the star on any sticker' : 'No stickers found'}
@@ -2139,7 +2206,7 @@ function ChatSettingsPanel({ conv, myId, meAvatar, meName, isPinned, isLocked, w
         <ArrowLeft size={20} style={{ cursor: 'pointer', color: theme.ink }} onClick={onClose} />
         <div style={{ fontWeight: 800, fontSize: 17, color: theme.ink }}>Chat settings</div>
       </div>
-      <div style={{ flex: 1, overflow: 'hidden', padding: '12px 18px', position: 'relative', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '12px 18px', position: 'relative', display: 'flex', flexDirection: 'column' }}>
         <div style={{ textAlign: 'center', marginBottom: 12, flexShrink: 0 }}>
           <div style={{ display: 'flex', justifyContent: 'center' }}>
             <Avatar emoji={conv.otherProfile.avatar} name={otherName} size={56} />
@@ -2171,7 +2238,7 @@ function ChatSettingsPanel({ conv, myId, meAvatar, meName, isPinned, isLocked, w
           </div>
         </div>
 
-        <div style={{ flex: 1, overflow: 'hidden' }}>
+        <div style={{ flexShrink: 0, paddingBottom: 20 }}>
           <PillRow icon={<AtSign size={14} />} label="Nicknames" onClick={() => setShowNicknames(true)} />
           <PillRow icon={<Pin_ size={14} />} label={isPinned ? 'Unpin chat' : 'Pin chat'} onClick={onTogglePin} />
           <PillRow icon={<Archive size={14} />} label="Archive chat" onClick={onToggleArchive} />
@@ -2214,9 +2281,9 @@ function ChatSettingsPanel({ conv, myId, meAvatar, meName, isPinned, isLocked, w
 
 function Pin_({ size = 16, color = '#FF3B30' }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <path d="M12 2c-3.6 0-6.5 2.9-6.5 6.5 0 4.9 6.5 12.5 6.5 12.5s6.5-7.6 6.5-12.5C18.5 4.9 15.6 2 12 2z" fill={color} stroke={color} strokeWidth="1" strokeLinejoin="round" />
-      <circle cx="12" cy="8.4" r="2.6" fill="white" opacity="0.92" />
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" transform="rotate(45)">
+      <path d="M14.5 2.5a1 1 0 0 1 1.4 0l5.6 5.6a1 1 0 0 1 0 1.4l-3 3a1 1 0 0 1-1.3.1l-1-.7-3.6 3.6.6 2.7a1 1 0 0 1-.3.9l-1 1a1 1 0 0 1-1.4 0l-3.1-3.1-4.3 4.3a.75.75 0 0 1-1-1l4.3-4.3-3.1-3.1a1 1 0 0 1 0-1.4l1-1a1 1 0 0 1 .9-.3l2.7.6 3.6-3.6-.7-1a1 1 0 0 1 .1-1.3z"
+        fill={color} stroke={color} strokeWidth="0.6" strokeLinejoin="round" strokeLinecap="round" />
     </svg>
   );
 }
@@ -3028,7 +3095,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
                 <Avatar emoji={avatar} name={profile.name} size={84} />
               </div>
               <label style={{
-              position: 'absolute', bottom: 0, right: 0, width: 28, height: 28, borderRadius: '50%',
+                position: 'absolute', bottom: 0, right: 0, width: 28, height: 28, borderRadius: '50%',
                 background: theme.coral, display: 'flex', alignItems: 'center', justifyContent: 'center',
                 cursor: 'pointer', border: `3px solid ${theme.panelBg}`,
               }}>
@@ -3086,7 +3153,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
               <textarea value={bio} onChange={(e) => setBio(e.target.value.slice(0, 140))}
                 placeholder="Tell people about yourself"
                 style={{ ...inputStyle(theme), height: 64, resize: 'none', fontFamily: FONT, marginBottom: 14 }} />
-              <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
+<div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 11.5, color: theme.muted, marginBottom: 5, fontWeight: 800, letterSpacing: '0.04em' }}>AGE</div>
                   <input value={age} onChange={(e) => {
@@ -3121,25 +3188,40 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
             </div>
           ) : (
             <>
-              <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 20 }}>
-                <div onClick={() => setListModal('followers')} style={{ flex: 1, minWidth: 80, background: theme.rowBg, borderRadius: 16, padding: '10px 12px', cursor: 'pointer' }}>
-                  <div style={{ fontWeight: 800, fontSize: 16, color: theme.ink }}>{followerCount}</div>
-                  <div style={{ fontSize: 10.5, color: theme.muted, fontWeight: 600, marginTop: 1 }}>Followers</div>
+              {(!isSelf && profile.is_private && followState !== 'accepted') ? (
+                <div style={{ marginTop: 20, padding: '22px 16px', textAlign: 'center' }}>
+                  <div style={{
+                    width: 46, height: 46, borderRadius: '50%', margin: '0 auto 10px', background: theme.rowBg,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.muted,
+                  }}><Lock size={20} /></div>
+                  <div style={{ fontWeight: 800, fontSize: 14.5, color: theme.ink, marginBottom: 4 }}>This account is private</div>
+                  <div style={{ fontSize: 12.5, color: theme.muted, lineHeight: 1.5 }}>
+                    Follow {profile.name} to see their followers, following, and profile details.
+                  </div>
                 </div>
-                <div onClick={() => setListModal('following')} style={{ flex: 1, minWidth: 80, background: theme.rowBg, borderRadius: 16, padding: '10px 12px', cursor: 'pointer' }}>
-                  <div style={{ fontWeight: 800, fontSize: 16, color: theme.ink }}>{followingCount}</div>
-                  <div style={{ fontSize: 10.5, color: theme.muted, fontWeight: 600, marginTop: 1 }}>Following</div>
-                </div>
-              </div>
-              {(profile.gender || profile.age != null || profile.country || profile.bio) && (
-                <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
-                  {profile.gender && (isSelf || !profile.hide_gender) && <span style={{ fontSize: 11, color: theme.ink, fontWeight: 600, background: theme.rowBg, padding: '3px 10px', borderRadius: 12 }}>{profile.gender}</span>}
-                  {profile.age != null && (isSelf || !profile.hide_age) && <span style={{ fontSize: 11, color: theme.ink, fontWeight: 600, background: theme.rowBg, padding: '3px 10px', borderRadius: 12 }}>{profile.age} yrs</span>}
-                  {profile.country && (isSelf || !profile.hide_country) && <span style={{ fontSize: 14, background: theme.rowBg, padding: '3px 10px', borderRadius: 12 }}>{countryFlag(profile.country)}</span>}
-                </div>
-              )}
-              {profile.bio && (isSelf || !profile.hide_bio) && (
-                <div style={{ fontSize: 12.5, color: theme.ink, marginTop: 10, lineHeight: 1.5, padding: '0 8px', textAlign: 'center' }}>{profile.bio}</div>
+              ) : (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 20 }}>
+                    <div onClick={() => setListModal('followers')} style={{ flex: 1, minWidth: 80, background: theme.rowBg, borderRadius: 16, padding: '10px 12px', cursor: 'pointer' }}>
+                      <div style={{ fontWeight: 800, fontSize: 16, color: theme.ink }}>{followerCount}</div>
+                      <div style={{ fontSize: 10.5, color: theme.muted, fontWeight: 600, marginTop: 1 }}>Followers</div>
+                    </div>
+                    <div onClick={() => setListModal('following')} style={{ flex: 1, minWidth: 80, background: theme.rowBg, borderRadius: 16, padding: '10px 12px', cursor: 'pointer' }}>
+                      <div style={{ fontWeight: 800, fontSize: 16, color: theme.ink }}>{followingCount}</div>
+                      <div style={{ fontSize: 10.5, color: theme.muted, fontWeight: 600, marginTop: 1 }}>Following</div>
+                    </div>
+                  </div>
+                  {(profile.gender || profile.age != null || profile.country || profile.bio) && (
+                    <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
+                      {profile.gender && (isSelf || !profile.hide_gender) && <span style={{ fontSize: 11, color: theme.ink, fontWeight: 600, background: theme.rowBg, padding: '3px 10px', borderRadius: 12 }}>{profile.gender}</span>}
+                      {profile.age != null && (isSelf || !profile.hide_age) && <span style={{ fontSize: 11, color: theme.ink, fontWeight: 600, background: theme.rowBg, padding: '3px 10px', borderRadius: 12 }}>{profile.age} yrs</span>}
+                      {profile.country && (isSelf || !profile.hide_country) && <span style={{ fontSize: 14, background: theme.rowBg, padding: '3px 10px', borderRadius: 12 }}>{countryFlag(profile.country)}</span>}
+                    </div>
+                  )}
+                  {profile.bio && (isSelf || !profile.hide_bio) && (
+                    <div style={{ fontSize: 12.5, color: theme.ink, marginTop: 10, lineHeight: 1.5, padding: '0 8px', textAlign: 'center' }}>{profile.bio}</div>
+                  )}
+                </>
               )}
               {isSelf && (
                 <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${theme.border}` }}>
@@ -3178,13 +3260,15 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
                   </>
                 )}
               </button>
-              <button onClick={() => onMessage(profile)} style={{
-                padding: '9px 22px', borderRadius: 22, border: 'none', background: theme.ink,
-                color: theme.dark ? '#121319' : 'white', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT,
-                display: 'flex', alignItems: 'center', gap: 6,
-              }}>
-                <Send size={13} /> Message
-              </button>
+              {followState === 'accepted' && (
+                <button onClick={() => onMessage(profile)} style={{
+                  padding: '9px 22px', borderRadius: 22, border: 'none', background: theme.ink,
+                  color: theme.dark ? '#121319' : 'white', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: FONT,
+                  display: 'flex', alignItems: 'center', gap: 6,
+                }}>
+                  <Send size={13} /> Message
+                </button>
+              )}
             </div>
           )}
 
@@ -3313,9 +3397,6 @@ function AudioBubble({ url, isMe }) {
         </div>
         <div style={{ fontSize: 10, color: theme.muted, marginTop: 3 }}>{fmt(playing || progress ? progress : duration)}</div>
       </div>
-      <div onClick={(e) => { e.stopPropagation(); silentDownload(url, 'zchat-voice.webm'); }} style={{ color: theme.muted, flexShrink: 0, cursor: 'pointer', display: 'flex' }}>
-        <Download size={14} />
-      </div>
     </div>
   );
 }
@@ -3343,7 +3424,7 @@ async function silentDownload(url, filename) {
   }
 }
 
-function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSelect, onLongPress, onOpenImage, onOpenVideo, reactions, onReact, onOpenWhoReacted, replyPreview, onSwipeReply, senderLabel, senderAvatar, hideReadStatus, onOpenSenderProfile, canModerate }) {
+function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSelect, onLongPress, onOpenImage, onOpenVideo, reactions, onReact, onOpenWhoReacted, replyPreview, onSwipeReply, onJumpToMessage, highlighted, senderLabel, senderAvatar, hideReadStatus, onOpenSenderProfile, canModerate }) {
   const { theme, fontScale, chatTheme, bubbleColor } = useTheme();
   const [hover, setHover] = useState(false);
   const [burstHeart, setBurstHeart] = useState(false);
@@ -3424,10 +3505,12 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
 
   return (
     <div
+      id={`msg-${m.id}`}
       style={{
         display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start', alignItems: 'flex-start', gap: 8, marginBottom: 14,
         touchAction: 'pan-y', WebkitTapHighlightColor: 'transparent', overscrollBehaviorX: 'none', cursor: 'pointer',
-        background: selected ? `${theme.coral}14` : 'transparent',
+        background: selected ? `${theme.coral}14` : highlighted ? `${theme.coral}22` : 'transparent',
+        transition: 'background 0.3s ease',
         marginLeft: -18, marginRight: -18, paddingLeft: 18, paddingRight: 18, paddingTop: 2, paddingBottom: 2,
       }}
       onClick={handleRowTap}
@@ -3490,12 +3573,12 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
             </div>
           )}
           {replyPreview && !m.deleted && (
-            <div style={{
+            <div onClick={(e) => { e.stopPropagation(); onJumpToMessage && onJumpToMessage(replyPreview.id); }} style={{
               borderLeft: `3px solid ${theme.coral}`, background: 'rgba(0,0,0,0.05)', borderRadius: 6,
-              padding: '4px 8px', marginBottom: 5, fontSize: 11.5, color: theme.muted,
+              padding: '4px 8px', marginBottom: 5, fontSize: 11.5, color: theme.muted, cursor: 'pointer',
             }}>
               <div style={{ fontWeight: 700, color: theme.coralDeep, fontSize: 10.5 }}>{replyPreview.senderLabel}</div>
-              <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              <div style={{ wordBreak: 'break-word', lineHeight: 1.35 }}>
                 {replyPreview.type === 'text' ? replyPreview.content : replyPreview.type === 'image' ? 'Photo' : replyPreview.type === 'audio' ? 'Voice message' : replyPreview.type === 'sticker' ? 'Sticker' : 'Video'}
               </div>
             </div>
@@ -3803,6 +3886,32 @@ function DeleteChatConfirm({ name, onCancel, onConfirm }) {
   );
 }
 
+function AccountGoneModal({ name, onOk }) {
+  const { theme } = useTheme();
+  return (
+    <div style={{
+      position: 'absolute', inset: 0, background: 'rgba(10,8,6,0.45)', backdropFilter: 'blur(3px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 90, padding: 24,
+    }} className="zchat-fade">
+      <div style={{ background: theme.panelBg, borderRadius: 20, padding: '24px 22px', width: '100%', maxWidth: 280, textAlign: 'center' }}>
+        <div style={{
+          width: 52, height: 52, borderRadius: '50%', margin: '0 auto 14px', background: theme.rowBg,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.muted,
+        }}><User size={22} /></div>
+        <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 6, color: theme.ink }}>Account not found</div>
+        <div style={{ fontSize: 12.5, marginBottom: 20, lineHeight: 1.5, color: theme.muted }}>
+          {name}'s account no longer exists.
+        </div>
+        <button onClick={onOk} style={{
+          width: '100%', padding: 11, borderRadius: 13, border: 'none', background: theme.coral,
+          color: 'white', fontWeight: 700, fontSize: 13.5, cursor: 'pointer', fontFamily: FONT,
+        }}>OK</button>
+      </div>
+    </div>
+  );
+}
+
+
 function DeleteMessageConfirm({ onCancel, onConfirm }) {
   const { theme } = useTheme();
   return (
@@ -4025,6 +4134,50 @@ function NotificationPermissionBanner({ onOpenHelp, onDismiss, top }) {
   );
 }
 
+function InstallAppBanner({ onOpenHelp, onInstallNow, canInstallDirectly, onDismiss, top }) {
+  const { theme } = useTheme();
+  return (
+    <div style={{
+      position: 'absolute', top, left: 10, right: 10, zIndex: 14, maxWidth: 340, margin: '0 auto',
+      background: theme.panelBg, borderRadius: 14, padding: '10px 12px', boxShadow: '0 6px 20px rgba(0,0,0,0.22)',
+      border: `1px solid ${theme.border}`, display: 'flex', alignItems: 'center', gap: 10,
+    }} className="zchat-fade">
+      <Download size={16} color={theme.coral} style={{ flexShrink: 0 }} />
+      <div style={{ flex: 1, fontSize: 11, color: theme.ink, fontWeight: 600 }}>Install ZChat on your home screen</div>
+      <span onClick={canInstallDirectly ? onInstallNow : onOpenHelp} style={{ fontSize: 11.5, color: theme.coral, fontWeight: 800, cursor: 'pointer', flexShrink: 0 }}>Install</span>
+      <X size={15} color={theme.muted} style={{ cursor: 'pointer', flexShrink: 0 }} onClick={onDismiss} />
+    </div>
+  );
+}
+
+function InstallAppHelpModal({ onClose }) {
+  const { theme } = useTheme();
+  const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+  const isIOS = /iPhone|iPad|iPod/.test(ua);
+  const steps = isIOS
+    ? ['Tap the Share icon at the bottom of Safari (the square with an arrow)', 'Scroll down and tap "Add to Home Screen"', 'Tap "Add" in the top right', 'ZChat now opens full-screen from your home screen, just like any other app']
+    : ['Tap the 3-dot menu in the top right of your browser', 'Tap "Add to Home screen" or "Install app"', 'Confirm by tapping "Add" or "Install"', 'ZChat now opens full-screen from your home screen, just like any other app'];
+  return (
+    <div style={{
+      position: 'absolute', inset: 0, background: 'rgba(20,16,14,0.5)', zIndex: 97,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 18,
+    }} className="zchat-fade">
+      <div style={{ background: theme.panelBg, borderRadius: 22, padding: 22, width: '100%', maxWidth: 320 }}>
+        <div style={{ fontWeight: 800, fontSize: 16, color: theme.ink, marginBottom: 6 }}>Install ZChat</div>
+        <div style={{ fontSize: 12.5, color: theme.muted, marginBottom: 14, lineHeight: 1.5 }}>
+          Add ZChat to your home screen so it opens instantly, full-screen, with no browser bar -- exactly like an app you installed from a store.
+        </div>
+        <ol style={{ margin: 0, paddingLeft: 18, marginBottom: 18 }}>
+          {steps.map((s, i) => (
+            <li key={i} style={{ fontSize: 12.5, color: theme.ink, marginBottom: 6, lineHeight: 1.4 }}>{s}</li>
+          ))}
+        </ol>
+        <button onClick={onClose} style={primaryBtn(theme, false)}>Got it</button>
+      </div>
+    </div>
+  );
+}
+
 function SmartMenu({ anchorEl, open, onClose, children, width = 170 }) {
   const [pos, setPos] = useState(null);
   useEffect(() => {
@@ -4072,6 +4225,25 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     window.addEventListener('focus', check);
     return () => { document.removeEventListener('visibilitychange', check); window.removeEventListener('focus', check); };
   }, []);
+  const [deferredInstallPrompt, setDeferredInstallPrompt] = useState(null);
+  const [isStandaloneApp, setIsStandaloneApp] = useState(false);
+  const [installBannerDismissed, setInstallBannerDismissed] = useState(() => {
+    try { return localStorage.getItem('zchat-install-banner-dismissed') === '1'; } catch { return false; }
+  });
+  const [showInstallHelp, setShowInstallHelp] = useState(false);
+  useEffect(() => {
+    const standalone = window.matchMedia?.('(display-mode: standalone)')?.matches || window.navigator.standalone === true;
+    setIsStandaloneApp(!!standalone);
+    const onBeforeInstall = (e) => { e.preventDefault(); setDeferredInstallPrompt(e); };
+    window.addEventListener('beforeinstallprompt', onBeforeInstall);
+    return () => window.removeEventListener('beforeinstallprompt', onBeforeInstall);
+  }, []);
+  const handleInstallNow = async () => {
+    if (!deferredInstallPrompt) { setShowInstallHelp(true); return; }
+    deferredInstallPrompt.prompt();
+    await deferredInstallPrompt.userChoice;
+    setDeferredInstallPrompt(null);
+  };
   const [me, setMe] = useState(null);
   const [profileCheckFailed, setProfileCheckFailed] = useState(false);
   const [results, setResults] = useState([]);
@@ -4119,6 +4291,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [videoEditQueue, setVideoEditQueue] = useState([]);
   const [activeFollowState, setActiveFollowState] = useState('none');
   const [activeFollowBusy, setActiveFollowBusy] = useState(false);
+  const [activeFollowerFollowsMe, setActiveFollowerFollowsMe] = useState(false);
   const [whoReactedFor, setWhoReactedFor] = useState(null);
   const [showArchived, setShowArchived] = useState(false);
   const [archivedConversations, setArchivedConversations] = useState([]);
@@ -4136,9 +4309,19 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [myLocks, setMyLocks] = useState({});
   const [unlockedChats, setUnlockedChats] = useState(new Set());
   const [lockPromptFor, setLockPromptFor] = useState(null);
+  const [deletedAccountAlertFor, setDeletedAccountAlertFor] = useState(null);
   const [recording, setRecording] = useState(false);
   const [recordSeconds, setRecordSeconds] = useState(0);
   const [pullDistance, setPullDistance] = useState(0);
+  const [highlightedMsgId, setHighlightedMsgId] = useState(null);
+  const highlightTimerRef = useRef(null);
+  const jumpToMessage = (id) => {
+    const el = document.getElementById(`msg-${id}`);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setHighlightedMsgId(id);
+    clearTimeout(highlightTimerRef.current);
+    highlightTimerRef.current = setTimeout(() => setHighlightedMsgId(null), 1400);
+  };
   const [refreshing, setRefreshing] = useState(false);
   const pullStartYRef = useRef(null);
   const sidebarListRef = useRef(null);
@@ -4465,8 +4648,12 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const channel = supabase.channel('read-receipts-' + me.id)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, (payload) => {
         const row = payload.new;
-        if (row.sender_id === me.id) {
-          setMessages((prev) => prev.map((m) => (m.id === row.id ? { ...m, read: row.read, delivered: row.delivered, edited: row.edited, deleted: row.deleted } : m)));
+        /* This has to fire for messages where I'm either side of the conversation --
+           it was only updating when I was the sender, which is why deleting or editing
+           a message never reached the OTHER person live; they only saw it after leaving
+           and reopening the chat, which re-fetches everything fresh from the server. */
+        if (row.sender_id === me.id || row.receiver_id === me.id) {
+          setMessages((prev) => prev.map((m) => (m.id === row.id ? { ...m, read: row.read, delivered: row.delivered, edited: row.edited, deleted: row.deleted, content: row.deleted ? m.content : row.content } : m)));
         }
       })
       .subscribe();
@@ -4543,7 +4730,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       })
       .subscribe();
     return () => supabase.removeChannel(channel);
-    }, [me, myGroupIdsKey, activeGroup]);
+  }, [me, myGroupIdsKey, activeGroup]);
   useEffect(() => {
     if (!me) return;
     const channel = supabase.channel('group-members-watch-' + me.id)
@@ -4604,6 +4791,20 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       composerRef.current.style.height = 'auto';
     }
   }, [draft]);
+
+  useEffect(() => {
+    /* Populating the draft programmatically (tapping Edit on a message, or a
+       forwarded caption) doesn't fire the textarea's own onChange handler, so the
+       auto-grow logic there never runs -- a long message being edited would stay
+       squashed into one line instead of expanding to show it. */
+    if (composerRef.current && editingMessage) {
+      const el = composerRef.current;
+      requestAnimationFrame(() => {
+        el.style.height = 'auto';
+        el.style.height = Math.min(el.scrollHeight, 110) + 'px';
+      });
+    }
+  }, [editingMessage]);
 
   useEffect(() => {
     if (!profileOf || profileOf.id === me?.id) return;
@@ -4841,6 +5042,11 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   };
 
   const openChat = async (profile, convId) => {
+    const { data: freshCheck } = await getProfile(profile.id);
+    if (freshCheck?.is_deleted) {
+      setDeletedAccountAlertFor(profile.name || 'This person');
+      return;
+    }
     if (convId) {
       /* Check the locally-cached lock map first (instant, and not dependent on
          a fresh round-trip succeeding) and fall back to a live DB check in case
@@ -4872,6 +5078,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (convId) markRead(convId);
     const { data: followRow } = await supabase.from('follows').select('status').eq('follower_id', session.user.id).eq('following_id', profile.id).maybeSingle();
     setActiveFollowState(followRow ? followRow.status : 'none');
+    const { data: theyFollowMeRow } = await supabase.from('follows').select('status').eq('follower_id', profile.id).eq('following_id', session.user.id).eq('status', 'accepted').maybeSingle();
+    setActiveFollowerFollowsMe(!!theyFollowMeRow);
     const { data } = await getConversation(session.user.id, profile.id);
     const hidden = getHiddenMsgIds();
     const visible = (data || []).filter((m) => !hidden.has(m.id));
@@ -5216,18 +5424,27 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         const destUrl = activeGroup ? `/?group=${activeGroup.id}` : `/?dm=${session.user.id}`;
         sendPushNotification(targetMessage.sender_id, me.name, `reacted ${emoji} to your message`, destUrl, me.avatar);
       }
+      /* A reaction counts as the latest activity in the chat too -- without this the
+         main list never reflected that someone just reacted until an actual new
+         message came in. */
+      if (activeProfile) upsertConversation(activeProfile.id, `Reacted ${emoji}`, 'text');
     }
     setReactionPickerFor(null);
   };
 
-  const confirmDeleteChat = () => {
-    if (deleteConvoTarget) {
-      hideChatLocally(deleteConvoTarget.id);
-      const allIds = messages.filter((m) => !m.deleted).map((m) => m.id);
-      if (activeProfile?.id === deleteConvoTarget.otherProfile.id && allIds.length) hideMessagesLocally(allIds);
-    }
-    if (deleteConvoTarget && activeProfile?.id === deleteConvoTarget.otherProfile.id) { setActiveProfile(null); setMessages([]); }
+  const confirmDeleteChat = async () => {
+    const target = deleteConvoTarget;
     setDeleteConvoTarget(null);
+    if (!target) return;
+    hideChatLocally(target.id);
+    /* Always fetch the full message history fresh from the server before hiding it --
+       relying on whatever happened to already be loaded in `messages` meant deleting a
+       chat straight from the list (without opening it first) hid nothing, so the entire
+       old history came back the moment they messaged again. */
+    const { data: allMsgs } = await getConversation(session.user.id, target.otherProfile.id);
+    const allIds = (allMsgs || []).map((m) => m.id);
+    if (allIds.length) hideMessagesLocally(allIds);
+    if (activeProfile?.id === target.otherProfile.id) { setActiveProfile(null); setMobileShowChat(false); setMessages([]); }
     loadConversations();
   };
 
@@ -5339,6 +5556,13 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         <NotificationPermissionBanner top="calc(10px + env(safe-area-inset-top))" onOpenHelp={() => setShowNotifHelp(true)}
           onDismiss={() => { setNotifBannerDismissed(true); try { sessionStorage.setItem('zchat-notif-banner-dismissed', '1'); } catch {} }} />
       )}
+      {!isStandaloneApp && !installBannerDismissed && !mobileShowChat && (
+        <InstallAppBanner
+          top={notifPermission === 'denied' && !notifBannerDismissed ? 'calc(60px + env(safe-area-inset-top))' : 'calc(10px + env(safe-area-inset-top))'}
+          canInstallDirectly={!!deferredInstallPrompt} onInstallNow={handleInstallNow} onOpenHelp={() => setShowInstallHelp(true)}
+          onDismiss={() => { setInstallBannerDismissed(true); try { localStorage.setItem('zchat-install-banner-dismissed', '1'); } catch {} }} />
+      )}
+      {showInstallHelp && <InstallAppHelpModal onClose={() => setShowInstallHelp(false)} />}
       {/* Sidebar */}
       <div style={{
         width: mobileShowChat ? 0 : '100%', maxWidth: mobileShowChat ? 0 : '100%', overflow: 'hidden',
@@ -5346,7 +5570,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         transition: 'none',
       }} className="zchat-sidebar-desktop">
         <div style={{
-          padding: '14px 16px 10px', paddingTop: 'calc(14px + env(safe-area-inset-top))',
+          padding: '14px 16px 10px',
           display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexShrink: 0,
         }}>
           <ZBrand size={22} showTag />
@@ -5521,7 +5745,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
       {/* Chat panel */}
       <div style={{
-        flex: 1, display: mobileShowChat ? 'flex' : 'none', flexDirection: 'column', minWidth: 0, position: 'relative',
+        flex: 1, display: mobileShowChat ? 'flex' : 'none', flexDirection: 'column', minWidth: 0, minHeight: 0, position: 'relative',
       }} className={mobileShowChat ? 'zchat-chat-panel zchat-panel-open' : 'zchat-chat-panel'}>
         {(activeProfile || activeGroup) ? (
           <>
@@ -5550,10 +5774,31 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                     color: activeNameBarKey ? 'white' : theme.ink, textShadow: activeNameBarKey ? '0 1px 4px rgba(0,0,0,0.7)' : 'none',
                   }}>{activeGroup ? activeGroup.name : activeProfile.name}</div>
                   <div style={{ fontSize: 11, color: activeNameBarKey ? 'rgba(255,255,255,0.85)' : theme.muted, textShadow: activeNameBarKey ? '0 1px 4px rgba(0,0,0,0.7)' : 'none' }}>
-                    {activeGroup ? `${groupMembers.length} members` : typingFrom ? 'typing...' : (isUserOnline(activeProfile) ? 'Online' : (!activeProfile.hide_activity && formatLastSeen(activeProfile.last_seen)) || '')}
+                    {activeGroup ? `${groupMembers.length} members` : typingFrom ? 'typing...' : (isUserOnline(activeProfile) && !activeProfile.hide_activity ? 'Online' : (!activeProfile.hide_activity && formatLastSeen(activeProfile.last_seen)) || '')}
                   </div>
                 </div>
               </div>
+              {!activeGroup && activeFollowState !== null && (
+                <button onClick={(e) => { e.stopPropagation(); toggleActiveFollow(); }} disabled={activeFollowBusy} style={{
+                  padding: '6px 14px', borderRadius: 18, fontSize: 11.5, fontWeight: 700, cursor: activeFollowBusy ? 'default' : 'pointer', fontFamily: FONT, flexShrink: 0,
+                  position: 'relative', marginRight: 4,
+                  border: activeNameBarKey
+                    ? '1.5px solid rgba(255,255,255,0.5)'
+                    : (activeFollowState !== 'none' ? `1.5px solid ${theme.border}` : 'none'),
+                  background: activeNameBarKey
+                    ? (activeFollowState === 'accepted' ? 'rgba(0,0,0,0.45)' : activeFollowState === 'pending' ? 'rgba(0,0,0,0.35)' : theme.coral)
+                    : (activeFollowState === 'accepted' ? `${theme.coral}18` : activeFollowState === 'pending' ? 'transparent' : theme.coral),
+                  color: activeNameBarKey
+                    ? 'white'
+                    : (activeFollowState === 'accepted' ? theme.coralDeep : activeFollowState === 'pending' ? theme.ink : 'white'),
+                  display: 'flex', alignItems: 'center', gap: 5,
+                }}>
+                  {activeFollowBusy ? <Spinner size={11} color={activeNameBarKey ? 'white' : (activeFollowState !== 'none' ? theme.ink : 'white')} /> : (
+                    <>{activeFollowState === 'accepted' ? <Check size={11} /> : activeFollowState === 'pending' ? null : <UserPlus size={11} />}</>
+                  )}
+                  {!activeFollowBusy && (activeFollowState === 'accepted' ? 'Following' : activeFollowState === 'pending' ? 'Requested' : (activeFollowerFollowsMe ? 'Follow back' : 'Follow'))}
+                </button>
+              )}
               <MoreVertical size={19} style={{ cursor: 'pointer', color: activeNameBarKey ? 'white' : theme.ink, flexShrink: 0, filter: activeNameBarKey ? 'drop-shadow(0 1px 3px rgba(0,0,0,0.6))' : 'none', position: 'relative' }}
                 onClick={(e) => { e.stopPropagation(); (activeGroup ? setShowGroupInfo(true) : setShowChatSettings(true)); }} />
             </div>
@@ -5565,8 +5810,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             )}
 
             <div ref={scrollRef} className="zchat-msglist" onScroll={handleChatScroll} style={{
-              flex: 1, overflowY: 'auto', padding: '14px 18px', position: 'relative',
-              WebkitOverflowScrolling: 'touch', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end',
+              flex: 1, minHeight: 0, overflowY: 'auto', padding: '14px 18px', position: 'relative',
+              WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain', touchAction: 'pan-y',
+              display: 'flex', flexDirection: 'column', justifyContent: 'flex-end',
               ...(wallpaperBgStyle(activeWallpaperKey) || {}),
             }}>
               {!activeWallpaperKey && <AnimatedChatBackground chatTheme={chatTheme} />}
@@ -5600,6 +5846,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                       reactions={messageLikes[m.id]} onReact={(id, emoji) => reactToMessage(id, emoji)}
                       onOpenWhoReacted={(id) => setWhoReactedFor(messageLikes[id] || [])}
                       replyPreview={replyPreview} onSwipeReply={(msg) => { setReplyingTo(msg); setEditingMessage(null); setTimeout(() => composerRef.current?.focus(), 0); }}
+                      onJumpToMessage={jumpToMessage} highlighted={highlightedMsgId === m.id}
                       senderLabel={showSenderLabel ? memberName(m.sender_id) : null}
                       senderAvatar={showSenderLabel ? groupMembers.find((gm) => gm.user_id === m.sender_id)?.profile.avatar : null}
                       hideReadStatus={!!activeGroup}
@@ -5673,7 +5920,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                     placeholder={editingMessage ? 'Edit message' : 'Message'}
                     rows={1}
                     style={{
-                      flex: 1, resize: 'none', maxHeight: 110, padding: '9px 14px', borderRadius: 20,
+                      flex: 1, resize: 'none', height: 38, maxHeight: 110, minHeight: 38, boxSizing: 'border-box', padding: '9px 14px', borderRadius: 20,
                       border: `1px solid ${theme.border}`, background: theme.inputBg, color: theme.ink,
                       fontFamily: FONT, fontSize: 15, outline: 'none', lineHeight: 1.35,
                     }}
@@ -5731,11 +5978,11 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       {profileOf && (
         <ProfilePanel
           profile={profileOf} isSelf={profileOf.id === session.user.id} userId={session.user.id}
-          isOnline={isUserOnline(profileOf)} onClose={() => setProfileOf(null)}
+          isOnline={isUserOnline(profileOf) && !profileOf.hide_activity} onClose={() => setProfileOf(null)}
           onReport={handleReport} onSaved={(updated) => setProfileOf(updated)}
           onOpenSettings={() => { setProfileOf(null); setShowSettings(true); }}
           onOpenProfile={(p) => setProfileOf(p)}
-          onMessage={(p) => { setProfileOf(null); openChat(p, null); }}
+          onMessage={(p) => { openChat(p, null); setProfileOf(null); }}
           isBlocked={myBlockedIds.has(profileOf.id)} onBlock={blockUser} onUnblock={unblockUser}
         />
       )}
@@ -5860,6 +6107,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       {lockPromptFor && (
         <ChatLockUnlock correctHash={me.chat_lock_hash} onCancel={() => { setLockPromptFor(null); setMobileShowChat(false); }}
           onUnlock={() => { const { profile, convId } = lockPromptFor; setUnlockedChats((prev) => new Set(prev).add(convId)); setLockPromptFor(null); openChat(profile, convId); }} />
+      )}
+      {deletedAccountAlertFor && (
+        <AccountGoneModal name={deletedAccountAlertFor} onOk={() => { setDeletedAccountAlertFor(null); setMobileShowChat(false); loadConversations(); }} />
       )}
       {showNotifHelp && <NotificationHelpModal onClose={() => setShowNotifHelp(false)} />}
       {photoEditQueue.length > 0 && (
@@ -6057,4 +6307,4 @@ export default function App() {
       <AppInner />
     </ThemeProvider>
   );
-        }
+            }
