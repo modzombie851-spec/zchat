@@ -1095,7 +1095,7 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
     }} className="zchat-fade" onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} style={glass(theme, {
         background: theme.panelBg, borderRadius: '0 24px 24px 0', padding: 26,
-        width: '86%', maxWidth: 360, height: '100%', position: 'relative', overflowY: 'auto',
+        width: '80%', maxWidth: 340, height: '100%', position: 'relative', overflowY: 'auto',
         WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain',
         paddingTop: 'calc(26px + env(safe-area-inset-top))',
         paddingBottom: 'calc(26px + env(safe-area-inset-bottom))',
@@ -1585,7 +1585,7 @@ function toggleFavoriteSticker(key) {
   const cur = getFavoriteStickerKeys();
   if (cur.has(key)) cur.delete(key); else cur.add(key);
   try { localStorage.setItem('zchat-fav-stickers', JSON.stringify([...cur])); } catch {}
-  return cur;
+return cur;
 }
 
 function StickerPicker({ onPick, onClose }) {
@@ -1640,25 +1640,31 @@ function StickerPicker({ onPick, onClose }) {
             ))}
           </div>
         )}
-        <div style={{ overflowY: 'auto', flex: 1, minHeight: 0, alignContent: 'flex-start', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
+        <div style={{ overflowY: 'auto', flex: 1, minHeight: 0, display: 'flex', flexWrap: 'wrap', gap: 14, alignContent: 'flex-start' }}>
           {filtered.length === 0 && (
-            <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: 20, fontSize: 12.5, color: theme.muted }}>
+            <div style={{ width: '100%', textAlign: 'center', padding: 20, fontSize: 12.5, color: theme.muted }}>
               {category === 'favorites' ? 'No favorites yet -- tap the star on any sticker' : 'No stickers found'}
             </div>
           )}
           {filtered.map((s) => (
-            <div key={s.key} onClick={() => onPick(s)} style={{
-              position: 'relative', borderRadius: 16, background: theme.rowBg, cursor: 'pointer',
-              border: `1px solid ${theme.border}`, boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', aspectRatio: '1 / 1', overflow: 'hidden',
-            }}>
-              <img src={s.file} alt={s.label} loading="lazy" draggable={false} onContextMenu={(e) => e.preventDefault()}
-                style={{ width: '72%', height: '72%', objectFit: 'contain' }} />
-              <div onClick={(e) => toggleFav(e, s.key)} style={{
-                position: 'absolute', top: 4, right: 4, width: 20, height: 20, borderRadius: '50%',
-                background: 'rgba(0,0,0,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+            <div key={s.key} style={{ width: 'calc((100% - 28px) / 3)', flexShrink: 0, flexGrow: 0 }}>
+              <div
+                onClick={() => onPick(s)}
+                style={{
+                position: 'relative', width: '100%', paddingBottom: '100%', height: 0,
+                borderRadius: 16, background: theme.rowBg, cursor: 'pointer',
+                border: `1px solid ${theme.border}`, boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
               }}>
-                <Star_ size={11} color={favKeys.has(s.key) ? '#FFB800' : 'white'} filled={favKeys.has(s.key)} />
+                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderRadius: 16 }}>
+                  <img src={s.file} alt={s.label} loading="lazy" draggable={false} onContextMenu={(e) => e.preventDefault()}
+                    style={{ width: '72%', height: '72%', objectFit: 'contain' }} />
+                </div>
+                <div onClick={(e) => toggleFav(e, s.key)} style={{
+                  position: 'absolute', top: 4, right: 4, width: 20, height: 20, borderRadius: '50%',
+                  background: 'rgba(0,0,0,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+                }}>
+                  <Star_ size={11} color={favKeys.has(s.key) ? '#FFB800' : 'white'} filled={favKeys.has(s.key)} />
+                </div>
               </div>
             </div>
           ))}
@@ -1702,6 +1708,12 @@ function FullEmojiPicker({ onPick, onClose }) {
 function MessageContextMenu({ message, isMine, canEditText, canModerate, onClose, onReact, onReply, onCopy, onEdit, onForward, onReport, onDeleteForMe, onDeleteForEveryone, onSelectMultiple }) {
   const { theme } = useTheme();
   const [showFullEmoji, setShowFullEmoji] = useState(false);
+  const [favKeys, setFavKeys] = useState(() => getFavoriteStickerKeys());
+  const stickerMatch = message.type === 'sticker' ? STICKERS.find((s) => s.file === message.content) : null;
+  const toggleStickerFav = () => {
+    if (!stickerMatch) return;
+    setFavKeys(new Set(toggleFavoriteSticker(stickerMatch.key)));
+  };
   const row = { display: 'flex', alignItems: 'center', gap: 12, padding: '11px 6px', cursor: 'pointer', fontSize: 14, fontWeight: 600, color: theme.ink };
   return (
     <div onClick={onClose} style={{
@@ -1722,6 +1734,12 @@ function MessageContextMenu({ message, isMine, canEditText, canModerate, onClose
           <div style={row} onClick={onReply}><Reply size={16} /> Reply</div>
           {!message.deleted && message.type === 'text' && <div style={row} onClick={onCopy}><Check size={16} /> Copy</div>}
           {!message.deleted && canEditText && <div style={row} onClick={onEdit}><Edit3 size={16} /> Edit</div>}
+          {!message.deleted && stickerMatch && (
+            <div style={row} onClick={toggleStickerFav}>
+              <Star_ size={16} color="#FFB800" filled={favKeys.has(stickerMatch.key)} />
+              {favKeys.has(stickerMatch.key) ? 'Remove from Favourites' : 'Add to Favourites'}
+            </div>
+          )}
           <div style={row} onClick={onForward}><Forward size={16} /> Forward</div>
           <div style={row} onClick={onSelectMultiple}><Check size={16} /> Select multiple</div>
           {!isMine && <div style={{ ...row, color: theme.danger }} onClick={onReport}><Flag size={16} color={theme.danger} /> Report</div>}
@@ -1762,7 +1780,7 @@ function EmojiPickerBar({ onPick, onClose }) {
   );
 }
 
-function WhoReactedModal({ reactions, onClose }) {
+function WhoReactedModal({ reactions, myId, onClose, onRemoveMine }) {
   const { theme } = useTheme();
   const [profiles, setProfiles] = useState(null);
 
@@ -1780,7 +1798,17 @@ function WhoReactedModal({ reactions, onClose }) {
       {profiles === null ? (
         <div style={{ display: 'flex', justifyContent: 'center', padding: 20 }}><Spinner color={theme.ink} /></div>
       ) : (
-        profiles.map((p) => <UserListRow key={p.id} profile={p} rightContent={<span style={{ fontSize: 18 }}>{p.emoji}</span>} />)
+        profiles.map((p) => {
+          const isMine = p.id === myId;
+          return (
+            <UserListRow key={p.id} profile={p} onClick={isMine ? () => { onRemoveMine(p.emoji); onClose(); } : undefined} rightContent={
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 18 }}>{p.emoji}</span>
+                {isMine && <span style={{ fontSize: 10.5, color: theme.muted, fontWeight: 600 }}>Tap to remove</span>}
+              </div>
+            } />
+          );
+        })
       )}
     </ListModal>
   );
@@ -2290,9 +2318,8 @@ function ChatSettingsPanel({ conv, myId, meAvatar, meName, isPinned, isLocked, w
 function Pin_({ size = 16, color = '#FF3B30' }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <path d="M14.5 2.5a1 1 0 0 1 1.4 0l5.6 5.6a1 1 0 0 1 0 1.4l-3 3a1 1 0 0 1-1.3.1l-1-.7-3.6 3.6.6 2.7a1 1 0 0 1-.3.9l-1 1a1 1 0 0 1-1.4 0l-3.1-3.1-4.3 4.3a.75.75 0 0 1-1-1l4.3-4.3-3.1-3.1a1 1 0 0 1 0-1.4l1-1a1 1 0 0 1 .9-.3l2.7.6 3.6-3.6-.7-1a1 1 0 0 1 .1-1.3z"
-        fill={color} stroke={color} strokeWidth="0.6" strokeLinejoin="round" strokeLinecap="round"
-        transform="rotate(45 12 12)" />
+      <circle cx="8" cy="8" r="4.2" fill={color} />
+      <line x1="10.8" y1="10.8" x2="19" y2="19" stroke={color} strokeWidth="3" strokeLinecap="round" />
     </svg>
   );
 }
@@ -2924,8 +2951,8 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
   const [saving, setSaving] = useState(false);
   const [showEmail, setShowEmail] = useState(false);
   const [followState, setFollowState] = useState('none'); // none | pending | accepted
-  const [followerCount, setFollowerCount] = useState(0);
-  const [followingCount, setFollowingCount] = useState(0);
+  const [followerCount, setFollowerCount] = useState(null);
+  const [followingCount, setFollowingCount] = useState(null);
   const [followBusy, setFollowBusy] = useState(false);
   const [username, setUsername] = useState(profile.username || '');
   const [usernameErr, setUsernameErr] = useState('');
@@ -3145,7 +3172,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
                 Privacy
               </button>
             </div>
-          )}
+      )}
           {editing ? (
             <div style={{ marginTop: 22, textAlign: 'left' }}>
               <div style={{ fontSize: 11.5, color: theme.muted, marginBottom: 5, fontWeight: 800, letterSpacing: '0.04em' }}>USERNAME</div>
@@ -3212,11 +3239,11 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
                 <>
                   <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 20 }}>
                     <div onClick={() => setListModal('followers')} style={{ flex: 1, minWidth: 80, background: theme.rowBg, borderRadius: 16, padding: '10px 12px', cursor: 'pointer' }}>
-                      <div style={{ fontWeight: 800, fontSize: 16, color: theme.ink }}>{followerCount}</div>
+                      <div style={{ fontWeight: 800, fontSize: 16, color: theme.ink, opacity: followerCount === null ? 0 : 1 }}>{followerCount ?? 0}</div>
                       <div style={{ fontSize: 10.5, color: theme.muted, fontWeight: 600, marginTop: 1 }}>Followers</div>
                     </div>
                     <div onClick={() => setListModal('following')} style={{ flex: 1, minWidth: 80, background: theme.rowBg, borderRadius: 16, padding: '10px 12px', cursor: 'pointer' }}>
-                      <div style={{ fontWeight: 800, fontSize: 16, color: theme.ink }}>{followingCount}</div>
+                      <div style={{ fontWeight: 800, fontSize: 16, color: theme.ink, opacity: followingCount === null ? 0 : 1 }}>{followingCount ?? 0}</div>
                       <div style={{ fontSize: 10.5, color: theme.muted, fontWeight: 600, marginTop: 1 }}>Following</div>
                     </div>
                   </div>
@@ -3622,7 +3649,7 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
                   }}><Download size={13} color="white" /></div>
                 </div>
               )}
-              {m.type === 'audio' && <AudioBubble url={m.media_url} isMe={isMe} />}
+              {m.type === 'audio' && <div style={{ paddingBottom: 14 }}><AudioBubble url={m.media_url} isMe={isMe} /></div>}
               {m.type === 'sticker' && (
                 m.content && m.content.startsWith('/') ? (
                   <img src={m.content} alt="sticker" className="zchat-wave-pop" onContextMenu={(e) => e.preventDefault()} draggable={false}
@@ -3631,8 +3658,19 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
                   <div className="zchat-wave-pop" style={{ fontSize: 64, lineHeight: 1, padding: '4px 10px' }}>{m.content}</div>
                 )
               )}
-              {m.type === 'text' && m.content && <div style={{ fontSize: 15 * fontScale, color: theme.ink, wordBreak: 'break-word', lineHeight: 1.32 }}>{linkifyText(m.content)}</div>}
+              {m.type === 'text' && m.content && <div style={{ fontSize: 15 * fontScale, color: theme.ink, wordBreak: 'break-word', lineHeight: 1.32, paddingRight: 44 }}>{linkifyText(m.content)}</div>}
             </>
+          )}
+          {!m.deleted && (
+            <div style={{
+              position: 'absolute', bottom: 4, right: 8, display: 'flex', alignItems: 'center', gap: 3,
+              background: m.type === 'text' ? 'none' : 'rgba(0,0,0,0.4)', borderRadius: 8,
+              padding: m.type === 'text' ? 0 : '1px 5px',
+            }}>
+              {m.edited && <span style={{ fontSize: 8, color: m.type === 'text' ? theme.muted : 'rgba(255,255,255,0.85)', fontStyle: 'italic' }}>edited</span>}
+              <span style={{ fontSize: 9, color: m.type === 'text' ? theme.muted : 'rgba(255,255,255,0.85)' }}>{time}</span>
+              {isMe && <StatusTicks status={(!hideReadStatus && m.read) ? 'read' : m.delivered ? 'delivered' : 'sent'} />}
+            </div>
           )}
         </div>
         {groupedEntries.length > 0 && !m.deleted && (
@@ -3651,16 +3689,6 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
           }}>{'\u2764\u{FE0F}'}</div>
         )}
         </div>
-        {!m.deleted && (
-          <div style={{
-            display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start', alignItems: 'center', gap: 3,
-            marginTop: groupedEntries.length > 0 ? 10 : 2, padding: isMe ? '0 3px 0 0' : '0 0 0 3px',
-          }}>
-            {m.edited && <span style={{ fontSize: 8.5, color: theme.muted, fontStyle: 'italic' }}>edited</span>}
-            <span style={{ fontSize: 9.5, color: theme.muted }}>{time}</span>
-            {isMe && <StatusTicks status={(!hideReadStatus && m.read) ? 'read' : m.delivered ? 'delivered' : 'sent'} />}
-          </div>
-        )}
         </div>
       </div>
     </div>
@@ -4739,7 +4767,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       })
       .subscribe();
     return () => supabase.removeChannel(channel);
-    }, [me, myGroupIdsKey, activeGroup]);
+  }, [me, myGroupIdsKey, activeGroup]);
   useEffect(() => {
     if (!me) return;
     const channel = supabase.channel('group-members-watch-' + me.id)
@@ -4857,11 +4885,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const isNewConversation = lastScrollKeyRef.current !== key;
     const t = setTimeout(() => {
       if (isNewConversation) {
-        /* Just opened this chat -- resume where you left off last time
-           instead of always jumping to the newest message, unless this
-           is the first time you've opened it this session. */
-        const saved = chatScrollPositions.current[key];
-        el.scrollTop = (saved != null) ? saved : el.scrollHeight;
+        /* Always open a chat scrolled to the newest message at the bottom. */
+        el.scrollTop = el.scrollHeight;
         lastScrollKeyRef.current = key;
       } else {
         /* Already in this chat and a new message came in -- only snap to
@@ -5755,16 +5780,16 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             <div style={{
               position: 'fixed', top: 0, left: 0, right: 0, zIndex: 15,
               borderBottom: activeNameBarKey ? 'none' : `1px solid ${theme.border}`,
-              boxShadow: activeNameBarKey ? '0 2px 16px rgba(0,0,0,0.28), inset 0 0 0 1px rgba(255,255,255,0.16)' : 'none',
-              background: activeNameBarKey ? undefined : theme.panelBg,
-              ...(nameBarBgStyle(activeNameBarKey) || {}),
+              background: theme.panelBg,
             }}>
               <div style={{ height: 'env(safe-area-inset-top)', width: '100%' }} />
               <div
                 style={{
                   padding: '13px 18px', display: 'flex', alignItems: 'center', gap: 10,
-                  minHeight: 64, boxSizing: 'border-box',
+                  height: 64, boxSizing: 'border-box',
                   cursor: 'pointer', position: 'relative', overflow: 'hidden',
+                  boxShadow: activeNameBarKey ? '0 2px 16px rgba(0,0,0,0.28), inset 0 0 0 1px rgba(255,255,255,0.16)' : 'none',
+                  ...(nameBarBgStyle(activeNameBarKey) || {}),
                 }}
                 onClick={() => (activeGroup ? setShowGroupInfo(true) : setProfileOf(activeProfile))}>
               {activeNameBarKey && (
@@ -5854,7 +5879,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                       onDelete={(id) => setPendingQuickDelete(id)}
                       onOpenImage={setViewerUrl} onOpenVideo={setViewerVideoUrl}
                       reactions={messageLikes[m.id]} onReact={(id, emoji) => reactToMessage(id, emoji)}
-                      onOpenWhoReacted={(id) => setWhoReactedFor(messageLikes[id] || [])}
+                      onOpenWhoReacted={(id) => setWhoReactedFor({ messageId: id, reactions: messageLikes[id] || [] })}
                       replyPreview={replyPreview} onSwipeReply={(msg) => { setReplyingTo(msg); setEditingMessage(null); setTimeout(() => composerRef.current?.focus(), 0); }}
                       onJumpToMessage={jumpToMessage} highlighted={highlightedMsgId === m.id}
                       senderLabel={showSenderLabel ? memberName(m.sender_id) : null}
@@ -6064,7 +6089,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         <DeleteChatConfirm name={deleteConvoTarget.otherProfile.name} onCancel={() => setDeleteConvoTarget(null)} onConfirm={confirmDeleteChat} />
       )}
       {whoReactedFor && (
-        <WhoReactedModal reactions={whoReactedFor} onClose={() => setWhoReactedFor(null)} />
+        <WhoReactedModal reactions={whoReactedFor.reactions} myId={session.user.id} onClose={() => setWhoReactedFor(null)}
+          onRemoveMine={(emoji) => reactToMessage(whoReactedFor.messageId, emoji)} />
       )}
       {viewerUrl && (
         <ImageViewer url={viewerUrl} onClose={() => setViewerUrl(null)} onForward={() => { openForward(); }} onReport={() => setReportModalFor('__viewer__')} />
@@ -6318,4 +6344,4 @@ export default function App() {
       <AppInner />
     </ThemeProvider>
   );
-        }
+                               }
