@@ -1718,9 +1718,7 @@ function toggleFavoriteSticker(key) {
 function StickerPicker({ onPick, onClose }) {
   const { theme } = useTheme();
   const [favKeys, setFavKeys] = useState(() => getFavoriteStickerKeys());
-const [query, setQuery] = useState('');
-  const [category, setCategory] = useState(() => (getFavoriteStickerKeys().size > 0 ? 'favorites' : 'goma'));
-
+  const [query, setQuery] = useState('');
   const toggleFav = (e, key) => {
     e.stopPropagation();
     setFavKeys(new Set(toggleFavoriteSticker(key)));
@@ -3442,6 +3440,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
           display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.muted,
         }}><User size={28} /></div>
         <div style={{ fontWeight: 800, fontSize: 16, color: theme.ink, marginBottom: 6 }}>User not found</div>
+  const [category, setCategory] = useState(() => (getFavoriteStickerKeys().size > 0 ? 'favorites' : 'goma'));
         <div style={{ fontSize: 12.5, color: theme.muted }}>This account no longer exists.</div>
       </div>
     </div>
@@ -5162,7 +5161,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       .subscribe();
     return () => supabase.removeChannel(channel);
   }, [me, activeProfile]);
-
   const myGroupIds = groups.map((g) => g.id);
   const myGroupIdsKey = myGroupIds.join(',');
 
@@ -6736,6 +6734,13 @@ function AppInner() {
   const [needsProfile, setNeedsProfile] = useState(false);
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
   const [switchingAccountId, setSwitchingAccountId] = useState(null);
+  /* Set the instant the OTP verifies (before password/username/avatar steps
+     run) so a valid-but-incomplete session doesn't get treated as a normal
+     login. Without this, verifying the code created a real session, the app
+     immediately tried to jump to the main chat screen, found no profile yet,
+     and dumped the person into a fresh, blank RegisterFlow -- which is what
+     looked like "entering the code sends you to a broken page." */
+  const [registering, setRegistering] = useState(false);
 
   useEffect(() => {
     if (window.location.hash.includes('type=recovery')) setIsPasswordRecovery(true);
@@ -6830,14 +6835,16 @@ function AppInner() {
     );
   }
 
-  if (!session || needsProfile) {
+  if (!session || needsProfile || registering) {
     if (needsProfile) {
       return (
-        <RegisterFlow
-          onStart={() => {}}
-          onDone={() => { setNeedsProfile(false); }}
-          onBack={() => { setNeedsProfile(false); supabase.auth.signOut(); setSession(null); }}
-        />
+        <AuthShell>
+          <RegisterFlow
+            onStart={() => setRegistering(true)}
+            onDone={() => { setRegistering(false); setNeedsProfile(false); }}
+            onBack={() => { setRegistering(false); setNeedsProfile(false); supabase.auth.signOut(); setSession(null); }}
+          />
+        </AuthShell>
       );
     }
     return (
@@ -6847,7 +6854,7 @@ function AppInner() {
         )}
         {screen === 'forgot' && <ForgotStep onBack={() => setScreen('login')} />}
         {screen === 'register' && (
-          <RegisterFlow onStart={() => {}} onDone={() => setScreen('login')} onBack={() => setScreen('login')} />
+          <RegisterFlow onStart={() => setRegistering(true)} onDone={() => { setRegistering(false); setScreen('login'); }} onBack={() => { setRegistering(false); setScreen('login'); }} />
         )}
       </AuthShell>
     );
@@ -6874,4 +6881,4 @@ export default function App() {
       <AppInner />
     </ThemeProvider>
   );
-  }
+      }
