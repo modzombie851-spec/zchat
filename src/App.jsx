@@ -100,6 +100,16 @@ function ThemeProvider({ children }) {
   useEffect(() => {
     try { localStorage.setItem('zchat-bubblecolor', bubbleColor); } catch {}
   }, [bubbleColor]);
+  useEffect(() => {
+    const bg = THEMES[dark ? 'dark' : 'light'].bgGradient;
+    try {
+      document.documentElement.style.background = bg;
+      document.body.style.background = bg;
+      let meta = document.querySelector('meta[name="theme-color"]');
+      if (!meta) { meta = document.createElement('meta'); meta.setAttribute('name', 'theme-color'); document.head.appendChild(meta); }
+      meta.setAttribute('content', bg);
+    } catch {}
+  }, [dark]);
   const accent = ACCENT_PALETTES[accentName] || ACCENT_PALETTES.coral;
   const theme = { ...THEMES[dark ? 'dark' : 'light'], ...accent, dark };
   return (
@@ -228,11 +238,18 @@ function urlBase64ToUint8Array(base64String) {
   return outputArray;
 }
 
-async function subscribeToPush(userId) {
+function pushSupported() {
+  return typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window && typeof Notification !== 'undefined';
+}
+
+async function subscribeToPush(userId, askPermission = false) {
   try {
-    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
-    const permission = await Notification.requestPermission();
-    if (permission !== 'granted') return;
+    if (!pushSupported()) return;
+    if (Notification.permission !== 'granted') {
+      if (!askPermission || Notification.permission === 'denied') return;
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') return;
+    }
     const registration = await navigator.serviceWorker.ready;
     let subscription = await registration.pushManager.getSubscription();
     if (!subscription) {
@@ -259,6 +276,14 @@ async function sendPushNotification(userId, title, body, url, icon) {
   } catch (err) {
     console.error('Push notify failed:', err);
   }
+}
+
+function isTouchDevice() {
+  try { return window.matchMedia('(pointer: coarse)').matches && !window.matchMedia('(pointer: fine)').matches; } catch { return false; }
+}
+
+function canHoverPointer() {
+  try { return window.matchMedia('(hover: hover) and (pointer: fine)').matches; } catch { return false; }
 }
 
 function inputStyle(theme) {
@@ -318,6 +343,10 @@ function GlobalStyle() {
       .zchat-panel-open { animation: zchat-panel-zoom-in 0.24s cubic-bezier(0.16, 1, 0.3, 1); }
       .zchat-msglist { scroll-behavior: smooth; }
       * { font-family: ${FONT}; }
+      html, body { margin: 0; padding: 0; overscroll-behavior: none; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+      @supports (-webkit-touch-callout: none) {
+        input, textarea, select { font-size: 16px !important; }
+      }
       *:not(input):not(textarea) {
         -webkit-user-select: none;
         -webkit-touch-callout: none;
@@ -1312,7 +1341,6 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
           <>
             <SectionHeader title="About" />
             <SettingsRow icon={<FileText size={16} />} label="Privacy policy" onClick={onOpenPrivacy} />
-            <SettingsRow icon={<HelpCircle size={16} />} label="Help & support" onClick={() => {}} />
           </>
         )}
 
@@ -1392,11 +1420,15 @@ function PrivacyPanel({ onBack }) {
           <div style={{ fontWeight: 800, fontSize: 17, color: theme.ink }}>Privacy policy</div>
         </div>
         <div style={{ fontSize: 13, lineHeight: 1.7, color: theme.muted }}>
-          <p>This is placeholder text. Replace it with your actual privacy policy before launch.</p>
+          <p>ZChat keeps only what it needs to run your account and deliver your messages.</p>
+          <h3 style={{ color: theme.ink, fontSize: 14, margin: '16px 0 4px' }}>What we store</h3>
+          <p>Your email, username, name, and the profile details you choose to add, such as photo, bio, age, gender, and country. We also store your messages, photos, videos, voice messages, reactions, follows, and group memberships so they can reach the people you send them to.</p>
           <h3 style={{ color: theme.ink, fontSize: 14, margin: '16px 0 4px' }}>How it's used</h3>
-          <p>Solely to operate the chat service. We don't sell your data to third parties.</p>
+          <p>Only to run ZChat: showing your profile, delivering messages, sending notifications you allow, and keeping the community safe when someone reports an account. We don't sell your data or show ads.</p>
+          <h3 style={{ color: theme.ink, fontSize: 14, margin: '16px 0 4px' }}>Who can see it</h3>
+          <p>Messages are visible to the people in that chat. You decide who sees your photo, bio, age, gender, country, and activity status in Privacy, and you can make your account private.</p>
           <h3 style={{ color: theme.ink, fontSize: 14, margin: '16px 0 4px' }}>Your controls</h3>
-          <p>You can delete messages, update your profile, or close your account at any time.</p>
+          <p>You can edit your profile, delete messages, block or report accounts, turn notifications off, and delete your account at any time from Settings.</p>
         </div>
       </div>
     </div>
@@ -1472,7 +1504,7 @@ function ListModal({ title, onClose, children }) {
       </div>
     </div>
   );
-}
+                   }
 function FollowListModal({ userId, viewerId, mode, onClose, onOpenProfile }) {
   const [list, setList] = useState(null);
   const [iFollow, setIFollow] = useState(new Set());
@@ -2947,7 +2979,7 @@ function CreateGroupPanel({ myId, onClose, onCreated }) {
       )}
     </div>
   );
-                   }
+      }
 function GroupInfoPanel({ group, members, myId, myRole, isOwner, onClose, onPromote, onDemote, onMute, onUnmute, onKick, onLeave, onOpenProfile, onSaveBio, onSaveName, onSaveAvatar, onAddMembers, onTransferOwnership, onSetWallpaper, onSetHeaderStyle }) {
   const { theme } = useTheme();
   const isAdmin = myRole === 'admin';
@@ -3880,7 +3912,8 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
   );
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 50, background: theme.panelBg, display: 'flex', flexDirection: 'column' }} className="zchat-fade">
+    <div onClick={(e) => { if (e.target === e.currentTarget && !editing) onClose(); }} style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(5,8,16,0.6)', display: 'flex', justifyContent: 'center' }} className="zchat-fade">
+    <div style={{ width: '100%', maxWidth: 560, height: '100%', background: theme.panelBg, display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden' }}>
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
         <div style={{ position: 'relative', height: 'min(58vh, 440px)', minHeight: 320, background: hasPhoto ? '#000' : colorForName(profile.name), overflow: 'hidden' }}>
           {hasPhoto ? (
@@ -4112,6 +4145,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
       {reportOpen && !reportSent && (
         <ReportReasonPicker onCancel={() => setReportOpen(false)} onSubmit={async (reason) => { await onReport(profile, reason); setReportSent(true); setReportOpen(false); }} />
       )}
+    </div>
     </div>
   );
 }
@@ -4367,7 +4401,7 @@ async function silentDownload(url, filename) {
     a.click();
     document.body.removeChild(a);
   }
-                                      }
+                             }
 function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSelect, onLongPress, onOpenImage, onOpenVideo, reactions, onReact, onOpenWhoReacted, replyPreview, onSwipeReply, onJumpToMessage, highlighted, senderLabel, senderAvatar, hideReadStatus, onOpenSenderProfile, canModerate, onOpenMention, mentionsMe }) {
   const { theme, fontScale, chatTheme, bubbleColor } = useTheme();
   const [hover, setHover] = useState(false);
@@ -4377,6 +4411,7 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
   const longPressFiredRef = useRef(false);
   const startPosRef = useRef({ x: 0, y: 0 });
   const activePointerRef = useRef(null);
+  const [mouseOver, setMouseOver] = useState(false);
   const dragXRef = useRef(0);
   const bubbleWrapRef = useRef(null);
   const replyArrowRef = useRef(null);
@@ -4479,7 +4514,9 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
       onPointerMove={handlePointerMove}
       onPointerUp={finalizeDrag}
       onPointerCancel={finalizeDrag}
-      onPointerLeave={finalizeDrag}
+      onPointerLeave={(e) => { if (e.pointerType === 'mouse') setMouseOver(false); finalizeDrag(); }}
+      onPointerEnter={(e) => { if (e.pointerType === 'mouse') setMouseOver(true); }}
+      onContextMenu={(e) => { if (isTouchDevice()) return; e.preventDefault(); if (!selectionMode) onLongPress(m.id); }}
     >
       {selectionMode && (
         <div style={{
@@ -4490,8 +4527,8 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
           {selected && <Check size={12} color="white" />}
         </div>
       )}
-      {isMe && !m.deleted && !selectionMode && (
-        <Trash2 size={14} color={theme.muted} style={{ cursor: 'pointer', flexShrink: 0, opacity: hover ? 1 : 0.35, transition: 'opacity 0.15s', marginTop: 4 }}
+      {isMe && !m.deleted && !selectionMode && canHoverPointer() && (
+        <Trash2 size={14} color={theme.muted} style={{ cursor: 'pointer', flexShrink: 0, visibility: mouseOver ? 'visible' : 'hidden', marginTop: 4 }}
           onClick={(e) => { e.stopPropagation(); onDelete(m.id); }} />
       )}
       {senderLabel && !m.deleted && (
@@ -5090,6 +5127,22 @@ function NotificationHelpModal({ onClose }) {
   );
 }
 
+function EnableNotificationsBanner({ onEnable, onDismiss, top }) {
+  const { theme } = useTheme();
+  return (
+    <div style={{
+      position: 'absolute', top, left: 10, right: 10, zIndex: 14, maxWidth: 340, margin: '0 auto',
+      background: theme.panelBg, borderRadius: 14, padding: '10px 12px', boxShadow: '0 6px 20px rgba(0,0,0,0.22)',
+      border: `1px solid ${theme.border}`, display: 'flex', alignItems: 'center', gap: 10,
+    }} className="zchat-fade">
+      <Bell size={16} color={theme.coral} style={{ flexShrink: 0 }} />
+      <div style={{ flex: 1, fontSize: 11, color: theme.ink, fontWeight: 600 }}>Get notified when someone messages you</div>
+      <span onClick={onEnable} style={{ fontSize: 11.5, color: theme.coral, fontWeight: 800, cursor: 'pointer', flexShrink: 0 }}>Turn on</span>
+      <X size={15} color={theme.muted} style={{ cursor: 'pointer', flexShrink: 0 }} onClick={onDismiss} />
+    </div>
+  );
+}
+
 function NotificationPermissionBanner({ onOpenHelp, onDismiss, top }) {
   const { theme } = useTheme();
   return (
@@ -5137,7 +5190,7 @@ function InstallAppHelpModal({ onClose }) {
       <div style={{ background: theme.panelBg, borderRadius: 22, padding: 22, width: '100%', maxWidth: 320 }}>
         <div style={{ fontWeight: 800, fontSize: 16, color: theme.ink, marginBottom: 6 }}>Install ZChat</div>
         <div style={{ fontSize: 12.5, color: theme.muted, marginBottom: 14, lineHeight: 1.5 }}>
-          Add ZChat to your home screen so it opens instantly, full-screen, with no browser bar -- exactly like an app you installed from a store.
+          Add ZChat to your home screen so it opens instantly in full screen with no browser bar, just like an app from the store.
         </div>
         <ol style={{ margin: 0, paddingLeft: 18, marginBottom: 18 }}>
           {steps.map((s, i) => (
@@ -5200,13 +5253,42 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [deferredInstallPrompt, setDeferredInstallPrompt] = useState(null);
   const [isStandaloneApp, setIsStandaloneApp] = useState(false);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
+  const [viewportBox, setViewportBox] = useState({ height: null, offset: 0 });
+  const [isWide, setIsWide] = useState(() => (typeof window !== 'undefined' ? window.innerWidth >= 900 : false));
+  useEffect(() => {
+    const onResize = () => setIsWide(window.innerWidth >= 900);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
   useEffect(() => {
     const vv = window.visualViewport;
-    if (!vv) return;
-    const update = () => setKeyboardOpen(window.innerHeight - vv.height > 120);
+    if (!vv) return undefined;
+    let frame = 0;
+    const update = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const open = window.innerHeight - vv.height > 120;
+        setKeyboardOpen(open);
+        setViewportBox((prev) => {
+          const next = { height: open ? Math.round(vv.height) : null, offset: open ? Math.max(0, Math.round(vv.offsetTop)) : 0 };
+          return prev.height === next.height && prev.offset === next.offset ? prev : next;
+        });
+        if (!open && (window.scrollY || document.documentElement.scrollTop)) window.scrollTo(0, 0);
+      });
+    };
+    const onFocusOut = () => setTimeout(() => {
+      if (window.innerHeight - vv.height <= 120 && (window.scrollY || document.documentElement.scrollTop)) window.scrollTo(0, 0);
+    }, 80);
     update();
     vv.addEventListener('resize', update);
-    return () => vv.removeEventListener('resize', update);
+    vv.addEventListener('scroll', update);
+    window.addEventListener('focusout', onFocusOut);
+    return () => {
+      cancelAnimationFrame(frame);
+      vv.removeEventListener('resize', update);
+      vv.removeEventListener('scroll', update);
+      window.removeEventListener('focusout', onFocusOut);
+    };
   }, []);
   const [installBannerDismissed, setInstallBannerDismissed] = useState(() => {
     try { return localStorage.getItem('zchat-install-banner-dismissed') === '1'; } catch { return false; }
@@ -5567,7 +5649,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   }, [profileCheckFailed]);
 
   useEffect(() => {
-    if (me) { loadConversations(); loadUnreadCounts(); loadMyLocks(); loadGroups(); loadMyBlocks(); subscribeToPush(session.user.id); loadFollowRequestCount(); loadUnreadMailCount(); supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', me.id); }
+    if (me) { loadConversations(); loadUnreadCounts(); loadMyLocks(); loadGroups(); loadMyBlocks(); subscribeToPush(session.user.id, false); loadFollowRequestCount(); loadUnreadMailCount(); supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', me.id); }
   }, [me]);
 
   useEffect(() => {
@@ -5636,21 +5718,26 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   }, [me, activeProfile]);
 
   useEffect(() => {
+    if (me) loadConversations();
+  }, [myBlockedIds]);
+
+  useEffect(() => {
     if (!me) return;
     const channel = supabase.channel('read-receipts-' + me.id)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, (payload) => {
         const row = payload.new;
-        if (row.sender_id === me.id || row.receiver_id === me.id) {
-          setMessages((prev) => prev.map((m) => (m.id === row.id ? { ...m, read: row.read, delivered: row.delivered, edited: row.edited, deleted: row.deleted, content: row.deleted ? m.content : row.content } : m)));
-        }
+        if (!row || !row.id) return;
+        setMessages((prev) => (prev.some((m) => m.id === row.id)
+          ? prev.map((m) => (m.id === row.id ? { ...m, read: row.read, delivered: row.delivered, edited: row.edited, deleted: row.deleted, content: row.deleted ? m.content : row.content } : m))
+          : prev));
       })
       .subscribe();
     return () => supabase.removeChannel(channel);
   }, [me]);
 
   useEffect(() => {
-    if (!me || !activeProfile) return;
-    const channel = supabase.channel('reactions-' + activeProfile.id)
+    if (!me || (!activeProfile && !activeGroup)) return;
+    const channel = supabase.channel('reactions-' + (activeGroup ? activeGroup.id : activeProfile.id))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'message_likes' }, (payload) => {
         const row = payload.new || payload.old;
         const msgId = row.message_id;
@@ -5667,7 +5754,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       })
       .subscribe();
     return () => supabase.removeChannel(channel);
-  }, [me, activeProfile, messages]);
+  }, [me, activeProfile, activeGroup, messages]);
 
   useEffect(() => {
     if (!me || !activeProfile) return;
@@ -5708,7 +5795,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         const row = payload.new;
         if (!row.group_id || !myGroupIds.includes(row.group_id)) return;
         if (row.sender_id !== me.id && (!activeGroup || row.group_id !== activeGroup.id)) { playPing(); supabase.from('messages').update({ delivered: true }).eq('id', row.id); }
-        if (row.sender_id !== me.id && activeGroup && row.group_id === activeGroup.id) { supabase.from('messages').update({ read: true, delivered: true }).eq('id', row.id); }
+        if (row.sender_id !== me.id && activeGroup && row.group_id === activeGroup.id) { markGroupRead(activeGroup.id); supabase.from('messages').update({ read: true, delivered: true }).eq('id', row.id); }
         setMessages((prev) => {
           if (!activeGroup || row.group_id !== activeGroup.id) return prev;
           if (prev.some((m) => m.id === row.id)) return prev;
@@ -5872,16 +5959,28 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     }, 300);
   };
 
+  const groupReadKey = (groupId) => `zchat-group-read-${session.user.id}-${groupId}`;
+  const markGroupRead = (groupId) => { try { localStorage.setItem(groupReadKey(groupId), new Date().toISOString()); } catch {} };
+  const getGroupReadAt = (groupId) => { try { return localStorage.getItem(groupReadKey(groupId)); } catch { return null; } };
+  const activeGroupIdRef = useRef(null);
+  useEffect(() => { activeGroupIdRef.current = activeGroup ? activeGroup.id : null; }, [activeGroup]);
+
   const loadGroups = async () => {
     const { data: mems } = await supabase.from('group_members').select('*').eq('user_id', session.user.id);
     if (!mems || !mems.length) { setGroups([]); return; }
     const ids = mems.map((m) => m.group_id);
     const { data: groupRows } = await supabase.from('groups').select('*').in('id', ids);
-    const { data: lastMsgs } = await supabase.from('messages').select('*').in('group_id', ids).order('created_at', { ascending: false });
+    const { data: recent } = await supabase.from('messages').select('id, group_id, sender_id, type, content, created_at, deleted')
+      .in('group_id', ids).order('created_at', { ascending: false }).limit(Math.min(1500, ids.length * 60));
     const merged = (groupRows || []).map((g) => {
       const mine = mems.find((m) => m.group_id === g.id);
-      const last = (lastMsgs || []).find((m) => m.group_id === g.id);
-      return { ...g, myRole: mine?.role || 'member', pinned: mine?.pinned || false, archived: mine?.archived || false, last_message: last?.content, last_message_type: last?.type, last_message_at: last?.created_at || g.created_at };
+      const groupMsgs = (recent || []).filter((m) => m.group_id === g.id);
+      const last = groupMsgs[0];
+      let readAt = getGroupReadAt(g.id);
+      if (!readAt) { markGroupRead(g.id); readAt = new Date().toISOString(); }
+      const readTime = new Date(readAt).getTime();
+      const unread = activeGroupIdRef.current === g.id ? 0 : groupMsgs.filter((m) => m.sender_id !== session.user.id && m.type !== 'system' && !m.deleted && new Date(m.created_at).getTime() > readTime).length;
+      return { ...g, myRole: mine?.role || 'member', pinned: mine?.pinned || false, archived: mine?.archived || false, last_message: last?.deleted ? 'This message was deleted' : last?.content, last_message_type: last?.deleted ? 'text' : last?.type, last_message_at: last?.created_at || g.created_at, unread };
     }).sort((a, b) => new Date(b.last_message_at) - new Date(a.last_message_at));
     setGroups(merged);
   };
@@ -5895,6 +5994,12 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     loadGroups();
   };
   const leaveGroupById = async (g) => {
+    if (g.created_by === session.user.id) { await openGroup(g); setShowGroupInfo(true); return; }
+    if (g.myRole === 'admin') {
+      const { count: adminCount } = await supabase.from('group_members').select('*', { count: 'exact', head: true }).eq('group_id', g.id).eq('role', 'admin');
+      const { count: memberCount } = await supabase.from('group_members').select('*', { count: 'exact', head: true }).eq('group_id', g.id);
+      if ((adminCount || 0) <= 1 && (memberCount || 0) > 1) { await openGroup(g); setShowGroupInfo(true); return; }
+    }
     const name = realName(session.user.id);
     await supabase.from('group_members').delete().eq('group_id', g.id).eq('user_id', session.user.id);
     await supabase.from('messages').insert({ sender_id: session.user.id, group_id: g.id, type: 'system', content: `${name} left the group` });
@@ -5912,6 +6017,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   };
 
   const openGroup = async (group) => {
+    markGroupRead(group.id);
+    activeGroupIdRef.current = group.id;
+    setGroups((prev) => prev.map((g) => (g.id === group.id ? { ...g, unread: 0 } : g)));
     setActiveGroup(group);
     setActiveProfile(null);
     setMobileShowChat(true);
@@ -5922,16 +6030,28 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     setEditingMessage(null);
     setPendingForwardItems([]);
     const { data } = await supabase.from('messages').select('*').eq('group_id', group.id).order('created_at', { ascending: true });
-    setMessages(data || []);
+    const hidden = getHiddenMsgIds();
+    const visible = (data || []).filter((m) => !hidden.has(m.id));
+    setMessages(visible);
     setLoadingConvo(false);
     loadGroupMembers(group.id);
+    const ids = visible.map((m) => m.id).slice(-400);
+    if (ids.length) {
+      const { data: likes } = await supabase.from('message_likes').select('*').in('message_id', ids);
+      const grouped = {};
+      (likes || []).forEach((l) => { grouped[l.message_id] = grouped[l.message_id] || []; grouped[l.message_id].push({ user_id: l.user_id, emoji: l.emoji }); });
+      setMessageLikes(grouped);
+    } else {
+      setMessageLikes({});
+    }
   };
-
-  const sendGroupMessage = async (type, content, mediaUrl, forwardedFromName) => {
-    const { data, error } = await supabase.from('messages').insert({
+  const sendGroupMessage = async (type, content, mediaUrl, forwardedFromName, replyToId) => {
+    const row = {
       sender_id: session.user.id, group_id: activeGroup.id, type, content: content || null, media_url: mediaUrl || null,
       forwarded: !!forwardedFromName, forwarded_from_name: forwardedFromName || null,
-    }).select().single();
+    };
+    if (replyToId) row.reply_to_id = replyToId;
+    const { data, error } = await supabase.from('messages').insert(row).select().single();
     if (!error && data) {
       setMessages((prev) => [...prev, data]);
       loadGroups();
@@ -5949,6 +6069,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     }
     return data;
   };
+
   const memberName = (userId) => (userId === session.user.id ? 'You' : (groupMembers.find((m) => m.user_id === userId)?.profile.name || 'Someone'));
   const realName = (userId) => (userId === session.user.id ? (me?.name || 'Someone') : (groupMembers.find((m) => m.user_id === userId)?.profile.name || 'Someone'));
 
@@ -6190,7 +6311,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       const text = draft.trim().slice(0, MAX_CHARS);
       setDraft('');
       const soloForwardName = items.length === 1 && items[0].type === 'text' ? items[0].forwarded_from_name : null;
-      await sendGroupMessage('text', text, null, soloForwardName);
+      const groupReplyId = replyingTo?.id || null;
+      setReplyingTo(null);
+      await sendGroupMessage('text', text, null, soloForwardName, groupReplyId);
       return;
     }
     const items = pendingForwardItems;
@@ -6422,8 +6545,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const doReactSingle = (m, emoji) => { reactToMessage(m.id, emoji); setContextMenuFor(null); };
 
   const doReportMessage = async (reason) => {
-    const id = reportModalFor || selectedMessages[0]?.id;
-    if (id && id !== '__viewer__') {
+    let id = reportModalFor;
+    if (id === '__selection__') id = selectedMessages[0]?.id;
+    else if (id === '__viewer__') id = messages.find((x) => x.media_url === viewerUrl)?.id;
+    if (id) {
       await supabase.from('message_reports').insert({ reporter_id: session.user.id, message_id: id, reason });
       const reportedMsg = findMessageById(id);
       if (reportedMsg) await sendReportMail(reportedMsg.sender_id, reason);
@@ -6586,7 +6711,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     : listFilter === 'dms'
       ? conversations
       : listFilter === 'unread'
-        ? conversations.filter(isUnread)
+        ? [...conversations.filter(isUnread).map((c) => ({ ...c, __kind: 'dm' })), ...groups.filter((g) => !g.archived && g.unread > 0).map((g) => ({ ...g, __kind: 'group' }))]
+            .sort((a, b) => displayListSortByPin(a, b, (x) => (x.__kind === 'dm' ? isPinnedByMe(x) : x.pinned)))
         : [...conversations.map((c) => ({ ...c, __kind: 'dm' })), ...groups.filter((g) => !g.archived).map((g) => ({ ...g, __kind: 'group' }))]
             .sort((a, b) => displayListSortByPin(a, b, (x) => (x.__kind === 'dm' ? isPinnedByMe(x) : x.pinned)));
 
@@ -6595,27 +6721,33 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
   return (
     <div id="zapp-root" style={{
-      height: '100dvh', width: '100%', background: theme.bgGradient, fontFamily: FONT,
+      height: viewportBox.height ? viewportBox.height : '100dvh', width: '100%', background: theme.bgGradient, fontFamily: FONT,
       display: 'flex', overflow: 'hidden', position: 'relative', boxSizing: 'border-box',
+      transform: viewportBox.offset ? `translateY(${viewportBox.offset}px)` : 'none',
       paddingTop: 'env(safe-area-inset-top)',
       paddingLeft: 'env(safe-area-inset-left)',
       paddingRight: 'env(safe-area-inset-right)',
     }}>
       <GlobalStyle />
       <AssetDownloadBar progress={assetProgress} />
+      {notifPermission === 'default' && pushSupported() && !notifBannerDismissed && !mobileShowChat && (
+        <EnableNotificationsBanner top="calc(10px + env(safe-area-inset-top))"
+          onEnable={async () => { await subscribeToPush(session.user.id, true); if (typeof Notification !== 'undefined') setNotifPermission(Notification.permission); }}
+          onDismiss={() => { setNotifBannerDismissed(true); try { sessionStorage.setItem('zchat-notif-banner-dismissed', '1'); } catch {} }} />
+      )}
       {notifPermission === 'denied' && !notifBannerDismissed && (
         <NotificationPermissionBanner top="calc(10px + env(safe-area-inset-top))" onOpenHelp={() => setShowNotifHelp(true)}
           onDismiss={() => { setNotifBannerDismissed(true); try { sessionStorage.setItem('zchat-notif-banner-dismissed', '1'); } catch {} }} />
       )}
       {!isStandaloneApp && !installBannerDismissed && !mobileShowChat && (
         <InstallAppBanner
-          top={notifPermission === 'denied' && !notifBannerDismissed ? 'calc(60px + env(safe-area-inset-top))' : 'calc(10px + env(safe-area-inset-top))'}
+          top={(notifPermission === 'denied' || (notifPermission === 'default' && pushSupported())) && !notifBannerDismissed ? 'calc(60px + env(safe-area-inset-top))' : 'calc(10px + env(safe-area-inset-top))'}
           canInstallDirectly={!!deferredInstallPrompt} onInstallNow={handleInstallNow} onOpenHelp={() => setShowInstallHelp(true)}
           onDismiss={() => { setInstallBannerDismissed(true); try { localStorage.setItem('zchat-install-banner-dismissed', '1'); } catch {} }} />
       )}
       {showInstallHelp && <InstallAppHelpModal onClose={() => setShowInstallHelp(false)} />}
       <div style={{
-        width: mobileShowChat ? 0 : '100%', maxWidth: mobileShowChat ? 0 : '100%', overflow: 'hidden',
+        width: isWide ? 360 : (mobileShowChat ? 0 : '100%'), maxWidth: isWide ? 360 : (mobileShowChat ? 0 : '100%'), overflow: 'hidden',
         borderRight: `1px solid ${theme.border}`, display: 'flex', flexDirection: 'column', flexShrink: 0,
         transition: 'none',
       }} className="zchat-sidebar-desktop">
@@ -6740,15 +6872,16 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                       <GroupAvatar avatar={g.avatar} name={g.name} size={46} />
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ fontWeight: 700, fontSize: 14, color: theme.ink, display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 150 }}>
+                          <span style={{ fontWeight: g.unread ? 800 : 700, fontSize: 14, color: theme.ink, display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 150 }}>
                             {g.pinned && <Pin_ size={13} />}{g.name}
                           </span>
-                          {g.last_message_at && <span style={{ fontSize: 10.5, color: theme.muted, flexShrink: 0 }}>{new Date(g.last_message_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>}
+                          {g.last_message_at && <span style={{ fontSize: 10.5, color: g.unread ? theme.coral : theme.muted, fontWeight: g.unread ? 700 : 400, flexShrink: 0 }}>{new Date(g.last_message_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>}
                         </div>
                         <div style={{ fontSize: 12, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                           {g.last_message_type === 'image' ? 'Photo' : g.last_message_type === 'audio' ? 'Voice message' : g.last_message_type === 'video' ? 'Video' : g.last_message_type === 'sticker' ? 'Sticker' : parseProfileLink(g.last_message) ? 'Shared a profile' : (g.last_message || 'No messages yet')}
                         </div>
                       </div>
+                      {g.unread > 0 && <div style={{ minWidth: 20, height: 20, padding: '0 5px', boxSizing: 'border-box', borderRadius: 10, background: theme.coral, color: 'white', fontSize: 10.5, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{g.unread > 99 ? '99+' : g.unread}</div>}
                       <MoreVertical size={15} color={theme.muted} style={{ cursor: 'pointer', flexShrink: 0 }}
                         onClick={(e) => { e.stopPropagation(); setGroupRowMenuAnchor(e.currentTarget); setGroupRowMenuFor(groupRowMenuFor === g.id ? null : g.id); }} />
                       <SmartMenu anchorEl={groupRowMenuAnchor} open={groupRowMenuFor === g.id} onClose={() => setGroupRowMenuFor(null)} width={190}>
@@ -6803,14 +6936,15 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       </div>
 
       <div style={{
-        flex: 1, display: mobileShowChat ? 'flex' : 'none', flexDirection: 'column', minWidth: 0, minHeight: 0, position: 'relative',
+        flex: 1, display: (isWide || mobileShowChat) ? 'flex' : 'none', flexDirection: 'column', minWidth: 0, minHeight: 0, position: 'relative',
         paddingTop: (activeProfile || activeGroup) ? 64 : 0,
       }} className={mobileShowChat ? 'zchat-chat-panel zchat-panel-open' : 'zchat-chat-panel'}>
         {(activeProfile || activeGroup) ? (
           <>
             {ReactDOM.createPortal(
             <div style={{
-              position: 'fixed', top: 0, left: 0, right: 0, zIndex: 15,
+              position: 'fixed', top: 0, left: isWide ? 'calc(360px + env(safe-area-inset-left))' : 0, right: 0, zIndex: 15,
+              transform: viewportBox.offset ? `translateY(${viewportBox.offset}px)` : 'none',
               borderBottom: activeNameBarKey ? 'none' : `1px solid ${theme.border}`,
               background: theme.panelBg,
             }}>
@@ -6831,7 +6965,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                 }} />
               )}
               <ArrowLeft size={20} style={{ cursor: 'pointer', color: activeNameBarKey ? 'white' : theme.ink, flexShrink: 0, filter: activeNameBarKey ? 'drop-shadow(0 1px 3px rgba(0,0,0,0.6))' : 'none', position: 'relative' }}
-                onClick={(e) => { e.stopPropagation(); if (activeConvForBar && myLocks[activeConvForBar.id]) lastLeftChatAtRef.current[activeConvForBar.id] = Date.now(); setMobileShowChat(false); setActiveProfile(null); setActiveGroup(null); }} />
+                onClick={(e) => { e.stopPropagation(); if (activeConvForBar && myLocks[activeConvForBar.id]) lastLeftChatAtRef.current[activeConvForBar.id] = Date.now(); if (activeGroup) markGroupRead(activeGroup.id); setMobileShowChat(false); setActiveProfile(null); setActiveGroup(null); }} />
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, position: 'relative' }}>
                 {activeGroup ? <GroupAvatar avatar={activeGroup.avatar} name={activeGroup.name} size={38} /> : <Avatar emoji={activeProfile.avatar} name={activeProfile.name} online={isUserOnline(activeProfile) && !activeProfile.hide_activity} size={38} />}
                 <div style={{ minWidth: 0 }}>
@@ -7005,7 +7139,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                     data-keyboard-heal="true"
                     onChange={(e) => { const next = e.target.value.slice(0, MAX_CHARS); setDraft(next); setComposerMention(getActiveMention(next, Math.min(e.target.selectionStart, next.length))); sendTyping(); e.target.style.height = 'auto'; e.target.style.height = Math.min(e.target.scrollHeight, 110) + 'px'; }}
                     onClick={(e) => setComposerMention(getActiveMention(e.target.value, e.target.selectionStart))}
-                    onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); editingMessage ? saveEdit() : send(); } }}
+                    onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && !isTouchDevice()) { e.preventDefault(); if (editingMessage) saveEdit(); else send(); } }}
                     placeholder={editingMessage ? 'Edit message' : 'Message'}
                     rows={1}
                     style={{
@@ -7068,7 +7202,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         <ProfilePanel
           profile={profileOf} isSelf={profileOf.id === session.user.id} userId={session.user.id}
           isOnline={isUserOnline(profileOf) && !profileOf.hide_activity} onClose={() => setProfileOf(null)}
-          onReport={handleReport} onSaved={(updated) => setProfileOf(updated)}
+          onReport={handleReport} onSaved={(updated) => { setProfileOf({ ...updated, email: me.email }); if (updated.id === me.id) setMe((prev) => ({ ...prev, ...updated, email: prev.email })); }}
           onOpenSettings={() => { setProfileOf(null); setShowSettings(true); }}
           onOpenProfile={(p) => setProfileOf(p)}
           onMessage={(p) => { openChat(p, null); setProfileOf(null); }}
@@ -7422,4 +7556,4 @@ export default function App() {
       <AppInner />
     </ThemeProvider>
   );
-                    }
+                }
