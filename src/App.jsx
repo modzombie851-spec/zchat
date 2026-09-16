@@ -4,7 +4,7 @@ import {
   Send, Paperclip, Search, Mail, ShieldCheck, AtSign, LogOut, Eye, EyeOff, Lock,
   Flag, X, Trash2, User, Phone, MoreVertical, Image as ImageIcon, Video as VideoIcon,
   Smile, ArrowLeft, Check, CheckCheck, Settings as SettingsIcon, Moon, Sun, UserPlus,
-  FileText, HelpCircle, ChevronRight, Compass, Bell, Volume2, VolumeX, Palette, Mic, Play, Pause, Download, Users, Camera, Reply, Forward, Ban, Edit3, Archive, Sparkles, Share2, Copy, Crop, Type, Pencil, Undo2, Scissors, BellOff, Link as LinkIcon, ShieldAlert, Heart, Repeat,
+  FileText, HelpCircle, ChevronRight, Compass, Bell, Volume2, VolumeX, Palette, Mic, Play, Pause, Download, Users, Camera, Reply, Forward, Ban, Edit3, Archive, Sparkles, Share2, Copy, Crop, Type, Pencil, Undo2, Scissors, BellOff, Link as LinkIcon, ShieldAlert, Heart, Repeat, PhoneOff, MicOff, VideoOff, SwitchCamera,
 } from 'lucide-react';
 import {
   supabase, registerWithEmail, verifyOtp, setPassword, signInWithPassword,
@@ -340,6 +340,10 @@ function GlobalStyle() {
       .zchat-toast-in { animation: zchat-toast-in 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.1); }
       .zchat-pop { animation: zchat-pop-in 0.18s cubic-bezier(0.2, 0.9, 0.3, 1.2); }
       .zchat-sheet-up { animation: zchat-sheet-up 0.22s cubic-bezier(0.2, 0.9, 0.3, 1); }
+      @keyframes zchat-call-pulse { 0% { box-shadow: 0 0 0 0 rgba(52,199,89,0.55); } 70% { box-shadow: 0 0 0 16px rgba(52,199,89,0); } 100% { box-shadow: 0 0 0 0 rgba(52,199,89,0); } }
+      @keyframes zchat-call-ring { 0% { transform: scale(0.92); opacity: 0.85; } 100% { transform: scale(1.4); opacity: 0; } }
+      .zchat-call-pulse { animation: zchat-call-pulse 1.6s infinite; }
+      .zchat-call-ring { animation: zchat-call-ring 1.8s ease-out infinite; }
       .zchat-fire-ring {
         background: linear-gradient(135deg, #FFD23F, #FF6B00, #FF2D55);
       }
@@ -1192,7 +1196,7 @@ function ToggleSwitch({ on, onClick }) {
   );
 }
 
-function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideActivity, onToggleActivity, onOpenAccounts, onOpenDelete, chatLockSet, chatLockHash, onSetChatLockPassword, onTurnOffChatLock, autoOpenLockSetup, onConsumedAutoOpen }) {
+function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideActivity, onToggleActivity, onOpenAccounts, onOpenDelete, onOpenBlocked, blockedCount = 0, chatLockSet, chatLockHash, onSetChatLockPassword, onTurnOffChatLock, autoOpenLockSetup, onConsumedAutoOpen }) {
   const { theme, dark, setDark, accentName, setAccentName, soundOn, setSoundOn, reactionSoundOn, setReactionSoundOn, bgPatternOn, setBgPatternOn, fontScale, setFontScale, chatTheme, setChatTheme, bubbleColor, setBubbleColor } = useTheme();
   const accentLabels = { coral: 'Coral', ocean: 'Ocean', berry: 'Berry' };
   const [lockFlow, setLockFlow] = useState(null);
@@ -1269,7 +1273,7 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
             <CategoryRow icon={<Palette size={17} />} label="Appearance" sub="Theme, chat style, text size" onClick={() => setSection('appearance')} />
             <CategoryRow icon={<EyeOff size={17} />} label="Privacy & Security" sub="Activity status, Chat Lock" onClick={() => setSection('privacy')} />
             <CategoryRow icon={<Bell size={17} />} label="Notifications" sub="Sounds, alerts" onClick={() => setSection('notifications')} />
-            <CategoryRow icon={<HelpCircle size={17} />} label="About" sub="Privacy policy, help" onClick={() => setSection('about')} />
+            <CategoryRow icon={<HelpCircle size={17} />} label="About" sub={`Version ${APP_VERSION}, privacy policy`} onClick={() => setSection('about')} />
             <CategoryRow icon={<UserPlus size={17} />} label="Account" sub="Follow requests, switch, delete" onClick={() => setSection('account')} />
             <div style={{ height: 4 }} />
             <SettingsRow icon={<LogOut size={16} />} label="Log out" danger onClick={onLogout} />
@@ -1328,6 +1332,7 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
           <>
             <SectionHeader title="Privacy & Security" />
             <SettingsRow icon={<EyeOff size={16} />} label="Hide activity status" right={<ToggleSwitch on={hideActivity} onClick={onToggleActivity} />} />
+            <SettingsRow icon={<Ban size={16} />} label="Blocked accounts" onClick={onOpenBlocked} right={<span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, color: theme.muted }}>{blockedCount > 0 ? blockedCount : ''}<ChevronRight size={16} /></span>} />
             <SettingsRow icon={<Lock size={16} />} label={chatLockSet ? 'Change Chat Lock password' : 'Set Chat Lock password'} onClick={() => setLockFlow(chatLockSet ? 'verify-then-change' : 'set')} />
             {chatLockSet && (
               <SettingsRow icon={<Lock size={16} />} label="Turn off Chat Lock" danger onClick={() => setLockFlow('verify-then-off')} />
@@ -1347,6 +1352,15 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
           <>
             <SectionHeader title="About" />
             <SettingsRow icon={<FileText size={16} />} label="Privacy policy" onClick={onOpenPrivacy} />
+            <SettingsRow icon={<Sparkles size={16} />} label="Version" right={<span style={{ fontSize: 13, fontWeight: 800, color: theme.coral }}>{APP_VERSION}</span>} />
+            <div style={{ margin: '10px 4px 0', padding: '14px 16px', borderRadius: 16, background: theme.rowBg }}>
+              <div style={{ fontSize: 13.5, fontWeight: 800, color: theme.ink }}>What's new in {APP_VERSION}</div>
+              <div style={{ fontSize: 12.5, color: theme.muted, lineHeight: 1.6, marginTop: 6 }}>
+                Status that disappears after 24 hours, with viewers, likes, replies, mentions and share links.<br />
+                Voice and video calls with people you both follow, plus group calls.<br />
+                A new blocking system with a blocked accounts list.
+              </div>
+            </div>
           </>
         )}
 
@@ -1666,7 +1680,7 @@ function DiscoverPanel({ myId, blockedIds, onClose, onOpenProfile }) {
       </div>
     </div>
   );
-        }
+         }
 function IconDownload({ size = 15, color = 'currentColor' }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
@@ -2146,7 +2160,7 @@ function MailPanel({ myId, onClose, initialMailId }) {
               <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11.5, color: theme.muted, fontWeight: 600 }}>{mailSenderName(selected.type)} <VerifiedTick size={12} /> <span style={{ fontWeight: 400 }}>· {new Date(selected.created_at).toLocaleString()}</span></div>
             </div>
           </div>
-          <div style={{ fontSize: 14, color: theme.ink, lineHeight: 1.6, wordBreak: 'break-word' }}>{selected.body}</div>
+          <div style={{ fontSize: 14, color: theme.ink, lineHeight: 1.6, wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>{selected.body}</div>
         </div>
       ) : (
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '6px 10px', paddingBottom: 'calc(6px + env(safe-area-inset-bottom))' }}>
@@ -2822,7 +2836,7 @@ function CreateGroupPanel({ myId, onClose, onCreated }) {
     clearTimeout(timer.current);
     if (val.trim().length < 2) { setResults([]); return; }
     timer.current = setTimeout(async () => {
-      const { data } = await searchByUsername(val.trim());
+      const { data } = await searchAccounts(val.trim());
       setResults(sanitizeAvatarList(data, myId).filter((u) => u.id !== myId && !selected.find((s) => s.id === u.id)));
     }, 300);
   };
@@ -2940,7 +2954,7 @@ function CreateGroupPanel({ myId, onClose, onCreated }) {
       )}
     </div>
   );
-                }
+   }
 function GroupInfoPanel({ group, members, myId, myRole, isOwner, onClose, onPromote, onDemote, onMute, onUnmute, onKick, onLeave, onOpenProfile, onSaveBio, onSaveName, onSaveAvatar, onAddMembers, onTransferOwnership, onSetWallpaper, onSetHeaderStyle }) {
   const { theme } = useTheme();
   const isAdmin = myRole === 'admin';
@@ -3108,7 +3122,7 @@ function AddMembersPanel({ myId, existingIds, onClose, onAdd }) {
     clearTimeout(timer.current);
     if (val.trim().length < 2) { setResults([]); return; }
     timer.current = setTimeout(async () => {
-      const { data } = await searchByUsername(val.trim());
+      const { data } = await searchAccounts(val.trim());
       setResults(sanitizeAvatarList(data, myId).filter((u) => u.id !== myId && !existingIds.includes(u.id) && !selected.find((s) => s.id === u.id)));
     }, 300);
   };
@@ -3346,7 +3360,7 @@ function ShareProfileSheet({ profile, myId, conversations, groups, onSend, onClo
     clearTimeout(timer.current);
     if (val.trim().length < 2) { setResults([]); return; }
     timer.current = setTimeout(async () => {
-      const { data } = await searchByUsername(val.trim());
+      const { data } = await searchAccounts(val.trim());
       const people = sanitizeAvatarList(data, myId).filter((u) => u.id !== myId && !u.is_deleted).map(userItem);
       const term = val.trim().toLowerCase();
       const groupMatches = (groups || []).filter((g) => (g.name || '').toLowerCase().includes(term)).map(groupItem);
@@ -3486,7 +3500,7 @@ function PosterIconButton({ onClick, children, label }) {
   );
 }
 
-function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, onSaved, onOpenSettings, onOpenProfile, onMessage, isBlocked, onBlock, onUnblock, shareConversations, shareGroups, onShareToChats }) {
+function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, onSaved, onOpenSettings, onOpenProfile, onMessage, isBlocked, onBlock, onUnblock, shareConversations, shareGroups, onShareToChats, canCall, onCall }) {
   const { theme } = useTheme();
   const [reportOpen, setReportOpen] = useState(false);
   const [reportSent, setReportSent] = useState(false);
@@ -3845,6 +3859,12 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
                     <button onClick={() => onMessage(profile)} style={pillBtn(false)}><Send size={15} /> Message</button>
                   ) : (
                     <button onClick={() => setShowShare(true)} style={pillBtn(false)}><Share2 size={15} /> Share</button>
+                  )}
+                  {canCall && followState === 'accepted' && (
+                    <>
+                      <button onClick={() => onCall('voice')} aria-label="Voice call" style={{ ...pillBtn(false), flex: '0 0 48px' }}><Phone size={16} /></button>
+                      <button onClick={() => onCall('video')} aria-label="Video call" style={{ ...pillBtn(false), flex: '0 0 48px' }}><VideoIcon size={17} /></button>
+                    </>
                   )}
                 </div>
               )}
@@ -4402,7 +4422,7 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
                   <ProfileLinkCard profileId={sharedProfileId} onOpen={onOpenMention} />
                 </div>
               )}
-              {m.type === 'text' && m.content && !sharedProfileId && !(m.story_id && (m.content === STORY_MENTION_TEXT || m.content === STORY_GROUP_MENTION_TEXT)) && (
+              {m.type === 'text' && m.content && !sharedProfileId && !(m.story_id && (m.content === STORY_MENTION_TEXT || m.content === STORY_GROUP_MENTION_TEXT || m.content === STORY_SHARE_TEXT)) && (
                 <div style={{ fontSize: 15 * fontScale, color: theme.ink, wordBreak: 'break-word', lineHeight: 1.32 }}>
                   <RichText text={m.content} onMention={onOpenMention} />
                   <span style={{ display: 'inline-block', float: 'right', width: Math.ceil(time.length * 5.4) + (isMe ? 22 : 8) + (m.edited ? 30 : 0), height: 17 }} />
@@ -4473,8 +4493,6 @@ function playReactionPing() {
 }
 
 function pairKey(a, b) { return a < b ? [a, b] : [b, a]; }
-
-
 function ImageViewer({ url, onClose, onForward, onReport }) {
   const [menuOpen, setMenuOpen] = useState(false);
   return (
@@ -4502,7 +4520,8 @@ function ImageViewer({ url, onClose, onForward, onReport }) {
       <img src={url} alt="" onContextMenu={(e) => e.preventDefault()} draggable={false} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: 8 }} />
     </div>
   );
-                           }
+}
+
 function MessageActionBar({ count, canEditActions, onCancel, onForward, onDeleteForMe, onDeleteForEveryone, onReport }) {
   const { theme } = useTheme();
   const btn = { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer', color: theme.ink, fontSize: 10, fontWeight: 600, flexShrink: 0, minWidth: 52 };
@@ -4535,7 +4554,7 @@ function ForwardPicker({ conversations, onCancel, onPick, myId }) {
     if (val.trim().length < 2) { setResults([]); return; }
     setSearching(true);
     timer.current = setTimeout(async () => {
-      const { data } = await searchByUsername(val.trim());
+      const { data } = await searchAccounts(val.trim());
       setResults(sanitizeAvatarList(data, myId).filter((u) => u.id !== myId));
       setSearching(false);
     }, 300);
@@ -4910,7 +4929,7 @@ function describeMessage(m) {
   if (!m) return { kind: 'none', text: '' };
   if (m.deleted) return { kind: 'deleted', text: 'This message was deleted' };
   if (m.story_id) {
-    if (m.content === STORY_MENTION_TEXT || m.content === STORY_GROUP_MENTION_TEXT) return { kind: 'story', text: m.content };
+    if (m.content === STORY_MENTION_TEXT || m.content === STORY_GROUP_MENTION_TEXT || m.content === STORY_SHARE_TEXT) return { kind: 'story', text: m.content };
     return { kind: 'story', text: `Story reply: ${m.content || ''}` };
   }
   switch (m.type) {
@@ -4998,7 +5017,7 @@ function InAppMessageToast({ toast, top, onOpen, onDismiss }) {
       }}>
       <div style={{ position: 'relative', flexShrink: 0, pointerEvents: 'none' }}>
         {toast.kind === 'notice' ? (
-          toast.icon ? <MailBadgeIcon type={toast.icon === 'warning' ? 'report_warning' : toast.icon === 'mention' ? 'mention' : 'mail'} size={42} />
+          toast.icon ? <MailBadgeIcon type={toast.icon === 'warning' ? 'report_warning' : toast.icon === 'mention' ? 'mention' : toast.icon === 'update' ? 'update' : 'mail'} size={42} />
             : toast.isGroupIcon ? <GroupAvatar avatar={toast.groupAvatar} name={toast.title} size={42} /> : <Avatar emoji={toast.avatar} name={toast.avatarName} size={42} />
         ) : toast.kind === 'group'
           ? <GroupAvatar avatar={toast.groupAvatar} name={toast.title} size={42} />
@@ -6042,8 +6061,7 @@ function ChatSearchBar({ query, onChange, count, position, onPrev, onNext, onClo
       <X size={19} color={theme.muted} style={{ cursor: 'pointer', flexShrink: 0 }} onClick={onClose} />
     </div>
   );
-}
-
+                                        }
 function PinnedMessagesBar({ pins, index, labelFor, onOpen }) {
   const { theme } = useTheme();
   if (!pins.length) return null;
@@ -6082,7 +6100,8 @@ function extractLinks(text) {
   let match;
   while ((match = LINK_REGEX.exec(text)) !== null) found.push(match[0]);
   return found;
-      }
+}
+
 function ChatMediaPanel({ title, messages, labelFor, onClose, onOpenImage, onOpenVideo, onJump }) {
   const { theme } = useTheme();
   const [tab, setTab] = useState('media');
@@ -6204,8 +6223,10 @@ function timeShort(iso) {
 function MailBadgeIcon({ type, size = 42 }) {
   const warning = type === 'report_warning';
   const mention = type === 'mention';
+  const update = type === 'update';
   const bg = warning ? 'linear-gradient(135deg, #FF5F6D 0%, #FF2E4D 55%, #B3122E 100%)'
     : mention ? 'linear-gradient(135deg, #7C5CFC 0%, #2E7CF6 100%)'
+      : update ? 'linear-gradient(135deg, #00C2A8 0%, #2E7CF6 55%, #7C5CFC 100%)'
       : 'linear-gradient(135deg, #2E7CF6 0%, #00C2A8 100%)';
   return (
     <div style={{
@@ -6215,6 +6236,7 @@ function MailBadgeIcon({ type, size = 42 }) {
     }}>
       {warning ? <ShieldAlert size={size * 0.5} color="white" strokeWidth={2.2} />
         : mention ? <AtSign size={size * 0.46} color="white" strokeWidth={2.4} />
+          : update ? <Sparkles size={size * 0.48} color="white" strokeWidth={2.2} />
           : <span style={{ fontFamily: 'Georgia, serif', fontWeight: 800, fontSize: size * 0.5, color: 'white', lineHeight: 1 }}>Z</span>}
       <div style={{ position: 'absolute', inset: 0, borderRadius: size * 0.32, boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.35)', pointerEvents: 'none' }} />
     </div>
@@ -6256,38 +6278,7 @@ function StoryAvatar({ profile, size = 64, ring = 'none', onClick, badgePlus = f
   );
 }
 
-function StoryTray({ me, myStories, trayUsers, seen, onAdd, onOpen }) {
-  const { theme } = useTheme();
-  const hasMine = myStories.length > 0;
-  const label = (text, highlight) => (
-    <div style={{ fontSize: 11, fontWeight: highlight ? 700 : 600, color: highlight ? theme.ink : theme.muted, marginTop: 5, maxWidth: 66, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'center' }}>{text}</div>
-  );
-  return (
-    <div style={{ display: 'flex', gap: 12, padding: '2px 14px 12px', overflowX: 'auto', flexShrink: 0, WebkitOverflowScrolling: 'touch' }}>
-      <div onClick={onAdd} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'pointer', flexShrink: 0 }}>
-        <div style={{ width: 62, height: 62, borderRadius: '50%', border: `1.5px dashed ${theme.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.coral, background: theme.rowBg, boxSizing: 'border-box' }}>
-          <span style={{ fontSize: 30, fontWeight: 300, lineHeight: 1 }}>+</span>
-        </div>
-        {label('Add story', true)}
-      </div>
-      <div onClick={() => (hasMine ? onOpen(me.id) : onAdd())} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0, cursor: 'pointer' }}>
-        <StoryAvatar profile={me} size={62} ring={hasMine ? (myStories.every((s) => seen.has(s.id)) ? 'seen' : 'unseen') : 'none'} badgePlus={!hasMine} />
-        {label('Your story', true)}
-      </div>
-      {trayUsers.map((u) => {
-        const allSeen = u.stories.every((s) => seen.has(s.id));
-        return (
-          <div key={u.profile.id} onClick={() => onOpen(u.profile.id)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0, cursor: 'pointer' }}>
-            <StoryAvatar profile={u.profile} size={62} ring={allSeen ? 'seen' : 'unseen'} />
-            {label((u.profile.name || u.profile.username || '').split(' ')[0], !allSeen)}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function AvatarPeek({ profile, online, lastSeen, hasStory, storySeen, onClose, onMessage, onProfile, onStory }) {
+function AvatarPeek({ profile, online, lastSeen, hasStory, storySeen, canCall, onCall, onClose, onMessage, onProfile, onStory }) {
   const { theme } = useTheme();
   const photo = typeof profile.avatar === 'string' && profile.avatar.startsWith('http') ? profile.avatar : '';
   const action = (icon, label, onClick, highlight) => (
@@ -6319,6 +6310,7 @@ function AvatarPeek({ profile, online, lastSeen, hasStory, storySeen, onClose, o
         </div>
         <div style={{ display: 'flex', borderTop: `1px solid ${theme.border}` }}>
           {action(<Send size={20} />, 'Message', onMessage)}
+          {canCall && action(<Phone size={20} />, 'Call', onCall)}
           {action(<User size={20} />, 'Profile', onProfile)}
           {hasStory && action(<Sparkles size={20} />, 'View status', onStory, true)}
         </div>
@@ -6336,7 +6328,7 @@ function StoryMentionPicker({ myId, groups, onPick, onClose }) {
     if (term.length < 1) { setPeople([]); return undefined; }
     let cancelled = false;
     const t = setTimeout(async () => {
-      const { data } = await searchByUsername(term);
+      const { data } = await searchAccounts(term);
       if (!cancelled) setPeople(sanitizeAvatarList(data, myId).filter((p) => p.id !== myId && !p.is_deleted).slice(0, 12));
     }, 220);
     return () => { cancelled = true; clearTimeout(t); };
@@ -6420,7 +6412,7 @@ function StoryViewersSheet({ story, myId, onClose, onOpenProfile }) {
   );
 }
 
-function StoryViewer({ groupsList, startGroup = 0, startStoryId = null, myId, seen, liked, onSeen, onClose, onLike, onReply, onRepost, onDelete, onReport, onOpenProfile, onOpenMention }) {
+function StoryViewer({ groupsList, startGroup = 0, startStoryId = null, onAddStory, onShare, externalPause = false, myId, seen, liked, onSeen, onClose, onLike, onReply, onRepost, onDelete, onReport, onOpenProfile, onOpenMention }) {
   const [gi, setGi] = useState(startGroup);
   const [si, setSi] = useState(() => {
     const g = groupsList[startGroup];
@@ -6454,7 +6446,7 @@ function StoryViewer({ groupsList, startGroup = 0, startStoryId = null, myId, se
   const group = groupsList[gi];
   const story = group ? group.stories[Math.min(si, group.stories.length - 1)] : null;
   const isMine = group && group.profile.id === myId;
-  const stopped = paused || holding || replyFocus || showViewers || menu || confirmDelete || !loaded;
+  const stopped = paused || holding || replyFocus || showViewers || menu || confirmDelete || externalPause || !loaded;
 
   useEffect(() => {
     if (!story) return;
@@ -6618,6 +6610,14 @@ function StoryViewer({ groupsList, startGroup = 0, startStoryId = null, myId, se
                 <Eye size={17} /> {viewCount == null ? 'Viewers' : `${viewCount} ${viewCount === 1 ? 'viewer' : 'viewers'}`}
               </div>
               <div style={{ flex: 1 }} />
+              {onShare && (
+                <div onClick={() => onShare(story, group.profile)} style={{ width: 42, height: 42, borderRadius: '50%', background: 'rgba(255,255,255,0.14)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><Share2 size={18} color="white" /></div>
+              )}
+              {onAddStory && (
+                <div onClick={onAddStory} style={{ height: 42, padding: '0 14px', borderRadius: 21, background: 'rgba(255,255,255,0.14)', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontWeight: 700, fontSize: 13.5 }}>
+                  <span style={{ fontSize: 20, lineHeight: 1 }}>+</span> Add
+                </div>
+              )}
               <div onClick={() => setConfirmDelete(true)} style={{ width: 42, height: 42, borderRadius: '50%', background: 'rgba(255,255,255,0.14)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><Trash2 size={18} color="white" /></div>
             </>
           ) : (
@@ -6632,6 +6632,7 @@ function StoryViewer({ groupsList, startGroup = 0, startStoryId = null, myId, se
                 <>
                   <div onClick={toggleLike} style={{ padding: 6, cursor: 'pointer' }}><Heart size={26} color={isLiked ? '#FF3B5C' : 'white'} fill={isLiked ? '#FF3B5C' : 'none'} /></div>
                   <div onClick={async () => { await onRepost(story, group.profile); setFlash('Added to your story'); setTimeout(() => setFlash(''), 1600); }} style={{ padding: 6, cursor: 'pointer' }}><Repeat size={24} color="white" /></div>
+                  {onShare && <div onClick={() => onShare(story, group.profile)} style={{ padding: 6, cursor: 'pointer' }}><Send size={23} color="white" /></div>}
                 </>
               )}
             </>
@@ -6644,9 +6645,13 @@ function StoryViewer({ groupsList, startGroup = 0, startStoryId = null, myId, se
           <div onClick={() => setMenu(false)} style={{ position: 'absolute', inset: 0, zIndex: 9, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'flex-end' }}>
             <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ width: '100%', background: '#11151F', borderRadius: '22px 22px 0 0', padding: '8px 0', paddingBottom: 'calc(8px + env(safe-area-inset-bottom))' }}>
               {isMine ? (
-                <div onClick={() => { setMenu(false); setConfirmDelete(true); }} style={{ padding: '15px 22px', color: '#FF5A6A', fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>Delete story</div>
+                <>
+                  {onShare && <div onClick={() => { setMenu(false); onShare(story, group.profile); }} style={{ padding: '15px 22px', fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>Share</div>}
+                  <div onClick={() => { setMenu(false); setConfirmDelete(true); }} style={{ padding: '15px 22px', color: '#FF5A6A', fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>Delete story</div>
+                </>
               ) : (
                 <>
+                  {onShare && <div onClick={() => { setMenu(false); onShare(story, group.profile); }} style={{ padding: '15px 22px', fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>Share</div>}
                   <div onClick={() => { setMenu(false); onOpenProfile(group.profile); }} style={{ padding: '15px 22px', fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>View profile</div>
                   <div onClick={() => { setMenu(false); onReport(group.profile); }} style={{ padding: '15px 22px', color: '#FF5A6A', fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>Report</div>
                 </>
@@ -6668,8 +6673,9 @@ function StoryViewer({ groupsList, startGroup = 0, startStoryId = null, myId, se
 
 function StoryRefCard({ m, isMe, onOpen }) {
   const { theme } = useTheme();
-  const isMention = m.content === STORY_MENTION_TEXT || m.content === STORY_GROUP_MENTION_TEXT;
-  const label = isMention
+  const isShare = m.content === STORY_SHARE_TEXT;
+  const isMention = m.content === STORY_MENTION_TEXT || m.content === STORY_GROUP_MENTION_TEXT || isShare;
+  const label = isShare ? (isMe ? 'You shared a story' : 'Shared a story') : isMention
     ? (isMe ? 'You mentioned them in your story' : m.content === STORY_GROUP_MENTION_TEXT ? 'Mentioned this group in their story' : 'Mentioned you in their story')
     : (isMe ? 'You replied to their story' : 'Replied to your story');
   return (
@@ -6721,6 +6727,821 @@ async function notifyBioMentions(profile, oldBio, newBio) {
       sendPushNotification(p.id, 'ZChat', `${profile.name} mentioned you in their bio`, `/?profile=${profile.id}`, profile.avatar);
     }
   } catch {}
+}
+
+const CALL_TURN_URLS = '';
+const CALL_TURN_USERNAME = '';
+const CALL_TURN_CREDENTIAL = '';
+const CALL_RING_MS = 45000;
+
+function callIceConfig() {
+  const servers = [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302', 'stun:stun.cloudflare.com:3478'] }];
+  if (CALL_TURN_URLS) servers.push({ urls: CALL_TURN_URLS.split(',').map((u) => u.trim()).filter(Boolean), username: CALL_TURN_USERNAME, credential: CALL_TURN_CREDENTIAL });
+  return { iceServers: servers, iceCandidatePoolSize: 4 };
+}
+
+function formatCallDuration(ms) {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  return h ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}` : `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function startCallTone(kind) {
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return () => {};
+    const ctx = new Ctx();
+    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+    let stopped = false;
+    const beep = (freq, start, length, volume) => {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = 'sine';
+      o.frequency.value = freq;
+      g.gain.setValueAtTime(0.0001, ctx.currentTime + start);
+      g.gain.exponentialRampToValueAtTime(volume, ctx.currentTime + start + 0.03);
+      g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + start + length);
+      o.connect(g);
+      g.connect(ctx.destination);
+      o.start(ctx.currentTime + start);
+      o.stop(ctx.currentTime + start + length + 0.05);
+    };
+    const pattern = () => {
+      if (stopped) return;
+      if (kind === 'incoming') {
+        beep(784, 0, 0.35, 0.18);
+        beep(988, 0.4, 0.35, 0.18);
+        if (navigator.vibrate) navigator.vibrate([400, 250, 400]);
+      } else {
+        beep(425, 0, 1.1, 0.08);
+      }
+    };
+    pattern();
+    const iv = setInterval(pattern, kind === 'incoming' ? 2200 : 3500);
+    return () => {
+      stopped = true;
+      clearInterval(iv);
+      if (navigator.vibrate) navigator.vibrate(0);
+      ctx.close().catch(() => {});
+    };
+  } catch {
+    return () => {};
+  }
+}
+
+function useCallEngine(options) {
+  const [call, setCall] = useState(null);
+  const callRef = useRef(null);
+  const pcsRef = useRef(new Map());
+  const pendingIceRef = useRef(new Map());
+  const channelRef = useRef(null);
+  const localRef = useRef(null);
+  const timersRef = useRef({});
+  const toneStopRef = useRef(null);
+  const optsRef = useRef(options);
+  optsRef.current = options;
+
+  const put = (value) => { callRef.current = value; setCall(value); };
+  const patch = (fnOrObj) => {
+    const prev = callRef.current;
+    if (!prev) return;
+    const next = { ...prev, ...(typeof fnOrObj === 'function' ? fnOrObj(prev) : fnOrObj) };
+    callRef.current = next;
+    setCall(next);
+  };
+  const stopTone = () => { if (toneStopRef.current) { toneStopRef.current(); toneStopRef.current = null; } };
+  const playTone = (kind) => { stopTone(); toneStopRef.current = startCallTone(kind); };
+  const send = (msg) => {
+    const ch = channelRef.current;
+    if (!ch) return;
+    ch.send({ type: 'broadcast', event: 'signal', payload: { ...msg, from: optsRef.current.myId } });
+  };
+
+  const getMedia = async (kind, facing = 'user') => {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      optsRef.current.snack("Calls aren't supported in this browser");
+      return null;
+    }
+    try {
+      return await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        video: kind === 'video' ? { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } } : false,
+      });
+    } catch {
+      optsRef.current.snack(kind === 'video' ? 'Allow camera and microphone to make video calls' : 'Allow microphone access to make calls');
+      return null;
+    }
+  };
+
+  const cleanup = () => {
+    Object.values(timersRef.current).forEach((t) => clearTimeout(t));
+    timersRef.current = {};
+    stopTone();
+    pcsRef.current.forEach((pc) => { try { pc.close(); } catch {} });
+    pcsRef.current = new Map();
+    pendingIceRef.current = new Map();
+    if (localRef.current) localRef.current.getTracks().forEach((t) => t.stop());
+    localRef.current = null;
+    if (channelRef.current) supabase.removeChannel(channelRef.current);
+    channelRef.current = null;
+  };
+
+  const removePeer = (peerId) => {
+    const pc = pcsRef.current.get(peerId);
+    if (pc) { try { pc.close(); } catch {} }
+    pcsRef.current.delete(peerId);
+    patch((prev) => {
+      const remoteStreams = { ...prev.remoteStreams };
+      delete remoteStreams[peerId];
+      return { remoteStreams, participants: prev.participants.filter((id) => id !== peerId) };
+    });
+  };
+
+  const flushIce = async (peerId) => {
+    const pc = pcsRef.current.get(peerId);
+    const queue = pendingIceRef.current.get(peerId) || [];
+    pendingIceRef.current.delete(peerId);
+    for (const c of queue) { try { await pc.addIceCandidate(c); } catch {} }
+  };
+
+  const createPeer = (peerId) => {
+    const pc = new RTCPeerConnection(callIceConfig());
+    pcsRef.current.set(peerId, pc);
+    const local = localRef.current;
+    if (local) local.getTracks().forEach((t) => pc.addTrack(t, local));
+    pc.ontrack = (e) => {
+      const stream = (e.streams && e.streams[0]) || new MediaStream([e.track]);
+      patch((prev) => ({ remoteStreams: { ...prev.remoteStreams, [peerId]: stream } }));
+    };
+    pc.onicecandidate = (e) => {
+      if (e.candidate) send({ type: 'ice', to: peerId, candidate: typeof e.candidate.toJSON === 'function' ? e.candidate.toJSON() : e.candidate });
+    };
+    pc.onconnectionstatechange = () => {
+      const state = pc.connectionState;
+      if (state === 'connected') {
+        stopTone();
+        clearTimeout(timersRef.current[`drop-${peerId}`]);
+        patch((prev) => ({ status: 'active', startedAt: prev.startedAt || Date.now(), reconnecting: false }));
+      } else if (state === 'disconnected' || state === 'failed') {
+        patch({ reconnecting: true });
+        clearTimeout(timersRef.current[`drop-${peerId}`]);
+        timersRef.current[`drop-${peerId}`] = setTimeout(() => {
+          if (pc.connectionState === 'connected') return;
+          const current = callRef.current;
+          if (!current) return;
+          if (current.mode === 'direct') finish('failed'); else removePeer(peerId);
+        }, state === 'failed' ? 2500 : 10000);
+      }
+    };
+    return pc;
+  };
+
+  const offerTo = async (peerId) => {
+    const pc = pcsRef.current.get(peerId) || createPeer(peerId);
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    send({ type: 'offer', to: peerId, sdp: { type: pc.localDescription.type, sdp: pc.localDescription.sdp } });
+  };
+
+  const handleSignal = async (p) => {
+    const c = callRef.current;
+    const myId = optsRef.current.myId;
+    if (!c || !p || p.from === myId) return;
+    if (p.to && p.to !== myId) return;
+    try {
+      if (p.type === 'accept' && c.mode === 'direct' && c.direction === 'outgoing') {
+        stopTone();
+        clearTimeout(timersRef.current.noAnswer);
+        patch({ status: 'connecting' });
+        await offerTo(p.from);
+      } else if (p.type === 'join' && c.mode === 'group' && c.status !== 'ringing') {
+        patch((prev) => ({ participants: prev.participants.includes(p.from) ? prev.participants : [...prev.participants, p.from] }));
+        if (!pcsRef.current.has(p.from)) {
+          if (myId < p.from) await offerTo(p.from); else send({ type: 'hello', to: p.from });
+        }
+      } else if (p.type === 'hello' && c.mode === 'group') {
+        if (!pcsRef.current.has(p.from)) await offerTo(p.from);
+      } else if (p.type === 'offer') {
+        const pc = pcsRef.current.get(p.from) || createPeer(p.from);
+        await pc.setRemoteDescription(p.sdp);
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        send({ type: 'answer', to: p.from, sdp: { type: pc.localDescription.type, sdp: pc.localDescription.sdp } });
+        await flushIce(p.from);
+        if (c.mode === 'group') patch((prev) => ({ participants: prev.participants.includes(p.from) ? prev.participants : [...prev.participants, p.from] }));
+      } else if (p.type === 'answer') {
+        const pc = pcsRef.current.get(p.from);
+        if (pc && pc.signalingState === 'have-local-offer') {
+          await pc.setRemoteDescription(p.sdp);
+          await flushIce(p.from);
+        }
+      } else if (p.type === 'ice') {
+        const pc = pcsRef.current.get(p.from);
+        if (pc && pc.remoteDescription) { try { await pc.addIceCandidate(p.candidate); } catch {} } else {
+          const q = pendingIceRef.current.get(p.from) || [];
+          q.push(p.candidate);
+          pendingIceRef.current.set(p.from, q);
+        }
+      } else if (p.type === 'decline' && c.mode === 'direct') {
+        finish('declined');
+      } else if (p.type === 'end' && c.mode === 'direct') {
+        finish('remote');
+      } else if (p.type === 'leave' && c.mode === 'group') {
+        removePeer(p.from);
+      } else if (p.type === 'camera') {
+        patch((prev) => ({ remoteCameraOff: { ...(prev.remoteCameraOff || {}), [p.from]: !!p.off } }));
+      }
+    } catch {}
+  };
+
+  const joinChannel = (callId) => new Promise((resolve) => {
+    const ch = supabase.channel(`call-${callId}`, { config: { broadcast: { self: false } } });
+    ch.on('broadcast', { event: 'signal' }, ({ payload }) => { handleSignal(payload); });
+    channelRef.current = ch;
+    let done = false;
+    const finishJoin = () => { if (!done) { done = true; resolve(); } };
+    ch.subscribe((status) => { if (status === 'SUBSCRIBED') finishJoin(); });
+    setTimeout(finishJoin, 5000);
+  });
+
+  const finish = (reason = 'hangup') => {
+    const c = callRef.current;
+    if (!c || c.status === 'ended') return;
+    const nowIso = new Date().toISOString();
+    const connected = !!c.startedAt;
+    if (c.mode === 'direct') {
+      if (reason === 'hangup' || reason === 'no_answer' || reason === 'failed') send({ type: 'end' });
+      if (reason !== 'declined' && reason !== 'busy') {
+        const status = connected ? 'ended' : reason === 'no_answer' ? 'missed' : c.direction === 'outgoing' ? 'cancelled' : 'ended';
+        supabase.from('calls').update({ status, ended_at: nowIso }).eq('id', c.id).then(() => {});
+      }
+      if (c.direction === 'outgoing' && optsRef.current.onDirectEnded) optsRef.current.onDirectEnded(c, connected ? Date.now() - c.startedAt : 0);
+    } else {
+      send({ type: 'leave' });
+      if (pcsRef.current.size === 0) supabase.from('calls').update({ status: 'ended', ended_at: nowIso }).eq('id', c.id).then(() => {});
+    }
+    cleanup();
+    const labels = { declined: 'Call declined', busy: 'On another call', no_answer: 'No answer', failed: 'Call dropped', remote: 'Call ended', hangup: 'Call ended' };
+    put({ ...c, status: 'ended', endLabel: labels[reason] || 'Call ended', localStream: null, remoteStreams: {} });
+    const endedId = c.id;
+    setTimeout(() => { if (callRef.current && callRef.current.id === endedId && callRef.current.status === 'ended') put(null); }, 1400);
+  };
+
+  const startDirect = async (profile, kind) => {
+    if (callRef.current) return;
+    const opts = optsRef.current;
+    const local = await getMedia(kind);
+    if (!local) return;
+    localRef.current = local;
+    const { data: row, error } = await supabase.from('calls').insert({ caller_id: opts.myId, callee_id: profile.id, kind, status: 'ringing' }).select().single();
+    if (error || !row) {
+      local.getTracks().forEach((t) => t.stop());
+      localRef.current = null;
+      opts.snack(friendlyError(error, "Couldn't start the call. You can only call people who follow you back."));
+      return;
+    }
+    put({ id: row.id, mode: 'direct', kind, direction: 'outgoing', status: 'ringing', peer: profile, group: null, localStream: local, remoteStreams: {}, participants: [], muted: false, cameraOff: false, facing: 'user' });
+    playTone('outgoing');
+    await joinChannel(row.id);
+    opts.notify(profile.id, opts.myName, `Incoming ${kind === 'video' ? 'video' : 'voice'} call`, `/?call=${row.id}`, opts.myAvatar);
+    timersRef.current.noAnswer = setTimeout(() => {
+      const current = callRef.current;
+      if (current && current.id === row.id && current.status === 'ringing') finish('no_answer');
+    }, CALL_RING_MS);
+  };
+
+  const startGroup = async (group, kind) => {
+    if (callRef.current) return;
+    const opts = optsRef.current;
+    const local = await getMedia(kind);
+    if (!local) return;
+    localRef.current = local;
+    const { data: row, error } = await supabase.from('calls').insert({ caller_id: opts.myId, group_id: group.id, kind, status: 'ringing' }).select().single();
+    if (error || !row) {
+      local.getTracks().forEach((t) => t.stop());
+      localRef.current = null;
+      opts.snack(friendlyError(error, "Couldn't start the group call. Try again."));
+      return;
+    }
+    put({ id: row.id, mode: 'group', kind, direction: 'outgoing', status: 'active', peer: null, group, localStream: local, remoteStreams: {}, participants: [], muted: false, cameraOff: false, facing: 'user', startedAt: Date.now() });
+    await joinChannel(row.id);
+    send({ type: 'join' });
+    if (opts.onGroupStarted) opts.onGroupStarted(row, group);
+  };
+
+  const joinGroupCall = async (row, group) => {
+    if (callRef.current) return;
+    const local = await getMedia(row.kind);
+    if (!local) return;
+    localRef.current = local;
+    put({ id: row.id, mode: 'group', kind: row.kind, direction: 'incoming', status: 'active', peer: null, group, localStream: local, remoteStreams: {}, participants: [], muted: false, cameraOff: false, facing: 'user', startedAt: Date.now() });
+    await joinChannel(row.id);
+    supabase.from('calls').update({ status: 'active' }).eq('id', row.id).eq('status', 'ringing').then(() => {});
+    send({ type: 'join' });
+  };
+
+  const incoming = (row, caller, group) => {
+    if (callRef.current) {
+      if (row.callee_id) supabase.from('calls').update({ status: 'busy', ended_at: new Date().toISOString() }).eq('id', row.id).then(() => {});
+      return;
+    }
+    put({ id: row.id, mode: row.group_id ? 'group' : 'direct', kind: row.kind, direction: 'incoming', status: 'ringing', peer: caller, group: group || null, row, localStream: null, remoteStreams: {}, participants: [], muted: false, cameraOff: false, facing: 'user' });
+    playTone('incoming');
+    const age = Math.max(0, Date.now() - new Date(row.created_at || Date.now()).getTime());
+    timersRef.current.ringOut = setTimeout(() => {
+      const current = callRef.current;
+      if (current && current.id === row.id && current.status === 'ringing') { cleanup(); put(null); }
+    }, Math.max(5000, CALL_RING_MS - age));
+  };
+
+  const accept = async () => {
+    const c = callRef.current;
+    if (!c || c.direction !== 'incoming' || c.status !== 'ringing') return;
+    stopTone();
+    clearTimeout(timersRef.current.ringOut);
+    if (c.mode === 'group') {
+      put(null);
+      await joinGroupCall(c.row || { id: c.id, kind: c.kind }, c.group);
+      return;
+    }
+    const local = await getMedia(c.kind);
+    if (!local) { decline(); return; }
+    localRef.current = local;
+    patch({ localStream: local, status: 'connecting' });
+    await joinChannel(c.id);
+    supabase.from('calls').update({ status: 'accepted', answered_at: new Date().toISOString() }).eq('id', c.id).then(() => {});
+    send({ type: 'accept' });
+  };
+
+  const decline = () => {
+    const c = callRef.current;
+    if (!c) return;
+    if (c.mode === 'direct' && c.status === 'ringing') supabase.from('calls').update({ status: 'declined', ended_at: new Date().toISOString() }).eq('id', c.id).then(() => {});
+    cleanup();
+    put(null);
+  };
+
+  const onRowUpdate = (row) => {
+    const c = callRef.current;
+    if (!c || !row || row.id !== c.id) return;
+    if (c.mode === 'direct') {
+      if (c.direction === 'outgoing' && (row.status === 'declined' || row.status === 'busy')) finish(row.status);
+      else if (c.direction === 'incoming' && c.status === 'ringing' && ['cancelled', 'missed', 'ended', 'accepted'].includes(row.status)) { cleanup(); put(null); }
+    } else if (c.direction === 'incoming' && c.status === 'ringing' && row.status === 'ended') {
+      cleanup();
+      put(null);
+    }
+  };
+
+  const toggleMute = () => {
+    const c = callRef.current;
+    if (!c || !localRef.current) return;
+    const next = !c.muted;
+    localRef.current.getAudioTracks().forEach((t) => { t.enabled = !next; });
+    patch({ muted: next });
+  };
+
+  const toggleCamera = () => {
+    const c = callRef.current;
+    if (!c || !localRef.current || c.kind !== 'video') return;
+    const next = !c.cameraOff;
+    localRef.current.getVideoTracks().forEach((t) => { t.enabled = !next; });
+    patch({ cameraOff: next });
+    send({ type: 'camera', off: next });
+  };
+
+  const flipCamera = async () => {
+    const c = callRef.current;
+    if (!c || c.kind !== 'video' || !localRef.current) return;
+    const facing = c.facing === 'user' ? 'environment' : 'user';
+    try {
+      const fresh = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing } });
+      const track = fresh.getVideoTracks()[0];
+      track.enabled = !c.cameraOff;
+      pcsRef.current.forEach((pc) => {
+        const sender = pc.getSenders().find((s) => s.track && s.track.kind === 'video');
+        if (sender) sender.replaceTrack(track);
+      });
+      const old = localRef.current.getVideoTracks()[0];
+      if (old) { localRef.current.removeTrack(old); old.stop(); }
+      localRef.current.addTrack(track);
+      patch({ facing, localStream: new MediaStream(localRef.current.getTracks()) });
+    } catch {
+      optsRef.current.snack("Couldn't switch camera");
+    }
+  };
+
+  useEffect(() => () => cleanup(), []);
+
+  return { call, startDirect, startGroup, joinGroupCall, incoming, accept, decline, hangup: () => finish('hangup'), onRowUpdate, toggleMute, toggleCamera, flipCamera };
+}
+
+function CallVideo({ stream, muted, mirror, fit = 'cover' }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    if (el.srcObject !== stream) el.srcObject = stream || null;
+    if (stream) { const p = el.play && el.play(); if (p && p.catch) p.catch(() => {}); }
+  }, [stream]);
+  return <video ref={ref} autoPlay playsInline muted={muted} style={{ width: '100%', height: '100%', objectFit: fit, display: 'block', background: '#000', transform: mirror ? 'scaleX(-1)' : 'none' }} />;
+}
+
+function CallAudio({ stream }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    if (el.srcObject !== stream) el.srcObject = stream || null;
+    if (stream) { const p = el.play && el.play(); if (p && p.catch) p.catch(() => {}); }
+  }, [stream]);
+  return <audio ref={ref} autoPlay playsInline />;
+}
+
+function CallScreen({ call, me, nameFor, avatarFor, onAccept, onDecline, onHangup, onToggleMute, onToggleCamera, onFlip }) {
+  const [now, setNow] = useState(Date.now());
+  const [pipCorner, setPipCorner] = useState('tr');
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const isVideo = call.kind === 'video';
+  const isGroup = call.mode === 'group';
+  const ringingIn = call.direction === 'incoming' && call.status === 'ringing';
+  const remotes = Object.entries(call.remoteStreams || {});
+  const title = isGroup ? (call.group ? call.group.name : 'Group call') : (call.peer ? call.peer.name : '');
+  const photo = !isGroup && call.peer && typeof call.peer.avatar === 'string' && call.peer.avatar.startsWith('http') ? call.peer.avatar : '';
+  let status;
+  if (call.status === 'ended') status = call.endLabel || 'Call ended';
+  else if (ringingIn) status = isGroup ? `${call.peer ? call.peer.name.split(' ')[0] : 'Someone'} is calling the group` : `Incoming ${isVideo ? 'video' : 'voice'} call`;
+  else if (call.reconnecting) status = 'Reconnecting\u2026';
+  else if (call.status === 'ringing') status = 'Ringing\u2026';
+  else if (call.status === 'connecting') status = 'Connecting\u2026';
+  else if (isGroup && !remotes.length) status = 'Waiting for others to join';
+  else status = call.startedAt ? formatCallDuration(now - call.startedAt) : '';
+
+  const directRemote = !isGroup && remotes.length ? remotes[0][1] : null;
+  const remoteHasVideo = directRemote && isVideo && directRemote.getVideoTracks().length > 0 && !(call.remoteCameraOff && call.peer && call.remoteCameraOff[call.peer.id]);
+  const showLocalVideo = isVideo && call.localStream && !call.cameraOff;
+  const localFull = isVideo && !isGroup && !ringingIn && !remoteHasVideo && showLocalVideo && call.status !== 'ended';
+
+  const roundBtn = (icon, label, onClick, variant) => (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 7 }}>
+      <div role="button" aria-label={label} onClick={onClick} style={{
+        width: variant === 'big' ? 70 : 58, height: variant === 'big' ? 70 : 58, borderRadius: '50%', cursor: 'pointer',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: variant === 'end' || variant === 'decline' ? '#FF3B30' : variant === 'accept' ? '#34C759' : variant === 'on' ? 'white' : 'rgba(255,255,255,0.18)',
+        color: variant === 'on' ? '#000' : 'white', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+        boxShadow: variant === 'accept' ? '0 0 0 10px rgba(52,199,89,0.18)' : 'none',
+      }} className={variant === 'accept' ? 'zchat-call-pulse' : ''}>{icon}</div>
+      <span style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.85)' }}>{label}</span>
+    </div>
+  );
+
+  const groupTiles = [
+    { id: me.id, name: 'You', avatarName: me.name, avatar: me.avatar, stream: call.localStream, local: true, videoOn: showLocalVideo },
+    ...remotes.map(([id, stream]) => ({ id, name: nameFor(id), avatar: avatarFor(id), stream, local: false, videoOn: isVideo && stream.getVideoTracks().length > 0 && !(call.remoteCameraOff && call.remoteCameraOff[id]) })),
+  ];
+  const cols = groupTiles.length <= 2 ? 1 : 2;
+
+  return (
+    <div className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 500, background: '#05070D', color: 'white', display: 'flex', flexDirection: 'column', overflow: 'hidden', fontFamily: FONT }}>
+      {!isVideo || ringingIn || (!isGroup && !remoteHasVideo) ? (
+        <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
+          {photo
+            ? <img src={photo} alt="" draggable={false} style={{ position: 'absolute', inset: -40, width: 'calc(100% + 80px)', height: 'calc(100% + 80px)', objectFit: 'cover', filter: 'blur(38px) brightness(0.45)' }} />
+            : <div style={{ position: 'absolute', inset: 0, background: `radial-gradient(circle at 50% 30%, ${colorForName(title)}66, #05070D 70%)` }} />}
+        </div>
+      ) : null}
+
+      {localFull && (
+        <div style={{ position: 'absolute', inset: 0 }}>
+          <CallVideo stream={call.localStream} muted mirror={call.facing === 'user'} />
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.35)' }} />
+        </div>
+      )}
+      {!isGroup && remoteHasVideo && !ringingIn && (
+        <div style={{ position: 'absolute', inset: 0 }}><CallVideo stream={directRemote} fit="cover" /></div>
+      )}
+      {!isGroup && !isVideo && remotes.map(([id, stream]) => <CallAudio key={id} stream={stream} />)}
+
+      {isGroup && call.status !== 'ringing' && (
+        <div style={{ position: 'absolute', inset: 0, paddingTop: 'calc(70px + env(safe-area-inset-top))', paddingBottom: 'calc(130px + env(safe-area-inset-bottom))', display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 6, paddingLeft: 6, paddingRight: 6, boxSizing: 'border-box' }}>
+          {groupTiles.map((t) => (
+            <div key={t.id} style={{ position: 'relative', borderRadius: 18, overflow: 'hidden', background: '#111624', minHeight: 0 }}>
+              {t.videoOn && t.stream
+                ? <CallVideo stream={t.stream} muted={t.local} mirror={t.local && call.facing === 'user'} />
+                : (
+                  <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Avatar emoji={t.avatar} name={t.avatarName || t.name} size={72} />
+                    {!t.local && t.stream && <CallAudio stream={t.stream} />}
+                  </div>
+                )}
+              {t.videoOn && !t.local && t.stream && null}
+              <div style={{ position: 'absolute', left: 8, bottom: 8, padding: '3px 9px', borderRadius: 10, background: 'rgba(0,0,0,0.45)', fontSize: 12, fontWeight: 700 }}>{t.name}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div style={{ position: 'relative', zIndex: 2, padding: 'calc(18px + env(safe-area-inset-top)) 20px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', pointerEvents: 'none' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.7)' }}>
+          <Lock size={11} /> End to end encrypted
+        </div>
+        {(!isVideo || ringingIn || !remoteHasVideo) && !(isGroup && call.status !== 'ringing') && (
+          <div style={{ marginTop: 44, position: 'relative' }}>
+            {(call.status === 'ringing' || call.status === 'connecting') && <div className="zchat-call-ring" style={{ position: 'absolute', inset: -18, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.25)' }} />}
+            {isGroup ? <GroupAvatar avatar={call.group && call.group.avatar} name={title} size={118} /> : <Avatar emoji={call.peer && call.peer.avatar} name={title} size={118} />}
+          </div>
+        )}
+        <div style={{ marginTop: (!isVideo || ringingIn || !remoteHasVideo) && !(isGroup && call.status !== 'ringing') ? 22 : 8, fontSize: isGroup && call.status !== 'ringing' ? 17 : 27, fontWeight: 800, textShadow: '0 2px 12px rgba(0,0,0,0.5)' }}>{title}</div>
+        <div style={{ marginTop: 5, fontSize: 14.5, color: 'rgba(255,255,255,0.8)', textShadow: '0 1px 8px rgba(0,0,0,0.5)', fontVariantNumeric: 'tabular-nums' }}>{status}</div>
+      </div>
+
+      {!isGroup && showLocalVideo && remoteHasVideo && !ringingIn && call.status !== 'ended' && (
+        <div onClick={() => setPipCorner((c) => (c === 'tr' ? 'tl' : c === 'tl' ? 'bl' : c === 'bl' ? 'br' : 'tr'))} style={{
+          position: 'absolute', zIndex: 3, width: 108, height: 156, borderRadius: 16, overflow: 'hidden', border: '2px solid rgba(255,255,255,0.25)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)', cursor: 'pointer',
+          top: pipCorner[0] === 't' ? 'calc(70px + env(safe-area-inset-top))' : 'auto', bottom: pipCorner[0] === 'b' ? 'calc(140px + env(safe-area-inset-bottom))' : 'auto',
+          left: pipCorner[1] === 'l' ? 14 : 'auto', right: pipCorner[1] === 'r' ? 14 : 'auto', transition: 'all 0.25s ease',
+        }}>
+          <CallVideo stream={call.localStream} muted mirror={call.facing === 'user'} />
+        </div>
+      )}
+
+      <div style={{ flex: 1 }} />
+      <div style={{ position: 'relative', zIndex: 4, padding: '18px 20px', paddingBottom: 'calc(28px + env(safe-area-inset-bottom))', display: 'flex', justifyContent: 'center', gap: ringingIn ? 90 : 18, background: 'linear-gradient(0deg, rgba(0,0,0,0.55), rgba(0,0,0,0))' }}>
+        {call.status === 'ended' ? (
+          <div style={{ height: 70 }} />
+        ) : ringingIn ? (
+          <>
+            {roundBtn(<PhoneOff size={28} />, 'Decline', onDecline, 'decline')}
+            {roundBtn(isVideo ? <VideoIcon size={28} /> : <Phone size={28} />, 'Accept', onAccept, 'accept')}
+          </>
+        ) : (
+          <>
+            {roundBtn(call.muted ? <MicOff size={24} /> : <Mic size={24} />, call.muted ? 'Unmute' : 'Mute', onToggleMute, call.muted ? 'on' : null)}
+            {isVideo && roundBtn(call.cameraOff ? <VideoOff size={24} /> : <VideoIcon size={24} />, call.cameraOff ? 'Camera on' : 'Camera off', onToggleCamera, call.cameraOff ? 'on' : null)}
+            {isVideo && roundBtn(<SwitchCamera size={24} />, 'Flip', onFlip)}
+            {roundBtn(<PhoneOff size={26} />, 'End', onHangup, 'end')}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function GroupCallBar({ row, onJoin }) {
+  const { theme } = useTheme();
+  return (
+    <div className="zchat-fade" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 14px', flexShrink: 0, background: `${theme.teal}1F`, borderBottom: `1px solid ${theme.border}` }}>
+      <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#34C759', display: 'flex', alignItems: 'center', justifyContent: 'center' }} className="zchat-call-pulse">
+        {row.kind === 'video' ? <VideoIcon size={16} color="white" /> : <Phone size={16} color="white" />}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 13, fontWeight: 800, color: theme.ink }}>{row.kind === 'video' ? 'Video call' : 'Voice call'} in progress</div>
+        <div style={{ fontSize: 11.5, color: theme.muted }}>Tap join to hop in</div>
+      </div>
+      <button onClick={onJoin} style={{ padding: '8px 18px', borderRadius: 18, border: 'none', background: '#34C759', color: 'white', fontWeight: 800, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>Join</button>
+    </div>
+  );
+}
+
+function StoryTray({ me, myStories, trayUsers, seen, onAdd, onOpen }) {
+  const { theme } = useTheme();
+  const hasMine = myStories.length > 0;
+  const label = (text, highlight) => (
+    <div style={{ fontSize: 11, fontWeight: highlight ? 700 : 600, color: highlight ? theme.ink : theme.muted, marginTop: 5, maxWidth: 66, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'center' }}>{text}</div>
+  );
+  return (
+    <div style={{ display: 'flex', gap: 12, padding: '2px 14px 12px', overflowX: 'auto', flexShrink: 0, WebkitOverflowScrolling: 'touch' }}>
+      <div onClick={() => (hasMine ? onOpen(me.id) : onAdd())} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0, cursor: 'pointer', position: 'relative' }}>
+        <StoryAvatar profile={me} size={62} ring={hasMine ? (myStories.every((s) => seen.has(s.id)) ? 'seen' : 'unseen') : 'none'} />
+        <div role="button" aria-label="Add to your story" onClick={(e) => { e.stopPropagation(); onAdd(); }} style={{
+          position: 'absolute', right: -2, top: 42, width: 24, height: 24, borderRadius: '50%', background: theme.coral, border: `2.5px solid ${theme.panelBg}`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800, fontSize: 17, lineHeight: 1, boxSizing: 'border-box',
+        }}>+</div>
+        {label('Your story', true)}
+      </div>
+      {trayUsers.map((u) => {
+        const allSeen = u.stories.every((s) => seen.has(s.id));
+        return (
+          <div key={u.profile.id} onClick={() => onOpen(u.profile.id)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0, cursor: 'pointer' }}>
+            <StoryAvatar profile={u.profile} size={62} ring={allSeen ? 'seen' : 'unseen'} />
+            {label((u.profile.name || u.profile.username || '').split(' ')[0], !allSeen)}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+const APP_VERSION = '3.7V';
+const STORY_SHARE_TEXT = 'Shared a story';
+const accountsThatBlockedMe = new Set();
+
+async function searchAccounts(term) {
+  const res = await searchByUsername(term);
+  if (res && Array.isArray(res.data)) return { ...res, data: res.data.filter((p) => !accountsThatBlockedMe.has(p.id)) };
+  return res;
+}
+
+function storyShareLink(ownerId, storyId) {
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://getzchat.com';
+  return `${origin}/?story=${ownerId}&s=${storyId}`;
+}
+
+function BlockBullet({ icon, text }) {
+  const { theme } = useTheme();
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, padding: '9px 0' }}>
+      <div style={{ width: 34, height: 34, borderRadius: '50%', background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.ink, flexShrink: 0 }}>{icon}</div>
+      <div style={{ fontSize: 13.5, color: theme.ink, lineHeight: 1.45, paddingTop: 7 }}>{text}</div>
+    </div>
+  );
+}
+
+function BlockConfirmSheet({ profile, onCancel, onConfirm }) {
+  const { theme } = useTheme();
+  const [busy, setBusy] = useState(false);
+  return (
+    <div onClick={onCancel} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 420, background: 'rgba(5,8,16,0.55)', backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+      <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ width: '100%', maxWidth: 460, background: theme.panelBg, borderRadius: '26px 26px 0 0', padding: '10px 22px', paddingBottom: 'calc(18px + env(safe-area-inset-bottom))' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '2px 0 14px' }}><div style={{ width: 38, height: 4, borderRadius: 2, background: theme.border }} /></div>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+          <div style={{ position: 'relative' }}>
+            <Avatar emoji={profile.avatar} name={profile.name} size={72} />
+            <div style={{ position: 'absolute', right: -4, bottom: -2, width: 28, height: 28, borderRadius: '50%', background: theme.danger, border: `3px solid ${theme.panelBg}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Ban size={14} color="white" /></div>
+          </div>
+          <div style={{ fontSize: 18, fontWeight: 800, color: theme.ink, marginTop: 12 }}>Block {profile.name}?</div>
+          <div style={{ fontSize: 12.5, color: theme.muted, marginTop: 2 }}>@{profile.username}</div>
+        </div>
+        <div style={{ marginTop: 14 }}>
+          <BlockBullet icon={<Send size={15} />} text="They won't be able to message you, call you or find your profile." />
+          <BlockBullet icon={<Sparkles size={15} />} text="They won't see your status, and you'll both stop following each other." />
+          <BlockBullet icon={<BellOff size={15} />} text="They won't be notified that you blocked them." />
+          <BlockBullet icon={<SettingsIcon size={15} />} text="You can unblock them anytime in Settings." />
+        </div>
+        <button disabled={busy} onClick={async () => { setBusy(true); await onConfirm(); setBusy(false); }} style={{ width: '100%', marginTop: 16, padding: 14, borderRadius: 16, border: 'none', background: theme.danger, color: 'white', fontWeight: 800, fontSize: 15, cursor: 'pointer', fontFamily: FONT }}>
+          {busy ? <Spinner size={15} /> : 'Block'}
+        </button>
+        <button onClick={onCancel} style={{ width: '100%', marginTop: 8, padding: 13, borderRadius: 16, border: 'none', background: 'transparent', color: theme.ink, fontWeight: 700, fontSize: 14.5, cursor: 'pointer', fontFamily: FONT }}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
+function UnblockConfirmSheet({ profile, onCancel, onConfirm }) {
+  const { theme } = useTheme();
+  const [busy, setBusy] = useState(false);
+  return (
+    <div onClick={onCancel} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 420, background: 'rgba(5,8,16,0.55)', backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+      <div onClick={(e) => e.stopPropagation()} className="zchat-pop" style={{ width: '100%', maxWidth: 320, background: theme.panelBg, borderRadius: 24, padding: '22px 20px 14px', textAlign: 'center', boxShadow: '0 20px 50px rgba(0,0,0,0.35)' }}>
+        <div style={{ display: 'flex', justifyContent: 'center' }}><Avatar emoji={profile.avatar} name={profile.name} size={60} /></div>
+        <div style={{ fontSize: 17, fontWeight: 800, color: theme.ink, marginTop: 12 }}>Unblock {profile.name}?</div>
+        <div style={{ fontSize: 13, color: theme.muted, lineHeight: 1.5, marginTop: 8 }}>
+          They'll be able to message you, call you, see your status and follow you again. They won't be notified that you unblocked them.
+        </div>
+        <button disabled={busy} onClick={async () => { setBusy(true); await onConfirm(); setBusy(false); }} style={{ width: '100%', marginTop: 18, padding: 13, borderRadius: 14, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontSize: 14.5, cursor: 'pointer', fontFamily: FONT }}>
+          {busy ? <Spinner size={15} /> : 'Unblock'}
+        </button>
+        <button onClick={onCancel} style={{ width: '100%', marginTop: 6, padding: 12, borderRadius: 14, border: 'none', background: 'transparent', color: theme.ink, fontWeight: 700, fontSize: 14, cursor: 'pointer', fontFamily: FONT }}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
+function BlockedAccountsPanel({ myId, blockedIds, onClose, onUnblock, onOpenProfile }) {
+  const { theme } = useTheme();
+  const [rows, setRows] = useState(null);
+  const [q, setQ] = useState('');
+  const idsKey = [...blockedIds].sort().join(',');
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data: blocks } = await supabase.from('blocks').select('*').eq('blocker_id', myId);
+      const list = blocks || [];
+      if (!list.length) { if (!cancelled) setRows([]); return; }
+      const { data: profs } = await supabase.from('profiles').select('*').in('id', list.map((b) => b.blocked_id));
+      const byId = {};
+      sanitizeAvatarList(profs, myId).forEach((p) => { byId[p.id] = p; });
+      const merged = list.map((b) => ({ profile: byId[b.blocked_id] || { id: b.blocked_id, name: 'Deleted Account', username: 'deleted', avatar: '', is_deleted: true }, at: b.created_at }))
+        .sort((a, b) => new Date(b.at || 0) - new Date(a.at || 0));
+      if (!cancelled) setRows(merged);
+    })();
+    return () => { cancelled = true; };
+  }, [idsKey]);
+  const term = q.trim().toLowerCase();
+  const shown = (rows || []).filter((r) => !term || (r.profile.name || '').toLowerCase().includes(term) || (r.profile.username || '').toLowerCase().includes(term));
+  return (
+    <div className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 70, background: theme.panelBg, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', paddingTop: 'calc(14px + env(safe-area-inset-top))', flexShrink: 0 }}>
+        <ArrowLeft size={20} style={{ cursor: 'pointer', color: theme.ink }} onClick={onClose} />
+        <div>
+          <div style={{ fontWeight: 800, fontSize: 17, color: theme.ink }}>Blocked accounts</div>
+          <div style={{ fontSize: 11.5, color: theme.muted }}>{rows ? `${rows.length} ${rows.length === 1 ? 'account' : 'accounts'}` : 'Loading'}</div>
+        </div>
+      </div>
+      {rows && rows.length > 4 && (
+        <div style={{ padding: '0 16px 10px', position: 'relative', flexShrink: 0 }}>
+          <Search size={15} color={theme.muted} style={{ position: 'absolute', left: 30, top: 12 }} />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search blocked accounts" style={{ ...inputStyle(theme), paddingLeft: 38 }} />
+        </div>
+      )}
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 8px', paddingBottom: 'calc(16px + env(safe-area-inset-bottom))' }}>
+        {rows === null && <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><Spinner size={22} color={theme.ink} /></div>}
+        {rows && rows.length === 0 && (
+          <div style={{ textAlign: 'center', padding: '60px 30px' }}>
+            <div style={{ width: 78, height: 78, borderRadius: '50%', margin: '0 auto', border: `2px solid ${theme.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.muted }}><Ban size={34} /></div>
+            <div style={{ fontWeight: 800, fontSize: 16, color: theme.ink, marginTop: 16 }}>No blocked accounts</div>
+            <div style={{ fontSize: 13, color: theme.muted, marginTop: 6, lineHeight: 1.5 }}>When you block someone, they'll show up here. You can unblock them anytime.</div>
+          </div>
+        )}
+        {shown.map((r) => (
+          <div key={r.profile.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 8px' }}>
+            <div onClick={() => !r.profile.is_deleted && onOpenProfile(r.profile)} style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0, cursor: 'pointer' }}>
+              <Avatar emoji={r.profile.avatar} name={r.profile.name} size={46} />
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: 14.5, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.profile.name}</div>
+                <div style={{ fontSize: 12, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>@{r.profile.username}</div>
+              </div>
+            </div>
+            <button onClick={() => onUnblock(r.profile)} style={{ padding: '8px 18px', borderRadius: 12, border: `1.5px solid ${theme.border}`, background: theme.rowBg, color: theme.ink, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, flexShrink: 0 }}>Unblock</button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+    }
+function StoryShareSheet({ story, owner, conversations, groups, onSend, onClose }) {
+  const { theme } = useTheme();
+  const [picked, setPicked] = useState([]);
+  const [q, setQ] = useState('');
+  const [flash, setFlash] = useState('');
+  const [sending, setSending] = useState(false);
+  const link = storyShareLink(owner.id, story.id);
+  const items = [
+    ...groups.map((g) => ({ key: `g-${g.id}`, kind: 'group', id: g.id, name: g.name, avatar: g.avatar, sub: 'Group' })),
+    ...conversations.filter((c) => !c.otherProfile.is_deleted).map((c) => ({ key: `u-${c.otherProfile.id}`, kind: 'user', id: c.otherProfile.id, name: c.otherProfile.name, avatar: c.otherProfile.avatar, sub: `@${c.otherProfile.username}` })),
+  ];
+  const term = q.trim().toLowerCase();
+  const shown = items.filter((it) => !term || it.name.toLowerCase().includes(term) || it.sub.toLowerCase().includes(term));
+  const toggle = (it) => setPicked((prev) => (prev.some((p) => p.key === it.key) ? prev.filter((p) => p.key !== it.key) : [...prev, it]));
+  const say = (text) => { setFlash(text); setTimeout(() => setFlash(''), 1600); };
+  const action = (icon, label, onClick) => (
+    <div onClick={onClick} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: 'pointer', width: 76 }}>
+      <div style={{ width: 52, height: 52, borderRadius: '50%', background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.ink }}>{icon}</div>
+      <span style={{ fontSize: 11.5, fontWeight: 600, color: theme.ink, textAlign: 'center' }}>{label}</span>
+    </div>
+  );
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 280, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+      <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ width: '100%', maxWidth: 520, maxHeight: '82%', background: theme.panelBg, borderRadius: '24px 24px 0 0', display: 'flex', flexDirection: 'column', paddingBottom: 'env(safe-area-inset-bottom)', position: 'relative' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 4px' }}><div style={{ width: 38, height: 4, borderRadius: 2, background: theme.border }} /></div>
+        <div style={{ padding: '6px 16px 10px' }}>
+          <div style={{ position: 'relative' }}>
+            <Search size={15} color={theme.muted} style={{ position: 'absolute', left: 13, top: 12 }} />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search chats and groups" style={{ ...inputStyle(theme), paddingLeft: 36 }} />
+          </div>
+        </div>
+        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 10px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 4 }}>
+            {shown.map((it) => {
+              const on = picked.some((p) => p.key === it.key);
+              return (
+                <div key={it.key} onClick={() => toggle(it)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '8px 2px', cursor: 'pointer' }}>
+                  <div style={{ position: 'relative' }}>
+                    {it.kind === 'group' ? <GroupAvatar avatar={it.avatar} name={it.name} size={56} /> : <Avatar emoji={it.avatar} name={it.name} size={56} />}
+                    {on && <div style={{ position: 'absolute', right: -2, bottom: -2, width: 22, height: 22, borderRadius: '50%', background: theme.coral, border: `2.5px solid ${theme.panelBg}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Check size={12} color="white" /></div>}
+                  </div>
+                  <div style={{ fontSize: 11.5, fontWeight: on ? 800 : 600, color: theme.ink, marginTop: 5, maxWidth: '100%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.name.split(' ')[0]}</div>
+                </div>
+              );
+            })}
+          </div>
+          {!shown.length && <div style={{ textAlign: 'center', padding: 24, fontSize: 13, color: theme.muted }}>No chats found</div>}
+        </div>
+        {picked.length > 0 ? (
+          <div style={{ padding: '12px 16px 14px', borderTop: `1px solid ${theme.border}` }}>
+            <button disabled={sending} onClick={async () => { setSending(true); await onSend(picked); setSending(false); onClose(); }} style={{ width: '100%', padding: 14, borderRadius: 16, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontSize: 15, cursor: 'pointer', fontFamily: FONT }}>
+              {sending ? <Spinner size={15} /> : picked.length === 1 ? `Send to ${picked[0].name.split(' ')[0]}` : `Send to ${picked.length} chats`}
+            </button>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', justifyContent: 'space-around', padding: '14px 10px 16px', borderTop: `1px solid ${theme.border}` }}>
+            {action(<Copy size={20} />, 'Copy link', async () => { const ok = await copyTextToClipboard(link); say(ok ? 'Link copied' : "Couldn't copy the link"); })}
+            {action(<Share2 size={20} />, 'Share to apps', async () => {
+              if (navigator.share) { try { await navigator.share({ title: `${owner.name} on ZChat`, text: `See ${owner.name}'s status on ZChat`, url: link }); } catch {} } else { const ok = await copyTextToClipboard(link); say(ok ? 'Link copied' : "Couldn't copy the link"); }
+            })}
+            {action(<Send size={20} />, 'WhatsApp', () => window.open(`https://wa.me/?text=${encodeURIComponent(`See ${owner.name}'s status on ZChat ${link}`)}`, '_blank', 'noopener'))}
+            {action(<Mail size={20} />, 'Email', () => { window.location.href = `mailto:?subject=${encodeURIComponent(`${owner.name} on ZChat`)}&body=${encodeURIComponent(link)}`; })}
+          </div>
+        )}
+        {flash && <div className="zchat-pop" style={{ position: 'absolute', left: '50%', top: -48, transform: 'translateX(-50%)', background: theme.ink, color: theme.panelBg, padding: '9px 16px', borderRadius: 20, fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' }}>{flash}</div>}
+      </div>
+    </div>
+  );
 }
 
 function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAccount, onAddAccount, onRemoveAccount, switchingAccountId }) {
@@ -6865,6 +7686,21 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [mailOpenId, setMailOpenId] = useState(null);
   const [storyData, setStoryData] = useState({ byUser: {}, profiles: {}, seen: new Set(), liked: new Set(), ready: false });
   const [storyViewer, setStoryViewer] = useState(null);
+  const [mutualIds, setMutualIds] = useState(new Set());
+  const [blockedByIds, setBlockedByIds] = useState(new Set());
+  const [blockConfirmFor, setBlockConfirmFor] = useState(null);
+  const [unblockConfirmFor, setUnblockConfirmFor] = useState(null);
+  const [showBlockedList, setShowBlockedList] = useState(false);
+  const [storyShareFor, setStoryShareFor] = useState(null);
+  const blockRefreshTimerRef = useRef(null);
+  const blockRefreshRef = useRef(null);
+  const [activeGroupCall, setActiveGroupCall] = useState(null);
+  const followRefreshTimerRef = useRef(null);
+  const followRefreshRef = useRef(null);
+  const storyFollowSetRef = useRef(new Set());
+  const storyFeedRef = useRef(null);
+  const callEngineRef = useRef(null);
+  const handleCallRowRef = useRef(null);
   const [storyComposer, setStoryComposer] = useState(null);
   const [avatarPeek, setAvatarPeek] = useState(null);
   const [snack, setSnack] = useState('');
@@ -6873,6 +7709,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const stickToBottomRef = useRef(true);
   const prevMsgCountRef = useRef(0);
   const storyInputRef = useRef(null);
+  const openStoryRefRef = useRef(null);
   const storyDataRef = useRef(null);
   const reloadStoriesRef = useRef(null);
   const storyReloadTimerRef = useRef(null);
@@ -7079,6 +7916,11 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const loadMyBlocks = async () => {
     const { data } = await supabase.from('blocks').select('blocked_id').eq('blocker_id', session.user.id);
     setMyBlockedIds(new Set((data || []).map((b) => b.blocked_id)));
+    const { data: against } = await supabase.from('blocks').select('blocker_id').eq('blocked_id', session.user.id);
+    const ids = new Set((against || []).map((b) => b.blocker_id));
+    accountsThatBlockedMe.clear();
+    ids.forEach((id) => accountsThatBlockedMe.add(id));
+    setBlockedByIds(ids);
   };
 
   const loadFollowRequestCount = async () => {
@@ -7091,17 +7933,39 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     setUnreadMailCount(count || 0);
   };
 
-  const blockUser = async (userId) => {
-    await supabase.from('blocks').insert({ blocker_id: session.user.id, blocked_id: userId });
+  const blockUser = async (target) => {
+    const userId = typeof target === 'string' ? target : target.id;
+    const myId = session.user.id;
+    const { error } = await supabase.from('blocks').insert({ blocker_id: myId, blocked_id: userId });
+    if (error && !String(error.message || '').toLowerCase().includes('duplicate')) { alert(friendlyError(error, "Couldn't block this account. Try again.")); return false; }
+    await supabase.from('follows').delete().eq('follower_id', myId).eq('following_id', userId);
+    await supabase.from('follows').delete().eq('follower_id', userId).eq('following_id', myId);
     setMyBlockedIds((prev) => new Set(prev).add(userId));
-    if (activeProfile?.id === userId) { setActiveProfile(null); setMobileShowChat(false); }
+    if (activeProfile?.id === userId) { setActiveFollowState('none'); setActiveFollowerFollowsMe(false); setReplyingTo(null); setEditingMessage(null); setDraft(''); }
     setProfileOf(null);
+    setMutualIds((prev) => { const n = new Set(prev); n.delete(userId); return n; });
     loadConversations();
+    loadFollowRequestCount();
+    loadMutuals();
+    loadStories();
+    return true;
   };
-  const unblockUser = async (userId) => {
-    await supabase.from('blocks').delete().eq('blocker_id', session.user.id).eq('blocked_id', userId);
+  const unblockUser = async (target) => {
+    const userId = typeof target === 'string' ? target : target.id;
+    const { error } = await supabase.from('blocks').delete().eq('blocker_id', session.user.id).eq('blocked_id', userId);
+    if (error) { alert(friendlyError(error, "Couldn't unblock this account. Try again.")); return false; }
     setMyBlockedIds((prev) => { const n = new Set(prev); n.delete(userId); return n; });
+    loadConversations();
+    loadStories();
+    return true;
   };
+  blockRefreshRef.current = () => { loadMyBlocks(); loadConversations(); loadMutuals(); loadStories(); };
+  useEffect(() => {
+    if (profileOf && blockedByIds.has(profileOf.id)) {
+      setProfileOf(null);
+      showSnack("This account isn't available");
+    }
+  }, [profileOf, blockedByIds]);
 
   const deleteMyAccount = async () => {
     await supabase.from('profiles').update({ is_deleted: true }).eq('id', session.user.id);
@@ -7180,7 +8044,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const mergedAll = visible
       .map((c) => {
         const otherId = c.user_a === myId ? c.user_b : c.user_a;
-        if (myBlockedIds.has(otherId)) return null;
         const nick = nicks?.find((n) => n.contact_id === otherId);
         const theirAlias = aliasesForMe?.find((al) => al.user_id === otherId);
         const foundProfile = profs?.find((p) => p.id === otherId);
@@ -7254,6 +8117,15 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const requestsFlag = params.get('requests');
     const mailFlag = params.get('mail');
     const storyFlag = params.get('story');
+    const callFlag = params.get('call');
+    const storyItemFlag = params.get('s');
+    if (storyItemFlag) { pendingStoryUserRef.current = null; setTimeout(() => { if (openStoryRefRef.current) openStoryRefRef.current({ story_id: storyItemFlag }); }, 700); }
+    if (callFlag) {
+      (async () => {
+        const { data: callRow } = await supabase.from('calls').select('*').eq('id', callFlag).maybeSingle();
+        if (callRow && handleCallRowRef.current) handleCallRowRef.current(callRow);
+      })();
+    }
     if (storyFlag) pendingStoryUserRef.current = storyFlag;
     if (requestsFlag) setShowFollowRequests(true);
     if (mailFlag) setShowMail(true);
@@ -7276,7 +8148,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         if (data) setProfileOf(sanitizeAvatar(data, session.user.id));
       })();
     }
-    if (dmId || groupId || profileId || requestsFlag || mailFlag || storyFlag) window.history.replaceState({}, '', window.location.pathname);
+    if (dmId || groupId || profileId || requestsFlag || mailFlag || storyFlag || callFlag) window.history.replaceState({}, '', window.location.pathname);
   }, [me]);
 
   useEffect(() => {
@@ -7293,9 +8165,29 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   useEffect(() => {
     if (!me) return undefined;
     const channel = supabase.channel('stories-' + me.id)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'stories' }, () => {
-        clearTimeout(storyReloadTimerRef.current);
-        storyReloadTimerRef.current = setTimeout(() => { if (reloadStoriesRef.current) reloadStoriesRef.current(); }, 600);
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'stories' }, async (payload) => {
+        const row = payload.new;
+        if (!row || !storyFollowSetRef.current.has(row.user_id)) return;
+        let profile = row.user_id === me.id ? me : (storyDataRef.current && storyDataRef.current.profiles[row.user_id]);
+        if (!profile) profile = await cachedProfile(row.user_id);
+        setStoryData((prev) => {
+          const list = (prev.byUser[row.user_id] || []).filter((s) => s.id !== row.id);
+          const seen = row.user_id === me.id ? new Set([...prev.seen, row.id]) : prev.seen;
+          return {
+            ...prev, seen,
+            byUser: { ...prev.byUser, [row.user_id]: [...list, row].sort((x, y) => new Date(x.created_at) - new Date(y.created_at)) },
+            profiles: profile ? { ...prev.profiles, [row.user_id]: profile } : prev.profiles,
+          };
+        });
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'stories' }, (payload) => {
+        const id = payload.old && payload.old.id;
+        if (!id) return;
+        setStoryData((prev) => {
+          const byUser = {};
+          Object.entries(prev.byUser).forEach(([uid, list]) => { byUser[uid] = list.filter((s) => s.id !== id); });
+          return { ...prev, byUser };
+        });
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'story_likes' }, async (payload) => {
         const row = payload.new;
@@ -7309,12 +8201,32 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           preview: { kind: 'story', text: 'liked your story' }, action: { type: 'story', userId: me.id } });
       })
       .subscribe();
-    return () => supabase.removeChannel(channel);
+    const feed = supabase.channel('story-feed', { config: { broadcast: { self: false } } })
+      .on('broadcast', { event: 'story' }, ({ payload }) => {
+        if (!payload || !storyFollowSetRef.current.has(payload.userId)) return;
+        clearTimeout(storyReloadTimerRef.current);
+        storyReloadTimerRef.current = setTimeout(() => { if (reloadStoriesRef.current) reloadStoriesRef.current(); }, 150);
+      })
+      .subscribe();
+    storyFeedRef.current = feed;
+    return () => { supabase.removeChannel(channel); supabase.removeChannel(feed); storyFeedRef.current = null; };
   }, [me]);
 
   useEffect(() => {
     if (!me) return undefined;
     const channel = supabase.channel('notices-' + me.id)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'blocks' }, (payload) => {
+        const row = payload.new && payload.new.blocker_id ? payload.new : payload.old;
+        if (row && row.blocker_id && row.blocker_id !== me.id && row.blocked_id !== me.id) return;
+        clearTimeout(blockRefreshTimerRef.current);
+        blockRefreshTimerRef.current = setTimeout(() => { if (blockRefreshRef.current) blockRefreshRef.current(); }, 400);
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'follows' }, (payload) => {
+        const row = payload.new && payload.new.follower_id ? payload.new : payload.old;
+        if (row && row.follower_id && row.follower_id !== me.id && row.following_id !== me.id) return;
+        clearTimeout(followRefreshTimerRef.current);
+        followRefreshTimerRef.current = setTimeout(() => { if (followRefreshRef.current) followRefreshRef.current(); }, 500);
+      })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'follows' }, async (payload) => {
         const row = payload.new;
         if (!row || row.following_id !== me.id || row.follower_id === me.id) return;
@@ -7337,7 +8249,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'mails' }, (payload) => {
         const row = payload.new;
         if (!row || row.recipient_id !== me.id) return;
-        setInAppToast({ key: `mail-${row.id}`, kind: 'notice', icon: row.type === 'report_warning' ? 'warning' : row.type === 'mention' ? 'mention' : 'mail', title: row.title || 'New mail',
+        setInAppToast({ key: `mail-${row.id}`, kind: 'notice', icon: row.type === 'report_warning' ? 'warning' : row.type === 'mention' ? 'mention' : row.type === 'update' ? 'update' : 'mail', title: row.title || 'New mail',
           preview: { kind: 'text', text: row.body || '' }, action: { type: 'mail', id: row.id } });
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'group_members' }, async (payload) => {
@@ -7656,13 +8568,15 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     setShowJumpButton((prev) => (prev === show ? prev : show));
     if (distance < 80) setNewBelowCount((n) => (n ? 0 : n));
   };
+
+
   const doSearch = (val) => {
     setSearch(val);
     clearTimeout(searchTimer.current);
     if (val.trim().length < 2) { setResults([]); return; }
     setSearching(true);
     searchTimer.current = setTimeout(async () => {
-      const { data } = await searchByUsername(val.trim());
+      const { data } = await searchAccounts(val.trim());
       const list = sanitizeAvatarList(data, session.user.id).filter((u) => u.id !== session.user.id && !u.is_deleted && !myBlockedIds.has(u.id));
       setResults(list);
       setSearching(false);
@@ -7743,6 +8657,12 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   };
 
   const openGroup = async (group) => {
+    setActiveGroupCall(null);
+    supabase.from('calls').select('*').eq('group_id', group.id).in('status', ['ringing', 'active']).order('created_at', { ascending: false }).limit(1)
+      .then(({ data }) => {
+        const row = data && data[0];
+        if (row && Date.now() - new Date(row.created_at).getTime() < 3 * 3600000 && activeGroupIdRef.current === group.id) setActiveGroupCall(row);
+      });
     setChatSearch(null);
     setShowChatMedia(false);
     setPinIndex(0);
@@ -7920,6 +8840,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   };
 
   const actuallyOpenChat = async (profile, convId) => {
+    setActiveGroupCall(null);
     setChatSearch(null);
     setShowChatMedia(false);
     setPinIndex(0);
@@ -8243,7 +9164,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     setMessages((prev) => prev.map((m) => (ids.includes(m.id) ? { ...m, deleted: true } : m)));
     cancelSelection();
   };
-
   const openForward = () => {
     const targets = selectedMessages.length ? selectedMessages : (viewerUrl ? [{ type: 'image', media_url: viewerUrl, content: null }] : []);
     setForwardTargets(targets.map((m) => (m.sender_id ? { ...m, forwarded_from_name: labelForSender(m.sender_id) } : m)));
@@ -8446,7 +9366,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const loadStories = async () => {
     const myId = session.user.id;
     const { data: fol } = await supabase.from('follows').select('following_id').eq('follower_id', myId).eq('status', 'accepted');
-    const ids = [...new Set([myId, ...(fol || []).map((r) => r.following_id)])].filter((id) => !myBlockedIds.has(id));
+    const ids = [...new Set([myId, ...(fol || []).map((r) => r.following_id)])].filter((id) => !myBlockedIds.has(id) && !accountsThatBlockedMe.has(id));
+    storyFollowSetRef.current = new Set(ids);
     const { data: rows, error } = await supabase.from('stories').select('*').in('user_id', ids).gt('expires_at', new Date().toISOString()).order('created_at', { ascending: true });
     if (error) { setStoryData((prev) => ({ ...prev, ready: true })); return; }
     const byUser = {};
@@ -8550,11 +9471,13 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     });
     if (error) { showSnack(friendlyError(error, "Couldn't add it to your story. Try again.")); return; }
     notifyUser(owner.id, me.name, 'shared your story to their story', `/?story=${session.user.id}`, me.avatar);
+    if (storyFeedRef.current) storyFeedRef.current.send({ type: 'broadcast', event: 'story', payload: { userId: session.user.id } });
     loadStories();
   };
 
   const deleteStory = async (story) => {
     await supabase.from('stories').delete().eq('id', story.id).eq('user_id', session.user.id);
+    if (storyFeedRef.current) storyFeedRef.current.send({ type: 'broadcast', event: 'story', payload: { userId: session.user.id } });
     setStoryData((prev) => ({ ...prev, byUser: { ...prev.byUser, [story.user_id]: (prev.byUser[story.user_id] || []).filter((s) => s.id !== story.id) } }));
     loadStories();
   };
@@ -8581,6 +9504,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       if (item.url) URL.revokeObjectURL(item.url);
     }
     if (!firstStory) { showSnack("Couldn't share your story. Try again."); return; }
+    if (storyFeedRef.current) storyFeedRef.current.send({ type: 'broadcast', event: 'story', payload: { userId: session.user.id } });
     for (const mn of mentions || []) {
       if (mn.kind === 'group') {
         await supabase.from('messages').insert({ sender_id: session.user.id, group_id: mn.id, type: 'text', content: STORY_GROUP_MENTION_TEXT, ...storyMessageFields(firstStory) });
@@ -8609,6 +9533,25 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     setStoryViewer({ key: Date.now(), groupsList: [{ profile: owner, stories: (list && list.length) ? list : [story] }], startGroup: 0, startStoryId: story.id });
   };
 
+  openStoryRefRef.current = openStoryRef;
+  const shareStoryToChats = async (targets, story) => {
+    const fields = storyMessageFields(story);
+    for (const t of targets) {
+      if (t.kind === 'group') {
+        const { data } = await supabase.from('messages').insert({ sender_id: session.user.id, group_id: t.id, type: 'text', content: STORY_SHARE_TEXT, ...fields }).select().single();
+        if (data && activeGroupIdRef.current === t.id) setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
+      } else {
+        const { data } = await supabase.from('messages').insert({ sender_id: session.user.id, receiver_id: t.id, group_id: null, type: 'text', content: STORY_SHARE_TEXT, ...fields }).select().single();
+        if (data && activeProfile && activeProfile.id === t.id) setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
+        await upsertConversation(t.id, STORY_SHARE_TEXT, 'text');
+        notifyUser(t.id, me.name, 'Shared a story with you', `/?dm=${session.user.id}`, me.avatar);
+      }
+    }
+    showSnack(targets.length === 1 ? `Sent to ${targets[0].name.split(' ')[0]}` : `Sent to ${targets.length} chats`);
+    loadConversations();
+    loadGroups();
+  };
+
   const openStoryMention = async (mn) => {
     setStoryViewer(null);
     if (mn.kind === 'group') {
@@ -8619,6 +9562,108 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const p = await cachedProfile(mn.id);
     if (p) setProfileOf(p);
   };
+
+  const loadMutuals = async () => {
+    const myId = session.user.id;
+    const { data: outgoing } = await supabase.from('follows').select('following_id').eq('follower_id', myId).eq('status', 'accepted');
+    const { data: incomingRows } = await supabase.from('follows').select('follower_id').eq('following_id', myId).eq('status', 'accepted');
+    const iFollow = new Set((outgoing || []).map((r) => r.following_id));
+    setMutualIds(new Set((incomingRows || []).map((r) => r.follower_id).filter((id) => iFollow.has(id))));
+  };
+  followRefreshRef.current = () => { loadMutuals(); loadStories(); };
+  const canCall = (profile) => !!profile && profile.id !== session.user.id && !profile.is_deleted && mutualIds.has(profile.id) && !myBlockedIds.has(profile.id) && !blockedByIds.has(profile.id);
+
+  const callEngine = useCallEngine({
+    myId: session.user.id,
+    myName: me ? me.name : '',
+    myAvatar: me ? me.avatar : '',
+    snack: (text) => showSnack(text),
+    notify: (...args) => notifyUser(...args),
+    onDirectEnded: async (c, durationMs) => {
+      if (!c.peer) return;
+      const kindLabel = c.kind === 'video' ? 'video' : 'voice';
+      const text = durationMs > 0 ? `${kindLabel === 'video' ? 'Video' : 'Voice'} call \u00b7 ${formatCallDuration(durationMs)}` : `Missed ${kindLabel} call`;
+      const { data } = await sendMessage(session.user.id, c.peer.id, 'system', text, null);
+      if (data && activeProfileRefForCalls.current && activeProfileRefForCalls.current.id === c.peer.id) setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
+      await upsertConversation(c.peer.id, text, 'system');
+      loadConversations();
+    },
+    onGroupStarted: async (row, group) => {
+      const kindLabel = row.kind === 'video' ? 'video' : 'voice';
+      const { data } = await supabase.from('messages').insert({ sender_id: session.user.id, group_id: group.id, type: 'system', content: `${me.name} started a ${kindLabel} call` }).select().single();
+      if (data && activeGroupIdRef.current === group.id) setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
+      if (activeGroupIdRef.current === group.id) setActiveGroupCall(row);
+      const { data: mems } = await supabase.from('group_members').select('user_id').eq('group_id', group.id);
+      (mems || []).filter((gm) => gm.user_id !== session.user.id).forEach((gm) => notifyUser(gm.user_id, group.name, `${me.name} started a ${kindLabel} call`, `/?call=${row.id}`, group.avatar || me.avatar));
+    },
+  });
+  callEngineRef.current = callEngine;
+  const activeProfileRefForCalls = useRef(null);
+  activeProfileRefForCalls.current = activeProfile;
+
+  const startDirectCall = (profile, kind) => {
+    if (!canCall(profile)) { showSnack('You can call people who follow you back'); return; }
+    callEngine.startDirect(profile, kind);
+  };
+  const startGroupCall = (group, kind) => {
+    if (!group) return;
+    if (activeGroupCall && activeGroupCall.group_id === group.id) { callEngine.joinGroupCall(activeGroupCall, group); return; }
+    callEngine.startGroup(group, kind);
+  };
+  const callNameFor = (id) => {
+    const gm = groupMembers.find((x) => x.user_id === id);
+    if (gm && gm.profile) return gm.profile.name;
+    const cached = profileCacheRef.current.get(id);
+    return cached ? cached.name : 'Member';
+  };
+  const callAvatarFor = (id) => {
+    const gm = groupMembers.find((x) => x.user_id === id);
+    if (gm && gm.profile) return gm.profile.avatar;
+    const cached = profileCacheRef.current.get(id);
+    return cached ? cached.avatar : '';
+  };
+  const remoteCallIdsKey = callEngine.call ? Object.keys(callEngine.call.remoteStreams || {}).join(',') : '';
+  useEffect(() => {
+    if (!remoteCallIdsKey) return;
+    remoteCallIdsKey.split(',').forEach((id) => {
+      if (id && !profileCacheRef.current.has(id) && !groupMembers.some((x) => x.user_id === id)) cachedProfile(id).then(() => setClockTick((n) => n + 1));
+    });
+  }, [remoteCallIdsKey]);
+
+  handleCallRowRef.current = async (row) => {
+    if (!row || row.caller_id === session.user.id) return;
+    const age = Date.now() - new Date(row.created_at || Date.now()).getTime();
+    if (row.callee_id === session.user.id) {
+      if (row.status !== 'ringing' || age > CALL_RING_MS) return;
+      if (blockedRef.current.has(row.caller_id) || accountsThatBlockedMe.has(row.caller_id)) return;
+      const caller = await cachedProfile(row.caller_id);
+      if (caller) callEngineRef.current.incoming(row, caller, null);
+    } else if (row.group_id) {
+      const g = groupsRef.current.find((x) => x.id === row.group_id);
+      if (!g || !['ringing', 'active'].includes(row.status) || age > 3 * 3600000) return;
+      if (activeGroupIdRef.current === row.group_id) setActiveGroupCall(row);
+      if (row.status !== 'ringing' || age > CALL_RING_MS) return;
+      const caller = await cachedProfile(row.caller_id);
+      callEngineRef.current.incoming(row, caller || { id: row.caller_id, name: 'Someone', avatar: '' }, g);
+    }
+  };
+
+  useEffect(() => {
+    if (!me) return undefined;
+    const channel = supabase.channel('calls-' + me.id)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'calls' }, (payload) => {
+        if (handleCallRowRef.current) handleCallRowRef.current(payload.new);
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'calls' }, (payload) => {
+        const row = payload.new;
+        if (!row) return;
+        if (callEngineRef.current) callEngineRef.current.onRowUpdate(row);
+        if (row.group_id && activeGroupIdRef.current === row.group_id) setActiveGroupCall(['ringing', 'active'].includes(row.status) ? row : null);
+      })
+      .subscribe();
+    loadMutuals();
+    return () => supabase.removeChannel(channel);
+  }, [me]);
 
   const myConvMuteField = (conv) => (conv.user_a === session.user.id ? 'muted_until_a' : 'muted_until_b');
   const isConvMutedForMe = (conv) => !!conv && isActiveUntil(conv[myConvMuteField(conv)]);
@@ -9096,6 +10141,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           </>
         )}
       </div>
+
       <div style={{
         flex: 1, display: (isWide || mobileShowChat) ? 'flex' : 'none', flexDirection: 'column', minWidth: 0, minHeight: 0, position: 'relative',
         paddingTop: (activeProfile || activeGroup) ? 64 : 0,
@@ -9137,11 +10183,27 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                       <span style={{ color: activeNameBarKey ? 'white' : theme.coral, fontWeight: 700 }}>
                         {activeGroup ? `${(groupMembers.find((gm) => gm.user_id === activityFrom.from)?.profile.name || 'Someone').split(' ')[0]} is ` : ''}{activityLabel(activityFrom.kind)}
                       </span>
-                    ) : activeGroup ? `${groupMembers.length} members` : (isUserOnline(activeProfile) && !activeProfile.hide_activity ? 'Online' : (!activeProfile.hide_activity && formatLastSeen(activeProfile.last_seen)) || '')}
+                    ) : activeGroup ? `${groupMembers.length} members` : (blockedByIds.has(activeProfile.id) || myBlockedIds.has(activeProfile.id)) ? '' : (isUserOnline(activeProfile) && !activeProfile.hide_activity ? 'Online' : (!activeProfile.hide_activity && formatLastSeen(activeProfile.last_seen)) || '')}
                   </div>
                 </div>
               </div>
-              {!activeGroup && activeFollowState !== null && (
+              {!activeGroup && canCall(activeProfile) && (
+                <>
+                  <Phone size={20} style={{ cursor: 'pointer', color: activeNameBarKey ? 'white' : theme.ink, flexShrink: 0, position: 'relative', marginRight: 6, filter: activeNameBarKey ? 'drop-shadow(0 1px 3px rgba(0,0,0,0.6))' : 'none' }}
+                    onClick={(e) => { e.stopPropagation(); startDirectCall(activeProfile, 'voice'); }} />
+                  <VideoIcon size={23} style={{ cursor: 'pointer', color: activeNameBarKey ? 'white' : theme.ink, flexShrink: 0, position: 'relative', marginRight: 6, filter: activeNameBarKey ? 'drop-shadow(0 1px 3px rgba(0,0,0,0.6))' : 'none' }}
+                    onClick={(e) => { e.stopPropagation(); startDirectCall(activeProfile, 'video'); }} />
+                </>
+              )}
+              {activeGroup && (
+                <>
+                  <Phone size={20} style={{ cursor: 'pointer', color: activeNameBarKey ? 'white' : theme.ink, flexShrink: 0, position: 'relative', marginRight: 6, filter: activeNameBarKey ? 'drop-shadow(0 1px 3px rgba(0,0,0,0.6))' : 'none' }}
+                    onClick={(e) => { e.stopPropagation(); startGroupCall(activeGroup, 'voice'); }} />
+                  <VideoIcon size={23} style={{ cursor: 'pointer', color: activeNameBarKey ? 'white' : theme.ink, flexShrink: 0, position: 'relative', marginRight: 6, filter: activeNameBarKey ? 'drop-shadow(0 1px 3px rgba(0,0,0,0.6))' : 'none' }}
+                    onClick={(e) => { e.stopPropagation(); startGroupCall(activeGroup, 'video'); }} />
+                </>
+              )}
+              {!activeGroup && activeFollowState !== null && !canCall(activeProfile) && !myBlockedIds.has(activeProfile.id) && !blockedByIds.has(activeProfile.id) && (
                 <button onClick={(e) => { e.stopPropagation(); toggleActiveFollow(); }} disabled={activeFollowBusy} style={{
                   padding: '6px 14px', borderRadius: 18, fontSize: 11.5, fontWeight: 700, cursor: activeFollowBusy ? 'default' : 'pointer', fontFamily: FONT, flexShrink: 0,
                   position: 'relative', marginRight: 4,
@@ -9171,6 +10233,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               <ChatSearchBar query={chatSearch.query} onChange={changeSearch} count={chatSearchMatches.length}
                 position={chatSearchMatches.length ? chatSearchMatches.length - Math.min(chatSearch.pos, chatSearchMatches.length - 1) : 0}
                 onPrev={() => stepSearch(1)} onNext={() => stepSearch(-1)} onClose={() => setChatSearch(null)} />
+            )}
+            {activeGroup && activeGroupCall && activeGroupCall.group_id === activeGroup.id && !(callEngine.call && callEngine.call.id === activeGroupCall.id) && (
+              <GroupCallBar row={activeGroupCall} onJoin={() => callEngine.joinGroupCall(activeGroupCall, activeGroup)} />
             )}
             {!chatSearch && pinnedMessages.length > 0 && (
               <PinnedMessagesBar pins={pinnedMessages} index={Math.min(pinIndex, pinnedMessages.length - 1)} labelFor={labelForSender}
@@ -9293,7 +10358,17 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             )}
 
             <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, padding: '4px 14px', flexShrink: 0, paddingBottom: keyboardOpen ? 6 : 'max(8px, calc(env(safe-area-inset-bottom) - 14px))' }}>
-              {activeProfile?.is_deleted ? (
+              {activeProfile && !activeGroup && myBlockedIds.has(activeProfile.id) ? (
+                <div className="zchat-fade" style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 9, padding: '8px 4px 2px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, color: theme.ink, fontWeight: 700 }}><Ban size={15} color={theme.danger} /> You blocked {activeProfile.name}</div>
+                  <div style={{ fontSize: 12, color: theme.muted, textAlign: 'center' }}>You can't message or call them while they're blocked.</div>
+                  <button onClick={() => setUnblockConfirmFor(activeProfile)} style={{ padding: '9px 26px', borderRadius: 14, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontSize: 13.5, cursor: 'pointer', fontFamily: FONT }}>Unblock</button>
+                </div>
+              ) : activeProfile && !activeGroup && blockedByIds.has(activeProfile.id) ? (
+                <div className="zchat-fade" style={{ flex: 1, textAlign: 'center', padding: '12px 4px', fontSize: 12.5, color: theme.muted, fontWeight: 600 }}>
+                  You can't reply to this conversation. This account isn't available.
+                </div>
+              ) : activeProfile?.is_deleted ? (
                 <div style={{ flex: 1, textAlign: 'center', padding: '10px 4px', fontSize: 12.5, color: theme.muted, fontWeight: 600 }}>
                   This account no longer exists. You can't send new messages here.
                 </div>
@@ -9403,11 +10478,11 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           onOpenSettings={() => { setProfileOf(null); setShowSettings(true); }}
           onOpenProfile={(p) => setProfileOf(p)}
           onMessage={(p) => { openChat(p, null); setProfileOf(null); }}
-          isBlocked={myBlockedIds.has(profileOf.id)} onBlock={blockUser} onUnblock={unblockUser}
+          isBlocked={myBlockedIds.has(profileOf.id)} onBlock={() => setBlockConfirmFor(profileOf)} onUnblock={() => setUnblockConfirmFor(profileOf)}
           shareConversations={conversations} shareGroups={groups.filter((g) => !g.archived)} onShareToChats={shareProfileToChats}
+          canCall={canCall(profileOf)} onCall={(kind) => { const target = profileOf; setProfileOf(null); startDirectCall(target, kind); }}
         />
       )}
-
       {showSettings && (
         <SettingsPanel
           onClose={() => setShowSettings(false)}
@@ -9416,6 +10491,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           onLogout={() => setShowLogoutConfirm(true)}
           hideActivity={!!me.hide_activity} onToggleActivity={toggleHideActivity}
           onOpenAccounts={() => { setShowSettings(false); setShowAccountSwitcher(true); }}
+          onOpenBlocked={() => setShowBlockedList(true)} blockedCount={myBlockedIds.size}
           onOpenDelete={() => { setShowSettings(false); setShowDeleteAccount(true); }}
           chatLockSet={!!me.chat_lock_enabled} chatLockHash={me.chat_lock_hash}
           onSetChatLockPassword={setChatLockPassword} onTurnOffChatLock={turnOffChatLock}
@@ -9575,7 +10651,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               isUnread(c) ? { icon: <CheckCheck size={18} />, label: 'Mark as read', onClick: () => markChatRead(c.otherProfile.id) } : null,
               { icon: <Archive size={18} />, label: 'Archive chat', onClick: () => toggleArchive(c.id, true) },
               { icon: <User size={18} />, label: 'View profile', onClick: () => setProfileOf(c.otherProfile) },
-              { icon: <Ban size={18} />, label: blocked ? 'Unblock' : 'Block', onClick: () => (blocked ? unblockUser(c.otherProfile.id) : blockUser(c.otherProfile.id)), danger: !blocked },
+              canCall(c.otherProfile) ? { icon: <Phone size={18} />, label: 'Voice call', onClick: () => startDirectCall(c.otherProfile, 'voice') } : null,
+              canCall(c.otherProfile) ? { icon: <VideoIcon size={18} />, label: 'Video call', onClick: () => startDirectCall(c.otherProfile, 'video') } : null,
+              { icon: <Ban size={18} />, label: blocked ? 'Unblock' : 'Block', onClick: () => (blocked ? setUnblockConfirmFor(c.otherProfile) : setBlockConfirmFor(c.otherProfile)), danger: !blocked },
               { icon: <Flag size={18} />, label: 'Report', onClick: () => setReportUserTarget(c.otherProfile), danger: true },
               { icon: <Trash2 size={18} />, label: 'Delete chat', onClick: () => setDeleteConvoTarget(c), danger: true },
             ]} />
@@ -9592,10 +10670,34 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               g.unread > 0 ? { icon: <CheckCheck size={18} />, label: 'Mark as read', onClick: () => { markGroupRead(g.id); setGroups((prev) => prev.map((x) => (x.id === g.id ? { ...x, unread: 0 } : x))); } } : null,
               { icon: <Archive size={18} />, label: 'Archive group', onClick: () => toggleGroupArchive(g) },
               { icon: <Users size={18} />, label: 'Group info', onClick: async () => { await openGroup(g); setShowGroupInfo(true); } },
+              { icon: <Phone size={18} />, label: 'Group voice call', onClick: async () => { await openGroup(g); startGroupCall(g, 'voice'); } },
+              { icon: <VideoIcon size={18} />, label: 'Group video call', onClick: async () => { await openGroup(g); startGroupCall(g, 'video'); } },
               { icon: <LogOut size={18} />, label: 'Leave group', onClick: () => leaveGroupById(g), danger: true },
             ]} />
         );
       })()}
+      {storyShareFor && (
+        <StoryShareSheet story={storyShareFor.story} owner={storyShareFor.owner}
+          conversations={conversations.filter((c) => !myBlockedIds.has(c.otherProfile.id) && !blockedByIds.has(c.otherProfile.id))} groups={groups.filter((g) => !g.archived)}
+          onClose={() => setStoryShareFor(null)} onSend={(targets) => shareStoryToChats(targets, storyShareFor.story)} />
+      )}
+      {blockConfirmFor && (
+        <BlockConfirmSheet profile={blockConfirmFor} onCancel={() => setBlockConfirmFor(null)}
+          onConfirm={async () => { const p = blockConfirmFor; const ok = await blockUser(p); setBlockConfirmFor(null); if (ok) showSnack(`You blocked ${p.name}`); }} />
+      )}
+      {unblockConfirmFor && (
+        <UnblockConfirmSheet profile={unblockConfirmFor} onCancel={() => setUnblockConfirmFor(null)}
+          onConfirm={async () => { const p = unblockConfirmFor; const ok = await unblockUser(p); setUnblockConfirmFor(null); if (ok) showSnack(`You unblocked ${p.name}`); }} />
+      )}
+      {showBlockedList && (
+        <BlockedAccountsPanel myId={session.user.id} blockedIds={myBlockedIds} onClose={() => setShowBlockedList(false)}
+          onUnblock={(p) => setUnblockConfirmFor(p)} onOpenProfile={(p) => setProfileOf(p)} />
+      )}
+      {callEngine.call && (
+        <CallScreen call={callEngine.call} me={me} nameFor={callNameFor} avatarFor={callAvatarFor}
+          onAccept={callEngine.accept} onDecline={callEngine.decline} onHangup={callEngine.hangup}
+          onToggleMute={callEngine.toggleMute} onToggleCamera={callEngine.toggleCamera} onFlip={callEngine.flipCamera} />
+      )}
       {storyComposer && (
         <MediaComposer key={storyComposer.key} files={storyComposer.files} mode="story" myId={session.user.id}
           mentionGroups={groups} onCancel={() => setStoryComposer(null)} onSend={postStories} />
@@ -9605,6 +10707,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           myId={session.user.id} seen={storyData.seen} liked={storyData.liked}
           onSeen={markStorySeen} onClose={() => setStoryViewer(null)} onLike={likeStory} onReply={replyToStory} onRepost={repostStory}
           onDelete={deleteStory} onReport={(p) => { setStoryViewer(null); setReportUserTarget(p); }}
+          onAddStory={() => { setStoryViewer(null); if (storyInputRef.current) storyInputRef.current.click(); }}
+          onShare={(story, owner) => setStoryShareFor({ story, owner })} externalPause={!!storyShareFor}
           onOpenProfile={(p) => { setStoryViewer(null); setProfileOf(p); }} onOpenMention={openStoryMention} />
       )}
       {avatarPeek && (() => {
@@ -9614,11 +10718,12 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           <AvatarPeek profile={c.otherProfile} online={isUserOnline(c.otherProfile) && !c.otherProfile.hide_activity}
             lastSeen={!c.otherProfile.hide_activity ? formatLastSeen(c.otherProfile.last_seen) : null}
             hasStory={ring !== 'none'} storySeen={ring === 'seen'} onClose={() => setAvatarPeek(null)}
+            canCall={canCall(c.otherProfile)} onCall={() => startDirectCall(c.otherProfile, 'voice')}
             onMessage={() => openChat(c.otherProfile, c.id)} onProfile={() => setProfileOf(c.otherProfile)} onStory={() => openStoriesFor(c.otherProfile.id)} />
         );
       })()}
       {snack && (
-        <div className="zchat-pop" style={{ position: 'fixed', left: '50%', bottom: 'calc(90px + env(safe-area-inset-bottom))', transform: 'translateX(-50%)', zIndex: 320, background: theme.ink, color: theme.panelBg, padding: '10px 16px', borderRadius: 22, fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', boxShadow: '0 8px 24px rgba(0,0,0,0.3)' }}>{snack}</div>
+        <div className="zchat-pop" style={{ position: 'fixed', left: '50%', bottom: 'calc(150px + env(safe-area-inset-bottom))', transform: 'translateX(-50%)', zIndex: 320, background: theme.ink, color: theme.panelBg, padding: '10px 16px', borderRadius: 22, fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', boxShadow: '0 8px 24px rgba(0,0,0,0.3)' }}>{snack}</div>
       )}
       {chatMenuAnchor && (activeProfile || activeGroup) && (() => {
         const groupRow = activeGroup ? (groups.find((x) => x.id === activeGroup.id) || activeGroup) : null;
@@ -9642,6 +10747,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           item(<Users size={17} />, 'Group info', () => setShowGroupInfo(true)),
           item(<Search size={17} />, 'Search', () => setChatSearch({ query: '', pos: 0 })),
           item(<ImageIcon size={17} />, 'Media, links and voice', () => setShowChatMedia(true)),
+          item(<Phone size={17} />, activeGroupCall ? 'Join voice call' : 'Group voice call', () => startGroupCall(activeGroup, 'voice')),
+          item(<VideoIcon size={17} />, activeGroupCall ? 'Join video call' : 'Group video call', () => startGroupCall(activeGroup, 'video')),
           pinnedMessages.length ? item(<Pin_ size={17} color={theme.muted} />, `Pinned messages (${pinnedMessages.length})`, () => jumpToMessage(pinnedMessages[0].id)) : null,
           item(isActiveUntil(mutedUntil) ? <Bell size={17} /> : <BellOff size={17} />, isActiveUntil(mutedUntil) ? 'Unmute notifications' : 'Mute notifications', () => (isActiveUntil(mutedUntil) ? setChatMute(muteTarget, null) : setMuteSheet(muteTarget)), false, muteLabel(mutedUntil)),
           item(<LogOut size={17} />, `Leave ${activeGroup.name}`, () => leaveGroupById(groupRow), true),
@@ -9649,10 +10756,12 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           item(<User size={17} />, `View ${activeProfile.name}`, () => setProfileOf(activeProfile)),
           item(<Search size={17} />, 'Search', () => setChatSearch({ query: '', pos: 0 })),
           item(<ImageIcon size={17} />, 'Media, links and voice', () => setShowChatMedia(true)),
+          canCall(activeProfile) ? item(<Phone size={17} />, 'Voice call', () => startDirectCall(activeProfile, 'voice')) : null,
+          canCall(activeProfile) ? item(<VideoIcon size={17} />, 'Video call', () => startDirectCall(activeProfile, 'video')) : null,
           pinnedMessages.length ? item(<Pin_ size={17} color={theme.muted} />, `Pinned messages (${pinnedMessages.length})`, () => jumpToMessage(pinnedMessages[0].id)) : null,
           muteTarget ? item(isActiveUntil(mutedUntil) ? <Bell size={17} /> : <BellOff size={17} />, isActiveUntil(mutedUntil) ? 'Unmute notifications' : 'Mute notifications', () => (isActiveUntil(mutedUntil) ? setChatMute(muteTarget, null) : setMuteSheet(muteTarget)), false, muteLabel(mutedUntil)) : null,
           activeConvForBar ? item(<SettingsIcon size={17} />, 'Chat settings', () => setShowChatSettings(true), false, 'Nicknames, wallpaper, lock and more') : null,
-          item(<Ban size={17} />, blocked ? `Unblock ${activeProfile.name}` : `Block ${activeProfile.name}`, () => (blocked ? unblockUser(activeProfile.id) : blockUser(activeProfile.id)), !blocked),
+          item(<Ban size={17} />, blocked ? `Unblock ${activeProfile.name}` : `Block ${activeProfile.name}`, () => (blocked ? setUnblockConfirmFor(activeProfile) : setBlockConfirmFor(activeProfile)), !blocked),
           item(<Flag size={17} />, `Report ${activeProfile.name}`, () => setReportUserTarget(activeProfile), true),
           activeConvForBar ? item(<Trash2 size={17} />, 'Delete chat', () => setDeleteConvoTarget(activeConvForBar), true) : null,
         ];
@@ -9885,4 +10994,4 @@ export default function App() {
       <AppInner />
     </ThemeProvider>
   );
-               }
+}
