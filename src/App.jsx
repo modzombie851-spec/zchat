@@ -1599,10 +1599,26 @@ function FollowRequestsPanel({ userId, onClose, onOpenProfile }) {
     return () => supabase.removeChannel(channel);
   }, [userId]);
 
+  const [handled, setHandled] = useState({});
+  const [followingBack, setFollowingBack] = useState({});
   const respond = async (followerId, accept) => {
-    if (accept) await supabase.from('follows').update({ status: 'accepted' }).eq('follower_id', followerId).eq('following_id', userId);
-    else await supabase.from('follows').delete().eq('follower_id', followerId).eq('following_id', userId);
-    load();
+    if (accept) {
+      await supabase.from('follows').update({ status: 'accepted' }).eq('follower_id', followerId).eq('following_id', userId);
+      const { data: mine } = await supabase.from('follows').select('status').eq('follower_id', userId).eq('following_id', followerId).maybeSingle();
+      setFollowingBack((prev) => ({ ...prev, [followerId]: mine ? mine.status : 'none' }));
+      setHandled((prev) => ({ ...prev, [followerId]: 'accepted' }));
+    } else {
+      await supabase.from('follows').delete().eq('follower_id', followerId).eq('following_id', userId);
+      setHandled((prev) => ({ ...prev, [followerId]: 'declined' }));
+    }
+  };
+  const followBack = async (p) => {
+    const status = p.is_private ? 'pending' : 'accepted';
+    setFollowingBack((prev) => ({ ...prev, [p.id]: status }));
+    const { error } = await supabase.from('follows').insert({ follower_id: userId, following_id: p.id, status });
+    if (error) { setFollowingBack((prev) => ({ ...prev, [p.id]: 'none' })); return; }
+    const { data: meRow } = await supabase.from('profiles').select('name, avatar').eq('id', userId).maybeSingle();
+    sendPushNotification(p.id, 'ZChat', status === 'pending' ? `${meRow?.name || 'Someone'} requested to follow you` : `${meRow?.name || 'Someone'} started following you`, status === 'pending' ? '/?requests=1' : `/?profile=${userId}`, meRow?.avatar);
   };
 
   return (
@@ -1612,8 +1628,16 @@ function FollowRequestsPanel({ userId, onClose, onOpenProfile }) {
       ) : requests.length === 0 ? (
         <div style={{ textAlign: 'center', padding: 20, fontSize: 13, color: theme.muted }}>No pending requests</div>
       ) : (
-        requests.map(({ profile: p }) => (
-          <UserListRow key={p.id} profile={p} onClick={() => onOpenProfile(p)} rightContent={
+        requests.filter(({ profile: p }) => handled[p.id] !== 'declined').map(({ profile: p }) => (
+          <UserListRow key={p.id} profile={p} onClick={() => onOpenProfile(p)} rightContent={handled[p.id] === 'accepted' ? (
+            <div onClick={(e) => e.stopPropagation()}>
+              {followingBack[p.id] === 'accepted' || followingBack[p.id] === 'pending' ? (
+                <button disabled style={{ padding: '6px 12px', borderRadius: 10, border: `1px solid ${theme.border}`, background: 'transparent', color: theme.muted, fontWeight: 700, fontSize: 11.5, fontFamily: FONT }}>{followingBack[p.id] === 'pending' ? 'Requested' : 'Following'}</button>
+              ) : (
+                <button onClick={() => followBack(p)} style={{ padding: '6px 14px', borderRadius: 10, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontSize: 11.5, cursor: 'pointer', fontFamily: FONT }}>Follow back</button>
+              )}
+            </div>
+          ) : (
             <div style={{ display: 'flex', gap: 6 }} onClick={(e) => e.stopPropagation()}>
               <button onClick={() => respond(p.id, true)} style={{
                 padding: '6px 12px', borderRadius: 10, border: 'none', background: theme.coral, color: 'white',
@@ -1624,7 +1648,7 @@ function FollowRequestsPanel({ userId, onClose, onOpenProfile }) {
                 fontWeight: 700, fontSize: 11.5, cursor: 'pointer', fontFamily: FONT,
               }}>Decline</button>
             </div>
-          } />
+          )} />
         ))
       )}
     </ListModal>
@@ -1680,7 +1704,9 @@ function DiscoverPanel({ myId, blockedIds, onClose, onOpenProfile }) {
       </div>
     </div>
   );
-         }
+}
+
+
 function IconDownload({ size = 15, color = 'currentColor' }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
@@ -2954,7 +2980,8 @@ function CreateGroupPanel({ myId, onClose, onCreated }) {
       )}
     </div>
   );
-   }
+}
+
 function GroupInfoPanel({ group, members, myId, myRole, isOwner, onClose, onPromote, onDemote, onMute, onUnmute, onKick, onLeave, onOpenProfile, onSaveBio, onSaveName, onSaveAvatar, onAddMembers, onTransferOwnership, onSetWallpaper, onSetHeaderStyle }) {
   const { theme } = useTheme();
   const isAdmin = myRole === 'admin';
@@ -4197,7 +4224,7 @@ function AudioBubble({ url, isMe }) {
   );
 }
 
-function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSelect, onLongPress, onOpenImage, onOpenVideo, reactions, onReact, onOpenWhoReacted, replyPreview, onSwipeReply, onJumpToMessage, highlighted, senderLabel, senderAvatar, hideReadStatus, onOpenSenderProfile, canModerate, onOpenMention, mentionsMe, onOpenStoryRef }) {
+function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSelect, onLongPress, onOpenImage, onOpenVideo, reactions, onReact, onOpenWhoReacted, replyPreview, onSwipeReply, onJumpToMessage, highlighted, senderLabel, senderAvatar, hideReadStatus, onOpenSenderProfile, canModerate, onOpenMention, mentionsMe, onOpenStoryRef, onCallBack, onOpenSticker, tightBelow }) {
   const { theme, fontScale, chatTheme, bubbleColor } = useTheme();
   const [hover, setHover] = useState(false);
   const [burstHeart, setBurstHeart] = useState(false);
@@ -4215,7 +4242,11 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
   const time = m.created_at ? new Date(m.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
   const bubbleColorSpec = BUBBLE_COLORS[bubbleColor] || BUBBLE_COLORS.default;
   const sharedProfileId = m.type === 'text' && !m.deleted ? parseProfileLink(m.content) : null;
+  const inlineTime = m.type === 'text' && !m.deleted && !!m.content && !sharedProfileId && !(m.story_id && (m.content === STORY_MENTION_TEXT || m.content === STORY_GROUP_MENTION_TEXT || m.content === STORY_SHARE_TEXT));
 
+  if (m.type === 'system' && parseCallLog(m.content)) {
+    return <CallLogBubble m={m} isMe={isMe} onCallBack={onCallBack} />;
+  }
   if (m.type === 'system') {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 10 }}>
@@ -4298,7 +4329,7 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
     <div
       id={`msg-${m.id}`}
       style={{
-        display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start', alignItems: 'flex-start', gap: 8, marginBottom: 7,
+        display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start', alignItems: 'flex-start', gap: 8, marginBottom: groupedEntries.length > 0 && !m.deleted ? 14 : tightBelow ? 1 : 6,
         touchAction: 'pan-y', WebkitTapHighlightColor: 'transparent', overscrollBehaviorX: 'none', cursor: 'pointer',
         background: selected ? `${theme.coral}14` : highlighted ? `${theme.coral}22` : 'transparent',
         transition: 'background 0.3s ease',
@@ -4411,7 +4442,8 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
               {m.type === 'sticker' && (
                 m.content && m.content.startsWith('/') ? (
                   <img src={m.content} alt="sticker" className="zchat-wave-pop" onContextMenu={(e) => e.preventDefault()} draggable={false}
-                    style={{ width: 96, height: 96, objectFit: 'contain', display: 'block' }} />
+                    onClick={(e) => { if (selectionMode || !onOpenSticker) return; e.stopPropagation(); onOpenSticker(m); }}
+                    style={{ width: 96, height: 96, objectFit: 'contain', display: 'block', marginBottom: 18, cursor: 'pointer' }} />
                 ) : (
                   <div className="zchat-wave-pop" style={{ fontSize: 64, lineHeight: 1, padding: '4px 10px' }}>{m.content}</div>
                 )
@@ -4423,14 +4455,18 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
                 </div>
               )}
               {m.type === 'text' && m.content && !sharedProfileId && !(m.story_id && (m.content === STORY_MENTION_TEXT || m.content === STORY_GROUP_MENTION_TEXT || m.content === STORY_SHARE_TEXT)) && (
-                <div style={{ fontSize: 15 * fontScale, color: theme.ink, wordBreak: 'break-word', lineHeight: 1.32 }}>
+                <div style={{ fontSize: 15 * fontScale, color: theme.ink, wordBreak: 'break-word', lineHeight: 1.32, display: 'flow-root' }}>
                   <RichText text={m.content} onMention={onOpenMention} />
-                  <span style={{ display: 'inline-block', float: 'right', width: Math.ceil(time.length * 5.4) + (isMe ? 22 : 8) + (m.edited ? 30 : 0), height: 17 }} />
+                  <span data-msg-time="true" style={{ float: 'right', display: 'inline-flex', alignItems: 'center', gap: 3, marginLeft: 10, marginTop: 7, marginBottom: -3, height: 14, lineHeight: 1, position: 'relative', top: 1, userSelect: 'none' }}>
+                    {m.edited && <span style={{ fontSize: 8, color: theme.muted, fontStyle: 'italic' }}>edited</span>}
+                    <span style={{ fontSize: 9, color: theme.muted }}>{time}</span>
+                    {isMe && <StatusTicks status={(!hideReadStatus && m.read) ? 'read' : m.delivered ? 'delivered' : 'sent'} />}
+                  </span>
                 </div>
               )}
             </>
           )}
-          {!m.deleted && (
+          {!m.deleted && !inlineTime && (
             <div style={{
               position: 'absolute', bottom: 4, right: 8, display: 'flex', alignItems: 'center', gap: 3,
               background: m.type === 'text' ? 'none' : 'rgba(0,0,0,0.4)', borderRadius: 8,
@@ -4493,6 +4529,8 @@ function playReactionPing() {
 }
 
 function pairKey(a, b) { return a < b ? [a, b] : [b, a]; }
+
+
 function ImageViewer({ url, onClose, onForward, onReport }) {
   const [menuOpen, setMenuOpen] = useState(false);
   return (
@@ -4937,12 +4975,21 @@ function describeMessage(m) {
     case 'video': return { kind: 'video', text: m.content || 'Video' };
     case 'audio': return { kind: 'audio', text: 'Voice message' };
     case 'sticker': return { kind: 'sticker', text: 'Sticker' };
-    case 'system': return { kind: 'system', text: m.content || '' };
+    case 'system': {
+      const log = parseCallLog(m.content);
+      if (log) {
+        const Kind = log.k === 'video' ? 'Video' : 'Voice';
+        const text = log.s === 'group' ? `${Kind} group call` : (log.s === 'missed' || log.s === 'declined') ? `Missed ${Kind.toLowerCase()} call` : `${Kind} call \u00b7 ${formatCallDuration((log.d || 0) * 1000)}`;
+        return { kind: log.s === 'missed' || log.s === 'declined' ? 'callmissed' : 'call', text };
+      }
+      return { kind: 'system', text: m.content || '' };
+    }
     default: return { kind: 'text', text: parseProfileLink(m.content) ? 'Shared a profile' : (m.content || '') };
   }
 }
 
-const PREVIEW_ICONS = { image: Camera, video: VideoIcon, audio: Mic, sticker: Smile, deleted: Ban, story: Sparkles };
+const PREVIEW_ICONS = { image: Camera, video: VideoIcon, audio: Mic, sticker: Smile, deleted: Ban, story: StatusIcon, call: Phone, callmissed: PhoneMissedIcon };
+function PhoneMissedIcon({ size = 14, style }) { return <Phone size={size} color="#FF3B30" style={style} />; }
 
 function PreviewLine({ preview, prefix, color, weight = 400, size = 12 }) {
   const Icon = preview ? PREVIEW_ICONS[preview.kind] : null;
@@ -5011,7 +5058,7 @@ function InAppMessageToast({ toast, top, onOpen, onDismiss }) {
         display: 'flex', alignItems: 'center', gap: 11, padding: '11px 14px 11px 11px', borderRadius: 20,
         background: theme.dark ? 'rgba(20,26,44,0.96)' : 'rgba(255,255,255,0.97)',
         backdropFilter: 'blur(22px) saturate(160%)', WebkitBackdropFilter: 'blur(22px) saturate(160%)',
-        border: `1px solid ${theme.border}`, boxShadow: '0 12px 32px rgba(0,0,0,0.3)',
+        border: `1px solid ${theme.border}`, borderLeft: toast.accent === 'missed' ? '4px solid #FF3B30' : `1px solid ${theme.border}`, boxShadow: '0 12px 32px rgba(0,0,0,0.3)',
         transform: `translateY(${dragY}px)`, transition: startRef.current ? 'none' : 'transform 0.2s ease',
         cursor: 'pointer', touchAction: 'pan-x', userSelect: 'none', WebkitTapHighlightColor: 'transparent',
       }}>
@@ -5299,7 +5346,14 @@ function strokeToPath(points, W, H) {
   return points.length === 1 ? `${d} l0.1 0` : d;
 }
 
-function paintEdits(ctx, item, W, H, offsetX, offsetY, scale) {
+function paintEdits(ctx, item, W, H, offsetX, offsetY, scale, stickerImages = {}) {
+  (item.stickers || []).forEach((st) => {
+    const img = stickerImages[st.id];
+    if (!img || !img.naturalWidth) return;
+    const w = st.size * W * scale;
+    const h = w * (img.naturalHeight / img.naturalWidth);
+    ctx.drawImage(img, st.x * W * scale - offsetX - w / 2, st.y * H * scale - offsetY - h / 2, w, h);
+  });
   item.strokes.forEach((s) => {
     if (!s.points.length) return;
     ctx.save();
@@ -5336,6 +5390,14 @@ function paintEdits(ctx, item, W, H, offsetX, offsetY, scale) {
   });
 }
 
+async function loadStickerImages(item) {
+  const out = {};
+  for (const st of item.stickers || []) {
+    try { out[st.id] = await loadImageElement(st.src); } catch {}
+  }
+  return out;
+}
+
 async function prepareImageFile(file, url) {
   if (/gif/i.test(file.type)) return file;
   if (file.size < 1.8 * 1024 * 1024 && /jpe?g|png|webp/i.test(file.type)) return file;
@@ -5354,7 +5416,7 @@ async function prepareImageFile(file, url) {
 }
 
 async function exportEditedImage(item) {
-  const hasEdits = item.crop || item.texts.length || item.strokes.length;
+  const hasEdits = item.crop || item.texts.length || item.strokes.length || (item.stickers || []).length;
   if (!hasEdits) return prepareImageFile(item.file, item.url);
   try { if (document.fonts && document.fonts.load) await document.fonts.load('800 40px Manrope'); } catch {}
   const img = await loadImageElement(item.url);
@@ -5369,20 +5431,20 @@ async function exportEditedImage(item) {
   canvas.height = Math.max(1, Math.round(rh * scale));
   const ctx = canvas.getContext('2d');
   ctx.drawImage(img, c.x * W, c.y * H, rw, rh, 0, 0, canvas.width, canvas.height);
-  paintEdits(ctx, item, W, H, c.x * W * scale, c.y * H * scale, scale);
+  paintEdits(ctx, item, W, H, c.x * W * scale, c.y * H * scale, scale, await loadStickerImages(item));
   const blob = await new Promise((res) => canvas.toBlob(res, 'image/jpeg', 0.9));
   return blob ? new File([blob], 'photo.jpg', { type: 'image/jpeg' }) : item.file;
 }
 
 async function exportVideoOverlay(item) {
-  if (!item.texts.length && !item.strokes.length) return null;
+  if (!item.texts.length && !item.strokes.length && !(item.stickers || []).length) return null;
   if (!item.width || !item.height) return null;
   try { if (document.fonts && document.fonts.load) await document.fonts.load('800 40px Manrope'); } catch {}
   const scale = Math.min(1, 1280 / Math.max(item.width, item.height));
   const canvas = document.createElement('canvas');
   canvas.width = Math.round(item.width * scale);
   canvas.height = Math.round(item.height * scale);
-  paintEdits(canvas.getContext('2d'), item, item.width, item.height, 0, 0, scale);
+  paintEdits(canvas.getContext('2d'), item, item.width, item.height, 0, 0, scale, await loadStickerImages(item));
   const blob = await new Promise((res) => canvas.toBlob(res, 'image/png'));
   return blob ? new File([blob], 'overlay.png', { type: 'image/png' }) : null;
 }
@@ -5391,7 +5453,7 @@ function MediaComposer({ files, recipientName, onCancel, onSend, onActivity, mod
   const { theme } = useTheme();
   const [items, setItems] = useState(() => files.map((f, i) => ({
     id: `${Date.now()}-${i}`, kind: (f.type || '').startsWith('video') ? 'video' : 'image', file: f, url: URL.createObjectURL(f),
-    width: 0, height: 0, duration: 0, crop: null, texts: [], strokes: [], trimStart: 0, trimEnd: null,
+    width: 0, height: 0, duration: 0, crop: null, texts: [], strokes: [], stickers: [], trimStart: 0, trimEnd: null,
   })));
   const [index, setIndex] = useState(0);
   const [mode, setMode] = useState('view');
@@ -5406,6 +5468,8 @@ function MediaComposer({ files, recipientName, onCancel, onSend, onActivity, mod
   const [playing, setPlaying] = useState(false);
   const [mentions, setMentions] = useState([]);
   const [showMentionPicker, setShowMentionPicker] = useState(false);
+  const [showStickerPicker, setShowStickerPicker] = useState(false);
+  const [selectedSticker, setSelectedSticker] = useState(null);
   const isStory = composerMode === 'story';
   const stageRef = useRef(null);
   const innerRef = useRef(null);
@@ -5696,6 +5760,7 @@ function MediaComposer({ files, recipientName, onCancel, onSend, onActivity, mod
             <div style={{ display: 'flex', gap: 8 }}>
               {cur.kind === 'image' && toolBtn(<Crop size={18} />, 'Crop', startCrop)}
               {cur.kind === 'video' && cur.duration > 1 && toolBtn(<Scissors size={18} />, 'Trim', () => { setMode('trim'); if (videoRef.current) videoRef.current.pause(); })}
+              {toolBtn(<Smile size={18} />, 'Stickers', () => { setShowStickerPicker(true); if (videoRef.current) videoRef.current.pause(); })}
               {toolBtn(<Type size={18} />, 'Add text', () => setTextDraft({ id: null, text: '', color: '#FFFFFF', size: 0.07 }))}
               {toolBtn(<Pencil size={18} />, 'Draw', () => { setMode('draw'); if (videoRef.current) videoRef.current.pause(); })}
               {isStory && toolBtn(<AtSign size={18} />, 'Mention', () => setShowMentionPicker(true))}
@@ -5746,6 +5811,28 @@ function MediaComposer({ files, recipientName, onCancel, onSend, onActivity, mod
                 ))}
                 <path ref={livePathRef} stroke={brushColor} strokeWidth={(brushSize / Math.max(1, innerW)) * W} fill="none" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
+              {(cur.stickers || []).map((st) => (
+                <img key={st.id} src={st.src} alt="" draggable={false}
+                  onPointerDown={(e) => {
+                    if (mode !== 'view') return;
+                    e.stopPropagation();
+                    e.currentTarget.setPointerCapture?.(e.pointerId);
+                    dragRef.current = { type: 'sticker', id: st.id, sx: e.clientX, sy: e.clientY, ox: st.x, oy: st.y, moved: false };
+                  }}
+                  onPointerMove={(e) => {
+                    const d = dragRef.current;
+                    if (!d || d.type !== 'sticker' || d.id !== st.id) return;
+                    const dx = e.clientX - d.sx;
+                    const dy = e.clientY - d.sy;
+                    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) d.moved = true;
+                    if (!d.moved) return;
+                    const { innerW: iw, innerH: ih } = frameRef.current;
+                    updateItem(cur.id, (it) => ({ stickers: it.stickers.map((x) => (x.id === st.id ? { ...x, x: Math.max(0, Math.min(1, d.ox + dx / iw)), y: Math.max(0, Math.min(1, d.oy + dy / ih)) } : x)) }));
+                  }}
+                  onPointerUp={() => { const d = dragRef.current; dragRef.current = null; if (d && d.type === 'sticker' && !d.moved) setSelectedSticker(st.id === selectedSticker ? null : st.id); }}
+                  onClick={(e) => e.stopPropagation()}
+                  style={{ position: 'absolute', left: `${st.x * 100}%`, top: `${st.y * 100}%`, width: st.size * innerW, transform: 'translate(-50%, -50%)', touchAction: 'none', cursor: 'grab', pointerEvents: mode === 'view' ? 'auto' : 'none', outline: selectedSticker === st.id ? '2px dashed rgba(255,255,255,0.85)' : 'none', outlineOffset: 4, borderRadius: 8, userSelect: 'none' }} />
+              ))}
               {cur.texts.map((t) => (
                 <div key={t.id}
                   onPointerDown={(e) => textDown(e, t)} onPointerMove={textMove} onPointerUp={(e) => textUp(e, t)} onPointerCancel={() => { dragRef.current = null; }}
@@ -5882,7 +5969,7 @@ function MediaComposer({ files, recipientName, onCancel, onSend, onActivity, mod
             {isStory ? (
               <div onPointerDown={(e) => e.preventDefault()} onClick={send} role="button" aria-label="Share to your story" style={{
                 height: 48, padding: '0 16px', borderRadius: 24, background: 'white', color: '#000', display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', flexShrink: 0, fontWeight: 800, fontSize: 14,
-              }}>{sending ? <Spinner size={16} color="#000" /> : <><Sparkles size={16} /> Your story</>}</div>
+              }}>{sending ? <Spinner size={16} color="#000" /> : <><StatusIcon size={17} color="#000" /> Your story</>}</div>
             ) : (
               <div onPointerDown={(e) => e.preventDefault()} onClick={send} role="button" aria-label="Send" style={{
                 width: 48, height: 48, borderRadius: '50%', background: theme.coral, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0,
@@ -5895,6 +5982,37 @@ function MediaComposer({ files, recipientName, onCancel, onSend, onActivity, mod
         </div>
       )}
 
+      {selectedSticker && mode === 'view' && (cur.stickers || []).some((x) => x.id === selectedSticker) && (
+        <div className="zchat-pop" style={{ position: 'absolute', left: '50%', top: 'calc(70px + env(safe-area-inset-top))', transform: 'translateX(-50%)', zIndex: 6, display: 'flex', gap: 8, padding: 6, borderRadius: 22, background: 'rgba(0,0,0,0.65)' }}>
+          {[{ l: 'Smaller', f: 0.8 }, { l: 'Bigger', f: 1.25 }].map((b) => (
+            <div key={b.l} onClick={() => updateItem(cur.id, (it) => ({ stickers: it.stickers.map((x) => (x.id === selectedSticker ? { ...x, size: Math.max(0.08, Math.min(0.9, x.size * b.f)) } : x)) }))} style={{ padding: '8px 14px', borderRadius: 16, background: 'rgba(255,255,255,0.14)', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>{b.l}</div>
+          ))}
+          <div onClick={() => { updateItem(cur.id, (it) => ({ stickers: it.stickers.filter((x) => x.id !== selectedSticker) })); setSelectedSticker(null); }} style={{ padding: '8px 14px', borderRadius: 16, background: '#FF3B30', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Remove</div>
+        </div>
+      )}
+      {showStickerPicker && (
+        <div onClick={() => setShowStickerPicker(false)} style={{ position: 'absolute', inset: 0, zIndex: 8, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'flex-end' }}>
+          <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ width: '100%', height: '60%', background: '#11151F', borderRadius: '22px 22px 0 0', display: 'flex', flexDirection: 'column', paddingBottom: 'env(safe-area-inset-bottom)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px' }}>
+              <span style={{ fontWeight: 800, fontSize: 15 }}>Stickers</span>
+              <X size={20} style={{ cursor: 'pointer' }} onClick={() => setShowStickerPicker(false)} />
+            </div>
+            <div style={{ flex: 1, overflowY: 'auto', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, padding: '0 12px 14px' }}>
+              {[...STICKERS].sort((x, y) => (getFavoriteStickerKeys().has(y.key) ? 1 : 0) - (getFavoriteStickerKeys().has(x.key) ? 1 : 0)).map((stk) => (
+                <div key={stk.key} onClick={() => {
+                  setShowStickerPicker(false);
+                  const r = cur.crop || { x: 0, y: 0, w: 1, h: 1 };
+                  const id = `s${Date.now()}`;
+                  updateItem(cur.id, (it) => ({ stickers: [...(it.stickers || []), { id, src: stk.file, x: r.x + r.w / 2, y: r.y + r.h / 2, size: 0.32 }] }));
+                  setSelectedSticker(id);
+                }} style={{ aspectRatio: '1 / 1', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', borderRadius: 14, background: 'rgba(255,255,255,0.05)' }}>
+                  <img src={stk.file} alt="" loading="lazy" draggable={false} style={{ width: '82%', height: '82%', objectFit: 'contain' }} />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
       {showMentionPicker && (
         <StoryMentionPicker myId={myId} groups={mentionGroups} onClose={() => setShowMentionPicker(false)}
           onPick={(mn) => {
@@ -6061,7 +6179,8 @@ function ChatSearchBar({ query, onChange, count, position, onPrev, onNext, onClo
       <X size={19} color={theme.muted} style={{ cursor: 'pointer', flexShrink: 0 }} onClick={onClose} />
     </div>
   );
-                                        }
+}
+
 function PinnedMessagesBar({ pins, index, labelFor, onOpen }) {
   const { theme } = useTheme();
   if (!pins.length) return null;
@@ -6278,47 +6397,6 @@ function StoryAvatar({ profile, size = 64, ring = 'none', onClick, badgePlus = f
   );
 }
 
-function AvatarPeek({ profile, online, lastSeen, hasStory, storySeen, canCall, onCall, onClose, onMessage, onProfile, onStory }) {
-  const { theme } = useTheme();
-  const photo = typeof profile.avatar === 'string' && profile.avatar.startsWith('http') ? profile.avatar : '';
-  const action = (icon, label, onClick, highlight) => (
-    <div onClick={() => { onClose(); onClick(); }} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '12px 4px', cursor: 'pointer', color: highlight ? theme.coral : theme.ink }}>
-      {icon}
-      <span style={{ fontSize: 12, fontWeight: 700 }}>{label}</span>
-    </div>
-  );
-  return (
-    <div onClick={onClose} className="zchat-fade" style={{
-      position: 'fixed', inset: 0, zIndex: 96, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
-      background: theme.dark ? 'rgba(3,6,14,0.55)' : 'rgba(230,234,244,0.55)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
-    }}>
-      <div onClick={(e) => e.stopPropagation()} className="zchat-pop" style={{ width: '100%', maxWidth: 300, borderRadius: 26, overflow: 'hidden', background: theme.panelBg, boxShadow: '0 24px 60px rgba(0,0,0,0.45)' }}>
-        <div onClick={() => { if (hasStory) { onClose(); onStory(); } }} style={{ position: 'relative', aspectRatio: '1 / 1', background: photo ? '#000' : colorForName(profile.name), cursor: hasStory ? 'pointer' : 'default' }}>
-          {photo
-            ? <img src={photo} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-            : <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 110, fontWeight: 800, color: 'rgba(255,255,255,0.92)' }}>{(profile.name || '?').charAt(0).toUpperCase()}</div>}
-          <div style={{ position: 'absolute', left: 0, right: 0, top: 0, padding: '12px 14px 26px', background: 'linear-gradient(180deg, rgba(0,0,0,0.6), rgba(0,0,0,0))', color: 'white' }}>
-            <div style={{ fontSize: 16, fontWeight: 800 }}>{profile.name}</div>
-            <div style={{ fontSize: 11.5, opacity: 0.85 }}>{online ? 'Online now' : lastSeen || `@${profile.username}`}</div>
-          </div>
-          {hasStory && (
-            <div style={{ position: 'absolute', right: 12, bottom: 12, display: 'flex', alignItems: 'center', gap: 6, padding: '6px 11px', borderRadius: 20, background: 'rgba(0,0,0,0.5)', color: 'white', fontSize: 11.5, fontWeight: 700 }}>
-              <span style={{ width: 8, height: 8, borderRadius: '50%', background: storySeen ? '#B9BCC3' : theme.teal }} />
-              {storySeen ? 'Status' : 'New status'}
-            </div>
-          )}
-        </div>
-        <div style={{ display: 'flex', borderTop: `1px solid ${theme.border}` }}>
-          {action(<Send size={20} />, 'Message', onMessage)}
-          {canCall && action(<Phone size={20} />, 'Call', onCall)}
-          {action(<User size={20} />, 'Profile', onProfile)}
-          {hasStory && action(<Sparkles size={20} />, 'View status', onStory, true)}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function StoryMentionPicker({ myId, groups, onPick, onClose }) {
   const { theme } = useTheme();
   const [q, setQ] = useState('');
@@ -6366,52 +6444,6 @@ function StoryMentionPicker({ myId, groups, onPick, onClose }) {
   );
 }
 
-function StoryViewersSheet({ story, myId, onClose, onOpenProfile }) {
-  const { theme } = useTheme();
-  const [rows, setRows] = useState(null);
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const { data: views } = await supabase.from('story_views').select('*').eq('story_id', story.id);
-      const { data: likes } = await supabase.from('story_likes').select('*').eq('story_id', story.id);
-      const ids = [...new Set([...(views || []).map((v) => v.viewer_id), ...(likes || []).map((l) => l.user_id)])].filter((id) => id !== myId);
-      if (!ids.length) { if (!cancelled) setRows([]); return; }
-      const { data: profs } = await supabase.from('profiles').select('*').in('id', ids);
-      const likedSet = new Set((likes || []).map((l) => l.user_id));
-      const viewedAt = {};
-      (views || []).forEach((v) => { viewedAt[v.viewer_id] = v.viewed_at; });
-      const list = sanitizeAvatarList(profs, myId).map((p) => ({ profile: p, liked: likedSet.has(p.id), at: viewedAt[p.id] }))
-        .sort((a, b) => (b.liked - a.liked) || (new Date(b.at || 0) - new Date(a.at || 0)));
-      if (!cancelled) setRows(list);
-    })();
-    return () => { cancelled = true; };
-  }, [story.id]);
-  return (
-    <div onClick={onClose} style={{ position: 'absolute', inset: 0, zIndex: 9, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end' }}>
-      <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ width: '100%', maxHeight: '65%', background: theme.panelBg, borderRadius: '22px 22px 0 0', display: 'flex', flexDirection: 'column', paddingBottom: 'env(safe-area-inset-bottom)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderBottom: `1px solid ${theme.border}` }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, fontSize: 15, color: theme.ink }}><Eye size={18} /> {rows ? `${rows.length} ${rows.length === 1 ? 'viewer' : 'viewers'}` : 'Viewers'}</div>
-          <X size={20} color={theme.muted} style={{ cursor: 'pointer' }} onClick={onClose} />
-        </div>
-        <div style={{ overflowY: 'auto', padding: '4px 10px 14px' }}>
-          {rows === null && <div style={{ display: 'flex', justifyContent: 'center', padding: 24 }}><Spinner color={theme.ink} /></div>}
-          {rows && !rows.length && <div style={{ textAlign: 'center', padding: 24, fontSize: 13, color: theme.muted }}>No views yet</div>}
-          {rows && rows.map((r) => (
-            <div key={r.profile.id} onClick={() => onOpenProfile(r.profile)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 8px', cursor: 'pointer' }}>
-              <Avatar emoji={r.profile.avatar} name={r.profile.name} size={42} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 700, fontSize: 14, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.profile.name}</div>
-                <div style={{ fontSize: 11.5, color: theme.muted }}>@{r.profile.username}{r.at ? ` · ${timeShort(r.at)}` : ''}</div>
-              </div>
-              {r.liked && <Heart size={18} color="#FF3B5C" fill="#FF3B5C" />}
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function StoryViewer({ groupsList, startGroup = 0, startStoryId = null, onAddStory, onShare, externalPause = false, myId, seen, liked, onSeen, onClose, onLike, onReply, onRepost, onDelete, onReport, onOpenProfile, onOpenMention }) {
   const [gi, setGi] = useState(startGroup);
   const [si, setSi] = useState(() => {
@@ -6437,6 +6469,7 @@ function StoryViewer({ groupsList, startGroup = 0, startStoryId = null, onAddSto
   const [flash, setFlash] = useState('');
   const [viewCount, setViewCount] = useState(null);
   const [likeBurst, setLikeBurst] = useState(false);
+  const [burstEmoji, setBurstEmoji] = useState('');
   const videoRef = useRef(null);
   const elapsedRef = useRef(0);
   const lastTickRef = useRef(0);
@@ -6519,6 +6552,8 @@ function StoryViewer({ groupsList, startGroup = 0, startStoryId = null, onAddSto
     const dx = e.clientX - p.x;
     const dy = e.clientY - p.y;
     if (dy > 90 && Math.abs(dy) > Math.abs(dx)) { onClose(); return; }
+    if (dy < -70 && Math.abs(dy) > Math.abs(dx) && isMine) { setShowViewers(true); return; }
+    if (dy < -70 && Math.abs(dy) > Math.abs(dx) && !isMine) { setReplyFocus(true); const el = document.querySelector('[data-story-reply]'); if (el) el.focus(); return; }
     if (Date.now() - p.t > 260 || Math.abs(dx) > 14 || Math.abs(dy) > 14) return;
     const width = e.currentTarget.getBoundingClientRect().width;
     if (e.clientX < width * 0.32) goPrev(); else goNext();
@@ -6558,6 +6593,7 @@ function StoryViewer({ groupsList, startGroup = 0, startStoryId = null, onAddSto
             <img src={story.overlay_url} alt="" draggable={false} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }} />
           )}
           {!loaded && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Spinner size={26} /></div>}
+          {burstEmoji && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none', fontSize: 120, animation: 'zchat-heart-burst 0.9s ease' }}>{burstEmoji}</div>}
           {likeBurst && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none', animation: 'zchat-heart-burst 0.7s ease' }}><Heart size={110} color="#FF3B5C" fill="#FF3B5C" /></div>}
         </div>
 
@@ -6588,7 +6624,7 @@ function StoryViewer({ groupsList, startGroup = 0, startStoryId = null, onAddSto
           </div>
         </div>
 
-        {(story.caption || mentions.length > 0) && (
+        {(story.caption || mentions.length > 0) && !replyFocus && (
           <div data-story-control style={{ position: 'absolute', left: 14, right: 14, bottom: 'calc(84px + env(safe-area-inset-bottom))', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
             {story.caption && <div style={{ background: 'rgba(0,0,0,0.45)', padding: '8px 14px', borderRadius: 14, fontSize: 14.5, fontWeight: 600, textAlign: 'center', maxWidth: '100%', wordBreak: 'break-word' }}>{story.caption}</div>}
             {mentions.length > 0 && (
@@ -6606,6 +6642,10 @@ function StoryViewer({ groupsList, startGroup = 0, startStoryId = null, onAddSto
         <div data-story-control style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '14px 12px', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))', background: 'linear-gradient(0deg, rgba(0,0,0,0.6), rgba(0,0,0,0))', display: 'flex', alignItems: 'center', gap: 10 }}>
           {isMine ? (
             <>
+              <div style={{ position: 'absolute', left: 0, right: 0, bottom: 'calc(64px + env(safe-area-inset-bottom))', display: 'flex', flexDirection: 'column', alignItems: 'center', pointerEvents: 'none', opacity: 0.85 }}>
+                <ChevronRight size={18} style={{ transform: 'rotate(-90deg)' }} />
+                <span style={{ fontSize: 11.5, fontWeight: 700 }}>Swipe up for activity</span>
+              </div>
               <div onClick={() => setShowViewers(true)} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 14px', borderRadius: 22, background: 'rgba(255,255,255,0.14)', cursor: 'pointer', fontSize: 13.5, fontWeight: 700 }}>
                 <Eye size={17} /> {viewCount == null ? 'Viewers' : `${viewCount} ${viewCount === 1 ? 'viewer' : 'viewers'}`}
               </div>
@@ -6622,7 +6662,15 @@ function StoryViewer({ groupsList, startGroup = 0, startStoryId = null, onAddSto
             </>
           ) : (
             <>
-              <input value={reply} onChange={(e) => setReply(e.target.value.slice(0, 1000))} onFocus={() => setReplyFocus(true)} onBlur={() => setReplyFocus(false)}
+              {replyFocus && !reply.trim() && (
+                <div className="zchat-sheet-up" style={{ position: 'absolute', left: 0, right: 0, bottom: '100%', padding: '14px 16px', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, background: 'linear-gradient(0deg, rgba(0,0,0,0.75), rgba(0,0,0,0))' }}>
+                  {QUICK_STORY_REACTIONS.map((emo) => (
+                    <div key={emo} onPointerDown={(e) => e.preventDefault()} onClick={async () => { setBurstEmoji(emo); setTimeout(() => setBurstEmoji(''), 900); await onReply(story, group.profile, emo); }}
+                      style={{ fontSize: 38, textAlign: 'center', cursor: 'pointer', lineHeight: 1.2 }}>{emo}</div>
+                  ))}
+                </div>
+              )}
+              <input data-story-reply value={reply} onChange={(e) => setReply(e.target.value.slice(0, 1000))} onFocus={() => setReplyFocus(true)} onBlur={() => setTimeout(() => setReplyFocus(false), 120)}
                 onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); sendReply(); } }}
                 placeholder={`Reply to ${(group.profile.name || '').split(' ')[0]}`}
                 style={{ flex: 1, minWidth: 0, padding: '11px 16px', borderRadius: 24, border: '1.5px solid rgba(255,255,255,0.55)', background: 'rgba(0,0,0,0.25)', color: 'white', outline: 'none', fontFamily: FONT, fontSize: 15 }} />
@@ -6665,31 +6713,6 @@ function StoryViewer({ groupsList, startGroup = 0, startStoryId = null, onAddSto
           <ConfirmDialog title="Delete this story?" body="It will be removed for everyone right away."
             onCancel={() => setConfirmDelete(false)}
             onConfirm={async () => { setConfirmDelete(false); const remaining = group.stories.length - 1; await onDelete(story); if (remaining <= 0) onClose(); else if (si >= remaining) setSi(remaining - 1); }} />
-        )}
-      </div>
-    </div>
-  );
-}
-
-function StoryRefCard({ m, isMe, onOpen }) {
-  const { theme } = useTheme();
-  const isShare = m.content === STORY_SHARE_TEXT;
-  const isMention = m.content === STORY_MENTION_TEXT || m.content === STORY_GROUP_MENTION_TEXT || isShare;
-  const label = isShare ? (isMe ? 'You shared a story' : 'Shared a story') : isMention
-    ? (isMe ? 'You mentioned them in your story' : m.content === STORY_GROUP_MENTION_TEXT ? 'Mentioned this group in their story' : 'Mentioned you in their story')
-    : (isMe ? 'You replied to their story' : 'Replied to your story');
-  return (
-    <div onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onOpen && onOpen(m); }} style={{ cursor: 'pointer', marginBottom: isMention ? 16 : 6 }}>
-      <div style={{ fontSize: 11, color: theme.muted, fontWeight: 700, marginBottom: 5, display: 'flex', alignItems: 'center', gap: 4 }}>
-        <Sparkles size={11} /> {label}
-      </div>
-      <div style={{ width: 96, height: 150, borderRadius: 12, overflow: 'hidden', background: '#000', position: 'relative' }}>
-        {m.story_media_url ? (
-          m.story_media_type === 'video'
-            ? <video src={`${m.story_media_url}#t=0.1`} muted playsInline preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} />
-            : <img src={m.story_media_url} alt="" loading="lazy" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-        ) : (
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.6)', fontSize: 11, textAlign: 'center', padding: 8 }}>Story</div>
         )}
       </div>
     </div>
@@ -6754,36 +6777,49 @@ function startCallTone(kind) {
     if (!Ctx) return () => {};
     const ctx = new Ctx();
     if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+    const master = ctx.createGain();
+    master.gain.value = kind === 'incoming' ? 0.9 : 0.55;
+    const comp = ctx.createDynamicsCompressor();
+    master.connect(comp);
+    comp.connect(ctx.destination);
     let stopped = false;
-    const beep = (freq, start, length, volume) => {
-      const o = ctx.createOscillator();
-      const g = ctx.createGain();
-      o.type = 'sine';
-      o.frequency.value = freq;
-      g.gain.setValueAtTime(0.0001, ctx.currentTime + start);
-      g.gain.exponentialRampToValueAtTime(volume, ctx.currentTime + start + 0.03);
-      g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + start + length);
-      o.connect(g);
-      g.connect(ctx.destination);
-      o.start(ctx.currentTime + start);
-      o.stop(ctx.currentTime + start + length + 0.05);
+    const note = (freq, start, length, volume, type = 'sine') => {
+      const t0 = ctx.currentTime + start;
+      [1, 2, 3].forEach((harmonic, i) => {
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.type = i === 0 ? type : 'sine';
+        o.frequency.value = freq * harmonic;
+        const v = volume / (harmonic * harmonic * 1.4);
+        g.gain.setValueAtTime(0.0001, t0);
+        g.gain.exponentialRampToValueAtTime(v, t0 + 0.012);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + length);
+        o.connect(g);
+        g.connect(master);
+        o.start(t0);
+        o.stop(t0 + length + 0.05);
+      });
+    };
+    const incomingPhrase = () => {
+      const seq = [659.25, 830.61, 987.77, 1318.51, 987.77, 1318.51];
+      seq.forEach((f, i) => note(f, i * 0.16, 0.5, 0.22, 'triangle'));
+      [659.25, 830.61, 987.77].forEach((f, i) => note(f, 1.25 + i * 0.16, 0.6, 0.2, 'triangle'));
+      if (navigator.vibrate) { try { navigator.vibrate([500, 300, 500]); } catch {} }
+    };
+    const outgoingPhrase = () => {
+      note(440, 0, 1.4, 0.08);
+      note(480, 0, 1.4, 0.08);
     };
     const pattern = () => {
       if (stopped) return;
-      if (kind === 'incoming') {
-        beep(784, 0, 0.35, 0.18);
-        beep(988, 0.4, 0.35, 0.18);
-        if (navigator.vibrate) navigator.vibrate([400, 250, 400]);
-      } else {
-        beep(425, 0, 1.1, 0.08);
-      }
+      if (kind === 'incoming') incomingPhrase(); else outgoingPhrase();
     };
     pattern();
-    const iv = setInterval(pattern, kind === 'incoming' ? 2200 : 3500);
+    const iv = setInterval(pattern, kind === 'incoming' ? 2600 : 4000);
     return () => {
       stopped = true;
       clearInterval(iv);
-      if (navigator.vibrate) navigator.vibrate(0);
+      if (navigator.vibrate) { try { navigator.vibrate(0); } catch {} }
       ctx.close().catch(() => {});
     };
   } catch {
@@ -6884,6 +6920,11 @@ function useCallEngine(options) {
         stopTone();
         clearTimeout(timersRef.current[`drop-${peerId}`]);
         patch((prev) => ({ status: 'active', startedAt: prev.startedAt || Date.now(), reconnecting: false }));
+        const cur = callRef.current;
+        if (cur) {
+          send({ type: 'mute', muted: !!cur.muted });
+          if (cur.kind === 'video') send({ type: 'camera', off: !!cur.cameraOff });
+        }
       } else if (state === 'disconnected' || state === 'failed') {
         patch({ reconnecting: true });
         clearTimeout(timersRef.current[`drop-${peerId}`]);
@@ -6950,6 +6991,16 @@ function useCallEngine(options) {
         finish('remote');
       } else if (p.type === 'leave' && c.mode === 'group') {
         removePeer(p.from);
+      } else if (p.type === 'mute') {
+        patch((prev) => ({ remoteMuted: { ...(prev.remoteMuted || {}), [p.from]: !!p.muted } }));
+      } else if (p.type === 'force-mute') {
+        const cur = callRef.current;
+        if (cur && !cur.muted && localRef.current) {
+          localRef.current.getAudioTracks().forEach((t) => { t.enabled = false; });
+          patch({ muted: true });
+          send({ type: 'mute', muted: true });
+          optsRef.current.snack('Someone in the call muted you');
+        }
       } else if (p.type === 'camera') {
         patch((prev) => ({ remoteCameraOff: { ...(prev.remoteCameraOff || {}), [p.from]: !!p.off } }));
       }
@@ -6977,19 +7028,20 @@ function useCallEngine(options) {
         const status = connected ? 'ended' : reason === 'no_answer' ? 'missed' : c.direction === 'outgoing' ? 'cancelled' : 'ended';
         supabase.from('calls').update({ status, ended_at: nowIso }).eq('id', c.id).then(() => {});
       }
-      if (c.direction === 'outgoing' && optsRef.current.onDirectEnded) optsRef.current.onDirectEnded(c, connected ? Date.now() - c.startedAt : 0);
+      if (c.direction === 'outgoing' && optsRef.current.onDirectEnded) optsRef.current.onDirectEnded(c, connected ? Date.now() - c.startedAt : 0, reason);
     } else {
       send({ type: 'leave' });
       if (pcsRef.current.size === 0) supabase.from('calls').update({ status: 'ended', ended_at: nowIso }).eq('id', c.id).then(() => {});
     }
     cleanup();
     const labels = { declined: 'Call declined', busy: 'On another call', no_answer: 'No answer', failed: 'Call dropped', remote: 'Call ended', hangup: 'Call ended' };
-    put({ ...c, status: 'ended', endLabel: labels[reason] || 'Call ended', localStream: null, remoteStreams: {} });
+    put({ ...c, status: 'ended', minimized: false, endLabel: labels[reason] || 'Call ended', endedAt: Date.now(), summaryDuration: connected ? Date.now() - c.startedAt : 0, localStream: null, remoteStreams: {} });
     const endedId = c.id;
-    setTimeout(() => { if (callRef.current && callRef.current.id === endedId && callRef.current.status === 'ended') put(null); }, 1400);
+    setTimeout(() => { if (callRef.current && callRef.current.id === endedId && callRef.current.status === 'ended') put(null); }, 15000);
   };
 
   const startDirect = async (profile, kind) => {
+    if (callRef.current && callRef.current.status === 'ended') put(null);
     if (callRef.current) return;
     const opts = optsRef.current;
     const local = await getMedia(kind);
@@ -7013,6 +7065,7 @@ function useCallEngine(options) {
   };
 
   const startGroup = async (group, kind) => {
+    if (callRef.current && callRef.current.status === 'ended') put(null);
     if (callRef.current) return;
     const opts = optsRef.current;
     const local = await getMedia(kind);
@@ -7031,18 +7084,21 @@ function useCallEngine(options) {
     if (opts.onGroupStarted) opts.onGroupStarted(row, group);
   };
 
-  const joinGroupCall = async (row, group) => {
+  const joinGroupCall = async (row, group, joinOpts = {}) => {
+    if (callRef.current && callRef.current.status === 'ended') put(null);
     if (callRef.current) return;
     const local = await getMedia(row.kind);
     if (!local) return;
     localRef.current = local;
-    put({ id: row.id, mode: 'group', kind: row.kind, direction: 'incoming', status: 'active', peer: null, group, localStream: local, remoteStreams: {}, participants: [], muted: false, cameraOff: false, facing: 'user', startedAt: Date.now() });
+    if (joinOpts.cameraOff) local.getVideoTracks().forEach((t) => { t.enabled = false; });
+    put({ id: row.id, mode: 'group', kind: row.kind, direction: 'incoming', status: 'active', peer: null, group, localStream: local, remoteStreams: {}, participants: [], muted: false, cameraOff: !!joinOpts.cameraOff, facing: 'user', startedAt: Date.now() });
     await joinChannel(row.id);
     supabase.from('calls').update({ status: 'active' }).eq('id', row.id).eq('status', 'ringing').then(() => {});
     send({ type: 'join' });
   };
 
   const incoming = (row, caller, group) => {
+    if (callRef.current && callRef.current.status === 'ended') put(null);
     if (callRef.current) {
       if (row.callee_id) supabase.from('calls').update({ status: 'busy', ended_at: new Date().toISOString() }).eq('id', row.id).then(() => {});
       return;
@@ -7052,24 +7108,29 @@ function useCallEngine(options) {
     const age = Math.max(0, Date.now() - new Date(row.created_at || Date.now()).getTime());
     timersRef.current.ringOut = setTimeout(() => {
       const current = callRef.current;
-      if (current && current.id === row.id && current.status === 'ringing') { cleanup(); put(null); }
+      if (current && current.id === row.id && current.status === 'ringing') {
+        cleanup();
+        put(null);
+        if (optsRef.current.onMissed) optsRef.current.onMissed(current);
+      }
     }, Math.max(5000, CALL_RING_MS - age));
   };
 
-  const accept = async () => {
+  const accept = async (acceptOpts = {}) => {
     const c = callRef.current;
     if (!c || c.direction !== 'incoming' || c.status !== 'ringing') return;
     stopTone();
     clearTimeout(timersRef.current.ringOut);
     if (c.mode === 'group') {
       put(null);
-      await joinGroupCall(c.row || { id: c.id, kind: c.kind }, c.group);
+      await joinGroupCall(c.row || { id: c.id, kind: c.kind }, c.group, acceptOpts);
       return;
     }
     const local = await getMedia(c.kind);
     if (!local) { decline(); return; }
     localRef.current = local;
-    patch({ localStream: local, status: 'connecting' });
+    if (acceptOpts.cameraOff) local.getVideoTracks().forEach((t) => { t.enabled = false; });
+    patch({ localStream: local, status: 'connecting', cameraOff: !!acceptOpts.cameraOff });
     await joinChannel(c.id);
     supabase.from('calls').update({ status: 'accepted', answered_at: new Date().toISOString() }).eq('id', c.id).then(() => {});
     send({ type: 'accept' });
@@ -7088,7 +7149,11 @@ function useCallEngine(options) {
     if (!c || !row || row.id !== c.id) return;
     if (c.mode === 'direct') {
       if (c.direction === 'outgoing' && (row.status === 'declined' || row.status === 'busy')) finish(row.status);
-      else if (c.direction === 'incoming' && c.status === 'ringing' && ['cancelled', 'missed', 'ended', 'accepted'].includes(row.status)) { cleanup(); put(null); }
+      else if (c.direction === 'incoming' && c.status === 'ringing' && ['cancelled', 'missed', 'ended', 'accepted'].includes(row.status)) {
+        cleanup();
+        put(null);
+        if (row.status !== 'accepted' && optsRef.current.onMissed) optsRef.current.onMissed(c);
+      }
     } else if (c.direction === 'incoming' && c.status === 'ringing' && row.status === 'ended') {
       cleanup();
       put(null);
@@ -7101,6 +7166,7 @@ function useCallEngine(options) {
     const next = !c.muted;
     localRef.current.getAudioTracks().forEach((t) => { t.enabled = !next; });
     patch({ muted: next });
+    send({ type: 'mute', muted: next });
   };
 
   const toggleCamera = () => {
@@ -7133,9 +7199,13 @@ function useCallEngine(options) {
     }
   };
 
+  const minimize = (value) => patch({ minimized: value });
+  const muteOther = (peerId) => send({ type: 'force-mute', to: peerId });
+  const dismissSummary = () => { if (callRef.current && callRef.current.status === 'ended') put(null); };
+
   useEffect(() => () => cleanup(), []);
 
-  return { call, startDirect, startGroup, joinGroupCall, incoming, accept, decline, hangup: () => finish('hangup'), onRowUpdate, toggleMute, toggleCamera, flipCamera };
+  return { call, startDirect, startGroup, joinGroupCall, incoming, accept, decline, hangup: () => finish('hangup'), onRowUpdate, toggleMute, toggleCamera, flipCamera, minimize, muteOther, dismissSummary };
 }
 
 function CallVideo({ stream, muted, mirror, fit = 'cover' }) {
@@ -7158,138 +7228,6 @@ function CallAudio({ stream }) {
     if (stream) { const p = el.play && el.play(); if (p && p.catch) p.catch(() => {}); }
   }, [stream]);
   return <audio ref={ref} autoPlay playsInline />;
-}
-
-function CallScreen({ call, me, nameFor, avatarFor, onAccept, onDecline, onHangup, onToggleMute, onToggleCamera, onFlip }) {
-  const [now, setNow] = useState(Date.now());
-  const [pipCorner, setPipCorner] = useState('tr');
-  useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, []);
-  const isVideo = call.kind === 'video';
-  const isGroup = call.mode === 'group';
-  const ringingIn = call.direction === 'incoming' && call.status === 'ringing';
-  const remotes = Object.entries(call.remoteStreams || {});
-  const title = isGroup ? (call.group ? call.group.name : 'Group call') : (call.peer ? call.peer.name : '');
-  const photo = !isGroup && call.peer && typeof call.peer.avatar === 'string' && call.peer.avatar.startsWith('http') ? call.peer.avatar : '';
-  let status;
-  if (call.status === 'ended') status = call.endLabel || 'Call ended';
-  else if (ringingIn) status = isGroup ? `${call.peer ? call.peer.name.split(' ')[0] : 'Someone'} is calling the group` : `Incoming ${isVideo ? 'video' : 'voice'} call`;
-  else if (call.reconnecting) status = 'Reconnecting\u2026';
-  else if (call.status === 'ringing') status = 'Ringing\u2026';
-  else if (call.status === 'connecting') status = 'Connecting\u2026';
-  else if (isGroup && !remotes.length) status = 'Waiting for others to join';
-  else status = call.startedAt ? formatCallDuration(now - call.startedAt) : '';
-
-  const directRemote = !isGroup && remotes.length ? remotes[0][1] : null;
-  const remoteHasVideo = directRemote && isVideo && directRemote.getVideoTracks().length > 0 && !(call.remoteCameraOff && call.peer && call.remoteCameraOff[call.peer.id]);
-  const showLocalVideo = isVideo && call.localStream && !call.cameraOff;
-  const localFull = isVideo && !isGroup && !ringingIn && !remoteHasVideo && showLocalVideo && call.status !== 'ended';
-
-  const roundBtn = (icon, label, onClick, variant) => (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 7 }}>
-      <div role="button" aria-label={label} onClick={onClick} style={{
-        width: variant === 'big' ? 70 : 58, height: variant === 'big' ? 70 : 58, borderRadius: '50%', cursor: 'pointer',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: variant === 'end' || variant === 'decline' ? '#FF3B30' : variant === 'accept' ? '#34C759' : variant === 'on' ? 'white' : 'rgba(255,255,255,0.18)',
-        color: variant === 'on' ? '#000' : 'white', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
-        boxShadow: variant === 'accept' ? '0 0 0 10px rgba(52,199,89,0.18)' : 'none',
-      }} className={variant === 'accept' ? 'zchat-call-pulse' : ''}>{icon}</div>
-      <span style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.85)' }}>{label}</span>
-    </div>
-  );
-
-  const groupTiles = [
-    { id: me.id, name: 'You', avatarName: me.name, avatar: me.avatar, stream: call.localStream, local: true, videoOn: showLocalVideo },
-    ...remotes.map(([id, stream]) => ({ id, name: nameFor(id), avatar: avatarFor(id), stream, local: false, videoOn: isVideo && stream.getVideoTracks().length > 0 && !(call.remoteCameraOff && call.remoteCameraOff[id]) })),
-  ];
-  const cols = groupTiles.length <= 2 ? 1 : 2;
-
-  return (
-    <div className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 500, background: '#05070D', color: 'white', display: 'flex', flexDirection: 'column', overflow: 'hidden', fontFamily: FONT }}>
-      {!isVideo || ringingIn || (!isGroup && !remoteHasVideo) ? (
-        <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
-          {photo
-            ? <img src={photo} alt="" draggable={false} style={{ position: 'absolute', inset: -40, width: 'calc(100% + 80px)', height: 'calc(100% + 80px)', objectFit: 'cover', filter: 'blur(38px) brightness(0.45)' }} />
-            : <div style={{ position: 'absolute', inset: 0, background: `radial-gradient(circle at 50% 30%, ${colorForName(title)}66, #05070D 70%)` }} />}
-        </div>
-      ) : null}
-
-      {localFull && (
-        <div style={{ position: 'absolute', inset: 0 }}>
-          <CallVideo stream={call.localStream} muted mirror={call.facing === 'user'} />
-          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.35)' }} />
-        </div>
-      )}
-      {!isGroup && remoteHasVideo && !ringingIn && (
-        <div style={{ position: 'absolute', inset: 0 }}><CallVideo stream={directRemote} fit="cover" /></div>
-      )}
-      {!isGroup && !isVideo && remotes.map(([id, stream]) => <CallAudio key={id} stream={stream} />)}
-
-      {isGroup && call.status !== 'ringing' && (
-        <div style={{ position: 'absolute', inset: 0, paddingTop: 'calc(70px + env(safe-area-inset-top))', paddingBottom: 'calc(130px + env(safe-area-inset-bottom))', display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 6, paddingLeft: 6, paddingRight: 6, boxSizing: 'border-box' }}>
-          {groupTiles.map((t) => (
-            <div key={t.id} style={{ position: 'relative', borderRadius: 18, overflow: 'hidden', background: '#111624', minHeight: 0 }}>
-              {t.videoOn && t.stream
-                ? <CallVideo stream={t.stream} muted={t.local} mirror={t.local && call.facing === 'user'} />
-                : (
-                  <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <Avatar emoji={t.avatar} name={t.avatarName || t.name} size={72} />
-                    {!t.local && t.stream && <CallAudio stream={t.stream} />}
-                  </div>
-                )}
-              {t.videoOn && !t.local && t.stream && null}
-              <div style={{ position: 'absolute', left: 8, bottom: 8, padding: '3px 9px', borderRadius: 10, background: 'rgba(0,0,0,0.45)', fontSize: 12, fontWeight: 700 }}>{t.name}</div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div style={{ position: 'relative', zIndex: 2, padding: 'calc(18px + env(safe-area-inset-top)) 20px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', pointerEvents: 'none' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.7)' }}>
-          <Lock size={11} /> End to end encrypted
-        </div>
-        {(!isVideo || ringingIn || !remoteHasVideo) && !(isGroup && call.status !== 'ringing') && (
-          <div style={{ marginTop: 44, position: 'relative' }}>
-            {(call.status === 'ringing' || call.status === 'connecting') && <div className="zchat-call-ring" style={{ position: 'absolute', inset: -18, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.25)' }} />}
-            {isGroup ? <GroupAvatar avatar={call.group && call.group.avatar} name={title} size={118} /> : <Avatar emoji={call.peer && call.peer.avatar} name={title} size={118} />}
-          </div>
-        )}
-        <div style={{ marginTop: (!isVideo || ringingIn || !remoteHasVideo) && !(isGroup && call.status !== 'ringing') ? 22 : 8, fontSize: isGroup && call.status !== 'ringing' ? 17 : 27, fontWeight: 800, textShadow: '0 2px 12px rgba(0,0,0,0.5)' }}>{title}</div>
-        <div style={{ marginTop: 5, fontSize: 14.5, color: 'rgba(255,255,255,0.8)', textShadow: '0 1px 8px rgba(0,0,0,0.5)', fontVariantNumeric: 'tabular-nums' }}>{status}</div>
-      </div>
-
-      {!isGroup && showLocalVideo && remoteHasVideo && !ringingIn && call.status !== 'ended' && (
-        <div onClick={() => setPipCorner((c) => (c === 'tr' ? 'tl' : c === 'tl' ? 'bl' : c === 'bl' ? 'br' : 'tr'))} style={{
-          position: 'absolute', zIndex: 3, width: 108, height: 156, borderRadius: 16, overflow: 'hidden', border: '2px solid rgba(255,255,255,0.25)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)', cursor: 'pointer',
-          top: pipCorner[0] === 't' ? 'calc(70px + env(safe-area-inset-top))' : 'auto', bottom: pipCorner[0] === 'b' ? 'calc(140px + env(safe-area-inset-bottom))' : 'auto',
-          left: pipCorner[1] === 'l' ? 14 : 'auto', right: pipCorner[1] === 'r' ? 14 : 'auto', transition: 'all 0.25s ease',
-        }}>
-          <CallVideo stream={call.localStream} muted mirror={call.facing === 'user'} />
-        </div>
-      )}
-
-      <div style={{ flex: 1 }} />
-      <div style={{ position: 'relative', zIndex: 4, padding: '18px 20px', paddingBottom: 'calc(28px + env(safe-area-inset-bottom))', display: 'flex', justifyContent: 'center', gap: ringingIn ? 90 : 18, background: 'linear-gradient(0deg, rgba(0,0,0,0.55), rgba(0,0,0,0))' }}>
-        {call.status === 'ended' ? (
-          <div style={{ height: 70 }} />
-        ) : ringingIn ? (
-          <>
-            {roundBtn(<PhoneOff size={28} />, 'Decline', onDecline, 'decline')}
-            {roundBtn(isVideo ? <VideoIcon size={28} /> : <Phone size={28} />, 'Accept', onAccept, 'accept')}
-          </>
-        ) : (
-          <>
-            {roundBtn(call.muted ? <MicOff size={24} /> : <Mic size={24} />, call.muted ? 'Unmute' : 'Mute', onToggleMute, call.muted ? 'on' : null)}
-            {isVideo && roundBtn(call.cameraOff ? <VideoOff size={24} /> : <VideoIcon size={24} />, call.cameraOff ? 'Camera on' : 'Camera off', onToggleCamera, call.cameraOff ? 'on' : null)}
-            {isVideo && roundBtn(<SwitchCamera size={24} />, 'Flip', onFlip)}
-            {roundBtn(<PhoneOff size={26} />, 'End', onHangup, 'end')}
-          </>
-        )}
-      </div>
-    </div>
-  );
 }
 
 function GroupCallBar({ row, onJoin }) {
@@ -7473,7 +7411,8 @@ function BlockedAccountsPanel({ myId, blockedIds, onClose, onUnblock, onOpenProf
       </div>
     </div>
   );
-    }
+}
+
 function StoryShareSheet({ story, owner, conversations, groups, onSend, onClose }) {
   const { theme } = useTheme();
   const [picked, setPicked] = useState([]);
@@ -7541,6 +7480,509 @@ function StoryShareSheet({ story, owner, conversations, groups, onSend, onClose 
         {flash && <div className="zchat-pop" style={{ position: 'absolute', left: '50%', top: -48, transform: 'translateX(-50%)', background: theme.ink, color: theme.panelBg, padding: '9px 16px', borderRadius: 20, fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' }}>{flash}</div>}
       </div>
     </div>
+  );
+}
+
+const QUICK_STORY_REACTIONS = ['\u{1F602}', '\u{1F62E}', '\u{1F60D}', '\u{1F622}', '\u{1F44F}', '\u{1F525}', '\u{1F389}', '\u{1F4AF}'];
+
+function StatusIcon({ size = 18, color = 'currentColor', strokeWidth = 2 }) {
+  const r = 9;
+  const c = 2 * Math.PI * r;
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
+      <circle cx="12" cy="12" r={r} stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeDasharray={`${c * 0.2} ${c * 0.05}`} transform="rotate(-81 12 12)" />
+      <circle cx="12" cy="12" r="3.6" fill={color} />
+    </svg>
+  );
+}
+
+function parseCallLog(content) {
+  if (typeof content !== 'string' || !content.startsWith('call:')) return null;
+  try { return JSON.parse(content.slice(5)); } catch { return null; }
+}
+
+function callLogLabel(log, isMe) {
+  const kind = log.k === 'video' ? 'video' : 'voice';
+  const Kind = kind === 'video' ? 'Video' : 'Voice';
+  if (log.s === 'group') return `${Kind} group call`;
+  if (log.s === 'missed') return isMe ? `${Kind} call, no answer` : `Missed ${kind} call`;
+  if (log.s === 'declined') return isMe ? `${Kind} call declined` : `Missed ${kind} call`;
+  return `${Kind} call`;
+}
+
+function CallLogBubble({ m, isMe, onCallBack }) {
+  const { theme } = useTheme();
+  const log = parseCallLog(m.content) || {};
+  const missed = log.s === 'missed' || log.s === 'declined';
+  const time = m.created_at ? new Date(m.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
+  const sub = log.s === 'group' ? 'Tap to join or call' : missed ? (isMe ? 'Tap to call again' : 'Tap to call back') : formatCallDuration((log.d || 0) * 1000);
+  const Icon = log.k === 'video' ? VideoIcon : Phone;
+  return (
+    <div style={{ display: 'flex', justifyContent: isMe ? 'flex-end' : 'flex-start', margin: '4px 0 6px' }}>
+      <div onClick={() => onCallBack && onCallBack(log.k === 'video' ? 'video' : 'voice')} style={{
+        display: 'flex', alignItems: 'center', gap: 11, padding: '10px 14px 10px 10px', borderRadius: 18, cursor: 'pointer', minWidth: 210,
+        background: isMe ? theme.bubbleMe : theme.bubbleThem, border: `1px solid ${theme.border}`,
+      }}>
+        <div style={{ width: 40, height: 40, borderRadius: '50%', background: missed ? `${theme.danger}22` : `${theme.teal}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', flexShrink: 0 }}>
+          <Icon size={18} color={missed ? theme.danger : theme.teal} />
+          <svg width="14" height="14" viewBox="0 0 14 14" style={{ position: 'absolute', right: -1, bottom: -1, background: theme.panelBg, borderRadius: '50%' }}>
+            <path d={isMe ? 'M4 10 L10 4 M5.5 4 H10 V8.5' : 'M10 4 L4 10 M4 5.5 V10 H8.5'} stroke={missed ? theme.danger : theme.teal} strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 14, fontWeight: 800, color: missed && !isMe ? theme.danger : theme.ink }}>{callLogLabel(log, isMe)}</div>
+          <div style={{ fontSize: 12, color: theme.muted, marginTop: 1 }}>{sub}</div>
+        </div>
+        <span style={{ fontSize: 10, color: theme.muted, alignSelf: 'flex-end' }}>{time}</span>
+      </div>
+    </div>
+  );
+}
+
+function StickerPreviewSheet({ message, isMine, onClose, onReport }) {
+  const { theme } = useTheme();
+  const sticker = STICKERS.find((s) => s.file === message.content);
+  const [favs, setFavs] = useState(() => getFavoriteStickerKeys());
+  const fav = sticker ? favs.has(sticker.key) : false;
+  const row = (icon, label, onClick, danger) => (
+    <div onClick={onClick} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 20px', cursor: 'pointer', fontSize: 14.5, fontWeight: 700, color: danger ? theme.danger : theme.ink, borderTop: `1px solid ${theme.border}` }}>
+      <span style={{ display: 'flex' }}>{icon}</span>{label}
+    </div>
+  );
+  return (
+    <div onClick={onClose} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 96, background: theme.dark ? 'rgba(3,6,14,0.55)' : 'rgba(230,234,244,0.55)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+      <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ width: '100%', maxWidth: 440, background: theme.panelBg, borderRadius: '26px 26px 0 0', paddingBottom: 'calc(8px + env(safe-area-inset-bottom))' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 4px' }}><div style={{ width: 38, height: 4, borderRadius: 2, background: theme.border }} /></div>
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '14px 0 18px' }}>
+          {message.content && message.content.startsWith('/')
+            ? <img src={message.content} alt="" className="zchat-wave-pop" draggable={false} style={{ width: 150, height: 150, objectFit: 'contain' }} />
+            : <div style={{ fontSize: 110, lineHeight: 1 }}>{message.content}</div>}
+        </div>
+        {sticker && row(<Star_ size={19} color="#FFB800" filled={fav} />, fav ? 'Remove from favorites' : 'Add to favorites', () => setFavs(new Set(toggleFavoriteSticker(sticker.key))))}
+        {!isMine && row(<Flag size={19} />, 'Report sticker', () => { onClose(); onReport(); }, true)}
+        {row(<X size={19} />, 'Close', onClose)}
+      </div>
+    </div>
+  );
+}
+
+function AvatarPeek({ profile, online, lastSeen, hasStory, storySeen, canCall, onCall, onClose, onMessage, onProfile, onStory }) {
+  const { theme } = useTheme();
+  const photo = typeof profile.avatar === 'string' && profile.avatar.startsWith('http') ? profile.avatar : '';
+  const btn = (icon, label, onClick, primary) => (
+    <div role="button" onClick={() => { onClose(); onClick(); }} style={{
+      flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '11px 4px', cursor: 'pointer', borderRadius: 16,
+      background: primary ? `linear-gradient(135deg, ${theme.coral}, ${theme.teal})` : theme.rowBg, color: primary ? 'white' : theme.ink,
+    }}>
+      {icon}
+      <span style={{ fontSize: 11.5, fontWeight: 800 }}>{label}</span>
+    </div>
+  );
+  return (
+    <div onClick={onClose} className="zchat-fade" style={{
+      position: 'fixed', inset: 0, zIndex: 96, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
+      background: theme.dark ? 'rgba(3,6,14,0.6)' : 'rgba(230,234,244,0.6)', backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)',
+    }}>
+      <div onClick={(e) => e.stopPropagation()} className="zchat-pop" style={{ width: '100%', maxWidth: 300, borderRadius: 28, overflow: 'hidden', background: theme.panelBg, boxShadow: '0 28px 70px rgba(0,0,0,0.5)' }}>
+        <div onClick={() => { onClose(); if (hasStory) onStory(); else onProfile(); }} style={{ position: 'relative', aspectRatio: '1 / 1', background: photo ? '#000' : colorForName(profile.name), cursor: 'pointer' }}>
+          {photo
+            ? <img src={photo} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+            : <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 110, fontWeight: 800, color: 'rgba(255,255,255,0.92)' }}>{(profile.name || '?').charAt(0).toUpperCase()}</div>}
+          <div style={{ position: 'absolute', left: 0, right: 0, top: 0, padding: '14px 16px 30px', background: 'linear-gradient(180deg, rgba(0,0,0,0.62), rgba(0,0,0,0))', color: 'white' }}>
+            <div style={{ fontSize: 17, fontWeight: 800 }}>{profile.name}</div>
+            <div style={{ fontSize: 12, opacity: 0.85, display: 'flex', alignItems: 'center', gap: 5 }}>
+              {online && <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#34C759' }} />}
+              {online ? 'Online now' : lastSeen || `@${profile.username}`}
+            </div>
+          </div>
+          {hasStory && (
+            <div style={{ position: 'absolute', left: 12, bottom: 12, display: 'flex', alignItems: 'center', gap: 7, padding: '7px 12px 7px 9px', borderRadius: 20, background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', color: 'white', fontSize: 12, fontWeight: 800 }}>
+              <StatusIcon size={16} color={storySeen ? '#C9CCD3' : theme.teal} />
+              {storySeen ? 'Status' : 'New status'}
+            </div>
+          )}
+        </div>
+        <div style={{ display: 'flex', gap: 8, padding: 10 }}>
+          {btn(<Send size={19} />, 'Message', onMessage)}
+          {canCall && btn(<Phone size={19} />, 'Call', onCall)}
+          {btn(<User size={19} />, 'Profile', onProfile)}
+          {hasStory && btn(<StatusIcon size={19} color="white" />, 'Status', onStory, true)}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StoryRefCard({ m, isMe, onOpen }) {
+  const { theme } = useTheme();
+  const isShare = m.content === STORY_SHARE_TEXT;
+  const isMention = m.content === STORY_MENTION_TEXT || m.content === STORY_GROUP_MENTION_TEXT || isShare;
+  const label = isShare ? (isMe ? 'You shared a story' : 'Shared a story')
+    : isMention ? (isMe ? 'You mentioned them in your story' : m.content === STORY_GROUP_MENTION_TEXT ? 'Mentioned this group in their story' : 'Mentioned you in their story')
+      : (isMe ? 'You replied to their story' : 'Replied to your story');
+  const src = m.story_media_url;
+  const isVideo = m.story_media_type === 'video';
+  return (
+    <div onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); if (onOpen) onOpen(m); }} style={{ cursor: 'pointer', marginBottom: isMention ? 18 : 6 }}>
+      <div style={{ fontSize: 11, color: theme.muted, fontWeight: 700, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 5 }}>
+        <StatusIcon size={12} color={theme.muted} /> {label}
+      </div>
+      <div style={{ width: 118, height: 210, borderRadius: 14, overflow: 'hidden', background: '#000', position: 'relative', boxShadow: '0 4px 14px rgba(0,0,0,0.25)' }}>
+        {src ? (
+          <>
+            {isVideo
+              ? <video src={`${src}#t=0.1`} muted playsInline preload="metadata" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', filter: 'blur(14px) brightness(0.6)', transform: 'scale(1.2)', pointerEvents: 'none' }} />
+              : <img src={src} alt="" draggable={false} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', filter: 'blur(14px) brightness(0.6)', transform: 'scale(1.2)' }} />}
+            {isVideo
+              ? <video src={`${src}#t=0.1`} muted playsInline preload="metadata" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }} />
+              : <img src={src} alt="" loading="lazy" draggable={false} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain' }} />}
+            {isVideo && <div style={{ position: 'absolute', left: 8, bottom: 8, width: 24, height: 24, borderRadius: '50%', background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Play size={12} color="white" style={{ marginLeft: 1 }} /></div>}
+          </>
+        ) : (
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.6)', fontSize: 11 }}>Story</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function StoryViewersSheet({ story, myId, onClose, onOpenProfile }) {
+  const { theme } = useTheme();
+  const [rows, setRows] = useState(null);
+  const [tab, setTab] = useState('views');
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data: views } = await supabase.from('story_views').select('*').eq('story_id', story.id);
+      const { data: likes } = await supabase.from('story_likes').select('*').eq('story_id', story.id);
+      const ids = [...new Set([...(views || []).map((v) => v.viewer_id), ...(likes || []).map((l) => l.user_id)])].filter((id) => id !== myId);
+      if (!ids.length) { if (!cancelled) setRows([]); return; }
+      const { data: profs } = await supabase.from('profiles').select('*').in('id', ids);
+      const likedSet = new Set((likes || []).map((l) => l.user_id));
+      const viewedAt = {};
+      (views || []).forEach((v) => { viewedAt[v.viewer_id] = v.viewed_at; });
+      const list = sanitizeAvatarList(profs, myId).map((p) => ({ profile: p, liked: likedSet.has(p.id), at: viewedAt[p.id] }))
+        .sort((a, b) => (b.liked - a.liked) || (new Date(b.at || 0) - new Date(a.at || 0)));
+      if (!cancelled) setRows(list);
+    })();
+    return () => { cancelled = true; };
+  }, [story.id]);
+  const likedRows = (rows || []).filter((r) => r.liked);
+  const shown = tab === 'likes' ? likedRows : (rows || []);
+  return (
+    <div onClick={onClose} style={{ position: 'absolute', inset: 0, zIndex: 9, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'flex-end' }}>
+      <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ width: '100%', height: '62%', background: theme.panelBg, borderRadius: '24px 24px 0 0', display: 'flex', flexDirection: 'column', paddingBottom: 'env(safe-area-inset-bottom)' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 2px' }}><div style={{ width: 38, height: 4, borderRadius: 2, background: theme.border }} /></div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px 0', borderBottom: `1px solid ${theme.border}` }}>
+          {[{ k: 'views', icon: <Eye size={16} />, n: rows ? rows.length : null, l: 'Viewers' }, { k: 'likes', icon: <Heart size={16} />, n: rows ? likedRows.length : null, l: 'Likes' }].map((t) => (
+            <div key={t.k} onClick={() => setTab(t.k)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 12px', cursor: 'pointer', fontSize: 13.5, fontWeight: 800, color: tab === t.k ? theme.ink : theme.muted, borderBottom: tab === t.k ? `2.5px solid ${theme.coral}` : '2.5px solid transparent' }}>
+              {t.icon}{t.n == null ? t.l : `${t.n} ${t.l.toLowerCase()}`}
+            </div>
+          ))}
+          <div style={{ flex: 1 }} />
+          <X size={20} color={theme.muted} style={{ cursor: 'pointer' }} onClick={onClose} />
+        </div>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '4px 10px 14px' }}>
+          {rows === null && <div style={{ display: 'flex', justifyContent: 'center', padding: 24 }}><Spinner color={theme.ink} /></div>}
+          {rows && !shown.length && <div style={{ textAlign: 'center', padding: 30, fontSize: 13, color: theme.muted }}>{tab === 'likes' ? 'No likes yet' : 'No views yet'}</div>}
+          {shown.map((r) => (
+            <div key={r.profile.id} onClick={() => onOpenProfile(r.profile)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 8px', cursor: 'pointer' }}>
+              <div style={{ position: 'relative' }}>
+                <Avatar emoji={r.profile.avatar} name={r.profile.name} size={44} />
+                {r.liked && <div style={{ position: 'absolute', right: -3, bottom: -3, width: 20, height: 20, borderRadius: '50%', background: theme.panelBg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Heart size={13} color="#FF3B5C" fill="#FF3B5C" /></div>}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: 14, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.profile.name}</div>
+                <div style={{ fontSize: 11.5, color: theme.muted }}>@{r.profile.username}{r.at ? ` · ${timeShort(r.at)}` : ''}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CallTile({ tile, isVideo, muted, cameraOff, facing, onMenu }) {
+  const hasVideo = isVideo && tile.stream && !cameraOff && tile.stream.getVideoTracks().length > 0;
+  return (
+    <div onClick={onMenu} style={{ position: 'relative', borderRadius: 20, overflow: 'hidden', background: '#131826', minHeight: 0, minWidth: 0, cursor: onMenu ? 'pointer' : 'default' }}>
+      <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: `radial-gradient(circle at 50% 40%, ${colorForName(tile.avatarName || tile.name)}55, #131826 75%)` }}>
+        <Avatar emoji={tile.avatar} name={tile.avatarName || tile.name} size={76} />
+      </div>
+      {tile.stream && (
+        <div style={{ position: 'absolute', inset: 0, opacity: hasVideo ? 1 : 0, transition: 'opacity 0.25s ease' }}>
+          <CallVideo stream={tile.stream} muted={tile.local} mirror={tile.local && facing === 'user'} />
+        </div>
+      )}
+      {!tile.local && tile.stream && !isVideo && <CallAudio stream={tile.stream} />}
+      <div style={{ position: 'absolute', left: 8, bottom: 8, display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 12, background: 'rgba(0,0,0,0.5)', fontSize: 12, fontWeight: 700, color: 'white' }}>
+        {muted && <MicOff size={12} color="#FF6B6B" />}{tile.name}
+      </div>
+    </div>
+  );
+}
+
+function CallScreen({ call, me, nameFor, avatarFor, onAccept, onDecline, onHangup, onToggleMute, onToggleCamera, onFlip, onMinimize, onMuteOther, onCloseSummary, onCallAgain, onMessage }) {
+  const [now, setNow] = useState(Date.now());
+  const [pipCorner, setPipCorner] = useState('tr');
+  const [joinCameraOff, setJoinCameraOff] = useState(false);
+  const [tileMenu, setTileMenu] = useState(null);
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const isVideo = call.kind === 'video';
+  const isGroup = call.mode === 'group';
+  const ringingIn = call.direction === 'incoming' && call.status === 'ringing';
+  const ended = call.status === 'ended';
+  const remotes = Object.entries(call.remoteStreams || {});
+  const title = isGroup ? (call.group ? call.group.name : 'Group call') : (call.peer ? call.peer.name : '');
+  const photo = !isGroup && call.peer && typeof call.peer.avatar === 'string' && call.peer.avatar.startsWith('http') ? call.peer.avatar : '';
+  const remoteMuted = call.remoteMuted || {};
+  const remoteCamOff = call.remoteCameraOff || {};
+
+  if (ended) {
+    const d = call.summaryDuration || 0;
+    return (
+      <div className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 500, background: '#05070D', color: 'white', display: 'flex', flexDirection: 'column', alignItems: 'center', fontFamily: FONT, overflow: 'hidden' }}>
+        {photo
+          ? <img src={photo} alt="" draggable={false} style={{ position: 'absolute', inset: -40, width: 'calc(100% + 80px)', height: 'calc(100% + 80px)', objectFit: 'cover', filter: 'blur(40px) brightness(0.35)' }} />
+          : <div style={{ position: 'absolute', inset: 0, background: `radial-gradient(circle at 50% 30%, ${colorForName(title)}55, #05070D 70%)` }} />}
+        <div style={{ position: 'relative', width: '100%', display: 'flex', justifyContent: 'flex-end', padding: 'calc(14px + env(safe-area-inset-top)) 16px 0', boxSizing: 'border-box' }}>
+          <div role="button" aria-label="Close" onClick={onCloseSummary} style={{ width: 40, height: 40, borderRadius: '50%', background: 'rgba(255,255,255,0.14)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={20} /></div>
+        </div>
+        <div style={{ position: 'relative', flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, textAlign: 'center' }}>
+          {isGroup ? <GroupAvatar avatar={call.group && call.group.avatar} name={title} size={112} /> : <Avatar emoji={call.peer && call.peer.avatar} name={title} size={112} />}
+          <div style={{ fontSize: 26, fontWeight: 800, marginTop: 18 }}>{title}</div>
+          <div style={{ fontSize: 15, color: 'rgba(255,255,255,0.75)', marginTop: 6 }}>{call.endLabel || 'Call ended'}</div>
+          <div style={{ display: 'flex', gap: 10, marginTop: 22 }}>
+            <div style={{ padding: '10px 16px', borderRadius: 16, background: 'rgba(255,255,255,0.1)' }}>
+              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)', fontWeight: 700 }}>DURATION</div>
+              <div style={{ fontSize: 18, fontWeight: 800, marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>{d > 0 ? formatCallDuration(d) : '0:00'}</div>
+            </div>
+            <div style={{ padding: '10px 16px', borderRadius: 16, background: 'rgba(255,255,255,0.1)' }}>
+              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)', fontWeight: 700 }}>{isVideo ? 'VIDEO CALL' : 'VOICE CALL'}</div>
+              <div style={{ fontSize: 18, fontWeight: 800, marginTop: 2 }}>{new Date(call.endedAt || Date.now()).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</div>
+            </div>
+          </div>
+        </div>
+        <div style={{ position: 'relative', display: 'flex', gap: 14, padding: '0 24px', paddingBottom: 'calc(34px + env(safe-area-inset-bottom))' }}>
+          {!isGroup && onCallAgain && (
+            <>
+              <div role="button" onClick={() => onCallAgain('voice')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                <div style={{ width: 62, height: 62, borderRadius: '50%', background: '#34C759', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Phone size={24} /></div>
+                <span style={{ fontSize: 12, fontWeight: 700 }}>Voice</span>
+              </div>
+              <div role="button" onClick={() => onCallAgain('video')} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                <div style={{ width: 62, height: 62, borderRadius: '50%', background: '#34C759', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><VideoIcon size={25} /></div>
+                <span style={{ fontSize: 12, fontWeight: 700 }}>Video</span>
+              </div>
+            </>
+          )}
+          <div role="button" onClick={onMessage} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+            <div style={{ width: 62, height: 62, borderRadius: '50%', background: 'rgba(255,255,255,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Send size={23} /></div>
+            <span style={{ fontSize: 12, fontWeight: 700 }}>Message</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  let status;
+  if (ringingIn) status = isGroup ? `${call.peer ? call.peer.name.split(' ')[0] : 'Someone'} is calling the group` : `Incoming ${isVideo ? 'video' : 'voice'} call`;
+  else if (call.reconnecting) status = 'Reconnecting\u2026';
+  else if (call.status === 'ringing') status = 'Ringing\u2026';
+  else if (call.status === 'connecting') status = 'Connecting\u2026';
+  else if (isGroup && !remotes.length) status = 'Waiting for others to join';
+  else status = call.startedAt ? formatCallDuration(now - call.startedAt) : '';
+
+  const directRemote = !isGroup && remotes.length ? remotes[0][1] : null;
+  const peerId = call.peer ? call.peer.id : null;
+  const remoteVideoOn = !!(directRemote && isVideo && directRemote.getVideoTracks().length > 0 && !remoteCamOff[peerId]);
+  const localVideoOn = !!(isVideo && call.localStream && !call.cameraOff);
+  const showRemoteFull = !isGroup && !ringingIn && remoteVideoOn;
+  const showLocalFull = !isGroup && !ringingIn && !remoteVideoOn && localVideoOn;
+
+  const tiles = [
+    { id: me.id, name: 'You', avatarName: me.name, avatar: me.avatar, stream: call.localStream, local: true },
+    ...remotes.map(([id, stream]) => ({ id, name: nameFor(id), avatar: avatarFor(id), stream, local: false })),
+  ];
+  const cols = tiles.length <= 2 ? 1 : 2;
+  const rows = Math.ceil(tiles.length / cols);
+
+  const ctrl = (icon, label, onClick, variant) => (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 7, minWidth: 64 }}>
+      <div role="button" aria-label={label} onClick={onClick} style={{
+        width: 60, height: 60, borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: variant === 'end' ? '#FF3B30' : variant === 'on' ? 'white' : 'rgba(255,255,255,0.16)', color: variant === 'on' ? '#0B0F19' : 'white',
+        boxShadow: variant === 'end' ? '0 8px 22px rgba(255,59,48,0.45)' : 'none', transition: 'background 0.2s ease',
+      }}>{icon}</div>
+      <span style={{ fontSize: 11.5, fontWeight: 700, color: 'rgba(255,255,255,0.85)' }}>{label}</span>
+    </div>
+  );
+
+  return (
+    <div className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 500, background: '#05070D', color: 'white', display: call.minimized ? 'none' : 'flex', flexDirection: 'column', overflow: 'hidden', fontFamily: FONT }}>
+      <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
+        {photo
+          ? <img src={photo} alt="" draggable={false} style={{ position: 'absolute', inset: -40, width: 'calc(100% + 80px)', height: 'calc(100% + 80px)', objectFit: 'cover', filter: 'blur(40px) brightness(0.42)' }} />
+          : <div style={{ position: 'absolute', inset: 0, background: `radial-gradient(circle at 50% 28%, ${colorForName(title)}66, #05070D 72%)` }} />}
+      </div>
+      {!isGroup && (
+        <>
+          <div style={{ position: 'absolute', inset: 0, opacity: showRemoteFull ? 1 : 0, transition: 'opacity 0.3s ease', pointerEvents: 'none' }}>
+            {directRemote && <CallVideo stream={directRemote} fit="cover" />}
+          </div>
+          <div style={{ position: 'absolute', inset: 0, opacity: showLocalFull ? 1 : 0, transition: 'opacity 0.3s ease', pointerEvents: 'none' }}>
+            {call.localStream && isVideo && <CallVideo stream={call.localStream} muted mirror={call.facing === 'user'} />}
+            <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.3)' }} />
+          </div>
+          {!isVideo && remotes.map(([id, stream]) => <CallAudio key={id} stream={stream} />)}
+        </>
+      )}
+
+      {isGroup && !ringingIn && (
+        <div style={{
+          position: 'absolute', left: 8, right: 8, top: 'calc(112px + env(safe-area-inset-top))', bottom: 'calc(150px + env(safe-area-inset-bottom))',
+          display: 'grid', gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`, gap: 8,
+        }}>
+          {tiles.map((t) => (
+            <CallTile key={t.id} tile={t} isVideo={isVideo} facing={call.facing}
+              muted={t.local ? call.muted : !!remoteMuted[t.id]} cameraOff={t.local ? call.cameraOff : !!remoteCamOff[t.id]}
+              onMenu={!t.local ? () => setTileMenu(t) : null} />
+          ))}
+        </div>
+      )}
+
+      <div style={{ position: 'relative', zIndex: 3, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 'calc(10px + env(safe-area-inset-top)) 14px 0' }}>
+        {!ringingIn ? (
+          <div role="button" aria-label="Back to chats" onClick={onMinimize} style={{ width: 42, height: 42, borderRadius: '50%', background: 'rgba(255,255,255,0.14)', backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+            <ChevronRight size={22} style={{ transform: 'rotate(90deg)' }} />
+          </div>
+        ) : <div style={{ width: 42 }} />}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 700, color: 'rgba(255,255,255,0.75)' }}><Lock size={11} /> End to end encrypted</div>
+        <div style={{ width: 42 }} />
+      </div>
+
+      {(isGroup ? ringingIn : !showRemoteFull) ? (
+        <div style={{ position: 'relative', zIndex: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', marginTop: '9vh', padding: '0 24px' }}>
+          <div style={{ position: 'relative' }}>
+            {(call.status === 'ringing' || call.status === 'connecting') && (
+              <>
+                <div className="zchat-call-ring" style={{ position: 'absolute', inset: -16, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.28)' }} />
+                <div className="zchat-call-ring" style={{ position: 'absolute', inset: -16, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.18)', animationDelay: '0.9s' }} />
+              </>
+            )}
+            {isGroup ? <GroupAvatar avatar={call.group && call.group.avatar} name={title} size={122} /> : <Avatar emoji={call.peer && call.peer.avatar} name={title} size={122} />}
+          </div>
+          <div style={{ marginTop: 22, fontSize: 29, fontWeight: 800, textShadow: '0 2px 14px rgba(0,0,0,0.5)' }}>{title}</div>
+          <div style={{ marginTop: 6, fontSize: 15, color: 'rgba(255,255,255,0.82)', fontVariantNumeric: 'tabular-nums' }}>{status}</div>
+          {!isGroup && peerId && remoteMuted[peerId] && !ringingIn && <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 14, background: 'rgba(0,0,0,0.4)', fontSize: 12.5, fontWeight: 700 }}><MicOff size={13} color="#FF6B6B" /> {title.split(' ')[0]} is muted</div>}
+        </div>
+      ) : (
+        <div style={{ position: 'relative', zIndex: 2, textAlign: 'center', marginTop: 8 }}>
+          <div style={{ fontSize: 17, fontWeight: 800, textShadow: '0 2px 12px rgba(0,0,0,0.6)' }}>{title}</div>
+          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.85)', textShadow: '0 1px 8px rgba(0,0,0,0.6)', fontVariantNumeric: 'tabular-nums', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+            {!isGroup && peerId && remoteMuted[peerId] && <MicOff size={13} color="#FF6B6B" />}{status}
+          </div>
+        </div>
+      )}
+
+      {!isGroup && localVideoOn && remoteVideoOn && !ringingIn && (
+        <div onClick={() => setPipCorner((c) => (c === 'tr' ? 'tl' : c === 'tl' ? 'bl' : c === 'bl' ? 'br' : 'tr'))} style={{
+          position: 'absolute', zIndex: 4, width: 104, height: 150, borderRadius: 18, overflow: 'hidden', border: '2px solid rgba(255,255,255,0.3)', boxShadow: '0 10px 26px rgba(0,0,0,0.45)', cursor: 'pointer',
+          top: pipCorner[0] === 't' ? 'calc(70px + env(safe-area-inset-top))' : 'auto', bottom: pipCorner[0] === 'b' ? 'calc(160px + env(safe-area-inset-bottom))' : 'auto',
+          left: pipCorner[1] === 'l' ? 14 : 'auto', right: pipCorner[1] === 'r' ? 14 : 'auto', transition: 'top 0.25s ease, bottom 0.25s ease, left 0.25s ease, right 0.25s ease',
+        }}>
+          <CallVideo stream={call.localStream} muted mirror={call.facing === 'user'} />
+        </div>
+      )}
+
+      <div style={{ flex: 1 }} />
+      {ringingIn ? (
+        <div style={{ position: 'relative', zIndex: 4, padding: '0 34px', paddingBottom: 'calc(46px + env(safe-area-inset-bottom))' }}>
+          {isVideo && (
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 26 }}>
+              <div role="button" onClick={() => setJoinCameraOff((v) => !v)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 16px', borderRadius: 22, cursor: 'pointer', background: joinCameraOff ? 'white' : 'rgba(255,255,255,0.16)', color: joinCameraOff ? '#0B0F19' : 'white', fontSize: 13, fontWeight: 800 }}>
+                {joinCameraOff ? <VideoOff size={16} /> : <VideoIcon size={16} />}{joinCameraOff ? 'Camera off when you join' : 'Camera on when you join'}
+              </div>
+            </div>
+          )}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', maxWidth: 320, margin: '0 auto' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+              <div role="button" aria-label="Decline" onClick={onDecline} style={{ width: 76, height: 76, borderRadius: '50%', background: '#FF3B30', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 10px 28px rgba(255,59,48,0.45)' }}><PhoneOff size={30} /></div>
+              <span style={{ fontSize: 13, fontWeight: 700 }}>Decline</span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+              <div role="button" aria-label="Accept" onClick={() => onAccept({ cameraOff: isVideo && joinCameraOff })} className="zchat-call-pulse" style={{ width: 76, height: 76, borderRadius: '50%', background: '#34C759', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                {isVideo ? <VideoIcon size={31} /> : <Phone size={30} />}
+              </div>
+              <span style={{ fontSize: 13, fontWeight: 700 }}>Accept</span>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div style={{ position: 'relative', zIndex: 4, margin: '0 10px', marginBottom: 'calc(14px + env(safe-area-inset-bottom))', padding: '16px 10px 14px', borderRadius: 30, background: 'rgba(18,22,34,0.72)', backdropFilter: 'blur(22px) saturate(160%)', WebkitBackdropFilter: 'blur(22px) saturate(160%)', border: '1px solid rgba(255,255,255,0.08)', display: 'flex', justifyContent: 'space-evenly' }}>
+          {ctrl(call.muted ? <MicOff size={24} /> : <Mic size={24} />, call.muted ? 'Unmute' : 'Mute', onToggleMute, call.muted ? 'on' : null)}
+          {isVideo && ctrl(call.cameraOff ? <VideoOff size={24} /> : <VideoIcon size={24} />, call.cameraOff ? 'Camera' : 'Camera', onToggleCamera, call.cameraOff ? 'on' : null)}
+          {isVideo && ctrl(<SwitchCamera size={24} />, 'Flip', onFlip)}
+          {ctrl(<PhoneOff size={26} />, 'End', onHangup, 'end')}
+        </div>
+      )}
+
+      {tileMenu && (
+        <div onClick={() => setTileMenu(null)} style={{ position: 'absolute', inset: 0, zIndex: 10, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'flex-end' }}>
+          <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ width: '100%', background: '#141926', borderRadius: '24px 24px 0 0', padding: '14px 0', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '4px 20px 12px' }}>
+              <Avatar emoji={tileMenu.avatar} name={tileMenu.name} size={40} />
+              <div style={{ fontWeight: 800, fontSize: 15 }}>{tileMenu.name}</div>
+            </div>
+            <div onClick={() => { onMuteOther(tileMenu.id); setTileMenu(null); }} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 20px', cursor: 'pointer', fontWeight: 700, opacity: remoteMuted[tileMenu.id] ? 0.45 : 1 }}>
+              <MicOff size={19} /> {remoteMuted[tileMenu.id] ? 'Already muted' : `Mute ${tileMenu.name.split(' ')[0]}`}
+            </div>
+            <div onClick={() => setTileMenu(null)} style={{ padding: '14px 20px', cursor: 'pointer', fontWeight: 700, opacity: 0.7 }}>Cancel</div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CallMiniBar({ call, remoteVideo, onOpen, onHangup }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const title = call.mode === 'group' ? (call.group ? call.group.name : 'Group call') : (call.peer ? call.peer.name : 'Call');
+  const text = call.status === 'ringing' ? 'Ringing\u2026' : call.status === 'connecting' ? 'Connecting\u2026' : call.startedAt ? formatCallDuration(now - call.startedAt) : '';
+  return (
+    <>
+      <div onClick={onOpen} className="zchat-fade" style={{
+        position: 'fixed', top: 0, left: 0, right: 0, zIndex: 480, cursor: 'pointer',
+        background: 'linear-gradient(90deg, #1FA855, #34C759)', color: 'white',
+        paddingTop: 'env(safe-area-inset-top)', boxShadow: '0 4px 16px rgba(0,0,0,0.25)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 14px' }}>
+          <div className="zchat-call-pulse" style={{ width: 26, height: 26, borderRadius: '50%', background: 'rgba(255,255,255,0.22)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            {call.kind === 'video' ? <VideoIcon size={14} /> : <Phone size={13} />}
+          </div>
+          <div style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {title} <span style={{ fontWeight: 600, opacity: 0.9 }}>· Tap to return</span>
+          </div>
+          <span style={{ fontSize: 13, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>{text}</span>
+          <div role="button" aria-label="End call" onClick={(e) => { e.stopPropagation(); onHangup(); }} style={{ width: 30, height: 30, borderRadius: '50%', background: '#FF3B30', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <PhoneOff size={15} />
+          </div>
+        </div>
+      </div>
+      {remoteVideo && (
+        <div onClick={onOpen} className="zchat-pop" style={{ position: 'fixed', right: 12, bottom: 'calc(96px + env(safe-area-inset-bottom))', width: 108, height: 156, zIndex: 480, borderRadius: 18, overflow: 'hidden', boxShadow: '0 12px 30px rgba(0,0,0,0.45)', border: '2px solid rgba(255,255,255,0.25)', cursor: 'pointer', background: '#000' }}>
+          <CallVideo stream={remoteVideo} fit="cover" muted />
+        </div>
+      )}
+    </>
   );
 }
 
@@ -7692,6 +8134,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [unblockConfirmFor, setUnblockConfirmFor] = useState(null);
   const [showBlockedList, setShowBlockedList] = useState(false);
   const [storyShareFor, setStoryShareFor] = useState(null);
+  const [stickerSheetFor, setStickerSheetFor] = useState(null);
   const blockRefreshTimerRef = useRef(null);
   const blockRefreshRef = useRef(null);
   const [activeGroupCall, setActiveGroupCall] = useState(null);
@@ -8165,20 +8608,11 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   useEffect(() => {
     if (!me) return undefined;
     const channel = supabase.channel('stories-' + me.id)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'stories' }, async (payload) => {
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'stories' }, (payload) => {
         const row = payload.new;
         if (!row || !storyFollowSetRef.current.has(row.user_id)) return;
-        let profile = row.user_id === me.id ? me : (storyDataRef.current && storyDataRef.current.profiles[row.user_id]);
-        if (!profile) profile = await cachedProfile(row.user_id);
-        setStoryData((prev) => {
-          const list = (prev.byUser[row.user_id] || []).filter((s) => s.id !== row.id);
-          const seen = row.user_id === me.id ? new Set([...prev.seen, row.id]) : prev.seen;
-          return {
-            ...prev, seen,
-            byUser: { ...prev.byUser, [row.user_id]: [...list, row].sort((x, y) => new Date(x.created_at) - new Date(y.created_at)) },
-            profiles: profile ? { ...prev.profiles, [row.user_id]: profile } : prev.profiles,
-          };
-        });
+        clearTimeout(storyReloadTimerRef.current);
+        storyReloadTimerRef.current = setTimeout(() => { if (reloadStoriesRef.current) reloadStoriesRef.current(); }, 80);
       })
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'stories' }, (payload) => {
         const id = payload.old && payload.old.id;
@@ -8205,11 +8639,22 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       .on('broadcast', { event: 'story' }, ({ payload }) => {
         if (!payload || !storyFollowSetRef.current.has(payload.userId)) return;
         clearTimeout(storyReloadTimerRef.current);
-        storyReloadTimerRef.current = setTimeout(() => { if (reloadStoriesRef.current) reloadStoriesRef.current(); }, 150);
+        storyReloadTimerRef.current = setTimeout(() => { if (reloadStoriesRef.current) reloadStoriesRef.current(); }, 60);
       })
       .subscribe();
     storyFeedRef.current = feed;
-    return () => { supabase.removeChannel(channel); supabase.removeChannel(feed); storyFeedRef.current = null; };
+    const poll = setInterval(() => { if (document.visibilityState === 'visible' && reloadStoriesRef.current) reloadStoriesRef.current(); }, 20000);
+    const onVisible = () => { if (document.visibilityState === 'visible' && reloadStoriesRef.current) reloadStoriesRef.current(); };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    return () => {
+      supabase.removeChannel(channel);
+      supabase.removeChannel(feed);
+      storyFeedRef.current = null;
+      clearInterval(poll);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+    };
   }, [me]);
 
   useEffect(() => {
@@ -9164,6 +9609,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     setMessages((prev) => prev.map((m) => (ids.includes(m.id) ? { ...m, deleted: true } : m)));
     cancelSelection();
   };
+
   const openForward = () => {
     const targets = selectedMessages.length ? selectedMessages : (viewerUrl ? [{ type: 'image', media_url: viewerUrl, content: null }] : []);
     setForwardTargets(targets.map((m) => (m.sender_id ? { ...m, forwarded_from_name: labelForSender(m.sender_id) } : m)));
@@ -9366,7 +9812,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const loadStories = async () => {
     const myId = session.user.id;
     const { data: fol } = await supabase.from('follows').select('following_id').eq('follower_id', myId).eq('status', 'accepted');
-    const ids = [...new Set([myId, ...(fol || []).map((r) => r.following_id)])].filter((id) => !myBlockedIds.has(id) && !accountsThatBlockedMe.has(id));
+    const { data: fans } = await supabase.from('follows').select('follower_id').eq('following_id', myId).eq('status', 'accepted');
+    const iFollowSet = new Set((fol || []).map((r) => r.following_id));
+    const followsMeSet = new Set((fans || []).map((r) => r.follower_id));
+    const ids = [...new Set([myId, ...iFollowSet, ...followsMeSet])].filter((id) => !myBlockedIds.has(id) && !accountsThatBlockedMe.has(id));
     storyFollowSetRef.current = new Set(ids);
     const { data: rows, error } = await supabase.from('stories').select('*').in('user_id', ids).gt('expires_at', new Date().toISOString()).order('created_at', { ascending: true });
     if (error) { setStoryData((prev) => ({ ...prev, ready: true })); return; }
@@ -9388,6 +9837,12 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       const { data: profs } = await supabase.from('profiles').select('*').in('id', userIds);
       sanitizeAvatarList(profs, myId).forEach((p) => { profiles[p.id] = p; });
     }
+    Object.keys(byUser).forEach((uid) => {
+      if (uid === myId) return;
+      const owner = profiles[uid];
+      const allowed = owner && (owner.is_private ? followsMeSet.has(uid) : iFollowSet.has(uid));
+      if (!allowed) delete byUser[uid];
+    });
     setStoryData({ byUser, profiles, seen, liked, ready: true });
     if (pendingStoryUserRef.current && byUser[pendingStoryUserRef.current]) {
       const target = pendingStoryUserRef.current;
@@ -9579,18 +10034,29 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     myAvatar: me ? me.avatar : '',
     snack: (text) => showSnack(text),
     notify: (...args) => notifyUser(...args),
-    onDirectEnded: async (c, durationMs) => {
+    onDirectEnded: async (c, durationMs, reason) => {
       if (!c.peer) return;
       const kindLabel = c.kind === 'video' ? 'video' : 'voice';
-      const text = durationMs > 0 ? `${kindLabel === 'video' ? 'Video' : 'Voice'} call \u00b7 ${formatCallDuration(durationMs)}` : `Missed ${kindLabel} call`;
-      const { data } = await sendMessage(session.user.id, c.peer.id, 'system', text, null);
+      const status = durationMs > 0 ? 'ok' : reason === 'declined' ? 'declined' : 'missed';
+      const payload = `call:${JSON.stringify({ k: kindLabel, s: status, d: Math.round(durationMs / 1000), by: session.user.id })}`;
+      const friendly = status === 'ok' ? `${kindLabel === 'video' ? 'Video' : 'Voice'} call \u00b7 ${formatCallDuration(durationMs)}` : `Missed ${kindLabel} call`;
+      const { data } = await sendMessage(session.user.id, c.peer.id, 'system', payload, null);
       if (data && activeProfileRefForCalls.current && activeProfileRefForCalls.current.id === c.peer.id) setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
-      await upsertConversation(c.peer.id, text, 'system');
+      await upsertConversation(c.peer.id, friendly, 'system');
+      if (status !== 'ok') notifyUser(c.peer.id, me.name, `Missed ${kindLabel} call`, `/?dm=${session.user.id}`, me.avatar);
       loadConversations();
+    },
+    onMissed: (c) => {
+      const kindLabel = c.kind === 'video' ? 'video' : 'voice';
+      if (c.mode === 'group') {
+        setInAppToast({ key: `missed-${c.id}`, kind: 'notice', accent: 'missed', isGroupIcon: true, groupAvatar: c.group && c.group.avatar, title: c.group ? c.group.name : 'Group call', preview: { kind: 'callmissed', text: `Missed group ${kindLabel} call` }, action: { type: 'group', group: c.group } });
+      } else if (c.peer) {
+        setInAppToast({ key: `missed-${c.id}`, kind: 'notice', accent: 'missed', title: c.peer.name, avatar: c.peer.avatar, avatarName: c.peer.name, preview: { kind: 'callmissed', text: `Missed ${kindLabel} call` }, action: { type: 'dm', profile: c.peer } });
+      }
     },
     onGroupStarted: async (row, group) => {
       const kindLabel = row.kind === 'video' ? 'video' : 'voice';
-      const { data } = await supabase.from('messages').insert({ sender_id: session.user.id, group_id: group.id, type: 'system', content: `${me.name} started a ${kindLabel} call` }).select().single();
+      const { data } = await supabase.from('messages').insert({ sender_id: session.user.id, group_id: group.id, type: 'system', content: `call:${JSON.stringify({ k: kindLabel, s: 'group', d: 0, by: session.user.id })}` }).select().single();
       if (data && activeGroupIdRef.current === group.id) setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
       if (activeGroupIdRef.current === group.id) setActiveGroupCall(row);
       const { data: mems } = await supabase.from('group_members').select('user_id').eq('group_id', group.id);
@@ -9598,6 +10064,14 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     },
   });
   callEngineRef.current = callEngine;
+  const callBarShown = !!(callEngine.call && callEngine.call.minimized && callEngine.call.status !== 'ended');
+  useEffect(() => {
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (!meta) return undefined;
+    const previous = meta.getAttribute('content');
+    if (callBarShown) meta.setAttribute('content', '#1FA855');
+    return () => { if (callBarShown && previous) meta.setAttribute('content', previous); };
+  }, [callBarShown]);
   const activeProfileRefForCalls = useRef(null);
   activeProfileRefForCalls.current = activeProfile;
 
@@ -9770,6 +10244,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       else if (action.type === 'profile') setProfileOf(action.profile);
       else if (action.type === 'group') openGroup(action.group);
       else if (action.type === 'story') openStoriesFor(action.userId);
+      else if (action.type === 'dm') openChat(action.profile, null);
       return;
     }
     if (toast.kind === 'group') openGroup(toast.group);
@@ -9910,7 +10385,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       ...(viewportBox.height ? { height: viewportBox.height } : { bottom: 0 }),
       background: theme.bgGradient, fontFamily: FONT,
       display: 'flex', overflow: 'hidden', boxSizing: 'border-box',
-      paddingTop: 'env(safe-area-inset-top)',
+      paddingTop: callBarShown ? 'calc(env(safe-area-inset-top) + 42px)' : 'env(safe-area-inset-top)',
       paddingLeft: 'env(safe-area-inset-left)',
       paddingRight: 'env(safe-area-inset-right)',
     }}>
@@ -10058,7 +10533,11 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                   {listFilter === 'unread' ? 'No unread chats' : 'Search a username above to start chatting, or create a group.'}
                 </div>
               )}
-              {displayList.map((item) => {
+              {(() => {
+                const isPinnedItem = (it) => ((it.__kind === 'group' || (!it.__kind && listFilter === 'groups')) ? !!it.pinned : isPinnedByMe(it));
+                const pinnedItems = displayList.filter(isPinnedItem);
+                const otherItems = displayList.filter((it) => !isPinnedItem(it));
+                const renderRow = (item) => {
                 const isGroup = item.__kind === 'group' || (!item.__kind && listFilter === 'groups');
                 if (isGroup) {
                   const g = item;
@@ -10136,7 +10615,20 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                     </SmartMenu>
                   </div>
                 );
-              })}
+                };
+                const sectionLabel = (text, icon) => (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 10px 4px', fontSize: 11, fontWeight: 800, letterSpacing: 0.6, color: theme.muted, textTransform: 'uppercase' }}>{icon}{text}</div>
+                );
+                if (!pinnedItems.length) return otherItems.map(renderRow);
+                return (
+                  <>
+                    {sectionLabel(`Pinned \u00b7 ${pinnedItems.length}`, <Pin_ size={11} color={theme.muted} />)}
+                    <div style={{ background: theme.rowBg, borderRadius: 18, padding: 2, marginBottom: 6 }}>{pinnedItems.map(renderRow)}</div>
+                    {otherItems.length > 0 && sectionLabel('All chats', null)}
+                    {otherItems.map(renderRow)}
+                  </>
+                );
+              })()}
             </div>
           </>
         )}
@@ -10149,7 +10641,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         {(activeProfile || activeGroup) ? (
           <>
             <div style={{
-              position: 'fixed', top: viewportBox.height ? viewportBox.offset : 0, left: isWide ? 'calc(360px + env(safe-area-inset-left))' : 0, right: 0, zIndex: 15,
+              position: 'fixed', top: (viewportBox.height ? viewportBox.offset : 0) + (callBarShown ? 42 : 0), left: isWide ? 'calc(360px + env(safe-area-inset-left))' : 0, right: 0, zIndex: 15,
               borderBottom: activeNameBarKey ? 'none' : `1px solid ${theme.border}`,
               background: theme.panelBg,
             }}>
@@ -10253,7 +10745,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             )}
 
             <div ref={scrollRef} className="zchat-msglist" onScroll={handleChatScroll} style={{
-              flex: 1, minHeight: 0, overflowY: 'auto', padding: '14px 18px', position: 'relative',
+              flex: 1, minHeight: 0, overflowY: 'auto', padding: '10px 18px 4px', position: 'relative',
               WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain', touchAction: 'pan-y',
               ...(wallpaperBgStyle(activeWallpaperKey) || {}),
             }}>
@@ -10272,7 +10764,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                   {activeGroup ? 'No messages yet. Say hello!' : `No messages yet. Say hi to ${activeProfile.name}!`}
                 </div>
               ) : (
-                messages.map((m) => {
+                messages.map((m, msgIndex) => {
+                  const nextMsg = messages[msgIndex + 1];
+                  const tightBelow = !!nextMsg && nextMsg.sender_id === m.sender_id && nextMsg.type !== 'system' && m.type !== 'system';
                   const replyPreview = m.reply_to_id ? (() => {
                     const rm = findMessageById(m.reply_to_id);
                     return rm ? { ...rm, senderLabel: labelForSender(rm.sender_id) } : null;
@@ -10304,6 +10798,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                       onOpenMention={(p) => setProfileOf(sanitizeAvatar(p, session.user.id))}
                       mentionsMe={!!activeGroup && !isMe && !m.deleted && m.type === 'text' && extractMentions(m.content).has((me.username || '').toLowerCase())}
                       onOpenStoryRef={openStoryRef}
+                      tightBelow={tightBelow}
+                      onCallBack={(kind) => { if (activeGroup) startGroupCall(activeGroup, kind); else if (activeProfile) startDirectCall(activeProfile, kind); }}
+                      onOpenSticker={(msg) => setStickerSheetFor(msg)}
                     />
                   );
                 })
@@ -10483,6 +10980,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           canCall={canCall(profileOf)} onCall={(kind) => { const target = profileOf; setProfileOf(null); startDirectCall(target, kind); }}
         />
       )}
+
       {showSettings && (
         <SettingsPanel
           onClose={() => setShowSettings(false)}
@@ -10696,7 +11194,30 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       {callEngine.call && (
         <CallScreen call={callEngine.call} me={me} nameFor={callNameFor} avatarFor={callAvatarFor}
           onAccept={callEngine.accept} onDecline={callEngine.decline} onHangup={callEngine.hangup}
-          onToggleMute={callEngine.toggleMute} onToggleCamera={callEngine.toggleCamera} onFlip={callEngine.flipCamera} />
+          onToggleMute={callEngine.toggleMute} onToggleCamera={callEngine.toggleCamera} onFlip={callEngine.flipCamera}
+          onMinimize={() => callEngine.minimize(true)} onMuteOther={callEngine.muteOther}
+          onCloseSummary={callEngine.dismissSummary}
+          onCallAgain={callEngine.call.mode === 'direct' && callEngine.call.peer && canCall(callEngine.call.peer) ? (kind) => { const peer = callEngine.call.peer; callEngine.dismissSummary(); setTimeout(() => startDirectCall(peer, kind), 60); } : null}
+          onMessage={() => {
+            const c = callEngine.call;
+            callEngine.dismissSummary();
+            if (c.mode === 'group' && c.group) openGroup(c.group); else if (c.peer) openChat(c.peer, null);
+          }} />
+      )}
+      {callEngine.call && callEngine.call.minimized && callEngine.call.status !== 'ended' && (
+        <CallMiniBar call={callEngine.call}
+          remoteVideo={(() => {
+            const c = callEngine.call;
+            if (c.mode !== 'direct' || c.kind !== 'video' || !c.peer) return null;
+            const stream = (c.remoteStreams || {})[c.peer.id];
+            if (!stream || !stream.getVideoTracks().length || (c.remoteCameraOff || {})[c.peer.id]) return null;
+            return stream;
+          })()}
+          onOpen={() => callEngine.minimize(false)} onHangup={callEngine.hangup} />
+      )}
+      {stickerSheetFor && (
+        <StickerPreviewSheet message={stickerSheetFor} isMine={stickerSheetFor.sender_id === session.user.id}
+          onClose={() => setStickerSheetFor(null)} onReport={() => doReportSingle(stickerSheetFor)} />
       )}
       {storyComposer && (
         <MediaComposer key={storyComposer.key} files={storyComposer.files} mode="story" myId={session.user.id}
