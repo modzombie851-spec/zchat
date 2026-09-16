@@ -11905,7 +11905,15 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               </div>
             )}
 
-            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, padding: '4px 14px', flexShrink: 0, paddingBottom: keyboardOpen ? 6 : 'max(6px, calc(env(safe-area-inset-bottom) - 24px))' }}>
+            <div style={{
+              flexShrink: 0, position: 'relative', marginBottom: 'calc(-1 * var(--zchat-bottom-pad, 0px))', paddingBottom: 'var(--zchat-bottom-pad, 0px)',
+              ...(activeNameBarKey && !keyboardOpen ? (nameBarBgStyle(activeNameBarKey) || {}) : {}),
+              boxShadow: activeNameBarKey && !keyboardOpen ? '0 -2px 16px rgba(0,0,0,0.25)' : 'none',
+            }}>
+              {activeNameBarKey && !keyboardOpen && (
+                <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: 'linear-gradient(180deg, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0.55) 60%, rgba(0,0,0,0.7) 100%)' }} />
+              )}
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, padding: '6px 14px', flexShrink: 0, position: 'relative', paddingBottom: keyboardOpen ? 6 : 'max(6px, calc(env(safe-area-inset-bottom) - 24px))' }}>
               {activeProfile && !activeGroup && myBlockedIds.has(activeProfile.id) ? (
                 <div className="zchat-fade" style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 9, padding: '8px 4px 2px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, color: theme.ink, fontWeight: 700 }}><Ban size={15} color={theme.danger} /> You blocked {activeProfile.name}</div>
@@ -11974,6 +11982,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                   )}
                 </>
               )}
+            </div>
             </div>
 
             {showJumpButton && !selectionMode && (
