@@ -4,7 +4,7 @@ import {
   Send, Paperclip, Search, Mail, ShieldCheck, AtSign, LogOut, Eye, EyeOff, Lock,
   Flag, X, Trash2, User, Phone, MoreVertical, Image as ImageIcon, Video as VideoIcon,
   Smile, ArrowLeft, Check, CheckCheck, Settings as SettingsIcon, Moon, Sun, UserPlus,
-  FileText, HelpCircle, ChevronRight, Compass, Bell, Volume2, VolumeX, Palette, Mic, Play, Pause, Download, Users, Camera, Reply, Forward, Ban, Edit3, Archive, Sparkles, Share2, Copy, Crop, Type, Pencil, Undo2, Scissors,
+  FileText, HelpCircle, ChevronRight, Compass, Bell, Volume2, VolumeX, Palette, Mic, Play, Pause, Download, Users, Camera, Reply, Forward, Ban, Edit3, Archive, Sparkles, Share2, Copy, Crop, Type, Pencil, Undo2, Scissors, BellOff, Link as LinkIcon,
 } from 'lucide-react';
 import {
   supabase, registerWithEmail, verifyOtp, setPassword, signInWithPassword,
@@ -1667,7 +1667,7 @@ function DiscoverPanel({ myId, blockedIds, onClose, onOpenProfile }) {
       </div>
     </div>
   );
-    }
+        }
 function IconDownload({ size = 15, color = 'currentColor' }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
@@ -2050,7 +2050,7 @@ function WhoReactedModal({ reactions, myId, onClose, onRemoveMine }) {
   );
 }
 
-function MailPanel({ myId, onClose }) {
+function MailPanel({ myId, onClose, initialMailId }) {
   const { theme } = useTheme();
   const [mails, setMails] = useState(null);
   const [selected, setSelected] = useState(null);
@@ -2058,6 +2058,8 @@ function MailPanel({ myId, onClose }) {
     try { return new Set(JSON.parse(localStorage.getItem(`zchat-pinned-mails-${myId}`) || '[]')); } catch { return new Set(); }
   });
   const [actionFor, setActionFor] = useState(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+  const openedInitialRef = useRef(false);
   const pressTimerRef = useRef(null);
   const longPressFiredRef = useRef(false);
 
@@ -2077,6 +2079,11 @@ function MailPanel({ myId, onClose }) {
     setMails(data || []);
   };
   useEffect(() => { load(); }, [myId]);
+  useEffect(() => {
+    if (!mails || !initialMailId || openedInitialRef.current) return;
+    const target = mails.find((x) => x.id === initialMailId);
+    if (target) { openedInitialRef.current = true; openMail(target); }
+  }, [mails, initialMailId]);
 
   const sortedMails = mails ? [...mails].sort((a, b) => {
     const pa = pinnedIds.has(a.id) ? 1 : 0, pb = pinnedIds.has(b.id) ? 1 : 0;
@@ -2138,7 +2145,7 @@ function MailPanel({ myId, onClose }) {
         <ArrowLeft size={20} style={{ cursor: 'pointer', color: theme.ink }} onClick={() => (selected ? setSelected(null) : onClose())} />
         <div style={{ fontWeight: 800, fontSize: 17, color: theme.ink, flex: 1 }}>{selected ? 'Message' : 'Mail'}</div>
         {selected && (
-          <Trash2 size={18} style={{ cursor: 'pointer', color: theme.danger, flexShrink: 0 }} onClick={() => deleteMail(selected.id)} />
+          <Trash2 size={18} style={{ cursor: 'pointer', color: theme.danger, flexShrink: 0 }} onClick={() => setConfirmDeleteId(selected.id)} />
         )}
       </div>
       {selected ? (
@@ -2196,12 +2203,17 @@ function MailPanel({ myId, onClose }) {
               padding: '13px 10px', fontSize: 14, fontWeight: 600, color: theme.ink, cursor: 'pointer',
               display: 'flex', alignItems: 'center', gap: 12,
             }}><Pin_ size={16} /> {pinnedIds.has(actionFor.id) ? 'Unpin' : 'Pin'}</div>
-            <div onClick={() => deleteMail(actionFor.id)} style={{
+            <div onClick={() => { setConfirmDeleteId(actionFor.id); setActionFor(null); }} style={{
               padding: '13px 10px', fontSize: 14, fontWeight: 600, color: theme.danger, cursor: 'pointer',
               display: 'flex', alignItems: 'center', gap: 12,
             }}><Trash2 size={16} color={theme.danger} /> Delete</div>
           </div>
         </div>
+      )}
+      {confirmDeleteId && (
+        <ConfirmDialog title="Delete this mail?" body="It will be removed from your mailbox. This can't be undone."
+          onCancel={() => setConfirmDeleteId(null)}
+          onConfirm={async () => { const id = confirmDeleteId; setConfirmDeleteId(null); await deleteMail(id); }} />
       )}
     </div>
   );
@@ -2396,6 +2408,7 @@ async function sendReportMail(reportedUserId, reasonLabel) {
   const title = 'Account warning';
   const body = `You have been reported for: ${reasonLabel}. Please take a moment to review ZChat's community guidelines and adjust your behavior accordingly. If reports like this continue, we will have to permanently ban your account from ZChat.`;
   await supabase.from('mails').insert({ recipient_id: reportedUserId, type: 'report_warning', title, body });
+  sendPushNotification(reportedUserId, 'ZChat', 'Account warning. Open your mail to see why.', '/?mail=1');
   const { data: rows } = await supabase.from('mails').select('id').eq('recipient_id', reportedUserId).order('created_at', { ascending: false });
   if (rows && rows.length > MAX_MAILS_PER_USER) {
     const idsToDelete = rows.slice(MAX_MAILS_PER_USER).map((r) => r.id);
@@ -2845,6 +2858,8 @@ function CreateGroupPanel({ myId, onClose, onCreated }) {
     if (selected.length) {
       const { error: inviteErr } = await supabase.from('group_members').insert(selected.slice(0, 49).map((p) => ({ group_id: group.id, user_id: p.id, role: 'member', added_by: myId })));
       if (inviteErr) { setCreating(false); setErr(friendlyError(inviteErr, "Couldn't add those people. Try again.")); return; }
+      const { data: creator } = await getProfile(myId);
+      selected.slice(0, 49).forEach((p) => sendPushNotification(p.id, 'ZChat', `${creator?.name || 'Someone'} added you to ${group.name}`, `/?group=${group.id}`, creator?.avatar));
     }
     await supabase.from('messages').insert({
       sender_id: myId, group_id: group.id, type: 'system',
@@ -2936,8 +2951,7 @@ function CreateGroupPanel({ myId, onClose, onCreated }) {
       )}
     </div>
   );
-}
-
+   }
 function GroupInfoPanel({ group, members, myId, myRole, isOwner, onClose, onPromote, onDemote, onMute, onUnmute, onKick, onLeave, onOpenProfile, onSaveBio, onSaveName, onSaveAvatar, onAddMembers, onTransferOwnership, onSetWallpaper, onSetHeaderStyle }) {
   const { theme } = useTheme();
   const isAdmin = myRole === 'admin';
@@ -3310,6 +3324,7 @@ function ProfileLinkCard({ profileId, onOpen }) {
     </div>
   );
 }
+
 function ShareProfileSheet({ profile, myId, conversations, groups, onSend, onClose }) {
   const { theme } = useTheme();
   const link = profileShareLink(profile.id);
@@ -3569,7 +3584,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
       if (status === 'accepted') setFollowerCount((c) => (c || 0) + 1);
       setFollowState(status);
       const viewerProfile = (await getProfile(userId)).data;
-      sendPushNotification(profile.id, 'ZChat', status === 'pending' ? `${viewerProfile?.name || 'Someone'} requested to follow you` : `${viewerProfile?.name || 'Someone'} started following you`, `/?profile=${userId}`, viewerProfile?.avatar);
+      sendPushNotification(profile.id, 'ZChat', status === 'pending' ? `${viewerProfile?.name || 'Someone'} requested to follow you` : `${viewerProfile?.name || 'Someone'} started following you`, status === 'pending' ? '/?requests=1' : `/?profile=${userId}`, viewerProfile?.avatar);
     }
     setFollowBusy(false);
   };
@@ -4507,8 +4522,7 @@ function MessageActionBar({ count, canEditActions, onCancel, onForward, onDelete
       </div>
     </div>
   );
-}
-
+            }
 function ForwardPicker({ conversations, onCancel, onPick, myId }) {
   const { theme } = useTheme();
   const [q, setQ] = useState('');
@@ -4971,7 +4985,13 @@ function InAppMessageToast({ toast, top, onOpen, onDismiss }) {
         cursor: 'pointer', touchAction: 'none', userSelect: 'none',
       }}>
       <div style={{ position: 'relative', flexShrink: 0 }}>
-        {toast.kind === 'group'
+        {toast.kind === 'notice' ? (
+          toast.icon ? (
+            <div style={{ width: 42, height: 42, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: toast.icon === 'warning' ? `${theme.danger}22` : `${theme.coral}22` }}>
+              {toast.icon === 'warning' ? <Flag size={19} color={theme.danger} /> : <Mail size={19} color={theme.coral} />}
+            </div>
+          ) : toast.isGroupIcon ? <GroupAvatar avatar={toast.groupAvatar} name={toast.title} size={42} /> : <Avatar emoji={toast.avatar} name={toast.avatarName} size={42} />
+        ) : toast.kind === 'group'
           ? <GroupAvatar avatar={toast.groupAvatar} name={toast.title} size={42} />
           : <Avatar emoji={toast.avatar} name={toast.avatarName} size={42} />}
         {toast.kind === 'group' && (
@@ -5025,8 +5045,9 @@ function ChatRowSheet({ title, subtitle, avatar, actions, onClose }) {
       </div>
     </div>
   );
-    }
-function MessageContextMenu({ message, isMine, canEditText, canModerate, anchorRect, bubble, onClose, onReact, onReply, onCopy, onEdit, onForward, onReport, onDeleteForMe, onDeleteForEveryone, onSelectMultiple, onSave }) {
+}
+
+function MessageContextMenu({ message, isMine, canEditText, canModerate, anchorRect, bubble, isPinned, onPin, onUnpin, onClose, onReact, onReply, onCopy, onEdit, onForward, onReport, onDeleteForMe, onDeleteForEveryone, onSelectMultiple, onSave }) {
   const { theme } = useTheme();
   const [showFullEmoji, setShowFullEmoji] = useState(false);
   const [favKeys, setFavKeys] = useState(() => getFavoriteStickerKeys());
@@ -5102,6 +5123,7 @@ function MessageContextMenu({ message, isMine, canEditText, canModerate, anchorR
           {!message.deleted && (message.type === 'image' || message.type === 'video') && row(<Download size={18} />, 'Save', onSave)}
           {!message.deleted && stickerMatch && row(<Star_ size={18} color="#FFB800" filled={favKeys.has(stickerMatch.key)} />, favKeys.has(stickerMatch.key) ? 'Remove from favorites' : 'Add to favorites', () => setFavKeys(new Set(toggleFavoriteSticker(stickerMatch.key))))}
           {!message.deleted && row(<Forward size={18} />, 'Forward', onForward)}
+          {!message.deleted && message.type !== 'system' && onPin && row(<Pin_ size={18} color={theme.ink} />, isPinned ? 'Unpin' : 'Pin', isPinned ? onUnpin : onPin)}
           {row(<CheckCheck size={18} />, 'Select', onSelectMultiple)}
           {!isMine && !message.deleted && row(<Flag size={18} />, 'Report', onReport, true)}
           {row(<Trash2 size={18} />, 'Delete for me', onDeleteForMe, true)}
@@ -5924,6 +5946,192 @@ async function silentDownload(url, filename) {
   }
 }
 
+function isActiveUntil(value) {
+  return !!value && new Date(value).getTime() > Date.now();
+}
+
+function muteLabel(value) {
+  if (!isActiveUntil(value)) return '';
+  const until = new Date(value);
+  if (until.getFullYear() >= 2090) return 'Muted';
+  return `Muted until ${until.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`;
+}
+
+function ConfirmDialog({ title, body, confirmLabel = 'Delete', onCancel, onConfirm, danger = true }) {
+  const { theme } = useTheme();
+  const [busy, setBusy] = useState(false);
+  return (
+    <div onClick={onCancel} className="zchat-fade" style={{
+      position: 'fixed', inset: 0, zIndex: 400, background: 'rgba(5,8,16,0.55)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
+    }}>
+      <div onClick={(e) => e.stopPropagation()} className="zchat-pop" style={{ background: theme.panelBg, borderRadius: 22, padding: '22px 20px 18px', width: '100%', maxWidth: 300, textAlign: 'center', boxShadow: '0 20px 50px rgba(0,0,0,0.35)' }}>
+        <div style={{ fontWeight: 800, fontSize: 16, color: theme.ink, marginBottom: 6 }}>{title}</div>
+        {body && <div style={{ fontSize: 13, color: theme.muted, lineHeight: 1.5, marginBottom: 18 }}>{body}</div>}
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={onCancel} style={{ flex: 1, padding: 11, borderRadius: 13, border: `1.5px solid ${theme.border}`, background: 'transparent', color: theme.ink, fontWeight: 700, fontSize: 13.5, cursor: 'pointer', fontFamily: FONT }}>Cancel</button>
+          <button disabled={busy} onClick={async () => { setBusy(true); await onConfirm(); setBusy(false); }} style={{ flex: 1, padding: 11, borderRadius: 13, border: 'none', background: danger ? theme.danger : theme.coral, color: 'white', fontWeight: 700, fontSize: 13.5, cursor: 'pointer', fontFamily: FONT }}>
+            {busy ? <Spinner size={13} /> : confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ChatSearchBar({ query, onChange, count, position, onPrev, onNext, onClose }) {
+  const { theme } = useTheme();
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderBottom: `1px solid ${theme.border}`, background: theme.panelBg, flexShrink: 0 }} className="zchat-fade">
+      <div style={{ position: 'relative', flex: 1 }}>
+        <Search size={15} color={theme.muted} style={{ position: 'absolute', left: 12, top: 11 }} />
+        <input autoFocus value={query} onChange={(e) => onChange(e.target.value)} placeholder="Search in this chat"
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (e.shiftKey) onNext(); else onPrev(); } if (e.key === 'Escape') onClose(); }}
+          style={{ ...inputStyle(theme), padding: '9px 12px 9px 34px', fontSize: 14, borderRadius: 20 }} />
+      </div>
+      <span style={{ fontSize: 12, color: theme.muted, minWidth: 44, textAlign: 'center', fontWeight: 600 }}>
+        {query.trim() ? (count ? `${position} of ${count}` : 'No results') : ''}
+      </span>
+      <div role="button" aria-label="Older result" onClick={onPrev} style={{ width: 32, height: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: count ? 'pointer' : 'default', color: count ? theme.ink : theme.muted, background: theme.rowBg }}>
+        <ChevronRight size={17} style={{ transform: 'rotate(-90deg)' }} />
+      </div>
+      <div role="button" aria-label="Newer result" onClick={onNext} style={{ width: 32, height: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: count ? 'pointer' : 'default', color: count ? theme.ink : theme.muted, background: theme.rowBg }}>
+        <ChevronRight size={17} style={{ transform: 'rotate(90deg)' }} />
+      </div>
+      <X size={19} color={theme.muted} style={{ cursor: 'pointer', flexShrink: 0 }} onClick={onClose} />
+    </div>
+  );
+}
+
+function PinnedMessagesBar({ pins, index, labelFor, onOpen }) {
+  const { theme } = useTheme();
+  if (!pins.length) return null;
+  const current = pins[Math.min(index, pins.length - 1)];
+  const preview = describeMessage(current);
+  return (
+    <div onClick={onOpen} style={{
+      display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', cursor: 'pointer', flexShrink: 0,
+      background: theme.glass, backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', borderBottom: `1px solid ${theme.border}`,
+    }} className="zchat-fade">
+      {pins.length > 1 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignSelf: 'stretch', justifyContent: 'center' }}>
+          {pins.map((p, i) => (
+            <div key={p.id} style={{ width: 3, flex: 1, maxHeight: 12, borderRadius: 2, background: i === index ? theme.coral : theme.border }} />
+          ))}
+        </div>
+      )}
+      <Pin_ size={16} color={theme.coral} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 11.5, fontWeight: 800, color: theme.coral }}>
+          {pins.length > 1 ? `Pinned message ${index + 1} of ${pins.length}` : 'Pinned message'}
+        </div>
+        <PreviewLine preview={preview} prefix={`${labelFor(current.sender_id)}: `} color={theme.ink} size={12.5} />
+      </div>
+      {(current.type === 'image') && current.media_url && (
+        <img src={current.media_url} alt="" style={{ width: 34, height: 34, borderRadius: 8, objectFit: 'cover', flexShrink: 0 }} />
+      )}
+    </div>
+  );
+}
+
+function extractLinks(text) {
+  if (!text) return [];
+  const found = [];
+  LINK_REGEX.lastIndex = 0;
+  let match;
+  while ((match = LINK_REGEX.exec(text)) !== null) found.push(match[0]);
+  return found;
+      }
+function ChatMediaPanel({ title, messages, labelFor, onClose, onOpenImage, onOpenVideo, onJump }) {
+  const { theme } = useTheme();
+  const [tab, setTab] = useState('media');
+  const visible = messages.filter((m) => !m.deleted);
+  const media = visible.filter((m) => (m.type === 'image' || m.type === 'video') && m.media_url).slice().reverse();
+  const links = [];
+  visible.slice().reverse().forEach((m) => {
+    if (m.type === 'system') return;
+    extractLinks(m.content).forEach((link, i) => links.push({ key: `${m.id}-${i}`, link, m }));
+  });
+  const voices = visible.filter((m) => m.type === 'audio' && m.media_url).slice().reverse();
+  const dateLabel = (iso) => new Date(iso).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' });
+  const tabs = [
+    { key: 'media', label: `Media (${media.length})` },
+    { key: 'links', label: `Links (${links.length})` },
+    { key: 'voice', label: `Voice (${voices.length})` },
+  ];
+  const openLink = (link) => {
+    const isEmail = link.includes('@') && !/^https?:|^www\./i.test(link);
+    const href = isEmail ? `mailto:${link}` : (/^https?:/i.test(link) ? link : `https://${link}`);
+    window.open(href, '_blank', 'noopener');
+  };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 60, background: theme.panelBg, display: 'flex', flexDirection: 'column' }} className="zchat-fade">
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', paddingTop: 'calc(14px + env(safe-area-inset-top))', flexShrink: 0 }}>
+        <ArrowLeft size={20} style={{ cursor: 'pointer', color: theme.ink }} onClick={onClose} />
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontWeight: 800, fontSize: 16.5, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</div>
+          <div style={{ fontSize: 11.5, color: theme.muted }}>Media, links and voice messages</div>
+        </div>
+      </div>
+      <div style={{ display: 'flex', borderBottom: `1px solid ${theme.border}`, flexShrink: 0 }}>
+        {tabs.map((t) => (
+          <div key={t.key} onClick={() => setTab(t.key)} style={{
+            flex: 1, textAlign: 'center', padding: '11px 0', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+            color: tab === t.key ? theme.ink : theme.muted, borderBottom: tab === t.key ? `2.5px solid ${theme.coral}` : '2.5px solid transparent',
+          }}>{t.label}</div>
+        ))}
+      </div>
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', paddingBottom: 'calc(12px + env(safe-area-inset-bottom))' }}>
+        {tab === 'media' && (
+          media.length ? (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2, padding: 2 }}>
+              {media.map((m) => (
+                <div key={m.id} onClick={() => (m.type === 'image' ? onOpenImage(m.media_url) : onOpenVideo({ url: m.media_url, trimStart: m.trim_start, trimEnd: m.trim_end, overlayUrl: m.overlay_url }))}
+                  style={{ position: 'relative', aspectRatio: '1 / 1', background: '#000', cursor: 'pointer', overflow: 'hidden' }}>
+                  {m.type === 'image'
+                    ? <img src={m.media_url} alt="" loading="lazy" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                    : <video src={`${m.media_url}#t=0.1`} muted playsInline preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none' }} />}
+                  {m.type === 'video' && (
+                    <div style={{ position: 'absolute', left: 6, bottom: 6, width: 22, height: 22, borderRadius: '50%', background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Play size={11} color="white" style={{ marginLeft: 1 }} />
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : <div style={{ textAlign: 'center', padding: 40, fontSize: 13, color: theme.muted }}>Photos and videos you share will show here</div>
+        )}
+        {tab === 'links' && (
+          links.length ? links.map(({ key, link, m }) => (
+            <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderBottom: `1px solid ${theme.border}` }}>
+              <div style={{ width: 42, height: 42, borderRadius: 12, background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.coral, flexShrink: 0 }}>
+                {link.includes('@') && !/^https?:|^www\./i.test(link) ? <Mail size={18} /> : <LinkIcon size={18} />}
+              </div>
+              <div onClick={() => openLink(link)} style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}>
+                <div style={{ fontSize: 13.5, fontWeight: 700, color: theme.coralDeep, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{link}</div>
+                <div style={{ fontSize: 11.5, color: theme.muted }}>{labelFor(m.sender_id)} · {dateLabel(m.created_at)}</div>
+              </div>
+              <span onClick={() => onJump(m.id)} style={{ fontSize: 12, fontWeight: 700, color: theme.muted, cursor: 'pointer', flexShrink: 0 }}>Show</span>
+            </div>
+          )) : <div style={{ textAlign: 'center', padding: 40, fontSize: 13, color: theme.muted }}>Links and emails you share will show here</div>
+        )}
+        {tab === 'voice' && (
+          voices.length ? voices.map((m) => (
+            <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderBottom: `1px solid ${theme.border}` }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: theme.ink }}>{labelFor(m.sender_id)} <span style={{ color: theme.muted, fontWeight: 500 }}>· {dateLabel(m.created_at)}</span></div>
+                <AudioBubble url={m.media_url} isMe={false} />
+              </div>
+              <span onClick={() => onJump(m.id)} style={{ fontSize: 12, fontWeight: 700, color: theme.muted, cursor: 'pointer', flexShrink: 0 }}>Show</span>
+            </div>
+          )) : <div style={{ textAlign: 'center', padding: 40, fontSize: 13, color: theme.muted }}>Voice messages will show here</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAccount, onAddAccount, onRemoveAccount, switchingAccountId }) {
   const { theme, bgPatternOn, chatTheme } = useTheme();
   const assetProgress = useAssetPrefetch();
@@ -6057,6 +6265,15 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [contextRect, setContextRect] = useState(null);
   const [rowSheet, setRowSheet] = useState(null);
   const [reportUserTarget, setReportUserTarget] = useState(null);
+  const [chatMenuAnchor, setChatMenuAnchor] = useState(null);
+  const [chatSearch, setChatSearch] = useState(null);
+  const [showChatMedia, setShowChatMedia] = useState(false);
+  const [pinIndex, setPinIndex] = useState(0);
+  const [pinSheetFor, setPinSheetFor] = useState(null);
+  const [muteSheet, setMuteSheet] = useState(null);
+  const [mailOpenId, setMailOpenId] = useState(null);
+  const groupMembersRef = useRef([]);
+  const archivedConversationsRef = useRef([]);
   const [, setClockTick] = useState(0);
   const visibleIdsRef = useRef(new Set());
   const profileCacheRef = useRef(new Map());
@@ -6433,6 +6650,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const dmId = params.get('dm');
     const groupId = params.get('group');
     const profileId = params.get('profile');
+    const requestsFlag = params.get('requests');
+    const mailFlag = params.get('mail');
+    if (requestsFlag) setShowFollowRequests(true);
+    if (mailFlag) setShowMail(true);
     if (dmId) {
       (async () => {
         const { data } = await getProfile(dmId);
@@ -6452,7 +6673,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         if (data) setProfileOf(sanitizeAvatar(data, session.user.id));
       })();
     }
-    if (dmId || groupId || profileId) window.history.replaceState({}, '', window.location.pathname);
+    if (dmId || groupId || profileId || requestsFlag || mailFlag) window.history.replaceState({}, '', window.location.pathname);
   }, [me]);
 
   useEffect(() => {
@@ -6461,6 +6682,48 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations' }, (payload) => {
         const row = payload.new || payload.old;
         if (row && (row.user_a === me.id || row.user_b === me.id)) loadConversations();
+      })
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, [me]);
+
+  useEffect(() => {
+    if (!me) return undefined;
+    const channel = supabase.channel('notices-' + me.id)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'follows' }, async (payload) => {
+        const row = payload.new;
+        if (!row || row.following_id !== me.id || row.follower_id === me.id) return;
+        loadFollowRequestCount();
+        const who = await cachedProfile(row.follower_id);
+        if (!who) return;
+        setInAppToast({ key: `follow-${row.follower_id}-${Date.now()}`, kind: 'notice', title: who.name, avatar: who.avatar, avatarName: who.name,
+          preview: { kind: 'text', text: row.status === 'pending' ? 'requested to follow you' : 'started following you' },
+          action: row.status === 'pending' ? { type: 'requests' } : { type: 'profile', profile: who } });
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'follows' }, async (payload) => {
+        const row = payload.new;
+        if (!row || row.follower_id !== me.id || row.status !== 'accepted') return;
+        if (payload.old && payload.old.status === 'accepted') return;
+        const who = await cachedProfile(row.following_id);
+        if (!who) return;
+        setInAppToast({ key: `accepted-${row.following_id}-${Date.now()}`, kind: 'notice', title: who.name, avatar: who.avatar, avatarName: who.name,
+          preview: { kind: 'text', text: 'accepted your follow request' }, action: { type: 'profile', profile: who } });
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'mails' }, (payload) => {
+        const row = payload.new;
+        if (!row || row.recipient_id !== me.id) return;
+        setInAppToast({ key: `mail-${row.id}`, kind: 'notice', icon: row.type === 'report_warning' ? 'warning' : 'mail', title: row.title || 'New mail',
+          preview: { kind: 'text', text: row.body || '' }, action: { type: 'mail', id: row.id } });
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'group_members' }, async (payload) => {
+        const row = payload.new;
+        if (!row || row.user_id !== me.id || !row.added_by || row.added_by === me.id) return;
+        const { data: g } = await supabase.from('groups').select('*').eq('id', row.group_id).maybeSingle();
+        if (!g) return;
+        const who = await cachedProfile(row.added_by);
+        loadGroups();
+        setInAppToast({ key: `group-${row.group_id}-${Date.now()}`, kind: 'notice', isGroupIcon: true, groupAvatar: g.avatar, title: g.name,
+          preview: { kind: 'text', text: `${who?.name || 'Someone'} added you to this group` }, action: { type: 'group', group: g } });
       })
       .subscribe();
     return () => supabase.removeChannel(channel);
@@ -6484,9 +6747,12 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         if (blockedRef.current.has(msg.sender_id)) return;
         unhideChatLocally(msg.sender_id);
         if (msg.sender_id !== activeProfile?.id || !mobileShowChatRef.current) {
-          playPing();
           supabase.from('messages').update({ delivered: true }).eq('id', msg.id);
-          showMessageToast(msg);
+          const senderConv = conversationsRef.current.find((c) => c.otherProfile.id === msg.sender_id) || archivedConversationsRef.current.find((c) => c.otherProfile.id === msg.sender_id);
+          if (!(senderConv && isActiveUntil(senderConv[senderConv.user_a === me.id ? 'muted_until_a' : 'muted_until_b']))) {
+            playPing();
+            showMessageToast(msg);
+          }
         } else {
           supabase.from('messages').update({ read: true, delivered: true }).eq('id', msg.id);
           setActivityFrom(null);
@@ -6514,7 +6780,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           listReloadTimerRef.current = setTimeout(() => { if (reloadListsRef.current) reloadListsRef.current(); }, 700);
         }
         setMessages((prev) => (prev.some((m) => m.id === row.id)
-          ? prev.map((m) => (m.id === row.id ? { ...m, read: row.read, delivered: row.delivered, edited: row.edited, deleted: row.deleted, content: row.deleted ? m.content : row.content } : m))
+          ? prev.map((m) => (m.id === row.id ? { ...m, read: row.read, delivered: row.delivered, edited: row.edited, deleted: row.deleted, content: row.deleted ? m.content : row.content, pinned_until: row.pinned_until, pinned_by: row.pinned_by, pinned_at: row.pinned_at } : m))
           : prev));
       })
       .subscribe();
@@ -6580,7 +6846,12 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
         const row = payload.new;
         if (!row.group_id || !myGroupIds.includes(row.group_id)) return;
-        if (row.sender_id !== me.id && (!activeGroup || row.group_id !== activeGroup.id)) { playPing(); supabase.from('messages').update({ delivered: true }).eq('id', row.id); showMessageToast(row); }
+        if (row.sender_id !== me.id && (!activeGroup || row.group_id !== activeGroup.id)) {
+          supabase.from('messages').update({ delivered: true }).eq('id', row.id);
+          const mutedGroup = groupsRef.current.find((x) => x.id === row.group_id);
+          const mentioned = row.type === 'text' && extractMentions(row.content || '').has((me.username || '').toLowerCase());
+          if (!(mutedGroup && isActiveUntil(mutedGroup.mutedUntil)) || mentioned) { playPing(); showMessageToast(row); }
+        }
         if (row.sender_id !== me.id && activeGroup && row.group_id === activeGroup.id) { markGroupRead(activeGroup.id); supabase.from('messages').update({ read: true, delivered: true }).eq('id', row.id); }
         setMessages((prev) => {
           if (!activeGroup || row.group_id !== activeGroup.id) return prev;
@@ -6783,7 +7054,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       const unread = activeGroupIdRef.current === g.id ? 0 : groupMsgs.filter((m) => m.sender_id !== session.user.id && m.type !== 'system' && !m.deleted && new Date(m.created_at).getTime() > readTime).length;
       const preview = last ? describeMessage(last) : { kind: 'text', text: 'No messages yet' };
       const previewPrefix = !last || last.type === 'system' ? '' : last.sender_id === session.user.id ? 'You: ' : `${(senderNames[last.sender_id] || 'Someone').split(' ')[0]}: `;
-      return { ...g, myRole: mine?.role || 'member', pinned: mine?.pinned || false, archived: mine?.archived || false, last_message: last?.deleted ? 'This message was deleted' : last?.content, last_message_type: last?.deleted ? 'text' : last?.type, last_message_at: last?.created_at || g.created_at, unread, preview, previewPrefix };
+      return { ...g, myRole: mine?.role || 'member', pinned: mine?.pinned || false, archived: mine?.archived || false, last_message: last?.deleted ? 'This message was deleted' : last?.content, last_message_type: last?.deleted ? 'text' : last?.type, last_message_at: last?.created_at || g.created_at, unread, preview, previewPrefix, mutedUntil: mine?.notify_muted_until || null };
     }).sort((a, b) => new Date(b.last_message_at) - new Date(a.last_message_at));
     setGroups(merged);
   };
@@ -6818,7 +7089,11 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const sanitized = sanitizeAvatarList(profs, session.user.id);
     setGroupMembers((mems || []).map((m) => ({ ...m, profile: sanitized.find((p) => p.id === m.user_id) })).filter((m) => m.profile));
   };
+
   const openGroup = async (group) => {
+    setChatSearch(null);
+    setShowChatMedia(false);
+    setPinIndex(0);
     markGroupRead(group.id);
     activeGroupIdRef.current = group.id;
     setGroups((prev) => prev.map((g) => (g.id === group.id ? { ...g, unread: 0 } : g)));
@@ -6939,6 +7214,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const addGroupMembers = async (people) => {
     if (!people.length) return;
     await supabase.from('group_members').insert(people.map((p) => ({ group_id: activeGroup.id, user_id: p.id, role: 'member', added_by: session.user.id })));
+    people.forEach((p) => notifyUser(p.id, 'ZChat', `${me.name} added you to ${activeGroup.name}`, `/?group=${activeGroup.id}`, me.avatar));
     loadGroupMembers(activeGroup.id);
     sendGroupMessage('system', `${realName(session.user.id)} added ${people.map((p) => p.name).join(', ')}`, null);
   };
@@ -6992,6 +7268,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   };
 
   const actuallyOpenChat = async (profile, convId) => {
+    setChatSearch(null);
+    setShowChatMedia(false);
+    setPinIndex(0);
     setActiveProfile(profile);
     getProfile(profile.id).then(({ data }) => {
       if (data) setActiveProfile((prev) => (prev && prev.id === data.id ? { ...prev, ...sanitizeAvatar(data, session.user.id), name: prev.name } : prev));
@@ -7413,7 +7692,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       const status = activeProfile.is_private ? 'pending' : 'accepted';
       await supabase.from('follows').insert({ follower_id: session.user.id, following_id: activeProfile.id, status });
       setActiveFollowState(status);
-      notifyUser(activeProfile.id, 'ZChat', status === 'pending' ? `${me.name} requested to follow you` : `${me.name} started following you`, `/?profile=${session.user.id}`, me.avatar);
+      notifyUser(activeProfile.id, 'ZChat', status === 'pending' ? `${me.name} requested to follow you` : `${me.name} started following you`, status === 'pending' ? '/?requests=1' : `/?profile=${session.user.id}`, me.avatar);
     }
     setActiveFollowBusy(false);
   };
@@ -7468,7 +7747,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     activitySentRef.current = {};
     return () => { supabase.removeChannel(channel); typingChannelRef.current = null; clearTimeout(typingTimeoutRef.current); setActivityFrom(null); };
   }, [activeProfile?.id, activeGroup?.id]);
-
   const liveActivity = recording ? 'voice' : showStickers ? 'sticker' : null;
   useEffect(() => {
     if (!liveActivity) return undefined;
@@ -7478,6 +7756,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   }, [liveActivity, activeProfile?.id, activeGroup?.id]);
 
   conversationsRef.current = conversations;
+  archivedConversationsRef.current = archivedConversations;
+  groupMembersRef.current = groupMembers;
   groupsRef.current = groups;
   blockedRef.current = myBlockedIds;
   locksRef.current = myLocks;
@@ -7485,7 +7765,85 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
   const notifyUser = (userId, title, body, url, icon) => {
     if (!userId || visibleIdsRef.current.has(userId)) return;
+    if (url && url.startsWith('/?dm=')) {
+      const conv = conversationsRef.current.find((c) => c.otherProfile.id === userId) || archivedConversationsRef.current.find((c) => c.otherProfile.id === userId);
+      if (conv && isActiveUntil(conv[conv.user_a === session.user.id ? 'muted_until_b' : 'muted_until_a'])) return;
+    }
+    if (url && url.startsWith('/?group=') && !/mentioned you|added you/.test(title || '')) {
+      const member = groupMembersRef.current.find((gm) => gm.user_id === userId);
+      if (member && isActiveUntil(member.notify_muted_until)) return;
+    }
     sendPushNotification(userId, title, body, url, icon);
+  };
+
+  const myConvMuteField = (conv) => (conv.user_a === session.user.id ? 'muted_until_a' : 'muted_until_b');
+  const isConvMutedForMe = (conv) => !!conv && isActiveUntil(conv[myConvMuteField(conv)]);
+  const setChatMute = async (target, until) => {
+    if (!target) return;
+    if (target.kind === 'group') {
+      const { error } = await supabase.from('group_members').update({ notify_muted_until: until }).eq('group_id', target.id).eq('user_id', session.user.id);
+      if (error) { alert(friendlyError(error, "Couldn't change notifications. Try again.")); return; }
+      setGroups((prev) => prev.map((g) => (g.id === target.id ? { ...g, mutedUntil: until } : g)));
+      setGroupMembers((prev) => prev.map((gm) => (gm.user_id === session.user.id ? { ...gm, notify_muted_until: until } : gm)));
+      return;
+    }
+    const conv = target.conv;
+    const field = myConvMuteField(conv);
+    const { error } = await supabase.from('conversations').update({ [field]: until }).eq('id', conv.id);
+    if (error) { alert(friendlyError(error, "Couldn't change notifications. Try again.")); return; }
+    setConversations((prev) => prev.map((c) => (c.id === conv.id ? { ...c, [field]: until } : c)));
+    setArchivedConversations((prev) => prev.map((c) => (c.id === conv.id ? { ...c, [field]: until } : c)));
+  };
+  const muteFor = (option) => (option === 'always' ? '2099-12-31T00:00:00.000Z' : new Date(Date.now() + (option === '8h' ? 8 * 3600000 : 7 * 86400000)).toISOString());
+
+  const pinnedMessages = messages.filter((m) => !m.deleted && isActiveUntil(m.pinned_until))
+    .sort((a, b) => new Date(b.pinned_at || 0).getTime() - new Date(a.pinned_at || 0).getTime());
+  const pinMessage = async (m, days) => {
+    const others = pinnedMessages.filter((x) => x.id !== m.id);
+    if (others.length >= 3) {
+      const oldest = others[others.length - 1];
+      const clear = { pinned_until: null, pinned_by: null, pinned_at: null };
+      await supabase.from('messages').update(clear).eq('id', oldest.id);
+      setMessages((prev) => prev.map((x) => (x.id === oldest.id ? { ...x, ...clear } : x)));
+    }
+    const patch = { pinned_until: new Date(Date.now() + days * 86400000).toISOString(), pinned_by: session.user.id, pinned_at: new Date().toISOString() };
+    const { error } = await supabase.from('messages').update(patch).eq('id', m.id);
+    if (error) { alert(friendlyError(error, "Couldn't pin that message. Try again.")); return; }
+    setMessages((prev) => prev.map((x) => (x.id === m.id ? { ...x, ...patch } : x)));
+    setPinIndex(0);
+    const note = `${me.name} pinned a message`;
+    if (activeGroup) {
+      await sendGroupMessage('system', note, null);
+    } else if (activeProfile) {
+      const { data } = await sendMessage(session.user.id, activeProfile.id, 'system', note, null);
+      if (data) setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
+    }
+  };
+  const unpinMessage = async (m) => {
+    const clear = { pinned_until: null, pinned_by: null, pinned_at: null };
+    const { error } = await supabase.from('messages').update(clear).eq('id', m.id);
+    if (error) { alert(friendlyError(error, "Couldn't unpin that message. Try again.")); return; }
+    setMessages((prev) => prev.map((x) => (x.id === m.id ? { ...x, ...clear } : x)));
+    setPinIndex(0);
+  };
+
+  const searchMatchesFor = (query) => {
+    const q = (query || '').trim().toLowerCase();
+    if (!q) return [];
+    return messages.filter((m) => !m.deleted && m.type !== 'system' && (m.content || '').toLowerCase().includes(q) && !parseProfileLink(m.content));
+  };
+  const chatSearchMatches = chatSearch ? searchMatchesFor(chatSearch.query) : [];
+  const stepSearch = (delta) => {
+    if (!chatSearch || !chatSearchMatches.length) return;
+    const nextPos = Math.max(0, Math.min(chatSearchMatches.length - 1, chatSearch.pos + delta));
+    setChatSearch({ ...chatSearch, pos: nextPos });
+    const target = chatSearchMatches[chatSearchMatches.length - 1 - nextPos];
+    if (target) jumpToMessage(target.id);
+  };
+  const changeSearch = (query) => {
+    setChatSearch({ query, pos: 0 });
+    const found = searchMatchesFor(query);
+    if (found.length) jumpToMessage(found[found.length - 1].id);
   };
 
   const cachedProfile = async (userId) => {
@@ -7516,6 +7874,14 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const openToast = (toast) => {
     setInAppToast(null);
     setProfileOf(null);
+    if (toast.kind === 'notice') {
+      const action = toast.action || {};
+      if (action.type === 'requests') setShowFollowRequests(true);
+      else if (action.type === 'mail') { setMailOpenId(action.id); setShowMail(true); }
+      else if (action.type === 'profile') setProfileOf(action.profile);
+      else if (action.type === 'group') openGroup(action.group);
+      return;
+    }
     if (toast.kind === 'group') openGroup(toast.group);
     else openChat(toast.profile, toast.convId);
   };
@@ -7812,7 +8178,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                         </div>
                         <PreviewLine preview={g.preview || { kind: 'text', text: 'No messages yet' }} prefix={g.previewPrefix} color={g.unread ? theme.ink : theme.muted} weight={g.unread ? 700 : 400} />
                       </div>
-                      {g.unread > 0 && <div style={{ minWidth: 20, height: 20, padding: '0 5px', boxSizing: 'border-box', borderRadius: 10, background: theme.coral, color: 'white', fontSize: 10.5, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{g.unread > 99 ? '99+' : g.unread}</div>}
+                      {isActiveUntil(g.mutedUntil) && <BellOff size={14} color={theme.muted} style={{ flexShrink: 0 }} />}
+                      {g.unread > 0 && <div style={{ minWidth: 20, height: 20, padding: '0 5px', boxSizing: 'border-box', borderRadius: 10, background: isActiveUntil(g.mutedUntil) ? theme.muted : theme.coral, color: 'white', fontSize: 10.5, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{g.unread > 99 ? '99+' : g.unread}</div>}
                       <MoreVertical size={15} color={theme.muted} style={{ cursor: 'pointer', flexShrink: 0 }}
                         onClick={(e) => { e.stopPropagation(); setGroupRowMenuAnchor(e.currentTarget); setGroupRowMenuFor(groupRowMenuFor === g.id ? null : g.id); }} />
                       <SmartMenu anchorEl={groupRowMenuAnchor} open={groupRowMenuFor === g.id} onClose={() => setGroupRowMenuFor(null)} width={190}>
@@ -7849,7 +8216,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                         <PreviewLine preview={c.preview && c.preview.text ? c.preview : { kind: 'text', text: 'Say hi \u{1F44B}' }} color={unread ? theme.ink : theme.muted} weight={unread ? 700 : 400} />
                       </div>
                     </div>
-                    {unread && <div style={{ width: 20, height: 20, borderRadius: 10, background: theme.coral, color: 'white', fontSize: 10.5, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{unreadCounts[c.otherProfile.id]}</div>}
+                    {isConvMutedForMe(c) && <BellOff size={14} color={theme.muted} style={{ flexShrink: 0 }} />}
+                    {unread && <div style={{ width: 20, height: 20, borderRadius: 10, background: isConvMutedForMe(c) ? theme.muted : theme.coral, color: 'white', fontSize: 10.5, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{unreadCounts[c.otherProfile.id]}</div>}
                     <MoreVertical size={15} color={theme.muted} style={{ cursor: 'pointer', flexShrink: 0 }}
                       onClick={(e) => { e.stopPropagation(); setRowMenuAnchor(e.currentTarget); setRowMenuFor(rowMenuFor === c.id ? null : c.id); }} />
                     <SmartMenu anchorEl={rowMenuAnchor} open={rowMenuFor === c.id} onClose={() => setRowMenuFor(null)} width={190}>
@@ -7934,9 +8302,23 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                 </button>
               )}
               <MoreVertical size={19} style={{ cursor: 'pointer', color: activeNameBarKey ? 'white' : theme.ink, flexShrink: 0, filter: activeNameBarKey ? 'drop-shadow(0 1px 3px rgba(0,0,0,0.6))' : 'none', position: 'relative' }}
-                onClick={(e) => { e.stopPropagation(); (activeGroup ? setShowGroupInfo(true) : setShowChatSettings(true)); }} />
+                onClick={(e) => { e.stopPropagation(); setChatMenuAnchor(e.currentTarget); }} />
               </div>
             </div>
+
+            {chatSearch && (
+              <ChatSearchBar query={chatSearch.query} onChange={changeSearch} count={chatSearchMatches.length}
+                position={chatSearchMatches.length ? chatSearchMatches.length - Math.min(chatSearch.pos, chatSearchMatches.length - 1) : 0}
+                onPrev={() => stepSearch(1)} onNext={() => stepSearch(-1)} onClose={() => setChatSearch(null)} />
+            )}
+            {!chatSearch && pinnedMessages.length > 0 && (
+              <PinnedMessagesBar pins={pinnedMessages} index={Math.min(pinIndex, pinnedMessages.length - 1)} labelFor={labelForSender}
+                onOpen={() => {
+                  const idx = Math.min(pinIndex, pinnedMessages.length - 1);
+                  jumpToMessage(pinnedMessages[idx].id);
+                  setPinIndex((idx + 1) % pinnedMessages.length);
+                }} />
+            )}
 
             {selectionMode && (
               <MessageActionBar count={selectedIds.size} canEditActions={selectionInfo} onCancel={cancelSelection}
@@ -8222,6 +8604,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             onDeleteForMe={() => doDeleteForMeSingle(m)}
             onDeleteForEveryone={() => doDeleteForEveryoneSingle(m)}
             onSelectMultiple={() => doSelectMultipleFrom(m)}
+            isPinned={isActiveUntil(m.pinned_until)}
+            onPin={() => { setContextMenuFor(null); setPinSheetFor(m); }}
+            onUnpin={() => { setContextMenuFor(null); unpinMessage(m); }}
           />
         );
       })()}
@@ -8253,7 +8638,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           onUnarchive={(id) => toggleArchive(id, false)} />
       )}
       {showMail && (
-        <MailPanel myId={session.user.id} onClose={() => { setShowMail(false); loadUnreadMailCount(); }} />
+        <MailPanel myId={session.user.id} initialMailId={mailOpenId} onClose={() => { setShowMail(false); setMailOpenId(null); loadUnreadMailCount(); }} />
       )}
       {showChatSettings && activeConvForBar && (
         <ChatSettingsPanel
@@ -8345,6 +8730,75 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             ]} />
         );
       })()}
+      {chatMenuAnchor && (activeProfile || activeGroup) && (() => {
+        const groupRow = activeGroup ? (groups.find((x) => x.id === activeGroup.id) || activeGroup) : null;
+        const mutedUntil = activeGroup ? groupRow?.mutedUntil : (activeConvForBar ? activeConvForBar[myConvMuteField(activeConvForBar)] : null);
+        const muteTarget = activeGroup ? { kind: 'group', id: activeGroup.id } : (activeConvForBar ? { kind: 'dm', conv: activeConvForBar } : null);
+        const blocked = activeProfile ? myBlockedIds.has(activeProfile.id) : false;
+        const close = () => setChatMenuAnchor(null);
+        const item = (icon, label, onClick, danger, hint) => (
+          <div key={label} onClick={() => { close(); onClick(); }} style={{
+            display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', cursor: 'pointer',
+            fontSize: 14, fontWeight: 600, color: danger ? theme.danger : theme.ink, borderTop: `1px solid ${theme.border}`,
+          }}>
+            <span style={{ display: 'flex', color: danger ? theme.danger : theme.muted }}>{icon}</span>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              {label}
+              {hint && <span style={{ display: 'block', fontSize: 11, color: theme.muted, fontWeight: 500 }}>{hint}</span>}
+            </span>
+          </div>
+        );
+        const items = activeGroup ? [
+          item(<Users size={17} />, 'Group info', () => setShowGroupInfo(true)),
+          item(<Search size={17} />, 'Search', () => setChatSearch({ query: '', pos: 0 })),
+          item(<ImageIcon size={17} />, 'Media, links and voice', () => setShowChatMedia(true)),
+          pinnedMessages.length ? item(<Pin_ size={17} color={theme.muted} />, `Pinned messages (${pinnedMessages.length})`, () => jumpToMessage(pinnedMessages[0].id)) : null,
+          item(isActiveUntil(mutedUntil) ? <Bell size={17} /> : <BellOff size={17} />, isActiveUntil(mutedUntil) ? 'Unmute notifications' : 'Mute notifications', () => (isActiveUntil(mutedUntil) ? setChatMute(muteTarget, null) : setMuteSheet(muteTarget)), false, muteLabel(mutedUntil)),
+          item(<LogOut size={17} />, `Leave ${activeGroup.name}`, () => leaveGroupById(groupRow), true),
+        ] : [
+          item(<User size={17} />, `View ${activeProfile.name}`, () => setProfileOf(activeProfile)),
+          item(<Search size={17} />, 'Search', () => setChatSearch({ query: '', pos: 0 })),
+          item(<ImageIcon size={17} />, 'Media, links and voice', () => setShowChatMedia(true)),
+          pinnedMessages.length ? item(<Pin_ size={17} color={theme.muted} />, `Pinned messages (${pinnedMessages.length})`, () => jumpToMessage(pinnedMessages[0].id)) : null,
+          muteTarget ? item(isActiveUntil(mutedUntil) ? <Bell size={17} /> : <BellOff size={17} />, isActiveUntil(mutedUntil) ? 'Unmute notifications' : 'Mute notifications', () => (isActiveUntil(mutedUntil) ? setChatMute(muteTarget, null) : setMuteSheet(muteTarget)), false, muteLabel(mutedUntil)) : null,
+          activeConvForBar ? item(<SettingsIcon size={17} />, 'Chat settings', () => setShowChatSettings(true), false, 'Nicknames, wallpaper, lock and more') : null,
+          item(<Ban size={17} />, blocked ? `Unblock ${activeProfile.name}` : `Block ${activeProfile.name}`, () => (blocked ? unblockUser(activeProfile.id) : blockUser(activeProfile.id)), !blocked),
+          item(<Flag size={17} />, `Report ${activeProfile.name}`, () => setReportUserTarget(activeProfile), true),
+          activeConvForBar ? item(<Trash2 size={17} />, 'Delete chat', () => setDeleteConvoTarget(activeConvForBar), true) : null,
+        ];
+        return (
+          <SmartMenu anchorEl={chatMenuAnchor} open onClose={close} width={250}>
+            <div className="zchat-pop" style={{ background: theme.panelBg, borderRadius: 16, boxShadow: '0 12px 34px rgba(0,0,0,0.3)', border: `1px solid ${theme.border}`, overflow: 'hidden', maxHeight: '75vh', overflowY: 'auto' }}>
+              <div style={{ marginTop: -1 }}>{items.filter(Boolean)}</div>
+            </div>
+          </SmartMenu>
+        );
+      })()}
+      {showChatMedia && (activeProfile || activeGroup) && (
+        <ChatMediaPanel title={activeGroup ? activeGroup.name : activeProfile.name} messages={messages} labelFor={labelForSender}
+          onClose={() => setShowChatMedia(false)} onOpenImage={setViewerUrl} onOpenVideo={setViewerVideoUrl}
+          onJump={(id) => { setShowChatMedia(false); setTimeout(() => jumpToMessage(id), 150); }} />
+      )}
+      {muteSheet && (
+        <ChatRowSheet title="Mute notifications" subtitle={muteSheet.kind === 'group' ? 'Mentions will still notify you' : 'No sounds or alerts for this chat'}
+          avatar={<div style={{ width: 44, height: 44, borderRadius: '50%', background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.ink }}><BellOff size={20} /></div>}
+          onClose={() => setMuteSheet(null)}
+          actions={[
+            { icon: <BellOff size={18} />, label: '8 hours', onClick: () => setChatMute(muteSheet, muteFor('8h')) },
+            { icon: <BellOff size={18} />, label: '1 week', onClick: () => setChatMute(muteSheet, muteFor('1w')) },
+            { icon: <BellOff size={18} />, label: 'Always', onClick: () => setChatMute(muteSheet, muteFor('always')) },
+          ]} />
+      )}
+      {pinSheetFor && (
+        <ChatRowSheet title="Pin message" subtitle="Choose how long it stays pinned"
+          avatar={<div style={{ width: 44, height: 44, borderRadius: '50%', background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Pin_ size={20} color={theme.coral} /></div>}
+          onClose={() => setPinSheetFor(null)}
+          actions={[
+            { icon: <Pin_ size={18} color={theme.muted} />, label: '24 hours', onClick: () => pinMessage(pinSheetFor, 1) },
+            { icon: <Pin_ size={18} color={theme.muted} />, label: '7 days', onClick: () => pinMessage(pinSheetFor, 7) },
+            { icon: <Pin_ size={18} color={theme.muted} />, label: '30 days', onClick: () => pinMessage(pinSheetFor, 30) },
+          ]} />
+      )}
       {reportUserTarget && (
         <ReportReasonPicker onCancel={() => setReportUserTarget(null)}
           onSubmit={async (reason) => { const target = reportUserTarget; setReportUserTarget(null); await handleReport(target, reason); }} />
@@ -8541,4 +8995,4 @@ export default function App() {
       <AppInner />
     </ThemeProvider>
   );
-}
+                  }
