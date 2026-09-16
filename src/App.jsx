@@ -1203,6 +1203,7 @@ function ToggleSwitch({ on, onClick }) {
 }
 
 function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideActivity, onToggleActivity, onOpenAccounts, onOpenDelete, onOpenBlocked, blockedCount = 0, chatLockSet, chatLockHash, onSetChatLockPassword, onTurnOffChatLock, autoOpenLockSetup, onConsumedAutoOpen }) {
+  const [debugTaps, setDebugTaps] = useState(0);
   const { theme, dark, setDark, accentName, setAccentName, soundOn, setSoundOn, reactionSoundOn, setReactionSoundOn, bgPatternOn, setBgPatternOn, fontScale, setFontScale, chatTheme, setChatTheme, bubbleColor, setBubbleColor } = useTheme();
   const accentLabels = { coral: 'Coral', ocean: 'Ocean', berry: 'Berry' };
   const [lockFlow, setLockFlow] = useState(null);
@@ -1290,6 +1291,7 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
         {section === 'appearance' && (
           <>
             <SectionHeader title="Appearance" />
+            <BottomPositionSetting />
             <SettingsRow icon={dark ? <Sun size={16} /> : <Moon size={16} />} label="Dark mode" right={<ToggleSwitch on={dark} onClick={() => setDark((d) => !d)} />} />
             <div style={{ padding: '10px 4px', borderBottom: `1px solid ${theme.border}` }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
@@ -1358,6 +1360,8 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
           <>
             <SectionHeader title="About" />
             <SettingsRow icon={<FileText size={16} />} label="Privacy policy" onClick={onOpenPrivacy} />
+            <div onClick={() => setDebugTaps((n) => n + 1)} style={{ textAlign: 'center', fontSize: 11, color: theme.muted, marginTop: 14, fontWeight: 600, cursor: 'pointer', userSelect: 'none' }}>ZChat {APP_VERSION}</div>
+            {debugTaps >= 5 && <ScreenDebugInfo />}
           </>
         )}
 
@@ -2185,7 +2189,7 @@ function MailPanel({ myId, onClose, initialMailId }) {
     return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
   };
 
-  const MailIcon = ({ m, size }) => <MailBadgeIcon type={m.type} size={size} />;
+  const MailIcon = ({ m, size }) => <MailBadgeIcon type={m.type} size={size} badgeTier={badgeTierFromTitle(m.title)} />;
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: theme.panelBg, zIndex: 34, display: 'flex', flexDirection: 'column' }} className="zchat-fade">
@@ -5087,7 +5091,7 @@ function InAppMessageToast({ toast, top, onOpen, onDismiss }) {
       }}>
       <div style={{ position: 'relative', flexShrink: 0, pointerEvents: 'none' }}>
         {toast.kind === 'notice' ? (
-          toast.icon ? <MailBadgeIcon type={toast.icon === 'warning' ? 'report_warning' : toast.icon === 'mention' ? 'mention' : toast.icon === 'update' ? 'update' : 'mail'} size={42} />
+          toast.icon ? <MailBadgeIcon type={toast.icon === 'warning' ? 'report_warning' : toast.icon === 'mention' ? 'mention' : toast.icon === 'update' ? 'update' : toast.icon === 'badge' ? 'badge' : 'mail'} badgeTier={toast.badgeTier} size={42} />
             : toast.isGroupIcon ? <GroupAvatar avatar={toast.groupAvatar} name={toast.title} size={42} /> : <Avatar emoji={toast.avatar} name={toast.avatarName} size={42} />
         ) : toast.kind === 'group'
           ? <GroupAvatar avatar={toast.groupAvatar} name={toast.title} size={42} />
@@ -6363,13 +6367,20 @@ function timeShort(iso) {
   return `${Math.floor(hrs / 24)}d`;
 }
 
-function MailBadgeIcon({ type, size = 42 }) {
+function badgeTierFromTitle(title) {
+  const m = String(title || '').toLowerCase().match(/\b(blue|red|gold|pink|green|purple)\b/);
+  return m ? m[1] : null;
+}
+
+function MailBadgeIcon({ type, size = 42, badgeTier = null }) {
   const warning = type === 'report_warning';
   const mention = type === 'mention';
   const update = type === 'update';
+  const badge = type === 'badge';
   const bg = warning ? 'linear-gradient(135deg, #FF5F6D 0%, #FF2E4D 55%, #B3122E 100%)'
     : mention ? 'linear-gradient(135deg, #7C5CFC 0%, #2E7CF6 100%)'
       : update ? 'linear-gradient(135deg, #00C2A8 0%, #2E7CF6 55%, #7C5CFC 100%)'
+        : badge ? 'linear-gradient(135deg, #1B2036 0%, #0B0F19 100%)'
       : 'linear-gradient(135deg, #2E7CF6 0%, #00C2A8 100%)';
   return (
     <div style={{
@@ -6377,7 +6388,8 @@ function MailBadgeIcon({ type, size = 42 }) {
       background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center',
       boxShadow: warning ? '0 4px 14px rgba(255,46,77,0.35)' : '0 4px 14px rgba(46,124,246,0.3)',
     }}>
-      {warning ? <ShieldAlert size={size * 0.5} color="white" strokeWidth={2.2} />
+      {badge ? <VerifiedBadge tier={badgeTier || 'blue'} size={size * 0.62} style={{ marginLeft: 0, filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.35))' }} />
+        : warning ? <ShieldAlert size={size * 0.5} color="white" strokeWidth={2.2} />
         : mention ? <AtSign size={size * 0.46} color="white" strokeWidth={2.4} />
           : update ? <Sparkles size={size * 0.48} color="white" strokeWidth={2.2} />
           : <span style={{ fontFamily: 'Georgia, serif', fontWeight: 800, fontSize: size * 0.5, color: 'white', lineHeight: 1 }}>Z</span>}
@@ -6389,6 +6401,7 @@ function MailBadgeIcon({ type, size = 42 }) {
 function mailSenderName(type) {
   if (type === 'report_warning') return 'ZChat Safety';
   if (type === 'mention') return 'ZChat Mentions';
+  if (type === 'badge') return 'ZChat Team';
   return 'ZChat Team';
 }
 
@@ -8806,6 +8819,64 @@ function PostLinkCard({ postId, onOpen }) {
   );
 }
 
+function getBottomShift() {
+  try { const v = parseInt(localStorage.getItem('zchat-bottom-shift') || '0', 10); return Number.isFinite(v) ? Math.max(-60, Math.min(90, v)) : 0; } catch { return 0; }
+}
+function setBottomShift(v) {
+  try { localStorage.setItem('zchat-bottom-shift', String(v)); } catch {}
+  try { window.dispatchEvent(new CustomEvent('zchat-bottom-shift')); } catch {}
+}
+
+function BottomPositionSetting() {
+  const { theme } = useTheme();
+  const [value, setValue] = useState(() => getBottomShift());
+  if (!isAppleMobile()) return null;
+  const update = (v) => { const next = Math.max(-60, Math.min(90, v)); setValue(next); setBottomShift(next); };
+  const btn = (label, onClick) => (
+    <div role="button" onClick={onClick} style={{ width: 38, height: 38, borderRadius: 12, background: theme.rowBg, border: `1px solid ${theme.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: theme.ink, fontSize: 20, fontWeight: 700, userSelect: 'none' }}>{label}</div>
+  );
+  return (
+    <div style={{ padding: '12px 4px', borderBottom: `1px solid ${theme.border}` }}>
+      <div style={{ fontSize: 14, fontWeight: 600, color: theme.ink }}>Message bar position</div>
+      <div style={{ fontSize: 12, color: theme.muted, marginTop: 2, lineHeight: 1.45 }}>If there's empty space under the message bar, tap + until it touches the bottom of the screen. If the bar is hidden, tap −.</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 10 }}>
+        {btn('−', () => update(value - 4))}
+        <div style={{ minWidth: 60, textAlign: 'center', fontWeight: 800, color: theme.ink, fontVariantNumeric: 'tabular-nums' }}>{value > 0 ? `+${value}` : value}</div>
+        {btn('+', () => update(value + 4))}
+        <div role="button" onClick={() => update(0)} style={{ marginLeft: 'auto', fontSize: 12.5, fontWeight: 700, color: theme.coral, cursor: 'pointer' }}>Reset</div>
+      </div>
+    </div>
+  );
+}
+
+function ScreenDebugInfo() {
+  const { theme } = useTheme();
+  const [info, setInfo] = useState(null);
+  const measure = () => {
+    const vv = window.visualViewport;
+    const probe = (side) => { const el = document.createElement('div'); el.style.cssText = `position:fixed;top:0;left:0;width:1px;height:env(safe-area-inset-${side});visibility:hidden;pointer-events:none;`; document.body.appendChild(el); const h = el.getBoundingClientRect().height; document.body.removeChild(el); return h; };
+    const root = document.getElementById('zapp-root');
+    const r = root ? root.getBoundingClientRect() : null;
+    setInfo({
+      standalone: String(window.navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)),
+      innerHeight: window.innerHeight, innerWidth: window.innerWidth, outerHeight: window.outerHeight,
+      screen: `${window.screen.width} x ${window.screen.height}`, docHeight: document.documentElement.clientHeight,
+      vvHeight: vv ? Math.round(vv.height) : 'n/a', vvOffsetTop: vv ? Math.round(vv.offsetTop) : 'n/a', vvScale: vv ? vv.scale : 'n/a',
+      safeTop: probe('top'), safeBottom: probe('bottom'), scrollY: window.scrollY,
+      rootTop: r ? Math.round(r.top) : 'n/a', rootBottom: r ? Math.round(r.bottom) : 'n/a', rootHeight: r ? Math.round(r.height) : 'n/a',
+      shift: getBottomShift(), dpr: window.devicePixelRatio, ua: navigator.userAgent.slice(0, 80),
+    });
+  };
+  useEffect(() => { measure(); const t = setInterval(measure, 2000); return () => clearInterval(t); }, []);
+  if (!info) return null;
+  return (
+    <div style={{ marginTop: 12, padding: 12, borderRadius: 14, background: theme.rowBg, fontSize: 11.5, fontFamily: 'ui-monospace, monospace', color: theme.ink, lineHeight: 1.6, wordBreak: 'break-all' }}>
+      <div style={{ fontWeight: 800, marginBottom: 4 }}>Screen info (send a screenshot of this)</div>
+      {Object.entries(info).map(([k, v]) => <div key={k}>{k}: {String(v)}</div>)}
+    </div>
+  );
+}
+
 function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAccount, onAddAccount, onRemoveAccount, switchingAccountId }) {
   const { theme, bgPatternOn, chatTheme } = useTheme();
   const assetProgress = useAssetPrefetch();
@@ -8825,7 +8896,13 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   const [viewportBox, setViewportBox] = useState({ height: null, offset: 0 });
   const [standaloneFill, setStandaloneFill] = useState(null);
+  const [bottomShift, setBottomShiftState] = useState(() => getBottomShift());
   const safeTopRef = useRef(null);
+  useEffect(() => {
+    const onChange = () => setBottomShiftState(getBottomShift());
+    window.addEventListener('zchat-bottom-shift', onChange);
+    return () => window.removeEventListener('zchat-bottom-shift', onChange);
+  }, []);
   const [isWide, setIsWide] = useState(() => (typeof window !== 'undefined' ? window.innerWidth >= 900 : false));
   useEffect(() => {
     const onResize = () => setIsWide(window.innerWidth >= 900);
@@ -9544,7 +9621,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'mails' }, (payload) => {
         const row = payload.new;
         if (!row || row.recipient_id !== me.id) return;
-        setInAppToast({ key: `mail-${row.id}`, kind: 'notice', icon: row.type === 'report_warning' ? 'warning' : row.type === 'mention' ? 'mention' : row.type === 'update' ? 'update' : 'mail', title: row.title || 'New mail',
+        setInAppToast({ key: `mail-${row.id}`, kind: 'notice', icon: row.type === 'report_warning' ? 'warning' : row.type === 'mention' ? 'mention' : row.type === 'update' ? 'update' : row.type === 'badge' ? 'badge' : 'mail', badgeTier: badgeTierFromTitle(row.title), title: row.title || 'New mail',
           preview: { kind: 'text', text: row.body || '' }, action: { type: 'mail', id: row.id } });
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'group_members' }, async (payload) => {
@@ -9834,6 +9911,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     return () => clearInterval(poll);
   }, [activeProfile]);
 
+  const autoBottomPad = standaloneFill ? standaloneFill.pad : 0;
+  const rootExtend = Math.max(autoBottomPad, bottomShift);
   const chatKey = activeGroup?.id || activeProfile?.id || null;
   const activeProfileIdForSeen = activeGroup ? null : (activeProfile ? activeProfile.id : null);
   useEffect(() => {
@@ -10959,10 +11038,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   callEngineRef.current = callEngine;
   useEffect(() => {
     if (!me || !me.verified || !VERIFIED_TIERS[me.verified]) return;
-    let seen = null;
-    try { seen = localStorage.getItem(`zchat-verified-seen-${me.id}`); } catch {}
-    if (seen !== me.verified) setCelebrateTier(me.verified);
-  }, [me && me.verified]);
+    if (me.verified_seen === me.verified) return;
+    setCelebrateTier(me.verified);
+  }, [me && me.verified, me && me.verified_seen]);
   const openHighlight = async (h, owner) => {
     const { data } = await supabase.from('highlight_items').select('*').eq('highlight_id', h.id).order('created_at', { ascending: true });
     if (!data || !data.length) { showSnack('This highlight is empty'); return; }
@@ -11016,6 +11094,47 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     return () => supabase.removeChannel(channel);
   }, [me]);
   const callBarShown = !!(callEngine.call && callEngine.call.minimized && callEngine.call.status !== 'ended');
+  const bannerColorRef = useRef({});
+  useEffect(() => {
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (!meta) return undefined;
+    const previous = meta.getAttribute('content');
+    const activeNameBarKey = activeGroup ? activeGroup.name_bar : activeConvNameBar;
+    const inChat = mobileShowChat && (activeProfile || activeGroup);
+    if (!inChat || callBarShown) return undefined;
+    let cancelled = false;
+    const apply = (color) => { if (!cancelled) meta.setAttribute('content', color); };
+    if (activeNameBarKey) {
+      const cached = bannerColorRef.current[activeNameBarKey];
+      if (cached) apply(cached);
+      else {
+        const preset = NAME_BAR_PRESETS.find((p) => p.key === activeNameBarKey);
+        if (preset) {
+          const img = new Image();
+          img.crossOrigin = 'anonymous';
+          img.onload = () => {
+            try {
+              const c = document.createElement('canvas');
+              c.width = 8; c.height = 4;
+              const ctx = c.getContext('2d');
+              ctx.drawImage(img, 0, 0, 8, 4);
+              const d = ctx.getImageData(0, 0, 8, 2).data;
+              let r = 0, g = 0, b = 0, n = 0;
+              for (let i = 0; i < d.length; i += 4) { r += d[i]; g += d[i + 1]; b += d[i + 2]; n++; }
+              const hex = '#' + [r, g, b].map((v) => Math.round((v / n) * 0.75).toString(16).padStart(2, '0')).join('');
+              bannerColorRef.current[activeNameBarKey] = hex;
+              apply(hex);
+            } catch { apply(theme.dark ? '#0b0f19' : '#f4f6fb'); }
+          };
+          img.onerror = () => apply(theme.dark ? '#0b0f19' : '#f4f6fb');
+          img.src = preset.file;
+        }
+      }
+    } else {
+      apply(theme.dark ? '#0b0f19' : '#f4f6fb');
+    }
+    return () => { cancelled = true; if (previous) meta.setAttribute('content', previous); };
+  }, [mobileShowChat, activeProfile && activeProfile.id, activeGroup && activeGroup.id, activeGroup && activeGroup.name_bar, activeConvNameBar, callBarShown, theme.dark]);
   useEffect(() => {
     const meta = document.querySelector('meta[name="theme-color"]');
     if (!meta) return undefined;
@@ -11333,8 +11452,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   return (
     <div id="zapp-root" style={{
       position: 'fixed', left: 0, right: 0, top: viewportBox.height ? viewportBox.offset : 0,
-      ...(viewportBox.height ? { height: viewportBox.height } : standaloneFill ? { height: standaloneFill.h } : { bottom: 0 }),
-      '--zchat-bottom-pad': `${!viewportBox.height && standaloneFill ? standaloneFill.pad : 0}px`,
+      ...(viewportBox.height ? { height: viewportBox.height } : { bottom: -Math.max(0, rootExtend) }),
+      '--zchat-bottom-pad': `${viewportBox.height ? 0 : Math.max(0, rootExtend - bottomShift)}px`,
       background: theme.bgGradient, fontFamily: FONT,
       display: 'flex', overflow: 'hidden', boxSizing: 'border-box',
       paddingTop: callBarShown ? 'calc(env(safe-area-inset-top) + 42px)' : 'env(safe-area-inset-top)',
@@ -12154,7 +12273,12 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       )}
       {celebrateTier && (
         <VerifiedCelebration tier={celebrateTier} name={me.name}
-          onClose={() => { try { localStorage.setItem(`zchat-verified-seen-${me.id}`, celebrateTier); } catch {} setCelebrateTier(null); }} />
+          onClose={async () => {
+            const tier = celebrateTier;
+            setCelebrateTier(null);
+            setMe((prev) => (prev ? { ...prev, verified_seen: tier } : prev));
+            await supabase.from('profiles').update({ verified_seen: tier }).eq('id', session.user.id);
+          }} />
       )}
       {stickerSheetFor && (
         <StickerPreviewSheet message={stickerSheetFor} isMine={stickerSheetFor.sender_id === session.user.id}
