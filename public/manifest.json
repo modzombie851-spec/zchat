@@ -1,12 +1,10 @@
 {
   "name": "ZChat",
   "short_name": "ZChat",
-  "description": "Chat, share and stay close with your people on ZChat.",
+  "description": "Message people, your way.",
   "start_url": "/",
   "scope": "/",
-  "id": "/",
   "display": "fullscreen",
-  "display_override": ["fullscreen", "standalone"],
   "orientation": "portrait",
   "background_color": "#050810",
   "theme_color": "#050810",
@@ -15,7 +13,19 @@
       "src": "/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }
