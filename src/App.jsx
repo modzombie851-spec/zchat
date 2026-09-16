@@ -343,6 +343,8 @@ function GlobalStyle() {
       @keyframes zchat-call-pulse { 0% { box-shadow: 0 0 0 0 rgba(52,199,89,0.55); } 70% { box-shadow: 0 0 0 16px rgba(52,199,89,0); } 100% { box-shadow: 0 0 0 0 rgba(52,199,89,0); } }
       @keyframes zchat-call-ring { 0% { transform: scale(0.92); opacity: 0.85; } 100% { transform: scale(1.4); opacity: 0; } }
       .zchat-call-pulse { animation: zchat-call-pulse 1.6s infinite; }
+      html, body { overscroll-behavior: none; }
+      [style*="overflow-y: auto"] { overflow-x: hidden; overscroll-behavior-y: contain; -webkit-overflow-scrolling: touch; }
       @keyframes zchat-confetti { 0% { transform: translateY(-20px) rotate(0deg); } 100% { transform: translateY(110vh) rotate(720deg); } }
       @keyframes zchat-badge-pulse { 0%, 100% { transform: scale(0.94); opacity: 0.75; } 50% { transform: scale(1.06); opacity: 1; } }
       @keyframes zchat-frame-spin { to { transform: rotate(360deg); } }
@@ -3775,7 +3777,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
   return (
     <div onClick={(e) => { if (e.target === e.currentTarget && !editing) onClose(); }} style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(5,8,16,0.6)', display: 'flex', justifyContent: 'center' }} className="zchat-fade">
     <div style={{ width: '100%', maxWidth: 560, height: '100%', background: theme.dark ? '#000' : '#fff', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden' }}>
-      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain', touchAction: 'pan-y' }}>
         <div style={{ position: 'relative', height: 'min(42vh, 320px)', minHeight: 240, background: hasPhoto ? '#000' : colorForName(profile.name), overflow: 'hidden' }}>
           {hasPhoto ? (
             <img src={shownPhoto} alt="" draggable={false} onContextMenu={(e) => e.preventDefault()} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
@@ -9886,6 +9888,23 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     return () => clearInterval(poll);
   }, [activeProfile]);
 
+  const preloadedImagesRef = useRef(new Set());
+  useEffect(() => {
+    const files = [];
+    const add = (list, key) => { const preset = key && list.find((x) => x.key === key); if (preset) files.push(preset.file); };
+    conversations.forEach((c) => {
+      add(NAME_BAR_PRESETS, c.name_bar);
+      add(WALLPAPER_PRESETS, c[c.user_a === session.user.id ? 'wallpaper_a' : 'wallpaper_b']);
+    });
+    groups.forEach((g) => { add(NAME_BAR_PRESETS, g.name_bar); add(WALLPAPER_PRESETS, g.wallpaper); });
+    files.forEach((file) => {
+      if (preloadedImagesRef.current.has(file)) return;
+      preloadedImagesRef.current.add(file);
+      const img = new Image();
+      img.decoding = 'async';
+      img.src = file;
+    });
+  }, [conversations, groups]);
   const chatKey = activeGroup?.id || activeProfile?.id || null;
   const activeProfileIdForSeen = activeGroup ? null : (activeProfile ? activeProfile.id : null);
   useEffect(() => {
@@ -9897,8 +9916,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       setActiveProfile((prev) => (prev && prev.id === data.id ? { ...prev, last_seen: data.last_seen, hide_activity: data.hide_activity, verified: data.verified } : prev));
     };
     refresh();
-    const t = setInterval(refresh, 45000);
-    return () => { cancelled = true; clearInterval(t); };
+    const t = setInterval(refresh, 20000);
+    const onVisible = () => { if (document.visibilityState === 'visible') refresh(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => { cancelled = true; clearInterval(t); document.removeEventListener('visibilitychange', onVisible); };
   }, [activeProfileIdForSeen]);
   const scrollChatToBottom = (smooth) => {
     const el = scrollRef.current;
@@ -11067,47 +11088,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     return () => supabase.removeChannel(channel);
   }, [me]);
   const callBarShown = !!(callEngine.call && callEngine.call.minimized && callEngine.call.status !== 'ended');
-  const bannerColorRef = useRef({});
-  useEffect(() => {
-    const meta = document.querySelector('meta[name="theme-color"]');
-    if (!meta) return undefined;
-    const previous = meta.getAttribute('content');
-    const activeNameBarKey = activeGroup ? activeGroup.name_bar : activeConvNameBar;
-    const inChat = mobileShowChat && (activeProfile || activeGroup);
-    if (!inChat || callBarShown) return undefined;
-    let cancelled = false;
-    const apply = (color) => { if (!cancelled) meta.setAttribute('content', color); };
-    if (activeNameBarKey) {
-      const cached = bannerColorRef.current[activeNameBarKey];
-      if (cached) apply(cached);
-      else {
-        const preset = NAME_BAR_PRESETS.find((p) => p.key === activeNameBarKey);
-        if (preset) {
-          const img = new Image();
-          img.crossOrigin = 'anonymous';
-          img.onload = () => {
-            try {
-              const c = document.createElement('canvas');
-              c.width = 8; c.height = 4;
-              const ctx = c.getContext('2d');
-              ctx.drawImage(img, 0, 0, 8, 4);
-              const d = ctx.getImageData(0, 0, 8, 2).data;
-              let r = 0, g = 0, b = 0, n = 0;
-              for (let i = 0; i < d.length; i += 4) { r += d[i]; g += d[i + 1]; b += d[i + 2]; n++; }
-              const hex = '#' + [r, g, b].map((v) => Math.round((v / n) * 0.75).toString(16).padStart(2, '0')).join('');
-              bannerColorRef.current[activeNameBarKey] = hex;
-              apply(hex);
-            } catch { apply(theme.dark ? '#0b0f19' : '#f4f6fb'); }
-          };
-          img.onerror = () => apply(theme.dark ? '#0b0f19' : '#f4f6fb');
-          img.src = preset.file;
-        }
-      }
-    } else {
-      apply(theme.dark ? '#0b0f19' : '#f4f6fb');
-    }
-    return () => { cancelled = true; if (previous) meta.setAttribute('content', previous); };
-  }, [mobileShowChat, activeProfile && activeProfile.id, activeGroup && activeGroup.id, activeGroup && activeGroup.name_bar, activeConvNameBar, callBarShown, theme.dark]);
   useEffect(() => {
     const meta = document.querySelector('meta[name="theme-color"]');
     if (!meta) return undefined;
@@ -11665,7 +11645,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
       <div style={{
         flex: 1, display: (isWide || mobileShowChat) ? 'flex' : 'none', flexDirection: 'column', minWidth: 0, minHeight: 0, position: 'relative',
-        paddingTop: (activeProfile || activeGroup) ? 64 : 0,
+        paddingTop: (activeProfile || activeGroup) ? (isAppleMobile() ? 64 : 74) : 0,
       }} className={mobileShowChat ? 'zchat-chat-panel zchat-panel-open' : 'zchat-chat-panel'}>
         {(activeProfile || activeGroup) ? (
           <>
@@ -11673,6 +11653,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               position: 'fixed', top: (viewportBox.height ? viewportBox.offset : 0) + (callBarShown ? 42 : 0), left: isWide ? 'calc(360px + env(safe-area-inset-left))' : 0, right: 0, zIndex: 15,
               borderBottom: activeNameBarKey ? 'none' : `1px solid ${theme.dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}`,
               overflow: 'hidden',
+              ...(!isAppleMobile() ? { borderTopLeftRadius: 22, borderTopRightRadius: 22 } : {}),
+              transform: 'translateZ(0)',
               ...(activeNameBarKey
                 ? (nameBarBgStyle(activeNameBarKey) || {})
                 : { background: theme.dark ? 'rgba(10,13,22,0.68)' : 'rgba(255,255,255,0.72)', backdropFilter: 'blur(26px) saturate(180%)', WebkitBackdropFilter: 'blur(26px) saturate(180%)' }),
@@ -11684,8 +11666,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                   background: 'linear-gradient(90deg, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.5) 45%, rgba(0,0,0,0.26) 75%, rgba(0,0,0,0.12) 100%), linear-gradient(180deg, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0) 40%, rgba(0,0,0,0.2) 100%)',
                 }} />
               )}
-              {activeNameBarKey && <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', backdropFilter: 'saturate(140%)', WebkitBackdropFilter: 'saturate(140%)' }} />}
-              <div style={{ height: 'env(safe-area-inset-top)', width: '100%' }} />
+              <div style={{ height: isAppleMobile() ? 'env(safe-area-inset-top)' : 10, width: '100%' }} />
               <div
                 style={{
                   padding: '13px 18px', display: 'flex', alignItems: 'center', gap: 10,
