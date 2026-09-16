@@ -11695,6 +11695,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         flex: 1, display: (isWide || mobileShowChat) ? 'flex' : 'none', flexDirection: 'column', minWidth: 0, minHeight: 0, position: 'relative',
         paddingTop: (activeProfile || activeGroup) ? 64 : 0,
         paddingBottom: 'var(--zchat-bottom-pad, 0px)',
+        ...((activeProfile || activeGroup) ? (wallpaperBgStyle(activeWallpaperKey) || {}) : {}),
       }} className={mobileShowChat ? 'zchat-chat-panel zchat-panel-open' : 'zchat-chat-panel'}>
         {(activeProfile || activeGroup) ? (
           <>
@@ -11796,7 +11797,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             <div ref={scrollRef} className="zchat-msglist" onScroll={handleChatScroll} style={{
               flex: 1, minHeight: 0, overflowY: 'auto', padding: '10px 18px 4px', position: 'relative',
               WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain', touchAction: 'pan-y',
-              ...(wallpaperBgStyle(activeWallpaperKey) || {}),
             }}>
               <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
               {!activeWallpaperKey && <AnimatedChatBackground chatTheme={chatTheme} />}
