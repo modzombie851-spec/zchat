@@ -6381,8 +6381,8 @@ function mailSenderName(type) {
 function VerifiedTick({ size = 13 }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" style={{ flexShrink: 0 }}>
-      <path fill="#2E7CF6" d="M12 1.5l2.6 1.9 3.2-.2 1 3 2.7 1.8-.9 3.1.9 3.1-2.7 1.8-1 3-3.2-.2L12 22.5l-2.6-1.9-3.2.2-1-3-2.7-1.8.9-3.1-.9-3.1 2.7-1.8 1-3 3.2.2z" />
-      <path d="M7.5 12.2l3 3 6-6.2" fill="none" stroke="white" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+      <path fill="#3D9DF2" d={BADGE_SHAPE_PATH} />
+      <path d="M8.6 12.3l2.3 2.2 4.6-3.6" fill="none" stroke="white" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -8128,10 +8128,26 @@ function FollowActionButton({ state, theyFollowMe, busy, onClick, size = 'md', o
   );
 }
 
+const BADGE_SHAPE_PATH = (() => {
+  const lobes = 12;
+  const steps = 144;
+  const radius = 9.9;
+  const depth = 0.075;
+  let d = '';
+  for (let i = 0; i <= steps; i++) {
+    const a = (i / steps) * Math.PI * 2;
+    const r = radius * (1 - depth * Math.cos(lobes * a));
+    const x = 12 + r * Math.cos(a - Math.PI / 2);
+    const y = 12 + r * Math.sin(a - Math.PI / 2);
+    d += `${i ? 'L' : 'M'}${x.toFixed(2)} ${y.toFixed(2)}`;
+  }
+  return `${d}Z`;
+})();
+
 const VERIFIED_TIERS = {
-  blue: { color: '#2E7CF6', glow: 'rgba(46,124,246,0.45)', label: 'Verified', desc: 'This account is verified.' },
-  red: { color: '#FF2D55', glow: 'rgba(255,45,85,0.5)', label: 'Official ZChat', desc: 'This is the official ZChat account.' },
-  gold: { color: '#F5B800', glow: 'rgba(245,184,0,0.5)', label: 'Verified email', desc: 'This account has a verified email.' },
+  blue: { color: '#3D9DF2', glow: 'rgba(61,157,242,0.45)', label: 'Verified', desc: 'This account is verified.' },
+  red: { color: '#F5334F', glow: 'rgba(245,51,79,0.5)', label: 'Official ZChat', desc: 'This is the official ZChat account.' },
+  gold: { color: '#F6B40E', glow: 'rgba(246,180,14,0.5)', label: 'Verified email', desc: 'This account has a verified email.' },
 };
 
 function VerifiedBadge({ tier, size = 14, style }) {
@@ -8139,8 +8155,8 @@ function VerifiedBadge({ tier, size = 14, style }) {
   if (!t) return null;
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" style={{ flexShrink: 0, display: 'inline-block', verticalAlign: '-0.12em', marginLeft: 4, ...style }} aria-label={t.label}>
-      <path fill={t.color} d="M12 1.5l2.6 1.9 3.2-.2 1 3 2.7 1.8-.9 3.1.9 3.1-2.7 1.8-1 3-3.2-.2L12 22.5l-2.6-1.9-3.2.2-1-3-2.7-1.8.9-3.1-.9-3.1 2.7-1.8 1-3 3.2.2z" />
-      <path d="M7.5 12.2l3 3 6-6.2" fill="none" stroke="white" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+      <path fill={t.color} d={BADGE_SHAPE_PATH} />
+      <path d="M8.6 12.3l2.3 2.2 4.6-3.6" fill="none" stroke="white" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
