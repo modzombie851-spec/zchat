@@ -1203,7 +1203,6 @@ function ToggleSwitch({ on, onClick }) {
 }
 
 function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideActivity, onToggleActivity, onOpenAccounts, onOpenDelete, onOpenBlocked, blockedCount = 0, chatLockSet, chatLockHash, onSetChatLockPassword, onTurnOffChatLock, autoOpenLockSetup, onConsumedAutoOpen }) {
-  const [debugTaps, setDebugTaps] = useState(0);
   const { theme, dark, setDark, accentName, setAccentName, soundOn, setSoundOn, reactionSoundOn, setReactionSoundOn, bgPatternOn, setBgPatternOn, fontScale, setFontScale, chatTheme, setChatTheme, bubbleColor, setBubbleColor } = useTheme();
   const accentLabels = { coral: 'Coral', ocean: 'Ocean', berry: 'Berry' };
   const [lockFlow, setLockFlow] = useState(null);
@@ -1291,7 +1290,6 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
         {section === 'appearance' && (
           <>
             <SectionHeader title="Appearance" />
-            <BottomPositionSetting />
             <SettingsRow icon={dark ? <Sun size={16} /> : <Moon size={16} />} label="Dark mode" right={<ToggleSwitch on={dark} onClick={() => setDark((d) => !d)} />} />
             <div style={{ padding: '10px 4px', borderBottom: `1px solid ${theme.border}` }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
@@ -1360,8 +1358,7 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
           <>
             <SectionHeader title="About" />
             <SettingsRow icon={<FileText size={16} />} label="Privacy policy" onClick={onOpenPrivacy} />
-            <div onClick={() => setDebugTaps((n) => n + 1)} style={{ textAlign: 'center', fontSize: 11, color: theme.muted, marginTop: 14, fontWeight: 600, cursor: 'pointer', userSelect: 'none' }}>ZChat {APP_VERSION}</div>
-            {debugTaps >= 5 && <ScreenDebugInfo />}
+
           </>
         )}
 
@@ -8895,15 +8892,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [isStandaloneApp, setIsStandaloneApp] = useState(false);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   const [viewportBox, setViewportBox] = useState({ height: null, offset: 0 });
-  const [standaloneFill, setStandaloneFill] = useState(null);
-  const [bottomShift, setBottomShiftState] = useState(() => getBottomShift());
-  const [safeTopPx, setSafeTopPx] = useState(0);
-  const safeTopRef = useRef(null);
-  useEffect(() => {
-    const onChange = () => setBottomShiftState(getBottomShift());
-    window.addEventListener('zchat-bottom-shift', onChange);
-    return () => window.removeEventListener('zchat-bottom-shift', onChange);
-  }, []);
+
   const [isWide, setIsWide] = useState(() => (typeof window !== 'undefined' ? window.innerWidth >= 900 : false));
   useEffect(() => {
     const onResize = () => setIsWide(window.innerWidth >= 900);
@@ -8932,29 +8921,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         const open = typing && fullHeightRef.current - vv.height > 120;
         const standalone = isAppleMobile() && (window.navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches));
         let fill = null;
-        if (standalone && safeTopRef.current == null) {
-          const probe = document.createElement('div');
-          probe.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:env(safe-area-inset-top);visibility:hidden;pointer-events:none;';
-          document.body.appendChild(probe);
-          safeTopRef.current = probe.getBoundingClientRect().height || 0;
-          document.body.removeChild(probe);
-          setSafeTopPx(safeTopRef.current);
-        }
-        if (!open && standalone && window.screen) {
-          if (safeTopRef.current == null) {
-            const probe = document.createElement('div');
-            probe.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:env(safe-area-inset-top);visibility:hidden;pointer-events:none;';
-            document.body.appendChild(probe);
-            safeTopRef.current = probe.getBoundingClientRect().height || 0;
-            document.body.removeChild(probe);
-          }
-          const portrait = window.innerHeight >= window.innerWidth;
-          const screenH = portrait ? Math.max(window.screen.height, window.screen.width) : Math.min(window.screen.height, window.screen.width);
-          const gap = screenH - window.innerHeight;
-          const safeTop = safeTopRef.current;
-          if (safeTop >= 20 && gap > 0 && Math.abs(gap - safeTop) <= 6) fill = { h: screenH, pad: gap };
-        }
-        setStandaloneFill((prev) => ((prev && fill && prev.h === fill.h && prev.pad === fill.pad) || (!prev && !fill) ? prev : fill));
         setKeyboardOpen((prev) => (prev === open ? prev : open));
         setViewportBox((prev) => {
           const next = open
@@ -9920,8 +9886,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     return () => clearInterval(poll);
   }, [activeProfile]);
 
-  const autoBottomPad = standaloneFill ? standaloneFill.pad : 0;
-  const rootExtend = safeTopPx >= 20 ? Math.max(autoBottomPad, bottomShift) : 0;
   const chatKey = activeGroup?.id || activeProfile?.id || null;
   const activeProfileIdForSeen = activeGroup ? null : (activeProfile ? activeProfile.id : null);
   useEffect(() => {
@@ -11103,24 +11067,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     return () => supabase.removeChannel(channel);
   }, [me]);
   const callBarShown = !!(callEngine.call && callEngine.call.minimized && callEngine.call.status !== 'ended');
-  useEffect(() => {
-    const html = document.documentElement;
-    const body = document.body;
-    const inChat = mobileShowChat && (activeProfile || activeGroup);
-    const wallpaperKey = activeGroup ? activeGroup.wallpaper : (activeConvForBar ? myWallpaper(activeConvForBar) : null);
-    const wp = inChat ? wallpaperBgStyle(wallpaperKey) : null;
-    const bg = theme.bgGradient;
-    try {
-      if (wp && wp.backgroundImage) {
-        html.style.background = `${wp.backgroundImage} center / cover no-repeat fixed, ${bg}`;
-        body.style.background = 'transparent';
-      } else {
-        html.style.background = bg;
-        body.style.background = bg;
-      }
-    } catch {}
-    return () => { try { html.style.background = bg; body.style.background = bg; } catch {} };
-  }, [mobileShowChat, activeProfile && activeProfile.id, activeGroup && activeGroup.id, activeGroup && activeGroup.wallpaper, activeConvForBar && myWallpaper(activeConvForBar), theme.bgGradient]);
   const bannerColorRef = useRef({});
   useEffect(() => {
     const meta = document.querySelector('meta[name="theme-color"]');
@@ -11479,8 +11425,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   return (
     <div id="zapp-root" style={{
       position: 'fixed', left: 0, right: 0, top: viewportBox.height ? viewportBox.offset : 0,
-      ...(viewportBox.height ? { height: viewportBox.height } : { bottom: -Math.max(0, rootExtend) }),
-      '--zchat-bottom-pad': `${viewportBox.height ? 0 : Math.max(0, rootExtend - bottomShift)}px`,
+      ...(viewportBox.height ? { height: viewportBox.height } : { bottom: 0 }),
       background: theme.bgGradient, fontFamily: FONT,
       display: 'flex', overflow: 'hidden', boxSizing: 'border-box',
       paddingTop: callBarShown ? 'calc(env(safe-area-inset-top) + 42px)' : 'env(safe-area-inset-top)',
@@ -11493,7 +11438,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       <div style={{
         width: isWide ? 360 : (mobileShowChat ? 0 : '100%'), maxWidth: isWide ? 360 : (mobileShowChat ? 0 : '100%'), overflow: 'hidden',
         borderRight: `1px solid ${theme.border}`, display: 'flex', flexDirection: 'column', flexShrink: 0,
-        transition: 'none', paddingBottom: 'var(--zchat-bottom-pad, 0px)',
+        transition: 'none',
       }} className="zchat-sidebar-desktop">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
         {notifPermission === 'default' && pushSupported() && !notifBannerDismissed && (
@@ -11721,8 +11666,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       <div style={{
         flex: 1, display: (isWide || mobileShowChat) ? 'flex' : 'none', flexDirection: 'column', minWidth: 0, minHeight: 0, position: 'relative',
         paddingTop: (activeProfile || activeGroup) ? 64 : 0,
-        paddingBottom: 'var(--zchat-bottom-pad, 0px)',
-        ...((activeProfile || activeGroup) ? (wallpaperBgStyle(activeWallpaperKey) || {}) : {}),
       }} className={mobileShowChat ? 'zchat-chat-panel zchat-panel-open' : 'zchat-chat-panel'}>
         {(activeProfile || activeGroup) ? (
           <>
@@ -11824,6 +11767,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             <div ref={scrollRef} className="zchat-msglist" onScroll={handleChatScroll} style={{
               flex: 1, minHeight: 0, overflowY: 'auto', padding: '10px 18px 4px', position: 'relative',
               WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain', touchAction: 'pan-y',
+              ...(wallpaperBgStyle(activeWallpaperKey) || {}),
             }}>
               <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
               {!activeWallpaperKey && <AnimatedChatBackground chatTheme={chatTheme} />}
@@ -11932,7 +11876,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               </div>
             )}
 
-            <div style={{ flexShrink: 0, position: 'relative', marginBottom: 'calc(-1 * var(--zchat-bottom-pad, 0px))', paddingBottom: 'var(--zchat-bottom-pad, 0px)' }}>
             <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, padding: '6px 14px', flexShrink: 0, position: 'relative', paddingBottom: keyboardOpen ? 6 : 'max(6px, calc(env(safe-area-inset-bottom) - 24px))' }}>
               {activeProfile && !activeGroup && myBlockedIds.has(activeProfile.id) ? (
                 <div className="zchat-fade" style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 9, padding: '8px 4px 2px' }}>
@@ -12002,7 +11945,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                   )}
                 </>
               )}
-            </div>
             </div>
 
             {showJumpButton && !selectionMode && (
