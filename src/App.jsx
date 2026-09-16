@@ -346,6 +346,7 @@ function GlobalStyle() {
       @keyframes zchat-confetti { 0% { transform: translateY(-20px) rotate(0deg); } 100% { transform: translateY(110vh) rotate(720deg); } }
       @keyframes zchat-badge-pulse { 0%, 100% { transform: scale(0.94); opacity: 0.75; } 50% { transform: scale(1.06); opacity: 1; } }
       @keyframes zchat-frame-spin { to { transform: rotate(360deg); } }
+      @keyframes zchat-post-heart { 0% { transform: scale(0); opacity: 0; } 15% { transform: scale(1.2); opacity: 1; } 30% { transform: scale(0.95); } 45% { transform: scale(1); } 80% { transform: scale(1); opacity: 1; } 100% { transform: scale(0.2) translateY(-60px); opacity: 0; } }
       img, video { -webkit-touch-callout: none; -webkit-user-drag: none; }
       body { -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
       .zchat-call-ring { animation: zchat-call-ring 1.8s ease-out infinite; }
@@ -4238,7 +4239,7 @@ function AudioBubble({ url, isMe }) {
   );
 }
 
-function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSelect, onLongPress, onOpenImage, onOpenVideo, reactions, onReact, onOpenWhoReacted, replyPreview, onSwipeReply, onJumpToMessage, highlighted, senderLabel, senderAvatar, hideReadStatus, onOpenSenderProfile, canModerate, onOpenMention, mentionsMe, onOpenStoryRef, onCallBack, onOpenSticker, tightBelow }) {
+function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSelect, onLongPress, onOpenImage, onOpenVideo, reactions, onReact, onOpenWhoReacted, replyPreview, onSwipeReply, onJumpToMessage, highlighted, senderLabel, senderAvatar, hideReadStatus, onOpenSenderProfile, canModerate, onOpenMention, mentionsMe, onOpenStoryRef, onCallBack, onOpenSticker, tightBelow, senderVerified }) {
   const { theme, fontScale, chatTheme, bubbleColor } = useTheme();
   const [hover, setHover] = useState(false);
   const [burstHeart, setBurstHeart] = useState(false);
@@ -4399,7 +4400,7 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
         })}>
           {senderLabel && !m.deleted && (
             <div style={{ fontSize: 11.5, fontWeight: 700, color: theme.coralDeep, marginBottom: 3, padding: m.type !== 'text' ? '0 4px' : 0 }}>
-              {senderLabel}
+              {senderLabel}<VerifiedBadge tier={senderVerified} size={11} />
             </div>
           )}
           {m.forwarded && !m.deleted && (
@@ -4417,7 +4418,9 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
             }}>
               <div style={{ fontWeight: 700, color: theme.coralDeep, fontSize: 10.5 }}>{replyPreview.senderLabel}</div>
               <div style={{ wordBreak: 'break-word', lineHeight: 1.35 }}>
-                {replyPreview.type === 'text' ? (parseProfileLink(replyPreview.content) ? 'Profile' : replyPreview.content) : replyPreview.type === 'image' ? 'Photo' : replyPreview.type === 'audio' ? 'Voice message' : replyPreview.type === 'sticker' ? 'Sticker' : 'Video'}
+                {replyPreview.type === 'sticker' && replyPreview.content && replyPreview.content.startsWith('/')
+                  ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><img src={replyPreview.content} alt="" style={{ width: 28, height: 28, objectFit: 'contain' }} />Sticker</span>
+                  : replyPreview.type === 'text' ? (parseProfileLink(replyPreview.content) ? 'Profile' : replyPreview.content) : replyPreview.type === 'image' ? 'Photo' : replyPreview.type === 'audio' ? 'Voice message' : replyPreview.type === 'sticker' ? 'Sticker' : 'Video'}
               </div>
             </div>
           )}
@@ -8162,6 +8165,9 @@ const VERIFIED_TIERS = {
   blue: { color: '#3D9DF2', glow: 'rgba(61,157,242,0.45)', label: 'Verified', desc: 'This account is verified.' },
   red: { color: '#F5334F', glow: 'rgba(245,51,79,0.5)', label: 'Official ZChat', desc: 'This is the official ZChat account.' },
   gold: { color: '#F6B40E', glow: 'rgba(246,180,14,0.5)', label: 'Verified email', desc: 'This account has a verified email.' },
+  pink: { color: '#FF4FA3', glow: 'rgba(255,79,163,0.5)', label: 'Creator', desc: 'This account is a ZChat creator.' },
+  green: { color: '#22C55E', glow: 'rgba(34,197,94,0.5)', label: 'Partner', desc: 'This account is a ZChat partner.' },
+  purple: { color: '#8B5CF6', glow: 'rgba(139,92,246,0.5)', label: 'Premium', desc: 'This account is a ZChat premium member.' },
 };
 
 function VerifiedBadge({ tier, size = 14, style }) {
@@ -8209,7 +8215,12 @@ function VerifiedCelebration({ tier, name, onClose }) {
 }
 
 function AvatarFrame({ size, tier, children }) {
-  const palette = tier === 'red' ? ['#FF2D55', '#FF9500', '#FF2D55'] : tier === 'gold' ? ['#F5B800', '#FFF1A8', '#C98A00'] : ['#2E7CF6', '#7C5CFC', '#00E5FF'];
+  const palette = tier === 'red' ? ['#FF2D55', '#FF9500', '#FF2D55']
+    : tier === 'gold' ? ['#F5B800', '#FFF1A8', '#C98A00']
+      : tier === 'pink' ? ['#FF4FA3', '#FFB3D9', '#C026D3']
+        : tier === 'green' ? ['#22C55E', '#A7F3D0', '#059669']
+          : tier === 'purple' ? ['#8B5CF6', '#C4B5FD', '#6D28D9']
+            : ['#2E7CF6', '#7C5CFC', '#00E5FF'];
   const pad = Math.max(3, Math.round(size * 0.08));
   const outer = size + pad * 2;
   return (
@@ -8440,24 +8451,49 @@ function ProfilePosts({ profile, isSelf, userId, meProfile }) {
   );
 }
 
+function postShareLink(postId) {
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://getzchat.com';
+  return `${origin}/?post=${postId}`;
+}
+
+function timeAgoLong(iso) {
+  const diff = Math.max(0, Date.now() - new Date(iso).getTime());
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return 'Just now';
+  if (m < 60) return `${m} ${m === 1 ? 'minute' : 'minutes'} ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h} ${h === 1 ? 'hour' : 'hours'} ago`;
+  const d = Math.floor(h / 24);
+  if (d < 7) return `${d} ${d === 1 ? 'day' : 'days'} ago`;
+  return new Date(iso).toLocaleDateString([], { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
 function PostViewer({ post, owner, userId, meProfile, onClose, onDeleted }) {
   const { theme } = useTheme();
   const [likes, setLikes] = useState([]);
+  const [likerNames, setLikerNames] = useState({});
   const [comments, setComments] = useState(null);
   const [text, setText] = useState('');
-  const [showComments, setShowComments] = useState(false);
+  const [sheet, setSheet] = useState(null);
+  const [burst, setBurst] = useState(false);
+  const [flash, setFlash] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const lastTapRef = useRef(0);
   const liked = likes.some((l) => l.user_id === userId);
+  const bg = theme.dark ? '#000' : '#fff';
+  const link = postShareLink(post.id);
+
   const load = async () => {
-    const { data: l } = await supabase.from('post_likes').select('*').eq('post_id', post.id);
+    const { data: l } = await supabase.from('post_likes').select('*').eq('post_id', post.id).order('created_at', { ascending: false });
     setLikes(l || []);
     const { data: c } = await supabase.from('post_comments').select('*').eq('post_id', post.id).order('created_at', { ascending: true });
-    const ids = [...new Set((c || []).map((x) => x.user_id))];
-    let byId = {};
+    const ids = [...new Set([...(c || []).map((x) => x.user_id), ...((l || []).slice(0, 1).map((x) => x.user_id))])];
+    const byId = {};
     if (ids.length) {
       const { data: profs } = await supabase.from('profiles').select('*').in('id', ids);
       sanitizeAvatarList(profs, userId).forEach((p) => { byId[p.id] = p; });
     }
+    setLikerNames(byId);
     setComments((c || []).map((x) => ({ ...x, profile: byId[x.user_id] })));
   };
   useEffect(() => {
@@ -8468,14 +8504,28 @@ function PostViewer({ post, owner, userId, meProfile, onClose, onDeleted }) {
       .subscribe();
     return () => supabase.removeChannel(ch);
   }, [post.id]);
-  const toggleLike = async () => {
+
+  const say = (t) => { setFlash(t); setTimeout(() => setFlash(''), 1600); };
+  const like = async (force) => {
+    if (liked && force) return;
     if (liked) {
       setLikes((p) => p.filter((l) => l.user_id !== userId));
       await supabase.from('post_likes').delete().eq('post_id', post.id).eq('user_id', userId);
+      return;
+    }
+    setLikes((p) => [{ post_id: post.id, user_id: userId }, ...p]);
+    await supabase.from('post_likes').upsert({ post_id: post.id, user_id: userId }, { onConflict: 'post_id,user_id' });
+    if (owner.id !== userId) sendPushNotification(owner.id, 'ZChat', `${(meProfile && meProfile.name) || 'Someone'} liked your post`, link, meProfile && meProfile.avatar);
+  };
+  const onMediaTap = () => {
+    const now = Date.now();
+    if (now - lastTapRef.current < 300) {
+      setBurst(true);
+      setTimeout(() => setBurst(false), 850);
+      like(true);
+      lastTapRef.current = 0;
     } else {
-      setLikes((p) => [...p, { post_id: post.id, user_id: userId }]);
-      await supabase.from('post_likes').upsert({ post_id: post.id, user_id: userId }, { onConflict: 'post_id,user_id' });
-      if (owner.id !== userId) sendPushNotification(owner.id, 'ZChat', `${(meProfile && meProfile.name) || 'Someone'} liked your post`, `/?profile=${owner.id}`, meProfile && meProfile.avatar);
+      lastTapRef.current = now;
     }
   };
   const sendComment = async () => {
@@ -8483,48 +8533,113 @@ function PostViewer({ post, owner, userId, meProfile, onClose, onDeleted }) {
     if (!value) return;
     setText('');
     await supabase.from('post_comments').insert({ post_id: post.id, user_id: userId, content: value.slice(0, 500) });
-    if (owner.id !== userId) sendPushNotification(owner.id, 'ZChat', `${(meProfile && meProfile.name) || 'Someone'} commented: ${value.slice(0, 80)}`, `/?profile=${owner.id}`, meProfile && meProfile.avatar);
+    if (owner.id !== userId) sendPushNotification(owner.id, 'ZChat', `${(meProfile && meProfile.name) || 'Someone'} commented: ${value.slice(0, 80)}`, link, meProfile && meProfile.avatar);
     load();
   };
-  const bg = theme.dark ? '#000' : '#fff';
+  const deleteComment = async (c) => {
+    setComments((prev) => (prev || []).filter((x) => x.id !== c.id));
+    await supabase.from('post_comments').delete().eq('id', c.id);
+  };
+  const firstLiker = likes.length ? likerNames[likes[0].user_id] : null;
+  const iconBtn = (icon, onClick, label) => (
+    <div role="button" aria-label={label} onClick={onClick} style={{ padding: 6, cursor: 'pointer', display: 'flex' }}>{icon}</div>
+  );
+
   return (
-    <div className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 90, background: bg, display: 'flex', flexDirection: 'column', color: theme.ink }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', paddingTop: 'calc(12px + env(safe-area-inset-top))' }}>
-        <ArrowLeft size={21} style={{ cursor: 'pointer' }} onClick={onClose} />
-        <Avatar emoji={owner.avatar} name={owner.name} size={32} />
-        <div style={{ flex: 1, fontWeight: 800, fontSize: 14 }}>{owner.username}<VerifiedBadge tier={owner.verified} size={13} /></div>
-        {owner.id === userId && <Trash2 size={19} style={{ cursor: 'pointer', color: theme.danger }} onClick={() => setConfirmDelete(true)} />}
+    <div className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 90, background: bg, color: theme.ink, display: 'flex', flexDirection: 'column', fontFamily: FONT }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '10px 14px', paddingTop: 'calc(10px + env(safe-area-inset-top))', borderBottom: `1px solid ${theme.border}` }}>
+        <ArrowLeft size={22} style={{ cursor: 'pointer' }} onClick={onClose} />
+        <div style={{ fontWeight: 800, fontSize: 16 }}>Posts</div>
       </div>
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-        <div onDoubleClick={() => { if (!liked) toggleLike(); }} style={{ background: '#000', position: 'relative' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px' }}>
+          <Avatar emoji={owner.avatar} name={owner.name} size={34} />
+          <div style={{ flex: 1, minWidth: 0, fontWeight: 700, fontSize: 14 }}>{owner.username}<VerifiedBadge tier={owner.verified} size={13} /></div>
+          <MoreVertical size={20} style={{ cursor: 'pointer', transform: 'rotate(90deg)' }} onClick={() => setSheet('more')} />
+        </div>
+        <div onClick={onMediaTap} style={{ position: 'relative', background: '#000', userSelect: 'none' }}>
           {post.media_type === 'video'
-            ? <video src={post.media_url} controls playsInline style={{ width: '100%', maxHeight: '70vh', display: 'block', objectFit: 'contain' }} />
-            : <img src={post.media_url} alt="" draggable={false} style={{ width: '100%', maxHeight: '70vh', display: 'block', objectFit: 'contain' }} />}
+            ? <video src={post.media_url} playsInline controls style={{ width: '100%', maxHeight: '78vh', display: 'block', objectFit: 'contain' }} />
+            : <img src={post.media_url} alt="" draggable={false} style={{ width: '100%', maxHeight: '78vh', display: 'block', objectFit: 'contain' }} />}
           {post.overlay_url && post.media_type === 'video' && <img src={post.overlay_url} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }} />}
+          {burst && (
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+              <div style={{ animation: 'zchat-post-heart 0.85s ease forwards' }}><Heart size={96} color="white" fill="white" style={{ filter: 'drop-shadow(0 6px 20px rgba(0,0,0,0.35))' }} /></div>
+            </div>
+          )}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '10px 14px' }}>
-          <Heart size={26} color={liked ? '#FF3B5C' : theme.ink} fill={liked ? '#FF3B5C' : 'none'} style={{ cursor: 'pointer' }} onClick={toggleLike} />
-          <ChatBubbleIcon size={25} color={theme.ink} />
+        <div style={{ display: 'flex', alignItems: 'center', padding: '6px 6px 0' }}>
+          {iconBtn(<Heart size={26} color={liked ? '#FF3040' : theme.ink} fill={liked ? '#FF3040' : 'none'} style={{ transition: 'transform 0.15s ease', transform: liked ? 'scale(1.08)' : 'scale(1)' }} />, () => like(false), 'Like')}
+          {iconBtn(<ChatBubbleIcon size={25} color={theme.ink} />, () => setSheet('comments'), 'Comments')}
+          {iconBtn(<Send size={24} color={theme.ink} />, () => setSheet('share'), 'Share')}
         </div>
-        <div style={{ padding: '0 14px', fontSize: 13.5, fontWeight: 800 }}>{likes.length} {likes.length === 1 ? 'like' : 'likes'}</div>
-        {post.caption && <div style={{ padding: '6px 14px 0', fontSize: 14, lineHeight: 1.5 }}><b>{owner.username}</b> {post.caption}</div>}
-        <div onClick={() => setShowComments((v) => !v)} style={{ padding: '8px 14px', fontSize: 13, color: theme.muted, cursor: 'pointer' }}>
-          {comments && comments.length ? (showComments ? 'Hide comments' : `View all ${comments.length} comments`) : 'No comments yet'}
+        <div style={{ padding: '2px 14px', fontSize: 14, fontWeight: 700 }}>
+          {likes.length === 0 ? 'Be the first to like this' : likes.length === 1 && firstLiker ? <>Liked by {firstLiker.username}<VerifiedBadge tier={firstLiker.verified} size={12} /></> : firstLiker ? <>Liked by {firstLiker.username}<VerifiedBadge tier={firstLiker.verified} size={12} /> and {formatCount(likes.length - 1)} others</> : `${formatCount(likes.length)} likes`}
         </div>
-        {showComments && (comments || []).map((c) => (
-          <div key={c.id} style={{ display: 'flex', gap: 10, padding: '6px 14px' }}>
-            <Avatar emoji={c.profile && c.profile.avatar} name={(c.profile && c.profile.name) || '?'} size={30} />
-            <div style={{ fontSize: 13.5, lineHeight: 1.45 }}><b>{c.profile ? c.profile.username : 'user'}</b><VerifiedBadge tier={c.profile && c.profile.verified} size={11} /> {c.content}
-              <div style={{ fontSize: 11, color: theme.muted, marginTop: 2 }}>{timeShort(c.created_at)}</div>
+        {post.caption && (
+          <div style={{ padding: '4px 14px 0', fontSize: 14, lineHeight: 1.45, wordBreak: 'break-word' }}>
+            <b>{owner.username}</b><VerifiedBadge tier={owner.verified} size={12} /> {post.caption}
+          </div>
+        )}
+        {comments && comments.length > 0 && (
+          <div onClick={() => setSheet('comments')} style={{ padding: '6px 14px 0', fontSize: 14, color: theme.muted, cursor: 'pointer' }}>
+            {comments.length === 1 ? 'View 1 comment' : `View all ${comments.length} comments`}
+          </div>
+        )}
+        <div style={{ padding: '6px 14px 18px', fontSize: 11.5, color: theme.muted }}>{timeAgoLong(post.created_at)}</div>
+      </div>
+
+      {sheet === 'comments' && (
+        <div onClick={() => setSheet(null)} style={{ position: 'absolute', inset: 0, zIndex: 5, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'flex-end' }}>
+          <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ width: '100%', height: '78%', background: bg, borderRadius: '22px 22px 0 0', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 4px' }}><div style={{ width: 38, height: 4, borderRadius: 2, background: theme.border }} /></div>
+            <div style={{ textAlign: 'center', fontWeight: 800, fontSize: 15, padding: '4px 0 12px', borderBottom: `1px solid ${theme.border}` }}>Comments</div>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '6px 0' }}>
+              {comments && !comments.length && (
+                <div style={{ textAlign: 'center', padding: '50px 20px' }}>
+                  <div style={{ fontWeight: 800, fontSize: 20 }}>No comments yet</div>
+                  <div style={{ fontSize: 13.5, color: theme.muted, marginTop: 6 }}>Start the conversation.</div>
+                </div>
+              )}
+              {(comments || []).map((c) => (
+                <div key={c.id} style={{ display: 'flex', gap: 12, padding: '10px 16px' }}>
+                  <Avatar emoji={c.profile && c.profile.avatar} name={(c.profile && c.profile.name) || '?'} size={34} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12.5 }}><b>{c.profile ? c.profile.username : 'user'}</b><VerifiedBadge tier={c.profile && c.profile.verified} size={11} /> <span style={{ color: theme.muted }}>{timeShort(c.created_at)}</span></div>
+                    <div style={{ fontSize: 14, lineHeight: 1.4, marginTop: 2, wordBreak: 'break-word' }}>{c.content}</div>
+                  </div>
+                  {(c.user_id === userId || owner.id === userId) && <Trash2 size={15} color={theme.muted} style={{ cursor: 'pointer', flexShrink: 0, marginTop: 4 }} onClick={() => deleteComment(c)} />}
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', paddingBottom: 'calc(10px + env(safe-area-inset-bottom))', borderTop: `1px solid ${theme.border}` }}>
+              <Avatar emoji={meProfile && meProfile.avatar} name={(meProfile && meProfile.name) || '?'} size={34} />
+              <input autoFocus value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') sendComment(); }}
+                placeholder={`Add a comment for ${owner.username}`} style={{ flex: 1, minWidth: 0, border: `1px solid ${theme.border}`, borderRadius: 22, padding: '10px 14px', background: 'transparent', color: theme.ink, outline: 'none', fontFamily: FONT, fontSize: 14 }} />
+              <span onClick={sendComment} style={{ fontWeight: 800, color: text.trim() ? theme.coral : theme.muted, cursor: 'pointer' }}>Post</span>
             </div>
           </div>
-        ))}
-        <div style={{ padding: '4px 14px 14px', fontSize: 11, color: theme.muted }}>{new Date(post.created_at).toLocaleDateString([], { day: 'numeric', month: 'long', year: 'numeric' })}</div>
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', paddingBottom: 'calc(10px + env(safe-area-inset-bottom))', borderTop: `1px solid ${theme.border}` }}>
-        <input value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') sendComment(); }} placeholder="Add a comment" style={{ ...inputStyle(theme), flex: 1 }} />
-        <span onClick={sendComment} style={{ fontWeight: 800, color: text.trim() ? theme.coral : theme.muted, cursor: 'pointer' }}>Post</span>
-      </div>
+        </div>
+      )}
+
+      {(sheet === 'share' || sheet === 'more') && (
+        <div onClick={() => setSheet(null)} style={{ position: 'absolute', inset: 0, zIndex: 5, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'flex-end' }}>
+          <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ width: '100%', background: bg, borderRadius: '22px 22px 0 0', padding: '8px 0', paddingBottom: 'calc(10px + env(safe-area-inset-bottom))' }}>
+            <div style={{ display: 'flex', justifyContent: 'center', padding: '4px 0 10px' }}><div style={{ width: 38, height: 4, borderRadius: 2, background: theme.border }} /></div>
+            {[
+              { icon: <Copy size={20} />, label: 'Copy link', onClick: async () => { const ok = await copyTextToClipboard(link); say(ok ? 'Link copied' : "Couldn't copy the link"); } },
+              { icon: <Share2 size={20} />, label: 'Share to apps', onClick: async () => { if (navigator.share) { try { await navigator.share({ title: `${owner.username} on ZChat`, url: link }); } catch {} } else { const ok = await copyTextToClipboard(link); say(ok ? 'Link copied' : "Couldn't copy the link"); } } },
+              { icon: <Send size={20} />, label: 'Share on WhatsApp', onClick: () => window.open(`https://wa.me/?text=${encodeURIComponent(`See this post on ZChat ${link}`)}`, '_blank', 'noopener') },
+              owner.id === userId && sheet === 'more' ? { icon: <Trash2 size={20} />, label: 'Delete post', danger: true, onClick: () => setConfirmDelete(true) } : null,
+            ].filter(Boolean).map((a) => (
+              <div key={a.label} onClick={() => { setSheet(null); a.onClick(); }} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 20px', cursor: 'pointer', fontSize: 15, fontWeight: 600, color: a.danger ? theme.danger : theme.ink }}>
+                {a.icon}{a.label}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {flash && <div className="zchat-pop" style={{ position: 'absolute', left: '50%', bottom: 'calc(90px + env(safe-area-inset-bottom))', transform: 'translateX(-50%)', background: theme.ink, color: bg, padding: '9px 16px', borderRadius: 20, fontSize: 13, fontWeight: 700, zIndex: 6 }}>{flash}</div>}
       {confirmDelete && <ConfirmDialog title="Delete this post?" body="It will be removed from your profile." onCancel={() => setConfirmDelete(false)} onConfirm={async () => { await supabase.from('posts').delete().eq('id', post.id).eq('user_id', userId); onDeleted(); }} />}
     </div>
   );
@@ -8548,7 +8663,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [isStandaloneApp, setIsStandaloneApp] = useState(false);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   const [viewportBox, setViewportBox] = useState({ height: null, offset: 0 });
-  const [standaloneFill, setStandaloneFill] = useState(null);
   const [isWide, setIsWide] = useState(() => (typeof window !== 'undefined' ? window.innerWidth >= 900 : false));
   useEffect(() => {
     const onResize = () => setIsWide(window.innerWidth >= 900);
@@ -8575,15 +8689,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         if (!typing) fullHeightRef.current = Math.max(vv.height, layoutHeight);
         else fullHeightRef.current = Math.max(fullHeightRef.current, layoutHeight);
         const open = typing && fullHeightRef.current - vv.height > 120;
-        const standalone = isAppleMobile() && (window.navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches));
-        let fill = null;
-        if (!open && standalone && window.screen) {
-          const portrait = window.innerHeight >= window.innerWidth;
-          const screenH = portrait ? Math.max(window.screen.height, window.screen.width) : Math.min(window.screen.height, window.screen.width);
-          const gap = screenH - window.innerHeight;
-          if (gap > 8 && gap < 420) fill = screenH;
-        }
-        setStandaloneFill((prev) => (prev === fill ? prev : fill));
         setKeyboardOpen((prev) => (prev === open ? prev : open));
         setViewportBox((prev) => {
           const next = open
@@ -8690,6 +8795,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [storyShareFor, setStoryShareFor] = useState(null);
   const [stickerSheetFor, setStickerSheetFor] = useState(null);
   const [celebrateTier, setCelebrateTier] = useState(null);
+  const [deepPost, setDeepPost] = useState(null);
   const blockRefreshTimerRef = useRef(null);
   const blockRefreshRef = useRef(null);
   const [activeGroupCall, setActiveGroupCall] = useState(null);
@@ -9110,6 +9216,15 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (!me) return;
     const params = new URLSearchParams(window.location.search);
     const dmId = params.get('dm');
+    const postFlag = params.get('post');
+    if (postFlag) {
+      (async () => {
+        const { data: postRow } = await supabase.from('posts').select('*').eq('id', postFlag).maybeSingle();
+        if (!postRow) { showSnack("This post isn't available"); return; }
+        const { data: ownerRow } = await getProfile(postRow.user_id);
+        if (ownerRow) setDeepPost({ post: postRow, owner: sanitizeAvatar(ownerRow, session.user.id) });
+      })();
+    }
     const groupId = params.get('group');
     const profileId = params.get('profile');
     const requestsFlag = params.get('requests');
@@ -9146,7 +9261,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         if (data) setProfileOf(sanitizeAvatar(data, session.user.id));
       })();
     }
-    if (dmId || groupId || profileId || requestsFlag || mailFlag || storyFlag || callFlag) window.history.replaceState({}, '', window.location.pathname);
+    if (dmId || groupId || profileId || requestsFlag || mailFlag || storyFlag || callFlag || postFlag) window.history.replaceState({}, '', window.location.pathname);
   }, [me]);
 
   useEffect(() => {
@@ -9933,11 +10048,15 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     setShowStickers(false);
     if (!activeProfile && !activeGroup) return;
     const filePath = sticker.file;
+    const replyId = replyingTo ? replyingTo.id : null;
+    setReplyingTo(null);
     if (activeGroup) {
-      await sendGroupMessage('sticker', filePath, null);
+      await sendGroupMessage('sticker', filePath, null, null, replyId);
       return;
     }
-    const { data } = await sendMessage(session.user.id, activeProfile.id, 'sticker', filePath, null);
+    const { data } = replyId
+      ? await supabase.from('messages').insert({ sender_id: session.user.id, receiver_id: activeProfile.id, group_id: null, type: 'sticker', content: filePath, reply_to_id: replyId }).select().single()
+      : await sendMessage(session.user.id, activeProfile.id, 'sticker', filePath, null);
     if (data) {
       setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
       upsertConversation(activeProfile.id, filePath, 'sticker');
@@ -11020,7 +11139,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   return (
     <div id="zapp-root" style={{
       position: 'fixed', left: 0, right: 0, top: viewportBox.height ? viewportBox.offset : 0,
-      ...(viewportBox.height ? { height: viewportBox.height } : standaloneFill ? { height: standaloneFill } : { bottom: 0 }),
+      ...(viewportBox.height ? { height: viewportBox.height } : { bottom: 0 }),
       background: theme.bgGradient, fontFamily: FONT,
       display: 'flex', overflow: 'hidden', boxSizing: 'border-box',
       paddingTop: callBarShown ? 'calc(env(safe-area-inset-top) + 42px)' : 'env(safe-area-inset-top)',
@@ -11403,6 +11522,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                       replyPreview={replyPreview} onSwipeReply={(msg) => { setReplyingTo(msg); setEditingMessage(null); focusComposer(); }}
                       onJumpToMessage={jumpToMessage} highlighted={highlightedMsgId === m.id}
                       senderLabel={showSenderLabel ? memberName(m.sender_id) : null}
+                      senderVerified={showSenderLabel ? ((groupMembers.find((gm) => gm.user_id === m.sender_id) || {}).profile || {}).verified : null}
                       senderAvatar={showSenderLabel ? groupMembers.find((gm) => gm.user_id === m.sender_id)?.profile.avatar : null}
                       hideReadStatus={!!activeGroup}
                       onOpenSenderProfile={showSenderLabel ? () => { const p = groupMembers.find((gm) => gm.user_id === m.sender_id)?.profile; if (p) setProfileOf(p); } : null}
@@ -11429,7 +11549,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: theme.coralDeep }}>{editingMessage ? 'Editing message' : `Replying to ${labelForSender(replyingTo.sender_id)}`}</div>
                   <div style={{ fontSize: 12, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {(editingMessage || replyingTo).type === 'text' ? (editingMessage || replyingTo).content : (editingMessage || replyingTo).type === 'image' ? 'Photo' : (editingMessage || replyingTo).type === 'audio' ? 'Voice message' : 'Video'}
+                    {(editingMessage || replyingTo).type === 'text' ? (editingMessage || replyingTo).content : (editingMessage || replyingTo).type === 'image' ? 'Photo' : (editingMessage || replyingTo).type === 'audio' ? 'Voice message' : (editingMessage || replyingTo).type === 'sticker' ? 'Sticker' : (editingMessage || replyingTo).type === 'system' ? 'Message' : 'Video'}
                   </div>
                 </div>
                 <X size={16} style={{ cursor: 'pointer', color: theme.muted, flexShrink: 0 }} onClick={() => { setReplyingTo(null); setEditingMessage(null); setDraft(''); }} />
@@ -11827,6 +11947,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             return stream;
           })()}
           onOpen={() => callEngine.minimize(false)} onHangup={callEngine.hangup} />
+      )}
+      {deepPost && (
+        <PostViewer post={deepPost.post} owner={deepPost.owner} userId={session.user.id} meProfile={me}
+          onClose={() => setDeepPost(null)} onDeleted={() => setDeepPost(null)} />
       )}
       {celebrateTier && (
         <VerifiedCelebration tier={celebrateTier} name={me.name}
