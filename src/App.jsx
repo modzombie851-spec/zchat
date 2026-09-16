@@ -4239,7 +4239,7 @@ function AudioBubble({ url, isMe }) {
   );
 }
 
-function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSelect, onLongPress, onOpenImage, onOpenVideo, reactions, onReact, onOpenWhoReacted, replyPreview, onSwipeReply, onJumpToMessage, highlighted, senderLabel, senderAvatar, hideReadStatus, onOpenSenderProfile, canModerate, onOpenMention, mentionsMe, onOpenStoryRef, onCallBack, onOpenSticker, tightBelow, senderVerified }) {
+function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSelect, onLongPress, onOpenImage, onOpenVideo, reactions, onReact, onOpenWhoReacted, replyPreview, onSwipeReply, onJumpToMessage, highlighted, senderLabel, senderAvatar, hideReadStatus, onOpenSenderProfile, canModerate, onOpenMention, mentionsMe, onOpenStoryRef, onCallBack, onOpenSticker, tightBelow, senderVerified, onOpenPost }) {
   const { theme, fontScale, chatTheme, bubbleColor } = useTheme();
   const [hover, setHover] = useState(false);
   const [burstHeart, setBurstHeart] = useState(false);
@@ -4257,7 +4257,8 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
   const time = m.created_at ? new Date(m.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '';
   const bubbleColorSpec = BUBBLE_COLORS[bubbleColor] || BUBBLE_COLORS.default;
   const sharedProfileId = m.type === 'text' && !m.deleted ? parseProfileLink(m.content) : null;
-  const inlineTime = m.type === 'text' && !m.deleted && !!m.content && !sharedProfileId && !(m.story_id && (m.content === STORY_MENTION_TEXT || m.content === STORY_GROUP_MENTION_TEXT || m.content === STORY_SHARE_TEXT));
+  const sharedPostId = m.type === 'text' && !m.deleted ? parsePostLink(m.content) : null;
+  const inlineTime = m.type === 'text' && !m.deleted && !!m.content && !sharedProfileId && !sharedPostId && !(m.story_id && (m.content === STORY_MENTION_TEXT || m.content === STORY_GROUP_MENTION_TEXT || m.content === STORY_SHARE_TEXT));
 
   if (m.type === 'system' && parseCallLog(m.content)) {
     return <CallLogBubble m={m} isMe={isMe} onCallBack={onCallBack} />;
@@ -4466,12 +4467,17 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
                 )
               )}
               {m.story_id && <StoryRefCard m={m} isMe={isMe} onOpen={onOpenStoryRef} />}
+              {sharedPostId && (
+                <div style={{ paddingTop: 2, paddingBottom: 16 }}>
+                  <PostLinkCard postId={sharedPostId} onOpen={onOpenPost} />
+                </div>
+              )}
               {sharedProfileId && (
                 <div style={{ paddingTop: 2, paddingBottom: 16 }}>
                   <ProfileLinkCard profileId={sharedProfileId} onOpen={onOpenMention} />
                 </div>
               )}
-              {m.type === 'text' && m.content && !sharedProfileId && !(m.story_id && (m.content === STORY_MENTION_TEXT || m.content === STORY_GROUP_MENTION_TEXT || m.content === STORY_SHARE_TEXT)) && (
+              {m.type === 'text' && m.content && !sharedProfileId && !sharedPostId && !(m.story_id && (m.content === STORY_MENTION_TEXT || m.content === STORY_GROUP_MENTION_TEXT || m.content === STORY_SHARE_TEXT)) && (
                 <div style={{ fontSize: 15 * fontScale, color: theme.ink, wordBreak: 'break-word', lineHeight: 1.32, display: 'flow-root' }}>
                   <RichText text={m.content} onMention={onOpenMention} />
                   <span data-msg-time="true" style={{ float: 'right', display: 'inline-flex', alignItems: 'center', gap: 3, marginLeft: 10, marginTop: 7, marginBottom: -3, height: 14, lineHeight: 1, position: 'relative', top: 1, userSelect: 'none' }}>
@@ -5001,7 +5007,7 @@ function describeMessage(m) {
       }
       return { kind: 'system', text: m.content || '' };
     }
-    default: return { kind: 'text', text: parseProfileLink(m.content) ? 'Shared a profile' : (m.content || '') };
+    default: return { kind: 'text', text: parseProfileLink(m.content) ? 'Shared a profile' : parsePostLink(m.content) ? 'Shared a post' : (m.content || '') };
   }
 }
 
@@ -5105,13 +5111,14 @@ function InAppMessageToast({ toast, top, onOpen, onDismiss }) {
 
 function ChatRowSheet({ title, subtitle, avatar, actions, onClose }) {
   const { theme } = useTheme();
+  const drag = useSheetDrag(onClose);
   return (
     <div onClick={onClose} className="zchat-fade" style={{
       position: 'fixed', inset: 0, zIndex: 94, display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
       background: theme.dark ? 'rgba(3,6,14,0.5)' : 'rgba(230,234,244,0.5)',
       backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
     }}>
-      <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{
+      <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" {...drag.sheetProps} style={{ ...drag.sheetStyle,
         width: '100%', maxWidth: 460, background: theme.panelBg, borderRadius: '24px 24px 0 0', overflow: 'hidden',
         paddingBottom: 'calc(8px + env(safe-area-inset-bottom))', boxShadow: '0 -10px 40px rgba(0,0,0,0.25)',
       }}>
@@ -7412,10 +7419,11 @@ function BlockBullet({ icon, text }) {
 
 function BlockConfirmSheet({ profile, onCancel, onConfirm }) {
   const { theme } = useTheme();
+  const drag = useSheetDrag(onCancel);
   const [busy, setBusy] = useState(false);
   return (
     <div onClick={onCancel} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 420, background: 'rgba(5,8,16,0.55)', backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
-      <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ width: '100%', maxWidth: 460, background: theme.panelBg, borderRadius: '26px 26px 0 0', padding: '10px 22px', paddingBottom: 'calc(18px + env(safe-area-inset-bottom))' }}>
+      <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" {...drag.sheetProps} style={{ ...drag.sheetStyle, width: '100%', maxWidth: 460, background: theme.panelBg, borderRadius: '26px 26px 0 0', padding: '10px 22px', paddingBottom: 'calc(18px + env(safe-area-inset-bottom))' }}>
         <div style={{ display: 'flex', justifyContent: 'center', padding: '2px 0 14px' }}><div style={{ width: 38, height: 4, borderRadius: 2, background: theme.border }} /></div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
           <div style={{ position: 'relative' }}>
@@ -7525,6 +7533,7 @@ function BlockedAccountsPanel({ myId, blockedIds, onClose, onUnblock, onOpenProf
 
 function StoryShareSheet({ story, owner, conversations, groups, onSend, onClose }) {
   const { theme } = useTheme();
+  const drag = useSheetDrag(onClose);
   const [picked, setPicked] = useState([]);
   const [q, setQ] = useState('');
   const [flash, setFlash] = useState('');
@@ -7546,7 +7555,7 @@ function StoryShareSheet({ story, owner, conversations, groups, onSend, onClose 
   );
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 280, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
-      <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ width: '100%', maxWidth: 520, maxHeight: '82%', background: theme.panelBg, borderRadius: '24px 24px 0 0', display: 'flex', flexDirection: 'column', paddingBottom: 'env(safe-area-inset-bottom)', position: 'relative' }}>
+      <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" {...drag.sheetProps} style={{ ...drag.sheetStyle, width: '100%', maxWidth: 520, maxHeight: '82%', background: theme.panelBg, borderRadius: '24px 24px 0 0', display: 'flex', flexDirection: 'column', paddingBottom: 'env(safe-area-inset-bottom)', position: 'relative' }}>
         <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 4px' }}><div style={{ width: 38, height: 4, borderRadius: 2, background: theme.border }} /></div>
         <div style={{ padding: '6px 16px 10px' }}>
           <div style={{ position: 'relative' }}>
@@ -7554,7 +7563,7 @@ function StoryShareSheet({ story, owner, conversations, groups, onSend, onClose 
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search chats and groups" style={{ ...inputStyle(theme), paddingLeft: 36 }} />
           </div>
         </div>
-        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 10px' }}>
+        <div data-sheet-scroll style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 10px', touchAction: 'pan-y' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 4 }}>
             {shown.map((it) => {
               const on = picked.some((p) => p.key === it.key);
@@ -7651,6 +7660,7 @@ function CallLogBubble({ m, isMe, onCallBack }) {
 
 function StickerPreviewSheet({ message, isMine, onClose, onReport }) {
   const { theme } = useTheme();
+  const drag = useSheetDrag(onClose);
   const sticker = STICKERS.find((s) => s.file === message.content);
   const [favs, setFavs] = useState(() => getFavoriteStickerKeys());
   const fav = sticker ? favs.has(sticker.key) : false;
@@ -7661,7 +7671,7 @@ function StickerPreviewSheet({ message, isMine, onClose, onReport }) {
   );
   return (
     <div onClick={onClose} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 96, background: theme.dark ? 'rgba(3,6,14,0.55)' : 'rgba(230,234,244,0.55)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
-      <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ width: '100%', maxWidth: 440, background: theme.panelBg, borderRadius: '26px 26px 0 0', paddingBottom: 'calc(8px + env(safe-area-inset-bottom))' }}>
+      <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" {...drag.sheetProps} style={{ ...drag.sheetStyle, width: '100%', maxWidth: 440, background: theme.panelBg, borderRadius: '26px 26px 0 0', paddingBottom: 'calc(8px + env(safe-area-inset-bottom))' }}>
         <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 4px' }}><div style={{ width: 38, height: 4, borderRadius: 2, background: theme.border }} /></div>
         <div style={{ display: 'flex', justifyContent: 'center', padding: '14px 0 18px' }}>
           {message.content && message.content.startsWith('/')
@@ -7758,6 +7768,7 @@ function StoryRefCard({ m, isMe, onOpen }) {
 
 function StoryViewersSheet({ story, myId, onClose, onOpenProfile }) {
   const { theme } = useTheme();
+  const drag = useSheetDrag(onClose);
   const [rows, setRows] = useState(null);
   const [tab, setTab] = useState('views');
   useEffect(() => {
@@ -7781,7 +7792,7 @@ function StoryViewersSheet({ story, myId, onClose, onOpenProfile }) {
   const shown = tab === 'likes' ? likedRows : (rows || []);
   return (
     <div onClick={onClose} style={{ position: 'absolute', inset: 0, zIndex: 9, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'flex-end' }}>
-      <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ width: '100%', height: '62%', background: theme.panelBg, borderRadius: '24px 24px 0 0', display: 'flex', flexDirection: 'column', paddingBottom: 'env(safe-area-inset-bottom)' }}>
+      <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" {...drag.sheetProps} style={{ ...drag.sheetStyle, width: '100%', height: '62%', background: theme.panelBg, borderRadius: '24px 24px 0 0', display: 'flex', flexDirection: 'column', paddingBottom: 'env(safe-area-inset-bottom)' }}>
         <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 2px' }}><div style={{ width: 38, height: 4, borderRadius: 2, background: theme.border }} /></div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px 0', borderBottom: `1px solid ${theme.border}` }}>
           {[{ k: 'views', icon: <Eye size={16} />, n: rows ? rows.length : null, l: 'Viewers' }, { k: 'likes', icon: <Heart size={16} />, n: rows ? likedRows.length : null, l: 'Likes' }].map((t) => (
@@ -7792,7 +7803,7 @@ function StoryViewersSheet({ story, myId, onClose, onOpenProfile }) {
           <div style={{ flex: 1 }} />
           <X size={20} color={theme.muted} style={{ cursor: 'pointer' }} onClick={onClose} />
         </div>
-        <div style={{ flex: 1, overflowY: 'auto', padding: '4px 10px 14px' }}>
+        <div data-sheet-scroll style={{ flex: 1, overflowY: 'auto', padding: '4px 10px 14px', touchAction: 'pan-y' }}>
           {rows === null && <div style={{ display: 'flex', justifyContent: 'center', padding: 24 }}><Spinner color={theme.ink} /></div>}
           {rows && !shown.length && <div style={{ textAlign: 'center', padding: 30, fontSize: 13, color: theme.muted }}>{tab === 'likes' ? 'No likes yet' : 'No views yet'}</div>}
           {shown.map((r) => (
@@ -8479,6 +8490,7 @@ function PostViewer({ post, owner, userId, meProfile, onClose, onDeleted }) {
   const [flash, setFlash] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
   const lastTapRef = useRef(0);
+  const drag = useSheetDrag(() => setSheet(null));
   const liked = likes.some((l) => l.user_id === userId);
   const bg = theme.dark ? '#000' : '#fff';
   const link = postShareLink(post.id);
@@ -8548,8 +8560,11 @@ function PostViewer({ post, owner, userId, meProfile, onClose, onDeleted }) {
   return (
     <div className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 90, background: bg, color: theme.ink, display: 'flex', flexDirection: 'column', fontFamily: FONT }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '10px 14px', paddingTop: 'calc(10px + env(safe-area-inset-top))', borderBottom: `1px solid ${theme.border}` }}>
-        <ArrowLeft size={22} style={{ cursor: 'pointer' }} onClick={onClose} />
-        <div style={{ fontWeight: 800, fontSize: 16 }}>Posts</div>
+        <ArrowLeft size={24} style={{ cursor: 'pointer', flexShrink: 0 }} onClick={onClose} />
+        <div style={{ flex: 1, textAlign: 'center', marginRight: 38, lineHeight: 1.2 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: theme.muted, textTransform: 'uppercase', letterSpacing: 0.4 }}>{owner.username}</div>
+          <div style={{ fontSize: 16, fontWeight: 800 }}>Posts</div>
+        </div>
       </div>
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px' }}>
@@ -8591,10 +8606,10 @@ function PostViewer({ post, owner, userId, meProfile, onClose, onDeleted }) {
 
       {sheet === 'comments' && (
         <div onClick={() => setSheet(null)} style={{ position: 'absolute', inset: 0, zIndex: 5, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'flex-end' }}>
-          <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ width: '100%', height: '78%', background: bg, borderRadius: '22px 22px 0 0', display: 'flex', flexDirection: 'column' }}>
+          <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" {...drag.sheetProps} style={{ ...drag.sheetStyle, width: '100%', height: '78%', background: bg, borderRadius: '22px 22px 0 0', display: 'flex', flexDirection: 'column' }}>
             <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 4px' }}><div style={{ width: 38, height: 4, borderRadius: 2, background: theme.border }} /></div>
             <div style={{ textAlign: 'center', fontWeight: 800, fontSize: 15, padding: '4px 0 12px', borderBottom: `1px solid ${theme.border}` }}>Comments</div>
-            <div style={{ flex: 1, overflowY: 'auto', padding: '6px 0' }}>
+            <div data-sheet-scroll style={{ flex: 1, overflowY: 'auto', padding: '6px 0', touchAction: 'pan-y' }}>
               {comments && !comments.length && (
                 <div style={{ textAlign: 'center', padding: '50px 20px' }}>
                   <div style={{ fontWeight: 800, fontSize: 20 }}>No comments yet</div>
@@ -8624,7 +8639,7 @@ function PostViewer({ post, owner, userId, meProfile, onClose, onDeleted }) {
 
       {(sheet === 'share' || sheet === 'more') && (
         <div onClick={() => setSheet(null)} style={{ position: 'absolute', inset: 0, zIndex: 5, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'flex-end' }}>
-          <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ width: '100%', background: bg, borderRadius: '22px 22px 0 0', padding: '8px 0', paddingBottom: 'calc(10px + env(safe-area-inset-bottom))' }}>
+          <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" {...drag.sheetProps} style={{ ...drag.sheetStyle, width: '100%', background: bg, borderRadius: '22px 22px 0 0', padding: '8px 0', paddingBottom: 'calc(10px + env(safe-area-inset-bottom))' }}>
             <div style={{ display: 'flex', justifyContent: 'center', padding: '4px 0 10px' }}><div style={{ width: 38, height: 4, borderRadius: 2, background: theme.border }} /></div>
             {[
               { icon: <Copy size={20} />, label: 'Copy link', onClick: async () => { const ok = await copyTextToClipboard(link); say(ok ? 'Link copied' : "Couldn't copy the link"); } },
@@ -8641,6 +8656,97 @@ function PostViewer({ post, owner, userId, meProfile, onClose, onDeleted }) {
       )}
       {flash && <div className="zchat-pop" style={{ position: 'absolute', left: '50%', bottom: 'calc(90px + env(safe-area-inset-bottom))', transform: 'translateX(-50%)', background: theme.ink, color: bg, padding: '9px 16px', borderRadius: 20, fontSize: 13, fontWeight: 700, zIndex: 6 }}>{flash}</div>}
       {confirmDelete && <ConfirmDialog title="Delete this post?" body="It will be removed from your profile." onCancel={() => setConfirmDelete(false)} onConfirm={async () => { await supabase.from('posts').delete().eq('id', post.id).eq('user_id', userId); onDeleted(); }} />}
+    </div>
+  );
+}
+
+function useSheetDrag(onClose) {
+  const [dy, setDy] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const startRef = useRef(null);
+  const onPointerDown = (e) => {
+    const t = e.target;
+    if (t.closest && t.closest('input, textarea, select')) return;
+    const scroller = t.closest && t.closest('[data-sheet-scroll]');
+    if (scroller && scroller.scrollTop > 0) return;
+    startRef.current = { y: e.clientY, t: Date.now() };
+  };
+  const onPointerMove = (e) => {
+    const s = startRef.current;
+    if (!s) return;
+    const d = e.clientY - s.y;
+    if (!dragging && d > 6) setDragging(true);
+    if (d > 0) setDy(d);
+  };
+  const finish = (e) => {
+    const s = startRef.current;
+    startRef.current = null;
+    if (!s) return;
+    const d = Math.max(0, (e && e.clientY ? e.clientY : s.y) - s.y);
+    const velocity = d / Math.max(1, Date.now() - s.t);
+    setDragging(false);
+    if (d > 110 || (d > 30 && velocity > 0.7)) {
+      setDy(window.innerHeight);
+      setTimeout(() => { onClose(); setDy(0); }, 200);
+    } else {
+      setDy(0);
+    }
+  };
+  return {
+    sheetProps: { onPointerDown, onPointerMove, onPointerUp: finish, onPointerCancel: () => { startRef.current = null; setDragging(false); setDy(0); } },
+    sheetStyle: { transform: `translateY(${dy}px)`, transition: dragging ? 'none' : 'transform 0.24s cubic-bezier(0.2, 0.9, 0.3, 1)', touchAction: 'none' },
+    dragging,
+  };
+}
+
+function parsePostLink(text) {
+  if (typeof text !== 'string') return null;
+  const trimmed = text.trim();
+  if (/\s/.test(trimmed)) return null;
+  const m = trimmed.match(/[?&]post=([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
+  return m ? m[1] : null;
+}
+
+const sharedPostCache = new Map();
+
+function PostLinkCard({ postId, onOpen }) {
+  const { theme } = useTheme();
+  const [data, setData] = useState(() => sharedPostCache.get(postId) || null);
+  const [missing, setMissing] = useState(false);
+  useEffect(() => {
+    if (data) return;
+    let cancelled = false;
+    (async () => {
+      const { data: post } = await supabase.from('posts').select('*').eq('id', postId).maybeSingle();
+      if (!post) { if (!cancelled) setMissing(true); return; }
+      const { data: owner } = await supabase.from('profiles').select('*').eq('id', post.user_id).maybeSingle();
+      const value = { post, owner: owner || { username: 'user', name: 'User' } };
+      sharedPostCache.set(postId, value);
+      if (!cancelled) setData(value);
+    })();
+    return () => { cancelled = true; };
+  }, [postId]);
+  if (missing) return <div style={{ fontSize: 13, color: theme.muted, padding: '6px 2px' }}>This post isn't available</div>;
+  return (
+    <div onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); if (data && onOpen) onOpen(data.post, data.owner); }}
+      style={{ width: 230, borderRadius: 16, overflow: 'hidden', background: theme.dark ? '#0d0d0d' : '#fff', border: `1px solid ${theme.border}`, cursor: 'pointer' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px' }}>
+        <Avatar emoji={data && data.owner.avatar} name={(data && data.owner.name) || '?'} size={24} />
+        <span style={{ fontSize: 13, fontWeight: 700, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{data ? data.owner.username : ''}</span>
+        {data && <VerifiedBadge tier={data.owner.verified} size={12} />}
+      </div>
+      <div style={{ position: 'relative', aspectRatio: '1 / 1', background: '#111' }}>
+        {data ? (data.post.media_type === 'video'
+          ? <video src={`${data.post.media_url}#t=0.1`} muted playsInline preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} />
+          : <img src={data.post.media_url} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />)
+          : <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Spinner size={18} /></div>}
+        {data && data.post.media_type === 'video' && <Play size={18} color="white" style={{ position: 'absolute', top: 8, right: 8, filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.6))' }} />}
+      </div>
+      {data && data.post.caption && (
+        <div style={{ padding: '8px 10px', fontSize: 12.5, color: theme.ink, lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+          <b>{data.owner.username}</b> {data.post.caption}
+        </div>
+      )}
     </div>
   );
 }
@@ -8663,6 +8769,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [isStandaloneApp, setIsStandaloneApp] = useState(false);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   const [viewportBox, setViewportBox] = useState({ height: null, offset: 0 });
+  const [standaloneFill, setStandaloneFill] = useState(null);
+  const safeTopRef = useRef(null);
   const [isWide, setIsWide] = useState(() => (typeof window !== 'undefined' ? window.innerWidth >= 900 : false));
   useEffect(() => {
     const onResize = () => setIsWide(window.innerWidth >= 900);
@@ -8689,6 +8797,23 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         if (!typing) fullHeightRef.current = Math.max(vv.height, layoutHeight);
         else fullHeightRef.current = Math.max(fullHeightRef.current, layoutHeight);
         const open = typing && fullHeightRef.current - vv.height > 120;
+        const standalone = isAppleMobile() && (window.navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches));
+        let fill = null;
+        if (!open && standalone && window.screen) {
+          if (safeTopRef.current == null) {
+            const probe = document.createElement('div');
+            probe.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:env(safe-area-inset-top);visibility:hidden;pointer-events:none;';
+            document.body.appendChild(probe);
+            safeTopRef.current = probe.getBoundingClientRect().height || 0;
+            document.body.removeChild(probe);
+          }
+          const portrait = window.innerHeight >= window.innerWidth;
+          const screenH = portrait ? Math.max(window.screen.height, window.screen.width) : Math.min(window.screen.height, window.screen.width);
+          const gap = screenH - window.innerHeight;
+          const safeTop = safeTopRef.current;
+          if (safeTop >= 20 && gap > 0 && Math.abs(gap - safeTop) <= 6) fill = screenH;
+        }
+        setStandaloneFill((prev) => (prev === fill ? prev : fill));
         setKeyboardOpen((prev) => (prev === open ? prev : open));
         setViewportBox((prev) => {
           const next = open
@@ -9452,9 +9577,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, (payload) => {
         const row = payload.new;
         if (!row || !row.id) return;
-        if (row.deleted || row.edited) {
+        if (row.deleted || row.edited || row.sender_id === me.id || row.receiver_id === me.id) {
           clearTimeout(listReloadTimerRef.current);
-          listReloadTimerRef.current = setTimeout(() => { if (reloadListsRef.current) reloadListsRef.current(); }, 700);
+          listReloadTimerRef.current = setTimeout(() => { if (reloadListsRef.current) reloadListsRef.current(); }, 500);
+          if (row.receiver_id === me.id && row.read) loadUnreadCounts();
         }
         setMessages((prev) => (prev.some((m) => m.id === row.id)
           ? prev.map((m) => (m.id === row.id ? { ...m, read: row.read, delivered: row.delivered, edited: row.edited, deleted: row.deleted, content: row.deleted ? m.content : row.content, pinned_until: row.pinned_until, pinned_by: row.pinned_by, pinned_at: row.pinned_at } : m))
@@ -9654,6 +9780,19 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   }, [activeProfile]);
 
   const chatKey = activeGroup?.id || activeProfile?.id || null;
+  const activeProfileIdForSeen = activeGroup ? null : (activeProfile ? activeProfile.id : null);
+  useEffect(() => {
+    if (!activeProfileIdForSeen) return undefined;
+    let cancelled = false;
+    const refresh = async () => {
+      const { data } = await supabase.from('profiles').select('id, last_seen, hide_activity, verified, name, avatar').eq('id', activeProfileIdForSeen).maybeSingle();
+      if (cancelled || !data) return;
+      setActiveProfile((prev) => (prev && prev.id === data.id ? { ...prev, last_seen: data.last_seen, hide_activity: data.hide_activity, verified: data.verified } : prev));
+    };
+    refresh();
+    const t = setInterval(refresh, 45000);
+    return () => { cancelled = true; clearInterval(t); };
+  }, [activeProfileIdForSeen]);
   const scrollChatToBottom = (smooth) => {
     const el = scrollRef.current;
     if (!el) return;
@@ -11139,7 +11278,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   return (
     <div id="zapp-root" style={{
       position: 'fixed', left: 0, right: 0, top: viewportBox.height ? viewportBox.offset : 0,
-      ...(viewportBox.height ? { height: viewportBox.height } : { bottom: 0 }),
+      ...(viewportBox.height ? { height: viewportBox.height } : standaloneFill ? { height: standaloneFill } : { bottom: 0 }),
       background: theme.bgGradient, fontFamily: FONT,
       display: 'flex', overflow: 'hidden', boxSizing: 'border-box',
       paddingTop: callBarShown ? 'calc(env(safe-area-inset-top) + 42px)' : 'env(safe-area-inset-top)',
@@ -11385,27 +11524,30 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           <>
             <div style={{
               position: 'fixed', top: (viewportBox.height ? viewportBox.offset : 0) + (callBarShown ? 42 : 0), left: isWide ? 'calc(360px + env(safe-area-inset-left))' : 0, right: 0, zIndex: 15,
-              borderBottom: activeNameBarKey ? 'none' : `1px solid ${theme.border}`,
-              background: theme.panelBg,
+              borderBottom: activeNameBarKey ? 'none' : `1px solid ${theme.dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}`,
+              overflow: 'hidden',
+              ...(activeNameBarKey
+                ? (nameBarBgStyle(activeNameBarKey) || {})
+                : { background: theme.dark ? 'rgba(10,13,22,0.68)' : 'rgba(255,255,255,0.72)', backdropFilter: 'blur(26px) saturate(180%)', WebkitBackdropFilter: 'blur(26px) saturate(180%)' }),
+              boxShadow: activeNameBarKey ? '0 2px 16px rgba(0,0,0,0.28)' : 'none',
             }}>
+              {activeNameBarKey && (
+                <div style={{
+                  position: 'absolute', inset: 0, pointerEvents: 'none',
+                  background: 'linear-gradient(90deg, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.5) 45%, rgba(0,0,0,0.26) 75%, rgba(0,0,0,0.12) 100%), linear-gradient(180deg, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0) 40%, rgba(0,0,0,0.2) 100%)',
+                }} />
+              )}
+              {activeNameBarKey && <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', backdropFilter: 'saturate(140%)', WebkitBackdropFilter: 'saturate(140%)' }} />}
               <div style={{ height: 'env(safe-area-inset-top)', width: '100%' }} />
               <div
                 style={{
                   padding: '13px 18px', display: 'flex', alignItems: 'center', gap: 10,
                   height: 64, boxSizing: 'border-box',
                   cursor: 'pointer', position: 'relative', overflow: 'hidden',
-                  boxShadow: activeNameBarKey ? '0 2px 16px rgba(0,0,0,0.28), inset 0 0 0 1px rgba(255,255,255,0.16)' : 'none',
-                  ...(nameBarBgStyle(activeNameBarKey) || {}),
                 }}
                 onClick={() => (activeGroup ? setShowGroupInfo(true) : setProfileOf(activeProfile))}>
-              {activeNameBarKey && (
-                <div style={{
-                  position: 'absolute', inset: 0, pointerEvents: 'none',
-                  background: 'linear-gradient(90deg, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.55) 45%, rgba(0,0,0,0.3) 75%, rgba(0,0,0,0.14) 100%), linear-gradient(180deg, rgba(0,0,0,0.05) 0%, rgba(0,0,0,0) 45%, rgba(0,0,0,0.22) 100%)',
-                }} />
-              )}
               <ArrowLeft size={20} style={{ cursor: 'pointer', color: activeNameBarKey ? 'white' : theme.ink, flexShrink: 0, filter: activeNameBarKey ? 'drop-shadow(0 1px 3px rgba(0,0,0,0.6))' : 'none', position: 'relative' }}
-                onClick={(e) => { e.stopPropagation(); if (activeConvForBar && myLocks[activeConvForBar.id]) lastLeftChatAtRef.current[activeConvForBar.id] = Date.now(); if (activeGroup) markGroupRead(activeGroup.id); setMobileShowChat(false); setActiveProfile(null); setActiveGroup(null); }} />
+                onClick={(e) => { e.stopPropagation(); if (activeConvForBar && myLocks[activeConvForBar.id]) lastLeftChatAtRef.current[activeConvForBar.id] = Date.now(); if (activeGroup) markGroupRead(activeGroup.id); if (reloadListsRef.current) reloadListsRef.current(); loadUnreadCounts(); setMobileShowChat(false); setActiveProfile(null); setActiveGroup(null); }} />
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, position: 'relative' }}>
                 {activeGroup ? <GroupAvatar avatar={activeGroup.avatar} name={activeGroup.name} size={38} /> : <AvatarFrame size={34} tier={activeProfile.verified}><Avatar emoji={activeProfile.avatar} name={activeProfile.name} online={isUserOnline(activeProfile) && !activeProfile.hide_activity} size={34} /></AvatarFrame>}
                 <div style={{ minWidth: 0 }}>
@@ -11422,7 +11564,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                       <span style={{ color: activeNameBarKey ? 'white' : theme.coral, fontWeight: 700 }}>
                         {activeGroup ? `${(groupMembers.find((gm) => gm.user_id === activityFrom.from)?.profile.name || 'Someone').split(' ')[0]} is ` : ''}{activityLabel(activityFrom.kind)}
                       </span>
-                    ) : activeGroup ? `${groupMembers.length} members` : (blockedByIds.has(activeProfile.id) || myBlockedIds.has(activeProfile.id)) ? '' : (isUserOnline(activeProfile) && !activeProfile.hide_activity ? 'Online' : (!activeProfile.hide_activity && formatLastSeen(activeProfile.last_seen)) || '')}
+                    ) : activeGroup ? `${groupMembers.length} members` : (blockedByIds.has(activeProfile.id) || myBlockedIds.has(activeProfile.id) || activeProfile.hide_activity) ? '' : isUserOnline(activeProfile) ? 'Online' : (formatLastSeen(activeProfile.last_seen) || 'Last seen recently')}
                   </div>
                 </div>
               </div>
@@ -11533,6 +11675,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                       tightBelow={tightBelow}
                       onCallBack={(kind) => { if (activeGroup) startGroupCall(activeGroup, kind); else if (activeProfile) startDirectCall(activeProfile, kind); }}
                       onOpenSticker={(msg) => setStickerSheetFor(msg)}
+                      onOpenPost={(post, owner) => setDeepPost({ post, owner: sanitizeAvatar(owner, session.user.id) })}
                     />
                   );
                 })
