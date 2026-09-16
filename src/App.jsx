@@ -2724,7 +2724,7 @@ function ChatSettingsPanel({ conv, myId, meAvatar, meName, isPinned, isLocked, w
             </div>
           )}
           {showBio && (
-            <div style={{ fontSize: 12, color: theme.muted, marginTop: 8, padding: '0 24px', lineHeight: 1.5 }}>{p.bio}</div>
+            <div style={{ fontSize: 12, color: theme.muted, marginTop: 8, padding: '0 24px', lineHeight: 1.5 }}><RichText text={p.bio} onMention={onOpenProfile} /></div>
           )}
           <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 12 }}>
             <div onClick={() => setListModal('followers')} style={{ flex: 1, maxWidth: 130, background: theme.rowBg, borderRadius: 14, padding: '8px 10px', cursor: 'pointer' }}>
@@ -3005,7 +3005,7 @@ function GroupInfoPanel({ group, members, myId, myRole, isOwner, onClose, onProm
           </div>
         ) : (
           <div onClick={() => isAdmin && setEditingBio(true)} style={{ fontSize: 13, color: group.bio ? theme.ink : theme.muted, marginBottom: 18, cursor: isAdmin ? 'pointer' : 'default' }}>
-            {group.bio || (isAdmin ? 'Add a group bio' : 'No bio yet')}
+            {group.bio ? <RichText text={group.bio} onMention={onOpenProfile} /> : (isAdmin ? 'Add a group bio' : 'No bio yet')}
           </div>
         )}
 
@@ -3413,7 +3413,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
   const [cropFile, setCropFile] = useState(null);
   const [saving, setSaving] = useState(false);
   const [showEmail, setShowEmail] = useState(false);
-  const [followState, setFollowState] = useState('none'); // none | pending | accepted
+  const [followState, setFollowState] = useState('none');
   const [followerCount, setFollowerCount] = useState(null);
   const [followingCount, setFollowingCount] = useState(null);
   const [followBusy, setFollowBusy] = useState(false);
@@ -3422,9 +3422,11 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
   const [nickname, setNickname] = useState('');
   const [nicknameEditing, setNicknameEditing] = useState(false);
   const [nicknameSaving, setNicknameSaving] = useState(false);
-  const [listModal, setListModal] = useState(null); // 'followers' | 'following'
+  const [listModal, setListModal] = useState(null);
   const [showPrivacySettings, setShowPrivacySettings] = useState(false);
   const [showMoreDetails, setShowMoreDetails] = useState(false);
+  const [bioMention, setBioMention] = useState(null);
+  const bioRef = useRef(null);
 
   const cooldownDaysLeft = (() => {
     if (!profile.username_changed_at) return 0;
@@ -3508,6 +3510,16 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
     setAvatarUploading(false);
   };
 
+  const pickBioMention = (picked) => {
+    if (!bioMention) return;
+    const { value, caret } = applyMention(bio, bioMention, picked.username, 140);
+    setBio(value);
+    setBioMention(null);
+    requestAnimationFrame(() => {
+      const el = bioRef.current;
+      if (el) { el.focus(); el.setSelectionRange(caret, caret); }
+    });
+  };
   const save = async () => {
     const cleanUsername = username.toLowerCase().replace(/[^a-z0-9._]/g, '');
     let parsedAge = age.trim() === '' ? null : parseInt(age, 10);
@@ -3531,7 +3543,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
       setUsernameErr(msg.includes('duplicate') || msg.includes('unique') ? 'That username is already taken.' : error.message);
       return;
     }
-    if (data) { onSaved(data); setEditing(false); }
+    if (data) { onSaved(data); setEditing(false); setBioMention(null); }
   };
 
   return (profile.is_deleted && !isSelf) ? (
@@ -3648,9 +3660,16 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
               )}
               {usernameErr && <div style={{ fontSize: 11.5, color: theme.danger, marginBottom: 10 }}>{usernameErr}</div>}
               <div style={{ fontSize: 11.5, color: theme.muted, marginBottom: 5, fontWeight: 800, letterSpacing: '0.04em' }}>BIO</div>
-              <textarea value={bio} onChange={(e) => setBio(e.target.value.slice(0, 140))}
+              <textarea ref={bioRef} value={bio}
+                onChange={(e) => { const next = e.target.value.slice(0, 140); setBio(next); setBioMention(getActiveMention(next, Math.min(e.target.selectionStart, next.length))); }}
+                onClick={(e) => setBioMention(getActiveMention(e.target.value, e.target.selectionStart))}
                 placeholder="Tell people about yourself"
                 style={{ ...inputStyle(theme), height: 64, resize: 'none', fontFamily: FONT, marginBottom: 14 }} />
+              {bioMention && (
+                <div style={{ marginTop: -6, marginBottom: 14 }}>
+                  <MentionSuggestions query={bioMention.query} myId={userId} excludeIds={[profile.id]} onPick={pickBioMention} />
+                </div>
+              )}
               <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 11.5, color: theme.muted, marginBottom: 5, fontWeight: 800, letterSpacing: '0.04em' }}>AGE</div>
@@ -3678,7 +3697,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
                 ))}
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={() => { setEditing(false); setUsername(profile.username || ''); setUsernameErr(''); }} style={{ ...primaryBtn(theme, false, theme.rowBg), color: theme.ink, marginTop: 0, flex: 1, boxShadow: 'none' }}>Cancel</button>
+                <button onClick={() => { setEditing(false); setBioMention(null); setUsername(profile.username || ''); setUsernameErr(''); }} style={{ ...primaryBtn(theme, false, theme.rowBg), color: theme.ink, marginTop: 0, flex: 1, boxShadow: 'none' }}>Cancel</button>
                 <button onClick={save} disabled={saving || avatarUploading} style={{ ...primaryBtn(theme, saving || avatarUploading), marginTop: 0, flex: 1 }}>
                   {(saving || avatarUploading) ? <Spinner /> : 'Save'}
                 </button>
@@ -3717,7 +3736,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
                     </div>
                   )}
                   {profile.bio && (isSelf || !profile.hide_bio) && (
-                    <div style={{ fontSize: 12.5, color: theme.ink, marginTop: 10, lineHeight: 1.5, padding: '0 8px', textAlign: 'center' }}>{profile.bio}</div>
+                    <div style={{ fontSize: 12.5, color: theme.ink, marginTop: 10, lineHeight: 1.5, padding: '0 8px', textAlign: 'center' }}><RichText text={profile.bio} onMention={onOpenProfile} /></div>
                   )}
                 </>
               )}
@@ -3851,6 +3870,161 @@ function linkifyText(text) {
   return parts;
 }
 
+const MENTION_REGEX = /(^|[^a-zA-Z0-9._@])@([a-zA-Z0-9._]{3,30})/g;
+function splitMentions(text) {
+  const out = [];
+  let last = 0;
+  let match;
+  MENTION_REGEX.lastIndex = 0;
+  while ((match = MENTION_REGEX.exec(text)) !== null) {
+    const handle = match[2].replace(/\.+$/, '');
+    if (handle.length < 3 || handle.length > 20) continue;
+    const at = match.index + match[1].length;
+    if (at > last) out.push(text.slice(last, at));
+    out.push({ mention: handle.toLowerCase(), raw: '@' + handle });
+    last = at + 1 + handle.length;
+  }
+  if (last < text.length) out.push(text.slice(last));
+  return out;
+}
+
+function extractMentions(text) {
+  const found = new Set();
+  if (!text) return found;
+  splitMentions(text).forEach((seg) => { if (seg && seg.mention) found.add(seg.mention); });
+  return found;
+}
+
+const mentionCache = new Map();
+const mentionPending = new Set();
+const mentionListeners = new Set();
+let mentionTimer = null;
+function requestMentionProfiles(names) {
+  names.forEach((n) => { if (n && !mentionCache.has(n)) mentionPending.add(n); });
+  if (!mentionPending.size || mentionTimer) return;
+  mentionTimer = setTimeout(async () => {
+    const batch = [...mentionPending];
+    mentionPending.clear();
+    mentionTimer = null;
+    const { data, error } = await supabase.from('profiles').select('*').in('username', batch);
+    if (error) return;
+    batch.forEach((n) => mentionCache.set(n, null));
+    (data || []).forEach((p) => { if (!p.is_deleted && p.username) mentionCache.set(p.username.toLowerCase(), p); });
+    mentionListeners.forEach((fn) => fn());
+  }, 50);
+}
+
+function useMentionProfiles(names) {
+  const [, setTick] = useState(0);
+  const key = names.slice().sort().join(',');
+  useEffect(() => {
+    if (!key) return undefined;
+    const listener = () => setTick((t) => t + 1);
+    mentionListeners.add(listener);
+    requestMentionProfiles(key.split(','));
+    return () => { mentionListeners.delete(listener); };
+  }, [key]);
+}
+
+function RichText({ text, onMention }) {
+  const { theme } = useTheme();
+  const linked = linkifyText(text);
+  const pieces = [];
+  (Array.isArray(linked) ? linked : [linked]).forEach((part) => {
+    if (typeof part === 'string') splitMentions(part).forEach((seg) => pieces.push(seg));
+    else pieces.push(part);
+  });
+  const names = [...new Set(pieces.filter((seg) => seg && seg.mention).map((seg) => seg.mention))];
+  useMentionProfiles(names);
+  return (
+    <>
+      {pieces.map((seg, i) => {
+        if (!seg || !seg.mention) return <React.Fragment key={i}>{seg}</React.Fragment>;
+        const found = mentionCache.get(seg.mention);
+        if (!found) return <React.Fragment key={i}>{seg.raw}</React.Fragment>;
+        return (
+          <span key={i}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => { e.stopPropagation(); if (onMention) onMention(found); }}
+            style={{ color: theme.dark ? theme.gold : theme.coralDeep, fontWeight: 700, cursor: onMention ? 'pointer' : 'default' }}>
+            {seg.raw}
+          </span>
+        );
+      })}
+    </>
+  );
+}
+
+function getActiveMention(text, caret) {
+  if (caret == null) return null;
+  const before = text.slice(0, caret);
+  const match = before.match(/(^|[^a-zA-Z0-9._@])@([a-zA-Z0-9._]{0,20})$/);
+  if (!match) return null;
+  return { query: match[2].toLowerCase(), start: caret - match[2].length - 1, end: caret };
+}
+
+function applyMention(text, mention, username, maxLen) {
+  const before = text.slice(0, mention.start);
+  const after = text.slice(mention.end).replace(/^[a-zA-Z0-9._]*/, '').replace(/^\s/, '');
+  const insert = `@${username} `;
+  const value = (before + insert + after).slice(0, maxLen);
+  return { value, caret: Math.min(before.length + insert.length, value.length) };
+}
+
+function MentionSuggestions({ query, priority, excludeIds, myId, onPick }) {
+  const { theme } = useTheme();
+  const [remote, setRemote] = useState([]);
+  useEffect(() => {
+    let cancelled = false;
+    if (!query) { setRemote([]); return undefined; }
+    const timer = setTimeout(async () => {
+      const pattern = query.replace(/[\\%_]/g, (c) => `\\${c}`) + '%';
+      const { data } = await supabase.from('profiles').select('id, name, username, avatar, hide_photo, is_deleted')
+        .ilike('username', pattern).not('is_deleted', 'is', true).limit(8);
+      if (!cancelled) setRemote(data || []);
+    }, 180);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [query]);
+
+  const excluded = new Set(excludeIds || []);
+  const seen = new Set();
+  const list = [];
+  const consider = (p) => {
+    if (!p || !p.username || p.is_deleted || excluded.has(p.id) || seen.has(p.id)) return;
+    const uname = p.username.toLowerCase();
+    if (query && !uname.startsWith(query) && !(p.name || '').toLowerCase().startsWith(query)) return;
+    seen.add(p.id);
+    list.push(sanitizeAvatar(p, myId));
+  };
+  (priority || []).forEach(consider);
+  remote.forEach(consider);
+  if (!list.length) return null;
+
+  return (
+    <div className="zchat-fade" style={{
+      background: theme.panelBg, border: `1px solid ${theme.border}`, borderRadius: 16,
+      boxShadow: '0 8px 24px rgba(0,0,0,0.18)', maxHeight: 208, overflowY: 'auto', WebkitOverflowScrolling: 'touch',
+    }}>
+      {list.slice(0, 8).map((p, i) => (
+        <div key={p.id}
+          onPointerDown={(e) => e.preventDefault()}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => onPick(p)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', cursor: 'pointer',
+            borderTop: i ? `1px solid ${theme.border}` : 'none',
+          }}>
+          <Avatar emoji={p.avatar} name={p.name} size={30} />
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
+            <div style={{ fontSize: 11.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>@{p.username}</div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function AudioBubble({ url, isMe }) {
   const { theme } = useTheme();
   const audioRef = useRef(null);
@@ -3914,7 +4088,7 @@ async function silentDownload(url, filename) {
   }
 }
 
-function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSelect, onLongPress, onOpenImage, onOpenVideo, reactions, onReact, onOpenWhoReacted, replyPreview, onSwipeReply, onJumpToMessage, highlighted, senderLabel, senderAvatar, hideReadStatus, onOpenSenderProfile, canModerate }) {
+function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSelect, onLongPress, onOpenImage, onOpenVideo, reactions, onReact, onOpenWhoReacted, replyPreview, onSwipeReply, onJumpToMessage, highlighted, senderLabel, senderAvatar, hideReadStatus, onOpenSenderProfile, canModerate, onOpenMention, mentionsMe }) {
   const { theme, fontScale, chatTheme, bubbleColor } = useTheme();
   const [hover, setHover] = useState(false);
   const [burstHeart, setBurstHeart] = useState(false);
@@ -4055,7 +4229,7 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
           borderBottomRightRadius: isMe && !m.deleted ? 5 : 19,
           borderBottomLeftRadius: !isMe && !m.deleted ? 5 : 19,
           padding: m.type === 'text' || m.deleted ? '6px 11px' : 4,
-          border: m.deleted ? `1px dashed ${theme.border}` : `1px solid ${theme.dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)'}`,
+          border: m.deleted ? `1px dashed ${theme.border}` : mentionsMe ? `1.5px solid ${theme.coral}` : `1px solid ${theme.dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)'}`,
           boxShadow: m.deleted ? 'none' : '0 1px 2px rgba(0,0,0,0.06)',
           ...(m.deleted ? {} : bubbleThemeStyle(chatTheme, isMe, theme)),
         })}>
@@ -4124,7 +4298,7 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
               )}
               {m.type === 'text' && m.content && (
                 <div style={{ fontSize: 15 * fontScale, color: theme.ink, wordBreak: 'break-word', lineHeight: 1.32 }}>
-                  {linkifyText(m.content)}
+                  <RichText text={m.content} onMention={onOpenMention} />
                   <span style={{ display: 'inline-block', float: 'right', width: 46, height: 17 }} />
                 </div>
               )}
@@ -4769,6 +4943,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [activeProfile, setActiveProfile] = useState(null);
   const [messages, setMessages] = useState([]);
   const [draft, setDraft] = useState('');
+  const [composerMention, setComposerMention] = useState(null);
   const [showAttach, setShowAttach] = useState(false);
   const [showStickers, setShowStickers] = useState(false);
   const [profileOf, setProfileOf] = useState(null);
@@ -5141,7 +5316,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       .subscribe();
     return () => supabase.removeChannel(channel);
   }, [me]);
-
   useEffect(() => {
     if (!me) return;
     const channel = supabase.channel('mail-watch-' + me.id)
@@ -5308,6 +5482,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   useEffect(() => { mobileShowChatRef.current = mobileShowChat; }, [mobileShowChat]);
 
   useEffect(() => {
+    if (draft === '') setComposerMention(null);
     if (composerRef.current && draft === '') {
       composerRef.current.style.height = 'auto';
     }
@@ -5469,8 +5644,13 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       loadGroups();
       if (type !== 'system') {
         const preview = type === 'text' ? content : type === 'image' ? 'Photo' : type === 'audio' ? 'Voice message' : type === 'sticker' ? 'Sticker' : 'Video';
-        groupMembers.filter((m) => m.user_id !== session.user.id && !m.muted).forEach((m) => {
-          sendPushNotification(m.user_id, `${me.name} in ${activeGroup.name}`, preview, `/?group=${activeGroup.id}`, me.avatar);
+        const mentioned = extractMentions(content || '');
+        groupMembers.filter((m) => m.user_id !== session.user.id).forEach((m) => {
+          if (mentioned.has((m.profile?.username || '').toLowerCase())) {
+            sendPushNotification(m.user_id, `${me.name} mentioned you in ${activeGroup.name}`, preview, `/?group=${activeGroup.id}`, me.avatar);
+          } else if (!m.muted) {
+            sendPushNotification(m.user_id, `${me.name} in ${activeGroup.name}`, preview, `/?group=${activeGroup.id}`, me.avatar);
+          }
         });
       }
     }
@@ -5753,6 +5933,21 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       upsertConversation(activeProfile.id, text, 'text');
       sendPushNotification(activeProfile.id, me.name, text, `/?dm=${session.user.id}`, me.avatar);
     }
+  };
+
+  const pickComposerMention = (picked) => {
+    if (!composerMention) return;
+    const { value, caret } = applyMention(draft, composerMention, picked.username, MAX_CHARS);
+    setDraft(value);
+    setComposerMention(null);
+    requestAnimationFrame(() => {
+      const el = composerRef.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(caret, caret);
+      el.style.height = 'auto';
+      el.style.height = Math.min(el.scrollHeight, 110) + 'px';
+    });
   };
 
   const saveEdit = async () => {
@@ -6410,6 +6605,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                       hideReadStatus={!!activeGroup}
                       onOpenSenderProfile={showSenderLabel ? () => { const p = groupMembers.find((gm) => gm.user_id === m.sender_id)?.profile; if (p) setProfileOf(p); } : null}
                       canModerate={activeGroup ? (groupMembers.find((gm) => gm.user_id === session.user.id)?.role === 'admin') : false}
+                      onOpenMention={(p) => setProfileOf(sanitizeAvatar(p, session.user.id))}
+                      mentionsMe={!!activeGroup && !isMe && !m.deleted && m.type === 'text' && extractMentions(m.content).has((me.username || '').toLowerCase())}
                     />
                   );
                 })
@@ -6451,6 +6648,18 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               </div>
             )}
 
+            {composerMention && !recording && !activeProfile?.is_deleted && (
+              <div style={{ padding: '6px 14px 2px', flexShrink: 0 }}>
+                <MentionSuggestions
+                  query={composerMention.query}
+                  myId={session.user.id}
+                  priority={activeGroup ? groupMembers.map((gm) => gm.profile) : (activeProfile ? [activeProfile] : [])}
+                  excludeIds={[session.user.id, ...myBlockedIds]}
+                  onPick={pickComposerMention}
+                />
+              </div>
+            )}
+
             <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, padding: '4px 14px', flexShrink: 0, paddingBottom: keyboardOpen ? 4 : 'max(4px, env(safe-area-inset-bottom))' }}>
               {activeProfile?.is_deleted ? (
                 <div style={{ flex: 1, textAlign: 'center', padding: '10px 4px', fontSize: 12.5, color: theme.muted, fontWeight: 600 }}>
@@ -6478,7 +6687,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                     value={draft}
                     enterKeyHint="enter"
                     data-keyboard-heal="true"
-                    onChange={(e) => { setDraft(e.target.value.slice(0, MAX_CHARS)); sendTyping(); e.target.style.height = 'auto'; e.target.style.height = Math.min(e.target.scrollHeight, 110) + 'px'; }}
+                    onChange={(e) => { const next = e.target.value.slice(0, MAX_CHARS); setDraft(next); setComposerMention(getActiveMention(next, Math.min(e.target.selectionStart, next.length))); sendTyping(); e.target.style.height = 'auto'; e.target.style.height = Math.min(e.target.scrollHeight, 110) + 'px'; }}
+                    onClick={(e) => setComposerMention(getActiveMention(e.target.value, e.target.selectionStart))}
                     onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); editingMessage ? saveEdit() : send(); } }}
                     placeholder={editingMessage ? 'Edit message' : 'Message'}
                     rows={1}
@@ -6895,4 +7105,4 @@ export default function App() {
       <AppInner />
     </ThemeProvider>
   );
-                         }
+      }
