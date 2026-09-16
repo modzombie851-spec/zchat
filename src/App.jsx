@@ -11094,6 +11094,24 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     return () => supabase.removeChannel(channel);
   }, [me]);
   const callBarShown = !!(callEngine.call && callEngine.call.minimized && callEngine.call.status !== 'ended');
+  useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
+    const inChat = mobileShowChat && (activeProfile || activeGroup);
+    const wallpaperKey = activeGroup ? activeGroup.wallpaper : (activeConvForBar ? myWallpaper(activeConvForBar) : null);
+    const wp = inChat ? wallpaperBgStyle(wallpaperKey) : null;
+    const bg = theme.bgGradient;
+    try {
+      if (wp && wp.backgroundImage) {
+        html.style.background = `${wp.backgroundImage} center / cover no-repeat fixed, ${bg}`;
+        body.style.background = 'transparent';
+      } else {
+        html.style.background = bg;
+        body.style.background = bg;
+      }
+    } catch {}
+    return () => { try { html.style.background = bg; body.style.background = bg; } catch {} };
+  }, [mobileShowChat, activeProfile && activeProfile.id, activeGroup && activeGroup.id, activeGroup && activeGroup.wallpaper, activeConvForBar && myWallpaper(activeConvForBar), theme.bgGradient]);
   const bannerColorRef = useRef({});
   useEffect(() => {
     const meta = document.querySelector('meta[name="theme-color"]');
@@ -11905,14 +11923,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               </div>
             )}
 
-            <div style={{
-              flexShrink: 0, position: 'relative', marginBottom: 'calc(-1 * var(--zchat-bottom-pad, 0px))', paddingBottom: 'var(--zchat-bottom-pad, 0px)',
-              ...(activeNameBarKey && !keyboardOpen ? (nameBarBgStyle(activeNameBarKey) || {}) : {}),
-              boxShadow: activeNameBarKey && !keyboardOpen ? '0 -2px 16px rgba(0,0,0,0.25)' : 'none',
-            }}>
-              {activeNameBarKey && !keyboardOpen && (
-                <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: 'linear-gradient(180deg, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0.55) 60%, rgba(0,0,0,0.7) 100%)' }} />
-              )}
+            <div style={{ flexShrink: 0, position: 'relative', marginBottom: 'calc(-1 * var(--zchat-bottom-pad, 0px))', paddingBottom: 'var(--zchat-bottom-pad, 0px)' }}>
             <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, padding: '6px 14px', flexShrink: 0, position: 'relative', paddingBottom: keyboardOpen ? 6 : 'max(6px, calc(env(safe-area-inset-bottom) - 24px))' }}>
               {activeProfile && !activeGroup && myBlockedIds.has(activeProfile.id) ? (
                 <div className="zchat-fade" style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 9, padding: '8px 4px 2px' }}>
