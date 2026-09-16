@@ -2757,7 +2757,7 @@ function ChatSettingsPanel({ conv, myId, meAvatar, meName, isPinned, isLocked, w
         <NameBarPicker value={nameBar} onSelect={onSetNameBar} onClose={() => setShowNameBar(false)} />
       )}
       {showNicknames && (
-        <NicknamesModal
+        <NicknamesModal 
           conv={conv} myAvatar={meAvatar} myName={meName}
           currentNickname={nickname} currentAlias={myAlias}
           onSaveNickname={saveNickname} onSaveAlias={saveMyAlias}
@@ -3447,8 +3447,8 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
       await sendMessage(userId, profile.id, 'system', `Nickname updated to "${nickname.trim()}"`, null);
     } else {
       await supabase.from('contact_nicknames').delete().eq('owner_id', userId).eq('contact_id', profile.id);
-      await sendMessage(
-        }
+      await sendMessage(userId, profile.id, 'system', 'Nickname removed', null);
+    }
     setNicknameSaving(false);
     setNicknameEditing(false);
   };
@@ -5517,7 +5517,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     setMe((prev) => ({ ...prev, hide_activity: next }));
     await supabase.from('profiles').update({ hide_activity: next }).eq('id', session.user.id);
   };
-
   const saveGroupBio = async (bio) => {
     await supabase.from('groups').update({ bio: bio.trim() || null }).eq('id', activeGroup.id);
     setActiveGroup((prev) => ({ ...prev, bio: bio.trim() || null }));
@@ -6896,4 +6895,4 @@ export default function App() {
       <AppInner />
     </ThemeProvider>
   );
-    }
+                         }
