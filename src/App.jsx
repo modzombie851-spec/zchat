@@ -8434,7 +8434,7 @@ function ProfilePosts({ profile, isSelf, userId, meProfile }) {
   return (
     <div style={{ marginTop: 18, marginLeft: -20, marginRight: -20 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px 0', borderTop: `1px solid ${theme.border}`, borderBottom: `1px solid ${theme.border}`, color: theme.ink, fontWeight: 800, fontSize: 13, position: 'sticky', top: 0, zIndex: 5, background: theme.dark ? '#000' : '#fff' }}>
-        <ImageIcon size={16} /> Posts {posts ? `(${posts.length})` : ''}
+        <ImageIcon size={16} /> Posts
         {isSelf && (
           <div onClick={() => inputRef.current && inputRef.current.click()} style={{ position: 'absolute', right: 16, width: 30, height: 30, borderRadius: 10, background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 20, fontWeight: 400 }}>+</div>
         )}
@@ -8479,6 +8479,33 @@ function timeAgoLong(iso) {
   return new Date(iso).toLocaleDateString([], { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
+function InstaCommentIcon({ size = 24, color = 'currentColor' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
+      <path d="M20.656 17.008a9.993 9.993 0 1 0-3.59 3.615L22 22Z" stroke={color} strokeWidth="2" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function InstaShareIcon({ size = 24, color = 'currentColor' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
+      <line x1="22" y1="3" x2="9.218" y2="10.083" stroke={color} strokeWidth="2" strokeLinejoin="round" />
+      <polygon points="11.698 20.334 22 3.001 2 3.001 9.218 10.084 11.698 20.334" stroke={color} strokeWidth="2" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+const COMMENT_QUICK_EMOJIS = ['\u2764\uFE0F', '\u{1F64C}', '\u{1F525}', '\u{1F44F}', '\u{1F622}', '\u{1F60D}', '\u{1F62E}', '\u{1F602}'];
+
+function CommentBody({ content, theme }) {
+  if (typeof content === 'string' && content.startsWith('sticker:')) {
+    const src = content.slice(8);
+    return <img src={src} alt="sticker" draggable={false} style={{ width: 88, height: 88, objectFit: 'contain', display: 'block', marginTop: 4 }} />;
+  }
+  return <div style={{ fontSize: 14.5, lineHeight: 1.45, marginTop: 2, wordBreak: 'break-word', color: theme.ink }}>{content}</div>;
+}
+
 function PostViewer({ post, owner, userId, meProfile, onClose, onDeleted }) {
   const { theme } = useTheme();
   const [likes, setLikes] = useState([]);
@@ -8490,7 +8517,8 @@ function PostViewer({ post, owner, userId, meProfile, onClose, onDeleted }) {
   const [flash, setFlash] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
   const lastTapRef = useRef(0);
-  const drag = useSheetDrag(() => setSheet(null));
+  const [commentStickers, setCommentStickers] = useState(false);
+  const drag = useSheetDrag(() => { setSheet(null); setCommentStickers(false); });
   const liked = likes.some((l) => l.user_id === userId);
   const bg = theme.dark ? '#000' : '#fff';
   const link = postShareLink(post.id);
@@ -8548,13 +8576,19 @@ function PostViewer({ post, owner, userId, meProfile, onClose, onDeleted }) {
     if (owner.id !== userId) sendPushNotification(owner.id, 'ZChat', `${(meProfile && meProfile.name) || 'Someone'} commented: ${value.slice(0, 80)}`, link, meProfile && meProfile.avatar);
     load();
   };
+  const sendStickerComment = async (file) => {
+    setCommentStickers(false);
+    await supabase.from('post_comments').insert({ post_id: post.id, user_id: userId, content: `sticker:${file}` });
+    if (owner.id !== userId) sendPushNotification(owner.id, 'ZChat', `${(meProfile && meProfile.name) || 'Someone'} commented with a sticker`, link, meProfile && meProfile.avatar);
+    load();
+  };
   const deleteComment = async (c) => {
     setComments((prev) => (prev || []).filter((x) => x.id !== c.id));
     await supabase.from('post_comments').delete().eq('id', c.id);
   };
   const firstLiker = likes.length ? likerNames[likes[0].user_id] : null;
   const iconBtn = (icon, onClick, label) => (
-    <div role="button" aria-label={label} onClick={onClick} style={{ padding: 6, cursor: 'pointer', display: 'flex' }}>{icon}</div>
+    <div role="button" aria-label={label} onClick={onClick} style={{ padding: '8px 8px', cursor: 'pointer', display: 'flex' }}>{icon}</div>
   );
 
   return (
@@ -8584,9 +8618,9 @@ function PostViewer({ post, owner, userId, meProfile, onClose, onDeleted }) {
           )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', padding: '6px 6px 0' }}>
-          {iconBtn(<Heart size={26} color={liked ? '#FF3040' : theme.ink} fill={liked ? '#FF3040' : 'none'} style={{ transition: 'transform 0.15s ease', transform: liked ? 'scale(1.08)' : 'scale(1)' }} />, () => like(false), 'Like')}
-          {iconBtn(<ChatBubbleIcon size={25} color={theme.ink} />, () => setSheet('comments'), 'Comments')}
-          {iconBtn(<Send size={24} color={theme.ink} />, () => setSheet('share'), 'Share')}
+          {iconBtn(<Heart size={27} strokeWidth={2} color={liked ? '#FF3040' : theme.ink} fill={liked ? '#FF3040' : 'none'} style={{ transition: 'transform 0.18s cubic-bezier(0.2, 0.9, 0.3, 1.4)', transform: liked ? 'scale(1.1)' : 'scale(1)' }} />, () => like(false), 'Like')}
+          {iconBtn(<InstaCommentIcon size={25} color={theme.ink} />, () => setSheet('comments'), 'Comments')}
+          {iconBtn(<InstaShareIcon size={24} color={theme.ink} />, () => setSheet('share'), 'Share')}
         </div>
         <div style={{ padding: '2px 14px', fontSize: 14, fontWeight: 700 }}>
           {likes.length === 0 ? 'Be the first to like this' : likes.length === 1 && firstLiker ? <>Liked by {firstLiker.username}<VerifiedBadge tier={firstLiker.verified} size={12} /></> : firstLiker ? <>Liked by {firstLiker.username}<VerifiedBadge tier={firstLiker.verified} size={12} /> and {formatCount(likes.length - 1)} others</> : `${formatCount(likes.length)} likes`}
@@ -8596,11 +8630,17 @@ function PostViewer({ post, owner, userId, meProfile, onClose, onDeleted }) {
             <b>{owner.username}</b><VerifiedBadge tier={owner.verified} size={12} /> {post.caption}
           </div>
         )}
-        {comments && comments.length > 0 && (
+        {comments && comments.length > 2 && (
           <div onClick={() => setSheet('comments')} style={{ padding: '6px 14px 0', fontSize: 14, color: theme.muted, cursor: 'pointer' }}>
-            {comments.length === 1 ? 'View 1 comment' : `View all ${comments.length} comments`}
+            View all {comments.length} comments
           </div>
         )}
+        {(comments || []).slice(-2).map((c) => (
+          <div key={c.id} onClick={() => setSheet('comments')} style={{ padding: '4px 14px 0', fontSize: 14, lineHeight: 1.4, color: theme.ink, cursor: 'pointer', wordBreak: 'break-word' }}>
+            <b>{c.profile ? c.profile.username : 'user'}</b><VerifiedBadge tier={c.profile && c.profile.verified} size={11} />{' '}
+            {typeof c.content === 'string' && c.content.startsWith('sticker:') ? <span style={{ color: theme.muted }}>sent a sticker</span> : c.content}
+          </div>
+        ))}
         <div style={{ padding: '6px 14px 18px', fontSize: 11.5, color: theme.muted }}>{timeAgoLong(post.created_at)}</div>
       </div>
 
@@ -8617,21 +8657,36 @@ function PostViewer({ post, owner, userId, meProfile, onClose, onDeleted }) {
                 </div>
               )}
               {(comments || []).map((c) => (
-                <div key={c.id} style={{ display: 'flex', gap: 12, padding: '10px 16px' }}>
-                  <Avatar emoji={c.profile && c.profile.avatar} name={(c.profile && c.profile.name) || '?'} size={34} />
+                <div key={c.id} style={{ display: 'flex', gap: 12, padding: '12px 16px' }}>
+                  <Avatar emoji={c.profile && c.profile.avatar} name={(c.profile && c.profile.name) || '?'} size={36} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 12.5 }}><b>{c.profile ? c.profile.username : 'user'}</b><VerifiedBadge tier={c.profile && c.profile.verified} size={11} /> <span style={{ color: theme.muted }}>{timeShort(c.created_at)}</span></div>
-                    <div style={{ fontSize: 14, lineHeight: 1.4, marginTop: 2, wordBreak: 'break-word' }}>{c.content}</div>
+                    <CommentBody content={c.content} theme={theme} />
                   </div>
                   {(c.user_id === userId || owner.id === userId) && <Trash2 size={15} color={theme.muted} style={{ cursor: 'pointer', flexShrink: 0, marginTop: 4 }} onClick={() => deleteComment(c)} />}
                 </div>
               ))}
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', paddingBottom: 'calc(10px + env(safe-area-inset-bottom))', borderTop: `1px solid ${theme.border}` }}>
+            {commentStickers && (
+              <div data-sheet-scroll style={{ maxHeight: 220, overflowY: 'auto', display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6, padding: '8px 12px', borderTop: `1px solid ${theme.border}`, touchAction: 'pan-y' }}>
+                {STICKERS.map((stk) => (
+                  <div key={stk.key} onClick={() => sendStickerComment(stk.file)} style={{ aspectRatio: '1 / 1', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', borderRadius: 12, background: theme.rowBg }}>
+                    <img src={stk.file} alt="" loading="lazy" draggable={false} style={{ width: '80%', height: '80%', objectFit: 'contain' }} />
+                  </div>
+                ))}
+              </div>
+            )}
+            <div style={{ display: 'flex', justifyContent: 'space-around', padding: '10px 10px 2px', borderTop: `1px solid ${theme.border}` }}>
+              {COMMENT_QUICK_EMOJIS.map((emo) => (
+                <span key={emo} onClick={() => setText((t) => `${t}${emo}`)} style={{ fontSize: 26, cursor: 'pointer', lineHeight: 1 }}>{emo}</span>
+              ))}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', paddingBottom: 'calc(10px + env(safe-area-inset-bottom))' }}>
               <Avatar emoji={meProfile && meProfile.avatar} name={(meProfile && meProfile.name) || '?'} size={34} />
               <input autoFocus value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') sendComment(); }}
-                placeholder={`Add a comment for ${owner.username}`} style={{ flex: 1, minWidth: 0, border: `1px solid ${theme.border}`, borderRadius: 22, padding: '10px 14px', background: 'transparent', color: theme.ink, outline: 'none', fontFamily: FONT, fontSize: 14 }} />
-              <span onClick={sendComment} style={{ fontWeight: 800, color: text.trim() ? theme.coral : theme.muted, cursor: 'pointer' }}>Post</span>
+                placeholder={`Add a comment for ${owner.username}`} style={{ flex: 1, minWidth: 0, border: `1px solid ${theme.border}`, borderRadius: 22, padding: '11px 16px', background: theme.rowBg, color: theme.ink, outline: 'none', fontFamily: FONT, fontSize: 14 }} />
+              <div role="button" aria-label="Stickers" onClick={() => setCommentStickers((v) => !v)} style={{ display: 'flex', cursor: 'pointer', color: commentStickers ? theme.coral : theme.ink }}><Smile size={24} /></div>
+              {text.trim() && <span onClick={sendComment} style={{ fontWeight: 800, color: theme.coral, cursor: 'pointer' }}>Post</span>}
             </div>
           </div>
         </div>
@@ -8811,9 +8866,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           const screenH = portrait ? Math.max(window.screen.height, window.screen.width) : Math.min(window.screen.height, window.screen.width);
           const gap = screenH - window.innerHeight;
           const safeTop = safeTopRef.current;
-          if (safeTop >= 20 && gap > 0 && Math.abs(gap - safeTop) <= 6) fill = screenH;
+          if (safeTop >= 20 && gap > 0 && Math.abs(gap - safeTop) <= 6) fill = { h: screenH, pad: gap };
         }
-        setStandaloneFill((prev) => (prev === fill ? prev : fill));
+        setStandaloneFill((prev) => ((prev && fill && prev.h === fill.h && prev.pad === fill.pad) || (!prev && !fill) ? prev : fill));
         setKeyboardOpen((prev) => (prev === open ? prev : open));
         setViewportBox((prev) => {
           const next = open
@@ -11278,7 +11333,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   return (
     <div id="zapp-root" style={{
       position: 'fixed', left: 0, right: 0, top: viewportBox.height ? viewportBox.offset : 0,
-      ...(viewportBox.height ? { height: viewportBox.height } : standaloneFill ? { height: standaloneFill } : { bottom: 0 }),
+      ...(viewportBox.height ? { height: viewportBox.height } : standaloneFill ? { height: standaloneFill.h } : { bottom: 0 }),
+      '--zchat-bottom-pad': `${!viewportBox.height && standaloneFill ? standaloneFill.pad : 0}px`,
       background: theme.bgGradient, fontFamily: FONT,
       display: 'flex', overflow: 'hidden', boxSizing: 'border-box',
       paddingTop: callBarShown ? 'calc(env(safe-area-inset-top) + 42px)' : 'env(safe-area-inset-top)',
@@ -11291,7 +11347,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       <div style={{
         width: isWide ? 360 : (mobileShowChat ? 0 : '100%'), maxWidth: isWide ? 360 : (mobileShowChat ? 0 : '100%'), overflow: 'hidden',
         borderRight: `1px solid ${theme.border}`, display: 'flex', flexDirection: 'column', flexShrink: 0,
-        transition: 'none',
+        transition: 'none', paddingBottom: 'var(--zchat-bottom-pad, 0px)',
       }} className="zchat-sidebar-desktop">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
         {notifPermission === 'default' && pushSupported() && !notifBannerDismissed && (
@@ -11519,6 +11575,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       <div style={{
         flex: 1, display: (isWide || mobileShowChat) ? 'flex' : 'none', flexDirection: 'column', minWidth: 0, minHeight: 0, position: 'relative',
         paddingTop: (activeProfile || activeGroup) ? 64 : 0,
+        paddingBottom: 'var(--zchat-bottom-pad, 0px)',
       }} className={mobileShowChat ? 'zchat-chat-panel zchat-panel-open' : 'zchat-chat-panel'}>
         {(activeProfile || activeGroup) ? (
           <>
