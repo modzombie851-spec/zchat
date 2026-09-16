@@ -4,7 +4,7 @@ import {
   Send, Paperclip, Search, Mail, ShieldCheck, AtSign, LogOut, Eye, EyeOff, Lock,
   Flag, X, Trash2, User, Phone, MoreVertical, Image as ImageIcon, Video as VideoIcon,
   Smile, ArrowLeft, Check, CheckCheck, Settings as SettingsIcon, Moon, Sun, UserPlus,
-  FileText, HelpCircle, ChevronRight, Compass, Bell, Volume2, VolumeX, Palette, Mic, Play, Pause, Download, Users, Camera, Reply, Forward, Ban, Edit3, Archive, Sparkles, Share2, Copy,
+  FileText, HelpCircle, ChevronRight, Compass, Bell, Volume2, VolumeX, Palette, Mic, Play, Pause, Download, Users, Camera, Reply, Forward, Ban, Edit3, Archive, Sparkles, Share2, Copy, Crop, Type, Pencil, Undo2, Scissors,
 } from 'lucide-react';
 import {
   supabase, registerWithEmail, verifyOtp, setPassword, signInWithPassword,
@@ -333,6 +333,13 @@ function GlobalStyle() {
       @keyframes zchat-panel-zoom-in { 0% { opacity: 0; } 100% { opacity: 1; } }
       @keyframes zchat-panel-slide-in { 0% { opacity: 0; transform: translateX(14px) scale(0.985); } 100% { opacity: 1; transform: translateX(0) scale(1); } }
       @keyframes zchat-pull-spin { to { transform: rotate(360deg); } }
+      @keyframes zchat-toast-in { 0% { opacity: 0; transform: translateY(-28px) scale(0.97); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
+      @keyframes zchat-pop-in { 0% { opacity: 0; transform: scale(0.92); } 100% { opacity: 1; transform: scale(1); } }
+      @keyframes zchat-sheet-up { 0% { transform: translateY(40px); opacity: 0; } 100% { transform: translateY(0); opacity: 1; } }
+      @keyframes zchat-dots { 0%, 80%, 100% { opacity: 0.25; } 40% { opacity: 1; } }
+      .zchat-toast-in { animation: zchat-toast-in 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.1); }
+      .zchat-pop { animation: zchat-pop-in 0.18s cubic-bezier(0.2, 0.9, 0.3, 1.2); }
+      .zchat-sheet-up { animation: zchat-sheet-up 0.22s cubic-bezier(0.2, 0.9, 0.3, 1); }
       .zchat-fire-ring {
         background: linear-gradient(135deg, #FFD23F, #FF6B00, #FF2D55);
       }
@@ -512,7 +519,7 @@ function GoogleButton({ onError }) {
           const { error } = await supabase.auth.signInWithIdToken({
             provider: 'google', token: response.credential, nonce: rawNonce,
           });
-          if (error && onError) onError(error.message);
+          if (error && onError) onError(friendlyError(error, "Couldn't sign in with Google. Try again."));
         },
       });
       window.google.accounts.id.prompt((notification) => {
@@ -768,7 +775,7 @@ function RegisterFlow({ onDone, onBack, onStart, initialStage = 'email' }) {
     setLoading(true); setErr('');
     const { error } = await registerWithEmail(email);
     setLoading(false);
-    if (error) { setErr(error.message); return false; }
+    if (error) { setErr(friendlyError(error, "Couldn't send the code. Try again.")); return false; }
     setStage('otp');
     return true;
   };
@@ -789,7 +796,7 @@ function RegisterFlow({ onDone, onBack, onStart, initialStage = 'email' }) {
     setLoading(true); setErr('');
     const { error } = await setPassword(pw);
     setLoading(false);
-    if (error) { setErr(error.message); return; }
+    if (error) { setErr(friendlyError(error, "Couldn't save your password. Try again.")); return; }
     setStage('username');
   };
 
@@ -819,7 +826,7 @@ function RegisterFlow({ onDone, onBack, onStart, initialStage = 'email' }) {
       if (msg.includes('duplicate') || msg.includes('unique') || error.code === '23505') {
         setErr('That username was just taken. Try a different one.');
       } else {
-        setErr(error.message);
+        setErr(friendlyError(error, "Couldn't create your profile. Try again."));
       }
       return;
     }
@@ -1504,7 +1511,8 @@ function ListModal({ title, onClose, children }) {
       </div>
     </div>
   );
-                   }
+}
+
 function FollowListModal({ userId, viewerId, mode, onClose, onOpenProfile }) {
   const [list, setList] = useState(null);
   const [iFollow, setIFollow] = useState(new Set());
@@ -1659,9 +1667,7 @@ function DiscoverPanel({ myId, blockedIds, onClose, onOpenProfile }) {
       </div>
     </div>
   );
-}
-
-
+    }
 function IconDownload({ size = 15, color = 'currentColor' }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
@@ -1984,55 +1990,6 @@ function FullEmojiPicker({ onPick, onClose }) {
     </div>
   );
 }
-function MessageContextMenu({ message, isMine, canEditText, canModerate, onClose, onReact, onReply, onCopy, onEdit, onForward, onReport, onDeleteForMe, onDeleteForEveryone, onSelectMultiple }) {
-  const { theme } = useTheme();
-  const [showFullEmoji, setShowFullEmoji] = useState(false);
-  const [favKeys, setFavKeys] = useState(() => getFavoriteStickerKeys());
-  const stickerMatch = message.type === 'sticker' ? STICKERS.find((s) => s.file === message.content) : null;
-  const toggleStickerFav = () => {
-    if (!stickerMatch) return;
-    setFavKeys(new Set(toggleFavoriteSticker(stickerMatch.key)));
-  };
-  const row = { display: 'flex', alignItems: 'center', gap: 12, padding: '11px 6px', cursor: 'pointer', fontSize: 14, fontWeight: 600, color: theme.ink };
-  return (
-    <div onClick={onClose} style={{
-      position: 'absolute', inset: 0, background: 'rgba(20,16,14,0.5)', zIndex: 95,
-      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
-    }} className="zchat-fade">
-      <div onClick={(e) => e.stopPropagation()} style={{ background: theme.panelBg, borderRadius: 22, padding: 16, width: '100%', maxWidth: 300 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'center', padding: '4px 0 14px' }}>
-          {REACTION_EMOJIS.map((e) => (
-            <div key={e} onClick={() => onReact(e)} style={{ fontSize: 24, cursor: 'pointer' }}>{e}</div>
-          ))}
-          <div onClick={() => setShowFullEmoji(true)} style={{
-            width: 26, height: 26, borderRadius: '50%', background: theme.rowBg, display: 'flex',
-            alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0,
-          }}><span style={{ fontSize: 16, fontWeight: 800, color: theme.muted, lineHeight: 1 }}>+</span></div>
-        </div>
-        <div style={{ borderTop: `1px solid ${theme.border}`, paddingTop: 4 }}>
-          <div style={row} onClick={onReply}><Reply size={16} /> Reply</div>
-          {!message.deleted && message.type === 'text' && <div style={row} onClick={onCopy}><Check size={16} /> Copy</div>}
-          {!message.deleted && canEditText && <div style={row} onClick={onEdit}><Edit3 size={16} /> Edit</div>}
-          {!message.deleted && stickerMatch && (
-            <div style={row} onClick={toggleStickerFav}>
-              <Star_ size={16} color="#FFB800" filled={favKeys.has(stickerMatch.key)} />
-              {favKeys.has(stickerMatch.key) ? 'Remove from Favourites' : 'Add to Favourites'}
-            </div>
-          )}
-          <div style={row} onClick={onForward}><Forward size={16} /> Forward</div>
-          <div style={row} onClick={onSelectMultiple}><Check size={16} /> Select multiple</div>
-          {!isMine && <div style={{ ...row, color: theme.danger }} onClick={onReport}><Flag size={16} color={theme.danger} /> Report</div>}
-          <div style={{ ...row, color: theme.danger }} onClick={onDeleteForMe}><Trash2 size={16} color={theme.danger} /> Delete for me</div>
-          {(isMine || canModerate) && !message.deleted && <div style={{ ...row, color: theme.danger }} onClick={onDeleteForEveryone}><Trash2 size={16} color={theme.danger} /> Delete for everyone</div>}
-        </div>
-      </div>
-      {showFullEmoji && (
-        <FullEmojiPicker onClose={() => setShowFullEmoji(false)} onPick={(e) => { onReact(e); setShowFullEmoji(false); }} />
-      )}
-    </div>
-  );
-}
-
 function EmojiPickerBar({ onPick, onClose }) {
   const { theme } = useTheme();
   const [showFullEmoji, setShowFullEmoji] = useState(false);
@@ -2882,12 +2839,12 @@ function CreateGroupPanel({ myId, onClose, onCreated }) {
       avatarUrl = url || null;
     }
     const { data: group, error } = await supabase.from('groups').insert({ name: name.trim().slice(0, 50), bio: bio.trim() || null, avatar: avatarUrl, created_by: myId }).select().single();
-    if (error || !group) { setCreating(false); setErr(error?.message || 'Could not create the group.'); return; }
+    if (error || !group) { setCreating(false); setErr(friendlyError(error, "Couldn't create the group. Try again.")); return; }
     const { error: memberErr } = await supabase.from('group_members').insert({ group_id: group.id, user_id: myId, role: 'admin', added_by: myId });
-    if (memberErr) { setCreating(false); setErr(memberErr.message); return; }
+    if (memberErr) { setCreating(false); setErr(friendlyError(memberErr, "Couldn't create the group. Try again.")); return; }
     if (selected.length) {
       const { error: inviteErr } = await supabase.from('group_members').insert(selected.slice(0, 49).map((p) => ({ group_id: group.id, user_id: p.id, role: 'member', added_by: myId })));
-      if (inviteErr) { setCreating(false); setErr(inviteErr.message); return; }
+      if (inviteErr) { setCreating(false); setErr(friendlyError(inviteErr, "Couldn't add those people. Try again.")); return; }
     }
     await supabase.from('messages').insert({
       sender_id: myId, group_id: group.id, type: 'system',
@@ -2979,7 +2936,8 @@ function CreateGroupPanel({ myId, onClose, onCreated }) {
       )}
     </div>
   );
-      }
+}
+
 function GroupInfoPanel({ group, members, myId, myRole, isOwner, onClose, onPromote, onDemote, onMute, onUnmute, onKick, onLeave, onOpenProfile, onSaveBio, onSaveName, onSaveAvatar, onAddMembers, onTransferOwnership, onSetWallpaper, onSetHeaderStyle }) {
   const { theme } = useTheme();
   const isAdmin = myRole === 'admin';
@@ -3263,179 +3221,6 @@ function AccountPrivacyPanel({ profile, onClose, onSaved }) {
   );
 }
 
-function PhotoCropEditor({ file, isAvatar = false, onCancel, onConfirm }) {
-  const { theme } = useTheme();
-  const [imgEl, setImgEl] = useState(null);
-  const [caption, setCaption] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [rect, setRect] = useState(null);
-  const boxRef = useRef(null);
-  const dragRef = useRef(null);
-  const BOX = 320;
-
-  useEffect(() => {
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = () => setImgEl(img);
-    img.src = url;
-    return () => URL.revokeObjectURL(url);
-  }, [file]);
-
-  const boxW = BOX;
-  const boxH = imgEl ? Math.min(420, BOX * (imgEl.naturalHeight / imgEl.naturalWidth)) : BOX;
-  const displayScale = imgEl ? Math.min(boxW / imgEl.naturalWidth, boxH / imgEl.naturalHeight) : 1;
-  const drawnW = imgEl ? imgEl.naturalWidth * displayScale : boxW;
-  const drawnH = imgEl ? imgEl.naturalHeight * displayScale : boxH;
-  const offsetX = (boxW - drawnW) / 2;
-  const offsetY = (boxH - drawnH) / 2;
-
-  useEffect(() => {
-    if (!imgEl) return;
-    if (isAvatar) {
-      const side = Math.min(drawnW, drawnH) * 0.86;
-      setRect({ x: offsetX + (drawnW - side) / 2, y: offsetY + (drawnH - side) / 2, w: side, h: side });
-    } else {
-      const pad = 0.06;
-      setRect({ x: offsetX + drawnW * pad, y: offsetY + drawnH * pad, w: drawnW * (1 - pad * 2), h: drawnH * (1 - pad * 2) });
-    }
-  }, [imgEl]);
-
-  if (!imgEl || !rect) {
-    return (
-      <div style={{ position: 'absolute', inset: 0, background: 'rgba(10,8,6,0.92)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 90 }}>
-        <Spinner size={26} color="white" />
-      </div>
-    );
-  }
-
-  const MIN_SIZE = 60;
-  const imgBounds = { left: offsetX, top: offsetY, right: offsetX + drawnW, bottom: offsetY + drawnH };
-
-  const clampRect = (r) => {
-    let { x, y, w, h } = r;
-    w = Math.max(MIN_SIZE, Math.min(w, imgBounds.right - imgBounds.left));
-    h = Math.max(MIN_SIZE, Math.min(h, imgBounds.bottom - imgBounds.top));
-    x = Math.max(imgBounds.left, Math.min(x, imgBounds.right - w));
-    y = Math.max(imgBounds.top, Math.min(y, imgBounds.bottom - h));
-    return { x, y, w, h };
-  };
-
-  const startDrag = (mode, clientX, clientY) => {
-    dragRef.current = { mode, startX: clientX, startY: clientY, orig: { ...rect } };
-  };
-  const moveDrag = (clientX, clientY) => {
-    if (!dragRef.current || !boxRef.current) return;
-    const dx = clientX - dragRef.current.startX;
-    const dy = clientY - dragRef.current.startY;
-    const o = dragRef.current.orig;
-    const { mode } = dragRef.current;
-    let next = { ...o };
-    if (mode === 'move') {
-      next = { x: o.x + dx, y: o.y + dy, w: o.w, h: o.h };
-    } else if (isAvatar) {
-      const delta = mode.includes('right') || mode.includes('bottom') ? Math.max(dx, dy) : -Math.max(-dx, -dy);
-      const side = Math.max(MIN_SIZE, o.w + delta);
-      if (mode === 'nw') next = { x: o.x + (o.w - side), y: o.y + (o.h - side), w: side, h: side };
-      else if (mode === 'ne') next = { x: o.x, y: o.y + (o.h - side), w: side, h: side };
-      else if (mode === 'sw') next = { x: o.x + (o.w - side), y: o.y, w: side, h: side };
-      else next = { x: o.x, y: o.y, w: side, h: side };
-    } else {
-      if (mode.includes('n')) { next.y = o.y + dy; next.h = o.h - dy; }
-      if (mode.includes('s')) { next.h = o.h + dy; }
-      if (mode.includes('w')) { next.x = o.x + dx; next.w = o.w - dx; }
-      if (mode.includes('e')) { next.w = o.w + dx; }
-    }
-    setRect(clampRect(next));
-  };
-  const endDrag = () => { dragRef.current = null; };
-
-  const confirm = () => {
-    setSaving(true);
-    const outSize = isAvatar ? 480 : 1080;
-    const cropXOnImg = (rect.x - offsetX) / displayScale;
-    const cropYOnImg = (rect.y - offsetY) / displayScale;
-    const cropWOnImg = rect.w / displayScale;
-    const cropHOnImg = rect.h / displayScale;
-    const canvas = document.createElement('canvas');
-    const outW = isAvatar ? outSize : outSize;
-    const outH = isAvatar ? outSize : Math.round(outSize * (cropHOnImg / cropWOnImg));
-    canvas.width = outW; canvas.height = outH;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(imgEl, cropXOnImg, cropYOnImg, cropWOnImg, cropHOnImg, 0, 0, outW, outH);
-    canvas.toBlob((blob) => { setSaving(false); if (blob) onConfirm(blob, caption.trim()); }, 'image/jpeg', isAvatar ? 0.92 : 0.9);
-  };
-
-  const Handle = ({ mode, style }) => (
-    <div
-      onMouseDown={(e) => { e.stopPropagation(); startDrag(mode, e.clientX, e.clientY); }}
-      onTouchStart={(e) => { e.stopPropagation(); startDrag(mode, e.touches[0].clientX, e.touches[0].clientY); }}
-      style={{
-        position: 'absolute', width: 22, height: 22, borderRadius: isAvatar ? '50%' : 6,
-        background: 'white', border: `3px solid ${theme.coral}`, ...style, touchAction: 'none',
-      }}
-    />
-  );
-
-  return (
-    <div
-      style={{
-        position: 'absolute', inset: 0, background: 'rgba(10,8,6,0.92)', display: 'flex', flexDirection: 'column',
-        alignItems: 'center', justifyContent: 'center', zIndex: 90, padding: 20,
-        paddingTop: 'calc(20px + env(safe-area-inset-top))',
-      }}
-      className="zchat-fade"
-      onMouseMove={(e) => moveDrag(e.clientX, e.clientY)} onMouseUp={endDrag} onMouseLeave={endDrag}
-      onTouchMove={(e) => moveDrag(e.touches[0].clientX, e.touches[0].clientY)} onTouchEnd={endDrag}
-    >
-      <div onClick={onCancel} style={{
-        position: 'absolute', top: 'calc(16px + env(safe-area-inset-top))', left: 16, width: 34, height: 34, borderRadius: '50%',
-        background: 'rgba(255,255,255,0.14)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 2,
-      }}><X size={18} color="white" /></div>
-      <div style={{ fontWeight: 800, fontSize: 15, color: 'white', marginBottom: 14 }}>{isAvatar ? 'Adjust your photo' : 'Edit photo'}</div>
-      <div ref={boxRef} style={{ width: boxW, height: boxH, position: 'relative', marginBottom: 16, touchAction: 'none' }}>
-        <img src={imgEl.src} alt="" draggable={false} onContextMenu={(e) => e.preventDefault()} style={{
-          position: 'absolute', left: offsetX, top: offsetY, width: drawnW, height: drawnH, userSelect: 'none', pointerEvents: 'none',
-        }} />
-        <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.55)', clipPath: `polygon(0 0, 0 100%, ${rect.x}px 100%, ${rect.x}px ${rect.y}px, ${rect.x + rect.w}px ${rect.y}px, ${rect.x + rect.w}px ${rect.y + rect.h}px, ${rect.x}px ${rect.y + rect.h}px, ${rect.x}px 100%, 100% 100%, 100% 0)` }} />
-        <div
-          onMouseDown={(e) => startDrag('move', e.clientX, e.clientY)}
-          onTouchStart={(e) => startDrag('move', e.touches[0].clientX, e.touches[0].clientY)}
-          style={{
-            position: 'absolute', left: rect.x, top: rect.y, width: rect.w, height: rect.h,
-            border: `2px solid ${theme.coral}`, borderRadius: isAvatar ? '50%' : 4, cursor: 'move', touchAction: 'none',
-          }}
-        />
-        <Handle mode="nw" style={{ left: rect.x - 11, top: rect.y - 11, cursor: 'nwse-resize' }} />
-        <Handle mode="ne" style={{ left: rect.x + rect.w - 11, top: rect.y - 11, cursor: 'nesw-resize' }} />
-        <Handle mode="sw" style={{ left: rect.x - 11, top: rect.y + rect.h - 11, cursor: 'nesw-resize' }} />
-        <Handle mode="se" style={{ left: rect.x + rect.w - 11, top: rect.y + rect.h - 11, cursor: 'nwse-resize' }} />
-        {!isAvatar && (
-          <>
-            <Handle mode="n" style={{ left: rect.x + rect.w / 2 - 11, top: rect.y - 11, cursor: 'ns-resize' }} />
-            <Handle mode="s" style={{ left: rect.x + rect.w / 2 - 11, top: rect.y + rect.h - 11, cursor: 'ns-resize' }} />
-            <Handle mode="w" style={{ left: rect.x - 11, top: rect.y + rect.h / 2 - 11, cursor: 'ew-resize' }} />
-            <Handle mode="e" style={{ left: rect.x + rect.w - 11, top: rect.y + rect.h / 2 - 11, cursor: 'ew-resize' }} />
-          </>
-        )}
-      </div>
-      {!isAvatar && (
-        <input value={caption} onChange={(e) => setCaption(e.target.value.slice(0, 1000))} placeholder="Add a caption..."
-          style={{ width: boxW, padding: '10px 14px', borderRadius: 20, border: '1px solid rgba(255,255,255,0.3)', background: 'rgba(255,255,255,0.1)', color: 'white', fontFamily: FONT, fontSize: 14, outline: 'none', marginBottom: 14, boxSizing: 'border-box' }} />
-      )}
-      <div style={{ display: 'flex', gap: 10, width: boxW }}>
-        <button onClick={onCancel} style={{
-          flex: 1, padding: 12, borderRadius: 13, border: '1.5px solid rgba(255,255,255,0.3)',
-          background: 'transparent', color: 'white', fontWeight: 700, fontSize: 13.5, cursor: 'pointer', fontFamily: FONT,
-        }}>Cancel</button>
-        <button onClick={confirm} disabled={saving} style={{
-          flex: 1, padding: 12, borderRadius: 13, border: 'none', background: theme.coral, color: 'white',
-          fontWeight: 700, fontSize: 13.5, cursor: 'pointer', fontFamily: FONT,
-        }}>{saving ? <Spinner size={14} /> : (isAvatar ? 'Use photo' : 'Done')}</button>
-      </div>
-    </div>
-  );
-}
-
 const PROFILE_LINK_REGEX = /^https?:\/\/[^\s/]+\/\?profile=([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
 
 function profileShareLink(profileId) {
@@ -3525,7 +3310,6 @@ function ProfileLinkCard({ profileId, onOpen }) {
     </div>
   );
 }
-
 function ShareProfileSheet({ profile, myId, conversations, groups, onSend, onClose }) {
   const { theme } = useTheme();
   const link = profileShareLink(profile.id);
@@ -3844,7 +3628,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
     setSaving(false);
     if (error) {
       const msg = (error.message || '').toLowerCase();
-      setUsernameErr(msg.includes('duplicate') || msg.includes('unique') ? 'That username is already taken.' : error.message);
+      setUsernameErr(msg.includes('duplicate') || msg.includes('unique') ? 'That username is already taken.' : friendlyError(error, "Couldn't save your profile. Try again."));
       return;
     }
     if (data) { onSaved(data); setEditing(false); }
@@ -4380,28 +4164,6 @@ function AudioBubble({ url, isMe }) {
   );
 }
 
-async function silentDownload(url, filename) {
-  try {
-    const res = await fetch(url);
-    const blob = await res.blob();
-    const blobUrl = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = blobUrl;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(blobUrl), 4000);
-  } catch {
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.target = '_blank';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  }
-                             }
 function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSelect, onLongPress, onOpenImage, onOpenVideo, reactions, onReact, onOpenWhoReacted, replyPreview, onSwipeReply, onJumpToMessage, highlighted, senderLabel, senderAvatar, hideReadStatus, onOpenSenderProfile, canModerate, onOpenMention, mentionsMe }) {
   const { theme, fontScale, chatTheme, bubbleColor } = useTheme();
   const [hover, setHover] = useState(false);
@@ -4446,7 +4208,7 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
     } else if (m.type === 'image') {
       onOpenImage(m.media_url);
     } else if (m.type === 'video') {
-      onOpenVideo({ url: m.media_url, trimStart: m.trim_start, trimEnd: m.trim_end });
+      onOpenVideo({ url: m.media_url, trimStart: m.trim_start, trimEnd: m.trim_end, overlayUrl: m.overlay_url });
     }
     lastTapRef.current = now;
   };
@@ -4586,8 +4348,8 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
           ) : (
             <>
               {m.type === 'image' && (
-                <div style={{ position: 'relative', width: 220, height: 220, borderRadius: 14, overflow: 'hidden', marginBottom: m.content ? 4 : 2 }}>
-                  <img src={m.media_url} alt="" onContextMenu={(e) => e.preventDefault()} draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                <div style={{ position: 'relative', width: 240, maxWidth: '100%', minHeight: 120, borderRadius: 14, overflow: 'hidden', marginBottom: m.content ? 4 : 2, background: 'rgba(0,0,0,0.15)' }}>
+                  <img src={m.media_url} alt="" loading="lazy" onContextMenu={(e) => e.preventDefault()} draggable={false} style={{ width: '100%', height: 'auto', maxHeight: 340, objectFit: 'cover', display: 'block' }} />
                   <div onClick={(e) => { e.stopPropagation(); silentDownload(m.media_url, 'zchat-photo.jpg'); }} style={{
                     position: 'absolute', top: 6, right: 6, width: 26, height: 26, borderRadius: '50%',
                     background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
@@ -4595,8 +4357,9 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
                 </div>
               )}
               {m.type === 'video' && (
-                <div onClick={(e) => { e.stopPropagation(); onOpenVideo({ url: m.media_url, trimStart: m.trim_start, trimEnd: m.trim_end }); }} style={{ position: 'relative', width: 220, height: 220, borderRadius: 14, overflow: 'hidden', marginBottom: m.content ? 4 : 2, background: '#000', cursor: 'pointer' }}>
-                  <video src={m.media_url} preload="metadata" onContextMenu={(e) => e.preventDefault()} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none' }} />
+                <div onClick={(e) => { e.stopPropagation(); onOpenVideo({ url: m.media_url, trimStart: m.trim_start, trimEnd: m.trim_end, overlayUrl: m.overlay_url }); }} style={{ position: 'relative', width: 240, maxWidth: '100%', height: 240, borderRadius: 14, overflow: 'hidden', marginBottom: m.content ? 4 : 2, background: '#000', cursor: 'pointer' }}>
+                  <video src={m.media_url ? `${m.media_url}#t=0.1` : undefined} preload="metadata" playsInline muted onContextMenu={(e) => e.preventDefault()} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none' }} />
+                  {m.overlay_url && <img src={m.overlay_url} alt="" draggable={false} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} />}
                   <div style={{
                     position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none',
                     background: 'rgba(0,0,0,0.18)',
@@ -4628,7 +4391,7 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
               {m.type === 'text' && m.content && !sharedProfileId && (
                 <div style={{ fontSize: 15 * fontScale, color: theme.ink, wordBreak: 'break-word', lineHeight: 1.32 }}>
                   <RichText text={m.content} onMention={onOpenMention} />
-                  <span style={{ display: 'inline-block', float: 'right', width: 46, height: 17 }} />
+                  <span style={{ display: 'inline-block', float: 'right', width: Math.ceil(time.length * 5.4) + (isMe ? 22 : 8) + (m.edited ? 30 : 0), height: 17 }} />
                 </div>
               )}
             </>
@@ -4723,43 +4486,6 @@ function ImageViewer({ url, onClose, onForward, onReport }) {
         )}
       </div>
       <img src={url} alt="" onContextMenu={(e) => e.preventDefault()} draggable={false} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: 8 }} />
-    </div>
-  );
-}
-
-function VideoViewer({ url, trimStart, trimEnd, onClose, onForward }) {
-  const videoRef = useRef(null);
-  const seekedRef = useRef(false);
-  const onLoadedMetadata = (e) => {
-    if (trimStart && !seekedRef.current) { e.target.currentTime = trimStart; seekedRef.current = true; }
-  };
-  const onTimeUpdate = (e) => {
-    if (trimEnd && e.target.currentTime >= trimEnd) {
-      e.target.pause();
-      e.target.currentTime = trimStart || 0;
-    }
-  };
-  return (
-    <div style={{
-      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.96)', zIndex: 200,
-      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
-    }} className="zchat-fade">
-      <div onClick={onClose} style={{
-        position: 'absolute', top: 'calc(18px + env(safe-area-inset-top))', left: 18, width: 36, height: 36, borderRadius: '50%',
-        background: 'rgba(255,255,255,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 2,
-      }}><X size={18} color="white" /></div>
-      <div style={{ position: 'absolute', top: 'calc(18px + env(safe-area-inset-top))', right: 18, display: 'flex', gap: 10, zIndex: 2 }}>
-        <div onClick={() => silentDownload(url, 'zchat-video.mp4')} style={{
-          width: 36, height: 36, borderRadius: '50%', background: 'rgba(255,255,255,0.12)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-        }}><Download size={17} color="white" /></div>
-        <div onClick={onForward} style={{
-          width: 36, height: 36, borderRadius: '50%', background: 'rgba(255,255,255,0.12)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-        }}><Forward size={17} color="white" /></div>
-      </div>
-      <video ref={videoRef} src={url} controls autoPlay playsInline onContextMenu={(e) => e.preventDefault()} onLoadedMetadata={onLoadedMetadata} onTimeUpdate={onTimeUpdate}
-        style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
     </div>
   );
 }
@@ -4943,105 +4669,6 @@ function DeleteMessageConfirm({ onCancel, onConfirm }) {
             color: 'white', fontWeight: 700, fontSize: 13.5, cursor: 'pointer', fontFamily: FONT,
           }}>Delete</button>
         </div>
-      </div>
-    </div>
-  );
-}
-
-function VideoTrimEditor({ file, onCancel, onConfirm }) {
-  const { theme } = useTheme();
-  const [url, setUrl] = useState(null);
-  const [duration, setDuration] = useState(0);
-  const [start, setStart] = useState(0);
-  const [end, setEnd] = useState(0);
-  const [caption, setCaption] = useState('');
-  const [dragging, setDragging] = useState(null);
-  const barRef = useRef(null);
-
-  useEffect(() => {
-    const u = URL.createObjectURL(file);
-    setUrl(u);
-    return () => URL.revokeObjectURL(u);
-  }, [file]);
-
-  const onLoadedMetadata = (e) => {
-    const d = e.target.duration;
-    setDuration(d);
-    setEnd(d);
-  };
-
-  const pctFromEvent = (clientX) => {
-    if (!barRef.current) return 0;
-    const rect = barRef.current.getBoundingClientRect();
-    return Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
-  };
-  const handleMove = (clientX) => {
-    if (!dragging || !duration) return;
-    const t = pctFromEvent(clientX) * duration;
-    if (dragging === 'start') setStart(Math.min(t, end - 0.5));
-    else setEnd(Math.max(t, start + 0.5));
-  };
-
-  const fmt = (s) => `${Math.floor(s / 60)}:${Math.floor(s % 60).toString().padStart(2, '0')}`;
-  const trimmedTooShort = duration > 0 && end - start < 1;
-
-  if (!url) {
-    return (
-      <div style={{ position: 'absolute', inset: 0, background: 'rgba(10,8,6,0.92)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 90 }}>
-        <Spinner size={26} color="white" />
-      </div>
-    );
-  }
-
-  return (
-    <div
-      style={{ position: 'absolute', inset: 0, background: 'rgba(10,8,6,0.92)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', zIndex: 90, padding: 20, paddingTop: 'calc(20px + env(safe-area-inset-top))' }}
-      className="zchat-fade"
-      onMouseMove={(e) => handleMove(e.clientX)} onMouseUp={() => setDragging(null)} onMouseLeave={() => setDragging(null)}
-      onTouchMove={(e) => handleMove(e.touches[0].clientX)} onTouchEnd={() => setDragging(null)}
-    >
-      <div onClick={onCancel} style={{
-        position: 'absolute', top: 'calc(16px + env(safe-area-inset-top))', left: 16, width: 34, height: 34, borderRadius: '50%',
-        background: 'rgba(255,255,255,0.14)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 2,
-      }}><X size={18} color="white" /></div>
-      <div style={{ fontWeight: 800, fontSize: 15, color: 'white', marginBottom: 14 }}>Trim video</div>
-      <video src={url} onLoadedMetadata={onLoadedMetadata} controls playsInline onContextMenu={(e) => e.preventDefault()}
-        style={{ width: 280, maxHeight: 340, borderRadius: 16, marginBottom: 16, background: '#000' }} />
-      {duration > 0 && (
-        <>
-          <div ref={barRef} style={{ position: 'relative', width: 280, height: 30, marginBottom: 6 }}>
-            <div style={{ position: 'absolute', top: 11, left: 0, right: 0, height: 8, borderRadius: 4, background: 'rgba(255,255,255,0.25)' }} />
-            <div style={{
-              position: 'absolute', top: 11, height: 8, borderRadius: 4, background: theme.coral,
-              left: `${(start / duration) * 100}%`, width: `${((end - start) / duration) * 100}%`,
-            }} />
-            <div onMouseDown={(e) => { e.stopPropagation(); setDragging('start'); }} onTouchStart={(e) => { e.stopPropagation(); setDragging('start'); }} style={{
-              position: 'absolute', top: 1, left: `calc(${(start / duration) * 100}% - 11px)`, width: 22, height: 22, borderRadius: '50%',
-              background: 'white', border: `3px solid ${theme.coral}`, cursor: 'grab', touchAction: 'none',
-            }} />
-            <div onMouseDown={(e) => { e.stopPropagation(); setDragging('end'); }} onTouchStart={(e) => { e.stopPropagation(); setDragging('end'); }} style={{
-              position: 'absolute', top: 1, left: `calc(${(end / duration) * 100}% - 11px)`, width: 22, height: 22, borderRadius: '50%',
-              background: 'white', border: `3px solid ${theme.coral}`, cursor: 'grab', touchAction: 'none',
-            }} />
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', width: 280, fontSize: 11.5, color: 'rgba(255,255,255,0.8)', marginBottom: 14 }}>
-            <span>{fmt(start)}</span>
-            <span>{fmt(end - start)} selected</span>
-            <span>{fmt(end)}</span>
-          </div>
-        </>
-      )}
-      <input value={caption} onChange={(e) => setCaption(e.target.value.slice(0, 1000))} placeholder="Add a caption..."
-        style={{ width: 280, padding: '10px 14px', borderRadius: 20, border: '1px solid rgba(255,255,255,0.3)', background: 'rgba(255,255,255,0.1)', color: 'white', fontFamily: FONT, fontSize: 14, outline: 'none', marginBottom: 14, boxSizing: 'border-box' }} />
-      <div style={{ display: 'flex', gap: 10, width: 280 }}>
-        <button onClick={onCancel} style={{
-          flex: 1, padding: 12, borderRadius: 13, border: '1.5px solid rgba(255,255,255,0.3)',
-          background: 'transparent', color: 'white', fontWeight: 700, fontSize: 13.5, cursor: 'pointer', fontFamily: FONT,
-        }}>Cancel</button>
-        <button onClick={() => onConfirm(file, url, start, end, caption.trim())} disabled={trimmedTooShort} style={{
-          flex: 1, padding: 12, borderRadius: 13, border: 'none', background: theme.coral, color: 'white',
-          fontWeight: 700, fontSize: 13.5, cursor: trimmedTooShort ? 'default' : 'pointer', fontFamily: FONT, opacity: trimmedTooShort ? 0.5 : 1,
-        }}>{trimmedTooShort ? 'Too short' : 'Done'}</button>
       </div>
     </div>
   );
@@ -5236,6 +4863,1067 @@ function SmartMenu({ anchorEl, open, onClose, children, width = 170 }) {
   );
 }
 
+function friendlyError(error, fallback = 'Something went wrong. Try again.') {
+  const msg = String((error && error.message) || error || '').toLowerCase();
+  if (!msg) return fallback;
+  if (msg.includes('failed to fetch') || msg.includes('network') || msg.includes('load failed')) return "You're offline. Check your connection and try again.";
+  if (msg.includes('rate limit') || msg.includes('too many')) return 'Too many tries. Wait a minute and try again.';
+  if (msg.includes('already registered') || msg.includes('already been registered') || msg.includes('user already exists')) return 'That email already has an account. Sign in instead.';
+  if (msg.includes('duplicate') || msg.includes('unique')) return 'That name is already taken. Try another one.';
+  if (msg.includes('invalid login') || msg.includes('invalid credentials')) return 'Incorrect email or password.';
+  if (msg.includes('same password') || msg.includes('different from the old')) return 'Choose a password you have not used before.';
+  if (msg.includes('password') && (msg.includes('characters') || msg.includes('short') || msg.includes('weak'))) return 'Use a stronger password with at least 6 characters.';
+  if (msg.includes('expired') || msg.includes('otp') || msg.includes('token')) return 'That code expired. Ask for a new one.';
+  if (msg.includes('email') && msg.includes('invalid')) return 'Enter a valid email address.';
+  if (msg.includes('too large') || msg.includes('exceeded the maximum')) return 'That file is too big.';
+  if (msg.includes('permission') || msg.includes('policy') || msg.includes('not allowed') || msg.includes('jwt') || msg.includes('unauthorized')) return "You don't have permission to do that.";
+  return fallback;
+}
+
+function formatListTime(value) {
+  if (!value) return '';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  const now = new Date();
+  if (d.toDateString() === now.toDateString()) return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
+  if (now.getTime() - d.getTime() < 6 * 86400000) return d.toLocaleDateString([], { weekday: 'short' });
+  return d.toLocaleDateString([], d.getFullYear() === now.getFullYear() ? { day: 'numeric', month: 'short' } : { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function describeMessage(m) {
+  if (!m) return { kind: 'none', text: '' };
+  if (m.deleted) return { kind: 'deleted', text: 'This message was deleted' };
+  switch (m.type) {
+    case 'image': return { kind: 'image', text: m.content || 'Photo' };
+    case 'video': return { kind: 'video', text: m.content || 'Video' };
+    case 'audio': return { kind: 'audio', text: 'Voice message' };
+    case 'sticker': return { kind: 'sticker', text: 'Sticker' };
+    case 'system': return { kind: 'system', text: m.content || '' };
+    default: return { kind: 'text', text: parseProfileLink(m.content) ? 'Shared a profile' : (m.content || '') };
+  }
+}
+
+const PREVIEW_ICONS = { image: Camera, video: VideoIcon, audio: Mic, sticker: Smile, deleted: Ban };
+
+function PreviewLine({ preview, prefix, color, weight = 400, size = 12 }) {
+  const Icon = preview ? PREVIEW_ICONS[preview.kind] : null;
+  return (
+    <span style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0, fontSize: size, color, fontWeight: weight, fontStyle: preview && preview.kind === 'deleted' ? 'italic' : 'normal' }}>
+      {prefix ? <span style={{ flexShrink: 0 }}>{prefix}</span> : null}
+      {Icon ? <Icon size={size + 1} style={{ flexShrink: 0 }} /> : null}
+      <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{preview ? preview.text : ''}</span>
+    </span>
+  );
+}
+
+function activityLabel(kind) {
+  const labels = {
+    typing: 'typing',
+    sticker: 'choosing a sticker',
+    photo: 'selecting a photo',
+    video: 'selecting a video',
+    voice: 'recording a voice message',
+  };
+  return `${labels[kind] || 'typing'}\u2026`;
+}
+
+function InAppMessageToast({ toast, top, onOpen, onDismiss }) {
+  const { theme } = useTheme();
+  const startRef = useRef(null);
+  const [dragY, setDragY] = useState(0);
+
+  useEffect(() => {
+    setDragY(0);
+    const t = setTimeout(onDismiss, 4500);
+    return () => clearTimeout(t);
+  }, [toast.key]);
+
+  const end = () => {
+    if (startRef.current == null) return;
+    const moved = startRef.current.moved;
+    startRef.current = null;
+    if (dragY < -28) { onDismiss(); return; }
+    setDragY(0);
+    if (!moved) onOpen();
+  };
+
+  return (
+    <div key={toast.key} className="zchat-toast-in"
+      onPointerDown={(e) => { startRef.current = { y: e.clientY, moved: false }; e.currentTarget.setPointerCapture?.(e.pointerId); }}
+      onPointerMove={(e) => {
+        if (!startRef.current) return;
+        const dy = e.clientY - startRef.current.y;
+        if (Math.abs(dy) > 6) startRef.current.moved = true;
+        setDragY(Math.min(0, dy));
+      }}
+      onPointerUp={end}
+      onPointerCancel={() => { startRef.current = null; setDragY(0); }}
+      style={{
+        position: 'fixed', top, left: 10, right: 10, zIndex: 300, maxWidth: 420, margin: '0 auto',
+        display: 'flex', alignItems: 'center', gap: 11, padding: '10px 14px 10px 10px', borderRadius: 20,
+        background: theme.dark ? 'rgba(20,26,44,0.94)' : 'rgba(255,255,255,0.96)',
+        backdropFilter: 'blur(22px) saturate(160%)', WebkitBackdropFilter: 'blur(22px) saturate(160%)',
+        border: `1px solid ${theme.border}`, boxShadow: '0 12px 32px rgba(0,0,0,0.3)',
+        transform: `translateY(${dragY}px)`, transition: startRef.current ? 'none' : 'transform 0.2s ease',
+        cursor: 'pointer', touchAction: 'none', userSelect: 'none',
+      }}>
+      <div style={{ position: 'relative', flexShrink: 0 }}>
+        {toast.kind === 'group'
+          ? <GroupAvatar avatar={toast.groupAvatar} name={toast.title} size={42} />
+          : <Avatar emoji={toast.avatar} name={toast.avatarName} size={42} />}
+        {toast.kind === 'group' && (
+          <div style={{ position: 'absolute', right: -4, bottom: -4, borderRadius: '50%', border: `2px solid ${theme.panelBg}` }}>
+            <Avatar emoji={toast.avatar} name={toast.avatarName} size={20} />
+          </div>
+        )}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+          <span style={{ fontSize: 13.5, fontWeight: 800, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{toast.title}</span>
+          <span style={{ fontSize: 10.5, color: theme.muted, flexShrink: 0 }}>now</span>
+        </div>
+        <PreviewLine preview={toast.preview} prefix={toast.prefix} color={theme.muted} size={12.5} />
+      </div>
+    </div>
+  );
+}
+
+function ChatRowSheet({ title, subtitle, avatar, actions, onClose }) {
+  const { theme } = useTheme();
+  return (
+    <div onClick={onClose} className="zchat-fade" style={{
+      position: 'fixed', inset: 0, zIndex: 94, display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+      background: theme.dark ? 'rgba(3,6,14,0.5)' : 'rgba(230,234,244,0.5)',
+      backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
+    }}>
+      <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{
+        width: '100%', maxWidth: 460, background: theme.panelBg, borderRadius: '24px 24px 0 0', overflow: 'hidden',
+        paddingBottom: 'calc(8px + env(safe-area-inset-bottom))', boxShadow: '0 -10px 40px rgba(0,0,0,0.25)',
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 2px' }}>
+          <div style={{ width: 38, height: 4, borderRadius: 2, background: theme.border }} />
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 18px 12px', borderBottom: `1px solid ${theme.border}` }}>
+          {avatar}
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontWeight: 800, fontSize: 15, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</div>
+            {subtitle && <div style={{ fontSize: 12, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{subtitle}</div>}
+          </div>
+        </div>
+        {actions.filter(Boolean).map((a) => (
+          <div key={a.label} onClick={() => { onClose(); a.onClick(); }} style={{
+            display: 'flex', alignItems: 'center', gap: 14, padding: '14px 20px', cursor: 'pointer',
+            fontSize: 14.5, fontWeight: 600, color: a.danger ? theme.danger : theme.ink,
+          }}>
+            <span style={{ display: 'flex', color: a.danger ? theme.danger : theme.muted }}>{a.icon}</span>
+            {a.label}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+    }
+function MessageContextMenu({ message, isMine, canEditText, canModerate, anchorRect, bubble, onClose, onReact, onReply, onCopy, onEdit, onForward, onReport, onDeleteForMe, onDeleteForEveryone, onSelectMultiple, onSave }) {
+  const { theme } = useTheme();
+  const [showFullEmoji, setShowFullEmoji] = useState(false);
+  const [favKeys, setFavKeys] = useState(() => getFavoriteStickerKeys());
+  const [measured, setMeasured] = useState({ menu: 0, bubble: 0 });
+  const menuRef = useRef(null);
+  const bubbleRef = useRef(null);
+  const stickerMatch = message.type === 'sticker' ? STICKERS.find((s) => s.file === message.content) : null;
+
+  useEffect(() => {
+    setMeasured({ menu: menuRef.current ? menuRef.current.offsetHeight : 0, bubble: bubbleRef.current ? bubbleRef.current.offsetHeight : 0 });
+  }, []);
+
+  const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+  const vw = window.innerWidth;
+  const rect = anchorRect || { top: vh * 0.3, left: Math.max(0, (vw - Math.min(vw, 560)) / 2), width: Math.min(vw, 560), height: 60 };
+  const maxBubble = Math.round(vh * 0.38);
+  const bubbleH = Math.min(measured.bubble || rect.height, maxBubble);
+  const barH = 50;
+  const gap = 10;
+  const minTop = 52 + barH + gap;
+  const maxTop = vh - 14 - (measured.menu || 300) - gap - bubbleH;
+  const top = Math.max(minTop, Math.min(rect.top, Math.max(minTop, maxTop)));
+  const sideStyle = isMine
+    ? { right: Math.max(10, vw - (rect.left + rect.width) + 14) }
+    : { left: Math.max(10, rect.left + 14) };
+  const ready = measured.menu > 0;
+
+  const row = (icon, label, onClick, danger) => (
+    <div onClick={onClick} style={{
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: '12px 16px', cursor: 'pointer',
+      fontSize: 14.5, fontWeight: 600, color: danger ? theme.danger : theme.ink, borderTop: `1px solid ${theme.border}`,
+    }}>
+      <span>{label}</span>
+      <span style={{ display: 'flex' }}>{icon}</span>
+    </div>
+  );
+
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 95 }}>
+      <div className="zchat-fade" style={{
+        position: 'absolute', inset: 0,
+        background: theme.dark ? 'rgba(3,6,14,0.5)' : 'rgba(235,239,247,0.5)',
+        backdropFilter: 'blur(18px) saturate(140%)', WebkitBackdropFilter: 'blur(18px) saturate(140%)',
+      }} />
+      {!message.deleted && (
+        <div onClick={(e) => e.stopPropagation()} className={ready ? 'zchat-pop' : ''} style={{
+          position: 'absolute', top: top - barH - gap, ...sideStyle, height: barH, boxSizing: 'border-box',
+          display: 'flex', alignItems: 'center', gap: 6, padding: '0 10px', borderRadius: 26,
+          background: theme.panelBg, boxShadow: '0 8px 28px rgba(0,0,0,0.28)', opacity: ready ? 1 : 0,
+        }}>
+          {REACTION_EMOJIS.map((e) => (
+            <div key={e} onClick={() => onReact(e)} style={{ fontSize: 25, cursor: 'pointer', padding: '0 2px', lineHeight: 1 }}>{e}</div>
+          ))}
+          <div onClick={() => setShowFullEmoji(true)} style={{
+            width: 30, height: 30, borderRadius: '50%', background: theme.rowBg, display: 'flex',
+            alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, color: theme.muted, fontSize: 18, fontWeight: 800,
+          }}>+</div>
+        </div>
+      )}
+      <div ref={bubbleRef} style={{
+        position: 'absolute', top, left: rect.left, width: rect.width, paddingLeft: 18, paddingRight: 18, boxSizing: 'border-box',
+        maxHeight: maxBubble, overflow: 'hidden', pointerEvents: 'none', opacity: ready ? 1 : 0,
+        transform: ready ? 'scale(1)' : 'scale(0.97)', transition: 'transform 0.18s ease, opacity 0.12s ease',
+      }}>{bubble}</div>
+      <div ref={menuRef} onClick={(e) => e.stopPropagation()} className={ready ? 'zchat-pop' : ''} style={{
+        position: 'absolute', top: top + bubbleH + gap, ...sideStyle, width: 236, borderRadius: 16, overflow: 'hidden',
+        background: theme.panelBg, boxShadow: '0 10px 32px rgba(0,0,0,0.3)', opacity: ready ? 1 : 0,
+      }}>
+        <div style={{ marginTop: -1 }}>
+          {!message.deleted && row(<Reply size={18} />, 'Reply', onReply)}
+          {!message.deleted && message.type === 'text' && row(<Copy size={18} />, 'Copy', onCopy)}
+          {!message.deleted && canEditText && row(<Edit3 size={18} />, 'Edit', onEdit)}
+          {!message.deleted && (message.type === 'image' || message.type === 'video') && row(<Download size={18} />, 'Save', onSave)}
+          {!message.deleted && stickerMatch && row(<Star_ size={18} color="#FFB800" filled={favKeys.has(stickerMatch.key)} />, favKeys.has(stickerMatch.key) ? 'Remove from favorites' : 'Add to favorites', () => setFavKeys(new Set(toggleFavoriteSticker(stickerMatch.key))))}
+          {!message.deleted && row(<Forward size={18} />, 'Forward', onForward)}
+          {row(<CheckCheck size={18} />, 'Select', onSelectMultiple)}
+          {!isMine && !message.deleted && row(<Flag size={18} />, 'Report', onReport, true)}
+          {row(<Trash2 size={18} />, 'Delete for me', onDeleteForMe, true)}
+          {(isMine || canModerate) && !message.deleted && row(<Trash2 size={18} />, 'Delete for everyone', onDeleteForEveryone, true)}
+        </div>
+      </div>
+      {showFullEmoji && (
+        <FullEmojiPicker onClose={() => setShowFullEmoji(false)} onPick={(e) => { onReact(e); setShowFullEmoji(false); }} />
+      )}
+    </div>
+  );
+}
+
+function loadImageElement(url) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = url;
+  });
+}
+
+function PhotoCropEditor({ file, onCancel, onConfirm }) {
+  const { theme } = useTheme();
+  const [url, setUrl] = useState(null);
+  const [natural, setNatural] = useState(null);
+  const [zoom, setZoom] = useState(1);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const [saving, setSaving] = useState(false);
+  const pointersRef = useRef(new Map());
+  const pinchRef = useRef(null);
+  const imgRef = useRef(null);
+  const size = Math.max(220, Math.min((typeof window !== 'undefined' ? window.innerWidth : 360) - 48, 340));
+
+  useEffect(() => {
+    const u = URL.createObjectURL(file);
+    setUrl(u);
+    loadImageElement(u).then((img) => { imgRef.current = img; setNatural({ w: img.naturalWidth, h: img.naturalHeight }); }).catch(() => onCancel());
+    return () => URL.revokeObjectURL(u);
+  }, [file]);
+
+  const base = natural ? Math.max(size / natural.w, size / natural.h) : 1;
+  const dispW = natural ? natural.w * base * zoom : size;
+  const dispH = natural ? natural.h * base * zoom : size;
+  const clampOffset = (o, z) => {
+    if (!natural) return o;
+    const w = natural.w * base * z;
+    const h = natural.h * base * z;
+    const mx = Math.max(0, (w - size) / 2);
+    const my = Math.max(0, (h - size) / 2);
+    return { x: Math.max(-mx, Math.min(mx, o.x)), y: Math.max(-my, Math.min(my, o.y)) };
+  };
+  const setZoomSafe = (z) => {
+    const nz = Math.max(1, Math.min(5, z));
+    setZoom(nz);
+    setOffset((o) => clampOffset(o, nz));
+  };
+
+  const onDown = (e) => {
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointersRef.current.size === 2) {
+      const [a, b] = [...pointersRef.current.values()];
+      pinchRef.current = { dist: Math.hypot(a.x - b.x, a.y - b.y), zoom };
+    }
+  };
+  const onMove = (e) => {
+    const prev = pointersRef.current.get(e.pointerId);
+    if (!prev) return;
+    pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointersRef.current.size >= 2 && pinchRef.current) {
+      const [a, b] = [...pointersRef.current.values()];
+      const dist = Math.hypot(a.x - b.x, a.y - b.y);
+      setZoomSafe(pinchRef.current.zoom * (dist / Math.max(1, pinchRef.current.dist)));
+      return;
+    }
+    const dx = e.clientX - prev.x;
+    const dy = e.clientY - prev.y;
+    setOffset((o) => clampOffset({ x: o.x + dx, y: o.y + dy }, zoom));
+  };
+  const onUp = (e) => {
+    pointersRef.current.delete(e.pointerId);
+    if (pointersRef.current.size < 2) pinchRef.current = null;
+  };
+
+  const confirm = () => {
+    if (!natural || !imgRef.current || saving) return;
+    setSaving(true);
+    const scale = base * zoom;
+    const sw = size / scale;
+    const sx = (dispW / 2 - size / 2 - offset.x) / scale;
+    const sy = (dispH / 2 - size / 2 - offset.y) / scale;
+    const out = 640;
+    const canvas = document.createElement('canvas');
+    canvas.width = out;
+    canvas.height = out;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(imgRef.current, sx, sy, sw, sw, 0, 0, out, out);
+    canvas.toBlob((blob) => { setSaving(false); if (blob) onConfirm(blob); }, 'image/jpeg', 0.92);
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: '#000', zIndex: 150, display: 'flex', flexDirection: 'column',
+      paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'env(safe-area-inset-bottom)', color: 'white',
+    }} className="zchat-fade">
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px' }}>
+        <span onClick={onCancel} style={{ fontSize: 15, fontWeight: 600, cursor: 'pointer', padding: 6 }}>Cancel</span>
+        <span style={{ fontSize: 15, fontWeight: 800 }}>Move and scale</span>
+        <span onClick={confirm} style={{ fontSize: 15, fontWeight: 800, cursor: 'pointer', padding: 6, color: theme.gold }}>{saving ? <Spinner size={15} /> : 'Done'}</span>
+      </div>
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', position: 'relative' }}
+        onWheel={(e) => setZoomSafe(zoom * (1 - e.deltaY * 0.0015))}>
+        <div
+          onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}
+          style={{ position: 'relative', width: size, height: size, touchAction: 'none', cursor: 'grab' }}>
+          {url && natural ? (
+            <img src={url} alt="" draggable={false} style={{
+              position: 'absolute', left: 0, top: 0, width: dispW, height: dispH, maxWidth: 'none', userSelect: 'none', pointerEvents: 'none',
+              transform: `translate(${size / 2 - dispW / 2 + offset.x}px, ${size / 2 - dispH / 2 + offset.y}px)`,
+            }} />
+          ) : (
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Spinner size={24} /></div>
+          )}
+          <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', boxShadow: '0 0 0 2000px rgba(0,0,0,0.6)', border: '2px solid rgba(255,255,255,0.85)', pointerEvents: 'none' }} />
+        </div>
+      </div>
+      <div style={{ padding: '14px 28px 22px', display: 'flex', alignItems: 'center', gap: 14 }}>
+        <ImageIcon size={14} color="rgba(255,255,255,0.7)" />
+        <input type="range" min="1" max="5" step="0.01" value={zoom} onChange={(e) => setZoomSafe(parseFloat(e.target.value))} style={{ flex: 1, accentColor: theme.coral }} />
+        <ImageIcon size={20} color="rgba(255,255,255,0.9)" />
+      </div>
+    </div>
+  );
+}
+
+const EDITOR_COLORS = ['#FFFFFF', '#111111', '#FF3B30', '#FF9500', '#FFCC00', '#34C759', '#2E7CF6', '#AF52DE', '#FF2D92'];
+const BRUSH_SIZES = [4, 8, 14];
+
+function strokeToPath(points, W, H) {
+  if (!points || !points.length) return '';
+  const d = points.map((p, i) => `${i ? 'L' : 'M'}${(p[0] * W).toFixed(1)} ${(p[1] * H).toFixed(1)}`).join(' ');
+  return points.length === 1 ? `${d} l0.1 0` : d;
+}
+
+function paintEdits(ctx, item, W, H, offsetX, offsetY, scale) {
+  item.strokes.forEach((s) => {
+    if (!s.points.length) return;
+    ctx.save();
+    ctx.strokeStyle = s.color;
+    ctx.lineWidth = s.size * W * scale;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    s.points.forEach((p, i) => {
+      const x = p[0] * W * scale - offsetX;
+      const y = p[1] * H * scale - offsetY;
+      if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+    });
+    if (s.points.length === 1) ctx.lineTo(s.points[0][0] * W * scale - offsetX + 0.1, s.points[0][1] * H * scale - offsetY);
+    ctx.stroke();
+    ctx.restore();
+  });
+  item.texts.forEach((t) => {
+    const fontSize = t.size * W * scale;
+    const lines = t.text.split('\n');
+    const lineHeight = fontSize * 1.18;
+    const cx = t.x * W * scale - offsetX;
+    const cy = t.y * H * scale - offsetY;
+    ctx.save();
+    ctx.font = `800 ${fontSize}px Manrope, -apple-system, BlinkMacSystemFont, system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = t.color;
+    ctx.shadowColor = 'rgba(0,0,0,0.45)';
+    ctx.shadowBlur = fontSize * 0.25;
+    ctx.shadowOffsetY = fontSize * 0.04;
+    lines.forEach((line, i) => ctx.fillText(line, cx, cy + (i - (lines.length - 1) / 2) * lineHeight));
+    ctx.restore();
+  });
+}
+
+async function prepareImageFile(file, url) {
+  if (/gif/i.test(file.type)) return file;
+  if (file.size < 1.8 * 1024 * 1024 && /jpe?g|png|webp/i.test(file.type)) return file;
+  try {
+    const img = await loadImageElement(url);
+    const scale = Math.min(1, 2560 / Math.max(img.naturalWidth, img.naturalHeight));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(img.naturalWidth * scale);
+    canvas.height = Math.round(img.naturalHeight * scale);
+    canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+    const blob = await new Promise((res) => canvas.toBlob(res, 'image/jpeg', 0.88));
+    return blob ? new File([blob], 'photo.jpg', { type: 'image/jpeg' }) : file;
+  } catch {
+    return file;
+  }
+}
+
+async function exportEditedImage(item) {
+  const hasEdits = item.crop || item.texts.length || item.strokes.length;
+  if (!hasEdits) return prepareImageFile(item.file, item.url);
+  try { if (document.fonts && document.fonts.load) await document.fonts.load('800 40px Manrope'); } catch {}
+  const img = await loadImageElement(item.url);
+  const W = img.naturalWidth;
+  const H = img.naturalHeight;
+  const c = item.crop || { x: 0, y: 0, w: 1, h: 1 };
+  const rw = c.w * W;
+  const rh = c.h * H;
+  const scale = Math.min(1, 2560 / Math.max(rw, rh));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(rw * scale));
+  canvas.height = Math.max(1, Math.round(rh * scale));
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, c.x * W, c.y * H, rw, rh, 0, 0, canvas.width, canvas.height);
+  paintEdits(ctx, item, W, H, c.x * W * scale, c.y * H * scale, scale);
+  const blob = await new Promise((res) => canvas.toBlob(res, 'image/jpeg', 0.9));
+  return blob ? new File([blob], 'photo.jpg', { type: 'image/jpeg' }) : item.file;
+}
+
+async function exportVideoOverlay(item) {
+  if (!item.texts.length && !item.strokes.length) return null;
+  if (!item.width || !item.height) return null;
+  try { if (document.fonts && document.fonts.load) await document.fonts.load('800 40px Manrope'); } catch {}
+  const scale = Math.min(1, 1280 / Math.max(item.width, item.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(item.width * scale);
+  canvas.height = Math.round(item.height * scale);
+  paintEdits(canvas.getContext('2d'), item, item.width, item.height, 0, 0, scale);
+  const blob = await new Promise((res) => canvas.toBlob(res, 'image/png'));
+  return blob ? new File([blob], 'overlay.png', { type: 'image/png' }) : null;
+}
+
+function MediaComposer({ files, recipientName, onCancel, onSend, onActivity }) {
+  const { theme } = useTheme();
+  const [items, setItems] = useState(() => files.map((f, i) => ({
+    id: `${Date.now()}-${i}`, kind: (f.type || '').startsWith('video') ? 'video' : 'image', file: f, url: URL.createObjectURL(f),
+    width: 0, height: 0, duration: 0, crop: null, texts: [], strokes: [], trimStart: 0, trimEnd: null,
+  })));
+  const [index, setIndex] = useState(0);
+  const [mode, setMode] = useState('view');
+  const [caption, setCaption] = useState('');
+  const [sending, setSending] = useState(false);
+  const [stage, setStage] = useState({ w: 0, h: 0 });
+  const [draftCrop, setDraftCrop] = useState(null);
+  const [cropAspect, setCropAspect] = useState(null);
+  const [brushColor, setBrushColor] = useState('#FF3B30');
+  const [brushSize, setBrushSize] = useState(BRUSH_SIZES[1]);
+  const [textDraft, setTextDraft] = useState(null);
+  const [playing, setPlaying] = useState(false);
+  const stageRef = useRef(null);
+  const innerRef = useRef(null);
+  const videoRef = useRef(null);
+  const livePathRef = useRef(null);
+  const drawRef = useRef(null);
+  const dragRef = useRef(null);
+  const frameRef = useRef({ frameW: 1, frameH: 1, innerW: 1, innerH: 1 });
+  const trimBarRef = useRef(null);
+  const sentRef = useRef(false);
+
+  const cur = items[Math.min(index, items.length - 1)];
+
+  useEffect(() => {
+    const el = stageRef.current;
+    if (!el) return undefined;
+    const measure = () => setStage({ w: el.clientWidth, h: el.clientHeight });
+    measure();
+    let ro = null;
+    if (typeof ResizeObserver !== 'undefined') { ro = new ResizeObserver(measure); ro.observe(el); }
+    window.addEventListener('resize', measure);
+    return () => { if (ro) ro.disconnect(); window.removeEventListener('resize', measure); };
+  }, []);
+
+  useEffect(() => {
+    items.forEach((it) => {
+      if (it.width) return;
+      if (it.kind === 'image') {
+        loadImageElement(it.url).then((img) => updateItem(it.id, { width: img.naturalWidth, height: img.naturalHeight })).catch(() => updateItem(it.id, { width: 1000, height: 1000 }));
+      } else {
+        const v = document.createElement('video');
+        v.preload = 'metadata';
+        v.muted = true;
+        v.playsInline = true;
+        v.onloadedmetadata = () => updateItem(it.id, { width: v.videoWidth || 720, height: v.videoHeight || 1280, duration: Number.isFinite(v.duration) ? v.duration : 0 });
+        v.onerror = () => updateItem(it.id, { width: 720, height: 1280 });
+        v.src = it.url;
+      }
+    });
+  }, [items.length]);
+
+  useEffect(() => {
+    if (!onActivity || !cur) return undefined;
+    onActivity(cur.kind === 'video' ? 'video' : 'photo');
+    const t = setInterval(() => onActivity(cur.kind === 'video' ? 'video' : 'photo'), 2000);
+    return () => clearInterval(t);
+  }, [cur && cur.kind]);
+
+  useEffect(() => () => {
+    if (!sentRef.current) items.forEach((it) => URL.revokeObjectURL(it.url));
+  }, []);
+
+  useEffect(() => { setMode('view'); setPlaying(false); }, [index]);
+
+  function updateItem(id, patch) {
+    setItems((prev) => prev.map((it) => (it.id === id ? { ...it, ...(typeof patch === 'function' ? patch(it) : patch) } : it)));
+  }
+
+  if (!cur) return null;
+
+  const W = cur.width || 1;
+  const H = cur.height || 1;
+  const region = mode === 'crop' || !cur.crop ? { x: 0, y: 0, w: 1, h: 1 } : cur.crop;
+  const pad = mode === 'crop' ? 26 : 0;
+  const availW = Math.max(60, stage.w - pad * 2);
+  const availH = Math.max(60, stage.h - pad * 2);
+  const scale = Math.min(availW / (region.w * W), availH / (region.h * H));
+  const frameW = region.w * W * scale;
+  const frameH = region.h * H * scale;
+  const innerW = W * scale;
+  const innerH = H * scale;
+  frameRef.current = { frameW, frameH, innerW, innerH };
+
+  const removeItem = (id) => {
+    const it = items.find((x) => x.id === id);
+    if (it) URL.revokeObjectURL(it.url);
+    const next = items.filter((x) => x.id !== id);
+    if (!next.length) { onCancel(); return; }
+    setItems(next);
+    setIndex((i) => Math.min(i, next.length - 1));
+  };
+
+  const startCrop = () => {
+    setDraftCrop(cur.crop || { x: 0, y: 0, w: 1, h: 1 });
+    setCropAspect(null);
+    setMode('crop');
+  };
+
+  const applyAspect = (ratio) => {
+    setCropAspect(ratio);
+    if (!ratio) return;
+    setDraftCrop(() => {
+      let w = 1;
+      let h = (w * W) / (H * ratio);
+      if (h > 1) { h = 1; w = (h * H * ratio) / W; }
+      return { x: (1 - w) / 2, y: (1 - h) / 2, w, h };
+    });
+  };
+
+  const cropDown = (e, handle) => {
+    e.stopPropagation();
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    dragRef.current = { type: 'crop', handle, sx: e.clientX, sy: e.clientY, orig: { ...draftCrop } };
+  };
+  const cropMove = (e) => {
+    const d = dragRef.current;
+    if (!d || d.type !== 'crop') return;
+    const { frameW: fw, frameH: fh } = frameRef.current;
+    const dx = (e.clientX - d.sx) / fw;
+    const dy = (e.clientY - d.sy) / fh;
+    const o = d.orig;
+    const min = 0.1;
+    const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+    if (d.handle === 'move') {
+      setDraftCrop({ ...o, x: clamp(o.x + dx, 0, 1 - o.w), y: clamp(o.y + dy, 0, 1 - o.h) });
+      return;
+    }
+    const right = o.x + o.w;
+    const bottom = o.y + o.h;
+    let x = o.x;
+    let y = o.y;
+    let w = o.w;
+    let h = o.h;
+    if (d.handle.includes('w')) { x = clamp(o.x + dx, 0, right - min); w = right - x; }
+    if (d.handle.includes('e')) { w = clamp(o.w + dx, min, 1 - o.x); }
+    if (d.handle.includes('n')) { y = clamp(o.y + dy, 0, bottom - min); h = bottom - y; }
+    if (d.handle.includes('s')) { h = clamp(o.h + dy, min, 1 - o.y); }
+    if (cropAspect) {
+      h = (w * W) / (H * cropAspect);
+      const maxH = d.handle.includes('n') ? bottom : 1 - o.y;
+      if (h > maxH) { h = maxH; w = (h * H * cropAspect) / W; }
+      if (d.handle.includes('w')) x = right - w;
+      if (d.handle.includes('n')) y = bottom - h;
+    }
+    setDraftCrop({ x, y, w, h });
+  };
+  const dragEnd = () => { dragRef.current = null; };
+
+  const finishCrop = () => {
+    const c = draftCrop;
+    const full = !c || (c.x < 0.002 && c.y < 0.002 && c.w > 0.996 && c.h > 0.996);
+    updateItem(cur.id, { crop: full ? null : c });
+    setMode('view');
+  };
+
+  const pointOnInner = (e) => {
+    const rect = innerRef.current.getBoundingClientRect();
+    return [Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)), Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height))];
+  };
+  const drawDown = (e) => {
+    if (mode !== 'draw' || !innerRef.current) return;
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    drawRef.current = { points: [pointOnInner(e)], size: brushSize / frameRef.current.innerW, color: brushColor };
+    if (livePathRef.current) livePathRef.current.setAttribute('d', strokeToPath(drawRef.current.points, W, H));
+  };
+  const drawMove = (e) => {
+    if (!drawRef.current) return;
+    drawRef.current.points.push(pointOnInner(e));
+    if (livePathRef.current) livePathRef.current.setAttribute('d', strokeToPath(drawRef.current.points, W, H));
+  };
+  const drawUp = () => {
+    const s = drawRef.current;
+    drawRef.current = null;
+    if (livePathRef.current) livePathRef.current.setAttribute('d', '');
+    if (s && s.points.length) updateItem(cur.id, (it) => ({ strokes: [...it.strokes, s] }));
+  };
+
+  const textDown = (e, t) => {
+    if (mode === 'draw' || mode === 'crop') return;
+    e.stopPropagation();
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    dragRef.current = { type: 'text', id: t.id, sx: e.clientX, sy: e.clientY, ox: t.x, oy: t.y, moved: false };
+  };
+  const textMove = (e) => {
+    const d = dragRef.current;
+    if (!d || d.type !== 'text') return;
+    const dx = e.clientX - d.sx;
+    const dy = e.clientY - d.sy;
+    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) d.moved = true;
+    if (!d.moved) return;
+    const { innerW: iw, innerH: ih } = frameRef.current;
+    updateItem(cur.id, (it) => ({ texts: it.texts.map((x) => (x.id === d.id ? { ...x, x: Math.max(0, Math.min(1, d.ox + dx / iw)), y: Math.max(0, Math.min(1, d.oy + dy / ih)) } : x)) }));
+  };
+  const textUp = (e, t) => {
+    const d = dragRef.current;
+    dragRef.current = null;
+    if (d && d.type === 'text' && !d.moved) setTextDraft({ id: t.id, text: t.text, color: t.color, size: t.size });
+  };
+
+  const saveText = () => {
+    const td = textDraft;
+    setTextDraft(null);
+    if (!td) return;
+    const value = td.text.replace(/\s+$/, '');
+    if (!value.trim()) {
+      if (td.id) updateItem(cur.id, (it) => ({ texts: it.texts.filter((x) => x.id !== td.id) }));
+      return;
+    }
+    if (td.id) {
+      updateItem(cur.id, (it) => ({ texts: it.texts.map((x) => (x.id === td.id ? { ...x, text: value, color: td.color, size: td.size } : x)) }));
+    } else {
+      const r = cur.crop || { x: 0, y: 0, w: 1, h: 1 };
+      updateItem(cur.id, (it) => ({ texts: [...it.texts, { id: `t${Date.now()}`, text: value, color: td.color, size: td.size, x: r.x + r.w / 2, y: r.y + r.h * 0.42 }] }));
+    }
+  };
+
+  const togglePlay = () => {
+    const v = videoRef.current;
+    if (!v) return;
+    if (v.paused) { v.play().catch(() => {}); } else { v.pause(); }
+  };
+
+  const onVideoTime = (e) => {
+    const v = e.currentTarget;
+    const end = cur.trimEnd != null ? cur.trimEnd : v.duration;
+    if (end && v.currentTime >= end) { v.currentTime = cur.trimStart || 0; if (mode !== 'trim') v.play().catch(() => {}); }
+    if (cur.trimStart && v.currentTime < cur.trimStart - 0.2) v.currentTime = cur.trimStart;
+  };
+
+  const trimDown = (e, which) => {
+    e.stopPropagation();
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    dragRef.current = { type: 'trim', which };
+  };
+  const trimMove = (e) => {
+    const d = dragRef.current;
+    if (!d || d.type !== 'trim' || !trimBarRef.current || !cur.duration) return;
+    const rect = trimBarRef.current.getBoundingClientRect();
+    const t = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)) * cur.duration;
+    const end = cur.trimEnd != null ? cur.trimEnd : cur.duration;
+    if (d.which === 'start') {
+      const v = Math.min(t, end - 1);
+      updateItem(cur.id, { trimStart: Math.max(0, v) });
+      if (videoRef.current) videoRef.current.currentTime = Math.max(0, v);
+    } else {
+      const v = Math.max(t, (cur.trimStart || 0) + 1);
+      updateItem(cur.id, { trimEnd: Math.min(cur.duration, v) });
+      if (videoRef.current) videoRef.current.currentTime = Math.min(cur.duration, v);
+    }
+  };
+
+  const send = async () => {
+    if (sending) return;
+    setSending(true);
+    try {
+      const outputs = [];
+      for (const it of items) {
+        if (it.kind === 'image') {
+          const file = await exportEditedImage(it);
+          outputs.push({ kind: 'image', file, url: it.url });
+        } else {
+          const overlayFile = await exportVideoOverlay(it);
+          const trimmed = it.duration && ((it.trimStart || 0) > 0.05 || (it.trimEnd != null && it.trimEnd < it.duration - 0.05));
+          outputs.push({ kind: 'video', file: it.file, url: it.url, overlayFile, trimStart: trimmed ? (it.trimStart || 0) : null, trimEnd: trimmed ? (it.trimEnd != null ? it.trimEnd : it.duration) : null });
+        }
+      }
+      sentRef.current = true;
+      onSend(outputs, caption.trim());
+    } catch {
+      setSending(false);
+    }
+  };
+
+  const fmt = (s) => `${Math.floor((s || 0) / 60)}:${Math.floor((s || 0) % 60).toString().padStart(2, '0')}`;
+  const toolBtn = (icon, label, onClick, active) => (
+    <div role="button" aria-label={label} onClick={onClick} style={{
+      width: 40, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+      background: active ? 'white' : 'rgba(0,0,0,0.45)', color: active ? '#000' : 'white', flexShrink: 0,
+    }}>{icon}</div>
+  );
+  const colorRow = (value, onPick) => (
+    <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+      {EDITOR_COLORS.map((c) => (
+        <div key={c} onClick={() => onPick(c)} style={{
+          width: 26, height: 26, borderRadius: '50%', background: c, cursor: 'pointer', boxSizing: 'border-box',
+          border: value === c ? '3px solid white' : '2px solid rgba(255,255,255,0.35)', transform: value === c ? 'scale(1.15)' : 'none',
+        }} />
+      ))}
+    </div>
+  );
+
+  return (
+    <div style={{ position: 'absolute', inset: 0, zIndex: 120, background: '#000', color: 'white', display: 'flex', flexDirection: 'column', paddingTop: 'env(safe-area-inset-top)' }} className="zchat-fade">
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '10px 12px', flexShrink: 0, minHeight: 60, boxSizing: 'border-box' }}>
+        {mode === 'view' && (
+          <>
+            {toolBtn(<X size={20} />, 'Close', onCancel)}
+            <div style={{ display: 'flex', gap: 8 }}>
+              {cur.kind === 'image' && toolBtn(<Crop size={18} />, 'Crop', startCrop)}
+              {cur.kind === 'video' && cur.duration > 1 && toolBtn(<Scissors size={18} />, 'Trim', () => { setMode('trim'); if (videoRef.current) videoRef.current.pause(); })}
+              {toolBtn(<Type size={18} />, 'Add text', () => setTextDraft({ id: null, text: '', color: '#FFFFFF', size: 0.07 }))}
+              {toolBtn(<Pencil size={18} />, 'Draw', () => { setMode('draw'); if (videoRef.current) videoRef.current.pause(); })}
+            </div>
+          </>
+        )}
+        {mode === 'draw' && (
+          <>
+            {toolBtn(<Undo2 size={18} />, 'Undo', () => updateItem(cur.id, (it) => ({ strokes: it.strokes.slice(0, -1) })))}
+            <span style={{ fontSize: 15, fontWeight: 800 }}>Draw</span>
+            <span onClick={() => setMode('view')} style={{ fontSize: 15, fontWeight: 800, cursor: 'pointer', padding: '8px 10px' }}>Done</span>
+          </>
+        )}
+        {mode === 'crop' && (
+          <>
+            <span onClick={() => setMode('view')} style={{ fontSize: 15, fontWeight: 600, cursor: 'pointer', padding: '8px 10px' }}>Cancel</span>
+            <span onClick={() => { setDraftCrop({ x: 0, y: 0, w: 1, h: 1 }); setCropAspect(null); }} style={{ fontSize: 14, fontWeight: 600, cursor: 'pointer', padding: '8px 10px', color: 'rgba(255,255,255,0.75)' }}>Reset</span>
+            <span onClick={finishCrop} style={{ fontSize: 15, fontWeight: 800, cursor: 'pointer', padding: '8px 10px', color: theme.gold }}>Done</span>
+          </>
+        )}
+        {mode === 'trim' && (
+          <>
+            <span style={{ width: 60 }} />
+            <span style={{ fontSize: 15, fontWeight: 800 }}>Trim video</span>
+            <span onClick={() => setMode('view')} style={{ fontSize: 15, fontWeight: 800, cursor: 'pointer', padding: '8px 10px', color: theme.gold }}>Done</span>
+          </>
+        )}
+      </div>
+
+      <div ref={stageRef} onClick={() => { if (mode === 'view' && cur.kind === 'video') togglePlay(); }}
+        style={{ flex: 1, minHeight: 0, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', touchAction: 'none' }}>
+        {cur.width && stage.w ? (
+          <div style={{ position: 'relative', width: frameW, height: frameH, overflow: mode === 'crop' ? 'visible' : 'hidden', flexShrink: 0 }}>
+            <div ref={innerRef}
+              onPointerDown={drawDown} onPointerMove={drawMove} onPointerUp={drawUp} onPointerCancel={drawUp}
+              style={{ position: 'absolute', left: -region.x * innerW, top: -region.y * innerH, width: innerW, height: innerH, touchAction: 'none', cursor: mode === 'draw' ? 'crosshair' : 'default' }}>
+              {cur.kind === 'image' ? (
+                <img src={cur.url} alt="" draggable={false} style={{ width: '100%', height: '100%', display: 'block', userSelect: 'none', pointerEvents: 'none' }} />
+              ) : (
+                <video ref={videoRef} src={cur.url} playsInline preload="auto"
+                  onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onTimeUpdate={onVideoTime}
+                  onLoadedMetadata={(e) => { if (cur.trimStart) e.currentTarget.currentTime = cur.trimStart; }}
+                  style={{ width: '100%', height: '100%', display: 'block', objectFit: 'fill', pointerEvents: 'none' }} />
+              )}
+              <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', overflow: 'visible' }}>
+                {cur.strokes.map((s, i) => (
+                  <path key={i} d={strokeToPath(s.points, W, H)} stroke={s.color} strokeWidth={s.size * W} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                ))}
+                <path ref={livePathRef} stroke={brushColor} strokeWidth={(brushSize / Math.max(1, innerW)) * W} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              {cur.texts.map((t) => (
+                <div key={t.id}
+                  onPointerDown={(e) => textDown(e, t)} onPointerMove={textMove} onPointerUp={(e) => textUp(e, t)} onPointerCancel={() => { dragRef.current = null; }}
+                  onClick={(e) => e.stopPropagation()}
+                  style={{
+                    position: 'absolute', left: `${t.x * 100}%`, top: `${t.y * 100}%`, transform: 'translate(-50%, -50%)',
+                    color: t.color, fontSize: t.size * innerW, fontWeight: 800, lineHeight: 1.18, whiteSpace: 'pre', textAlign: 'center',
+                    textShadow: '0 1px 8px rgba(0,0,0,0.45)', pointerEvents: mode === 'draw' || mode === 'crop' ? 'none' : 'auto',
+                    touchAction: 'none', cursor: 'grab', userSelect: 'none', fontFamily: FONT,
+                  }}>{t.text}</div>
+              ))}
+            </div>
+            {cur.kind === 'video' && mode === 'view' && !playing && (
+              <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+                <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Play size={28} color="white" style={{ marginLeft: 3 }} />
+                </div>
+              </div>
+            )}
+            {mode === 'crop' && draftCrop && (
+              <div onPointerDown={(e) => cropDown(e, 'move')} onPointerMove={cropMove} onPointerUp={dragEnd} onPointerCancel={dragEnd}
+                style={{
+                  position: 'absolute', left: draftCrop.x * frameW, top: draftCrop.y * frameH, width: draftCrop.w * frameW, height: draftCrop.h * frameH,
+                  boxShadow: '0 0 0 4000px rgba(0,0,0,0.6)', outline: '1px solid rgba(255,255,255,0.9)', touchAction: 'none', cursor: 'move',
+                }}>
+                {[1, 2].map((n) => (
+                  <React.Fragment key={n}>
+                    <div style={{ position: 'absolute', left: `${(n * 100) / 3}%`, top: 0, bottom: 0, width: 1, background: 'rgba(255,255,255,0.35)', pointerEvents: 'none' }} />
+                    <div style={{ position: 'absolute', top: `${(n * 100) / 3}%`, left: 0, right: 0, height: 1, background: 'rgba(255,255,255,0.35)', pointerEvents: 'none' }} />
+                  </React.Fragment>
+                ))}
+                {['nw', 'ne', 'sw', 'se'].map((hnd) => (
+                  <div key={hnd} onPointerDown={(e) => cropDown(e, hnd)} onPointerMove={cropMove} onPointerUp={dragEnd} onPointerCancel={dragEnd}
+                    style={{ position: 'absolute', width: 48, height: 48, [hnd[0] === 'n' ? 'top' : 'bottom']: -24, [hnd[1] === 'w' ? 'left' : 'right']: -24, touchAction: 'none', cursor: hnd === 'nw' || hnd === 'se' ? 'nwse-resize' : 'nesw-resize' }}>
+                    <div style={{
+                      position: 'absolute', width: 22, height: 22, [hnd[0] === 'n' ? 'top' : 'bottom']: 21, [hnd[1] === 'w' ? 'left' : 'right']: 21,
+                      [hnd[0] === 'n' ? 'borderTop' : 'borderBottom']: '4px solid white', [hnd[1] === 'w' ? 'borderLeft' : 'borderRight']: '4px solid white',
+                    }} />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          <Spinner size={26} />
+        )}
+      </div>
+
+      {mode === 'crop' && (
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'center', padding: '14px 12px', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))', flexShrink: 0 }}>
+          {[{ l: 'Free', v: null }, { l: 'Square', v: 1 }, { l: '4:5', v: 0.8 }, { l: '16:9', v: 16 / 9 }].map((opt) => (
+            <div key={opt.l} onClick={() => applyAspect(opt.v)} style={{
+              padding: '8px 14px', borderRadius: 18, fontSize: 13, fontWeight: 700, cursor: 'pointer',
+              background: cropAspect === opt.v ? 'white' : 'rgba(255,255,255,0.14)', color: cropAspect === opt.v ? '#000' : 'white',
+            }}>{opt.l}</div>
+          ))}
+        </div>
+      )}
+
+      {mode === 'draw' && (
+        <div style={{ padding: '12px 14px', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))', display: 'flex', flexDirection: 'column', gap: 12, flexShrink: 0 }}>
+          {colorRow(brushColor, setBrushColor)}
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 16, alignItems: 'center' }}>
+            {BRUSH_SIZES.map((s) => (
+              <div key={s} onClick={() => setBrushSize(s)} style={{ width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', borderRadius: '50%', background: brushSize === s ? 'rgba(255,255,255,0.18)' : 'transparent' }}>
+                <div style={{ width: s + 4, height: s + 4, borderRadius: '50%', background: brushColor }} />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {mode === 'trim' && (
+        <div style={{ padding: '14px 22px', paddingBottom: 'calc(16px + env(safe-area-inset-bottom))', flexShrink: 0 }}>
+          <div ref={trimBarRef} style={{ position: 'relative', height: 44, touchAction: 'none' }}>
+            <div style={{ position: 'absolute', top: 16, left: 0, right: 0, height: 12, borderRadius: 6, background: 'rgba(255,255,255,0.2)' }} />
+            <div style={{
+              position: 'absolute', top: 16, height: 12, borderRadius: 6, background: theme.coral,
+              left: `${((cur.trimStart || 0) / (cur.duration || 1)) * 100}%`,
+              width: `${(((cur.trimEnd != null ? cur.trimEnd : cur.duration) - (cur.trimStart || 0)) / (cur.duration || 1)) * 100}%`,
+            }} />
+            {['start', 'end'].map((which) => {
+              const value = which === 'start' ? (cur.trimStart || 0) : (cur.trimEnd != null ? cur.trimEnd : cur.duration);
+              return (
+                <div key={which} onPointerDown={(e) => trimDown(e, which)} onPointerMove={trimMove} onPointerUp={dragEnd} onPointerCancel={dragEnd}
+                  style={{ position: 'absolute', top: 0, width: 44, height: 44, marginLeft: -22, left: `${(value / (cur.duration || 1)) * 100}%`, display: 'flex', alignItems: 'center', justifyContent: 'center', touchAction: 'none', cursor: 'ew-resize' }}>
+                  <div style={{ width: 22, height: 22, borderRadius: '50%', background: 'white', border: `3px solid ${theme.coral}` }} />
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'rgba(255,255,255,0.75)', marginTop: 4 }}>
+            <span>{fmt(cur.trimStart)}</span>
+            <span>{fmt((cur.trimEnd != null ? cur.trimEnd : cur.duration) - (cur.trimStart || 0))} selected</span>
+            <span>{fmt(cur.trimEnd != null ? cur.trimEnd : cur.duration)}</span>
+          </div>
+        </div>
+      )}
+
+      {mode === 'view' && (
+        <div style={{ flexShrink: 0, paddingBottom: 'calc(10px + env(safe-area-inset-bottom))' }}>
+          {items.length > 1 && (
+            <div style={{ display: 'flex', gap: 8, padding: '10px 12px 4px', overflowX: 'auto' }}>
+              {items.map((it, i) => (
+                <div key={it.id} onClick={() => setIndex(i)} style={{
+                  position: 'relative', width: 52, height: 52, borderRadius: 10, overflow: 'hidden', flexShrink: 0, cursor: 'pointer',
+                  border: i === index ? '2px solid white' : '2px solid transparent', boxSizing: 'border-box',
+                }}>
+                  {it.kind === 'image'
+                    ? <img src={it.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                    : <video src={it.url} muted playsInline preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />}
+                  {i === index && (
+                    <div onClick={(e) => { e.stopPropagation(); removeItem(it.id); }} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Trash2 size={16} color="white" />
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px 0' }}>
+            <input value={caption} onChange={(e) => setCaption(e.target.value.slice(0, MAX_CHARS))} placeholder="Add a caption"
+              onKeyDown={(e) => { if (e.key === 'Enter' && !isTouchDevice()) { e.preventDefault(); send(); } }}
+              style={{ flex: 1, minWidth: 0, padding: '12px 16px', borderRadius: 24, border: 'none', outline: 'none', background: 'rgba(255,255,255,0.14)', color: 'white', fontFamily: FONT, fontSize: 15 }} />
+            <div onPointerDown={(e) => e.preventDefault()} onClick={send} role="button" aria-label="Send" style={{
+              width: 48, height: 48, borderRadius: '50%', background: theme.coral, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0,
+            }}>{sending ? <Spinner size={18} /> : <Send size={20} color="white" style={{ marginLeft: -2 }} />}</div>
+          </div>
+          {recipientName && <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.6)', padding: '6px 18px 0' }}>To {recipientName}</div>}
+        </div>
+      )}
+
+      {textDraft && (
+        <div onClick={saveText} style={{ position: 'absolute', inset: 0, zIndex: 5, background: 'rgba(0,0,0,0.6)', display: 'flex', flexDirection: 'column', paddingTop: 'env(safe-area-inset-top)' }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px' }}>
+            {textDraft.id
+              ? <span onClick={() => { const id = textDraft.id; setTextDraft(null); updateItem(cur.id, (it) => ({ texts: it.texts.filter((x) => x.id !== id) })); }} style={{ fontSize: 15, fontWeight: 700, color: '#FF6B6B', cursor: 'pointer', padding: 8 }}>Delete</span>
+              : <span style={{ width: 50 }} />}
+            <input type="range" min="0.035" max="0.16" step="0.005" value={textDraft.size} onChange={(e) => setTextDraft((d) => ({ ...d, size: parseFloat(e.target.value) }))} style={{ width: 130, accentColor: 'white' }} />
+            <span onClick={saveText} style={{ fontSize: 15, fontWeight: 800, cursor: 'pointer', padding: 8 }}>Done</span>
+          </div>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+            <textarea autoFocus value={textDraft.text} onClick={(e) => e.stopPropagation()} onChange={(e) => setTextDraft((d) => ({ ...d, text: e.target.value.slice(0, 200) }))}
+              placeholder="Type something" rows={3}
+              style={{
+                width: '100%', background: 'transparent', border: 'none', outline: 'none', resize: 'none', textAlign: 'center',
+                color: textDraft.color, fontFamily: FONT, fontWeight: 800, fontSize: Math.max(22, Math.min(46, textDraft.size * 380)), lineHeight: 1.18,
+                textShadow: '0 1px 8px rgba(0,0,0,0.45)',
+              }} />
+          </div>
+          <div onClick={(e) => e.stopPropagation()} style={{ padding: '10px 14px', paddingBottom: 'calc(16px + env(safe-area-inset-bottom))' }}>
+            {colorRow(textDraft.color, (c) => setTextDraft((d) => ({ ...d, color: c })))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function VideoViewer({ url, trimStart, trimEnd, overlayUrl, onClose, onForward }) {
+  const seekedRef = useRef(false);
+  const [ratio, setRatio] = useState(null);
+  const onLoadedMetadata = (e) => {
+    const v = e.currentTarget;
+    if (v.videoWidth && v.videoHeight) setRatio(v.videoWidth / v.videoHeight);
+    if (trimStart && !seekedRef.current) { v.currentTime = trimStart; seekedRef.current = true; }
+  };
+  const onTimeUpdate = (e) => {
+    if (trimEnd && e.currentTarget.currentTime >= trimEnd) {
+      e.currentTarget.pause();
+      e.currentTarget.currentTime = trimStart || 0;
+    }
+  };
+  const boxStyle = ratio
+    ? { position: 'relative', width: `min(100vw, calc(100dvh * ${ratio}))`, aspectRatio: String(ratio), maxHeight: '100dvh' }
+    : { position: 'relative', maxWidth: '100%', maxHeight: '100%' };
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: '#000', zIndex: 200,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0,
+    }} className="zchat-fade">
+      <div onClick={onClose} style={{
+        position: 'absolute', top: 'calc(14px + env(safe-area-inset-top))', left: 16, width: 38, height: 38, borderRadius: '50%',
+        background: 'rgba(255,255,255,0.14)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 3,
+      }}><X size={18} color="white" /></div>
+      <div style={{ position: 'absolute', top: 'calc(14px + env(safe-area-inset-top))', right: 16, display: 'flex', gap: 10, zIndex: 3 }}>
+        <div onClick={() => silentDownload(url, 'zchat-video.mp4')} style={{
+          width: 38, height: 38, borderRadius: '50%', background: 'rgba(255,255,255,0.14)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+        }}><Download size={17} color="white" /></div>
+        <div onClick={onForward} style={{
+          width: 38, height: 38, borderRadius: '50%', background: 'rgba(255,255,255,0.14)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+        }}><Forward size={17} color="white" /></div>
+      </div>
+      <div style={boxStyle}>
+        <video src={url} controls autoPlay playsInline onContextMenu={(e) => e.preventDefault()} onLoadedMetadata={onLoadedMetadata} onTimeUpdate={onTimeUpdate}
+          style={ratio ? { width: '100%', height: '100%', display: 'block', objectFit: 'contain' } : { maxWidth: '100vw', maxHeight: '100dvh', display: 'block' }} />
+        {overlayUrl && ratio && (
+          <img src={overlayUrl} alt="" draggable={false} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', objectFit: 'contain' }} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+async function silentDownload(url, filename) {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('download');
+    const blob = await res.blob();
+    const file = new File([blob], filename, { type: blob.type || 'application/octet-stream' });
+    if (isTouchDevice() && navigator.canShare && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file] });
+        return true;
+      } catch (err) {
+        if (err && err.name === 'AbortError') return false;
+      }
+    }
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 4000);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAccount, onAddAccount, onRemoveAccount, switchingAccountId }) {
   const { theme, bgPatternOn, chatTheme } = useTheme();
   const assetProgress = useAssetPrefetch();
@@ -5260,34 +5948,52 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);
+  const fullHeightRef = useRef(0);
+  const fullWidthRef = useRef(0);
   useEffect(() => {
     const vv = window.visualViewport;
     if (!vv) return undefined;
     let frame = 0;
+    const isTypingField = (el) => !!el && (el.tagName === 'TEXTAREA' || el.isContentEditable || (el.tagName === 'INPUT' && !['checkbox', 'radio', 'button', 'submit', 'file', 'range', 'color'].includes(el.type)));
     const update = () => {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
-        const open = window.innerHeight - vv.height > 120;
-        setKeyboardOpen(open);
+        const width = window.innerWidth;
+        if (Math.abs(width - fullWidthRef.current) > 40) {
+          fullWidthRef.current = width;
+          fullHeightRef.current = 0;
+        }
+        const layoutHeight = document.documentElement.clientHeight || window.innerHeight;
+        const typing = isTypingField(document.activeElement);
+        if (!typing) fullHeightRef.current = Math.max(vv.height, layoutHeight);
+        else fullHeightRef.current = Math.max(fullHeightRef.current, layoutHeight);
+        const open = typing && fullHeightRef.current - vv.height > 120;
+        setKeyboardOpen((prev) => (prev === open ? prev : open));
         setViewportBox((prev) => {
-          const next = { height: open ? Math.round(vv.height) : null, offset: open ? Math.max(0, Math.round(vv.offsetTop)) : 0 };
+          const next = open
+            ? { height: Math.round(vv.height), offset: Math.max(0, Math.round(vv.offsetTop)) }
+            : { height: null, offset: 0 };
           return prev.height === next.height && prev.offset === next.offset ? prev : next;
         });
-        if (!open && (window.scrollY || document.documentElement.scrollTop)) window.scrollTo(0, 0);
       });
     };
-    const onFocusOut = () => setTimeout(() => {
-      if (window.innerHeight - vv.height <= 120 && (window.scrollY || document.documentElement.scrollTop)) window.scrollTo(0, 0);
-    }, 80);
+    const settle = () => setTimeout(() => {
+      update();
+      if (!isTypingField(document.activeElement) && (window.scrollY || document.documentElement.scrollTop)) window.scrollTo(0, 0);
+    }, 300);
     update();
     vv.addEventListener('resize', update);
     vv.addEventListener('scroll', update);
-    window.addEventListener('focusout', onFocusOut);
+    window.addEventListener('focusin', update);
+    window.addEventListener('focusout', settle);
+    window.addEventListener('orientationchange', settle);
     return () => {
       cancelAnimationFrame(frame);
       vv.removeEventListener('resize', update);
       vv.removeEventListener('scroll', update);
-      window.removeEventListener('focusout', onFocusOut);
+      window.removeEventListener('focusin', update);
+      window.removeEventListener('focusout', settle);
+      window.removeEventListener('orientationchange', settle);
     };
   }, []);
   const [installBannerDismissed, setInstallBannerDismissed] = useState(() => {
@@ -5345,7 +6051,18 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [groupRowMenuFor, setGroupRowMenuFor] = useState(null);
   const [groupRowMenuAnchor, setGroupRowMenuAnchor] = useState(null);
   const [messageLikes, setMessageLikes] = useState({});
-  const [typingFrom, setTypingFrom] = useState(false);
+  const [activityFrom, setActivityFrom] = useState(null);
+  const [mediaComposer, setMediaComposer] = useState(null);
+  const [inAppToast, setInAppToast] = useState(null);
+  const [contextRect, setContextRect] = useState(null);
+  const [rowSheet, setRowSheet] = useState(null);
+  const [reportUserTarget, setReportUserTarget] = useState(null);
+  const [, setClockTick] = useState(0);
+  const visibleIdsRef = useRef(new Set());
+  const profileCacheRef = useRef(new Map());
+  const rowPressRef = useRef({ timer: null, fired: false, x: 0, y: 0 });
+  const listReloadTimerRef = useRef(null);
+  const reloadListsRef = useRef(null);
   const [replyingTo, setReplyingTo] = useState(null);
   const [editingMessage, setEditingMessage] = useState(null);
   const [reactionPickerFor, setReactionPickerFor] = useState(null);
@@ -5353,8 +6070,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [pendingQuickDelete, setPendingQuickDelete] = useState(null);
   const [pendingForwardItems, setPendingForwardItems] = useState([]);
   const [pendingMedia, setPendingMedia] = useState([]);
-  const [photoEditQueue, setPhotoEditQueue] = useState([]);
-  const [videoEditQueue, setVideoEditQueue] = useState([]);
   const [activeFollowState, setActiveFollowState] = useState('none');
   const [activeFollowBusy, setActiveFollowBusy] = useState(false);
   const [activeFollowerFollowsMe, setActiveFollowerFollowsMe] = useState(false);
@@ -5397,6 +6112,18 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const chatScrollPositions = useRef({});
   const lastScrollKeyRef = useRef(null);
   const scrollRef = useRef(null);
+  useEffect(() => {
+    if (!keyboardOpen) return undefined;
+    const el = scrollRef.current;
+    if (!el) return undefined;
+    const t = setTimeout(() => {
+      const prev = el.style.scrollBehavior;
+      el.style.scrollBehavior = 'auto';
+      el.scrollTop = el.scrollHeight;
+      el.style.scrollBehavior = prev;
+    }, 60);
+    return () => clearTimeout(t);
+  }, [keyboardOpen, viewportBox.height]);
   const composerRef = useRef(null);
   const searchTimer = useRef(null);
   const typingChannelRef = useRef(null);
@@ -5407,6 +6134,14 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const recordStartRef = useRef(0);
   const pendingStopRef = useRef(false);
   const [unreadCounts, setUnreadCounts] = useState({});
+  const conversationsRef = useRef([]);
+  const groupsRef = useRef([]);
+  const blockedRef = useRef(new Set());
+  const locksRef = useRef({});
+  useEffect(() => {
+    const t = setInterval(() => setClockTick((n) => n + 1), 30000);
+    return () => clearInterval(t);
+  }, []);
 
   const archivedChatsKey = () => `zchat-archived-chats-${session.user.id}`;
   const getArchivedChatIds = () => { try { return new Set(JSON.parse(localStorage.getItem(archivedChatsKey()) || '[]')); } catch { return new Set(); } };
@@ -5426,17 +6161,32 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   };
 
   const hiddenChatsKey = () => `zchat-hidden-chats-${session.user.id}`;
-  const getHiddenChatIds = () => { try { return new Set(JSON.parse(localStorage.getItem(hiddenChatsKey()) || '[]')); } catch { return new Set(); } };
+  const saveHiddenChatMap = (map) => { try { localStorage.setItem(hiddenChatsKey(), JSON.stringify(map)); } catch {} };
+  const getHiddenChatMap = () => {
+    try {
+      const raw = JSON.parse(localStorage.getItem(hiddenChatsKey()) || '{}');
+      if (Array.isArray(raw)) {
+        const now = Date.now();
+        const map = {};
+        raw.forEach((id) => { map[id] = now; });
+        saveHiddenChatMap(map);
+        return map;
+      }
+      return raw && typeof raw === 'object' ? raw : {};
+    } catch {
+      return {};
+    }
+  };
   const hideChatLocally = (otherUserId) => {
-    const cur = getHiddenChatIds();
-    cur.add(otherUserId);
-    try { localStorage.setItem(hiddenChatsKey(), JSON.stringify([...cur])); } catch {}
+    const map = getHiddenChatMap();
+    map[otherUserId] = Date.now();
+    saveHiddenChatMap(map);
   };
   const unhideChatLocally = (otherUserId) => {
-    const cur = getHiddenChatIds();
-    if (!cur.has(otherUserId)) return;
-    cur.delete(otherUserId);
-    try { localStorage.setItem(hiddenChatsKey(), JSON.stringify([...cur])); } catch {}
+    const map = getHiddenChatMap();
+    if (!(otherUserId in map)) return;
+    delete map[otherUserId];
+    saveHiddenChatMap(map);
   };
 
   const readKey = (convId) => `zchat-read-${session.user.id}-${convId}`;
@@ -5463,7 +6213,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const myWallpaper = (conv) => conv[myWallpaperField(conv)];
   const setWallpaper = async (conv, key) => {
     const { error } = await supabase.from('conversations').update({ wallpaper_a: key, wallpaper_b: key }).eq('id', conv.id);
-    if (error) { alert('Could not change wallpaper: ' + error.message); return; }
+    if (error) { alert(friendlyError(error, "Couldn't change the wallpaper. Try again.")); return; }
     setConversations((prev) => prev.map((c) => (c.id === conv.id ? { ...c, wallpaper_a: key, wallpaper_b: key } : c)));
     const label = key ? (WALLPAPER_PRESETS.find((p) => p.key === key)?.label || key) : 'Default';
     await sendMessage(session.user.id, conv.otherProfile.id, 'system', `Wallpaper changed to ${label}`, null);
@@ -5473,7 +6223,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
   const setNameBar = async (conv, key) => {
     const { error } = await supabase.from('conversations').update({ name_bar: key }).eq('id', conv.id);
-    if (error) { alert('Could not change header style: ' + error.message); return; }
+    if (error) { alert(friendlyError(error, "Couldn't change the header style. Try again.")); return; }
     setConversations((prev) => prev.map((c) => (c.id === conv.id ? { ...c, name_bar: key } : c)));
     const label = key ? (NAME_BAR_PRESETS.find((p) => p.key === key)?.label || key) : 'None';
     await sendMessage(session.user.id, conv.otherProfile.id, 'system', `Header style changed to ${label}`, null);
@@ -5484,7 +6234,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const setGroupWallpaper = async (key) => {
     if (!activeGroup || groupMembers.find((gm) => gm.user_id === session.user.id)?.role !== 'admin') return;
     const { error } = await supabase.from('groups').update({ wallpaper: key }).eq('id', activeGroup.id);
-    if (error) { alert('Could not change wallpaper: ' + error.message); return; }
+    if (error) { alert(friendlyError(error, "Couldn't change the wallpaper. Try again.")); return; }
     setActiveGroup((prev) => ({ ...prev, wallpaper: key }));
     const label = key ? (WALLPAPER_PRESETS.find((p) => p.key === key)?.label || key) : 'Default';
     sendGroupMessage('system', `${realName(session.user.id)} changed the wallpaper to ${label}`, null);
@@ -5494,7 +6244,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const setGroupHeaderStyle = async (key) => {
     if (!activeGroup || groupMembers.find((gm) => gm.user_id === session.user.id)?.role !== 'admin') return;
     const { error } = await supabase.from('groups').update({ name_bar: key }).eq('id', activeGroup.id);
-    if (error) { alert('Could not change header style: ' + error.message); return; }
+    if (error) { alert(friendlyError(error, "Couldn't change the header style. Try again.")); return; }
     setActiveGroup((prev) => ({ ...prev, name_bar: key }));
     const label = key ? (NAME_BAR_PRESETS.find((p) => p.key === key)?.label || key) : 'None';
     sendGroupMessage('system', `${realName(session.user.id)} changed the header style to ${label}`, null);
@@ -5572,47 +6322,72 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   };
 
   const loadConversations = async () => {
-    const hidden = getHiddenChatIds();
+    const myId = session.user.id;
+    const hiddenMap = getHiddenChatMap();
+    const hiddenMsgs = getHiddenMsgIds();
     const archived = getArchivedChatIds();
     const { data } = await supabase.from('conversations').select('*')
-      .or(`user_a.eq.${session.user.id},user_b.eq.${session.user.id}`)
+      .or(`user_a.eq.${myId},user_b.eq.${myId}`)
       .order('last_message_at', { ascending: false });
     if (!data || data.length === 0) { setConversations([]); setArchivedConversations([]); return; }
-    const visible = data.filter((c) => {
-      const otherId = c.user_a === session.user.id ? c.user_b : c.user_a;
-      return !hidden.has(otherId);
+    const { data: recentMsgs } = await supabase.from('messages')
+      .select('id, sender_id, receiver_id, type, content, deleted, created_at, read, delivered')
+      .or(`sender_id.eq.${myId},receiver_id.eq.${myId}`).is('group_id', null)
+      .order('created_at', { ascending: false }).limit(800);
+    const lastByOther = {};
+    (recentMsgs || []).forEach((m) => {
+      if (hiddenMsgs.has(m.id)) return;
+      const otherId = m.sender_id === myId ? m.receiver_id : m.sender_id;
+      if (otherId && !lastByOther[otherId]) lastByOther[otherId] = m;
     });
-    const otherIds = visible.map((c) => (c.user_a === session.user.id ? c.user_b : c.user_a));
-    const { data: profsRaw } = await supabase.from('profiles').select('*').in('id', otherIds.length ? otherIds : ['00000000-0000-0000-0000-000000000000']);
-    const profs = sanitizeAvatarList(profsRaw, session.user.id);
-    const { data: nicks } = await supabase.from('contact_nicknames').select('*').eq('owner_id', session.user.id);
-    const { data: aliasesForMe } = await supabase.from('self_aliases').select('*').eq('viewer_id', session.user.id);
-    const { data: myLastMsgs } = await supabase.from('messages').select('receiver_id, read, delivered, created_at')
-      .eq('sender_id', session.user.id).in('receiver_id', otherIds.length ? otherIds : ['00000000-0000-0000-0000-000000000000'])
-      .order('created_at', { ascending: false });
-    const lastMineByReceiver = {};
-    (myLastMsgs || []).forEach((m) => { if (!lastMineByReceiver[m.receiver_id]) lastMineByReceiver[m.receiver_id] = m; });
+    let hiddenChanged = false;
+    const visible = data.filter((c) => {
+      const otherId = c.user_a === myId ? c.user_b : c.user_a;
+      if (!(otherId in hiddenMap)) return true;
+      const last = lastByOther[otherId];
+      if (last && last.sender_id !== myId && new Date(last.created_at).getTime() > Number(hiddenMap[otherId] || 0)) {
+        delete hiddenMap[otherId];
+        hiddenChanged = true;
+        return true;
+      }
+      return false;
+    });
+    if (hiddenChanged) saveHiddenChatMap(hiddenMap);
+    const otherIds = visible.map((c) => (c.user_a === myId ? c.user_b : c.user_a));
+    const noIds = ['00000000-0000-0000-0000-000000000000'];
+    const { data: profsRaw } = await supabase.from('profiles').select('*').in('id', otherIds.length ? otherIds : noIds);
+    const profs = sanitizeAvatarList(profsRaw, myId);
+    const { data: nicks } = await supabase.from('contact_nicknames').select('*').eq('owner_id', myId);
+    const { data: aliasesForMe } = await supabase.from('self_aliases').select('*').eq('viewer_id', myId);
     const mergedAll = visible
       .map((c) => {
-        const otherId = c.user_a === session.user.id ? c.user_b : c.user_a;
+        const otherId = c.user_a === myId ? c.user_b : c.user_a;
         if (myBlockedIds.has(otherId)) return null;
         const nick = nicks?.find((n) => n.contact_id === otherId);
-        const theirAlias = aliasesForMe?.find((a) => a.user_id === otherId);
+        const theirAlias = aliasesForMe?.find((al) => al.user_id === otherId);
         const foundProfile = profs?.find((p) => p.id === otherId);
         const profile = foundProfile || { id: otherId, name: 'Deleted Account', username: 'deleted', avatar: '', is_deleted: true };
         const baseName = theirAlias ? theirAlias.alias : profile.name;
-        const lastMine = lastMineByReceiver[otherId];
+        const last = lastByOther[otherId];
+        const convTime = c.last_message_at ? new Date(c.last_message_at).getTime() : 0;
+        const msgTime = last ? new Date(last.created_at).getTime() : 0;
+        const useStored = !last || (c.last_message && convTime - msgTime > 1500);
+        const preview = useStored ? { kind: 'text', text: c.last_message || '' } : describeMessage(last);
+        const lastFromMe = useStored ? c.last_sender_id === myId : last.sender_id === myId;
         return {
           ...c, otherProfile: nick && foundProfile ? { ...profile, name: nick.nickname } : { ...profile, name: baseName }, realName: profile.name,
-          lastMineRead: lastMine?.read || false, lastMineDelivered: lastMine?.delivered || false,
+          preview, lastFromMe, sortTime: Math.max(convTime, msgTime),
+          lastMineRead: last && last.sender_id === myId ? !!last.read : false,
+          lastMineDelivered: last && last.sender_id === myId ? !!last.delivered : false,
         };
       })
       .filter(Boolean)
-      .sort((a, b) => {
-        const pa = isPinnedByMe(a) ? 1 : 0, pb = isPinnedByMe(b) ? 1 : 0;
-        if (pa !== pb) return pb - pa;
-        return new Date(b.last_message_at) - new Date(a.last_message_at);
-        });
+      .sort((x, y) => {
+        const px = isPinnedByMe(x) ? 1 : 0;
+        const py = isPinnedByMe(y) ? 1 : 0;
+        if (px !== py) return py - px;
+        return y.sortTime - x.sortTime;
+      });
     setConversations(mergedAll.filter((c) => !archived.has(c.id)));
     setArchivedConversations(mergedAll.filter((c) => archived.has(c.id)));
   };
@@ -5706,9 +6481,16 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (!me) return;
     const sub = subscribeToMessages(me.id, (msg) => {
       if (msg.sender_id !== me.id) {
+        if (blockedRef.current.has(msg.sender_id)) return;
         unhideChatLocally(msg.sender_id);
-        if (msg.sender_id !== activeProfile?.id || !mobileShowChatRef.current) { playPing(); supabase.from('messages').update({ delivered: true }).eq('id', msg.id); }
-        else supabase.from('messages').update({ read: true, delivered: true }).eq('id', msg.id);
+        if (msg.sender_id !== activeProfile?.id || !mobileShowChatRef.current) {
+          playPing();
+          supabase.from('messages').update({ delivered: true }).eq('id', msg.id);
+          showMessageToast(msg);
+        } else {
+          supabase.from('messages').update({ read: true, delivered: true }).eq('id', msg.id);
+          setActivityFrom(null);
+        }
         loadUnreadCounts();
         loadConversations();
       }
@@ -5727,6 +6509,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, (payload) => {
         const row = payload.new;
         if (!row || !row.id) return;
+        if (row.deleted || row.edited) {
+          clearTimeout(listReloadTimerRef.current);
+          listReloadTimerRef.current = setTimeout(() => { if (reloadListsRef.current) reloadListsRef.current(); }, 700);
+        }
         setMessages((prev) => (prev.some((m) => m.id === row.id)
           ? prev.map((m) => (m.id === row.id ? { ...m, read: row.read, delivered: row.delivered, edited: row.edited, deleted: row.deleted, content: row.deleted ? m.content : row.content } : m))
           : prev));
@@ -5794,7 +6580,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
         const row = payload.new;
         if (!row.group_id || !myGroupIds.includes(row.group_id)) return;
-        if (row.sender_id !== me.id && (!activeGroup || row.group_id !== activeGroup.id)) { playPing(); supabase.from('messages').update({ delivered: true }).eq('id', row.id); }
+        if (row.sender_id !== me.id && (!activeGroup || row.group_id !== activeGroup.id)) { playPing(); supabase.from('messages').update({ delivered: true }).eq('id', row.id); showMessageToast(row); }
         if (row.sender_id !== me.id && activeGroup && row.group_id === activeGroup.id) { markGroupRead(activeGroup.id); supabase.from('messages').update({ read: true, delivered: true }).eq('id', row.id); }
         setMessages((prev) => {
           if (!activeGroup || row.group_id !== activeGroup.id) return prev;
@@ -5836,15 +6622,22 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   useEffect(() => {
     if (!me) return;
     const channel = supabase.channel('presence-global', { config: { presence: { key: me.id } } });
+    let subscribed = false;
     channel.on('presence', { event: 'sync' }, () => {
-      setOnlineIds(new Set(Object.keys(channel.presenceState())));
+      const state = channel.presenceState();
+      setOnlineIds(new Set(Object.keys(state)));
+      visibleIdsRef.current = new Set(Object.entries(state).filter(([, metas]) => (metas || []).some((meta) => meta && meta.visible === true)).map(([id]) => id));
     });
-    channel.subscribe(async (status) => {
-      if (status === 'SUBSCRIBED') await channel.track({ online_at: new Date().toISOString() });
+    const trackPresence = () => {
+      if (!subscribed) return;
+      channel.track({ online_at: new Date().toISOString(), visible: document.visibilityState === 'visible' }).catch(() => {});
+    };
+    channel.subscribe((status) => {
+      if (status === 'SUBSCRIBED') { subscribed = true; trackPresence(); }
     });
     const updateLastSeen = () => { supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', me.id); };
     const heartbeat = setInterval(updateLastSeen, 45000);
-    const onVisibility = () => { if (document.visibilityState === 'hidden') updateLastSeen(); };
+    const onVisibility = () => { trackPresence(); if (document.visibilityState === 'hidden') updateLastSeen(); };
     document.addEventListener('visibilitychange', onVisibility);
     window.addEventListener('pagehide', updateLastSeen);
     return () => {
@@ -5972,15 +6765,25 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const { data: groupRows } = await supabase.from('groups').select('*').in('id', ids);
     const { data: recent } = await supabase.from('messages').select('id, group_id, sender_id, type, content, created_at, deleted')
       .in('group_id', ids).order('created_at', { ascending: false }).limit(Math.min(1500, ids.length * 60));
+    const hiddenMsgs = getHiddenMsgIds();
+    const visibleRecent = (recent || []).filter((m) => !hiddenMsgs.has(m.id));
+    const lastSenderIds = [...new Set(ids.map((gid) => visibleRecent.find((m) => m.group_id === gid)).filter((m) => m && m.sender_id !== session.user.id && m.type !== 'system').map((m) => m.sender_id))];
+    const senderNames = {};
+    if (lastSenderIds.length) {
+      const { data: senders } = await supabase.from('profiles').select('id, name').in('id', lastSenderIds);
+      (senders || []).forEach((s) => { senderNames[s.id] = s.name; });
+    }
     const merged = (groupRows || []).map((g) => {
       const mine = mems.find((m) => m.group_id === g.id);
-      const groupMsgs = (recent || []).filter((m) => m.group_id === g.id);
+      const groupMsgs = visibleRecent.filter((m) => m.group_id === g.id);
       const last = groupMsgs[0];
       let readAt = getGroupReadAt(g.id);
       if (!readAt) { markGroupRead(g.id); readAt = new Date().toISOString(); }
       const readTime = new Date(readAt).getTime();
       const unread = activeGroupIdRef.current === g.id ? 0 : groupMsgs.filter((m) => m.sender_id !== session.user.id && m.type !== 'system' && !m.deleted && new Date(m.created_at).getTime() > readTime).length;
-      return { ...g, myRole: mine?.role || 'member', pinned: mine?.pinned || false, archived: mine?.archived || false, last_message: last?.deleted ? 'This message was deleted' : last?.content, last_message_type: last?.deleted ? 'text' : last?.type, last_message_at: last?.created_at || g.created_at, unread };
+      const preview = last ? describeMessage(last) : { kind: 'text', text: 'No messages yet' };
+      const previewPrefix = !last || last.type === 'system' ? '' : last.sender_id === session.user.id ? 'You: ' : `${(senderNames[last.sender_id] || 'Someone').split(' ')[0]}: `;
+      return { ...g, myRole: mine?.role || 'member', pinned: mine?.pinned || false, archived: mine?.archived || false, last_message: last?.deleted ? 'This message was deleted' : last?.content, last_message_type: last?.deleted ? 'text' : last?.type, last_message_at: last?.created_at || g.created_at, unread, preview, previewPrefix };
     }).sort((a, b) => new Date(b.last_message_at) - new Date(a.last_message_at));
     setGroups(merged);
   };
@@ -6015,7 +6818,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const sanitized = sanitizeAvatarList(profs, session.user.id);
     setGroupMembers((mems || []).map((m) => ({ ...m, profile: sanitized.find((p) => p.id === m.user_id) })).filter((m) => m.profile));
   };
-
   const openGroup = async (group) => {
     markGroupRead(group.id);
     activeGroupIdRef.current = group.id;
@@ -6045,6 +6847,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       setMessageLikes({});
     }
   };
+
   const sendGroupMessage = async (type, content, mediaUrl, forwardedFromName, replyToId) => {
     const row = {
       sender_id: session.user.id, group_id: activeGroup.id, type, content: content || null, media_url: mediaUrl || null,
@@ -6053,16 +6856,16 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (replyToId) row.reply_to_id = replyToId;
     const { data, error } = await supabase.from('messages').insert(row).select().single();
     if (!error && data) {
-      setMessages((prev) => [...prev, data]);
+      setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
       loadGroups();
       if (type !== 'system') {
         const preview = type === 'text' ? (parseProfileLink(content) ? 'Shared a profile' : content) : type === 'image' ? 'Photo' : type === 'audio' ? 'Voice message' : type === 'sticker' ? 'Sticker' : 'Video';
         const mentioned = extractMentions(content || '');
         groupMembers.filter((m) => m.user_id !== session.user.id).forEach((m) => {
           if (mentioned.has((m.profile?.username || '').toLowerCase())) {
-            sendPushNotification(m.user_id, `${me.name} mentioned you in ${activeGroup.name}`, preview, `/?group=${activeGroup.id}`, me.avatar);
+            notifyUser(m.user_id, `${me.name} mentioned you in ${activeGroup.name}`, preview, `/?group=${activeGroup.id}`, me.avatar);
           } else if (!m.muted) {
-            sendPushNotification(m.user_id, `${me.name} in ${activeGroup.name}`, preview, `/?group=${activeGroup.id}`, me.avatar);
+            notifyUser(m.user_id, `${me.name} in ${activeGroup.name}`, preview, `/?group=${activeGroup.id}`, me.avatar);
           }
         });
       }
@@ -6259,9 +7062,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     }
     const { data } = await sendMessage(session.user.id, activeProfile.id, 'sticker', filePath, null);
     if (data) {
-      setMessages((prev) => [...prev, data]);
+      setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
       upsertConversation(activeProfile.id, filePath, 'sticker');
-      sendPushNotification(activeProfile.id, me.name, 'Sticker', `/?dm=${session.user.id}`, me.avatar);
+      notifyUser(activeProfile.id, me.name, 'Sticker', `/?dm=${session.user.id}`, me.avatar);
     }
   };
 
@@ -6284,8 +7087,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             const { data } = await sendMessage(session.user.id, activeProfile.id, items[i].kind, captionForThis, url);
             insertedRow = data;
             if (data) {
-              setMessages((prev) => [...prev, data]);
-              sendPushNotification(activeProfile.id, me.name, captionForThis || (items[i].kind === 'image' ? 'Photo' : 'Video'), `/?dm=${session.user.id}`, me.avatar);
+              setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
+              notifyUser(activeProfile.id, me.name, captionForThis || (items[i].kind === 'image' ? 'Photo' : 'Video'), `/?dm=${session.user.id}`, me.avatar);
             }
           }
           if (insertedRow && items[i].kind === 'video' && (items[i].trimStart != null || items[i].trimEnd != null)) {
@@ -6325,7 +7128,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           await supabase.from('messages').update({ forwarded: true, forwarded_from_name: item.forwarded_from_name || null }).eq('id', data.id);
           data.forwarded = true;
           data.forwarded_from_name = item.forwarded_from_name || null;
-          setMessages((prev) => [...prev, data]);
+          setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
           upsertConversation(activeProfile.id, item.content, item.type);
         }
       }
@@ -6344,9 +7147,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         data.forwarded = true;
         data.forwarded_from_name = items[0].forwarded_from_name || null;
       }
-      setMessages((prev) => [...prev, data]);
+      setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
       upsertConversation(activeProfile.id, text, 'text');
-      sendPushNotification(activeProfile.id, me.name, parseProfileLink(text) ? 'Shared a profile' : text, `/?dm=${session.user.id}`, me.avatar);
+      notifyUser(activeProfile.id, me.name, parseProfileLink(text) ? 'Shared a profile' : text, `/?dm=${session.user.id}`, me.avatar);
     }
   };
 
@@ -6384,17 +7187,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     });
   };
 
-  const handleFile = (e, kind) => {
+  const handleFile = (e) => {
     const files = Array.from(e.target.files || []);
     e.target.value = '';
-    if (!files.length || (!activeProfile && !activeGroup)) return;
-    setShowAttach(false);
-    const capped = files.slice(0, MAX_PHOTOS_PER_SEND - pendingMedia.length);
-    if (kind === 'image') {
-      setPhotoEditQueue((prev) => [...prev, ...capped]);
-    } else {
-      setVideoEditQueue((prev) => [...prev, ...capped]);
-    }
+    openMediaComposer(files);
   };
 
   const MIN_RECORDING_MS = 700;
@@ -6427,7 +7223,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             await sendGroupMessage('audio', null, url);
           } else {
             const { data } = await sendMessage(session.user.id, activeProfile.id, 'audio', null, url);
-            if (data) { setMessages((prev) => [...prev, data]); upsertConversation(activeProfile.id, null, 'audio'); sendPushNotification(activeProfile.id, me.name, 'Voice message', `/?dm=${session.user.id}`, me.avatar); }
+            if (data) { setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data])); upsertConversation(activeProfile.id, null, 'audio'); notifyUser(activeProfile.id, me.name, 'Voice message', `/?dm=${session.user.id}`, me.avatar); }
           }
         }
         setUploading(false);
@@ -6588,7 +7384,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       await supabase.from('message_likes').upsert({ message_id: messageId, user_id: session.user.id, emoji }, { onConflict: 'message_id,user_id' });
       if (targetMessage && targetMessage.sender_id !== session.user.id) {
         const destUrl = activeGroup ? `/?group=${activeGroup.id}` : `/?dm=${session.user.id}`;
-        sendPushNotification(targetMessage.sender_id, me.name, `reacted ${emoji} to your message`, destUrl, me.avatar);
+        notifyUser(targetMessage.sender_id, me.name, `reacted ${emoji} to your message`, destUrl, me.avatar);
       }
       if (activeProfile) upsertConversation(activeProfile.id, `Reacted ${emoji}`, 'text');
     }
@@ -6617,7 +7413,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       const status = activeProfile.is_private ? 'pending' : 'accepted';
       await supabase.from('follows').insert({ follower_id: session.user.id, following_id: activeProfile.id, status });
       setActiveFollowState(status);
-      sendPushNotification(activeProfile.id, 'ZChat', status === 'pending' ? `${me.name} requested to follow you` : `${me.name} started following you`, `/?profile=${session.user.id}`, me.avatar);
+      notifyUser(activeProfile.id, 'ZChat', status === 'pending' ? `${me.name} requested to follow you` : `${me.name} started following you`, `/?profile=${session.user.id}`, me.avatar);
     }
     setActiveFollowBusy(false);
   };
@@ -6631,7 +7427,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         if (noteText) await supabase.from('messages').insert({ sender_id: session.user.id, group_id: t.id, type: 'text', content: noteText });
         const { data: mems } = await supabase.from('group_members').select('user_id, muted').eq('group_id', t.id);
         (mems || []).filter((gm) => gm.user_id !== session.user.id && !gm.muted).forEach((gm) => {
-          sendPushNotification(gm.user_id, `${me.name} in ${t.name}`, noteText || 'Shared a profile', `/?group=${t.id}`, me.avatar);
+          notifyUser(gm.user_id, `${me.name} in ${t.name}`, noteText || 'Shared a profile', `/?group=${t.id}`, me.avatar);
         });
       } else {
         const { data: cardRow } = await sendMessage(session.user.id, t.id, 'text', link, null);
@@ -6639,32 +7435,165 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         if (noteText) noteRow = (await sendMessage(session.user.id, t.id, 'text', noteText, null)).data;
         await upsertConversation(t.id, noteText || link, 'text');
         if (activeProfile && activeProfile.id === t.id) setMessages((prev) => [...prev, ...[cardRow, noteRow].filter(Boolean)]);
-        sendPushNotification(t.id, me.name, noteText || 'Shared a profile', `/?dm=${session.user.id}`, me.avatar);
+        notifyUser(t.id, me.name, noteText || 'Shared a profile', `/?dm=${session.user.id}`, me.avatar);
       }
     }
     loadConversations();
     loadGroups();
   };
 
-  const sendTyping = () => {
+  const activitySentRef = useRef({});
+  const sendActivity = (kind) => {
     if (!typingChannelRef.current || me?.hide_activity) return;
-    typingChannelRef.current.send({ type: 'broadcast', event: 'typing', payload: { from: session.user.id } });
+    const now = Date.now();
+    if (now - (activitySentRef.current[kind] || 0) < 1500) return;
+    activitySentRef.current[kind] = now;
+    typingChannelRef.current.send({ type: 'broadcast', event: 'typing', payload: { from: session.user.id, kind } }).catch?.(() => {});
   };
+  const sendTyping = () => sendActivity('typing');
 
   useEffect(() => {
-    if (!activeProfile) return;
-    const [a, b] = pairKey(session.user.id, activeProfile.id);
-    const channel = supabase.channel('typing-' + a + '-' + b);
+    let key = null;
+    if (activeGroup) key = `typing-group-${activeGroup.id}`;
+    else if (activeProfile) { const [a, b] = pairKey(session.user.id, activeProfile.id); key = `typing-${a}-${b}`; }
+    if (!key) return undefined;
+    const channel = supabase.channel(key);
     channel.on('broadcast', { event: 'typing' }, ({ payload }) => {
-      if (payload.from !== session.user.id) {
-        setTypingFrom(true);
-        clearTimeout(typingTimeoutRef.current);
-        typingTimeoutRef.current = setTimeout(() => setTypingFrom(false), 2500);
-      }
+      if (!payload || payload.from === session.user.id) return;
+      setActivityFrom({ kind: payload.kind || 'typing', from: payload.from });
+      clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = setTimeout(() => setActivityFrom(null), 3200);
     }).subscribe();
     typingChannelRef.current = channel;
-    return () => { supabase.removeChannel(channel); typingChannelRef.current = null; setTypingFrom(false); };
-  }, [activeProfile?.id]);
+    activitySentRef.current = {};
+    return () => { supabase.removeChannel(channel); typingChannelRef.current = null; clearTimeout(typingTimeoutRef.current); setActivityFrom(null); };
+  }, [activeProfile?.id, activeGroup?.id]);
+
+  const liveActivity = recording ? 'voice' : showStickers ? 'sticker' : null;
+  useEffect(() => {
+    if (!liveActivity) return undefined;
+    sendActivity(liveActivity);
+    const t = setInterval(() => sendActivity(liveActivity), 2000);
+    return () => clearInterval(t);
+  }, [liveActivity, activeProfile?.id, activeGroup?.id]);
+
+  conversationsRef.current = conversations;
+  groupsRef.current = groups;
+  blockedRef.current = myBlockedIds;
+  locksRef.current = myLocks;
+  reloadListsRef.current = () => { loadConversations(); loadGroups(); };
+
+  const notifyUser = (userId, title, body, url, icon) => {
+    if (!userId || visibleIdsRef.current.has(userId)) return;
+    sendPushNotification(userId, title, body, url, icon);
+  };
+
+  const cachedProfile = async (userId) => {
+    if (profileCacheRef.current.has(userId)) return profileCacheRef.current.get(userId);
+    const { data } = await getProfile(userId);
+    const p = data ? sanitizeAvatar(data, session.user.id) : null;
+    if (p) profileCacheRef.current.set(userId, p);
+    return p;
+  };
+
+  const showMessageToast = async (msg) => {
+    if (!msg || msg.type === 'system') return;
+    const preview = describeMessage(msg);
+    if (msg.group_id) {
+      const g = groupsRef.current.find((x) => x.id === msg.group_id);
+      if (!g) return;
+      const sender = await cachedProfile(msg.sender_id);
+      setInAppToast({ key: msg.id, kind: 'group', group: g, title: g.name, groupAvatar: g.avatar, avatar: sender?.avatar, avatarName: sender?.name || g.name, prefix: `${(sender?.name || 'Someone').split(' ')[0]}: `, preview });
+      return;
+    }
+    const conv = conversationsRef.current.find((c) => c.otherProfile.id === msg.sender_id);
+    const profile = conv ? conv.otherProfile : await cachedProfile(msg.sender_id);
+    if (!profile) return;
+    const locked = conv && locksRef.current[conv.id];
+    setInAppToast({ key: msg.id, kind: 'dm', profile, convId: conv ? conv.id : null, title: profile.name, avatar: profile.avatar, avatarName: profile.name, prefix: '', preview: locked ? { kind: 'text', text: 'New message' } : preview });
+  };
+
+  const openToast = (toast) => {
+    setInAppToast(null);
+    setProfileOf(null);
+    if (toast.kind === 'group') openGroup(toast.group);
+    else openChat(toast.profile, toast.convId);
+  };
+
+  const startRowPress = (e, sheet) => {
+    const r = rowPressRef.current;
+    r.fired = false;
+    r.x = e.clientX;
+    r.y = e.clientY;
+    clearTimeout(r.timer);
+    r.timer = setTimeout(() => { r.fired = true; if (navigator.vibrate) navigator.vibrate(12); setRowSheet(sheet); }, 450);
+  };
+  const moveRowPress = (e) => {
+    const r = rowPressRef.current;
+    if (Math.abs(e.clientX - r.x) > 8 || Math.abs(e.clientY - r.y) > 8) clearTimeout(r.timer);
+  };
+  const endRowPress = () => clearTimeout(rowPressRef.current.timer);
+  const guardRowClick = (fn) => () => {
+    if (rowPressRef.current.fired) { rowPressRef.current.fired = false; return; }
+    fn();
+  };
+
+  const markChatRead = async (otherId) => {
+    await supabase.from('messages').update({ read: true, delivered: true }).eq('sender_id', otherId).eq('receiver_id', session.user.id).eq('read', false);
+    loadUnreadCounts();
+  };
+
+  const openMediaComposer = (files) => {
+    const list = Array.from(files || []).filter((f) => f && ((f.type || '').startsWith('image') || (f.type || '').startsWith('video'))).slice(0, MAX_PHOTOS_PER_SEND);
+    if (!list.length || (!activeProfile && !activeGroup)) return;
+    setShowAttach(false);
+    setShowStickers(false);
+    setMediaComposer({ key: Date.now(), files: list });
+  };
+
+  const sendMediaItems = async (outputs, caption) => {
+    setMediaComposer(null);
+    if (!outputs.length || (!activeProfile && !activeGroup)) return;
+    const targetProfile = activeProfile;
+    const targetGroup = activeGroup;
+    setUploading(outputs.length);
+    for (let i = 0; i < outputs.length; i++) {
+      const item = outputs[i];
+      const { url, error } = await uploadMedia(item.file, session.user.id);
+      if (!error && url) {
+        const captionForThis = i === 0 ? (caption || null) : null;
+        let inserted = null;
+        if (targetGroup) {
+          inserted = await sendGroupMessage(item.kind, captionForThis, url);
+        } else {
+          const { data } = await sendMessage(session.user.id, targetProfile.id, item.kind, captionForThis, url);
+          inserted = data;
+          if (data) {
+            setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
+            notifyUser(targetProfile.id, me.name, captionForThis || (item.kind === 'image' ? 'Photo' : 'Video'), `/?dm=${session.user.id}`, me.avatar);
+          }
+        }
+        if (inserted && item.kind === 'video') {
+          if (item.trimStart != null || item.trimEnd != null) {
+            const trimPatch = { trim_start: item.trimStart || 0, trim_end: item.trimEnd || null };
+            await supabase.from('messages').update(trimPatch).eq('id', inserted.id);
+            setMessages((prev) => prev.map((x) => (x.id === inserted.id ? { ...x, ...trimPatch } : x)));
+          }
+          if (item.overlayFile) {
+            const up = await uploadMedia(item.overlayFile, session.user.id);
+            if (!up.error && up.url) {
+              const { error: overlayError } = await supabase.from('messages').update({ overlay_url: up.url }).eq('id', inserted.id);
+              if (!overlayError) setMessages((prev) => prev.map((x) => (x.id === inserted.id ? { ...x, overlay_url: up.url } : x)));
+            }
+          }
+        }
+      }
+      if (item.url) URL.revokeObjectURL(item.url);
+      setUploading((n) => Math.max(0, (typeof n === 'number' ? n : 1) - 1));
+    }
+    if (targetProfile) await upsertConversation(targetProfile.id, caption || null, outputs[outputs.length - 1].kind);
+    setUploading(0);
+  };
 
   const handlePullTouchStart = (e) => {
     if (sidebarListRef.current && sidebarListRef.current.scrollTop <= 0) {
@@ -6721,9 +7650,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
   return (
     <div id="zapp-root" style={{
-      height: viewportBox.height ? viewportBox.height : '100dvh', width: '100%', background: theme.bgGradient, fontFamily: FONT,
-      display: 'flex', overflow: 'hidden', position: 'relative', boxSizing: 'border-box',
-      transform: viewportBox.offset ? `translateY(${viewportBox.offset}px)` : 'none',
+      position: 'fixed', left: 0, right: 0, top: viewportBox.height ? viewportBox.offset : 0,
+      ...(viewportBox.height ? { height: viewportBox.height } : { bottom: 0 }),
+      background: theme.bgGradient, fontFamily: FONT,
+      display: 'flex', overflow: 'hidden', boxSizing: 'border-box',
       paddingTop: 'env(safe-area-inset-top)',
       paddingLeft: 'env(safe-area-inset-left)',
       paddingRight: 'env(safe-area-inset-right)',
@@ -6865,7 +7795,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                   const g = item;
                   const isActive = activeGroup?.id === g.id;
                   return (
-                    <div key={'g-' + g.id} onClick={() => openGroup(g)} style={{
+                    <div key={'g-' + g.id} onClick={guardRowClick(() => openGroup(g))}
+                      onPointerDown={(e) => startRowPress(e, { kind: 'group', group: g })} onPointerMove={moveRowPress} onPointerUp={endRowPress} onPointerLeave={endRowPress} onPointerCancel={endRowPress}
+                      onContextMenu={(e) => { e.preventDefault(); endRowPress(); setRowSheet({ kind: 'group', group: g }); }}
+                      style={{
                       display: 'flex', alignItems: 'center', gap: 12, padding: '10px 8px', cursor: 'pointer', borderRadius: 16,
                       background: isActive ? theme.rowBg : 'transparent', position: 'relative',
                     }}>
@@ -6875,11 +7808,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                           <span style={{ fontWeight: g.unread ? 800 : 700, fontSize: 14, color: theme.ink, display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 150 }}>
                             {g.pinned && <Pin_ size={13} />}{g.name}
                           </span>
-                          {g.last_message_at && <span style={{ fontSize: 10.5, color: g.unread ? theme.coral : theme.muted, fontWeight: g.unread ? 700 : 400, flexShrink: 0 }}>{new Date(g.last_message_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>}
+                          {g.last_message_at && <span style={{ fontSize: 10.5, color: g.unread ? theme.coral : theme.muted, fontWeight: g.unread ? 700 : 400, flexShrink: 0 }}>{formatListTime(g.last_message_at)}</span>}
                         </div>
-                        <div style={{ fontSize: 12, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {g.last_message_type === 'image' ? 'Photo' : g.last_message_type === 'audio' ? 'Voice message' : g.last_message_type === 'video' ? 'Video' : g.last_message_type === 'sticker' ? 'Sticker' : parseProfileLink(g.last_message) ? 'Shared a profile' : (g.last_message || 'No messages yet')}
-                        </div>
+                        <PreviewLine preview={g.preview || { kind: 'text', text: 'No messages yet' }} prefix={g.previewPrefix} color={g.unread ? theme.ink : theme.muted} weight={g.unread ? 700 : 400} />
                       </div>
                       {g.unread > 0 && <div style={{ minWidth: 20, height: 20, padding: '0 5px', boxSizing: 'border-box', borderRadius: 10, background: theme.coral, color: 'white', fontSize: 10.5, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{g.unread > 99 ? '99+' : g.unread}</div>}
                       <MoreVertical size={15} color={theme.muted} style={{ cursor: 'pointer', flexShrink: 0 }}
@@ -6898,7 +7829,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                 const isActive = activeProfile?.id === c.otherProfile.id;
                 const unread = isUnread(c);
                 return (
-                  <div key={'c-' + c.id} onClick={() => openChat(c.otherProfile, c.id)} style={{
+                  <div key={'c-' + c.id} onClick={guardRowClick(() => openChat(c.otherProfile, c.id))}
+                    onPointerDown={(e) => startRowPress(e, { kind: 'dm', conv: c })} onPointerMove={moveRowPress} onPointerUp={endRowPress} onPointerLeave={endRowPress} onPointerCancel={endRowPress}
+                    onContextMenu={(e) => { e.preventDefault(); endRowPress(); setRowSheet({ kind: 'dm', conv: c }); }}
+                    style={{
                     display: 'flex', alignItems: 'center', gap: 12, padding: '10px 8px', cursor: 'pointer', borderRadius: 16,
                     background: isActive ? theme.rowBg : 'transparent', position: 'relative',
                   }}>
@@ -6908,13 +7842,11 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                         <span style={{ fontWeight: unread ? 800 : 700, fontSize: 14, color: theme.ink, display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 150 }}>
                           {isPinnedByMe(c) && <Pin_ size={13} />}{c.otherProfile.name}
                         </span>
-                        {c.last_message_at && <span style={{ fontSize: 10.5, color: unread ? theme.coral : theme.muted, fontWeight: unread ? 700 : 400, flexShrink: 0 }}>{new Date(c.last_message_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>}
+                        {(c.sortTime || c.last_message_at) && <span style={{ fontSize: 10.5, color: unread ? theme.coral : theme.muted, fontWeight: unread ? 700 : 400, flexShrink: 0 }}>{formatListTime(c.sortTime || c.last_message_at)}</span>}
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        {c.last_sender_id === session.user.id && <StatusTicks status={c.lastMineRead ? 'read' : c.lastMineDelivered ? 'delivered' : 'sent'} />}
-                        <div style={{ fontSize: 12, color: unread ? theme.ink : theme.muted, fontWeight: unread ? 700 : 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {c.last_message || 'Say hi \u{1F44B}'}
-                        </div>
+                        {c.lastFromMe && c.preview && c.preview.kind !== 'deleted' && c.preview.kind !== 'system' && <StatusTicks status={c.lastMineRead ? 'read' : c.lastMineDelivered ? 'delivered' : 'sent'} />}
+                        <PreviewLine preview={c.preview && c.preview.text ? c.preview : { kind: 'text', text: 'Say hi \u{1F44B}' }} color={unread ? theme.ink : theme.muted} weight={unread ? 700 : 400} />
                       </div>
                     </div>
                     {unread && <div style={{ width: 20, height: 20, borderRadius: 10, background: theme.coral, color: 'white', fontSize: 10.5, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{unreadCounts[c.otherProfile.id]}</div>}
@@ -6941,10 +7873,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       }} className={mobileShowChat ? 'zchat-chat-panel zchat-panel-open' : 'zchat-chat-panel'}>
         {(activeProfile || activeGroup) ? (
           <>
-            {ReactDOM.createPortal(
             <div style={{
-              position: 'fixed', top: 0, left: isWide ? 'calc(360px + env(safe-area-inset-left))' : 0, right: 0, zIndex: 15,
-              transform: viewportBox.offset ? `translateY(${viewportBox.offset}px)` : 'none',
+              position: 'fixed', top: viewportBox.height ? viewportBox.offset : 0, left: isWide ? 'calc(360px + env(safe-area-inset-left))' : 0, right: 0, zIndex: 15,
               borderBottom: activeNameBarKey ? 'none' : `1px solid ${theme.border}`,
               background: theme.panelBg,
             }}>
@@ -6974,7 +7904,11 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                     color: activeNameBarKey ? 'white' : theme.ink, textShadow: activeNameBarKey ? '0 1px 4px rgba(0,0,0,0.7)' : 'none',
                   }}>{activeGroup ? activeGroup.name : activeProfile.name}</div>
                   <div style={{ fontSize: 11, color: activeNameBarKey ? 'rgba(255,255,255,0.85)' : theme.muted, textShadow: activeNameBarKey ? '0 1px 4px rgba(0,0,0,0.7)' : 'none' }}>
-                    {activeGroup ? `${groupMembers.length} members` : typingFrom ? 'typing...' : (isUserOnline(activeProfile) && !activeProfile.hide_activity ? 'Online' : (!activeProfile.hide_activity && formatLastSeen(activeProfile.last_seen)) || '')}
+                    {activityFrom ? (
+                      <span style={{ color: activeNameBarKey ? 'white' : theme.coral, fontWeight: 700 }}>
+                        {activeGroup ? `${(groupMembers.find((gm) => gm.user_id === activityFrom.from)?.profile.name || 'Someone').split(' ')[0]} is ` : ''}{activityLabel(activityFrom.kind)}
+                      </span>
+                    ) : activeGroup ? `${groupMembers.length} members` : (isUserOnline(activeProfile) && !activeProfile.hide_activity ? 'Online' : (!activeProfile.hide_activity && formatLastSeen(activeProfile.last_seen)) || '')}
                   </div>
                 </div>
               </div>
@@ -7002,9 +7936,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               <MoreVertical size={19} style={{ cursor: 'pointer', color: activeNameBarKey ? 'white' : theme.ink, flexShrink: 0, filter: activeNameBarKey ? 'drop-shadow(0 1px 3px rgba(0,0,0,0.6))' : 'none', position: 'relative' }}
                 onClick={(e) => { e.stopPropagation(); (activeGroup ? setShowGroupInfo(true) : setShowChatSettings(true)); }} />
               </div>
-            </div>,
-            document.body
-            )}
+            </div>
 
             {selectionMode && (
               <MessageActionBar count={selectedIds.size} canEditActions={selectionInfo} onCancel={cancelSelection}
@@ -7043,7 +7975,13 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                     <MessageBubble
                       key={m.id} m={m} isMe={isMe}
                       selectionMode={selectionMode} selected={selectedIds.has(m.id)} onToggleSelect={toggleSelect}
-                      onLongPress={() => { if (!selectionMode) setContextMenuFor(m.id); }}
+                      onLongPress={() => {
+                        if (selectionMode) return;
+                        const el = document.getElementById(`msg-${m.id}`);
+                        setContextRect(el ? el.getBoundingClientRect() : null);
+                        if (navigator.vibrate) navigator.vibrate(15);
+                        setContextMenuFor(m.id);
+                      }}
                       onDelete={(id) => setPendingQuickDelete(id)}
                       onOpenImage={setViewerUrl} onOpenVideo={setViewerVideoUrl}
                       reactions={messageLikes[m.id]} onReact={(id, emoji) => reactToMessage(id, emoji)}
@@ -7110,7 +8048,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               </div>
             )}
 
-            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, padding: '4px 14px', flexShrink: 0, paddingBottom: keyboardOpen ? 4 : 'max(4px, env(safe-area-inset-bottom))' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, padding: '4px 14px', flexShrink: 0, paddingBottom: keyboardOpen ? 6 : 'max(8px, calc(env(safe-area-inset-bottom) - 14px))' }}>
               {activeProfile?.is_deleted ? (
                 <div style={{ flex: 1, textAlign: 'center', padding: '10px 4px', fontSize: 12.5, color: theme.muted, fontWeight: 600 }}>
                   This account no longer exists. You can't send new messages here.
@@ -7139,6 +8077,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                     data-keyboard-heal="true"
                     onChange={(e) => { const next = e.target.value.slice(0, MAX_CHARS); setDraft(next); setComposerMention(getActiveMention(next, Math.min(e.target.selectionStart, next.length))); sendTyping(); e.target.style.height = 'auto'; e.target.style.height = Math.min(e.target.scrollHeight, 110) + 'px'; }}
                     onClick={(e) => setComposerMention(getActiveMention(e.target.value, e.target.selectionStart))}
+                    onPaste={(e) => {
+                      const pasted = Array.from((e.clipboardData && e.clipboardData.files) || []).filter((f) => (f.type || '').startsWith('image') || (f.type || '').startsWith('video'));
+                      if (pasted.length) { e.preventDefault(); openMediaComposer(pasted); }
+                    }}
                     onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && !isTouchDevice()) { e.preventDefault(); if (editingMessage) saveEdit(); else send(); } }}
                     placeholder={editingMessage ? 'Edit message' : 'Message'}
                     rows={1}
@@ -7149,7 +8091,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                     }}
                   />
                   {(draft.trim() || pendingMedia.length > 0) ? (
-                    <div onClick={editingMessage ? saveEdit : send} style={{
+                    <div onPointerDown={(e) => e.preventDefault()} onMouseDown={(e) => e.preventDefault()} onClick={editingMessage ? saveEdit : send} style={{
                       width: 40, height: 40, borderRadius: '50%', background: theme.coral, display: 'flex',
                       alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0,
                     }}><Send size={17} color="white" style={{ marginLeft: -1 }} /></div>
@@ -7167,6 +8109,13 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               )}
             </div>
 
+            {uploading > 0 && (
+              <div style={{ position: 'absolute', bottom: 70, left: '50%', transform: 'translateX(-50%)', zIndex: 11, display: 'flex', alignItems: 'center', gap: 8, padding: '7px 14px', borderRadius: 20, background: theme.panelBg, border: `1px solid ${theme.border}`, boxShadow: '0 6px 18px rgba(0,0,0,0.2)', fontSize: 12, fontWeight: 700, color: theme.ink, whiteSpace: 'nowrap' }} className="zchat-fade">
+                <Spinner size={12} color={theme.coral} />
+                {uploading > 1 ? `Sending ${uploading} items\u2026` : 'Sending\u2026'}
+              </div>
+            )}
+
             {showAttach && (
               <div style={{ position: 'absolute', bottom: 76, left: 14, zIndex: 12, display: 'flex', gap: 10 }} className="zchat-fade">
                 <label style={{
@@ -7174,14 +8123,14 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                   alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 6px 16px rgba(0,0,0,0.2)',
                 }}>
                   <ImageIcon size={20} color="white" />
-                  <input type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={(e) => handleFile(e, 'image')} />
+                  <input type="file" accept="image/*,video/*" multiple style={{ display: 'none' }} onChange={handleFile} />
                 </label>
                 <label style={{
                   width: 52, height: 52, borderRadius: '50%', background: theme.coralDeep, display: 'flex',
                   alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 6px 16px rgba(0,0,0,0.2)',
                 }}>
                   <VideoIcon size={20} color="white" />
-                  <input type="file" accept="video/*" style={{ display: 'none' }} onChange={(e) => handleFile(e, 'video')} />
+                  <input type="file" accept="video/*" style={{ display: 'none' }} onChange={handleFile} />
                 </label>
               </div>
             )}
@@ -7246,9 +8195,21 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         const m = findMessageById(contextMenuFor);
         if (!m) return null;
         const isMine = m.sender_id === session.user.id;
+        const cloneSender = activeGroup && !isMine;
+        const cloneReply = m.reply_to_id ? (() => { const rm = findMessageById(m.reply_to_id); return rm ? { ...rm, senderLabel: labelForSender(rm.sender_id) } : null; })() : null;
+        const noop = () => {};
         return (
           <MessageContextMenu
-            message={m} isMine={isMine}
+            message={m} isMine={isMine} anchorRect={contextRect}
+            bubble={(
+              <MessageBubble m={m} isMe={isMine} selectionMode={false} selected={false} onToggleSelect={noop} onLongPress={noop} onDelete={noop}
+                onOpenImage={noop} onOpenVideo={noop} reactions={messageLikes[m.id]} onReact={noop} onOpenWhoReacted={noop}
+                replyPreview={cloneReply} onSwipeReply={noop} onJumpToMessage={noop} highlighted={false}
+                senderLabel={cloneSender ? memberName(m.sender_id) : null}
+                senderAvatar={cloneSender ? groupMembers.find((gm) => gm.user_id === m.sender_id)?.profile.avatar : null}
+                hideReadStatus={!!activeGroup} onOpenSenderProfile={null} canModerate={false} onOpenMention={noop} mentionsMe={false} />
+            )}
+            onSave={() => { silentDownload(m.media_url, m.type === 'video' ? 'zchat-video.mp4' : 'zchat-photo.jpg'); setContextMenuFor(null); }}
             canEditText={isMine && m.type === 'text' && !m.deleted}
             canModerate={activeGroup ? (groupMembers.find((gm) => gm.user_id === session.user.id)?.role === 'admin') : false}
             onClose={() => setContextMenuFor(null)}
@@ -7284,7 +8245,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         <ImageViewer url={viewerUrl} onClose={() => setViewerUrl(null)} onForward={() => { openForward(); }} onReport={() => setReportModalFor('__viewer__')} />
       )}
       {viewerVideoUrl && (
-        <VideoViewer url={viewerVideoUrl.url} trimStart={viewerVideoUrl.trimStart} trimEnd={viewerVideoUrl.trimEnd} onClose={() => setViewerVideoUrl(null)} onForward={() => { setViewerVideoUrl(null); openForward(); }} />
+        <VideoViewer url={viewerVideoUrl.url} trimStart={viewerVideoUrl.trimStart} trimEnd={viewerVideoUrl.trimEnd} overlayUrl={viewerVideoUrl.overlayUrl} onClose={() => setViewerVideoUrl(null)} onForward={() => { setViewerVideoUrl(null); openForward(); }} />
       )}
       {showArchived && (
         <ArchivedChatsPanel conversations={archivedConversations} onClose={() => setShowArchived(false)}
@@ -7340,29 +8301,53 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         <AccountGoneModal name={deletedAccountAlertFor} onOk={() => { setDeletedAccountAlertFor(null); setMobileShowChat(false); loadConversations(); }} />
       )}
       {showNotifHelp && <NotificationHelpModal onClose={() => setShowNotifHelp(false)} />}
-      {photoEditQueue.length > 0 && (
-        <PhotoCropEditor
-          file={photoEditQueue[0]}
-          onCancel={() => setPhotoEditQueue((prev) => prev.slice(1))}
-          onConfirm={(blob, caption) => {
-            const file = new File([blob], 'photo.jpg', { type: 'image/jpeg' });
-            const url = URL.createObjectURL(blob);
-            setPendingMedia((prev) => [...prev, { file, url, kind: 'image' }]);
-            if (caption) setDraft(caption);
-            setPhotoEditQueue((prev) => prev.slice(1));
-          }}
-        />
+      {mediaComposer && (
+        <MediaComposer key={mediaComposer.key} files={mediaComposer.files}
+          recipientName={activeGroup ? activeGroup.name : activeProfile ? activeProfile.name : ''}
+          onActivity={sendActivity}
+          onCancel={() => setMediaComposer(null)}
+          onSend={sendMediaItems} />
       )}
-      {videoEditQueue.length > 0 && (
-        <VideoTrimEditor
-          file={videoEditQueue[0]}
-          onCancel={() => setVideoEditQueue((prev) => prev.slice(1))}
-          onConfirm={(file, url, trimStart, trimEnd, caption) => {
-            setPendingMedia((prev) => [...prev, { file, url, kind: 'video', trimStart, trimEnd }]);
-            if (caption) setDraft(caption);
-            setVideoEditQueue((prev) => prev.slice(1));
-          }}
-        />
+      {inAppToast && (
+        <InAppMessageToast toast={inAppToast} top={`calc(8px + env(safe-area-inset-top) + ${viewportBox.offset || 0}px)`}
+          onOpen={() => openToast(inAppToast)} onDismiss={() => setInAppToast(null)} />
+      )}
+      {rowSheet && rowSheet.kind === 'dm' && (() => {
+        const c = rowSheet.conv;
+        const blocked = myBlockedIds.has(c.otherProfile.id);
+        return (
+          <ChatRowSheet title={c.otherProfile.name} subtitle={`@${c.otherProfile.username}`}
+            avatar={<Avatar emoji={c.otherProfile.avatar} name={c.otherProfile.name} size={44} />}
+            onClose={() => setRowSheet(null)}
+            actions={[
+              { icon: <Pin_ size={18} />, label: isPinnedByMe(c) ? 'Unpin chat' : 'Pin chat', onClick: () => togglePin(c) },
+              isUnread(c) ? { icon: <CheckCheck size={18} />, label: 'Mark as read', onClick: () => markChatRead(c.otherProfile.id) } : null,
+              { icon: <Archive size={18} />, label: 'Archive chat', onClick: () => toggleArchive(c.id, true) },
+              { icon: <User size={18} />, label: 'View profile', onClick: () => setProfileOf(c.otherProfile) },
+              { icon: <Ban size={18} />, label: blocked ? 'Unblock' : 'Block', onClick: () => (blocked ? unblockUser(c.otherProfile.id) : blockUser(c.otherProfile.id)), danger: !blocked },
+              { icon: <Flag size={18} />, label: 'Report', onClick: () => setReportUserTarget(c.otherProfile), danger: true },
+              { icon: <Trash2 size={18} />, label: 'Delete chat', onClick: () => setDeleteConvoTarget(c), danger: true },
+            ]} />
+        );
+      })()}
+      {rowSheet && rowSheet.kind === 'group' && (() => {
+        const g = rowSheet.group;
+        return (
+          <ChatRowSheet title={g.name} subtitle="Group"
+            avatar={<GroupAvatar avatar={g.avatar} name={g.name} size={44} />}
+            onClose={() => setRowSheet(null)}
+            actions={[
+              { icon: <Pin_ size={18} />, label: g.pinned ? 'Unpin group' : 'Pin group', onClick: () => toggleGroupPin(g) },
+              g.unread > 0 ? { icon: <CheckCheck size={18} />, label: 'Mark as read', onClick: () => { markGroupRead(g.id); setGroups((prev) => prev.map((x) => (x.id === g.id ? { ...x, unread: 0 } : x))); } } : null,
+              { icon: <Archive size={18} />, label: 'Archive group', onClick: () => toggleGroupArchive(g) },
+              { icon: <Users size={18} />, label: 'Group info', onClick: async () => { await openGroup(g); setShowGroupInfo(true); } },
+              { icon: <LogOut size={18} />, label: 'Leave group', onClick: () => leaveGroupById(g), danger: true },
+            ]} />
+        );
+      })()}
+      {reportUserTarget && (
+        <ReportReasonPicker onCancel={() => setReportUserTarget(null)}
+          onSubmit={async (reason) => { const target = reportUserTarget; setReportUserTarget(null); await handleReport(target, reason); }} />
       )}
     </div>
   );
@@ -7382,7 +8367,7 @@ function ResetPasswordScreen({ onDone }) {
     setLoading(true); setErr('');
     const { error } = await setPassword(pw);
     setLoading(false);
-    if (error) { setErr(error.message); return; }
+    if (error) { setErr(friendlyError(error, "Couldn't update your password. Try again.")); return; }
     setDone(true);
     setTimeout(onDone, 1400);
   };
@@ -7556,4 +8541,4 @@ export default function App() {
       <AppInner />
     </ThemeProvider>
   );
-                }
+}
