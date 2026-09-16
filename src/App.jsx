@@ -4,7 +4,7 @@ import {
   Send, Paperclip, Search, Mail, ShieldCheck, AtSign, LogOut, Eye, EyeOff, Lock,
   Flag, X, Trash2, User, Phone, MoreVertical, Image as ImageIcon, Video as VideoIcon,
   Smile, ArrowLeft, Check, CheckCheck, Settings as SettingsIcon, Moon, Sun, UserPlus,
-  FileText, HelpCircle, ChevronRight, Compass, Bell, Volume2, VolumeX, Palette, Mic, Play, Pause, Download, Users, Camera, Reply, Forward, Ban, Edit3, Archive, Sparkles, Share2, Copy, Crop, Type, Pencil, Undo2, Scissors, BellOff, Link as LinkIcon,
+  FileText, HelpCircle, ChevronRight, Compass, Bell, Volume2, VolumeX, Palette, Mic, Play, Pause, Download, Users, Camera, Reply, Forward, Ban, Edit3, Archive, Sparkles, Share2, Copy, Crop, Type, Pencil, Undo2, Scissors, BellOff, Link as LinkIcon, ShieldAlert, Heart, Repeat,
 } from 'lucide-react';
 import {
   supabase, registerWithEmail, verifyOtp, setPassword, signInWithPassword,
@@ -348,7 +348,6 @@ function GlobalStyle() {
       .zchat-fade { animation: zchat-fade 0.25s ease; }
       .zchat-wave-pop { animation: zchat-wave-pop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1); }
       .zchat-panel-open { animation: zchat-panel-zoom-in 0.24s cubic-bezier(0.16, 1, 0.3, 1); }
-      .zchat-msglist { scroll-behavior: smooth; }
       * { font-family: ${FONT}; }
       html, body { margin: 0; padding: 0; overscroll-behavior: none; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
       @supports (-webkit-touch-callout: none) {
@@ -801,7 +800,7 @@ function RegisterFlow({ onDone, onBack, onStart, initialStage = 'email' }) {
   };
 
   const checkUsername = (val) => {
-    const clean = val.toLowerCase().replace(/[^a-z0-9._]/g, '').slice(0, 20);
+    const clean = val.toLowerCase().replace(/[^a-z0-9._]/g, '').slice(0, USERNAME_MAX);
     setUsername(clean);
     setTaken(false);
     clearTimeout(usernameTimer.current);
@@ -926,7 +925,7 @@ function RegisterFlow({ onDone, onBack, onStart, initialStage = 'email' }) {
     );
   }
 
-  const validU = /^[a-z0-9._]{3,20}$/.test(username);
+  const validU = !usernameProblem(username);
   const validN = name.trim().length >= 2;
   const canFinish = validU && validN && !taken && !checkingUsername;
   if (stage === 'username') {
@@ -937,7 +936,7 @@ function RegisterFlow({ onDone, onBack, onStart, initialStage = 'email' }) {
           <AtSign size={18} color={theme.muted} /><span style={{ fontSize: 13.5, color: theme.muted }}>Choose your identity</span>
         </div>
         <input style={{ ...inputStyle(theme), marginBottom: 10 }} placeholder="Full name"
-          value={name} onChange={(e) => setName(e.target.value)} />
+          value={name} maxLength={NAME_MAX} onChange={(e) => setName(e.target.value.slice(0, NAME_MAX))} />
         <div style={{ position: 'relative' }}>
           <span style={{ position: 'absolute', left: 14, top: 13, color: theme.muted, fontSize: 16 }}>@</span>
           <input style={{ ...inputStyle(theme), paddingLeft: 26 }} placeholder="username" autoCapitalize="none"
@@ -948,7 +947,7 @@ function RegisterFlow({ onDone, onBack, onStart, initialStage = 'email' }) {
             <div style={{ fontSize: 12, color: theme.muted }}>At least 3 characters</div>
           )}
           {username.length >= 3 && !validU && (
-            <div style={{ fontSize: 12, color: theme.danger }}>Only letters, numbers, dot, underscore</div>
+            <div style={{ fontSize: 12, color: theme.danger }}>{usernameProblem(username)}</div>
           )}
           {validU && checkingUsername && <div style={{ fontSize: 12, color: theme.muted }}>Checking...</div>}
           {validU && !checkingUsername && taken && <div style={{ fontSize: 12, color: theme.danger }}>That username is taken</div>}
@@ -2127,17 +2126,7 @@ function MailPanel({ myId, onClose, initialMailId }) {
     return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
   };
 
-  const MailIcon = ({ m, size }) => (
-    <div style={{
-      width: size, height: size, borderRadius: size * 0.3, flexShrink: 0, overflow: 'hidden',
-      background: m.type === 'report_warning' ? `${theme.danger}18` : theme.rowBg,
-      display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative',
-    }}>
-      {m.type === 'report_warning'
-        ? <Flag size={size * 0.44} color={theme.danger} />
-        : <img src="/icon-192.png" alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
-    </div>
-  );
+  const MailIcon = ({ m, size }) => <MailBadgeIcon type={m.type} size={size} />;
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: theme.panelBg, zIndex: 34, display: 'flex', flexDirection: 'column' }} className="zchat-fade">
@@ -2154,7 +2143,7 @@ function MailPanel({ myId, onClose, initialMailId }) {
             <MailIcon m={selected} size={44} />
             <div>
               <div style={{ fontWeight: 800, fontSize: 15.5, color: theme.ink }}>{selected.title}</div>
-              <div style={{ fontSize: 11, color: theme.muted }}>{new Date(selected.created_at).toLocaleString()}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11.5, color: theme.muted, fontWeight: 600 }}>{mailSenderName(selected.type)} <VerifiedTick size={12} /> <span style={{ fontWeight: 400 }}>· {new Date(selected.created_at).toLocaleString()}</span></div>
             </div>
           </div>
           <div style={{ fontSize: 14, color: theme.ink, lineHeight: 1.6, wordBreak: 'break-word' }}>{selected.body}</div>
@@ -2951,7 +2940,7 @@ function CreateGroupPanel({ myId, onClose, onCreated }) {
       )}
     </div>
   );
-   }
+                }
 function GroupInfoPanel({ group, members, myId, myRole, isOwner, onClose, onPromote, onDemote, onMute, onUnmute, onKick, onLeave, onOpenProfile, onSaveBio, onSaveName, onSaveAvatar, onAddMembers, onTransferOwnership, onSetWallpaper, onSetHeaderStyle }) {
   const { theme } = useTheme();
   const isAdmin = myRole === 'admin';
@@ -3518,6 +3507,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
   const [mutualCount, setMutualCount] = useState(null);
   const [followBusy, setFollowBusy] = useState(false);
   const [username, setUsername] = useState(profile.username || '');
+  const [displayName, setDisplayName] = useState(profile.name || '');
   const [usernameErr, setUsernameErr] = useState('');
   const [listModal, setListModal] = useState(null);
   const [showPrivacySettings, setShowPrivacySettings] = useState(false);
@@ -3528,7 +3518,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
 
   const pickBioMention = (picked) => {
     if (!bioMention) return;
-    const { value, caret } = applyMention(bio, bioMention, picked.username, 140);
+    const { value, caret } = applyMention(bio, bioMention, picked.username, BIO_MAX);
     setBio(value);
     setBioMention(null);
     requestAnimationFrame(() => {
@@ -3596,6 +3586,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
     setCountry(profile.country || '');
     setAvatar(profile.avatar || '');
     setUsername(profile.username || '');
+    setDisplayName(profile.name || '');
     setUsernameErr('');
     setBioMention(null);
     setEditing(true);
@@ -3630,10 +3621,13 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
       if (parsedAge < 12) { setUsernameErr('Age must be at least 12.'); return; }
       if (parsedAge > 99) { setUsernameErr('Age must be 99 or under.'); return; }
     }
-    const fields = { bio, gender, avatar, age: Number.isFinite(parsedAge) ? parsedAge : null, country: country.trim() || null };
+    const cleanName = displayName.replace(/\s+/g, ' ').trim().slice(0, NAME_MAX);
+    if (cleanName.length < 1) { setUsernameErr('Add your name.'); return; }
+    const fields = { name: cleanName, bio: bio.slice(0, BIO_MAX), gender, avatar, age: Number.isFinite(parsedAge) ? parsedAge : null, country: country.trim() || null };
     if (cleanUsername !== profile.username) {
       if (cooldownDaysLeft > 0) { setUsernameErr(`You can change your username again in ${cooldownDaysLeft} day${cooldownDaysLeft === 1 ? '' : 's'}.`); return; }
-      if (cleanUsername.length < 3) { setUsernameErr('Username must be at least 3 characters.'); return; }
+      const problem = usernameProblem(cleanUsername);
+      if (problem) { setUsernameErr(`${problem}.`); return; }
       fields.username = cleanUsername;
       fields.username_changed_at = new Date().toISOString();
     }
@@ -3646,7 +3640,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
       setUsernameErr(msg.includes('duplicate') || msg.includes('unique') ? 'That username is already taken.' : friendlyError(error, "Couldn't save your profile. Try again."));
       return;
     }
-    if (data) { onSaved(data); setEditing(false); }
+    if (data) { notifyBioMentions(data, profile.bio, data.bio); onSaved(data); setEditing(false); }
   };
 
   if (profile.is_deleted && !isSelf) {
@@ -3769,19 +3763,23 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
         <div style={{ padding: '16px 18px', paddingBottom: 'calc(28px + env(safe-area-inset-bottom))', maxWidth: 520, margin: '0 auto' }}>
           {editing ? (
             <div>
-              <div style={labelStyle}>USERNAME</div>
+              <div style={{ ...labelStyle, display: 'flex', justifyContent: 'space-between' }}><span>NAME</span><span style={{ fontWeight: 600 }}>{displayName.length}/{NAME_MAX}</span></div>
+              <input value={displayName} maxLength={NAME_MAX} onChange={(e) => setDisplayName(e.target.value.slice(0, NAME_MAX))}
+                style={{ ...inputStyle(theme), marginBottom: 12 }} placeholder="Name" />
+              <div style={{ ...labelStyle, display: 'flex', justifyContent: 'space-between' }}><span>USERNAME</span><span style={{ fontWeight: 600 }}>{username.length}/{USERNAME_MAX}</span></div>
               <div style={{ position: 'relative', marginBottom: 4 }}>
                 <span style={{ position: 'absolute', left: 14, top: 13, color: theme.muted, fontSize: 16 }}>@</span>
-                <input value={username} onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9._]/g, ''))}
+                <input value={username} maxLength={USERNAME_MAX} onChange={(e) => { setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9._]/g, '').slice(0, USERNAME_MAX)); setUsernameErr(''); }}
                   style={{ ...inputStyle(theme), paddingLeft: 26 }} autoCapitalize="none" />
               </div>
+              {username !== profile.username && usernameProblem(username) && <div style={{ fontSize: 11.5, color: theme.danger, marginBottom: 8 }}>{usernameProblem(username)}</div>}
               {cooldownDaysLeft > 0 && (
                 <div style={{ fontSize: 11, color: theme.muted, marginBottom: 10 }}>You can change your username again in {cooldownDaysLeft} day{cooldownDaysLeft === 1 ? '' : 's'}.</div>
               )}
               {usernameErr && <div style={{ fontSize: 11.5, color: theme.danger, marginBottom: 10 }}>{usernameErr}</div>}
-              <div style={{ ...labelStyle, marginTop: 10 }}>BIO</div>
+              <div style={{ ...labelStyle, marginTop: 10, display: 'flex', justifyContent: 'space-between' }}><span>BIO</span><span style={{ fontWeight: 600, color: bio.length >= BIO_MAX ? theme.danger : theme.muted }}>{bio.length}/{BIO_MAX}</span></div>
               <textarea ref={bioRef} value={bio}
-                onChange={(e) => { const v = e.target.value.slice(0, 140); setBio(v); setBioMention(getActiveMention(v, e.target.selectionStart)); }}
+                onChange={(e) => { const v = e.target.value.slice(0, BIO_MAX); setBio(v); setBioMention(getActiveMention(v, e.target.selectionStart)); }}
                 onClick={(e) => setBioMention(getActiveMention(e.target.value, e.target.selectionStart))}
                 placeholder="Tell people about yourself, type @ to mention someone"
                 style={{ ...inputStyle(theme), height: 76, resize: 'none', fontFamily: FONT, marginBottom: bioMention ? 0 : 14 }} />
@@ -3992,7 +3990,7 @@ function splitMentions(text) {
   MENTION_REGEX.lastIndex = 0;
   while ((match = MENTION_REGEX.exec(text)) !== null) {
     const handle = match[2].replace(/\.+$/, '');
-    if (handle.length < 3 || handle.length > 20) continue;
+    if (handle.length < 3 || handle.length > USERNAME_MAX) continue;
     const at = match.index + match[1].length;
     if (at > last) out.push(text.slice(last, at));
     out.push({ mention: handle.toLowerCase(), raw: '@' + handle });
@@ -4072,7 +4070,7 @@ function RichText({ text, onMention }) {
 function getActiveMention(text, caret) {
   if (caret == null) return null;
   const before = text.slice(0, caret);
-  const match = before.match(/(^|[^a-zA-Z0-9._@])@([a-zA-Z0-9._]{0,20})$/);
+  const match = before.match(/(^|[^a-zA-Z0-9._@])@([a-zA-Z0-9._]{0,30})$/);
   if (!match) return null;
   return { query: match[2].toLowerCase(), start: caret - match[2].length - 1, end: caret };
 }
@@ -4179,7 +4177,7 @@ function AudioBubble({ url, isMe }) {
   );
 }
 
-function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSelect, onLongPress, onOpenImage, onOpenVideo, reactions, onReact, onOpenWhoReacted, replyPreview, onSwipeReply, onJumpToMessage, highlighted, senderLabel, senderAvatar, hideReadStatus, onOpenSenderProfile, canModerate, onOpenMention, mentionsMe }) {
+function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSelect, onLongPress, onOpenImage, onOpenVideo, reactions, onReact, onOpenWhoReacted, replyPreview, onSwipeReply, onJumpToMessage, highlighted, senderLabel, senderAvatar, hideReadStatus, onOpenSenderProfile, canModerate, onOpenMention, mentionsMe, onOpenStoryRef }) {
   const { theme, fontScale, chatTheme, bubbleColor } = useTheme();
   const [hover, setHover] = useState(false);
   const [burstHeart, setBurstHeart] = useState(false);
@@ -4241,7 +4239,7 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
     pressTimerRef.current = setTimeout(() => {
       longPressFiredRef.current = true;
       onLongPress(m.id);
-    }, 350);
+    }, 420);
   };
   const handlePointerMove = (e) => {
     if (activePointerRef.current !== e.pointerId) return;
@@ -4398,12 +4396,13 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
                   <div className="zchat-wave-pop" style={{ fontSize: 64, lineHeight: 1, padding: '4px 10px' }}>{m.content}</div>
                 )
               )}
+              {m.story_id && <StoryRefCard m={m} isMe={isMe} onOpen={onOpenStoryRef} />}
               {sharedProfileId && (
                 <div style={{ paddingTop: 2, paddingBottom: 16 }}>
                   <ProfileLinkCard profileId={sharedProfileId} onOpen={onOpenMention} />
                 </div>
               )}
-              {m.type === 'text' && m.content && !sharedProfileId && (
+              {m.type === 'text' && m.content && !sharedProfileId && !(m.story_id && (m.content === STORY_MENTION_TEXT || m.content === STORY_GROUP_MENTION_TEXT)) && (
                 <div style={{ fontSize: 15 * fontScale, color: theme.ink, wordBreak: 'break-word', lineHeight: 1.32 }}>
                   <RichText text={m.content} onMention={onOpenMention} />
                   <span style={{ display: 'inline-block', float: 'right', width: Math.ceil(time.length * 5.4) + (isMe ? 22 : 8) + (m.edited ? 30 : 0), height: 17 }} />
@@ -4503,8 +4502,7 @@ function ImageViewer({ url, onClose, onForward, onReport }) {
       <img src={url} alt="" onContextMenu={(e) => e.preventDefault()} draggable={false} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: 8 }} />
     </div>
   );
-}
-
+                           }
 function MessageActionBar({ count, canEditActions, onCancel, onForward, onDeleteForMe, onDeleteForEveryone, onReport }) {
   const { theme } = useTheme();
   const btn = { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer', color: theme.ink, fontSize: 10, fontWeight: 600, flexShrink: 0, minWidth: 52 };
@@ -4522,7 +4520,8 @@ function MessageActionBar({ count, canEditActions, onCancel, onForward, onDelete
       </div>
     </div>
   );
-            }
+}
+
 function ForwardPicker({ conversations, onCancel, onPick, myId }) {
   const { theme } = useTheme();
   const [q, setQ] = useState('');
@@ -4768,11 +4767,11 @@ function NotificationHelpModal({ onClose }) {
   );
 }
 
-function EnableNotificationsBanner({ onEnable, onDismiss, top }) {
+function EnableNotificationsBanner({ onEnable, onDismiss, top, inline }) {
   const { theme } = useTheme();
   return (
     <div style={{
-      position: 'absolute', top, left: 10, right: 10, zIndex: 14, maxWidth: 340, margin: '0 auto',
+      position: inline ? 'relative' : 'absolute', top: inline ? 'auto' : top, left: inline ? 'auto' : 10, right: inline ? 'auto' : 10, zIndex: 14, maxWidth: inline ? 'none' : 340, margin: inline ? '8px 12px 0' : '0 auto',
       background: theme.panelBg, borderRadius: 14, padding: '10px 12px', boxShadow: '0 6px 20px rgba(0,0,0,0.22)',
       border: `1px solid ${theme.border}`, display: 'flex', alignItems: 'center', gap: 10,
     }} className="zchat-fade">
@@ -4784,11 +4783,11 @@ function EnableNotificationsBanner({ onEnable, onDismiss, top }) {
   );
 }
 
-function NotificationPermissionBanner({ onOpenHelp, onDismiss, top }) {
+function NotificationPermissionBanner({ onOpenHelp, onDismiss, top, inline }) {
   const { theme } = useTheme();
   return (
     <div style={{
-      position: 'absolute', top, left: 10, right: 10, zIndex: 14, maxWidth: 340, margin: '0 auto',
+      position: inline ? 'relative' : 'absolute', top: inline ? 'auto' : top, left: inline ? 'auto' : 10, right: inline ? 'auto' : 10, zIndex: 14, maxWidth: inline ? 'none' : 340, margin: inline ? '8px 12px 0' : '0 auto',
       background: theme.panelBg, borderRadius: 14, padding: '10px 12px', boxShadow: '0 6px 20px rgba(0,0,0,0.22)',
       border: `1px solid ${theme.border}`, display: 'flex', alignItems: 'center', gap: 10,
     }} className="zchat-fade">
@@ -4800,11 +4799,11 @@ function NotificationPermissionBanner({ onOpenHelp, onDismiss, top }) {
   );
 }
 
-function InstallAppBanner({ onOpenHelp, onInstallNow, canInstallDirectly, onDismiss, top }) {
+function InstallAppBanner({ onOpenHelp, onInstallNow, canInstallDirectly, onDismiss, top, inline }) {
   const { theme } = useTheme();
   return (
     <div style={{
-      position: 'absolute', top, left: 10, right: 10, zIndex: 14, maxWidth: 340, margin: '0 auto',
+      position: inline ? 'relative' : 'absolute', top: inline ? 'auto' : top, left: inline ? 'auto' : 10, right: inline ? 'auto' : 10, zIndex: 14, maxWidth: inline ? 'none' : 340, margin: inline ? '8px 12px 0' : '0 auto',
       background: theme.panelBg, borderRadius: 14, padding: '10px 12px', boxShadow: '0 6px 20px rgba(0,0,0,0.22)',
       border: `1px solid ${theme.border}`, display: 'flex', alignItems: 'center', gap: 10,
     }} className="zchat-fade">
@@ -4910,6 +4909,10 @@ function formatListTime(value) {
 function describeMessage(m) {
   if (!m) return { kind: 'none', text: '' };
   if (m.deleted) return { kind: 'deleted', text: 'This message was deleted' };
+  if (m.story_id) {
+    if (m.content === STORY_MENTION_TEXT || m.content === STORY_GROUP_MENTION_TEXT) return { kind: 'story', text: m.content };
+    return { kind: 'story', text: `Story reply: ${m.content || ''}` };
+  }
   switch (m.type) {
     case 'image': return { kind: 'image', text: m.content || 'Photo' };
     case 'video': return { kind: 'video', text: m.content || 'Video' };
@@ -4920,7 +4923,7 @@ function describeMessage(m) {
   }
 }
 
-const PREVIEW_ICONS = { image: Camera, video: VideoIcon, audio: Mic, sticker: Smile, deleted: Ban };
+const PREVIEW_ICONS = { image: Camera, video: VideoIcon, audio: Mic, sticker: Smile, deleted: Ban, story: Sparkles };
 
 function PreviewLine({ preview, prefix, color, weight = 400, size = 12 }) {
   const Icon = preview ? PREVIEW_ICONS[preview.kind] : null;
@@ -4947,50 +4950,56 @@ function activityLabel(kind) {
 function InAppMessageToast({ toast, top, onOpen, onDismiss }) {
   const { theme } = useTheme();
   const startRef = useRef(null);
+  const suppressRef = useRef(false);
+  const holdRef = useRef(false);
   const [dragY, setDragY] = useState(0);
 
   useEffect(() => {
     setDragY(0);
-    const t = setTimeout(onDismiss, 4500);
-    return () => clearTimeout(t);
+    let left = 6000;
+    const t = setInterval(() => {
+      if (!holdRef.current) left -= 250;
+      if (left <= 0) { clearInterval(t); onDismiss(); }
+    }, 250);
+    return () => clearInterval(t);
   }, [toast.key]);
-
-  const end = () => {
-    if (startRef.current == null) return;
-    const moved = startRef.current.moved;
-    startRef.current = null;
-    if (dragY < -28) { onDismiss(); return; }
-    setDragY(0);
-    if (!moved) onOpen();
-  };
 
   return (
     <div key={toast.key} className="zchat-toast-in"
-      onPointerDown={(e) => { startRef.current = { y: e.clientY, moved: false }; e.currentTarget.setPointerCapture?.(e.pointerId); }}
+      onPointerDown={(e) => { e.stopPropagation(); holdRef.current = true; startRef.current = { y: e.clientY, moved: false }; }}
       onPointerMove={(e) => {
-        if (!startRef.current) return;
-        const dy = e.clientY - startRef.current.y;
-        if (Math.abs(dy) > 6) startRef.current.moved = true;
-        setDragY(Math.min(0, dy));
+        const s = startRef.current;
+        if (!s) return;
+        const dy = e.clientY - s.y;
+        if (Math.abs(dy) > 12) s.moved = true;
+        if (s.moved) setDragY(Math.min(0, dy));
       }}
-      onPointerUp={end}
-      onPointerCancel={() => { startRef.current = null; setDragY(0); }}
+      onPointerUp={(e) => {
+        e.stopPropagation();
+        holdRef.current = false;
+        const s = startRef.current;
+        startRef.current = null;
+        if (s && s.moved) {
+          suppressRef.current = true;
+          setTimeout(() => { suppressRef.current = false; }, 80);
+          if (dragY < -28) onDismiss(); else setDragY(0);
+        }
+      }}
+      onPointerCancel={() => { holdRef.current = false; startRef.current = null; setDragY(0); }}
+      onClick={(e) => { e.stopPropagation(); e.preventDefault(); if (suppressRef.current) return; onOpen(); }}
       style={{
         position: 'fixed', top, left: 10, right: 10, zIndex: 300, maxWidth: 420, margin: '0 auto',
-        display: 'flex', alignItems: 'center', gap: 11, padding: '10px 14px 10px 10px', borderRadius: 20,
-        background: theme.dark ? 'rgba(20,26,44,0.94)' : 'rgba(255,255,255,0.96)',
+        display: 'flex', alignItems: 'center', gap: 11, padding: '11px 14px 11px 11px', borderRadius: 20,
+        background: theme.dark ? 'rgba(20,26,44,0.96)' : 'rgba(255,255,255,0.97)',
         backdropFilter: 'blur(22px) saturate(160%)', WebkitBackdropFilter: 'blur(22px) saturate(160%)',
         border: `1px solid ${theme.border}`, boxShadow: '0 12px 32px rgba(0,0,0,0.3)',
         transform: `translateY(${dragY}px)`, transition: startRef.current ? 'none' : 'transform 0.2s ease',
-        cursor: 'pointer', touchAction: 'none', userSelect: 'none',
+        cursor: 'pointer', touchAction: 'pan-x', userSelect: 'none', WebkitTapHighlightColor: 'transparent',
       }}>
-      <div style={{ position: 'relative', flexShrink: 0 }}>
+      <div style={{ position: 'relative', flexShrink: 0, pointerEvents: 'none' }}>
         {toast.kind === 'notice' ? (
-          toast.icon ? (
-            <div style={{ width: 42, height: 42, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: toast.icon === 'warning' ? `${theme.danger}22` : `${theme.coral}22` }}>
-              {toast.icon === 'warning' ? <Flag size={19} color={theme.danger} /> : <Mail size={19} color={theme.coral} />}
-            </div>
-          ) : toast.isGroupIcon ? <GroupAvatar avatar={toast.groupAvatar} name={toast.title} size={42} /> : <Avatar emoji={toast.avatar} name={toast.avatarName} size={42} />
+          toast.icon ? <MailBadgeIcon type={toast.icon === 'warning' ? 'report_warning' : toast.icon === 'mention' ? 'mention' : 'mail'} size={42} />
+            : toast.isGroupIcon ? <GroupAvatar avatar={toast.groupAvatar} name={toast.title} size={42} /> : <Avatar emoji={toast.avatar} name={toast.avatarName} size={42} />
         ) : toast.kind === 'group'
           ? <GroupAvatar avatar={toast.groupAvatar} name={toast.title} size={42} />
           : <Avatar emoji={toast.avatar} name={toast.avatarName} size={42} />}
@@ -5000,7 +5009,7 @@ function InAppMessageToast({ toast, top, onOpen, onDismiss }) {
           </div>
         )}
       </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ flex: 1, minWidth: 0, pointerEvents: 'none' }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
           <span style={{ fontSize: 13.5, fontWeight: 800, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{toast.title}</span>
           <span style={{ fontSize: 10.5, color: theme.muted, flexShrink: 0 }}>now</span>
@@ -5054,6 +5063,8 @@ function MessageContextMenu({ message, isMine, canEditText, canModerate, anchorR
   const [measured, setMeasured] = useState({ menu: 0, bubble: 0 });
   const menuRef = useRef(null);
   const bubbleRef = useRef(null);
+  const openedAtRef = useRef(Date.now());
+  const guard = (fn) => (...args) => { if (Date.now() - openedAtRef.current < 450) return; if (fn) fn(...args); };
   const stickerMatch = message.type === 'sticker' ? STICKERS.find((s) => s.file === message.content) : null;
 
   useEffect(() => {
@@ -5076,7 +5087,7 @@ function MessageContextMenu({ message, isMine, canEditText, canModerate, anchorR
   const ready = measured.menu > 0;
 
   const row = (icon, label, onClick, danger) => (
-    <div onClick={onClick} style={{
+    <div onClick={guard(onClick)} style={{
       display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: '12px 16px', cursor: 'pointer',
       fontSize: 14.5, fontWeight: 600, color: danger ? theme.danger : theme.ink, borderTop: `1px solid ${theme.border}`,
     }}>
@@ -5086,7 +5097,7 @@ function MessageContextMenu({ message, isMine, canEditText, canModerate, anchorR
   );
 
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 95 }}>
+    <div onClick={guard(onClose)} onContextMenu={(e) => e.preventDefault()} style={{ position: 'fixed', inset: 0, zIndex: 95 }}>
       <div className="zchat-fade" style={{
         position: 'absolute', inset: 0,
         background: theme.dark ? 'rgba(3,6,14,0.5)' : 'rgba(235,239,247,0.5)',
@@ -5099,7 +5110,7 @@ function MessageContextMenu({ message, isMine, canEditText, canModerate, anchorR
           background: theme.panelBg, boxShadow: '0 8px 28px rgba(0,0,0,0.28)', opacity: ready ? 1 : 0,
         }}>
           {REACTION_EMOJIS.map((e) => (
-            <div key={e} onClick={() => onReact(e)} style={{ fontSize: 25, cursor: 'pointer', padding: '0 2px', lineHeight: 1 }}>{e}</div>
+            <div key={e} onClick={guard(() => onReact(e))} style={{ fontSize: 25, cursor: 'pointer', padding: '0 2px', lineHeight: 1 }}>{e}</div>
           ))}
           <div onClick={() => setShowFullEmoji(true)} style={{
             width: 30, height: 30, borderRadius: '50%', background: theme.rowBg, display: 'flex',
@@ -5357,7 +5368,7 @@ async function exportVideoOverlay(item) {
   return blob ? new File([blob], 'overlay.png', { type: 'image/png' }) : null;
 }
 
-function MediaComposer({ files, recipientName, onCancel, onSend, onActivity }) {
+function MediaComposer({ files, recipientName, onCancel, onSend, onActivity, mode: composerMode = 'chat', mentionGroups = [], myId }) {
   const { theme } = useTheme();
   const [items, setItems] = useState(() => files.map((f, i) => ({
     id: `${Date.now()}-${i}`, kind: (f.type || '').startsWith('video') ? 'video' : 'image', file: f, url: URL.createObjectURL(f),
@@ -5374,6 +5385,9 @@ function MediaComposer({ files, recipientName, onCancel, onSend, onActivity }) {
   const [brushSize, setBrushSize] = useState(BRUSH_SIZES[1]);
   const [textDraft, setTextDraft] = useState(null);
   const [playing, setPlaying] = useState(false);
+  const [mentions, setMentions] = useState([]);
+  const [showMentionPicker, setShowMentionPicker] = useState(false);
+  const isStory = composerMode === 'story';
   const stageRef = useRef(null);
   const innerRef = useRef(null);
   const videoRef = useRef(null);
@@ -5630,7 +5644,7 @@ function MediaComposer({ files, recipientName, onCancel, onSend, onActivity }) {
         }
       }
       sentRef.current = true;
-      onSend(outputs, caption.trim());
+      onSend(outputs, caption.trim(), mentions);
     } catch {
       setSending(false);
     }
@@ -5665,6 +5679,7 @@ function MediaComposer({ files, recipientName, onCancel, onSend, onActivity }) {
               {cur.kind === 'video' && cur.duration > 1 && toolBtn(<Scissors size={18} />, 'Trim', () => { setMode('trim'); if (videoRef.current) videoRef.current.pause(); })}
               {toolBtn(<Type size={18} />, 'Add text', () => setTextDraft({ id: null, text: '', color: '#FFFFFF', size: 0.07 }))}
               {toolBtn(<Pencil size={18} />, 'Draw', () => { setMode('draw'); if (videoRef.current) videoRef.current.pause(); })}
+              {isStory && toolBtn(<AtSign size={18} />, 'Mention', () => setShowMentionPicker(true))}
             </div>
           </>
         )}
@@ -5832,18 +5847,44 @@ function MediaComposer({ files, recipientName, onCancel, onSend, onActivity }) {
               ))}
             </div>
           )}
+          {isStory && mentions.length > 0 && (
+            <div style={{ display: 'flex', gap: 6, padding: '8px 12px 0', overflowX: 'auto' }}>
+              {mentions.map((mn) => (
+                <div key={`${mn.kind}-${mn.id}`} onClick={() => setMentions((prev) => prev.filter((x) => !(x.id === mn.id && x.kind === mn.kind)))} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '5px 10px', borderRadius: 14, background: 'rgba(255,255,255,0.16)', fontSize: 12.5, fontWeight: 700, whiteSpace: 'nowrap', cursor: 'pointer' }}>
+                  {mn.kind === 'group' ? <Users size={12} /> : <AtSign size={12} />}{mn.label}<X size={12} />
+                </div>
+              ))}
+            </div>
+          )}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px 0' }}>
             <input value={caption} onChange={(e) => setCaption(e.target.value.slice(0, MAX_CHARS))} placeholder="Add a caption"
               onKeyDown={(e) => { if (e.key === 'Enter' && !isTouchDevice()) { e.preventDefault(); send(); } }}
               style={{ flex: 1, minWidth: 0, padding: '12px 16px', borderRadius: 24, border: 'none', outline: 'none', background: 'rgba(255,255,255,0.14)', color: 'white', fontFamily: FONT, fontSize: 15 }} />
-            <div onPointerDown={(e) => e.preventDefault()} onClick={send} role="button" aria-label="Send" style={{
-              width: 48, height: 48, borderRadius: '50%', background: theme.coral, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0,
-            }}>{sending ? <Spinner size={18} /> : <Send size={20} color="white" style={{ marginLeft: -2 }} />}</div>
+            {isStory ? (
+              <div onPointerDown={(e) => e.preventDefault()} onClick={send} role="button" aria-label="Share to your story" style={{
+                height: 48, padding: '0 16px', borderRadius: 24, background: 'white', color: '#000', display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', flexShrink: 0, fontWeight: 800, fontSize: 14,
+              }}>{sending ? <Spinner size={16} color="#000" /> : <><Sparkles size={16} /> Your story</>}</div>
+            ) : (
+              <div onPointerDown={(e) => e.preventDefault()} onClick={send} role="button" aria-label="Send" style={{
+                width: 48, height: 48, borderRadius: '50%', background: theme.coral, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0,
+              }}>{sending ? <Spinner size={18} /> : <Send size={20} color="white" style={{ marginLeft: -2 }} />}</div>
+            )}
           </div>
-          {recipientName && <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.6)', padding: '6px 18px 0' }}>To {recipientName}</div>}
+          {isStory
+            ? <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.6)', padding: '6px 18px 0' }}>Shared with your followers for 24 hours</div>
+            : recipientName && <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.6)', padding: '6px 18px 0' }}>To {recipientName}</div>}
         </div>
       )}
 
+      {showMentionPicker && (
+        <StoryMentionPicker myId={myId} groups={mentionGroups} onClose={() => setShowMentionPicker(false)}
+          onPick={(mn) => {
+            setShowMentionPicker(false);
+            setMentions((prev) => (prev.some((x) => x.id === mn.id && x.kind === mn.kind) ? prev : [...prev, mn]));
+            const r = cur.crop || { x: 0, y: 0, w: 1, h: 1 };
+            updateItem(cur.id, (it) => ({ texts: [...it.texts, { id: `m${Date.now()}`, text: `@${mn.label}`, color: '#FFFFFF', size: 0.06, x: r.x + r.w / 2, y: r.y + r.h * (0.62 + Math.min(0.24, it.texts.length * 0.08)) }] }));
+          }} />
+      )}
       {textDraft && (
         <div onClick={saveText} style={{ position: 'absolute', inset: 0, zIndex: 5, background: 'rgba(0,0,0,0.6)', display: 'flex', flexDirection: 'column', paddingTop: 'env(safe-area-inset-top)' }}>
           <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px' }}>
@@ -6132,6 +6173,556 @@ function ChatMediaPanel({ title, messages, labelFor, onClose, onOpenImage, onOpe
   );
 }
 
+const NAME_MAX = 30;
+const USERNAME_MAX = 30;
+const BIO_MAX = 150;
+const STORY_MENTION_TEXT = 'Mentioned you in their story';
+const STORY_GROUP_MENTION_TEXT = 'Mentioned this group in their story';
+const STORY_IMAGE_MS = 5000;
+
+function usernameProblem(u) {
+  if (!u) return 'Choose a username';
+  if (u.length < 3) return 'Use at least 3 characters';
+  if (u.length > USERNAME_MAX) return `Use ${USERNAME_MAX} characters or fewer`;
+  if (!/^[a-z0-9._]+$/.test(u)) return 'Only letters, numbers, periods and underscores';
+  if (u.startsWith('.') || u.endsWith('.')) return "Usernames can't start or end with a period";
+  if (u.includes('..')) return "Usernames can't have two periods in a row";
+  if (/^[0-9._]+$/.test(u)) return 'Add at least one letter';
+  return '';
+}
+
+function timeShort(iso) {
+  const diff = Math.max(0, Date.now() - new Date(iso).getTime());
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'now';
+  if (mins < 60) return `${mins}m`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h`;
+  return `${Math.floor(hrs / 24)}d`;
+}
+
+function MailBadgeIcon({ type, size = 42 }) {
+  const warning = type === 'report_warning';
+  const mention = type === 'mention';
+  const bg = warning ? 'linear-gradient(135deg, #FF5F6D 0%, #FF2E4D 55%, #B3122E 100%)'
+    : mention ? 'linear-gradient(135deg, #7C5CFC 0%, #2E7CF6 100%)'
+      : 'linear-gradient(135deg, #2E7CF6 0%, #00C2A8 100%)';
+  return (
+    <div style={{
+      width: size, height: size, borderRadius: size * 0.32, flexShrink: 0, position: 'relative',
+      background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center',
+      boxShadow: warning ? '0 4px 14px rgba(255,46,77,0.35)' : '0 4px 14px rgba(46,124,246,0.3)',
+    }}>
+      {warning ? <ShieldAlert size={size * 0.5} color="white" strokeWidth={2.2} />
+        : mention ? <AtSign size={size * 0.46} color="white" strokeWidth={2.4} />
+          : <span style={{ fontFamily: 'Georgia, serif', fontWeight: 800, fontSize: size * 0.5, color: 'white', lineHeight: 1 }}>Z</span>}
+      <div style={{ position: 'absolute', inset: 0, borderRadius: size * 0.32, boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.35)', pointerEvents: 'none' }} />
+    </div>
+  );
+}
+
+function mailSenderName(type) {
+  if (type === 'report_warning') return 'ZChat Safety';
+  if (type === 'mention') return 'ZChat Mentions';
+  return 'ZChat Team';
+}
+
+function VerifiedTick({ size = 13 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" style={{ flexShrink: 0 }}>
+      <path fill="#2E7CF6" d="M12 1.5l2.6 1.9 3.2-.2 1 3 2.7 1.8-.9 3.1.9 3.1-2.7 1.8-1 3-3.2-.2L12 22.5l-2.6-1.9-3.2.2-1-3-2.7-1.8.9-3.1-.9-3.1 2.7-1.8 1-3 3.2.2z" />
+      <path d="M7.5 12.2l3 3 6-6.2" fill="none" stroke="white" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function StoryAvatar({ profile, size = 64, ring = 'none', onClick, badgePlus = false, dim = false }) {
+  const { theme } = useTheme();
+  const pad = ring === 'none' ? 0 : 3;
+  const ringBg = ring === 'unseen'
+    ? `conic-gradient(from 210deg, ${theme.coral}, ${theme.teal}, ${theme.gold}, ${theme.coral})`
+    : ring === 'seen' ? theme.border : 'transparent';
+  return (
+    <div onClick={onClick} style={{ position: 'relative', width: size, height: size, flexShrink: 0, cursor: onClick ? 'pointer' : 'default', opacity: dim ? 0.55 : 1 }}>
+      <div style={{ width: size, height: size, borderRadius: '50%', padding: pad, boxSizing: 'border-box', background: ringBg }}>
+        <div style={{ width: '100%', height: '100%', borderRadius: '50%', padding: ring === 'none' ? 0 : 2, boxSizing: 'border-box', background: theme.panelBg }}>
+          <Avatar emoji={profile?.avatar} name={profile?.name || '?'} size={size - (ring === 'none' ? 0 : 10)} />
+        </div>
+      </div>
+      {badgePlus && (
+        <div style={{ position: 'absolute', right: 0, bottom: 0, width: size * 0.32, height: size * 0.32, borderRadius: '50%', background: theme.coral, border: `2.5px solid ${theme.panelBg}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800, fontSize: size * 0.22, lineHeight: 1 }}>+</div>
+      )}
+    </div>
+  );
+}
+
+function StoryTray({ me, myStories, trayUsers, seen, onAdd, onOpen }) {
+  const { theme } = useTheme();
+  const hasMine = myStories.length > 0;
+  const label = (text, highlight) => (
+    <div style={{ fontSize: 11, fontWeight: highlight ? 700 : 600, color: highlight ? theme.ink : theme.muted, marginTop: 5, maxWidth: 66, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'center' }}>{text}</div>
+  );
+  return (
+    <div style={{ display: 'flex', gap: 12, padding: '2px 14px 12px', overflowX: 'auto', flexShrink: 0, WebkitOverflowScrolling: 'touch' }}>
+      <div onClick={onAdd} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'pointer', flexShrink: 0 }}>
+        <div style={{ width: 62, height: 62, borderRadius: '50%', border: `1.5px dashed ${theme.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.coral, background: theme.rowBg, boxSizing: 'border-box' }}>
+          <span style={{ fontSize: 30, fontWeight: 300, lineHeight: 1 }}>+</span>
+        </div>
+        {label('Add story', true)}
+      </div>
+      <div onClick={() => (hasMine ? onOpen(me.id) : onAdd())} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0, cursor: 'pointer' }}>
+        <StoryAvatar profile={me} size={62} ring={hasMine ? (myStories.every((s) => seen.has(s.id)) ? 'seen' : 'unseen') : 'none'} badgePlus={!hasMine} />
+        {label('Your story', true)}
+      </div>
+      {trayUsers.map((u) => {
+        const allSeen = u.stories.every((s) => seen.has(s.id));
+        return (
+          <div key={u.profile.id} onClick={() => onOpen(u.profile.id)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0, cursor: 'pointer' }}>
+            <StoryAvatar profile={u.profile} size={62} ring={allSeen ? 'seen' : 'unseen'} />
+            {label((u.profile.name || u.profile.username || '').split(' ')[0], !allSeen)}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function AvatarPeek({ profile, online, lastSeen, hasStory, storySeen, onClose, onMessage, onProfile, onStory }) {
+  const { theme } = useTheme();
+  const photo = typeof profile.avatar === 'string' && profile.avatar.startsWith('http') ? profile.avatar : '';
+  const action = (icon, label, onClick, highlight) => (
+    <div onClick={() => { onClose(); onClick(); }} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '12px 4px', cursor: 'pointer', color: highlight ? theme.coral : theme.ink }}>
+      {icon}
+      <span style={{ fontSize: 12, fontWeight: 700 }}>{label}</span>
+    </div>
+  );
+  return (
+    <div onClick={onClose} className="zchat-fade" style={{
+      position: 'fixed', inset: 0, zIndex: 96, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
+      background: theme.dark ? 'rgba(3,6,14,0.55)' : 'rgba(230,234,244,0.55)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
+    }}>
+      <div onClick={(e) => e.stopPropagation()} className="zchat-pop" style={{ width: '100%', maxWidth: 300, borderRadius: 26, overflow: 'hidden', background: theme.panelBg, boxShadow: '0 24px 60px rgba(0,0,0,0.45)' }}>
+        <div onClick={() => { if (hasStory) { onClose(); onStory(); } }} style={{ position: 'relative', aspectRatio: '1 / 1', background: photo ? '#000' : colorForName(profile.name), cursor: hasStory ? 'pointer' : 'default' }}>
+          {photo
+            ? <img src={photo} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+            : <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 110, fontWeight: 800, color: 'rgba(255,255,255,0.92)' }}>{(profile.name || '?').charAt(0).toUpperCase()}</div>}
+          <div style={{ position: 'absolute', left: 0, right: 0, top: 0, padding: '12px 14px 26px', background: 'linear-gradient(180deg, rgba(0,0,0,0.6), rgba(0,0,0,0))', color: 'white' }}>
+            <div style={{ fontSize: 16, fontWeight: 800 }}>{profile.name}</div>
+            <div style={{ fontSize: 11.5, opacity: 0.85 }}>{online ? 'Online now' : lastSeen || `@${profile.username}`}</div>
+          </div>
+          {hasStory && (
+            <div style={{ position: 'absolute', right: 12, bottom: 12, display: 'flex', alignItems: 'center', gap: 6, padding: '6px 11px', borderRadius: 20, background: 'rgba(0,0,0,0.5)', color: 'white', fontSize: 11.5, fontWeight: 700 }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: storySeen ? '#B9BCC3' : theme.teal }} />
+              {storySeen ? 'Status' : 'New status'}
+            </div>
+          )}
+        </div>
+        <div style={{ display: 'flex', borderTop: `1px solid ${theme.border}` }}>
+          {action(<Send size={20} />, 'Message', onMessage)}
+          {action(<User size={20} />, 'Profile', onProfile)}
+          {hasStory && action(<Sparkles size={20} />, 'View status', onStory, true)}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StoryMentionPicker({ myId, groups, onPick, onClose }) {
+  const { theme } = useTheme();
+  const [q, setQ] = useState('');
+  const [people, setPeople] = useState([]);
+  useEffect(() => {
+    const term = q.trim().replace(/^@/, '');
+    if (term.length < 1) { setPeople([]); return undefined; }
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      const { data } = await searchByUsername(term);
+      if (!cancelled) setPeople(sanitizeAvatarList(data, myId).filter((p) => p.id !== myId && !p.is_deleted).slice(0, 12));
+    }, 220);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [q]);
+  const term = q.trim().replace(/^@/, '').toLowerCase();
+  const groupMatches = (groups || []).filter((g) => !term || (g.name || '').toLowerCase().includes(term)).slice(0, 8);
+  return (
+    <div onClick={onClose} style={{ position: 'absolute', inset: 0, zIndex: 8, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'flex-end' }}>
+      <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ width: '100%', maxHeight: '70%', background: '#11151F', borderRadius: '22px 22px 0 0', display: 'flex', flexDirection: 'column', paddingBottom: 'env(safe-area-inset-bottom)' }}>
+        <div style={{ padding: '14px 16px 8px', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <AtSign size={18} color="white" />
+          <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Mention people or groups"
+            style={{ flex: 1, background: 'rgba(255,255,255,0.1)', border: 'none', outline: 'none', color: 'white', borderRadius: 18, padding: '10px 14px', fontFamily: FONT, fontSize: 15 }} />
+          <X size={20} color="white" style={{ cursor: 'pointer' }} onClick={onClose} />
+        </div>
+        <div style={{ overflowY: 'auto', padding: '4px 8px 12px' }}>
+          {groupMatches.map((g) => (
+            <div key={`g-${g.id}`} onClick={() => onPick({ id: g.id, kind: 'group', label: g.name })} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px', cursor: 'pointer', color: 'white' }}>
+              <GroupAvatar avatar={g.avatar} name={g.name} size={38} />
+              <div><div style={{ fontWeight: 700, fontSize: 14 }}>{g.name}</div><div style={{ fontSize: 11.5, opacity: 0.6 }}>Group</div></div>
+            </div>
+          ))}
+          {people.map((p) => (
+            <div key={p.id} onClick={() => onPick({ id: p.id, kind: 'user', label: p.username })} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px', cursor: 'pointer', color: 'white' }}>
+              <Avatar emoji={p.avatar} name={p.name} size={38} />
+              <div><div style={{ fontWeight: 700, fontSize: 14 }}>{p.name}</div><div style={{ fontSize: 11.5, opacity: 0.6 }}>@{p.username}</div></div>
+            </div>
+          ))}
+          {!groupMatches.length && !people.length && (
+            <div style={{ textAlign: 'center', padding: 20, fontSize: 13, color: 'rgba(255,255,255,0.6)' }}>{term ? 'No one found' : 'Type a name to mention someone'}</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StoryViewersSheet({ story, myId, onClose, onOpenProfile }) {
+  const { theme } = useTheme();
+  const [rows, setRows] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data: views } = await supabase.from('story_views').select('*').eq('story_id', story.id);
+      const { data: likes } = await supabase.from('story_likes').select('*').eq('story_id', story.id);
+      const ids = [...new Set([...(views || []).map((v) => v.viewer_id), ...(likes || []).map((l) => l.user_id)])].filter((id) => id !== myId);
+      if (!ids.length) { if (!cancelled) setRows([]); return; }
+      const { data: profs } = await supabase.from('profiles').select('*').in('id', ids);
+      const likedSet = new Set((likes || []).map((l) => l.user_id));
+      const viewedAt = {};
+      (views || []).forEach((v) => { viewedAt[v.viewer_id] = v.viewed_at; });
+      const list = sanitizeAvatarList(profs, myId).map((p) => ({ profile: p, liked: likedSet.has(p.id), at: viewedAt[p.id] }))
+        .sort((a, b) => (b.liked - a.liked) || (new Date(b.at || 0) - new Date(a.at || 0)));
+      if (!cancelled) setRows(list);
+    })();
+    return () => { cancelled = true; };
+  }, [story.id]);
+  return (
+    <div onClick={onClose} style={{ position: 'absolute', inset: 0, zIndex: 9, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end' }}>
+      <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ width: '100%', maxHeight: '65%', background: theme.panelBg, borderRadius: '22px 22px 0 0', display: 'flex', flexDirection: 'column', paddingBottom: 'env(safe-area-inset-bottom)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderBottom: `1px solid ${theme.border}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, fontSize: 15, color: theme.ink }}><Eye size={18} /> {rows ? `${rows.length} ${rows.length === 1 ? 'viewer' : 'viewers'}` : 'Viewers'}</div>
+          <X size={20} color={theme.muted} style={{ cursor: 'pointer' }} onClick={onClose} />
+        </div>
+        <div style={{ overflowY: 'auto', padding: '4px 10px 14px' }}>
+          {rows === null && <div style={{ display: 'flex', justifyContent: 'center', padding: 24 }}><Spinner color={theme.ink} /></div>}
+          {rows && !rows.length && <div style={{ textAlign: 'center', padding: 24, fontSize: 13, color: theme.muted }}>No views yet</div>}
+          {rows && rows.map((r) => (
+            <div key={r.profile.id} onClick={() => onOpenProfile(r.profile)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 8px', cursor: 'pointer' }}>
+              <Avatar emoji={r.profile.avatar} name={r.profile.name} size={42} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: 14, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.profile.name}</div>
+                <div style={{ fontSize: 11.5, color: theme.muted }}>@{r.profile.username}{r.at ? ` · ${timeShort(r.at)}` : ''}</div>
+              </div>
+              {r.liked && <Heart size={18} color="#FF3B5C" fill="#FF3B5C" />}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StoryViewer({ groupsList, startGroup = 0, startStoryId = null, myId, seen, liked, onSeen, onClose, onLike, onReply, onRepost, onDelete, onReport, onOpenProfile, onOpenMention }) {
+  const [gi, setGi] = useState(startGroup);
+  const [si, setSi] = useState(() => {
+    const g = groupsList[startGroup];
+    if (!g) return 0;
+    if (startStoryId) {
+      const at = g.stories.findIndex((s) => s.id === startStoryId);
+      if (at >= 0) return at;
+    }
+    const idx = g.stories.findIndex((s) => !seen.has(s.id));
+    return idx >= 0 && g.profile.id !== myId ? idx : 0;
+  });
+  const [progress, setProgress] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const [holding, setHolding] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [muted, setMuted] = useState(false);
+  const [reply, setReply] = useState('');
+  const [replyFocus, setReplyFocus] = useState(false);
+  const [showViewers, setShowViewers] = useState(false);
+  const [menu, setMenu] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [flash, setFlash] = useState('');
+  const [viewCount, setViewCount] = useState(null);
+  const [likeBurst, setLikeBurst] = useState(false);
+  const videoRef = useRef(null);
+  const elapsedRef = useRef(0);
+  const lastTickRef = useRef(0);
+  const durationRef = useRef(STORY_IMAGE_MS);
+  const pressRef = useRef(null);
+
+  const group = groupsList[gi];
+  const story = group ? group.stories[Math.min(si, group.stories.length - 1)] : null;
+  const isMine = group && group.profile.id === myId;
+  const stopped = paused || holding || replyFocus || showViewers || menu || confirmDelete || !loaded;
+
+  useEffect(() => {
+    if (!story) return;
+    elapsedRef.current = 0;
+    setProgress(0);
+    setLoaded(false);
+    durationRef.current = STORY_IMAGE_MS;
+    onSeen(story);
+    setViewCount(null);
+    if (group.profile.id === myId) {
+      supabase.from('story_views').select('*', { count: 'exact', head: true }).eq('story_id', story.id).then(({ count }) => setViewCount(count || 0));
+    }
+  }, [story && story.id]);
+
+  useEffect(() => {
+    let frame = 0;
+    lastTickRef.current = performance.now();
+    const tick = (t) => {
+      const dt = t - lastTickRef.current;
+      lastTickRef.current = t;
+      if (!stopped) {
+        elapsedRef.current += dt;
+        const p = Math.min(1, elapsedRef.current / durationRef.current);
+        setProgress(p);
+        if (p >= 1) { goNext(); return; }
+      }
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [stopped, gi, si]);
+
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v) return;
+    if (stopped && loaded) v.pause(); else if (!stopped) v.play().catch(() => { setMuted(true); });
+  }, [stopped, loaded, story && story.id]);
+
+  if (!group || !story) return null;
+
+  function goNext() {
+    if (si < group.stories.length - 1) { setSi(si + 1); return; }
+    if (gi < groupsList.length - 1) {
+      const nextGroup = groupsList[gi + 1];
+      const idx = nextGroup.stories.findIndex((s) => !seen.has(s.id));
+      setGi(gi + 1);
+      setSi(idx >= 0 ? idx : 0);
+      return;
+    }
+    onClose();
+  }
+  function goPrev() {
+    if (si > 0) { setSi(si - 1); return; }
+    if (gi > 0) { setSi(groupsList[gi - 1].stories.length - 1); setGi(gi - 1); return; }
+    elapsedRef.current = 0;
+    setProgress(0);
+    if (videoRef.current) videoRef.current.currentTime = 0;
+  }
+
+  const onDown = (e) => {
+    if (e.target.closest && e.target.closest('[data-story-control]')) return;
+    pressRef.current = { x: e.clientX, y: e.clientY, t: Date.now() };
+    setHolding(true);
+  };
+  const onUp = (e) => {
+    const p = pressRef.current;
+    pressRef.current = null;
+    setHolding(false);
+    if (!p) return;
+    const dx = e.clientX - p.x;
+    const dy = e.clientY - p.y;
+    if (dy > 90 && Math.abs(dy) > Math.abs(dx)) { onClose(); return; }
+    if (Date.now() - p.t > 260 || Math.abs(dx) > 14 || Math.abs(dy) > 14) return;
+    const width = e.currentTarget.getBoundingClientRect().width;
+    if (e.clientX < width * 0.32) goPrev(); else goNext();
+  };
+
+  const isLiked = liked.has(story.id);
+  const toggleLike = () => {
+    if (!isLiked) { setLikeBurst(true); setTimeout(() => setLikeBurst(false), 700); }
+    onLike(story, !isLiked);
+  };
+  const sendReply = async () => {
+    const text = reply.trim();
+    if (!text) return;
+    setReply('');
+    await onReply(story, group.profile, text);
+    setFlash('Sent');
+    setTimeout(() => setFlash(''), 1400);
+  };
+  const mentions = Array.isArray(story.mentions) ? story.mentions : [];
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 250, background: '#000', display: 'flex', justifyContent: 'center' }} className="zchat-fade">
+      <div style={{ position: 'relative', width: '100%', maxWidth: 520, height: '100%', overflow: 'hidden', color: 'white' }}>
+        <div onPointerDown={onDown} onPointerUp={onUp} onPointerCancel={() => { pressRef.current = null; setHolding(false); }}
+          onDoubleClick={() => { if (!isMine) toggleLike(); }}
+          style={{ position: 'absolute', inset: 0, touchAction: 'none', userSelect: 'none' }}>
+          {story.media_type === 'video' ? (
+            <video key={story.id} ref={videoRef} src={story.media_url} playsInline autoPlay muted={muted}
+              onLoadedMetadata={(e) => { const d = e.currentTarget.duration; durationRef.current = Number.isFinite(d) && d > 0 ? Math.min(d, 60) * 1000 : 15000; setLoaded(true); }}
+              onError={() => setLoaded(true)}
+              style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block', pointerEvents: 'none' }} />
+          ) : (
+            <img key={story.id} src={story.media_url} alt="" draggable={false} onLoad={() => setLoaded(true)} onError={() => setLoaded(true)}
+              style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block', pointerEvents: 'none' }} />
+          )}
+          {story.overlay_url && story.media_type === 'video' && (
+            <img src={story.overlay_url} alt="" draggable={false} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }} />
+          )}
+          {!loaded && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Spinner size={26} /></div>}
+          {likeBurst && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none', animation: 'zchat-heart-burst 0.7s ease' }}><Heart size={110} color="#FF3B5C" fill="#FF3B5C" /></div>}
+        </div>
+
+        <div style={{ position: 'absolute', left: 0, right: 0, top: 0, padding: 'calc(8px + env(safe-area-inset-top)) 10px 28px', background: 'linear-gradient(180deg, rgba(0,0,0,0.55), rgba(0,0,0,0))', pointerEvents: 'none' }}>
+          <div style={{ display: 'flex', gap: 3 }}>
+            {group.stories.map((s, i) => (
+              <div key={s.id} style={{ flex: 1, height: 2.5, borderRadius: 2, background: 'rgba(255,255,255,0.35)', overflow: 'hidden' }}>
+                <div style={{ height: '100%', background: 'white', width: `${i < si ? 100 : i === si ? progress * 100 : 0}%` }} />
+              </div>
+            ))}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10, pointerEvents: 'auto' }} data-story-control>
+            <div onClick={() => onOpenProfile(group.profile)} style={{ display: 'flex', alignItems: 'center', gap: 9, flex: 1, minWidth: 0, cursor: 'pointer' }}>
+              <Avatar emoji={group.profile.avatar} name={group.profile.name} size={34} />
+              <div style={{ minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 7 }}>
+                  <span style={{ fontWeight: 800, fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{isMine ? 'Your story' : group.profile.name}</span>
+                  <span style={{ fontSize: 12, opacity: 0.75, flexShrink: 0 }}>{timeShort(story.created_at)}</span>
+                </div>
+                {story.repost_of && <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, opacity: 0.8 }}><Repeat size={11} /> Reposted{story.repost_label ? ` from @${story.repost_label}` : ''}</div>}
+              </div>
+            </div>
+            {story.media_type === 'video' && (
+              <div onClick={() => setMuted((m) => !m)} style={{ padding: 6, cursor: 'pointer' }}>{muted ? <VolumeX size={20} color="white" /> : <Volume2 size={20} color="white" />}</div>
+            )}
+            <div onClick={() => setMenu(true)} style={{ padding: 6, cursor: 'pointer' }}><MoreVertical size={20} color="white" /></div>
+            <div onClick={onClose} style={{ padding: 6, cursor: 'pointer' }}><X size={22} color="white" /></div>
+          </div>
+        </div>
+
+        {(story.caption || mentions.length > 0) && (
+          <div data-story-control style={{ position: 'absolute', left: 14, right: 14, bottom: 'calc(84px + env(safe-area-inset-bottom))', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+            {story.caption && <div style={{ background: 'rgba(0,0,0,0.45)', padding: '8px 14px', borderRadius: 14, fontSize: 14.5, fontWeight: 600, textAlign: 'center', maxWidth: '100%', wordBreak: 'break-word' }}>{story.caption}</div>}
+            {mentions.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'center' }}>
+                {mentions.map((mn) => (
+                  <div key={`${mn.kind}-${mn.id}`} onClick={() => onOpenMention(mn)} style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(255,255,255,0.92)', color: '#111', padding: '5px 11px', borderRadius: 14, fontSize: 12.5, fontWeight: 800, cursor: 'pointer' }}>
+                    {mn.kind === 'group' ? <Users size={13} /> : <AtSign size={13} />}{mn.label}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        <div data-story-control style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '14px 12px', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))', background: 'linear-gradient(0deg, rgba(0,0,0,0.6), rgba(0,0,0,0))', display: 'flex', alignItems: 'center', gap: 10 }}>
+          {isMine ? (
+            <>
+              <div onClick={() => setShowViewers(true)} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 14px', borderRadius: 22, background: 'rgba(255,255,255,0.14)', cursor: 'pointer', fontSize: 13.5, fontWeight: 700 }}>
+                <Eye size={17} /> {viewCount == null ? 'Viewers' : `${viewCount} ${viewCount === 1 ? 'viewer' : 'viewers'}`}
+              </div>
+              <div style={{ flex: 1 }} />
+              <div onClick={() => setConfirmDelete(true)} style={{ width: 42, height: 42, borderRadius: '50%', background: 'rgba(255,255,255,0.14)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><Trash2 size={18} color="white" /></div>
+            </>
+          ) : (
+            <>
+              <input value={reply} onChange={(e) => setReply(e.target.value.slice(0, 1000))} onFocus={() => setReplyFocus(true)} onBlur={() => setReplyFocus(false)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); sendReply(); } }}
+                placeholder={`Reply to ${(group.profile.name || '').split(' ')[0]}`}
+                style={{ flex: 1, minWidth: 0, padding: '11px 16px', borderRadius: 24, border: '1.5px solid rgba(255,255,255,0.55)', background: 'rgba(0,0,0,0.25)', color: 'white', outline: 'none', fontFamily: FONT, fontSize: 15 }} />
+              {reply.trim() ? (
+                <div onPointerDown={(e) => e.preventDefault()} onClick={sendReply} style={{ padding: '10px 14px', fontWeight: 800, fontSize: 14.5, cursor: 'pointer' }}>Send</div>
+              ) : (
+                <>
+                  <div onClick={toggleLike} style={{ padding: 6, cursor: 'pointer' }}><Heart size={26} color={isLiked ? '#FF3B5C' : 'white'} fill={isLiked ? '#FF3B5C' : 'none'} /></div>
+                  <div onClick={async () => { await onRepost(story, group.profile); setFlash('Added to your story'); setTimeout(() => setFlash(''), 1600); }} style={{ padding: 6, cursor: 'pointer' }}><Repeat size={24} color="white" /></div>
+                </>
+              )}
+            </>
+          )}
+        </div>
+
+        {flash && <div style={{ position: 'absolute', left: '50%', top: '45%', transform: 'translate(-50%, -50%)', background: 'rgba(0,0,0,0.7)', padding: '9px 16px', borderRadius: 20, fontSize: 13.5, fontWeight: 700 }} className="zchat-pop">{flash}</div>}
+
+        {menu && (
+          <div onClick={() => setMenu(false)} style={{ position: 'absolute', inset: 0, zIndex: 9, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'flex-end' }}>
+            <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ width: '100%', background: '#11151F', borderRadius: '22px 22px 0 0', padding: '8px 0', paddingBottom: 'calc(8px + env(safe-area-inset-bottom))' }}>
+              {isMine ? (
+                <div onClick={() => { setMenu(false); setConfirmDelete(true); }} style={{ padding: '15px 22px', color: '#FF5A6A', fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>Delete story</div>
+              ) : (
+                <>
+                  <div onClick={() => { setMenu(false); onOpenProfile(group.profile); }} style={{ padding: '15px 22px', fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>View profile</div>
+                  <div onClick={() => { setMenu(false); onReport(group.profile); }} style={{ padding: '15px 22px', color: '#FF5A6A', fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>Report</div>
+                </>
+              )}
+              <div onClick={() => setMenu(false)} style={{ padding: '15px 22px', opacity: 0.7, fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>Cancel</div>
+            </div>
+          </div>
+        )}
+        {showViewers && <StoryViewersSheet story={story} myId={myId} onClose={() => setShowViewers(false)} onOpenProfile={(p) => { setShowViewers(false); onOpenProfile(p); }} />}
+        {confirmDelete && (
+          <ConfirmDialog title="Delete this story?" body="It will be removed for everyone right away."
+            onCancel={() => setConfirmDelete(false)}
+            onConfirm={async () => { setConfirmDelete(false); const remaining = group.stories.length - 1; await onDelete(story); if (remaining <= 0) onClose(); else if (si >= remaining) setSi(remaining - 1); }} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function StoryRefCard({ m, isMe, onOpen }) {
+  const { theme } = useTheme();
+  const isMention = m.content === STORY_MENTION_TEXT || m.content === STORY_GROUP_MENTION_TEXT;
+  const label = isMention
+    ? (isMe ? 'You mentioned them in your story' : m.content === STORY_GROUP_MENTION_TEXT ? 'Mentioned this group in their story' : 'Mentioned you in their story')
+    : (isMe ? 'You replied to their story' : 'Replied to your story');
+  return (
+    <div onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onOpen && onOpen(m); }} style={{ cursor: 'pointer', marginBottom: isMention ? 16 : 6 }}>
+      <div style={{ fontSize: 11, color: theme.muted, fontWeight: 700, marginBottom: 5, display: 'flex', alignItems: 'center', gap: 4 }}>
+        <Sparkles size={11} /> {label}
+      </div>
+      <div style={{ width: 96, height: 150, borderRadius: 12, overflow: 'hidden', background: '#000', position: 'relative' }}>
+        {m.story_media_url ? (
+          m.story_media_type === 'video'
+            ? <video src={`${m.story_media_url}#t=0.1`} muted playsInline preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} />
+            : <img src={m.story_media_url} alt="" loading="lazy" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+        ) : (
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.6)', fontSize: 11, textAlign: 'center', padding: 8 }}>Story</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function JumpToLatestButton({ count, onClick, bottom }) {
+  const { theme } = useTheme();
+  return (
+    <div onPointerDown={(e) => e.preventDefault()} onClick={onClick} className="zchat-pop" role="button" aria-label="Jump to latest message" style={{
+      position: 'absolute', right: 14, bottom, zIndex: 11, width: 42, height: 42, borderRadius: '50%', cursor: 'pointer',
+      background: theme.panelBg, border: `1px solid ${theme.border}`, boxShadow: '0 6px 18px rgba(0,0,0,0.28)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.ink,
+    }}>
+      <ChevronRight size={22} style={{ transform: 'rotate(90deg)' }} />
+      {count > 0 && (
+        <div style={{ position: 'absolute', top: -7, right: -4, minWidth: 20, height: 20, padding: '0 5px', boxSizing: 'border-box', borderRadius: 10, background: theme.coral, color: 'white', fontSize: 11, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          {count > 99 ? '99+' : count}
+        </div>
+      )}
+    </div>
+  );
+}
+
+async function notifyBioMentions(profile, oldBio, newBio) {
+  try {
+    const before = extractMentions(oldBio || '');
+    const after = extractMentions(newBio || '');
+    const fresh = [...after].filter((u) => !before.has(u) && u !== (profile.username || '').toLowerCase());
+    if (!fresh.length) return;
+    const { data } = await supabase.from('profiles').select('id, username').in('username', fresh);
+    for (const p of data || []) {
+      if (p.id === profile.id) continue;
+      await supabase.from('mails').insert({ recipient_id: p.id, type: 'mention', title: `${profile.name} mentioned you`, body: `${profile.name} (@${profile.username}) mentioned you in their bio: "${newBio}"` });
+      sendPushNotification(p.id, 'ZChat', `${profile.name} mentioned you in their bio`, `/?profile=${profile.id}`, profile.avatar);
+    }
+  } catch {}
+}
+
 function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAccount, onAddAccount, onRemoveAccount, switchingAccountId }) {
   const { theme, bgPatternOn, chatTheme } = useTheme();
   const assetProgress = useAssetPrefetch();
@@ -6272,6 +6863,21 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [pinSheetFor, setPinSheetFor] = useState(null);
   const [muteSheet, setMuteSheet] = useState(null);
   const [mailOpenId, setMailOpenId] = useState(null);
+  const [storyData, setStoryData] = useState({ byUser: {}, profiles: {}, seen: new Set(), liked: new Set(), ready: false });
+  const [storyViewer, setStoryViewer] = useState(null);
+  const [storyComposer, setStoryComposer] = useState(null);
+  const [avatarPeek, setAvatarPeek] = useState(null);
+  const [snack, setSnack] = useState('');
+  const [showJumpButton, setShowJumpButton] = useState(false);
+  const [newBelowCount, setNewBelowCount] = useState(0);
+  const stickToBottomRef = useRef(true);
+  const prevMsgCountRef = useRef(0);
+  const storyInputRef = useRef(null);
+  const storyDataRef = useRef(null);
+  const reloadStoriesRef = useRef(null);
+  const storyReloadTimerRef = useRef(null);
+  const pendingStoryUserRef = useRef(null);
+  const snackTimerRef = useRef(null);
   const groupMembersRef = useRef([]);
   const archivedConversationsRef = useRef([]);
   const [, setClockTick] = useState(0);
@@ -6326,18 +6932,13 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [refreshing, setRefreshing] = useState(false);
   const pullStartYRef = useRef(null);
   const sidebarListRef = useRef(null);
-  const chatScrollPositions = useRef({});
-  const lastScrollKeyRef = useRef(null);
   const scrollRef = useRef(null);
   useEffect(() => {
     if (!keyboardOpen) return undefined;
     const el = scrollRef.current;
     if (!el) return undefined;
     const t = setTimeout(() => {
-      const prev = el.style.scrollBehavior;
-      el.style.scrollBehavior = 'auto';
-      el.scrollTop = el.scrollHeight;
-      el.style.scrollBehavior = prev;
+      if (stickToBottomRef.current) el.scrollTop = el.scrollHeight;
     }, 60);
     return () => clearTimeout(t);
   }, [keyboardOpen, viewportBox.height]);
@@ -6548,7 +7149,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       .order('last_message_at', { ascending: false });
     if (!data || data.length === 0) { setConversations([]); setArchivedConversations([]); return; }
     const { data: recentMsgs } = await supabase.from('messages')
-      .select('id, sender_id, receiver_id, type, content, deleted, created_at, read, delivered')
+      .select('id, sender_id, receiver_id, type, content, deleted, created_at, read, delivered, story_id')
       .or(`sender_id.eq.${myId},receiver_id.eq.${myId}`).is('group_id', null)
       .order('created_at', { ascending: false }).limit(800);
     const lastByOther = {};
@@ -6641,7 +7242,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   }, [profileCheckFailed]);
 
   useEffect(() => {
-    if (me) { loadConversations(); loadUnreadCounts(); loadMyLocks(); loadGroups(); loadMyBlocks(); subscribeToPush(session.user.id, false); loadFollowRequestCount(); loadUnreadMailCount(); supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', me.id); }
+    if (me) { loadConversations(); loadUnreadCounts(); loadMyLocks(); loadGroups(); loadMyBlocks(); loadStories(); subscribeToPush(session.user.id, false); loadFollowRequestCount(); loadUnreadMailCount(); supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', me.id); }
   }, [me]);
 
   useEffect(() => {
@@ -6652,6 +7253,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const profileId = params.get('profile');
     const requestsFlag = params.get('requests');
     const mailFlag = params.get('mail');
+    const storyFlag = params.get('story');
+    if (storyFlag) pendingStoryUserRef.current = storyFlag;
     if (requestsFlag) setShowFollowRequests(true);
     if (mailFlag) setShowMail(true);
     if (dmId) {
@@ -6673,7 +7276,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         if (data) setProfileOf(sanitizeAvatar(data, session.user.id));
       })();
     }
-    if (dmId || groupId || profileId || requestsFlag || mailFlag) window.history.replaceState({}, '', window.location.pathname);
+    if (dmId || groupId || profileId || requestsFlag || mailFlag || storyFlag) window.history.replaceState({}, '', window.location.pathname);
   }, [me]);
 
   useEffect(() => {
@@ -6682,6 +7285,28 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations' }, (payload) => {
         const row = payload.new || payload.old;
         if (row && (row.user_a === me.id || row.user_b === me.id)) loadConversations();
+      })
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, [me]);
+
+  useEffect(() => {
+    if (!me) return undefined;
+    const channel = supabase.channel('stories-' + me.id)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'stories' }, () => {
+        clearTimeout(storyReloadTimerRef.current);
+        storyReloadTimerRef.current = setTimeout(() => { if (reloadStoriesRef.current) reloadStoriesRef.current(); }, 600);
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'story_likes' }, async (payload) => {
+        const row = payload.new;
+        if (!row || row.user_id === me.id) return;
+        const data = storyDataRef.current;
+        const mine = data && (data.byUser[me.id] || []).some((s) => s.id === row.story_id);
+        if (!mine) return;
+        const who = await cachedProfile(row.user_id);
+        if (!who) return;
+        setInAppToast({ key: `slike-${row.story_id}-${row.user_id}`, kind: 'notice', title: who.name, avatar: who.avatar, avatarName: who.name,
+          preview: { kind: 'story', text: 'liked your story' }, action: { type: 'story', userId: me.id } });
       })
       .subscribe();
     return () => supabase.removeChannel(channel);
@@ -6712,7 +7337,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'mails' }, (payload) => {
         const row = payload.new;
         if (!row || row.recipient_id !== me.id) return;
-        setInAppToast({ key: `mail-${row.id}`, kind: 'notice', icon: row.type === 'report_warning' ? 'warning' : 'mail', title: row.title || 'New mail',
+        setInAppToast({ key: `mail-${row.id}`, kind: 'notice', icon: row.type === 'report_warning' ? 'warning' : row.type === 'mention' ? 'mention' : 'mail', title: row.title || 'New mail',
           preview: { kind: 'text', text: row.body || '' }, action: { type: 'mail', id: row.id } });
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'group_members' }, async (payload) => {
@@ -6766,7 +7391,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   }, [me, activeProfile]);
 
   useEffect(() => {
-    if (me) loadConversations();
+    if (me) { loadConversations(); loadStories(); }
   }, [myBlockedIds]);
 
   useEffect(() => {
@@ -6976,34 +7601,61 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     return () => clearInterval(poll);
   }, [activeProfile]);
 
-  useEffect(() => {
-    const key = activeGroup?.id || activeProfile?.id;
-    if (!key || loadingConvo) return;
+  const chatKey = activeGroup?.id || activeProfile?.id || null;
+  const scrollChatToBottom = (smooth) => {
     const el = scrollRef.current;
     if (!el) return;
-    const isNewConversation = lastScrollKeyRef.current !== key;
-    const timers = [];
-    if (isNewConversation) {
-      lastScrollKeyRef.current = key;
-      [30, 250, 600, 1200].forEach((delay) => {
-        timers.push(setTimeout(() => {
-          if (lastScrollKeyRef.current === key) el.scrollTop = el.scrollHeight;
-        }, delay));
-      });
-    } else {
-      timers.push(setTimeout(() => {
-        const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-        if (distanceFromBottom < 200) el.scrollTop = el.scrollHeight;
-      }, 30));
+    stickToBottomRef.current = true;
+    if (smooth && typeof el.scrollTo === 'function') el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+    else el.scrollTop = el.scrollHeight;
+    setNewBelowCount(0);
+    setShowJumpButton(false);
+  };
+  useEffect(() => {
+    stickToBottomRef.current = true;
+    prevMsgCountRef.current = 0;
+    setNewBelowCount(0);
+    setShowJumpButton(false);
+  }, [chatKey]);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || !chatKey || loadingConvo) return;
+    const prev = prevMsgCountRef.current;
+    const count = messages.length;
+    prevMsgCountRef.current = count;
+    if (prev === 0 || count <= prev) {
+      if (stickToBottomRef.current) el.scrollTop = el.scrollHeight;
+      return;
     }
-    return () => timers.forEach(clearTimeout);
-  }, [messages.length, activeProfile, activeGroup, loadingConvo]);
+    const added = messages.slice(prev);
+    const mine = added.some((x) => x.sender_id === session.user.id && x.type !== 'system');
+    if (mine || stickToBottomRef.current) {
+      stickToBottomRef.current = true;
+      el.scrollTop = el.scrollHeight;
+    } else {
+      const incoming = added.filter((x) => x.sender_id !== session.user.id && x.type !== 'system').length;
+      if (incoming) setNewBelowCount((n) => n + incoming);
+    }
+  }, [messages, loadingConvo, chatKey]);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || !chatKey || typeof ResizeObserver === 'undefined') return undefined;
+    const inner = el.firstElementChild;
+    const ro = new ResizeObserver(() => { if (stickToBottomRef.current) el.scrollTop = el.scrollHeight; });
+    ro.observe(el);
+    if (inner) ro.observe(inner);
+    return () => ro.disconnect();
+  }, [chatKey, loadingConvo]);
 
   const handleChatScroll = () => {
-    const key = activeGroup?.id || activeProfile?.id;
-    if (key && scrollRef.current) chatScrollPositions.current[key] = scrollRef.current.scrollTop;
+    const el = scrollRef.current;
+    if (!el) return;
+    const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+    stickToBottomRef.current = distance < 80;
+    const show = distance > 320;
+    setShowJumpButton((prev) => (prev === show ? prev : show));
+    if (distance < 80) setNewBelowCount((n) => (n ? 0 : n));
   };
-
   const doSearch = (val) => {
     setSearch(val);
     clearTimeout(searchTimer.current);
@@ -7610,8 +8262,15 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   };
 
   const doCopySingle = (m) => { if (m.content) navigator.clipboard?.writeText(m.content); setContextMenuFor(null); };
-  const doStartEditSingle = (m) => { setEditingMessage(m); setDraft(m.content || ''); setReplyingTo(null); setContextMenuFor(null); };
-  const doStartReplySingle = (m) => { setReplyingTo(m); setEditingMessage(null); setContextMenuFor(null); setTimeout(() => composerRef.current?.focus(), 30); };
+  const focusComposer = () => {
+    const el = composerRef.current;
+    if (!el) return;
+    try { el.focus({ preventScroll: true }); } catch { el.focus(); }
+    const len = el.value.length;
+    try { el.setSelectionRange(len, len); } catch {}
+  };
+  const doStartEditSingle = (m) => { setEditingMessage(m); setDraft(m.content || ''); setReplyingTo(null); setContextMenuFor(null); focusComposer(); };
+  const doStartReplySingle = (m) => { setReplyingTo(m); setEditingMessage(null); setContextMenuFor(null); focusComposer(); };
   const doDeleteForMeSingle = (m) => { hideMessagesLocally([m.id]); setMessages((prev) => prev.filter((x) => x.id !== m.id)); setContextMenuFor(null); };
   const doDeleteForEveryoneSingle = async (m) => { await deleteMessage(m.id); setMessages((prev) => prev.map((x) => (x.id === m.id ? { ...x, deleted: true } : x))); setContextMenuFor(null); };
   const openForwardSingle = (m) => { setForwardTargets([{ ...m, forwarded_from_name: labelForSender(m.sender_id) }]); setForwardOpen(true); setContextMenuFor(null); };
@@ -7747,6 +8406,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     activitySentRef.current = {};
     return () => { supabase.removeChannel(channel); typingChannelRef.current = null; clearTimeout(typingTimeoutRef.current); setActivityFrom(null); };
   }, [activeProfile?.id, activeGroup?.id]);
+
   const liveActivity = recording ? 'voice' : showStickers ? 'sticker' : null;
   useEffect(() => {
     if (!liveActivity) return undefined;
@@ -7774,6 +8434,190 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       if (member && isActiveUntil(member.notify_muted_until)) return;
     }
     sendPushNotification(userId, title, body, url, icon);
+  };
+
+  storyDataRef.current = storyData;
+  const showSnack = (text) => {
+    setSnack(text);
+    clearTimeout(snackTimerRef.current);
+    snackTimerRef.current = setTimeout(() => setSnack(''), 2200);
+  };
+
+  const loadStories = async () => {
+    const myId = session.user.id;
+    const { data: fol } = await supabase.from('follows').select('following_id').eq('follower_id', myId).eq('status', 'accepted');
+    const ids = [...new Set([myId, ...(fol || []).map((r) => r.following_id)])].filter((id) => !myBlockedIds.has(id));
+    const { data: rows, error } = await supabase.from('stories').select('*').in('user_id', ids).gt('expires_at', new Date().toISOString()).order('created_at', { ascending: true });
+    if (error) { setStoryData((prev) => ({ ...prev, ready: true })); return; }
+    const byUser = {};
+    (rows || []).forEach((s) => { (byUser[s.user_id] = byUser[s.user_id] || []).push(s); });
+    const storyIds = (rows || []).map((s) => s.id);
+    let seen = new Set();
+    let liked = new Set();
+    if (storyIds.length) {
+      const { data: views } = await supabase.from('story_views').select('story_id').eq('viewer_id', myId).in('story_id', storyIds);
+      seen = new Set((views || []).map((v) => v.story_id));
+      const { data: likes } = await supabase.from('story_likes').select('story_id').eq('user_id', myId).in('story_id', storyIds);
+      liked = new Set((likes || []).map((l) => l.story_id));
+    }
+    (byUser[myId] || []).forEach((s) => seen.add(s.id));
+    const userIds = Object.keys(byUser);
+    const profiles = {};
+    if (userIds.length) {
+      const { data: profs } = await supabase.from('profiles').select('*').in('id', userIds);
+      sanitizeAvatarList(profs, myId).forEach((p) => { profiles[p.id] = p; });
+    }
+    setStoryData({ byUser, profiles, seen, liked, ready: true });
+    if (pendingStoryUserRef.current && byUser[pendingStoryUserRef.current]) {
+      const target = pendingStoryUserRef.current;
+      pendingStoryUserRef.current = null;
+      setTimeout(() => openStoriesFor(target, { byUser, profiles, seen, liked }), 50);
+    }
+  };
+  reloadStoriesRef.current = loadStories;
+
+  const activeStoriesOf = (userId, data = storyData) => (data.byUser[userId] || []).filter((s) => isActiveUntil(s.expires_at));
+  const trayUsers = Object.keys(storyData.byUser)
+    .filter((id) => id !== session.user.id && activeStoriesOf(id).length && storyData.profiles[id])
+    .map((id) => ({ profile: storyData.profiles[id], stories: activeStoriesOf(id) }))
+    .sort((a, b) => {
+      const ua = a.stories.every((s) => storyData.seen.has(s.id)) ? 1 : 0;
+      const ub = b.stories.every((s) => storyData.seen.has(s.id)) ? 1 : 0;
+      if (ua !== ub) return ua - ub;
+      return new Date(b.stories[b.stories.length - 1].created_at) - new Date(a.stories[a.stories.length - 1].created_at);
+    });
+  const storyRingFor = (userId) => {
+    const list = activeStoriesOf(userId);
+    if (!list.length) return 'none';
+    return list.every((s) => storyData.seen.has(s.id)) ? 'seen' : 'unseen';
+  };
+
+  const openStoriesFor = (userId, dataOverride) => {
+    const data = dataOverride || storyDataRef.current || storyData;
+    const listFor = (id) => (data.byUser[id] || []).filter((s) => isActiveUntil(s.expires_at));
+    if (userId === session.user.id) {
+      const mine = listFor(userId);
+      if (!mine.length) return;
+      setStoryViewer({ key: Date.now(), groupsList: [{ profile: me, stories: mine }], startGroup: 0 });
+      return;
+    }
+    const order = Object.keys(data.byUser).filter((id) => id !== session.user.id && listFor(id).length && data.profiles[id])
+      .map((id) => ({ profile: data.profiles[id], stories: listFor(id) }))
+      .sort((a, b) => {
+        const ua = a.stories.every((s) => data.seen.has(s.id)) ? 1 : 0;
+        const ub = b.stories.every((s) => data.seen.has(s.id)) ? 1 : 0;
+        if (ua !== ub) return ua - ub;
+        return new Date(b.stories[b.stories.length - 1].created_at) - new Date(a.stories[a.stories.length - 1].created_at);
+      });
+    const start = order.findIndex((g) => g.profile.id === userId);
+    if (start < 0) return;
+    setStoryViewer({ key: Date.now(), groupsList: order, startGroup: start });
+  };
+
+  const markStorySeen = (story) => {
+    if (!story || story.user_id === session.user.id) return;
+    if (storyDataRef.current && storyDataRef.current.seen.has(story.id)) return;
+    setStoryData((prev) => { const seen = new Set(prev.seen); seen.add(story.id); return { ...prev, seen }; });
+    supabase.from('story_views').upsert({ story_id: story.id, viewer_id: session.user.id }, { onConflict: 'story_id,viewer_id' }).then(() => {});
+  };
+
+  const likeStory = async (story, like) => {
+    setStoryData((prev) => { const liked = new Set(prev.liked); if (like) liked.add(story.id); else liked.delete(story.id); return { ...prev, liked }; });
+    if (like) {
+      await supabase.from('story_likes').upsert({ story_id: story.id, user_id: session.user.id }, { onConflict: 'story_id,user_id' });
+      notifyUser(story.user_id, me.name, 'liked your story', `/?story=${story.user_id}`, me.avatar);
+    } else {
+      await supabase.from('story_likes').delete().eq('story_id', story.id).eq('user_id', session.user.id);
+    }
+  };
+
+  const storyMessageFields = (story) => ({ story_id: story.id, story_media_url: story.media_url, story_media_type: story.media_type, story_owner_id: story.user_id });
+
+  const replyToStory = async (story, owner, text) => {
+    const row = { sender_id: session.user.id, receiver_id: owner.id, group_id: null, type: 'text', content: text.slice(0, MAX_CHARS), ...storyMessageFields(story) };
+    const { data, error } = await supabase.from('messages').insert(row).select().single();
+    if (error) { showSnack(friendlyError(error, "Couldn't send your reply. Try again.")); return; }
+    if (data && activeProfile && activeProfile.id === owner.id) setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
+    await upsertConversation(owner.id, text, 'text');
+    notifyUser(owner.id, me.name, `Replied to your story: ${text}`, `/?dm=${session.user.id}`, me.avatar);
+    loadConversations();
+  };
+
+  const repostStory = async (story, owner) => {
+    const { error } = await supabase.from('stories').insert({
+      user_id: session.user.id, media_url: story.media_url, media_type: story.media_type, overlay_url: story.overlay_url || null,
+      caption: null, mentions: [], repost_of: story.id, repost_label: owner.username,
+    });
+    if (error) { showSnack(friendlyError(error, "Couldn't add it to your story. Try again.")); return; }
+    notifyUser(owner.id, me.name, 'shared your story to their story', `/?story=${session.user.id}`, me.avatar);
+    loadStories();
+  };
+
+  const deleteStory = async (story) => {
+    await supabase.from('stories').delete().eq('id', story.id).eq('user_id', session.user.id);
+    setStoryData((prev) => ({ ...prev, byUser: { ...prev.byUser, [story.user_id]: (prev.byUser[story.user_id] || []).filter((s) => s.id !== story.id) } }));
+    loadStories();
+  };
+
+  const postStories = async (outputs, caption, mentions) => {
+    setStoryComposer(null);
+    if (!outputs.length) return;
+    showSnack('Sharing to your story\u2026');
+    let firstStory = null;
+    for (const item of outputs) {
+      const { url, error } = await uploadMedia(item.file, session.user.id);
+      if (error || !url) continue;
+      let overlayUrl = null;
+      if (item.overlayFile) {
+        const up = await uploadMedia(item.overlayFile, session.user.id);
+        if (!up.error && up.url) overlayUrl = up.url;
+      }
+      const { data, error: insertError } = await supabase.from('stories').insert({
+        user_id: session.user.id, media_url: url, media_type: item.kind === 'video' ? 'video' : 'image', overlay_url: overlayUrl,
+        caption: caption || null, mentions: mentions || [],
+      }).select().single();
+      if (insertError) { showSnack(friendlyError(insertError, "Couldn't share your story. Try again.")); return; }
+      if (!firstStory) firstStory = data;
+      if (item.url) URL.revokeObjectURL(item.url);
+    }
+    if (!firstStory) { showSnack("Couldn't share your story. Try again."); return; }
+    for (const mn of mentions || []) {
+      if (mn.kind === 'group') {
+        await supabase.from('messages').insert({ sender_id: session.user.id, group_id: mn.id, type: 'text', content: STORY_GROUP_MENTION_TEXT, ...storyMessageFields(firstStory) });
+        const { data: mems } = await supabase.from('group_members').select('user_id').eq('group_id', mn.id);
+        (mems || []).filter((gm) => gm.user_id !== session.user.id).forEach((gm) => notifyUser(gm.user_id, 'ZChat', `${me.name} mentioned ${mn.label} in their story`, `/?group=${mn.id}`, me.avatar));
+      } else if (mn.id !== session.user.id) {
+        const { data } = await supabase.from('messages').insert({ sender_id: session.user.id, receiver_id: mn.id, group_id: null, type: 'text', content: STORY_MENTION_TEXT, ...storyMessageFields(firstStory) }).select().single();
+        if (data && activeProfile && activeProfile.id === mn.id) setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
+        await upsertConversation(mn.id, STORY_MENTION_TEXT, 'text');
+        notifyUser(mn.id, 'ZChat', `${me.name} mentioned you in their story`, `/?story=${session.user.id}`, me.avatar);
+      }
+    }
+    showSnack('Shared to your story');
+    loadStories();
+    loadConversations();
+    loadGroups();
+  };
+
+  const openStoryRef = async (m) => {
+    if (!m || !m.story_id) return;
+    const { data: story } = await supabase.from('stories').select('*').eq('id', m.story_id).maybeSingle();
+    if (!story || !isActiveUntil(story.expires_at)) { showSnack('This story is no longer available'); return; }
+    const owner = story.user_id === session.user.id ? me : (await cachedProfile(story.user_id));
+    if (!owner) { showSnack('This story is no longer available'); return; }
+    const { data: list } = await supabase.from('stories').select('*').eq('user_id', story.user_id).gt('expires_at', new Date().toISOString()).order('created_at', { ascending: true });
+    setStoryViewer({ key: Date.now(), groupsList: [{ profile: owner, stories: (list && list.length) ? list : [story] }], startGroup: 0, startStoryId: story.id });
+  };
+
+  const openStoryMention = async (mn) => {
+    setStoryViewer(null);
+    if (mn.kind === 'group') {
+      const g = groups.find((x) => x.id === mn.id);
+      if (g) openGroup(g); else showSnack("You're not in that group");
+      return;
+    }
+    const p = await cachedProfile(mn.id);
+    if (p) setProfileOf(p);
   };
 
   const myConvMuteField = (conv) => (conv.user_a === session.user.id ? 'muted_until_a' : 'muted_until_b');
@@ -7880,6 +8724,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       else if (action.type === 'mail') { setMailOpenId(action.id); setShowMail(true); }
       else if (action.type === 'profile') setProfileOf(action.profile);
       else if (action.type === 'group') openGroup(action.group);
+      else if (action.type === 'story') openStoriesFor(action.userId);
       return;
     }
     if (toast.kind === 'group') openGroup(toast.group);
@@ -8026,27 +8871,29 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     }}>
       <GlobalStyle />
       <AssetDownloadBar progress={assetProgress} />
-      {notifPermission === 'default' && pushSupported() && !notifBannerDismissed && !mobileShowChat && (
-        <EnableNotificationsBanner top="calc(10px + env(safe-area-inset-top))"
-          onEnable={async () => { await subscribeToPush(session.user.id, true); if (typeof Notification !== 'undefined') setNotifPermission(Notification.permission); }}
-          onDismiss={() => { setNotifBannerDismissed(true); try { sessionStorage.setItem('zchat-notif-banner-dismissed', '1'); } catch {} }} />
-      )}
-      {notifPermission === 'denied' && !notifBannerDismissed && (
-        <NotificationPermissionBanner top="calc(10px + env(safe-area-inset-top))" onOpenHelp={() => setShowNotifHelp(true)}
-          onDismiss={() => { setNotifBannerDismissed(true); try { sessionStorage.setItem('zchat-notif-banner-dismissed', '1'); } catch {} }} />
-      )}
-      {!isStandaloneApp && !installBannerDismissed && !mobileShowChat && (
-        <InstallAppBanner
-          top={(notifPermission === 'denied' || (notifPermission === 'default' && pushSupported())) && !notifBannerDismissed ? 'calc(60px + env(safe-area-inset-top))' : 'calc(10px + env(safe-area-inset-top))'}
-          canInstallDirectly={!!deferredInstallPrompt} onInstallNow={handleInstallNow} onOpenHelp={() => setShowInstallHelp(true)}
-          onDismiss={() => { setInstallBannerDismissed(true); try { localStorage.setItem('zchat-install-banner-dismissed', '1'); } catch {} }} />
-      )}
       {showInstallHelp && <InstallAppHelpModal onClose={() => setShowInstallHelp(false)} />}
       <div style={{
         width: isWide ? 360 : (mobileShowChat ? 0 : '100%'), maxWidth: isWide ? 360 : (mobileShowChat ? 0 : '100%'), overflow: 'hidden',
         borderRight: `1px solid ${theme.border}`, display: 'flex', flexDirection: 'column', flexShrink: 0,
         transition: 'none',
       }} className="zchat-sidebar-desktop">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
+        {notifPermission === 'default' && pushSupported() && !notifBannerDismissed && (
+          <EnableNotificationsBanner inline
+            onEnable={async () => { await subscribeToPush(session.user.id, true); if (typeof Notification !== 'undefined') setNotifPermission(Notification.permission); }}
+            onDismiss={() => { setNotifBannerDismissed(true); try { sessionStorage.setItem('zchat-notif-banner-dismissed', '1'); } catch {} }} />
+        )}
+        {notifPermission === 'denied' && !notifBannerDismissed && (
+          <NotificationPermissionBanner inline onOpenHelp={() => setShowNotifHelp(true)}
+            onDismiss={() => { setNotifBannerDismissed(true); try { sessionStorage.setItem('zchat-notif-banner-dismissed', '1'); } catch {} }} />
+        )}
+        {!isStandaloneApp && !installBannerDismissed && (
+          <InstallAppBanner
+            inline
+            canInstallDirectly={!!deferredInstallPrompt} onInstallNow={handleInstallNow} onOpenHelp={() => setShowInstallHelp(true)}
+            onDismiss={() => { setInstallBannerDismissed(true); try { localStorage.setItem('zchat-install-banner-dismissed', '1'); } catch {} }} />
+        )}
+        </div>
         <div style={{
           padding: '14px 16px 10px',
           display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexShrink: 0,
@@ -8105,6 +8952,17 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             <span style={{ fontSize: 9, color: theme.muted, fontWeight: 600 }}>Settings</span>
           </div>
         </div>
+
+        <input ref={storyInputRef} type="file" accept="image/*,video/*" multiple style={{ display: 'none' }}
+          onChange={(e) => {
+            const picked = Array.from(e.target.files || []).filter((f) => (f.type || '').startsWith('image') || (f.type || '').startsWith('video')).slice(0, 10);
+            e.target.value = '';
+            if (picked.length) setStoryComposer({ key: Date.now(), files: picked });
+          }} />
+        {search.trim().length < 2 && (
+          <StoryTray me={me} myStories={activeStoriesOf(session.user.id)} trayUsers={trayUsers} seen={storyData.seen}
+            onAdd={() => storyInputRef.current && storyInputRef.current.click()} onOpen={(id) => openStoriesFor(id)} />
+        )}
 
         {search.trim().length >= 2 ? (
           <div style={{ overflowY: 'auto', flex: 1, padding: '0 12px' }}>
@@ -8203,7 +9061,11 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                     display: 'flex', alignItems: 'center', gap: 12, padding: '10px 8px', cursor: 'pointer', borderRadius: 16,
                     background: isActive ? theme.rowBg : 'transparent', position: 'relative',
                   }}>
-                    <Avatar emoji={c.otherProfile.avatar} name={c.otherProfile.name} online={isUserOnline(c.otherProfile) && !c.otherProfile.hide_activity} size={46} />
+                    <div onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); setAvatarPeek(c); }} style={{ position: 'relative', flexShrink: 0, cursor: 'pointer' }}>
+                      {storyRingFor(c.otherProfile.id) !== 'none'
+                        ? <StoryAvatar profile={c.otherProfile} size={50} ring={storyRingFor(c.otherProfile.id)} />
+                        : <Avatar emoji={c.otherProfile.avatar} name={c.otherProfile.name} online={isUserOnline(c.otherProfile) && !c.otherProfile.hide_activity} size={46} />}
+                    </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <span style={{ fontWeight: unread ? 800 : 700, fontSize: 14, color: theme.ink, display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 150 }}>
@@ -8234,7 +9096,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           </>
         )}
       </div>
-
       <div style={{
         flex: 1, display: (isWide || mobileShowChat) ? 'flex' : 'none', flexDirection: 'column', minWidth: 0, minHeight: 0, position: 'relative',
         paddingTop: (activeProfile || activeGroup) ? 64 : 0,
@@ -8368,7 +9229,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                       onOpenImage={setViewerUrl} onOpenVideo={setViewerVideoUrl}
                       reactions={messageLikes[m.id]} onReact={(id, emoji) => reactToMessage(id, emoji)}
                       onOpenWhoReacted={(id) => setWhoReactedFor({ messageId: id, reactions: messageLikes[id] || [] })}
-                      replyPreview={replyPreview} onSwipeReply={(msg) => { setReplyingTo(msg); setEditingMessage(null); setTimeout(() => composerRef.current?.focus(), 0); }}
+                      replyPreview={replyPreview} onSwipeReply={(msg) => { setReplyingTo(msg); setEditingMessage(null); focusComposer(); }}
                       onJumpToMessage={jumpToMessage} highlighted={highlightedMsgId === m.id}
                       senderLabel={showSenderLabel ? memberName(m.sender_id) : null}
                       senderAvatar={showSenderLabel ? groupMembers.find((gm) => gm.user_id === m.sender_id)?.profile.avatar : null}
@@ -8377,6 +9238,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                       canModerate={activeGroup ? (groupMembers.find((gm) => gm.user_id === session.user.id)?.role === 'admin') : false}
                       onOpenMention={(p) => setProfileOf(sanitizeAvatar(p, session.user.id))}
                       mentionsMe={!!activeGroup && !isMe && !m.deleted && m.type === 'text' && extractMentions(m.content).has((me.username || '').toLowerCase())}
+                      onOpenStoryRef={openStoryRef}
                     />
                   );
                 })
@@ -8490,6 +9352,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                 </>
               )}
             </div>
+
+            {showJumpButton && !selectionMode && (
+              <JumpToLatestButton count={newBelowCount} bottom={pendingMedia.length ? 150 : (replyingTo || editingMessage) ? 118 : 72} onClick={() => scrollChatToBottom(true)} />
+            )}
 
             {uploading > 0 && (
               <div style={{ position: 'absolute', bottom: 70, left: '50%', transform: 'translateX(-50%)', zIndex: 11, display: 'flex', alignItems: 'center', gap: 8, padding: '7px 14px', borderRadius: 20, background: theme.panelBg, border: `1px solid ${theme.border}`, boxShadow: '0 6px 18px rgba(0,0,0,0.2)', fontSize: 12, fontWeight: 700, color: theme.ink, whiteSpace: 'nowrap' }} className="zchat-fade">
@@ -8730,6 +9596,30 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             ]} />
         );
       })()}
+      {storyComposer && (
+        <MediaComposer key={storyComposer.key} files={storyComposer.files} mode="story" myId={session.user.id}
+          mentionGroups={groups} onCancel={() => setStoryComposer(null)} onSend={postStories} />
+      )}
+      {storyViewer && (
+        <StoryViewer key={storyViewer.key} groupsList={storyViewer.groupsList} startGroup={storyViewer.startGroup} startStoryId={storyViewer.startStoryId}
+          myId={session.user.id} seen={storyData.seen} liked={storyData.liked}
+          onSeen={markStorySeen} onClose={() => setStoryViewer(null)} onLike={likeStory} onReply={replyToStory} onRepost={repostStory}
+          onDelete={deleteStory} onReport={(p) => { setStoryViewer(null); setReportUserTarget(p); }}
+          onOpenProfile={(p) => { setStoryViewer(null); setProfileOf(p); }} onOpenMention={openStoryMention} />
+      )}
+      {avatarPeek && (() => {
+        const c = avatarPeek;
+        const ring = storyRingFor(c.otherProfile.id);
+        return (
+          <AvatarPeek profile={c.otherProfile} online={isUserOnline(c.otherProfile) && !c.otherProfile.hide_activity}
+            lastSeen={!c.otherProfile.hide_activity ? formatLastSeen(c.otherProfile.last_seen) : null}
+            hasStory={ring !== 'none'} storySeen={ring === 'seen'} onClose={() => setAvatarPeek(null)}
+            onMessage={() => openChat(c.otherProfile, c.id)} onProfile={() => setProfileOf(c.otherProfile)} onStory={() => openStoriesFor(c.otherProfile.id)} />
+        );
+      })()}
+      {snack && (
+        <div className="zchat-pop" style={{ position: 'fixed', left: '50%', bottom: 'calc(90px + env(safe-area-inset-bottom))', transform: 'translateX(-50%)', zIndex: 320, background: theme.ink, color: theme.panelBg, padding: '10px 16px', borderRadius: 22, fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', boxShadow: '0 8px 24px rgba(0,0,0,0.3)' }}>{snack}</div>
+      )}
       {chatMenuAnchor && (activeProfile || activeGroup) && (() => {
         const groupRow = activeGroup ? (groups.find((x) => x.id === activeGroup.id) || activeGroup) : null;
         const mutedUntil = activeGroup ? groupRow?.mutedUntil : (activeConvForBar ? activeConvForBar[myConvMuteField(activeConvForBar)] : null);
@@ -8995,4 +9885,4 @@ export default function App() {
       <AppInner />
     </ThemeProvider>
   );
-                  }
+               }
