@@ -1278,11 +1278,11 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
             <CategoryRow icon={<Palette size={17} />} label="Appearance" sub="Theme, chat style, text size" onClick={() => setSection('appearance')} />
             <CategoryRow icon={<EyeOff size={17} />} label="Privacy & Security" sub="Activity status, Chat Lock" onClick={() => setSection('privacy')} />
             <CategoryRow icon={<Bell size={17} />} label="Notifications" sub="Sounds, alerts" onClick={() => setSection('notifications')} />
-            <CategoryRow icon={<HelpCircle size={17} />} label="About" sub={`Version ${APP_VERSION}, privacy policy`} onClick={() => setSection('about')} />
+            <CategoryRow icon={<HelpCircle size={17} />} label="About" sub="Privacy policy, help" onClick={() => setSection('about')} />
             <CategoryRow icon={<UserPlus size={17} />} label="Account" sub="Follow requests, switch, delete" onClick={() => setSection('account')} />
             <div style={{ height: 4 }} />
             <SettingsRow icon={<LogOut size={16} />} label="Log out" danger onClick={onLogout} />
-            <div style={{ textAlign: 'center', fontSize: 10.5, color: theme.muted, marginTop: 18, fontWeight: 600 }}>ZChat v2.6</div>
+            <div style={{ textAlign: 'center', fontSize: 10.5, color: theme.muted, marginTop: 18, fontWeight: 600 }}>ZChat {APP_VERSION}</div>
           </>
         )}
 
@@ -1357,15 +1357,6 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
           <>
             <SectionHeader title="About" />
             <SettingsRow icon={<FileText size={16} />} label="Privacy policy" onClick={onOpenPrivacy} />
-            <SettingsRow icon={<Sparkles size={16} />} label="Version" right={<span style={{ fontSize: 13, fontWeight: 800, color: theme.coral }}>{APP_VERSION}</span>} />
-            <div style={{ margin: '10px 4px 0', padding: '14px 16px', borderRadius: 16, background: theme.rowBg }}>
-              <div style={{ fontSize: 13.5, fontWeight: 800, color: theme.ink }}>What's new in {APP_VERSION}</div>
-              <div style={{ fontSize: 12.5, color: theme.muted, lineHeight: 1.6, marginTop: 6 }}>
-                Status that disappears after 24 hours, with viewers, likes, replies, mentions and share links.<br />
-                Voice and video calls with people you both follow, plus group calls.<br />
-                A new blocking system with a blocked accounts list.
-              </div>
-            </div>
           </>
         )}
 
@@ -1395,6 +1386,16 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
 
 function AccountSwitcherPanel({ accounts, currentId, switchingId, onBack, onSwitch, onRemove, onAdd }) {
   const { theme } = useTheme();
+  const [tiers, setTiers] = useState({});
+  useEffect(() => {
+    const ids = accounts.map((a) => a.id).filter(Boolean);
+    if (!ids.length) return;
+    supabase.from('profiles').select('id, verified').in('id', ids).then(({ data }) => {
+      const next = {};
+      (data || []).forEach((r) => { next[r.id] = r.verified; });
+      setTiers(next);
+    });
+  }, [accounts.map((a) => a.id).join(',')]);
   return (
     <div style={{
       position: 'absolute', inset: 0, background: 'rgba(28,29,33,0.4)',
@@ -1414,7 +1415,7 @@ function AccountSwitcherPanel({ accounts, currentId, switchingId, onBack, onSwit
               <Avatar emoji={a.avatar} name={a.name} size={40} />
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontWeight: 700, fontSize: 13.5, color: theme.ink, display: 'flex', alignItems: 'center', minWidth: 0 }}>
-                  <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{a.name}</span>{a.id === currentId && <span style={{ color: theme.coral, fontWeight: 700, flexShrink: 0 }}>&nbsp;Active</span>}
+                  <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{a.name}</span><VerifiedBadge tier={tiers[a.id] || a.verified} size={13} />{a.id === currentId && <span style={{ color: theme.coral, fontWeight: 700, flexShrink: 0 }}>&nbsp;Active</span>}
                 </div>
                 <div style={{ fontSize: 11.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.email}</div>
               </div>
@@ -2929,7 +2930,7 @@ function CreateGroupPanel({ myId, onClose, onCreated }) {
               {selected.map((p) => (
                 <div key={p.id} onClick={() => toggleSelect(p)} style={{ textAlign: 'center', cursor: 'pointer', flexShrink: 0 }}>
                   <Avatar emoji={p.avatar} name={p.name} size={48} />
-                  <div style={{ fontSize: 10, color: theme.muted, marginTop: 2, maxWidth: 48, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
+                  <div style={{ fontSize: 10, color: theme.muted, marginTop: 2, maxWidth: 48, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}<VerifiedBadge tier={p.verified} size={12} /></div>
                 </div>
               ))}
             </div>
@@ -2946,7 +2947,7 @@ function CreateGroupPanel({ myId, onClose, onCreated }) {
               <div key={p.id} onClick={() => toggleSelect(p)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 4px', cursor: 'pointer' }}>
                 <Avatar emoji={p.avatar} name={p.name} size={40} />
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 700, fontSize: 14, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
+                  <div style={{ fontWeight: 700, fontSize: 14, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}<VerifiedBadge tier={p.verified} size={12} /></div>
                   <div style={{ fontSize: 11.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>@{p.username}</div>
                 </div>
                 <div style={{
@@ -3086,7 +3087,7 @@ function GroupInfoPanel({ group, members, myId, myRole, isOwner, onClose, onProm
               <Avatar emoji={m.profile.avatar} name={m.profile.name} size={40} />
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontWeight: 700, fontSize: 13.5, color: theme.ink, display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                  <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{m.profile.name}</span>{m.user_id === myId && <span style={{ color: theme.muted, fontWeight: 500, flexShrink: 0 }}>(you)</span>}
+                  <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{m.profile.name}</span><VerifiedBadge tier={m.profile.verified} size={12} />{m.user_id === myId && <span style={{ color: theme.muted, fontWeight: 500, flexShrink: 0 }}>(you)</span>}
                 </div>
                 <div style={{ display: 'flex', gap: 6, marginBottom: 2 }}>
                   {m.user_id === group.created_by ? (
@@ -3193,7 +3194,7 @@ function AddMembersPanel({ myId, existingIds, onClose, onAdd }) {
           <div key={p.id} onClick={() => toggleSelect(p)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 4px', cursor: 'pointer' }}>
             <Avatar emoji={p.avatar} name={p.name} size={40} />
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontWeight: 700, fontSize: 14, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
+              <div style={{ fontWeight: 700, fontSize: 14, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}<VerifiedBadge tier={p.verified} size={12} /></div>
               <div style={{ fontSize: 11.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>@{p.username}</div>
             </div>
             <div style={{
@@ -3360,7 +3361,7 @@ function ProfileLinkCard({ profileId, onOpen }) {
           </div>
         )}
         <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '18px 10px 6px', background: 'linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.7) 100%)', color: 'white' }}>
-          <div style={{ fontSize: 14, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
+          <div style={{ fontSize: 14, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}<VerifiedBadge tier={p.verified} size={12} /></div>
           <div style={{ fontSize: 11, opacity: 0.85, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>@{p.username}</div>
         </div>
       </div>
@@ -3755,11 +3756,12 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
   });
 
   const stat = (value, label, onClick) => (
-    <div onClick={onClick} style={{ flex: 1, textAlign: 'center', cursor: onClick ? 'pointer' : 'default', padding: '12px 4px', borderRadius: 16, background: theme.rowBg, border: `1px solid ${theme.border}` }}>
-      <div style={{ fontSize: 20, fontWeight: 800, color: theme.ink, fontVariantNumeric: 'tabular-nums', minHeight: 24 }}>{value == null ? '' : value}</div>
-      <div style={{ fontSize: 11.5, color: theme.muted, fontWeight: 700, marginTop: 2 }}>{label}</div>
+    <div onClick={onClick} style={{ flex: 1, textAlign: 'center', cursor: onClick ? 'pointer' : 'default', padding: '4px 2px' }}>
+      <div style={{ fontSize: 19, fontWeight: 800, color: theme.ink, letterSpacing: '-0.02em', minHeight: 24 }}>{value == null ? '' : formatCount(value)}</div>
+      <div style={{ fontSize: 13, color: theme.muted, fontWeight: 500, marginTop: 1 }}>{label}</div>
     </div>
   );
+  const statDivider = <div style={{ width: 1, height: 16, background: theme.border, alignSelf: 'center' }} />;
 
   const sheetRow = (icon, label, onClick, danger) => (
     <div onClick={onClick} style={{
@@ -3772,7 +3774,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
     <div onClick={(e) => { if (e.target === e.currentTarget && !editing) onClose(); }} style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(5,8,16,0.6)', display: 'flex', justifyContent: 'center' }} className="zchat-fade">
     <div style={{ width: '100%', maxWidth: 560, height: '100%', background: theme.dark ? '#000' : '#fff', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden' }}>
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
-        <div style={{ position: 'relative', height: 'min(58vh, 440px)', minHeight: 320, background: hasPhoto ? '#000' : colorForName(profile.name), overflow: 'hidden' }}>
+        <div style={{ position: 'relative', height: 'min(42vh, 320px)', minHeight: 240, background: hasPhoto ? '#000' : colorForName(profile.name), overflow: 'hidden' }}>
           {hasPhoto ? (
             <img src={shownPhoto} alt="" draggable={false} onContextMenu={(e) => e.preventDefault()} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
           ) : (
@@ -3815,7 +3817,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
                     {statusText}
                   </div>
                 )}
-                <div style={{ fontSize: 31, fontWeight: 800, lineHeight: 1.08, letterSpacing: '-0.02em', textShadow: '0 2px 12px rgba(0,0,0,0.45)', wordBreak: 'break-word' }}>{profile.name}<VerifiedBadge tier={profile.verified} size={24} /></div>
+                <div style={{ fontSize: 26, fontWeight: 800, lineHeight: 1.08, letterSpacing: '-0.02em', textShadow: '0 2px 12px rgba(0,0,0,0.45)', wordBreak: 'break-word' }}>{profile.name}<VerifiedBadge tier={profile.verified} size={24} /></div>
                 <div style={{ fontSize: 13.5, marginTop: 4, color: 'rgba(255,255,255,0.88)', textShadow: '0 1px 6px rgba(0,0,0,0.5)' }}>
                   @{profile.username}{infoBits.map((b) => ` · ${b}`).join('')}
                 </div>
@@ -3923,9 +3925,11 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
                       <RichText text={profile.bio} onMention={(p) => onOpenProfile(sanitizeAvatar(p, userId))} />
                     </div>
                   )}
-                  <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
-                    {stat(followerCount, 'Followers', () => setListModal('followers'))}
+                  <div style={{ display: 'flex', alignItems: 'center', marginTop: 16, padding: '0 6px' }}>
                     {stat(followingCount, 'Following', () => setListModal('following'))}
+                    {statDivider}
+                    {stat(followerCount, 'Followers', () => setListModal('followers'))}
+                    {!isSelf && statDivider}
                     {!isSelf && stat(mutualCount, 'Mutual', () => setListModal('mutual'))}
                   </div>
                   {!editing && <ProfileHighlights profile={profile} isSelf={isSelf} userId={userId} onOpenHighlight={(h) => onOpenHighlight && onOpenHighlight(h, profile)} />}
@@ -4185,7 +4189,7 @@ function MentionSuggestions({ query, priority, excludeIds, myId, onPick }) {
           }}>
           <Avatar emoji={p.avatar} name={p.name} size={30} />
           <div style={{ minWidth: 0, flex: 1 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}<VerifiedBadge tier={p.verified} size={12} /></div>
             <div style={{ fontSize: 11.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>@{p.username}</div>
           </div>
         </div>
@@ -4633,7 +4637,7 @@ function ForwardPicker({ conversations, onCancel, onPick, myId }) {
             }}>
               <Avatar emoji={p.avatar} name={p.name} size={38} />
               <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ fontWeight: 700, fontSize: 14, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
+                <div style={{ fontWeight: 700, fontSize: 14, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}<VerifiedBadge tier={p.verified} size={12} /></div>
                 <div style={{ fontSize: 11.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>@{p.username}</div>
               </div>
             </div>
@@ -5087,7 +5091,7 @@ function InAppMessageToast({ toast, top, onOpen, onDismiss }) {
       </div>
       <div style={{ flex: 1, minWidth: 0, pointerEvents: 'none' }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-          <span style={{ fontSize: 13.5, fontWeight: 800, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{toast.title}</span>
+          <span style={{ fontSize: 13.5, fontWeight: 800, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{toast.title}<VerifiedBadge tier={toast.verified} size={12} /></span>
           <span style={{ fontSize: 10.5, color: theme.muted, flexShrink: 0 }}>now</span>
         </div>
         <PreviewLine preview={toast.preview} prefix={toast.prefix} color={theme.muted} size={12.5} />
@@ -6454,7 +6458,7 @@ function StoryMentionPicker({ myId, groups, onPick, onClose }) {
   );
 }
 
-function StoryViewer({ groupsList, startGroup = 0, startStoryId = null, onAddStory, onShare, externalPause = false, readOnly = false, myId, seen, liked, onSeen, onClose, onLike, onReply, onRepost, onDelete, onReport, onOpenProfile, onOpenMention }) {
+function StoryViewer({ groupsList, startGroup = 0, startStoryId = null, onAddStory, onShare, externalPause = false, readOnly = false, highlightLike = null, myId, seen, liked, onSeen, onClose, onLike, onReply, onRepost, onDelete, onReport, onOpenProfile, onOpenMention }) {
   const [gi, setGi] = useState(startGroup);
   const [si, setSi] = useState(() => {
     const g = groupsList[startGroup];
@@ -6650,7 +6654,17 @@ function StoryViewer({ groupsList, startGroup = 0, startStoryId = null, onAddSto
         )}
 
         <div data-story-control style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '14px 12px', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))', background: 'linear-gradient(0deg, rgba(0,0,0,0.6), rgba(0,0,0,0))', display: 'flex', alignItems: 'center', gap: 10 }}>
-          {readOnly ? null : isMine ? (
+          {readOnly ? (
+            highlightLike ? (
+              <>
+                <div style={{ flex: 1 }} />
+                <div onClick={highlightLike.onToggle} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 12px', cursor: 'pointer' }}>
+                  <Heart size={27} color={highlightLike.liked ? '#FF3B5C' : 'white'} fill={highlightLike.liked ? '#FF3B5C' : 'none'} />
+                  <span style={{ fontSize: 14, fontWeight: 800 }}>{highlightLike.count > 0 ? formatCount(highlightLike.count) : ''}</span>
+                </div>
+              </>
+            ) : null
+          ) : isMine ? (
             <>
               <div style={{ position: 'absolute', left: 0, right: 0, bottom: 'calc(64px + env(safe-area-inset-bottom))', display: 'flex', flexDirection: 'column', alignItems: 'center', pointerEvents: 'none', opacity: 0.85 }}>
                 <ChevronRight size={18} style={{ transform: 'rotate(-90deg)' }} />
@@ -7360,7 +7374,7 @@ function StoryTray({ me, myStories, trayUsers, seen, onAdd, onOpen }) {
         return (
           <div key={u.profile.id} onClick={() => onOpen(u.profile.id)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0, cursor: 'pointer' }}>
             <StoryAvatar profile={u.profile} size={62} ring={allSeen ? 'seen' : 'unseen'} />
-            {label((u.profile.name || u.profile.username || '').split(' ')[0], !allSeen)}
+            {label(<>{(u.profile.name || u.profile.username || '').split(' ')[0]}<VerifiedBadge tier={u.profile.verified} size={10} style={{ marginLeft: 2 }} /></>, !allSeen)}
           </div>
         );
       })}
@@ -7368,7 +7382,7 @@ function StoryTray({ me, myStories, trayUsers, seen, onAdd, onOpen }) {
   );
 }
 
-const APP_VERSION = '3.7V';
+const APP_VERSION = '3.8V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -7405,7 +7419,7 @@ function BlockConfirmSheet({ profile, onCancel, onConfirm }) {
             <Avatar emoji={profile.avatar} name={profile.name} size={72} />
             <div style={{ position: 'absolute', right: -4, bottom: -2, width: 28, height: 28, borderRadius: '50%', background: theme.danger, border: `3px solid ${theme.panelBg}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Ban size={14} color="white" /></div>
           </div>
-          <div style={{ fontSize: 18, fontWeight: 800, color: theme.ink, marginTop: 12 }}>Block {profile.name}?</div>
+          <div style={{ fontSize: 18, fontWeight: 800, color: theme.ink, marginTop: 12 }}>Block {profile.name}<VerifiedBadge tier={profile.verified} size={15} />?</div>
           <div style={{ fontSize: 12.5, color: theme.muted, marginTop: 2 }}>@{profile.username}</div>
         </div>
         <div style={{ marginTop: 14 }}>
@@ -7494,7 +7508,7 @@ function BlockedAccountsPanel({ myId, blockedIds, onClose, onUnblock, onOpenProf
             <div onClick={() => !r.profile.is_deleted && onOpenProfile(r.profile)} style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0, cursor: 'pointer' }}>
               <Avatar emoji={r.profile.avatar} name={r.profile.name} size={46} />
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontWeight: 700, fontSize: 14.5, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.profile.name}</div>
+                <div style={{ fontWeight: 700, fontSize: 14.5, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.profile.name}<VerifiedBadge tier={r.profile.verified} size={12} /></div>
                 <div style={{ fontSize: 12, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>@{r.profile.username}</div>
               </div>
             </div>
@@ -7785,7 +7799,7 @@ function StoryViewersSheet({ story, myId, onClose, onOpenProfile }) {
                 {r.liked && <div style={{ position: 'absolute', right: -3, bottom: -3, width: 20, height: 20, borderRadius: '50%', background: theme.panelBg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Heart size={13} color="#FF3B5C" fill="#FF3B5C" /></div>}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 700, fontSize: 14, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.profile.name}</div>
+                <div style={{ fontWeight: 700, fontSize: 14, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.profile.name}<VerifiedBadge tier={r.profile.verified} size={12} /></div>
                 <div style={{ fontSize: 11.5, color: theme.muted }}>@{r.profile.username}{r.at ? ` · ${timeShort(r.at)}` : ''}</div>
               </div>
             </div>
@@ -7847,7 +7861,7 @@ function CallScreen({ call, me, nameFor, avatarFor, onAccept, onDecline, onHangu
         </div>
         <div style={{ position: 'relative', flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, textAlign: 'center' }}>
           {isGroup ? <GroupAvatar avatar={call.group && call.group.avatar} name={title} size={112} /> : <Avatar emoji={call.peer && call.peer.avatar} name={title} size={112} />}
-          <div style={{ fontSize: 26, fontWeight: 800, marginTop: 18 }}>{title}</div>
+          <div style={{ fontSize: 26, fontWeight: 800, marginTop: 18 }}>{title}{!isGroup && call.peer && <VerifiedBadge tier={call.peer.verified} size={20} />}</div>
           <div style={{ fontSize: 15, color: 'rgba(255,255,255,0.75)', marginTop: 6 }}>{call.endLabel || 'Call ended'}</div>
           <div style={{ marginTop: 14, fontSize: 34, fontWeight: 300, letterSpacing: 1, fontVariantNumeric: 'tabular-nums' }}>{d > 0 ? formatCallDuration(d) : '0:00'}</div>
           <div style={{ marginTop: 6, fontSize: 13.5, color: 'rgba(255,255,255,0.6)' }}>
@@ -7963,7 +7977,7 @@ function CallScreen({ call, me, nameFor, avatarFor, onAccept, onDecline, onHangu
             )}
             {isGroup ? <GroupAvatar avatar={call.group && call.group.avatar} name={title} size={122} /> : <Avatar emoji={call.peer && call.peer.avatar} name={title} size={122} />}
           </div>
-          <div style={{ marginTop: 22, fontSize: 29, fontWeight: 800, textShadow: '0 2px 14px rgba(0,0,0,0.5)' }}>{title}</div>
+          <div style={{ marginTop: 22, fontSize: 29, fontWeight: 800, textShadow: '0 2px 14px rgba(0,0,0,0.5)' }}>{title}{!isGroup && call.peer && <VerifiedBadge tier={call.peer.verified} size={22} />}</div>
           <div style={{ marginTop: 6, fontSize: 15, color: 'rgba(255,255,255,0.82)', fontVariantNumeric: 'tabular-nums' }}>{status}</div>
           {!isGroup && peerId && remoteMuted[peerId] && !ringingIn && <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 14, background: 'rgba(0,0,0,0.4)', fontSize: 12.5, fontWeight: 700 }}><MicOff size={13} color="#FF6B6B" /> {title.split(' ')[0]} is muted</div>}
         </div>
@@ -8213,31 +8227,103 @@ function AvatarFrame({ size, tier, children }) {
   );
 }
 
+function formatCount(n) {
+  const v = Number(n) || 0;
+  if (v >= 1000000) return `${(v / 1000000).toFixed(v >= 10000000 ? 0 : 1).replace(/\.0$/, '')}M`;
+  if (v >= 10000) return `${(v / 1000).toFixed(v >= 100000 ? 0 : 1).replace(/\.0$/, '')}K`;
+  return v.toLocaleString();
+}
+
 function ProfileHighlights({ profile, isSelf, userId, onOpenHighlight }) {
   const { theme } = useTheme();
   const [items, setItems] = useState(null);
   const [creating, setCreating] = useState(false);
+  const [menuFor, setMenuFor] = useState(null);
+  const [renameFor, setRenameFor] = useState(null);
+  const [renameText, setRenameText] = useState('');
+  const [deleteFor, setDeleteFor] = useState(null);
+  const pressRef = useRef({ timer: null, fired: false });
   const load = async () => {
     const { data } = await supabase.from('highlights').select('*').eq('user_id', profile.id).order('created_at', { ascending: true });
     setItems(data || []);
   };
-  useEffect(() => { load(); }, [profile.id]);
+  useEffect(() => {
+    load();
+    const ch = supabase.channel(`highlights-${profile.id}-${Math.random().toString(36).slice(2, 7)}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'highlights' }, () => load())
+      .subscribe();
+    return () => supabase.removeChannel(ch);
+  }, [profile.id]);
   if (items === null || (!items.length && !isSelf)) return null;
-  const tile = (key, content, label, onClick) => (
-    <div key={key} onClick={onClick} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: 'pointer', flexShrink: 0, width: 72 }}>
-      <div style={{ width: 66, height: 88, borderRadius: 16, overflow: 'hidden', border: `1px solid ${theme.border}`, background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{content}</div>
-      <span style={{ fontSize: 11.5, fontWeight: 600, color: theme.ink, maxWidth: 72, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
+  const startPress = (h) => {
+    if (!isSelf) return;
+    pressRef.current.fired = false;
+    clearTimeout(pressRef.current.timer);
+    pressRef.current.timer = setTimeout(() => { pressRef.current.fired = true; if (navigator.vibrate) navigator.vibrate(12); setMenuFor(h); }, 480);
+  };
+  const endPress = () => clearTimeout(pressRef.current.timer);
+  const circle = (content, dashed) => (
+    <div style={{ width: 70, height: 70, borderRadius: '50%', padding: 3, boxSizing: 'border-box', background: dashed ? 'transparent' : theme.border, border: dashed ? `1.5px dashed ${theme.border}` : 'none' }}>
+      <div style={{ width: '100%', height: '100%', borderRadius: '50%', overflow: 'hidden', background: theme.dark ? '#000' : '#fff', padding: 2, boxSizing: 'border-box' }}>
+        <div style={{ width: '100%', height: '100%', borderRadius: '50%', overflow: 'hidden', background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{content}</div>
+      </div>
     </div>
   );
   return (
     <div style={{ marginTop: 18 }}>
-      <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 4 }}>
-        {isSelf && tile('new', <span style={{ fontSize: 30, fontWeight: 300, color: theme.ink }}>+</span>, 'New', () => setCreating(true))}
-        {items.map((h) => tile(h.id, h.cover_url
-          ? (h.cover_type === 'video' ? <video src={`${h.cover_url}#t=0.1`} muted playsInline preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} /> : <img src={h.cover_url} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />)
-          : null, h.title, () => onOpenHighlight(h)))}
+      <div style={{ display: 'flex', gap: 14, overflowX: 'auto', paddingBottom: 4 }}>
+        {isSelf && (
+          <div onClick={() => setCreating(true)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: 'pointer', flexShrink: 0, width: 74 }}>
+            {circle(<span style={{ fontSize: 30, fontWeight: 300, color: theme.ink, lineHeight: 1 }}>+</span>, true)}
+            <span style={{ fontSize: 12.5, color: theme.ink }}>New</span>
+          </div>
+        )}
+        {items.map((h) => (
+          <div key={h.id}
+            onPointerDown={() => startPress(h)} onPointerUp={endPress} onPointerLeave={endPress} onPointerCancel={endPress}
+            onContextMenu={(e) => { e.preventDefault(); if (isSelf) setMenuFor(h); }}
+            onClick={() => { if (pressRef.current.fired) { pressRef.current.fired = false; return; } onOpenHighlight(h); }}
+            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: 'pointer', flexShrink: 0, width: 74 }}>
+            {circle(h.cover_url
+              ? (h.cover_type === 'video' ? <video src={`${h.cover_url}#t=0.1`} muted playsInline preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} /> : <img src={h.cover_url} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />)
+              : null)}
+            <span style={{ fontSize: 12.5, color: theme.ink, maxWidth: 74, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{h.title}</span>
+          </div>
+        ))}
       </div>
       {creating && <HighlightCreator userId={userId} onClose={() => setCreating(false)} onCreated={() => { setCreating(false); load(); }} />}
+      {menuFor && (
+        <ChatRowSheet title={menuFor.title} subtitle="Highlight" avatar={<div style={{ width: 44, height: 44, borderRadius: '50%', overflow: 'hidden', background: theme.rowBg }}>{menuFor.cover_url && menuFor.cover_type !== 'video' && <img src={menuFor.cover_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}</div>}
+          onClose={() => setMenuFor(null)}
+          actions={[
+            { icon: <Edit3 size={18} />, label: 'Rename highlight', onClick: () => { setRenameText(menuFor.title || ''); setRenameFor(menuFor); } },
+            { icon: <Trash2 size={18} />, label: 'Delete highlight', onClick: () => setDeleteFor(menuFor), danger: true },
+          ]} />
+      )}
+      {renameFor && (
+        <div onClick={() => setRenameFor(null)} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 420, background: 'rgba(5,8,16,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <div onClick={(e) => e.stopPropagation()} className="zchat-pop" style={{ width: '100%', maxWidth: 320, background: theme.panelBg, borderRadius: 22, padding: 20 }}>
+            <div style={{ fontWeight: 800, fontSize: 16, color: theme.ink, marginBottom: 12, textAlign: 'center' }}>Rename highlight</div>
+            <input autoFocus value={renameText} maxLength={20} onChange={(e) => setRenameText(e.target.value.slice(0, 20))} style={inputStyle(theme)} />
+            <div style={{ fontSize: 11, color: theme.muted, textAlign: 'right', marginTop: 4 }}>{renameText.length}/20</div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+              <button onClick={() => setRenameFor(null)} style={{ flex: 1, padding: 11, borderRadius: 13, border: `1px solid ${theme.border}`, background: 'transparent', color: theme.ink, fontWeight: 700, fontFamily: FONT, cursor: 'pointer' }}>Cancel</button>
+              <button onClick={async () => {
+                const title = renameText.trim() || 'Highlights';
+                const target = renameFor;
+                setRenameFor(null);
+                setItems((prev) => (prev || []).map((x) => (x.id === target.id ? { ...x, title } : x)));
+                await supabase.from('highlights').update({ title }).eq('id', target.id).eq('user_id', userId);
+              }} style={{ flex: 1, padding: 11, borderRadius: 13, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontFamily: FONT, cursor: 'pointer' }}>Save</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {deleteFor && (
+        <ConfirmDialog title="Delete this highlight?" body="It will be removed from your profile. Your statuses stay in your archive."
+          onCancel={() => setDeleteFor(null)}
+          onConfirm={async () => { const target = deleteFor; setDeleteFor(null); setItems((prev) => (prev || []).filter((x) => x.id !== target.id)); await supabase.from('highlights').delete().eq('id', target.id).eq('user_id', userId); }} />
+      )}
     </div>
   );
 }
@@ -8325,7 +8411,7 @@ function ProfilePosts({ profile, isSelf, userId, meProfile }) {
   };
   return (
     <div style={{ marginTop: 18, marginLeft: -20, marginRight: -20 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px 0', borderTop: `1px solid ${theme.border}`, borderBottom: `1px solid ${theme.border}`, color: theme.ink, fontWeight: 800, fontSize: 13, position: 'relative' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px 0', borderTop: `1px solid ${theme.border}`, borderBottom: `1px solid ${theme.border}`, color: theme.ink, fontWeight: 800, fontSize: 13, position: 'sticky', top: 0, zIndex: 5, background: theme.dark ? '#000' : '#fff' }}>
         <ImageIcon size={16} /> Posts {posts ? `(${posts.length})` : ''}
         {isSelf && (
           <div onClick={() => inputRef.current && inputRef.current.click()} style={{ position: 'absolute', right: 16, width: 30, height: 30, borderRadius: 10, background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 20, fontWeight: 400 }}>+</div>
@@ -8462,6 +8548,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [isStandaloneApp, setIsStandaloneApp] = useState(false);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   const [viewportBox, setViewportBox] = useState({ height: null, offset: 0 });
+  const [standaloneFill, setStandaloneFill] = useState(null);
   const [isWide, setIsWide] = useState(() => (typeof window !== 'undefined' ? window.innerWidth >= 900 : false));
   useEffect(() => {
     const onResize = () => setIsWide(window.innerWidth >= 900);
@@ -8488,6 +8575,15 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         if (!typing) fullHeightRef.current = Math.max(vv.height, layoutHeight);
         else fullHeightRef.current = Math.max(fullHeightRef.current, layoutHeight);
         const open = typing && fullHeightRef.current - vv.height > 120;
+        const standalone = isAppleMobile() && (window.navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches));
+        let fill = null;
+        if (!open && standalone && window.screen) {
+          const portrait = window.innerHeight >= window.innerWidth;
+          const screenH = portrait ? Math.max(window.screen.height, window.screen.width) : Math.min(window.screen.height, window.screen.width);
+          const gap = screenH - window.innerHeight;
+          if (gap > 8 && gap < 420) fill = screenH;
+        }
+        setStandaloneFill((prev) => (prev === fill ? prev : fill));
         setKeyboardOpen((prev) => (prev === open ? prev : open));
         setViewportBox((prev) => {
           const next = open
@@ -9090,7 +9186,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         if (!mine) return;
         const who = await cachedProfile(row.user_id);
         if (!who) return;
-        setInAppToast({ key: `slike-${row.story_id}-${row.user_id}`, kind: 'notice', title: who.name, avatar: who.avatar, avatarName: who.name,
+        setInAppToast({ key: `slike-${row.story_id}-${row.user_id}`, kind: 'notice', title: who.name, verified: who.verified, avatar: who.avatar, avatarName: who.name,
           preview: { kind: 'story', text: 'liked your story' }, action: { type: 'story', userId: me.id } });
       })
       .subscribe();
@@ -9137,7 +9233,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         loadFollowRequestCount();
         const who = await cachedProfile(row.follower_id);
         if (!who) return;
-        setInAppToast({ key: `follow-${row.follower_id}-${Date.now()}`, kind: 'notice', title: who.name, avatar: who.avatar, avatarName: who.name,
+        setInAppToast({ key: `follow-${row.follower_id}-${Date.now()}`, kind: 'notice', title: who.name, verified: who.verified, avatar: who.avatar, avatarName: who.name,
           preview: { kind: 'text', text: row.status === 'pending' ? 'requested to follow you' : 'started following you' },
           action: row.status === 'pending' ? { type: 'requests' } : { type: 'profile', profile: who } });
       })
@@ -9147,7 +9243,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         if (payload.old && payload.old.status === 'accepted') return;
         const who = await cachedProfile(row.following_id);
         if (!who) return;
-        setInAppToast({ key: `accepted-${row.following_id}-${Date.now()}`, kind: 'notice', title: who.name, avatar: who.avatar, avatarName: who.name,
+        setInAppToast({ key: `accepted-${row.following_id}-${Date.now()}`, kind: 'notice', title: who.name, verified: who.verified, avatar: who.avatar, avatarName: who.name,
           preview: { kind: 'text', text: 'accepted your follow request' }, action: { type: 'profile', profile: who } });
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'mails' }, (payload) => {
@@ -10535,7 +10631,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       if (c.mode === 'group') {
         setInAppToast({ key: `missed-${c.id}`, kind: 'notice', accent: 'missed', isGroupIcon: true, groupAvatar: c.group && c.group.avatar, title: c.group ? c.group.name : 'Group call', preview: { kind: 'callmissed', text: `Missed group ${kindLabel} call` }, action: { type: 'group', group: c.group } });
       } else if (c.peer) {
-        setInAppToast({ key: `missed-${c.id}`, kind: 'notice', accent: 'missed', title: c.peer.name, avatar: c.peer.avatar, avatarName: c.peer.name, preview: { kind: 'callmissed', text: `Missed ${kindLabel} call` }, action: { type: 'dm', profile: c.peer } });
+        setInAppToast({ key: `missed-${c.id}`, kind: 'notice', accent: 'missed', verified: c.peer.verified, title: c.peer.name, avatar: c.peer.avatar, avatarName: c.peer.name, preview: { kind: 'callmissed', text: `Missed ${kindLabel} call` }, action: { type: 'dm', profile: c.peer } });
       }
     },
     onGroupStarted: async (row, group) => {
@@ -10559,7 +10655,21 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (!data || !data.length) { showSnack('This highlight is empty'); return; }
     const far = new Date(Date.now() + 365 * 86400000).toISOString();
     const items = data.map((it) => ({ id: it.id, user_id: owner.id, media_url: it.media_url, media_type: it.media_type, overlay_url: it.overlay_url, caption: it.caption, mentions: [], created_at: it.created_at, expires_at: far }));
-    setStoryViewer({ key: Date.now(), groupsList: [{ profile: owner, stories: items }], startGroup: 0, readOnly: true });
+    const { data: likeRows } = await supabase.from('highlight_likes').select('user_id').eq('highlight_id', h.id);
+    const likedByMe = (likeRows || []).some((r) => r.user_id === session.user.id);
+    setStoryViewer({ key: Date.now(), groupsList: [{ profile: owner, stories: items }], startGroup: 0, readOnly: true, highlight: { id: h.id, ownerId: owner.id, liked: likedByMe, count: (likeRows || []).length } });
+  };
+  const toggleHighlightLike = async () => {
+    const hl = storyViewer && storyViewer.highlight;
+    if (!hl) return;
+    const nextLiked = !hl.liked;
+    setStoryViewer((prev) => (prev && prev.highlight ? { ...prev, highlight: { ...prev.highlight, liked: nextLiked, count: Math.max(0, prev.highlight.count + (nextLiked ? 1 : -1)) } } : prev));
+    if (nextLiked) {
+      await supabase.from('highlight_likes').upsert({ highlight_id: hl.id, user_id: session.user.id }, { onConflict: 'highlight_id,user_id' });
+      if (hl.ownerId !== session.user.id) notifyUser(hl.ownerId, me.name, 'liked your highlight', `/?profile=${session.user.id}`, me.avatar);
+    } else {
+      await supabase.from('highlight_likes').delete().eq('highlight_id', hl.id).eq('user_id', session.user.id);
+    }
   };
   useEffect(() => {
     if (!me) return undefined;
@@ -10759,7 +10869,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const profile = conv ? conv.otherProfile : await cachedProfile(msg.sender_id);
     if (!profile) return;
     const locked = conv && locksRef.current[conv.id];
-    setInAppToast({ key: msg.id, kind: 'dm', profile, convId: conv ? conv.id : null, title: profile.name, avatar: profile.avatar, avatarName: profile.name, prefix: '', preview: locked ? { kind: 'text', text: 'New message' } : preview });
+    setInAppToast({ key: msg.id, kind: 'dm', profile, convId: conv ? conv.id : null, title: profile.name, verified: profile.verified, avatar: profile.avatar, avatarName: profile.name, prefix: '', preview: locked ? { kind: 'text', text: 'New message' } : preview });
   };
 
   const openToast = (toast) => {
@@ -10910,7 +11020,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   return (
     <div id="zapp-root" style={{
       position: 'fixed', left: 0, right: 0, top: viewportBox.height ? viewportBox.offset : 0,
-      ...(viewportBox.height ? { height: viewportBox.height } : { bottom: 0 }),
+      ...(viewportBox.height ? { height: viewportBox.height } : standaloneFill ? { height: standaloneFill } : { bottom: 0 }),
       background: theme.bgGradient, fontFamily: FONT,
       display: 'flex', overflow: 'hidden', boxSizing: 'border-box',
       paddingTop: callBarShown ? 'calc(env(safe-area-inset-top) + 42px)' : 'env(safe-area-inset-top)',
@@ -11021,7 +11131,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               }}>
                 <Avatar emoji={p.avatar} name={p.name} size={42} />
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 700, fontSize: 14, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
+                  <div style={{ fontWeight: 700, fontSize: 14, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}<VerifiedBadge tier={p.verified} size={12} /></div>
                   <div style={{ fontSize: 11.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>@{p.username}</div>
                 </div>
                 <FollowStatusPill theirId={p.id} viewerId={session.user.id} viewerFollowsThem={searchIFollow.has(p.id)} theyFollowViewer={searchFollowsMe.has(p.id)}
@@ -11644,7 +11754,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         const c = rowSheet.conv;
         const blocked = myBlockedIds.has(c.otherProfile.id);
         return (
-          <ChatRowSheet title={c.otherProfile.name} subtitle={`@${c.otherProfile.username}`}
+          <ChatRowSheet title={<>{c.otherProfile.name}<VerifiedBadge tier={c.otherProfile.verified} size={13} /></>} subtitle={`@${c.otherProfile.username}`}
             avatar={<Avatar emoji={c.otherProfile.avatar} name={c.otherProfile.name} size={44} />}
             onClose={() => setRowSheet(null)}
             actions={[
@@ -11732,6 +11842,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       )}
       {storyViewer && (
         <StoryViewer key={storyViewer.key} groupsList={storyViewer.groupsList} startGroup={storyViewer.startGroup} startStoryId={storyViewer.startStoryId} readOnly={!!storyViewer.readOnly}
+          highlightLike={storyViewer.highlight ? { liked: storyViewer.highlight.liked, count: storyViewer.highlight.count, onToggle: toggleHighlightLike } : null}
           myId={session.user.id} seen={storyData.seen} liked={storyData.liked}
           onSeen={markStorySeen} onClose={() => setStoryViewer(null)} onLike={likeStory} onReply={replyToStory} onRepost={repostStory}
           onDelete={deleteStory} onReport={(p) => { setStoryViewer(null); setReportUserTarget(p); }}
@@ -11901,7 +12012,7 @@ function AppInner() {
   useEffect(() => {
     if (session?.user) {
       getProfile(session.user.id).then(({ data }) => {
-        if (data) saveAccountEntry({ id: session.user.id, name: data.name, avatar: data.avatar, email: session.user.email });
+        if (data) saveAccountEntry({ id: session.user.id, name: data.name, avatar: data.avatar, email: session.user.email, verified: data.verified || null });
       });
     }
   }, [session?.user?.id]);
