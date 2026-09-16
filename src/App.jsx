@@ -343,6 +343,7 @@ function GlobalStyle() {
       @keyframes zchat-call-pulse { 0% { box-shadow: 0 0 0 0 rgba(52,199,89,0.55); } 70% { box-shadow: 0 0 0 16px rgba(52,199,89,0); } 100% { box-shadow: 0 0 0 0 rgba(52,199,89,0); } }
       @keyframes zchat-call-ring { 0% { transform: scale(0.92); opacity: 0.85; } 100% { transform: scale(1.4); opacity: 0; } }
       .zchat-call-pulse { animation: zchat-call-pulse 1.6s infinite; }
+      @keyframes zchat-flame-glow { 0%, 100% { opacity: 0.75; } 50% { opacity: 1; } }
       .zchat-call-ring { animation: zchat-call-ring 1.8s ease-out infinite; }
       .zchat-fire-ring {
         background: linear-gradient(135deg, #FFD23F, #FF6B00, #FF2D55);
@@ -1457,38 +1458,37 @@ function PrivacyPanel({ onBack }) {
 
 
 function FollowStatusPill({ theirId, viewerId, viewerFollowsThem, theyFollowViewer, theirIsPrivate, onChanged }) {
-  const { theme } = useTheme();
   const [busy, setBusy] = useState(false);
+  const [pending, setPending] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    if (viewerFollowsThem || !theirIsPrivate || theirId === viewerId) return undefined;
+    supabase.from('follows').select('status').eq('follower_id', viewerId).eq('following_id', theirId).maybeSingle()
+      .then(({ data }) => { if (!cancelled) setPending(!!data && data.status === 'pending'); });
+    return () => { cancelled = true; };
+  }, [theirId, viewerId, viewerFollowsThem, theirIsPrivate]);
   if (theirId === viewerId) return null;
+  const state = viewerFollowsThem ? 'accepted' : pending ? 'pending' : 'none';
 
-  const label = viewerFollowsThem ? 'Following' : theyFollowViewer ? 'Follow back' : 'Follow';
-
-  const toggle = async (e) => {
-    e.stopPropagation();
+  const toggle = async () => {
     if (busy) return;
     setBusy(true);
-    if (viewerFollowsThem) {
+    if (viewerFollowsThem || pending) {
       await supabase.from('follows').delete().eq('follower_id', viewerId).eq('following_id', theirId);
+      setPending(false);
       onChanged(theirId, false);
     } else {
       const status = theirIsPrivate ? 'pending' : 'accepted';
-      await supabase.from('follows').insert({ follower_id: viewerId, following_id: theirId, status });
-      onChanged(theirId, status === 'accepted');
+      const { error } = await supabase.from('follows').insert({ follower_id: viewerId, following_id: theirId, status });
+      if (!error) {
+        if (status === 'pending') setPending(true);
+        onChanged(theirId, status === 'accepted');
+      }
     }
     setBusy(false);
   };
 
-  return (
-    <button onClick={toggle} disabled={busy} style={{
-      padding: '6px 13px', borderRadius: 16, cursor: busy ? 'default' : 'pointer', fontFamily: FONT, flexShrink: 0,
-      border: viewerFollowsThem ? `1.5px solid ${theme.border}` : 'none',
-      background: viewerFollowsThem ? 'transparent' : theme.coral,
-      color: viewerFollowsThem ? theme.ink : 'white',
-      fontSize: 11.5, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4,
-    }}>
-      {busy ? <Spinner size={11} color={viewerFollowsThem ? theme.ink : 'white'} /> : label}
-    </button>
-  );
+  return <FollowActionButton size="sm" state={state} theyFollowMe={theyFollowViewer} busy={busy} onClick={toggle} />;
 }
 
 function UserListRow({ profile, rightContent, onClick }) {
@@ -1903,18 +1903,31 @@ const STICKER_CATEGORIES = [
 ];
 
 function getFavoriteStickerKeys() {
-  try { return new Set(JSON.parse(localStorage.getItem('zchat-fav-stickers') || '[]')); } catch { return new Set(); }
+  try {
+    const raw = localStorage.getItem(`zchat-fav-stickers-${favoriteSync.userId || 'local'}`) ?? localStorage.getItem('zchat-fav-stickers') ?? '[]';
+    return new Set(JSON.parse(raw));
+  } catch { return new Set(); }
 }
 function toggleFavoriteSticker(key) {
   const cur = getFavoriteStickerKeys();
-  if (cur.has(key)) cur.delete(key); else cur.add(key);
-  try { localStorage.setItem('zchat-fav-stickers', JSON.stringify([...cur])); } catch {}
+  const adding = !cur.has(key);
+  if (adding) cur.add(key); else cur.delete(key);
+  writeFavoriteKeys(cur);
+  if (favoriteSync.userId) {
+    if (adding) supabase.from('sticker_favorites').upsert({ user_id: favoriteSync.userId, sticker_key: key }, { onConflict: 'user_id,sticker_key' }).then(() => {});
+    else supabase.from('sticker_favorites').delete().eq('user_id', favoriteSync.userId).eq('sticker_key', key).then(() => {});
+  }
   return cur;
 }
 
 function StickerPicker({ onPick, onClose }) {
   const { theme } = useTheme();
   const [favKeys, setFavKeys] = useState(() => getFavoriteStickerKeys());
+  useEffect(() => {
+    const onChange = () => setFavKeys(getFavoriteStickerKeys());
+    window.addEventListener('zchat-favorites', onChange);
+    return () => window.removeEventListener('zchat-favorites', onChange);
+  }, []);
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState(() => (getFavoriteStickerKeys().size > 0 ? 'favorites' : 'goma'));
 
@@ -3542,10 +3555,12 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
   const [cropFile, setCropFile] = useState(null);
   const [saving, setSaving] = useState(false);
   const [showEmail, setShowEmail] = useState(false);
-  const [followState, setFollowState] = useState('none');
-  const [followerCount, setFollowerCount] = useState(null);
-  const [followingCount, setFollowingCount] = useState(null);
-  const [mutualCount, setMutualCount] = useState(null);
+  const cachedStats = profileStatsCache.get(profile.id) || {};
+  const [followState, setFollowState] = useState(cachedStats.followState || 'none');
+  const [theyFollowMe, setTheyFollowMe] = useState(!!cachedStats.theyFollowMe);
+  const [followerCount, setFollowerCount] = useState(cachedStats.followers ?? null);
+  const [followingCount, setFollowingCount] = useState(cachedStats.following ?? null);
+  const [mutualCount, setMutualCount] = useState(cachedStats.mutual ?? null);
   const [followBusy, setFollowBusy] = useState(false);
   const [username, setUsername] = useState(profile.username || '');
   const [displayName, setDisplayName] = useState(profile.name || '');
@@ -3580,17 +3595,20 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
     let cancelled = false;
     const loadCounts = async () => {
       const { count: followers } = await supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', profile.id).eq('status', 'accepted');
-      if (!cancelled) setFollowerCount(followers || 0);
+      if (!cancelled && followers != null) { setFollowerCount((prev) => (prev === followers ? prev : followers)); saveProfileStats(profile.id, { followers }); }
       const { count: following } = await supabase.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', profile.id).eq('status', 'accepted');
-      if (!cancelled) setFollowingCount(following || 0);
+      if (!cancelled && following != null) { setFollowingCount((prev) => (prev === following ? prev : following)); saveProfileStats(profile.id, { following }); }
       if (isSelf) return;
       const { data } = await supabase.from('follows').select('status').eq('follower_id', userId).eq('following_id', profile.id).maybeSingle();
-      if (!cancelled) setFollowState(data ? data.status : 'none');
+      const nextState = data ? data.status : 'none';
+      if (!cancelled) { setFollowState((prev) => (prev === nextState ? prev : nextState)); saveProfileStats(profile.id, { followState: nextState }); }
+      const { data: back } = await supabase.from('follows').select('status').eq('follower_id', profile.id).eq('following_id', userId).eq('status', 'accepted').maybeSingle();
+      if (!cancelled) { setTheyFollowMe(!!back); saveProfileStats(profile.id, { theyFollowMe: !!back }); }
       const { data: myFollowing } = await supabase.from('follows').select('following_id').eq('follower_id', userId).eq('status', 'accepted');
       const ids = (myFollowing || []).map((r) => r.following_id).filter((id) => id !== profile.id).slice(0, 300);
-      if (!ids.length) { if (!cancelled) setMutualCount(0); return; }
+      if (!ids.length) { if (!cancelled) { setMutualCount(0); saveProfileStats(profile.id, { mutual: 0 }); } return; }
       const { count: mutual } = await supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', profile.id).eq('status', 'accepted').in('follower_id', ids);
-      if (!cancelled) setMutualCount(mutual || 0);
+      if (!cancelled) { setMutualCount(mutual || 0); saveProfileStats(profile.id, { mutual: mutual || 0 }); }
     };
     loadCounts();
     const channel = supabase.channel('profile-follows-' + profile.id)
@@ -3724,17 +3742,18 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
   const showBio = canSeeDetails && profile.bio && (isSelf || !profile.hide_bio);
   const labelStyle = { fontSize: 11.5, color: theme.muted, marginBottom: 5, fontWeight: 800, letterSpacing: '0.04em' };
   const pillBtn = (primary) => ({
-    flex: 1, padding: '12px 0', borderRadius: 30, cursor: 'pointer', fontFamily: FONT, fontSize: 14, fontWeight: 700,
-    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-    border: primary ? 'none' : `1.5px solid ${theme.border}`,
-    background: primary ? theme.coral : 'transparent',
+    flex: 1, height: 44, padding: '0 10px', borderRadius: 14, cursor: 'pointer', fontFamily: FONT, fontSize: 14, fontWeight: 700, boxSizing: 'border-box',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+    border: primary ? 'none' : `1px solid ${theme.border}`,
+    background: primary ? `linear-gradient(135deg, ${theme.coral}, ${theme.coralDeep || theme.coral})` : theme.rowBg,
     color: primary ? 'white' : theme.ink,
+    boxShadow: primary ? `0 6px 16px ${theme.coral}40` : 'none',
   });
 
   const stat = (value, label, onClick) => (
-    <div onClick={onClick} style={{ flex: 1, textAlign: 'center', cursor: onClick ? 'pointer' : 'default', padding: '2px 0' }}>
-      <div style={{ fontSize: 19, fontWeight: 800, color: theme.ink, opacity: value === null ? 0 : 1 }}>{value ?? 0}</div>
-      <div style={{ fontSize: 11.5, color: theme.muted, fontWeight: 600 }}>{label}</div>
+    <div onClick={onClick} style={{ flex: 1, textAlign: 'center', cursor: onClick ? 'pointer' : 'default', padding: '12px 4px', borderRadius: 16, background: theme.rowBg, border: `1px solid ${theme.border}` }}>
+      <div style={{ fontSize: 20, fontWeight: 800, color: theme.ink, fontVariantNumeric: 'tabular-nums', minHeight: 24 }}>{value == null ? '' : value}</div>
+      <div style={{ fontSize: 11.5, color: theme.muted, fontWeight: 700, marginTop: 2 }}>{label}</div>
     </div>
   );
 
@@ -3748,6 +3767,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
   return (
     <div onClick={(e) => { if (e.target === e.currentTarget && !editing) onClose(); }} style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(5,8,16,0.6)', display: 'flex', justifyContent: 'center' }} className="zchat-fade">
     <div style={{ width: '100%', maxWidth: 560, height: '100%', background: theme.panelBg, display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden' }}>
+      {!editing && <div style={{ position: 'absolute', inset: 0, zIndex: 40, pointerEvents: 'none' }}><FlameBorder /></div>}
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
         <div style={{ position: 'relative', height: 'min(58vh, 440px)', minHeight: 320, background: hasPhoto ? '#000' : colorForName(profile.name), overflow: 'hidden' }}>
           {hasPhoto ? (
@@ -3866,31 +3886,22 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button onClick={startEditing} style={pillBtn(true)}><Edit3 size={15} /> Edit profile</button>
                   <button onClick={() => setShowShare(true)} style={pillBtn(false)}><Share2 size={15} /> Share</button>
-                  <button onClick={() => setShowPrivacySettings(true)} aria-label="Privacy" style={{ ...pillBtn(false), flex: '0 0 48px' }}><Lock size={16} /></button>
+                  <button onClick={() => setShowPrivacySettings(true)} style={{ ...pillBtn(false), flex: '0 0 auto', padding: '0 14px' }}><Lock size={15} /> Privacy</button>
                 </div>
               ) : (
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <button onClick={toggleFollow} disabled={followBusy} style={{
-                    ...pillBtn(followState === 'none'),
-                    background: followState === 'accepted' ? `${theme.coral}18` : followState === 'pending' ? 'transparent' : theme.coral,
-                    color: followState === 'accepted' ? theme.coralDeep : followState === 'pending' ? theme.ink : 'white',
-                  }}>
-                    {followBusy ? <Spinner size={14} color={followState !== 'none' ? theme.ink : 'white'} /> : (
-                      <>
-                        {followState === 'accepted' ? <Check size={15} /> : followState === 'pending' ? null : <UserPlus size={15} />}
-                        {followState === 'accepted' ? 'Following' : followState === 'pending' ? 'Requested' : 'Follow'}
-                      </>
-                    )}
-                  </button>
+                  <div style={{ flex: 1, display: 'flex' }}>
+                    <FollowActionButton state={followState} theyFollowMe={theyFollowMe} busy={followBusy} onClick={toggleFollow} />
+                  </div>
                   {followState === 'accepted' ? (
-                    <button onClick={() => onMessage(profile)} style={pillBtn(false)}><Send size={15} /> Message</button>
+                    <button onClick={() => onMessage(profile)} style={pillBtn(false)}><ChatBubbleIcon size={17} /> Message</button>
                   ) : (
                     <button onClick={() => setShowShare(true)} style={pillBtn(false)}><Share2 size={15} /> Share</button>
                   )}
                   {canCall && followState === 'accepted' && (
                     <>
-                      <button onClick={() => onCall('voice')} aria-label="Voice call" style={{ ...pillBtn(false), flex: '0 0 48px' }}><Phone size={16} /></button>
-                      <button onClick={() => onCall('video')} aria-label="Video call" style={{ ...pillBtn(false), flex: '0 0 48px' }}><VideoIcon size={17} /></button>
+                      <button onClick={() => onCall('voice')} aria-label="Voice call" style={{ ...pillBtn(false), flex: '0 0 44px', padding: 0 }}><Phone size={17} /></button>
+                      <button onClick={() => onCall('video')} aria-label="Video call" style={{ ...pillBtn(false), flex: '0 0 44px', padding: 0 }}><VideoIcon size={18} /></button>
                     </>
                   )}
                 </div>
@@ -3909,16 +3920,10 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
                       <RichText text={profile.bio} onMention={(p) => onOpenProfile(sanitizeAvatar(p, userId))} />
                     </div>
                   )}
-                  <div style={{ display: 'flex', marginTop: 16, paddingTop: 14, borderTop: `1px solid ${theme.border}` }}>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
                     {stat(followerCount, 'Followers', () => setListModal('followers'))}
-                    <div style={{ width: 1, background: theme.border }} />
                     {stat(followingCount, 'Following', () => setListModal('following'))}
-                    {!isSelf && (
-                      <>
-                        <div style={{ width: 1, background: theme.border }} />
-                        {stat(mutualCount, 'Mutual', () => setListModal('mutual'))}
-                      </>
-                    )}
+                    {!isSelf && stat(mutualCount, 'Mutual', () => setListModal('mutual'))}
                   </div>
                 </>
               ) : (
@@ -6836,6 +6841,7 @@ function useCallEngine(options) {
   const localRef = useRef(null);
   const timersRef = useRef({});
   const toneStopRef = useRef(null);
+  const screenRef = useRef(null);
   const optsRef = useRef(options);
   optsRef.current = options;
 
@@ -6875,6 +6881,7 @@ function useCallEngine(options) {
     Object.values(timersRef.current).forEach((t) => clearTimeout(t));
     timersRef.current = {};
     stopTone();
+    if (screenRef.current) { screenRef.current.stream.getTracks().forEach((t) => t.stop()); screenRef.current = null; }
     pcsRef.current.forEach((pc) => { try { pc.close(); } catch {} });
     pcsRef.current = new Map();
     pendingIceRef.current = new Map();
@@ -6927,21 +6934,22 @@ function useCallEngine(options) {
         }
       } else if (state === 'disconnected' || state === 'failed') {
         patch({ reconnecting: true });
+        if (optsRef.current.myId < peerId && pc.signalingState === 'stable') offerTo(peerId, true).catch(() => {});
         clearTimeout(timersRef.current[`drop-${peerId}`]);
         timersRef.current[`drop-${peerId}`] = setTimeout(() => {
           if (pc.connectionState === 'connected') return;
           const current = callRef.current;
           if (!current) return;
           if (current.mode === 'direct') finish('failed'); else removePeer(peerId);
-        }, state === 'failed' ? 2500 : 10000);
+        }, state === 'failed' ? 9000 : 18000);
       }
     };
     return pc;
   };
 
-  const offerTo = async (peerId) => {
+  const offerTo = async (peerId, restart) => {
     const pc = pcsRef.current.get(peerId) || createPeer(peerId);
-    const offer = await pc.createOffer();
+    const offer = await pc.createOffer(restart ? { iceRestart: true } : undefined);
     await pc.setLocalDescription(offer);
     send({ type: 'offer', to: peerId, sdp: { type: pc.localDescription.type, sdp: pc.localDescription.sdp } });
   };
@@ -7200,12 +7208,92 @@ function useCallEngine(options) {
   };
 
   const minimize = (value) => patch({ minimized: value });
+
+  const stopScreenShare = () => {
+    const sc = screenRef.current;
+    if (!sc) return;
+    screenRef.current = null;
+    sc.stream.getTracks().forEach((t) => t.stop());
+    const cam = localRef.current && localRef.current.getVideoTracks()[0];
+    pcsRef.current.forEach((pc) => {
+      const sender = pc.getSenders().find((s) => s.track && s.track.kind === 'video');
+      if (sender && cam) sender.replaceTrack(cam);
+    });
+    patch({ sharingScreen: false, screenStream: null });
+    const cur = callRef.current;
+    if (cur) send({ type: 'camera', off: !!cur.cameraOff });
+  };
+  const toggleScreenShare = async () => {
+    const c = callRef.current;
+    if (!c || c.kind !== 'video' || !localRef.current) return;
+    if (screenRef.current) { stopScreenShare(); return; }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) { optsRef.current.snack('Screen sharing works in computer browsers'); return; }
+    try {
+      const display = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+      const track = display.getVideoTracks()[0];
+      if (!track) return;
+      screenRef.current = { stream: display, track };
+      pcsRef.current.forEach((pc) => {
+        const sender = pc.getSenders().find((s) => s.track && s.track.kind === 'video');
+        if (sender) sender.replaceTrack(track);
+      });
+      track.onended = () => stopScreenShare();
+      patch({ sharingScreen: true, screenStream: display });
+      send({ type: 'camera', off: false });
+    } catch {}
+  };
+
+  useEffect(() => {
+    const resume = async () => {
+      if (document.visibilityState !== 'visible') return;
+      const c = callRef.current;
+      if (!c || c.status === 'ended' || c.status === 'ringing') return;
+      document.querySelectorAll('video, audio').forEach((el) => {
+        if (el.srcObject && el.paused) { const p = el.play(); if (p && p.catch) p.catch(() => {}); }
+      });
+      const local = localRef.current;
+      if (local) {
+        const dead = local.getTracks().filter((t) => t.readyState === 'ended');
+        if (dead.length) {
+          try {
+            const fresh = await navigator.mediaDevices.getUserMedia({
+              audio: dead.some((t) => t.kind === 'audio') ? { echoCancellation: true, noiseSuppression: true, autoGainControl: true } : false,
+              video: dead.some((t) => t.kind === 'video') ? { facingMode: c.facing || 'user' } : false,
+            });
+            fresh.getTracks().forEach((track) => {
+              const old = dead.find((t) => t.kind === track.kind);
+              if (old) local.removeTrack(old);
+              if (track.kind === 'audio') track.enabled = !c.muted;
+              if (track.kind === 'video') track.enabled = !c.cameraOff;
+              local.addTrack(track);
+              pcsRef.current.forEach((pc) => {
+                const sender = pc.getSenders().find((s) => s.track && s.track.kind === track.kind);
+                if (sender) sender.replaceTrack(track);
+              });
+            });
+            patch({ localStream: new MediaStream(local.getTracks()) });
+          } catch {}
+        }
+      }
+      pcsRef.current.forEach((pc, peerId) => {
+        if ((pc.connectionState === 'disconnected' || pc.connectionState === 'failed') && pc.signalingState === 'stable') offerTo(peerId, true).catch(() => {});
+      });
+    };
+    document.addEventListener('visibilitychange', resume);
+    window.addEventListener('pageshow', resume);
+    window.addEventListener('focus', resume);
+    return () => {
+      document.removeEventListener('visibilitychange', resume);
+      window.removeEventListener('pageshow', resume);
+      window.removeEventListener('focus', resume);
+    };
+  }, []);
   const muteOther = (peerId) => send({ type: 'force-mute', to: peerId });
   const dismissSummary = () => { if (callRef.current && callRef.current.status === 'ended') put(null); };
 
   useEffect(() => () => cleanup(), []);
 
-  return { call, startDirect, startGroup, joinGroupCall, incoming, accept, decline, hangup: () => finish('hangup'), onRowUpdate, toggleMute, toggleCamera, flipCamera, minimize, muteOther, dismissSummary };
+  return { call, startDirect, startGroup, joinGroupCall, incoming, accept, decline, hangup: () => finish('hangup'), onRowUpdate, toggleMute, toggleCamera, flipCamera, minimize, muteOther, dismissSummary, toggleScreenShare };
 }
 
 function CallVideo({ stream, muted, mirror, fit = 'cover' }) {
@@ -7603,7 +7691,7 @@ function AvatarPeek({ profile, online, lastSeen, hasStory, storySeen, canCall, o
           )}
         </div>
         <div style={{ display: 'flex', gap: 8, padding: 10 }}>
-          {btn(<Send size={19} />, 'Message', onMessage)}
+          {btn(<ChatBubbleIcon size={19} />, 'Message', onMessage)}
           {canCall && btn(<Phone size={19} />, 'Call', onCall)}
           {btn(<User size={19} />, 'Profile', onProfile)}
           {hasStory && btn(<StatusIcon size={19} color="white" />, 'Status', onStory, true)}
@@ -7723,7 +7811,7 @@ function CallTile({ tile, isVideo, muted, cameraOff, facing, onMenu }) {
   );
 }
 
-function CallScreen({ call, me, nameFor, avatarFor, onAccept, onDecline, onHangup, onToggleMute, onToggleCamera, onFlip, onMinimize, onMuteOther, onCloseSummary, onCallAgain, onMessage }) {
+function CallScreen({ call, me, nameFor, avatarFor, onAccept, onDecline, onHangup, onToggleMute, onToggleCamera, onFlip, onMinimize, onMuteOther, onCloseSummary, onCallAgain, onMessage, onShareScreen }) {
   const [now, setNow] = useState(Date.now());
   const [pipCorner, setPipCorner] = useState('tr');
   const [joinCameraOff, setJoinCameraOff] = useState(false);
@@ -7756,15 +7844,9 @@ function CallScreen({ call, me, nameFor, avatarFor, onAccept, onDecline, onHangu
           {isGroup ? <GroupAvatar avatar={call.group && call.group.avatar} name={title} size={112} /> : <Avatar emoji={call.peer && call.peer.avatar} name={title} size={112} />}
           <div style={{ fontSize: 26, fontWeight: 800, marginTop: 18 }}>{title}</div>
           <div style={{ fontSize: 15, color: 'rgba(255,255,255,0.75)', marginTop: 6 }}>{call.endLabel || 'Call ended'}</div>
-          <div style={{ display: 'flex', gap: 10, marginTop: 22 }}>
-            <div style={{ padding: '10px 16px', borderRadius: 16, background: 'rgba(255,255,255,0.1)' }}>
-              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)', fontWeight: 700 }}>DURATION</div>
-              <div style={{ fontSize: 18, fontWeight: 800, marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>{d > 0 ? formatCallDuration(d) : '0:00'}</div>
-            </div>
-            <div style={{ padding: '10px 16px', borderRadius: 16, background: 'rgba(255,255,255,0.1)' }}>
-              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)', fontWeight: 700 }}>{isVideo ? 'VIDEO CALL' : 'VOICE CALL'}</div>
-              <div style={{ fontSize: 18, fontWeight: 800, marginTop: 2 }}>{new Date(call.endedAt || Date.now()).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</div>
-            </div>
+          <div style={{ marginTop: 14, fontSize: 34, fontWeight: 300, letterSpacing: 1, fontVariantNumeric: 'tabular-nums' }}>{d > 0 ? formatCallDuration(d) : '0:00'}</div>
+          <div style={{ marginTop: 6, fontSize: 13.5, color: 'rgba(255,255,255,0.6)' }}>
+            {isVideo ? 'Video call' : 'Voice call'} ended at {new Date(call.endedAt || Date.now()).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
           </div>
         </div>
         <div style={{ position: 'relative', display: 'flex', gap: 14, padding: '0 24px', paddingBottom: 'calc(34px + env(safe-area-inset-bottom))' }}>
@@ -7895,7 +7977,7 @@ function CallScreen({ call, me, nameFor, avatarFor, onAccept, onDecline, onHangu
           top: pipCorner[0] === 't' ? 'calc(70px + env(safe-area-inset-top))' : 'auto', bottom: pipCorner[0] === 'b' ? 'calc(160px + env(safe-area-inset-bottom))' : 'auto',
           left: pipCorner[1] === 'l' ? 14 : 'auto', right: pipCorner[1] === 'r' ? 14 : 'auto', transition: 'top 0.25s ease, bottom 0.25s ease, left 0.25s ease, right 0.25s ease',
         }}>
-          <CallVideo stream={call.localStream} muted mirror={call.facing === 'user'} />
+          <CallVideo stream={call.sharingScreen && call.screenStream ? call.screenStream : call.localStream} muted mirror={!call.sharingScreen && call.facing === 'user'} />
         </div>
       )}
 
@@ -7927,6 +8009,7 @@ function CallScreen({ call, me, nameFor, avatarFor, onAccept, onDecline, onHangu
           {ctrl(call.muted ? <MicOff size={24} /> : <Mic size={24} />, call.muted ? 'Unmute' : 'Mute', onToggleMute, call.muted ? 'on' : null)}
           {isVideo && ctrl(call.cameraOff ? <VideoOff size={24} /> : <VideoIcon size={24} />, call.cameraOff ? 'Camera' : 'Camera', onToggleCamera, call.cameraOff ? 'on' : null)}
           {isVideo && ctrl(<SwitchCamera size={24} />, 'Flip', onFlip)}
+          {isVideo && onShareScreen && typeof navigator !== 'undefined' && navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia && ctrl(<Share2 size={23} />, call.sharingScreen ? 'Stop share' : 'Share', onShareScreen, call.sharingScreen ? 'on' : null)}
           {ctrl(<PhoneOff size={26} />, 'End', onHangup, 'end')}
         </div>
       )}
@@ -7982,6 +8065,128 @@ function CallMiniBar({ call, remoteVideo, onOpen, onHangup }) {
           <CallVideo stream={remoteVideo} fit="cover" muted />
         </div>
       )}
+    </>
+  );
+}
+
+const profileStatsCache = (() => {
+  try { return new Map(Object.entries(JSON.parse(localStorage.getItem('zchat-profile-stats') || '{}'))); } catch { return new Map(); }
+})();
+function saveProfileStats(id, patch) {
+  const next = { ...(profileStatsCache.get(id) || {}), ...patch };
+  profileStatsCache.set(id, next);
+  try {
+    const entries = [...profileStatsCache.entries()].slice(-150);
+    localStorage.setItem('zchat-profile-stats', JSON.stringify(Object.fromEntries(entries)));
+  } catch {}
+}
+
+const favoriteSync = { userId: null };
+function writeFavoriteKeys(keys) {
+  try { localStorage.setItem(`zchat-fav-stickers-${favoriteSync.userId || 'local'}`, JSON.stringify([...keys])); } catch {}
+  try { window.dispatchEvent(new CustomEvent('zchat-favorites')); } catch {}
+}
+
+function ChatBubbleIcon({ size = 18, color = 'currentColor' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
+      <path d="M12 3.2c5 0 9 3.4 9 7.7s-4 7.7-9 7.7c-1 0-2-.1-2.9-.4L4.6 20.2c-.5.2-1-.3-.8-.8l1.3-3.3C3.8 14.7 3 12.9 3 10.9 3 6.6 7 3.2 12 3.2z" stroke={color} strokeWidth="1.9" strokeLinejoin="round" />
+      <circle cx="8.3" cy="11" r="1.15" fill={color} />
+      <circle cx="12" cy="11" r="1.15" fill={color} />
+      <circle cx="15.7" cy="11" r="1.15" fill={color} />
+    </svg>
+  );
+}
+
+function followLabel(state, theyFollowMe) {
+  if (state === 'accepted') return 'Following';
+  if (state === 'pending') return 'Requested';
+  return theyFollowMe ? 'Follow back' : 'Follow';
+}
+
+function FollowActionButton({ state, theyFollowMe, busy, onClick, size = 'md', onDark = false }) {
+  const { theme } = useTheme();
+  const filled = state !== 'accepted' && state !== 'pending';
+  const dims = size === 'sm' ? { width: 104, height: 32, fontSize: 12, radius: 10 } : { width: '100%', height: 44, fontSize: 14, radius: 14 };
+  return (
+    <button onClick={(e) => { e.stopPropagation(); if (!busy) onClick(); }} disabled={busy} style={{
+      width: dims.width, minWidth: dims.width, height: dims.height, borderRadius: dims.radius, flexShrink: 0, boxSizing: 'border-box',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, cursor: busy ? 'default' : 'pointer', fontFamily: FONT,
+      fontSize: dims.fontSize, fontWeight: 700, letterSpacing: 0.1, transition: 'background 0.2s ease, color 0.2s ease',
+      border: filled ? 'none' : `1px solid ${onDark ? 'rgba(255,255,255,0.45)' : theme.border}`,
+      background: filled ? `linear-gradient(135deg, ${theme.coral}, ${theme.coralDeep || theme.coral})` : (onDark ? 'rgba(0,0,0,0.35)' : theme.rowBg),
+      color: filled || onDark ? 'white' : theme.ink,
+      boxShadow: filled ? `0 6px 16px ${theme.coral}40` : 'none',
+    }}>
+      {busy ? <Spinner size={13} color={filled || onDark ? 'white' : theme.ink} /> : followLabel(state, theyFollowMe)}
+    </button>
+  );
+}
+
+function FlameBorder({ active = true }) {
+  const canvasRef = useRef(null);
+  useEffect(() => {
+    if (!active) return undefined;
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return undefined;
+    const canvas = canvasRef.current;
+    if (!canvas) return undefined;
+    const ctx = canvas.getContext('2d');
+    let w = 0;
+    let h = 0;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const resize = () => {
+      const r = canvas.getBoundingClientRect();
+      w = r.width; h = r.height;
+      canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    };
+    resize();
+    window.addEventListener('resize', resize);
+    const parts = [];
+    const spawn = () => {
+      const side = Math.random();
+      let x; let y;
+      if (side < 0.4) { x = Math.random() * w; y = h - 2; }
+      else if (side < 0.7) { x = 2; y = Math.random() * h; }
+      else { x = w - 2; y = Math.random() * h; }
+      parts.push({ x, y, vx: (Math.random() - 0.5) * 0.6, vy: -(0.8 + Math.random() * 1.8), life: 0, max: 38 + Math.random() * 34, size: 6 + Math.random() * 12 });
+    };
+    let frame = 0;
+    let running = true;
+    const tick = () => {
+      if (!running) return;
+      ctx.clearRect(0, 0, w, h);
+      for (let i = 0; i < 7; i++) spawn();
+      ctx.globalCompositeOperation = 'lighter';
+      for (let i = parts.length - 1; i >= 0; i--) {
+        const p = parts[i];
+        p.life += 1;
+        p.x += p.vx + Math.sin((p.life + p.y) * 0.12) * 0.35;
+        p.y += p.vy;
+        const t = p.life / p.max;
+        if (t >= 1) { parts.splice(i, 1); continue; }
+        const r = p.size * (1 - t * 0.7);
+        const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
+        g.addColorStop(0, `rgba(255, ${Math.round(230 - t * 120)}, ${Math.round(120 - t * 110)}, ${0.55 * (1 - t)})`);
+        g.addColorStop(0.5, `rgba(255, ${Math.round(120 - t * 80)}, 20, ${0.35 * (1 - t)})`);
+        g.addColorStop(1, 'rgba(180, 20, 0, 0)');
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalCompositeOperation = 'source-over';
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    const onVis = () => { if (document.visibilityState === 'hidden') { running = false; cancelAnimationFrame(frame); } else if (!running) { running = true; frame = requestAnimationFrame(tick); } };
+    document.addEventListener('visibilitychange', onVis);
+    return () => { running = false; cancelAnimationFrame(frame); window.removeEventListener('resize', resize); document.removeEventListener('visibilitychange', onVis); };
+  }, [active]);
+  return (
+    <>
+      <canvas ref={canvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 1 }} />
+      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 1, boxShadow: 'inset 0 0 28px rgba(255,110,20,0.55), inset 0 -40px 60px -30px rgba(255,90,0,0.55)', animation: 'zchat-flame-glow 2.4s ease-in-out infinite' }} />
     </>
   );
 }
@@ -10064,6 +10269,37 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     },
   });
   callEngineRef.current = callEngine;
+  useEffect(() => {
+    if (!me) return undefined;
+    favoriteSync.userId = me.id;
+    const pull = async () => {
+      const { data, error } = await supabase.from('sticker_favorites').select('sticker_key').eq('user_id', me.id);
+      if (error) return;
+      const remote = new Set((data || []).map((r) => r.sticker_key));
+      const mergedFlag = `zchat-fav-merged-${me.id}`;
+      let alreadyMerged = false;
+      try { alreadyMerged = localStorage.getItem(mergedFlag) === '1'; } catch {}
+      if (!alreadyMerged) {
+        const local = getFavoriteStickerKeys();
+        const missing = [...local].filter((k) => !remote.has(k));
+        if (missing.length) {
+          await supabase.from('sticker_favorites').upsert(missing.map((k) => ({ user_id: me.id, sticker_key: k })), { onConflict: 'user_id,sticker_key' });
+          missing.forEach((k) => remote.add(k));
+        }
+        try { localStorage.setItem(mergedFlag, '1'); } catch {}
+      }
+      writeFavoriteKeys(remote);
+    };
+    pull();
+    const channel = supabase.channel('favorites-' + me.id)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sticker_favorites' }, (payload) => {
+        const row = payload.new && payload.new.user_id ? payload.new : payload.old;
+        if (row && row.user_id && row.user_id !== me.id) return;
+        pull();
+      })
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, [me]);
   const callBarShown = !!(callEngine.call && callEngine.call.minimized && callEngine.call.status !== 'ended');
   useEffect(() => {
     const meta = document.querySelector('meta[name="theme-color"]');
@@ -10534,9 +10770,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                 </div>
               )}
               {(() => {
-                const isPinnedItem = (it) => ((it.__kind === 'group' || (!it.__kind && listFilter === 'groups')) ? !!it.pinned : isPinnedByMe(it));
-                const pinnedItems = displayList.filter(isPinnedItem);
-                const otherItems = displayList.filter((it) => !isPinnedItem(it));
                 const renderRow = (item) => {
                 const isGroup = item.__kind === 'group' || (!item.__kind && listFilter === 'groups');
                 if (isGroup) {
@@ -10616,18 +10849,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                   </div>
                 );
                 };
-                const sectionLabel = (text, icon) => (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 10px 4px', fontSize: 11, fontWeight: 800, letterSpacing: 0.6, color: theme.muted, textTransform: 'uppercase' }}>{icon}{text}</div>
-                );
-                if (!pinnedItems.length) return otherItems.map(renderRow);
-                return (
-                  <>
-                    {sectionLabel(`Pinned \u00b7 ${pinnedItems.length}`, <Pin_ size={11} color={theme.muted} />)}
-                    <div style={{ background: theme.rowBg, borderRadius: 18, padding: 2, marginBottom: 6 }}>{pinnedItems.map(renderRow)}</div>
-                    {otherItems.length > 0 && sectionLabel('All chats', null)}
-                    {otherItems.map(renderRow)}
-                  </>
-                );
+                return displayList.map(renderRow);
               })()}
             </div>
           </>
@@ -10669,7 +10891,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                   <div style={{
                     fontWeight: 800, fontSize: 14.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                     color: activeNameBarKey ? 'white' : theme.ink, textShadow: activeNameBarKey ? '0 1px 4px rgba(0,0,0,0.7)' : 'none',
-                  }}>{activeGroup ? activeGroup.name : activeProfile.name}</div>
+                  }}>
+                    {(activeGroup ? !!(groups.find((x) => x.id === activeGroup.id) || {}).pinned : !!(activeConvForBar && isPinnedByMe(activeConvForBar))) && <span style={{ marginRight: 4, display: 'inline-flex', verticalAlign: 'middle' }}><Pin_ size={12} /></span>}
+                    {activeGroup ? activeGroup.name : activeProfile.name}
+                  </div>
                   <div style={{ fontSize: 11, color: activeNameBarKey ? 'rgba(255,255,255,0.85)' : theme.muted, textShadow: activeNameBarKey ? '0 1px 4px rgba(0,0,0,0.7)' : 'none' }}>
                     {activityFrom ? (
                       <span style={{ color: activeNameBarKey ? 'white' : theme.coral, fontWeight: 700 }}>
@@ -10696,25 +10921,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                 </>
               )}
               {!activeGroup && activeFollowState !== null && !canCall(activeProfile) && !myBlockedIds.has(activeProfile.id) && !blockedByIds.has(activeProfile.id) && (
-                <button onClick={(e) => { e.stopPropagation(); toggleActiveFollow(); }} disabled={activeFollowBusy} style={{
-                  padding: '6px 14px', borderRadius: 18, fontSize: 11.5, fontWeight: 700, cursor: activeFollowBusy ? 'default' : 'pointer', fontFamily: FONT, flexShrink: 0,
-                  position: 'relative', marginRight: 4,
-                  border: activeNameBarKey
-                    ? '1.5px solid rgba(255,255,255,0.5)'
-                    : (activeFollowState !== 'none' ? `1.5px solid ${theme.border}` : 'none'),
-                  background: activeNameBarKey
-                    ? (activeFollowState === 'accepted' ? 'rgba(0,0,0,0.45)' : activeFollowState === 'pending' ? 'rgba(0,0,0,0.35)' : theme.coral)
-                    : (activeFollowState === 'accepted' ? `${theme.coral}18` : activeFollowState === 'pending' ? 'transparent' : theme.coral),
-                  color: activeNameBarKey
-                    ? 'white'
-                    : (activeFollowState === 'accepted' ? theme.coralDeep : activeFollowState === 'pending' ? theme.ink : 'white'),
-                  display: 'flex', alignItems: 'center', gap: 5,
-                }}>
-                  {activeFollowBusy ? <Spinner size={11} color={activeNameBarKey ? 'white' : (activeFollowState !== 'none' ? theme.ink : 'white')} /> : (
-                    <>{activeFollowState === 'accepted' ? <Check size={11} /> : activeFollowState === 'pending' ? null : <UserPlus size={11} />}</>
-                  )}
-                  {!activeFollowBusy && (activeFollowState === 'accepted' ? 'Following' : activeFollowState === 'pending' ? 'Requested' : (activeFollowerFollowsMe ? 'Follow back' : 'Follow'))}
-                </button>
+                <div style={{ position: 'relative', marginRight: 6 }}>
+                  <FollowActionButton size="sm" state={activeFollowState} theyFollowMe={activeFollowerFollowsMe} busy={activeFollowBusy} onDark={!!activeNameBarKey} onClick={toggleActiveFollow} />
+                </div>
               )}
               <MoreVertical size={19} style={{ cursor: 'pointer', color: activeNameBarKey ? 'white' : theme.ink, flexShrink: 0, filter: activeNameBarKey ? 'drop-shadow(0 1px 3px rgba(0,0,0,0.6))' : 'none', position: 'relative' }}
                 onClick={(e) => { e.stopPropagation(); setChatMenuAnchor(e.currentTarget); }} />
@@ -10854,7 +11063,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               </div>
             )}
 
-            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, padding: '4px 14px', flexShrink: 0, paddingBottom: keyboardOpen ? 6 : 'max(8px, calc(env(safe-area-inset-bottom) - 14px))' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, padding: '4px 14px', flexShrink: 0, paddingBottom: keyboardOpen ? 6 : 'max(6px, calc(env(safe-area-inset-bottom) - 24px))' }}>
               {activeProfile && !activeGroup && myBlockedIds.has(activeProfile.id) ? (
                 <div className="zchat-fade" style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 9, padding: '8px 4px 2px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, color: theme.ink, fontWeight: 700 }}><Ban size={15} color={theme.danger} /> You blocked {activeProfile.name}</div>
@@ -11196,7 +11405,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           onAccept={callEngine.accept} onDecline={callEngine.decline} onHangup={callEngine.hangup}
           onToggleMute={callEngine.toggleMute} onToggleCamera={callEngine.toggleCamera} onFlip={callEngine.flipCamera}
           onMinimize={() => callEngine.minimize(true)} onMuteOther={callEngine.muteOther}
-          onCloseSummary={callEngine.dismissSummary}
+          onCloseSummary={callEngine.dismissSummary} onShareScreen={callEngine.toggleScreenShare}
           onCallAgain={callEngine.call.mode === 'direct' && callEngine.call.peer && canCall(callEngine.call.peer) ? (kind) => { const peer = callEngine.call.peer; callEngine.dismissSummary(); setTimeout(() => startDirectCall(peer, kind), 60); } : null}
           onMessage={() => {
             const c = callEngine.call;
