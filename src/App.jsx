@@ -8897,6 +8897,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [viewportBox, setViewportBox] = useState({ height: null, offset: 0 });
   const [standaloneFill, setStandaloneFill] = useState(null);
   const [bottomShift, setBottomShiftState] = useState(() => getBottomShift());
+  const [safeTopPx, setSafeTopPx] = useState(0);
   const safeTopRef = useRef(null);
   useEffect(() => {
     const onChange = () => setBottomShiftState(getBottomShift());
@@ -8931,6 +8932,14 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         const open = typing && fullHeightRef.current - vv.height > 120;
         const standalone = isAppleMobile() && (window.navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches));
         let fill = null;
+        if (standalone && safeTopRef.current == null) {
+          const probe = document.createElement('div');
+          probe.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:env(safe-area-inset-top);visibility:hidden;pointer-events:none;';
+          document.body.appendChild(probe);
+          safeTopRef.current = probe.getBoundingClientRect().height || 0;
+          document.body.removeChild(probe);
+          setSafeTopPx(safeTopRef.current);
+        }
         if (!open && standalone && window.screen) {
           if (safeTopRef.current == null) {
             const probe = document.createElement('div');
@@ -9912,7 +9921,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   }, [activeProfile]);
 
   const autoBottomPad = standaloneFill ? standaloneFill.pad : 0;
-  const rootExtend = Math.max(autoBottomPad, bottomShift);
+  const rootExtend = safeTopPx >= 20 ? Math.max(autoBottomPad, bottomShift) : 0;
   const chatKey = activeGroup?.id || activeProfile?.id || null;
   const activeProfileIdForSeen = activeGroup ? null : (activeProfile ? activeProfile.id : null);
   useEffect(() => {
