@@ -8327,7 +8327,7 @@ const VERIFIED_TIERS = {
 };
 
 const CUSTOM_BADGES = {
-  cat: { file: '/badges/badge-cat.webp', fallback: '/badge-cat.webp', label: 'Cute cat badge', ratio: 1.125 },
+  cat: { file: '/badges/badge-cat.webp', fallback: '/badge-cat.webp', label: 'Cute cat badge', ratio: 1.182 },
 };
 const customBadgeUrlCache = new Map();
 function useCustomBadgeUrl(key) {
@@ -12029,7 +12029,12 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     },
   });
   callEngineRef.current = callEngine;
-  useEffect(() => { Object.keys(AVATAR_FRAMES).forEach((k) => { resolveFrameUrl(k); }); }, []);
+  useEffect(() => {
+    const used = new Set();
+    if (me && me.avatar_frame) used.add(me.avatar_frame);
+    conversations.forEach((c) => { if (c.otherProfile && c.otherProfile.avatar_frame) used.add(c.otherProfile.avatar_frame); });
+    used.forEach((k) => { if (AVATAR_FRAMES[k]) resolveFrameUrl(k); });
+  }, [me && me.avatar_frame, conversations]);
   useEffect(() => {
     if (!storyViewer || storyViewer.readOnly || storyViewer.detached) return;
     const live = new Set();
