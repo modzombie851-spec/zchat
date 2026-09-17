@@ -8335,7 +8335,7 @@ function useCustomBadgeUrl(key) {
     const spec = key && CUSTOM_BADGES[key];
     if (!spec) { setUrl(null); return undefined; }
     if (customBadgeUrlCache.has(key)) { setUrl(customBadgeUrlCache.get(key)); return undefined; }
-    const tryLoad = (src) => new Promise((resolve) => { if (!src) { resolve(null); return; } const img = new Image(); img.onload = () => resolve(src); img.onerror = () => resolve(null); img.src = src; });
+    const tryLoad = (raw) => new Promise(async (resolve) => { if (!raw) { resolve(null); return; } const src = await cachedAssetUrl(raw); if (!src) { resolve(null); return; } const img = new Image(); img.onload = () => resolve(src); img.onerror = () => resolve(null); img.src = src; });
     tryLoad(spec.file).then((u) => u || tryLoad(spec.fallback)).then((u) => { if (u) customBadgeUrlCache.set(key, u); if (alive) setUrl(u); });
     return () => { alive = false; };
   }, [key]);
@@ -9223,10 +9223,10 @@ function AudioBubble({ url, isMe }) {
 }
 
 const AVATAR_FRAMES = {
-  fire_wolf: { file: '/frames/frame-fire-wolf.webp', fallback: '/frame-fire-wolf.webp', label: 'Inferno wolf frame', scale: 1.578, centerX: 0.4997, centerY: 0.4603, glow: '#ff5a1f' },
-  ice_wolf: { file: '/frames/frame-ice-wolf.webp', fallback: '/frame-ice-wolf.webp', label: 'Frost wolf frame', scale: 1.539, centerX: 0.4967, centerY: 0.4854, glow: '#38bdf8' },
-  poison: { file: '/frames/frame-poison.webp', fallback: '/frame-poison.webp', label: 'Toxic skull frame', scale: 1.62, centerX: 0.5029, centerY: 0.4765, glow: '#4ade80' },
-  ice_flow: { file: '/frames/frame-ice-flow.webp', fallback: '/frame-ice-flow.webp', label: 'Frost flow frame', scale: 1.8, centerX: 0.4907, centerY: 0.475, glow: '#60a5fa' },
+  fire_wolf: { file: '/frames/frame-fire-wolf.webp', fallback: '/frame-fire-wolf.webp', label: 'Inferno wolf frame', scale: 1.428, centerX: 0.5002, centerY: 0.4605, glow: '#ff5a1f' },
+  ice_wolf: { file: '/frames/frame-ice-wolf.webp', fallback: '/frame-ice-wolf.webp', label: 'Frost wolf frame', scale: 1.399, centerX: 0.4968, centerY: 0.4791, glow: '#38bdf8' },
+  poison: { file: '/frames/frame-poison.webp?v=2', fallback: '/frame-poison.webp?v=2', label: 'Toxic skull frame', scale: 1.821, centerX: 0.5037, centerY: 0.4763, glow: '#4ade80' },
+  ice_flow: { file: '/frames/frame-ice-flow.webp?v=3', fallback: '/frame-ice-flow.webp?v=3', label: 'Frost flow frame', scale: 1.502, centerX: 0.5133, centerY: 0.4888, glow: '#60a5fa' },
 };
 
 function frameMaskStyle(spec) {
@@ -9237,8 +9237,31 @@ function frameMaskStyle(spec) {
 const frameUrlCache = new Map();
 const frameWaiters = new Map();
 const frameImageKeep = [];
-function loadFrameImage(url) {
-  return new Promise((resolve) => {
+async function cachedAssetUrl(url) {
+  if (!url) return null;
+  try {
+    if (typeof caches === 'undefined') return url;
+    const cache = await caches.open('zchat-assets-v1');
+    let res = await cache.match(url);
+    if (!res) {
+      const net = await fetch(url, { cache: 'no-cache' });
+      if (!net.ok) return null;
+      const type = net.headers.get('content-type') || '';
+      if (type.includes('text/html')) return null;
+      await cache.put(url, net.clone());
+      res = net;
+    }
+    const blob = await res.blob();
+    if (!blob.size) return null;
+    return URL.createObjectURL(blob);
+  } catch {
+    return url;
+  }
+}
+function loadFrameImage(rawUrl) {
+  return new Promise(async (resolve) => {
+    if (!rawUrl) { resolve(null); return; }
+    const url = await cachedAssetUrl(rawUrl);
     if (!url) { resolve(null); return; }
     const img = new Image();
     img.decoding = 'async';
@@ -9997,6 +10020,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [celebrateTier, setCelebrateTier] = useState(null);
   const [deepPost, setDeepPost] = useState(null);
   const [reportThanks, setReportThanks] = useState(null);
+  const [rewardReady, setRewardReady] = useState({});
   const newVersionAvailable = useNewVersionAvailable();
   const [updateLater, setUpdateLater] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
@@ -12067,6 +12091,36 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   });
   callEngineRef.current = callEngine;
   useEffect(() => {
+    if (!me) return undefined;
+    let alive = true;
+    const markReady = (id) => { if (alive) setRewardReady((prev) => (prev[id] ? prev : { ...prev, [id]: true })); };
+    if (me.avatar_frame && AVATAR_FRAMES[me.avatar_frame] && me.avatar_frame_seen !== me.avatar_frame) {
+      const id = `frame:${me.avatar_frame}`;
+      const timer = setTimeout(() => markReady(id), 8000);
+      resolveFrameUrl(me.avatar_frame).then(() => { clearTimeout(timer); markReady(id); });
+    }
+    if (me.custom_badge && CUSTOM_BADGES[me.custom_badge] && me.custom_badge_seen !== me.custom_badge) {
+      const id = `badge:${me.custom_badge}`;
+      const spec = CUSTOM_BADGES[me.custom_badge];
+      const timer = setTimeout(() => markReady(id), 8000);
+      cachedAssetUrl(spec.file).then((u) => u || cachedAssetUrl(spec.fallback)).then((u) => {
+        if (u) customBadgeUrlCache.set(me.custom_badge, u);
+        clearTimeout(timer); markReady(id);
+      });
+    }
+    return () => { alive = false; };
+  }, [me && me.avatar_frame, me && me.avatar_frame_seen, me && me.custom_badge, me && me.custom_badge_seen]);
+  useEffect(() => {
+    let cancelled = false;
+    const warm = () => {
+      if (cancelled) return;
+      Object.keys(AVATAR_FRAMES).forEach((k) => { resolveFrameUrl(k); });
+      Object.values(CUSTOM_BADGES).forEach((b) => { cachedAssetUrl(b.file).then((u) => { if (!u) cachedAssetUrl(b.fallback); }); });
+    };
+    const t = setTimeout(() => { if (window.requestIdleCallback) window.requestIdleCallback(warm, { timeout: 4000 }); else warm(); }, 2500);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, []);
+  useEffect(() => {
     const used = new Set();
     if (me && me.avatar_frame) used.add(me.avatar_frame);
     conversations.forEach((c) => { if (c.otherProfile && c.otherProfile.avatar_frame) used.add(c.otherProfile.avatar_frame); });
@@ -13417,7 +13471,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         <PostViewer post={deepPost.post} owner={deepPost.owner} userId={session.user.id} meProfile={me}
           onClose={() => setDeepPost(null)} onDeleted={() => setDeepPost(null)} />
       )}
-      {!celebrateTier && me && me.avatar_frame && AVATAR_FRAMES[me.avatar_frame] && me.avatar_frame_seen !== me.avatar_frame && (
+      {!celebrateTier && me && me.avatar_frame && AVATAR_FRAMES[me.avatar_frame] && me.avatar_frame_seen !== me.avatar_frame && rewardReady[`frame:${me.avatar_frame}`] && (
         <RewardCelebration kind="frame" rewardKey={me.avatar_frame} me={me}
           onClaim={async () => {
             const key = me.avatar_frame;
@@ -13425,7 +13479,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             await supabase.from('profiles').update({ avatar_frame_seen: key }).eq('id', session.user.id);
           }} />
       )}
-      {!celebrateTier && me && !(me.avatar_frame && AVATAR_FRAMES[me.avatar_frame] && me.avatar_frame_seen !== me.avatar_frame) && me.custom_badge && CUSTOM_BADGES[me.custom_badge] && me.custom_badge_seen !== me.custom_badge && (
+      {!celebrateTier && me && !(me.avatar_frame && AVATAR_FRAMES[me.avatar_frame] && me.avatar_frame_seen !== me.avatar_frame) && me.custom_badge && CUSTOM_BADGES[me.custom_badge] && me.custom_badge_seen !== me.custom_badge && rewardReady[`badge:${me.custom_badge}`] && (
         <RewardCelebration kind="badge" rewardKey={me.custom_badge} me={me}
           onClaim={async () => {
             const key = me.custom_badge;
