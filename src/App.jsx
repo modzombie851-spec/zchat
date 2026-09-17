@@ -9223,10 +9223,10 @@ function AudioBubble({ url, isMe }) {
 }
 
 const AVATAR_FRAMES = {
-  fire_wolf: { file: '/frames/frame-fire-wolf.webp', fallback: '/frame-fire-wolf.webp', label: 'Inferno wolf frame', scale: 1.578, centerX: 0.4997, centerY: 0.4603, animation: 'zchat-frame-fire 2.2s ease-in-out infinite', glow: '#ff5a1f' },
-  ice_wolf: { file: '/frames/frame-ice-wolf.webp', fallback: '/frame-ice-wolf.webp', label: 'Frost wolf frame', scale: 1.539, centerX: 0.4967, centerY: 0.4854, animation: 'zchat-frame-ice 3s ease-in-out infinite', glow: '#38bdf8' },
-  poison: { file: '/frames/frame-poison.webp', fallback: '/frame-poison.webp', label: 'Toxic skull frame', scale: 1.62, centerX: 0.5029, centerY: 0.4765, animation: 'zchat-frame-poison 2.6s ease-in-out infinite', animationLight: 'zchat-frame-poison-light 2.6s ease-in-out infinite', glow: '#4ade80' },
-  ice_flow: { file: '/frames/frame-ice-flow.webp', fallback: '/frame-ice-flow.webp', label: 'Frost flow frame', scale: 1.8, centerX: 0.4907, centerY: 0.475, animation: 'zchat-frame-ice 3s ease-in-out infinite', glow: '#60a5fa' },
+  fire_wolf: { file: '/frames/frame-fire-wolf.webp', fallback: '/frame-fire-wolf.webp', label: 'Inferno wolf frame', scale: 1.578, centerX: 0.4997, centerY: 0.4603, glow: '#ff5a1f' },
+  ice_wolf: { file: '/frames/frame-ice-wolf.webp', fallback: '/frame-ice-wolf.webp', label: 'Frost wolf frame', scale: 1.539, centerX: 0.4967, centerY: 0.4854, glow: '#38bdf8' },
+  poison: { file: '/frames/frame-poison.webp', fallback: '/frame-poison.webp', label: 'Toxic skull frame', scale: 1.62, centerX: 0.5029, centerY: 0.4765, glow: '#4ade80' },
+  ice_flow: { file: '/frames/frame-ice-flow.webp', fallback: '/frame-ice-flow.webp', label: 'Frost flow frame', scale: 1.8, centerX: 0.4907, centerY: 0.475, glow: '#60a5fa' },
 };
 
 function frameMaskStyle(spec) {
