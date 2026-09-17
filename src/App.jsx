@@ -3872,10 +3872,10 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
           <div style={{ position: 'relative', paddingBottom: 4 }}>
             <div style={{ position: 'absolute', left: -60, right: -60, top: -60, height: 540, overflow: 'hidden', pointerEvents: 'none' }}>
               {hasPhoto
-                ? <img src={shownPhoto} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'blur(42px) saturate(1.35)', opacity: theme.dark ? 0.85 : 0.6, transform: 'scale(1.12)' }} />
+                ? <img src={shownPhoto} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'blur(18px) saturate(1.25)', opacity: theme.dark ? 0.95 : 0.8, transform: 'scale(1.08)' }} />
                 : <div style={{ position: 'absolute', inset: 0, background: colorForName(profile.name), filter: 'blur(50px)', opacity: theme.dark ? 0.75 : 0.5 }} />}
             </div>
-            <div style={{ position: 'absolute', left: 0, right: 0, top: 0, height: 480, pointerEvents: 'none', background: `linear-gradient(180deg, ${theme.dark ? 'rgba(0,0,0,0.28)' : 'rgba(255,255,255,0.15)'} 0%, ${theme.dark ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.05)'} 38%, ${pageBg} 100%)` }} />
+            <div style={{ position: 'absolute', left: 0, right: 0, top: 0, height: 480, pointerEvents: 'none', background: `linear-gradient(180deg, ${theme.dark ? 'rgba(0,0,0,0.18)' : 'rgba(255,255,255,0.08)'} 0%, rgba(0,0,0,0) 45%, ${pageBg} 100%)` }} />
 
             <div style={{ position: 'relative', zIndex: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 14px', paddingTop: 'calc(12px + env(safe-area-inset-top))' }}>
               <div role="button" aria-label="Close" onClick={onClose} style={glassCircle}><ArrowLeft size={19} /></div>
@@ -3904,7 +3904,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
                     : <span style={{ fontSize: 72, fontWeight: 800, color: 'rgba(255,255,255,0.92)', fontFamily: FONT }}>{initial}</span>}
                 </div>
                 {AVATAR_FRAMES[profile.avatar_frame] && (
-                  <img src={AVATAR_FRAMES[profile.avatar_frame].file} alt="" draggable={false} style={{ position: 'absolute', width: 150 * AVATAR_FRAMES[profile.avatar_frame].scale, height: 150 * AVATAR_FRAMES[profile.avatar_frame].scale, left: 75 - (150 * AVATAR_FRAMES[profile.avatar_frame].scale) / 2, top: 75 - 150 * AVATAR_FRAMES[profile.avatar_frame].scale * AVATAR_FRAMES[profile.avatar_frame].centerY, pointerEvents: 'none', zIndex: 2 }} />
+                  <img src={AVATAR_FRAMES[profile.avatar_frame].file} alt="" draggable={false} onError={(e) => { const el = e.currentTarget; const fb = AVATAR_FRAMES[profile.avatar_frame].fallback; if (fb && !el.dataset.fallback) { el.dataset.fallback = '1'; el.src = fb; } }} style={{ position: 'absolute', width: 150 * AVATAR_FRAMES[profile.avatar_frame].scale, height: 150 * AVATAR_FRAMES[profile.avatar_frame].scale, left: 75 - (150 * AVATAR_FRAMES[profile.avatar_frame].scale) / 2, top: 75 - 150 * AVATAR_FRAMES[profile.avatar_frame].scale * AVATAR_FRAMES[profile.avatar_frame].centerY, pointerEvents: 'none', zIndex: 2 }} />
                 )}
                 {isOnline && !AVATAR_FRAMES[profile.avatar_frame] && <div style={{ position: 'absolute', right: 14, bottom: 14, width: 26, height: 26, borderRadius: '50%', background: '#22c55e', border: `5px solid ${pageBg}`, zIndex: 3 }} />}
               </div>
@@ -9173,7 +9173,7 @@ function AudioBubble({ url, isMe }) {
 }
 
 const AVATAR_FRAMES = {
-  laurel: { file: '/frames/laurel.gif', label: 'Golden laurel frame', scale: 1.86, centerY: 0.5 },
+  laurel: { file: '/frames/laurel.gif', fallback: '/laurel.gif', label: 'Golden laurel frame', scale: 1.86, centerY: 0.5 },
 };
 
 function FramedAvatar({ frame, size, children }) {
@@ -9183,7 +9183,7 @@ function FramedAvatar({ frame, size, children }) {
   return (
     <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
       {children}
-      <img src={spec.file} alt="" draggable={false} style={{
+      <img src={spec.file} alt="" draggable={false} onError={(e) => { const el = e.currentTarget; if (spec.fallback && !el.dataset.fallback) { el.dataset.fallback = '1'; el.src = spec.fallback; } }} style={{
         position: 'absolute', width: w, height: w, left: size / 2 - w / 2, top: size / 2 - w * spec.centerY,
         pointerEvents: 'none', userSelect: 'none', filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.35))', zIndex: 2,
       }} />
@@ -9484,8 +9484,8 @@ function SocialGlyph({ platform, size = 20 }) {
 function SocialIcon({ platform, size = 40, round = false }) {
   const meta = SOCIAL_PLATFORMS.find((p) => p.key === platform) || SOCIAL_PLATFORMS[SOCIAL_PLATFORMS.length - 1];
   return (
-    <div style={{ width: size, height: size, borderRadius: round ? '50%' : size * 0.3, background: meta.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' }}>
-      <SocialGlyph platform={meta.key} size={size * 0.56} />
+    <div style={{ width: size, height: size, borderRadius: round ? '50%' : size * 0.3, background: meta.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden', lineHeight: 0 }}>
+      <SocialGlyph platform={meta.key} size={Math.round(size * 0.56)} />
     </div>
   );
 }
@@ -9500,17 +9500,17 @@ function ProfileSocialRow({ links, whatsapp }) {
   ];
   if (!items.length) return null;
   return (
-    <div style={{ display: 'flex', gap: 14, overflowX: 'auto', padding: '4px 2px 2px', margin: '14px auto 0', width: 'fit-content', maxWidth: '100%', scrollbarWidth: 'none' }}>
+    <div style={{ display: 'flex', gap: 6, overflowX: 'auto', padding: '4px 2px 2px', margin: '14px auto 0', width: 'fit-content', maxWidth: '100%', scrollbarWidth: 'none' }}>
       {items.map((it) => (
         <div key={it.key} role="button" aria-label={it.label} onClick={() => window.open(it.href, '_blank', 'noopener')}
-          style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, flexShrink: 0, width: 62, cursor: 'pointer' }}>
+          style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, flexShrink: 0, width: 74, cursor: 'pointer' }}>
           <div style={{ width: 58, height: 58, borderRadius: '50%', padding: 3, boxSizing: 'border-box', background: `linear-gradient(135deg, ${theme.border}, ${theme.dark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.12)'})`, transition: 'transform 0.15s ease' }}
             onPointerDown={(e) => { e.currentTarget.style.transform = 'scale(0.92)'; }} onPointerUp={(e) => { e.currentTarget.style.transform = 'scale(1)'; }} onPointerLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}>
-            <div style={{ width: '100%', height: '100%', borderRadius: '50%', padding: 2, boxSizing: 'border-box', background: theme.dark ? '#000' : '#fff' }}>
+            <div style={{ width: '100%', height: '100%', borderRadius: '50%', boxSizing: 'border-box', background: theme.dark ? '#000' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <SocialIcon platform={it.platform} size={46} round />
             </div>
           </div>
-          <span style={{ fontSize: 11.5, fontWeight: 600, color: theme.ink, maxWidth: 64, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.label}</span>
+          <span style={{ fontSize: 11, fontWeight: 600, color: theme.ink, maxWidth: 74, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'center' }}>{it.label}</span>
         </div>
       ))}
     </div>
@@ -9664,6 +9664,50 @@ function LinkPreviewCard({ url }) {
           <div style={{ fontSize: 11, color: theme.muted, marginTop: 3 }}>{data.siteName || host}</div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function useNewVersionAvailable() {
+  const [available, setAvailable] = useState(false);
+  useEffect(() => {
+    const currentScript = () => {
+      const el = document.querySelector('script[type="module"][src*="/assets/"]');
+      return el ? el.getAttribute('src') : null;
+    };
+    const mine = currentScript();
+    if (!mine) return undefined;
+    let stopped = false;
+    const check = async () => {
+      if (stopped || document.visibilityState === 'hidden') return;
+      try {
+        const res = await fetch(`/?v=${Date.now()}`, { cache: 'no-store' });
+        if (!res.ok) return;
+        const html = await res.text();
+        const m = html.match(/<script[^>]+type="module"[^>]+src="([^"]*\/assets\/[^"]+)"/i) || html.match(/src="([^"]*\/assets\/index[^"]+\.js)"/i);
+        if (m && m[1] && m[1] !== mine) setAvailable(true);
+      } catch {}
+    };
+    const timer = setInterval(check, 3 * 60 * 1000);
+    const onVisible = () => { if (document.visibilityState === 'visible') check(); };
+    document.addEventListener('visibilitychange', onVisible);
+    const first = setTimeout(check, 20000);
+    return () => { stopped = true; clearInterval(timer); clearTimeout(first); document.removeEventListener('visibilitychange', onVisible); };
+  }, []);
+  return available;
+}
+
+function UpdateAvailableBanner({ onUpdate, onLater }) {
+  const { theme } = useTheme();
+  return (
+    <div className="zchat-sheet-up" style={{ position: 'fixed', left: 12, right: 12, bottom: 'calc(16px + env(safe-area-inset-bottom))', zIndex: 640, display: 'flex', alignItems: 'center', gap: 12, padding: '12px 12px 12px 14px', borderRadius: 18, background: theme.panelBg, border: `1px solid ${theme.border}`, boxShadow: '0 16px 40px rgba(0,0,0,0.4)', maxWidth: 480, margin: '0 auto' }}>
+      <div style={{ width: 40, height: 40, borderRadius: 12, background: `linear-gradient(135deg, ${theme.coral}, #8b5cf6)`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Sparkles size={20} color="white" /></div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 14, fontWeight: 800, color: theme.ink }}>New update ready</div>
+        <div style={{ fontSize: 12, color: theme.muted, marginTop: 1 }}>Tap update to get the latest ZChat</div>
+      </div>
+      <button onClick={onLater} style={{ padding: '9px 10px', borderRadius: 12, border: 'none', background: 'transparent', color: theme.muted, fontWeight: 700, fontFamily: FONT, cursor: 'pointer' }}>Later</button>
+      <button onClick={onUpdate} style={{ padding: '9px 14px', borderRadius: 12, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontFamily: FONT, cursor: 'pointer' }}>Update</button>
     </div>
   );
 }
@@ -9823,6 +9867,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [celebrateTier, setCelebrateTier] = useState(null);
   const [deepPost, setDeepPost] = useState(null);
   const [reportThanks, setReportThanks] = useState(null);
+  const newVersionAvailable = useNewVersionAvailable();
+  const [updateLater, setUpdateLater] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [recordLocked, setRecordLocked] = useState(false);
   const [recordDragX, setRecordDragX] = useState(0);
@@ -13127,6 +13173,17 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             return stream;
           })()}
           onOpen={() => callEngine.minimize(false)} onHangup={callEngine.hangup} />
+      )}
+      {newVersionAvailable && !updateLater && (
+        <UpdateAvailableBanner
+          onLater={() => setUpdateLater(true)}
+          onUpdate={async () => {
+            try {
+              if ('serviceWorker' in navigator) { const reg = await navigator.serviceWorker.getRegistration(); if (reg) await reg.update(); }
+              if (window.caches && caches.keys) { const keys = await caches.keys(); await Promise.all(keys.map((k) => caches.delete(k))); }
+            } catch {}
+            window.location.reload();
+          }} />
       )}
       {reportThanks && (
         <ReportThanksSheet profile={reportThanks.profile} isBlocked={!!(reportThanks.profile && myBlockedIds.has(reportThanks.profile.id))}
