@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo, createContext, useContext } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useMemo, createContext, useContext } from 'react';
 import ReactDOM from 'react-dom';
 import {
   Send, Paperclip, Search, Mail, ShieldCheck, AtSign, LogOut, Eye, EyeOff, Lock,
@@ -350,8 +350,6 @@ function GlobalStyle() {
       @keyframes zchat-frame-spin { to { transform: rotate(360deg); } }
       @keyframes zchat-frame-fire { 0%, 100% { filter: brightness(1) saturate(1.05) drop-shadow(0 0 4px rgba(255,90,20,0.45)); } 25% { filter: brightness(1.12) saturate(1.2) drop-shadow(0 0 9px rgba(255,120,30,0.7)); } 50% { filter: brightness(0.96) saturate(1.1) drop-shadow(0 0 5px rgba(255,70,10,0.5)); } 75% { filter: brightness(1.18) saturate(1.25) drop-shadow(0 0 11px rgba(255,140,40,0.75)); } }
       @keyframes zchat-frame-ice { 0%, 100% { filter: brightness(1) drop-shadow(0 0 4px rgba(56,189,248,0.4)); } 50% { filter: brightness(1.15) drop-shadow(0 0 12px rgba(56,189,248,0.8)); } }
-      @keyframes zchat-frame-poison { 0%, 100% { filter: brightness(1) saturate(1.1) drop-shadow(0 0 4px rgba(74,222,128,0.45)); } 50% { filter: brightness(1.18) saturate(1.3) drop-shadow(0 0 12px rgba(74,222,128,0.8)); } }
-      @keyframes zchat-frame-poison-light { 0%, 100% { filter: saturate(1.5) contrast(1.3) brightness(0.88) drop-shadow(0 0 2px rgba(10,80,20,0.55)); } 50% { filter: saturate(1.75) contrast(1.4) brightness(0.96) drop-shadow(0 0 5px rgba(20,140,40,0.6)); } }
       .zchat-frame-mask { -webkit-mask-image: radial-gradient(circle closest-side, #000 84%, rgba(0,0,0,0) 100%); mask-image: radial-gradient(circle closest-side, #000 84%, rgba(0,0,0,0) 100%); }
       @keyframes zchat-post-heart { 0% { transform: scale(0); opacity: 0; } 15% { transform: scale(1.2); opacity: 1; } 30% { transform: scale(0.95); } 45% { transform: scale(1); } 80% { transform: scale(1); opacity: 1; } 100% { transform: scale(0.2) translateY(-60px); opacity: 0; } }
       img, video { -webkit-touch-callout: none; -webkit-user-drag: none; }
@@ -9240,7 +9238,6 @@ function AudioBubble({ url, isMe }) {
 const AVATAR_FRAMES = {
   fire_wolf: { file: '/frames/frame-fire-wolf.webp', fallback: '/frame-fire-wolf.webp', label: 'Inferno wolf frame', scale: 1.428, centerX: 0.5002, centerY: 0.4605, glow: '#ff5a1f', rarity: 'legendary' },
   ice_wolf: { file: '/frames/frame-ice-wolf.webp', fallback: '/frame-ice-wolf.webp', label: 'Frost wolf frame', scale: 1.399, centerX: 0.4968, centerY: 0.4791, glow: '#38bdf8', rarity: 'legendary' },
-  poison: { file: '/frames/frame-poison.webp?v=2', fallback: '/frame-poison.webp?v=2', label: 'Toxic skull frame', scale: 1.821, centerX: 0.5037, centerY: 0.4763, glow: '#4ade80', rarity: 'mythic', animated: true },
   frost_dragon: { file: '/frames/frame-frost-dragon.webp', fallback: '/frame-frost-dragon.webp', label: 'Frost dragon frame', scale: 1.521, centerX: 0.4802, centerY: 0.5087, mask: false, rarity: 'legendary' },
   emerald_lion: { file: '/frames/frame-emerald-lion.webp', fallback: '/frame-emerald-lion.webp', label: 'Emerald lion frame', scale: 1.567, centerX: 0.4978, centerY: 0.4488, mask: false, rarity: 'legendary' },
   crystal_deer: { file: '/frames/frame-crystal-deer.webp', fallback: '/frame-crystal-deer.webp', label: 'Crystal deer frame', scale: 1.413, centerX: 0.4877, centerY: 0.4499, mask: false, rarity: 'epic' },
@@ -9896,6 +9893,115 @@ const RARITY_STYLE = {
   rare: { label: 'Rare', color: '#60a5fa', bg: 'linear-gradient(160deg, #0b2447 0%, #060d1a 100%)', glow: 'rgba(96,165,250,0.45)' },
 };
 
+function FrameTryOnPage({ me, frameKey, onClose, action }) {
+  const spec = AVATAR_FRAMES[frameKey];
+  if (!spec) return null;
+  const r = RARITY_STYLE[spec.rarity] || RARITY_STYLE.rare;
+  const name = me ? (me.name || me.username || 'You') : 'You';
+  const username = me ? me.username : 'you';
+  const photo = me && typeof me.avatar === 'string' && me.avatar.startsWith('http') ? me.avatar : null;
+  const bg = photo ? null : colorForName(name);
+  const now = new Date();
+  const time = now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  const mockCard = { borderRadius: 20, background: '#0f1117', border: '1px solid rgba(255,255,255,0.08)', overflow: 'hidden' };
+  const label = { fontSize: 11, fontWeight: 900, letterSpacing: '0.14em', color: 'rgba(255,255,255,0.5)', margin: '22px 4px 8px' };
+  return (
+    <div className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 900, background: '#07080d', color: 'white', fontFamily: FONT, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', paddingTop: 'calc(10px + env(safe-area-inset-top))', borderBottom: '1px solid rgba(255,255,255,0.06)', background: 'rgba(7,8,13,0.9)', zIndex: 2 }}>
+        <div role="button" aria-label="Close preview" onClick={onClose} style={{ width: 38, height: 38, borderRadius: '50%', background: 'rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={19} /></div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 16, fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{spec.label}</div>
+          <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: '0.1em', textTransform: 'uppercase', color: r.color }}>{r.label}{spec.animated ? ' · Animated' : ''} · Preview</div>
+        </div>
+      </div>
+
+      <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '0 14px 130px' }}>
+        <div style={label}>YOUR PROFILE</div>
+        <div style={{ ...mockCard, position: 'relative' }}>
+          <div style={{ position: 'absolute', left: -40, right: -40, top: -40, height: 330, overflow: 'hidden', pointerEvents: 'none' }}>
+            {photo
+              ? <img src={photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'blur(18px) saturate(1.25)', opacity: 0.9, transform: 'scale(1.08)' }} />
+              : <div style={{ position: 'absolute', inset: 0, background: bg, filter: 'blur(40px)', opacity: 0.75 }} />}
+          </div>
+          <div style={{ position: 'absolute', left: 0, right: 0, top: 0, height: 300, background: 'linear-gradient(180deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0) 40%, #0f1117 100%)', pointerEvents: 'none' }} />
+          <div style={{ position: 'relative', padding: '26px 16px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+            <div style={{ width: 230, height: 230, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Avatar emoji={me ? me.avatar : ''} name={name} size={138} frame={frameKey} />
+            </div>
+            <div style={{ fontSize: 24, fontWeight: 900, marginTop: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
+              {name}{me && <VerifiedBadge tier={me.verified} custom={me.custom_badge} size={19} />}
+            </div>
+            <div style={{ fontSize: 13.5, color: 'rgba(255,255,255,0.6)', marginTop: 2 }}>@{username}</div>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 800, marginTop: 10, padding: '4px 11px', borderRadius: 14, color: '#22c55e', background: 'rgba(34,197,94,0.12)' }}>
+              <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#22c55e' }} />Online now
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, alignSelf: 'stretch', marginTop: 16 }}>
+              {[['Posts', '24'], ['Followers', '1.2K'], ['Following', '312']].map(([k, v]) => (
+                <div key={k} style={{ padding: '10px 0', borderRadius: 14, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}>
+                  <div style={{ fontSize: 17, fontWeight: 900 }}>{v}</div>
+                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', fontWeight: 700 }}>{k}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div style={label}>IN THE CHAT LIST</div>
+        <div style={mockCard}>
+          {[
+            { me: true, text: 'Love my new frame 😍', unread: 2, time },
+            { me: false, name: 'Alex', text: 'See you tomorrow!', time: 'Yesterday', color: '#29C7B3' },
+          ].map((row, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderTop: i ? '1px solid rgba(255,255,255,0.06)' : 'none' }}>
+              <div style={{ width: 62, height: 62, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                {row.me
+                  ? <Avatar emoji={me ? me.avatar : ''} name={name} size={46} frame={frameKey} />
+                  : <div style={{ width: 46, height: 46, borderRadius: '50%', background: row.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900 }}>{row.name[0]}</div>}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 900, fontSize: 15, display: 'flex', alignItems: 'center' }}>
+                  <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.me ? name : row.name}</span>
+                  {row.me && me && <VerifiedBadge tier={me.verified} custom={me.custom_badge} size={13} />}
+                </div>
+                <div style={{ fontSize: 13, color: row.unread ? 'white' : 'rgba(255,255,255,0.55)', fontWeight: row.unread ? 700 : 500, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.text}</div>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+                <div style={{ fontSize: 11.5, color: row.unread ? '#60a5fa' : 'rgba(255,255,255,0.45)', fontWeight: 700 }}>{row.time}</div>
+                {row.unread && <div style={{ minWidth: 20, height: 20, borderRadius: 10, background: '#3b82f6', fontSize: 11, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 6px' }}>{row.unread}</div>}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div style={label}>IN A CHAT</div>
+        <div style={mockCard}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderBottom: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.02)' }}>
+            <ChevronLeft size={20} color="rgba(255,255,255,0.7)" />
+            <div style={{ width: 52, height: 52, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Avatar emoji={me ? me.avatar : ''} name={name} size={38} frame={frameKey} />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 900, fontSize: 15, display: 'flex', alignItems: 'center' }}>{name}{me && <VerifiedBadge tier={me.verified} custom={me.custom_badge} size={13} />}</div>
+              <div style={{ fontSize: 12, color: '#22c55e', fontWeight: 700 }}>Online</div>
+            </div>
+          </div>
+          <div style={{ padding: '14px 12px 16px', display: 'flex', flexDirection: 'column', gap: 8, background: 'linear-gradient(180deg, #0d1016, #0b0d12)' }}>
+            <div style={{ alignSelf: 'flex-start', maxWidth: '78%', padding: '8px 12px', borderRadius: '16px 16px 16px 4px', background: '#1c1f27', fontSize: 14 }}>Your frame looks amazing 🔥</div>
+            <div style={{ alignSelf: 'flex-end', maxWidth: '78%', padding: '8px 12px', borderRadius: '16px 16px 4px 16px', background: '#2563eb', fontSize: 14 }}>Thanks! Just got it ✨</div>
+          </div>
+        </div>
+      </div>
+
+      {action && (
+        <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '12px 16px', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))', background: 'linear-gradient(180deg, rgba(7,8,13,0) 0%, rgba(7,8,13,0.96) 30%)' }}>
+          <button onClick={action.onClick} disabled={action.disabled} style={{ width: '100%', padding: '15px 16px', borderRadius: 18, border: 'none', fontFamily: FONT, fontWeight: 900, fontSize: 16.5, cursor: action.disabled ? 'default' : 'pointer', color: action.disabled ? 'rgba(255,255,255,0.6)' : '#1a0f02', background: action.disabled ? 'rgba(255,255,255,0.1)' : 'linear-gradient(135deg, #fde047, #f59e0b 45%, #ea580c)', boxShadow: action.disabled ? 'none' : '0 12px 30px rgba(245,158,11,0.35)' }}>{action.label}</button>
+          {action.sub && <div style={{ textAlign: 'center', fontSize: 12, color: 'rgba(255,255,255,0.55)', marginTop: 6, fontWeight: 700 }}>{action.sub}</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const FRAME_STORE = {
   checkoutUrl: '',
   priceLabel: '$2',
@@ -9925,6 +10031,7 @@ function openFrameCheckout(userId, email, frameKey) {
 function CollectionPanel({ me, rewards, onClose, onEquip, userEmail }) {
   const [tab, setTab] = useState('frame');
   const [selected, setSelected] = useState(null);
+  const [tryOn, setTryOn] = useState(null);
   const [busy, setBusy] = useState(false);
   const rewardFor = (key) => (rewards || []).find((r) => r.kind === tab && r.reward_key === key) || null;
   const owned = new Set((rewards || []).filter((r) => r.kind === tab && rewardActive(r)).map((r) => r.reward_key));
@@ -10022,13 +10129,16 @@ function CollectionPanel({ me, rewards, onClose, onEquip, userEmail }) {
             </>
           ) : (
             <>
-              <div style={{ width: 96, height: 96, display: 'flex', alignItems: 'center', justifyContent: 'center', filter: selOwned ? 'none' : 'grayscale(1) brightness(0.5)', flexShrink: 0 }}>
+              <div role="button" onClick={() => { if (tab === 'frame') setTryOn(sel.key); }} style={{ width: 96, height: 96, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: tab === 'frame' ? 'pointer' : 'default' }}>
                 {tab === 'frame' ? <Avatar emoji={me.avatar} name={me.name} size={62} frame={sel.key} /> : <CharmPreview charm={sel.key} size={62} />}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 10.5, fontWeight: 900, letterSpacing: '0.1em', textTransform: 'uppercase', color: rarity(sel.spec).color }}>{rarity(sel.spec).label}{sel.spec.animated ? ' · Animated' : ''}</div>
                 <div style={{ fontSize: 17, fontWeight: 900, marginTop: 2 }}>{sel.spec.label}</div>
-                {tab === 'charm' && selOwned && <div style={{ fontSize: 13, marginTop: 4, color: 'rgba(255,255,255,0.8)', fontWeight: 700 }}>{me.name}<VerifiedBadge tier={me.verified} custom={sel.key} size={14} /></div>}
+                {tab === 'frame' && (
+                  <div role="button" onClick={() => setTryOn(sel.key)} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6, padding: '5px 10px', borderRadius: 10, background: 'rgba(255,255,255,0.08)', fontSize: 12, fontWeight: 800, cursor: 'pointer', color: 'rgba(255,255,255,0.85)' }}><Eye size={13} /> Full preview</div>
+                )}
+                {tab === 'charm' && <div style={{ fontSize: 13, marginTop: 4, color: 'rgba(255,255,255,0.8)', fontWeight: 700 }}>{me.name}<VerifiedBadge tier={me.verified} custom={sel.key} size={14} /></div>}
                 {selOwned && daysLeft(rewardFor(sel.key)) != null && (
                   <div style={{ fontSize: 12, marginTop: 4, fontWeight: 700, color: daysLeft(rewardFor(sel.key)) <= 5 ? '#fca5a5' : 'rgba(255,255,255,0.6)' }}>Expires in {daysLeft(rewardFor(sel.key))} {daysLeft(rewardFor(sel.key)) === 1 ? 'day' : 'days'}</div>
                 )}
@@ -10058,6 +10168,17 @@ function CollectionPanel({ me, rewards, onClose, onEquip, userEmail }) {
           )}
         </div>
       )}
+      {tryOn && (() => {
+        const rw = (rewards || []).find((x) => x.kind === 'frame' && x.reward_key === tryOn);
+        const has = rw && rewardActive(rw);
+        const isEq = me.avatar_frame === tryOn;
+        const action = has
+          ? { label: isEq ? '✓ Equipped' : 'Equip this frame', disabled: isEq || busy, onClick: async () => { setTab('frame'); await equip(tryOn); setTryOn(null); }, sub: daysLeft(rw) != null ? `${daysLeft(rw)} days left` : 'Yours to keep' }
+          : FRAME_STORE.checkoutUrl
+            ? { label: `Unlock for ${FRAME_STORE.priceLabel} · ${FRAME_STORE.periodLabel}`, onClick: () => openFrameCheckout(me.id, userEmail, tryOn), sub: 'Single payment · Secure checkout by Lemon Squeezy' }
+            : { label: 'Store opening soon', disabled: true, sub: 'This frame goes on sale very soon' };
+        return <FrameTryOnPage me={me} frameKey={tryOn} onClose={() => setTryOn(null)} action={action} />;
+      })()}
     </div>
   );
 }
@@ -10289,16 +10410,22 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [listFilter, setListFilter] = useState('all');
   const [groups, setGroups] = useState([]);
   const [activeGroup, setActiveGroup] = useState(null);
-  const [composerHeight, setComposerHeight] = useState(38);
-  useEffect(() => {
+  const [composerTall, setComposerTall] = useState(false);
+  useLayoutEffect(() => {
     const el = composerRef.current;
-    if (!el) { setComposerHeight(38); return; }
-    const prev = el.style.height;
-    el.style.height = '38px';
-    const next = Math.max(38, Math.min(148, el.scrollHeight + 1));
-    el.style.height = prev;
-    setComposerHeight((h) => (h === next ? h : next));
-    if (next >= 148) el.scrollTop = el.scrollHeight;
+    if (!el) return;
+    if (!draft) {
+      el.style.height = '38px';
+      el.style.overflowY = 'hidden';
+      setComposerTall(false);
+      return;
+    }
+    el.style.height = '0px';
+    const full = el.scrollHeight + 2;
+    const next = Math.max(38, Math.min(148, full));
+    el.style.height = `${next}px`;
+    el.style.overflowY = full > 148 ? 'auto' : 'hidden';
+    setComposerTall(next > 40);
   }, [draft, activeProfile && activeProfile.id, activeGroup && activeGroup.id]);
   const [groupMembers, setGroupMembers] = useState([]);
   const [showCreateGroup, setShowCreateGroup] = useState(false);
@@ -13367,8 +13494,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                     placeholder={editingMessage ? 'Edit message' : 'Message'}
                     rows={1}
                     style={{
-                      flex: 1, resize: 'none', height: composerHeight, maxHeight: 148, minHeight: 38, boxSizing: 'border-box', padding: '9px 14px', borderRadius: composerHeight > 40 ? 18 : 20,
-                      overflowY: composerHeight >= 148 ? 'auto' : 'hidden', transition: 'height 0.12s ease, border-radius 0.12s ease', wordBreak: 'break-word',
+                      flex: 1, resize: 'none', maxHeight: 148, minHeight: 38, boxSizing: 'border-box', padding: '9px 14px', borderRadius: composerTall ? 18 : 20,
+                      wordBreak: 'break-word',
                       border: `1px solid ${theme.border}`, background: theme.inputBg, color: theme.ink,
                       fontFamily: FONT, fontSize: 15, outline: 'none', lineHeight: 1.35,
                     }}
@@ -14051,27 +14178,29 @@ function AppInner() {
 const PUBLIC_PAGES = ['/store', '/terms', '/refund', '/privacy'];
 const SUPPORT_EMAIL = 'support@getzchat.com';
 
-function PublicShell({ title, children }) {
+function PublicShell({ title, children, wide }) {
   const nav = [['/?page=store', 'Store'], ['/?page=terms', 'Terms'], ['/?page=refund', 'Refunds'], ['/?page=privacy', 'Privacy']];
   const pageParam = (new URLSearchParams(window.location.search).get('page') || '').toLowerCase();
-  const here = pageParam ? `/${pageParam}` : (window.location.pathname.replace(/\/+$/, '') || '/');
+  const here = pageParam ? `/?page=${pageParam}` : '';
   return (
-    <div style={{ minHeight: '100vh', background: 'radial-gradient(circle at 50% 0%, #1c1535 0%, #07080d 60%)', color: '#e8eaf0', fontFamily: FONT }}>
-      <div style={{ maxWidth: 820, margin: '0 auto', padding: '18px 18px 60px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-          <a href="/" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none', color: 'white' }}>
-            <div style={{ width: 38, height: 38, borderRadius: 12, background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 18 }}>Z</div>
-            <div style={{ fontWeight: 900, fontSize: 20 }}>ZChat</div>
+    <div style={{ position: 'fixed', inset: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain', background: '#07080d', color: '#e8eaf0', fontFamily: FONT }}>
+      <div style={{ position: 'sticky', top: 0, zIndex: 20, background: 'rgba(7,8,13,0.82)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+        <div style={{ maxWidth: wide ? 960 : 820, margin: '0 auto', padding: '10px 14px 8px', paddingTop: 'calc(10px + env(safe-area-inset-top))' }}>
+          <a href="/" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, textDecoration: 'none', color: 'white' }}>
+            <div style={{ width: 32, height: 32, borderRadius: 10, background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 16 }}>Z</div>
+            <div style={{ fontWeight: 900, fontSize: 17 }}>ZChat</div>
           </a>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 6, marginTop: 8, overflowX: 'auto', scrollbarWidth: 'none' }}>
             {nav.map(([href, label]) => (
-              <a key={href} href={href} style={{ padding: '8px 12px', borderRadius: 12, fontSize: 13.5, fontWeight: 800, textDecoration: 'none', color: here === href.replace('/?page=', '/') ? '#1a0f02' : 'rgba(255,255,255,0.75)', background: here === href.replace('/?page=', '/') ? 'linear-gradient(135deg, #f59e0b, #ea580c)' : 'rgba(255,255,255,0.06)' }}>{label}</a>
+              <a key={href} href={href} style={{ flexShrink: 0, padding: '7px 14px', borderRadius: 11, fontSize: 13, fontWeight: 800, textDecoration: 'none', whiteSpace: 'nowrap', color: here === href ? '#1a0f02' : 'rgba(255,255,255,0.75)', background: here === href ? 'linear-gradient(135deg, #fbbf24, #f97316)' : 'rgba(255,255,255,0.06)' }}>{label}</a>
             ))}
           </div>
         </div>
-        <h1 style={{ fontSize: 30, fontWeight: 900, margin: '34px 0 8px', color: 'white' }}>{title}</h1>
+      </div>
+      <div style={{ maxWidth: wide ? 960 : 820, margin: '0 auto', padding: '0 16px 50px' }}>
+        {title && <h1 style={{ fontSize: 30, fontWeight: 900, margin: '28px 0 8px', color: 'white' }}>{title}</h1>}
         {children}
-        <div style={{ marginTop: 50, paddingTop: 20, borderTop: '1px solid rgba(255,255,255,0.08)', fontSize: 13, color: 'rgba(255,255,255,0.5)', lineHeight: 1.8 }}>
+        <div style={{ marginTop: 44, paddingTop: 20, borderTop: '1px solid rgba(255,255,255,0.08)', fontSize: 13, color: 'rgba(255,255,255,0.5)', lineHeight: 1.8 }}>
           <div>ZChat · <a href="https://getzchat.com" style={{ color: 'rgba(255,255,255,0.7)' }}>getzchat.com</a></div>
           <div>Contact: <a href={`mailto:${SUPPORT_EMAIL}`} style={{ color: '#fbbf24' }}>{SUPPORT_EMAIL}</a></div>
           <div>Payments are processed securely by Lemon Squeezy, our reseller and merchant of record.</div>
@@ -14087,47 +14216,196 @@ function PublicShell({ title, children }) {
 const legalH = { fontSize: 18, fontWeight: 900, color: 'white', margin: '26px 0 8px' };
 const legalP = { fontSize: 15, lineHeight: 1.7, color: 'rgba(255,255,255,0.78)', margin: '0 0 10px' };
 
-function PublicFramePreview({ frameKey }) {
-  const spec = AVATAR_FRAMES[frameKey];
-  const url = useFrameUrl(frameKey);
-  const size = 86;
-  const w = size * spec.scale;
-  return (
-    <div style={{ position: 'relative', width: 150, height: 150, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ position: 'relative', width: size, height: size }}>
-        <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 32, color: 'white' }}>Z</div>
-        {url && <img src={url} alt="" draggable={false} style={{ ...frameMaskStyle(spec), position: 'absolute', width: w, height: w, left: size / 2 - w * (spec.centerX ?? 0.5), top: size / 2 - w * spec.centerY, maxWidth: 'none', pointerEvents: 'none' }} />}
-      </div>
-    </div>
-  );
+function LazyShow({ children, height, rootMargin = '250px' }) {
+  const ref = useRef(null);
+  const [show, setShow] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return undefined;
+    if (!('IntersectionObserver' in window)) { setShow(true); return undefined; }
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach((e) => { if (e.isIntersecting) { setShow(true); io.disconnect(); } });
+    }, { rootMargin });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+  return <div ref={ref} style={{ minHeight: height }}>{show ? children : null}</div>;
 }
 
+function useStoreViewer() {
+  const [viewer, setViewer] = useState({ loading: true, profile: null, rewards: [], email: '' });
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const { data } = await supabase.auth.getSession();
+        const session = data && data.session;
+        if (!session) { if (alive) setViewer({ loading: false, profile: null, rewards: [], email: '' }); return; }
+        const [{ data: prof }, { data: rw }] = await Promise.all([
+          supabase.from('profiles').select('id, name, username, avatar, verified, custom_badge, avatar_frame').eq('id', session.user.id).maybeSingle(),
+          supabase.from('user_rewards').select('*').eq('user_id', session.user.id),
+        ]);
+        if (alive) setViewer({ loading: false, profile: prof || null, rewards: rw || [], email: session.user.email || '' });
+      } catch {
+        if (alive) setViewer({ loading: false, profile: null, rewards: [], email: '' });
+      }
+    })();
+    return () => { alive = false; };
+  }, []);
+  return viewer;
+}
+
+const STORE_RARITY_ORDER = { mythic: 0, legendary: 1, epic: 2, rare: 3 };
+
 function PublicStorePage() {
-  const frames = Object.entries(AVATAR_FRAMES);
+  const viewer = useStoreViewer();
+  const me = viewer.profile;
+  const frames = Object.entries(AVATAR_FRAMES).sort((a, b) => (STORE_RARITY_ORDER[a[1].rarity] ?? 9) - (STORE_RARITY_ORDER[b[1].rarity] ?? 9));
+  const [filter, setFilter] = useState('all');
+  const [selected, setSelected] = useState(frames[0][0]);
+  const [tryOn, setTryOn] = useState(false);
+  const topRef = useRef(null);
+  const spec = AVATAR_FRAMES[selected];
+  const r = RARITY_STYLE[spec.rarity] || RARITY_STYLE.rare;
+  const reward = (viewer.rewards || []).find((x) => x.kind === 'frame' && x.reward_key === selected);
+  const owned = reward && rewardActive(reward);
+  const left = owned ? daysLeft(reward) : null;
+  const shown = frames.filter(([, s]) => filter === 'all' || s.rarity === filter);
+  const displayName = me ? (me.name || me.username) : 'You';
+  const ownedCount = (viewer.rewards || []).filter((x) => x.kind === 'frame' && rewardActive(x) && AVATAR_FRAMES[x.reward_key]).length;
+
+  const buy = () => {
+    if (!me) { window.location.href = '/'; return; }
+    if (!FRAME_STORE.checkoutUrl) return;
+    openFrameCheckout(me.id, viewer.email, selected);
+  };
+  const pick = (key) => {
+    setSelected(key);
+    if (topRef.current) topRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const cta = !me
+    ? { label: 'Sign in to buy', sub: 'Free account, takes a minute', disabled: false }
+    : !FRAME_STORE.checkoutUrl
+      ? { label: 'Store opening soon', sub: 'Frames go on sale very soon', disabled: true }
+      : owned
+        ? { label: `Add 2 more months · ${FRAME_STORE.priceLabel}`, sub: `Active · ${left} ${left === 1 ? 'day' : 'days'} left`, disabled: false }
+        : { label: `Unlock for ${FRAME_STORE.priceLabel}`, sub: '2 months · single payment', disabled: false };
+
   return (
-    <PublicShell title="ZChat Store">
-      <p style={legalP}>ZChat is a free chat and social app. Everything needed to chat is free. The store sells optional cosmetic <b>avatar frames</b> that decorate your profile photo everywhere in the app.</p>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: 12, marginTop: 22 }}>
-        {frames.map(([key, spec]) => {
-          const r = RARITY_STYLE[spec.rarity] || RARITY_STYLE.rare;
+    <PublicShell wide>
+      <style>{`
+        @keyframes zs-glow { 0%,100% { opacity: .55; transform: scale(1); } 50% { opacity: .9; transform: scale(1.08); } }
+        @keyframes zs-shine { 0% { transform: translateX(-120%) skewX(-20deg); } 60%,100% { transform: translateX(220%) skewX(-20deg); } }
+        @keyframes zs-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+        .zs-card { transition: transform .18s ease, border-color .18s ease; }
+        .zs-card:active { transform: scale(.97); }
+      `}</style>
+
+      <div ref={topRef} style={{ scrollMarginTop: 70 }} />
+      <div style={{ position: 'relative', marginTop: 16, borderRadius: 28, overflow: 'hidden', background: `radial-gradient(circle at 50% 30%, ${r.color}33 0%, rgba(10,10,18,0) 60%), linear-gradient(180deg, #120f1f 0%, #0a0a12 100%)`, border: `1px solid ${r.color}40` }}>
+        <div style={{ position: 'absolute', left: '50%', top: 40, width: 320, height: 320, marginLeft: -160, borderRadius: '50%', background: `radial-gradient(circle, ${r.glow} 0%, transparent 65%)`, animation: 'zs-glow 3.2s ease-in-out infinite', pointerEvents: 'none' }} />
+        <div style={{ position: 'relative', padding: '18px 18px 22px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+          <div style={{ alignSelf: 'stretch', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: '0.14em', color: 'rgba(255,255,255,0.55)' }}>AVATAR FRAME STORE</div>
+            {me && <div style={{ fontSize: 11.5, fontWeight: 800, padding: '4px 10px', borderRadius: 10, background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.8)' }}>{ownedCount} owned</div>}
+          </div>
+
+          <div key={selected} style={{ width: 230, height: 230, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '18px 0 6px', animation: 'zs-rise .35s ease' }}>
+            <Avatar emoji={me ? me.avatar : ''} name={me ? (me.name || me.username) : 'Z'} size={132} frame={selected} />
+          </div>
+
+          <div style={{ fontSize: 20, fontWeight: 900, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
+            {displayName}{me && <VerifiedBadge tier={me.verified} custom={me.custom_badge} size={17} />}
+          </div>
+          {me && <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', marginTop: 1 }}>@{me.username}</div>}
+          {!me && !viewer.loading && <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.5)', marginTop: 2 }}>Sign in to see frames on your own photo</div>}
+
+          <div style={{ marginTop: 14, fontSize: 11, fontWeight: 900, letterSpacing: '0.12em', textTransform: 'uppercase', color: r.color }}>{r.label}{spec.animated ? ' · Animated' : ''}</div>
+          <div style={{ fontSize: 24, fontWeight: 900, color: 'white', marginTop: 2 }}>{spec.label.replace(/ frame$/i, '')}</div>
+          <button onClick={() => setTryOn(true)} style={{ marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.14)', background: 'rgba(255,255,255,0.06)', color: 'white', fontFamily: FONT, fontWeight: 800, fontSize: 13, cursor: 'pointer' }}><Eye size={15} /> See it on {me ? 'your profile' : 'a profile'}</button>
+
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginTop: 10 }}>
+            <span style={{ fontSize: 34, fontWeight: 900, color: '#fbbf24' }}>{FRAME_STORE.priceLabel}</span>
+            <span style={{ fontSize: 14, fontWeight: 700, color: 'rgba(255,255,255,0.6)' }}>for {FRAME_STORE.periodLabel}</span>
+          </div>
+
+          <button onClick={buy} disabled={cta.disabled} style={{ position: 'relative', overflow: 'hidden', marginTop: 14, width: '100%', maxWidth: 360, padding: '16px 18px', borderRadius: 18, border: 'none', fontFamily: FONT, fontWeight: 900, fontSize: 17, letterSpacing: '0.02em', cursor: cta.disabled ? 'default' : 'pointer', color: cta.disabled ? 'rgba(255,255,255,0.6)' : '#1a0f02', background: cta.disabled ? 'rgba(255,255,255,0.1)' : 'linear-gradient(135deg, #fde047, #f59e0b 45%, #ea580c)', boxShadow: cta.disabled ? 'none' : '0 12px 30px rgba(245,158,11,0.35)' }}>
+            {!cta.disabled && <span style={{ position: 'absolute', top: 0, bottom: 0, width: '40%', background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.55), transparent)', animation: 'zs-shine 2.6s ease-in-out infinite' }} />}
+            <span style={{ position: 'relative' }}>{cta.label}</span>
+          </button>
+          <div style={{ fontSize: 12.5, color: owned ? '#34d399' : 'rgba(255,255,255,0.55)', marginTop: 8, fontWeight: 700 }}>{cta.sub}</div>
+
+          <div style={{ display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap', justifyContent: 'center' }}>
+            {['⚡ Instant delivery', '🔁 Not a subscription', '🔒 Secure checkout'].map((t) => (
+              <span key={t} style={{ fontSize: 12, fontWeight: 800, padding: '6px 10px', borderRadius: 10, background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.75)' }}>{t}</span>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, margin: '22px 0 12px', overflowX: 'auto', scrollbarWidth: 'none', paddingBottom: 2 }}>
+        {[['all', 'All'], ['mythic', 'Mythic'], ['legendary', 'Legendary'], ['epic', 'Epic'], ['rare', 'Rare']].map(([k, label]) => {
+          const on = filter === k;
+          const c = k === 'all' ? '#fbbf24' : RARITY_STYLE[k].color;
           return (
-            <div key={key} style={{ borderRadius: 18, padding: '10px 10px 14px', background: r.bg, border: `1px solid ${r.color}55`, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
-              <PublicFramePreview frameKey={key} />
-              <div style={{ fontWeight: 900, fontSize: 15, color: 'white' }}>{spec.label}</div>
-              <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: '0.08em', textTransform: 'uppercase', color: r.color, marginTop: 3 }}>{r.label}{spec.animated ? ' · Animated' : ''}</div>
-              <div style={{ marginTop: 10, padding: '6px 12px', borderRadius: 10, background: 'rgba(245,158,11,0.15)', color: '#fbbf24', fontWeight: 900, fontSize: 14 }}>$2 · 2 months</div>
+            <button key={k} onClick={() => setFilter(k)} style={{ flexShrink: 0, padding: '9px 14px', borderRadius: 12, fontFamily: FONT, fontWeight: 900, fontSize: 13, cursor: 'pointer', border: `1px solid ${on ? c : 'rgba(255,255,255,0.1)'}`, background: on ? `${c}22` : 'rgba(255,255,255,0.04)', color: on ? c : 'rgba(255,255,255,0.7)' }}>{label}</button>
+          );
+        })}
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 10 }}>
+        {shown.map(([key, s]) => {
+          const rr = RARITY_STYLE[s.rarity] || RARITY_STYLE.rare;
+          const rw = (viewer.rewards || []).find((x) => x.kind === 'frame' && x.reward_key === key);
+          const has = rw && rewardActive(rw);
+          const isSel = selected === key;
+          return (
+            <div key={key} className="zs-card" role="button" onClick={() => pick(key)} style={{ position: 'relative', borderRadius: 20, padding: '8px 8px 12px', cursor: 'pointer', background: rr.bg, border: `1.5px solid ${isSel ? '#fbbf24' : `${rr.color}40`}`, boxShadow: isSel ? `0 0 22px ${rr.glow}` : 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', overflow: 'hidden', contentVisibility: 'auto', containIntrinsicSize: '220px' }}>
+              <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 3, background: rr.color }} />
+              {has
+                ? <div style={{ position: 'absolute', top: 8, right: 8, padding: '3px 8px', borderRadius: 8, background: 'rgba(52,211,153,0.9)', color: '#052e1c', fontSize: 10.5, fontWeight: 900 }}>OWNED</div>
+                : <div style={{ position: 'absolute', top: 8, right: 8, padding: '3px 8px', borderRadius: 8, background: 'rgba(245,158,11,0.92)', color: '#1a0f02', fontSize: 10.5, fontWeight: 900 }}>{FRAME_STORE.priceLabel}</div>}
+              <LazyShow height={130}>
+                <div style={{ height: 130, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Avatar emoji={me ? me.avatar : ''} name={me ? (me.name || me.username) : 'Z'} size={70} frame={key} />
+                </div>
+              </LazyShow>
+              <div style={{ fontWeight: 900, fontSize: 14, color: 'white', textAlign: 'center', marginTop: 4 }}>{s.label.replace(/ frame$/i, '')}</div>
+              <div style={{ fontSize: 10.5, fontWeight: 900, letterSpacing: '0.1em', textTransform: 'uppercase', color: rr.color, marginTop: 3 }}>{rr.label}{s.animated ? ' · Animated' : ''}</div>
             </div>
           );
         })}
       </div>
-      <h2 style={legalH}>How it works</h2>
-      <p style={legalP}>1. Create a free ZChat account at getzchat.com and sign in.</p>
-      <p style={legalP}>2. Open your profile, then Collection, choose a frame and tap Unlock.</p>
-      <p style={legalP}>3. Pay $2 (USD) securely with Lemon Squeezy. This is a single payment, not a subscription. You are never charged again automatically.</p>
-      <p style={legalP}>4. The frame is added to your account instantly and stays active for 2 months (60 days). You can buy it again anytime to add another 2 months.</p>
-      <h2 style={legalH}>Delivery</h2>
-      <p style={legalP}>Frames are digital items delivered automatically to your ZChat account within seconds of payment. Nothing is shipped.</p>
-      <p style={legalP}>Refunds: see our <a href="/?page=refund" style={{ color: '#fbbf24' }}>Refund Policy</a>. Questions: <a href={`mailto:${SUPPORT_EMAIL}`} style={{ color: '#fbbf24' }}>{SUPPORT_EMAIL}</a></p>
+
+      {tryOn && <FrameTryOnPage me={me} frameKey={selected} onClose={() => setTryOn(false)} action={{ label: cta.label, disabled: cta.disabled, onClick: buy, sub: cta.sub }} />}
+      <h2 style={{ ...legalH, marginTop: 34 }}>How it works</h2>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
+        {[
+          ['1', 'Pick a frame', 'Preview every frame on your own profile photo right here.'],
+          ['2', 'Pay $2 securely', 'Checkout by Lemon Squeezy. One payment, never charged again.'],
+          ['3', 'Wear it everywhere', 'It appears instantly on your profile, chats, lists and posts for 2 months.'],
+        ].map(([n, t, d]) => (
+          <div key={n} style={{ borderRadius: 18, padding: 16, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
+            <div style={{ width: 30, height: 30, borderRadius: 10, background: 'linear-gradient(135deg, #fbbf24, #f97316)', color: '#1a0f02', fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{n}</div>
+            <div style={{ fontWeight: 900, color: 'white', marginTop: 10, fontSize: 15.5 }}>{t}</div>
+            <div style={{ fontSize: 13.5, color: 'rgba(255,255,255,0.65)', marginTop: 4, lineHeight: 1.5 }}>{d}</div>
+          </div>
+        ))}
+      </div>
+
+      <h2 style={legalH}>Questions</h2>
+      {[
+        ['Is it a subscription?', 'No. You pay $2 once and the frame stays active for 2 months. Buy again anytime to add another 2 months.'],
+        ['When do I get it?', 'Within seconds of payment. A claim screen appears in ZChat and the frame is equipped for you.'],
+        ['Can I switch frames?', 'Yes. Every frame you own is saved in Profile, Collection, and you can switch anytime.'],
+        ['Refunds?', 'Only for technical problems. See the Refund Policy.'],
+      ].map(([q, a]) => (
+        <div key={q} style={{ borderRadius: 16, padding: '12px 14px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', marginBottom: 8 }}>
+          <div style={{ fontWeight: 900, color: 'white', fontSize: 14.5 }}>{q}</div>
+          <div style={{ fontSize: 13.5, color: 'rgba(255,255,255,0.65)', marginTop: 4, lineHeight: 1.5 }}>{a}{q === 'Refunds?' && <> <a href="/?page=refund" style={{ color: '#fbbf24' }}>Read it</a></>}</div>
+        </div>
+      ))}
     </PublicShell>
   );
 }
