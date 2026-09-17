@@ -2465,19 +2465,11 @@ const REPORT_REASONS = [
   'Something else',
 ];
 
-const MAX_MAILS_PER_USER = 100;
 
 async function sendReportMail(reportedUserId, reasonLabel) {
   if (!reportedUserId) return;
-  const title = 'Account warning';
-  const body = `You have been reported for: ${reasonLabel}. Please take a moment to review ZChat's community guidelines and adjust your behavior accordingly. If reports like this continue, we will have to permanently ban your account from ZChat.`;
-  await supabase.from('mails').insert({ recipient_id: reportedUserId, type: 'report_warning', title, body });
-  sendPushNotification(reportedUserId, 'ZChat', 'Account warning. Open your mail to see why.', '/?mail=1');
-  const { data: rows } = await supabase.from('mails').select('id').eq('recipient_id', reportedUserId).order('created_at', { ascending: false });
-  if (rows && rows.length > MAX_MAILS_PER_USER) {
-    const idsToDelete = rows.slice(MAX_MAILS_PER_USER).map((r) => r.id);
-    await supabase.from('mails').delete().in('id', idsToDelete);
-  }
+  const { data: sent, error } = await supabase.rpc('send_report_warning', { p_reported: reportedUserId, p_reason: reasonLabel });
+  if (!error && sent) sendPushNotification(reportedUserId, 'ZChat', 'Account warning. Open your mail to see why.', '/?mail=1');
 }
 
 function ReportReasonPicker({ reportedUserId, onCancel, onSubmit }) {
@@ -6933,8 +6925,8 @@ async function notifyBioMentions(profile, oldBio, newBio) {
     const { data } = await supabase.from('profiles').select('id, username').in('username', fresh);
     for (const p of data || []) {
       if (p.id === profile.id) continue;
-      await supabase.from('mails').insert({ recipient_id: p.id, type: 'mention', title: `${profile.name} mentioned you`, body: `${profile.name} (@${profile.username}) mentioned you in their bio: "${newBio}"` });
-      sendPushNotification(p.id, 'ZChat', `${profile.name} mentioned you in their bio`, `/?profile=${profile.id}`, profile.avatar);
+      const { data: sent, error } = await supabase.rpc('send_bio_mention', { p_target: p.id });
+      if (!error && sent) sendPushNotification(p.id, 'ZChat', `${profile.name} mentioned you in their bio`, `/?profile=${profile.id}`, profile.avatar);
     }
   } catch {}
 }
@@ -8332,6 +8324,12 @@ const VERIFIED_TIERS = {
   pink: { color: '#FF4FA3', glow: 'rgba(255,79,163,0.5)', label: 'Creator', desc: 'This account is a ZChat creator.' },
   green: { color: '#22C55E', glow: 'rgba(34,197,94,0.5)', label: 'Partner', desc: 'This account is a ZChat partner.' },
   purple: { color: '#8B5CF6', glow: 'rgba(139,92,246,0.5)', label: 'Premium', desc: 'This account is a ZChat premium member.' },
+  orange: { color: '#F97316', glow: 'rgba(249,115,22,0.5)', label: 'Rising star', desc: 'This account is a ZChat rising star.' },
+  teal: { color: '#14B8A6', glow: 'rgba(20,184,166,0.5)', label: 'Mentor', desc: 'This account is a ZChat mentor.' },
+  black: { color: '#111827', glow: 'rgba(148,163,184,0.45)', label: 'Elite', desc: 'This account is a ZChat elite member.', ring: '#94A3B8' },
+  silver: { color: '#94A3B8', glow: 'rgba(203,213,225,0.5)', label: 'Legend', desc: 'This account is a ZChat legend.', gradient: ['#F8FAFC', '#94A3B8', '#475569'] },
+  diamond: { color: '#67E8F9', glow: 'rgba(103,232,249,0.55)', label: 'Diamond', desc: 'This account is a ZChat diamond member.', gradient: ['#E0F2FE', '#67E8F9', '#6366F1'] },
+  rainbow: { color: '#EC4899', glow: 'rgba(236,72,153,0.5)', label: 'Icon', desc: 'This account is a ZChat icon.', gradient: ['#F43F5E', '#F59E0B', '#22C55E', '#3B82F6', '#A855F7'] },
 };
 
 const CUSTOM_BADGES = {
@@ -8372,7 +8370,14 @@ function VerifiedBadge({ tier, size = 14, style, custom }) {
       {hasCustom && <CustomBadgeIcon badge={custom} size={size} closeToName />}
       {t && (
         <svg width={size} height={size} viewBox="0 0 24 24" style={{ flexShrink: 0, display: 'inline-block', verticalAlign: '-0.12em', marginLeft: hasCustom ? 2 : 4, ...style }} aria-label={t.label}>
-          <path fill={t.color} d={BADGE_SHAPE_PATH} />
+          {t.gradient && (
+            <defs>
+              <linearGradient id={`zchat-vb-${tier}`} x1="0" y1="0" x2="1" y2="1">
+                {t.gradient.map((c, i) => <stop key={i} offset={`${(i / (t.gradient.length - 1)) * 100}%`} stopColor={c} />)}
+              </linearGradient>
+            </defs>
+          )}
+          <path fill={t.gradient ? `url(#zchat-vb-${tier})` : t.color} d={BADGE_SHAPE_PATH} stroke={t.ring || 'none'} strokeWidth={t.ring ? 0.9 : 0} />
           <path d="M8.6 12.3l2.3 2.2 4.6-3.6" fill="none" stroke="white" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       )}
@@ -9708,7 +9713,7 @@ function SocialLinksEditor({ links, onChange, whatsapp, onWhatsappChange, labelS
       <div style={{ ...labelStyle, marginTop: 14 }}>WHATSAPP NUMBER</div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <SocialIcon platform="whatsapp" size={38} round />
-        <input value={whatsapp} inputMode="tel" placeholder="+94 77 123 4567" onChange={(e) => onWhatsappChange(cleanWhatsappNumber(e.target.value))} style={{ ...inputStyle(theme), flex: 1 }} />
+        <input value={whatsapp} inputMode="tel" placeholder="Country code and number" onChange={(e) => onWhatsappChange(cleanWhatsappNumber(e.target.value))} style={{ ...inputStyle(theme), flex: 1 }} />
       </div>
       <div style={{ fontSize: 11, color: theme.muted, marginTop: 5 }}>Include your country code. Everyone who can see your profile can see this number.</div>
     </div>
@@ -9891,18 +9896,45 @@ const RARITY_STYLE = {
   rare: { label: 'Rare', color: '#60a5fa', bg: 'linear-gradient(160deg, #0b2447 0%, #060d1a 100%)', glow: 'rgba(96,165,250,0.45)' },
 };
 
-function CollectionPanel({ me, rewards, onClose, onEquip }) {
+const FRAME_STORE = {
+  checkoutUrl: '',
+  priceLabel: '$2',
+  periodLabel: '2 months',
+};
+
+function rewardActive(r) {
+  return !r.expires_at || new Date(r.expires_at).getTime() > Date.now();
+}
+
+function daysLeft(r) {
+  if (!r || !r.expires_at) return null;
+  return Math.max(0, Math.ceil((new Date(r.expires_at).getTime() - Date.now()) / 86400000));
+}
+
+function openFrameCheckout(userId, email, frameKey) {
+  if (!FRAME_STORE.checkoutUrl || !AVATAR_FRAMES[frameKey]) return false;
+  const params = new URLSearchParams();
+  params.set('checkout[custom][user_id]', userId);
+  params.set('checkout[custom][frame]', frameKey);
+  if (email) params.set('checkout[email]', email);
+  const sep = FRAME_STORE.checkoutUrl.includes('?') ? '&' : '?';
+  window.location.href = `${FRAME_STORE.checkoutUrl}${sep}${params.toString()}`;
+  return true;
+}
+
+function CollectionPanel({ me, rewards, onClose, onEquip, userEmail }) {
   const [tab, setTab] = useState('frame');
   const [selected, setSelected] = useState(null);
   const [busy, setBusy] = useState(false);
-  const owned = new Set((rewards || []).filter((r) => r.kind === tab).map((r) => r.reward_key));
+  const rewardFor = (key) => (rewards || []).find((r) => r.kind === tab && r.reward_key === key) || null;
+  const owned = new Set((rewards || []).filter((r) => r.kind === tab && rewardActive(r)).map((r) => r.reward_key));
   const items = tab === 'frame'
     ? Object.entries(AVATAR_FRAMES).map(([key, spec]) => ({ key, spec }))
     : Object.entries(CUSTOM_BADGES).map(([key, spec]) => ({ key, spec }));
   const equippedKey = tab === 'frame' ? me.avatar_frame : me.custom_badge;
   const sorted = [...items].sort((a, b) => Number(owned.has(b.key)) - Number(owned.has(a.key)));
   const ownedCount = items.filter((it) => owned.has(it.key)).length;
-  const totalOwned = (rewards || []).filter((r) => (r.kind === 'frame' ? AVATAR_FRAMES[r.reward_key] : CUSTOM_BADGES[r.reward_key])).length;
+  const totalOwned = (rewards || []).filter((r) => rewardActive(r) && (r.kind === 'frame' ? AVATAR_FRAMES[r.reward_key] : CUSTOM_BADGES[r.reward_key])).length;
   const totalItems = Object.keys(AVATAR_FRAMES).length + Object.keys(CUSTOM_BADGES).length;
   const sel = selected ? items.find((it) => it.key === selected) : null;
   const selOwned = sel ? owned.has(sel.key) : false;
@@ -9965,6 +9997,12 @@ function CollectionPanel({ me, rewards, onClose, onEquip }) {
                 {isEq && (
                   <div style={{ position: 'absolute', top: 6, right: 6, width: 18, height: 18, borderRadius: '50%', background: '#34d399', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Check size={11} color="#052e1c" strokeWidth={4} /></div>
                 )}
+                {has && daysLeft(rewardFor(key)) != null && (
+                  <div style={{ position: 'absolute', top: 6, left: 6, padding: '2px 6px', borderRadius: 7, background: 'rgba(0,0,0,0.6)', fontSize: 9.5, fontWeight: 900, color: daysLeft(rewardFor(key)) <= 5 ? '#fca5a5' : 'rgba(255,255,255,0.85)' }}>{daysLeft(rewardFor(key))}d</div>
+                )}
+                {!has && tab === 'frame' && FRAME_STORE.checkoutUrl && (
+                  <div style={{ position: 'absolute', top: 6, left: 6, padding: '2px 6px', borderRadius: 7, background: 'rgba(245,158,11,0.9)', fontSize: 9.5, fontWeight: 900, color: '#1a0f02' }}>{FRAME_STORE.priceLabel}</div>
+                )}
               </div>
             );
           })}
@@ -9991,12 +10029,28 @@ function CollectionPanel({ me, rewards, onClose, onEquip }) {
                 <div style={{ fontSize: 10.5, fontWeight: 900, letterSpacing: '0.1em', textTransform: 'uppercase', color: rarity(sel.spec).color }}>{rarity(sel.spec).label}{sel.spec.animated ? ' · Animated' : ''}</div>
                 <div style={{ fontSize: 17, fontWeight: 900, marginTop: 2 }}>{sel.spec.label}</div>
                 {tab === 'charm' && selOwned && <div style={{ fontSize: 13, marginTop: 4, color: 'rgba(255,255,255,0.8)', fontWeight: 700 }}>{me.name}<VerifiedBadge tier={me.verified} custom={sel.key} size={14} /></div>}
+                {selOwned && daysLeft(rewardFor(sel.key)) != null && (
+                  <div style={{ fontSize: 12, marginTop: 4, fontWeight: 700, color: daysLeft(rewardFor(sel.key)) <= 5 ? '#fca5a5' : 'rgba(255,255,255,0.6)' }}>Expires in {daysLeft(rewardFor(sel.key))} {daysLeft(rewardFor(sel.key)) === 1 ? 'day' : 'days'}</div>
+                )}
                 {selOwned ? (
-                  <button disabled={busy || selEquipped} onClick={() => equip(sel.key)} style={{ marginTop: 10, padding: '10px 26px', borderRadius: 12, border: 'none', fontWeight: 900, fontFamily: FONT, cursor: selEquipped ? 'default' : 'pointer', background: selEquipped ? 'rgba(52,211,153,0.2)' : 'linear-gradient(135deg, #f59e0b, #ea580c)', color: selEquipped ? '#34d399' : '#1a0f02', letterSpacing: '0.04em' }}>
-                    {selEquipped ? '✓ EQUIPPED' : busy ? 'EQUIPPING…' : 'EQUIP'}
-                  </button>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+                    <button disabled={busy || selEquipped} onClick={() => equip(sel.key)} style={{ padding: '10px 22px', borderRadius: 12, border: 'none', fontWeight: 900, fontFamily: FONT, cursor: selEquipped ? 'default' : 'pointer', background: selEquipped ? 'rgba(52,211,153,0.2)' : 'linear-gradient(135deg, #f59e0b, #ea580c)', color: selEquipped ? '#34d399' : '#1a0f02', letterSpacing: '0.04em' }}>
+                      {selEquipped ? '✓ EQUIPPED' : busy ? 'EQUIPPING…' : 'EQUIP'}
+                    </button>
+                    {tab === 'frame' && FRAME_STORE.checkoutUrl && daysLeft(rewardFor(sel.key)) != null && (
+                      <button onClick={() => openFrameCheckout(me.id, userEmail, sel.key)} style={{ padding: '10px 14px', borderRadius: 12, border: '1px solid rgba(245,158,11,0.5)', background: 'transparent', color: '#fbbf24', fontWeight: 900, fontFamily: FONT, cursor: 'pointer' }}>+ {FRAME_STORE.periodLabel} · {FRAME_STORE.priceLabel}</button>
+                    )}
+                  </div>
+                ) : tab === 'frame' && FRAME_STORE.checkoutUrl ? (
+                  <div>
+                    {rewardFor(sel.key) && !rewardActive(rewardFor(sel.key)) && <div style={{ fontSize: 12, marginTop: 4, fontWeight: 700, color: '#fca5a5' }}>Expired</div>}
+                    <button onClick={() => openFrameCheckout(me.id, userEmail, sel.key)} style={{ marginTop: 10, padding: '11px 22px', borderRadius: 12, border: 'none', fontWeight: 900, fontFamily: FONT, cursor: 'pointer', background: 'linear-gradient(135deg, #f59e0b, #ea580c)', color: '#1a0f02', letterSpacing: '0.03em' }}>
+                      UNLOCK · {FRAME_STORE.priceLabel} for {FRAME_STORE.periodLabel}
+                    </button>
+                    <div style={{ fontSize: 11, marginTop: 6, color: 'rgba(255,255,255,0.45)' }}>Secure checkout by Lemon Squeezy. Not a subscription.</div>
+                  </div>
                 ) : (
-                  <div style={{ marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 14px', borderRadius: 12, background: 'rgba(255,255,255,0.07)', fontSize: 12.5, fontWeight: 800, color: 'rgba(255,255,255,0.7)' }}><Lock size={13} /> Locked · Earn it from ZChat events and gifts</div>
+                  <div style={{ marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 14px', borderRadius: 12, background: 'rgba(255,255,255,0.07)', fontSize: 12.5, fontWeight: 800, color: 'rgba(255,255,255,0.7)' }}><Lock size={13} /> {rewardFor(sel.key) ? 'Expired' : 'Locked'} · {tab === 'frame' ? 'Store opening soon' : 'Earn it from ZChat events and gifts'}</div>
                 )}
               </div>
               <div role="button" aria-label="Close" onClick={() => setSelected(null)} style={{ alignSelf: 'flex-start', padding: 4, cursor: 'pointer', color: 'rgba(255,255,255,0.5)' }}><X size={18} /></div>
@@ -10235,6 +10289,17 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [listFilter, setListFilter] = useState('all');
   const [groups, setGroups] = useState([]);
   const [activeGroup, setActiveGroup] = useState(null);
+  const [composerHeight, setComposerHeight] = useState(38);
+  useEffect(() => {
+    const el = composerRef.current;
+    if (!el) { setComposerHeight(38); return; }
+    const prev = el.style.height;
+    el.style.height = '38px';
+    const next = Math.max(38, Math.min(148, el.scrollHeight + 1));
+    el.style.height = prev;
+    setComposerHeight((h) => (h === next ? h : next));
+    if (next >= 148) el.scrollTop = el.scrollHeight;
+  }, [draft, activeProfile && activeProfile.id, activeGroup && activeGroup.id]);
   const [groupMembers, setGroupMembers] = useState([]);
   const [showCreateGroup, setShowCreateGroup] = useState(false);
   const [showGroupInfo, setShowGroupInfo] = useState(false);
@@ -12260,7 +12325,16 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       .subscribe();
     return () => { alive = false; supabase.removeChannel(ch); };
   }, [me && me.id]);
-  const pendingReward = (myRewards || []).find((r) => !r.seen && (r.kind === 'frame' ? AVATAR_FRAMES[r.reward_key] : CUSTOM_BADGES[r.reward_key])) || null;
+  const pendingReward = (myRewards || []).find((r) => !r.seen && rewardActive(r) && (r.kind === 'frame' ? AVATAR_FRAMES[r.reward_key] : CUSTOM_BADGES[r.reward_key])) || null;
+  useEffect(() => {
+    if (!me) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('purchase') !== 'done') return;
+    params.delete('purchase');
+    const q = params.toString();
+    window.history.replaceState(null, '', `${window.location.pathname}${q ? `?${q}` : ''}`);
+    showSnack('Payment received! Your frame unlocks in a few seconds.');
+  }, [me && me.id]);
   const equipReward = async (kind, key) => {
     const field = kind === 'frame' ? 'avatar_frame' : 'custom_badge';
     const prevValue = me[field];
@@ -13293,7 +13367,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                     placeholder={editingMessage ? 'Edit message' : 'Message'}
                     rows={1}
                     style={{
-                      flex: 1, resize: 'none', height: 38, maxHeight: 110, minHeight: 38, boxSizing: 'border-box', padding: '9px 14px', borderRadius: 20,
+                      flex: 1, resize: 'none', height: composerHeight, maxHeight: 148, minHeight: 38, boxSizing: 'border-box', padding: '9px 14px', borderRadius: composerHeight > 40 ? 18 : 20,
+                      overflowY: composerHeight >= 148 ? 'auto' : 'hidden', transition: 'height 0.12s ease, border-radius 0.12s ease', wordBreak: 'break-word',
                       border: `1px solid ${theme.border}`, background: theme.inputBg, color: theme.ink,
                       fontFamily: FONT, fontSize: 15, outline: 'none', lineHeight: 1.35,
                     }}
@@ -13661,7 +13736,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           }} />
       )}
       {collectionOpen && me && (
-        <CollectionPanel me={me} rewards={myRewards} onClose={() => setCollectionOpen(false)} onEquip={equipReward} />
+        <CollectionPanel me={me} rewards={myRewards} userEmail={session.user.email} onClose={() => setCollectionOpen(false)} onEquip={equipReward} />
       )}
       {celebrateTier && (
         <VerifiedCelebration tier={celebrateTier} name={me.name}
@@ -13949,6 +14024,11 @@ function AppInner() {
         {screen === 'register' && (
           <RegisterFlow onStart={() => setRegistering(true)} onDone={() => { setRegistering(false); setScreen('login'); }} onBack={() => { setRegistering(false); setScreen('login'); }} />
         )}
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 14, flexWrap: 'wrap', marginTop: 22, fontSize: 12.5, fontFamily: FONT }}>
+          {[['/store', 'Store'], ['/terms', 'Terms'], ['/refund', 'Refunds'], ['/privacy', 'Privacy']].map(([href, label]) => (
+            <a key={href} href={href} style={{ color: 'rgba(140,150,170,0.95)', textDecoration: 'none', fontWeight: 700 }}>{label}</a>
+          ))}
+        </div>
       </AuthShell>
     );
   }
@@ -13968,7 +14048,170 @@ function AppInner() {
   );
 }
 
+const PUBLIC_PAGES = ['/store', '/terms', '/refund', '/privacy'];
+const SUPPORT_EMAIL = 'support@getzchat.com';
+
+function PublicShell({ title, children }) {
+  const nav = [['/store', 'Store'], ['/terms', 'Terms'], ['/refund', 'Refunds'], ['/privacy', 'Privacy']];
+  const here = window.location.pathname.replace(/\/+$/, '') || '/';
+  return (
+    <div style={{ minHeight: '100vh', background: 'radial-gradient(circle at 50% 0%, #1c1535 0%, #07080d 60%)', color: '#e8eaf0', fontFamily: FONT }}>
+      <div style={{ maxWidth: 820, margin: '0 auto', padding: '18px 18px 60px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+          <a href="/" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none', color: 'white' }}>
+            <div style={{ width: 38, height: 38, borderRadius: 12, background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 18 }}>Z</div>
+            <div style={{ fontWeight: 900, fontSize: 20 }}>ZChat</div>
+          </a>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {nav.map(([href, label]) => (
+              <a key={href} href={href} style={{ padding: '8px 12px', borderRadius: 12, fontSize: 13.5, fontWeight: 800, textDecoration: 'none', color: here === href ? '#1a0f02' : 'rgba(255,255,255,0.75)', background: here === href ? 'linear-gradient(135deg, #f59e0b, #ea580c)' : 'rgba(255,255,255,0.06)' }}>{label}</a>
+            ))}
+          </div>
+        </div>
+        <h1 style={{ fontSize: 30, fontWeight: 900, margin: '34px 0 8px', color: 'white' }}>{title}</h1>
+        {children}
+        <div style={{ marginTop: 50, paddingTop: 20, borderTop: '1px solid rgba(255,255,255,0.08)', fontSize: 13, color: 'rgba(255,255,255,0.5)', lineHeight: 1.8 }}>
+          <div>ZChat · <a href="https://getzchat.com" style={{ color: 'rgba(255,255,255,0.7)' }}>getzchat.com</a></div>
+          <div>Contact: <a href={`mailto:${SUPPORT_EMAIL}`} style={{ color: '#fbbf24' }}>{SUPPORT_EMAIL}</a></div>
+          <div>Payments are processed securely by Lemon Squeezy, our reseller and merchant of record.</div>
+          <div style={{ display: 'flex', gap: 14, marginTop: 6, flexWrap: 'wrap' }}>
+            {nav.map(([href, label]) => <a key={href} href={href} style={{ color: 'rgba(255,255,255,0.65)' }}>{label}</a>)}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const legalH = { fontSize: 18, fontWeight: 900, color: 'white', margin: '26px 0 8px' };
+const legalP = { fontSize: 15, lineHeight: 1.7, color: 'rgba(255,255,255,0.78)', margin: '0 0 10px' };
+
+function PublicFramePreview({ frameKey }) {
+  const spec = AVATAR_FRAMES[frameKey];
+  const url = useFrameUrl(frameKey);
+  const size = 86;
+  const w = size * spec.scale;
+  return (
+    <div style={{ position: 'relative', width: 150, height: 150, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ position: 'relative', width: size, height: size }}>
+        <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 32, color: 'white' }}>Z</div>
+        {url && <img src={url} alt="" draggable={false} style={{ ...frameMaskStyle(spec), position: 'absolute', width: w, height: w, left: size / 2 - w * (spec.centerX ?? 0.5), top: size / 2 - w * spec.centerY, maxWidth: 'none', pointerEvents: 'none' }} />}
+      </div>
+    </div>
+  );
+}
+
+function PublicStorePage() {
+  const frames = Object.entries(AVATAR_FRAMES);
+  return (
+    <PublicShell title="ZChat Store">
+      <p style={legalP}>ZChat is a free chat and social app. Everything needed to chat is free. The store sells optional cosmetic <b>avatar frames</b> that decorate your profile photo everywhere in the app.</p>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: 12, marginTop: 22 }}>
+        {frames.map(([key, spec]) => {
+          const r = RARITY_STYLE[spec.rarity] || RARITY_STYLE.rare;
+          return (
+            <div key={key} style={{ borderRadius: 18, padding: '10px 10px 14px', background: r.bg, border: `1px solid ${r.color}55`, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+              <PublicFramePreview frameKey={key} />
+              <div style={{ fontWeight: 900, fontSize: 15, color: 'white' }}>{spec.label}</div>
+              <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: '0.08em', textTransform: 'uppercase', color: r.color, marginTop: 3 }}>{r.label}{spec.animated ? ' · Animated' : ''}</div>
+              <div style={{ marginTop: 10, padding: '6px 12px', borderRadius: 10, background: 'rgba(245,158,11,0.15)', color: '#fbbf24', fontWeight: 900, fontSize: 14 }}>$2 · 2 months</div>
+            </div>
+          );
+        })}
+      </div>
+      <h2 style={legalH}>How it works</h2>
+      <p style={legalP}>1. Create a free ZChat account at getzchat.com and sign in.</p>
+      <p style={legalP}>2. Open your profile, then Collection, choose a frame and tap Unlock.</p>
+      <p style={legalP}>3. Pay $2 (USD) securely with Lemon Squeezy. This is a single payment, not a subscription. You are never charged again automatically.</p>
+      <p style={legalP}>4. The frame is added to your account instantly and stays active for 2 months (60 days). You can buy it again anytime to add another 2 months.</p>
+      <h2 style={legalH}>Delivery</h2>
+      <p style={legalP}>Frames are digital items delivered automatically to your ZChat account within seconds of payment. Nothing is shipped.</p>
+      <p style={legalP}>Refunds: see our <a href="/refund" style={{ color: '#fbbf24' }}>Refund Policy</a>. Questions: <a href={`mailto:${SUPPORT_EMAIL}`} style={{ color: '#fbbf24' }}>{SUPPORT_EMAIL}</a></p>
+    </PublicShell>
+  );
+}
+
+function PublicTermsPage() {
+  return (
+    <PublicShell title="Terms of Service">
+      <p style={legalP}>Last updated: September 2026</p>
+      <p style={legalP}>These terms apply when you use ZChat at getzchat.com. By creating an account or using ZChat you agree to them.</p>
+      <h2 style={legalH}>1. Your account</h2>
+      <p style={legalP}>You are responsible for your account and for keeping your login secure. You must give accurate information and must not create accounts to impersonate others.</p>
+      <h2 style={legalH}>2. Acceptable use</h2>
+      <p style={legalP}>Do not use ZChat to harass, threaten, scam or spam people, or to share illegal, sexual or violent content, hate speech, or content that harms children. We may remove content and suspend or delete accounts that break these rules.</p>
+      <h2 style={legalH}>3. Digital items</h2>
+      <p style={legalP}>Avatar frames and other cosmetic items are digital items for use inside ZChat only. They have no cash value, cannot be transferred or sold, and give no ownership rights. Paid frames stay active for the period shown at purchase (2 months). Items given as gifts or rewards may be permanent or time limited as shown.</p>
+      <h2 style={legalH}>4. Payments</h2>
+      <p style={legalP}>Purchases are processed by Lemon Squeezy, who acts as our reseller and merchant of record. Prices are shown in USD. Purchases are single payments, not subscriptions. Lemon Squeezy's own terms also apply to your payment.</p>
+      <h2 style={legalH}>5. Refunds</h2>
+      <p style={legalP}>Refunds are handled under our <a href="/refund" style={{ color: '#fbbf24' }}>Refund Policy</a>.</p>
+      <h2 style={legalH}>6. Changes and availability</h2>
+      <p style={legalP}>We may update ZChat, change or retire features and items, or update these terms. If a paid frame is permanently removed while still active, we will provide a replacement or a refund for the unused time.</p>
+      <h2 style={legalH}>7. Suspension</h2>
+      <p style={legalP}>If your account is suspended or deleted for breaking these terms, active paid items are lost and are not refunded.</p>
+      <h2 style={legalH}>8. Liability</h2>
+      <p style={legalP}>ZChat is provided as is. To the extent allowed by law, we are not liable for indirect losses, lost data or content, or interruptions of the service.</p>
+      <h2 style={legalH}>9. Contact</h2>
+      <p style={legalP}>Questions about these terms: <a href={`mailto:${SUPPORT_EMAIL}`} style={{ color: '#fbbf24' }}>{SUPPORT_EMAIL}</a></p>
+    </PublicShell>
+  );
+}
+
+function PublicRefundPage() {
+  return (
+    <PublicShell title="Refund Policy">
+      <p style={legalP}>Last updated: September 2026</p>
+      <p style={legalP}>Avatar frames are digital items delivered instantly to your account, so <b>purchases are final and not refundable</b>, except in the case of a technical problem described below.</p>
+      <h2 style={legalH}>When you can get a refund</h2>
+      <p style={legalP}>You can request a full refund if, because of a technical problem on our side:</p>
+      <p style={legalP}>• you were charged but the frame was not added to your account within 24 hours,</p>
+      <p style={legalP}>• you were charged more than once for the same purchase by mistake, or</p>
+      <p style={legalP}>• the frame does not display or work in ZChat and we cannot fix it within 7 days of your report.</p>
+      <h2 style={legalH}>When refunds are not given</h2>
+      <p style={legalP}>Refunds are not given for changing your mind, not liking how a frame looks, not using a frame, a frame reaching the end of its 2 month period, or an account being suspended for breaking our <a href="/terms" style={{ color: '#fbbf24' }}>Terms of Service</a>.</p>
+      <h2 style={legalH}>How to request</h2>
+      <p style={legalP}>Email <a href={`mailto:${SUPPORT_EMAIL}`} style={{ color: '#fbbf24' }}>{SUPPORT_EMAIL}</a> within 14 days of purchase with your order number from the Lemon Squeezy receipt and a short description of the problem. Approved refunds are returned to your original payment method by Lemon Squeezy. When a refund is issued, the frame is removed from your account.</p>
+    </PublicShell>
+  );
+}
+
+function PublicPrivacyPage() {
+  return (
+    <PublicShell title="Privacy Policy">
+      <p style={legalP}>Last updated: September 2026</p>
+      <h2 style={legalH}>What we collect</h2>
+      <p style={legalP}>Account details you provide (email, username, name, profile photo and optional profile information), the messages, posts and statuses you create, and basic technical data needed to run the app (such as when you were last active).</p>
+      <h2 style={legalH}>How we use it</h2>
+      <p style={legalP}>To run ZChat, deliver your messages and notifications, show your profile to others according to your privacy settings, keep the service safe, and deliver items you buy.</p>
+      <h2 style={legalH}>Payments</h2>
+      <p style={legalP}>Payments are handled by Lemon Squeezy. We never receive or store your card details. We only receive an order confirmation linked to your ZChat account so we can deliver your item.</p>
+      <h2 style={legalH}>Sharing</h2>
+      <p style={legalP}>We do not sell your personal data. We use trusted providers to run the service, such as hosting, database and payment processing, and share data with them only as needed to operate ZChat, or when required by law.</p>
+      <h2 style={legalH}>Your choices</h2>
+      <p style={legalP}>You can edit your profile and privacy settings in the app, and you can ask us to delete your account and its data by emailing <a href={`mailto:${SUPPORT_EMAIL}`} style={{ color: '#fbbf24' }}>{SUPPORT_EMAIL}</a>.</p>
+      <h2 style={legalH}>Contact</h2>
+      <p style={legalP}>Privacy questions: <a href={`mailto:${SUPPORT_EMAIL}`} style={{ color: '#fbbf24' }}>{SUPPORT_EMAIL}</a></p>
+    </PublicShell>
+  );
+}
+
+function PublicPage({ path }) {
+  if (path === '/store') return <PublicStorePage />;
+  if (path === '/terms') return <PublicTermsPage />;
+  if (path === '/refund') return <PublicRefundPage />;
+  return <PublicPrivacyPage />;
+}
+
 export default function App() {
+  const publicPath = (typeof window !== 'undefined' ? window.location.pathname.replace(/\/+$/, '').toLowerCase() : '');
+  if (PUBLIC_PAGES.includes(publicPath)) {
+    return (
+      <ThemeProvider>
+        <PublicPage path={publicPath} />
+      </ThemeProvider>
+    );
+  }
   return (
     <ThemeProvider>
       <AppInner />
