@@ -416,6 +416,7 @@ function colorForName(name) {
 
 function Avatar({ emoji, name = '', online, size = 40, ring = false, frame = null }) {
   const { chatTheme, theme } = useTheme();
+  const frameUrl = useFrameUrl(frame && size >= 22 ? frame : null);
   const [imgFailed, setImgFailed] = useState(false);
   const isImage = typeof emoji === 'string' && emoji.startsWith('http') && !imgFailed;
   const initial = (name || '?').trim().charAt(0).toUpperCase() || '?';
@@ -434,12 +435,11 @@ function Avatar({ emoji, name = '', online, size = 40, ring = false, frame = nul
           ? <img src={emoji} alt="" onError={() => setImgFailed(true)} onContextMenu={(e) => e.preventDefault()} draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           : initial}
       </div>
-      {frame && AVATAR_FRAMES[frame] && size >= 22 && (() => {
+      {frameUrl && AVATAR_FRAMES[frame] && (() => {
         const spec = AVATAR_FRAMES[frame];
         const w = size * spec.scale;
         return (
-          <img src={spec.file} alt="" draggable={false}
-            onError={(e) => { const el = e.currentTarget; if (spec.fallback && !el.dataset.fallback) { el.dataset.fallback = '1'; el.src = spec.fallback; } }}
+          <img src={frameUrl} alt="" draggable={false} aria-hidden="true"
             style={{ position: 'absolute', width: w, height: w, left: size / 2 - w * (spec.centerX ?? 0.5), top: size / 2 - w * spec.centerY, pointerEvents: 'none', userSelect: 'none', zIndex: 2, maxWidth: 'none', animation: spec.animation || 'none' }} />
         );
       })()}
@@ -3588,6 +3588,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
   const [followingCount, setFollowingCount] = useState(cachedStats.following ?? null);
   const [mutualCount, setMutualCount] = useState(cachedStats.mutual ?? null);
   const [postCount, setPostCount] = useState(cachedStats.posts ?? null);
+  const profileFrameUrl = useFrameUrl(profile.avatar_frame);
   useEffect(() => {
     let cancelled = false;
     supabase.from('posts').select('*', { count: 'exact', head: true }).eq('user_id', profile.id).then(({ count, error }) => {
@@ -3914,8 +3915,8 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
                     ? <img src={shownPhoto} alt="" draggable={false} onContextMenu={(e) => e.preventDefault()} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
                     : <span style={{ fontSize: 72, fontWeight: 800, color: 'rgba(255,255,255,0.92)', fontFamily: FONT }}>{initial}</span>}
                 </div>
-                {AVATAR_FRAMES[profile.avatar_frame] && (
-                  <img src={AVATAR_FRAMES[profile.avatar_frame].file} alt="" draggable={false} onError={(e) => { const el = e.currentTarget; const fb = AVATAR_FRAMES[profile.avatar_frame].fallback; if (fb && !el.dataset.fallback) { el.dataset.fallback = '1'; el.src = fb; } }} style={{ position: 'absolute', width: 150 * AVATAR_FRAMES[profile.avatar_frame].scale, height: 150 * AVATAR_FRAMES[profile.avatar_frame].scale, left: 75 - 150 * AVATAR_FRAMES[profile.avatar_frame].scale * (AVATAR_FRAMES[profile.avatar_frame].centerX ?? 0.5), top: 75 - 150 * AVATAR_FRAMES[profile.avatar_frame].scale * AVATAR_FRAMES[profile.avatar_frame].centerY, pointerEvents: 'none', zIndex: 2, animation: AVATAR_FRAMES[profile.avatar_frame].animation || 'none' }} />
+                {AVATAR_FRAMES[profile.avatar_frame] && profileFrameUrl && (
+                  <img src={profileFrameUrl} alt="" draggable={false} aria-hidden="true" style={{ position: 'absolute', width: 150 * AVATAR_FRAMES[profile.avatar_frame].scale, height: 150 * AVATAR_FRAMES[profile.avatar_frame].scale, left: 75 - 150 * AVATAR_FRAMES[profile.avatar_frame].scale * (AVATAR_FRAMES[profile.avatar_frame].centerX ?? 0.5), top: 75 - 150 * AVATAR_FRAMES[profile.avatar_frame].scale * AVATAR_FRAMES[profile.avatar_frame].centerY, pointerEvents: 'none', zIndex: 2, animation: AVATAR_FRAMES[profile.avatar_frame].animation || 'none' }} />
                 )}
                 {isOnline && !AVATAR_FRAMES[profile.avatar_frame] && <div style={{ position: 'absolute', right: 14, bottom: 14, width: 26, height: 26, borderRadius: '50%', background: '#22c55e', border: `5px solid ${pageBg}`, zIndex: 3 }} />}
               </div>
@@ -9188,6 +9189,51 @@ const AVATAR_FRAMES = {
   ice_wolf: { file: '/frames/frame-ice-wolf.webp', fallback: '/frame-ice-wolf.webp', label: 'Frost wolf frame', scale: 1.539, centerX: 0.4967, centerY: 0.4854, animation: 'zchat-frame-ice 3s ease-in-out infinite' },
 };
 
+const frameUrlCache = new Map();
+const frameWaiters = new Map();
+const frameImageKeep = [];
+function loadFrameImage(url) {
+  return new Promise((resolve) => {
+    if (!url) { resolve(null); return; }
+    const img = new Image();
+    img.decoding = 'async';
+    img.onload = () => {
+      frameImageKeep.push(img);
+      const done = () => resolve(url);
+      if (img.decode) img.decode().then(done, done); else done();
+    };
+    img.onerror = () => resolve(null);
+    img.src = url;
+  });
+}
+function resolveFrameUrl(key) {
+  const spec = AVATAR_FRAMES[key];
+  if (!spec) return Promise.resolve(null);
+  if (frameUrlCache.has(key)) return Promise.resolve(frameUrlCache.get(key));
+  if (frameWaiters.has(key)) return frameWaiters.get(key);
+  const p = loadFrameImage(spec.file)
+    .then((u) => u || loadFrameImage(spec.fallback))
+    .then((u) => {
+      frameWaiters.delete(key);
+      if (u) frameUrlCache.set(key, u);
+      return u;
+    });
+  frameWaiters.set(key, p);
+  return p;
+}
+function useFrameUrl(key) {
+  const [url, setUrl] = useState(() => (key && frameUrlCache.has(key) ? frameUrlCache.get(key) : null));
+  useEffect(() => {
+    let alive = true;
+    if (!key || !AVATAR_FRAMES[key]) { setUrl(null); return undefined; }
+    if (frameUrlCache.has(key)) { setUrl(frameUrlCache.get(key)); return undefined; }
+    setUrl(null);
+    resolveFrameUrl(key).then((u) => { if (alive) setUrl(u); });
+    return () => { alive = false; };
+  }, [key]);
+  return url;
+}
+
 function FramedAvatar({ children }) {
   return children;
 }
@@ -11937,6 +11983,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     },
   });
   callEngineRef.current = callEngine;
+  useEffect(() => { Object.keys(AVATAR_FRAMES).forEach((k) => { resolveFrameUrl(k); }); }, []);
   useEffect(() => {
     if (!storyViewer || storyViewer.readOnly || storyViewer.detached) return;
     const live = new Set();
@@ -12016,6 +12063,87 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   }, [callBarShown]);
   const activeProfileRefForCalls = useRef(null);
   activeProfileRefForCalls.current = activeProfile;
+  const activeGroupResumeRef = useRef(null);
+  activeGroupResumeRef.current = activeGroup;
+  const hiddenAtRef = useRef(0);
+  const resumingRef = useRef(false);
+  useEffect(() => {
+    if (!me) return undefined;
+    const refreshActiveChat = async () => {
+      const g = activeGroupResumeRef.current;
+      const pr = activeProfileRefForCalls.current;
+      const myId = session.user.id;
+      let query;
+      if (g) query = supabase.from('messages').select('*').eq('group_id', g.id);
+      else if (pr) query = supabase.from('messages').select('*').or(`and(sender_id.eq.${myId},receiver_id.eq.${pr.id}),and(sender_id.eq.${pr.id},receiver_id.eq.${myId})`).is('group_id', null);
+      else return;
+      const { data, error } = await query.order('created_at', { ascending: false }).limit(CHAT_HISTORY_LIMIT);
+      if (error || !data) return;
+      const same = g
+        ? (activeGroupResumeRef.current && activeGroupResumeRef.current.id === g.id)
+        : (activeProfileRefForCalls.current && activeProfileRefForCalls.current.id === pr.id);
+      if (!same) return;
+      const hidden = getHiddenMsgIds();
+      const fresh = data.slice().reverse().filter((m) => !hidden.has(m.id));
+      const newestServer = fresh.length ? new Date(fresh[fresh.length - 1].created_at).getTime() : 0;
+      setMessages((prev) => {
+        const ids = new Set(fresh.map((m) => m.id));
+        const localNewer = prev.filter((m) => !ids.has(m.id) && new Date(m.created_at).getTime() > newestServer);
+        return [...fresh, ...localNewer];
+      });
+      setLoadingConvo(false);
+    };
+    const resume = async (force) => {
+      if (document.visibilityState !== 'visible') return;
+      const awayMs = hiddenAtRef.current ? Date.now() - hiddenAtRef.current : 0;
+      if (!force && awayMs < 1500) return;
+      if (resumingRef.current) return;
+      resumingRef.current = true;
+      hiddenAtRef.current = 0;
+      try {
+        try { supabase.auth.startAutoRefresh && supabase.auth.startAutoRefresh(); } catch {}
+        const { data: sessData } = await supabase.auth.getSession();
+        let current = sessData && sessData.session;
+        if (current && current.expires_at && current.expires_at * 1000 - Date.now() < 90 * 1000) {
+          const { data: refreshed } = await supabase.auth.refreshSession();
+          if (refreshed && refreshed.session) current = refreshed.session;
+        }
+        try {
+          if (current && supabase.realtime && supabase.realtime.setAuth) supabase.realtime.setAuth(current.access_token);
+          if (supabase.realtime && supabase.realtime.isConnected && !supabase.realtime.isConnected()) supabase.realtime.connect();
+        } catch {}
+        if (reloadListsRef.current) reloadListsRef.current();
+        loadUnreadCounts();
+        if (reloadStoriesRef.current) reloadStoriesRef.current();
+        await refreshActiveChat();
+        setTimeout(() => {
+          if (document.visibilityState !== 'visible') return;
+          if (reloadListsRef.current) reloadListsRef.current();
+          refreshActiveChat();
+        }, 2500);
+      } finally {
+        resumingRef.current = false;
+      }
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        hiddenAtRef.current = Date.now();
+        try { supabase.auth.stopAutoRefresh && supabase.auth.stopAutoRefresh(); } catch {}
+      } else {
+        resume(false);
+      }
+    };
+    const onPageShow = (e) => { if (e.persisted) resume(true); };
+    const onOnline = () => resume(true);
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('pageshow', onPageShow);
+    window.addEventListener('online', onOnline);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pageshow', onPageShow);
+      window.removeEventListener('online', onOnline);
+    };
+  }, [me && me.id]);
 
   const startDirectCall = (profile, kind) => {
     if (!canCall(profile)) { showSnack('You can call people who follow you back'); return; }
