@@ -3570,7 +3570,7 @@ function PosterIconButton({ onClick, children, label }) {
   );
 }
 
-function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, onSaved, onOpenSettings, onOpenProfile, onMessage, isBlocked, onBlock, onUnblock, shareConversations, shareGroups, onShareToChats, canCall, onCall, onOpenHighlight, meProfile }) {
+function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, onSaved, onOpenSettings, onOpenProfile, onMessage, isBlocked, onBlock, onUnblock, shareConversations, shareGroups, onShareToChats, canCall, onCall, onOpenHighlight, meProfile, onOpenCollection }) {
   const { theme } = useTheme();
   const [reportOpen, setReportOpen] = useState(false);
   const [reportSent, setReportSent] = useState(false);
@@ -4002,11 +4002,21 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
                 </div>
               )}
               {isSelf ? (
+                <>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button onClick={startEditing} style={pillBtn(true)}><Edit3 size={15} /> Edit profile</button>
                   <button onClick={() => setShowShare(true)} style={pillBtn(false)}><Share2 size={15} /> Share</button>
                   <button onClick={() => setShowPrivacySettings(true)} aria-label="Privacy" style={{ ...pillBtn(false), flex: '0 0 46px', padding: 0 }}><Lock size={16} /></button>
                 </div>
+                <div role="button" onClick={onOpenCollection} style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px', borderRadius: 16, cursor: 'pointer', background: 'linear-gradient(135deg, rgba(245,158,11,0.18), rgba(234,88,12,0.12))', border: '1px solid rgba(245,158,11,0.35)' }}>
+                  <div style={{ width: 34, height: 34, borderRadius: 11, background: 'linear-gradient(135deg, #f59e0b, #ea580c)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Sparkles size={18} color="#1a0f02" /></div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 900, color: theme.ink }}>Collection</div>
+                    <div style={{ fontSize: 12, color: theme.muted }}>Avatar frames and name charms</div>
+                  </div>
+                  <ChevronRight size={18} color={theme.muted} />
+                </div>
+                </>
               ) : (
                 <div style={{ display: 'flex', gap: 8 }}>
                   <div style={{ flex: 1, display: 'flex' }}>
@@ -8325,7 +8335,7 @@ const VERIFIED_TIERS = {
 };
 
 const CUSTOM_BADGES = {
-  cat: { file: '/badges/badge-cat.webp', fallback: '/badge-cat.webp', label: 'Cute cat badge', ratio: 1.182 },
+  cat: { file: '/badges/badge-cat.webp', fallback: '/badge-cat.webp', label: 'Cute cat charm', ratio: 1.182, rarity: 'epic', animated: true },
 };
 const customBadgeUrlCache = new Map();
 function useCustomBadgeUrl(key) {
@@ -8359,13 +8369,13 @@ function VerifiedBadge({ tier, size = 14, style, custom }) {
   if (!t && !hasCustom) return null;
   return (
     <>
+      {hasCustom && <CustomBadgeIcon badge={custom} size={size} closeToName />}
       {t && (
-        <svg width={size} height={size} viewBox="0 0 24 24" style={{ flexShrink: 0, display: 'inline-block', verticalAlign: '-0.12em', marginLeft: 4, ...style }} aria-label={t.label}>
+        <svg width={size} height={size} viewBox="0 0 24 24" style={{ flexShrink: 0, display: 'inline-block', verticalAlign: '-0.12em', marginLeft: hasCustom ? 2 : 4, ...style }} aria-label={t.label}>
           <path fill={t.color} d={BADGE_SHAPE_PATH} />
           <path d="M8.6 12.3l2.3 2.2 4.6-3.6" fill="none" stroke="white" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       )}
-      {hasCustom && <CustomBadgeIcon badge={custom} size={size} closeToName={!t} />}
     </>
   );
 }
@@ -9223,13 +9233,22 @@ function AudioBubble({ url, isMe }) {
 }
 
 const AVATAR_FRAMES = {
-  fire_wolf: { file: '/frames/frame-fire-wolf.webp', fallback: '/frame-fire-wolf.webp', label: 'Inferno wolf frame', scale: 1.428, centerX: 0.5002, centerY: 0.4605, glow: '#ff5a1f' },
-  ice_wolf: { file: '/frames/frame-ice-wolf.webp', fallback: '/frame-ice-wolf.webp', label: 'Frost wolf frame', scale: 1.399, centerX: 0.4968, centerY: 0.4791, glow: '#38bdf8' },
-  poison: { file: '/frames/frame-poison.webp?v=2', fallback: '/frame-poison.webp?v=2', label: 'Toxic skull frame', scale: 1.821, centerX: 0.5037, centerY: 0.4763, glow: '#4ade80' },
-  ice_flow: { file: '/frames/frame-ice-flow.webp?v=3', fallback: '/frame-ice-flow.webp?v=3', label: 'Frost flow frame', scale: 1.502, centerX: 0.5133, centerY: 0.4888, glow: '#60a5fa' },
+  fire_wolf: { file: '/frames/frame-fire-wolf.webp', fallback: '/frame-fire-wolf.webp', label: 'Inferno wolf frame', scale: 1.428, centerX: 0.5002, centerY: 0.4605, glow: '#ff5a1f', rarity: 'legendary' },
+  ice_wolf: { file: '/frames/frame-ice-wolf.webp', fallback: '/frame-ice-wolf.webp', label: 'Frost wolf frame', scale: 1.399, centerX: 0.4968, centerY: 0.4791, glow: '#38bdf8', rarity: 'legendary' },
+  poison: { file: '/frames/frame-poison.webp?v=2', fallback: '/frame-poison.webp?v=2', label: 'Toxic skull frame', scale: 1.821, centerX: 0.5037, centerY: 0.4763, glow: '#4ade80', rarity: 'mythic', animated: true },
+  frost_dragon: { file: '/frames/frame-frost-dragon.webp', fallback: '/frame-frost-dragon.webp', label: 'Frost dragon frame', scale: 1.521, centerX: 0.4802, centerY: 0.5087, mask: false, rarity: 'legendary' },
+  emerald_lion: { file: '/frames/frame-emerald-lion.webp', fallback: '/frame-emerald-lion.webp', label: 'Emerald lion frame', scale: 1.567, centerX: 0.4978, centerY: 0.4488, mask: false, rarity: 'legendary' },
+  crystal_deer: { file: '/frames/frame-crystal-deer.webp', fallback: '/frame-crystal-deer.webp', label: 'Crystal deer frame', scale: 1.413, centerX: 0.4877, centerY: 0.4499, mask: false, rarity: 'epic' },
+  azure_phoenix: { file: '/frames/frame-azure-phoenix.webp', fallback: '/frame-azure-phoenix.webp', label: 'Azure phoenix frame', scale: 1.4, centerX: 0.5081, centerY: 0.4923, mask: false, rarity: 'epic' },
+  lilac_kitty: { file: '/frames/frame-lilac-kitty.webp', fallback: '/frame-lilac-kitty.webp', label: 'Lilac kitty frame', scale: 1.38, centerX: 0.4907, centerY: 0.477, mask: false, rarity: 'epic' },
+  fairy_princess: { file: '/frames/frame-fairy-princess.webp', fallback: '/frame-fairy-princess.webp', label: 'Fairy princess frame', scale: 1.416, centerX: 0.5068, centerY: 0.4836, mask: false, rarity: 'epic' },
+  rose_hearts: { file: '/frames/frame-rose-hearts.webp', fallback: '/frame-rose-hearts.webp', label: 'Rose hearts frame', scale: 1.604, centerX: 0.5132, centerY: 0.4549, mask: false, rarity: 'rare' },
+  crimson_lily: { file: '/frames/frame-crimson-lily.webp', fallback: '/frame-crimson-lily.webp', label: 'Crimson lily frame', scale: 1.309, centerX: 0.5151, centerY: 0.4588, mask: false, rarity: 'rare' },
+  sapphire_butterfly: { file: '/frames/frame-sapphire-butterfly.webp', fallback: '/frame-sapphire-butterfly.webp', label: 'Sapphire butterfly frame', scale: 1.317, centerX: 0.4983, centerY: 0.5, mask: false, rarity: 'rare' },
 };
 
 function frameMaskStyle(spec) {
+  if (spec.mask === false) return {};
   const inner = Math.max(0, Math.min(80, 90 / (spec.scale || 1.5)));
   const mask = `radial-gradient(circle closest-side, rgba(0,0,0,0) ${inner.toFixed(1)}%, #000 ${(inner + 4).toFixed(1)}%, #000 86%, rgba(0,0,0,0) 100%)`;
   return { WebkitMaskImage: mask, maskImage: mask };
@@ -9832,7 +9851,7 @@ function RewardCelebration({ kind, rewardKey, me, onClaim }) {
   const isFrame = kind === 'frame';
   const spec = isFrame ? AVATAR_FRAMES[rewardKey] : CUSTOM_BADGES[rewardKey];
   if (!spec) return null;
-  const glow = (isFrame ? spec.glow : '#f472b6') || '#8b5cf6';
+  const glow = (isFrame ? (spec.glow || (RARITY_STYLE[spec.rarity] || RARITY_STYLE.rare).color) : '#f472b6') || '#8b5cf6';
   const shownFrame = isFrame ? rewardKey : (AVATAR_FRAMES[me.avatar_frame] ? me.avatar_frame : null);
   const frameRoom = shownFrame ? Math.round(150 * ((AVATAR_FRAMES[shownFrame].scale || 1.5) - 1) / 2) + 14 : 22;
   const pieces = Array.from({ length: 30 }, (_, i) => i);
@@ -9841,9 +9860,9 @@ function RewardCelebration({ kind, rewardKey, me, onClaim }) {
       {pieces.map((i) => (
         <span key={i} style={{ position: 'absolute', top: -20, left: `${(i * 97) % 100}%`, width: 7, height: 13, borderRadius: 2, background: [glow, '#FFFFFF', '#7C5CFC', '#fbbf24'][i % 4], opacity: 0.85, animation: `zchat-confetti ${2.8 + (i % 5) * 0.4}s linear ${(i % 9) * 0.25}s infinite` }} />
       ))}
-      <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.18em', color: glow, textTransform: 'uppercase' }}>{isFrame ? 'New profile frame' : 'New badge'}</div>
+      <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.18em', color: glow, textTransform: 'uppercase' }}>{isFrame ? 'New avatar frame' : 'New name charm'}</div>
       <div style={{ fontSize: 30, fontWeight: 900, marginTop: 8 }}>Congratulations!</div>
-      <div style={{ fontSize: 14.5, opacity: 0.75, marginTop: 6, maxWidth: 300, lineHeight: 1.5 }}>You unlocked the <b style={{ color: glow }}>{spec.label}</b>. Here's how your profile looks now.</div>
+      <div style={{ fontSize: 14.5, opacity: 0.75, marginTop: 6, maxWidth: 300, lineHeight: 1.5 }}>You unlocked the <b style={{ color: glow }}>{spec.label}</b>. It's saved in your Collection. Here's how it looks on you.</div>
 
       <div className="zchat-pop" style={{ position: 'relative', marginTop: frameRoom + 12, marginBottom: frameRoom, width: 150, height: 150 }}>
         <div style={{ position: 'absolute', inset: -40, borderRadius: '50%', background: `radial-gradient(circle, ${glow}55 0%, transparent 70%)`, animation: 'zchat-badge-pulse 2.2s ease-in-out infinite' }} />
@@ -9859,10 +9878,141 @@ function RewardCelebration({ kind, rewardKey, me, onClaim }) {
       )}
 
       <button disabled={claiming} onClick={async () => { setClaiming(true); await onClaim(); }} style={{ marginTop: 30, padding: '15px 56px', borderRadius: 18, border: 'none', background: `linear-gradient(135deg, ${glow}, #8b5cf6)`, color: 'white', fontWeight: 900, fontSize: 16, cursor: 'pointer', fontFamily: FONT, boxShadow: `0 12px 34px ${glow}66`, opacity: claiming ? 0.7 : 1 }}>
-        {claiming ? 'Claiming…' : 'Claim'}
+        {claiming ? 'Claiming…' : 'Claim & equip'}
       </button>
     </div>
   );
+}
+
+const RARITY_STYLE = {
+  mythic: { label: 'Mythic', color: '#ff4d6d', bg: 'linear-gradient(160deg, #3b0a17 0%, #16060b 100%)', glow: 'rgba(255,77,109,0.55)' },
+  legendary: { label: 'Legendary', color: '#fbbf24', bg: 'linear-gradient(160deg, #3a2606 0%, #140d02 100%)', glow: 'rgba(251,191,36,0.5)' },
+  epic: { label: 'Epic', color: '#c084fc', bg: 'linear-gradient(160deg, #2a0f45 0%, #0f0719 100%)', glow: 'rgba(192,132,252,0.45)' },
+  rare: { label: 'Rare', color: '#60a5fa', bg: 'linear-gradient(160deg, #0b2447 0%, #060d1a 100%)', glow: 'rgba(96,165,250,0.45)' },
+};
+
+function CollectionPanel({ me, rewards, onClose, onEquip }) {
+  const [tab, setTab] = useState('frame');
+  const [selected, setSelected] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const owned = new Set((rewards || []).filter((r) => r.kind === tab).map((r) => r.reward_key));
+  const items = tab === 'frame'
+    ? Object.entries(AVATAR_FRAMES).map(([key, spec]) => ({ key, spec }))
+    : Object.entries(CUSTOM_BADGES).map(([key, spec]) => ({ key, spec }));
+  const equippedKey = tab === 'frame' ? me.avatar_frame : me.custom_badge;
+  const sorted = [...items].sort((a, b) => Number(owned.has(b.key)) - Number(owned.has(a.key)));
+  const ownedCount = items.filter((it) => owned.has(it.key)).length;
+  const totalOwned = (rewards || []).filter((r) => (r.kind === 'frame' ? AVATAR_FRAMES[r.reward_key] : CUSTOM_BADGES[r.reward_key])).length;
+  const totalItems = Object.keys(AVATAR_FRAMES).length + Object.keys(CUSTOM_BADGES).length;
+  const sel = selected ? items.find((it) => it.key === selected) : null;
+  const selOwned = sel ? owned.has(sel.key) : false;
+  const selEquipped = sel ? equippedKey === sel.key : false;
+  const rarity = (spec) => RARITY_STYLE[spec.rarity] || RARITY_STYLE.rare;
+
+  const equip = async (key) => {
+    if (busy) return;
+    setBusy(true);
+    await onEquip(tab, key);
+    setBusy(false);
+  };
+
+  return (
+    <div className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 620, background: 'radial-gradient(circle at 50% 0%, #1c1535 0%, #07080d 55%)', color: 'white', display: 'flex', flexDirection: 'column', fontFamily: FONT }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', paddingTop: 'calc(12px + env(safe-area-inset-top))' }}>
+        <div role="button" aria-label="Close collection" onClick={onClose} style={{ width: 38, height: 38, borderRadius: '50%', background: 'rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><ArrowLeft size={19} /></div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 20, fontWeight: 900, letterSpacing: '0.02em' }}>Collection</div>
+          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)', fontWeight: 600 }}>{totalOwned} of {totalItems} unlocked</div>
+        </div>
+        <div style={{ width: 90, height: 6, borderRadius: 3, background: 'rgba(255,255,255,0.1)', overflow: 'hidden' }}>
+          <div style={{ width: `${totalItems ? Math.round((totalOwned / totalItems) * 100) : 0}%`, height: '100%', background: 'linear-gradient(90deg, #fbbf24, #f97316)' }} />
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, padding: '4px 16px 12px' }}>
+        {[['frame', 'Avatar Frames'], ['charm', 'Name Charms']].map(([k, label]) => (
+          <div key={k} role="button" onClick={() => { setTab(k); setSelected(null); }} style={{ flex: 1, textAlign: 'center', padding: '11px 0', borderRadius: 14, fontWeight: 800, fontSize: 13.5, cursor: 'pointer', letterSpacing: '0.03em', textTransform: 'uppercase', background: tab === k ? 'linear-gradient(135deg, #f59e0b, #ea580c)' : 'rgba(255,255,255,0.06)', color: tab === k ? '#1a0f02' : 'rgba(255,255,255,0.7)', border: tab === k ? 'none' : '1px solid rgba(255,255,255,0.08)' }}>
+            {label}
+          </div>
+        ))}
+      </div>
+      <div style={{ padding: '0 16px 10px', fontSize: 12, color: 'rgba(255,255,255,0.5)', fontWeight: 700 }}>{ownedCount}/{items.length} {tab === 'frame' ? 'frames' : 'charms'} unlocked</div>
+
+      <div style={{ flex: 1, overflowY: 'auto', padding: '0 12px calc(120px + env(safe-area-inset-bottom))' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+          <div role="button" onClick={() => setSelected('__none')} style={{ position: 'relative', borderRadius: 16, padding: '12px 6px 10px', background: 'linear-gradient(160deg, #1b1d26 0%, #0c0d12 100%)', border: `1.5px solid ${selected === '__none' ? '#fbbf24' : (!equippedKey ? 'rgba(52,211,153,0.7)' : 'rgba(255,255,255,0.08)')}`, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+            <div style={{ width: 64, height: 64, borderRadius: '50%', border: '2px dashed rgba(255,255,255,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.45)' }}><Ban size={22} /></div>
+            <div style={{ fontSize: 11.5, fontWeight: 800 }}>None</div>
+            {!equippedKey && <div style={{ position: 'absolute', top: 6, right: 6, width: 18, height: 18, borderRadius: '50%', background: '#34d399', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Check size={11} color="#052e1c" strokeWidth={4} /></div>}
+          </div>
+          {sorted.map(({ key, spec }) => {
+            const has = owned.has(key);
+            const isEq = equippedKey === key;
+            const r = rarity(spec);
+            return (
+              <div key={key} role="button" onClick={() => setSelected(key)} style={{ position: 'relative', borderRadius: 16, padding: '12px 6px 10px', background: has ? r.bg : 'linear-gradient(160deg, #15161c 0%, #0a0b0f 100%)', border: `1.5px solid ${selected === key ? '#fbbf24' : isEq ? 'rgba(52,211,153,0.8)' : has ? `${r.color}55` : 'rgba(255,255,255,0.06)'}`, boxShadow: isEq ? `0 0 18px ${r.glow}` : 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, overflow: 'hidden' }}>
+                {has && <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 3, background: r.color }} />}
+                <div style={{ height: 64, display: 'flex', alignItems: 'center', justifyContent: 'center', filter: has ? 'none' : 'grayscale(1) brightness(0.45)' }}>
+                  {tab === 'frame'
+                    ? <div style={{ padding: 10 }}><Avatar emoji={me.avatar} name={me.name} size={44} frame={key} /></div>
+                    : <CharmPreview charm={key} size={40} />}
+                </div>
+                <div style={{ fontSize: 11, fontWeight: 800, textAlign: 'center', lineHeight: 1.2, color: has ? 'white' : 'rgba(255,255,255,0.45)', minHeight: 26, display: 'flex', alignItems: 'center' }}>{spec.label.replace(/ (frame|charm)$/i, '')}</div>
+                <div style={{ fontSize: 9.5, fontWeight: 900, letterSpacing: '0.08em', textTransform: 'uppercase', color: has ? r.color : 'rgba(255,255,255,0.3)' }}>{r.label}</div>
+                {!has && (
+                  <div style={{ position: 'absolute', top: 6, right: 6, width: 22, height: 22, borderRadius: 7, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Lock size={12} color="rgba(255,255,255,0.75)" /></div>
+                )}
+                {isEq && (
+                  <div style={{ position: 'absolute', top: 6, right: 6, width: 18, height: 18, borderRadius: '50%', background: '#34d399', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Check size={11} color="#052e1c" strokeWidth={4} /></div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {(sel || selected === '__none') && (
+        <div className="zchat-sheet-up" style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '18px 18px', paddingBottom: 'calc(18px + env(safe-area-inset-bottom))', background: 'linear-gradient(180deg, rgba(20,18,32,0.96), #0a0a10)', borderTop: '1px solid rgba(255,255,255,0.1)', borderRadius: '24px 24px 0 0', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', display: 'flex', alignItems: 'center', gap: 16 }}>
+          {selected === '__none' ? (
+            <>
+              <div style={{ width: 84, height: 84, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Avatar emoji={me.avatar} name={me.name} size={64} /></div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 16, fontWeight: 900 }}>No {tab === 'frame' ? 'frame' : 'charm'}</div>
+                <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.6)', marginTop: 2 }}>Show your profile without one</div>
+                <button disabled={busy || !equippedKey} onClick={() => equip(null)} style={{ marginTop: 10, padding: '10px 22px', borderRadius: 12, border: 'none', fontWeight: 900, fontFamily: FONT, cursor: 'pointer', background: equippedKey ? 'rgba(255,255,255,0.14)' : 'rgba(52,211,153,0.2)', color: equippedKey ? 'white' : '#34d399' }}>{equippedKey ? (busy ? 'Saving…' : 'Remove') : 'In use'}</button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div style={{ width: 96, height: 96, display: 'flex', alignItems: 'center', justifyContent: 'center', filter: selOwned ? 'none' : 'grayscale(1) brightness(0.5)', flexShrink: 0 }}>
+                {tab === 'frame' ? <Avatar emoji={me.avatar} name={me.name} size={62} frame={sel.key} /> : <CharmPreview charm={sel.key} size={62} />}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 10.5, fontWeight: 900, letterSpacing: '0.1em', textTransform: 'uppercase', color: rarity(sel.spec).color }}>{rarity(sel.spec).label}{sel.spec.animated ? ' · Animated' : ''}</div>
+                <div style={{ fontSize: 17, fontWeight: 900, marginTop: 2 }}>{sel.spec.label}</div>
+                {tab === 'charm' && selOwned && <div style={{ fontSize: 13, marginTop: 4, color: 'rgba(255,255,255,0.8)', fontWeight: 700 }}>{me.name}<VerifiedBadge tier={me.verified} custom={sel.key} size={14} /></div>}
+                {selOwned ? (
+                  <button disabled={busy || selEquipped} onClick={() => equip(sel.key)} style={{ marginTop: 10, padding: '10px 26px', borderRadius: 12, border: 'none', fontWeight: 900, fontFamily: FONT, cursor: selEquipped ? 'default' : 'pointer', background: selEquipped ? 'rgba(52,211,153,0.2)' : 'linear-gradient(135deg, #f59e0b, #ea580c)', color: selEquipped ? '#34d399' : '#1a0f02', letterSpacing: '0.04em' }}>
+                    {selEquipped ? '✓ EQUIPPED' : busy ? 'EQUIPPING…' : 'EQUIP'}
+                  </button>
+                ) : (
+                  <div style={{ marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 14px', borderRadius: 12, background: 'rgba(255,255,255,0.07)', fontSize: 12.5, fontWeight: 800, color: 'rgba(255,255,255,0.7)' }}><Lock size={13} /> Locked · Earn it from ZChat events and gifts</div>
+                )}
+              </div>
+              <div role="button" aria-label="Close" onClick={() => setSelected(null)} style={{ alignSelf: 'flex-start', padding: 4, cursor: 'pointer', color: 'rgba(255,255,255,0.5)' }}><X size={18} /></div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CharmPreview({ charm, size }) {
+  const url = useCustomBadgeUrl(charm);
+  const spec = CUSTOM_BADGES[charm];
+  if (!spec || !url) return <div style={{ width: size * (spec ? spec.ratio : 1), height: size }} />;
+  return <img src={url} alt="" draggable={false} style={{ height: size, width: Math.round(size * spec.ratio), objectFit: 'contain' }} />;
 }
 
 function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAccount, onAddAccount, onRemoveAccount, switchingAccountId }) {
@@ -10021,6 +10171,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [deepPost, setDeepPost] = useState(null);
   const [reportThanks, setReportThanks] = useState(null);
   const [rewardReady, setRewardReady] = useState({});
+  const [myRewards, setMyRewards] = useState([]);
+  const [collectionOpen, setCollectionOpen] = useState(false);
   const newVersionAvailable = useNewVersionAvailable();
   const [updateLater, setUpdateLater] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
@@ -12093,23 +12245,51 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   useEffect(() => {
     if (!me) return undefined;
     let alive = true;
+    const load = async () => {
+      const { data, error } = await supabase.from('user_rewards').select('*').eq('user_id', session.user.id).order('granted_at', { ascending: true });
+      if (!alive || error) return;
+      setMyRewards(data || []);
+    };
+    load();
+    const ch = supabase.channel('rewards-' + session.user.id)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'user_rewards' }, (payload) => {
+        const row = payload.new && payload.new.user_id ? payload.new : payload.old;
+        if (row && row.user_id && row.user_id !== session.user.id) return;
+        load();
+      })
+      .subscribe();
+    return () => { alive = false; supabase.removeChannel(ch); };
+  }, [me && me.id]);
+  const pendingReward = (myRewards || []).find((r) => !r.seen && (r.kind === 'frame' ? AVATAR_FRAMES[r.reward_key] : CUSTOM_BADGES[r.reward_key])) || null;
+  const equipReward = async (kind, key) => {
+    const field = kind === 'frame' ? 'avatar_frame' : 'custom_badge';
+    const prevValue = me[field];
+    setMe((prev) => (prev ? { ...prev, [field]: key } : prev));
+    const { error } = await supabase.from('profiles').update({ [field]: key }).eq('id', session.user.id);
+    if (error) { setMe((prev) => (prev ? { ...prev, [field]: prevValue } : prev)); showSnack("Couldn't equip that. Try again."); return false; }
+    playUiSound('like');
+    return true;
+  };
+  useEffect(() => {
+    if (!me) return undefined;
+    let alive = true;
     const markReady = (id) => { if (alive) setRewardReady((prev) => (prev[id] ? prev : { ...prev, [id]: true })); };
-    if (me.avatar_frame && AVATAR_FRAMES[me.avatar_frame] && me.avatar_frame_seen !== me.avatar_frame) {
-      const id = `frame:${me.avatar_frame}`;
+    if (pendingReward && pendingReward.kind === 'frame') {
+      const id = `frame:${pendingReward.reward_key}`;
       const timer = setTimeout(() => markReady(id), 8000);
-      resolveFrameUrl(me.avatar_frame).then(() => { clearTimeout(timer); markReady(id); });
+      resolveFrameUrl(pendingReward.reward_key).then(() => { clearTimeout(timer); markReady(id); });
     }
-    if (me.custom_badge && CUSTOM_BADGES[me.custom_badge] && me.custom_badge_seen !== me.custom_badge) {
-      const id = `badge:${me.custom_badge}`;
-      const spec = CUSTOM_BADGES[me.custom_badge];
+    if (pendingReward && pendingReward.kind === 'charm') {
+      const id = `charm:${pendingReward.reward_key}`;
+      const spec = CUSTOM_BADGES[pendingReward.reward_key];
       const timer = setTimeout(() => markReady(id), 8000);
       cachedAssetUrl(spec.file).then((u) => u || cachedAssetUrl(spec.fallback)).then((u) => {
-        if (u) customBadgeUrlCache.set(me.custom_badge, u);
+        if (u) customBadgeUrlCache.set(pendingReward.reward_key, u);
         clearTimeout(timer); markReady(id);
       });
     }
     return () => { alive = false; };
-  }, [me && me.avatar_frame, me && me.avatar_frame_seen, me && me.custom_badge, me && me.custom_badge_seen]);
+  }, [pendingReward && pendingReward.id]);
   useEffect(() => {
     let cancelled = false;
     const warm = () => {
@@ -13209,7 +13389,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           isBlocked={myBlockedIds.has(profileOf.id)} onBlock={() => setBlockConfirmFor(profileOf)} onUnblock={() => setUnblockConfirmFor(profileOf)}
           shareConversations={conversations} shareGroups={groups.filter((g) => !g.archived)} onShareToChats={shareProfileToChats}
           canCall={canCall(profileOf)} onCall={(kind) => { const target = profileOf; setProfileOf(null); startDirectCall(target, kind); }}
-          onOpenHighlight={openHighlight} meProfile={me}
+          onOpenHighlight={openHighlight} meProfile={me} onOpenCollection={() => setCollectionOpen(true)}
         />
       )}
 
@@ -13471,21 +13651,17 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         <PostViewer post={deepPost.post} owner={deepPost.owner} userId={session.user.id} meProfile={me}
           onClose={() => setDeepPost(null)} onDeleted={() => setDeepPost(null)} />
       )}
-      {!celebrateTier && me && me.avatar_frame && AVATAR_FRAMES[me.avatar_frame] && me.avatar_frame_seen !== me.avatar_frame && rewardReady[`frame:${me.avatar_frame}`] && (
-        <RewardCelebration kind="frame" rewardKey={me.avatar_frame} me={me}
+      {!celebrateTier && me && pendingReward && rewardReady[`${pendingReward.kind}:${pendingReward.reward_key}`] && (
+        <RewardCelebration kind={pendingReward.kind === 'frame' ? 'frame' : 'badge'} rewardKey={pendingReward.reward_key} me={me}
           onClaim={async () => {
-            const key = me.avatar_frame;
-            setMe((prev) => (prev ? { ...prev, avatar_frame_seen: key } : prev));
-            await supabase.from('profiles').update({ avatar_frame_seen: key }).eq('id', session.user.id);
+            const reward = pendingReward;
+            setMyRewards((prev) => prev.map((r) => (r.id === reward.id ? { ...r, seen: true } : r)));
+            await supabase.from('user_rewards').update({ seen: true }).eq('id', reward.id);
+            await equipReward(reward.kind, reward.reward_key);
           }} />
       )}
-      {!celebrateTier && me && !(me.avatar_frame && AVATAR_FRAMES[me.avatar_frame] && me.avatar_frame_seen !== me.avatar_frame) && me.custom_badge && CUSTOM_BADGES[me.custom_badge] && me.custom_badge_seen !== me.custom_badge && rewardReady[`badge:${me.custom_badge}`] && (
-        <RewardCelebration kind="badge" rewardKey={me.custom_badge} me={me}
-          onClaim={async () => {
-            const key = me.custom_badge;
-            setMe((prev) => (prev ? { ...prev, custom_badge_seen: key } : prev));
-            await supabase.from('profiles').update({ custom_badge_seen: key }).eq('id', session.user.id);
-          }} />
+      {collectionOpen && me && (
+        <CollectionPanel me={me} rewards={myRewards} onClose={() => setCollectionOpen(false)} onEquip={equipReward} />
       )}
       {celebrateTier && (
         <VerifiedCelebration tier={celebrateTier} name={me.name}
