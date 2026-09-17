@@ -351,8 +351,6 @@ function GlobalStyle() {
       @keyframes zchat-frame-fire { 0%, 100% { filter: brightness(1) saturate(1.05) drop-shadow(0 0 4px rgba(255,90,20,0.45)); } 25% { filter: brightness(1.12) saturate(1.2) drop-shadow(0 0 9px rgba(255,120,30,0.7)); } 50% { filter: brightness(0.96) saturate(1.1) drop-shadow(0 0 5px rgba(255,70,10,0.5)); } 75% { filter: brightness(1.18) saturate(1.25) drop-shadow(0 0 11px rgba(255,140,40,0.75)); } }
       @keyframes zchat-frame-ice { 0%, 100% { filter: brightness(1) drop-shadow(0 0 4px rgba(56,189,248,0.4)); } 50% { filter: brightness(1.15) drop-shadow(0 0 12px rgba(56,189,248,0.8)); } }
       @keyframes zchat-frame-poison { 0%, 100% { filter: brightness(1) saturate(1.1) drop-shadow(0 0 4px rgba(74,222,128,0.45)); } 50% { filter: brightness(1.18) saturate(1.3) drop-shadow(0 0 12px rgba(74,222,128,0.8)); } }
-      @keyframes zchat-frame-fire-light { 0%, 100% { filter: saturate(1.55) contrast(1.25) brightness(0.92) drop-shadow(0 0 2px rgba(120,20,0,0.55)); } 50% { filter: saturate(1.8) contrast(1.35) brightness(1) drop-shadow(0 0 5px rgba(200,50,0,0.6)); } }
-      @keyframes zchat-frame-ice-light { 0%, 100% { filter: saturate(1.6) contrast(1.3) brightness(0.88) drop-shadow(0 0 2px rgba(10,40,120,0.55)); } 50% { filter: saturate(1.85) contrast(1.4) brightness(0.95) drop-shadow(0 0 5px rgba(20,90,200,0.6)); } }
       @keyframes zchat-frame-poison-light { 0%, 100% { filter: saturate(1.5) contrast(1.3) brightness(0.88) drop-shadow(0 0 2px rgba(10,80,20,0.55)); } 50% { filter: saturate(1.75) contrast(1.4) brightness(0.96) drop-shadow(0 0 5px rgba(20,140,40,0.6)); } }
       .zchat-frame-mask { -webkit-mask-image: radial-gradient(circle closest-side, #000 84%, rgba(0,0,0,0) 100%); mask-image: radial-gradient(circle closest-side, #000 84%, rgba(0,0,0,0) 100%); }
       @keyframes zchat-post-heart { 0% { transform: scale(0); opacity: 0; } 15% { transform: scale(1.2); opacity: 1; } 30% { transform: scale(0.95); } 45% { transform: scale(1); } 80% { transform: scale(1); opacity: 1; } 100% { transform: scale(0.2) translateY(-60px); opacity: 0; } }
@@ -9225,9 +9223,10 @@ function AudioBubble({ url, isMe }) {
 }
 
 const AVATAR_FRAMES = {
-  fire_wolf: { file: '/frames/frame-fire-wolf.webp', fallback: '/frame-fire-wolf.webp', label: 'Inferno wolf frame', scale: 1.47, centerX: 0.493, centerY: 0.4624, animation: 'zchat-frame-fire 2.2s ease-in-out infinite', animationLight: 'zchat-frame-fire-light 2.2s ease-in-out infinite' },
-  ice_wolf: { file: '/frames/frame-ice-wolf.webp', fallback: '/frame-ice-wolf.webp', label: 'Frost wolf frame', scale: 1.403, centerX: 0.4965, centerY: 0.4831, animation: 'zchat-frame-ice 3s ease-in-out infinite', animationLight: 'zchat-frame-ice-light 3s ease-in-out infinite' },
-  poison: { file: '/frames/frame-poison.webp', fallback: '/frame-poison.webp', label: 'Toxic skull frame', scale: 1.62, centerX: 0.5029, centerY: 0.4765, animation: 'zchat-frame-poison 2.6s ease-in-out infinite', animationLight: 'zchat-frame-poison-light 2.6s ease-in-out infinite' },
+  fire_wolf: { file: '/frames/frame-fire-wolf.webp', fallback: '/frame-fire-wolf.webp', label: 'Inferno wolf frame', scale: 1.578, centerX: 0.4997, centerY: 0.4603, animation: 'zchat-frame-fire 2.2s ease-in-out infinite', glow: '#ff5a1f' },
+  ice_wolf: { file: '/frames/frame-ice-wolf.webp', fallback: '/frame-ice-wolf.webp', label: 'Frost wolf frame', scale: 1.539, centerX: 0.4967, centerY: 0.4854, animation: 'zchat-frame-ice 3s ease-in-out infinite', glow: '#38bdf8' },
+  poison: { file: '/frames/frame-poison.webp', fallback: '/frame-poison.webp', label: 'Toxic skull frame', scale: 1.62, centerX: 0.5029, centerY: 0.4765, animation: 'zchat-frame-poison 2.6s ease-in-out infinite', animationLight: 'zchat-frame-poison-light 2.6s ease-in-out infinite', glow: '#4ade80' },
+  ice_flow: { file: '/frames/frame-ice-flow.webp', fallback: '/frame-ice-flow.webp', label: 'Frost flow frame', scale: 1.8, centerX: 0.4907, centerY: 0.475, animation: 'zchat-frame-ice 3s ease-in-out infinite', glow: '#60a5fa' },
 };
 
 function frameMaskStyle(spec) {
@@ -9801,6 +9800,44 @@ function UpdateAvailableBanner({ onUpdate, onLater }) {
       </div>
       <button onClick={onLater} style={{ padding: '9px 10px', borderRadius: 12, border: 'none', background: 'transparent', color: theme.muted, fontWeight: 700, fontFamily: FONT, cursor: 'pointer' }}>Later</button>
       <button onClick={onUpdate} style={{ padding: '9px 14px', borderRadius: 12, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontFamily: FONT, cursor: 'pointer' }}>Update</button>
+    </div>
+  );
+}
+
+function RewardCelebration({ kind, rewardKey, me, onClaim }) {
+  const [claiming, setClaiming] = useState(false);
+  const isFrame = kind === 'frame';
+  const spec = isFrame ? AVATAR_FRAMES[rewardKey] : CUSTOM_BADGES[rewardKey];
+  if (!spec) return null;
+  const glow = (isFrame ? spec.glow : '#f472b6') || '#8b5cf6';
+  const shownFrame = isFrame ? rewardKey : (AVATAR_FRAMES[me.avatar_frame] ? me.avatar_frame : null);
+  const frameRoom = shownFrame ? Math.round(150 * ((AVATAR_FRAMES[shownFrame].scale || 1.5) - 1) / 2) + 14 : 22;
+  const pieces = Array.from({ length: 30 }, (_, i) => i);
+  return (
+    <div className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 701, color: 'white', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 28, overflow: 'hidden', fontFamily: FONT, textAlign: 'center', background: `radial-gradient(circle at 50% 44%, ${glow}38 0%, rgba(11,15,25,0) 55%), #05070D` }}>
+      {pieces.map((i) => (
+        <span key={i} style={{ position: 'absolute', top: -20, left: `${(i * 97) % 100}%`, width: 7, height: 13, borderRadius: 2, background: [glow, '#FFFFFF', '#7C5CFC', '#fbbf24'][i % 4], opacity: 0.85, animation: `zchat-confetti ${2.8 + (i % 5) * 0.4}s linear ${(i % 9) * 0.25}s infinite` }} />
+      ))}
+      <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.18em', color: glow, textTransform: 'uppercase' }}>{isFrame ? 'New profile frame' : 'New badge'}</div>
+      <div style={{ fontSize: 30, fontWeight: 900, marginTop: 8 }}>Congratulations!</div>
+      <div style={{ fontSize: 14.5, opacity: 0.75, marginTop: 6, maxWidth: 300, lineHeight: 1.5 }}>You unlocked the <b style={{ color: glow }}>{spec.label}</b>. Here's how your profile looks now.</div>
+
+      <div className="zchat-pop" style={{ position: 'relative', marginTop: frameRoom + 12, marginBottom: frameRoom, width: 150, height: 150 }}>
+        <div style={{ position: 'absolute', inset: -40, borderRadius: '50%', background: `radial-gradient(circle, ${glow}55 0%, transparent 70%)`, animation: 'zchat-badge-pulse 2.2s ease-in-out infinite' }} />
+        <Avatar emoji={me.avatar} name={me.name} size={150} frame={shownFrame} />
+      </div>
+
+      <div style={{ fontSize: 24, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
+        {me.name}<VerifiedBadge tier={me.verified} custom={isFrame ? me.custom_badge : rewardKey} size={20} />
+      </div>
+      <div style={{ fontSize: 14, opacity: 0.6, marginTop: 2 }}>@{me.username}</div>
+      {!isFrame && (
+        <div style={{ marginTop: 14, padding: '8px 14px', borderRadius: 14, background: 'rgba(255,255,255,0.08)', fontSize: 13, opacity: 0.85 }}>Shows next to your name everywhere on ZChat</div>
+      )}
+
+      <button disabled={claiming} onClick={async () => { setClaiming(true); await onClaim(); }} style={{ marginTop: 30, padding: '15px 56px', borderRadius: 18, border: 'none', background: `linear-gradient(135deg, ${glow}, #8b5cf6)`, color: 'white', fontWeight: 900, fontSize: 16, cursor: 'pointer', fontFamily: FONT, boxShadow: `0 12px 34px ${glow}66`, opacity: claiming ? 0.7 : 1 }}>
+        {claiming ? 'Claiming…' : 'Claim'}
+      </button>
     </div>
   );
 }
@@ -13379,6 +13416,22 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       {deepPost && (
         <PostViewer post={deepPost.post} owner={deepPost.owner} userId={session.user.id} meProfile={me}
           onClose={() => setDeepPost(null)} onDeleted={() => setDeepPost(null)} />
+      )}
+      {!celebrateTier && me && me.avatar_frame && AVATAR_FRAMES[me.avatar_frame] && me.avatar_frame_seen !== me.avatar_frame && (
+        <RewardCelebration kind="frame" rewardKey={me.avatar_frame} me={me}
+          onClaim={async () => {
+            const key = me.avatar_frame;
+            setMe((prev) => (prev ? { ...prev, avatar_frame_seen: key } : prev));
+            await supabase.from('profiles').update({ avatar_frame_seen: key }).eq('id', session.user.id);
+          }} />
+      )}
+      {!celebrateTier && me && !(me.avatar_frame && AVATAR_FRAMES[me.avatar_frame] && me.avatar_frame_seen !== me.avatar_frame) && me.custom_badge && CUSTOM_BADGES[me.custom_badge] && me.custom_badge_seen !== me.custom_badge && (
+        <RewardCelebration kind="badge" rewardKey={me.custom_badge} me={me}
+          onClaim={async () => {
+            const key = me.custom_badge;
+            setMe((prev) => (prev ? { ...prev, custom_badge_seen: key } : prev));
+            await supabase.from('profiles').update({ custom_badge_seen: key }).eq('id', session.user.id);
+          }} />
       )}
       {celebrateTier && (
         <VerifiedCelebration tier={celebrateTier} name={me.name}
