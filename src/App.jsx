@@ -14025,7 +14025,7 @@ function AppInner() {
           <RegisterFlow onStart={() => setRegistering(true)} onDone={() => { setRegistering(false); setScreen('login'); }} onBack={() => { setRegistering(false); setScreen('login'); }} />
         )}
         <div style={{ display: 'flex', justifyContent: 'center', gap: 14, flexWrap: 'wrap', marginTop: 22, fontSize: 12.5, fontFamily: FONT }}>
-          {[['/store', 'Store'], ['/terms', 'Terms'], ['/refund', 'Refunds'], ['/privacy', 'Privacy']].map(([href, label]) => (
+          {[['/?page=store', 'Store'], ['/?page=terms', 'Terms'], ['/?page=refund', 'Refunds'], ['/?page=privacy', 'Privacy']].map(([href, label]) => (
             <a key={href} href={href} style={{ color: 'rgba(140,150,170,0.95)', textDecoration: 'none', fontWeight: 700 }}>{label}</a>
           ))}
         </div>
@@ -14052,8 +14052,9 @@ const PUBLIC_PAGES = ['/store', '/terms', '/refund', '/privacy'];
 const SUPPORT_EMAIL = 'support@getzchat.com';
 
 function PublicShell({ title, children }) {
-  const nav = [['/store', 'Store'], ['/terms', 'Terms'], ['/refund', 'Refunds'], ['/privacy', 'Privacy']];
-  const here = window.location.pathname.replace(/\/+$/, '') || '/';
+  const nav = [['/?page=store', 'Store'], ['/?page=terms', 'Terms'], ['/?page=refund', 'Refunds'], ['/?page=privacy', 'Privacy']];
+  const pageParam = (new URLSearchParams(window.location.search).get('page') || '').toLowerCase();
+  const here = pageParam ? `/${pageParam}` : (window.location.pathname.replace(/\/+$/, '') || '/');
   return (
     <div style={{ minHeight: '100vh', background: 'radial-gradient(circle at 50% 0%, #1c1535 0%, #07080d 60%)', color: '#e8eaf0', fontFamily: FONT }}>
       <div style={{ maxWidth: 820, margin: '0 auto', padding: '18px 18px 60px' }}>
@@ -14064,7 +14065,7 @@ function PublicShell({ title, children }) {
           </a>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {nav.map(([href, label]) => (
-              <a key={href} href={href} style={{ padding: '8px 12px', borderRadius: 12, fontSize: 13.5, fontWeight: 800, textDecoration: 'none', color: here === href ? '#1a0f02' : 'rgba(255,255,255,0.75)', background: here === href ? 'linear-gradient(135deg, #f59e0b, #ea580c)' : 'rgba(255,255,255,0.06)' }}>{label}</a>
+              <a key={href} href={href} style={{ padding: '8px 12px', borderRadius: 12, fontSize: 13.5, fontWeight: 800, textDecoration: 'none', color: here === href.replace('/?page=', '/') ? '#1a0f02' : 'rgba(255,255,255,0.75)', background: here === href.replace('/?page=', '/') ? 'linear-gradient(135deg, #f59e0b, #ea580c)' : 'rgba(255,255,255,0.06)' }}>{label}</a>
             ))}
           </div>
         </div>
@@ -14126,7 +14127,7 @@ function PublicStorePage() {
       <p style={legalP}>4. The frame is added to your account instantly and stays active for 2 months (60 days). You can buy it again anytime to add another 2 months.</p>
       <h2 style={legalH}>Delivery</h2>
       <p style={legalP}>Frames are digital items delivered automatically to your ZChat account within seconds of payment. Nothing is shipped.</p>
-      <p style={legalP}>Refunds: see our <a href="/refund" style={{ color: '#fbbf24' }}>Refund Policy</a>. Questions: <a href={`mailto:${SUPPORT_EMAIL}`} style={{ color: '#fbbf24' }}>{SUPPORT_EMAIL}</a></p>
+      <p style={legalP}>Refunds: see our <a href="/?page=refund" style={{ color: '#fbbf24' }}>Refund Policy</a>. Questions: <a href={`mailto:${SUPPORT_EMAIL}`} style={{ color: '#fbbf24' }}>{SUPPORT_EMAIL}</a></p>
     </PublicShell>
   );
 }
@@ -14145,7 +14146,7 @@ function PublicTermsPage() {
       <h2 style={legalH}>4. Payments</h2>
       <p style={legalP}>Purchases are processed by Lemon Squeezy, who acts as our reseller and merchant of record. Prices are shown in USD. Purchases are single payments, not subscriptions. Lemon Squeezy's own terms also apply to your payment.</p>
       <h2 style={legalH}>5. Refunds</h2>
-      <p style={legalP}>Refunds are handled under our <a href="/refund" style={{ color: '#fbbf24' }}>Refund Policy</a>.</p>
+      <p style={legalP}>Refunds are handled under our <a href="/?page=refund" style={{ color: '#fbbf24' }}>Refund Policy</a>.</p>
       <h2 style={legalH}>6. Changes and availability</h2>
       <p style={legalP}>We may update ZChat, change or retire features and items, or update these terms. If a paid frame is permanently removed while still active, we will provide a replacement or a refund for the unused time.</p>
       <h2 style={legalH}>7. Suspension</h2>
@@ -14169,7 +14170,7 @@ function PublicRefundPage() {
       <p style={legalP}>• you were charged more than once for the same purchase by mistake, or</p>
       <p style={legalP}>• the frame does not display or work in ZChat and we cannot fix it within 7 days of your report.</p>
       <h2 style={legalH}>When refunds are not given</h2>
-      <p style={legalP}>Refunds are not given for changing your mind, not liking how a frame looks, not using a frame, a frame reaching the end of its 2 month period, or an account being suspended for breaking our <a href="/terms" style={{ color: '#fbbf24' }}>Terms of Service</a>.</p>
+      <p style={legalP}>Refunds are not given for changing your mind, not liking how a frame looks, not using a frame, a frame reaching the end of its 2 month period, or an account being suspended for breaking our <a href="/?page=terms" style={{ color: '#fbbf24' }}>Terms of Service</a>.</p>
       <h2 style={legalH}>How to request</h2>
       <p style={legalP}>Email <a href={`mailto:${SUPPORT_EMAIL}`} style={{ color: '#fbbf24' }}>{SUPPORT_EMAIL}</a> within 14 days of purchase with your order number from the Lemon Squeezy receipt and a short description of the problem. Approved refunds are returned to your original payment method by Lemon Squeezy. When a refund is issued, the frame is removed from your account.</p>
     </PublicShell>
@@ -14204,7 +14205,8 @@ function PublicPage({ path }) {
 }
 
 export default function App() {
-  const publicPath = (typeof window !== 'undefined' ? window.location.pathname.replace(/\/+$/, '').toLowerCase() : '');
+  const pageParam = (typeof window !== 'undefined' ? (new URLSearchParams(window.location.search).get('page') || '').toLowerCase() : '');
+  const publicPath = pageParam ? `/${pageParam}` : (typeof window !== 'undefined' ? window.location.pathname.replace(/\/+$/, '').toLowerCase() : '');
   if (PUBLIC_PAGES.includes(publicPath)) {
     return (
       <ThemeProvider>
