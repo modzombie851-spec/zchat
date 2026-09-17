@@ -1,10 +1,10 @@
-import React, { useState, useRef, useEffect, createContext, useContext } from 'react';
+import React, { useState, useRef, useEffect, useMemo, createContext, useContext } from 'react';
 import ReactDOM from 'react-dom';
 import {
   Send, Paperclip, Search, Mail, ShieldCheck, AtSign, LogOut, Eye, EyeOff, Lock,
   Flag, X, Trash2, User, Phone, MoreVertical, Image as ImageIcon, Video as VideoIcon,
   Smile, ArrowLeft, Check, CheckCheck, Settings as SettingsIcon, Moon, Sun, UserPlus,
-  FileText, HelpCircle, ChevronRight, Compass, Bell, Volume2, VolumeX, Palette, Mic, Play, Pause, Download, Users, Camera, Reply, Forward, Ban, Edit3, Archive, Sparkles, Share2, Copy, Crop, Type, Pencil, Undo2, Scissors, BellOff, Link as LinkIcon, ShieldAlert, Heart, Repeat, PhoneOff, MicOff, VideoOff, SwitchCamera,
+  FileText, HelpCircle, ChevronRight, ChevronLeft, Compass, Bell, Volume2, VolumeX, Palette, Mic, Play, Pause, Download, Users, Camera, Reply, Forward, Ban, Edit3, Archive, Sparkles, Share2, Copy, Crop, Type, Pencil, Undo2, Scissors, BellOff, Link as LinkIcon, ShieldAlert, Heart, Repeat, PhoneOff, MicOff, VideoOff, SwitchCamera,
 } from 'lucide-react';
 import {
   supabase, registerWithEmail, verifyOtp, setPassword, signInWithPassword,
@@ -1000,7 +1000,6 @@ function RegisterFlow({ onDone, onBack, onStart, initialStage = 'email' }) {
   );
 }
 
-const GENDERS = ['Male', 'Female', 'Other', 'Prefer not to say'];
 
 const COUNTRIES = [
   ['AF','Afghanistan'],['AL','Albania'],['DZ','Algeria'],['AD','Andorra'],['AO','Angola'],['AR','Argentina'],['AM','Armenia'],['AU','Australia'],['AT','Austria'],['AZ','Azerbaijan'],
@@ -1452,11 +1451,11 @@ function PrivacyPanel({ onBack }) {
         <div style={{ fontSize: 13, lineHeight: 1.7, color: theme.muted }}>
           <p>ZChat keeps only what it needs to run your account and deliver your messages.</p>
           <h3 style={{ color: theme.ink, fontSize: 14, margin: '16px 0 4px' }}>What we store</h3>
-          <p>Your email, username, name, and the profile details you choose to add, such as photo, bio, age, gender, and country. We also store your messages, photos, videos, voice messages, reactions, follows, and group memberships so they can reach the people you send them to.</p>
+          <p>Your email, username, name, and the profile details you choose to add, such as photo, bio, pronouns, age, and country. We also store your messages, photos, videos, voice messages, reactions, follows, and group memberships so they can reach the people you send them to.</p>
           <h3 style={{ color: theme.ink, fontSize: 14, margin: '16px 0 4px' }}>How it's used</h3>
           <p>Only to run ZChat: showing your profile, delivering messages, sending notifications you allow, and keeping the community safe when someone reports an account. We don't sell your data or show ads.</p>
           <h3 style={{ color: theme.ink, fontSize: 14, margin: '16px 0 4px' }}>Who can see it</h3>
-          <p>Messages are visible to the people in that chat. You decide who sees your photo, bio, age, gender, country, and activity status in Privacy, and you can make your account private.</p>
+          <p>Messages are visible to the people in that chat. You decide who sees your photo, bio, age, country, and activity status in Privacy, and you can make your account private.</p>
           <h3 style={{ color: theme.ink, fontSize: 14, margin: '16px 0 4px' }}>Your controls</h3>
           <p>You can edit your profile, delete messages, block or report accounts, turn notifications off, and delete your account at any time from Settings.</p>
         </div>
@@ -1507,7 +1506,7 @@ function UserListRow({ profile, rightContent, onClick }) {
       display: 'flex', alignItems: 'center', gap: 12, padding: '10px 4px', cursor: onClick ? 'pointer' : 'default',
       borderBottom: `1px solid ${theme.border}`,
     }}>
-      <Avatar emoji={profile.avatar} name={profile.name} size={40} />
+      <FramedAvatar frame={profile.avatar_frame} size={40}><Avatar emoji={profile.avatar} name={profile.name} size={40} /></FramedAvatar>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontWeight: 700, fontSize: 14, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{profile.name}<VerifiedBadge tier={profile.verified} size={12} /></div>
         <div style={{ fontSize: 12, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>@{profile.username}</div>
@@ -2747,7 +2746,7 @@ function ChatSettingsPanel({ conv, myId, meAvatar, meName, isPinned, isLocked, w
   const otherName = conv.realName || conv.otherProfile.name;
   const p = conv.otherProfile;
   const infoBits = [
-    p.gender && !p.hide_gender ? p.gender : null,
+    p.pronouns ? p.pronouns : null,
     p.age != null && !p.hide_age ? `${p.age} yrs` : null,
     p.country && !p.hide_country ? countryFlag(p.country) : null,
   ].filter(Boolean);
@@ -3269,7 +3268,6 @@ function AccountPrivacyPanel({ profile, onClose, onSaved }) {
         </div>
         <PrivacyField label="Profile photo" hidden={hidePhoto} onToggle={() => setHidePhoto((s) => !s)} />
         <PrivacyField label="Bio" hidden={hideBio} onToggle={() => setHideBio((s) => !s)} />
-        <PrivacyField label="Gender" hidden={hideGender} onToggle={() => setHideGender((s) => !s)} />
         <PrivacyField label="Age" hidden={hideAge} onToggle={() => setHideAge((s) => !s)} />
         <PrivacyField label="Country" hidden={hideCountry} onToggle={() => setHideCountry((s) => !s)} />
 
@@ -3564,7 +3562,6 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
   const [reportSent, setReportSent] = useState(false);
   const [editing, setEditing] = useState(false);
   const [bio, setBio] = useState(profile.bio || '');
-  const [gender, setGender] = useState(profile.gender || '');
   const [age, setAge] = useState(profile.age != null ? String(profile.age) : '');
   const [country, setCountry] = useState(profile.country || '');
   const [showCountryPicker, setShowCountryPicker] = useState(false);
@@ -3582,7 +3579,8 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
   const [followBusy, setFollowBusy] = useState(false);
   const [username, setUsername] = useState(profile.username || '');
   const [displayName, setDisplayName] = useState(profile.name || '');
-  const [socialLinks, setSocialLinks] = useState(() => (Array.isArray(profile.social_links) ? profile.social_links : []));
+  const [socialLinks, setSocialLinks] = useState(() => readSocialLinks(profile.social_links).map((l) => ({ url: l.url, title: l.title })));
+  const [pronouns, setPronouns] = useState(profile.pronouns || '');
   const [whatsapp, setWhatsapp] = useState(profile.whatsapp || '');
   const [usernameErr, setUsernameErr] = useState('');
   const [listModal, setListModal] = useState(null);
@@ -3660,13 +3658,13 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
 
   const startEditing = () => {
     setBio(profile.bio || '');
-    setGender(profile.gender || '');
     setAge(profile.age != null ? String(profile.age) : '');
     setCountry(profile.country || '');
     setAvatar(profile.avatar || '');
     setUsername(profile.username || '');
     setDisplayName(profile.name || '');
-    setSocialLinks(Array.isArray(profile.social_links) ? profile.social_links : []);
+    setSocialLinks(readSocialLinks(profile.social_links).map((l) => ({ url: l.url, title: l.title })));
+    setPronouns(profile.pronouns || '');
     setWhatsapp(profile.whatsapp || '');
     setUsernameErr('');
     setBioMention(null);
@@ -3704,7 +3702,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
     }
     const cleanName = displayName.replace(/\s+/g, ' ').trim().slice(0, NAME_MAX);
     if (cleanName.length < 1) { setUsernameErr('Add your name.'); return; }
-    const fields = { name: cleanName, bio: bio.slice(0, BIO_MAX), gender, avatar, age: Number.isFinite(parsedAge) ? parsedAge : null, country: country.trim() || null };
+    const fields = { name: cleanName, bio: bio.slice(0, BIO_MAX), avatar, age: Number.isFinite(parsedAge) ? parsedAge : null, country: country.trim() || null };
     if (cleanUsername !== profile.username) {
       if (cooldownDaysLeft > 0) { setUsernameErr(`You can change your username again in ${cooldownDaysLeft} day${cooldownDaysLeft === 1 ? '' : 's'}.`); return; }
       const problem = usernameProblem(cleanUsername);
@@ -3714,9 +3712,12 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
     }
     setUsernameErr('');
     setSaving(true);
-    const cleanLinks = socialLinks.map((l) => ({ platform: l.platform, handle: cleanSocialHandle(l.handle) })).filter((l) => l.handle && SOCIAL_PLATFORMS.some((p) => p.key === l.platform)).slice(0, SOCIAL_MAX);
+    const cleanLinks = readSocialLinks(socialLinks).map((l) => ({ url: l.url, title: l.title || null }));
     const phone = cleanWhatsappNumber(whatsapp);
-    let { data, error } = await updateProfile(profile.id, { ...fields, social_links: cleanLinks, whatsapp: phone || null });
+    let { data, error } = await updateProfile(profile.id, { ...fields, social_links: cleanLinks, whatsapp: phone || null, pronouns: pronouns.trim().slice(0, 40) || null });
+    if (error && /pronouns/i.test(error.message || '')) {
+      ({ data, error } = await updateProfile(profile.id, { ...fields, social_links: cleanLinks, whatsapp: phone || null }));
+    }
     if (error && /social_links|whatsapp|column/i.test(error.message || '')) {
       ({ data, error } = await updateProfile(profile.id, fields));
     }
@@ -3764,7 +3765,6 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
   const infoBits = canSeeDetails ? [
     countryName && (isSelf || !profile.hide_country) ? `${countryFlag(profile.country)} ${countryName}` : null,
     profile.age != null && (isSelf || !profile.hide_age) ? `${profile.age}` : null,
-    profile.gender && (isSelf || !profile.hide_gender) ? profile.gender : null,
   ].filter(Boolean) : [];
   const showBio = canSeeDetails && profile.bio && (isSelf || !profile.hide_bio);
   const labelStyle = { fontSize: 11.5, color: theme.muted, marginBottom: 5, fontWeight: 800, letterSpacing: '0.04em' };
@@ -3841,7 +3841,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
                 )}
                 <div style={{ fontSize: 26, fontWeight: 800, lineHeight: 1.08, letterSpacing: '-0.02em', textShadow: '0 2px 12px rgba(0,0,0,0.45)', wordBreak: 'break-word' }}>{profile.name}<VerifiedBadge tier={profile.verified} size={24} /></div>
                 <div style={{ fontSize: 13.5, marginTop: 4, color: 'rgba(255,255,255,0.88)', textShadow: '0 1px 6px rgba(0,0,0,0.5)' }}>
-                  @{profile.username}{infoBits.map((b) => ` · ${b}`).join('')}
+                  @{profile.username}{profile.pronouns ? ` · ${profile.pronouns}` : ''}{infoBits.map((b) => ` · ${b}`).join('')}
                 </div>
               </>
             )}
@@ -3891,16 +3891,8 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
                   </div>
                 </div>
               </div>
-              <div style={labelStyle}>GENDER</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 18 }}>
-                {GENDERS.map((g) => (
-                  <div key={g} onClick={() => setGender(g)} style={{
-                    padding: '7px 13px', borderRadius: 16, fontSize: 12.5, cursor: 'pointer',
-                    background: gender === g ? theme.coral : theme.rowBg,
-                    color: gender === g ? 'white' : theme.muted, fontWeight: 600,
-                  }}>{g}</div>
-                ))}
-              </div>
+              <PronounsPicker value={pronouns} onChange={setPronouns} labelStyle={labelStyle} />
+              <div style={{ height: 18 }} />
               <div style={{ display: 'flex', gap: 8 }}>
                 <button onClick={cancelEditing} style={pillBtn(false)}>Cancel</button>
                 <button onClick={save} disabled={saving || avatarUploading} style={pillBtn(true)}>
@@ -4222,45 +4214,6 @@ function MentionSuggestions({ query, priority, excludeIds, myId, onPick }) {
   );
 }
 
-function AudioBubble({ url, isMe }) {
-  const { theme } = useTheme();
-  const audioRef = useRef(null);
-  const [playing, setPlaying] = useState(false);
-  const [duration, setDuration] = useState(0);
-  const [progress, setProgress] = useState(0);
-
-  const toggle = (e) => {
-    e.stopPropagation();
-    const el = audioRef.current;
-    if (!el) return;
-    if (playing) { el.pause(); } else { el.play(); }
-  };
-
-  const fmt = (s) => `${Math.floor(s / 60)}:${Math.floor(s % 60).toString().padStart(2, '0')}`;
-  const pct = duration ? (progress / duration) * 100 : 0;
-
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 10px', minWidth: 190 }}>
-      <audio ref={audioRef} src={url}
-        onLoadedMetadata={(e) => setDuration(e.target.duration)}
-        onTimeUpdate={(e) => setProgress(e.target.currentTime)}
-        onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)}
-        onEnded={() => { setPlaying(false); setProgress(0); }} />
-      <div onClick={toggle} style={{
-        width: 32, height: 32, borderRadius: '50%', background: isMe ? theme.coral : theme.coralDeep,
-        display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0,
-      }}>
-        {playing ? <Pause size={14} color="white" /> : <Play size={14} color="white" style={{ marginLeft: 1 }} />}
-      </div>
-      <div style={{ flex: 1 }}>
-        <div style={{ height: 4, borderRadius: 2, background: theme.rowBg, overflow: 'hidden' }}>
-          <div style={{ height: '100%', width: `${pct}%`, background: theme.coral, borderRadius: 2 }} />
-        </div>
-        <div style={{ fontSize: 10, color: theme.muted, marginTop: 3 }}>{fmt(playing || progress ? progress : duration)}</div>
-      </div>
-    </div>
-  );
-}
 
 function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSelect, onLongPress, onOpenImage, onOpenVideo, reactions, onReact, onOpenWhoReacted, replyPreview, onSwipeReply, onJumpToMessage, highlighted, senderLabel, senderAvatar, hideReadStatus, onOpenSenderProfile, canModerate, onOpenMention, mentionsMe, onOpenStoryRef, onCallBack, onOpenSticker, tightBelow, senderVerified, onOpenPost, tightAbove }) {
   const { theme, fontScale, chatTheme, bubbleColor } = useTheme();
@@ -4281,6 +4234,7 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
   const bubbleColorSpec = BUBBLE_COLORS[bubbleColor] || BUBBLE_COLORS.default;
   const sharedProfileId = m.type === 'text' && !m.deleted ? parseProfileLink(m.content) : null;
   const sharedPostId = m.type === 'text' && !m.deleted ? parsePostLink(m.content) : null;
+  const linkPreviewUrl = m.type === 'text' && !m.deleted && !sharedPostId && !sharedProfileId ? firstPreviewableUrl(m.content) : null;
   const inlineTime = m.type === 'text' && !m.deleted && !!m.content && !sharedProfileId && !sharedPostId && !(m.story_id && (m.content === STORY_MENTION_TEXT || m.content === STORY_GROUP_MENTION_TEXT || m.content === STORY_SHARE_TEXT));
 
   if (m.type === 'system' && parseCallLog(m.content)) {
@@ -4499,6 +4453,7 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
               {m.type === 'text' && m.content && !sharedProfileId && !sharedPostId && !(m.story_id && (m.content === STORY_MENTION_TEXT || m.content === STORY_GROUP_MENTION_TEXT || m.content === STORY_SHARE_TEXT)) && (
                 <div style={{ fontSize: 15 * fontScale, color: theme.ink, wordBreak: 'break-word', lineHeight: 1.32, display: 'flow-root' }}>
                   <RichText text={m.content} onMention={onOpenMention} />
+                  {linkPreviewUrl && <LinkPreviewCard url={linkPreviewUrl} />}
                   <span data-msg-time="true" style={{ float: 'right', display: 'inline-flex', alignItems: 'center', gap: 3, marginLeft: 10, marginTop: 7, marginBottom: -3, height: 14, lineHeight: 1, position: 'relative', top: 1, userSelect: 'none' }}>
                     {m.edited && <span style={{ fontSize: 8, color: theme.muted, fontStyle: 'italic' }}>edited</span>}
                     <span style={{ fontSize: 9, color: theme.muted }}>{time}</span>
@@ -6496,7 +6451,7 @@ function StoryMentionPicker({ myId, groups, onPick, onClose }) {
   );
 }
 
-function StoryViewer({ groupsList, startGroup = 0, startStoryId = null, onAddStory, onShare, externalPause = false, readOnly = false, highlightLike = null, myId, seen, liked, onSeen, onClose, onLike, onReply, onRepost, onDelete, onReport, onOpenProfile, onOpenMention }) {
+function StoryViewer({ groupsList, startGroup = 0, startStoryId = null, onAddStory, onShare, externalPause = false, readOnly = false, highlightLike = null, initialRepostedIds = null, myId, seen, liked, onSeen, onClose, onLike, onReply, onRepost, onDelete, onReport, onOpenProfile, onOpenMention }) {
   const [gi, setGi] = useState(startGroup);
   const [si, setSi] = useState(() => {
     const g = groupsList[startGroup];
@@ -6522,6 +6477,9 @@ function StoryViewer({ groupsList, startGroup = 0, startStoryId = null, onAddSto
   const [viewCount, setViewCount] = useState(null);
   const [likeBurst, setLikeBurst] = useState(false);
   const [burstEmoji, setBurstEmoji] = useState('');
+  const [repostedIds, setRepostedIds] = useState(() => new Set(initialRepostedIds || []));
+  const [repostBusy, setRepostBusy] = useState(false);
+  const [repostPop, setRepostPop] = useState(false);
   const [keyboardLift, setKeyboardLift] = useState(0);
   useEffect(() => {
     const vv = window.visualViewport;
@@ -6636,6 +6594,13 @@ function StoryViewer({ groupsList, startGroup = 0, startStoryId = null, onAddSto
     if (!isLiked) { setLikeBurst(true); setTimeout(() => setLikeBurst(false), 700); }
     onLike(story, !isLiked);
   };
+  const repostedHere = !!(story && repostedIds.has(story.id));
+  useEffect(() => {
+    if (!groupsList.length) { onClose(); return; }
+    if (!groupsList[gi]) { setGi(groupsList.length - 1); setSi(0); return; }
+    const count = groupsList[gi].stories.length;
+    if (si >= count) setSi(Math.max(0, count - 1));
+  }, [groupsList]);
   const sendReply = async () => {
     const text = reply.trim();
     if (!text) return;
@@ -6776,7 +6741,25 @@ function StoryViewer({ groupsList, startGroup = 0, startStoryId = null, onAddSto
               ) : (
                 <>
                   <div onClick={toggleLike} style={{ padding: 6, cursor: 'pointer' }}><Heart size={26} color={isLiked ? '#FF3B5C' : 'white'} fill={isLiked ? '#FF3B5C' : 'none'} /></div>
-                  <div onClick={async () => { await onRepost(story, group.profile); setFlash('Added to your story'); setTimeout(() => setFlash(''), 1600); }} style={{ padding: 6, cursor: 'pointer' }}><Repeat size={24} color="white" /></div>
+                  <div role="button" aria-label="Repost" onClick={async () => {
+                    if (repostBusy) return;
+                    if (repostedHere) { setFlash('Already on your story'); setTimeout(() => setFlash(''), 1600); return; }
+                    setRepostBusy(true);
+                    const result = await onRepost(story, group.profile);
+                    setRepostBusy(false);
+                    if (result === 'ok' || result === 'already') {
+                      setRepostedIds((prev) => new Set(prev).add(story.id));
+                      setRepostPop(true);
+                      setTimeout(() => setRepostPop(false), 700);
+                      setFlash(result === 'ok' ? 'Added to your story' : 'Already on your story');
+                      setTimeout(() => setFlash(''), 1600);
+                    }
+                  }} style={{ padding: 6, cursor: 'pointer', position: 'relative', display: 'flex' }}>
+                    <div style={{ transition: 'transform 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.5)', transform: repostPop ? 'rotate(180deg) scale(1.25)' : 'rotate(0deg) scale(1)', display: 'flex' }}>
+                      {repostBusy ? <Spinner size={22} color="white" /> : <Repeat size={24} color={repostedHere ? '#34D399' : 'white'} strokeWidth={repostedHere ? 2.6 : 2} />}
+                    </div>
+                    {repostedHere && <div style={{ position: 'absolute', right: 1, bottom: 2, width: 13, height: 13, borderRadius: '50%', background: '#34D399', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid black' }}><Check size={8} color="black" strokeWidth={4} /></div>}
+                  </div>
                   {onShare && <div onClick={() => onShare(story, group.profile)} style={{ padding: 6, cursor: 'pointer' }}><Send size={23} color="white" /></div>}
                 </>
               )}
@@ -8616,6 +8599,7 @@ function PostViewer({ post, owner, userId, meProfile, onClose, onDeleted }) {
       await supabase.from('post_likes').delete().eq('post_id', post.id).eq('user_id', userId);
       return;
     }
+    playUiSound('like');
     setLikes((p) => [{ post_id: post.id, user_id: userId }, ...p]);
     await supabase.from('post_likes').upsert({ post_id: post.id, user_id: userId }, { onConflict: 'post_id,user_id' });
     if (owner.id !== userId) sendPushNotification(owner.id, 'ZChat', `${(meProfile && meProfile.name) || 'Someone'} liked your post`, link, meProfile && meProfile.avatar);
@@ -8651,7 +8635,7 @@ function PostViewer({ post, owner, userId, meProfile, onClose, onDeleted }) {
   };
   const firstLiker = likes.length ? likerNames[likes[0].user_id] : null;
   const iconBtn = (icon, onClick, label) => (
-    <div role="button" aria-label={label} onClick={onClick} style={{ padding: '8px 8px', cursor: 'pointer', display: 'flex' }}>{icon}</div>
+    <div role="button" aria-label={label} onClick={onClick} style={{ padding: '8px 8px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>{icon}</div>
   );
 
   return (
@@ -8665,8 +8649,8 @@ function PostViewer({ post, owner, userId, meProfile, onClose, onDeleted }) {
       </div>
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px' }}>
-          <Avatar emoji={owner.avatar} name={owner.name} size={34} />
-          <div style={{ flex: 1, minWidth: 0, fontWeight: 700, fontSize: 14 }}>{owner.username}<VerifiedBadge tier={owner.verified} size={13} /></div>
+          <FramedAvatar frame={owner.avatar_frame} size={34}><Avatar emoji={owner.avatar} name={owner.name} size={34} /></FramedAvatar>
+          <div style={{ flex: 1, minWidth: 0, fontWeight: 700, fontSize: 14, marginLeft: owner.avatar_frame ? 6 : 0 }}>{owner.username}<VerifiedBadge tier={owner.verified} size={13} /></div>
           <MoreVertical size={20} style={{ cursor: 'pointer', transform: 'rotate(90deg)' }} onClick={() => setSheet('more')} />
         </div>
         <div onClick={onMediaTap} style={{ position: 'relative', background: '#000', userSelect: 'none' }}>
@@ -8681,8 +8665,8 @@ function PostViewer({ post, owner, userId, meProfile, onClose, onDeleted }) {
           )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', padding: '6px 6px 0' }}>
-          {iconBtn(<Heart size={27} strokeWidth={2} color={liked ? '#FF3040' : theme.ink} fill={liked ? '#FF3040' : 'none'} style={{ transition: 'transform 0.18s cubic-bezier(0.2, 0.9, 0.3, 1.4)', transform: liked ? 'scale(1.1)' : 'scale(1)' }} />, () => like(false), 'Like')}
-          {iconBtn(<InstaCommentIcon size={25} color={theme.ink} />, () => setSheet('comments'), 'Comments')}
+          {iconBtn(<><Heart size={27} strokeWidth={2} color={liked ? '#FF3040' : theme.ink} fill={liked ? '#FF3040' : 'none'} style={{ transition: 'transform 0.18s cubic-bezier(0.2, 0.9, 0.3, 1.4)', transform: liked ? 'scale(1.1)' : 'scale(1)' }} />{likes.length > 0 && <span style={{ fontSize: 14, fontWeight: 700, marginLeft: 6, color: theme.ink }}>{formatCount(likes.length)}</span>}</>, () => like(false), 'Like')}
+          {iconBtn(<><InstaCommentIcon size={25} color={theme.ink} />{comments && comments.length > 0 && <span style={{ fontSize: 14, fontWeight: 700, marginLeft: 6, color: theme.ink }}>{formatCount(comments.length)}</span>}</>, () => setSheet('comments'), 'Comments')}
           {iconBtn(<InstaShareIcon size={24} color={theme.ink} />, () => setSheet('share'), 'Share')}
         </div>
         <div style={{ padding: '2px 14px', fontSize: 14, fontWeight: 700 }}>
@@ -8927,185 +8911,12 @@ function ScreenDebugInfo() {
   );
 }
 
-const SOCIAL_PLATFORMS = [
-  { key: 'instagram', label: 'Instagram', placeholder: 'username', bg: 'radial-gradient(circle at 30% 107%, #fdf497 0%, #fdf497 5%, #fd5949 45%, #d6249f 60%, #285AEB 90%)', url: (h) => `https://instagram.com/${h}` },
-  { key: 'tiktok', label: 'TikTok', placeholder: 'username', bg: '#000000', url: (h) => `https://www.tiktok.com/@${h}` },
-  { key: 'facebook', label: 'Facebook', placeholder: 'username or page', bg: '#1877F2', url: (h) => `https://facebook.com/${h}` },
-  { key: 'x', label: 'X', placeholder: 'username', bg: '#000000', url: (h) => `https://x.com/${h}` },
-  { key: 'youtube', label: 'YouTube', placeholder: 'channel handle', bg: '#FF0000', url: (h) => `https://youtube.com/@${h}` },
-  { key: 'snapchat', label: 'Snapchat', placeholder: 'username', bg: '#FFFC00', url: (h) => `https://snapchat.com/add/${h}` },
-  { key: 'telegram', label: 'Telegram', placeholder: 'username', bg: '#229ED9', url: (h) => `https://t.me/${h}` },
-  { key: 'discord', label: 'Discord', placeholder: 'invite code or username', bg: '#5865F2', url: (h) => `https://discord.gg/${h}` },
-];
-const SOCIAL_MAX = 3;
 
-function cleanSocialHandle(v) {
-  return String(v || '').trim().replace(/^https?:\/\/[^/]+\//i, '').replace(/^@+/, '').replace(/[\s/?#]+.*$/, '').slice(0, 60);
-}
 
-function cleanWhatsappNumber(v) {
-  const digits = String(v || '').replace(/[^\d+]/g, '');
-  const normalized = digits.startsWith('+') ? `+${digits.slice(1).replace(/\+/g, '')}` : digits.replace(/\+/g, '');
-  return normalized.slice(0, 18);
-}
 
-function SocialGlyph({ platform, size = 20 }) {
-  const s = size;
-  const white = 'white';
-  switch (platform) {
-    case 'instagram':
-      return (
-        <svg width={s} height={s} viewBox="0 0 24 24" fill="none">
-          <rect x="3" y="3" width="18" height="18" rx="5.5" stroke={white} strokeWidth="2" />
-          <circle cx="12" cy="12" r="4.2" stroke={white} strokeWidth="2" />
-          <circle cx="17.3" cy="6.7" r="1.3" fill={white} />
-        </svg>
-      );
-    case 'tiktok':
-      return (
-        <svg width={s} height={s} viewBox="0 0 24 24">
-          <path d="M16.6 3c.4 2.4 1.9 3.9 4.1 4.1v3.1c-1.5 0-2.9-.4-4.1-1.2v6.3c0 3.5-2.6 5.7-5.7 5.7-3.2 0-5.6-2.5-5.6-5.5 0-3.3 2.8-5.8 6.3-5.4v3.2c-1.6-.3-3.1.7-3.1 2.2 0 1.3 1 2.3 2.3 2.3 1.4 0 2.4-1 2.4-2.6V3h3.4z" fill="#25F4EE" transform="translate(-0.7 -0.5)" />
-          <path d="M16.6 3c.4 2.4 1.9 3.9 4.1 4.1v3.1c-1.5 0-2.9-.4-4.1-1.2v6.3c0 3.5-2.6 5.7-5.7 5.7-3.2 0-5.6-2.5-5.6-5.5 0-3.3 2.8-5.8 6.3-5.4v3.2c-1.6-.3-3.1.7-3.1 2.2 0 1.3 1 2.3 2.3 2.3 1.4 0 2.4-1 2.4-2.6V3h3.4z" fill="#FE2C55" transform="translate(0.7 0.5)" />
-          <path d="M16.6 3c.4 2.4 1.9 3.9 4.1 4.1v3.1c-1.5 0-2.9-.4-4.1-1.2v6.3c0 3.5-2.6 5.7-5.7 5.7-3.2 0-5.6-2.5-5.6-5.5 0-3.3 2.8-5.8 6.3-5.4v3.2c-1.6-.3-3.1.7-3.1 2.2 0 1.3 1 2.3 2.3 2.3 1.4 0 2.4-1 2.4-2.6V3h3.4z" fill={white} />
-        </svg>
-      );
-    case 'facebook':
-      return (
-        <svg width={s} height={s} viewBox="0 0 24 24">
-          <path d="M13.6 21v-7.6h2.6l.4-3h-3V8.5c0-.9.3-1.5 1.5-1.5h1.6V4.3c-.3 0-1.2-.1-2.3-.1-2.3 0-3.9 1.4-3.9 4v2.2H7.9v3h2.6V21h3.1z" fill={white} />
-        </svg>
-      );
-    case 'x':
-      return (
-        <svg width={s} height={s} viewBox="0 0 24 24">
-          <path d="M17.8 3h3.1l-6.8 7.8L22 21h-6.2l-4.9-6.4L5.3 21H2.2l7.3-8.3L1.9 3h6.4l4.4 5.8L17.8 3zm-1.1 16.2h1.7L7.4 4.7H5.6l11.1 14.5z" fill={white} />
-        </svg>
-      );
-    case 'youtube':
-      return (
-        <svg width={s} height={s} viewBox="0 0 24 24">
-          <path d="M9.8 15.3V8.7l5.8 3.3-5.8 3.3z" fill={white} />
-        </svg>
-      );
-    case 'snapchat':
-      return (
-        <svg width={s} height={s} viewBox="0 0 24 24">
-          <path d="M12 3.2c2.9 0 4.9 2.2 4.9 5v1.9l1.3-.4c.6-.2 1.2.5.7 1-.5.5-1.4.8-2 1 .4 1.4 1.7 2.8 3.3 3.3.5.2.4.8-.1.9-.8.2-1.6.3-1.9.7-.2.3 0 .9-.4 1.1-.6.2-1.6-.2-2.6.1-1 .3-1.8 1.7-3.2 1.7s-2.2-1.4-3.2-1.7c-1-.3-2 .1-2.6-.1-.4-.2-.2-.8-.4-1.1-.3-.4-1.1-.5-1.9-.7-.5-.1-.6-.7-.1-.9 1.6-.5 2.9-1.9 3.3-3.3-.6-.2-1.5-.5-2-1-.5-.5.1-1.2.7-1l1.3.4V8.2c0-2.8 2-5 4.9-5z" fill={white} stroke="#111" strokeWidth="1.1" strokeLinejoin="round" />
-        </svg>
-      );
-    case 'telegram':
-      return (
-        <svg width={s} height={s} viewBox="0 0 24 24">
-          <path d="M20.7 4.3L3.5 11c-1.2.5-1.2 1.2-.2 1.5l4.4 1.4 1.7 5.2c.2.6.1.8.7.8.5 0 .7-.2 1-.5l2.1-2.1 4.4 3.3c.8.4 1.4.2 1.6-.8l2.9-13.6c.3-1.2-.5-1.8-1.4-1.9zM8.6 13.5l8.9-5.6c.4-.3.8-.1.5.2l-7.3 6.6-.3 3-1.8-4.2z" fill={white} />
-        </svg>
-      );
-    case 'discord':
-      return (
-        <svg width={s} height={s} viewBox="0 0 24 24">
-          <path d="M19.3 5.4A16 16 0 0 0 15.4 4l-.5 1a14.8 14.8 0 0 0-5.8 0l-.5-1c-1.4.2-2.7.7-3.9 1.4C2.3 9.1 1.7 12.7 2 16.3a16 16 0 0 0 4.8 2.4l1-1.6c-.6-.2-1.1-.5-1.6-.8l.4-.3a11.4 11.4 0 0 0 10.8 0l.4.3c-.5.3-1 .6-1.6.8l1 1.6a16 16 0 0 0 4.8-2.4c.4-4.2-.7-7.8-2.7-10.9zM8.7 14.1c-.9 0-1.7-.9-1.7-2s.8-2 1.7-2 1.7.9 1.7 2-.8 2-1.7 2zm6.6 0c-.9 0-1.7-.9-1.7-2s.8-2 1.7-2 1.7.9 1.7 2-.8 2-1.7 2z" fill={white} />
-        </svg>
-      );
-    case 'whatsapp':
-      return (
-        <svg width={s} height={s} viewBox="0 0 24 24">
-          <path d="M12 2.8a9.1 9.1 0 0 0-7.8 13.8L3 21l4.5-1.2A9.1 9.1 0 1 0 12 2.8z" fill="none" stroke={white} strokeWidth="1.9" strokeLinejoin="round" />
-          <path d="M9.1 7.6c-.2-.4-.4-.4-.6-.4h-.5c-.2 0-.5.1-.7.3-.2.3-.9.9-.9 2.2s1 2.5 1.1 2.7c.1.2 1.9 3 4.6 4 2.3.9 2.7.7 3.2.7.5 0 1.6-.6 1.8-1.3.2-.6.2-1.2.2-1.3-.1-.1-.3-.2-.5-.3l-1.8-.9c-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1-.2-.1-1-.4-1.9-1.2-.7-.6-1.2-1.4-1.3-1.6-.1-.2 0-.4.1-.5l.4-.5c.1-.2.2-.3.3-.5.1-.2 0-.4 0-.5l-.6-1.6z" fill={white} />
-        </svg>
-      );
-    default:
-      return null;
-  }
-}
 
-function SocialIcon({ platform, size = 40 }) {
-  const meta = platform === 'whatsapp' ? { bg: '#25D366' } : SOCIAL_PLATFORMS.find((p) => p.key === platform);
-  if (!meta) return null;
-  return (
-    <div style={{ width: size, height: size, borderRadius: size * 0.3, background: meta.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 3px 10px rgba(0,0,0,0.18)', position: 'relative', overflow: 'hidden' }}>
-      {platform === 'youtube' && <div style={{ position: 'absolute', width: size * 0.62, height: size * 0.44, borderRadius: size * 0.12, background: 'rgba(255,255,255,0.0)', border: 'none' }} />}
-      <SocialGlyph platform={platform} size={size * 0.56} />
-    </div>
-  );
-}
 
-function ProfileSocialRow({ links, whatsapp }) {
-  const { theme } = useTheme();
-  const list = (Array.isArray(links) ? links : []).filter((l) => l && l.platform && l.handle && SOCIAL_PLATFORMS.some((p) => p.key === l.platform)).slice(0, SOCIAL_MAX);
-  const phone = cleanWhatsappNumber(whatsapp);
-  if (!list.length && !phone) return null;
-  const open = (href) => window.open(href, '_blank', 'noopener');
-  return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 14 }}>
-      {list.map((l) => {
-        const meta = SOCIAL_PLATFORMS.find((p) => p.key === l.platform);
-        return (
-          <div key={`${l.platform}-${l.handle}`} role="button" aria-label={meta.label} onClick={() => open(meta.url(l.handle))}
-            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 12px 5px 5px', borderRadius: 14, background: theme.rowBg, border: `1px solid ${theme.border}`, cursor: 'pointer', maxWidth: '100%' }}>
-            <SocialIcon platform={l.platform} size={28} />
-            <span style={{ fontSize: 13, fontWeight: 700, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 140 }}>{l.handle}</span>
-          </div>
-        );
-      })}
-      {phone && (
-        <div role="button" aria-label="WhatsApp" onClick={() => open(`https://wa.me/${phone.replace(/^\+/, '')}`)}
-          style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 12px 5px 5px', borderRadius: 14, background: theme.rowBg, border: `1px solid ${theme.border}`, cursor: 'pointer' }}>
-          <SocialIcon platform="whatsapp" size={28} />
-          <span style={{ fontSize: 13, fontWeight: 700, color: theme.ink }}>WhatsApp</span>
-        </div>
-      )}
-    </div>
-  );
-}
 
-function SocialLinksEditor({ links, onChange, whatsapp, onWhatsappChange, labelStyle }) {
-  const { theme } = useTheme();
-  const [picking, setPicking] = useState(false);
-  const list = Array.isArray(links) ? links : [];
-  const used = new Set(list.map((l) => l.platform));
-  const update = (i, patch) => onChange(list.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
-  return (
-    <div style={{ marginTop: 14 }}>
-      <div style={{ ...labelStyle, display: 'flex', justifyContent: 'space-between' }}><span>SOCIAL LINKS</span><span style={{ fontWeight: 600 }}>{list.length}/{SOCIAL_MAX}</span></div>
-      {list.map((l, i) => {
-        const meta = SOCIAL_PLATFORMS.find((p) => p.key === l.platform);
-        return (
-          <div key={l.platform} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-            <SocialIcon platform={l.platform} size={38} />
-            <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
-              <span style={{ position: 'absolute', left: 12, top: 12, color: theme.muted, fontSize: 15, pointerEvents: 'none' }}>@</span>
-              <input value={l.handle} placeholder={meta ? meta.placeholder : 'username'} autoCapitalize="none" autoCorrect="off"
-                onChange={(e) => update(i, { handle: cleanSocialHandle(e.target.value) })}
-                style={{ ...inputStyle(theme), paddingLeft: 28 }} />
-            </div>
-            <div role="button" aria-label="Remove" onClick={() => onChange(list.filter((_, idx) => idx !== i))} style={{ width: 36, height: 36, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: theme.muted, flexShrink: 0 }}><X size={18} /></div>
-          </div>
-        );
-      })}
-      {list.length < SOCIAL_MAX && !picking && (
-        <div role="button" onClick={() => setPicking(true)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '11px 0', borderRadius: 14, border: `1.5px dashed ${theme.border}`, color: theme.ink, fontWeight: 700, fontSize: 13.5, cursor: 'pointer' }}>
-          <span style={{ fontSize: 18, lineHeight: 1 }}>+</span> Add social link
-        </div>
-      )}
-      {picking && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, padding: 12, borderRadius: 16, background: theme.rowBg, border: `1px solid ${theme.border}` }}>
-          {SOCIAL_PLATFORMS.filter((p) => !used.has(p.key)).map((p) => (
-            <div key={p.key} role="button" onClick={() => { onChange([...list, { platform: p.key, handle: '' }]); setPicking(false); }} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
-              <SocialIcon platform={p.key} size={42} />
-              <span style={{ fontSize: 11, fontWeight: 600, color: theme.ink }}>{p.label}</span>
-            </div>
-          ))}
-          <div role="button" onClick={() => setPicking(false)} style={{ gridColumn: '1 / -1', textAlign: 'center', fontSize: 13, fontWeight: 700, color: theme.muted, cursor: 'pointer', paddingTop: 4 }}>Cancel</div>
-        </div>
-      )}
-      <div style={{ ...labelStyle, marginTop: 14 }}>WHATSAPP NUMBER</div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <SocialIcon platform="whatsapp" size={38} />
-        <input value={whatsapp} inputMode="tel" placeholder="+94 77 123 4567" onChange={(e) => onWhatsappChange(cleanWhatsappNumber(e.target.value))} style={{ ...inputStyle(theme), flex: 1 }} />
-      </div>
-      <div style={{ fontSize: 11, color: theme.muted, marginTop: 5 }}>Include your country code. Everyone who can see your profile can see this number.</div>
-    </div>
-  );
-}
 
 const imageAspectCache = new Map();
 
@@ -9137,6 +8948,640 @@ function ChatImage({ src, onOpen, caption }) {
         position: 'absolute', top: 6, right: 6, width: 26, height: 26, borderRadius: '50%',
         background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
       }}><Download size={13} color="white" /></div>
+    </div>
+  );
+}
+
+let uiAudioCtx = null;
+function playUiSound(kind) {
+  try {
+    if (localStorage.getItem('zchat-sound') === 'off') return;
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    if (!uiAudioCtx) uiAudioCtx = new Ctx();
+    const ctx = uiAudioCtx;
+    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+    const t = ctx.currentTime;
+    const tone = (freqFrom, freqTo, start, length, volume, type = 'sine') => {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = type;
+      o.frequency.setValueAtTime(freqFrom, t + start);
+      o.frequency.exponentialRampToValueAtTime(Math.max(40, freqTo), t + start + length);
+      g.gain.setValueAtTime(0.0001, t + start);
+      g.gain.exponentialRampToValueAtTime(volume, t + start + Math.min(0.015, length / 3));
+      g.gain.exponentialRampToValueAtTime(0.0001, t + start + length);
+      o.connect(g);
+      g.connect(ctx.destination);
+      o.start(t + start);
+      o.stop(t + start + length + 0.03);
+    };
+    if (kind === 'send') { tone(520, 980, 0, 0.11, 0.09); tone(980, 1180, 0.05, 0.08, 0.05); }
+    else if (kind === 'like') { tone(740, 1100, 0, 0.09, 0.08); tone(1100, 1480, 0.07, 0.1, 0.06); }
+    else if (kind === 'repost') { tone(660, 660, 0, 0.08, 0.06); tone(880, 880, 0.08, 0.08, 0.06); tone(1320, 1320, 0.16, 0.14, 0.07); }
+    else if (kind === 'record-start') { tone(420, 700, 0, 0.12, 0.08); }
+    else if (kind === 'record-stop') { tone(700, 420, 0, 0.12, 0.07); }
+    else if (kind === 'cancel') { tone(300, 160, 0, 0.16, 0.08, 'triangle'); }
+    else if (kind === 'shutter') { tone(1800, 600, 0, 0.05, 0.08, 'square'); tone(900, 300, 0.05, 0.07, 0.05, 'triangle'); }
+    else if (kind === 'delete') { tone(380, 200, 0, 0.14, 0.07, 'triangle'); }
+    else if (kind === 'tap') { tone(1500, 1300, 0, 0.03, 0.035); }
+  } catch {}
+}
+
+function voiceBars(seed, count = 30) {
+  let h = 0;
+  const str = String(seed || 'z');
+  for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0;
+  const out = [];
+  for (let i = 0; i < count; i++) {
+    h = (h * 1103515245 + 12345) >>> 0;
+    const base = 0.25 + ((h >>> 8) % 1000) / 1000 * 0.75;
+    const shape = 0.55 + 0.45 * Math.sin((i / count) * Math.PI);
+    out.push(Math.max(0.18, Math.min(1, base * shape + 0.1)));
+  }
+  return out;
+}
+
+function AudioBubble({ url, isMe }) {
+  const { theme } = useTheme();
+  const audioRef = useRef(null);
+  const [playing, setPlaying] = useState(false);
+  const [duration, setDuration] = useState(0);
+  const [progress, setProgress] = useState(0);
+  const [speed, setSpeed] = useState(1);
+  const fixingRef = useRef(false);
+  const bars = useMemo(() => voiceBars(url), [url]);
+
+  const fmt = (s) => {
+    const v = Number.isFinite(s) ? Math.max(0, s) : 0;
+    return `${Math.floor(v / 60)}:${Math.floor(v % 60).toString().padStart(2, '0')}`;
+  };
+  const onMeta = (e) => {
+    const el = e.currentTarget;
+    if (Number.isFinite(el.duration) && el.duration > 0) { setDuration(el.duration); return; }
+    fixingRef.current = true;
+    el.currentTime = 1e7;
+  };
+  const onTime = (e) => {
+    const el = e.currentTarget;
+    if (fixingRef.current) {
+      if (Number.isFinite(el.duration) && el.duration > 0) {
+        fixingRef.current = false;
+        setDuration(el.duration);
+        el.currentTime = 0;
+      }
+      return;
+    }
+    setProgress(el.currentTime);
+  };
+  const toggle = (e) => {
+    e.stopPropagation();
+    const el = audioRef.current;
+    if (!el) return;
+    if (playing) el.pause(); else { el.playbackRate = speed; el.play().catch(() => {}); }
+  };
+  const seek = (e) => {
+    e.stopPropagation();
+    const el = audioRef.current;
+    if (!el || !duration) return;
+    const r = e.currentTarget.getBoundingClientRect();
+    el.currentTime = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * duration;
+    setProgress(el.currentTime);
+  };
+  const cycleSpeed = (e) => {
+    e.stopPropagation();
+    const next = speed === 1 ? 1.5 : speed === 1.5 ? 2 : 1;
+    setSpeed(next);
+    if (audioRef.current) audioRef.current.playbackRate = next;
+  };
+  const pct = duration ? progress / duration : 0;
+  const active = isMe ? 'rgba(255,255,255,0.95)' : theme.coral;
+  const idle = isMe ? 'rgba(255,255,255,0.38)' : (theme.dark ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.22)');
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 8px 4px 6px', minWidth: 220 }}>
+      <audio ref={audioRef} src={url} preload="metadata"
+        onLoadedMetadata={onMeta} onDurationChange={(e) => { const d = e.currentTarget.duration; if (Number.isFinite(d) && d > 0 && !fixingRef.current) setDuration(d); }}
+        onTimeUpdate={onTime}
+        onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)}
+        onEnded={() => { setPlaying(false); setProgress(0); }} />
+      <div role="button" aria-label={playing ? 'Pause' : 'Play'} onClick={toggle} style={{
+        width: 40, height: 40, borderRadius: '50%', flexShrink: 0, cursor: 'pointer',
+        background: isMe ? 'rgba(255,255,255,0.22)' : theme.coral, display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        {playing ? <Pause size={17} color="white" fill="white" /> : <Play size={17} color="white" fill="white" style={{ marginLeft: 2 }} />}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div onClick={seek} style={{ display: 'flex', alignItems: 'center', gap: 2, height: 28, cursor: 'pointer' }}>
+          {bars.map((b, i) => (
+            <div key={i} style={{ flex: 1, height: `${Math.round(b * 100)}%`, minHeight: 3, borderRadius: 2, background: (i + 0.5) / bars.length <= pct ? active : idle, transition: 'background 0.15s linear' }} />
+          ))}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 }}>
+          <span style={{ fontSize: 11, fontWeight: 600, color: isMe ? 'rgba(255,255,255,0.8)' : theme.muted, fontVariantNumeric: 'tabular-nums' }}>
+            {playing || progress > 0 ? fmt(progress) : fmt(duration)}
+          </span>
+          {(playing || progress > 0) && (
+            <span role="button" onClick={cycleSpeed} style={{ fontSize: 10.5, fontWeight: 800, padding: '1px 7px', borderRadius: 9, cursor: 'pointer', background: isMe ? 'rgba(255,255,255,0.22)' : theme.rowBg, color: isMe ? 'white' : theme.ink }}>{speed}x</span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const AVATAR_FRAMES = {
+  laurel: { file: '/frames/laurel.gif', label: 'Golden laurel frame', scale: 1.86, centerY: 0.5 },
+};
+
+function FramedAvatar({ frame, size, children }) {
+  const spec = AVATAR_FRAMES[frame];
+  if (!spec) return children;
+  const w = size * spec.scale;
+  return (
+    <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
+      {children}
+      <img src={spec.file} alt="" draggable={false} style={{
+        position: 'absolute', width: w, height: w, left: size / 2 - w / 2, top: size / 2 - w * spec.centerY,
+        pointerEvents: 'none', userSelect: 'none', filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.35))', zIndex: 2,
+      }} />
+    </div>
+  );
+}
+
+function ReportThanksSheet({ profile, isBlocked, onBlock, onClose }) {
+  const { theme } = useTheme();
+  const drag = useSheetDrag(onClose);
+  return (
+    <div onClick={onClose} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 430, background: 'rgba(5,8,16,0.55)', backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+      <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" {...drag.sheetProps} style={{ ...drag.sheetStyle, width: '100%', maxWidth: 460, background: theme.panelBg, borderRadius: '26px 26px 0 0', padding: '10px 22px', paddingBottom: 'calc(18px + env(safe-area-inset-bottom))', textAlign: 'center' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '2px 0 16px' }}><div style={{ width: 38, height: 4, borderRadius: 2, background: theme.border }} /></div>
+        <div className="zchat-pop" style={{ width: 72, height: 72, borderRadius: '50%', margin: '0 auto', background: `${theme.teal}22`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <CheckCheck size={34} color={theme.teal} />
+        </div>
+        <div style={{ fontSize: 19, fontWeight: 800, color: theme.ink, marginTop: 14 }}>Thanks for letting us know</div>
+        <div style={{ fontSize: 13.5, color: theme.muted, lineHeight: 1.55, marginTop: 8 }}>
+          Your report helps keep ZChat safe. We'll review it, and{profile ? ` ${profile.name}` : ' they'} won't know who reported them.
+        </div>
+        {profile && !isBlocked && onBlock && (
+          <button onClick={() => { onClose(); onBlock(profile); }} style={{ width: '100%', marginTop: 18, padding: 13, borderRadius: 15, border: `1px solid ${theme.border}`, background: 'transparent', color: theme.danger, fontWeight: 800, fontSize: 14.5, cursor: 'pointer', fontFamily: FONT }}>
+            Block {profile.name}
+          </button>
+        )}
+        <button onClick={onClose} style={{ width: '100%', marginTop: 8, padding: 13, borderRadius: 15, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontSize: 14.5, cursor: 'pointer', fontFamily: FONT }}>Done</button>
+      </div>
+    </div>
+  );
+}
+
+function CameraCapture({ onClose, onCapture, onPickGallery }) {
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
+  const recorderRef = useRef(null);
+  const chunksRef = useRef([]);
+  const holdTimerRef = useRef(null);
+  const startedAtRef = useRef(0);
+  const [facing, setFacing] = useState('environment');
+  const [ready, setReady] = useState(false);
+  const [error, setError] = useState('');
+  const [recordingVideo, setRecordingVideo] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+  const [flash, setFlash] = useState(false);
+  const MAX_MS = 60000;
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        if (streamRef.current) streamRef.current.getTracks().forEach((t) => t.stop());
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: true });
+        if (cancelled) { stream.getTracks().forEach((t) => t.stop()); return; }
+        streamRef.current = stream;
+        const v = videoRef.current;
+        if (v) { v.srcObject = stream; v.play().catch(() => {}); }
+        setReady(true);
+        setError('');
+      } catch {
+        setError('Allow camera access to take photos and videos.');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [facing]);
+
+  useEffect(() => () => {
+    clearTimeout(holdTimerRef.current);
+    if (streamRef.current) streamRef.current.getTracks().forEach((t) => t.stop());
+  }, []);
+
+  useEffect(() => {
+    if (!recordingVideo) return undefined;
+    const t = setInterval(() => {
+      const ms = Date.now() - startedAtRef.current;
+      setElapsed(ms);
+      if (ms >= MAX_MS) stopVideo();
+    }, 100);
+    return () => clearInterval(t);
+  }, [recordingVideo]);
+
+  const takePhoto = () => {
+    const v = videoRef.current;
+    if (!v || !v.videoWidth) return;
+    const c = document.createElement('canvas');
+    c.width = v.videoWidth;
+    c.height = v.videoHeight;
+    const ctx = c.getContext('2d');
+    if (facing === 'user') { ctx.translate(c.width, 0); ctx.scale(-1, 1); }
+    ctx.drawImage(v, 0, 0, c.width, c.height);
+    playUiSound('shutter');
+    setFlash(true);
+    setTimeout(() => setFlash(false), 160);
+    c.toBlob((blob) => { if (blob) onCapture(new File([blob], `photo-${Date.now()}.jpg`, { type: 'image/jpeg' })); }, 'image/jpeg', 0.92);
+  };
+
+  const startVideo = () => {
+    const stream = streamRef.current;
+    if (!stream || typeof MediaRecorder === 'undefined') return;
+    const types = ['video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+    const mime = types.find((t) => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t));
+    let rec;
+    try { rec = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream); } catch { return; }
+    chunksRef.current = [];
+    rec.ondataavailable = (e) => { if (e.data && e.data.size) chunksRef.current.push(e.data); };
+    rec.onstop = () => {
+      const type = rec.mimeType || mime || 'video/webm';
+      const blob = new Blob(chunksRef.current, { type });
+      if (blob.size > 2000) onCapture(new File([blob], `video-${Date.now()}.${type.includes('mp4') ? 'mp4' : 'webm'}`, { type }));
+    };
+    recorderRef.current = rec;
+    rec.start(250);
+    startedAtRef.current = Date.now();
+    setElapsed(0);
+    setRecordingVideo(true);
+    playUiSound('record-start');
+  };
+
+  function stopVideo() {
+    const rec = recorderRef.current;
+    recorderRef.current = null;
+    setRecordingVideo(false);
+    if (rec && rec.state !== 'inactive') { playUiSound('record-stop'); rec.stop(); }
+  }
+
+  const onShutterDown = (e) => {
+    e.preventDefault();
+    if (!ready) return;
+    clearTimeout(holdTimerRef.current);
+    holdTimerRef.current = setTimeout(() => { holdTimerRef.current = null; startVideo(); }, 350);
+  };
+  const onShutterUp = (e) => {
+    e.preventDefault();
+    if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null; takePhoto(); return; }
+    if (recorderRef.current) stopVideo();
+  };
+
+  const ring = recordingVideo ? Math.min(1, elapsed / MAX_MS) : 0;
+  const secs = Math.floor(elapsed / 1000);
+
+  return (
+    <div className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 520, background: '#000', color: 'white', display: 'flex', flexDirection: 'column', fontFamily: FONT }}>
+      <video ref={videoRef} playsInline muted style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', transform: facing === 'user' ? 'scaleX(-1)' : 'none' }} />
+      {flash && <div style={{ position: 'absolute', inset: 0, background: 'white', opacity: 0.85 }} />}
+      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 'calc(14px + env(safe-area-inset-top)) 16px 0' }}>
+        <div role="button" aria-label="Close" onClick={onClose} style={{ width: 42, height: 42, borderRadius: '50%', background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={22} /></div>
+        {recordingVideo && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '6px 12px', borderRadius: 16, background: 'rgba(0,0,0,0.45)', fontWeight: 800, fontSize: 14, fontVariantNumeric: 'tabular-nums' }}>
+            <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#FF3B30' }} />{Math.floor(secs / 60)}:{String(secs % 60).padStart(2, '0')}
+          </div>
+        )}
+        <div style={{ width: 42 }} />
+      </div>
+      {error && <div style={{ position: 'relative', margin: 'auto', textAlign: 'center', padding: 24, fontSize: 15, fontWeight: 600 }}>{error}</div>}
+      <div style={{ flex: 1 }} />
+      <div style={{ position: 'relative', textAlign: 'center', fontSize: 12.5, fontWeight: 600, opacity: 0.85, marginBottom: 14 }}>{recordingVideo ? 'Release to stop' : 'Tap for photo, hold for video'}</div>
+      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-around', padding: '0 24px', paddingBottom: 'calc(30px + env(safe-area-inset-bottom))' }}>
+        <div role="button" aria-label="Gallery" onClick={onPickGallery} style={{ width: 48, height: 48, borderRadius: 14, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', visibility: recordingVideo ? 'hidden' : 'visible' }}><ImageIcon size={22} /></div>
+        <div role="button" aria-label="Shutter" onPointerDown={onShutterDown} onPointerUp={onShutterUp} onPointerCancel={onShutterUp} onContextMenu={(e) => e.preventDefault()}
+          style={{ position: 'relative', width: 84, height: 84, cursor: 'pointer', touchAction: 'none', userSelect: 'none' }}>
+          <svg width="84" height="84" viewBox="0 0 84 84" style={{ position: 'absolute', inset: 0, transform: 'rotate(-90deg)' }}>
+            <circle cx="42" cy="42" r="38" fill="none" stroke="white" strokeWidth="5" opacity={recordingVideo ? 0.35 : 1} />
+            {recordingVideo && <circle cx="42" cy="42" r="38" fill="none" stroke="#FF3B30" strokeWidth="5" strokeDasharray={`${2 * Math.PI * 38 * ring} ${2 * Math.PI * 38}`} strokeLinecap="round" />}
+          </svg>
+          <div style={{ position: 'absolute', inset: recordingVideo ? 22 : 11, borderRadius: recordingVideo ? 10 : '50%', background: recordingVideo ? '#FF3B30' : 'white', transition: 'all 0.2s ease' }} />
+        </div>
+        <div role="button" aria-label="Flip camera" onClick={() => !recordingVideo && setFacing((f) => (f === 'user' ? 'environment' : 'user'))} style={{ width: 48, height: 48, borderRadius: '50%', background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', visibility: recordingVideo ? 'hidden' : 'visible' }}><SwitchCamera size={22} /></div>
+      </div>
+    </div>
+  );
+}
+
+const SOCIAL_PLATFORMS = [
+  { key: 'instagram', label: 'Instagram', bg: 'radial-gradient(circle at 30% 107%, #fdf497 0%, #fdf497 5%, #fd5949 45%, #d6249f 60%, #285AEB 90%)', hosts: ['instagram.com', 'instagr.am'] },
+  { key: 'tiktok', label: 'TikTok', bg: '#000000', hosts: ['tiktok.com'] },
+  { key: 'facebook', label: 'Facebook', bg: '#1877F2', hosts: ['facebook.com', 'fb.com', 'fb.me', 'fb.watch'] },
+  { key: 'x', label: 'X', bg: '#000000', hosts: ['x.com', 'twitter.com'] },
+  { key: 'youtube', label: 'YouTube', bg: '#FF0000', hosts: ['youtube.com', 'youtu.be'] },
+  { key: 'threads', label: 'Threads', bg: '#000000', hosts: ['threads.net', 'threads.com'] },
+  { key: 'snapchat', label: 'Snapchat', bg: '#FFFC00', hosts: ['snapchat.com'] },
+  { key: 'whatsapp', label: 'WhatsApp', bg: '#25D366', hosts: ['wa.me', 'whatsapp.com', 'chat.whatsapp.com'] },
+  { key: 'telegram', label: 'Telegram', bg: '#229ED9', hosts: ['t.me', 'telegram.me', 'telegram.org'] },
+  { key: 'discord', label: 'Discord', bg: '#5865F2', hosts: ['discord.gg', 'discord.com', 'discordapp.com'] },
+  { key: 'twitch', label: 'Twitch', bg: '#9146FF', hosts: ['twitch.tv'] },
+  { key: 'kick', label: 'Kick', bg: '#0B0E0F', hosts: ['kick.com'] },
+  { key: 'reddit', label: 'Reddit', bg: '#FF4500', hosts: ['reddit.com', 'redd.it'] },
+  { key: 'pinterest', label: 'Pinterest', bg: '#E60023', hosts: ['pinterest.com', 'pin.it'] },
+  { key: 'linkedin', label: 'LinkedIn', bg: '#0A66C2', hosts: ['linkedin.com', 'lnkd.in'] },
+  { key: 'github', label: 'GitHub', bg: '#181717', hosts: ['github.com'] },
+  { key: 'spotify', label: 'Spotify', bg: '#1DB954', hosts: ['spotify.com', 'spotify.link'] },
+  { key: 'soundcloud', label: 'SoundCloud', bg: '#FF5500', hosts: ['soundcloud.com', 'on.soundcloud.com'] },
+  { key: 'steam', label: 'Steam', bg: '#171A21', hosts: ['steamcommunity.com', 'steampowered.com', 's.team'] },
+  { key: 'linktree', label: 'Linktree', bg: '#43E55E', hosts: ['linktr.ee'] },
+  { key: 'website', label: 'Website', bg: 'linear-gradient(135deg, #6366F1, #06B6D4)', hosts: [] },
+];
+const SOCIAL_MAX = 5;
+
+function normalizeSocialUrl(input) {
+  let v = String(input || '').trim();
+  if (!v) return null;
+  if (!/^https?:\/\//i.test(v)) v = `https://${v.replace(/^\/+/, '')}`;
+  try {
+    const u = new URL(v);
+    if (!/^https?:$/.test(u.protocol) || !u.hostname.includes('.')) return null;
+    return u.toString().replace(/\/$/, '');
+  } catch { return null; }
+}
+
+function detectSocialPlatform(url) {
+  try {
+    const host = new URL(url).hostname.toLowerCase().replace(/^www\.|^m\./, '');
+    const hit = SOCIAL_PLATFORMS.find((p) => p.hosts.some((h) => host === h || host.endsWith(`.${h}`)));
+    return hit ? hit.key : 'website';
+  } catch { return 'website'; }
+}
+
+function socialLinkLabel(url, platform) {
+  try {
+    const u = new URL(url);
+    const parts = u.pathname.split('/').filter(Boolean);
+    const first = (parts[0] || '').replace(/^@/, '');
+    if (platform === 'website') return u.hostname.replace(/^www\./, '');
+    if (platform === 'youtube' && parts[0] && parts[0].startsWith('@')) return parts[0];
+    if (first && !['channel', 'c', 'user', 'invite', 'add', 'profile.php', 'in', 'u', 'user'].includes(first)) return `@${first}`.slice(0, 24);
+    if (parts[1]) return parts[1].slice(0, 24);
+    return SOCIAL_PLATFORMS.find((p) => p.key === platform)?.label || u.hostname;
+  } catch { return url; }
+}
+
+function readSocialLinks(raw) {
+  const legacyUrl = { instagram: (h) => `https://instagram.com/${h}`, tiktok: (h) => `https://www.tiktok.com/@${h}`, facebook: (h) => `https://facebook.com/${h}`, x: (h) => `https://x.com/${h}`, youtube: (h) => `https://youtube.com/@${h}`, snapchat: (h) => `https://snapchat.com/add/${h}`, telegram: (h) => `https://t.me/${h}`, discord: (h) => `https://discord.gg/${h}` };
+  return (Array.isArray(raw) ? raw : []).map((l) => {
+    if (!l) return null;
+    const url = l.url ? normalizeSocialUrl(l.url) : (l.platform && l.handle && legacyUrl[l.platform] ? legacyUrl[l.platform](l.handle) : null);
+    if (!url) return null;
+    return { url, title: (l.title || '').slice(0, 30), platform: detectSocialPlatform(url) };
+  }).filter(Boolean).slice(0, SOCIAL_MAX);
+}
+
+function cleanWhatsappNumber(v) {
+  const digits = String(v || '').replace(/[^\d+]/g, '');
+  const normalized = digits.startsWith('+') ? `+${digits.slice(1).replace(/\+/g, '')}` : digits.replace(/\+/g, '');
+  return normalized.slice(0, 18);
+}
+
+function SocialGlyph({ platform, size = 20 }) {
+  const s = size;
+  const W = 'white';
+  const txt = (t, fs = 13, fill = W, weight = 900, y = 16.5) => <text x="12" y={y} textAnchor="middle" fontSize={fs} fontWeight={weight} fill={fill} fontFamily="Arial, Helvetica, sans-serif">{t}</text>;
+  switch (platform) {
+    case 'instagram':
+      return (<svg width={s} height={s} viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="5.5" stroke={W} strokeWidth="2" /><circle cx="12" cy="12" r="4.2" stroke={W} strokeWidth="2" /><circle cx="17.3" cy="6.7" r="1.3" fill={W} /></svg>);
+    case 'tiktok': {
+      const d = 'M16.6 3c.4 2.4 1.9 3.9 4.1 4.1v3.1c-1.5 0-2.9-.4-4.1-1.2v6.3c0 3.5-2.6 5.7-5.7 5.7-3.2 0-5.6-2.5-5.6-5.5 0-3.3 2.8-5.8 6.3-5.4v3.2c-1.6-.3-3.1.7-3.1 2.2 0 1.3 1 2.3 2.3 2.3 1.4 0 2.4-1 2.4-2.6V3h3.4z';
+      return (<svg width={s} height={s} viewBox="0 0 24 24"><path d={d} fill="#25F4EE" transform="translate(-0.7 -0.5)" /><path d={d} fill="#FE2C55" transform="translate(0.7 0.5)" /><path d={d} fill={W} /></svg>);
+    }
+    case 'facebook':
+      return (<svg width={s} height={s} viewBox="0 0 24 24"><path d="M13.6 21v-7.6h2.6l.4-3h-3V8.5c0-.9.3-1.5 1.5-1.5h1.6V4.3c-.3 0-1.2-.1-2.3-.1-2.3 0-3.9 1.4-3.9 4v2.2H7.9v3h2.6V21h3.1z" fill={W} /></svg>);
+    case 'x':
+      return (<svg width={s} height={s} viewBox="0 0 24 24"><path d="M17.8 3h3.1l-6.8 7.8L22 21h-6.2l-4.9-6.4L5.3 21H2.2l7.3-8.3L1.9 3h6.4l4.4 5.8L17.8 3zm-1.1 16.2h1.7L7.4 4.7H5.6l11.1 14.5z" fill={W} /></svg>);
+    case 'youtube':
+      return (<svg width={s} height={s} viewBox="0 0 24 24"><rect x="2.5" y="5.5" width="19" height="13" rx="4" fill={W} /><path d="M10 9.2v5.6l4.8-2.8z" fill="#FF0000" /></svg>);
+    case 'threads':
+      return (<svg width={s} height={s} viewBox="0 0 24 24" fill="none"><path d="M16.8 11.2c-.2-2.6-1.9-4-4.5-4-2.3 0-3.8 1.3-4.1 2.8M12.5 21c-4.9 0-8-3.3-8-9s3.1-9 8-9c4.3 0 7 2.4 7.8 6M16.8 11.2c.2 2.1-1 4.3-3.9 4.4-1.9.1-3.1-.9-3.1-2.3 0-1.5 1.4-2.4 3.4-2.4 3.9 0 6.5 1.6 6.5 4.4 0 3.1-3 5.7-6.7 5.7" stroke={W} strokeWidth="2" strokeLinecap="round" /></svg>);
+    case 'snapchat':
+      return (<svg width={s} height={s} viewBox="0 0 24 24"><path d="M12 3.2c2.9 0 4.9 2.2 4.9 5v1.9l1.3-.4c.6-.2 1.2.5.7 1-.5.5-1.4.8-2 1 .4 1.4 1.7 2.8 3.3 3.3.5.2.4.8-.1.9-.8.2-1.6.3-1.9.7-.2.3 0 .9-.4 1.1-.6.2-1.6-.2-2.6.1-1 .3-1.8 1.7-3.2 1.7s-2.2-1.4-3.2-1.7c-1-.3-2 .1-2.6-.1-.4-.2-.2-.8-.4-1.1-.3-.4-1.1-.5-1.9-.7-.5-.1-.6-.7-.1-.9 1.6-.5 2.9-1.9 3.3-3.3-.6-.2-1.5-.5-2-1-.5-.5.1-1.2.7-1l1.3.4V8.2c0-2.8 2-5 4.9-5z" fill={W} stroke="#111" strokeWidth="1.1" strokeLinejoin="round" /></svg>);
+    case 'whatsapp':
+      return (<svg width={s} height={s} viewBox="0 0 24 24"><path d="M12 2.8a9.1 9.1 0 0 0-7.8 13.8L3 21l4.5-1.2A9.1 9.1 0 1 0 12 2.8z" fill="none" stroke={W} strokeWidth="1.9" strokeLinejoin="round" /><path d="M9.1 7.6c-.2-.4-.4-.4-.6-.4h-.5c-.2 0-.5.1-.7.3-.2.3-.9.9-.9 2.2s1 2.5 1.1 2.7c.1.2 1.9 3 4.6 4 2.3.9 2.7.7 3.2.7.5 0 1.6-.6 1.8-1.3.2-.6.2-1.2.2-1.3-.1-.1-.3-.2-.5-.3l-1.8-.9c-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1-.2-.1-1-.4-1.9-1.2-.7-.6-1.2-1.4-1.3-1.6-.1-.2 0-.4.1-.5l.4-.5c.1-.2.2-.3.3-.5.1-.2 0-.4 0-.5l-.6-1.6z" fill={W} /></svg>);
+    case 'telegram':
+      return (<svg width={s} height={s} viewBox="0 0 24 24"><path d="M20.7 4.3L3.5 11c-1.2.5-1.2 1.2-.2 1.5l4.4 1.4 1.7 5.2c.2.6.1.8.7.8.5 0 .7-.2 1-.5l2.1-2.1 4.4 3.3c.8.4 1.4.2 1.6-.8l2.9-13.6c.3-1.2-.5-1.8-1.4-1.9zM8.6 13.5l8.9-5.6c.4-.3.8-.1.5.2l-7.3 6.6-.3 3-1.8-4.2z" fill={W} /></svg>);
+    case 'discord':
+      return (<svg width={s} height={s} viewBox="0 0 24 24"><path d="M19.3 5.4A16 16 0 0 0 15.4 4l-.5 1a14.8 14.8 0 0 0-5.8 0l-.5-1c-1.4.2-2.7.7-3.9 1.4C2.3 9.1 1.7 12.7 2 16.3a16 16 0 0 0 4.8 2.4l1-1.6c-.6-.2-1.1-.5-1.6-.8l.4-.3a11.4 11.4 0 0 0 10.8 0l.4.3c-.5.3-1 .6-1.6.8l1 1.6a16 16 0 0 0 4.8-2.4c.4-4.2-.7-7.8-2.7-10.9zM8.7 14.1c-.9 0-1.7-.9-1.7-2s.8-2 1.7-2 1.7.9 1.7 2-.8 2-1.7 2zm6.6 0c-.9 0-1.7-.9-1.7-2s.8-2 1.7-2 1.7.9 1.7 2-.8 2-1.7 2z" fill={W} /></svg>);
+    case 'twitch':
+      return (<svg width={s} height={s} viewBox="0 0 24 24"><path d="M5 3L3.5 6.5V19h4.2v2.5h2.4l2.5-2.5h3.4L21 14.1V3H5zm14 10.2l-2.7 2.7h-4.2l-2.3 2.3v-2.3H6.3V5H19v8.2z" fill={W} /><rect x="11" y="7.6" width="1.9" height="5" fill={W} /><rect x="15.2" y="7.6" width="1.9" height="5" fill={W} /></svg>);
+    case 'kick':
+      return (<svg width={s} height={s} viewBox="0 0 24 24"><path d="M4 3h5.2v4.2h2.1V5.1h2.1V3h6.6v6.3h-2.1v2.1h-2.1v1.2h2.1v2.1h2.1V21h-6.6v-2.1h-2.1v-2.1H9.2V21H4V3z" fill="#53FC18" /></svg>);
+    case 'reddit':
+      return (<svg width={s} height={s} viewBox="0 0 24 24"><ellipse cx="12" cy="14" rx="8" ry="5.6" fill={W} /><circle cx="18.6" cy="9.6" r="1.8" fill={W} /><circle cx="5.4" cy="9.6" r="1.8" fill={W} /><circle cx="17.4" cy="4.4" r="1.5" fill={W} /><path d="M12 8.4l1.2-4.6 4.1 1" stroke={W} strokeWidth="1.3" fill="none" strokeLinecap="round" /><circle cx="9" cy="13.4" r="1.3" fill="#FF4500" /><circle cx="15" cy="13.4" r="1.3" fill="#FF4500" /><path d="M9.2 16.4c1.7 1.2 3.9 1.2 5.6 0" stroke="#FF4500" strokeWidth="1.2" fill="none" strokeLinecap="round" /></svg>);
+    case 'pinterest':
+      return (<svg width={s} height={s} viewBox="0 0 24 24"><path d="M12.3 2.5C7 2.5 4.3 6.3 4.3 9.5c0 1.9.7 3.6 2.3 4.2.3.1.5 0 .6-.3l.2-.9c.1-.3 0-.4-.2-.7-.5-.6-.8-1.3-.8-2.4 0-3.1 2.3-5.8 6-5.8 3.3 0 5.1 2 5.1 4.7 0 3.5-1.6 6.5-3.9 6.5-1.3 0-2.2-1-1.9-2.3.4-1.5 1.1-3.2 1.1-4.3 0-1-.5-1.8-1.6-1.8-1.3 0-2.3 1.3-2.3 3.1 0 1.1.4 1.9.4 1.9l-1.5 6.4c-.4 1.9-.1 4.2 0 4.4 0 .1.2.2.3.1.1-.2 1.5-1.9 2-3.6l.8-3c.4.7 1.5 1.4 2.7 1.4 3.5 0 5.9-3.2 5.9-7.5 0-3.2-2.7-6.3-6.9-6.3z" fill={W} /></svg>);
+    case 'linkedin':
+      return (<svg width={s} height={s} viewBox="0 0 24 24">{txt('in', 14, W, 900, 17)}</svg>);
+    case 'github':
+      return (<svg width={s} height={s} viewBox="0 0 24 24"><path d="M12 2.5a9.5 9.5 0 0 0-3 18.5c.5.1.7-.2.7-.5v-1.7c-2.6.6-3.2-1.2-3.2-1.2-.4-1.1-1.1-1.4-1.1-1.4-.9-.6.1-.6.1-.6 1 .1 1.5 1 1.5 1 .9 1.5 2.3 1.1 2.9.8.1-.6.3-1.1.6-1.3-2.1-.2-4.3-1.1-4.3-4.7 0-1 .4-1.9 1-2.6-.1-.2-.4-1.2.1-2.5 0 0 .8-.3 2.6 1a9 9 0 0 1 4.8 0c1.8-1.2 2.6-1 2.6-1 .5 1.3.2 2.3.1 2.5.6.7 1 1.5 1 2.6 0 3.7-2.2 4.5-4.3 4.7.3.3.6.9.6 1.8v2.6c0 .3.2.6.7.5A9.5 9.5 0 0 0 12 2.5z" fill={W} /></svg>);
+    case 'spotify':
+      return (<svg width={s} height={s} viewBox="0 0 24 24" fill="none"><path d="M6 9.2c4-1.3 8.6-.9 12.2 1.1M6.8 12.6c3.3-1 7-.6 9.9 1M7.6 15.8c2.6-.7 5.3-.4 7.6.9" stroke={W} strokeWidth="2" strokeLinecap="round" /></svg>);
+    case 'soundcloud':
+      return (<svg width={s} height={s} viewBox="0 0 24 24"><path d="M11 8.5c.8-.6 1.9-1 3-1 2.6 0 4.7 2 4.9 4.5a2.8 2.8 0 0 1 0 5.6H11V8.5z" fill={W} />{[2.2, 4, 5.8, 7.6, 9.4].map((x, i) => <rect key={x} x={x} y={12 - i * 0.9} width="1.1" height={4.6 + i * 0.9} rx="0.5" fill={W} />)}</svg>);
+    case 'steam':
+      return (<svg width={s} height={s} viewBox="0 0 24 24" fill="none"><circle cx="15.5" cy="8.8" r="3.6" stroke={W} strokeWidth="1.8" /><circle cx="15.5" cy="8.8" r="1.4" fill={W} /><circle cx="8" cy="16" r="2.6" stroke={W} strokeWidth="1.8" /><path d="M2.5 13.2l3.4 1.4M10.2 14.6l2.7-3.3" stroke={W} strokeWidth="1.8" strokeLinecap="round" /></svg>);
+    case 'linktree':
+      return (<svg width={s} height={s} viewBox="0 0 24 24"><path d="M10.6 3h2.8v5.2l3.6-3.7 1.9 2-3.8 3.6h5.4v2.8h-5.4l3.8 3.7-1.9 1.9-5.2-5.2-5.2 5.2-1.9-1.9 3.8-3.7H3.1V10h5.4L4.7 6.5l1.9-2 3.9 3.7V3zm0 12.5h2.8V21h-2.8v-5.5z" fill="#000" /></svg>);
+    default:
+      return (<svg width={s} height={s} viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke={W} strokeWidth="1.8" /><path d="M3 12h18M12 3c2.6 2.6 3.8 5.6 3.8 9s-1.2 6.4-3.8 9c-2.6-2.6-3.8-5.6-3.8-9S9.4 5.6 12 3z" stroke={W} strokeWidth="1.8" /></svg>);
+  }
+}
+
+function SocialIcon({ platform, size = 40, round = false }) {
+  const meta = SOCIAL_PLATFORMS.find((p) => p.key === platform) || SOCIAL_PLATFORMS[SOCIAL_PLATFORMS.length - 1];
+  return (
+    <div style={{ width: size, height: size, borderRadius: round ? '50%' : size * 0.3, background: meta.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' }}>
+      <SocialGlyph platform={meta.key} size={size * 0.56} />
+    </div>
+  );
+}
+
+function ProfileSocialRow({ links, whatsapp }) {
+  const { theme } = useTheme();
+  const list = readSocialLinks(links);
+  const phone = cleanWhatsappNumber(whatsapp);
+  const items = [
+    ...list.map((l) => ({ key: l.url, platform: l.platform, label: l.title || (l.platform === 'website' ? socialLinkLabel(l.url, l.platform) : (SOCIAL_PLATFORMS.find((p) => p.key === l.platform) || {}).label), href: l.url })),
+    ...(phone ? [{ key: 'wa-number', platform: 'whatsapp', label: 'WhatsApp', href: `https://wa.me/${phone.replace(/^\+/, '')}` }] : []),
+  ];
+  if (!items.length) return null;
+  return (
+    <div style={{ display: 'flex', gap: 14, overflowX: 'auto', padding: '4px 2px 2px', marginTop: 14, scrollbarWidth: 'none' }}>
+      {items.map((it) => (
+        <div key={it.key} role="button" aria-label={it.label} onClick={() => window.open(it.href, '_blank', 'noopener')}
+          style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, flexShrink: 0, width: 62, cursor: 'pointer' }}>
+          <div style={{ width: 58, height: 58, borderRadius: '50%', padding: 3, boxSizing: 'border-box', background: `linear-gradient(135deg, ${theme.border}, ${theme.dark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.12)'})`, transition: 'transform 0.15s ease' }}
+            onPointerDown={(e) => { e.currentTarget.style.transform = 'scale(0.92)'; }} onPointerUp={(e) => { e.currentTarget.style.transform = 'scale(1)'; }} onPointerLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}>
+            <div style={{ width: '100%', height: '100%', borderRadius: '50%', padding: 2, boxSizing: 'border-box', background: theme.dark ? '#000' : '#fff' }}>
+              <SocialIcon platform={it.platform} size={46} round />
+            </div>
+          </div>
+          <span style={{ fontSize: 11.5, fontWeight: 600, color: theme.ink, maxWidth: 64, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.label}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SocialLinksEditor({ links, onChange, whatsapp, onWhatsappChange, labelStyle }) {
+  const { theme } = useTheme();
+  const [adding, setAdding] = useState(false);
+  const [draftUrl, setDraftUrl] = useState('');
+  const [draftTitle, setDraftTitle] = useState('');
+  const [err, setErr] = useState('');
+  const list = readSocialLinks(links);
+  const preview = normalizeSocialUrl(draftUrl);
+  const previewPlatform = preview ? detectSocialPlatform(preview) : null;
+  const add = () => {
+    const url = normalizeSocialUrl(draftUrl);
+    if (!url) { setErr('Enter a valid link'); return; }
+    if (list.some((l) => l.url === url)) { setErr('You already added this link'); return; }
+    onChange([...list.map((l) => ({ url: l.url, title: l.title })), { url, title: draftTitle.trim().slice(0, 30) }]);
+    setDraftUrl(''); setDraftTitle(''); setErr(''); setAdding(false);
+  };
+  return (
+    <div style={{ marginTop: 14 }}>
+      <div style={{ ...labelStyle, display: 'flex', justifyContent: 'space-between' }}><span>LINKS</span><span style={{ fontWeight: 600 }}>{list.length}/{SOCIAL_MAX}</span></div>
+      <div style={{ borderRadius: 16, border: `1px solid ${theme.border}`, overflow: 'hidden' }}>
+        {list.map((l, i) => (
+          <div key={l.url} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderBottom: `1px solid ${theme.border}` }}>
+            <SocialIcon platform={l.platform} size={36} round />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.title || socialLinkLabel(l.url, l.platform)}</div>
+              <div style={{ fontSize: 11.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.url.replace(/^https?:\/\//, '')}</div>
+            </div>
+            <div role="button" aria-label="Remove link" onClick={() => onChange(list.filter((_, idx) => idx !== i).map((x) => ({ url: x.url, title: x.title })))} style={{ width: 32, height: 32, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: theme.danger }}><Trash2 size={16} /></div>
+          </div>
+        ))}
+        {!adding && list.length < SOCIAL_MAX && (
+          <div role="button" onClick={() => setAdding(true)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px', cursor: 'pointer' }}>
+            <div style={{ width: 36, height: 36, borderRadius: '50%', background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.ink, fontSize: 20 }}>+</div>
+            <span style={{ fontSize: 14, fontWeight: 700, color: theme.ink }}>Add link</span>
+          </div>
+        )}
+        {adding && (
+          <div style={{ padding: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <SocialIcon platform={previewPlatform || 'website'} size={36} round />
+              <input autoFocus value={draftUrl} inputMode="url" autoCapitalize="none" autoCorrect="off" placeholder="Paste your link, like instagram.com/you"
+                onChange={(e) => { setDraftUrl(e.target.value); setErr(''); }} onKeyDown={(e) => { if (e.key === 'Enter') add(); }}
+                style={{ ...inputStyle(theme), flex: 1 }} />
+            </div>
+            <input value={draftTitle} maxLength={30} placeholder="Title (optional)" onChange={(e) => setDraftTitle(e.target.value)} style={{ ...inputStyle(theme), marginTop: 8 }} />
+            {previewPlatform && <div style={{ fontSize: 11.5, color: theme.muted, marginTop: 6 }}>Detected: <b style={{ color: theme.ink }}>{SOCIAL_PLATFORMS.find((p) => p.key === previewPlatform).label}</b></div>}
+            {err && <div style={{ fontSize: 12, color: theme.danger, marginTop: 6, fontWeight: 600 }}>{err}</div>}
+            <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+              <button onClick={() => { setAdding(false); setDraftUrl(''); setDraftTitle(''); setErr(''); }} style={{ flex: 1, padding: 10, borderRadius: 12, border: `1px solid ${theme.border}`, background: 'transparent', color: theme.ink, fontWeight: 700, fontFamily: FONT, cursor: 'pointer' }}>Cancel</button>
+              <button onClick={add} style={{ flex: 1, padding: 10, borderRadius: 12, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontFamily: FONT, cursor: 'pointer' }}>Add</button>
+            </div>
+          </div>
+        )}
+      </div>
+      <div style={{ ...labelStyle, marginTop: 14 }}>WHATSAPP NUMBER</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <SocialIcon platform="whatsapp" size={38} round />
+        <input value={whatsapp} inputMode="tel" placeholder="+94 77 123 4567" onChange={(e) => onWhatsappChange(cleanWhatsappNumber(e.target.value))} style={{ ...inputStyle(theme), flex: 1 }} />
+      </div>
+      <div style={{ fontSize: 11, color: theme.muted, marginTop: 5 }}>Include your country code. Everyone who can see your profile can see this number.</div>
+    </div>
+  );
+}
+
+const PRONOUN_OPTIONS = ['he/him', 'she/her', 'they/them', 'he/they', 'she/they', 'any pronouns'];
+
+function PronounsPicker({ value, onChange, labelStyle }) {
+  const { theme } = useTheme();
+  const selected = String(value || '').split(',').map((x) => x.trim()).filter(Boolean);
+  const toggle = (p) => {
+    const next = selected.includes(p) ? selected.filter((x) => x !== p) : [...selected, p].slice(-2);
+    onChange(next.join(', '));
+  };
+  return (
+    <div style={{ marginTop: 14 }}>
+      <div style={{ ...labelStyle, display: 'flex', justifyContent: 'space-between' }}><span>PRONOUNS</span><span style={{ fontWeight: 600 }}>up to 2</span></div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {PRONOUN_OPTIONS.map((p) => {
+          const on = selected.includes(p);
+          return (
+            <div key={p} role="button" onClick={() => toggle(p)} style={{ padding: '7px 13px', borderRadius: 16, fontSize: 12.5, cursor: 'pointer', fontWeight: 600, background: on ? theme.coral : theme.rowBg, color: on ? 'white' : theme.muted, border: `1px solid ${on ? theme.coral : theme.border}` }}>{p}</div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+const linkPreviewCache = new Map();
+const URL_IN_TEXT = /\bhttps?:\/\/[^\s<>"']+|\bwww\.[^\s<>"']+\.[a-z]{2,}[^\s<>"']*/i;
+
+function firstPreviewableUrl(text) {
+  if (typeof text !== 'string') return null;
+  const m = text.match(URL_IN_TEXT);
+  if (!m) return null;
+  const raw = m[0].replace(/[),.!?]+$/, '');
+  const url = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+  try {
+    const u = new URL(url);
+    if (/(^|\.)getzchat\.com$/i.test(u.hostname) && (u.searchParams.get('post') || u.searchParams.get('profile') || u.searchParams.get('story'))) return null;
+    return u.toString();
+  } catch { return null; }
+}
+
+function LinkPreviewCard({ url }) {
+  const { theme } = useTheme();
+  const [data, setData] = useState(() => linkPreviewCache.get(url) || null);
+  useEffect(() => {
+    if (linkPreviewCache.has(url)) { setData(linkPreviewCache.get(url)); return undefined; }
+    let cancelled = false;
+    try {
+      const stored = sessionStorage.getItem(`zchat-lp-${url}`);
+      if (stored) { const v = JSON.parse(stored); linkPreviewCache.set(url, v); setData(v); return undefined; }
+    } catch {}
+    (async () => {
+      try {
+        const { data: res, error } = await supabase.functions.invoke('link-preview', { body: { url } });
+        const value = !error && res && (res.title || res.image) ? res : { empty: true };
+        linkPreviewCache.set(url, value);
+        try { sessionStorage.setItem(`zchat-lp-${url}`, JSON.stringify(value)); } catch {}
+        if (!cancelled) setData(value);
+      } catch {
+        linkPreviewCache.set(url, { empty: true });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [url]);
+  if (!data || data.empty) return null;
+  let host = '';
+  try { host = new URL(url).hostname.replace(/^www\./, ''); } catch {}
+  const platform = detectSocialPlatform(url);
+  return (
+    <div onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); window.open(url, '_blank', 'noopener'); }}
+      style={{ marginTop: 6, width: 250, maxWidth: '100%', borderRadius: 12, overflow: 'hidden', cursor: 'pointer', background: theme.dark ? 'rgba(0,0,0,0.28)' : 'rgba(0,0,0,0.05)', border: `1px solid ${theme.dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'}` }}>
+      {data.image && (
+        <div style={{ width: '100%', aspectRatio: '1.91 / 1', background: '#111' }}>
+          <img src={data.image} alt="" loading="lazy" draggable={false} onError={(e) => { e.currentTarget.parentElement.style.display = 'none'; }} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+        </div>
+      )}
+      <div style={{ padding: '8px 10px', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+        {platform !== 'website' && <SocialIcon platform={platform} size={22} round />}
+        <div style={{ minWidth: 0, flex: 1 }}>
+          {data.title && <div style={{ fontSize: 13, fontWeight: 700, color: theme.ink, lineHeight: 1.3, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{data.title}</div>}
+          {data.description && <div style={{ fontSize: 11.5, color: theme.muted, lineHeight: 1.35, marginTop: 2, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{data.description}</div>}
+          <div style={{ fontSize: 11, color: theme.muted, marginTop: 3 }}>{data.siteName || host}</div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -9295,6 +9740,13 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [stickerSheetFor, setStickerSheetFor] = useState(null);
   const [celebrateTier, setCelebrateTier] = useState(null);
   const [deepPost, setDeepPost] = useState(null);
+  const [reportThanks, setReportThanks] = useState(null);
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [recordLocked, setRecordLocked] = useState(false);
+  const [recordDragX, setRecordDragX] = useState(0);
+  const recordCancelRef = useRef(false);
+  const recordGestureRef = useRef(null);
+  const cameraGalleryRef = useRef(null);
   const blockRefreshTimerRef = useRef(null);
   const blockRefreshRef = useRef(null);
   const [activeGroupCall, setActiveGroupCall] = useState(null);
@@ -10744,12 +11196,17 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         stream.getTracks().forEach((t) => t.stop());
         clearInterval(recordTimerRef.current);
         setRecording(false);
+        setRecordLocked(false);
+        setRecordDragX(0);
+        mediaRecorderRef.current = null;
+        if (recordCancelRef.current) { recordCancelRef.current = false; return; }
         if (!activeProfile && !activeGroup) return;
         const blob = new Blob(audioChunksRef.current, { type: actualMime });
         if (blob.size < 1000) {
-          alert('That recording was too short or got cut off, please try again.');
+          showSnack('Hold the mic a little longer to record');
           return;
         }
+        playUiSound('send');
         const file = new File([blob], `voice.${ext}`, { type: actualMime });
         setUploading(true);
         const { url, error } = await uploadMedia(file, session.user.id);
@@ -10766,6 +11223,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       mediaRecorderRef.current = recorder;
       recorder.start(250);
       recordStartRef.current = Date.now();
+      recordCancelRef.current = false;
+      playUiSound('record-start');
       setRecording(true);
       setRecordSeconds(0);
       recordTimerRef.current = setInterval(() => setRecordSeconds((s) => s + 1), 1000);
@@ -10775,6 +11234,37 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     }
   };
 
+  const cancelRecording = () => {
+    recordCancelRef.current = true;
+    playUiSound('cancel');
+    if (!mediaRecorderRef.current) { pendingStopRef.current = true; return; }
+    try { mediaRecorderRef.current.stop(); } catch {}
+  };
+  const onMicDown = (e) => {
+    e.preventDefault();
+    if (recording) return;
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
+    recordGestureRef.current = { x: e.clientX, y: e.clientY, locked: false, cancelled: false };
+    setRecordDragX(0);
+    setRecordLocked(false);
+    startRecording();
+  };
+  const onMicMove = (e) => {
+    const g = recordGestureRef.current;
+    if (!g || g.locked || g.cancelled) return;
+    const dx = Math.min(0, e.clientX - g.x);
+    const dy = e.clientY - g.y;
+    if (dy < -70) { g.locked = true; setRecordLocked(true); setRecordDragX(0); if (navigator.vibrate) navigator.vibrate(15); return; }
+    setRecordDragX(dx);
+    if (dx < -110) { g.cancelled = true; setRecordDragX(0); cancelRecording(); }
+  };
+  const onMicUp = () => {
+    const g = recordGestureRef.current;
+    recordGestureRef.current = null;
+    if (!g || g.locked || g.cancelled) return;
+    setRecordDragX(0);
+    stopRecording();
+  };
   const stopRecording = () => {
     if (!mediaRecorderRef.current) { pendingStopRef.current = true; return; }
     const elapsed = Date.now() - recordStartRef.current;
@@ -10790,6 +11280,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   };
 
   const handleReport = async (profile, reason) => {
+    setReportThanks({ profile });
     await reportUser(session.user.id, profile.id, reason);
     await sendReportMail(profile.id, reason);
   };
@@ -10886,13 +11377,15 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     let id = reportModalFor;
     if (id === '__selection__') id = selectedMessages[0]?.id;
     else if (id === '__viewer__') id = messages.find((x) => x.media_url === viewerUrl)?.id;
-    if (id) {
-      await supabase.from('message_reports').insert({ reporter_id: session.user.id, message_id: id, reason });
-      const reportedMsg = findMessageById(id);
-      if (reportedMsg) await sendReportMail(reportedMsg.sender_id, reason);
-    }
     setReportModalFor(null);
     cancelSelection();
+    if (id) {
+      const reportedMsg = findMessageById(id);
+      const senderProfile = reportedMsg ? (activeGroup ? ((groupMembers.find((gm) => gm.user_id === reportedMsg.sender_id) || {}).profile || null) : (activeProfile && activeProfile.id === reportedMsg.sender_id ? activeProfile : null)) : null;
+      setReportThanks({ profile: senderProfile && senderProfile.id !== session.user.id ? senderProfile : null });
+      await supabase.from('message_reports').insert({ reporter_id: session.user.id, message_id: id, reason });
+      if (reportedMsg) await sendReportMail(reportedMsg.sender_id, reason);
+    }
   };
 
   const reactToMessage = async (messageId, emoji) => {
@@ -11136,6 +11629,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   };
 
   const likeStory = async (story, like) => {
+    playUiSound('like');
     setStoryData((prev) => { const liked = new Set(prev.liked); if (like) liked.add(story.id); else liked.delete(story.id); return { ...prev, liked }; });
     if (like) {
       await supabase.from('story_likes').upsert({ story_id: story.id, user_id: session.user.id }, { onConflict: 'story_id,user_id' });
@@ -11158,17 +11652,29 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   };
 
   const repostStory = async (story, owner) => {
+    const mine = (storyData.byUser[session.user.id] || []);
+    if (mine.some((s) => s.repost_of === story.id)) return 'already';
+    const { data: existing } = await supabase.from('stories').select('id').eq('user_id', session.user.id).eq('repost_of', story.id).gt('expires_at', new Date().toISOString()).limit(1);
+    if (existing && existing.length) return 'already';
+    playUiSound('repost');
     const { error } = await supabase.from('stories').insert({
       user_id: session.user.id, media_url: story.media_url, media_type: story.media_type, overlay_url: story.overlay_url || null,
       caption: null, mentions: [], repost_of: story.id, repost_label: owner.username,
     });
-    if (error) { showSnack(friendlyError(error, "Couldn't add it to your story. Try again.")); return; }
+    if (error) {
+      if (/duplicate|unique/i.test(error.message || '')) return 'already';
+      showSnack(friendlyError(error, "Couldn't add it to your story. Try again."));
+      return 'error';
+    }
     notifyUser(owner.id, me.name, 'shared your story to their story', `/?story=${session.user.id}`, me.avatar);
     if (storyFeedRef.current) storyFeedRef.current.send({ type: 'broadcast', event: 'story', payload: { userId: session.user.id } });
     loadStories();
+    return 'ok';
   };
 
   const deleteStory = async (story) => {
+    playUiSound('delete');
+    setStoryData((prev) => ({ ...prev, byUser: { ...prev.byUser, [story.user_id]: (prev.byUser[story.user_id] || []).filter((s) => s.id !== story.id) } }));
     await supabase.from('stories').delete().eq('id', story.id).eq('user_id', session.user.id);
     if (storyFeedRef.current) storyFeedRef.current.send({ type: 'broadcast', event: 'story', payload: { userId: session.user.id } });
     setStoryData((prev) => ({ ...prev, byUser: { ...prev.byUser, [story.user_id]: (prev.byUser[story.user_id] || []).filter((s) => s.id !== story.id) } }));
@@ -11223,7 +11729,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const owner = story.user_id === session.user.id ? me : (await cachedProfile(story.user_id));
     if (!owner) { showSnack('This story is no longer available'); return; }
     const { data: list } = await supabase.from('stories').select('*').eq('user_id', story.user_id).gt('expires_at', new Date().toISOString()).order('created_at', { ascending: true });
-    setStoryViewer({ key: Date.now(), groupsList: [{ profile: owner, stories: (list && list.length) ? list : [story] }], startGroup: 0, startStoryId: story.id });
+    setStoryViewer({ key: Date.now(), groupsList: [{ profile: owner, stories: (list && list.length) ? list : [story] }], startGroup: 0, startStoryId: story.id, detached: true });
   };
 
   openStoryRefRef.current = openStoryRef;
@@ -11302,6 +11808,18 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     },
   });
   callEngineRef.current = callEngine;
+  useEffect(() => {
+    if (!storyViewer || storyViewer.readOnly || storyViewer.detached) return;
+    const live = new Set();
+    Object.values(storyData.byUser || {}).forEach((list) => (list || []).forEach((s) => live.add(s.id)));
+    const next = storyViewer.groupsList
+      .map((g) => ({ ...g, stories: g.stories.filter((s) => live.has(s.id)) }))
+      .filter((g) => g.stories.length);
+    const changed = next.length !== storyViewer.groupsList.length || next.some((g, i) => g.stories.length !== storyViewer.groupsList[i].stories.length);
+    if (!changed) return;
+    if (!next.length) { setStoryViewer(null); return; }
+    setStoryViewer((prev) => (prev ? { ...prev, groupsList: next } : prev));
+  }, [storyData]);
   useEffect(() => {
     if (!me || !me.verified || !VERIFIED_TIERS[me.verified]) return;
     if (me.verified_seen === me.verified) return;
@@ -11949,7 +12467,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               <ArrowLeft size={20} style={{ cursor: 'pointer', color: activeNameBarKey ? 'white' : theme.ink, flexShrink: 0, filter: activeNameBarKey ? 'drop-shadow(0 1px 3px rgba(0,0,0,0.6))' : 'none', position: 'relative' }}
                 onClick={(e) => { e.stopPropagation(); if (activeConvForBar && myLocks[activeConvForBar.id]) lastLeftChatAtRef.current[activeConvForBar.id] = Date.now(); if (activeGroup) markGroupRead(activeGroup.id); if (reloadListsRef.current) reloadListsRef.current(); loadUnreadCounts(); setMobileShowChat(false); setActiveProfile(null); setActiveGroup(null); }} />
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, position: 'relative' }}>
-                {activeGroup ? <GroupAvatar avatar={activeGroup.avatar} name={activeGroup.name} size={38} /> : <AvatarFrame size={34} tier={activeProfile.verified}><Avatar emoji={activeProfile.avatar} name={activeProfile.name} online={isUserOnline(activeProfile) && !activeProfile.hide_activity} size={34} /></AvatarFrame>}
+                {activeGroup ? <GroupAvatar avatar={activeGroup.avatar} name={activeGroup.name} size={38} /> : AVATAR_FRAMES[activeProfile.avatar_frame] ? <div style={{ margin: '0 6px' }}><FramedAvatar frame={activeProfile.avatar_frame} size={36}><Avatar emoji={activeProfile.avatar} name={activeProfile.name} online={isUserOnline(activeProfile) && !activeProfile.hide_activity} size={36} /></FramedAvatar></div> : <AvatarFrame size={34} tier={activeProfile.verified}><Avatar emoji={activeProfile.avatar} name={activeProfile.name} online={isUserOnline(activeProfile) && !activeProfile.hide_activity} size={34} /></AvatarFrame>}
                 <div style={{ minWidth: 0 }}>
                   <div style={{
                     fontWeight: 800, fontSize: 14.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
@@ -12147,15 +12665,30 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                 <div style={{ flex: 1, textAlign: 'center', padding: '10px 4px', fontSize: 12.5, color: theme.muted, fontWeight: 600 }}>
                   This account no longer exists. You can't send new messages here.
                 </div>
-              ) : recording ? (
-                <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 10, background: theme.inputBg, borderRadius: 22, padding: '9px 16px' }}>
-                  <div style={{ width: 9, height: 9, borderRadius: '50%', background: theme.danger, animation: 'zchat-love-pulse 1s infinite' }} />
-                  <span style={{ fontSize: 13, color: theme.ink, fontWeight: 700 }}>Recording {Math.floor(recordSeconds / 60)}:{(recordSeconds % 60).toString().padStart(2, '0')}</span>
-                  <div style={{ flex: 1 }} />
-                  <X size={17} color={theme.muted} style={{ cursor: 'pointer' }} onClick={() => { mediaRecorderRef.current?.stream?.getTracks().forEach((t) => t.stop()); clearInterval(recordTimerRef.current); setRecording(false); mediaRecorderRef.current = null; }} />
+              ) : (recording && recordLocked) ? (
+                <div className="zchat-fade" style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div role="button" aria-label="Delete recording" onClick={cancelRecording} style={{ width: 40, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: theme.danger, flexShrink: 0 }}><Trash2 size={20} /></div>
+                  <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 10, background: theme.inputBg, borderRadius: 22, padding: '10px 16px', border: `1px solid ${theme.border}` }}>
+                    <div style={{ width: 9, height: 9, borderRadius: '50%', background: '#FF3B30', animation: 'zchat-love-pulse 1s infinite' }} />
+                    <span style={{ fontSize: 14, color: theme.ink, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{Math.floor(recordSeconds / 60)}:{(recordSeconds % 60).toString().padStart(2, '0')}</span>
+                    <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 2, height: 18, overflow: 'hidden' }}>
+                      {voiceBars(`live-${recordSeconds}`, 22).map((b, i) => <div key={i} style={{ flex: 1, height: `${Math.round(b * 100)}%`, borderRadius: 2, background: theme.coral, opacity: 0.75 }} />)}
+                    </div>
+                  </div>
+                  <div role="button" aria-label="Send voice message" onClick={() => { setRecordLocked(false); stopRecording(); }} style={{ width: 44, height: 44, borderRadius: '50%', background: theme.coral, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}><Send size={18} color="white" style={{ marginLeft: -1 }} /></div>
                 </div>
               ) : (
                 <>
+                  {recording ? (
+                    <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 10, height: 40, padding: '0 6px 0 12px', overflow: 'hidden' }}>
+                      <div style={{ width: 9, height: 9, borderRadius: '50%', background: '#FF3B30', animation: 'zchat-love-pulse 1s infinite', flexShrink: 0 }} />
+                      <span style={{ fontSize: 14, color: theme.ink, fontWeight: 700, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>{Math.floor(recordSeconds / 60)}:{(recordSeconds % 60).toString().padStart(2, '0')}</span>
+                      <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, color: theme.muted, fontSize: 13.5, fontWeight: 600, transform: `translateX(${recordDragX}px)`, opacity: Math.max(0.2, 1 + recordDragX / 140), whiteSpace: 'nowrap' }}>
+                        <ChevronLeft size={16} /> Slide to cancel
+                      </div>
+                    </div>
+                  ) : (
+                  <>
                   <div onClick={() => setShowAttach((s) => !s)} style={{
                     width: 40, height: 40, borderRadius: '50%', background: theme.rowBg, display: 'flex',
                     alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, color: theme.coralDeep,
@@ -12184,20 +12717,35 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                       fontFamily: FONT, fontSize: 15, outline: 'none', lineHeight: 1.35,
                     }}
                   />
-                  {(draft.trim() || pendingMedia.length > 0) ? (
-                    <div onPointerDown={(e) => e.preventDefault()} onMouseDown={(e) => e.preventDefault()} onClick={editingMessage ? saveEdit : send} style={{
+                  </>
+                  )}
+                  {(!recording && (draft.trim() || pendingMedia.length > 0)) ? (
+                    <div onPointerDown={(e) => e.preventDefault()} onMouseDown={(e) => e.preventDefault()} onClick={() => { if (!editingMessage) playUiSound('send'); (editingMessage ? saveEdit : send)(); }} style={{
                       width: 40, height: 40, borderRadius: '50%', background: theme.coral, display: 'flex',
                       alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0,
                     }}><Send size={17} color="white" style={{ marginLeft: -1 }} /></div>
                   ) : (
-                    <div
-                      onPointerDown={(e) => { e.preventDefault(); startRecording(); }}
-                      onPointerUp={stopRecording}
-                      onPointerLeave={stopRecording}
-                      style={{
-                        width: 40, height: 40, borderRadius: '50%', background: theme.coral, display: 'flex',
-                        alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, touchAction: 'none',
-                      }}><Mic size={17} color="white" /></div>
+                    <div style={{ position: 'relative', width: 40, height: 40, flexShrink: 0 }}>
+                      {recording && (
+                        <div className="zchat-fade" style={{ position: 'absolute', left: '50%', bottom: 62, transform: 'translateX(-50%)', width: 36, padding: '8px 0', borderRadius: 18, background: theme.panelBg, border: `1px solid ${theme.border}`, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, color: theme.muted, boxShadow: '0 6px 18px rgba(0,0,0,0.25)' }}>
+                          <Lock size={15} />
+                          <ChevronLeft size={14} style={{ transform: 'rotate(90deg)' }} />
+                        </div>
+                      )}
+                      <div
+                        role="button" aria-label="Hold to record"
+                        onPointerDown={onMicDown}
+                        onPointerMove={onMicMove}
+                        onPointerUp={onMicUp}
+                        onPointerCancel={onMicUp}
+                        onContextMenu={(e) => e.preventDefault()}
+                        style={{
+                          position: 'absolute', left: '50%', top: '50%', width: 40, height: 40, borderRadius: '50%', background: theme.coral, display: 'flex',
+                          alignItems: 'center', justifyContent: 'center', cursor: 'pointer', touchAction: 'none', userSelect: 'none',
+                          transform: `translate(-50%, -50%) scale(${recording ? 1.55 : 1})`, transition: 'transform 0.18s cubic-bezier(0.2, 0.9, 0.3, 1.3)',
+                          boxShadow: recording ? `0 0 0 8px ${theme.coral}33` : 'none', zIndex: 2,
+                        }}><Mic size={17} color="white" /></div>
+                    </div>
                   )}
                 </>
               )}
@@ -12216,12 +12764,16 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
             {showAttach && (
               <div style={{ position: 'absolute', bottom: 76, left: 14, zIndex: 12, display: 'flex', gap: 10 }} className="zchat-fade">
+                <div role="button" aria-label="Camera" onClick={() => { setShowAttach(false); setCameraOpen(true); }} style={{
+                  width: 52, height: 52, borderRadius: '50%', background: '#111827', display: 'flex',
+                  alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 6px 16px rgba(0,0,0,0.2)',
+                }}><Camera size={21} color="white" /></div>
                 <label style={{
                   width: 52, height: 52, borderRadius: '50%', background: theme.coral, display: 'flex',
                   alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 6px 16px rgba(0,0,0,0.2)',
                 }}>
                   <ImageIcon size={20} color="white" />
-                  <input type="file" accept="image/*,video/*" multiple style={{ display: 'none' }} onChange={handleFile} />
+                  <input ref={cameraGalleryRef} type="file" accept="image/*,video/*" multiple style={{ display: 'none' }} onChange={handleFile} />
                 </label>
                 <label style={{
                   width: 52, height: 52, borderRadius: '50%', background: theme.coralDeep, display: 'flex',
@@ -12494,6 +13046,15 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           })()}
           onOpen={() => callEngine.minimize(false)} onHangup={callEngine.hangup} />
       )}
+      {reportThanks && (
+        <ReportThanksSheet profile={reportThanks.profile} isBlocked={!!(reportThanks.profile && myBlockedIds.has(reportThanks.profile.id))}
+          onBlock={(p) => setBlockConfirmFor(p)} onClose={() => setReportThanks(null)} />
+      )}
+      {cameraOpen && (
+        <CameraCapture onClose={() => setCameraOpen(false)}
+          onPickGallery={() => { setCameraOpen(false); if (cameraGalleryRef.current) cameraGalleryRef.current.click(); }}
+          onCapture={(file) => { setCameraOpen(false); openMediaComposer([file]); }} />
+      )}
       {deepPost && (
         <PostViewer post={deepPost.post} owner={deepPost.owner} userId={session.user.id} meProfile={me}
           onClose={() => setDeepPost(null)} onDeleted={() => setDeepPost(null)} />
@@ -12520,6 +13081,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           highlightLike={storyViewer.highlight ? { liked: storyViewer.highlight.liked, count: storyViewer.highlight.count, onToggle: toggleHighlightLike } : null}
           myId={session.user.id} seen={storyData.seen} liked={storyData.liked}
           onSeen={markStorySeen} onClose={() => setStoryViewer(null)} onLike={likeStory} onReply={replyToStory} onRepost={repostStory}
+          initialRepostedIds={(storyData.byUser[session.user.id] || []).map((s) => s.repost_of).filter(Boolean)}
           onDelete={deleteStory} onReport={(p) => { setStoryViewer(null); setReportUserTarget(p); }}
           onAddStory={() => { setStoryViewer(null); if (storyInputRef.current) storyInputRef.current.click(); }}
           onShare={(story, owner) => setStoryShareFor({ story, owner })} externalPause={!!storyShareFor}
