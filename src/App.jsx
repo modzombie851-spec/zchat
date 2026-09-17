@@ -348,6 +348,8 @@ function GlobalStyle() {
       @keyframes zchat-confetti { 0% { transform: translateY(-20px) rotate(0deg); } 100% { transform: translateY(110vh) rotate(720deg); } }
       @keyframes zchat-badge-pulse { 0%, 100% { transform: scale(0.94); opacity: 0.75; } 50% { transform: scale(1.06); opacity: 1; } }
       @keyframes zchat-frame-spin { to { transform: rotate(360deg); } }
+      @keyframes zchat-frame-fire { 0%, 100% { filter: brightness(1) saturate(1.05) drop-shadow(0 0 4px rgba(255,90,20,0.45)); } 25% { filter: brightness(1.12) saturate(1.2) drop-shadow(0 0 9px rgba(255,120,30,0.7)); } 50% { filter: brightness(0.96) saturate(1.1) drop-shadow(0 0 5px rgba(255,70,10,0.5)); } 75% { filter: brightness(1.18) saturate(1.25) drop-shadow(0 0 11px rgba(255,140,40,0.75)); } }
+      @keyframes zchat-frame-ice { 0%, 100% { filter: brightness(1) drop-shadow(0 0 4px rgba(56,189,248,0.4)); } 50% { filter: brightness(1.15) drop-shadow(0 0 12px rgba(56,189,248,0.8)); } }
       @keyframes zchat-post-heart { 0% { transform: scale(0); opacity: 0; } 15% { transform: scale(1.2); opacity: 1; } 30% { transform: scale(0.95); } 45% { transform: scale(1); } 80% { transform: scale(1); opacity: 1; } 100% { transform: scale(0.2) translateY(-60px); opacity: 0; } }
       img, video { -webkit-touch-callout: none; -webkit-user-drag: none; }
       body { -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
@@ -3904,7 +3906,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
                     : <span style={{ fontSize: 72, fontWeight: 800, color: 'rgba(255,255,255,0.92)', fontFamily: FONT }}>{initial}</span>}
                 </div>
                 {AVATAR_FRAMES[profile.avatar_frame] && (
-                  <img src={AVATAR_FRAMES[profile.avatar_frame].file} alt="" draggable={false} onError={(e) => { const el = e.currentTarget; const fb = AVATAR_FRAMES[profile.avatar_frame].fallback; if (fb && !el.dataset.fallback) { el.dataset.fallback = '1'; el.src = fb; } }} style={{ position: 'absolute', width: 150 * AVATAR_FRAMES[profile.avatar_frame].scale, height: 150 * AVATAR_FRAMES[profile.avatar_frame].scale, left: 75 - (150 * AVATAR_FRAMES[profile.avatar_frame].scale) / 2, top: 75 - 150 * AVATAR_FRAMES[profile.avatar_frame].scale * AVATAR_FRAMES[profile.avatar_frame].centerY, pointerEvents: 'none', zIndex: 2 }} />
+                  <img src={AVATAR_FRAMES[profile.avatar_frame].file} alt="" draggable={false} onError={(e) => { const el = e.currentTarget; const fb = AVATAR_FRAMES[profile.avatar_frame].fallback; if (fb && !el.dataset.fallback) { el.dataset.fallback = '1'; el.src = fb; } }} style={{ position: 'absolute', width: 150 * AVATAR_FRAMES[profile.avatar_frame].scale, height: 150 * AVATAR_FRAMES[profile.avatar_frame].scale, left: 75 - 150 * AVATAR_FRAMES[profile.avatar_frame].scale * (AVATAR_FRAMES[profile.avatar_frame].centerX ?? 0.5), top: 75 - 150 * AVATAR_FRAMES[profile.avatar_frame].scale * AVATAR_FRAMES[profile.avatar_frame].centerY, pointerEvents: 'none', zIndex: 2, animation: AVATAR_FRAMES[profile.avatar_frame].animation || 'none' }} />
                 )}
                 {isOnline && !AVATAR_FRAMES[profile.avatar_frame] && <div style={{ position: 'absolute', right: 14, bottom: 14, width: 26, height: 26, borderRadius: '50%', background: '#22c55e', border: `5px solid ${pageBg}`, zIndex: 3 }} />}
               </div>
@@ -9173,7 +9175,8 @@ function AudioBubble({ url, isMe }) {
 }
 
 const AVATAR_FRAMES = {
-  laurel: { file: '/frames/laurel.gif', fallback: '/laurel.gif', label: 'Golden laurel frame', scale: 1.86, centerY: 0.5 },
+  fire_wolf: { file: '/frames/frame-fire-wolf.webp', fallback: '/frame-fire-wolf.webp', label: 'Inferno wolf frame', scale: 1.578, centerX: 0.4997, centerY: 0.4603, animation: 'zchat-frame-fire 2.2s ease-in-out infinite' },
+  ice_wolf: { file: '/frames/frame-ice-wolf.webp', fallback: '/frame-ice-wolf.webp', label: 'Frost wolf frame', scale: 1.539, centerX: 0.4967, centerY: 0.4854, animation: 'zchat-frame-ice 3s ease-in-out infinite' },
 };
 
 function FramedAvatar({ frame, size, children }) {
@@ -9184,8 +9187,8 @@ function FramedAvatar({ frame, size, children }) {
     <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
       {children}
       <img src={spec.file} alt="" draggable={false} onError={(e) => { const el = e.currentTarget; if (spec.fallback && !el.dataset.fallback) { el.dataset.fallback = '1'; el.src = spec.fallback; } }} style={{
-        position: 'absolute', width: w, height: w, left: size / 2 - w / 2, top: size / 2 - w * spec.centerY,
-        pointerEvents: 'none', userSelect: 'none', filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.35))', zIndex: 2,
+        position: 'absolute', width: w, height: w, left: size / 2 - w * (spec.centerX ?? 0.5), top: size / 2 - w * spec.centerY,
+        pointerEvents: 'none', userSelect: 'none', zIndex: 2, animation: spec.animation || 'none',
       }} />
     </div>
   );
