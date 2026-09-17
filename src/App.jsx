@@ -3576,6 +3576,17 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
   const [followerCount, setFollowerCount] = useState(cachedStats.followers ?? null);
   const [followingCount, setFollowingCount] = useState(cachedStats.following ?? null);
   const [mutualCount, setMutualCount] = useState(cachedStats.mutual ?? null);
+  const [postCount, setPostCount] = useState(cachedStats.posts ?? null);
+  useEffect(() => {
+    let cancelled = false;
+    supabase.from('posts').select('*', { count: 'exact', head: true }).eq('user_id', profile.id).then(({ count, error }) => {
+      if (cancelled) return;
+      const value = error ? 0 : (count || 0);
+      setPostCount(value);
+      saveProfileStats(profile.id, { posts: value });
+    });
+    return () => { cancelled = true; };
+  }, [profile.id]);
   const [followBusy, setFollowBusy] = useState(false);
   const [username, setUsername] = useState(profile.username || '');
   const [displayName, setDisplayName] = useState(profile.name || '');
@@ -3769,10 +3780,10 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
   const showBio = canSeeDetails && profile.bio && (isSelf || !profile.hide_bio);
   const labelStyle = { fontSize: 11.5, color: theme.muted, marginBottom: 5, fontWeight: 800, letterSpacing: '0.04em' };
   const pillBtn = (primary) => ({
-    flex: 1, height: 44, padding: '0 10px', borderRadius: 14, cursor: 'pointer', fontFamily: FONT, fontSize: 13.5, fontWeight: 700, boxSizing: 'border-box', whiteSpace: 'nowrap', minWidth: 0,
+    flex: 1, height: 46, padding: '0 10px', borderRadius: 16, cursor: 'pointer', fontFamily: FONT, fontSize: 13.5, fontWeight: 700, boxSizing: 'border-box', whiteSpace: 'nowrap', minWidth: 0,
     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
-    border: primary ? 'none' : `1px solid ${theme.border}`,
-    background: primary ? `linear-gradient(135deg, ${theme.coral}, ${theme.coralDeep || theme.coral})` : theme.rowBg,
+    border: primary ? 'none' : `1px solid ${theme.dark ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.06)'}`,
+    background: primary ? `linear-gradient(135deg, ${theme.coral}, #8b5cf6)` : (theme.dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)'),
     color: primary ? 'white' : theme.ink,
     boxShadow: primary ? `0 6px 16px ${theme.coral}40` : 'none',
   });
@@ -3784,6 +3795,15 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
     </div>
   );
   const statDivider = <div style={{ width: 1, height: 16, background: theme.border, alignSelf: 'center' }} />;
+  const pageBg = theme.dark ? '#000' : '#fff';
+  const glassFill = theme.dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)';
+  const glassCircle = { width: 38, height: 38, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: theme.ink, background: theme.dark ? 'rgba(0,0,0,0.35)' : 'rgba(255,255,255,0.65)', border: `1px solid ${theme.dark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.06)'}`, backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' };
+  const statTile = (value, label, onClick) => (
+    <div role={onClick ? 'button' : undefined} onClick={onClick} style={{ padding: '11px 4px', borderRadius: 18, textAlign: 'center', cursor: onClick ? 'pointer' : 'default', background: glassFill, border: `1px solid ${theme.dark ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.06)'}` }}>
+      <div style={{ fontSize: 19, fontWeight: 800, color: theme.ink, letterSpacing: '-0.02em', minHeight: 23 }}>{value == null ? '' : formatCount(value)}</div>
+      <div style={{ fontSize: 11.5, color: theme.muted, fontWeight: 600, marginTop: 1 }}>{label}</div>
+    </div>
+  );
 
   const sheetRow = (icon, label, onClick, danger) => (
     <div onClick={onClick} style={{
@@ -3796,6 +3816,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
     <div onClick={(e) => { if (e.target === e.currentTarget && !editing) onClose(); }} style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(5,8,16,0.6)', display: 'flex', justifyContent: 'center' }} className="zchat-fade">
     <div style={{ width: '100%', maxWidth: 560, height: '100%', background: theme.dark ? '#000' : '#fff', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden' }}>
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain', touchAction: 'pan-y' }}>
+        {editing ? (
         <div style={{ position: 'relative', height: 'min(42vh, 320px)', minHeight: 240, background: hasPhoto ? '#000' : colorForName(profile.name), overflow: 'hidden' }}>
           {hasPhoto ? (
             <img src={shownPhoto} alt="" draggable={false} onContextMenu={(e) => e.preventDefault()} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
@@ -3847,8 +3868,64 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
             )}
           </div>
         </div>
+        ) : (
+          <div style={{ position: 'relative', paddingBottom: 4 }}>
+            <div style={{ position: 'absolute', left: -60, right: -60, top: -60, height: 540, overflow: 'hidden', pointerEvents: 'none' }}>
+              {hasPhoto
+                ? <img src={shownPhoto} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'blur(42px) saturate(1.35)', opacity: theme.dark ? 0.85 : 0.6, transform: 'scale(1.12)' }} />
+                : <div style={{ position: 'absolute', inset: 0, background: colorForName(profile.name), filter: 'blur(50px)', opacity: theme.dark ? 0.75 : 0.5 }} />}
+            </div>
+            <div style={{ position: 'absolute', left: 0, right: 0, top: 0, height: 480, pointerEvents: 'none', background: `linear-gradient(180deg, ${theme.dark ? 'rgba(0,0,0,0.28)' : 'rgba(255,255,255,0.15)'} 0%, ${theme.dark ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.05)'} 38%, ${pageBg} 100%)` }} />
 
-        <div style={{ padding: '16px 18px', paddingBottom: 'calc(28px + env(safe-area-inset-bottom))', maxWidth: 520, margin: '0 auto' }}>
+            <div style={{ position: 'relative', zIndex: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 14px', paddingTop: 'calc(12px + env(safe-area-inset-top))' }}>
+              <div role="button" aria-label="Close" onClick={onClose} style={glassCircle}><ArrowLeft size={19} /></div>
+              <div style={{ fontWeight: 800, fontSize: 16, color: theme.ink, display: 'flex', alignItems: 'center', minWidth: 0, maxWidth: '55%' }}>
+                <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{profile.username}</span>
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {isSelf && <div role="button" aria-label="Share profile" onClick={() => setShowShare(true)} style={glassCircle}><Share2 size={17} /></div>}
+                {isSelf
+                  ? <div role="button" aria-label="Settings" onClick={onOpenSettings} style={glassCircle}><SettingsIcon size={17} /></div>
+                  : <div role="button" aria-label="More" onClick={() => setShowMore(true)} style={glassCircle}><MoreVertical size={18} /></div>}
+              </div>
+            </div>
+
+            <div style={{ position: 'relative', zIndex: 2, display: 'flex', justifyContent: 'center', marginTop: AVATAR_FRAMES[profile.avatar_frame] ? 64 : 22 }}>
+              <div style={{ position: 'relative', width: AVATAR_FRAMES[profile.avatar_frame] ? 150 : 176, height: AVATAR_FRAMES[profile.avatar_frame] ? 150 : 176 }}>
+                {!AVATAR_FRAMES[profile.avatar_frame] && (
+                  <>
+                    <div style={{ position: 'absolute', inset: -9, borderRadius: '50%', background: 'conic-gradient(#f59e0b, #ef4444, #d946ef, #6366f1, #22d3ee, #f59e0b)', animation: 'zchat-frame-spin 6s linear infinite' }} />
+                    <div style={{ position: 'absolute', inset: -5, borderRadius: '50%', background: pageBg }} />
+                  </>
+                )}
+                <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', overflow: 'hidden', background: hasPhoto ? '#000' : colorForName(profile.name), boxShadow: '0 20px 60px rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {hasPhoto
+                    ? <img src={shownPhoto} alt="" draggable={false} onContextMenu={(e) => e.preventDefault()} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                    : <span style={{ fontSize: 72, fontWeight: 800, color: 'rgba(255,255,255,0.92)', fontFamily: FONT }}>{initial}</span>}
+                </div>
+                {AVATAR_FRAMES[profile.avatar_frame] && (
+                  <img src={AVATAR_FRAMES[profile.avatar_frame].file} alt="" draggable={false} style={{ position: 'absolute', width: 150 * AVATAR_FRAMES[profile.avatar_frame].scale, height: 150 * AVATAR_FRAMES[profile.avatar_frame].scale, left: 75 - (150 * AVATAR_FRAMES[profile.avatar_frame].scale) / 2, top: 75 - 150 * AVATAR_FRAMES[profile.avatar_frame].scale * AVATAR_FRAMES[profile.avatar_frame].centerY, pointerEvents: 'none', zIndex: 2 }} />
+                )}
+                {isOnline && !AVATAR_FRAMES[profile.avatar_frame] && <div style={{ position: 'absolute', right: 14, bottom: 14, width: 26, height: 26, borderRadius: '50%', background: '#22c55e', border: `5px solid ${pageBg}`, zIndex: 3 }} />}
+              </div>
+            </div>
+
+            <div style={{ position: 'relative', zIndex: 2, textAlign: 'center', marginTop: AVATAR_FRAMES[profile.avatar_frame] ? 64 : 18, padding: '0 20px' }}>
+              <div style={{ fontSize: 27, fontWeight: 900, color: theme.ink, letterSpacing: '-0.02em', lineHeight: 1.15, wordBreak: 'break-word' }}>{profile.name}<VerifiedBadge tier={profile.verified} size={22} /></div>
+              <div style={{ fontSize: 13.5, color: theme.muted, marginTop: 4 }}>
+                @{profile.username}{profile.pronouns ? ` · ${profile.pronouns}` : ''}{infoBits.map((b) => ` · ${b}`).join('')}
+              </div>
+              {statusText && (
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, marginTop: 10, padding: '4px 11px', borderRadius: 14, color: isOnline ? '#22c55e' : theme.muted, background: isOnline ? 'rgba(34,197,94,0.12)' : glassFill }}>
+                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: isOnline ? '#22c55e' : theme.muted }} />
+                  {statusText}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        <div style={{ padding: editing ? '16px 18px' : '14px 14px', paddingBottom: 'calc(28px + env(safe-area-inset-bottom))', maxWidth: 520, margin: '0 auto', position: 'relative', zIndex: 2 }}>
           {editing ? (
             <div>
               <div style={{ ...labelStyle, display: 'flex', justifyContent: 'space-between' }}><span>NAME</span><span style={{ fontWeight: 600 }}>{displayName.length}/{NAME_MAX}</span></div>
@@ -3902,11 +3979,18 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
             </div>
           ) : (
             <>
+              {canSeeDetails && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 10 }}>
+                  {statTile(postCount, 'Posts', null)}
+                  {statTile(followerCount, 'Followers', () => setListModal('followers'))}
+                  {statTile(followingCount, 'Following', () => setListModal('following'))}
+                </div>
+              )}
               {isSelf ? (
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button onClick={startEditing} style={pillBtn(true)}><Edit3 size={15} /> Edit profile</button>
                   <button onClick={() => setShowShare(true)} style={pillBtn(false)}><Share2 size={15} /> Share</button>
-                  <button onClick={() => setShowPrivacySettings(true)} style={{ ...pillBtn(false), flex: '0 0 auto', padding: '0 14px' }}><Lock size={15} /> Privacy</button>
+                  <button onClick={() => setShowPrivacySettings(true)} aria-label="Privacy" style={{ ...pillBtn(false), flex: '0 0 46px', padding: 0 }}><Lock size={16} /></button>
                 </div>
               ) : (
                 <div style={{ display: 'flex', gap: 8 }}>
@@ -3936,18 +4020,16 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
               {canSeeDetails ? (
                 <>
                   {showBio && (
-                    <div style={{ fontSize: 14.5, color: theme.ink, lineHeight: 1.55, marginTop: 16, wordBreak: 'break-word' }}>
+                    <div style={{ fontSize: 14.5, color: theme.ink, lineHeight: 1.55, marginTop: 16, wordBreak: 'break-word', textAlign: 'center', padding: '0 10px' }}>
                       <RichText text={profile.bio} onMention={(p) => onOpenProfile(sanitizeAvatar(p, userId))} />
                     </div>
                   )}
                   <ProfileSocialRow links={profile.social_links} whatsapp={profile.whatsapp} />
-                  <div style={{ display: 'flex', alignItems: 'center', marginTop: 16, padding: '0 6px' }}>
-                    {stat(followingCount, 'Following', () => setListModal('following'))}
-                    {statDivider}
-                    {stat(followerCount, 'Followers', () => setListModal('followers'))}
-                    {!isSelf && statDivider}
-                    {!isSelf && stat(mutualCount, 'Mutual', () => setListModal('mutual'))}
-                  </div>
+                  {!isSelf && mutualCount > 0 && (
+                    <div role="button" onClick={() => setListModal('mutual')} style={{ textAlign: 'center', fontSize: 12.5, color: theme.muted, marginTop: 12, cursor: 'pointer' }}>
+                      Followed by <b style={{ color: theme.ink }}>{formatCount(mutualCount)}</b> {mutualCount === 1 ? 'person' : 'people'} you follow
+                    </div>
+                  )}
                   {!editing && <ProfileHighlights profile={profile} isSelf={isSelf} userId={userId} onOpenHighlight={(h) => onOpenHighlight && onOpenHighlight(h, profile)} />}
                   {!editing && <ProfilePosts profile={profile} isSelf={isSelf} userId={userId} meProfile={meProfile} />}
                 </>
@@ -8186,14 +8268,14 @@ function followLabel(state, theyFollowMe) {
 function FollowActionButton({ state, theyFollowMe, busy, onClick, size = 'md', onDark = false }) {
   const { theme } = useTheme();
   const filled = state !== 'accepted' && state !== 'pending';
-  const dims = size === 'sm' ? { width: 104, height: 32, fontSize: 12, radius: 10 } : { width: '100%', height: 44, fontSize: 14, radius: 14 };
+  const dims = size === 'sm' ? { width: 104, height: 32, fontSize: 12, radius: 10 } : { width: '100%', height: 46, fontSize: 14, radius: 16 };
   return (
     <button onClick={(e) => { e.stopPropagation(); if (!busy) onClick(); }} disabled={busy} style={{
       width: dims.width, minWidth: dims.width, height: dims.height, borderRadius: dims.radius, flexShrink: 0, boxSizing: 'border-box',
       display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, cursor: busy ? 'default' : 'pointer', fontFamily: FONT,
       fontSize: dims.fontSize, fontWeight: 700, letterSpacing: 0.1, transition: 'background 0.2s ease, color 0.2s ease',
       border: filled ? 'none' : `1px solid ${onDark ? 'rgba(255,255,255,0.45)' : theme.border}`,
-      background: filled ? `linear-gradient(135deg, ${theme.coral}, ${theme.coralDeep || theme.coral})` : (onDark ? 'rgba(0,0,0,0.35)' : theme.rowBg),
+      background: filled ? `linear-gradient(135deg, ${theme.coral}, ${size === 'sm' ? (theme.coralDeep || theme.coral) : '#8b5cf6'})` : (onDark ? 'rgba(0,0,0,0.35)' : (size === 'sm' ? theme.rowBg : (theme.dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)'))),
       color: filled || onDark ? 'white' : theme.ink,
       boxShadow: filled ? `0 6px 16px ${theme.coral}40` : 'none',
     }}>
@@ -9418,7 +9500,7 @@ function ProfileSocialRow({ links, whatsapp }) {
   ];
   if (!items.length) return null;
   return (
-    <div style={{ display: 'flex', gap: 14, overflowX: 'auto', padding: '4px 2px 2px', marginTop: 14, scrollbarWidth: 'none' }}>
+    <div style={{ display: 'flex', gap: 14, overflowX: 'auto', padding: '4px 2px 2px', margin: '14px auto 0', width: 'fit-content', maxWidth: '100%', scrollbarWidth: 'none' }}>
       {items.map((it) => (
         <div key={it.key} role="button" aria-label={it.label} onClick={() => window.open(it.href, '_blank', 'noopener')}
           style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, flexShrink: 0, width: 62, cursor: 'pointer' }}>
