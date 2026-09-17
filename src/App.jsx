@@ -350,6 +350,11 @@ function GlobalStyle() {
       @keyframes zchat-frame-spin { to { transform: rotate(360deg); } }
       @keyframes zchat-frame-fire { 0%, 100% { filter: brightness(1) saturate(1.05) drop-shadow(0 0 4px rgba(255,90,20,0.45)); } 25% { filter: brightness(1.12) saturate(1.2) drop-shadow(0 0 9px rgba(255,120,30,0.7)); } 50% { filter: brightness(0.96) saturate(1.1) drop-shadow(0 0 5px rgba(255,70,10,0.5)); } 75% { filter: brightness(1.18) saturate(1.25) drop-shadow(0 0 11px rgba(255,140,40,0.75)); } }
       @keyframes zchat-frame-ice { 0%, 100% { filter: brightness(1) drop-shadow(0 0 4px rgba(56,189,248,0.4)); } 50% { filter: brightness(1.15) drop-shadow(0 0 12px rgba(56,189,248,0.8)); } }
+      @keyframes zchat-frame-poison { 0%, 100% { filter: brightness(1) saturate(1.1) drop-shadow(0 0 4px rgba(74,222,128,0.45)); } 50% { filter: brightness(1.18) saturate(1.3) drop-shadow(0 0 12px rgba(74,222,128,0.8)); } }
+      @keyframes zchat-frame-fire-light { 0%, 100% { filter: saturate(1.55) contrast(1.25) brightness(0.92) drop-shadow(0 0 2px rgba(120,20,0,0.55)); } 50% { filter: saturate(1.8) contrast(1.35) brightness(1) drop-shadow(0 0 5px rgba(200,50,0,0.6)); } }
+      @keyframes zchat-frame-ice-light { 0%, 100% { filter: saturate(1.6) contrast(1.3) brightness(0.88) drop-shadow(0 0 2px rgba(10,40,120,0.55)); } 50% { filter: saturate(1.85) contrast(1.4) brightness(0.95) drop-shadow(0 0 5px rgba(20,90,200,0.6)); } }
+      @keyframes zchat-frame-poison-light { 0%, 100% { filter: saturate(1.5) contrast(1.3) brightness(0.88) drop-shadow(0 0 2px rgba(10,80,20,0.55)); } 50% { filter: saturate(1.75) contrast(1.4) brightness(0.96) drop-shadow(0 0 5px rgba(20,140,40,0.6)); } }
+      .zchat-frame-mask { -webkit-mask-image: radial-gradient(circle closest-side, #000 84%, rgba(0,0,0,0) 100%); mask-image: radial-gradient(circle closest-side, #000 84%, rgba(0,0,0,0) 100%); }
       @keyframes zchat-post-heart { 0% { transform: scale(0); opacity: 0; } 15% { transform: scale(1.2); opacity: 1; } 30% { transform: scale(0.95); } 45% { transform: scale(1); } 80% { transform: scale(1); opacity: 1; } 100% { transform: scale(0.2) translateY(-60px); opacity: 0; } }
       img, video { -webkit-touch-callout: none; -webkit-user-drag: none; }
       body { -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
@@ -440,7 +445,7 @@ function Avatar({ emoji, name = '', online, size = 40, ring = false, frame = nul
         const w = size * spec.scale;
         return (
           <img src={frameUrl} alt="" draggable={false} aria-hidden="true"
-            style={{ position: 'absolute', width: w, height: w, left: size / 2 - w * (spec.centerX ?? 0.5), top: size / 2 - w * spec.centerY, pointerEvents: 'none', userSelect: 'none', zIndex: 2, maxWidth: 'none', animation: spec.animation || 'none' }} />
+            style={{ ...frameMaskStyle(spec), position: 'absolute', width: w, height: w, left: size / 2 - w * (spec.centerX ?? 0.5), top: size / 2 - w * spec.centerY, pointerEvents: 'none', userSelect: 'none', zIndex: 2, maxWidth: 'none', animation: (theme.dark ? spec.animation : (spec.animationLight || spec.animation)) || 'none' }} />
         );
       })()}
       {online != null && (
@@ -1429,7 +1434,7 @@ function AccountSwitcherPanel({ accounts, currentId, switchingId, onBack, onSwit
               <Avatar emoji={a.avatar} name={a.name} frame={a.avatar_frame} size={40} />
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontWeight: 700, fontSize: 13.5, color: theme.ink, display: 'flex', alignItems: 'center', minWidth: 0 }}>
-                  <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{a.name}</span><VerifiedBadge tier={tiers[a.id] || a.verified} size={13} />{a.id === currentId && <span style={{ color: theme.coral, fontWeight: 700, flexShrink: 0 }}>&nbsp;Active</span>}
+                  <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{a.name}</span><VerifiedBadge tier={tiers[a.id] || a.verified} custom={a.custom_badge} size={13} />{a.id === currentId && <span style={{ color: theme.coral, fontWeight: 700, flexShrink: 0 }}>&nbsp;Active</span>}
                 </div>
                 <div style={{ fontSize: 11.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.email}</div>
               </div>
@@ -1519,7 +1524,7 @@ function UserListRow({ profile, rightContent, onClick }) {
     }}>
       <FramedAvatar frame={profile.avatar_frame} size={40}><Avatar emoji={profile.avatar} name={profile.name} frame={profile.avatar_frame} size={40} /></FramedAvatar>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontWeight: 700, fontSize: 14, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{profile.name}<VerifiedBadge tier={profile.verified} size={12} /></div>
+        <div style={{ fontWeight: 700, fontSize: 14, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{profile.name}<VerifiedBadge tier={profile.verified} custom={profile.custom_badge} size={12} /></div>
         <div style={{ fontSize: 12, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>@{profile.username}</div>
       </div>
       {rightContent && <div style={{ flexShrink: 0 }}>{rightContent}</div>}
@@ -2944,7 +2949,7 @@ function CreateGroupPanel({ myId, onClose, onCreated }) {
               {selected.map((p) => (
                 <div key={p.id} onClick={() => toggleSelect(p)} style={{ textAlign: 'center', cursor: 'pointer', flexShrink: 0 }}>
                   <Avatar emoji={p.avatar} name={p.name} frame={p.avatar_frame} size={48} />
-                  <div style={{ fontSize: 10, color: theme.muted, marginTop: 2, maxWidth: 48, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}<VerifiedBadge tier={p.verified} size={12} /></div>
+                  <div style={{ fontSize: 10, color: theme.muted, marginTop: 2, maxWidth: 48, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}<VerifiedBadge tier={p.verified} custom={p.custom_badge} size={12} /></div>
                 </div>
               ))}
             </div>
@@ -2961,7 +2966,7 @@ function CreateGroupPanel({ myId, onClose, onCreated }) {
               <div key={p.id} onClick={() => toggleSelect(p)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 4px', cursor: 'pointer' }}>
                 <Avatar emoji={p.avatar} name={p.name} frame={p.avatar_frame} size={40} />
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 700, fontSize: 14, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}<VerifiedBadge tier={p.verified} size={12} /></div>
+                  <div style={{ fontWeight: 700, fontSize: 14, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}<VerifiedBadge tier={p.verified} custom={p.custom_badge} size={12} /></div>
                   <div style={{ fontSize: 11.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>@{p.username}</div>
                 </div>
                 <div style={{
@@ -3101,7 +3106,7 @@ function GroupInfoPanel({ group, members, myId, myRole, isOwner, onClose, onProm
               <Avatar emoji={m.profile.avatar} name={m.profile.name} frame={m.profile.avatar_frame} size={40} />
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontWeight: 700, fontSize: 13.5, color: theme.ink, display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                  <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{m.profile.name}</span><VerifiedBadge tier={m.profile.verified} size={12} />{m.user_id === myId && <span style={{ color: theme.muted, fontWeight: 500, flexShrink: 0 }}>(you)</span>}
+                  <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{m.profile.name}</span><VerifiedBadge tier={m.profile.verified} custom={m.profile.custom_badge} size={12} />{m.user_id === myId && <span style={{ color: theme.muted, fontWeight: 500, flexShrink: 0 }}>(you)</span>}
                 </div>
                 <div style={{ display: 'flex', gap: 6, marginBottom: 2 }}>
                   {m.user_id === group.created_by ? (
@@ -3208,7 +3213,7 @@ function AddMembersPanel({ myId, existingIds, onClose, onAdd }) {
           <div key={p.id} onClick={() => toggleSelect(p)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 4px', cursor: 'pointer' }}>
             <Avatar emoji={p.avatar} name={p.name} frame={p.avatar_frame} size={40} />
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontWeight: 700, fontSize: 14, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}<VerifiedBadge tier={p.verified} size={12} /></div>
+              <div style={{ fontWeight: 700, fontSize: 14, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}<VerifiedBadge tier={p.verified} custom={p.custom_badge} size={12} /></div>
               <div style={{ fontSize: 11.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>@{p.username}</div>
             </div>
             <div style={{
@@ -3383,7 +3388,7 @@ function ProfileLinkCard({ profileId, onOpen }) {
           </div>
         )}
         <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '18px 10px 6px', background: 'linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.7) 100%)', color: 'white' }}>
-          <div style={{ fontSize: 14, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}<VerifiedBadge tier={p.verified} size={12} /></div>
+          <div style={{ fontSize: 14, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}<VerifiedBadge tier={p.verified} custom={p.custom_badge} size={12} /></div>
           <div style={{ fontSize: 11, opacity: 0.85, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>@{p.username}</div>
         </div>
       </div>
@@ -3872,7 +3877,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
                     {statusText}
                   </div>
                 )}
-                <div style={{ fontSize: 26, fontWeight: 800, lineHeight: 1.08, letterSpacing: '-0.02em', textShadow: '0 2px 12px rgba(0,0,0,0.45)', wordBreak: 'break-word' }}>{profile.name}<VerifiedBadge tier={profile.verified} size={24} /></div>
+                <div style={{ fontSize: 26, fontWeight: 800, lineHeight: 1.08, letterSpacing: '-0.02em', textShadow: '0 2px 12px rgba(0,0,0,0.45)', wordBreak: 'break-word' }}>{profile.name}<VerifiedBadge tier={profile.verified} custom={profile.custom_badge} size={24} /></div>
                 <div style={{ fontSize: 13.5, marginTop: 4, color: 'rgba(255,255,255,0.88)', textShadow: '0 1px 6px rgba(0,0,0,0.5)' }}>
                   @{profile.username}{profile.pronouns ? ` · ${profile.pronouns}` : ''}{infoBits.map((b) => ` · ${b}`).join('')}
                 </div>
@@ -3916,14 +3921,14 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
                     : <span style={{ fontSize: 72, fontWeight: 800, color: 'rgba(255,255,255,0.92)', fontFamily: FONT }}>{initial}</span>}
                 </div>
                 {AVATAR_FRAMES[profile.avatar_frame] && profileFrameUrl && (
-                  <img src={profileFrameUrl} alt="" draggable={false} aria-hidden="true" style={{ position: 'absolute', width: 150 * AVATAR_FRAMES[profile.avatar_frame].scale, height: 150 * AVATAR_FRAMES[profile.avatar_frame].scale, left: 75 - 150 * AVATAR_FRAMES[profile.avatar_frame].scale * (AVATAR_FRAMES[profile.avatar_frame].centerX ?? 0.5), top: 75 - 150 * AVATAR_FRAMES[profile.avatar_frame].scale * AVATAR_FRAMES[profile.avatar_frame].centerY, pointerEvents: 'none', zIndex: 2, animation: AVATAR_FRAMES[profile.avatar_frame].animation || 'none' }} />
+                  <img src={profileFrameUrl} alt="" draggable={false} aria-hidden="true" style={{ ...frameMaskStyle(AVATAR_FRAMES[profile.avatar_frame]), position: 'absolute', width: 150 * AVATAR_FRAMES[profile.avatar_frame].scale, height: 150 * AVATAR_FRAMES[profile.avatar_frame].scale, left: 75 - 150 * AVATAR_FRAMES[profile.avatar_frame].scale * (AVATAR_FRAMES[profile.avatar_frame].centerX ?? 0.5), top: 75 - 150 * AVATAR_FRAMES[profile.avatar_frame].scale * AVATAR_FRAMES[profile.avatar_frame].centerY, pointerEvents: 'none', zIndex: 2, animation: (theme.dark ? AVATAR_FRAMES[profile.avatar_frame].animation : (AVATAR_FRAMES[profile.avatar_frame].animationLight || AVATAR_FRAMES[profile.avatar_frame].animation)) || 'none' }} />
                 )}
                 {isOnline && !AVATAR_FRAMES[profile.avatar_frame] && <div style={{ position: 'absolute', right: 14, bottom: 14, width: 26, height: 26, borderRadius: '50%', background: '#22c55e', border: `5px solid ${pageBg}`, zIndex: 3 }} />}
               </div>
             </div>
 
             <div style={{ position: 'relative', zIndex: 2, textAlign: 'center', marginTop: AVATAR_FRAMES[profile.avatar_frame] ? 64 : 18, padding: '0 20px' }}>
-              <div style={{ fontSize: 27, fontWeight: 900, color: theme.ink, letterSpacing: '-0.02em', lineHeight: 1.15, wordBreak: 'break-word' }}>{profile.name}<VerifiedBadge tier={profile.verified} size={22} /></div>
+              <div style={{ fontSize: 27, fontWeight: 900, color: theme.ink, letterSpacing: '-0.02em', lineHeight: 1.15, wordBreak: 'break-word' }}>{profile.name}<VerifiedBadge tier={profile.verified} custom={profile.custom_badge} size={22} /></div>
               <div style={{ fontSize: 13.5, color: theme.muted, marginTop: 4 }}>
                 @{profile.username}{profile.pronouns ? ` · ${profile.pronouns}` : ''}{infoBits.map((b) => ` · ${b}`).join('')}
               </div>
@@ -4299,7 +4304,7 @@ function MentionSuggestions({ query, priority, excludeIds, myId, onPick }) {
           }}>
           <Avatar emoji={p.avatar} name={p.name} frame={p.avatar_frame} size={30} />
           <div style={{ minWidth: 0, flex: 1 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}<VerifiedBadge tier={p.verified} size={12} /></div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}<VerifiedBadge tier={p.verified} custom={p.custom_badge} size={12} /></div>
             <div style={{ fontSize: 11.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>@{p.username}</div>
           </div>
         </div>
@@ -4309,7 +4314,7 @@ function MentionSuggestions({ query, priority, excludeIds, myId, onPick }) {
 }
 
 
-function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSelect, onLongPress, onOpenImage, onOpenVideo, reactions, onReact, onOpenWhoReacted, replyPreview, onSwipeReply, onJumpToMessage, highlighted, senderLabel, senderAvatar, hideReadStatus, onOpenSenderProfile, canModerate, onOpenMention, mentionsMe, onOpenStoryRef, onCallBack, onOpenSticker, tightBelow, senderVerified, onOpenPost, tightAbove, senderFrame }) {
+function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSelect, onLongPress, onOpenImage, onOpenVideo, reactions, onReact, onOpenWhoReacted, replyPreview, onSwipeReply, onJumpToMessage, highlighted, senderLabel, senderAvatar, hideReadStatus, onOpenSenderProfile, canModerate, onOpenMention, mentionsMe, onOpenStoryRef, onCallBack, onOpenSticker, tightBelow, senderVerified, onOpenPost, tightAbove, senderFrame, senderCustomBadge }) {
   const { theme, fontScale, chatTheme, bubbleColor } = useTheme();
   const [hover, setHover] = useState(false);
   const [burstHeart, setBurstHeart] = useState(false);
@@ -4476,7 +4481,7 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
         })}>
           {senderLabel && !m.deleted && !tightAbove && (
             <div style={{ fontSize: 11.5, fontWeight: 700, color: theme.coralDeep, marginBottom: 3, padding: m.type !== 'text' ? '0 4px' : 0 }}>
-              {senderLabel}<VerifiedBadge tier={senderVerified} size={11} />
+              {senderLabel}<VerifiedBadge tier={senderVerified} custom={senderCustomBadge} size={11} />
             </div>
           )}
           {m.forwarded && !m.deleted && (
@@ -4714,7 +4719,7 @@ function ForwardPicker({ conversations, onCancel, onPick, myId }) {
             }}>
               <Avatar emoji={p.avatar} name={p.name} frame={p.avatar_frame} size={38} />
               <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ fontWeight: 700, fontSize: 14, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}<VerifiedBadge tier={p.verified} size={12} /></div>
+                <div style={{ fontWeight: 700, fontSize: 14, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}<VerifiedBadge tier={p.verified} custom={p.custom_badge} size={12} /></div>
                 <div style={{ fontSize: 11.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>@{p.username}</div>
               </div>
             </div>
@@ -5168,7 +5173,7 @@ function InAppMessageToast({ toast, top, onOpen, onDismiss }) {
       </div>
       <div style={{ flex: 1, minWidth: 0, pointerEvents: 'none' }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-          <span style={{ fontSize: 13.5, fontWeight: 800, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{toast.title}<VerifiedBadge tier={toast.verified} size={12} /></span>
+          <span style={{ fontSize: 13.5, fontWeight: 800, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{toast.title}<VerifiedBadge tier={toast.verified} custom={toast.customBadge} size={12} /></span>
           <span style={{ fontSize: 10.5, color: theme.muted, flexShrink: 0 }}>now</span>
         </div>
         <PreviewLine preview={toast.preview} prefix={toast.prefix} color={theme.muted} size={12.5} />
@@ -6752,7 +6757,7 @@ function StoryViewer({ groupsList, startGroup = 0, startStoryId = null, onAddSto
               <Avatar emoji={group.profile.avatar} name={group.profile.name} frame={group.profile.avatar_frame} size={34} />
               <div style={{ minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 7 }}>
-                  <span style={{ fontWeight: 800, fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{isMine && !readOnly ? 'Your story' : group.profile.name}<VerifiedBadge tier={group.profile.verified} size={13} /></span>
+                  <span style={{ fontWeight: 800, fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{isMine && !readOnly ? 'Your story' : group.profile.name}<VerifiedBadge tier={group.profile.verified} custom={group.profile.custom_badge} size={13} /></span>
                   <span style={{ fontSize: 12, opacity: 0.75, flexShrink: 0 }}>{timeShort(story.created_at)}</span>
                 </div>
                 {story.repost_of && <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, opacity: 0.8 }}><Repeat size={11} /> Reposted{story.repost_label ? ` from @${story.repost_label}` : ''}</div>}
@@ -7510,7 +7515,7 @@ function StoryTray({ me, myStories, trayUsers, seen, onAdd, onOpen }) {
     <div style={{ fontSize: 11, fontWeight: highlight ? 700 : 600, color: highlight ? theme.ink : theme.muted, marginTop: 5, maxWidth: 66, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'center' }}>{text}</div>
   );
   return (
-    <div style={{ display: 'flex', gap: 12, padding: '2px 14px 12px', overflowX: 'auto', flexShrink: 0, WebkitOverflowScrolling: 'touch' }}>
+    <div style={{ display: 'flex', gap: 16, padding: '16px 18px 12px', marginTop: -14, overflowX: 'auto', overflowY: 'hidden', flexShrink: 0, WebkitOverflowScrolling: 'touch' }}>
       <div onClick={() => (hasMine ? onOpen(me.id) : onAdd())} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0, cursor: 'pointer', position: 'relative' }}>
         <StoryAvatar profile={me} size={62} ring={hasMine ? (myStories.every((s) => seen.has(s.id)) ? 'seen' : 'unseen') : 'none'} />
         <div role="button" aria-label="Add to your story" onClick={(e) => { e.stopPropagation(); onAdd(); }} style={{
@@ -7524,7 +7529,7 @@ function StoryTray({ me, myStories, trayUsers, seen, onAdd, onOpen }) {
         return (
           <div key={u.profile.id} onClick={() => onOpen(u.profile.id)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0, cursor: 'pointer' }}>
             <StoryAvatar profile={u.profile} size={62} ring={allSeen ? 'seen' : 'unseen'} />
-            {label(<>{(u.profile.name || u.profile.username || '').split(' ')[0]}<VerifiedBadge tier={u.profile.verified} size={10} style={{ marginLeft: 2 }} /></>, !allSeen)}
+            {label(<>{(u.profile.name || u.profile.username || '').split(' ')[0]}<VerifiedBadge tier={u.profile.verified} custom={u.profile.custom_badge} size={10} style={{ marginLeft: 2 }} /></>, !allSeen)}
           </div>
         );
       })}
@@ -7570,7 +7575,7 @@ function BlockConfirmSheet({ profile, onCancel, onConfirm }) {
             <Avatar emoji={profile.avatar} name={profile.name} frame={profile.avatar_frame} size={72} />
             <div style={{ position: 'absolute', right: -4, bottom: -2, width: 28, height: 28, borderRadius: '50%', background: theme.danger, border: `3px solid ${theme.panelBg}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Ban size={14} color="white" /></div>
           </div>
-          <div style={{ fontSize: 18, fontWeight: 800, color: theme.ink, marginTop: 12 }}>Block {profile.name}<VerifiedBadge tier={profile.verified} size={15} />?</div>
+          <div style={{ fontSize: 18, fontWeight: 800, color: theme.ink, marginTop: 12 }}>Block {profile.name}<VerifiedBadge tier={profile.verified} custom={profile.custom_badge} size={15} />?</div>
           <div style={{ fontSize: 12.5, color: theme.muted, marginTop: 2 }}>@{profile.username}</div>
         </div>
         <div style={{ marginTop: 14 }}>
@@ -7659,7 +7664,7 @@ function BlockedAccountsPanel({ myId, blockedIds, onClose, onUnblock, onOpenProf
             <div onClick={() => !r.profile.is_deleted && onOpenProfile(r.profile)} style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0, cursor: 'pointer' }}>
               <Avatar emoji={r.profile.avatar} name={r.profile.name} frame={r.profile.avatar_frame} size={46} />
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontWeight: 700, fontSize: 14.5, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.profile.name}<VerifiedBadge tier={r.profile.verified} size={12} /></div>
+                <div style={{ fontWeight: 700, fontSize: 14.5, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.profile.name}<VerifiedBadge tier={r.profile.verified} custom={r.profile.custom_badge} size={12} /></div>
                 <div style={{ fontSize: 12, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>@{r.profile.username}</div>
               </div>
             </div>
@@ -7849,7 +7854,7 @@ function AvatarPeek({ profile, online, lastSeen, hasStory, storySeen, canCall, o
             ? <img src={photo} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
             : <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 110, fontWeight: 800, color: 'rgba(255,255,255,0.92)' }}>{(profile.name || '?').charAt(0).toUpperCase()}</div>}
           <div style={{ position: 'absolute', left: 0, right: 0, top: 0, padding: '14px 16px 30px', background: 'linear-gradient(180deg, rgba(0,0,0,0.62), rgba(0,0,0,0))', color: 'white' }}>
-            <div style={{ fontSize: 17, fontWeight: 800 }}>{profile.name}<VerifiedBadge tier={profile.verified} size={15} /></div>
+            <div style={{ fontSize: 17, fontWeight: 800 }}>{profile.name}<VerifiedBadge tier={profile.verified} custom={profile.custom_badge} size={15} /></div>
             <div style={{ fontSize: 12, opacity: 0.85, display: 'flex', alignItems: 'center', gap: 5 }}>
               {online && <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#34C759' }} />}
               {online ? 'Online now' : lastSeen || `@${profile.username}`}
@@ -7953,7 +7958,7 @@ function StoryViewersSheet({ story, myId, onClose, onOpenProfile }) {
                 {r.liked && <div style={{ position: 'absolute', right: -3, bottom: -3, width: 20, height: 20, borderRadius: '50%', background: theme.panelBg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Heart size={13} color="#FF3B5C" fill="#FF3B5C" /></div>}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 700, fontSize: 14, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.profile.name}<VerifiedBadge tier={r.profile.verified} size={12} /></div>
+                <div style={{ fontWeight: 700, fontSize: 14, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.profile.name}<VerifiedBadge tier={r.profile.verified} custom={r.profile.custom_badge} size={12} /></div>
                 <div style={{ fontSize: 11.5, color: theme.muted }}>@{r.profile.username}{r.at ? ` · ${timeShort(r.at)}` : ''}</div>
               </div>
             </div>
@@ -8015,7 +8020,7 @@ function CallScreen({ call, me, nameFor, avatarFor, onAccept, onDecline, onHangu
         </div>
         <div style={{ position: 'relative', flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, textAlign: 'center' }}>
           {isGroup ? <GroupAvatar avatar={call.group && call.group.avatar} name={title} size={112} /> : <Avatar emoji={call.peer && call.peer.avatar} name={title} frame={call.peer && call.peer.avatar_frame} size={112} />}
-          <div style={{ fontSize: 26, fontWeight: 800, marginTop: 18 }}>{title}{!isGroup && call.peer && <VerifiedBadge tier={call.peer.verified} size={20} />}</div>
+          <div style={{ fontSize: 26, fontWeight: 800, marginTop: 18 }}>{title}{!isGroup && call.peer && <VerifiedBadge tier={call.peer.verified} custom={call.peer.custom_badge} size={20} />}</div>
           <div style={{ fontSize: 15, color: 'rgba(255,255,255,0.75)', marginTop: 6 }}>{call.endLabel || 'Call ended'}</div>
           <div style={{ marginTop: 14, fontSize: 34, fontWeight: 300, letterSpacing: 1, fontVariantNumeric: 'tabular-nums' }}>{d > 0 ? formatCallDuration(d) : '0:00'}</div>
           <div style={{ marginTop: 6, fontSize: 13.5, color: 'rgba(255,255,255,0.6)' }}>
@@ -8131,7 +8136,7 @@ function CallScreen({ call, me, nameFor, avatarFor, onAccept, onDecline, onHangu
             )}
             {isGroup ? <GroupAvatar avatar={call.group && call.group.avatar} name={title} size={122} /> : <Avatar emoji={call.peer && call.peer.avatar} name={title} frame={call.peer && call.peer.avatar_frame} size={122} />}
           </div>
-          <div style={{ marginTop: 22, fontSize: 29, fontWeight: 800, textShadow: '0 2px 14px rgba(0,0,0,0.5)' }}>{title}{!isGroup && call.peer && <VerifiedBadge tier={call.peer.verified} size={22} />}</div>
+          <div style={{ marginTop: 22, fontSize: 29, fontWeight: 800, textShadow: '0 2px 14px rgba(0,0,0,0.5)' }}>{title}{!isGroup && call.peer && <VerifiedBadge tier={call.peer.verified} custom={call.peer.custom_badge} size={22} />}</div>
           <div style={{ marginTop: 6, fontSize: 15, color: 'rgba(255,255,255,0.82)', fontVariantNumeric: 'tabular-nums' }}>{status}</div>
           {!isGroup && peerId && remoteMuted[peerId] && !ringingIn && <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 14, background: 'rgba(0,0,0,0.4)', fontSize: 12.5, fontWeight: 700 }}><MicOff size={13} color="#FF6B6B" /> {title.split(' ')[0]} is muted</div>}
         </div>
@@ -8321,14 +8326,49 @@ const VERIFIED_TIERS = {
   purple: { color: '#8B5CF6', glow: 'rgba(139,92,246,0.5)', label: 'Premium', desc: 'This account is a ZChat premium member.' },
 };
 
-function VerifiedBadge({ tier, size = 14, style }) {
-  const t = VERIFIED_TIERS[tier];
-  if (!t) return null;
+const CUSTOM_BADGES = {
+  cat: { file: '/badges/badge-cat.webp', fallback: '/badge-cat.webp', label: 'Cute cat badge', ratio: 1.125 },
+};
+const customBadgeUrlCache = new Map();
+function useCustomBadgeUrl(key) {
+  const [url, setUrl] = useState(() => (key && customBadgeUrlCache.has(key) ? customBadgeUrlCache.get(key) : null));
+  useEffect(() => {
+    let alive = true;
+    const spec = key && CUSTOM_BADGES[key];
+    if (!spec) { setUrl(null); return undefined; }
+    if (customBadgeUrlCache.has(key)) { setUrl(customBadgeUrlCache.get(key)); return undefined; }
+    const tryLoad = (src) => new Promise((resolve) => { if (!src) { resolve(null); return; } const img = new Image(); img.onload = () => resolve(src); img.onerror = () => resolve(null); img.src = src; });
+    tryLoad(spec.file).then((u) => u || tryLoad(spec.fallback)).then((u) => { if (u) customBadgeUrlCache.set(key, u); if (alive) setUrl(u); });
+    return () => { alive = false; };
+  }, [key]);
+  return url;
+}
+
+function CustomBadgeIcon({ badge, size, closeToName }) {
+  const url = useCustomBadgeUrl(badge);
+  const spec = CUSTOM_BADGES[badge];
+  if (!spec || !url) return null;
+  const h = Math.round(size * 1.18);
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" style={{ flexShrink: 0, display: 'inline-block', verticalAlign: '-0.12em', marginLeft: 4, ...style }} aria-label={t.label}>
-      <path fill={t.color} d={BADGE_SHAPE_PATH} />
-      <path d="M8.6 12.3l2.3 2.2 4.6-3.6" fill="none" stroke="white" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
+    <img src={url} alt="" aria-label={spec.label} draggable={false}
+      style={{ display: 'inline-block', height: h, width: Math.round(h * spec.ratio), verticalAlign: '-0.22em', marginLeft: closeToName ? 3 : 1, objectFit: 'contain', flexShrink: 0 }} />
+  );
+}
+
+function VerifiedBadge({ tier, size = 14, style, custom }) {
+  const t = VERIFIED_TIERS[tier];
+  const hasCustom = !!(custom && CUSTOM_BADGES[custom]);
+  if (!t && !hasCustom) return null;
+  return (
+    <>
+      {t && (
+        <svg width={size} height={size} viewBox="0 0 24 24" style={{ flexShrink: 0, display: 'inline-block', verticalAlign: '-0.12em', marginLeft: 4, ...style }} aria-label={t.label}>
+          <path fill={t.color} d={BADGE_SHAPE_PATH} />
+          <path d="M8.6 12.3l2.3 2.2 4.6-3.6" fill="none" stroke="white" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      )}
+      {hasCustom && <CustomBadgeIcon badge={custom} size={size} closeToName={!t} />}
+    </>
   );
 }
 
@@ -8744,7 +8784,7 @@ function PostViewer({ post, owner, userId, meProfile, onClose, onDeleted }) {
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px' }}>
           <FramedAvatar frame={owner.avatar_frame} size={34}><Avatar emoji={owner.avatar} name={owner.name} frame={owner.avatar_frame} size={34} /></FramedAvatar>
-          <div style={{ flex: 1, minWidth: 0, fontWeight: 700, fontSize: 14, marginLeft: owner.avatar_frame ? 6 : 0 }}>{owner.username}<VerifiedBadge tier={owner.verified} size={13} /></div>
+          <div style={{ flex: 1, minWidth: 0, fontWeight: 700, fontSize: 14, marginLeft: owner.avatar_frame ? 6 : 0 }}>{owner.username}<VerifiedBadge tier={owner.verified} custom={owner.custom_badge} size={13} /></div>
           <MoreVertical size={20} style={{ cursor: 'pointer', transform: 'rotate(90deg)' }} onClick={() => setSheet('more')} />
         </div>
         <div onClick={onMediaTap} style={{ position: 'relative', background: '#000', userSelect: 'none' }}>
@@ -8764,11 +8804,11 @@ function PostViewer({ post, owner, userId, meProfile, onClose, onDeleted }) {
           {iconBtn(<InstaShareIcon size={24} color={theme.ink} />, () => setSheet('share'), 'Share')}
         </div>
         <div style={{ padding: '2px 14px', fontSize: 14, fontWeight: 700 }}>
-          {likes.length === 0 ? 'Be the first to like this' : likes.length === 1 && firstLiker ? <>Liked by {firstLiker.username}<VerifiedBadge tier={firstLiker.verified} size={12} /></> : firstLiker ? <>Liked by {firstLiker.username}<VerifiedBadge tier={firstLiker.verified} size={12} /> and {formatCount(likes.length - 1)} others</> : `${formatCount(likes.length)} likes`}
+          {likes.length === 0 ? 'Be the first to like this' : likes.length === 1 && firstLiker ? <>Liked by {firstLiker.username}<VerifiedBadge tier={firstLiker.verified} custom={firstLiker.custom_badge} size={12} /></> : firstLiker ? <>Liked by {firstLiker.username}<VerifiedBadge tier={firstLiker.verified} custom={firstLiker.custom_badge} size={12} /> and {formatCount(likes.length - 1)} others</> : `${formatCount(likes.length)} likes`}
         </div>
         {post.caption && (
           <div style={{ padding: '4px 14px 0', fontSize: 14, lineHeight: 1.45, wordBreak: 'break-word' }}>
-            <b>{owner.username}</b><VerifiedBadge tier={owner.verified} size={12} /> {post.caption}
+            <b>{owner.username}</b><VerifiedBadge tier={owner.verified} custom={owner.custom_badge} size={12} /> {post.caption}
           </div>
         )}
         {comments && comments.length > 2 && (
@@ -8778,7 +8818,7 @@ function PostViewer({ post, owner, userId, meProfile, onClose, onDeleted }) {
         )}
         {(comments || []).slice(-2).map((c) => (
           <div key={c.id} onClick={() => setSheet('comments')} style={{ padding: '4px 14px 0', fontSize: 14, lineHeight: 1.4, color: theme.ink, cursor: 'pointer', wordBreak: 'break-word' }}>
-            <b>{c.profile ? c.profile.username : 'user'}</b><VerifiedBadge tier={c.profile && c.profile.verified} size={11} />{' '}
+            <b>{c.profile ? c.profile.username : 'user'}</b><VerifiedBadge tier={c.profile && c.profile.verified} custom={c.profile && c.profile.custom_badge} size={11} />{' '}
             {typeof c.content === 'string' && c.content.startsWith('sticker:') ? <span style={{ color: theme.muted }}>sent a sticker</span> : c.content}
           </div>
         ))}
@@ -8801,7 +8841,7 @@ function PostViewer({ post, owner, userId, meProfile, onClose, onDeleted }) {
                 <div key={c.id} style={{ display: 'flex', gap: 12, padding: '12px 16px' }}>
                   <Avatar emoji={c.profile && c.profile.avatar} name={(c.profile && c.profile.name) || '?'} frame={c.profile && c.profile.avatar_frame} size={36} />
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12.5 }}><b>{c.profile ? c.profile.username : 'user'}</b><VerifiedBadge tier={c.profile && c.profile.verified} size={11} /> <span style={{ color: theme.muted }}>{timeShort(c.created_at)}</span></div>
+                    <div style={{ fontSize: 12.5 }}><b>{c.profile ? c.profile.username : 'user'}</b><VerifiedBadge tier={c.profile && c.profile.verified} custom={c.profile && c.profile.custom_badge} size={11} /> <span style={{ color: theme.muted }}>{timeShort(c.created_at)}</span></div>
                     <CommentBody content={c.content} theme={theme} />
                   </div>
                   {(c.user_id === userId || owner.id === userId) && <Trash2 size={15} color={theme.muted} style={{ cursor: 'pointer', flexShrink: 0, marginTop: 4 }} onClick={() => deleteComment(c)} />}
@@ -8929,7 +8969,7 @@ function PostLinkCard({ postId, onOpen }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px' }}>
         <Avatar emoji={data && data.owner.avatar} name={(data && data.owner.name) || '?'} frame={data && data.owner.avatar_frame} size={24} />
         <span style={{ fontSize: 13, fontWeight: 700, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{data ? data.owner.username : ''}</span>
-        {data && <VerifiedBadge tier={data.owner.verified} size={12} />}
+        {data && <VerifiedBadge tier={data.owner.verified} custom={data.owner.custom_badge} size={12} />}
       </div>
       <div style={{ position: 'relative', aspectRatio: '1 / 1', background: '#111' }}>
         {data ? (data.post.media_type === 'video'
@@ -9185,10 +9225,16 @@ function AudioBubble({ url, isMe }) {
 }
 
 const AVATAR_FRAMES = {
-  fire_wolf: { file: '/frames/frame-fire-wolf.webp', fallback: '/frame-fire-wolf.webp', label: 'Inferno wolf frame', scale: 1.578, centerX: 0.4997, centerY: 0.4603, animation: 'zchat-frame-fire 2.2s ease-in-out infinite' },
-  ice_wolf: { file: '/frames/frame-ice-wolf.webp', fallback: '/frame-ice-wolf.webp', label: 'Frost wolf frame', scale: 1.539, centerX: 0.4967, centerY: 0.4854, animation: 'zchat-frame-ice 3s ease-in-out infinite' },
+  fire_wolf: { file: '/frames/frame-fire-wolf.webp', fallback: '/frame-fire-wolf.webp', label: 'Inferno wolf frame', scale: 1.47, centerX: 0.493, centerY: 0.4624, animation: 'zchat-frame-fire 2.2s ease-in-out infinite', animationLight: 'zchat-frame-fire-light 2.2s ease-in-out infinite' },
+  ice_wolf: { file: '/frames/frame-ice-wolf.webp', fallback: '/frame-ice-wolf.webp', label: 'Frost wolf frame', scale: 1.403, centerX: 0.4965, centerY: 0.4831, animation: 'zchat-frame-ice 3s ease-in-out infinite', animationLight: 'zchat-frame-ice-light 3s ease-in-out infinite' },
+  poison: { file: '/frames/frame-poison.webp', fallback: '/frame-poison.webp', label: 'Toxic skull frame', scale: 1.62, centerX: 0.5029, centerY: 0.4765, animation: 'zchat-frame-poison 2.6s ease-in-out infinite', animationLight: 'zchat-frame-poison-light 2.6s ease-in-out infinite' },
 };
 
+function frameMaskStyle(spec) {
+  const inner = Math.max(0, Math.min(80, 90 / (spec.scale || 1.5)));
+  const mask = `radial-gradient(circle closest-side, rgba(0,0,0,0) ${inner.toFixed(1)}%, #000 ${(inner + 4).toFixed(1)}%, #000 86%, rgba(0,0,0,0) 100%)`;
+  return { WebkitMaskImage: mask, maskImage: mask };
+}
 const frameUrlCache = new Map();
 const frameWaiters = new Map();
 const frameImageKeep = [];
@@ -12301,7 +12347,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const profile = conv ? conv.otherProfile : await cachedProfile(msg.sender_id);
     if (!profile) return;
     const locked = conv && locksRef.current[conv.id];
-    setInAppToast({ key: msg.id, kind: 'dm', profile, convId: conv ? conv.id : null, title: profile.name, verified: profile.verified, avatar: profile.avatar, frame: profile.avatar_frame, avatarName: profile.name, prefix: '', preview: locked ? { kind: 'text', text: 'New message' } : preview });
+    setInAppToast({ key: msg.id, kind: 'dm', profile, convId: conv ? conv.id : null, title: profile.name, verified: profile.verified, customBadge: profile.custom_badge, avatar: profile.avatar, frame: profile.avatar_frame, avatarName: profile.name, prefix: '', preview: locked ? { kind: 'text', text: 'New message' } : preview });
   };
 
   const openToast = (toast) => {
@@ -12491,7 +12537,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           <ZBrand size={22} showTag />
           <div onClick={() => setProfileOf(me)} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', maxWidth: 160 }}>
             <div style={{ textAlign: 'right', minWidth: 0 }}>
-              <div style={{ fontWeight: 800, fontSize: 12, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{me.name}<VerifiedBadge tier={me.verified} size={11} /></div>
+              <div style={{ fontWeight: 800, fontSize: 12, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{me.name}<VerifiedBadge tier={me.verified} custom={me.custom_badge} size={11} /></div>
               <div style={{ fontSize: 10, color: theme.teal, fontWeight: 600 }}>Online</div>
               {me.bio && <div style={{ fontSize: 9.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 130 }}>"{me.bio}"</div>}
             </div>
@@ -12563,7 +12609,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               }}>
                 <Avatar emoji={p.avatar} name={p.name} frame={p.avatar_frame} size={42} />
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 700, fontSize: 14, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}<VerifiedBadge tier={p.verified} size={12} /></div>
+                  <div style={{ fontWeight: 700, fontSize: 14, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}<VerifiedBadge tier={p.verified} custom={p.custom_badge} size={12} /></div>
                   <div style={{ fontSize: 11.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>@{p.username}</div>
                 </div>
                 <FollowStatusPill theirId={p.id} viewerId={session.user.id} viewerFollowsThem={searchIFollow.has(p.id)} theyFollowViewer={searchFollowsMe.has(p.id)}
@@ -12660,7 +12706,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <span style={{ fontWeight: unread ? 800 : 700, fontSize: 14, color: theme.ink, display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 150 }}>
-                          {isPinnedByMe(c) && <Pin_ size={13} />}{c.otherProfile.name}<VerifiedBadge tier={c.otherProfile.verified} size={13} />
+                          {isPinnedByMe(c) && <Pin_ size={13} />}{c.otherProfile.name}<VerifiedBadge tier={c.otherProfile.verified} custom={c.otherProfile.custom_badge} size={13} />
                         </span>
                         {(c.sortTime || c.last_message_at) && <span style={{ fontSize: 10.5, color: unread ? theme.coral : theme.muted, fontWeight: unread ? 700 : 400, flexShrink: 0 }}>{formatListTime(c.sortTime || c.last_message_at)}</span>}
                       </div>
@@ -12732,7 +12778,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                   }}>
                     {(activeGroup ? !!(groups.find((x) => x.id === activeGroup.id) || {}).pinned : !!(activeConvForBar && isPinnedByMe(activeConvForBar))) && <span style={{ marginRight: 4, display: 'inline-flex', verticalAlign: 'middle' }}><Pin_ size={12} /></span>}
                     {activeGroup ? activeGroup.name : activeProfile.name}
-                    {!activeGroup && <VerifiedBadge tier={activeProfile.verified} size={13} />}
+                    {!activeGroup && <VerifiedBadge tier={activeProfile.verified} custom={activeProfile.custom_badge} size={13} />}
                   </div>
                   <div style={{ fontSize: 11, color: activeNameBarKey ? 'rgba(255,255,255,0.85)' : theme.muted, textShadow: activeNameBarKey ? '0 1px 4px rgba(0,0,0,0.7)' : 'none' }}>
                     {activityFrom ? (
@@ -12844,6 +12890,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                       senderVerified={showSenderLabel ? ((groupMembers.find((gm) => gm.user_id === m.sender_id) || {}).profile || {}).verified : null}
                       senderAvatar={showSenderLabel ? groupMembers.find((gm) => gm.user_id === m.sender_id)?.profile.avatar : null}
                       senderFrame={showSenderLabel ? ((groupMembers.find((gm) => gm.user_id === m.sender_id) || {}).profile || {}).avatar_frame : null}
+                      senderCustomBadge={showSenderLabel ? ((groupMembers.find((gm) => gm.user_id === m.sender_id) || {}).profile || {}).custom_badge : null}
                       hideReadStatus={!!activeGroup}
                       onOpenSenderProfile={showSenderLabel ? () => { const p = groupMembers.find((gm) => gm.user_id === m.sender_id)?.profile; if (p) setProfileOf(p); } : null}
                       canModerate={activeGroup ? (groupMembers.find((gm) => gm.user_id === session.user.id)?.role === 'admin') : false}
@@ -13230,7 +13277,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         const c = rowSheet.conv;
         const blocked = myBlockedIds.has(c.otherProfile.id);
         return (
-          <ChatRowSheet title={<>{c.otherProfile.name}<VerifiedBadge tier={c.otherProfile.verified} size={13} /></>} subtitle={`@${c.otherProfile.username}`}
+          <ChatRowSheet title={<>{c.otherProfile.name}<VerifiedBadge tier={c.otherProfile.verified} custom={c.otherProfile.custom_badge} size={13} /></>} subtitle={`@${c.otherProfile.username}`}
             avatar={<Avatar emoji={c.otherProfile.avatar} name={c.otherProfile.name} frame={c.otherProfile.avatar_frame} size={44} />}
             onClose={() => setRowSheet(null)}
             actions={[
