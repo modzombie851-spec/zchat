@@ -415,9 +415,13 @@ function colorForName(name) {
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
 }
 
-function Avatar({ emoji, name = '', online, size = 40, ring = false, frame = null }) {
+function Avatar({ emoji, name = '', online, size = 40, ring = false, frame = null, frameFit }) {
   const { chatTheme, theme } = useTheme();
   const frameUrl = useFrameUrl(frame && size >= 22 ? frame : null);
+  const frameSpec = frame ? AVATAR_FRAMES[frame] : null;
+  const fitFrame = frameSpec ? (frameFit === undefined ? size <= 72 : !!frameFit) : false;
+  const photo = fitFrame ? Math.round(size / frameSpec.scale) : size;
+  const inset = (size - photo) / 2;
   const [imgFailed, setImgFailed] = useState(false);
   const isImage = typeof emoji === 'string' && emoji.startsWith('http') && !imgFailed;
   const initial = (name || '?').trim().charAt(0).toUpperCase() || '?';
@@ -425,10 +429,11 @@ function Avatar({ emoji, name = '', online, size = 40, ring = false, frame = nul
   return (
     <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
       <div style={{
-        width: size, height: size, borderRadius: '50%',
+        position: 'absolute', left: inset, top: inset,
+        width: photo, height: photo, borderRadius: '50%',
         background: isImage ? 'transparent' : colorForName(name),
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: size * 0.42, fontWeight: 800, color: 'white', fontFamily: FONT,
+        fontSize: photo * 0.42, fontWeight: 800, color: 'white', fontFamily: FONT,
         boxShadow: (ring && ringColor) ? `0 0 0 2.5px ${ringColor}, 0 0 10px ${ringColor}88` : 'inset 0 0 0 1px rgba(255,255,255,0.25)',
         overflow: 'hidden',
       }}>
@@ -436,9 +441,9 @@ function Avatar({ emoji, name = '', online, size = 40, ring = false, frame = nul
           ? <img src={emoji} alt="" onError={() => setImgFailed(true)} onContextMenu={(e) => e.preventDefault()} draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           : initial}
       </div>
-      {frameUrl && AVATAR_FRAMES[frame] && (() => {
-        const spec = AVATAR_FRAMES[frame];
-        const w = size * spec.scale;
+      {frameUrl && frameSpec && (() => {
+        const spec = frameSpec;
+        const w = photo * spec.scale;
         return (
           <img src={frameUrl} alt="" draggable={false} aria-hidden="true"
             style={{ ...frameMaskStyle(spec), position: 'absolute', width: w, height: w, left: size / 2 - w * (spec.centerX ?? 0.5), top: size / 2 - w * spec.centerY, pointerEvents: 'none', userSelect: 'none', zIndex: 2, maxWidth: 'none', animation: (theme.dark ? spec.animation : (spec.animationLight || spec.animation)) || 'none' }} />
@@ -446,7 +451,7 @@ function Avatar({ emoji, name = '', online, size = 40, ring = false, frame = nul
       })()}
       {online != null && (
         <div style={{
-          position: 'absolute', bottom: 0, right: 0, width: size * 0.28, height: size * 0.28, zIndex: 3,
+          position: 'absolute', bottom: inset, right: inset, width: photo * 0.28, height: photo * 0.28, zIndex: 3,
           borderRadius: '50%', background: online ? '#31D158' : '#B9BCC3', border: '2px solid white',
         }} />
       )}
@@ -1906,6 +1911,144 @@ const STICKERS = [
   { key: 'new-catsweat-99164', label: 'Catsweat', file: '/new-catsweat-99164.png', category: 'cats' },
   { key: 'new-growastrawberry-99169', label: 'Growastrawberry', file: '/new-growastrawberry-99169.gif', category: 'reactions' },
   { key: 'new-gtahandcuffs-99593', label: 'Gtahandcuffs', file: '/new-gtahandcuffs-99593.png', category: 'gta' },
+  { key: 'zs-pepeheart', label: 'Pepeheart', file: '/zs-pepeheart.webp', category: 'memes' },
+  { key: 'zs-terrified', label: 'Terrified', file: '/zs-terrified.webp', category: 'fresh' },
+  { key: 'zs-bet', label: 'Bet', file: '/zs-bet.webp', category: 'memes' },
+  { key: 'zs-catgoodjob', label: 'Catgoodjob', file: '/zs-catgoodjob.webp', category: 'cats' },
+  { key: 'zs-vibecat', label: 'Vibecat', file: '/zs-vibecat.webp', category: 'cats' },
+  { key: 'zs-surprised-cat', label: 'Surprised Cat', file: '/zs-surprised-cat.webp', category: 'cats' },
+  { key: 'zs-whatulookinat', label: 'Whatulookinat', file: '/zs-whatulookinat.webp', category: 'fresh' },
+  { key: 'zs-fax', label: 'Fax', file: '/zs-fax.webp', category: 'memes' },
+  { key: 'zs-bunnywave', label: 'Bunnywave', file: '/zs-bunnywave.webp', category: 'animals' },
+  { key: 'zs-pusheen-gasp', label: 'Pusheen Gasp', file: '/zs-pusheen-gasp.webp', category: 'cats' },
+  { key: 'zs-pepe-spit', label: 'Pepe Spit', file: '/zs-pepe-spit.webp', category: 'memes' },
+  { key: 'zs-sweetangel', label: 'Sweetangel', file: '/zs-sweetangel.webp', category: 'fresh' },
+  { key: 'zs-catnoted', label: 'Catnoted', file: '/zs-catnoted.webp', category: 'cats' },
+  { key: 'zs-stinky', label: 'Stinky', file: '/zs-stinky.webp', category: 'memes' },
+  { key: 'zs-miku-sleeping', label: 'Miku Sleeping', file: '/zs-miku-sleeping.webp', category: 'anime' },
+  { key: 'zs-miku-stareyes', label: 'Miku Stareyes', file: '/zs-miku-stareyes.webp', category: 'anime' },
+  { key: 'zs-rabbitpeace', label: 'Rabbitpeace', file: '/zs-rabbitpeace.webp', category: 'animals' },
+  { key: 'zs-puppylickies', label: 'Puppylickies', file: '/zs-puppylickies.webp', category: 'animals' },
+  { key: 'zs-pusheen-sad', label: 'Pusheen Sad', file: '/zs-pusheen-sad.webp', category: 'cats' },
+  { key: 'zs-catdonut', label: 'Catdonut', file: '/zs-catdonut.webp', category: 'cats' },
+  { key: 'zs-catcried', label: 'Catcried', file: '/zs-catcried.webp', category: 'cats' },
+  { key: 'zs-cat-slide', label: 'Cat Slide', file: '/zs-cat-slide.webp', category: 'cats' },
+  { key: 'zs-pusheen-angry', label: 'Pusheen Angry', file: '/zs-pusheen-angry.webp', category: 'cats' },
+  { key: 'zs-nerdcat', label: 'Nerdcat', file: '/zs-nerdcat.webp', category: 'cats' },
+  { key: 'zs-doakes', label: 'Doakes', file: '/zs-doakes.webp', category: 'memes' },
+  { key: 'zs-cat-cry', label: 'Cat Cry', file: '/zs-cat-cry.webp', category: 'cats' },
+  { key: 'zs-miku-cool', label: 'Miku Cool', file: '/zs-miku-cool.webp', category: 'anime' },
+  { key: 'zs-shocked-cat', label: 'Shocked Cat', file: '/zs-shocked-cat.webp', category: 'cats' },
+  { key: 'zs-heartforyou', label: 'Heartforyou', file: '/zs-heartforyou.webp', category: 'fresh' },
+  { key: 'zs-blehh-cat', label: 'Blehh Cat', file: '/zs-blehh-cat.webp', category: 'cats' },
+  { key: 'zs-peachnoodles', label: 'Peachnoodles', file: '/zs-peachnoodles.webp', category: 'food' },
+  { key: 'zs-duckwaddle', label: 'Duckwaddle', file: '/zs-duckwaddle.webp', category: 'animals' },
+  { key: 'zs-peachpizza', label: 'Peachpizza', file: '/zs-peachpizza.webp', category: 'food' },
+  { key: 'zs-reverso', label: 'Reverso', file: '/zs-reverso.webp', category: 'memes' },
+  { key: 'zs-pusheen-happy', label: 'Pusheen Happy', file: '/zs-pusheen-happy.webp', category: 'cats' },
+  { key: 'zs-huh', label: 'Huh', file: '/zs-huh.webp', category: 'memes' },
+  { key: 'zs-cat-dead', label: 'Cat Dead', file: '/zs-cat-dead.webp', category: 'cats' },
+  { key: 'zs-pusheen-annoyed', label: 'Pusheen Annoyed', file: '/zs-pusheen-annoyed.webp', category: 'cats' },
+  { key: 'zs-dogparty', label: 'Dogparty', file: '/zs-dogparty.webp', category: 'animals' },
+  { key: 'zs-cat-mog', label: 'Cat Mog', file: '/zs-cat-mog.webp', category: 'cats' },
+  { key: 'zs-walterjam', label: 'Walterjam', file: '/zs-walterjam.webp', category: 'fresh' },
+  { key: 'zs-catjamming', label: 'Catjamming', file: '/zs-catjamming.webp', category: 'cats' },
+  { key: 'zs-137-catscream', label: '137 Catscream', file: '/zs-137-catscream.webp', category: 'cats' },
+  { key: 'zs-redcard', label: 'Redcard', file: '/zs-redcard.webp', category: 'fresh' },
+  { key: 'zs-pusheen-playful', label: 'Pusheen Playful', file: '/zs-pusheen-playful.webp', category: 'cats' },
+  { key: 'zs-cat-pichi', label: 'Cat Pichi', file: '/zs-cat-pichi.webp', category: 'cats' },
+  { key: 'zs-screamingcat', label: 'Screamingcat', file: '/zs-screamingcat.webp', category: 'cats' },
+  { key: 'zs-pusheen-comfy', label: 'Pusheen Comfy', file: '/zs-pusheen-comfy.webp', category: 'cats' },
+  { key: 'zs-peachtableflip', label: 'Peachtableflip', file: '/zs-peachtableflip.webp', category: 'fresh' },
+  { key: 'zs-bunnylovegun', label: 'Bunnylovegun', file: '/zs-bunnylovegun.webp', category: 'animals' },
+  { key: 'zs-plotting', label: 'Plotting', file: '/zs-plotting.webp', category: 'fresh' },
+  { key: 'zs-cat-cry2', label: 'Cat Cry', file: '/zs-cat-cry2.webp', category: 'cats' },
+  { key: 'zs-goofy-ah-cat', label: 'Goofy Ah Cat', file: '/zs-goofy-ah-cat.webp', category: 'cats' },
+  { key: 'zs-miku-begging', label: 'Miku Begging', file: '/zs-miku-begging.webp', category: 'anime' },
+  { key: 'zs-catheart', label: 'Catheart', file: '/zs-catheart.webp', category: 'cats' },
+  { key: 'zs-miku-blushing', label: 'Miku Blushing', file: '/zs-miku-blushing.webp', category: 'anime' },
+  { key: 'zs-bearkissphone', label: 'Bearkissphone', file: '/zs-bearkissphone.webp', category: 'animals' },
+  { key: 'zs-bunnydance', label: 'Bunnydance', file: '/zs-bunnydance.webp', category: 'animals' },
+  { key: 'zs-downvote', label: 'Downvote', file: '/zs-downvote.webp', category: 'fresh' },
+  { key: 'zs-silly-cat', label: 'Silly Cat', file: '/zs-silly-cat.webp', category: 'cats' },
+  { key: 'zs-polarbearsleep', label: 'Polarbearsleep', file: '/zs-polarbearsleep.webp', category: 'animals' },
+  { key: 'zs-95-crythumbsup', label: '95 Crythumbsup', file: '/zs-95-crythumbsup.webp', category: 'fresh' },
+  { key: 'zs-sniffdog', label: 'Sniffdog', file: '/zs-sniffdog.webp', category: 'animals' },
+  { key: 'zs-miku-headpat', label: 'Miku Headpat', file: '/zs-miku-headpat.webp', category: 'anime' },
+  { key: 'zs-dogdance', label: 'Dogdance', file: '/zs-dogdance.webp', category: 'animals' },
+  { key: 'zs-whiteteddybear', label: 'Whiteteddybear', file: '/zs-whiteteddybear.webp', category: 'animals' },
+  { key: 'zs-peachbreakfast', label: 'Peachbreakfast', file: '/zs-peachbreakfast.webp', category: 'fresh' },
+  { key: 'zs-5577-pusheen-popcorn', label: '5577 Pusheen Popcorn', file: '/zs-5577-pusheen-popcorn.webp', category: 'cats' },
+  { key: 'zs-catwave', label: 'Catwave', file: '/zs-catwave.webp', category: 'cats' },
+  { key: 'zs-pepe-evil', label: 'Pepe Evil', file: '/zs-pepe-evil.webp', category: 'memes' },
+  { key: 'zs-chipichapa', label: 'Chipichapa', file: '/zs-chipichapa.webp', category: 'fresh' },
+  { key: 'zs-im-done', label: 'Im Done', file: '/zs-im-done.webp', category: 'fresh' },
+  { key: 'zs-cat-sus', label: 'Cat Sus', file: '/zs-cat-sus.webp', category: 'cats' },
+  { key: 'zs-glasses', label: 'Glasses', file: '/zs-glasses.webp', category: 'fresh' },
+  { key: 'zs-miku-shocked', label: 'Miku Shocked', file: '/zs-miku-shocked.webp', category: 'anime' },
+  { key: 'zs-whaat', label: 'Whaat', file: '/zs-whaat.webp', category: 'fresh' },
+  { key: 'zs-bearballoons', label: 'Bearballoons', file: '/zs-bearballoons.webp', category: 'animals' },
+  { key: 'zs-bunnycry', label: 'Bunnycry', file: '/zs-bunnycry.webp', category: 'animals' },
+  { key: 'zs-shiba', label: 'Shiba', file: '/zs-shiba.webp', category: 'fresh' },
+  { key: 'zs-bunnyheartbounce', label: 'Bunnyheartbounce', file: '/zs-bunnyheartbounce.webp', category: 'animals' },
+  { key: 'zs-pusheen-laughing', label: 'Pusheen Laughing', file: '/zs-pusheen-laughing.webp', category: 'cats' },
+  { key: 'zs-peace', label: 'Peace', file: '/zs-peace.webp', category: 'fresh' },
+  { key: 'zs-peachcoffee', label: 'Peachcoffee', file: '/zs-peachcoffee.webp', category: 'fresh' },
+  { key: 'zs-satisfiedbob', label: 'Satisfiedbob', file: '/zs-satisfiedbob.webp', category: 'fresh' },
+  { key: 'zs-cat-pat', label: 'Cat Pat', file: '/zs-cat-pat.webp', category: 'cats' },
+  { key: 'zs-thousandyardstare', label: 'Thousandyardstare', file: '/zs-thousandyardstare.webp', category: 'fresh' },
+  { key: 'zs-6746-52-crycat', label: '6746 52 Crycat', file: '/zs-6746-52-crycat.webp', category: 'cats' },
+  { key: 'zs-gigachad', label: 'Gigachad', file: '/zs-gigachad.webp', category: 'fresh' },
+  { key: 'zs-catlust', label: 'Catlust', file: '/zs-catlust.webp', category: 'cats' },
+  { key: 'zs-scaredhampter', label: 'Scaredhampter', file: '/zs-scaredhampter.webp', category: 'fresh' },
+  { key: 'zs-soldierhamster', label: 'Soldierhamster', file: '/zs-soldierhamster.webp', category: 'fresh' },
+  { key: 'zs-miku-grossedout', label: 'Miku Grossedout', file: '/zs-miku-grossedout.webp', category: 'anime' },
+  { key: 'zs-bunnyphone', label: 'Bunnyphone', file: '/zs-bunnyphone.webp', category: 'animals' },
+  { key: 'zs-pusheen-nervous', label: 'Pusheen Nervous', file: '/zs-pusheen-nervous.webp', category: 'cats' },
+  { key: 'zs-annoyed', label: 'Annoyed', file: '/zs-annoyed.webp', category: 'fresh' },
+  { key: 'zs-bunnydrool', label: 'Bunnydrool', file: '/zs-bunnydrool.webp', category: 'animals' },
+  { key: 'zs-miku-angry', label: 'Miku Angry', file: '/zs-miku-angry.webp', category: 'anime' },
+  { key: 'zs-pusheen-hungry', label: 'Pusheen Hungry', file: '/zs-pusheen-hungry.webp', category: 'cats' },
+  { key: 'zs-drinkwater', label: 'Drinkwater', file: '/zs-drinkwater.webp', category: 'fresh' },
+  { key: 'zs-cat-stare', label: 'Cat Stare', file: '/zs-cat-stare.webp', category: 'cats' },
+  { key: 'zs-pusheen-donut', label: 'Pusheen Donut', file: '/zs-pusheen-donut.webp', category: 'cats' },
+  { key: 'zs-peachlurk', label: 'Peachlurk', file: '/zs-peachlurk.webp', category: 'fresh' },
+  { key: 'zs-pusheen-laying', label: 'Pusheen Laying', file: '/zs-pusheen-laying.webp', category: 'cats' },
+  { key: 'zs-shhhhh', label: 'Shhhhh', file: '/zs-shhhhh.webp', category: 'fresh' },
+  { key: 'zs-peachtoy', label: 'Peachtoy', file: '/zs-peachtoy.webp', category: 'fresh' },
+  { key: 'zs-jaja', label: 'Jaja', file: '/zs-jaja.webp', category: 'fresh' },
+  { key: 'zs-hammysigh', label: 'Hammysigh', file: '/zs-hammysigh.webp', category: 'fresh' },
+  { key: 'zs-pusheen-blush', label: 'Pusheen Blush', file: '/zs-pusheen-blush.webp', category: 'cats' },
+  { key: 'zs-beardance', label: 'Beardance', file: '/zs-beardance.webp', category: 'animals' },
+  { key: 'zs-debil', label: 'Debil', file: '/zs-debil.webp', category: 'fresh' },
+  { key: 'zs-thinky', label: 'Thinky', file: '/zs-thinky.webp', category: 'fresh' },
+  { key: 'zs-plink', label: 'Plink', file: '/zs-plink.webp', category: 'fresh' },
+  { key: 'zs-miku-leek', label: 'Miku Leek', file: '/zs-miku-leek.webp', category: 'anime' },
+  { key: 'zs-tiredcat', label: 'Tiredcat', file: '/zs-tiredcat.webp', category: 'cats' },
+  { key: 'zs-bunnyhearteyes', label: 'Bunnyhearteyes', file: '/zs-bunnyhearteyes.webp', category: 'animals' },
+  { key: 'zs-no', label: 'No', file: '/zs-no.webp', category: 'fresh' },
+  { key: 'zs-angelbunnylaugh', label: 'Angelbunnylaugh', file: '/zs-angelbunnylaugh.webp', category: 'animals' },
+  { key: 'zs-shutseagullmeme', label: 'Shutseagullmeme', file: '/zs-shutseagullmeme.webp', category: 'fresh' },
+  { key: 'zs-catbowtie', label: 'Catbowtie', file: '/zs-catbowtie.webp', category: 'cats' },
+  { key: 'zs-catbunny', label: 'Catbunny', file: '/zs-catbunny.webp', category: 'cats' },
+  { key: 'zs-bunnydance2', label: 'Bunnydance', file: '/zs-bunnydance2.webp', category: 'animals' },
+  { key: 'zs-peachflowers', label: 'Peachflowers', file: '/zs-peachflowers.webp', category: 'fresh' },
+  { key: 'zs-cateating', label: 'Cateating', file: '/zs-cateating.webp', category: 'cats' },
+  { key: 'zs-whitebearheart', label: 'Whitebearheart', file: '/zs-whitebearheart.webp', category: 'animals' },
+  { key: 'zs-pusheen-heart', label: 'Pusheen Heart', file: '/zs-pusheen-heart.webp', category: 'cats' },
+  { key: 'zs-alarm-dancing-cat', label: 'Alarm Dancing Cat', file: '/zs-alarm-dancing-cat.webp', category: 'cats' },
+  { key: 'zs-rahhh', label: 'Rahhh', file: '/zs-rahhh.webp', category: 'fresh' },
+  { key: 'zs-kekwlaugh', label: 'Kekwlaugh', file: '/zs-kekwlaugh.webp', category: 'fresh' },
+  { key: 'zs-stopit', label: 'Stopit', file: '/zs-stopit.webp', category: 'fresh' },
+  { key: 'zs-pomunderattack', label: 'Pomunderattack', file: '/zs-pomunderattack.webp', category: 'fresh' },
+  { key: 'zs-pusheen-thinking', label: 'Pusheen Thinking', file: '/zs-pusheen-thinking.webp', category: 'cats' },
+  { key: 'zs-catsweet', label: 'Catsweet', file: '/zs-catsweet.webp', category: 'cats' },
+  { key: 'zs-bearpeek', label: 'Bearpeek', file: '/zs-bearpeek.webp', category: 'animals' },
+  { key: 'zs-kitty-cat-heart', label: 'Kitty Cat Heart', file: '/zs-kitty-cat-heart.webp', category: 'cats' },
+  { key: 'zs-cat-feeling-love-emotionsexpression-emojisticker-animation', label: 'Cat Feeling Love Emoti', file: '/zs-cat-feeling-love-emotionsexpression-emojisticker-animation.webp', category: 'cats' },
+  { key: 'zs-cat-laughing-loudly-hahahahlol-emojisticker-animation', label: 'Cat Laughing Loudly Ha', file: '/zs-cat-laughing-loudly-hahahahlol-emojisticker-animation.webp', category: 'cats' },
+  { key: 'zs-sticker-29', label: 'Sticker 29', file: '/zs-sticker-29.webp', category: 'fresh' },
+  { key: 'zs-sticker-30', label: 'Sticker 30', file: '/zs-sticker-30.webp', category: 'fresh' },
 ];
 
 const STICKER_CATEGORIES = [
@@ -1920,6 +2063,11 @@ const STICKER_CATEGORIES = [
   { key: 'cool', label: 'Cool' },
   { key: 'gta', label: 'GTA' },
   { key: 'reactions', label: 'Reactions' },
+  { key: 'anime', label: 'Anime' },
+  { key: 'animals', label: 'Animals' },
+  { key: 'memes', label: 'Memes' },
+  { key: 'food', label: 'Food' },
+  { key: 'fresh', label: 'Fresh' },
 ];
 
 function getFavoriteStickerKeys() {
@@ -2338,6 +2486,24 @@ const WALLPAPER_PRESETS = [
   { key: 'girls-sky', label: 'Girls Sky', file: '/wallpaper-girls-sky.jpg' },
   { key: 'friend-circle', label: 'Friend Circle', file: '/wallpaper-friend-circle.jpg' },
   { key: 'cat-squad', label: 'Cat Squad', file: '/wallpaper-cat-squad.jpg' },
+  { key: 'zc01', label: 'Wall 1', file: '/wallpaper-zc01.webp' },
+  { key: 'zc02', label: 'Wall 2', file: '/wallpaper-zc02.webp' },
+  { key: 'zc03', label: 'Wall 3', file: '/wallpaper-zc03.webp' },
+  { key: 'zc04', label: 'Wall 4', file: '/wallpaper-zc04.webp' },
+  { key: 'zc05', label: 'Wall 5', file: '/wallpaper-zc05.webp' },
+  { key: 'zc06', label: 'Wall 6', file: '/wallpaper-zc06.webp' },
+  { key: 'zc07', label: 'Wall 7', file: '/wallpaper-zc07.webp' },
+  { key: 'zc08', label: 'Wall 8', file: '/wallpaper-zc08.webp' },
+  { key: 'zc09', label: 'Wall 9', file: '/wallpaper-zc09.webp' },
+  { key: 'zc10', label: 'Wall 10', file: '/wallpaper-zc10.webp' },
+  { key: 'zc11', label: 'Wall 11', file: '/wallpaper-zc11.webp' },
+  { key: 'zc12', label: 'Wall 12', file: '/wallpaper-zc12.webp' },
+  { key: 'zc13', label: 'Wall 13', file: '/wallpaper-zc13.webp' },
+  { key: 'zc14', label: 'Wall 14', file: '/wallpaper-zc14.webp' },
+  { key: 'zc15', label: 'Wall 15', file: '/wallpaper-zc15.webp' },
+  { key: 'zc16', label: 'Wall 16', file: '/wallpaper-zc16.webp' },
+  { key: 'zc17', label: 'Wall 17', file: '/wallpaper-zc17.webp' },
+  { key: 'zc18', label: 'Wall 18', file: '/wallpaper-zc18.webp' },
 ];
 
 function wallpaperBgStyle(key) {
@@ -3581,6 +3747,16 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
   const [followingCount, setFollowingCount] = useState(cachedStats.following ?? null);
   const [mutualCount, setMutualCount] = useState(cachedStats.mutual ?? null);
   const [postCount, setPostCount] = useState(cachedStats.posts ?? null);
+  const [ownedRewards, setOwnedRewards] = useState([]);
+  const [tryOnFrame, setTryOnFrame] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    supabase.from('user_rewards').select('kind, reward_key, expires_at').eq('user_id', profile.id).then(({ data, error }) => {
+      if (!alive || error) return;
+      setOwnedRewards(data || []);
+    });
+    return () => { alive = false; };
+  }, [profile.id]);
   const profileFrameUrl = useFrameUrl(profile.avatar_frame);
   useEffect(() => {
     let cancelled = false;
@@ -4040,6 +4216,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
                     </div>
                   )}
                   <ProfileSocialRow links={profile.social_links} whatsapp={profile.whatsapp} />
+                  <ProfileCollectionShowcase profile={profile} rewards={ownedRewards} isSelf={isSelf} onPreview={(k) => setTryOnFrame(k)} onOpenCollection={onOpenCollection} />
                   {!isSelf && mutualCount > 0 && (
                     <div role="button" onClick={() => setListModal('mutual')} style={{ textAlign: 'center', fontSize: 12.5, color: theme.muted, marginTop: 12, cursor: 'pointer' }}>
                       Followed by <b style={{ color: theme.ink }}>{formatCount(mutualCount)}</b> {mutualCount === 1 ? 'person' : 'people'} you follow
@@ -4096,6 +4273,9 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
             <div onClick={() => setShowMore(false)} style={{ textAlign: 'center', padding: '12px 0 4px', fontWeight: 700, color: theme.muted, cursor: 'pointer' }}>Cancel</div>
           </div>
         </div>
+      )}
+      {tryOnFrame && (
+        <FrameTryOnPage me={profile} frameKey={tryOnFrame} onClose={() => setTryOnFrame(null)} action={null} />
       )}
       {showShare && (
         <ShareProfileSheet profile={profile} myId={userId} conversations={shareConversations} groups={shareGroups}
@@ -6495,7 +6675,7 @@ function StoryAvatar({ profile, size = 64, ring = 'none', onClick, badgePlus = f
         </div>
       </div>
       {badgePlus && (
-        <div style={{ position: 'absolute', right: 0, bottom: 0, width: size * 0.32, height: size * 0.32, borderRadius: '50%', background: theme.coral, border: `2.5px solid ${theme.panelBg}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800, fontSize: size * 0.22, lineHeight: 1 }}>+</div>
+        <div style={{ position: 'absolute', right: 0, bottom: 0, zIndex: 6, width: size * 0.32, height: size * 0.32, borderRadius: '50%', background: theme.coral, border: `2.5px solid ${theme.panelBg}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800, fontSize: size * 0.22, lineHeight: 1 }}>+</div>
       )}
     </div>
   );
@@ -7517,7 +7697,7 @@ function StoryTray({ me, myStories, trayUsers, seen, onAdd, onOpen }) {
       <div onClick={() => (hasMine ? onOpen(me.id) : onAdd())} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0, cursor: 'pointer', position: 'relative' }}>
         <StoryAvatar profile={me} size={62} ring={hasMine ? (myStories.every((s) => seen.has(s.id)) ? 'seen' : 'unseen') : 'none'} />
         <div role="button" aria-label="Add to your story" onClick={(e) => { e.stopPropagation(); onAdd(); }} style={{
-          position: 'absolute', right: -2, top: 42, width: 24, height: 24, borderRadius: '50%', background: theme.coral, border: `2.5px solid ${theme.panelBg}`,
+          position: 'absolute', right: -2, top: 42, zIndex: 6, width: 24, height: 24, borderRadius: '50%', background: theme.coral, border: `2.5px solid ${theme.panelBg}`,
           display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800, fontSize: 17, lineHeight: 1, boxSizing: 'border-box',
         }}>+</div>
         {label('Your story', true)}
@@ -8332,6 +8512,22 @@ const VERIFIED_TIERS = {
 
 const CUSTOM_BADGES = {
   cat: { file: '/badges/badge-cat.webp', fallback: '/badge-cat.webp', label: 'Cute cat charm', ratio: 1.182, rarity: 'epic', animated: true },
+  grey_butterfly: { file: '/badges/charm-grey_butterfly.webp', fallback: '/charm-grey_butterfly.webp', label: 'Grey Butterfly charm', ratio: 1.018, rarity: 'rare', animated: true },
+  milkbear: { file: '/badges/charm-milkbear.webp', fallback: '/charm-milkbear.webp', label: 'Milkbear charm', ratio: 1.291, rarity: 'rare', animated: true },
+  milkbear2: { file: '/badges/charm-milkbear2.webp', fallback: '/charm-milkbear2.webp', label: 'Milkbear2 charm', ratio: 0.809, rarity: 'rare', animated: true },
+  milk2: { file: '/badges/charm-milk2.webp', fallback: '/charm-milk2.webp', label: 'Milk2 charm', ratio: 0.864, rarity: 'rare', animated: true },
+  cathug: { file: '/badges/charm-cathug.webp', fallback: '/charm-cathug.webp', label: 'Cathug charm', ratio: 0.864, rarity: 'epic', animated: true },
+  cutecat_heart: { file: '/badges/charm-cutecat_heart.webp', fallback: '/charm-cutecat_heart.webp', label: 'Cutecat Heart charm', ratio: 1.1, rarity: 'epic', animated: true },
+  milk1: { file: '/badges/charm-milk1.webp', fallback: '/charm-milk1.webp', label: 'Milk1 charm', ratio: 1.291, rarity: 'rare', animated: true },
+  milk9: { file: '/badges/charm-milk9.webp', fallback: '/charm-milk9.webp', label: 'Milk9 charm', ratio: 0.836, rarity: 'rare', animated: true },
+  scuba_cat: { file: '/badges/charm-scuba_cat.webp', fallback: '/charm-scuba_cat.webp', label: 'Scuba Cat charm', ratio: 0.964, rarity: 'legendary', animated: true },
+  penguinlove: { file: '/badges/charm-penguinlove.webp', fallback: '/charm-penguinlove.webp', label: 'Penguinlove charm', ratio: 1.1, rarity: 'epic', animated: true },
+  milk10: { file: '/badges/charm-milk10.webp', fallback: '/charm-milk10.webp', label: 'Milk10 charm', ratio: 1.245, rarity: 'rare', animated: true },
+  milk6: { file: '/badges/charm-milk6.webp', fallback: '/charm-milk6.webp', label: 'Milk6 charm', ratio: 1.336, rarity: 'rare', animated: true },
+  milk3: { file: '/badges/charm-milk3.webp', fallback: '/charm-milk3.webp', label: 'Milk3 charm', ratio: 1.136, rarity: 'rare', animated: true },
+  milkdance: { file: '/badges/charm-milkdance.webp', fallback: '/charm-milkdance.webp', label: 'Milkdance charm', ratio: 1.018, rarity: 'rare', animated: true },
+  milklaughing: { file: '/badges/charm-milklaughing.webp', fallback: '/charm-milklaughing.webp', label: 'Milklaughing charm', ratio: 1.018, rarity: 'rare', animated: true },
+  milkrock: { file: '/badges/charm-milkrock.webp', fallback: '/charm-milkrock.webp', label: 'Milkrock charm', ratio: 1.082, rarity: 'rare', animated: true },
 };
 const customBadgeUrlCache = new Map();
 function useCustomBadgeUrl(key) {
@@ -9622,6 +9818,59 @@ function SocialIcon({ platform, size = 40, round = false }) {
   return (
     <div style={{ width: size, height: size, borderRadius: round ? '50%' : size * 0.3, background: meta.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden', lineHeight: 0 }}>
       <SocialGlyph platform={meta.key} size={Math.round(size * 0.56)} />
+    </div>
+  );
+}
+
+function ProfileCollectionShowcase({ profile, rewards, isSelf, onPreview, onOpenCollection }) {
+  const { theme } = useTheme();
+  const frames = (rewards || [])
+    .filter((r) => r.kind === 'frame' && AVATAR_FRAMES[r.reward_key] && rewardActive(r))
+    .sort((a, b) => (STORE_RARITY_ORDER[AVATAR_FRAMES[a.reward_key].rarity] ?? 9) - (STORE_RARITY_ORDER[AVATAR_FRAMES[b.reward_key].rarity] ?? 9));
+  const charms = (rewards || []).filter((r) => r.kind === 'charm' && CUSTOM_BADGES[r.reward_key] && rewardActive(r));
+  const total = frames.length + charms.length;
+  if (!total) return null;
+  const best = frames.length ? (RARITY_STYLE[AVATAR_FRAMES[frames[0].reward_key].rarity] || RARITY_STYLE.rare) : RARITY_STYLE.rare;
+  return (
+    <div style={{ marginTop: 18, borderRadius: 22, overflow: 'hidden', background: theme.dark ? 'linear-gradient(160deg, #15121f 0%, #0c0d13 100%)' : 'linear-gradient(160deg, #f6f4ff 0%, #ffffff 100%)', border: `1px solid ${theme.dark ? 'rgba(255,255,255,0.08)' : theme.border}`, textAlign: 'left' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px 10px' }}>
+        <div style={{ width: 30, height: 30, borderRadius: 10, background: `linear-gradient(135deg, ${best.color}, #f97316)`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Sparkles size={16} color="#1a0f02" /></div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 14.5, fontWeight: 900, color: theme.ink }}>Collection</div>
+          <div style={{ fontSize: 11.5, color: theme.muted, fontWeight: 600 }}>{total} unlocked{frames.length ? ` · ${frames.length} ${frames.length === 1 ? 'frame' : 'frames'}` : ''}</div>
+        </div>
+        {isSelf && onOpenCollection && (
+          <div role="button" onClick={onOpenCollection} style={{ fontSize: 12.5, fontWeight: 800, color: '#fbbf24', cursor: 'pointer', padding: '6px 10px', borderRadius: 10, background: 'rgba(245,158,11,0.12)' }}>Manage</div>
+        )}
+      </div>
+      <div style={{ display: 'flex', gap: 10, overflowX: 'auto', padding: '0 14px 14px', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
+        {frames.map((r) => {
+          const spec = AVATAR_FRAMES[r.reward_key];
+          const rr = RARITY_STYLE[spec.rarity] || RARITY_STYLE.rare;
+          return (
+            <div key={r.reward_key} role="button" onClick={() => onPreview(r.reward_key)} style={{ flexShrink: 0, width: 104, borderRadius: 16, padding: '8px 6px 10px', cursor: 'pointer', background: rr.bg, border: `1px solid ${rr.color}55`, textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
+              <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 3, background: rr.color }} />
+              <div style={{ height: 74, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Avatar emoji={profile.avatar} name={profile.name} size={68} frame={r.reward_key} />
+              </div>
+              <div style={{ fontSize: 11, fontWeight: 800, color: 'white', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{spec.label.replace(/ frame$/i, '')}</div>
+              <div style={{ fontSize: 9, fontWeight: 900, letterSpacing: '0.08em', textTransform: 'uppercase', color: rr.color, marginTop: 2 }}>{rr.label}</div>
+            </div>
+          );
+        })}
+        {charms.map((r) => {
+          const spec = CUSTOM_BADGES[r.reward_key];
+          const rr = RARITY_STYLE[spec.rarity] || RARITY_STYLE.rare;
+          return (
+            <div key={`c-${r.reward_key}`} style={{ flexShrink: 0, width: 104, borderRadius: 16, padding: '8px 6px 10px', background: rr.bg, border: `1px solid ${rr.color}55`, textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
+              <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 3, background: rr.color }} />
+              <div style={{ height: 74, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><CharmPreview charm={r.reward_key} size={54} /></div>
+              <div style={{ fontSize: 11, fontWeight: 800, color: 'white', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{spec.label.replace(/ charm$/i, '')}</div>
+              <div style={{ fontSize: 9, fontWeight: 900, letterSpacing: '0.08em', textTransform: 'uppercase', color: rr.color, marginTop: 2 }}>Charm</div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -13247,7 +13496,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               <ArrowLeft size={20} style={{ cursor: 'pointer', color: activeNameBarKey ? 'white' : theme.ink, flexShrink: 0, filter: activeNameBarKey ? 'drop-shadow(0 1px 3px rgba(0,0,0,0.6))' : 'none', position: 'relative' }}
                 onClick={(e) => { e.stopPropagation(); if (activeConvForBar && myLocks[activeConvForBar.id]) lastLeftChatAtRef.current[activeConvForBar.id] = Date.now(); if (activeGroup) markGroupRead(activeGroup.id); if (reloadListsRef.current) reloadListsRef.current(); loadUnreadCounts(); setMobileShowChat(false); setActiveProfile(null); setActiveGroup(null); }} />
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, position: 'relative' }}>
-                {activeGroup ? <GroupAvatar avatar={activeGroup.avatar} name={activeGroup.name} size={38} /> : AVATAR_FRAMES[activeProfile.avatar_frame] ? <div style={{ margin: '0 6px' }}><FramedAvatar frame={activeProfile.avatar_frame} size={36}><Avatar emoji={activeProfile.avatar} name={activeProfile.name} frame={activeProfile.avatar_frame} online={isUserOnline(activeProfile) && !activeProfile.hide_activity} size={36} /></FramedAvatar></div> : <AvatarFrame size={34} tier={activeProfile.verified}><Avatar emoji={activeProfile.avatar} name={activeProfile.name} frame={activeProfile.avatar_frame} online={isUserOnline(activeProfile) && !activeProfile.hide_activity} size={34} /></AvatarFrame>}
+                {activeGroup ? <GroupAvatar avatar={activeGroup.avatar} name={activeGroup.name} size={38} /> : AVATAR_FRAMES[activeProfile.avatar_frame] ? <div style={{ margin: '0 6px' }}><FramedAvatar frame={activeProfile.avatar_frame} size={36}><Avatar emoji={activeProfile.avatar} name={activeProfile.name} frame={activeProfile.avatar_frame} frameFit={false} online={isUserOnline(activeProfile) && !activeProfile.hide_activity} size={36} /></FramedAvatar></div> : <AvatarFrame size={34} tier={activeProfile.verified}><Avatar emoji={activeProfile.avatar} name={activeProfile.name} frame={activeProfile.avatar_frame} online={isUserOnline(activeProfile) && !activeProfile.hide_activity} size={34} /></AvatarFrame>}
                 <div style={{ minWidth: 0 }}>
                   <div style={{
                     fontWeight: 800, fontSize: 14.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
