@@ -13,6 +13,26 @@ import {
   subscribeToMessages, reportUser, uploadMedia, deleteMessage,
 } from './supabaseClient.js';
 
+// Guarantee that account data (frames, charms, badges, messages, everything
+// read from the database) always comes from the live server, never from a
+// stale copy sitting in the browser's cache or a service worker's cache.
+// Picture/video files are unaffected and still cache normally for speed.
+(function guaranteeFreshData() {
+  if (typeof window === 'undefined' || !window.fetch || window.__zchatFetchPatched) return;
+  window.__zchatFetchPatched = true;
+  const nativeFetch = window.fetch.bind(window);
+  window.fetch = (input, init) => {
+    try {
+      const url = typeof input === 'string' ? input : (input && input.url) || '';
+      if (url.includes('.supabase.co/rest/v1/') || url.includes('.supabase.co/auth/v1/')) {
+        const opts = { ...(init || {}), cache: 'no-store' };
+        return nativeFetch(input, opts);
+      }
+    } catch {}
+    return nativeFetch(input, init);
+  };
+})();
+
 
 const ACCENT_PALETTES = {
   coral: { coral: '#2E7CF6', coralDeep: '#1B5FD1', gold: '#5FA8FF', teal: '#00C2A8', danger: '#ED4956' },
