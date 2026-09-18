@@ -272,7 +272,9 @@ async function subscribeToPush(userId, askPermission = false) {
 
 async function sendPushNotification(userId, title, body, url, icon) {
   try {
-    await supabase.functions.invoke('hyper-worker', { body: { user_id: userId, title, body, url: url || '/', icon: icon || undefined } });
+    const base = url || '/';
+    const withAccount = base.includes('acc=') ? base : `${base}${base.includes('?') ? '&' : '?'}acc=${userId}`;
+    await supabase.functions.invoke('hyper-worker', { body: { user_id: userId, title, body, url: withAccount, icon: icon || undefined } });
   } catch (err) {
     console.error('Push notify failed:', err);
   }
@@ -408,6 +410,17 @@ function ThemeToggleIcon({ size = 18 }) {
 }
 
 const AVATAR_COLORS = ['#FF6B4A', '#29C7B3', '#7C5CFC', '#F3B54C', '#FF4D8D', '#3DA5F5', '#4CC98A', '#E85B81'];
+function hiddenAccountProfile(profile) {
+  if (!profile) return profile;
+  return {
+    ...profile,
+    name: 'ZChat user', username: 'zchatuser', avatar: '', bio: '',
+    verified: null, avatar_frame: null, custom_badge: null,
+    social_links: null, whatsapp: null, pronouns: null, country: null, age: null,
+    hidden_account: true,
+  };
+}
+
 function colorForName(name) {
   let hash = 0;
   const str = name || '?';
@@ -2279,6 +2292,9 @@ function MailPanel({ myId, onClose, initialMailId }) {
   });
   const [actionFor, setActionFor] = useState(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+  const [picking, setPicking] = useState(false);
+  const [picked, setPicked] = useState(() => new Set());
+  const [confirmBulk, setConfirmBulk] = useState(null);
   const openedInitialRef = useRef(false);
   const pressTimerRef = useRef(null);
   const longPressFiredRef = useRef(false);
@@ -2348,14 +2364,46 @@ function MailPanel({ myId, onClose, initialMailId }) {
   };
 
   const MailIcon = ({ m, size }) => <MailBadgeIcon type={m.type} size={size} badgeTier={badgeTierFromTitle(m.title)} />;
+  const allIds = (mails || []).map((m) => m.id);
+  const togglePick = (id) => {
+    setPicked((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+  };
+  const markAllRead = async () => {
+    const unread = (mails || []).filter((m) => !m.read).map((m) => m.id);
+    if (!unread.length) return;
+    setMails((prev) => prev.map((m) => ({ ...m, read: true })));
+    playUiSound('tap');
+    await supabase.from('mails').update({ read: true }).in('id', unread);
+  };
+  const deletePicked = async () => {
+    const ids = [...picked];
+    if (!ids.length) return;
+    setMails((prev) => prev.filter((m) => !picked.has(m.id)));
+    setPicked(new Set());
+    setPicking(false);
+    setConfirmBulk(null);
+    playUiSound('delete');
+    await supabase.from('mails').delete().in('id', ids);
+  };
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: theme.panelBg, zIndex: 34, display: 'flex', flexDirection: 'column' }} className="zchat-fade">
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 18px', paddingTop: 'calc(16px + env(safe-area-inset-top))', borderBottom: `1px solid ${theme.border}`, flexShrink: 0 }}>
         <ArrowLeft size={20} style={{ cursor: 'pointer', color: theme.ink }} onClick={() => (selected ? setSelected(null) : onClose())} />
-        <div style={{ fontWeight: 800, fontSize: 17, color: theme.ink, flex: 1 }}>{selected ? 'Message' : 'Mail'}</div>
-        {selected && (
+        <div style={{ fontWeight: 800, fontSize: 17, color: theme.ink, flex: 1 }}>{selected ? 'Message' : picking ? `${picked.size} selected` : 'Mail'}</div>
+        {selected ? (
           <Trash2 size={18} style={{ cursor: 'pointer', color: theme.danger, flexShrink: 0 }} onClick={() => setConfirmDeleteId(selected.id)} />
+        ) : picking ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0 }}>
+            <div role="button" onClick={() => setPicked(picked.size === allIds.length ? new Set() : new Set(allIds))} style={{ fontSize: 13, fontWeight: 800, color: theme.coral, cursor: 'pointer' }}>{picked.size === allIds.length && allIds.length ? 'None' : 'All'}</div>
+            <Trash2 size={18} style={{ cursor: picked.size ? 'pointer' : 'default', color: picked.size ? theme.danger : theme.muted }} onClick={() => picked.size && setConfirmBulk(picked.size)} />
+            <X size={18} style={{ cursor: 'pointer', color: theme.ink }} onClick={() => { setPicking(false); setPicked(new Set()); }} />
+          </div>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0 }}>
+            <div role="button" aria-label="Mark all read" onClick={markAllRead} style={{ cursor: 'pointer', color: theme.ink, display: 'flex' }}><Check size={19} /></div>
+            <div role="button" aria-label="Select mails" onClick={() => { setPicking(true); playUiSound('tap'); }} style={{ fontSize: 13, fontWeight: 800, color: theme.coral, cursor: 'pointer' }}>Select</div>
+          </div>
         )}
       </div>
       {selected ? (
@@ -2377,12 +2425,19 @@ function MailPanel({ myId, onClose, initialMailId }) {
             <div style={{ textAlign: 'center', padding: 40, fontSize: 13, color: theme.muted }}>No mail yet</div>
           ) : (
             sortedMails.map((m) => (
-              <div key={m.id} onClick={() => openMail(m)}
-                onPointerDown={() => startPress(m)} onPointerUp={cancelPress} onPointerLeave={cancelPress} onPointerCancel={cancelPress}
+              <div key={m.id} onClick={() => (picking ? togglePick(m.id) : openMail(m))}
+                onPointerDown={() => !picking && startPress(m)} onPointerUp={cancelPress} onPointerLeave={cancelPress} onPointerCancel={cancelPress}
                 style={{
-                display: 'flex', alignItems: 'center', gap: 12, padding: '11px 8px', cursor: 'pointer', borderRadius: 14,
-                background: pinnedIds.has(m.id) ? `${theme.coral}0F` : m.read ? 'transparent' : theme.rowBg,
+                display: 'flex', alignItems: 'center', gap: 12, padding: '12px 12px', cursor: 'pointer', borderRadius: 18, marginBottom: 8,
+                border: `1px solid ${picked.has(m.id) ? theme.coral : m.read ? theme.border : `${theme.coral}55`}`,
+                boxShadow: m.read ? 'none' : `0 6px 18px ${theme.coral}14`,
+                background: picked.has(m.id) ? `${theme.coral}1A` : pinnedIds.has(m.id) ? `${theme.coral}0F` : m.read ? theme.panelBg : theme.rowBg,
               }}>
+                {picking && (
+                  <div style={{ width: 22, height: 22, borderRadius: '50%', flexShrink: 0, border: `2px solid ${picked.has(m.id) ? theme.coral : theme.border}`, background: picked.has(m.id) ? theme.coral : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {picked.has(m.id) && <Check size={13} color="white" strokeWidth={4} />}
+                  </div>
+                )}
                 <div style={{ position: 'relative', flexShrink: 0 }}>
                   <MailIcon m={m} size={42} />
                   {!m.read && <div style={{ position: 'absolute', top: -2, right: -2, width: 10, height: 10, borderRadius: '50%', background: theme.coral, border: `2px solid ${theme.panelBg}` }} />}
@@ -2424,6 +2479,15 @@ function MailPanel({ myId, onClose, initialMailId }) {
         <ConfirmDialog title="Delete this mail?" body="It will be removed from your mailbox. This can't be undone."
           onCancel={() => setConfirmDeleteId(null)}
           onConfirm={async () => { const id = confirmDeleteId; setConfirmDeleteId(null); await deleteMail(id); }} />
+      )}
+      {confirmBulk != null && (
+        <ConfirmDialog
+          title={`Delete ${confirmBulk} ${confirmBulk === 1 ? 'mail' : 'mails'}?`}
+          body="They will be removed from your mail box."
+          confirmLabel="Delete"
+          danger
+          onCancel={() => setConfirmBulk(null)}
+          onConfirm={deletePicked} />
       )}
     </div>
   );
@@ -4071,27 +4135,39 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
               </div>
             </div>
 
-            <div style={{ position: 'relative', zIndex: 2, display: 'flex', justifyContent: 'center', marginTop: AVATAR_FRAMES[profile.avatar_frame] ? 64 : 22 }}>
-              <div style={{ position: 'relative', width: AVATAR_FRAMES[profile.avatar_frame] ? 150 : 176, height: AVATAR_FRAMES[profile.avatar_frame] ? 150 : 176 }}>
-                {!AVATAR_FRAMES[profile.avatar_frame] && (
-                  <>
-                    <div style={{ position: 'absolute', inset: -9, borderRadius: '50%', background: 'conic-gradient(#f59e0b, #ef4444, #d946ef, #6366f1, #22d3ee, #f59e0b)', animation: 'zchat-frame-spin 6s linear infinite' }} />
-                    <div style={{ position: 'absolute', inset: -5, borderRadius: '50%', background: pageBg }} />
-                  </>
-                )}
-                <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', overflow: 'hidden', background: hasPhoto ? '#000' : colorForName(profile.name), boxShadow: '0 20px 60px rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  {hasPhoto
-                    ? <img src={shownPhoto} alt="" draggable={false} onContextMenu={(e) => e.preventDefault()} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-                    : <span style={{ fontSize: 72, fontWeight: 800, color: 'rgba(255,255,255,0.92)', fontFamily: FONT }}>{initial}</span>}
-                </div>
-                {AVATAR_FRAMES[profile.avatar_frame] && profileFrameUrl && (
-                  <img src={profileFrameUrl} alt="" draggable={false} aria-hidden="true" style={{ ...frameMaskStyle(AVATAR_FRAMES[profile.avatar_frame]), position: 'absolute', width: 150 * AVATAR_FRAMES[profile.avatar_frame].scale, height: 150 * AVATAR_FRAMES[profile.avatar_frame].scale, left: 75 - 150 * AVATAR_FRAMES[profile.avatar_frame].scale * (AVATAR_FRAMES[profile.avatar_frame].centerX ?? 0.5), top: 75 - 150 * AVATAR_FRAMES[profile.avatar_frame].scale * AVATAR_FRAMES[profile.avatar_frame].centerY, pointerEvents: 'none', zIndex: 2, animation: (theme.dark ? AVATAR_FRAMES[profile.avatar_frame].animation : (AVATAR_FRAMES[profile.avatar_frame].animationLight || AVATAR_FRAMES[profile.avatar_frame].animation)) || 'none' }} />
-                )}
-                {isOnline && !AVATAR_FRAMES[profile.avatar_frame] && <div style={{ position: 'absolute', right: 14, bottom: 14, width: 26, height: 26, borderRadius: '50%', background: '#22c55e', border: `5px solid ${pageBg}`, zIndex: 3 }} />}
+            <div style={{ position: 'relative', zIndex: 2, display: 'flex', justifyContent: 'center', marginTop: 22 }}>
+              <div style={{ position: 'relative', width: 200, height: 200 }}>
+                {(() => {
+                  const fspec = AVATAR_FRAMES[profile.avatar_frame];
+                  const photo = fspec ? Math.round(Math.min(178, Math.max(120, 200 / fspec.scale))) : 176;
+                  const off = (200 - photo) / 2;
+                  const fw = photo * (fspec ? fspec.scale : 1);
+                  return (
+                    <>
+                      {!fspec && (
+                        <>
+                          <div style={{ position: 'absolute', inset: -9, borderRadius: '50%', background: 'conic-gradient(#f59e0b, #ef4444, #d946ef, #6366f1, #22d3ee, #f59e0b)', animation: 'zchat-frame-spin 6s linear infinite' }} />
+                          <div style={{ position: 'absolute', inset: -5, borderRadius: '50%', background: pageBg }} />
+                        </>
+                      )}
+                      <div style={{ position: 'absolute', left: off, top: off, width: photo, height: photo, borderRadius: '50%', overflow: 'hidden', background: hasPhoto ? '#000' : colorForName(profile.name), boxShadow: '0 20px 60px rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        {hasPhoto
+                          ? <img src={shownPhoto} alt="" draggable={false} onContextMenu={(e) => e.preventDefault()} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                          : <span style={{ fontSize: photo * 0.46, fontWeight: 800, color: 'rgba(255,255,255,0.92)', fontFamily: FONT }}>{initial}</span>}
+                      </div>
+                      {fspec && profileFrameUrl && (
+                        <img src={profileFrameUrl} alt="" draggable={false} aria-hidden="true" style={{ ...frameMaskStyle(fspec), position: 'absolute', width: fw, height: fw, left: 100 - fw * (fspec.centerX ?? 0.5), top: 100 - fw * fspec.centerY, pointerEvents: 'none', zIndex: 2, maxWidth: 'none', animation: (theme.dark ? fspec.animation : (fspec.animationLight || fspec.animation)) || 'none' }} />
+                      )}
+                      {isOnline && (
+                        <div style={{ position: 'absolute', right: off + photo * 0.06, bottom: off + photo * 0.06, width: 26, height: 26, borderRadius: '50%', background: '#22c55e', border: `5px solid ${pageBg}`, zIndex: 3 }} />
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             </div>
 
-            <div style={{ position: 'relative', zIndex: 2, textAlign: 'center', marginTop: AVATAR_FRAMES[profile.avatar_frame] ? 64 : 18, padding: '0 20px' }}>
+            <div style={{ position: 'relative', zIndex: 2, textAlign: 'center', marginTop: 16, padding: '0 20px' }}>
               <div style={{ fontSize: 27, fontWeight: 900, color: theme.ink, letterSpacing: '-0.02em', lineHeight: 1.15, wordBreak: 'break-word' }}>{profile.name}<VerifiedBadge tier={profile.verified} custom={profile.custom_badge} size={22} /></div>
               <div style={{ fontSize: 13.5, color: theme.muted, marginTop: 4 }}>
                 @{profile.username}{profile.pronouns ? ` · ${profile.pronouns}` : ''}{infoBits.map((b) => ` · ${b}`).join('')}
@@ -4106,7 +4182,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
           </div>
         )}
 
-        <div style={{ padding: editing ? '16px 18px' : '14px 14px', paddingBottom: 'calc(28px + env(safe-area-inset-bottom))', maxWidth: 520, margin: '0 auto', position: 'relative', zIndex: 2 }}>
+        <div style={{ paddingTop: editing ? 16 : 14, paddingLeft: editing ? 18 : 14, paddingRight: editing ? 18 : 14, paddingBottom: 'calc(28px + env(safe-area-inset-bottom))', maxWidth: 520, margin: '0 auto', position: 'relative', zIndex: 2 }}>
           {editing ? (
             <div>
               <div style={{ ...labelStyle, display: 'flex', justifyContent: 'space-between' }}><span>NAME</span><span style={{ fontWeight: 600 }}>{displayName.length}/{NAME_MAX}</span></div>
@@ -4709,9 +4785,9 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
               {m.type === 'audio' && <div style={{ paddingBottom: 14 }}><AudioBubble url={m.media_url} isMe={isMe} /></div>}
               {m.type === 'sticker' && (
                 m.content && m.content.startsWith('/') ? (
-                  <img src={m.content} alt="sticker" className="zchat-wave-pop" onContextMenu={(e) => e.preventDefault()} draggable={false}
-                    onClick={(e) => { if (selectionMode || !onOpenSticker) return; e.stopPropagation(); onOpenSticker(m); }}
-                    style={{ width: 96, height: 96, objectFit: 'contain', display: 'block', marginBottom: 18, cursor: 'pointer' }} />
+                  <div onClick={(e) => { if (selectionMode || !onOpenSticker) return; e.stopPropagation(); onOpenSticker(m); }} style={{ cursor: 'pointer' }}>
+                    <LoopingSticker src={m.content} size={96} className="zchat-wave-pop" style={{ display: 'block', marginBottom: 18 }} />
+                  </div>
                 ) : (
                   <div className="zchat-wave-pop" style={{ fontSize: 64, lineHeight: 1, padding: '4px 10px' }}>{m.content}</div>
                 )
@@ -6410,6 +6486,27 @@ function muteLabel(value) {
   return `Muted until ${until.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}`;
 }
 
+function LoopingSticker({ src, size = 128, style, className, alt = 'sticker' }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || !('IntersectionObserver' in window)) return undefined;
+    const restart = () => { const url = el.getAttribute('data-src'); if (url) { el.src = ''; el.src = url; } };
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach((e) => { if (e.isIntersecting) restart(); });
+    }, { threshold: 0.15 });
+    io.observe(el);
+    const onShow = () => { if (document.visibilityState === 'visible') restart(); };
+    document.addEventListener('visibilitychange', onShow);
+    return () => { io.disconnect(); document.removeEventListener('visibilitychange', onShow); };
+  }, [src]);
+  return (
+    <img ref={ref} src={src} data-src={src} alt={alt} className={className} draggable={false}
+      onContextMenu={(e) => e.preventDefault()} decoding="async"
+      style={{ width: size, height: size, objectFit: 'contain', ...style }} />
+  );
+}
+
 function ConfirmDialog({ title, body, confirmLabel = 'Delete', onCancel, onConfirm, danger = true }) {
   const { theme } = useTheme();
   const [busy, setBusy] = useState(false);
@@ -6663,17 +6760,21 @@ function VerifiedTick({ size = 13 }) {
 
 function StoryAvatar({ profile, size = 64, ring = 'none', onClick, badgePlus = false, dim = false }) {
   const { theme } = useTheme();
-  const pad = ring === 'none' ? 0 : 3;
+  const framed = !!(profile && AVATAR_FRAMES[profile.avatar_frame]);
+  const pad = ring === 'none' || framed ? 0 : 3;
   const ringBg = ring === 'unseen'
     ? `conic-gradient(from 210deg, ${theme.coral}, ${theme.teal}, ${theme.gold}, ${theme.coral})`
     : ring === 'seen' ? theme.border : 'transparent';
   return (
     <div onClick={onClick} style={{ position: 'relative', width: size, height: size, flexShrink: 0, cursor: onClick ? 'pointer' : 'default', opacity: dim ? 0.55 : 1 }}>
-      <div style={{ width: size, height: size, borderRadius: '50%', padding: pad, boxSizing: 'border-box', background: ringBg }}>
-        <div style={{ width: '100%', height: '100%', borderRadius: '50%', padding: ring === 'none' ? 0 : 2, boxSizing: 'border-box', background: theme.panelBg }}>
-          <Avatar emoji={profile?.avatar} name={profile?.name || '?'} frame={profile?.avatar_frame} size={size - (ring === 'none' ? 0 : 10)} />
+      <div style={{ width: size, height: size, borderRadius: '50%', padding: pad, boxSizing: 'border-box', background: framed ? 'transparent' : ringBg }}>
+        <div style={{ width: '100%', height: '100%', borderRadius: '50%', padding: framed ? 0 : (ring === 'none' ? 0 : 2), boxSizing: 'border-box', background: framed ? 'transparent' : theme.panelBg }}>
+          <Avatar emoji={profile?.avatar} name={profile?.name || '?'} frame={profile?.avatar_frame} size={size - (framed || ring === 'none' ? 0 : 10)} />
         </div>
       </div>
+      {framed && ring !== 'none' && (
+        <div style={{ position: 'absolute', inset: -3, borderRadius: '50%', border: `2px solid ${ring === 'unseen' ? theme.coral : theme.border}`, pointerEvents: 'none' }} />
+      )}
       {badgePlus && (
         <div style={{ position: 'absolute', right: 0, bottom: 0, zIndex: 6, width: size * 0.32, height: size * 0.32, borderRadius: '50%', background: theme.coral, border: `2.5px solid ${theme.panelBg}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800, fontSize: size * 0.22, lineHeight: 1 }}>+</div>
       )}
@@ -9971,13 +10072,18 @@ const PRONOUN_OPTIONS = ['he/him', 'she/her', 'they/them', 'he/they', 'she/they'
 function PronounsPicker({ value, onChange, labelStyle }) {
   const { theme } = useTheme();
   const selected = String(value || '').split(',').map((x) => x.trim()).filter(Boolean);
+  const [full, setFull] = useState(false);
   const toggle = (p) => {
-    const next = selected.includes(p) ? selected.filter((x) => x !== p) : [...selected, p].slice(-2);
-    onChange(next.join(', '));
+    if (selected.includes(p)) { onChange(selected.filter((x) => x !== p).join(', ')); setFull(false); return; }
+    if (p === 'any pronouns') { onChange(p); setFull(false); return; }
+    const base = selected.filter((x) => x !== 'any pronouns');
+    if (base.length >= 2) { setFull(true); setTimeout(() => setFull(false), 1400); return; }
+    onChange([...base, p].join(', '));
+    setFull(false);
   };
   return (
     <div style={{ marginTop: 14 }}>
-      <div style={{ ...labelStyle, display: 'flex', justifyContent: 'space-between' }}><span>PRONOUNS</span><span style={{ fontWeight: 600 }}>up to 2</span></div>
+      <div style={{ ...labelStyle, display: 'flex', justifyContent: 'space-between' }}><span>PRONOUNS</span><span style={{ fontWeight: 600, color: full ? theme.danger : undefined }}>{full ? 'remove one first' : 'up to 2'}</span></div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
         {PRONOUN_OPTIONS.map((p) => {
           const on = selected.includes(p);
@@ -10142,8 +10248,9 @@ const RARITY_STYLE = {
   rare: { label: 'Rare', color: '#60a5fa', bg: 'linear-gradient(160deg, #0b2447 0%, #060d1a 100%)', glow: 'rgba(96,165,250,0.45)' },
 };
 
-function FrameTryOnPage({ me, frameKey, onClose, action }) {
-  const spec = AVATAR_FRAMES[frameKey];
+function FrameTryOnPage({ me, frameKey, charmKey, onClose, action }) {
+  const isCharm = !!charmKey;
+  const spec = isCharm ? CUSTOM_BADGES[charmKey] : AVATAR_FRAMES[frameKey];
   if (!spec) return null;
   const r = RARITY_STYLE[spec.rarity] || RARITY_STYLE.rare;
   const name = me ? (me.name || me.username || 'You') : 'You';
@@ -10175,10 +10282,10 @@ function FrameTryOnPage({ me, frameKey, onClose, action }) {
           <div style={{ position: 'absolute', left: 0, right: 0, top: 0, height: 300, background: 'linear-gradient(180deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0) 40%, #0f1117 100%)', pointerEvents: 'none' }} />
           <div style={{ position: 'relative', padding: '26px 16px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
             <div style={{ width: 230, height: 230, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Avatar emoji={me ? me.avatar : ''} name={name} size={138} frame={frameKey} />
+              <Avatar emoji={me ? me.avatar : ''} name={name} size={138} frame={isCharm ? (me && me.avatar_frame) : frameKey} />
             </div>
             <div style={{ fontSize: 24, fontWeight: 900, marginTop: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
-              {name}{me && <VerifiedBadge tier={me.verified} custom={me.custom_badge} size={19} />}
+              {name}{me && <VerifiedBadge tier={me.verified} custom={isCharm ? charmKey : me.custom_badge} size={19} />}
             </div>
             <div style={{ fontSize: 13.5, color: 'rgba(255,255,255,0.6)', marginTop: 2 }}>@{username}</div>
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 800, marginTop: 10, padding: '4px 11px', borderRadius: 14, color: '#22c55e', background: 'rgba(34,197,94,0.12)' }}>
@@ -10204,13 +10311,13 @@ function FrameTryOnPage({ me, frameKey, onClose, action }) {
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderTop: i ? '1px solid rgba(255,255,255,0.06)' : 'none' }}>
               <div style={{ width: 62, height: 62, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                 {row.me
-                  ? <Avatar emoji={me ? me.avatar : ''} name={name} size={46} frame={frameKey} />
+                  ? <Avatar emoji={me ? me.avatar : ''} name={name} size={46} frame={isCharm ? (me && me.avatar_frame) : frameKey} />
                   : <div style={{ width: 46, height: 46, borderRadius: '50%', background: row.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900 }}>{row.name[0]}</div>}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 900, fontSize: 15, display: 'flex', alignItems: 'center' }}>
                   <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.me ? name : row.name}</span>
-                  {row.me && me && <VerifiedBadge tier={me.verified} custom={me.custom_badge} size={13} />}
+                  {row.me && me && <VerifiedBadge tier={me.verified} custom={isCharm ? charmKey : me.custom_badge} size={13} />}
                 </div>
                 <div style={{ fontSize: 13, color: row.unread ? 'white' : 'rgba(255,255,255,0.55)', fontWeight: row.unread ? 700 : 500, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.text}</div>
               </div>
@@ -10227,10 +10334,10 @@ function FrameTryOnPage({ me, frameKey, onClose, action }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderBottom: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.02)' }}>
             <ChevronLeft size={20} color="rgba(255,255,255,0.7)" />
             <div style={{ width: 52, height: 52, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Avatar emoji={me ? me.avatar : ''} name={name} size={38} frame={frameKey} />
+              <Avatar emoji={me ? me.avatar : ''} name={name} size={38} frame={isCharm ? (me && me.avatar_frame) : frameKey} />
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontWeight: 900, fontSize: 15, display: 'flex', alignItems: 'center' }}>{name}{me && <VerifiedBadge tier={me.verified} custom={me.custom_badge} size={13} />}</div>
+              <div style={{ fontWeight: 900, fontSize: 15, display: 'flex', alignItems: 'center' }}>{name}{me && <VerifiedBadge tier={me.verified} custom={isCharm ? charmKey : me.custom_badge} size={13} />}</div>
               <div style={{ fontSize: 12, color: '#22c55e', fontWeight: 700 }}>Online</div>
             </div>
           </div>
@@ -10366,7 +10473,7 @@ function CollectionPanel({ me, rewards, onClose, onEquip, userEmail }) {
       </div>
 
       {(sel || selected === '__none') && (
-        <div className="zchat-sheet-up" style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '18px 18px', paddingBottom: 'calc(18px + env(safe-area-inset-bottom))', background: 'linear-gradient(180deg, rgba(20,18,32,0.96), #0a0a10)', borderTop: '1px solid rgba(255,255,255,0.1)', borderRadius: '24px 24px 0 0', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', display: 'flex', alignItems: 'center', gap: 16 }}>
+        <div className="zchat-sheet-up" style={{ position: 'absolute', zIndex: 30, left: 0, right: 0, bottom: 0, padding: '18px 18px', paddingBottom: 'calc(18px + env(safe-area-inset-bottom))', background: 'linear-gradient(180deg, rgba(20,18,32,0.98), #0a0a10)', borderTop: '1px solid rgba(255,255,255,0.1)', borderRadius: '24px 24px 0 0', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', display: 'flex', alignItems: 'center', gap: 16 }}>
           {selected === '__none' ? (
             <>
               <div style={{ width: 84, height: 84, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Avatar emoji={me.avatar} name={me.name} size={64} /></div>
@@ -10378,15 +10485,13 @@ function CollectionPanel({ me, rewards, onClose, onEquip, userEmail }) {
             </>
           ) : (
             <>
-              <div role="button" onClick={() => { if (tab === 'frame') setTryOn(sel.key); }} style={{ width: 96, height: 96, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: tab === 'frame' ? 'pointer' : 'default' }}>
+              <div role="button" onClick={() => setTryOn({ kind: tab, key: sel.key })} style={{ width: 96, height: 96, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: tab === 'frame' ? 'pointer' : 'default' }}>
                 {tab === 'frame' ? <Avatar emoji={me.avatar} name={me.name} size={62} frame={sel.key} /> : <CharmPreview charm={sel.key} size={62} />}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 10.5, fontWeight: 900, letterSpacing: '0.1em', textTransform: 'uppercase', color: rarity(sel.spec).color }}>{rarity(sel.spec).label}{sel.spec.animated ? ' · Animated' : ''}</div>
                 <div style={{ fontSize: 17, fontWeight: 900, marginTop: 2 }}>{sel.spec.label}</div>
-                {tab === 'frame' && (
-                  <div role="button" onClick={() => setTryOn(sel.key)} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6, padding: '5px 10px', borderRadius: 10, background: 'rgba(255,255,255,0.08)', fontSize: 12, fontWeight: 800, cursor: 'pointer', color: 'rgba(255,255,255,0.85)' }}><Eye size={13} /> Full preview</div>
-                )}
+                <div role="button" onClick={() => setTryOn({ kind: tab, key: sel.key })} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6, padding: '5px 10px', borderRadius: 10, background: 'rgba(255,255,255,0.08)', fontSize: 12, fontWeight: 800, cursor: 'pointer', color: 'rgba(255,255,255,0.85)' }}><Eye size={13} /> Full preview</div>
                 {tab === 'charm' && <div style={{ fontSize: 13, marginTop: 4, color: 'rgba(255,255,255,0.8)', fontWeight: 700 }}>{me.name}<VerifiedBadge tier={me.verified} custom={sel.key} size={14} /></div>}
                 {selOwned && daysLeft(rewardFor(sel.key)) != null && (
                   <div style={{ fontSize: 12, marginTop: 4, fontWeight: 700, color: daysLeft(rewardFor(sel.key)) <= 5 ? '#fca5a5' : 'rgba(255,255,255,0.6)' }}>Expires in {daysLeft(rewardFor(sel.key))} {daysLeft(rewardFor(sel.key)) === 1 ? 'day' : 'days'}</div>
@@ -10418,15 +10523,16 @@ function CollectionPanel({ me, rewards, onClose, onEquip, userEmail }) {
         </div>
       )}
       {tryOn && (() => {
-        const rw = (rewards || []).find((x) => x.kind === 'frame' && x.reward_key === tryOn);
+        const isCharm = tryOn.kind === 'charm';
+        const rw = (rewards || []).find((x) => x.kind === tryOn.kind && x.reward_key === tryOn.key);
         const has = rw && rewardActive(rw);
-        const isEq = me.avatar_frame === tryOn;
+        const isEq = (isCharm ? me.custom_badge : me.avatar_frame) === tryOn.key;
         const action = has
-          ? { label: isEq ? '✓ Equipped' : 'Equip this frame', disabled: isEq || busy, onClick: async () => { setTab('frame'); await equip(tryOn); setTryOn(null); }, sub: daysLeft(rw) != null ? `${daysLeft(rw)} days left` : 'Yours to keep' }
-          : FRAME_STORE.checkoutUrl
-            ? { label: `Unlock for ${FRAME_STORE.priceLabel} · ${FRAME_STORE.periodLabel}`, onClick: () => openFrameCheckout(me.id, userEmail, tryOn), sub: 'Single payment · Secure checkout by Lemon Squeezy' }
-            : { label: 'Store opening soon', disabled: true, sub: 'This frame goes on sale very soon' };
-        return <FrameTryOnPage me={me} frameKey={tryOn} onClose={() => setTryOn(null)} action={action} />;
+          ? { label: isEq ? '✓ Equipped' : (isCharm ? 'Equip this charm' : 'Equip this frame'), disabled: isEq || busy, onClick: async () => { await onEquip(tryOn.kind, tryOn.key); setTryOn(null); }, sub: daysLeft(rw) != null ? `${daysLeft(rw)} days left` : 'Yours to keep' }
+          : !isCharm && FRAME_STORE.checkoutUrl
+            ? { label: `Unlock for ${FRAME_STORE.priceLabel} · ${FRAME_STORE.periodLabel}`, onClick: () => openFrameCheckout(me.id, userEmail, tryOn.key), sub: 'Single payment · Secure checkout by Lemon Squeezy' }
+            : { label: 'Locked', disabled: true, sub: isCharm ? 'Earn this charm from ZChat events and gifts' : 'This frame goes on sale very soon' };
+        return <FrameTryOnPage me={me} frameKey={isCharm ? null : tryOn.key} charmKey={isCharm ? tryOn.key : null} onClose={() => setTryOn(null)} action={action} />;
       })()}
     </div>
   );
@@ -10597,6 +10703,24 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [rewardReady, setRewardReady] = useState({});
   const [myRewards, setMyRewards] = useState([]);
   const [collectionOpen, setCollectionOpen] = useState(false);
+  const backStateRef = useRef({});
+  const exitHintRef = useRef(0);
+  backStateRef.current.closeTop = () => {
+    const steps = [
+      [collectionOpen, () => setCollectionOpen(false)],
+      [showStickers, () => setShowStickers(false)],
+      [showSettings, () => setShowSettings(false)],
+      [showMail, () => setShowMail(false)],
+      [showDiscover, () => setShowDiscover(false)],
+      [showArchived, () => setShowArchived(false)],
+      [profileOf, () => setProfileOf(null)],
+      [mobileShowChat || activeProfile || activeGroup, () => { setMobileShowChat(false); setActiveProfile(null); setActiveGroup(null); }],
+    ];
+    const hit = steps.find(([open]) => !!open);
+    if (!hit) return false;
+    hit[1]();
+    return true;
+  };
   const newVersionAvailable = useNewVersionAvailable();
   const [updateLater, setUpdateLater] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
@@ -10986,7 +11110,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         const preview = useStored ? { kind: 'text', text: c.last_message || '' } : describeMessage(last);
         const lastFromMe = useStored ? c.last_sender_id === myId : last.sender_id === myId;
         return {
-          ...c, otherProfile: nick && foundProfile ? { ...profile, name: nick.nickname } : { ...profile, name: baseName }, realName: profile.name,
+          ...c, otherProfile: profile.is_deleted ? hiddenAccountProfile(profile) : (nick && foundProfile ? { ...profile, name: nick.nickname } : { ...profile, name: baseName }), realName: profile.name,
           preview, lastFromMe, sortTime: Math.max(convTime, msgTime),
           lastMineRead: last && last.sender_id === myId ? !!last.read : false,
           lastMineDelivered: last && last.sender_id === myId ? !!last.delivered : false,
@@ -11041,6 +11165,14 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   useEffect(() => {
     if (!me) return;
     const params = new URLSearchParams(window.location.search);
+    const acc = params.get('acc');
+    if (acc && acc !== session.user.id) {
+      ['dm', 'group', 'post', 'story', 'mail', 's', 'acc'].forEach((k) => params.delete(k));
+      const rest = params.toString();
+      window.history.replaceState(null, '', `${window.location.pathname}${rest ? `?${rest}` : ''}`);
+      showSnack('That notification is for your other account. Switch account to open it.');
+      return;
+    }
     const dmId = params.get('dm');
     const postFlag = params.get('post');
     if (postFlag) {
@@ -11701,7 +11833,12 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       forwarded: !!forwardedFromName, forwarded_from_name: forwardedFromName || null,
     };
     if (replyToId) row.reply_to_id = replyToId;
+    const tempId = type === 'system' ? null : `temp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    if (tempId) {
+      setMessages((prev) => [...prev, { ...row, id: tempId, created_at: new Date().toISOString(), read: false, delivered: false, deleted: false, sending: true }]);
+    }
     const { data, error } = await supabase.from('messages').insert(row).select().single();
+    if (tempId) setMessages((prev) => prev.filter((x) => x.id !== tempId || (error ? true : false)).map((x) => (x.id === tempId && error ? { ...x, sending: false, failed: true } : x)));
     if (!error && data) {
       setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
       loadGroups();
@@ -12001,9 +12138,21 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const replyId = replyingTo?.id || null;
     setReplyingTo(null);
     const wasForward = items.length === 1 && items[0].type === 'text';
-    const { data } = await sendMessage(session.user.id, activeProfile.id, 'text', text, null);
+    const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const optimistic = {
+      id: tempId, sender_id: session.user.id, receiver_id: activeProfile.id, group_id: null,
+      type: 'text', content: text, media_url: null, reply_to_id: replyId || null,
+      created_at: new Date().toISOString(), read: false, delivered: false, deleted: false, sending: true,
+    };
+    setMessages((prev) => [...prev, optimistic]);
+    const { data } = replyId
+      ? (await supabase.from('messages').insert({ sender_id: session.user.id, receiver_id: activeProfile.id, group_id: null, type: 'text', content: text, reply_to_id: replyId }).select().single())
+      : await sendMessage(session.user.id, activeProfile.id, 'text', text, null);
+    if (!data) {
+      setMessages((prev) => prev.map((x) => (x.id === tempId ? { ...x, sending: false, failed: true } : x)));
+    }
     if (data) {
-      if (replyId) { await supabase.from('messages').update({ reply_to_id: replyId }).eq('id', data.id); data.reply_to_id = replyId; }
+      setMessages((prev) => prev.filter((x) => x.id !== tempId));
       if (wasForward) {
         await supabase.from('messages').update({ forwarded: true, forwarded_from_name: items[0].forwarded_from_name || null }).eq('id', data.id);
         data.forwarded = true;
@@ -12683,6 +12832,25 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     },
   });
   callEngineRef.current = callEngine;
+  useEffect(() => {
+    if (!me) return undefined;
+    try { window.history.replaceState({ zchat: 'root' }, ''); window.history.pushState({ zchat: 'app' }, ''); } catch {}
+    const onPop = () => {
+      const st = backStateRef.current;
+      const closed = st.closeTop && st.closeTop();
+      try { window.history.pushState({ zchat: 'app' }, ''); } catch {}
+      if (closed) return;
+      const now = Date.now();
+      if (now - exitHintRef.current < 2500) {
+        try { window.history.go(-3); } catch {}
+        return;
+      }
+      exitHintRef.current = now;
+      showSnack('Press back again to close ZChat');
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, [me && me.id]);
   useEffect(() => {
     if (!me) return undefined;
     let alive = true;
