@@ -322,7 +322,7 @@ function GlobalStyle() {
     <style>{`
       @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
       @keyframes zchat-spin { to { transform: rotate(360deg); } }
-      @keyframes zchat-fade { from { opacity: 0; transform: scale(0.965) translateY(8px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+      @keyframes zchat-fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
       @keyframes zchat-heart-burst { 0% { opacity: 0; transform: scale(0.3); } 30% { opacity: 1; transform: scale(1.2); } 100% { opacity: 0; transform: scale(1.6); } }
       @keyframes zchat-mail-zoom-in { 0% { opacity: 0; transform: scale(0.82); } 100% { opacity: 1; transform: scale(1); } }
       .zchat-mail-zoom { animation: zchat-mail-zoom-in 0.22s cubic-bezier(.2,.8,.3,1); }
@@ -362,7 +362,7 @@ function GlobalStyle() {
       }
       .zchat-bubble-love { animation: zchat-love-pulse 2.6s ease-in-out infinite; }
       .zchat-bubble-neon { animation: zchat-neon-pulse 2.2s ease-in-out infinite; }
-      .zchat-fade { animation: zchat-fade 0.28s cubic-bezier(0.2, 0.8, 0.2, 1); transform-origin: 50% 60%; }
+      .zchat-fade { animation: zchat-fade 0.25s ease; }
       .zchat-wave-pop { animation: zchat-wave-pop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1); }
       .zchat-panel-open { animation: zchat-panel-zoom-in 0.24s cubic-bezier(0.16, 1, 0.3, 1); }
       * { font-family: ${FONT}; }
@@ -1685,21 +1685,12 @@ function FollowRequestsPanel({ userId, onClose, onOpenProfile }) {
   const { theme } = useTheme();
   const [requests, setRequests] = useState(null);
 
-  const [newFollowers, setNewFollowers] = useState([]);
   const load = async () => {
     const { data } = await supabase.from('follows').select('*').eq('following_id', userId).eq('status', 'pending');
     const ids = (data || []).map((r) => r.follower_id);
-    const { data: accepted } = await supabase.from('follows').select('follower_id, created_at').eq('following_id', userId).eq('status', 'accepted').order('created_at', { ascending: false }).limit(60);
-    const { data: mine } = await supabase.from('follows').select('following_id').eq('follower_id', userId).eq('status', 'accepted');
-    const iFollow = new Set((mine || []).map((x) => x.following_id));
-    const accIds = (accepted || []).map((r) => r.follower_id).filter((id) => !ids.includes(id));
-    const allIds = [...new Set([...ids, ...accIds])];
-    if (!allIds.length) { setRequests([]); setNewFollowers([]); return; }
-    const { data: profs } = await supabase.from('profiles').select('*').in('id', allIds);
-    const byId = {};
-    sanitizeAvatarList(profs, userId).forEach((p) => { byId[p.id] = p; });
-    setRequests(ids.map((id) => byId[id]).filter(Boolean).map((p) => ({ profile: p })));
-    setNewFollowers(accIds.map((id) => byId[id]).filter(Boolean).map((p) => ({ profile: p, followingBack: iFollow.has(p.id), when: (accepted || []).find((r) => r.follower_id === p.id)?.created_at })));
+    if (!ids.length) { setRequests([]); return; }
+    const { data: profs } = await supabase.from('profiles').select('*').in('id', ids);
+    setRequests(sanitizeAvatarList(profs, userId).map((p) => ({ profile: p })));
   };
   useEffect(() => {
     load();
@@ -1763,26 +1754,6 @@ function FollowRequestsPanel({ userId, onClose, onOpenProfile }) {
             </div>
           )} />
         ))
-      )}
-      {newFollowers.length > 0 && (
-        <>
-          <div style={{ fontSize: 11, fontWeight: 900, color: theme.muted, letterSpacing: '0.1em', padding: '14px 4px 6px' }}>NEW FOLLOWERS</div>
-          {newFollowers.map(({ profile: p, followingBack, when }) => (
-            <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 4px' }}>
-              <div onClick={() => onOpenProfile && onOpenProfile(p)} style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, cursor: 'pointer' }}>
-                <Avatar emoji={p.avatar} name={p.name} frame={p.avatar_frame} size={40} />
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontWeight: 700, fontSize: 13.5, color: theme.ink, display: 'flex', alignItems: 'center' }}><span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</span><VerifiedBadge tier={p.verified} custom={p.custom_badge} size={12} /></div>
-                  <div style={{ fontSize: 11.5, color: theme.muted }}>@{p.username} · started following {when ? timeAgoLong(when) : ''}</div>
-                </div>
-              </div>
-              {!followingBack && (
-                <button onClick={async () => { await supabase.from('follows').upsert({ follower_id: userId, following_id: p.id, status: p.is_private ? 'pending' : 'accepted' }, { onConflict: 'follower_id,following_id' }); setNewFollowers((prev) => prev.map((x) => (x.profile.id === p.id ? { ...x, followingBack: true } : x))); playUiSound('tap'); }}
-                  style={{ padding: '7px 12px', borderRadius: 10, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontSize: 12, fontFamily: FONT, cursor: 'pointer' }}>{p.is_private ? 'Request' : 'Follow back'}</button>
-              )}
-            </div>
-          ))}
-        </>
       )}
     </ListModal>
   );
@@ -3210,25 +3181,10 @@ function CreateGroupPanel({ myId, onClose, onCreated }) {
   const [err, setErr] = useState('');
   const timer = useRef(null);
 
-  const [suggested, setSuggested] = useState([]);
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      const { data: f } = await supabase.from('follows').select('following_id').eq('follower_id', myId).eq('status', 'accepted').limit(200);
-      const ids = (f || []).map((x) => x.following_id);
-      if (!ids.length) return;
-      const { data: profs } = await supabase.from('profiles').select('*').in('id', ids).eq('is_deleted', false);
-      if (!alive) return;
-      const list = sanitizeAvatarList(profs, myId).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-      setSuggested(list);
-      setResults(list);
-    })();
-    return () => { alive = false; };
-  }, [myId]);
   const doSearch = (val) => {
     setQ(val);
     clearTimeout(timer.current);
-    if (val.trim().length < 2) { setResults(suggested); return; }
+    if (val.trim().length < 2) { setResults([]); return; }
     timer.current = setTimeout(async () => {
       const { data } = await searchAccounts(val.trim());
       setResults(sanitizeAvatarList(data, myId).filter((u) => u.id !== myId && !selected.find((s) => s.id === u.id)));
@@ -3547,25 +3503,10 @@ function AddMembersPanel({ myId, existingIds, onClose, onAdd }) {
   const [selected, setSelected] = useState([]);
   const timer = useRef(null);
 
-  const [suggested, setSuggested] = useState([]);
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      const { data: f } = await supabase.from('follows').select('following_id').eq('follower_id', myId).eq('status', 'accepted').limit(200);
-      const ids = (f || []).map((x) => x.following_id);
-      if (!ids.length) return;
-      const { data: profs } = await supabase.from('profiles').select('*').in('id', ids).eq('is_deleted', false);
-      if (!alive) return;
-      const list = sanitizeAvatarList(profs, myId).filter((u) => !existingIds.includes(u.id)).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-      setSuggested(list);
-      setResults(list);
-    })();
-    return () => { alive = false; };
-  }, [myId]);
   const doSearch = (val) => {
     setQ(val);
     clearTimeout(timer.current);
-    if (val.trim().length < 2) { setResults(suggested); return; }
+    if (val.trim().length < 2) { setResults([]); return; }
     timer.current = setTimeout(async () => {
       const { data } = await searchAccounts(val.trim());
       setResults(sanitizeAvatarList(data, myId).filter((u) => u.id !== myId && !existingIds.includes(u.id) && !selected.find((s) => s.id === u.id)));
@@ -3808,25 +3749,10 @@ function ShareProfileSheet({ profile, myId, conversations, groups, onSend, onClo
     ...(groups || []).map(groupItem),
   ];
 
-  const [suggested, setSuggested] = useState([]);
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      const { data: f } = await supabase.from('follows').select('following_id').eq('follower_id', myId).eq('status', 'accepted').limit(200);
-      const ids = (f || []).map((x) => x.following_id);
-      if (!ids.length) return;
-      const { data: profs } = await supabase.from('profiles').select('*').in('id', ids).eq('is_deleted', false);
-      if (!alive) return;
-      const list = sanitizeAvatarList(profs, myId).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-      setSuggested(list);
-      setResults(list);
-    })();
-    return () => { alive = false; };
-  }, [myId]);
   const doSearch = (val) => {
     setQ(val);
     clearTimeout(timer.current);
-    if (val.trim().length < 2) { setResults(suggested); return; }
+    if (val.trim().length < 2) { setResults([]); return; }
     timer.current = setTimeout(async () => {
       const { data } = await searchAccounts(val.trim());
       const people = sanitizeAvatarList(data, myId).filter((u) => u.id !== myId && !u.is_deleted).map(userItem);
@@ -5120,25 +5046,10 @@ function ForwardPicker({ conversations, onCancel, onPick, myId }) {
   const [searching, setSearching] = useState(false);
   const timer = useRef(null);
 
-  const [suggested, setSuggested] = useState([]);
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      const { data: f } = await supabase.from('follows').select('following_id').eq('follower_id', myId).eq('status', 'accepted').limit(200);
-      const ids = (f || []).map((x) => x.following_id);
-      if (!ids.length) return;
-      const { data: profs } = await supabase.from('profiles').select('*').in('id', ids).eq('is_deleted', false);
-      if (!alive) return;
-      const list = sanitizeAvatarList(profs, myId).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-      setSuggested(list);
-      setResults(list);
-    })();
-    return () => { alive = false; };
-  }, [myId]);
   const doSearch = (val) => {
     setQ(val);
     clearTimeout(timer.current);
-    if (val.trim().length < 2) { setResults(suggested); return; }
+    if (val.trim().length < 2) { setResults([]); return; }
     setSearching(true);
     timer.current = setTimeout(async () => {
       const { data } = await searchAccounts(val.trim());
@@ -7058,14 +6969,13 @@ function StoryViewer({ groupsList, startGroup = 0, startStoryId = null, onAddSto
   const [repostBusy, setRepostBusy] = useState(false);
   const [repostPop, setRepostPop] = useState(false);
   const [keyboardLift, setKeyboardLift] = useState(0);
-  const [viewTop, setViewTop] = useState(0);
   useEffect(() => {
     const vv = window.visualViewport;
     if (!vv) return undefined;
     let frame = 0;
     const update = () => {
       cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => { setKeyboardLift(Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop))); setViewTop(Math.max(0, Math.round(vv.offsetTop))); });
+      frame = requestAnimationFrame(() => setKeyboardLift(Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop))));
     };
     vv.addEventListener('resize', update);
     vv.addEventListener('scroll', update);
@@ -7223,7 +7133,7 @@ function StoryViewer({ groupsList, startGroup = 0, startStoryId = null, onAddSto
           {likeBurst && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none', animation: 'zchat-heart-burst 0.7s ease' }}><Heart size={110} color="#FF3B5C" fill="#FF3B5C" /></div>}
         </div>
 
-        <div style={{ position: 'absolute', left: 0, right: 0, top: viewTop, zIndex: 5, padding: 'calc(8px + env(safe-area-inset-top)) 10px 28px', background: 'linear-gradient(180deg, rgba(0,0,0,0.55), rgba(0,0,0,0))', pointerEvents: 'none' }}>
+        <div style={{ position: 'absolute', left: 0, right: 0, top: 0, padding: 'calc(8px + env(safe-area-inset-top)) 10px 28px', background: 'linear-gradient(180deg, rgba(0,0,0,0.55), rgba(0,0,0,0))', pointerEvents: 'none' }}>
           <div style={{ display: 'flex', gap: 3 }}>
             {group.stories.map((s, i) => (
               <div key={s.id} style={{ flex: 1, height: 2.5, borderRadius: 2, background: 'rgba(255,255,255,0.35)', overflow: 'hidden' }}>
@@ -7322,8 +7232,6 @@ function StoryViewer({ groupsList, startGroup = 0, startStoryId = null, onAddSto
                   <div role="button" aria-label="Repost" onClick={async () => {
                     if (repostBusy) return;
                     if (repostedHere) { setFlash('Already on your story'); setTimeout(() => setFlash(''), 1600); return; }
-                    if (!window.confirm(`Add ${(group.profile.name || 'this').split(' ')[0]}'s status to your story?`)) return;
-                    playUiSound('repost');
                     setRepostBusy(true);
                     const result = await onRepost(story, group.profile);
                     setRepostBusy(false);
@@ -7780,7 +7688,6 @@ function useCallEngine(options) {
   };
 
   const accept = async (acceptOpts = {}) => {
-    playUiSound('like');
     const c = callRef.current;
     if (!c || c.direction !== 'incoming' || c.status !== 'ringing') return;
     stopTone();
@@ -7801,7 +7708,6 @@ function useCallEngine(options) {
   };
 
   const decline = () => {
-    playUiSound('cancel');
     const c = callRef.current;
     if (!c) return;
     if (c.mode === 'direct' && c.status === 'ringing') supabase.from('calls').update({ status: 'declined', ended_at: new Date().toISOString() }).eq('id', c.id).then(() => {});
@@ -12024,36 +11930,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   }, [me]);
 
   useEffect(() => {
-    if (!me) return undefined;
-    let t1 = 0; let t2 = 0; let t3 = 0;
-    const channel = supabase.channel('device-sync-' + me.id)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'group_members', filter: `user_id=eq.${me.id}` }, () => {
-        clearTimeout(t1); t1 = setTimeout(() => { loadGroups(); loadUnreadCounts(); }, 400);
-      })
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'story_views', filter: `viewer_id=eq.${me.id}` }, () => {
-        clearTimeout(t2); t2 = setTimeout(() => { if (reloadStoriesRef.current) reloadStoriesRef.current(); }, 600);
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'mails', filter: `recipient_id=eq.${me.id}` }, () => {
-        clearTimeout(t3); t3 = setTimeout(() => loadUnreadMailCount(), 400);
-      })
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `sender_id=eq.${me.id}` }, (payload) => {
-        const row = payload.new;
-        if (!row) return;
-        setMessages((prev) => {
-          const open = activeProfileRefForCalls.current;
-          const g = activeGroupResumeRef.current;
-          const belongs = g ? row.group_id === g.id : (open && !row.group_id && row.receiver_id === open.id);
-          if (!belongs || prev.some((m) => m.id === row.id)) return prev;
-          return [...prev, row];
-        });
-        clearTimeout(listReloadTimerRef.current);
-        listReloadTimerRef.current = setTimeout(() => { if (reloadListsRef.current) reloadListsRef.current(); }, 500);
-      })
-      .subscribe();
-    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); supabase.removeChannel(channel); };
-  }, [me && me.id]);
-
-  useEffect(() => {
     if (!me || (!activeProfile && !activeGroup)) return;
     const channel = supabase.channel('reactions-' + (activeGroup ? activeGroup.id : activeProfile.id))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'message_likes' }, (payload) => {
@@ -13174,23 +13050,16 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   locksRef.current = myLocks;
   reloadListsRef.current = () => { loadConversations(); loadGroups(); };
 
-  const notifyUser = async (userId, title, body, url, icon) => {
+  const notifyUser = (userId, title, body, url, icon) => {
     if (!userId || visibleIdsRef.current.has(userId)) return;
-    try {
-      if (url && url.startsWith('/?dm=')) {
-        const me_ = session.user.id;
-        const { data: conv } = await supabase.from('conversations').select('user_a, user_b, muted_until_a, muted_until_b')
-          .or(`and(user_a.eq.${me_},user_b.eq.${userId}),and(user_a.eq.${userId},user_b.eq.${me_})`).maybeSingle();
-        if (conv && isActiveUntil(conv[conv.user_a === userId ? 'muted_until_a' : 'muted_until_b'])) return;
-      }
-      if (url && url.startsWith('/?group=') && !/mentioned you|added you/.test(title || '')) {
-        const gid = new URLSearchParams(url.slice(url.indexOf('?'))).get('group');
-        if (gid) {
-          const { data: member } = await supabase.from('group_members').select('notify_muted_until').eq('group_id', gid).eq('user_id', userId).maybeSingle();
-          if (member && isActiveUntil(member.notify_muted_until)) return;
-        }
-      }
-    } catch {}
+    if (url && url.startsWith('/?dm=')) {
+      const conv = conversationsRef.current.find((c) => c.otherProfile.id === userId) || archivedConversationsRef.current.find((c) => c.otherProfile.id === userId);
+      if (conv && isActiveUntil(conv[conv.user_a === session.user.id ? 'muted_until_b' : 'muted_until_a'])) return;
+    }
+    if (url && url.startsWith('/?group=') && !/mentioned you|added you/.test(title || '')) {
+      const member = groupMembersRef.current.find((gm) => gm.user_id === userId);
+      if (member && isActiveUntil(member.notify_muted_until)) return;
+    }
     sendPushNotification(userId, title, body, url, icon);
   };
 
