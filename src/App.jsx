@@ -2428,11 +2428,14 @@ function MailPanel({ myId, onClose, initialMailId }) {
               <div key={m.id} onClick={() => (picking ? togglePick(m.id) : openMail(m))}
                 onPointerDown={() => !picking && startPress(m)} onPointerUp={cancelPress} onPointerLeave={cancelPress} onPointerCancel={cancelPress}
                 style={{
-                display: 'flex', alignItems: 'center', gap: 12, padding: '12px 12px', cursor: 'pointer', borderRadius: 18, marginBottom: 8,
+                position: 'relative', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 12px', cursor: 'pointer', borderRadius: 18, marginBottom: 8,
                 border: `1px solid ${picked.has(m.id) ? theme.coral : m.read ? theme.border : `${theme.coral}55`}`,
                 boxShadow: m.read ? 'none' : `0 6px 18px ${theme.coral}14`,
                 background: picked.has(m.id) ? `${theme.coral}1A` : pinnedIds.has(m.id) ? `${theme.coral}0F` : m.read ? theme.panelBg : theme.rowBg,
               }}>
+                {!m.read && !picking && (
+                  <div style={{ position: 'absolute', top: 8, right: 10, padding: '2px 7px', borderRadius: 7, background: theme.coral, color: 'white', fontSize: 9.5, fontWeight: 900, letterSpacing: '0.06em' }}>NEW</div>
+                )}
                 {picking && (
                   <div style={{ width: 22, height: 22, borderRadius: '50%', flexShrink: 0, border: `2px solid ${picked.has(m.id) ? theme.coral : theme.border}`, background: picked.has(m.id) ? theme.coral : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     {picked.has(m.id) && <Check size={13} color="white" strokeWidth={4} />}
@@ -3972,6 +3975,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
     const phone = cleanWhatsappNumber(whatsapp);
     let { data, error } = await updateProfile(profile.id, { ...fields, social_links: cleanLinks, whatsapp: phone || null, pronouns: pronouns.trim().slice(0, 40) || null });
     if (error && /pronouns/i.test(error.message || '')) {
+      alert('Pronouns could not be saved yet. Ask the ZChat team to run the pronouns update.');
       ({ data, error } = await updateProfile(profile.id, { ...fields, social_links: cleanLinks, whatsapp: phone || null }));
     }
     if (error && /social_links|whatsapp|column/i.test(error.message || '')) {
@@ -4804,7 +4808,7 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
                 </div>
               )}
               {m.type === 'text' && m.content && !sharedProfileId && !sharedPostId && !(m.story_id && (m.content === STORY_MENTION_TEXT || m.content === STORY_GROUP_MENTION_TEXT || m.content === STORY_SHARE_TEXT)) && (
-                <div style={{ fontSize: 15 * fontScale, color: theme.ink, wordBreak: 'break-word', lineHeight: 1.32, display: 'flow-root' }}>
+                <div style={{ fontSize: 15 * fontScale, color: theme.ink, wordBreak: 'break-word', whiteSpace: 'pre-wrap', lineHeight: 1.32, display: 'flow-root' }}>
                   <RichText text={m.content} onMention={onOpenMention} />
                   {linkPreviewUrl && <LinkPreviewCard url={linkPreviewUrl} />}
                   <span data-msg-time="true" style={{ float: 'right', display: 'inline-flex', alignItems: 'center', gap: 3, marginLeft: 10, marginTop: 7, marginBottom: -3, height: 14, lineHeight: 1, position: 'relative', top: 1, userSelect: 'none' }}>
@@ -7089,7 +7093,7 @@ function StoryViewer({ groupsList, startGroup = 0, startStoryId = null, onAddSto
               <div onClick={() => setShowViewers(true)} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 14px', borderRadius: 22, background: 'rgba(255,255,255,0.14)', cursor: 'pointer', fontSize: 13.5, fontWeight: 700 }}>
                 <Eye size={17} /> {viewCount == null ? 'Viewers' : `${viewCount} ${viewCount === 1 ? 'viewer' : 'viewers'}`}
               </div>
-              <div style={{ flex: 1 }} />
+              <div style={{ position: 'relative', zIndex: 12, flex: 1 }} />
               {onShare && (
                 <div onClick={() => onShare(story, group.profile)} style={{ width: 42, height: 42, borderRadius: '50%', background: 'rgba(255,255,255,0.14)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><Share2 size={18} color="white" /></div>
               )}
@@ -7118,7 +7122,7 @@ function StoryViewer({ groupsList, startGroup = 0, startStoryId = null, onAddSto
                 <div onPointerDown={(e) => e.preventDefault()} onClick={sendReply} style={{ padding: '10px 14px', fontWeight: 800, fontSize: 14.5, cursor: 'pointer' }}>Send</div>
               ) : (
                 <>
-                  <div onClick={toggleLike} style={{ padding: 6, cursor: 'pointer' }}><Heart size={26} color={isLiked ? '#FF3B5C' : 'white'} fill={isLiked ? '#FF3B5C' : 'none'} /></div>
+                  <div onClick={toggleLike} style={{ padding: 6, cursor: 'pointer', position: 'relative', zIndex: 12 }}><Heart size={26} color={isLiked ? '#FF3B5C' : 'white'} fill={isLiked ? '#FF3B5C' : 'none'} /></div>
                   <div role="button" aria-label="Repost" onClick={async () => {
                     if (repostBusy) return;
                     if (repostedHere) { setFlash('Already on your story'); setTimeout(() => setFlash(''), 1600); return; }
@@ -7816,7 +7820,7 @@ function StoryTray({ me, myStories, trayUsers, seen, onAdd, onOpen }) {
   );
 }
 
-const APP_VERSION = '3.8V';
+const APP_VERSION = '3.9V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -10281,7 +10285,7 @@ function FrameTryOnPage({ me, frameKey, charmKey, onClose, action }) {
           </div>
           <div style={{ position: 'absolute', left: 0, right: 0, top: 0, height: 300, background: 'linear-gradient(180deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0) 40%, #0f1117 100%)', pointerEvents: 'none' }} />
           <div style={{ position: 'relative', padding: '26px 16px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
-            <div style={{ width: 230, height: 230, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ position: 'relative', zIndex: 0, width: 230, height: 230, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Avatar emoji={me ? me.avatar : ''} name={name} size={138} frame={isCharm ? (me && me.avatar_frame) : frameKey} />
             </div>
             <div style={{ fontSize: 24, fontWeight: 900, marginTop: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
@@ -10349,7 +10353,7 @@ function FrameTryOnPage({ me, frameKey, charmKey, onClose, action }) {
       </div>
 
       {action && (
-        <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '12px 16px', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))', background: 'linear-gradient(180deg, rgba(7,8,13,0) 0%, rgba(7,8,13,0.96) 30%)' }}>
+        <div style={{ position: 'absolute', zIndex: 40, left: 0, right: 0, bottom: 0, padding: '12px 16px', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))', background: 'linear-gradient(180deg, rgba(7,8,13,0) 0%, rgba(7,8,13,0.96) 30%)' }}>
           <button onClick={action.onClick} disabled={action.disabled} style={{ width: '100%', padding: '15px 16px', borderRadius: 18, border: 'none', fontFamily: FONT, fontWeight: 900, fontSize: 16.5, cursor: action.disabled ? 'default' : 'pointer', color: action.disabled ? 'rgba(255,255,255,0.6)' : '#1a0f02', background: action.disabled ? 'rgba(255,255,255,0.1)' : 'linear-gradient(135deg, #fde047, #f59e0b 45%, #ea580c)', boxShadow: action.disabled ? 'none' : '0 12px 30px rgba(245,158,11,0.35)' }}>{action.label}</button>
           {action.sub && <div style={{ textAlign: 'center', fontSize: 12, color: 'rgba(255,255,255,0.55)', marginTop: 6, fontWeight: 700 }}>{action.sub}</div>}
         </div>
@@ -10724,15 +10728,16 @@ function FeedComments({ post, me, userId, onClose, onCount, onOpenProfile }) {
     const parent = replyTo;
     setReplyTo(null);
     playUiSound('send');
-    const row = { post_id: post.id, user_id: userId, text: parent ? `@${parent.profile?.username || 'user'} ${body}` : body };
-    await supabase.from('post_comments').insert(row);
+    const row = { post_id: post.id, user_id: userId, content: parent ? `@${parent.profile?.username || 'user'} ${body}` : body };
+    const { error: cErr } = await supabase.from('post_comments').insert(row);
+    if (cErr) { setText(body); alert(`Couldn't post comment: ${cErr.message}`); }
     if (post.user_id !== userId) sendPushNotification(post.user_id, 'ZChat', `${(me && me.name) || 'Someone'} commented on your post`, `/?post=${post.id}`, me && me.avatar);
     setSending(false);
     load();
   };
 
-  const top = (rows || []).filter((c) => !/^@\S+\s/.test(c.text || ''));
-  const repliesOf = (c) => (rows || []).filter((r) => r !== c && (r.text || '').startsWith(`@${c.profile?.username || '~'} `));
+  const top = (rows || []).filter((c) => !/^@\S+\s/.test(c.content || ''));
+  const repliesOf = (c) => (rows || []).filter((r) => r !== c && (r.content || '').startsWith(`@${c.profile?.username || '~'} `));
 
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 20, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
@@ -10762,9 +10767,9 @@ function FeedComments({ post, me, userId, onClose, onCount, onOpenProfile }) {
                       {isOwner && <span style={{ color: '#fbbf24', marginLeft: 5 }}>· creator</span>}
                     </div>
                     <div style={{ fontSize: 14, marginTop: 3, lineHeight: 1.35, wordBreak: 'break-word' }}>
-                      {(c.text || '').startsWith('sticker:')
-                        ? <LoopingSticker src={(c.text || '').slice(8)} size={72} />
-                        : c.text}
+                      {(c.content || '').startsWith('sticker:')
+                        ? <LoopingSticker src={(c.content || '').slice(8)} size={72} />
+                        : c.content}
                     </div>
                     <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)', marginTop: 5, display: 'flex', gap: 16, fontWeight: 700 }}>
                       <span>{timeAgoLong(c.created_at)}</span>
@@ -10781,7 +10786,7 @@ function FeedComments({ post, me, userId, onClose, onCount, onOpenProfile }) {
                         <Avatar emoji={r.profile?.avatar} name={r.profile?.name || '?'} size={28} frame={r.profile?.avatar_frame} />
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.55)', fontWeight: 700 }}>{r.profile?.username || 'user'}</div>
-                          <div style={{ fontSize: 13.5, marginTop: 2, wordBreak: 'break-word' }}>{r.text}</div>
+                          <div style={{ fontSize: 13.5, marginTop: 2, wordBreak: 'break-word' }}>{r.content}</div>
                           <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.5)', marginTop: 4, fontWeight: 700 }}>{timeAgoLong(r.created_at)}</div>
                         </div>
                       </div>
@@ -13588,13 +13593,15 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     for (let i = 0; i < outputs.length; i++) {
       const item = outputs[i];
       const { url, error } = await uploadMedia(item.file, session.user.id);
+      if (error || !url) { showSnack(`Upload failed: ${(error && error.message) || 'no file'}`); continue; }
       if (!error && url) {
         const captionForThis = i === 0 ? (caption || null) : null;
         let inserted = null;
         if (targetGroup) {
           inserted = await sendGroupMessage(item.kind, captionForThis, url);
         } else {
-          const { data } = await sendMessage(session.user.id, targetProfile.id, item.kind, captionForThis, url);
+          const { data, error: sendErr } = await sendMessage(session.user.id, targetProfile.id, item.kind, captionForThis, url);
+          if (sendErr) showSnack(`Couldn't send: ${sendErr.message}`);
           inserted = data;
           if (data) {
             setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
@@ -13805,12 +13812,37 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         ) : (
           <>
             <div style={{ display: 'flex', gap: 6, padding: '0 16px 10px', flexShrink: 0, overflowX: 'auto' }}>
-              {[{ k: 'all', l: 'All' }, { k: 'unread', l: 'Unread' }, { k: 'groups', l: 'Groups' }, { k: 'dms', l: 'Chats' }].map((f) => (
-                <div key={f.k} onClick={() => setListFilter(f.k)} style={{
-                  padding: '6px 14px', borderRadius: 20, fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
-                  background: listFilter === f.k ? theme.coral : theme.rowBg, color: listFilter === f.k ? 'white' : theme.muted,
-                }}>{f.l}</div>
-              ))}
+              {(() => {
+                const liveGroups = groups.filter((g) => !g.archived);
+                const unreadDms = conversations.filter(isUnread).length;
+                const unreadGroups = liveGroups.filter((g) => g.unread > 0).length;
+                const chips = [
+                  { k: 'all', l: 'All', n: conversations.length + liveGroups.length },
+                  { k: 'unread', l: 'Unread', n: unreadDms + unreadGroups, hot: true },
+                  { k: 'groups', l: 'Groups', n: liveGroups.length },
+                  { k: 'dms', l: 'Chats', n: conversations.length },
+                ];
+                return chips.map((f) => {
+                  const on = listFilter === f.k;
+                  return (
+                    <div key={f.k} onClick={() => { setListFilter(f.k); playUiSound('tap'); }} style={{
+                      display: 'flex', alignItems: 'center', gap: 6,
+                      padding: '6px 12px', borderRadius: 20, fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
+                      background: on ? theme.coral : theme.rowBg, color: on ? 'white' : theme.muted,
+                    }}>
+                      {f.l}
+                      {f.n > 0 && (
+                        <span style={{
+                          minWidth: 18, height: 18, padding: '0 5px', borderRadius: 9, fontSize: 10.5, fontWeight: 900,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          background: on ? 'rgba(255,255,255,0.28)' : (f.hot ? theme.coral : theme.border),
+                          color: on ? 'white' : (f.hot ? 'white' : theme.ink),
+                        }}>{f.n > 99 ? '99+' : f.n}</span>
+                      )}
+                    </div>
+                  );
+                });
+              })()}
             </div>
             <div
               ref={sidebarListRef}
