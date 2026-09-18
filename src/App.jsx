@@ -8069,7 +8069,7 @@ function StoryTray({ me, myStories, trayUsers, seen, onAdd, onOpen }) {
   );
 }
 
-const APP_VERSION = '3.9V';
+const APP_VERSION = '4.0V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
