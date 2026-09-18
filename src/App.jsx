@@ -2407,6 +2407,13 @@ function MailPanel({ myId, onClose, initialMailId }) {
 
   const load = async () => {
     const { data } = await supabase.from('mails').select('*').eq('recipient_id', myId).order('created_at', { ascending: false }).limit(100);
+    const senderIds = [...new Set((data || []).map((m) => m.sender_id).filter(Boolean))];
+    if (senderIds.length) {
+      const { data: profs } = await supabase.from('profiles').select('*').in('id', senderIds);
+      const byId = {};
+      sanitizeAvatarList(profs, myId).forEach((p) => { byId[p.id] = p; });
+      (data || []).forEach((m) => { if (m.sender_id && byId[m.sender_id]) m.sender = byId[m.sender_id]; });
+    }
     setMails(data || []);
   };
   useEffect(() => { load(); }, [myId]);
@@ -2537,13 +2544,20 @@ function MailPanel({ myId, onClose, initialMailId }) {
                   </div>
                 )}
                 <div style={{ position: 'relative', flexShrink: 0 }}>
-                  <MailIcon m={m} size={42} />
+                  {m.sender
+                    ? <div style={{ position: 'relative', width: 46, height: 46, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <Avatar emoji={m.sender.avatar} name={m.sender.name} size={44} frame={m.sender.avatar_frame} />
+                        <div style={{ position: 'absolute', right: -4, bottom: -4, width: 20, height: 20, borderRadius: 7, background: theme.panelBg, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 4 }}><MailIcon m={m} size={16} /></div>
+                      </div>
+                    : <MailIcon m={m} size={42} />}
                   {!m.read && <div style={{ position: 'absolute', top: -2, right: -2, width: 10, height: 10, borderRadius: '50%', background: theme.coral, border: `2px solid ${theme.panelBg}` }} />}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                     {pinnedIds.has(m.id) && <Pin_ size={11} />}
-                    <div style={{ fontWeight: m.read ? 600 : 800, fontSize: 13.5, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.title}</div>
+                    <div style={{ fontWeight: m.read ? 600 : 800, fontSize: 13.5, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'flex', alignItems: 'center' }}>
+                      {m.sender ? <><span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.sender.name}</span><VerifiedBadge tier={m.sender.verified} custom={m.sender.custom_badge} size={12} /><span style={{ color: theme.muted, fontWeight: 600, marginLeft: 6, overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.title.replace(new RegExp(`^${m.sender.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*`), '')}</span></> : m.title}
+                    </div>
                   </div>
                   <div style={{ fontSize: 12, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.body}</div>
                 </div>
@@ -3993,11 +4007,19 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
   const [tryOnFrame, setTryOnFrame] = useState(null);
   useEffect(() => {
     let alive = true;
-    supabase.from('user_rewards').select('kind, reward_key, expires_at').eq('user_id', profile.id).then(({ data, error }) => {
-      if (!alive || error) return;
-      setOwnedRewards(data || []);
-    });
-    return () => { alive = false; };
+    let retryTimer = null;
+    const load = (attempt) => {
+      supabase.from('user_rewards').select('kind, reward_key, expires_at').eq('user_id', profile.id).then(({ data, error }) => {
+        if (!alive) return;
+        if (error) {
+          if ((attempt || 0) < 4) { clearTimeout(retryTimer); retryTimer = setTimeout(() => load((attempt || 0) + 1), Math.min(1200 * ((attempt || 0) + 1), 6000)); }
+          return;
+        }
+        setOwnedRewards(data || []);
+      });
+    };
+    load(0);
+    return () => { alive = false; clearTimeout(retryTimer); };
   }, [profile.id]);
   const profileFrameUrl = useFrameUrl(profile.avatar_frame);
   useEffect(() => {
@@ -9823,12 +9845,16 @@ function frameMaskStyle(spec) {
 const frameUrlCache = new Map();
 const frameWaiters = new Map();
 const frameImageKeep = [];
-async function cachedAssetUrl(url) {
+async function cachedAssetUrl(url, retried) {
   if (!url) return null;
   try {
-    if (typeof caches === 'undefined') return url;
+    if (typeof caches === 'undefined') {
+      const net = await fetch(url, { cache: 'reload' });
+      return net.ok ? url : null;
+    }
     const cache = await caches.open('zchat-assets-v1');
     let res = await cache.match(url);
+    let fromCache = !!res;
     if (!res) {
       const net = await fetch(url, { cache: 'no-cache' });
       if (!net.ok) return null;
@@ -9838,13 +9864,16 @@ async function cachedAssetUrl(url) {
       res = net;
     }
     const blob = await res.blob();
-    if (!blob.size) return null;
+    if (!blob.size) {
+      if (fromCache && !retried) { await cache.delete(url); return cachedAssetUrl(url, true); }
+      return null;
+    }
     return URL.createObjectURL(blob);
   } catch {
     return url;
   }
 }
-function loadFrameImage(rawUrl) {
+function loadFrameImage(rawUrl, retried) {
   return new Promise(async (resolve) => {
     if (!rawUrl) { resolve(null); return; }
     const url = await cachedAssetUrl(rawUrl);
@@ -9856,7 +9885,14 @@ function loadFrameImage(rawUrl) {
       const done = () => resolve(url);
       if (img.decode) img.decode().then(done, done); else done();
     };
-    img.onerror = () => resolve(null);
+    img.onerror = async () => {
+      if (!retried && typeof caches !== 'undefined') {
+        try { const cache = await caches.open('zchat-assets-v1'); await cache.delete(rawUrl); } catch {}
+        resolve(await loadFrameImage(rawUrl, true));
+      } else {
+        resolve(null);
+      }
+    };
     img.src = url;
   });
 }
@@ -11302,6 +11338,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       }
     },
   };
+  const lastAppResumeRef = useRef(0);
   const backStateRef = useRef({});
   const exitHintRef = useRef(0);
   backStateRef.current.closeTop = () => {
@@ -11384,21 +11421,24 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [groups, setGroups] = useState([]);
   const [activeGroup, setActiveGroup] = useState(null);
   const [composerTall, setComposerTall] = useState(false);
+  const draftLenRef = useRef(0);
   useLayoutEffect(() => {
     const el = composerRef.current;
     if (!el) return;
+    const shrank = draft.length < draftLenRef.current;
+    draftLenRef.current = draft.length;
     if (!draft) {
       el.style.height = '38px';
       el.style.overflowY = 'hidden';
       setComposerTall(false);
       return;
     }
-    el.style.height = '0px';
+    if (shrank) el.style.height = '0px';
     const full = el.scrollHeight + 2;
     const next = Math.max(38, Math.min(148, full));
-    el.style.height = `${next}px`;
+    if (el.style.height !== `${next}px`) el.style.height = `${next}px`;
     el.style.overflowY = full > 148 ? 'auto' : 'hidden';
-    setComposerTall(next > 40);
+    setComposerTall((prev) => (prev === (next > 40) ? prev : next > 40));
   }, [draft, activeProfile && activeProfile.id, activeGroup && activeGroup.id]);
   const [groupMembers, setGroupMembers] = useState([]);
   const [showCreateGroup, setShowCreateGroup] = useState(false);
@@ -11872,7 +11912,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       .subscribe();
     storyFeedRef.current = feed;
     const poll = setInterval(() => { if (document.visibilityState === 'visible' && reloadStoriesRef.current) reloadStoriesRef.current(); }, 20000);
-    const onVisible = () => { if (document.visibilityState === 'visible' && reloadStoriesRef.current) reloadStoriesRef.current(); };
+    const onVisible = () => { if (document.visibilityState === 'visible' && Date.now() - lastAppResumeRef.current > 3000 && reloadStoriesRef.current) reloadStoriesRef.current(); };
     document.addEventListener('visibilitychange', onVisible);
     window.addEventListener('focus', onVisible);
     return () => {
@@ -12271,7 +12311,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     };
     refresh();
     const t = setInterval(refresh, 20000);
-    const onVisible = () => { if (document.visibilityState === 'visible') refresh(); };
+    const onVisible = () => { if (document.visibilityState === 'visible' && Date.now() - lastAppResumeRef.current > 3000) refresh(); };
     document.addEventListener('visibilitychange', onVisible);
     return () => { cancelled = true; clearInterval(t); document.removeEventListener('visibilitychange', onVisible); };
   }, [activeProfileIdForSeen]);
@@ -13491,9 +13531,22 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   useEffect(() => {
     if (!me) return undefined;
     let alive = true;
+    let retryTimer = null;
+    let attempt = 0;
     const load = async () => {
       const { data, error } = await supabase.from('user_rewards').select('*').eq('user_id', session.user.id).order('granted_at', { ascending: true });
-      if (!alive || error) return;
+      if (!alive) return;
+      if (error) {
+        // A failed check must never blank out someone's real, owned items.
+        // Keep whatever we last knew was true, and quietly try again.
+        attempt += 1;
+        if (attempt <= 6) {
+          clearTimeout(retryTimer);
+          retryTimer = setTimeout(load, Math.min(1500 * attempt, 8000));
+        }
+        return;
+      }
+      attempt = 0;
       setMyRewards(data || []);
     };
     load();
@@ -13504,7 +13557,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         load();
       })
       .subscribe();
-    return () => { alive = false; supabase.removeChannel(ch); };
+    const onVisible = () => { if (document.visibilityState === 'visible') load(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => { alive = false; clearTimeout(retryTimer); document.removeEventListener('visibilitychange', onVisible); supabase.removeChannel(ch); };
   }, [me && me.id]);
   const pendingReward = (myRewards || []).find((r) => !r.seen && rewardActive(r) && (r.kind === 'frame' ? AVATAR_FRAMES[r.reward_key] : CUSTOM_BADGES[r.reward_key])) || null;
   useEffect(() => {
@@ -13678,6 +13733,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       if (resumingRef.current) return;
       if (Date.now() - lastResumeRef.t < 8000) return;
       lastResumeRef.t = Date.now();
+      lastAppResumeRef.current = Date.now();
       resumingRef.current = true;
       hiddenAtRef.current = 0;
       try {
@@ -15340,11 +15396,16 @@ function useStoreViewer() {
         const { data } = await supabase.auth.getSession();
         const session = data && data.session;
         if (!session) { if (alive) setViewer({ loading: false, profile: null, rewards: [], email: '' }); return; }
-        const [{ data: prof }, { data: rw }] = await Promise.all([
+        const [{ data: prof }, { data: rw, error: rwErr }] = await Promise.all([
           supabase.from('profiles').select('id, name, username, avatar, verified, custom_badge, avatar_frame').eq('id', session.user.id).maybeSingle(),
           supabase.from('user_rewards').select('*').eq('user_id', session.user.id),
         ]);
-        if (alive) setViewer({ loading: false, profile: prof || null, rewards: rw || [], email: session.user.email || '' });
+        let rewards = rw || [];
+        if (rwErr) {
+          const retry = await supabase.from('user_rewards').select('*').eq('user_id', session.user.id);
+          rewards = retry.data || [];
+        }
+        if (alive) setViewer({ loading: false, profile: prof || null, rewards, email: session.user.email || '' });
       } catch {
         if (alive) setViewer({ loading: false, profile: null, rewards: [], email: '' });
       }
