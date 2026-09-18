@@ -4,7 +4,7 @@ import {
   Send, Paperclip, Search, Mail, ShieldCheck, AtSign, LogOut, Eye, EyeOff, Lock,
   Flag, X, Trash2, User, Phone, MoreVertical, Image as ImageIcon, Video as VideoIcon,
   Smile, ArrowLeft, Check, CheckCheck, Settings as SettingsIcon, Moon, Sun, UserPlus,
-  FileText, HelpCircle, ChevronRight, ChevronLeft, Compass, Bell, Volume2, VolumeX, Palette, Mic, Play, Pause, Download, Users, Camera, Reply, Forward, Ban, Edit3, Archive, Sparkles, Share2, Copy, Crop, Type, Pencil, Undo2, Scissors, BellOff, Link as LinkIcon, ShieldAlert, Heart, Repeat, PhoneOff, MicOff, VideoOff, SwitchCamera,
+  FileText, HelpCircle, ChevronRight, ChevronLeft, Compass, Bell, Volume2, VolumeX, Palette, Mic, Play, Pause, Download, Users, Camera, Reply, Forward, Ban, Edit3, Archive, Sparkles, Bookmark, Share2, Copy, Crop, Type, Pencil, Undo2, Scissors, BellOff, Link as LinkIcon, ShieldAlert, Heart, Repeat, PhoneOff, MicOff, VideoOff, SwitchCamera,
 } from 'lucide-react';
 import {
   supabase, registerWithEmail, verifyOtp, setPassword, signInWithPassword,
@@ -1200,19 +1200,22 @@ function DeleteAccountConfirm({ onCancel, onConfirm }) {
   );
 }
 
-function SettingsRow({ icon, label, onClick, danger, right }) {
+function SettingsRow({ icon, label, sub, onClick, danger, right }) {
   const { theme } = useTheme();
   return (
     <div onClick={onClick} style={{
-      display: 'flex', alignItems: 'center', gap: 12, padding: '13px 4px', cursor: 'pointer',
-      borderBottom: `1px solid ${theme.border}`, fontSize: 14, fontWeight: 600,
+      display: 'flex', alignItems: 'center', gap: 12, padding: '12px 12px', cursor: 'pointer',
+      borderBottom: `1px solid ${theme.border}`, fontSize: 14, fontWeight: 700,
       color: danger ? theme.danger : theme.ink,
     }}>
       <div style={{
         width: 34, height: 34, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center',
         background: danger ? `${theme.danger}1F` : `${theme.coral}1F`, color: danger ? theme.danger : theme.coralDeep, flexShrink: 0,
       }}>{icon}</div>
-      <div style={{ flex: 1 }}>{label}</div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div>{label}</div>
+        {sub && <div style={{ fontSize: 11.5, color: theme.muted, fontWeight: 600, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub}</div>}
+      </div>
       {right || (!danger && <ChevronRight size={17} color={theme.muted} />)}
     </div>
   );
@@ -1233,7 +1236,33 @@ function ToggleSwitch({ on, onClick }) {
   );
 }
 
-function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideActivity, onToggleActivity, onOpenAccounts, onOpenDelete, onOpenBlocked, blockedCount = 0, chatLockSet, chatLockHash, onSetChatLockPassword, onTurnOffChatLock, autoOpenLockSetup, onConsumedAutoOpen }) {
+function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideActivity, onToggleActivity, onOpenAccounts, onOpenDelete, onOpenBlocked, blockedCount = 0, chatLockSet, chatLockHash, onSetChatLockPassword, onTurnOffChatLock, autoOpenLockSetup, onConsumedAutoOpen, me, rewardCount, onOpenCollection, onEditProfile }) {
+  const [permText, setPermText] = useState('Checking…');
+  const notifState = (typeof Notification !== 'undefined' && Notification.permission) || 'default';
+  const checkPerms = async () => {
+    try {
+      if (!navigator.permissions) { setPermText('Tap to allow'); return; }
+      const [cam, mic] = await Promise.all([navigator.permissions.query({ name: 'camera' }).catch(() => null), navigator.permissions.query({ name: 'microphone' }).catch(() => null)]);
+      const st = [cam && cam.state, mic && mic.state];
+      if (st.every((x) => x === 'granted')) setPermText('Allowed');
+      else if (st.some((x) => x === 'denied')) setPermText('Blocked · tap to fix');
+      else setPermText('Tap to allow');
+    } catch { setPermText('Tap to allow'); }
+  };
+  useEffect(() => { checkPerms(); }, []);
+  const fixPermissions = async () => {
+    playUiSound('tap');
+    try {
+      const st = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+      st.getTracks().forEach((t) => t.stop());
+      setPermText('Allowed');
+    } catch {
+      try { const a = await navigator.mediaDevices.getUserMedia({ audio: true }); a.getTracks().forEach((t) => t.stop()); } catch {}
+      setPermText('Blocked · open phone Settings');
+      alert('Camera or microphone is blocked. Open your phone Settings → Apps → ZChat (or your browser) → Permissions, and allow Camera and Microphone.');
+    }
+    checkPerms();
+  };
   const { theme, dark, setDark, accentName, setAccentName, soundOn, setSoundOn, reactionSoundOn, setReactionSoundOn, bgPatternOn, setBgPatternOn, fontScale, setFontScale, chatTheme, setChatTheme, bubbleColor, setBubbleColor } = useTheme();
   const accentLabels = { coral: 'Coral', ocean: 'Ocean', berry: 'Berry' };
   const [lockFlow, setLockFlow] = useState(null);
@@ -1306,14 +1335,51 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
 
         {section === 'main' && (
           <>
-            <div style={{ fontWeight: 800, fontSize: 19, color: theme.ink, marginBottom: 18 }}>Settings</div>
-            <CategoryRow icon={<Palette size={17} />} label="Appearance" sub="Theme, chat style, text size" onClick={() => setSection('appearance')} />
-            <CategoryRow icon={<EyeOff size={17} />} label="Privacy & Security" sub="Activity status, Chat Lock" onClick={() => setSection('privacy')} />
-            <CategoryRow icon={<Bell size={17} />} label="Notifications" sub="Sounds, alerts" onClick={() => setSection('notifications')} />
-            <CategoryRow icon={<HelpCircle size={17} />} label="About" sub="Privacy policy, help" onClick={() => setSection('about')} />
-            <CategoryRow icon={<UserPlus size={17} />} label="Account" sub="Follow requests, switch, delete" onClick={() => setSection('account')} />
-            <div style={{ height: 4 }} />
-            <SettingsRow icon={<LogOut size={16} />} label="Log out" danger onClick={onLogout} />
+            <div style={{ fontWeight: 900, fontSize: 22, color: theme.ink, marginBottom: 14 }}>Settings</div>
+            {me && (
+              <div style={{ borderRadius: 22, padding: 14, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 12, background: theme.dark ? 'linear-gradient(135deg, #1d1740, #0f1220)' : 'linear-gradient(135deg, #eef0ff, #ffffff)', border: `1px solid ${theme.dark ? 'rgba(255,255,255,0.08)' : theme.border}` }}>
+                <Avatar emoji={me.avatar} name={me.name} size={58} frame={me.avatar_frame} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 16, fontWeight: 900, color: theme.ink, display: 'flex', alignItems: 'center' }}>{me.name}<VerifiedBadge tier={me.verified} custom={me.custom_badge} size={14} /></div>
+                  <div style={{ fontSize: 12, color: theme.muted, fontWeight: 700 }}>@{me.username}{me.verified && VERIFIED_TIERS[me.verified] ? ` · ${VERIFIED_TIERS[me.verified].label}` : ''}</div>
+                  {rewardCount != null && <div style={{ fontSize: 11, color: theme.muted, marginTop: 2 }}>{rewardCount} items in collection</div>}
+                </div>
+                {onEditProfile && <div role="button" onClick={onEditProfile} style={{ padding: '8px 12px', borderRadius: 12, background: theme.dark ? 'rgba(255,255,255,0.08)' : theme.rowBg, fontSize: 12, fontWeight: 800, color: theme.ink, cursor: 'pointer' }}>Edit</div>}
+              </div>
+            )}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 6 }}>
+              {[
+                ['Collection', <Sparkles size={18} color="#fbbf24" />, 'rgba(251,191,36,0.15)', () => onOpenCollection && onOpenCollection()],
+                ['Theme', <Palette size={18} color="#60a5fa" />, 'rgba(59,130,246,0.15)', () => setSection('appearance')],
+                ['Alerts', <Bell size={18} color="#f472b6" />, 'rgba(236,72,153,0.15)', () => setSection('notifications')],
+                ['Privacy', <ShieldCheck size={18} color="#4ade80" />, 'rgba(34,197,94,0.15)', () => setSection('privacy')],
+              ].map(([label, icon, bg, onClick]) => (
+                <div key={label} role="button" onClick={() => { playUiSound('tap'); onClick(); }} style={{ borderRadius: 16, padding: '12px 4px', background: theme.rowBg, border: `1px solid ${theme.border}`, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, fontSize: 10.5, fontWeight: 800, color: theme.ink, cursor: 'pointer' }}>
+                  <div style={{ width: 38, height: 38, borderRadius: 12, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{icon}</div>
+                  {label}
+                </div>
+              ))}
+            </div>
+            <div style={{ fontSize: 11, fontWeight: 900, color: theme.muted, letterSpacing: '0.12em', margin: '14px 4px 6px' }}>ACCOUNT</div>
+            <div style={{ borderRadius: 18, background: theme.rowBg, border: `1px solid ${theme.border}`, overflow: 'hidden' }}>
+              <SettingsRow icon={<User size={16} />} label="Edit profile" sub="Name, photo, bio, links, pronouns" onClick={onEditProfile} />
+              <SettingsRow icon={<UserPlus size={16} />} label="Switch account" onClick={onOpenAccounts} />
+              <SettingsRow icon={<Bell size={16} />} label="Follow requests" onClick={onOpenRequests} />
+            </div>
+            <div style={{ fontSize: 11, fontWeight: 900, color: theme.muted, letterSpacing: '0.12em', margin: '14px 4px 6px' }}>APP</div>
+            <div style={{ borderRadius: 18, background: theme.rowBg, border: `1px solid ${theme.border}`, overflow: 'hidden' }}>
+              <SettingsRow icon={dark ? <Sun size={16} /> : <Moon size={16} />} label="Dark mode" right={<ToggleSwitch on={dark} onClick={() => setDark(!dark)} />} />
+              <SettingsRow icon={soundOn ? <Volume2 size={16} /> : <VolumeX size={16} />} label="Sounds" sub="Taps, sends, calls" right={<ToggleSwitch on={soundOn} onClick={() => setSoundOn(!soundOn)} />} />
+              <SettingsRow icon={<Bell size={16} />} label="Notifications" sub={notifState === 'granted' ? 'On' : notifState === 'denied' ? 'Blocked · tap to fix' : 'Tap to turn on'} onClick={() => setSection('notifications')} />
+              <SettingsRow icon={<Camera size={16} />} label="Camera & microphone" sub={permText} onClick={fixPermissions} />
+            </div>
+            <div style={{ fontSize: 11, fontWeight: 900, color: theme.muted, letterSpacing: '0.12em', margin: '14px 4px 6px' }}>MORE</div>
+            <div style={{ borderRadius: 18, background: theme.rowBg, border: `1px solid ${theme.border}`, overflow: 'hidden' }}>
+              <SettingsRow icon={<Ban size={16} />} label="Blocked accounts" sub={blockedCount ? `${blockedCount} blocked` : 'None'} onClick={onOpenBlocked} />
+              <SettingsRow icon={<HelpCircle size={16} />} label="About ZChat" sub={`Version ${APP_VERSION}`} onClick={() => setSection('about')} />
+              <SettingsRow icon={<Trash2 size={16} />} label="Delete my account" danger onClick={onOpenDelete} />
+              <SettingsRow icon={<LogOut size={16} />} label="Log out" danger onClick={onLogout} />
+            </div>
             <div style={{ textAlign: 'center', fontSize: 10.5, color: theme.muted, marginTop: 18, fontWeight: 600 }}>ZChat {APP_VERSION}</div>
           </>
         )}
@@ -3260,10 +3326,16 @@ function GroupInfoPanel({ group, members, myId, myRole, isOwner, onClose, onProm
         <ArrowLeft size={20} style={{ cursor: 'pointer', color: theme.ink }} onClick={onClose} />
         <div style={{ fontWeight: 800, fontSize: 17, color: theme.ink }}>Group info</div>
       </div>
-      <div style={{ overflowY: 'auto', flex: 1, minHeight: 0, padding: '14px 18px', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))' }}>
-        <div style={{ textAlign: 'center', marginBottom: 14 }}>
-          <div onClick={() => isAdmin && document.getElementById('group-info-avatar-input').click()} style={{ display: 'inline-block', cursor: isAdmin ? 'pointer' : 'default', position: 'relative' }}>
-            <GroupAvatar avatar={group.avatar} name={group.name} size={72} />
+      <div style={{ overflowY: 'auto', flex: 1, minHeight: 0, padding: '0 18px', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))', position: 'relative' }}>
+        <div style={{ position: 'absolute', left: 0, right: 0, top: 0, height: 190, overflow: 'hidden', pointerEvents: 'none' }}>
+          {group.avatar && typeof group.avatar === 'string' && group.avatar.startsWith('http')
+            ? <img src={group.avatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'blur(22px) saturate(1.3)', opacity: 0.85, transform: 'scale(1.15)' }} />
+            : <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(160deg, ${colorForName(group.name)}, #7c3aed)` , opacity: 0.85 }} />}
+          <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(180deg, rgba(0,0,0,0.25), transparent 40%, ${theme.panelBg} 100%)` }} />
+        </div>
+        <div style={{ textAlign: 'center', marginBottom: 14, position: 'relative', paddingTop: 96 }}>
+          <div onClick={() => isAdmin && document.getElementById('group-info-avatar-input').click()} style={{ display: 'inline-block', cursor: isAdmin ? 'pointer' : 'default', position: 'relative', borderRadius: 30, border: `4px solid ${theme.panelBg}`, boxShadow: '0 14px 40px rgba(0,0,0,0.35)' }}>
+            <GroupAvatar avatar={group.avatar} name={group.name} size={96} />
             {isAdmin && (
               <div style={{ position: 'absolute', bottom: 0, right: 0, width: 24, height: 24, borderRadius: '50%', background: theme.coral, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <Camera size={12} color="white" />
@@ -3288,8 +3360,36 @@ function GroupInfoPanel({ group, members, myId, myRole, isOwner, onClose, onProm
               {group.name}
             </div>
           )}
-          <div style={{ fontSize: 12, color: theme.muted }}>{members.length} members</div>
+          <div style={{ fontSize: 12, color: theme.muted, fontWeight: 700 }}>Group · {members.length} members{group.created_at ? ` · Created ${new Date(group.created_at).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}` : ''}</div>
         </div>
+        {(() => {
+          const online = members.filter((m) => m.profile && !m.profile.hide_activity && m.profile.last_seen && Date.now() - new Date(m.profile.last_seen).getTime() < 3 * 60 * 1000).length;
+          const admins = members.filter((m) => m.role === 'admin').length;
+          const stat = (n, label) => (
+            <div style={{ flex: 1, borderRadius: 16, background: theme.rowBg, border: `1px solid ${theme.border}`, padding: '10px 4px', textAlign: 'center' }}>
+              <div style={{ fontSize: 17, fontWeight: 900, color: theme.ink }}>{n}</div>
+              <div style={{ fontSize: 10.5, color: theme.muted, fontWeight: 700 }}>{label}</div>
+            </div>
+          );
+          const act = (icon, label, onClick, danger) => (
+            <div role="button" onClick={onClick} style={{ flex: 1, borderRadius: 14, background: theme.rowBg, border: `1px solid ${theme.border}`, padding: '10px 4px', textAlign: 'center', fontSize: 11, fontWeight: 800, color: danger ? theme.danger : theme.ink, cursor: 'pointer' }}>
+              <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 4, color: danger ? theme.danger : theme.coralDeep }}>{icon}</div>{label}
+            </div>
+          );
+          return (
+            <>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                {stat(members.length, 'Members')}{stat(online, 'Online')}{stat(admins, admins === 1 ? 'Admin' : 'Admins')}{stat(group.unread || 0, 'Unread')}
+              </div>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+                {isAdmin && act(<UserPlus size={18} />, 'Add', () => setShowAddMembers(true))}
+                {act(<ImageIcon size={18} />, 'Wallpaper', () => setShowWallpaper(true))}
+                {isAdmin && act(<Palette size={18} />, 'Header', () => setShowHeaderStyle(true))}
+                {act(<LogOut size={18} />, 'Leave', () => { if (!soleAdmin && !isOwner) onLeave(); }, true)}
+              </div>
+            </>
+          );
+        })()}
 
         <div style={{ fontSize: 11, color: theme.muted, marginBottom: 5, fontWeight: 800 }}>GROUP BIO</div>
         {editingBio ? (
@@ -3331,9 +3431,10 @@ function GroupInfoPanel({ group, members, myId, myRole, isOwner, onClose, onProm
                 </div>
                 <div style={{ display: 'flex', gap: 6, marginBottom: 2 }}>
                   {m.user_id === group.created_by ? (
-                    <span style={{ fontSize: 10.5, color: theme.coral, fontWeight: 700 }}>Owner</span>
-                  ) : m.role === 'admin' && <span style={{ fontSize: 10.5, color: theme.coral, fontWeight: 700 }}>Admin</span>}
-                  {m.muted && <span style={{ fontSize: 10.5, color: theme.muted, fontWeight: 700 }}>Muted</span>}
+                    <span style={{ fontSize: 9.5, fontWeight: 900, padding: '2px 7px', borderRadius: 8, background: 'rgba(251,191,36,0.15)', color: '#fbbf24' }}>Owner</span>
+                  ) : m.role === 'admin' && <span style={{ fontSize: 9.5, fontWeight: 900, padding: '2px 7px', borderRadius: 8, background: 'rgba(96,165,250,0.15)', color: '#60a5fa' }}>Admin</span>}
+                  {m.muted && <span style={{ fontSize: 9.5, fontWeight: 900, padding: '2px 7px', borderRadius: 8, background: theme.rowBg, color: theme.muted }}>Muted</span>}
+                  {m.profile && !m.profile.hide_activity && m.profile.last_seen && Date.now() - new Date(m.profile.last_seen).getTime() < 3 * 60 * 1000 && <span style={{ fontSize: 9.5, fontWeight: 900, padding: '2px 7px', borderRadius: 8, background: 'rgba(34,197,94,0.14)', color: '#22c55e' }}>Online</span>}
                 </div>
                 <div style={{ fontSize: 10.5, color: theme.muted }}>
                   Added by {m.added_by === m.user_id ? 'themself' : (members.find((x) => x.user_id === m.added_by)?.profile.name || 'someone who left')}
@@ -4784,6 +4885,11 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
                     position: 'absolute', top: 6, right: 6, width: 26, height: 26, borderRadius: '50%',
                     background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
                   }}><Download size={13} color="white" /></div>
+                </div>
+              )}
+              {(m.type === 'image' || m.type === 'video') && m.content && !String(m.content).startsWith('/') && (
+                <div style={{ fontSize: 15 * fontScale, color: theme.ink, wordBreak: 'break-word', whiteSpace: 'pre-wrap', lineHeight: 1.32, padding: '2px 2px 16px', maxWidth: 250 }}>
+                  <RichText text={m.content} onMention={onOpenMention} />
                 </div>
               )}
               {m.type === 'audio' && <div style={{ paddingBottom: 14 }}><AudioBubble url={m.media_url} isMe={isMe} /></div>}
@@ -7643,25 +7749,44 @@ function useCallEngine(options) {
     send({ type: 'camera', off: next });
   };
 
+  const flipBusyRef = useRef(false);
   const flipCamera = async () => {
     const c = callRef.current;
-    if (!c || c.kind !== 'video' || !localRef.current) return;
+    if (!c || c.kind !== 'video' || !localRef.current || flipBusyRef.current) return;
+    flipBusyRef.current = true;
     const facing = c.facing === 'user' ? 'environment' : 'user';
+    const old = localRef.current.getVideoTracks()[0];
+    const wasEnabled = old ? old.enabled : !c.cameraOff;
+    if (old) { try { localRef.current.removeTrack(old); old.stop(); } catch {} }
+    const open = async (constraints) => navigator.mediaDevices.getUserMedia({ video: constraints, audio: false });
+    let fresh = null;
     try {
-      const fresh = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing } });
-      const track = fresh.getVideoTracks()[0];
-      track.enabled = !c.cameraOff;
-      pcsRef.current.forEach((pc) => {
-        const sender = pc.getSenders().find((s) => s.track && s.track.kind === 'video');
-        if (sender) sender.replaceTrack(track);
-      });
-      const old = localRef.current.getVideoTracks()[0];
-      if (old) { localRef.current.removeTrack(old); old.stop(); }
-      localRef.current.addTrack(track);
-      patch({ facing, localStream: new MediaStream(localRef.current.getTracks()) });
+      fresh = await open({ facingMode: { exact: facing }, width: { ideal: 1280 }, height: { ideal: 720 } });
     } catch {
-      optsRef.current.snack("Couldn't switch camera");
+      try { fresh = await open({ facingMode: facing }); } catch {}
     }
+    if (!fresh) {
+      try { fresh = await open({ facingMode: c.facing || 'user' }); } catch {}
+      if (!fresh) { flipBusyRef.current = false; optsRef.current.snack("Couldn't switch camera"); return; }
+      const back = fresh.getVideoTracks()[0];
+      back.enabled = wasEnabled;
+      localRef.current.addTrack(back);
+      pcsRef.current.forEach((pc) => { const sender = pc.getSenders().find((sd) => sd.track == null || (sd.track && sd.track.kind === 'video')); if (sender) sender.replaceTrack(back).catch(() => {}); });
+      patch({ localStream: new MediaStream(localRef.current.getTracks()) });
+      flipBusyRef.current = false;
+      optsRef.current.snack("Couldn't switch camera");
+      return;
+    }
+    const track = fresh.getVideoTracks()[0];
+    track.enabled = wasEnabled;
+    localRef.current.addTrack(track);
+    pcsRef.current.forEach((pc) => {
+      const sender = pc.getSenders().find((sd) => sd.track && sd.track.kind === 'video') || pc.getSenders().find((sd) => !sd.track);
+      if (sender) sender.replaceTrack(track).catch(() => {});
+    });
+    patch({ facing, localStream: new MediaStream(localRef.current.getTracks()) });
+    playUiSound('tap');
+    flipBusyRef.current = false;
   };
 
   const minimize = (value) => patch({ minimized: value });
@@ -7736,13 +7861,21 @@ function useCallEngine(options) {
         if ((pc.connectionState === 'disconnected' || pc.connectionState === 'failed') && pc.signalingState === 'stable') offerTo(peerId, true).catch(() => {});
       });
     };
-    document.addEventListener('visibilitychange', resume);
-    window.addEventListener('pageshow', resume);
-    window.addEventListener('focus', resume);
+    const kick = () => {
+      if (document.visibilityState !== 'visible') return;
+      document.querySelectorAll('video, audio').forEach((el) => { try { const pr = el.play(); if (pr && pr.catch) pr.catch(() => {}); } catch {} });
+      const local = localRef.current;
+      const c = callRef.current;
+      if (local && c) local.getTracks().forEach((t) => { if (t.readyState === 'live') t.enabled = t.kind === 'audio' ? !c.muted : !c.cameraOff; });
+    };
+    const resumeAll = () => { kick(); resume(); setTimeout(kick, 800); };
+    document.addEventListener('visibilitychange', resumeAll);
+    window.addEventListener('pageshow', resumeAll);
+    window.addEventListener('focus', resumeAll);
     return () => {
-      document.removeEventListener('visibilitychange', resume);
-      window.removeEventListener('pageshow', resume);
-      window.removeEventListener('focus', resume);
+      document.removeEventListener('visibilitychange', resumeAll);
+      window.removeEventListener('pageshow', resumeAll);
+      window.removeEventListener('focus', resumeAll);
     };
   }, []);
   const muteOther = (peerId) => send({ type: 'force-mute', to: peerId });
@@ -8252,10 +8385,16 @@ function StoryViewersSheet({ story, myId, onClose, onOpenProfile }) {
   );
 }
 
-function CallTile({ tile, isVideo, muted, cameraOff, facing, onMenu }) {
+function CallTile({ tile, isVideo, muted, cameraOff, facing, onMenu, onFocus, focused }) {
   const hasVideo = isVideo && tile.stream && !cameraOff && tile.stream.getVideoTracks().length > 0;
+  const pressRef = useRef(null);
+  const longRef = useRef(false);
+  const startPress = () => { longRef.current = false; if (onMenu) pressRef.current = setTimeout(() => { longRef.current = true; onMenu(); }, 480); };
+  const endPress = () => { if (pressRef.current) { clearTimeout(pressRef.current); pressRef.current = null; } };
   return (
-    <div onClick={onMenu} style={{ position: 'relative', borderRadius: 20, overflow: 'hidden', background: '#131826', minHeight: 0, minWidth: 0, cursor: onMenu ? 'pointer' : 'default' }}>
+    <div onPointerDown={startPress} onPointerUp={endPress} onPointerLeave={endPress} onPointerCancel={endPress}
+      onClick={() => { if (longRef.current) return; if (onFocus) onFocus(); }}
+      style={{ position: 'relative', borderRadius: 20, overflow: 'hidden', background: '#131826', minHeight: 0, minWidth: 0, cursor: onMenu ? 'pointer' : 'default' }}>
       <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: `radial-gradient(circle at 50% 40%, ${colorForName(tile.avatarName || tile.name)}55, #131826 75%)` }}>
         <Avatar emoji={tile.avatar} name={tile.avatarName || tile.name} size={76} />
       </div>
@@ -8273,6 +8412,7 @@ function CallTile({ tile, isVideo, muted, cameraOff, facing, onMenu }) {
 }
 
 function CallScreen({ call, me, nameFor, avatarFor, onAccept, onDecline, onHangup, onToggleMute, onToggleCamera, onFlip, onMinimize, onMuteOther, onCloseSummary, onCallAgain, onMessage, onShareScreen }) {
+  const [focusedTile, setFocusedTile] = useState(null);
   const [now, setNow] = useState(Date.now());
   const [pipCorner, setPipCorner] = useState('tr');
   const [joinCameraOff, setJoinCameraOff] = useState(false);
@@ -8386,16 +8526,46 @@ function CallScreen({ call, me, nameFor, avatarFor, onAccept, onDecline, onHangu
       )}
 
       {isGroup && !ringingIn && (
-        <div style={{
-          position: 'absolute', left: 8, right: 8, top: 'calc(112px + env(safe-area-inset-top))', bottom: 'calc(150px + env(safe-area-inset-bottom))',
-          display: 'grid', gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`, gap: 8,
-        }}>
-          {tiles.map((t) => (
-            <CallTile key={t.id} tile={t} isVideo={isVideo} facing={call.facing}
-              muted={t.local ? call.muted : !!remoteMuted[t.id]} cameraOff={t.local ? call.cameraOff : !!remoteCamOff[t.id]}
-              onMenu={!t.local ? () => setTileMenu(t) : null} />
-          ))}
-        </div>
+        <>
+          <div style={{ position: 'absolute', left: 12, right: 12, top: 'calc(66px + env(safe-area-inset-top))', zIndex: 3, display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.8)', overflowX: 'auto', scrollbarWidth: 'none', whiteSpace: 'nowrap' }}>
+            <Users size={13} />
+            <span>{tiles.length} in call:</span>
+            <span style={{ color: 'white' }}>{tiles.map((t) => (t.local ? 'You' : (t.name || '').split(' ')[0])).join(', ')}</span>
+          </div>
+          {focusedTile && tiles.some((t) => t.id === focusedTile) ? (
+            <div style={{ position: 'absolute', left: 8, right: 8, top: 'calc(96px + env(safe-area-inset-top))', bottom: 'calc(150px + env(safe-area-inset-bottom))', display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ flex: 1, minHeight: 0 }}>
+                {tiles.filter((t) => t.id === focusedTile).map((t) => (
+                  <CallTile key={t.id} tile={t} isVideo={isVideo} facing={call.facing} focused
+                    muted={t.local ? call.muted : !!remoteMuted[t.id]} cameraOff={t.local ? call.cameraOff : !!remoteCamOff[t.id]}
+                    onMenu={!t.local ? () => setTileMenu(t) : null} onFocus={() => setFocusedTile(null)} />
+                ))}
+              </div>
+              {tiles.length > 1 && (
+                <div style={{ height: 96, display: 'flex', gap: 8, overflowX: 'auto', scrollbarWidth: 'none', flexShrink: 0 }}>
+                  {tiles.filter((t) => t.id !== focusedTile).map((t) => (
+                    <div key={t.id} style={{ width: 80, flexShrink: 0 }}>
+                      <CallTile tile={t} isVideo={isVideo} facing={call.facing}
+                        muted={t.local ? call.muted : !!remoteMuted[t.id]} cameraOff={t.local ? call.cameraOff : !!remoteCamOff[t.id]}
+                        onMenu={!t.local ? () => setTileMenu(t) : null} onFocus={() => setFocusedTile(t.id)} />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div style={{
+              position: 'absolute', left: 8, right: 8, top: 'calc(96px + env(safe-area-inset-top))', bottom: 'calc(150px + env(safe-area-inset-bottom))',
+              display: 'grid', gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`, gap: 8,
+            }}>
+              {tiles.map((t) => (
+                <CallTile key={t.id} tile={t} isVideo={isVideo} facing={call.facing}
+                  muted={t.local ? call.muted : !!remoteMuted[t.id]} cameraOff={t.local ? call.cameraOff : !!remoteCamOff[t.id]}
+                  onMenu={!t.local ? () => setTileMenu(t) : null} onFocus={() => { setFocusedTile(t.id); playUiSound('tap'); }} />
+              ))}
+            </div>
+          )}
+        </>
       )}
 
       <div style={{ position: 'relative', zIndex: 3, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 'calc(10px + env(safe-area-inset-top)) 14px 0' }}>
@@ -10552,7 +10722,45 @@ function FeedPanel({ me, userId, onClose, onOpenProfile }) {
   const [counts, setCounts] = useState({});
   const [commentsFor, setCommentsFor] = useState(null);
   const [burst, setBurst] = useState(null);
+  const [saved, setSaved] = useState(() => { try { return new Set(JSON.parse(localStorage.getItem('zchat-saved-posts') || '[]')); } catch { return new Set(); } });
+  const [hideUi, setHideUi] = useState(false);
   const lastTapRef = useRef(0);
+  const holdRef = useRef(null);
+  const tabSwipeRef = useRef(null);
+  const toggleSave = (post) => {
+    setSaved((prev) => {
+      const next = new Set(prev);
+      if (next.has(post.id)) next.delete(post.id); else next.add(post.id);
+      try { localStorage.setItem('zchat-saved-posts', JSON.stringify([...next])); } catch {}
+      return next;
+    });
+    playUiSound('tap');
+  };
+  const download = async (post) => {
+    try {
+      const res = await fetch(post.media_url);
+      const blob = await res.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `zchat-post.${post.media_type === 'video' ? 'mp4' : 'jpg'}`;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+      playUiSound('tap');
+    } catch { window.open(post.media_url, '_blank'); }
+  };
+  const tabSwipe = {
+    onTouchStart: (e) => { const t = e.touches && e.touches[0]; tabSwipeRef.current = t ? { x: t.clientX, y: t.clientY } : null; holdRef.current = setTimeout(() => setHideUi(true), 450); },
+    onTouchMove: () => { if (holdRef.current) { clearTimeout(holdRef.current); holdRef.current = null; } },
+    onTouchEnd: (e) => {
+      if (holdRef.current) { clearTimeout(holdRef.current); holdRef.current = null; }
+      if (hideUi) { setHideUi(false); return; }
+      const st = tabSwipeRef.current; tabSwipeRef.current = null;
+      const t = e.changedTouches && e.changedTouches[0];
+      if (!st || !t) return;
+      const dx = t.clientX - st.x; const dy = Math.abs(t.clientY - st.y);
+      if (Math.abs(dx) > 80 && dy < 50) { setTab(dx < 0 ? 'foryou' : 'following'); playUiSound('tap'); }
+    },
+  };
 
   const load = async () => {
     let followingIds = null;
@@ -10615,7 +10823,9 @@ function FeedPanel({ me, userId, onClose, onOpenProfile }) {
     if (now - lastTapRef.current < 300) {
       setBurst(post.id);
       setTimeout(() => setBurst(null), 700);
-      toggleLike(post, true);
+      toggleLike(post);
+      lastTapRef.current = 0;
+      return;
     }
     lastTapRef.current = now;
   };
@@ -10645,7 +10855,7 @@ function FeedPanel({ me, userId, onClose, onOpenProfile }) {
           <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)' }}>{tab === 'following' ? 'Follow more people to fill this up' : 'Share the first post from your profile'}</div>
         </div>
       ) : (
-        <div style={{ height: '100%', overflowY: 'auto', scrollSnapType: 'y mandatory', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
+        <div {...tabSwipe} style={{ height: '100%', overflowY: 'auto', scrollSnapType: 'y mandatory', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
           {items.map((post) => {
             const c = countOf(post.id);
             const isVideo = post.media_type === 'video';
@@ -10660,21 +10870,25 @@ function FeedPanel({ me, userId, onClose, onOpenProfile }) {
                 </div>
                 <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(0,0,0,0.45) 0%, transparent 20%, transparent 55%, rgba(0,0,0,0.75) 100%)', pointerEvents: 'none' }} />
 
-                <div style={{ position: 'absolute', right: 10, bottom: 110, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 18, zIndex: 3 }}>
+                <div style={{ position: 'absolute', right: 10, bottom: 110, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 18, zIndex: 3, opacity: hideUi ? 0 : 1, transition: 'opacity 0.2s', pointerEvents: hideUi ? 'none' : 'auto' }}>
                   <div role="button" onClick={() => onOpenProfile(post.owner)} style={{ cursor: 'pointer', marginBottom: 2 }}>
                     <Avatar emoji={post.owner.avatar} name={post.owner.name} size={48} frame={post.owner.avatar_frame} />
                   </div>
                   {railBtn(<Heart size={31} color={likes[post.id] ? '#ff2d55' : 'white'} fill={likes[post.id] ? '#ff2d55' : 'none'} />, formatCount(c.likes), () => toggleLike(post))}
                   {railBtn(<InstaCommentIcon size={29} color="white" />, formatCount(c.comments), () => { setCommentsFor(post); playUiSound('tap'); })}
+                  {railBtn(<Bookmark size={27} color={saved.has(post.id) ? '#fbbf24' : 'white'} fill={saved.has(post.id) ? '#fbbf24' : 'none'} />, saved.has(post.id) ? 'Saved' : 'Save', () => toggleSave(post))}
                   {railBtn(<Share2 size={26} />, 'Share', async () => {
                     const link = `${siteOrigin()}/?post=${post.id}`;
+                    playUiSound('tap');
                     try { if (navigator.share) await navigator.share({ url: link }); else { await navigator.clipboard.writeText(link); } } catch {}
                   })}
+                  {railBtn(<Download size={25} />, 'Save file', () => download(post))}
                 </div>
 
-                <div style={{ position: 'absolute', left: 14, right: 80, bottom: 26, zIndex: 3 }}>
-                  <div role="button" onClick={() => onOpenProfile(post.owner)} style={{ fontWeight: 900, fontSize: 16, display: 'flex', alignItems: 'center', cursor: 'pointer', textShadow: '0 1px 6px rgba(0,0,0,0.6)' }}>
-                    {post.owner.name}<VerifiedBadge tier={post.owner.verified} custom={post.owner.custom_badge} size={15} />
+                <div style={{ position: 'absolute', left: 14, right: 80, bottom: 26, zIndex: 3, opacity: hideUi ? 0 : 1, transition: 'opacity 0.2s' }}>
+                  <div role="button" onClick={() => onOpenProfile(post.owner)} style={{ fontWeight: 900, fontSize: 16, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', textShadow: '0 1px 6px rgba(0,0,0,0.6)' }}>
+                    <Avatar emoji={post.owner.avatar} name={post.owner.name} size={30} frame={post.owner.avatar_frame} />
+                    <span style={{ display: 'flex', alignItems: 'center' }}>{post.owner.name}<VerifiedBadge tier={post.owner.verified} custom={post.owner.custom_badge} size={15} /></span>
                   </div>
                   {post.caption && <div style={{ fontSize: 14, marginTop: 6, lineHeight: 1.45, textShadow: '0 1px 6px rgba(0,0,0,0.6)', wordBreak: 'break-word' }}>{post.caption}</div>}
                   <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.65)', marginTop: 4 }}>{timeAgoLong(post.created_at)}</div>
@@ -13325,11 +13539,14 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       });
       setLoadingConvo(false);
     };
+    const lastResumeRef = { t: 0 };
     const resume = async (force) => {
       if (document.visibilityState !== 'visible') return;
       const awayMs = hiddenAtRef.current ? Date.now() - hiddenAtRef.current : 0;
       if (!force && awayMs < 1500) return;
       if (resumingRef.current) return;
+      if (Date.now() - lastResumeRef.t < 8000) return;
+      lastResumeRef.t = Date.now();
       resumingRef.current = true;
       hiddenAtRef.current = 0;
       try {
@@ -13348,11 +13565,13 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         loadUnreadCounts();
         if (reloadStoriesRef.current) reloadStoriesRef.current();
         await refreshActiveChat();
-        setTimeout(() => {
-          if (document.visibilityState !== 'visible') return;
-          if (reloadListsRef.current) reloadListsRef.current();
-          refreshActiveChat();
-        }, 2500);
+        if (awayMs > 60000) {
+          setTimeout(() => {
+            if (document.visibilityState !== 'visible') return;
+            if (reloadListsRef.current) reloadListsRef.current();
+            refreshActiveChat();
+          }, 2500);
+        }
       } finally {
         resumingRef.current = false;
       }
@@ -13589,6 +13808,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (!outputs.length || (!activeProfile && !activeGroup)) return;
     const targetProfile = activeProfile;
     const targetGroup = activeGroup;
+    const replyId = replyingTo?.id || null;
+    setReplyingTo(null);
     setUploading(outputs.length);
     for (let i = 0; i < outputs.length; i++) {
       const item = outputs[i];
@@ -13598,9 +13819,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         const captionForThis = i === 0 ? (caption || null) : null;
         let inserted = null;
         if (targetGroup) {
-          inserted = await sendGroupMessage(item.kind, captionForThis, url);
+          inserted = await sendGroupMessage(item.kind, captionForThis, url, null, i === 0 ? replyId : null);
         } else {
-          const { data, error: sendErr } = await sendMessage(session.user.id, targetProfile.id, item.kind, captionForThis, url);
+          const { data, error: sendErr } = await supabase.from('messages').insert({ sender_id: session.user.id, receiver_id: targetProfile.id, group_id: null, type: item.kind, content: captionForThis, media_url: url, reply_to_id: i === 0 ? replyId : null }).select().single();
           if (sendErr) showSnack(`Couldn't send: ${sendErr.message}`);
           inserted = data;
           if (data) {
@@ -14337,6 +14558,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
       {showSettings && (
         <SettingsPanel
+          me={me} rewardCount={(myRewards || []).filter(rewardActive).length}
+          onOpenCollection={() => { setShowSettings(false); setCollectionOpen(true); }}
+          onEditProfile={() => { setShowSettings(false); setProfileOf({ ...me, email: session.user.email }); }}
           onClose={() => setShowSettings(false)}
           onOpenPrivacy={() => setShowPrivacy(true)}
           onOpenRequests={() => { setShowSettings(false); setShowFollowRequests(true); }}
