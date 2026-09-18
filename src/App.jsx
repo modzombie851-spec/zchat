@@ -10540,6 +10540,276 @@ function CharmPreview({ charm, size }) {
   return <img src={url} alt="" draggable={false} style={{ height: size, width: Math.round(size * spec.ratio), objectFit: 'contain' }} />;
 }
 
+function FeedPanel({ me, userId, onClose, onOpenProfile }) {
+  const { theme } = useTheme();
+  const [tab, setTab] = useState('foryou');
+  const [items, setItems] = useState(null);
+  const [likes, setLikes] = useState({});
+  const [counts, setCounts] = useState({});
+  const [commentsFor, setCommentsFor] = useState(null);
+  const [burst, setBurst] = useState(null);
+  const lastTapRef = useRef(0);
+
+  const load = async () => {
+    let followingIds = null;
+    if (tab === 'following') {
+      const { data: f } = await supabase.from('follows').select('following_id').eq('follower_id', userId).eq('status', 'accepted');
+      followingIds = (f || []).map((x) => x.following_id);
+      if (!followingIds.length) { setItems([]); return; }
+    }
+    let q = supabase.from('posts').select('*').order('created_at', { ascending: false }).limit(60);
+    if (followingIds) q = q.in('user_id', followingIds);
+    const { data: posts } = await q;
+    const rows = posts || [];
+    const ids = [...new Set(rows.map((p) => p.user_id))];
+    const byId = {};
+    if (ids.length) {
+      const { data: profs } = await supabase.from('profiles').select('*').in('id', ids);
+      sanitizeAvatarList(profs, userId).forEach((p) => { byId[p.id] = p; });
+    }
+    const postIds = rows.map((p) => p.id);
+    const likeMap = {}; const countMap = {};
+    if (postIds.length) {
+      const [{ data: ls }, { data: cs }] = await Promise.all([
+        supabase.from('post_likes').select('post_id, user_id').in('post_id', postIds),
+        supabase.from('post_comments').select('post_id').in('post_id', postIds),
+      ]);
+      (ls || []).forEach((l) => {
+        countMap[l.post_id] = countMap[l.post_id] || { likes: 0, comments: 0 };
+        countMap[l.post_id].likes += 1;
+        if (l.user_id === userId) likeMap[l.post_id] = true;
+      });
+      (cs || []).forEach((c) => {
+        countMap[c.post_id] = countMap[c.post_id] || { likes: 0, comments: 0 };
+        countMap[c.post_id].comments += 1;
+      });
+    }
+    setLikes(likeMap);
+    setCounts(countMap);
+    setItems(rows.map((p) => ({ ...p, owner: byId[p.user_id] })).filter((p) => p.owner && !p.owner.is_deleted));
+  };
+  useEffect(() => { setItems(null); load(); }, [tab]);
+
+  const countOf = (id) => counts[id] || { likes: 0, comments: 0 };
+  const toggleLike = async (post, force) => {
+    const isLiked = !!likes[post.id];
+    if (isLiked && force) return;
+    if (isLiked) {
+      setLikes((p) => ({ ...p, [post.id]: false }));
+      setCounts((p) => ({ ...p, [post.id]: { ...countOf(post.id), likes: Math.max(0, countOf(post.id).likes - 1) } }));
+      await supabase.from('post_likes').delete().eq('post_id', post.id).eq('user_id', userId);
+      return;
+    }
+    playUiSound('like');
+    setLikes((p) => ({ ...p, [post.id]: true }));
+    setCounts((p) => ({ ...p, [post.id]: { ...countOf(post.id), likes: countOf(post.id).likes + 1 } }));
+    await supabase.from('post_likes').upsert({ post_id: post.id, user_id: userId }, { onConflict: 'post_id,user_id' });
+    if (post.user_id !== userId) sendPushNotification(post.user_id, 'ZChat', `${(me && me.name) || 'Someone'} liked your post`, `/?post=${post.id}`, me && me.avatar);
+  };
+  const onTapMedia = (post) => {
+    const now = Date.now();
+    if (now - lastTapRef.current < 300) {
+      setBurst(post.id);
+      setTimeout(() => setBurst(null), 700);
+      toggleLike(post, true);
+    }
+    lastTapRef.current = now;
+  };
+
+  const railBtn = (icon, label, onClick, color) => (
+    <div role="button" onClick={onClick} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer', color: color || 'white' }}>
+      {icon}
+      <span style={{ fontSize: 11.5, fontWeight: 800, textShadow: '0 1px 4px rgba(0,0,0,0.6)' }}>{label}</span>
+    </div>
+  );
+
+  return (
+    <div className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 600, background: '#000', color: 'white', fontFamily: FONT }}>
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 22, padding: '10px 16px', paddingTop: 'calc(12px + env(safe-area-inset-top))', background: 'linear-gradient(180deg, rgba(0,0,0,0.5), transparent)' }}>
+        <div role="button" aria-label="Close feed" onClick={onClose} style={{ position: 'absolute', left: 12, top: 'calc(10px + env(safe-area-inset-top))', width: 36, height: 36, borderRadius: '50%', background: 'rgba(0,0,0,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><ArrowLeft size={19} /></div>
+        {[['following', 'Following'], ['foryou', 'For you']].map(([k, label]) => (
+          <div key={k} role="button" onClick={() => { setTab(k); playUiSound('tap'); }} style={{ fontSize: 15.5, fontWeight: 800, cursor: 'pointer', color: tab === k ? 'white' : 'rgba(255,255,255,0.6)', borderBottom: tab === k ? '2.5px solid white' : '2.5px solid transparent', paddingBottom: 4 }}>{label}</div>
+        ))}
+      </div>
+
+      {items === null ? (
+        <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Spinner color="white" /></div>
+      ) : !items.length ? (
+        <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 30, textAlign: 'center' }}>
+          <Compass size={34} color="rgba(255,255,255,0.5)" />
+          <div style={{ fontWeight: 800, fontSize: 16 }}>{tab === 'following' ? 'No posts from people you follow' : 'No posts yet'}</div>
+          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)' }}>{tab === 'following' ? 'Follow more people to fill this up' : 'Share the first post from your profile'}</div>
+        </div>
+      ) : (
+        <div style={{ height: '100%', overflowY: 'auto', scrollSnapType: 'y mandatory', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
+          {items.map((post) => {
+            const c = countOf(post.id);
+            const isVideo = post.media_type === 'video';
+            return (
+              <div key={post.id} style={{ position: 'relative', height: '100%', scrollSnapAlign: 'start', scrollSnapStop: 'always', overflow: 'hidden' }}>
+                <div onClick={() => onTapMedia(post)} style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#05060a' }}>
+                  {isVideo
+                    ? <video src={post.media_url} playsInline loop muted autoPlay style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                    : <img src={post.media_url} alt="" loading="lazy" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />}
+                  {post.overlay_url && <img src={post.overlay_url} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }} />}
+                  {burst === post.id && <Heart size={110} color="#ff2d55" fill="#ff2d55" className="zchat-heart-burst" style={{ position: 'absolute' }} />}
+                </div>
+                <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(0,0,0,0.45) 0%, transparent 20%, transparent 55%, rgba(0,0,0,0.75) 100%)', pointerEvents: 'none' }} />
+
+                <div style={{ position: 'absolute', right: 10, bottom: 110, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 18, zIndex: 3 }}>
+                  <div role="button" onClick={() => onOpenProfile(post.owner)} style={{ cursor: 'pointer', marginBottom: 2 }}>
+                    <Avatar emoji={post.owner.avatar} name={post.owner.name} size={48} frame={post.owner.avatar_frame} />
+                  </div>
+                  {railBtn(<Heart size={31} color={likes[post.id] ? '#ff2d55' : 'white'} fill={likes[post.id] ? '#ff2d55' : 'none'} />, formatCount(c.likes), () => toggleLike(post))}
+                  {railBtn(<InstaCommentIcon size={29} color="white" />, formatCount(c.comments), () => { setCommentsFor(post); playUiSound('tap'); })}
+                  {railBtn(<Share2 size={26} />, 'Share', async () => {
+                    const link = `${siteOrigin()}/?post=${post.id}`;
+                    try { if (navigator.share) await navigator.share({ url: link }); else { await navigator.clipboard.writeText(link); } } catch {}
+                  })}
+                </div>
+
+                <div style={{ position: 'absolute', left: 14, right: 80, bottom: 26, zIndex: 3 }}>
+                  <div role="button" onClick={() => onOpenProfile(post.owner)} style={{ fontWeight: 900, fontSize: 16, display: 'flex', alignItems: 'center', cursor: 'pointer', textShadow: '0 1px 6px rgba(0,0,0,0.6)' }}>
+                    {post.owner.name}<VerifiedBadge tier={post.owner.verified} custom={post.owner.custom_badge} size={15} />
+                  </div>
+                  {post.caption && <div style={{ fontSize: 14, marginTop: 6, lineHeight: 1.45, textShadow: '0 1px 6px rgba(0,0,0,0.6)', wordBreak: 'break-word' }}>{post.caption}</div>}
+                  <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.65)', marginTop: 4 }}>{timeAgoLong(post.created_at)}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {commentsFor && (
+        <FeedComments post={commentsFor} me={me} userId={userId} onClose={() => setCommentsFor(null)}
+          onOpenProfile={onOpenProfile}
+          onCount={(n) => setCounts((p) => ({ ...p, [commentsFor.id]: { ...countOf(commentsFor.id), comments: n } }))} />
+      )}
+    </div>
+  );
+}
+
+function FeedComments({ post, me, userId, onClose, onCount, onOpenProfile }) {
+  const [rows, setRows] = useState(null);
+  const [text, setText] = useState('');
+  const [replyTo, setReplyTo] = useState(null);
+  const [open, setOpen] = useState(() => new Set());
+  const [sending, setSending] = useState(false);
+  const load = async () => {
+    const { data } = await supabase.from('post_comments').select('*').eq('post_id', post.id).order('created_at', { ascending: true });
+    const list = data || [];
+    const ids = [...new Set(list.map((c) => c.user_id))];
+    const byId = {};
+    if (ids.length) {
+      const { data: profs } = await supabase.from('profiles').select('*').in('id', ids);
+      sanitizeAvatarList(profs, userId).forEach((p) => { byId[p.id] = p; });
+    }
+    setRows(list.map((c) => ({ ...c, profile: byId[c.user_id] })));
+    onCount(list.length);
+  };
+  useEffect(() => {
+    load();
+    const ch = supabase.channel(`feedc-${post.id}-${Math.random().toString(36).slice(2, 6)}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'post_comments' }, () => load())
+      .subscribe();
+    return () => supabase.removeChannel(ch);
+  }, [post.id]);
+
+  const send = async () => {
+    const body = text.trim();
+    if (!body || sending) return;
+    setSending(true);
+    setText('');
+    const parent = replyTo;
+    setReplyTo(null);
+    playUiSound('send');
+    const row = { post_id: post.id, user_id: userId, text: parent ? `@${parent.profile?.username || 'user'} ${body}` : body };
+    await supabase.from('post_comments').insert(row);
+    if (post.user_id !== userId) sendPushNotification(post.user_id, 'ZChat', `${(me && me.name) || 'Someone'} commented on your post`, `/?post=${post.id}`, me && me.avatar);
+    setSending(false);
+    load();
+  };
+
+  const top = (rows || []).filter((c) => !/^@\S+\s/.test(c.text || ''));
+  const repliesOf = (c) => (rows || []).filter((r) => r !== c && (r.text || '').startsWith(`@${c.profile?.username || '~'} `));
+
+  return (
+    <div style={{ position: 'absolute', inset: 0, zIndex: 20, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
+      <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)' }} />
+      <div className="zchat-sheet-up" style={{ position: 'relative', height: '64%', background: '#15171d', borderRadius: '20px 20px 0 0', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{ padding: '12px 16px', borderBottom: '1px solid #22252e', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ fontWeight: 900, fontSize: 15 }}>{rows ? `${rows.length} ${rows.length === 1 ? 'comment' : 'comments'}` : 'Comments'}</div>
+          <X size={19} style={{ cursor: 'pointer', color: 'rgba(255,255,255,0.6)' }} onClick={onClose} />
+        </div>
+        <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
+          {rows === null ? (
+            <div style={{ display: 'flex', justifyContent: 'center', padding: 30 }}><Spinner color="white" /></div>
+          ) : !rows.length ? (
+            <div style={{ textAlign: 'center', padding: 40, color: 'rgba(255,255,255,0.55)', fontSize: 14 }}>No comments yet. Say something nice.</div>
+          ) : top.map((c) => {
+            const reps = repliesOf(c);
+            const isOwner = c.user_id === post.user_id;
+            return (
+              <div key={c.id}>
+                <div style={{ display: 'flex', gap: 10, padding: '12px 16px' }}>
+                  <div role="button" onClick={() => c.profile && onOpenProfile(c.profile)} style={{ cursor: 'pointer' }}>
+                    <Avatar emoji={c.profile?.avatar} name={c.profile?.name || '?'} size={36} frame={c.profile?.avatar_frame} />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.6)', fontWeight: 700, display: 'flex', alignItems: 'center' }}>
+                      {c.profile?.username || 'user'}<VerifiedBadge tier={c.profile?.verified} custom={c.profile?.custom_badge} size={11} />
+                      {isOwner && <span style={{ color: '#fbbf24', marginLeft: 5 }}>· creator</span>}
+                    </div>
+                    <div style={{ fontSize: 14, marginTop: 3, lineHeight: 1.35, wordBreak: 'break-word' }}>
+                      {(c.text || '').startsWith('sticker:')
+                        ? <LoopingSticker src={(c.text || '').slice(8)} size={72} />
+                        : c.text}
+                    </div>
+                    <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)', marginTop: 5, display: 'flex', gap: 16, fontWeight: 700 }}>
+                      <span>{timeAgoLong(c.created_at)}</span>
+                      <span role="button" onClick={() => setReplyTo(c)} style={{ cursor: 'pointer' }}>Reply</span>
+                    </div>
+                    {!!reps.length && (
+                      <div role="button" onClick={() => setOpen((p) => { const n = new Set(p); if (n.has(c.id)) n.delete(c.id); else n.add(c.id); return n; })}
+                        style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.55)', fontWeight: 700, marginTop: 8, cursor: 'pointer' }}>
+                        — {open.has(c.id) ? 'Hide' : `View ${reps.length}`} {reps.length === 1 ? 'reply' : 'replies'}
+                      </div>
+                    )}
+                    {open.has(c.id) && reps.map((r) => (
+                      <div key={r.id} style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                        <Avatar emoji={r.profile?.avatar} name={r.profile?.name || '?'} size={28} frame={r.profile?.avatar_frame} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.55)', fontWeight: 700 }}>{r.profile?.username || 'user'}</div>
+                          <div style={{ fontSize: 13.5, marginTop: 2, wordBreak: 'break-word' }}>{r.text}</div>
+                          <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.5)', marginTop: 4, fontWeight: 700 }}>{timeAgoLong(r.created_at)}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        {replyTo && (
+          <div style={{ padding: '6px 16px', fontSize: 12.5, color: 'rgba(255,255,255,0.6)', display: 'flex', justifyContent: 'space-between', fontWeight: 700 }}>
+            <span>Replying to @{replyTo.profile?.username || 'user'}</span>
+            <span role="button" onClick={() => setReplyTo(null)} style={{ cursor: 'pointer' }}>Cancel</span>
+          </div>
+        )}
+        <div style={{ padding: '10px 12px', paddingBottom: 'calc(10px + env(safe-area-inset-bottom))', borderTop: '1px solid #22252e', display: 'flex', gap: 8, alignItems: 'center' }}>
+          <Avatar emoji={me && me.avatar} name={(me && me.name) || '?'} size={32} frame={me && me.avatar_frame} />
+          <input value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') send(); }}
+            placeholder="Add comment…" maxLength={300}
+            style={{ flex: 1, height: 40, borderRadius: 20, background: '#22252e', border: 'none', outline: 'none', color: 'white', padding: '0 14px', fontSize: 14, fontFamily: FONT }} />
+          <div role="button" aria-label="Send comment" onClick={send} style={{ width: 40, height: 40, borderRadius: '50%', background: text.trim() ? '#2563eb' : '#22252e', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><Send size={17} /></div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAccount, onAddAccount, onRemoveAccount, switchingAccountId }) {
   const { theme, bgPatternOn, chatTheme } = useTheme();
   const assetProgress = useAssetPrefetch();
@@ -10698,10 +10968,32 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [rewardReady, setRewardReady] = useState({});
   const [myRewards, setMyRewards] = useState([]);
   const [collectionOpen, setCollectionOpen] = useState(false);
+  const [feedOpen, setFeedOpen] = useState(false);
+  const swipeRef = useRef(null);
+  const feedSwipe = {
+    onTouchStart: (e) => {
+      const t = e.touches && e.touches[0];
+      swipeRef.current = t ? { x: t.clientX, y: t.clientY, time: Date.now() } : null;
+    },
+    onTouchEnd: (e) => {
+      const start = swipeRef.current;
+      swipeRef.current = null;
+      if (!start || feedOpen) return;
+      const t = e.changedTouches && e.changedTouches[0];
+      if (!t) return;
+      const dx = t.clientX - start.x;
+      const dy = Math.abs(t.clientY - start.y);
+      if (dx > 90 && dy < 60 && Date.now() - start.time < 700 && start.x < 60) {
+        setFeedOpen(true);
+        playUiSound('tap');
+      }
+    },
+  };
   const backStateRef = useRef({});
   const exitHintRef = useRef(0);
   backStateRef.current.closeTop = () => {
     const steps = [
+      [feedOpen, () => setFeedOpen(false)],
       [collectionOpen, () => setCollectionOpen(false)],
       [showStickers, () => setShowStickers(false)],
       [showSettings, () => setShowSettings(false)],
@@ -13397,7 +13689,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       <GlobalStyle />
       <AssetDownloadBar progress={assetProgress} />
       {showInstallHelp && <InstallAppHelpModal onClose={() => setShowInstallHelp(false)} />}
-      <div style={{
+      <div {...feedSwipe} style={{
         width: isWide ? 360 : (mobileShowChat ? 0 : '100%'), maxWidth: isWide ? 360 : (mobileShowChat ? 0 : '100%'), overflow: 'hidden',
         borderRight: `1px solid ${theme.border}`, display: 'flex', flexDirection: 'column', flexShrink: 0,
         transition: 'none',
@@ -13463,6 +13755,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           <div onClick={() => setShowCreateGroup(true)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer', flexShrink: 0 }}>
             <div style={{ width: 38, height: 38, borderRadius: 12, background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.coralDeep }}><Users size={16} /></div>
             <span style={{ fontSize: 9, color: theme.muted, fontWeight: 600 }}>Group</span>
+          </div>
+          <div onClick={() => { setFeedOpen(true); playUiSound('tap'); }} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer', flexShrink: 0 }}>
+            <div style={{ width: 38, height: 38, borderRadius: 12, background: 'linear-gradient(135deg, #ec4899, #8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white' }}><Play size={18} /></div>
+            <span style={{ fontSize: 9, color: theme.muted, fontWeight: 600 }}>Feed</span>
           </div>
           <div onClick={() => setShowDiscover(true)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer', flexShrink: 0 }}>
             <div style={{ width: 38, height: 38, borderRadius: 12, background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.coralDeep }}><Compass size={16} /></div>
@@ -14273,6 +14569,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             await supabase.from('user_rewards').update({ seen: true }).eq('id', reward.id);
             await equipReward(reward.kind, reward.reward_key);
           }} />
+      )}
+      {feedOpen && me && (
+        <FeedPanel me={me} userId={session.user.id} onClose={() => setFeedOpen(false)}
+          onOpenProfile={(p) => { setFeedOpen(false); setProfileOf(sanitizeAvatar(p, session.user.id)); }} />
       )}
       {collectionOpen && me && (
         <CollectionPanel me={me} rewards={myRewards} userEmail={session.user.email} onClose={() => setCollectionOpen(false)} onEquip={equipReward} />
