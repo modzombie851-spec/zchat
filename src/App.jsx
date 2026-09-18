@@ -10387,148 +10387,143 @@ function openFrameCheckout(userId, email, frameKey) {
 function CollectionPanel({ me, rewards, onClose, onEquip, userEmail }) {
   const [tab, setTab] = useState('frame');
   const [selected, setSelected] = useState(null);
-  const [tryOn, setTryOn] = useState(null);
   const [busy, setBusy] = useState(false);
-  const rewardFor = (key) => (rewards || []).find((r) => r.kind === tab && r.reward_key === key) || null;
-  const owned = new Set((rewards || []).filter((r) => r.kind === tab && rewardActive(r)).map((r) => r.reward_key));
-  const items = tab === 'frame'
-    ? Object.entries(AVATAR_FRAMES).map(([key, spec]) => ({ key, spec }))
-    : Object.entries(CUSTOM_BADGES).map(([key, spec]) => ({ key, spec }));
-  const equippedKey = tab === 'frame' ? me.avatar_frame : me.custom_badge;
-  const sorted = [...items].sort((a, b) => Number(owned.has(b.key)) - Number(owned.has(a.key)));
-  const ownedCount = items.filter((it) => owned.has(it.key)).length;
-  const totalOwned = (rewards || []).filter((r) => rewardActive(r) && (r.kind === 'frame' ? AVATAR_FRAMES[r.reward_key] : CUSTOM_BADGES[r.reward_key])).length;
-  const totalItems = Object.keys(AVATAR_FRAMES).length + Object.keys(CUSTOM_BADGES).length;
-  const sel = selected ? items.find((it) => it.key === selected) : null;
-  const selOwned = sel ? owned.has(sel.key) : false;
-  const selEquipped = sel ? equippedKey === sel.key : false;
-  const rarity = (spec) => RARITY_STYLE[spec.rarity] || RARITY_STYLE.rare;
+  const [tryOn, setTryOn] = useState(null);
+  const rewardFor = (kind, key) => (rewards || []).find((r) => r.kind === kind && r.reward_key === key) || null;
+  const activeRewards = (rewards || []).filter(rewardActive);
+  const ownedFrames = new Set(activeRewards.filter((r) => r.kind === 'frame').map((r) => r.reward_key));
+  const ownedCharms = new Set(activeRewards.filter((r) => r.kind === 'charm').map((r) => r.reward_key));
 
-  const equip = async (key) => {
-    if (busy) return;
+  const items = tab === 'frame'
+    ? Object.entries(AVATAR_FRAMES).map(([key, spec]) => ({ key, spec, owned: ownedFrames.has(key), equipped: me.avatar_frame === key, reward: rewardFor('frame', key) }))
+    : tab === 'charm'
+      ? Object.entries(CUSTOM_BADGES).map(([key, spec]) => ({ key, spec, owned: ownedCharms.has(key), equipped: me.custom_badge === key, reward: rewardFor('charm', key) }))
+      : Object.entries(VERIFIED_TIERS).map(([key, t]) => ({ key, spec: { label: `${t.label} badge`, rarity: key === 'red' ? 'mythic' : key === 'gold' ? 'legendary' : 'epic', color: t.color }, owned: me.verified === key, equipped: me.verified === key, reward: null, badge: true }));
+
+  const sorted = [...items].sort((x, y) => Number(y.owned) - Number(x.owned));
+  const totalOwned = ownedFrames.size + ownedCharms.size + (me.verified ? 1 : 0);
+  const totalItems = Object.keys(AVATAR_FRAMES).length + Object.keys(CUSTOM_BADGES).length + Object.keys(VERIFIED_TIERS).length;
+  const pct = totalItems ? Math.round((totalOwned / totalItems) * 100) : 0;
+  const rarity = (spec) => RARITY_STYLE[spec.rarity] || RARITY_STYLE.rare;
+  const equippedNow = tab === 'frame' ? (me.avatar_frame && AVATAR_FRAMES[me.avatar_frame] ? { key: me.avatar_frame, spec: AVATAR_FRAMES[me.avatar_frame], kind: 'frame' } : null)
+    : tab === 'charm' ? (me.custom_badge && CUSTOM_BADGES[me.custom_badge] ? { key: me.custom_badge, spec: CUSTOM_BADGES[me.custom_badge], kind: 'charm' } : null)
+      : (me.verified && VERIFIED_TIERS[me.verified] ? { key: me.verified, spec: { label: `${VERIFIED_TIERS[me.verified].label} badge`, rarity: 'epic' }, kind: 'badge' } : null);
+
+  const equip = async (kind, key) => {
+    if (busy || kind === 'badge') return;
     setBusy(true);
-    await onEquip(tab, key);
+    playUiSound('like');
+    await onEquip(kind, key);
     setBusy(false);
   };
 
-  return (
-    <div className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 620, background: 'radial-gradient(circle at 50% 0%, #1c1535 0%, #07080d 55%)', color: 'white', display: 'flex', flexDirection: 'column', fontFamily: FONT }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', paddingTop: 'calc(12px + env(safe-area-inset-top))' }}>
-        <div role="button" aria-label="Close collection" onClick={onClose} style={{ width: 38, height: 38, borderRadius: '50%', background: 'rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><ArrowLeft size={19} /></div>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 20, fontWeight: 900, letterSpacing: '0.02em' }}>Collection</div>
-          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)', fontWeight: 600 }}>{totalOwned} of {totalItems} unlocked</div>
-        </div>
-        <div style={{ width: 90, height: 6, borderRadius: 3, background: 'rgba(255,255,255,0.1)', overflow: 'hidden' }}>
-          <div style={{ width: `${totalItems ? Math.round((totalOwned / totalItems) * 100) : 0}%`, height: '100%', background: 'linear-gradient(90deg, #fbbf24, #f97316)' }} />
-        </div>
-      </div>
+  const sel = selected ? items.find((it) => it.key === selected) : null;
 
-      <div style={{ display: 'flex', gap: 8, padding: '4px 16px 12px' }}>
-        {[['frame', 'Avatar Frames'], ['charm', 'Name Charms']].map(([k, label]) => (
-          <div key={k} role="button" onClick={() => { setTab(k); setSelected(null); }} style={{ flex: 1, textAlign: 'center', padding: '11px 0', borderRadius: 14, fontWeight: 800, fontSize: 13.5, cursor: 'pointer', letterSpacing: '0.03em', textTransform: 'uppercase', background: tab === k ? 'linear-gradient(135deg, #f59e0b, #ea580c)' : 'rgba(255,255,255,0.06)', color: tab === k ? '#1a0f02' : 'rgba(255,255,255,0.7)', border: tab === k ? 'none' : '1px solid rgba(255,255,255,0.08)' }}>
-            {label}
-          </div>
+  return (
+    <div className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 620, background: 'radial-gradient(circle at 50% 0%, #1b1533 0%, #07080d 55%)', color: 'white', display: 'flex', flexDirection: 'column', fontFamily: FONT }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px 8px', paddingTop: 'calc(12px + env(safe-area-inset-top))' }}>
+        <div role="button" aria-label="Close collection" onClick={onClose} style={{ width: 38, height: 38, borderRadius: '50%', background: 'rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><ArrowLeft size={19} /></div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 21, fontWeight: 900 }}>Collection</div>
+          <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.55)', fontWeight: 700 }}>{totalOwned} of {totalItems} unlocked</div>
+        </div>
+        <div style={{ fontSize: 20, fontWeight: 900, color: '#fbbf24' }}>{pct}%</div>
+      </div>
+      <div style={{ margin: '0 16px 14px', height: 8, borderRadius: 4, background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+        <div style={{ width: `${pct}%`, height: '100%', background: 'linear-gradient(90deg, #fbbf24, #f97316)', transition: 'width 0.4s ease' }} />
+      </div>
+      <div style={{ display: 'flex', gap: 8, padding: '0 16px 14px', overflowX: 'auto', scrollbarWidth: 'none' }}>
+        {[['frame', 'Frames'], ['charm', 'Charms'], ['badge', 'Badges']].map(([k, label]) => (
+          <div key={k} role="button" onClick={() => { setTab(k); setSelected(null); playUiSound('tap'); }} style={{ flexShrink: 0, padding: '9px 16px', borderRadius: 13, fontWeight: 900, fontSize: 13, cursor: 'pointer', background: tab === k ? 'linear-gradient(135deg, #fbbf24, #f97316)' : 'rgba(255,255,255,0.06)', color: tab === k ? '#1a0f02' : 'rgba(255,255,255,0.75)' }}>{label}</div>
         ))}
       </div>
-      <div style={{ padding: '0 16px 10px', fontSize: 12, color: 'rgba(255,255,255,0.5)', fontWeight: 700 }}>{ownedCount}/{items.length} {tab === 'frame' ? 'frames' : 'charms'} unlocked</div>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '0 12px calc(120px + env(safe-area-inset-bottom))' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
-          <div role="button" onClick={() => setSelected('__none')} style={{ position: 'relative', borderRadius: 16, padding: '12px 6px 10px', background: 'linear-gradient(160deg, #1b1d26 0%, #0c0d12 100%)', border: `1.5px solid ${selected === '__none' ? '#fbbf24' : (!equippedKey ? 'rgba(52,211,153,0.7)' : 'rgba(255,255,255,0.08)')}`, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-            <div style={{ width: 64, height: 64, borderRadius: '50%', border: '2px dashed rgba(255,255,255,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,0.45)' }}><Ban size={22} /></div>
-            <div style={{ fontSize: 11.5, fontWeight: 800 }}>None</div>
-            {!equippedKey && <div style={{ position: 'absolute', top: 6, right: 6, width: 18, height: 18, borderRadius: '50%', background: '#34d399', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Check size={11} color="#052e1c" strokeWidth={4} /></div>}
-          </div>
-          {sorted.map(({ key, spec }) => {
-            const has = owned.has(key);
-            const isEq = equippedKey === key;
-            const r = rarity(spec);
+      <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: `0 14px ${equippedNow ? 130 : 30}px` }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
+          {sorted.map((it) => {
+            const r = rarity(it.spec);
+            const left = daysLeft(it.reward);
             return (
-              <div key={key} role="button" onClick={() => setSelected(key)} style={{ position: 'relative', borderRadius: 16, padding: '12px 6px 10px', background: has ? r.bg : 'linear-gradient(160deg, #15161c 0%, #0a0b0f 100%)', border: `1.5px solid ${selected === key ? '#fbbf24' : isEq ? 'rgba(52,211,153,0.8)' : has ? `${r.color}55` : 'rgba(255,255,255,0.06)'}`, boxShadow: isEq ? `0 0 18px ${r.glow}` : 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, overflow: 'hidden' }}>
-                {has && <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 3, background: r.color }} />}
-                <div style={{ height: 64, display: 'flex', alignItems: 'center', justifyContent: 'center', filter: has ? 'none' : 'grayscale(1) brightness(0.45)' }}>
-                  {tab === 'frame'
-                    ? <div style={{ padding: 10 }}><Avatar emoji={me.avatar} name={me.name} size={44} frame={key} /></div>
-                    : <CharmPreview charm={key} size={40} />}
+              <div key={it.key} role="button" onClick={() => { setSelected(it.key); playUiSound('tap'); }} style={{ position: 'relative', borderRadius: 20, padding: '12px 10px 14px', cursor: 'pointer', textAlign: 'center', overflow: 'hidden', background: it.owned ? r.bg : 'linear-gradient(160deg, #151620 0%, #0a0b0f 100%)', border: `1.5px solid ${selected === it.key ? '#fbbf24' : it.owned ? `${r.color}66` : 'rgba(255,255,255,0.07)'}`, boxShadow: it.equipped ? `0 0 20px ${r.glow}` : 'none' }}>
+                {it.equipped && <div style={{ position: 'absolute', top: 8, left: 8, padding: '2px 7px', borderRadius: 7, background: '#22c55e', color: '#052e1c', fontSize: 9.5, fontWeight: 900 }}>EQUIPPED</div>}
+                {!it.owned && <div style={{ position: 'absolute', top: 8, right: 8 }}><Lock size={13} color="rgba(255,255,255,0.6)" /></div>}
+                <div style={{ height: 96, display: 'flex', alignItems: 'center', justifyContent: 'center', filter: it.owned ? 'none' : 'grayscale(1) brightness(0.5)' }}>
+                  {tab === 'frame' ? <Avatar emoji={me.avatar} name={me.name} size={92} frame={it.key} />
+                    : tab === 'charm' ? <CharmPreview charm={it.key} size={56} />
+                      : <svg width="56" height="56" viewBox="0 0 24 24"><path fill={it.spec.color} d={BADGE_SHAPE_PATH} /><path d="M8.6 12.3l2.3 2.2 4.6-3.6" fill="none" stroke="white" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round" /></svg>}
                 </div>
-                <div style={{ fontSize: 11, fontWeight: 800, textAlign: 'center', lineHeight: 1.2, color: has ? 'white' : 'rgba(255,255,255,0.45)', minHeight: 26, display: 'flex', alignItems: 'center' }}>{spec.label.replace(/ (frame|charm)$/i, '')}</div>
-                <div style={{ fontSize: 9.5, fontWeight: 900, letterSpacing: '0.08em', textTransform: 'uppercase', color: has ? r.color : 'rgba(255,255,255,0.3)' }}>{r.label}</div>
-                {!has && (
-                  <div style={{ position: 'absolute', top: 6, right: 6, width: 22, height: 22, borderRadius: 7, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Lock size={12} color="rgba(255,255,255,0.75)" /></div>
-                )}
-                {isEq && (
-                  <div style={{ position: 'absolute', top: 6, right: 6, width: 18, height: 18, borderRadius: '50%', background: '#34d399', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Check size={11} color="#052e1c" strokeWidth={4} /></div>
-                )}
-                {has && daysLeft(rewardFor(key)) != null && (
-                  <div style={{ position: 'absolute', top: 6, left: 6, padding: '2px 6px', borderRadius: 7, background: 'rgba(0,0,0,0.6)', fontSize: 9.5, fontWeight: 900, color: daysLeft(rewardFor(key)) <= 5 ? '#fca5a5' : 'rgba(255,255,255,0.85)' }}>{daysLeft(rewardFor(key))}d</div>
-                )}
-                {!has && tab === 'frame' && FRAME_STORE.checkoutUrl && (
-                  <div style={{ position: 'absolute', top: 6, left: 6, padding: '2px 6px', borderRadius: 7, background: 'rgba(245,158,11,0.9)', fontSize: 9.5, fontWeight: 900, color: '#1a0f02' }}>{FRAME_STORE.priceLabel}</div>
-                )}
+                <div style={{ fontWeight: 900, fontSize: 13.5, marginTop: 8, color: it.owned ? 'white' : 'rgba(255,255,255,0.55)' }}>{it.spec.label.replace(/ (frame|charm|badge)$/i, '')}</div>
+                <div style={{ fontSize: 9.5, fontWeight: 900, letterSpacing: '0.1em', textTransform: 'uppercase', color: it.owned ? r.color : 'rgba(255,255,255,0.35)', marginTop: 3 }}>
+                  {it.owned ? `${r.label}${left != null ? ` · ${left}d left` : ''}` : tab === 'frame' && FRAME_STORE.checkoutUrl ? `LOCKED · ${FRAME_STORE.priceLabel}` : 'LOCKED'}
+                </div>
               </div>
             );
           })}
         </div>
       </div>
 
-      {(sel || selected === '__none') && (
-        <div className="zchat-sheet-up" style={{ position: 'absolute', zIndex: 30, left: 0, right: 0, bottom: 0, padding: '18px 18px', paddingBottom: 'calc(18px + env(safe-area-inset-bottom))', background: 'linear-gradient(180deg, rgba(20,18,32,0.98), #0a0a10)', borderTop: '1px solid rgba(255,255,255,0.1)', borderRadius: '24px 24px 0 0', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', display: 'flex', alignItems: 'center', gap: 16 }}>
-          {selected === '__none' ? (
-            <>
-              <div style={{ width: 84, height: 84, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Avatar emoji={me.avatar} name={me.name} size={64} /></div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 16, fontWeight: 900 }}>No {tab === 'frame' ? 'frame' : 'charm'}</div>
-                <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.6)', marginTop: 2 }}>Show your profile without one</div>
-                <button disabled={busy || !equippedKey} onClick={() => equip(null)} style={{ marginTop: 10, padding: '10px 22px', borderRadius: 12, border: 'none', fontWeight: 900, fontFamily: FONT, cursor: 'pointer', background: equippedKey ? 'rgba(255,255,255,0.14)' : 'rgba(52,211,153,0.2)', color: equippedKey ? 'white' : '#34d399' }}>{equippedKey ? (busy ? 'Saving…' : 'Remove') : 'In use'}</button>
-              </div>
-            </>
-          ) : (
-            <>
-              <div role="button" onClick={() => setTryOn({ kind: tab, key: sel.key })} style={{ width: 96, height: 96, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: tab === 'frame' ? 'pointer' : 'default' }}>
-                {tab === 'frame' ? <Avatar emoji={me.avatar} name={me.name} size={62} frame={sel.key} /> : <CharmPreview charm={sel.key} size={62} />}
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 10.5, fontWeight: 900, letterSpacing: '0.1em', textTransform: 'uppercase', color: rarity(sel.spec).color }}>{rarity(sel.spec).label}{sel.spec.animated ? ' · Animated' : ''}</div>
-                <div style={{ fontSize: 17, fontWeight: 900, marginTop: 2 }}>{sel.spec.label}</div>
-                <div role="button" onClick={() => setTryOn({ kind: tab, key: sel.key })} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6, padding: '5px 10px', borderRadius: 10, background: 'rgba(255,255,255,0.08)', fontSize: 12, fontWeight: 800, cursor: 'pointer', color: 'rgba(255,255,255,0.85)' }}><Eye size={13} /> Full preview</div>
-                {tab === 'charm' && <div style={{ fontSize: 13, marginTop: 4, color: 'rgba(255,255,255,0.8)', fontWeight: 700 }}>{me.name}<VerifiedBadge tier={me.verified} custom={sel.key} size={14} /></div>}
-                {selOwned && daysLeft(rewardFor(sel.key)) != null && (
-                  <div style={{ fontSize: 12, marginTop: 4, fontWeight: 700, color: daysLeft(rewardFor(sel.key)) <= 5 ? '#fca5a5' : 'rgba(255,255,255,0.6)' }}>Expires in {daysLeft(rewardFor(sel.key))} {daysLeft(rewardFor(sel.key)) === 1 ? 'day' : 'days'}</div>
-                )}
-                {selOwned ? (
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
-                    <button disabled={busy || selEquipped} onClick={() => equip(sel.key)} style={{ padding: '10px 22px', borderRadius: 12, border: 'none', fontWeight: 900, fontFamily: FONT, cursor: selEquipped ? 'default' : 'pointer', background: selEquipped ? 'rgba(52,211,153,0.2)' : 'linear-gradient(135deg, #f59e0b, #ea580c)', color: selEquipped ? '#34d399' : '#1a0f02', letterSpacing: '0.04em' }}>
-                      {selEquipped ? '✓ EQUIPPED' : busy ? 'EQUIPPING…' : 'EQUIP'}
-                    </button>
-                    {tab === 'frame' && FRAME_STORE.checkoutUrl && daysLeft(rewardFor(sel.key)) != null && (
-                      <button onClick={() => openFrameCheckout(me.id, userEmail, sel.key)} style={{ padding: '10px 14px', borderRadius: 12, border: '1px solid rgba(245,158,11,0.5)', background: 'transparent', color: '#fbbf24', fontWeight: 900, fontFamily: FONT, cursor: 'pointer' }}>+ {FRAME_STORE.periodLabel} · {FRAME_STORE.priceLabel}</button>
-                    )}
-                  </div>
-                ) : tab === 'frame' && FRAME_STORE.checkoutUrl ? (
-                  <div>
-                    {rewardFor(sel.key) && !rewardActive(rewardFor(sel.key)) && <div style={{ fontSize: 12, marginTop: 4, fontWeight: 700, color: '#fca5a5' }}>Expired</div>}
-                    <button onClick={() => openFrameCheckout(me.id, userEmail, sel.key)} style={{ marginTop: 10, padding: '11px 22px', borderRadius: 12, border: 'none', fontWeight: 900, fontFamily: FONT, cursor: 'pointer', background: 'linear-gradient(135deg, #f59e0b, #ea580c)', color: '#1a0f02', letterSpacing: '0.03em' }}>
-                      UNLOCK · {FRAME_STORE.priceLabel} for {FRAME_STORE.periodLabel}
-                    </button>
-                    <div style={{ fontSize: 11, marginTop: 6, color: 'rgba(255,255,255,0.45)' }}>Secure checkout by Lemon Squeezy. Not a subscription.</div>
-                  </div>
-                ) : (
-                  <div style={{ marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 14px', borderRadius: 12, background: 'rgba(255,255,255,0.07)', fontSize: 12.5, fontWeight: 800, color: 'rgba(255,255,255,0.7)' }}><Lock size={13} /> {rewardFor(sel.key) ? 'Expired' : 'Locked'} · {tab === 'frame' ? 'Store opening soon' : 'Earn it from ZChat events and gifts'}</div>
-                )}
-              </div>
-              <div role="button" aria-label="Close" onClick={() => setSelected(null)} style={{ alignSelf: 'flex-start', padding: 4, cursor: 'pointer', color: 'rgba(255,255,255,0.5)' }}><X size={18} /></div>
-            </>
+      {equippedNow && !sel && (
+        <div style={{ position: 'absolute', left: 12, right: 12, bottom: 'calc(14px + env(safe-area-inset-bottom))', padding: '12px 14px', borderRadius: 20, background: 'rgba(18,20,28,0.97)', border: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ width: 64, height: 64, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            {equippedNow.kind === 'frame' ? <Avatar emoji={me.avatar} name={me.name} size={62} frame={equippedNow.key} />
+              : equippedNow.kind === 'charm' ? <CharmPreview charm={equippedNow.key} size={42} />
+                : <svg width="40" height="40" viewBox="0 0 24 24"><path fill={(VERIFIED_TIERS[me.verified] || {}).color} d={BADGE_SHAPE_PATH} /><path d="M8.6 12.3l2.3 2.2 4.6-3.6" fill="none" stroke="white" strokeWidth="1.65" strokeLinecap="round" /></svg>}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 9.5, fontWeight: 900, letterSpacing: '0.1em', color: rarity(equippedNow.spec).color, textTransform: 'uppercase' }}>{rarity(equippedNow.spec).label}</div>
+            <div style={{ fontWeight: 900, fontSize: 15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{equippedNow.spec.label.replace(/ (frame|charm|badge)$/i, '')}</div>
+            <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.55)', fontWeight: 700 }}>Wearing now</div>
+          </div>
+          {equippedNow.kind !== 'badge' && (
+            <button disabled={busy} onClick={() => equip(equippedNow.kind, null)} style={{ padding: '10px 14px', borderRadius: 12, border: 'none', background: 'rgba(255,255,255,0.1)', color: 'white', fontWeight: 900, fontSize: 12.5, fontFamily: FONT, cursor: 'pointer' }}>Take off</button>
           )}
         </div>
       )}
+
+      {sel && (
+        <div className="zchat-sheet-up" style={{ position: 'absolute', zIndex: 30, left: 0, right: 0, bottom: 0, padding: '16px 16px', paddingBottom: 'calc(16px + env(safe-area-inset-bottom))', background: 'linear-gradient(180deg, rgba(20,18,32,0.98), #0a0a10)', borderTop: '1px solid rgba(255,255,255,0.1)', borderRadius: '24px 24px 0 0' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <div role="button" onClick={() => tab !== 'badge' && setTryOn({ kind: tab, key: sel.key })} style={{ width: 92, height: 92, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: tab === 'badge' ? 'default' : 'pointer', filter: sel.owned ? 'none' : 'grayscale(0.2)' }}>
+              {tab === 'frame' ? <Avatar emoji={me.avatar} name={me.name} size={88} frame={sel.key} />
+                : tab === 'charm' ? <CharmPreview charm={sel.key} size={54} />
+                  : <svg width="54" height="54" viewBox="0 0 24 24"><path fill={sel.spec.color} d={BADGE_SHAPE_PATH} /><path d="M8.6 12.3l2.3 2.2 4.6-3.6" fill="none" stroke="white" strokeWidth="1.65" strokeLinecap="round" /></svg>}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 10.5, fontWeight: 900, letterSpacing: '0.1em', textTransform: 'uppercase', color: rarity(sel.spec).color }}>{rarity(sel.spec).label}{sel.spec.animated ? ' · Animated' : ''}</div>
+              <div style={{ fontSize: 17, fontWeight: 900, marginTop: 2 }}>{sel.spec.label}</div>
+              {sel.owned && daysLeft(sel.reward) != null && <div style={{ fontSize: 12, fontWeight: 700, color: daysLeft(sel.reward) <= 5 ? '#fca5a5' : 'rgba(255,255,255,0.6)', marginTop: 3 }}>Expires in {daysLeft(sel.reward)} days</div>}
+              <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+                {tab === 'badge' ? (
+                  <div style={{ padding: '10px 14px', borderRadius: 12, background: 'rgba(255,255,255,0.07)', fontSize: 12.5, fontWeight: 800, color: 'rgba(255,255,255,0.7)' }}>{sel.owned ? 'You have this badge' : 'Given by the ZChat team'}</div>
+                ) : sel.owned ? (
+                  <>
+                    <button disabled={busy || sel.equipped} onClick={() => equip(tab, sel.key)} style={{ padding: '10px 22px', borderRadius: 12, border: 'none', fontWeight: 900, fontFamily: FONT, fontSize: 13.5, cursor: sel.equipped ? 'default' : 'pointer', background: sel.equipped ? 'rgba(52,211,153,0.2)' : 'linear-gradient(135deg, #fbbf24, #ea580c)', color: sel.equipped ? '#34d399' : '#1a0f02' }}>{sel.equipped ? '✓ EQUIPPED' : busy ? 'EQUIPPING…' : 'EQUIP'}</button>
+                    <button onClick={() => setTryOn({ kind: tab, key: sel.key })} style={{ padding: '10px 14px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.14)', background: 'transparent', color: 'white', fontWeight: 800, fontFamily: FONT, fontSize: 13, cursor: 'pointer' }}>Preview</button>
+                  </>
+                ) : (
+                  <>
+                    {tab === 'frame' && FRAME_STORE.checkoutUrl ? (
+                      <button onClick={() => openFrameCheckout(me.id, userEmail, sel.key)} style={{ padding: '11px 20px', borderRadius: 12, border: 'none', fontWeight: 900, fontFamily: FONT, fontSize: 13.5, cursor: 'pointer', background: 'linear-gradient(135deg, #fbbf24, #ea580c)', color: '#1a0f02' }}>UNLOCK · {FRAME_STORE.priceLabel} for {FRAME_STORE.periodLabel}</button>
+                    ) : (
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '10px 14px', borderRadius: 12, background: 'rgba(255,255,255,0.07)', fontSize: 12.5, fontWeight: 800, color: 'rgba(255,255,255,0.7)' }}><Lock size={13} /> Locked · Earn it from ZChat events and gifts</div>
+                    )}
+                    <button onClick={() => setTryOn({ kind: tab, key: sel.key })} style={{ padding: '10px 14px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.14)', background: 'transparent', color: 'white', fontWeight: 800, fontFamily: FONT, fontSize: 13, cursor: 'pointer' }}>Preview</button>
+                  </>
+                )}
+              </div>
+            </div>
+            <div role="button" aria-label="Close details" onClick={() => setSelected(null)} style={{ alignSelf: 'flex-start', padding: 4, cursor: 'pointer', color: 'rgba(255,255,255,0.5)' }}><X size={18} /></div>
+          </div>
+        </div>
+      )}
+
       {tryOn && (() => {
         const isCharm = tryOn.kind === 'charm';
-        const rw = (rewards || []).find((x) => x.kind === tryOn.kind && x.reward_key === tryOn.key);
+        const rw = rewardFor(tryOn.kind, tryOn.key);
         const has = rw && rewardActive(rw);
         const isEq = (isCharm ? me.custom_badge : me.avatar_frame) === tryOn.key;
         const action = has
-          ? { label: isEq ? '✓ Equipped' : (isCharm ? 'Equip this charm' : 'Equip this frame'), disabled: isEq || busy, onClick: async () => { await onEquip(tryOn.kind, tryOn.key); setTryOn(null); }, sub: daysLeft(rw) != null ? `${daysLeft(rw)} days left` : 'Yours to keep' }
+          ? { label: isEq ? '✓ Equipped' : (isCharm ? 'Equip this charm' : 'Equip this frame'), disabled: isEq || busy, onClick: async () => { await equip(tryOn.kind, tryOn.key); setTryOn(null); }, sub: daysLeft(rw) != null ? `${daysLeft(rw)} days left` : 'Yours to keep' }
           : !isCharm && FRAME_STORE.checkoutUrl
             ? { label: `Unlock for ${FRAME_STORE.priceLabel} · ${FRAME_STORE.periodLabel}`, onClick: () => openFrameCheckout(me.id, userEmail, tryOn.key), sub: 'Single payment · Secure checkout by Lemon Squeezy' }
             : { label: 'Locked', disabled: true, sub: isCharm ? 'Earn this charm from ZChat events and gifts' : 'This frame goes on sale very soon' };
