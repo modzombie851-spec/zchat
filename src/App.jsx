@@ -5143,6 +5143,7 @@ function MentionSuggestions({ query, priority, excludeIds, myId, onPick }) {
 
 function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSelect, onLongPress, onOpenImage, onOpenVideo, reactions, onReact, onOpenWhoReacted, replyPreview, onSwipeReply, onJumpToMessage, highlighted, senderLabel, senderAvatar, hideReadStatus, onOpenSenderProfile, canModerate, onOpenMention, mentionsMe, onOpenStoryRef, onCallBack, onOpenSticker, tightBelow, senderVerified, onOpenPost, tightAbove, senderFrame, senderCustomBadge }) {
   const { theme, fontScale, chatTheme, bubbleColor } = useTheme();
+  const cachedVideoSrc = useCachedMedia(m.type === 'video' ? m.media_url : null);
   const [hover, setHover] = useState(false);
   const [burstHeart, setBurstHeart] = useState(false);
   const lastTapRef = useRef(0);
@@ -5339,7 +5340,7 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
               {m.type === 'image' && <ChatImage src={m.media_url} caption={m.content} />}
               {m.type === 'video' && (
                 <div onClick={(e) => { e.stopPropagation(); onOpenVideo({ url: m.media_url, trimStart: m.trim_start, trimEnd: m.trim_end, overlayUrl: m.overlay_url }); }} style={{ position: 'relative', width: 240, maxWidth: '100%', height: 240, borderRadius: 14, overflow: 'hidden', marginBottom: m.content ? 4 : 2, background: '#000', cursor: 'pointer' }}>
-                  <video src={m.media_url ? `${m.media_url}#t=0.1` : undefined} preload="metadata" playsInline muted onContextMenu={(e) => e.preventDefault()} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none' }} />
+                  <video src={cachedVideoSrc ? `${cachedVideoSrc}#t=0.1` : (m.media_url ? `${m.media_url}#t=0.1` : undefined)} preload="metadata" playsInline muted onContextMenu={(e) => e.preventDefault()} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none' }} />
                   {m.overlay_url && <img src={m.overlay_url} alt="" draggable={false} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} />}
                   <div style={{
                     position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none',
@@ -8531,7 +8532,7 @@ function StoryTray({ me, myStories, trayUsers, seen, onAdd, onOpen }) {
   );
 }
 
-const APP_VERSION = '4.7V';
+const APP_VERSION = '4.8V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -10116,6 +10117,7 @@ function ScreenDebugInfo() {
 const imageAspectCache = new Map();
 
 function ChatImage({ src, onOpen, caption }) {
+  const cachedSrc = useCachedMedia(src);
   const [aspect, setAspect] = useState(() => imageAspectCache.get(src) || null);
   const maxW = 250;
   const box = (() => {
@@ -10129,7 +10131,7 @@ function ChatImage({ src, onOpen, caption }) {
   })();
   return (
     <div style={{ position: 'relative', width: box.width, maxWidth: '100%', height: box.height, borderRadius: 14, overflow: 'hidden', marginBottom: caption ? 4 : 2, background: 'rgba(0,0,0,0.18)' }}>
-      <img src={src} alt="" loading="lazy" draggable={false} onContextMenu={(e) => e.preventDefault()}
+      <img src={cachedSrc || src} alt="" loading="lazy" draggable={false} onContextMenu={(e) => e.preventDefault()}
         onLoad={(e) => {
           const img = e.currentTarget;
           if (img.naturalWidth && img.naturalHeight) {
@@ -10308,6 +10310,55 @@ function frameMaskStyle(spec) {
 const frameUrlCache = new Map();
 const frameWaiters = new Map();
 const frameImageKeep = [];
+// Chat photos and videos are shown instantly from their normal link
+// (so opening a chat never feels slow), but every one is also quietly
+// saved on the phone the first time it's seen. Next time that same
+// photo or video is needed, it's read straight from the phone instead
+// of downloading it from the server all over again. Kept in its own
+// storage bucket, separate from frames, so one can never crowd out
+// the other, and it self-heals exactly like the frame cache does.
+const mediaBlobCache = new Map();
+async function cachedMediaBlobUrl(url, retried) {
+  if (!url) return null;
+  try {
+    if (typeof caches === 'undefined') return null;
+    const cache = await caches.open('zchat-media-v1');
+    let res = await cache.match(url);
+    const fromCache = !!res;
+    if (!res) {
+      const net = await fetch(url, { cache: 'no-cache' });
+      if (!net.ok) return null;
+      await cache.put(url, net.clone());
+      res = net;
+    }
+    const blob = await res.blob();
+    if (!blob.size) {
+      if (fromCache && !retried) { await cache.delete(url); return cachedMediaBlobUrl(url, true); }
+      return null;
+    }
+    return URL.createObjectURL(blob);
+  } catch {
+    return null;
+  }
+}
+function useCachedMedia(rawUrl) {
+  const [url, setUrl] = useState(() => (rawUrl ? mediaBlobCache.get(rawUrl) || rawUrl : null));
+  useEffect(() => {
+    if (!rawUrl) { setUrl(null); return undefined; }
+    const already = mediaBlobCache.get(rawUrl);
+    if (already) { setUrl(already); return undefined; }
+    setUrl(rawUrl);
+    let alive = true;
+    cachedMediaBlobUrl(rawUrl).then((blobUrl) => {
+      if (!alive || !blobUrl) return;
+      mediaBlobCache.set(rawUrl, blobUrl);
+      setUrl(blobUrl);
+    });
+    return () => { alive = false; };
+  }, [rawUrl]);
+  return url;
+}
+
 async function cachedAssetUrl(url, retried) {
   if (!url) return null;
   try {
