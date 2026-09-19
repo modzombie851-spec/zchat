@@ -8531,7 +8531,7 @@ function StoryTray({ me, myStories, trayUsers, seen, onAdd, onOpen }) {
   );
 }
 
-const APP_VERSION = '4.6V';
+const APP_VERSION = '4.7V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -12285,9 +12285,24 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   useEffect(() => {
     let cancelled = false;
     getProfile(session.user.id)
-      .then(({ data }) => {
+      .then(async ({ data }) => {
         if (cancelled) return;
-        if (data) { setMe({ ...data, email: session.user.email }); return; }
+        if (data) {
+          // Someone can end up back on an account they previously deleted
+          // (their login remembers their email). Welcome them back instead
+          // of silently leaving them hidden and unable to be messaged.
+          if (data.is_deleted) {
+            const { data: restored } = await supabase.from('profiles')
+              .update({ is_deleted: false })
+              .eq('id', session.user.id)
+              .select()
+              .single();
+            setMe({ ...(restored || data), is_deleted: false, email: session.user.email });
+            return;
+          }
+          setMe({ ...data, email: session.user.email });
+          return;
+        }
         setProfileCheckFailed(true);
       })
       .catch(() => { if (!cancelled) setProfileCheckFailed(true); });
