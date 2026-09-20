@@ -8539,7 +8539,7 @@ function StoryTray({ me, myStories, trayUsers, seen, onAdd, onOpen }) {
   );
 }
 
-const APP_VERSION = '4.9V';
+const APP_VERSION = '5.1V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -9373,23 +9373,23 @@ const VERIFIED_TIERS = {
 };
 
 const CUSTOM_BADGES = {
-  cat: { file: '/badges/badge-cat.webp', fallback: '/badge-cat.webp', label: 'Cute cat charm', ratio: 1.182, rarity: 'epic', animated: true },
-  grey_butterfly: { file: '/badges/charm-grey_butterfly.webp', fallback: '/charm-grey_butterfly.webp', label: 'Grey Butterfly charm', ratio: 1.018, rarity: 'rare', animated: true },
-  milkbear: { file: '/badges/charm-milkbear.webp', fallback: '/charm-milkbear.webp', label: 'Milkbear charm', ratio: 1.291, rarity: 'rare', animated: true },
-  milkbear2: { file: '/badges/charm-milkbear2.webp', fallback: '/charm-milkbear2.webp', label: 'Milkbear2 charm', ratio: 0.809, rarity: 'rare', animated: true },
-  milk2: { file: '/badges/charm-milk2.webp', fallback: '/charm-milk2.webp', label: 'Milk2 charm', ratio: 0.864, rarity: 'rare', animated: true },
-  cathug: { file: '/badges/charm-cathug.webp', fallback: '/charm-cathug.webp', label: 'Cathug charm', ratio: 0.864, rarity: 'epic', animated: true },
-  cutecat_heart: { file: '/badges/charm-cutecat_heart.webp', fallback: '/charm-cutecat_heart.webp', label: 'Cutecat Heart charm', ratio: 1.1, rarity: 'epic', animated: true },
-  milk1: { file: '/badges/charm-milk1.webp', fallback: '/charm-milk1.webp', label: 'Milk1 charm', ratio: 1.291, rarity: 'rare', animated: true },
-  milk9: { file: '/badges/charm-milk9.webp', fallback: '/charm-milk9.webp', label: 'Milk9 charm', ratio: 0.836, rarity: 'rare', animated: true },
-  scuba_cat: { file: '/badges/charm-scuba_cat.webp', fallback: '/charm-scuba_cat.webp', label: 'Scuba Cat charm', ratio: 0.964, rarity: 'legendary', animated: true },
-  penguinlove: { file: '/badges/charm-penguinlove.webp', fallback: '/charm-penguinlove.webp', label: 'Penguinlove charm', ratio: 1.1, rarity: 'epic', animated: true },
-  milk10: { file: '/badges/charm-milk10.webp', fallback: '/charm-milk10.webp', label: 'Milk10 charm', ratio: 1.245, rarity: 'rare', animated: true },
-  milk6: { file: '/badges/charm-milk6.webp', fallback: '/charm-milk6.webp', label: 'Milk6 charm', ratio: 1.336, rarity: 'rare', animated: true },
-  milk3: { file: '/badges/charm-milk3.webp', fallback: '/charm-milk3.webp', label: 'Milk3 charm', ratio: 1.136, rarity: 'rare', animated: true },
-  milkdance: { file: '/badges/charm-milkdance.webp', fallback: '/charm-milkdance.webp', label: 'Milkdance charm', ratio: 1.018, rarity: 'rare', animated: true },
-  milklaughing: { file: '/badges/charm-milklaughing.webp', fallback: '/charm-milklaughing.webp', label: 'Milklaughing charm', ratio: 1.018, rarity: 'rare', animated: true },
-  milkrock: { file: '/badges/charm-milkrock.webp', fallback: '/charm-milkrock.webp', label: 'Milkrock charm', ratio: 1.082, rarity: 'rare', animated: true },
+  cat: { file: '/badges/badge-cat.webp', fallback: '/badge-cat.webp', label: 'Cute cat charm', ratio: 1.182, rarity: 'legendary', animated: true },
+  grey_butterfly: { file: '/badges/charm-grey_butterfly.webp', fallback: '/charm-grey_butterfly.webp', label: 'Grey Butterfly charm', ratio: 1.018, rarity: 'epic', animated: true },
+  milkbear: { file: '/badges/charm-milkbear.webp', fallback: '/charm-milkbear.webp', label: 'Milkbear charm', ratio: 1.291, rarity: 'epic', animated: true },
+  milkbear2: { file: '/badges/charm-milkbear2.webp', fallback: '/charm-milkbear2.webp', label: 'Milkbear2 charm', ratio: 0.809, rarity: 'epic', animated: true },
+  milk2: { file: '/badges/charm-milk2.webp', fallback: '/charm-milk2.webp', label: 'Milk2 charm', ratio: 0.864, rarity: 'epic', animated: true },
+  cathug: { file: '/badges/charm-cathug.webp', fallback: '/charm-cathug.webp', label: 'Cathug charm', ratio: 0.864, rarity: 'legendary', animated: true },
+  cutecat_heart: { file: '/badges/charm-cutecat_heart.webp', fallback: '/charm-cutecat_heart.webp', label: 'Cutecat Heart charm', ratio: 1.1, rarity: 'legendary', animated: true },
+  milk1: { file: '/badges/charm-milk1.webp', fallback: '/charm-milk1.webp', label: 'Milk1 charm', ratio: 1.291, rarity: 'epic', animated: true },
+  milk9: { file: '/badges/charm-milk9.webp', fallback: '/charm-milk9.webp', label: 'Milk9 charm', ratio: 0.836, rarity: 'epic', animated: true },
+  scuba_cat: { file: '/badges/charm-scuba_cat.webp', fallback: '/charm-scuba_cat.webp', label: 'Scuba Cat charm', ratio: 0.964, rarity: 'mythic', animated: true },
+  penguinlove: { file: '/badges/charm-penguinlove.webp', fallback: '/charm-penguinlove.webp', label: 'Penguinlove charm', ratio: 1.1, rarity: 'legendary', animated: true },
+  milk10: { file: '/badges/charm-milk10.webp', fallback: '/charm-milk10.webp', label: 'Milk10 charm', ratio: 1.245, rarity: 'epic', animated: true },
+  milk6: { file: '/badges/charm-milk6.webp', fallback: '/charm-milk6.webp', label: 'Milk6 charm', ratio: 1.336, rarity: 'epic', animated: true },
+  milk3: { file: '/badges/charm-milk3.webp', fallback: '/charm-milk3.webp', label: 'Milk3 charm', ratio: 1.136, rarity: 'epic', animated: true },
+  milkdance: { file: '/badges/charm-milkdance.webp', fallback: '/charm-milkdance.webp', label: 'Milkdance charm', ratio: 1.018, rarity: 'legendary', animated: true },
+  milklaughing: { file: '/badges/charm-milklaughing.webp', fallback: '/charm-milklaughing.webp', label: 'Milklaughing charm', ratio: 1.018, rarity: 'epic', animated: true },
+  milkrock: { file: '/badges/charm-milkrock.webp', fallback: '/charm-milkrock.webp', label: 'Milkrock charm', ratio: 1.082, rarity: 'epic', animated: true },
 };
 const customBadgeUrlCache = new Map();
 function useCustomBadgeUrl(key) {
@@ -10295,17 +10295,17 @@ function AudioBubble({ url, isMe }) {
 }
 
 const AVATAR_FRAMES = {
-  fire_wolf: { file: '/frames/frame-fire-wolf.webp', fallback: '/frame-fire-wolf.webp', label: 'Inferno wolf frame', scale: 1.428, centerX: 0.5002, centerY: 0.4605, glow: '#ff5a1f', rarity: 'legendary' },
-  ice_wolf: { file: '/frames/frame-ice-wolf.webp', fallback: '/frame-ice-wolf.webp', label: 'Frost wolf frame', scale: 1.399, centerX: 0.4968, centerY: 0.4791, glow: '#38bdf8', rarity: 'legendary' },
+  fire_wolf: { file: '/frames/frame-fire-wolf.webp', fallback: '/frame-fire-wolf.webp', label: 'Inferno wolf frame', scale: 1.428, centerX: 0.5002, centerY: 0.4605, glow: '#ff5a1f', rarity: 'mythic' },
+  ice_wolf: { file: '/frames/frame-ice-wolf.webp', fallback: '/frame-ice-wolf.webp', label: 'Frost wolf frame', scale: 1.399, centerX: 0.4968, centerY: 0.4791, glow: '#38bdf8', rarity: 'mythic' },
   frost_dragon: { file: '/frames/frame-frost-dragon.webp', fallback: '/frame-frost-dragon.webp', label: 'Frost dragon frame', scale: 1.521, centerX: 0.4802, centerY: 0.5087, mask: false, rarity: 'legendary' },
   emerald_lion: { file: '/frames/frame-emerald-lion.webp', fallback: '/frame-emerald-lion.webp', label: 'Emerald lion frame', scale: 1.567, centerX: 0.4978, centerY: 0.4488, mask: false, rarity: 'legendary' },
   crystal_deer: { file: '/frames/frame-crystal-deer.webp', fallback: '/frame-crystal-deer.webp', label: 'Crystal deer frame', scale: 1.413, centerX: 0.4877, centerY: 0.4499, mask: false, rarity: 'epic' },
-  azure_phoenix: { file: '/frames/frame-azure-phoenix.webp', fallback: '/frame-azure-phoenix.webp', label: 'Azure phoenix frame', scale: 1.4, centerX: 0.5081, centerY: 0.4923, mask: false, rarity: 'epic' },
+  azure_phoenix: { file: '/frames/frame-azure-phoenix.webp', fallback: '/frame-azure-phoenix.webp', label: 'Azure phoenix frame', scale: 1.4, centerX: 0.5081, centerY: 0.4923, mask: false, rarity: 'legendary' },
   lilac_kitty: { file: '/frames/frame-lilac-kitty.webp', fallback: '/frame-lilac-kitty.webp', label: 'Lilac kitty frame', scale: 1.38, centerX: 0.4907, centerY: 0.477, mask: false, rarity: 'epic' },
-  fairy_princess: { file: '/frames/frame-fairy-princess.webp', fallback: '/frame-fairy-princess.webp', label: 'Fairy princess frame', scale: 1.416, centerX: 0.5068, centerY: 0.4836, mask: false, rarity: 'epic' },
-  rose_hearts: { file: '/frames/frame-rose-hearts.webp', fallback: '/frame-rose-hearts.webp', label: 'Rose hearts frame', scale: 1.604, centerX: 0.5132, centerY: 0.4549, mask: false, rarity: 'rare' },
-  crimson_lily: { file: '/frames/frame-crimson-lily.webp', fallback: '/frame-crimson-lily.webp', label: 'Crimson lily frame', scale: 1.309, centerX: 0.5151, centerY: 0.4588, mask: false, rarity: 'rare' },
-  sapphire_butterfly: { file: '/frames/frame-sapphire-butterfly.webp', fallback: '/frame-sapphire-butterfly.webp', label: 'Sapphire butterfly frame', scale: 1.317, centerX: 0.4983, centerY: 0.5, mask: false, rarity: 'rare' },
+  fairy_princess: { file: '/frames/frame-fairy-princess.webp', fallback: '/frame-fairy-princess.webp', label: 'Fairy princess frame', scale: 1.416, centerX: 0.5068, centerY: 0.4836, mask: false, rarity: 'legendary' },
+  rose_hearts: { file: '/frames/frame-rose-hearts.webp', fallback: '/frame-rose-hearts.webp', label: 'Rose hearts frame', scale: 1.604, centerX: 0.5132, centerY: 0.4549, mask: false, rarity: 'epic' },
+  crimson_lily: { file: '/frames/frame-crimson-lily.webp', fallback: '/frame-crimson-lily.webp', label: 'Crimson lily frame', scale: 1.309, centerX: 0.5151, centerY: 0.4588, mask: false, rarity: 'epic' },
+  sapphire_butterfly: { file: '/frames/frame-sapphire-butterfly.webp', fallback: '/frame-sapphire-butterfly.webp', label: 'Sapphire butterfly frame', scale: 1.317, centerX: 0.4983, centerY: 0.5, mask: false, rarity: 'epic' },
 };
 
 function frameMaskStyle(spec) {
@@ -10451,11 +10451,11 @@ function FramedAvatar({ children }) {
 
 const NAMEPLATES = {
   sakura_neon: { file: '/nameplates/nameplate-sakura-neon.webp', fallback: '/nameplate-sakura-neon.webp', label: 'Sakura Neon', rarity: 'mythic', glow: '#ff4d9d', ratio: 0.4333, anchorY: 0.4206, box: [0.325, 0.4956, 0.675, 0.715] },
-  frost_lily: { file: '/nameplates/nameplate-frost-lily.webp', fallback: '/nameplate-frost-lily.webp', label: 'Frost Lily', rarity: 'legendary', glow: '#60a5fa', ratio: 0.4333, anchorY: 0.4424, box: [0.325, 0.5174, 0.675, 0.715] },
+  frost_lily: { file: '/nameplates/nameplate-frost-lily.webp', fallback: '/nameplate-frost-lily.webp', label: 'Frost Lily', rarity: 'mythic', glow: '#60a5fa', ratio: 0.4333, anchorY: 0.4424, box: [0.325, 0.5174, 0.675, 0.715] },
   midnight_wanderer: { file: '/nameplates/nameplate-midnight-wanderer.webp', fallback: '/nameplate-midnight-wanderer.webp', label: 'Midnight Wanderer', rarity: 'legendary', glow: '#7c8cff', ratio: 0.4333, anchorY: 0.4364, box: [0.325, 0.5114, 0.675, 0.715] },
-  blue_flame: { file: '/nameplates/nameplate-blue-flame.webp', fallback: '/nameplate-blue-flame.webp', label: 'Blue Flame', rarity: 'epic', glow: '#22d3ee', ratio: 0.425, anchorY: 0.3864, box: [0.325, 0.4614, 0.675, 0.715] },
-  deep_blue: { file: '/nameplates/nameplate-deep-blue.webp', fallback: '/nameplate-deep-blue.webp', label: 'Deep Blue', rarity: 'epic', glow: '#38bdf8', ratio: 0.4333, anchorY: 0.4558, box: [0.325, 0.5308, 0.675, 0.715] },
-  azure_bloom: { file: '/nameplates/nameplate-azure-bloom.webp', fallback: '/nameplate-azure-bloom.webp', label: 'Azure Bloom', rarity: 'rare', glow: '#2dd4bf', ratio: 0.4275, anchorY: 0.427, box: [0.325, 0.502, 0.675, 0.715] },
+  blue_flame: { file: '/nameplates/nameplate-blue-flame.webp', fallback: '/nameplate-blue-flame.webp', label: 'Blue Flame', rarity: 'legendary', glow: '#22d3ee', ratio: 0.425, anchorY: 0.3864, box: [0.325, 0.4614, 0.675, 0.715] },
+  deep_blue: { file: '/nameplates/nameplate-deep-blue.webp', fallback: '/nameplate-deep-blue.webp', label: 'Deep Blue', rarity: 'legendary', glow: '#38bdf8', ratio: 0.4333, anchorY: 0.4558, box: [0.325, 0.5308, 0.675, 0.715] },
+  azure_bloom: { file: '/nameplates/nameplate-azure-bloom.webp', fallback: '/nameplate-azure-bloom.webp', label: 'Azure Bloom', rarity: 'epic', glow: '#2dd4bf', ratio: 0.4275, anchorY: 0.427, box: [0.325, 0.502, 0.675, 0.715] },
 };
 const nameplateUrlCache = new Map();
 function useNameplateUrl(key) {
@@ -10846,7 +10846,7 @@ function ProfileCollectionShowcase({ profile, rewards, isSelf, onPreview, onOpen
   const plates = (rewards || []).filter((r) => r.kind === 'nameplate' && NAMEPLATES[r.reward_key] && rewardActive(r));
   const total = frames.length + charms.length + plates.length;
   if (!total) return null;
-  const best = frames.length ? (RARITY_STYLE[AVATAR_FRAMES[frames[0].reward_key].rarity] || RARITY_STYLE.rare) : RARITY_STYLE.rare;
+  const best = frames.length ? (RARITY_STYLE[AVATAR_FRAMES[frames[0].reward_key].rarity] || RARITY_STYLE.epic) : RARITY_STYLE.epic;
   return (
     <div style={{ marginTop: 18, borderRadius: 22, overflow: 'hidden', background: theme.dark ? 'linear-gradient(160deg, #15121f 0%, #0c0d13 100%)' : 'linear-gradient(160deg, #f6f4ff 0%, #ffffff 100%)', border: `1px solid ${theme.dark ? 'rgba(255,255,255,0.08)' : theme.border}`, textAlign: 'left' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px 10px' }}>
@@ -10862,7 +10862,7 @@ function ProfileCollectionShowcase({ profile, rewards, isSelf, onPreview, onOpen
       <div style={{ display: 'flex', gap: 10, overflowX: 'auto', padding: '0 14px 14px', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
         {frames.map((r) => {
           const spec = AVATAR_FRAMES[r.reward_key];
-          const rr = RARITY_STYLE[spec.rarity] || RARITY_STYLE.rare;
+          const rr = RARITY_STYLE[spec.rarity] || RARITY_STYLE.epic;
           return (
             <div key={r.reward_key} role="button" onClick={() => onPreview(r.reward_key)} style={{ flexShrink: 0, width: 104, borderRadius: 16, padding: '8px 6px 10px', cursor: 'pointer', background: rr.bg, border: `1px solid ${rr.color}55`, textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
               <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 3, background: rr.color }} />
@@ -10876,7 +10876,7 @@ function ProfileCollectionShowcase({ profile, rewards, isSelf, onPreview, onOpen
         })}
         {plates.map((r) => {
           const spec = NAMEPLATES[r.reward_key];
-          const rr = RARITY_STYLE[spec.rarity] || RARITY_STYLE.rare;
+          const rr = RARITY_STYLE[spec.rarity] || RARITY_STYLE.epic;
           return (
             <div key={`p-${r.reward_key}`} style={{ flexShrink: 0, width: 160, borderRadius: 16, padding: '8px 6px 10px', background: rr.bg, border: `1px solid ${rr.color}55`, textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
               <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 3, background: rr.color }} />
@@ -10888,7 +10888,7 @@ function ProfileCollectionShowcase({ profile, rewards, isSelf, onPreview, onOpen
         })}
         {charms.map((r) => {
           const spec = CUSTOM_BADGES[r.reward_key];
-          const rr = RARITY_STYLE[spec.rarity] || RARITY_STYLE.rare;
+          const rr = RARITY_STYLE[spec.rarity] || RARITY_STYLE.epic;
           return (
             <div key={`c-${r.reward_key}`} style={{ flexShrink: 0, width: 104, borderRadius: 16, padding: '8px 6px 10px', background: rr.bg, border: `1px solid ${rr.color}55`, textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
               <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 3, background: rr.color }} />
@@ -11136,7 +11136,7 @@ function RewardCelebration({ kind, rewardKey, me, onClaim }) {
   const isPlate = kind === 'nameplate';
   const spec = isFrame ? AVATAR_FRAMES[rewardKey] : isPlate ? NAMEPLATES[rewardKey] : CUSTOM_BADGES[rewardKey];
   if (!spec) return null;
-  const glow = (isFrame ? (spec.glow || (RARITY_STYLE[spec.rarity] || RARITY_STYLE.rare).color) : isPlate ? (spec.glow || '#8b5cf6') : '#f472b6') || '#8b5cf6';
+  const glow = (isFrame ? (spec.glow || (RARITY_STYLE[spec.rarity] || RARITY_STYLE.epic).color) : isPlate ? (spec.glow || '#8b5cf6') : '#f472b6') || '#8b5cf6';
   const shownFrame = isFrame ? rewardKey : (AVATAR_FRAMES[me.avatar_frame] ? me.avatar_frame : null);
   const frameRoom = shownFrame ? Math.round(150 * ((AVATAR_FRAMES[shownFrame].scale || 1.5) - 1) / 2) + 14 : 22;
   const pieces = Array.from({ length: 30 }, (_, i) => i);
@@ -11189,7 +11189,7 @@ function FrameTryOnPage({ me, frameKey, charmKey, plateKey, onClose, action }) {
   const isPlate = !!plateKey;
   const spec = isPlate ? NAMEPLATES[plateKey] : isCharm ? CUSTOM_BADGES[charmKey] : AVATAR_FRAMES[frameKey];
   if (!spec) return null;
-  const r = RARITY_STYLE[spec.rarity] || RARITY_STYLE.rare;
+  const r = RARITY_STYLE[spec.rarity] || RARITY_STYLE.epic;
   const name = me ? (me.name || me.username || 'You') : 'You';
   const username = me ? me.username : 'you';
   const photo = me && typeof me.avatar === 'string' && me.avatar.startsWith('http') ? me.avatar : null;
@@ -11348,11 +11348,12 @@ function CollectionPanel({ me, rewards, onClose, onEquip, userEmail }) {
       ? Object.entries(CUSTOM_BADGES).map(([key, spec]) => ({ key, spec, owned: ownedCharms.has(key), equipped: me.custom_badge === key, reward: rewardFor('charm', key) }))
       : Object.entries(VERIFIED_TIERS).map(([key, t]) => ({ key, spec: { label: `${t.label} badge`, rarity: key === 'red' ? 'mythic' : key === 'gold' ? 'legendary' : 'epic', color: t.color }, owned: me.verified === key, equipped: me.verified === key, reward: null, badge: true }));
 
-  const sorted = [...items].sort((x, y) => Number(y.owned) - Number(x.owned));
-  const totalOwned = ownedFrames.size + ownedCharms.size + ownedPlates.size + (me.verified ? 1 : 0);
-  const totalItems = Object.keys(AVATAR_FRAMES).length + Object.keys(CUSTOM_BADGES).length + Object.keys(NAMEPLATES).length + Object.keys(VERIFIED_TIERS).length;
+  const sorted = [...items].sort((x, y) => Number(y.owned) - Number(x.owned)
+    || (STORE_RARITY_ORDER[x.spec.rarity] ?? 9) - (STORE_RARITY_ORDER[y.spec.rarity] ?? 9));
+  const totalOwned = ownedFrames.size + ownedCharms.size + ownedPlates.size;
+  const totalItems = Object.keys(AVATAR_FRAMES).length + Object.keys(CUSTOM_BADGES).length + Object.keys(NAMEPLATES).length;
   const pct = totalItems ? Math.round((totalOwned / totalItems) * 100) : 0;
-  const rarity = (spec) => RARITY_STYLE[spec.rarity] || RARITY_STYLE.rare;
+  const rarity = (spec) => RARITY_STYLE[spec.rarity] || RARITY_STYLE.epic;
   const equippedNow = tab === 'frame' ? (me.avatar_frame && AVATAR_FRAMES[me.avatar_frame] ? { key: me.avatar_frame, spec: AVATAR_FRAMES[me.avatar_frame], kind: 'frame' } : null)
     : tab === 'nameplate' ? (me.nameplate && NAMEPLATES[me.nameplate] ? { key: me.nameplate, spec: NAMEPLATES[me.nameplate], kind: 'nameplate' } : null)
     : tab === 'charm' ? (me.custom_badge && CUSTOM_BADGES[me.custom_badge] ? { key: me.custom_badge, spec: CUSTOM_BADGES[me.custom_badge], kind: 'charm' } : null)
@@ -11374,7 +11375,7 @@ function CollectionPanel({ me, rewards, onClose, onEquip, userEmail }) {
         <div role="button" aria-label="Close collection" onClick={onClose} style={{ width: 38, height: 38, borderRadius: '50%', background: 'rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><ArrowLeft size={19} /></div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 21, fontWeight: 900 }}>Collection</div>
-          <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.55)', fontWeight: 700 }}>{totalOwned} of {totalItems} unlocked</div>
+          <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.55)', fontWeight: 700 }}>{totalOwned} of {totalItems} unlocked{tab === 'badge' ? ' · badges not counted' : ''}</div>
         </div>
         <div style={{ fontSize: 20, fontWeight: 900, color: '#fbbf24' }}>{pct}%</div>
       </div>
@@ -11446,7 +11447,7 @@ function CollectionPanel({ me, rewards, onClose, onEquip, userEmail }) {
               {sel.owned && daysLeft(sel.reward) != null && <div style={{ fontSize: 12, fontWeight: 700, color: daysLeft(sel.reward) <= 5 ? '#fca5a5' : 'rgba(255,255,255,0.6)', marginTop: 3 }}>Expires in {daysLeft(sel.reward)} days</div>}
               <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
                 {tab === 'badge' ? (
-                  <div style={{ padding: '10px 14px', borderRadius: 12, background: 'rgba(255,255,255,0.07)', fontSize: 12.5, fontWeight: 800, color: 'rgba(255,255,255,0.7)' }}>{sel.owned ? 'You have this badge' : 'Given by the ZChat team'}</div>
+                  <div style={{ padding: '10px 14px', borderRadius: 12, background: 'rgba(255,255,255,0.07)', fontSize: 12.5, fontWeight: 800, color: 'rgba(255,255,255,0.7)' }}>{sel.owned ? 'You are wearing this badge' : 'Given by the ZChat team'}</div>
                 ) : sel.owned ? (
                   <>
                     <button disabled={busy || sel.equipped} onClick={() => equip(tab, sel.key)} style={{ padding: '10px 22px', borderRadius: 12, border: 'none', fontWeight: 900, fontFamily: FONT, fontSize: 13.5, cursor: sel.equipped ? 'default' : 'pointer', background: sel.equipped ? 'rgba(52,211,153,0.2)' : 'linear-gradient(135deg, #fbbf24, #ea580c)', color: sel.equipped ? '#34d399' : '#1a0f02' }}>{sel.equipped ? '✓ EQUIPPED' : busy ? 'EQUIPPING…' : 'EQUIP'}</button>
@@ -16212,7 +16213,7 @@ function PublicStorePage() {
   const [tryOn, setTryOn] = useState(false);
   const topRef = useRef(null);
   const spec = AVATAR_FRAMES[selected];
-  const r = RARITY_STYLE[spec.rarity] || RARITY_STYLE.rare;
+  const r = RARITY_STYLE[spec.rarity] || RARITY_STYLE.epic;
   const reward = (viewer.rewards || []).find((x) => x.kind === 'frame' && x.reward_key === selected);
   const owned = reward && rewardActive(reward);
   const left = owned ? daysLeft(reward) : null;
@@ -16302,7 +16303,7 @@ function PublicStorePage() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 10 }}>
         {shown.map(([key, s]) => {
-          const rr = RARITY_STYLE[s.rarity] || RARITY_STYLE.rare;
+          const rr = RARITY_STYLE[s.rarity] || RARITY_STYLE.epic;
           const rw = (viewer.rewards || []).find((x) => x.kind === 'frame' && x.reward_key === key);
           const has = rw && rewardActive(rw);
           const isSel = selected === key;
