@@ -436,7 +436,7 @@ function hiddenAccountProfile(profile) {
   return {
     ...profile,
     name: 'ZChat user', username: 'zchatuser', avatar: '', bio: '',
-    verified: null, avatar_frame: null, custom_badge: null,
+    verified: null, avatar_frame: null, custom_badge: null, nameplate: null,
     social_links: null, whatsapp: null, pronouns: null, country: null, age: null,
     hidden_account: true,
   };
@@ -4708,7 +4708,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
               </div>
             </div>
 
-            <div style={{ position: 'relative', zIndex: 2, display: 'flex', justifyContent: 'center', marginTop: 22 }}>
+            <div style={{ position: 'relative', zIndex: 3, display: 'flex', justifyContent: 'center', marginTop: 22 }}>
               <div style={{ position: 'relative', width: 200, height: 200 }}>
                 {(() => {
                   const fspec = AVATAR_FRAMES[profile.avatar_frame];
@@ -4740,10 +4740,17 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
               </div>
             </div>
 
-            <div style={{ position: 'relative', zIndex: 2, textAlign: 'center', marginTop: 16, padding: '0 20px' }}>
-              <div style={{ fontSize: 27, fontWeight: 900, color: theme.ink, letterSpacing: '-0.02em', lineHeight: 1.15, wordBreak: 'break-word' }}>{profile.name}<VerifiedBadge tier={profile.verified} custom={profile.custom_badge} size={22} /></div>
+            {NAMEPLATES[profile.nameplate] && (
+              <div style={{ position: 'relative', zIndex: 2, width: '100%', marginTop: `calc(-${nameplatePull(profile.nameplate).toFixed(2)}% - 8px)` }}>
+                <NameplateBanner plate={profile.nameplate} name={profile.name} username={profile.username} verified={profile.verified} custom={profile.custom_badge} />
+              </div>
+            )}
+            <div style={{ position: 'relative', zIndex: 2, textAlign: 'center', marginTop: NAMEPLATES[profile.nameplate] ? 6 : 16, padding: '0 20px' }}>
+              {!NAMEPLATES[profile.nameplate] && (
+                <div style={{ fontSize: 27, fontWeight: 900, color: theme.ink, letterSpacing: '-0.02em', lineHeight: 1.15, wordBreak: 'break-word' }}>{profile.name}<VerifiedBadge tier={profile.verified} custom={profile.custom_badge} size={22} /></div>
+              )}
               <div style={{ fontSize: 13.5, color: theme.muted, marginTop: 4 }}>
-                @{profile.username}{profile.pronouns ? ` · ${profile.pronouns}` : ''}{infoBits.map((b) => ` · ${b}`).join('')}
+                {NAMEPLATES[profile.nameplate] ? [profile.pronouns, ...infoBits].filter(Boolean).join(' · ') : `@${profile.username}${profile.pronouns ? ` · ${profile.pronouns}` : ''}${infoBits.map((b) => ` · ${b}`).join('')}`}
               </div>
               {statusText && (
                 <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, marginTop: 10, padding: '4px 11px', borderRadius: 14, color: isOnline ? '#22c55e' : theme.muted, background: isOnline ? 'rgba(34,197,94,0.12)' : glassFill }}>
@@ -8532,7 +8539,7 @@ function StoryTray({ me, myStories, trayUsers, seen, onAdd, onOpen }) {
   );
 }
 
-const APP_VERSION = '4.8V';
+const APP_VERSION = '4.9V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -10442,6 +10449,95 @@ function FramedAvatar({ children }) {
   return children;
 }
 
+const NAMEPLATES = {
+  sakura_neon: { file: '/nameplates/nameplate-sakura-neon.webp', fallback: '/nameplate-sakura-neon.webp', label: 'Sakura Neon', rarity: 'mythic', glow: '#ff4d9d', ratio: 0.4333, anchorY: 0.4206, box: [0.325, 0.4956, 0.675, 0.715] },
+  frost_lily: { file: '/nameplates/nameplate-frost-lily.webp', fallback: '/nameplate-frost-lily.webp', label: 'Frost Lily', rarity: 'legendary', glow: '#60a5fa', ratio: 0.4333, anchorY: 0.4424, box: [0.325, 0.5174, 0.675, 0.715] },
+  midnight_wanderer: { file: '/nameplates/nameplate-midnight-wanderer.webp', fallback: '/nameplate-midnight-wanderer.webp', label: 'Midnight Wanderer', rarity: 'legendary', glow: '#7c8cff', ratio: 0.4333, anchorY: 0.4364, box: [0.325, 0.5114, 0.675, 0.715] },
+  blue_flame: { file: '/nameplates/nameplate-blue-flame.webp', fallback: '/nameplate-blue-flame.webp', label: 'Blue Flame', rarity: 'epic', glow: '#22d3ee', ratio: 0.425, anchorY: 0.3864, box: [0.325, 0.4614, 0.675, 0.715] },
+  deep_blue: { file: '/nameplates/nameplate-deep-blue.webp', fallback: '/nameplate-deep-blue.webp', label: 'Deep Blue', rarity: 'epic', glow: '#38bdf8', ratio: 0.4333, anchorY: 0.4558, box: [0.325, 0.5308, 0.675, 0.715] },
+  azure_bloom: { file: '/nameplates/nameplate-azure-bloom.webp', fallback: '/nameplate-azure-bloom.webp', label: 'Azure Bloom', rarity: 'rare', glow: '#2dd4bf', ratio: 0.4275, anchorY: 0.427, box: [0.325, 0.502, 0.675, 0.715] },
+};
+const nameplateUrlCache = new Map();
+function useNameplateUrl(key) {
+  const [url, setUrl] = useState(() => (key && nameplateUrlCache.has(key) ? nameplateUrlCache.get(key) : null));
+  useEffect(() => {
+    let alive = true;
+    const spec = key && NAMEPLATES[key];
+    if (!spec) { setUrl(null); return undefined; }
+    if (nameplateUrlCache.has(key)) { setUrl(nameplateUrlCache.get(key)); return undefined; }
+    cachedAssetUrl(spec.file).then((u) => u || cachedAssetUrl(spec.fallback)).then((u) => {
+      if (u) nameplateUrlCache.set(key, u);
+      if (alive) setUrl(u);
+    });
+    return () => { alive = false; };
+  }, [key]);
+  return url;
+}
+
+function nameplatePull(key) {
+  const spec = NAMEPLATES[key];
+  if (!spec) return 0;
+  return spec.anchorY * spec.ratio * 100;
+}
+
+function PlatePreview({ plate, width }) {
+  const spec = NAMEPLATES[plate];
+  const url = useNameplateUrl(plate);
+  if (!spec) return null;
+  return (
+    <div style={{ width, height: Math.round(width * spec.ratio), display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      {url && <img src={url} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />}
+    </div>
+  );
+}
+
+function NameplateBanner({ plate, name, username, verified, custom }) {
+  const spec = NAMEPLATES[plate];
+  const url = useNameplateUrl(plate);
+  const ref = useRef(null);
+  const [width, setWidth] = useState(0);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return undefined;
+    const measure = () => setWidth(el.clientWidth);
+    measure();
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', measure);
+      return () => window.removeEventListener('resize', measure);
+    }
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [plate]);
+  if (!spec) return null;
+  const bx0 = spec.box[0];
+  const by0 = spec.box[1];
+  const bx1 = spec.box[2];
+  const by1 = spec.box[3];
+  const boxW = width * (bx1 - bx0);
+  const boxH = width * spec.ratio * (by1 - by0);
+  const shown = (name || '').trim() || 'ZChat user';
+  const handle = '@' + (username || 'zchatuser');
+  const nameSize = Math.max(10, Math.min(boxH * 0.5, boxW / Math.max(4, shown.length * 0.58)));
+  const userSize = Math.max(9, Math.min(boxH * 0.3, boxW / Math.max(5, handle.length * 0.56)));
+  return (
+    <div ref={ref} style={{ position: 'relative', width: '100%', height: 0, paddingBottom: (spec.ratio * 100).toFixed(3) + '%' }}>
+      {url && <img src={url} alt="" draggable={false} onContextMenu={(e) => e.preventDefault()} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'fill', pointerEvents: 'none' }} />}
+      <div style={{
+        position: 'absolute', left: (bx0 * 100) + '%', top: (by0 * 100) + '%', width: ((bx1 - bx0) * 100) + '%', height: ((by1 - by0) * 100) + '%',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: Math.max(1, boxH * 0.035),
+        opacity: width ? 1 : 0, transition: 'opacity 0.15s ease', pointerEvents: 'none',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', maxWidth: '100%', minWidth: 0 }}>
+          <span style={{ fontSize: nameSize, fontWeight: 900, color: '#ffffff', lineHeight: 1.05, letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textShadow: '0 2px 10px rgba(0,0,0,0.55)' }}>{shown}</span>
+          <VerifiedBadge tier={verified} custom={custom} size={Math.max(11, Math.round(nameSize * 0.68))} />
+        </div>
+        <div style={{ fontSize: userSize, fontWeight: 600, color: 'rgba(255,255,255,0.82)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%', textShadow: '0 1px 7px rgba(0,0,0,0.55)' }}>{handle}</div>
+      </div>
+    </div>
+  );
+}
+
 function ReportThanksSheet({ profile, isBlocked, onBlock, onClose }) {
   const { theme } = useTheme();
   const drag = useSheetDrag(onClose);
@@ -10747,7 +10843,8 @@ function ProfileCollectionShowcase({ profile, rewards, isSelf, onPreview, onOpen
     .filter((r) => r.kind === 'frame' && AVATAR_FRAMES[r.reward_key] && rewardActive(r))
     .sort((a, b) => (STORE_RARITY_ORDER[AVATAR_FRAMES[a.reward_key].rarity] ?? 9) - (STORE_RARITY_ORDER[AVATAR_FRAMES[b.reward_key].rarity] ?? 9));
   const charms = (rewards || []).filter((r) => r.kind === 'charm' && CUSTOM_BADGES[r.reward_key] && rewardActive(r));
-  const total = frames.length + charms.length;
+  const plates = (rewards || []).filter((r) => r.kind === 'nameplate' && NAMEPLATES[r.reward_key] && rewardActive(r));
+  const total = frames.length + charms.length + plates.length;
   if (!total) return null;
   const best = frames.length ? (RARITY_STYLE[AVATAR_FRAMES[frames[0].reward_key].rarity] || RARITY_STYLE.rare) : RARITY_STYLE.rare;
   return (
@@ -10756,7 +10853,7 @@ function ProfileCollectionShowcase({ profile, rewards, isSelf, onPreview, onOpen
         <div style={{ width: 30, height: 30, borderRadius: 10, background: `linear-gradient(135deg, ${best.color}, #f97316)`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Sparkles size={16} color="#1a0f02" /></div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 14.5, fontWeight: 900, color: theme.ink }}>Collection</div>
-          <div style={{ fontSize: 11.5, color: theme.muted, fontWeight: 600 }}>{total} unlocked{frames.length ? ` · ${frames.length} ${frames.length === 1 ? 'frame' : 'frames'}` : ''}</div>
+          <div style={{ fontSize: 11.5, color: theme.muted, fontWeight: 600 }}>{total} unlocked{frames.length ? ` · ${frames.length} ${frames.length === 1 ? 'frame' : 'frames'}` : ''}{plates.length ? ` · ${plates.length} ${plates.length === 1 ? 'nameplate' : 'nameplates'}` : ''}</div>
         </div>
         {isSelf && onOpenCollection && (
           <div role="button" onClick={onOpenCollection} style={{ fontSize: 12.5, fontWeight: 800, color: '#fbbf24', cursor: 'pointer', padding: '6px 10px', borderRadius: 10, background: 'rgba(245,158,11,0.12)' }}>Manage</div>
@@ -10774,6 +10871,18 @@ function ProfileCollectionShowcase({ profile, rewards, isSelf, onPreview, onOpen
               </div>
               <div style={{ fontSize: 11, fontWeight: 800, color: 'white', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{spec.label.replace(/ frame$/i, '')}</div>
               <div style={{ fontSize: 9, fontWeight: 900, letterSpacing: '0.08em', textTransform: 'uppercase', color: rr.color, marginTop: 2 }}>{rr.label}</div>
+            </div>
+          );
+        })}
+        {plates.map((r) => {
+          const spec = NAMEPLATES[r.reward_key];
+          const rr = RARITY_STYLE[spec.rarity] || RARITY_STYLE.rare;
+          return (
+            <div key={`p-${r.reward_key}`} style={{ flexShrink: 0, width: 160, borderRadius: 16, padding: '8px 6px 10px', background: rr.bg, border: `1px solid ${rr.color}55`, textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
+              <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 3, background: rr.color }} />
+              <div style={{ height: 74, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><PlatePreview plate={r.reward_key} width={146} /></div>
+              <div style={{ fontSize: 11, fontWeight: 800, color: 'white', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{spec.label}</div>
+              <div style={{ fontSize: 9, fontWeight: 900, letterSpacing: '0.08em', textTransform: 'uppercase', color: rr.color, marginTop: 2 }}>Nameplate</div>
             </div>
           );
         })}
@@ -11024,9 +11133,10 @@ function UpdateAvailableBanner({ onUpdate, onLater }) {
 function RewardCelebration({ kind, rewardKey, me, onClaim }) {
   const [claiming, setClaiming] = useState(false);
   const isFrame = kind === 'frame';
-  const spec = isFrame ? AVATAR_FRAMES[rewardKey] : CUSTOM_BADGES[rewardKey];
+  const isPlate = kind === 'nameplate';
+  const spec = isFrame ? AVATAR_FRAMES[rewardKey] : isPlate ? NAMEPLATES[rewardKey] : CUSTOM_BADGES[rewardKey];
   if (!spec) return null;
-  const glow = (isFrame ? (spec.glow || (RARITY_STYLE[spec.rarity] || RARITY_STYLE.rare).color) : '#f472b6') || '#8b5cf6';
+  const glow = (isFrame ? (spec.glow || (RARITY_STYLE[spec.rarity] || RARITY_STYLE.rare).color) : isPlate ? (spec.glow || '#8b5cf6') : '#f472b6') || '#8b5cf6';
   const shownFrame = isFrame ? rewardKey : (AVATAR_FRAMES[me.avatar_frame] ? me.avatar_frame : null);
   const frameRoom = shownFrame ? Math.round(150 * ((AVATAR_FRAMES[shownFrame].scale || 1.5) - 1) / 2) + 14 : 22;
   const pieces = Array.from({ length: 30 }, (_, i) => i);
@@ -11035,7 +11145,7 @@ function RewardCelebration({ kind, rewardKey, me, onClaim }) {
       {pieces.map((i) => (
         <span key={i} style={{ position: 'absolute', top: -20, left: `${(i * 97) % 100}%`, width: 7, height: 13, borderRadius: 2, background: [glow, '#FFFFFF', '#7C5CFC', '#fbbf24'][i % 4], opacity: 0.85, animation: `zchat-confetti ${2.8 + (i % 5) * 0.4}s linear ${(i % 9) * 0.25}s infinite` }} />
       ))}
-      <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.18em', color: glow, textTransform: 'uppercase' }}>{isFrame ? 'New avatar frame' : 'New name charm'}</div>
+      <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.18em', color: glow, textTransform: 'uppercase' }}>{isFrame ? 'New avatar frame' : isPlate ? 'New nameplate' : 'New name charm'}</div>
       <div style={{ fontSize: 30, fontWeight: 900, marginTop: 8 }}>Congratulations!</div>
       <div style={{ fontSize: 14.5, opacity: 0.75, marginTop: 6, maxWidth: 300, lineHeight: 1.5 }}>You unlocked the <b style={{ color: glow }}>{spec.label}</b>. It's saved in your Collection. Here's how it looks on you.</div>
 
@@ -11044,11 +11154,19 @@ function RewardCelebration({ kind, rewardKey, me, onClaim }) {
         <Avatar emoji={me.avatar} name={me.name} size={150} frame={shownFrame} />
       </div>
 
-      <div style={{ fontSize: 24, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
-        {me.name}<VerifiedBadge tier={me.verified} custom={isFrame ? me.custom_badge : rewardKey} size={20} />
-      </div>
-      <div style={{ fontSize: 14, opacity: 0.6, marginTop: 2 }}>@{me.username}</div>
-      {!isFrame && (
+      {isPlate ? (
+        <div style={{ width: '100%', maxWidth: 440, marginTop: 6 }}>
+          <NameplateBanner plate={rewardKey} name={me.name} username={me.username} verified={me.verified} custom={me.custom_badge} />
+        </div>
+      ) : (
+        <>
+          <div style={{ fontSize: 24, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
+            {me.name}<VerifiedBadge tier={me.verified} custom={isFrame ? me.custom_badge : rewardKey} size={20} />
+          </div>
+          <div style={{ fontSize: 14, opacity: 0.6, marginTop: 2 }}>@{me.username}</div>
+        </>
+      )}
+      {!isFrame && !isPlate && (
         <div style={{ marginTop: 14, padding: '8px 14px', borderRadius: 14, background: 'rgba(255,255,255,0.08)', fontSize: 13, opacity: 0.85 }}>Shows next to your name everywhere on ZChat</div>
       )}
 
@@ -11066,9 +11184,10 @@ const RARITY_STYLE = {
   rare: { label: 'Rare', color: '#60a5fa', bg: 'linear-gradient(160deg, #0b2447 0%, #060d1a 100%)', glow: 'rgba(96,165,250,0.45)' },
 };
 
-function FrameTryOnPage({ me, frameKey, charmKey, onClose, action }) {
+function FrameTryOnPage({ me, frameKey, charmKey, plateKey, onClose, action }) {
   const isCharm = !!charmKey;
-  const spec = isCharm ? CUSTOM_BADGES[charmKey] : AVATAR_FRAMES[frameKey];
+  const isPlate = !!plateKey;
+  const spec = isPlate ? NAMEPLATES[plateKey] : isCharm ? CUSTOM_BADGES[charmKey] : AVATAR_FRAMES[frameKey];
   if (!spec) return null;
   const r = RARITY_STYLE[spec.rarity] || RARITY_STYLE.rare;
   const name = me ? (me.name || me.username || 'You') : 'You';
@@ -11099,13 +11218,21 @@ function FrameTryOnPage({ me, frameKey, charmKey, onClose, action }) {
           </div>
           <div style={{ position: 'absolute', left: 0, right: 0, top: 0, height: 300, background: 'linear-gradient(180deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0) 40%, #0f1117 100%)', pointerEvents: 'none' }} />
           <div style={{ position: 'relative', padding: '26px 16px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
-            <div style={{ position: 'relative', zIndex: 0, width: 230, height: 230, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Avatar emoji={me ? me.avatar : ''} name={name} size={138} frame={isCharm ? (me && me.avatar_frame) : frameKey} />
+            <div style={{ position: 'relative', zIndex: 2, width: 230, height: 230, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Avatar emoji={me ? me.avatar : ''} name={name} size={138} frame={isCharm || isPlate ? (me && me.avatar_frame) : frameKey} />
             </div>
-            <div style={{ fontSize: 24, fontWeight: 900, marginTop: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
-              {name}{me && <VerifiedBadge tier={me.verified} custom={isCharm ? charmKey : me.custom_badge} size={19} />}
-            </div>
-            <div style={{ fontSize: 13.5, color: 'rgba(255,255,255,0.6)', marginTop: 2 }}>@{username}</div>
+            {isPlate ? (
+              <div style={{ position: 'relative', zIndex: 1, width: '100%', marginTop: `calc(-${nameplatePull(plateKey).toFixed(2)}% - 6px)` }}>
+                <NameplateBanner plate={plateKey} name={name} username={username} verified={me && me.verified} custom={me && me.custom_badge} />
+              </div>
+            ) : (
+              <>
+                <div style={{ fontSize: 24, fontWeight: 900, marginTop: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
+                  {name}{me && <VerifiedBadge tier={me.verified} custom={isCharm ? charmKey : me.custom_badge} size={19} />}
+                </div>
+                <div style={{ fontSize: 13.5, color: 'rgba(255,255,255,0.6)', marginTop: 2 }}>@{username}</div>
+              </>
+            )}
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 800, marginTop: 10, padding: '4px 11px', borderRadius: 14, color: '#22c55e', background: 'rgba(34,197,94,0.12)' }}>
               <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#22c55e' }} />Online now
             </div>
@@ -11129,7 +11256,7 @@ function FrameTryOnPage({ me, frameKey, charmKey, onClose, action }) {
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderTop: i ? '1px solid rgba(255,255,255,0.06)' : 'none' }}>
               <div style={{ width: 62, height: 62, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                 {row.me
-                  ? <Avatar emoji={me ? me.avatar : ''} name={name} size={46} frame={isCharm ? (me && me.avatar_frame) : frameKey} />
+                  ? <Avatar emoji={me ? me.avatar : ''} name={name} size={46} frame={isCharm || isPlate ? (me && me.avatar_frame) : frameKey} />
                   : <div style={{ width: 46, height: 46, borderRadius: '50%', background: row.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900 }}>{row.name[0]}</div>}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -11152,7 +11279,7 @@ function FrameTryOnPage({ me, frameKey, charmKey, onClose, action }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderBottom: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.02)' }}>
             <ChevronLeft size={20} color="rgba(255,255,255,0.7)" />
             <div style={{ width: 52, height: 52, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Avatar emoji={me ? me.avatar : ''} name={name} size={38} frame={isCharm ? (me && me.avatar_frame) : frameKey} />
+              <Avatar emoji={me ? me.avatar : ''} name={name} size={38} frame={isCharm || isPlate ? (me && me.avatar_frame) : frameKey} />
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontWeight: 900, fontSize: 15, display: 'flex', alignItems: 'center' }}>{name}{me && <VerifiedBadge tier={me.verified} custom={isCharm ? charmKey : me.custom_badge} size={13} />}</div>
@@ -11211,19 +11338,23 @@ function CollectionPanel({ me, rewards, onClose, onEquip, userEmail }) {
   const activeRewards = (rewards || []).filter(rewardActive);
   const ownedFrames = new Set(activeRewards.filter((r) => r.kind === 'frame').map((r) => r.reward_key));
   const ownedCharms = new Set(activeRewards.filter((r) => r.kind === 'charm').map((r) => r.reward_key));
+  const ownedPlates = new Set(activeRewards.filter((r) => r.kind === 'nameplate').map((r) => r.reward_key));
 
   const items = tab === 'frame'
     ? Object.entries(AVATAR_FRAMES).map(([key, spec]) => ({ key, spec, owned: ownedFrames.has(key), equipped: me.avatar_frame === key, reward: rewardFor('frame', key) }))
+    : tab === 'nameplate'
+    ? Object.entries(NAMEPLATES).map(([key, spec]) => ({ key, spec, owned: ownedPlates.has(key), equipped: me.nameplate === key, reward: rewardFor('nameplate', key) }))
     : tab === 'charm'
       ? Object.entries(CUSTOM_BADGES).map(([key, spec]) => ({ key, spec, owned: ownedCharms.has(key), equipped: me.custom_badge === key, reward: rewardFor('charm', key) }))
       : Object.entries(VERIFIED_TIERS).map(([key, t]) => ({ key, spec: { label: `${t.label} badge`, rarity: key === 'red' ? 'mythic' : key === 'gold' ? 'legendary' : 'epic', color: t.color }, owned: me.verified === key, equipped: me.verified === key, reward: null, badge: true }));
 
   const sorted = [...items].sort((x, y) => Number(y.owned) - Number(x.owned));
-  const totalOwned = ownedFrames.size + ownedCharms.size + (me.verified ? 1 : 0);
-  const totalItems = Object.keys(AVATAR_FRAMES).length + Object.keys(CUSTOM_BADGES).length + Object.keys(VERIFIED_TIERS).length;
+  const totalOwned = ownedFrames.size + ownedCharms.size + ownedPlates.size + (me.verified ? 1 : 0);
+  const totalItems = Object.keys(AVATAR_FRAMES).length + Object.keys(CUSTOM_BADGES).length + Object.keys(NAMEPLATES).length + Object.keys(VERIFIED_TIERS).length;
   const pct = totalItems ? Math.round((totalOwned / totalItems) * 100) : 0;
   const rarity = (spec) => RARITY_STYLE[spec.rarity] || RARITY_STYLE.rare;
   const equippedNow = tab === 'frame' ? (me.avatar_frame && AVATAR_FRAMES[me.avatar_frame] ? { key: me.avatar_frame, spec: AVATAR_FRAMES[me.avatar_frame], kind: 'frame' } : null)
+    : tab === 'nameplate' ? (me.nameplate && NAMEPLATES[me.nameplate] ? { key: me.nameplate, spec: NAMEPLATES[me.nameplate], kind: 'nameplate' } : null)
     : tab === 'charm' ? (me.custom_badge && CUSTOM_BADGES[me.custom_badge] ? { key: me.custom_badge, spec: CUSTOM_BADGES[me.custom_badge], kind: 'charm' } : null)
       : (me.verified && VERIFIED_TIERS[me.verified] ? { key: me.verified, spec: { label: `${VERIFIED_TIERS[me.verified].label} badge`, rarity: 'epic' }, kind: 'badge' } : null);
 
@@ -11251,7 +11382,7 @@ function CollectionPanel({ me, rewards, onClose, onEquip, userEmail }) {
         <div style={{ width: `${pct}%`, height: '100%', background: 'linear-gradient(90deg, #fbbf24, #f97316)', transition: 'width 0.4s ease' }} />
       </div>
       <div style={{ display: 'flex', gap: 8, padding: '0 16px 14px', overflowX: 'auto', scrollbarWidth: 'none' }}>
-        {[['frame', 'Frames'], ['charm', 'Charms'], ['badge', 'Badges']].map(([k, label]) => (
+        {[['frame', 'Frames'], ['nameplate', 'Nameplates'], ['charm', 'Charms'], ['badge', 'Badges']].map(([k, label]) => (
           <div key={k} role="button" onClick={() => { setTab(k); setSelected(null); playUiSound('tap'); }} style={{ flexShrink: 0, padding: '9px 16px', borderRadius: 13, fontWeight: 900, fontSize: 13, cursor: 'pointer', background: tab === k ? 'linear-gradient(135deg, #fbbf24, #f97316)' : 'rgba(255,255,255,0.06)', color: tab === k ? '#1a0f02' : 'rgba(255,255,255,0.75)' }}>{label}</div>
         ))}
       </div>
@@ -11267,6 +11398,7 @@ function CollectionPanel({ me, rewards, onClose, onEquip, userEmail }) {
                 {!it.owned && <div style={{ position: 'absolute', top: 8, right: 8 }}><Lock size={13} color="rgba(255,255,255,0.6)" /></div>}
                 <div style={{ height: 96, display: 'flex', alignItems: 'center', justifyContent: 'center', filter: it.owned ? 'none' : 'grayscale(1) brightness(0.5)' }}>
                   {tab === 'frame' ? <Avatar emoji={me.avatar} name={me.name} size={92} frame={it.key} />
+                    : tab === 'nameplate' ? <PlatePreview plate={it.key} width={148} />
                     : tab === 'charm' ? <CharmPreview charm={it.key} size={56} />
                       : <svg width="56" height="56" viewBox="0 0 24 24"><path fill={it.spec.color} d={BADGE_SHAPE_PATH} /><path d="M8.6 12.3l2.3 2.2 4.6-3.6" fill="none" stroke="white" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round" /></svg>}
                 </div>
@@ -11282,8 +11414,9 @@ function CollectionPanel({ me, rewards, onClose, onEquip, userEmail }) {
 
       {equippedNow && !sel && (
         <div style={{ position: 'absolute', left: 12, right: 12, bottom: 'calc(14px + env(safe-area-inset-bottom))', padding: '12px 14px', borderRadius: 20, background: 'rgba(18,20,28,0.97)', border: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ width: 64, height: 64, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <div style={{ width: 84, height: 64, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             {equippedNow.kind === 'frame' ? <Avatar emoji={me.avatar} name={me.name} size={62} frame={equippedNow.key} />
+              : equippedNow.kind === 'nameplate' ? <PlatePreview plate={equippedNow.key} width={82} />
               : equippedNow.kind === 'charm' ? <CharmPreview charm={equippedNow.key} size={42} />
                 : <svg width="40" height="40" viewBox="0 0 24 24"><path fill={(VERIFIED_TIERS[me.verified] || {}).color} d={BADGE_SHAPE_PATH} /><path d="M8.6 12.3l2.3 2.2 4.6-3.6" fill="none" stroke="white" strokeWidth="1.65" strokeLinecap="round" /></svg>}
           </div>
@@ -11301,8 +11434,9 @@ function CollectionPanel({ me, rewards, onClose, onEquip, userEmail }) {
       {sel && (
         <div className="zchat-sheet-up" style={{ position: 'absolute', zIndex: 30, left: 0, right: 0, bottom: 0, padding: '16px 16px', paddingBottom: 'calc(16px + env(safe-area-inset-bottom))', background: 'linear-gradient(180deg, rgba(20,18,32,0.98), #0a0a10)', borderTop: '1px solid rgba(255,255,255,0.1)', borderRadius: '24px 24px 0 0' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-            <div role="button" onClick={() => tab !== 'badge' && setTryOn({ kind: tab, key: sel.key })} style={{ width: 92, height: 92, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: tab === 'badge' ? 'default' : 'pointer', filter: sel.owned ? 'none' : 'grayscale(0.2)' }}>
+            <div role="button" onClick={() => tab !== 'badge' && setTryOn({ kind: tab, key: sel.key })} style={{ width: tab === 'nameplate' ? 132 : 92, height: 92, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: tab === 'badge' ? 'default' : 'pointer', filter: sel.owned ? 'none' : 'grayscale(0.2)' }}>
               {tab === 'frame' ? <Avatar emoji={me.avatar} name={me.name} size={88} frame={sel.key} />
+                : tab === 'nameplate' ? <PlatePreview plate={sel.key} width={130} />
                 : tab === 'charm' ? <CharmPreview charm={sel.key} size={54} />
                   : <svg width="54" height="54" viewBox="0 0 24 24"><path fill={sel.spec.color} d={BADGE_SHAPE_PATH} /><path d="M8.6 12.3l2.3 2.2 4.6-3.6" fill="none" stroke="white" strokeWidth="1.65" strokeLinecap="round" /></svg>}
             </div>
@@ -11337,15 +11471,18 @@ function CollectionPanel({ me, rewards, onClose, onEquip, userEmail }) {
 
       {tryOn && (() => {
         const isCharm = tryOn.kind === 'charm';
+        const isPlate = tryOn.kind === 'nameplate';
         const rw = rewardFor(tryOn.kind, tryOn.key);
         const has = rw && rewardActive(rw);
-        const isEq = (isCharm ? me.custom_badge : me.avatar_frame) === tryOn.key;
+        const isEq = (isPlate ? me.nameplate : isCharm ? me.custom_badge : me.avatar_frame) === tryOn.key;
+        const equipLabel = isPlate ? 'Equip this nameplate' : isCharm ? 'Equip this charm' : 'Equip this frame';
+        const lockedSub = isPlate ? 'Earn this nameplate from ZChat events and gifts' : isCharm ? 'Earn this charm from ZChat events and gifts' : 'This frame goes on sale very soon';
         const action = has
-          ? { label: isEq ? '✓ Equipped' : (isCharm ? 'Equip this charm' : 'Equip this frame'), disabled: isEq || busy, onClick: async () => { await equip(tryOn.kind, tryOn.key); setTryOn(null); }, sub: daysLeft(rw) != null ? `${daysLeft(rw)} days left` : 'Yours to keep' }
-          : !isCharm && FRAME_STORE.checkoutUrl
+          ? { label: isEq ? '✓ Equipped' : equipLabel, disabled: isEq || busy, onClick: async () => { await equip(tryOn.kind, tryOn.key); setTryOn(null); }, sub: daysLeft(rw) != null ? `${daysLeft(rw)} days left` : 'Yours to keep' }
+          : !isCharm && !isPlate && FRAME_STORE.checkoutUrl
             ? { label: `Unlock for ${FRAME_STORE.priceLabel} · ${FRAME_STORE.periodLabel}`, onClick: () => openFrameCheckout(me.id, userEmail, tryOn.key), sub: 'Single payment · Secure checkout by Lemon Squeezy' }
-            : { label: 'Locked', disabled: true, sub: isCharm ? 'Earn this charm from ZChat events and gifts' : 'This frame goes on sale very soon' };
-        return <FrameTryOnPage me={me} frameKey={isCharm ? null : tryOn.key} charmKey={isCharm ? tryOn.key : null} onClose={() => setTryOn(null)} action={action} />;
+            : { label: 'Locked', disabled: true, sub: lockedSub };
+        return <FrameTryOnPage me={me} frameKey={isCharm || isPlate ? null : tryOn.key} charmKey={isCharm ? tryOn.key : null} plateKey={isPlate ? tryOn.key : null} onClose={() => setTryOn(null)} action={action} />;
       })()}
     </div>
   );
@@ -14162,7 +14299,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     document.addEventListener('visibilitychange', onVisible);
     return () => { alive = false; clearTimeout(retryTimer); document.removeEventListener('visibilitychange', onVisible); supabase.removeChannel(ch); };
   }, [me && me.id]);
-  const pendingReward = (myRewards || []).find((r) => !r.seen && rewardActive(r) && (r.kind === 'frame' ? AVATAR_FRAMES[r.reward_key] : CUSTOM_BADGES[r.reward_key])) || null;
+  const pendingReward = (myRewards || []).find((r) => !r.seen && rewardActive(r) && (r.kind === 'frame' ? AVATAR_FRAMES[r.reward_key] : r.kind === 'nameplate' ? NAMEPLATES[r.reward_key] : CUSTOM_BADGES[r.reward_key])) || null;
   useEffect(() => {
     if (!me) return;
     const params = new URLSearchParams(window.location.search);
@@ -14173,7 +14310,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     showSnack('Payment received! Your frame unlocks in a few seconds.');
   }, [me && me.id]);
   const equipReward = async (kind, key) => {
-    const field = kind === 'frame' ? 'avatar_frame' : 'custom_badge';
+    const field = kind === 'frame' ? 'avatar_frame' : kind === 'nameplate' ? 'nameplate' : 'custom_badge';
     const prevValue = me[field];
     setMe((prev) => (prev ? { ...prev, [field]: key } : prev));
     const { error } = await supabase.from('profiles').update({ [field]: key }).eq('id', session.user.id);
@@ -14189,6 +14326,15 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       const id = `frame:${pendingReward.reward_key}`;
       const timer = setTimeout(() => markReady(id), 8000);
       resolveFrameUrl(pendingReward.reward_key).then(() => { clearTimeout(timer); markReady(id); });
+    }
+    if (pendingReward && pendingReward.kind === 'nameplate') {
+      const id = `nameplate:${pendingReward.reward_key}`;
+      const spec = NAMEPLATES[pendingReward.reward_key];
+      const timer = setTimeout(() => markReady(id), 8000);
+      cachedAssetUrl(spec.file).then((u) => u || cachedAssetUrl(spec.fallback)).then((u) => {
+        if (u) nameplateUrlCache.set(pendingReward.reward_key, u);
+        clearTimeout(timer); markReady(id);
+      });
     }
     if (pendingReward && pendingReward.kind === 'charm') {
       const id = `charm:${pendingReward.reward_key}`;
@@ -15645,7 +15791,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           onClose={() => setDeepPost(null)} onDeleted={() => setDeepPost(null)} />
       )}
       {!celebrateTier && me && pendingReward && rewardReady[`${pendingReward.kind}:${pendingReward.reward_key}`] && (
-        <RewardCelebration kind={pendingReward.kind === 'frame' ? 'frame' : 'badge'} rewardKey={pendingReward.reward_key} me={me}
+        <RewardCelebration kind={pendingReward.kind} rewardKey={pendingReward.reward_key} me={me}
           onClaim={async () => {
             const reward = pendingReward;
             setMyRewards((prev) => prev.map((r) => (r.id === reward.id ? { ...r, seen: true } : r)));
