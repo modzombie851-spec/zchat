@@ -244,6 +244,7 @@ function bubbleThemeStyle(chatTheme, isMe, theme) {
   return base;
 }
 
+const COMPOSER_AUTOSIZE = typeof CSS !== 'undefined' && typeof CSS.supports === 'function' && CSS.supports('field-sizing', 'content');
 const FONT = "'Manrope', -apple-system, BlinkMacSystemFont, system-ui, sans-serif";
 const MAX_CHARS = 1000;
 
@@ -347,6 +348,7 @@ function GlobalStyle() {
       @keyframes zchat-heart-burst { 0% { opacity: 0; transform: scale(0.3); } 30% { opacity: 1; transform: scale(1.2); } 100% { opacity: 0; transform: scale(1.6); } }
       @keyframes zchat-mail-zoom-in { 0% { opacity: 0; transform: scale(0.82); } 100% { opacity: 1; transform: scale(1); } }
       .zchat-mail-zoom { animation: zchat-mail-zoom-in 0.22s cubic-bezier(.2,.8,.3,1); }
+      .zchat-wall { height: 100vh; height: 100lvh; }
       @keyframes zchat-float-up { 0% { transform: translateY(0) translateX(0); opacity: 0; } 10% { opacity: 1; } 100% { transform: translateY(-620px) translateX(18px); opacity: 0; } }
       @keyframes zchat-drift-a { 0%, 100% { transform: translate(0,0); } 50% { transform: translate(30px, 20px); } }
       @keyframes zchat-drift-b { 0%, 100% { transform: translate(0,0); } 50% { transform: translate(-24px, -18px); } }
@@ -8539,7 +8541,7 @@ function StoryTray({ me, myStories, trayUsers, seen, onAdd, onOpen }) {
   );
 }
 
-const APP_VERSION = '5.3V';
+const APP_VERSION = '5.6V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -10518,7 +10520,8 @@ function NameplateBanner({ plate, name, username, verified, custom }) {
   const boxH = width * spec.ratio * (by1 - by0);
   const shown = (name || '').trim() || 'ZChat user';
   const handle = '@' + (username || 'zchatuser');
-  const nameSize = Math.max(10, Math.min(boxH * 0.5, boxW / Math.max(4, shown.length * 0.58)));
+  const badgeRoom = (verified && VERIFIED_TIERS[verified]) || (custom && CUSTOM_BADGES[custom]) ? boxH * 0.62 : 0;
+  const nameSize = Math.max(10, Math.min(boxH * 0.5, (boxW * 0.94 - badgeRoom) / Math.max(4, shown.length * 0.62)));
   const userSize = Math.max(9, Math.min(boxH * 0.3, boxW / Math.max(5, handle.length * 0.56)));
   return (
     <div ref={ref} style={{ position: 'relative', width: '100%', height: 0, paddingBottom: (spec.ratio * 100).toFixed(3) + '%' }}>
@@ -11845,6 +11848,13 @@ function FeedComments({ post, me, userId, onClose, onCount, onOpenProfile }) {
   );
 }
 
+function mergeProfileRow(prev, row) {
+  if (!prev || !row) return prev;
+  const changed = Object.keys(row).some((k) => k !== 'last_seen' && k !== 'email' && prev[k] !== row[k]);
+  if (!changed) return prev;
+  return { ...prev, ...row, email: prev.email };
+}
+
 function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAccount, onAddAccount, onRemoveAccount, switchingAccountId }) {
   const { theme, bgPatternOn, chatTheme } = useTheme();
   const assetProgress = useAssetPrefetch();
@@ -12111,6 +12121,11 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   useLayoutEffect(() => {
     const el = composerRef.current;
     if (!el) return;
+    if (COMPOSER_AUTOSIZE) {
+      const tall = draft.includes('\n') || draft.length > 34;
+      setComposerTall((prev) => (prev === tall ? prev : tall));
+      return;
+    }
     const shrank = draft.length < draftLenRef.current;
     draftLenRef.current = draft.length;
     if (!draft) {
@@ -12119,8 +12134,16 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       setComposerTall(false);
       return;
     }
-    if (shrank) el.style.height = '0px';
-    const full = el.scrollHeight + 2;
+    const mirror = composerMirrorRef.current;
+    let full;
+    if (mirror) {
+      mirror.style.width = `${el.offsetWidth}px`;
+      mirror.value = draft;
+      full = mirror.scrollHeight + 2;
+    } else {
+      if (shrank) el.style.height = '0px';
+      full = el.scrollHeight + 2;
+    }
     const next = Math.max(38, Math.min(148, full));
     if (el.style.height !== `${next}px`) el.style.height = `${next}px`;
     el.style.overflowY = full > 148 ? 'auto' : 'hidden';
@@ -12152,6 +12175,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [refreshing, setRefreshing] = useState(false);
   const pullStartYRef = useRef(null);
   const sidebarListRef = useRef(null);
+  const sidebarScrollRef = useRef(0);
   const scrollRef = useRef(null);
   useEffect(() => {
     if (!keyboardOpen) return undefined;
@@ -12163,6 +12187,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     return () => clearTimeout(t);
   }, [keyboardOpen, viewportBox.height]);
   const composerRef = useRef(null);
+  const composerMirrorRef = useRef(null);
   const searchTimer = useRef(null);
   const typingChannelRef = useRef(null);
   const typingTimeoutRef = useRef(null);
@@ -12398,7 +12423,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const { data: recentMsgs } = await supabase.from('messages')
       .select('id, sender_id, receiver_id, type, content, deleted, created_at, read, delivered, story_id')
       .or(`sender_id.eq.${myId},receiver_id.eq.${myId}`).is('group_id', null)
-      .order('created_at', { ascending: false }).limit(800);
+      .order('created_at', { ascending: false }).limit(400);
     const lastByOther = {};
     (recentMsgs || []).forEach((m) => {
       if (hiddenMsgs.has(m.id)) return;
@@ -12504,7 +12529,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
   useEffect(() => {
     if (me) { loadConversations(); loadUnreadCounts(); loadMyLocks(); loadGroups(); loadMyBlocks(); loadStories(); subscribeToPush(session.user.id, false); loadFollowRequestCount(); loadUnreadMailCount(); supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', me.id); }
-  }, [me]);
+  }, [me && me.id]);
 
   useEffect(() => {
     if (!me) return;
@@ -12585,18 +12610,21 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       })();
     }
     if (dmId || groupId || profileId || requestsFlag || mailFlag || storyFlag || callFlag || postFlag) window.history.replaceState({}, '', window.location.pathname);
-  }, [me]);
+  }, [me && me.id]);
 
   useEffect(() => {
     if (!me) return;
     const channel = supabase.channel('conversations-watch-' + me.id)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations' }, (payload) => {
         const row = payload.new || payload.old;
-        if (row && (row.user_a === me.id || row.user_b === me.id)) loadConversations();
+        if (row && (row.user_a === me.id || row.user_b === me.id)) {
+          clearTimeout(listReloadTimerRef.current);
+          listReloadTimerRef.current = setTimeout(() => { if (reloadListsRef.current) reloadListsRef.current(); }, 500);
+        }
       })
       .subscribe();
     return () => supabase.removeChannel(channel);
-  }, [me]);
+  }, [me && me.id]);
 
   useEffect(() => {
     if (!me) return undefined;
@@ -12636,7 +12664,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       })
       .subscribe();
     storyFeedRef.current = feed;
-    const poll = setInterval(() => { if (document.visibilityState === 'visible' && reloadStoriesRef.current) reloadStoriesRef.current(); }, 20000);
+    const poll = setInterval(() => { if (document.visibilityState === 'visible' && reloadStoriesRef.current) reloadStoriesRef.current(); }, 60000);
     const onVisible = () => { if (document.visibilityState === 'visible' && Date.now() - lastAppResumeRef.current > 3000 && reloadStoriesRef.current) reloadStoriesRef.current(); };
     document.addEventListener('visibilitychange', onVisible);
     window.addEventListener('focus', onVisible);
@@ -12648,7 +12676,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('focus', onVisible);
     };
-  }, [me]);
+  }, [me && me.id]);
 
   useEffect(() => {
     if (!me) return undefined;
@@ -12702,7 +12730,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       })
       .subscribe();
     return () => supabase.removeChannel(channel);
-  }, [me]);
+  }, [me && me.id]);
 
   useEffect(() => {
     if (!me) return;
@@ -12713,7 +12741,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       })
       .subscribe();
     return () => supabase.removeChannel(channel);
-  }, [me]);
+  }, [me && me.id]);
 
   useEffect(() => {
     if (!me) return undefined;
@@ -12750,10 +12778,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       })
       .subscribe();
     const meWatch = supabase.channel('me-profile-' + me.id)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles' }, (payload) => {
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${me.id}` }, (payload) => {
         const row = payload.new;
         if (!row || row.id !== me.id) return;
-        setMe((prev) => (prev ? { ...prev, ...row, email: prev.email } : prev));
+        setMe((prev) => mergeProfileRow(prev, row));
       })
       .subscribe();
     const blockContext = (e) => {
@@ -12786,7 +12814,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       })
       .subscribe();
     return () => supabase.removeChannel(channel);
-  }, [me]);
+  }, [me && me.id]);
 
   useEffect(() => {
     if (!me) return undefined;
@@ -12857,12 +12885,22 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const channel = supabase.channel('profile-watch-' + me.id)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles' }, (payload) => {
         const rowRaw = payload.new;
+        if (!rowRaw || !rowRaw.id) return;
+        if (rowRaw.id === me.id) return;
+        const inList = conversationsRef.current.some((c) => c.otherProfile.id === rowRaw.id) || archivedConversationsRef.current.some((c) => c.otherProfile.id === rowRaw.id);
+        const isActive = activeProfile && rowRaw.id === activeProfile.id;
+        if (!inList && !isActive) {
+          setProfileOf((prev) => (prev && prev.id === rowRaw.id ? { ...prev, ...sanitizeAvatar(rowRaw, session.user.id), name: prev.name } : prev));
+          return;
+        }
         const row = sanitizeAvatar(rowRaw, session.user.id);
-        if (row.id === me.id) setMe((prev) => ({ ...prev, ...rowRaw, email: prev.email }));
-        if (activeProfile && row.id === activeProfile.id) setActiveProfile((prev) => ({ ...prev, ...row, name: prev.name }));
+        if (isActive) setActiveProfile((prev) => (prev && prev.id === row.id ? { ...prev, ...row, name: prev.name } : prev));
         setProfileOf((prev) => (prev && prev.id === row.id ? { ...prev, ...row, name: prev.name } : prev));
-        setConversations((prev) => prev.map((c) => (c.otherProfile.id === row.id ? { ...c, otherProfile: { ...c.otherProfile, ...row, name: c.otherProfile.name }, realName: row.name } : c)));
-        setArchivedConversations((prev) => prev.map((c) => (c.otherProfile.id === row.id ? { ...c, otherProfile: { ...c.otherProfile, ...row, name: c.otherProfile.name }, realName: row.name } : c)));
+        const patchList = (prev) => (prev.some((c) => c.otherProfile.id === row.id)
+          ? prev.map((c) => (c.otherProfile.id === row.id ? { ...c, otherProfile: { ...c.otherProfile, ...row, name: c.otherProfile.name }, realName: row.name } : c))
+          : prev);
+        setConversations(patchList);
+        setArchivedConversations(patchList);
       })
       .subscribe();
     return () => supabase.removeChannel(channel);
@@ -12893,7 +12931,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       })
       .subscribe();
     return () => supabase.removeChannel(channel);
-  }, [me, myGroupIdsKey, activeGroup]);
+  }, [me && me.id, me && me.username, myGroupIdsKey, activeGroup && activeGroup.id]);
   useEffect(() => {
     if (!me) return;
     const channel = supabase.channel('group-members-watch-' + me.id)
@@ -12907,7 +12945,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       })
       .subscribe();
     return () => supabase.removeChannel(channel);
-  }, [me, activeGroup]);
+  }, [me && me.id, activeGroup && activeGroup.id]);
 
   useEffect(() => {
     if (!me) return;
@@ -12919,7 +12957,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       })
       .subscribe();
     return () => supabase.removeChannel(channel);
-  }, [me, activeGroup]);
+  }, [me && me.id, activeGroup && activeGroup.id]);
 
   useEffect(() => {
     if (!me) return;
@@ -12949,7 +12987,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       window.removeEventListener('pagehide', updateLastSeen);
       updateLastSeen();
     };
-  }, [me]);
+  }, [me && me.id]);
 
   const messagesRef = useRef(messages);
   useEffect(() => { messagesRef.current = messages; }, [messages]);
@@ -14451,7 +14489,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       })
       .subscribe();
     return () => supabase.removeChannel(channel);
-  }, [me]);
+  }, [me && me.id]);
   const callBarShown = !!(callEngine.call && callEngine.call.minimized && callEngine.call.status !== 'ended');
   useEffect(() => {
     const meta = document.querySelector('meta[name="theme-color"]');
@@ -14612,7 +14650,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       .subscribe();
     loadMutuals();
     return () => supabase.removeChannel(channel);
-  }, [me]);
+  }, [me && me.id]);
 
   const myConvMuteField = (conv) => (conv.user_a === session.user.id ? 'muted_until_a' : 'muted_until_b');
   const isConvMutedForMe = (conv) => !!conv && isActiveUntil(conv[myConvMuteField(conv)]);
@@ -14831,6 +14869,12 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     pullStartYRef.current = null;
   };
 
+  useLayoutEffect(() => {
+    if (mobileShowChat || isWide) return;
+    const el = sidebarListRef.current;
+    if (el && sidebarScrollRef.current) el.scrollTop = sidebarScrollRef.current;
+  }, [mobileShowChat, isWide]);
+
   const renderedMessages = useMemo(() => {
     if (!me || (!activeProfile && !activeGroup)) return null;
     const byId = new Map(messages.map((x) => [x.id, x]));
@@ -14930,6 +14974,13 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         borderRight: `1px solid ${theme.border}`, display: 'flex', flexDirection: 'column', flexShrink: 0,
         transition: 'none',
       }} className="zchat-sidebar-desktop">
+        <input ref={storyInputRef} type="file" accept="image/*,video/*" multiple style={{ display: 'none' }}
+          onChange={(e) => {
+            const picked = Array.from(e.target.files || []).filter((f) => (f.type || '').startsWith('image') || (f.type || '').startsWith('video')).slice(0, 10);
+            e.target.value = '';
+            if (picked.length) setStoryComposer({ key: Date.now(), files: picked });
+          }} />
+        {(isWide || !mobileShowChat) && (<>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
         {notifPermission === 'default' && pushSupported() && !notifBannerDismissed && (
           <EnableNotificationsBanner inline
@@ -15010,12 +15061,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           </div>
         </div>
 
-        <input ref={storyInputRef} type="file" accept="image/*,video/*" multiple style={{ display: 'none' }}
-          onChange={(e) => {
-            const picked = Array.from(e.target.files || []).filter((f) => (f.type || '').startsWith('image') || (f.type || '').startsWith('video')).slice(0, 10);
-            e.target.value = '';
-            if (picked.length) setStoryComposer({ key: Date.now(), files: picked });
-          }} />
         {search.trim().length < 2 && (
           <StoryTray me={me} myStories={activeStoriesOf(session.user.id)} trayUsers={trayUsers} seen={storyData.seen}
             onAdd={() => storyInputRef.current && storyInputRef.current.click()} onOpen={(id) => openStoriesFor(id)} />
@@ -15075,6 +15120,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             </div>
             <div
               ref={sidebarListRef}
+              onScroll={(e) => { sidebarScrollRef.current = e.currentTarget.scrollTop; }}
               onTouchStart={handlePullTouchStart}
               onTouchMove={handlePullTouchMove}
               onTouchEnd={handlePullTouchEnd}
@@ -15180,16 +15226,20 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             </div>
           </>
         )}
+        </>)}
       </div>
 
       <div style={{
-        flex: 1, display: (isWide || mobileShowChat) ? 'flex' : 'none', flexDirection: 'column', minWidth: 0, minHeight: 0, position: 'relative',
+        flex: 1, display: (isWide || mobileShowChat) ? 'flex' : 'none', flexDirection: 'column', minWidth: 0, minHeight: 0, position: isAppleMobile() && !isWide ? 'static' : 'relative',
         paddingTop: (activeProfile || activeGroup) ? (isAppleMobile() ? 64 : 74) : 0,
       }} className={mobileShowChat ? 'zchat-chat-panel zchat-panel-open' : 'zchat-chat-panel'}>
         {(activeProfile || activeGroup) ? (
           <>
             <div style={{
-              position: 'fixed', top: (viewportBox.height ? viewportBox.offset : 0) + (callBarShown ? 42 : 0), left: isWide ? 'calc(360px + env(safe-area-inset-left))' : 0, right: 0, zIndex: 15,
+              ...(isAppleMobile() && !isWide
+                ? { position: 'absolute', top: callBarShown ? 42 : 0 }
+                : { position: 'fixed', top: (viewportBox.height ? viewportBox.offset : 0) + (callBarShown ? 42 : 0) }),
+              left: isWide ? 'calc(360px + env(safe-area-inset-left))' : 0, right: 0, zIndex: 15,
               borderBottom: activeNameBarKey ? 'none' : `1px solid ${theme.dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}`,
               overflow: 'hidden',
               ...(!isAppleMobile() ? { borderTopLeftRadius: 22, borderTopRightRadius: 22 } : {}),
@@ -15284,10 +15334,15 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                 onReport={() => setReportModalFor('__selection__')} />
             )}
 
+            {activeWallpaperKey && wallpaperBgStyle(activeWallpaperKey) && (
+              <div aria-hidden="true" className="zchat-wall" style={{
+                position: 'absolute', left: 0, right: 0, top: 0, zIndex: -1, pointerEvents: 'none',
+                ...wallpaperBgStyle(activeWallpaperKey), backgroundPosition: 'center top',
+              }} />
+            )}
             <div ref={scrollRef} className="zchat-msglist" onScroll={handleChatScroll} style={{
               flex: 1, minHeight: 0, overflowY: 'auto', padding: '10px 18px 4px', position: 'relative',
               WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain', touchAction: 'pan-y',
-              ...(wallpaperBgStyle(activeWallpaperKey) || {}),
             }}>
               <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
               {!activeWallpaperKey && <AnimatedChatBackground chatTheme={chatTheme} />}
@@ -15402,6 +15457,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                     width: 40, height: 40, borderRadius: '50%', background: theme.rowBg, display: 'flex',
                     alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, color: theme.coralDeep, fontSize: 18,
                   }}><Smile size={18} /></div>
+                  {!COMPOSER_AUTOSIZE && (
+                    <textarea ref={composerMirrorRef} aria-hidden="true" tabIndex={-1} readOnly rows={1} defaultValue=""
+                      style={{ position: 'absolute', left: 0, top: 0, height: 0, visibility: 'hidden', overflow: 'hidden', pointerEvents: 'none', zIndex: -1, resize: 'none', boxSizing: 'border-box', padding: '9px 14px', border: '1px solid transparent', fontFamily: FONT, fontSize: 15, lineHeight: 1.35, wordBreak: 'break-word', whiteSpace: 'pre-wrap' }} />
+                  )}
                   <textarea
                     ref={composerRef}
                     value={draft}
@@ -15417,6 +15476,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                     placeholder={editingMessage ? 'Edit message' : 'Message'}
                     rows={1}
                     style={{
+                      ...(COMPOSER_AUTOSIZE ? { fieldSizing: 'content', overflowY: 'auto' } : {}),
                       flex: 1, resize: 'none', maxHeight: 148, minHeight: 38, boxSizing: 'border-box', padding: '9px 14px', borderRadius: composerTall ? 18 : 20,
                       wordBreak: 'break-word',
                       border: `1px solid ${theme.border}`, background: theme.inputBg, color: theme.ink,
