@@ -139,6 +139,21 @@ function ThemeProvider({ children }) {
   );
 }
 
+const backStack = [];
+function useBackClose(active, onClose) {
+  const ref = useRef(onClose);
+  ref.current = onClose;
+  useEffect(() => {
+    if (!active) return undefined;
+    const entry = () => { if (ref.current) ref.current(); };
+    backStack.push(entry);
+    return () => {
+      const i = backStack.lastIndexOf(entry);
+      if (i >= 0) backStack.splice(i, 1);
+    };
+  }, [active]);
+}
+
 const glass = (theme, extra = {}) => ({
   background: theme.glass,
   backdropFilter: 'blur(20px) saturate(180%)',
@@ -1115,6 +1130,7 @@ function sanitizeAvatarList(list, myId) {
 }
 
 function CountryPicker({ value, onSelect, onClose }) {
+  useBackClose(true, onClose);
   const { theme } = useTheme();
   const [q, setQ] = useState('');
   const filtered = COUNTRIES.filter(([, name]) => name.toLowerCase().includes(q.toLowerCase()));
@@ -1146,6 +1162,7 @@ function CountryPicker({ value, onSelect, onClose }) {
 
 
 function LogoutConfirm({ onCancel, onConfirm }) {
+  useBackClose(true, onCancel);
   const { theme } = useTheme();
   return (
     <div style={{
@@ -1183,6 +1200,7 @@ function LogoutConfirm({ onCancel, onConfirm }) {
 
 
 function DeleteAccountConfirm({ onCancel, onConfirm }) {
+  useBackClose(true, onCancel);
   const { theme } = useTheme();
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
@@ -1260,6 +1278,7 @@ function ToggleSwitch({ on, onClick }) {
 }
 
 function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideActivity, onToggleActivity, onOpenAccounts, onOpenDelete, onOpenBlocked, blockedCount = 0, chatLockSet, chatLockHash, onSetChatLockPassword, onTurnOffChatLock, autoOpenLockSetup, onConsumedAutoOpen, me, rewardCount, onOpenCollection, onEditProfile }) {
+  useBackClose(true, onClose);
   const [permText, setPermText] = useState('Checking…');
   const notifState = (typeof Notification !== 'undefined' && Notification.permission) || 'default';
   const checkPerms = async () => {
@@ -1290,6 +1309,7 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
   const accentLabels = { coral: 'Coral', ocean: 'Ocean', berry: 'Berry' };
   const [lockFlow, setLockFlow] = useState(null);
   const [section, setSection] = useState('main');
+  useBackClose(section !== 'main', () => setSection('main'));
   const [dragX, setDragX] = useState(0);
   const dragStartRef = useRef(null);
   const draggingRef = useRef(false);
@@ -1507,6 +1527,7 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
 }
 
 function AccountSwitcherPanel({ accounts, currentId, switchingId, onBack, onSwitch, onRemove, onAdd }) {
+  useBackClose(true, onBack);
   const { theme } = useTheme();
   const [tiers, setTiers] = useState({});
   useEffect(() => {
@@ -1553,6 +1574,7 @@ function AccountSwitcherPanel({ accounts, currentId, switchingId, onBack, onSwit
 }
 
 function PrivacyPanel({ onBack }) {
+  useBackClose(true, onBack);
   const { theme } = useTheme();
   return (
     <div style={{
@@ -1636,6 +1658,7 @@ function UserListRow({ profile, rightContent, onClick }) {
 }
 
 function ListModal({ title, onClose, children }) {
+  useBackClose(true, onClose);
   const { theme } = useTheme();
   return (
     <div style={{
@@ -1812,6 +1835,7 @@ function FollowRequestsPanel({ userId, onClose, onOpenProfile }) {
 }
 
 function DiscoverPanel({ myId, blockedIds, onClose, onOpenProfile }) {
+  useBackClose(true, onClose);
   const { theme } = useTheme();
   const [people, setPeople] = useState(null);
   const [iFollow, setIFollow] = useState(new Set());
@@ -2220,6 +2244,7 @@ function toggleFavoriteSticker(key) {
 }
 
 function StickerPicker({ onPick, onClose }) {
+  useBackClose(true, onClose);
   const { theme } = useTheme();
   const [favKeys, setFavKeys] = useState(() => getFavoriteStickerKeys());
   useEffect(() => {
@@ -2319,6 +2344,7 @@ function Star_({ size = 14, color = '#FFB800', filled = false }) {
 }
 
 function FullEmojiPicker({ onPick, onClose }) {
+  useBackClose(true, onClose);
   const { theme } = useTheme();
   return (
     <div style={{
@@ -2342,6 +2368,7 @@ function FullEmojiPicker({ onPick, onClose }) {
   );
 }
 function EmojiPickerBar({ onPick, onClose }) {
+  useBackClose(true, onClose);
   const { theme } = useTheme();
   const [showFullEmoji, setShowFullEmoji] = useState(false);
   return (
@@ -2402,6 +2429,7 @@ function WhoReactedModal({ reactions, myId, onClose, onRemoveMine }) {
 }
 
 function MailPanel({ myId, onClose, initialMailId }) {
+  useBackClose(true, onClose);
   const { theme } = useTheme();
   const [mails, setMails] = useState(null);
   const [selected, setSelected] = useState(null);
@@ -2413,6 +2441,9 @@ function MailPanel({ myId, onClose, initialMailId }) {
   const [picking, setPicking] = useState(false);
   const [picked, setPicked] = useState(() => new Set());
   const [confirmBulk, setConfirmBulk] = useState(null);
+  useBackClose(!!selected, () => setSelected(null));
+  useBackClose(picking, () => { setPicking(false); setPicked(new Set()); });
+  useBackClose(!!actionFor, () => setActionFor(null));
   const openedInitialRef = useRef(false);
   const pressTimerRef = useRef(null);
   const longPressFiredRef = useRef(false);
@@ -2629,6 +2660,7 @@ function MailPanel({ myId, onClose, initialMailId }) {
 }
 
 function ArchivedChatsPanel({ conversations, onClose, onOpenChat, onUnarchive }) {
+  useBackClose(true, onClose);
   const { theme } = useTheme();
   return (
     <div style={{
@@ -2717,6 +2749,7 @@ function wallpaperBgStyle(key) {
 }
 
 function WallpaperPicker({ value, onSelect, onClose }) {
+  useBackClose(true, onClose);
   const { theme } = useTheme();
   return (
     <div style={{
@@ -2779,6 +2812,7 @@ function nameBarBgStyle(key) {
 }
 
 function NameBarPicker({ value, onSelect, onClose }) {
+  useBackClose(true, onClose);
   const { theme } = useTheme();
   return (
     <div onClick={onClose} style={{
@@ -2836,6 +2870,7 @@ async function sendReportMail(reportedUserId, reasonLabel) {
 }
 
 function ReportReasonPicker({ reportedUserId, onCancel, onSubmit }) {
+  useBackClose(true, onCancel);
   const { theme } = useTheme();
   const [submitting, setSubmitting] = useState(null);
 
@@ -2911,6 +2946,7 @@ function PinKeypad({ onDigit, onBackspace }) {
 }
 
 function ChatLockSetup({ onCancel, onConfirm }) {
+  useBackClose(true, onCancel);
   const { theme } = useTheme();
   const [pin, setPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
@@ -2957,6 +2993,7 @@ function ChatLockSetup({ onCancel, onConfirm }) {
 }
 
 function ChatLockUnlock({ onCancel, onUnlock, correctHash }) {
+  useBackClose(true, onCancel);
   const { theme } = useTheme();
   const [pin, setPin] = useState('');
   const [err, setErr] = useState('');
@@ -3025,6 +3062,7 @@ function NicknameEditRow({ avatar, label, currentValue, placeholder, onSave }) {
 }
 
 function NicknamesModal({ conv, myAvatar, myName, currentNickname, currentAlias, onSaveNickname, onSaveAlias, onClose }) {
+  useBackClose(true, onClose);
   const { theme } = useTheme();
   const otherRealName = conv.realName || conv.otherProfile.name;
   return (
@@ -3067,7 +3105,9 @@ function PillRow({ icon, label, onClick, danger }) {
 }
 
 function ChatSettingsPanel({ conv, myId, meAvatar, meName, isPinned, isLocked, wallpaper, nameBar, chatLockAvailable, onClose, onTogglePin, onToggleArchive, onSetWallpaper, onSetNameBar, onEnableLock, onDisableLock, onDeleteChat, onReportUser, onNicknameSaved, onNeedChatLockSetup, onOpenProfile, isMuted, onSetMute, onCall }) {
+  useBackClose(true, onClose);
   const [showMuteOptions, setShowMuteOptions] = useState(false);
+  useBackClose(showMuteOptions, () => setShowMuteOptions(false));
   const { theme } = useTheme();
   const [nickname, setNickname] = useState('');
   const [myAlias, setMyAlias] = useState('');
@@ -3285,8 +3325,10 @@ function GroupAvatar({ avatar, name, size = 44 }) {
 }
 
 function CreateGroupPanel({ myId, onClose, onCreated }) {
+  useBackClose(true, onClose);
   const { theme } = useTheme();
   const [step, setStep] = useState('members');
+  useBackClose(step === 'details', () => setStep('members'));
   const [q, setQ] = useState('');
   const [results, setResults] = useState([]);
   const [selected, setSelected] = useState([]);
@@ -3440,6 +3482,7 @@ function CreateGroupPanel({ myId, onClose, onCreated }) {
 }
 
 function GroupInfoPanel({ group, members, myId, myRole, isOwner, onClose, onPromote, onDemote, onMute, onUnmute, onKick, onLeave, onOpenProfile, onSaveBio, onSaveName, onSaveAvatar, onAddMembers, onTransferOwnership, onSetWallpaper, onSetHeaderStyle, onOpenSettings, onOpenMembers }) {
+  useBackClose(true, onClose);
   const { theme } = useTheme();
   const isAdmin = myRole === 'admin';
   const [menuFor, setMenuFor] = useState(null);
@@ -3634,8 +3677,10 @@ function GroupInfoPanel({ group, members, myId, myRole, isOwner, onClose, onProm
 }
 
 function GroupSettingsPanel({ group, myId, isAdmin, isOwner, isMuted, onSetMute, isPinned, onTogglePin, onClose, onLeave, onDeleteGroup, onOpenAdmins, onOpenEdit }) {
+  useBackClose(true, onClose);
   const { theme } = useTheme();
   const [showMuteOptions, setShowMuteOptions] = useState(false);
+  useBackClose(showMuteOptions, () => setShowMuteOptions(false));
   const [addPolicy, setAddPolicy] = useState(group.add_members_policy || 'everyone');
   const [sendPolicy, setSendPolicy] = useState(group.send_policy || 'everyone');
   const [inviteCode, setInviteCode] = useState(group.invite_code || '');
@@ -3836,10 +3881,12 @@ function GroupSettingsPanel({ group, myId, isAdmin, isOwner, isMuted, onSetMute,
 }
 
 function GroupMembersPanel({ group, members, myId, isAdmin, isOwner, onClose, onOpenProfile, onAddMembers, onPromote, onDemote, onKick, onMute, onUnmute, onTransferOwnership }) {
+  useBackClose(true, onClose);
   const { theme } = useTheme();
   const [q, setQ] = useState('');
   const [tab, setTab] = useState('all');
   const [sheetFor, setSheetFor] = useState(null);
+  useBackClose(!!sheetFor, () => setSheetFor(null));
 
   const isOnline = (m) => m.profile && !m.profile.hide_activity && m.profile.last_seen && Date.now() - new Date(m.profile.last_seen).getTime() < 3 * 60 * 1000;
   const onlineCount = members.filter(isOnline).length;
@@ -3929,6 +3976,7 @@ function GroupMembersPanel({ group, members, myId, isAdmin, isOwner, onClose, on
   );
 }
 function AddMembersPanel({ myId, existingIds, onClose, onAdd }) {
+  useBackClose(true, onClose);
   const { theme } = useTheme();
   const [q, setQ] = useState('');
   const [results, setResults] = useState([]);
@@ -4013,6 +4061,7 @@ function PrivacyField({ label, hidden, onToggle }) {
 }
 
 function AccountPrivacyPanel({ profile, onClose, onSaved }) {
+  useBackClose(true, onClose);
   const { theme } = useTheme();
   const [isPrivate, setIsPrivate] = useState(profile.is_private || false);
   const [hidePhoto, setHidePhoto] = useState(profile.hide_photo || false);
@@ -4170,6 +4219,7 @@ function ProfileLinkCard({ profileId, onOpen }) {
 }
 
 function ShareProfileSheet({ profile, myId, conversations, groups, onSend, onClose }) {
+  useBackClose(true, onClose);
   const { theme } = useTheme();
   const link = profileShareLink(profile.id);
   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=360x360&margin=10&data=${encodeURIComponent(link)}`;
@@ -4357,6 +4407,7 @@ function PosterIconButton({ onClick, children, label }) {
 }
 
 function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, onSaved, onOpenSettings, onOpenProfile, onMessage, isBlocked, onBlock, onUnblock, shareConversations, shareGroups, onShareToChats, canCall, onCall, onOpenHighlight, meProfile, onOpenCollection }) {
+  useBackClose(true, onClose);
   const { theme } = useTheme();
   const [reportOpen, setReportOpen] = useState(false);
   const [reportSent, setReportSent] = useState(false);
@@ -4417,6 +4468,8 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
   const [showPrivacySettings, setShowPrivacySettings] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [showMore, setShowMore] = useState(false);
+  useBackClose(editing, () => cancelEditing());
+  useBackClose(showMore, () => setShowMore(false));
   const bioRef = useRef(null);
   const [bioMention, setBioMention] = useState(null);
 
@@ -5470,6 +5523,7 @@ function pairKey(a, b) { return a < b ? [a, b] : [b, a]; }
 
 
 function ImageViewer({ url, onClose, onForward, onReport }) {
+  useBackClose(true, onClose);
   const [menuOpen, setMenuOpen] = useState(false);
   return (
     <div style={{
@@ -5499,6 +5553,7 @@ function ImageViewer({ url, onClose, onForward, onReport }) {
 }
 
 function MessageActionBar({ count, canEditActions, onCancel, onForward, onDeleteForMe, onDeleteForEveryone, onReport }) {
+  useBackClose(true, onCancel);
   const { theme } = useTheme();
   const btn = { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer', color: theme.ink, fontSize: 10, fontWeight: 600, flexShrink: 0, minWidth: 52 };
   return (
@@ -5518,6 +5573,7 @@ function MessageActionBar({ count, canEditActions, onCancel, onForward, onDelete
 }
 
 function ForwardPicker({ conversations, onCancel, onPick, myId }) {
+  useBackClose(true, onCancel);
   const { theme } = useTheme();
   const [q, setQ] = useState('');
   const [results, setResults] = useState([]);
@@ -5593,6 +5649,7 @@ function ForwardPicker({ conversations, onCancel, onPick, myId }) {
 
 
 function ReportMessageModal({ onCancel, onSubmit, title = 'Report message' }) {
+  useBackClose(true, onCancel);
   const { theme } = useTheme();
   const [reason, setReason] = useState('');
   return (
@@ -5618,6 +5675,7 @@ function ReportMessageModal({ onCancel, onSubmit, title = 'Report message' }) {
 
 
 function DeleteChatConfirm({ name, onCancel, onConfirm }) {
+  useBackClose(true, onCancel);
   const { theme } = useTheme();
   return (
     <div style={{
@@ -5645,6 +5703,7 @@ function DeleteChatConfirm({ name, onCancel, onConfirm }) {
 }
 
 function AccountGoneModal({ name, onOk }) {
+  useBackClose(true, onOk);
   const { theme } = useTheme();
   return (
     <div style={{
@@ -5671,6 +5730,7 @@ function AccountGoneModal({ name, onOk }) {
 
 
 function DeleteMessageConfirm({ onCancel, onConfirm }) {
+  useBackClose(true, onCancel);
   const { theme } = useTheme();
   return (
     <div style={{
@@ -5747,6 +5807,7 @@ function AssetDownloadBar({ progress }) {
 }
 
 function NotificationHelpModal({ onClose }) {
+  useBackClose(true, onClose);
   const { theme } = useTheme();
   const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
   const isIOS = /iPhone|iPad|iPod/.test(ua);
@@ -5826,6 +5887,7 @@ function InstallAppBanner({ onOpenHelp, onInstallNow, canInstallDirectly, onDism
 }
 
 function InstallAppHelpModal({ onClose }) {
+  useBackClose(true, onClose);
   const { theme } = useTheme();
   const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
   const isIOS = /iPhone|iPad|iPod/.test(ua);
@@ -5854,6 +5916,7 @@ function InstallAppHelpModal({ onClose }) {
 }
 
 function SmartMenu({ anchorEl, open, onClose, children, width = 170 }) {
+  useBackClose(!!open, onClose);
   const [pos, setPos] = useState(null);
   useEffect(() => {
     if (!open || !anchorEl) { setPos(null); return; }
@@ -6040,6 +6103,7 @@ function InAppMessageToast({ toast, top, onOpen, onDismiss }) {
 }
 
 function ChatRowSheet({ title, subtitle, avatar, actions, onClose }) {
+  useBackClose(true, onClose);
   const { theme } = useTheme();
   const drag = useSheetDrag(onClose);
   return (
@@ -6077,6 +6141,7 @@ function ChatRowSheet({ title, subtitle, avatar, actions, onClose }) {
 }
 
 function MessageContextMenu({ message, isMine, canEditText, canModerate, anchorRect, bubble, isPinned, onPin, onUnpin, onClose, onReact, onReply, onCopy, onEdit, onForward, onReport, onDeleteForMe, onDeleteForEveryone, onSelectMultiple, onSave }) {
+  useBackClose(true, onClose);
   const { theme } = useTheme();
   const [showFullEmoji, setShowFullEmoji] = useState(false);
   const [favKeys, setFavKeys] = useState(() => getFavoriteStickerKeys());
@@ -6152,7 +6217,7 @@ function MessageContextMenu({ message, isMine, canEditText, canModerate, anchorR
           {!message.deleted && message.type === 'text' && row(<Copy size={18} />, 'Copy', onCopy)}
           {!message.deleted && canEditText && row(<Edit3 size={18} />, 'Edit', onEdit)}
           {!message.deleted && (message.type === 'image' || message.type === 'video') && row(<Download size={18} />, 'Save', onSave)}
-          {!message.deleted && stickerMatch && row(<Star_ size={18} color="#FFB800" filled={favKeys.has(stickerMatch.key)} />, favKeys.has(stickerMatch.key) ? 'Remove from favorites' : 'Add to favorites', () => setFavKeys(new Set(toggleFavoriteSticker(stickerMatch.key))))}
+          {!message.deleted && stickerMatch && row(<Star_ size={18} color="#FFB800" filled={favKeys.has(stickerMatch.key)} />, favKeys.has(stickerMatch.key) ? 'Remove from favorites' : 'Add to favorites', () => { setFavKeys(new Set(toggleFavoriteSticker(stickerMatch.key))); onClose(); })}
           {!message.deleted && row(<Forward size={18} />, 'Forward', onForward)}
           {!message.deleted && message.type !== 'system' && onPin && row(<Pin_ size={18} color={theme.ink} />, isPinned ? 'Unpin' : 'Pin', isPinned ? onUnpin : onPin)}
           {row(<CheckCheck size={18} />, 'Select', onSelectMultiple)}
@@ -6178,6 +6243,7 @@ function loadImageElement(url) {
 }
 
 function PhotoCropEditor({ file, onCancel, onConfirm }) {
+  useBackClose(true, onCancel);
   const { theme } = useTheme();
   const [url, setUrl] = useState(null);
   const [natural, setNatural] = useState(null);
@@ -6404,6 +6470,7 @@ async function exportVideoOverlay(item) {
 }
 
 function MediaComposer({ files, recipientName, onCancel, onSend, onActivity, mode: composerMode = 'chat', mentionGroups = [], myId }) {
+  useBackClose(true, onCancel);
   const { theme } = useTheme();
   const [items, setItems] = useState(() => files.map((f, i) => ({
     id: `${Date.now()}-${i}`, kind: (f.type || '').startsWith('video') ? 'video' : 'image', file: f, url: URL.createObjectURL(f),
@@ -6434,6 +6501,9 @@ function MediaComposer({ files, recipientName, onCancel, onSend, onActivity, mod
   const frameRef = useRef({ frameW: 1, frameH: 1, innerW: 1, innerH: 1 });
   const trimBarRef = useRef(null);
   const sentRef = useRef(false);
+  useBackClose(mode !== 'view', () => setMode('view'));
+  useBackClose(!!textDraft, () => saveText());
+  useBackClose(showStickerPicker, () => setShowStickerPicker(false));
 
   const cur = items[Math.min(index, items.length - 1)];
 
@@ -7004,6 +7074,7 @@ function MediaComposer({ files, recipientName, onCancel, onSend, onActivity, mod
 }
 
 function VideoViewer({ url, trimStart, trimEnd, overlayUrl, onClose, onForward }) {
+  useBackClose(true, onClose);
   const seekedRef = useRef(false);
   const [ratio, setRatio] = useState(null);
   const onLoadedMetadata = (e) => {
@@ -7111,6 +7182,7 @@ function LoopingSticker({ src, size = 128, style, className, alt = 'sticker' }) 
 }
 
 function ConfirmDialog({ title, body, confirmLabel = 'Delete', onCancel, onConfirm, danger = true }) {
+  useBackClose(true, onCancel);
   const { theme } = useTheme();
   const [busy, setBusy] = useState(false);
   return (
@@ -7133,6 +7205,7 @@ function ConfirmDialog({ title, body, confirmLabel = 'Delete', onCancel, onConfi
 }
 
 function ChatSearchBar({ query, onChange, count, position, onPrev, onNext, onClose }) {
+  useBackClose(true, onClose);
   const { theme } = useTheme();
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderBottom: `1px solid ${theme.border}`, background: theme.panelBg, flexShrink: 0 }} className="zchat-fade">
@@ -7197,6 +7270,7 @@ function extractLinks(text) {
 }
 
 function ChatMediaPanel({ title, messages, labelFor, onClose, onOpenImage, onOpenVideo, onJump }) {
+  useBackClose(true, onClose);
   const { theme } = useTheme();
   const [tab, setTab] = useState('media');
   const [picking, setPicking] = useState(false);
@@ -7433,6 +7507,7 @@ function StoryAvatar({ profile, size = 64, ring = 'none', onClick, badgePlus = f
 }
 
 function StoryMentionPicker({ myId, groups, onPick, onClose }) {
+  useBackClose(true, onClose);
   const { theme } = useTheme();
   const [q, setQ] = useState('');
   const [people, setPeople] = useState([]);
@@ -7480,6 +7555,7 @@ function StoryMentionPicker({ myId, groups, onPick, onClose }) {
 }
 
 function StoryViewer({ groupsList, startGroup = 0, startStoryId = null, onAddStory, onShare, externalPause = false, readOnly = false, highlightLike = null, initialRepostedIds = null, myId, seen, liked, onSeen, onClose, onLike, onReply, onRepost, onDelete, onReport, onOpenProfile, onOpenMention }) {
+  useBackClose(true, onClose);
   const [gi, setGi] = useState(startGroup);
   const [si, setSi] = useState(() => {
     const g = groupsList[startGroup];
@@ -7500,6 +7576,7 @@ function StoryViewer({ groupsList, startGroup = 0, startStoryId = null, onAddSto
   const [replyFocus, setReplyFocus] = useState(false);
   const [showViewers, setShowViewers] = useState(false);
   const [menu, setMenu] = useState(false);
+  useBackClose(menu, () => setMenu(false));
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [flash, setFlash] = useState('');
   const [viewCount, setViewCount] = useState(null);
@@ -8541,7 +8618,7 @@ function StoryTray({ me, myStories, trayUsers, seen, onAdd, onOpen }) {
   );
 }
 
-const APP_VERSION = '5.6V';
+const APP_VERSION = '5.9V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -8567,6 +8644,7 @@ function BlockBullet({ icon, text }) {
 }
 
 function BlockConfirmSheet({ profile, onCancel, onConfirm }) {
+  useBackClose(true, onCancel);
   const { theme } = useTheme();
   const drag = useSheetDrag(onCancel);
   const [busy, setBusy] = useState(false);
@@ -8598,6 +8676,7 @@ function BlockConfirmSheet({ profile, onCancel, onConfirm }) {
 }
 
 function UnblockConfirmSheet({ profile, onCancel, onConfirm }) {
+  useBackClose(true, onCancel);
   const { theme } = useTheme();
   const [busy, setBusy] = useState(false);
   return (
@@ -8618,6 +8697,7 @@ function UnblockConfirmSheet({ profile, onCancel, onConfirm }) {
 }
 
 function BlockedAccountsPanel({ myId, blockedIds, onClose, onUnblock, onOpenProfile }) {
+  useBackClose(true, onClose);
   const { theme } = useTheme();
   const [rows, setRows] = useState(null);
   const [q, setQ] = useState('');
@@ -8681,6 +8761,7 @@ function BlockedAccountsPanel({ myId, blockedIds, onClose, onUnblock, onOpenProf
 }
 
 function StoryShareSheet({ story, owner, conversations, groups, onSend, onClose }) {
+  useBackClose(true, onClose);
   const { theme } = useTheme();
   const drag = useSheetDrag(onClose);
   const [picked, setPicked] = useState([]);
@@ -8808,6 +8889,7 @@ function CallLogBubble({ m, isMe, onCallBack }) {
 }
 
 function StickerPreviewSheet({ message, isMine, onClose, onReport }) {
+  useBackClose(true, onClose);
   const { theme } = useTheme();
   const drag = useSheetDrag(onClose);
   const sticker = STICKERS.find((s) => s.file === message.content);
@@ -8827,7 +8909,7 @@ function StickerPreviewSheet({ message, isMine, onClose, onReport }) {
             ? <img src={message.content} alt="" className="zchat-wave-pop" draggable={false} style={{ width: 150, height: 150, objectFit: 'contain' }} />
             : <div style={{ fontSize: 110, lineHeight: 1 }}>{message.content}</div>}
         </div>
-        {sticker && row(<Star_ size={19} color="#FFB800" filled={fav} />, fav ? 'Remove from favorites' : 'Add to favorites', () => setFavs(new Set(toggleFavoriteSticker(sticker.key))))}
+        {sticker && row(<Star_ size={19} color="#FFB800" filled={fav} />, fav ? 'Remove from favorites' : 'Add to favorites', () => { setFavs(new Set(toggleFavoriteSticker(sticker.key))); onClose(); })}
         {!isMine && row(<Flag size={19} />, 'Report sticker', () => { onClose(); onReport(); }, true)}
         {row(<X size={19} />, 'Close', onClose)}
       </div>
@@ -8836,6 +8918,7 @@ function StickerPreviewSheet({ message, isMine, onClose, onReport }) {
 }
 
 function AvatarPeek({ profile, online, lastSeen, hasStory, storySeen, canCall, onCall, onClose, onMessage, onProfile, onStory }) {
+  useBackClose(true, onClose);
   const { theme } = useTheme();
   const photo = typeof profile.avatar === 'string' && profile.avatar.startsWith('http') ? profile.avatar : '';
   const btn = (icon, label, onClick, primary) => (
@@ -8916,6 +8999,7 @@ function StoryRefCard({ m, isMe, onOpen }) {
 }
 
 function StoryViewersSheet({ story, myId, onClose, onOpenProfile }) {
+  useBackClose(true, onClose);
   const { theme } = useTheme();
   const drag = useSheetDrag(onClose);
   const [rows, setRows] = useState(null);
@@ -9000,6 +9084,7 @@ function CallTile({ tile, isVideo, muted, cameraOff, facing, onMenu, onFocus, fo
 }
 
 function CallScreen({ call, me, nameFor, avatarFor, onAccept, onDecline, onHangup, onToggleMute, onToggleCamera, onFlip, onMinimize, onMuteOther, onCloseSummary, onCallAgain, onMessage, onShareScreen, onToggleSpeaker, speakerOn }) {
+  useBackClose(!call.minimized && !(call.direction === 'incoming' && call.status === 'ringing'), () => (call.status === 'ended' ? onCloseSummary() : onMinimize()));
   const [focusedTile, setFocusedTile] = useState(null);
   const [now, setNow] = useState(Date.now());
   const [pipCorner, setPipCorner] = useState('tr');
@@ -9449,6 +9534,7 @@ function isAppleMobile() {
 }
 
 function VerifiedCelebration({ tier, name, onClose }) {
+  useBackClose(true, onClose);
   const t = VERIFIED_TIERS[tier] || VERIFIED_TIERS.blue;
   const pieces = Array.from({ length: 36 }, (_, i) => i);
   return (
@@ -9602,6 +9688,7 @@ function ProfileHighlights({ profile, isSelf, userId, onOpenHighlight }) {
 }
 
 function HighlightCreator({ userId, onClose, onCreated }) {
+  useBackClose(true, onClose);
   const { theme } = useTheme();
   const [stories, setStories] = useState(null);
   const [picked, setPicked] = useState([]);
@@ -9758,6 +9845,7 @@ function CommentBody({ content, theme }) {
 }
 
 function PostViewer({ post, owner, userId, meProfile, onClose, onDeleted }) {
+  useBackClose(true, onClose);
   const { theme } = useTheme();
   const [likes, setLikes] = useState([]);
   const [likerNames, setLikerNames] = useState({});
@@ -9769,6 +9857,7 @@ function PostViewer({ post, owner, userId, meProfile, onClose, onDeleted }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const lastTapRef = useRef(0);
   const [commentStickers, setCommentStickers] = useState(false);
+  useBackClose(!!sheet, () => { setSheet(null); setCommentStickers(false); });
   const drag = useSheetDrag(() => { setSheet(null); setCommentStickers(false); });
   const liked = likes.some((l) => l.user_id === userId);
   const bg = theme.dark ? '#000' : '#fff';
@@ -10542,6 +10631,7 @@ function NameplateBanner({ plate, name, username, verified, custom }) {
 }
 
 function ReportThanksSheet({ profile, isBlocked, onBlock, onClose }) {
+  useBackClose(true, onClose);
   const { theme } = useTheme();
   const drag = useSheetDrag(onClose);
   return (
@@ -10567,6 +10657,7 @@ function ReportThanksSheet({ profile, isBlocked, onBlock, onClose }) {
 }
 
 function CameraCapture({ onClose, onCapture, onPickGallery }) {
+  useBackClose(true, onClose);
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const recorderRef = useRef(null);
@@ -11188,6 +11279,7 @@ const RARITY_STYLE = {
 };
 
 function FrameTryOnPage({ me, frameKey, charmKey, plateKey, onClose, action }) {
+  useBackClose(true, onClose);
   const isCharm = !!charmKey;
   const isPlate = !!plateKey;
   const spec = isPlate ? NAMEPLATES[plateKey] : isCharm ? CUSTOM_BADGES[charmKey] : AVATAR_FRAMES[frameKey];
@@ -11333,10 +11425,12 @@ function openFrameCheckout(userId, email, frameKey) {
 }
 
 function CollectionPanel({ me, rewards, onClose, onEquip, userEmail }) {
+  useBackClose(true, onClose);
   const [tab, setTab] = useState('frame');
   const [selected, setSelected] = useState(null);
   const [busy, setBusy] = useState(false);
   const [tryOn, setTryOn] = useState(null);
+  useBackClose(!!selected, () => setSelected(null));
   const rewardFor = (kind, key) => (rewards || []).find((r) => r.kind === kind && r.reward_key === key) || null;
   const activeRewards = (rewards || []).filter(rewardActive);
   const ownedFrames = new Set(activeRewards.filter((r) => r.kind === 'frame').map((r) => r.reward_key));
@@ -11500,6 +11594,7 @@ function CharmPreview({ charm, size }) {
 }
 
 function FeedPanel({ me, userId, onClose, onOpenProfile }) {
+  useBackClose(true, onClose);
   const { theme } = useTheme();
   const [tab, setTab] = useState('foryou');
   const [items, setItems] = useState(null);
@@ -11694,6 +11789,7 @@ function FeedPanel({ me, userId, onClose, onOpenProfile }) {
 }
 
 function FeedComments({ post, me, userId, onClose, onCount, onOpenProfile }) {
+  useBackClose(true, onClose);
   const [rows, setRows] = useState(null);
   const [text, setText] = useState('');
   const [replyTo, setReplyTo] = useState(null);
@@ -11848,6 +11944,10 @@ function FeedComments({ post, me, userId, onClose, onCount, onOpenProfile }) {
   );
 }
 
+function keyboardMemoryKey() {
+  return `zchat-kb-${window.innerWidth > window.innerHeight ? 'l' : 'p'}`;
+}
+
 function mergeProfileRow(prev, row) {
   if (!prev || !row) return prev;
   const changed = Object.keys(row).some((k) => k !== 'last_seen' && k !== 'email' && prev[k] !== row[k]);
@@ -11881,6 +11981,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     return () => window.removeEventListener('resize', onResize);
   }, []);
   const fullHeightRef = useRef(0);
+  const presizeRef = useRef({ until: 0, height: 0 });
+  const viewportUpdateRef = useRef(null);
   const fullWidthRef = useRef(0);
   useEffect(() => {
     const vv = window.visualViewport;
@@ -11897,16 +11999,24 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         }
         const layoutHeight = document.documentElement.clientHeight || window.innerHeight;
         const typing = isTypingField(document.activeElement);
+        const ios = isAppleMobile();
+        if (ios && typing && (window.scrollY || document.documentElement.scrollTop)) window.scrollTo(0, 0);
         if (!typing) fullHeightRef.current = Math.max(vv.height, layoutHeight);
         else fullHeightRef.current = Math.max(fullHeightRef.current, layoutHeight);
         const open = typing && fullHeightRef.current - vv.height > 120;
+        if (open && ios) {
+          try { localStorage.setItem(keyboardMemoryKey(), String(Math.round(fullHeightRef.current - vv.height))); } catch {}
+        }
+        const pre = presizeRef.current;
+        const holding = !open && typing && pre.height > 0 && Date.now() < pre.until;
         const standalone = isAppleMobile() && (window.navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches));
         let fill = null;
-        setKeyboardOpen((prev) => (prev === open ? prev : open));
+        const shown = open || holding;
+        setKeyboardOpen((prev) => (prev === shown ? prev : shown));
         setViewportBox((prev) => {
           const next = open
             ? { height: Math.round(vv.height), offset: Math.max(0, Math.round(vv.offsetTop)) }
-            : { height: null, offset: 0 };
+            : holding ? { height: pre.height, offset: 0 } : { height: null, offset: 0 };
           return prev.height === next.height && prev.offset === next.offset ? prev : next;
         });
       });
@@ -11915,6 +12025,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       update();
       if (!isTypingField(document.activeElement) && (window.scrollY || document.documentElement.scrollTop)) window.scrollTo(0, 0);
     }, 300);
+    viewportUpdateRef.current = update;
     update();
     vv.addEventListener('resize', update);
     vv.addEventListener('scroll', update);
@@ -11930,6 +12041,18 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       window.removeEventListener('orientationchange', settle);
     };
   }, []);
+  const presizeForKeyboard = () => {
+    if (!isAppleMobile() || isWide) return;
+    let kb = 0;
+    try { kb = parseInt(localStorage.getItem(keyboardMemoryKey()) || '0', 10) || 0; } catch {}
+    const full = window.innerHeight;
+    if (kb < 150 || kb > full * 0.7) return;
+    const height = Math.round(full - kb);
+    presizeRef.current = { until: Date.now() + 1000, height };
+    const apply = () => { setKeyboardOpen(true); setViewportBox({ height, offset: 0 }); };
+    try { ReactDOM.flushSync(apply); } catch { apply(); }
+    setTimeout(() => { if (viewportUpdateRef.current) viewportUpdateRef.current(); }, 1050);
+  };
   const [installBannerDismissed, setInstallBannerDismissed] = useState(() => {
     try { return localStorage.getItem('zchat-install-banner-dismissed') === '1'; } catch { return false; }
   });
@@ -14309,8 +14432,13 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (!me) return undefined;
     try { window.history.replaceState({ zchat: 'root' }, ''); window.history.pushState({ zchat: 'app' }, ''); } catch {}
     const onPop = () => {
-      const st = backStateRef.current;
-      const closed = st.closeTop && st.closeTop();
+      let closed = false;
+      const top = backStack.pop();
+      if (top) { top(); closed = true; }
+      else {
+        const st = backStateRef.current;
+        closed = !!(st.closeTop && st.closeTop());
+      }
       try { window.history.pushState({ zchat: 'app' }, ''); } catch {}
       if (closed) return;
       const now = Date.now();
@@ -14875,6 +15003,17 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (el && sidebarScrollRef.current) el.scrollTop = sidebarScrollRef.current;
   }, [mobileShowChat, isWide]);
 
+  useBackClose(!isWide && mobileShowChat, () => {
+    if (activeConvForBar && myLocks[activeConvForBar.id]) lastLeftChatAtRef.current[activeConvForBar.id] = Date.now();
+    if (activeGroup) markGroupRead(activeGroup.id);
+    if (reloadListsRef.current) reloadListsRef.current();
+    loadUnreadCounts();
+    setMobileShowChat(false); setActiveProfile(null); setActiveGroup(null);
+  });
+  useBackClose(!!(replyingTo || editingMessage), () => { if (editingMessage) setDraft(''); setReplyingTo(null); setEditingMessage(null); });
+  useBackClose(showAttach, () => setShowAttach(false));
+  useBackClose(search.trim().length >= 2 && !mobileShowChat, () => { setSearch(''); setResults([]); });
+
   const renderedMessages = useMemo(() => {
     if (!me || (!activeProfile && !activeGroup)) return null;
     const byId = new Map(messages.map((x) => [x.id, x]));
@@ -15410,7 +15549,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               </div>
             )}
 
-            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, padding: '6px 14px', flexShrink: 0, position: 'relative', paddingBottom: keyboardOpen ? 6 : 'max(6px, calc(env(safe-area-inset-bottom) - 24px))' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, padding: '6px 14px', flexShrink: 0, position: 'relative', background: theme.bgGradient, paddingBottom: keyboardOpen ? 6 : 'max(6px, calc(env(safe-area-inset-bottom) - 24px))' }}>
               {activeProfile && !activeGroup && myBlockedIds.has(activeProfile.id) ? (
                 <div className="zchat-fade" style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 9, padding: '8px 4px 2px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, color: theme.ink, fontWeight: 700 }}><Ban size={15} color={theme.danger} /> You blocked {activeProfile.name}</div>
@@ -15464,6 +15603,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                   <textarea
                     ref={composerRef}
                     value={draft}
+                    onFocus={presizeForKeyboard}
                     enterKeyHint="enter"
                     data-keyboard-heal="true"
                     onChange={(e) => { const next = e.target.value.slice(0, MAX_CHARS); setDraft(next); setComposerMention(next.includes('@') ? getActiveMention(next, Math.min(e.target.selectionStart, next.length)) : null); sendTyping(); }}
