@@ -8539,7 +8539,7 @@ function StoryTray({ me, myStories, trayUsers, seen, onAdd, onOpen }) {
   );
 }
 
-const APP_VERSION = '5.1V';
+const APP_VERSION = '5.3V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -12824,7 +12824,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       .on('postgres_changes', { event: '*', schema: 'public', table: 'message_likes' }, (payload) => {
         const row = payload.new || payload.old;
         const msgId = row.message_id;
-        const targetMsg = findMessageById(msgId);
+        const targetMsg = messagesRef.current.find((x) => x.id === msgId);
         if (!targetMsg) return;
         if (payload.eventType === 'INSERT' && row.user_id !== me.id && targetMsg.sender_id === me.id) playReactionPing();
         setMessageLikes((prev) => {
@@ -12837,7 +12837,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       })
       .subscribe();
     return () => supabase.removeChannel(channel);
-  }, [me, activeProfile, activeGroup, messages]);
+  }, [me && me.id, activeProfile && activeProfile.id, activeGroup && activeGroup.id]);
 
   useEffect(() => {
     if (!me || !activeProfile) return;
@@ -12850,7 +12850,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       })
       .subscribe();
     return () => supabase.removeChannel(channel);
-  }, [me, activeProfile]);
+  }, [me && me.id, activeProfile && activeProfile.id]);
 
   useEffect(() => {
     if (!me) return;
@@ -12866,7 +12866,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       })
       .subscribe();
     return () => supabase.removeChannel(channel);
-  }, [me, activeProfile]);
+  }, [me && me.id, activeProfile && activeProfile.id]);
 
   const myGroupIds = groups.map((g) => g.id);
   const myGroupIdsKey = myGroupIds.join(',');
@@ -12982,30 +12982,49 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     return () => { cancelled = true; };
   }, [profileOf?.id]);
 
+  const activeProfileIdForPoll = activeProfile ? activeProfile.id : null;
   useEffect(() => {
-    if (!activeProfile) return;
-    const poll = setInterval(async () => {
-      const currentMessages = messagesRef.current;
-      const myIds = currentMessages.filter((m) => m.sender_id === session.user.id && !m.deleted).map((m) => m.id);
-      if (myIds.length) {
-        const { data } = await supabase.from('messages').select('id, read, delivered').in('id', myIds);
-        if (data) {
-          setMessages((prev) => prev.map((m) => {
-            const fresh = data.find((d) => d.id === m.id);
-            return fresh ? { ...m, read: fresh.read, delivered: fresh.delivered } : m;
-          }));
+    if (!activeProfileIdForPoll) return undefined;
+    let busy = false;
+    const tick = async () => {
+      if (busy || document.visibilityState !== 'visible') return;
+      busy = true;
+      try {
+        const currentMessages = messagesRef.current;
+        const pendingMine = currentMessages
+          .filter((m) => m.sender_id === session.user.id && !m.deleted && !m.read && typeof m.id === 'string' && !m.id.startsWith('temp-'))
+          .slice(-60)
+          .map((m) => m.id);
+        if (pendingMine.length) {
+          const { data } = await supabase.from('messages').select('id, read, delivered').in('id', pendingMine);
+          if (data && data.length) {
+            const fresh = new Map(data.map((d) => [d.id, d]));
+            setMessages((prev) => {
+              let changed = false;
+              const next = prev.map((m) => {
+                const f = fresh.get(m.id);
+                if (!f || (f.read === m.read && f.delivered === m.delivered)) return m;
+                changed = true;
+                return { ...m, read: f.read, delivered: f.delivered };
+              });
+              return changed ? next : prev;
+            });
+          }
         }
+        if (!mobileShowChatRef.current) return;
+        const theirUnread = new Set(currentMessages.filter((m) => m.sender_id === activeProfileIdForPoll && !m.read).map((m) => m.id));
+        if (theirUnread.size) {
+          await supabase.from('messages').update({ read: true, delivered: true }).in('id', [...theirUnread]);
+          setMessages((prev) => prev.map((m) => (theirUnread.has(m.id) ? { ...m, read: true, delivered: true } : m)));
+          loadUnreadCounts();
+        }
+      } finally {
+        busy = false;
       }
-      if (!mobileShowChatRef.current) return;
-      const theirUnreadIds = currentMessages.filter((m) => m.sender_id === activeProfile.id && !m.read).map((m) => m.id);
-      if (theirUnreadIds.length) {
-        await supabase.from('messages').update({ read: true, delivered: true }).in('id', theirUnreadIds);
-        setMessages((prev) => prev.map((m) => (theirUnreadIds.includes(m.id) ? { ...m, read: true, delivered: true } : m)));
-        loadUnreadCounts();
-      }
-    }, 1000);
+    };
+    const poll = setInterval(tick, 4000);
     return () => clearInterval(poll);
-  }, [activeProfile]);
+  }, [activeProfileIdForPoll]);
 
   const preloadedImagesRef = useRef(new Set());
   useEffect(() => {
@@ -14812,6 +14831,60 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     pullStartYRef.current = null;
   };
 
+  const renderedMessages = useMemo(() => {
+    if (!me || (!activeProfile && !activeGroup)) return null;
+    const byId = new Map(messages.map((x) => [x.id, x]));
+    return (
+                messages.map((m, msgIndex) => {
+                  const nextMsg = messages[msgIndex + 1];
+                  const tightBelow = !!nextMsg && nextMsg.sender_id === m.sender_id && nextMsg.type !== 'system' && m.type !== 'system';
+                  const prevMsg = messages[msgIndex - 1];
+                  const tightAbove = !!prevMsg && prevMsg.sender_id === m.sender_id && prevMsg.type !== 'system' && m.type !== 'system' && !prevMsg.deleted;
+                  const replyPreview = m.reply_to_id ? (() => {
+                    const rm = byId.get(m.reply_to_id);
+                    return rm ? { ...rm, senderLabel: labelForSender(rm.sender_id) } : null;
+                  })() : null;
+                  const isMe = m.sender_id === session.user.id;
+                  const showSenderLabel = activeGroup && !isMe;
+                  return (
+                    <MessageBubble
+                      key={m.id} m={m} isMe={isMe}
+                      selectionMode={selectionMode} selected={selectedIds.has(m.id)} onToggleSelect={toggleSelect}
+                      onLongPress={() => {
+                        if (selectionMode) return;
+                        const el = document.getElementById(`msg-${m.id}`);
+                        setContextRect(el ? el.getBoundingClientRect() : null);
+                        if (navigator.vibrate) navigator.vibrate(15);
+                        setContextMenuFor(m.id);
+                      }}
+                      onDelete={(id) => setPendingQuickDelete(id)}
+                      onOpenImage={setViewerUrl} onOpenVideo={setViewerVideoUrl}
+                      reactions={messageLikes[m.id]} onReact={(id, emoji) => reactToMessage(id, emoji)}
+                      onOpenWhoReacted={(id) => setWhoReactedFor({ messageId: id, reactions: messageLikes[id] || [] })}
+                      replyPreview={replyPreview} onSwipeReply={(msg) => { setReplyingTo(msg); setEditingMessage(null); focusComposer(); }}
+                      onJumpToMessage={jumpToMessage} highlighted={highlightedMsgId === m.id}
+                      senderLabel={showSenderLabel ? memberName(m.sender_id) : null}
+                      senderVerified={showSenderLabel ? ((groupMembers.find((gm) => gm.user_id === m.sender_id) || {}).profile || {}).verified : null}
+                      senderAvatar={showSenderLabel ? groupMembers.find((gm) => gm.user_id === m.sender_id)?.profile.avatar : null}
+                      senderFrame={showSenderLabel ? ((groupMembers.find((gm) => gm.user_id === m.sender_id) || {}).profile || {}).avatar_frame : null}
+                      senderCustomBadge={showSenderLabel ? ((groupMembers.find((gm) => gm.user_id === m.sender_id) || {}).profile || {}).custom_badge : null}
+                      hideReadStatus={!!activeGroup}
+                      onOpenSenderProfile={showSenderLabel ? () => { const p = groupMembers.find((gm) => gm.user_id === m.sender_id)?.profile; if (p) setProfileOf(p); } : null}
+                      canModerate={activeGroup ? (groupMembers.find((gm) => gm.user_id === session.user.id)?.role === 'admin') : false}
+                      onOpenMention={(p) => setProfileOf(sanitizeAvatar(p, session.user.id))}
+                      mentionsMe={!!activeGroup && !isMe && !m.deleted && m.type === 'text' && extractMentions(m.content).has((me.username || '').toLowerCase())}
+                      onOpenStoryRef={openStoryRef}
+                      tightBelow={tightBelow}
+                      tightAbove={tightAbove}
+                      onCallBack={(kind) => { if (activeGroup) startGroupCall(activeGroup, kind); else if (activeProfile) startDirectCall(activeProfile, kind); }}
+                      onOpenSticker={(msg) => setStickerSheetFor(msg)}
+                      onOpenPost={(post, owner) => setDeepPost({ post, owner: sanitizeAvatar(owner, session.user.id) })}
+                    />
+                  );
+                })
+    );
+  }, [messages, messageLikes, selectionMode, selectedIds, highlightedMsgId, activeGroup, activeProfile, groupMembers, me, mutualIds, myBlockedIds, blockedByIds, activeGroupCall]);
+
   if (!me) {
     return (
       <div style={{ height: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: theme.bgGradient }}>
@@ -15231,53 +15304,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                   {activeGroup ? 'No messages yet. Say hello!' : `No messages yet. Say hi to ${activeProfile.name}!`}
                 </div>
               ) : (
-                messages.map((m, msgIndex) => {
-                  const nextMsg = messages[msgIndex + 1];
-                  const tightBelow = !!nextMsg && nextMsg.sender_id === m.sender_id && nextMsg.type !== 'system' && m.type !== 'system';
-                  const prevMsg = messages[msgIndex - 1];
-                  const tightAbove = !!prevMsg && prevMsg.sender_id === m.sender_id && prevMsg.type !== 'system' && m.type !== 'system' && !prevMsg.deleted;
-                  const replyPreview = m.reply_to_id ? (() => {
-                    const rm = findMessageById(m.reply_to_id);
-                    return rm ? { ...rm, senderLabel: labelForSender(rm.sender_id) } : null;
-                  })() : null;
-                  const isMe = m.sender_id === session.user.id;
-                  const showSenderLabel = activeGroup && !isMe;
-                  return (
-                    <MessageBubble
-                      key={m.id} m={m} isMe={isMe}
-                      selectionMode={selectionMode} selected={selectedIds.has(m.id)} onToggleSelect={toggleSelect}
-                      onLongPress={() => {
-                        if (selectionMode) return;
-                        const el = document.getElementById(`msg-${m.id}`);
-                        setContextRect(el ? el.getBoundingClientRect() : null);
-                        if (navigator.vibrate) navigator.vibrate(15);
-                        setContextMenuFor(m.id);
-                      }}
-                      onDelete={(id) => setPendingQuickDelete(id)}
-                      onOpenImage={setViewerUrl} onOpenVideo={setViewerVideoUrl}
-                      reactions={messageLikes[m.id]} onReact={(id, emoji) => reactToMessage(id, emoji)}
-                      onOpenWhoReacted={(id) => setWhoReactedFor({ messageId: id, reactions: messageLikes[id] || [] })}
-                      replyPreview={replyPreview} onSwipeReply={(msg) => { setReplyingTo(msg); setEditingMessage(null); focusComposer(); }}
-                      onJumpToMessage={jumpToMessage} highlighted={highlightedMsgId === m.id}
-                      senderLabel={showSenderLabel ? memberName(m.sender_id) : null}
-                      senderVerified={showSenderLabel ? ((groupMembers.find((gm) => gm.user_id === m.sender_id) || {}).profile || {}).verified : null}
-                      senderAvatar={showSenderLabel ? groupMembers.find((gm) => gm.user_id === m.sender_id)?.profile.avatar : null}
-                      senderFrame={showSenderLabel ? ((groupMembers.find((gm) => gm.user_id === m.sender_id) || {}).profile || {}).avatar_frame : null}
-                      senderCustomBadge={showSenderLabel ? ((groupMembers.find((gm) => gm.user_id === m.sender_id) || {}).profile || {}).custom_badge : null}
-                      hideReadStatus={!!activeGroup}
-                      onOpenSenderProfile={showSenderLabel ? () => { const p = groupMembers.find((gm) => gm.user_id === m.sender_id)?.profile; if (p) setProfileOf(p); } : null}
-                      canModerate={activeGroup ? (groupMembers.find((gm) => gm.user_id === session.user.id)?.role === 'admin') : false}
-                      onOpenMention={(p) => setProfileOf(sanitizeAvatar(p, session.user.id))}
-                      mentionsMe={!!activeGroup && !isMe && !m.deleted && m.type === 'text' && extractMentions(m.content).has((me.username || '').toLowerCase())}
-                      onOpenStoryRef={openStoryRef}
-                      tightBelow={tightBelow}
-                      tightAbove={tightAbove}
-                      onCallBack={(kind) => { if (activeGroup) startGroupCall(activeGroup, kind); else if (activeProfile) startDirectCall(activeProfile, kind); }}
-                      onOpenSticker={(msg) => setStickerSheetFor(msg)}
-                      onOpenPost={(post, owner) => setDeepPost({ post, owner: sanitizeAvatar(owner, session.user.id) })}
-                    />
-                  );
-                })
+                renderedMessages
               )}
               </div>
             </div>
@@ -15380,7 +15407,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                     value={draft}
                     enterKeyHint="enter"
                     data-keyboard-heal="true"
-                    onChange={(e) => { const next = e.target.value.slice(0, MAX_CHARS); setDraft(next); setComposerMention(getActiveMention(next, Math.min(e.target.selectionStart, next.length))); sendTyping(); e.target.style.height = 'auto'; e.target.style.height = Math.min(e.target.scrollHeight, 110) + 'px'; }}
+                    onChange={(e) => { const next = e.target.value.slice(0, MAX_CHARS); setDraft(next); setComposerMention(next.includes('@') ? getActiveMention(next, Math.min(e.target.selectionStart, next.length)) : null); sendTyping(); }}
                     onClick={(e) => setComposerMention(getActiveMention(e.target.value, e.target.selectionStart))}
                     onPaste={(e) => {
                       const pasted = Array.from((e.clipboardData && e.clipboardData.files) || []).filter((f) => (f.type || '').startsWith('image') || (f.type || '').startsWith('video'));
