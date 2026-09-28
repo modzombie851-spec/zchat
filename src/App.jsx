@@ -476,16 +476,15 @@ function Avatar({ emoji, name = '', online, size = 40, ring = false, frame = nul
   const { chatTheme, theme } = useTheme();
   const frameUrl = useFrameUrl(frame && size >= 22 ? frame : null);
   const frameSpec = frame ? AVATAR_FRAMES[frame] : null;
-  const framed = !!(frameSpec && size >= 22);
-  const box = framed ? Math.round(size * (size <= 72 ? 1.2 : 1.08)) : size;
-  const photo = framed ? Math.round(box / frameSpec.scale) : size;
-  const inset = (box - photo) / 2;
+  const fitFrame = frameSpec ? (frameFit === undefined ? size <= 72 : !!frameFit) : false;
+  const photo = fitFrame ? Math.round(size / frameSpec.scale) : size;
+  const inset = (size - photo) / 2;
   const [imgFailed, setImgFailed] = useState(false);
   const isImage = typeof emoji === 'string' && emoji.startsWith('http') && !imgFailed;
   const initial = (name || '?').trim().charAt(0).toUpperCase() || '?';
   const ringColor = chatTheme === 'love' ? '#FF4D8D' : chatTheme === 'neon' ? '#00FFDC' : theme.coral;
   return (
-    <div style={{ position: 'relative', width: box, height: box, flexShrink: 0 }}>
+    <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
       <div style={{
         position: 'absolute', left: inset, top: inset,
         width: photo, height: photo, borderRadius: '50%',
@@ -504,13 +503,13 @@ function Avatar({ emoji, name = '', online, size = 40, ring = false, frame = nul
         const w = photo * spec.scale;
         return (
           <img src={frameUrl} alt="" draggable={false} aria-hidden="true"
-            style={{ ...frameMaskStyle(spec), position: 'absolute', width: w, height: w, left: box / 2 - w * (spec.centerX ?? 0.5), top: box / 2 - w * spec.centerY, pointerEvents: 'none', userSelect: 'none', zIndex: 2, maxWidth: 'none' }} />
+            style={{ ...frameMaskStyle(spec), position: 'absolute', width: w, height: w, left: size / 2 - w * (spec.centerX ?? 0.5), top: size / 2 - w * spec.centerY, pointerEvents: 'none', userSelect: 'none', zIndex: 2, maxWidth: 'none', animation: (theme.dark ? spec.animation : (spec.animationLight || spec.animation)) || 'none' }} />
         );
       })()}
       {online != null && (
         <div style={{
-          position: 'absolute', bottom: Math.max(0, inset - 1), right: Math.max(0, inset - 1), width: Math.max(8, photo * 0.28), height: Math.max(8, photo * 0.28), zIndex: 3,
-          borderRadius: '50%', background: online ? '#31D158' : '#B9BCC3', border: `${photo < 34 ? 1.5 : 2}px solid ${theme.dark ? '#0C1120' : 'white'}`,
+          position: 'absolute', bottom: inset, right: inset, width: photo * 0.28, height: photo * 0.28, zIndex: 3,
+          borderRadius: '50%', background: online ? '#31D158' : '#B9BCC3', border: '2px solid white',
         }} />
       )}
     </div>
@@ -1312,7 +1311,7 @@ function IgHeading({ children }) {
   return <div style={{ padding: '22px 16px 6px', fontSize: 13, fontWeight: 600, color: c.dim }}>{children}</div>;
 }
 
-function IgTopBar({ title, onBack, sticky, bleed = 0, right = null }) {
+function IgTopBar({ title, onBack, sticky, bleed = 0 }) {
   const { theme } = useTheme();
   const c = igPalette(theme);
   return (
@@ -1324,8 +1323,7 @@ function IgTopBar({ title, onBack, sticky, bleed = 0, right = null }) {
         <div role="button" aria-label="Back" onClick={onBack} style={{ width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: c.fg }}>
           <ArrowLeft size={24} strokeWidth={2} />
         </div>
-        <div style={{ position: 'absolute', left: 56, right: 56, textAlign: 'center', fontSize: 16, fontWeight: 700, color: c.fg, pointerEvents: 'none', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</div>
-        {right && <div style={{ marginLeft: 'auto', width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', color: c.fg }}>{right}</div>}
+        <div style={{ position: 'absolute', left: 0, right: 0, textAlign: 'center', fontSize: 16, fontWeight: 700, color: c.fg, pointerEvents: 'none' }}>{title}</div>
       </div>
     </div>
   );
@@ -1536,7 +1534,7 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
               <div style={{ textAlign: 'center', padding: '14px 16px 4px' }}>
                 <div role="button" aria-label="Edit profile photo" onClick={onEditProfile} style={{ display: 'inline-flex', cursor: 'pointer' }}>
                   {me.avatar_frame ? (
-                    <Avatar emoji={me.avatar} name={me.name} size={112} frame={me.avatar_frame} />
+                    <Avatar emoji={me.avatar} name={me.name} size={112} frame={me.avatar_frame} frameFit />
                   ) : (
                     <div data-testid="hero-ring" style={{ padding: 3, borderRadius: '50%', background: `conic-gradient(from 210deg, ${theme.coral}, ${theme.gold}, ${theme.teal}, ${theme.coralDeep}, ${theme.coral})` }}>
                       <div style={{ borderRadius: '50%', border: `3px solid ${c.bg}`, display: 'flex' }}>
@@ -1545,10 +1543,14 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
                     </div>
                   )}
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, fontSize: 25, fontWeight: 800, marginTop: 12, wordBreak: 'break-word' }}>
-                  <span>{me.name}</span><VerifiedBadge tier={me.verified} custom={me.custom_badge} size={20} />
+                <div style={{ display: 'flex', justifyContent: 'center', marginTop: 14, padding: '0 4px' }}>
+                  <NameBadge name={me.name} verified={me.verified} custom={me.custom_badge} size={me.name.length > 24 ? 16 : 20} lines={2}
+                    style={{ justifyContent: 'center', textAlign: 'center', fontWeight: 800, fontSize: me.name.length > 36 ? 18 : me.name.length > 22 ? 21 : 25 }} />
                 </div>
-                <div style={{ fontSize: 14, color: c.dim, marginTop: 3 }}>@{me.username}{me.verified && VERIFIED_TIERS[me.verified] ? ` \u00b7 ${VERIFIED_TIERS[me.verified].label}` : ''}</div>
+                <div style={{ fontSize: 14, color: c.dim, marginTop: 4, padding: '0 16px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>@{me.username}</div>
+                {me.verified && VERIFIED_TIERS[me.verified] && (
+                  <div style={{ display: 'inline-block', marginTop: 8, padding: '3px 11px', borderRadius: 999, border: `1px solid ${c.line}`, fontSize: 12, fontWeight: 700 }}>{VERIFIED_TIERS[me.verified].label}</div>
+                )}
                 <div style={{ display: 'flex', justifyContent: 'center', gap: 24, marginTop: 16, fontSize: 14, color: c.dim }}>
                   <span role="button" aria-label="Followers" onClick={() => setListModal('followers')} style={{ cursor: 'pointer' }}>
                     <b style={{ color: c.fg, fontSize: 16 }}>{followerCount == null ? '\u2013' : formatCount(followerCount)}</b> followers
@@ -1905,7 +1907,7 @@ function WhoCanSeePanel({ me, onBack, onSaved }) {
                 <Avatar emoji={u.avatar} name={u.name} size={40} frame={u.avatar_frame} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 14.5, fontWeight: 700, color: theme.ink, display: 'flex', alignItems: 'center' }}>
-                    {u.name}<VerifiedBadge tier={u.verified} custom={u.custom_badge} size={12} />
+                    <NameBadge name={u.name} verified={u.verified} custom={u.custom_badge} size={12} />
                   </div>
                   <div style={{ fontSize: 12, color: theme.muted }}>@{u.username}</div>
                 </div>
@@ -1997,7 +1999,7 @@ function UserListRow({ profile, rightContent, onClick }) {
     }}>
       <FramedAvatar frame={profile.avatar_frame} size={40}><Avatar emoji={profile.avatar} name={profile.name} frame={profile.avatar_frame} size={40} /></FramedAvatar>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <NameRow style={{ fontWeight: 700, fontSize: 14, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} tier={profile.verified} custom={profile.custom_badge} size={12}>{profile.name}</NameRow>
+        <div style={{ fontWeight: 700, fontSize: 14, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><NameBadge name={profile.name} verified={profile.verified} custom={profile.custom_badge} size={12} /></div>
         <div style={{ fontSize: 12, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>@{profile.username}</div>
       </div>
       {rightContent && <div style={{ flexShrink: 0 }}>{rightContent}</div>}
@@ -3689,10 +3691,12 @@ function ChatSettingsPanel({ conv, myId, meAvatar, meName, isPinned, isLocked, w
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', paddingBottom: 'calc(28px + env(safe-area-inset-bottom))' }}>
         <div style={{ textAlign: 'center', padding: '8px 20px 4px' }}>
           <div role="button" onClick={() => onOpenProfile(p)} style={{ display: 'flex', justifyContent: 'center', cursor: 'pointer' }}>
-            <Avatar emoji={conv.otherProfile.avatar} name={otherName} frame={conv.otherProfile.avatar_frame} size={84} />
+            <Avatar emoji={conv.otherProfile.avatar} name={otherName} frame={conv.otherProfile.avatar_frame} size={92} frameFit />
           </div>
-          <NameRow style={{ fontWeight: 700, fontSize: 18, marginTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }} tier={p.verified} custom={p.custom_badge} size={15}>{otherName}</NameRow>
-          <div style={{ fontSize: 13, color: c.dim, marginTop: 2 }}>@{conv.otherProfile.username}</div>
+          <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12, padding: '0 6px' }}>
+            <NameBadge name={otherName} verified={p.verified} custom={p.custom_badge} size={15} lines={2} style={{ justifyContent: 'center', textAlign: 'center', fontWeight: 700, fontSize: otherName.length > 30 ? 16 : 18 }} />
+          </div>
+          <div style={{ fontSize: 13, color: c.dim, marginTop: 3, padding: '0 16px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>@{conv.otherProfile.username}</div>
           {infoBits.length > 0 && <div style={{ fontSize: 13, color: c.dim, marginTop: 6 }}>{infoBits.join(' \u00b7 ')}</div>}
           {showBio && <div style={{ fontSize: 13.5, marginTop: 8, lineHeight: 1.45, padding: '0 8px' }}><RichText text={p.bio} onMention={onOpenProfile} /></div>}
           <div style={{ display: 'flex', justifyContent: 'center', gap: 26, marginTop: 14 }}>
@@ -3804,29 +3808,6 @@ function GroupAvatar({ avatar, name, size = 44 }) {
   );
 }
 
-function GroupColourSheet({ value, onPick, onClose }) {
-  useBackClose(true, onClose);
-  const { theme } = useTheme();
-  const c = igPalette(theme);
-  const sheet = (
-    <div onClick={onClose} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 730, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'flex-end', fontFamily: FONT }}>
-      <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ width: '100%', background: theme.panelBg, color: c.fg, borderRadius: '22px 22px 0 0', padding: '18px 18px', paddingBottom: 'calc(22px + env(safe-area-inset-bottom))' }}>
-        <div style={{ fontWeight: 800, fontSize: 16 }}>Group colour</div>
-        <div style={{ fontSize: 13, color: c.dim, margin: '4px 0 16px' }}>Used for the ring around the group photo and the line under the chat header.</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, justifyItems: 'center' }}>
-          {GROUP_ACCENTS.map((col) => (
-            <div key={col} role="button" aria-label={`Use colour ${col}`} onClick={() => { onPick(col); onClose(); }} style={{
-              width: 52, height: 52, borderRadius: '50%', background: col, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: value === col ? `0 0 0 3px ${theme.panelBg}, 0 0 0 5px ${c.fg}` : `inset 0 0 0 1px ${c.line}`,
-            }}>{value === col && <Check size={22} color="white" strokeWidth={3} />}</div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-  return ReactDOM.createPortal(sheet, document.body);
-}
-
 function CreateGroupPanel({ myId, onClose, onCreated }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
@@ -3843,6 +3824,7 @@ function CreateGroupPanel({ myId, onClose, onCreated }) {
   const [cropFile, setCropFile] = useState(null);
   const [creating, setCreating] = useState(false);
   const [showColour, setShowColour] = useState(false);
+  useBackClose(showColour, () => setShowColour(false));
   const [err, setErr] = useState('');
   const timer = useRef(null);
 
@@ -3946,7 +3928,7 @@ function CreateGroupPanel({ myId, onClose, onCreated }) {
               <div key={p.id} onClick={() => toggleSelect(p)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 4px', cursor: 'pointer' }}>
                 <Avatar emoji={p.avatar} name={p.name} frame={p.avatar_frame} size={42} />
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <NameRow style={{ fontWeight: 800, fontSize: 14, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} tier={p.verified} custom={p.custom_badge} size={12}>{p.name}</NameRow>
+                  <div style={{ fontWeight: 800, fontSize: 14, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><NameBadge name={p.name} verified={p.verified} custom={p.custom_badge} size={12} /></div>
                   <div style={{ fontSize: 11.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>@{p.username}</div>
                 </div>
                 <div style={{ width: 22, height: 22, borderRadius: '50%', border: `2px solid ${isPicked(p.id) ? accent : theme.border}`, background: isPicked(p.id) ? accent : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -3956,50 +3938,47 @@ function CreateGroupPanel({ myId, onClose, onCreated }) {
             ))}
           </div>
           <div style={{ padding: 18, paddingBottom: 'calc(18px + env(safe-area-inset-bottom))' }}>
-            <button onClick={() => setStep('details')} disabled={!canNext} style={{ ...primaryBtn(theme, !canNext), background: canNext ? theme.ink : undefined, color: canNext ? theme.bgGradient : undefined }}>
+            <button onClick={() => setStep('details')} disabled={!canNext} style={{ ...primaryBtn(theme, !canNext), background: canNext ? accent : undefined }}>
               {canNext ? `Next with ${selected.length} ${selected.length === 1 ? 'person' : 'people'}` : 'Pick at least one person'}
             </button>
           </div>
         </>
       ) : (
-        <div style={{ padding: '4px 0 20px', paddingBottom: 'calc(20px + env(safe-area-inset-bottom))', flex: 1, overflowY: 'auto' }}>
-          <div style={{ textAlign: 'center', padding: '6px 18px 0' }}>
-            <div role="button" aria-label="Choose group photo" onClick={() => document.getElementById('group-avatar-input').click()} style={{ display: 'inline-block', cursor: 'pointer', position: 'relative' }}>
-              <div style={{ padding: 3, borderRadius: '50%', background: accent }}>
-                <div style={{ borderRadius: '50%', border: `3px solid ${theme.bgGradient}`, display: 'flex', overflow: 'hidden' }}>
-                  {avatarPreview ? (
-                    <img src={avatarPreview} alt="" onContextMenu={(e) => e.preventDefault()} draggable={false} style={{ width: 96, height: 96, borderRadius: '50%', objectFit: 'cover', display: 'block' }} />
-                  ) : (
-                    <GroupAvatar avatar={null} name={name || 'New group'} size={96} />
-                  )}
-                </div>
-              </div>
-              <div style={{ position: 'absolute', right: 2, bottom: 2, width: 30, height: 30, borderRadius: '50%', background: theme.ink, color: theme.bgGradient, border: `3px solid ${theme.bgGradient}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Camera size={14} /></div>
+        <div style={{ padding: '4px 18px 20px', paddingBottom: 'calc(20px + env(safe-area-inset-bottom))', flex: 1, overflowY: 'auto' }}>
+          <div style={{ textAlign: 'center', padding: '6px 0 20px' }}>
+            <div onClick={() => document.getElementById('group-avatar-input').click()} style={{ display: 'inline-block', cursor: 'pointer', position: 'relative', padding: 3, borderRadius: 36, border: `2px solid ${accent}` }}>
+              {avatarPreview ? (
+                <img src={avatarPreview} alt="" onContextMenu={(e) => e.preventDefault()} draggable={false} style={{ width: 96, height: 96, borderRadius: 30, objectFit: 'cover', display: 'block' }} />
+              ) : (
+                <GroupAvatar avatar={null} name={name || 'New group'} size={96} />
+              )}
+              <div style={{ position: 'absolute', bottom: -4, right: -4, width: 28, height: 28, borderRadius: '50%', background: theme.ink, color: theme.panelBg, border: `2px solid ${theme.panelBg}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Camera size={13} /></div>
             </div>
             <input id="group-avatar-input" type="file" accept="image/*" style={{ display: 'none' }}
               onChange={(e) => { const f = e.target.files?.[0]; if (f) setCropFile(f); e.target.value = ''; }} />
-            <div style={{ fontWeight: 800, fontSize: 21, marginTop: 12, color: theme.ink, wordBreak: 'break-word' }}>{name.trim() || 'Name your group'}</div>
-            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', marginTop: 8, minWidth: 0 }}>
+            <div style={{ fontWeight: 800, fontSize: (name || '').length > 26 ? 19 : 23, color: theme.ink, marginTop: 14, wordBreak: 'break-word', padding: '0 8px' }}>{name.trim() || 'Name your group'}</div>
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', marginTop: 10 }}>
               {selected.slice(0, 5).map((p, i) => (
-                <span key={p.id} style={{ marginLeft: i ? -8 : 0, display: 'inline-flex', borderRadius: '50%', boxShadow: `0 0 0 2px ${theme.bgGradient}` }}><Avatar emoji={p.avatar} name={p.name} frame={p.avatar_frame} size={26} /></span>
+                <span key={p.id} style={{ marginLeft: i ? -8 : 0, display: 'inline-flex', borderRadius: '50%', boxShadow: `0 0 0 2px ${theme.panelBg}` }}><Avatar emoji={p.avatar} name={p.name} size={26} /></span>
               ))}
-              <span style={{ marginLeft: 10, fontSize: 12.5, fontWeight: 700, color: theme.muted }}>You and {selected.length} {selected.length === 1 ? 'other' : 'others'}</span>
+              <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 700, color: theme.muted }}>You and {selected.length} {selected.length === 1 ? 'other' : 'others'}</span>
             </div>
           </div>
-          <div style={{ padding: '18px 16px 0' }}>
-            <div style={{ fontSize: 12.5, color: theme.muted, marginBottom: 6, fontWeight: 700 }}>Group name</div>
-            <input value={name} onChange={(e) => setName(e.target.value.slice(0, 50))} placeholder="e.g. Weekend Trip" style={{ ...inputStyle(theme), marginBottom: 14 }} />
-            <div style={{ fontSize: 12.5, color: theme.muted, marginBottom: 6, fontWeight: 700 }}>About (optional)</div>
-            <input value={bio} onChange={(e) => setBio(e.target.value.slice(0, 120))} placeholder="A line about this group" style={{ ...inputStyle(theme), marginBottom: 6 }} />
+          <div style={{ fontSize: 12, color: theme.muted, marginBottom: 6, fontWeight: 800 }}>Group name</div>
+          <input value={name} onChange={(e) => setName(e.target.value.slice(0, 50))} placeholder="e.g. Weekend Trip" style={{ ...inputStyle(theme), marginBottom: 16 }} />
+          <div style={{ fontSize: 12, color: theme.muted, marginBottom: 6, fontWeight: 800 }}>What is it about? (optional)</div>
+          <input value={bio} onChange={(e) => setBio(e.target.value.slice(0, 120))} placeholder="A line about this group" style={{ ...inputStyle(theme), marginBottom: 16 }} />
+          <div role="button" onClick={() => setShowColour(true)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 4px', marginBottom: 14, cursor: 'pointer', borderTop: `1px solid ${theme.border}`, borderBottom: `1px solid ${theme.border}` }}>
+            <span style={{ fontSize: 15, fontWeight: 600, color: theme.ink }}>Group colour</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ width: 22, height: 22, borderRadius: '50%', background: accent, border: `2px solid ${theme.border}` }} />
+              <ChevronRight size={18} color={theme.muted} />
+            </span>
           </div>
-          <IgRow icon={<Palette />} label="Group colour" onClick={() => setShowColour(true)}
-            right={<span style={{ width: 20, height: 20, borderRadius: '50%', background: accent, boxShadow: `inset 0 0 0 1px ${theme.border}`, flexShrink: 0 }} />} />
-          <div style={{ padding: '14px 16px 0' }}>
-            <button onClick={create} disabled={!name.trim() || creating} style={{ ...primaryBtn(theme, !name.trim() || creating), background: name.trim() ? theme.ink : undefined, color: name.trim() ? theme.bgGradient : undefined }}>
-              {creating ? <Spinner size={14} /> : 'Create group'}
-            </button>
-            {err && <div style={{ color: theme.danger, fontSize: 12.5, marginTop: 10, textAlign: 'center' }}>{err}</div>}
-          </div>
+          <button onClick={create} disabled={!name.trim() || creating} style={{ ...primaryBtn(theme, !name.trim() || creating), background: name.trim() ? accent : undefined }}>
+            {creating ? <Spinner size={14} /> : 'Create group'}
+          </button>
+          {err && <div style={{ color: theme.danger, fontSize: 12.5, marginTop: 10, textAlign: 'center' }}>{err}</div>}
         </div>
       )}
       {showColour && <GroupColourSheet value={accent} onPick={setAccent} onClose={() => setShowColour(false)} />}
@@ -4012,6 +3991,27 @@ function CreateGroupPanel({ myId, onClose, onCreated }) {
         }} />
       )}
     </div>
+  );
+}
+
+function GroupColourSheet({ value, onPick, onClose }) {
+  const { theme } = useTheme();
+  return ReactDOM.createPortal(
+    <div onClick={onClose} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 720, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'flex-end', fontFamily: FONT }}>
+      <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ width: '100%', background: theme.panelBg, borderRadius: '22px 22px 0 0', padding: '20px 18px calc(22px + env(safe-area-inset-bottom))' }}>
+        <div style={{ fontWeight: 800, fontSize: 16, color: theme.ink }}>Group colour</div>
+        <div style={{ fontSize: 12.5, color: theme.muted, margin: '4px 0 16px' }}>Used for the group photo ring and the tabs.</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, justifyItems: 'center' }}>
+          {GROUP_ACCENTS.map((col) => (
+            <div key={col} role="button" aria-label={`Use colour ${col}`} onClick={() => { onPick(col); onClose(); }} style={{
+              width: 52, height: 52, borderRadius: '50%', background: col, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              border: value === col ? `3px solid ${theme.ink}` : `1px solid ${theme.border}`,
+            }}>{value === col && <Check size={20} color="white" />}</div>
+          ))}
+        </div>
+      </div>
+    </div>,
+    document.body
   );
 }
 
@@ -4035,6 +4035,7 @@ function GroupInfoPanel({ group, members, myId, iFollowIds, privacyAllowed, myRo
   const [showHeaderStyle, setShowHeaderStyle] = useState(false);
   const [showDisappear, setShowDisappear] = useState(false);
   const [showColour, setShowColour] = useState(false);
+  useBackClose(showColour, () => setShowColour(false));
   const soleAdmin = isAdmin && members.filter((m) => m.role === 'admin').length === 1 && members.length > 1;
   const online = members.filter(isMemberOnline);
   const dayAgo = Date.now() - 86400000;
@@ -4044,7 +4045,7 @@ function GroupInfoPanel({ group, members, myId, iFollowIds, privacyAllowed, myRo
   const rank = (m) => (m.user_id === group.created_by ? 0 : m.role === 'admin' ? 1 : 2);
   const shown = members
     .filter((m) => m.profile && (!term || (m.profile.name || '').toLowerCase().includes(term) || (m.profile.username || '').toLowerCase().includes(term)))
-    .sort((x, y) => rank(x) - rank(y) || (x.profile.name || '').localeCompare(y.profile.name || ''));
+    .sort((a, b) => rank(a) - rank(b) || (a.profile.name || '').localeCompare(b.profile.name || ''));
   const media = messages.filter((m) => !m.deleted && (m.type === 'image' || m.type === 'video') && m.media_url).slice().reverse().slice(0, 90);
   const links = [];
   const seenLinks = new Set();
@@ -4060,22 +4061,25 @@ function GroupInfoPanel({ group, members, myId, iFollowIds, privacyAllowed, myRo
   const pinned = messages.filter((m) => !m.deleted && m.type !== 'system' && isActiveUntil(m.pinned_until)).slice().reverse();
   const domainOf = (u) => { try { return new URL(/^https?:/i.test(u) ? u : `https://${u}`).hostname.replace(/^www\./, ''); } catch { return u; } };
   const hrefOf = (u) => (u.includes('@') && !/^https?:|^www\./i.test(u) ? `mailto:${u}` : (/^https?:/i.test(u) ? u : `https://${u}`));
+  const chip = (label) => (
+    <span style={{ flex: 'none', fontSize: 10.5, fontWeight: 800, padding: '1px 7px', borderRadius: 8, border: `1px solid ${c.line}`, color: c.dim }}>{label}</span>
+  );
 
   const memberRow = (m) => {
     const on = isMemberOnline(m);
     const isOwnerRow = m.user_id === group.created_by;
-    const roleText = isOwnerRow ? 'Owner' : m.role === 'admin' ? 'Admin' : '';
     return (
-      <div key={m.user_id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '7px 16px', minHeight: 58 }}>
-        <div role="button" onClick={() => onOpenProfile(m.profile)} style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0, cursor: 'pointer' }}>
-          <Avatar emoji={m.profile.avatar} name={m.profile.name} frame={m.profile.avatar_frame} size={42} online={on ? true : undefined} />
-          <div style={{ minWidth: 0, flex: 1 }}>
-            <NameRow style={{ fontWeight: 700, fontSize: 14.5 }} tier={m.profile.verified} custom={m.profile.custom_badge} size={12}>{m.profile.name}{m.user_id === myId ? ' (you)' : ''}</NameRow>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 1, fontSize: 12.5, color: c.dim, minWidth: 0 }}>
-              {roleText && <span style={{ flexShrink: 0, fontWeight: 700, color: c.fg }}>{roleText}</span>}
-              {m.muted && <span style={{ flexShrink: 0 }}>Muted</span>}
-              <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>@{m.profile.username}</span>
-              {on && <span style={{ flexShrink: 0, color: '#34d399', fontWeight: 700 }}>Online now</span>}
+      <div key={m.user_id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 16px' }}>
+        <div onClick={() => onOpenProfile(m.profile)} style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0, cursor: 'pointer' }}>
+          <Avatar emoji={m.profile.avatar} name={m.profile.name} frame={m.profile.avatar_frame} online={on ? true : null} size={48} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', minWidth: 0, fontWeight: 700, fontSize: 14.5 }}>
+              <NameBadge name={`${m.profile.name}${m.user_id === myId ? ' (you)' : ''}`} verified={m.profile.verified} custom={m.profile.custom_badge} size={13} />
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3, fontSize: 12, color: c.dim, minWidth: 0 }}>
+              {isOwnerRow ? chip('Owner') : m.role === 'admin' ? chip('Admin') : null}
+              {m.muted && chip('Muted')}
+              <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: on ? '#34d399' : c.dim, fontWeight: on ? 700 : 400 }}>{on ? 'Online now' : `@${m.profile.username}`}</span>
             </div>
           </div>
         </div>
@@ -4087,26 +4091,29 @@ function GroupInfoPanel({ group, members, myId, iFollowIds, privacyAllowed, myRo
     );
   };
 
-  const smallHead = (label, n) => <div style={{ padding: '14px 16px 4px', fontSize: 12.5, fontWeight: 700, color: c.dim }}>{label} {n}</div>;
-  const tabs = [['members', 'Members', members.length], ['media', 'Media', media.length], ['links', 'Links', links.length], ['pinned', 'Pinned', pinned.length]];
-  const empty = (text) => <div style={{ textAlign: 'center', padding: '30px 20px', fontSize: 13.5, color: c.dim }}>{text}</div>;
-  const btn = (icon, label, onClick, aria) => (
-    <div role="button" aria-label={aria || label} onClick={onClick} style={{ flex: 1, height: 36, borderRadius: 10, background: c.field, color: c.fg, fontWeight: 700, fontSize: 13.5, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, cursor: 'pointer' }}>{icon}{label}</div>
+  const sectionTitle = (label, n) => (
+    <div style={{ fontSize: 12, fontWeight: 700, color: c.dim, margin: '12px 16px 2px' }}>{label} {n}</div>
   );
+  const tabs = [['members', 'Members', members.length], ['media', 'Media', media.length], ['links', 'Links', links.length], ['pinned', 'Pinned', pinned.length]];
+  const empty = (text) => <div style={{ textAlign: 'center', padding: '28px 16px', fontSize: 13, color: c.dim }}>{text}</div>;
+  const nameLen = (group.name || '').length;
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: c.bg, color: c.fg, zIndex: 40, display: 'flex', flexDirection: 'column', fontFamily: FONT }} className="zchat-fade">
-      <IgTopBar title="Group info" onBack={onClose}
-        right={onOpenSettings ? <div role="button" aria-label="Group settings" onClick={onOpenSettings} style={{ display: 'flex', cursor: 'pointer' }}><SettingsIcon size={22} strokeWidth={1.7} /></div> : null} />
-      <div style={{ overflowY: 'auto', flex: 1, minHeight: 0, WebkitOverflowScrolling: 'touch', paddingBottom: 'calc(28px + env(safe-area-inset-bottom))' }}>
-        <div style={{ textAlign: 'center', padding: '8px 18px 4px' }}>
-          <div role={isAdmin ? 'button' : undefined} aria-label={isAdmin ? 'Change group photo' : undefined} onClick={() => isAdmin && document.getElementById('group-info-avatar-input').click()} style={{ display: 'inline-block', position: 'relative', cursor: isAdmin ? 'pointer' : 'default' }}>
-            <div style={{ padding: 3, borderRadius: '50%', background: accent }}>
-              <div style={{ borderRadius: '50%', border: `3px solid ${c.bg}`, display: 'flex' }}><GroupAvatar avatar={group.avatar} name={group.name} size={100} /></div>
-            </div>
+      <div style={{ paddingTop: 'env(safe-area-inset-top)', flexShrink: 0 }}>
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 52, padding: '0 8px' }}>
+          <div role="button" aria-label="Back" onClick={onClose} style={{ width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><ArrowLeft size={24} strokeWidth={2} /></div>
+          <div style={{ position: 'absolute', left: 0, right: 0, textAlign: 'center', fontSize: 16, fontWeight: 700, pointerEvents: 'none' }}>Group info</div>
+          {onOpenSettings ? <div role="button" aria-label="Group settings" onClick={onOpenSettings} style={{ width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><SettingsIcon size={21} strokeWidth={1.8} /></div> : <span style={{ width: 44 }} />}
+        </div>
+      </div>
+      <div style={{ overflowY: 'auto', flex: 1, minHeight: 0, WebkitOverflowScrolling: 'touch', paddingBottom: 'calc(24px + env(safe-area-inset-bottom))' }}>
+        <div style={{ textAlign: 'center', padding: '10px 16px 4px' }}>
+          <div onClick={() => isAdmin && document.getElementById('group-info-avatar-input').click()} style={{ display: 'inline-block', position: 'relative', cursor: isAdmin ? 'pointer' : 'default', padding: 3, borderRadius: 36, border: `2px solid ${accent}` }}>
+            <GroupAvatar avatar={group.avatar} name={group.name} size={100} />
             {isAdmin && (
-              <div style={{ position: 'absolute', right: 2, bottom: 2, width: 30, height: 30, borderRadius: '50%', background: c.fg, color: c.bg, border: `3px solid ${c.bg}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Camera size={14} />
+              <div style={{ position: 'absolute', bottom: -4, right: -4, width: 28, height: 28, borderRadius: '50%', background: c.fg, color: c.bg, border: `2px solid ${c.bg}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Camera size={13} />
               </div>
             )}
           </div>
@@ -4115,48 +4122,51 @@ function GroupInfoPanel({ group, members, myId, iFollowIds, privacyAllowed, myRo
               onChange={(e) => { const f = e.target.files?.[0]; if (f) setCropFile(f); e.target.value = ''; }} />
           )}
           {editingName ? (
-            <div style={{ display: 'flex', gap: 8, marginTop: 14, justifyContent: 'center' }}>
-              <input value={name} onChange={(e) => setName(e.target.value.slice(0, 50))} style={{ flex: 1, maxWidth: 240, height: 38, borderRadius: 10, border: 'none', background: c.field, color: c.fg, padding: '0 12px', fontFamily: FONT, fontSize: 15, outline: 'none' }} />
-              <div role="button" onClick={() => { onSaveName(name); setEditingName(false); }} style={{ padding: '0 16px', height: 38, borderRadius: 10, background: c.fg, color: c.bg, fontWeight: 800, fontSize: 13.5, display: 'flex', alignItems: 'center', cursor: 'pointer' }}>Save</div>
+            <div style={{ display: 'flex', gap: 6, marginTop: 14, justifyContent: 'center' }}>
+              <input value={name} onChange={(e) => setName(e.target.value.slice(0, 50))} style={{ ...inputStyle(theme), fontSize: 14, width: 210 }} />
+              <button onClick={() => { onSaveName(name); setEditingName(false); }} style={{ padding: '0 16px', borderRadius: 12, border: 'none', background: c.fg, color: c.bg, fontWeight: 800, fontSize: 12.5, cursor: 'pointer', fontFamily: FONT }}>Save</button>
             </div>
           ) : (
-            <div role={isAdmin ? 'button' : undefined} onClick={() => isAdmin && setEditingName(true)} style={{ fontWeight: 800, fontSize: 22, marginTop: 14, lineHeight: 1.2, wordBreak: 'break-word', cursor: isAdmin ? 'pointer' : 'default' }}>{group.name}</div>
+            <div onClick={() => isAdmin && setEditingName(true)} style={{
+              marginTop: 14, padding: '0 6px', fontWeight: 800, fontSize: nameLen > 34 ? 18 : nameLen > 20 ? 21 : 25, lineHeight: 1.15, cursor: isAdmin ? 'pointer' : 'default',
+              wordBreak: 'break-word', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical',
+            }}>{group.name}</div>
           )}
-          <div style={{ fontSize: 13.5, color: c.dim, marginTop: 4 }}>
+          <div style={{ fontSize: 13, color: c.dim, marginTop: 6 }}>
             {members.length} {members.length === 1 ? 'member' : 'members'}{group.created_at ? ` \u00b7 Created ${new Date(group.created_at).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}` : ''}
           </div>
-          <div style={{ fontSize: 13, color: c.dim, marginTop: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-            <span style={{ width: 7, height: 7, borderRadius: '50%', background: online.length ? '#34d399' : c.faint, flexShrink: 0 }} />
-            {online.length} online now {'\u00b7'} {todayCount} {todayCount === 1 ? 'message' : 'messages'} today
-          </div>
-          <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
-            {isAdmin && btn(<UserPlus size={16} strokeWidth={1.8} />, 'Add people', () => setShowAddMembers(true))}
-            {onOpenSettings && btn(<SettingsIcon size={16} strokeWidth={1.8} />, 'Settings', onOpenSettings, 'Open group settings')}
+          <div style={{ fontSize: 13, color: c.dim, marginTop: 3 }}>
+            <span style={{ color: online.length ? '#34d399' : c.dim, fontWeight: 700 }}>{online.length} online now</span>
+            {` \u00b7 ${todayCount} ${todayCount === 1 ? 'message' : 'messages'} today`}
           </div>
         </div>
 
-        <IgHeading>Details</IgHeading>
-        {editingBio ? (
-          <div style={{ display: 'flex', gap: 8, padding: '4px 16px 10px' }}>
-            <input value={bio} onChange={(e) => setBio(e.target.value.slice(0, 120))} placeholder="What is this group about?" style={{ flex: 1, minWidth: 0, height: 38, borderRadius: 10, border: 'none', background: c.field, color: c.fg, padding: '0 12px', fontFamily: FONT, fontSize: 14.5, outline: 'none' }} />
-            <div role="button" onClick={() => { onSaveBio(bio); setEditingBio(false); }} style={{ padding: '0 16px', height: 38, borderRadius: 10, background: c.fg, color: c.bg, fontWeight: 800, fontSize: 13.5, display: 'flex', alignItems: 'center', cursor: 'pointer' }}>Save</div>
-          </div>
-        ) : (
-          <IgRow icon={<FileText />} label="About" sub={group.bio ? group.bio : (isAdmin ? 'Add a group bio' : 'No bio yet')} onClick={isAdmin ? () => setEditingBio(true) : undefined} />
-        )}
-        {isAdmin && (
-          <IgRow icon={<Palette />} label="Group colour" onClick={() => setShowColour(true)}
-            right={<span style={{ width: 20, height: 20, borderRadius: '50%', background: accent, boxShadow: `inset 0 0 0 1px ${c.line}`, flexShrink: 0 }} />} />
-        )}
+        <IgHeading>About</IgHeading>
+        <div style={{ padding: '0 16px 6px' }}>
+          {editingBio ? (
+            <div style={{ display: 'flex', gap: 6 }}>
+              <input value={bio} onChange={(e) => setBio(e.target.value.slice(0, 120))} placeholder="What's this group about?" style={{ ...inputStyle(theme), fontSize: 13 }} />
+              <button onClick={() => { onSaveBio(bio); setEditingBio(false); }} style={{ padding: '0 16px', borderRadius: 13, border: 'none', background: c.fg, color: c.bg, fontWeight: 800, fontSize: 12.5, cursor: 'pointer', fontFamily: FONT }}>Save</button>
+            </div>
+          ) : (
+            <div onClick={() => isAdmin && setEditingBio(true)} style={{ fontSize: 14, lineHeight: 1.5, color: group.bio ? c.fg : c.dim, cursor: isAdmin ? 'pointer' : 'default', wordBreak: 'break-word' }}>
+              {group.bio ? <RichText text={group.bio} onMention={onOpenProfile} /> : (isAdmin ? 'Add a group bio' : 'No bio yet')}
+            </div>
+          )}
+        </div>
+        <div style={{ height: 8 }} />
+        {isAdmin && <IgRow icon={<UserPlus />} label="Add people" onClick={() => setShowAddMembers(true)} />}
         <IgRow icon={<ImageIcon />} label="Wallpaper" onClick={() => setShowWallpaper(true)} />
-        {isAdmin && <IgRow icon={<Sparkles />} label="Header style" onClick={() => setShowHeaderStyle(true)} />}
+        {isAdmin && <IgRow icon={<Palette />} label="Header style" onClick={() => setShowHeaderStyle(true)} />}
         <IgRow icon={<Timer />} label="Disappearing messages" value={disappearLabel(disappearSecs)} onClick={() => setShowDisappear(true)} />
+        {isAdmin && <IgRow icon={<Sparkles />} label="Group colour" onClick={() => setShowColour(true)} right={<span style={{ width: 22, height: 22, borderRadius: '50%', background: accent, border: `2px solid ${c.line}`, flex: 'none' }} />} />}
+        {onOpenSettings && <IgRow icon={<SettingsIcon />} label="Group settings" onClick={onOpenSettings} />}
 
-        <div style={{ display: 'flex', borderBottom: `1px solid ${c.line}`, marginTop: 18 }}>
+        <div style={{ display: 'flex', borderBottom: `1px solid ${c.line}`, marginTop: 14 }}>
           {tabs.map(([k, label, n]) => (
             <div key={k} role="button" aria-label={`Tab ${label}`} onClick={() => setTab(k)} style={{
-              flex: 1, textAlign: 'center', padding: '12px 0', fontSize: 14, fontWeight: 700, cursor: 'pointer',
-              color: tab === k ? c.fg : c.dim, borderBottom: tab === k ? `2px solid ${c.fg}` : '2px solid transparent', marginBottom: -1,
+              flex: 1, textAlign: 'center', padding: '12px 2px', fontSize: 13.5, fontWeight: 700, cursor: 'pointer',
+              color: tab === k ? c.fg : c.dim, borderBottom: tab === k ? `2px solid ${accent}` : '2px solid transparent', marginBottom: -1,
             }}>{label}{n ? ` ${n}` : ''}</div>
           ))}
         </div>
@@ -4164,21 +4174,18 @@ function GroupInfoPanel({ group, members, myId, iFollowIds, privacyAllowed, myRo
         {tab === 'members' && (
           <>
             {members.length > 6 && (
-              <div style={{ padding: '12px 16px 4px' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, height: 38, padding: '0 12px', borderRadius: 10, background: c.field, color: c.dim }}>
-                  <Search size={16} />
-                  <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search members" autoCapitalize="none" style={{ flex: 1, minWidth: 0, border: 0, outline: 0, background: 'transparent', color: c.fg, fontFamily: FONT, fontSize: 14.5 }} />
-                </label>
+              <div style={{ position: 'relative', margin: '10px 16px 4px' }}>
+                <Search size={15} color={c.dim} style={{ position: 'absolute', left: 12, top: 12 }} />
+                <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search members" autoCapitalize="none" style={{ ...inputStyle(theme), padding: '9px 12px 9px 34px', fontSize: 13.5 }} />
               </div>
             )}
             {term ? (shown.length ? shown.map(memberRow) : empty('No member matches that.')) : (
               [[0, 'Owner'], [1, 'Admins'], [2, 'Members']].map(([r, label]) => {
                 const list = shown.filter((m) => rank(m) === r);
                 if (!list.length) return null;
-                return <div key={r}>{smallHead(label, list.length)}{list.map(memberRow)}</div>;
+                return <div key={r}>{sectionTitle(label, list.length)}{list.map(memberRow)}</div>;
               })
             )}
-            {isAdmin && <IgRow icon={<UserPlus />} label="Add people" bold onClick={() => setShowAddMembers(true)} />}
           </>
         )}
 
@@ -4196,25 +4203,25 @@ function GroupInfoPanel({ group, members, myId, iFollowIds, privacyAllowed, myRo
         ) : empty('Photos and videos shared in this group show up here.'))}
 
         {tab === 'links' && (links.length ? links.map((l) => (
-          <a key={l.url} href={hrefOf(l.url)} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '10px 16px', textDecoration: 'none', color: c.fg }}>
-            <span style={{ flex: 'none', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><LinkIcon size={22} strokeWidth={1.6} /></span>
-            <span style={{ minWidth: 0, flex: 1 }}>
-              <span style={{ display: 'block', fontWeight: 700, fontSize: 14.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{domainOf(l.url)}</span>
-              <span style={{ display: 'block', fontSize: 12.5, color: c.dim, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Shared by {l.from} {timeAgoLong(l.at)}</span>
-            </span>
+          <a key={l.url} href={hrefOf(l.url)} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '11px 16px', textDecoration: 'none', color: 'inherit' }}>
+            <LinkIcon size={22} strokeWidth={1.6} style={{ flex: 'none' }} />
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontWeight: 700, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{domainOf(l.url)}</div>
+              <div style={{ fontSize: 12, color: c.dim, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Shared by {l.from} {timeAgoLong(l.at)}</div>
+            </div>
           </a>
         )) : empty('Links shared in this group show up here.'))}
 
         {tab === 'pinned' && (pinned.length ? pinned.map((m) => (
           <div key={m.id} role="button" onClick={() => onJumpToMessage && onJumpToMessage(m.id)} style={{ padding: '11px 16px', cursor: 'pointer', borderBottom: `1px solid ${c.line}` }}>
-            <div style={{ fontSize: 12.5, fontWeight: 700, color: c.dim, marginBottom: 3 }}>{nameOf(m.sender_id)}</div>
-            <div style={{ fontSize: 14.5, lineHeight: 1.4, wordBreak: 'break-word' }}>{String(describeMessage(m).text || '').slice(0, 200)}</div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: c.dim, marginBottom: 3 }}>{nameOf(m.sender_id)}</div>
+            <div style={{ fontSize: 14, lineHeight: 1.4, wordBreak: 'break-word' }}>{String(describeMessage(m).text || '').slice(0, 200)}</div>
           </div>
         )) : empty('Pinned messages show up here.'))}
 
-        <div style={{ marginTop: 20 }}>
-          <IgRow icon={<LogOut />} bold label={isOwner ? 'Transfer ownership before leaving' : soleAdmin ? 'Leave group (assign a new admin first)' : 'Leave group'}
-            onClick={() => { if (!soleAdmin && !isOwner) onLeave(); }} />
+        <div style={{ marginTop: 18, opacity: (soleAdmin || isOwner) ? 0.55 : 1 }}>
+          <IgRow icon={<LogOut />} bold onClick={() => { if (!soleAdmin && !isOwner) onLeave(); }}
+            label={isOwner ? 'Transfer ownership before leaving' : soleAdmin ? 'Leave group (assign a new admin first)' : 'Leave group'} />
         </div>
       </div>
 
@@ -4228,7 +4235,7 @@ function GroupInfoPanel({ group, members, myId, iFollowIds, privacyAllowed, myRo
           return (
             <div style={{ background: theme.panelBg, borderRadius: 14, boxShadow: '0 8px 24px rgba(0,0,0,0.2)', border: `1px solid ${theme.border}`, overflow: 'hidden' }}>
               {isOwner && (mm.role === 'admin' ? item('Remove as admin', () => onDemote(mm.user_id)) : item('Make admin', () => onPromote(mm.user_id)))}
-              {isOwner && item('Transfer ownership', () => onTransferOwnership(mm.user_id))}
+              {isOwner && item('Transfer ownership', () => onTransferOwnership(mm.user_id), accent)}
               {mm.muted ? item('Unmute member', () => onUnmute(mm.user_id)) : item('Mute member', () => onMute(mm.user_id))}
               {item('Remove from group', () => onKick(mm.user_id), theme.danger, true)}
             </div>
@@ -4241,7 +4248,7 @@ function GroupInfoPanel({ group, members, myId, iFollowIds, privacyAllowed, myRo
       {showWallpaper && <WallpaperPicker value={group.wallpaper} onSelect={onSetWallpaper} onClose={() => setShowWallpaper(false)} />}
       {showHeaderStyle && <NameBarPicker value={group.name_bar} onSelect={onSetHeaderStyle} onClose={() => setShowHeaderStyle(false)} />}
       {showDisappear && <DisappearSheet value={disappearSecs} subject="this group" canEdit={isAdmin} onPick={onSetDisappear} onClose={() => setShowDisappear(false)} />}
-      {showColour && <GroupColourSheet value={accent} onPick={(col) => onSetAccent && onSetAccent(col)} onClose={() => setShowColour(false)} />}
+      {showColour && <GroupColourSheet value={accent} onPick={(col) => { if (onSetAccent) onSetAccent(col); }} onClose={() => setShowColour(false)} />}
       {showAddMembers && (
         <AddMembersPanel myId={myId} iFollowIds={iFollowIds} privacyAllowed={privacyAllowed} existingIds={members.map((m) => m.user_id)}
           onClose={() => setShowAddMembers(false)}
@@ -4557,7 +4564,7 @@ function AddMembersPanel({ myId, existingIds, onClose, onAdd, iFollowIds, privac
           <div key={p.id} onClick={() => toggleSelect(p)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 4px', cursor: 'pointer' }}>
             <Avatar emoji={p.avatar} name={p.name} frame={p.avatar_frame} size={40} />
             <div style={{ flex: 1, minWidth: 0 }}>
-              <NameRow style={{ fontWeight: 700, fontSize: 14, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} tier={p.verified} custom={p.custom_badge} size={12}>{p.name}</NameRow>
+              <div style={{ fontWeight: 700, fontSize: 14, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><NameBadge name={p.name} verified={p.verified} custom={p.custom_badge} size={12} /></div>
               <div style={{ fontSize: 11.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>@{p.username}</div>
             </div>
             <div style={{
@@ -4733,7 +4740,7 @@ function ProfileLinkCard({ profileId, onOpen }) {
           </div>
         )}
         <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '18px 10px 6px', background: 'linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.7) 100%)', color: 'white' }}>
-          <NameRow style={{ fontSize: 14, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} tier={p.verified} custom={p.custom_badge} size={12}>{p.name}</NameRow>
+          <div style={{ fontSize: 14, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><NameBadge name={p.name} verified={p.verified} custom={p.custom_badge} size={12} /></div>
           <div style={{ fontSize: 11, opacity: 0.85, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>@{p.username}</div>
         </div>
       </div>
@@ -5336,8 +5343,8 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
               </div>
             )}
             <div style={{ position: 'relative', zIndex: 2, textAlign: 'center', marginTop: NAMEPLATES[profile.nameplate] ? 6 : 16, padding: '0 20px' }}>
-              {!NAMEPLATES[profile.nameplate] && (
-                <div style={{ fontSize: 27, fontWeight: 900, color: theme.ink, letterSpacing: '-0.02em', lineHeight: 1.15, wordBreak: 'break-word' }}>{profile.name}<VerifiedBadge tier={profile.verified} custom={profile.custom_badge} size={22} /></div>
+              {(!NAMEPLATES[profile.nameplate] || (profile.name || '').length > 14) && (
+                <div style={{ marginTop: NAMEPLATES[profile.nameplate] ? 4 : 0, fontSize: NAMEPLATES[profile.nameplate] ? 17 : ((profile.name || '').length > 26 ? 21 : 27), fontWeight: 900, color: theme.ink, letterSpacing: '-0.02em', lineHeight: 1.15, wordBreak: 'break-word' }}>{profile.name}<VerifiedBadge tier={profile.verified} custom={profile.custom_badge} size={22} /></div>
               )}
               <div style={{ fontSize: 13.5, color: theme.muted, marginTop: 4 }}>
                 {NAMEPLATES[profile.nameplate] ? [profile.pronouns, ...infoBits].filter(Boolean).join(' · ') : `@${profile.username}${profile.pronouns ? ` · ${profile.pronouns}` : ''}${infoBits.map((b) => ` · ${b}`).join('')}`}
@@ -5770,7 +5777,7 @@ function MentionSuggestions({ query, priority, excludeIds, myId, onPick }) {
           }}>
           <Avatar emoji={p.avatar} name={p.name} frame={p.avatar_frame} size={30} />
           <div style={{ minWidth: 0, flex: 1 }}>
-            <NameRow style={{ fontSize: 13, fontWeight: 700, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} tier={p.verified} custom={p.custom_badge} size={12}>{p.name}</NameRow>
+            <div style={{ fontSize: 13, fontWeight: 700, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><NameBadge name={p.name} verified={p.verified} custom={p.custom_badge} size={12} /></div>
             <div style={{ fontSize: 11.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>@{p.username}</div>
           </div>
         </div>
@@ -5953,7 +5960,7 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
         })}>
           {senderLabel && !m.deleted && !tightAbove && (
             <div style={{ fontSize: 11.5, fontWeight: 700, color: theme.coralDeep, marginBottom: 3, padding: m.type !== 'text' ? '0 4px' : 0 }}>
-              {senderLabel}<VerifiedBadge tier={senderVerified} custom={senderCustomBadge} size={11} />
+              <NameBadge name={senderLabel} verified={senderVerified} custom={senderCustomBadge} size={11} />
             </div>
           )}
           {m.forwarded && !m.deleted && (
@@ -6224,7 +6231,7 @@ function ForwardPicker({ conversations, onCancel, onPick, myId }) {
             }}>
               <Avatar emoji={p.avatar} name={p.name} frame={p.avatar_frame} size={38} />
               <div style={{ minWidth: 0, flex: 1 }}>
-                <NameRow style={{ fontWeight: 700, fontSize: 14, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} tier={p.verified} custom={p.custom_badge} size={12}>{p.name}</NameRow>
+                <div style={{ fontWeight: 700, fontSize: 14, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><NameBadge name={p.name} verified={p.verified} custom={p.custom_badge} size={12} /></div>
                 <div style={{ fontSize: 11.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>@{p.username}</div>
               </div>
             </div>
@@ -6685,7 +6692,7 @@ function InAppMessageToast({ toast, top, onOpen, onDismiss }) {
       </div>
       <div style={{ flex: 1, minWidth: 0, pointerEvents: 'none' }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-          <NameRow style={{ fontSize: 13.5, fontWeight: 800, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} tier={toast.verified} custom={toast.customBadge} size={12}>{toast.title}</NameRow>
+          <span style={{ fontSize: 13.5, fontWeight: 800, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><NameBadge name={toast.title} verified={toast.verified} custom={toast.customBadge} size={12} /></span>
           <span style={{ fontSize: 10.5, color: theme.muted, flexShrink: 0 }}>now</span>
         </div>
         <PreviewLine preview={toast.preview} prefix={toast.prefix} color={theme.muted} size={12.5} />
@@ -8086,7 +8093,7 @@ function StoryAvatar({ profile, size = 64, ring = 'none', onClick, badgePlus = f
     <div onClick={onClick} style={{ position: 'relative', width: size, height: size, flexShrink: 0, cursor: onClick ? 'pointer' : 'default', opacity: dim ? 0.55 : 1 }}>
       <div style={{ width: size, height: size, borderRadius: '50%', padding: pad, boxSizing: 'border-box', background: framed ? 'transparent' : ringBg }}>
         <div style={{ width: '100%', height: '100%', borderRadius: '50%', padding: framed ? 0 : (ring === 'none' ? 0 : 2), boxSizing: 'border-box', background: framed ? 'transparent' : theme.panelBg }}>
-          <Avatar emoji={profile?.avatar} name={profile?.name || '?'} frame={profile?.avatar_frame} size={framed ? Math.round(size / (size <= 72 ? 1.2 : 1.08)) : size - (ring === 'none' ? 0 : 10)} />
+          <Avatar emoji={profile?.avatar} name={profile?.name || '?'} frame={profile?.avatar_frame} size={size - (framed || ring === 'none' ? 0 : 10)} />
         </div>
       </div>
       {framed && ring !== 'none' && (
@@ -8373,7 +8380,7 @@ function StoryViewer({ groupsList, startGroup = 0, startStoryId = null, onAddSto
               <Avatar emoji={group.profile.avatar} name={group.profile.name} frame={group.profile.avatar_frame} size={34} />
               <div style={{ minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 7 }}>
-                  <NameRow style={{ fontWeight: 800, fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} tier={group.profile.verified} custom={group.profile.custom_badge} size={13}>{isMine && !readOnly ? 'Your story' : group.profile.name}</NameRow>
+                  <span style={{ fontWeight: 800, fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{isMine && !readOnly ? 'Your story' : group.profile.name}<VerifiedBadge tier={group.profile.verified} custom={group.profile.custom_badge} size={13} /></span>
                   <span style={{ fontSize: 12, opacity: 0.75, flexShrink: 0 }}>{timeShort(story.created_at)}</span>
                 </div>
                 {story.repost_of && <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, opacity: 0.8 }}><Repeat size={11} /> Reposted{story.repost_label ? ` from @${story.repost_label}` : ''}</div>}
@@ -9227,7 +9234,7 @@ function StoryTray({ me, myStories, trayUsers, seen, onAdd, onOpen }) {
   );
 }
 
-const APP_VERSION = '7.3V';
+const APP_VERSION = '7.4V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -9266,7 +9273,7 @@ function BlockConfirmSheet({ profile, onCancel, onConfirm }) {
             <Avatar emoji={profile.avatar} name={profile.name} frame={profile.avatar_frame} size={72} />
             <div style={{ position: 'absolute', right: -4, bottom: -2, width: 28, height: 28, borderRadius: '50%', background: theme.danger, border: `3px solid ${theme.panelBg}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Ban size={14} color="white" /></div>
           </div>
-          <div style={{ fontSize: 18, fontWeight: 800, color: theme.ink, marginTop: 12 }}>Block {profile.name}<VerifiedBadge tier={profile.verified} custom={profile.custom_badge} size={15} />?</div>
+          <div style={{ fontSize: 18, fontWeight: 800, color: theme.ink, marginTop: 12 }}>Block <NameBadge name={profile.name} verified={profile.verified} custom={profile.custom_badge} size={15} />?</div>
           <div style={{ fontSize: 12.5, color: theme.muted, marginTop: 2 }}>@{profile.username}</div>
         </div>
         <div style={{ marginTop: 14 }}>
@@ -9357,7 +9364,7 @@ function BlockedAccountsPanel({ myId, blockedIds, onClose, onUnblock, onOpenProf
             <div onClick={() => !r.profile.is_deleted && onOpenProfile(r.profile)} style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0, cursor: 'pointer' }}>
               <Avatar emoji={r.profile.avatar} name={r.profile.name} frame={r.profile.avatar_frame} size={46} />
               <div style={{ minWidth: 0 }}>
-                <NameRow style={{ fontWeight: 700, fontSize: 14.5, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} tier={r.profile.verified} custom={r.profile.custom_badge} size={12}>{r.profile.name}</NameRow>
+                <div style={{ fontWeight: 700, fontSize: 14.5, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><NameBadge name={r.profile.name} verified={r.profile.verified} custom={r.profile.custom_badge} size={12} /></div>
                 <div style={{ fontSize: 12, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>@{r.profile.username}</div>
               </div>
             </div>
@@ -9550,7 +9557,7 @@ function AvatarPeek({ profile, online, lastSeen, hasStory, storySeen, canCall, o
             ? <img src={photo} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
             : <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 110, fontWeight: 800, color: 'rgba(255,255,255,0.92)' }}>{(profile.name || '?').charAt(0).toUpperCase()}</div>}
           <div style={{ position: 'absolute', left: 0, right: 0, top: 0, padding: '14px 16px 30px', background: 'linear-gradient(180deg, rgba(0,0,0,0.62), rgba(0,0,0,0))', color: 'white' }}>
-            <div style={{ fontSize: 17, fontWeight: 800 }}>{profile.name}<VerifiedBadge tier={profile.verified} custom={profile.custom_badge} size={15} /></div>
+            <div style={{ fontSize: 17, fontWeight: 800 }}><NameBadge name={profile.name} verified={profile.verified} custom={profile.custom_badge} size={15} /></div>
             <div style={{ fontSize: 12, opacity: 0.85, display: 'flex', alignItems: 'center', gap: 5 }}>
               {online && <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#34C759' }} />}
               {online ? 'Online now' : lastSeen || `@${profile.username}`}
@@ -9655,7 +9662,7 @@ function StoryViewersSheet({ story, myId, onClose, onOpenProfile }) {
                 {r.liked && <div style={{ position: 'absolute', right: -3, bottom: -3, width: 20, height: 20, borderRadius: '50%', background: theme.panelBg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Heart size={13} color="#FF3B5C" fill="#FF3B5C" /></div>}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <NameRow style={{ fontWeight: 700, fontSize: 14, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} tier={r.profile.verified} custom={r.profile.custom_badge} size={12}>{r.profile.name}</NameRow>
+                <div style={{ fontWeight: 700, fontSize: 14, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><NameBadge name={r.profile.name} verified={r.profile.verified} custom={r.profile.custom_badge} size={12} /></div>
                 <div style={{ fontSize: 11.5, color: theme.muted }}>@{r.profile.username}{r.at ? ` · ${timeShort(r.at)}` : ''}</div>
               </div>
             </div>
@@ -9724,8 +9731,8 @@ function CallScreen({ call, me, nameFor, avatarFor, onAccept, onDecline, onHangu
           <div role="button" aria-label="Close" onClick={onCloseSummary} style={{ width: 40, height: 40, borderRadius: '50%', background: 'rgba(255,255,255,0.14)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={20} /></div>
         </div>
         <div style={{ position: 'relative', flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, textAlign: 'center' }}>
-          {isGroup ? <GroupAvatar avatar={call.group && call.group.avatar} name={title} size={112} /> : <Avatar emoji={call.peer && call.peer.avatar} name={title} frame={call.peer && call.peer.avatar_frame} size={112} />}
-          <div style={{ fontSize: 26, fontWeight: 800, marginTop: 18 }}>{title}{!isGroup && call.peer && <VerifiedBadge tier={call.peer.verified} custom={call.peer.custom_badge} size={20} />}</div>
+          {isGroup ? <GroupAvatar avatar={call.group && call.group.avatar} name={title} size={112} /> : <Avatar emoji={call.peer && call.peer.avatar} name={title} frame={call.peer && call.peer.avatar_frame} size={112} frameFit />}
+          <div style={{ fontSize: String(title || '').length > 28 ? 20 : 26, fontWeight: 800, marginTop: 18, padding: '0 24px', textAlign: 'center', wordBreak: 'break-word', lineHeight: 1.15 }}>{title}{!isGroup && call.peer && <VerifiedBadge tier={call.peer.verified} custom={call.peer.custom_badge} size={20} />}</div>
           <div style={{ fontSize: 15, color: 'rgba(255,255,255,0.75)', marginTop: 6 }}>{call.endLabel || 'Call ended'}</div>
           <div style={{ marginTop: 14, fontSize: 34, fontWeight: 300, letterSpacing: 1, fontVariantNumeric: 'tabular-nums' }}>{d > 0 ? formatCallDuration(d) : '0:00'}</div>
           <div style={{ marginTop: 6, fontSize: 13.5, color: 'rgba(255,255,255,0.6)' }}>
@@ -9869,9 +9876,9 @@ function CallScreen({ call, me, nameFor, avatarFor, onAccept, onDecline, onHangu
                 <div className="zchat-call-ring" style={{ position: 'absolute', inset: -16, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.18)', animationDelay: '0.9s' }} />
               </>
             )}
-            {isGroup ? <GroupAvatar avatar={call.group && call.group.avatar} name={title} size={122} /> : <Avatar emoji={call.peer && call.peer.avatar} name={title} frame={call.peer && call.peer.avatar_frame} size={122} />}
+            {isGroup ? <GroupAvatar avatar={call.group && call.group.avatar} name={title} size={122} /> : <Avatar emoji={call.peer && call.peer.avatar} name={title} frame={call.peer && call.peer.avatar_frame} size={122} frameFit />}
           </div>
-          <div style={{ marginTop: 22, fontSize: 29, fontWeight: 800, textShadow: '0 2px 14px rgba(0,0,0,0.5)' }}>{title}{!isGroup && call.peer && <VerifiedBadge tier={call.peer.verified} custom={call.peer.custom_badge} size={22} />}</div>
+          <div style={{ marginTop: 22, fontSize: String(title || '').length > 28 ? 21 : 29, fontWeight: 800, padding: '0 24px', textAlign: 'center', wordBreak: 'break-word', lineHeight: 1.15, textShadow: '0 2px 14px rgba(0,0,0,0.5)' }}>{title}{!isGroup && call.peer && <VerifiedBadge tier={call.peer.verified} custom={call.peer.custom_badge} size={22} />}</div>
           <div style={{ marginTop: 6, fontSize: 15, color: 'rgba(255,255,255,0.82)', fontVariantNumeric: 'tabular-nums' }}>{status}</div>
           {!isGroup && peerId && remoteMuted[peerId] && !ringingIn && <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 14, background: 'rgba(0,0,0,0.4)', fontSize: 12.5, fontWeight: 700 }}><MicOff size={13} color="#FF6B6B" /> {title.split(' ')[0]} is muted</div>}
         </div>
@@ -10109,19 +10116,21 @@ function CustomBadgeIcon({ badge, size, closeToName }) {
   const h = Math.round(size * 1.18);
   return (
     <img src={url} alt="" aria-label={spec.label} draggable={false}
-      style={{ display: 'inline-block', height: h, width: Math.round(h * spec.ratio), verticalAlign: '-0.22em', marginLeft: closeToName ? 5 : 1, objectFit: 'contain', flexShrink: 0 }} />
+      style={{ display: 'inline-block', height: h, width: Math.round(h * spec.ratio), verticalAlign: '-0.22em', marginLeft: closeToName ? 3 : 1, objectFit: 'contain', flexShrink: 0 }} />
   );
 }
 
-function NameRow({ children, tier, custom, size = 13, style, lead, trail }) {
-  const { overflow, textOverflow, whiteSpace, maxWidth, wordBreak, ...rest } = style || {};
+function NameBadge({ name, verified, custom, size = 13, style, lines = 1, suffix }) {
+  const clamp = lines > 1;
   return (
-    <div style={{ display: 'flex', alignItems: 'center', minWidth: 0, maxWidth: maxWidth || '100%', ...rest }}>
-      {lead}
-      <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{children}</span>
-      <VerifiedBadge tier={tier} custom={custom} size={size} />
-      {trail}
-    </div>
+    <span style={{ display: 'inline-flex', alignItems: 'center', minWidth: 0, maxWidth: '100%', verticalAlign: 'middle', ...style }}>
+      <span style={{
+        minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', wordBreak: 'break-word',
+        ...(clamp ? { display: '-webkit-box', WebkitLineClamp: lines, WebkitBoxOrient: 'vertical' } : { whiteSpace: 'nowrap' }),
+      }}>{name}</span>
+      <span style={{ display: 'inline-flex', alignItems: 'center', flexShrink: 0 }}><VerifiedBadge tier={verified} custom={custom} size={size} /></span>
+      {suffix}
+    </span>
   );
 }
 
@@ -10133,7 +10142,7 @@ function VerifiedBadge({ tier, size = 14, style, custom }) {
     <>
       {hasCustom && <CustomBadgeIcon badge={custom} size={size} closeToName />}
       {t && (
-        <svg width={size} height={size} viewBox="0 0 24 24" style={{ flexShrink: 0, display: 'inline-block', verticalAlign: '-0.12em', marginLeft: hasCustom ? 3 : 5, ...style }} aria-label={t.label}>
+        <svg width={size} height={size} viewBox="0 0 24 24" style={{ flexShrink: 0, display: 'inline-block', verticalAlign: '-0.12em', marginLeft: hasCustom ? 2 : 4, ...style }} aria-label={t.label}>
           {t.gradient && (
             <defs>
               <linearGradient id={`zchat-vb-${tier}`} x1="0" y1="0" x2="1" y2="1">
@@ -10565,7 +10574,7 @@ function PostViewer({ post, owner, userId, meProfile, onClose, onDeleted }) {
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px' }}>
           <FramedAvatar frame={owner.avatar_frame} size={34}><Avatar emoji={owner.avatar} name={owner.name} frame={owner.avatar_frame} size={34} /></FramedAvatar>
-          <div style={{ flex: 1, minWidth: 0, fontWeight: 700, fontSize: 14, marginLeft: owner.avatar_frame ? 6 : 0 }}>{owner.username}<VerifiedBadge tier={owner.verified} custom={owner.custom_badge} size={13} /></div>
+          <div style={{ flex: 1, minWidth: 0, fontWeight: 700, fontSize: 14, marginLeft: owner.avatar_frame ? 6 : 0 }}><NameBadge name={owner.username} verified={owner.verified} custom={owner.custom_badge} size={13} /></div>
           <MoreVertical size={20} style={{ cursor: 'pointer', transform: 'rotate(90deg)' }} onClick={() => setSheet('more')} />
         </div>
         <div onClick={onMediaTap} style={{ position: 'relative', background: '#000', userSelect: 'none' }}>
@@ -10585,7 +10594,7 @@ function PostViewer({ post, owner, userId, meProfile, onClose, onDeleted }) {
           {iconBtn(<InstaShareIcon size={24} color={theme.ink} />, () => setSheet('share'), 'Share')}
         </div>
         <div style={{ padding: '2px 14px', fontSize: 14, fontWeight: 700 }}>
-          {likes.length === 0 ? 'Be the first to like this' : likes.length === 1 && firstLiker ? <>Liked by {firstLiker.username}<VerifiedBadge tier={firstLiker.verified} custom={firstLiker.custom_badge} size={12} /></> : firstLiker ? <>Liked by {firstLiker.username}<VerifiedBadge tier={firstLiker.verified} custom={firstLiker.custom_badge} size={12} /> and {formatCount(likes.length - 1)} others</> : `${formatCount(likes.length)} likes`}
+          {likes.length === 0 ? 'Be the first to like this' : likes.length === 1 && firstLiker ? <>Liked by <NameBadge name={firstLiker.username} verified={firstLiker.verified} custom={firstLiker.custom_badge} size={12} /></> : firstLiker ? <>Liked by <NameBadge name={firstLiker.username} verified={firstLiker.verified} custom={firstLiker.custom_badge} size={12} /> and {formatCount(likes.length - 1)} others</> : `${formatCount(likes.length)} likes`}
         </div>
         {post.caption && (
           <div style={{ padding: '4px 14px 0', fontSize: 14, lineHeight: 1.45, wordBreak: 'break-word' }}>
@@ -12409,7 +12418,7 @@ function FeedPanel({ me, userId, onClose, onOpenProfile, ownerFilter = null, sta
                 <div style={{ position: 'absolute', left: 14, right: 80, bottom: 26, zIndex: 3, opacity: hideUi ? 0 : 1, transition: 'opacity 0.2s' }}>
                   <div role="button" onClick={() => onOpenProfile(post.owner)} style={{ fontWeight: 900, fontSize: 16, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', textShadow: '0 1px 6px rgba(0,0,0,0.6)' }}>
                     <Avatar emoji={post.owner.avatar} name={post.owner.name} size={30} frame={post.owner.avatar_frame} />
-                    <NameRow style={{ display: 'flex', alignItems: 'center' }} tier={post.owner.verified} custom={post.owner.custom_badge} size={15}>{post.owner.name}</NameRow>
+                    <span style={{ display: 'flex', alignItems: 'center', minWidth: 0, flex: 1 }}><NameBadge name={post.owner.name} verified={post.owner.verified} custom={post.owner.custom_badge} size={15} /></span>
                   </div>
                   {post.caption && <div style={{ fontSize: 14, marginTop: 6, lineHeight: 1.45, textShadow: '0 1px 6px rgba(0,0,0,0.6)', wordBreak: 'break-word' }}>{post.caption}</div>}
                   <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.65)', marginTop: 4 }}>{timeAgoLong(post.created_at)}</div>
@@ -16363,7 +16372,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           <ZBrand size={22} showTag />
           <div onClick={() => setProfileOf(me)} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', maxWidth: 160 }}>
             <div style={{ textAlign: 'right', minWidth: 0 }}>
-              <NameRow style={{ fontWeight: 800, fontSize: 12, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} tier={me.verified} custom={me.custom_badge} size={11}>{me.name}</NameRow>
+              <div style={{ fontWeight: 800, fontSize: 12, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><NameBadge name={me.name} verified={me.verified} custom={me.custom_badge} size={11} /></div>
               <div style={{ fontSize: 10, color: theme.teal, fontWeight: 600 }}>Online</div>
               {me.bio && <div style={{ fontSize: 9.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 130 }}>"{me.bio}"</div>}
             </div>
@@ -16433,7 +16442,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               }}>
                 <Avatar emoji={p.avatar} name={p.name} frame={p.avatar_frame} size={42} />
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <NameRow style={{ fontWeight: 700, fontSize: 14, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} tier={p.verified} custom={p.custom_badge} size={12}>{p.name}</NameRow>
+                  <div style={{ fontWeight: 700, fontSize: 14, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><NameBadge name={p.name} verified={p.verified} custom={p.custom_badge} size={12} /></div>
                   <div style={{ fontSize: 11.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>@{p.username}</div>
                 </div>
                 <FollowStatusPill theirId={p.id} viewerId={session.user.id} viewerFollowsThem={searchIFollow.has(p.id)} theyFollowViewer={searchFollowsMe.has(p.id)}
@@ -16515,9 +16524,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                     }}>
                       <GroupAvatar avatar={g.avatar} name={g.name} size={46} />
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                          <NameRow style={{ fontWeight: g.unread ? 800 : 700, fontSize: 14, color: theme.ink, flex: 1, gap: 4 }} size={13}
-                            lead={g.pinned ? <span style={{ display: 'inline-flex', flexShrink: 0 }}><Pin_ size={13} /></span> : null}>{g.name}</NameRow>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontWeight: g.unread ? 800 : 700, fontSize: 14, color: theme.ink, display: 'flex', alignItems: 'center', gap: 4, minWidth: 0, flex: '1 1 auto', marginRight: 8 }}>
+                            {g.pinned && <Pin_ size={13} />}<span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.name}</span>
+                          </span>
                           {g.last_message_at && <span style={{ fontSize: 10.5, color: g.unread ? theme.coral : theme.muted, fontWeight: g.unread ? 700 : 400, flexShrink: 0 }}>{formatListTime(g.last_message_at)}</span>}
                         </div>
                         <PreviewLine preview={g.preview || { kind: 'text', text: 'No messages yet' }} prefix={g.previewPrefix} color={g.unread ? theme.ink : theme.muted} weight={g.unread ? 700 : 400} />
@@ -16553,9 +16563,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                         : <Avatar emoji={c.otherProfile.avatar} name={c.otherProfile.name} frame={c.otherProfile.avatar_frame} online={isUserOnline(c.otherProfile) && !c.otherProfile.hide_activity} size={46} />}
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                        <NameRow style={{ fontWeight: unread ? 800 : 700, fontSize: 14, color: theme.ink, flex: 1, gap: 4 }} tier={c.otherProfile.verified} custom={c.otherProfile.custom_badge} size={13}
-                          lead={isPinnedByMe(c) ? <span style={{ display: 'inline-flex', flexShrink: 0 }}><Pin_ size={13} /></span> : null}>{c.otherProfile.name}</NameRow>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontWeight: unread ? 800 : 700, fontSize: 14, color: theme.ink, display: 'flex', alignItems: 'center', gap: 4, minWidth: 0, flex: '1 1 auto', marginRight: 8 }}>
+                          {isPinnedByMe(c) && <Pin_ size={13} />}<NameBadge name={c.otherProfile.name} verified={c.otherProfile.verified} custom={c.otherProfile.custom_badge} size={13} />
+                        </span>
                         {(c.sortTime || c.last_message_at) && <span style={{ fontSize: 10.5, color: unread ? theme.coral : theme.muted, fontWeight: unread ? 700 : 400, flexShrink: 0 }}>{formatListTime(c.sortTime || c.last_message_at)}</span>}
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -16626,16 +16637,16 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               <ArrowLeft size={20} style={{ cursor: 'pointer', color: activeNameBarKey ? 'white' : theme.ink, flexShrink: 0, filter: activeNameBarKey ? 'drop-shadow(0 1px 3px rgba(0,0,0,0.6))' : 'none', position: 'relative' }}
                 onClick={(e) => { e.stopPropagation(); if (activeConvForBar && myLocks[activeConvForBar.id]) lastLeftChatAtRef.current[activeConvForBar.id] = Date.now(); if (activeGroup) markGroupRead(activeGroup.id); if (reloadListsRef.current) reloadListsRef.current(); loadUnreadCounts(); setMobileShowChat(false); setActiveProfile(null); setActiveGroup(null); }} />
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, position: 'relative' }}>
-                {activeGroup ? <GroupAvatar avatar={activeGroup.avatar} name={activeGroup.name} size={38} /> : AVATAR_FRAMES[activeProfile.avatar_frame] ? <Avatar emoji={activeProfile.avatar} name={activeProfile.name} frame={activeProfile.avatar_frame} online={isUserOnline(activeProfile) && !activeProfile.hide_activity} size={38} /> : <AvatarFrame size={34} tier={activeProfile.verified}><Avatar emoji={activeProfile.avatar} name={activeProfile.name} frame={activeProfile.avatar_frame} online={isUserOnline(activeProfile) && !activeProfile.hide_activity} size={34} /></AvatarFrame>}
-                <div style={{ minWidth: 0 }}>
-                  <NameRow style={{
-                    fontWeight: 800, fontSize: 14.5,
+                {activeGroup ? <GroupAvatar avatar={activeGroup.avatar} name={activeGroup.name} size={38} /> : AVATAR_FRAMES[activeProfile.avatar_frame] ? <div style={{ margin: '0 6px' }}><FramedAvatar frame={activeProfile.avatar_frame} size={36}><Avatar emoji={activeProfile.avatar} name={activeProfile.name} frame={activeProfile.avatar_frame} frameFit={false} online={isUserOnline(activeProfile) && !activeProfile.hide_activity} size={36} /></FramedAvatar></div> : <AvatarFrame size={34} tier={activeProfile.verified}><Avatar emoji={activeProfile.avatar} name={activeProfile.name} frame={activeProfile.avatar_frame} online={isUserOnline(activeProfile) && !activeProfile.hide_activity} size={34} /></AvatarFrame>}
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{
+                    fontWeight: 800, fontSize: 14.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
                     color: activeNameBarKey ? 'white' : theme.ink, textShadow: activeNameBarKey ? '0 1px 4px rgba(0,0,0,0.7)' : 'none',
-                  }} tier={activeGroup ? null : activeProfile.verified} custom={activeGroup ? null : activeProfile.custom_badge} size={13}
-                    lead={(activeGroup ? !!(groups.find((x) => x.id === activeGroup.id) || {}).pinned : !!(activeConvForBar && isPinnedByMe(activeConvForBar))) ? <span style={{ marginRight: 5, display: 'inline-flex', flexShrink: 0 }}><Pin_ size={12} /></span> : null}
-                    trail={disappearOn ? <Timer size={12} style={{ marginLeft: 6, flexShrink: 0, opacity: 0.85 }} /> : null}>
-                    {activeGroup ? activeGroup.name : activeProfile.name}
-                  </NameRow>
+                  }}>
+                    {(activeGroup ? !!(groups.find((x) => x.id === activeGroup.id) || {}).pinned : !!(activeConvForBar && isPinnedByMe(activeConvForBar))) && <span style={{ marginRight: 4, display: 'inline-flex', verticalAlign: 'middle' }}><Pin_ size={12} /></span>}
+                    {activeGroup ? activeGroup.name : <NameBadge name={activeProfile.name} verified={activeProfile.verified} custom={activeProfile.custom_badge} size={13} />}
+                    {disappearOn && <Timer size={12} style={{ marginLeft: 5, verticalAlign: 'middle', opacity: 0.85 }} />}
+                  </div>
                   <div style={{ fontSize: 11, color: activeNameBarKey ? 'rgba(255,255,255,0.85)' : theme.muted, textShadow: activeNameBarKey ? '0 1px 4px rgba(0,0,0,0.7)' : 'none' }}>
                     {activityFrom ? (
                       <span style={{ color: activeNameBarKey ? 'white' : theme.coral, fontWeight: 700 }}>
@@ -17193,7 +17204,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         const c = rowSheet.conv;
         const blocked = myBlockedIds.has(c.otherProfile.id);
         return (
-          <ChatRowSheet title={<>{c.otherProfile.name}<VerifiedBadge tier={c.otherProfile.verified} custom={c.otherProfile.custom_badge} size={13} /></>} subtitle={`@${c.otherProfile.username}`}
+          <ChatRowSheet title={<><NameBadge name={c.otherProfile.name} verified={c.otherProfile.verified} custom={c.otherProfile.custom_badge} size={13} /></>} subtitle={`@${c.otherProfile.username}`}
             avatar={<Avatar emoji={c.otherProfile.avatar} name={c.otherProfile.name} frame={c.otherProfile.avatar_frame} size={44} />}
             onClose={() => setRowSheet(null)}
             actions={[
@@ -18403,7 +18414,7 @@ function SharePreviewScreen({ landing, onAuth }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
           <Avatar emoji={o.avatar} name={o.name || '?'} frame={o.avatar_frame} size={42} />
           <div style={{ minWidth: 0 }}>
-            <NameRow style={{ display: 'flex', alignItems: 'center', fontWeight: 800, fontSize: 15 }} tier={o.verified} custom={o.custom_badge} size={14}>{o.name}</NameRow>
+            <div style={{ display: 'flex', alignItems: 'center', fontWeight: 800, fontSize: 15 }}><NameBadge name={o.name} verified={o.verified} custom={o.custom_badge} size={14} /></div>
             <div style={{ color: MUTED, fontSize: 12.5 }}>@{o.username}</div>
           </div>
         </div>
@@ -18439,7 +18450,7 @@ function SharePreviewScreen({ landing, onAuth }) {
       <div style={{ textAlign: 'center', paddingTop: 22 }}>
         <div style={{ display: 'inline-flex', borderRadius: '50%', padding: isStory ? 4 : 0, background: isStory ? 'linear-gradient(135deg, #f59e0b, #ec4899, #8b5cf6)' : 'transparent' }}>
           <div style={{ borderRadius: '50%', boxShadow: isStory ? `0 0 0 3px ${BG}` : 'none', display: 'inline-flex' }}>
-            <Avatar emoji={data.avatar} name={data.name || '?'} frame={data.avatar_frame} size={104} />
+            <Avatar emoji={data.avatar} name={data.name || '?'} frame={data.avatar_frame} size={104} frameFit />
           </div>
         </div>
         <div style={{ marginTop: 14 }}>{nameLine(data.name, data.verified, data.custom_badge)}</div>
@@ -18567,7 +18578,7 @@ function LikersSheet({ post, meId, onClose, onOpenProfile }) {
             <div key={p.id} role="button" onClick={() => onOpenProfile(p)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 0', cursor: 'pointer' }}>
               <Avatar emoji={p.avatar} name={p.name} frame={p.avatar_frame} size={42} />
               <div style={{ minWidth: 0 }}>
-                <NameRow style={{ display: 'flex', alignItems: 'center', fontWeight: 800, fontSize: 14 }} tier={p.verified} custom={p.custom_badge} size={12}>{p.name}</NameRow>
+                <div style={{ display: 'flex', alignItems: 'center', fontWeight: 800, fontSize: 14 }}><NameBadge name={p.name} verified={p.verified} custom={p.custom_badge} size={12} /></div>
                 <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>@{p.username}</div>
               </div>
             </div>
