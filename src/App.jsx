@@ -1257,15 +1257,15 @@ function DeleteAccountConfirm({ onCancel, onConfirm }) {
   );
 }
 
-function igPalette(dark) {
-  return dark
-    ? { bg: '#000000', fg: '#ffffff', dim: '#a8a8a8', faint: '#737373', line: '#262626', field: '#262626', track: '#3a3a3c', knob: '#000000' }
-    : { bg: '#ffffff', fg: '#000000', dim: '#737373', faint: '#a8a8a8', line: '#dbdbdb', field: '#efefef', track: '#d1d1d6', knob: '#ffffff' };
+function igPalette(theme) {
+  return theme.dark
+    ? { bg: theme.bgGradient, fg: theme.ink, dim: theme.muted, faint: 'rgba(241,244,255,0.42)', line: theme.border, field: 'rgba(120,160,255,0.10)', track: 'rgba(120,160,255,0.28)', knob: theme.bgGradient }
+    : { bg: theme.bgGradient, fg: theme.ink, dim: theme.muted, faint: 'rgba(11,18,32,0.38)', line: theme.border, field: 'rgba(30,60,120,0.07)', track: 'rgba(30,60,120,0.22)', knob: '#ffffff' };
 }
 
 function IgRow({ icon, label, sub, onClick, danger, right, value, bold, inset = true }) {
   const { theme } = useTheme();
-  const c = igPalette(theme.dark);
+  const c = igPalette(theme);
   const showChevron = !right && !danger && !!onClick;
   return (
     <div role={onClick ? 'button' : undefined} onClick={onClick} style={{
@@ -1290,7 +1290,7 @@ function IgRow({ icon, label, sub, onClick, danger, right, value, bold, inset = 
 
 function IgToggle({ on, onClick }) {
   const { theme } = useTheme();
-  const c = igPalette(theme.dark);
+  const c = igPalette(theme);
   return (
     <div role="switch" aria-checked={!!on} onClick={onClick} style={{
       flex: 'none', width: 46, height: 28, borderRadius: 14, position: 'relative', cursor: 'pointer',
@@ -1307,13 +1307,13 @@ function IgToggle({ on, onClick }) {
 
 function IgHeading({ children }) {
   const { theme } = useTheme();
-  const c = igPalette(theme.dark);
+  const c = igPalette(theme);
   return <div style={{ padding: '22px 16px 6px', fontSize: 13, fontWeight: 600, color: c.dim }}>{children}</div>;
 }
 
 function IgTopBar({ title, onBack, sticky, bleed = 0 }) {
   const { theme } = useTheme();
-  const c = igPalette(theme.dark);
+  const c = igPalette(theme);
   return (
     <div style={{
       position: sticky ? 'sticky' : 'relative', top: 0, zIndex: 4, background: c.bg,
@@ -1441,7 +1441,7 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
     </div>
   );
 
-  const c = igPalette(theme.dark);
+  const c = igPalette(theme);
   const SettingsRow = (p) => <IgRow {...p} inset={false} />;
   const ToggleSwitch = IgToggle;
   const SectionHeader = ({ title }) => <IgTopBar title={title} onBack={() => setSection('main')} sticky bleed={16} />;
@@ -2542,6 +2542,17 @@ function toggleFavoriteSticker(key) {
   return next;
 }
 
+function orderStickersForPick() {
+  const uid = favoriteSync.userId;
+  const byKey = new Map(STICKERS.map((x) => [x.key, x]));
+  const recent = readRecentStickers(uid).map((r) => byKey.get(r.key)).filter(Boolean);
+  const favs = [...getFavoriteStickerKeys()].map((k) => byKey.get(k)).filter(Boolean);
+  const seen = new Set();
+  const out = [];
+  [...recent, ...favs, ...STICKERS].forEach((x) => { if (!seen.has(x.key)) { seen.add(x.key); out.push(x); } });
+  return out;
+}
+
 function readRecentStickers(uid) {
   try { return JSON.parse(localStorage.getItem(`zchat-recent-stickers-${uid || 'local'}`) || '[]'); } catch { return []; }
 }
@@ -3616,7 +3627,7 @@ function ChatSettingsPanel({ conv, myId, meAvatar, meName, isPinned, isLocked, w
       <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 4, color: theme.coralDeep }}>{icon}</div>{label}
     </div>
   );
-  const c = igPalette(theme.dark);
+  const c = igPalette(theme);
   const muteLabel = isMuted === true ? 'Muted' : isMuted ? `Muted until ${new Date(isMuted).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}` : 'Off';
 
   return (
@@ -3670,7 +3681,7 @@ function ChatSettingsPanel({ conv, myId, meAvatar, meName, isPinned, isLocked, w
         <IgHeading>Privacy and manage</IgHeading>
         <IgRow icon={<Timer />} label="Disappearing messages" value={disappearLabel(disappearSecs)} onClick={() => setShowDisappear(true)} />
         {showDisappear && <DisappearSheet value={disappearSecs} subject="this chat" onPick={onSetDisappear} onClose={() => setShowDisappear(false)} />}
-        <IgRow icon={<Pin_ />} label="Pin chat" onClick={onTogglePin} right={<IgToggle on={!!isPinned} />} />
+        <IgRow icon={<Pin_ color="currentColor" />} label="Pin chat" onClick={onTogglePin} right={<IgToggle on={!!isPinned} />} />
         <IgRow icon={<Archive />} label="Archive chat" onClick={onToggleArchive} />
         <IgRow icon={<Lock />} label="Lock this chat" onClick={() => { if (isLocked) onDisableLock(); else if (chatLockAvailable) onEnableLock(); else onNeedChatLockSetup(); }} right={<IgToggle on={!!isLocked} />} />
 
@@ -4266,124 +4277,63 @@ function GroupSettingsPanel({ group, myId, isAdmin, isOwner, isMuted, onSetMute,
   const card = { borderRadius: 18, background: theme.rowBg, border: `1px solid ${theme.border}`, overflow: 'hidden' };
   const muteLabel = isMuted === true ? 'Muted' : isMuted ? `Muted until ${new Date(isMuted).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}` : 'Off';
 
-  return (
-    <div style={{ position: 'fixed', inset: 0, background: theme.panelBg, zIndex: 34, display: 'flex', flexDirection: 'column', overflow: 'hidden' }} className="zchat-fade">
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 18px', paddingTop: 'calc(16px + env(safe-area-inset-top))', borderBottom: `1px solid ${theme.border}`, flexShrink: 0 }}>
-        <ArrowLeft size={20} style={{ cursor: 'pointer', color: theme.ink }} onClick={onClose} />
-        <div style={{ fontWeight: 900, fontSize: 19, color: theme.ink }}>Group settings</div>
+  const c = igPalette(theme);
+  const segRow = (label, value, onPick) => (
+    <div style={{ padding: '8px 16px 12px' }}>
+      <div style={{ fontSize: 15, fontWeight: 500, marginBottom: 8 }}>{label}</div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        {[['everyone', 'Everyone'], ['admins', 'Admins only']].map(([val, lab]) => (
+          <div key={val} role="button" aria-label={`${label} ${lab}`} onClick={() => onPick(val)} style={{
+            flex: 1, textAlign: 'center', padding: '9px 6px', borderRadius: 10, fontSize: 13.5, fontWeight: 700, cursor: 'pointer',
+            background: value === val ? c.fg : c.field, color: value === val ? c.bg : c.fg,
+          }}>{lab}</div>
+        ))}
       </div>
-      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '12px 18px', paddingBottom: 'calc(12px + env(safe-area-inset-bottom))' }}>
-        <div style={sectionLabel}>YOUR SETTINGS</div>
-        <div style={card}>
-          <div role="button" onClick={() => setShowMuteOptions(true)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 12px', cursor: 'pointer', borderBottom: `1px solid ${theme.border}` }}>
-            <div style={{ width: 30, height: 30, borderRadius: 10, background: `${theme.coral}1F`, color: theme.coralDeep, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{isMuted ? <BellOff size={15} /> : <Bell size={15} />}</div>
-            <div style={{ flex: 1, textAlign: 'left' }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: theme.ink }}>Mute notifications</div>
-              <div style={{ fontSize: 11.5, color: theme.muted, marginTop: 1 }}>{muteLabel}</div>
-            </div>
-            <ChevronRight size={16} color={theme.muted} />
-          </div>
-          <div role="button" onClick={onTogglePin} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 12px', cursor: 'pointer' }}>
-            <div style={{ width: 30, height: 30, borderRadius: 10, background: `${theme.coral}1F`, color: theme.coralDeep, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Pin_ size={15} /></div>
-            <div style={{ flex: 1, textAlign: 'left' }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: theme.ink }}>Pin group</div>
-              <div style={{ fontSize: 11.5, color: theme.muted, marginTop: 1 }}>Keep at the top of your chat list</div>
-            </div>
-            <ToggleSwitch on={!!isPinned} onClick={onTogglePin} />
-          </div>
-        </div>
-
+    </div>
+  );
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: c.bg, color: c.fg, zIndex: 34, display: 'flex', flexDirection: 'column', overflow: 'hidden', fontFamily: FONT }} className="zchat-fade">
+      <IgTopBar title="Group settings" onBack={onClose} />
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', paddingBottom: 'calc(28px + env(safe-area-inset-bottom))' }}>
+        <IgHeading>Your settings</IgHeading>
+        <IgRow icon={isMuted ? <BellOff /> : <Bell />} label="Mute notifications" value={muteLabel} onClick={() => setShowMuteOptions(true)} />
+        <IgRow icon={<Pin_ color="currentColor" />} label="Pin group" onClick={onTogglePin} right={<IgToggle on={!!isPinned} />} />
+        <IgRow icon={<Timer />} label="Disappearing messages" value={disappearLabel(disappearSecs)} onClick={() => setShowDisappear(true)} />
         {showDisappear && <DisappearSheet value={disappearSecs} subject="this group" canEdit={isAdmin} onPick={onSetDisappear} onClose={() => setShowDisappear(false)} />}
+
         {isAdmin && (
           <>
-            <div style={sectionLabel}>ADMIN CONTROLS</div>
-            <div style={card}>
-              <div role="button" onClick={onOpenEdit} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 12px', cursor: 'pointer', borderBottom: `1px solid ${theme.border}` }}>
-                <div style={{ width: 30, height: 30, borderRadius: 10, background: `${theme.coral}1F`, color: theme.coralDeep, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Pencil size={14} /></div>
-                <div style={{ flex: 1, fontSize: 14, fontWeight: 700, color: theme.ink, textAlign: 'left' }}>Edit name, photo & description</div>
-                <ChevronRight size={16} color={theme.muted} />
-              </div>
-              <div style={{ padding: '12px 12px', borderBottom: `1px solid ${theme.border}` }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: theme.ink, marginBottom: 8 }}>Who can add members</div>
+            <IgHeading>Admin controls</IgHeading>
+            <IgRow icon={<Pencil />} label="Edit name, photo and description" onClick={onOpenEdit} />
+            <IgRow icon={<ShieldCheck />} label="Manage members and admins" onClick={onOpenAdmins} />
+            {segRow('Who can add members', addPolicy, (val) => savePolicy('add_members_policy', val, setAddPolicy))}
+            {segRow('Who can send messages', sendPolicy, (val) => savePolicy('send_policy', val, setSendPolicy))}
+            <IgRow icon={<LinkIcon />} label="Invite link" onClick={toggleInvite} right={<IgToggle on={inviteEnabled} />} />
+            {inviteEnabled && (
+              <div style={{ padding: '0 16px 12px 56px' }}>
+                <div style={{ fontSize: 12.5, color: c.dim, marginBottom: 8, wordBreak: 'break-all' }}>{siteOrigin()}/?join={inviteCode}</div>
                 <div style={{ display: 'flex', gap: 8 }}>
-                  {[['everyone', 'Everyone'], ['admins', 'Admins only']].map(([val, label]) => (
-                    <div key={val} role="button" onClick={() => savePolicy('add_members_policy', val, setAddPolicy)} style={{ flex: 1, textAlign: 'center', padding: '8px 6px', borderRadius: 11, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', background: addPolicy === val ? theme.coral : theme.dark ? 'rgba(255,255,255,0.06)' : '#fff', color: addPolicy === val ? 'white' : theme.ink, border: `1px solid ${addPolicy === val ? theme.coral : theme.border}` }}>{label}</div>
-                  ))}
+                  <div role="button" aria-label="Share invite link" onClick={copyInvite} style={{ flex: 1, textAlign: 'center', padding: '9px 6px', borderRadius: 10, fontSize: 13.5, fontWeight: 700, cursor: 'pointer', background: c.fg, color: c.bg }}>{copied ? 'Copied' : 'Share link'}</div>
+                  <div role="button" aria-label="Reset invite link" onClick={resetInvite} style={{ flex: 1, textAlign: 'center', padding: '9px 6px', borderRadius: 10, fontSize: 13.5, fontWeight: 700, cursor: 'pointer', background: c.field, color: c.fg }}>Reset link</div>
                 </div>
               </div>
-              <div style={{ padding: '12px 12px', borderBottom: `1px solid ${theme.border}` }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: theme.ink, marginBottom: 8 }}>Who can send messages</div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  {[['everyone', 'Everyone'], ['admins', 'Admins only']].map(([val, label]) => (
-                    <div key={val} role="button" onClick={() => savePolicy('send_policy', val, setSendPolicy)} style={{ flex: 1, textAlign: 'center', padding: '8px 6px', borderRadius: 11, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', background: sendPolicy === val ? theme.coral : theme.dark ? 'rgba(255,255,255,0.06)' : '#fff', color: sendPolicy === val ? 'white' : theme.ink, border: `1px solid ${sendPolicy === val ? theme.coral : theme.border}` }}>{label}</div>
-                  ))}
-                </div>
-              </div>
-              <div style={{ padding: '12px 12px', borderBottom: `1px solid ${theme.border}` }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: theme.ink }}>Invite link</div>
-                  <ToggleSwitch on={inviteEnabled} onClick={toggleInvite} />
-                </div>
-                {inviteEnabled && (
-                  <>
-                    <div style={{ fontSize: 12, color: theme.muted, marginBottom: 8, wordBreak: 'break-all' }}>{siteOrigin()}/?join={inviteCode}</div>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <div role="button" onClick={copyInvite} style={{ flex: 1, textAlign: 'center', padding: '8px 6px', borderRadius: 11, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', background: theme.coral, color: 'white' }}>{copied ? 'Copied!' : 'Copy link'}</div>
-                      <div role="button" onClick={resetInvite} style={{ flex: 1, textAlign: 'center', padding: '8px 6px', borderRadius: 11, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', background: theme.dark ? 'rgba(255,255,255,0.06)' : '#fff', color: theme.ink, border: `1px solid ${theme.border}` }}>Reset link</div>
-                    </div>
-                  </>
-                )}
-              </div>
-              <div role="button" onClick={() => setShowDisappear(true)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 12px', cursor: 'pointer', borderBottom: `1px solid ${theme.border}` }}>
-                <div style={{ width: 30, height: 30, borderRadius: 10, background: `${theme.coral}1F`, color: theme.coralDeep, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Timer size={15} /></div>
-                <div style={{ flex: 1, textAlign: 'left' }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: theme.ink }}>Disappearing messages</div>
-                  <div style={{ fontSize: 11.5, color: theme.muted, marginTop: 1 }}>{disappearLabel(disappearSecs)}</div>
-                </div>
-                <ChevronRight size={16} color={theme.muted} />
-              </div>
-              <div role="button" onClick={onOpenAdmins} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 12px', cursor: 'pointer' }}>
-                <div style={{ width: 30, height: 30, borderRadius: 10, background: `${theme.coral}1F`, color: theme.coralDeep, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><ShieldCheck size={14} /></div>
-                <div style={{ flex: 1, fontSize: 14, fontWeight: 700, color: theme.ink, textAlign: 'left' }}>Manage members & admins</div>
-                <ChevronRight size={16} color={theme.muted} />
-              </div>
-            </div>
+            )}
           </>
         )}
 
-        <div style={sectionLabel}>ACTIVITY</div>
-        <div style={card}>
-          {activity === null ? (
-            <div style={{ padding: 20, textAlign: 'center' }}><Spinner size={18} color={theme.muted} /></div>
-          ) : (
-            <>
-              {activity.top && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 12px', borderBottom: `1px solid ${theme.border}` }}>
-                  <div style={{ width: 30, height: 30, borderRadius: 10, background: `${theme.coral}1F`, color: theme.coralDeep, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>📊</div>
-                  <div style={{ flex: 1, textAlign: 'left' }}>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: theme.ink }}>Most active this week</div>
-                    <div style={{ fontSize: 11.5, color: theme.muted, marginTop: 1 }}>{activity.top.name} · {activity.top.count} messages</div>
-                  </div>
-                </div>
-              )}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 12px' }}>
-                <div style={{ width: 30, height: 30, borderRadius: 10, background: `${theme.coral}1F`, color: theme.coralDeep, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>📅</div>
-                <div style={{ flex: 1, textAlign: 'left' }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: theme.ink }}>Last activity</div>
-                  <div style={{ fontSize: 11.5, color: theme.muted, marginTop: 1 }}>{activity.lastActivity ? timeAgoLong(activity.lastActivity) : 'No messages this week'}</div>
-                </div>
-              </div>
-            </>
-          )}
-        </div>
+        <IgHeading>Activity</IgHeading>
+        {activity === null ? (
+          <div style={{ padding: 20, textAlign: 'center' }}><Spinner size={18} color={c.dim} /></div>
+        ) : (
+          <>
+            {activity.top && <IgRow icon={<Users />} label="Most active this week" sub={`${activity.top.name} \u00b7 ${activity.top.count} messages`} />}
+            <IgRow icon={<Clock />} label="Last activity" sub={activity.lastActivity ? timeAgoLong(activity.lastActivity) : 'No messages this week'} />
+          </>
+        )}
 
-        <div style={sectionLabel}>DANGER</div>
-        <div style={card}>
-          <div role="button" onClick={onLeave} style={{ padding: '13px 12px', fontSize: 14, fontWeight: 700, color: theme.danger, cursor: 'pointer', borderBottom: isOwner ? `1px solid ${theme.border}` : 'none' }}>Leave group</div>
-          {isOwner && (
-            <div role="button" onClick={() => setConfirmDelete(true)} style={{ padding: '13px 12px', fontSize: 14, fontWeight: 700, color: theme.danger, cursor: 'pointer' }}>Delete group</div>
-          )}
-        </div>
+        <IgHeading>More</IgHeading>
+        <IgRow icon={<LogOut />} label="Leave group" bold onClick={onLeave} />
+        {isOwner && <IgRow icon={<Trash2 />} label="Delete group" bold onClick={() => setConfirmDelete(true)} />}
       </div>
 
       {showMuteOptions && (
@@ -7622,8 +7572,8 @@ function MediaComposer({ files, recipientName, onCancel, onSend, onActivity, mod
               <span style={{ fontWeight: 800, fontSize: 15 }}>Stickers</span>
               <X size={20} style={{ cursor: 'pointer' }} onClick={() => setShowStickerPicker(false)} />
             </div>
-            <div style={{ flex: 1, overflowY: 'auto', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, padding: '0 12px 14px' }}>
-              {[...STICKERS].sort((x, y) => (getFavoriteStickerKeys().has(y.key) ? 1 : 0) - (getFavoriteStickerKeys().has(x.key) ? 1 : 0)).map((stk) => (
+            <div style={{ flex: 1, overflowY: 'auto', display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8, padding: '0 12px 14px' }}>
+              {orderStickersForPick().map((stk) => (
                 <div key={stk.key} onClick={() => {
                   setShowStickerPicker(false);
                   const r = cur.crop || { x: 0, y: 0, w: 1, h: 1 };
@@ -9235,7 +9185,7 @@ function StoryTray({ me, myStories, trayUsers, seen, onAdd, onOpen }) {
   );
 }
 
-const APP_VERSION = '7.0V';
+const APP_VERSION = '7.1V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -10627,7 +10577,7 @@ function PostViewer({ post, owner, userId, meProfile, onClose, onDeleted }) {
             </div>
             {commentStickers && (
               <div data-sheet-scroll style={{ maxHeight: 220, overflowY: 'auto', display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6, padding: '8px 12px', borderTop: `1px solid ${theme.border}`, touchAction: 'pan-y' }}>
-                {STICKERS.map((stk) => (
+                {orderStickersForPick().map((stk) => (
                   <div key={stk.key} onClick={() => sendStickerComment(stk.file)} style={{ aspectRatio: '1 / 1', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', borderRadius: 12, background: theme.rowBg }}>
                     <img src={stk.file} alt="" loading="lazy" draggable={false} style={{ width: '80%', height: '80%', objectFit: 'contain' }} />
                   </div>
@@ -12222,6 +12172,7 @@ function FeedPanel({ me, userId, onClose, onOpenProfile, ownerFilter = null, sta
   const [saved, setSaved] = useState(() => { try { return new Set(JSON.parse(localStorage.getItem('zchat-saved-posts') || '[]')); } catch { return new Set(); } });
   const [hideUi, setHideUi] = useState(false);
   const [confirmDeletePost, setConfirmDeletePost] = useState(null);
+  const [likersFor, setLikersFor] = useState(null);
   const scrollerRef = useRef(null);
   const startedRef = useRef(false);
   const lastTapRef = useRef(0);
@@ -12384,7 +12335,12 @@ function FeedPanel({ me, userId, onClose, onOpenProfile, ownerFilter = null, sta
                   <div role="button" onClick={() => onOpenProfile(post.owner)} style={{ cursor: 'pointer', marginBottom: 2 }}>
                     <Avatar emoji={post.owner.avatar} name={post.owner.name} size={48} frame={post.owner.avatar_frame} />
                   </div>
-                  {railBtn(<Heart size={31} color={likes[post.id] ? '#ff2d55' : 'white'} fill={likes[post.id] ? '#ff2d55' : 'none'} />, formatCount(c.likes), () => toggleLike(post))}
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, color: 'white' }}>
+                    <div role="button" aria-label="Like" onClick={() => toggleLike(post)} style={{ display: 'flex', cursor: 'pointer' }}>
+                      <Heart size={31} color={likes[post.id] ? '#ff2d55' : 'white'} fill={likes[post.id] ? '#ff2d55' : 'none'} />
+                    </div>
+                    <span role="button" aria-label="Show who liked" onClick={() => setLikersFor(post)} style={{ fontSize: 11.5, fontWeight: 800, textShadow: '0 1px 4px rgba(0,0,0,0.6)', cursor: 'pointer', padding: '0 8px' }}>{formatCount(c.likes)}</span>
+                  </div>
                   {railBtn(<InstaCommentIcon size={29} color="white" />, formatCount(c.comments), () => { setCommentsFor(post); playUiSound('tap'); })}
                   {railBtn(<Bookmark size={27} color={saved.has(post.id) ? '#fbbf24' : 'white'} fill={saved.has(post.id) ? '#fbbf24' : 'none'} />, saved.has(post.id) ? 'Saved' : 'Save', () => toggleSave(post))}
                   {railBtn(<Share2 size={26} />, 'Share', async () => {
@@ -12410,6 +12366,7 @@ function FeedPanel({ me, userId, onClose, onOpenProfile, ownerFilter = null, sta
         </div>
       )}
 
+      {likersFor && <LikersSheet post={likersFor} meId={userId} onClose={() => setLikersFor(null)} onOpenProfile={(p) => { setLikersFor(null); onOpenProfile(p); }} />}
       {confirmDeletePost && (
         <ConfirmDialog layer={700} title="Delete this post?" body="It will be removed from your profile." onCancel={() => setConfirmDeletePost(null)}
           onConfirm={async () => {
@@ -12547,6 +12504,7 @@ function FeedComments({ post, me, userId, onClose, onCount, onOpenProfile }) {
 
   const sendSticker = async (file) => {
     setStickersOpen(false);
+    pushRecentSticker(userId, STICKERS.find((x) => x.file === file));
     playUiSound('send');
     await supabase.from('post_comments').insert({ post_id: post.id, user_id: userId, content: `sticker:${file}` });
     if (post.user_id !== userId) sendPushNotification(post.user_id, 'ZChat', `${(me && me.name) || 'Someone'} commented with a sticker`, `/?post=${post.id}`, me && me.avatar);
@@ -12662,7 +12620,7 @@ function FeedComments({ post, me, userId, onClose, onCount, onOpenProfile }) {
         )}
         {stickersOpen && (
           <div style={{ maxHeight: 200, overflowY: 'auto', display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6, padding: '8px 12px', borderTop: '1px solid #22252e' }}>
-            {STICKERS.map((stk) => (
+            {orderStickersForPick().map((stk) => (
               <div key={stk.key} onClick={() => sendSticker(stk.file)} style={{ aspectRatio: '1 / 1', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', borderRadius: 12, background: '#22252e' }}>
                 <img src={stk.file} alt="" loading="lazy" draggable={false} style={{ width: '80%', height: '80%', objectFit: 'contain' }} />
               </div>
@@ -13473,12 +13431,13 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       .order('last_message_at', { ascending: false });
     if (!data || data.length === 0) { setConversations([]); setArchivedConversations([]); return; }
     const { data: recentMsgs } = await supabase.from('messages')
-      .select('id, sender_id, receiver_id, type, content, deleted, created_at, read, delivered, story_id')
+      .select('id, sender_id, receiver_id, type, content, deleted, created_at, read, delivered, story_id, expires_at')
       .or(`sender_id.eq.${myId},receiver_id.eq.${myId}`).is('group_id', null)
       .order('created_at', { ascending: false }).limit(400);
     const lastByOther = {};
     (recentMsgs || []).forEach((m) => {
       if (hiddenMsgs.has(m.id)) return;
+      if (m.expires_at && new Date(m.expires_at).getTime() <= Date.now()) return;
       const otherId = m.sender_id === myId ? m.receiver_id : m.sender_id;
       if (otherId && !lastByOther[otherId]) lastByOther[otherId] = m;
     });
@@ -13512,7 +13471,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         const last = lastByOther[otherId];
         const convTime = c.last_message_at ? new Date(c.last_message_at).getTime() : 0;
         const msgTime = last ? new Date(last.created_at).getTime() : 0;
-        const useStored = !last ? !c.disappear_secs : (c.last_message && convTime - msgTime > 1500);
+        const useStored = !c.disappear_secs && (!last || (c.last_message && convTime - msgTime > 1500));
         const preview = useStored ? { kind: 'text', text: c.last_message || '' } : describeMessage(last);
         const lastFromMe = useStored ? c.last_sender_id === myId : last.sender_id === myId;
         return {
@@ -14257,10 +14216,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (!mems || !mems.length) { setGroups([]); return; }
     const ids = mems.map((m) => m.group_id);
     const { data: groupRows } = await supabase.from('groups').select('*').in('id', ids);
-    const { data: recent } = await supabase.from('messages').select('id, group_id, sender_id, type, content, created_at, deleted')
+    const { data: recent } = await supabase.from('messages').select('id, group_id, sender_id, type, content, created_at, deleted, expires_at')
       .in('group_id', ids).order('created_at', { ascending: false }).limit(Math.min(1500, ids.length * 60));
     const hiddenMsgs = getHiddenMsgIds();
-    const visibleRecent = (recent || []).filter((m) => !hiddenMsgs.has(m.id));
+    const visibleRecent = (recent || []).filter((m) => !hiddenMsgs.has(m.id) && !(m.expires_at && new Date(m.expires_at).getTime() <= Date.now()));
     const lastSenderIds = [...new Set(ids.map((gid) => visibleRecent.find((m) => m.group_id === gid)).filter((m) => m && m.sender_id !== session.user.id && m.type !== 'system').map((m) => m.sender_id))];
     const senderNames = {};
     if (lastSenderIds.length) {
@@ -18522,6 +18481,46 @@ function JoinGroupSheet({ group, count, busy, onJoin, onClose }) {
           {busy ? <Spinner size={16} /> : 'Join group'}
         </button>
         <div role="button" onClick={onClose} style={{ padding: '14px 0 2px', fontWeight: 700, color: theme.muted, cursor: 'pointer' }}>Not now</div>
+      </div>
+    </div>
+  );
+  return ReactDOM.createPortal(sheet, document.body);
+}
+
+function LikersSheet({ post, meId, onClose, onOpenProfile }) {
+  useBackClose(true, onClose);
+  const [rows, setRows] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const { data: likes } = await supabase.from('post_likes').select('user_id, created_at').eq('post_id', post.id).order('created_at', { ascending: false }).limit(200);
+      const ids = [...new Set((likes || []).map((l) => l.user_id))];
+      let byId = {};
+      if (ids.length) {
+        const { data: profs } = await supabase.from('profiles').select('*').in('id', ids);
+        sanitizeAvatarList(profs, meId).forEach((p) => { byId[p.id] = p; });
+      }
+      if (alive) setRows((likes || []).map((l) => byId[l.user_id]).filter(Boolean));
+    })();
+    return () => { alive = false; };
+  }, [post.id]);
+  const sheet = (
+    <div onClick={onClose} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 720, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'flex-end', fontFamily: FONT }}>
+      <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ width: '100%', maxHeight: '70vh', display: 'flex', flexDirection: 'column', background: '#12141c', color: 'white', borderRadius: '22px 22px 0 0', paddingBottom: 'env(safe-area-inset-bottom)' }}>
+        <div style={{ textAlign: 'center', fontWeight: 800, fontSize: 15, padding: '16px 0 12px', borderBottom: '1px solid #22252e' }}>Likes</div>
+        <div style={{ overflowY: 'auto', padding: '6px 16px 16px' }}>
+          {rows === null && <div style={{ display: 'flex', justifyContent: 'center', padding: 24 }}><Spinner size={20} color="white" /></div>}
+          {rows && rows.length === 0 && <div style={{ textAlign: 'center', padding: 28, color: 'rgba(255,255,255,0.6)', fontSize: 13.5 }}>No likes yet.</div>}
+          {(rows || []).map((p) => (
+            <div key={p.id} role="button" onClick={() => onOpenProfile(p)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 0', cursor: 'pointer' }}>
+              <Avatar emoji={p.avatar} name={p.name} frame={p.avatar_frame} size={42} />
+              <div style={{ minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', fontWeight: 800, fontSize: 14 }}>{p.name}<VerifiedBadge tier={p.verified} custom={p.custom_badge} size={12} /></div>
+                <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>@{p.username}</div>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
