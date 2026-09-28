@@ -1,10 +1,10 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useMemo, createContext, useContext } from 'react';
 import ReactDOM from 'react-dom';
 import {
-  Send, Paperclip, Search, Mail, ShieldCheck, AtSign, LogOut, Eye, EyeOff, Lock,
+  Send, Paperclip, Search, Mail, ShieldCheck, ShieldOff, AtSign, LogOut, Eye, EyeOff, Lock,
   Flag, X, Trash2, User, Phone, MoreVertical, Image as ImageIcon, Video as VideoIcon,
   Smile, ArrowLeft, Check, CheckCheck, Settings as SettingsIcon, Moon, Sun, UserPlus,
-  FileText, HelpCircle, ChevronRight, ChevronLeft, Compass, Bell, Volume2, Volume1, VolumeX, Palette, Mic, Play, Pause, Download, Users, Camera, Reply, Forward, Ban, Edit3, Archive, Sparkles, Bookmark, Share2, Copy, Crop, Type, Pencil, Undo2, Scissors, BellOff, Link as LinkIcon, ShieldAlert, Heart, Repeat, PhoneOff, MicOff, VideoOff, SwitchCamera,
+  FileText, HelpCircle, ChevronRight, ChevronLeft, Compass, Bell, Volume2, Volume1, VolumeX, Palette, Mic, Play, Pause, Download, Users, Camera, Reply, Forward, Ban, Edit3, Archive, Sparkles, Bookmark, Share2, Copy, Crop, Type, Pencil, Undo2, Scissors, BellOff, Link as LinkIcon, ShieldAlert, Heart, Repeat, PhoneOff, MicOff, VideoOff, SwitchCamera, Clock, Timer, Smartphone,
 } from 'lucide-react';
 import {
   supabase, registerWithEmail, verifyOtp, setPassword, signInWithPassword,
@@ -154,10 +154,16 @@ function useBackClose(active, onClose) {
   }, [active]);
 }
 
+const HEAVY_BLUR_OK = !(typeof navigator !== 'undefined'
+  && /iPad|iPhone|iPod/.test(navigator.userAgent || '')
+  || (typeof navigator !== 'undefined' && navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
+
 const glass = (theme, extra = {}) => ({
-  background: theme.glass,
-  backdropFilter: 'blur(20px) saturate(180%)',
-  WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+  background: HEAVY_BLUR_OK ? theme.glass : (theme.panelBg || theme.glass),
+  ...(HEAVY_BLUR_OK ? {
+    backdropFilter: 'blur(20px) saturate(180%)',
+    WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+  } : {}),
   border: `1px solid ${theme.border}`,
   ...extra,
 });
@@ -172,7 +178,7 @@ function ZBrand({ size = 22, showTag = false }) {
         <span style={{ fontFamily: 'Georgia, serif', fontWeight: 700, fontSize: size * 0.86, color: theme.ink }}>chat</span>
         <span style={{ width: size * 0.24, height: size * 0.24, borderRadius: '50%', background: dotColor, boxShadow: `0 0 8px ${dotColor}`, flexShrink: 0 }} />
       </div>
-      {showTag && <div style={{ fontSize: size * 0.28, letterSpacing: 1.5, color: theme.muted, marginTop: 2, textTransform: 'uppercase' }}>More than messages</div>}
+      {showTag && <div style={{ fontSize: Math.max(9, size * 0.28), letterSpacing: 1.2, color: theme.muted, marginTop: 2, textTransform: 'uppercase' }}>More than messages</div>}
     </div>
   );
 }
@@ -651,6 +657,11 @@ function LoginStep({ onSuccess, onForgot, onGoRegister }) {
   const submit = async () => {
     if (!valid || loading) return;
     setLoading(true); setErr('');
+    if (await isBlockedHere(email)) {
+      setLoading(false);
+      setErr(BLOCKED_MESSAGE);
+      return;
+    }
     const { data, error } = await signInWithPassword(email, password);
     setLoading(false);
     if (error) { setErr('Incorrect email or password.'); return; }
@@ -852,6 +863,11 @@ function RegisterFlow({ onDone, onBack, onStart, initialStage = 'email' }) {
 
   const sendCode = async () => {
     setLoading(true); setErr('');
+    if (await isBlockedHere(email)) {
+      setLoading(false);
+      setErr(BLOCKED_MESSAGE);
+      return false;
+    }
     const { error } = await registerWithEmail(email);
     setLoading(false);
     if (error) { setErr(friendlyError(error, "Couldn't send the code. Try again.")); return false; }
@@ -1277,7 +1293,7 @@ function ToggleSwitch({ on, onClick }) {
   );
 }
 
-function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideActivity, onToggleActivity, onOpenAccounts, onOpenDelete, onOpenBlocked, blockedCount = 0, chatLockSet, chatLockHash, onSetChatLockPassword, onTurnOffChatLock, autoOpenLockSetup, onConsumedAutoOpen, me, rewardCount, onOpenCollection, onEditProfile }) {
+function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideActivity, onToggleActivity, onOpenAccounts, onOpenDelete, onOpenBlocked, blockedCount = 0, chatLockSet, chatLockHash, onSetChatLockPassword, onTurnOffChatLock, autoOpenLockSetup, onConsumedAutoOpen, me, rewardCount, onOpenCollection, onEditProfile, onPrivacySaved, isZAdmin, onOpenReports, hasPasswordLogin, onOpenSaved }) {
   useBackClose(true, onClose);
   const [permText, setPermText] = useState('Checking…');
   const notifState = (typeof Notification !== 'undefined' && Notification.permission) || 'default';
@@ -1408,7 +1424,19 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
               <SettingsRow icon={<User size={16} />} label="Edit profile" sub="Name, photo, bio, links, pronouns" onClick={onEditProfile} />
               <SettingsRow icon={<UserPlus size={16} />} label="Switch account" onClick={onOpenAccounts} />
               <SettingsRow icon={<Bell size={16} />} label="Follow requests" onClick={onOpenRequests} />
+              <SettingsRow icon={<Lock size={16} />} label="Change password" sub={hasPasswordLogin ? 'Update the password you sign in with' : 'Add a password to your account'} onClick={() => setSection('password')} />
+              <SettingsRow icon={<ShieldCheck size={16} />} label="Two factor authentication" sub="Ask for a code from an authenticator app" onClick={() => setSection('twofactor')} />
+              <SettingsRow icon={<Smartphone size={16} />} label="Active sessions" sub="See devices and log out the others" onClick={() => setSection('sessions')} />
+              <SettingsRow icon={<Bookmark size={16} />} label="Saved messages" sub="Messages and notes you kept" onClick={onOpenSaved} />
             </div>
+            {isZAdmin && (
+              <>
+                <div style={{ fontSize: 11, fontWeight: 900, color: theme.muted, letterSpacing: '0.12em', margin: '14px 4px 6px' }}>ADMIN</div>
+                <div style={{ borderRadius: 18, background: theme.rowBg, border: `1px solid ${theme.border}`, overflow: 'hidden' }}>
+                  <SettingsRow icon={<ShieldAlert size={16} />} label="Report queue" sub="Abuse reports from members" onClick={onOpenReports} />
+                </div>
+              </>
+            )}
             <div style={{ fontSize: 11, fontWeight: 900, color: theme.muted, letterSpacing: '0.12em', margin: '14px 4px 6px' }}>APP</div>
             <div style={{ borderRadius: 18, background: theme.rowBg, border: `1px solid ${theme.border}`, overflow: 'hidden' }}>
               <SettingsRow icon={dark ? <Sun size={16} /> : <Moon size={16} />} label="Dark mode" right={<ToggleSwitch on={dark} onClick={() => setDark(!dark)} />} />
@@ -1424,6 +1452,27 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
               <SettingsRow icon={<LogOut size={16} />} label="Log out" danger onClick={onLogout} />
             </div>
             <div style={{ textAlign: 'center', fontSize: 10.5, color: theme.muted, marginTop: 18, fontWeight: 600 }}>ZChat {APP_VERSION}</div>
+          </>
+        )}
+
+        {section === 'twofactor' && (
+          <>
+            <SectionHeader title="Two factor authentication" />
+            <TwoFactorSection />
+          </>
+        )}
+
+        {section === 'sessions' && (
+          <>
+            <SectionHeader title="Active sessions" />
+            <SessionsSection userId={me && me.id} />
+          </>
+        )}
+
+        {section === 'password' && (
+          <>
+            <SectionHeader title="Change password" />
+            <ChangePasswordForm email={me && me.email} hasPassword={!!hasPasswordLogin} onDone={() => setSection('main')} />
           </>
         )}
 
@@ -1477,6 +1526,7 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
         {section === 'privacy' && (
           <>
             <SectionHeader title="Privacy & Security" />
+            <SettingsRow icon={<Eye size={16} />} label="Who can see what" sub="Profile, bio, online, tags, groups" onClick={() => setSection('whocansee')} />
             <SettingsRow icon={<EyeOff size={16} />} label="Hide activity status" right={<ToggleSwitch on={hideActivity} onClick={onToggleActivity} />} />
             <SettingsRow icon={<Ban size={16} />} label="Blocked accounts" onClick={onOpenBlocked} right={<span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, color: theme.muted }}>{blockedCount > 0 ? blockedCount : ''}<ChevronRight size={16} /></span>} />
             <SettingsRow icon={<Lock size={16} />} label={chatLockSet ? 'Change Chat Lock password' : 'Set Chat Lock password'} onClick={() => setLockFlow(chatLockSet ? 'verify-then-change' : 'set')} />
@@ -1484,6 +1534,10 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
               <SettingsRow icon={<Lock size={16} />} label="Turn off Chat Lock" danger onClick={() => setLockFlow('verify-then-off')} />
             )}
           </>
+        )}
+
+        {section === 'whocansee' && me && (
+          <WhoCanSeePanel me={me} onBack={() => setSection('privacy')} onSaved={onPrivacySaved} />
         )}
 
         {section === 'notifications' && (
@@ -1529,6 +1583,8 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
 function AccountSwitcherPanel({ accounts, currentId, switchingId, onBack, onSwitch, onRemove, onAdd }) {
   useBackClose(true, onBack);
   const { theme } = useTheme();
+  const [removeAsk, setRemoveAsk] = useState(null);
+  useBackClose(!!removeAsk, () => setRemoveAsk(null));
   const [tiers, setTiers] = useState({});
   useEffect(() => {
     const ids = accounts.map((a) => a.id).filter(Boolean);
@@ -1564,11 +1620,165 @@ function AccountSwitcherPanel({ accounts, currentId, switchingId, onBack, onSwit
               </div>
               {switchingId === a.id && <Spinner size={14} color={theme.coral} />}
             </div>
-            {a.id !== currentId && !switchingId && <X size={16} color={theme.muted} style={{ cursor: 'pointer', flexShrink: 0 }} onClick={() => onRemove(a.id)} />}
+            {a.id !== currentId && !switchingId && <X size={16} color={theme.muted} style={{ cursor: 'pointer', flexShrink: 0 }} onClick={(e) => { e.stopPropagation(); setRemoveAsk(a); }} />}
           </div>
         ))}
         <button onClick={onAdd} style={{ ...primaryBtn(theme, false), marginTop: 16 }}>+ Add another account</button>
       </div>
+      {removeAsk && (
+        <div onClick={() => setRemoveAsk(null)} style={{
+          position: 'absolute', inset: 0, background: 'rgba(10,8,6,0.62)', zIndex: 40,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 22,
+        }} className="zchat-fade">
+          <div onClick={(e) => e.stopPropagation()} style={{ background: theme.panelBg, borderRadius: 22, width: '100%', maxWidth: 330, padding: 22, textAlign: 'center' }}>
+            <div style={{ fontWeight: 900, fontSize: 16.5, color: theme.ink, marginBottom: 8 }}>Remove this account?</div>
+            <div style={{ fontSize: 13.5, color: theme.muted, lineHeight: 1.65, marginBottom: 18 }}>
+              {removeAsk.name || 'This account'} will be taken off the switcher on this phone. Nothing is deleted, and you can sign back in any time.
+            </div>
+            <button style={{ ...primaryBtn(theme), background: theme.danger }}
+              onClick={() => { const id = removeAsk.id; setRemoveAsk(null); onRemove(id); }}>Remove</button>
+            <div onClick={() => setRemoveAsk(null)} style={{ padding: '14px 0 2px', fontWeight: 700, color: theme.muted, cursor: 'pointer' }}>Cancel</div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const PRIVACY_CHOICES = [
+  ['everyone', 'Everyone'],
+  ['followers', 'My followers'],
+  ['chosen', 'Only chosen people'],
+];
+const PRIVACY_ITEMS = [
+  ['privacy_profile', 'Who can see my profile', 'Your posts, followers and highlights'],
+  ['privacy_bio', 'Who can see my bio and links', 'The text and links on your profile'],
+  ['privacy_online', 'Who can see when I am online', 'The green dot beside your name'],
+  ['privacy_lastseen', 'Who can see my last seen', 'When you were last on ZChat'],
+  ['privacy_tags', 'Who can tag me in a status', 'Mentions in someone else story'],
+  ['privacy_groups', 'Who can add me to groups', 'Everyone else has to ask first'],
+];
+
+function WhoCanSeePanel({ me, onBack, onSaved }) {
+  useBackClose(true, onBack);
+  const { theme } = useTheme();
+  const [values, setValues] = useState(() => {
+    const v = {};
+    PRIVACY_ITEMS.forEach(([key]) => { v[key] = (me && me[key]) || 'everyone'; });
+    return v;
+  });
+  const [openKey, setOpenKey] = useState(null);
+  const [chosenFor, setChosenFor] = useState(null);
+  const [people, setPeople] = useState(null);
+  const [allow, setAllow] = useState(() => new Set());
+  const [busy, setBusy] = useState(false);
+  useBackClose(!!chosenFor, () => setChosenFor(null));
+
+  const save = async (key, value) => {
+    setValues((prev) => ({ ...prev, [key]: value }));
+    setOpenKey(null);
+    await supabase.from('profiles').update({ [key]: value }).eq('id', me.id);
+    onSaved({ [key]: value });
+    if (value === 'chosen') openChosen(key);
+  };
+
+  const openChosen = async (key) => {
+    setChosenFor(key);
+    setPeople(null);
+    const [{ data: followers }, { data: allowRows }] = await Promise.all([
+      supabase.from('follows').select('follower_id').eq('following_id', me.id).eq('status', 'accepted'),
+      supabase.from('privacy_allow').select('viewer_id').eq('user_id', me.id).eq('scope', key),
+    ]);
+    setAllow(new Set((allowRows || []).map((r) => r.viewer_id)));
+    const ids = [...new Set((followers || []).map((f) => f.follower_id))];
+    if (!ids.length) { setPeople([]); return; }
+    const { data: profs } = await supabase.from('profiles').select('id, name, username, avatar, avatar_frame, verified, custom_badge').in('id', ids);
+    setPeople(sanitizeAvatarList(profs, me.id).filter((x) => !x.is_deleted));
+  };
+
+  const toggleAllow = async (viewerId) => {
+    const key = chosenFor;
+    const has = allow.has(viewerId);
+    setAllow((prev) => { const n = new Set(prev); if (has) n.delete(viewerId); else n.add(viewerId); return n; });
+    setBusy(true);
+    if (has) await supabase.from('privacy_allow').delete().eq('user_id', me.id).eq('scope', key).eq('viewer_id', viewerId);
+    else await supabase.from('privacy_allow').insert({ user_id: me.id, scope: key, viewer_id: viewerId });
+    setBusy(false);
+  };
+
+  const label = (v) => (PRIVACY_CHOICES.find(([k]) => k === v) || PRIVACY_CHOICES[0])[1];
+
+  return (
+    <div style={{ position: 'absolute', inset: 0, background: theme.panelBg, zIndex: 33, display: 'flex', flexDirection: 'column' }} className="zchat-fade">
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', borderBottom: `1px solid ${theme.border}`, paddingTop: 'calc(14px + env(safe-area-inset-top))' }}>
+        <div role="button" onClick={onBack} style={{ cursor: 'pointer' }}><ChevronLeft size={22} color={theme.ink} /></div>
+        <div style={{ fontWeight: 800, fontSize: 16, color: theme.ink }}>Who can see what</div>
+      </div>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0 40px' }}>
+        {PRIVACY_ITEMS.map(([key, title, sub]) => (
+          <div key={key}>
+            <div role="button" onClick={() => setOpenKey(openKey === key ? null : key)} style={{ padding: '14px 18px', cursor: 'pointer', borderBottom: `1px solid ${theme.border}` }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 14.5, fontWeight: 700, color: theme.ink }}>{title}</div>
+                  <div style={{ fontSize: 12, color: theme.muted, marginTop: 2 }}>{sub}</div>
+                </div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: theme.coral }}>{label(values[key])}</div>
+              </div>
+              {openKey === key && (
+                <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {PRIVACY_CHOICES.map(([v, text]) => (
+                    <div key={v} role="button" onClick={(e) => { e.stopPropagation(); save(key, v); }}
+                      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 12, cursor: 'pointer',
+                        background: values[key] === v ? `${theme.coral}1A` : 'transparent', border: `1px solid ${values[key] === v ? theme.coral : theme.border}` }}>
+                      <div style={{ width: 16, height: 16, borderRadius: 8, border: `2px solid ${values[key] === v ? theme.coral : theme.muted}`, background: values[key] === v ? theme.coral : 'transparent' }} />
+                      <span style={{ fontSize: 14, fontWeight: 600, color: theme.ink }}>{text}</span>
+                    </div>
+                  ))}
+                  {values[key] === 'chosen' && (
+                    <div role="button" onClick={(e) => { e.stopPropagation(); openChosen(key); }} style={{ fontSize: 13, fontWeight: 700, color: theme.coral, padding: '6px 2px', cursor: 'pointer' }}>
+                      Choose the people
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+        <div style={{ padding: '16px 18px', fontSize: 12.5, color: theme.muted, lineHeight: 1.7 }}>
+          Chosen people are picked from your followers. Anyone you have not chosen simply will not see that part of your profile.
+        </div>
+      </div>
+      {chosenFor && (
+        <div style={{ position: 'absolute', inset: 0, background: theme.panelBg, zIndex: 34, display: 'flex', flexDirection: 'column' }} className="zchat-fade">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', borderBottom: `1px solid ${theme.border}`, paddingTop: 'calc(14px + env(safe-area-inset-top))' }}>
+            <div role="button" onClick={() => setChosenFor(null)} style={{ cursor: 'pointer' }}><ChevronLeft size={22} color={theme.ink} /></div>
+            <div style={{ fontWeight: 800, fontSize: 16, color: theme.ink, flex: 1 }}>Chosen people</div>
+            <div style={{ fontSize: 12.5, color: theme.muted, fontWeight: 700 }}>{allow.size} picked</div>
+          </div>
+          <div style={{ flex: 1, overflowY: 'auto' }}>
+            {people === null ? (
+              <div style={{ display: 'flex', justifyContent: 'center', padding: 36 }}><Spinner color={theme.ink} /></div>
+            ) : !people.length ? (
+              <div style={{ textAlign: 'center', padding: 40, color: theme.muted, fontSize: 13.5 }}>Nobody follows you yet, so there is nobody to choose.</div>
+            ) : people.map((u) => (
+              <div key={u.id} role="button" onClick={() => !busy && toggleAllow(u.id)}
+                style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', cursor: 'pointer', borderBottom: `1px solid ${theme.border}` }}>
+                <Avatar emoji={u.avatar} name={u.name} size={40} frame={u.avatar_frame} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 14.5, fontWeight: 700, color: theme.ink, display: 'flex', alignItems: 'center' }}>
+                    {u.name}<VerifiedBadge tier={u.verified} custom={u.custom_badge} size={12} />
+                  </div>
+                  <div style={{ fontSize: 12, color: theme.muted }}>@{u.username}</div>
+                </div>
+                <div style={{ width: 22, height: 22, borderRadius: 11, border: `2px solid ${allow.has(u.id) ? theme.coral : theme.muted}`, background: allow.has(u.id) ? theme.coral : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {allow.has(u.id) && <Check size={13} color="#fff" />}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -3104,7 +3314,8 @@ function PillRow({ icon, label, onClick, danger }) {
   );
 }
 
-function ChatSettingsPanel({ conv, myId, meAvatar, meName, isPinned, isLocked, wallpaper, nameBar, chatLockAvailable, onClose, onTogglePin, onToggleArchive, onSetWallpaper, onSetNameBar, onEnableLock, onDisableLock, onDeleteChat, onReportUser, onNicknameSaved, onNeedChatLockSetup, onOpenProfile, isMuted, onSetMute, onCall }) {
+function ChatSettingsPanel({ conv, myId, meAvatar, meName, isPinned, isLocked, wallpaper, nameBar, chatLockAvailable, onClose, onTogglePin, onToggleArchive, onSetWallpaper, onSetNameBar, onEnableLock, onDisableLock, onDeleteChat, onReportUser, onNicknameSaved, onNeedChatLockSetup, onOpenProfile, isMuted, onSetMute, onCall, disappearSecs, onSetDisappear }) {
+  const [showDisappear, setShowDisappear] = useState(false);
   useBackClose(true, onClose);
   const [showMuteOptions, setShowMuteOptions] = useState(false);
   useBackClose(showMuteOptions, () => setShowMuteOptions(false));
@@ -3247,6 +3458,8 @@ function ChatSettingsPanel({ conv, myId, meAvatar, meName, isPinned, isLocked, w
         <div style={sectionLabel}>PRIVACY & MANAGE</div>
         <div style={card}>
           <PillRow icon={<AtSign size={14} />} label="Nicknames" onClick={() => setShowNicknames(true)} />
+          <PillRow icon={<Timer size={14} />} label={`Disappearing messages: ${disappearLabel(disappearSecs)}`} onClick={() => setShowDisappear(true)} />
+          {showDisappear && <DisappearSheet value={disappearSecs} subject="this chat" onPick={onSetDisappear} onClose={() => setShowDisappear(false)} />}
           <PillRow icon={<Pin_ size={14} />} label={isPinned ? 'Unpin chat' : 'Pin chat'} onClick={onTogglePin} />
           <PillRow icon={<Archive size={14} />} label="Archive chat" onClick={onToggleArchive} />
           <PillRow icon={<Lock size={14} />} label={isLocked ? 'Remove chat lock' : 'Lock this chat'}
@@ -3334,6 +3547,7 @@ function CreateGroupPanel({ myId, onClose, onCreated }) {
   const [selected, setSelected] = useState([]);
   const [name, setName] = useState('');
   const [bio, setBio] = useState('');
+  const [accent, setAccent] = useState(() => GROUP_ACCENTS[Math.floor(Math.random() * GROUP_ACCENTS.length)]);
   const [avatarFile, setAvatarFile] = useState(null);
   const [avatarPreview, setAvatarPreview] = useState(null);
   const [cropFile, setCropFile] = useState(null);
@@ -3362,7 +3576,7 @@ function CreateGroupPanel({ myId, onClose, onCreated }) {
     if (val.trim().length < 2) { setResults(suggested); return; }
     timer.current = setTimeout(async () => {
       const { data } = await searchAccounts(val.trim());
-      setResults(sanitizeAvatarList(data, myId).filter((u) => u.id !== myId && !selected.find((s) => s.id === u.id)));
+      setResults(sanitizeAvatarList(data, myId).filter((u) => u.id !== myId));
     }, 300);
   };
 
@@ -3393,25 +3607,38 @@ function CreateGroupPanel({ myId, onClose, onCreated }) {
       sender_id: myId, group_id: group.id, type: 'system',
       content: selected.length ? `Group created and ${selected.map((p) => p.name).join(', ')} added` : 'Group created',
     });
+    let savedAccent = null;
+    try {
+      const { error: accentErr } = await supabase.from('groups').update({ accent }).eq('id', group.id);
+      if (!accentErr) savedAccent = accent;
+    } catch {}
     setCreating(false);
-    onCreated(group);
+    onCreated(savedAccent ? { ...group, accent: savedAccent } : group);
   };
 
+  const isPicked = (id) => !!selected.find((s) => s.id === id);
+  const heading = step === 'members' ? 'Choose members' : 'Make it yours';
+  const canNext = selected.length > 0;
+
   return (
-    <div style={{ position: 'fixed', inset: 0, background: theme.panelBg, zIndex: 40, display: 'flex', flexDirection: 'column' }} className="zchat-fade">
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 18px', paddingTop: 'calc(16px + env(safe-area-inset-top))', borderBottom: `1px solid ${theme.border}`, flexShrink: 0 }}>
+    <div style={{ position: 'fixed', inset: 0, background: theme.panelBg, zIndex: 40, display: 'flex', flexDirection: 'column', fontFamily: FONT }} className="zchat-fade">
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 18px 10px', paddingTop: 'calc(16px + env(safe-area-inset-top))', flexShrink: 0 }}>
         <ArrowLeft size={20} style={{ cursor: 'pointer', color: theme.ink }} onClick={() => (step === 'details' ? setStep('members') : onClose())} />
-        <div style={{ fontWeight: 800, fontSize: 17, color: theme.ink }}>{step === 'members' ? `Add participants${selected.length ? ` (${selected.length})` : ''}` : 'New group'}</div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontWeight: 900, fontSize: 19, color: theme.ink }}>{heading}</div>
+          <div style={{ fontSize: 11.5, color: theme.muted, fontWeight: 700 }}>{step === 'members' ? 'Step 1 of 2' : 'Step 2 of 2'}</div>
+        </div>
       </div>
 
       {step === 'members' ? (
         <>
           {selected.length > 0 && (
-            <div style={{ display: 'flex', gap: 8, padding: '10px 18px', overflowX: 'auto' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, padding: '4px 18px 10px', maxHeight: 112, overflowY: 'auto' }}>
               {selected.map((p) => (
-                <div key={p.id} onClick={() => toggleSelect(p)} style={{ textAlign: 'center', cursor: 'pointer', flexShrink: 0 }}>
-                  <Avatar emoji={p.avatar} name={p.name} frame={p.avatar_frame} size={48} />
-                  <div style={{ fontSize: 10, color: theme.muted, marginTop: 2, maxWidth: 48, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}<VerifiedBadge tier={p.verified} custom={p.custom_badge} size={12} /></div>
+                <div key={p.id} role="button" onClick={() => toggleSelect(p)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px 4px 4px', borderRadius: 18, background: `${accent}26`, border: `1px solid ${accent}66`, cursor: 'pointer' }}>
+                  <Avatar emoji={p.avatar} name={p.name} size={24} />
+                  <span style={{ fontSize: 12.5, fontWeight: 800, color: theme.ink, maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
+                  <X size={13} color={theme.muted} />
                 </div>
               ))}
             </div>
@@ -3419,51 +3646,62 @@ function CreateGroupPanel({ myId, onClose, onCreated }) {
           <div style={{ padding: '0 18px 10px' }}>
             <div style={{ position: 'relative' }}>
               <Search size={15} color={theme.muted} style={{ position: 'absolute', left: 12, top: 12 }} />
-              <input value={q} onChange={(e) => doSearch(e.target.value)} placeholder="Search username" autoCapitalize="none"
-                style={{ ...inputStyle(theme), padding: '9px 12px 9px 34px', fontSize: 13.5 }} />
+              <input value={q} onChange={(e) => doSearch(e.target.value)} placeholder="Search username" autoCapitalize="none" style={{ ...inputStyle(theme), padding: '9px 12px 9px 34px', fontSize: 13.5 }} />
             </div>
           </div>
           <div style={{ overflowY: 'auto', flex: 1, padding: '0 18px' }}>
+            {!q.trim() && suggested.length > 0 && <div style={{ fontSize: 11.5, fontWeight: 800, color: theme.muted, margin: '4px 2px' }}>People you follow</div>}
             {results.map((p) => (
               <div key={p.id} onClick={() => toggleSelect(p)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 4px', cursor: 'pointer' }}>
-                <Avatar emoji={p.avatar} name={p.name} frame={p.avatar_frame} size={40} />
+                <Avatar emoji={p.avatar} name={p.name} frame={p.avatar_frame} size={42} />
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 700, fontSize: 14, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}<VerifiedBadge tier={p.verified} custom={p.custom_badge} size={12} /></div>
+                  <div style={{ fontWeight: 800, fontSize: 14, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}<VerifiedBadge tier={p.verified} custom={p.custom_badge} size={12} /></div>
                   <div style={{ fontSize: 11.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>@{p.username}</div>
                 </div>
-                <div style={{
-                  width: 20, height: 20, borderRadius: '50%', border: `2px solid ${selected.find((s) => s.id === p.id) ? theme.coral : theme.border}`,
-                  background: selected.find((s) => s.id === p.id) ? theme.coral : 'transparent',
-                }} />
+                <div style={{ width: 22, height: 22, borderRadius: '50%', border: `2px solid ${isPicked(p.id) ? accent : theme.border}`, background: isPicked(p.id) ? accent : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {isPicked(p.id) && <Check size={13} color="white" />}
+                </div>
               </div>
             ))}
           </div>
           <div style={{ padding: 18, paddingBottom: 'calc(18px + env(safe-area-inset-bottom))' }}>
-            <button onClick={() => setStep('details')} disabled={selected.length === 0} style={primaryBtn(theme, selected.length === 0)}>Next</button>
+            <button onClick={() => setStep('details')} disabled={!canNext} style={{ ...primaryBtn(theme, !canNext), background: canNext ? accent : undefined }}>
+              {canNext ? `Next with ${selected.length} ${selected.length === 1 ? 'person' : 'people'}` : 'Pick at least one person'}
+            </button>
           </div>
         </>
       ) : (
-        <div style={{ padding: 20, paddingBottom: 'calc(20px + env(safe-area-inset-bottom))', flex: 1, overflowY: 'auto' }}>
-          <div style={{ textAlign: 'center', marginBottom: 20 }}>
-            <div onClick={() => document.getElementById('group-avatar-input').click()} style={{ display: 'inline-block', cursor: 'pointer', position: 'relative' }}>
+        <div style={{ padding: '4px 18px 20px', paddingBottom: 'calc(20px + env(safe-area-inset-bottom))', flex: 1, overflowY: 'auto' }}>
+          <div style={{ position: 'relative', overflow: 'hidden', borderRadius: 24, padding: '22px 16px 18px', textAlign: 'center', background: `linear-gradient(160deg, ${accent}, #4c1d95)`, marginBottom: 18 }}>
+            <div onClick={() => document.getElementById('group-avatar-input').click()} style={{ display: 'inline-block', cursor: 'pointer', position: 'relative', borderRadius: 30, boxShadow: '0 0 0 3px rgba(255,255,255,0.85), 0 12px 32px rgba(0,0,0,0.3)' }}>
               {avatarPreview ? (
-                <img src={avatarPreview} alt="" onContextMenu={(e) => e.preventDefault()} draggable={false} style={{ width: 84, height: 84, borderRadius: '50%', objectFit: 'cover' }} />
+                <img src={avatarPreview} alt="" onContextMenu={(e) => e.preventDefault()} draggable={false} style={{ width: 88, height: 88, borderRadius: 28, objectFit: 'cover', display: 'block' }} />
               ) : (
-                <div style={{ width: 84, height: 84, borderRadius: '50%', background: theme.coral, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Camera size={28} color="white" />
-                </div>
+                <GroupAvatar avatar={null} name={name || 'New group'} size={88} />
               )}
+              <div style={{ position: 'absolute', bottom: -4, right: -4, width: 28, height: 28, borderRadius: '50%', background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Camera size={14} color="#1b1b1f" /></div>
             </div>
             <input id="group-avatar-input" type="file" accept="image/*" style={{ display: 'none' }}
               onChange={(e) => { const f = e.target.files?.[0]; if (f) setCropFile(f); e.target.value = ''; }} />
+            <div style={{ fontWeight: 900, fontSize: 20, color: 'white', marginTop: 14, wordBreak: 'break-word' }}>{name.trim() || 'Name your group'}</div>
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', marginTop: 10 }}>
+              {selected.slice(0, 5).map((p, i) => (
+                <span key={p.id} style={{ marginLeft: i ? -8 : 0, display: 'inline-flex', borderRadius: '50%', boxShadow: '0 0 0 2px rgba(0,0,0,0.25)' }}><Avatar emoji={p.avatar} name={p.name} size={26} /></span>
+              ))}
+              <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 800, color: 'rgba(255,255,255,0.9)' }}>You and {selected.length} {selected.length === 1 ? 'other' : 'others'}</span>
+            </div>
           </div>
-          <div style={{ fontSize: 11.5, color: theme.muted, marginBottom: 5, fontWeight: 800 }}>GROUP NAME</div>
-          <input value={name} onChange={(e) => setName(e.target.value.slice(0, 50))} placeholder="e.g. Weekend Trip"
-            style={{ ...inputStyle(theme), marginBottom: 16 }} />
-          <div style={{ fontSize: 11.5, color: theme.muted, marginBottom: 5, fontWeight: 800 }}>GROUP BIO (OPTIONAL)</div>
-          <input value={bio} onChange={(e) => setBio(e.target.value.slice(0, 120))} placeholder="What's this group about?"
-            style={{ ...inputStyle(theme), marginBottom: 20 }} />
-          <button onClick={create} disabled={!name.trim() || creating} style={primaryBtn(theme, !name.trim() || creating)}>
+          <div style={{ fontSize: 12, color: theme.muted, marginBottom: 6, fontWeight: 800 }}>Group name</div>
+          <input value={name} onChange={(e) => setName(e.target.value.slice(0, 50))} placeholder="e.g. Weekend Trip" style={{ ...inputStyle(theme), marginBottom: 16 }} />
+          <div style={{ fontSize: 12, color: theme.muted, marginBottom: 6, fontWeight: 800 }}>What is it about? (optional)</div>
+          <input value={bio} onChange={(e) => setBio(e.target.value.slice(0, 120))} placeholder="A line about this group" style={{ ...inputStyle(theme), marginBottom: 16 }} />
+          <div style={{ fontSize: 12, color: theme.muted, marginBottom: 8, fontWeight: 800 }}>Group colour</div>
+          <div style={{ display: 'flex', gap: 10, overflowX: 'auto', marginBottom: 22, paddingBottom: 2 }}>
+            {GROUP_ACCENTS.map((c) => (
+              <div key={c} role="button" aria-label={`Use colour ${c}`} onClick={() => setAccent(c)} style={{ width: 34, height: 34, borderRadius: 17, background: c, flexShrink: 0, cursor: 'pointer', border: accent === c ? `3px solid ${theme.ink}` : `1px solid ${theme.border}` }} />
+            ))}
+          </div>
+          <button onClick={create} disabled={!name.trim() || creating} style={{ ...primaryBtn(theme, !name.trim() || creating), background: name.trim() ? accent : undefined }}>
             {creating ? <Spinner size={14} /> : 'Create group'}
           </button>
           {err && <div style={{ color: theme.danger, fontSize: 12.5, marginTop: 10, textAlign: 'center' }}>{err}</div>}
@@ -3481,10 +3719,13 @@ function CreateGroupPanel({ myId, onClose, onCreated }) {
   );
 }
 
-function GroupInfoPanel({ group, members, myId, myRole, isOwner, onClose, onPromote, onDemote, onMute, onUnmute, onKick, onLeave, onOpenProfile, onSaveBio, onSaveName, onSaveAvatar, onAddMembers, onTransferOwnership, onSetWallpaper, onSetHeaderStyle, onOpenSettings, onOpenMembers }) {
+function GroupInfoPanel({ group, members, myId, iFollowIds, privacyAllowed, myRole, isOwner, onClose, onPromote, onDemote, onMute, onUnmute, onKick, onLeave, onOpenProfile, onSaveBio, onSaveName, onSaveAvatar, onAddMembers, onTransferOwnership, onSetWallpaper, onSetHeaderStyle, onOpenSettings, messages = [], onSetAccent, disappearSecs, onSetDisappear, onOpenMedia, onJumpToMessage }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
   const isAdmin = myRole === 'admin';
+  const accent = groupAccent(group);
+  const [tab, setTab] = useState('members');
+  const [q, setQ] = useState('');
   const [menuFor, setMenuFor] = useState(null);
   const [menuAnchor, setMenuAnchor] = useState(null);
   const [editingBio, setEditingBio] = useState(false);
@@ -3495,180 +3736,255 @@ function GroupInfoPanel({ group, members, myId, myRole, isOwner, onClose, onProm
   const [showAddMembers, setShowAddMembers] = useState(false);
   const [showWallpaper, setShowWallpaper] = useState(false);
   const [showHeaderStyle, setShowHeaderStyle] = useState(false);
+  const [showDisappear, setShowDisappear] = useState(false);
   const soleAdmin = isAdmin && members.filter((m) => m.role === 'admin').length === 1 && members.length > 1;
-  return (
-    <div style={{ position: 'fixed', inset: 0, background: theme.panelBg, zIndex: 40, display: 'flex', flexDirection: 'column' }} className="zchat-fade">
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 18px', paddingTop: 'calc(16px + env(safe-area-inset-top))', borderBottom: `1px solid ${theme.border}`, flexShrink: 0 }}>
-        <ArrowLeft size={20} style={{ cursor: 'pointer', color: theme.ink }} onClick={onClose} />
-        <div style={{ fontWeight: 800, fontSize: 17, color: theme.ink }}>Group info</div>
-      </div>
-      <div style={{ overflowY: 'auto', flex: 1, minHeight: 0, padding: '0 18px', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))', position: 'relative' }}>
-        <div style={{ position: 'absolute', left: 0, right: 0, top: 0, height: 190, overflow: 'hidden', pointerEvents: 'none' }}>
-          {group.avatar && typeof group.avatar === 'string' && group.avatar.startsWith('http')
-            ? <img src={group.avatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'blur(22px) saturate(1.3)', opacity: 0.85, transform: 'scale(1.15)' }} />
-            : <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(160deg, ${colorForName(group.name)}, #7c3aed)` , opacity: 0.85 }} />}
-          <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(180deg, rgba(0,0,0,0.25), transparent 40%, ${theme.panelBg} 100%)` }} />
+  const online = members.filter(isMemberOnline);
+  const dayAgo = Date.now() - 86400000;
+  const todayCount = messages.filter((m) => m.type !== 'system' && !m.deleted && new Date(m.created_at).getTime() > dayAgo).length;
+  const nameOf = (id) => { const f = members.find((x) => x.user_id === id); return f && f.profile ? f.profile.name : 'Someone'; };
+  const term = q.trim().toLowerCase();
+  const rank = (m) => (m.user_id === group.created_by ? 0 : m.role === 'admin' ? 1 : 2);
+  const shown = members
+    .filter((m) => m.profile && (!term || (m.profile.name || '').toLowerCase().includes(term) || (m.profile.username || '').toLowerCase().includes(term)))
+    .sort((a, b) => rank(a) - rank(b) || (a.profile.name || '').localeCompare(b.profile.name || ''));
+  const media = messages.filter((m) => !m.deleted && (m.type === 'image' || m.type === 'video') && m.media_url).slice().reverse().slice(0, 90);
+  const links = [];
+  const seenLinks = new Set();
+  for (let i = messages.length - 1; i >= 0 && links.length < 40; i--) {
+    const m = messages[i];
+    if (m.deleted || m.type !== 'text') continue;
+    for (const url of extractLinks(m.content)) {
+      if (seenLinks.has(url)) continue;
+      seenLinks.add(url);
+      links.push({ url, from: nameOf(m.sender_id), at: m.created_at });
+    }
+  }
+  const pinned = messages.filter((m) => !m.deleted && m.type !== 'system' && isActiveUntil(m.pinned_until)).slice().reverse();
+  const domainOf = (u) => { try { return new URL(/^https?:/i.test(u) ? u : `https://${u}`).hostname.replace(/^www\./, ''); } catch { return u; } };
+  const hrefOf = (u) => (u.includes('@') && !/^https?:|^www\./i.test(u) ? `mailto:${u}` : (/^https?:/i.test(u) ? u : `https://${u}`));
+  const chip = (label, color, bg) => (
+    <span style={{ fontSize: 9.5, fontWeight: 900, padding: '2px 7px', borderRadius: 8, background: bg || `${color}26`, color }}>{label}</span>
+  );
+
+  const memberRow = (m) => {
+    const on = isMemberOnline(m);
+    const isOwnerRow = m.user_id === group.created_by;
+    return (
+      <div key={m.user_id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 2px' }}>
+        <div onClick={() => onOpenProfile(m.profile)} style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0, cursor: 'pointer' }}>
+          <div style={{ borderRadius: '50%', boxShadow: on ? `0 0 0 2px ${theme.panelBg}, 0 0 0 4px #34d399` : 'none', flexShrink: 0 }}>
+            <Avatar emoji={m.profile.avatar} name={m.profile.name} frame={m.profile.avatar_frame} size={42} />
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 800, fontSize: 14, color: theme.ink, minWidth: 0 }}>
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.profile.name}{m.user_id === myId ? ' (you)' : ''}</span>
+              <VerifiedBadge tier={m.profile.verified} custom={m.profile.custom_badge} size={12} />
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2, fontSize: 11.5, color: theme.muted }}>
+              {isOwnerRow ? chip('Owner', '#fbbf24') : m.role === 'admin' ? chip('Admin', accent) : null}
+              {m.muted && chip('Muted', theme.muted, theme.rowBg)}
+              <span style={{ color: on ? '#34d399' : theme.muted, fontWeight: on ? 700 : 400 }}>{on ? 'Online now' : `@${m.profile.username}`}</span>
+            </div>
+          </div>
         </div>
-        <div style={{ textAlign: 'center', marginBottom: 14, position: 'relative', paddingTop: 96 }}>
-          <div onClick={() => isAdmin && document.getElementById('group-info-avatar-input').click()} style={{ display: 'inline-block', cursor: isAdmin ? 'pointer' : 'default', position: 'relative', borderRadius: 30, border: `4px solid ${theme.panelBg}`, boxShadow: '0 14px 40px rgba(0,0,0,0.35)' }}>
-            <GroupAvatar avatar={group.avatar} name={group.name} size={96} />
+        {isAdmin && m.user_id !== myId && !isOwnerRow && (
+          <MoreVertical size={17} color={theme.muted} style={{ cursor: 'pointer', flexShrink: 0 }}
+            onClick={(e) => { e.stopPropagation(); setMenuAnchor(e.currentTarget); setMenuFor(menuFor === m.user_id ? null : m.user_id); }} />
+        )}
+      </div>
+    );
+  };
+
+  const sectionTitle = (label, n) => (
+    <div style={{ fontSize: 11.5, fontWeight: 800, color: theme.muted, margin: '12px 2px 2px' }}>{label} {n}</div>
+  );
+
+  const tile = (icon, label, onClick, sub) => (
+    <div role="button" onClick={onClick} style={{ flex: '0 0 auto', minWidth: 78, borderRadius: 18, background: theme.rowBg, border: `1px solid ${theme.border}`, padding: '11px 10px', textAlign: 'center', cursor: 'pointer' }}>
+      <div style={{ width: 34, height: 34, borderRadius: 12, margin: '0 auto 6px', background: `${accent}26`, color: accent, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{icon}</div>
+      <div style={{ fontSize: 11.5, fontWeight: 800, color: theme.ink }}>{label}</div>
+      {sub && <div style={{ fontSize: 10, color: theme.muted, marginTop: 1 }}>{sub}</div>}
+    </div>
+  );
+
+  const tabs = [['members', 'Members', members.length], ['media', 'Media', media.length], ['links', 'Links', links.length], ['pinned', 'Pinned', pinned.length]];
+  const empty = (text) => <div style={{ textAlign: 'center', padding: '28px 16px', fontSize: 13, color: theme.muted }}>{text}</div>;
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: theme.panelBg, zIndex: 40, display: 'flex', flexDirection: 'column', fontFamily: FONT }} className="zchat-fade">
+      <style>{`@keyframes zgDriftA{0%{transform:translate(-12%,-8%) scale(1)}50%{transform:translate(10%,8%) scale(1.18)}100%{transform:translate(-12%,-8%) scale(1)}}@keyframes zgDriftB{0%{transform:translate(12%,6%) scale(1.1)}50%{transform:translate(-10%,-6%) scale(0.95)}100%{transform:translate(12%,6%) scale(1.1)}}@media (prefers-reduced-motion: reduce){.zg-blob{animation:none !important}}`}</style>
+      <div style={{ overflowY: 'auto', flex: 1, minHeight: 0, WebkitOverflowScrolling: 'touch', paddingBottom: 'calc(20px + env(safe-area-inset-bottom))' }}>
+        <div style={{ position: 'relative', overflow: 'hidden', padding: '0 18px 20px', paddingTop: 'calc(14px + env(safe-area-inset-top))' }}>
+          <div aria-hidden="true" style={{ position: 'absolute', inset: 0, background: `linear-gradient(180deg, ${accent}55 0%, ${accent}12 70%, transparent 100%)` }} />
+          <div className="zg-blob" aria-hidden="true" style={{ position: 'absolute', width: 260, height: 260, borderRadius: '50%', left: -60, top: -80, background: accent, opacity: 0.35, filter: 'blur(50px)', animation: 'zgDriftA 14s ease-in-out infinite' }} />
+          <div className="zg-blob" aria-hidden="true" style={{ position: 'absolute', width: 220, height: 220, borderRadius: '50%', right: -70, top: 20, background: '#7c3aed', opacity: 0.28, filter: 'blur(50px)', animation: 'zgDriftB 17s ease-in-out infinite' }} />
+          <div aria-hidden="true" style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 80, background: `linear-gradient(180deg, transparent, ${theme.panelBg})`, pointerEvents: 'none' }} />
+          <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div role="button" aria-label="Back" onClick={onClose} style={{ width: 38, height: 38, borderRadius: '50%', background: 'rgba(0,0,0,0.28)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><ArrowLeft size={19} color="white" /></div>
+            {onOpenSettings && <div role="button" aria-label="Group settings" onClick={onOpenSettings} style={{ width: 38, height: 38, borderRadius: '50%', background: 'rgba(0,0,0,0.28)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><SettingsIcon size={18} color="white" /></div>}
+          </div>
+          <div style={{ position: 'relative', textAlign: 'center', marginTop: 6 }}>
+            <div onClick={() => isAdmin && document.getElementById('group-info-avatar-input').click()} style={{ display: 'inline-block', position: 'relative', cursor: isAdmin ? 'pointer' : 'default', borderRadius: 32, boxShadow: `0 0 0 3px ${accent}, 0 14px 44px ${accent}66` }}>
+              <GroupAvatar avatar={group.avatar} name={group.name} size={96} />
+              {isAdmin && (
+                <div style={{ position: 'absolute', bottom: -2, right: -2, width: 26, height: 26, borderRadius: '50%', background: accent, border: `2px solid ${theme.panelBg}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Camera size={12} color="white" />
+                </div>
+              )}
+            </div>
             {isAdmin && (
-              <div style={{ position: 'absolute', bottom: 0, right: 0, width: 24, height: 24, borderRadius: '50%', background: theme.coral, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Camera size={12} color="white" />
+              <input id="group-info-avatar-input" type="file" accept="image/*" style={{ display: 'none' }}
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) setCropFile(f); e.target.value = ''; }} />
+            )}
+            {editingName ? (
+              <div style={{ display: 'flex', gap: 6, marginTop: 12, justifyContent: 'center' }}>
+                <input value={name} onChange={(e) => setName(e.target.value.slice(0, 50))} style={{ ...inputStyle(theme), fontSize: 14, width: 190 }} />
+                <button onClick={() => { onSaveName(name); setEditingName(false); }} style={{ padding: '0 16px', borderRadius: 12, border: 'none', background: accent, color: 'white', fontWeight: 800, fontSize: 12.5, cursor: 'pointer', fontFamily: FONT }}>Save</button>
+              </div>
+            ) : (
+              <div onClick={() => isAdmin && setEditingName(true)} style={{ fontWeight: 900, fontSize: 22, color: theme.ink, marginTop: 12, cursor: isAdmin ? 'pointer' : 'default', wordBreak: 'break-word' }}>{group.name}</div>
+            )}
+            <div style={{ fontSize: 12.5, color: theme.muted, fontWeight: 700, marginTop: 3 }}>
+              {members.length} {members.length === 1 ? 'member' : 'members'}{group.created_at ? ` \u00b7 Created ${new Date(group.created_at).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}` : ''}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 16, background: 'rgba(52,211,153,0.15)', color: '#34d399', fontSize: 12, fontWeight: 800 }}>
+                <span style={{ width: 8, height: 8, borderRadius: 4, background: '#34d399' }} />{online.length} online now
+              </div>
+              <div style={{ padding: '6px 12px', borderRadius: 16, background: `${accent}26`, color: accent, fontSize: 12, fontWeight: 800 }}>{todayCount} {todayCount === 1 ? 'message' : 'messages'} today</div>
+              {!!Number(disappearSecs || 0) && <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 16, background: theme.rowBg, color: theme.ink, fontSize: 12, fontWeight: 800 }}><Timer size={12} />{disappearLabel(disappearSecs)}</div>}
+            </div>
+          </div>
+        </div>
+
+        <div style={{ padding: '0 18px' }}>
+          <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4, marginBottom: 14 }}>
+            {isAdmin && tile(<UserPlus size={17} />, 'Add', () => setShowAddMembers(true))}
+            {tile(<ImageIcon size={17} />, 'Wallpaper', () => setShowWallpaper(true))}
+            {isAdmin && tile(<Palette size={17} />, 'Header', () => setShowHeaderStyle(true))}
+            {tile(<Timer size={17} />, 'Timer', () => setShowDisappear(true), disappearLabel(disappearSecs))}
+            {onOpenSettings && tile(<SettingsIcon size={17} />, 'Settings', onOpenSettings)}
+          </div>
+
+          <div style={{ borderRadius: 18, background: theme.rowBg, border: `1px solid ${theme.border}`, padding: '12px 14px' }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: theme.muted, marginBottom: 6 }}>About</div>
+            {editingBio ? (
+              <div style={{ display: 'flex', gap: 6 }}>
+                <input value={bio} onChange={(e) => setBio(e.target.value.slice(0, 120))} placeholder="What's this group about?" style={{ ...inputStyle(theme), fontSize: 13 }} />
+                <button onClick={() => { onSaveBio(bio); setEditingBio(false); }} style={{ padding: '0 16px', borderRadius: 13, border: 'none', background: accent, color: 'white', fontWeight: 800, fontSize: 12.5, cursor: 'pointer', fontFamily: FONT }}>Save</button>
+              </div>
+            ) : (
+              <div onClick={() => isAdmin && setEditingBio(true)} style={{ fontSize: 13.5, lineHeight: 1.45, color: group.bio ? theme.ink : theme.muted, cursor: isAdmin ? 'pointer' : 'default' }}>
+                {group.bio ? <RichText text={group.bio} onMention={onOpenProfile} /> : (isAdmin ? 'Add a group bio' : 'No bio yet')}
+              </div>
+            )}
+            {isAdmin && (
+              <div style={{ marginTop: 14 }}>
+                <div style={{ fontSize: 12, fontWeight: 800, color: theme.muted, marginBottom: 8 }}>Group colour</div>
+                <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 2 }}>
+                  {GROUP_ACCENTS.map((c) => (
+                    <div key={c} role="button" aria-label={`Use colour ${c}`} onClick={() => onSetAccent && onSetAccent(c)} style={{ width: 30, height: 30, borderRadius: 15, background: c, flexShrink: 0, cursor: 'pointer', border: accent === c ? `3px solid ${theme.ink}` : `1px solid ${theme.border}` }} />
+                  ))}
+                </div>
               </div>
             )}
           </div>
-          {isAdmin && (
-            <input id="group-info-avatar-input" type="file" accept="image/*" style={{ display: 'none' }}
-              onChange={(e) => { const f = e.target.files?.[0]; if (f) setCropFile(f); e.target.value = ''; }} />
+
+          <div style={{ display: 'flex', gap: 4, padding: 4, borderRadius: 16, background: theme.rowBg, border: `1px solid ${theme.border}`, margin: '16px 0 8px' }}>
+            {tabs.map(([k, label, n]) => (
+              <div key={k} role="button" onClick={() => setTab(k)} style={{ flex: 1, textAlign: 'center', padding: '8px 2px', borderRadius: 12, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', background: tab === k ? accent : 'transparent', color: tab === k ? 'white' : theme.muted, transition: 'background 0.2s' }}>
+                {label}{n ? ` ${n}` : ''}
+              </div>
+            ))}
+          </div>
+
+          {tab === 'members' && (
+            <>
+              {members.length > 6 && (
+                <div style={{ position: 'relative', margin: '6px 0 4px' }}>
+                  <Search size={15} color={theme.muted} style={{ position: 'absolute', left: 12, top: 12 }} />
+                  <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search members" autoCapitalize="none" style={{ ...inputStyle(theme), padding: '9px 12px 9px 34px', fontSize: 13.5 }} />
+                </div>
+              )}
+              {term ? (shown.length ? shown.map(memberRow) : empty('No member matches that.')) : (
+                <>
+                  {[[0, 'Owner'], [1, 'Admins'], [2, 'Members']].map(([r, label]) => {
+                    const list = shown.filter((m) => rank(m) === r);
+                    if (!list.length) return null;
+                    return <div key={r}>{sectionTitle(label, list.length)}{list.map(memberRow)}</div>;
+                  })}
+                </>
+              )}
+              {isAdmin && (
+                <div role="button" onClick={() => setShowAddMembers(true)} style={{ textAlign: 'center', padding: '12px 4px', fontSize: 13, fontWeight: 800, color: accent, cursor: 'pointer' }}>+ Add people</div>
+              )}
+            </>
           )}
-          {editingName ? (
-            <div style={{ display: 'flex', gap: 6, marginTop: 8, justifyContent: 'center' }}>
-              <input value={name} onChange={(e) => setName(e.target.value.slice(0, 50))}
-                style={{ ...inputStyle(theme), fontSize: 13, width: 160 }} />
-              <button onClick={() => { onSaveName(name); setEditingName(false); }} style={{
-                padding: '0 14px', borderRadius: 12, border: 'none', background: theme.coral, color: 'white',
-                fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: FONT,
-              }}>Save</button>
+
+          {tab === 'media' && (media.length ? (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 3, marginTop: 6 }}>
+              {media.map((m) => (
+                <div key={m.id} role="button" onClick={() => onOpenMedia && onOpenMedia(m)} style={{ position: 'relative', aspectRatio: '1 / 1', background: theme.rowBg, overflow: 'hidden', borderRadius: 8, cursor: 'pointer' }}>
+                  {m.type === 'video'
+                    ? <video src={`${m.media_url}#t=0.1`} muted playsInline preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} />
+                    : <img src={m.media_url} alt="" loading="lazy" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
+                  {m.type === 'video' && <Play size={15} color="white" style={{ position: 'absolute', top: 6, right: 6, filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.6))' }} />}
+                </div>
+              ))}
             </div>
-          ) : (
-            <div onClick={() => isAdmin && setEditingName(true)} style={{ fontWeight: 800, fontSize: 16, color: theme.ink, marginTop: 8, cursor: isAdmin ? 'pointer' : 'default' }}>
-              {group.name}
+          ) : empty('Photos and videos shared in this group show up here.'))}
+
+          {tab === 'links' && (links.length ? links.map((l) => (
+            <a key={l.url} href={hrefOf(l.url)} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 2px', textDecoration: 'none', borderBottom: `1px solid ${theme.border}` }}>
+              <div style={{ width: 38, height: 38, borderRadius: 12, background: `${accent}26`, color: accent, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><LinkIcon size={16} /></div>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontWeight: 800, fontSize: 13.5, color: theme.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{domainOf(l.url)}</div>
+                <div style={{ fontSize: 11.5, color: theme.muted }}>Shared by {l.from} {timeAgoLong(l.at)}</div>
+              </div>
+            </a>
+          )) : empty('Links shared in this group show up here.'))}
+
+          {tab === 'pinned' && (pinned.length ? pinned.map((m) => (
+            <div key={m.id} role="button" onClick={() => onJumpToMessage && onJumpToMessage(m.id)} style={{ padding: '11px 12px', borderRadius: 14, background: theme.rowBg, border: `1px solid ${theme.border}`, marginTop: 8, cursor: 'pointer' }}>
+              <div style={{ fontSize: 11.5, fontWeight: 800, color: accent, marginBottom: 3 }}>{nameOf(m.sender_id)}</div>
+              <div style={{ fontSize: 13.5, color: theme.ink, lineHeight: 1.4, wordBreak: 'break-word' }}>{String(describeMessage(m).text || '').slice(0, 200)}</div>
             </div>
-          )}
-          <div style={{ fontSize: 12, color: theme.muted, fontWeight: 700 }}>Group · {members.length} members{group.created_at ? ` · Created ${new Date(group.created_at).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}` : ''}</div>
+          )) : empty('Pinned messages show up here.'))}
+
+          <div style={{ marginTop: 22 }}>
+            <span style={{ ...ghostBtn(theme), color: theme.danger, borderColor: theme.danger, display: 'block', textAlign: 'center', opacity: (soleAdmin || isOwner) ? 0.5 : 1, cursor: (soleAdmin || isOwner) ? 'default' : 'pointer' }}
+              onClick={() => { if (!soleAdmin && !isOwner) onLeave(); }}>
+              {isOwner ? 'Transfer ownership before leaving' : soleAdmin ? 'Leave group (assign a new admin first)' : 'Leave group'}
+            </span>
+          </div>
         </div>
+      </div>
+
+      <SmartMenu anchorEl={menuAnchor} open={!!menuFor} onClose={() => setMenuFor(null)} width={200}>
         {(() => {
-          const online = members.filter((m) => m.profile && !m.profile.hide_activity && m.profile.last_seen && Date.now() - new Date(m.profile.last_seen).getTime() < 3 * 60 * 1000).length;
-          const admins = members.filter((m) => m.role === 'admin').length;
-          const stat = (n, label, onClick) => (
-            <div role={onClick ? 'button' : undefined} onClick={onClick} style={{ flex: 1, borderRadius: 16, background: theme.rowBg, border: `1px solid ${theme.border}`, padding: '10px 4px', textAlign: 'center', cursor: onClick ? 'pointer' : 'default' }}>
-              <div style={{ fontSize: 17, fontWeight: 900, color: theme.ink }}>{n}</div>
-              <div style={{ fontSize: 10.5, color: theme.muted, fontWeight: 700 }}>{label}</div>
-            </div>
-          );
-          const act = (icon, label, onClick, danger) => (
-            <div role="button" onClick={onClick} style={{ flex: 1, borderRadius: 14, background: theme.rowBg, border: `1px solid ${theme.border}`, padding: '10px 4px', textAlign: 'center', fontSize: 11, fontWeight: 800, color: danger ? theme.danger : theme.ink, cursor: 'pointer' }}>
-              <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 4, color: danger ? theme.danger : theme.coralDeep }}>{icon}</div>{label}
-            </div>
+          const mm = members.find((x) => x.user_id === menuFor);
+          if (!mm || mm.user_id === group.created_by) return null;
+          const item = (label, onClick, color, last) => (
+            <div onClick={() => { onClick(); setMenuFor(null); }} style={{ padding: '11px 14px', fontSize: 13, fontWeight: 600, color: color || theme.ink, cursor: 'pointer', borderBottom: last ? 'none' : `1px solid ${theme.border}` }}>{label}</div>
           );
           return (
-            <>
-              <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-                {stat(members.length, 'Members', onOpenMembers)}{stat(online, 'Online', onOpenMembers)}{stat(admins, admins === 1 ? 'Admin' : 'Admins', onOpenMembers)}{stat(group.unread || 0, 'Unread')}
-              </div>
-              <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-                {isAdmin && act(<UserPlus size={18} />, 'Add', () => setShowAddMembers(true))}
-                {act(<ImageIcon size={18} />, 'Wallpaper', () => setShowWallpaper(true))}
-                {isAdmin && act(<Palette size={18} />, 'Header', () => setShowHeaderStyle(true))}
-                {onOpenSettings && act(<SettingsIcon size={18} />, 'Settings', onOpenSettings)}
-              </div>
-            </>
+            <div style={{ background: theme.panelBg, borderRadius: 14, boxShadow: '0 8px 24px rgba(0,0,0,0.2)', border: `1px solid ${theme.border}`, overflow: 'hidden' }}>
+              {isOwner && (mm.role === 'admin' ? item('Remove as admin', () => onDemote(mm.user_id)) : item('Make admin', () => onPromote(mm.user_id)))}
+              {isOwner && item('Transfer ownership', () => onTransferOwnership(mm.user_id), accent)}
+              {mm.muted ? item('Unmute member', () => onUnmute(mm.user_id)) : item('Mute member', () => onMute(mm.user_id))}
+              {item('Remove from group', () => onKick(mm.user_id), theme.danger, true)}
+            </div>
           );
         })()}
-
-        <div style={{ fontSize: 11, color: theme.muted, marginBottom: 5, fontWeight: 800 }}>GROUP BIO</div>
-        {editingBio ? (
-          <div style={{ display: 'flex', gap: 6, marginBottom: 18 }}>
-            <input value={bio} onChange={(e) => setBio(e.target.value.slice(0, 120))} placeholder="What's this group about?"
-              style={{ ...inputStyle(theme), fontSize: 13 }} />
-            <button onClick={() => { onSaveBio(bio); setEditingBio(false); }} style={{
-              padding: '0 16px', borderRadius: 13, border: 'none', background: theme.coral, color: 'white',
-              fontWeight: 700, fontSize: 12.5, cursor: 'pointer', fontFamily: FONT,
-            }}>Save</button>
-          </div>
-        ) : (
-          <div onClick={() => isAdmin && setEditingBio(true)} style={{ fontSize: 13, color: group.bio ? theme.ink : theme.muted, marginBottom: 18, cursor: isAdmin ? 'pointer' : 'default' }}>
-            {group.bio ? <RichText text={group.bio} onMention={onOpenProfile} /> : (isAdmin ? 'Add a group bio' : 'No bio yet')}
-          </div>
-        )}
-
-        {isAdmin && (
-          <>
-            <SettingsRow icon={<ImageIcon size={16} />} label="Chat wallpaper" onClick={() => setShowWallpaper(true)} />
-            <SettingsRow icon={<Sparkles size={16} />} label="Header style" onClick={() => setShowHeaderStyle(true)} />
-            <div style={{ height: 12 }} />
-          </>
-        )}
-
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-          <div style={{ fontSize: 11, color: theme.muted, fontWeight: 800 }}>MEMBERS · {members.length}</div>
-          {isAdmin && (
-            <div onClick={() => setShowAddMembers(true)} style={{ fontSize: 12, color: theme.coral, fontWeight: 700, cursor: 'pointer' }}>+ Add</div>
-          )}
-        </div>
-        {members.slice(0, 5).map((m) => (
-          <div key={m.user_id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 2px', position: 'relative' }}>
-            <div onClick={() => onOpenProfile(m.profile)} style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, cursor: 'pointer', minWidth: 0 }}>
-              <Avatar emoji={m.profile.avatar} name={m.profile.name} frame={m.profile.avatar_frame} size={40} />
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontWeight: 700, fontSize: 13.5, color: theme.ink, display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                  <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{m.profile.name}</span><VerifiedBadge tier={m.profile.verified} custom={m.profile.custom_badge} size={12} />{m.user_id === myId && <span style={{ color: theme.muted, fontWeight: 500, flexShrink: 0 }}>(you)</span>}
-                </div>
-                <div style={{ display: 'flex', gap: 6, marginBottom: 2 }}>
-                  {m.user_id === group.created_by ? (
-                    <span style={{ fontSize: 9.5, fontWeight: 900, padding: '2px 7px', borderRadius: 8, background: 'rgba(251,191,36,0.15)', color: '#fbbf24' }}>Owner</span>
-                  ) : m.role === 'admin' && <span style={{ fontSize: 9.5, fontWeight: 900, padding: '2px 7px', borderRadius: 8, background: 'rgba(96,165,250,0.15)', color: '#60a5fa' }}>Admin</span>}
-                  {m.muted && <span style={{ fontSize: 9.5, fontWeight: 900, padding: '2px 7px', borderRadius: 8, background: theme.rowBg, color: theme.muted }}>Muted</span>}
-                  {m.profile && !m.profile.hide_activity && m.profile.last_seen && Date.now() - new Date(m.profile.last_seen).getTime() < 3 * 60 * 1000 && <span style={{ fontSize: 9.5, fontWeight: 900, padding: '2px 7px', borderRadius: 8, background: 'rgba(34,197,94,0.14)', color: '#22c55e' }}>Online</span>}
-                </div>
-                <div style={{ fontSize: 10.5, color: theme.muted }}>
-                  Added by {m.added_by === m.user_id ? 'themself' : (members.find((x) => x.user_id === m.added_by)?.profile.name || 'someone who left')}
-                  {m.joined_at ? ` on ${new Date(m.joined_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })} at ${new Date(m.joined_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : ''}
-                </div>
-              </div>
-            </div>
-            {isAdmin && m.user_id !== myId && m.user_id !== group.created_by && (
-              <MoreVertical size={16} color={theme.muted} style={{ cursor: 'pointer', flexShrink: 0 }}
-                onClick={(e) => { e.stopPropagation(); setMenuAnchor(e.currentTarget); setMenuFor(menuFor === m.user_id ? null : m.user_id); }} />
-            )}
-          </div>
-        ))}
-        {members.length > 5 && onOpenMembers && (
-          <div role="button" onClick={onOpenMembers} style={{ textAlign: 'center', padding: '10px 4px', fontSize: 13, fontWeight: 800, color: theme.coral, cursor: 'pointer' }}>View all {members.length} members</div>
-        )}
-        <SmartMenu anchorEl={menuAnchor} open={!!menuFor} onClose={() => setMenuFor(null)} width={190}>
-          {(() => {
-            const mm = members.find((x) => x.user_id === menuFor);
-            if (!mm || mm.user_id === group.created_by) return null;
-            return (
-              <div style={{ background: theme.panelBg, borderRadius: 14, boxShadow: '0 8px 24px rgba(0,0,0,0.2)', border: `1px solid ${theme.border}`, overflow: 'hidden' }}>
-                {isOwner && (mm.role === 'admin' ? (
-                  <div onClick={() => { onDemote(mm.user_id); setMenuFor(null); }} style={{ padding: '11px 14px', fontSize: 13, fontWeight: 600, color: theme.ink, cursor: 'pointer', borderBottom: `1px solid ${theme.border}` }}>Remove as admin</div>
-                ) : (
-                  <div onClick={() => { onPromote(mm.user_id); setMenuFor(null); }} style={{ padding: '11px 14px', fontSize: 13, fontWeight: 600, color: theme.ink, cursor: 'pointer', borderBottom: `1px solid ${theme.border}` }}>Make admin</div>
-                ))}
-                {isOwner && (
-                  <div onClick={() => { onTransferOwnership(mm.user_id); setMenuFor(null); }} style={{ padding: '11px 14px', fontSize: 13, fontWeight: 600, color: theme.coral, cursor: 'pointer', borderBottom: `1px solid ${theme.border}` }}>Make owner</div>
-                )}
-                {mm.muted ? (
-                  <div onClick={() => { onUnmute(mm.user_id); setMenuFor(null); }} style={{ padding: '11px 14px', fontSize: 13, fontWeight: 600, color: theme.ink, cursor: 'pointer', borderBottom: `1px solid ${theme.border}` }}>Unmute in group</div>
-                ) : (
-                  <div onClick={() => { onMute(mm.user_id); setMenuFor(null); }} style={{ padding: '11px 14px', fontSize: 13, fontWeight: 600, color: theme.ink, cursor: 'pointer', borderBottom: `1px solid ${theme.border}` }}>Mute in group</div>
-                )}
-                <div onClick={() => { onKick(mm.user_id); setMenuFor(null); }} style={{ padding: '11px 14px', fontSize: 13, fontWeight: 600, color: theme.danger, cursor: 'pointer' }}>Remove from group</div>
-              </div>
-            );
-          })()}
-        </SmartMenu>
-      </div>
-      <div style={{ padding: 18, paddingBottom: 'calc(18px + env(safe-area-inset-bottom))', borderTop: `1px solid ${theme.border}` }}>
-        <span style={{ ...ghostBtn(theme), color: theme.danger, borderColor: theme.danger, display: 'block', textAlign: 'center', opacity: (soleAdmin || isOwner) ? 0.5 : 1, cursor: (soleAdmin || isOwner) ? 'default' : 'pointer' }}
-          onClick={() => { if (!soleAdmin && !isOwner) onLeave(); }}>
-          {isOwner ? 'Transfer ownership before leaving' : soleAdmin ? 'Leave group (assign a new admin first)' : 'Leave group'}
-        </span>
-      </div>
+      </SmartMenu>
       {cropFile && (
         <PhotoCropEditor file={cropFile} isAvatar onCancel={() => setCropFile(null)} onConfirm={(blob) => { onSaveAvatar(blob); setCropFile(null); }} />
       )}
-      {showWallpaper && (
-        <WallpaperPicker value={group.wallpaper} onSelect={onSetWallpaper} onClose={() => setShowWallpaper(false)} />
-      )}
-      {showHeaderStyle && (
-        <NameBarPicker value={group.name_bar} onSelect={onSetHeaderStyle} onClose={() => setShowHeaderStyle(false)} />
-      )}
+      {showWallpaper && <WallpaperPicker value={group.wallpaper} onSelect={onSetWallpaper} onClose={() => setShowWallpaper(false)} />}
+      {showHeaderStyle && <NameBarPicker value={group.name_bar} onSelect={onSetHeaderStyle} onClose={() => setShowHeaderStyle(false)} />}
+      {showDisappear && <DisappearSheet value={disappearSecs} subject="this group" canEdit={isAdmin} onPick={onSetDisappear} onClose={() => setShowDisappear(false)} />}
       {showAddMembers && (
-        <AddMembersPanel myId={myId} existingIds={members.map((m) => m.user_id)}
+        <AddMembersPanel myId={myId} iFollowIds={iFollowIds} privacyAllowed={privacyAllowed} existingIds={members.map((m) => m.user_id)}
           onClose={() => setShowAddMembers(false)}
           onAdd={(people) => { onAddMembers(people); setShowAddMembers(false); }} />
       )}
@@ -3676,8 +3992,9 @@ function GroupInfoPanel({ group, members, myId, myRole, isOwner, onClose, onProm
   );
 }
 
-function GroupSettingsPanel({ group, myId, isAdmin, isOwner, isMuted, onSetMute, isPinned, onTogglePin, onClose, onLeave, onDeleteGroup, onOpenAdmins, onOpenEdit }) {
+function GroupSettingsPanel({ group, myId, isAdmin, isOwner, isMuted, onSetMute, isPinned, onTogglePin, onClose, onLeave, onDeleteGroup, onOpenAdmins, onOpenEdit, disappearSecs, onSetDisappear }) {
   useBackClose(true, onClose);
+  const [showDisappear, setShowDisappear] = useState(false);
   const { theme } = useTheme();
   const [showMuteOptions, setShowMuteOptions] = useState(false);
   useBackClose(showMuteOptions, () => setShowMuteOptions(false));
@@ -3770,6 +4087,7 @@ function GroupSettingsPanel({ group, myId, isAdmin, isOwner, isMuted, onSetMute,
           </div>
         </div>
 
+        {showDisappear && <DisappearSheet value={disappearSecs} subject="this group" canEdit={isAdmin} onPick={onSetDisappear} onClose={() => setShowDisappear(false)} />}
         {isAdmin && (
           <>
             <div style={sectionLabel}>ADMIN CONTROLS</div>
@@ -3809,6 +4127,14 @@ function GroupSettingsPanel({ group, myId, isAdmin, isOwner, isMuted, onSetMute,
                     </div>
                   </>
                 )}
+              </div>
+              <div role="button" onClick={() => setShowDisappear(true)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 12px', cursor: 'pointer', borderBottom: `1px solid ${theme.border}` }}>
+                <div style={{ width: 30, height: 30, borderRadius: 10, background: `${theme.coral}1F`, color: theme.coralDeep, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Timer size={15} /></div>
+                <div style={{ flex: 1, textAlign: 'left' }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: theme.ink }}>Disappearing messages</div>
+                  <div style={{ fontSize: 11.5, color: theme.muted, marginTop: 1 }}>{disappearLabel(disappearSecs)}</div>
+                </div>
+                <ChevronRight size={16} color={theme.muted} />
               </div>
               <div role="button" onClick={onOpenAdmins} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 12px', cursor: 'pointer' }}>
                 <div style={{ width: 30, height: 30, borderRadius: 10, background: `${theme.coral}1F`, color: theme.coralDeep, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><ShieldCheck size={14} /></div>
@@ -3975,7 +4301,7 @@ function GroupMembersPanel({ group, members, myId, isAdmin, isOwner, onClose, on
     </div>
   );
 }
-function AddMembersPanel({ myId, existingIds, onClose, onAdd }) {
+function AddMembersPanel({ myId, existingIds, onClose, onAdd, iFollowIds, privacyAllowed }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
   const [q, setQ] = useState('');
@@ -3992,7 +4318,10 @@ function AddMembersPanel({ myId, existingIds, onClose, onAdd }) {
       if (!ids.length) return;
       const { data: profs } = await supabase.from('profiles').select('*').in('id', ids).eq('is_deleted', false);
       if (!alive) return;
-      const list = sanitizeAvatarList(profs, myId).filter((u) => !existingIds.includes(u.id)).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+      const list = sanitizeAvatarList(profs, myId)
+        .filter((u) => !existingIds.includes(u.id))
+        .filter((u) => privacyAllows(u, 'privacy_groups', myId, iFollowIds, privacyAllowed))
+        .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
       setSuggested(list);
       setResults(list);
     })();
@@ -4406,7 +4735,7 @@ function PosterIconButton({ onClick, children, label }) {
   );
 }
 
-function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, onSaved, onOpenSettings, onOpenProfile, onMessage, isBlocked, onBlock, onUnblock, shareConversations, shareGroups, onShareToChats, canCall, onCall, onOpenHighlight, meProfile, onOpenCollection }) {
+function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, onSaved, onOpenSettings, onOpenProfile, onMessage, isBlocked, onBlock, onUnblock, shareConversations, shareGroups, onShareToChats, canCall, onCall, onOpenHighlight, meProfile, onOpenCollection, isZAdmin, iFollowIds, privacyAllowed }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
   const [reportOpen, setReportOpen] = useState(false);
@@ -4468,8 +4797,13 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
   const [showPrivacySettings, setShowPrivacySettings] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [showMore, setShowMore] = useState(false);
+  const [banAsk, setBanAsk] = useState(false);
+  const [banReason, setBanReason] = useState('');
+  const [banBusy, setBanBusy] = useState(false);
+  const [banDone, setBanDone] = useState(null);
   useBackClose(editing, () => cancelEditing());
   useBackClose(showMore, () => setShowMore(false));
+  useBackClose(banAsk, () => setBanAsk(false));
   const bioRef = useRef(null);
   const [bioMention, setBioMention] = useState(null);
 
@@ -4639,18 +4973,21 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
     );
   }
 
-  const canSeeDetails = isSelf || !profile.is_private || followState === 'accepted';
+  const allowsProfile = privacyAllows(profile, 'privacy_profile', userId, iFollowIds, privacyAllowed);
+  const allowsBio = privacyAllows(profile, 'privacy_bio', userId, iFollowIds, privacyAllowed);
+  const allowsLastSeen = privacyAllows(profile, 'privacy_lastseen', userId, iFollowIds, privacyAllowed);
+  const canSeeDetails = isSelf || ((!profile.is_private || followState === 'accepted') && allowsProfile);
   const shownPhoto = editing ? avatar : ((isSelf || !profile.hide_photo) ? profile.avatar : '');
   const hasPhoto = typeof shownPhoto === 'string' && shownPhoto.startsWith('http');
   const initial = (profile.name || '?').trim().charAt(0).toUpperCase() || '?';
-  const lastSeenText = !isSelf && !isOnline && !profile.hide_activity ? formatLastSeen(profile.last_seen) : null;
+  const lastSeenText = !isSelf && !isOnline && !profile.hide_activity && allowsLastSeen ? formatLastSeen(profile.last_seen) : null;
   const statusText = isOnline ? 'Online now' : lastSeenText;
   const countryName = profile.country ? (COUNTRIES.find(([c]) => c === profile.country)?.[1] || profile.country) : null;
   const infoBits = canSeeDetails ? [
     countryName && (isSelf || !profile.hide_country) ? `${countryFlag(profile.country)} ${countryName}` : null,
     profile.age != null && (isSelf || !profile.hide_age) ? `${profile.age}` : null,
   ].filter(Boolean) : [];
-  const showBio = canSeeDetails && profile.bio && (isSelf || !profile.hide_bio);
+  const showBio = canSeeDetails && allowsBio && profile.bio && (isSelf || !profile.hide_bio);
   const labelStyle = { fontSize: 11.5, color: theme.muted, marginBottom: 5, fontWeight: 800, letterSpacing: '0.04em' };
   const pillBtn = (primary) => ({
     flex: 1, height: 46, padding: '0 10px', borderRadius: 16, cursor: 'pointer', fontFamily: FONT, fontSize: 13.5, fontWeight: 700, boxSizing: 'border-box', whiteSpace: 'nowrap', minWidth: 0,
@@ -4981,7 +5318,48 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
             {sheetRow(<Copy size={18} />, 'Copy profile link', async () => { await copyTextToClipboard(profileShareLink(profile.id)); setShowMore(false); })}
             {!reportSent && sheetRow(<Flag size={18} color={theme.danger} />, 'Report account', () => { setShowMore(false); setReportOpen(true); }, true)}
             {sheetRow(<Ban size={18} color={theme.danger} />, isBlocked ? 'Unblock account' : 'Block account', () => { setShowMore(false); if (isBlocked) onUnblock(profile.id); else onBlock(profile.id); }, true)}
+            {isZAdmin && !isSelf && (profile.banned
+              ? sheetRow(<ShieldCheck size={18} color={theme.teal} />, 'Remove from ZChat ban list', async () => {
+                  setShowMore(false);
+                  await supabase.rpc('admin_unban', { p_user_id: profile.id });
+                  onSaved({ ...profile, banned: false });
+                }, false)
+              : sheetRow(<ShieldOff size={18} color={theme.danger} />, 'Ban from ZChat', () => { setShowMore(false); setBanAsk(true); }, true))}
             <div onClick={() => setShowMore(false)} style={{ textAlign: 'center', padding: '12px 0 4px', fontWeight: 700, color: theme.muted, cursor: 'pointer' }}>Cancel</div>
+          </div>
+        </div>
+      )}
+      {banAsk && (
+        <div onClick={() => !banBusy && setBanAsk(false)} style={{ position: 'absolute', inset: 0, background: 'rgba(10,8,6,0.62)', zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 22 }} className="zchat-fade">
+          <div onClick={(e) => e.stopPropagation()} style={{ background: theme.panelBg, borderRadius: 22, width: '100%', maxWidth: 380, padding: 22 }}>
+            {banDone ? (
+              <>
+                <div style={{ fontWeight: 900, fontSize: 17, color: theme.ink, marginBottom: 10 }}>Banned</div>
+                <div style={{ fontSize: 13.5, color: theme.muted, lineHeight: 1.7, marginBottom: 18 }}>
+                  @{profile.username} can no longer sign in. Their email and their phone are on the block list, so a new account from that phone will be refused.
+                  {banDone.messages_removed ? ` ${banDone.messages_removed} of their messages were removed from every chat.` : ''}
+                </div>
+                <button style={primaryBtn(theme)} onClick={() => { setBanAsk(false); setBanDone(null); onClose(); }}>Done</button>
+              </>
+            ) : (
+              <>
+                <div style={{ fontWeight: 900, fontSize: 17, color: theme.ink, marginBottom: 8 }}>Ban @{profile.username} from ZChat?</div>
+                <div style={{ fontSize: 13.5, color: theme.muted, lineHeight: 1.7, marginBottom: 14 }}>
+                  This blocks their login, their email and the phone they signed up on, and removes every message they sent. Keep a screenshot first if you may need it later.
+                </div>
+                <input style={inputStyle(theme)} placeholder="Reason, for your records" value={banReason}
+                  onChange={(e) => setBanReason(e.target.value)} />
+                <button style={{ ...primaryBtn(theme, banBusy), background: theme.danger, marginTop: 14 }} disabled={banBusy}
+                  onClick={async () => {
+                    setBanBusy(true);
+                    const { data, error } = await supabase.rpc('admin_ban', { p_user_id: profile.id, p_reason: banReason });
+                    setBanBusy(false);
+                    if (error) { setBanReason(''); alert(error.message || 'Could not ban this account.'); return; }
+                    setBanDone(data || {});
+                  }}>{banBusy ? <Spinner /> : 'Ban this account'}</button>
+                <div onClick={() => !banBusy && setBanAsk(false)} style={{ textAlign: 'center', padding: '14px 0 2px', fontWeight: 700, color: theme.muted, cursor: 'pointer' }}>Cancel</div>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -5014,6 +5392,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
 
 function StatusTicks({ status }) {
   const { theme } = useTheme();
+  if (status === 'queued') return <Clock size={13} color={theme.muted} />;
   if (status === 'sent') return <Check size={14} color={theme.muted} />;
   if (status === 'read') return <CheckCheck size={14} color={theme.coral} />;
   return <CheckCheck size={14} color={theme.muted} />;
@@ -5204,6 +5583,9 @@ function MentionSuggestions({ query, priority, excludeIds, myId, onPick }) {
 
 
 function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSelect, onLongPress, onOpenImage, onOpenVideo, reactions, onReact, onOpenWhoReacted, replyPreview, onSwipeReply, onJumpToMessage, highlighted, senderLabel, senderAvatar, hideReadStatus, onOpenSenderProfile, canModerate, onOpenMention, mentionsMe, onOpenStoryRef, onCallBack, onOpenSticker, tightBelow, senderVerified, onOpenPost, tightAbove, senderFrame, senderCustomBadge }) {
+  const mediaOnly = !m.deleted && (m.type === 'image' || m.type === 'video')
+    && !replyPreview && !senderLabel && !m.forwarded
+    && !(m.content && !String(m.content).startsWith('/'));
   const { theme, fontScale, chatTheme, bubbleColor } = useTheme();
   const cachedVideoSrc = useCachedMedia(m.type === 'video' ? m.media_url : null);
   const [hover, setHover] = useState(false);
@@ -5279,14 +5661,14 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
     if (e.pointerType === 'mouse' && (e.buttons & 1) !== 1) { finalizeDrag(); return; }
     const dx = e.clientX - startPosRef.current.x;
     const dy = e.clientY - startPosRef.current.y;
-    if (Math.abs(dx) > 8 || Math.abs(dy) > 8) clearPressTimer();
+    if (Math.abs(dx) > 5 || Math.abs(dy) > 5) clearPressTimer();
     if (!m.deleted && !selectionMode && Math.abs(dx) > Math.abs(dy) && dx > 0) {
       draggingRef.current = true;
       const clamped = Math.min(dx, 60);
       dragXRef.current = clamped;
       if (bubbleWrapRef.current) bubbleWrapRef.current.style.transform = `translateX(${clamped}px)`;
-      if (replyArrowRef.current) replyArrowRef.current.style.opacity = Math.min(1, clamped / 40);
-      swipedPastThresholdRef.current = clamped >= 40;
+      if (replyArrowRef.current) replyArrowRef.current.style.opacity = Math.min(1, clamped / 24);
+      swipedPastThresholdRef.current = clamped >= 26;
     }
   };
   const finalizeDrag = () => {
@@ -5348,6 +5730,7 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
             </div>
           )
       )}
+      {/* media with no caption, no reply and no sender label fills the bubble */}
       <div style={{ position: 'relative', maxWidth: senderLabel ? 'calc(80% - 30px)' : '80%' }}>
         {!selectionMode && !m.deleted && (
           <div ref={replyArrowRef} style={{
@@ -5364,9 +5747,10 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
           borderRadius: 19,
           borderBottomRightRadius: isMe && !m.deleted ? 5 : 19,
           borderBottomLeftRadius: !isMe && !m.deleted ? 5 : 19,
-          padding: m.type === 'text' || m.deleted ? '6px 11px' : 4,
-          border: m.deleted ? `1px dashed ${theme.border}` : mentionsMe ? `1.5px solid ${theme.coral}` : `1px solid ${theme.dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)'}`,
-          boxShadow: m.deleted ? 'none' : '0 1px 2px rgba(0,0,0,0.06)',
+          padding: m.type === 'text' || m.deleted ? '6px 11px' : (mediaOnly ? 0 : 4),
+          border: m.deleted ? `1px dashed ${theme.border}` : mentionsMe ? `1.5px solid ${theme.coral}` : (mediaOnly ? 'none' : `1px solid ${theme.dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)'}`),
+          boxShadow: m.deleted || mediaOnly ? 'none' : '0 1px 2px rgba(0,0,0,0.06)',
+          ...(mediaOnly ? { background: 'transparent', overflow: 'hidden' } : {}),
           ...(m.deleted ? {} : bubbleThemeStyle(chatTheme, isMe, theme)),
         })}>
           {senderLabel && !m.deleted && !tightAbove && (
@@ -5445,13 +5829,20 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
                 </div>
               )}
               {m.type === 'text' && m.content && !sharedProfileId && !sharedPostId && !(m.story_id && (m.content === STORY_MENTION_TEXT || m.content === STORY_GROUP_MENTION_TEXT || m.content === STORY_SHARE_TEXT)) && (
-                <div style={{ fontSize: 15 * fontScale, color: theme.ink, wordBreak: 'break-word', whiteSpace: 'pre-wrap', lineHeight: 1.32, display: 'flow-root' }}>
+                <div style={{
+                  fontSize: (m.text_size ? textSizePx(m.text_size) : 15) * fontScale,
+                  fontWeight: m.text_size === 'l' || m.text_size === 'xl' ? 800 : 400,
+                  color: m.text_color || theme.ink,
+                  wordBreak: 'break-word', whiteSpace: 'pre-wrap',
+                  lineHeight: m.text_size === 'xl' ? 1.12 : m.text_size === 'l' ? 1.2 : 1.32,
+                  display: 'flow-root',
+                }}>
                   <RichText text={m.content} onMention={onOpenMention} />
                   {linkPreviewUrl && <LinkPreviewCard url={linkPreviewUrl} />}
                   <span data-msg-time="true" style={{ float: 'right', display: 'inline-flex', alignItems: 'center', gap: 3, marginLeft: 10, marginTop: 7, marginBottom: -3, height: 14, lineHeight: 1, position: 'relative', top: 1, userSelect: 'none' }}>
                     {m.edited && <span style={{ fontSize: 8, color: theme.muted, fontStyle: 'italic' }}>edited</span>}
-                    <span style={{ fontSize: 9, color: theme.muted }}>{time}</span>
-                    {isMe && <StatusTicks status={(!hideReadStatus && m.read) ? 'read' : m.delivered ? 'delivered' : 'sent'} />}
+                    <span style={{ fontSize: 10.5, color: theme.muted }}>{time}</span>
+                    {isMe && <StatusTicks status={m.queued ? 'queued' : (!hideReadStatus && m.read) ? 'read' : m.delivered ? 'delivered' : 'sent'} />}
                   </span>
                 </div>
               )}
@@ -5464,8 +5855,8 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
               padding: m.type === 'text' ? 0 : '1px 5px',
             }}>
               {m.edited && <span style={{ fontSize: 8, color: m.type === 'text' ? theme.muted : 'rgba(255,255,255,0.85)', fontStyle: 'italic' }}>edited</span>}
-              <span style={{ fontSize: 9, color: m.type === 'text' ? theme.muted : 'rgba(255,255,255,0.85)' }}>{time}</span>
-              {isMe && <StatusTicks status={(!hideReadStatus && m.read) ? 'read' : m.delivered ? 'delivered' : 'sent'} />}
+              <span style={{ fontSize: 10.5, color: m.type === 'text' ? theme.muted : 'rgba(255,255,255,0.85)' }}>{time}</span>
+              {isMe && <StatusTicks status={m.queued ? 'queued' : (!hideReadStatus && m.read) ? 'read' : m.delivered ? 'delivered' : 'sent'} />}
             </div>
           )}
         </div>
@@ -6140,7 +6531,7 @@ function ChatRowSheet({ title, subtitle, avatar, actions, onClose }) {
   );
 }
 
-function MessageContextMenu({ message, isMine, canEditText, canModerate, anchorRect, bubble, isPinned, onPin, onUnpin, onClose, onReact, onReply, onCopy, onEdit, onForward, onReport, onDeleteForMe, onDeleteForEveryone, onSelectMultiple, onSave }) {
+function MessageContextMenu({ message, isMine, canEditText, canModerate, anchorRect, bubble, isPinned, onPin, onUnpin, onClose, onReact, onReply, onCopy, onEdit, onForward, onReport, onDeleteForMe, onDeleteForEveryone, onSelectMultiple, onSave, onToggleSave, isSaved }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
   const [showFullEmoji, setShowFullEmoji] = useState(false);
@@ -6219,6 +6610,7 @@ function MessageContextMenu({ message, isMine, canEditText, canModerate, anchorR
           {!message.deleted && (message.type === 'image' || message.type === 'video') && row(<Download size={18} />, 'Save', onSave)}
           {!message.deleted && stickerMatch && row(<Star_ size={18} color="#FFB800" filled={favKeys.has(stickerMatch.key)} />, favKeys.has(stickerMatch.key) ? 'Remove from favorites' : 'Add to favorites', () => { setFavKeys(new Set(toggleFavoriteSticker(stickerMatch.key))); onClose(); })}
           {!message.deleted && row(<Forward size={18} />, 'Forward', onForward)}
+          {!message.deleted && message.type !== 'system' && onToggleSave && row(<Bookmark size={18} fill={isSaved ? 'currentColor' : 'none'} />, isSaved ? 'Remove from Saved' : 'Add to Saved', onToggleSave)}
           {!message.deleted && message.type !== 'system' && onPin && row(<Pin_ size={18} color={theme.ink} />, isPinned ? 'Unpin' : 'Pin', isPinned ? onUnpin : onPin)}
           {row(<CheckCheck size={18} />, 'Select', onSelectMultiple)}
           {!isMine && !message.deleted && row(<Flag size={18} />, 'Report', onReport, true)}
@@ -6469,7 +6861,7 @@ async function exportVideoOverlay(item) {
   return blob ? new File([blob], 'overlay.png', { type: 'image/png' }) : null;
 }
 
-function MediaComposer({ files, recipientName, onCancel, onSend, onActivity, mode: composerMode = 'chat', mentionGroups = [], myId }) {
+function MediaComposer({ files, recipientName, onCancel, onSend, onActivity, mode: composerMode = 'chat', mentionGroups = [], myId, privacyCtx }) {
   useBackClose(true, onCancel);
   const { theme } = useTheme();
   const [items, setItems] = useState(() => files.map((f, i) => ({
@@ -7038,7 +7430,7 @@ function MediaComposer({ files, recipientName, onCancel, onSend, onActivity, mod
         </div>
       )}
       {showMentionPicker && (
-        <StoryMentionPicker myId={myId} groups={mentionGroups} onClose={() => setShowMentionPicker(false)}
+        <StoryMentionPicker myId={myId} groups={mentionGroups} privacyCtx={privacyCtx} onClose={() => setShowMentionPicker(false)}
           onPick={(mn) => {
             setShowMentionPicker(false);
             setMentions((prev) => (prev.some((x) => x.id === mn.id && x.kind === mn.kind) ? prev : [...prev, mn]));
@@ -7181,13 +7573,13 @@ function LoopingSticker({ src, size = 128, style, className, alt = 'sticker' }) 
   );
 }
 
-function ConfirmDialog({ title, body, confirmLabel = 'Delete', onCancel, onConfirm, danger = true }) {
+function ConfirmDialog({ title, body, confirmLabel = 'Delete', onCancel, onConfirm, danger = true, layer = 400 }) {
   useBackClose(true, onCancel);
   const { theme } = useTheme();
   const [busy, setBusy] = useState(false);
   return (
     <div onClick={onCancel} className="zchat-fade" style={{
-      position: 'fixed', inset: 0, zIndex: 400, background: 'rgba(5,8,16,0.55)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
+      position: 'fixed', inset: 0, zIndex: layer, background: 'rgba(5,8,16,0.55)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
       display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
     }}>
       <div onClick={(e) => e.stopPropagation()} className="zchat-pop" style={{ background: theme.panelBg, borderRadius: 22, padding: '22px 20px 18px', width: '100%', maxWidth: 300, textAlign: 'center', boxShadow: '0 20px 50px rgba(0,0,0,0.35)' }}>
@@ -7506,18 +7898,29 @@ function StoryAvatar({ profile, size = 64, ring = 'none', onClick, badgePlus = f
   );
 }
 
-function StoryMentionPicker({ myId, groups, onPick, onClose }) {
+function StoryMentionPicker({ myId, groups, privacyCtx, onPick, onClose }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
   const [q, setQ] = useState('');
   const [people, setPeople] = useState([]);
+  const [hiddenCount, setHiddenCount] = useState(0);
   useEffect(() => {
     const term = q.trim().replace(/^@/, '');
-    if (term.length < 1) { setPeople([]); return undefined; }
+    if (term.length < 1) { setPeople([]); setHiddenCount(0); return undefined; }
     let cancelled = false;
     const t = setTimeout(async () => {
       const { data } = await searchAccounts(term);
-      if (!cancelled) setPeople(sanitizeAvatarList(data, myId).filter((p) => p.id !== myId && !p.is_deleted).slice(0, 12));
+      const found = sanitizeAvatarList(data, myId).filter((p) => p.id !== myId && !p.is_deleted).slice(0, 24);
+      let tagSetting = null;
+      if (found.length) {
+        const { data: rows, error } = await supabase.from('profiles').select('id, privacy_tags').in('id', found.map((p) => p.id));
+        if (!error && rows) tagSetting = new Map(rows.map((r) => [r.id, r.privacy_tags]));
+      }
+      const ctx = privacyCtx || {};
+      const iFollow = ctx.iFollow || new Set();
+      const allowed = ctx.allowed || new Set();
+      const ok = found.filter((p) => privacyAllows({ ...p, privacy_tags: tagSetting ? tagSetting.get(p.id) : p.privacy_tags }, 'privacy_tags', myId, iFollow, allowed));
+      if (!cancelled) { setPeople(ok.slice(0, 12)); setHiddenCount(found.length - ok.length); }
     }, 220);
     return () => { cancelled = true; clearTimeout(t); };
   }, [q]);
@@ -7546,7 +7949,12 @@ function StoryMentionPicker({ myId, groups, onPick, onClose }) {
             </div>
           ))}
           {!groupMatches.length && !people.length && (
-            <div style={{ textAlign: 'center', padding: 20, fontSize: 13, color: 'rgba(255,255,255,0.6)' }}>{term ? 'No one found' : 'Type a name to mention someone'}</div>
+            <div style={{ textAlign: 'center', padding: 20, fontSize: 13, color: 'rgba(255,255,255,0.6)' }}>{term ? (hiddenCount > 0 ? 'No one you can tag matches that' : 'No one found') : 'Type a name to mention someone'}</div>
+          )}
+          {hiddenCount > 0 && (
+            <div style={{ textAlign: 'center', padding: '6px 16px 10px', fontSize: 11.5, color: 'rgba(255,255,255,0.5)' }}>
+              {hiddenCount === 1 ? '1 account does not allow tags from you.' : `${hiddenCount} accounts do not allow tags from you.`}
+            </div>
           )}
         </div>
       </div>
@@ -8618,7 +9026,7 @@ function StoryTray({ me, myStories, trayUsers, seen, onAdd, onOpen }) {
   );
 }
 
-const APP_VERSION = '5.9V';
+const APP_VERSION = '6.8V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -9795,7 +10203,7 @@ function ProfilePosts({ profile, isSelf, userId, meProfile }) {
         </div>
       )}
       {composer && <MediaComposer key={composer.key} files={composer.files} recipientName="your profile" onCancel={() => setComposer(null)} onSend={share} />}
-      {openPost && <PostViewer post={openPost} owner={profile} userId={userId} meProfile={meProfile} onClose={() => setOpenPost(null)} onDeleted={() => { setOpenPost(null); load(); }} />}
+      {openPost && <FeedPanel me={meProfile} userId={userId} ownerFilter={profile} startPostId={openPost.id} seedPost={openPost} onClose={() => setOpenPost(null)} onOpenProfile={() => setOpenPost(null)} onPostDeleted={() => load()} />}
     </div>
   );
 }
@@ -11593,7 +12001,7 @@ function CharmPreview({ charm, size }) {
   return <img src={url} alt="" draggable={false} style={{ height: size, width: Math.round(size * spec.ratio), objectFit: 'contain' }} />;
 }
 
-function FeedPanel({ me, userId, onClose, onOpenProfile }) {
+function FeedPanel({ me, userId, onClose, onOpenProfile, ownerFilter = null, startPostId = null, seedPost = null, onPostDeleted = null }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
   const [tab, setTab] = useState('foryou');
@@ -11604,6 +12012,9 @@ function FeedPanel({ me, userId, onClose, onOpenProfile }) {
   const [burst, setBurst] = useState(null);
   const [saved, setSaved] = useState(() => { try { return new Set(JSON.parse(localStorage.getItem('zchat-saved-posts') || '[]')); } catch { return new Set(); } });
   const [hideUi, setHideUi] = useState(false);
+  const [confirmDeletePost, setConfirmDeletePost] = useState(null);
+  const scrollerRef = useRef(null);
+  const startedRef = useRef(false);
   const lastTapRef = useRef(0);
   const holdRef = useRef(null);
   const tabSwipeRef = useRef(null);
@@ -11638,21 +12049,23 @@ function FeedPanel({ me, userId, onClose, onOpenProfile }) {
       const t = e.changedTouches && e.changedTouches[0];
       if (!st || !t) return;
       const dx = t.clientX - st.x; const dy = Math.abs(t.clientY - st.y);
-      if (Math.abs(dx) > 80 && dy < 50) { setTab(dx < 0 ? 'foryou' : 'following'); playUiSound('tap'); }
+      if (!ownerFilter && Math.abs(dx) > 80 && dy < 50) { setTab(dx < 0 ? 'foryou' : 'following'); playUiSound('tap'); }
     },
   };
 
   const load = async () => {
     let followingIds = null;
-    if (tab === 'following') {
+    if (!ownerFilter && tab === 'following') {
       const { data: f } = await supabase.from('follows').select('following_id').eq('follower_id', userId).eq('status', 'accepted');
       followingIds = (f || []).map((x) => x.following_id);
       if (!followingIds.length) { setItems([]); return; }
     }
     let q = supabase.from('posts').select('*').order('created_at', { ascending: false }).limit(60);
     if (followingIds) q = q.in('user_id', followingIds);
+    if (ownerFilter) q = q.eq('user_id', ownerFilter.id);
     const { data: posts } = await q;
-    const rows = posts || [];
+    let rows = posts || [];
+    if (seedPost && !rows.some((p) => p.id === seedPost.id)) rows = [seedPost, ...rows].sort((x, y) => new Date(y.created_at) - new Date(x.created_at));
     const ids = [...new Set(rows.map((p) => p.user_id))];
     const byId = {};
     if (ids.length) {
@@ -11681,6 +12094,13 @@ function FeedPanel({ me, userId, onClose, onOpenProfile }) {
     setItems(rows.map((p) => ({ ...p, owner: byId[p.user_id] })).filter((p) => p.owner && !p.owner.is_deleted));
   };
   useEffect(() => { setItems(null); load(); }, [tab]);
+  useEffect(() => {
+    if (!startPostId || startedRef.current || !items || !items.length || !scrollerRef.current) return;
+    startedRef.current = true;
+    const idx = items.findIndex((p) => p.id === startPostId);
+    if (idx > 0) scrollerRef.current.scrollTop = idx * scrollerRef.current.clientHeight;
+  }, [items && items.length]);
+  useEffect(() => { if (ownerFilter && items && items.length === 0) onClose(); }, [items && items.length]);
 
   const countOf = (id) => counts[id] || { likes: 0, comments: 0 };
   const toggleLike = async (post, force) => {
@@ -11721,7 +12141,8 @@ function FeedPanel({ me, userId, onClose, onOpenProfile }) {
     <div className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 600, background: '#000', color: 'white', fontFamily: FONT }}>
       <div style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 22, padding: '10px 16px', paddingTop: 'calc(12px + env(safe-area-inset-top))', background: 'linear-gradient(180deg, rgba(0,0,0,0.5), transparent)' }}>
         <div role="button" aria-label="Close feed" onClick={onClose} style={{ position: 'absolute', left: 12, top: 'calc(10px + env(safe-area-inset-top))', width: 36, height: 36, borderRadius: '50%', background: 'rgba(0,0,0,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><ArrowLeft size={19} /></div>
-        {[['following', 'Following'], ['foryou', 'For you']].map(([k, label]) => (
+        {ownerFilter && <div style={{ fontSize: 15.5, fontWeight: 800 }}>Posts</div>}
+        {(ownerFilter ? [] : [['following', 'Following'], ['foryou', 'For you']]).map(([k, label]) => (
           <div key={k} role="button" onClick={() => { setTab(k); playUiSound('tap'); }} style={{ fontSize: 15.5, fontWeight: 800, cursor: 'pointer', color: tab === k ? 'white' : 'rgba(255,255,255,0.6)', borderBottom: tab === k ? '2.5px solid white' : '2.5px solid transparent', paddingBottom: 4 }}>{label}</div>
         ))}
       </div>
@@ -11735,15 +12156,15 @@ function FeedPanel({ me, userId, onClose, onOpenProfile }) {
           <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)' }}>{tab === 'following' ? 'Follow more people to fill this up' : 'Share the first post from your profile'}</div>
         </div>
       ) : (
-        <div {...tabSwipe} style={{ height: '100%', overflowY: 'auto', scrollSnapType: 'y mandatory', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
+        <div ref={scrollerRef} {...tabSwipe} style={{ height: '100%', overflowY: 'auto', scrollSnapType: 'y mandatory', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
           {items.map((post) => {
             const c = countOf(post.id);
             const isVideo = post.media_type === 'video';
             return (
               <div key={post.id} style={{ position: 'relative', height: '100%', scrollSnapAlign: 'start', scrollSnapStop: 'always', overflow: 'hidden' }}>
-                <div onClick={() => onTapMedia(post)} style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#05060a' }}>
+                <div onClick={() => { if (!isVideo) onTapMedia(post); }} style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#05060a' }}>
                   {isVideo
-                    ? <video src={post.media_url} playsInline loop muted autoPlay style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                    ? <ReelVideo post={post} rootRef={scrollerRef} onDoubleTap={() => { setBurst(post.id); setTimeout(() => setBurst(null), 700); toggleLike(post); }} />
                     : <img src={post.media_url} alt="" loading="lazy" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />}
                   {post.overlay_url && <img src={post.overlay_url} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }} />}
                   {burst === post.id && <Heart size={110} color="#ff2d55" fill="#ff2d55" className="zchat-heart-burst" style={{ position: 'absolute' }} />}
@@ -11763,6 +12184,7 @@ function FeedPanel({ me, userId, onClose, onOpenProfile }) {
                     try { if (navigator.share) await navigator.share({ url: link }); else { await navigator.clipboard.writeText(link); } } catch {}
                   })}
                   {railBtn(<Download size={25} />, 'Save file', () => download(post))}
+                  {post.user_id === userId && railBtn(<Trash2 size={25} />, 'Delete', () => setConfirmDeletePost(post))}
                 </div>
 
                 <div style={{ position: 'absolute', left: 14, right: 80, bottom: 26, zIndex: 3, opacity: hideUi ? 0 : 1, transition: 'opacity 0.2s' }}>
@@ -11779,11 +12201,79 @@ function FeedPanel({ me, userId, onClose, onOpenProfile }) {
         </div>
       )}
 
+      {confirmDeletePost && (
+        <ConfirmDialog layer={700} title="Delete this post?" body="It will be removed from your profile." onCancel={() => setConfirmDeletePost(null)}
+          onConfirm={async () => {
+            const gone = confirmDeletePost;
+            setConfirmDeletePost(null);
+            setItems((prev) => (prev || []).filter((x) => x.id !== gone.id));
+            await supabase.from('posts').delete().eq('id', gone.id).eq('user_id', userId);
+            if (onPostDeleted) onPostDeleted(gone);
+          }} />
+      )}
       {commentsFor && (
         <FeedComments post={commentsFor} me={me} userId={userId} onClose={() => setCommentsFor(null)}
           onOpenProfile={onOpenProfile}
           onCount={(n) => setCounts((p) => ({ ...p, [commentsFor.id]: { ...countOf(commentsFor.id), comments: n } }))} />
       )}
+    </div>
+  );
+}
+
+function SwipeToReply({ onReply, children }) {
+  const rowRef = useRef(null);
+  const hintRef = useRef(null);
+  const st = useRef({ x: 0, y: 0, dx: 0, active: false, decided: false, horizontal: false, buzzed: false });
+  const paint = (dx, animate) => {
+    const el = rowRef.current;
+    if (el) {
+      el.style.transition = animate ? 'transform 0.18s ease' : 'none';
+      el.style.transform = dx ? `translateX(${dx}px)` : '';
+    }
+    const h = hintRef.current;
+    if (h) {
+      h.style.opacity = String(Math.min(1, dx / 48));
+      h.style.transform = `scale(${0.6 + Math.min(0.4, dx / 120)})`;
+    }
+  };
+  const onStart = (e) => {
+    const t = e.touches[0];
+    st.current = { x: t.clientX, y: t.clientY, dx: 0, active: true, decided: false, horizontal: false, buzzed: false };
+  };
+  const onMove = (e) => {
+    const s = st.current;
+    if (!s.active) return;
+    const t = e.touches[0];
+    const dx = t.clientX - s.x;
+    const dy = t.clientY - s.y;
+    if (!s.decided) {
+      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+      s.decided = true;
+      s.horizontal = dx > 0 && Math.abs(dx) > Math.abs(dy) * 1.2;
+    }
+    if (!s.horizontal) return;
+    e.stopPropagation();
+    s.dx = Math.max(0, Math.min(84, dx * 0.8));
+    paint(s.dx, false);
+    if (s.dx >= 56 && !s.buzzed) { s.buzzed = true; if (navigator.vibrate) navigator.vibrate(12); }
+    if (s.dx < 56) s.buzzed = false;
+  };
+  const onEnd = () => {
+    const s = st.current;
+    if (!s.active) return;
+    s.active = false;
+    const fire = s.horizontal && s.dx >= 56;
+    paint(0, true);
+    if (fire) onReply();
+  };
+  return (
+    <div style={{ position: 'relative', touchAction: 'pan-y' }}>
+      <div ref={hintRef} aria-hidden="true" style={{ position: 'absolute', left: 16, top: '50%', marginTop: -10, opacity: 0, color: 'rgba(255,255,255,0.75)', pointerEvents: 'none' }}>
+        <Reply size={20} />
+      </div>
+      <div ref={rowRef} onTouchStart={onStart} onTouchMove={onMove} onTouchEnd={onEnd} onTouchCancel={onEnd} style={{ willChange: 'transform' }}>
+        {children}
+      </div>
     </div>
   );
 }
@@ -11796,29 +12286,29 @@ function FeedComments({ post, me, userId, onClose, onCount, onOpenProfile }) {
   const [open, setOpen] = useState(() => new Set());
   const [sending, setSending] = useState(false);
   const [commentLikes, setCommentLikes] = useState({});
+  const [stickersOpen, setStickersOpen] = useState(false);
+  const inputRef = useRef(null);
   const load = async () => {
     const { data, error } = await supabase.from('post_comments').select('*').eq('post_id', post.id).order('created_at', { ascending: true });
     if (error) return;
     const list = data || [];
     const ids = [...new Set(list.map((c) => c.user_id))];
+    const cIds = list.map((c) => c.id);
+    const [profRes, likeRes] = await Promise.all([
+      ids.length ? supabase.from('profiles').select('*').in('id', ids) : Promise.resolve({ data: [] }),
+      cIds.length ? supabase.from('post_comment_likes').select('comment_id, user_id').in('comment_id', cIds) : Promise.resolve({ data: [] }),
+    ]);
     const byId = {};
-    if (ids.length) {
-      const { data: profs } = await supabase.from('profiles').select('*').in('id', ids);
-      sanitizeAvatarList(profs, userId).forEach((p) => { byId[p.id] = p; });
-    }
+    sanitizeAvatarList(profRes.data || [], userId).forEach((p) => { byId[p.id] = p; });
     setRows(list.map((c) => ({ ...c, profile: byId[c.user_id] })));
     onCount(list.length);
-    const cIds = list.map((c) => c.id);
-    if (cIds.length) {
-      const { data: likes } = await supabase.from('post_comment_likes').select('comment_id, user_id').in('comment_id', cIds);
-      const map = {};
-      (likes || []).forEach((l) => {
-        map[l.comment_id] = map[l.comment_id] || { count: 0, mine: false };
-        map[l.comment_id].count += 1;
-        if (l.user_id === userId) map[l.comment_id].mine = true;
-      });
-      setCommentLikes(map);
-    }
+    const map = {};
+    (likeRes.data || []).forEach((l) => {
+      map[l.comment_id] = map[l.comment_id] || { count: 0, mine: false };
+      map[l.comment_id].count += 1;
+      if (l.user_id === userId) map[l.comment_id].mine = true;
+    });
+    setCommentLikes(map);
   };
   const toggleCommentLike = async (comment) => {
     const cur = commentLikes[comment.id] || { count: 0, mine: false };
@@ -11836,11 +12326,29 @@ function FeedComments({ post, me, userId, onClose, onCount, onOpenProfile }) {
   };
   useEffect(() => {
     load();
+    let timer = null;
     const ch = supabase.channel(`feedc-${post.id}-${Math.random().toString(36).slice(2, 6)}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'post_comments' }, () => load())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'post_comments', filter: `post_id=eq.${post.id}` }, () => {
+        clearTimeout(timer);
+        timer = setTimeout(load, 250);
+      })
       .subscribe();
-    return () => supabase.removeChannel(ch);
+    return () => { clearTimeout(timer); supabase.removeChannel(ch); };
   }, [post.id]);
+
+  const sendSticker = async (file) => {
+    setStickersOpen(false);
+    playUiSound('send');
+    await supabase.from('post_comments').insert({ post_id: post.id, user_id: userId, content: `sticker:${file}` });
+    if (post.user_id !== userId) sendPushNotification(post.user_id, 'ZChat', `${(me && me.name) || 'Someone'} commented with a sticker`, `/?post=${post.id}`, me && me.avatar);
+    load();
+  };
+
+  const startReply = (c) => {
+    setReplyTo(c);
+    playUiSound('tap');
+    requestAnimationFrame(() => { if (inputRef.current) inputRef.current.focus(); });
+  };
 
   const send = async () => {
     const body = text.trim();
@@ -11850,9 +12358,16 @@ function FeedComments({ post, me, userId, onClose, onCount, onOpenProfile }) {
     const parent = replyTo;
     setReplyTo(null);
     playUiSound('send');
-    const row = { post_id: post.id, user_id: userId, content: parent ? `@${parent.profile?.username || 'user'} ${body}` : body };
-    const { error: cErr } = await supabase.from('post_comments').insert(row);
-    if (cErr) { setText(body); alert(`Couldn't post comment: ${cErr.message}`); }
+    const content = parent ? `@${parent.profile?.username || 'user'} ${body}` : body;
+    const tempId = `temp-${Date.now()}`;
+    setRows((prev) => [...(prev || []), { id: tempId, post_id: post.id, user_id: userId, content, created_at: new Date().toISOString(), profile: me }]);
+    if (parent) setOpen((p) => { const n = new Set(p); n.add(parent.id); return n; });
+    const { error: cErr } = await supabase.from('post_comments').insert({ post_id: post.id, user_id: userId, content });
+    if (cErr) {
+      setRows((prev) => (prev || []).filter((r) => r.id !== tempId));
+      setText(body);
+      alert(friendlyError(cErr, "Couldn't post comment. Try again."));
+    }
     if (!cErr && post.user_id !== userId) {
       sendPushNotification(post.user_id, 'ZChat', `${(me && me.name) || 'Someone'} commented on your post`, `/?post=${post.id}`, me && me.avatar);
       supabase.from('mails').insert({ recipient_id: post.user_id, sender_id: userId, type: 'post_comment', title: `${(me && me.name) || 'Someone'} commented on your post`, body: body.slice(0, 200) });
@@ -11882,6 +12397,7 @@ function FeedComments({ post, me, userId, onClose, onCount, onOpenProfile }) {
             const isOwner = c.user_id === post.user_id;
             return (
               <div key={c.id}>
+                <SwipeToReply onReply={() => startReply(c)}>
                 <div style={{ display: 'flex', gap: 10, padding: '12px 16px' }}>
                   <div role="button" onClick={() => c.profile && onOpenProfile(c.profile)} style={{ cursor: 'pointer' }}>
                     <Avatar emoji={c.profile?.avatar} name={c.profile?.name || '?'} size={36} frame={c.profile?.avatar_frame} />
@@ -11898,7 +12414,7 @@ function FeedComments({ post, me, userId, onClose, onCount, onOpenProfile }) {
                     </div>
                     <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.55)', marginTop: 5, display: 'flex', gap: 16, fontWeight: 700, alignItems: 'center' }}>
                       <span>{timeAgoLong(c.created_at)}</span>
-                      <span role="button" onClick={() => setReplyTo(c)} style={{ cursor: 'pointer' }}>Reply</span>
+                      <span role="button" onClick={() => startReply(c)} style={{ cursor: 'pointer' }}>Reply</span>
                     </div>
                     {!!reps.length && (
                       <div role="button" onClick={() => setOpen((p) => { const n = new Set(p); if (n.has(c.id)) n.delete(c.id); else n.add(c.id); return n; })}
@@ -11907,7 +12423,8 @@ function FeedComments({ post, me, userId, onClose, onCount, onOpenProfile }) {
                       </div>
                     )}
                     {open.has(c.id) && reps.map((r) => (
-                      <div key={r.id} style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                      <SwipeToReply key={r.id} onReply={() => startReply(c)}>
+                      <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
                         <Avatar emoji={r.profile?.avatar} name={r.profile?.name || '?'} size={28} frame={r.profile?.avatar_frame} />
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.55)', fontWeight: 700 }}>{r.profile?.username || 'user'}</div>
@@ -11915,6 +12432,7 @@ function FeedComments({ post, me, userId, onClose, onCount, onOpenProfile }) {
                           <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.5)', marginTop: 4, fontWeight: 700 }}>{timeAgoLong(r.created_at)}</div>
                         </div>
                       </div>
+                      </SwipeToReply>
                     ))}
                   </div>
                   <div role="button" onClick={() => toggleCommentLike(c)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer', paddingTop: 2, flexShrink: 0 }}>
@@ -11922,6 +12440,7 @@ function FeedComments({ post, me, userId, onClose, onCount, onOpenProfile }) {
                     {!!(commentLikes[c.id] || {}).count && <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', fontWeight: 700 }}>{(commentLikes[c.id] || {}).count}</span>}
                   </div>
                 </div>
+                </SwipeToReply>
               </div>
             );
           })}
@@ -11932,16 +12451,63 @@ function FeedComments({ post, me, userId, onClose, onCount, onOpenProfile }) {
             <span role="button" onClick={() => setReplyTo(null)} style={{ cursor: 'pointer' }}>Cancel</span>
           </div>
         )}
+        {stickersOpen && (
+          <div style={{ maxHeight: 200, overflowY: 'auto', display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6, padding: '8px 12px', borderTop: '1px solid #22252e' }}>
+            {STICKERS.map((stk) => (
+              <div key={stk.key} onClick={() => sendSticker(stk.file)} style={{ aspectRatio: '1 / 1', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', borderRadius: 12, background: '#22252e' }}>
+                <img src={stk.file} alt="" loading="lazy" draggable={false} style={{ width: '80%', height: '80%', objectFit: 'contain' }} />
+              </div>
+            ))}
+          </div>
+        )}
         <div style={{ padding: '10px 12px', paddingBottom: 'calc(10px + env(safe-area-inset-bottom))', borderTop: '1px solid #22252e', display: 'flex', gap: 8, alignItems: 'center' }}>
           <Avatar emoji={me && me.avatar} name={(me && me.name) || '?'} size={32} frame={me && me.avatar_frame} />
-          <input value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') send(); }}
+          <input ref={inputRef} value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') send(); }}
             placeholder="Add comment…" maxLength={300}
             style={{ flex: 1, height: 40, borderRadius: 20, background: '#22252e', border: 'none', outline: 'none', color: 'white', padding: '0 14px', fontSize: 14, fontFamily: FONT }} />
+          <div role="button" aria-label="Stickers" onClick={() => setStickersOpen((v) => !v)} style={{ display: 'flex', cursor: 'pointer', color: stickersOpen ? '#fbbf24' : 'rgba(255,255,255,0.7)' }}><Smile size={24} /></div>
           <div role="button" aria-label="Send comment" onClick={send} style={{ width: 40, height: 40, borderRadius: '50%', background: text.trim() ? '#2563eb' : '#22252e', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><Send size={17} /></div>
         </div>
       </div>
     </div>
   );
+}
+
+function deviceFingerprint() {
+  try {
+    let id = localStorage.getItem('zchat.device');
+    if (!id) {
+      id = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(36).slice(2));
+      localStorage.setItem('zchat.device', id);
+    }
+    return id;
+  } catch {
+    return '';
+  }
+}
+
+async function isBlockedHere(email) {
+  try {
+    const { data } = await supabase.rpc('is_blocked', { p_device: deviceFingerprint(), p_email: email || '' });
+    return !!data;
+  } catch {
+    return false;
+  }
+}
+
+const BLOCKED_MESSAGE = 'This account has been removed from ZChat for breaking the rules. If you think this is a mistake, contact support.';
+
+const TEXT_SIZES = [['s', 'Small', 13], ['m', 'Normal', 15.5], ['l', 'Big', 22], ['xl', 'Huge', 30]];
+const TEXT_COLORS = ['#ff4d6d', '#ffb703', '#3ddc84', '#4dabff', '#c77dff', '#ffffff'];
+const textSizePx = (key) => (TEXT_SIZES.find(([k]) => k === key) || TEXT_SIZES[1])[2];
+
+function privacyAllows(owner, scope, viewerId, iFollow, allowed) {
+  if (!owner || !owner.id || owner.id === viewerId) return true;
+  const setting = owner[scope] || 'everyone';
+  if (setting === 'everyone') return true;
+  if (setting === 'followers') return !!(iFollow && iFollow.has(owner.id));
+  if (setting === 'chosen') return !!(allowed && allowed.has(`${owner.id}:${scope}`));
+  return true;
 }
 
 function keyboardMemoryKey() {
@@ -12071,6 +12637,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     setDeferredInstallPrompt(null);
   };
   const [me, setMe] = useState(null);
+  const [isZAdmin, setIsZAdmin] = useState(false);
   const [profileCheckFailed, setProfileCheckFailed] = useState(false);
   const [results, setResults] = useState([]);
   const [search, setSearch] = useState('');
@@ -12124,6 +12691,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [storyData, setStoryData] = useState({ byUser: {}, profiles: {}, seen: new Set(), liked: new Set(), ready: false });
   const [storyViewer, setStoryViewer] = useState(null);
   const [mutualIds, setMutualIds] = useState(new Set());
+  const [iFollowIds, setIFollowIds] = useState(new Set());
+  const [privacyAllowed, setPrivacyAllowed] = useState(new Set());
   const [blockedByIds, setBlockedByIds] = useState(new Set());
   const [blockConfirmFor, setBlockConfirmFor] = useState(null);
   const [unblockConfirmFor, setUnblockConfirmFor] = useState(null);
@@ -12299,6 +12868,23 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const pullStartYRef = useRef(null);
   const sidebarListRef = useRef(null);
   const sidebarScrollRef = useRef(0);
+  const [visibleCount, setVisibleCount] = useState(120);
+  const [unreadAnchor, setUnreadAnchor] = useState(null);
+  const [unreadPillOn, setUnreadPillOn] = useState(false);
+  const unreadPillOnRef = useRef(false);
+  const [online, setOnline] = useState(() => (typeof navigator === 'undefined' ? true : navigator.onLine !== false));
+  const [showBackOnline, setShowBackOnline] = useState(false);
+  const outboxRef = useRef(null);
+  if (outboxRef.current === null) outboxRef.current = readOutbox(session.user.id);
+  const [outboxCount, setOutboxCount] = useState(() => outboxRef.current.length);
+  const flushOutboxRef = useRef(null);
+  const flushingOutboxRef = useRef(false);
+  const [showReportQueue, setShowReportQueue] = useState(false);
+  const [showSaved, setShowSaved] = useState(false);
+  const [savedIds, setSavedIds] = useState(() => new Set());
+  const [textSize, setTextSize] = useState('m');
+  const [textColor, setTextColor] = useState(null);
+  const [showTextStyle, setShowTextStyle] = useState(false);
   const scrollRef = useRef(null);
   useEffect(() => {
     if (!keyboardOpen) return undefined;
@@ -12380,6 +12966,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const isUnread = (conv) => (unreadCounts[conv.otherProfile.id] || 0) > 0;
   const isUserOnline = (profile) => {
     if (!profile) return false;
+    if (!privacyAllows(profile, 'privacy_online', session.user.id, iFollowIds, privacyAllowed)) return false;
     if (onlineIds.has(profile.id)) return true;
     if (profile.last_seen) {
       const age = Date.now() - new Date(profile.last_seen).getTime();
@@ -12415,6 +13002,40 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     await sendMessage(session.user.id, conv.otherProfile.id, 'system', `Header style changed to ${label}`, null);
     await upsertConversation(conv.otherProfile.id, `Header style changed to ${label}`, 'system');
     loadConversations();
+  };
+
+  const setDisappear = async (target, secs) => {
+    const on = Number(secs || 0) > 0;
+    if (target.kind === 'dm') {
+      const conv = target.conv;
+      if (!conv) return;
+      const { error } = await supabase.from('conversations').update({ disappear_secs: on ? Number(secs) : null }).eq('id', conv.id);
+      if (error) { alert(friendlyError(error, "Couldn't change disappearing messages. Try again.")); return; }
+      setConversations((prev) => prev.map((c) => (c.id === conv.id ? { ...c, disappear_secs: on ? Number(secs) : null } : c)));
+      const text = on ? `${me.name} turned on disappearing messages. New messages vanish after ${disappearLabel(secs)}.` : `${me.name} turned off disappearing messages.`;
+      const { data } = await sendMessage(session.user.id, conv.otherProfile.id, 'system', text, null);
+      if (data && activeProfileRefForCalls.current && activeProfileRefForCalls.current.id === conv.otherProfile.id) {
+        setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
+      }
+      await upsertConversation(conv.otherProfile.id, text, 'system');
+      loadConversations();
+      return;
+    }
+    if (!activeGroup || groupMembers.find((gm) => gm.user_id === session.user.id)?.role !== 'admin') return;
+    const { error } = await supabase.from('groups').update({ disappear_secs: on ? Number(secs) : null }).eq('id', activeGroup.id);
+    if (error) { alert(friendlyError(error, "Couldn't change disappearing messages. Try again.")); return; }
+    setActiveGroup((prev) => ({ ...prev, disappear_secs: on ? Number(secs) : null }));
+    sendGroupMessage('system', on ? `${realName(session.user.id)} turned on disappearing messages. New messages vanish after ${disappearLabel(secs)}.` : `${realName(session.user.id)} turned off disappearing messages.`, null);
+    loadGroups();
+  };
+
+  const setGroupAccent = async (color) => {
+    if (!activeGroup || groupMembers.find((gm) => gm.user_id === session.user.id)?.role !== 'admin') return;
+    const before = activeGroup.accent;
+    setActiveGroup((prev) => ({ ...prev, accent: color }));
+    const { error } = await supabase.from('groups').update({ accent: color }).eq('id', activeGroup.id);
+    if (error) { setActiveGroup((prev) => ({ ...prev, accent: before })); alert(friendlyError(error, "Couldn't change the group colour. Try again.")); return; }
+    loadGroups();
   };
 
   const setGroupWallpaper = async (key) => {
@@ -12583,7 +13204,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         const last = lastByOther[otherId];
         const convTime = c.last_message_at ? new Date(c.last_message_at).getTime() : 0;
         const msgTime = last ? new Date(last.created_at).getTime() : 0;
-        const useStored = !last || (c.last_message && convTime - msgTime > 1500);
+        const useStored = !last ? !c.disappear_secs : (c.last_message && convTime - msgTime > 1500);
         const preview = useStored ? { kind: 'text', text: c.last_message || '' } : describeMessage(last);
         const lastFromMe = useStored ? c.last_sender_id === myId : last.sender_id === myId;
         return {
@@ -12600,8 +13221,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         if (px !== py) return py - px;
         return y.sortTime - x.sortTime;
       });
-    setConversations(mergedAll.filter((c) => !archived.has(c.id)));
-    setArchivedConversations(mergedAll.filter((c) => archived.has(c.id)));
+    setConversations(uniqueBy(mergedAll.filter((c) => !archived.has(c.id)), (c) => c.id));
+    setArchivedConversations(uniqueBy(mergedAll.filter((c) => archived.has(c.id)), (c) => c.id));
   };
 
   const upsertConversation = async (otherId, text, type) => {
@@ -12637,7 +13258,23 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             setMe({ ...(restored || data), is_deleted: false, email: session.user.email });
             return;
           }
-          setMe({ ...data, email: session.user.email });
+          if (data.banned) {
+            await signOut();
+            alert(BLOCKED_MESSAGE);
+            window.location.replace('/');
+            return;
+          }
+          const fp = deviceFingerprint();
+          if (fp && data.device_id !== fp) {
+            supabase.from('profiles').update({ device_id: fp }).eq('id', session.user.id);
+          }
+          isBlockedHere(session.user.email).then(async (blocked) => {
+            if (!blocked) return;
+            await signOut();
+            alert(BLOCKED_MESSAGE);
+            window.location.replace('/');
+          });
+          setMe({ ...data, email: session.user.email, device_id: fp || data.device_id });
           return;
         }
         setProfileCheckFailed(true);
@@ -12649,6 +13286,13 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   useEffect(() => {
     if (profileCheckFailed) onNeedsProfile();
   }, [profileCheckFailed]);
+
+  useEffect(() => {
+    if (!me) { setIsZAdmin(false); return; }
+    supabase.from('admins').select('user_id').eq('user_id', me.id).maybeSingle()
+      .then(({ data }) => setIsZAdmin(!!data))
+      .catch(() => setIsZAdmin(false));
+  }, [me && me.id]);
 
   useEffect(() => {
     if (me) { loadConversations(); loadUnreadCounts(); loadMyLocks(); loadGroups(); loadMyBlocks(); loadStories(); subscribeToPush(session.user.id, false); loadFollowRequestCount(); loadUnreadMailCount(); supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', me.id); }
@@ -13268,11 +13912,16 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const handleChatScroll = () => {
     const el = scrollRef.current;
     if (!el) return;
+    // scrolling near the top brings older messages back in
+    if (el.scrollTop < 120) {
+      setVisibleCount((n) => (messagesRef.current.length > n ? n + 120 : n));
+    }
     const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
     stickToBottomRef.current = distance < 80;
     const show = distance > 320;
     setShowJumpButton((prev) => (prev === show ? prev : show));
     if (distance < 80) setNewBelowCount((n) => (n ? 0 : n));
+    if (unreadPillOnRef.current && !dividerAboveViewport()) setUnreadPillOn(false);
   };
 
 
@@ -13328,7 +13977,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       const previewPrefix = !last || last.type === 'system' ? '' : last.sender_id === session.user.id ? 'You: ' : `${(senderNames[last.sender_id] || 'Someone').split(' ')[0]}: `;
       return { ...g, myRole: mine?.role || 'member', pinned: mine?.pinned || false, archived: mine?.archived || false, last_message: last?.deleted ? 'This message was deleted' : last?.content, last_message_type: last?.deleted ? 'text' : last?.type, last_message_at: last?.created_at || g.created_at, unread, preview, previewPrefix, mutedUntil: mine?.notify_muted_until || null };
     }).sort((a, b) => new Date(b.last_message_at) - new Date(a.last_message_at));
-    setGroups(merged);
+    setGroups(uniqueBy(merged, (g) => g.id));
   };
 
   const toggleGroupPin = async (g) => {
@@ -13372,6 +14021,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     setChatSearch(null);
     setShowChatMedia(false);
     setPinIndex(0);
+    const prevGroupReadAt = getGroupReadAt(group.id);
     markGroupRead(group.id);
     activeGroupIdRef.current = group.id;
     setGroups((prev) => prev.map((g) => (g.id === group.id ? { ...g, unread: 0 } : g)));
@@ -13387,8 +14037,13 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const { data: newestFirst } = await supabase.from('messages').select('*').eq('group_id', group.id).order('created_at', { ascending: false }).limit(CHAT_HISTORY_LIMIT);
     const data = (newestFirst || []).slice().reverse();
     const hidden = getHiddenMsgIds();
-    const visible = (data || []).filter((m) => !hidden.has(m.id));
-    setMessages(visible);
+    const visible = (data || []).filter((m) => !hidden.has(m.id) && !(m.expires_at && new Date(m.expires_at).getTime() <= Date.now()));
+    const readAtMs = prevGroupReadAt ? new Date(prevGroupReadAt).getTime() : 0;
+    const groupUnread = readAtMs
+      ? visible.filter((m) => m.sender_id !== session.user.id && !m.deleted && m.type !== 'system' && new Date(m.created_at).getTime() > readAtMs)
+      : [];
+    setUnreadAnchor(groupUnread.length ? { chat: group.id, id: groupUnread[0].id, count: groupUnread.length } : null);
+    setMessages([...visible, ...queuedMessagesFor('group', group.id)]);
     setLoadingConvo(false);
     loadGroupMembers(group.id);
     const ids = visible.map((m) => m.id).slice(-400);
@@ -13412,7 +14067,19 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (tempId) {
       setMessages((prev) => [...prev, { ...row, id: tempId, created_at: new Date().toISOString(), read: false, delivered: false, deleted: false, sending: true }]);
     }
-    const { data, error } = await supabase.from('messages').insert(row).select().single();
+    if (tempId && type === 'text' && navigator.onLine === false) {
+      queueOutgoing({ tempId, kind: 'group', targetId: activeGroup.id, groupName: activeGroup.name, row, createdAt: new Date().toISOString() });
+      setMessages((prev) => prev.map((x) => (x.id === tempId ? { ...x, sending: false, queued: true } : x)));
+      return null;
+    }
+    let insertResult;
+    try { insertResult = await supabase.from('messages').insert(row).select().single(); } catch (thrown) { insertResult = { data: null, error: thrown }; }
+    const { data, error } = insertResult;
+    if (tempId && error && type === 'text' && isNetworkProblem(error)) {
+      queueOutgoing({ tempId, kind: 'group', targetId: activeGroup.id, groupName: activeGroup.name, row, createdAt: new Date().toISOString() });
+      setMessages((prev) => prev.map((x) => (x.id === tempId ? { ...x, sending: false, queued: true } : x)));
+      return null;
+    }
     if (tempId) setMessages((prev) => prev.filter((x) => x.id !== tempId || (error ? true : false)).map((x) => (x.id === tempId && error ? { ...x, sending: false, failed: true } : x)));
     if (!error && data) {
       setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
@@ -13596,8 +14263,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       .limit(CHAT_HISTORY_LIMIT);
     const data = (newestFirst || []).slice().reverse();
     const hidden = getHiddenMsgIds();
-    const visible = (data || []).filter((m) => !hidden.has(m.id));
-    setMessages(visible);
+    const visible = (data || []).filter((m) => !hidden.has(m.id) && !(m.expires_at && new Date(m.expires_at).getTime() <= Date.now()));
+    const unreadFromThem = visible.filter((m) => m.sender_id === profile.id && !m.read && !m.deleted && m.type !== 'system');
+    setUnreadAnchor(unreadFromThem.length ? { chat: profile.id, id: unreadFromThem[0].id, count: unreadFromThem.length } : null);
+    setMessages([...visible, ...queuedMessagesFor('dm', profile.id)]);
     setLoadingConvo(false);
     const unreadIds = visible.filter((m) => m.sender_id === profile.id && !m.read).map((m) => m.id);
     if (unreadIds.length) {
@@ -13659,6 +14328,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const sendInner = async () => {
     if (!activeProfile && !activeGroup) return;
     if (pendingMedia.length) {
+      if (navigator.onLine === false) { showSnack('No connection. Photos and videos send once you are back online.'); return; }
       const items = pendingMedia;
       setPendingMedia([]);
       const caption = draft.trim().slice(0, MAX_CHARS);
@@ -13728,16 +14398,31 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     setReplyingTo(null);
     const wasForward = items.length === 1 && items[0].type === 'text';
     const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    const optimistic = {
-      id: tempId, sender_id: session.user.id, receiver_id: activeProfile.id, group_id: null,
-      type: 'text', content: text, media_url: null, reply_to_id: replyId || null,
-      created_at: new Date().toISOString(), read: false, delivered: false, deleted: false, sending: true,
-    };
+    const dmRow = { sender_id: session.user.id, receiver_id: activeProfile.id, group_id: null, type: 'text', content: text, reply_to_id: replyId || null, text_size: textSize === 'm' ? null : textSize, text_color: textColor };
+    const optimistic = { ...dmRow, id: tempId, media_url: null, created_at: new Date().toISOString(), read: false, delivered: false, deleted: false, sending: true };
+    const dmTarget = activeProfile.id;
+    if (navigator.onLine === false) {
+      queueOutgoing({ tempId, kind: 'dm', targetId: dmTarget, row: dmRow, createdAt: optimistic.created_at });
+      setMessages((prev) => [...prev, { ...optimistic, sending: false, queued: true }]);
+      return;
+    }
     setMessages((prev) => [...prev, optimistic]);
-    const { data } = replyId
-      ? (await supabase.from('messages').insert({ sender_id: session.user.id, receiver_id: activeProfile.id, group_id: null, type: 'text', content: text, reply_to_id: replyId }).select().single())
-      : await sendMessage(session.user.id, activeProfile.id, 'text', text, null);
+    const styledText = textSize !== 'm' || !!textColor;
+    let sendResult;
+    try {
+      sendResult = (replyId || styledText)
+        ? await supabase.from('messages').insert(dmRow).select().single()
+        : await sendMessage(session.user.id, dmTarget, 'text', text, null);
+    } catch (thrown) {
+      sendResult = { data: null, error: thrown };
+    }
+    const data = sendResult && sendResult.data;
     if (!data) {
+      if (isNetworkProblem(sendResult && sendResult.error)) {
+        queueOutgoing({ tempId, kind: 'dm', targetId: dmTarget, row: dmRow, createdAt: optimistic.created_at });
+        setMessages((prev) => prev.map((x) => (x.id === tempId ? { ...x, sending: false, queued: true } : x)));
+        return;
+      }
       setMessages((prev) => prev.map((x) => (x.id === tempId ? { ...x, sending: false, failed: true } : x)));
     }
     if (data) {
@@ -13770,6 +14455,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
   const saveEdit = async () => {
     if (!editingMessage || !draft.trim()) return;
+    if (navigator.onLine === false) { showSnack('No connection. Edit this message once you are back online.'); return; }
     const newText = draft.trim().slice(0, MAX_CHARS);
     await supabase.from('messages').update({ content: newText, edited: true }).eq('id', editingMessage.id);
     setMessages((prev) => prev.map((m) => (m.id === editingMessage.id ? { ...m, content: newText, edited: true } : m)));
@@ -14090,6 +14776,154 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     loadGroups();
   };
 
+  const queueOutgoing = (item) => {
+    outboxRef.current = [...outboxRef.current, item];
+    writeOutbox(session.user.id, outboxRef.current);
+    setOutboxCount(outboxRef.current.length);
+  };
+  const queuedMessagesFor = (kind, targetId) => outboxRef.current
+    .filter((q) => q.kind === kind && q.targetId === targetId)
+    .map((q) => ({ ...q.row, id: q.tempId, media_url: null, created_at: q.createdAt, read: false, delivered: false, deleted: false, queued: true }));
+  const flushOutbox = async () => {
+    if (flushingOutboxRef.current || !me || !outboxRef.current.length || navigator.onLine === false) return;
+    flushingOutboxRef.current = true;
+    try {
+      while (outboxRef.current.length) {
+        const item = outboxRef.current[0];
+        let result;
+        try { result = await supabase.from('messages').insert(item.row).select().single(); } catch (thrown) { result = { data: null, error: thrown }; }
+        const { data, error } = result;
+        if (!data && isNetworkProblem(error)) break;
+        outboxRef.current = outboxRef.current.slice(1);
+        writeOutbox(session.user.id, outboxRef.current);
+        setOutboxCount(outboxRef.current.length);
+        if (!data) {
+          setMessages((prev) => prev.map((x) => (x.id === item.tempId ? { ...x, queued: false, sending: false, failed: true } : x)));
+          continue;
+        }
+        const activeNow = item.kind === 'group'
+          ? activeGroupIdRef.current === item.targetId
+          : !!(activeProfileRefForCalls.current && activeProfileRefForCalls.current.id === item.targetId);
+        if (activeNow) {
+          setMessages((prev) => {
+            const without = prev.filter((x) => x.id !== item.tempId);
+            return without.some((x) => x.id === data.id) ? without : [...without, data];
+          });
+        }
+        const text = item.row.content || '';
+        if (item.kind === 'dm') {
+          upsertConversation(item.targetId, text, 'text');
+          notifyUser(item.targetId, me.name, parseProfileLink(text) ? 'Shared a profile' : text, `/?dm=${session.user.id}`, me.avatar);
+        } else {
+          loadGroups();
+          supabase.from('group_members').select('user_id, muted').eq('group_id', item.targetId).then(({ data: mems }) => {
+            (mems || []).filter((m) => m.user_id !== session.user.id && !m.muted)
+              .forEach((m) => notifyUser(m.user_id, `${me.name} in ${item.groupName || 'a group'}`, text, `/?group=${item.targetId}`, me.avatar));
+          });
+        }
+      }
+    } finally {
+      flushingOutboxRef.current = false;
+    }
+  };
+  flushOutboxRef.current = flushOutbox;
+
+  useEffect(() => {
+    let hideTimer = null;
+    const goOnline = () => {
+      setOnline(true);
+      setShowBackOnline(true);
+      clearTimeout(hideTimer);
+      hideTimer = setTimeout(() => setShowBackOnline(false), 2200);
+      if (flushOutboxRef.current) flushOutboxRef.current();
+      if (reloadListsRef.current) reloadListsRef.current();
+    };
+    const goOffline = () => { clearTimeout(hideTimer); setOnline(false); setShowBackOnline(false); };
+    window.addEventListener('online', goOnline);
+    window.addEventListener('offline', goOffline);
+    const tryFlush = () => { if (navigator.onLine !== false && outboxRef.current.length && flushOutboxRef.current) flushOutboxRef.current(); };
+    const poll = setInterval(tryFlush, 8000);
+    const boot = setTimeout(tryFlush, 1500);
+    return () => {
+      clearTimeout(hideTimer); clearTimeout(boot); clearInterval(poll);
+      window.removeEventListener('online', goOnline);
+      window.removeEventListener('offline', goOffline);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!me) return undefined;
+    const beat = () => {
+      try {
+        supabase.from('user_devices').upsert({ user_id: session.user.id, device_id: getDeviceId(), label: deviceLabelNow(), last_active: new Date().toISOString() }, { onConflict: 'user_id,device_id' }).then(() => {}, () => {});
+      } catch {}
+    };
+    beat();
+    const t = setInterval(() => { if (document.visibilityState === 'visible') beat(); }, 5 * 60 * 1000);
+    return () => clearInterval(t);
+  }, [me && me.id]);
+
+  useEffect(() => {
+    if (!me) return;
+    supabase.from('saved_messages').select('source_message_id').eq('user_id', me.id).limit(2000)
+      .then(({ data, error }) => { if (!error && data) setSavedIds(new Set(data.map((r) => r.source_message_id).filter(Boolean).map(String))); }, () => {});
+  }, [me && me.id]);
+
+  useEffect(() => {
+    const t = setInterval(() => {
+      const now = Date.now();
+      setMessages((prev) => (prev.some((m) => m.expires_at && new Date(m.expires_at).getTime() <= now)
+        ? prev.filter((m) => !(m.expires_at && new Date(m.expires_at).getTime() <= now))
+        : prev));
+    }, 15000);
+    return () => clearInterval(t);
+  }, []);
+
+  const toggleSaveMessage = async (m) => {
+    setContextMenuFor(null);
+    if (!m || String(m.id).startsWith('temp-')) return;
+    const sid = String(m.id);
+    if (savedIds.has(sid)) {
+      setSavedIds((prev) => { const n = new Set(prev); n.delete(sid); return n; });
+      const { error } = await supabase.from('saved_messages').delete().eq('user_id', session.user.id).eq('source_message_id', sid);
+      if (error) { setSavedIds((prev) => new Set(prev).add(sid)); showSnack(friendlyError(error, "Couldn't remove it from Saved.")); return; }
+      showSnack('Removed from Saved');
+      return;
+    }
+    const fromName = m.sender_id === session.user.id ? 'You' : (activeGroup ? memberName(m.sender_id) : (activeProfile ? activeProfile.name : 'Someone'));
+    const chatLabel = activeGroup ? activeGroup.name : (activeProfile ? activeProfile.name : '');
+    const kind = ['image', 'video', 'audio', 'sticker'].includes(m.type) ? m.type : 'text';
+    setSavedIds((prev) => new Set(prev).add(sid));
+    const { error } = await supabase.from('saved_messages').upsert({
+      user_id: session.user.id, source_message_id: sid, kind, content: m.content || null, media_url: m.media_url || null,
+      from_name: fromName, chat_label: chatLabel, message_created_at: m.created_at,
+    }, { onConflict: 'user_id,source_message_id' });
+    if (error) { setSavedIds((prev) => { const n = new Set(prev); n.delete(sid); return n; }); showSnack(friendlyError(error, "Couldn't save that message. Try again.")); return; }
+    showSnack('Added to Saved');
+  };
+
+  const dividerAboveViewport = () => {
+    const box = scrollRef.current;
+    const divider = document.getElementById('unread-divider');
+    if (!box || !divider) return false;
+    return divider.getBoundingClientRect().bottom <= box.getBoundingClientRect().top + 8;
+  };
+  const jumpToFirstUnread = () => {
+    const box = scrollRef.current;
+    const divider = document.getElementById('unread-divider');
+    if (!box || !divider) return;
+    stickToBottomRef.current = false;
+    const offset = divider.getBoundingClientRect().top - box.getBoundingClientRect().top;
+    box.scrollTo({ top: Math.max(0, box.scrollTop + offset - 12), behavior: 'smooth' });
+    setUnreadPillOn(false);
+  };
+  useEffect(() => { unreadPillOnRef.current = unreadPillOn; }, [unreadPillOn]);
+  useEffect(() => {
+    if (!unreadAnchor || unreadAnchor.chat !== chatKey || loadingConvo) { setUnreadPillOn(false); return undefined; }
+    const t = setTimeout(() => setUnreadPillOn(dividerAboveViewport()), 400);
+    return () => clearTimeout(t);
+  }, [unreadAnchor, chatKey, loadingConvo]);
+
   const activitySentRef = useRef({});
   const sendActivity = (kind) => {
     if (!typingChannelRef.current || me?.hide_activity) return;
@@ -14301,10 +15135,30 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     loadStories();
   };
 
-  const postStories = async (outputs, caption, mentions) => {
+  const filterTaggableMentions = async (list) => {
+    const users = (list || []).filter((mn) => mn.kind !== 'group' && mn.id !== session.user.id);
+    if (!users.length) return list || [];
+    const ids = users.map((u) => u.id);
+    const [tagRes, followRes, allowRes] = await Promise.all([
+      supabase.from('profiles').select('id, privacy_tags').in('id', ids),
+      supabase.from('follows').select('following_id').eq('follower_id', session.user.id).eq('status', 'accepted').in('following_id', ids),
+      supabase.from('privacy_allow').select('user_id').eq('viewer_id', session.user.id).eq('scope', 'privacy_tags').in('user_id', ids),
+    ]);
+    if (tagRes.error || !tagRes.data) return list || [];
+    const iFollow = new Set((followRes.data || []).map((r) => r.following_id));
+    const allowed = new Set((allowRes.data || []).map((r) => `${r.user_id}:privacy_tags`));
+    const blocked = new Set(tagRes.data
+      .filter((row) => !privacyAllows({ id: row.id, privacy_tags: row.privacy_tags }, 'privacy_tags', session.user.id, iFollow, allowed))
+      .map((row) => row.id));
+    if (blocked.size) showSnack(blocked.size === 1 ? "One person doesn't allow tags from you, so they weren't notified." : "Some people don't allow tags from you, so they weren't notified.");
+    return (list || []).filter((mn) => mn.kind === 'group' || !blocked.has(mn.id));
+  };
+
+  const postStories = async (outputs, caption, mentionsRaw) => {
     setStoryComposer(null);
     if (!outputs.length) return;
     showSnack('Sharing to your story\u2026');
+    const mentions = await filterTaggableMentions(mentionsRaw || []);
     let firstStory = null;
     for (const item of outputs) {
       const { url, error } = await uploadMedia(item.file, session.user.id);
@@ -14387,7 +15241,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const { data: outgoing } = await supabase.from('follows').select('following_id').eq('follower_id', myId).eq('status', 'accepted');
     const { data: incomingRows } = await supabase.from('follows').select('follower_id').eq('following_id', myId).eq('status', 'accepted');
     const iFollow = new Set((outgoing || []).map((r) => r.following_id));
+    setIFollowIds(iFollow);
     setMutualIds(new Set((incomingRows || []).map((r) => r.follower_id).filter((id) => iFollow.has(id))));
+    const { data: allowRows } = await supabase.from('privacy_allow').select('user_id, scope').eq('viewer_id', myId);
+    setPrivacyAllowed(new Set((allowRows || []).map((r) => `${r.user_id}:${r.scope}`)));
   };
   followRefreshRef.current = () => { loadMutuals(); loadStories(); };
   const canCall = (profile) => !!profile && profile.id !== session.user.id && !profile.is_deleted && mutualIds.has(profile.id) && !myBlockedIds.has(profile.id) && !blockedByIds.has(profile.id);
@@ -14649,7 +15506,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         : (activeProfileRefForCalls.current && activeProfileRefForCalls.current.id === pr.id);
       if (!same) return;
       const hidden = getHiddenMsgIds();
-      const fresh = data.slice().reverse().filter((m) => !hidden.has(m.id));
+      const fresh = data.slice().reverse().filter((m) => !hidden.has(m.id) && !(m.expires_at && new Date(m.expires_at).getTime() <= Date.now()));
       const newestServer = fresh.length ? new Date(fresh[fresh.length - 1].created_at).getTime() : 0;
       setMessages((prev) => {
         const ids = new Set(fresh.map((m) => m.id));
@@ -15003,6 +15860,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (el && sidebarScrollRef.current) el.scrollTop = sidebarScrollRef.current;
   }, [mobileShowChat, isWide]);
 
+  useEffect(() => { setVisibleCount(120); }, [activeProfile && activeProfile.id, activeGroup && activeGroup.id]);
+
   useBackClose(!isWide && mobileShowChat, () => {
     if (activeConvForBar && myLocks[activeConvForBar.id]) lastLeftChatAtRef.current[activeConvForBar.id] = Date.now();
     if (activeGroup) markGroupRead(activeGroup.id);
@@ -15012,16 +15871,23 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   });
   useBackClose(!!(replyingTo || editingMessage), () => { if (editingMessage) setDraft(''); setReplyingTo(null); setEditingMessage(null); });
   useBackClose(showAttach, () => setShowAttach(false));
+  useBackClose(showTextStyle, () => setShowTextStyle(false));
   useBackClose(search.trim().length >= 2 && !mobileShowChat, () => { setSearch(''); setResults([]); });
 
   const renderedMessages = useMemo(() => {
     if (!me || (!activeProfile && !activeGroup)) return null;
     const byId = new Map(messages.map((x) => [x.id, x]));
+    let startAt = Math.max(0, messages.length - visibleCount);
+    if (unreadAnchor && unreadAnchor.chat === chatKey) {
+      const anchorAt = messages.findIndex((x) => x.id === unreadAnchor.id);
+      if (anchorAt >= 0) startAt = Math.min(startAt, Math.max(0, anchorAt - 15));
+    }
+    const list = uniqueBy(messages.slice(startAt), (x) => x.id);
     return (
-                messages.map((m, msgIndex) => {
-                  const nextMsg = messages[msgIndex + 1];
+                list.map((m, msgIndex) => {
+                  const nextMsg = list[msgIndex + 1];
                   const tightBelow = !!nextMsg && nextMsg.sender_id === m.sender_id && nextMsg.type !== 'system' && m.type !== 'system';
-                  const prevMsg = messages[msgIndex - 1];
+                  const prevMsg = list[msgIndex - 1];
                   const tightAbove = !!prevMsg && prevMsg.sender_id === m.sender_id && prevMsg.type !== 'system' && m.type !== 'system' && !prevMsg.deleted;
                   const replyPreview = m.reply_to_id ? (() => {
                     const rm = byId.get(m.reply_to_id);
@@ -15029,7 +15895,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                   })() : null;
                   const isMe = m.sender_id === session.user.id;
                   const showSenderLabel = activeGroup && !isMe;
-                  return (
+                  const isUnreadAnchor = !!unreadAnchor && unreadAnchor.chat === chatKey && unreadAnchor.id === m.id;
+                  const bubble = (
                     <MessageBubble
                       key={m.id} m={m} isMe={isMe}
                       selectionMode={selectionMode} selected={selectedIds.has(m.id)} onToggleSelect={toggleSelect}
@@ -15064,9 +15931,12 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                       onOpenPost={(post, owner) => setDeepPost({ post, owner: sanitizeAvatar(owner, session.user.id) })}
                     />
                   );
+                  return isUnreadAnchor
+                    ? <React.Fragment key={m.id}><UnreadDivider count={unreadAnchor.count} />{bubble}</React.Fragment>
+                    : bubble;
                 })
     );
-  }, [messages, messageLikes, selectionMode, selectedIds, highlightedMsgId, activeGroup, activeProfile, groupMembers, me, mutualIds, myBlockedIds, blockedByIds, activeGroupCall]);
+  }, [messages, visibleCount, messageLikes, selectionMode, selectedIds, highlightedMsgId, activeGroup, activeProfile, groupMembers, me, mutualIds, myBlockedIds, blockedByIds, activeGroupCall, unreadAnchor, chatKey]);
 
   if (!me) {
     return (
@@ -15082,7 +15952,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     return new Date(b.last_message_at) - new Date(a.last_message_at);
   };
 
-  const displayList = listFilter === 'groups'
+  const displayListRaw = listFilter === 'groups'
     ? groups.filter((g) => !g.archived).sort((a, b) => displayListSortByPin(a, b, (x) => x.pinned))
     : listFilter === 'dms'
       ? conversations
@@ -15092,8 +15962,11 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         : [...conversations.map((c) => ({ ...c, __kind: 'dm' })), ...groups.filter((g) => !g.archived).map((g) => ({ ...g, __kind: 'group' }))]
             .sort((a, b) => displayListSortByPin(a, b, (x) => (x.__kind === 'dm' ? isPinnedByMe(x) : x.pinned)));
 
+  const displayList = uniqueBy(displayListRaw, (x) => `${x.__kind || (listFilter === 'groups' ? 'group' : 'dm')}-${x.id}`);
+
   const activeWallpaperKey = activeGroup ? activeGroup.wallpaper : (activeConvForBar ? myWallpaper(activeConvForBar) : null);
   const activeNameBarKey = activeGroup ? activeGroup.name_bar : activeConvNameBar;
+  const disappearOn = activeGroup ? !!((groups.find((x) => x.id === activeGroup.id) || activeGroup).disappear_secs) : !!(activeConvForBar && activeConvForBar.disappear_secs);
 
   return (
     <div id="zapp-root" style={{
@@ -15106,6 +15979,15 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       paddingRight: 'env(safe-area-inset-right)',
     }}>
       <GlobalStyle />
+      {(!online || showBackOnline) && (
+        <div role="status" style={{
+          position: 'fixed', top: 'calc(env(safe-area-inset-top) + 8px)', left: '50%', transform: 'translateX(-50%)', zIndex: 300,
+          padding: '7px 16px', borderRadius: 18, fontSize: 12.5, fontWeight: 800, fontFamily: FONT, color: 'white', whiteSpace: 'nowrap',
+          background: online ? '#1f9d55' : '#2b2f3a', boxShadow: '0 6px 20px rgba(0,0,0,0.3)', pointerEvents: 'none',
+        }}>
+          {online ? 'Back online' : `No connection${outboxCount ? ` \u00b7 ${outboxCount} waiting to send` : ''}`}
+        </div>
+      )}
       <AssetDownloadBar progress={assetProgress} />
       {showInstallHelp && <InstallAppHelpModal onClose={() => setShowInstallHelp(false)} />}
       <div {...feedSwipe} style={{
@@ -15381,7 +16263,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               left: isWide ? 'calc(360px + env(safe-area-inset-left))' : 0, right: 0, zIndex: 15,
               borderBottom: activeNameBarKey ? 'none' : `1px solid ${theme.dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}`,
               overflow: 'hidden',
-              ...(!isAppleMobile() ? { borderTopLeftRadius: 22, borderTopRightRadius: 22 } : {}),
+              borderTopLeftRadius: 22,
+              borderTopRightRadius: 22,
               transform: 'translateZ(0)',
               ...(activeNameBarKey
                 ? (nameBarBgStyle(activeNameBarKey) || {})
@@ -15402,6 +16285,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                   cursor: 'pointer', position: 'relative', overflow: 'hidden',
                 }}
                 onClick={() => (activeGroup ? setShowGroupInfo(true) : setProfileOf(activeProfile))}>
+              {activeGroup && <div aria-hidden="true" style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 2, background: `linear-gradient(90deg, ${groupAccent(activeGroup)}, transparent 80%)`, pointerEvents: 'none' }} />}
               <ArrowLeft size={20} style={{ cursor: 'pointer', color: activeNameBarKey ? 'white' : theme.ink, flexShrink: 0, filter: activeNameBarKey ? 'drop-shadow(0 1px 3px rgba(0,0,0,0.6))' : 'none', position: 'relative' }}
                 onClick={(e) => { e.stopPropagation(); if (activeConvForBar && myLocks[activeConvForBar.id]) lastLeftChatAtRef.current[activeConvForBar.id] = Date.now(); if (activeGroup) markGroupRead(activeGroup.id); if (reloadListsRef.current) reloadListsRef.current(); loadUnreadCounts(); setMobileShowChat(false); setActiveProfile(null); setActiveGroup(null); }} />
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, position: 'relative' }}>
@@ -15414,13 +16298,14 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                     {(activeGroup ? !!(groups.find((x) => x.id === activeGroup.id) || {}).pinned : !!(activeConvForBar && isPinnedByMe(activeConvForBar))) && <span style={{ marginRight: 4, display: 'inline-flex', verticalAlign: 'middle' }}><Pin_ size={12} /></span>}
                     {activeGroup ? activeGroup.name : activeProfile.name}
                     {!activeGroup && <VerifiedBadge tier={activeProfile.verified} custom={activeProfile.custom_badge} size={13} />}
+                    {disappearOn && <Timer size={12} style={{ marginLeft: 5, verticalAlign: 'middle', opacity: 0.85 }} />}
                   </div>
                   <div style={{ fontSize: 11, color: activeNameBarKey ? 'rgba(255,255,255,0.85)' : theme.muted, textShadow: activeNameBarKey ? '0 1px 4px rgba(0,0,0,0.7)' : 'none' }}>
                     {activityFrom ? (
                       <span style={{ color: activeNameBarKey ? 'white' : theme.coral, fontWeight: 700 }}>
                         {activeGroup ? `${(groupMembers.find((gm) => gm.user_id === activityFrom.from)?.profile.name || 'Someone').split(' ')[0]} is ` : ''}{activityLabel(activityFrom.kind)}
                       </span>
-                    ) : activeGroup ? `${groupMembers.length} members` : (blockedByIds.has(activeProfile.id) || myBlockedIds.has(activeProfile.id) || activeProfile.hide_activity) ? '' : isUserOnline(activeProfile) ? 'Online' : (formatLastSeen(activeProfile.last_seen) || 'Last seen recently')}
+                    ) : activeGroup ? <GroupHeaderLine members={groupMembers} /> : (blockedByIds.has(activeProfile.id) || myBlockedIds.has(activeProfile.id) || activeProfile.hide_activity) ? '' : isUserOnline(activeProfile) ? 'Online' : (privacyAllows(activeProfile, 'privacy_lastseen', session.user.id, iFollowIds, privacyAllowed) ? (formatLastSeen(activeProfile.last_seen) || 'Last seen recently') : '')}
                   </div>
                 </div>
               </div>
@@ -15491,6 +16376,17 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                   backgroundImage: 'radial-gradient(circle, currentColor 1px, transparent 1px)', backgroundSize: '18px 18px', color: theme.ink,
                 }} />
               )}
+              {unreadPillOn && unreadAnchor && unreadAnchor.chat === chatKey && (
+                <div style={{ position: 'sticky', top: 8, height: 0, zIndex: 6, display: 'flex', justifyContent: 'center', overflow: 'visible' }}>
+                  <div role="button" onPointerDown={(e) => e.preventDefault()} onClick={jumpToFirstUnread} className="zchat-pop" style={{
+                    display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 18, background: theme.coral, color: 'white',
+                    fontSize: 12.5, fontWeight: 800, boxShadow: '0 6px 18px rgba(0,0,0,0.28)', cursor: 'pointer', whiteSpace: 'nowrap',
+                  }}>
+                    <ChevronRight size={15} style={{ transform: 'rotate(-90deg)' }} />
+                    {unreadAnchor.count} unread {unreadAnchor.count === 1 ? 'message' : 'messages'}
+                  </div>
+                </div>
+              )}
               {loadingConvo ? (
                 <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 40 }}><Spinner size={22} color={theme.ink} /></div>
               ) : messages.length === 0 ? (
@@ -15549,6 +16445,33 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               </div>
             )}
 
+            {showTextStyle && (
+              <div style={{ padding: '8px 14px 2px', display: 'flex', flexDirection: 'column', gap: 8 }} className="zchat-fade">
+                <div style={{ display: 'flex', gap: 7 }}>
+                  {TEXT_SIZES.map(([key, label, px]) => (
+                    <div key={key} role="button" onClick={() => setTextSize(key)} style={{
+                      flex: 1, textAlign: 'center', padding: '7px 4px', borderRadius: 12, cursor: 'pointer',
+                      background: textSize === key ? theme.coral : theme.rowBg,
+                      color: textSize === key ? 'white' : theme.ink,
+                      fontWeight: 800, fontSize: Math.min(17, px * 0.7),
+                    }}>{label}</div>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <div role="button" onClick={() => setTextColor(null)} style={{
+                    width: 28, height: 28, borderRadius: 14, cursor: 'pointer', flexShrink: 0,
+                    border: `2px solid ${textColor ? theme.border : theme.coral}`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 900, color: theme.muted,
+                  }}>A</div>
+                  {TEXT_COLORS.map((c) => (
+                    <div key={c} role="button" onClick={() => setTextColor(c)} style={{
+                      width: 28, height: 28, borderRadius: 14, background: c, cursor: 'pointer', flexShrink: 0,
+                      border: textColor === c ? `3px solid ${theme.ink}` : `1px solid ${theme.border}`,
+                    }} />
+                  ))}
+                </div>
+              </div>
+            )}
             <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, padding: '6px 14px', flexShrink: 0, position: 'relative', background: theme.bgGradient, paddingBottom: keyboardOpen ? 6 : 'max(6px, calc(env(safe-area-inset-bottom) - 24px))' }}>
               {activeProfile && !activeGroup && myBlockedIds.has(activeProfile.id) ? (
                 <div className="zchat-fade" style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 9, padding: '8px 4px 2px' }}>
@@ -15596,6 +16519,11 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                     width: 40, height: 40, borderRadius: '50%', background: theme.rowBg, display: 'flex',
                     alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, color: theme.coralDeep, fontSize: 18,
                   }}><Smile size={18} /></div>
+                  <div onClick={() => setShowTextStyle((v) => !v)} aria-label="Text size and colour" style={{
+                    width: 40, height: 40, borderRadius: '50%', background: showTextStyle ? theme.coral : theme.rowBg, display: 'flex',
+                    alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0,
+                    color: showTextStyle ? 'white' : (textColor || theme.coralDeep), fontWeight: 900, fontSize: 15, letterSpacing: '-0.04em',
+                  }}>Aa</div>
                   {!COMPOSER_AUTOSIZE && (
                     <textarea ref={composerMirrorRef} aria-hidden="true" tabIndex={-1} readOnly rows={1} defaultValue=""
                       style={{ position: 'absolute', left: 0, top: 0, height: 0, visibility: 'hidden', overflow: 'hidden', pointerEvents: 'none', zIndex: -1, resize: 'none', boxSizing: 'border-box', padding: '9px 14px', border: '1px solid transparent', fontFamily: FONT, fontSize: 15, lineHeight: 1.35, wordBreak: 'break-word', whiteSpace: 'pre-wrap' }} />
@@ -15712,6 +16640,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           onOpenProfile={(p) => setProfileOf(p)}
           onMessage={(p) => { openChat(p, null); setProfileOf(null); }}
           isBlocked={myBlockedIds.has(profileOf.id)} onBlock={() => setBlockConfirmFor(profileOf)} onUnblock={() => setUnblockConfirmFor(profileOf)}
+          isZAdmin={isZAdmin} iFollowIds={iFollowIds} privacyAllowed={privacyAllowed}
           shareConversations={conversations} shareGroups={groups.filter((g) => !g.archived)} onShareToChats={shareProfileToChats}
           canCall={canCall(profileOf)} onCall={(kind) => { const target = profileOf; setProfileOf(null); startDirectCall(target, kind); }}
           onOpenHighlight={openHighlight} meProfile={me} onOpenCollection={() => setCollectionOpen(true)}
@@ -15720,6 +16649,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
       {showSettings && (
         <SettingsPanel
+          onPrivacySaved={(patch) => setMe((prev) => (prev ? { ...prev, ...patch } : prev))}
           me={me} rewardCount={(myRewards || []).filter(rewardActive).length}
           onOpenCollection={() => { setShowSettings(false); setCollectionOpen(true); }}
           onEditProfile={() => { setShowSettings(false); setProfileOf({ ...me, email: session.user.email }); }}
@@ -15730,6 +16660,13 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           hideActivity={!!me.hide_activity} onToggleActivity={toggleHideActivity}
           onOpenAccounts={() => { setShowSettings(false); setShowAccountSwitcher(true); }}
           onOpenBlocked={() => setShowBlockedList(true)} blockedCount={myBlockedIds.size}
+          isZAdmin={isZAdmin} onOpenReports={() => { setShowSettings(false); setShowReportQueue(true); }}
+          onOpenSaved={() => { setShowSettings(false); setShowSaved(true); }}
+          hasPasswordLogin={(() => {
+            const meta = session.user.app_metadata || {};
+            const provs = Array.isArray(meta.providers) ? meta.providers : (meta.provider ? [meta.provider] : []);
+            return provs.length === 0 || provs.includes('email');
+          })()}
           onOpenDelete={() => { setShowSettings(false); setShowDeleteAccount(true); }}
           chatLockSet={!!me.chat_lock_enabled} chatLockHash={me.chat_lock_hash}
           onSetChatLockPassword={setChatLockPassword} onTurnOffChatLock={turnOffChatLock}
@@ -15737,6 +16674,13 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         />
       )}
       {showPrivacy && <PrivacyPanel onBack={() => setShowPrivacy(false)} />}
+      {showSaved && (
+        <SavedMessagesPanel myId={session.user.id} onClose={() => setShowSaved(false)}
+          onChanged={(sourceId) => setSavedIds((prev) => { const n = new Set(prev); n.delete(String(sourceId)); return n; })} />
+      )}
+      {showReportQueue && isZAdmin && (
+        <ReportQueuePanel onClose={() => setShowReportQueue(false)} onOpenProfile={(p) => setProfileOf(p)} />
+      )}
       {showLogoutConfirm && (
         <LogoutConfirm onCancel={() => setShowLogoutConfirm(false)} onConfirm={onLogout} />
       )}
@@ -15771,6 +16715,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                 senderAvatar={cloneSender ? groupMembers.find((gm) => gm.user_id === m.sender_id)?.profile.avatar : null}
                 hideReadStatus={!!activeGroup} onOpenSenderProfile={null} canModerate={false} onOpenMention={noop} mentionsMe={false} />
             )}
+            isSaved={savedIds.has(String(m.id))} onToggleSave={String(m.id).startsWith('temp-') ? null : () => toggleSaveMessage(m)}
             onSave={() => { silentDownload(m.media_url, m.type === 'video' ? 'zchat-video.mp4' : 'zchat-photo.jpg'); setContextMenuFor(null); }}
             canEditText={isMine && m.type === 'text' && !m.deleted}
             canModerate={activeGroup ? (groupMembers.find((gm) => gm.user_id === session.user.id)?.role === 'admin') : false}
@@ -15834,6 +16779,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           onToggleArchive={() => { toggleArchive(activeConvForBar.id, true); setShowChatSettings(false); setMobileShowChat(false); setActiveProfile(null); }}
           onSetWallpaper={(key) => setWallpaper(activeConvForBar, key)}
           onSetNameBar={(key) => setNameBar(activeConvForBar, key)}
+          disappearSecs={activeConvForBar.disappear_secs} onSetDisappear={(secs) => setDisappear({ kind: 'dm', conv: activeConvForBar }, secs)}
           onEnableLock={() => enableChatLock(activeConvForBar)}
           onDisableLock={() => disableChatLock(activeConvForBar)}
           onDeleteChat={() => { setShowChatSettings(false); setDeleteConvoTarget(activeConvForBar); }}
@@ -15849,6 +16795,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       )}
       {showGroupInfo && activeGroup && (
         <GroupInfoPanel
+          iFollowIds={iFollowIds} privacyAllowed={privacyAllowed}
           group={activeGroup} members={groupMembers} myId={session.user.id}
           myRole={groupMembers.find((gm) => gm.user_id === session.user.id)?.role || 'member'}
           isOwner={activeGroup.created_by === session.user.id}
@@ -15859,6 +16806,11 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           onSaveBio={saveGroupBio} onSaveName={saveGroupName} onSaveAvatar={saveGroupAvatar}
           onAddMembers={addGroupMembers} onTransferOwnership={transferOwnership}
           onSetWallpaper={setGroupWallpaper} onSetHeaderStyle={setGroupHeaderStyle}
+          messages={messages} onSetAccent={setGroupAccent}
+          disappearSecs={(groups.find((g) => g.id === activeGroup.id) || activeGroup).disappear_secs}
+          onSetDisappear={(secs) => setDisappear({ kind: 'group' }, secs)}
+          onOpenMedia={(m) => { setShowGroupInfo(false); if (m.type === 'video') setViewerVideoUrl(m.media_url); else setViewerUrl(m.media_url); }}
+          onJumpToMessage={(id) => { setShowGroupInfo(false); setTimeout(() => jumpToMessage(id), 250); }}
           onOpenSettings={() => { setShowGroupInfo(false); setShowGroupSettings(true); }}
           onOpenMembers={() => { setShowGroupInfo(false); setShowGroupMembers(true); }}
         />
@@ -15876,7 +16828,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         />
       )}
       {showAddMembersFromMembers && activeGroup && (
-        <AddMembersPanel myId={session.user.id} existingIds={groupMembers.map((m) => m.user_id)}
+        <AddMembersPanel myId={session.user.id} iFollowIds={iFollowIds} privacyAllowed={privacyAllowed} existingIds={groupMembers.map((m) => m.user_id)}
           onClose={() => setShowAddMembersFromMembers(false)}
           onAdd={(people) => { addGroupMembers(people); setShowAddMembersFromMembers(false); }} />
       )}
@@ -15892,6 +16844,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             onClose={() => { setShowGroupSettings(false); setShowGroupInfo(true); }}
             onLeave={leaveGroup} onDeleteGroup={deleteGroup}
             onOpenAdmins={() => { setShowGroupSettings(false); setShowGroupInfo(true); }}
+            disappearSecs={groupRow.disappear_secs} onSetDisappear={(secs) => setDisappear({ kind: 'group' }, secs)}
             onOpenEdit={() => { setShowGroupSettings(false); setShowGroupInfo(true); }}
           />
         );
@@ -16015,8 +16968,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           onCapture={(file) => { setCameraOpen(false); openMediaComposer([file]); }} />
       )}
       {deepPost && (
-        <PostViewer post={deepPost.post} owner={deepPost.owner} userId={session.user.id} meProfile={me}
-          onClose={() => setDeepPost(null)} onDeleted={() => setDeepPost(null)} />
+        <FeedPanel me={me} userId={session.user.id} ownerFilter={deepPost.owner} startPostId={deepPost.post.id} seedPost={deepPost.post}
+          onClose={() => setDeepPost(null)} onOpenProfile={(p) => { setDeepPost(null); setProfileOf(p); }} />
       )}
       {!celebrateTier && me && pendingReward && rewardReady[`${pendingReward.kind}:${pendingReward.reward_key}`] && (
         <RewardCelebration kind={pendingReward.kind} rewardKey={pendingReward.reward_key} me={me}
@@ -16048,7 +17001,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           onClose={() => setStickerSheetFor(null)} onReport={() => doReportSingle(stickerSheetFor)} />
       )}
       {storyComposer && (
-        <MediaComposer key={storyComposer.key} files={storyComposer.files} mode="story" myId={session.user.id}
+        <MediaComposer key={storyComposer.key} files={storyComposer.files} mode="story" myId={session.user.id} privacyCtx={{ iFollow: iFollowIds, allowed: privacyAllowed }}
           mentionGroups={groups} onCancel={() => setStoryComposer(null)} onSend={postStories} />
       )}
       {storyViewer && (
@@ -16067,7 +17020,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         const ring = storyRingFor(c.otherProfile.id);
         return (
           <AvatarPeek profile={c.otherProfile} online={isUserOnline(c.otherProfile) && !c.otherProfile.hide_activity}
-            lastSeen={!c.otherProfile.hide_activity ? formatLastSeen(c.otherProfile.last_seen) : null}
+            lastSeen={!c.otherProfile.hide_activity && privacyAllows(c.otherProfile, 'privacy_lastseen', session.user.id, iFollowIds, privacyAllowed) ? formatLastSeen(c.otherProfile.last_seen) : null}
             hasStory={ring !== 'none'} storySeen={ring === 'seen'} onClose={() => setAvatarPeek(null)}
             canCall={canCall(c.otherProfile)} onCall={() => startDirectCall(c.otherProfile, 'voice')}
             onMessage={() => openChat(c.otherProfile, c.id)} onProfile={() => setProfileOf(c.otherProfile)} onStory={() => openStoriesFor(c.otherProfile.id)} />
@@ -16157,6 +17110,865 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   );
 }
 
+function isNetworkProblem(error) {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return true;
+  if (!error) return false;
+  return /failed to fetch|network|load failed|offline|timeout|timed out|fetch/i.test(String(error.message || error));
+}
+
+function readOutbox(myId) {
+  try {
+    const raw = JSON.parse(localStorage.getItem(`zchat-outbox-${myId}`) || '[]');
+    return Array.isArray(raw) ? raw : [];
+  } catch { return []; }
+}
+
+function writeOutbox(myId, list) {
+  try {
+    if (list.length) localStorage.setItem(`zchat-outbox-${myId}`, JSON.stringify(list.slice(-50)));
+    else localStorage.removeItem(`zchat-outbox-${myId}`);
+  } catch {}
+}
+
+function uniqueBy(list, keyFn) {
+  const seen = new Set();
+  return list.filter((x) => {
+    const k = keyFn(x);
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
+
+function UnreadDivider({ count }) {
+  const { theme } = useTheme();
+  return (
+    <div id="unread-divider" style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '12px 0 14px' }}>
+      <div style={{ flex: 1, height: 1, background: `${theme.coral}66` }} />
+      <div style={{ fontSize: 11.5, fontWeight: 800, color: theme.coral, whiteSpace: 'nowrap' }}>{count} unread {count === 1 ? 'message' : 'messages'}</div>
+      <div style={{ flex: 1, height: 1, background: `${theme.coral}66` }} />
+    </div>
+  );
+}
+
+function ChangePasswordForm({ email, hasPassword, onDone }) {
+  const { theme } = useTheme();
+  const [current, setCurrent] = useState('');
+  const [next, setNext] = useState('');
+  const [again, setAgain] = useState('');
+  const [show, setShow] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const [done, setDone] = useState(false);
+  const sameAsCurrent = hasPassword && next.length > 0 && next === current;
+  const problem = next.length > 0 && next.length < 6 ? 'Use at least 6 characters.'
+    : again.length > 0 && next !== again ? 'The two passwords do not match.'
+    : sameAsCurrent ? 'Your new password must be different from the current one.' : '';
+  const ready = (!hasPassword || current.length > 0) && next.length >= 6 && next === again && !sameAsCurrent;
+
+  const submit = async () => {
+    if (!ready || busy) return;
+    setBusy(true);
+    setErr('');
+    if (hasPassword) {
+      const { error: checkErr } = await signInWithPassword(email, current);
+      if (checkErr) {
+        setBusy(false);
+        setErr(/invalid|credentials|incorrect|wrong/i.test(String(checkErr.message || checkErr)) ? 'Your current password is not right.' : friendlyError(checkErr, "Couldn't check your current password. Try again."));
+        return;
+      }
+    }
+    const { error } = await setPassword(next);
+    setBusy(false);
+    if (error) { setErr(friendlyError(error, "Couldn't update your password. Try again.")); return; }
+    setDone(true);
+    setCurrent(''); setNext(''); setAgain('');
+    setTimeout(onDone, 1400);
+  };
+
+  const field = (value, setValue, placeholder, autoComplete) => (
+    <div style={{ position: 'relative', marginBottom: 10 }}>
+      <input style={{ ...inputStyle(theme), paddingRight: 44 }} type={show ? 'text' : 'password'} placeholder={placeholder}
+        value={value} autoComplete={autoComplete} onChange={(e) => setValue(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && submit()} />
+      <div role="button" aria-label={show ? 'Hide passwords' : 'Show passwords'} onClick={() => setShow((v) => !v)}
+        style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', cursor: 'pointer', color: theme.muted, display: 'flex' }}>
+        {show ? <EyeOff size={18} /> : <Eye size={18} />}
+      </div>
+    </div>
+  );
+
+  if (done) {
+    return (
+      <div style={{ textAlign: 'center', padding: '30px 0' }} className="zchat-fade">
+        <ShieldCheck size={32} color={theme.teal} style={{ marginBottom: 10 }} />
+        <div style={{ fontWeight: 800, fontSize: 16, color: theme.ink }}>Password updated</div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div style={{ fontSize: 12.5, color: theme.muted, lineHeight: 1.5, marginBottom: 14 }}>
+        {hasPassword ? 'Enter your current password, then choose a new one.' : 'You signed in with Google. Add a password to also sign in with your email.'}
+      </div>
+      {hasPassword && field(current, setCurrent, 'Current password', 'current-password')}
+      {field(next, setNext, 'New password', 'new-password')}
+      {field(again, setAgain, 'Confirm new password', 'new-password')}
+      {(problem || err) && <div style={{ color: theme.danger, fontSize: 12.5, marginBottom: 6 }}>{err || problem}</div>}
+      <button style={primaryBtn(theme, !ready || busy)} disabled={!ready || busy} onClick={submit}>
+        {busy ? <Spinner /> : 'Update password'}
+      </button>
+    </div>
+  );
+}
+
+function readReportStates() {
+  try {
+    const raw = JSON.parse(localStorage.getItem('zchat-report-states') || '{}');
+    return raw && typeof raw === 'object' ? raw : {};
+  } catch { return {}; }
+}
+
+function writeReportStates(map) {
+  try {
+    const keys = Object.keys(map);
+    const trimmed = keys.length > 2000 ? Object.fromEntries(keys.slice(-2000).map((k) => [k, map[k]])) : map;
+    localStorage.setItem('zchat-report-states', JSON.stringify(trimmed));
+  } catch {}
+}
+
+function normalizeReport(row, source) {
+  const pick = (...keys) => {
+    for (const k of keys) if (row[k] != null && row[k] !== '') return row[k];
+    return null;
+  };
+  const statusRaw = pick('status', 'state');
+  return {
+    key: `${source}-${row.id != null ? row.id : Math.random().toString(36).slice(2)}`,
+    source,
+    id: row.id != null ? row.id : null,
+    linkedId: pick('report_id', 'message_report_id'),
+    reporterId: pick('reporter_id', 'reported_by', 'from_user_id'),
+    targetId: pick('reported_id', 'reported_user_id', 'target_id', 'target_user_id', 'offender_id'),
+    messageId: pick('message_id'),
+    reason: String(pick('reason', 'category', 'kind') || 'No reason given'),
+    details: pick('details', 'note', 'notes', 'description', 'comment'),
+    createdAt: pick('created_at', 'inserted_at', 'reported_at'),
+    dbHandled: (!!statusRaw && /handled|resolved|closed|done|actioned|dismissed|reviewed/i.test(String(statusRaw))) || row.handled === true || row.resolved === true,
+    message: null,
+  };
+}
+
+function ReportQueuePanel({ onClose, onOpenProfile }) {
+  useBackClose(true, onClose);
+  const { theme } = useTheme();
+  const [items, setItems] = useState(null);
+  const [people, setPeople] = useState({});
+  const [problems, setProblems] = useState([]);
+  const [tab, setTab] = useState('open');
+  const [states, setStates] = useState(() => readReportStates());
+  const [banFor, setBanFor] = useState(null);
+  const [banReason, setBanReason] = useState('');
+  const [banBusy, setBanBusy] = useState(false);
+  const [banError, setBanError] = useState('');
+  const [bannedIds, setBannedIds] = useState(() => new Set());
+
+  const fetchByIds = async (table, columns, ids) => {
+    const out = [];
+    for (let i = 0; i < ids.length; i += 60) {
+      const { data } = await supabase.from(table).select(columns).in('id', ids.slice(i, i + 60));
+      if (data) out.push(...data);
+    }
+    return out;
+  };
+
+  const load = async () => {
+    setItems(null);
+    const issues = [];
+    let mr = { data: [], error: null };
+    let rq = { data: [], error: null };
+    try {
+      [mr, rq] = await Promise.all([
+        supabase.from('message_reports').select('*').limit(300),
+        supabase.from('report_queue').select('*').limit(300),
+      ]);
+    } catch (thrown) {
+      issues.push("Couldn't reach the server.");
+    }
+    if (mr.error) issues.push(friendlyError(mr.error, "Couldn't read message reports."));
+    if (rq.error) issues.push(friendlyError(rq.error, "Couldn't read the report queue."));
+    const fromMessages = (mr.data || []).map((r) => normalizeReport(r, 'message_reports'));
+    const fromQueue = (rq.data || []).map((r) => normalizeReport(r, 'report_queue'));
+    const linked = new Set(fromQueue.map((r) => (r.linkedId != null ? String(r.linkedId) : null)).filter(Boolean));
+    const seenSig = new Set(fromQueue.filter((r) => r.messageId).map((r) => `${r.reporterId}|${r.messageId}|${r.reason}`));
+    const rows = [
+      ...fromQueue,
+      ...fromMessages.filter((r) => !(r.id != null && linked.has(String(r.id))) && !seenSig.has(`${r.reporterId}|${r.messageId}|${r.reason}`)),
+    ];
+    const msgIds = [...new Set(rows.map((r) => r.messageId).filter(Boolean))];
+    if (msgIds.length) {
+      const msgs = await fetchByIds('messages', 'id, sender_id, receiver_id, group_id, type, content, media_url, story_id, deleted', msgIds);
+      const byId = {};
+      msgs.forEach((m) => { byId[m.id] = m; });
+      rows.forEach((r) => {
+        const m = byId[r.messageId];
+        if (m) { r.message = m; if (!r.targetId) r.targetId = m.sender_id; }
+      });
+    }
+    const pids = [...new Set(rows.flatMap((r) => [r.reporterId, r.targetId]).filter(Boolean))];
+    const profs = pids.length ? await fetchByIds('profiles', '*', pids) : [];
+    const map = {};
+    sanitizeAvatarList(profs, '').forEach((p) => { map[p.id] = p; });
+    rows.sort((x, y) => new Date(y.createdAt || 0).getTime() - new Date(x.createdAt || 0).getTime());
+    setPeople(map);
+    setProblems(issues);
+    setItems(rows);
+  };
+  useEffect(() => { load(); }, []);
+
+  const isHandled = (it) => (states[it.key] !== undefined ? states[it.key] === 'handled' : it.dbHandled);
+  const setHandled = async (it, handled) => {
+    const next = { ...states, [it.key]: handled ? 'handled' : 'open' };
+    setStates(next);
+    writeReportStates(next);
+    if (it.id != null) {
+      try { await supabase.from(it.source).update({ status: handled ? 'handled' : 'open' }).eq('id', it.id); } catch {}
+    }
+  };
+
+  const doBan = async () => {
+    if (!banFor || banBusy) return;
+    setBanBusy(true);
+    setBanError('');
+    const { error } = await supabase.rpc('admin_ban', { p_user_id: banFor.target.id, p_reason: banReason || `Report: ${banFor.item.reason}` });
+    setBanBusy(false);
+    if (error) { setBanError(friendlyError(error, 'Could not ban this account.')); return; }
+    setBannedIds((prev) => new Set([...prev, banFor.target.id]));
+    setHandled(banFor.item, true);
+    setBanFor(null);
+    setBanReason('');
+  };
+
+  const list = (items || []).filter((it) => (tab === 'open' ? !isHandled(it) : isHandled(it)));
+  const openCount = (items || []).filter((it) => !isHandled(it)).length;
+  const doneCount = (items || []).length - openCount;
+
+  const pillBtn = (label, onClick, tone) => (
+    <div role="button" onClick={onClick} style={{
+      padding: '8px 13px', borderRadius: 14, fontSize: 12.5, fontWeight: 800, cursor: 'pointer',
+      background: tone === 'danger' ? `${theme.danger}22` : tone === 'main' ? theme.coral : theme.rowBg,
+      color: tone === 'danger' ? theme.danger : tone === 'main' ? 'white' : theme.ink,
+      border: `1px solid ${tone === 'danger' ? `${theme.danger}55` : tone === 'main' ? 'transparent' : theme.border}`,
+    }}>{label}</div>
+  );
+
+  const person = (label, p) => (
+    <div role="button" onClick={() => p && onOpenProfile(p)} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, cursor: p ? 'pointer' : 'default' }}>
+      <div style={{ fontSize: 11.5, color: theme.muted, width: 92, flexShrink: 0, fontWeight: 700 }}>{label}</div>
+      {p ? (
+        <>
+          <Avatar emoji={p.avatar} name={p.name} size={24} frame={p.avatar_frame} />
+          <div style={{ fontSize: 13, fontWeight: 800, color: theme.ink, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {p.name} <span style={{ color: theme.muted, fontWeight: 600 }}>@{p.username}</span>
+          </div>
+          {(p.banned || bannedIds.has(p.id)) && <span style={{ fontSize: 10.5, fontWeight: 900, color: theme.danger, flexShrink: 0 }}>Banned</span>}
+        </>
+      ) : <div style={{ fontSize: 13, color: theme.muted }}>Unknown account</div>}
+    </div>
+  );
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 40, background: theme.panelBg, display: 'flex', flexDirection: 'column', fontFamily: FONT }} className="zchat-fade">
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px 10px', paddingTop: 'calc(14px + env(safe-area-inset-top))' }}>
+        <ArrowLeft size={20} style={{ cursor: 'pointer', color: theme.ink }} onClick={onClose} />
+        <div style={{ fontWeight: 900, fontSize: 18, color: theme.ink, flex: 1 }}>Report queue</div>
+        <div role="button" onClick={load} style={{ fontSize: 12.5, fontWeight: 800, color: theme.coral, cursor: 'pointer' }}>Refresh</div>
+      </div>
+      <div style={{ display: 'flex', gap: 8, padding: '0 16px 10px' }}>
+        {[['open', `Open ${openCount}`], ['handled', `Handled ${doneCount}`]].map(([k, label]) => (
+          <div key={k} role="button" onClick={() => setTab(k)} style={{
+            padding: '7px 14px', borderRadius: 16, fontSize: 12.5, fontWeight: 800, cursor: 'pointer',
+            background: tab === k ? theme.coral : theme.rowBg, color: tab === k ? 'white' : theme.ink, border: `1px solid ${tab === k ? 'transparent' : theme.border}`,
+          }}>{label}</div>
+        ))}
+      </div>
+      <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '0 16px', paddingBottom: 'calc(20px + env(safe-area-inset-bottom))' }}>
+        {problems.map((p, i) => (
+          <div key={i} style={{ background: `${theme.danger}18`, color: theme.danger, borderRadius: 12, padding: '9px 12px', fontSize: 12.5, fontWeight: 700, marginBottom: 8 }}>{p}</div>
+        ))}
+        {items === null ? (
+          <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><Spinner size={22} color={theme.ink} /></div>
+        ) : list.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '50px 20px', color: theme.muted }}>
+            <div style={{ fontWeight: 800, fontSize: 15, color: theme.ink }}>{tab === 'open' ? 'No open reports' : 'Nothing handled yet'}</div>
+            <div style={{ fontSize: 12.5, marginTop: 6 }}>{tab === 'open' ? 'New abuse reports show up here.' : 'Reports you mark as handled move here.'}</div>
+          </div>
+        ) : list.map((it) => {
+          const reporter = people[it.reporterId];
+          const target = people[it.targetId];
+          const preview = it.message ? describeMessage(it.message).text : null;
+          const targetBanned = !!target && (target.banned || bannedIds.has(target.id));
+          return (
+            <div key={it.key} style={{ background: theme.rowBg, border: `1px solid ${theme.border}`, borderRadius: 18, padding: 14, marginBottom: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
+                <div style={{ fontWeight: 900, fontSize: 14.5, color: theme.ink }}>{it.reason}</div>
+                {it.createdAt && <div style={{ fontSize: 11, color: theme.muted, flexShrink: 0 }}>{timeAgoLong(it.createdAt)}</div>}
+              </div>
+              {person('Reported by', reporter)}
+              {person('Account', target)}
+              {(it.message || it.messageId) && (
+                <div style={{ marginTop: 10, padding: '9px 11px', borderRadius: 12, background: theme.dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', fontSize: 13, color: theme.ink, lineHeight: 1.4, wordBreak: 'break-word' }}>
+                  {preview ? String(preview).slice(0, 220) : 'That message is no longer available.'}
+                </div>
+              )}
+              {it.details && <div style={{ marginTop: 8, fontSize: 12.5, color: theme.muted, lineHeight: 1.4 }}>{String(it.details).slice(0, 300)}</div>}
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+                {target && pillBtn('Open profile', () => onOpenProfile(target))}
+                {target && !targetBanned && pillBtn('Ban', () => { setBanFor({ item: it, target }); setBanError(''); }, 'danger')}
+                {isHandled(it) ? pillBtn('Reopen', () => setHandled(it, false)) : pillBtn('Mark handled', () => setHandled(it, true), 'main')}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {banFor && (
+        <div onClick={() => !banBusy && setBanFor(null)} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end' }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', background: theme.panelBg, borderRadius: '22px 22px 0 0', padding: '20px 18px', paddingBottom: 'calc(20px + env(safe-area-inset-bottom))' }}>
+            <div style={{ fontWeight: 900, fontSize: 17, color: theme.ink, marginBottom: 8 }}>Ban @{banFor.target.username} from ZChat?</div>
+            <div style={{ fontSize: 13.5, color: theme.muted, lineHeight: 1.6, marginBottom: 14 }}>
+              This blocks their login, their email and their phone, and removes every message they sent.
+            </div>
+            <input style={inputStyle(theme)} placeholder="Reason, for your records" value={banReason} onChange={(e) => setBanReason(e.target.value)} />
+            {banError && <div style={{ color: theme.danger, fontSize: 12.5, marginTop: 8 }}>{banError}</div>}
+            <button style={{ ...primaryBtn(theme, banBusy), background: theme.danger, marginTop: 14 }} disabled={banBusy} onClick={doBan}>
+              {banBusy ? <Spinner /> : 'Ban this account'}
+            </button>
+            <div onClick={() => !banBusy && setBanFor(null)} style={{ textAlign: 'center', padding: '14px 0 2px', fontWeight: 700, color: theme.muted, cursor: 'pointer' }}>Cancel</div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const DISAPPEAR_OPTIONS = [[0, 'Off'], [86400, '24 hours'], [604800, '7 days'], [7776000, '90 days']];
+function disappearLabel(secs) {
+  const found = DISAPPEAR_OPTIONS.find(([v]) => v === Number(secs || 0));
+  return found ? found[1] : 'Off';
+}
+
+function DisappearSheet({ value, canEdit = true, subject = 'this chat', onPick, onClose }) {
+  useBackClose(true, onClose);
+  const { theme } = useTheme();
+  const current = Number(value || 0);
+  const sheet = (
+    <div onClick={onClose} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 700, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end', fontFamily: FONT }}>
+      <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ width: '100%', background: theme.panelBg, borderRadius: '22px 22px 0 0', padding: '20px 18px', paddingBottom: 'calc(20px + env(safe-area-inset-bottom))' }}>
+        <div style={{ fontWeight: 900, fontSize: 17, color: theme.ink }}>Disappearing messages</div>
+        <div style={{ fontSize: 12.5, color: theme.muted, lineHeight: 1.5, margin: '6px 0 12px' }}>
+          New messages in {subject} disappear for everyone after the time you choose. Messages already sent stay.
+        </div>
+        {DISAPPEAR_OPTIONS.map(([secs, label]) => (
+          <div key={secs} role="button" onClick={() => { if (!canEdit) return; if (secs !== current) onPick(secs); onClose(); }} style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '13px 4px', borderTop: `1px solid ${theme.border}`,
+            cursor: canEdit ? 'pointer' : 'default', opacity: canEdit || secs === current ? 1 : 0.5,
+          }}>
+            <span style={{ fontSize: 14.5, fontWeight: 700, color: theme.ink }}>{label}</span>
+            <span style={{ width: 20, height: 20, borderRadius: 10, border: `2px solid ${current === secs ? theme.coral : theme.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {current === secs && <span style={{ width: 10, height: 10, borderRadius: 5, background: theme.coral }} />}
+            </span>
+          </div>
+        ))}
+        {!canEdit && <div style={{ fontSize: 12, color: theme.muted, marginTop: 10 }}>Only group admins can change this.</div>}
+      </div>
+    </div>
+  );
+  return ReactDOM.createPortal(sheet, document.body);
+}
+
+function getDeviceId() {
+  try {
+    let id = localStorage.getItem('zchat-device-id');
+    if (!id) {
+      id = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : `d${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+      localStorage.setItem('zchat-device-id', id);
+    }
+    return id;
+  } catch { return 'unknown'; }
+}
+
+function deviceLabelNow() {
+  const ua = (typeof navigator !== 'undefined' && navigator.userAgent) || '';
+  let os = 'the web';
+  if (/iPhone/.test(ua)) os = 'iPhone';
+  else if (/iPad/.test(ua)) os = 'iPad';
+  else if (/Android/.test(ua)) os = 'Android';
+  else if (/Windows/.test(ua)) os = 'Windows';
+  else if (/Mac OS X|Macintosh/.test(ua)) os = 'Mac';
+  else if (/Linux/.test(ua)) os = 'Linux';
+  let browser = 'Browser';
+  if (/Edg\//.test(ua)) browser = 'Edge';
+  else if (/OPR\/|Opera/.test(ua)) browser = 'Opera';
+  else if (/Firefox|FxiOS/.test(ua)) browser = 'Firefox';
+  else if (/CriOS|Chrome/.test(ua)) browser = 'Chrome';
+  else if (/Safari/.test(ua)) browser = 'Safari';
+  let standalone = false;
+  try { standalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true; } catch {}
+  return standalone ? `ZChat app on ${os}` : `${browser} on ${os}`;
+}
+
+function TwoFactorSection() {
+  const { theme } = useTheme();
+  const [phase, setPhase] = useState('loading');
+  const [factor, setFactor] = useState(null);
+  const [setup, setSetup] = useState(null);
+  const [code, setCode] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const [copied, setCopied] = useState(false);
+  const mfa = supabase.auth && supabase.auth.mfa;
+
+  const refresh = async () => {
+    if (!mfa || !mfa.listFactors) { setErr('Two factor is not available right now.'); setPhase('off'); return; }
+    try {
+      const { data, error } = await mfa.listFactors();
+      if (error) throw error;
+      const verified = ((data && data.totp) || []).find((f) => f.status === 'verified') || null;
+      setFactor(verified);
+      setPhase(verified ? 'on' : 'off');
+    } catch (e) {
+      setErr(friendlyError(e, "Couldn't check two factor. Try again."));
+      setPhase('off');
+    }
+  };
+  useEffect(() => { refresh(); }, []);
+
+  const startSetup = async () => {
+    if (busy) return;
+    setBusy(true); setErr('');
+    try {
+      const { data: listed } = await mfa.listFactors();
+      const stale = ((listed && listed.all) || []).filter((f) => f.factor_type === 'totp' && f.status !== 'verified');
+      for (const f of stale) await mfa.unenroll({ factorId: f.id });
+      const { data, error } = await mfa.enroll({ factorType: 'totp', friendlyName: `ZChat ${Math.random().toString(36).slice(2, 7)}`, issuer: 'ZChat' });
+      if (error) throw error;
+      setSetup({ id: data.id, qr: data.totp && data.totp.qr_code, secret: data.totp && data.totp.secret });
+      setCode('');
+      setPhase('setup');
+    } catch (e) {
+      setErr(friendlyError(e, "Couldn't start two factor setup. Try again."));
+    }
+    setBusy(false);
+  };
+
+  const confirmSetup = async () => {
+    if (busy || code.length !== 6 || !setup) return;
+    setBusy(true); setErr('');
+    try {
+      const { error } = await mfa.challengeAndVerify({ factorId: setup.id, code });
+      if (error) throw error;
+      setSetup(null); setCode('');
+      await refresh();
+    } catch (e) {
+      setErr(/invalid|expired|incorrect/i.test(String((e && e.message) || e)) ? 'That code is not right. Try the newest code.' : friendlyError(e, "Couldn't check that code. Try again."));
+      setCode('');
+    }
+    setBusy(false);
+  };
+
+  const cancelSetup = async () => {
+    const pending = setup;
+    setSetup(null); setCode(''); setErr(''); setPhase('off');
+    if (pending) { try { await mfa.unenroll({ factorId: pending.id }); } catch {} }
+  };
+
+  const turnOff = async () => {
+    if (busy || code.length !== 6 || !factor) return;
+    setBusy(true); setErr('');
+    try {
+      const { error: verifyErr } = await mfa.challengeAndVerify({ factorId: factor.id, code });
+      if (verifyErr) throw verifyErr;
+      const { error } = await mfa.unenroll({ factorId: factor.id });
+      if (error) throw error;
+      setCode('');
+      await refresh();
+    } catch (e) {
+      setErr(/invalid|expired|incorrect/i.test(String((e && e.message) || e)) ? 'That code is not right. Try the newest code.' : friendlyError(e, "Couldn't turn it off. Try again."));
+      setCode('');
+    }
+    setBusy(false);
+  };
+
+  const copySecret = async () => {
+    try { await navigator.clipboard.writeText(setup.secret); setCopied(true); setTimeout(() => setCopied(false), 1600); } catch {}
+  };
+
+  const codeInput = (
+    <input value={code} inputMode="numeric" autoComplete="one-time-code" maxLength={6} placeholder="6 digit code"
+      onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+      style={{ ...inputStyle(theme), textAlign: 'center', letterSpacing: 6, fontSize: 20, fontWeight: 800 }} />
+  );
+
+  if (phase === 'loading') return <div style={{ display: 'flex', justifyContent: 'center', padding: 30 }}><Spinner size={20} color={theme.ink} /></div>;
+
+  return (
+    <div>
+      {phase === 'off' && (
+        <>
+          <div style={{ fontSize: 12.5, color: theme.muted, lineHeight: 1.55, marginBottom: 14 }}>
+            Add a second lock to your account. After you turn this on, ZChat asks for a 6 digit code from an authenticator app each time you log in.
+          </div>
+          <button style={primaryBtn(theme, busy)} disabled={busy} onClick={startSetup}>{busy ? <Spinner /> : 'Turn on'}</button>
+        </>
+      )}
+      {phase === 'setup' && setup && (
+        <>
+          <div style={{ fontSize: 12.5, color: theme.muted, lineHeight: 1.55, marginBottom: 12 }}>
+            Scan this code with Google Authenticator, Authy or 1Password, then enter the 6 digit code it shows.
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
+            {setup.qr ? <img src={setup.qr} alt="Two factor setup code" style={{ width: 176, height: 176, background: 'white', borderRadius: 14, padding: 8 }} /> : null}
+          </div>
+          <div style={{ fontSize: 11.5, color: theme.muted, textAlign: 'center', marginBottom: 6 }}>Cannot scan? Enter this key instead</div>
+          <div role="button" onClick={copySecret} style={{ textAlign: 'center', fontWeight: 800, fontSize: 13, letterSpacing: 1.5, color: theme.ink, background: theme.rowBg, border: `1px solid ${theme.border}`, borderRadius: 12, padding: '10px 8px', wordBreak: 'break-all', cursor: 'pointer', marginBottom: 14 }}>
+            {copied ? 'Copied' : setup.secret}
+          </div>
+          {codeInput}
+          {err && <div style={{ color: theme.danger, fontSize: 12.5, marginTop: 8 }}>{err}</div>}
+          <button style={{ ...primaryBtn(theme, busy || code.length !== 6), marginTop: 12 }} disabled={busy || code.length !== 6} onClick={confirmSetup}>{busy ? <Spinner /> : 'Verify and turn on'}</button>
+          <div role="button" onClick={cancelSetup} style={{ textAlign: 'center', padding: '14px 0 2px', fontWeight: 700, color: theme.muted, cursor: 'pointer' }}>Cancel</div>
+        </>
+      )}
+      {phase === 'on' && (
+        <>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: `${theme.teal}22`, border: `1px solid ${theme.teal}55`, borderRadius: 14, padding: '12px 14px', marginBottom: 14 }}>
+            <ShieldCheck size={20} color={theme.teal} />
+            <div style={{ fontWeight: 800, fontSize: 14, color: theme.ink }}>Two factor is on</div>
+          </div>
+          <div style={{ fontSize: 12.5, color: theme.muted, lineHeight: 1.55, marginBottom: 14 }}>
+            You need a code from your authenticator app to log in. To turn this off, enter a current code.
+          </div>
+          {codeInput}
+          {err && <div style={{ color: theme.danger, fontSize: 12.5, marginTop: 8 }}>{err}</div>}
+          <button style={{ ...primaryBtn(theme, busy || code.length !== 6), background: theme.danger, marginTop: 12 }} disabled={busy || code.length !== 6} onClick={turnOff}>{busy ? <Spinner /> : 'Turn off'}</button>
+        </>
+      )}
+      {phase === 'off' && err && <div style={{ color: theme.danger, fontSize: 12.5, marginTop: 10 }}>{err}</div>}
+    </div>
+  );
+}
+
+function MfaChallengeScreen({ onPassed, onCancel }) {
+  const { theme } = useTheme();
+  const [code, setCode] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const submit = async () => {
+    if (code.length !== 6 || busy) return;
+    setBusy(true); setErr('');
+    try {
+      const mfa = supabase.auth.mfa;
+      const { data: listed, error: listErr } = await mfa.listFactors();
+      if (listErr) throw listErr;
+      const factor = ((listed && listed.totp) || []).find((f) => f.status === 'verified');
+      if (!factor) { onPassed(); return; }
+      const { error } = await mfa.challengeAndVerify({ factorId: factor.id, code });
+      if (error) throw error;
+      onPassed();
+      return;
+    } catch (e) {
+      setErr(/invalid|expired|incorrect/i.test(String((e && e.message) || e)) ? 'That code is not right. Try the newest code.' : friendlyError(e, "Couldn't check that code. Try again."));
+      setCode('');
+    }
+    setBusy(false);
+  };
+  return (
+    <AuthShell>
+      <div style={{ textAlign: 'center', marginBottom: 14 }}>
+        <ShieldCheck size={30} color={theme.coral} />
+      </div>
+      <div style={{ fontSize: 19, fontWeight: 800, marginBottom: 6, color: theme.ink, textAlign: 'center' }}>Enter your code</div>
+      <div style={{ fontSize: 13, color: theme.muted, marginBottom: 16, textAlign: 'center' }}>Open your authenticator app and type the 6 digit code for ZChat.</div>
+      <input autoFocus value={code} inputMode="numeric" autoComplete="one-time-code" maxLength={6} placeholder="6 digit code"
+        onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))} onKeyDown={(e) => e.key === 'Enter' && submit()}
+        style={{ ...inputStyle(theme), textAlign: 'center', letterSpacing: 6, fontSize: 20, fontWeight: 800 }} />
+      {err && <div style={{ color: theme.danger, fontSize: 12.5, marginTop: 8, textAlign: 'center' }}>{err}</div>}
+      <button style={primaryBtn(theme, busy || code.length !== 6)} disabled={busy || code.length !== 6} onClick={submit}>{busy ? <Spinner /> : 'Continue'}</button>
+      <div role="button" onClick={onCancel} style={{ textAlign: 'center', padding: '16px 0 2px', fontWeight: 700, color: theme.muted, cursor: 'pointer' }}>Use a different account</div>
+    </AuthShell>
+  );
+}
+
+function SessionsSection({ userId }) {
+  const { theme } = useTheme();
+  const [rows, setRows] = useState(null);
+  const [unavailable, setUnavailable] = useState(false);
+  const [confirm, setConfirm] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState('');
+  const [err, setErr] = useState('');
+  const mine = getDeviceId();
+  const load = async () => {
+    if (!userId) { setRows([]); return; }
+    const { data, error } = await supabase.from('user_devices').select('*').eq('user_id', userId).order('last_active', { ascending: false }).limit(30);
+    if (error) { setUnavailable(true); setRows([]); return; }
+    setUnavailable(false);
+    setRows(data || []);
+  };
+  useEffect(() => { load(); }, [userId]);
+  const others = (rows || []).filter((r) => r.device_id !== mine);
+  const logOutOthers = async () => {
+    if (busy) return;
+    setBusy(true); setErr(''); setNote('');
+    const { error } = await supabase.auth.signOut({ scope: 'others' });
+    if (error) { setBusy(false); setConfirm(false); setErr(friendlyError(error, "Couldn't log out the other devices. Try again.")); return; }
+    if (userId) await supabase.from('user_devices').delete().eq('user_id', userId).neq('device_id', mine);
+    setBusy(false); setConfirm(false);
+    setNote('Every other device was logged out.');
+    load();
+  };
+  return (
+    <div>
+      <div style={{ fontSize: 12.5, color: theme.muted, lineHeight: 1.55, marginBottom: 14 }}>
+        These are the phones and browsers that have been signed in to your account. If you see one you do not know, log out other devices and change your password.
+      </div>
+      {rows === null ? (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: 24 }}><Spinner size={20} color={theme.ink} /></div>
+      ) : unavailable ? (
+        <div style={{ fontSize: 12.5, color: theme.muted, background: theme.rowBg, border: `1px solid ${theme.border}`, borderRadius: 14, padding: 12, marginBottom: 12 }}>The device list is not available yet. You can still log out the other devices below.</div>
+      ) : (
+        <div style={{ borderRadius: 18, background: theme.rowBg, border: `1px solid ${theme.border}`, overflow: 'hidden', marginBottom: 14 }}>
+          {rows.length === 0 && <div style={{ padding: 14, fontSize: 13, color: theme.muted }}>No devices listed yet.</div>}
+          {rows.map((r, i) => (
+            <div key={r.id || r.device_id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 14px', borderTop: i ? `1px solid ${theme.border}` : 'none' }}>
+              <div style={{ width: 36, height: 36, borderRadius: 11, background: `${theme.coral}1F`, color: theme.coralDeep, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Smartphone size={17} /></div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 800, fontSize: 13.5, color: theme.ink }}>{r.label || 'Unknown device'}</div>
+                <div style={{ fontSize: 11.5, color: theme.muted, marginTop: 2 }}>
+                  {r.device_id === mine ? 'This device' : `Last active ${timeAgoLong(r.last_active)}`}
+                  {r.created_at ? ` \u00b7 Signed in ${new Date(r.created_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}` : ''}
+                </div>
+              </div>
+              {r.device_id === mine && <span style={{ fontSize: 10, fontWeight: 900, padding: '3px 8px', borderRadius: 8, background: `${theme.teal}26`, color: theme.teal }}>Current</span>}
+            </div>
+          ))}
+        </div>
+      )}
+      {note && <div style={{ color: theme.teal, fontSize: 12.5, fontWeight: 700, marginBottom: 10 }}>{note}</div>}
+      {err && <div style={{ color: theme.danger, fontSize: 12.5, marginBottom: 10 }}>{err}</div>}
+      <button style={{ ...primaryBtn(theme, busy), background: theme.danger }} disabled={busy} onClick={() => setConfirm(true)}>
+        {others.length > 1 ? `Log out ${others.length} other devices` : 'Log out other devices'}
+      </button>
+      {confirm && (
+        <ConfirmDialog layer={700} title="Log out other devices?" body="Every other phone and browser signed in to your account will be logged out. You stay signed in here."
+          confirmLabel="Log out others" onCancel={() => setConfirm(false)} onConfirm={logOutOthers} />
+      )}
+    </div>
+  );
+}
+
+function SavedMessagesPanel({ myId, onClose, onChanged }) {
+  useBackClose(true, onClose);
+  const { theme } = useTheme();
+  const [rows, setRows] = useState(null);
+  const [q, setQ] = useState('');
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState('');
+  const [lightbox, setLightbox] = useState(null);
+  const load = async () => {
+    const { data, error } = await supabase.from('saved_messages').select('*').eq('user_id', myId).order('created_at', { ascending: false }).limit(300);
+    if (error) { setProblem(friendlyError(error, "Couldn't load saved messages.")); setRows([]); return; }
+    setProblem('');
+    setRows(data || []);
+  };
+  useEffect(() => { load(); }, []);
+  const addNote = async () => {
+    const text = note.trim();
+    if (!text || busy) return;
+    setBusy(true);
+    const { data, error } = await supabase.from('saved_messages').insert({ user_id: myId, kind: 'note', content: text.slice(0, 2000), from_name: 'You', chat_label: 'Note to self' }).select().single();
+    setBusy(false);
+    if (error || !data) { setProblem(friendlyError(error, "Couldn't save that note. Try again.")); return; }
+    setProblem('');
+    setNote('');
+    setRows((prev) => [data, ...(prev || [])]);
+  };
+  const remove = async (row) => {
+    setRows((prev) => (prev || []).filter((r) => r.id !== row.id));
+    await supabase.from('saved_messages').delete().eq('id', row.id).eq('user_id', myId);
+    if (onChanged && row.source_message_id) onChanged(row.source_message_id, false);
+  };
+  const term = q.trim().toLowerCase();
+  const shown = (rows || []).filter((r) => !term || (r.content || '').toLowerCase().includes(term) || (r.from_name || '').toLowerCase().includes(term) || (r.chat_label || '').toLowerCase().includes(term));
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 40, background: theme.panelBg, display: 'flex', flexDirection: 'column', fontFamily: FONT }} className="zchat-fade">
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px 10px', paddingTop: 'calc(14px + env(safe-area-inset-top))' }}>
+        <ArrowLeft size={20} style={{ cursor: 'pointer', color: theme.ink }} onClick={onClose} />
+        <div style={{ fontWeight: 900, fontSize: 18, color: theme.ink, flex: 1 }}>Saved messages</div>
+      </div>
+      <div style={{ padding: '0 16px 10px' }}>
+        <div style={{ position: 'relative' }}>
+          <Search size={15} color={theme.muted} style={{ position: 'absolute', left: 12, top: 12 }} />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search saved messages" style={{ ...inputStyle(theme), padding: '9px 12px 9px 34px', fontSize: 13.5 }} />
+        </div>
+      </div>
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '0 16px' }}>
+        {problem && <div style={{ background: `${theme.danger}18`, color: theme.danger, borderRadius: 12, padding: '9px 12px', fontSize: 12.5, fontWeight: 700, marginBottom: 8 }}>{problem}</div>}
+        {rows === null ? (
+          <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><Spinner size={22} color={theme.ink} /></div>
+        ) : shown.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '50px 24px', color: theme.muted }}>
+            <Bookmark size={30} color={theme.muted} />
+            <div style={{ fontWeight: 800, fontSize: 15, color: theme.ink, marginTop: 10 }}>{term ? 'Nothing found' : 'Nothing saved yet'}</div>
+            <div style={{ fontSize: 12.5, marginTop: 6, lineHeight: 1.5 }}>{term ? 'Try a different word.' : 'Press and hold any message in a chat and choose Add to Saved. You can also write a note to yourself below.'}</div>
+          </div>
+        ) : shown.map((r) => (
+          <div key={r.id} style={{ background: theme.rowBg, border: `1px solid ${theme.border}`, borderRadius: 18, padding: 12, marginBottom: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
+              <div style={{ fontSize: 12, fontWeight: 800, color: theme.coralDeep, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {r.from_name || 'Someone'}{r.chat_label && r.kind !== 'note' ? ` in ${r.chat_label}` : ''}
+              </div>
+              <div style={{ fontSize: 11, color: theme.muted, flexShrink: 0 }}>{timeAgoLong(r.message_created_at || r.created_at)}</div>
+            </div>
+            {r.kind === 'image' && r.media_url && <img src={r.media_url} alt="" onClick={() => setLightbox(r.media_url)} style={{ width: '100%', maxHeight: 280, objectFit: 'cover', borderRadius: 12, cursor: 'pointer', display: 'block' }} />}
+            {r.kind === 'video' && r.media_url && <video src={r.media_url} controls playsInline preload="metadata" style={{ width: '100%', maxHeight: 280, borderRadius: 12, background: '#000', display: 'block' }} />}
+            {r.kind === 'audio' && r.media_url && <audio src={r.media_url} controls preload="none" style={{ width: '100%' }} />}
+            {r.kind === 'sticker' && r.content && <img src={r.content} alt="" style={{ width: 110, height: 110, objectFit: 'contain' }} />}
+            {(r.kind === 'text' || r.kind === 'note' || ((r.kind === 'image' || r.kind === 'video') && r.content)) && r.content && (
+              <div style={{ fontSize: 14, color: theme.ink, lineHeight: 1.45, wordBreak: 'break-word', marginTop: r.media_url ? 8 : 0 }}><RichText text={r.content} /></div>
+            )}
+            <div style={{ display: 'flex', gap: 14, justifyContent: 'flex-end', marginTop: 10 }}>
+              {r.content && r.kind !== 'sticker' && (
+                <div role="button" aria-label="Copy" onClick={() => { try { navigator.clipboard.writeText(r.content); } catch {} }} style={{ cursor: 'pointer', color: theme.muted, display: 'flex' }}><Copy size={16} /></div>
+              )}
+              <div role="button" aria-label="Remove" onClick={() => remove(r)} style={{ cursor: 'pointer', color: theme.muted, display: 'flex' }}><Trash2 size={16} /></div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', padding: '10px 14px', paddingBottom: 'calc(10px + env(safe-area-inset-bottom))', borderTop: `1px solid ${theme.border}` }}>
+        <textarea value={note} onChange={(e) => setNote(e.target.value.slice(0, 2000))} rows={1} placeholder="Write a note to yourself"
+          style={{ ...inputStyle(theme), flex: 1, resize: 'none', maxHeight: 96, padding: '11px 14px', fontSize: 14 }} />
+        <div role="button" aria-label="Save note" onClick={addNote} style={{ width: 42, height: 42, borderRadius: '50%', background: note.trim() ? theme.coral : theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: note.trim() ? 'pointer' : 'default', flexShrink: 0 }}>
+          {busy ? <Spinner size={16} /> : <Bookmark size={18} color={note.trim() ? 'white' : theme.muted} />}
+        </div>
+      </div>
+      {lightbox && (
+        <div onClick={() => setLightbox(null)} style={{ position: 'fixed', inset: 0, zIndex: 250, background: 'rgba(0,0,0,0.94)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <img src={lightbox} alt="" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: 8 }} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+const GROUP_ACCENTS = ['#FF6B4A', '#29C7B3', '#7C5CFC', '#F3B54C', '#FF4D8D', '#3DA5F5', '#4CC98A', '#B45CFF'];
+function groupAccent(group) { return (group && group.accent) || colorForName((group && group.name) || 'group'); }
+function isMemberOnline(m) {
+  return !!(m && m.profile && !m.profile.hide_activity && m.profile.last_seen && Date.now() - new Date(m.profile.last_seen).getTime() < 3 * 60 * 1000);
+}
+
+function GroupHeaderLine({ members }) {
+  const online = members.filter(isMemberOnline).length;
+  const faces = members.filter((m) => m.profile).slice(0, 3);
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+      <span style={{ display: 'inline-flex' }}>
+        {faces.map((m, i) => (
+          <span key={m.user_id} style={{ marginLeft: i ? -6 : 0, display: 'inline-flex', borderRadius: '50%', boxShadow: '0 0 0 1.5px rgba(0,0,0,0.25)' }}>
+            <Avatar emoji={m.profile.avatar} name={m.profile.name} size={16} />
+          </span>
+        ))}
+      </span>
+      <span>{members.length} {members.length === 1 ? 'member' : 'members'}{online > 0 ? ` \u00b7 ${online} online` : ''}</span>
+    </span>
+  );
+}
+
+function ReelVideo({ post, rootRef, onDoubleTap }) {
+  const wrapRef = useRef(null);
+  const videoRef = useRef(null);
+  const barRef = useRef(null);
+  const tapAtRef = useRef(0);
+  const tapTimerRef = useRef(null);
+  const flashTimerRef = useRef(null);
+  const pausedByUserRef = useRef(false);
+  const [muted, setMuted] = useState(true);
+  const [flash, setFlash] = useState(null);
+  const [portrait, setPortrait] = useState(false);
+  const showFlash = (kind) => {
+    setFlash(kind);
+    clearTimeout(flashTimerRef.current);
+    flashTimerRef.current = setTimeout(() => setFlash(null), 550);
+  };
+  useEffect(() => {
+    const el = videoRef.current;
+    const wrap = wrapRef.current;
+    if (!el || !wrap) return undefined;
+    const start = () => { const p = el.play(); if (p && p.catch) p.catch(() => {}); };
+    if (typeof IntersectionObserver === 'undefined') { start(); return undefined; }
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach((en) => {
+        if (en.isIntersecting && en.intersectionRatio >= 0.6) {
+          if (!pausedByUserRef.current) start();
+        } else {
+          el.pause();
+          if (!en.isIntersecting) { pausedByUserRef.current = false; try { el.currentTime = 0; } catch {} }
+        }
+      });
+    }, { root: (rootRef && rootRef.current) || null, threshold: [0, 0.6, 1] });
+    io.observe(wrap);
+    return () => io.disconnect();
+  }, []);
+  useEffect(() => { if (videoRef.current) videoRef.current.muted = muted; }, [muted]);
+  useEffect(() => () => { clearTimeout(tapTimerRef.current); clearTimeout(flashTimerRef.current); }, []);
+  const togglePause = () => {
+    const el = videoRef.current;
+    if (!el) return;
+    if (el.paused) {
+      pausedByUserRef.current = false;
+      const p = el.play(); if (p && p.catch) p.catch(() => {});
+      showFlash('play');
+    } else {
+      pausedByUserRef.current = true;
+      el.pause();
+      showFlash('pause');
+    }
+  };
+  const onTap = () => {
+    const now = Date.now();
+    if (now - tapAtRef.current < 280) {
+      clearTimeout(tapTimerRef.current);
+      tapAtRef.current = 0;
+      if (onDoubleTap) onDoubleTap();
+      return;
+    }
+    tapAtRef.current = now;
+    tapTimerRef.current = setTimeout(() => { tapAtRef.current = 0; togglePause(); }, 280);
+  };
+  return (
+    <div ref={wrapRef} onClick={onTap} data-reel-video={post.id} style={{ position: 'absolute', inset: 0 }}>
+      <video ref={videoRef} src={post.media_url} playsInline loop muted preload="auto"
+        onLoadedMetadata={(e) => setPortrait(e.currentTarget.videoHeight >= e.currentTarget.videoWidth)}
+        onTimeUpdate={(e) => { const v = e.currentTarget; if (barRef.current && v.duration) barRef.current.style.width = `${Math.min(100, (v.currentTime / v.duration) * 100)}%`; }}
+        style={{ width: '100%', height: '100%', objectFit: portrait ? 'cover' : 'contain' }} />
+      {flash && (
+        <div className="zchat-pop" style={{ position: 'absolute', left: '50%', top: '50%', marginLeft: -32, marginTop: -32, width: 64, height: 64, borderRadius: '50%', background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+          {flash === 'pause' ? <Pause size={30} color="white" fill="white" /> : <Play size={30} color="white" fill="white" />}
+        </div>
+      )}
+      <div role="button" aria-label={muted ? 'Turn sound on' : 'Turn sound off'} onClick={(e) => { e.stopPropagation(); setMuted((m) => !m); }}
+        style={{ position: 'absolute', top: 'calc(64px + env(safe-area-inset-top))', right: 12, width: 36, height: 36, borderRadius: '50%', background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 4 }}>
+        {muted ? <VolumeX size={18} color="white" /> : <Volume2 size={18} color="white" />}
+      </div>
+      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 2, background: 'rgba(255,255,255,0.18)', pointerEvents: 'none' }}>
+        <div ref={barRef} style={{ height: '100%', width: 0, background: 'white' }} />
+      </div>
+    </div>
+  );
+}
+
 function ResetPasswordScreen({ onDone }) {
   const { theme } = useTheme();
   const [pw, setPw] = useState('');
@@ -16210,12 +18022,40 @@ function AppInner() {
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
   const [switchingAccountId, setSwitchingAccountId] = useState(null);
   const [registering, setRegistering] = useState(false);
+  const [mfaGate, setMfaGate] = useState({ uid: null, state: 'checking' });
+
+  useEffect(() => {
+    const uid = session && session.user ? session.user.id : null;
+    if (!uid) return undefined;
+    let alive = true;
+    (async () => {
+      let next = 'clear';
+      try {
+        const mfa = supabase.auth && supabase.auth.mfa;
+        if (mfa && mfa.getAuthenticatorAssuranceLevel) {
+          const { data, error } = await mfa.getAuthenticatorAssuranceLevel();
+          if (!error && data && data.nextLevel === 'aal2' && data.currentLevel !== 'aal2') next = 'need';
+        }
+      } catch {}
+      if (alive) setMfaGate((prev) => (prev.uid === uid && prev.state === next ? prev : { uid, state: next }));
+    })();
+    return () => { alive = false; };
+  }, [session && session.user && session.user.id, session && session.access_token]);
 
   useEffect(() => {
     if (window.location.hash.includes('type=recovery')) setIsPasswordRecovery(true);
     getSession().then(({ data }) => setSession(data.session || null));
     const { data: listener } = supabase.auth.onAuthStateChange((event, sess) => {
       if (event === 'PASSWORD_RECOVERY') setIsPasswordRecovery(true);
+      if (event === 'SIGNED_OUT') { setSession(null); return; }
+      if (!sess) {
+        // A refresh can report an empty session for a moment on a weak
+        // connection. Try once more before throwing anyone out.
+        supabase.auth.refreshSession()
+          .then(({ data }) => { if (data && data.session) setSession(data.session); })
+          .catch(() => {});
+        return;
+      }
       setSession(sess);
     });
     return () => listener.subscription.unsubscribe();
@@ -16327,6 +18167,18 @@ function AppInner() {
         </div>
       </AuthShell>
     );
+  }
+
+  const mfaState = mfaGate.uid === session.user.id ? mfaGate.state : 'checking';
+  if (mfaState === 'checking') {
+    return (
+      <div style={{ height: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Spinner size={26} color="#1B1B1F" />
+      </div>
+    );
+  }
+  if (mfaState === 'need') {
+    return <MfaChallengeScreen onPassed={() => setMfaGate({ uid: session.user.id, state: 'clear' })} onCancel={handleLogout} />;
   }
 
   return (
