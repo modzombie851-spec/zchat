@@ -4048,7 +4048,7 @@ function GroupSettingsPanel({ group, myId, isAdmin, isOwner, isMuted, onSetMute,
   };
   const copyInvite = async () => {
     const link = `${siteOrigin()}/?join=${inviteCode}`;
-    try { if (navigator.share) await navigator.share({ url: link }); else { await navigator.clipboard.writeText(link); setCopied(true); setTimeout(() => setCopied(false), 1800); } } catch {}
+    try { if (navigator.share) await navigator.share({ title: `Join ${group.name} on ZChat`, text: `Join the group ${group.name} on ZChat`, url: link }); else { await navigator.clipboard.writeText(link); setCopied(true); setTimeout(() => setCopied(false), 1800); } } catch {}
   };
   const doDelete = async () => {
     if (busy) return;
@@ -9026,7 +9026,7 @@ function StoryTray({ me, myStories, trayUsers, seen, onAdd, onOpen }) {
   );
 }
 
-const APP_VERSION = '6.8V';
+const APP_VERSION = '6.9V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -12181,7 +12181,7 @@ function FeedPanel({ me, userId, onClose, onOpenProfile, ownerFilter = null, sta
                   {railBtn(<Share2 size={26} />, 'Share', async () => {
                     const link = `${siteOrigin()}/?post=${post.id}`;
                     playUiSound('tap');
-                    try { if (navigator.share) await navigator.share({ url: link }); else { await navigator.clipboard.writeText(link); } } catch {}
+                    try { if (navigator.share) await navigator.share({ title: `${post.owner.name} on ZChat`, text: `See this post by ${post.owner.name} on ZChat`, url: link }); else { await navigator.clipboard.writeText(link); } } catch {}
                   })}
                   {railBtn(<Download size={25} />, 'Save file', () => download(post))}
                   {post.user_id === userId && railBtn(<Trash2 size={25} />, 'Delete', () => setConfirmDeletePost(post))}
@@ -12881,6 +12881,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const flushingOutboxRef = useRef(false);
   const [showReportQueue, setShowReportQueue] = useState(false);
   const [showSaved, setShowSaved] = useState(false);
+  const [joinPrompt, setJoinPrompt] = useState(null);
+  const [joiningGroup, setJoiningGroup] = useState(false);
   const [savedIds, setSavedIds] = useState(() => new Set());
   const [textSize, setTextSize] = useState('m');
   const [textColor, setTextColor] = useState(null);
@@ -13002,6 +13004,21 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     await sendMessage(session.user.id, conv.otherProfile.id, 'system', `Header style changed to ${label}`, null);
     await upsertConversation(conv.otherProfile.id, `Header style changed to ${label}`, 'system');
     loadConversations();
+  };
+
+  const confirmJoinGroup = async () => {
+    if (!joinPrompt || joiningGroup) return;
+    const g = joinPrompt.group;
+    setJoiningGroup(true);
+    const { error: joinErr } = await supabase.from('group_members').insert({ group_id: g.id, user_id: session.user.id, role: 'member' });
+    if (joinErr) { setJoiningGroup(false); setJoinPrompt(null); showSnack("Couldn't join that group"); return; }
+    const name = realName(session.user.id);
+    await supabase.from('messages').insert({ sender_id: session.user.id, group_id: g.id, type: 'system', content: `${name} joined via invite link` });
+    setJoiningGroup(false);
+    setJoinPrompt(null);
+    await loadGroups();
+    openGroup({ ...g, myRole: 'member' });
+    showSnack(`You joined ${g.name}`);
   };
 
   const setDisappear = async (target, secs) => {
@@ -13318,16 +13335,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         window.history.replaceState(null, '', `${window.location.pathname}${rest ? `?${rest}` : ''}`);
         const { data: g } = await supabase.from('groups').select('*').eq('invite_code', joinCode).maybeSingle();
         if (!g || g.invite_enabled === false) { showSnack("This invite link isn't valid anymore"); return; }
-        const { data: already } = await supabase.from('group_members').select('user_id').eq('group_id', g.id).eq('user_id', session.user.id).maybeSingle();
-        if (!already) {
-          const { error: joinErr } = await supabase.from('group_members').insert({ group_id: g.id, user_id: session.user.id, role: 'member' });
-          if (joinErr) { showSnack("Couldn't join that group"); return; }
-          const name = realName(session.user.id);
-          await supabase.from('messages').insert({ sender_id: session.user.id, group_id: g.id, type: 'system', content: `${name} joined via invite link` });
-        }
-        await loadGroups();
-        openGroup({ ...g, myRole: 'member' });
-        showSnack(`You joined ${g.name}`);
+        const { data: memberRows } = await supabase.from('group_members').select('user_id, role').eq('group_id', g.id);
+        const mine = (memberRows || []).find((r) => r.user_id === session.user.id);
+        if (mine) { await loadGroups(); openGroup({ ...g, myRole: mine.role || 'member' }); return; }
+        setJoinPrompt({ group: g, count: (memberRows || []).length });
       })();
       return;
     }
@@ -16674,6 +16685,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         />
       )}
       {showPrivacy && <PrivacyPanel onBack={() => setShowPrivacy(false)} />}
+      {joinPrompt && <JoinGroupSheet group={joinPrompt.group} count={joinPrompt.count} busy={joiningGroup} onJoin={confirmJoinGroup} onClose={() => { if (!joiningGroup) setJoinPrompt(null); }} />}
       {showSaved && (
         <SavedMessagesPanel myId={session.user.id} onClose={() => setShowSaved(false)}
           onChanged={(sourceId) => setSavedIds((prev) => { const n = new Set(prev); n.delete(String(sourceId)); return n; })} />
@@ -17969,6 +17981,255 @@ function ReelVideo({ post, rootRef, onDoubleTap }) {
   );
 }
 
+function parseShareLanding() {
+  if (typeof window === 'undefined') return null;
+  const p = new URLSearchParams(window.location.search);
+  const safe = /^[A-Za-z0-9_-]{1,64}$/;
+  const join = p.get('join');
+  if (join && safe.test(join)) return { kind: 'group', key: join };
+  const post = p.get('post');
+  if (post && safe.test(post)) return { kind: 'post', key: post };
+  const story = p.get('story');
+  if (story && safe.test(story)) return { kind: 'story', key: story };
+  const profile = p.get('profile');
+  if (profile && safe.test(profile)) return { kind: 'profile', key: profile };
+  return null;
+}
+
+function stashPendingLink() {
+  try { localStorage.setItem('zchat-pending-link', JSON.stringify({ search: window.location.search, at: Date.now() })); } catch {}
+}
+
+function SharePreviewScreen({ landing, onAuth }) {
+  const [data, setData] = useState(null);
+  const [deferred, setDeferred] = useState(null);
+  const [showHelp, setShowHelp] = useState(false);
+  const [standalone] = useState(() => {
+    try { return !!((window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true); } catch { return false; }
+  });
+  const BG = '#07080d';
+  const CARD = '#12141c';
+  const LINE = 'rgba(255,255,255,0.09)';
+  const MUTED = 'rgba(232,234,240,0.62)';
+  const BRAND = 'linear-gradient(135deg, #3b82f6, #8b5cf6)';
+
+  useEffect(() => {
+    const onPrompt = (e) => { e.preventDefault(); setDeferred(e); };
+    window.addEventListener('beforeinstallprompt', onPrompt);
+    return () => window.removeEventListener('beforeinstallprompt', onPrompt);
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      let result = null;
+      try {
+        const fn = landing.kind === 'group' ? 'public_group_preview' : landing.kind === 'post' ? 'public_post_preview' : 'public_profile_preview';
+        const args = landing.kind === 'group' ? { p_code: landing.key } : { p_id: landing.key };
+        const { data: res, error } = await supabase.rpc(fn, args);
+        if (!error && res) result = res;
+      } catch {}
+      if (alive) setData(result || { found: false, unavailable: true });
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  const getApp = async () => {
+    if (!deferred) { setShowHelp(true); return; }
+    try { deferred.prompt(); await deferred.userChoice; } catch {}
+    setDeferred(null);
+  };
+  const login = (note) => onAuth('login', note || '');
+  const signup = (note) => onAuth('register', note || '');
+
+  const primaryBtn = { display: 'block', width: '100%', boxSizing: 'border-box', padding: '14px 16px', borderRadius: 14, border: 'none', background: BRAND, color: 'white', fontWeight: 800, fontSize: 15, fontFamily: FONT, cursor: 'pointer', textAlign: 'center' };
+  const ghostBtn = { display: 'block', width: '100%', boxSizing: 'border-box', padding: '13px 16px', borderRadius: 14, border: `1px solid ${LINE}`, background: 'transparent', color: '#e8eaf0', fontWeight: 800, fontSize: 14.5, fontFamily: FONT, cursor: 'pointer', textAlign: 'center' };
+  const stat = (n, label) => (
+    <div style={{ flex: 1, textAlign: 'center' }}>
+      <div style={{ fontWeight: 900, fontSize: 18 }}>{formatCount(n || 0)}</div>
+      <div style={{ fontSize: 12, color: MUTED, marginTop: 1 }}>{label}</div>
+    </div>
+  );
+  const nameLine = (name, verified, custom, size = 20) => (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontWeight: 900, fontSize: size, wordBreak: 'break-word' }}>
+      <span>{name}</span><VerifiedBadge tier={verified} custom={custom} size={size - 5} />
+    </div>
+  );
+
+  let body = null;
+  if (data === null) {
+    body = <div style={{ display: 'flex', justifyContent: 'center', padding: '80px 0' }}><Spinner size={26} color="white" /></div>;
+  } else if (!data.found) {
+    body = (
+      <div style={{ textAlign: 'center', padding: '50px 8px' }}>
+        <div style={{ width: 64, height: 64, borderRadius: 20, background: BRAND, margin: '0 auto 16px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 28 }}>Z</div>
+        <div style={{ fontWeight: 900, fontSize: 19 }}>{data.unavailable ? 'Open this in ZChat' : 'This link is not available'}</div>
+        <div style={{ color: MUTED, fontSize: 13.5, marginTop: 8, lineHeight: 1.5 }}>
+          {data.unavailable ? 'Log in to see it.' : 'It may have been removed, or the person made it private.'}
+        </div>
+      </div>
+    );
+  } else if (landing.kind === 'group') {
+    const faces = data.faces || [];
+    body = (
+      <div style={{ textAlign: 'center', paddingTop: 26 }}>
+        <div style={{ display: 'inline-block', borderRadius: 34, boxShadow: '0 12px 40px rgba(59,130,246,0.35)' }}><GroupAvatar avatar={data.avatar} name={data.name} size={104} /></div>
+        <div style={{ fontWeight: 900, fontSize: 22, marginTop: 16, wordBreak: 'break-word' }}>{data.name}</div>
+        <div style={{ color: MUTED, fontSize: 13.5, marginTop: 4 }}>Group with {data.member_count} {data.member_count === 1 ? 'member' : 'members'}</div>
+        {faces.length > 0 && (
+          <div style={{ display: 'flex', justifyContent: 'center', marginTop: 14 }}>
+            {faces.map((f, i) => (
+              <span key={i} style={{ marginLeft: i ? -10 : 0, display: 'inline-flex', borderRadius: '50%', boxShadow: `0 0 0 2px ${BG}` }}><Avatar emoji={f.avatar} name={f.name || '?'} size={34} /></span>
+            ))}
+          </div>
+        )}
+        {data.bio && <div style={{ color: '#d5d8e0', fontSize: 14, lineHeight: 1.5, marginTop: 16 }}>{data.bio}</div>}
+        <div style={{ marginTop: 22 }}><button style={primaryBtn} onClick={() => login(`Log in to join ${data.name}`)}>Join group</button></div>
+      </div>
+    );
+  } else if (landing.kind === 'post') {
+    const o = data.owner || {};
+    body = (
+      <div style={{ paddingTop: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+          <Avatar emoji={o.avatar} name={o.name || '?'} frame={o.avatar_frame} size={42} />
+          <div style={{ minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', fontWeight: 800, fontSize: 15 }}>{o.name}<VerifiedBadge tier={o.verified} custom={o.custom_badge} size={14} /></div>
+            <div style={{ color: MUTED, fontSize: 12.5 }}>@{o.username}</div>
+          </div>
+        </div>
+        {data.restricted ? (
+          <div style={{ background: CARD, border: `1px solid ${LINE}`, borderRadius: 18, padding: '34px 18px', textAlign: 'center' }}>
+            <Lock size={26} color={MUTED} />
+            <div style={{ fontWeight: 800, marginTop: 10 }}>This post is from a private account</div>
+            <div style={{ color: MUTED, fontSize: 13, marginTop: 6 }}>Log in and follow {o.name} to see it.</div>
+          </div>
+        ) : (
+          <>
+            <div style={{ borderRadius: 18, overflow: 'hidden', background: '#000', border: `1px solid ${LINE}` }}>
+              {data.media_type === 'video'
+                ? <video src={data.media_url} muted playsInline loop autoPlay style={{ width: '100%', maxHeight: '62vh', objectFit: 'contain', display: 'block' }} />
+                : <img src={data.media_url} alt="" draggable={false} style={{ width: '100%', maxHeight: '62vh', objectFit: 'contain', display: 'block' }} />}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 18, marginTop: 12, color: '#e8eaf0', fontWeight: 800, fontSize: 14 }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Heart size={20} />{formatCount(data.likes || 0)}</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><InstaCommentIcon size={19} />{formatCount(data.comments || 0)}</span>
+            </div>
+            {data.caption && <div style={{ marginTop: 10, fontSize: 14.5, lineHeight: 1.5, wordBreak: 'break-word' }}>{data.caption}</div>}
+            <div style={{ color: MUTED, fontSize: 12, marginTop: 6 }}>{timeAgoLong(data.created_at)}</div>
+          </>
+        )}
+        <div style={{ marginTop: 18 }}><button style={ghostBtn} onClick={() => login(data.restricted ? `Log in to follow ${o.name}` : 'Log in to like and comment')}>{data.restricted ? 'Log in to follow' : 'Log in to like and comment'}</button></div>
+      </div>
+    );
+  } else {
+    const isStory = landing.kind === 'story';
+    const posts = data.posts || [];
+    const first = String(data.name || '').split(' ')[0] || 'them';
+    body = (
+      <div style={{ textAlign: 'center', paddingTop: 22 }}>
+        <div style={{ display: 'inline-flex', borderRadius: '50%', padding: isStory ? 4 : 0, background: isStory ? 'linear-gradient(135deg, #f59e0b, #ec4899, #8b5cf6)' : 'transparent' }}>
+          <div style={{ borderRadius: '50%', boxShadow: isStory ? `0 0 0 3px ${BG}` : 'none', display: 'inline-flex' }}>
+            <Avatar emoji={data.avatar} name={data.name || '?'} frame={data.avatar_frame} size={104} />
+          </div>
+        </div>
+        <div style={{ marginTop: 14 }}>{nameLine(data.name, data.verified, data.custom_badge)}</div>
+        <div style={{ color: MUTED, fontSize: 14, marginTop: 3 }}>@{data.username}</div>
+        {isStory && <div style={{ marginTop: 12, fontWeight: 700, color: '#d5d8e0' }}>{first} shared a story</div>}
+        {!isStory && data.bio && <div style={{ color: '#d5d8e0', fontSize: 14, lineHeight: 1.5, margin: '12px 6px 0', wordBreak: 'break-word' }}>{data.bio}</div>}
+        {!isStory && (
+          <div style={{ display: 'flex', margin: '18px 0 4px', padding: '12px 0', borderTop: `1px solid ${LINE}`, borderBottom: `1px solid ${LINE}` }}>
+            {stat(data.posts_count, 'Posts')}{stat(data.followers_count, 'Followers')}{stat(data.following_count, 'Following')}
+          </div>
+        )}
+        <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+          {isStory
+            ? <button style={primaryBtn} onClick={() => login(`Log in to watch ${first}'s story`)}>Watch story</button>
+            : (
+              <>
+                <button style={primaryBtn} onClick={() => login(`Log in to follow ${data.name}`)}>Follow</button>
+                <button style={ghostBtn} onClick={() => login(`Log in to message ${data.name}`)}>Message</button>
+              </>
+            )}
+        </div>
+        {!isStory && data.is_private && (
+          <div style={{ marginTop: 22, background: CARD, border: `1px solid ${LINE}`, borderRadius: 18, padding: '26px 18px' }}>
+            <Lock size={24} color={MUTED} />
+            <div style={{ fontWeight: 800, marginTop: 8 }}>This account is private</div>
+            <div style={{ color: MUTED, fontSize: 13, marginTop: 5 }}>Log in and send a follow request to see their posts.</div>
+          </div>
+        )}
+        {!isStory && !data.is_private && posts.length > 0 && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 3, marginTop: 20, borderRadius: 12, overflow: 'hidden' }}>
+            {posts.map((p) => (
+              <div key={p.id} role="button" onClick={() => login(`Log in to see more from ${data.name}`)} style={{ position: 'relative', aspectRatio: '3 / 4', background: CARD, cursor: 'pointer', overflow: 'hidden' }}>
+                {p.media_type === 'video'
+                  ? <video src={`${p.media_url}#t=0.1`} muted playsInline preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} />
+                  : <img src={p.media_url} alt="" loading="lazy" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
+                {p.media_type === 'video' && <Play size={15} color="white" style={{ position: 'absolute', top: 6, right: 6, filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.6))' }} />}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: BG, color: '#e8eaf0', fontFamily: FONT, overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
+      <div style={{ position: 'sticky', top: 0, zIndex: 5, background: 'rgba(7,8,13,0.85)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', borderBottom: `1px solid ${LINE}` }}>
+        <div style={{ maxWidth: 480, margin: '0 auto', padding: '10px 16px', paddingTop: 'calc(10px + env(safe-area-inset-top))', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ width: 30, height: 30, borderRadius: 10, background: BRAND, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900 }}>Z</div>
+            <div style={{ fontWeight: 900, fontSize: 17 }}>ZChat</div>
+          </div>
+          <div role="button" onClick={() => login('')} style={{ fontWeight: 800, fontSize: 14, color: '#8ab4ff', cursor: 'pointer' }}>Log in</div>
+        </div>
+      </div>
+      <div style={{ maxWidth: 480, margin: '0 auto', padding: '4px 18px', paddingBottom: 'calc(190px + env(safe-area-inset-bottom))' }}>{body}</div>
+      <div style={{ position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 8, background: 'rgba(12,14,22,0.96)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', borderTop: `1px solid ${LINE}` }}>
+        <div style={{ maxWidth: 480, margin: '0 auto', padding: '14px 18px', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))' }}>
+          <div style={{ fontWeight: 900, fontSize: 15.5, textAlign: 'center' }}>{standalone ? 'Join ZChat' : 'Get the ZChat app'}</div>
+          <div style={{ color: MUTED, fontSize: 12.5, textAlign: 'center', margin: '3px 0 12px' }}>Chat, share posts and stay close to the people you love.</div>
+          {standalone ? (
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button style={primaryBtn} onClick={() => signup('')}>Sign up</button>
+              <button style={ghostBtn} onClick={() => login('')}>Log in</button>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button style={primaryBtn} onClick={getApp}>Get the app</button>
+              <button style={ghostBtn} onClick={() => login('')}>Continue in browser</button>
+            </div>
+          )}
+        </div>
+      </div>
+      {showHelp && <InstallAppHelpModal onClose={() => setShowHelp(false)} />}
+    </div>
+  );
+}
+
+function JoinGroupSheet({ group, count, busy, onJoin, onClose }) {
+  useBackClose(true, onClose);
+  const { theme } = useTheme();
+  const accent = groupAccent(group);
+  const sheet = (
+    <div onClick={onClose} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 700, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'flex-end', fontFamily: FONT }}>
+      <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ width: '100%', background: theme.panelBg, borderRadius: '24px 24px 0 0', padding: '26px 20px', paddingBottom: 'calc(22px + env(safe-area-inset-bottom))', textAlign: 'center' }}>
+        <div style={{ display: 'inline-block', borderRadius: 32, boxShadow: `0 0 0 3px ${accent}, 0 12px 34px ${accent}55` }}><GroupAvatar avatar={group.avatar} name={group.name} size={92} /></div>
+        <div style={{ fontWeight: 900, fontSize: 21, color: theme.ink, marginTop: 16, wordBreak: 'break-word' }}>Join {group.name}?</div>
+        <div style={{ fontSize: 13, color: theme.muted, fontWeight: 700, marginTop: 4 }}>Group with {count} {count === 1 ? 'member' : 'members'}</div>
+        {group.bio && <div style={{ fontSize: 14, color: theme.ink, lineHeight: 1.5, marginTop: 12 }}>{group.bio}</div>}
+        <button disabled={busy} onClick={onJoin} style={{ display: 'block', width: '100%', marginTop: 20, padding: '14px 16px', borderRadius: 14, border: 'none', background: accent, color: 'white', fontWeight: 800, fontSize: 15, fontFamily: FONT, cursor: 'pointer', opacity: busy ? 0.7 : 1 }}>
+          {busy ? <Spinner size={16} /> : 'Join group'}
+        </button>
+        <div role="button" onClick={onClose} style={{ padding: '14px 0 2px', fontWeight: 700, color: theme.muted, cursor: 'pointer' }}>Not now</div>
+      </div>
+    </div>
+  );
+  return ReactDOM.createPortal(sheet, document.body);
+}
+
 function ResetPasswordScreen({ onDone }) {
   const { theme } = useTheme();
   const [pw, setPw] = useState('');
@@ -18023,6 +18284,25 @@ function AppInner() {
   const [switchingAccountId, setSwitchingAccountId] = useState(null);
   const [registering, setRegistering] = useState(false);
   const [mfaGate, setMfaGate] = useState({ uid: null, state: 'checking' });
+  const [shareLanding, setShareLanding] = useState(() => parseShareLanding());
+  const [authRequested, setAuthRequested] = useState(false);
+  const [authNote, setAuthNote] = useState('');
+
+  useEffect(() => { if (session) setShareLanding(null); }, [!!session]);
+
+  useEffect(() => {
+    if (!session || needsProfile || registering) return;
+    try {
+      const raw = localStorage.getItem('zchat-pending-link');
+      if (!raw) return;
+      localStorage.removeItem('zchat-pending-link');
+      const saved = JSON.parse(raw);
+      if (!saved || !saved.search || Date.now() - Number(saved.at || 0) > 86400000) return;
+      const cur = new URLSearchParams(window.location.search);
+      if (['join', 'post', 'profile', 'story'].some((k) => cur.get(k))) return;
+      window.history.replaceState(null, '', `${window.location.pathname}${saved.search}`);
+    } catch {}
+  }, [session && session.user && session.user.id, needsProfile, registering]);
 
   useEffect(() => {
     const uid = session && session.user ? session.user.id : null;
@@ -18151,8 +18431,21 @@ function AppInner() {
         </AuthShell>
       );
     }
+    if (!session && !registering && shareLanding && !authRequested) {
+      return (
+        <SharePreviewScreen landing={shareLanding} onAuth={(mode, note) => {
+          stashPendingLink();
+          setAuthNote(note || '');
+          setScreen(mode === 'register' ? 'register' : 'login');
+          setAuthRequested(true);
+        }} />
+      );
+    }
     return (
       <AuthShell>
+        {shareLanding && authNote && screen === 'login' && (
+          <div style={{ background: 'rgba(59,130,246,0.14)', border: '1px solid rgba(59,130,246,0.35)', color: '#8ab4ff', borderRadius: 12, padding: '10px 12px', fontSize: 13, fontWeight: 700, textAlign: 'center', marginBottom: 14, fontFamily: FONT }}>{authNote}</div>
+        )}
         {screen === 'login' && (
           <LoginStep onSuccess={setSession} onForgot={() => setScreen('forgot')} onGoRegister={() => setScreen('register')} />
         )}
@@ -18165,6 +18458,9 @@ function AppInner() {
             <a key={href} href={href} style={{ color: 'rgba(140,150,170,0.95)', textDecoration: 'none', fontWeight: 700 }}>{label}</a>
           ))}
         </div>
+        {shareLanding && (
+          <div role="button" onClick={() => { setAuthRequested(false); setAuthNote(''); }} style={{ textAlign: 'center', marginTop: 16, fontSize: 13, fontWeight: 800, color: '#8ab4ff', cursor: 'pointer', fontFamily: FONT }}>Back to the preview</div>
+        )}
       </AuthShell>
     );
   }
