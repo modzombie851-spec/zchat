@@ -4,7 +4,7 @@ import {
   Send, Paperclip, Search, Mail, ShieldCheck, ShieldOff, AtSign, LogOut, Eye, EyeOff, Lock,
   Flag, X, Trash2, User, Phone, MoreVertical, Image as ImageIcon, Video as VideoIcon,
   Smile, ArrowLeft, Check, CheckCheck, Settings as SettingsIcon, Moon, Sun, UserPlus,
-  FileText, HelpCircle, ChevronRight, ChevronLeft, Compass, Bell, Volume2, Volume1, VolumeX, Palette, Mic, Play, Pause, Download, Users, Camera, Reply, Forward, Ban, Edit3, Archive, Sparkles, Bookmark, Share2, Copy, Crop, Type, Pencil, Undo2, Scissors, BellOff, Link as LinkIcon, ShieldAlert, Heart, Repeat, PhoneOff, MicOff, VideoOff, SwitchCamera, Clock, Timer, Smartphone,
+  FileText, HelpCircle, ChevronRight, ChevronLeft, Compass, Bell, Volume2, Volume1, VolumeX, Palette, Mic, Play, Pause, Download, Users, Camera, Reply, Forward, Ban, Edit3, Archive, Sparkles, Bookmark, Share2, Copy, Crop, Type, Pencil, Undo2, Scissors, BellOff, Link as LinkIcon, ShieldAlert, Heart, Repeat, PhoneOff, MicOff, VideoOff, SwitchCamera, Clock, Timer, Smartphone, Plus,
 } from 'lucide-react';
 import {
   supabase, registerWithEmail, verifyOtp, setPassword, signInWithPassword,
@@ -1257,6 +1257,78 @@ function DeleteAccountConfirm({ onCancel, onConfirm }) {
   );
 }
 
+function igPalette(dark) {
+  return dark
+    ? { bg: '#000000', fg: '#ffffff', dim: '#a8a8a8', faint: '#737373', line: '#262626', field: '#262626', track: '#3a3a3c', knob: '#000000' }
+    : { bg: '#ffffff', fg: '#000000', dim: '#737373', faint: '#a8a8a8', line: '#dbdbdb', field: '#efefef', track: '#d1d1d6', knob: '#ffffff' };
+}
+
+function IgRow({ icon, label, sub, onClick, danger, right, value, bold, inset = true }) {
+  const { theme } = useTheme();
+  const c = igPalette(theme.dark);
+  const showChevron = !right && !danger && !!onClick;
+  return (
+    <div role={onClick ? 'button' : undefined} onClick={onClick} style={{
+      display: 'flex', alignItems: 'center', gap: 16, minHeight: sub ? 60 : 52, padding: inset ? '0 16px' : '0',
+      cursor: onClick ? 'pointer' : 'default', color: c.fg, WebkitTapHighlightColor: 'transparent',
+    }}>
+      {icon && (
+        <span style={{ flex: 'none', width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          {React.isValidElement(icon) ? React.cloneElement(icon, { size: 22, strokeWidth: 1.6 }) : icon}
+        </span>
+      )}
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ display: 'block', fontSize: 15, lineHeight: '20px', fontWeight: bold || danger ? 700 : 500 }}>{label}</span>
+        {sub && <span style={{ display: 'block', fontSize: 12.5, lineHeight: '17px', color: c.dim, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub}</span>}
+      </span>
+      {value != null && value !== '' && <span style={{ flex: 'none', fontSize: 14, color: c.dim }}>{value}</span>}
+      {right}
+      {showChevron && <ChevronRight size={18} color={c.faint} style={{ flex: 'none' }} />}
+    </div>
+  );
+}
+
+function IgToggle({ on, onClick }) {
+  const { theme } = useTheme();
+  const c = igPalette(theme.dark);
+  return (
+    <div role="switch" aria-checked={!!on} onClick={onClick} style={{
+      flex: 'none', width: 46, height: 28, borderRadius: 14, position: 'relative', cursor: 'pointer',
+      background: on ? c.fg : c.track, transition: 'background 0.2s',
+    }}>
+      <div style={{
+        position: 'absolute', top: 2, left: 2, width: 24, height: 24, borderRadius: '50%',
+        background: on ? c.knob : '#ffffff', transform: on ? 'translateX(18px)' : 'none',
+        transition: 'transform 0.2s, background 0.2s', boxShadow: '0 1px 2px rgba(0,0,0,0.3)',
+      }} />
+    </div>
+  );
+}
+
+function IgHeading({ children }) {
+  const { theme } = useTheme();
+  const c = igPalette(theme.dark);
+  return <div style={{ padding: '22px 16px 6px', fontSize: 13, fontWeight: 600, color: c.dim }}>{children}</div>;
+}
+
+function IgTopBar({ title, onBack, sticky, bleed = 0 }) {
+  const { theme } = useTheme();
+  const c = igPalette(theme.dark);
+  return (
+    <div style={{
+      position: sticky ? 'sticky' : 'relative', top: 0, zIndex: 4, background: c.bg,
+      margin: bleed ? `0 -${bleed}px` : 0, paddingTop: 'env(safe-area-inset-top)',
+    }}>
+      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', height: 52, padding: '0 8px' }}>
+        <div role="button" aria-label="Back" onClick={onBack} style={{ width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: c.fg }}>
+          <ArrowLeft size={24} strokeWidth={2} />
+        </div>
+        <div style={{ position: 'absolute', left: 0, right: 0, textAlign: 'center', fontSize: 16, fontWeight: 700, color: c.fg, pointerEvents: 'none' }}>{title}</div>
+      </div>
+    </div>
+  );
+}
+
 function SettingsRow({ icon, label, sub, onClick, danger, right }) {
   const { theme } = useTheme();
   return (
@@ -1324,6 +1396,7 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
   const { theme, dark, setDark, accentName, setAccentName, soundOn, setSoundOn, reactionSoundOn, setReactionSoundOn, bgPatternOn, setBgPatternOn, fontScale, setFontScale, chatTheme, setChatTheme, bubbleColor, setBubbleColor } = useTheme();
   const accentLabels = { coral: 'Coral', ocean: 'Ocean', berry: 'Berry' };
   const [lockFlow, setLockFlow] = useState(null);
+  const [igQuery, setIgQuery] = useState('');
   const [section, setSection] = useState('main');
   useBackClose(section !== 'main', () => setSection('main'));
   const [dragX, setDragX] = useState(0);
@@ -1368,93 +1441,107 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
     </div>
   );
 
-  const SectionHeader = ({ title }) => (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18 }}>
-      <ArrowLeft size={19} style={{ cursor: 'pointer', color: theme.ink }} onClick={() => setSection('main')} />
-      <div style={{ fontWeight: 800, fontSize: 17, color: theme.ink }}>{title}</div>
-    </div>
-  );
+  const c = igPalette(theme.dark);
+  const SettingsRow = (p) => <IgRow {...p} inset={false} />;
+  const ToggleSwitch = IgToggle;
+  const SectionHeader = ({ title }) => <IgTopBar title={title} onBack={() => setSection('main')} sticky bleed={16} />;
+
+  const notifValue = notifState === 'granted' ? 'On' : notifState === 'denied' ? 'Blocked' : 'Off';
+  const igGroups = [
+    { title: 'Your account', rows: [
+      { icon: <User />, label: 'Edit profile', onClick: onEditProfile },
+      { icon: <UserPlus />, label: 'Switch account', onClick: onOpenAccounts },
+      { icon: <Bell />, label: 'Follow requests', onClick: onOpenRequests },
+      { icon: <Bookmark />, label: 'Saved messages', onClick: onOpenSaved },
+    ] },
+    { title: 'Login and security', rows: [
+      { icon: <Lock />, label: 'Change password', onClick: () => setSection('password') },
+      { icon: <ShieldCheck />, label: 'Two factor authentication', onClick: () => setSection('twofactor') },
+      { icon: <Smartphone />, label: 'Active sessions', onClick: () => setSection('sessions') },
+    ] },
+    { title: 'Who can see your content', rows: [
+      { icon: <Eye />, label: 'Privacy', onClick: () => setSection('privacy') },
+      { icon: <EyeOff />, label: 'Hide activity status', toggle: !!hideActivity, onClick: onToggleActivity },
+      { icon: <Ban />, label: 'Blocked accounts', value: blockedCount ? String(blockedCount) : 'None', onClick: onOpenBlocked },
+    ] },
+    { title: 'Your app', rows: [
+      { icon: dark ? <Sun /> : <Moon />, label: 'Dark mode', toggle: !!dark, onClick: () => setDark(!dark) },
+      { icon: soundOn ? <Volume2 /> : <VolumeX />, label: 'Sounds', toggle: !!soundOn, onClick: () => setSoundOn(!soundOn) },
+      { icon: <Bell />, label: 'Notifications', value: notifValue, onClick: () => setSection('notifications') },
+      { icon: <Camera />, label: 'Camera & microphone', value: permText, onClick: fixPermissions },
+      { icon: <Palette />, label: 'Theme', onClick: () => setSection('appearance') },
+    ] },
+    { title: 'Admin', rows: isZAdmin ? [{ icon: <ShieldAlert />, label: 'Report queue', onClick: onOpenReports }] : [] },
+    { title: 'More info and support', rows: [
+      { icon: <HelpCircle />, label: 'About ZChat', value: `Version ${APP_VERSION}`, onClick: () => setSection('about') },
+    ] },
+    { title: 'Login', rows: [
+      { icon: <LogOut />, label: 'Log out', bold: true, onClick: onLogout },
+      { icon: <Trash2 />, label: 'Delete my account', bold: true, onClick: onOpenDelete },
+    ] },
+  ];
+  const igTerm = igQuery.trim().toLowerCase();
+  const igVisible = igGroups
+    .map((g) => ({ ...g, rows: g.rows.filter((r) => !igTerm || r.label.toLowerCase().includes(igTerm)) }))
+    .filter((g) => g.rows.length);
 
   return (
     <div style={{
-      position: 'fixed', inset: 0, background: 'rgba(10,10,14,0.45)',
-      display: 'flex', alignItems: 'stretch', justifyContent: 'flex-start', zIndex: 30,
-    }} className="zchat-fade" onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} style={glass(theme, {
-        background: theme.panelBg, borderRadius: '0 24px 24px 0', padding: 26,
-        width: '80%', maxWidth: 340, height: '100%', position: 'relative', overflowY: 'auto',
-        WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain',
-        paddingTop: 'calc(26px + env(safe-area-inset-top))',
-        paddingBottom: 'calc(26px + env(safe-area-inset-bottom))',
-        transform: `translateX(${dragX}px)`, transition: draggingRef.current ? 'none' : 'transform 0.25s ease',
-      })}
-        onTouchStart={onDragStart} onTouchMove={onDragMove} onTouchEnd={onDragEnd} onTouchCancel={onDragEnd}
-      >
-        <X size={20} style={{ position: 'absolute', top: 'calc(18px + env(safe-area-inset-top))', right: 18, cursor: 'pointer', color: theme.muted }} onClick={onClose} />
+      position: 'fixed', inset: 0, zIndex: 30, background: c.bg, color: c.fg, fontFamily: FONT,
+    }} className="zchat-fade">
+      <div style={{ height: '100%', overflowY: 'auto', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
 
         {section === 'main' && (
           <>
-            <div style={{ fontWeight: 900, fontSize: 22, color: theme.ink, marginBottom: 14 }}>Settings</div>
-            {me && (
-              <div style={{ borderRadius: 22, padding: 14, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 12, background: theme.dark ? 'linear-gradient(135deg, #1d1740, #0f1220)' : 'linear-gradient(135deg, #eef0ff, #ffffff)', border: `1px solid ${theme.dark ? 'rgba(255,255,255,0.08)' : theme.border}` }}>
-                <Avatar emoji={me.avatar} name={me.name} size={58} frame={me.avatar_frame} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 16, fontWeight: 900, color: theme.ink, display: 'flex', alignItems: 'center' }}>{me.name}<VerifiedBadge tier={me.verified} custom={me.custom_badge} size={14} /></div>
-                  <div style={{ fontSize: 12, color: theme.muted, fontWeight: 700 }}>@{me.username}{me.verified && VERIFIED_TIERS[me.verified] ? ` · ${VERIFIED_TIERS[me.verified].label}` : ''}</div>
-                  {rewardCount != null && <div style={{ fontSize: 11, color: theme.muted, marginTop: 2 }}>{rewardCount} items in collection</div>}
+            <IgTopBar title="Settings" onBack={onClose} sticky />
+            <div style={{ padding: '4px 16px 0' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, height: 38, padding: '0 12px', borderRadius: 10, background: c.field, color: c.dim }}>
+                <Search size={17} />
+                <input value={igQuery} onChange={(e) => setIgQuery(e.target.value)} placeholder="Search" aria-label="Search settings" autoCapitalize="none"
+                  style={{ flex: 1, minWidth: 0, border: 0, outline: 0, background: 'transparent', color: c.fg, fontFamily: FONT, fontSize: 15 }} />
+                {igQuery && <X size={16} style={{ cursor: 'pointer' }} onClick={() => setIgQuery('')} />}
+              </label>
+            </div>
+            {me && !igTerm && (
+              <div style={{ margin: '14px 16px 0', border: `1px solid ${c.line}`, borderRadius: 14, overflow: 'hidden' }}>
+                <div role="button" onClick={onEditProfile} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: 14, cursor: 'pointer' }}>
+                  <Avatar emoji={me.avatar} name={me.name} size={56} frame={me.avatar_frame} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 16, fontWeight: 700, display: 'flex', alignItems: 'center' }}>{me.name}<VerifiedBadge tier={me.verified} custom={me.custom_badge} size={14} /></div>
+                    <div style={{ fontSize: 13, color: c.dim, marginTop: 2 }}>@{me.username}{me.verified && VERIFIED_TIERS[me.verified] ? ` \u00b7 ${VERIFIED_TIERS[me.verified].label}` : ''}</div>
+                  </div>
+                  <ChevronRight size={18} color={c.faint} />
                 </div>
-                {onEditProfile && <div role="button" onClick={onEditProfile} style={{ padding: '8px 12px', borderRadius: 12, background: theme.dark ? 'rgba(255,255,255,0.08)' : theme.rowBg, fontSize: 12, fontWeight: 800, color: theme.ink, cursor: 'pointer' }}>Edit</div>}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', borderTop: `1px solid ${c.line}` }}>
+                  <div role="button" onClick={() => onOpenCollection && onOpenCollection()} style={{ padding: '12px 14px', borderRight: `1px solid ${c.line}`, cursor: 'pointer' }}>
+                    <div style={{ fontSize: 12, color: c.dim }}>Collection</div>
+                    <div style={{ fontSize: 18, fontWeight: 700, marginTop: 2 }}>{rewardCount != null ? `${rewardCount} items` : 'Open'}</div>
+                  </div>
+                  <div role="button" onClick={() => setSection('appearance')} style={{ padding: '12px 14px', cursor: 'pointer' }}>
+                    <div style={{ fontSize: 12, color: c.dim }}>Theme</div>
+                    <div style={{ fontSize: 18, fontWeight: 700, marginTop: 2 }}>{accentLabels[accentName] || 'Change'}</div>
+                  </div>
+                </div>
               </div>
             )}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 6 }}>
-              {[
-                ['Collection', <Sparkles size={18} color="#fbbf24" />, 'rgba(251,191,36,0.15)', () => onOpenCollection && onOpenCollection()],
-                ['Theme', <Palette size={18} color="#60a5fa" />, 'rgba(59,130,246,0.15)', () => setSection('appearance')],
-                ['Alerts', <Bell size={18} color="#f472b6" />, 'rgba(236,72,153,0.15)', () => setSection('notifications')],
-                ['Privacy', <ShieldCheck size={18} color="#4ade80" />, 'rgba(34,197,94,0.15)', () => setSection('privacy')],
-              ].map(([label, icon, bg, onClick]) => (
-                <div key={label} role="button" onClick={() => { playUiSound('tap'); onClick(); }} style={{ borderRadius: 16, padding: '12px 4px', background: theme.rowBg, border: `1px solid ${theme.border}`, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, fontSize: 10.5, fontWeight: 800, color: theme.ink, cursor: 'pointer' }}>
-                  <div style={{ width: 38, height: 38, borderRadius: 12, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{icon}</div>
-                  {label}
-                </div>
-              ))}
-            </div>
-            <div style={{ fontSize: 11, fontWeight: 900, color: theme.muted, letterSpacing: '0.12em', margin: '14px 4px 6px' }}>ACCOUNT</div>
-            <div style={{ borderRadius: 18, background: theme.rowBg, border: `1px solid ${theme.border}`, overflow: 'hidden' }}>
-              <SettingsRow icon={<User size={16} />} label="Edit profile" sub="Name, photo, bio, links, pronouns" onClick={onEditProfile} />
-              <SettingsRow icon={<UserPlus size={16} />} label="Switch account" onClick={onOpenAccounts} />
-              <SettingsRow icon={<Bell size={16} />} label="Follow requests" onClick={onOpenRequests} />
-              <SettingsRow icon={<Lock size={16} />} label="Change password" sub={hasPasswordLogin ? 'Update the password you sign in with' : 'Add a password to your account'} onClick={() => setSection('password')} />
-              <SettingsRow icon={<ShieldCheck size={16} />} label="Two factor authentication" sub="Ask for a code from an authenticator app" onClick={() => setSection('twofactor')} />
-              <SettingsRow icon={<Smartphone size={16} />} label="Active sessions" sub="See devices and log out the others" onClick={() => setSection('sessions')} />
-              <SettingsRow icon={<Bookmark size={16} />} label="Saved messages" sub="Messages and notes you kept" onClick={onOpenSaved} />
-            </div>
-            {isZAdmin && (
-              <>
-                <div style={{ fontSize: 11, fontWeight: 900, color: theme.muted, letterSpacing: '0.12em', margin: '14px 4px 6px' }}>ADMIN</div>
-                <div style={{ borderRadius: 18, background: theme.rowBg, border: `1px solid ${theme.border}`, overflow: 'hidden' }}>
-                  <SettingsRow icon={<ShieldAlert size={16} />} label="Report queue" sub="Abuse reports from members" onClick={onOpenReports} />
-                </div>
-              </>
+            {igVisible.map((g) => (
+              <div key={g.title}>
+                <IgHeading>{g.title}</IgHeading>
+                {g.rows.map((r) => (
+                  <IgRow key={r.label} icon={r.icon} label={r.label} value={r.value} bold={r.bold} onClick={r.onClick}
+                    right={r.toggle !== undefined ? <IgToggle on={r.toggle} /> : undefined} />
+                ))}
+              </div>
+            ))}
+            {igTerm && igVisible.length === 0 && (
+              <div style={{ textAlign: 'center', padding: '40px 20px', color: c.dim, fontSize: 14 }}>No settings match that.</div>
             )}
-            <div style={{ fontSize: 11, fontWeight: 900, color: theme.muted, letterSpacing: '0.12em', margin: '14px 4px 6px' }}>APP</div>
-            <div style={{ borderRadius: 18, background: theme.rowBg, border: `1px solid ${theme.border}`, overflow: 'hidden' }}>
-              <SettingsRow icon={dark ? <Sun size={16} /> : <Moon size={16} />} label="Dark mode" right={<ToggleSwitch on={dark} onClick={() => setDark(!dark)} />} />
-              <SettingsRow icon={soundOn ? <Volume2 size={16} /> : <VolumeX size={16} />} label="Sounds" sub="Taps, sends, calls" right={<ToggleSwitch on={soundOn} onClick={() => setSoundOn(!soundOn)} />} />
-              <SettingsRow icon={<Bell size={16} />} label="Notifications" sub={notifState === 'granted' ? 'On' : notifState === 'denied' ? 'Blocked · tap to fix' : 'Tap to turn on'} onClick={() => setSection('notifications')} />
-              <SettingsRow icon={<Camera size={16} />} label="Camera & microphone" sub={permText} onClick={fixPermissions} />
-            </div>
-            <div style={{ fontSize: 11, fontWeight: 900, color: theme.muted, letterSpacing: '0.12em', margin: '14px 4px 6px' }}>MORE</div>
-            <div style={{ borderRadius: 18, background: theme.rowBg, border: `1px solid ${theme.border}`, overflow: 'hidden' }}>
-              <SettingsRow icon={<Ban size={16} />} label="Blocked accounts" sub={blockedCount ? `${blockedCount} blocked` : 'None'} onClick={onOpenBlocked} />
-              <SettingsRow icon={<HelpCircle size={16} />} label="About ZChat" sub={`Version ${APP_VERSION}`} onClick={() => setSection('about')} />
-              <SettingsRow icon={<Trash2 size={16} />} label="Delete my account" danger onClick={onOpenDelete} />
-              <SettingsRow icon={<LogOut size={16} />} label="Log out" danger onClick={onLogout} />
-            </div>
-            <div style={{ textAlign: 'center', fontSize: 10.5, color: theme.muted, marginTop: 18, fontWeight: 600 }}>ZChat {APP_VERSION}</div>
+            <div style={{ textAlign: 'center', padding: '28px 16px calc(36px + env(safe-area-inset-bottom))', fontSize: 12, color: c.faint }}>ZChat {APP_VERSION}</div>
           </>
         )}
 
+        {section !== 'main' && (
+        <div style={{ padding: '0 16px calc(24px + env(safe-area-inset-bottom))' }}>
         {section === 'twofactor' && (
           <>
             <SectionHeader title="Two factor authentication" />
@@ -1565,7 +1652,8 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
           </>
         )}
 
-        <div style={{ height: 20 }} />
+        </div>
+        )}
       </div>
       {lockFlow === 'set' && (
         <ChatLockSetup onCancel={() => setLockFlow(null)} onConfirm={(pin) => { onSetChatLockPassword(pin); setLockFlow(null); }} />
@@ -2444,37 +2532,162 @@ function getFavoriteStickerKeys() {
 function toggleFavoriteSticker(key) {
   const cur = getFavoriteStickerKeys();
   const adding = !cur.has(key);
-  if (adding) cur.add(key); else cur.delete(key);
-  writeFavoriteKeys(cur);
+  let next = cur;
+  if (adding) next = new Set([key, ...cur]); else cur.delete(key);
+  writeFavoriteKeys(next);
   if (favoriteSync.userId) {
     if (adding) supabase.from('sticker_favorites').upsert({ user_id: favoriteSync.userId, sticker_key: key }, { onConflict: 'user_id,sticker_key' }).then(() => {});
     else supabase.from('sticker_favorites').delete().eq('user_id', favoriteSync.userId).eq('sticker_key', key).then(() => {});
   }
-  return cur;
+  return next;
 }
 
-function StickerPicker({ onPick, onClose }) {
+function readRecentStickers(uid) {
+  try { return JSON.parse(localStorage.getItem(`zchat-recent-stickers-${uid || 'local'}`) || '[]'); } catch { return []; }
+}
+function pushRecentSticker(uid, sticker) {
+  if (!sticker || !sticker.file) return;
+  const item = { key: sticker.key, file: sticker.file, label: sticker.label || 'Sticker' };
+  const next = [item, ...readRecentStickers(uid).filter((r) => r.key !== item.key)].slice(0, 30);
+  try { localStorage.setItem(`zchat-recent-stickers-${uid || 'local'}`, JSON.stringify(next)); } catch {}
+  try { window.dispatchEvent(new CustomEvent('zchat-recents')); } catch {}
+}
+function readMyStickersLocal(uid) {
+  try { return JSON.parse(localStorage.getItem(`zchat-my-stickers-${uid || 'local'}`) || '[]'); } catch { return []; }
+}
+function writeMyStickersLocal(uid, list) {
+  try { localStorage.setItem(`zchat-my-stickers-${uid || 'local'}`, JSON.stringify(list.slice(0, 200))); } catch {}
+}
+async function loadMyStickers(uid) {
+  let list = readMyStickersLocal(uid);
+  try {
+    const { data, error } = await supabase.from('user_stickers').select('id, url, created_at').eq('user_id', uid).order('created_at', { ascending: false }).limit(200);
+    if (!error && data) {
+      const remoteUrls = new Set(data.map((r) => r.url));
+      const localOnly = list.filter((x) => String(x.id).startsWith('local-') && !remoteUrls.has(x.url));
+      list = [...localOnly, ...data.map((r) => ({ id: r.id, url: r.url }))];
+      writeMyStickersLocal(uid, list);
+    }
+  } catch {}
+  return list;
+}
+
+function makeStickerBlob(blob) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const S = 512, B = 16, R = 120, M = 4;
+        const canvas = document.createElement('canvas');
+        canvas.width = S; canvas.height = S;
+        const ctx = canvas.getContext('2d');
+        const rr = (x, y, w, h, r) => { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); };
+        ctx.save();
+        ctx.shadowColor = 'rgba(0,0,0,0.28)'; ctx.shadowBlur = 8; ctx.fillStyle = '#ffffff';
+        rr(M, M, S - 2 * M, S - 2 * M, R); ctx.fill();
+        ctx.restore();
+        ctx.save();
+        rr(M + B, M + B, S - 2 * (M + B), S - 2 * (M + B), R - B); ctx.clip();
+        const side = Math.min(img.naturalWidth, img.naturalHeight);
+        ctx.drawImage(img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, M + B, M + B, S - 2 * (M + B), S - 2 * (M + B));
+        ctx.restore();
+        canvas.toBlob((out) => { URL.revokeObjectURL(url); if (out) resolve(out); else reject(new Error('sticker')); }, 'image/png');
+      } catch (e) { URL.revokeObjectURL(url); reject(e); }
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('sticker')); };
+    img.src = url;
+  });
+}
+
+function StickerCreator({ file, userId, onCancel, onSaved }) {
+  const { theme } = useTheme();
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+  const save = async (croppedBlob) => {
+    if (saving) return;
+    setSaving(true); setErr('');
+    try {
+      const out = await makeStickerBlob(croppedBlob);
+      const upFile = new File([out], `sticker-${Date.now()}.png`, { type: 'image/png' });
+      const { url, error } = await uploadMedia(upFile, userId);
+      if (error || !url) throw error || new Error('upload');
+      let row = null;
+      try {
+        const { data, error: insertErr } = await supabase.from('user_stickers').insert({ user_id: userId, url }).select('id, url').single();
+        if (!insertErr && data) row = { id: data.id, url: data.url };
+      } catch {}
+      onSaved(row || { id: `local-${Date.now()}`, url });
+    } catch {
+      setErr("Couldn't make that sticker. Try again.");
+      setSaving(false);
+    }
+  };
+  return (
+    <>
+      <PhotoCropEditor file={file} onCancel={onCancel} onConfirm={save} />
+      {err && (
+        <div style={{ position: 'fixed', left: 16, right: 16, bottom: 'calc(24px + env(safe-area-inset-bottom))', zIndex: 400, background: theme.panelBg, color: theme.danger, border: `1px solid ${theme.border}`, borderRadius: 14, padding: '12px 14px', fontSize: 13, fontWeight: 700, textAlign: 'center' }}>{err}</div>
+      )}
+    </>
+  );
+}
+
+function StickerPicker({ onPick, onClose, userId }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
-  const [favKeys, setFavKeys] = useState(() => getFavoriteStickerKeys());
+  const [favKeys, setFavKeys] = useState(() => [...getFavoriteStickerKeys()]);
+  const [recents, setRecents] = useState(() => readRecentStickers(userId));
+  const [mine, setMine] = useState(() => readMyStickersLocal(userId));
+  const [creatorFile, setCreatorFile] = useState(null);
+  const fileRef = useRef(null);
   useEffect(() => {
-    const onChange = () => setFavKeys(getFavoriteStickerKeys());
-    window.addEventListener('zchat-favorites', onChange);
-    return () => window.removeEventListener('zchat-favorites', onChange);
-  }, []);
+    const onFav = () => setFavKeys([...getFavoriteStickerKeys()]);
+    const onRec = () => setRecents(readRecentStickers(userId));
+    window.addEventListener('zchat-favorites', onFav);
+    window.addEventListener('zchat-recents', onRec);
+    return () => { window.removeEventListener('zchat-favorites', onFav); window.removeEventListener('zchat-recents', onRec); };
+  }, [userId]);
+  useEffect(() => {
+    let alive = true;
+    loadMyStickers(userId).then((list) => { if (alive) setMine(list); });
+    return () => { alive = false; };
+  }, [userId]);
   const [query, setQuery] = useState('');
-  const [category, setCategory] = useState(() => (getFavoriteStickerKeys().size > 0 ? 'favorites' : 'goma'));
+  const [category, setCategory] = useState(() => (readRecentStickers(userId).length ? 'recent' : getFavoriteStickerKeys().size > 0 ? 'favorites' : 'goma'));
+
+  const mineStickers = mine.map((x) => ({ key: `my:${x.id}`, label: 'My sticker', file: x.url, custom: true, id: x.id }));
+  const byKey = new Map([...STICKERS, ...mineStickers].map((x) => [x.key, x]));
 
   const toggleFav = (e, key) => {
     e.stopPropagation();
-    setFavKeys(new Set(toggleFavoriteSticker(key)));
+    setFavKeys([...toggleFavoriteSticker(key)]);
+  };
+  const removeMine = async (e, st) => {
+    e.stopPropagation();
+    const next = mine.filter((x) => x.id !== st.id);
+    setMine(next);
+    writeMyStickersLocal(userId, next);
+    if (!String(st.id).startsWith('local-')) await supabase.from('user_stickers').delete().eq('id', st.id).eq('user_id', userId);
+  };
+  const onCreated = (row) => {
+    const next = [row, ...mine.filter((x) => x.id !== row.id)];
+    setMine(next);
+    writeMyStickersLocal(userId, next);
+    setCreatorFile(null);
+    setCategory('mine');
   };
 
-  const filtered = STICKERS.filter((s) => {
-    if (query.trim()) return s.label.toLowerCase().includes(query.trim().toLowerCase());
-    if (category === 'favorites') return favKeys.has(s.key);
-    return s.category === category;
-  });
+  let list;
+  const term = query.trim().toLowerCase();
+  if (term) list = [...STICKERS, ...mineStickers].filter((x) => x.label.toLowerCase().includes(term));
+  else if (category === 'recent') list = recents.map((r) => byKey.get(r.key) || { key: r.key, label: r.label, file: r.file }).filter((x) => x && x.file);
+  else if (category === 'favorites') list = favKeys.map((k) => byKey.get(k)).filter(Boolean);
+  else if (category === 'mine') list = mineStickers;
+  else list = STICKERS.filter((x) => x.category === category);
+
+  const tabs = [{ key: 'recent', label: 'Recent' }, { key: 'favorites', label: 'Favorites' }, { key: 'mine', label: 'My stickers' }, ...STICKER_CATEGORIES.filter((x) => x.key !== 'favorites')];
+  const emptyText = category === 'recent' ? 'Stickers you send show up here' : category === 'favorites' ? 'No favorites yet, tap the star on any sticker' : 'No stickers found';
 
   return (
     <div style={{
@@ -2482,65 +2695,89 @@ function StickerPicker({ onPick, onClose }) {
       display: 'flex', alignItems: 'flex-end', justifyContent: 'center', padding: 0,
     }} className="zchat-fade" onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} style={glass(theme, {
-        borderRadius: '26px 26px 0 0', padding: '18px 18px 16px', width: '100%', maxWidth: 460,
-        height: '40vh', maxHeight: 360, minHeight: 300, display: 'flex', flexDirection: 'column',
-        paddingBottom: 'calc(16px + env(safe-area-inset-bottom))',
+        borderRadius: '26px 26px 0 0', padding: '16px 14px 14px', width: '100%', maxWidth: 460,
+        height: '48vh', maxHeight: 430, minHeight: 330, display: 'flex', flexDirection: 'column',
+        paddingBottom: 'calc(14px + env(safe-area-inset-bottom))',
         border: 'none', borderTop: `1px solid ${theme.border}`,
         boxShadow: '0 -8px 40px rgba(0,0,0,0.18)',
       })}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, flexShrink: 0 }}>
           <div style={{ fontWeight: 800, fontSize: 15, color: theme.ink }}>Stickers</div>
-          <div onClick={onClose} style={{
+          <div role="button" aria-label="Close stickers" onClick={onClose} style={{
             width: 26, height: 26, borderRadius: '50%', background: theme.rowBg,
             display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
           }}><X size={14} color={theme.muted} /></div>
         </div>
-        <div style={{ position: 'relative', marginBottom: 10, flexShrink: 0 }}>
+        <div style={{ position: 'relative', marginBottom: 8, flexShrink: 0 }}>
           <Search size={14} color={theme.muted} style={{ position: 'absolute', left: 11, top: 10 }} />
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search stickers"
             style={{ ...inputStyle(theme), padding: '8px 12px 8px 32px', fontSize: 13 }} />
         </div>
-        {!query.trim() && (
-          <div style={{ display: 'flex', gap: 6, marginBottom: 10, overflowX: 'auto', flexShrink: 0 }}>
-            {STICKER_CATEGORIES.map((c) => (
-              <div key={c.key} onClick={() => setCategory(c.key)} style={{
+        {!term && (
+          <div style={{ display: 'flex', gap: 6, marginBottom: 8, overflowX: 'auto', flexShrink: 0, scrollbarWidth: 'none' }}>
+            {tabs.map((tb) => (
+              <div key={tb.key} role="button" aria-label={`Tab ${tb.label}`} onClick={() => setCategory(tb.key)} style={{
                 padding: '6px 13px', borderRadius: 16, fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
-                background: category === c.key ? theme.coral : theme.rowBg, color: category === c.key ? 'white' : theme.muted,
+                background: category === tb.key ? theme.coral : theme.rowBg, color: category === tb.key ? 'white' : theme.muted,
                 display: 'flex', alignItems: 'center', gap: 4,
-              }}>{c.key === 'favorites' && <Star_ size={11} color={category === c.key ? 'white' : '#FFB800'} filled />}{c.label}</div>
+              }}>
+                {tb.key === 'favorites' && <Star_ size={11} color={category === tb.key ? 'white' : '#FFB800'} filled />}
+                {tb.key === 'recent' && <Clock size={11} />}
+                {tb.key === 'mine' && <Plus size={11} />}
+                {tb.label}
+              </div>
             ))}
           </div>
         )}
-        <div style={{ overflowY: 'auto', flex: 1, minHeight: 0, display: 'flex', flexWrap: 'wrap', gap: 14, alignContent: 'flex-start' }}>
-          {filtered.length === 0 && (
-            <div style={{ width: '100%', textAlign: 'center', padding: 20, fontSize: 12.5, color: theme.muted }}>
-              {category === 'favorites' ? 'No favorites yet, tap the star on any sticker' : 'No stickers found'}
+        <div data-testid="sticker-grid" style={{ overflowY: 'auto', flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 8, alignContent: 'start' }}>
+          {category === 'mine' && !term && (
+            <div role="button" aria-label="Create sticker" onClick={() => fileRef.current && fileRef.current.click()} style={{
+              position: 'relative', width: '100%', paddingBottom: '100%', borderRadius: 12, cursor: 'pointer',
+              border: `1.5px dashed ${theme.muted}`, color: theme.muted,
+            }}>
+              <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, fontSize: 10, fontWeight: 800 }}>
+                <Plus size={20} />Create
+              </div>
             </div>
           )}
-          {filtered.map((s) => (
-            <div key={s.key} style={{ width: 'calc((100% - 28px) / 3)', flexShrink: 0, flexGrow: 0 }}>
-              <div
-                onClick={() => onPick(s)}
-                style={{
+          {list.length === 0 && !(category === 'mine' && !term) && (
+            <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: 20, fontSize: 12.5, color: theme.muted }}>{emptyText}</div>
+          )}
+          {list.map((st) => (
+            <div key={st.key} data-sticker-key={st.key} style={{ minWidth: 0 }}>
+              <div onClick={() => onPick(st)} style={{
                 position: 'relative', width: '100%', paddingBottom: '100%', height: 0,
-                borderRadius: 16, background: theme.rowBg, cursor: 'pointer',
-                border: `1px solid ${theme.border}`, boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+                borderRadius: 12, background: theme.rowBg, cursor: 'pointer',
+                border: `1px solid ${theme.border}`,
               }}>
-                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderRadius: 16 }}>
-                  <img src={s.file} alt={s.label} loading="lazy" draggable={false} onContextMenu={(e) => e.preventDefault()}
-                    style={{ width: '72%', height: '72%', objectFit: 'contain' }} />
+                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderRadius: 12 }}>
+                  <img src={st.file} alt={st.label} loading="lazy" draggable={false} onContextMenu={(e) => e.preventDefault()}
+                    style={{ width: '78%', height: '78%', objectFit: 'contain' }} />
                 </div>
-                <div onClick={(e) => toggleFav(e, s.key)} style={{
-                  position: 'absolute', top: 4, right: 4, width: 20, height: 20, borderRadius: '50%',
-                  background: 'rgba(0,0,0,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+                <div role="button" aria-label="Favourite" onClick={(e) => toggleFav(e, st.key)} style={{
+                  position: 'absolute', top: 3, right: 3, width: 17, height: 17, borderRadius: '50%',
+                  background: 'rgba(0,0,0,0.38)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
                 }}>
-                  <Star_ size={11} color={favKeys.has(s.key) ? '#FFB800' : 'white'} filled={favKeys.has(s.key)} />
+                  <Star_ size={10} color={favKeys.includes(st.key) ? '#FFB800' : 'white'} filled={favKeys.includes(st.key)} />
                 </div>
+                {st.custom && category === 'mine' && (
+                  <div role="button" aria-label="Delete sticker" onClick={(e) => removeMine(e, st)} style={{
+                    position: 'absolute', top: 3, left: 3, width: 17, height: 17, borderRadius: '50%',
+                    background: 'rgba(0,0,0,0.38)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+                  }}><X size={10} color="white" /></div>
+                )}
               </div>
             </div>
           ))}
         </div>
+        <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} data-testid="sticker-file"
+          onChange={(e) => { const f = e.target.files && e.target.files[0]; if (f) setCreatorFile(f); e.target.value = ''; }} />
       </div>
+      {creatorFile && (
+        <div onClick={(e) => e.stopPropagation()} style={{ display: 'contents' }}>
+          <StickerCreator file={creatorFile} userId={userId} onCancel={() => setCreatorFile(null)} onSaved={onCreated} />
+        </div>
+      )}
     </div>
   );
 }
@@ -3379,98 +3616,67 @@ function ChatSettingsPanel({ conv, myId, meAvatar, meName, isPinned, isLocked, w
       <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 4, color: theme.coralDeep }}>{icon}</div>{label}
     </div>
   );
+  const c = igPalette(theme.dark);
   const muteLabel = isMuted === true ? 'Muted' : isMuted ? `Muted until ${new Date(isMuted).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}` : 'Off';
 
   return (
     <div style={{
-      position: 'fixed', inset: 0, background: theme.panelBg, zIndex: 33,
+      position: 'fixed', inset: 0, background: c.bg, color: c.fg, zIndex: 33, fontFamily: FONT,
       display: 'flex', flexDirection: 'column', overflow: 'hidden',
     }} className="zchat-fade">
-      <div style={{
-        position: 'absolute', inset: 0, backgroundImage: "url('/chat-bg.jpg')",
-        backgroundSize: 'cover', backgroundPosition: 'center', opacity: 0.35, pointerEvents: 'none',
-      }} />
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '16px 18px', paddingTop: 'calc(16px + env(safe-area-inset-top))', borderBottom: `1px solid ${theme.border}`, position: 'relative', flexShrink: 0 }}>
-        <ArrowLeft size={20} style={{ cursor: 'pointer', color: theme.ink }} onClick={onClose} />
-        <div style={{ fontWeight: 900, fontSize: 19, color: theme.ink }}>Chat settings</div>
-      </div>
-      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '12px 18px', paddingBottom: 'calc(12px + env(safe-area-inset-bottom))', position: 'relative' }}>
-        <div style={{ textAlign: 'center', marginBottom: 12, flexShrink: 0 }}>
+      <IgTopBar title="Chat settings" onBack={onClose} />
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', paddingBottom: 'calc(28px + env(safe-area-inset-bottom))' }}>
+        <div style={{ textAlign: 'center', padding: '8px 20px 4px' }}>
           <div role="button" onClick={() => onOpenProfile(p)} style={{ display: 'flex', justifyContent: 'center', cursor: 'pointer' }}>
-            <Avatar emoji={conv.otherProfile.avatar} name={otherName} frame={conv.otherProfile.avatar_frame} size={64} />
+            <Avatar emoji={conv.otherProfile.avatar} name={otherName} frame={conv.otherProfile.avatar_frame} size={84} />
           </div>
-          <div style={{ fontWeight: 900, fontSize: 17, color: theme.ink, marginTop: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{otherName}<VerifiedBadge tier={p.verified} custom={p.custom_badge} size={14} /></div>
-          <div style={{ fontSize: 12, color: theme.muted }}>@{conv.otherProfile.username}</div>
-          {infoBits.length > 0 && (
-            <div style={{ display: 'flex', justifyContent: 'center', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
-              {infoBits.map((bit, i) => (
-                <span key={i} style={{
-                  fontSize: 11, color: theme.ink, fontWeight: 600, background: theme.rowBg,
-                  padding: '3px 10px', borderRadius: 12,
-                }}>{bit}</span>
-              ))}
+          <div style={{ fontWeight: 700, fontSize: 18, marginTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{otherName}<VerifiedBadge tier={p.verified} custom={p.custom_badge} size={15} /></div>
+          <div style={{ fontSize: 13, color: c.dim, marginTop: 2 }}>@{conv.otherProfile.username}</div>
+          {infoBits.length > 0 && <div style={{ fontSize: 13, color: c.dim, marginTop: 6 }}>{infoBits.join(' \u00b7 ')}</div>}
+          {showBio && <div style={{ fontSize: 13.5, marginTop: 8, lineHeight: 1.45, padding: '0 8px' }}><RichText text={p.bio} onMention={onOpenProfile} /></div>}
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 26, marginTop: 14 }}>
+            <div role="button" onClick={() => setListModal('followers')} style={{ cursor: 'pointer' }}>
+              <span style={{ fontWeight: 700, fontSize: 15 }}>{followerCount}</span> <span style={{ fontSize: 13, color: c.dim }}>followers</span>
             </div>
-          )}
-          {showBio && (
-            <div style={{ fontSize: 12, color: theme.muted, marginTop: 8, padding: '0 24px', lineHeight: 1.5 }}><RichText text={p.bio} onMention={onOpenProfile} /></div>
-          )}
-          <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 12 }}>
-            <div onClick={() => setListModal('followers')} style={{ flex: 1, maxWidth: 130, background: theme.rowBg, borderRadius: 14, padding: '8px 10px', cursor: 'pointer' }}>
-              <div style={{ fontWeight: 800, fontSize: 14, color: theme.ink }}>{followerCount}</div>
-              <div style={{ fontSize: 9.5, color: theme.muted, fontWeight: 600 }}>Followers</div>
-            </div>
-            <div onClick={() => setListModal('following')} style={{ flex: 1, maxWidth: 130, background: theme.rowBg, borderRadius: 14, padding: '8px 10px', cursor: 'pointer' }}>
-              <div style={{ fontWeight: 800, fontSize: 14, color: theme.ink }}>{followingCount}</div>
-              <div style={{ fontSize: 9.5, color: theme.muted, fontWeight: 600 }}>Following</div>
+            <div role="button" onClick={() => setListModal('following')} style={{ cursor: 'pointer' }}>
+              <span style={{ fontWeight: 700, fontSize: 15 }}>{followingCount}</span> <span style={{ fontSize: 13, color: c.dim }}>following</span>
             </div>
           </div>
-          {onCall && (
-            <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-              {quickAction(<Phone size={17} />, 'Call', () => onCall('voice'))}
-              {quickAction(<VideoIcon size={17} />, 'Video', () => onCall('video'))}
-              {quickAction(<AtSign size={17} />, 'Nickname', () => setShowNicknames(true))}
-            </div>
-          )}
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 22, marginTop: 18 }}>
+            {[
+              [<User size={21} strokeWidth={1.6} />, 'Profile', () => onOpenProfile(p)],
+              ...(onCall ? [[<Phone size={21} strokeWidth={1.6} />, 'Call', () => onCall('voice')], [<VideoIcon size={21} strokeWidth={1.6} />, 'Video', () => onCall('video')]] : []),
+              [<AtSign size={21} strokeWidth={1.6} />, 'Nickname', () => setShowNicknames(true)],
+            ].map(([icon, label, fn]) => (
+              <div key={label} role="button" aria-label={label} onClick={fn} style={{ textAlign: 'center', cursor: 'pointer', width: 62 }}>
+                <div style={{ width: 52, height: 52, borderRadius: '50%', border: `1px solid ${c.line}`, background: c.field, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 6px' }}>{icon}</div>
+                <div style={{ fontSize: 12, color: c.dim }}>{label}</div>
+              </div>
+            ))}
+          </div>
         </div>
 
-        <div style={sectionLabel}>LOOK</div>
-        <div style={card}>
-          <PillRow icon={<ImageIcon size={14} />} label="Chat wallpaper" onClick={() => setShowWallpaper(true)} />
-          <PillRow icon={<Sparkles size={14} />} label="Header style" onClick={() => setShowNameBar(true)} />
-        </div>
+        <IgHeading>Look</IgHeading>
+        <IgRow icon={<ImageIcon />} label="Chat wallpaper" onClick={() => setShowWallpaper(true)} />
+        <IgRow icon={<Sparkles />} label="Header style" onClick={() => setShowNameBar(true)} />
 
         {onSetMute && (
           <>
-            <div style={sectionLabel}>NOTIFICATIONS</div>
-            <div style={card}>
-              <div role="button" onClick={() => setShowMuteOptions(true)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 12px', cursor: 'pointer' }}>
-                <div style={{ width: 30, height: 30, borderRadius: 10, background: `${theme.coral}1F`, color: theme.coralDeep, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{isMuted ? <BellOff size={15} /> : <Bell size={15} />}</div>
-                <div style={{ flex: 1, textAlign: 'left' }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: theme.ink }}>Mute</div>
-                  <div style={{ fontSize: 11.5, color: theme.muted, marginTop: 1 }}>{muteLabel}</div>
-                </div>
-                <ChevronRight size={16} color={theme.muted} />
-              </div>
-            </div>
+            <IgHeading>Notifications</IgHeading>
+            <IgRow icon={isMuted ? <BellOff /> : <Bell />} label="Mute notifications" value={muteLabel} onClick={() => setShowMuteOptions(true)} />
           </>
         )}
 
-        <div style={sectionLabel}>PRIVACY & MANAGE</div>
-        <div style={card}>
-          <PillRow icon={<AtSign size={14} />} label="Nicknames" onClick={() => setShowNicknames(true)} />
-          <PillRow icon={<Timer size={14} />} label={`Disappearing messages: ${disappearLabel(disappearSecs)}`} onClick={() => setShowDisappear(true)} />
-          {showDisappear && <DisappearSheet value={disappearSecs} subject="this chat" onPick={onSetDisappear} onClose={() => setShowDisappear(false)} />}
-          <PillRow icon={<Pin_ size={14} />} label={isPinned ? 'Unpin chat' : 'Pin chat'} onClick={onTogglePin} />
-          <PillRow icon={<Archive size={14} />} label="Archive chat" onClick={onToggleArchive} />
-          <PillRow icon={<Lock size={14} />} label={isLocked ? 'Remove chat lock' : 'Lock this chat'}
-            onClick={() => { if (isLocked) onDisableLock(); else if (chatLockAvailable) onEnableLock(); else onNeedChatLockSetup(); }} />
-        </div>
+        <IgHeading>Privacy and manage</IgHeading>
+        <IgRow icon={<Timer />} label="Disappearing messages" value={disappearLabel(disappearSecs)} onClick={() => setShowDisappear(true)} />
+        {showDisappear && <DisappearSheet value={disappearSecs} subject="this chat" onPick={onSetDisappear} onClose={() => setShowDisappear(false)} />}
+        <IgRow icon={<Pin_ />} label="Pin chat" onClick={onTogglePin} right={<IgToggle on={!!isPinned} />} />
+        <IgRow icon={<Archive />} label="Archive chat" onClick={onToggleArchive} />
+        <IgRow icon={<Lock />} label="Lock this chat" onClick={() => { if (isLocked) onDisableLock(); else if (chatLockAvailable) onEnableLock(); else onNeedChatLockSetup(); }} right={<IgToggle on={!!isLocked} />} />
 
-        <div style={sectionLabel}>DANGER</div>
-        <div style={card}>
-          <PillRow icon={<Flag size={14} />} label={`Report ${otherName}`} danger onClick={() => setShowReportUser(true)} />
-          <PillRow icon={<Trash2 size={14} />} label={`Delete chat with ${otherName}`} danger onClick={onDeleteChat} />
-        </div>
+        <IgHeading>More</IgHeading>
+        <IgRow icon={<Flag />} label={`Report ${otherName}`} bold onClick={() => setShowReportUser(true)} />
+        <IgRow icon={<Trash2 />} label={`Delete chat with ${otherName}`} bold onClick={onDeleteChat} />
       </div>
       {showMuteOptions && onSetMute && (
         <div onClick={() => setShowMuteOptions(false)} style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end' }}>
@@ -5773,7 +5979,7 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
             }}>
               <div style={{ fontWeight: 700, color: theme.coralDeep, fontSize: 10.5 }}>{replyPreview.senderLabel}</div>
               <div style={{ wordBreak: 'break-word', lineHeight: 1.35 }}>
-                {replyPreview.type === 'sticker' && replyPreview.content && replyPreview.content.startsWith('/')
+                {replyPreview.type === 'sticker' && replyPreview.content && (replyPreview.content.startsWith('/') || /^https?:/i.test(replyPreview.content))
                   ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><img src={replyPreview.content} alt="" style={{ width: 28, height: 28, objectFit: 'contain' }} />Sticker</span>
                   : replyPreview.type === 'text' ? (parseProfileLink(replyPreview.content) ? 'Profile' : replyPreview.content) : replyPreview.type === 'image' ? 'Photo' : replyPreview.type === 'audio' ? 'Voice message' : replyPreview.type === 'sticker' ? 'Sticker' : 'Video'}
               </div>
@@ -5809,7 +6015,9 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
               )}
               {m.type === 'audio' && <div style={{ paddingBottom: 14 }}><AudioBubble url={m.media_url} isMe={isMe} /></div>}
               {m.type === 'sticker' && (
-                m.content && m.content.startsWith('/') ? (
+                m.content && /^https?:/i.test(m.content) ? (
+                  <img src={m.content} alt="Sticker" draggable={false} className="zchat-wave-pop" style={{ display: 'block', width: 120, height: 120, objectFit: 'contain', marginBottom: 18 }} />
+                ) : m.content && m.content.startsWith('/') ? (
                   <div onClick={(e) => { if (selectionMode || !onOpenSticker) return; e.stopPropagation(); onOpenSticker(m); }} style={{ cursor: 'pointer' }}>
                     <LoopingSticker src={m.content} size={96} className="zchat-wave-pop" style={{ display: 'block', marginBottom: 18 }} />
                   </div>
@@ -5832,6 +6040,7 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
                 <div style={{
                   fontSize: (m.text_size ? textSizePx(m.text_size) : 15) * fontScale,
                   fontWeight: m.text_size === 'l' || m.text_size === 'xl' ? 800 : 400,
+                  ...fontStyleCss(m.text_font),
                   color: m.text_color || theme.ink,
                   wordBreak: 'break-word', whiteSpace: 'pre-wrap',
                   lineHeight: m.text_size === 'xl' ? 1.12 : m.text_size === 'l' ? 1.2 : 1.32,
@@ -9026,7 +9235,7 @@ function StoryTray({ me, myStories, trayUsers, seen, onAdd, onOpen }) {
   );
 }
 
-const APP_VERSION = '6.9V';
+const APP_VERSION = '7.0V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -12497,9 +12706,90 @@ async function isBlockedHere(email) {
 
 const BLOCKED_MESSAGE = 'This account has been removed from ZChat for breaking the rules. If you think this is a mistake, contact support.';
 
-const TEXT_SIZES = [['s', 'Small', 13], ['m', 'Normal', 15.5], ['l', 'Big', 22], ['xl', 'Huge', 30]];
-const TEXT_COLORS = ['#ff4d6d', '#ffb703', '#3ddc84', '#4dabff', '#c77dff', '#ffffff'];
-const textSizePx = (key) => (TEXT_SIZES.find(([k]) => k === key) || TEXT_SIZES[1])[2];
+const TEXT_SIZES = [['xxs', 'Tiny', 10], ['xs', 'Mini', 11.5], ['s', 'Small', 13], ['m', 'Normal', 15.5], ['l', 'Big', 22], ['xl', 'Huge', 30]];
+const TEXT_COLORS = [
+  '#000000', '#ffffff', '#9ca3af', '#ff4d6d', '#ff7a45', '#ffb703', '#fde047', '#a3e635',
+  '#3ddc84', '#14b8a6', '#22d3ee', '#4dabff', '#3b82f6', '#6366f1', '#8b5cf6', '#c77dff',
+  '#e879f9', '#f472b6', '#fb7185', '#b45309', '#78350f', '#166534', '#1e3a8a', '#7f1d1d',
+];
+const textSizePx = (key) => (TEXT_SIZES.find(([k]) => k === key) || TEXT_SIZES.find(([k]) => k === 'm'))[2];
+const FONT_STYLES = [
+  { key: 'classic', label: 'Classic' },
+  { key: 'bold', label: 'Bold', css: { fontWeight: 800 } },
+  { key: 'serif', label: 'Serif', css: { fontFamily: 'Georgia, "Times New Roman", serif' } },
+  { key: 'elegant', label: 'Elegant', css: { fontFamily: '"Playfair Display", Georgia, serif', fontWeight: 500, fontStyle: 'italic' } },
+  { key: 'mono', label: 'Mono', css: { fontFamily: 'ui-monospace, Menlo, Consolas, monospace' } },
+  { key: 'typewriter', label: 'Typewriter', css: { fontFamily: '"Special Elite", "Courier New", monospace' } },
+  { key: 'rounded', label: 'Rounded', css: { fontFamily: '"Nunito", system-ui, sans-serif', fontWeight: 700 } },
+  { key: 'bubble', label: 'Bubble', css: { fontFamily: '"Fredoka", system-ui, sans-serif', fontWeight: 500 } },
+  { key: 'script', label: 'Script', css: { fontFamily: '"Pacifico", cursive' } },
+  { key: 'hand', label: 'Handwriting', css: { fontFamily: '"Caveat", cursive', fontWeight: 600 } },
+  { key: 'marker', label: 'Marker', css: { fontFamily: '"Permanent Marker", cursive' } },
+  { key: 'condensed', label: 'Condensed', css: { fontFamily: '"Bebas Neue", Impact, sans-serif', letterSpacing: '0.04em' } },
+  { key: 'retro', label: 'Retro', css: { fontFamily: '"Righteous", system-ui, sans-serif' } },
+  { key: 'comic', label: 'Comic', css: { fontFamily: '"Comic Neue", "Comic Sans MS", cursive', fontWeight: 700 } },
+  { key: 'gothic', label: 'Gothic', css: { fontFamily: '"UnifrakturCook", serif', fontWeight: 700 } },
+  { key: 'caps', label: 'CAPS', css: { textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700 } },
+  { key: 'lower', label: 'lowercase', css: { textTransform: 'lowercase', letterSpacing: '0.02em' } },
+  { key: 'smallcaps', label: 'Small caps', css: { fontVariant: 'small-caps', letterSpacing: '0.05em', fontWeight: 600 } },
+  { key: 'wide', label: 'Wide', css: { letterSpacing: '0.18em', fontWeight: 600 } },
+];
+const fontStyleCss = (key) => { const f = FONT_STYLES.find((x) => x.key === key); return (f && f.css) || {}; };
+const previewTextCss = (font, size, color, ink) => ({ ...fontStyleCss(font), color: color || ink, fontSize: size && size !== 'm' ? Math.min(22, textSizePx(size)) : 15 });
+function ensureTextFonts() {
+  try {
+    if (document.getElementById('zchat-text-fonts')) return;
+    const link = document.createElement('link');
+    link.id = 'zchat-text-fonts';
+    link.rel = 'stylesheet';
+    link.href = 'https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Caveat:wght@600&family=Comic+Neue:wght@700&family=Fredoka:wght@500&family=Nunito:wght@700&family=Pacifico&family=Permanent+Marker&family=Playfair+Display:ital,wght@1,500&family=Righteous&family=Special+Elite&family=UnifrakturCook:wght@700&display=swap';
+    document.head.appendChild(link);
+  } catch {}
+}
+
+function TextStyleBar({ font, size, color, onFont, onSize, onColor }) {
+  const { theme } = useTheme();
+  const rowStyle = { display: 'flex', gap: 8, overflowX: 'auto', padding: '0 14px', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' };
+  return (
+    <div className="zchat-fade" style={{ padding: '8px 0 4px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div data-testid="font-row" style={rowStyle}>
+        {FONT_STYLES.map((f) => {
+          const on = (font || 'classic') === f.key;
+          return (
+            <div key={f.key} role="button" aria-label={`Font ${f.label}`} onClick={() => onFont(f.key === 'classic' ? null : f.key)} style={{
+              flex: '0 0 auto', minWidth: 68, padding: '7px 10px 6px', borderRadius: 14, textAlign: 'center', cursor: 'pointer',
+              background: on ? theme.coral : theme.rowBg, color: on ? 'white' : theme.ink, border: `1px solid ${on ? theme.coral : theme.border}`,
+            }}>
+              <div style={{ fontSize: 19, lineHeight: '24px', ...fontStyleCss(f.key) }}>Aa</div>
+              <div style={{ fontSize: 9.5, fontWeight: 700, marginTop: 1, opacity: 0.85, whiteSpace: 'nowrap' }}>{f.label}</div>
+            </div>
+          );
+        })}
+      </div>
+      <div data-testid="size-row" style={rowStyle}>
+        {TEXT_SIZES.map(([key, label, px]) => (
+          <div key={key} role="button" aria-label={`Size ${label}`} onClick={() => onSize(key)} style={{
+            flex: '1 0 auto', textAlign: 'center', padding: '7px 12px', borderRadius: 12, cursor: 'pointer',
+            background: size === key ? theme.coral : theme.rowBg, color: size === key ? 'white' : theme.ink,
+            fontWeight: 800, fontSize: Math.min(16, Math.max(10, px * 0.7)), whiteSpace: 'nowrap',
+          }}>{label}</div>
+        ))}
+      </div>
+      <div data-testid="color-row" style={{ ...rowStyle, alignItems: 'center' }}>
+        <div role="button" aria-label="Default colour" onClick={() => onColor(null)} style={{
+          width: 30, height: 30, borderRadius: 15, cursor: 'pointer', flexShrink: 0, border: `2px solid ${color ? theme.border : theme.coral}`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 900, color: theme.muted,
+        }}>A</div>
+        {TEXT_COLORS.map((col) => (
+          <div key={col} role="button" aria-label={`Colour ${col}`} onClick={() => onColor(col)} style={{
+            width: 30, height: 30, borderRadius: 15, background: col, cursor: 'pointer', flexShrink: 0,
+            border: color === col ? `3px solid ${theme.ink}` : `1px solid ${theme.border}`,
+          }} />
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function privacyAllows(owner, scope, viewerId, iFollow, allowed) {
   if (!owner || !owner.id || owner.id === viewerId) return true;
@@ -12886,6 +13176,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [savedIds, setSavedIds] = useState(() => new Set());
   const [textSize, setTextSize] = useState('m');
   const [textColor, setTextColor] = useState(null);
+  const [textFont, setTextFont] = useState(null);
   const [showTextStyle, setShowTextStyle] = useState(false);
   const scrollRef = useRef(null);
   useEffect(() => {
@@ -14068,12 +14359,13 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     }
   };
 
-  const sendGroupMessage = async (type, content, mediaUrl, forwardedFromName, replyToId) => {
+  const sendGroupMessage = async (type, content, mediaUrl, forwardedFromName, replyToId, textStyleRow) => {
     const row = {
       sender_id: session.user.id, group_id: activeGroup.id, type, content: content || null, media_url: mediaUrl || null,
       forwarded: !!forwardedFromName, forwarded_from_name: forwardedFromName || null,
     };
     if (replyToId) row.reply_to_id = replyToId;
+    if (textStyleRow) Object.assign(row, textStyleRow);
     const tempId = type === 'system' ? null : `temp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     if (tempId) {
       setMessages((prev) => [...prev, { ...row, id: tempId, created_at: new Date().toISOString(), read: false, delivered: false, deleted: false, sending: true }]);
@@ -14085,6 +14377,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     }
     let insertResult;
     try { insertResult = await supabase.from('messages').insert(row).select().single(); } catch (thrown) { insertResult = { data: null, error: thrown }; }
+    if (insertResult && insertResult.error && row.text_font && /text_font/i.test(String(insertResult.error.message || ''))) {
+      const { text_font: droppedFont, ...plainGroupRow } = row;
+      try { insertResult = await supabase.from('messages').insert(plainGroupRow).select().single(); } catch (thrown) { insertResult = { data: null, error: thrown }; }
+    }
     const { data, error } = insertResult;
     if (tempId && error && type === 'text' && isNetworkProblem(error)) {
       queueOutgoing({ tempId, kind: 'group', targetId: activeGroup.id, groupName: activeGroup.name, row, createdAt: new Date().toISOString() });
@@ -14320,6 +14616,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     setShowStickers(false);
     if (!activeProfile && !activeGroup) return;
     const filePath = sticker.file;
+    pushRecentSticker(session.user.id, sticker);
     const replyId = replyingTo ? replyingTo.id : null;
     setReplyingTo(null);
     if (activeGroup) {
@@ -14385,7 +14682,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       const soloForwardName = items.length === 1 && items[0].type === 'text' ? items[0].forwarded_from_name : null;
       const groupReplyId = replyingTo?.id || null;
       setReplyingTo(null);
-      await sendGroupMessage('text', text, null, soloForwardName, groupReplyId);
+      await sendGroupMessage('text', text, null, soloForwardName, groupReplyId, (textSize !== 'm' || textColor || textFont) ? { text_size: textSize === 'm' ? null : textSize, text_color: textColor, ...(textFont ? { text_font: textFont } : {}) } : null);
       return;
     }
     const items = pendingForwardItems;
@@ -14409,7 +14706,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     setReplyingTo(null);
     const wasForward = items.length === 1 && items[0].type === 'text';
     const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    const dmRow = { sender_id: session.user.id, receiver_id: activeProfile.id, group_id: null, type: 'text', content: text, reply_to_id: replyId || null, text_size: textSize === 'm' ? null : textSize, text_color: textColor };
+    const dmRow = { sender_id: session.user.id, receiver_id: activeProfile.id, group_id: null, type: 'text', content: text, reply_to_id: replyId || null, text_size: textSize === 'm' ? null : textSize, text_color: textColor, ...(textFont ? { text_font: textFont } : {}) };
     const optimistic = { ...dmRow, id: tempId, media_url: null, created_at: new Date().toISOString(), read: false, delivered: false, deleted: false, sending: true };
     const dmTarget = activeProfile.id;
     if (navigator.onLine === false) {
@@ -14418,7 +14715,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       return;
     }
     setMessages((prev) => [...prev, optimistic]);
-    const styledText = textSize !== 'm' || !!textColor;
+    const styledText = textSize !== 'm' || !!textColor || !!textFont;
     let sendResult;
     try {
       sendResult = (replyId || styledText)
@@ -14426,6 +14723,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         : await sendMessage(session.user.id, dmTarget, 'text', text, null);
     } catch (thrown) {
       sendResult = { data: null, error: thrown };
+    }
+    if (sendResult && sendResult.error && /text_font/i.test(String(sendResult.error.message || ''))) {
+      const { text_font: droppedFont, ...plainRow } = dmRow;
+      try { sendResult = await supabase.from('messages').insert(plainRow).select().single(); } catch (thrown) { sendResult = { data: null, error: thrown }; }
     }
     const data = sendResult && sendResult.data;
     if (!data) {
@@ -14889,6 +15190,16 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     }, 15000);
     return () => clearInterval(t);
   }, []);
+
+  useEffect(() => { ensureTextFonts(); }, []);
+
+  useEffect(() => {
+    if (draft.trim()) return;
+    setShowTextStyle(false);
+    if (textSize !== 'm') setTextSize('m');
+    if (textColor) setTextColor(null);
+    if (textFont) setTextFont(null);
+  }, [draft]);
 
   const toggleSaveMessage = async (m) => {
     setContextMenuFor(null);
@@ -15474,7 +15785,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         }
         try { localStorage.setItem(mergedFlag, '1'); } catch {}
       }
-      writeFavoriteKeys(remote);
+      const localOrder = [...getFavoriteStickerKeys()];
+      const ordered = [...localOrder.filter((k) => remote.has(k)), ...[...remote].filter((k) => !localOrder.includes(k))];
+      writeFavoriteKeys(new Set(ordered));
     };
     pull();
     const channel = supabase.channel('favorites-' + me.id)
@@ -16276,6 +16589,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               overflow: 'hidden',
               borderTopLeftRadius: 22,
               borderTopRightRadius: 22,
+              borderBottomLeftRadius: 26,
+              borderBottomRightRadius: 26,
               transform: 'translateZ(0)',
               ...(activeNameBarKey
                 ? (nameBarBgStyle(activeNameBarKey) || {})
@@ -16456,32 +16771,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               </div>
             )}
 
-            {showTextStyle && (
-              <div style={{ padding: '8px 14px 2px', display: 'flex', flexDirection: 'column', gap: 8 }} className="zchat-fade">
-                <div style={{ display: 'flex', gap: 7 }}>
-                  {TEXT_SIZES.map(([key, label, px]) => (
-                    <div key={key} role="button" onClick={() => setTextSize(key)} style={{
-                      flex: 1, textAlign: 'center', padding: '7px 4px', borderRadius: 12, cursor: 'pointer',
-                      background: textSize === key ? theme.coral : theme.rowBg,
-                      color: textSize === key ? 'white' : theme.ink,
-                      fontWeight: 800, fontSize: Math.min(17, px * 0.7),
-                    }}>{label}</div>
-                  ))}
-                </div>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <div role="button" onClick={() => setTextColor(null)} style={{
-                    width: 28, height: 28, borderRadius: 14, cursor: 'pointer', flexShrink: 0,
-                    border: `2px solid ${textColor ? theme.border : theme.coral}`,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 900, color: theme.muted,
-                  }}>A</div>
-                  {TEXT_COLORS.map((c) => (
-                    <div key={c} role="button" onClick={() => setTextColor(c)} style={{
-                      width: 28, height: 28, borderRadius: 14, background: c, cursor: 'pointer', flexShrink: 0,
-                      border: textColor === c ? `3px solid ${theme.ink}` : `1px solid ${theme.border}`,
-                    }} />
-                  ))}
-                </div>
-              </div>
+            {showTextStyle && draft.trim() && !editingMessage && (
+              <TextStyleBar font={textFont} size={textSize} color={textColor} onFont={setTextFont} onSize={setTextSize} onColor={setTextColor} />
             )}
             <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, padding: '6px 14px', flexShrink: 0, position: 'relative', background: theme.bgGradient, paddingBottom: keyboardOpen ? 6 : 'max(6px, calc(env(safe-area-inset-bottom) - 24px))' }}>
               {activeProfile && !activeGroup && myBlockedIds.has(activeProfile.id) ? (
@@ -16530,11 +16821,17 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                     width: 40, height: 40, borderRadius: '50%', background: theme.rowBg, display: 'flex',
                     alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, color: theme.coralDeep, fontSize: 18,
                   }}><Smile size={18} /></div>
-                  <div onClick={() => setShowTextStyle((v) => !v)} aria-label="Text size and colour" style={{
-                    width: 40, height: 40, borderRadius: '50%', background: showTextStyle ? theme.coral : theme.rowBg, display: 'flex',
-                    alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0,
-                    color: showTextStyle ? 'white' : (textColor || theme.coralDeep), fontWeight: 900, fontSize: 15, letterSpacing: '-0.04em',
-                  }}>Aa</div>
+                  <div aria-hidden={!(draft.trim() && !editingMessage)} style={{
+                    width: draft.trim() && !editingMessage ? 40 : 0, marginRight: draft.trim() && !editingMessage ? 0 : -8, opacity: draft.trim() && !editingMessage ? 1 : 0,
+                    overflow: 'hidden', flexShrink: 0, transition: 'width 0.22s ease, margin 0.22s ease, opacity 0.18s ease',
+                    pointerEvents: draft.trim() && !editingMessage ? 'auto' : 'none',
+                  }}>
+                    <div onClick={() => setShowTextStyle((v) => !v)} aria-label="Text style" role="button" style={{
+                      width: 40, height: 40, borderRadius: '50%', background: showTextStyle ? theme.coral : theme.rowBg, display: 'flex',
+                      alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+                      color: showTextStyle ? 'white' : (textColor || theme.coralDeep), fontWeight: 900, fontSize: 15, letterSpacing: '-0.04em',
+                    }}>Aa</div>
+                  </div>
                   {!COMPOSER_AUTOSIZE && (
                     <textarea ref={composerMirrorRef} aria-hidden="true" tabIndex={-1} readOnly rows={1} defaultValue=""
                       style={{ position: 'absolute', left: 0, top: 0, height: 0, visibility: 'hidden', overflow: 'hidden', pointerEvents: 'none', zIndex: -1, resize: 'none', boxSizing: 'border-box', padding: '9px 14px', border: '1px solid transparent', fontFamily: FONT, fontSize: 15, lineHeight: 1.35, wordBreak: 'break-word', whiteSpace: 'pre-wrap' }} />
@@ -16560,6 +16857,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                       wordBreak: 'break-word',
                       border: `1px solid ${theme.border}`, background: theme.inputBg, color: theme.ink,
                       fontFamily: FONT, fontSize: 15, outline: 'none', lineHeight: 1.35,
+                      ...previewTextCss(textFont, textSize, textColor, theme.ink),
                     }}
                   />
                   </>
@@ -16631,7 +16929,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             )}
 
             {showStickers && (
-              <StickerPicker onPick={sendSticker} onClose={() => setShowStickers(false)} />
+              <StickerPicker onPick={sendSticker} userId={session.user.id} onClose={() => setShowStickers(false)} />
             )}
           </>
         ) : (
