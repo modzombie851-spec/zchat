@@ -7887,7 +7887,7 @@ function ChatMediaPanel({ title, myId, otherId, groupId, hiddenIds, labelFor, on
   const load = async (which) => {
     const myReq = ++reqIdRef.current;
     setErr((prev) => ({ ...prev, [which]: '' }));
-    let q = supabase.from('messages').select('id, type, media_url, content, sender_id, created_at, trim_start, trim_end, overlay_url, expires_at')
+    let q = supabase.from('messages').select('*')
       .eq('deleted', false).order('created_at', { ascending: false }).limit(CHAT_MEDIA_LIMIT);
     q = scopeQuery(q);
     q = which === 'links' ? q.eq('type', 'text') : which === 'voice' ? q.eq('type', 'audio') : q.in('type', ['image', 'video']);
@@ -9266,7 +9266,7 @@ function StoryTray({ me, myStories, trayUsers, seen, onAdd, onOpen }) {
   );
 }
 
-const APP_VERSION = '7.5V';
+const APP_VERSION = '7.6V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
