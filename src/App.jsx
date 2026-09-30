@@ -4656,6 +4656,7 @@ function AccountPrivacyPanel({ profile, onClose, onSaved }) {
 const PROFILE_LINK_REGEX = /^https?:\/\/[^\s/]+\/\?profile=([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
 
 const CHAT_HISTORY_LIMIT = 800;
+const CHAT_MEDIA_LIMIT = 3000;
 const PUBLIC_SITE_URL = 'https://getzchat.com';
 function siteOrigin() {
   if (typeof window === 'undefined') return PUBLIC_SITE_URL;
@@ -7869,13 +7870,36 @@ function extractLinks(text) {
   return found;
 }
 
-function ChatMediaPanel({ title, messages, labelFor, onClose, onOpenImage, onOpenVideo, onJump }) {
+function ChatMediaPanel({ title, myId, otherId, groupId, hiddenIds, labelFor, onClose, onOpenImage, onOpenVideo, onJump }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
   const [tab, setTab] = useState('media');
   const [picking, setPicking] = useState(false);
   const [picked, setPicked] = useState(() => new Set());
   const togglePick = (id) => setPicked((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const [store, setStore] = useState({ media: null, links: null, voice: null });
+  const [err, setErr] = useState({ media: '', links: '', voice: '' });
+  const reqIdRef = useRef(0);
+
+  const scopeQuery = (q) => (groupId ? q.eq('group_id', groupId) : q.is('group_id', null).or(`and(sender_id.eq.${myId},receiver_id.eq.${otherId}),and(sender_id.eq.${otherId},receiver_id.eq.${myId})`));
+  const stillFresh = (m) => !hiddenIds.has(m.id) && !(m.expires_at && new Date(m.expires_at).getTime() <= Date.now());
+
+  const load = async (which) => {
+    const myReq = ++reqIdRef.current;
+    setErr((prev) => ({ ...prev, [which]: '' }));
+    let q = supabase.from('messages').select('id, type, media_url, content, sender_id, created_at, trim_start, trim_end, overlay_url, expires_at')
+      .eq('deleted', false).order('created_at', { ascending: false }).limit(CHAT_MEDIA_LIMIT);
+    q = scopeQuery(q);
+    q = which === 'links' ? q.eq('type', 'text') : which === 'voice' ? q.eq('type', 'audio') : q.in('type', ['image', 'video']);
+    const { data, error } = await q;
+    if (reqIdRef.current !== myReq) return;
+    if (error) { setErr((prev) => ({ ...prev, [which]: friendlyError(error, "Couldn't load this. Try again.") })); return; }
+    setStore((prev) => ({ ...prev, [which]: (data || []).filter(stillFresh) }));
+  };
+
+  useEffect(() => { setStore({ media: null, links: null, voice: null }); setErr({ media: '', links: '', voice: '' }); load('media'); }, [otherId, groupId]);
+  useEffect(() => { if (store[tab] === null && !err[tab]) load(tab); }, [tab]);
+
   const downloadOne = async (m) => {
     try {
       const res = await fetch(m.media_url);
@@ -7892,19 +7916,18 @@ function ChatMediaPanel({ title, messages, labelFor, onClose, onOpenImage, onOpe
     playUiSound('tap');
     setPicking(false); setPicked(new Set());
   };
-  const visible = messages.filter((m) => !m.deleted);
-  const media = visible.filter((m) => (m.type === 'image' || m.type === 'video') && m.media_url).slice().reverse();
+  const media = (store.media || []).filter((m) => m.media_url).slice().reverse();
   const links = [];
-  visible.slice().reverse().forEach((m) => {
-    if (m.type === 'system') return;
+  (store.links || []).slice().reverse().forEach((m) => {
     extractLinks(m.content).forEach((link, i) => links.push({ key: `${m.id}-${i}`, link, m }));
   });
-  const voices = visible.filter((m) => m.type === 'audio' && m.media_url).slice().reverse();
+  const voices = (store.voice || []).filter((m) => m.media_url).slice().reverse();
   const dateLabel = (iso) => new Date(iso).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' });
+  const countFor = (key, list) => (store[key] === null ? '' : ` (${list.length})`);
   const tabs = [
-    { key: 'media', label: `Media (${media.length})` },
-    { key: 'links', label: `Links (${links.length})` },
-    { key: 'voice', label: `Voice (${voices.length})` },
+    { key: 'media', label: `Media${countFor('media', media)}` },
+    { key: 'links', label: `Links${countFor('links', links)}` },
+    { key: 'voice', label: `Voice${countFor('voice', voices)}` },
   ];
   const openLink = (link) => {
     const isEmail = link.includes('@') && !/^https?:|^www\./i.test(link);
@@ -7915,7 +7938,7 @@ function ChatMediaPanel({ title, messages, labelFor, onClose, onOpenImage, onOpe
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 60, background: theme.panelBg, display: 'flex', flexDirection: 'column' }} className="zchat-fade">
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', paddingTop: 'calc(14px + env(safe-area-inset-top))', flexShrink: 0 }}>
-        <ArrowLeft size={20} style={{ cursor: 'pointer', color: theme.ink }} onClick={onClose} />
+        <div role="button" aria-label="Back" onClick={onClose} style={{ cursor: 'pointer', color: theme.ink, display: 'flex' }}><ArrowLeft size={20} /></div>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontWeight: 800, fontSize: 16.5, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</div>
           <div style={{ fontSize: 11.5, color: theme.muted }}>Media, links and voice messages</div>
@@ -7930,7 +7953,16 @@ function ChatMediaPanel({ title, messages, labelFor, onClose, onOpenImage, onOpe
         ))}
       </div>
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', paddingBottom: 'calc(12px + env(safe-area-inset-bottom))' }}>
-        {tab === 'media' && (
+        {err[tab] && (
+          <div style={{ textAlign: 'center', padding: '30px 20px' }}>
+            <div style={{ fontSize: 13, color: theme.danger, fontWeight: 700, marginBottom: 10 }}>{err[tab]}</div>
+            <div role="button" onClick={() => load(tab)} style={{ display: 'inline-block', fontSize: 13, fontWeight: 800, color: theme.coralDeep, cursor: 'pointer' }}>Try again</div>
+          </div>
+        )}
+        {!err[tab] && store[tab] === null && (
+          <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><Spinner size={22} color={theme.ink} /></div>
+        )}
+        {!err.media && store.media !== null && tab === 'media' && (
           media.length ? (
             <>
               <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '8px 12px 0' }}>
@@ -7977,7 +8009,7 @@ function ChatMediaPanel({ title, messages, labelFor, onClose, onOpenImage, onOpe
             </>
           ) : <div style={{ textAlign: 'center', padding: 40, fontSize: 13, color: theme.muted }}>Photos and videos you share will show here</div>
         )}
-        {tab === 'links' && (
+        {!err.links && store.links !== null && tab === 'links' && (
           links.length ? links.map(({ key, link, m }) => (
             <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderBottom: `1px solid ${theme.border}` }}>
               <div style={{ width: 42, height: 42, borderRadius: 12, background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.coral, flexShrink: 0 }}>
@@ -7991,7 +8023,7 @@ function ChatMediaPanel({ title, messages, labelFor, onClose, onOpenImage, onOpe
             </div>
           )) : <div style={{ textAlign: 'center', padding: 40, fontSize: 13, color: theme.muted }}>Links and emails you share will show here</div>
         )}
-        {tab === 'voice' && (
+        {!err.voice && store.voice !== null && tab === 'voice' && (
           voices.length ? voices.map((m) => (
             <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderBottom: `1px solid ${theme.border}` }}>
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -9234,7 +9266,7 @@ function StoryTray({ me, myStories, trayUsers, seen, onAdd, onOpen }) {
   );
 }
 
-const APP_VERSION = '7.4V';
+const APP_VERSION = '7.5V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -17410,7 +17442,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         );
       })()}
       {showChatMedia && (activeProfile || activeGroup) && (
-        <ChatMediaPanel title={activeGroup ? activeGroup.name : activeProfile.name} messages={messages} labelFor={labelForSender}
+        <ChatMediaPanel title={activeGroup ? activeGroup.name : activeProfile.name}
+          myId={session.user.id} otherId={activeGroup ? null : activeProfile.id} groupId={activeGroup ? activeGroup.id : null}
+          hiddenIds={getHiddenMsgIds()} labelFor={labelForSender}
           onClose={() => setShowChatMedia(false)} onOpenImage={setViewerUrl} onOpenVideo={setViewerVideoUrl}
           onJump={(id) => { setShowChatMedia(false); setTimeout(() => jumpToMessage(id), 150); }} />
       )}
