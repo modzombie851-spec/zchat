@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useMemo, createContext, useContext } from 'react';
 import ReactDOM from 'react-dom';
 import {
-  Send, Paperclip, Search, Mail, ShieldCheck, ShieldOff, AtSign, LogOut, Eye, EyeOff, Lock, MessageCircle,
+  Send, Paperclip, Search, Mail, ShieldCheck, ShieldOff, AtSign, LogOut, Eye, EyeOff, Lock, MessageCircle, SlidersHorizontal, LayoutGrid,
   Flag, X, Trash2, User, Phone, MoreVertical, Image as ImageIcon, Video as VideoIcon,
   Smile, ArrowLeft, Check, CheckCheck, Settings as SettingsIcon, Moon, Sun, UserPlus,
   FileText, HelpCircle, ChevronRight, ChevronLeft, Compass, Bell, Volume2, Volume1, VolumeX, Palette, Mic, Play, Pause, Download, Users, Camera, Reply, Forward, Ban, Edit3, Archive, Sparkles, Bookmark, Share2, Copy, Crop, Type, Pencil, Undo2, Scissors, BellOff, Link as LinkIcon, ShieldAlert, Heart, Repeat, PhoneOff, MicOff, VideoOff, SwitchCamera, Clock, Timer, Smartphone, Plus,
@@ -168,13 +168,37 @@ const glass = (theme, extra = {}) => ({
   ...extra,
 });
 
+function ZActionSheet({ title, options, onClose }) {
+  useBackClose(true, onClose);
+  const { theme } = useTheme();
+  const sheet = (
+    <div onClick={onClose} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 500, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'flex-end', fontFamily: FONT }}>
+      <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ width: '100%', background: theme.panelBg, borderRadius: '24px 24px 0 0', padding: '20px 16px calc(22px + env(safe-area-inset-bottom))' }}>
+        <div style={{ fontWeight: 800, fontSize: 16, color: theme.ink, padding: '0 4px 14px' }}>{title}</div>
+        {options.map((opt) => (
+          <div key={opt.label} role="button" onClick={() => { opt.onClick(); onClose(); }} style={{
+            display: 'flex', alignItems: 'center', gap: 14, padding: '12px 8px', cursor: 'pointer', borderRadius: 14,
+          }}>
+            <div style={{ width: 42, height: 42, borderRadius: 13, background: `${theme.coral}1F`, color: theme.coralDeep, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{opt.icon}</div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 14.5, fontWeight: 700, color: theme.ink }}>{opt.label}</div>
+              {opt.sub && <div style={{ fontSize: 12, color: theme.muted, marginTop: 1 }}>{opt.sub}</div>}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+  return ReactDOM.createPortal(sheet, document.body);
+}
+
 function ZBrand({ size = 22, showTag = false }) {
   const { theme, chatTheme } = useTheme();
   const dotColor = chatTheme === 'love' ? '#FF4D8D' : chatTheme === 'neon' ? '#00FFDC' : theme.teal;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span style={{ fontFamily: 'Georgia, serif', fontWeight: 800, fontSize: size, color: theme.coral, letterSpacing: -0.5, filter: `drop-shadow(0 0 8px ${theme.coral}99)` }}>Z</span>
+        <span style={{ fontFamily: 'Georgia, serif', fontWeight: 800, fontSize: size, letterSpacing: -0.5, background: 'linear-gradient(160deg, #bfe4ff, #7C5CFC)', WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent', filter: 'drop-shadow(0 0 8px rgba(124,92,255,0.6))' }}>Z</span>
         <span style={{ fontFamily: 'Georgia, serif', fontWeight: 700, fontSize: size * 0.86, color: theme.ink }}>chat</span>
         <span style={{ width: size * 0.24, height: size * 0.24, borderRadius: '50%', background: dotColor, boxShadow: `0 0 8px ${dotColor}`, flexShrink: 0 }} />
       </div>
@@ -9246,7 +9270,7 @@ function StoryTray({ me, myStories, trayUsers, seen, onAdd, onOpen }) {
   return (
     <div style={{ display: 'flex', gap: 16, padding: '16px 18px 12px', marginTop: -14, overflowX: 'auto', overflowY: 'hidden', flexShrink: 0, WebkitOverflowScrolling: 'touch' }}>
       <div onClick={() => (hasMine ? onOpen(me.id) : onAdd())} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0, cursor: 'pointer', position: 'relative' }}>
-        <StoryAvatar profile={me} size={62} ring={hasMine ? (myStories.every((s) => seen.has(s.id)) ? 'seen' : 'unseen') : 'none'} tint={theme.coral} />
+        <StoryAvatar profile={me} size={68} ring={hasMine ? (myStories.every((s) => seen.has(s.id)) ? 'seen' : 'unseen') : 'none'} tint={theme.coral} />
         <div role="button" aria-label="Add to your story" onClick={(e) => { e.stopPropagation(); onAdd(); }} style={{
           position: 'absolute', right: -2, top: 42, zIndex: 6, width: 24, height: 24, borderRadius: '50%', background: theme.coral, border: `2.5px solid ${theme.panelBg}`,
           display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800, fontSize: 17, lineHeight: 1, boxSizing: 'border-box',
@@ -9257,7 +9281,7 @@ function StoryTray({ me, myStories, trayUsers, seen, onAdd, onOpen }) {
         const allSeen = u.stories.every((s) => seen.has(s.id));
         return (
           <div key={u.profile.id} onClick={() => onOpen(u.profile.id)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0, cursor: 'pointer' }}>
-            <StoryAvatar profile={u.profile} size={62} ring={allSeen ? 'seen' : 'unseen'} tint={colorForName(u.profile.name || u.profile.username)} />
+            <StoryAvatar profile={u.profile} size={68} ring={allSeen ? 'seen' : 'unseen'} tint={colorForName(u.profile.name || u.profile.username)} />
             {label(<>{(u.profile.name || u.profile.username || '').split(' ')[0]}<VerifiedBadge tier={u.profile.verified} custom={u.profile.custom_badge} size={10} style={{ marginLeft: 2 }} /></>, !allSeen)}
           </div>
         );
@@ -9266,7 +9290,7 @@ function StoryTray({ me, myStories, trayUsers, seen, onAdd, onOpen }) {
   );
 }
 
-const APP_VERSION = '7.7V';
+const APP_VERSION = '7.8V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -13115,6 +13139,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const prevMsgCountRef = useRef(0);
   const storyInputRef = useRef(null);
   const homeSearchInputRef = useRef(null);
+  const [showCreateSheet, setShowCreateSheet] = useState(false);
+  const [showMoreSheet, setShowMoreSheet] = useState(false);
   const openStoryRefRef = useRef(null);
   const storyDataRef = useRef(null);
   const reloadStoriesRef = useRef(null);
@@ -16402,9 +16428,15 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             onDismiss={() => { setInstallBannerDismissed(true); try { localStorage.setItem('zchat-install-banner-dismissed', '1'); } catch {} }} />
         )}
         </div>
+        <div style={{ position: 'relative', flexShrink: 0, overflow: 'hidden' }}>
+          <div aria-hidden="true" style={{
+            position: 'absolute', inset: 0, pointerEvents: 'none',
+            background: 'radial-gradient(420px 160px at 15% -20%, rgba(124,92,255,0.30), transparent 65%), radial-gradient(320px 150px at 95% -10%, rgba(61,165,245,0.26), transparent 60%)',
+          }} />
         <div style={{
+          position: 'relative',
           padding: '14px 16px 10px',
-          display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexShrink: 0,
+          display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
         }}>
           <ZBrand size={22} showTag />
           <div onClick={() => setProfileOf(me)} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', maxWidth: 160 }}>
@@ -16413,61 +16445,77 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               <div style={{ fontSize: 10, color: theme.teal, fontWeight: 600 }}>Online</div>
               {me.bio && <div style={{ fontSize: 9.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 130 }}>"{me.bio}"</div>}
             </div>
-            <span style={{ display: 'inline-flex', borderRadius: '50%', boxShadow: `0 0 0 2px ${theme.coral}, 0 0 14px ${theme.coral}aa` }}><Avatar emoji={me.avatar} name={me.name} frame={me.avatar_frame} size={34} /></span>
+            <span style={{ display: 'inline-flex', borderRadius: '50%', boxShadow: '0 0 0 2.5px #3DA5F5, 0 0 16px rgba(61,165,245,0.8)' }}><Avatar emoji={me.avatar} name={me.name} frame={me.avatar_frame} size={44} /></span>
           </div>
         </div>
+        </div>
 
-        <div style={{ padding: '0 16px 10px', flexShrink: 0 }}>
-          <div style={{ position: 'relative' }}>
-            <Search size={15} color={theme.muted} style={{ position: 'absolute', left: 12, top: 11 }} />
+        <div style={{ padding: '0 16px 12px', flexShrink: 0, display: 'flex', gap: 8, alignItems: 'center' }}>
+          <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
+            <Search size={16} color={theme.muted} style={{ position: 'absolute', left: 13, top: 12 }} />
             <input ref={homeSearchInputRef} value={search} onChange={(e) => doSearch(e.target.value)} placeholder="Search by username" autoCapitalize="none"
-              style={{ ...inputStyle(theme), padding: '9px 12px 9px 34px', fontSize: 13.5 }} />
-            {searching && <div style={{ position: 'absolute', right: 12, top: 10 }}><Spinner size={13} color={theme.muted} /></div>}
+              style={{ ...inputStyle(theme), padding: '10px 12px 10px 36px', fontSize: 14, borderRadius: 22, border: `1.5px solid #3DA5F566`, boxShadow: '0 0 12px rgba(61,165,245,0.28)' }} />
+            {searching && <div style={{ position: 'absolute', right: 12, top: 11 }}><Spinner size={13} color={theme.muted} /></div>}
           </div>
+          <div role="button" aria-label="Filter options" style={{
+            width: 44, height: 44, borderRadius: 15, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+            border: '1.5px solid #3DA5F566', boxShadow: '0 0 12px rgba(61,165,245,0.28)', color: theme.ink,
+          }}><SlidersHorizontal size={17} /></div>
         </div>
 
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '2px 14px 12px', flexShrink: 0,
         }}>
           <div onClick={() => setShowMail(true)} style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer', flexShrink: 0 }}>
-            <div style={{ width: 38, height: 38, borderRadius: 12, background: theme.rowBg, boxShadow: `0 0 0 1px ${theme.teal}55, 0 0 10px ${theme.teal}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.teal }}><Mail size={16} /></div>
+            <div style={{ width: 44, height: 44, borderRadius: 14, background: theme.rowBg, border: `1.5px solid ${theme.teal}88`, boxShadow: `0 0 12px ${theme.teal}55`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.teal }}><Mail size={18} /></div>
             {unreadMailCount > 0 && (
               <div style={{ position: 'absolute', top: -3, right: -3, background: theme.danger, color: 'white', fontSize: 9, fontWeight: 800, borderRadius: 8, minWidth: 15, height: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px' }}>{unreadMailCount > 99 ? '99+' : unreadMailCount}</div>
             )}
             <span style={{ fontSize: 9, color: theme.muted, fontWeight: 600 }}>Mail</span>
           </div>
           <div onClick={() => setShowFollowRequests(true)} style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer', flexShrink: 0 }}>
-            <div style={{ width: 38, height: 38, borderRadius: 12, background: theme.rowBg, boxShadow: `0 0 0 1px ${theme.teal}55, 0 0 10px ${theme.teal}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.teal }}><Bell size={16} /></div>
+            <div style={{ width: 44, height: 44, borderRadius: 14, background: theme.rowBg, border: `1.5px solid ${theme.teal}88`, boxShadow: `0 0 12px ${theme.teal}55`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.teal }}><Bell size={18} /></div>
             {followRequestCount > 0 && (
               <div style={{ position: 'absolute', top: -3, right: -3, background: theme.danger, color: 'white', fontSize: 9, fontWeight: 800, borderRadius: 8, minWidth: 15, height: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px' }}>{followRequestCount}</div>
             )}
             <span style={{ fontSize: 9, color: theme.muted, fontWeight: 600 }}>Requests</span>
           </div>
           <div onClick={() => setShowCreateGroup(true)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer', flexShrink: 0 }}>
-            <div style={{ width: 38, height: 38, borderRadius: 12, background: theme.rowBg, boxShadow: `0 0 0 1px ${theme.teal}55, 0 0 10px ${theme.teal}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.teal }}><Users size={16} /></div>
+            <div style={{ width: 44, height: 44, borderRadius: 14, background: theme.rowBg, border: `1.5px solid ${theme.teal}88`, boxShadow: `0 0 12px ${theme.teal}55`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.teal }}><Users size={18} /></div>
             <span style={{ fontSize: 9, color: theme.muted, fontWeight: 600 }}>Group</span>
           </div>
           <div onClick={() => { setFeedOpen(true); playUiSound('tap'); }} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer', flexShrink: 0 }}>
-            <div style={{ width: 38, height: 38, borderRadius: 12, background: 'linear-gradient(135deg, #ec4899, #8b5cf6)', boxShadow: '0 0 0 1.5px #d946ef, 0 0 16px rgba(217,70,239,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white' }}><Play size={18} fill="white" /></div>
-            <span style={{ fontSize: 9, color: theme.muted, fontWeight: 600 }}>Feed</span>
+            <div style={{ width: 44, height: 44, borderRadius: 14, background: 'linear-gradient(135deg, #ec4899, #8b5cf6)', boxShadow: '0 0 0 1.5px #d946ef, 0 0 18px rgba(217,70,239,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white' }}><Play size={19} fill="white" /></div>
+            <span style={{ fontSize: 9, color: '#e879f9', fontWeight: 700 }}>Feed</span>
+            <span style={{ width: 18, height: 2.5, borderRadius: 2, background: '#e879f9', marginTop: -1 }} />
           </div>
           <div onClick={() => setShowDiscover(true)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer', flexShrink: 0 }}>
-            <div style={{ width: 38, height: 38, borderRadius: 12, background: theme.rowBg, boxShadow: `0 0 0 1px ${theme.teal}55, 0 0 10px ${theme.teal}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.teal }}><Compass size={16} /></div>
+            <div style={{ width: 44, height: 44, borderRadius: 14, background: theme.rowBg, border: `1.5px solid ${theme.teal}88`, boxShadow: `0 0 12px ${theme.teal}55`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.teal }}><Compass size={18} /></div>
             <span style={{ fontSize: 9, color: theme.muted, fontWeight: 600 }}>Discover</span>
           </div>
           <div onClick={() => setShowArchived(true)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer', flexShrink: 0 }}>
-            <div style={{ width: 38, height: 38, borderRadius: 12, background: theme.rowBg, boxShadow: `0 0 0 1px ${theme.teal}55, 0 0 10px ${theme.teal}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.teal }}><Archive size={16} /></div>
+            <div style={{ width: 44, height: 44, borderRadius: 14, background: theme.rowBg, border: `1.5px solid ${theme.teal}88`, boxShadow: `0 0 12px ${theme.teal}55`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.teal }}><Archive size={18} /></div>
             <span style={{ fontSize: 9, color: theme.muted, fontWeight: 600 }}>Archive</span>
           </div>
           <div onClick={() => setShowSettings(true)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer', flexShrink: 0 }}>
-            <div style={{ width: 38, height: 38, borderRadius: 12, background: theme.rowBg, boxShadow: `0 0 0 1px ${theme.teal}55, 0 0 10px ${theme.teal}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.teal }}><SettingsIcon size={16} /></div>
+            <div style={{ width: 44, height: 44, borderRadius: 14, background: theme.rowBg, border: `1.5px solid ${theme.teal}88`, boxShadow: `0 0 12px ${theme.teal}55`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.teal }}><SettingsIcon size={18} /></div>
             <span style={{ fontSize: 9, color: theme.muted, fontWeight: 600 }}>Settings</span>
           </div>
         </div>
 
         {search.trim().length < 2 && (
-          <StoryTray me={me} myStories={activeStoriesOf(session.user.id)} trayUsers={trayUsers} seen={storyData.seen}
-            onAdd={() => storyInputRef.current && storyInputRef.current.click()} onOpen={(id) => openStoriesFor(id)} />
+          <div style={{ margin: '4px 16px 14px', borderRadius: 20, border: `1px solid ${theme.border}`, background: theme.panelBg, overflow: 'hidden', flexShrink: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px 4px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontWeight: 800, fontSize: 14.5, color: theme.ink }}>
+                <Sparkles size={15} color="#8B7CFF" />Stories
+              </div>
+              <div role="button" onClick={() => setShowDiscover(true)} style={{ display: 'flex', alignItems: 'center', gap: 2, fontSize: 12.5, fontWeight: 700, color: '#3DA5F5', cursor: 'pointer' }}>
+                See all<ChevronRight size={14} />
+              </div>
+            </div>
+            <StoryTray me={me} myStories={activeStoriesOf(session.user.id)} trayUsers={trayUsers} seen={storyData.seen}
+              onAdd={() => storyInputRef.current && storyInputRef.current.click()} onOpen={(id) => openStoriesFor(id)} />
+          </div>
         )}
 
         {search.trim().length >= 2 ? (
@@ -16506,9 +16554,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                   return (
                     <div key={f.k} onClick={() => { setListFilter(f.k); playUiSound('tap'); }} style={{
                       display: 'flex', alignItems: 'center', gap: 6,
-                      padding: '8px 14px', borderRadius: 22, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
-                      background: on ? `linear-gradient(135deg, ${theme.coral}, ${theme.coralDeep})` : theme.rowBg,
-                      boxShadow: on ? `0 0 14px ${theme.coral}88` : 'none', color: on ? 'white' : theme.muted,
+                      padding: '9px 16px', borderRadius: 22, fontSize: 13, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
+                      background: on ? 'linear-gradient(135deg, #7C5CFC, #3DA5F5)' : theme.rowBg,
+                      boxShadow: on ? '0 0 16px rgba(124,92,255,0.7)' : 'none', color: on ? 'white' : theme.muted,
                     }}>
                       {f.l}
                       {f.n > 0 && (
@@ -16524,11 +16572,14 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                 });
               })()}
               <div role="button" aria-label="Pinned chats" onClick={() => { setListFilter((prev) => (prev === 'pinned' ? 'all' : 'pinned')); playUiSound('tap'); }} style={{
-                width: 34, height: 34, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-                background: listFilter === 'pinned' ? '#ec4899' : 'rgba(236,72,153,0.12)',
-                boxShadow: listFilter === 'pinned' ? '0 0 14px rgba(236,72,153,0.75)' : 'none',
-                border: listFilter === 'pinned' ? 'none' : '1.5px solid #ec4899',
-              }}><Heart size={15} color={listFilter === 'pinned' ? 'white' : '#ec4899'} fill={listFilter === 'pinned' ? 'white' : 'none'} /></div>
+                width: 38, height: 38, borderRadius: '50%', flexShrink: 0, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+                background: listFilter === 'pinned' ? 'linear-gradient(135deg, #7C5CFC, #3DA5F5)' : theme.rowBg,
+                boxShadow: listFilter === 'pinned' ? '0 0 16px rgba(124,92,255,0.7)' : 'none',
+                border: listFilter === 'pinned' ? 'none' : `1.5px solid ${theme.border}`,
+              }}>
+                <SlidersHorizontal size={15} color={listFilter === 'pinned' ? 'white' : theme.muted} />
+                {listFilter !== 'pinned' && <span style={{ position: 'absolute', top: -1, right: -1, width: 9, height: 9, borderRadius: '50%', background: theme.danger, border: `1.5px solid ${theme.panelBg}` }} />}
+              </div>
             </div>
             <div
               ref={sidebarListRef}
@@ -16563,11 +16614,11 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                       onPointerDown={(e) => startRowPress(e, { kind: 'group', group: g })} onPointerMove={moveRowPress} onPointerUp={endRowPress} onPointerLeave={endRowPress} onPointerCancel={endRowPress}
                       onContextMenu={(e) => { e.preventDefault(); endRowPress(); setRowSheet({ kind: 'group', group: g }); }}
                       style={{
-                      display: 'flex', alignItems: 'center', gap: 12, padding: '10px 10px', marginBottom: 8, cursor: 'pointer', borderRadius: 18,
+                      display: 'flex', alignItems: 'center', gap: 12, padding: '12px 12px', marginBottom: 9, cursor: 'pointer', borderRadius: 18,
                       background: isActive ? theme.rowBg : theme.panelBg, position: 'relative',
-                      boxShadow: `0 0 0 1px ${gGlow}55, 0 0 14px ${gGlow}33`,
+                      border: `1.5px solid ${gGlow}99`, boxShadow: `0 0 16px ${gGlow}40`,
                     }}>
-                      <span style={{ display: 'inline-flex', borderRadius: '50%', flexShrink: 0, boxShadow: `0 0 0 2px ${gGlow}, 0 0 12px ${gGlow}aa` }}><GroupAvatar avatar={g.avatar} name={g.name} size={46} /></span>
+                      <span style={{ display: 'inline-flex', borderRadius: '50%', flexShrink: 0, boxShadow: `0 0 0 2px ${gGlow}, 0 0 12px ${gGlow}aa` }}><GroupAvatar avatar={g.avatar} name={g.name} size={50} /></span>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <span style={{ fontWeight: g.unread ? 800 : 700, fontSize: 14, color: theme.ink, display: 'flex', alignItems: 'center', gap: 4, minWidth: 0, flex: '1 1 auto', marginRight: 8 }}>
@@ -16578,9 +16629,12 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                         <PreviewLine preview={g.preview || { kind: 'text', text: 'No messages yet' }} prefix={g.previewPrefix} color={g.unread ? theme.ink : theme.muted} weight={g.unread ? 700 : 400} />
                       </div>
                       {isActiveUntil(g.mutedUntil) && <BellOff size={14} color={theme.muted} style={{ flexShrink: 0 }} />}
-                      {g.unread > 0 && <div style={{ minWidth: 20, height: 20, padding: '0 5px', boxSizing: 'border-box', borderRadius: 10, background: isActiveUntil(g.mutedUntil) ? theme.muted : theme.coral, color: 'white', fontSize: 10.5, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{g.unread > 99 ? '99+' : g.unread}</div>}
-                      <MoreVertical size={15} color={theme.muted} style={{ cursor: 'pointer', flexShrink: 0 }}
-                        onClick={(e) => { e.stopPropagation(); setGroupRowMenuAnchor(e.currentTarget); setGroupRowMenuFor(groupRowMenuFor === g.id ? null : g.id); }} />
+                      {g.unread > 0 && <div style={{ minWidth: 22, height: 22, padding: '0 6px', boxSizing: 'border-box', borderRadius: 11, background: isActiveUntil(g.mutedUntil) ? theme.muted : 'linear-gradient(135deg, #7C5CFC, #3DA5F5)', color: 'white', fontSize: 11, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{g.unread > 99 ? '99+' : g.unread}</div>}
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 7, flexShrink: 0 }}>
+                        <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#8B7CFF', boxShadow: '0 0 6px #8B7CFF' }} />
+                        <MoreVertical size={15} color={theme.muted} style={{ cursor: 'pointer' }}
+                          onClick={(e) => { e.stopPropagation(); setGroupRowMenuAnchor(e.currentTarget); setGroupRowMenuFor(groupRowMenuFor === g.id ? null : g.id); }} />
+                      </div>
                       <SmartMenu anchorEl={groupRowMenuAnchor} open={groupRowMenuFor === g.id} onClose={() => setGroupRowMenuFor(null)} width={190}>
                         <div style={{ background: theme.panelBg, borderRadius: 14, boxShadow: '0 8px 24px rgba(0,0,0,0.2)', border: `1px solid ${theme.border}`, overflow: 'hidden' }}>
                           <div onClick={() => { toggleGroupPin(g); setGroupRowMenuFor(null); }} style={{ padding: '11px 14px', fontSize: 13, fontWeight: 600, color: theme.ink, cursor: 'pointer', borderBottom: `1px solid ${theme.border}` }}>{g.pinned ? `Unpin ${g.name}` : `Pin ${g.name}`}</div>
@@ -16600,14 +16654,14 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                     onPointerDown={(e) => startRowPress(e, { kind: 'dm', conv: c })} onPointerMove={moveRowPress} onPointerUp={endRowPress} onPointerLeave={endRowPress} onPointerCancel={endRowPress}
                     onContextMenu={(e) => { e.preventDefault(); endRowPress(); setRowSheet({ kind: 'dm', conv: c }); }}
                     style={{
-                    display: 'flex', alignItems: 'center', gap: 12, padding: '10px 10px', marginBottom: 8, cursor: 'pointer', borderRadius: 18,
+                    display: 'flex', alignItems: 'center', gap: 12, padding: '12px 12px', marginBottom: 9, cursor: 'pointer', borderRadius: 18,
                     background: isActive ? theme.rowBg : theme.panelBg, position: 'relative',
-                    boxShadow: `0 0 0 1px ${cGlow}55, 0 0 14px ${cGlow}33`,
+                    border: `1.5px solid ${cGlow}99`, boxShadow: `0 0 16px ${cGlow}40`,
                   }}>
                     <div onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); setAvatarPeek(c); }} style={{ position: 'relative', flexShrink: 0, cursor: 'pointer', display: 'inline-flex', borderRadius: '50%', boxShadow: storyRingFor(c.otherProfile.id) !== 'none' ? 'none' : `0 0 0 2px ${cGlow}, 0 0 12px ${cGlow}aa` }}>
                       {storyRingFor(c.otherProfile.id) !== 'none'
-                        ? <StoryAvatar profile={c.otherProfile} size={50} ring={storyRingFor(c.otherProfile.id)} tint={cGlow} />
-                        : <Avatar emoji={c.otherProfile.avatar} name={c.otherProfile.name} frame={c.otherProfile.avatar_frame} online={isUserOnline(c.otherProfile) && !c.otherProfile.hide_activity} size={46} />}
+                        ? <StoryAvatar profile={c.otherProfile} size={54} ring={storyRingFor(c.otherProfile.id)} tint={cGlow} />
+                        : <Avatar emoji={c.otherProfile.avatar} name={c.otherProfile.name} frame={c.otherProfile.avatar_frame} online={isUserOnline(c.otherProfile) && !c.otherProfile.hide_activity} size={50} />}
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -16622,9 +16676,12 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                       </div>
                     </div>
                     {isConvMutedForMe(c) && <BellOff size={14} color={theme.muted} style={{ flexShrink: 0 }} />}
-                    {unread && <div style={{ width: 20, height: 20, borderRadius: 10, background: isConvMutedForMe(c) ? theme.muted : theme.coral, color: 'white', fontSize: 10.5, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{unreadCounts[c.otherProfile.id]}</div>}
-                    <MoreVertical size={15} color={theme.muted} style={{ cursor: 'pointer', flexShrink: 0 }}
-                      onClick={(e) => { e.stopPropagation(); setRowMenuAnchor(e.currentTarget); setRowMenuFor(rowMenuFor === c.id ? null : c.id); }} />
+                    {unread && <div style={{ width: 22, height: 22, borderRadius: 11, background: isConvMutedForMe(c) ? theme.muted : 'linear-gradient(135deg, #7C5CFC, #3DA5F5)', color: 'white', fontSize: 11, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{unreadCounts[c.otherProfile.id]}</div>}
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 7, flexShrink: 0 }}>
+                      <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#8B7CFF', boxShadow: '0 0 6px #8B7CFF' }} />
+                      <MoreVertical size={15} color={theme.muted} style={{ cursor: 'pointer' }}
+                        onClick={(e) => { e.stopPropagation(); setRowMenuAnchor(e.currentTarget); setRowMenuFor(rowMenuFor === c.id ? null : c.id); }} />
+                    </div>
                     <SmartMenu anchorEl={rowMenuAnchor} open={rowMenuFor === c.id} onClose={() => setRowMenuFor(null)} width={190}>
                       <div style={{ background: theme.panelBg, borderRadius: 14, boxShadow: '0 8px 24px rgba(0,0,0,0.2)', border: `1px solid ${theme.border}`, overflow: 'hidden' }}>
                         <div onClick={() => { togglePin(c); setRowMenuFor(null); }} style={{ padding: '11px 14px', fontSize: 13, fontWeight: 600, color: theme.ink, cursor: 'pointer', borderBottom: `1px solid ${theme.border}` }}>{isPinnedByMe(c) ? `Unpin ${c.otherProfile.name}` : `Pin ${c.otherProfile.name}`}</div>
@@ -16642,38 +16699,51 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         )}
         <div style={{
           display: 'flex', alignItems: 'flex-end', justifyContent: 'space-around', flexShrink: 0,
-          padding: '8px 6px calc(10px + env(safe-area-inset-bottom))', borderTop: `1px solid ${theme.border}`,
+          padding: '9px 6px calc(11px + env(safe-area-inset-bottom))', borderTop: `1px solid ${theme.border}`,
           background: theme.panelBg,
         }}>
           {(() => {
             const totalUnread = conversations.filter(isUnread).length + groups.filter((g) => !g.archived && g.unread > 0).length;
             const tab = (icon, label, onClick, active, badge) => (
-              <div role="button" onClick={onClick} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer', position: 'relative', color: active ? theme.coral : theme.muted, fontSize: 10, fontWeight: 600 }}>
+              <div role="button" onClick={onClick} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, cursor: 'pointer', position: 'relative', color: active ? '#8B7CFF' : theme.muted, fontSize: 10.5, fontWeight: 600 }}>
                 {icon}
                 {badge > 0 && <div style={{ position: 'absolute', top: -6, right: -10, background: theme.danger, color: 'white', fontSize: 9, fontWeight: 800, minWidth: 15, height: 15, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px' }}>{badge > 99 ? '99+' : badge}</div>}
                 <span>{label}</span>
+                {active && <span style={{ width: 16, height: 2.5, borderRadius: 2, background: '#8B7CFF', marginTop: -1 }} />}
               </div>
             );
             return (
               <>
-                {tab(<MessageCircle size={21} />, 'Chats', () => setListFilter('all'), true, totalUnread)}
-                {tab(<Phone size={21} />, 'Calls', () => showSnack('Call history is not available yet'), false, 0)}
-                <div role="button" aria-label="New chat" onClick={() => homeSearchInputRef.current && homeSearchInputRef.current.focus()} style={{
-                  width: 52, height: 52, borderRadius: '50%', marginTop: -20, flexShrink: 0,
-                  background: `radial-gradient(circle at 35% 30%, ${theme.gold}, ${theme.coralDeep} 75%)`,
-                  boxShadow: `0 0 0 2px ${theme.coral}, 0 0 18px ${theme.coral}aa`,
+                {tab(<MessageCircle size={22} />, 'Chats', () => setListFilter('all'), true, totalUnread)}
+                {tab(<Phone size={22} />, 'Calls', () => showSnack('Call history is not available yet'), false, 0)}
+                <div role="button" aria-label="Create" onClick={() => setShowCreateSheet(true)} style={{
+                  width: 68, height: 68, borderRadius: '50%', marginTop: -30, flexShrink: 0,
+                  background: 'radial-gradient(circle at 35% 30%, #a78bfa, #3DA5F5 75%)',
+                  boxShadow: '0 0 0 3px rgba(124,92,255,0.9), 0 0 26px rgba(124,92,255,0.85)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', cursor: 'pointer',
-                }}><Plus size={24} /></div>
-                {tab(<Users size={21} />, 'People', () => setShowDiscover(true), false, 0)}
-                {tab(<Play size={21} />, 'Reels', () => { setFeedOpen(true); playUiSound('tap'); }, false, 0)}
-                <div role="button" onClick={() => setProfileOf(me)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer', color: theme.muted, fontSize: 10, fontWeight: 600 }}>
-                  <span style={{ display: 'inline-flex', borderRadius: '50%', boxShadow: `0 0 0 1.5px ${theme.coral}` }}><Avatar emoji={me.avatar} name={me.name} frame={me.avatar_frame} size={24} /></span>
-                  <span>Profile</span>
-                </div>
+                }}><Plus size={30} /></div>
+                {tab(<Users size={22} />, 'People', () => setShowDiscover(true), false, 0)}
+                {tab(<LayoutGrid size={22} />, 'More', () => setShowMoreSheet(true), false, 0)}
               </>
             );
           })()}
         </div>
+        {showCreateSheet && (
+          <ZActionSheet title="Create" onClose={() => setShowCreateSheet(false)} options={[
+            { icon: <MessageCircle size={19} />, label: 'New message', sub: 'Start a chat with someone', onClick: () => { setListFilter('all'); setTimeout(() => homeSearchInputRef.current && homeSearchInputRef.current.focus(), 250); } },
+            { icon: <ImageIcon size={19} />, label: 'New post', sub: 'Shows in Feed and on your profile as a reel', onClick: () => setProfileOf(me) },
+            { icon: <Sparkles size={19} />, label: 'New story', sub: 'Share a photo or video for 24 hours', onClick: () => storyInputRef.current && storyInputRef.current.click() },
+            { icon: <Users size={19} />, label: 'New group', sub: 'Start a group chat', onClick: () => setShowCreateGroup(true) },
+          ]} />
+        )}
+        {showMoreSheet && (
+          <ZActionSheet title="More" onClose={() => setShowMoreSheet(false)} options={[
+            { icon: <span style={{ display: 'inline-flex', borderRadius: '50%' }}><Avatar emoji={me.avatar} name={me.name} frame={me.avatar_frame} size={22} /></span>, label: 'Profile', onClick: () => setProfileOf(me) },
+            { icon: <Play size={19} />, label: 'Reels', sub: 'Watch posts as reels', onClick: () => { setFeedOpen(true); playUiSound('tap'); } },
+            { icon: <Archive size={19} />, label: 'Archive', onClick: () => setShowArchived(true) },
+            { icon: <SettingsIcon size={19} />, label: 'Settings', onClick: () => setShowSettings(true) },
+          ]} />
+        )}
         </>)}
       </div>
 
