@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useMemo, createContext, useContext } from 'react';
 import ReactDOM from 'react-dom';
 import {
-  Send, Paperclip, Search, Mail, ShieldCheck, ShieldOff, AtSign, LogOut, Eye, EyeOff, Lock,
+  Send, Paperclip, Search, Mail, ShieldCheck, ShieldOff, AtSign, LogOut, Eye, EyeOff, Lock, MessageCircle,
   Flag, X, Trash2, User, Phone, MoreVertical, Image as ImageIcon, Video as VideoIcon,
   Smile, ArrowLeft, Check, CheckCheck, Settings as SettingsIcon, Moon, Sun, UserPlus,
   FileText, HelpCircle, ChevronRight, ChevronLeft, Compass, Bell, Volume2, Volume1, VolumeX, Palette, Mic, Play, Pause, Download, Users, Camera, Reply, Forward, Ban, Edit3, Archive, Sparkles, Bookmark, Share2, Copy, Crop, Type, Pencil, Undo2, Scissors, BellOff, Link as LinkIcon, ShieldAlert, Heart, Repeat, PhoneOff, MicOff, VideoOff, SwitchCamera, Clock, Timer, Smartphone, Plus,
@@ -174,7 +174,7 @@ function ZBrand({ size = 22, showTag = false }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span style={{ fontFamily: 'Georgia, serif', fontWeight: 800, fontSize: size, color: theme.coral, letterSpacing: -0.5 }}>Z</span>
+        <span style={{ fontFamily: 'Georgia, serif', fontWeight: 800, fontSize: size, color: theme.coral, letterSpacing: -0.5, filter: `drop-shadow(0 0 8px ${theme.coral}99)` }}>Z</span>
         <span style={{ fontFamily: 'Georgia, serif', fontWeight: 700, fontSize: size * 0.86, color: theme.ink }}>chat</span>
         <span style={{ width: size * 0.24, height: size * 0.24, borderRadius: '50%', background: dotColor, boxShadow: `0 0 8px ${dotColor}`, flexShrink: 0 }} />
       </div>
@@ -8114,16 +8114,16 @@ function VerifiedTick({ size = 13 }) {
   );
 }
 
-function StoryAvatar({ profile, size = 64, ring = 'none', onClick, badgePlus = false, dim = false }) {
+function StoryAvatar({ profile, size = 64, ring = 'none', onClick, badgePlus = false, dim = false, tint }) {
   const { theme } = useTheme();
   const framed = !!(profile && AVATAR_FRAMES[profile.avatar_frame]);
   const pad = ring === 'none' || framed ? 0 : 3;
   const ringBg = ring === 'unseen'
-    ? `conic-gradient(from 210deg, ${theme.coral}, ${theme.teal}, ${theme.gold}, ${theme.coral})`
+    ? (tint ? `conic-gradient(from 210deg, ${tint}, ${theme.gold}, ${tint})` : `conic-gradient(from 210deg, ${theme.coral}, ${theme.teal}, ${theme.gold}, ${theme.coral})`)
     : ring === 'seen' ? theme.border : 'transparent';
   return (
     <div onClick={onClick} style={{ position: 'relative', width: size, height: size, flexShrink: 0, cursor: onClick ? 'pointer' : 'default', opacity: dim ? 0.55 : 1 }}>
-      <div style={{ width: size, height: size, borderRadius: '50%', padding: pad, boxSizing: 'border-box', background: framed ? 'transparent' : ringBg }}>
+      <div style={{ width: size, height: size, borderRadius: '50%', padding: pad, boxSizing: 'border-box', background: framed ? 'transparent' : ringBg, boxShadow: (ring === 'unseen' && tint) ? `0 0 14px ${tint}99` : 'none' }}>
         <div style={{ width: '100%', height: '100%', borderRadius: '50%', padding: framed ? 0 : (ring === 'none' ? 0 : 2), boxSizing: 'border-box', background: framed ? 'transparent' : theme.panelBg }}>
           <Avatar emoji={profile?.avatar} name={profile?.name || '?'} frame={profile?.avatar_frame} size={size - (framed || ring === 'none' ? 0 : 10)} />
         </div>
@@ -9246,7 +9246,7 @@ function StoryTray({ me, myStories, trayUsers, seen, onAdd, onOpen }) {
   return (
     <div style={{ display: 'flex', gap: 16, padding: '16px 18px 12px', marginTop: -14, overflowX: 'auto', overflowY: 'hidden', flexShrink: 0, WebkitOverflowScrolling: 'touch' }}>
       <div onClick={() => (hasMine ? onOpen(me.id) : onAdd())} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0, cursor: 'pointer', position: 'relative' }}>
-        <StoryAvatar profile={me} size={62} ring={hasMine ? (myStories.every((s) => seen.has(s.id)) ? 'seen' : 'unseen') : 'none'} />
+        <StoryAvatar profile={me} size={62} ring={hasMine ? (myStories.every((s) => seen.has(s.id)) ? 'seen' : 'unseen') : 'none'} tint={theme.coral} />
         <div role="button" aria-label="Add to your story" onClick={(e) => { e.stopPropagation(); onAdd(); }} style={{
           position: 'absolute', right: -2, top: 42, zIndex: 6, width: 24, height: 24, borderRadius: '50%', background: theme.coral, border: `2.5px solid ${theme.panelBg}`,
           display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800, fontSize: 17, lineHeight: 1, boxSizing: 'border-box',
@@ -9257,7 +9257,7 @@ function StoryTray({ me, myStories, trayUsers, seen, onAdd, onOpen }) {
         const allSeen = u.stories.every((s) => seen.has(s.id));
         return (
           <div key={u.profile.id} onClick={() => onOpen(u.profile.id)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0, cursor: 'pointer' }}>
-            <StoryAvatar profile={u.profile} size={62} ring={allSeen ? 'seen' : 'unseen'} />
+            <StoryAvatar profile={u.profile} size={62} ring={allSeen ? 'seen' : 'unseen'} tint={colorForName(u.profile.name || u.profile.username)} />
             {label(<>{(u.profile.name || u.profile.username || '').split(' ')[0]}<VerifiedBadge tier={u.profile.verified} custom={u.profile.custom_badge} size={10} style={{ marginLeft: 2 }} /></>, !allSeen)}
           </div>
         );
@@ -9266,7 +9266,7 @@ function StoryTray({ me, myStories, trayUsers, seen, onAdd, onOpen }) {
   );
 }
 
-const APP_VERSION = '7.6V';
+const APP_VERSION = '7.7V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -13114,6 +13114,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const stickToBottomRef = useRef(true);
   const prevMsgCountRef = useRef(0);
   const storyInputRef = useRef(null);
+  const homeSearchInputRef = useRef(null);
   const openStoryRefRef = useRef(null);
   const storyDataRef = useRef(null);
   const reloadStoriesRef = useRef(null);
@@ -16334,6 +16335,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     ? groups.filter((g) => !g.archived).sort((a, b) => displayListSortByPin(a, b, (x) => x.pinned))
     : listFilter === 'dms'
       ? conversations
+      : listFilter === 'pinned'
+        ? [...conversations.filter(isPinnedByMe).map((c) => ({ ...c, __kind: 'dm' })), ...groups.filter((g) => !g.archived && g.pinned).map((g) => ({ ...g, __kind: 'group' }))]
+            .sort((a, b) => new Date(b.last_message_at) - new Date(a.last_message_at))
       : listFilter === 'unread'
         ? [...conversations.filter(isUnread).map((c) => ({ ...c, __kind: 'dm' })), ...groups.filter((g) => !g.archived && g.unread > 0).map((g) => ({ ...g, __kind: 'group' }))]
             .sort((a, b) => displayListSortByPin(a, b, (x) => (x.__kind === 'dm' ? isPinnedByMe(x) : x.pinned)))
@@ -16341,6 +16345,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             .sort((a, b) => displayListSortByPin(a, b, (x) => (x.__kind === 'dm' ? isPinnedByMe(x) : x.pinned)));
 
   const displayList = uniqueBy(displayListRaw, (x) => `${x.__kind || (listFilter === 'groups' ? 'group' : 'dm')}-${x.id}`);
+  const emptyListText = listFilter === 'unread' ? 'No unread chats' : listFilter === 'pinned' ? 'No pinned chats yet' : 'Search a username above to start chatting, or create a group.';
 
   const activeWallpaperKey = activeGroup ? activeGroup.wallpaper : (activeConvForBar ? myWallpaper(activeConvForBar) : null);
   const activeNameBarKey = activeGroup ? activeGroup.name_bar : activeConvNameBar;
@@ -16408,14 +16413,14 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               <div style={{ fontSize: 10, color: theme.teal, fontWeight: 600 }}>Online</div>
               {me.bio && <div style={{ fontSize: 9.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 130 }}>"{me.bio}"</div>}
             </div>
-            <Avatar emoji={me.avatar} name={me.name} frame={me.avatar_frame} size={34} ring />
+            <span style={{ display: 'inline-flex', borderRadius: '50%', boxShadow: `0 0 0 2px ${theme.coral}, 0 0 14px ${theme.coral}aa` }}><Avatar emoji={me.avatar} name={me.name} frame={me.avatar_frame} size={34} /></span>
           </div>
         </div>
 
         <div style={{ padding: '0 16px 10px', flexShrink: 0 }}>
           <div style={{ position: 'relative' }}>
             <Search size={15} color={theme.muted} style={{ position: 'absolute', left: 12, top: 11 }} />
-            <input value={search} onChange={(e) => doSearch(e.target.value)} placeholder="Search by username" autoCapitalize="none"
+            <input ref={homeSearchInputRef} value={search} onChange={(e) => doSearch(e.target.value)} placeholder="Search by username" autoCapitalize="none"
               style={{ ...inputStyle(theme), padding: '9px 12px 9px 34px', fontSize: 13.5 }} />
             {searching && <div style={{ position: 'absolute', right: 12, top: 10 }}><Spinner size={13} color={theme.muted} /></div>}
           </div>
@@ -16425,37 +16430,37 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '2px 14px 12px', flexShrink: 0,
         }}>
           <div onClick={() => setShowMail(true)} style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer', flexShrink: 0 }}>
-            <div style={{ width: 38, height: 38, borderRadius: 12, background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.coralDeep }}><Mail size={16} /></div>
+            <div style={{ width: 38, height: 38, borderRadius: 12, background: theme.rowBg, boxShadow: `0 0 0 1px ${theme.teal}55, 0 0 10px ${theme.teal}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.teal }}><Mail size={16} /></div>
             {unreadMailCount > 0 && (
               <div style={{ position: 'absolute', top: -3, right: -3, background: theme.danger, color: 'white', fontSize: 9, fontWeight: 800, borderRadius: 8, minWidth: 15, height: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px' }}>{unreadMailCount > 99 ? '99+' : unreadMailCount}</div>
             )}
             <span style={{ fontSize: 9, color: theme.muted, fontWeight: 600 }}>Mail</span>
           </div>
           <div onClick={() => setShowFollowRequests(true)} style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer', flexShrink: 0 }}>
-            <div style={{ width: 38, height: 38, borderRadius: 12, background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.coralDeep }}><Bell size={16} /></div>
+            <div style={{ width: 38, height: 38, borderRadius: 12, background: theme.rowBg, boxShadow: `0 0 0 1px ${theme.teal}55, 0 0 10px ${theme.teal}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.teal }}><Bell size={16} /></div>
             {followRequestCount > 0 && (
               <div style={{ position: 'absolute', top: -3, right: -3, background: theme.danger, color: 'white', fontSize: 9, fontWeight: 800, borderRadius: 8, minWidth: 15, height: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px' }}>{followRequestCount}</div>
             )}
             <span style={{ fontSize: 9, color: theme.muted, fontWeight: 600 }}>Requests</span>
           </div>
           <div onClick={() => setShowCreateGroup(true)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer', flexShrink: 0 }}>
-            <div style={{ width: 38, height: 38, borderRadius: 12, background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.coralDeep }}><Users size={16} /></div>
+            <div style={{ width: 38, height: 38, borderRadius: 12, background: theme.rowBg, boxShadow: `0 0 0 1px ${theme.teal}55, 0 0 10px ${theme.teal}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.teal }}><Users size={16} /></div>
             <span style={{ fontSize: 9, color: theme.muted, fontWeight: 600 }}>Group</span>
           </div>
           <div onClick={() => { setFeedOpen(true); playUiSound('tap'); }} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer', flexShrink: 0 }}>
-            <div style={{ width: 38, height: 38, borderRadius: 12, background: 'linear-gradient(135deg, #ec4899, #8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white' }}><Play size={18} /></div>
+            <div style={{ width: 38, height: 38, borderRadius: 12, background: 'linear-gradient(135deg, #ec4899, #8b5cf6)', boxShadow: '0 0 0 1.5px #d946ef, 0 0 16px rgba(217,70,239,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white' }}><Play size={18} fill="white" /></div>
             <span style={{ fontSize: 9, color: theme.muted, fontWeight: 600 }}>Feed</span>
           </div>
           <div onClick={() => setShowDiscover(true)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer', flexShrink: 0 }}>
-            <div style={{ width: 38, height: 38, borderRadius: 12, background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.coralDeep }}><Compass size={16} /></div>
+            <div style={{ width: 38, height: 38, borderRadius: 12, background: theme.rowBg, boxShadow: `0 0 0 1px ${theme.teal}55, 0 0 10px ${theme.teal}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.teal }}><Compass size={16} /></div>
             <span style={{ fontSize: 9, color: theme.muted, fontWeight: 600 }}>Discover</span>
           </div>
           <div onClick={() => setShowArchived(true)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer', flexShrink: 0 }}>
-            <div style={{ width: 38, height: 38, borderRadius: 12, background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.coralDeep }}><Archive size={16} /></div>
+            <div style={{ width: 38, height: 38, borderRadius: 12, background: theme.rowBg, boxShadow: `0 0 0 1px ${theme.teal}55, 0 0 10px ${theme.teal}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.teal }}><Archive size={16} /></div>
             <span style={{ fontSize: 9, color: theme.muted, fontWeight: 600 }}>Archive</span>
           </div>
           <div onClick={() => setShowSettings(true)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer', flexShrink: 0 }}>
-            <div style={{ width: 38, height: 38, borderRadius: 12, background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.coralDeep }}><SettingsIcon size={16} /></div>
+            <div style={{ width: 38, height: 38, borderRadius: 12, background: theme.rowBg, boxShadow: `0 0 0 1px ${theme.teal}55, 0 0 10px ${theme.teal}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.teal }}><SettingsIcon size={16} /></div>
             <span style={{ fontSize: 9, color: theme.muted, fontWeight: 600 }}>Settings</span>
           </div>
         </div>
@@ -16484,11 +16489,12 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           </div>
         ) : (
           <>
-            <div style={{ display: 'flex', gap: 6, padding: '0 16px 10px', flexShrink: 0, overflowX: 'auto' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 16px 10px', flexShrink: 0, overflowX: 'auto' }}>
               {(() => {
                 const liveGroups = groups.filter((g) => !g.archived);
                 const unreadDms = conversations.filter(isUnread).length;
                 const unreadGroups = liveGroups.filter((g) => g.unread > 0).length;
+                const pinnedCount = conversations.filter(isPinnedByMe).length + liveGroups.filter((g) => g.pinned).length;
                 const chips = [
                   { k: 'all', l: 'All', n: conversations.length + liveGroups.length },
                   { k: 'unread', l: 'Unread', n: unreadDms + unreadGroups, hot: true },
@@ -16500,8 +16506,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                   return (
                     <div key={f.k} onClick={() => { setListFilter(f.k); playUiSound('tap'); }} style={{
                       display: 'flex', alignItems: 'center', gap: 6,
-                      padding: '6px 12px', borderRadius: 20, fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
-                      background: on ? theme.coral : theme.rowBg, color: on ? 'white' : theme.muted,
+                      padding: '8px 14px', borderRadius: 22, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
+                      background: on ? `linear-gradient(135deg, ${theme.coral}, ${theme.coralDeep})` : theme.rowBg,
+                      boxShadow: on ? `0 0 14px ${theme.coral}88` : 'none', color: on ? 'white' : theme.muted,
                     }}>
                       {f.l}
                       {f.n > 0 && (
@@ -16516,6 +16523,12 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                   );
                 });
               })()}
+              <div role="button" aria-label="Pinned chats" onClick={() => { setListFilter((prev) => (prev === 'pinned' ? 'all' : 'pinned')); playUiSound('tap'); }} style={{
+                width: 34, height: 34, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+                background: listFilter === 'pinned' ? '#ec4899' : 'rgba(236,72,153,0.12)',
+                boxShadow: listFilter === 'pinned' ? '0 0 14px rgba(236,72,153,0.75)' : 'none',
+                border: listFilter === 'pinned' ? 'none' : '1.5px solid #ec4899',
+              }}><Heart size={15} color={listFilter === 'pinned' ? 'white' : '#ec4899'} fill={listFilter === 'pinned' ? 'white' : 'none'} /></div>
             </div>
             <div
               ref={sidebarListRef}
@@ -16536,9 +16549,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                 </div>
               )}
               {displayList.length === 0 && (
-                <div style={{ textAlign: 'center', padding: 30, fontSize: 13, color: theme.muted }}>
-                  {listFilter === 'unread' ? 'No unread chats' : 'Search a username above to start chatting, or create a group.'}
-                </div>
+                <div style={{ textAlign: 'center', padding: 30, fontSize: 13, color: theme.muted }}>{emptyListText}</div>
               )}
               {(() => {
                 const renderRow = (item) => {
@@ -16546,15 +16557,17 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                 if (isGroup) {
                   const g = item;
                   const isActive = activeGroup?.id === g.id;
+                  const gGlow = groupAccent(g) || colorForName(g.name);
                   return (
                     <div key={'g-' + g.id} onClick={guardRowClick(() => openGroup(g))}
                       onPointerDown={(e) => startRowPress(e, { kind: 'group', group: g })} onPointerMove={moveRowPress} onPointerUp={endRowPress} onPointerLeave={endRowPress} onPointerCancel={endRowPress}
                       onContextMenu={(e) => { e.preventDefault(); endRowPress(); setRowSheet({ kind: 'group', group: g }); }}
                       style={{
-                      display: 'flex', alignItems: 'center', gap: 12, padding: '10px 8px', cursor: 'pointer', borderRadius: 16,
-                      background: isActive ? theme.rowBg : 'transparent', position: 'relative',
+                      display: 'flex', alignItems: 'center', gap: 12, padding: '10px 10px', marginBottom: 8, cursor: 'pointer', borderRadius: 18,
+                      background: isActive ? theme.rowBg : theme.panelBg, position: 'relative',
+                      boxShadow: `0 0 0 1px ${gGlow}55, 0 0 14px ${gGlow}33`,
                     }}>
-                      <GroupAvatar avatar={g.avatar} name={g.name} size={46} />
+                      <span style={{ display: 'inline-flex', borderRadius: '50%', flexShrink: 0, boxShadow: `0 0 0 2px ${gGlow}, 0 0 12px ${gGlow}aa` }}><GroupAvatar avatar={g.avatar} name={g.name} size={46} /></span>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <span style={{ fontWeight: g.unread ? 800 : 700, fontSize: 14, color: theme.ink, display: 'flex', alignItems: 'center', gap: 4, minWidth: 0, flex: '1 1 auto', marginRight: 8 }}>
@@ -16581,17 +16594,19 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                 const c = item;
                 const isActive = activeProfile?.id === c.otherProfile.id;
                 const unread = isUnread(c);
+                const cGlow = colorForName(c.otherProfile.name || c.otherProfile.username);
                 return (
                   <div key={'c-' + c.id} onClick={guardRowClick(() => openChat(c.otherProfile, c.id))}
                     onPointerDown={(e) => startRowPress(e, { kind: 'dm', conv: c })} onPointerMove={moveRowPress} onPointerUp={endRowPress} onPointerLeave={endRowPress} onPointerCancel={endRowPress}
                     onContextMenu={(e) => { e.preventDefault(); endRowPress(); setRowSheet({ kind: 'dm', conv: c }); }}
                     style={{
-                    display: 'flex', alignItems: 'center', gap: 12, padding: '10px 8px', cursor: 'pointer', borderRadius: 16,
-                    background: isActive ? theme.rowBg : 'transparent', position: 'relative',
+                    display: 'flex', alignItems: 'center', gap: 12, padding: '10px 10px', marginBottom: 8, cursor: 'pointer', borderRadius: 18,
+                    background: isActive ? theme.rowBg : theme.panelBg, position: 'relative',
+                    boxShadow: `0 0 0 1px ${cGlow}55, 0 0 14px ${cGlow}33`,
                   }}>
-                    <div onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); setAvatarPeek(c); }} style={{ position: 'relative', flexShrink: 0, cursor: 'pointer' }}>
+                    <div onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); setAvatarPeek(c); }} style={{ position: 'relative', flexShrink: 0, cursor: 'pointer', display: 'inline-flex', borderRadius: '50%', boxShadow: storyRingFor(c.otherProfile.id) !== 'none' ? 'none' : `0 0 0 2px ${cGlow}, 0 0 12px ${cGlow}aa` }}>
                       {storyRingFor(c.otherProfile.id) !== 'none'
-                        ? <StoryAvatar profile={c.otherProfile} size={50} ring={storyRingFor(c.otherProfile.id)} />
+                        ? <StoryAvatar profile={c.otherProfile} size={50} ring={storyRingFor(c.otherProfile.id)} tint={cGlow} />
                         : <Avatar emoji={c.otherProfile.avatar} name={c.otherProfile.name} frame={c.otherProfile.avatar_frame} online={isUserOnline(c.otherProfile) && !c.otherProfile.hide_activity} size={46} />}
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
@@ -16625,6 +16640,40 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             </div>
           </>
         )}
+        <div style={{
+          display: 'flex', alignItems: 'flex-end', justifyContent: 'space-around', flexShrink: 0,
+          padding: '8px 6px calc(10px + env(safe-area-inset-bottom))', borderTop: `1px solid ${theme.border}`,
+          background: theme.panelBg,
+        }}>
+          {(() => {
+            const totalUnread = conversations.filter(isUnread).length + groups.filter((g) => !g.archived && g.unread > 0).length;
+            const tab = (icon, label, onClick, active, badge) => (
+              <div role="button" onClick={onClick} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer', position: 'relative', color: active ? theme.coral : theme.muted, fontSize: 10, fontWeight: 600 }}>
+                {icon}
+                {badge > 0 && <div style={{ position: 'absolute', top: -6, right: -10, background: theme.danger, color: 'white', fontSize: 9, fontWeight: 800, minWidth: 15, height: 15, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px' }}>{badge > 99 ? '99+' : badge}</div>}
+                <span>{label}</span>
+              </div>
+            );
+            return (
+              <>
+                {tab(<MessageCircle size={21} />, 'Chats', () => setListFilter('all'), true, totalUnread)}
+                {tab(<Phone size={21} />, 'Calls', () => showSnack('Call history is not available yet'), false, 0)}
+                <div role="button" aria-label="New chat" onClick={() => homeSearchInputRef.current && homeSearchInputRef.current.focus()} style={{
+                  width: 52, height: 52, borderRadius: '50%', marginTop: -20, flexShrink: 0,
+                  background: `radial-gradient(circle at 35% 30%, ${theme.gold}, ${theme.coralDeep} 75%)`,
+                  boxShadow: `0 0 0 2px ${theme.coral}, 0 0 18px ${theme.coral}aa`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', cursor: 'pointer',
+                }}><Plus size={24} /></div>
+                {tab(<Users size={21} />, 'People', () => setShowDiscover(true), false, 0)}
+                {tab(<Play size={21} />, 'Reels', () => { setFeedOpen(true); playUiSound('tap'); }, false, 0)}
+                <div role="button" onClick={() => setProfileOf(me)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer', color: theme.muted, fontSize: 10, fontWeight: 600 }}>
+                  <span style={{ display: 'inline-flex', borderRadius: '50%', boxShadow: `0 0 0 1.5px ${theme.coral}` }}><Avatar emoji={me.avatar} name={me.name} frame={me.avatar_frame} size={24} /></span>
+                  <span>Profile</span>
+                </div>
+              </>
+            );
+          })()}
+        </div>
         </>)}
       </div>
 
