@@ -9266,7 +9266,7 @@ function StoryTray({ me, myStories, trayUsers, seen, onAdd, onOpen }) {
   );
 }
 
-const APP_VERSION = '7.9V';
+const APP_VERSION = '8.0V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -18718,7 +18718,17 @@ function AppInner() {
 
   useEffect(() => {
     if (window.location.hash.includes('type=recovery')) setIsPasswordRecovery(true);
-    getSession().then(({ data }) => setSession(data.session || null));
+    let settled = false;
+    const landSession = (value) => { if (!settled) { settled = true; setSession(value); } };
+    // getSession() should resolve almost instantly, but on some browsers (notably iOS
+    // Safari, especially once the app is added to the home screen) the underlying
+    // storage read can throw or simply never settle. Either way we must not leave the
+    // person staring at the loading spinner forever, so we race it against a timeout
+    // and always fall back to a clean "logged out" state rather than hanging.
+    Promise.race([
+      getSession().then(({ data }) => data.session || null),
+      new Promise((resolve) => setTimeout(() => resolve(null), 6000)),
+    ]).then(landSession).catch(() => landSession(null));
     const { data: listener } = supabase.auth.onAuthStateChange((event, sess) => {
       if (event === 'PASSWORD_RECOVERY') setIsPasswordRecovery(true);
       if (event === 'SIGNED_OUT') { setSession(null); return; }
