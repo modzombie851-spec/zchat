@@ -1182,7 +1182,7 @@ function LogoutConfirm({ onCancel, onConfirm }) {
   const { theme } = useTheme();
   return (
     <div style={{
-      position: 'absolute', inset: 0, background: 'rgba(10,8,6,0.45)', backdropFilter: 'blur(3px)',
+      position: 'absolute', inset: 0, background: 'rgba(10,8,6,0.45)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)',
       display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 60, padding: 24,
     }} className="zchat-fade">
       <div style={{
@@ -1223,7 +1223,7 @@ function DeleteAccountConfirm({ onCancel, onConfirm }) {
   const ok = text.trim().toUpperCase() === 'DELETE';
   return (
     <div style={{
-      position: 'absolute', inset: 0, background: 'rgba(10,8,6,0.45)', backdropFilter: 'blur(3px)',
+      position: 'absolute', inset: 0, background: 'rgba(10,8,6,0.45)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)',
       display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 60, padding: 24,
     }} className="zchat-fade">
       <div style={{
@@ -6279,7 +6279,7 @@ function DeleteChatConfirm({ name, onCancel, onConfirm }) {
   const { theme } = useTheme();
   return (
     <div style={{
-      position: 'absolute', inset: 0, background: 'rgba(10,8,6,0.45)', backdropFilter: 'blur(3px)',
+      position: 'absolute', inset: 0, background: 'rgba(10,8,6,0.45)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)',
       display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 90, padding: 24,
     }} className="zchat-fade">
       <div style={{ background: theme.panelBg, borderRadius: 20, padding: '24px 22px', width: '100%', maxWidth: 280, textAlign: 'center' }}>
@@ -6307,7 +6307,7 @@ function AccountGoneModal({ name, onOk }) {
   const { theme } = useTheme();
   return (
     <div style={{
-      position: 'absolute', inset: 0, background: 'rgba(10,8,6,0.45)', backdropFilter: 'blur(3px)',
+      position: 'absolute', inset: 0, background: 'rgba(10,8,6,0.45)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)',
       display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 90, padding: 24,
     }} className="zchat-fade">
       <div style={{ background: theme.panelBg, borderRadius: 20, padding: '24px 22px', width: '100%', maxWidth: 280, textAlign: 'center' }}>
@@ -6334,7 +6334,7 @@ function DeleteMessageConfirm({ onCancel, onConfirm }) {
   const { theme } = useTheme();
   return (
     <div style={{
-      position: 'absolute', inset: 0, background: 'rgba(10,8,6,0.45)', backdropFilter: 'blur(3px)',
+      position: 'absolute', inset: 0, background: 'rgba(10,8,6,0.45)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)',
       display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 92, padding: 24,
     }} className="zchat-fade">
       <div style={{ background: theme.panelBg, borderRadius: 20, padding: '24px 22px', width: '100%', maxWidth: 280, textAlign: 'center' }}>
@@ -9270,7 +9270,7 @@ function StoryTray({ me, myStories, trayUsers, seen, onAdd, onOpen }) {
 // Keep this in sync with the username given to the bot's profile row (see the setup SQL).
 const BOT_MENTION = '@zchatbot';
 
-const APP_VERSION = '8.7V';
+const APP_VERSION = '8.8V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -16811,7 +16811,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               flex: 1, minHeight: 0, overflowY: 'auto', padding: '10px 18px 4px', position: 'relative',
               WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain', touchAction: 'pan-y',
             }}>
-              <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
+              <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', maxWidth: isWide ? 760 : 'none', width: '100%', margin: isWide ? '0 auto' : 0 }}>
               {!activeWallpaperKey && <AnimatedChatBackground chatTheme={chatTheme} />}
               {bgPatternOn && !activeWallpaperKey && (
                 <div style={{
@@ -16911,7 +16911,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             {showTextStyle && draft.trim() && !editingMessage && (
               <TextStyleBar font={textFont} size={textSize} color={textColor} onFont={setTextFont} onSize={setTextSize} onColor={setTextColor} />
             )}
-            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, padding: '6px 14px', flexShrink: 0, position: 'relative', background: theme.bgGradient, paddingBottom: keyboardOpen ? 6 : 'max(6px, calc(env(safe-area-inset-bottom) - 24px))' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, padding: '6px 14px', flexShrink: 0, position: 'relative', background: theme.bgGradient, maxWidth: isWide ? 760 : 'none', width: '100%', margin: isWide ? '0 auto' : 0, paddingBottom: keyboardOpen ? 6 : 'max(6px, calc(env(safe-area-inset-bottom) - 24px))' }}>
               {activeProfile && !activeGroup && myBlockedIds.has(activeProfile.id) ? (
                 <div className="zchat-fade" style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 9, padding: '8px 4px 2px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, color: theme.ink, fontWeight: 700 }}><Ban size={15} color={theme.danger} /> You blocked {activeProfile.name}</div>
