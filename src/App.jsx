@@ -9266,7 +9266,11 @@ function StoryTray({ me, myStories, trayUsers, seen, onAdd, onOpen }) {
   );
 }
 
-const APP_VERSION = '8.1V';
+// The handle people type to call the bot into a group conversation, e.g. "@zchatbot how do I reset my password".
+// Keep this in sync with the username given to the bot's profile row (see the setup SQL).
+const BOT_MENTION = '@zchatbot';
+
+const APP_VERSION = '8.4V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -12086,7 +12090,7 @@ function openFrameCheckout(userId, email, frameKey) {
   return true;
 }
 
-function CollectionPanel({ me, rewards, onClose, onEquip, userEmail }) {
+function CollectionPanel({ me, rewards, onClose, onEquip, userEmail, isAdmin }) {
   useBackClose(true, onClose);
   const [tab, setTab] = useState('frame');
   const [selected, setSelected] = useState(null);
@@ -12105,7 +12109,7 @@ function CollectionPanel({ me, rewards, onClose, onEquip, userEmail }) {
     ? Object.entries(NAMEPLATES).map(([key, spec]) => ({ key, spec, owned: ownedPlates.has(key), equipped: me.nameplate === key, reward: rewardFor('nameplate', key) }))
     : tab === 'charm'
       ? Object.entries(CUSTOM_BADGES).map(([key, spec]) => ({ key, spec, owned: ownedCharms.has(key), equipped: me.custom_badge === key, reward: rewardFor('charm', key) }))
-      : Object.entries(VERIFIED_TIERS).map(([key, t]) => ({ key, spec: { label: `${t.label} badge`, rarity: key === 'red' ? 'mythic' : key === 'gold' ? 'legendary' : 'epic', color: t.color }, owned: me.verified === key, equipped: me.verified === key, reward: null, badge: true }));
+      : Object.entries(VERIFIED_TIERS).map(([key, t]) => ({ key, spec: { label: `${t.label} badge`, rarity: key === 'red' ? 'mythic' : key === 'gold' ? 'legendary' : 'epic', color: t.color }, owned: isAdmin || me.verified === key, equipped: me.verified === key, reward: null, badge: true }));
 
   const sorted = [...items].sort((x, y) => Number(y.owned) - Number(x.owned)
     || (STORE_RARITY_ORDER[x.spec.rarity] ?? 9) - (STORE_RARITY_ORDER[y.spec.rarity] ?? 9));
@@ -12119,7 +12123,7 @@ function CollectionPanel({ me, rewards, onClose, onEquip, userEmail }) {
       : (me.verified && VERIFIED_TIERS[me.verified] ? { key: me.verified, spec: { label: `${VERIFIED_TIERS[me.verified].label} badge`, rarity: 'epic' }, kind: 'badge' } : null);
 
   const equip = async (kind, key) => {
-    if (busy || kind === 'badge') return;
+    if (busy || (kind === 'badge' && !isAdmin)) return;
     setBusy(true);
     playUiSound('like');
     await onEquip(kind, key);
@@ -12206,7 +12210,11 @@ function CollectionPanel({ me, rewards, onClose, onEquip, userEmail }) {
               {sel.owned && daysLeft(sel.reward) != null && <div style={{ fontSize: 12, fontWeight: 700, color: daysLeft(sel.reward) <= 5 ? '#fca5a5' : 'rgba(255,255,255,0.6)', marginTop: 3 }}>Expires in {daysLeft(sel.reward)} days</div>}
               <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
                 {tab === 'badge' ? (
-                  <div style={{ padding: '10px 14px', borderRadius: 12, background: 'rgba(255,255,255,0.07)', fontSize: 12.5, fontWeight: 800, color: 'rgba(255,255,255,0.7)' }}>{sel.owned ? 'You are wearing this badge' : 'Given by the ZChat team'}</div>
+                  isAdmin ? (
+                    <button disabled={busy || sel.equipped} onClick={() => equip('badge', sel.key)} style={{ padding: '10px 22px', borderRadius: 12, border: 'none', fontWeight: 900, fontFamily: FONT, fontSize: 13.5, cursor: sel.equipped ? 'default' : 'pointer', background: sel.equipped ? 'rgba(52,211,153,0.2)' : 'linear-gradient(135deg, #fbbf24, #ea580c)', color: sel.equipped ? '#34d399' : '#1a0f02' }}>{sel.equipped ? '\u2713 EQUIPPED' : busy ? 'EQUIPPING\u2026' : 'EQUIP'}</button>
+                  ) : (
+                    <div style={{ padding: '10px 14px', borderRadius: 12, background: 'rgba(255,255,255,0.07)', fontSize: 12.5, fontWeight: 800, color: 'rgba(255,255,255,0.7)' }}>{sel.owned ? 'You are wearing this badge' : 'Given by the ZChat team'}</div>
+                  )
                 ) : sel.owned ? (
                   <>
                     <button disabled={busy || sel.equipped} onClick={() => equip(tab, sel.key)} style={{ padding: '10px 22px', borderRadius: 12, border: 'none', fontWeight: 900, fontFamily: FONT, fontSize: 13.5, cursor: sel.equipped ? 'default' : 'pointer', background: sel.equipped ? 'rgba(52,211,153,0.2)' : 'linear-gradient(135deg, #fbbf24, #ea580c)', color: sel.equipped ? '#34d399' : '#1a0f02' }}>{sel.equipped ? '✓ EQUIPPED' : busy ? 'EQUIPPING…' : 'EQUIP'}</button>
@@ -14737,6 +14745,13 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       const groupReplyId = replyingTo?.id || null;
       setReplyingTo(null);
       await sendGroupMessage('text', text, null, soloForwardName, groupReplyId, (textSize !== 'm' || textColor || textFont) ? { text_size: textSize === 'm' ? null : textSize, text_color: textColor, ...(textFont ? { text_font: textFont } : {}) } : null);
+      if (text.toLowerCase().includes(BOT_MENTION)) {
+        fetch('/.netlify/functions/bot-reply-group', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: session.user.id, groupId: activeGroup.id, text }),
+        }).catch(() => {});
+      }
       return;
     }
     const items = pendingForwardItems;
@@ -14801,6 +14816,13 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
       upsertConversation(activeProfile.id, text, 'text');
       notifyUser(activeProfile.id, me.name, parseProfileLink(text) ? 'Shared a profile' : text, `/?dm=${session.user.id}`, me.avatar);
+      if (activeProfile.is_bot) {
+        fetch('/.netlify/functions/bot-reply', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: session.user.id, botId: activeProfile.id, text }),
+        }).catch(() => {});
+      }
     }
   };
 
@@ -15729,7 +15751,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     showSnack('Payment received! Your frame unlocks in a few seconds.');
   }, [me && me.id]);
   const equipReward = async (kind, key) => {
-    const field = kind === 'frame' ? 'avatar_frame' : kind === 'nameplate' ? 'nameplate' : 'custom_badge';
+    const field = kind === 'frame' ? 'avatar_frame' : kind === 'nameplate' ? 'nameplate' : kind === 'badge' ? 'verified' : 'custom_badge';
     const prevValue = me[field];
     setMe((prev) => (prev ? { ...prev, [field]: key } : prev));
     const { error } = await supabase.from('profiles').update({ [field]: key }).eq('id', session.user.id);
@@ -17349,7 +17371,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           onOpenProfile={(p) => { setFeedOpen(false); setProfileOf(sanitizeAvatar(p, session.user.id)); }} />
       )}
       {collectionOpen && me && (
-        <CollectionPanel me={me} rewards={myRewards} userEmail={session.user.email} onClose={() => setCollectionOpen(false)} onEquip={equipReward} />
+        <CollectionPanel me={me} rewards={myRewards} userEmail={session.user.email} isAdmin={isZAdmin} onClose={() => setCollectionOpen(false)} onEquip={equipReward} />
       )}
       {celebrateTier && (
         <VerifiedCelebration tier={celebrateTier} name={me.name}
