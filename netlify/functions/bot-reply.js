@@ -25,6 +25,37 @@ const RESPONSE_SCHEMA = {
   required: ['reply'],
 };
 
+// Pulls the reply (and suggestions, if present) out of Gemini's output. Handles the clean case,
+// and also the messy real-world cases: markdown code fences wrapped around the JSON, or the
+// response getting cut off mid-way through - in which case JSON.parse fails outright but the
+// "reply" field is usually still fully present near the start, so we recover it with a regex
+// rather than ever showing raw/broken JSON text to the person.
+function extractReplyAndSuggestions(rawText) {
+  if (!rawText) return { reply: null, suggestions: [] };
+  const cleaned = rawText.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim();
+
+  try {
+    const parsed = JSON.parse(cleaned);
+    const reply = (parsed.reply && String(parsed.reply).trim()) || null;
+    if (reply) {
+      const suggestions = Array.isArray(parsed.suggestions)
+        ? parsed.suggestions.filter((x) => typeof x === 'string' && x.trim()).slice(0, 3).map((x) => x.trim())
+        : [];
+      return { reply, suggestions };
+    }
+  } catch { /* fall through to the recovery attempt below */ }
+
+  const match = cleaned.match(/"reply"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+  if (match) {
+    try {
+      const recovered = JSON.parse(`"${match[1]}"`).trim();
+      if (recovered) return { reply: recovered, suggestions: [] };
+    } catch { /* give up below */ }
+  }
+
+  return { reply: null, suggestions: [] };
+}
+
 async function fetchAsInlineData(url) {
   try {
     const res = await fetch(url);
@@ -125,23 +156,18 @@ exports.handler = async (event) => {
         systemInstruction: { parts: [{ text: `${SYSTEM_INSTRUCTION}\nThe person you are talking to is named: ${senderName}.` }] },
         contents,
         safetySettings: [{ category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_LOW_AND_ABOVE' }],
-        generationConfig: { maxOutputTokens: 500, responseMimeType: 'application/json', responseSchema: RESPONSE_SCHEMA },
+        generationConfig: { maxOutputTokens: 700, responseMimeType: 'application/json', responseSchema: RESPONSE_SCHEMA },
       }),
     });
     const json = await res.json();
     const rawText = json && json.candidates && json.candidates[0] && json.candidates[0].content
       && json.candidates[0].content.parts && json.candidates[0].content.parts[0] && json.candidates[0].content.parts[0].text;
-    if (rawText) {
-      try {
-        const parsed = JSON.parse(rawText);
-        if (parsed.reply && parsed.reply.trim()) reply = parsed.reply.trim();
-        if (Array.isArray(parsed.suggestions)) suggestions = parsed.suggestions.filter((x) => typeof x === 'string' && x.trim()).slice(0, 3).map((x) => x.trim());
-      } catch (parseErr) {
-        console.error('Could not parse structured reply, using raw text', parseErr);
-        reply = rawText.trim();
-      }
+    const extracted = extractReplyAndSuggestions(rawText);
+    if (extracted.reply) {
+      reply = extracted.reply;
+      suggestions = extracted.suggestions;
     } else {
-      console.error('Gemini returned no text', JSON.stringify(json).slice(0, 500));
+      console.error('Could not extract a usable reply from gemini output', (rawText || '').slice(0, 400), JSON.stringify(json).slice(0, 300));
     }
   } catch (err) {
     console.error('Gemini request failed', err);
