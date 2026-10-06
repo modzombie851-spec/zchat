@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useLayoutEffect, useMemo, createCon
 import ReactDOM from 'react-dom';
 import {
   Send, Paperclip, Search, Mail, ShieldCheck, ShieldOff, AtSign, LogOut, Eye, EyeOff, Lock,
-  Flag, X, Trash2, User, Phone, MoreVertical, Image as ImageIcon, Video as VideoIcon,
+  Flag, X, Trash2, User, Phone, MoreVertical, Image as ImageIcon, Video as VideoIcon, Pin,
   Smile, ArrowLeft, Check, CheckCheck, Settings as SettingsIcon, Moon, Sun, UserPlus,
   FileText, HelpCircle, ChevronRight, ChevronLeft, Compass, Bell, Volume2, Volume1, VolumeX, Palette, Mic, Play, Pause, Download, Users, Camera, Reply, Forward, Ban, Edit3, Archive, Sparkles, Bookmark, Share2, Copy, Crop, Type, Pencil, Undo2, Scissors, BellOff, Link as LinkIcon, ShieldAlert, Heart, Repeat, PhoneOff, MicOff, VideoOff, SwitchCamera, Clock, Timer, Smartphone, Plus,
 } from 'lucide-react';
@@ -3783,13 +3783,7 @@ function ChatSettingsPanel({ conv, myId, meAvatar, meName, isPinned, isLocked, w
 }
 
 function Pin_({ size = 16, color = '#FF3B30' }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <path d="M10.7 12.4 L19.5 19.5 L12.4 10.7 Z" fill={color} />
-      <circle cx="8" cy="8" r="5.4" fill={color} />
-      <circle cx="6.2" cy="6.2" r="1.8" fill="white" opacity="0.4" />
-    </svg>
-  );
+  return <Pin size={size} color={color} strokeWidth={2} fill={color} fillOpacity={0.18} />;
 }
 
 
@@ -5522,7 +5516,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
           }}>
             {sheetRow(<Share2 size={18} />, 'Share profile', () => { setShowMore(false); setShowShare(true); })}
             {sheetRow(<Copy size={18} />, 'Copy profile link', async () => { await copyTextToClipboard(profileShareLink(profile.id)); setShowMore(false); })}
-            {!reportSent && sheetRow(<Flag size={18} color={theme.danger} />, 'Report account', () => { setShowMore(false); setReportOpen(true); }, true)}
+            {!reportSent && !profile.is_bot && sheetRow(<Flag size={18} color={theme.danger} />, 'Report account', () => { setShowMore(false); setReportOpen(true); }, true)}
             {!profile.is_bot && sheetRow(<Ban size={18} color={theme.danger} />, isBlocked ? 'Unblock account' : 'Block account', () => { setShowMore(false); if (isBlocked) onUnblock(profile.id); else onBlock(profile.id); }, true)}
             {isZAdmin && !isSelf && (profile.banned
               ? sheetRow(<ShieldCheck size={18} color={theme.teal} />, 'Remove from ZChat ban list', async () => {
@@ -9270,7 +9264,7 @@ function StoryTray({ me, myStories, trayUsers, seen, onAdd, onOpen }) {
 // Keep this in sync with the username given to the bot's profile row (see the setup SQL).
 const BOT_MENTION = '@zchatbot';
 
-const APP_VERSION = '8.8V';
+const APP_VERSION = '8.9V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -14602,6 +14596,19 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     await actuallyOpenChat(profile, convId);
   };
 
+  const openChatFromSaved = async (row) => {
+    setShowSaved(false);
+    if (row.group_id) {
+      const { data } = await supabase.from('groups').select('*').eq('id', row.group_id).maybeSingle();
+      if (data) openGroup(data);
+      else showSnack("That group isn't available anymore.");
+    } else if (row.dm_user_id) {
+      const { data } = await getProfile(row.dm_user_id);
+      if (data) actuallyOpenChat(sanitizeAvatar(data, session.user.id), null);
+      else showSnack("That person's profile isn't available anymore.");
+    }
+  };
+
   const actuallyOpenChat = async (profile, convId) => {
     setActiveGroupCall(null);
     setChatSearch(null);
@@ -15337,6 +15344,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const { error } = await supabase.from('saved_messages').upsert({
       user_id: session.user.id, source_message_id: sid, kind, content: m.content || null, media_url: m.media_url || null,
       from_name: fromName, chat_label: chatLabel, message_created_at: m.created_at,
+      dm_user_id: activeGroup ? null : (activeProfile ? activeProfile.id : null),
+      group_id: activeGroup ? activeGroup.id : null,
     }, { onConflict: 'user_id,source_message_id' });
     if (error) { setSavedIds((prev) => { const n = new Set(prev); n.delete(sid); return n; }); showSnack(friendlyError(error, "Couldn't save that message. Try again.")); return; }
     showSnack('Added to Saved');
@@ -16707,8 +16716,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               overflow: 'hidden',
               borderTopLeftRadius: 22,
               borderTopRightRadius: 22,
-              borderBottomLeftRadius: 26,
-              borderBottomRightRadius: 26,
+              borderBottomLeftRadius: 0,
+              borderBottomRightRadius: 0,
               transform: 'translateZ(0)',
               ...(activeNameBarKey
                 ? (nameBarBgStyle(activeNameBarKey) || {})
@@ -16990,10 +16999,11 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                     rows={1}
                     style={{
                       ...(COMPOSER_AUTOSIZE ? { fieldSizing: 'content', overflowY: 'auto' } : {}),
-                      flex: 1, resize: 'none', maxHeight: 148, minHeight: 38, boxSizing: 'border-box', padding: '9px 14px', borderRadius: composerTall ? 18 : 20,
+                      flex: 1, resize: 'none', maxHeight: 148, minHeight: 38, boxSizing: 'border-box', padding: '10px 16px', borderRadius: composerTall ? 18 : 22,
                       wordBreak: 'break-word',
                       border: `1px solid ${theme.border}`, background: theme.inputBg, color: theme.ink,
-                      fontFamily: FONT, fontSize: 15, outline: 'none', lineHeight: 1.35,
+                      boxShadow: theme.dark ? '0 1px 3px rgba(0,0,0,0.25)' : '0 1px 3px rgba(20,20,40,0.06)',
+                      fontFamily: FONT, fontSize: 15.5, outline: 'none', lineHeight: 1.4,
                       ...previewTextCss(textFont, textSize, textColor, theme.ink),
                     }}
                   />
@@ -17002,7 +17012,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                   {(!recording && (draft.trim() || pendingMedia.length > 0)) ? (
                     <div onPointerDown={(e) => e.preventDefault()} onMouseDown={(e) => e.preventDefault()} onClick={() => { if (!editingMessage) playUiSound('send'); (editingMessage ? saveEdit : send)(); }} style={{
                       width: 40, height: 40, borderRadius: '50%', background: theme.coral, display: 'flex',
-                      alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0,
+                      alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, WebkitTapHighlightColor: 'transparent', outline: 'none', border: 'none',
                     }}><Send size={17} color="white" style={{ marginLeft: -1 }} /></div>
                   ) : (
                     <div style={{ position: 'relative', width: 40, height: 40, flexShrink: 0 }}>
@@ -17123,7 +17133,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       {showPrivacy && <PrivacyPanel onBack={() => setShowPrivacy(false)} />}
       {joinPrompt && <JoinGroupSheet group={joinPrompt.group} count={joinPrompt.count} busy={joiningGroup} onJoin={confirmJoinGroup} onClose={() => { if (!joiningGroup) setJoinPrompt(null); }} />}
       {showSaved && (
-        <SavedMessagesPanel myId={session.user.id} onClose={() => setShowSaved(false)}
+        <SavedMessagesPanel myId={session.user.id} onClose={() => setShowSaved(false)} onOpenChat={openChatFromSaved}
           onChanged={(sourceId) => setSavedIds((prev) => { const n = new Set(prev); n.delete(String(sourceId)); return n; })} />
       )}
       {showReportQueue && isZAdmin && (
@@ -17514,7 +17524,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           muteTarget ? item(isActiveUntil(mutedUntil) ? <Bell size={17} /> : <BellOff size={17} />, isActiveUntil(mutedUntil) ? 'Unmute notifications' : 'Mute notifications', () => (isActiveUntil(mutedUntil) ? setChatMute(muteTarget, null) : setMuteSheet(muteTarget)), false, muteLabel(mutedUntil)) : null,
           activeConvForBar ? item(<SettingsIcon size={17} />, 'Chat settings', () => setShowChatSettings(true), false, 'Nicknames, wallpaper, lock and more') : null,
           !activeProfile.is_bot ? item(<Ban size={17} />, blocked ? `Unblock ${activeProfile.name}` : `Block ${activeProfile.name}`, () => (blocked ? setUnblockConfirmFor(activeProfile) : setBlockConfirmFor(activeProfile)), !blocked) : null,
-          item(<Flag size={17} />, `Report ${activeProfile.name}`, () => setReportUserTarget(activeProfile), true),
+          !activeProfile.is_bot ? item(<Flag size={17} />, `Report ${activeProfile.name}`, () => setReportUserTarget(activeProfile), true) : null,
           (activeConvForBar && !activeProfile.is_bot) ? item(<Trash2 size={17} />, 'Delete chat', () => setDeleteConvoTarget(activeConvForBar), true) : null,
         ];
         return (
@@ -18217,7 +18227,7 @@ function SessionsSection({ userId }) {
   );
 }
 
-function SavedMessagesPanel({ myId, onClose, onChanged }) {
+function SavedMessagesPanel({ myId, onClose, onChanged, onOpenChat }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
   const [rows, setRows] = useState(null);
@@ -18276,7 +18286,14 @@ function SavedMessagesPanel({ myId, onClose, onChanged }) {
         ) : shown.map((r) => (
           <div key={r.id} style={{ background: theme.rowBg, border: `1px solid ${theme.border}`, borderRadius: 18, padding: 12, marginBottom: 10 }}>
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
-              <div style={{ fontSize: 12, fontWeight: 800, color: theme.coralDeep, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <div
+                role={(onOpenChat && (r.dm_user_id || r.group_id)) ? 'button' : undefined}
+                onClick={(onOpenChat && (r.dm_user_id || r.group_id)) ? () => onOpenChat(r) : undefined}
+                style={{
+                  fontSize: 12, fontWeight: 800, color: theme.coralDeep, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  cursor: (onOpenChat && (r.dm_user_id || r.group_id)) ? 'pointer' : 'default',
+                  textDecoration: (onOpenChat && (r.dm_user_id || r.group_id)) ? 'underline' : 'none', textUnderlineOffset: 2,
+                }}>
                 {r.from_name || 'Someone'}{r.chat_label && r.kind !== 'note' ? ` in ${r.chat_label}` : ''}
               </div>
               <div style={{ fontSize: 11, color: theme.muted, flexShrink: 0 }}>{timeAgoLong(r.message_created_at || r.created_at)}</div>
