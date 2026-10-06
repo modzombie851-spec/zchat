@@ -42,9 +42,12 @@ exports.handler = async (event) => {
 
   let reply = "Sorry, I couldn't come up with a reply just now. Try asking again in a moment.";
   try {
-    const res = await fetch(`${GEMINI_URL}?key=${process.env.GEMINI_API_KEY}`, {
+    const res = await fetch(GEMINI_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': process.env.GEMINI_API_KEY,
+      },
       body: JSON.stringify({
         contents: [{ parts: [{ text }] }],
         generationConfig: { maxOutputTokens: 400 },
