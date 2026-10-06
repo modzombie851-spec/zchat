@@ -9264,7 +9264,7 @@ function StoryTray({ me, myStories, trayUsers, seen, onAdd, onOpen }) {
 // Keep this in sync with the username given to the bot's profile row (see the setup SQL).
 const BOT_MENTION = '@zchatbot';
 
-const APP_VERSION = '8.9V';
+const APP_VERSION = '9.1V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -16707,6 +16707,13 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       }} className={mobileShowChat ? 'zchat-chat-panel zchat-panel-open' : 'zchat-chat-panel'}>
         {(activeProfile || activeGroup) ? (
           <>
+            <div aria-hidden="true" style={{
+              ...(isAppleMobile() && !isWide
+                ? { position: 'absolute', top: callBarShown ? 42 : 0 }
+                : { position: 'fixed', top: (viewportBox.height ? viewportBox.offset : 0) + (callBarShown ? 42 : 0) }),
+              left: isWide ? 'calc(360px + env(safe-area-inset-left))' : 0, right: 0, height: 30, zIndex: 14,
+              background: theme.bgGradient, pointerEvents: 'none',
+            }} />
             <div style={{
               ...(isAppleMobile() && !isWide
                 ? { position: 'absolute', top: callBarShown ? 42 : 0 }
@@ -16920,7 +16927,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             {showTextStyle && draft.trim() && !editingMessage && (
               <TextStyleBar font={textFont} size={textSize} color={textColor} onFont={setTextFont} onSize={setTextSize} onColor={setTextColor} />
             )}
-            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, padding: '6px 14px', flexShrink: 0, position: 'relative', background: theme.bgGradient, maxWidth: isWide ? 760 : 'none', width: '100%', margin: isWide ? '0 auto' : 0, paddingBottom: keyboardOpen ? 6 : 'max(6px, calc(env(safe-area-inset-bottom) - 24px))' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, padding: '6px 14px', flexShrink: 0, position: 'relative', background: theme.bgGradient, boxSizing: 'border-box', maxWidth: isWide ? 760 : 'none', width: '100%', margin: isWide ? '0 auto' : 0, paddingBottom: keyboardOpen ? 6 : 'max(6px, calc(env(safe-area-inset-bottom) - 24px))' }}>
               {activeProfile && !activeGroup && myBlockedIds.has(activeProfile.id) ? (
                 <div className="zchat-fade" style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 9, padding: '8px 4px 2px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, color: theme.ink, fontWeight: 700 }}><Ban size={15} color={theme.danger} /> You blocked {activeProfile.name}</div>
@@ -16999,7 +17006,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                     rows={1}
                     style={{
                       ...(COMPOSER_AUTOSIZE ? { fieldSizing: 'content', overflowY: 'auto' } : {}),
-                      flex: 1, resize: 'none', maxHeight: 148, minHeight: 38, boxSizing: 'border-box', padding: '10px 16px', borderRadius: composerTall ? 18 : 22,
+                      flex: 1, minWidth: 0, resize: 'none', maxHeight: 148, minHeight: 38, boxSizing: 'border-box', padding: '10px 16px', borderRadius: composerTall ? 18 : 22,
                       wordBreak: 'break-word',
                       border: `1px solid ${theme.border}`, background: theme.inputBg, color: theme.ink,
                       boxShadow: theme.dark ? '0 1px 3px rgba(0,0,0,0.25)' : '0 1px 3px rgba(20,20,40,0.06)',
