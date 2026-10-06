@@ -5523,7 +5523,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
             {sheetRow(<Share2 size={18} />, 'Share profile', () => { setShowMore(false); setShowShare(true); })}
             {sheetRow(<Copy size={18} />, 'Copy profile link', async () => { await copyTextToClipboard(profileShareLink(profile.id)); setShowMore(false); })}
             {!reportSent && sheetRow(<Flag size={18} color={theme.danger} />, 'Report account', () => { setShowMore(false); setReportOpen(true); }, true)}
-            {sheetRow(<Ban size={18} color={theme.danger} />, isBlocked ? 'Unblock account' : 'Block account', () => { setShowMore(false); if (isBlocked) onUnblock(profile.id); else onBlock(profile.id); }, true)}
+            {!profile.is_bot && sheetRow(<Ban size={18} color={theme.danger} />, isBlocked ? 'Unblock account' : 'Block account', () => { setShowMore(false); if (isBlocked) onUnblock(profile.id); else onBlock(profile.id); }, true)}
             {isZAdmin && !isSelf && (profile.banned
               ? sheetRow(<ShieldCheck size={18} color={theme.teal} />, 'Remove from ZChat ban list', async () => {
                   setShowMore(false);
@@ -9270,7 +9270,7 @@ function StoryTray({ me, myStories, trayUsers, seen, onAdd, onOpen }) {
 // Keep this in sync with the username given to the bot's profile row (see the setup SQL).
 const BOT_MENTION = '@zchatbot';
 
-const APP_VERSION = '8.4V';
+const APP_VERSION = '8.7V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -13320,6 +13320,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const isUnread = (conv) => (unreadCounts[conv.otherProfile.id] || 0) > 0;
   const isUserOnline = (profile) => {
     if (!profile) return false;
+    if (profile.is_bot) return true;
     if (!privacyAllows(profile, 'privacy_online', session.user.id, iFollowIds, privacyAllowed)) return false;
     if (onlineIds.has(profile.id)) return true;
     if (profile.last_seen) {
@@ -14663,6 +14664,51 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     return activeProfile?.name || 'Unknown';
   };
 
+  const triggerBotDM = (text, mediaType, mediaUrl) => {
+    if (!activeProfile || !activeProfile.is_bot) return;
+    fetch('/.netlify/functions/bot-reply', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: session.user.id, botId: activeProfile.id, text: text || '', mediaType: mediaType || null, mediaUrl: mediaUrl || null }),
+    }).catch(() => {});
+  };
+  const sendQuickReply = async (suggestionText) => {
+    if ((!activeProfile && !activeGroup) || sendingRef.current) return;
+    sendingRef.current = true;
+    try {
+      const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      if (activeGroup) {
+        const optimistic = { id: tempId, sender_id: session.user.id, group_id: activeGroup.id, type: 'text', content: suggestionText, media_url: null, created_at: new Date().toISOString(), read: false, delivered: false, deleted: false, sending: true };
+        setMessages((prev) => [...prev, optimistic]);
+        const inserted = await sendGroupMessage('text', suggestionText, null);
+        setMessages((prev) => (inserted ? prev.map((x) => (x.id === tempId ? inserted : x)) : prev.filter((x) => x.id !== tempId)));
+        if (inserted) {
+          fetch('/.netlify/functions/bot-reply-group', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: session.user.id, groupId: activeGroup.id, text: suggestionText }),
+          }).catch(() => {});
+        } else {
+          showSnack("Couldn't send that. Try again.");
+        }
+      } else {
+        const optimistic = { id: tempId, sender_id: session.user.id, receiver_id: activeProfile.id, group_id: null, type: 'text', content: suggestionText, media_url: null, created_at: new Date().toISOString(), read: false, delivered: false, deleted: false, sending: true };
+        setMessages((prev) => [...prev, optimistic]);
+        const { data } = await sendMessage(session.user.id, activeProfile.id, 'text', suggestionText, null);
+        if (data) {
+          setMessages((prev) => prev.map((x) => (x.id === tempId ? data : x)));
+          upsertConversation(activeProfile.id, suggestionText, 'text');
+          notifyUser(activeProfile.id, me.name, suggestionText, `/?dm=${session.user.id}`, me.avatar);
+          triggerBotDM(suggestionText, null, null);
+        } else {
+          setMessages((prev) => prev.filter((x) => x.id !== tempId));
+          showSnack("Couldn't send that. Try again.");
+        }
+      }
+    } finally {
+      sendingRef.current = false;
+    }
+  };
   const sendingRef = useRef(false);
   const send = async () => {
     if (sendingRef.current) return;
@@ -14692,6 +14738,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
       upsertConversation(activeProfile.id, filePath, 'sticker');
       notifyUser(activeProfile.id, me.name, 'Sticker', `/?dm=${session.user.id}`, me.avatar);
+      triggerBotDM(null, 'sticker', null);
     }
   };
 
@@ -14717,6 +14764,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             if (data) {
               setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
               notifyUser(activeProfile.id, me.name, captionForThis || (items[i].kind === 'image' ? 'Photo' : 'Video'), `/?dm=${session.user.id}`, me.avatar);
+              triggerBotDM(captionForThis, items[i].kind, url);
             }
           }
           if (insertedRow && items[i].kind === 'video' && (items[i].trimStart != null || items[i].trimEnd != null)) {
@@ -14816,13 +14864,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
       upsertConversation(activeProfile.id, text, 'text');
       notifyUser(activeProfile.id, me.name, parseProfileLink(text) ? 'Shared a profile' : text, `/?dm=${session.user.id}`, me.avatar);
-      if (activeProfile.is_bot) {
-        fetch('/.netlify/functions/bot-reply', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: session.user.id, botId: activeProfile.id, text }),
-        }).catch(() => {});
-      }
+      triggerBotDM(text, null, null);
     }
   };
 
@@ -14902,7 +14944,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             await sendGroupMessage('audio', null, url);
           } else {
             const { data } = await sendMessage(session.user.id, activeProfile.id, 'audio', null, url);
-            if (data) { setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data])); upsertConversation(activeProfile.id, null, 'audio'); notifyUser(activeProfile.id, me.name, 'Voice message', `/?dm=${session.user.id}`, me.avatar); }
+            if (data) { setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data])); upsertConversation(activeProfile.id, null, 'audio'); triggerBotDM(null, 'audio', url); notifyUser(activeProfile.id, me.name, 'Voice message', `/?dm=${session.user.id}`, me.avatar); }
           }
         }
         setUploading(false);
@@ -16800,6 +16842,26 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               </div>
             </div>
 
+            {(() => {
+              const lastMsg = messages[messages.length - 1];
+              const botMemberId = activeGroup
+                ? (groupMembers.find((gm) => gm.profile && gm.profile.is_bot) || {}).user_id
+                : (activeProfile && activeProfile.is_bot ? activeProfile.id : null);
+              const showSuggestions = botMemberId && lastMsg && lastMsg.sender_id === botMemberId && !lastMsg.sending
+                && Array.isArray(lastMsg.suggestions) && lastMsg.suggestions.length > 0;
+              if (!showSuggestions) return null;
+              return (
+                <div style={{ display: 'flex', gap: 8, padding: '0 16px 10px', overflowX: 'auto', flexShrink: 0, WebkitOverflowScrolling: 'touch' }}>
+                  {lastMsg.suggestions.slice(0, 3).map((sgg, sggIdx) => (
+                    <div key={sggIdx} role="button" onClick={() => sendQuickReply(sgg)} style={{
+                      flex: '0 0 auto', padding: '9px 14px', borderRadius: 18, border: `1px solid ${theme.border}`,
+                      background: theme.rowBg, color: theme.ink, fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
+                    }}>{sgg}</div>
+                  ))}
+                </div>
+              );
+            })()}
+
             {(replyingTo || editingMessage) && (
               <div style={{
                 display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderTop: `1px solid ${theme.border}`,
@@ -17451,9 +17513,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           pinnedMessages.length ? item(<Pin_ size={17} color={theme.muted} />, `Pinned messages (${pinnedMessages.length})`, () => jumpToMessage(pinnedMessages[0].id)) : null,
           muteTarget ? item(isActiveUntil(mutedUntil) ? <Bell size={17} /> : <BellOff size={17} />, isActiveUntil(mutedUntil) ? 'Unmute notifications' : 'Mute notifications', () => (isActiveUntil(mutedUntil) ? setChatMute(muteTarget, null) : setMuteSheet(muteTarget)), false, muteLabel(mutedUntil)) : null,
           activeConvForBar ? item(<SettingsIcon size={17} />, 'Chat settings', () => setShowChatSettings(true), false, 'Nicknames, wallpaper, lock and more') : null,
-          item(<Ban size={17} />, blocked ? `Unblock ${activeProfile.name}` : `Block ${activeProfile.name}`, () => (blocked ? setUnblockConfirmFor(activeProfile) : setBlockConfirmFor(activeProfile)), !blocked),
+          !activeProfile.is_bot ? item(<Ban size={17} />, blocked ? `Unblock ${activeProfile.name}` : `Block ${activeProfile.name}`, () => (blocked ? setUnblockConfirmFor(activeProfile) : setBlockConfirmFor(activeProfile)), !blocked) : null,
           item(<Flag size={17} />, `Report ${activeProfile.name}`, () => setReportUserTarget(activeProfile), true),
-          activeConvForBar ? item(<Trash2 size={17} />, 'Delete chat', () => setDeleteConvoTarget(activeConvForBar), true) : null,
+          (activeConvForBar && !activeProfile.is_bot) ? item(<Trash2 size={17} />, 'Delete chat', () => setDeleteConvoTarget(activeConvForBar), true) : null,
         ];
         return (
           <SmartMenu anchorEl={chatMenuAnchor} open onClose={close} width={250}>
