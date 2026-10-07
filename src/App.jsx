@@ -4,7 +4,7 @@ import {
   Send, Paperclip, Search, Mail, ShieldCheck, ShieldOff, AtSign, LogOut, Eye, EyeOff, Lock,
   Flag, X, Trash2, User, Phone, MoreVertical, Image as ImageIcon, Video as VideoIcon, Pin,
   Smile, ArrowLeft, Check, CheckCheck, Settings as SettingsIcon, Moon, Sun, UserPlus,
-  FileText, HelpCircle, ChevronRight, ChevronLeft, Compass, Bell, Volume2, Volume1, VolumeX, Palette, Mic, Play, Pause, Download, Users, Camera, Reply, Forward, Ban, Edit3, Archive, Sparkles, Bookmark, Share2, Copy, Crop, Type, Pencil, Undo2, Scissors, BellOff, Link as LinkIcon, ShieldAlert, Heart, Repeat, PhoneOff, MicOff, VideoOff, SwitchCamera, Clock, Timer, Smartphone, Plus,
+  FileText, HelpCircle, ChevronRight, ChevronLeft, Compass, Bell, Volume2, Volume1, VolumeX, Palette, Mic, Play, Pause, Download, Users, Camera, Reply, Forward, Ban, Edit3, Archive, Sparkles, Bookmark, Share2, Copy, Crop, Type, Pencil, Undo2, Scissors, BellOff, Link as LinkIcon, ShieldAlert, Heart, Repeat, PhoneOff, MicOff, VideoOff, SwitchCamera, Clock, Timer, Smartphone, Plus, ThumbsUp, ThumbsDown,
 } from 'lucide-react';
 import {
   supabase, registerWithEmail, verifyOtp, setPassword, signInWithPassword,
@@ -1365,7 +1365,7 @@ function ToggleSwitch({ on, onClick }) {
   );
 }
 
-function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideActivity, onToggleActivity, onOpenAccounts, onOpenDelete, onOpenBlocked, blockedCount = 0, chatLockSet, chatLockHash, onSetChatLockPassword, onTurnOffChatLock, autoOpenLockSetup, onConsumedAutoOpen, me, rewardCount, onOpenCollection, onEditProfile, onPrivacySaved, isZAdmin, onOpenReports, hasPasswordLogin, onOpenSaved, onOpenProfile }) {
+function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideActivity, onToggleActivity, onOpenAccounts, onOpenDelete, onOpenBlocked, blockedCount = 0, chatLockSet, chatLockHash, onSetChatLockPassword, onTurnOffChatLock, autoOpenLockSetup, onConsumedAutoOpen, me, rewardCount, onOpenCollection, onEditProfile, onPrivacySaved, isZAdmin, onOpenReports, onOpenAdmin, hasPasswordLogin, onOpenSaved, onOpenProfile }) {
   useBackClose(true, onClose);
   const [permText, setPermText] = useState('Checking…');
   const notifState = (typeof Notification !== 'undefined' && Notification.permission) || 'default';
@@ -1499,7 +1499,7 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
       { icon: <Camera />, label: 'Camera & microphone', value: permText, onClick: fixPermissions },
       { icon: <Palette />, label: 'Theme', onClick: () => setSection('appearance') },
     ] },
-    { title: 'Admin', rows: isZAdmin ? [{ icon: <ShieldAlert />, label: 'Report queue', onClick: onOpenReports }] : [] },
+    { title: 'Admin', rows: isZAdmin ? [{ icon: <ShieldCheck />, label: 'Admin panel', onClick: onOpenAdmin }, { icon: <ShieldAlert />, label: 'Report queue', onClick: onOpenReports }] : [] },
     { title: 'More info and support', rows: [
       { icon: <HelpCircle />, label: 'About ZChat', value: `Version ${APP_VERSION}`, onClick: () => setSection('about') },
     ] },
@@ -9264,7 +9264,7 @@ function StoryTray({ me, myStories, trayUsers, seen, onAdd, onOpen }) {
 // Keep this in sync with the username given to the bot's profile row (see the setup SQL).
 const BOT_MENTION = '@zchatbot';
 
-const APP_VERSION = '9.1V';
+const APP_VERSION = '9.3V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -13225,6 +13225,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const flushOutboxRef = useRef(null);
   const flushingOutboxRef = useRef(false);
   const [showReportQueue, setShowReportQueue] = useState(false);
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [myRestrictions, setMyRestrictions] = useState([]);
   const [showSaved, setShowSaved] = useState(false);
   const [joinPrompt, setJoinPrompt] = useState(null);
   const [joiningGroup, setJoiningGroup] = useState(false);
@@ -13657,6 +13659,20 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     supabase.from('admins').select('user_id').eq('user_id', me.id).maybeSingle()
       .then(({ data }) => setIsZAdmin(!!data))
       .catch(() => setIsZAdmin(false));
+  }, [me && me.id]);
+
+  useEffect(() => {
+    if (!me) { setMyRestrictions([]); return undefined; }
+    let alive = true;
+    const loadRestrictions = async () => {
+      try {
+        const { data } = await supabase.from('user_restrictions').select('*').eq('user_id', me.id).eq('lifted', false).gt('until', new Date().toISOString());
+        if (alive) setMyRestrictions(data || []);
+      } catch {}
+    };
+    loadRestrictions();
+    const timer = setInterval(loadRestrictions, 60000);
+    return () => { alive = false; clearInterval(timer); };
   }, [me && me.id]);
 
   useEffect(() => {
@@ -14719,6 +14735,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const sendingRef = useRef(false);
   const send = async () => {
     if (sendingRef.current) return;
+    const chatPause = (myRestrictions || []).find((r) => r.kind === 'chat' && new Date(r.until).getTime() > Date.now());
+    if (chatPause) { showSnack(`Chat is paused until ${adminDate(chatPause.until)}.`); return; }
     sendingRef.current = true;
     try {
       await sendInner();
@@ -16334,6 +16352,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       if (anchorAt >= 0) startAt = Math.min(startAt, Math.max(0, anchorAt - 15));
     }
     const list = uniqueBy(messages.slice(startAt), (x) => x.id);
+    const botSenderId = activeGroup
+      ? (groupMembers.find((gm) => gm.profile && gm.profile.is_bot) || {}).user_id
+      : (activeProfile && activeProfile.is_bot ? activeProfile.id : null);
     return (
                 list.map((m, msgIndex) => {
                   const nextMsg = list[msgIndex + 1];
@@ -16382,9 +16403,15 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                       onOpenPost={(post, owner) => setDeepPost({ post, owner: sanitizeAvatar(owner, session.user.id) })}
                     />
                   );
-                  return isUnreadAnchor
-                    ? <React.Fragment key={m.id}><UnreadDivider count={unreadAnchor.count} />{bubble}</React.Fragment>
-                    : bubble;
+                  const showBotActions = !!botSenderId && m.sender_id === botSenderId && m.type === 'text' && !!m.content && !m.deleted && !m.sending && !selectionMode;
+                  if (!isUnreadAnchor && !showBotActions) return bubble;
+                  return (
+                    <React.Fragment key={m.id}>
+                      {isUnreadAnchor && <UnreadDivider count={unreadAnchor.count} />}
+                      {bubble}
+                      {showBotActions && <BotMessageActions m={m} />}
+                    </React.Fragment>
+                  );
                 })
     );
   }, [messages, visibleCount, messageLikes, selectionMode, selectedIds, highlightedMsgId, activeGroup, activeProfile, groupMembers, me, mutualIds, myBlockedIds, blockedByIds, activeGroupCall, unreadAnchor, chatKey]);
@@ -16440,6 +16467,11 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         </div>
       )}
       <AssetDownloadBar progress={assetProgress} />
+      {(myRestrictions || []).filter((r) => new Date(r.until).getTime() > Date.now()).length > 0 && (
+        <div role="status" style={{ position: 'fixed', left: 12, right: 12, bottom: 'calc(env(safe-area-inset-bottom) + 84px)', zIndex: 250, padding: '10px 14px', borderRadius: 16, background: '#2b2f3a', color: 'white', fontSize: 12.5, fontWeight: 700, fontFamily: FONT, lineHeight: 1.4, boxShadow: '0 6px 20px rgba(0,0,0,0.3)', pointerEvents: 'none' }}>
+          {(myRestrictions || []).filter((r) => new Date(r.until).getTime() > Date.now()).map((r) => `${r.kind === 'chat' ? 'Chat' : r.kind === 'status' ? 'Status' : 'Posting'} paused until ${adminDate(r.until)}`).join('. ')}
+        </div>
+      )}
       {showInstallHelp && <InstallAppHelpModal onClose={() => setShowInstallHelp(false)} />}
       <div {...feedSwipe} style={{
         width: isWide ? 360 : (mobileShowChat ? 0 : '100%'), maxWidth: isWide ? 360 : (mobileShowChat ? 0 : '100%'), overflow: 'hidden',
@@ -17123,7 +17155,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           hideActivity={!!me.hide_activity} onToggleActivity={toggleHideActivity}
           onOpenAccounts={() => { setShowSettings(false); setShowAccountSwitcher(true); }}
           onOpenBlocked={() => setShowBlockedList(true)} blockedCount={myBlockedIds.size}
-          isZAdmin={isZAdmin} onOpenReports={() => { setShowSettings(false); setShowReportQueue(true); }}
+          isZAdmin={isZAdmin} onOpenReports={() => { setShowSettings(false); setShowReportQueue(true); }} onOpenAdmin={() => { setShowSettings(false); setShowAdminPanel(true); }}
           onOpenSaved={() => { setShowSettings(false); setShowSaved(true); }}
           onOpenProfile={(p) => { setShowSettings(false); setProfileOf(p); }}
           hasPasswordLogin={(() => {
@@ -17142,6 +17174,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       {showSaved && (
         <SavedMessagesPanel myId={session.user.id} onClose={() => setShowSaved(false)} onOpenChat={openChatFromSaved}
           onChanged={(sourceId) => setSavedIds((prev) => { const n = new Set(prev); n.delete(String(sourceId)); return n; })} />
+      )}
+      {showAdminPanel && isZAdmin && (
+        <AdminPanel myId={session.user.id} onClose={() => setShowAdminPanel(false)} onOpenProfile={(p) => setProfileOf(p)} onOpenReports={() => { setShowAdminPanel(false); setShowReportQueue(true); }} />
       )}
       {showReportQueue && isZAdmin && (
         <ReportQueuePanel onClose={() => setShowReportQueue(false)} onOpenProfile={(p) => setProfileOf(p)} />
@@ -17724,6 +17759,563 @@ function normalizeReport(row, source) {
     dbHandled: (!!statusRaw && /handled|resolved|closed|done|actioned|dismissed|reviewed/i.test(String(statusRaw))) || row.handled === true || row.resolved === true,
     message: null,
   };
+}
+
+function BotMessageActions({ m }) {
+  const { theme } = useTheme();
+  const storeKey = `zchat-botfeedback-${m.id}`;
+  const [fb, setFb] = useState(() => { try { return localStorage.getItem(storeKey) || ''; } catch { return ''; } });
+  const [copied, setCopied] = useState(false);
+  const pick = (val) => {
+    const next = fb === val ? '' : val;
+    setFb(next);
+    try { if (next) localStorage.setItem(storeKey, next); else localStorage.removeItem(storeKey); } catch {}
+  };
+  const doCopy = async () => {
+    const ok = await copyTextToClipboard(m.content);
+    if (ok) { setCopied(true); setTimeout(() => setCopied(false), 1600); }
+  };
+  const btn = (label, onClick, icon, active) => (
+    <div role="button" aria-label={label} title={label} onClick={onClick} style={{
+      width: 32, height: 32, borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+      color: active ? theme.coral : theme.muted, background: active ? `${theme.coral}1F` : 'transparent', WebkitTapHighlightColor: 'transparent',
+    }}>{icon}</div>
+  );
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '0 16px 6px 20px', marginTop: -2 }}>
+      {btn(copied ? 'Copied' : 'Copy', doCopy, copied ? <Check size={16} /> : <Copy size={16} />, copied)}
+      {btn('Good reply', () => pick('like'), <ThumbsUp size={16} fill={fb === 'like' ? 'currentColor' : 'none'} />, fb === 'like')}
+      {btn('Bad reply', () => pick('dislike'), <ThumbsDown size={16} fill={fb === 'dislike' ? 'currentColor' : 'none'} />, fb === 'dislike')}
+      {copied && <span style={{ fontSize: 12, fontWeight: 700, color: theme.muted, marginLeft: 4 }}>Copied</span>}
+    </div>
+  );
+}
+
+function AdminPanel({ myId, onClose, onOpenProfile, onOpenReports }) {
+  useBackClose(true, onClose);
+  const { theme } = useTheme();
+  const [tab, setTab] = useState('overview');
+  const [stats, setStats] = useState(null);
+  const [statsError, setStatsError] = useState('');
+  const [query, setQuery] = useState('');
+  const [people, setPeople] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [busyId, setBusyId] = useState(null);
+  const [note, setNote] = useState('');
+  const [badgeFor, setBadgeFor] = useState(null);
+  const [banFor, setBanFor] = useState(null);
+  const [banReason, setBanReason] = useState('');
+  const [bTitle, setBTitle] = useState('');
+  const [bBody, setBBody] = useState('');
+  const [bBusy, setBBusy] = useState(false);
+  const [bConfirm, setBConfirm] = useState(false);
+  const [manageFor, setManageFor] = useState(null);
+
+  const loadStats = async () => {
+    setStatsError('');
+    const { data, error } = await supabase.rpc('admin_stats');
+    if (error) { setStats(null); setStatsError(friendlyError(error, 'Could not load the numbers. Run the admin SQL first.')); return; }
+    setStats(data || {});
+  };
+  useEffect(() => { loadStats(); }, []);
+
+  const runSearch = async (text) => {
+    const q = String(text || '').trim().replace(/[%,()]/g, '');
+    setSearching(true);
+    let req = supabase.from('profiles').select('*').order('created_at', { ascending: false }).limit(30);
+    if (q) req = req.or(`name.ilike.%${q}%,username.ilike.%${q}%`);
+    const { data } = await req;
+    setPeople(sanitizeAvatarList(data || [], ''));
+    setSearching(false);
+  };
+  useEffect(() => { if (tab === 'users') runSearch(query); }, [tab]);
+  useEffect(() => {
+    if (tab !== 'users') return undefined;
+    const t = setTimeout(() => runSearch(query), 320);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  const patch = (id, fields) => setPeople((prev) => prev.map((p) => (p.id === id ? { ...p, ...fields } : p)));
+
+  const setBadge = async (p, tier) => {
+    setBusyId(p.id);
+    const { error } = await supabase.rpc('admin_set_verified', { p_user_id: p.id, p_tier: tier || null });
+    setBusyId(null);
+    if (error) { setNote(friendlyError(error, 'Could not change the badge.')); return; }
+    patch(p.id, { verified: tier || null });
+    setBadgeFor(null);
+    setNote(`Badge updated for ${p.name}.`);
+  };
+  const doBan = async () => {
+    if (!banFor) return;
+    setBusyId(banFor.id);
+    const { error } = await supabase.rpc('admin_ban', { p_user_id: banFor.id, p_reason: banReason || 'Banned by admin panel' });
+    setBusyId(null);
+    if (error) { setNote(friendlyError(error, 'Could not ban this account.')); return; }
+    patch(banFor.id, { banned: true });
+    setNote(`${banFor.name} is banned.`);
+    setBanFor(null); setBanReason('');
+    loadStats();
+  };
+  const doUnban = async (p) => {
+    setBusyId(p.id);
+    const { error } = await supabase.rpc('admin_unban', { p_user_id: p.id });
+    setBusyId(null);
+    if (error) { setNote(friendlyError(error, 'Could not unban this account.')); return; }
+    patch(p.id, { banned: false });
+    setNote(`${p.name} is unbanned.`);
+    loadStats();
+  };
+  const sendBroadcast = async () => {
+    if (!bTitle.trim() || !bBody.trim() || bBusy) return;
+    setBBusy(true);
+    const { data, error } = await supabase.rpc('admin_broadcast', { p_title: bTitle.trim(), p_body: bBody.trim() });
+    setBBusy(false);
+    setBConfirm(false);
+    if (error) { setNote(friendlyError(error, 'Could not send the announcement.')); return; }
+    setNote(`Announcement sent to ${formatCount(Number(data) || 0)} people.`);
+    setBTitle(''); setBBody('');
+  };
+
+  const card = { background: theme.rowBg, border: `1px solid ${theme.border}`, borderRadius: 18, padding: 14 };
+  const pill = (label, onClick, tone, disabled) => (
+    <div role="button" onClick={disabled ? undefined : onClick} style={{
+      padding: '8px 13px', borderRadius: 14, fontSize: 12.5, fontWeight: 800, cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.5 : 1,
+      background: tone === 'danger' ? `${theme.danger}22` : tone === 'main' ? theme.coral : theme.panelBg,
+      color: tone === 'danger' ? theme.danger : tone === 'main' ? 'white' : theme.ink,
+      border: `1px solid ${tone === 'danger' ? `${theme.danger}55` : tone === 'main' ? 'transparent' : theme.border}`,
+    }}>{label}</div>
+  );
+  const statTile = (label, value) => (
+    <div style={{ ...card, flex: '1 1 calc(50% - 5px)', minWidth: 130 }}>
+      <div style={{ fontSize: 24, fontWeight: 900, color: theme.ink }}>{value == null ? '—' : formatCount(Number(value) || 0)}</div>
+      <div style={{ fontSize: 12, color: theme.muted, fontWeight: 700, marginTop: 2 }}>{label}</div>
+    </div>
+  );
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 40, background: theme.panelBg, display: 'flex', flexDirection: 'column', fontFamily: FONT }} className="zchat-fade">
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px 10px', paddingTop: 'calc(14px + env(safe-area-inset-top))' }}>
+        <ArrowLeft size={20} style={{ cursor: 'pointer', color: theme.ink }} onClick={onClose} />
+        <ShieldCheck size={20} color={theme.coral} />
+        <div style={{ fontWeight: 900, fontSize: 18, color: theme.ink, flex: 1 }}>Admin panel</div>
+        {tab === 'overview' && <div role="button" onClick={loadStats} style={{ fontSize: 12.5, fontWeight: 800, color: theme.coral, cursor: 'pointer' }}>Refresh</div>}
+      </div>
+      <div style={{ display: 'flex', gap: 8, padding: '0 16px 10px', overflowX: 'auto' }}>
+        {[['overview', 'Overview'], ['users', 'People'], ['data', 'Data'], ['broadcast', 'Announce']].map(([k, label]) => (
+          <div key={k} role="button" onClick={() => { setTab(k); setNote(''); }} style={{
+            padding: '7px 14px', borderRadius: 16, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', flexShrink: 0,
+            background: tab === k ? theme.coral : theme.rowBg, color: tab === k ? 'white' : theme.ink, border: `1px solid ${tab === k ? 'transparent' : theme.border}`,
+          }}>{label}</div>
+        ))}
+      </div>
+      <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '0 16px', paddingBottom: 'calc(24px + env(safe-area-inset-bottom))' }}>
+        {note && <div style={{ ...card, padding: '10px 12px', marginBottom: 10, fontSize: 13, fontWeight: 700, color: theme.ink }}>{note}</div>}
+
+        {tab === 'overview' && (
+          <>
+            {statsError && <div style={{ background: `${theme.danger}18`, color: theme.danger, borderRadius: 12, padding: '9px 12px', fontSize: 12.5, fontWeight: 700, marginBottom: 10 }}>{statsError}</div>}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+              {statTile('People', stats && stats.users)}
+              {statTile('Joined today', stats && stats.new_today)}
+              {statTile('Messages', stats && stats.messages)}
+              {statTile('Groups', stats && stats.groups)}
+              {statTile('Posts', stats && stats.posts)}
+              {statTile('Open reports', stats && stats.open_reports)}
+              {statTile('Banned', stats && stats.banned)}
+              {statTile('Bot messages', stats && stats.bot_messages)}
+            </div>
+            <div style={{ ...card, marginTop: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
+              <ShieldAlert size={20} color={theme.coral} />
+              <div style={{ flex: 1, fontWeight: 800, color: theme.ink, fontSize: 14 }}>Report queue</div>
+              {pill('Open', onOpenReports, 'main')}
+            </div>
+          </>
+        )}
+
+        {tab === 'users' && (
+          <>
+            <input style={inputStyle(theme)} placeholder="Search name or username" value={query} onChange={(e) => setQuery(e.target.value)} />
+            <div style={{ height: 10 }} />
+            {searching && !people.length ? (
+              <div style={{ display: 'flex', justifyContent: 'center', padding: 30 }}><Spinner size={22} color={theme.ink} /></div>
+            ) : people.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '40px 20px', color: theme.muted, fontSize: 13 }}>No people found.</div>
+            ) : people.map((p) => (
+              <div key={p.id} style={{ ...card, marginBottom: 10 }}>
+                <div role="button" onClick={() => onOpenProfile(p)} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+                  <Avatar emoji={p.avatar} name={p.name} size={40} frame={p.avatar_frame} />
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontWeight: 800, fontSize: 14.5, color: theme.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
+                    <div style={{ fontSize: 12, color: theme.muted }}>@{p.username}{p.verified ? ` · ${(VERIFIED_TIERS[p.verified] || {}).label || p.verified}` : ''}</div>
+                  </div>
+                  {p.banned && <span style={{ fontSize: 11, fontWeight: 900, color: theme.danger }}>Banned</span>}
+                </div>
+                {p.id !== myId && !p.is_bot && (
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+                    {pill('Manage', () => setManageFor(p), 'main')}
+                    {pill('Badge', () => setBadgeFor(p), null, busyId === p.id)}
+                    {p.banned ? pill('Unban', () => doUnban(p), 'main', busyId === p.id) : pill('Ban', () => { setBanFor(p); setBanReason(''); }, 'danger', busyId === p.id)}
+                  </div>
+                )}
+              </div>
+            ))}
+          </>
+        )}
+
+        {tab === 'data' && <AdminDataBrowser />}
+
+        {tab === 'broadcast' && (
+          <div style={card}>
+            <div style={{ fontWeight: 900, fontSize: 15, color: theme.ink }}>Announcement to everyone</div>
+            <div style={{ fontSize: 12.5, color: theme.muted, margin: '4px 0 12px', lineHeight: 1.5 }}>It lands in every person's Mail as a message from you.</div>
+            <input style={inputStyle(theme)} placeholder="Title" maxLength={80} value={bTitle} onChange={(e) => setBTitle(e.target.value)} />
+            <div style={{ height: 10 }} />
+            <textarea style={{ ...inputStyle(theme), minHeight: 110, resize: 'vertical', fontFamily: FONT }} placeholder="Message" maxLength={1000} value={bBody} onChange={(e) => setBBody(e.target.value)} />
+            <button style={{ ...primaryBtn(theme, bBusy || !bTitle.trim() || !bBody.trim()), marginTop: 14 }} disabled={bBusy || !bTitle.trim() || !bBody.trim()} onClick={() => setBConfirm(true)}>
+              {bBusy ? <Spinner /> : 'Send announcement'}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {manageFor && <AdminUserPanel person={manageFor} myId={myId} onClose={() => setManageFor(null)} onChanged={(fields) => { patch(manageFor.id, fields); setManageFor((cur) => (cur ? { ...cur, ...fields } : cur)); }} onOpenProfile={onOpenProfile} />}
+      {badgeFor && (
+        <div onClick={() => setBadgeFor(null)} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end' }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', background: theme.panelBg, borderRadius: '22px 22px 0 0', padding: '20px 18px', paddingBottom: 'calc(20px + env(safe-area-inset-bottom))', maxHeight: '80%', overflowY: 'auto' }}>
+            <div style={{ fontWeight: 900, fontSize: 17, color: theme.ink, marginBottom: 10 }}>Badge for {badgeFor.name}</div>
+            {[['', 'No badge', theme.muted], ...Object.entries(VERIFIED_TIERS).map(([k, t]) => [k, t.label, t.color])].map(([k, label, color]) => (
+              <div key={k || 'none'} role="button" onClick={() => setBadge(badgeFor, k)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 4px', borderTop: `1px solid ${theme.border}`, cursor: 'pointer' }}>
+                <span style={{ width: 14, height: 14, borderRadius: 7, background: color, flexShrink: 0 }} />
+                <span style={{ flex: 1, fontSize: 14.5, fontWeight: 700, color: theme.ink }}>{label}</span>
+                {(badgeFor.verified || '') === k && <Check size={17} color={theme.coral} />}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {banFor && (
+        <div onClick={() => setBanFor(null)} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end' }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', background: theme.panelBg, borderRadius: '22px 22px 0 0', padding: '20px 18px', paddingBottom: 'calc(20px + env(safe-area-inset-bottom))' }}>
+            <div style={{ fontWeight: 900, fontSize: 17, color: theme.ink, marginBottom: 8 }}>Ban @{banFor.username} from ZChat?</div>
+            <div style={{ fontSize: 13.5, color: theme.muted, lineHeight: 1.6, marginBottom: 14 }}>This blocks their login, email and phone, and removes every message they sent.</div>
+            <input style={inputStyle(theme)} placeholder="Reason, for your records" value={banReason} onChange={(e) => setBanReason(e.target.value)} />
+            <button style={{ ...primaryBtn(theme, false), background: theme.danger, marginTop: 14 }} onClick={doBan}>Ban this account</button>
+            <div onClick={() => setBanFor(null)} style={{ textAlign: 'center', padding: '14px 0 2px', fontWeight: 700, color: theme.muted, cursor: 'pointer' }}>Cancel</div>
+          </div>
+        </div>
+      )}
+      {bConfirm && (
+        <div onClick={() => !bBusy && setBConfirm(false)} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end' }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', background: theme.panelBg, borderRadius: '22px 22px 0 0', padding: '20px 18px', paddingBottom: 'calc(20px + env(safe-area-inset-bottom))' }}>
+            <div style={{ fontWeight: 900, fontSize: 17, color: theme.ink, marginBottom: 8 }}>Send to everyone?</div>
+            <div style={{ fontSize: 13.5, color: theme.muted, lineHeight: 1.6, marginBottom: 14 }}>This cannot be taken back. Every account will get it in Mail.</div>
+            <button style={primaryBtn(theme, bBusy)} disabled={bBusy} onClick={sendBroadcast}>{bBusy ? <Spinner /> : 'Send now'}</button>
+            <div onClick={() => setBConfirm(false)} style={{ textAlign: 'center', padding: '14px 0 2px', fontWeight: 700, color: theme.muted, cursor: 'pointer' }}>Cancel</div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+function adminDate(v) {
+  if (!v) return 'never';
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return String(v);
+  return d.toLocaleString([], { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+const ADMIN_RESTRICT_KINDS = [['chat', 'Chat'], ['status', 'Status'], ['post', 'Posts']];
+const ADMIN_RESTRICT_HOURS = [[1, '1 hour'], [24, '24 hours'], [72, '3 days'], [168, '7 days'], [720, '30 days']];
+const ADMIN_GRANT_DAYS = [[0, 'Forever'], [7, '7 days'], [30, '30 days'], [90, '90 days']];
+
+function AdminUserPanel({ person, myId, onClose, onChanged, onOpenProfile }) {
+  useBackClose(true, onClose);
+  const { theme } = useTheme();
+  const [data, setData] = useState(null);
+  const [error, setError] = useState('');
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [section, setSection] = useState('info');
+  const [giftKind, setGiftKind] = useState('frame');
+  const [giftDays, setGiftDays] = useState(0);
+  const [equipNow, setEquipNow] = useState(true);
+  const [rKind, setRKind] = useState('chat');
+  const [rHours, setRHours] = useState(24);
+  const [rReason, setRReason] = useState('');
+  const [msgs, setMsgs] = useState(null);
+
+  const load = async () => {
+    const { data: d, error: e } = await supabase.rpc('admin_user_overview', { p_user_id: person.id });
+    if (e) { setError(friendlyError(e, 'Could not load this person. Run the admin SQL files first.')); return; }
+    setError('');
+    setData(d || {});
+  };
+  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    if (section !== 'messages' || msgs) return;
+    supabase.rpc('admin_user_messages', { p_user_id: person.id, p_limit: 60 }).then(({ data: d, error: e }) => {
+      if (e) { setNote(friendlyError(e, 'Could not load messages.')); setMsgs([]); return; }
+      setMsgs(d || []);
+    });
+  }, [section]);
+
+  const act = async (fn, okText, after) => {
+    if (busy) return;
+    setBusy(true);
+    const res = await fn();
+    setBusy(false);
+    if (res && res.error) { setNote(friendlyError(res.error, 'That did not work.')); return; }
+    setNote(okText);
+    if (after) after(res);
+    load();
+  };
+
+  const profile = (data && data.profile) || person;
+  const rewards = ((data && data.rewards) || []).filter(rewardActive);
+  const restrictions = ((data && data.restrictions) || []).filter((r) => !r.lifted && new Date(r.until).getTime() > Date.now());
+  const ownedKey = (kind, key) => rewards.find((r) => r.kind === kind && r.reward_key === key);
+  const equippedKey = giftKind === 'frame' ? profile.avatar_frame : giftKind === 'nameplate' ? profile.nameplate : profile.custom_badge;
+  const catalog = giftKind === 'frame' ? AVATAR_FRAMES : giftKind === 'nameplate' ? NAMEPLATES : CUSTOM_BADGES;
+  const fieldOf = (kind) => (kind === 'frame' ? 'avatar_frame' : kind === 'nameplate' ? 'nameplate' : 'custom_badge');
+  const isSelf = person.id === myId;
+
+  const card = { background: theme.rowBg, border: `1px solid ${theme.border}`, borderRadius: 18, padding: 14, marginBottom: 10 };
+  const chip = (label, on, onClick) => (
+    <div key={label} role="button" onClick={onClick} style={{ padding: '7px 13px', borderRadius: 15, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', flexShrink: 0, background: on ? theme.coral : theme.panelBg, color: on ? 'white' : theme.ink, border: `1px solid ${on ? 'transparent' : theme.border}` }}>{label}</div>
+  );
+  const pill = (label, onClick, tone, disabled) => (
+    <div role="button" onClick={disabled ? undefined : onClick} style={{
+      padding: '8px 13px', borderRadius: 14, fontSize: 12.5, fontWeight: 800, cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.5 : 1, flexShrink: 0,
+      background: tone === 'danger' ? `${theme.danger}22` : tone === 'main' ? theme.coral : theme.panelBg,
+      color: tone === 'danger' ? theme.danger : tone === 'main' ? 'white' : theme.ink,
+      border: `1px solid ${tone === 'danger' ? `${theme.danger}55` : tone === 'main' ? 'transparent' : theme.border}`,
+    }}>{label}</div>
+  );
+  const line = (label, value) => (
+    <div key={label} style={{ display: 'flex', gap: 10, padding: '7px 0', borderTop: `1px solid ${theme.border}`, fontSize: 13 }}>
+      <div style={{ width: 118, flexShrink: 0, color: theme.muted, fontWeight: 700 }}>{label}</div>
+      <div style={{ flex: 1, minWidth: 0, color: theme.ink, wordBreak: 'break-word' }}>{value == null || value === '' ? 'none' : String(value)}</div>
+    </div>
+  );
+  const rarityColor = (spec) => (RARITY_STYLE[spec.rarity] || RARITY_STYLE.epic).color;
+
+  const ban = () => act(() => supabase.rpc('admin_ban', { p_user_id: person.id, p_reason: 'Banned by admin panel' }), 'Account banned.', () => onChanged({ banned: true }));
+  const unban = () => act(() => supabase.rpc('admin_unban', { p_user_id: person.id }), 'Account unbanned.', () => onChanged({ banned: false }));
+
+  return (
+    <div style={{ position: 'absolute', inset: 0, zIndex: 5, background: theme.panelBg, display: 'flex', flexDirection: 'column' }} className="zchat-fade">
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px 10px', paddingTop: 'calc(14px + env(safe-area-inset-top))' }}>
+        <ArrowLeft size={20} style={{ cursor: 'pointer', color: theme.ink }} onClick={onClose} />
+        <Avatar emoji={profile.avatar} name={profile.name} size={34} frame={profile.avatar_frame} />
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ fontWeight: 900, fontSize: 16, color: theme.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.name}</div>
+          <div style={{ fontSize: 12, color: theme.muted }}>@{profile.username}{profile.banned ? ' · Banned' : ''}</div>
+        </div>
+        {pill('Profile', () => onOpenProfile(profile))}
+      </div>
+      <div style={{ display: 'flex', gap: 8, padding: '0 16px 10px', overflowX: 'auto' }}>
+        {[['info', 'Info'], ['gifts', 'Gifts'], ['restrict', 'Restrict'], ['messages', 'Messages'], ['raw', 'Raw']].map(([k, l]) => chip(l, section === k, () => { setSection(k); setNote(''); }))}
+      </div>
+      <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '0 16px', paddingBottom: 'calc(24px + env(safe-area-inset-bottom))' }}>
+        {note && <div style={{ ...card, padding: '10px 12px', fontSize: 13, fontWeight: 700, color: theme.ink }}>{note}</div>}
+        {error && <div style={{ background: `${theme.danger}18`, color: theme.danger, borderRadius: 12, padding: '9px 12px', fontSize: 12.5, fontWeight: 700, marginBottom: 10 }}>{error}</div>}
+        {!data && !error && <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><Spinner size={22} color={theme.ink} /></div>}
+
+        {data && section === 'info' && (
+          <>
+            <div style={card}>
+              {line('Email', data.auth && data.auth.email)}
+              {line('Phone', data.auth && data.auth.phone)}
+              {line('User id', profile.id)}
+              {line('Joined', adminDate(data.auth && data.auth.created_at))}
+              {line('Last sign in', adminDate(data.auth && data.auth.last_sign_in_at))}
+              {line('Last seen', adminDate(profile.last_seen))}
+              {line('Messages sent', data.messages_sent)}
+              {line('Posts', data.posts)}
+              {line('Stories', data.stories)}
+              {line('Reports against', data.reports_against)}
+              {line('Badge', profile.verified)}
+              {line('Private account', profile.is_private ? 'yes' : 'no')}
+            </div>
+            {!isSelf && !profile.is_bot && (
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {profile.banned ? pill('Unban account', unban, 'main', busy) : pill('Ban account', ban, 'danger', busy)}
+              </div>
+            )}
+          </>
+        )}
+
+        {data && section === 'gifts' && (
+          <>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 10, overflowX: 'auto' }}>
+              {[['frame', 'Frames'], ['nameplate', 'Nameplates'], ['charm', 'Charms'], ['badge', 'Badges']].map(([k, l]) => chip(l, giftKind === k, () => setGiftKind(k)))}
+            </div>
+            {giftKind !== 'badge' && (
+              <div style={{ ...card, padding: 12 }}>
+                <div style={{ fontSize: 12, color: theme.muted, fontWeight: 700, marginBottom: 8 }}>How long</div>
+                <div style={{ display: 'flex', gap: 8, overflowX: 'auto' }}>{ADMIN_GRANT_DAYS.map(([d, l]) => chip(l, giftDays === d, () => setGiftDays(d)))}</div>
+                <div role="button" onClick={() => setEquipNow((v) => !v)} style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12, cursor: 'pointer' }}>
+                  <span style={{ width: 20, height: 20, borderRadius: 6, border: `2px solid ${equipNow ? theme.coral : theme.border}`, background: equipNow ? theme.coral : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{equipNow && <Check size={13} color="white" />}</span>
+                  <span style={{ fontSize: 13.5, fontWeight: 700, color: theme.ink }}>Wear it right away</span>
+                </div>
+              </div>
+            )}
+            {giftKind === 'badge' ? (
+              [['', 'No badge', theme.muted], ...Object.entries(VERIFIED_TIERS).map(([k, t]) => [k, t.label, t.color])].map(([k, label, color]) => (
+                <div key={k || 'none'} style={{ ...card, display: 'flex', alignItems: 'center', gap: 10, padding: '11px 12px' }}>
+                  <span style={{ width: 14, height: 14, borderRadius: 7, background: color, flexShrink: 0 }} />
+                  <span style={{ flex: 1, fontWeight: 800, fontSize: 14, color: theme.ink }}>{label}</span>
+                  {(profile.verified || '') === k ? <span style={{ fontSize: 11.5, fontWeight: 900, color: theme.coral }}>ACTIVE</span> : pill('Set', () => act(() => supabase.rpc('admin_set_verified', { p_user_id: person.id, p_tier: k || null }), 'Badge updated.', () => onChanged({ verified: k || null })), 'main', busy)}
+                </div>
+              ))
+            ) : Object.entries(catalog).map(([key, spec]) => {
+              const own = ownedKey(giftKind, key);
+              const worn = equippedKey === key;
+              return (
+                <div key={key} style={{ ...card, display: 'flex', alignItems: 'center', gap: 10, padding: '11px 12px' }}>
+                  <span style={{ width: 10, height: 10, borderRadius: 5, background: rarityColor(spec), flexShrink: 0 }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 800, fontSize: 14, color: theme.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{spec.label}</div>
+                    <div style={{ fontSize: 11.5, color: theme.muted }}>{worn ? 'Worn now' : own ? (own.expires_at ? `Owned until ${adminDate(own.expires_at)}` : 'Owned forever') : 'Not owned'}</div>
+                  </div>
+                  {own && pill('Remove', () => act(() => supabase.rpc('admin_revoke_reward', { p_user_id: person.id, p_kind: giftKind, p_key: key }), 'Removed.', () => { if (worn) onChanged({ [fieldOf(giftKind)]: null }); }), 'danger', busy)}
+                  {pill(own ? 'Renew' : 'Give', () => act(() => supabase.rpc('admin_grant_reward', { p_user_id: person.id, p_kind: giftKind, p_key: key, p_days: giftDays, p_equip: equipNow }), 'Given.', () => { if (equipNow) onChanged({ [fieldOf(giftKind)]: key }); }), 'main', busy)}
+                </div>
+              );
+            })}
+          </>
+        )}
+
+        {data && section === 'restrict' && (
+          <>
+            <div style={card}>
+              <div style={{ fontWeight: 900, fontSize: 15, color: theme.ink, marginBottom: 4 }}>Pause something for a while</div>
+              <div style={{ fontSize: 12.5, color: theme.muted, lineHeight: 1.5, marginBottom: 12 }}>They get a Mail telling them when it ends. The database enforces it, so it cannot be skipped.</div>
+              <div style={{ display: 'flex', gap: 8, overflowX: 'auto', marginBottom: 10 }}>{ADMIN_RESTRICT_KINDS.map(([k, l]) => chip(l, rKind === k, () => setRKind(k)))}</div>
+              <div style={{ display: 'flex', gap: 8, overflowX: 'auto', marginBottom: 12 }}>{ADMIN_RESTRICT_HOURS.map(([h, l]) => chip(l, rHours === h, () => setRHours(h)))}</div>
+              <input style={inputStyle(theme)} placeholder="Reason, they will see it" value={rReason} onChange={(e) => setRReason(e.target.value)} />
+              <div style={{ marginTop: 12 }}>
+                {pill('Apply pause', () => act(() => supabase.rpc('admin_restrict', { p_user_id: person.id, p_kind: rKind, p_hours: rHours, p_reason: rReason }), 'Pause applied.', () => setRReason('')), 'danger', busy || isSelf || !!profile.is_bot)}
+              </div>
+            </div>
+            <div style={{ fontWeight: 900, fontSize: 14, color: theme.ink, margin: '14px 2px 8px' }}>Active pauses</div>
+            {restrictions.length === 0 ? <div style={{ color: theme.muted, fontSize: 13, padding: '6px 2px' }}>None right now.</div> : restrictions.map((r) => (
+              <div key={r.id} style={{ ...card, display: 'flex', alignItems: 'center', gap: 10, padding: '11px 12px' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 800, fontSize: 14, color: theme.ink }}>{(ADMIN_RESTRICT_KINDS.find((x) => x[0] === r.kind) || [0, r.kind])[1]} paused</div>
+                  <div style={{ fontSize: 12, color: theme.muted }}>Until {adminDate(r.until)}{r.reason ? ` · ${r.reason}` : ''}</div>
+                </div>
+                {pill('Lift', () => act(() => supabase.rpc('admin_lift_restriction', { p_id: r.id }), 'Pause lifted.'), 'main', busy)}
+              </div>
+            ))}
+          </>
+        )}
+
+        {section === 'messages' && (
+          msgs === null ? <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><Spinner size={22} color={theme.ink} /></div>
+          : msgs.length === 0 ? <div style={{ color: theme.muted, fontSize: 13, textAlign: 'center', padding: 30 }}>No messages found.</div>
+          : msgs.map((m) => (
+            <div key={m.id} style={card}>
+              <div style={{ fontSize: 11.5, color: theme.muted, fontWeight: 700 }}>{`${m.sender_id === person.id ? 'Sent' : 'Received'} · ${m.type}${m.group_id ? ' · group' : ''} · ${adminDate(m.created_at)}`}</div>
+              <div style={{ fontSize: 13.5, color: theme.ink, marginTop: 5, wordBreak: 'break-word', lineHeight: 1.4 }}>{m.deleted ? 'Deleted message' : String(m.content || m.media_url || '').slice(0, 400)}</div>
+            </div>
+          ))
+        )}
+
+        {data && section === 'raw' && (
+          <pre style={{ ...card, fontSize: 11.5, color: theme.ink, whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: 0 }}>{JSON.stringify(data, null, 2)}</pre>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AdminDataBrowser() {
+  const { theme } = useTheme();
+  const [tables, setTables] = useState(null);
+  const [error, setError] = useState('');
+  const [table, setTable] = useState(null);
+  const [search, setSearch] = useState('');
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [more, setMore] = useState(false);
+  const [open, setOpen] = useState(null);
+  const PAGE = 30;
+
+  useEffect(() => {
+    supabase.rpc('admin_list_tables').then(({ data, error: e }) => {
+      if (e) { setError(friendlyError(e, 'Could not list tables. Run the admin SQL files first.')); return; }
+      setTables(data || []);
+    });
+  }, []);
+
+  const fetchRows = async (name, text, offset) => {
+    setLoading(true);
+    const { data, error: e } = await supabase.rpc('admin_table_rows', { p_table: name, p_search: text, p_limit: PAGE, p_offset: offset });
+    setLoading(false);
+    if (e) { setError(friendlyError(e, 'Could not read that table.')); return; }
+    setError('');
+    const list = data || [];
+    setRows((prev) => (offset === 0 ? list : [...prev, ...list]));
+    setMore(list.length === PAGE);
+  };
+  useEffect(() => {
+    if (!table) return undefined;
+    const t = setTimeout(() => { setOpen(null); fetchRows(table, search, 0); }, 300);
+    return () => clearTimeout(t);
+  }, [table, search]);
+
+  const card = { background: theme.rowBg, border: `1px solid ${theme.border}`, borderRadius: 16, padding: 12, marginBottom: 10 };
+  const show = (v) => (v === null || v === undefined ? 'none' : typeof v === 'object' ? JSON.stringify(v) : String(v));
+  const errBox = error ? <div style={{ background: `${theme.danger}18`, color: theme.danger, borderRadius: 12, padding: '9px 12px', fontSize: 12.5, fontWeight: 700, marginBottom: 10 }}>{error}</div> : null;
+
+  if (!table) {
+    return (
+      <>
+        {errBox}
+        {tables === null && !error ? <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><Spinner size={22} color={theme.ink} /></div> : (tables || []).map((t) => (
+          <div key={t.name} role="button" onClick={() => { setTable(t.name); setSearch(''); setRows([]); }} style={{ ...card, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+            <div style={{ flex: 1, fontWeight: 800, fontSize: 14, color: theme.ink }}>{t.name}</div>
+            <div style={{ fontSize: 12.5, color: theme.muted, fontWeight: 700 }}>{t.rows == null ? '' : formatCount(Number(t.rows) || 0)}</div>
+            <ChevronRight size={16} color={theme.muted} />
+          </div>
+        ))}
+      </>
+    );
+  }
+  return (
+    <>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+        <ArrowLeft size={19} style={{ cursor: 'pointer', color: theme.ink }} onClick={() => { setTable(null); setRows([]); setError(''); }} />
+        <div style={{ fontWeight: 900, fontSize: 16, color: theme.ink }}>{table}</div>
+      </div>
+      <input style={inputStyle(theme)} placeholder="Search inside this table" value={search} onChange={(e) => setSearch(e.target.value)} />
+      <div style={{ height: 10 }} />
+      {errBox}
+      {rows.map((r, i) => {
+        const keys = Object.keys(r);
+        const isOpen = open === i;
+        const shown = isOpen ? keys : keys.slice(0, 4);
+        return (
+          <div key={i} role="button" onClick={() => setOpen(isOpen ? null : i)} style={{ ...card, cursor: 'pointer' }}>
+            {shown.map((k) => (
+              <div key={k} style={{ display: 'flex', gap: 8, fontSize: 12.5, padding: '2px 0' }}>
+                <div style={{ width: 104, flexShrink: 0, color: theme.muted, fontWeight: 700, wordBreak: 'break-word' }}>{k}</div>
+                <div style={{ flex: 1, minWidth: 0, color: theme.ink, wordBreak: 'break-word' }}>{show(r[k]).slice(0, isOpen ? 2000 : 90)}</div>
+              </div>
+            ))}
+            {!isOpen && keys.length > 4 && <div style={{ fontSize: 11.5, color: theme.coral, fontWeight: 800, marginTop: 4 }}>{`Tap for all ${keys.length} fields`}</div>}
+          </div>
+        );
+      })}
+      {loading && <div style={{ display: 'flex', justifyContent: 'center', padding: 20 }}><Spinner size={20} color={theme.ink} /></div>}
+      {!loading && rows.length === 0 && !error && <div style={{ textAlign: 'center', color: theme.muted, fontSize: 13, padding: 30 }}>Nothing here.</div>}
+      {!loading && more && <div role="button" onClick={() => fetchRows(table, search, rows.length)} style={{ textAlign: 'center', padding: 14, fontWeight: 800, color: theme.coral, cursor: 'pointer' }}>Load more</div>}
+    </>
+  );
 }
 
 function ReportQueuePanel({ onClose, onOpenProfile }) {
