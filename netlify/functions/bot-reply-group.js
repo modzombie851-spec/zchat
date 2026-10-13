@@ -329,6 +329,7 @@ async function runGemini({ systemText, contents, background }) {
   const steps = models.map((model) => ({ model, structured: true, thinking: { thinkingLevel: 'low' } }));
   steps.push({ model: FALLBACK_MODEL, structured: false, thinking: null });
   let lastStatus = null;
+  for (let round = 0; round < (background ? 6 : 1); round++) {
   for (let i = 0; i < steps.length; i++) {
     const step = { ...steps[i] };
     for (let tries = 0; tries < 3; tries++) {
@@ -350,6 +351,10 @@ async function runGemini({ systemText, contents, background }) {
       break;
     }
     if (lastStatus === 429 || lastStatus === 401 || lastStatus === 403) break;
+  }
+  const transient = lastStatus === 503 || lastStatus === 500 || lastStatus === 'timeout' || lastStatus === 'network' || lastStatus === 'empty' || lastStatus === 404;
+  if (!transient) break;
+  await new Promise((r) => setTimeout(r, 2500 * (round + 1)));
   }
   return { reply: null, suggestions: [], rawText: null, status: lastStatus };
 }
