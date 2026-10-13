@@ -130,6 +130,57 @@ function ThemeProvider({ children }) {
   useEffect(() => {
     try { localStorage.setItem('zchat-keep-textstyle', keepTextStyle ? '1' : '0'); } catch {}
   }, [keepTextStyle]);
+  const prefsReadyRef = useRef(false);
+  const prefsTimerRef = useRef(null);
+  const applyRemotePrefs = (user) => {
+    const p = user && user.user_metadata && user.user_metadata.zprefs;
+    if (p && typeof p === 'object') {
+      if (typeof p.bs === 'string' && p.bs) setBubbleStyle(p.bs);
+      if (typeof p.kt === 'boolean') setKeepTextStyle(p.kt);
+      if (typeof p.bc === 'string' && p.bc) setBubbleColor(p.bc);
+      if (p.ts && typeof p.ts === 'object') {
+        try {
+          const before = localStorage.getItem('zchat-textstyle');
+          const next = JSON.stringify(p.ts);
+          if (before !== next) {
+            localStorage.setItem('zchat-textstyle', next);
+            window.dispatchEvent(new Event('zchat-prefs-pulled'));
+          }
+        } catch {}
+      }
+    }
+    prefsReadyRef.current = true;
+    if (!p && user) pushPrefs();
+  };
+  useEffect(() => {
+    let alive = true;
+    supabase.auth.getSession().then(({ data }) => { if (alive) applyRemotePrefs(data && data.session && data.session.user); }).catch(() => {});
+    const { data: sub } = supabase.auth.onAuthStateChange((evt, sess) => {
+      if (evt === 'SIGNED_IN' || evt === 'TOKEN_REFRESHED') applyRemotePrefs(sess && sess.user);
+      if (evt === 'SIGNED_OUT') prefsReadyRef.current = false;
+    });
+    const refreshFromServer = () => {
+      if (document.visibilityState !== 'visible') return;
+      supabase.auth.getUser().then(({ data }) => { if (alive && data && data.user) applyRemotePrefs(data.user); }).catch(() => {});
+    };
+    document.addEventListener('visibilitychange', refreshFromServer);
+    return () => { alive = false; document.removeEventListener('visibilitychange', refreshFromServer); try { sub.subscription.unsubscribe(); } catch {} };
+  }, []);
+  const pushPrefs = () => {
+    if (!prefsReadyRef.current) return;
+    clearTimeout(prefsTimerRef.current);
+    prefsTimerRef.current = setTimeout(() => {
+      let ts = null;
+      try { ts = JSON.parse(localStorage.getItem('zchat-textstyle') || 'null'); } catch {}
+      supabase.auth.updateUser({ data: { zprefs: { bs: bubbleStyle, kt: keepTextStyle, bc: bubbleColor, ts } } }).catch(() => {});
+    }, 900);
+  };
+  useEffect(() => { pushPrefs(); }, [bubbleStyle, keepTextStyle, bubbleColor]);
+  useEffect(() => {
+    const onLocal = () => pushPrefs();
+    window.addEventListener('zchat-prefs-local', onLocal);
+    return () => window.removeEventListener('zchat-prefs-local', onLocal);
+  }, [bubbleStyle, keepTextStyle, bubbleColor]);
   useEffect(() => {
     const bg = THEMES[dark ? 'dark' : 'light'].bgGradient;
     try {
@@ -5951,7 +6002,7 @@ function MessageBubble({ isBot, m, isMe, onDelete, selectionMode, selected, onTo
     }
   };
 
-  const bubbleKey = !m.deleted && m.type === 'text' && m.bubble_style && BUBBLE_STYLES[m.bubble_style] ? m.bubble_style : null;
+  const bubbleKey = !m.deleted && m.type !== 'system' && m.bubble_style && BUBBLE_STYLES[m.bubble_style] ? m.bubble_style : null;
   const bubbleSpec = bubbleKey ? BUBBLE_STYLES[bubbleKey] : null;
   const bubbleBg = m.deleted ? theme.rowBg : (isMe ? (bubbleColorSpec.me || theme.bubbleMe) : (bubbleColorSpec.them || theme.bubbleThem));
 
@@ -6013,12 +6064,13 @@ function MessageBubble({ isBot, m, isMe, onDelete, selectionMode, selected, onTo
           borderRadius: 19,
           borderBottomRightRadius: isMe && !m.deleted ? 5 : 19,
           borderBottomLeftRadius: !isMe && !m.deleted ? 5 : 19,
-          padding: m.type === 'text' || m.deleted ? '6px 11px' : (mediaOnly ? 0 : 4),
+          padding: m.type === 'text' || m.deleted ? '6px 11px' : (mediaOnly && !bubbleSpec ? 0 : 4),
           border: m.deleted ? `1px dashed ${theme.border}` : mentionsMe ? `1.5px solid ${theme.coral}` : (mediaOnly ? 'none' : `1px solid ${theme.dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)'}`),
           boxShadow: m.deleted || mediaOnly ? 'none' : '0 1px 2px rgba(0,0,0,0.06)',
           ...(mediaOnly ? { background: 'transparent', overflow: 'hidden' } : {}),
           ...(m.deleted ? {} : bubbleThemeStyle(chatTheme, isMe, theme)),
-          ...(bubbleSpec ? bubbleStyleCss(bubbleSpec, isMe) : {}),
+          ...(bubbleSpec && m.type !== 'sticker' ? bubbleStyleCss(bubbleSpec, isMe) : {}),
+          ...(bubbleSpec && mediaOnly ? { overflow: 'visible' } : {}),
         })}>
           {bubbleSpec && <div aria-hidden="true" style={{ position: 'absolute', pointerEvents: 'none', zIndex: 1, ...bubbleSpec.deco }}>{BUBBLE_DECO[bubbleKey]()}</div>}
           {senderLabel && !m.deleted && !tightAbove && (
@@ -9354,7 +9406,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-const APP_VERSION = '10.6V';
+const APP_VERSION = '10.7V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -14807,6 +14859,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (type === 'text') {
       row.client_id = newClientId();
       if (bubbleStyle && bubbleStyle !== 'classic') row.bubble_style = bubbleStyle;
+    } else if (type !== 'system' && bubbleStyle && bubbleStyle !== 'classic') {
+      row.bubble_style = bubbleStyle;
     }
     const tempId = type === 'system' ? null : `temp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     if (tempId) {
@@ -15059,6 +15113,16 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     } catch { /* keep the token we already have */ }
     return { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) };
   };
+  const callBotFn = async (path, body) => {
+    const headers = await botCallHeaders();
+    const send = (p) => fetch(p, { method: 'POST', headers, body: typeof body === 'string' ? body : JSON.stringify(body) });
+    try {
+      const r = await send(`${path}-background`);
+      if (r.status === 404 || r.status === 405 || r.status >= 500) await send(path).catch(() => {});
+    } catch {
+      try { await send(path); } catch {}
+    }
+  };
   const [botWaitBase, setBotWaitBase] = useState(null);
   const currentBotId = () => (activeGroup
     ? (groupMembers.find((gm) => gm.profile && gm.profile.is_bot) || {}).user_id
@@ -15072,10 +15136,32 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const bid = currentBotId();
     const n = messages.filter((x) => !!x.bot_reply || (bid && x.sender_id === bid)).length;
     if (n > botWaitBase) { setBotWaitBase(null); return undefined; }
-    const t = setTimeout(() => setBotWaitBase(null), 45000);
+    const t = setTimeout(() => setBotWaitBase(null), 120000);
     return () => clearTimeout(t);
   }, [messages, botWaitBase]);
   useEffect(() => { setBotWaitBase(null); }, [chatKey]);
+  useEffect(() => {
+    if (botWaitBase == null || !session) return undefined;
+    let stop = false;
+    const tick = async () => {
+      try {
+        const bid = currentBotId();
+        let q = supabase.from('messages').select('*').eq('deleted', false).order('created_at', { ascending: false }).limit(12);
+        if (activeGroup) q = q.eq('group_id', activeGroup.id);
+        else if (activeProfile) q = q.or(`and(sender_id.eq.${session.user.id},receiver_id.eq.${activeProfile.id}),and(sender_id.eq.${activeProfile.id},receiver_id.eq.${session.user.id})`);
+        else return;
+        const { data } = await q;
+        if (stop || !data || !data.length) return;
+        setMessages((prev) => {
+          const have = new Set(prev.map((x) => x.id));
+          const add = data.filter((x) => !have.has(x.id) && (!!x.bot_reply || (bid && x.sender_id === bid))).reverse();
+          return add.length ? [...prev, ...add] : prev;
+        });
+      } catch {}
+    };
+    const iv = setInterval(tick, 4000);
+    return () => { stop = true; clearInterval(iv); };
+  }, [botWaitBase, chatKey]);
   useEffect(() => {
     if (botWaitBase == null) return;
     requestAnimationFrame(() => scrollChatToBottom(true));
@@ -15097,26 +15183,24 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       : (activeProfile && activeProfile.is_bot
         ? { userId: session.user.id, botId: activeProfile.id, text: prevText, regenerate: true }
         : { userId: session.user.id, peerId: activeProfile.id, text: prevText, regenerate: true });
-    fetch(url, { method: 'POST', headers: await botCallHeaders(), body: JSON.stringify(body) }).catch(() => {});
+    callBotFn(url, JSON.stringify(body));
   };
   const triggerBotInPrivate = async (text, peerId, replyToText) => {
     if (!peerId || !text) return;
     if (!text.toLowerCase().includes(BOT_MENTION) && replyToText == null) return;
     startBotWait();
-    fetch('/.netlify/functions/bot-reply', {
-      method: 'POST',
-      headers: await botCallHeaders(),
-      body: JSON.stringify({ userId: session.user.id, peerId, text, replyToText: replyToText || undefined }),
-    }).catch(() => {});
+    callBotFn('/.netlify/functions/bot-reply', JSON.stringify({ userId: session.user.id, peerId, text, replyToText: replyToText || undefined }));
   };
   const triggerBotDM = async (text, mediaType, mediaUrl) => {
     if (!activeProfile || !activeProfile.is_bot) return;
     startBotWait();
-    fetch('/.netlify/functions/bot-reply', {
-      method: 'POST',
-      headers: await botCallHeaders(),
-      body: JSON.stringify({ userId: session.user.id, botId: activeProfile.id, text: text || '', mediaType: mediaType || null, mediaUrl: mediaUrl || null }),
-    }).catch(() => {});
+    callBotFn('/.netlify/functions/bot-reply', JSON.stringify({ userId: session.user.id, botId: activeProfile.id, text: text || '', mediaType: mediaType || null, mediaUrl: mediaUrl || null }));
+  };
+  const sendStyled = async (myId, toId, type, content, mediaUrl) => {
+    if (!bubbleStyle || bubbleStyle === 'classic') return sendMessage(myId, toId, type, content, mediaUrl);
+    const r = await insertMessageSafe({ sender_id: myId, receiver_id: toId, group_id: null, type, content: content == null ? null : content, media_url: mediaUrl == null ? null : mediaUrl, bubble_style: bubbleStyle });
+    if (r && r.data) return r;
+    return sendMessage(myId, toId, type, content, mediaUrl);
   };
   const sendQuickReply = async (suggestionText) => {
     if ((!activeProfile && !activeGroup) || sendingRef.current) return;
@@ -15131,11 +15215,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         setMessages((prev) => (inserted ? prev.map((x) => (x.id === tempId ? inserted : x)) : prev.filter((x) => x.id !== tempId)));
         if (inserted) {
           startBotWait();
-          fetch('/.netlify/functions/bot-reply-group', {
-            method: 'POST',
-            headers: await botCallHeaders(),
-            body: JSON.stringify({ userId: session.user.id, groupId: activeGroup.id, text: suggestionText }),
-          }).catch(() => {});
+          callBotFn('/.netlify/functions/bot-reply-group', JSON.stringify({ userId: session.user.id, groupId: activeGroup.id, text: suggestionText }));
         } else {
           showSnack("Couldn't send that. Try again.");
         }
@@ -15183,7 +15263,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     }
     const { data } = replyId
       ? await supabase.from('messages').insert({ sender_id: session.user.id, receiver_id: activeProfile.id, group_id: null, type: 'sticker', content: filePath, reply_to_id: replyId }).select().single()
-      : await sendMessage(session.user.id, activeProfile.id, 'sticker', filePath, null);
+      : await sendStyled(session.user.id, activeProfile.id, 'sticker', filePath, null);
     if (data) {
       setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
       upsertConversation(activeProfile.id, filePath, 'sticker');
@@ -15209,7 +15289,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           if (activeGroup) {
             insertedRow = await sendGroupMessage(items[i].kind, captionForThis, url);
           } else {
-            const { data } = await sendMessage(session.user.id, activeProfile.id, items[i].kind, captionForThis, url);
+            const { data } = await sendStyled(session.user.id, activeProfile.id, items[i].kind, captionForThis, url);
             insertedRow = data;
             if (data) {
               setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
@@ -15248,11 +15328,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       await sendGroupMessage('text', text, null, soloForwardName, groupReplyId, (textSize !== 'm' || textColor || textFont) ? { text_size: textSize === 'm' ? null : textSize, text_color: textColor, ...(textFont ? { text_font: textFont } : {}) } : null);
       if (text.toLowerCase().includes(BOT_MENTION) || repliedToBot) {
         startBotWait();
-        fetch('/.netlify/functions/bot-reply-group', {
-          method: 'POST',
-          headers: await botCallHeaders(),
-          body: JSON.stringify({ userId: session.user.id, groupId: activeGroup.id, text, replyToText: repliedToText || undefined }),
-        }).catch(() => {});
+        callBotFn('/.netlify/functions/bot-reply-group', JSON.stringify({ userId: session.user.id, groupId: activeGroup.id, text, replyToText: repliedToText || undefined }));
       }
       return;
     }
@@ -15388,7 +15464,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           if (activeGroup) {
             await sendGroupMessage('audio', null, url);
           } else {
-            const { data } = await sendMessage(session.user.id, activeProfile.id, 'audio', null, url);
+            const { data } = await sendStyled(session.user.id, activeProfile.id, 'audio', null, url);
             if (data) { setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data])); upsertConversation(activeProfile.id, null, 'audio'); triggerBotDM(null, 'audio', url); notifyUser(activeProfile.id, me.name, 'Voice message', `/?dm=${session.user.id}`, me.avatar); }
           }
         }
@@ -15765,8 +15841,19 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   }, [draft]);
   useEffect(() => {
     if (!keepTextStyle) return;
-    try { localStorage.setItem('zchat-textstyle', JSON.stringify({ font: textFont, size: textSize, color: textColor })); } catch {}
+    try { localStorage.setItem('zchat-textstyle', JSON.stringify({ font: textFont, size: textSize, color: textColor })); window.dispatchEvent(new Event('zchat-prefs-local')); } catch {}
   }, [keepTextStyle, textFont, textSize, textColor]);
+  useEffect(() => {
+    const onPulled = () => {
+      const kept = readKeptTextStyle();
+      if (!kept || draftLiveRef.current.trim()) return;
+      if (kept.font !== undefined) setTextFont(kept.font || null);
+      if (kept.size) setTextSize(kept.size);
+      if (kept.color !== undefined) setTextColor(kept.color || null);
+    };
+    window.addEventListener('zchat-prefs-pulled', onPulled);
+    return () => window.removeEventListener('zchat-prefs-pulled', onPulled);
+  }, []);
   const draftsRef = useRef({});
   const draftLiveRef = useRef('');
   draftLiveRef.current = draft;
