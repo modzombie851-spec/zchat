@@ -4,8 +4,8 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SER
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.5-flash';
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 const DAILY_LIMIT_PER_GROUP = 50;
-const HISTORY_LIMIT = 40;
-const HISTORY_CHAR_CAP = 3000;
+const HISTORY_LIMIT = 30;
+const HISTORY_CHAR_CAP = 2000;
 const MAX_INLINE_BYTES = 15 * 1024 * 1024;
 
 const SYSTEM_INSTRUCTION = `You are ZChat Bot, the official AI assistant built into the ZChat app. You were made by Zombie (@zombiedev), the creator of ZChat.
@@ -55,6 +55,14 @@ function extractReplyAndSuggestions(rawText) {
       const recovered = JSON.parse(`"${match[1]}"`).trim();
       if (recovered) return { reply: recovered, suggestions: [] };
     } catch { /* give up below */ }
+  }
+
+  const part = cleaned.match(/"reply"\s*:\s*"((?:[^"\\]|\\.)*)/);
+  if (part && part[1].length > 20) {
+    try {
+      const partial = JSON.parse(`"${part[1].replace(/\\$/, '')}"`).trim();
+      if (partial) return { reply: partial, suggestions: [] };
+    } catch { /* give up */ }
   }
 
   return { reply: null, suggestions: [] };
@@ -271,6 +279,71 @@ async function verifyCaller(event, userId) {
   } catch { return false; }
 }
 
+const FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL || 'gemini-2.5-flash';
+const geminiUrlFor = (model) => `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+
+async function geminiOnce({ model, systemText, contents, structured, thinking, timeoutMs }) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const generationConfig = { maxOutputTokens: 8192 };
+    if (structured) {
+      generationConfig.responseMimeType = 'application/json';
+      generationConfig.responseSchema = RESPONSE_SCHEMA;
+    }
+    if (thinking) generationConfig.thinkingConfig = thinking;
+    const res = await fetch(geminiUrlFor(model), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: systemText }] },
+        contents,
+        safetySettings: [{ category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_LOW_AND_ABOVE' }],
+        generationConfig,
+      }),
+      signal: ctrl.signal,
+    });
+    const json = await res.json().catch(() => null);
+    if (!res.ok) {
+      console.error('Gemini error', model, res.status, JSON.stringify(json).slice(0, 300));
+      return { rawText: null };
+    }
+    const cand = json && json.candidates && json.candidates[0];
+    const parts = (cand && cand.content && cand.content.parts) || [];
+    const rawText = parts.filter((p) => typeof p.text === 'string' && !p.thought).map((p) => p.text).join('');
+    if (!rawText) console.error('Gemini empty', model, JSON.stringify(json).slice(0, 300));
+    return { rawText };
+  } catch (err) {
+    console.error('Gemini request failed', model, err && err.name);
+    return { rawText: null };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function runGemini({ systemText, contents, background }) {
+  const started = Date.now();
+  const budget = background ? 100000 : 8500;
+  const steps = [
+    { model: GEMINI_MODEL, structured: true, thinking: { thinkingLevel: 'low' } },
+    { model: GEMINI_MODEL, structured: false, thinking: null },
+    { model: FALLBACK_MODEL, structured: false, thinking: { thinkingBudget: 0 } },
+  ];
+  for (let i = 0; i < steps.length; i++) {
+    const left = budget - (Date.now() - started);
+    if (left < 1500) break;
+    const timeoutMs = background ? Math.min(left, 45000) : (i === 0 ? Math.min(left, 6000) : left - 300);
+    const out = await geminiOnce({ ...steps[i], systemText, contents, timeoutMs });
+    if (!out.rawText) continue;
+    const ex = extractReplyAndSuggestions(out.rawText);
+    if (ex.reply) return { reply: ex.reply, suggestions: ex.suggestions, rawText: out.rawText };
+    if (!steps[i].structured && out.rawText.trim() && !/^\s*[{\[]/.test(out.rawText)) {
+      return { reply: out.rawText.trim(), suggestions: [], rawText: null };
+    }
+  }
+  return { reply: null, suggestions: [], rawText: null };
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: 'Method not allowed' };
@@ -370,36 +443,14 @@ exports.handler = async (event) => {
   const knowledge = await knowledgePromise;
   let reply = "Sorry, I couldn't come up with a reply just now. Try mentioning me again in a moment.";
   let suggestions = [];
-  try {
-    const res = await fetch(GEMINI_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': process.env.GEMINI_API_KEY,
-      },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: `${SYSTEM_INSTRUCTION}\nThe person who just mentioned you is named: ${senderName}.${knowledgeBlock(knowledge)}${wolfCoinBlock(text)}` }] },
-        contents,
-        safetySettings: [{ category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_LOW_AND_ABOVE' }],
-        generationConfig: { maxOutputTokens: 4000, responseMimeType: 'application/json', responseSchema: RESPONSE_SCHEMA },
-      }),
-    });
-    const json = await res.json();
-    const rawText = json && json.candidates && json.candidates[0] && json.candidates[0].content
-      && json.candidates[0].content.parts && json.candidates[0].content.parts[0] && json.candidates[0].content.parts[0].text;
-    const extracted = extractReplyAndSuggestions(rawText);
-    if (extracted.reply) {
-      reply = extracted.reply;
-      suggestions = extracted.suggestions;
-      if (text) {
-        const learned = await saveLearned(userId, extractLearn(rawText));
-        if (learned === 'rejected') reply += "\n\nI could not save that one to share with others, though.";
-      }
-    } else {
-      console.error('Could not extract a usable reply from gemini output', (rawText || '').slice(0, 400), JSON.stringify(json).slice(0, 300));
+  const gem = await runGemini({ systemText: `${SYSTEM_INSTRUCTION}\nThe person who just mentioned you is named: ${senderName}.${knowledgeBlock(knowledge)}${wolfCoinBlock(text)}`, contents, background: /background/.test(event.path || '') });
+  if (gem.reply) {
+    reply = gem.reply;
+    suggestions = gem.suggestions;
+    if (text && gem.rawText) {
+      const learned = await saveLearned(userId, extractLearn(gem.rawText));
+      if (learned === 'rejected') reply += "\n\nI could not save that one to share with others, though.";
     }
-  } catch (err) {
-    console.error('Gemini request failed', err);
   }
 
   const { error } = await supabase.from('messages').insert({
