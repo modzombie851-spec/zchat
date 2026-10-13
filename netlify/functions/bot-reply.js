@@ -198,6 +198,19 @@ function wolfMoney(n) {
 }
 
 // Reads very different phrasings ("attack 500-600", "speed max", "the 750th attck", "max all attributes") and returns exact costs.
+function wolfContext(text, history) {
+  const t = String(text || '');
+  const statRe = /\b(hp|health|helth|hitpoints?|def|deff|defence|defense|defance|defanse|atk|attack|attacks|attck|atack|attak|atak|spd|speed|spead|sped)\b/i;
+  if (!t || statRe.test(t) || !/\d/.test(t) || !Array.isArray(history)) return t;
+  if (!/\b(level|lvl|lv|levels)\b|\d+\s*(to|till|until|-)\s*\d+/i.test(t)) return t;
+  for (let i = history.length - 1, seen = 0; i >= 0 && seen < 6; i--, seen++) {
+    const h = history[i];
+    const hit = h && h.parts && h.parts[0] && h.parts[0].text ? String(h.parts[0].text).match(statRe) : null;
+    if (hit) return `${hit[1]} ${t}`;
+  }
+  return t;
+}
+
 function wolfCoinBlock(text) {
   if (!text) return '';
   const t = String(text).toLowerCase();
@@ -241,7 +254,7 @@ function wolfCoinBlock(text) {
     else if (nums.length === 1) {
       if (wantsMax || /\b(start|starting|from|after|now|currently|am at|at level|at lvl)\b/.test(around)) { from = nums[0]; to = max; }
       else { to = nums[0]; }
-    } else if (wantsMax || wantsAll) { to = max; }
+    } else if (wantsMax || wantsAll || /\b(cost|costs|coins?|price|how much)\b/.test(t)) { to = max; }
     if (to === null) return;
     if (from > to) { const x = from; from = to; to = x; }
     let note = '';
@@ -473,7 +486,7 @@ const handlerCore = async (event) => {
   const failAgain = "Try asking again in a moment.";
   let reply = failureText(null, failAgain);
   let suggestions = [];
-  const gem = await runGemini({ systemText: `${SYSTEM_INSTRUCTION}\nThe person you are talking to is named: ${senderName}.${knowledgeBlock(knowledge)}${wolfCoinBlock(text)}${peerNote}`, contents, background: /background/.test(event.path || '') });
+  const gem = await runGemini({ systemText: `${SYSTEM_INSTRUCTION}\nThe person you are talking to is named: ${senderName}.${knowledgeBlock(knowledge)}${wolfCoinBlock(wolfContext(text, history))}${peerNote}`, contents, background: /background/.test(event.path || '') });
   if (!gem.reply) reply = failureText(gem.status, failAgain);
   if (gem.reply) {
     reply = gem.reply;
