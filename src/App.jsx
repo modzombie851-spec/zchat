@@ -35,36 +35,34 @@ import {
 
 
 const ACCENT_PALETTES = {
-  coral: { coral: '#2E7CF6', coralDeep: '#1B5FD1', gold: '#5FA8FF', teal: '#00C2A8', danger: '#ED4956' },
-  ocean: { coral: '#00B4FF', coralDeep: '#0089CC', gold: '#5FD9C4', teal: '#00C2A8', danger: '#ED4956' },
-  berry: { coral: '#7C5CFC', coralDeep: '#5E3AE0', gold: '#B98CFF', teal: '#00C2A8', danger: '#ED4956' },
+  coral: { coral: '#7C5CFC', coralDeep: '#6B48F0', gold: '#B79CFF', teal: '#00C2A8', danger: '#ED4956' },
 };
 const ACCENT = ACCENT_PALETTES.coral;
 
 const THEMES = {
   light: {
-    bgGradient: '#F5F7FB',
+    bgGradient: '#F6F3FF',
     glass: 'rgba(255,255,255,0.85)',
     panelBg: '#FFFFFF',
-    border: 'rgba(20,30,60,0.09)',
-    ink: '#0B1220',
-    muted: '#6E7688',
-    bubbleMe: '#E9F2FF',
-    bubbleThem: '#F1F3F7',
-    inputBg: '#F5F7FB',
-    rowBg: 'rgba(30,60,120,0.045)',
+    border: 'rgba(60,30,130,0.10)',
+    ink: '#1A1230',
+    muted: '#7A7392',
+    bubbleMe: '#E8E0FF',
+    bubbleThem: '#F1EEF9',
+    inputBg: '#F6F3FF',
+    rowBg: 'rgba(90,60,180,0.06)',
   },
   dark: {
-    bgGradient: '#050810',
-    glass: 'rgba(13,18,32,0.85)',
-    panelBg: '#0C1120',
-    border: 'rgba(120,160,255,0.12)',
-    ink: '#F1F4FF',
-    muted: '#8892A8',
-    bubbleMe: '#123259',
-    bubbleThem: '#151A2C',
-    inputBg: '#0F1424',
-    rowBg: 'rgba(120,160,255,0.07)',
+    bgGradient: '#0E0A1A',
+    glass: 'rgba(22,16,42,0.85)',
+    panelBg: '#150F26',
+    border: 'rgba(170,140,255,0.14)',
+    ink: '#F5F1FF',
+    muted: '#9D95B8',
+    bubbleMe: '#3B2A7A',
+    bubbleThem: '#1E1736',
+    inputBg: '#1A1330',
+    rowBg: 'rgba(170,140,255,0.08)',
   },
 };
 
@@ -142,7 +140,7 @@ function ThemeProvider({ children }) {
       meta.setAttribute('content', bg);
     } catch {}
   }, [dark]);
-  const accent = ACCENT_PALETTES[accentName] || ACCENT_PALETTES.coral;
+  const accent = ACCENT_PALETTES.coral;
   const theme = { ...THEMES[dark ? 'dark' : 'light'], ...accent, dark };
   return (
     <ThemeContext.Provider value={{ theme, dark, setDark, accentName, setAccentName, soundOn, setSoundOn, reactionSoundOn, setReactionSoundOn, bgPatternOn, setBgPatternOn, fontScale, setFontScale, chatTheme, setChatTheme, bubbleColor, setBubbleColor, bubbleStyle, setBubbleStyle, keepTextStyle, setKeepTextStyle }}>
@@ -1291,8 +1289,8 @@ function DeleteAccountConfirm({ onCancel, onConfirm }) {
 
 function igPalette(theme) {
   return theme.dark
-    ? { bg: theme.bgGradient, fg: theme.ink, dim: theme.muted, faint: 'rgba(241,244,255,0.42)', line: theme.border, field: 'rgba(120,160,255,0.10)', track: 'rgba(120,160,255,0.28)', knob: theme.bgGradient }
-    : { bg: theme.bgGradient, fg: theme.ink, dim: theme.muted, faint: 'rgba(11,18,32,0.38)', line: theme.border, field: 'rgba(30,60,120,0.07)', track: 'rgba(30,60,120,0.22)', knob: '#ffffff' };
+    ? { bg: theme.bgGradient, fg: theme.ink, dim: theme.muted, faint: 'rgba(245,241,255,0.42)', line: theme.border, field: 'rgba(170,140,255,0.10)', track: 'rgba(170,140,255,0.28)', knob: theme.bgGradient }
+    : { bg: theme.bgGradient, fg: theme.ink, dim: theme.muted, faint: 'rgba(26,18,48,0.38)', line: theme.border, field: 'rgba(90,60,180,0.07)', track: 'rgba(90,60,180,0.22)', knob: '#ffffff' };
 }
 
 function IgRow({ icon, label, sub, onClick, danger, right, value, bold, inset = true }) {
@@ -1647,20 +1645,6 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
           <>
             <SectionHeader title="Appearance" />
             <SettingsRow icon={dark ? <Sun size={16} /> : <Moon size={16} />} label="Dark mode" right={<ToggleSwitch on={dark} onClick={() => setDark((d) => !d)} />} />
-            <div style={{ padding: '10px 4px', borderBottom: `1px solid ${theme.border}` }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-                <div style={{ width: 34, height: 34, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', background: `${theme.coral}1F`, color: theme.coralDeep }}><Palette size={16} /></div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: theme.ink }}>Theme color</div>
-              </div>
-              <div style={{ display: 'flex', gap: 8, paddingLeft: 44 }}>
-                {Object.keys(ACCENT_PALETTES).map((key) => (
-                  <div key={key} onClick={() => setAccentName(key)} style={{
-                    width: 30, height: 30, borderRadius: '50%', background: ACCENT_PALETTES[key].coral, cursor: 'pointer',
-                    border: accentName === key ? `3px solid ${theme.ink}` : '3px solid transparent',
-                  }} title={accentLabels[key]} />
-                ))}
-              </div>
-            </div>
             <div style={{ padding: '10px 4px', borderBottom: `1px solid ${theme.border}` }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
                 <div style={{ width: 34, height: 34, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', background: `${theme.coral}1F`, color: theme.coralDeep }}><Sparkles size={16} /></div>
@@ -5014,6 +4998,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
   const [mutualCount, setMutualCount] = useState(cachedStats.mutual ?? null);
   const [postCount, setPostCount] = useState(cachedStats.posts ?? null);
   const [ownedRewards, setOwnedRewards] = useState([]);
+  const [profileTab, setProfileTab] = useState('posts');
   const [tryOnFrame, setTryOnFrame] = useState(null);
   useEffect(() => {
     let alive = true;
@@ -5261,7 +5246,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
     </div>
   );
   const statDivider = <div style={{ width: 1, height: 16, background: theme.border, alignSelf: 'center' }} />;
-  const pageBg = theme.dark ? '#000' : '#fff';
+  const pageBg = theme.bgGradient;
   const glassFill = theme.dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)';
   const glassCircle = { width: 38, height: 38, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: theme.ink, background: theme.dark ? 'rgba(0,0,0,0.35)' : 'rgba(255,255,255,0.65)', border: `1px solid ${theme.dark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.06)'}`, backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' };
   const statTile = (value, label, onClick) => (
@@ -5356,19 +5341,20 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
               </div>
             </div>
 
-            <div style={{ position: 'relative', zIndex: 3, display: 'flex', justifyContent: 'center', marginTop: 22 }}>
-              <div style={{ position: 'relative', width: 200, height: 200 }}>
+            <div style={{ position: 'relative', zIndex: 3, display: 'flex', justifyContent: 'center', marginTop: 4 }}>
+              <div style={{ position: 'relative', width: 210, height: 210 }}>
                 {(() => {
                   const fspec = AVATAR_FRAMES[profile.avatar_frame];
-                  const photo = fspec ? Math.round(Math.min(178, Math.max(120, 200 / fspec.scale))) : 176;
-                  const off = (200 - photo) / 2;
+                  const box = 210;
+                  const photo = fspec ? Math.round(Math.min(176, Math.max(110, box / fspec.scale))) : 168;
+                  const off = (box - photo) / 2;
                   const fw = photo * (fspec ? fspec.scale : 1);
                   return (
                     <>
                       {!fspec && (
                         <>
-                          <div style={{ position: 'absolute', inset: -9, borderRadius: '50%', background: 'conic-gradient(#f59e0b, #ef4444, #d946ef, #6366f1, #22d3ee, #f59e0b)', animation: 'zchat-frame-spin 6s linear infinite' }} />
-                          <div style={{ position: 'absolute', inset: -5, borderRadius: '50%', background: pageBg }} />
+                          <div style={{ position: 'absolute', inset: off - 6, borderRadius: '50%', background: 'conic-gradient(#7C5CFC, #A78BFA, #C4B5FD, #6B48F0, #7C5CFC)', animation: 'zchat-frame-spin 6s linear infinite' }} />
+                          <div style={{ position: 'absolute', inset: off - 3, borderRadius: '50%', background: pageBg }} />
                         </>
                       )}
                       <div style={{ position: 'absolute', left: off, top: off, width: photo, height: photo, borderRadius: '50%', overflow: 'hidden', background: hasPhoto ? '#000' : colorForName(profile.name), boxShadow: '0 20px 60px rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -5377,10 +5363,10 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
                           : <span style={{ fontSize: photo * 0.46, fontWeight: 800, color: 'rgba(255,255,255,0.92)', fontFamily: FONT }}>{initial}</span>}
                       </div>
                       {fspec && profileFrameUrl && (
-                        <img src={profileFrameUrl} alt="" draggable={false} aria-hidden="true" style={{ ...frameMaskStyle(fspec), position: 'absolute', width: fw, height: fw, left: 100 - fw * (fspec.centerX ?? 0.5), top: 100 - fw * fspec.centerY, pointerEvents: 'none', zIndex: 2, maxWidth: 'none', animation: (theme.dark ? fspec.animation : (fspec.animationLight || fspec.animation)) || 'none' }} />
+                        <img src={profileFrameUrl} alt="" draggable={false} aria-hidden="true" style={{ ...frameMaskStyle(fspec), position: 'absolute', width: fw, height: fw, left: box / 2 - fw * (fspec.centerX ?? 0.5), top: box / 2 - fw * fspec.centerY, pointerEvents: 'none', zIndex: 2, maxWidth: 'none', animation: (theme.dark ? fspec.animation : (fspec.animationLight || fspec.animation)) || 'none' }} />
                       )}
                       {isOnline && (
-                        <div style={{ position: 'absolute', right: off + photo * 0.06, bottom: off + photo * 0.06, width: 26, height: 26, borderRadius: '50%', background: '#22c55e', border: `5px solid ${pageBg}`, zIndex: 3 }} />
+                        <div style={{ position: 'absolute', right: off + photo * 0.06, bottom: off + photo * 0.06, width: 24, height: 24, borderRadius: '50%', background: '#22c55e', border: `4px solid ${pageBg}`, zIndex: 3 }} />
                       )}
                     </>
                   );
@@ -5388,24 +5374,23 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
               </div>
             </div>
 
-            {NAMEPLATES[profile.nameplate] && (
-              <div style={{ position: 'relative', zIndex: 2, width: '100%', marginTop: `calc(-${nameplatePull(profile.nameplate).toFixed(2)}% - 8px)` }}>
-                <NameplateBanner plate={profile.nameplate} name={profile.name} username={profile.username} verified={profile.verified} custom={profile.custom_badge} />
-              </div>
-            )}
-            <div style={{ position: 'relative', zIndex: 2, textAlign: 'center', marginTop: NAMEPLATES[profile.nameplate] ? 6 : 16, padding: '0 20px' }}>
-              {(!NAMEPLATES[profile.nameplate] || (profile.name || '').length > 14) && (
-                <div style={{ marginTop: NAMEPLATES[profile.nameplate] ? 4 : 0, fontSize: NAMEPLATES[profile.nameplate] ? 17 : ((profile.name || '').length > 26 ? 21 : 27), fontWeight: 900, color: theme.ink, letterSpacing: '-0.02em', lineHeight: 1.15, wordBreak: 'break-word' }}>{profile.name}<VerifiedBadge tier={profile.verified} custom={profile.custom_badge} size={22} /></div>
-              )}
-              <div style={{ fontSize: 13.5, color: theme.muted, marginTop: 4 }}>
-                {NAMEPLATES[profile.nameplate] ? [profile.pronouns, ...infoBits].filter(Boolean).join(' · ') : `@${profile.username}${profile.pronouns ? ` · ${profile.pronouns}` : ''}${infoBits.map((b) => ` · ${b}`).join('')}`}
-              </div>
-              {statusText && (
-                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, marginTop: 10, padding: '4px 11px', borderRadius: 14, color: isOnline ? '#22c55e' : theme.muted, background: isOnline ? 'rgba(34,197,94,0.12)' : glassFill }}>
-                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: isOnline ? '#22c55e' : theme.muted }} />
-                  {statusText}
+            {NAMEPLATES[profile.nameplate] && (() => {
+              const plateW = Math.min(360, (typeof window !== 'undefined' ? window.innerWidth : 390) - 32);
+              const pullPx = Math.round(nameplatePull(profile.nameplate) * plateW / 100) + 8;
+              return (
+                <div style={{ position: 'relative', zIndex: 2, width: plateW, margin: `-${pullPx}px auto 0` }}>
+                  <NameplateBanner plate={profile.nameplate} name={profile.name} username={profile.username} verified={profile.verified} custom={profile.custom_badge} />
                 </div>
+              );
+            })()}
+            <div style={{ position: 'relative', zIndex: 2, textAlign: 'center', marginTop: NAMEPLATES[profile.nameplate] ? 2 : 14, padding: '0 20px' }}>
+              {(!NAMEPLATES[profile.nameplate] || (profile.name || '').length > 14) && (
+                <div style={{ marginTop: NAMEPLATES[profile.nameplate] ? 2 : 0, fontSize: NAMEPLATES[profile.nameplate] ? 17 : ((profile.name || '').length > 26 ? 21 : 27), fontWeight: 900, color: theme.ink, letterSpacing: '-0.02em', lineHeight: 1.15, wordBreak: 'break-word' }}>{profile.name}<VerifiedBadge tier={profile.verified} custom={profile.custom_badge} size={22} /></div>
               )}
+              <div style={{ fontSize: 13, color: theme.muted, marginTop: 3 }}>
+                {NAMEPLATES[profile.nameplate] ? [profile.pronouns, ...infoBits].filter(Boolean).join(' · ') : `@${profile.username}${profile.pronouns ? ` · ${profile.pronouns}` : ''}${infoBits.map((b) => ` · ${b}`).join('')}`}
+                {statusText ? <span style={{ color: isOnline ? '#22c55e' : theme.muted, fontWeight: isOnline ? 700 : 600 }}>{[profile.pronouns, ...infoBits].filter(Boolean).length || !NAMEPLATES[profile.nameplate] ? ' · ' : ''}{statusText}</span> : null}
+              </div>
             </div>
           </div>
         )}
@@ -5465,10 +5450,20 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
           ) : (
             <>
               {canSeeDetails && (
-                <div style={{ display: 'grid', gridTemplateColumns: profile.is_bot ? '1fr' : 'repeat(3, 1fr)', gap: 8, marginBottom: 10 }}>
-                  {!profile.is_bot && statTile(postCount, 'Posts', null)}
-                  {statTile(profile.is_bot ? BOT_FOLLOWER_BASE + (followerCount || 0) : followerCount, 'Followers', profile.is_bot ? null : () => setListModal('followers'))}
-                  {!profile.is_bot && statTile(followingCount, 'Following', () => setListModal('following'))}
+                <div style={{ display: 'flex', alignItems: 'center', height: 62, borderRadius: 18, marginBottom: 10, background: glassFill, border: `1px solid ${theme.dark ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.06)'}` }}>
+                  {[
+                    !profile.is_bot && { v: postCount, l: 'Posts', on: null },
+                    { v: profile.is_bot ? BOT_FOLLOWER_BASE + (followerCount || 0) : followerCount, l: 'Followers', on: profile.is_bot ? null : () => setListModal('followers') },
+                    !profile.is_bot && { v: followingCount, l: 'Following', on: () => setListModal('following') },
+                  ].filter(Boolean).map((c, i) => (
+                    <React.Fragment key={c.l}>
+                      {i > 0 && <div style={{ width: 1, height: 28, background: theme.border }} />}
+                      <div role={c.on ? 'button' : undefined} onClick={c.on || undefined} style={{ flex: 1, textAlign: 'center', cursor: c.on ? 'pointer' : 'default' }}>
+                        <div style={{ fontSize: 20, fontWeight: 900, color: theme.ink, letterSpacing: '-0.02em', minHeight: 24 }}>{c.v == null ? '' : formatCount(c.v)}</div>
+                        <div style={{ fontSize: 11.5, color: theme.muted, fontWeight: 600 }}>{c.l}</div>
+                      </div>
+                    </React.Fragment>
+                  ))}
                 </div>
               )}
               {isSelf ? (
@@ -5477,14 +5472,6 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
                   <button onClick={startEditing} style={pillBtn(true)}><Edit3 size={15} /> Edit profile</button>
                   <button onClick={() => setShowShare(true)} style={pillBtn(false)}><Share2 size={15} /> Share</button>
                   <button onClick={() => setShowPrivacySettings(true)} aria-label="Privacy" style={{ ...pillBtn(false), flex: '0 0 46px', padding: 0 }}><Lock size={16} /></button>
-                </div>
-                <div role="button" onClick={onOpenCollection} style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px', borderRadius: 16, cursor: 'pointer', background: 'linear-gradient(135deg, rgba(245,158,11,0.18), rgba(234,88,12,0.12))', border: '1px solid rgba(245,158,11,0.35)' }}>
-                  <div style={{ width: 34, height: 34, borderRadius: 11, background: 'linear-gradient(135deg, #f59e0b, #ea580c)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Sparkles size={18} color="#1a0f02" /></div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 14, fontWeight: 900, color: theme.ink }}>Collection</div>
-                    <div style={{ fontSize: 12, color: theme.muted }}>Avatar frames and name charms</div>
-                  </div>
-                  <ChevronRight size={18} color={theme.muted} />
                 </div>
                 </>
               ) : (
@@ -5531,15 +5518,24 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
                       </div>
                     </div>
                   )}
-                  {!profile.is_bot && <ProfileSocialRow links={profile.social_links} whatsapp={profile.whatsapp} />}
-                  {!profile.is_bot && <ProfileCollectionShowcase profile={profile} rewards={ownedRewards} isSelf={isSelf} onPreview={(k) => setTryOnFrame(k)} onOpenCollection={onOpenCollection} />}
                   {!isSelf && !profile.is_bot && mutualCount > 0 && (
                     <div role="button" onClick={() => setListModal('mutual')} style={{ textAlign: 'center', fontSize: 12.5, color: theme.muted, marginTop: 12, cursor: 'pointer' }}>
                       Followed by <b style={{ color: theme.ink }}>{formatCount(mutualCount)}</b> {mutualCount === 1 ? 'person' : 'people'} you follow
                     </div>
                   )}
-                  {!editing && !profile.is_bot && <ProfileHighlights profile={profile} isSelf={isSelf} userId={userId} onOpenHighlight={(h) => onOpenHighlight && onOpenHighlight(h, profile)} />}
-                  {!editing && !profile.is_bot && <ProfilePosts profile={profile} isSelf={isSelf} userId={userId} meProfile={meProfile} />}
+                  {!editing && !profile.is_bot && (
+                    <>
+                      <div style={{ display: 'flex', gap: 6, marginTop: 14, padding: 4, borderRadius: 16, background: glassFill }}>
+                        {[['posts', 'Posts'], ['highlights', 'Highlights'], ['collection', 'Collection'], ['links', 'Links']].map(([k, label]) => (
+                          <div key={k} role="button" onClick={() => setProfileTab(k)} style={{ flex: 1, textAlign: 'center', padding: '9px 0', borderRadius: 12, fontSize: 13, fontWeight: 800, cursor: 'pointer', color: profileTab === k ? '#fff' : theme.muted, background: profileTab === k ? theme.coral : 'transparent', transition: 'background 0.18s ease, color 0.18s ease' }}>{label}</div>
+                        ))}
+                      </div>
+                      {profileTab === 'posts' && <ProfilePosts profile={profile} isSelf={isSelf} userId={userId} meProfile={meProfile} />}
+                      {profileTab === 'highlights' && <ProfileHighlights profile={profile} isSelf={isSelf} userId={userId} onOpenHighlight={(h) => onOpenHighlight && onOpenHighlight(h, profile)} />}
+                      {profileTab === 'collection' && <ProfileCollectionShowcase profile={profile} rewards={ownedRewards} isSelf={isSelf} onPreview={(k) => setTryOnFrame(k)} onOpenCollection={onOpenCollection} />}
+                      {profileTab === 'links' && <ProfileSocialRow links={profile.social_links} whatsapp={profile.whatsapp} />}
+                    </>
+                  )}
                 </>
               ) : (
                 <div style={{ marginTop: 20, padding: '22px 16px', textAlign: 'center', borderRadius: 20, background: theme.rowBg }}>
@@ -8144,15 +8140,15 @@ function MailBadgeIcon({ type, size = 42, badgeTier = null }) {
   const update = type === 'update';
   const badge = type === 'badge';
   const bg = warning ? 'linear-gradient(135deg, #FF5F6D 0%, #FF2E4D 55%, #B3122E 100%)'
-    : mention ? 'linear-gradient(135deg, #7C5CFC 0%, #2E7CF6 100%)'
-      : update ? 'linear-gradient(135deg, #00C2A8 0%, #2E7CF6 55%, #7C5CFC 100%)'
-        : badge ? 'linear-gradient(135deg, #1B2036 0%, #0B0F19 100%)'
-      : 'linear-gradient(135deg, #2E7CF6 0%, #00C2A8 100%)';
+    : mention ? 'linear-gradient(135deg, #7C5CFC 0%, #9D7BFF 100%)'
+      : update ? 'linear-gradient(135deg, #5E3AE0 0%, #7C5CFC 55%, #A78BFA 100%)'
+        : badge ? 'linear-gradient(135deg, #2A1F4D 0%, #140E24 100%)'
+      : 'linear-gradient(135deg, #7C5CFC 0%, #A78BFA 100%)';
   return (
     <div style={{
       width: size, height: size, borderRadius: size * 0.32, flexShrink: 0, position: 'relative',
       background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center',
-      boxShadow: warning ? '0 4px 14px rgba(255,46,77,0.35)' : '0 4px 14px rgba(46,124,246,0.3)',
+      boxShadow: warning ? '0 4px 14px rgba(255,46,77,0.35)' : '0 4px 14px rgba(124,92,252,0.35)',
     }}>
       {badge ? <VerifiedBadge tier={badgeTier || 'blue'} size={size * 0.62} style={{ marginLeft: 0, filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.35))' }} />
         : warning ? <ShieldAlert size={size * 0.5} color="white" strokeWidth={2.2} />
@@ -9358,7 +9354,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-const APP_VERSION = '10.5V';
+const APP_VERSION = '10.6V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -9863,10 +9859,10 @@ function CallScreen({ call, me, nameFor, avatarFor, onAccept, onDecline, onHangu
   if (ended) {
     const d = call.summaryDuration || 0;
     return (
-      <div className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 500, background: '#05070D', color: 'white', display: 'flex', flexDirection: 'column', alignItems: 'center', fontFamily: FONT, overflow: 'hidden' }}>
+      <div className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 500, background: '#0E0A1A', color: 'white', display: 'flex', flexDirection: 'column', alignItems: 'center', fontFamily: FONT, overflow: 'hidden' }}>
         {photo
           ? <img src={photo} alt="" draggable={false} style={{ position: 'absolute', inset: -40, width: 'calc(100% + 80px)', height: 'calc(100% + 80px)', objectFit: 'cover', filter: 'blur(40px) brightness(0.35)' }} />
-          : <div style={{ position: 'absolute', inset: 0, background: `radial-gradient(circle at 50% 30%, ${colorForName(title)}55, #05070D 70%)` }} />}
+          : <div style={{ position: 'absolute', inset: 0, background: `radial-gradient(circle at 50% 30%, ${colorForName(title)}55, #0E0A1A 70%)` }} />}
         <div style={{ position: 'relative', width: '100%', display: 'flex', justifyContent: 'flex-end', padding: 'calc(14px + env(safe-area-inset-top)) 16px 0', boxSizing: 'border-box' }}>
           <div role="button" aria-label="Close" onClick={onCloseSummary} style={{ width: 40, height: 40, borderRadius: '50%', background: 'rgba(255,255,255,0.14)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={20} /></div>
         </div>
@@ -9927,7 +9923,7 @@ function CallScreen({ call, me, nameFor, avatarFor, onAccept, onDecline, onHangu
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 7, minWidth: 64 }}>
       <div role="button" aria-label={label} onClick={onClick} style={{
         width: 60, height: 60, borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: variant === 'end' ? '#FF3B30' : variant === 'on' ? 'white' : 'rgba(255,255,255,0.16)', color: variant === 'on' ? '#0B0F19' : 'white',
+        background: variant === 'end' ? '#FF3B30' : variant === 'on' ? 'white' : 'rgba(255,255,255,0.16)', color: variant === 'on' ? '#140E24' : 'white',
         boxShadow: variant === 'end' ? '0 8px 22px rgba(255,59,48,0.45)' : 'none', transition: 'background 0.2s ease',
       }}>{icon}</div>
       <span style={{ fontSize: 11.5, fontWeight: 700, color: 'rgba(255,255,255,0.85)' }}>{label}</span>
@@ -9935,11 +9931,11 @@ function CallScreen({ call, me, nameFor, avatarFor, onAccept, onDecline, onHangu
   );
 
   return (
-    <div className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 500, background: '#05070D', color: 'white', display: call.minimized ? 'none' : 'flex', flexDirection: 'column', overflow: 'hidden', fontFamily: FONT }}>
+    <div className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 500, background: '#0E0A1A', color: 'white', display: call.minimized ? 'none' : 'flex', flexDirection: 'column', overflow: 'hidden', fontFamily: FONT }}>
       <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
         {photo
           ? <img src={photo} alt="" draggable={false} style={{ position: 'absolute', inset: -40, width: 'calc(100% + 80px)', height: 'calc(100% + 80px)', objectFit: 'cover', filter: 'blur(40px) brightness(0.42)' }} />
-          : <div style={{ position: 'absolute', inset: 0, background: `radial-gradient(circle at 50% 28%, ${colorForName(title)}66, #05070D 72%)` }} />}
+          : <div style={{ position: 'absolute', inset: 0, background: `radial-gradient(circle at 50% 28%, ${colorForName(title)}66, #0E0A1A 72%)` }} />}
       </div>
       {!isGroup && (
         <>
@@ -10046,7 +10042,7 @@ function CallScreen({ call, me, nameFor, avatarFor, onAccept, onDecline, onHangu
         <div style={{ position: 'relative', zIndex: 4, padding: '0 34px', paddingBottom: 'calc(46px + env(safe-area-inset-bottom))' }}>
           {isVideo && (
             <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 26 }}>
-              <div role="button" onClick={() => setJoinCameraOff((v) => !v)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 16px', borderRadius: 22, cursor: 'pointer', background: joinCameraOff ? 'white' : 'rgba(255,255,255,0.16)', color: joinCameraOff ? '#0B0F19' : 'white', fontSize: 13, fontWeight: 800 }}>
+              <div role="button" onClick={() => setJoinCameraOff((v) => !v)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 16px', borderRadius: 22, cursor: 'pointer', background: joinCameraOff ? 'white' : 'rgba(255,255,255,0.16)', color: joinCameraOff ? '#140E24' : 'white', fontSize: 13, fontWeight: 800 }}>
                 {joinCameraOff ? <VideoOff size={16} /> : <VideoIcon size={16} />}{joinCameraOff ? 'Camera off when you join' : 'Camera on when you join'}
               </div>
             </div>
@@ -10308,7 +10304,7 @@ function VerifiedCelebration({ tier, name, onClose }) {
   const t = VERIFIED_TIERS[tier] || VERIFIED_TIERS.blue;
   const pieces = Array.from({ length: 36 }, (_, i) => i);
   return (
-    <div className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 700, background: 'radial-gradient(circle at 50% 38%, #1a1f33 0%, #05070D 70%)', color: 'white', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 28, overflow: 'hidden', fontFamily: FONT, textAlign: 'center' }}>
+    <div className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 700, background: 'radial-gradient(circle at 50% 38%, #2a1f4d 0%, #0E0A1A 70%)', color: 'white', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 28, overflow: 'hidden', fontFamily: FONT, textAlign: 'center' }}>
       {pieces.map((i) => (
         <span key={i} style={{
           position: 'absolute', top: -20, left: `${(i * 97) % 100}%`, width: 8, height: 14, borderRadius: 2,
@@ -10338,7 +10334,7 @@ function AvatarFrame({ size, tier, children }) {
       : tier === 'pink' ? ['#FF4FA3', '#FFB3D9', '#C026D3']
         : tier === 'green' ? ['#22C55E', '#A7F3D0', '#059669']
           : tier === 'purple' ? ['#8B5CF6', '#C4B5FD', '#6D28D9']
-            : ['#2E7CF6', '#7C5CFC', '#00E5FF'];
+            : ['#7C5CFC', '#A78BFA', '#C4B5FD'];
   const pad = Math.max(3, Math.round(size * 0.08));
   const outer = size + pad * 2;
   return (
@@ -10349,7 +10345,7 @@ function AvatarFrame({ size, tier, children }) {
         <span style={{ position: 'absolute', top: 0, left: '50%', width: 5, height: 5, marginLeft: -2.5, borderRadius: '50%', background: 'white', boxShadow: `0 0 8px 2px ${palette[1]}` }} />
         <span style={{ position: 'absolute', bottom: 0, left: '50%', width: 4, height: 4, marginLeft: -2, borderRadius: '50%', background: palette[2], boxShadow: `0 0 8px 2px ${palette[0]}` }} />
       </div>
-      <div style={{ position: 'absolute', inset: pad - 1, borderRadius: '50%', background: '#05070D', padding: 1 }}>
+      <div style={{ position: 'absolute', inset: pad - 1, borderRadius: '50%', background: '#0E0A1A', padding: 1 }}>
         <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{children}</div>
       </div>
     </div>
@@ -11332,7 +11328,7 @@ function resolveFrameUrl(key) {
   const p = loadFrameImage(spec.file)
     .then((u) => u || loadFrameImage(spec.fallback))
     .then(async (u) => {
-      if (u && !spec.measured) {
+      if (u && !spec.measured && spec.centerY === undefined) {
         spec.measured = true;
         const geo = await measureFrameGeometry(u);
         if (geo && geo.scale > 1.1 && geo.scale < 2.1 && Math.abs(geo.centerX - 0.5) < 0.15 && Math.abs(geo.centerY - 0.5) < 0.15) Object.assign(spec, geo);
@@ -12070,7 +12066,7 @@ function RewardCelebration({ kind, rewardKey, me, onClaim }) {
   const frameRoom = shownFrame ? Math.round(150 * ((AVATAR_FRAMES[shownFrame].scale || 1.5) - 1) / 2) + 14 : 22;
   const pieces = Array.from({ length: 30 }, (_, i) => i);
   return (
-    <div className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 701, color: 'white', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 28, overflow: 'hidden', fontFamily: FONT, textAlign: 'center', background: `radial-gradient(circle at 50% 44%, ${glow}38 0%, rgba(11,15,25,0) 55%), #05070D` }}>
+    <div className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 701, color: 'white', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 28, overflow: 'hidden', fontFamily: FONT, textAlign: 'center', background: `radial-gradient(circle at 50% 44%, ${glow}38 0%, rgba(11,15,25,0) 55%), #0E0A1A` }}>
       {pieces.map((i) => (
         <span key={i} style={{ position: 'absolute', top: -20, left: `${(i * 97) % 100}%`, width: 7, height: 13, borderRadius: 2, background: [glow, '#FFFFFF', '#7C5CFC', '#fbbf24'][i % 4], opacity: 0.85, animation: `zchat-confetti ${2.8 + (i % 5) * 0.4}s linear ${(i % 9) * 0.25}s infinite` }} />
       ))}
@@ -12197,8 +12193,8 @@ function FrameTryOnPage({ me, frameKey, charmKey, plateKey, onClose, action }) {
                 <div style={{ fontSize: 13, color: row.unread ? 'white' : 'rgba(255,255,255,0.55)', fontWeight: row.unread ? 700 : 500, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.text}</div>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-                <div style={{ fontSize: 11.5, color: row.unread ? '#60a5fa' : 'rgba(255,255,255,0.45)', fontWeight: 700 }}>{row.time}</div>
-                {row.unread && <div style={{ minWidth: 20, height: 20, borderRadius: 10, background: '#3b82f6', fontSize: 11, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 6px' }}>{row.unread}</div>}
+                <div style={{ fontSize: 11.5, color: row.unread ? '#B79CFF' : 'rgba(255,255,255,0.45)', fontWeight: 700 }}>{row.time}</div>
+                {row.unread && <div style={{ minWidth: 20, height: 20, borderRadius: 10, background: '#7C5CFC', fontSize: 11, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 6px' }}>{row.unread}</div>}
               </div>
             </div>
           ))}
@@ -12218,7 +12214,7 @@ function FrameTryOnPage({ me, frameKey, charmKey, plateKey, onClose, action }) {
           </div>
           <div style={{ padding: '14px 12px 16px', display: 'flex', flexDirection: 'column', gap: 8, background: 'linear-gradient(180deg, #0d1016, #0b0d12)' }}>
             <div style={{ alignSelf: 'flex-start', maxWidth: '78%', padding: '8px 12px', borderRadius: '16px 16px 16px 4px', background: '#1c1f27', fontSize: 14 }}>Your frame looks amazing 🔥</div>
-            <div style={{ alignSelf: 'flex-end', maxWidth: '78%', padding: '8px 12px', borderRadius: '16px 16px 4px 16px', background: '#2563eb', fontSize: 14 }}>Thanks! Just got it ✨</div>
+            <div style={{ alignSelf: 'flex-end', maxWidth: '78%', padding: '8px 12px', borderRadius: '16px 16px 4px 16px', background: '#6B48F0', fontSize: 14 }}>Thanks! Just got it ✨</div>
           </div>
         </div>
       </div>
@@ -12905,7 +12901,7 @@ function FeedComments({ post, me, userId, onClose, onCount, onOpenProfile }) {
             placeholder="Add comment…" maxLength={300}
             style={{ flex: 1, height: 40, borderRadius: 20, background: '#22252e', border: 'none', outline: 'none', color: 'white', padding: '0 14px', fontSize: 14, fontFamily: FONT }} />
           <div role="button" aria-label="Stickers" onClick={() => setStickersOpen((v) => !v)} style={{ display: 'flex', cursor: 'pointer', color: stickersOpen ? '#fbbf24' : 'rgba(255,255,255,0.7)' }}><Smile size={24} /></div>
-          <div role="button" aria-label="Send comment" onClick={send} style={{ width: 40, height: 40, borderRadius: '50%', background: text.trim() ? '#2563eb' : '#22252e', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><Send size={17} /></div>
+          <div role="button" aria-label="Send comment" onClick={send} style={{ width: 40, height: 40, borderRadius: '50%', background: text.trim() ? '#6B48F0' : '#22252e', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><Send size={17} /></div>
         </div>
       </div>
     </div>
@@ -20169,7 +20165,7 @@ function SharePreviewScreen({ landing, onAuth }) {
   const CARD = '#12141c';
   const LINE = 'rgba(255,255,255,0.09)';
   const MUTED = 'rgba(232,234,240,0.62)';
-  const BRAND = 'linear-gradient(135deg, #3b82f6, #8b5cf6)';
+  const BRAND = 'linear-gradient(135deg, #7C5CFC, #A78BFA)';
 
   useEffect(() => {
     const onPrompt = (e) => { e.preventDefault(); setDeferred(e); };
@@ -20733,7 +20729,7 @@ function PublicShell({ title, children, wide }) {
       <div style={{ position: 'sticky', top: 0, zIndex: 20, background: 'rgba(7,8,13,0.82)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
         <div style={{ maxWidth: wide ? 960 : 820, margin: '0 auto', padding: '10px 14px 8px', paddingTop: 'calc(10px + env(safe-area-inset-top))' }}>
           <a href="/" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, textDecoration: 'none', color: 'white' }}>
-            <div style={{ width: 32, height: 32, borderRadius: 10, background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 16 }}>Z</div>
+            <div style={{ width: 32, height: 32, borderRadius: 10, background: 'linear-gradient(135deg, #7C5CFC, #A78BFA)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 16 }}>Z</div>
             <div style={{ fontWeight: 900, fontSize: 17 }}>ZChat</div>
           </a>
           <div style={{ display: 'flex', gap: 6, marginTop: 8, overflowX: 'auto', scrollbarWidth: 'none' }}>
