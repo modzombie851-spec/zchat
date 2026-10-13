@@ -120,6 +120,18 @@ function ThemeProvider({ children }) {
   useEffect(() => {
     try { localStorage.setItem('zchat-bubblecolor', bubbleColor); } catch {}
   }, [bubbleColor]);
+  const [bubbleStyle, setBubbleStyle] = useState(() => {
+    try { return localStorage.getItem('zchat-bubble-style') || 'classic'; } catch { return 'classic'; }
+  });
+  const [keepTextStyle, setKeepTextStyle] = useState(() => {
+    try { return localStorage.getItem('zchat-keep-textstyle') === '1'; } catch { return false; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem('zchat-bubble-style', bubbleStyle); } catch {}
+  }, [bubbleStyle]);
+  useEffect(() => {
+    try { localStorage.setItem('zchat-keep-textstyle', keepTextStyle ? '1' : '0'); } catch {}
+  }, [keepTextStyle]);
   useEffect(() => {
     const bg = THEMES[dark ? 'dark' : 'light'].bgGradient;
     try {
@@ -133,13 +145,25 @@ function ThemeProvider({ children }) {
   const accent = ACCENT_PALETTES[accentName] || ACCENT_PALETTES.coral;
   const theme = { ...THEMES[dark ? 'dark' : 'light'], ...accent, dark };
   return (
-    <ThemeContext.Provider value={{ theme, dark, setDark, accentName, setAccentName, soundOn, setSoundOn, reactionSoundOn, setReactionSoundOn, bgPatternOn, setBgPatternOn, fontScale, setFontScale, chatTheme, setChatTheme, bubbleColor, setBubbleColor }}>
+    <ThemeContext.Provider value={{ theme, dark, setDark, accentName, setAccentName, soundOn, setSoundOn, reactionSoundOn, setReactionSoundOn, bgPatternOn, setBgPatternOn, fontScale, setFontScale, chatTheme, setChatTheme, bubbleColor, setBubbleColor, bubbleStyle, setBubbleStyle, keepTextStyle, setKeepTextStyle }}>
       {children}
     </ThemeContext.Provider>
   );
 }
 
+const DEEP_DM_ID = (() => { try { return new URLSearchParams(window.location.search).get('dm'); } catch { return null; } })();
+const deepDmPrefetch = { current: null };
 const backStack = [];
+function runWithTransition(fn) {
+  try {
+    const reduce = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!reduce && typeof document !== 'undefined' && typeof document.startViewTransition === 'function') {
+      document.startViewTransition(() => { ReactDOM.flushSync(() => { fn(); }); });
+      return;
+    }
+  } catch {}
+  fn();
+}
 function useBackClose(active, onClose) {
   const ref = useRef(onClose);
   ref.current = onClose;
@@ -376,7 +400,11 @@ function GlobalStyle() {
       @keyframes zchat-love-pulse { 0%, 100% { box-shadow: 0 0 10px rgba(255,77,141,0.28); } 50% { box-shadow: 0 0 20px rgba(255,77,141,0.55); } }
       @keyframes zchat-neon-pulse { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.18); } }
       @keyframes zchat-wave-pop { 0% { opacity: 0; transform: scale(0.4) translateY(10px); } 60% { opacity: 1; transform: scale(1.08) translateY(-2px); } 100% { opacity: 1; transform: scale(1) translateY(0); } }
-      @keyframes zchat-panel-zoom-in { 0% { opacity: 0; transform: scale(0.97); } 100% { opacity: 1; transform: scale(1); } }
+      @keyframes zchat-panel-zoom-in { 0% { opacity: 0; transform: translateX(26px); } 100% { opacity: 1; transform: translateX(0); } }
+      @keyframes zchat-vt-out { to { opacity: 0; transform: translateX(22px) scale(0.985); } }
+      @keyframes zchat-vt-in { from { opacity: 0; transform: translateX(-16px); } }
+      ::view-transition-old(root) { animation: zchat-vt-out 0.2s cubic-bezier(0.4, 0, 1, 1) both; }
+      ::view-transition-new(root) { animation: zchat-vt-in 0.26s cubic-bezier(0.16, 1, 0.3, 1) both; }
       @keyframes zchat-panel-slide-in { 0% { opacity: 0; transform: translateX(14px) scale(0.985); } 100% { opacity: 1; transform: translateX(0) scale(1); } }
       @keyframes zchat-pull-spin { to { transform: rotate(360deg); } }
       @keyframes zchat-toast-in { 0% { opacity: 0; transform: translateY(-28px) scale(0.97); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
@@ -415,6 +443,9 @@ function GlobalStyle() {
       @supports (-webkit-touch-callout: none) {
         input, textarea, select { font-size: 16px !important; }
       }
+      * { -webkit-tap-highlight-color: transparent; }
+      button, [role="button"], a { touch-action: manipulation; }
+      input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), textarea { -webkit-appearance: none; appearance: none; }
       *:not(input):not(textarea) {
         -webkit-user-select: none;
         -webkit-touch-callout: none;
@@ -1321,7 +1352,7 @@ function IgTopBar({ title, onBack, sticky, bleed = 0 }) {
       margin: bleed ? `0 -${bleed}px` : 0, paddingTop: 'env(safe-area-inset-top)',
     }}>
       <div style={{ position: 'relative', display: 'flex', alignItems: 'center', height: 52, padding: '0 8px' }}>
-        <div role="button" aria-label="Back" onClick={onBack} style={{ width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: c.fg }}>
+        <div role="button" aria-label="Back" onClick={() => runWithTransition(() => { if (onBack) onBack(); })} style={{ width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: c.fg }}>
           <ArrowLeft size={24} strokeWidth={2} />
         </div>
         <div style={{ position: 'absolute', left: 0, right: 0, textAlign: 'center', fontSize: 16, fontWeight: 700, color: c.fg, pointerEvents: 'none' }}>{title}</div>
@@ -1394,7 +1425,7 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
     }
     checkPerms();
   };
-  const { theme, dark, setDark, accentName, setAccentName, soundOn, setSoundOn, reactionSoundOn, setReactionSoundOn, bgPatternOn, setBgPatternOn, fontScale, setFontScale, chatTheme, setChatTheme, bubbleColor, setBubbleColor } = useTheme();
+  const { theme, dark, setDark, accentName, setAccentName, soundOn, setSoundOn, reactionSoundOn, setReactionSoundOn, bgPatternOn, setBgPatternOn, fontScale, setFontScale, chatTheme, setChatTheme, bubbleColor, setBubbleColor, bubbleStyle, setBubbleStyle } = useTheme();
   const accentLabels = { coral: 'Coral', ocean: 'Ocean', berry: 'Berry' };
   const [lockFlow, setLockFlow] = useState(null);
   const [igQuery, setIgQuery] = useState('');
@@ -1643,6 +1674,28 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
                     border: bubbleColor === key ? `3px solid ${theme.ink}` : `3px solid transparent`,
                     boxShadow: `0 0 0 1px ${theme.border}`,
                   }} />
+                ))}
+              </div>
+            </div>
+            <div style={{ padding: '10px 4px', borderBottom: `1px solid ${theme.border}` }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+                <div style={{ width: 34, height: 34, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', background: `${theme.coral}1F`, color: theme.coralDeep }}><Sparkles size={16} /></div>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: theme.ink }}>Chat bubbles</div>
+                  <div style={{ fontSize: 12, color: theme.muted }}>Everyone you chat with sees your style</div>
+                </div>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8, marginTop: 8 }}>
+                {['classic', ...Object.keys(BUBBLE_STYLES)].map((key) => (
+                  <div key={key} role="button" aria-label={`Bubble style ${key === 'classic' ? 'Classic' : BUBBLE_STYLES[key].label}`} onClick={() => setBubbleStyle(key)} style={{
+                    borderRadius: 16, padding: '24px 8px 10px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, cursor: 'pointer',
+                    background: theme.rowBg, border: bubbleStyle === key ? `2px solid ${theme.coral}` : `2px solid ${theme.border}`,
+                  }}>
+                    {key === 'classic'
+                      ? <div style={{ background: theme.bubbleMe, color: theme.ink, borderRadius: 19, borderBottomRightRadius: 5, padding: '8px 14px', fontSize: 13.5, marginTop: 8 }}>Hello</div>
+                      : <BubbleSample k={key} text="Hello" />}
+                    <div style={{ fontSize: 12, fontWeight: 800, color: bubbleStyle === key ? theme.coralDeep : theme.muted }}>{key === 'classic' ? 'Classic' : BUBBLE_STYLES[key].label}</div>
+                  </div>
                 ))}
               </div>
             </div>
@@ -3704,9 +3757,11 @@ function ChatSettingsPanel({ conv, myId, meAvatar, meName, isPinned, isLocked, w
             <div role="button" onClick={conv.otherProfile.is_bot ? undefined : () => setListModal('followers')} style={{ cursor: conv.otherProfile.is_bot ? 'default' : 'pointer' }}>
               <span style={{ fontWeight: 700, fontSize: 15 }}>{conv.otherProfile.is_bot ? (BOT_FOLLOWER_BASE + (followerCount || 0)).toLocaleString('en-US') : followerCount}</span> <span style={{ fontSize: 13, color: c.dim }}>followers</span>
             </div>
-            <div role="button" onClick={() => setListModal('following')} style={{ cursor: 'pointer' }}>
-              <span style={{ fontWeight: 700, fontSize: 15 }}>{followingCount}</span> <span style={{ fontSize: 13, color: c.dim }}>following</span>
-            </div>
+            {!conv.otherProfile.is_bot && (
+              <div role="button" onClick={() => setListModal('following')} style={{ cursor: 'pointer' }}>
+                <span style={{ fontWeight: 700, fontSize: 15 }}>{followingCount}</span> <span style={{ fontSize: 13, color: c.dim }}>following</span>
+              </div>
+            )}
           </div>
           <div style={{ display: 'flex', justifyContent: 'center', gap: 22, marginTop: 18 }}>
             {[
@@ -5410,10 +5465,10 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
           ) : (
             <>
               {canSeeDetails && (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 10 }}>
-                  {statTile(postCount, 'Posts', null)}
+                <div style={{ display: 'grid', gridTemplateColumns: profile.is_bot ? '1fr' : 'repeat(3, 1fr)', gap: 8, marginBottom: 10 }}>
+                  {!profile.is_bot && statTile(postCount, 'Posts', null)}
                   {statTile(profile.is_bot ? BOT_FOLLOWER_BASE + (followerCount || 0) : followerCount, 'Followers', profile.is_bot ? null : () => setListModal('followers'))}
-                  {statTile(followingCount, 'Following', () => setListModal('following'))}
+                  {!profile.is_bot && statTile(followingCount, 'Following', () => setListModal('following'))}
                 </div>
               )}
               {isSelf ? (
@@ -5466,15 +5521,25 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
                       <RichText text={profile.bio} onMention={(p) => onOpenProfile(sanitizeAvatar(p, userId))} />
                     </div>
                   )}
-                  <ProfileSocialRow links={profile.social_links} whatsapp={profile.whatsapp} />
-                  <ProfileCollectionShowcase profile={profile} rewards={ownedRewards} isSelf={isSelf} onPreview={(k) => setTryOnFrame(k)} onOpenCollection={onOpenCollection} />
-                  {!isSelf && mutualCount > 0 && (
+                  {profile.is_bot && (
+                    <div style={{ marginTop: 16, padding: '14px 14px 12px', borderRadius: 20, background: theme.rowBg, border: `1px solid ${theme.border}` }}>
+                      <div style={{ fontSize: 13, fontWeight: 900, color: theme.ink, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 7 }}><Sparkles size={15} color={theme.coral} /> What I can do</div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+                        {['Answer anything', 'Write and fix code', 'Translate', 'Look at photos and videos', 'Understand voice messages', 'Remember our chat', 'Help in groups with @zchatbot'].map((t) => (
+                          <span key={t} style={{ fontSize: 12.5, fontWeight: 700, color: theme.ink, padding: '6px 11px', borderRadius: 14, background: `${theme.coral}1A`, border: `1px solid ${theme.coral}33` }}>{t}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {!profile.is_bot && <ProfileSocialRow links={profile.social_links} whatsapp={profile.whatsapp} />}
+                  {!profile.is_bot && <ProfileCollectionShowcase profile={profile} rewards={ownedRewards} isSelf={isSelf} onPreview={(k) => setTryOnFrame(k)} onOpenCollection={onOpenCollection} />}
+                  {!isSelf && !profile.is_bot && mutualCount > 0 && (
                     <div role="button" onClick={() => setListModal('mutual')} style={{ textAlign: 'center', fontSize: 12.5, color: theme.muted, marginTop: 12, cursor: 'pointer' }}>
                       Followed by <b style={{ color: theme.ink }}>{formatCount(mutualCount)}</b> {mutualCount === 1 ? 'person' : 'people'} you follow
                     </div>
                   )}
-                  {!editing && <ProfileHighlights profile={profile} isSelf={isSelf} userId={userId} onOpenHighlight={(h) => onOpenHighlight && onOpenHighlight(h, profile)} />}
-                  {!editing && <ProfilePosts profile={profile} isSelf={isSelf} userId={userId} meProfile={meProfile} />}
+                  {!editing && !profile.is_bot && <ProfileHighlights profile={profile} isSelf={isSelf} userId={userId} onOpenHighlight={(h) => onOpenHighlight && onOpenHighlight(h, profile)} />}
+                  {!editing && !profile.is_bot && <ProfilePosts profile={profile} isSelf={isSelf} userId={userId} meProfile={meProfile} />}
                 </>
               ) : (
                 <div style={{ marginTop: 20, padding: '22px 16px', textAlign: 'center', borderRadius: 20, background: theme.rowBg }}>
@@ -5890,6 +5955,8 @@ function MessageBubble({ isBot, m, isMe, onDelete, selectionMode, selected, onTo
     }
   };
 
+  const bubbleKey = !m.deleted && m.type === 'text' && m.bubble_style && BUBBLE_STYLES[m.bubble_style] ? m.bubble_style : null;
+  const bubbleSpec = bubbleKey ? BUBBLE_STYLES[bubbleKey] : null;
   const bubbleBg = m.deleted ? theme.rowBg : (isMe ? (bubbleColorSpec.me || theme.bubbleMe) : (bubbleColorSpec.them || theme.bubbleThem));
 
   return (
@@ -5934,7 +6001,7 @@ function MessageBubble({ isBot, m, isMe, onDelete, selectionMode, selected, onTo
           )
       )}
       {/* media with no caption, no reply and no sender label fills the bubble */}
-      <div style={{ position: 'relative', maxWidth: senderLabel ? `calc(${isBot ? 92 : 80}% - 30px)` : `${isBot ? 92 : 80}%` }}>
+      <div style={{ position: 'relative', maxWidth: senderLabel ? `calc(${isBot ? 92 : 80}% - 30px)` : `${isBot ? 92 : 80}%`, marginTop: bubbleSpec ? bubbleSpec.top : 0 }}>
         {!selectionMode && !m.deleted && (
           <div ref={replyArrowRef} style={{
             position: 'absolute', top: 10, left: -30, transform: 'translateY(-50%)',
@@ -5955,7 +6022,9 @@ function MessageBubble({ isBot, m, isMe, onDelete, selectionMode, selected, onTo
           boxShadow: m.deleted || mediaOnly ? 'none' : '0 1px 2px rgba(0,0,0,0.06)',
           ...(mediaOnly ? { background: 'transparent', overflow: 'hidden' } : {}),
           ...(m.deleted ? {} : bubbleThemeStyle(chatTheme, isMe, theme)),
+          ...(bubbleSpec ? bubbleStyleCss(bubbleSpec, isMe) : {}),
         })}>
+          {bubbleSpec && <div aria-hidden="true" style={{ position: 'absolute', pointerEvents: 'none', zIndex: 1, ...bubbleSpec.deco }}>{BUBBLE_DECO[bubbleKey]()}</div>}
           {senderLabel && !m.deleted && !tightAbove && (
             <div style={{ fontSize: 11.5, fontWeight: 700, color: theme.coralDeep, marginBottom: 3, padding: m.type !== 'text' ? '0 4px' : 0 }}>
               <NameBadge name={senderLabel} verified={senderVerified} custom={senderCustomBadge} size={11} />
@@ -5975,7 +6044,7 @@ function MessageBubble({ isBot, m, isMe, onDelete, selectionMode, selected, onTo
               padding: '4px 8px', marginBottom: 5, fontSize: 11.5, color: theme.muted, cursor: 'pointer',
             }}>
               <div style={{ fontWeight: 700, color: theme.coralDeep, fontSize: 10.5 }}>{replyPreview.senderLabel}</div>
-              <div style={{ wordBreak: 'break-word', lineHeight: 1.35 }}>
+              <div style={{ wordBreak: 'break-word', lineHeight: 1.35, ...(replyPreview.type === 'text' ? { ...fontStyleCss(replyPreview.text_font), ...(replyPreview.text_color ? { color: replyPreview.text_color } : {}) } : {}) }}>
                 {replyPreview.type === 'sticker' && replyPreview.content && (replyPreview.content.startsWith('/') || /^https?:/i.test(replyPreview.content))
                   ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><img src={replyPreview.content} alt="" style={{ width: 28, height: 28, objectFit: 'contain' }} />Sticker</span>
                   : replyPreview.type === 'text' ? (parseProfileLink(replyPreview.content) ? 'Profile' : replyPreview.content) : replyPreview.type === 'image' ? 'Photo' : replyPreview.type === 'audio' ? 'Voice message' : replyPreview.type === 'sticker' ? 'Sticker' : 'Video'}
@@ -6013,7 +6082,7 @@ function MessageBubble({ isBot, m, isMe, onDelete, selectionMode, selected, onTo
               {m.type === 'audio' && <div style={{ paddingBottom: 14 }}><AudioBubble url={m.media_url} isMe={isMe} /></div>}
               {m.type === 'sticker' && (
                 m.content && /^https?:/i.test(m.content) ? (
-                  <img src={m.content} alt="Sticker" draggable={false} className="zchat-wave-pop" style={{ display: 'block', width: 120, height: 120, objectFit: 'contain', marginBottom: 18 }} />
+                  <img src={m.content} alt="Sticker" draggable={false} onClick={(e) => { if (selectionMode || !onOpenSticker) return; e.stopPropagation(); onOpenSticker(m); }} className="zchat-wave-pop" style={{ display: 'block', width: 120, height: 120, objectFit: 'contain', marginBottom: 18, cursor: 'pointer' }} />
                 ) : m.content && m.content.startsWith('/') ? (
                   <div onClick={(e) => { if (selectionMode || !onOpenSticker) return; e.stopPropagation(); onOpenSticker(m); }} style={{ cursor: 'pointer' }}>
                     <LoopingSticker src={m.content} size={96} className="zchat-wave-pop" style={{ display: 'block', marginBottom: 18 }} />
@@ -6038,7 +6107,7 @@ function MessageBubble({ isBot, m, isMe, onDelete, selectionMode, selected, onTo
                   fontSize: (m.text_size ? textSizePx(m.text_size) : 15) * fontScale,
                   fontWeight: m.text_size === 'l' || m.text_size === 'xl' ? 800 : 400,
                   ...fontStyleCss(m.text_font),
-                  color: m.text_color || theme.ink,
+                  color: m.text_color || (bubbleSpec ? bubbleSpec.ink : theme.ink),
                   wordBreak: 'break-word', whiteSpace: 'pre-wrap',
                   lineHeight: m.text_size === 'xl' ? 1.12 : m.text_size === 'l' ? 1.2 : 1.32,
                   display: 'flow-root',
@@ -6047,7 +6116,7 @@ function MessageBubble({ isBot, m, isMe, onDelete, selectionMode, selected, onTo
                   {linkPreviewUrl && <LinkPreviewCard url={linkPreviewUrl} />}
                   <span data-msg-time="true" style={{ float: 'right', display: 'inline-flex', alignItems: 'center', gap: 3, marginLeft: 10, marginTop: 7, marginBottom: -3, height: 14, lineHeight: 1, position: 'relative', top: 1, userSelect: 'none' }}>
                     {m.edited && <span style={{ fontSize: 8, color: theme.muted, fontStyle: 'italic' }}>edited</span>}
-                    <span style={{ fontSize: 10.5, color: theme.muted }}>{time}</span>
+                    <span style={{ fontSize: 10.5, color: bubbleSpec ? bubbleSpec.ink : theme.muted, opacity: bubbleSpec ? 0.7 : 1 }}>{time}</span>
                     {isMe && <StatusTicks status={m.queued ? 'queued' : (!hideReadStatus && m.read) ? 'read' : m.delivered ? 'delivered' : 'sent'} />}
                   </span>
                 </div>
@@ -9289,7 +9358,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-const APP_VERSION = '10.2V';
+const APP_VERSION = '10.5V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -9559,13 +9628,28 @@ function CallLogBubble({ m, isMe, onCallBack }) {
   );
 }
 
-function StickerPreviewSheet({ message, isMine, onClose, onReport }) {
+function StickerPreviewSheet({ message, isMine, onClose, onReport, userId, onNotice }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
   const drag = useSheetDrag(onClose);
   const sticker = STICKERS.find((s) => s.file === message.content);
   const [favs, setFavs] = useState(() => getFavoriteStickerKeys());
   const fav = sticker ? favs.has(sticker.key) : false;
+  const customUrl = !sticker && typeof message.content === 'string' && /^https?:/i.test(message.content) ? message.content : null;
+  const [alreadyMine, setAlreadyMine] = useState(() => !!customUrl && readMyStickersLocal(userId).some((x) => x.url === customUrl));
+  const saveToMine = async () => {
+    if (!customUrl || alreadyMine) return;
+    setAlreadyMine(true);
+    let row = null;
+    try {
+      const { data, error } = await supabase.from('user_stickers').insert({ user_id: userId, url: customUrl }).select('id, url').single();
+      if (!error && data) row = { id: data.id, url: data.url };
+    } catch {}
+    const item = row || { id: `local-${Date.now()}`, url: customUrl };
+    writeMyStickersLocal(userId, [item, ...readMyStickersLocal(userId).filter((x) => x.url !== customUrl)]);
+    if (onNotice) onNotice('Added to your stickers');
+    onClose();
+  };
   const row = (icon, label, onClick, danger) => (
     <div onClick={onClick} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 20px', cursor: 'pointer', fontSize: 14.5, fontWeight: 700, color: danger ? theme.danger : theme.ink, borderTop: `1px solid ${theme.border}` }}>
       <span style={{ display: 'flex' }}>{icon}</span>{label}
@@ -9576,11 +9660,12 @@ function StickerPreviewSheet({ message, isMine, onClose, onReport }) {
       <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" {...drag.sheetProps} style={{ ...drag.sheetStyle, width: '100%', maxWidth: 440, background: theme.panelBg, borderRadius: '26px 26px 0 0', paddingBottom: 'calc(8px + env(safe-area-inset-bottom))' }}>
         <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 4px' }}><div style={{ width: 38, height: 4, borderRadius: 2, background: theme.border }} /></div>
         <div style={{ display: 'flex', justifyContent: 'center', padding: '14px 0 18px' }}>
-          {message.content && message.content.startsWith('/')
+          {message.content && (message.content.startsWith('/') || /^https?:/i.test(message.content))
             ? <img src={message.content} alt="" className="zchat-wave-pop" draggable={false} style={{ width: 150, height: 150, objectFit: 'contain' }} />
             : <div style={{ fontSize: 110, lineHeight: 1 }}>{message.content}</div>}
         </div>
         {sticker && row(<Star_ size={19} color="#FFB800" filled={fav} />, fav ? 'Remove from favorites' : 'Add to favorites', () => { setFavs(new Set(toggleFavoriteSticker(sticker.key))); onClose(); })}
+        {customUrl && !alreadyMine && row(<Plus size={19} />, 'Add to my stickers', saveToMine)}
         {!isMine && row(<Flag size={19} />, 'Report sticker', () => { onClose(); onReport(); }, true)}
         {row(<X size={19} />, 'Close', onClose)}
       </div>
@@ -11193,6 +11278,52 @@ function loadFrameImage(rawUrl, retried) {
     img.src = url;
   });
 }
+function measureFrameGeometry(url) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const N = 320;
+        const c = document.createElement('canvas');
+        c.width = N; c.height = N;
+        const g = c.getContext('2d', { willReadFrequently: true });
+        g.drawImage(img, 0, 0, N, N);
+        const d = g.getImageData(0, 0, N, N).data;
+        const A = (x, y) => d[(Math.min(N - 1, Math.max(0, Math.round(y))) * N + Math.min(N - 1, Math.max(0, Math.round(x)))) * 4 + 3];
+        let cx = N / 2;
+        let cy = N / 2;
+        if (A(cx, cy) > 60) { resolve(null); return; }
+        for (let pass = 0; pass < 3; pass++) {
+          const pts = [];
+          for (let i = 0; i < 72; i++) {
+            const a = (i / 72) * Math.PI * 2;
+            let r = 2;
+            while (r < N * 0.6) {
+              const x = cx + Math.cos(a) * r;
+              const y = cy + Math.sin(a) * r;
+              if (x < 0 || y < 0 || x >= N || y >= N || A(x, y) > 60) break;
+              r++;
+            }
+            pts.push({ x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r, r });
+          }
+          const sorted = pts.map((p) => p.r).sort((p, q) => p - q);
+          const med = sorted[Math.floor(sorted.length / 2)];
+          const good = pts.filter((p) => p.r > med * 0.8 && p.r < med * 1.2);
+          if (good.length < 36 || med < N * 0.12) { resolve(null); return; }
+          cx = good.reduce((sum, p) => sum + p.x, 0) / good.length;
+          cy = good.reduce((sum, p) => sum + p.y, 0) / good.length;
+          if (pass === 2) {
+            const rad = good.reduce((sum, p) => sum + Math.hypot(p.x - cx, p.y - cy), 0) / good.length;
+            resolve({ scale: N / (2 * rad * 1.04), centerX: cx / N, centerY: cy / N });
+            return;
+          }
+        }
+      } catch { resolve(null); }
+    };
+    img.onerror = () => resolve(null);
+    img.src = url;
+  });
+}
 function resolveFrameUrl(key) {
   const spec = AVATAR_FRAMES[key];
   if (!spec) return Promise.resolve(null);
@@ -11200,6 +11331,14 @@ function resolveFrameUrl(key) {
   if (frameWaiters.has(key)) return frameWaiters.get(key);
   const p = loadFrameImage(spec.file)
     .then((u) => u || loadFrameImage(spec.fallback))
+    .then(async (u) => {
+      if (u && !spec.measured) {
+        spec.measured = true;
+        const geo = await measureFrameGeometry(u);
+        if (geo && geo.scale > 1.1 && geo.scale < 2.1 && Math.abs(geo.centerX - 0.5) < 0.15 && Math.abs(geo.centerY - 0.5) < 0.15) Object.assign(spec, geo);
+      }
+      return u;
+    })
     .then((u) => {
       frameWaiters.delete(key);
       if (u) frameUrlCache.set(key, u);
@@ -11241,7 +11380,18 @@ function useNameplateUrl(key) {
     const spec = key && NAMEPLATES[key];
     if (!spec) { setUrl(null); return undefined; }
     if (nameplateUrlCache.has(key)) { setUrl(nameplateUrlCache.get(key)); return undefined; }
-    cachedAssetUrl(spec.file).then((u) => u || cachedAssetUrl(spec.fallback)).then((u) => {
+    cachedAssetUrl(spec.file).then((u) => u || cachedAssetUrl(spec.fallback)).then((u) => new Promise((resolve) => {
+      if (!u || spec.measured) { resolve(u); return; }
+      const probe = new Image();
+      probe.onload = () => {
+        spec.measured = true;
+        const natural = probe.naturalHeight / probe.naturalWidth;
+        if (natural > 0.15 && natural < 1.2) spec.ratio = natural;
+        resolve(u);
+      };
+      probe.onerror = () => resolve(u);
+      probe.src = u;
+    })).then((u) => {
       if (u) nameplateUrlCache.set(key, u);
       if (alive) setUrl(u);
     });
@@ -12827,6 +12977,181 @@ function ensureTextFonts() {
   } catch {}
 }
 
+
+const BUBBLE_POLKA = 'radial-gradient(circle, rgba(255,255,255,0.8) 2.6px, transparent 3px)';
+const BUBBLE_STYLES = {
+  strawberry: { label: 'Strawberry', fill: { backgroundColor: '#FFD3E0', backgroundImage: 'linear-gradient(90deg, rgba(255,105,150,0.42) 50%, transparent 50%), linear-gradient(rgba(255,105,150,0.42) 50%, transparent 50%)', backgroundSize: '14px 14px' }, line: '#C2415E', ink: '#7A1630', deco: { right: -8, top: -15, transform: 'rotate(12deg)' }, top: 15 },
+  bow: { label: 'Bow', fill: { background: 'linear-gradient(180deg, #FFC2DA, #FF9BC2)' }, line: '#C2418A', ink: '#7A1556', deco: { left: -9, top: -14, transform: 'rotate(-14deg)' }, top: 14 },
+  cherry: { label: 'Cherry', fill: { background: '#FFF0E6' }, line: '#B3261E', ink: '#7A1410', deco: { right: -6, top: -20, transform: 'rotate(8deg)' }, top: 20 },
+  daisy: { label: 'Daisy', fill: { backgroundColor: '#FFE680', backgroundImage: BUBBLE_POLKA, backgroundSize: '15px 15px' }, line: '#C99A00', ink: '#5A4300', deco: { left: -10, top: -14, transform: 'rotate(-10deg)' }, top: 14 },
+  moon: { label: 'Moonlight', fill: { backgroundColor: '#2B3478', backgroundImage: 'radial-gradient(circle, #fff 1.1px, transparent 1.6px), radial-gradient(circle, rgba(255,255,255,0.7) 0.8px, transparent 1.3px)', backgroundSize: '34px 30px, 21px 19px', backgroundPosition: '6px 5px, 15px 14px' }, line: '#0D1233', ink: '#EEF1FF', deco: { right: -8, top: -15, transform: 'rotate(14deg)' }, top: 15 },
+  bunny: { label: 'Bunny', fill: { background: '#FFFFFF' }, line: '#E58FB0', ink: '#8A3A5C', deco: { left: '50%', marginLeft: -31, top: -27 }, top: 27 },
+  matcha: { label: 'Matcha', fill: { backgroundColor: '#BFE3B0', backgroundImage: BUBBLE_POLKA, backgroundSize: '15px 15px' }, line: '#4E8B3A', ink: '#24501A', deco: { left: -10, top: -17, transform: 'rotate(-8deg)' }, top: 17 },
+  paws: { label: 'Paws', fill: { background: 'linear-gradient(180deg, #E4D6FF, #CDB8FF)' }, line: '#7C5CD6', ink: '#3F2A8C', deco: { right: -8, top: -16, transform: 'rotate(16deg)' }, top: 16 },
+};
+const BUBBLE_DECO = {
+  strawberry: () => (
+    <svg width="30" height="32" viewBox="0 0 30 32" aria-hidden="true"><path d="M15 30C6 25 2 17 3.5 12c1.2-4.5 7-5.5 11.5-3.2C19.500 6.500 25.800 7.500 26.500 12 28 17 24 25 15 30z" fill="#FF4D5E" stroke="#A81E2E" strokeWidth="1.8" strokeLinejoin="round"/><path d="M15 9c-1.500-4-5-5.500-8-4.500 2.500.5 3.500 2 4 4-3-1-5.500-.5-7 1.500 3-.7 5.500.2 8 1.200 2.500-1 5-1.900 8-1.200-1.500-2-4-2.500-7-1.500.5-2 1.500-3.500 4-4-3-1-6.500.5-8 4.500z" fill="#5CBF5F" stroke="#2E7D32" strokeWidth="1.4" strokeLinejoin="round"/><g fill="#FFE3A8"><circle cx="10" cy="16" r="1.2"/><circle cx="16" cy="14.5" r="1.2"/><circle cx="21" cy="17" r="1.2"/><circle cx="13" cy="21" r="1.2"/><circle cx="18.5" cy="22.5" r="1.2"/></g></svg>
+  ),
+  bow: () => (
+    <svg width="36" height="26" viewBox="0 0 36 26" aria-hidden="true"><path d="M18 13L4 4C0 8 0 19 4 23z" fill="#FF7BAF" stroke="#B3265E" strokeWidth="1.8" strokeLinejoin="round"/><path d="M18 13L32 4c4 4 4 15 0 19z" fill="#FF7BAF" stroke="#B3265E" strokeWidth="1.8" strokeLinejoin="round"/><rect x="14" y="8" width="8" height="10" rx="3.5" fill="#FF4D93" stroke="#B3265E" strokeWidth="1.8"/></svg>
+  ),
+  cherry: () => (
+    <svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true"><path d="M10 22C11 14 15 8 22 4M24 22C23 14 22 9 22 4" fill="none" stroke="#2E7D32" strokeWidth="2" strokeLinecap="round"/><circle cx="9" cy="25" r="7" fill="#E53935" stroke="#8E1B16" strokeWidth="1.8"/><circle cx="25" cy="25" r="7" fill="#E53935" stroke="#8E1B16" strokeWidth="1.8"/><circle cx="7" cy="23" r="1.8" fill="#fff" opacity="0.7"/><circle cx="23" cy="23" r="1.8" fill="#fff" opacity="0.7"/></svg>
+  ),
+  daisy: () => (
+    <svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true"><ellipse cx="16" cy="7" rx="3.6" ry="6" fill="#fff" stroke="#D7B53A" strokeWidth="1.2" transform="rotate(0 16 16)"/><ellipse cx="16" cy="7" rx="3.6" ry="6" fill="#fff" stroke="#D7B53A" strokeWidth="1.2" transform="rotate(45 16 16)"/><ellipse cx="16" cy="7" rx="3.6" ry="6" fill="#fff" stroke="#D7B53A" strokeWidth="1.2" transform="rotate(90 16 16)"/><ellipse cx="16" cy="7" rx="3.6" ry="6" fill="#fff" stroke="#D7B53A" strokeWidth="1.2" transform="rotate(135 16 16)"/><ellipse cx="16" cy="7" rx="3.6" ry="6" fill="#fff" stroke="#D7B53A" strokeWidth="1.2" transform="rotate(180 16 16)"/><ellipse cx="16" cy="7" rx="3.6" ry="6" fill="#fff" stroke="#D7B53A" strokeWidth="1.2" transform="rotate(225 16 16)"/><ellipse cx="16" cy="7" rx="3.6" ry="6" fill="#fff" stroke="#D7B53A" strokeWidth="1.2" transform="rotate(270 16 16)"/><ellipse cx="16" cy="7" rx="3.6" ry="6" fill="#fff" stroke="#D7B53A" strokeWidth="1.2" transform="rotate(315 16 16)"/><circle cx="16" cy="16" r="4.5" fill="#FFB300" stroke="#B37A00" strokeWidth="1.4"/></svg>
+  ),
+  moon: () => (
+    <svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true"><path d="M20 3A12 12 0 1 0 27 20 9.5 9.5 0 0 1 20 3z" fill="#FFE27A" stroke="#C9A227" strokeWidth="1.6" strokeLinejoin="round"/><circle cx="26" cy="6" r="1.8" fill="#FFF3B0"/></svg>
+  ),
+  bunny: () => (
+    <svg width="62" height="34" viewBox="0 0 62 34" aria-hidden="true"><g stroke="#E58FB0" strokeWidth="2.2"><ellipse cx="18" cy="17" rx="7" ry="15" fill="#fff" transform="rotate(-12 18 17)"/><ellipse cx="44" cy="17" rx="7" ry="15" fill="#fff" transform="rotate(12 44 17)"/></g><ellipse cx="18" cy="18" rx="3.2" ry="9.5" fill="#FFC1D8" transform="rotate(-12 18 18)"/><ellipse cx="44" cy="18" rx="3.2" ry="9.5" fill="#FFC1D8" transform="rotate(12 44 18)"/></svg>
+  ),
+  matcha: () => (
+    <svg width="34" height="30" viewBox="0 0 34 30" aria-hidden="true"><path d="M3 27C3 12 13 3 31 3c0 16-8 25-25 24z" fill="#79C257" stroke="#3E7D2B" strokeWidth="1.8" strokeLinejoin="round"/><path d="M5 25C12 17 19 11 27 7" fill="none" stroke="#3E7D2B" strokeWidth="1.5" strokeLinecap="round"/></svg>
+  ),
+  paws: () => (
+    <svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true"><g fill="#B79BFF" stroke="#6B4BC7" strokeWidth="1.6"><ellipse cx="15" cy="20" rx="7" ry="5.5"/><ellipse cx="6" cy="13" rx="2.8" ry="3.6"/><ellipse cx="12" cy="7.5" rx="2.8" ry="3.6"/><ellipse cx="19" cy="7.5" rx="2.8" ry="3.6"/><ellipse cx="25" cy="13" rx="2.8" ry="3.6"/></g></svg>
+  )
+};
+function bubbleStyleCss(spec, isMe) {
+  return {
+    ...spec.fill, border: `2.5px solid ${spec.line}`, color: spec.ink,
+    borderRadius: isMe ? '22px 22px 6px 22px' : '22px 22px 22px 6px',
+    boxShadow: `0 3px 0 ${spec.line}`, position: 'relative', backdropFilter: 'none', WebkitBackdropFilter: 'none',
+  };
+}
+function BubbleSample({ k, text, isMe = true }) {
+  const spec = BUBBLE_STYLES[k];
+  if (!spec) return null;
+  return (
+    <div style={{ position: 'relative', ...bubbleStyleCss(spec, isMe), padding: '8px 14px', fontSize: 13.5, fontWeight: 800, lineHeight: 1.3, marginTop: spec.top }}>
+      <div style={{ position: 'absolute', pointerEvents: 'none', zIndex: 1, ...spec.deco }}>{BUBBLE_DECO[k]()}</div>
+      <span style={{ position: 'relative' }}>{text}</span>
+    </div>
+  );
+}
+
+const FONT_UNICODE = {
+  bold: { up: 0x1D5D4, lo: 0x1D5EE, dg: 0x1D7EC },
+  mono: { up: 0x1D670, lo: 0x1D68A, dg: 0x1D7F6 },
+  script: { up: 0x1D4D0, lo: 0x1D4EA },
+  gothic: { up: 0x1D56C, lo: 0x1D586 },
+  elegant: { up: 0x1D608, lo: 0x1D622 },
+  wide: { up: 0xFF21, lo: 0xFF41, dg: 0xFF10 },
+};
+const SMALL_CAPS_MAP = { a: 'ᴀ', b: 'ʙ', c: 'ᴄ', d: 'ᴅ', e: 'ᴇ', f: 'ꜰ', g: 'ɢ', h: 'ʜ', i: 'ɪ', j: 'ᴊ', k: 'ᴋ', l: 'ʟ', m: 'ᴍ', n: 'ɴ', o: 'ᴏ', p: 'ᴘ', q: 'ǫ', r: 'ʀ', s: 'ꜱ', t: 'ᴛ', u: 'ᴜ', v: 'ᴠ', w: 'ᴡ', x: 'x', y: 'ʏ', z: 'ᴢ' };
+function bakeTextFont(text, font) {
+  if (!text || !font) return text;
+  if (font === 'caps') return text.toUpperCase();
+  if (font === 'lower') return text.toLowerCase();
+  if (font === 'smallcaps') return text.replace(/[a-z]/g, (ch) => SMALL_CAPS_MAP[ch] || ch);
+  const map = FONT_UNICODE[font];
+  if (!map) return text;
+  return Array.from(text).map((ch) => {
+    const c = ch.charCodeAt(0);
+    if (c >= 65 && c <= 90) return String.fromCodePoint(map.up + c - 65);
+    if (c >= 97 && c <= 122) return String.fromCodePoint(map.lo + c - 97);
+    if (map.dg && c >= 48 && c <= 57) return String.fromCodePoint(map.dg + c - 48);
+    return ch;
+  }).join('');
+}
+function readKeptTextStyle() {
+  try {
+    if (localStorage.getItem('zchat-keep-textstyle') !== '1') return null;
+    const saved = JSON.parse(localStorage.getItem('zchat-textstyle') || 'null');
+    return saved && typeof saved === 'object' ? saved : null;
+  } catch { return null; }
+}
+function newClientId() {
+  try { return crypto.randomUUID(); } catch { return `c${Date.now()}${Math.random().toString(36).slice(2, 12)}`; }
+}
+const OPTIONAL_MESSAGE_COLUMNS = ['client_id', 'bubble_style', 'text_font'];
+async function insertMessageSafe(rowIn) {
+  const row = { ...rowIn };
+  for (let i = 0; i < 4; i++) {
+    let r;
+    try { r = await supabase.from('messages').insert(row).select().single(); } catch (thrown) { r = { data: null, error: thrown }; }
+    if (r.data) return r;
+    const msg = String((r.error && r.error.message) || '');
+    if (r.error && (r.error.code === '23505' || /duplicate key/i.test(msg)) && row.client_id) {
+      const { data } = await supabase.from('messages').select('*').eq('sender_id', row.sender_id).eq('client_id', row.client_id).maybeSingle();
+      if (data) return { data, error: null };
+      return r;
+    }
+    const bad = OPTIONAL_MESSAGE_COLUMNS.find((col) => row[col] !== undefined && new RegExp(col, 'i').test(msg));
+    if (!bad) return r;
+    delete row[bad];
+  }
+  return { data: null, error: new Error('send failed') };
+}
+
+function TextStylePanel({ draft, font, size, color, onFont, onSize, onColor, onDone }) {
+  const { theme, keepTextStyle, setKeepTextStyle } = useTheme();
+  const [tab, setTab] = useState('font');
+  const sizeIdx = Math.max(0, TEXT_SIZES.findIndex(([k]) => k === size));
+  const previewPx = Math.min(24, Math.max(11, textSizePx(size)));
+  const reset = () => { onFont(null); onSize('m'); onColor(null); };
+  const tabBtn = (key, label) => (
+    <div role="button" onClick={() => setTab(key)} style={{
+      flex: 1, textAlign: 'center', padding: '8px 0', borderRadius: 12, fontSize: 13, fontWeight: 800, cursor: 'pointer',
+      color: tab === key ? 'white' : theme.muted, background: tab === key ? theme.coral : 'transparent',
+    }}>{label}</div>
+  );
+  return (
+    <div className="zchat-sheet-up" style={{ padding: '10px 14px 12px', background: theme.panelBg, borderTop: `1px solid ${theme.border}`, borderRadius: '22px 22px 0 0', display: 'flex', flexDirection: 'column', gap: 10, flexShrink: 0 }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', minHeight: 44 }}>
+        <div style={{ maxWidth: '88%', background: theme.bubbleMe, borderRadius: 19, borderBottomRightRadius: 5, padding: '8px 13px', lineHeight: 1.3, wordBreak: 'break-word', overflow: 'hidden', maxHeight: 74, ...fontStyleCss(font), color: color || theme.ink, fontSize: previewPx }}>
+          {draft.trim() ? draft.trim().slice(0, 90) : 'Your message'}
+        </div>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <span style={{ fontSize: 11, fontWeight: 800, color: theme.muted }}>Aa</span>
+        <input type="range" min={0} max={TEXT_SIZES.length - 1} step={1} value={sizeIdx} onChange={(e) => onSize(TEXT_SIZES[parseInt(e.target.value, 10)][0])}
+          aria-label="Text size" style={{ flex: 1, accentColor: theme.coral, height: 28 }} />
+        <span style={{ fontSize: 20, fontWeight: 800, color: theme.ink }}>Aa</span>
+      </div>
+      <div style={{ display: 'flex', gap: 4, padding: 3, borderRadius: 15, background: theme.rowBg }}>
+        {tabBtn('font', 'Font')}{tabBtn('colour', 'Colour')}
+      </div>
+      {tab === 'font' ? (
+        <div data-testid="font-row" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 7, maxHeight: 142, overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
+          {FONT_STYLES.map((f) => {
+            const on = (font || 'classic') === f.key;
+            return (
+              <div key={f.key} role="button" aria-label={`Font ${f.label}`} onClick={() => onFont(f.key === 'classic' ? null : f.key)} style={{
+                height: 62, borderRadius: 14, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1, cursor: 'pointer',
+                background: on ? theme.coral : theme.rowBg, color: on ? 'white' : theme.ink, border: `1px solid ${on ? theme.coral : theme.border}`,
+              }}>
+                <div style={{ fontSize: 22, lineHeight: '26px', ...fontStyleCss(f.key) }}>Aa</div>
+                <div style={{ fontSize: 9.5, fontWeight: 700, opacity: 0.85, whiteSpace: 'nowrap' }}>{f.label}</div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div data-testid="color-row" style={{ display: 'grid', gridTemplateColumns: 'repeat(8, minmax(0, 1fr))', gap: 8, maxHeight: 142, overflowY: 'auto' }}>
+          <div role="button" aria-label="Default colour" onClick={() => onColor(null)} style={{ aspectRatio: '1', borderRadius: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 900, color: theme.muted, border: `2px solid ${color ? theme.border : theme.coral}` }}>A</div>
+          {TEXT_COLORS.map((col) => (
+            <div key={col} role="button" aria-label={`Colour ${col}`} onClick={() => onColor(col)} style={{ aspectRatio: '1', borderRadius: 12, background: col, cursor: 'pointer', border: color === col ? `3px solid ${theme.ink}` : `1px solid ${theme.border}` }} />
+          ))}
+        </div>
+      )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div role="switch" aria-checked={keepTextStyle} aria-label="Keep this style for next time" onClick={() => setKeepTextStyle(!keepTextStyle)} style={{ display: 'flex', alignItems: 'center', gap: 9, flex: 1, minWidth: 0, cursor: 'pointer' }}>
+          <div style={{ width: 40, height: 24, borderRadius: 12, background: keepTextStyle ? theme.coral : theme.border, position: 'relative', flexShrink: 0, transition: 'background 0.18s' }}>
+            <div style={{ position: 'absolute', top: 2, left: keepTextStyle ? 18 : 2, width: 20, height: 20, borderRadius: '50%', background: 'white', transition: 'left 0.18s', boxShadow: '0 1px 3px rgba(0,0,0,0.3)' }} />
+          </div>
+          <span style={{ fontSize: 12.5, fontWeight: 700, color: theme.ink, lineHeight: 1.2 }}>Keep this style for next time</span>
+        </div>
+        <div role="button" onClick={reset} style={{ padding: '10px 14px', borderRadius: 14, background: theme.rowBg, color: theme.ink, fontWeight: 800, fontSize: 13, cursor: 'pointer' }}>Reset</div>
+        <div role="button" onClick={onDone} style={{ padding: '10px 18px', borderRadius: 14, background: theme.coral, color: 'white', fontWeight: 800, fontSize: 13, cursor: 'pointer' }}>Done</div>
+      </div>
+    </div>
+  );
+}
+
 function TextStyleBar({ font, size, color, onFont, onSize, onColor }) {
   const { theme } = useTheme();
   const rowStyle = { display: 'flex', gap: 8, overflowX: 'auto', padding: '0 14px', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' };
@@ -12892,7 +13217,7 @@ function mergeProfileRow(prev, row) {
 }
 
 function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAccount, onAddAccount, onRemoveAccount, switchingAccountId }) {
-  const { theme, bgPatternOn, chatTheme } = useTheme();
+  const { theme, bgPatternOn, chatTheme, bubbleStyle, keepTextStyle } = useTheme();
   const assetProgress = useAssetPrefetch();
   const [notifPermission, setNotifPermission] = useState(typeof Notification !== 'undefined' ? Notification.permission : 'default');
   const [notifBannerDismissed, setNotifBannerDismissed] = useState(() => {
@@ -13259,9 +13584,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [joinPrompt, setJoinPrompt] = useState(null);
   const [joiningGroup, setJoiningGroup] = useState(false);
   const [savedIds, setSavedIds] = useState(() => new Set());
-  const [textSize, setTextSize] = useState('m');
-  const [textColor, setTextColor] = useState(null);
-  const [textFont, setTextFont] = useState(null);
+  const [textSize, setTextSize] = useState(() => (readKeptTextStyle() || {}).size || 'm');
+  const [textColor, setTextColor] = useState(() => (readKeptTextStyle() || {}).color || null);
+  const [textFont, setTextFont] = useState(() => (readKeptTextStyle() || {}).font || null);
   const [showTextStyle, setShowTextStyle] = useState(false);
   const scrollRef = useRef(null);
   useEffect(() => {
@@ -13637,10 +13962,17 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
   useEffect(() => {
     let cancelled = false;
+    const meCacheKey = `zchat-me-cache-${session.user.id}`;
+    try {
+      const cached = JSON.parse(localStorage.getItem(meCacheKey) || 'null');
+      if (cached && cached.id === session.user.id && !cached.banned && !cached.is_deleted) setMe((prev) => prev || { ...cached, email: session.user.email });
+    } catch {}
+    if (DEEP_DM_ID && !deepDmPrefetch.current) deepDmPrefetch.current = getProfile(DEEP_DM_ID);
     getProfile(session.user.id)
       .then(async ({ data }) => {
         if (cancelled) return;
         if (data) {
+          try { const { chat_lock_hash, ...safe } = data; localStorage.setItem(meCacheKey, JSON.stringify(safe)); } catch {}
           // Someone can end up back on an account they previously deleted
           // (their login remembers their email). Welcome them back instead
           // of silently leaving them hidden and unable to be messaged.
@@ -13768,9 +14100,12 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (mailFlag) setShowMail(true);
     if (dmId) {
       (async () => {
-        const { data } = await getProfile(dmId);
+        const pre = dmId === DEEP_DM_ID ? deepDmPrefetch.current : null;
+        deepDmPrefetch.current = null;
+        const { data } = await (pre || getProfile(dmId));
         if (data) {
-          await openChat(sanitizeAvatar(data, session.user.id), null);
+          if (data.is_deleted) { setDeletedAccountAlertFor(data.name || 'This person'); return; }
+          await actuallyOpenChat(sanitizeAvatar(data, session.user.id), null);
           setTimeout(() => composerRef.current?.focus(), 300);
         }
       })();
@@ -14473,6 +14808,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     };
     if (replyToId) row.reply_to_id = replyToId;
     if (textStyleRow) Object.assign(row, textStyleRow);
+    if (type === 'text') {
+      row.client_id = newClientId();
+      if (bubbleStyle && bubbleStyle !== 'classic') row.bubble_style = bubbleStyle;
+    }
     const tempId = type === 'system' ? null : `temp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     if (tempId) {
       setMessages((prev) => [...prev, { ...row, id: tempId, created_at: new Date().toISOString(), read: false, delivered: false, deleted: false, sending: true }]);
@@ -14482,12 +14821,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       setMessages((prev) => prev.map((x) => (x.id === tempId ? { ...x, sending: false, queued: true } : x)));
       return null;
     }
-    let insertResult;
-    try { insertResult = await supabase.from('messages').insert(row).select().single(); } catch (thrown) { insertResult = { data: null, error: thrown }; }
-    if (insertResult && insertResult.error && row.text_font && /text_font/i.test(String(insertResult.error.message || ''))) {
-      const { text_font: droppedFont, ...plainGroupRow } = row;
-      try { insertResult = await supabase.from('messages').insert(plainGroupRow).select().single(); } catch (thrown) { insertResult = { data: null, error: thrown }; }
-    }
+    const insertResult = await insertMessageSafe(row);
     const { data, error } = insertResult;
     if (tempId && error && type === 'text' && isNetworkProblem(error)) {
       queueOutgoing({ tempId, kind: 'group', targetId: activeGroup.id, groupName: activeGroup.name, row, createdAt: new Date().toISOString() });
@@ -14907,7 +15241,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         for (const item of items) await sendGroupMessage(item.type, item.content, item.media_url, item.forwarded_from_name);
       }
       if (!draft.trim()) return;
-      const text = draft.trim().slice(0, MAX_CHARS);
+      const text = bakeTextFont(draft.trim().slice(0, MAX_CHARS), textFont);
       setDraft('');
       const soloForwardName = items.length === 1 && items[0].type === 'text' ? items[0].forwarded_from_name : null;
       const groupReplyId = replyingTo?.id || null;
@@ -14941,14 +15275,14 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       }
     }
     if (!draft.trim()) return;
-    const text = draft.trim().slice(0, MAX_CHARS);
+    const text = bakeTextFont(draft.trim().slice(0, MAX_CHARS), textFont);
     setDraft('');
     const replyId = replyingTo?.id || null;
     const repliedBotText = replyingTo && replyingTo.bot_reply ? String(replyingTo.content || '').slice(0, 400) : null;
     setReplyingTo(null);
     const wasForward = items.length === 1 && items[0].type === 'text';
     const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    const dmRow = { sender_id: session.user.id, receiver_id: activeProfile.id, group_id: null, type: 'text', content: text, reply_to_id: replyId || null, text_size: textSize === 'm' ? null : textSize, text_color: textColor, ...(textFont ? { text_font: textFont } : {}) };
+    const dmRow = { sender_id: session.user.id, receiver_id: activeProfile.id, group_id: null, type: 'text', content: text, reply_to_id: replyId || null, text_size: textSize === 'm' ? null : textSize, text_color: textColor, client_id: newClientId(), ...(bubbleStyle && bubbleStyle !== 'classic' ? { bubble_style: bubbleStyle } : {}), ...(textFont ? { text_font: textFont } : {}) };
     const optimistic = { ...dmRow, id: tempId, media_url: null, created_at: new Date().toISOString(), read: false, delivered: false, deleted: false, sending: true };
     const dmTarget = activeProfile.id;
     if (navigator.onLine === false) {
@@ -14957,19 +15291,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       return;
     }
     setMessages((prev) => [...prev, optimistic]);
-    const styledText = textSize !== 'm' || !!textColor || !!textFont;
-    let sendResult;
-    try {
-      sendResult = (replyId || styledText)
-        ? await supabase.from('messages').insert(dmRow).select().single()
-        : await sendMessage(session.user.id, dmTarget, 'text', text, null);
-    } catch (thrown) {
-      sendResult = { data: null, error: thrown };
-    }
-    if (sendResult && sendResult.error && /text_font/i.test(String(sendResult.error.message || ''))) {
-      const { text_font: droppedFont, ...plainRow } = dmRow;
-      try { sendResult = await supabase.from('messages').insert(plainRow).select().single(); } catch (thrown) { sendResult = { data: null, error: thrown }; }
-    }
+    const sendResult = await insertMessageSafe(dmRow);
     const data = sendResult && sendResult.data;
     if (!data) {
       if (isNetworkProblem(sendResult && sendResult.error)) {
@@ -15347,8 +15669,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     try {
       while (outboxRef.current.length) {
         const item = outboxRef.current[0];
-        let result;
-        try { result = await supabase.from('messages').insert(item.row).select().single(); } catch (thrown) { result = { data: null, error: thrown }; }
+        const result = await insertMessageSafe(item.row);
         const { data, error } = result;
         if (!data && isNetworkProblem(error)) break;
         outboxRef.current = outboxRef.current.slice(1);
@@ -15440,11 +15761,30 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
   useEffect(() => {
     if (draft.trim()) return;
+    if (keepTextStyle) return;
     setShowTextStyle(false);
     if (textSize !== 'm') setTextSize('m');
     if (textColor) setTextColor(null);
     if (textFont) setTextFont(null);
   }, [draft]);
+  useEffect(() => {
+    if (!keepTextStyle) return;
+    try { localStorage.setItem('zchat-textstyle', JSON.stringify({ font: textFont, size: textSize, color: textColor })); } catch {}
+  }, [keepTextStyle, textFont, textSize, textColor]);
+  const draftsRef = useRef({});
+  const draftLiveRef = useRef('');
+  draftLiveRef.current = draft;
+  const prevDraftChatRef = useRef(null);
+  useEffect(() => {
+    const prev = prevDraftChatRef.current;
+    if (prev === chatKey) return;
+    if (prev) draftsRef.current[prev] = draftLiveRef.current;
+    prevDraftChatRef.current = chatKey;
+    setDraft(chatKey ? (draftsRef.current[chatKey] || '') : '');
+    setReplyingTo(null);
+    setEditingMessage(null);
+    setComposerMention(null);
+  }, [chatKey]);
 
   const toggleSaveMessage = async (m) => {
     setContextMenuFor(null);
@@ -15860,7 +16200,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const onPop = () => {
       let closed = false;
       const top = backStack.pop();
-      if (top) { top(); closed = true; }
+      if (top) { runWithTransition(top); closed = true; }
       else {
         const st = backStateRef.current;
         closed = !!(st.closeTop && st.closeTop());
@@ -16579,7 +16919,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       {showInstallHelp && <InstallAppHelpModal onClose={() => setShowInstallHelp(false)} />}
       <div {...feedSwipe} style={{
         width: isWide ? 360 : (mobileShowChat ? 0 : '100%'), maxWidth: isWide ? 360 : (mobileShowChat ? 0 : '100%'), overflow: 'hidden',
-        borderRight: `1px solid ${theme.border}`, display: 'flex', flexDirection: 'column', flexShrink: 0,
+        borderRight: (isWide || !mobileShowChat) ? `1px solid ${theme.border}` : 'none', display: 'flex', flexDirection: 'column', flexShrink: 0,
         transition: 'none',
       }} className="zchat-sidebar-desktop">
         <input ref={storyInputRef} type="file" accept="image/*,video/*" multiple style={{ display: 'none' }}
@@ -16883,7 +17223,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                 onClick={() => (activeGroup ? setShowGroupInfo(true) : setProfileOf(activeProfile))}>
               {activeGroup && <div aria-hidden="true" style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 2, background: `linear-gradient(90deg, ${groupAccent(activeGroup)}, transparent 80%)`, pointerEvents: 'none' }} />}
               <ArrowLeft size={20} style={{ cursor: 'pointer', color: activeNameBarKey ? 'white' : theme.ink, flexShrink: 0, filter: activeNameBarKey ? 'drop-shadow(0 1px 3px rgba(0,0,0,0.6))' : 'none', position: 'relative' }}
-                onClick={(e) => { e.stopPropagation(); if (activeConvForBar && myLocks[activeConvForBar.id]) lastLeftChatAtRef.current[activeConvForBar.id] = Date.now(); if (activeGroup) markGroupRead(activeGroup.id); if (reloadListsRef.current) reloadListsRef.current(); loadUnreadCounts(); setMobileShowChat(false); setActiveProfile(null); setActiveGroup(null); }} />
+                onClick={(e) => { e.stopPropagation(); if (activeConvForBar && myLocks[activeConvForBar.id]) lastLeftChatAtRef.current[activeConvForBar.id] = Date.now(); if (activeGroup) markGroupRead(activeGroup.id); if (reloadListsRef.current) reloadListsRef.current(); loadUnreadCounts(); runWithTransition(() => { setMobileShowChat(false); setActiveProfile(null); setActiveGroup(null); }); }} />
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, position: 'relative' }}>
                 {activeGroup ? <GroupAvatar avatar={activeGroup.avatar} name={activeGroup.name} size={38} /> : AVATAR_FRAMES[activeProfile.avatar_frame] ? <div style={{ margin: '0 6px' }}><FramedAvatar frame={activeProfile.avatar_frame} size={36}><Avatar emoji={activeProfile.avatar} name={activeProfile.name} frame={activeProfile.avatar_frame} frameFit={false} online={isUserOnline(activeProfile) && !activeProfile.hide_activity} size={36} /></FramedAvatar></div> : <AvatarFrame size={34} tier={activeProfile.verified}><Avatar emoji={activeProfile.avatar} name={activeProfile.name} frame={activeProfile.avatar_frame} online={isUserOnline(activeProfile) && !activeProfile.hide_activity} size={34} /></AvatarFrame>}
                 <div style={{ minWidth: 0, flex: 1 }}>
@@ -17024,7 +17364,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                 <div style={{ width: 3, alignSelf: 'stretch', background: theme.coral, borderRadius: 2, flexShrink: 0 }} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 11, fontWeight: 700, color: theme.coralDeep }}>{editingMessage ? 'Editing message' : `Replying to ${labelForSender(replyingTo.sender_id)}`}</div>
-                  <div style={{ fontSize: 12, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  <div style={{ fontSize: 12, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', ...((editingMessage || replyingTo).type === 'text' ? { ...fontStyleCss((editingMessage || replyingTo).text_font), ...((editingMessage || replyingTo).text_color ? { color: (editingMessage || replyingTo).text_color } : {}) } : {}) }}>
                     {(editingMessage || replyingTo).type === 'text' ? (editingMessage || replyingTo).content : (editingMessage || replyingTo).type === 'image' ? 'Photo' : (editingMessage || replyingTo).type === 'audio' ? 'Voice message' : (editingMessage || replyingTo).type === 'sticker' ? 'Sticker' : (editingMessage || replyingTo).type === 'system' ? 'Message' : 'Video'}
                   </div>
                 </div>
@@ -17062,8 +17402,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               </div>
             )}
 
-            {showTextStyle && draft.trim() && !editingMessage && (
-              <TextStyleBar font={textFont} size={textSize} color={textColor} onFont={setTextFont} onSize={setTextSize} onColor={setTextColor} />
+            {showTextStyle && !editingMessage && (
+              <TextStylePanel draft={draft} font={textFont} size={textSize} color={textColor} onFont={setTextFont} onSize={setTextSize} onColor={setTextColor} onDone={() => setShowTextStyle(false)} />
             )}
             <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, padding: '6px 14px', flexShrink: 0, position: 'relative', background: theme.bgGradient, boxSizing: 'border-box', maxWidth: isWide ? 760 : 'none', width: '100%', margin: isWide ? '0 auto' : 0, paddingBottom: keyboardOpen ? 6 : 'max(6px, calc(env(safe-area-inset-bottom) - 24px))' }}>
               {activeRestriction('chat') ? (
@@ -17606,7 +17946,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       )}
       {stickerSheetFor && (
         <StickerPreviewSheet message={stickerSheetFor} isMine={stickerSheetFor.sender_id === session.user.id}
-          onClose={() => setStickerSheetFor(null)} onReport={() => doReportSingle(stickerSheetFor)} />
+          onClose={() => setStickerSheetFor(null)} onReport={() => doReportSingle(stickerSheetFor)} userId={session.user.id} onNotice={showSnack} />
       )}
       {storyComposer && (
         <MediaComposer key={storyComposer.key} files={storyComposer.files} mode="story" myId={session.user.id} privacyCtx={{ iFollow: iFollowIds, allowed: privacyAllowed }}
@@ -20191,11 +20531,29 @@ function AppInner() {
     // screen just because their check was slow. The timer below only ever fills in a
     // temporary "not logged in yet" guess, and only if nothing has answered by then, so
     // the spinner can't get stuck forever while we wait.
-    getSession().then(({ data }) => setSession(data.session || null))
-      .catch(() => setSession((prev) => (prev === undefined ? null : prev)));
+    let hasStoredLogin = false;
+    try { hasStoredLogin = Object.keys(localStorage).some((k) => /^sb-.*-auth-token$/.test(k)); } catch {}
+    const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+    (async () => {
+      let found = null;
+      for (let attempt = 0; attempt < (hasStoredLogin ? 4 : 1) && !found; attempt++) {
+        if (attempt > 0) await pause(1200 * attempt);
+        try {
+          const r = await getSession();
+          found = r && r.data && r.data.session ? r.data.session : null;
+        } catch {}
+        if (!found && hasStoredLogin) {
+          try {
+            const r = await supabase.auth.refreshSession();
+            found = r && r.data && r.data.session ? r.data.session : null;
+          } catch {}
+        }
+      }
+      setSession((prev) => (found || (prev === undefined ? null : prev)));
+    })();
     const unstickTimer = setTimeout(() => {
       setSession((prev) => (prev === undefined ? null : prev));
-    }, 10000);
+    }, hasStoredLogin ? 25000 : 10000);
     const { data: listener } = supabase.auth.onAuthStateChange((event, sess) => {
       if (event === 'PASSWORD_RECOVERY') setIsPasswordRecovery(true);
       if (event === 'SIGNED_OUT') { setSession(null); return; }
