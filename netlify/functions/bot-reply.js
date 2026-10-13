@@ -284,7 +284,8 @@ async function verifyCaller(event, userId) {
   } catch { return false; }
 }
 
-const FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL || 'gemini-2.5-flash';
+const FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL || 'gemini-3.8-flash';
+const SECOND_FALLBACK_MODEL = 'gemini-3.5-flash';
 const geminiUrlFor = (model) => `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
 async function geminiOnce({ model, systemText, contents, structured, thinking, timeoutMs }) {
@@ -311,16 +312,16 @@ async function geminiOnce({ model, systemText, contents, structured, thinking, t
     const json = await res.json().catch(() => null);
     if (!res.ok) {
       console.error('Gemini error', model, res.status, JSON.stringify(json).slice(0, 300));
-      return { rawText: null };
+      return { rawText: null, status: res.status };
     }
     const cand = json && json.candidates && json.candidates[0];
     const parts = (cand && cand.content && cand.content.parts) || [];
     const rawText = parts.filter((p) => typeof p.text === 'string' && !p.thought).map((p) => p.text).join('');
     if (!rawText) console.error('Gemini empty', model, JSON.stringify(json).slice(0, 300));
-    return { rawText };
+    return { rawText, status: rawText ? 200 : 'empty' };
   } catch (err) {
     console.error('Gemini request failed', model, err && err.name);
-    return { rawText: null };
+    return { rawText: null, status: (err && err.name === 'AbortError') ? 'timeout' : 'network' };
   } finally {
     clearTimeout(timer);
   }
@@ -329,27 +330,42 @@ async function geminiOnce({ model, systemText, contents, structured, thinking, t
 async function runGemini({ systemText, contents, background }) {
   const started = Date.now();
   const budget = background ? 100000 : 8500;
-  const steps = [
-    { model: GEMINI_MODEL, structured: true, thinking: { thinkingLevel: 'low' } },
-    { model: GEMINI_MODEL, structured: false, thinking: null },
-    { model: FALLBACK_MODEL, structured: false, thinking: { thinkingBudget: 0 } },
-  ];
+  const models = [...new Set([GEMINI_MODEL, FALLBACK_MODEL, SECOND_FALLBACK_MODEL])];
+  const steps = models.map((model) => ({ model, structured: true, thinking: { thinkingLevel: 'low' } }));
+  steps.push({ model: FALLBACK_MODEL, structured: false, thinking: null });
+  let lastStatus = null;
   for (let i = 0; i < steps.length; i++) {
-    const left = budget - (Date.now() - started);
-    if (left < 1500) break;
-    const timeoutMs = background ? Math.min(left, 45000) : (i === 0 ? Math.min(left, 6000) : left - 300);
-    const out = await geminiOnce({ ...steps[i], systemText, contents, timeoutMs });
-    if (!out.rawText) continue;
-    const ex = extractReplyAndSuggestions(out.rawText);
-    if (ex.reply) return { reply: ex.reply, suggestions: ex.suggestions, rawText: out.rawText };
-    if (!steps[i].structured && out.rawText.trim() && !/^\s*[{\[]/.test(out.rawText)) {
-      return { reply: out.rawText.trim(), suggestions: [], rawText: null };
+    const step = { ...steps[i] };
+    for (let tries = 0; tries < 3; tries++) {
+      const left = budget - (Date.now() - started);
+      if (left < 1500) return { reply: null, suggestions: [], rawText: null, status: lastStatus };
+      const timeoutMs = background ? Math.min(left, 30000) : (i === 0 ? Math.min(left, 6000) : left - 300);
+      const out = await geminiOnce({ ...step, systemText, contents, timeoutMs });
+      lastStatus = out.status;
+      if (out.rawText) {
+        const ex = extractReplyAndSuggestions(out.rawText);
+        if (ex.reply) return { reply: ex.reply, suggestions: ex.suggestions, rawText: out.rawText, status: 200 };
+        if (!step.structured && out.rawText.trim() && !/^\s*[{\[]/.test(out.rawText)) {
+          return { reply: out.rawText.trim(), suggestions: [], rawText: null, status: 200 };
+        }
+        break;
+      }
+      if (out.status === 400 && step.thinking) { step.thinking = null; continue; }
+      if (out.status === 429 && background && tries === 0) { await new Promise((r) => setTimeout(r, 6000)); continue; }
+      break;
     }
+    if (lastStatus === 429 || lastStatus === 401 || lastStatus === 403) break;
   }
-  return { reply: null, suggestions: [], rawText: null };
+  return { reply: null, suggestions: [], rawText: null, status: lastStatus };
 }
 
-exports.handler = async (event) => {
+function failureText(status, again) {
+  if (status === 429) return `I'm getting too many requests right now. ${again} (Error code 429)`;
+  return `Sorry, I couldn't come up with a reply just now. ${again}${status ? ` (Error code ${status})` : ''}`;
+}
+
+const handlerCore = async (event) => {
+  const startedAt = Date.now();
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: 'Method not allowed' };
   }
@@ -449,9 +465,11 @@ exports.handler = async (event) => {
     ? `\nThis is a private chat between two people: ${senderName}, who just called on you, and ${peerName}. Lines in the conversation are written as "Name: message". Answer ${senderName}, and remember ${peerName} can read your reply too. Do not greet or introduce yourself again unless you are asked who you are.`
     : '';
   const knowledge = await knowledgePromise;
-  let reply = "Sorry, I couldn't come up with a reply just now. Try asking again in a moment.";
+  const failAgain = "Try asking again in a moment.";
+  let reply = failureText(null, failAgain);
   let suggestions = [];
   const gem = await runGemini({ systemText: `${SYSTEM_INSTRUCTION}\nThe person you are talking to is named: ${senderName}.${knowledgeBlock(knowledge)}${wolfCoinBlock(text)}${peerNote}`, contents, background: /background/.test(event.path || '') });
+  if (!gem.reply) reply = failureText(gem.status, failAgain);
   if (gem.reply) {
     reply = gem.reply;
     suggestions = gem.suggestions;
@@ -460,6 +478,17 @@ exports.handler = async (event) => {
       if (learned === 'rejected') reply += "\n\nI could not save that one to share with others, though.";
     }
   }
+
+  try {
+    if (!regenerate) {
+      let dupQuery = supabase.from('messages').select('id', { count: 'exact', head: true }).gte('created_at', new Date(startedAt - 1500).toISOString());
+      dupQuery = peerMode
+        ? dupQuery.eq('sender_id', userId).eq('bot_reply', true).eq('receiver_id', peerId)
+        : dupQuery.eq('sender_id', botId).eq('receiver_id', userId);
+      const { count: already } = await dupQuery;
+      if ((already || 0) > 0) return { statusCode: 200, body: 'duplicate' };
+    }
+  } catch {}
 
   const replyRow = peerMode
     ? { sender_id: userId, receiver_id: peerId, group_id: null, type: 'text', content: reply.slice(0, 12000), bot_reply: true }
@@ -470,4 +499,13 @@ exports.handler = async (event) => {
     return { statusCode: 500, body: 'Could not save reply' };
   }
   return { statusCode: 200, body: 'ok' };
+};
+
+exports.handler = async (event, context) => {
+  try {
+    return await handlerCore(event, context);
+  } catch (err) {
+    console.error('Bot handler crashed', err);
+    return { statusCode: 200, body: 'error' };
+  }
 };
