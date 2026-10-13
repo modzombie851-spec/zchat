@@ -382,6 +382,7 @@ function GlobalStyle() {
       @keyframes zchat-toast-in { 0% { opacity: 0; transform: translateY(-28px) scale(0.97); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
       @keyframes zchat-pop-in { 0% { opacity: 0; transform: scale(0.92); } 100% { opacity: 1; transform: scale(1); } }
       @keyframes zchat-sheet-up { 0% { transform: translateY(40px); opacity: 0; } 100% { transform: translateY(0); opacity: 1; } }
+      @keyframes zchat-bot-orb { 0% { transform: translate(0, 0) scale(1); } 100% { transform: translate(40px, -50px) scale(1.18); } }
       @keyframes zchat-dots { 0%, 80%, 100% { opacity: 0.25; } 40% { opacity: 1; } }
       .zchat-toast-in { animation: zchat-toast-in 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.1); }
       .zchat-pop { animation: zchat-pop-in 0.18s cubic-bezier(0.2, 0.9, 0.3, 1.2); }
@@ -3700,8 +3701,8 @@ function ChatSettingsPanel({ conv, myId, meAvatar, meName, isPinned, isLocked, w
           {infoBits.length > 0 && <div style={{ fontSize: 13, color: c.dim, marginTop: 6 }}>{infoBits.join(' \u00b7 ')}</div>}
           {showBio && <div style={{ fontSize: 13.5, marginTop: 8, lineHeight: 1.45, padding: '0 8px' }}><RichText text={p.bio} onMention={onOpenProfile} /></div>}
           <div style={{ display: 'flex', justifyContent: 'center', gap: 26, marginTop: 14 }}>
-            <div role="button" onClick={() => setListModal('followers')} style={{ cursor: 'pointer' }}>
-              <span style={{ fontWeight: 700, fontSize: 15 }}>{followerCount}</span> <span style={{ fontSize: 13, color: c.dim }}>followers</span>
+            <div role="button" onClick={conv.otherProfile.is_bot ? undefined : () => setListModal('followers')} style={{ cursor: conv.otherProfile.is_bot ? 'default' : 'pointer' }}>
+              <span style={{ fontWeight: 700, fontSize: 15 }}>{conv.otherProfile.is_bot ? (BOT_FOLLOWER_BASE + (followerCount || 0)).toLocaleString('en-US') : followerCount}</span> <span style={{ fontSize: 13, color: c.dim }}>followers</span>
             </div>
             <div role="button" onClick={() => setListModal('following')} style={{ cursor: 'pointer' }}>
               <span style={{ fontWeight: 700, fontSize: 15 }}>{followingCount}</span> <span style={{ fontSize: 13, color: c.dim }}>following</span>
@@ -5411,7 +5412,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
               {canSeeDetails && (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 10 }}>
                   {statTile(postCount, 'Posts', null)}
-                  {statTile(followerCount, 'Followers', () => setListModal('followers'))}
+                  {statTile(profile.is_bot ? BOT_FOLLOWER_BASE + (followerCount || 0) : followerCount, 'Followers', profile.is_bot ? null : () => setListModal('followers'))}
                   {statTile(followingCount, 'Following', () => setListModal('following'))}
                 </div>
               )}
@@ -5433,10 +5434,12 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
                 </>
               ) : (
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <div style={{ flex: 1, display: 'flex' }}>
-                    <FollowActionButton state={followState} theyFollowMe={theyFollowMe} busy={followBusy} onClick={toggleFollow} />
-                  </div>
-                  {followState === 'accepted' ? (
+                  {!profile.is_bot && (
+                    <div style={{ flex: 1, display: 'flex' }}>
+                      <FollowActionButton state={followState} theyFollowMe={theyFollowMe} busy={followBusy} onClick={toggleFollow} />
+                    </div>
+                  )}
+                  {(followState === 'accepted' || profile.is_bot) ? (
                     <button onClick={() => onMessage(profile)} style={pillBtn(false)}><ChatBubbleIcon size={17} /> Message</button>
                   ) : (
                     <button onClick={() => setShowShare(true)} style={pillBtn(false)}><Share2 size={15} /> Share</button>
@@ -5782,7 +5785,7 @@ function MentionSuggestions({ query, priority, excludeIds, myId, onPick }) {
 }
 
 
-function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSelect, onLongPress, onOpenImage, onOpenVideo, reactions, onReact, onOpenWhoReacted, replyPreview, onSwipeReply, onJumpToMessage, highlighted, senderLabel, senderAvatar, hideReadStatus, onOpenSenderProfile, canModerate, onOpenMention, mentionsMe, onOpenStoryRef, onCallBack, onOpenSticker, tightBelow, senderVerified, onOpenPost, tightAbove, senderFrame, senderCustomBadge }) {
+function MessageBubble({ isBot, m, isMe, onDelete, selectionMode, selected, onToggleSelect, onLongPress, onOpenImage, onOpenVideo, reactions, onReact, onOpenWhoReacted, replyPreview, onSwipeReply, onJumpToMessage, highlighted, senderLabel, senderAvatar, hideReadStatus, onOpenSenderProfile, canModerate, onOpenMention, mentionsMe, onOpenStoryRef, onCallBack, onOpenSticker, tightBelow, senderVerified, onOpenPost, tightAbove, senderFrame, senderCustomBadge }) {
   const mediaOnly = !m.deleted && (m.type === 'image' || m.type === 'video')
     && !replyPreview && !senderLabel && !m.forwarded
     && !(m.content && !String(m.content).startsWith('/'));
@@ -5931,7 +5934,7 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
           )
       )}
       {/* media with no caption, no reply and no sender label fills the bubble */}
-      <div style={{ position: 'relative', maxWidth: senderLabel ? 'calc(80% - 30px)' : '80%' }}>
+      <div style={{ position: 'relative', maxWidth: senderLabel ? `calc(${isBot ? 92 : 80}% - 30px)` : `${isBot ? 92 : 80}%` }}>
         {!selectionMode && !m.deleted && (
           <div ref={replyArrowRef} style={{
             position: 'absolute', top: 10, left: -30, transform: 'translateY(-50%)',
@@ -6040,7 +6043,7 @@ function MessageBubble({ m, isMe, onDelete, selectionMode, selected, onToggleSel
                   lineHeight: m.text_size === 'xl' ? 1.12 : m.text_size === 'l' ? 1.2 : 1.32,
                   display: 'flow-root',
                 }}>
-                  <RichText text={m.content} onMention={onOpenMention} />
+                  {isBot ? <BotRichText text={m.content} onMention={onOpenMention} /> : <RichText text={m.content} onMention={onOpenMention} />}
                   {linkPreviewUrl && <LinkPreviewCard url={linkPreviewUrl} />}
                   <span data-msg-time="true" style={{ float: 'right', display: 'inline-flex', alignItems: 'center', gap: 3, marginLeft: 10, marginTop: 7, marginBottom: -3, height: 14, lineHeight: 1, position: 'relative', top: 1, userSelect: 'none' }}>
                     {m.edited && <span style={{ fontSize: 8, color: theme.muted, fontStyle: 'italic' }}>edited</span>}
@@ -9263,8 +9266,30 @@ function StoryTray({ me, myStories, trayUsers, seen, onAdd, onOpen }) {
 // The handle people type to call the bot into a group conversation, e.g. "@zchatbot how do I reset my password".
 // Keep this in sync with the username given to the bot's profile row (see the setup SQL).
 const BOT_MENTION = '@zchatbot';
+const BOT_FOLLOWER_BASE = 2193;
+function useBotFollowerCount(botId) {
+  const [real, setReal] = useState(() => {
+    try { const v = parseInt(localStorage.getItem('zchat-botfollowers') || '', 10); return Number.isFinite(v) ? v : 0; } catch { return 0; }
+  });
+  useEffect(() => {
+    if (!botId) return undefined;
+    let cancelled = false;
+    const load = async () => {
+      const { count } = await supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', botId).eq('status', 'accepted');
+      if (cancelled || count == null) return;
+      setReal(count);
+      try { localStorage.setItem('zchat-botfollowers', String(count)); } catch { /* storage unavailable */ }
+    };
+    load();
+    const channel = supabase.channel('bot-followers-' + botId)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'follows', filter: `following_id=eq.${botId}` }, load)
+      .subscribe();
+    return () => { cancelled = true; supabase.removeChannel(channel); };
+  }, [botId]);
+  return BOT_FOLLOWER_BASE + real;
+}
 
-const APP_VERSION = '9.9V';
+const APP_VERSION = '10.2V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -14704,9 +14729,50 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     } catch { /* keep the token we already have */ }
     return { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) };
   };
+  const [botWaitBase, setBotWaitBase] = useState(null);
+  const currentBotId = () => (activeGroup
+    ? (groupMembers.find((gm) => gm.profile && gm.profile.is_bot) || {}).user_id
+    : (activeProfile && activeProfile.is_bot ? activeProfile.id : null));
+  const startBotWait = () => {
+    const bid = currentBotId();
+    setBotWaitBase(messagesRef.current.filter((x) => !!x.bot_reply || (bid && x.sender_id === bid)).length);
+  };
+  useEffect(() => {
+    if (botWaitBase == null) return undefined;
+    const bid = currentBotId();
+    const n = messages.filter((x) => !!x.bot_reply || (bid && x.sender_id === bid)).length;
+    if (n > botWaitBase) { setBotWaitBase(null); return undefined; }
+    const t = setTimeout(() => setBotWaitBase(null), 45000);
+    return () => clearTimeout(t);
+  }, [messages, botWaitBase]);
+  useEffect(() => { setBotWaitBase(null); }, [chatKey]);
+  useEffect(() => {
+    if (botWaitBase == null) return;
+    requestAnimationFrame(() => scrollChatToBottom(true));
+  }, [botWaitBase]);
+  const regenerateBotReply = async (botMsg) => {
+    const list = messagesRef.current;
+    const at = list.findIndex((x) => x.id === botMsg.id);
+    const bid = currentBotId();
+    let prevText = '';
+    for (let i = (at < 0 ? list.length : at) - 1; i >= 0; i--) {
+      const x = list[i];
+      if (x.type === 'text' && x.content && !x.bot_reply && x.sender_id !== bid && !x.deleted) { prevText = String(x.content).slice(0, 4000); break; }
+    }
+    if (!prevText) { showSnack('Nothing to regenerate from.'); return; }
+    startBotWait();
+    const url = activeGroup ? '/.netlify/functions/bot-reply-group' : '/.netlify/functions/bot-reply';
+    const body = activeGroup
+      ? { userId: session.user.id, groupId: activeGroup.id, text: prevText, regenerate: true }
+      : (activeProfile && activeProfile.is_bot
+        ? { userId: session.user.id, botId: activeProfile.id, text: prevText, regenerate: true }
+        : { userId: session.user.id, peerId: activeProfile.id, text: prevText, regenerate: true });
+    fetch(url, { method: 'POST', headers: await botCallHeaders(), body: JSON.stringify(body) }).catch(() => {});
+  };
   const triggerBotInPrivate = async (text, peerId, replyToText) => {
     if (!peerId || !text) return;
     if (!text.toLowerCase().includes(BOT_MENTION) && replyToText == null) return;
+    startBotWait();
     fetch('/.netlify/functions/bot-reply', {
       method: 'POST',
       headers: await botCallHeaders(),
@@ -14715,6 +14781,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   };
   const triggerBotDM = async (text, mediaType, mediaUrl) => {
     if (!activeProfile || !activeProfile.is_bot) return;
+    startBotWait();
     fetch('/.netlify/functions/bot-reply', {
       method: 'POST',
       headers: await botCallHeaders(),
@@ -14733,6 +14800,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         const inserted = await sendGroupMessage('text', suggestionText, null);
         setMessages((prev) => (inserted ? prev.map((x) => (x.id === tempId ? inserted : x)) : prev.filter((x) => x.id !== tempId)));
         if (inserted) {
+          startBotWait();
           fetch('/.netlify/functions/bot-reply-group', {
             method: 'POST',
             headers: await botCallHeaders(),
@@ -14849,6 +14917,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       setReplyingTo(null);
       await sendGroupMessage('text', text, null, soloForwardName, groupReplyId, (textSize !== 'm' || textColor || textFont) ? { text_size: textSize === 'm' ? null : textSize, text_color: textColor, ...(textFont ? { text_font: textFont } : {}) } : null);
       if (text.toLowerCase().includes(BOT_MENTION) || repliedToBot) {
+        startBotWait();
         fetch('/.netlify/functions/bot-reply-group', {
           method: 'POST',
           headers: await botCallHeaders(),
@@ -16377,6 +16446,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   useBackClose(showTextStyle, () => setShowTextStyle(false));
   useBackClose(search.trim().length >= 2 && !mobileShowChat, () => { setSearch(''); setResults([]); });
 
+  const botFollowers = useBotFollowerCount(activeProfile && activeProfile.is_bot ? activeProfile.id : null);
   const renderedMessages = useMemo(() => {
     if (!me || (!activeProfile && !activeGroup)) return null;
     const byId = new Map(messages.map((x) => [x.id, x]));
@@ -16389,6 +16459,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const botSenderId = activeGroup
       ? (groupMembers.find((gm) => gm.profile && gm.profile.is_bot) || {}).user_id
       : (activeProfile && activeProfile.is_bot ? activeProfile.id : null);
+    const isBotAuthored = (x) => !!x.bot_reply || (!!botSenderId && x.sender_id === botSenderId);
+    let latestBotId = null;
+    for (let i = list.length - 1; i >= 0; i--) { if (isBotAuthored(list[i]) && list[i].type === 'text' && list[i].content && !list[i].deleted) { latestBotId = list[i].id; break; } }
     return (
                 list.map((m, msgIndex) => {
                   const nextMsg = list[msgIndex + 1];
@@ -16405,7 +16478,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                   const isUnreadAnchor = !!unreadAnchor && unreadAnchor.chat === chatKey && unreadAnchor.id === m.id;
                   const bubble = (
                     <MessageBubble
-                      key={m.id} m={m} isMe={isMe}
+                      key={m.id} m={m} isMe={isMe} isBot={isBotAuthored(m)}
                       selectionMode={selectionMode} selected={selectedIds.has(m.id)} onToggleSelect={toggleSelect}
                       onLongPress={() => {
                         if (selectionMode) return;
@@ -16444,12 +16517,12 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                     <React.Fragment key={m.id}>
                       {isUnreadAnchor && <UnreadDivider count={unreadAnchor.count} />}
                       {bubble}
-                      {showBotActions && <BotMessageActions m={m} />}
+                      {showBotActions && <BotMessageActions m={m} saved={savedIds.has(String(m.id))} onSave={String(m.id).startsWith('temp-') ? null : () => toggleSaveMessage(m)} onRegenerate={m.id === latestBotId ? () => regenerateBotReply(m) : null} />}
                     </React.Fragment>
                   );
                 })
     );
-  }, [messages, visibleCount, messageLikes, selectionMode, selectedIds, highlightedMsgId, activeGroup, activeProfile, groupMembers, me, mutualIds, myBlockedIds, blockedByIds, activeGroupCall, unreadAnchor, chatKey]);
+  }, [messages, visibleCount, messageLikes, selectionMode, selectedIds, highlightedMsgId, activeGroup, activeProfile, groupMembers, me, mutualIds, myBlockedIds, blockedByIds, activeGroupCall, unreadAnchor, chatKey, savedIds]);
 
   if (!me) {
     return (
@@ -16827,7 +16900,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                       <span style={{ color: activeNameBarKey ? 'white' : theme.coral, fontWeight: 700 }}>
                         {activeGroup ? `${(groupMembers.find((gm) => gm.user_id === activityFrom.from)?.profile.name || 'Someone').split(' ')[0]} is ` : ''}{activityLabel(activityFrom.kind)}
                       </span>
-                    ) : activeGroup ? <GroupHeaderLine members={groupMembers} /> : (blockedByIds.has(activeProfile.id) || myBlockedIds.has(activeProfile.id) || activeProfile.hide_activity) ? '' : isUserOnline(activeProfile) ? 'Online' : (privacyAllows(activeProfile, 'privacy_lastseen', session.user.id, iFollowIds, privacyAllowed) ? (formatLastSeen(activeProfile.last_seen) || 'Last seen recently') : '')}
+                    ) : activeGroup ? <GroupHeaderLine members={groupMembers} /> : activeProfile.is_bot ? (botWaitBase != null ? 'typing\u2026' : `${botFollowers.toLocaleString('en-US')} followers \u00b7 Online`) : (blockedByIds.has(activeProfile.id) || myBlockedIds.has(activeProfile.id) || activeProfile.hide_activity) ? '' : isUserOnline(activeProfile) ? 'Online' : (privacyAllows(activeProfile, 'privacy_lastseen', session.user.id, iFollowIds, privacyAllowed) ? (formatLastSeen(activeProfile.last_seen) || 'Last seen recently') : '')}
                   </div>
                 </div>
               </div>
@@ -16847,7 +16920,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                     onClick={(e) => { e.stopPropagation(); startGroupCall(activeGroup, 'video'); }} />
                 </>
               )}
-              {!activeGroup && activeFollowState !== null && !canCall(activeProfile) && !myBlockedIds.has(activeProfile.id) && !blockedByIds.has(activeProfile.id) && (
+              {!activeGroup && !activeProfile.is_bot && activeFollowState !== null && !canCall(activeProfile) && !myBlockedIds.has(activeProfile.id) && !blockedByIds.has(activeProfile.id) && (
                 <div style={{ position: 'relative', marginRight: 6 }}>
                   <FollowActionButton size="sm" state={activeFollowState} theyFollowMe={activeFollowerFollowsMe} busy={activeFollowBusy} onDark={!!activeNameBarKey} onClick={toggleActiveFollow} />
                 </div>
@@ -16880,6 +16953,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                 onReport={() => setReportModalFor('__selection__')} />
             )}
 
+            {!activeGroup && activeProfile && activeProfile.is_bot && <BotBackdrop />}
             {activeWallpaperKey && wallpaperBgStyle(activeWallpaperKey) && (
               <div aria-hidden="true" className="zchat-wall" style={{
                 position: 'absolute', left: 0, right: 0, top: 0, zIndex: -1, pointerEvents: 'none',
@@ -16891,8 +16965,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain', touchAction: 'pan-y',
             }}>
               <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', maxWidth: isWide ? 760 : 'none', width: '100%', margin: isWide ? '0 auto' : 0 }}>
-              {!activeWallpaperKey && <AnimatedChatBackground chatTheme={chatTheme} />}
-              {bgPatternOn && !activeWallpaperKey && (
+              {!activeWallpaperKey && !(activeProfile && activeProfile.is_bot) && <AnimatedChatBackground chatTheme={chatTheme} />}
+              {bgPatternOn && !activeWallpaperKey && !(activeProfile && activeProfile.is_bot) && (
                 <div style={{
                   position: 'absolute', inset: 0, opacity: theme.dark ? 0.05 : 0.04, pointerEvents: 'none',
                   backgroundImage: 'radial-gradient(circle, currentColor 1px, transparent 1px)', backgroundSize: '18px 18px', color: theme.ink,
@@ -16918,6 +16992,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               ) : (
                 renderedMessages
               )}
+              {botWaitBase != null && messages.length > 0 && <BotTypingBubble />}
               </div>
             </div>
 
@@ -17861,7 +17936,122 @@ function ChatPausedBar({ restriction }) {
   );
 }
 
-function BotMessageActions({ m }) {
+const BOT_MONO = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+
+function BotCodeBlock({ lang, code }) {
+  const [copied, setCopied] = useState(false);
+  const doCopy = async (e) => {
+    e.stopPropagation();
+    const ok = await copyTextToClipboard(code);
+    if (ok) { setCopied(true); setTimeout(() => setCopied(false), 1600); }
+  };
+  return (
+    <div onClick={(e) => e.stopPropagation()} style={{ margin: '7px 0', borderRadius: 12, overflow: 'hidden', background: '#0D1117', border: '1px solid rgba(255,255,255,0.1)', whiteSpace: 'normal', maxWidth: '100%' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 8px 6px 12px', background: '#161B22', color: '#9BA7B4', fontSize: 11.5, fontWeight: 700 }}>
+        <span style={{ textTransform: 'lowercase', letterSpacing: 0.3 }}>{lang || 'code'}</span>
+        <div role="button" aria-label="Copy code" onClick={doCopy} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 8px', borderRadius: 8, cursor: 'pointer', color: copied ? '#3FB950' : '#C9D1D9', background: 'rgba(255,255,255,0.07)', WebkitTapHighlightColor: 'transparent' }}>
+          {copied ? <Check size={13} /> : <Copy size={13} />}
+          <span>{copied ? 'Copied' : 'Copy code'}</span>
+        </div>
+      </div>
+      <pre style={{ margin: 0, padding: '10px 12px', overflowX: 'auto', fontSize: 12.5, lineHeight: 1.55, color: '#E6EDF3', fontFamily: BOT_MONO, whiteSpace: 'pre', WebkitOverflowScrolling: 'touch', userSelect: 'text', WebkitUserSelect: 'text' }}><code>{code}</code></pre>
+    </div>
+  );
+}
+
+function renderBotInline(str, onMention) {
+  return String(str).split(/(\*\*[^*\n]+\*\*|`[^`\n]+`)/g).map((p, i) => {
+    if (!p) return null;
+    if (p.length > 4 && p.startsWith('**') && p.endsWith('**')) return <strong key={i}><RichText text={p.slice(2, -2)} onMention={onMention} /></strong>;
+    if (p.length > 2 && p.startsWith('`') && p.endsWith('`')) return <code key={i} style={{ background: 'rgba(128,128,128,0.22)', padding: '1px 5px', borderRadius: 5, fontSize: '0.92em', fontFamily: BOT_MONO }}>{p.slice(1, -1)}</code>;
+    return <RichText key={i} text={p} onMention={onMention} />;
+  });
+}
+
+function BotRichText({ text, onMention }) {
+  const { theme } = useTheme();
+  const src = String(text || '');
+  const chunks = [];
+  const fence = /```([^\n`]*)\n?([\s\S]*?)(?:```|$)/g;
+  let last = 0;
+  let hit;
+  while ((hit = fence.exec(src))) {
+    if (hit.index > last) chunks.push({ t: 'md', v: src.slice(last, hit.index) });
+    chunks.push({ t: 'code', lang: hit[1].trim(), v: hit[2].replace(/\n$/, '') });
+    last = fence.lastIndex;
+    if (hit[0].length === 0) fence.lastIndex++;
+  }
+  if (last < src.length) chunks.push({ t: 'md', v: src.slice(last) });
+  return (
+    <div style={{ whiteSpace: 'normal' }}>
+      {chunks.map((c, ci) => {
+        if (c.t === 'code') return <BotCodeBlock key={ci} lang={c.lang} code={c.v} />;
+        const lines = c.v.replace(/^\s*\n/, '').replace(/\s+$/, '').split('\n');
+        return (
+          <React.Fragment key={ci}>
+            {lines.map((ln, li) => {
+              if (!ln.trim()) return <div key={li} style={{ height: 7 }} />;
+              if (/^\s*(---+|\*\*\*+)\s*$/.test(ln)) return <div key={li} style={{ height: 1, background: theme.border, margin: '8px 0' }} />;
+              const h = ln.match(/^\s*(#{1,4})\s+(.*)$/);
+              if (h) return <div key={li} style={{ fontWeight: 800, fontSize: h[1].length === 1 ? 17 : 15.5, margin: '6px 0 2px', lineHeight: 1.3 }}>{renderBotInline(h[2], onMention)}</div>;
+              const b = ln.match(/^(\s*)[-*•]\s+(.*)$/);
+              if (b) return (
+                <div key={li} style={{ display: 'flex', gap: 8, paddingLeft: Math.min(b[1].length, 8) * 5, margin: '2px 0', whiteSpace: 'pre-wrap' }}>
+                  <span style={{ flexShrink: 0, color: theme.coral, fontWeight: 900 }}>{'•'}</span>
+                  <span style={{ minWidth: 0, flex: 1 }}>{renderBotInline(b[2], onMention)}</span>
+                </div>
+              );
+              const n = ln.match(/^(\s*)(\d+)[.)]\s+(.*)$/);
+              if (n) return (
+                <div key={li} style={{ display: 'flex', gap: 7, paddingLeft: Math.min(n[1].length, 8) * 5, margin: '2px 0', whiteSpace: 'pre-wrap' }}>
+                  <span style={{ flexShrink: 0, minWidth: 18, color: theme.coral, fontWeight: 800 }}>{n[2]}.</span>
+                  <span style={{ minWidth: 0, flex: 1 }}>{renderBotInline(n[3], onMention)}</span>
+                </div>
+              );
+              return <div key={li} style={{ whiteSpace: 'pre-wrap', margin: '1px 0' }}>{renderBotInline(ln, onMention)}</div>;
+            })}
+          </React.Fragment>
+        );
+      })}
+    </div>
+  );
+}
+
+function BotTypingBubble() {
+  const { theme } = useTheme();
+  return (
+    <div className="zchat-pop" style={{ display: 'flex', alignItems: 'flex-end', gap: 8, padding: '4px 0 10px' }}>
+      <img src="/bot-avatar.jpg" alt="" draggable={false} style={{ width: 28, height: 28, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+      <div style={{ background: theme.bubbleThem, borderRadius: 19, borderBottomLeftRadius: 5, padding: '14px 16px', display: 'flex', gap: 5, alignItems: 'center', border: `1px solid ${theme.dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)'}` }}>
+        {[0, 1, 2].map((i) => (
+          <span key={i} style={{ width: 7, height: 7, borderRadius: '50%', background: theme.muted, animation: 'zchat-dots 1.2s infinite ease-in-out', animationDelay: `${i * 0.18}s` }} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function BotBackdrop() {
+  const { theme } = useTheme();
+  const dark = !!theme.dark;
+  const base = dark
+    ? 'linear-gradient(180deg, #070B1A 0%, #0B1230 55%, #0A0F26 100%)'
+    : 'linear-gradient(180deg, #EEF3FF 0%, #E4ECFF 55%, #EAF0FF 100%)';
+  const line = dark ? 'rgba(90,140,255,0.09)' : 'rgba(40,80,200,0.07)';
+  const orbs = dark
+    ? ['rgba(60,120,255,0.28)', 'rgba(150,80,255,0.24)', 'rgba(0,220,200,0.18)']
+    : ['rgba(60,120,255,0.20)', 'rgba(150,80,255,0.16)', 'rgba(0,200,180,0.14)'];
+  return (
+    <div aria-hidden="true" style={{ position: 'absolute', inset: 0, zIndex: -1, pointerEvents: 'none', overflow: 'hidden', background: base }}>
+      <div style={{ position: 'absolute', inset: 0, backgroundImage: `linear-gradient(${line} 1px, transparent 1px), linear-gradient(90deg, ${line} 1px, transparent 1px)`, backgroundSize: '34px 34px', WebkitMaskImage: 'radial-gradient(ellipse at 50% 40%, #000 20%, transparent 85%)', maskImage: 'radial-gradient(ellipse at 50% 40%, #000 20%, transparent 85%)' }} />
+      {orbs.map((c, i) => (
+        <div key={i} style={{ position: 'absolute', width: 260 + i * 50, height: 260 + i * 50, borderRadius: '50%', background: `radial-gradient(circle, ${c}, transparent 68%)`, left: `${[ -8, 55, 20 ][i]}%`, top: `${[ 8, 30, 68 ][i]}%`, animation: `zchat-bot-orb ${14 + i * 4}s ease-in-out infinite alternate`, animationDelay: `${i * -3}s` }} />
+      ))}
+    </div>
+  );
+}
+
+function BotMessageActions({ m, onRegenerate, onSave, saved }) {
   const { theme } = useTheme();
   const storeKey = `zchat-botfeedback-${m.id}`;
   const [fb, setFb] = useState(() => { try { return localStorage.getItem(storeKey) || ''; } catch { return ''; } });
@@ -17875,6 +18065,12 @@ function BotMessageActions({ m }) {
     const ok = await copyTextToClipboard(m.content);
     if (ok) { setCopied(true); setTimeout(() => setCopied(false), 1600); }
   };
+  const doShare = async () => {
+    try {
+      if (navigator.share) { await navigator.share({ text: m.content }); return; }
+    } catch { return; }
+    doCopy();
+  };
   const btn = (label, onClick, icon, active) => (
     <div role="button" aria-label={label} title={label} onClick={onClick} style={{
       width: 32, height: 32, borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
@@ -17886,6 +18082,9 @@ function BotMessageActions({ m }) {
       {btn(copied ? 'Copied' : 'Copy', doCopy, copied ? <Check size={16} /> : <Copy size={16} />, copied)}
       {btn('Good reply', () => pick('like'), <ThumbsUp size={16} fill={fb === 'like' ? 'currentColor' : 'none'} />, fb === 'like')}
       {btn('Bad reply', () => pick('dislike'), <ThumbsDown size={16} fill={fb === 'dislike' ? 'currentColor' : 'none'} />, fb === 'dislike')}
+      {onSave && btn(saved ? 'Saved' : 'Save', onSave, <Bookmark size={16} fill={saved ? 'currentColor' : 'none'} />, saved)}
+      {btn('Share', doShare, <Share2 size={16} />, false)}
+      {onRegenerate && btn('Regenerate', onRegenerate, <Repeat size={16} />, false)}
       {copied && <span style={{ fontSize: 12, fontWeight: 700, color: theme.muted, marginLeft: 4 }}>Copied</span>}
     </div>
   );
