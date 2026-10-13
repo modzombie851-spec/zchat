@@ -9264,7 +9264,7 @@ function StoryTray({ me, myStories, trayUsers, seen, onAdd, onOpen }) {
 // Keep this in sync with the username given to the bot's profile row (see the setup SQL).
 const BOT_MENTION = '@zchatbot';
 
-const APP_VERSION = '9.6V';
+const APP_VERSION = '9.9V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -10434,10 +10434,10 @@ function ProfilePosts({ profile, isSelf, userId, meProfile }) {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px 0', borderTop: `1px solid ${theme.border}`, borderBottom: `1px solid ${theme.border}`, color: theme.ink, fontWeight: 800, fontSize: 13, position: 'sticky', top: 0, zIndex: 5, background: theme.dark ? '#000' : '#fff' }}>
         <ImageIcon size={16} /> Posts
         {isSelf && (
-          <div onClick={() => inputRef.current && inputRef.current.click()} style={{ position: 'absolute', right: 16, width: 30, height: 30, borderRadius: 10, background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 20, fontWeight: 400 }}>+</div>
+          <div onClick={() => { if (blockedByRestriction('post')) return; if (inputRef.current) inputRef.current.click(); }} style={{ position: 'absolute', right: 16, width: 30, height: 30, borderRadius: 10, background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 20, fontWeight: 400 }}>+</div>
         )}
       </div>
-      <input ref={inputRef} type="file" accept="image/*,video/*" multiple style={{ display: 'none' }} onChange={(e) => { const f = Array.from(e.target.files || []).slice(0, 10); e.target.value = ''; if (f.length) setComposer({ key: Date.now(), files: f }); }} />
+      <input ref={inputRef} type="file" accept="image/*,video/*" multiple style={{ display: 'none' }} onChange={(e) => { const f = Array.from(e.target.files || []).slice(0, 10); e.target.value = ''; if (f.length && !blockedByRestriction('post')) setComposer({ key: Date.now(), files: f }); }} />
       {posting && <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 10, fontSize: 12.5, color: theme.muted }}><Spinner size={13} color={theme.coral} /> Posting</div>}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2 }}>
         {(posts || []).map((p) => (
@@ -13227,6 +13227,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [showReportQueue, setShowReportQueue] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [myRestrictions, setMyRestrictions] = useState([]);
+  const [restrictedNotice, setRestrictedNotice] = useState(null);
+  const [restrictionTick, setRestrictionTick] = useState(0);
+  const restrictionsReloadRef = useRef(null);
   const [showSaved, setShowSaved] = useState(false);
   const [joinPrompt, setJoinPrompt] = useState(null);
   const [joiningGroup, setJoiningGroup] = useState(false);
@@ -13667,12 +13670,18 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const loadRestrictions = async () => {
       try {
         const { data } = await supabase.from('user_restrictions').select('*').eq('user_id', me.id).eq('lifted', false).gt('until', new Date().toISOString());
-        if (alive) setMyRestrictions(data || []);
+        if (alive) { ACTIVE_RESTRICTIONS = data || []; setMyRestrictions(data || []); }
       } catch {}
     };
+    restrictionsReloadRef.current = loadRestrictions;
     loadRestrictions();
-    const timer = setInterval(loadRestrictions, 60000);
-    return () => { alive = false; clearInterval(timer); };
+    const timer = setInterval(loadRestrictions, 30000);
+    const tick = setInterval(() => setRestrictionTick((n) => n + 1), 30000);
+    const onRestricted = (e) => setRestrictedNotice(e.detail || null);
+    window.addEventListener('zchat-restricted', onRestricted);
+    const onVisible = () => { if (document.visibilityState === 'visible') loadRestrictions(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => { alive = false; clearInterval(timer); clearInterval(tick); window.removeEventListener('zchat-restricted', onRestricted); document.removeEventListener('visibilitychange', onVisible); };
   }, [me && me.id]);
 
   useEffect(() => {
@@ -14687,16 +14696,34 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     return activeProfile?.name || 'Unknown';
   };
 
-  const triggerBotDM = (text, mediaType, mediaUrl) => {
+  const botCallHeaders = async () => {
+    let token = session && session.access_token;
+    try {
+      const { data } = await supabase.auth.getSession();
+      if (data && data.session) token = data.session.access_token;
+    } catch { /* keep the token we already have */ }
+    return { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+  };
+  const triggerBotInPrivate = async (text, peerId, replyToText) => {
+    if (!peerId || !text) return;
+    if (!text.toLowerCase().includes(BOT_MENTION) && replyToText == null) return;
+    fetch('/.netlify/functions/bot-reply', {
+      method: 'POST',
+      headers: await botCallHeaders(),
+      body: JSON.stringify({ userId: session.user.id, peerId, text, replyToText: replyToText || undefined }),
+    }).catch(() => {});
+  };
+  const triggerBotDM = async (text, mediaType, mediaUrl) => {
     if (!activeProfile || !activeProfile.is_bot) return;
     fetch('/.netlify/functions/bot-reply', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: await botCallHeaders(),
       body: JSON.stringify({ userId: session.user.id, botId: activeProfile.id, text: text || '', mediaType: mediaType || null, mediaUrl: mediaUrl || null }),
     }).catch(() => {});
   };
   const sendQuickReply = async (suggestionText) => {
     if ((!activeProfile && !activeGroup) || sendingRef.current) return;
+    if (blockedByRestriction('chat')) return;
     sendingRef.current = true;
     try {
       const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -14708,7 +14735,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         if (inserted) {
           fetch('/.netlify/functions/bot-reply-group', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: await botCallHeaders(),
             body: JSON.stringify({ userId: session.user.id, groupId: activeGroup.id, text: suggestionText }),
           }).catch(() => {});
         } else {
@@ -14735,8 +14762,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const sendingRef = useRef(false);
   const send = async () => {
     if (sendingRef.current) return;
-    const chatPause = (myRestrictions || []).find((r) => r.kind === 'chat' && new Date(r.until).getTime() > Date.now());
-    if (chatPause) { showSnack(`Chat is paused until ${adminDate(chatPause.until)}.`); return; }
+    if (blockedByRestriction('chat')) return;
     sendingRef.current = true;
     try {
       await sendInner();
@@ -14748,6 +14774,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const sendSticker = async (sticker) => {
     setShowStickers(false);
     if (!activeProfile && !activeGroup) return;
+    if (blockedByRestriction('chat')) return;
     const filePath = sticker.file;
     pushRecentSticker(session.user.id, sticker);
     const replyId = replyingTo ? replyingTo.id : null;
@@ -14816,13 +14843,16 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       setDraft('');
       const soloForwardName = items.length === 1 && items[0].type === 'text' ? items[0].forwarded_from_name : null;
       const groupReplyId = replyingTo?.id || null;
+      const groupBotUserId = (groupMembers.find((gm) => gm.profile && gm.profile.is_bot) || {}).user_id;
+      const repliedToBot = !!(replyingTo && groupBotUserId && replyingTo.sender_id === groupBotUserId);
+      const repliedToText = repliedToBot ? String(replyingTo.content || '').slice(0, 400) : '';
       setReplyingTo(null);
       await sendGroupMessage('text', text, null, soloForwardName, groupReplyId, (textSize !== 'm' || textColor || textFont) ? { text_size: textSize === 'm' ? null : textSize, text_color: textColor, ...(textFont ? { text_font: textFont } : {}) } : null);
-      if (text.toLowerCase().includes(BOT_MENTION)) {
+      if (text.toLowerCase().includes(BOT_MENTION) || repliedToBot) {
         fetch('/.netlify/functions/bot-reply-group', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: session.user.id, groupId: activeGroup.id, text }),
+          headers: await botCallHeaders(),
+          body: JSON.stringify({ userId: session.user.id, groupId: activeGroup.id, text, replyToText: repliedToText || undefined }),
         }).catch(() => {});
       }
       return;
@@ -14845,6 +14875,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const text = draft.trim().slice(0, MAX_CHARS);
     setDraft('');
     const replyId = replyingTo?.id || null;
+    const repliedBotText = replyingTo && replyingTo.bot_reply ? String(replyingTo.content || '').slice(0, 400) : null;
     setReplyingTo(null);
     const wasForward = items.length === 1 && items[0].type === 'text';
     const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -14890,6 +14921,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       upsertConversation(activeProfile.id, text, 'text');
       notifyUser(activeProfile.id, me.name, parseProfileLink(text) ? 'Shared a profile' : text, `/?dm=${session.user.id}`, me.avatar);
       triggerBotDM(text, null, null);
+      if (!activeProfile.is_bot) triggerBotInPrivate(text, activeProfile.id, repliedBotText);
     }
   };
 
@@ -14937,6 +14969,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const MIN_RECORDING_MS = 700;
 
   const startRecording = async () => {
+    if (blockedByRestriction('chat')) return;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mimeCandidates = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/aac', 'audio/ogg'];
@@ -16244,6 +16277,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const openMediaComposer = (files) => {
     const list = Array.from(files || []).filter((f) => f && ((f.type || '').startsWith('image') || (f.type || '').startsWith('video'))).slice(0, MAX_PHOTOS_PER_SEND);
     if (!list.length || (!activeProfile && !activeGroup)) return;
+    if (blockedByRestriction('chat')) return;
     setShowAttach(false);
     setShowStickers(false);
     setMediaComposer({ key: Date.now(), files: list });
@@ -16358,15 +16392,16 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     return (
                 list.map((m, msgIndex) => {
                   const nextMsg = list[msgIndex + 1];
-                  const tightBelow = !!nextMsg && nextMsg.sender_id === m.sender_id && nextMsg.type !== 'system' && m.type !== 'system';
+                  const tightBelow = !!nextMsg && nextMsg.sender_id === m.sender_id && !!nextMsg.bot_reply === !!m.bot_reply && nextMsg.type !== 'system' && m.type !== 'system';
                   const prevMsg = list[msgIndex - 1];
-                  const tightAbove = !!prevMsg && prevMsg.sender_id === m.sender_id && prevMsg.type !== 'system' && m.type !== 'system' && !prevMsg.deleted;
+                  const tightAbove = !!prevMsg && prevMsg.sender_id === m.sender_id && !!prevMsg.bot_reply === !!m.bot_reply && prevMsg.type !== 'system' && m.type !== 'system' && !prevMsg.deleted;
                   const replyPreview = m.reply_to_id ? (() => {
                     const rm = byId.get(m.reply_to_id);
-                    return rm ? { ...rm, senderLabel: labelForSender(rm.sender_id) } : null;
+                    return rm ? { ...rm, senderLabel: rm.bot_reply ? 'ZChat Bot' : labelForSender(rm.sender_id) } : null;
                   })() : null;
-                  const isMe = m.sender_id === session.user.id;
+                  const isMe = m.sender_id === session.user.id && !m.bot_reply;
                   const showSenderLabel = activeGroup && !isMe;
+                  const isPrivateBot = !activeGroup && !!m.bot_reply;
                   const isUnreadAnchor = !!unreadAnchor && unreadAnchor.chat === chatKey && unreadAnchor.id === m.id;
                   const bubble = (
                     <MessageBubble
@@ -16385,9 +16420,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                       onOpenWhoReacted={(id) => setWhoReactedFor({ messageId: id, reactions: messageLikes[id] || [] })}
                       replyPreview={replyPreview} onSwipeReply={(msg) => { setReplyingTo(msg); setEditingMessage(null); focusComposer(); }}
                       onJumpToMessage={jumpToMessage} highlighted={highlightedMsgId === m.id}
-                      senderLabel={showSenderLabel ? memberName(m.sender_id) : null}
+                      senderLabel={showSenderLabel ? memberName(m.sender_id) : (isPrivateBot ? 'ZChat Bot' : null)}
                       senderVerified={showSenderLabel ? ((groupMembers.find((gm) => gm.user_id === m.sender_id) || {}).profile || {}).verified : null}
-                      senderAvatar={showSenderLabel ? groupMembers.find((gm) => gm.user_id === m.sender_id)?.profile.avatar : null}
+                      senderAvatar={showSenderLabel ? groupMembers.find((gm) => gm.user_id === m.sender_id)?.profile.avatar : (isPrivateBot ? '/bot-avatar.jpg' : null)}
                       senderFrame={showSenderLabel ? ((groupMembers.find((gm) => gm.user_id === m.sender_id) || {}).profile || {}).avatar_frame : null}
                       senderCustomBadge={showSenderLabel ? ((groupMembers.find((gm) => gm.user_id === m.sender_id) || {}).profile || {}).custom_badge : null}
                       hideReadStatus={!!activeGroup}
@@ -16403,7 +16438,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                       onOpenPost={(post, owner) => setDeepPost({ post, owner: sanitizeAvatar(owner, session.user.id) })}
                     />
                   );
-                  const showBotActions = !!botSenderId && m.sender_id === botSenderId && m.type === 'text' && !!m.content && !m.deleted && !m.sending && !selectionMode;
+                  const showBotActions = ((!!botSenderId && m.sender_id === botSenderId) || !!m.bot_reply) && m.type === 'text' && !!m.content && !m.deleted && !m.sending && !selectionMode;
                   if (!isUnreadAnchor && !showBotActions) return bubble;
                   return (
                     <React.Fragment key={m.id}>
@@ -16467,11 +16502,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         </div>
       )}
       <AssetDownloadBar progress={assetProgress} />
-      {(myRestrictions || []).filter((r) => new Date(r.until).getTime() > Date.now()).length > 0 && (
-        <div role="status" style={{ position: 'fixed', left: 12, right: 12, bottom: 'calc(env(safe-area-inset-bottom) + 84px)', zIndex: 250, padding: '10px 14px', borderRadius: 16, background: '#2b2f3a', color: 'white', fontSize: 12.5, fontWeight: 700, fontFamily: FONT, lineHeight: 1.4, boxShadow: '0 6px 20px rgba(0,0,0,0.3)', pointerEvents: 'none' }}>
-          {(myRestrictions || []).filter((r) => new Date(r.until).getTime() > Date.now()).map((r) => `${r.kind === 'chat' ? 'Chat' : r.kind === 'status' ? 'Status' : 'Posting'} paused until ${adminDate(r.until)}`).join('. ')}
-        </div>
-      )}
+      {restrictedNotice && <RestrictionNotice restriction={restrictedNotice} onClose={() => setRestrictedNotice(null)} />}
       {showInstallHelp && <InstallAppHelpModal onClose={() => setShowInstallHelp(false)} />}
       <div {...feedSwipe} style={{
         width: isWide ? 360 : (mobileShowChat ? 0 : '100%'), maxWidth: isWide ? 360 : (mobileShowChat ? 0 : '100%'), overflow: 'hidden',
@@ -16482,7 +16513,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           onChange={(e) => {
             const picked = Array.from(e.target.files || []).filter((f) => (f.type || '').startsWith('image') || (f.type || '').startsWith('video')).slice(0, 10);
             e.target.value = '';
-            if (picked.length) setStoryComposer({ key: Date.now(), files: picked });
+            if (picked.length && !blockedByRestriction('status')) setStoryComposer({ key: Date.now(), files: picked });
           }} />
         {(isWide || !mobileShowChat) && (<>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
@@ -16567,7 +16598,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
         {search.trim().length < 2 && (
           <StoryTray me={me} myStories={activeStoriesOf(session.user.id)} trayUsers={trayUsers} seen={storyData.seen}
-            onAdd={() => storyInputRef.current && storyInputRef.current.click()} onOpen={(id) => openStoriesFor(id)} />
+            onAdd={() => { if (blockedByRestriction('status')) return; if (storyInputRef.current) storyInputRef.current.click(); }} onOpen={(id) => openStoriesFor(id)} />
         )}
 
         {search.trim().length >= 2 ? (
@@ -16960,7 +16991,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               <TextStyleBar font={textFont} size={textSize} color={textColor} onFont={setTextFont} onSize={setTextSize} onColor={setTextColor} />
             )}
             <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, padding: '6px 14px', flexShrink: 0, position: 'relative', background: theme.bgGradient, boxSizing: 'border-box', maxWidth: isWide ? 760 : 'none', width: '100%', margin: isWide ? '0 auto' : 0, paddingBottom: keyboardOpen ? 6 : 'max(6px, calc(env(safe-area-inset-bottom) - 24px))' }}>
-              {activeProfile && !activeGroup && myBlockedIds.has(activeProfile.id) ? (
+              {activeRestriction('chat') ? (
+                <ChatPausedBar restriction={activeRestriction('chat')} />
+              ) : activeProfile && !activeGroup && myBlockedIds.has(activeProfile.id) ? (
                 <div className="zchat-fade" style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 9, padding: '8px 4px 2px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, color: theme.ink, fontWeight: 700 }}><Ban size={15} color={theme.danger} /> You blocked {activeProfile.name}</div>
                   <div style={{ fontSize: 12, color: theme.muted, textAlign: 'center' }}>You can't message or call them while they're blocked.</div>
@@ -17200,9 +17233,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       {contextMenuFor && (() => {
         const m = findMessageById(contextMenuFor);
         if (!m) return null;
-        const isMine = m.sender_id === session.user.id;
+        const isMine = m.sender_id === session.user.id && !m.bot_reply;
         const cloneSender = activeGroup && !isMine;
-        const cloneReply = m.reply_to_id ? (() => { const rm = findMessageById(m.reply_to_id); return rm ? { ...rm, senderLabel: labelForSender(rm.sender_id) } : null; })() : null;
+        const cloneReply = m.reply_to_id ? (() => { const rm = findMessageById(m.reply_to_id); return rm ? { ...rm, senderLabel: rm.bot_reply ? 'ZChat Bot' : labelForSender(rm.sender_id) } : null; })() : null;
         const noop = () => {};
         return (
           <MessageContextMenu
@@ -17511,7 +17544,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           onSeen={markStorySeen} onClose={() => setStoryViewer(null)} onLike={likeStory} onReply={replyToStory} onRepost={repostStory}
           initialRepostedIds={(storyData.byUser[session.user.id] || []).map((s) => s.repost_of).filter(Boolean)}
           onDelete={deleteStory} onReport={(p) => { setStoryViewer(null); setReportUserTarget(p); }}
-          onAddStory={() => { setStoryViewer(null); if (storyInputRef.current) storyInputRef.current.click(); }}
+          onAddStory={() => { setStoryViewer(null); if (blockedByRestriction('status')) return; if (storyInputRef.current) storyInputRef.current.click(); }}
           onShare={(story, owner) => setStoryShareFor({ story, owner })} externalPause={!!storyShareFor}
           onOpenProfile={(p) => { setStoryViewer(null); setProfileOf(p); }} onOpenMention={openStoryMention} />
       )}
@@ -17759,6 +17792,73 @@ function normalizeReport(row, source) {
     dbHandled: (!!statusRaw && /handled|resolved|closed|done|actioned|dismissed|reviewed/i.test(String(statusRaw))) || row.handled === true || row.resolved === true,
     message: null,
   };
+}
+
+let ACTIVE_RESTRICTIONS = [];
+function activeRestriction(kind) {
+  const now = Date.now();
+  return (ACTIVE_RESTRICTIONS || [])
+    .filter((r) => r.kind === kind && !r.lifted && new Date(r.until).getTime() > now)
+    .sort((a, b) => new Date(b.until).getTime() - new Date(a.until).getTime())[0] || null;
+}
+function blockedByRestriction(kind) {
+  const r = activeRestriction(kind);
+  if (!r) return false;
+  try { window.dispatchEvent(new CustomEvent('zchat-restricted', { detail: r })); } catch {}
+  return true;
+}
+function restrictionTimeLeft(until) {
+  const ms = new Date(until).getTime() - Date.now();
+  if (!(ms > 0)) return 'less than a minute';
+  const mins = Math.ceil(ms / 60000);
+  if (mins < 60) return `${mins} ${mins === 1 ? 'minute' : 'minutes'}`;
+  const hours = Math.floor(mins / 60);
+  const restMins = mins % 60;
+  if (hours < 24) return restMins ? `${hours} ${hours === 1 ? 'hour' : 'hours'} ${restMins} min` : `${hours} ${hours === 1 ? 'hour' : 'hours'}`;
+  const days = Math.floor(hours / 24);
+  const restHours = hours % 24;
+  return restHours ? `${days} ${days === 1 ? 'day' : 'days'} ${restHours} ${restHours === 1 ? 'hour' : 'hours'}` : `${days} ${days === 1 ? 'day' : 'days'}`;
+}
+const RESTRICTION_COPY = {
+  chat: { title: 'Messaging is paused', action: 'send messages' },
+  status: { title: 'Status is paused', action: 'add to your status' },
+  post: { title: 'Posting is paused', action: 'share posts' },
+};
+
+function RestrictionNotice({ restriction, onClose }) {
+  useBackClose(true, onClose);
+  const { theme } = useTheme();
+  const copy = RESTRICTION_COPY[restriction.kind] || RESTRICTION_COPY.chat;
+  return ReactDOM.createPortal(
+    <div onClick={onClose} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 900, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, fontFamily: FONT }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 340, background: theme.panelBg, borderRadius: 26, padding: '26px 22px 8px', textAlign: 'center', boxShadow: '0 20px 60px rgba(0,0,0,0.45)' }}>
+        <div style={{ width: 64, height: 64, borderRadius: 32, margin: '0 auto 14px', background: `${theme.danger}1F`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Lock size={28} color={theme.danger} /></div>
+        <div style={{ fontWeight: 900, fontSize: 19, color: theme.ink }}>{copy.title}</div>
+        <div style={{ fontSize: 14, color: theme.muted, lineHeight: 1.55, marginTop: 8 }}>
+          {`You can't ${copy.action} right now. This is paused until ${adminDate(restriction.until)}.`}
+        </div>
+        <div style={{ display: 'inline-block', marginTop: 12, padding: '6px 14px', borderRadius: 14, background: theme.rowBg, border: `1px solid ${theme.border}`, fontSize: 13, fontWeight: 800, color: theme.ink }}>{`${restrictionTimeLeft(restriction.until)} left`}</div>
+        {restriction.reason ? <div style={{ fontSize: 13, color: theme.muted, marginTop: 12, lineHeight: 1.5 }}>{`Reason: ${restriction.reason}`}</div> : null}
+        <div style={{ fontSize: 12.5, color: theme.muted, marginTop: 12, lineHeight: 1.5 }}>Your account is fine otherwise. You can still read messages and look around.</div>
+        <div role="button" onClick={onClose} style={{ margin: '18px -22px 0', padding: '15px 0', borderTop: `1px solid ${theme.border}`, fontWeight: 900, fontSize: 15, color: theme.coral, cursor: 'pointer' }}>OK</div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+function ChatPausedBar({ restriction }) {
+  const { theme } = useTheme();
+  return (
+    <div className="zchat-fade" style={{ flex: 1, minWidth: 0, fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 20, background: `${theme.danger}14`, border: `1px solid ${theme.danger}40` }}>
+      <div style={{ width: 40, height: 40, borderRadius: 20, background: `${theme.danger}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Lock size={19} color={theme.danger} /></div>
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <div style={{ fontWeight: 900, fontSize: 14, color: theme.ink }}>Messaging is paused</div>
+        <div style={{ fontSize: 12.5, color: theme.muted, marginTop: 2, lineHeight: 1.4 }}>{`Until ${adminDate(restriction.until)}. ${restrictionTimeLeft(restriction.until)} left.`}</div>
+        {restriction.reason ? <div style={{ fontSize: 12, color: theme.muted, marginTop: 2 }}>{`Reason: ${restriction.reason}`}</div> : null}
+      </div>
+    </div>
+  );
 }
 
 function BotMessageActions({ m }) {
