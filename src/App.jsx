@@ -6186,6 +6186,7 @@ function MessageBubble({ gameLive, onGameMove, onGameRematch, onOpenGame, peerNa
   const sharedProfileId = m.type === 'text' && !m.deleted ? parseProfileLink(m.content) : null;
   const sharedPostId = m.type === 'text' && !m.deleted ? parsePostLink(m.content) : null;
   const gameState = m.type === 'text' && !m.deleted ? parseGameMessage(m.content) : null;
+  const gameFresh = !!gameState && !!m.created_at && (Date.now() - new Date(m.created_at).getTime()) < 20000;
   const locationShare = m.type === 'text' && !m.deleted && !gameState ? parseLocationMessage(m.content) : null;
   const linkPreviewUrl = m.type === 'text' && !m.deleted && !sharedPostId && !sharedProfileId && !gameState && !locationShare ? firstPreviewableUrl(m.content) : null;
   const inlineTime = m.type === 'text' && !m.deleted && !!m.content && !sharedProfileId && !sharedPostId && !gameState && !locationShare && !(m.story_id && (m.content === STORY_MENTION_TEXT || m.content === STORY_GROUP_MENTION_TEXT || m.content === STORY_SHARE_TEXT));
@@ -6422,15 +6423,15 @@ function MessageBubble({ gameLive, onGameMove, onGameRematch, onOpenGame, peerNa
               {gameState && (
                 <div style={{ paddingTop: 2, paddingBottom: 6 }}>
                   {gameState.g === 'ttt' && (
-                    <TicTacToeCard state={gameState} myId={myId} live={!!gameLive} peerName={peerName} ink={bubbleSpec ? bubbleSpec.ink : undefined}
+                    <TicTacToeCard state={gameState} myId={myId} live={!!gameLive} fresh={gameFresh} peerName={peerName} ink={bubbleSpec ? bubbleSpec.ink : undefined}
                       onMove={(next) => onGameMove && onGameMove(next)} onRematch={onGameRematch ? () => onGameRematch(gameState) : null} />
                   )}
                   {gameState.g === 'c4' && (
-                    <ConnectFourCard state={gameState} myId={myId} live={!!gameLive} peerName={peerName} ink={bubbleSpec ? bubbleSpec.ink : undefined}
+                    <ConnectFourCard state={gameState} myId={myId} live={!!gameLive} fresh={gameFresh} peerName={peerName} ink={bubbleSpec ? bubbleSpec.ink : undefined}
                       onMove={(next) => onGameMove && onGameMove(next)} onRematch={onGameRematch ? () => onGameRematch(gameState) : null} />
                   )}
                   {gameState.g === 'rps' && (
-                    <RpsCard state={gameState} myId={myId} live={!!gameLive} peerName={peerName} ink={bubbleSpec ? bubbleSpec.ink : undefined}
+                    <RpsCard state={gameState} myId={myId} live={!!gameLive} fresh={gameFresh} peerName={peerName} ink={bubbleSpec ? bubbleSpec.ink : undefined}
                       onMove={(next) => onGameMove && onGameMove(next)} onRematch={onGameRematch ? () => onGameRematch(gameState) : null} />
                   )}
                   {gameState.g === 'score' && (
@@ -9725,7 +9726,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-const APP_VERSION = '12.4V';
+const APP_VERSION = '12.5V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -11386,9 +11387,11 @@ function ChatImage({ src, onOpen, caption }) {
 }
 
 let uiAudioCtx = null;
+let lastTapSoundAt = 0;
 function playUiSound(kind) {
   try {
     if (localStorage.getItem('zchat-sound') === 'off') return;
+    if (kind === 'tap') { const now = Date.now(); if (now - lastTapSoundAt < 90) return; lastTapSoundAt = now; }
     const Ctx = window.AudioContext || window.webkitAudioContext;
     if (!Ctx) return;
     if (!uiAudioCtx) uiAudioCtx = new Ctx();
@@ -11444,6 +11447,9 @@ function playUiSound(kind) {
     else if (kind === 'pad3') { tone(587, 587, 0, 0.28, 0.08); }
     else if (kind === 'pad4') { tone(784, 784, 0, 0.28, 0.08); }
     else if (kind === 'win') { bell(784, 0, 0.12, 0.06); bell(988, 0.1, 0.12, 0.06); bell(1175, 0.2, 0.12, 0.06); bell(1568, 0.3, 0.3, 0.07); }
+    else if (kind === 'lose') { tone(520, 330, 0, 0.16, 0.06, 'triangle'); tone(330, 180, 0.15, 0.26, 0.06, 'triangle'); }
+    else if (kind === 'point') { tone(880, 1320, 0, 0.06, 0.05); }
+    else if (kind === 'key') { swish(0, 0.014, 0.02, 3200, 0.7); }
     else if (kind === 'like') { tone(820, 1120, 0, 0.07, 0.06); bell(1319, 0.06, 0.16, 0.06); }
     else if (kind === 'repost') { bell(660, 0, 0.1, 0.05); bell(880, 0.08, 0.1, 0.05); bell(1320, 0.16, 0.18, 0.06); }
     else if (kind === 'record-start') { tone(420, 700, 0, 0.12, 0.06); }
@@ -13850,7 +13856,24 @@ function SwipeRow({ children, actions, disabled, bg }) {
   );
 }
 
-const PREF_DEFAULTS = { 'zchat-enter-send': true, 'zchat-doubletap': true, 'zchat-haptics': true, 'zchat-reduce-motion': false, 'zchat-swipe-reply': true, 'zchat-format': true, 'zchat-effects': true };
+const PREF_DEFAULTS = { 'zchat-enter-send': true, 'zchat-doubletap': true, 'zchat-haptics': true, 'zchat-reduce-motion': false, 'zchat-swipe-reply': true, 'zchat-format': true, 'zchat-effects': true, 'zchat-touch-sounds': true };
+let touchSoundsInstalled = false;
+function installTouchSounds() {
+  if (touchSoundsInstalled) return;
+  touchSoundsInstalled = true;
+  document.addEventListener('pointerdown', (e) => {
+    try {
+      if (!prefOn('zchat-touch-sounds')) return;
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      const t = e.target;
+      if (!t || !t.closest) return;
+      if (t.closest('input, textarea, select, [contenteditable="true"], canvas, video, audio, [data-silent]')) return;
+      const el = t.closest('button, a[href], [role="button"], [role="switch"], [role="tab"], [role="menuitem"], [role="option"], .zchat-row-press, .zchat-press');
+      if (!el) return;
+      playUiSound('tap');
+    } catch {}
+  }, { capture: true, passive: true });
+}
 const prefCache = {};
 function prefOn(key) {
   if (key in prefCache) return prefCache[key];
@@ -18166,7 +18189,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   });
   useBackClose(!!(replyingTo || editingMessage), () => { if (editingMessage) setDraft(''); setReplyingTo(null); setEditingMessage(null); });
   useBackClose(showAttach, () => setShowAttach(false));
-  useEffect(() => { installOverlayGhosts(); }, []);
+  useEffect(() => { installOverlayGhosts(); installTouchSounds(); }, []);
   useEffect(() => {
     const last = messages.length ? messages[messages.length - 1] : null;
     const seen = effectSeenRef.current;
@@ -19533,7 +19556,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           actions={[
             { icon: <GamepadIcon size={18} />, label: 'Tic tac toe', hint: 'Three in a row', onClick: () => startGameWith(gameSheetFor, 'ttt') },
             { icon: <GridDotsIcon size={18} />, label: 'Connect four', hint: 'Drop discs, line up four', onClick: () => startGameWith(gameSheetFor, 'c4') },
-            { icon: <span style={{ fontSize: 17, lineHeight: 1 }}>{'\u270A'}</span>, label: 'Rock paper scissors', hint: 'Best of three rounds', onClick: () => startGameWith(gameSheetFor, 'rps') },
+            { icon: <Scissors size={18} />, label: 'Rock paper scissors', hint: 'Best of three rounds', onClick: () => startGameWith(gameSheetFor, 'rps') },
             { icon: <TrophyIcon size={18} />, label: 'More games', hint: 'Solo games and high scores', onClick: () => setShowGames({ at: Date.now() }) },
           ]} />
       )}
@@ -19627,6 +19650,8 @@ function DayDivider({ label }) {
 }
 
 const WHATS_NEW = [
+  { title: 'Game covers and sounds', text: 'Every game has its own artwork, and wins, losses, taps, points and keys all have a sound.' },
+  { title: 'Touch sounds', text: 'A soft tick on every button, row and tile. Turn it off in Settings, Chats.' },
   { title: 'Twelve games', text: 'Connect four and rock paper scissors with friends, plus Sky hop, Bricks, Word guess, Reflex, Quiz and Echo to play solo.' },
   { title: 'High scores', text: 'Share your best score from any game as a card in the chat, and friends can tap it to try to beat you.' },
   { title: 'App lock', text: 'Lock ZChat with a PIN. Pick when it locks again after you leave.' },
@@ -19805,7 +19830,7 @@ function GamepadIcon({ size = 16, color = 'currentColor', style }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style} aria-hidden="true">
       <path d="M6 11h4M8 9v4M15 12h.01M18 10h.01" />
-      <path d="M17.3 5H6.7a4 4 0 0 0-3.96 3.47L2 16.5A2.5 2.5 0 0 0 6.4 18.3L8.6 16h6.8l2.2 2.3a2.5 2.5 0 0 0 4.4-1.8l-.74-8.03A4 4 0 0 0 17.3 5z" />
+      <path d="M17.32 5H6.68a4 4 0 0 0-3.978 3.59c-.006.052-.01.101-.017.152C2.604 9.416 2 14.456 2 16a3 3 0 0 0 3 3c1 0 1.5-.5 2-1l1.414-1.414A2 2 0 0 1 9.828 16h4.344a2 2 0 0 1 1.414.586L17 18c.5.5 1 1 2 1a3 3 0 0 0 3-3c0-1.545-.604-6.584-.685-7.258-.007-.05-.011-.1-.017-.151A4 4 0 0 0 17.32 5z" />
     </svg>
   );
 }
@@ -19830,11 +19855,21 @@ function LocationCard({ loc, isMe, ink }) {
   );
 }
 
-function TicTacToeCard({ state, myId, live, peerName, onMove, onRematch, ink }) {
+const gameResultSoundKeys = new Set();
+function useGameResultSound(live, fresh, finished, key, outcome) {
+  useEffect(() => {
+    if (!live || !fresh || !finished || gameResultSoundKeys.has(key)) return;
+    gameResultSoundKeys.add(key);
+    playUiSound(outcome === 'win' ? 'win' : outcome === 'lose' ? 'lose' : 'toggle');
+    if (outcome === 'win') hapticTap();
+  }, [finished, key]);
+}
+function TicTacToeCard({ state, myId, live, peerName, onMove, onRematch, ink, fresh }) {
   const { theme } = useTheme();
   const myMark = state.x === myId ? 1 : state.o === myId ? 2 : 0;
   const result = state.w ? (state.w === 'd' ? { who: 3, line: null } : (tttWinner(state.b) || { who: state.w === 'x' ? 1 : 2, line: null })) : null;
   const finished = !!result;
+  useGameResultSound(live, fresh, finished, `${state.id}:${state.n}`, finished ? (result.who === 3 ? 'draw' : result.who === myMark ? 'win' : 'lose') : null);
   const myTurn = live && !finished && state.t === myId && myMark > 0;
   const winLine = result && result.line ? result.line : [];
   const status = finished
@@ -19918,7 +19953,7 @@ function Game2048() {
     const sc = score + gained;
     setScore(sc);
     if (sc > best) { setBest(sc); writeBest('2048', sc); }
-    if (!canMove(next)) { setOver(true); playUiSound('cancel'); } else if (gained) playUiSound('toggle');
+    if (!canMove(next)) { setOver(true); playUiSound('lose'); } else if (next.includes(2048) && !grid.includes(2048)) playUiSound('win'); else if (gained) playUiSound('point'); else playUiSound('key');
     hapticTap();
   };
   useEffect(() => {
@@ -19973,17 +20008,18 @@ function MemoryGame() {
   const [best, setBest] = useState(() => readBest('memory'));
   const lock = useRef(false);
   const finished = done.size === cards.length;
-  useEffect(() => { if (finished && moves && (!best || moves < best)) { setBest(moves); writeBest('memory', moves); } }, [finished]);
+  useEffect(() => { if (finished && moves) { playUiSound('win'); if (!best || moves < best) { setBest(moves); writeBest('memory', moves); } } }, [finished]);
   const flip = (c) => {
     if (lock.current || open.includes(c.id) || done.has(c.id)) return;
     hapticTap();
+    playUiSound('key');
     const next = [...open, c.id];
     setOpen(next);
     if (next.length === 2) {
       setMoves((m) => m + 1);
       const [a, b] = next.map((id) => cards.find((x) => x.id === id));
       if (a.e === b.e) { playUiSound('like'); setDone((prev) => new Set([...prev, a.id, b.id])); setOpen([]); }
-      else { lock.current = true; setTimeout(() => { setOpen([]); lock.current = false; }, 650); }
+      else { lock.current = true; playUiSound('cancel'); setTimeout(() => { setOpen([]); lock.current = false; }, 650); }
     }
   };
   const reset = () => { setCards(deal()); setOpen([]); setDone(new Set()); setMoves(0); lock.current = false; };
@@ -20048,11 +20084,11 @@ function SnakeGame() {
       st.dir = st.next;
       const head = [st.snake[0][0] + st.dir[0], st.snake[0][1] + st.dir[1]];
       if (head[0] < 0 || head[1] < 0 || head[0] >= N || head[1] >= N || st.snake.some((p) => p[0] === head[0] && p[1] === head[1])) {
-        setPhase('over'); playUiSound('cancel'); if (st.score > best) { setBest(st.score); writeBest('snake', st.score); }
+        setPhase('over'); playUiSound('lose'); if (st.score > best) { setBest(st.score); writeBest('snake', st.score); }
         return;
       }
       st.snake.unshift(head);
-      if (head[0] === st.food[0] && head[1] === st.food[1]) { st.score += 1; setScore(st.score); placeFood(st); st.tick = Math.max(70, st.tick - 4); playUiSound('toggle'); hapticTap(); }
+      if (head[0] === st.food[0] && head[1] === st.food[1]) { st.score += 1; setScore(st.score); placeFood(st); st.tick = Math.max(70, st.tick - 4); playUiSound('point'); hapticTap(); }
       else st.snake.pop();
       draw();
       timer = setTimeout(step, st.tick);
@@ -20060,7 +20096,7 @@ function SnakeGame() {
     timer = setTimeout(step, stateRef.current.tick);
     return () => clearTimeout(timer);
   }, [phase]);
-  const turn = (d) => { const st = stateRef.current; if (st.dir[0] + d[0] === 0 && st.dir[1] + d[1] === 0) return; st.next = d; if (phase !== 'playing') start(); };
+  const turn = (d) => { const st = stateRef.current; if (st.dir[0] + d[0] === 0 && st.dir[1] + d[1] === 0) return; st.next = d; playUiSound('key'); if (phase !== 'playing') start(); };
   const start = () => { init(); setScore(0); setPhase('playing'); };
   useEffect(() => {
     const onKey = (e) => { const map = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }; if (map[e.key]) { e.preventDefault(); turn(map[e.key]); } };
@@ -20107,40 +20143,41 @@ function SnakeGame() {
 function KeyboardIcon({ size = 16, color = 'currentColor', style }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style} aria-hidden="true">
-      <rect x="2" y="6" width="20" height="12" rx="2.5" />
-      <path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M8 14h8" />
+      <rect width="20" height="16" x="2" y="4" rx="2" ry="2" />
+      <path d="M6 8h.001M10 8h.001M14 8h.001M18 8h.001M8 12h.001M12 12h.001M16 12h.001M7 16h10" />
     </svg>
   );
 }
 function TrophyIcon({ size = 16, color = 'currentColor', style }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style} aria-hidden="true">
-      <path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z" />
-      <path d="M7 6H4v2a3 3 0 0 0 3 3M17 6h3v2a3 3 0 0 1-3 3" />
+      <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6M18 9h1.5a2.5 2.5 0 0 0 0-5H18M4 22h16" />
+      <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22" />
+      <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
     </svg>
   );
 }
 function VibrateIcon({ size = 16, color = 'currentColor', style }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style} aria-hidden="true">
-      <rect x="8" y="3" width="8" height="18" rx="2" />
-      <path d="M4 9v6M20 9v6M1 11v2M23 11v2" />
+      <path d="m2 8 2 2-2 2 2 2-2 2M22 8l-2 2 2 2-2 2 2 2" />
+      <rect width="8" height="14" x="8" y="5" rx="1" />
     </svg>
   );
 }
 function GridDotsIcon({ size = 16, color = 'currentColor', style }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style} aria-hidden="true">
-      <circle cx="6" cy="6" r="2" /><circle cx="12" cy="6" r="2" /><circle cx="18" cy="6" r="2" />
-      <circle cx="6" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="18" cy="12" r="2" />
-      <circle cx="6" cy="18" r="2" /><circle cx="12" cy="18" r="2" /><circle cx="18" cy="18" r="2" />
+      <circle cx="12" cy="5" r="1" /><circle cx="19" cy="5" r="1" /><circle cx="5" cy="5" r="1" />
+      <circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /><circle cx="5" cy="12" r="1" />
+      <circle cx="12" cy="19" r="1" /><circle cx="19" cy="19" r="1" /><circle cx="5" cy="19" r="1" />
     </svg>
   );
 }
 function BoltIcon({ size = 16, color = 'currentColor', style }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style} aria-hidden="true">
-      <path d="M13 2 4 14h7l-1 8 9-12h-7z" />
+      <path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z" />
     </svg>
   );
 }
@@ -20177,6 +20214,7 @@ function ChatsPrefsSection() {
   const [reduce, setReduce] = usePref('zchat-reduce-motion');
   const [fmt, setFmt] = usePref('zchat-format');
   const [fx, setFx] = usePref('zchat-effects');
+  const [touch_, setTouch_] = usePref('zchat-touch-sounds');
   const [quick, setQuick] = useState(getQuickReactions);
   const [editAt, setEditAt] = useState(null);
   const touch = isTouchDevice();
@@ -20199,6 +20237,7 @@ function ChatsPrefsSection() {
       <div role="button" aria-label="Reset quick reactions" onClick={() => { setQuickReactions(REACTION_EMOJIS); setQuick(REACTION_EMOJIS); hapticTap(); }} style={{ fontSize: 13.5, fontWeight: 700, color: theme.coral, padding: '0 2px 12px', cursor: 'pointer' }}>Reset to default</div>
       <IgHeading>Feel</IgHeading>
       {row(<VibrateIcon size={16} />, 'Haptic feedback', 'A small buzz on taps and swipes', haptics, setHaptics)}
+      {row(<Volume1 size={16} />, 'Touch sounds', 'A soft tick on every button, row and tile', touch_, setTouch_)}
       {row(<Activity size={16} />, 'Reduce motion', 'Fade between pages instead of sliding', reduce, setReduce)}
       {editAt != null && <FullEmojiPicker onClose={() => setEditAt(null)} onPick={(e) => { const next = quick.slice(); next[editAt] = e; setQuickReactions(next); setQuick(next); setEditAt(null); hapticTap(); }} />}
     </div>
@@ -20378,11 +20417,12 @@ function AppLockSection() {
   );
 }
 
-function ConnectFourCard({ state, myId, live, peerName, onMove, onRematch, ink }) {
+function ConnectFourCard({ state, myId, live, peerName, onMove, onRematch, ink, fresh }) {
   const { theme } = useTheme();
   const myMark = state.x === myId ? 1 : state.o === myId ? 2 : 0;
   const result = state.w ? (state.w === 'd' ? { who: 3, line: null } : (c4Winner(state.b) || { who: state.w === 'x' ? 1 : 2, line: null })) : null;
   const finished = !!result;
+  useGameResultSound(live, fresh, finished, `${state.id}:${state.n}`, finished ? (result.who === 3 ? 'draw' : result.who === myMark ? 'win' : 'lose') : null);
   const myTurn = live && !finished && state.t === myId && myMark > 0;
   const winLine = result && result.line ? result.line : [];
   const status = finished
@@ -20436,9 +20476,10 @@ function ConnectFourCard({ state, myId, live, peerName, onMove, onRematch, ink }
   );
 }
 
-function RpsCard({ state, myId, live, peerName, onMove, onRematch, ink }) {
+function RpsCard({ state, myId, live, peerName, onMove, onRematch, ink, fresh }) {
   const { theme } = useTheme();
   const side = state.x === myId ? 'x' : state.o === myId ? 'o' : null;
+  useGameResultSound(live, fresh, !!state.w, `${state.id}:${state.n}`, state.w ? (state.w === 'd' ? 'draw' : state.w === side ? 'win' : 'lose') : null);
   const other = side === 'x' ? 'o' : 'x';
   const rounds = state.r || [];
   const wins = { x: 0, o: 0 };
@@ -20472,7 +20513,7 @@ function RpsCard({ state, myId, live, peerName, onMove, onRematch, ink }) {
   return (
     <div onClick={(e) => e.stopPropagation()} style={{ width: live ? 236 : 150, boxSizing: 'border-box', padding: live ? '10px 12px 12px' : '8px 10px 10px', borderRadius: 18, background: theme.dark ? 'rgba(255,255,255,0.06)' : 'rgba(90,60,180,0.06)', border: `1px solid ${theme.border}`, opacity: live ? 1 : 0.75 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, color: ink || theme.ink }}>
-        <span style={{ fontSize: 14, lineHeight: 1 }}>{'\u270A'}</span>
+        <Scissors size={15} color={theme.coral} />
         <span style={{ fontSize: live ? 13 : 11.5, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>Rock paper scissors</span>
         <span style={{ marginLeft: 'auto', fontSize: 10.5, fontWeight: 700, color: canPick ? theme.coral : theme.muted, whiteSpace: 'nowrap', flexShrink: 0 }}>{status}</span>
       </div>
@@ -20698,12 +20739,12 @@ function SkyHopGame() {
       s.vy = Math.min(9, s.vy + 0.34);
       s.y += s.vy;
       if (s.frame % 100 === 0) s.pipes.push({ x: W + 10, top: 48 + Math.random() * (H - 28 - GAP - 96), passed: false });
-      s.pipes.forEach((p) => { p.x -= 2.4; if (!p.passed && p.x + 46 < 80) { p.passed = true; s.score += 1; setScore(s.score); playUiSound('toggle'); } });
+      s.pipes.forEach((p) => { p.x -= 2.4; if (!p.passed && p.x + 46 < 80) { p.passed = true; s.score += 1; setScore(s.score); playUiSound('point'); } });
       s.pipes = s.pipes.filter((p) => p.x > -60);
       const hit = s.y + 12 > H - 28 || s.y - 12 < 0 || s.pipes.some((p) => 80 + 11 > p.x && 80 - 11 < p.x + 46 && (s.y - 11 < p.top || s.y + 11 > p.top + GAP));
       draw();
       if (hit) {
-        setPhase('over'); playUiSound('cancel'); hapticTap();
+        setPhase('over'); playUiSound('lose'); hapticTap();
         const b = readBest('sky');
         if (s.score > b) { setBest(s.score); writeBest('sky', s.score); }
         return;
@@ -20714,8 +20755,9 @@ function SkyHopGame() {
     return () => cancelAnimationFrame(raf);
   }, [phase]);
   const flap = () => {
-    if (phase !== 'playing') { reset(); setScore(0); st.current.vy = -6.2; setPhase('playing'); return; }
+    if (phase !== 'playing') { reset(); setScore(0); st.current.vy = -6.2; setPhase('playing'); playUiSound('toggle'); return; }
     st.current.vy = -6.4;
+    playUiSound('key');
     hapticTap();
   };
   useEffect(() => {
@@ -20788,9 +20830,9 @@ function BricksGame() {
             b.on = false;
             s.score += 10;
             setScore(s.score);
+            playUiSound('point');
             const fromSide = Math.min(Math.abs(s.bx - b.x), Math.abs(s.bx - (b.x + b.w))) < Math.min(Math.abs(s.by - b.y), Math.abs(s.by - (b.y + b.h)));
             if (fromSide) s.vx = -s.vx; else s.vy = -s.vy;
-            playUiSound('toggle');
             break;
           }
         }
@@ -20798,9 +20840,9 @@ function BricksGame() {
           s.level += 1; setLevel(s.level); s.speed = Math.min(1.9, s.speed + 0.15); s.bricks = makeBricks(); s.launched = false; s.vy = -Math.abs(s.vy); playUiSound('win'); hapticTap();
         }
         if (s.by - BR > H) {
-          s.lives -= 1; setLives(s.lives); hapticTap();
+          s.lives -= 1; setLives(s.lives); hapticTap(); playUiSound('cancel');
           if (s.lives <= 0) {
-            draw(); setPhase('over'); playUiSound('cancel');
+            draw(); setPhase('over'); playUiSound('lose');
             const b = readBest('bricks');
             if (s.score > b) { setBest(s.score); writeBest('bricks', s.score); }
             return;
@@ -20821,7 +20863,7 @@ function BricksGame() {
     st.current.px = Math.max(0, Math.min(W - PW, x - PW / 2));
     if (phase !== 'playing') draw();
   };
-  const launch = () => { if (phase !== 'playing') { start(); return; } if (!st.current.launched) { st.current.launched = true; hapticTap(); } };
+  const launch = () => { if (phase !== 'playing') { start(); playUiSound('toggle'); return; } if (!st.current.launched) { st.current.launched = true; hapticTap(); playUiSound('key'); } };
   useEffect(() => {
     const onKey = (e) => {
       if (e.key === 'ArrowLeft') { e.preventDefault(); st.current.px = Math.max(0, st.current.px - 22); }
@@ -20883,14 +20925,14 @@ function WordGame() {
     setRows(next);
     setCur('');
     if (cur === answer) { setDone('won'); playUiSound('win'); saveStreak(streak + 1); }
-    else if (next.length >= 6) { setDone('lost'); playUiSound('cancel'); saveStreak(0); }
-    else playUiSound('tap');
+    else if (next.length >= 6) { setDone('lost'); playUiSound('lose'); saveStreak(0); }
+    else playUiSound('toggle');
   };
   const type = (k) => {
     if (done) return;
     if (k === 'enter') { submit(); return; }
-    if (k === 'back') { setCur((c) => c.slice(0, -1)); return; }
-    if (cur.length < 5) { hapticTap(); setCur((c) => c + k); }
+    if (k === 'back') { playUiSound('key'); setCur((c) => c.slice(0, -1)); return; }
+    if (cur.length < 5) { hapticTap(); playUiSound('key'); setCur((c) => c + k); }
   };
   const newWord = (isDaily) => {
     const w = isDaily ? wordOfDay() : WORD_LIST[Math.floor(Math.random() * WORD_LIST.length)];
@@ -20958,18 +21000,18 @@ function ReflexGame() {
   const goAt = useRef(0);
   useEffect(() => () => clearTimeout(timer.current), []);
   const arm = () => {
-    setPhase('wait'); setMs(null); hapticTap();
-    timer.current = setTimeout(() => { goAt.current = performance.now(); setPhase('go'); playUiSound('toggle'); }, 1200 + Math.random() * 2600);
+    setPhase('wait'); setMs(null); hapticTap(); playUiSound('key');
+    timer.current = setTimeout(() => { goAt.current = performance.now(); setPhase('go'); playUiSound('point'); }, 1200 + Math.random() * 2600);
   };
   const tap = () => {
     if (phase === 'idle' || phase === 'result' || phase === 'early') { arm(); return; }
     if (phase === 'wait') { clearTimeout(timer.current); setPhase('early'); playUiSound('cancel'); hapticTap(); return; }
     if (phase === 'go') {
       const t = Math.round(performance.now() - goAt.current);
-      setMs(t); setPhase('result'); playUiSound('like'); hapticTap();
+      setMs(t); setPhase('result'); hapticTap();
       const next = [...runs, t].slice(-5); setRuns(next);
       const b = readBest('reflex');
-      if (!b || t < b) { setBest(t); writeBest('reflex', t); }
+      if (!b || t < b) { setBest(t); writeBest('reflex', t); playUiSound('win'); } else playUiSound('like');
     }
   };
   const avg = runs.length ? Math.round(runs.reduce((a, b) => a + b, 0) / runs.length) : null;
@@ -21048,7 +21090,7 @@ function QuizGame() {
     const sc = score + (ok ? 1 : 0);
     if (ok) { setScore(sc); playUiSound('like'); } else playUiSound('cancel');
     setTimeout(() => {
-      if (at + 1 >= qs.length) { setOver(true); playUiSound('win'); const b = readBest('quiz'); if (sc > b) { setBest(sc); writeBest('quiz', sc); } }
+      if (at + 1 >= qs.length) { setOver(true); playUiSound(sc >= 6 ? 'win' : 'lose'); const b = readBest('quiz'); if (sc > b) { setBest(sc); writeBest('quiz', sc); } }
       else { setAt(at + 1); setPicked(null); }
     }, 750);
   };
@@ -21113,7 +21155,7 @@ function EchoGame() {
     inputRef.current.push(p);
     const i = inputRef.current.length - 1;
     if (seq[i] !== p) {
-      setPhase('over'); playUiSound('cancel');
+      setPhase('over'); setTimeout(() => playUiSound('lose'), 220);
       const level = seq.length - 1;
       const b = readBest('echo');
       if (level > b) { setBest(level); writeBest('echo', level); }
@@ -21123,7 +21165,8 @@ function EchoGame() {
       const next = [...seq, Math.floor(Math.random() * 4)];
       setSeq(next);
       setPhase('show');
-      setTimeout(() => play(next), 500);
+      setTimeout(() => playUiSound('point'), 200);
+      setTimeout(() => play(next), 600);
     }
   };
   const level = phase === 'over' ? seq.length - 1 : Math.max(0, seq.length - (phase === 'show' ? 1 : 1) + 1);
@@ -21146,16 +21189,203 @@ function EchoGame() {
   );
 }
 
+
+const GAME_ART_BG = {
+  ttt: ['#6D4DF5', '#C13BDC'], c4: ['#2563EB', '#06B6D4'], rps: ['#F59E0B', '#F43F5E'], '2048': ['#F59E0B', '#EA580C'],
+  snake: ['#16A34A', '#0D9488'], sky: ['#7DD3FC', '#2563EB'], bricks: ['#7C3AED', '#DB2777'], word: ['#16A34A', '#0F766E'],
+  memory: ['#0EA5E9', '#10B981'], reflex: ['#EF4444', '#DC2626'], quiz: ['#4F46E5', '#9333EA'], echo: ['#EC4899', '#BE123C'],
+};
+function gameArtBody(k) {
+  if (k === 'ttt') {
+    const cell = (c, r) => <rect key={`${c}${r}`} x={46 + c * 24} y={16 + r * 24} width="20" height="20" rx="5" fill="white" opacity="0.22" />;
+    return (
+      <g>
+        {[0, 1, 2].map((c) => [0, 1, 2].map((r) => cell(c, r)))}
+        <path d="M51 21l10 10M61 21l-10 10M75 45l10 10M85 45l-10 10" stroke="white" strokeWidth="3.6" strokeLinecap="round" />
+        <circle cx="104" cy="26" r="6.5" fill="none" stroke="#FFD166" strokeWidth="3.6" />
+        <circle cx="56" cy="74" r="6.5" fill="none" stroke="#FFD166" strokeWidth="3.6" />
+        <path d="M99 69l10 10M109 69l-10 10" stroke="white" strokeWidth="3.6" strokeLinecap="round" />
+      </g>
+    );
+  }
+  if (k === 'c4') {
+    const discs = { '0-5': '#FBBF24', '1-5': '#F43F5E', '2-5': '#FBBF24', '3-5': '#F43F5E', '1-4': '#FBBF24', '2-4': '#F43F5E', '2-3': '#FBBF24', '4-5': '#FBBF24', '3-4': '#FBBF24' };
+    const holes = [];
+    for (let c = 0; c < 7; c++) for (let r = 0; r < 6; r++) holes.push(<circle key={`${c}-${r}`} cx={47 + c * 11} cy={22.5 + r * 11} r="4.3" fill={discs[`${c}-${r}`] || '#0F2A6B'} />);
+    return (
+      <g>
+        <rect x="40" y="13" width="80" height="74" rx="8" fill="#1E3A8A" />
+        <rect x="40" y="13" width="80" height="74" rx="8" fill="white" opacity="0.06" />
+        {holes}
+      </g>
+    );
+  }
+  if (k === 'rps') {
+    return (
+      <g>
+        <circle cx="44" cy="50" r="16" fill="white" opacity="0.94" />
+        <path d="M35 55l3 -10l8 -4l7 3l1 8l-6 6h-12z" fill="#94A3B8" stroke="#64748B" strokeWidth="1.5" strokeLinejoin="round" />
+        <circle cx="80" cy="50" r="16" fill="white" opacity="0.94" />
+        <path d="M74 40h9l4 4v16h-13z" fill="#F8FAFC" stroke="#94A3B8" strokeWidth="1.5" strokeLinejoin="round" />
+        <path d="M83 40v4h4M77 49h7M77 53h7M77 57h5" stroke="#94A3B8" strokeWidth="1.3" strokeLinecap="round" />
+        <circle cx="116" cy="50" r="16" fill="white" opacity="0.94" />
+        <path d="M111 55l10 -16M121 55l-10 -16" stroke="#64748B" strokeWidth="2.6" strokeLinecap="round" />
+        <circle cx="110" cy="58" r="3.2" fill="none" stroke="#475569" strokeWidth="2.2" />
+        <circle cx="122" cy="58" r="3.2" fill="none" stroke="#475569" strokeWidth="2.2" />
+      </g>
+    );
+  }
+  if (k === '2048') {
+    const tiles = [[2, '#EEE4DA', '#776E65'], [4, '#EDE0C8', '#776E65'], [8, '#F2B179', '#FFFFFF'], [16, '#F59563', '#FFFFFF'], [32, '#F67C5F', '#FFFFFF'], [64, '#F65E3B', '#FFFFFF']];
+    return (
+      <g>
+        <rect x="28" y="19" width="104" height="62" rx="9" fill="#BBADA0" />
+        {tiles.map(([v, bg, fg], i) => {
+          const x = 34 + (i % 3) * 32;
+          const y = 25 + Math.floor(i / 3) * 26;
+          return (
+            <g key={v}>
+              <rect x={x} y={y} width="28" height="22" rx="4" fill={bg} />
+              <text x={x + 14} y={y + 15.5} textAnchor="middle" fontFamily={FONT} fontWeight="800" fontSize="11" fill={fg}>{v}</text>
+            </g>
+          );
+        })}
+      </g>
+    );
+  }
+  if (k === 'snake') {
+    const squares = [];
+    for (let x = 0; x < 8; x++) for (let y = 0; y < 5; y++) if ((x + y) % 2) squares.push(<rect key={`${x}${y}`} x={x * 20} y={y * 20} width="20" height="20" fill="white" opacity="0.07" />);
+    return (
+      <g>
+        {squares}
+        <path d="M34 72V40h28v22h28V36h22" fill="none" stroke="#0B3B2E" strokeWidth="13" strokeLinecap="round" strokeLinejoin="round" opacity="0.25" transform="translate(1.5 2)" />
+        <path d="M34 72V40h28v22h28V36h22" fill="none" stroke="#BEF264" strokeWidth="12" strokeLinecap="round" strokeLinejoin="round" />
+        <circle cx="112" cy="36" r="8.5" fill="#84CC16" />
+        <circle cx="114.5" cy="32.5" r="2" fill="white" /><circle cx="115.2" cy="32.5" r="1" fill="#1F2937" />
+        <circle cx="114.5" cy="39.5" r="2" fill="white" /><circle cx="115.2" cy="39.5" r="1" fill="#1F2937" />
+        <circle cx="128" cy="36" r="6" fill="#EF4444" />
+        <path d="M128 30c1 -3 3 -4 5 -4c0 3 -2 4 -5 4z" fill="#22C55E" />
+      </g>
+    );
+  }
+  if (k === 'sky') {
+    return (
+      <g>
+        <circle cx="126" cy="20" r="10" fill="#FDE68A" />
+        <g fill="white" opacity="0.92">
+          <ellipse cx="34" cy="24" rx="12" ry="6" /><ellipse cx="44" cy="21" rx="9" ry="6" /><ellipse cx="26" cy="22" rx="7" ry="5" />
+          <ellipse cx="112" cy="70" rx="12" ry="6" /><ellipse cx="122" cy="67" rx="9" ry="6" />
+        </g>
+        <rect x="72" y="0" width="16" height="30" rx="2" fill="#22C55E" /><rect x="69" y="26" width="22" height="8" rx="2" fill="#16A34A" />
+        <rect x="72" y="66" width="16" height="34" rx="2" fill="#22C55E" /><rect x="69" y="66" width="22" height="8" rx="2" fill="#16A34A" />
+        <rect x="0" y="92" width="160" height="8" fill="#D8B37A" /><rect x="0" y="92" width="160" height="3" fill="#8BD36B" />
+        <ellipse cx="44" cy="54" rx="9" ry="8" fill="#FBBF24" />
+        <ellipse cx="40" cy="56" rx="5" ry="3" fill="#F59E0B" />
+        <path d="M51 52l6 2l-6 3z" fill="#F97316" />
+        <circle cx="47" cy="51" r="2.6" fill="white" /><circle cx="48" cy="51" r="1.3" fill="#111827" />
+      </g>
+    );
+  }
+  if (k === 'bricks') {
+    const rows = ['#F87171', '#FBBF24', '#4ADE80'];
+    const bricks = [];
+    for (let r = 0; r < 3; r++) for (let c = 0; c < 7; c++) bricks.push(<rect key={`${r}${c}`} x={8 + c * 21} y={12 + r * 10} width="18" height="7" rx="2" fill={rows[r]} />);
+    return (
+      <g>
+        {bricks}
+        <circle cx="80" cy="72" r="4.2" fill="white" />
+        <rect x="64" y="84" width="32" height="6" rx="3" fill="#E9D5FF" />
+      </g>
+    );
+  }
+  if (k === 'word') {
+    const letters = [['Z', '#22C55E'], ['C', '#64748B'], ['H', '#EAB308'], ['A', '#22C55E'], ['T', '#64748B']];
+    return (
+      <g>
+        {letters.map(([ch, c], i) => (
+          <g key={ch}>
+            <rect x={29 + i * 21} y="39" width="18" height="21" rx="4" fill={c} />
+            <text x={38 + i * 21} y="54.5" textAnchor="middle" fontFamily={FONT} fontWeight="900" fontSize="13" fill="white">{ch}</text>
+          </g>
+        ))}
+        <rect x="50" y="68" width="60" height="5" rx="2.5" fill="white" opacity="0.35" />
+        <rect x="60" y="27" width="40" height="5" rx="2.5" fill="white" opacity="0.35" />
+      </g>
+    );
+  }
+  if (k === 'memory') {
+    const star = 'M0 -8L2.4 -2.6L8 -2.4L3.7 1.2L5 6.8L0 3.8L-5 6.8L-3.7 1.2L-8 -2.4L-2.4 -2.6Z';
+    const card = (x, up) => (
+      <g key={x}>
+        <rect x={x} y="31" width="26" height="36" rx="5" fill={up ? 'white' : '#1E293B'} />
+        {up ? <path d={star} transform={`translate(${x + 13} 49) scale(1.15)`} fill="#F59E0B" /> : <text x={x + 13} y="54" textAnchor="middle" fontFamily={FONT} fontWeight="900" fontSize="15" fill="white" opacity="0.8">Z</text>}
+      </g>
+    );
+    return <g>{card(38, true)}{card(67, true)}{card(96, false)}</g>;
+  }
+  if (k === 'reflex') {
+    return (
+      <g>
+        <path d="M86 0h74v100h-110z" fill="#22C55E" />
+        <circle cx="80" cy="50" r="21" fill="white" />
+        <path d="M80 34l-9 18h8l-2 14l11 -19h-8z" fill="#F59E0B" />
+      </g>
+    );
+  }
+  if (k === 'quiz') {
+    return (
+      <g>
+        <circle cx="46" cy="50" r="18" fill="white" />
+        <text x="46" y="60" textAnchor="middle" fontFamily={FONT} fontWeight="900" fontSize="27" fill="#6366F1">?</text>
+        <rect x="72" y="28" width="52" height="11" rx="5.5" fill="white" opacity="0.3" />
+        <rect x="72" y="44.5" width="52" height="11" rx="5.5" fill="#22C55E" />
+        <path d="M78 50l3 3l6 -6" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+        <rect x="72" y="61" width="52" height="11" rx="5.5" fill="white" opacity="0.3" />
+      </g>
+    );
+  }
+  if (k === 'echo') {
+    const pad = (d, c) => <path d={d} fill={c} stroke="rgba(0,0,0,0.18)" strokeWidth="2" />;
+    return (
+      <g>
+        {pad('M80 50L80 14A36 36 0 0 1 116 50Z', '#22C55E')}
+        {pad('M80 50L116 50A36 36 0 0 1 80 86Z', '#EAB308')}
+        {pad('M80 50L80 86A36 36 0 0 1 44 50Z', '#3B82F6')}
+        {pad('M80 50L44 50A36 36 0 0 1 80 14Z', '#EF4444')}
+        <circle cx="80" cy="50" r="11" fill="#1F1537" />
+        <circle cx="80" cy="50" r="4" fill="white" opacity="0.85" />
+      </g>
+    );
+  }
+  return null;
+}
+function GameArt({ k, width = 160, height = 100, radius = 14, style }) {
+  const rawId = React.useId();
+  const id = `ga${rawId.replace(/[^a-zA-Z0-9]/g, '')}`;
+  const bg = GAME_ART_BG[k] || ['#6D4DF5', '#C13BDC'];
+  return (
+    <svg width={width} height={height} viewBox="0 0 160 100" preserveAspectRatio="xMidYMid slice" style={{ display: 'block', borderRadius: radius, flexShrink: 0, ...style }} aria-hidden="true">
+      <defs>
+        <linearGradient id={id} x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor={bg[0]} /><stop offset="1" stopColor={bg[1]} /></linearGradient>
+      </defs>
+      <rect width="160" height="100" fill={`url(#${id})`} />
+      <circle cx="138" cy="4" r="54" fill="white" opacity="0.1" />
+      {gameArtBody(k)}
+    </svg>
+  );
+}
+
 const SOLO_GAMES = [
-  { k: '2048', sub: 'Slide and merge the tiles', icon: <span style={{ fontWeight: 900, fontSize: 15 }}>2048</span>, bg: 'linear-gradient(135deg, #F59E0B, #EF4444)' },
-  { k: 'snake', sub: 'Eat, grow, do not crash', icon: <Activity size={22} />, bg: 'linear-gradient(135deg, #22D3EE, #6366F1)' },
-  { k: 'sky', sub: 'Flap through the gaps', icon: <span style={{ fontSize: 24, lineHeight: 1 }}>{'\u{1F424}'}</span>, bg: 'linear-gradient(135deg, #38BDF8, #2563EB)' },
-  { k: 'bricks', sub: 'Break every brick', icon: <GridDotsIcon size={22} />, bg: 'linear-gradient(135deg, #A855F7, #EC4899)' },
-  { k: 'word', sub: 'Guess the five letter word', icon: <Type size={22} />, bg: 'linear-gradient(135deg, #22C55E, #14B8A6)' },
-  { k: 'memory', sub: 'Find the pairs', icon: <Sparkles size={22} />, bg: 'linear-gradient(135deg, #10B981, #0EA5E9)' },
-  { k: 'reflex', sub: 'How fast are you', icon: <BoltIcon size={22} />, bg: 'linear-gradient(135deg, #F97316, #DC2626)' },
-  { k: 'quiz', sub: 'Ten quick questions', icon: <HelpCircle size={22} />, bg: 'linear-gradient(135deg, #6366F1, #8B5CF6)' },
-  { k: 'echo', sub: 'Repeat the pattern', icon: <Volume2 size={22} />, bg: 'linear-gradient(135deg, #EC4899, #F43F5E)' },
+  { k: '2048', sub: 'Slide and merge the tiles' },
+  { k: 'snake', sub: 'Eat, grow, do not crash' },
+  { k: 'sky', sub: 'Flap through the gaps' },
+  { k: 'bricks', sub: 'Break every brick' },
+  { k: 'word', sub: 'Guess the five letter word' },
+  { k: 'memory', sub: 'Find the pairs' },
+  { k: 'reflex', sub: 'How fast are you' },
+  { k: 'quiz', sub: 'Ten quick questions' },
+  { k: 'echo', sub: 'Repeat the pattern' },
 ];
 function GamesPage({ onClose, onChallenge, onShareScore, initialGame }) {
   useBackClose(true, onClose);
@@ -21163,9 +21393,9 @@ function GamesPage({ onClose, onChallenge, onShareScore, initialGame }) {
   const [game, setGame] = useState(() => (initialGame && SOLO_GAMES.some((g) => g.k === initialGame) ? initialGame : null));
   useBackClose(!!game, () => setGame(null));
   const friend = [
-    { k: 'ttt', sub: 'Three in a row', icon: <GamepadIcon size={24} />, bg: 'linear-gradient(135deg, #7C5CFC, #EC4899)' },
-    { k: 'c4', sub: 'Drop discs, line up four', icon: <GridDotsIcon size={24} />, bg: 'linear-gradient(135deg, #2563EB, #06B6D4)' },
-    { k: 'rps', sub: 'Best of three rounds', icon: <span style={{ fontSize: 26, lineHeight: 1 }}>{'\u270A'}</span>, bg: 'linear-gradient(135deg, #F59E0B, #F43F5E)' },
+    { k: 'ttt', sub: 'Three in a row' },
+    { k: 'c4', sub: 'Drop discs, line up four' },
+    { k: 'rps', sub: 'Best of three rounds' },
   ];
   const bestLabel = (k) => { const b = readBest(k); return b ? `Best ${formatGameScore(k, b)}` : 'No score yet'; };
   return (
@@ -21174,7 +21404,7 @@ function GamesPage({ onClose, onChallenge, onShareScore, initialGame }) {
         <IgHeading>With a friend</IgHeading>
         {friend.map((it) => (
           <div key={it.k} role="button" aria-label={GAME_TITLES[it.k]} onClick={() => { playUiSound('tap'); onChallenge(it.k); }} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '10px 4px', margin: '0 -4px', borderRadius: 14, cursor: 'pointer' }}>
-            <div style={{ width: 52, height: 52, borderRadius: 16, background: it.bg, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 8px 20px rgba(0,0,0,0.2)' }}>{it.icon}</div>
+            <GameArt k={it.k} width={58} height={58} radius={16} style={{ boxShadow: '0 8px 20px rgba(0,0,0,0.2)' }} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 16, fontWeight: 700, color: theme.ink }}>{GAME_TITLES[it.k]}</div>
               <div style={{ fontSize: 13, color: theme.muted, marginTop: 1 }}>{it.sub}</div>
@@ -21185,9 +21415,11 @@ function GamesPage({ onClose, onChallenge, onShareScore, initialGame }) {
         <IgHeading>Solo</IgHeading>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, paddingBottom: 8 }}>
           {SOLO_GAMES.map((it) => (
-            <div key={it.k} role="button" aria-label={GAME_TITLES[it.k]} onClick={() => { playUiSound('tap'); setGame(it.k); }} className="zchat-press" style={{ borderRadius: 18, padding: 12, background: theme.rowBg, border: `1px solid ${theme.border}`, cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <div style={{ width: 46, height: 46, borderRadius: 14, background: it.bg, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 18px rgba(0,0,0,0.18)' }}>{it.icon}</div>
-              <div style={{ minWidth: 0 }}>
+            <div key={it.k} role="button" aria-label={GAME_TITLES[it.k]} onClick={() => { playUiSound('tap'); setGame(it.k); }} className="zchat-press" style={{ borderRadius: 18, padding: 8, paddingBottom: 10, background: theme.rowBg, border: `1px solid ${theme.border}`, cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 9 }}>
+              <div style={{ width: '100%', aspectRatio: '16 / 10', borderRadius: 12, overflow: 'hidden', boxShadow: '0 8px 18px rgba(0,0,0,0.18)' }}>
+                <GameArt k={it.k} width="100%" height="100%" radius={12} />
+              </div>
+              <div style={{ minWidth: 0, padding: '0 4px' }}>
                 <div style={{ fontSize: 15, fontWeight: 800, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{GAME_TITLES[it.k]}</div>
                 <div style={{ fontSize: 12, color: theme.muted, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.sub}</div>
                 <div style={{ fontSize: 11.5, fontWeight: 700, color: readBest(it.k) ? theme.coral : theme.muted, marginTop: 5 }}>{bestLabel(it.k)}</div>
@@ -21199,7 +21431,7 @@ function GamesPage({ onClose, onChallenge, onShareScore, initialGame }) {
       </FullPage>
       {game && (
         <FullPage title={GAME_TITLES[game]} subtitle={bestLabel(game)} onBack={() => setGame(null)} zIndex={61}
-          right={<HeaderIconButton label="Share score" onClick={() => onShareScore(game, readBest(game))}><Share2 /></HeaderIconButton>}>
+          right={<><GameArt k={game} width={30} height={30} radius={9} style={{ marginRight: 4 }} /><HeaderIconButton label="Share score" onClick={() => onShareScore(game, readBest(game))}><Share2 /></HeaderIconButton></>}>
           {game === '2048' && <Game2048 />}
           {game === 'memory' && <MemoryGame />}
           {game === 'snake' && <SnakeGame />}
