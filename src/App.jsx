@@ -9433,7 +9433,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-const APP_VERSION = '11.1V';
+const APP_VERSION = '11.3V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -13286,6 +13286,26 @@ function privacyAllows(owner, scope, viewerId, iFollow, allowed) {
   return true;
 }
 
+let lastViewportHealAt = 0;
+function healStuckViewport() {
+  const now = Date.now();
+  if (now - lastViewportHealAt < 800) return;
+  lastViewportHealAt = now;
+  try { window.scrollTo(0, 1); window.scrollTo(0, 0); } catch {}
+  try {
+    const meta = document.querySelector('meta[name="viewport"]');
+    if (meta) {
+      const content = meta.getAttribute('content') || 'width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover';
+      meta.setAttribute('content', `${content}, height=${window.innerHeight}`);
+      setTimeout(() => meta.setAttribute('content', content), 60);
+    }
+  } catch {}
+  try {
+    const html = document.documentElement;
+    html.style.height = '100.1%';
+    setTimeout(() => { html.style.height = ''; }, 80);
+  } catch {}
+}
 function keyboardMemoryKey() {
   return `zchat-kb-${window.innerWidth > window.innerHeight ? 'l' : 'p'}`;
 }
@@ -13718,15 +13738,18 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         }
         const pre = presizeRef.current;
         const holding = !open && typing && pre.height > 0 && Date.now() < pre.until;
-        const standalone = isAppleMobile() && (window.navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches));
-        let fill = null;
+        const ghost = ios && !typing && !open && vv.height > layoutHeight + 40;
+        const stuck = ios && !typing && !open && !ghost && fullHeightRef.current - Math.max(vv.height, layoutHeight) > 120;
+        if (stuck) healStuckViewport();
         const shown = open || holding;
         setKeyboardOpen((prev) => (prev === shown ? prev : shown));
         setKeyboardReal((prev) => (prev === open ? prev : open));
         setViewportBox((prev) => {
           const next = open
             ? { height: Math.round(vv.height), offset: Math.max(0, Math.round(vv.offsetTop)) }
-            : holding ? { height: pre.height, offset: 0 } : { height: null, offset: 0 };
+            : holding ? { height: pre.height, offset: 0 }
+              : ghost ? { height: Math.round(vv.height), offset: Math.max(0, Math.round(vv.offsetTop)) }
+                : { height: null, offset: 0 };
           return prev.height === next.height && prev.offset === next.offset ? prev : next;
         });
       });
@@ -13734,9 +13757,14 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const settle = () => setTimeout(() => {
       update();
       if (!isTypingField(document.activeElement) && (window.scrollY || document.documentElement.scrollTop)) window.scrollTo(0, 0);
+      setTimeout(update, 450);
+      setTimeout(update, 1200);
     }, 300);
     viewportUpdateRef.current = update;
     update();
+    const poll = setInterval(() => {
+      if (fullHeightRef.current && (fullHeightRef.current - vv.height > 120 || isTypingField(document.activeElement))) update();
+    }, 500);
     vv.addEventListener('resize', update);
     vv.addEventListener('scroll', update);
     window.addEventListener('focusin', update);
@@ -13744,6 +13772,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     window.addEventListener('orientationchange', settle);
     return () => {
       cancelAnimationFrame(frame);
+      clearInterval(poll);
       vv.removeEventListener('resize', update);
       vv.removeEventListener('scroll', update);
       window.removeEventListener('focusin', update);
@@ -18562,7 +18591,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           onSubmit={async (reason) => { const target = reportUserTarget; setReportUserTarget(null); await handleReport(target, reason); }} />
       )}
     </div>
-    {isAppleMobile() && !isWide && !keyboardReal && (
+    {isAppleMobile() && !isWide && (
       <Portal>
         <KeyboardGapStrip top={viewportBox.height ? viewportBox.offset + viewportBox.height : '100%'}
           onShare={async () => {
