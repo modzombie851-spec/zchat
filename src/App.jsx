@@ -9406,7 +9406,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-const APP_VERSION = '10.7V';
+const APP_VERSION = '10.9V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -15118,7 +15118,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const send = (p) => fetch(p, { method: 'POST', headers, body: typeof body === 'string' ? body : JSON.stringify(body) });
     try {
       const r = await send(`${path}-background`);
-      if (r.status === 404 || r.status === 405 || r.status >= 500) await send(path).catch(() => {});
+      if (r.status === 404 || r.status === 405) await send(path).catch(() => {});
     } catch {
       try { await send(path); } catch {}
     }
@@ -20241,8 +20241,18 @@ function stashPendingLink() {
   try { localStorage.setItem('zchat-pending-link', JSON.stringify({ search: window.location.search, at: Date.now() })); } catch {}
 }
 
-function SharePreviewScreen({ landing, onAuth }) {
+function SharePreviewScreen({ landing: initialLanding, onAuth }) {
+  const [landing, setLanding] = useState(initialLanding);
   const [data, setData] = useState(null);
+  const [more, setMore] = useState(null);
+  const openPost = (id) => {
+    if (!id) return;
+    try { window.history.pushState({}, '', `/?post=${id}`); } catch {}
+    setData(null);
+    setMore(null);
+    setLanding({ kind: 'post', key: id });
+    try { window.scrollTo(0, 0); } catch {}
+  };
   const [deferred, setDeferred] = useState(null);
   const [showHelp, setShowHelp] = useState(false);
   const [standalone] = useState(() => {
@@ -20271,8 +20281,22 @@ function SharePreviewScreen({ landing, onAuth }) {
         if (!error && res) result = res;
       } catch {}
       if (alive) setData(result || { found: false, unavailable: true });
+      if (alive && result && landing.kind === 'post' && result.owner && result.owner.id && !result.restricted) {
+        try {
+          const { data: ownerRes } = await supabase.rpc('public_profile_preview', { p_id: result.owner.id });
+          if (alive && ownerRes && ownerRes.found && !ownerRes.is_private) setMore((ownerRes.posts || []).filter((p) => p.id !== landing.key));
+        } catch {}
+      }
     })();
     return () => { alive = false; };
+  }, [landing.kind, landing.key]);
+  useEffect(() => {
+    const onPop = () => {
+      const next = parseShareLanding();
+      if (next) { setData(null); setMore(null); setLanding(next); }
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
   }, []);
 
   const getApp = async () => {
@@ -20361,6 +20385,21 @@ function SharePreviewScreen({ landing, onAuth }) {
           </>
         )}
         <div style={{ marginTop: 18 }}><button style={ghostBtn} onClick={() => login(data.restricted ? `Log in to follow ${o.name}` : 'Log in to like and comment')}>{data.restricted ? 'Log in to follow' : 'Log in to like and comment'}</button></div>
+        {more && more.length > 0 && (
+          <>
+            <div style={{ fontWeight: 900, fontSize: 14.5, marginTop: 24, marginBottom: 8 }}>More from {o.name}</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 3, borderRadius: 12, overflow: 'hidden' }}>
+              {more.map((p) => (
+                <div key={p.id} role="button" onClick={() => openPost(p.id)} style={{ position: 'relative', aspectRatio: '3 / 4', background: CARD, cursor: 'pointer', overflow: 'hidden' }}>
+                  {p.media_type === 'video'
+                    ? <video src={`${p.media_url}#t=0.1`} muted playsInline preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} />
+                    : <img src={p.media_url} alt="" loading="lazy" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
+                  {p.media_type === 'video' && <Play size={15} color="white" style={{ position: 'absolute', top: 6, right: 6, filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.6))' }} />}
+                </div>
+              ))}
+            </div>
+          </>
+        )}
       </div>
     );
   } else {
@@ -20403,7 +20442,7 @@ function SharePreviewScreen({ landing, onAuth }) {
         {!isStory && !data.is_private && posts.length > 0 && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 3, marginTop: 20, borderRadius: 12, overflow: 'hidden' }}>
             {posts.map((p) => (
-              <div key={p.id} role="button" onClick={() => login(`Log in to see more from ${data.name}`)} style={{ position: 'relative', aspectRatio: '3 / 4', background: CARD, cursor: 'pointer', overflow: 'hidden' }}>
+              <div key={p.id} role="button" onClick={() => openPost(p.id)} style={{ position: 'relative', aspectRatio: '3 / 4', background: CARD, cursor: 'pointer', overflow: 'hidden' }}>
                 {p.media_type === 'video'
                   ? <video src={`${p.media_url}#t=0.1`} muted playsInline preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} />
                   : <img src={p.media_url} alt="" loading="lazy" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
@@ -20756,7 +20795,7 @@ function AppInner() {
     return (
       <AuthShell>
         {shareLanding && authNote && screen === 'login' && (
-          <div style={{ background: 'rgba(59,130,246,0.14)', border: '1px solid rgba(59,130,246,0.35)', color: '#8ab4ff', borderRadius: 12, padding: '10px 12px', fontSize: 13, fontWeight: 700, textAlign: 'center', marginBottom: 14, fontFamily: FONT }}>{authNote}</div>
+          <div style={{ background: 'rgba(124,92,252,0.16)', border: '1px solid rgba(124,92,252,0.4)', color: '#C4B5FD', borderRadius: 12, padding: '10px 12px', fontSize: 13, fontWeight: 700, textAlign: 'center', marginBottom: 14, fontFamily: FONT }}>{authNote}</div>
         )}
         {screen === 'login' && (
           <LoginStep onSuccess={setSession} onForgot={() => setScreen('forgot')} onGoRegister={() => setScreen('register')} />
