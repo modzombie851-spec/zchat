@@ -9433,7 +9433,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-const APP_VERSION = '11.0V';
+const APP_VERSION = '11.1V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -12890,7 +12890,7 @@ function FeedComments({ post, me, userId, onClose, onCount, onOpenProfile }) {
     }
     if (!cErr && post.user_id !== userId) {
       sendPushNotification(post.user_id, 'ZChat', `${(me && me.name) || 'Someone'} commented on your post`, `/?post=${post.id}`, me && me.avatar);
-      supabase.from('mails').insert({ recipient_id: post.user_id, sender_id: userId, type: 'post_comment', title: `${(me && me.name) || 'Someone'} commented on your post`, body: body.slice(0, 200) });
+      supabase.from('mails').insert({ recipient_id: post.user_id, sender_id: userId, type: 'post_comment', title: `${(me && me.name) || 'Someone'} commented on your post`, body: body.slice(0, 200) }).then(() => {}, () => {});
     }
     setSending(false);
     load();
@@ -13625,6 +13625,44 @@ function MeTab({ me, counts, onOpenProfile, onEditProfile, onSettings, onCollect
   );
 }
 
+const GAP_STRIP_ITEMS = [
+  { k: 'invite', kicker: 'ZChat', title: 'Invite a friend to ZChat', text: 'Chats, stories, posts and calls in one place', action: 'Share' },
+  { k: 'install', kicker: 'ZChat', title: 'Add ZChat to your home screen', text: 'Opens full screen like a real app, with notifications', action: 'How' },
+  { k: 'tip1', kicker: 'ZChat tip', title: 'Hold a message to react', text: 'Swipe it sideways to reply' },
+  { k: 'tip2', kicker: 'ZChat tip', title: 'Hold the mic to record', text: 'Slide up to lock it and keep talking' },
+  { k: 'tip3', kicker: 'ZChat tip', title: 'Your own chat bubbles', text: 'Settings, then Theme, then Chat bubbles' },
+];
+function KeyboardGapStrip({ top, onShare, onInstall }) {
+  const { theme } = useTheme();
+  const [i, setI] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setI((v) => (v + 1) % GAP_STRIP_ITEMS.length), 7000);
+    return () => clearInterval(t);
+  }, []);
+  const it = GAP_STRIP_ITEMS[i];
+  const act = it.k === 'invite' ? onShare : it.k === 'install' ? onInstall : null;
+  return (
+    <div aria-hidden={act ? undefined : 'true'} style={{ position: 'fixed', left: 0, right: 0, top, height: 320, zIndex: 4, overflow: 'hidden', fontFamily: FONT, background: theme.dark ? 'linear-gradient(180deg, #2A1F4D 0%, #1B1238 42%, #0E0A1A 100%)' : 'linear-gradient(180deg, #E8E0FF 0%, #F6F3FF 60%)', boxShadow: '0 -1px 0 rgba(170,140,255,0.18)' }}>
+      <div key={it.k} className="zchat-tab-in" onClick={act || undefined} style={{ display: 'flex', alignItems: 'center', gap: 12, height: 62, padding: '0 16px', cursor: act ? 'pointer' : 'default' }}>
+        <div style={{ width: 36, height: 36, borderRadius: 12, background: it.k.startsWith('tip') ? `${theme.coral}26` : theme.coral, color: it.k.startsWith('tip') ? theme.coral : 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontWeight: 900, fontSize: 19 }}>
+          {it.k === 'invite' ? <Share2 size={18} /> : it.k === 'install' ? <Download size={18} /> : 'Z'}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', color: theme.coral }}>{it.kicker}</div>
+          <div style={{ fontSize: 14, fontWeight: 800, color: theme.ink, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.title}</div>
+          <div style={{ fontSize: 12, color: theme.muted, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.text}</div>
+        </div>
+        {it.action && (
+          <button type="button" onClick={(e) => { e.stopPropagation(); if (act) act(); }} style={{ height: 32, padding: '0 14px', borderRadius: 16, border: 'none', background: theme.ink, color: theme.dark ? '#1B1238' : '#fff', fontWeight: 800, fontSize: 13, fontFamily: FONT, cursor: 'pointer', flexShrink: 0 }}>{it.action}</button>
+        )}
+      </div>
+      <div style={{ display: 'flex', gap: 5, justifyContent: 'center', paddingTop: 2 }}>
+        {GAP_STRIP_ITEMS.map((x, idx) => <span key={x.k} style={{ width: idx === i ? 14 : 5, height: 5, borderRadius: 3, background: idx === i ? theme.coral : theme.border, transition: 'width 0.25s ease' }} />)}
+      </div>
+    </div>
+  );
+}
+
 function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAccount, onAddAccount, onRemoveAccount, switchingAccountId }) {
   const { theme, bgPatternOn, chatTheme, bubbleStyle, keepTextStyle } = useTheme();
   const assetProgress = useAssetPrefetch();
@@ -13642,6 +13680,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [deferredInstallPrompt, setDeferredInstallPrompt] = useState(null);
   const [isStandaloneApp, setIsStandaloneApp] = useState(false);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
+  const [keyboardReal, setKeyboardReal] = useState(false);
   const [viewportBox, setViewportBox] = useState({ height: null, offset: 0 });
 
   const [isWide, setIsWide] = useState(() => (typeof window !== 'undefined' ? window.innerWidth >= 900 : false));
@@ -13683,6 +13722,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         let fill = null;
         const shown = open || holding;
         setKeyboardOpen((prev) => (prev === shown ? prev : shown));
+        setKeyboardReal((prev) => (prev === open ? prev : open));
         setViewportBox((prev) => {
           const next = open
             ? { height: Math.round(vv.height), offset: Math.max(0, Math.round(vv.offsetTop)) }
@@ -14431,7 +14471,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           }
           const fp = deviceFingerprint();
           if (fp && data.device_id !== fp) {
-            supabase.from('profiles').update({ device_id: fp }).eq('id', session.user.id);
+            supabase.from('profiles').update({ device_id: fp }).eq('id', session.user.id).then(() => {}, () => {});
           }
           isBlockedHere(session.user.email).then(async (blocked) => {
             if (!blocked) return;
@@ -14480,7 +14520,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   }, [me && me.id]);
 
   useEffect(() => {
-    if (me) { loadConversations(); loadUnreadCounts(); loadMyLocks(); loadGroups(); loadMyBlocks(); loadStories(); subscribeToPush(session.user.id, false); loadFollowRequestCount(); loadUnreadMailCount(); supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', me.id); }
+    if (me) { loadConversations(); loadUnreadCounts(); loadMyLocks(); loadGroups(); loadMyBlocks(); loadStories(); subscribeToPush(session.user.id, false); loadFollowRequestCount(); loadUnreadMailCount(); supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', me.id).then(() => {}, () => {}); }
   }, [me && me.id]);
 
   useEffect(() => {
@@ -14700,14 +14740,14 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         if (blockedRef.current.has(msg.sender_id)) return;
         unhideChatLocally(msg.sender_id);
         if (msg.sender_id !== (current && current.id) || !mobileShowChatRef.current) {
-          supabase.from('messages').update({ delivered: true }).eq('id', msg.id);
+          supabase.from('messages').update({ delivered: true }).eq('id', msg.id).then(() => {}, () => {});
           const senderConv = conversationsRef.current.find((c) => c.otherProfile.id === msg.sender_id) || archivedConversationsRef.current.find((c) => c.otherProfile.id === msg.sender_id);
           if (!(senderConv && isActiveUntil(senderConv[senderConv.user_a === me.id ? 'muted_until_a' : 'muted_until_b']))) {
             playPing();
             showMessageToast(msg);
           }
         } else {
-          supabase.from('messages').update({ read: true, delivered: true }).eq('id', msg.id);
+          supabase.from('messages').update({ read: true, delivered: true }).eq('id', msg.id).then(() => {}, () => {});
           setActivityFrom(null);
         }
         loadUnreadCounts();
@@ -14865,12 +14905,12 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         const row = payload.new;
         if (!row.group_id || !myGroupIds.includes(row.group_id)) return;
         if (row.sender_id !== me.id && (!activeGroup || row.group_id !== activeGroup.id)) {
-          supabase.from('messages').update({ delivered: true }).eq('id', row.id);
+          supabase.from('messages').update({ delivered: true }).eq('id', row.id).then(() => {}, () => {});
           const mutedGroup = groupsRef.current.find((x) => x.id === row.group_id);
           const mentioned = row.type === 'text' && extractMentions(row.content || '').has((me.username || '').toLowerCase());
           if (!(mutedGroup && isActiveUntil(mutedGroup.mutedUntil)) || mentioned) { playPing(); showMessageToast(row); }
         }
-        if (row.sender_id !== me.id && activeGroup && row.group_id === activeGroup.id) { markGroupRead(activeGroup.id); supabase.from('messages').update({ read: true, delivered: true }).eq('id', row.id); }
+        if (row.sender_id !== me.id && activeGroup && row.group_id === activeGroup.id) { markGroupRead(activeGroup.id); supabase.from('messages').update({ read: true, delivered: true }).eq('id', row.id).then(() => {}, () => {}); }
         setMessages((prev) => {
           if (!activeGroup || row.group_id !== activeGroup.id) return prev;
           if (prev.some((m) => m.id === row.id)) return prev;
@@ -14924,8 +14964,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     channel.subscribe((status) => {
       if (status === 'SUBSCRIBED') { subscribed = true; trackPresence(); }
     });
-    const updateLastSeen = () => { supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', me.id); };
-    const heartbeat = setInterval(updateLastSeen, 45000);
+    const updateLastSeen = () => { supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', me.id).then(() => {}, () => {}); };
+    updateLastSeen();
+    const heartbeat = setInterval(updateLastSeen, 30000);
     const onVisibility = () => { trackPresence(); if (document.visibilityState === 'hidden') updateLastSeen(); };
     document.addEventListener('visibilitychange', onVisibility);
     window.addEventListener('pagehide', updateLastSeen);
@@ -17368,6 +17409,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const disappearOn = activeGroup ? !!((groups.find((x) => x.id === activeGroup.id) || activeGroup).disappear_secs) : !!(activeConvForBar && activeConvForBar.disappear_secs);
 
   return (
+    <>
     <div id="zapp-root" style={{
       position: 'fixed', left: 0, right: 0, top: viewportBox.height ? viewportBox.offset : 0,
       ...(viewportBox.height ? { height: viewportBox.height } : { bottom: 0 }),
@@ -18520,6 +18562,20 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           onSubmit={async (reason) => { const target = reportUserTarget; setReportUserTarget(null); await handleReport(target, reason); }} />
       )}
     </div>
+    {isAppleMobile() && !isWide && !keyboardReal && (
+      <Portal>
+        <KeyboardGapStrip top={viewportBox.height ? viewportBox.offset + viewportBox.height : '100%'}
+          onShare={async () => {
+            const link = siteOrigin();
+            try {
+              if (navigator.share) await navigator.share({ title: 'ZChat', text: 'Join me on ZChat', url: link });
+              else { await navigator.clipboard.writeText(link); showSnack('Link copied'); }
+            } catch {}
+          }}
+          onInstall={() => setShowInstallHelp(true)} />
+      </Portal>
+    )}
+    </>
   );
 }
 
