@@ -450,6 +450,10 @@ function GlobalStyle() {
       @keyframes zchat-neon-pulse { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.18); } }
       @keyframes zchat-wave-pop { 0% { opacity: 0; transform: scale(0.4) translateY(10px); } 60% { opacity: 1; transform: scale(1.08) translateY(-2px); } 100% { opacity: 1; transform: scale(1) translateY(0); } }
       @keyframes zchat-panel-zoom-in { 0% { opacity: 0; transform: translateX(26px); } 100% { opacity: 1; transform: translateX(0); } }
+      @keyframes zchat-tab-in { 0% { opacity: 0; transform: translateY(8px); } 100% { opacity: 1; transform: translateY(0); } }
+      .zchat-tab-in { animation: zchat-tab-in 0.22s cubic-bezier(0.16, 1, 0.3, 1); }
+      .zchat-press { transition: transform 0.12s ease; }
+      .zchat-press:active { transform: scale(0.94); }
       @keyframes zchat-vt-out { to { opacity: 0; transform: translateX(22px) scale(0.985); } }
       @keyframes zchat-vt-in { from { opacity: 0; transform: translateX(-16px); } }
       ::view-transition-old(root) { animation: zchat-vt-out 0.2s cubic-bezier(0.4, 0, 1, 1) both; }
@@ -5026,7 +5030,7 @@ function PosterIconButton({ onClick, children, label }) {
   );
 }
 
-function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, onSaved, onOpenSettings, onOpenProfile, onMessage, isBlocked, onBlock, onUnblock, shareConversations, shareGroups, onShareToChats, canCall, onCall, onOpenHighlight, meProfile, onOpenCollection, isZAdmin, iFollowIds, privacyAllowed }) {
+function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, onSaved, onOpenSettings, onOpenProfile, onMessage, isBlocked, onBlock, onUnblock, shareConversations, shareGroups, onShareToChats, canCall, onCall, onOpenHighlight, meProfile, onOpenCollection, isZAdmin, iFollowIds, privacyAllowed, initialEdit = false, initialShare = false }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
   const [reportOpen, setReportOpen] = useState(false);
@@ -5179,6 +5183,10 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
     setBioMention(null);
     setEditing(true);
   };
+  useEffect(() => {
+    if (initialEdit && isSelf) startEditing();
+    else if (initialShare) setShowShare(true);
+  }, []);
 
   const cancelEditing = () => {
     setEditing(false);
@@ -5417,7 +5425,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
                         <img src={profileFrameUrl} alt="" draggable={false} aria-hidden="true" style={{ ...frameMaskStyle(fspec), position: 'absolute', width: fw, height: fw, left: box / 2 - fw * (fspec.centerX ?? 0.5), top: box / 2 - fw * fspec.centerY, pointerEvents: 'none', zIndex: 2, maxWidth: 'none', animation: (theme.dark ? fspec.animation : (fspec.animationLight || fspec.animation)) || 'none' }} />
                       )}
                       {isOnline && (
-                        <div style={{ position: 'absolute', right: off + photo * 0.06, bottom: off + photo * 0.06, width: 24, height: 24, borderRadius: '50%', background: '#22c55e', border: `4px solid ${pageBg}`, zIndex: 3 }} />
+                        <div style={{ position: 'absolute', right: fspec ? 10 : off + photo * 0.06, bottom: fspec ? 10 : off + photo * 0.06, width: 22, height: 22, borderRadius: '50%', background: '#22c55e', border: `4px solid ${pageBg}`, zIndex: 3, boxShadow: '0 2px 8px rgba(0,0,0,0.35)' }} />
                       )}
                     </>
                   );
@@ -6123,11 +6131,11 @@ function MessageBubble({ isBot, m, isMe, onDelete, selectionMode, selected, onTo
                 </div>
               )}
               {(m.type === 'image' || m.type === 'video') && m.content && !String(m.content).startsWith('/') && (
-                <div style={{ fontSize: 15 * fontScale, color: theme.ink, wordBreak: 'break-word', whiteSpace: 'pre-wrap', lineHeight: 1.32, padding: '2px 2px 16px', maxWidth: 250 }}>
+                <div style={{ fontSize: 15 * fontScale, color: bubbleSpec ? bubbleSpec.ink : theme.ink, wordBreak: 'break-word', whiteSpace: 'pre-wrap', lineHeight: 1.32, padding: '2px 2px 16px', maxWidth: 250 }}>
                   <RichText text={m.content} onMention={onOpenMention} />
                 </div>
               )}
-              {m.type === 'audio' && <div style={{ paddingBottom: 14 }}><AudioBubble url={m.media_url} isMe={isMe} /></div>}
+              {m.type === 'audio' && <div style={{ paddingBottom: 14 }}><AudioBubble url={m.media_url} isMe={isMe} ink={bubbleSpec ? bubbleSpec.ink : undefined} line={bubbleSpec ? bubbleSpec.line : undefined} /></div>}
               {m.type === 'sticker' && (
                 m.content && /^https?:/i.test(m.content) ? (
                   <img src={m.content} alt="Sticker" draggable={false} onClick={(e) => { if (selectionMode || !onOpenSticker) return; e.stopPropagation(); onOpenSticker(m); }} className="zchat-wave-pop" style={{ display: 'block', width: 120, height: 120, objectFit: 'contain', marginBottom: 18, cursor: 'pointer' }} />
@@ -6693,6 +6701,18 @@ function formatListTime(value) {
   return d.toLocaleDateString([], d.getFullYear() === now.getFullYear() ? { day: 'numeric', month: 'short' } : { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
+function plainPreviewText(text) {
+  return String(text || '')
+    .replace(/```[a-zA-Z0-9]*\n?([\s\S]*?)```/g, '$1')
+    .replace(/`([^`]*)`/g, '$1')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/__([^_]+)__/g, '$1')
+    .replace(/(^|\s)[*_]([^*_]+)[*_](?=\s|$)/g, '$1$2')
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/^\s*[-*]\s+/gm, '')
+    .replace(/\s*\n+\s*/g, ' ')
+    .trim();
+}
 function describeMessage(m) {
   if (!m) return { kind: 'none', text: '' };
   if (m.deleted) return { kind: 'deleted', text: 'This message was deleted' };
@@ -6714,7 +6734,7 @@ function describeMessage(m) {
       }
       return { kind: 'system', text: m.content || '' };
     }
-    default: return { kind: 'text', text: parseProfileLink(m.content) ? 'Shared a profile' : parsePostLink(m.content) ? 'Shared a post' : (m.content || '') };
+    default: return { kind: 'text', text: parseProfileLink(m.content) ? 'Shared a profile' : parsePostLink(m.content) ? 'Shared a post' : plainPreviewText(m.content || '') };
   }
 }
 
@@ -7207,6 +7227,7 @@ function MediaComposer({ files, recipientName, onCancel, onSend, onActivity, mod
   const [showStickerPicker, setShowStickerPicker] = useState(false);
   const [selectedSticker, setSelectedSticker] = useState(null);
   const isStory = composerMode === 'story';
+  const isPost = composerMode === 'post';
   const stageRef = useRef(null);
   const innerRef = useRef(null);
   const videoRef = useRef(null);
@@ -7702,10 +7723,14 @@ function MediaComposer({ files, recipientName, onCancel, onSend, onActivity, mod
             </div>
           )}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px 0' }}>
-            <input value={caption} onChange={(e) => setCaption(e.target.value.slice(0, MAX_CHARS))} placeholder="Add a caption"
+            <input value={caption} onChange={(e) => setCaption(e.target.value.slice(0, MAX_CHARS))} placeholder={isPost ? 'Write a caption' : 'Add a caption'}
               onKeyDown={(e) => { if (e.key === 'Enter' && !isTouchDevice()) { e.preventDefault(); send(); } }}
               style={{ flex: 1, minWidth: 0, padding: '12px 16px', borderRadius: 24, border: 'none', outline: 'none', background: 'rgba(255,255,255,0.14)', color: 'white', fontFamily: FONT, fontSize: 15 }} />
-            {isStory ? (
+            {isPost ? (
+              <div onPointerDown={(e) => e.preventDefault()} onClick={send} role="button" aria-label="Share post" style={{
+                height: 48, padding: '0 18px', borderRadius: 24, background: theme.coral, color: 'white', display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', flexShrink: 0, fontWeight: 800, fontSize: 14,
+              }}>{sending ? <Spinner size={16} /> : <><ImageIcon size={17} color="white" /> Share post</>}</div>
+            ) : isStory ? (
               <div onPointerDown={(e) => e.preventDefault()} onClick={send} role="button" aria-label="Share to your story" style={{
                 height: 48, padding: '0 16px', borderRadius: 24, background: 'white', color: '#000', display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', flexShrink: 0, fontWeight: 800, fontSize: 14,
               }}>{sending ? <Spinner size={16} color="#000" /> : <><StatusIcon size={17} color="#000" /> Your story</>}</div>
@@ -7715,7 +7740,9 @@ function MediaComposer({ files, recipientName, onCancel, onSend, onActivity, mod
               }}>{sending ? <Spinner size={18} /> : <Send size={20} color="white" style={{ marginLeft: -2 }} />}</div>
             )}
           </div>
-          {isStory
+          {isPost
+            ? <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.6)', padding: '6px 18px 0' }}>Shows on your profile and in Moments</div>
+            : isStory
             ? <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.6)', padding: '6px 18px 0' }}>Shared with your followers for 24 hours</div>
             : recipientName && <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.6)', padding: '6px 18px 0' }}>To {recipientName}</div>}
         </div>
@@ -9406,7 +9433,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-const APP_VERSION = '10.9V';
+const APP_VERSION = '11.0V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -10574,22 +10601,27 @@ function ProfilePosts({ profile, isSelf, userId, meProfile }) {
       .subscribe();
     return () => supabase.removeChannel(ch);
   }, [profile.id]);
+  const [postError, setPostError] = useState('');
   const share = async (outputs, caption) => {
     setComposer(null);
     setPosting(true);
+    setPostError('');
+    let failed = 0;
     for (const item of outputs) {
       const { url, error } = await uploadMedia(item.file, userId);
-      if (error || !url) continue;
+      if (error || !url) { failed += 1; continue; }
       let overlayUrl = null;
       if (item.overlayFile) { const up = await uploadMedia(item.overlayFile, userId); if (!up.error) overlayUrl = up.url; }
-      await supabase.from('posts').insert({ user_id: userId, media_url: url, media_type: item.kind === 'video' ? 'video' : 'image', overlay_url: overlayUrl, caption: caption || null });
+      const { error: insErr } = await supabase.from('posts').insert({ user_id: userId, media_url: url, media_type: item.kind === 'video' ? 'video' : 'image', overlay_url: overlayUrl, caption: caption || null });
+      if (insErr) failed += 1;
     }
     setPosting(false);
+    if (failed) setPostError(failed === outputs.length ? 'Could not post. Check your connection and try again.' : `${failed} of ${outputs.length} did not post.`);
     load();
   };
   return (
-    <div style={{ marginTop: 18, marginLeft: -20, marginRight: -20 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px 0', borderTop: `1px solid ${theme.border}`, borderBottom: `1px solid ${theme.border}`, color: theme.ink, fontWeight: 800, fontSize: 13, position: 'sticky', top: 0, zIndex: 5, background: theme.dark ? '#000' : '#fff' }}>
+    <div style={{ marginTop: 12, marginLeft: -14, marginRight: -14 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '10px 0', color: theme.ink, fontWeight: 800, fontSize: 13, position: 'relative' }}>
         <ImageIcon size={16} /> Posts
         {isSelf && (
           <div onClick={() => { if (blockedByRestriction('post')) return; if (inputRef.current) inputRef.current.click(); }} style={{ position: 'absolute', right: 16, width: 30, height: 30, borderRadius: 10, background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 20, fontWeight: 400 }}>+</div>
@@ -10597,6 +10629,7 @@ function ProfilePosts({ profile, isSelf, userId, meProfile }) {
       </div>
       <input ref={inputRef} type="file" accept="image/*,video/*" multiple style={{ display: 'none' }} onChange={(e) => { const f = Array.from(e.target.files || []).slice(0, 10); e.target.value = ''; if (f.length && !blockedByRestriction('post')) setComposer({ key: Date.now(), files: f }); }} />
       {posting && <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 10, fontSize: 12.5, color: theme.muted }}><Spinner size={13} color={theme.coral} /> Posting</div>}
+      {postError && <div style={{ textAlign: 'center', padding: '8px 14px', fontSize: 12.5, fontWeight: 700, color: theme.danger }}>{postError}</div>}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2 }}>
         {(posts || []).map((p) => (
           <div key={p.id} onClick={() => setOpenPost(p)} style={{ position: 'relative', aspectRatio: '3 / 4', background: theme.rowBg, cursor: 'pointer', overflow: 'hidden' }}>
@@ -10612,8 +10645,8 @@ function ProfilePosts({ profile, isSelf, userId, meProfile }) {
           {isSelf && <div onClick={() => inputRef.current && inputRef.current.click()} style={{ marginTop: 8, color: theme.coral, fontWeight: 700, fontSize: 13.5, cursor: 'pointer' }}>Share a photo or video</div>}
         </div>
       )}
-      {composer && <MediaComposer key={composer.key} files={composer.files} recipientName="your profile" onCancel={() => setComposer(null)} onSend={share} />}
-      {openPost && <FeedPanel me={meProfile} userId={userId} ownerFilter={profile} startPostId={openPost.id} seedPost={openPost} onClose={() => setOpenPost(null)} onOpenProfile={() => setOpenPost(null)} onPostDeleted={() => load()} />}
+      {composer && <Portal><MediaComposer key={composer.key} files={composer.files} recipientName="your profile" mode="post" onCancel={() => setComposer(null)} onSend={share} /></Portal>}
+      {openPost && <Portal><FeedPanel me={meProfile} userId={userId} ownerFilter={profile} startPostId={openPost.id} seedPost={openPost} onClose={() => setOpenPost(null)} onOpenProfile={() => setOpenPost(null)} onPostDeleted={() => load()} /></Portal>}
     </div>
   );
 }
@@ -11115,7 +11148,7 @@ function voiceBars(seed, count = 30) {
   return out;
 }
 
-function AudioBubble({ url, isMe }) {
+function AudioBubble({ url, isMe, ink, line }) {
   const { theme } = useTheme();
   const audioRef = useRef(null);
   const [playing, setPlaying] = useState(false);
@@ -11168,8 +11201,8 @@ function AudioBubble({ url, isMe }) {
     if (audioRef.current) audioRef.current.playbackRate = next;
   };
   const pct = duration ? progress / duration : 0;
-  const active = isMe ? 'rgba(255,255,255,0.95)' : theme.coral;
-  const idle = isMe ? 'rgba(255,255,255,0.38)' : (theme.dark ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.22)');
+  const active = ink ? ink : isMe ? 'rgba(255,255,255,0.95)' : theme.coral;
+  const idle = ink ? `${line || ink}66` : isMe ? 'rgba(255,255,255,0.38)' : (theme.dark ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.22)');
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 8px 4px 6px', minWidth: 220 }}>
@@ -11180,7 +11213,7 @@ function AudioBubble({ url, isMe }) {
         onEnded={() => { setPlaying(false); setProgress(0); }} />
       <div role="button" aria-label={playing ? 'Pause' : 'Play'} onClick={toggle} style={{
         width: 40, height: 40, borderRadius: '50%', flexShrink: 0, cursor: 'pointer',
-        background: isMe ? 'rgba(255,255,255,0.22)' : theme.coral, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: ink ? (line || ink) : isMe ? 'rgba(255,255,255,0.22)' : theme.coral, display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}>
         {playing ? <Pause size={17} color="white" fill="white" /> : <Play size={17} color="white" fill="white" style={{ marginLeft: 2 }} />}
       </div>
@@ -11191,11 +11224,11 @@ function AudioBubble({ url, isMe }) {
           ))}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 }}>
-          <span style={{ fontSize: 11, fontWeight: 600, color: isMe ? 'rgba(255,255,255,0.8)' : theme.muted, fontVariantNumeric: 'tabular-nums' }}>
+          <span style={{ fontSize: 11, fontWeight: 600, color: ink ? ink : isMe ? 'rgba(255,255,255,0.8)' : theme.muted, fontVariantNumeric: 'tabular-nums' }}>
             {playing || progress > 0 ? fmt(progress) : fmt(duration)}
           </span>
           {(playing || progress > 0) && (
-            <span role="button" onClick={cycleSpeed} style={{ fontSize: 10.5, fontWeight: 800, padding: '1px 7px', borderRadius: 9, cursor: 'pointer', background: isMe ? 'rgba(255,255,255,0.22)' : theme.rowBg, color: isMe ? 'white' : theme.ink }}>{speed}x</span>
+            <span role="button" onClick={cycleSpeed} style={{ fontSize: 10.5, fontWeight: 800, padding: '1px 7px', borderRadius: 9, cursor: 'pointer', background: ink ? `${ink}22` : isMe ? 'rgba(255,255,255,0.22)' : theme.rowBg, color: ink ? ink : isMe ? 'white' : theme.ink }}>{speed}x</span>
           )}
         </div>
       </div>
@@ -12480,10 +12513,10 @@ function CharmPreview({ charm, size }) {
   return <img src={url} alt="" draggable={false} style={{ height: size, width: Math.round(size * spec.ratio), objectFit: 'contain' }} />;
 }
 
-function FeedPanel({ me, userId, onClose, onOpenProfile, ownerFilter = null, startPostId = null, seedPost = null, onPostDeleted = null }) {
+function FeedPanel({ me, userId, onClose, onOpenProfile, ownerFilter = null, startPostId = null, seedPost = null, onPostDeleted = null, initialTab = 'foryou' }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
-  const [tab, setTab] = useState('foryou');
+  const [tab, setTab] = useState(initialTab || 'foryou');
   const [items, setItems] = useState(null);
   const [likes, setLikes] = useState({});
   const [counts, setCounts] = useState({});
@@ -12610,8 +12643,8 @@ function FeedPanel({ me, userId, onClose, onOpenProfile, ownerFilter = null, sta
     lastTapRef.current = now;
   };
 
-  const railBtn = (icon, label, onClick, color) => (
-    <div role="button" onClick={onClick} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer', color: color || 'white' }}>
+  const railBtn = (icon, label, onClick, color, name) => (
+    <div role="button" aria-label={name || label} onClick={onClick} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer', color: color || 'white' }}>
       {icon}
       <span style={{ fontSize: 11.5, fontWeight: 800, textShadow: '0 1px 4px rgba(0,0,0,0.6)' }}>{label}</span>
     </div>
@@ -12661,7 +12694,7 @@ function FeedPanel({ me, userId, onClose, onOpenProfile, ownerFilter = null, sta
                     </div>
                     <span role="button" aria-label="Show who liked" onClick={() => setLikersFor(post)} style={{ fontSize: 11.5, fontWeight: 800, textShadow: '0 1px 4px rgba(0,0,0,0.6)', cursor: 'pointer', padding: '0 8px' }}>{formatCount(c.likes)}</span>
                   </div>
-                  {railBtn(<InstaCommentIcon size={29} color="white" />, formatCount(c.comments), () => { setCommentsFor(post); playUiSound('tap'); })}
+                  {railBtn(<InstaCommentIcon size={29} color="white" />, formatCount(c.comments), () => { setCommentsFor(post); playUiSound('tap'); }, null, 'Comments')}
                   {railBtn(<Bookmark size={27} color={saved.has(post.id) ? '#fbbf24' : 'white'} fill={saved.has(post.id) ? '#fbbf24' : 'none'} />, saved.has(post.id) ? 'Saved' : 'Save', () => toggleSave(post))}
                   {railBtn(<Share2 size={26} />, 'Share', async () => {
                     const link = `${siteOrigin()}/?post=${post.id}`;
@@ -13264,6 +13297,334 @@ function mergeProfileRow(prev, row) {
   return { ...prev, ...row, email: prev.email };
 }
 
+function Portal({ children }) {
+  if (typeof document === 'undefined') return children;
+  return ReactDOM.createPortal(children, document.body);
+}
+
+function hapticTap() {
+  try { if (navigator.vibrate) navigator.vibrate(6); } catch {}
+}
+
+function MomentsIcon({ size = 24, color = 'currentColor', active = false }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={active ? 2.4 : 2} strokeLinecap="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="4.2" fill={active ? color : 'none'} />
+      <path d="M12 2.8a9.2 9.2 0 0 1 9.2 9.2M21.2 12a9.2 9.2 0 0 1-9.2 9.2M12 21.2A9.2 9.2 0 0 1 2.8 12M2.8 12A9.2 9.2 0 0 1 12 2.8" strokeDasharray="7 3.2" />
+    </svg>
+  );
+}
+
+function BottomTabBar({ tab, onChange, onCreate, badges }) {
+  const { theme } = useTheme();
+  const items = [
+    { k: 'chats', label: 'Chats', icon: (on) => <MessageSquare size={24} color={on ? theme.coral : theme.muted} strokeWidth={on ? 2.4 : 2} fill={on ? `${theme.coral}22` : 'none'} />, badge: badges.chats },
+    { k: 'moments', label: 'Moments', icon: (on) => <MomentsIcon size={24} color={on ? theme.coral : theme.muted} active={on} />, dot: badges.moments },
+    { k: 'create' },
+    { k: 'calls', label: 'Calls', icon: (on) => <Phone size={23} color={on ? theme.coral : theme.muted} strokeWidth={on ? 2.4 : 2} fill={on ? `${theme.coral}22` : 'none'} />, badge: badges.calls },
+    { k: 'me', label: 'Me', icon: (on) => <User size={24} color={on ? theme.coral : theme.muted} strokeWidth={on ? 2.4 : 2} fill={on ? `${theme.coral}22` : 'none'} />, badge: badges.me },
+  ];
+  return (
+    <div style={{
+      flexShrink: 0, position: 'relative', zIndex: 20,
+      background: theme.dark ? 'rgba(21,15,38,0.92)' : 'rgba(255,255,255,0.92)',
+      backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)',
+      borderTop: `1px solid ${theme.border}`,
+      paddingBottom: 'env(safe-area-inset-bottom)',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'stretch', height: 58 }}>
+        {items.map((it) => {
+          if (it.k === 'create') {
+            return (
+              <div key="create" role="button" aria-label="Create" onClick={() => { hapticTap(); playUiSound('tap'); onCreate(); }} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                <div className="zchat-press" style={{ width: 46, height: 34, borderRadius: 12, background: `linear-gradient(135deg, ${theme.coral}, ${theme.gold})`, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 6px 18px ${theme.coral}55`, transition: 'transform 0.15s ease' }}>
+                  <Plus size={22} color="white" strokeWidth={3} />
+                </div>
+              </div>
+            );
+          }
+          const on = tab === it.k;
+          return (
+            <div key={it.k} role="button" aria-label={it.label} onClick={() => { if (!on) { hapticTap(); playUiSound('tap'); } onChange(it.k); }}
+              style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, cursor: 'pointer', position: 'relative', userSelect: 'none', WebkitTapHighlightColor: 'transparent' }}>
+              <div style={{ position: 'relative', width: 52, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 15, background: on ? `${theme.coral}1C` : 'transparent', transition: 'background 0.2s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)', transform: on ? 'scale(1)' : 'scale(0.96)' }}>
+                {it.icon(on)}
+                {it.badge > 0 && (
+                  <span style={{ position: 'absolute', top: -2, right: 4, minWidth: 17, height: 17, padding: '0 5px', borderRadius: 9, background: theme.danger, color: 'white', fontSize: 10, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 0 0 2px ${theme.dark ? '#150F26' : '#fff'}` }}>{it.badge > 99 ? '99+' : it.badge}</span>
+                )}
+                {!it.badge && it.dot && (
+                  <span style={{ position: 'absolute', top: 2, right: 10, width: 8, height: 8, borderRadius: 4, background: theme.coral, boxShadow: `0 0 0 2px ${theme.dark ? '#150F26' : '#fff'}` }} />
+                )}
+              </div>
+              <span style={{ fontSize: 10.5, fontWeight: on ? 800 : 600, color: on ? theme.coral : theme.muted, letterSpacing: '0.01em', transition: 'color 0.2s ease' }}>{it.label}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function HomeHeader({ title, right, subtitle }) {
+  const { theme } = useTheme();
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', padding: '14px 16px 8px', flexShrink: 0 }}>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 30, fontWeight: 900, color: theme.ink, letterSpacing: '-0.03em', lineHeight: 1.05 }}>{title}</div>
+        {subtitle && <div style={{ fontSize: 12.5, color: theme.muted, fontWeight: 600, marginTop: 2 }}>{subtitle}</div>}
+      </div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>{right}</div>
+    </div>
+  );
+}
+
+function HeaderIconButton({ label, onClick, children, badge, accent }) {
+  const { theme } = useTheme();
+  return (
+    <div role="button" aria-label={label} onClick={onClick} style={{ position: 'relative', width: 40, height: 40, borderRadius: 14, background: accent ? theme.coral : theme.rowBg, color: accent ? 'white' : theme.ink, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+      {children}
+      {badge > 0 && (
+        <span style={{ position: 'absolute', top: -4, right: -4, minWidth: 17, height: 17, padding: '0 5px', borderRadius: 9, background: theme.danger, color: 'white', fontSize: 10, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 0 0 2px ${theme.bgGradient}` }}>{badge > 99 ? '99+' : badge}</span>
+      )}
+    </div>
+  );
+}
+
+function CreateSheet({ onClose, onPost, onStory, onGroup, onChat }) {
+  useBackClose(true, onClose);
+  const { theme } = useTheme();
+  const drag = useSheetDrag(onClose);
+  const items = [
+    { k: 'post', label: 'New post', desc: 'Share a photo or video to your profile', icon: <ImageIcon size={20} />, bg: 'linear-gradient(135deg, #7C5CFC, #A78BFA)', on: onPost },
+    { k: 'story', label: 'New story', desc: 'Disappears after 24 hours', icon: <Camera size={20} />, bg: 'linear-gradient(135deg, #ec4899, #f59e0b)', on: onStory },
+    { k: 'group', label: 'New group', desc: 'Chat with up to 50 people', icon: <Users size={20} />, bg: 'linear-gradient(135deg, #10b981, #0ea5e9)', on: onGroup },
+    { k: 'chat', label: 'New chat', desc: 'Find someone by username', icon: <MessageSquare size={20} />, bg: 'linear-gradient(135deg, #3b82f6, #6366f1)', on: onChat },
+  ];
+  return (
+    <Portal>
+      <div onClick={onClose} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 640, background: 'rgba(5,8,16,0.55)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontFamily: FONT }}>
+        <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" {...drag.sheetProps} style={{ ...drag.sheetStyle, width: '100%', maxWidth: 480, background: theme.panelBg, borderRadius: '28px 28px 0 0', padding: '10px 16px', paddingBottom: 'calc(20px + env(safe-area-inset-bottom))' }}>
+          <div style={{ display: 'flex', justifyContent: 'center', padding: '2px 0 14px' }}><div style={{ width: 38, height: 4, borderRadius: 2, background: theme.border }} /></div>
+          <div style={{ fontSize: 20, fontWeight: 900, color: theme.ink, letterSpacing: '-0.02em', padding: '0 4px 12px' }}>Create</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            {items.map((it) => (
+              <div key={it.k} role="button" onClick={() => { playUiSound('tap'); onClose(); setTimeout(it.on, 60); }} style={{ padding: '16px 14px', borderRadius: 20, background: theme.rowBg, cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={{ width: 42, height: 42, borderRadius: 14, background: it.bg, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{it.icon}</div>
+                <div>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: theme.ink }}>{it.label}</div>
+                  <div style={{ fontSize: 12, color: theme.muted, marginTop: 2, lineHeight: 1.35 }}>{it.desc}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </Portal>
+  );
+}
+
+function MomentsTab({ me, userId, myStories, trayUsers, seen, onAddStory, onOpenStory, onOpenPost, onOpenProfile, onDiscover, version, unseenStories }) {
+  const { theme } = useTheme();
+  const [tab, setTab] = useState('foryou');
+  const [items, setItems] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const load = async (quiet) => {
+    if (!quiet) setItems(null);
+    let followingIds = null;
+    if (tab === 'following') {
+      const { data: f } = await supabase.from('follows').select('following_id').eq('follower_id', userId).eq('status', 'accepted');
+      followingIds = [...(f || []).map((x) => x.following_id), userId];
+    }
+    let q = supabase.from('posts').select('*').order('created_at', { ascending: false }).limit(90);
+    if (followingIds) q = q.in('user_id', followingIds);
+    const { data: posts } = await q;
+    const rows = posts || [];
+    const ids = [...new Set(rows.map((p) => p.user_id))];
+    const byId = {};
+    if (ids.length) {
+      const { data: profs } = await supabase.from('profiles').select('*').in('id', ids);
+      sanitizeAvatarList(profs, userId).forEach((p) => { byId[p.id] = p; });
+    }
+    setItems(rows.map((p) => ({ ...p, owner: byId[p.user_id] })).filter((p) => p.owner && !p.owner.is_deleted));
+    setRefreshing(false);
+  };
+  useEffect(() => { load(); }, [tab]);
+  useEffect(() => { if (version) load(true); }, [version]);
+  const seg = (k, label) => (
+    <div key={k} role="button" onClick={() => { if (tab !== k) { setTab(k); playUiSound('tap'); } }} style={{ flex: 1, textAlign: 'center', padding: '8px 0', borderRadius: 12, fontSize: 13.5, fontWeight: 800, cursor: 'pointer', color: tab === k ? '#fff' : theme.muted, background: tab === k ? theme.coral : 'transparent', transition: 'background 0.18s ease, color 0.18s ease' }}>{label}</div>
+  );
+  return (
+    <div className="zchat-tab-in" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+      <HomeHeader title="Moments" subtitle={unseenStories > 0 ? `${unseenStories} new ${unseenStories === 1 ? 'story' : 'stories'}` : 'Stories and posts from people you follow'}
+        right={<HeaderIconButton label="Discover people" onClick={onDiscover}><Compass size={19} /></HeaderIconButton>} />
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
+        <div style={{ paddingTop: 14 }}>
+          <StoryTray me={me} myStories={myStories} trayUsers={trayUsers} seen={seen} onAdd={onAddStory} onOpen={onOpenStory} />
+        </div>
+        <div style={{ display: 'flex', gap: 6, margin: '2px 16px 10px', padding: 4, borderRadius: 16, background: theme.rowBg }}>
+          {seg('foryou', 'For you')}{seg('following', 'Following')}
+        </div>
+        {items === null ? (
+          <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><Spinner size={22} color={theme.coral} /></div>
+        ) : !items.length ? (
+          <div style={{ textAlign: 'center', padding: '44px 24px', color: theme.muted }}>
+            <div style={{ width: 64, height: 64, borderRadius: 22, margin: '0 auto 12px', background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.ink }}><ImageIcon size={26} /></div>
+            <div style={{ fontWeight: 800, fontSize: 16, color: theme.ink }}>{tab === 'following' ? 'Nothing from people you follow yet' : 'No posts yet'}</div>
+            <div style={{ fontSize: 13, marginTop: 6, lineHeight: 1.5 }}>{tab === 'following' ? 'Follow more people to fill this up.' : 'Be the first. Tap the plus button to share a post.'}</div>
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2, padding: '0 0 16px' }}>
+            {items.map((p) => (
+              <div key={p.id} role="button" onClick={() => onOpenPost(p, tab)} style={{ position: 'relative', aspectRatio: '3 / 4', background: theme.rowBg, cursor: 'pointer', overflow: 'hidden' }}>
+                {p.media_type === 'video'
+                  ? <video src={`${p.media_url}#t=0.1`} muted playsInline preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} />
+                  : <img src={p.media_url} alt="" loading="lazy" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />}
+                {p.media_type === 'video' && <Play size={15} color="white" fill="white" style={{ position: 'absolute', top: 7, right: 7, filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.6))' }} />}
+                <div style={{ position: 'absolute', left: 6, bottom: 6, display: 'flex', alignItems: 'center', gap: 5, maxWidth: 'calc(100% - 12px)' }}>
+                  <Avatar emoji={p.owner.avatar} name={p.owner.name} size={18} />
+                  <span style={{ fontSize: 10.5, fontWeight: 800, color: 'white', textShadow: '0 1px 4px rgba(0,0,0,0.8)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{(p.owner.name || '').split(' ')[0]}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CallsTab({ userId, groups, onCall, onOpenProfile, version }) {
+  const { theme } = useTheme();
+  const [rows, setRows] = useState(null);
+  const load = async () => {
+    const [{ data: a }, { data: b }] = await Promise.all([
+      supabase.from('calls').select('*').eq('caller_id', userId).order('created_at', { ascending: false }).limit(60),
+      supabase.from('calls').select('*').eq('callee_id', userId).order('created_at', { ascending: false }).limit(60),
+    ]);
+    const all = uniqueBy([...(a || []), ...(b || [])], (c) => c.id).filter((c) => !c.group_id).sort((x, y) => new Date(y.created_at) - new Date(x.created_at)).slice(0, 80);
+    const peerIds = [...new Set(all.map((c) => (c.caller_id === userId ? c.callee_id : c.caller_id)).filter(Boolean))];
+    const byId = {};
+    if (peerIds.length) {
+      const { data: profs } = await supabase.from('profiles').select('*').in('id', peerIds);
+      sanitizeAvatarList(profs, userId).forEach((p) => { byId[p.id] = p; });
+    }
+    setRows(all.map((c) => ({ ...c, peer: byId[c.caller_id === userId ? c.callee_id : c.caller_id] })).filter((c) => c.peer));
+  };
+  useEffect(() => { load(); }, [version]);
+  const describe = (c) => {
+    const out = c.caller_id === userId;
+    const missed = !out && (c.status === 'missed' || c.status === 'ringing' || c.status === 'declined' || c.status === 'no_answer');
+    const label = missed ? 'Missed' : out ? 'Outgoing' : 'Incoming';
+    const secs = c.ended_at && c.answered_at ? Math.max(0, Math.round((new Date(c.ended_at) - new Date(c.answered_at)) / 1000)) : null;
+    const dur = secs != null && secs > 0 ? ` · ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}` : '';
+    return { label, missed, out, text: `${label}${dur}` };
+  };
+  return (
+    <div className="zchat-tab-in" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+      <HomeHeader title="Calls" subtitle="Voice and video calls with people you follow each other" />
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '6px 10px 16px', WebkitOverflowScrolling: 'touch' }}>
+        {rows === null ? (
+          <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><Spinner size={22} color={theme.coral} /></div>
+        ) : !rows.length ? (
+          <div style={{ textAlign: 'center', padding: '50px 24px', color: theme.muted }}>
+            <div style={{ width: 64, height: 64, borderRadius: 22, margin: '0 auto 12px', background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.ink }}><Phone size={26} /></div>
+            <div style={{ fontWeight: 800, fontSize: 16, color: theme.ink }}>No calls yet</div>
+            <div style={{ fontSize: 13, marginTop: 6, lineHeight: 1.5 }}>Open a chat and tap the phone or camera icon to start one.</div>
+          </div>
+        ) : rows.map((c) => {
+          const d = describe(c);
+          return (
+            <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 8px', borderRadius: 16 }}>
+              <div role="button" onClick={() => onOpenProfile(c.peer)} style={{ cursor: 'pointer', flexShrink: 0 }}><Avatar emoji={c.peer.avatar} name={c.peer.name} frame={c.peer.avatar_frame} size={48} /></div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: 14.5, color: d.missed ? theme.danger : theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><NameBadge name={c.peer.name} verified={c.peer.verified} custom={c.peer.custom_badge} size={13} /></div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: theme.muted, marginTop: 2 }}>
+                  <span style={{ display: 'inline-flex', transform: d.out ? 'rotate(-45deg)' : 'rotate(135deg)', color: d.missed ? theme.danger : theme.teal }}><Forward size={12} /></span>
+                  {d.text} · {formatListTime(c.created_at)}
+                </div>
+              </div>
+              <div role="button" aria-label={c.kind === 'video' ? 'Video call' : 'Voice call'} onClick={() => onCall(c.peer, c.kind === 'video' ? 'video' : 'voice')} style={{ width: 40, height: 40, borderRadius: 14, background: theme.rowBg, color: theme.coral, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+                {c.kind === 'video' ? <VideoIcon size={19} /> : <Phone size={18} />}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function MeTab({ me, counts, onOpenProfile, onEditProfile, onSettings, onCollection, onSaved, onArchive, onMail, onRequests, onDiscover, onSwitchAccount, onShare }) {
+  const { theme } = useTheme();
+  const [social, setSocial] = useState(() => { try { return JSON.parse(localStorage.getItem('zchat-me-social') || 'null') || { followers: 0, following: 0, posts: 0 }; } catch { return { followers: 0, following: 0, posts: 0 }; } });
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const [{ count: followers }, { count: following }, { count: posts }] = await Promise.all([
+        supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', me.id).eq('status', 'accepted'),
+        supabase.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', me.id).eq('status', 'accepted'),
+        supabase.from('posts').select('*', { count: 'exact', head: true }).eq('user_id', me.id),
+      ]);
+      if (!alive) return;
+      const next = { followers: followers || 0, following: following || 0, posts: posts || 0 };
+      setSocial(next);
+      try { localStorage.setItem('zchat-me-social', JSON.stringify(next)); } catch {}
+    })();
+    return () => { alive = false; };
+  }, [me.id]);
+  const row = (icon, label, onClick, badge, sub, danger) => (
+    <div key={label} role="button" onClick={() => { playUiSound('tap'); onClick(); }} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 14px', cursor: 'pointer', borderBottom: `1px solid ${theme.border}` }}>
+      <div style={{ width: 36, height: 36, borderRadius: 12, background: `${theme.coral}1A`, color: danger ? theme.danger : theme.coral, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{icon}</div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 14.5, fontWeight: 700, color: danger ? theme.danger : theme.ink }}>{label}</div>
+        {sub && <div style={{ fontSize: 12, color: theme.muted, marginTop: 1 }}>{sub}</div>}
+      </div>
+      {badge > 0 && <span style={{ minWidth: 20, height: 20, padding: '0 6px', borderRadius: 10, background: theme.danger, color: 'white', fontSize: 11, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{badge > 99 ? '99+' : badge}</span>}
+      <ChevronRight size={17} color={theme.muted} />
+    </div>
+  );
+  const group = (children) => <div style={{ margin: '0 16px 14px', borderRadius: 20, background: theme.rowBg, overflow: 'hidden' }}>{children}</div>;
+  return (
+    <div className="zchat-tab-in" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+      <HomeHeader title="Me" right={<HeaderIconButton label="Settings" onClick={onSettings}><SettingsIcon size={19} /></HeaderIconButton>} />
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', paddingBottom: 20, WebkitOverflowScrolling: 'touch' }}>
+        <div role="button" onClick={onOpenProfile} style={{ margin: '6px 16px 14px', padding: '16px 16px 16px 14px', borderRadius: 24, cursor: 'pointer', background: `linear-gradient(135deg, ${theme.coral}2E, ${theme.gold}14)`, border: `1px solid ${theme.coral}33`, display: 'flex', alignItems: 'center', gap: 14 }}>
+          <Avatar emoji={me.avatar} name={me.name} frame={me.avatar_frame} size={64} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 18, fontWeight: 900, color: theme.ink, display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}><span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{me.name}</span><VerifiedBadge tier={me.verified} custom={me.custom_badge} size={16} /></div>
+            <div style={{ fontSize: 13, color: theme.muted, marginTop: 1 }}>@{me.username}</div>
+            <div style={{ display: 'flex', gap: 12, marginTop: 8, fontSize: 12.5, color: theme.muted, fontWeight: 600, flexWrap: 'wrap' }}>
+              <span><b style={{ color: theme.ink }}>{formatCount(social.posts)}</b> posts</span>
+              <span><b style={{ color: theme.ink }}>{formatCount(social.followers)}</b> followers</span>
+              <span><b style={{ color: theme.ink }}>{formatCount(social.following)}</b> following</span>
+            </div>
+          </div>
+          <ChevronRight size={18} color={theme.muted} />
+        </div>
+        <div style={{ display: 'flex', gap: 8, margin: '0 16px 16px' }}>
+          <button onClick={onEditProfile} style={{ flex: 1, padding: '11px 0', borderRadius: 14, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontSize: 14, fontFamily: FONT, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}><Edit3 size={15} /> Edit profile</button>
+          <button onClick={onShare} style={{ flex: 1, padding: '11px 0', borderRadius: 14, border: `1px solid ${theme.border}`, background: theme.rowBg, color: theme.ink, fontWeight: 800, fontSize: 14, fontFamily: FONT, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}><Share2 size={15} /> Share</button>
+        </div>
+        {group([
+          row(<Sparkles size={18} />, 'Collection', onCollection, 0, counts.rewards ? `${counts.rewards} unlocked` : 'Frames, nameplates and charms'),
+          row(<Bookmark size={18} />, 'Saved messages', onSaved),
+          row(<Archive size={18} />, 'Archived chats', onArchive, 0, counts.archived ? `${counts.archived} archived` : null),
+        ])}
+        {group([
+          row(<Bell size={18} />, 'Follow requests', onRequests, counts.requests),
+          row(<Mail size={18} />, 'Mail', onMail, counts.mail, 'Messages from the ZChat team'),
+          row(<Compass size={18} />, 'Discover people', onDiscover),
+        ])}
+        {group([
+          row(<Users size={18} />, 'Switch account', onSwitchAccount),
+          row(<SettingsIcon size={18} />, 'Settings', onSettings, 0, 'Theme, privacy, notifications and more'),
+        ])}
+        <div style={{ textAlign: 'center', fontSize: 11.5, color: theme.muted, marginTop: 6 }}>ZChat {APP_VERSION}</div>
+      </div>
+    </div>
+  );
+}
+
 function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAccount, onAddAccount, onRemoveAccount, switchingAccountId }) {
   const { theme, bgPatternOn, chatTheme, bubbleStyle, keepTextStyle } = useTheme();
   const assetProgress = useAssetPrefetch();
@@ -13449,6 +13810,33 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [myRewards, setMyRewards] = useState([]);
   const [collectionOpen, setCollectionOpen] = useState(false);
   const [feedOpen, setFeedOpen] = useState(false);
+  const [feedStart, setFeedStart] = useState(null);
+  const [homeTab, setHomeTab] = useState('chats');
+  const [showCreate, setShowCreate] = useState(false);
+  const [postComposer, setPostComposer] = useState(null);
+  const [postsVersion, setPostsVersion] = useState(0);
+  const postInputRef = useRef(null);
+  const searchInputRef = useRef(null);
+  const openFeedAt = (post, tab) => { setFeedStart(post ? { postId: post.id, tab: tab || 'foryou' } : (tab ? { postId: null, tab } : null)); setFeedOpen(true); };
+  const sharePost = async (outputs, caption) => {
+    setPostComposer(null);
+    let done = 0;
+    let failed = 0;
+    setSnack('Posting');
+    for (const item of outputs) {
+      const { url, error } = await uploadMedia(item.file, session.user.id);
+      if (error || !url) { failed += 1; continue; }
+      let overlayUrl = null;
+      if (item.overlayFile) { const up = await uploadMedia(item.overlayFile, session.user.id); if (!up.error) overlayUrl = up.url; }
+      const { error: insErr } = await supabase.from('posts').insert({ user_id: session.user.id, media_url: url, media_type: item.kind === 'video' ? 'video' : 'image', overlay_url: overlayUrl, caption: caption || null });
+      if (insErr) failed += 1; else done += 1;
+    }
+    setPostsVersion((v) => v + 1);
+    if (failed && !done) showSnack('Could not post. Check your connection and try again.');
+    else if (failed) showSnack(`Posted ${done}, ${failed} failed`);
+    else showSnack(done === 1 ? 'Posted to your profile' : `Posted ${done} items`);
+    playUiSound('tap');
+  };
   const swipeRef = useRef(null);
   const feedSwipe = {
     onTouchStart: (e) => {
@@ -13483,6 +13871,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       [showArchived, () => setShowArchived(false)],
       [profileOf, () => setProfileOf(null)],
       [mobileShowChat || activeProfile || activeGroup, () => { setMobileShowChat(false); setActiveProfile(null); setActiveGroup(null); }],
+      [showCreate, () => setShowCreate(false)],
+      [homeTab !== 'chats', () => setHomeTab('chats')],
     ];
     const hit = steps.find(([open]) => !!open);
     if (!hit) return false;
@@ -17011,6 +17401,12 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             e.target.value = '';
             if (picked.length && !blockedByRestriction('status')) setStoryComposer({ key: Date.now(), files: picked });
           }} />
+        <input ref={postInputRef} type="file" accept="image/*,video/*" multiple style={{ display: 'none' }}
+          onChange={(e) => {
+            const picked = Array.from(e.target.files || []).filter((f) => (f.type || '').startsWith('image') || (f.type || '').startsWith('video')).slice(0, 10);
+            e.target.value = '';
+            if (picked.length && !blockedByRestriction('post')) setPostComposer({ key: Date.now(), files: picked });
+          }} />
         {(isWide || !mobileShowChat) && (<>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
         {notifPermission === 'default' && pushSupported() && !notifBannerDismissed && (
@@ -17029,73 +17425,20 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             onDismiss={() => { setInstallBannerDismissed(true); try { localStorage.setItem('zchat-install-banner-dismissed', '1'); } catch {} }} />
         )}
         </div>
-        <div style={{
-          padding: '14px 16px 10px',
-          display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexShrink: 0,
-        }}>
-          <ZBrand size={22} showTag />
-          <div onClick={() => setProfileOf(me)} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', maxWidth: 160 }}>
-            <div style={{ textAlign: 'right', minWidth: 0 }}>
-              <div style={{ fontWeight: 800, fontSize: 12, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><NameBadge name={me.name} verified={me.verified} custom={me.custom_badge} size={11} /></div>
-              <div style={{ fontSize: 10, color: theme.teal, fontWeight: 600 }}>Online</div>
-              {me.bio && <div style={{ fontSize: 9.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 130 }}>"{me.bio}"</div>}
-            </div>
-            <Avatar emoji={me.avatar} name={me.name} frame={me.avatar_frame} size={34} ring />
-          </div>
-        </div>
-
+        {homeTab === 'chats' && (<div key="tab-chats" className="zchat-tab-in" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+        <HomeHeader title="Chats" right={<>
+          <HeaderIconButton label="Mail" onClick={() => setShowMail(true)} badge={unreadMailCount}><Mail size={18} /></HeaderIconButton>
+          <HeaderIconButton label="Follow requests" onClick={() => setShowFollowRequests(true)} badge={followRequestCount}><Bell size={18} /></HeaderIconButton>
+          <HeaderIconButton label="New chat" onClick={() => { playUiSound('tap'); setShowCreate(true); }} accent><Edit3 size={18} /></HeaderIconButton>
+        </>} />
         <div style={{ padding: '0 16px 10px', flexShrink: 0 }}>
           <div style={{ position: 'relative' }}>
             <Search size={15} color={theme.muted} style={{ position: 'absolute', left: 12, top: 11 }} />
-            <input value={search} onChange={(e) => doSearch(e.target.value)} placeholder="Search by username" autoCapitalize="none"
+            <input ref={searchInputRef} value={search} onChange={(e) => doSearch(e.target.value)} placeholder="Search people" autoCapitalize="none"
               style={{ ...inputStyle(theme), padding: '9px 12px 9px 34px', fontSize: 13.5 }} />
             {searching && <div style={{ position: 'absolute', right: 12, top: 10 }}><Spinner size={13} color={theme.muted} /></div>}
           </div>
         </div>
-
-        <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '2px 14px 12px', flexShrink: 0,
-        }}>
-          <div onClick={() => setShowMail(true)} style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer', flexShrink: 0 }}>
-            <div style={{ width: 38, height: 38, borderRadius: 12, background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.coralDeep }}><Mail size={16} /></div>
-            {unreadMailCount > 0 && (
-              <div style={{ position: 'absolute', top: -3, right: -3, background: theme.danger, color: 'white', fontSize: 9, fontWeight: 800, borderRadius: 8, minWidth: 15, height: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px' }}>{unreadMailCount > 99 ? '99+' : unreadMailCount}</div>
-            )}
-            <span style={{ fontSize: 9, color: theme.muted, fontWeight: 600 }}>Mail</span>
-          </div>
-          <div onClick={() => setShowFollowRequests(true)} style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer', flexShrink: 0 }}>
-            <div style={{ width: 38, height: 38, borderRadius: 12, background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.coralDeep }}><Bell size={16} /></div>
-            {followRequestCount > 0 && (
-              <div style={{ position: 'absolute', top: -3, right: -3, background: theme.danger, color: 'white', fontSize: 9, fontWeight: 800, borderRadius: 8, minWidth: 15, height: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px' }}>{followRequestCount}</div>
-            )}
-            <span style={{ fontSize: 9, color: theme.muted, fontWeight: 600 }}>Requests</span>
-          </div>
-          <div onClick={() => setShowCreateGroup(true)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer', flexShrink: 0 }}>
-            <div style={{ width: 38, height: 38, borderRadius: 12, background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.coralDeep }}><Users size={16} /></div>
-            <span style={{ fontSize: 9, color: theme.muted, fontWeight: 600 }}>Group</span>
-          </div>
-          <div onClick={() => { setFeedOpen(true); playUiSound('tap'); }} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer', flexShrink: 0 }}>
-            <div style={{ width: 38, height: 38, borderRadius: 12, background: 'linear-gradient(135deg, #ec4899, #8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white' }}><Play size={18} /></div>
-            <span style={{ fontSize: 9, color: theme.muted, fontWeight: 600 }}>Feed</span>
-          </div>
-          <div onClick={() => setShowDiscover(true)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer', flexShrink: 0 }}>
-            <div style={{ width: 38, height: 38, borderRadius: 12, background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.coralDeep }}><Compass size={16} /></div>
-            <span style={{ fontSize: 9, color: theme.muted, fontWeight: 600 }}>Discover</span>
-          </div>
-          <div onClick={() => setShowArchived(true)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer', flexShrink: 0 }}>
-            <div style={{ width: 38, height: 38, borderRadius: 12, background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.coralDeep }}><Archive size={16} /></div>
-            <span style={{ fontSize: 9, color: theme.muted, fontWeight: 600 }}>Archive</span>
-          </div>
-          <div onClick={() => setShowSettings(true)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer', flexShrink: 0 }}>
-            <div style={{ width: 38, height: 38, borderRadius: 12, background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.coralDeep }}><SettingsIcon size={16} /></div>
-            <span style={{ fontSize: 9, color: theme.muted, fontWeight: 600 }}>Settings</span>
-          </div>
-        </div>
-
-        {search.trim().length < 2 && (
-          <StoryTray me={me} myStories={activeStoriesOf(session.user.id)} trayUsers={trayUsers} seen={storyData.seen}
-            onAdd={() => { if (blockedByRestriction('status')) return; if (storyInputRef.current) storyInputRef.current.click(); }} onOpen={(id) => openStoriesFor(id)} />
-        )}
 
         {search.trim().length >= 2 ? (
           <div style={{ overflowY: 'auto', flex: 1, padding: '0 12px' }}>
@@ -17127,7 +17470,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                   { k: 'groups', l: 'Groups', n: liveGroups.length },
                   { k: 'dms', l: 'Chats', n: conversations.length },
                 ];
-                return chips.map((f) => {
+                return [...chips.map((f) => {
                   const on = listFilter === f.k;
                   return (
                     <div key={f.k} onClick={() => { setListFilter(f.k); playUiSound('tap'); }} style={{
@@ -17146,7 +17489,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                       )}
                     </div>
                   );
-                });
+                }), <div key="spacer" style={{ width: 6, flexShrink: 0 }} />];
               })()}
             </div>
             <div
@@ -17165,6 +17508,14 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               {(refreshing || pullDistance > 4) && (
                 <div style={{ position: 'absolute', top: -38, left: '50%', transform: `translateX(-50%) rotate(${refreshing ? 0 : pullDistance * 4}deg)`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <Spinner size={18} color={theme.coral} />
+                </div>
+              )}
+              {archivedConversations.length > 0 && listFilter === 'all' && (
+                <div role="button" onClick={() => setShowArchived(true)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 8px', cursor: 'pointer', borderRadius: 16 }}>
+                  <div style={{ width: 46, height: 46, borderRadius: 15, background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.coral, flexShrink: 0 }}><Archive size={20} /></div>
+                  <div style={{ flex: 1, fontWeight: 700, fontSize: 14, color: theme.ink }}>Archived</div>
+                  <span style={{ fontSize: 12.5, color: theme.muted, fontWeight: 700 }}>{archivedConversations.length}</span>
+                  <ChevronRight size={16} color={theme.muted} />
                 </div>
               )}
               {displayList.length === 0 && (
@@ -17257,6 +17608,24 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             </div>
           </>
         )}
+        </div>)}
+        {homeTab === 'moments' && (
+          <MomentsTab key="tab-moments" me={me} userId={session.user.id} myStories={activeStoriesOf(session.user.id)} trayUsers={trayUsers} seen={storyData.seen} version={postsVersion}
+            unseenStories={trayUsers.filter((u) => !u.stories.every((st) => storyData.seen.has(st.id))).length}
+            onAddStory={() => { if (blockedByRestriction('status')) return; if (storyInputRef.current) storyInputRef.current.click(); }} onOpenStory={(id) => openStoriesFor(id)}
+            onOpenPost={(p, tab) => openFeedAt(p, tab)} onOpenProfile={(p) => setProfileOf(sanitizeAvatar(p, session.user.id))} onDiscover={() => setShowDiscover(true)} />
+        )}
+        {homeTab === 'calls' && (
+          <CallsTab key="tab-calls" userId={session.user.id} groups={groups} version={callEngine.call ? 1 : 0} onCall={(p, kind) => { if (canCall(p)) startDirectCall(p, kind); else showSnack('You can call people who follow you back'); }} onOpenProfile={(p) => setProfileOf(p)} />
+        )}
+        {homeTab === 'me' && (
+          <MeTab key="tab-me" me={me} counts={{ rewards: (myRewards || []).filter(rewardActive).length, archived: archivedConversations.length, requests: followRequestCount, mail: unreadMailCount }}
+            onOpenProfile={() => setProfileOf(me)} onEditProfile={() => setProfileOf({ ...me, __edit: true })} onSettings={() => setShowSettings(true)} onCollection={() => setCollectionOpen(true)}
+            onSaved={() => setShowSaved(true)} onArchive={() => setShowArchived(true)} onMail={() => setShowMail(true)} onRequests={() => setShowFollowRequests(true)} onDiscover={() => setShowDiscover(true)}
+            onSwitchAccount={() => setShowAccountSwitcher(true)} onShare={() => setProfileOf({ ...me, __share: true })} />
+        )}
+        <BottomTabBar tab={homeTab} onChange={(k) => setHomeTab(k)} onCreate={() => setShowCreate(true)}
+          badges={{ chats: conversations.filter(isUnread).length + groups.filter((g) => !g.archived && g.unread > 0).length, moments: trayUsers.some((u) => !u.stories.every((st) => storyData.seen.has(st.id))), calls: 0, me: followRequestCount + unreadMailCount }} />
         </>)}
       </div>
 
@@ -17580,7 +17949,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                   </>
                   )}
                   {(!recording && (draft.trim() || pendingMedia.length > 0)) ? (
-                    <div onPointerDown={(e) => e.preventDefault()} onMouseDown={(e) => e.preventDefault()} onClick={() => { if (!editingMessage) playUiSound('send'); (editingMessage ? saveEdit : send)(); }} style={{
+                    <div role="button" aria-label={editingMessage ? 'Save edit' : 'Send message'} onPointerDown={(e) => e.preventDefault()} onMouseDown={(e) => e.preventDefault()} onClick={() => { if (!editingMessage) playUiSound('send'); (editingMessage ? saveEdit : send)(); }} style={{
                       width: 40, height: 40, borderRadius: '50%', background: theme.coral, display: 'flex',
                       alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, WebkitTapHighlightColor: 'transparent', outline: 'none', border: 'none',
                     }}><Send size={17} color="white" style={{ marginLeft: -1 }} /></div>
@@ -17658,7 +18027,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       </div>
 
       {profileOf && (
-        <ProfilePanel
+        <ProfilePanel initialEdit={!!profileOf.__edit} initialShare={!!profileOf.__share}
           profile={profileOf} isSelf={profileOf.id === session.user.id} userId={session.user.id}
           isOnline={isUserOnline(profileOf) && !profileOf.hide_activity} onClose={() => setProfileOf(null)}
           onReport={handleReport} onSaved={(updated) => { setProfileOf({ ...updated, email: me.email }); if (updated.id === me.id) setMe((prev) => ({ ...prev, ...updated, email: prev.email })); }}
@@ -17895,6 +18264,17 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           onCancel={() => setMediaComposer(null)}
           onSend={sendMediaItems} />
       )}
+      {showCreate && (
+        <CreateSheet onClose={() => setShowCreate(false)}
+          onPost={() => { if (blockedByRestriction('post')) return; if (postInputRef.current) postInputRef.current.click(); }}
+          onStory={() => { if (blockedByRestriction('status')) return; if (storyInputRef.current) storyInputRef.current.click(); }}
+          onGroup={() => setShowCreateGroup(true)}
+          onChat={() => { setHomeTab('chats'); setTimeout(() => { if (searchInputRef.current) searchInputRef.current.focus(); }, 80); }} />
+      )}
+      {postComposer && (
+        <MediaComposer key={postComposer.key} files={postComposer.files} recipientName="your profile" mode="post"
+          onCancel={() => setPostComposer(null)} onSend={sharePost} />
+      )}
       {inAppToast && (
         <InAppMessageToast toast={inAppToast} top={`calc(8px + env(safe-area-inset-top) + ${viewportBox.offset || 0}px)`}
           onOpen={() => openToast(inAppToast)} onDismiss={() => setInAppToast(null)} />
@@ -18012,7 +18392,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           }} />
       )}
       {feedOpen && me && (
-        <FeedPanel me={me} userId={session.user.id} onClose={() => setFeedOpen(false)}
+        <FeedPanel me={me} userId={session.user.id} onClose={() => { setFeedOpen(false); setFeedStart(null); }} startPostId={feedStart ? feedStart.postId : null} initialTab={feedStart ? feedStart.tab : 'foryou'}
           onOpenProfile={(p) => { setFeedOpen(false); setProfileOf(sanitizeAvatar(p, session.user.id)); }} />
       )}
       {collectionOpen && me && (
@@ -18458,12 +18838,12 @@ function BotBackdrop() {
   const { theme } = useTheme();
   const dark = !!theme.dark;
   const base = dark
-    ? 'linear-gradient(180deg, #070B1A 0%, #0B1230 55%, #0A0F26 100%)'
-    : 'linear-gradient(180deg, #EEF3FF 0%, #E4ECFF 55%, #EAF0FF 100%)';
-  const line = dark ? 'rgba(90,140,255,0.09)' : 'rgba(40,80,200,0.07)';
+    ? 'linear-gradient(180deg, #100A1F 0%, #1B1238 55%, #140E2B 100%)'
+    : 'linear-gradient(180deg, #F4F0FF 0%, #ECE4FF 55%, #F1ECFF 100%)';
+  const line = dark ? 'rgba(170,140,255,0.09)' : 'rgba(110,70,220,0.07)';
   const orbs = dark
-    ? ['rgba(60,120,255,0.28)', 'rgba(150,80,255,0.24)', 'rgba(0,220,200,0.18)']
-    : ['rgba(60,120,255,0.20)', 'rgba(150,80,255,0.16)', 'rgba(0,200,180,0.14)'];
+    ? ['rgba(124,92,252,0.30)', 'rgba(183,156,255,0.22)', 'rgba(94,58,224,0.22)']
+    : ['rgba(124,92,252,0.20)', 'rgba(183,156,255,0.16)', 'rgba(94,58,224,0.12)'];
   return (
     <div aria-hidden="true" style={{ position: 'absolute', inset: 0, zIndex: -1, pointerEvents: 'none', overflow: 'hidden', background: base }}>
       <div style={{ position: 'absolute', inset: 0, backgroundImage: `linear-gradient(${line} 1px, transparent 1px), linear-gradient(90deg, ${line} 1px, transparent 1px)`, backgroundSize: '34px 34px', WebkitMaskImage: 'radial-gradient(ellipse at 50% 40%, #000 20%, transparent 85%)', maskImage: 'radial-gradient(ellipse at 50% 40%, #000 20%, transparent 85%)' }} />
