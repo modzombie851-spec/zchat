@@ -35,7 +35,12 @@ import {
 
 
 const ACCENT_PALETTES = {
-  coral: { coral: '#7C5CFC', coralDeep: '#6B48F0', gold: '#B79CFF', teal: '#00C2A8', danger: '#ED4956' },
+  coral: { label: 'Violet', coral: '#7C5CFC', coralDeep: '#6B48F0', gold: '#B79CFF', teal: '#00C2A8', danger: '#ED4956' },
+  ocean: { label: 'Ocean', coral: '#2F7CF6', coralDeep: '#1F5FD6', gold: '#8DB8FF', teal: '#00C2A8', danger: '#ED4956' },
+  rose: { label: 'Rose', coral: '#F0507A', coralDeep: '#D63A64', gold: '#FF9FBB', teal: '#00C2A8', danger: '#ED4956' },
+  emerald: { label: 'Emerald', coral: '#18A86B', coralDeep: '#128C58', gold: '#7FE0B5', teal: '#2F7CF6', danger: '#ED4956' },
+  amber: { label: 'Amber', coral: '#E98A1B', coralDeep: '#C87211', gold: '#FFC56E', teal: '#00C2A8', danger: '#ED4956' },
+  graphite: { label: 'Graphite', coral: '#5B6478', coralDeep: '#48506A', gold: '#A3ADC2', teal: '#00C2A8', danger: '#ED4956' },
 };
 const ACCENT = ACCENT_PALETTES.coral;
 
@@ -191,7 +196,7 @@ function ThemeProvider({ children }) {
       meta.setAttribute('content', bg);
     } catch {}
   }, [dark]);
-  const accent = ACCENT_PALETTES.coral;
+  const accent = ACCENT_PALETTES[accentName] || ACCENT_PALETTES.coral;
   const theme = { ...THEMES[dark ? 'dark' : 'light'], ...accent, dark };
   return (
     <ThemeContext.Provider value={{ theme, dark, setDark, accentName, setAccentName, soundOn, setSoundOn, reactionSoundOn, setReactionSoundOn, bgPatternOn, setBgPatternOn, fontScale, setFontScale, chatTheme, setChatTheme, bubbleColor, setBubbleColor, bubbleStyle, setBubbleStyle, keepTextStyle, setKeepTextStyle }}>
@@ -219,6 +224,7 @@ function overlayKindOf(n) {
   return null;
 }
 function reducedMotion() {
+  if (prefOn('zchat-reduce-motion')) return true;
   try { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); } catch { return false; }
 }
 function sheetOrDialogShowing() {
@@ -556,6 +562,8 @@ function GlobalStyle() {
       .zchat-mail-zoom { animation: zchat-mail-zoom-in 0.22s cubic-bezier(.2,.8,.3,1); }
       .zchat-wall { height: 100vh; height: 100lvh; }
       @keyframes zchat-float-up { 0% { transform: translateY(0) translateX(0); opacity: 0; } 10% { opacity: 1; } 100% { transform: translateY(-620px) translateX(18px); opacity: 0; } }
+      @keyframes zchat-shake { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-9px); } 40% { transform: translateX(8px); } 60% { transform: translateX(-6px); } 80% { transform: translateX(4px); } }
+      .zchat-shake { animation: zchat-shake 0.45s ease; }
       @keyframes zchat-drift-a { 0%, 100% { transform: translate(0,0); } 50% { transform: translate(30px, 20px); } }
       @keyframes zchat-drift-b { 0%, 100% { transform: translate(0,0); } 50% { transform: translate(-24px, -18px); } }
       @keyframes zchat-love-pulse { 0%, 100% { box-shadow: 0 0 10px rgba(255,77,141,0.28); } 50% { box-shadow: 0 0 20px rgba(255,77,141,0.55); } }
@@ -743,28 +751,92 @@ function Avatar({ emoji, name = '', online, size = 40, ring = false, frame = nul
   );
 }
 
+function AuthBackdrop() {
+  const { theme } = useTheme();
+  const a = theme.dark ? 0.55 : 0.32;
+  const b = theme.dark ? 0.36 : 0.22;
+  const c = theme.dark ? 0.3 : 0.18;
+  return (
+    <div aria-hidden="true" style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none' }}>
+      <div style={{ position: 'absolute', width: 380, height: 380, borderRadius: '50%', left: -130, top: -90, background: `radial-gradient(circle, rgba(124,92,252,${a}), rgba(124,92,252,0) 70%)`, filter: 'blur(28px)', animation: 'zchat-drift-a 14s ease-in-out infinite' }} />
+      <div style={{ position: 'absolute', width: 440, height: 440, borderRadius: '50%', right: -170, top: '28%', background: `radial-gradient(circle, rgba(236,72,153,${b}), rgba(236,72,153,0) 70%)`, filter: 'blur(36px)', animation: 'zchat-drift-b 18s ease-in-out infinite' }} />
+      <div style={{ position: 'absolute', width: 400, height: 400, borderRadius: '50%', left: '18%', bottom: -220, background: `radial-gradient(circle, rgba(0,194,168,${c}), rgba(0,194,168,0) 70%)`, filter: 'blur(34px)', animation: 'zchat-drift-a 22s ease-in-out infinite reverse' }} />
+      <div style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(${theme.dark ? 'rgba(255,255,255,0.075)' : 'rgba(60,30,130,0.08)'} 1px, transparent 1.3px)`, backgroundSize: '26px 26px' }} />
+      {[[8, 14, 1.6], [26, 62, 1.2], [68, 9, 1.4], [84, 40, 1.1], [52, 86, 1.5], [14, 88, 1], [92, 76, 1.3], [40, 30, 0.9]].map(([x, y, r], i) => (
+        <div key={i} style={{ position: 'absolute', left: `${x}%`, top: `${y}%`, width: r * 3, height: r * 3, borderRadius: '50%', background: theme.dark ? '#E9E1FF' : '#7C5CFC', opacity: theme.dark ? 0.55 : 0.35, animation: `zchat-badge-pulse ${3 + i * 0.6}s ease-in-out infinite`, boxShadow: theme.dark ? '0 0 8px rgba(233,225,255,0.6)' : 'none' }} />
+      ))}
+    </div>
+  );
+}
+
 function AuthShell({ children }) {
   const { theme } = useTheme();
   return (
     <div id="zapp-root" style={{
-      height: '100dvh', width: '100%', background: theme.bgGradient,
+      minHeight: '100dvh', width: '100%', background: theme.dark ? '#0A0716' : '#F3EEFF',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       fontFamily: FONT, padding: 20, boxSizing: 'border-box', overflowY: 'auto', position: 'relative',
-      paddingTop: 'calc(20px + env(safe-area-inset-top))',
-      paddingLeft: 'calc(20px + env(safe-area-inset-left))',
-      paddingRight: 'calc(20px + env(safe-area-inset-right))',
+      paddingTop: 'calc(24px + env(safe-area-inset-top))',
+      paddingBottom: 'calc(24px + env(safe-area-inset-bottom))',
+      paddingLeft: 'calc(18px + env(safe-area-inset-left))',
+      paddingRight: 'calc(18px + env(safe-area-inset-right))',
     }}>
       <GlobalStyle />
-      <div style={{ position: 'absolute', top: 18, right: 18 }}><ThemeToggleIcon /></div>
-      <div style={{ width: '100%', maxWidth: 380 }} className="zchat-fade">
-        <div style={{ textAlign: 'center', marginBottom: 26 }}>
-          <div style={{ display: 'inline-flex' }}><ZBrand size={34} showTag /></div>
+      <AuthBackdrop />
+      <div style={{ position: 'absolute', top: 'calc(14px + env(safe-area-inset-top))', right: 16, zIndex: 2 }}><ThemeToggleIcon /></div>
+      <div style={{ width: '100%', maxWidth: 400, position: 'relative', zIndex: 1 }} className="zchat-fade">
+        <div style={{ textAlign: 'center', marginBottom: 20 }}>
+          <div style={{ display: 'inline-flex' }}><ZBrand size={40} showTag /></div>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginTop: 14, flexWrap: 'wrap' }}>
+            {[[<MessageSquare size={12} />, 'Chats'], [<Camera size={12} />, 'Moments'], [<Phone size={12} />, 'Calls'], [<Sparkles size={12} />, 'Collection']].map(([icon, label]) => (
+              <span key={label} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 999, fontSize: 11.5, fontWeight: 700, color: theme.dark ? '#D9CCFF' : '#4A3F80', background: theme.dark ? 'rgba(124,92,252,0.16)' : 'rgba(124,92,252,0.1)', border: `1px solid ${theme.dark ? 'rgba(183,156,255,0.22)' : 'rgba(124,92,252,0.18)'}` }}>{icon}{label}</span>
+            ))}
+          </div>
         </div>
-        <div style={glass(theme, { borderRadius: 26, padding: 28, boxShadow: '0 12px 40px rgba(31,20,15,0.14)' })}>
+        <div style={{ borderRadius: 28, padding: '24px 22px', background: theme.dark ? 'rgba(21,15,38,0.74)' : 'rgba(255,255,255,0.84)', border: `1px solid ${theme.dark ? 'rgba(183,156,255,0.16)' : 'rgba(90,60,180,0.12)'}`, backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', boxShadow: theme.dark ? '0 24px 60px rgba(5,2,20,0.55)' : '0 20px 50px rgba(60,30,130,0.14)' }}>
           {children}
         </div>
       </div>
     </div>
+  );
+}
+
+function AppleLogo({ size = 18, color = 'currentColor' }) {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} fill={color} aria-hidden="true">
+      <path d="M16.37 12.6c-.02-2.3 1.88-3.4 1.97-3.46-1.07-1.57-2.74-1.78-3.33-1.81-1.42-.14-2.77.84-3.49.84-.72 0-1.83-.82-3.01-.8-1.55.02-2.98.9-3.78 2.29-1.61 2.8-.41 6.94 1.16 9.21.77 1.11 1.68 2.36 2.88 2.32 1.16-.05 1.6-.75 3-.75s1.79.75 3.01.73c1.24-.02 2.03-1.13 2.79-2.25.88-1.29 1.24-2.54 1.26-2.6-.03-.01-2.42-.93-2.46-3.72zM14.08 5.84c.64-.77 1.07-1.85.95-2.92-.92.04-2.03.61-2.69 1.38-.59.68-1.11 1.78-.97 2.83 1.03.08 2.07-.52 2.71-1.29z" />
+    </svg>
+  );
+}
+
+function AppleButton({ onError }) {
+  const { theme } = useTheme();
+  const [loading, setLoading] = useState(false);
+  const click = async () => {
+    if (loading) return;
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({ provider: 'apple', options: { redirectTo: window.location.origin } });
+      if (error) {
+        setLoading(false);
+        const msg = String(error.message || '');
+        if (onError) onError(/not enabled|unsupported provider|validation_failed/i.test(msg) ? 'Apple sign in is not switched on for ZChat yet. Use Google or email for now.' : friendlyError(error, "Couldn't sign in with Apple. Try again."));
+      }
+    } catch {
+      setLoading(false);
+      if (onError) onError("Couldn't start Apple sign in. Try again.");
+    }
+  };
+  const dark = theme.dark;
+  return (
+    <button onClick={click} disabled={loading} aria-label="Continue with Apple" className="zchat-press" style={{
+      width: '100%', height: 48, borderRadius: 15, border: dark ? 'none' : '1.5px solid #000',
+      background: dark ? '#FFFFFF' : '#000000', color: dark ? '#000000' : '#FFFFFF',
+      fontSize: 15, fontWeight: 700, cursor: loading ? 'default' : 'pointer', fontFamily: FONT,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9,
+    }}>
+      {loading ? <Spinner size={15} color={dark ? '#000' : '#fff'} /> : (<><AppleLogo size={19} color={dark ? '#000' : '#fff'} />Continue with Apple</>)}
+    </button>
   );
 }
 
@@ -850,13 +922,14 @@ function GoogleButton({ onError }) {
     <button
       onClick={handleClick}
       disabled={loading}
+      className="zchat-press"
       style={{
-        width: '100%', padding: '13px', borderRadius: 15, border: `1.5px solid ${theme.border}`,
-        background: theme.dark ? 'rgba(255,255,255,0.04)' : 'white', color: theme.ink,
-        fontSize: 14.5, fontWeight: 700, cursor: loading ? 'default' : 'pointer', fontFamily: FONT,
-        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+        width: '100%', height: 48, borderRadius: 15, border: `1.5px solid ${theme.border}`,
+        background: theme.dark ? 'rgba(255,255,255,0.05)' : 'white', color: theme.ink,
+        fontSize: 15, fontWeight: 700, cursor: loading ? 'default' : 'pointer', fontFamily: FONT,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 10,
       }}>
-      {loading ? <Spinner size={15} color={theme.ink} /> : (<><GoogleLogo size={17} />Continue with Google</>)}
+      {loading ? <Spinner size={15} color={theme.ink} /> : (<><GoogleLogo size={18} />Continue with Google</>)}
     </button>
   );
 }
@@ -897,7 +970,9 @@ function LoginStep({ onSuccess, onForgot, onGoRegister }) {
 
   return (
     <div>
-      <div style={{ fontSize: 19, fontWeight: 800, marginBottom: 18, color: theme.ink }}>Welcome back</div>
+      <div style={{ fontSize: 24, fontWeight: 800, color: theme.ink, letterSpacing: '-0.02em' }}>Welcome back</div>
+      <div style={{ fontSize: 13.5, color: theme.muted, marginTop: 4, marginBottom: 18 }}>Sign in to pick up your chats where you left them.</div>
+      <AppleButton onError={setErr} />
       <GoogleButton onError={setErr} />
       <OrDivider />
       <input style={{ ...inputStyle(theme), marginBottom: 10 }} placeholder="Email" autoCapitalize="none"
@@ -1192,9 +1267,11 @@ function RegisterFlow({ onDone, onBack, onStart, initialStage = 'email' }) {
     return (
       <div className="zchat-fade">
         <StepDots active="email" />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-          <Mail size={18} color={theme.muted} /><span style={{ fontSize: 13.5, color: theme.muted }}>Create your account</span>
-        </div>
+        <div style={{ fontSize: 22, fontWeight: 800, color: theme.ink, letterSpacing: '-0.02em', marginBottom: 4 }}>Create your account</div>
+        <div style={{ fontSize: 13.5, color: theme.muted, marginBottom: 16 }}>Takes about a minute.</div>
+        <AppleButton onError={setErr} />
+        <GoogleButton onError={setErr} />
+        <OrDivider />
         <input style={inputStyle(theme)} placeholder="you@example.com" autoCapitalize="none"
           value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && sendCode()} />
         {err && <div style={{ color: theme.danger, fontSize: 12.5, marginTop: 8 }}>{err}</div>}
@@ -1642,7 +1719,7 @@ function ToggleSwitch({ on, onClick }) {
   );
 }
 
-function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideActivity, onToggleActivity, onOpenAccounts, onOpenDelete, onOpenBlocked, blockedCount = 0, chatLockSet, chatLockHash, onSetChatLockPassword, onTurnOffChatLock, autoOpenLockSetup, onConsumedAutoOpen, me, rewardCount, onOpenCollection, onEditProfile, onPrivacySaved, isZAdmin, onOpenReports, onOpenAdmin, hasPasswordLogin, onOpenSaved, onOpenProfile }) {
+function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideActivity, onToggleActivity, onOpenAccounts, onOpenDelete, onOpenBlocked, blockedCount = 0, chatLockSet, chatLockHash, onSetChatLockPassword, onTurnOffChatLock, autoOpenLockSetup, onConsumedAutoOpen, me, rewardCount, onOpenCollection, onEditProfile, onPrivacySaved, isZAdmin, onOpenReports, onOpenAdmin, hasPasswordLogin, onOpenSaved, onOpenProfile, sessionForLinks, onOpenWhatsNew }) {
   useBackClose(true, onClose);
   const edgeBack = useEdgeSwipeBack(true);
   const [permText, setPermText] = useState('Checking…');
@@ -1672,7 +1749,6 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
     checkPerms();
   };
   const { theme, dark, setDark, accentName, setAccentName, soundOn, setSoundOn, reactionSoundOn, setReactionSoundOn, bgPatternOn, setBgPatternOn, fontScale, setFontScale, chatTheme, setChatTheme, bubbleColor, setBubbleColor, bubbleStyle, setBubbleStyle } = useTheme();
-  const accentLabels = { coral: 'Coral', ocean: 'Ocean', berry: 'Berry' };
   const [lockFlow, setLockFlow] = useState(null);
   const [igQuery, setIgQuery] = useState('');
   const [followerCount, setFollowerCount] = useState(null);
@@ -1705,6 +1781,12 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
   };
   const [section, setSection] = useState('main');
   useBackClose(section !== 'main', () => setSection('main'));
+  const [appLockOn, setAppLockOn] = useState(() => !!readAppLock().h);
+  useEffect(() => {
+    const on = () => setAppLockOn(!!readAppLock().h);
+    window.addEventListener('zchat-applock-changed', on);
+    return () => window.removeEventListener('zchat-applock-changed', on);
+  }, []);
   const [dragX, setDragX] = useState(0);
   const dragStartRef = useRef(null);
   const draggingRef = useRef(false);
@@ -1764,6 +1846,8 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
       { icon: <Lock />, label: 'Change password', onClick: () => setSection('password') },
       { icon: <ShieldCheck />, label: 'Two factor authentication', onClick: () => setSection('twofactor') },
       { icon: <Smartphone />, label: 'Active sessions', onClick: () => setSection('sessions') },
+      { icon: <LinkIcon />, label: 'Sign in methods', value: sessionForLinks && sessionForLinks.user && sessionForLinks.user.identities ? `${sessionForLinks.user.identities.length} linked` : undefined, onClick: () => setSection('linked') },
+      { icon: <Lock />, label: 'App lock', value: appLockOn ? 'On' : 'Off', onClick: () => setSection('applock') },
     ] },
     { title: 'Who can see your content', rows: [
       { icon: <Eye />, label: 'Privacy', onClick: () => setSection('privacy') },
@@ -1776,10 +1860,13 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
       { icon: <Bell />, label: 'Notifications', value: notifValue, onClick: () => setSection('notifications') },
       { icon: <Camera />, label: 'Camera & microphone', value: permText, onClick: fixPermissions },
       { icon: <Palette />, label: 'Theme', onClick: () => setSection('appearance') },
+      { icon: <MessageSquare />, label: 'Chats', onClick: () => setSection('chats') },
+      { icon: <KeyboardIcon />, label: 'Keyboard shortcuts', onClick: () => setSection('shortcuts') },
       { icon: <Database />, label: 'Storage', onClick: () => setSection('storage') },
     ] },
     { title: 'Admin', rows: isZAdmin ? [{ icon: <ShieldCheck />, label: 'Admin panel', onClick: onOpenAdmin }, { icon: <ShieldAlert />, label: 'Report queue', onClick: onOpenReports }] : [] },
     { title: 'More info and support', rows: [
+      { icon: <Sparkles />, label: 'What is new', value: APP_VERSION, onClick: () => { if (onOpenWhatsNew) onOpenWhatsNew(); } },
       { icon: <HelpCircle />, label: 'About ZChat', value: `Version ${APP_VERSION}`, onClick: () => setSection('about') },
     ] },
     { title: 'Login', rows: [
@@ -1896,6 +1983,23 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
             <SettingsRow icon={dark ? <Sun size={16} /> : <Moon size={16} />} label="Dark mode" right={<ToggleSwitch on={dark} onClick={() => setDark((d) => !d)} />} />
             <div style={{ padding: '10px 4px', borderBottom: `1px solid ${theme.border}` }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                <div style={{ width: 34, height: 34, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', background: `${theme.coral}1F`, color: theme.coralDeep }}><Palette size={16} /></div>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: theme.ink }}>App color</div>
+                  <div style={{ fontSize: 12, color: theme.muted }}>{(ACCENT_PALETTES[accentName] || ACCENT_PALETTES.coral).label}</div>
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 10, paddingLeft: 44, flexWrap: 'wrap' }}>
+                {Object.entries(ACCENT_PALETTES).map(([key, spec]) => (
+                  <div key={key} role="button" aria-label={`App color ${spec.label}`} onClick={() => { hapticTap(); playUiSound('tap'); setAccentName(key); }} title={spec.label} style={{
+                    width: 32, height: 32, borderRadius: '50%', cursor: 'pointer', background: `linear-gradient(135deg, ${spec.gold}, ${spec.coral} 55%, ${spec.coralDeep})`,
+                    border: accentName === key ? `3px solid ${theme.ink}` : '3px solid transparent', boxShadow: `0 0 0 1px ${theme.border}`,
+                  }} />
+                ))}
+              </div>
+            </div>
+            <div style={{ padding: '10px 4px', borderBottom: `1px solid ${theme.border}` }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
                 <div style={{ width: 34, height: 34, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', background: `${theme.coral}1F`, color: theme.coralDeep }}><Sparkles size={16} /></div>
                 <div style={{ fontSize: 14, fontWeight: 600, color: theme.ink }}>Bubble color</div>
               </div>
@@ -1959,11 +2063,34 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
           </>
         )}
 
+        {section === 'chats' && (
+          <>
+            <SectionHeader title="Chats" />
+            <ChatsPrefsSection />
+          </>
+        )}
+
+        {section === 'applock' && (
+          <>
+            <SectionHeader title="App lock" />
+            <AppLockSection />
+          </>
+        )}
+
+        {section === 'shortcuts' && (
+          <>
+            <SectionHeader title="Keyboard shortcuts" />
+            <ShortcutsSection />
+          </>
+        )}
+
         {section === 'notifications' && (
           <>
             <SectionHeader title="Notifications" />
             <SettingsRow icon={soundOn ? <Volume2 size={16} /> : <VolumeX size={16} />} label="Message sound" right={<ToggleSwitch on={soundOn} onClick={() => setSoundOn((s) => !s)} />} />
             <SettingsRow icon={reactionSoundOn ? <Volume2 size={16} /> : <VolumeX size={16} />} label="Reaction sound" right={<ToggleSwitch on={reactionSoundOn} onClick={() => setReactionSoundOn((s) => !s)} />} />
+            <IgHeading>Message tone</IgHeading>
+            <ToneList />
           </>
         )}
 
@@ -1981,6 +2108,13 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
             <SettingsRow icon={<Bell size={16} />} label="Follow requests" onClick={onOpenRequests} />
             <SettingsRow icon={<UserPlus size={16} />} label="Switch account" onClick={onOpenAccounts} />
             <SettingsRow icon={<Trash2 size={16} />} label="Delete my account" danger onClick={onOpenDelete} />
+          </>
+        )}
+
+        {section === 'linked' && (
+          <>
+            <SectionHeader title="Sign in methods" />
+            <LinkedAccountsSection session={sessionForLinks} />
           </>
         )}
 
@@ -3121,7 +3255,7 @@ function EmojiPickerBar({ onPick, onClose }) {
       <div onClick={(e) => e.stopPropagation()} style={{
         background: theme.panelBg, borderRadius: 22, padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 14,
       }}>
-        {REACTION_EMOJIS.map((e) => (
+        {getQuickReactions().map((e) => (
           <div key={e} onClick={() => onPick(e)} style={{ fontSize: 26, cursor: 'pointer' }}>{e}</div>
         ))}
         <div onClick={() => setShowFullEmoji(true)} style={{
@@ -5903,6 +6037,31 @@ function useMentionProfiles(names) {
   }, [key]);
 }
 
+const INLINE_FORMAT_RE = /(^|[\s(])([*_~`])(\S(?:[^\n]*?\S)?)\2(?=[\s).,!?:;]|$)/;
+function formatInline(text, keyBase) {
+  if (!text || !prefOn('zchat-format') || !/[*_~`]/.test(text)) return text;
+  const out = [];
+  let rest = text;
+  let k = 0;
+  let guard = 0;
+  while (rest && guard < 60) {
+    guard += 1;
+    const m = rest.match(INLINE_FORMAT_RE);
+    if (!m) break;
+    const at = m.index + m[1].length;
+    if (at > 0) out.push(rest.slice(0, at));
+    const mark = m[2];
+    const inner = m[3];
+    const key = `${keyBase}-${k++}`;
+    if (mark === '*') out.push(<strong key={key} style={{ fontWeight: 800 }}>{formatInline(inner, key)}</strong>);
+    else if (mark === '_') out.push(<em key={key}>{formatInline(inner, key)}</em>);
+    else if (mark === '~') out.push(<span key={key} style={{ textDecoration: 'line-through' }}>{formatInline(inner, key)}</span>);
+    else out.push(<code key={key} style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', fontSize: '0.92em', padding: '0 4px', borderRadius: 5, background: 'rgba(127,127,127,0.18)' }}>{inner}</code>);
+    rest = rest.slice(at + m[0].length - m[1].length);
+  }
+  if (rest) out.push(rest);
+  return out.length === 1 && typeof out[0] === 'string' ? out[0] : out;
+}
 function RichText({ text, onMention }) {
   const { theme } = useTheme();
   const linked = linkifyText(text);
@@ -5916,7 +6075,7 @@ function RichText({ text, onMention }) {
   return (
     <>
       {pieces.map((seg, i) => {
-        if (!seg || !seg.mention) return <React.Fragment key={i}>{seg}</React.Fragment>;
+        if (!seg || !seg.mention) return <React.Fragment key={i}>{typeof seg === 'string' ? formatInline(seg, i) : seg}</React.Fragment>;
         const found = mentionCache.get(seg.mention);
         if (!found) return <React.Fragment key={i}>{seg.raw}</React.Fragment>;
         return (
@@ -6003,7 +6162,7 @@ function MentionSuggestions({ query, priority, excludeIds, myId, onPick }) {
 }
 
 
-function MessageBubble({ isBot, m, isMe, onDelete, selectionMode, selected, onToggleSelect, onLongPress, onOpenImage, onOpenVideo, reactions, onReact, onOpenWhoReacted, replyPreview, onSwipeReply, onJumpToMessage, highlighted, senderLabel, senderAvatar, hideReadStatus, onOpenSenderProfile, canModerate, onOpenMention, mentionsMe, onOpenStoryRef, onCallBack, onOpenSticker, tightBelow, senderVerified, onOpenPost, tightAbove, senderFrame, senderCustomBadge }) {
+function MessageBubble({ gameLive, onGameMove, onGameRematch, onOpenGame, peerName, myId, isBot, m, isMe, onDelete, selectionMode, selected, onToggleSelect, onLongPress, onOpenImage, onOpenVideo, reactions, onReact, onOpenWhoReacted, replyPreview, onSwipeReply, onJumpToMessage, highlighted, senderLabel, senderAvatar, hideReadStatus, onOpenSenderProfile, canModerate, onOpenMention, mentionsMe, onOpenStoryRef, onCallBack, onOpenSticker, tightBelow, senderVerified, onOpenPost, tightAbove, senderFrame, senderCustomBadge }) {
   const mediaOnly = !m.deleted && (m.type === 'image' || m.type === 'video')
     && !replyPreview && !senderLabel && !m.forwarded
     && !(m.content && !String(m.content).startsWith('/'));
@@ -6026,8 +6185,10 @@ function MessageBubble({ isBot, m, isMe, onDelete, selectionMode, selected, onTo
   const bubbleColorSpec = BUBBLE_COLORS[bubbleColor] || BUBBLE_COLORS.default;
   const sharedProfileId = m.type === 'text' && !m.deleted ? parseProfileLink(m.content) : null;
   const sharedPostId = m.type === 'text' && !m.deleted ? parsePostLink(m.content) : null;
-  const linkPreviewUrl = m.type === 'text' && !m.deleted && !sharedPostId && !sharedProfileId ? firstPreviewableUrl(m.content) : null;
-  const inlineTime = m.type === 'text' && !m.deleted && !!m.content && !sharedProfileId && !sharedPostId && !(m.story_id && (m.content === STORY_MENTION_TEXT || m.content === STORY_GROUP_MENTION_TEXT || m.content === STORY_SHARE_TEXT));
+  const gameState = m.type === 'text' && !m.deleted ? parseGameMessage(m.content) : null;
+  const locationShare = m.type === 'text' && !m.deleted && !gameState ? parseLocationMessage(m.content) : null;
+  const linkPreviewUrl = m.type === 'text' && !m.deleted && !sharedPostId && !sharedProfileId && !gameState && !locationShare ? firstPreviewableUrl(m.content) : null;
+  const inlineTime = m.type === 'text' && !m.deleted && !!m.content && !sharedProfileId && !sharedPostId && !gameState && !locationShare && !(m.story_id && (m.content === STORY_MENTION_TEXT || m.content === STORY_GROUP_MENTION_TEXT || m.content === STORY_SHARE_TEXT));
 
   if (m.type === 'system' && parseCallLog(m.content)) {
     return <CallLogBubble m={m} isMe={isMe} onCallBack={onCallBack} />;
@@ -6050,7 +6211,7 @@ function MessageBubble({ isBot, m, isMe, onDelete, selectionMode, selected, onTo
     if (longPressFiredRef.current) { longPressFiredRef.current = false; return; }
     if (selectionMode) { onToggleSelect(m.id); return; }
     const now = Date.now();
-    if (now - lastTapRef.current < 350) {
+    if (now - lastTapRef.current < 350 && prefOn('zchat-doubletap')) {
       onReact(m.id, '\u2764\u{FE0F}');
       setBurstHeart(true);
       setTimeout(() => setBurstHeart(false), 650);
@@ -6084,7 +6245,7 @@ function MessageBubble({ isBot, m, isMe, onDelete, selectionMode, selected, onTo
     const dx = e.clientX - startPosRef.current.x;
     const dy = e.clientY - startPosRef.current.y;
     if (Math.abs(dx) > 5 || Math.abs(dy) > 5) clearPressTimer();
-    if (!m.deleted && !selectionMode && Math.abs(dx) > Math.abs(dy) && dx > 0) {
+    if (!m.deleted && !selectionMode && prefOn('zchat-swipe-reply') && Math.abs(dx) > Math.abs(dy) && dx > 0) {
       draggingRef.current = true;
       const clamped = Math.min(dx, 60);
       dragXRef.current = clamped;
@@ -6258,7 +6419,31 @@ function MessageBubble({ isBot, m, isMe, onDelete, selectionMode, selected, onTo
                   <ProfileLinkCard profileId={sharedProfileId} onOpen={onOpenMention} />
                 </div>
               )}
-              {m.type === 'text' && m.content && !sharedProfileId && !sharedPostId && !(m.story_id && (m.content === STORY_MENTION_TEXT || m.content === STORY_GROUP_MENTION_TEXT || m.content === STORY_SHARE_TEXT)) && (
+              {gameState && (
+                <div style={{ paddingTop: 2, paddingBottom: 6 }}>
+                  {gameState.g === 'ttt' && (
+                    <TicTacToeCard state={gameState} myId={myId} live={!!gameLive} peerName={peerName} ink={bubbleSpec ? bubbleSpec.ink : undefined}
+                      onMove={(next) => onGameMove && onGameMove(next)} onRematch={onGameRematch ? () => onGameRematch(gameState) : null} />
+                  )}
+                  {gameState.g === 'c4' && (
+                    <ConnectFourCard state={gameState} myId={myId} live={!!gameLive} peerName={peerName} ink={bubbleSpec ? bubbleSpec.ink : undefined}
+                      onMove={(next) => onGameMove && onGameMove(next)} onRematch={onGameRematch ? () => onGameRematch(gameState) : null} />
+                  )}
+                  {gameState.g === 'rps' && (
+                    <RpsCard state={gameState} myId={myId} live={!!gameLive} peerName={peerName} ink={bubbleSpec ? bubbleSpec.ink : undefined}
+                      onMove={(next) => onGameMove && onGameMove(next)} onRematch={onGameRematch ? () => onGameRematch(gameState) : null} />
+                  )}
+                  {gameState.g === 'score' && (
+                    <ScoreCard state={gameState} isMe={isMe} senderName={peerName} ink={bubbleSpec ? bubbleSpec.ink : undefined} onPlay={() => onOpenGame && onOpenGame(gameState.k)} />
+                  )}
+                </div>
+              )}
+              {locationShare && (
+                <div style={{ paddingTop: 2, paddingBottom: 16 }}>
+                  <LocationCard loc={locationShare} isMe={isMe} ink={bubbleSpec ? bubbleSpec.ink : undefined} />
+                </div>
+              )}
+              {m.type === 'text' && m.content && !sharedProfileId && !sharedPostId && !gameState && !locationShare && !(m.story_id && (m.content === STORY_MENTION_TEXT || m.content === STORY_GROUP_MENTION_TEXT || m.content === STORY_SHARE_TEXT)) && (
                 <div style={{
                   fontSize: (m.text_size ? textSizePx(m.text_size) : 15) * fontScale,
                   fontWeight: m.text_size === 'l' || m.text_size === 'xl' ? 800 : 400,
@@ -6806,11 +6991,16 @@ function describeMessage(m) {
       }
       return { kind: 'system', text: m.content || '' };
     }
-    default: return { kind: 'text', text: parseProfileLink(m.content) ? 'Shared a profile' : parsePostLink(m.content) ? 'Shared a post' : plainPreviewText(m.content || '') };
+    default: {
+      const gs = parseGameMessage(m.content);
+      if (gs) return { kind: 'game', text: gs.g === 'score' ? `High score in ${gameTitle(gs)}` : gameTitle(gs) };
+      if (parseLocationMessage(m.content)) return { kind: 'location', text: 'Location' };
+      return { kind: 'text', text: parseProfileLink(m.content) ? 'Shared a profile' : parsePostLink(m.content) ? 'Shared a post' : plainPreviewText(m.content || '') };
+    }
   }
 }
 
-const PREVIEW_ICONS = { image: Camera, video: VideoIcon, audio: Mic, sticker: Smile, deleted: Ban, story: StatusIcon, call: Phone, callmissed: PhoneMissedIcon };
+const PREVIEW_ICONS = { image: Camera, video: VideoIcon, audio: Mic, sticker: Smile, deleted: Ban, story: StatusIcon, call: Phone, callmissed: PhoneMissedIcon, game: GamepadIcon, location: Compass };
 function PhoneMissedIcon({ size = 14, style }) { return <Phone size={size} color="#FF3B30" style={style} />; }
 
 function PreviewLine({ preview, prefix, color, weight = 400, size = 12 }) {
@@ -6974,7 +7164,7 @@ function ConfirmSheet({ title, text, confirmLabel = 'Confirm', danger = true, on
   );
 }
 
-function MessageContextMenu({ message, isMine, canEditText, canModerate, anchorRect, bubble, isPinned, onPin, onUnpin, onClose, onReact, onReply, onCopy, onEdit, onForward, onReport, onDeleteForMe, onDeleteForEveryone, onSelectMultiple, onSave, onToggleSave, isSaved }) {
+function MessageContextMenu({ message, isMine, canEditText, canModerate, anchorRect, bubble, isPinned, onPin, onUnpin, onClose, onReact, onReply, onCopy, onEdit, onForward, onReport, onDeleteForMe, onDeleteForEveryone, onSelectMultiple, onSave, onToggleSave, isSaved, onInfo }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
   const [showFullEmoji, setShowFullEmoji] = useState(false);
@@ -7028,7 +7218,7 @@ function MessageContextMenu({ message, isMine, canEditText, canModerate, anchorR
           display: 'flex', alignItems: 'center', gap: 6, padding: '0 10px', borderRadius: 26,
           background: theme.panelBg, boxShadow: '0 8px 28px rgba(0,0,0,0.28)', opacity: ready ? 1 : 0,
         }}>
-          {REACTION_EMOJIS.map((e) => (
+          {getQuickReactions().map((e) => (
             <div key={e} onClick={guard(() => onReact(e))} style={{ fontSize: 25, cursor: 'pointer', padding: '0 2px', lineHeight: 1 }}>{e}</div>
           ))}
           <div onClick={() => setShowFullEmoji(true)} style={{
@@ -7056,6 +7246,7 @@ function MessageContextMenu({ message, isMine, canEditText, canModerate, anchorR
           {!message.deleted && message.type !== 'system' && onToggleSave && row(<Bookmark size={18} fill={isSaved ? 'currentColor' : 'none'} />, isSaved ? 'Remove from Saved' : 'Add to Saved', onToggleSave)}
           {!message.deleted && message.type !== 'system' && onPin && row(<Pin_ size={18} color={theme.ink} />, isPinned ? 'Unpin' : 'Pin', isPinned ? onUnpin : onPin)}
           {row(<CheckCheck size={18} />, 'Select', onSelectMultiple)}
+          {onInfo && message.type !== 'system' && row(<HelpCircle size={18} />, 'Info', onInfo)}
           {!isMine && !message.deleted && row(<Flag size={18} />, 'Report', onReport, true)}
           {row(<Trash2 size={18} />, 'Delete for me', onDeleteForMe, true)}
           {(isMine || canModerate) && !message.deleted && row(<Trash2 size={18} />, 'Delete for everyone', onDeleteForEveryone, true)}
@@ -9534,7 +9725,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-const APP_VERSION = '12.2V';
+const APP_VERSION = '12.4V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -11240,7 +11431,19 @@ function playUiSound(kind) {
     };
     const bell = (freq, start, length, volume) => { tone(freq, freq, start, length, volume); tone(freq * 2, freq * 2, start, length * 0.55, volume * 0.22); };
     if (kind === 'send') { swish(0, 0.16, 0.07, 1400, 0.7, 3600); tone(620, 920, 0.02, 0.09, 0.05); }
-    else if (kind === 'receive') { bell(988, 0, 0.22, 0.09); bell(1319, 0.09, 0.3, 0.075); }
+    else if (kind === 'receive') {
+      const tn = readTone();
+      if (tn === 'pop') { tone(520, 980, 0, 0.08, 0.09); tone(980, 1400, 0.07, 0.1, 0.06); }
+      else if (tn === 'drop') { tone(1500, 500, 0, 0.18, 0.08); bell(740, 0.12, 0.2, 0.05); }
+      else if (tn === 'bell') { bell(1760, 0, 0.5, 0.07); bell(2217, 0.16, 0.5, 0.045); }
+      else if (tn === 'pulse') { tone(660, 660, 0, 0.07, 0.07, 'triangle'); tone(660, 660, 0.12, 0.07, 0.07, 'triangle'); tone(880, 880, 0.24, 0.12, 0.07, 'triangle'); }
+      else { bell(988, 0, 0.22, 0.09); bell(1319, 0.09, 0.3, 0.075); }
+    }
+    else if (kind === 'pad1') { tone(392, 392, 0, 0.28, 0.08); }
+    else if (kind === 'pad2') { tone(494, 494, 0, 0.28, 0.08); }
+    else if (kind === 'pad3') { tone(587, 587, 0, 0.28, 0.08); }
+    else if (kind === 'pad4') { tone(784, 784, 0, 0.28, 0.08); }
+    else if (kind === 'win') { bell(784, 0, 0.12, 0.06); bell(988, 0.1, 0.12, 0.06); bell(1175, 0.2, 0.12, 0.06); bell(1568, 0.3, 0.3, 0.07); }
     else if (kind === 'like') { tone(820, 1120, 0, 0.07, 0.06); bell(1319, 0.06, 0.16, 0.06); }
     else if (kind === 'repost') { bell(660, 0, 0.1, 0.05); bell(880, 0.08, 0.1, 0.05); bell(1320, 0.16, 0.18, 0.06); }
     else if (kind === 'record-start') { tone(420, 700, 0, 0.12, 0.06); }
@@ -13647,7 +13850,67 @@ function SwipeRow({ children, actions, disabled, bg }) {
   );
 }
 
+const PREF_DEFAULTS = { 'zchat-enter-send': true, 'zchat-doubletap': true, 'zchat-haptics': true, 'zchat-reduce-motion': false, 'zchat-swipe-reply': true, 'zchat-format': true, 'zchat-effects': true };
+const prefCache = {};
+function prefOn(key) {
+  if (key in prefCache) return prefCache[key];
+  let v = null;
+  try { v = localStorage.getItem(key); } catch {}
+  const on = v == null ? !!PREF_DEFAULTS[key] : v === '1';
+  prefCache[key] = on;
+  return on;
+}
+function setPref(key, on) {
+  prefCache[key] = !!on;
+  try { localStorage.setItem(key, on ? '1' : '0'); } catch {}
+  try { window.dispatchEvent(new Event('zchat-pref-changed')); } catch {}
+}
+function usePref(key) {
+  const [v, setV] = useState(() => prefOn(key));
+  useEffect(() => {
+    const on = () => setV(prefOn(key));
+    window.addEventListener('zchat-pref-changed', on);
+    return () => window.removeEventListener('zchat-pref-changed', on);
+  }, [key]);
+  return [v, (on) => { setPref(key, on); setV(!!on); }];
+}
+function getQuickReactions() {
+  try {
+    const a = JSON.parse(localStorage.getItem('zchat-quick-reactions') || 'null');
+    if (Array.isArray(a) && a.length === 6 && a.every((x) => typeof x === 'string' && x)) return a;
+  } catch {}
+  return REACTION_EMOJIS;
+}
+function setQuickReactions(a) { try { localStorage.setItem('zchat-quick-reactions', JSON.stringify(a)); } catch {} }
+const NOTIF_TONES = [{ k: 'chime', l: 'Chime' }, { k: 'pop', l: 'Pop' }, { k: 'drop', l: 'Drop' }, { k: 'bell', l: 'Bell' }, { k: 'pulse', l: 'Pulse' }];
+function readTone() { try { return localStorage.getItem('zchat-tone') || 'chime'; } catch { return 'chime'; } }
+function readAppLock() {
+  try { const o = JSON.parse(localStorage.getItem('zchat-applock') || 'null'); return o && typeof o === 'object' ? o : {}; } catch { return {}; }
+}
+function writeAppLock(cfg) {
+  try { localStorage.setItem('zchat-applock', JSON.stringify(cfg || {})); } catch {}
+  try { window.dispatchEvent(new Event('zchat-applock-changed')); } catch {}
+}
+async function hashAppPin(pin) {
+  const text = `zchat-pin:${pin}`;
+  try {
+    if (window.crypto && window.crypto.subtle && window.TextEncoder) {
+      const buf = await window.crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+      return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
+    }
+  } catch {}
+  let h = 5381;
+  for (let i = 0; i < text.length; i++) h = ((h << 5) + h + text.charCodeAt(i)) >>> 0;
+  return `x${h.toString(16)}`;
+}
+async function verifyPin(pin) {
+  const cfg = readAppLock();
+  if (!cfg.h) return true;
+  const h = await hashAppPin(pin);
+  return h === cfg.h;
+}
 function hapticTap() {
+  if (!prefOn('zchat-haptics')) return;
   try { if (navigator.vibrate) navigator.vibrate(6); } catch {}
 }
 
@@ -13735,7 +13998,7 @@ function HeaderIconButton({ label, onClick, children, badge, accent }) {
   );
 }
 
-function CreateSheet({ onClose, onPost, onStory, onGroup, onChat }) {
+function CreateSheet({ onClose, onPost, onStory, onGroup, onChat, onGames }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
   const drag = useSheetDrag(onClose);
@@ -13744,7 +14007,8 @@ function CreateSheet({ onClose, onPost, onStory, onGroup, onChat }) {
     { k: 'story', label: 'New story', desc: 'Disappears after 24 hours', icon: <Camera size={20} />, bg: 'linear-gradient(135deg, #ec4899, #f59e0b)', on: onStory },
     { k: 'group', label: 'New group', desc: 'Chat with up to 50 people', icon: <Users size={20} />, bg: 'linear-gradient(135deg, #10b981, #0ea5e9)', on: onGroup },
     { k: 'chat', label: 'New chat', desc: 'Find someone by username', icon: <MessageSquare size={20} />, bg: 'linear-gradient(135deg, #3b82f6, #6366f1)', on: onChat },
-  ];
+    onGames ? { k: 'games', label: 'Play a game', desc: 'Twelve games, solo or with a friend', icon: <GamepadIcon size={22} />, bg: 'linear-gradient(135deg, #f59e0b, #ef4444)', on: onGames } : null,
+  ].filter(Boolean);
   return (
     <Portal>
       <div onClick={onClose} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 640, background: 'rgba(5,8,16,0.55)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontFamily: FONT }}>
@@ -14025,7 +14289,7 @@ function CallsTab({ userId, groups, onCall, onOpenProfile, version }) {
   );
 }
 
-function MeTab({ me, counts, onOpenProfile, onEditProfile, onSettings, onCollection, onSaved, onArchive, onMail, onRequests, onDiscover, onSwitchAccount, onShare, onInvite }) {
+function MeTab({ me, counts, onOpenProfile, onEditProfile, onSettings, onCollection, onSaved, onArchive, onMail, onRequests, onDiscover, onSwitchAccount, onShare, onInvite, onGames }) {
   const { theme } = useTheme();
   const c = igPalette(theme);
   const [social, setSocial] = useState(() => { try { return JSON.parse(localStorage.getItem('zchat-me-social') || 'null') || { followers: 0, following: 0, posts: 0 }; } catch { return { followers: 0, following: 0, posts: 0 }; } });
@@ -14079,6 +14343,7 @@ function MeTab({ me, counts, onOpenProfile, onEditProfile, onSettings, onCollect
           {btn('Share profile', <Share2 size={16} strokeWidth={1.9} />, onShare)}
         </div>
         <IgHeading>Your stuff</IgHeading>
+        {row(<GamepadIcon size={22} />, 'Games', onGames, { sub: 'Twelve games, solo or with a friend' })}
         {row(<Sparkles />, 'Collection', onCollection, { value: counts.rewards ? `${counts.rewards} unlocked` : undefined })}
         {row(<Bookmark />, 'Saved messages', onSaved)}
         {row(<Archive />, 'Archived chats', onArchive, { value: counts.archived ? String(counts.archived) : undefined })}
@@ -14098,7 +14363,7 @@ function MeTab({ me, counts, onOpenProfile, onEditProfile, onSettings, onCollect
 }
 
 function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAccount, onAddAccount, onRemoveAccount, switchingAccountId }) {
-  const { theme, bgPatternOn, chatTheme, bubbleStyle, keepTextStyle } = useTheme();
+  const { theme, bgPatternOn, chatTheme, bubbleStyle, keepTextStyle, setDark } = useTheme();
   const assetProgress = useAssetPrefetch();
   const [notifPermission, setNotifPermission] = useState(typeof Notification !== 'undefined' ? Notification.permission : 'default');
   const [notifBannerDismissed, setNotifBannerDismissed] = useState(() => {
@@ -14509,6 +14774,129 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [showBubbleSheet, setShowBubbleSheet] = useState(false);
   const [showNewChat, setShowNewChat] = useNavState(false);
   const [clearChatAsk, setClearChatAsk] = useState(false);
+  const activeProfileRef = useRef(null);
+  activeProfileRef.current = activeProfile;
+  const [showGames, setShowGames] = useNavState(false);
+  const [gamePicker, setGamePicker] = useNavState(false);
+  const [locating, setLocating] = useState(false);
+  const [gameSheetFor, setGameSheetFor] = useState(null);
+  const [infoFor, setInfoFor] = useState(null);
+  const [screenEffect, setScreenEffect] = useState(null);
+  const effectSeenRef = useRef({ chat: null, id: null, count: 0 });
+  const [manualUnread, setManualUnread] = useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem(`zchat-unread-marks-${session.user.id}`) || '[]')); } catch { return new Set(); }
+  });
+  const setManualUnreadFor = (otherId, on) => {
+    setManualUnread((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(otherId); else next.delete(otherId);
+      try { localStorage.setItem(`zchat-unread-marks-${session.user.id}`, JSON.stringify([...next])); } catch {}
+      return next;
+    });
+  };
+  const activeGroupRef = useRef(null);
+  activeGroupRef.current = activeGroup;
+  const navActionsRef = useRef({});
+  const sendGameStateTo = async (profile, state) => {
+    if (!profile) return;
+    const content = encodeGameMessage(state);
+    const { data } = await sendMessage(session.user.id, profile.id, 'text', content, null);
+    if (!data) { showSnack('Could not send the game'); return; }
+    if (activeProfileRef.current && activeProfileRef.current.id === profile.id) setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
+    const title = gameTitle(state);
+    const low = title.toLowerCase();
+    upsertConversation(profile.id, state.g === 'score' ? `High score in ${title}` : title, 'text');
+    const text = state.g === 'score' ? `Scored ${formatGameScore(state.k, state.s)} in ${title}` : state.n === 0 ? `Challenged you to ${low}` : (state.w ? `Finished your ${low} game` : `Made a move in ${low}`);
+    notifyUser(profile.id, me.name, text, `/?dm=${session.user.id}`, me.avatar);
+    playUiSound('send');
+  };
+  const newGameState = (kind, profile) => {
+    const base = { id: newClientId(), x: session.user.id, o: profile.id, w: null, n: 0 };
+    if (kind === 'c4') return { g: 'c4', b: Array(42).fill(0), t: profile.id, ...base };
+    if (kind === 'rps') return { g: 'rps', r: [{ x: null, o: null }], ...base };
+    return { g: 'ttt', b: [0, 0, 0, 0, 0, 0, 0, 0, 0], t: profile.id, ...base };
+  };
+  const startGameWith = async (profile, kind) => {
+    if (!profile || profile.is_bot) return;
+    if (!activeProfileRef.current || activeProfileRef.current.id !== profile.id) await openChat(profile, null);
+    sendGameStateTo(profile, newGameState(kind || 'ttt', profile));
+  };
+  const sendScoreTo = async (profile, k, sc) => {
+    if (!profile || profile.is_bot) return;
+    if (!activeProfileRef.current || activeProfileRef.current.id !== profile.id) await openChat(profile, null);
+    sendGameStateTo(profile, { g: 'score', id: newClientId(), k, s: sc, n: 0, w: null });
+  };
+  const newTicTacToe = (profile) => newGameState('ttt', profile);
+  const startTicTacToeWith = (profile) => startGameWith(profile, 'ttt');
+  const [appLocked, setAppLocked] = useState(() => !!readAppLock().h);
+  useEffect(() => {
+    const onVis = () => {
+      const cfg = readAppLock();
+      if (!cfg.h) return;
+      if (document.visibilityState === 'hidden') { try { localStorage.setItem('zchat-applock-hidden', String(Date.now())); } catch {} return; }
+      let hid = 0;
+      try { hid = parseInt(localStorage.getItem('zchat-applock-hidden') || '0', 10) || 0; } catch {}
+      if (hid && Date.now() - hid >= (cfg.d || 0) * 1000) setAppLocked(true);
+    };
+    const lockNow = () => { if (readAppLock().h) setAppLocked(true); };
+    document.addEventListener('visibilitychange', onVis);
+    window.addEventListener('zchat-lock-now', lockNow);
+    return () => { document.removeEventListener('visibilitychange', onVis); window.removeEventListener('zchat-lock-now', lockNow); };
+  }, []);
+  const displayListRef = useRef([]);
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.defaultPrevented || isTouchDevice()) return;
+      const mod = e.ctrlKey || e.metaKey;
+      const key = String(e.key || '').toLowerCase();
+      if (mod && !e.shiftKey && !e.altKey && key === 'k') {
+        e.preventDefault();
+        setHomeTab('chats');
+        setTimeout(() => { if (searchInputRef.current) { searchInputRef.current.focus(); searchInputRef.current.select(); } }, 40);
+        return;
+      }
+      if (mod && e.shiftKey && key === 'u') { e.preventDefault(); setListFilter((f) => (f === 'unread' ? 'all' : 'unread')); return; }
+      if (mod && e.shiftKey && key === 'd') { e.preventDefault(); setDark((d) => !d); return; }
+      if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+        const list = displayListRef.current || [];
+        if (!list.length) return;
+        e.preventDefault();
+        const isGroupItem = (x) => x.__kind === 'group' || (!x.__kind && !x.otherProfile);
+        const cur = activeProfileRef.current ? `dm-${activeProfileRef.current.id}` : (activeGroupRef.current ? `group-${activeGroupRef.current.id}` : null);
+        const keyOf = (x) => (isGroupItem(x) ? `group-${x.id}` : `dm-${x.otherProfile ? x.otherProfile.id : x.id}`);
+        let idx = list.findIndex((x) => keyOf(x) === cur);
+        idx = idx < 0 ? 0 : (idx + (e.key === 'ArrowDown' ? 1 : -1) + list.length) % list.length;
+        const next = list[idx];
+        if (!next) return;
+        const acts = navActionsRef.current || {};
+        if (isGroupItem(next)) { if (acts.openGroup) acts.openGroup(next); } else if (acts.openChat) acts.openChat(next.otherProfile, next.id);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+  const shareMyLocation = () => {
+    if (!activeProfile || activeGroup) return;
+    if (!navigator.geolocation) { showSnack('Location is not available on this device'); return; }
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(async (pos) => {
+      setLocating(false);
+      setShowAttach(false);
+      const lat = pos.coords.latitude.toFixed(6);
+      const lng = pos.coords.longitude.toFixed(6);
+      const text = `\u{1F4CD} My location\nhttps://maps.google.com/?q=${lat},${lng}`;
+      const { data } = await sendMessage(session.user.id, activeProfile.id, 'text', text, null);
+      if (data) { setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data])); upsertConversation(activeProfile.id, 'Location', 'text'); notifyUser(activeProfile.id, me.name, 'Shared a location', `/?dm=${session.user.id}`, me.avatar); playUiSound('send'); }
+    }, () => { setLocating(false); showSnack('Could not get your location. Check location permission.'); }, { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 });
+  };
+  const [showWhatsNew, setShowWhatsNew] = useState(false);
+  useEffect(() => {
+    try {
+      const seen = localStorage.getItem('zchat-seen-version');
+      if (!seen) { localStorage.setItem('zchat-seen-version', APP_VERSION); return; }
+      if (seen !== APP_VERSION) { localStorage.setItem('zchat-seen-version', APP_VERSION); setTimeout(() => setShowWhatsNew(true), 1600); }
+    } catch {}
+  }, []);
   const [draftMap, setDraftMap] = useState({});
   const exportChat = async () => {
     const title = activeGroup ? activeGroup.name : (activeProfile ? activeProfile.name : 'chat');
@@ -14623,7 +15011,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
   const readKey = (convId) => `zchat-read-${session.user.id}-${convId}`;
   const markRead = (convId) => { try { localStorage.setItem(readKey(convId), Date.now().toString()); } catch {} };
-  const isUnread = (conv) => (unreadCounts[conv.otherProfile.id] || 0) > 0;
+  const isUnread = (conv) => (unreadCounts[conv.otherProfile.id] || 0) > 0 || manualUnread.has(conv.otherProfile.id);
   const isUserOnline = (profile) => {
     if (!profile) return false;
     if (profile.is_bot) return true;
@@ -15908,6 +16296,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   };
 
   const openChat = async (profile, convId) => {
+    if (profile && manualUnread.has(profile.id)) setManualUnreadFor(profile.id, false);
     if (activeConvForBar && activeConvForBar.otherProfile.id !== profile.id && myLocks[activeConvForBar.id]) {
       lastLeftChatAtRef.current[activeConvForBar.id] = Date.now();
     }
@@ -17596,7 +17985,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const searchMatchesFor = (query) => {
     const q = (query || '').trim().toLowerCase();
     if (!q) return [];
-    return messages.filter((m) => !m.deleted && m.type !== 'system' && (m.content || '').toLowerCase().includes(q) && !parseProfileLink(m.content));
+    return messages.filter((m) => !m.deleted && m.type !== 'system' && (m.content || '').toLowerCase().includes(q) && !parseProfileLink(m.content) && !parseGameMessage(m.content));
   };
   const chatSearchMatches = chatSearch ? searchMatchesFor(chatSearch.query) : [];
   const stepSearch = (delta) => {
@@ -17779,6 +18168,19 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   useBackClose(showAttach, () => setShowAttach(false));
   useEffect(() => { installOverlayGhosts(); }, []);
   useEffect(() => {
+    const last = messages.length ? messages[messages.length - 1] : null;
+    const seen = effectSeenRef.current;
+    if (seen.chat !== chatKey) { effectSeenRef.current = { chat: chatKey, id: last ? last.id : null, count: messages.length }; return; }
+    if (!last || last.id === seen.id) return;
+    const grewByOne = messages.length === (seen.count || 0) + 1;
+    effectSeenRef.current = { chat: chatKey, id: last.id, count: messages.length };
+    if (!grewByOne || last.type !== 'text' || last.deleted || reducedMotion()) return;
+    const age = last.created_at ? Date.now() - new Date(last.created_at).getTime() : 0;
+    if (age > 20000) return;
+    const kind = screenEffectFor(last.content);
+    if (kind) setScreenEffect({ kind, key: Date.now() });
+  }, [messages, chatKey]);
+  useEffect(() => {
     const n = conversations.filter(isUnread).length + groups.filter((g) => !g.archived && g.unread > 0).length;
     try { document.title = n > 0 ? `(${n}) ZChat` : 'ZChat'; } catch {}
   }, [conversations, groups, unreadCounts]);
@@ -17811,6 +18213,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const isBotAuthored = (x) => !!x.bot_reply || (!!botSenderId && x.sender_id === botSenderId);
     let latestBotId = null;
     for (let i = list.length - 1; i >= 0; i--) { if (isBotAuthored(list[i]) && list[i].type === 'text' && list[i].content && !list[i].deleted) { latestBotId = list[i].id; break; } }
+    const latestGame = {};
+    list.forEach((x) => { const st = x.type === 'text' && !x.deleted ? parseGameMessage(x.content) : null; if (st) latestGame[st.id] = x.id; });
     return (
                 list.map((m, msgIndex) => {
                   const nextMsg = list[msgIndex + 1];
@@ -17859,6 +18263,11 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                       onCallBack={(kind) => { if (activeGroup) startGroupCall(activeGroup, kind); else if (activeProfile) startDirectCall(activeProfile, kind); }}
                       onOpenSticker={(msg) => setStickerSheetFor(msg)}
                       onOpenPost={(post, owner) => setDeepPost({ post, owner: sanitizeAvatar(owner, session.user.id) })}
+                      myId={session.user.id} peerName={activeProfile ? activeProfile.name : ''}
+                      gameLive={(() => { const st = m.type === 'text' && !m.deleted ? parseGameMessage(m.content) : null; return !!st && latestGame[st.id] === m.id; })()}
+                      onGameMove={(next) => { if (activeProfile) sendGameStateTo(activeProfile, next); }}
+                      onGameRematch={(st) => { if (activeProfile) { const fresh = newGameState(st.g, activeProfile); sendGameStateTo(activeProfile, st.g === 'rps' ? { ...fresh, x: st.o, o: st.x } : { ...fresh, x: st.o, o: st.x, t: st.x === session.user.id ? st.o : st.x }); } }}
+                      onOpenGame={(k) => setShowGames({ game: k, at: Date.now() })}
                     />
                   );
                   const showBotActions = ((!!botSenderId && m.sender_id === botSenderId) || !!m.bot_reply) && m.type === 'text' && !!m.content && !m.deleted && !m.sending && !selectionMode;
@@ -17901,6 +18310,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             .sort((a, b) => displayListSortByPin(a, b, (x) => (x.__kind === 'dm' ? isPinnedByMe(x) : x.pinned)));
 
   const displayList = uniqueBy(displayListRaw, (x) => `${x.__kind || (listFilter === 'groups' ? 'group' : 'dm')}-${x.id}`);
+  displayListRef.current = displayList;
+  navActionsRef.current = { openChat, openGroup };
 
   const activeWallpaperKey = activeGroup ? activeGroup.wallpaper : (activeConvForBar ? myWallpaper(activeConvForBar) : null);
   const activeNameBarKey = activeGroup ? activeGroup.name_bar : activeConvNameBar;
@@ -18182,7 +18593,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                       </div>
                     </div>
                     {isConvMutedForMe(c) && <BellOff size={14} color={theme.muted} style={{ flexShrink: 0 }} />}
-                    {unread && <div style={{ minWidth: 20, height: 20, padding: '0 5px', boxSizing: 'border-box', borderRadius: 10, background: isConvMutedForMe(c) ? theme.muted : theme.coral, color: 'white', fontSize: 10.5, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{unreadCounts[c.otherProfile.id] > 99 ? '99+' : unreadCounts[c.otherProfile.id]}</div>}
+                    {unread && (unreadCounts[c.otherProfile.id] > 0
+                      ? <div style={{ minWidth: 20, height: 20, padding: '0 5px', boxSizing: 'border-box', borderRadius: 10, background: isConvMutedForMe(c) ? theme.muted : theme.coral, color: 'white', fontSize: 10.5, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{unreadCounts[c.otherProfile.id] > 99 ? '99+' : unreadCounts[c.otherProfile.id]}</div>
+                      : <div aria-label="Marked unread" style={{ width: 11, height: 11, borderRadius: '50%', background: isConvMutedForMe(c) ? theme.muted : theme.coral, flexShrink: 0 }} />)}
                     {isWide && <MoreVertical size={15} color={theme.muted} style={{ cursor: 'pointer', flexShrink: 0 }}
                       onClick={(e) => { e.stopPropagation(); setRowMenuAnchor(e.currentTarget); setRowMenuFor(rowMenuFor === c.id ? null : c.id); }} />}
                     <SmartMenu anchorEl={rowMenuAnchor} open={rowMenuFor === c.id} onClose={() => setRowMenuFor(null)} width={190}>
@@ -18215,7 +18628,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           <MeTab key="tab-me" me={me} counts={{ rewards: (myRewards || []).filter(rewardActive).length, archived: archivedConversations.length, requests: followRequestCount, mail: unreadMailCount }}
             onOpenProfile={() => setProfileOf(me)} onEditProfile={() => setProfileOf({ ...me, __edit: true })} onSettings={() => setShowSettings(true)} onCollection={() => setCollectionOpen(true)}
             onSaved={() => setShowSaved(true)} onArchive={() => setShowArchived(true)} onMail={() => setShowMail(true)} onRequests={() => setShowFollowRequests(true)} onDiscover={() => setShowDiscover(true)}
-            onSwitchAccount={() => setShowAccountSwitcher(true)} onShare={() => setProfileOf({ ...me, __share: true })} onInvite={inviteFriends} />
+            onSwitchAccount={() => setShowAccountSwitcher(true)} onShare={() => setProfileOf({ ...me, __share: true })} onInvite={inviteFriends} onGames={() => setShowGames(true)} />
         )}
         <BottomTabBar tab={homeTab} onChange={(k) => setHomeTab(k)} onCreate={() => setShowCreate(true)}
           badges={{ chats: conversations.filter(isUnread).length + groups.filter((g) => !g.archived && g.unread > 0).length, moments: trayUsers.some((u) => !u.stories.every((st) => storyData.seen.has(st.id))), calls: 0, me: followRequestCount + unreadMailCount }} />
@@ -18526,7 +18939,13 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                       const pasted = Array.from((e.clipboardData && e.clipboardData.files) || []).filter((f) => (f.type || '').startsWith('image') || (f.type || '').startsWith('video'));
                       if (pasted.length) { e.preventDefault(); openMediaComposer(pasted); }
                     }}
-                    onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && !isTouchDevice()) { e.preventDefault(); if (editingMessage) saveEdit(); else send(); } }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.nativeEvent.isComposing && !isTouchDevice() && (prefOn('zchat-enter-send') ? !e.shiftKey : (e.ctrlKey || e.metaKey))) { e.preventDefault(); if (editingMessage) saveEdit(); else send(); return; }
+                      if (e.key === 'ArrowUp' && !isTouchDevice() && !draft && !editingMessage && !replyingTo) {
+                        const mine = messages.slice().reverse().find((x) => x.sender_id === session.user.id && x.type === 'text' && !x.deleted && x.content && !parseGameMessage(x.content) && !parseLocationMessage(x.content));
+                        if (mine) { e.preventDefault(); doStartEditSingle(mine); }
+                      }
+                    }}
                     placeholder={editingMessage ? 'Edit message' : 'Message'}
                     rows={1}
                     style={{
@@ -18584,27 +19003,14 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               </div>
             )}
 
+            <input ref={cameraGalleryRef} type="file" accept="image/*,video/*" multiple style={{ display: 'none' }} onChange={handleFile} />
             {showAttach && (
-              <div style={{ position: 'absolute', bottom: 76, left: 14, zIndex: 12, display: 'flex', gap: 10 }} className="zchat-fade">
-                <div role="button" aria-label="Camera" onClick={() => { setShowAttach(false); setCameraOpen(true); }} style={{
-                  width: 52, height: 52, borderRadius: '50%', background: '#111827', display: 'flex',
-                  alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 6px 16px rgba(0,0,0,0.2)',
-                }}><Camera size={21} color="white" /></div>
-                <label style={{
-                  width: 52, height: 52, borderRadius: '50%', background: theme.coral, display: 'flex',
-                  alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 6px 16px rgba(0,0,0,0.2)',
-                }}>
-                  <ImageIcon size={20} color="white" />
-                  <input ref={cameraGalleryRef} type="file" accept="image/*,video/*" multiple style={{ display: 'none' }} onChange={handleFile} />
-                </label>
-                <label style={{
-                  width: 52, height: 52, borderRadius: '50%', background: theme.coralDeep, display: 'flex',
-                  alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 6px 16px rgba(0,0,0,0.2)',
-                }}>
-                  <VideoIcon size={20} color="white" />
-                  <input type="file" accept="video/*" style={{ display: 'none' }} onChange={handleFile} />
-                </label>
-              </div>
+              <AttachSheet onClose={() => setShowAttach(false)} locating={locating}
+                onCamera={() => { setShowAttach(false); setCameraOpen(true); }}
+                onGallery={() => { setShowAttach(false); if (cameraGalleryRef.current) cameraGalleryRef.current.click(); }}
+                onLocation={shareMyLocation}
+                canGame={!!activeProfile && !activeGroup && !activeProfile.is_bot}
+                onGame={() => { setShowAttach(false); setGameSheetFor(activeProfile); }} />
             )}
 
             {showStickers && (
@@ -18657,6 +19063,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             return provs.length === 0 || provs.includes('email');
           })()}
           onOpenDelete={() => { setShowSettings(false); setShowDeleteAccount(true); }}
+          sessionForLinks={session} onOpenWhatsNew={() => setShowWhatsNew(true)}
           chatLockSet={!!me.chat_lock_enabled} chatLockHash={me.chat_lock_hash}
           onSetChatLockPassword={setChatLockPassword} onTurnOffChatLock={turnOffChatLock}
           autoOpenLockSetup={autoOpenLockSetup} onConsumedAutoOpen={() => setAutoOpenLockSetup(false)}
@@ -18725,6 +19132,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             isPinned={isActiveUntil(m.pinned_until)}
             onPin={() => { setContextMenuFor(null); setPinSheetFor(m); }}
             onUnpin={() => { setContextMenuFor(null); unpinMessage(m); }}
+            onInfo={() => { setContextMenuFor(null); setInfoFor(m); }}
           />
         );
       })()}
@@ -18862,7 +19270,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           onPost={() => { if (blockedByRestriction('post')) return; if (postInputRef.current) postInputRef.current.click(); }}
           onStory={() => { if (blockedByRestriction('status')) return; if (storyInputRef.current) storyInputRef.current.click(); }}
           onGroup={() => setShowCreateGroup(true)}
-          onChat={() => setShowNewChat(true)} />
+          onChat={() => setShowNewChat(true)} onGames={() => setShowGames(true)} />
       )}
       {showNewChat && (
         <NewChatPage userId={session.user.id} blockedIds={myBlockedIds} onClose={() => setShowNewChat(false)}
@@ -18886,7 +19294,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             onClose={() => setRowSheet(null)}
             actions={[
               { icon: <Pin_ size={18} />, label: isPinnedByMe(c) ? 'Unpin chat' : 'Pin chat', onClick: () => togglePin(c) },
-              isUnread(c) ? { icon: <CheckCheck size={18} />, label: 'Mark as read', onClick: () => markChatRead(c.otherProfile.id) } : null,
+              isUnread(c) ? { icon: <CheckCheck size={18} />, label: 'Mark as read', onClick: () => { setManualUnreadFor(c.otherProfile.id, false); markChatRead(c.otherProfile.id); } } : { icon: <Mail size={18} />, label: 'Mark as unread', onClick: () => setManualUnreadFor(c.otherProfile.id, true) },
               { icon: <Archive size={18} />, label: 'Archive chat', onClick: () => toggleArchive(c.id, true) },
               { icon: isConvMutedForMe(c) ? <Bell size={18} /> : <BellOff size={18} />, label: isConvMutedForMe(c) ? 'Unmute notifications' : 'Mute notifications', onClick: () => (isConvMutedForMe(c) ? setChatMute({ kind: 'dm', conv: c }, null) : setMuteSheet({ kind: 'dm', conv: c })) },
               { icon: <User size={18} />, label: 'View profile', onClick: () => setProfileOf(c.otherProfile) },
@@ -19064,6 +19472,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           item(<Search size={17} />, 'Search', () => setChatSearch({ query: '', pos: 0 })),
           item(<ImageIcon size={17} />, 'Media, links and voice', () => setShowChatMedia(true)),
           item(<Sparkles size={17} />, 'Chat bubbles', () => setShowBubbleSheet(true), false, bubbleStyle && bubbleStyle !== 'classic' && BUBBLE_STYLES[bubbleStyle] ? `Now: ${BUBBLE_STYLES[bubbleStyle].label}` : 'Give your messages a look'),
+          !activeProfile.is_bot ? item(<GamepadIcon size={17} />, 'Play a game', () => setGameSheetFor(activeProfile), false, 'Tic tac toe, connect four, rock paper scissors') : null,
           canCall(activeProfile) ? item(<Phone size={17} />, 'Voice call', () => startDirectCall(activeProfile, 'voice')) : null,
           canCall(activeProfile) ? item(<VideoIcon size={17} />, 'Video call', () => startDirectCall(activeProfile, 'video')) : null,
           pinnedMessages.length ? item(<Pin_ size={17} color={theme.muted} />, `Pinned messages (${pinnedMessages.length})`, () => jumpToMessage(pinnedMessages[0].id)) : null,
@@ -19106,6 +19515,31 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           onConfirm={() => { hideMessagesLocally(messages.map((m) => m.id)); setMessages([]); setClearChatAsk(false); showSnack('Chat cleared'); loadConversations(); }} />
       )}
       {showBubbleSheet && <BubbleStyleSheet onClose={() => setShowBubbleSheet(false)} />}
+      {showWhatsNew && <WhatsNewSheet onClose={() => setShowWhatsNew(false)} />}
+      {showGames && (
+        <GamesPage key={showGames.at || 'games'} initialGame={showGames.game || null} onClose={() => setShowGames(false)}
+          onChallenge={(kind) => { setShowGames(false); setTimeout(() => setGamePicker({ kind: kind || 'ttt' }), 80); }}
+          onShareScore={(k, sc) => { if (!sc) { showSnack('Play a round first to get a score'); return; } setShowGames(false); setTimeout(() => setGamePicker({ kind: 'score', k, s: sc }), 80); }} />
+      )}
+      {gamePicker && (
+        <NewChatPage userId={session.user.id} blockedIds={myBlockedIds} onClose={() => setGamePicker(false)}
+          onPick={(p) => { const gp = gamePicker; setGamePicker(false); setTimeout(() => { if (gp && gp.kind === 'score') sendScoreTo(p, gp.k, gp.s); else startGameWith(p, gp && gp.kind); }, 80); }}
+          onNewGroup={() => setShowCreateGroup(true)} onDiscover={() => setShowDiscover(true)} />
+      )}
+      {gameSheetFor && (
+        <ChatRowSheet title="Play a game" subtitle={`With ${gameSheetFor.name}`}
+          avatar={<Avatar emoji={gameSheetFor.avatar} name={gameSheetFor.name} frame={gameSheetFor.avatar_frame} size={44} />}
+          onClose={() => setGameSheetFor(null)}
+          actions={[
+            { icon: <GamepadIcon size={18} />, label: 'Tic tac toe', hint: 'Three in a row', onClick: () => startGameWith(gameSheetFor, 'ttt') },
+            { icon: <GridDotsIcon size={18} />, label: 'Connect four', hint: 'Drop discs, line up four', onClick: () => startGameWith(gameSheetFor, 'c4') },
+            { icon: <span style={{ fontSize: 17, lineHeight: 1 }}>{'\u270A'}</span>, label: 'Rock paper scissors', hint: 'Best of three rounds', onClick: () => startGameWith(gameSheetFor, 'rps') },
+            { icon: <TrophyIcon size={18} />, label: 'More games', hint: 'Solo games and high scores', onClick: () => setShowGames({ at: Date.now() }) },
+          ]} />
+      )}
+      {screenEffect && <ScreenEffect key={screenEffect.key} kind={screenEffect.kind} onDone={() => setScreenEffect(null)} />}
+      {infoFor && <MessageInfoSheet m={infoFor} isMine={infoFor.sender_id === session.user.id} peerName={activeGroup ? labelForSender(infoFor.sender_id) : (activeProfile ? activeProfile.name : '')} isGroup={!!activeGroup} onClose={() => setInfoFor(null)} />}
+      {appLocked && <AppLockScreen onUnlock={() => setAppLocked(false)} onForgot={() => { writeAppLock({}); setAppLocked(false); onLogout(); }} />}
       {showChatMedia && (activeProfile || activeGroup) && (
         <ChatMediaPanel title={activeGroup ? activeGroup.name : activeProfile.name}
           myId={session.user.id} otherId={activeGroup ? null : activeProfile.id} groupId={activeGroup ? activeGroup.id : null}
@@ -19188,6 +19622,1621 @@ function DayDivider({ label }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'center', margin: '10px 0 12px' }}>
       <span style={{ fontSize: 11.5, fontWeight: 700, color: theme.muted, padding: '4px 11px', borderRadius: 12, background: theme.dark ? 'rgba(21,15,38,0.75)' : 'rgba(255,255,255,0.75)', border: `1px solid ${theme.border}`, backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}>{label}</span>
+    </div>
+  );
+}
+
+const WHATS_NEW = [
+  { title: 'Twelve games', text: 'Connect four and rock paper scissors with friends, plus Sky hop, Bricks, Word guess, Reflex, Quiz and Echo to play solo.' },
+  { title: 'High scores', text: 'Share your best score from any game as a card in the chat, and friends can tap it to try to beat you.' },
+  { title: 'App lock', text: 'Lock ZChat with a PIN. Pick when it locks again after you leave.' },
+  { title: 'Chats settings', text: 'Choose your six quick reactions, switch double tap to heart, swipe to reply, haptics and reduce motion.' },
+  { title: 'Text formatting', text: 'Wrap words in stars for bold, tildes to strike through, backticks for mono.' },
+  { title: 'Message effects', text: 'Send a party emoji, a balloon, a snowflake or only hearts and the whole screen celebrates.' },
+  { title: 'Message info and mark as unread', text: 'Hold a message for Info. Hold a chat row to mark it unread so you remember to reply.' },
+  { title: 'Message tones', text: 'Five tones for new messages: Chime, Pop, Drop, Bell and Pulse.' },
+  { title: 'App colors', text: 'Violet, Ocean, Rose, Emerald, Amber or Graphite, from Settings, Theme.' },
+  { title: 'Keyboard shortcuts', text: 'On a computer, Ctrl K searches, Alt with arrows switches chats, and the up arrow edits your last message.' },
+  { title: 'Games inside chats', text: 'Challenge a friend to tic tac toe right in the chat, plus 2048, Memory and Snake in the Games page.' },
+  { title: 'Apple sign in', text: 'Sign in or create an account with your Apple ID.' },
+  { title: 'Smoother everything', text: 'Pages slide, sheets slide, menus close with motion, and the app uses your phone font.' },
+  { title: 'Cleaner look', text: 'Flat native lists, no more boxed menus, plain icons, stickers without bubbles.' },
+  { title: 'Share your location', text: 'Send where you are from the attach menu.' },
+  { title: 'Chat tools', text: 'Export a chat, clear a chat, drafts in the list, swipe rows to pin or archive.' },
+];
+
+function WhatsNewSheet({ onClose }) {
+  useBackClose(true, onClose);
+  const { theme } = useTheme();
+  return (
+    <Portal>
+      <div onClick={onClose} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 660, background: 'rgba(5,8,16,0.55)', backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontFamily: FONT }}>
+        <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ width: '100%', maxWidth: 480, maxHeight: '86vh', display: 'flex', flexDirection: 'column', background: theme.panelBg, borderRadius: '28px 28px 0 0', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))', overflow: 'hidden' }}>
+          <div style={{ padding: '14px 20px 6px', flexShrink: 0 }}>
+            <div style={{ display: 'flex', justifyContent: 'center', paddingBottom: 12 }}><div style={{ width: 38, height: 4, borderRadius: 2, background: theme.border }} /></div>
+            <div style={{ fontSize: 12, fontWeight: 800, color: theme.coral, letterSpacing: '0.06em', textTransform: 'uppercase' }}>ZChat {APP_VERSION}</div>
+            <div style={{ fontSize: 24, fontWeight: 800, color: theme.ink, letterSpacing: '-0.02em', marginTop: 2 }}>What is new</div>
+          </div>
+          <div data-sheet-scroll="true" style={{ overflowY: 'auto', minHeight: 0, padding: '6px 20px 10px', WebkitOverflowScrolling: 'touch' }}>
+            {WHATS_NEW.map((it, i) => (
+              <div key={it.title} style={{ display: 'flex', gap: 14, padding: '12px 0', borderBottom: i < WHATS_NEW.length - 1 ? `1px solid ${theme.border}` : 'none' }}>
+                <div style={{ width: 34, height: 34, borderRadius: 12, background: `${theme.coral}1F`, color: theme.coralDeep, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontWeight: 900, fontSize: 14 }}>{i + 1}</div>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 15.5, fontWeight: 700, color: theme.ink }}>{it.title}</div>
+                  <div style={{ fontSize: 13.5, color: theme.muted, lineHeight: 1.5, marginTop: 2 }}>{it.text}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div style={{ padding: '10px 20px 0', flexShrink: 0 }}>
+            <button onClick={onClose} className="zchat-press" style={{ ...primaryBtn(theme, false), marginTop: 0 }}>Got it</button>
+          </div>
+        </div>
+      </div>
+    </Portal>
+  );
+}
+
+function LinkedAccountsSection({ session }) {
+  const { theme } = useTheme();
+  const [busy, setBusy] = useState('');
+  const [note, setNote] = useState('');
+  const identities = (session && session.user && session.user.identities) || [];
+  const has = (p) => identities.some((i) => i.provider === p);
+  const link = async (provider) => {
+    setBusy(provider);
+    setNote('');
+    try {
+      if (!supabase.auth.linkIdentity) throw new Error('unsupported');
+      const { error } = await supabase.auth.linkIdentity({ provider, options: { redirectTo: window.location.origin } });
+      if (error) throw error;
+    } catch (e) {
+      setBusy('');
+      const msg = String((e && e.message) || '');
+      setNote(/not enabled|unsupported|manual linking/i.test(msg) ? `Linking ${provider === 'apple' ? 'Apple' : 'Google'} is not switched on for ZChat yet.` : (msg || 'Could not link that account right now.'));
+    }
+  };
+  const row = (icon, label, provider, sub) => {
+    const linked = provider === 'email' ? identities.some((i) => i.provider === 'email') || !!(session && session.user && session.user.email) : has(provider);
+    return (
+      <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '13px 2px', borderBottom: `1px solid ${theme.border}` }}>
+        <span style={{ width: 24, display: 'flex', justifyContent: 'center', color: theme.ink }}>{icon}</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 15, fontWeight: 600, color: theme.ink }}>{label}</div>
+          <div style={{ fontSize: 12.5, color: theme.muted, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{linked ? (sub || 'Linked') : 'Not linked'}</div>
+        </div>
+        {linked ? (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12.5, fontWeight: 800, color: '#22c55e' }}><Check size={14} strokeWidth={3} />Linked</span>
+        ) : provider === 'email' ? null : (
+          <PillButton small label={busy === provider ? <Spinner size={12} /> : 'Link'} onClick={() => link(provider)} />
+        )}
+      </div>
+    );
+  };
+  return (
+    <div>
+      <div style={{ padding: '12px 2px 6px', fontSize: 13, color: theme.muted, lineHeight: 1.5 }}>Ways you can sign in to this ZChat account.</div>
+      {row(<Mail size={20} strokeWidth={1.7} />, 'Email and password', 'email', session && session.user && session.user.email)}
+      {row(<GoogleLogo size={18} />, 'Google', 'google', 'Linked')}
+      {row(<AppleLogo size={19} />, 'Apple', 'apple', 'Linked')}
+      {note && <div style={{ padding: '12px 2px 0', fontSize: 12.5, color: theme.danger, lineHeight: 1.5 }}>{note}</div>}
+    </div>
+  );
+}
+
+
+const GAME_PREFIX = 'zgame:';
+const GAME_TITLES = { ttt: 'Tic tac toe', c4: 'Connect four', rps: 'Rock paper scissors', '2048': '2048', memory: 'Memory', snake: 'Snake', sky: 'Sky hop', bricks: 'Bricks', word: 'Word guess', reflex: 'Reflex', quiz: 'Quiz', echo: 'Echo' };
+function parseGameMessage(content) {
+  if (typeof content !== 'string' || content.indexOf(GAME_PREFIX) !== 0) return null;
+  try {
+    const st = JSON.parse(content.slice(GAME_PREFIX.length));
+    if (!st || !st.id) return null;
+    if (st.g === 'ttt') return Array.isArray(st.b) && st.b.length === 9 ? st : null;
+    if (st.g === 'c4') return Array.isArray(st.b) && st.b.length === 42 ? st : null;
+    if (st.g === 'rps') return Array.isArray(st.r) ? st : null;
+    if (st.g === 'score') return typeof st.s === 'number' && typeof st.k === 'string' ? st : null;
+    return null;
+  } catch { return null; }
+}
+function gameTitle(st) {
+  if (!st) return 'Game';
+  if (st.g === 'score') return GAME_TITLES[st.k] || 'Game';
+  return GAME_TITLES[st.g] || 'Game';
+}
+function formatGameScore(k, s) {
+  if (k === 'reflex') return `${s} ms`;
+  if (k === 'memory') return `${s} moves`;
+  if (k === 'word') return `${s} in a row`;
+  if (k === 'echo') return `Level ${s}`;
+  if (k === 'quiz') return `${s} of 10`;
+  return String(s);
+}
+const C4_W = 7;
+const C4_H = 6;
+function c4Winner(b) {
+  const at = (x, y) => b[y * C4_W + x];
+  const dirs = [[1, 0], [0, 1], [1, 1], [1, -1]];
+  for (let y = 0; y < C4_H; y++) {
+    for (let x = 0; x < C4_W; x++) {
+      const v = at(x, y);
+      if (!v) continue;
+      for (let d = 0; d < dirs.length; d++) {
+        const line = [y * C4_W + x];
+        for (let k = 1; k < 4; k++) {
+          const nx = x + dirs[d][0] * k;
+          const ny = y + dirs[d][1] * k;
+          if (nx < 0 || ny < 0 || nx >= C4_W || ny >= C4_H || at(nx, ny) !== v) break;
+          line.push(ny * C4_W + nx);
+        }
+        if (line.length === 4) return { who: v, line };
+      }
+    }
+  }
+  if (b.every(Boolean)) return { who: 3, line: null };
+  return null;
+}
+const RPS_HANDS = { r: { l: 'Rock', e: '\u270A' }, p: { l: 'Paper', e: '\u270B' }, s: { l: 'Scissors', e: '\u270C\uFE0F' } };
+function rpsRoundWinner(a, b) {
+  if (!a || !b || a === b) return 0;
+  return (a === 'r' && b === 's') || (a === 'p' && b === 'r') || (a === 's' && b === 'p') ? 1 : 2;
+}
+function encodeGameMessage(st) { return GAME_PREFIX + JSON.stringify(st); }
+const TTT_LINES = [[0, 1, 2], [3, 4, 5], [6, 7, 8], [0, 3, 6], [1, 4, 7], [2, 5, 8], [0, 4, 8], [2, 4, 6]];
+function tttWinner(b) {
+  for (let i = 0; i < TTT_LINES.length; i++) {
+    const [x, y, z] = TTT_LINES[i];
+    if (b[x] && b[x] === b[y] && b[x] === b[z]) return { who: b[x], line: TTT_LINES[i] };
+  }
+  if (b.every(Boolean)) return { who: 3, line: null };
+  return null;
+}
+const LOCATION_RE = /https?:\/\/(?:maps\.google\.com|www\.google\.com\/maps)\/?\?q=(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/i;
+function parseLocationMessage(content) {
+  if (typeof content !== 'string') return null;
+  const m = content.match(LOCATION_RE);
+  if (!m) return null;
+  return { lat: parseFloat(m[1]), lng: parseFloat(m[2]), url: m[0] };
+}
+function readBest(key) { try { return parseInt(localStorage.getItem(`zchat-best-${key}`) || '0', 10) || 0; } catch { return 0; } }
+function writeBest(key, v) { try { localStorage.setItem(`zchat-best-${key}`, String(v)); } catch {} }
+
+function GamepadIcon({ size = 16, color = 'currentColor', style }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style} aria-hidden="true">
+      <path d="M6 11h4M8 9v4M15 12h.01M18 10h.01" />
+      <path d="M17.3 5H6.7a4 4 0 0 0-3.96 3.47L2 16.5A2.5 2.5 0 0 0 6.4 18.3L8.6 16h6.8l2.2 2.3a2.5 2.5 0 0 0 4.4-1.8l-.74-8.03A4 4 0 0 0 17.3 5z" />
+    </svg>
+  );
+}
+
+function LocationCard({ loc, isMe, ink }) {
+  const { theme } = useTheme();
+  return (
+    <a href={loc.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ display: 'block', textDecoration: 'none', width: 220, borderRadius: 16, overflow: 'hidden', border: `1px solid ${theme.border}`, background: theme.dark ? '#1A1330' : '#F0EBFF' }}>
+      <div style={{ height: 96, position: 'relative', background: 'linear-gradient(135deg, #2A1F4D, #3B2A7A 60%, #22104A)', overflow: 'hidden' }}>
+        <div style={{ position: 'absolute', inset: 0, backgroundImage: 'linear-gradient(rgba(255,255,255,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px)', backgroundSize: '22px 22px' }} />
+        <div style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -62%) rotate(-45deg)', width: 34, height: 34, borderRadius: '50% 50% 50% 0', background: '#ED4956', boxShadow: '0 6px 14px rgba(0,0,0,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ width: 12, height: 12, borderRadius: '50%', background: 'white' }} />
+        </div>
+        <div style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, 4px)', width: 44, height: 14, borderRadius: '50%', background: 'rgba(0,0,0,0.35)', filter: 'blur(3px)' }} />
+      </div>
+      <div style={{ padding: '9px 12px 10px' }}>
+        <div style={{ fontSize: 13.5, fontWeight: 700, color: ink || theme.ink }}>{isMe ? 'My location' : 'Shared location'}</div>
+        <div style={{ fontSize: 11.5, color: theme.muted, marginTop: 1 }}>{loc.lat.toFixed(5)}, {loc.lng.toFixed(5)}</div>
+        <div style={{ fontSize: 12.5, fontWeight: 800, color: theme.coral, marginTop: 6 }}>Open in Maps</div>
+      </div>
+    </a>
+  );
+}
+
+function TicTacToeCard({ state, myId, live, peerName, onMove, onRematch, ink }) {
+  const { theme } = useTheme();
+  const myMark = state.x === myId ? 1 : state.o === myId ? 2 : 0;
+  const result = state.w ? (state.w === 'd' ? { who: 3, line: null } : (tttWinner(state.b) || { who: state.w === 'x' ? 1 : 2, line: null })) : null;
+  const finished = !!result;
+  const myTurn = live && !finished && state.t === myId && myMark > 0;
+  const winLine = result && result.line ? result.line : [];
+  const status = finished
+    ? (result.who === 3 ? 'Draw' : result.who === myMark ? 'You won' : `${peerName || 'They'} won`)
+    : myTurn ? 'Your move' : live ? `Waiting for ${peerName || 'them'}` : `Move ${state.n}`;
+  const mark = (v, size) => (v === 1
+    ? <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="#7C5CFC" strokeWidth="3.2" strokeLinecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+    : v === 2 ? <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="#EC4899" strokeWidth="3.2" aria-hidden="true"><circle cx="12" cy="12" r="7.5" /></svg> : null);
+  const tap = (i) => {
+    if (!myTurn || state.b[i]) return;
+    const b = state.b.slice();
+    b[i] = myMark;
+    const w = tttWinner(b);
+    hapticTap();
+    playUiSound('tap');
+    onMove({ ...state, b, t: myMark === 1 ? state.o : state.x, n: (state.n || 0) + 1, w: w ? (w.who === 3 ? 'd' : w.who === 1 ? 'x' : 'o') : null });
+  };
+  const cell = live ? 56 : 34;
+  return (
+    <div onClick={(e) => e.stopPropagation()} style={{ width: live ? 204 : 140, padding: live ? '10px 10px 12px' : '8px 8px 10px', borderRadius: 18, background: theme.dark ? 'rgba(255,255,255,0.06)' : 'rgba(90,60,180,0.06)', border: `1px solid ${theme.border}`, opacity: live ? 1 : 0.75 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, color: ink || theme.ink }}>
+        <GamepadIcon size={15} color={theme.coral} />
+        <span style={{ fontSize: live ? 13 : 11.5, fontWeight: 800, whiteSpace: 'nowrap' }}>Tic tac toe</span>
+        <span style={{ marginLeft: 'auto', fontSize: 10.5, fontWeight: 700, color: myTurn ? theme.coral : theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0, maxWidth: 96, textAlign: 'right' }}>{status}</span>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(3, ${cell}px)`, gap: 5, justifyContent: 'center' }}>
+        {state.b.map((v, i) => (
+          <div key={i} role={myTurn && !v ? 'button' : undefined} aria-label={myTurn && !v ? `Cell ${i + 1}` : undefined} onClick={() => tap(i)} style={{
+            width: cell, height: cell, borderRadius: live ? 12 : 8, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: winLine.includes(i) ? `${theme.coral}33` : (theme.dark ? 'rgba(10,6,22,0.6)' : '#FFFFFF'),
+            border: `1px solid ${winLine.includes(i) ? theme.coral : theme.border}`, cursor: myTurn && !v ? 'pointer' : 'default',
+          }}>{mark(v, Math.round(cell * 0.56))}</div>
+        ))}
+      </div>
+      {live && finished && onRematch && (
+        <button onClick={onRematch} className="zchat-press" style={{ marginTop: 10, width: '100%', height: 34, borderRadius: 10, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontSize: 12.5, fontFamily: FONT, cursor: 'pointer' }}>Play again</button>
+      )}
+      {live && !finished && !myTurn && myMark > 0 && state.n === 0 && (
+        <div style={{ marginTop: 8, fontSize: 11.5, color: theme.muted, textAlign: 'center' }}>They go first</div>
+      )}
+      {live && !finished && myTurn && state.n === 0 && (
+        <div style={{ marginTop: 8, fontSize: 11.5, color: theme.muted, textAlign: 'center' }}>You go first. Tap a square</div>
+      )}
+      <div style={{ height: 12 }} />
+    </div>
+  );
+}
+
+const TILE_COLORS = { 2: '#EEE4DA', 4: '#EDE0C8', 8: '#F2B179', 16: '#F59563', 32: '#F67C5F', 64: '#F65E3B', 128: '#EDCF72', 256: '#EDCC61', 512: '#EDC850', 1024: '#EDC53F', 2048: '#EDC22E' };
+function Game2048() {
+  const { theme } = useTheme();
+  const addRandom = (g) => { const free = g.map((v, i) => (v ? -1 : i)).filter((i) => i >= 0); if (!free.length) return g; const n = g.slice(); n[free[Math.floor(Math.random() * free.length)]] = Math.random() < 0.9 ? 2 : 4; return n; };
+  const [grid, setGrid] = useState(() => addRandom(addRandom(Array(16).fill(0))));
+  const [score, setScore] = useState(0);
+  const [best, setBest] = useState(() => readBest('2048'));
+  const [over, setOver] = useState(false);
+  const touch = useRef(null);
+  const canMove = (g) => { if (g.includes(0)) return true; for (let i = 0; i < 16; i++) { if (i % 4 < 3 && g[i] === g[i + 1]) return true; if (i < 12 && g[i] === g[i + 4]) return true; } return false; };
+  const move = (dir) => {
+    if (over) return;
+    const g = grid.slice();
+    let gained = 0;
+    let moved = false;
+    const getLine = (i) => (dir < 2 ? [g[i * 4], g[i * 4 + 1], g[i * 4 + 2], g[i * 4 + 3]] : [g[i], g[i + 4], g[i + 8], g[i + 12]]);
+    const setLine = (i, line) => { for (let k = 0; k < 4; k++) { if (dir < 2) g[i * 4 + k] = line[k]; else g[i + 4 * k] = line[k]; } };
+    for (let i = 0; i < 4; i++) {
+      const original = getLine(i);
+      let line = original.slice();
+      const rev = dir === 1 || dir === 3;
+      if (rev) line.reverse();
+      const a = line.filter(Boolean);
+      for (let k = 0; k < a.length - 1; k++) { if (a[k] === a[k + 1]) { a[k] *= 2; gained += a[k]; a.splice(k + 1, 1); } }
+      while (a.length < 4) a.push(0);
+      const out = rev ? a.slice().reverse() : a;
+      if (out.some((v, k) => v !== original[k])) moved = true;
+      setLine(i, out);
+    }
+    if (!moved) return;
+    const next = addRandom(g);
+    setGrid(next);
+    const sc = score + gained;
+    setScore(sc);
+    if (sc > best) { setBest(sc); writeBest('2048', sc); }
+    if (!canMove(next)) { setOver(true); playUiSound('cancel'); } else if (gained) playUiSound('toggle');
+    hapticTap();
+  };
+  useEffect(() => {
+    const onKey = (e) => { const map = { ArrowLeft: 0, ArrowRight: 1, ArrowUp: 2, ArrowDown: 3 }; if (map[e.key] != null) { e.preventDefault(); move(map[e.key]); } };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+  const onTouchStart = (e) => { const t = e.touches[0]; touch.current = { x: t.clientX, y: t.clientY }; };
+  const onTouchEnd = (e) => {
+    const st = touch.current; if (!st) return; touch.current = null;
+    const t = e.changedTouches[0]; const dx = t.clientX - st.x; const dy = t.clientY - st.y;
+    if (Math.max(Math.abs(dx), Math.abs(dy)) < 24) return;
+    if (Math.abs(dx) > Math.abs(dy)) move(dx > 0 ? 1 : 0); else move(dy > 0 ? 3 : 2);
+  };
+  const reset = () => { setGrid(addRandom(addRandom(Array(16).fill(0)))); setScore(0); setOver(false); };
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, paddingTop: 8 }}>
+      <div style={{ display: 'flex', gap: 10, width: '100%', maxWidth: 340 }}>
+        {[['Score', score], ['Best', best]].map(([l, v]) => (
+          <div key={l} style={{ flex: 1, padding: '10px 12px', borderRadius: 14, background: theme.rowBg, textAlign: 'center' }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: theme.muted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{l}</div>
+            <div style={{ fontSize: 22, fontWeight: 900, color: theme.ink }}>{v}</div>
+          </div>
+        ))}
+        <button onClick={reset} className="zchat-press" style={{ padding: '0 16px', borderRadius: 14, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontFamily: FONT, cursor: 'pointer' }}>New</button>
+      </div>
+      <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} style={{ position: 'relative', width: 'min(340px, 92vw)', aspectRatio: '1', borderRadius: 18, background: theme.dark ? '#2A2140' : '#BBADA0', padding: 8, boxSizing: 'border-box', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, touchAction: 'none', userSelect: 'none' }}>
+        {grid.map((v, i) => (
+          <div key={i} style={{ borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', background: v ? (TILE_COLORS[v] || '#3C3A32') : (theme.dark ? 'rgba(255,255,255,0.07)' : 'rgba(238,228,218,0.35)'), color: v <= 4 ? '#776E65' : '#F9F6F2', fontSize: v >= 1024 ? 22 : v >= 128 ? 26 : 30, fontWeight: 900, transition: 'background 0.12s' }}>{v || ''}</div>
+        ))}
+        {over && (
+          <div style={{ position: 'absolute', inset: 0, borderRadius: 18, background: 'rgba(10,6,22,0.7)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, color: 'white' }}>
+            <div style={{ fontSize: 22, fontWeight: 900 }}>No more moves</div>
+            <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.8)' }}>Score {score}</div>
+            <button onClick={reset} className="zchat-press" style={{ marginTop: 6, padding: '10px 22px', borderRadius: 14, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontFamily: FONT, cursor: 'pointer' }}>Try again</button>
+          </div>
+        )}
+      </div>
+      <div style={{ fontSize: 13, color: theme.muted }}>Swipe to slide the tiles. Join the same numbers to reach 2048.</div>
+    </div>
+  );
+}
+
+const MEMORY_EMOJI = ['\u{1F436}', '\u{1F431}', '\u{1F98A}', '\u{1F43C}', '\u{1F428}', '\u{1F42F}', '\u{1F984}', '\u{1F419}', '\u{1F98B}', '\u{1F41D}', '\u{1F40B}', '\u{1F99C}'];
+function MemoryGame() {
+  const { theme } = useTheme();
+  const deal = () => { const picks = MEMORY_EMOJI.slice().sort(() => Math.random() - 0.5).slice(0, 8); return [...picks, ...picks].sort(() => Math.random() - 0.5).map((e, i) => ({ id: i, e })); };
+  const [cards, setCards] = useState(deal);
+  const [open, setOpen] = useState([]);
+  const [done, setDone] = useState(() => new Set());
+  const [moves, setMoves] = useState(0);
+  const [best, setBest] = useState(() => readBest('memory'));
+  const lock = useRef(false);
+  const finished = done.size === cards.length;
+  useEffect(() => { if (finished && moves && (!best || moves < best)) { setBest(moves); writeBest('memory', moves); } }, [finished]);
+  const flip = (c) => {
+    if (lock.current || open.includes(c.id) || done.has(c.id)) return;
+    hapticTap();
+    const next = [...open, c.id];
+    setOpen(next);
+    if (next.length === 2) {
+      setMoves((m) => m + 1);
+      const [a, b] = next.map((id) => cards.find((x) => x.id === id));
+      if (a.e === b.e) { playUiSound('like'); setDone((prev) => new Set([...prev, a.id, b.id])); setOpen([]); }
+      else { lock.current = true; setTimeout(() => { setOpen([]); lock.current = false; }, 650); }
+    }
+  };
+  const reset = () => { setCards(deal()); setOpen([]); setDone(new Set()); setMoves(0); lock.current = false; };
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, paddingTop: 8 }}>
+      <div style={{ display: 'flex', gap: 10, width: '100%', maxWidth: 340 }}>
+        {[['Moves', moves], ['Best', best || '–']].map(([l, v]) => (
+          <div key={l} style={{ flex: 1, padding: '10px 12px', borderRadius: 14, background: theme.rowBg, textAlign: 'center' }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: theme.muted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{l}</div>
+            <div style={{ fontSize: 22, fontWeight: 900, color: theme.ink }}>{v}</div>
+          </div>
+        ))}
+        <button onClick={reset} className="zchat-press" style={{ padding: '0 16px', borderRadius: 14, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontFamily: FONT, cursor: 'pointer' }}>New</button>
+      </div>
+      <div style={{ width: 'min(340px, 92vw)', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+        {cards.map((c) => {
+          const up = open.includes(c.id) || done.has(c.id);
+          return (
+            <div key={c.id} role="button" aria-label={up ? c.e : 'Hidden card'} onClick={() => flip(c)} style={{ aspectRatio: '1', borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 34, cursor: 'pointer', background: up ? (done.has(c.id) ? `${theme.coral}2A` : theme.panelBg) : theme.coral, border: `1px solid ${up ? theme.border : theme.coralDeep}`, transition: 'transform 0.2s, background 0.2s', transform: up ? 'rotateY(0)' : 'rotateY(0) scale(0.97)', userSelect: 'none' }}>
+              {up ? c.e : <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: 20, fontWeight: 900 }}>Z</span>}
+            </div>
+          );
+        })}
+      </div>
+      {finished ? (
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: 20, fontWeight: 900, color: theme.ink }}>All pairs found in {moves} moves</div>
+          <button onClick={reset} className="zchat-press" style={{ marginTop: 10, padding: '10px 22px', borderRadius: 14, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontFamily: FONT, cursor: 'pointer' }}>Play again</button>
+        </div>
+      ) : <div style={{ fontSize: 13, color: theme.muted }}>Flip two cards and find every matching pair.</div>}
+    </div>
+  );
+}
+
+function SnakeGame() {
+  const { theme } = useTheme();
+  const canvasRef = useRef(null);
+  const stateRef = useRef(null);
+  const [score, setScore] = useState(0);
+  const [best, setBest] = useState(() => readBest('snake'));
+  const [phase, setPhase] = useState('ready');
+  const N = 16;
+  const touch = useRef(null);
+  const init = () => { stateRef.current = { snake: [[8, 8], [7, 8], [6, 8]], dir: [1, 0], next: [1, 0], food: [12, 8], score: 0, tick: 150 }; };
+  if (!stateRef.current) init();
+  const placeFood = (st) => { let f; do { f = [Math.floor(Math.random() * N), Math.floor(Math.random() * N)]; } while (st.snake.some((p) => p[0] === f[0] && p[1] === f[1])); st.food = f; };
+  const draw = () => {
+    const c = canvasRef.current; if (!c) return;
+    const ctx = c.getContext('2d'); const st = stateRef.current; const cell = c.width / N;
+    ctx.fillStyle = theme.dark ? '#1A1330' : '#EDE7FF'; ctx.fillRect(0, 0, c.width, c.height);
+    ctx.fillStyle = theme.dark ? 'rgba(255,255,255,0.04)' : 'rgba(90,60,180,0.05)';
+    for (let x = 0; x < N; x++) for (let y = 0; y < N; y++) if ((x + y) % 2) ctx.fillRect(x * cell, y * cell, cell, cell);
+    ctx.fillStyle = '#ED4956'; ctx.beginPath(); ctx.arc(st.food[0] * cell + cell / 2, st.food[1] * cell + cell / 2, cell * 0.36, 0, Math.PI * 2); ctx.fill();
+    st.snake.forEach((p, i) => { ctx.fillStyle = i === 0 ? '#B79CFF' : '#7C5CFC'; const r = cell * 0.22; const x = p[0] * cell + 1; const y = p[1] * cell + 1; const w = cell - 2; ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + w, r); ctx.arcTo(x + w, y + w, x, y + w, r); ctx.arcTo(x, y + w, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); ctx.fill(); });
+  };
+  useEffect(() => { draw(); });
+  useEffect(() => {
+    if (phase !== 'playing') return undefined;
+    let timer = null;
+    const step = () => {
+      const st = stateRef.current;
+      st.dir = st.next;
+      const head = [st.snake[0][0] + st.dir[0], st.snake[0][1] + st.dir[1]];
+      if (head[0] < 0 || head[1] < 0 || head[0] >= N || head[1] >= N || st.snake.some((p) => p[0] === head[0] && p[1] === head[1])) {
+        setPhase('over'); playUiSound('cancel'); if (st.score > best) { setBest(st.score); writeBest('snake', st.score); }
+        return;
+      }
+      st.snake.unshift(head);
+      if (head[0] === st.food[0] && head[1] === st.food[1]) { st.score += 1; setScore(st.score); placeFood(st); st.tick = Math.max(70, st.tick - 4); playUiSound('toggle'); hapticTap(); }
+      else st.snake.pop();
+      draw();
+      timer = setTimeout(step, st.tick);
+    };
+    timer = setTimeout(step, stateRef.current.tick);
+    return () => clearTimeout(timer);
+  }, [phase]);
+  const turn = (d) => { const st = stateRef.current; if (st.dir[0] + d[0] === 0 && st.dir[1] + d[1] === 0) return; st.next = d; if (phase !== 'playing') start(); };
+  const start = () => { init(); setScore(0); setPhase('playing'); };
+  useEffect(() => {
+    const onKey = (e) => { const map = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }; if (map[e.key]) { e.preventDefault(); turn(map[e.key]); } };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+  const onTouchStart = (e) => { const t = e.touches[0]; touch.current = { x: t.clientX, y: t.clientY }; };
+  const onTouchEnd = (e) => {
+    const st = touch.current; if (!st) return; touch.current = null;
+    const t = e.changedTouches[0]; const dx = t.clientX - st.x; const dy = t.clientY - st.y;
+    if (Math.max(Math.abs(dx), Math.abs(dy)) < 18) { if (phase !== 'playing') start(); return; }
+    if (Math.abs(dx) > Math.abs(dy)) turn([dx > 0 ? 1 : -1, 0]); else turn([0, dy > 0 ? 1 : -1]);
+  };
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, paddingTop: 8 }}>
+      <div style={{ display: 'flex', gap: 10, width: '100%', maxWidth: 340 }}>
+        {[['Score', score], ['Best', best]].map(([l, v]) => (
+          <div key={l} style={{ flex: 1, padding: '10px 12px', borderRadius: 14, background: theme.rowBg, textAlign: 'center' }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: theme.muted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{l}</div>
+            <div style={{ fontSize: 22, fontWeight: 900, color: theme.ink }}>{v}</div>
+          </div>
+        ))}
+      </div>
+      <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} onClick={() => { if (phase !== 'playing') start(); }} style={{ position: 'relative', width: 'min(340px, 92vw)', aspectRatio: '1', borderRadius: 18, overflow: 'hidden', touchAction: 'none', userSelect: 'none', border: `1px solid ${theme.border}` }}>
+        <canvas ref={canvasRef} width={480} height={480} style={{ width: '100%', height: '100%', display: 'block' }} />
+        {phase !== 'playing' && (
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(10,6,22,0.62)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'white', textAlign: 'center', padding: 20 }}>
+            <div style={{ fontSize: 22, fontWeight: 900 }}>{phase === 'over' ? `Game over, ${score} eaten` : 'Snake'}</div>
+            <div style={{ fontSize: 13.5, color: 'rgba(255,255,255,0.8)' }}>Swipe to steer. Eat the red dots, avoid the walls and your tail.</div>
+            <button onClick={(e) => { e.stopPropagation(); start(); }} className="zchat-press" style={{ marginTop: 8, padding: '10px 22px', borderRadius: 14, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontFamily: FONT, cursor: 'pointer' }}>{phase === 'over' ? 'Play again' : 'Start'}</button>
+          </div>
+        )}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 56px)', gap: 6 }}>
+        {[[null, [0, -1], null], [[-1, 0], null, [1, 0]], [null, [0, 1], null]].flat().map((d, i) => (
+          d ? <div key={i} role="button" aria-label="Steer" onClick={() => turn(d)} style={{ height: 44, borderRadius: 12, background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.ink, cursor: 'pointer' }}><ChevronRight size={20} style={{ transform: `rotate(${d[0] === 1 ? 0 : d[0] === -1 ? 180 : d[1] === 1 ? 90 : -90}deg)` }} /></div> : <div key={i} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+
+function KeyboardIcon({ size = 16, color = 'currentColor', style }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style} aria-hidden="true">
+      <rect x="2" y="6" width="20" height="12" rx="2.5" />
+      <path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M8 14h8" />
+    </svg>
+  );
+}
+function TrophyIcon({ size = 16, color = 'currentColor', style }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style} aria-hidden="true">
+      <path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z" />
+      <path d="M7 6H4v2a3 3 0 0 0 3 3M17 6h3v2a3 3 0 0 1-3 3" />
+    </svg>
+  );
+}
+function VibrateIcon({ size = 16, color = 'currentColor', style }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style} aria-hidden="true">
+      <rect x="8" y="3" width="8" height="18" rx="2" />
+      <path d="M4 9v6M20 9v6M1 11v2M23 11v2" />
+    </svg>
+  );
+}
+function GridDotsIcon({ size = 16, color = 'currentColor', style }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style} aria-hidden="true">
+      <circle cx="6" cy="6" r="2" /><circle cx="12" cy="6" r="2" /><circle cx="18" cy="6" r="2" />
+      <circle cx="6" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="18" cy="12" r="2" />
+      <circle cx="6" cy="18" r="2" /><circle cx="12" cy="18" r="2" /><circle cx="18" cy="18" r="2" />
+    </svg>
+  );
+}
+function BoltIcon({ size = 16, color = 'currentColor', style }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style} aria-hidden="true">
+      <path d="M13 2 4 14h7l-1 8 9-12h-7z" />
+    </svg>
+  );
+}
+
+function ToneList() {
+  const { theme } = useTheme();
+  const [tone, setTone] = useState(readTone);
+  const pick = (k) => {
+    try { localStorage.setItem('zchat-tone', k); } catch {}
+    setTone(k);
+    hapticTap();
+    playUiSound('receive');
+  };
+  return (
+    <div>
+      {NOTIF_TONES.map((t) => (
+        <div key={t.k} role="button" aria-label={`Tone ${t.l}`} onClick={() => pick(t.k)} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 2px', borderBottom: `1px solid ${theme.border}`, cursor: 'pointer' }}>
+          <span style={{ width: 24, display: 'flex', justifyContent: 'center', color: theme.muted }}><Play size={15} /></span>
+          <span style={{ flex: 1, fontSize: 15, fontWeight: 600, color: theme.ink }}>{t.l}</span>
+          {tone === t.k && <Check size={18} color={theme.coral} strokeWidth={2.6} />}
+        </div>
+      ))}
+      <div style={{ padding: '10px 2px 0', fontSize: 12.5, color: theme.muted, lineHeight: 1.5 }}>Tap a tone to hear it. It plays when a message arrives while ZChat is open.</div>
+    </div>
+  );
+}
+
+function ChatsPrefsSection() {
+  const { theme } = useTheme();
+  const [enterSend, setEnterSend] = usePref('zchat-enter-send');
+  const [dbl, setDbl] = usePref('zchat-doubletap');
+  const [swipe, setSwipe] = usePref('zchat-swipe-reply');
+  const [haptics, setHaptics] = usePref('zchat-haptics');
+  const [reduce, setReduce] = usePref('zchat-reduce-motion');
+  const [fmt, setFmt] = usePref('zchat-format');
+  const [fx, setFx] = usePref('zchat-effects');
+  const [quick, setQuick] = useState(getQuickReactions);
+  const [editAt, setEditAt] = useState(null);
+  const touch = isTouchDevice();
+  const row = (icon, label, sub, on, set) => <IgRow inset={false} icon={icon} label={label} sub={sub} right={<IgToggle on={on} onClick={() => set(!on)} />} />;
+  return (
+    <div>
+      <IgHeading>Messages</IgHeading>
+      {!touch && row(<Send size={16} />, 'Enter sends the message', enterSend ? 'Shift and Enter adds a new line' : 'Ctrl and Enter sends instead', enterSend, setEnterSend)}
+      {row(<Heart size={16} />, 'Double tap to heart', 'Tap a message twice to react with a heart', dbl, setDbl)}
+      {row(<Reply size={16} />, 'Swipe to reply', 'Drag a message to the right to reply to it', swipe, setSwipe)}
+      {row(<Type size={16} />, 'Text formatting', 'Stars for bold, tildes to strike, backticks for mono, low lines for italic', fmt, setFmt)}
+      {row(<Sparkles size={16} />, 'Message effects', 'Confetti, hearts, balloons and snow fill the screen for party emoji', fx, setFx)}
+      <IgHeading>Quick reactions</IgHeading>
+      <div style={{ padding: '4px 2px 10px', fontSize: 13, color: theme.muted, lineHeight: 1.5 }}>These six show when you hold a message. Tap one to swap it.</div>
+      <div style={{ display: 'flex', gap: 8, padding: '0 2px 12px' }}>
+        {quick.map((e, i) => (
+          <div key={i} role="button" aria-label={`Quick reaction ${i + 1}`} onClick={() => setEditAt(i)} className="zchat-press" style={{ width: 46, height: 46, borderRadius: 14, background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, cursor: 'pointer', border: `1px solid ${theme.border}` }}>{e}</div>
+        ))}
+      </div>
+      <div role="button" aria-label="Reset quick reactions" onClick={() => { setQuickReactions(REACTION_EMOJIS); setQuick(REACTION_EMOJIS); hapticTap(); }} style={{ fontSize: 13.5, fontWeight: 700, color: theme.coral, padding: '0 2px 12px', cursor: 'pointer' }}>Reset to default</div>
+      <IgHeading>Feel</IgHeading>
+      {row(<VibrateIcon size={16} />, 'Haptic feedback', 'A small buzz on taps and swipes', haptics, setHaptics)}
+      {row(<Activity size={16} />, 'Reduce motion', 'Fade between pages instead of sliding', reduce, setReduce)}
+      {editAt != null && <FullEmojiPicker onClose={() => setEditAt(null)} onPick={(e) => { const next = quick.slice(); next[editAt] = e; setQuickReactions(next); setQuick(next); setEditAt(null); hapticTap(); }} />}
+    </div>
+  );
+}
+
+const KEY_SHORTCUTS = [
+  ['Ctrl K', 'Search chats and people'],
+  ['Esc', 'Go back or close what is open'],
+  ['Alt \u2191  Alt \u2193', 'Previous or next chat'],
+  ['Ctrl Shift U', 'Show only unread chats'],
+  ['Ctrl Shift D', 'Switch dark mode'],
+  ['Enter', 'Send the message'],
+  ['Shift Enter', 'Add a new line'],
+  ['\u2191 in an empty box', 'Edit your last message'],
+  ['Arrows', 'Steer in Snake, 2048, Bricks and Sky hop'],
+];
+function ShortcutsSection() {
+  const { theme } = useTheme();
+  const mac = (() => { try { return /Mac|iPhone|iPad/.test(navigator.platform || ''); } catch { return false; } })();
+  const show = (k) => (mac ? k.replace('Ctrl', '\u2318').replace('Alt', '\u2325') : k);
+  return (
+    <div>
+      <div style={{ padding: '12px 2px 6px', fontSize: 13, color: theme.muted, lineHeight: 1.5 }}>These work when ZChat is open on a computer.</div>
+      {KEY_SHORTCUTS.map(([k, l]) => (
+        <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 2px', borderBottom: `1px solid ${theme.border}` }}>
+          <span style={{ flex: 1, fontSize: 15, color: theme.ink, fontWeight: 600 }}>{l}</span>
+          <span style={{ fontSize: 12.5, fontWeight: 800, color: theme.ink, padding: '5px 9px', borderRadius: 8, background: theme.rowBg, border: `1px solid ${theme.border}`, whiteSpace: 'nowrap' }}>{show(k)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+const PIN_LETTERS = { 2: 'ABC', 3: 'DEF', 4: 'GHI', 5: 'JKL', 6: 'MNO', 7: 'PQRS', 8: 'TUV', 9: 'WXYZ' };
+function AppPinPad({ subtitle, onComplete, error, length = 4, light }) {
+  const { theme } = useTheme();
+  const [pin, setPin] = useState('');
+  const [shake, setShake] = useState(false);
+  const busyRef = useRef(false);
+  useEffect(() => {
+    if (!error) return undefined;
+    setShake(true);
+    setPin('');
+    busyRef.current = false;
+    const t = setTimeout(() => setShake(false), 520);
+    return () => clearTimeout(t);
+  }, [error]);
+  const push = (d) => {
+    if (busyRef.current || pin.length >= length) return;
+    hapticTap();
+    const next = pin + d;
+    setPin(next);
+    if (next.length === length) {
+      busyRef.current = true;
+      setTimeout(() => { onComplete(next); setPin(''); setTimeout(() => { busyRef.current = false; }, 50); }, 140);
+    }
+  };
+  const back = () => { hapticTap(); setPin((p) => p.slice(0, -1)); };
+  useEffect(() => {
+    const onKey = (e) => {
+      if (/^[0-9]$/.test(e.key)) { e.preventDefault(); push(e.key); }
+      else if (e.key === 'Backspace') { e.preventDefault(); back(); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+  const ink = light ? 'white' : theme.ink;
+  const keyBg = light ? 'rgba(255,255,255,0.14)' : theme.rowBg;
+  const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', 'back'];
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 10, userSelect: 'none' }}>
+      {subtitle && <div style={{ fontSize: 14.5, color: light ? 'rgba(255,255,255,0.78)' : theme.muted, textAlign: 'center', minHeight: 20 }}>{subtitle}</div>}
+      <div className={shake ? 'zchat-shake' : ''} style={{ display: 'flex', gap: 16, margin: '22px 0 30px' }}>
+        {Array.from({ length }).map((_, i) => (
+          <div key={i} style={{ width: 14, height: 14, borderRadius: '50%', border: `1.5px solid ${ink}`, background: i < pin.length ? ink : 'transparent', transition: 'background 0.12s' }} />
+        ))}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 74px)', gap: 18 }}>
+        {keys.map((k, i) => (
+          k === '' ? <div key={i} /> : (
+            <div key={i} role="button" aria-label={k === 'back' ? 'Delete digit' : `Digit ${k}`} onClick={() => (k === 'back' ? back() : push(k))} className="zchat-press" style={{ width: 74, height: 74, borderRadius: '50%', background: k === 'back' ? 'transparent' : keyBg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: ink }}>
+              {k === 'back' ? <ArrowLeft size={24} /> : (
+                <>
+                  <span style={{ fontSize: 28, fontWeight: 500, lineHeight: 1 }}>{k}</span>
+                  <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.12em', marginTop: 3, opacity: 0.75, minHeight: 11 }}>{PIN_LETTERS[k] || ''}</span>
+                </>
+              )}
+            </div>
+          )
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AppLockScreen({ onUnlock, onForgot }) {
+  const { theme } = useTheme();
+  const [err, setErr] = useState(0);
+  const [tries, setTries] = useState(0);
+  const [askForgot, setAskForgot] = useState(false);
+  const check = async (pin) => {
+    const ok = await verifyPin(pin);
+    if (ok) { playUiSound('toggle'); onUnlock(); }
+    else { setErr((e) => e + 1); setTries((t) => t + 1); playUiSound('cancel'); }
+  };
+  return (
+    <Portal>
+      <div className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 980, background: 'linear-gradient(160deg, #1B1340 0%, #3B2A7A 55%, #22104A 100%)', color: 'white', fontFamily: FONT, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px 16px calc(24px + env(safe-area-inset-bottom))', overflowY: 'auto' }}>
+        <div style={{ width: 70, height: 70, borderRadius: 24, background: 'rgba(255,255,255,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}><Lock size={30} /></div>
+        <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.01em' }}>ZChat is locked</div>
+        <AppPinPad light subtitle={tries ? 'Wrong PIN, try again' : 'Enter your PIN'} onComplete={check} error={err} />
+        <div role="button" aria-label="Forgot PIN" onClick={() => setAskForgot(true)} style={{ marginTop: 28, fontSize: 14, fontWeight: 700, color: 'rgba(255,255,255,0.8)', cursor: 'pointer' }}>Forgot your PIN?</div>
+        {askForgot && (
+          <ConfirmSheet title="Forgot your PIN?" text="You will be logged out and the PIN removed. Sign in again to get back into your chats." confirmLabel="Log out" zIndex={990}
+            onCancel={() => setAskForgot(false)} onConfirm={onForgot} />
+        )}
+      </div>
+    </Portal>
+  );
+}
+
+function AppLockSection() {
+  const { theme } = useTheme();
+  const [cfg, setCfg] = useState(readAppLock);
+  const [flow, setFlow] = useState(null);
+  const [err, setErr] = useState(0);
+  useBackClose(!!flow, () => setFlow(null));
+  const save = (next) => { writeAppLock(next); setCfg(next); };
+  const begin = (mode, next) => { setErr(0); setFlow({ mode, next }); };
+  const onPin = async (pin) => {
+    if (!flow) return;
+    if (flow.mode === 'verify') {
+      const ok = await verifyPin(pin);
+      if (!ok) { setErr((e) => e + 1); return; }
+      if (flow.next === 'off') { save({ d: cfg.d || 0 }); setFlow(null); playUiSound('toggle'); }
+      else { setErr(0); setFlow({ mode: 'set' }); }
+      return;
+    }
+    if (flow.mode === 'set') { setErr(0); setFlow({ mode: 'confirm', first: pin }); return; }
+    if (flow.mode === 'confirm') {
+      if (pin !== flow.first) { setErr((e) => e + 1); setFlow({ mode: 'set', mismatch: true }); return; }
+      const h = await hashAppPin(pin);
+      save({ h, d: cfg.d || 0 });
+      setFlow(null);
+      playUiSound('like');
+    }
+  };
+  const on = !!cfg.h;
+  const delays = [[0, 'Immediately'], [60, 'After 1 minute'], [300, 'After 5 minutes'], [1800, 'After 30 minutes']];
+  const titles = { verify: 'Enter your PIN', set: 'Choose a PIN', confirm: 'Confirm your PIN' };
+  const subs = flow ? (flow.mode === 'verify' ? (err ? 'Wrong PIN, try again' : 'Your current PIN') : flow.mode === 'set' ? (flow.mismatch ? 'The PINs did not match, start again' : 'Four digits you will remember') : 'Type the same PIN again') : '';
+  return (
+    <div>
+      <div style={{ padding: '12px 2px 6px', fontSize: 13, color: theme.muted, lineHeight: 1.5 }}>Ask for a PIN when you come back to ZChat. Your chats stay hidden until you enter it.</div>
+      <IgRow inset={false} icon={<Lock size={16} />} label="Require PIN" right={<IgToggle on={on} onClick={() => (on ? begin('verify', 'off') : begin('set'))} />} />
+      {on && <IgRow inset={false} icon={<Pencil size={16} />} label="Change PIN" onClick={() => begin('verify', 'change')} />}
+      {on && <IgRow inset={false} icon={<EyeOff size={16} />} label="Lock now" onClick={() => { try { window.dispatchEvent(new Event('zchat-lock-now')); } catch {} }} />}
+      {on && (
+        <>
+          <IgHeading>Lock again</IgHeading>
+          {delays.map(([d, l]) => (
+            <div key={d} role="button" aria-label={l} onClick={() => { save({ ...cfg, d }); hapticTap(); }} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', padding: '13px 2px', borderBottom: `1px solid ${theme.border}`, cursor: 'pointer' }}>
+              <span style={{ flex: 1, fontSize: 15, fontWeight: 600, color: theme.ink }}>{l}</span>
+              {(cfg.d || 0) === d && <Check size={18} color={theme.coral} strokeWidth={2.6} />}
+            </div>
+          ))}
+          <div style={{ padding: '10px 2px 0', fontSize: 12.5, color: theme.muted, lineHeight: 1.5 }}>Counted from the moment you leave the app or switch tabs.</div>
+        </>
+      )}
+      {flow && (
+        <FullPage title={titles[flow.mode]} onBack={() => setFlow(null)} zIndex={70}>
+          <AppPinPad key={flow.mode} subtitle={subs} onComplete={onPin} error={err} />
+        </FullPage>
+      )}
+    </div>
+  );
+}
+
+function ConnectFourCard({ state, myId, live, peerName, onMove, onRematch, ink }) {
+  const { theme } = useTheme();
+  const myMark = state.x === myId ? 1 : state.o === myId ? 2 : 0;
+  const result = state.w ? (state.w === 'd' ? { who: 3, line: null } : (c4Winner(state.b) || { who: state.w === 'x' ? 1 : 2, line: null })) : null;
+  const finished = !!result;
+  const myTurn = live && !finished && state.t === myId && myMark > 0;
+  const winLine = result && result.line ? result.line : [];
+  const status = finished
+    ? (result.who === 3 ? 'Draw' : result.who === myMark ? 'You won' : `${peerName || 'They'} won`)
+    : myTurn ? 'Your move' : live ? `Waiting for ${peerName || 'them'}` : `Move ${state.n}`;
+  const drop = (col) => {
+    if (!myTurn) return;
+    let row = -1;
+    for (let y = C4_H - 1; y >= 0; y--) { if (!state.b[y * C4_W + col]) { row = y; break; } }
+    if (row < 0) return;
+    const b = state.b.slice();
+    b[row * C4_W + col] = myMark;
+    const w = c4Winner(b);
+    hapticTap();
+    playUiSound('tap');
+    onMove({ ...state, b, t: myMark === 1 ? state.o : state.x, n: (state.n || 0) + 1, w: w ? (w.who === 3 ? 'd' : w.who === 1 ? 'x' : 'o') : null });
+  };
+  const cell = live ? 24 : 15;
+  const gap = live ? 3 : 2;
+  const pad = live ? 6 : 4;
+  const colors = { 1: '#FBBF24', 2: '#F43F5E' };
+  const boardW = C4_W * cell + (C4_W - 1) * gap + pad * 2;
+  return (
+    <div onClick={(e) => e.stopPropagation()} style={{ width: boardW + (live ? 20 : 16), boxSizing: 'border-box', padding: live ? '10px 10px 12px' : '8px 8px 10px', borderRadius: 18, background: theme.dark ? 'rgba(255,255,255,0.06)' : 'rgba(90,60,180,0.06)', border: `1px solid ${theme.border}`, opacity: live ? 1 : 0.75 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, color: ink || theme.ink }}>
+        <GridDotsIcon size={15} color={theme.coral} />
+        <span style={{ fontSize: live ? 13 : 11.5, fontWeight: 800, whiteSpace: 'nowrap' }}>Connect four</span>
+        <span style={{ marginLeft: 'auto', fontSize: 10.5, fontWeight: 700, color: myTurn ? theme.coral : theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0, maxWidth: 96, textAlign: 'right' }}>{status}</span>
+      </div>
+      <div style={{ padding: pad, borderRadius: live ? 12 : 8, background: theme.dark ? '#2F3F9E' : '#3B5BDB', display: 'grid', gridTemplateColumns: `repeat(7, ${cell}px)`, gap, boxSizing: 'border-box' }}>
+        {state.b.map((v, i) => {
+          const col = i % C4_W;
+          return (
+            <div key={i} role={myTurn ? 'button' : undefined} aria-label={myTurn ? `Column ${col + 1}` : undefined} onClick={() => drop(col)} style={{
+              width: cell, height: cell, borderRadius: '50%', background: v ? colors[v] : (theme.dark ? 'rgba(10,6,22,0.6)' : 'rgba(255,255,255,0.92)'),
+              boxShadow: winLine.includes(i) ? `inset 0 0 0 ${live ? 3 : 2}px white` : (v ? 'inset 0 -2px 0 rgba(0,0,0,0.18)' : 'none'), cursor: myTurn ? 'pointer' : 'default',
+            }} />
+          );
+        })}
+      </div>
+      {myMark > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, fontSize: 11.5, color: theme.muted }}>
+          <span style={{ width: 10, height: 10, borderRadius: '50%', background: colors[myMark] }} />You{live && !finished && myTurn ? ', tap a column' : ''}
+        </div>
+      )}
+      {live && finished && onRematch && (
+        <button onClick={onRematch} className="zchat-press" style={{ marginTop: 10, width: '100%', height: 34, borderRadius: 10, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontSize: 12.5, fontFamily: FONT, cursor: 'pointer' }}>Play again</button>
+      )}
+      <div style={{ height: 8 }} />
+    </div>
+  );
+}
+
+function RpsCard({ state, myId, live, peerName, onMove, onRematch, ink }) {
+  const { theme } = useTheme();
+  const side = state.x === myId ? 'x' : state.o === myId ? 'o' : null;
+  const other = side === 'x' ? 'o' : 'x';
+  const rounds = state.r || [];
+  const wins = { x: 0, o: 0 };
+  rounds.forEach((rd) => { const w = rpsRoundWinner(rd.x, rd.o); if (w === 1) wins.x += 1; else if (w === 2) wins.o += 1; });
+  const finished = !!state.w;
+  const cur = rounds[rounds.length - 1] || { x: null, o: null };
+  const iPicked = !!(side && cur[side]);
+  const canPick = live && !finished && !!side && !iPicked;
+  const status = finished
+    ? (state.w === 'd' ? 'Draw' : state.w === side ? 'You won' : `${peerName || 'They'} won`)
+    : canPick ? 'Your pick' : live ? `Waiting for ${peerName || 'them'}` : `Round ${rounds.length}`;
+  const pick = (h) => {
+    if (!canPick) return;
+    const r = rounds.map((x) => ({ ...x }));
+    const last = r[r.length - 1];
+    last[side] = h;
+    let w = null;
+    if (last.x && last.o) {
+      const rw = rpsRoundWinner(last.x, last.o);
+      const nw = { ...wins };
+      if (rw === 1) nw.x += 1; else if (rw === 2) nw.o += 1;
+      if (nw.x >= 2) w = 'x'; else if (nw.o >= 2) w = 'o'; else if (r.length >= 9) w = 'd'; else r.push({ x: null, o: null });
+    }
+    hapticTap();
+    playUiSound('tap');
+    onMove({ ...state, r, n: (state.n || 0) + 1, w });
+  };
+  const done = rounds.filter((rd) => rd.x && rd.o);
+  const mine = side || 'x';
+  const theirs = side ? other : 'o';
+  return (
+    <div onClick={(e) => e.stopPropagation()} style={{ width: live ? 236 : 150, boxSizing: 'border-box', padding: live ? '10px 12px 12px' : '8px 10px 10px', borderRadius: 18, background: theme.dark ? 'rgba(255,255,255,0.06)' : 'rgba(90,60,180,0.06)', border: `1px solid ${theme.border}`, opacity: live ? 1 : 0.75 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, color: ink || theme.ink }}>
+        <span style={{ fontSize: 14, lineHeight: 1 }}>{'\u270A'}</span>
+        <span style={{ fontSize: live ? 13 : 11.5, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>Rock paper scissors</span>
+        <span style={{ marginLeft: 'auto', fontSize: 10.5, fontWeight: 700, color: canPick ? theme.coral : theme.muted, whiteSpace: 'nowrap', flexShrink: 0 }}>{status}</span>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 8 }}>
+        <span style={{ fontSize: live ? 12 : 10.5, fontWeight: 700, color: theme.muted }}>You</span>
+        <span style={{ fontSize: live ? 20 : 15, fontWeight: 900, color: ink || theme.ink, letterSpacing: '0.04em' }}>{wins[mine]} : {wins[theirs]}</span>
+        <span style={{ fontSize: live ? 12 : 10.5, fontWeight: 700, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 70 }}>{peerName || 'Them'}</span>
+      </div>
+      {done.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 8 }}>
+          {done.map((rd, i) => {
+            const rw = rpsRoundWinner(rd[mine], rd[theirs]);
+            return (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: live ? 16 : 13 }}>
+                <span style={{ fontSize: 10.5, fontWeight: 700, color: theme.muted, width: 16 }}>{i + 1}</span>
+                <span>{RPS_HANDS[rd[mine]].e}</span>
+                <span style={{ fontSize: 10.5, color: theme.muted }}>vs</span>
+                <span>{RPS_HANDS[rd[theirs]].e}</span>
+                <span style={{ marginLeft: 'auto', fontSize: 10.5, fontWeight: 800, color: rw === 1 ? '#22c55e' : rw === 2 ? theme.danger : theme.muted }}>{rw === 1 ? 'Won' : rw === 2 ? 'Lost' : 'Tie'}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {live && !finished && side && canPick && (
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+          {Object.keys(RPS_HANDS).map((h) => (
+            <div key={h} role="button" aria-label={RPS_HANDS[h].l} onClick={() => pick(h)} className="zchat-press" style={{ width: 56, height: 56, borderRadius: 16, background: theme.dark ? 'rgba(10,6,22,0.6)' : '#FFFFFF', border: `1px solid ${theme.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, cursor: 'pointer' }}>{RPS_HANDS[h].e}</div>
+          ))}
+        </div>
+      )}
+      {live && !finished && side && iPicked && (
+        <div style={{ textAlign: 'center', fontSize: 11.5, color: theme.muted }}>You picked {RPS_HANDS[cur[side]].l.toLowerCase()}. Waiting for {peerName || 'them'}</div>
+      )}
+      {live && finished && onRematch && (
+        <button onClick={onRematch} className="zchat-press" style={{ marginTop: 8, width: '100%', height: 34, borderRadius: 10, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontSize: 12.5, fontFamily: FONT, cursor: 'pointer' }}>Play again</button>
+      )}
+      <div style={{ height: 8 }} />
+    </div>
+  );
+}
+
+function ScoreCard({ state, isMe, senderName, ink, onPlay }) {
+  const { theme } = useTheme();
+  const title = gameTitle(state);
+  return (
+    <div onClick={(e) => e.stopPropagation()} style={{ width: 196, boxSizing: 'border-box', padding: '12px 14px 12px', borderRadius: 18, background: theme.dark ? 'rgba(255,255,255,0.06)' : 'rgba(90,60,180,0.06)', border: `1px solid ${theme.border}` }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: ink || theme.ink }}>
+        <TrophyIcon size={15} color="#F59E0B" />
+        <span style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase' }}>High score</span>
+      </div>
+      <div style={{ fontSize: 30, fontWeight: 900, color: ink || theme.ink, letterSpacing: '-0.02em', marginTop: 6, lineHeight: 1.05 }}>{formatGameScore(state.k, state.s)}</div>
+      <div style={{ fontSize: 12.5, color: theme.muted, marginTop: 3 }}>{isMe ? 'Your best' : `${senderName || 'Their'} best`} in {title}</div>
+      <button onClick={onPlay} className="zchat-press" style={{ marginTop: 10, width: '100%', height: 34, borderRadius: 10, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontSize: 12.5, fontFamily: FONT, cursor: 'pointer' }}>{isMe ? 'Play again' : 'Try to beat it'}</button>
+      <div style={{ height: 8 }} />
+    </div>
+  );
+}
+
+function roundRectFill(ctx, x, y, w, h, r) {
+  if (w <= 0 || h <= 0) return;
+  const rr = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + rr, y);
+  ctx.arcTo(x + w, y, x + w, y + h, rr);
+  ctx.arcTo(x + w, y + h, x, y + h, rr);
+  ctx.arcTo(x, y + h, x, y, rr);
+  ctx.arcTo(x, y, x + w, y, rr);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function screenEffectFor(text) {
+  if (typeof text !== 'string' || !text || !prefOn('zchat-effects')) return null;
+  const t = text.trim();
+  if (!t || t.length > 120) return null;
+  if (/[\u{1F389}\u{1F38A}\u{1F382}\u{1F973}]/u.test(t)) return 'confetti';
+  if (/\u{1F388}/u.test(t)) return 'balloons';
+  if (/[\u{2744}\u{26C4}\u{2603}]/u.test(t)) return 'snow';
+  const hearts = t.replace(/[\u{2764}\u{1F495}\u{1F496}\u{1F497}\u{1F498}\u{1F49D}\u{1F49E}\u{1F49F}\u{1F60D}\u{1F970}\u{1F9E1}\u{1F49B}\u{1F49A}\u{1F499}\u{1F49C}\u{1F90D}\u{1F5A4}\u{1F48B}\uFE0F\s]/gu, '');
+  if (!hearts && /[\u{2764}\u{1F495}\u{1F496}\u{1F497}\u{1F498}\u{1F49D}\u{1F49E}\u{1F49F}\u{1F60D}\u{1F970}\u{1F9E1}\u{1F49B}\u{1F49A}\u{1F499}\u{1F49C}\u{1F90D}\u{1F5A4}\u{1F48B}]/u.test(t)) return 'hearts';
+  return null;
+}
+function ScreenEffect({ kind, onDone }) {
+  const canvasRef = useRef(null);
+  useEffect(() => {
+    const c = canvasRef.current;
+    if (!c) return undefined;
+    const W = c.width = window.innerWidth;
+    const H = c.height = window.innerHeight;
+    const ctx = c.getContext('2d');
+    const colors = ['#F43F5E', '#F59E0B', '#22C55E', '#3B82F6', '#A855F7', '#EC4899', '#FBBF24'];
+    const parts = [];
+    const n = kind === 'confetti' ? 140 : kind === 'hearts' ? 26 : kind === 'balloons' ? 14 : 110;
+    for (let i = 0; i < n; i++) {
+      if (kind === 'confetti') parts.push({ x: Math.random() * W, y: -20 - Math.random() * H * 0.6, vx: (Math.random() - 0.5) * 1.6, vy: 2.2 + Math.random() * 3, r: Math.random() * Math.PI, vr: (Math.random() - 0.5) * 0.25, w: 6 + Math.random() * 6, h: 8 + Math.random() * 8, c: colors[i % colors.length] });
+      else if (kind === 'hearts') parts.push({ x: Math.random() * W, y: H + 20 + Math.random() * H * 0.5, vx: (Math.random() - 0.5) * 0.8, vy: -(1.6 + Math.random() * 1.8), s: 18 + Math.random() * 26, c: ['#F43F5E', '#EC4899', '#FB7185', '#E11D48'][i % 4], ph: Math.random() * 6 });
+      else if (kind === 'balloons') parts.push({ x: 20 + Math.random() * (W - 40), y: H + 40 + Math.random() * H * 0.6, vx: (Math.random() - 0.5) * 0.6, vy: -(1.4 + Math.random() * 1.2), s: 22 + Math.random() * 16, c: colors[i % colors.length], ph: Math.random() * 6 });
+      else parts.push({ x: Math.random() * W, y: -10 - Math.random() * H, vx: (Math.random() - 0.5) * 0.6, vy: 0.9 + Math.random() * 1.6, s: 1.5 + Math.random() * 3, ph: Math.random() * 6 });
+    }
+    const start = performance.now();
+    const life = kind === 'snow' ? 4200 : 3200;
+    let raf = 0;
+    const draw = (now) => {
+      const t = now - start;
+      ctx.clearRect(0, 0, W, H);
+      const fade = t > life - 600 ? Math.max(0, (life - t) / 600) : 1;
+      ctx.globalAlpha = fade;
+      parts.forEach((p) => {
+        p.x += p.vx; p.y += p.vy;
+        if (kind === 'confetti') {
+          p.r += p.vr; p.vx += Math.sin(t / 300 + p.y / 40) * 0.02;
+          ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.r); ctx.fillStyle = p.c; ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h); ctx.restore();
+        } else if (kind === 'hearts') {
+          p.x += Math.sin(t / 400 + p.ph) * 0.6;
+          ctx.save(); ctx.translate(p.x, p.y); ctx.fillStyle = p.c; const s = p.s / 2;
+          ctx.beginPath(); ctx.moveTo(0, s * 0.9); ctx.bezierCurveTo(-s * 1.4, -s * 0.2, -s * 0.6, -s * 1.2, 0, -s * 0.4); ctx.bezierCurveTo(s * 0.6, -s * 1.2, s * 1.4, -s * 0.2, 0, s * 0.9); ctx.fill(); ctx.restore();
+        } else if (kind === 'balloons') {
+          p.x += Math.sin(t / 500 + p.ph) * 0.5;
+          ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(p.x, p.y + p.s); ctx.quadraticCurveTo(p.x + 6, p.y + p.s + 18, p.x, p.y + p.s + 36); ctx.stroke();
+          ctx.fillStyle = p.c; ctx.beginPath(); ctx.ellipse(p.x, p.y, p.s * 0.8, p.s, 0, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.beginPath(); ctx.ellipse(p.x - p.s * 0.3, p.y - p.s * 0.4, p.s * 0.2, p.s * 0.3, -0.5, 0, Math.PI * 2); ctx.fill();
+        } else {
+          p.x += Math.sin(t / 700 + p.ph) * 0.3;
+          ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.beginPath(); ctx.arc(p.x, p.y, p.s, 0, Math.PI * 2); ctx.fill();
+        }
+      });
+      ctx.globalAlpha = 1;
+      if (t < life) raf = requestAnimationFrame(draw); else onDone();
+    };
+    raf = requestAnimationFrame(draw);
+    return () => cancelAnimationFrame(raf);
+  }, [kind]);
+  return <canvas ref={canvasRef} aria-hidden="true" style={{ position: 'fixed', inset: 0, width: '100%', height: '100%', zIndex: 520, pointerEvents: 'none' }} />;
+}
+
+function MessageInfoSheet({ m, isMine, peerName, isGroup, onClose }) {
+  const { theme } = useTheme();
+  const when = (v) => (v ? new Date(v).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit', day: 'numeric', month: 'short' }) : '');
+  const kind = m.type === 'text' ? (parseGameMessage(m.content) ? 'Game' : parseLocationMessage(m.content) ? 'Location' : 'Text') : m.type === 'image' ? 'Photo' : m.type === 'video' ? 'Video' : m.type === 'voice' || m.type === 'audio' ? 'Voice message' : m.type === 'sticker' ? 'Sticker' : 'Message';
+  const status = m.queued ? 'Waiting to send' : (m.read && !isGroup) ? `Read by ${peerName || 'them'}` : m.delivered ? 'Delivered' : 'Sent';
+  const val = (t) => <span style={{ fontSize: 13.5, color: theme.muted, whiteSpace: 'nowrap' }}>{t}</span>;
+  const actions = [
+    { icon: <Clock size={18} />, label: 'Sent', right: val(when(m.created_at)), onClick: () => {} },
+    isMine ? { icon: <CheckCheck size={18} />, label: 'Status', right: val(status), onClick: () => {} } : null,
+    { icon: <FileText size={18} />, label: 'Type', right: val(kind), onClick: () => {} },
+    m.edited ? { icon: <Edit3 size={18} />, label: 'Edited', right: val('Yes'), onClick: () => {} } : null,
+    m.type === 'text' && m.content && kind === 'Text' ? { icon: <Type size={18} />, label: 'Length', right: val(`${m.content.length} characters`), onClick: () => {} } : null,
+    m.expires_at ? { icon: <Timer size={18} />, label: 'Disappears', right: val(when(m.expires_at)), onClick: () => {} } : null,
+  ];
+  return <ChatRowSheet title="Message info" subtitle={isMine ? 'Sent by you' : `From ${peerName || 'them'}`} onClose={onClose} actions={actions} zIndex={96} />;
+}
+
+function GameStats({ items, right }) {
+  const { theme } = useTheme();
+  return (
+    <div style={{ display: 'flex', gap: 10, width: '100%', maxWidth: 340 }}>
+      {items.map(([l, v]) => (
+        <div key={l} style={{ flex: 1, padding: '10px 12px', borderRadius: 14, background: theme.rowBg, textAlign: 'center' }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: theme.muted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{l}</div>
+          <div style={{ fontSize: 22, fontWeight: 900, color: theme.ink }}>{v}</div>
+        </div>
+      ))}
+      {right}
+    </div>
+  );
+}
+
+function GameOverlay({ title, text, button, onStart }) {
+  const { theme } = useTheme();
+  return (
+    <div style={{ position: 'absolute', inset: 0, background: 'rgba(10,6,22,0.62)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'white', textAlign: 'center', padding: 20 }}>
+      <div style={{ fontSize: 22, fontWeight: 900 }}>{title}</div>
+      <div style={{ fontSize: 13.5, color: 'rgba(255,255,255,0.8)', lineHeight: 1.45 }}>{text}</div>
+      <button onClick={(e) => { e.stopPropagation(); onStart(); }} className="zchat-press" style={{ marginTop: 8, padding: '10px 22px', borderRadius: 14, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontFamily: FONT, cursor: 'pointer' }}>{button}</button>
+    </div>
+  );
+}
+
+function SkyHopGame() {
+  const { theme } = useTheme();
+  const canvasRef = useRef(null);
+  const st = useRef(null);
+  const [phase, setPhase] = useState('ready');
+  const [score, setScore] = useState(0);
+  const [best, setBest] = useState(() => readBest('sky'));
+  const W = 320;
+  const H = 440;
+  const GAP = 132;
+  const reset = () => { st.current = { y: H / 2, vy: 0, pipes: [], frame: 0, score: 0 }; };
+  if (!st.current) reset();
+  const draw = () => {
+    const c = canvasRef.current; if (!c) return;
+    const ctx = c.getContext('2d');
+    const s = st.current;
+    const sky = ctx.createLinearGradient(0, 0, 0, H);
+    sky.addColorStop(0, theme.dark ? '#1B1740' : '#8FD3FF');
+    sky.addColorStop(1, theme.dark ? '#3A2A6E' : '#E3F6FF');
+    ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = theme.dark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.7)';
+    for (let i = 0; i < 3; i++) { const cx = ((i * 140 + s.frame * 0.4) % (W + 80)) - 40; ctx.beginPath(); ctx.arc(cx, 70 + i * 60, 18, 0, Math.PI * 2); ctx.arc(cx + 20, 64 + i * 60, 22, 0, Math.PI * 2); ctx.arc(cx + 42, 72 + i * 60, 16, 0, Math.PI * 2); ctx.fill(); }
+    ctx.fillStyle = theme.dark ? '#6D5BD0' : '#34D399';
+    s.pipes.forEach((p) => { roundRectFill(ctx, p.x, -8, 46, p.top + 8, 8); roundRectFill(ctx, p.x, p.top + GAP, 46, H - p.top - GAP - 28 + 8, 8); });
+    ctx.fillStyle = theme.dark ? '#2A2150' : '#D8B37A'; ctx.fillRect(0, H - 28, W, 28);
+    ctx.fillStyle = theme.dark ? '#3B2F6E' : '#8BD36B'; ctx.fillRect(0, H - 28, W, 5);
+    ctx.save();
+    ctx.translate(80, s.y);
+    ctx.rotate(Math.max(-0.5, Math.min(0.8, s.vy / 10)));
+    ctx.fillStyle = '#FBBF24'; ctx.beginPath(); ctx.arc(0, 0, 13, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#F97316'; ctx.beginPath(); ctx.moveTo(10, -2); ctx.lineTo(19, 2); ctx.lineTo(10, 6); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = 'white'; ctx.beginPath(); ctx.arc(4, -4, 4, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(5.5, -4, 2, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#F59E0B'; ctx.beginPath(); ctx.ellipse(-4, 3, 7, 4, -0.4, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  };
+  useEffect(() => { draw(); });
+  useEffect(() => {
+    if (phase !== 'playing') return undefined;
+    let raf = 0;
+    const step = () => {
+      const s = st.current;
+      s.frame += 1;
+      s.vy = Math.min(9, s.vy + 0.34);
+      s.y += s.vy;
+      if (s.frame % 100 === 0) s.pipes.push({ x: W + 10, top: 48 + Math.random() * (H - 28 - GAP - 96), passed: false });
+      s.pipes.forEach((p) => { p.x -= 2.4; if (!p.passed && p.x + 46 < 80) { p.passed = true; s.score += 1; setScore(s.score); playUiSound('toggle'); } });
+      s.pipes = s.pipes.filter((p) => p.x > -60);
+      const hit = s.y + 12 > H - 28 || s.y - 12 < 0 || s.pipes.some((p) => 80 + 11 > p.x && 80 - 11 < p.x + 46 && (s.y - 11 < p.top || s.y + 11 > p.top + GAP));
+      draw();
+      if (hit) {
+        setPhase('over'); playUiSound('cancel'); hapticTap();
+        const b = readBest('sky');
+        if (s.score > b) { setBest(s.score); writeBest('sky', s.score); }
+        return;
+      }
+      raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [phase]);
+  const flap = () => {
+    if (phase !== 'playing') { reset(); setScore(0); st.current.vy = -6.2; setPhase('playing'); return; }
+    st.current.vy = -6.4;
+    hapticTap();
+  };
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === ' ' || e.key === 'ArrowUp') { e.preventDefault(); flap(); } };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, paddingTop: 8 }}>
+      <GameStats items={[['Score', score], ['Best', best]]} />
+      <div onPointerDown={(e) => { e.preventDefault(); flap(); }} style={{ position: 'relative', width: 'min(320px, 92vw)', aspectRatio: '320 / 440', borderRadius: 18, overflow: 'hidden', touchAction: 'none', userSelect: 'none', border: `1px solid ${theme.border}`, cursor: 'pointer' }}>
+        <canvas ref={canvasRef} width={W} height={H} style={{ width: '100%', height: '100%', display: 'block' }} />
+        {phase !== 'playing' && <GameOverlay title={phase === 'over' ? `You passed ${score}` : 'Sky hop'} text="Tap to flap. Slip through the gaps and do not touch anything." button={phase === 'over' ? 'Play again' : 'Start'} onStart={flap} />}
+      </div>
+    </div>
+  );
+}
+
+function BricksGame() {
+  const { theme } = useTheme();
+  const canvasRef = useRef(null);
+  const st = useRef(null);
+  const [phase, setPhase] = useState('ready');
+  const [score, setScore] = useState(0);
+  const [lives, setLives] = useState(3);
+  const [level, setLevel] = useState(1);
+  const [best, setBest] = useState(() => readBest('bricks'));
+  const W = 320;
+  const H = 420;
+  const PW = 66;
+  const PH = 10;
+  const BR = 6;
+  const COLORS = ['#F87171', '#FB923C', '#FBBF24', '#4ADE80', '#60A5FA'];
+  const makeBricks = () => { const out = []; for (let r = 0; r < 5; r++) for (let c = 0; c < 7; c++) out.push({ x: 8 + c * 44, y: 40 + r * 20, w: 40, h: 14, c: COLORS[r], on: true }); return out; };
+  const fresh = () => ({ px: W / 2 - PW / 2, bx: W / 2, by: H - 60, vx: 2.3 * (Math.random() < 0.5 ? -1 : 1), vy: -3.4, bricks: makeBricks(), score: 0, lives: 3, level: 1, launched: false, speed: 1 });
+  if (!st.current) st.current = fresh();
+  const draw = () => {
+    const c = canvasRef.current; if (!c) return;
+    const ctx = c.getContext('2d');
+    const s = st.current;
+    ctx.fillStyle = theme.dark ? '#140F2A' : '#F3F0FF'; ctx.fillRect(0, 0, W, H);
+    s.bricks.forEach((b) => { if (!b.on) return; ctx.fillStyle = b.c; roundRectFill(ctx, b.x, b.y, b.w, b.h, 4); });
+    ctx.fillStyle = theme.dark ? '#B79CFF' : '#7C5CFC'; roundRectFill(ctx, s.px, H - 30, PW, PH, 5);
+    ctx.fillStyle = theme.dark ? 'white' : '#1F1537'; ctx.beginPath(); ctx.arc(s.bx, s.by, BR, 0, Math.PI * 2); ctx.fill();
+  };
+  useEffect(() => { draw(); });
+  useEffect(() => {
+    if (phase !== 'playing') return undefined;
+    let raf = 0;
+    const step = () => {
+      const s = st.current;
+      if (!s.launched) { s.bx = s.px + PW / 2; s.by = H - 30 - BR - 1; }
+      else {
+        s.bx += s.vx * s.speed; s.by += s.vy * s.speed;
+        if (s.bx - BR < 0) { s.bx = BR; s.vx = Math.abs(s.vx); }
+        if (s.bx + BR > W) { s.bx = W - BR; s.vx = -Math.abs(s.vx); }
+        if (s.by - BR < 0) { s.by = BR; s.vy = Math.abs(s.vy); }
+        if (s.vy > 0 && s.by + BR >= H - 30 && s.by + BR <= H - 30 + PH + 4 && s.bx >= s.px - BR && s.bx <= s.px + PW + BR) {
+          const rel = (s.bx - (s.px + PW / 2)) / (PW / 2);
+          const ang = rel * 1.05;
+          const sp = Math.hypot(s.vx, s.vy);
+          s.vx = Math.sin(ang) * sp; s.vy = -Math.abs(Math.cos(ang) * sp);
+          s.by = H - 30 - BR;
+          playUiSound('tap');
+        }
+        for (let i = 0; i < s.bricks.length; i++) {
+          const b = s.bricks[i];
+          if (!b.on) continue;
+          if (s.bx + BR > b.x && s.bx - BR < b.x + b.w && s.by + BR > b.y && s.by - BR < b.y + b.h) {
+            b.on = false;
+            s.score += 10;
+            setScore(s.score);
+            const fromSide = Math.min(Math.abs(s.bx - b.x), Math.abs(s.bx - (b.x + b.w))) < Math.min(Math.abs(s.by - b.y), Math.abs(s.by - (b.y + b.h)));
+            if (fromSide) s.vx = -s.vx; else s.vy = -s.vy;
+            playUiSound('toggle');
+            break;
+          }
+        }
+        if (s.bricks.every((b) => !b.on)) {
+          s.level += 1; setLevel(s.level); s.speed = Math.min(1.9, s.speed + 0.15); s.bricks = makeBricks(); s.launched = false; s.vy = -Math.abs(s.vy); playUiSound('win'); hapticTap();
+        }
+        if (s.by - BR > H) {
+          s.lives -= 1; setLives(s.lives); hapticTap();
+          if (s.lives <= 0) {
+            draw(); setPhase('over'); playUiSound('cancel');
+            const b = readBest('bricks');
+            if (s.score > b) { setBest(s.score); writeBest('bricks', s.score); }
+            return;
+          }
+          s.launched = false; s.vx = 2.3 * (Math.random() < 0.5 ? -1 : 1); s.vy = -3.4;
+        }
+      }
+      draw();
+      raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [phase]);
+  const start = () => { st.current = fresh(); setScore(0); setLives(3); setLevel(1); setPhase('playing'); };
+  const moveTo = (clientX, el) => {
+    const r = el.getBoundingClientRect();
+    const x = ((clientX - r.left) / r.width) * W;
+    st.current.px = Math.max(0, Math.min(W - PW, x - PW / 2));
+    if (phase !== 'playing') draw();
+  };
+  const launch = () => { if (phase !== 'playing') { start(); return; } if (!st.current.launched) { st.current.launched = true; hapticTap(); } };
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === 'ArrowLeft') { e.preventDefault(); st.current.px = Math.max(0, st.current.px - 22); }
+      else if (e.key === 'ArrowRight') { e.preventDefault(); st.current.px = Math.min(W - PW, st.current.px + 22); }
+      else if (e.key === ' ') { e.preventDefault(); launch(); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, paddingTop: 8 }}>
+      <GameStats items={[['Score', score], ['Lives', lives], ['Level', level], ['Best', best]]} />
+      <div onPointerMove={(e) => moveTo(e.clientX, e.currentTarget)} onPointerDown={(e) => { moveTo(e.clientX, e.currentTarget); launch(); }} style={{ position: 'relative', width: 'min(320px, 92vw)', aspectRatio: '320 / 420', borderRadius: 18, overflow: 'hidden', touchAction: 'none', userSelect: 'none', border: `1px solid ${theme.border}`, cursor: 'pointer' }}>
+        <canvas ref={canvasRef} width={W} height={H} style={{ width: '100%', height: '100%', display: 'block' }} />
+        {phase !== 'playing' && <GameOverlay title={phase === 'over' ? `Game over, ${score} points` : 'Bricks'} text="Slide to move the paddle. Tap to launch the ball and clear every brick." button={phase === 'over' ? 'Play again' : 'Start'} onStart={start} />}
+      </div>
+    </div>
+  );
+}
+
+const WORD_LIST = 'about above abuse actor acute admit adopt adult after again agent agree ahead alarm album alert alike alive allow alone along alter among anger angle angry apart apple apply arena argue arise array aside asset audio audit avoid awake award aware badly baker bases basic basis beach began begin begun being below bench birth black blame blind block blood board boost booth bound brain brand bread break breed brief bring broad broke brown build built buyer cable carry catch cause chain chair chart chase cheap check chest chief child china chose civil claim class clean clear click clock close coach coast could count court cover craft crash cream crime cross crowd crown curve cycle daily dance dated dealt death debut delay depth doing doubt dozen draft drama drawn dream dress drill drink drive drove dying eager early earth eight elite empty enemy enjoy enter entry equal error event every exact exist extra faith false fault fiber field fifth fifty fight final first fixed flash fleet floor fluid focus force forth forty forum found frame frank fraud fresh front fruit fully funny giant given glass globe going grace grade grand grant grass great green gross group grown guard guess guest guide happy harry heart heavy hence henry horse hotel house human ideal image index inner input issue japan jimmy joint jones judge known label large laser later laugh layer learn lease least leave legal level lewis light limit links lives local logic loose lower lucky lunch lying magic major maker march maria match maybe mayor meant media metal might minor minus mixed model money month moral motor mount mouse mouth movie music needs never newly night noise north noted novel nurse occur ocean offer often order other ought paint panel paper party peace peter phase phone photo piece pilot pitch place plain plane plant plate point pound power press price pride prime print prior prize proof proud prove queen quick quiet quite radio raise range rapid ratio reach ready refer right rival river robin roger roman rough round route royal rural scale scene scope score sense serve seven shall shape share sharp sheet shelf shell shift shirt shock shoot short shown sight since sixth sixty sized skill sleep slide small smart smile smith smoke solid solve sorry sound south space spare speak speed spend spent split spoke sport staff stage stake stand start state steam steel stick still stock stone stood store storm story strip stuck study stuff style sugar suite super sweet table taken taste taxes teach teeth terry texas thank theft their theme there these thick thing think third those three threw throw tight times tired title today topic total touch tough tower track trade train treat trend trial tried tries truck truly trust truth twice under undue union unity until upper upset urban usage usual valid value video virus visit vital voice waste watch water wheel where which while white whole whose woman women world worry worse worst worth would wound write wrong wrote yield young youth'.split(' ');
+function wordOfDay() {
+  const d = new Date();
+  const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+  let h = 7;
+  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
+  return WORD_LIST[h % WORD_LIST.length];
+}
+function scoreGuess(guess, answer) {
+  const out = Array(5).fill('absent');
+  const left = answer.split('');
+  for (let i = 0; i < 5; i++) if (guess[i] === answer[i]) { out[i] = 'correct'; left[i] = null; }
+  for (let i = 0; i < 5; i++) {
+    if (out[i] === 'correct') continue;
+    const at = left.indexOf(guess[i]);
+    if (at >= 0) { out[i] = 'present'; left[at] = null; }
+  }
+  return out;
+}
+function WordGame() {
+  const { theme } = useTheme();
+  const [answer, setAnswer] = useState(wordOfDay);
+  const [daily, setDaily] = useState(true);
+  const [rows, setRows] = useState([]);
+  const [cur, setCur] = useState('');
+  const [done, setDone] = useState(null);
+  const [shake, setShake] = useState(false);
+  const [streak, setStreak] = useState(() => { try { return parseInt(localStorage.getItem('zchat-word-streak') || '0', 10) || 0; } catch { return 0; } });
+  const [best, setBest] = useState(() => readBest('word'));
+  const saveStreak = (n) => { setStreak(n); try { localStorage.setItem('zchat-word-streak', String(n)); } catch {} if (n > readBest('word')) { setBest(n); writeBest('word', n); } };
+  const colors = { correct: '#22C55E', present: '#EAB308', absent: theme.dark ? '#3A3550' : '#9CA3AF' };
+  const keyState = {};
+  rows.forEach((r) => r.marks.forEach((mk, i) => { const ch = r.word[i]; const rank = { absent: 1, present: 2, correct: 3 }; if (!keyState[ch] || rank[mk] > rank[keyState[ch]]) keyState[ch] = mk; }));
+  const submit = () => {
+    if (done) return;
+    if (cur.length !== 5) { setShake(true); setTimeout(() => setShake(false), 500); hapticTap(); return; }
+    const marks = scoreGuess(cur, answer);
+    const next = [...rows, { word: cur, marks }];
+    setRows(next);
+    setCur('');
+    if (cur === answer) { setDone('won'); playUiSound('win'); saveStreak(streak + 1); }
+    else if (next.length >= 6) { setDone('lost'); playUiSound('cancel'); saveStreak(0); }
+    else playUiSound('tap');
+  };
+  const type = (k) => {
+    if (done) return;
+    if (k === 'enter') { submit(); return; }
+    if (k === 'back') { setCur((c) => c.slice(0, -1)); return; }
+    if (cur.length < 5) { hapticTap(); setCur((c) => c + k); }
+  };
+  const newWord = (isDaily) => {
+    const w = isDaily ? wordOfDay() : WORD_LIST[Math.floor(Math.random() * WORD_LIST.length)];
+    setAnswer(w); setDaily(isDaily); setRows([]); setCur(''); setDone(null);
+  };
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key === 'Enter') { e.preventDefault(); type('enter'); }
+      else if (e.key === 'Backspace') { e.preventDefault(); type('back'); }
+      else if (/^[a-zA-Z]$/.test(e.key)) { e.preventDefault(); type(e.key.toLowerCase()); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+  const keyRows = ['qwertyuiop', 'asdfghjkl', 'zxcvbnm'];
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, paddingTop: 6 }}>
+      <GameStats items={[['Streak', streak], ['Best', best]]} right={(
+        <button onClick={() => newWord(!daily)} className="zchat-press" style={{ padding: '0 14px', borderRadius: 14, border: 'none', background: theme.rowBg, color: theme.ink, fontWeight: 800, fontSize: 12.5, fontFamily: FONT, cursor: 'pointer', whiteSpace: 'nowrap' }}>{daily ? 'Random' : 'Daily'}</button>
+      )} />
+      <div style={{ fontSize: 12.5, color: theme.muted }}>{daily ? 'Word of the day. Guess it in six tries.' : 'A random word. Guess it in six tries.'}</div>
+      <div style={{ display: 'grid', gridTemplateRows: 'repeat(6, 1fr)', gap: 6 }}>
+        {Array.from({ length: 6 }).map((_, r) => {
+          const row = rows[r];
+          const typing = !row && r === rows.length;
+          const letters = row ? row.word : (typing ? cur.padEnd(5, ' ') : '     ');
+          return (
+            <div key={r} className={typing && shake ? 'zchat-shake' : ''} style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 50px)', gap: 6 }}>
+              {letters.split('').map((ch, i) => (
+                <div key={i} style={{ width: 50, height: 50, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, fontWeight: 900, textTransform: 'uppercase', color: row ? 'white' : theme.ink, background: row ? colors[row.marks[i]] : 'transparent', border: `2px solid ${row ? 'transparent' : (ch.trim() ? theme.ink : theme.border)}`, transition: 'background 0.25s', boxSizing: 'border-box' }}>{ch.trim()}</div>
+              ))}
+            </div>
+          );
+        })}
+      </div>
+      {done && (
+        <div style={{ textAlign: 'center', marginTop: 2 }}>
+          <div style={{ fontSize: 18, fontWeight: 900, color: theme.ink }}>{done === 'won' ? `Got it in ${rows.length}` : `It was ${answer.toUpperCase()}`}</div>
+          <button onClick={() => newWord(false)} className="zchat-press" style={{ marginTop: 8, padding: '9px 20px', borderRadius: 14, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontFamily: FONT, cursor: 'pointer' }}>Next word</button>
+        </div>
+      )}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center', width: '100%', maxWidth: 360, marginTop: 4 }}>
+        {keyRows.map((kr, ri) => (
+          <div key={ri} style={{ display: 'flex', gap: 4, justifyContent: 'center', width: '100%' }}>
+            {ri === 2 && <div role="button" aria-label="Enter word" onClick={() => type('enter')} className="zchat-press" style={{ flex: 1.6, height: 46, borderRadius: 8, background: theme.rowBg, color: theme.ink, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, cursor: 'pointer', maxWidth: 54 }}>ENTER</div>}
+            {kr.split('').map((k) => (
+              <div key={k} role="button" aria-label={`Key ${k}`} onClick={() => type(k)} className="zchat-press" style={{ flex: 1, height: 46, borderRadius: 8, background: keyState[k] ? colors[keyState[k]] : theme.rowBg, color: keyState[k] ? 'white' : theme.ink, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 800, textTransform: 'uppercase', cursor: 'pointer', maxWidth: 34, userSelect: 'none' }}>{k}</div>
+            ))}
+            {ri === 2 && <div role="button" aria-label="Delete letter" onClick={() => type('back')} className="zchat-press" style={{ flex: 1.6, height: 46, borderRadius: 8, background: theme.rowBg, color: theme.ink, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', maxWidth: 54 }}><ArrowLeft size={18} /></div>}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ReflexGame() {
+  const { theme } = useTheme();
+  const [phase, setPhase] = useState('idle');
+  const [ms, setMs] = useState(null);
+  const [runs, setRuns] = useState([]);
+  const [best, setBest] = useState(() => readBest('reflex'));
+  const timer = useRef(null);
+  const goAt = useRef(0);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  const arm = () => {
+    setPhase('wait'); setMs(null); hapticTap();
+    timer.current = setTimeout(() => { goAt.current = performance.now(); setPhase('go'); playUiSound('toggle'); }, 1200 + Math.random() * 2600);
+  };
+  const tap = () => {
+    if (phase === 'idle' || phase === 'result' || phase === 'early') { arm(); return; }
+    if (phase === 'wait') { clearTimeout(timer.current); setPhase('early'); playUiSound('cancel'); hapticTap(); return; }
+    if (phase === 'go') {
+      const t = Math.round(performance.now() - goAt.current);
+      setMs(t); setPhase('result'); playUiSound('like'); hapticTap();
+      const next = [...runs, t].slice(-5); setRuns(next);
+      const b = readBest('reflex');
+      if (!b || t < b) { setBest(t); writeBest('reflex', t); }
+    }
+  };
+  const avg = runs.length ? Math.round(runs.reduce((a, b) => a + b, 0) / runs.length) : null;
+  const bg = phase === 'go' ? '#22C55E' : phase === 'wait' ? '#EF4444' : phase === 'early' ? '#F59E0B' : (theme.dark ? '#2A2150' : '#7C5CFC');
+  const title = phase === 'idle' ? 'Tap to start' : phase === 'wait' ? 'Wait for green' : phase === 'go' ? 'Tap!' : phase === 'early' ? 'Too soon' : `${ms} ms`;
+  const text = phase === 'idle' ? 'When the box turns green, tap as fast as you can.' : phase === 'wait' ? 'Hold on' : phase === 'go' ? '' : phase === 'early' ? 'Tap to try again' : (ms < 200 ? 'Lightning fast. Tap to go again' : ms < 300 ? 'Quick. Tap to go again' : 'Tap to go again');
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, paddingTop: 8 }}>
+      <GameStats items={[['Best', best ? `${best} ms` : '\u2013'], ['Average', avg ? `${avg} ms` : '\u2013'], ['Tries', runs.length]]} />
+      <div role="button" aria-label="Reflex pad" onPointerDown={(e) => { e.preventDefault(); tap(); }} style={{ width: 'min(320px, 92vw)', aspectRatio: '1', borderRadius: 24, background: bg, color: 'white', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer', userSelect: 'none', touchAction: 'none', transition: 'background 0.15s', textAlign: 'center', padding: 24, boxSizing: 'border-box' }}>
+        <BoltIcon size={44} />
+        <div style={{ fontSize: 30, fontWeight: 900 }}>{title}</div>
+        <div style={{ fontSize: 14, opacity: 0.85 }}>{text}</div>
+      </div>
+    </div>
+  );
+}
+
+const QUIZ_POOL = [
+  ['What is the capital of Japan?', ['Tokyo', 'Kyoto', 'Osaka', 'Seoul'], 0],
+  ['How many continents are there?', ['Five', 'Six', 'Seven', 'Eight'], 2],
+  ['Which planet is known as the red planet?', ['Venus', 'Mars', 'Jupiter', 'Mercury'], 1],
+  ['What is the largest ocean?', ['Atlantic', 'Indian', 'Arctic', 'Pacific'], 3],
+  ['Water boils at what temperature in Celsius?', ['90', '100', '110', '120'], 1],
+  ['Which animal is the tallest?', ['Elephant', 'Giraffe', 'Horse', 'Camel'], 1],
+  ['How many sides does a hexagon have?', ['Five', 'Six', 'Seven', 'Eight'], 1],
+  ['What gas do plants breathe in?', ['Oxygen', 'Nitrogen', 'Carbon dioxide', 'Helium'], 2],
+  ['Which is the longest river in the world?', ['Nile', 'Amazon', 'Yangtze', 'Danube'], 0],
+  ['What is 12 times 12?', ['124', '132', '144', '156'], 2],
+  ['Which country has the most people?', ['USA', 'India', 'Brazil', 'Russia'], 1],
+  ['What is the hardest natural material?', ['Gold', 'Iron', 'Diamond', 'Quartz'], 2],
+  ['How many days are in a leap year?', ['364', '365', '366', '367'], 2],
+  ['Which instrument has 88 keys?', ['Guitar', 'Piano', 'Violin', 'Flute'], 1],
+  ['What is the capital of Australia?', ['Sydney', 'Melbourne', 'Canberra', 'Perth'], 2],
+  ['Which is the smallest prime number?', ['0', '1', '2', '3'], 2],
+  ['What do bees make?', ['Milk', 'Honey', 'Wax only', 'Silk'], 1],
+  ['Which ocean is Sri Lanka in?', ['Pacific', 'Atlantic', 'Indian', 'Southern'], 2],
+  ['How many legs does a spider have?', ['Six', 'Eight', 'Ten', 'Twelve'], 1],
+  ['What is frozen water called?', ['Steam', 'Ice', 'Mist', 'Dew'], 1],
+  ['Which is the largest desert?', ['Sahara', 'Gobi', 'Antarctica', 'Arabian'], 2],
+  ['What color do you get mixing blue and yellow?', ['Purple', 'Orange', 'Green', 'Brown'], 2],
+  ['Which planet has rings you can see?', ['Earth', 'Saturn', 'Mars', 'Venus'], 1],
+  ['How many minutes are in two hours?', ['60', '90', '120', '150'], 2],
+  ['What is the capital of France?', ['Rome', 'Paris', 'Madrid', 'Berlin'], 1],
+  ['Which bird cannot fly?', ['Eagle', 'Penguin', 'Parrot', 'Swan'], 1],
+  ['What is H2O?', ['Salt', 'Water', 'Sugar', 'Air'], 1],
+  ['Which is the fastest land animal?', ['Lion', 'Cheetah', 'Horse', 'Tiger'], 1],
+  ['How many strings does a standard guitar have?', ['Four', 'Five', 'Six', 'Seven'], 2],
+  ['What is the square root of 81?', ['7', '8', '9', '10'], 2],
+  ['Which language has the most native speakers?', ['English', 'Mandarin', 'Spanish', 'Hindi'], 1],
+  ['Which metal is liquid at room temperature?', ['Iron', 'Mercury', 'Copper', 'Silver'], 1],
+  ['What is the largest mammal?', ['Elephant', 'Blue whale', 'Giraffe', 'Hippo'], 1],
+  ['How many bones are in the adult human body?', ['106', '186', '206', '306'], 2],
+  ['Which continent is Egypt in?', ['Asia', 'Europe', 'Africa', 'Australia'], 2],
+  ['What is 15 percent of 200?', ['20', '25', '30', '35'], 2],
+  ['Which is the closest star to Earth?', ['Sirius', 'The Sun', 'Polaris', 'Vega'], 1],
+  ['How many players are on a football team on the pitch?', ['Nine', 'Ten', 'Eleven', 'Twelve'], 2],
+  ['Which fruit is known for keeping doctors away?', ['Banana', 'Apple', 'Orange', 'Grape'], 1],
+  ['What is the currency of the United Kingdom?', ['Euro', 'Dollar', 'Pound', 'Franc'], 2],
+];
+function QuizGame() {
+  const { theme } = useTheme();
+  const dealQ = () => QUIZ_POOL.slice().sort(() => Math.random() - 0.5).slice(0, 10);
+  const [qs, setQs] = useState(dealQ);
+  const [at, setAt] = useState(0);
+  const [picked, setPicked] = useState(null);
+  const [score, setScore] = useState(0);
+  const [best, setBest] = useState(() => readBest('quiz'));
+  const [over, setOver] = useState(false);
+  const q = qs[at];
+  const choose = (i) => {
+    if (picked != null) return;
+    setPicked(i);
+    hapticTap();
+    const ok = i === q[2];
+    const sc = score + (ok ? 1 : 0);
+    if (ok) { setScore(sc); playUiSound('like'); } else playUiSound('cancel');
+    setTimeout(() => {
+      if (at + 1 >= qs.length) { setOver(true); playUiSound('win'); const b = readBest('quiz'); if (sc > b) { setBest(sc); writeBest('quiz', sc); } }
+      else { setAt(at + 1); setPicked(null); }
+    }, 750);
+  };
+  const restart = () => { setQs(dealQ()); setAt(0); setPicked(null); setScore(0); setOver(false); };
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, paddingTop: 8 }}>
+      <GameStats items={[['Question', over ? 10 : `${at + 1} of 10`], ['Score', score], ['Best', best]]} />
+      {over ? (
+        <div style={{ textAlign: 'center', padding: '30px 10px' }}>
+          <TrophyIcon size={46} color="#F59E0B" />
+          <div style={{ fontSize: 24, fontWeight: 900, color: theme.ink, marginTop: 8 }}>{score} of 10</div>
+          <div style={{ fontSize: 13.5, color: theme.muted, marginTop: 4 }}>{score >= 9 ? 'Brilliant' : score >= 6 ? 'Nice work' : 'Keep practising'}</div>
+          <button onClick={restart} className="zchat-press" style={{ marginTop: 14, padding: '10px 22px', borderRadius: 14, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontFamily: FONT, cursor: 'pointer' }}>Play again</button>
+        </div>
+      ) : (
+        <div style={{ width: '100%', maxWidth: 360 }}>
+          <div style={{ padding: '18px 18px', borderRadius: 18, background: theme.rowBg, fontSize: 17, fontWeight: 800, color: theme.ink, lineHeight: 1.35, minHeight: 60 }}>{q[0]}</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
+            {q[1].map((opt, i) => {
+              const isRight = i === q[2];
+              const show = picked != null;
+              const bg = show && isRight ? '#22C55E' : (show && picked === i ? theme.danger : theme.panelBg);
+              const color = show && (isRight || picked === i) ? 'white' : theme.ink;
+              return (
+                <div key={opt} role="button" aria-label={`Answer ${opt}`} onClick={() => choose(i)} className="zchat-press" style={{ padding: '13px 16px', borderRadius: 14, background: bg, color, border: `1px solid ${theme.border}`, fontSize: 15, fontWeight: 700, cursor: 'pointer', transition: 'background 0.2s' }}>{opt}</div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EchoGame() {
+  const { theme } = useTheme();
+  const PADS = [{ c: '#EF4444', k: 'pad1' }, { c: '#22C55E', k: 'pad2' }, { c: '#3B82F6', k: 'pad3' }, { c: '#EAB308', k: 'pad4' }];
+  const [seq, setSeq] = useState([]);
+  const [lit, setLit] = useState(-1);
+  const [phase, setPhase] = useState('idle');
+  const [best, setBest] = useState(() => readBest('echo'));
+  const inputRef = useRef([]);
+  const timers = useRef([]);
+  const clearTimers = () => { timers.current.forEach((t) => clearTimeout(t)); timers.current = []; };
+  useEffect(() => () => clearTimers(), []);
+  const play = (s) => {
+    setPhase('show');
+    clearTimers();
+    s.forEach((p, i) => {
+      timers.current.push(setTimeout(() => { setLit(p); playUiSound(PADS[p].k); }, 450 * i + 350));
+      timers.current.push(setTimeout(() => setLit(-1), 450 * i + 650));
+    });
+    timers.current.push(setTimeout(() => { setPhase('input'); inputRef.current = []; }, 450 * s.length + 420));
+  };
+  const start = () => { const s = [Math.floor(Math.random() * 4)]; setSeq(s); play(s); hapticTap(); };
+  const tap = (p) => {
+    if (phase !== 'input') { if (phase === 'idle' || phase === 'over') start(); return; }
+    hapticTap();
+    playUiSound(PADS[p].k);
+    setLit(p);
+    setTimeout(() => setLit(-1), 180);
+    inputRef.current.push(p);
+    const i = inputRef.current.length - 1;
+    if (seq[i] !== p) {
+      setPhase('over'); playUiSound('cancel');
+      const level = seq.length - 1;
+      const b = readBest('echo');
+      if (level > b) { setBest(level); writeBest('echo', level); }
+      return;
+    }
+    if (inputRef.current.length === seq.length) {
+      const next = [...seq, Math.floor(Math.random() * 4)];
+      setSeq(next);
+      setPhase('show');
+      setTimeout(() => play(next), 500);
+    }
+  };
+  const level = phase === 'over' ? seq.length - 1 : Math.max(0, seq.length - (phase === 'show' ? 1 : 1) + 1);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, paddingTop: 8 }}>
+      <GameStats items={[['Level', phase === 'idle' ? 0 : level], ['Best', best]]} />
+      <div style={{ position: 'relative', width: 'min(300px, 88vw)', aspectRatio: '1', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, userSelect: 'none' }}>
+        {PADS.map((pd, i) => (
+          <div key={pd.k} role="button" aria-label={`Pad ${i + 1}`} onPointerDown={(e) => { e.preventDefault(); tap(i); }} style={{ borderRadius: i === 0 ? '60% 16px 16px 16px' : i === 1 ? '16px 60% 16px 16px' : i === 2 ? '16px 16px 16px 60%' : '16px 16px 60% 16px', background: pd.c, opacity: lit === i ? 1 : 0.45, transform: lit === i ? 'scale(1.03)' : 'scale(1)', transition: 'opacity 0.12s, transform 0.12s', cursor: 'pointer', touchAction: 'none', boxShadow: lit === i ? `0 0 28px ${pd.c}` : 'none' }} />
+        ))}
+        {(phase === 'idle' || phase === 'over') && (
+          <div onClick={start} style={{ position: 'absolute', inset: '28%', borderRadius: '50%', background: theme.panelBg, border: `1px solid ${theme.border}`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', cursor: 'pointer', boxShadow: '0 10px 30px rgba(0,0,0,0.25)', padding: 10 }}>
+            <div style={{ fontSize: 16, fontWeight: 900, color: theme.ink }}>{phase === 'over' ? `Level ${seq.length - 1}` : 'Echo'}</div>
+            <div style={{ fontSize: 11.5, color: theme.muted, marginTop: 2 }}>{phase === 'over' ? 'Tap to retry' : 'Tap to start'}</div>
+          </div>
+        )}
+      </div>
+      <div style={{ fontSize: 13, color: theme.muted, textAlign: 'center', minHeight: 18 }}>{phase === 'show' ? 'Watch and listen' : phase === 'input' ? 'Now repeat it' : 'Repeat the pattern. It grows by one each round.'}</div>
+    </div>
+  );
+}
+
+const SOLO_GAMES = [
+  { k: '2048', sub: 'Slide and merge the tiles', icon: <span style={{ fontWeight: 900, fontSize: 15 }}>2048</span>, bg: 'linear-gradient(135deg, #F59E0B, #EF4444)' },
+  { k: 'snake', sub: 'Eat, grow, do not crash', icon: <Activity size={22} />, bg: 'linear-gradient(135deg, #22D3EE, #6366F1)' },
+  { k: 'sky', sub: 'Flap through the gaps', icon: <span style={{ fontSize: 24, lineHeight: 1 }}>{'\u{1F424}'}</span>, bg: 'linear-gradient(135deg, #38BDF8, #2563EB)' },
+  { k: 'bricks', sub: 'Break every brick', icon: <GridDotsIcon size={22} />, bg: 'linear-gradient(135deg, #A855F7, #EC4899)' },
+  { k: 'word', sub: 'Guess the five letter word', icon: <Type size={22} />, bg: 'linear-gradient(135deg, #22C55E, #14B8A6)' },
+  { k: 'memory', sub: 'Find the pairs', icon: <Sparkles size={22} />, bg: 'linear-gradient(135deg, #10B981, #0EA5E9)' },
+  { k: 'reflex', sub: 'How fast are you', icon: <BoltIcon size={22} />, bg: 'linear-gradient(135deg, #F97316, #DC2626)' },
+  { k: 'quiz', sub: 'Ten quick questions', icon: <HelpCircle size={22} />, bg: 'linear-gradient(135deg, #6366F1, #8B5CF6)' },
+  { k: 'echo', sub: 'Repeat the pattern', icon: <Volume2 size={22} />, bg: 'linear-gradient(135deg, #EC4899, #F43F5E)' },
+];
+function GamesPage({ onClose, onChallenge, onShareScore, initialGame }) {
+  useBackClose(true, onClose);
+  const { theme } = useTheme();
+  const [game, setGame] = useState(() => (initialGame && SOLO_GAMES.some((g) => g.k === initialGame) ? initialGame : null));
+  useBackClose(!!game, () => setGame(null));
+  const friend = [
+    { k: 'ttt', sub: 'Three in a row', icon: <GamepadIcon size={24} />, bg: 'linear-gradient(135deg, #7C5CFC, #EC4899)' },
+    { k: 'c4', sub: 'Drop discs, line up four', icon: <GridDotsIcon size={24} />, bg: 'linear-gradient(135deg, #2563EB, #06B6D4)' },
+    { k: 'rps', sub: 'Best of three rounds', icon: <span style={{ fontSize: 26, lineHeight: 1 }}>{'\u270A'}</span>, bg: 'linear-gradient(135deg, #F59E0B, #F43F5E)' },
+  ];
+  const bestLabel = (k) => { const b = readBest(k); return b ? `Best ${formatGameScore(k, b)}` : 'No score yet'; };
+  return (
+    <>
+      <FullPage title="Games" subtitle="Solo or with a friend" onBack={onClose} zIndex={60}>
+        <IgHeading>With a friend</IgHeading>
+        {friend.map((it) => (
+          <div key={it.k} role="button" aria-label={GAME_TITLES[it.k]} onClick={() => { playUiSound('tap'); onChallenge(it.k); }} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '10px 4px', margin: '0 -4px', borderRadius: 14, cursor: 'pointer' }}>
+            <div style={{ width: 52, height: 52, borderRadius: 16, background: it.bg, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 8px 20px rgba(0,0,0,0.2)' }}>{it.icon}</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: theme.ink }}>{GAME_TITLES[it.k]}</div>
+              <div style={{ fontSize: 13, color: theme.muted, marginTop: 1 }}>{it.sub}</div>
+            </div>
+            <ChevronRight size={18} color={theme.muted} />
+          </div>
+        ))}
+        <IgHeading>Solo</IgHeading>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, paddingBottom: 8 }}>
+          {SOLO_GAMES.map((it) => (
+            <div key={it.k} role="button" aria-label={GAME_TITLES[it.k]} onClick={() => { playUiSound('tap'); setGame(it.k); }} className="zchat-press" style={{ borderRadius: 18, padding: 12, background: theme.rowBg, border: `1px solid ${theme.border}`, cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ width: 46, height: 46, borderRadius: 14, background: it.bg, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 18px rgba(0,0,0,0.18)' }}>{it.icon}</div>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 15, fontWeight: 800, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{GAME_TITLES[it.k]}</div>
+                <div style={{ fontSize: 12, color: theme.muted, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.sub}</div>
+                <div style={{ fontSize: 11.5, fontWeight: 700, color: readBest(it.k) ? theme.coral : theme.muted, marginTop: 5 }}>{bestLabel(it.k)}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div style={{ padding: '4px 2px 10px', fontSize: 12.5, color: theme.muted, lineHeight: 1.5 }}>Scores stay on this phone. Open a game and tap share to send your best to a friend.</div>
+      </FullPage>
+      {game && (
+        <FullPage title={GAME_TITLES[game]} subtitle={bestLabel(game)} onBack={() => setGame(null)} zIndex={61}
+          right={<HeaderIconButton label="Share score" onClick={() => onShareScore(game, readBest(game))}><Share2 /></HeaderIconButton>}>
+          {game === '2048' && <Game2048 />}
+          {game === 'memory' && <MemoryGame />}
+          {game === 'snake' && <SnakeGame />}
+          {game === 'sky' && <SkyHopGame />}
+          {game === 'bricks' && <BricksGame />}
+          {game === 'word' && <WordGame />}
+          {game === 'reflex' && <ReflexGame />}
+          {game === 'quiz' && <QuizGame />}
+          {game === 'echo' && <EchoGame />}
+        </FullPage>
+      )}
+    </>
+  );
+}
+
+function AttachSheet({ onClose, onCamera, onGallery, onLocation, onGame, canGame, locating }) {
+  useBackClose(true, onClose);
+  const { theme } = useTheme();
+  const items = [
+    { k: 'camera', label: 'Camera', icon: <Camera size={24} />, bg: 'linear-gradient(135deg, #EC4899, #F97316)', on: onCamera },
+    { k: 'gallery', label: 'Photo or video', icon: <ImageIcon size={24} />, bg: 'linear-gradient(135deg, #7C5CFC, #A78BFA)', on: onGallery },
+    { k: 'location', label: locating ? 'Finding you' : 'Location', icon: locating ? <Spinner size={18} color="white" /> : <Compass size={24} />, bg: 'linear-gradient(135deg, #10B981, #0EA5E9)', on: onLocation },
+    canGame ? { k: 'game', label: 'Games', icon: <GamepadIcon size={24} />, bg: 'linear-gradient(135deg, #F59E0B, #EF4444)', on: onGame } : null,
+  ].filter(Boolean);
+  return (
+    <div onClick={onClose} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 94, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontFamily: FONT, background: theme.dark ? 'rgba(3,6,14,0.45)' : 'rgba(230,234,244,0.45)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' }}>
+      <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ width: '100%', maxWidth: 460, background: theme.panelBg, borderRadius: '24px 24px 0 0', padding: '10px 16px', paddingBottom: 'calc(18px + env(safe-area-inset-bottom))', boxShadow: '0 -10px 40px rgba(0,0,0,0.25)' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '2px 0 14px' }}><div style={{ width: 38, height: 4, borderRadius: 2, background: theme.border }} /></div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+          {items.map((it) => (
+            <div key={it.k} role="button" aria-label={it.label} onClick={() => { if (!locating) { playUiSound('tap'); it.on(); } }} className="zchat-press" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+              <div style={{ width: 58, height: 58, borderRadius: 20, background: it.bg, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 20px rgba(0,0,0,0.22)' }}>{it.icon}</div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: theme.ink, textAlign: 'center' }}>{it.label}</div>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -21834,7 +23883,7 @@ function AppInner() {
 
   if (!session || needsProfile || registering) {
     if (needsProfile) {
-      const isGoogleUser = session?.user?.app_metadata?.provider === 'google';
+      const isGoogleUser = ['google', 'apple'].includes(session?.user?.app_metadata?.provider);
       return (
         <AuthShell>
           <RegisterFlow
