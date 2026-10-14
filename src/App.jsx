@@ -205,14 +205,75 @@ const deepDmPrefetch = { current: null };
 const backStack = [];
 const VT_SUPPORTED = typeof document !== 'undefined' && typeof document.startViewTransition === 'function';
 let vtUpdating = false;
+function overlayKindOf(n) {
+  if (!n || n.nodeType !== 1 || !n.style) return null;
+  const st = n.style;
+  const pos = st.position;
+  if (pos !== 'fixed' && pos !== 'absolute') return null;
+  const full = st.inset === '0px' || (st.left === '0px' && st.right === '0px' && (st.top === '0px' || String(st.top).indexOf('var(') === 0));
+  if (!full) return null;
+  const cl = n.classList;
+  if (cl.contains('zchat-panel-open')) return 'page';
+  if (st.alignItems === 'flex-end') return 'sheet';
+  if (cl.contains('zchat-fade')) return (st.justifyContent === 'center' && st.alignItems === 'center') ? 'dialog' : 'fade';
+  return null;
+}
+function reducedMotion() {
+  try { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); } catch { return false; }
+}
+function sheetOrDialogShowing() {
+  try {
+    const els = document.querySelectorAll('.zchat-fade, [style*="align-items: flex-end"]');
+    for (let i = 0; i < els.length; i++) {
+      const el = els[i];
+      const k = overlayKindOf(el);
+      if (k === 'sheet' || k === 'dialog') { const r = el.getBoundingClientRect(); if (r.width > 0 && r.height > 0) return true; }
+    }
+  } catch {}
+  return false;
+}
+let ghostsInstalled = false;
+function installOverlayGhosts() {
+  if (ghostsInstalled || typeof MutationObserver === 'undefined' || typeof document === 'undefined') return;
+  ghostsInstalled = true;
+  const mo = new MutationObserver((muts) => {
+    for (let i = 0; i < muts.length; i++) {
+      const removed = muts[i].removedNodes;
+      for (let j = 0; j < removed.length; j++) {
+        const n = removed[j];
+        const kind = overlayKindOf(n);
+        if (!kind) continue;
+        if (n.getAttribute('data-ghost') || n.getAttribute('data-ghost-skip')) continue;
+        if (document.documentElement.classList.contains('zchat-vt')) continue;
+        if (reducedMotion()) continue;
+        if (document.hidden) continue;
+        let g;
+        try { g = n.cloneNode(true); } catch { continue; }
+        g.setAttribute('data-ghost', '1');
+        g.setAttribute('aria-hidden', 'true');
+        g.classList.remove('zchat-fade', 'zchat-panel-open', 'zchat-pop', 'zchat-tab-in');
+        g.classList.add('zchat-ghost', 'zchat-ghost-' + kind);
+        g.style.pointerEvents = 'none';
+        g.style.animation = 'none';
+        const inner = g.querySelectorAll('.zchat-sheet-up, .zchat-pop, .zchat-fade, .zchat-tab-in, .zchat-panel-open, .zchat-mail-zoom, .zchat-wave-pop');
+        for (let k = 0; k < inner.length; k++) inner[k].classList.remove('zchat-sheet-up', 'zchat-pop', 'zchat-fade', 'zchat-tab-in', 'zchat-panel-open', 'zchat-mail-zoom', 'zchat-wave-pop');
+        const media = g.querySelectorAll('video, audio, iframe');
+        for (let k = 0; k < media.length; k++) media[k].remove();
+        document.body.appendChild(g);
+        setTimeout(() => { try { g.remove(); } catch {} }, kind === 'page' ? 320 : 300);
+      }
+    }
+  });
+  mo.observe(document.body, { childList: true, subtree: true });
+}
 let fallbackPopBusy = false;
 function fallbackPopAnimation() {
   try {
     const els = Array.from(document.querySelectorAll('.zchat-panel-open'));
     const vis = els.filter((el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; });
     const top = vis[vis.length - 1];
-    if (!top) return null;
-    top.style.animation = 'zchat-panel-zoom-out 0.22s cubic-bezier(0.4, 0, 1, 1) forwards';
+    if (!top || !top.classList.contains('zchat-chat-panel')) return null;
+    top.style.animation = 'zchat-panel-zoom-out 0.24s cubic-bezier(0.4, 0, 1, 1) forwards';
     top.style.pointerEvents = 'none';
     return top;
   } catch { return null; }
@@ -220,7 +281,8 @@ function fallbackPopAnimation() {
 function runWithTransition(fn, dir) {
   if (vtUpdating) { fn(); return; }
   try {
-    const reduce = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const reduce = reducedMotion();
+    if (dir === 'pop' && sheetOrDialogShowing()) { fn(); return; }
     if (!reduce && !VT_SUPPORTED && dir === 'pop' && window.innerWidth < 900 && !fallbackPopBusy) {
       const el = fallbackPopAnimation();
       if (el) {
@@ -230,13 +292,13 @@ function runWithTransition(fn, dir) {
             fallbackPopBusy = false;
             setTimeout(() => { if (el.isConnected) { el.style.animation = ''; el.style.pointerEvents = ''; } }, 60);
           }
-        }, 210);
+        }, 220);
         return;
       }
     }
-    if (!reduce && VT_SUPPORTED) {
+    if (VT_SUPPORTED) {
       const html = document.documentElement;
-      const nav = window.innerWidth >= 900 ? 'fade' : (dir || 'fade');
+      const nav = reduce || window.innerWidth >= 900 ? 'fade' : (dir || 'fade');
       html.setAttribute('data-nav', nav);
       html.classList.add('zchat-vt');
       const t = document.startViewTransition(() => {
@@ -249,6 +311,20 @@ function runWithTransition(fn, dir) {
     }
   } catch {}
   fn();
+}
+function useNavState(initial) {
+  const [value, setRaw] = useState(initial);
+  const ref = useRef(value);
+  ref.current = value;
+  const set = (v) => {
+    const cur = ref.current;
+    const next = typeof v === 'function' ? v(cur) : v;
+    if (Object.is(next, cur)) return;
+    ref.current = next;
+    if (!!next === !!cur) { setRaw(next); return; }
+    runWithTransition(() => setRaw(next), next ? 'push' : 'pop');
+  };
+  return [value, set];
 }
 function useBackClose(active, onClose) {
   const ref = useRef(onClose);
@@ -376,7 +452,7 @@ function bubbleThemeStyle(chatTheme, isMe, theme) {
 }
 
 const COMPOSER_AUTOSIZE = typeof CSS !== 'undefined' && typeof CSS.supports === 'function' && CSS.supports('field-sizing', 'content');
-const FONT = "'Manrope', -apple-system, BlinkMacSystemFont, system-ui, sans-serif";
+const FONT = "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
 const MAX_CHARS = 1000;
 
 const VAPID_PUBLIC_KEY = 'BPQngcM9FnRSK09G8_WBfzP_Gx6HXtYhtaIvXYLuGVFbojePmdVS-KUYUU63n6kFky3WBcbJLoZ48IvBmfoutAk';
@@ -472,7 +548,6 @@ function Spinner({ size = 16, color = 'white' }) {
 function GlobalStyle() {
   return (
     <style>{`
-      @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
       @keyframes zchat-spin { to { transform: rotate(360deg); } }
       @keyframes zchat-fade { from { opacity: 0; transform: scale(0.965) translateY(8px); } to { opacity: 1; transform: scale(1) translateY(0); } }
       @keyframes zchat-repost-ring { 0% { opacity: 0.9; transform: scale(0.4); } 100% { opacity: 0; transform: scale(2.2); } }
@@ -492,6 +567,8 @@ function GlobalStyle() {
       .zchat-tab-in { animation: zchat-tab-in 0.22s cubic-bezier(0.16, 1, 0.3, 1); }
       .zchat-press { transition: transform 0.12s ease; }
       .zchat-press:active { transform: scale(0.94); }
+      .zchat-row-press { transition: background 0.12s ease; }
+      .zchat-row-press:active { background: rgba(140,120,200,0.14) !important; }
       @keyframes zchat-vt-out { to { opacity: 0; transform: translateX(22px) scale(0.985); } }
       @keyframes zchat-vt-in { from { opacity: 0; transform: translateX(-16px); } }
       ::view-transition-old(root) { animation: zchat-vt-out 0.2s cubic-bezier(0.4, 0, 1, 1) both; }
@@ -511,12 +588,28 @@ function GlobalStyle() {
       @keyframes zchat-pull-spin { to { transform: rotate(360deg); } }
       @keyframes zchat-toast-in { 0% { opacity: 0; transform: translateY(-28px) scale(0.97); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
       @keyframes zchat-pop-in { 0% { opacity: 0; transform: scale(0.92); } 100% { opacity: 1; transform: scale(1); } }
-      @keyframes zchat-sheet-up { 0% { transform: translateY(40px); opacity: 0; } 100% { transform: translateY(0); opacity: 1; } }
+      @keyframes zchat-sheet-up { 0% { transform: translateY(100%); } 100% { transform: translateY(0); } }
+      @keyframes zchat-sheet-down { 0% { transform: translateY(0); } 100% { transform: translateY(104%); } }
+      @keyframes zchat-ghost-fade { 0% { opacity: 1; } 100% { opacity: 0; } }
+      @keyframes zchat-dialog-out { 0% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(0.94); } }
+      @keyframes zchat-backdrop-in { from { opacity: 0; } to { opacity: 1; } }
+      .zchat-ghost { animation: none !important; }
+      .zchat-ghost-page { animation: zchat-panel-zoom-out 0.3s cubic-bezier(0.32, 0.72, 0, 1) forwards !important; }
+      .zchat-ghost-sheet { animation: zchat-ghost-fade 0.26s ease forwards !important; }
+      .zchat-ghost-sheet > * { animation: zchat-sheet-down 0.28s cubic-bezier(0.4, 0, 1, 1) forwards !important; }
+      .zchat-ghost-dialog { animation: zchat-ghost-fade 0.18s ease forwards !important; }
+      .zchat-ghost-dialog > * { animation: zchat-dialog-out 0.18s ease forwards !important; }
+      .zchat-ghost-fade { animation: zchat-ghost-fade 0.2s ease forwards !important; }
+      @keyframes zchat-vt-fade-out { to { opacity: 0; } }
+      @keyframes zchat-vt-fade-in { from { opacity: 0; } }
+      html[data-nav="fade"]::view-transition-old(root) { animation: zchat-vt-fade-out 0.18s ease both; }
+      html[data-nav="fade"]::view-transition-new(root) { animation: zchat-vt-fade-in 0.22s ease both; }
       @keyframes zchat-bot-orb { 0% { transform: translate(0, 0) scale(1); } 100% { transform: translate(40px, -50px) scale(1.18); } }
       @keyframes zchat-dots { 0%, 80%, 100% { opacity: 0.25; } 40% { opacity: 1; } }
       .zchat-toast-in { animation: zchat-toast-in 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.1); }
       .zchat-pop { animation: zchat-pop-in 0.18s cubic-bezier(0.2, 0.9, 0.3, 1.2); }
-      .zchat-sheet-up { animation: zchat-sheet-up 0.22s cubic-bezier(0.2, 0.9, 0.3, 1); }
+      .zchat-sheet-up { animation: zchat-sheet-up 0.34s cubic-bezier(0.22, 1, 0.36, 1); }
+      [style*="align-items: flex-end"].zchat-fade { animation: zchat-backdrop-in 0.22s ease; transform: none; }
       @keyframes zchat-call-pulse { 0% { box-shadow: 0 0 0 0 rgba(52,199,89,0.55); } 70% { box-shadow: 0 0 0 16px rgba(52,199,89,0); } 100% { box-shadow: 0 0 0 0 rgba(52,199,89,0); } }
       @keyframes zchat-call-ring { 0% { transform: scale(0.92); opacity: 0.85; } 100% { transform: scale(1.4); opacity: 0; } }
       .zchat-call-pulse { animation: zchat-call-pulse 1.6s infinite; }
@@ -1403,7 +1496,7 @@ function IgRow({ icon, label, sub, onClick, danger, right, value, bold, inset = 
   const c = igPalette(theme);
   const showChevron = !right && !danger && !!onClick;
   return (
-    <div role={onClick ? 'button' : undefined} onClick={onClick} style={{
+    <div role={onClick ? 'button' : undefined} onClick={onClick} className={onClick ? 'zchat-row-press' : undefined} style={{
       display: 'flex', alignItems: 'center', gap: 16, minHeight: sub ? 60 : 52, padding: inset ? '0 16px' : '0',
       cursor: onClick ? 'pointer' : 'default', color: c.fg, WebkitTapHighlightColor: 'transparent',
     }}>
@@ -1427,7 +1520,7 @@ function IgToggle({ on, onClick }) {
   const { theme } = useTheme();
   const c = igPalette(theme);
   return (
-    <div role="switch" aria-checked={!!on} onClick={onClick} style={{
+    <div role="switch" aria-checked={!!on} onClick={(e) => { hapticTap(); playUiSound('toggle'); if (onClick) onClick(e); }} style={{
       flex: 'none', width: 46, height: 28, borderRadius: 14, position: 'relative', cursor: 'pointer',
       background: on ? c.fg : c.track, transition: 'background 0.2s',
     }}>
@@ -1537,7 +1630,7 @@ function SettingsRow({ icon, label, sub, onClick, danger, right }) {
 function ToggleSwitch({ on, onClick }) {
   const { theme } = useTheme();
   return (
-    <div onClick={onClick} style={{
+    <div onClick={(e) => { hapticTap(); playUiSound('toggle'); if (onClick) onClick(e); }} style={{
       width: 44, height: 26, borderRadius: 20, background: on ? theme.coral : theme.border,
       position: 'relative', cursor: 'pointer', transition: 'background 0.2s', flexShrink: 0,
     }}>
@@ -1683,6 +1776,7 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
       { icon: <Bell />, label: 'Notifications', value: notifValue, onClick: () => setSection('notifications') },
       { icon: <Camera />, label: 'Camera & microphone', value: permText, onClick: fixPermissions },
       { icon: <Palette />, label: 'Theme', onClick: () => setSection('appearance') },
+      { icon: <Database />, label: 'Storage', onClick: () => setSection('storage') },
     ] },
     { title: 'Admin', rows: isZAdmin ? [{ icon: <ShieldCheck />, label: 'Admin panel', onClick: onOpenAdmin }, { icon: <ShieldAlert />, label: 'Report queue', onClick: onOpenReports }] : [] },
     { title: 'More info and support', rows: [
@@ -1701,7 +1795,7 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
   return (
     <div {...edgeBack} style={{
       position: 'fixed', inset: 0, zIndex: 30, background: c.bg, color: c.fg, fontFamily: FONT,
-    }} className="zchat-fade">
+    }} className="zchat-panel-open">
       <div style={{ height: '100%', overflowY: 'auto', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
 
         {section === 'main' && (
@@ -1858,6 +1952,13 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
           <WhoCanSeePanel me={me} onBack={() => setSection('privacy')} onSaved={onPrivacySaved} />
         )}
 
+        {section === 'storage' && (
+          <>
+            <SectionHeader title="Storage" />
+            <StorageSection />
+          </>
+        )}
+
         {section === 'notifications' && (
           <>
             <SectionHeader title="Notifications" />
@@ -1921,10 +2022,10 @@ function AccountSwitcherPanel({ accounts, currentId, switchingId, onBack, onSwit
   return (
     <FullPage title="Switch account" onBack={onBack} zIndex={60}
       footer={<button onClick={onAdd} className="zchat-press" style={{ ...primaryBtn(theme, false), display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}><Plus size={18} strokeWidth={2.6} />Add another account</button>}>
-      <div style={{ padding: '8px 2px 10px', fontSize: 13, color: theme.muted, lineHeight: 1.5 }}>Tap an account to switch to it. Only this phone remembers these logins.</div>
-      <CardGroup>
+      <div style={{ padding: '8px 2px 6px', fontSize: 13, color: theme.muted, lineHeight: 1.5 }}>Tap an account to switch to it. Only this phone remembers these logins.</div>
+      <div>
         {accounts.map((a, idx) => (
-          <div key={a.id} role="button" aria-label={`Account ${a.name}`} onClick={() => a.id !== currentId && !switchingId && onSwitch(a)} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '11px 0', minHeight: 70, cursor: a.id !== currentId && !switchingId ? 'pointer' : 'default', opacity: switchingId && switchingId !== a.id ? 0.5 : 1, borderTop: idx ? `1px solid ${theme.border}` : 'none' }}>
+          <div key={a.id} role="button" aria-label={`Account ${a.name}`} onClick={() => a.id !== currentId && !switchingId && onSwitch(a)} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '11px 4px', minHeight: 70, borderRadius: 14, cursor: a.id !== currentId && !switchingId ? 'pointer' : 'default', opacity: switchingId && switchingId !== a.id ? 0.5 : 1 }}>
             <Avatar emoji={a.avatar} name={a.name} frame={a.avatar_frame} size={50} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontWeight: 700, fontSize: 15, color: theme.ink, display: 'flex', alignItems: 'center', minWidth: 0 }}>
@@ -1939,7 +2040,7 @@ function AccountSwitcherPanel({ accounts, currentId, switchingId, onBack, onSwit
             ) : null}
           </div>
         ))}
-      </CardGroup>
+      </div>
       {removeAsk && (
         <div onClick={() => setRemoveAsk(null)} style={{
           position: 'fixed', inset: 0, background: 'rgba(10,8,6,0.62)', zIndex: 40,
@@ -2104,11 +2205,11 @@ function PrivacyPanel({ onBack }) {
     <FullPage title="Privacy policy" onBack={onBack} zIndex={60}>
       <div style={{ padding: '12px 2px 6px', fontSize: 15, lineHeight: 1.55, color: theme.ink, fontWeight: 700 }}>ZChat keeps only what it needs to run your account and deliver your messages.</div>
       {sections.map(([icon, h, p]) => (
-        <div key={h} style={{ marginTop: 12, padding: '14px 16px', borderRadius: 18, background: theme.rowBg, display: 'flex', gap: 14 }}>
-          <div style={{ width: 38, height: 38, borderRadius: 13, background: `${theme.coral}1F`, color: theme.coralDeep, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{React.cloneElement(icon, { size: 19, strokeWidth: 1.9 })}</div>
+        <div key={h} style={{ marginTop: 18, display: 'flex', gap: 14, padding: '0 2px' }}>
+          <div style={{ width: 24, flexShrink: 0, color: theme.coral, paddingTop: 2 }}>{React.cloneElement(icon, { size: 22, strokeWidth: 1.7 })}</div>
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 15, fontWeight: 800, color: theme.ink, marginBottom: 4 }}>{h}</div>
-            <div style={{ fontSize: 13.5, lineHeight: 1.6, color: theme.muted }}>{p}</div>
+            <div style={{ fontSize: 15.5, fontWeight: 800, color: theme.ink, marginBottom: 4 }}>{h}</div>
+            <div style={{ fontSize: 14, lineHeight: 1.6, color: theme.muted }}>{p}</div>
           </div>
         </div>
       ))}
@@ -2155,8 +2256,8 @@ function FollowStatusPill({ theirId, viewerId, viewerFollowsThem, theyFollowView
 function UserListRow({ profile, rightContent, onClick, sub }) {
   const { theme } = useTheme();
   return (
-    <div onClick={onClick} role={onClick ? 'button' : undefined} style={{
-      display: 'flex', alignItems: 'center', gap: 14, padding: '9px 0', minHeight: 66, cursor: onClick ? 'pointer' : 'default',
+    <div onClick={onClick} role={onClick ? 'button' : undefined} className={onClick ? 'zchat-row-press' : undefined} style={{
+      display: 'flex', alignItems: 'center', gap: 14, padding: '9px 4px', margin: '0 -4px', minHeight: 66, boxSizing: 'border-box', borderRadius: 14, cursor: onClick ? 'pointer' : 'default',
     }}>
       <FramedAvatar frame={profile.avatar_frame} size={48}><Avatar emoji={profile.avatar} name={profile.name} frame={profile.avatar_frame} size={48} /></FramedAvatar>
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -3699,12 +3800,10 @@ function NicknamesModal({ conv, myAvatar, myName, currentNickname, currentAlias,
   const otherRealName = conv.realName || conv.otherProfile.name;
   return (
     <FullPage title="Nicknames" subtitle="Only you see these" onBack={onClose} zIndex={60}>
-      <div style={{ padding: '10px 2px 10px', fontSize: 13, color: theme.muted, lineHeight: 1.5 }}>Tap a name to change how it shows in this chat.</div>
-      <CardGroup>
-        <NicknameEditRow avatar={conv.otherProfile.avatar} label={otherRealName} currentValue={currentNickname} placeholder={otherRealName} onSave={onSaveNickname} />
-        <div style={{ height: 1, background: theme.border }} />
-        <NicknameEditRow avatar={myAvatar} label="You" currentValue={currentAlias} placeholder={myName} onSave={onSaveAlias} />
-      </CardGroup>
+      <div style={{ padding: '10px 2px 4px', fontSize: 13, color: theme.muted, lineHeight: 1.5 }}>Tap a name to change how it shows in this chat.</div>
+      <NicknameEditRow avatar={conv.otherProfile.avatar} label={otherRealName} currentValue={currentNickname} placeholder={otherRealName} onSave={onSaveNickname} />
+      <div style={{ height: 1, background: theme.border }} />
+      <NicknameEditRow avatar={myAvatar} label="You" currentValue={currentAlias} placeholder={myName} onSave={onSaveAlias} />
     </FullPage>
   );
 }
@@ -3802,7 +3901,7 @@ function ChatSettingsPanel({ conv, myId, meAvatar, meName, isPinned, isLocked, w
     <div {...edgeBack} style={{
       position: 'fixed', inset: 0, background: c.bg, color: c.fg, zIndex: 33, fontFamily: FONT,
       display: 'flex', flexDirection: 'column', overflow: 'hidden',
-    }} className="zchat-fade">
+    }} className="zchat-panel-open">
       <IgTopBar title="Chat settings" onBack={onClose} />
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', paddingBottom: 'calc(28px + env(safe-area-inset-bottom))' }}>
         <div style={{ textAlign: 'center', padding: '8px 20px 4px' }}>
@@ -3900,7 +3999,7 @@ function ChatSettingsPanel({ conv, myId, meAvatar, meName, isPinned, isLocked, w
   );
 }
 
-function Pin_({ size = 16, color = '#FF3B30' }) {
+function Pin_({ size = 16, color = ACCENT.coral }) {
   return <Pin size={size} color={color} strokeWidth={2} fill={color} fillOpacity={0.18} />;
 }
 
@@ -4206,7 +4305,7 @@ function GroupInfoPanel({ group, members, myId, iFollowIds, privacyAllowed, myRo
   const nameLen = (group.name || '').length;
 
   return (
-    <div {...edgeBack} style={{ position: 'fixed', inset: 0, background: c.bg, color: c.fg, zIndex: 40, display: 'flex', flexDirection: 'column', fontFamily: FONT }} className="zchat-fade">
+    <div {...edgeBack} style={{ position: 'fixed', inset: 0, background: c.bg, color: c.fg, zIndex: 40, display: 'flex', flexDirection: 'column', fontFamily: FONT }} className="zchat-panel-open">
       <div style={{ paddingTop: 'env(safe-area-inset-top)', flexShrink: 0 }}>
         <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 52, padding: '0 8px' }}>
           <div role="button" aria-label="Back" onClick={onClose} style={{ width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><ArrowLeft size={24} strokeWidth={2} /></div>
@@ -4448,7 +4547,7 @@ function GroupSettingsPanel({ group, myId, isAdmin, isOwner, isMuted, onSetMute,
     </div>
   );
   return (
-    <div style={{ position: 'fixed', inset: 0, background: c.bg, color: c.fg, zIndex: 34, display: 'flex', flexDirection: 'column', overflow: 'hidden', fontFamily: FONT }} className="zchat-fade">
+    <div style={{ position: 'fixed', inset: 0, background: c.bg, color: c.fg, zIndex: 34, display: 'flex', flexDirection: 'column', overflow: 'hidden', fontFamily: FONT }} className="zchat-panel-open">
       <IgTopBar title="Group settings" onBack={onClose} />
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', paddingBottom: 'calc(28px + env(safe-area-inset-bottom))' }}>
         <IgHeading>Your settings</IgHeading>
@@ -4687,7 +4786,7 @@ function AddMembersPanel({ myId, existingIds, onClose, onAdd, iFollowIds, privac
 function PrivacyField({ label, hidden, onToggle, last }) {
   const { theme } = useTheme();
   return (
-    <div role="button" aria-label={label} onClick={onToggle} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '13px 0', borderBottom: last ? 'none' : `1px solid ${theme.border}`, cursor: 'pointer' }}>
+    <div role="button" aria-label={label} onClick={onToggle} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '13px 2px', borderBottom: last ? 'none' : `1px solid ${theme.border}`, cursor: 'pointer' }}>
       <span style={{ fontSize: 15, fontWeight: 600, color: theme.ink }}>{label}</span>
       <ToggleSwitch on={!hidden} onClick={(e) => { e.stopPropagation(); onToggle(); }} />
     </div>
@@ -4719,22 +4818,22 @@ function AccountPrivacyPanel({ profile, onClose, onSaved }) {
   return (
     <FullPage title="Privacy" onBack={onClose} zIndex={60}
       footer={<button onClick={save} disabled={saving || !dirty} className="zchat-press" style={{ ...primaryBtn(theme, saving || !dirty) }}>{saving ? <Spinner /> : 'Save changes'}</button>}>
-      <CardGroup style={{ marginTop: 10 }}>
-        <div role="button" aria-label="Private account" onClick={() => setIsPrivate((s) => !s)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '13px 0', cursor: 'pointer' }}>
+      <div style={{ marginTop: 6 }}>
+        <div role="button" aria-label="Private account" onClick={() => setIsPrivate((s) => !s)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '13px 2px', cursor: 'pointer' }}>
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 15, fontWeight: 700, color: theme.ink }}>Private account</div>
             <div style={{ fontSize: 12.5, color: theme.muted, marginTop: 2, lineHeight: 1.4 }}>New followers need your approval before they see your posts</div>
           </div>
           <ToggleSwitch on={isPrivate} onClick={(e) => { e.stopPropagation(); setIsPrivate((s) => !s); }} />
         </div>
-      </CardGroup>
-      <div style={{ padding: '22px 2px 6px', fontSize: 13, fontWeight: 600, color: theme.muted }}>Visible to others</div>
-      <CardGroup>
+      </div>
+      <div style={{ padding: '22px 2px 4px', fontSize: 13, fontWeight: 600, color: theme.muted }}>Visible to others</div>
+      <div>
         <PrivacyField label="Profile photo" hidden={hidePhoto} onToggle={() => setHidePhoto((s) => !s)} />
         <PrivacyField label="Bio" hidden={hideBio} onToggle={() => setHideBio((s) => !s)} />
         <PrivacyField label="Age" hidden={hideAge} onToggle={() => setHideAge((s) => !s)} />
         <PrivacyField label="Country" hidden={hideCountry} onToggle={() => setHideCountry((s) => !s)} last />
-      </CardGroup>
+      </div>
       <div style={{ padding: '14px 2px 0', fontSize: 12.5, color: theme.muted, lineHeight: 1.6 }}>Switch something off and it disappears from your profile for everyone except you.</div>
     </FullPage>
   );
@@ -5322,7 +5421,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
   );
 
   return (
-    <div {...edgeBack} onClick={(e) => { if (e.target === e.currentTarget && !editing) onClose(); }} style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(5,8,16,0.6)', display: 'flex', justifyContent: 'center' }} className="zchat-fade">
+    <div {...edgeBack} onClick={(e) => { if (e.target === e.currentTarget && !editing) onClose(); }} style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(5,8,16,0.6)', display: 'flex', justifyContent: 'center' }} className="zchat-panel-open">
     <div style={{ width: '100%', maxWidth: 560, height: '100%', background: theme.dark ? '#000' : '#fff', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden' }}>
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain', touchAction: 'pan-y' }}>
         {editing ? (
@@ -6079,6 +6178,7 @@ function MessageBubble({ isBot, m, isMe, onDelete, selectionMode, selected, onTo
           ...(m.deleted ? {} : bubbleThemeStyle(chatTheme, isMe, theme)),
           ...(bubbleSpec && m.type !== 'sticker' ? bubbleStyleCss(bubbleSpec, isMe) : {}),
           ...(bubbleSpec && mediaOnly ? { overflow: 'visible' } : {}),
+          ...(m.type === 'sticker' && !m.deleted ? { background: 'transparent', border: 'none', boxShadow: 'none', padding: 0, backdropFilter: 'none', WebkitBackdropFilter: 'none', overflow: 'visible' } : {}),
         })}>
           {bubbleSpec && bubbleSpec.deco && BUBBLE_DECO[bubbleKey] && m.type !== 'sticker' && <div aria-hidden="true" style={{ position: 'absolute', pointerEvents: 'none', zIndex: 1, ...bubbleSpec.deco }}>{BUBBLE_DECO[bubbleKey]()}</div>}
           {senderLabel && !m.deleted && !tightAbove && (
@@ -6213,32 +6313,11 @@ function MessageBubble({ isBot, m, isMe, onDelete, selectionMode, selected, onTo
   );
 }
 function playPing() {
-  try {
-    if (localStorage.getItem('zchat-sound') === 'off') return;
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const o = ctx.createOscillator();
-    const g = ctx.createGain();
-    o.type = 'sine'; o.frequency.value = 880;
-    g.gain.setValueAtTime(0.0001, ctx.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.16, ctx.currentTime + 0.01);
-    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.28);
-    o.connect(g); g.connect(ctx.destination);
-    o.start(); o.stop(ctx.currentTime + 0.3);
-  } catch {}
+  playUiSound('receive');
 }
 function playReactionPing() {
-  try {
-    if (localStorage.getItem('zchat-reaction-sound') === 'off') return;
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const o = ctx.createOscillator();
-    const g = ctx.createGain();
-    o.type = 'sine'; o.frequency.value = 1320;
-    g.gain.setValueAtTime(0.0001, ctx.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.13, ctx.currentTime + 0.008);
-    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.16);
-    o.connect(g); g.connect(ctx.destination);
-    o.start(); o.stop(ctx.currentTime + 0.18);
-  } catch {}
+  try { if (localStorage.getItem('zchat-reaction-sound') === 'off') return; } catch {}
+  playUiSound('like');
 }
 
 function pairKey(a, b) { return a < b ? [a, b] : [b, a]; }
@@ -6829,39 +6908,67 @@ function InAppMessageToast({ toast, top, onOpen, onDismiss }) {
   );
 }
 
-function ChatRowSheet({ title, subtitle, avatar, actions, onClose }) {
+function ChatRowSheet({ title, subtitle, avatar, actions, onClose, zIndex = 94, portal = false }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
   const drag = useSheetDrag(onClose);
-  return (
+  const body = (
     <div onClick={onClose} className="zchat-fade" style={{
-      position: 'fixed', inset: 0, zIndex: 94, display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+      position: 'fixed', inset: 0, zIndex, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontFamily: FONT,
       background: theme.dark ? 'rgba(3,6,14,0.5)' : 'rgba(230,234,244,0.5)',
       backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
     }}>
-      <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" {...drag.sheetProps} style={{ ...drag.sheetStyle,
-        width: '100%', maxWidth: 460, background: theme.panelBg, borderRadius: '24px 24px 0 0', overflow: 'hidden',
+      <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ transform: drag.sheetStyle.transform, transition: drag.sheetStyle.transition,
+        width: '100%', maxWidth: 460, maxHeight: '86vh', display: 'flex', flexDirection: 'column', background: theme.panelBg, borderRadius: '24px 24px 0 0', overflow: 'hidden',
         paddingBottom: 'calc(8px + env(safe-area-inset-bottom))', boxShadow: '0 -10px 40px rgba(0,0,0,0.25)',
       }}>
-        <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 2px' }}>
-          <div style={{ width: 38, height: 4, borderRadius: 2, background: theme.border }} />
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 18px 12px', borderBottom: `1px solid ${theme.border}` }}>
-          {avatar}
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontWeight: 800, fontSize: 15, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</div>
-            {subtitle && <div style={{ fontSize: 12, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{subtitle}</div>}
+        <div {...drag.sheetProps} style={{ touchAction: 'none', flexShrink: 0 }}>
+          <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 2px' }}>
+            <div style={{ width: 38, height: 4, borderRadius: 2, background: theme.border }} />
           </div>
+          {(title || avatar) && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 18px 12px', borderBottom: `1px solid ${theme.border}` }}>
+              {avatar}
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontWeight: 800, fontSize: 15, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</div>
+                {subtitle && <div style={{ fontSize: 12, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{subtitle}</div>}
+              </div>
+            </div>
+          )}
         </div>
-        {actions.filter(Boolean).map((a) => (
-          <div key={a.label} onClick={() => { onClose(); a.onClick(); }} style={{
-            display: 'flex', alignItems: 'center', gap: 14, padding: '14px 20px', cursor: 'pointer',
-            fontSize: 14.5, fontWeight: 600, color: a.danger ? theme.danger : theme.ink,
-          }}>
-            <span style={{ display: 'flex', color: a.danger ? theme.danger : theme.muted }}>{a.icon}</span>
-            {a.label}
-          </div>
-        ))}
+        <div data-sheet-scroll="true" style={{ overflowY: 'auto', minHeight: 0, WebkitOverflowScrolling: 'touch', touchAction: 'pan-y', paddingTop: 4 }}>
+          {actions.filter(Boolean).map((a) => (
+            <div key={a.label} role="button" aria-label={a.label} onClick={() => { onClose(); a.onClick(); }} className="zchat-row-press" style={{
+              display: 'flex', alignItems: 'center', gap: 14, padding: a.hint ? '9px 20px' : '14px 20px', cursor: 'pointer', boxSizing: 'border-box', minHeight: 52,
+              fontSize: 15, fontWeight: 600, color: a.danger ? theme.danger : theme.ink,
+            }}>
+              <span style={{ display: 'flex', width: 24, justifyContent: 'center', color: a.danger ? theme.danger : theme.muted, flexShrink: 0 }}>{a.icon}</span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                {a.label}
+                {a.hint && <span style={{ display: 'block', fontSize: 12, color: theme.muted, fontWeight: 500, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.hint}</span>}
+              </span>
+              {a.right}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+  return portal ? <Portal>{body}</Portal> : body;
+}
+
+function ConfirmSheet({ title, text, confirmLabel = 'Confirm', danger = true, onConfirm, onCancel, busy = false, zIndex = 95 }) {
+  useBackClose(true, onCancel);
+  const { theme } = useTheme();
+  return (
+    <div onClick={() => !busy && onCancel()} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontFamily: FONT, background: theme.dark ? 'rgba(3,6,14,0.5)' : 'rgba(230,234,244,0.5)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)' }}>
+      <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ width: '100%', maxWidth: 460, background: theme.panelBg, borderRadius: '24px 24px 0 0', padding: '18px 16px', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))', boxShadow: '0 -10px 40px rgba(0,0,0,0.25)' }}>
+        <div style={{ textAlign: 'center', padding: '4px 10px 14px' }}>
+          <div style={{ fontSize: 17, fontWeight: 800, color: theme.ink }}>{title}</div>
+          {text && <div style={{ fontSize: 13.5, color: theme.muted, lineHeight: 1.55, marginTop: 6 }}>{text}</div>}
+        </div>
+        <button onClick={() => !busy && onConfirm()} disabled={busy} className="zchat-press" style={{ width: '100%', height: 50, borderRadius: 16, border: 'none', background: danger ? theme.danger : theme.coral, color: 'white', fontWeight: 800, fontSize: 15.5, fontFamily: FONT, cursor: 'pointer', opacity: busy ? 0.6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{busy ? <Spinner size={16} /> : confirmLabel}</button>
+        <button onClick={() => !busy && onCancel()} className="zchat-press" style={{ width: '100%', height: 50, borderRadius: 16, border: 'none', background: theme.rowBg, color: theme.ink, fontWeight: 700, fontSize: 15.5, fontFamily: FONT, cursor: 'pointer', marginTop: 8 }}>Cancel</button>
       </div>
     </div>
   );
@@ -9427,7 +9534,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-const APP_VERSION = '12.0V';
+const APP_VERSION = '12.2V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -11032,7 +11139,7 @@ function ScreenDebugInfo() {
       vvHeight: vv ? Math.round(vv.height) : 'n/a', vvOffsetTop: vv ? Math.round(vv.offsetTop) : 'n/a', vvScale: vv ? vv.scale : 'n/a',
       safeTop: probe('top'), safeBottom: probe('bottom'), scrollY: window.scrollY,
       rootTop: r ? Math.round(r.top) : 'n/a', rootBottom: r ? Math.round(r.bottom) : 'n/a', rootHeight: r ? Math.round(r.height) : 'n/a',
-      shift: getBottomShift(), dpr: window.devicePixelRatio, ua: navigator.userAgent.slice(0, 80),
+      shift: getBottomShift(), dpr: window.devicePixelRatio, transitions: VT_SUPPORTED ? 'native' : 'fallback', reduceMotion: String(reducedMotion()), ua: navigator.userAgent.slice(0, 80),
     });
   };
   useEffect(() => { measure(); const t = setInterval(measure, 2000); return () => clearInterval(t); }, []);
@@ -11111,15 +11218,39 @@ function playUiSound(kind) {
       o.start(t + start);
       o.stop(t + start + length + 0.03);
     };
-    if (kind === 'send') { tone(520, 980, 0, 0.11, 0.09); tone(980, 1180, 0.05, 0.08, 0.05); }
-    else if (kind === 'like') { tone(740, 1100, 0, 0.09, 0.08); tone(1100, 1480, 0.07, 0.1, 0.06); }
-    else if (kind === 'repost') { tone(660, 660, 0, 0.08, 0.06); tone(880, 880, 0.08, 0.08, 0.06); tone(1320, 1320, 0.16, 0.14, 0.07); }
-    else if (kind === 'record-start') { tone(420, 700, 0, 0.12, 0.08); }
-    else if (kind === 'record-stop') { tone(700, 420, 0, 0.12, 0.07); }
-    else if (kind === 'cancel') { tone(300, 160, 0, 0.16, 0.08, 'triangle'); }
-    else if (kind === 'shutter') { tone(1800, 600, 0, 0.05, 0.08, 'square'); tone(900, 300, 0.05, 0.07, 0.05, 'triangle'); }
-    else if (kind === 'delete') { tone(380, 200, 0, 0.14, 0.07, 'triangle'); }
-    else if (kind === 'tap') { tone(1500, 1300, 0, 0.03, 0.035); }
+    const swish = (start, length, volume, freq, q = 0.9, sweepTo = null) => {
+      const len = Math.max(1, Math.floor(ctx.sampleRate * length));
+      const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      const f = ctx.createBiquadFilter();
+      f.type = 'bandpass';
+      f.Q.value = q;
+      f.frequency.setValueAtTime(freq, t + start);
+      if (sweepTo) f.frequency.exponentialRampToValueAtTime(sweepTo, t + start + length);
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0.0001, t + start);
+      g.gain.exponentialRampToValueAtTime(volume, t + start + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + start + length);
+      src.connect(f); f.connect(g); g.connect(ctx.destination);
+      src.start(t + start);
+      src.stop(t + start + length + 0.02);
+    };
+    const bell = (freq, start, length, volume) => { tone(freq, freq, start, length, volume); tone(freq * 2, freq * 2, start, length * 0.55, volume * 0.22); };
+    if (kind === 'send') { swish(0, 0.16, 0.07, 1400, 0.7, 3600); tone(620, 920, 0.02, 0.09, 0.05); }
+    else if (kind === 'receive') { bell(988, 0, 0.22, 0.09); bell(1319, 0.09, 0.3, 0.075); }
+    else if (kind === 'like') { tone(820, 1120, 0, 0.07, 0.06); bell(1319, 0.06, 0.16, 0.06); }
+    else if (kind === 'repost') { bell(660, 0, 0.1, 0.05); bell(880, 0.08, 0.1, 0.05); bell(1320, 0.16, 0.18, 0.06); }
+    else if (kind === 'record-start') { tone(420, 700, 0, 0.12, 0.06); }
+    else if (kind === 'record-stop') { tone(700, 420, 0, 0.12, 0.055); }
+    else if (kind === 'cancel') { tone(300, 160, 0, 0.16, 0.06, 'triangle'); }
+    else if (kind === 'shutter') { swish(0, 0.05, 0.1, 3200, 1.2); tone(900, 300, 0.04, 0.06, 0.04, 'triangle'); }
+    else if (kind === 'delete') { swish(0, 0.12, 0.05, 900, 0.8, 300); tone(380, 200, 0, 0.12, 0.05, 'triangle'); }
+    else if (kind === 'refresh') { tone(1200, 1500, 0, 0.05, 0.035); }
+    else if (kind === 'toggle') { tone(900, 1300, 0, 0.035, 0.03); }
+    else if (kind === 'tap') { swish(0, 0.018, 0.028, 2600, 0.6); }
   } catch {}
 }
 
@@ -12373,7 +12504,7 @@ function CollectionPanel({ me, rewards, onClose, onEquip, userEmail, isAdmin }) 
   const sel = selected ? items.find((it) => it.key === selected) : null;
 
   return (
-    <div {...edgeBack} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 620, background: 'radial-gradient(circle at 50% 0%, #1b1533 0%, #07080d 55%)', color: 'white', display: 'flex', flexDirection: 'column', fontFamily: FONT }}>
+    <div {...edgeBack} className="zchat-panel-open" style={{ position: 'fixed', inset: 0, zIndex: 620, background: 'radial-gradient(circle at 50% 0%, #1b1533 0%, #07080d 55%)', color: 'white', display: 'flex', flexDirection: 'column', fontFamily: FONT }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px 8px', paddingTop: 'calc(12px + env(safe-area-inset-top))' }}>
         <div role="button" aria-label="Close collection" onClick={onClose} style={{ width: 38, height: 38, borderRadius: '50%', background: 'rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><ArrowLeft size={19} /></div>
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -12641,7 +12772,7 @@ function FeedPanel({ me, userId, onClose, onOpenProfile, ownerFilter = null, sta
   );
 
   return (
-    <div className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 600, background: '#000', color: 'white', fontFamily: FONT }}>
+    <div className="zchat-panel-open" style={{ position: 'fixed', inset: 0, zIndex: 600, background: '#000', color: 'white', fontFamily: FONT }}>
       <div style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 22, padding: '10px 16px', paddingTop: 'calc(12px + env(safe-area-inset-top))', background: 'linear-gradient(180deg, rgba(0,0,0,0.5), transparent)' }}>
         <div role="button" aria-label="Close feed" onClick={onClose} style={{ position: 'absolute', left: 12, top: 'calc(10px + env(safe-area-inset-top))', width: 36, height: 36, borderRadius: '50%', background: 'rgba(0,0,0,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><ArrowLeft size={19} /></div>
         {ownerFilter && <div style={{ fontSize: 15.5, fontWeight: 800 }}>Posts</div>}
@@ -13522,9 +13653,9 @@ function hapticTap() {
 
 function MomentsIcon({ size = 24, color = 'currentColor', active = false }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={active ? 2.4 : 2} strokeLinecap="round" aria-hidden="true">
-      <circle cx="12" cy="12" r="4.2" fill={active ? color : 'none'} />
-      <path d="M12 2.8a9.2 9.2 0 0 1 9.2 9.2M21.2 12a9.2 9.2 0 0 1-9.2 9.2M12 21.2A9.2 9.2 0 0 1 2.8 12M2.8 12A9.2 9.2 0 0 1 12 2.8" strokeDasharray="7 3.2" />
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={active ? 2.3 : 1.9} strokeLinecap="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="9.2" strokeDasharray="16.3 3" transform="rotate(-90 12 12)" />
+      <circle cx="12" cy="12" r="3.6" fill={active ? color : 'none'} />
     </svg>
   );
 }
@@ -13532,11 +13663,11 @@ function MomentsIcon({ size = 24, color = 'currentColor', active = false }) {
 function BottomTabBar({ tab, onChange, onCreate, badges }) {
   const { theme } = useTheme();
   const items = [
-    { k: 'chats', label: 'Chats', icon: (on) => <MessageSquare size={24} color={on ? theme.coral : theme.muted} strokeWidth={on ? 2.4 : 2} fill={on ? `${theme.coral}22` : 'none'} />, badge: badges.chats },
-    { k: 'moments', label: 'Moments', icon: (on) => <MomentsIcon size={24} color={on ? theme.coral : theme.muted} active={on} />, dot: badges.moments },
+    { k: 'chats', label: 'Chats', icon: (on) => <MessageSquare size={25} color={on ? theme.coral : theme.muted} strokeWidth={on ? 2.2 : 1.8} />, badge: badges.chats },
+    { k: 'moments', label: 'Moments', icon: (on) => <MomentsIcon size={25} color={on ? theme.coral : theme.muted} active={on} />, dot: badges.moments },
     { k: 'create' },
-    { k: 'calls', label: 'Calls', icon: (on) => <Phone size={23} color={on ? theme.coral : theme.muted} strokeWidth={on ? 2.4 : 2} fill={on ? `${theme.coral}22` : 'none'} />, badge: badges.calls },
-    { k: 'me', label: 'Me', icon: (on) => <User size={24} color={on ? theme.coral : theme.muted} strokeWidth={on ? 2.4 : 2} fill={on ? `${theme.coral}22` : 'none'} />, badge: badges.me },
+    { k: 'calls', label: 'Calls', icon: (on) => <Phone size={24} color={on ? theme.coral : theme.muted} strokeWidth={on ? 2.2 : 1.8} />, badge: badges.calls },
+    { k: 'me', label: 'Me', icon: (on) => <User size={25} color={on ? theme.coral : theme.muted} strokeWidth={on ? 2.2 : 1.8} />, badge: badges.me },
   ];
   return (
     <div style={{
@@ -13551,8 +13682,8 @@ function BottomTabBar({ tab, onChange, onCreate, badges }) {
           if (it.k === 'create') {
             return (
               <div key="create" role="button" aria-label="Create" onClick={() => { hapticTap(); playUiSound('tap'); onCreate(); }} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-                <div className="zchat-press" style={{ width: 46, height: 34, borderRadius: 12, background: `linear-gradient(135deg, ${theme.coral}, ${theme.gold})`, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 6px 18px ${theme.coral}55`, transition: 'transform 0.15s ease' }}>
-                  <Plus size={22} color="white" strokeWidth={3} />
+                <div className="zchat-press" style={{ width: 28, height: 28, borderRadius: 9, border: `2px solid ${theme.ink}`, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'transform 0.15s ease' }}>
+                  <Plus size={18} color={theme.ink} strokeWidth={2.4} />
                 </div>
               </div>
             );
@@ -13561,7 +13692,7 @@ function BottomTabBar({ tab, onChange, onCreate, badges }) {
           return (
             <div key={it.k} role="button" aria-label={it.label} onClick={() => { if (!on) { hapticTap(); playUiSound('tap'); } onChange(it.k); }}
               style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, cursor: 'pointer', position: 'relative', userSelect: 'none', WebkitTapHighlightColor: 'transparent' }}>
-              <div style={{ position: 'relative', width: 52, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 15, background: on ? `${theme.coral}1C` : 'transparent', transition: 'background 0.2s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)', transform: on ? 'scale(1)' : 'scale(0.96)' }}>
+              <div style={{ position: 'relative', width: 52, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)', transform: on ? 'scale(1.04)' : 'scale(1)' }}>
                 {it.icon(on)}
                 {it.badge > 0 && (
                   <span style={{ position: 'absolute', top: -2, right: 4, minWidth: 17, height: 17, padding: '0 5px', borderRadius: 9, background: theme.danger, color: 'white', fontSize: 10, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 0 0 2px ${theme.dark ? '#150F26' : '#fff'}` }}>{it.badge > 99 ? '99+' : it.badge}</span>
@@ -13570,7 +13701,7 @@ function BottomTabBar({ tab, onChange, onCreate, badges }) {
                   <span style={{ position: 'absolute', top: 2, right: 10, width: 8, height: 8, borderRadius: 4, background: theme.coral, boxShadow: `0 0 0 2px ${theme.dark ? '#150F26' : '#fff'}` }} />
                 )}
               </div>
-              <span style={{ fontSize: 10.5, fontWeight: on ? 800 : 600, color: on ? theme.coral : theme.muted, letterSpacing: '0.01em', transition: 'color 0.2s ease' }}>{it.label}</span>
+              <span style={{ fontSize: 10.5, fontWeight: on ? 700 : 500, color: on ? theme.coral : theme.muted, letterSpacing: '0.01em', transition: 'color 0.2s ease' }}>{it.label}</span>
             </div>
           );
         })}
@@ -13595,8 +13726,8 @@ function HomeHeader({ title, right, subtitle }) {
 function HeaderIconButton({ label, onClick, children, badge, accent }) {
   const { theme } = useTheme();
   return (
-    <div role="button" aria-label={label} onClick={onClick} style={{ position: 'relative', width: 40, height: 40, borderRadius: 14, background: accent ? theme.coral : theme.rowBg, color: accent ? 'white' : theme.ink, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
-      {children}
+    <div role="button" aria-label={label} onClick={onClick} className="zchat-press" style={{ position: 'relative', width: 40, height: 40, borderRadius: 20, color: accent ? theme.coral : theme.ink, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+      {React.isValidElement(children) ? React.cloneElement(children, { size: 24, strokeWidth: 1.9 }) : children}
       {badge > 0 && (
         <span style={{ position: 'absolute', top: -4, right: -4, minWidth: 17, height: 17, padding: '0 5px', borderRadius: 9, background: theme.danger, color: 'white', fontSize: 10, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 0 0 2px ${theme.bgGradient}` }}>{badge > 99 ? '99+' : badge}</span>
       )}
@@ -13619,15 +13750,16 @@ function CreateSheet({ onClose, onPost, onStory, onGroup, onChat }) {
       <div onClick={onClose} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 640, background: 'rgba(5,8,16,0.55)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontFamily: FONT }}>
         <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" {...drag.sheetProps} style={{ ...drag.sheetStyle, width: '100%', maxWidth: 480, background: theme.panelBg, borderRadius: '28px 28px 0 0', padding: '10px 16px', paddingBottom: 'calc(20px + env(safe-area-inset-bottom))' }}>
           <div style={{ display: 'flex', justifyContent: 'center', padding: '2px 0 14px' }}><div style={{ width: 38, height: 4, borderRadius: 2, background: theme.border }} /></div>
-          <div style={{ fontSize: 20, fontWeight: 900, color: theme.ink, letterSpacing: '-0.02em', padding: '0 4px 12px' }}>Create</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <div style={{ fontSize: 20, fontWeight: 900, color: theme.ink, letterSpacing: '-0.02em', padding: '0 4px 6px' }}>Create</div>
+          <div style={{ margin: '0 -16px' }}>
             {items.map((it) => (
-              <div key={it.k} role="button" onClick={() => { playUiSound('tap'); onClose(); setTimeout(it.on, 60); }} style={{ padding: '16px 14px', borderRadius: 20, background: theme.rowBg, cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <div style={{ width: 42, height: 42, borderRadius: 14, background: it.bg, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{it.icon}</div>
-                <div>
-                  <div style={{ fontSize: 15, fontWeight: 800, color: theme.ink }}>{it.label}</div>
-                  <div style={{ fontSize: 12, color: theme.muted, marginTop: 2, lineHeight: 1.35 }}>{it.desc}</div>
+              <div key={it.k} role="button" aria-label={it.label} onClick={() => { playUiSound('tap'); onClose(); setTimeout(it.on, 60); }} className="zchat-row-press" style={{ padding: '11px 20px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 14 }}>
+                <div style={{ width: 46, height: 46, borderRadius: 23, background: it.bg, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{it.icon}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 15.5, fontWeight: 700, color: theme.ink }}>{it.label}</div>
+                  <div style={{ fontSize: 12.5, color: theme.muted, marginTop: 1 }}>{it.desc}</div>
                 </div>
+                <ChevronRight size={18} color={theme.muted} />
               </div>
             ))}
           </div>
@@ -13859,7 +13991,7 @@ function CallsTab({ userId, groups, onCall, onOpenProfile, version }) {
   };
   return (
     <div className="zchat-tab-in" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-      <HomeHeader title="Calls" subtitle="Call people who follow you back" right={<HeaderIconButton label="New call" accent onClick={() => setNewCall(true)}><Phone size={20} /></HeaderIconButton>} />
+      <HomeHeader title="Calls" subtitle="Call people who follow you back" right={<HeaderIconButton label="New call" accent onClick={() => setNewCall(true)}><Phone /></HeaderIconButton>} />
       {newCall && <NewCallPage userId={userId} onClose={() => setNewCall(false)} onCall={onCall} />}
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '6px 10px 16px', WebkitOverflowScrolling: 'touch' }}>
         {rows === null ? (
@@ -13893,8 +14025,9 @@ function CallsTab({ userId, groups, onCall, onOpenProfile, version }) {
   );
 }
 
-function MeTab({ me, counts, onOpenProfile, onEditProfile, onSettings, onCollection, onSaved, onArchive, onMail, onRequests, onDiscover, onSwitchAccount, onShare }) {
+function MeTab({ me, counts, onOpenProfile, onEditProfile, onSettings, onCollection, onSaved, onArchive, onMail, onRequests, onDiscover, onSwitchAccount, onShare, onInvite }) {
   const { theme } = useTheme();
+  const c = igPalette(theme);
   const [social, setSocial] = useState(() => { try { return JSON.parse(localStorage.getItem('zchat-me-social') || 'null') || { followers: 0, following: 0, posts: 0 }; } catch { return { followers: 0, following: 0, posts: 0 }; } });
   useEffect(() => {
     let alive = true;
@@ -13911,54 +14044,54 @@ function MeTab({ me, counts, onOpenProfile, onEditProfile, onSettings, onCollect
     })();
     return () => { alive = false; };
   }, [me.id]);
-  const row = (icon, label, onClick, badge, sub, danger) => (
-    <div key={label} role="button" onClick={() => { playUiSound('tap'); onClick(); }} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 14px', cursor: 'pointer', borderBottom: `1px solid ${theme.border}` }}>
-      <div style={{ width: 36, height: 36, borderRadius: 12, background: `${theme.coral}1A`, color: danger ? theme.danger : theme.coral, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{icon}</div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 14.5, fontWeight: 700, color: danger ? theme.danger : theme.ink }}>{label}</div>
-        {sub && <div style={{ fontSize: 12, color: theme.muted, marginTop: 1 }}>{sub}</div>}
-      </div>
-      {badge > 0 && <span style={{ minWidth: 20, height: 20, padding: '0 6px', borderRadius: 10, background: theme.danger, color: 'white', fontSize: 11, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{badge > 99 ? '99+' : badge}</span>}
-      <ChevronRight size={17} color={theme.muted} />
+  const badge = (n) => (n > 0 ? <span style={{ minWidth: 20, height: 20, padding: '0 6px', borderRadius: 10, background: theme.danger, color: 'white', fontSize: 11, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{n > 99 ? '99+' : n}</span> : undefined);
+  const row = (icon, label, onClick, extra = {}) => (
+    <div key={label} className="zchat-row-press" style={{ borderRadius: 12 }}>
+      <IgRow icon={icon} label={label} onClick={() => { playUiSound('tap'); onClick(); }} value={extra.value} sub={extra.sub} right={extra.badge ? <>{extra.badge}<ChevronRight size={18} color={c.faint} style={{ flex: 'none' }} /></> : undefined} />
     </div>
   );
-  const group = (children) => <div style={{ margin: '0 16px 14px', borderRadius: 20, background: theme.rowBg, overflow: 'hidden' }}>{children}</div>;
+  const btn = (label, icon, onClick, ariaLabel) => (
+    <div role="button" aria-label={ariaLabel || label} onClick={() => { playUiSound('tap'); onClick(); }} className="zchat-press" style={{ flex: 1, height: 38, borderRadius: 10, background: c.field, color: c.fg, fontWeight: 700, fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, cursor: 'pointer' }}>{icon}{label}</div>
+  );
   return (
     <div className="zchat-tab-in" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-      <HomeHeader title="Me" right={<HeaderIconButton label="Settings" onClick={onSettings}><SettingsIcon size={19} /></HeaderIconButton>} />
+      <HomeHeader title="Me" right={<HeaderIconButton label="Settings" onClick={onSettings}><SettingsIcon /></HeaderIconButton>} />
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', paddingBottom: 20, WebkitOverflowScrolling: 'touch' }}>
-        <div role="button" aria-label="Open my profile" onClick={onOpenProfile} style={{ margin: '6px 16px 14px', padding: '16px 16px 16px 14px', borderRadius: 24, cursor: 'pointer', background: `linear-gradient(135deg, ${theme.coral}2E, ${theme.gold}14)`, border: `1px solid ${theme.coral}33`, display: 'flex', alignItems: 'center', gap: 14 }}>
-          <Avatar emoji={me.avatar} name={me.name} frame={me.avatar_frame} size={64} />
+        <div role="button" aria-label="Open my profile" onClick={onOpenProfile} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '8px 16px 12px', cursor: 'pointer' }}>
+          <Avatar emoji={me.avatar} name={me.name} frame={me.avatar_frame} size={72} />
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 18, fontWeight: 900, color: theme.ink, display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}><span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{me.name}</span><VerifiedBadge tier={me.verified} custom={me.custom_badge} size={16} /></div>
-            <div style={{ fontSize: 13, color: theme.muted, marginTop: 1 }}>@{me.username}</div>
-            <div style={{ display: 'flex', gap: 12, marginTop: 8, fontSize: 12.5, color: theme.muted, fontWeight: 600, flexWrap: 'wrap' }}>
-              <span><b style={{ color: theme.ink }}>{formatCount(social.posts)}</b> posts</span>
-              <span><b style={{ color: theme.ink }}>{formatCount(social.followers)}</b> followers</span>
-              <span><b style={{ color: theme.ink }}>{formatCount(social.following)}</b> following</span>
-            </div>
+            <div style={{ fontSize: 20, fontWeight: 800, color: theme.ink, display: 'flex', alignItems: 'center', gap: 4, minWidth: 0, letterSpacing: '-0.01em' }}><span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{me.name}</span><VerifiedBadge tier={me.verified} custom={me.custom_badge} size={16} /></div>
+            <div style={{ fontSize: 14, color: theme.muted, marginTop: 1 }}>@{me.username}</div>
+            {me.bio && <div style={{ fontSize: 13, color: theme.ink, marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', opacity: 0.85 }}>{me.bio}</div>}
           </div>
-          <ChevronRight size={18} color={theme.muted} />
+          <ChevronRight size={20} color={c.faint} />
         </div>
-        <div style={{ display: 'flex', gap: 8, margin: '0 16px 16px' }}>
-          <button onClick={onEditProfile} style={{ flex: 1, padding: '11px 0', borderRadius: 14, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontSize: 14, fontFamily: FONT, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}><Edit3 size={15} /> Edit profile</button>
-          <button onClick={onShare} style={{ flex: 1, padding: '11px 0', borderRadius: 14, border: `1px solid ${theme.border}`, background: theme.rowBg, color: theme.ink, fontWeight: 800, fontSize: 14, fontFamily: FONT, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}><Share2 size={15} /> Share</button>
+        <div style={{ display: 'flex', padding: '0 16px 12px' }}>
+          {[[social.posts, 'posts'], [social.followers, 'followers'], [social.following, 'following']].map(([n, l]) => (
+            <div key={l} style={{ flex: 1, textAlign: 'center' }}>
+              <div style={{ fontSize: 18, fontWeight: 800, color: theme.ink, letterSpacing: '-0.02em' }}>{formatCount(n)}</div>
+              <div style={{ fontSize: 12.5, color: theme.muted, fontWeight: 600 }}>{l}</div>
+            </div>
+          ))}
         </div>
-        {group([
-          row(<Sparkles size={18} />, 'Collection', onCollection, 0, counts.rewards ? `${counts.rewards} unlocked` : 'Frames, nameplates and charms'),
-          row(<Bookmark size={18} />, 'Saved messages', onSaved),
-          row(<Archive size={18} />, 'Archived chats', onArchive, 0, counts.archived ? `${counts.archived} archived` : null),
-        ])}
-        {group([
-          row(<Bell size={18} />, 'Follow requests', onRequests, counts.requests),
-          row(<Mail size={18} />, 'Mail', onMail, counts.mail, 'Messages from the ZChat team'),
-          row(<Compass size={18} />, 'Discover people', onDiscover),
-        ])}
-        {group([
-          row(<Users size={18} />, 'Switch account', onSwitchAccount),
-          row(<SettingsIcon size={18} />, 'Settings', onSettings, 0, 'Theme, privacy, notifications and more'),
-        ])}
-        <div style={{ textAlign: 'center', fontSize: 11.5, color: theme.muted, marginTop: 6 }}>ZChat {APP_VERSION}</div>
+        <div style={{ display: 'flex', gap: 8, padding: '0 16px 6px' }}>
+          {btn('Edit profile', <Edit3 size={16} strokeWidth={1.9} />, onEditProfile)}
+          {btn('Share profile', <Share2 size={16} strokeWidth={1.9} />, onShare)}
+        </div>
+        <IgHeading>Your stuff</IgHeading>
+        {row(<Sparkles />, 'Collection', onCollection, { value: counts.rewards ? `${counts.rewards} unlocked` : undefined })}
+        {row(<Bookmark />, 'Saved messages', onSaved)}
+        {row(<Archive />, 'Archived chats', onArchive, { value: counts.archived ? String(counts.archived) : undefined })}
+        <IgHeading>Inbox</IgHeading>
+        {row(<Bell />, 'Follow requests', onRequests, { badge: badge(counts.requests) })}
+        {row(<Mail />, 'Mail', onMail, { badge: badge(counts.mail), sub: 'Messages from the ZChat team' })}
+        <IgHeading>People</IgHeading>
+        {row(<Compass />, 'Discover people', onDiscover)}
+        {row(<UserPlus />, 'Invite friends', onInvite, { sub: 'Send a link to ZChat' })}
+        <IgHeading>Account</IgHeading>
+        {row(<Users />, 'Switch account', onSwitchAccount)}
+        {row(<SettingsIcon />, 'Settings', onSettings, { sub: 'Theme, privacy, notifications and more' })}
+        <div style={{ textAlign: 'center', fontSize: 12, color: c.faint, padding: '22px 16px 8px' }}>ZChat {APP_VERSION}</div>
       </div>
     </div>
   );
@@ -14101,19 +14234,14 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [composerMention, setComposerMention] = useState(null);
   const [showAttach, setShowAttach] = useState(false);
   const [showStickers, setShowStickers] = useState(false);
-  const [profileOf, setProfileOfRaw] = useState(null);
-  const setProfileOf = (v) => runWithTransition(() => setProfileOfRaw(v), (typeof v === 'function' ? !!profileOf : !!v) ? 'push' : 'pop');
-  const [showSettings, setShowSettingsRaw] = useState(false);
-  const setShowSettings = (v) => runWithTransition(() => setShowSettingsRaw(v), (typeof v === 'function' ? !!showSettings : !!v) ? 'push' : 'pop');
+  const [profileOf, setProfileOf] = useNavState(null);
+  const [showSettings, setShowSettings] = useNavState(false);
   const [autoOpenLockSetup, setAutoOpenLockSetup] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
-  const [showFollowRequests, setShowFollowRequestsRaw] = useState(false);
-  const setShowFollowRequests = (v) => runWithTransition(() => setShowFollowRequestsRaw(v), (typeof v === 'function' ? !!showFollowRequests : !!v) ? 'push' : 'pop');
-  const [showDiscover, setShowDiscoverRaw] = useState(false);
-  const setShowDiscover = (v) => runWithTransition(() => setShowDiscoverRaw(v), (typeof v === 'function' ? !!showDiscover : !!v) ? 'push' : 'pop');
-  const [mobileShowChat, setMobileShowChatRaw] = useState(false);
-  const setMobileShowChat = (v) => runWithTransition(() => setMobileShowChatRaw(v), (typeof v === 'function' ? !!mobileShowChat : !!v) ? 'push' : 'pop');
+  const [showFollowRequests, setShowFollowRequests] = useNavState(false);
+  const [showDiscover, setShowDiscover] = useNavState(false);
+  const [mobileShowChat, setMobileShowChat] = useNavState(false);
   const [uploading, setUploading] = useState(false);
   const [loadingConvo, setLoadingConvo] = useState(false);
   const [conversations, setConversations] = useState([]);
@@ -14160,10 +14288,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [reportThanks, setReportThanks] = useState(null);
   const [rewardReady, setRewardReady] = useState({});
   const [myRewards, setMyRewards] = useState([]);
-  const [collectionOpen, setCollectionOpenRaw] = useState(false);
-  const setCollectionOpen = (v) => runWithTransition(() => setCollectionOpenRaw(v), (typeof v === 'function' ? !!collectionOpen : !!v) ? 'push' : 'pop');
-  const [feedOpen, setFeedOpenRaw] = useState(false);
-  const setFeedOpen = (v) => runWithTransition(() => setFeedOpenRaw(v), (typeof v === 'function' ? !!feedOpen : !!v) ? 'push' : 'pop');
+  const [collectionOpen, setCollectionOpen] = useNavState(false);
+  const [feedOpen, setFeedOpen] = useNavState(false);
   const [feedStart, setFeedStart] = useState(null);
   const [homeTab, setHomeTab] = useState('chats');
   const [showCreate, setShowCreate] = useState(false);
@@ -14283,18 +14409,14 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [activeFollowBusy, setActiveFollowBusy] = useState(false);
   const [activeFollowerFollowsMe, setActiveFollowerFollowsMe] = useState(false);
   const [whoReactedFor, setWhoReactedFor] = useState(null);
-  const [showArchived, setShowArchivedRaw] = useState(false);
-  const setShowArchived = (v) => runWithTransition(() => setShowArchivedRaw(v), (typeof v === 'function' ? !!showArchived : !!v) ? 'push' : 'pop');
+  const [showArchived, setShowArchived] = useNavState(false);
   const [archivedConversations, setArchivedConversations] = useState([]);
-  const [showChatSettings, setShowChatSettingsRaw] = useState(false);
-  const setShowChatSettings = (v) => runWithTransition(() => setShowChatSettingsRaw(v), (typeof v === 'function' ? !!showChatSettings : !!v) ? 'push' : 'pop');
-  const [showAccountSwitcher, setShowAccountSwitcherRaw] = useState(false);
-  const setShowAccountSwitcher = (v) => runWithTransition(() => setShowAccountSwitcherRaw(v), (typeof v === 'function' ? !!showAccountSwitcher : !!v) ? 'push' : 'pop');
+  const [showChatSettings, setShowChatSettings] = useNavState(false);
+  const [showAccountSwitcher, setShowAccountSwitcher] = useNavState(false);
   const [showDeleteAccount, setShowDeleteAccount] = useState(false);
   const [myBlockedIds, setMyBlockedIds] = useState(new Set());
   const [followRequestCount, setFollowRequestCount] = useState(0);
-  const [showMail, setShowMailRaw] = useState(false);
-  const setShowMail = (v) => runWithTransition(() => setShowMailRaw(v), (typeof v === 'function' ? !!showMail : !!v) ? 'push' : 'pop');
+  const [showMail, setShowMail] = useNavState(false);
   const [unreadMailCount, setUnreadMailCount] = useState(0);
   const [listFilter, setListFilter] = useState('all');
   const [groups, setGroups] = useState([]);
@@ -14333,10 +14455,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     setComposerTall((prev) => (prev === (next > 40) ? prev : next > 40));
   }, [draft, activeProfile && activeProfile.id, activeGroup && activeGroup.id]);
   const [groupMembers, setGroupMembers] = useState([]);
-  const [showCreateGroup, setShowCreateGroupRaw] = useState(false);
-  const setShowCreateGroup = (v) => runWithTransition(() => setShowCreateGroupRaw(v), (typeof v === 'function' ? !!showCreateGroup : !!v) ? 'push' : 'pop');
-  const [showGroupInfo, setShowGroupInfoRaw] = useState(false);
-  const setShowGroupInfo = (v) => runWithTransition(() => setShowGroupInfoRaw(v), (typeof v === 'function' ? !!showGroupInfo : !!v) ? 'push' : 'pop');
+  const [showCreateGroup, setShowCreateGroup] = useNavState(false);
+  const [showGroupInfo, setShowGroupInfo] = useNavState(false);
   const [showGroupSettings, setShowGroupSettings] = useState(false);
   const [showGroupMembers, setShowGroupMembers] = useState(false);
   const [showAddMembersFromMembers, setShowAddMembersFromMembers] = useState(false);
@@ -14378,8 +14498,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [restrictedNotice, setRestrictedNotice] = useState(null);
   const [restrictionTick, setRestrictionTick] = useState(0);
   const restrictionsReloadRef = useRef(null);
-  const [showSaved, setShowSavedRaw] = useState(false);
-  const setShowSaved = (v) => runWithTransition(() => setShowSavedRaw(v), (typeof v === 'function' ? !!showSaved : !!v) ? 'push' : 'pop');
+  const [showSaved, setShowSaved] = useNavState(false);
   const [joinPrompt, setJoinPrompt] = useState(null);
   const [joiningGroup, setJoiningGroup] = useState(false);
   const [savedIds, setSavedIds] = useState(() => new Set());
@@ -14388,8 +14507,43 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [textFont, setTextFont] = useState(() => (readKeptTextStyle() || {}).font || null);
   const [showTextStyle, setShowTextStyle] = useState(false);
   const [showBubbleSheet, setShowBubbleSheet] = useState(false);
-  const [showNewChat, setShowNewChatRaw] = useState(false);
-  const setShowNewChat = (v) => runWithTransition(() => setShowNewChatRaw(v), v ? 'push' : 'pop');
+  const [showNewChat, setShowNewChat] = useNavState(false);
+  const [clearChatAsk, setClearChatAsk] = useState(false);
+  const [draftMap, setDraftMap] = useState({});
+  const exportChat = async () => {
+    const title = activeGroup ? activeGroup.name : (activeProfile ? activeProfile.name : 'chat');
+    const who = (m) => (m.bot_reply ? 'ZChat Bot' : (m.sender_id === session.user.id ? (me && me.name) || 'Me' : (activeGroup ? memberName(m.sender_id) : (activeProfile ? activeProfile.name : 'Them'))));
+    const what = (m) => {
+      if (m.deleted) return 'This message was deleted';
+      if (m.type === 'text' || m.type === 'system') return String(m.content || '');
+      if (m.type === 'image') return `[Photo]${m.content ? ' ' + m.content : ''}`;
+      if (m.type === 'video') return `[Video]${m.content ? ' ' + m.content : ''}`;
+      if (m.type === 'audio') return '[Voice message]';
+      if (m.type === 'sticker') return '[Sticker]';
+      return `[${m.type}]`;
+    };
+    const lines = messages.map((m) => `[${new Date(m.created_at).toLocaleString()}] ${who(m)}: ${what(m)}`);
+    const text = `ZChat export: ${title}\nExported ${new Date().toLocaleString()}\n\n${lines.join('\n')}\n`;
+    const name = `zchat ${title}`.replace(/[^a-z0-9 ]/gi, '').trim().replace(/\s+/g, ' ') + '.txt';
+    try {
+      const file = new File([text], name, { type: 'text/plain' });
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: name }); return; }
+    } catch (e) { if (e && e.name === 'AbortError') return; }
+    try {
+      const url = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
+      const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+      showSnack('Chat exported');
+    } catch { showSnack('Could not export this chat'); }
+  };
+  const inviteFriends = async () => {
+    const link = siteOrigin();
+    try {
+      if (navigator.share) { await navigator.share({ title: 'ZChat', text: 'Come chat with me on ZChat', url: link }); return; }
+    } catch (e) { if (e && e.name === 'AbortError') return; }
+    const ok = await copyTextToClipboard(link);
+    showSnack(ok ? 'Link copied' : link);
+  };
   const chatEdgeBack = useEdgeSwipeBack(mobileShowChat && !isWide);
   const scrollRef = useRef(null);
   useEffect(() => {
@@ -16618,7 +16772,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   useEffect(() => {
     const prev = prevDraftChatRef.current;
     if (prev === chatKey) return;
-    if (prev) draftsRef.current[prev] = draftLiveRef.current;
+    if (prev) { draftsRef.current[prev] = draftLiveRef.current; setDraftMap({ ...draftsRef.current }); }
     prevDraftChatRef.current = chatKey;
     setDraft(chatKey ? (draftsRef.current[chatKey] || '') : '');
     setReplyingTo(null);
@@ -17623,6 +17777,21 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   });
   useBackClose(!!(replyingTo || editingMessage), () => { if (editingMessage) setDraft(''); setReplyingTo(null); setEditingMessage(null); });
   useBackClose(showAttach, () => setShowAttach(false));
+  useEffect(() => { installOverlayGhosts(); }, []);
+  useEffect(() => {
+    const n = conversations.filter(isUnread).length + groups.filter((g) => !g.archived && g.unread > 0).length;
+    try { document.title = n > 0 ? `(${n}) ZChat` : 'ZChat'; } catch {}
+  }, [conversations, groups, unreadCounts]);
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      const t = e.target;
+      if (t && t.closest && t.closest('input, textarea, select, [contenteditable="true"]')) { try { t.blur(); } catch {} return; }
+      if (backStack.length) { e.preventDefault(); try { window.history.back(); } catch {} }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
   useBackClose(showTextStyle, () => setShowTextStyle(false));
   useBackClose(search.trim().length >= 2 && !mobileShowChat, () => { setSearch(''); setResults([]); });
 
@@ -17797,9 +17966,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         </div>
         {homeTab === 'chats' && (<div key="tab-chats" className="zchat-tab-in" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         <HomeHeader title="Chats" right={<>
-          <HeaderIconButton label="Mail" onClick={() => setShowMail(true)} badge={unreadMailCount}><Mail size={18} /></HeaderIconButton>
-          <HeaderIconButton label="Follow requests" onClick={() => setShowFollowRequests(true)} badge={followRequestCount}><Bell size={18} /></HeaderIconButton>
-          <HeaderIconButton label="New chat" onClick={() => { playUiSound('tap'); setShowNewChat(true); }} accent><Edit3 size={18} /></HeaderIconButton>
+          <HeaderIconButton label="Mail" onClick={() => setShowMail(true)} badge={unreadMailCount}><Mail /></HeaderIconButton>
+          <HeaderIconButton label="Follow requests" onClick={() => setShowFollowRequests(true)} badge={followRequestCount}><Bell /></HeaderIconButton>
+          <HeaderIconButton label="New chat" onClick={() => { playUiSound('tap'); setShowNewChat(true); }} accent><Edit3 /></HeaderIconButton>
         </>} />
         <div style={{ padding: '0 16px 10px', flexShrink: 0 }}>
           <div style={{ position: 'relative' }}>
@@ -17937,7 +18106,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                       { label: 'Archive', icon: <Archive size={19} />, bg: theme.dark ? '#3B3457' : '#6D5BB3', onClick: () => toggleGroupArchive(g) },
                       { label: 'More', icon: <MoreVertical size={19} />, bg: theme.dark ? '#262038' : '#4A3F80', onClick: () => setRowSheet({ kind: 'group', group: g }) },
                     ]}>
-                    <div onClick={guardRowClick(() => openGroup(g))}
+                    <div onClick={guardRowClick(() => openGroup(g))} className="zchat-row-press"
                       onPointerDown={(e) => startRowPress(e, { kind: 'group', group: g })} onPointerMove={moveRowPress} onPointerUp={endRowPress} onPointerLeave={endRowPress} onPointerCancel={endRowPress}
                       onContextMenu={(e) => { e.preventDefault(); endRowPress(); setRowSheet({ kind: 'group', group: g }); }}
                       style={{
@@ -17952,7 +18121,11 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                           </span>
                           {g.last_message_at && <span style={{ fontSize: 10.5, color: g.unread ? theme.coral : theme.muted, fontWeight: g.unread ? 700 : 400, flexShrink: 0 }}>{formatListTime(g.last_message_at)}</span>}
                         </div>
-                        <PreviewLine preview={g.preview || { kind: 'text', text: 'No messages yet' }} prefix={g.previewPrefix} color={g.unread ? theme.ink : theme.muted} weight={g.unread ? 700 : 400} />
+                        {(draftMap[g.id] || '').trim() && !isActive ? (
+                          <div style={{ fontSize: 13, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><span style={{ color: theme.danger, fontWeight: 700 }}>Draft: </span>{draftMap[g.id].trim()}</div>
+                        ) : (
+                          <PreviewLine preview={g.preview || { kind: 'text', text: 'No messages yet' }} prefix={g.previewPrefix} color={g.unread ? theme.ink : theme.muted} weight={g.unread ? 700 : 400} />
+                        )}
                       </div>
                       {isActiveUntil(g.mutedUntil) && <BellOff size={14} color={theme.muted} style={{ flexShrink: 0 }} />}
                       {g.unread > 0 && <div style={{ minWidth: 20, height: 20, padding: '0 5px', boxSizing: 'border-box', borderRadius: 10, background: isActiveUntil(g.mutedUntil) ? theme.muted : theme.coral, color: 'white', fontSize: 10.5, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{g.unread > 99 ? '99+' : g.unread}</div>}
@@ -17978,7 +18151,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                     { label: 'Archive', icon: <Archive size={19} />, bg: theme.dark ? '#3B3457' : '#6D5BB3', onClick: () => toggleArchive(c.id, true) },
                     { label: 'More', icon: <MoreVertical size={19} />, bg: theme.dark ? '#262038' : '#4A3F80', onClick: () => setRowSheet({ kind: 'dm', conv: c }) },
                   ]}>
-                  <div onClick={guardRowClick(() => openChat(c.otherProfile, c.id))}
+                  <div onClick={guardRowClick(() => openChat(c.otherProfile, c.id))} className="zchat-row-press"
                     onPointerDown={(e) => startRowPress(e, { kind: 'dm', conv: c })} onPointerMove={moveRowPress} onPointerUp={endRowPress} onPointerLeave={endRowPress} onPointerCancel={endRowPress}
                     onContextMenu={(e) => { e.preventDefault(); endRowPress(); setRowSheet({ kind: 'dm', conv: c }); }}
                     style={{
@@ -17998,8 +18171,14 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                         {(c.sortTime || c.last_message_at) && <span style={{ fontSize: 10.5, color: unread ? theme.coral : theme.muted, fontWeight: unread ? 700 : 400, flexShrink: 0 }}>{formatListTime(c.sortTime || c.last_message_at)}</span>}
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        {c.lastFromMe && c.preview && c.preview.kind !== 'deleted' && c.preview.kind !== 'system' && <StatusTicks status={c.lastMineRead ? 'read' : c.lastMineDelivered ? 'delivered' : 'sent'} />}
-                        <PreviewLine preview={c.preview && c.preview.text ? c.preview : { kind: 'text', text: 'Say hi \u{1F44B}' }} color={unread ? theme.ink : theme.muted} weight={unread ? 700 : 400} />
+                        {(draftMap[c.otherProfile.id] || '').trim() && !isActive ? (
+                          <div style={{ fontSize: 13, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><span style={{ color: theme.danger, fontWeight: 700 }}>Draft: </span>{draftMap[c.otherProfile.id].trim()}</div>
+                        ) : (
+                          <>
+                            {c.lastFromMe && c.preview && c.preview.kind !== 'deleted' && c.preview.kind !== 'system' && <StatusTicks status={c.lastMineRead ? 'read' : c.lastMineDelivered ? 'delivered' : 'sent'} />}
+                            <PreviewLine preview={c.preview && c.preview.text ? c.preview : { kind: 'text', text: 'Say hi \u{1F44B}' }} color={unread ? theme.ink : theme.muted} weight={unread ? 700 : 400} />
+                          </>
+                        )}
                       </div>
                     </div>
                     {isConvMutedForMe(c) && <BellOff size={14} color={theme.muted} style={{ flexShrink: 0 }} />}
@@ -18036,7 +18215,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           <MeTab key="tab-me" me={me} counts={{ rewards: (myRewards || []).filter(rewardActive).length, archived: archivedConversations.length, requests: followRequestCount, mail: unreadMailCount }}
             onOpenProfile={() => setProfileOf(me)} onEditProfile={() => setProfileOf({ ...me, __edit: true })} onSettings={() => setShowSettings(true)} onCollection={() => setCollectionOpen(true)}
             onSaved={() => setShowSaved(true)} onArchive={() => setShowArchived(true)} onMail={() => setShowMail(true)} onRequests={() => setShowFollowRequests(true)} onDiscover={() => setShowDiscover(true)}
-            onSwitchAccount={() => setShowAccountSwitcher(true)} onShare={() => setProfileOf({ ...me, __share: true })} />
+            onSwitchAccount={() => setShowAccountSwitcher(true)} onShare={() => setProfileOf({ ...me, __share: true })} onInvite={inviteFriends} />
         )}
         <BottomTabBar tab={homeTab} onChange={(k) => setHomeTab(k)} onCreate={() => setShowCreate(true)}
           badges={{ chats: conversations.filter(isUnread).length + groups.filter((g) => !g.archived && g.unread > 0).length, moments: trayUsers.some((u) => !u.stories.every((st) => storyData.seen.has(st.id))), calls: 0, me: followRequestCount + unreadMailCount }} />
@@ -18312,23 +18491,23 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                     </div>
                   ) : (
                   <>
-                  <div onClick={() => setShowAttach((s) => !s)} style={{
-                    width: 40, height: 40, borderRadius: '50%', background: theme.rowBg, display: 'flex',
-                    alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, color: theme.coralDeep,
-                  }}><Paperclip size={18} /></div>
-                  <div onClick={() => setShowStickers((s) => !s)} style={{
-                    width: 40, height: 40, borderRadius: '50%', background: theme.rowBg, display: 'flex',
-                    alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, color: theme.coralDeep, fontSize: 18,
-                  }}><Smile size={18} /></div>
+                  <div role="button" aria-label="Attach" onClick={() => setShowAttach((s) => !s)} className="zchat-press" style={{
+                    width: 36, height: 40, borderRadius: 18, display: 'flex',
+                    alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, color: showAttach ? theme.coral : theme.muted,
+                  }}><Paperclip size={23} strokeWidth={1.9} /></div>
+                  <div role="button" aria-label="Stickers and emoji" onClick={() => setShowStickers((s) => !s)} className="zchat-press" style={{
+                    width: 36, height: 40, borderRadius: 18, display: 'flex',
+                    alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, color: showStickers ? theme.coral : theme.muted,
+                  }}><Smile size={23} strokeWidth={1.9} /></div>
                   <div aria-hidden={!(draft.trim() && !editingMessage)} style={{
                     width: draft.trim() && !editingMessage ? 40 : 0, marginRight: draft.trim() && !editingMessage ? 0 : -8, opacity: draft.trim() && !editingMessage ? 1 : 0,
                     overflow: 'hidden', flexShrink: 0, transition: 'width 0.22s ease, margin 0.22s ease, opacity 0.18s ease',
                     pointerEvents: draft.trim() && !editingMessage ? 'auto' : 'none',
                   }}>
-                    <div onClick={() => setShowTextStyle((v) => !v)} aria-label="Text style" role="button" style={{
-                      width: 40, height: 40, borderRadius: '50%', background: showTextStyle ? theme.coral : theme.rowBg, display: 'flex',
+                    <div onClick={() => setShowTextStyle((v) => !v)} aria-label="Text style" role="button" className="zchat-press" style={{
+                      width: 40, height: 40, borderRadius: '50%', display: 'flex',
                       alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-                      color: showTextStyle ? 'white' : (textColor || theme.coralDeep), fontWeight: 900, fontSize: 15, letterSpacing: '-0.04em',
+                      color: showTextStyle ? theme.coral : (textColor || theme.muted), fontWeight: 800, fontSize: 17, letterSpacing: '-0.04em',
                     }}>Aa</div>
                   </div>
                   {!COMPOSER_AUTOSIZE && (
@@ -18869,18 +19048,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         const muteTarget = activeGroup ? { kind: 'group', id: activeGroup.id } : (activeConvForBar ? { kind: 'dm', conv: activeConvForBar } : null);
         const blocked = activeProfile ? myBlockedIds.has(activeProfile.id) : false;
         const close = () => setChatMenuAnchor(null);
-        const item = (icon, label, onClick, danger, hint) => (
-          <div key={label} onClick={() => { close(); onClick(); }} style={{
-            display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', cursor: 'pointer',
-            fontSize: 14, fontWeight: 600, color: danger ? theme.danger : theme.ink, borderTop: `1px solid ${theme.border}`,
-          }}>
-            <span style={{ display: 'flex', color: danger ? theme.danger : theme.muted }}>{icon}</span>
-            <span style={{ flex: 1, minWidth: 0 }}>
-              {label}
-              {hint && <span style={{ display: 'block', fontSize: 11, color: theme.muted, fontWeight: 500 }}>{hint}</span>}
-            </span>
-          </div>
-        );
+        const item = (icon, label, onClick, danger, hint) => ({ icon, label, onClick, danger, hint });
         const items = activeGroup ? [
           item(<Users size={17} />, 'Group info', () => setShowGroupInfo(true)),
           item(<Search size={17} />, 'Search', () => setChatSearch({ query: '', pos: 0 })),
@@ -18905,14 +19073,38 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           !activeProfile.is_bot ? item(<Flag size={17} />, `Report ${activeProfile.name}`, () => setReportUserTarget(activeProfile), true) : null,
           (activeConvForBar && !activeProfile.is_bot) ? item(<Trash2 size={17} />, 'Delete chat', () => setDeleteConvoTarget(activeConvForBar), true) : null,
         ];
+        const extras = [
+          item(<Download size={17} />, 'Export chat', () => exportChat(), false, 'Save this conversation as a text file'),
+          messages.length ? item(<Trash2 size={17} />, 'Clear chat', () => setClearChatAsk(true), true, 'Removes every message here, only for you') : null,
+        ];
+        const all = activeGroup ? [...items.slice(0, -1), ...extras, items[items.length - 1]] : [...items.filter(Boolean).filter((x) => !x.danger), ...extras, ...items.filter(Boolean).filter((x) => x.danger)];
+        if (isWide) {
+          return (
+            <SmartMenu anchorEl={chatMenuAnchor} open onClose={close} width={260}>
+              <div className="zchat-pop" style={{ background: theme.panelBg, borderRadius: 16, boxShadow: '0 12px 34px rgba(0,0,0,0.3)', border: `1px solid ${theme.border}`, overflow: 'hidden', maxHeight: '75vh', overflowY: 'auto' }}>
+                {all.filter(Boolean).map((a) => (
+                  <div key={a.label} onClick={() => { close(); a.onClick(); }} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px', cursor: 'pointer', fontSize: 14, fontWeight: 600, color: a.danger ? theme.danger : theme.ink }}>
+                    <span style={{ display: 'flex', color: a.danger ? theme.danger : theme.muted }}>{a.icon}</span>
+                    <span style={{ flex: 1, minWidth: 0 }}>{a.label}{a.hint && <span style={{ display: 'block', fontSize: 11, color: theme.muted, fontWeight: 500 }}>{a.hint}</span>}</span>
+                  </div>
+                ))}
+              </div>
+            </SmartMenu>
+          );
+        }
         return (
-          <SmartMenu anchorEl={chatMenuAnchor} open onClose={close} width={250}>
-            <div className="zchat-pop" style={{ background: theme.panelBg, borderRadius: 16, boxShadow: '0 12px 34px rgba(0,0,0,0.3)', border: `1px solid ${theme.border}`, overflow: 'hidden', maxHeight: '75vh', overflowY: 'auto' }}>
-              <div style={{ marginTop: -1 }}>{items.filter(Boolean)}</div>
-            </div>
-          </SmartMenu>
+          <ChatRowSheet
+            title={activeGroup ? activeGroup.name : <NameBadge name={activeProfile.name} verified={activeProfile.verified} custom={activeProfile.custom_badge} size={13} />}
+            subtitle={activeGroup ? `${groupMembers.length} members` : `@${activeProfile.username}`}
+            avatar={activeGroup ? <GroupAvatar avatar={activeGroup.avatar} name={activeGroup.name} size={44} /> : <Avatar emoji={activeProfile.avatar} name={activeProfile.name} frame={activeProfile.avatar_frame} size={44} />}
+            onClose={close} actions={all} />
         );
       })()}
+      {clearChatAsk && (activeProfile || activeGroup) && (
+        <ConfirmSheet title="Clear this chat?" text="Every message here disappears from your phone. The other side keeps their copy." confirmLabel="Clear chat"
+          onCancel={() => setClearChatAsk(false)}
+          onConfirm={() => { hideMessagesLocally(messages.map((m) => m.id)); setMessages([]); setClearChatAsk(false); showSnack('Chat cleared'); loadConversations(); }} />
+      )}
       {showBubbleSheet && <BubbleStyleSheet onClose={() => setShowBubbleSheet(false)} />}
       {showChatMedia && (activeProfile || activeGroup) && (
         <ChatMediaPanel title={activeGroup ? activeGroup.name : activeProfile.name}
@@ -18996,6 +19188,57 @@ function DayDivider({ label }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'center', margin: '10px 0 12px' }}>
       <span style={{ fontSize: 11.5, fontWeight: 700, color: theme.muted, padding: '4px 11px', borderRadius: 12, background: theme.dark ? 'rgba(21,15,38,0.75)' : 'rgba(255,255,255,0.75)', border: `1px solid ${theme.border}`, backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}>{label}</span>
+    </div>
+  );
+}
+
+function StorageSection() {
+  const { theme } = useTheme();
+  const [info, setInfo] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState('');
+  const load = async () => {
+    let usage = null;
+    let quota = null;
+    let cacheCount = 0;
+    try { if (navigator.storage && navigator.storage.estimate) { const e = await navigator.storage.estimate(); usage = e.usage || 0; quota = e.quota || 0; } } catch {}
+    try { if (window.caches) { const keys = await caches.keys(); cacheCount = keys.length; } } catch {}
+    setInfo({ usage, quota, cacheCount });
+  };
+  useEffect(() => { load(); }, []);
+  const fmt = (b) => (b == null ? 'Unknown' : b < 1048576 ? `${Math.max(1, Math.round(b / 1024))} KB` : b < 1073741824 ? `${(b / 1048576).toFixed(1)} MB` : `${(b / 1073741824).toFixed(2)} GB`);
+  const clear = async () => {
+    setBusy(true);
+    try { if (window.caches) { const keys = await caches.keys(); await Promise.all(keys.map((k) => caches.delete(k))); } } catch {}
+    try { Object.keys(localStorage).filter((k) => k.startsWith('zchat-img-') || k.startsWith('zchat-media-')).forEach((k) => localStorage.removeItem(k)); } catch {}
+    setBusy(false);
+    setNote('Cached photos and videos were cleared. They download again when you open them.');
+    load();
+  };
+  const pct = info && info.quota ? Math.min(100, Math.round((info.usage / info.quota) * 100)) : 0;
+  const line = (label, value) => (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '14px 2px', borderBottom: `1px solid ${theme.border}` }}>
+      <span style={{ fontSize: 15, color: theme.ink, fontWeight: 600 }}>{label}</span>
+      <span style={{ fontSize: 14.5, color: theme.muted }}>{value}</span>
+    </div>
+  );
+  return (
+    <div>
+      <div style={{ padding: '12px 2px 6px', fontSize: 13, color: theme.muted, lineHeight: 1.5 }}>Photos, videos and app files kept on this phone so ZChat opens fast.</div>
+      {info === null ? (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: 30 }}><Spinner color={theme.muted} /></div>
+      ) : (
+        <>
+          <div style={{ height: 8, borderRadius: 4, background: theme.rowBg, overflow: 'hidden', margin: '8px 2px 14px' }}>
+            <div style={{ width: `${Math.max(2, pct)}%`, height: '100%', background: theme.coral, transition: 'width 0.4s ease' }} />
+          </div>
+          {line('Used by ZChat', fmt(info.usage))}
+          {line('Space the phone allows', fmt(info.quota))}
+          {line('Cached folders', String(info.cacheCount))}
+        </>
+      )}
+      <button onClick={clear} disabled={busy} className="zchat-press" style={{ ...primaryBtn(theme, busy), marginTop: 22 }}>{busy ? <Spinner /> : 'Clear cached photos and videos'}</button>
+      <div style={{ padding: '12px 2px 0', fontSize: 12.5, color: theme.muted, lineHeight: 1.6 }}>{note || 'Your messages and photos stay safe on the server. This only removes the downloaded copies on this phone.'}</div>
     </div>
   );
 }
@@ -19740,7 +19983,7 @@ function AdminPanel({ myId, onClose, onOpenProfile, onOpenReports }) {
   const TABS = [['home', 'Home', LayoutDashboard], ['people', 'People', Users], ['content', 'Content', ImageIcon], ['bot', 'Bot', Sparkles], ['announce', 'Announce', Megaphone], ['data', 'Data', Database]];
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 40, background: theme.panelBg, display: 'flex', flexDirection: 'column', fontFamily: FONT, isolation: 'isolate' }} className="zchat-fade">
+    <div style={{ position: 'fixed', inset: 0, zIndex: 40, background: theme.panelBg, display: 'flex', flexDirection: 'column', fontFamily: FONT, isolation: 'isolate' }} className="zchat-panel-open">
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px 12px', paddingTop: 'calc(12px + env(safe-area-inset-top))' }}>
         <div role="button" aria-label="Back" onClick={onClose} style={{ width: 38, height: 38, borderRadius: 19, background: theme.rowBg, border: `1px solid ${theme.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><ArrowLeft size={19} color={theme.ink} /></div>
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -19944,7 +20187,7 @@ function AdminUserPanel({ person, myId, onClose, onChanged, onOpenProfile }) {
   const unban = () => act(() => supabase.rpc('admin_unban', { p_user_id: person.id }), 'Account unbanned.', () => onChanged({ banned: false }));
 
   return (
-    <div style={{ position: 'absolute', inset: 0, zIndex: 20, background: theme.panelBg, display: 'flex', flexDirection: 'column', isolation: 'isolate' }} className="zchat-fade">
+    <div style={{ position: 'absolute', inset: 0, zIndex: 20, background: theme.panelBg, display: 'flex', flexDirection: 'column', isolation: 'isolate' }} className="zchat-panel-open">
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px 10px', paddingTop: 'calc(14px + env(safe-area-inset-top))' }}>
         <ArrowLeft size={20} style={{ cursor: 'pointer', color: theme.ink }} onClick={onClose} />
         <Avatar emoji={profile.avatar} name={profile.name} size={34} frame={profile.avatar_frame} />
