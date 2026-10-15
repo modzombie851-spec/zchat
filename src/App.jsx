@@ -562,6 +562,12 @@ function GlobalStyle() {
       .zchat-mail-zoom { animation: zchat-mail-zoom-in 0.22s cubic-bezier(.2,.8,.3,1); }
       .zchat-wall { height: 100vh; height: 100lvh; }
       @keyframes zchat-float-up { 0% { transform: translateY(0) translateX(0); opacity: 0; } 10% { opacity: 1; } 100% { transform: translateY(-620px) translateX(18px); opacity: 0; } }
+      .zchat-gbtn { transition: transform 0.07s ease, box-shadow 0.07s ease, filter 0.12s ease; -webkit-tap-highlight-color: transparent; }
+      .zchat-gbtn:active:not(:disabled) { transform: translateY(3px); box-shadow: 0 1px 0 var(--gb-edge, #C77800), 0 3px 6px rgba(0,0,0,0.18), inset 0 2px 0 rgba(255,255,255,0.4) !important; }
+      .zchat-gbtn:disabled { filter: grayscale(0.7) opacity(0.55); cursor: default !important; }
+      @keyframes zchat-turn-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(253,224,71,0.65); } 50% { box-shadow: 0 0 0 5px rgba(253,224,71,0); } }
+      .zchat-turn-pulse { animation: zchat-turn-pulse 1.6s ease-in-out infinite; }
+      @keyframes zchat-sending-dots { 0%, 20% { opacity: 0.2; } 50% { opacity: 1; } 100% { opacity: 0.2; } }
       @keyframes zchat-shake { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-9px); } 40% { transform: translateX(8px); } 60% { transform: translateX(-6px); } 80% { transform: translateX(4px); } }
       .zchat-shake { animation: zchat-shake 0.45s ease; }
       @keyframes zchat-drift-a { 0%, 100% { transform: translate(0,0); } 50% { transform: translate(30px, 20px); } }
@@ -2091,6 +2097,8 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
             <SettingsRow icon={reactionSoundOn ? <Volume2 size={16} /> : <VolumeX size={16} />} label="Reaction sound" right={<ToggleSwitch on={reactionSoundOn} onClick={() => setReactionSoundOn((s) => !s)} />} />
             <IgHeading>Message tone</IgHeading>
             <ToneList />
+            <IgHeading>Quiet hours</IgHeading>
+            <QuietHoursSection />
           </>
         )}
 
@@ -6162,7 +6170,21 @@ function MentionSuggestions({ query, priority, excludeIds, myId, onPick }) {
 }
 
 
-function MessageBubble({ gameLive, onGameMove, onGameRematch, onOpenGame, onPlayDuel, peerName, myId, isBot, m, isMe, onDelete, selectionMode, selected, onToggleSelect, onLongPress, onOpenImage, onOpenVideo, reactions, onReact, onOpenWhoReacted, replyPreview, onSwipeReply, onJumpToMessage, highlighted, senderLabel, senderAvatar, hideReadStatus, onOpenSenderProfile, canModerate, onOpenMention, mentionsMe, onOpenStoryRef, onCallBack, onOpenSticker, tightBelow, senderVerified, onOpenPost, tightAbove, senderFrame, senderCustomBadge }) {
+function mergeDuelState(st, merge) {
+  if (!st || !merge) return st;
+  if (DUEL_KINDS[st.g]) {
+    const next = { ...st, rx: st.rx != null ? st.rx : (merge.rx != null ? merge.rx : null), ro: st.ro != null ? st.ro : (merge.ro != null ? merge.ro : null) };
+    if (!next.w) next.w = duelWinner(next);
+    return next;
+  }
+  if (st.g === 'dice') {
+    const next = { ...st, dx: st.dx || merge.dx || null, do: st.do || merge.do || null };
+    if (!next.w && next.dx && next.do) { const a = diceRank(next.dx).score; const b = diceRank(next.do).score; next.w = a === b ? 'd' : a > b ? 'x' : 'o'; }
+    return next;
+  }
+  return st;
+}
+function MessageBubble({ onVote, onShowVotes, gameMerge, gameLive, onGameMove, onGameRematch, onOpenGame, onPlayDuel, peerName, myId, isBot, m, isMe, onDelete, selectionMode, selected, onToggleSelect, onLongPress, onOpenImage, onOpenVideo, reactions, onReact, onOpenWhoReacted, replyPreview, onSwipeReply, onJumpToMessage, highlighted, senderLabel, senderAvatar, hideReadStatus, onOpenSenderProfile, canModerate, onOpenMention, mentionsMe, onOpenStoryRef, onCallBack, onOpenSticker, tightBelow, senderVerified, onOpenPost, tightAbove, senderFrame, senderCustomBadge }) {
   const mediaOnly = !m.deleted && (m.type === 'image' || m.type === 'video')
     && !replyPreview && !senderLabel && !m.forwarded
     && !(m.content && !String(m.content).startsWith('/'));
@@ -6185,19 +6207,26 @@ function MessageBubble({ gameLive, onGameMove, onGameRematch, onOpenGame, onPlay
   const bubbleColorSpec = BUBBLE_COLORS[bubbleColor] || BUBBLE_COLORS.default;
   const sharedProfileId = m.type === 'text' && !m.deleted ? parseProfileLink(m.content) : null;
   const sharedPostId = m.type === 'text' && !m.deleted ? parsePostLink(m.content) : null;
-  const gameState = m.type === 'text' && !m.deleted ? parseGameMessage(m.content) : null;
+  const pollData = m.type === 'text' && !m.deleted ? parsePoll(m.content) : null;
+  const eventData = m.type === 'text' && !m.deleted && !pollData ? parseEventMsg(m.content) : null;
+  const gameState = mergeDuelState(m.type === 'text' && !m.deleted ? parseGameMessage(m.content) : null, gameMerge);
   const gameFresh = !!gameState && !!m.created_at && (Date.now() - new Date(m.created_at).getTime()) < 20000;
-  const moveLockRef = useRef(0);
-  useEffect(() => { moveLockRef.current = 0; }, [gameState ? gameState.id : null, gameState ? gameState.n : null]);
+  const moveKey = gameState ? `${gameState.id}:${gameState.n}` : null;
+  const [sendingMove, setSendingMove] = useState(false);
+  useEffect(() => { setSendingMove(false); }, [moveKey]);
   const guardedGameMove = (next) => {
-    const now = Date.now();
-    if (moveLockRef.current && now - moveLockRef.current < 4000) return;
-    moveLockRef.current = now;
-    if (onGameMove) onGameMove(next);
+    if (!moveKey || sendingMove || sentGameMoveKeys.has(moveKey)) return;
+    sentGameMoveKeys.add(moveKey);
+    setSendingMove(true);
+    Promise.resolve(onGameMove ? onGameMove(next) : false).then((ok) => {
+      if (ok === false) { sentGameMoveKeys.delete(moveKey); setSendingMove(false); }
+    }).catch(() => { sentGameMoveKeys.delete(moveKey); setSendingMove(false); });
   };
-  const locationShare = m.type === 'text' && !m.deleted && !gameState ? parseLocationMessage(m.content) : null;
-  const linkPreviewUrl = m.type === 'text' && !m.deleted && !sharedPostId && !sharedProfileId && !gameState && !locationShare ? firstPreviewableUrl(m.content) : null;
-  const inlineTime = m.type === 'text' && !m.deleted && !!m.content && !sharedProfileId && !sharedPostId && !gameState && !locationShare && !(m.story_id && (m.content === STORY_MENTION_TEXT || m.content === STORY_GROUP_MENTION_TEXT || m.content === STORY_SHARE_TEXT));
+  const moveSent = !!moveKey && (sendingMove || sentGameMoveKeys.has(moveKey));
+  const bareCard = !m.deleted && m.type === 'text' && (!!gameState || !!pollData || !!eventData);
+  const locationShare = m.type === 'text' && !m.deleted && !gameState && !pollData && !eventData ? parseLocationMessage(m.content) : null;
+  const linkPreviewUrl = m.type === 'text' && !m.deleted && !sharedPostId && !sharedProfileId && !gameState && !locationShare && !pollData && !eventData ? firstPreviewableUrl(m.content) : null;
+  const inlineTime = m.type === 'text' && !m.deleted && !!m.content && !sharedProfileId && !sharedPostId && !gameState && !locationShare && !pollData && !eventData && !(m.story_id && (m.content === STORY_MENTION_TEXT || m.content === STORY_GROUP_MENTION_TEXT || m.content === STORY_SHARE_TEXT));
 
   if (m.type === 'system' && parseCallLog(m.content)) {
     return <CallLogBubble m={m} isMe={isMe} onCallBack={onCallBack} />;
@@ -6213,7 +6242,7 @@ function MessageBubble({ gameLive, onGameMove, onGameRematch, onOpenGame, onPlay
   }
 
   const grouped = {};
-  (reactions || []).forEach((r) => { grouped[r.emoji] = (grouped[r.emoji] || 0) + 1; });
+  (reactions || []).forEach((r) => { if (typeof r.emoji === 'string' && r.emoji.indexOf('zv:') === 0) return; grouped[r.emoji] = (grouped[r.emoji] || 0) + 1; });
   const groupedEntries = Object.entries(grouped);
 
   const handleRowTap = (e) => {
@@ -6349,8 +6378,9 @@ function MessageBubble({ gameLive, onGameMove, onGameRematch, onOpenGame, onPlay
           ...(bubbleSpec && m.type !== 'sticker' ? bubbleStyleCss(bubbleSpec, isMe) : {}),
           ...(bubbleSpec && mediaOnly ? { overflow: 'visible' } : {}),
           ...(m.type === 'sticker' && !m.deleted ? { background: 'transparent', border: 'none', boxShadow: 'none', padding: 0, backdropFilter: 'none', WebkitBackdropFilter: 'none', overflow: 'visible' } : {}),
+          ...(bareCard ? { background: 'transparent', border: 'none', boxShadow: 'none', padding: 0, backdropFilter: 'none', WebkitBackdropFilter: 'none', overflow: 'visible' } : {}),
         })}>
-          {bubbleSpec && bubbleSpec.deco && BUBBLE_DECO[bubbleKey] && m.type !== 'sticker' && <div aria-hidden="true" style={{ position: 'absolute', pointerEvents: 'none', zIndex: 1, ...bubbleSpec.deco }}>{BUBBLE_DECO[bubbleKey]()}</div>}
+          {bubbleSpec && bubbleSpec.deco && BUBBLE_DECO[bubbleKey] && m.type !== 'sticker' && !bareCard && <div aria-hidden="true" style={{ position: 'absolute', pointerEvents: 'none', zIndex: 1, ...bubbleSpec.deco }}>{BUBBLE_DECO[bubbleKey]()}</div>}
           {senderLabel && !m.deleted && !tightAbove && (
             <div style={{ fontSize: 11.5, fontWeight: 700, color: theme.coralDeep, marginBottom: 3, padding: m.type !== 'text' ? '0 4px' : 0 }}>
               <NameBadge name={senderLabel} verified={senderVerified} custom={senderCustomBadge} size={11} />
@@ -6422,7 +6452,14 @@ function MessageBubble({ gameLive, onGameMove, onGameRematch, onOpenGame, onPlay
                 </div>
               )}
               {gameState && (
-                <div style={{ paddingTop: 2, paddingBottom: 6 }}>
+                <div style={{ paddingTop: 2, paddingBottom: 18, position: 'relative' }}>
+                  {moveSent && gameLive && (
+                    <div onClick={(e) => e.stopPropagation()} style={{ position: 'absolute', inset: '2px 0 18px', zIndex: 3, borderRadius: 22, background: 'rgba(8,5,20,0.28)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <span style={{ padding: '7px 14px', borderRadius: 999, background: 'rgba(15,10,30,0.82)', color: 'white', fontSize: 12.5, fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 8, boxShadow: '0 6px 18px rgba(0,0,0,0.35)' }}>
+                        <Spinner size={13} color="white" />Sending
+                      </span>
+                    </div>
+                  )}
                   {gameState.g === 'ttt' && (
                     <TicTacToeCard state={gameState} myId={myId} live={!!gameLive} fresh={gameFresh} peerName={peerName} ink={bubbleSpec ? bubbleSpec.ink : undefined}
                       onMove={guardedGameMove} onRematch={onGameRematch ? () => onGameRematch(gameState) : null} />
@@ -6453,12 +6490,22 @@ function MessageBubble({ gameLive, onGameMove, onGameRematch, onOpenGame, onPlay
                   {BOARD_CARDS[gameState.g] && React.createElement(BOARD_CARDS[gameState.g], { state: gameState, myId, live: !!gameLive, fresh: gameFresh, peerName, onMove: guardedGameMove, onRematch: onGameRematch ? () => onGameRematch(gameState) : null })}
                 </div>
               )}
+              {pollData && (
+                <div style={{ paddingTop: 2, paddingBottom: 18 }}>
+                  <PollCard poll={pollData} votes={reactions} myId={myId} onVote={onVote ? (i) => onVote(m, i) : null} onShowVotes={onShowVotes ? () => onShowVotes(m) : null} />
+                </div>
+              )}
+              {eventData && (
+                <div style={{ paddingTop: 2, paddingBottom: 18 }}>
+                  <EventCard ev={eventData} votes={reactions} myId={myId} onVote={onVote ? (i) => onVote(m, i) : null} onShowVotes={onShowVotes ? () => onShowVotes(m) : null} />
+                </div>
+              )}
               {locationShare && (
                 <div style={{ paddingTop: 2, paddingBottom: 16 }}>
                   <LocationCard loc={locationShare} isMe={isMe} ink={bubbleSpec ? bubbleSpec.ink : undefined} />
                 </div>
               )}
-              {m.type === 'text' && m.content && !sharedProfileId && !sharedPostId && !gameState && !locationShare && !(m.story_id && (m.content === STORY_MENTION_TEXT || m.content === STORY_GROUP_MENTION_TEXT || m.content === STORY_SHARE_TEXT)) && (
+              {m.type === 'text' && m.content && !sharedProfileId && !sharedPostId && !gameState && !locationShare && !pollData && !eventData && !(m.story_id && (m.content === STORY_MENTION_TEXT || m.content === STORY_GROUP_MENTION_TEXT || m.content === STORY_SHARE_TEXT)) && (
                 <div style={{
                   fontSize: (m.text_size ? textSizePx(m.text_size) : 15) * fontScale,
                   fontWeight: m.text_size === 'l' || m.text_size === 'xl' ? 800 : 400,
@@ -6481,7 +6528,7 @@ function MessageBubble({ gameLive, onGameMove, onGameRematch, onOpenGame, onPlay
           )}
           {!m.deleted && !inlineTime && (
             <div style={{
-              position: 'absolute', bottom: 4, right: 8, display: 'flex', alignItems: 'center', gap: 3,
+              position: 'absolute', bottom: bareCard ? 0 : 4, right: bareCard ? 12 : 8, display: 'flex', alignItems: 'center', gap: 3,
               background: m.type === 'text' ? 'none' : 'rgba(0,0,0,0.4)', borderRadius: 8,
               padding: m.type === 'text' ? 0 : '1px 5px',
             }}>
@@ -6513,9 +6560,11 @@ function MessageBubble({ gameLive, onGameMove, onGameRematch, onOpenGame, onPlay
   );
 }
 function playPing() {
+  if (quietNow()) return;
   playUiSound('receive');
 }
 function playReactionPing() {
+  if (quietNow()) return;
   try { if (localStorage.getItem('zchat-reaction-sound') === 'off') return; } catch {}
   playUiSound('like');
 }
@@ -6983,6 +7032,8 @@ function ReplyQuote({ m, label, onClick, bar, dim, compact }) {
   let text = quoteTextFor(m);
   if (gs) icon = gs.g === 'score' ? <TrophyIcon size={13} color="#F59E0B" /> : <GamepadIcon size={13} color={theme.coral} />;
   else if (loc) icon = <Compass size={13} color={theme.coral} />;
+  else if (m && m.type === 'text' && parsePoll(m.content)) icon = <PollIcon size={13} color={theme.coral} />;
+  else if (m && m.type === 'text' && parseEventMsg(m.content)) icon = <CalendarIcon size={13} color={theme.coral} />;
   else if (m && m.type === 'audio') icon = <Mic size={13} color={theme.coral} />;
   else if (m && m.type === 'image') icon = <Camera size={13} color={theme.coral} />;
   else if (m && m.type === 'video') icon = <VideoIcon size={13} color={theme.coral} />;
@@ -6996,7 +7047,7 @@ function ReplyQuote({ m, label, onClick, bar, dim, compact }) {
   ) : isStickerImg ? (
     <img src={m.content} alt="" draggable={false} style={{ width: compact ? 30 : 36, height: compact ? 30 : 36, objectFit: 'contain', flexShrink: 0 }} />
   ) : null;
-  const textStyle = m && m.type === 'text' && !gs && !loc ? { ...fontStyleCss(m.text_font), ...(m.text_color ? { color: m.text_color } : {}) } : {};
+  const textStyle = m && m.type === 'text' && !gs && !loc && !isSpecialContent(m.content) ? { ...fontStyleCss(m.text_font), ...(m.text_color ? { color: m.text_color } : {}) } : {};
   return (
     <div onClick={onClick} style={{ display: 'flex', alignItems: 'stretch', gap: 8, borderRadius: 10, overflow: 'hidden', background: 'rgba(0,0,0,0.06)', cursor: onClick ? 'pointer' : 'default', minWidth: 0 }}>
       <div style={{ width: 3, flexShrink: 0, background: bar || theme.coral }} />
@@ -7013,11 +7064,19 @@ function ReplyQuote({ m, label, onClick, bar, dim, compact }) {
     </div>
   );
 }
+const SPECIAL_PREFIXES = ['zpoll:', 'zevent:'];
+function isSpecialContent(content) {
+  return typeof content === 'string' && SPECIAL_PREFIXES.some((p) => content.indexOf(p) === 0);
+}
 function quoteTextFor(m) {
   if (!m) return '';
   if (m.type === 'text') {
     const gs = parseGameMessage(m.content);
     if (gs) return gs.g === 'score' ? `High score in ${gameTitle(gs)}` : gameTitle(gs);
+    const qp = parsePoll(m.content);
+    if (qp) return `Poll: ${qp.q}`;
+    const qe = parseEventMsg(m.content);
+    if (qe) return `Event: ${qe.t}`;
     if (parseLocationMessage(m.content)) return 'Location';
     if (parseProfileLink(m.content)) return 'Profile';
     if (parsePostLink(m.content)) return 'Post';
@@ -7065,13 +7124,17 @@ function describeMessage(m) {
     default: {
       const gs = parseGameMessage(m.content);
       if (gs) return { kind: 'game', text: gs.g === 'score' ? `High score in ${gameTitle(gs)}` : gameTitle(gs) };
+      const dp = parsePoll(m.content);
+      if (dp) return { kind: 'poll', text: `Poll: ${dp.q}` };
+      const de = parseEventMsg(m.content);
+      if (de) return { kind: 'event', text: `Event: ${de.t}` };
       if (parseLocationMessage(m.content)) return { kind: 'location', text: 'Location' };
       return { kind: 'text', text: parseProfileLink(m.content) ? 'Shared a profile' : parsePostLink(m.content) ? 'Shared a post' : plainPreviewText(m.content || '') };
     }
   }
 }
 
-const PREVIEW_ICONS = { image: Camera, video: VideoIcon, audio: Mic, sticker: Smile, deleted: Ban, story: StatusIcon, call: Phone, callmissed: PhoneMissedIcon, game: GamepadIcon, location: Compass };
+const PREVIEW_ICONS = { image: Camera, video: VideoIcon, audio: Mic, sticker: Smile, deleted: Ban, story: StatusIcon, call: Phone, callmissed: PhoneMissedIcon, game: GamepadIcon, location: Compass, poll: PollIcon, event: CalendarIcon };
 function PhoneMissedIcon({ size = 14, style }) { return <Phone size={size} color="#FF3B30" style={style} />; }
 
 function PreviewLine({ preview, prefix, color, weight = 400, size = 12 }) {
@@ -7235,7 +7298,7 @@ function ConfirmSheet({ title, text, confirmLabel = 'Confirm', danger = true, on
   );
 }
 
-function MessageContextMenu({ message, isMine, canEditText, canModerate, anchorRect, bubble, isPinned, onPin, onUnpin, onClose, onReact, onReply, onCopy, onEdit, onForward, onReport, onDeleteForMe, onDeleteForEveryone, onSelectMultiple, onSave, onToggleSave, isSaved, onInfo }) {
+function MessageContextMenu({ onRemind, message, isMine, canEditText, canModerate, anchorRect, bubble, isPinned, onPin, onUnpin, onClose, onReact, onReply, onCopy, onEdit, onForward, onReport, onDeleteForMe, onDeleteForEveryone, onSelectMultiple, onSave, onToggleSave, isSaved, onInfo }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
   const [showFullEmoji, setShowFullEmoji] = useState(false);
@@ -7255,20 +7318,26 @@ function MessageContextMenu({ message, isMine, canEditText, canModerate, anchorR
   const vw = window.innerWidth;
   const rect = anchorRect || { top: vh * 0.3, left: Math.max(0, (vw - Math.min(vw, 560)) / 2), width: Math.min(vw, 560), height: 60 };
   const maxBubble = Math.round(vh * 0.38);
-  const bubbleH = Math.min(measured.bubble || rect.height, maxBubble);
   const barH = 50;
   const gap = 10;
   const minTop = 52 + barH + gap;
-  const maxTop = vh - 14 - (measured.menu || 300) - gap - bubbleH;
+  const room = vh - 14 - minTop;
+  const menuNat = measured.menu || 300;
+  const bubbleNat = Math.min(measured.bubble || rect.height, maxBubble);
+  const bubbleH = Math.max(Math.min(bubbleNat, 96), Math.min(bubbleNat, room - menuNat - gap));
+  const menuMax = Math.max(160, room - bubbleH - gap);
+  const menuH = Math.min(menuNat, menuMax);
+  const maxTop = vh - 14 - menuH - gap - bubbleH;
   const top = Math.max(minTop, Math.min(rect.top, Math.max(minTop, maxTop)));
+  const special = message.type === 'text' && !!(parseGameMessage(message.content) || isSpecialContent(message.content));
   const sideStyle = isMine
     ? { right: Math.max(10, vw - (rect.left + rect.width) + 14) }
     : { left: Math.max(10, rect.left + 14) };
   const ready = measured.menu > 0;
 
   const row = (icon, label, onClick, danger) => (
-    <div onClick={guard(onClick)} style={{
-      display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: '12px 16px', cursor: 'pointer',
+    <div onClick={guard(onClick)} className="zchat-row-press" style={{
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: '11px 16px', cursor: 'pointer',
       fontSize: 14.5, fontWeight: 600, color: danger ? theme.danger : theme.ink, borderTop: `1px solid ${theme.border}`,
     }}>
       <span>{label}</span>
@@ -7283,7 +7352,7 @@ function MessageContextMenu({ message, isMine, canEditText, canModerate, anchorR
         background: theme.dark ? 'rgba(3,6,14,0.5)' : 'rgba(235,239,247,0.5)',
         backdropFilter: 'blur(18px) saturate(140%)', WebkitBackdropFilter: 'blur(18px) saturate(140%)',
       }} />
-      {!message.deleted && (
+      {!message.deleted && !(message.type === 'text' && isSpecialContent(message.content)) && (
         <div onClick={(e) => e.stopPropagation()} className={ready ? 'zchat-pop' : ''} style={{
           position: 'absolute', top: top - barH - gap, ...sideStyle, height: barH, boxSizing: 'border-box',
           display: 'flex', alignItems: 'center', gap: 6, padding: '0 10px', borderRadius: 26,
@@ -7300,22 +7369,25 @@ function MessageContextMenu({ message, isMine, canEditText, canModerate, anchorR
       )}
       <div ref={bubbleRef} style={{
         position: 'absolute', top, left: rect.left, width: rect.width, paddingLeft: 18, paddingRight: 18, boxSizing: 'border-box',
-        maxHeight: maxBubble, overflow: 'hidden', pointerEvents: 'none', opacity: ready ? 1 : 0,
+        maxHeight: measured.bubble ? bubbleH : maxBubble, overflow: 'hidden', pointerEvents: 'none', opacity: ready ? 1 : 0,
+        WebkitMaskImage: measured.bubble && bubbleNat > bubbleH ? 'linear-gradient(180deg, #000 78%, transparent)' : 'none', maskImage: measured.bubble && bubbleNat > bubbleH ? 'linear-gradient(180deg, #000 78%, transparent)' : 'none',
         transform: ready ? 'scale(1)' : 'scale(0.97)', transition: 'transform 0.18s ease, opacity 0.12s ease',
       }}>{bubble}</div>
       <div ref={menuRef} onClick={(e) => e.stopPropagation()} className={ready ? 'zchat-pop' : ''} style={{
-        position: 'absolute', top: top + bubbleH + gap, ...sideStyle, width: 236, borderRadius: 16, overflow: 'hidden',
+        position: 'absolute', top: top + bubbleH + gap, ...sideStyle, width: 236, borderRadius: 16, overflowX: 'hidden', overflowY: ready && menuNat > menuMax ? 'auto' : 'hidden',
+        maxHeight: ready ? menuMax : undefined, WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain',
         background: theme.panelBg, boxShadow: '0 10px 32px rgba(0,0,0,0.3)', opacity: ready ? 1 : 0,
       }}>
         <div style={{ marginTop: -1 }}>
           {!message.deleted && row(<Reply size={18} />, 'Reply', onReply)}
-          {!message.deleted && message.type === 'text' && row(<Copy size={18} />, 'Copy', onCopy)}
-          {!message.deleted && canEditText && row(<Edit3 size={18} />, 'Edit', onEdit)}
+          {!message.deleted && message.type === 'text' && !special && row(<Copy size={18} />, 'Copy', onCopy)}
+          {!message.deleted && canEditText && !special && row(<Edit3 size={18} />, 'Edit', onEdit)}
           {!message.deleted && (message.type === 'image' || message.type === 'video') && row(<Download size={18} />, 'Save', onSave)}
           {!message.deleted && stickerMatch && row(<Star_ size={18} color="#FFB800" filled={favKeys.has(stickerMatch.key)} />, favKeys.has(stickerMatch.key) ? 'Remove from favorites' : 'Add to favorites', () => { setFavKeys(new Set(toggleFavoriteSticker(stickerMatch.key))); onClose(); })}
-          {!message.deleted && row(<Forward size={18} />, 'Forward', onForward)}
+          {!message.deleted && !(message.type === 'text' && parseGameMessage(message.content)) && row(<Forward size={18} />, 'Forward', onForward)}
           {!message.deleted && message.type !== 'system' && onToggleSave && row(<Bookmark size={18} fill={isSaved ? 'currentColor' : 'none'} />, isSaved ? 'Remove from Saved' : 'Add to Saved', onToggleSave)}
           {!message.deleted && message.type !== 'system' && onPin && row(<Pin_ size={18} color={theme.ink} />, isPinned ? 'Unpin' : 'Pin', isPinned ? onUnpin : onPin)}
+          {!message.deleted && message.type !== 'system' && onRemind && row(<Clock size={18} />, 'Remind me', onRemind)}
           {row(<CheckCheck size={18} />, 'Select', onSelectMultiple)}
           {onInfo && message.type !== 'system' && row(<HelpCircle size={18} />, 'Info', onInfo)}
           {!isMine && !message.deleted && row(<Flag size={18} />, 'Report', onReport, true)}
@@ -9796,7 +9868,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-const APP_VERSION = '12.8V';
+const APP_VERSION = '13.0V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -14116,7 +14188,7 @@ function CreateSheet({ onClose, onPost, onStory, onGroup, onChat, onGames }) {
     { k: 'story', label: 'New story', desc: 'Disappears after 24 hours', icon: <Camera size={20} />, bg: 'linear-gradient(135deg, #ec4899, #f59e0b)', on: onStory },
     { k: 'group', label: 'New group', desc: 'Chat with up to 50 people', icon: <Users size={20} />, bg: 'linear-gradient(135deg, #10b981, #0ea5e9)', on: onGroup },
     { k: 'chat', label: 'New chat', desc: 'Find someone by username', icon: <MessageSquare size={20} />, bg: 'linear-gradient(135deg, #3b82f6, #6366f1)', on: onChat },
-    onGames ? { k: 'games', label: 'Play a game', desc: 'Twenty eight games, solo or with a friend', icon: <GamepadIcon size={22} />, bg: 'linear-gradient(135deg, #f59e0b, #ef4444)', on: onGames } : null,
+    onGames ? { k: 'games', label: 'Play a game', desc: 'Forty five games, solo or with a friend', icon: <GamepadIcon size={22} />, bg: 'linear-gradient(135deg, #f59e0b, #ef4444)', on: onGames } : null,
   ].filter(Boolean);
   return (
     <Portal>
@@ -14398,7 +14470,7 @@ function CallsTab({ userId, groups, onCall, onOpenProfile, version }) {
   );
 }
 
-function MeTab({ me, counts, onOpenProfile, onEditProfile, onSettings, onCollection, onSaved, onArchive, onMail, onRequests, onDiscover, onSwitchAccount, onShare, onInvite, onGames }) {
+function MeTab({ me, counts, onOpenProfile, onEditProfile, onSettings, onCollection, onSaved, onArchive, onMail, onRequests, onDiscover, onSwitchAccount, onShare, onInvite, onGames, onReminders, onSearchMessages }) {
   const { theme } = useTheme();
   const c = igPalette(theme);
   const [social, setSocial] = useState(() => { try { return JSON.parse(localStorage.getItem('zchat-me-social') || 'null') || { followers: 0, following: 0, posts: 0 }; } catch { return { followers: 0, following: 0, posts: 0 }; } });
@@ -14452,9 +14524,11 @@ function MeTab({ me, counts, onOpenProfile, onEditProfile, onSettings, onCollect
           {btn('Share profile', <Share2 size={16} strokeWidth={1.9} />, onShare)}
         </div>
         <IgHeading>Your stuff</IgHeading>
-        {row(<GamepadIcon size={22} />, 'Games', onGames, { sub: 'Twenty eight games, solo or with a friend' })}
+        {row(<GamepadIcon size={22} />, 'Games', onGames, { sub: 'Forty five games, solo or with a friend' })}
         {row(<Sparkles />, 'Collection', onCollection, { value: counts.rewards ? `${counts.rewards} unlocked` : undefined })}
         {row(<Bookmark />, 'Saved messages', onSaved)}
+        {onReminders && row(<Clock />, 'Reminders', onReminders, { value: counts.reminders ? String(counts.reminders) : undefined, sub: 'Messages you asked to be reminded about' })}
+        {onSearchMessages && row(<Search />, 'Search messages', onSearchMessages, { sub: 'Find words in every chat and group' })}
         {row(<Archive />, 'Archived chats', onArchive, { value: counts.archived ? String(counts.archived) : undefined })}
         <IgHeading>Inbox</IgHeading>
         {row(<Bell />, 'Follow requests', onRequests, { badge: badge(counts.requests) })}
@@ -14793,6 +14867,27 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [showMail, setShowMail] = useNavState(false);
   const [unreadMailCount, setUnreadMailCount] = useState(0);
   const [listFilter, setListFilter] = useState('all');
+  const [pollComposer, setPollComposer] = useState(false);
+  const [eventComposer, setEventComposer] = useState(false);
+  const [msgSearchOpen, setMsgSearchOpen] = useState(null);
+  const [insightsOpen, setInsightsOpen] = useState(false);
+  const [jumpReq, setJumpReq] = useState(null);
+  const [remindFor, setRemindFor] = useState(null);
+  const [votesFor, setVotesFor] = useState(null);
+  const [showReminders, setShowReminders] = useState(false);
+  const [reminderTick, setReminderTick] = useState(0);
+  const specialLockRef = useRef(false);
+  const voteBusyRef = useRef({});
+  const favStoreKey = `zchat-favs-${session.user.id}`;
+  const [favChats, setFavChats] = useState(() => { try { const a = JSON.parse(localStorage.getItem(`zchat-favs-${session.user.id}`) || '[]'); return new Set(Array.isArray(a) ? a : []); } catch { return new Set(); } });
+  const toggleFavChat = (key) => {
+    const next = new Set(favChats);
+    const on = !next.has(key);
+    if (on) next.add(key); else next.delete(key);
+    setFavChats(next);
+    try { localStorage.setItem(favStoreKey, JSON.stringify([...next])); } catch {}
+    showSnack(on ? 'Added to favourites' : 'Removed from favourites');
+  };
   const [groups, setGroups] = useState([]);
   const [activeGroup, setActiveGroup] = useState(null);
   const [composerTall, setComposerTall] = useState(false);
@@ -14907,17 +15002,17 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   activeGroupRef.current = activeGroup;
   const navActionsRef = useRef({});
   const gameSendLockRef = useRef({});
+  const rematchLockRef = useRef(new Set());
   const sendGameStateTo = async (profile, state) => {
-    if (!profile) return;
-    const lockKey = state.g === 'score' ? `score:${state.k}` : `${state.id}:${state.n}`;
-    const now = Date.now();
+    if (!profile) return false;
+    const lockKey = state.g === 'score' ? `score:${state.k}:${state.s}` : `${state.id}:${state.n}`;
     const locks = gameSendLockRef.current;
-    if (locks[lockKey] && now - locks[lockKey] < 4000) return;
-    locks[lockKey] = now;
-    Object.keys(locks).forEach((k) => { if (now - locks[k] > 10000) delete locks[k]; });
+    if (locks[lockKey]) return true;
+    locks[lockKey] = Date.now();
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) { delete locks[lockKey]; showSnack('No connection. Tap again when you are back online'); return false; }
     const content = encodeGameMessage(state);
-    const { data } = await sendMessage(session.user.id, profile.id, 'text', content, null);
-    if (!data) { showSnack('Could not send the game'); return; }
+    const { data } = await insertMessageSafe({ sender_id: session.user.id, receiver_id: profile.id, group_id: null, type: 'text', content, client_id: stableUuid(`${session.user.id}|${lockKey}`) });
+    if (!data) { delete locks[lockKey]; showSnack('Could not send. Tap again'); return false; }
     if (activeProfileRef.current && activeProfileRef.current.id === profile.id) setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
     const title = gameTitle(state);
     const low = title.toLowerCase();
@@ -14925,6 +15020,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const text = state.g === 'score' ? `Scored ${formatGameScore(state.k, state.s)} in ${title}` : state.n === 0 ? `Challenged you to ${low}` : (state.w ? `Finished your ${low} game` : `Made a move in ${low}`);
     notifyUser(profile.id, me.name, text, `/?dm=${session.user.id}`, me.avatar);
     playUiSound('send');
+    return true;
   };
   const newGameState = (kind, profile, extra) => {
     const base = { id: newClientId(), x: session.user.id, o: profile.id, w: null, n: 0 };
@@ -14946,6 +15042,11 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (kind === 'war') return { g: 'war', k: 0, t: profile.id, ...base };
     if (kind === 'sl') return { g: 'sl', px: 0, po: 0, t: profile.id, d: 0, ...base };
     if (kind === 'ship') return { g: 'ship', sx: [], so: [], t: profile.id, ...base };
+    if (kind === 'sd') return { g: 'sd', k: (extra && extra.k) || 'stack', rx: null, ro: null, ...base };
+    if (kind === 'paint') { const init = paintInit(base.id); return { g: 'paint', b: init.b, own: init.own, t: profile.id, ...base }; }
+    if (kind === 'bomb') return { g: 'bomb', op: [], t: profile.id, ...base };
+    if (kind === 'gem') return { g: 'gem', d: Array(36).fill(0), t: profile.id, ...base };
+    if (kind === 'fade') return { g: 'fade', b: Array(9).fill(0), qx: [], qo: [], t: profile.id, ...base };
     if (kind === 'num') return { g: 'num', sv: Math.max(1, Math.min(100, parseInt((extra && extra.sv) || 0, 10) || 1)), gs: [], ...base };
     return { g: 'ttt', b: [0, 0, 0, 0, 0, 0, 0, 0, 0], t: profile.id, ...base };
   };
@@ -14953,8 +15054,11 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [duelPlay, setDuelPlay] = useState(null);
   useBackClose(!!duelPlay, () => setDuelPlay(null));
   const lastGameStartRef = useRef(0);
-  const startGameWith = async (profile, kind, extra) => {
+  const startGameWith = async (profile, kindIn, extraIn) => {
     if (!profile || profile.is_bot) return;
+    let kind = kindIn;
+    let extra = extraIn;
+    if (typeof kind === 'string' && kind.indexOf('sd:') === 0) { extra = { ...(extra || {}), k: kind.slice(3) }; kind = 'sd'; }
     if ((kind === 'hang' && !(extra && extra.sw)) || (kind === 'num' && !(extra && extra.sv))) {
       if (!activeProfileRef.current || activeProfileRef.current.id !== profile.id) await openChat(profile, null);
       setSetupFor({ profile, kind });
@@ -14974,7 +15078,11 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const profile = activeProfileRef.current;
     setDuelPlay(null);
     if (!profile) return;
-    const latest = latestGameState(st.id) || st;
+    let latest = latestGameState(st.id) || st;
+    messages.forEach((x) => {
+      const g = x.type === 'text' && !x.deleted ? parseGameMessage(x.content) : null;
+      if (g && g.id === st.id) latest = { ...latest, rx: latest.rx != null ? latest.rx : g.rx, ro: latest.ro != null ? latest.ro : g.ro };
+    });
     const side = latest.x === session.user.id ? 'x' : 'o';
     const next = { ...latest, [side === 'x' ? 'rx' : 'ro']: value, n: (latest.n || 0) + 1 };
     next.w = duelWinner(next);
@@ -15452,7 +15560,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const upsertConversation = async (otherId, text, type) => {
     unhideChatLocally(otherId);
     const [a, b] = pairKey(session.user.id, otherId);
-    const preview = type === 'text' ? (parseProfileLink(text) ? 'Shared a profile' : text)
+    const preview = type === 'text' ? (specialPreview(text) || (parseProfileLink(text) ? 'Shared a profile' : text))
       : type === 'image' ? 'Photo'
       : type === 'audio' ? 'Voice message'
       : type === 'sticker' ? 'Sticker'
@@ -15869,7 +15977,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         const msgId = row.message_id;
         const targetMsg = messagesRef.current.find((x) => x.id === msgId);
         if (!targetMsg) return;
-        if (payload.eventType === 'INSERT' && row.user_id !== me.id && targetMsg.sender_id === me.id) playReactionPing();
+        if (payload.eventType === 'INSERT' && row.user_id !== me.id && targetMsg.sender_id === me.id && !(typeof row.emoji === 'string' && row.emoji.indexOf('zv:') === 0)) playReactionPing();
         setMessageLikes((prev) => {
           const next = { ...prev };
           const list = (next[msgId] || []).filter((r) => r.user_id !== row.user_id);
@@ -16340,7 +16448,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
       loadGroups();
       if (type !== 'system') {
-        const preview = type === 'text' ? (parseProfileLink(content) ? 'Shared a profile' : content) : type === 'image' ? 'Photo' : type === 'audio' ? 'Voice message' : type === 'sticker' ? 'Sticker' : 'Video';
+        const preview = type === 'text' ? (specialPreview(content) || (parseProfileLink(content) ? 'Shared a profile' : content)) : type === 'image' ? 'Photo' : type === 'audio' ? 'Voice message' : type === 'sticker' ? 'Sticker' : 'Video';
         const mentioned = extractMentions(content || '');
         groupMembers.filter((m) => m.user_id !== session.user.id).forEach((m) => {
           if (mentioned.has((m.profile?.username || '').toLowerCase())) {
@@ -16352,6 +16460,72 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       }
     }
     return data;
+  };
+
+  const sendSpecial = async (content, notifyText) => {
+    if (specialLockRef.current) return false;
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) { showSnack('No connection. Try again when you are back online'); return false; }
+    specialLockRef.current = true;
+    try {
+      if (activeGroup) {
+        await sendGroupMessage('text', content);
+        playUiSound('send');
+        return true;
+      }
+      const profile = activeProfile;
+      if (!profile) return false;
+      const { data } = await insertMessageSafe({ sender_id: session.user.id, receiver_id: profile.id, group_id: null, type: 'text', content, client_id: newClientId() });
+      if (!data) { showSnack('Could not send. Try again'); return false; }
+      if (activeProfileRef.current && activeProfileRef.current.id === profile.id) setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
+      upsertConversation(profile.id, specialPreview(content) || 'Message', 'text');
+      notifyUser(profile.id, me.name, notifyText, `/?dm=${session.user.id}`, me.avatar);
+      playUiSound('send');
+      return true;
+    } catch {
+      showSnack('Could not send. Try again');
+      return false;
+    } finally {
+      specialLockRef.current = false;
+    }
+  };
+  const castVote = async (msg, idx) => {
+    if (!msg || !msg.id || String(msg.id).indexOf('temp-') === 0) return;
+    if (voteBusyRef.current[msg.id]) return;
+    const lastTap = voteBusyRef.current[`t:${msg.id}`] || 0;
+    if (Date.now() - lastTap < 650) return;
+    voteBusyRef.current[`t:${msg.id}`] = Date.now();
+    voteBusyRef.current[msg.id] = true;
+    const emoji = `zv:${idx}`;
+    const before = messageLikes[msg.id] || [];
+    const mine = before.find((r) => r.user_id === session.user.id);
+    const off = !!mine && mine.emoji === emoji;
+    hapticTap();
+    playUiSound('tap');
+    setMessageLikes((prev) => {
+      const next = { ...prev };
+      const list = (next[msg.id] || []).filter((r) => r.user_id !== session.user.id);
+      if (!off) list.push({ user_id: session.user.id, emoji });
+      next[msg.id] = list;
+      return next;
+    });
+    try {
+      if (off) {
+        const { error } = await supabase.from('message_likes').delete().eq('message_id', msg.id).eq('user_id', session.user.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('message_likes').upsert({ message_id: msg.id, user_id: session.user.id, emoji }, { onConflict: 'message_id,user_id' });
+        if (error) throw error;
+        if (msg.sender_id !== session.user.id && !(mine && typeof mine.emoji === 'string' && mine.emoji.indexOf('zv:') === 0)) {
+          const destUrl = activeGroup ? `/?group=${activeGroup.id}` : `/?dm=${session.user.id}`;
+          notifyUser(msg.sender_id, me.name, parsePoll(msg.content) ? 'Voted in your poll' : 'Answered your event', destUrl, me.avatar);
+        }
+      }
+    } catch {
+      setMessageLikes((prev) => ({ ...prev, [msg.id]: before }));
+      showSnack('Could not save that. Try again');
+    } finally {
+      voteBusyRef.current[msg.id] = false;
+    }
   };
 
   const memberName = (userId) => (userId === session.user.id ? 'You' : (groupMembers.find((m) => m.user_id === userId)?.profile.name || 'Someone'));
@@ -17114,7 +17288,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           .or(`and(sender_id.eq.${session.user.id},receiver_id.eq.${activeProfile.id}),and(sender_id.eq.${activeProfile.id},receiver_id.eq.${session.user.id})`)
           .eq('deleted', false).order('created_at', { ascending: false }).limit(1).maybeSingle();
         if (lastReal) {
-          const preview = lastReal.type === 'text' ? lastReal.content
+          const preview = lastReal.type === 'text' ? (specialPreview(lastReal.content) || lastReal.content)
             : lastReal.type === 'image' ? 'Photo'
             : lastReal.type === 'audio' ? 'Voice message'
             : lastReal.type === 'sticker' ? 'Sticker'
@@ -18144,7 +18318,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const searchMatchesFor = (query) => {
     const q = (query || '').trim().toLowerCase();
     if (!q) return [];
-    return messages.filter((m) => !m.deleted && m.type !== 'system' && (m.content || '').toLowerCase().includes(q) && !parseProfileLink(m.content) && !parseGameMessage(m.content));
+    return messages.filter((m) => !m.deleted && m.type !== 'system' && (m.content || '').toLowerCase().includes(q) && !parseProfileLink(m.content) && !parseGameMessage(m.content) && !isSpecialContent(m.content));
   };
   const chatSearchMatches = chatSearch ? searchMatchesFor(chatSearch.query) : [];
   const stepSearch = (delta) => {
@@ -18196,6 +18370,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       else if (action.type === 'group') openGroup(action.group);
       else if (action.type === 'story') openStoriesFor(action.userId);
       else if (action.type === 'dm') openChat(action.profile, null);
+      else if (action.type === 'reminder') openReminder(action.reminder);
       return;
     }
     if (toast.kind === 'group') openGroup(toast.group);
@@ -18315,6 +18490,85 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   }, [mobileShowChat, isWide]);
 
   useEffect(() => { setVisibleCount(120); }, [activeProfile && activeProfile.id, activeGroup && activeGroup.id]);
+  useEffect(() => {
+    if (!jumpReq) return undefined;
+    const idx = messages.findIndex((x) => x.id === jumpReq.id);
+    if (idx < 0) return undefined;
+    const need = messages.length - idx + 6;
+    if (need > visibleCount) { setVisibleCount(need); return undefined; }
+    const id = jumpReq.id;
+    const t = setTimeout(() => { jumpToMessage(id); setJumpReq(null); }, 450);
+    return () => clearTimeout(t);
+  }, [jumpReq, messages, visibleCount]);
+  useEffect(() => {
+    const uid = session.user.id;
+    const bump = () => setReminderTick((n) => n + 1);
+    const check = () => {
+      const list = readReminders(uid);
+      const due = list.filter((r) => !r.done && r.at <= Date.now());
+      if (!due.length) return;
+      writeReminders(uid, list.map((r) => (due.some((d) => d.id === r.id) ? { ...r, done: true } : r)));
+      const r = due[due.length - 1];
+      const chat = r.chat || {};
+      setInAppToast({ key: `rem-${r.id}`, kind: 'notice', isGroupIcon: chat.kind === 'group', groupAvatar: chat.avatar || null, avatar: chat.avatar || null, avatarName: chat.name || 'Reminder', title: `Reminder from ${chat.name || 'a chat'}`, preview: { kind: 'text', text: r.text || 'Message' }, action: { type: 'reminder', reminder: r } });
+      if (!quietNow()) playUiSound('receive');
+      try {
+        if (document.hidden && typeof Notification !== 'undefined' && Notification.permission === 'granted' && navigator.serviceWorker) {
+          navigator.serviceWorker.getRegistration().then((reg) => { if (reg) reg.showNotification(`Reminder from ${chat.name || 'ZChat'}`, { body: r.text || 'Message', tag: `rem-${r.id}`, icon: '/icon-192.png' }); }).catch(() => {});
+        }
+      } catch {}
+    };
+    check();
+    const iv = setInterval(check, 15000);
+    const vis = () => { if (!document.hidden) check(); };
+    document.addEventListener('visibilitychange', vis);
+    window.addEventListener('zchat-reminders', bump);
+    return () => { clearInterval(iv); document.removeEventListener('visibilitychange', vis); window.removeEventListener('zchat-reminders', bump); };
+  }, []);
+  const addReminder = (msg, choice) => {
+    if (!msg || !choice) return;
+    const chat = activeGroup ? { kind: 'group', id: activeGroup.id, name: activeGroup.name, avatar: activeGroup.avatar || null } : activeProfile ? { kind: 'dm', id: activeProfile.id, name: activeProfile.name, avatar: activeProfile.avatar || null } : null;
+    if (!chat) return;
+    const uid = session.user.id;
+    const list = readReminders(uid).filter((r) => !(r.msgId === msg.id && !r.done));
+    list.push({ id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`, at: choice.at, msgId: msg.id, text: plainPreviewText(quoteTextFor(msg)).slice(0, 160), chat, done: false });
+    writeReminders(uid, list);
+    hapticTap();
+    showSnack(`Reminder set for ${reminderWhen(choice.at).replace(/^Today at /, '')}`);
+  };
+  const openReminder = async (r) => {
+    setShowReminders(false);
+    setInAppToast(null);
+    const chat = r && r.chat;
+    if (!chat) return;
+    if (chat.kind === 'group') {
+      const g = groups.find((x) => x.id === chat.id);
+      if (!g) { showSnack('You are not in that group anymore'); return; }
+      setJumpReq({ id: r.msgId });
+      setTimeout(() => setJumpReq((j) => (j && j.id === r.msgId ? null : j)), 9000);
+      if (!activeGroup || activeGroup.id !== g.id) await openGroup(g);
+      return;
+    }
+    const conv = conversations.find((c) => c.otherProfile && c.otherProfile.id === chat.id);
+    let profile = conv ? conv.otherProfile : null;
+    if (!profile) { try { const { data } = await getProfile(chat.id); profile = data || null; } catch {} }
+    if (!profile) { showSnack('That chat is not available'); return; }
+    setJumpReq({ id: r.msgId });
+    setTimeout(() => setJumpReq((j) => (j && j.id === r.msgId ? null : j)), 9000);
+    if (!activeProfile || activeProfile.id !== profile.id || activeGroup) await openChat(profile, conv ? conv.id : undefined);
+  };
+  const openSearchHit = async ({ group, profile, messageId }) => {
+    setMsgSearchOpen(null);
+    setSearch(''); setResults([]);
+    setJumpReq({ id: messageId });
+    setTimeout(() => setJumpReq((j) => (j && j.id === messageId ? null : j)), 9000);
+    if (group) {
+      if (!activeGroup || activeGroup.id !== group.id) await openGroup(group);
+    } else if (profile) {
+      const conv = conversations.find((c) => c.otherProfile && c.otherProfile.id === profile.id);
+      if (!activeProfile || activeProfile.id !== profile.id || activeGroup) await openChat(conv ? conv.otherProfile : profile, conv ? conv.id : undefined);
+    }
+  };
 
   useBackClose(!isWide && mobileShowChat, () => {
     if (activeConvForBar && myLocks[activeConvForBar.id]) lastLeftChatAtRef.current[activeConvForBar.id] = Date.now();
@@ -18373,7 +18627,16 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     let latestBotId = null;
     for (let i = list.length - 1; i >= 0; i--) { if (isBotAuthored(list[i]) && list[i].type === 'text' && list[i].content && !list[i].deleted) { latestBotId = list[i].id; break; } }
     const latestGame = {};
-    list.forEach((x) => { const st = x.type === 'text' && !x.deleted ? parseGameMessage(x.content) : null; if (st) latestGame[st.id] = x.id; });
+    const duelMerge = {};
+    list.forEach((x) => {
+      const st = x.type === 'text' && !x.deleted ? parseGameMessage(x.content) : null;
+      if (!st) return;
+      latestGame[st.id] = x.id;
+      if (DUEL_KINDS[st.g] || st.g === 'dice') {
+        const d = duelMerge[st.id] || (duelMerge[st.id] = {});
+        ['rx', 'ro', 'dx', 'do'].forEach((f) => { if (st[f] != null) d[f] = st[f]; });
+      }
+    });
     return (
                 list.map((m, msgIndex) => {
                   const nextMsg = list[msgIndex + 1];
@@ -18403,7 +18666,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                       onDelete={(id) => setPendingQuickDelete(id)}
                       onOpenImage={setViewerUrl} onOpenVideo={setViewerVideoUrl}
                       reactions={messageLikes[m.id]} onReact={(id, emoji) => reactToMessage(id, emoji)}
-                      onOpenWhoReacted={(id) => setWhoReactedFor({ messageId: id, reactions: messageLikes[id] || [] })}
+                      onOpenWhoReacted={(id) => setWhoReactedFor({ messageId: id, reactions: (messageLikes[id] || []).filter((r) => !(typeof r.emoji === 'string' && r.emoji.indexOf('zv:') === 0)) })}
+                      onVote={castVote} onShowVotes={(msg) => setVotesFor(msg)}
                       replyPreview={replyPreview} onSwipeReply={(msg) => { setReplyingTo(msg); setEditingMessage(null); focusComposer(); }}
                       onJumpToMessage={jumpToMessage} highlighted={highlightedMsgId === m.id}
                       senderLabel={showSenderLabel ? memberName(m.sender_id) : (isPrivateBot ? 'ZChat Bot' : null)}
@@ -18424,11 +18688,14 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                       onOpenPost={(post, owner) => setDeepPost({ post, owner: sanitizeAvatar(owner, session.user.id) })}
                       myId={session.user.id} peerName={activeProfile ? activeProfile.name : ''}
                       gameLive={(() => { const st = m.type === 'text' && !m.deleted ? parseGameMessage(m.content) : null; return !!st && latestGame[st.id] === m.id; })()}
-                      onGameMove={(next) => { if (activeProfile) sendGameStateTo(activeProfile, next); }}
+                      gameMerge={(() => { const st = m.type === 'text' && !m.deleted ? parseGameMessage(m.content) : null; return st ? duelMerge[st.id] : null; })()}
+                      onGameMove={(next) => (activeProfile ? sendGameStateTo(activeProfile, next) : false)}
                       onGameRematch={(st) => {
                         if (!activeProfile) return;
                         if (st.g === 'hang' || st.g === 'num') { setSetupFor({ profile: activeProfile, kind: st.g }); return; }
-                        const fresh = newGameState(st.g, activeProfile);
+                        if (rematchLockRef.current.has(st.id)) return;
+                        rematchLockRef.current.add(st.id);
+                        const fresh = { ...newGameState(st.g, activeProfile, { k: st.k }), id: stableUuid(`next|${st.id}`) };
                         const swap = { ...fresh, x: st.o, o: st.x };
                         sendGameStateTo(activeProfile, (st.g === 'rps' || DUEL_KINDS[st.g]) ? swap : { ...swap, t: st.x === session.user.id ? st.o : st.x });
                       }}
@@ -18471,6 +18738,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       ? conversations
       : listFilter === 'unread'
         ? [...conversations.filter(isUnread).map((c) => ({ ...c, __kind: 'dm' })), ...groups.filter((g) => !g.archived && g.unread > 0).map((g) => ({ ...g, __kind: 'group' }))]
+            .sort((a, b) => displayListSortByPin(a, b, (x) => (x.__kind === 'dm' ? isPinnedByMe(x) : x.pinned)))
+      : listFilter === 'favs'
+        ? [...conversations.filter((c) => c.otherProfile && favChats.has(`dm-${c.otherProfile.id}`)).map((c) => ({ ...c, __kind: 'dm' })), ...groups.filter((g) => !g.archived && favChats.has(`group-${g.id}`)).map((g) => ({ ...g, __kind: 'group' }))]
             .sort((a, b) => displayListSortByPin(a, b, (x) => (x.__kind === 'dm' ? isPinnedByMe(x) : x.pinned)))
         : [...conversations.map((c) => ({ ...c, __kind: 'dm' })), ...groups.filter((g) => !g.archived).map((g) => ({ ...g, __kind: 'group' }))]
             .sort((a, b) => displayListSortByPin(a, b, (x) => (x.__kind === 'dm' ? isPinnedByMe(x) : x.pinned)));
@@ -18566,6 +18836,16 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           const sectionTitle = (t) => <div style={{ padding: '12px 6px 4px', fontSize: 13, fontWeight: 600, color: theme.muted }}>{t}</div>;
           return (
           <div style={{ overflowY: 'auto', flex: 1, padding: '0 12px', paddingBottom: 'calc(16px + env(safe-area-inset-bottom))' }}>
+            {term.length >= 2 && (
+              <div role="button" aria-label="Search messages" onClick={() => { playUiSound('tap'); setMsgSearchOpen(search.trim()); }} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 8px', cursor: 'pointer', borderRadius: 14, marginTop: 2 }}>
+                <div style={{ width: 46, height: 46, borderRadius: 15, background: 'linear-gradient(135deg, #7C5CFC, #2563EB)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 6px 14px rgba(60,40,160,0.28)' }}><MessageSquare size={20} /></div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: 14.5, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Search messages for {'\u201C'}{search.trim()}{'\u201D'}</div>
+                  <div style={{ fontSize: 12, color: theme.muted, marginTop: 1 }}>Every chat and group you are in</div>
+                </div>
+                <ChevronRight size={16} color={theme.muted} />
+              </div>
+            )}
             {(chatHits.length > 0 || groupHits.length > 0) && sectionTitle('Your chats')}
             {chatHits.map((c) => (
               <div key={'s-c-' + c.id} role="button" aria-label={`Open chat with ${c.otherProfile.name}`} onClick={() => { setSearch(''); setResults([]); openChat(c.otherProfile, c.id); }} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 8px', cursor: 'pointer', borderRadius: 14 }}>
@@ -18615,6 +18895,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                 const chips = [
                   { k: 'all', l: 'All', n: conversations.length + liveGroups.length },
                   { k: 'unread', l: 'Unread', n: unreadDms + unreadGroups, hot: true },
+                  { k: 'favs', l: 'Favourites', n: conversations.filter((c) => c.otherProfile && favChats.has(`dm-${c.otherProfile.id}`)).length + liveGroups.filter((g) => favChats.has(`group-${g.id}`)).length },
                   { k: 'groups', l: 'Groups', n: liveGroups.length },
                   { k: 'dms', l: 'Chats', n: conversations.length },
                 ];
@@ -18668,7 +18949,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               )}
               {displayList.length === 0 && (
                 <div style={{ textAlign: 'center', padding: 30, fontSize: 13, color: theme.muted }}>
-                  {listFilter === 'unread' ? 'No unread chats' : 'Search a username above to start chatting, or create a group.'}
+                  {listFilter === 'unread' ? 'No unread chats' : listFilter === 'favs' ? 'No favourites yet. Press and hold a chat, then tap Add to favourites.' : 'Search a username above to start chatting, or create a group.'}
                 </div>
               )}
               {(() => {
@@ -18791,7 +19072,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           <CallsTab key="tab-calls" userId={session.user.id} groups={groups} version={callEngine.call ? 1 : 0} onCall={(p, kind) => { if (canCall(p)) startDirectCall(p, kind); else showSnack('You can call people who follow you back'); }} onOpenProfile={(p) => setProfileOf(p)} />
         )}
         {homeTab === 'me' && (
-          <MeTab key="tab-me" me={me} counts={{ rewards: (myRewards || []).filter(rewardActive).length, archived: archivedConversations.length, requests: followRequestCount, mail: unreadMailCount }}
+          <MeTab key="tab-me" me={me} counts={{ rewards: (myRewards || []).filter(rewardActive).length, archived: archivedConversations.length, requests: followRequestCount, mail: unreadMailCount, reminders: reminderTick >= 0 ? readReminders(session.user.id).filter((r) => !r.done).length : 0 }}
+            onReminders={() => setShowReminders(true)} onSearchMessages={() => setMsgSearchOpen('')}
             onOpenProfile={() => setProfileOf(me)} onEditProfile={() => setProfileOf({ ...me, __edit: true })} onSettings={() => setShowSettings(true)} onCollection={() => setCollectionOpen(true)}
             onSaved={() => setShowSaved(true)} onArchive={() => setShowArchived(true)} onMail={() => setShowMail(true)} onRequests={() => setShowFollowRequests(true)} onDiscover={() => setShowDiscover(true)}
             onSwitchAccount={() => setShowAccountSwitcher(true)} onShare={() => setProfileOf({ ...me, __share: true })} onInvite={inviteFriends} onGames={() => setShowGames(true)} />
@@ -18980,6 +19262,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               );
             })()}
 
+            {!editingMessage && (
+              <QuickReplyBar draft={draft} onPick={(t) => { const next = t.slice(0, MAX_CHARS); setDraft(next); setTimeout(() => { const el = composerRef.current; if (el) { try { el.focus(); el.setSelectionRange(next.length, next.length); } catch {} } }, 0); }} />
+            )}
             {(replyingTo || editingMessage) && (
               <div style={{
                 display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderTop: `1px solid ${theme.border}`,
@@ -19167,7 +19452,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             </div>
 
             {showJumpButton && !selectionMode && (
-              <JumpToLatestButton count={newBelowCount} bottom={pendingMedia.length ? 150 : (replyingTo || editingMessage) ? 118 : 72} onClick={() => scrollChatToBottom(true)} />
+              <JumpToLatestButton count={newBelowCount} bottom={pendingMedia.length ? 150 : (replyingTo || editingMessage) ? 118 : (draft[0] === '/' && draft.indexOf(' ') < 0) ? 136 : 72} onClick={() => scrollChatToBottom(true)} />
             )}
 
             {uploading > 0 && (
@@ -19184,7 +19469,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                 onGallery={() => { setShowAttach(false); if (cameraGalleryRef.current) cameraGalleryRef.current.click(); }}
                 onLocation={shareMyLocation}
                 canGame={!!activeProfile && !activeGroup && !activeProfile.is_bot}
-                onGame={() => { setShowAttach(false); setGameSheetFor(activeProfile); }} />
+                onGame={() => { setShowAttach(false); setGameSheetFor(activeProfile); }}
+                onPoll={activeGroup || (activeProfile && !activeProfile.is_bot) ? () => { setShowAttach(false); setPollComposer(true); } : null}
+                onEvent={activeGroup || (activeProfile && !activeProfile.is_bot) ? () => { setShowAttach(false); setEventComposer(true); } : null} />
             )}
 
             {showStickers && (
@@ -19282,7 +19569,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           <MessageContextMenu
             message={m} isMine={isMine} anchorRect={contextRect}
             bubble={(
-              <MessageBubble m={m} isMe={isMine} selectionMode={false} selected={false} onToggleSelect={noop} onLongPress={noop} onDelete={noop}
+              <MessageBubble m={m} isMe={isMine} myId={session.user.id} selectionMode={false} selected={false} onToggleSelect={noop} onLongPress={noop} onDelete={noop}
                 onOpenImage={noop} onOpenVideo={noop} reactions={messageLikes[m.id]} onReact={noop} onOpenWhoReacted={noop}
                 replyPreview={cloneReply} onSwipeReply={noop} onJumpToMessage={noop} highlighted={false}
                 senderLabel={cloneSender ? memberName(m.sender_id) : null}
@@ -19307,6 +19594,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             onPin={() => { setContextMenuFor(null); setPinSheetFor(m); }}
             onUnpin={() => { setContextMenuFor(null); unpinMessage(m); }}
             onInfo={() => { setContextMenuFor(null); setInfoFor(m); }}
+            onRemind={String(m.id).startsWith('temp-') ? null : () => { setContextMenuFor(null); setRemindFor(m); }}
           />
         );
       })()}
@@ -19468,6 +19756,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             onClose={() => setRowSheet(null)}
             actions={[
               { icon: <Pin_ size={18} />, label: isPinnedByMe(c) ? 'Unpin chat' : 'Pin chat', onClick: () => togglePin(c) },
+              { icon: <Star_ size={18} color="#FFB800" filled={favChats.has(`dm-${c.otherProfile.id}`)} />, label: favChats.has(`dm-${c.otherProfile.id}`) ? 'Remove from favourites' : 'Add to favourites', onClick: () => toggleFavChat(`dm-${c.otherProfile.id}`) },
               isUnread(c) ? { icon: <CheckCheck size={18} />, label: 'Mark as read', onClick: () => { setManualUnreadFor(c.otherProfile.id, false); markChatRead(c.otherProfile.id); } } : { icon: <Mail size={18} />, label: 'Mark as unread', onClick: () => setManualUnreadFor(c.otherProfile.id, true) },
               { icon: <Archive size={18} />, label: 'Archive chat', onClick: () => toggleArchive(c.id, true) },
               { icon: isConvMutedForMe(c) ? <Bell size={18} /> : <BellOff size={18} />, label: isConvMutedForMe(c) ? 'Unmute notifications' : 'Mute notifications', onClick: () => (isConvMutedForMe(c) ? setChatMute({ kind: 'dm', conv: c }, null) : setMuteSheet({ kind: 'dm', conv: c })) },
@@ -19488,6 +19777,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             onClose={() => setRowSheet(null)}
             actions={[
               { icon: <Pin_ size={18} />, label: g.pinned ? 'Unpin group' : 'Pin group', onClick: () => toggleGroupPin(g) },
+              { icon: <Star_ size={18} color="#FFB800" filled={favChats.has(`group-${g.id}`)} />, label: favChats.has(`group-${g.id}`) ? 'Remove from favourites' : 'Add to favourites', onClick: () => toggleFavChat(`group-${g.id}`) },
               g.unread > 0 ? { icon: <CheckCheck size={18} />, label: 'Mark as read', onClick: () => { markGroupRead(g.id); setGroups((prev) => prev.map((x) => (x.id === g.id ? { ...x, unread: 0 } : x))); } } : null,
               { icon: <Archive size={18} />, label: 'Archive group', onClick: () => toggleGroupArchive(g) },
               { icon: isActiveUntil(g.mutedUntil) ? <Bell size={18} /> : <BellOff size={18} />, label: isActiveUntil(g.mutedUntil) ? 'Unmute notifications' : 'Mute notifications', onClick: () => (isActiveUntil(g.mutedUntil) ? setChatMute({ kind: 'group', id: g.id }, null) : setMuteSheet({ kind: 'group', id: g.id })) },
@@ -19646,7 +19936,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           item(<Search size={17} />, 'Search', () => setChatSearch({ query: '', pos: 0 })),
           item(<ImageIcon size={17} />, 'Media, links and voice', () => setShowChatMedia(true)),
           item(<Sparkles size={17} />, 'Chat bubbles', () => setShowBubbleSheet(true), false, bubbleStyle && bubbleStyle !== 'classic' && BUBBLE_STYLES[bubbleStyle] ? `Now: ${BUBBLE_STYLES[bubbleStyle].label}` : 'Give your messages a look'),
-          !activeProfile.is_bot ? item(<GamepadIcon size={17} />, 'Play a game', () => setGameSheetFor(activeProfile), false, 'Nineteen games to play together') : null,
+          !activeProfile.is_bot ? item(<GamepadIcon size={17} />, 'Play a game', () => setGameSheetFor(activeProfile), false, 'Thirty games to play together') : null,
           canCall(activeProfile) ? item(<Phone size={17} />, 'Voice call', () => startDirectCall(activeProfile, 'voice')) : null,
           canCall(activeProfile) ? item(<VideoIcon size={17} />, 'Video call', () => startDirectCall(activeProfile, 'video')) : null,
           pinnedMessages.length ? item(<Pin_ size={17} color={theme.muted} />, `Pinned messages (${pinnedMessages.length})`, () => jumpToMessage(pinnedMessages[0].id)) : null,
@@ -19657,6 +19947,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           (activeConvForBar && !activeProfile.is_bot) ? item(<Trash2 size={17} />, 'Delete chat', () => setDeleteConvoTarget(activeConvForBar), true) : null,
         ];
         const extras = [
+          item(<Activity size={17} />, 'Chat insights', () => setInsightsOpen(true), false, 'Who talks more, busiest hour, top emoji'),
+          (activeGroup || (activeProfile && !activeProfile.is_bot)) ? item(<PollIcon size={17} />, 'New poll', () => setPollComposer(true), false, 'Let everyone vote') : null,
+          (activeGroup || (activeProfile && !activeProfile.is_bot)) ? item(<CalendarIcon size={17} />, 'New event', () => setEventComposer(true), false, 'Plan something together') : null,
           item(<Download size={17} />, 'Export chat', () => exportChat(), false, 'Save this conversation as a text file'),
           messages.length ? item(<Trash2 size={17} />, 'Clear chat', () => setClearChatAsk(true), true, 'Removes every message here, only for you') : null,
         ];
@@ -19689,6 +19982,33 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           onConfirm={() => { hideMessagesLocally(messages.map((m) => m.id)); setMessages([]); setClearChatAsk(false); showSnack('Chat cleared'); loadConversations(); }} />
       )}
       {showBubbleSheet && <BubbleStyleSheet onClose={() => setShowBubbleSheet(false)} />}
+      {pollComposer && (activeProfile || activeGroup) && (
+        <PollComposerPage onClose={() => setPollComposer(false)}
+          onSend={async (p) => { const ok = await sendSpecial(`zpoll:${JSON.stringify(p)}`, `Sent a poll: ${p.q}`); if (ok) { setPollComposer(false); scrollChatToBottom(true); } }} />
+      )}
+      {eventComposer && (activeProfile || activeGroup) && (
+        <EventComposerPage onClose={() => setEventComposer(false)}
+          onSend={async (ev) => { const ok = await sendSpecial(`zevent:${JSON.stringify(ev)}`, `Invited you to ${ev.t}`); if (ok) { setEventComposer(false); scrollChatToBottom(true); } }} />
+      )}
+      {insightsOpen && (activeProfile || activeGroup) && (
+        <ChatInsightsPage messages={messages} myId={session.user.id} title={activeGroup ? activeGroup.name : activeProfile.name} onClose={() => setInsightsOpen(false)} />
+      )}
+      {remindFor && (activeProfile || activeGroup) && (
+        <ChatRowSheet title="Remind me" subtitle={plainPreviewText(quoteTextFor(remindFor)).slice(0, 90) || 'Message'}
+          avatar={<div style={{ width: 44, height: 44, borderRadius: 14, background: 'linear-gradient(135deg, #F59E0B, #EF4444)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 6px 14px rgba(239,68,68,0.3)' }}><Clock size={22} /></div>}
+          onClose={() => setRemindFor(null)}
+          actions={reminderChoices().map((c) => ({ icon: <Clock size={18} />, label: c.label, hint: reminderWhen(c.at), onClick: () => addReminder(remindFor, c) }))} />
+      )}
+      {votesFor && (() => {
+        const vp = parsePoll(votesFor.content);
+        const ve = vp ? null : parseEventMsg(votesFor.content);
+        if (!vp && !ve) return null;
+        return <VotesPage title={vp ? vp.q : ve.t} options={vp ? vp.o : RSVP_OPTIONS.map((x) => x[0])} votes={messageLikes[votesFor.id] || []} myId={session.user.id} people={!vp} onClose={() => setVotesFor(null)} />;
+      })()}
+      {showReminders && <RemindersPage uid={session.user.id} onClose={() => setShowReminders(false)} onOpen={openReminder} />}
+      {msgSearchOpen != null && (
+        <SearchMessagesPage myId={session.user.id} groups={groups} hiddenIds={getHiddenMsgIds()} initialQuery={msgSearchOpen} onClose={() => setMsgSearchOpen(null)} onOpen={openSearchHit} />
+      )}
       {showWhatsNew && <WhatsNewSheet onClose={() => setShowWhatsNew(false)} />}
       {showGames && (
         <GamesPage key={showGames.at || 'games'} initialGame={showGames.game || null} onClose={() => setShowGames(false)}
@@ -19715,12 +20035,14 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           onSubmit={(v) => { const p = setupFor.profile; setSetupFor(null); startGameWith(p, 'num', { sv: v }); }} />
       )}
       {duelPlay && activeProfile && (
-        <FullPage title={gameTitle(duelPlay)} subtitle={`Your round against ${activeProfile.name}`} onBack={() => setDuelPlay(null)} zIndex={62} right={<GameInfoButton k={duelPlay.g} header />}>
+        <FullPage title={gameTitle(duelPlay)} subtitle={`Your round against ${activeProfile.name}`} onBack={() => setDuelPlay(null)} zIndex={62} right={<GameInfoButton k={duelPlay.g === 'sd' ? `sd:${duelPlay.k}` : duelPlay.g} header />}
+          bodyStyle={duelPlay.g === 'sd' ? { background: `linear-gradient(170deg, ${(GAME_ART_BG[duelPlay.k] || ['#6D4DF5', '#C13BDC'])[0]}55 0%, ${(GAME_ART_BG[duelPlay.k] || ['#6D4DF5', '#C13BDC'])[1]}33 45%, transparent 85%)` } : undefined}>
           {duelPlay.g === 'wduel' && <WordGame key={duelPlay.id} duelWord={duelPlay.sw} onDuelFinish={(v) => finishDuel(duelPlay, v)} />}
           {duelPlay.g === 'rduel' && <ReflexGame key={duelPlay.id} duel onDuelFinish={(v) => finishDuel(duelPlay, v)} />}
           {duelPlay.g === 'qduel' && <QuizGame key={duelPlay.id} seed={duelPlay.id} count={5} onDuelFinish={(v) => finishDuel(duelPlay, v)} />}
           {duelPlay.g === 'math' && <MathSprint key={duelPlay.id} seed={duelPlay.id} onDuelFinish={(v) => finishDuel(duelPlay, v)} />}
           {duelPlay.g === 'taps' && <TapSprint key={duelPlay.id} onDuelFinish={(v) => finishDuel(duelPlay, v)} />}
+          {duelPlay.g === 'sd' && <SoloGame key={duelPlay.id} k={duelPlay.k} seed={duelPlay.id} onDuelFinish={(v) => finishDuel(duelPlay, v)} />}
         </FullPage>
       )}
       {screenEffect && <ScreenEffect key={screenEffect.key} kind={screenEffect.kind} onDone={() => setScreenEffect(null)} />}
@@ -19813,35 +20135,19 @@ function DayDivider({ label }) {
 }
 
 const WHATS_NEW = [
-  { title: 'Sea battle and Number guess', text: 'Two new friend games. Find and sink their fleet, or guess their secret number from 1 to 100. They replace Nim sticks and Mancala.' },
-  { title: 'How to play', text: 'Every game has an info button with simple rules. Solo games show them the first time you open them.' },
-  { title: 'Real game pictures', text: 'The Play a game list and every game card now show the colourful game picture instead of a plain icon.' },
-  { title: 'Steady speed', text: 'Sky hop and Bricks now run at the same speed on every phone, even while you touch the screen.' },
-  { title: 'Eleven more games with friends', text: 'Five in a row, Reversi, Nim sticks, Mancala, Pairs, Poker dice, Blackjack, High card, Snakes and ladders, Math duel and Tap frenzy.' },
-  { title: 'Bigger, brighter games', text: 'Solo games fill the screen with their own colours, a fullscreen button on computers, and every game has cover art.' },
-  { title: 'Replies show everything', text: 'Reply quotes now show photo and video thumbnails, stickers, voice, games and locations, in the bubble and above the keyboard.' },
-  { title: 'Sixteen new chat bubbles', text: 'Candy, Peach, Lavender, Mint, Cotton, Honey, Fire, Toxic, Midnight, Cyber, Gold, Ruby, Sand, Forest, Aurora and Stone.' },
-  { title: 'No more double moves', text: 'A game move is sent once even if you tap twice.' },
-  { title: 'Five more games with friends', text: 'Dots and boxes, Hangman, Word duel, Reflex duel and Quiz duel, all inside the chat.' },
-  { title: 'Steadier game cards', text: 'Game cards keep one size, old moves just dim, and replying to a game shows its name.' },
-  { title: 'Game covers and sounds', text: 'Every game has its own artwork, and wins, losses, taps, points and keys all have a sound.' },
-  { title: 'Touch sounds', text: 'A soft tick on every button, row and tile. Turn it off in Settings, Chats.' },
-  { title: 'Twelve games', text: 'Connect four and rock paper scissors with friends, plus Sky hop, Bricks, Word guess, Reflex, Quiz and Echo to play solo.' },
-  { title: 'High scores', text: 'Share your best score from any game as a card in the chat, and friends can tap it to try to beat you.' },
-  { title: 'App lock', text: 'Lock ZChat with a PIN. Pick when it locks again after you leave.' },
-  { title: 'Chats settings', text: 'Choose your six quick reactions, switch double tap to heart, swipe to reply, haptics and reduce motion.' },
-  { title: 'Text formatting', text: 'Wrap words in stars for bold, tildes to strike through, backticks for mono.' },
-  { title: 'Message effects', text: 'Send a party emoji, a balloon, a snowflake or only hearts and the whole screen celebrates.' },
-  { title: 'Message info and mark as unread', text: 'Hold a message for Info. Hold a chat row to mark it unread so you remember to reply.' },
-  { title: 'Message tones', text: 'Five tones for new messages: Chime, Pop, Drop, Bell and Pulse.' },
-  { title: 'App colors', text: 'Violet, Ocean, Rose, Emerald, Amber or Graphite, from Settings, Theme.' },
-  { title: 'Keyboard shortcuts', text: 'On a computer, Ctrl K searches, Alt with arrows switches chats, and the up arrow edits your last message.' },
-  { title: 'Games inside chats', text: 'Challenge a friend to tic tac toe right in the chat, plus 2048, Memory and Snake in the Games page.' },
-  { title: 'Apple sign in', text: 'Sign in or create an account with your Apple ID.' },
-  { title: 'Smoother everything', text: 'Pages slide, sheets slide, menus close with motion, and the app uses your phone font.' },
-  { title: 'Cleaner look', text: 'Flat native lists, no more boxed menus, plain icons, stickers without bubbles.' },
-  { title: 'Share your location', text: 'Send where you are from the attach menu.' },
-  { title: 'Chat tools', text: 'Export a chat, clear a chat, drafts in the list, swipe rows to pin or archive.' },
+  { title: 'Polls', text: 'Ask a question in any chat or group. Everyone votes with one tap and the results move live.' },
+  { title: 'Events', text: 'Plan a hangout with a date, time and place. Friends answer Going, Maybe or Can\u2019t go and add it to their calendar.' },
+  { title: 'Search every message', text: 'Type in the search bar and tap Search messages to find words in all your chats and groups, then jump right to them.' },
+  { title: 'Favourites', text: 'Hold a chat and tap Add to favourites. Open them all from the new Favourites tab.' },
+  { title: 'Quick replies', text: 'Save messages you send a lot. Type a slash and the shortcut, like /thanks, in any chat. Set them up in Settings, Chats.' },
+  { title: 'Chat insights', text: 'See who talks more, your busiest hour and your top emoji from the chat menu.' },
+  { title: 'Reminders', text: 'Hold any message and tap Remind me. ZChat nudges you later, and every reminder lives in Me, Reminders.' },
+  { title: 'Quiet hours', text: 'No message sounds while you sleep. Pick the hours in Settings, Notifications.' },
+  { title: 'Ten new games with friends', text: 'Paint war, Bomb box, Gem hunt, Fade tac toe, Tower stack, Dash, Fruit catch, Colour trap, Odd one out and Higher or lower.' },
+  { title: 'Score duels', text: 'Both of you play the same level of a solo game and the higher score wins.' },
+  { title: 'Six new solo games', text: 'Tower stack, Dash, Fruit catch, Colour trap, Odd one out and Higher or lower.' },
+  { title: 'A new look for games', text: 'Big shiny buttons, cleaner game cards in the chat, real pictures for every game and a Game of the day.' },
+  { title: 'Bug fixes', text: 'Bug fixes and a smoother app.' },
 ];
 
 function WhatsNewSheet({ onClose }) {
@@ -19868,7 +20174,7 @@ function WhatsNewSheet({ onClose }) {
             ))}
           </div>
           <div style={{ padding: '10px 20px 0', flexShrink: 0 }}>
-            <button onClick={onClose} className="zchat-press" style={{ ...primaryBtn(theme, false), marginTop: 0 }}>Got it</button>
+            <GameButton onClick={onClose} label="Got it" color="green" full />
           </div>
         </div>
       </div>
@@ -19925,23 +20231,32 @@ function LinkedAccountsSection({ session }) {
 
 
 const GAME_PREFIX = 'zgame:';
-const GAME_TITLES = { ship: 'Sea battle', num: 'Number guess', ttt: 'Tic tac toe', c4: 'Connect four', rps: 'Rock paper scissors', dots: 'Dots and boxes', hang: 'Hangman', wduel: 'Word duel', rduel: 'Reflex duel', qduel: 'Quiz duel', gomoku: 'Five in a row', reversi: 'Reversi', nim: 'Nim sticks', mancala: 'Mancala', pairs: 'Pairs', dice: 'Poker dice', bj: 'Blackjack', war: 'High card', sl: 'Snakes and ladders', math: 'Math duel', taps: 'Tap frenzy', '2048': '2048', memory: 'Memory', snake: 'Snake', sky: 'Sky hop', bricks: 'Bricks', word: 'Word guess', reflex: 'Reflex', quiz: 'Quiz', echo: 'Echo' };
+const GAME_TITLES = { paint: 'Paint war', bomb: 'Bomb box', gem: 'Gem hunt', fade: 'Fade tac toe', stack: 'Tower stack', dash: 'Dash', catch: 'Fruit catch', ctrap: 'Colour trap', odd: 'Odd one out', hilo: 'Higher or lower', ship: 'Sea battle', num: 'Number guess', ttt: 'Tic tac toe', c4: 'Connect four', rps: 'Rock paper scissors', dots: 'Dots and boxes', hang: 'Hangman', wduel: 'Word duel', rduel: 'Reflex duel', qduel: 'Quiz duel', gomoku: 'Five in a row', reversi: 'Reversi', nim: 'Nim sticks', mancala: 'Mancala', pairs: 'Pairs', dice: 'Poker dice', bj: 'Blackjack', war: 'High card', sl: 'Snakes and ladders', math: 'Math duel', taps: 'Tap frenzy', '2048': '2048', memory: 'Memory', snake: 'Snake', sky: 'Sky hop', bricks: 'Bricks', word: 'Word guess', reflex: 'Reflex', quiz: 'Quiz', echo: 'Echo' };
 const DUEL_KINDS = {
   wduel: { lowerWins: true, unit: (v) => (v >= 7 ? 'Missed it' : `${v} ${v === 1 ? 'try' : 'tries'}`), sub: 'Same secret word for both. Fewer tries wins.' },
   rduel: { lowerWins: true, unit: (v) => `${v} ms`, sub: 'One tap when it turns green. Fastest wins.' },
   qduel: { lowerWins: false, unit: (v) => `${v} of 5`, sub: 'Five questions each. Most right answers wins.' },
   math: { lowerWins: false, unit: (v) => `${Math.floor(v / 1000000)} right, ${((999999 - (v % 1000000)) / 1000).toFixed(1)}s`, sub: 'Ten quick sums. Most right, then fastest, wins.' },
   taps: { lowerWins: false, unit: (v) => `${v} taps`, sub: 'Five seconds. Tap as many times as you can.' },
+  sd: { lowerWins: false, unit: (v) => String(v), sub: 'Same level for both of you. The higher score wins.' },
 };
+function gameKeyTitle(k) {
+  if (typeof k === 'string' && k.indexOf('sd:') === 0) return `${GAME_TITLES[k.slice(3)] || 'Game'} duel`;
+  return GAME_TITLES[k] || 'Game';
+}
+function gameArtKey(k) { return typeof k === 'string' && k.indexOf('sd:') === 0 ? k.slice(3) : k; }
 const FRIEND_GAME_GROUPS = [
-  ['Board games', ['ttt', 'c4', 'ship', 'dots', 'gomoku', 'reversi', 'sl', 'pairs']],
-  ['Cards and dice', ['bj', 'war', 'dice', 'rps']],
+  ['Board games', ['ttt', 'fade', 'c4', 'paint', 'ship', 'gem', 'bomb', 'dots', 'gomoku', 'reversi', 'sl', 'pairs']],
+  ['Score duels', ['sd:stack', 'sd:dash', 'sd:catch', 'sd:ctrap', 'sd:odd', 'sd:hilo', 'sd:sky', 'sd:snake', 'sd:echo', 'sd:bricks']],
   ['Words and numbers', ['hang', 'num', 'wduel', 'qduel', 'math']],
-  ['Speed duels', ['rduel', 'taps']],
+  ['Quick fun', ['rps', 'rduel', 'taps']],
 ];
 const FRIEND_GAME_SUBS = {
   ttt: 'Three in a row', c4: 'Drop discs, line up four', ship: 'Find and sink their fleet', dots: 'Close boxes to score', gomoku: 'Five stones in a line', reversi: 'Flip discs, own the board',
   sl: 'Roll up the board', pairs: 'Memory, turn by turn', bj: 'Closest to 21 wins', war: 'Five rounds, higher card wins', dice: 'Roll, hold, roll again', rps: 'Best of three rounds',
+  paint: 'Grow your colour across the board', bomb: 'Do not open the bomb', gem: 'Dig up more gems', fade: 'Only three marks each',
+  'sd:stack': 'Build the taller tower', 'sd:dash': 'Run further than them', 'sd:catch': 'Catch more fruit', 'sd:ctrap': 'Beat the colour trick', 'sd:odd': 'Spot more odd tiles', 'sd:hilo': 'Longer guessing streak',
+  'sd:sky': 'Fly through more pipes', 'sd:snake': 'Eat more dots', 'sd:echo': 'Remember a longer pattern', 'sd:bricks': 'Break more bricks',
   hang: 'You pick a word, they guess', num: 'Pick 1 to 100, they guess', wduel: 'Same word, fewer tries wins', qduel: 'Five questions each', math: 'Ten quick sums', rduel: 'Fastest tap wins', taps: 'Five seconds of tapping',
 };
 const SHIP_SIZES = [3, 3, 2, 2];
@@ -20074,15 +20389,22 @@ function parseGameMessage(content) {
     if (st.g === 'dice' || st.g === 'bj' || st.g === 'war' || st.g === 'sl') return st;
     if (st.g === 'ship') return Array.isArray(st.sx) && Array.isArray(st.so) ? st : null;
     if (st.g === 'num') return typeof st.sv === 'number' && Array.isArray(st.gs) ? st : null;
+    if (st.g === 'sd') return typeof st.k === 'string' && SCORE_DUELS[st.k] ? st : null;
+    if (st.g === 'paint') return Array.isArray(st.b) && st.b.length === 49 && Array.isArray(st.own) && st.own.length === 49 ? st : null;
+    if (st.g === 'bomb') return Array.isArray(st.op) ? st : null;
+    if (st.g === 'gem') return Array.isArray(st.d) && st.d.length === 36 ? st : null;
+    if (st.g === 'fade') return Array.isArray(st.b) && st.b.length === 9 ? st : null;
     return null;
   } catch { return null; }
 }
 function gameTitle(st) {
   if (!st) return 'Game';
+  if (st.g === 'sd') return `${GAME_TITLES[st.k] || 'Game'} duel`;
   if (st.g === 'score') return GAME_TITLES[st.k] || 'Game';
   return GAME_TITLES[st.g] || 'Game';
 }
 function formatGameScore(k, s) {
+  if (SCORE_DUELS[k] && !['echo', 'sky', 'snake', 'bricks'].includes(k)) return SCORE_DUELS[k].unit(s);
   if (k === 'reflex') return `${s} ms`;
   if (k === 'memory') return `${s} moves`;
   if (k === 'word') return `${s} in a row`;
@@ -20113,6 +20435,36 @@ function c4Winner(b) {
   }
   if (b.every(Boolean)) return { who: 3, line: null };
   return null;
+}
+function RpsIcon({ h, size = 28 }) {
+  if (h === 'r') {
+    return (
+      <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true" style={{ display: 'block' }}>
+        <defs><linearGradient id="rpsR" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#CBD5E1" /><stop offset="1" stopColor="#64748B" /></linearGradient></defs>
+        <path d="M7 20.5l2.2 -8.4l7 -5.1l7.6 2.2l3.4 7.4l-3 7.6l-9.4 2.6l-6.2 -2.2z" fill="url(#rpsR)" stroke="#475569" strokeWidth="1.2" strokeLinejoin="round" />
+        <path d="M10.5 13l5 -3.4l5.2 1.6" fill="none" stroke="rgba(255,255,255,0.75)" strokeWidth="1.4" strokeLinecap="round" />
+        <path d="M14 19.5l3.5 2.2M19.5 16l2 3" stroke="#475569" strokeWidth="1" strokeLinecap="round" opacity="0.6" />
+      </svg>
+    );
+  }
+  if (h === 'p') {
+    return (
+      <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true" style={{ display: 'block' }}>
+        <path d="M8 4.5h11.5l5 5v18H8z" fill="#FFFFFF" stroke="#94A3B8" strokeWidth="1.2" strokeLinejoin="round" />
+        <path d="M19.5 4.5v5h5" fill="#E2E8F0" stroke="#94A3B8" strokeWidth="1.2" strokeLinejoin="round" />
+        <path d="M11.5 14h9.5M11.5 17.5h9.5M11.5 21h6.5" stroke="#3B82F6" strokeWidth="1.4" strokeLinecap="round" opacity="0.7" />
+      </svg>
+    );
+  }
+  return (
+    <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true" style={{ display: 'block' }}>
+      <path d="M13.5 17.5L25 5.5M18.5 17.5L7 5.5" stroke="#94A3B8" strokeWidth="2.6" strokeLinecap="round" />
+      <path d="M13.5 17.5L25 5.5" stroke="#E2E8F0" strokeWidth="1" strokeLinecap="round" />
+      <circle cx="10.5" cy="22.5" r="4.2" fill="none" stroke="#EF4444" strokeWidth="2.6" />
+      <circle cx="21.5" cy="22.5" r="4.2" fill="none" stroke="#EF4444" strokeWidth="2.6" />
+      <circle cx="16" cy="16" r="1.3" fill="#475569" />
+    </svg>
+  );
 }
 const RPS_HANDS = { r: { l: 'Rock', e: '\u270A' }, p: { l: 'Paper', e: '\u270B' }, s: { l: 'Scissors', e: '\u270C\uFE0F' } };
 function rpsRoundWinner(a, b) {
@@ -20202,14 +20554,7 @@ function TicTacToeCard({ state, myId, live, peerName, onMove, onRematch, ink, fr
   };
   const cell = 56;
   return (
-    <div onClick={(e) => e.stopPropagation()} style={{ width: 204, padding: '10px 10px 12px', borderRadius: 18, background: theme.dark ? 'rgba(255,255,255,0.06)' : 'rgba(90,60,180,0.06)', border: `1px solid ${theme.border}`, opacity: live ? 1 : 0.72 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, color: ink || theme.ink }}>
-        <GameArt k="ttt" width={20} height={20} radius={6} />
-        <span style={{ fontSize: 13, fontWeight: 800, whiteSpace: 'nowrap' }}>Tic tac toe</span>
-        <span style={{ flex: 1 }} />
-        <GameInfoButton k="ttt" small />
-      </div>
-      <div style={{ margin: '-4px 0 8px 26px', fontSize: 11, fontWeight: 700, color: myTurn ? theme.coral : theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{status}</div>
+    <GameCardShell k="ttt" width={204} live={live} title="Tic tac toe" status={status} hot={myTurn}>
       <div style={{ display: 'grid', gridTemplateColumns: `repeat(3, ${cell}px)`, gap: 5, justifyContent: 'center' }}>
         {state.b.map((v, i) => (
           <div key={i} role={myTurn && !v ? 'button' : undefined} aria-label={myTurn && !v ? `Cell ${i + 1}` : undefined} data-silent="1" onClick={() => tap(i)} style={{
@@ -20220,7 +20565,7 @@ function TicTacToeCard({ state, myId, live, peerName, onMove, onRematch, ink, fr
         ))}
       </div>
       {live && finished && onRematch && (
-        <button onClick={onRematch} className="zchat-press" style={{ marginTop: 10, width: '100%', height: 34, borderRadius: 10, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontSize: 12.5, fontFamily: FONT, cursor: 'pointer' }}>Play again</button>
+        <button onClick={onRematch} className="zchat-gbtn" style={{ marginTop: 10, width: '100%', height: 34, borderRadius: 10, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontSize: 12.5, fontFamily: FONT, cursor: 'pointer' , ...gameBtnStyle('gold') }}>Play again</button>
       )}
       {live && !finished && !myTurn && myMark > 0 && state.n === 0 && (
         <div style={{ marginTop: 8, fontSize: 11.5, color: theme.muted, textAlign: 'center' }}>They go first</div>
@@ -20228,8 +20573,7 @@ function TicTacToeCard({ state, myId, live, peerName, onMove, onRematch, ink, fr
       {live && !finished && myTurn && state.n === 0 && (
         <div style={{ marginTop: 8, fontSize: 11.5, color: theme.muted, textAlign: 'center' }}>You go first. Tap a square</div>
       )}
-      <div style={{ height: 12 }} />
-    </div>
+    </GameCardShell>
   );
 }
 
@@ -20286,7 +20630,7 @@ function Game2048() {
   const reset = () => { setGrid(addRandom(addRandom(Array(16).fill(0)))); setScore(0); setOver(false); };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, paddingTop: 8 }}>
-      <GameStats items={[['Score', score], ['Best', best]]} right={<button onClick={reset} className="zchat-press" style={{ padding: '0 16px', borderRadius: 14, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontFamily: FONT, cursor: 'pointer' }}>New</button>} />
+      <GameStats items={[['Score', score], ['Best', best]]} right={<button onClick={reset} className="zchat-gbtn" style={{ padding: '0 16px', borderRadius: 14, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontFamily: FONT, cursor: 'pointer' , ...gameBtnStyle('gold') }}>New</button>} />
       <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} style={{ position: 'relative', width: GAME_SQUARE, aspectRatio: '1', borderRadius: 18, background: theme.dark ? '#2A2140' : '#BBADA0', padding: 8, boxSizing: 'border-box', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, touchAction: 'none', userSelect: 'none' }}>
         {grid.map((v, i) => (
           <div key={i} style={{ borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', background: v ? (TILE_COLORS[v] || '#3C3A32') : (theme.dark ? 'rgba(255,255,255,0.07)' : 'rgba(238,228,218,0.35)'), color: v <= 4 ? '#776E65' : '#F9F6F2', fontSize: v >= 1024 ? 22 : v >= 128 ? 26 : 30, fontWeight: 900, transition: 'background 0.12s' }}>{v || ''}</div>
@@ -20295,7 +20639,7 @@ function Game2048() {
           <div style={{ position: 'absolute', inset: 0, borderRadius: 18, background: 'rgba(10,6,22,0.7)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, color: 'white' }}>
             <div style={{ fontSize: 22, fontWeight: 900 }}>No more moves</div>
             <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.8)' }}>Score {score}</div>
-            <button onClick={reset} className="zchat-press" style={{ marginTop: 6, padding: '10px 22px', borderRadius: 14, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontFamily: FONT, cursor: 'pointer' }}>Try again</button>
+            <button onClick={reset} className="zchat-gbtn" style={{ marginTop: 6, padding: '10px 22px', borderRadius: 14, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontFamily: FONT, cursor: 'pointer' , ...gameBtnStyle('gold') }}>Try again</button>
           </div>
         )}
       </div>
@@ -20304,10 +20648,50 @@ function Game2048() {
   );
 }
 
-const MEMORY_EMOJI = ['\u{1F436}', '\u{1F431}', '\u{1F98A}', '\u{1F43C}', '\u{1F428}', '\u{1F42F}', '\u{1F984}', '\u{1F419}', '\u{1F98B}', '\u{1F41D}', '\u{1F40B}', '\u{1F99C}'];
+const MEMORY_TOKENS = [
+  { k: 'ruby', l: 'Red circle', c: ['#FF7A7A', '#DC2626'], s: 'circle' },
+  { k: 'sky', l: 'Blue square', c: ['#7DD3FC', '#2563EB'], s: 'square' },
+  { k: 'leaf', l: 'Green triangle', c: ['#86EFAC', '#16A34A'], s: 'triangle' },
+  { k: 'sun', l: 'Gold star', c: ['#FDE68A', '#F59E0B'], s: 'star' },
+  { k: 'rose', l: 'Pink heart', c: ['#F9A8D4', '#DB2777'], s: 'heart' },
+  { k: 'ice', l: 'Cyan diamond', c: ['#A5F3FC', '#0891B2'], s: 'diamond' },
+  { k: 'plum', l: 'Purple hexagon', c: ['#D8B4FE', '#7C3AED'], s: 'hexagon' },
+  { k: 'ember', l: 'Orange moon', c: ['#FDBA74', '#EA580C'], s: 'moon' },
+  { k: 'mint', l: 'Mint ring', c: ['#99F6E4', '#0D9488'], s: 'ring' },
+  { k: 'night', l: 'Indigo bolt', c: ['#A5B4FC', '#4338CA'], s: 'bolt' },
+  { k: 'lime', l: 'Lime cross', c: ['#D9F99D', '#65A30D'], s: 'cross' },
+  { k: 'coral', l: 'Coral drop', c: ['#FECACA', '#E11D48'], s: 'drop' },
+];
+const MEMORY_SHAPES = {
+  circle: 'M12 3a9 9 0 1 1 0 18a9 9 0 1 1 0 -18z',
+  square: 'M5 5h14v14H5z',
+  triangle: 'M12 3l9.5 17h-19z',
+  star: 'M12 2.5l2.9 6.1l6.6 0.8l-4.9 4.6l1.3 6.6L12 17.3l-5.9 3.3l1.3 -6.6l-4.9 -4.6l6.6 -0.8z',
+  heart: 'M12 20.5s-8.5 -5.2 -8.5 -11a4.8 4.8 0 0 1 8.5 -3a4.8 4.8 0 0 1 8.5 3c0 5.8 -8.5 11 -8.5 11z',
+  diamond: 'M12 2.5l8.5 9.5l-8.5 9.5l-8.5 -9.5z',
+  hexagon: 'M12 2.5l8.2 4.75v9.5L12 21.5l-8.2 -4.75v-9.5z',
+  moon: 'M15.5 3.2a9 9 0 1 0 5.3 12.6A7.2 7.2 0 0 1 15.5 3.2z',
+  ring: 'M12 3a9 9 0 1 1 0 18a9 9 0 1 1 0 -18zM12 7.5a4.5 4.5 0 1 0 0 9a4.5 4.5 0 1 0 0 -9z',
+  bolt: 'M13.5 2L5 13.5h6L10 22l9 -12h-6z',
+  cross: 'M9 3h6v6h6v6h-6v6H9v-6H3V9h6z',
+  drop: 'M12 2.5c3.5 5 6.5 8.4 6.5 12a6.5 6.5 0 0 1 -13 0c0 -3.6 3 -7 6.5 -12z',
+};
+function MemoryToken({ k, size = 30 }) {
+  const t = MEMORY_TOKENS.find((x) => x.k === k) || MEMORY_TOKENS[0];
+  const gid = `mt${t.k}`;
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" style={{ display: 'block', filter: 'drop-shadow(0 2px 2px rgba(0,0,0,0.25))' }}>
+      <defs><linearGradient id={gid} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor={t.c[0]} /><stop offset="1" stopColor={t.c[1]} /></linearGradient></defs>
+      <path d={MEMORY_SHAPES[t.s]} fill={`url(#${gid})`} fillRule="evenodd" stroke="rgba(255,255,255,0.55)" strokeWidth="0.8" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function tokenLabel(k) { const t = MEMORY_TOKENS.find((x) => x.k === k); return t ? t.l : 'Card'; }
+const CARD_BACK = 'repeating-linear-gradient(45deg, rgba(255,255,255,0.14) 0 6px, rgba(255,255,255,0) 6px 12px), linear-gradient(160deg, #8B6CFF, #5B3FD6)';
+const MEMORY_EMOJI_OLD = ['\u{1F436}', '\u{1F431}', '\u{1F98A}', '\u{1F43C}', '\u{1F428}', '\u{1F42F}', '\u{1F984}', '\u{1F419}', '\u{1F98B}', '\u{1F41D}', '\u{1F40B}', '\u{1F99C}'];
 function MemoryGame() {
   const { theme } = useTheme();
-  const deal = () => { const picks = MEMORY_EMOJI.slice().sort(() => Math.random() - 0.5).slice(0, 8); return [...picks, ...picks].sort(() => Math.random() - 0.5).map((e, i) => ({ id: i, e })); };
+  const deal = () => { const picks = MEMORY_TOKENS.map((t) => t.k).sort(() => Math.random() - 0.5).slice(0, 8); return [...picks, ...picks].sort(() => Math.random() - 0.5).map((e, i) => ({ id: i, e })); };
   const [cards, setCards] = useState(deal);
   const [open, setOpen] = useState([]);
   const [done, setDone] = useState(() => new Set());
@@ -20332,13 +20716,13 @@ function MemoryGame() {
   const reset = () => { setCards(deal()); setOpen([]); setDone(new Set()); setMoves(0); lock.current = false; };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, paddingTop: 8 }}>
-      <GameStats items={[['Moves', moves], ['Best', best || '\u2013']]} right={<button onClick={reset} className="zchat-press" style={{ padding: '0 16px', borderRadius: 14, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontFamily: FONT, cursor: 'pointer' }}>New</button>} />
+      <GameStats items={[['Moves', moves], ['Best', best || '\u2013']]} right={<button onClick={reset} className="zchat-gbtn" style={{ padding: '0 16px', borderRadius: 14, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontFamily: FONT, cursor: 'pointer' , ...gameBtnStyle('gold') }}>New</button>} />
       <div style={{ width: GAME_SQUARE, display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
         {cards.map((c) => {
           const up = open.includes(c.id) || done.has(c.id);
           return (
-            <div key={c.id} role="button" aria-label={up ? c.e : 'Hidden card'} data-silent="1" onClick={() => flip(c)} style={{ aspectRatio: '1', borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 34, cursor: 'pointer', background: up ? (done.has(c.id) ? `${theme.coral}2A` : theme.panelBg) : theme.coral, border: `1px solid ${up ? theme.border : theme.coralDeep}`, transition: 'transform 0.2s, background 0.2s', transform: up ? 'rotateY(0)' : 'rotateY(0) scale(0.97)', userSelect: 'none' }}>
-              {up ? c.e : <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: 20, fontWeight: 900 }}>Z</span>}
+            <div key={c.id} role="button" aria-label={up ? tokenLabel(c.e) : 'Hidden card'} data-silent="1" onClick={() => flip(c)} style={{ aspectRatio: '1', borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 34, cursor: 'pointer', background: up ? (done.has(c.id) ? (theme.dark ? 'rgba(34,197,94,0.18)' : 'rgba(34,197,94,0.14)') : theme.panelBg) : CARD_BACK, border: `1px solid ${up ? theme.border : 'rgba(255,255,255,0.18)'}`, boxShadow: up ? 'none' : '0 3px 0 #3F2A9E, 0 6px 12px rgba(0,0,0,0.2)', transition: 'transform 0.2s, background 0.2s', transform: up ? 'rotateY(0)' : 'rotateY(0) scale(0.97)', userSelect: 'none' }}>
+              {up ? <MemoryToken k={c.e} size={34} /> : null}
             </div>
           );
         })}
@@ -20346,15 +20730,16 @@ function MemoryGame() {
       {finished ? (
         <div style={{ textAlign: 'center' }}>
           <div style={{ fontSize: 20, fontWeight: 900, color: theme.ink }}>All pairs found in {moves} moves</div>
-          <button onClick={reset} className="zchat-press" style={{ marginTop: 10, padding: '10px 22px', borderRadius: 14, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontFamily: FONT, cursor: 'pointer' }}>Play again</button>
+          <button onClick={reset} className="zchat-gbtn" style={{ marginTop: 10, padding: '10px 22px', borderRadius: 14, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontFamily: FONT, cursor: 'pointer' , ...gameBtnStyle('gold') }}>Play again</button>
         </div>
       ) : <div style={{ fontSize: 13, color: theme.muted }}>Flip two cards and find every matching pair.</div>}
     </div>
   );
 }
 
-function SnakeGame() {
+function SnakeGame({ seed, onDuelFinish } = {}) {
   const { theme } = useTheme();
+  const rnd = useGameRng(seed, 'snake');
   const canvasRef = useRef(null);
   const stateRef = useRef(null);
   const [score, setScore] = useState(0);
@@ -20364,7 +20749,7 @@ function SnakeGame() {
   const touch = useRef(null);
   const init = () => { stateRef.current = { snake: [[8, 8], [7, 8], [6, 8]], dir: [1, 0], next: [1, 0], food: [12, 8], score: 0, tick: 150 }; };
   if (!stateRef.current) init();
-  const placeFood = (st) => { let f; do { f = [Math.floor(Math.random() * N), Math.floor(Math.random() * N)]; } while (st.snake.some((p) => p[0] === f[0] && p[1] === f[1])); st.food = f; };
+  const placeFood = (st) => { let f; do { f = [Math.floor(rnd() * N), Math.floor(rnd() * N)]; } while (st.snake.some((p) => p[0] === f[0] && p[1] === f[1])); st.food = f; };
   const draw = () => {
     const c = canvasRef.current; if (!c) return;
     const ctx = c.getContext('2d'); const st = stateRef.current; const cell = c.width / N;
@@ -20396,7 +20781,7 @@ function SnakeGame() {
     return () => clearTimeout(timer);
   }, [phase]);
   const turn = (d) => { const st = stateRef.current; if (st.dir[0] + d[0] === 0 && st.dir[1] + d[1] === 0) return; st.next = d; playUiSound('key'); if (phase !== 'playing') start(); };
-  const start = () => { init(); setScore(0); setPhase('playing'); };
+  const start = () => { if (phase === 'over' && onDuelFinish) return; init(); setScore(0); setPhase('playing'); };
   useEffect(() => {
     const onKey = (e) => { const map = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }; if (map[e.key]) { e.preventDefault(); turn(map[e.key]); } };
     window.addEventListener('keydown', onKey);
@@ -20414,13 +20799,7 @@ function SnakeGame() {
       <GameStats items={[['Score', score], ['Best', best]]} />
       <div onTouchStart={onTouchStart} onTouchEnd={onTouchEnd} onClick={() => { if (phase !== 'playing') start(); }} style={{ position: 'relative', width: GAME_SQUARE, aspectRatio: '1', borderRadius: 18, overflow: 'hidden', touchAction: 'none', userSelect: 'none', border: `1px solid ${theme.border}`, boxShadow: '0 12px 30px rgba(0,0,0,0.25)' }}>
         <canvas ref={canvasRef} width={480} height={480} style={{ width: '100%', height: '100%', display: 'block' }} />
-        {phase !== 'playing' && (
-          <div style={{ position: 'absolute', inset: 0, background: 'rgba(10,6,22,0.62)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'white', textAlign: 'center', padding: 20 }}>
-            <div style={{ fontSize: 22, fontWeight: 900 }}>{phase === 'over' ? `Game over, ${score} eaten` : 'Snake'}</div>
-            <div style={{ fontSize: 13.5, color: 'rgba(255,255,255,0.8)' }}>Swipe to steer. Eat the red dots, avoid the walls and your tail.</div>
-            <button onClick={(e) => { e.stopPropagation(); start(); }} className="zchat-press" style={{ marginTop: 8, padding: '10px 22px', borderRadius: 14, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontFamily: FONT, cursor: 'pointer' }}>{phase === 'over' ? 'Play again' : 'Start'}</button>
-          </div>
-        )}
+        {phase !== 'playing' && <GameOverlay {...duelOverlayProps(phase, score, onDuelFinish, start, 'Snake', `Game over, ${score} eaten`, 'Swipe to steer. Eat the red dots, avoid the walls and your tail.')} />}
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 56px)', gap: 6 }}>
         {[[null, [0, -1], null], [[-1, 0], null, [1, 0]], [null, [0, 1], null]].flat().map((d, i) => (
@@ -20509,6 +20888,7 @@ function ChatsPrefsSection() {
   const [touch_, setTouch_] = usePref('zchat-touch-sounds');
   const [quick, setQuick] = useState(getQuickReactions);
   const [editAt, setEditAt] = useState(null);
+  const [qrOpen, setQrOpen] = useState(false);
   const touch = isTouchDevice();
   const row = (icon, label, sub, on, set) => <IgRow inset={false} icon={icon} label={label} sub={sub} right={<IgToggle on={on} onClick={() => set(!on)} />} />;
   return (
@@ -20527,10 +20907,13 @@ function ChatsPrefsSection() {
         ))}
       </div>
       <div role="button" aria-label="Reset quick reactions" onClick={() => { setQuickReactions(REACTION_EMOJIS); setQuick(REACTION_EMOJIS); hapticTap(); }} style={{ fontSize: 13.5, fontWeight: 700, color: theme.coral, padding: '0 2px 12px', cursor: 'pointer' }}>Reset to default</div>
+      <IgHeading>Quick replies</IgHeading>
+      <IgRow inset={false} icon={<MessageSquare size={16} />} label="Quick replies" sub="Type a slash in a chat to send a saved message" onClick={() => setQrOpen(true)} />
       <IgHeading>Feel</IgHeading>
       {row(<VibrateIcon size={16} />, 'Haptic feedback', 'A small buzz on taps and swipes', haptics, setHaptics)}
       {row(<Volume1 size={16} />, 'Touch sounds', 'A soft tick on every button, row and tile', touch_, setTouch_)}
       {row(<Activity size={16} />, 'Reduce motion', 'Fade between pages instead of sliding', reduce, setReduce)}
+      {qrOpen && <QuickRepliesPage onClose={() => setQrOpen(false)} />}
       {editAt != null && <FullEmojiPicker onClose={() => setEditAt(null)} onPick={(e) => { const next = quick.slice(); next[editAt] = e; setQuickReactions(next); setQuick(next); setEditAt(null); hapticTap(); }} />}
     </div>
   );
@@ -20738,14 +21121,7 @@ function ConnectFourCard({ state, myId, live, peerName, onMove, onRematch, ink, 
   const colors = { 1: '#FBBF24', 2: '#F43F5E' };
   const boardW = C4_W * cell + (C4_W - 1) * gap + pad * 2;
   return (
-    <div onClick={(e) => e.stopPropagation()} style={{ width: boardW + 20, boxSizing: 'border-box', padding: '10px 10px 12px', borderRadius: 18, background: theme.dark ? 'rgba(255,255,255,0.06)' : 'rgba(90,60,180,0.06)', border: `1px solid ${theme.border}`, opacity: live ? 1 : 0.72 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, color: ink || theme.ink }}>
-        <GameArt k="c4" width={20} height={20} radius={6} />
-        <span style={{ fontSize: 13, fontWeight: 800, whiteSpace: 'nowrap' }}>Connect four</span>
-        <span style={{ flex: 1 }} />
-        <GameInfoButton k="c4" small />
-      </div>
-      <div style={{ margin: '-4px 0 8px 26px', fontSize: 11, fontWeight: 700, color: myTurn ? theme.coral : theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{status}</div>
+    <GameCardShell k="c4" width={boardW + 20} live={live} title="Connect four" status={status} hot={myTurn}>
       <div style={{ padding: pad, borderRadius: 12, background: theme.dark ? '#2F3F9E' : '#3B5BDB', display: 'grid', gridTemplateColumns: `repeat(7, ${cell}px)`, gap, boxSizing: 'border-box' }}>
         {state.b.map((v, i) => {
           const col = i % C4_W;
@@ -20763,10 +21139,9 @@ function ConnectFourCard({ state, myId, live, peerName, onMove, onRematch, ink, 
         </div>
       )}
       {live && finished && onRematch && (
-        <button onClick={onRematch} className="zchat-press" style={{ marginTop: 10, width: '100%', height: 34, borderRadius: 10, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontSize: 12.5, fontFamily: FONT, cursor: 'pointer' }}>Play again</button>
+        <button onClick={onRematch} className="zchat-gbtn" style={{ marginTop: 10, width: '100%', height: 34, borderRadius: 10, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontSize: 12.5, fontFamily: FONT, cursor: 'pointer' , ...gameBtnStyle('gold') }}>Play again</button>
       )}
-      <div style={{ height: 8 }} />
-    </div>
+    </GameCardShell>
   );
 }
 
@@ -20805,14 +21180,7 @@ function RpsCard({ state, myId, live, peerName, onMove, onRematch, ink, fresh })
   const mine = side || 'x';
   const theirs = side ? other : 'o';
   return (
-    <div onClick={(e) => e.stopPropagation()} style={{ width: 236, boxSizing: 'border-box', padding: '10px 12px 12px', borderRadius: 18, background: theme.dark ? 'rgba(255,255,255,0.06)' : 'rgba(90,60,180,0.06)', border: `1px solid ${theme.border}`, opacity: live ? 1 : 0.72 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, color: ink || theme.ink }}>
-        <GameArt k="rps" width={20} height={20} radius={6} />
-        <span style={{ fontSize: 13, fontWeight: 800, whiteSpace: 'nowrap', flexShrink: 0 }}>Rock paper scissors</span>
-        <span style={{ flex: 1 }} />
-        <GameInfoButton k="rps" small />
-      </div>
-      <div style={{ margin: '-4px 0 8px 26px', fontSize: 11, fontWeight: 700, color: canPick ? theme.coral : theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{status}</div>
+    <GameCardShell k="rps" width={236} live={live} title="Rock paper scissors" status={status} hot={canPick}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 8 }}>
         <span style={{ fontSize: 12, fontWeight: 700, color: theme.muted }}>You</span>
         <span style={{ fontSize: 20, fontWeight: 900, color: ink || theme.ink, letterSpacing: '0.04em' }}>{wins[mine]} : {wins[theirs]}</span>
@@ -20825,9 +21193,9 @@ function RpsCard({ state, myId, live, peerName, onMove, onRematch, ink, fresh })
             return (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 16 }}>
                 <span style={{ fontSize: 10.5, fontWeight: 700, color: theme.muted, width: 16 }}>{i + 1}</span>
-                <span>{RPS_HANDS[rd[mine]].e}</span>
+                <RpsIcon h={rd[mine]} size={22} />
                 <span style={{ fontSize: 10.5, color: theme.muted }}>vs</span>
-                <span>{RPS_HANDS[rd[theirs]].e}</span>
+                <RpsIcon h={rd[theirs]} size={22} />
                 <span style={{ marginLeft: 'auto', fontSize: 10.5, fontWeight: 800, color: rw === 1 ? '#22c55e' : rw === 2 ? theme.danger : theme.muted }}>{rw === 1 ? 'Won' : rw === 2 ? 'Lost' : 'Tie'}</span>
               </div>
             );
@@ -20837,7 +21205,7 @@ function RpsCard({ state, myId, live, peerName, onMove, onRematch, ink, fresh })
       {live && !finished && side && canPick && (
         <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
           {Object.keys(RPS_HANDS).map((h) => (
-            <div key={h} role="button" aria-label={RPS_HANDS[h].l} data-silent="1" onClick={() => pick(h)} className="zchat-press" style={{ width: 56, height: 56, borderRadius: 16, background: theme.dark ? 'rgba(10,6,22,0.6)' : '#FFFFFF', border: `1px solid ${theme.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, cursor: 'pointer' }}>{RPS_HANDS[h].e}</div>
+            <div key={h} role="button" aria-label={RPS_HANDS[h].l} data-silent="1" onClick={() => pick(h)} className="zchat-gbtn" style={{ ...gameBtnStyle('white'), width: 58, height: 58, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 18 }}><RpsIcon h={h} size={34} /></div>
           ))}
         </div>
       )}
@@ -20845,33 +21213,39 @@ function RpsCard({ state, myId, live, peerName, onMove, onRematch, ink, fresh })
         <div style={{ textAlign: 'center', fontSize: 11.5, color: theme.muted }}>You picked {RPS_HANDS[cur[side]].l.toLowerCase()}. Waiting for {peerName || 'them'}</div>
       )}
       {live && finished && onRematch && (
-        <button onClick={onRematch} className="zchat-press" style={{ marginTop: 8, width: '100%', height: 34, borderRadius: 10, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontSize: 12.5, fontFamily: FONT, cursor: 'pointer' }}>Play again</button>
+        <button onClick={onRematch} className="zchat-gbtn" style={{ marginTop: 8, width: '100%', height: 34, borderRadius: 10, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontSize: 12.5, fontFamily: FONT, cursor: 'pointer' , ...gameBtnStyle('gold') }}>Play again</button>
       )}
-      <div style={{ height: 8 }} />
-    </div>
+    </GameCardShell>
   );
 }
 
 
-function GameCardShell({ width, live, children, title, status, hot, icon }) {
+function GameCardShell({ width, live, children, title, status, hot, icon, k }) {
   const { theme } = useTheme();
-  const gk = Object.keys(GAME_TITLES).find((x) => GAME_TITLES[x] === title && x !== 'reflex' && x !== 'quiz');
+  const gk = k || Object.keys(GAME_TITLES).find((x) => GAME_TITLES[x] === title && x !== 'reflex' && x !== 'quiz');
+  const bg = GAME_ART_BG[gk] || ['#6D4DF5', '#C13BDC'];
   return (
-    <div onClick={(e) => e.stopPropagation()} style={{ width, boxSizing: 'border-box', padding: '10px 10px 12px', borderRadius: 18, background: theme.dark ? 'rgba(255,255,255,0.06)' : 'rgba(90,60,180,0.06)', border: `1px solid ${theme.border}`, opacity: live ? 1 : 0.72 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8, color: theme.ink }}>
-        {gk ? <GameArt k={gk} width={20} height={20} radius={6} /> : icon}
-        <span style={{ fontSize: 13, fontWeight: 800, whiteSpace: 'nowrap', flexShrink: 0 }}>{title}</span>
-        <span style={{ flex: 1 }} />
-        {gk && <GameInfoButton k={gk} small />}
+    <div onClick={(e) => e.stopPropagation()} style={{ width, boxSizing: 'border-box', borderRadius: 22, overflow: 'hidden', background: theme.dark ? '#171129' : '#FFFFFF', border: `1px solid ${theme.dark ? 'rgba(255,255,255,0.09)' : 'rgba(60,30,130,0.12)'}`, boxShadow: theme.dark ? '0 10px 26px rgba(0,0,0,0.38)' : '0 10px 24px rgba(60,30,130,0.14)', opacity: live ? 1 : 0.8, filter: live ? 'none' : 'saturate(0.7)' }}>
+      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 9, padding: '9px 9px 9px 9px', background: `linear-gradient(135deg, ${bg[0]}, ${bg[1]})`, overflow: 'hidden' }}>
+        <div aria-hidden="true" style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(255,255,255,0.26) 0%, rgba(255,255,255,0.06) 48%, rgba(0,0,0,0.12) 100%)', pointerEvents: 'none' }} />
+        <div style={{ position: 'relative', width: 36, height: 36, borderRadius: 11, overflow: 'hidden', flexShrink: 0, boxShadow: '0 3px 8px rgba(0,0,0,0.3), 0 0 0 2px rgba(255,255,255,0.4)' }}>
+          {gk ? <GameArt k={gk} width={36} height={36} radius={11} /> : <div style={{ width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white' }}>{icon}</div>}
+        </div>
+        <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 14, fontWeight: 900, color: 'white', letterSpacing: '-0.01em', textShadow: '0 1px 2px rgba(0,0,0,0.35)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</div>
+          <div className={hot ? 'zchat-turn-pulse' : undefined} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 3, padding: '2px 8px', borderRadius: 999, maxWidth: '100%', boxSizing: 'border-box', fontSize: 10.5, fontWeight: 900, background: hot ? '#FDE047' : 'rgba(0,0,0,0.28)', color: hot ? '#6B3A00' : 'rgba(255,255,255,0.95)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {hot && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#16A34A', flexShrink: 0 }} />}
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{status}</span>
+          </div>
+        </div>
+        {gk && <div style={{ position: 'relative' }}><GameInfoButton k={gk} onDark /></div>}
       </div>
-      <div style={{ margin: '-4px 0 8px 26px', fontSize: 11, fontWeight: 700, color: hot ? theme.coral : theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{status}</div>
-      {children}
+      <div style={{ padding: '12px 10px 12px' }}>{children}</div>
     </div>
   );
 }
-function GameAgainButton({ onClick, label = 'Play again' }) {
-  const { theme } = useTheme();
-  return <button onClick={onClick} className="zchat-press" style={{ marginTop: 10, width: '100%', height: 34, borderRadius: 10, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontSize: 12.5, fontFamily: FONT, cursor: 'pointer' }}>{label}</button>;
+function GameAgainButton({ onClick, label = 'Play again', color = 'gold' }) {
+  return <GameButton onClick={onClick} label={label} color={color} full small style={{ marginTop: 12 }} />;
 }
 
 function dotsBoxEdges(r, c) { return { top: r * 3 + c, bottom: (r + 1) * 3 + c, left: r * 4 + c, right: r * 4 + c + 1 }; }
@@ -21029,7 +21403,8 @@ function DuelCard({ state, myId, live, peerName, onPlay, onRematch, fresh }) {
   const mine = side === 'o' ? state.ro : state.rx;
   const theirs = side === 'o' ? state.rx : state.ro;
   const finished = !!state.w;
-  const kind = DUEL_KINDS[state.g] || DUEL_KINDS.qduel;
+  const kindBase = DUEL_KINDS[state.g] || DUEL_KINDS.qduel;
+  const kind = state.g === 'sd' && SCORE_DUELS[state.k] ? { ...kindBase, unit: SCORE_DUELS[state.k].unit } : kindBase;
   useGameResultSound(live, fresh, finished, `${state.id}:${state.n}`, finished ? (state.w === 'd' ? 'draw' : state.w === side ? 'win' : 'lose') : null);
   const canPlay = live && !finished && !!side && mine == null;
   const status = finished ? (state.w === 'd' ? 'Draw' : state.w === side ? 'You won' : `${peerName || 'They'} won`) : canPlay ? 'Your round' : live ? `Waiting for ${peerName || 'them'}` : 'Round sent';
@@ -21042,13 +21417,13 @@ function DuelCard({ state, myId, live, peerName, onPlay, onRematch, fresh }) {
     </div>
   );
   return (
-    <GameCardShell width={224} live={live} title={gameTitle(state)} status={status} hot={canPlay} icon={icon}>
+    <GameCardShell k={state.g === 'sd' ? state.k : state.g} width={224} live={live} title={gameTitle(state)} status={status} hot={canPlay} icon={icon}>
       <div style={{ fontSize: 11.5, color: theme.muted, marginBottom: 8, lineHeight: 1.4 }}>{sub}</div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {line('You', mine, finished && state.w === side)}
         {line(peerName || 'Them', theirs, finished && state.w && state.w !== 'd' && state.w !== side)}
       </div>
-      {canPlay && <GameAgainButton onClick={onPlay} label="Play your round" />}
+      {canPlay && <GameAgainButton onClick={onPlay} label="Play your round" color="green" />}
       {live && finished && onRematch && <GameAgainButton onClick={onRematch} />}
     </GameCardShell>
   );
@@ -21267,7 +21642,7 @@ function MancalaCard({ state, myId, live, peerName, onMove, onRematch, fresh }) 
   const pit = (i, mineRow) => {
     const can = myTurn && mineRow && p[i] > 0;
     return (
-      <div key={i} role={can ? 'button' : undefined} aria-label={can ? `Pit ${i + 1}` : undefined} data-silent="1" onClick={() => sow(i)} style={{ width: 23, height: 32, borderRadius: 12, background: can ? '#FDE68A' : (theme.dark ? 'rgba(10,6,22,0.5)' : 'rgba(255,255,255,0.8)'), border: `1px solid ${can ? '#D97706' : theme.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 900, color: can ? '#78350F' : theme.ink, cursor: can ? 'pointer' : 'default' }}>{p[i]}</div>
+      <div key={i} role={can ? 'button' : undefined} aria-label={can ? `Pit ${i + 1}` : undefined} data-silent="1" onClick={() => sow(i)} style={{ width: 22, height: 32, borderRadius: 12, background: can ? '#FDE68A' : (theme.dark ? 'rgba(10,6,22,0.5)' : 'rgba(255,255,255,0.8)'), border: `1px solid ${can ? '#D97706' : theme.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 900, color: can ? '#78350F' : theme.ink, cursor: can ? 'pointer' : 'default' }}>{p[i]}</div>
     );
   };
   const store = (i, label) => (
@@ -21278,7 +21653,7 @@ function MancalaCard({ state, myId, live, peerName, onMove, onRematch, fresh }) 
   );
   return (
     <GameCardShell width={240} live={live} title="Mancala" status={status} hot={myTurn} icon={<GamepadIcon size={15} color={theme.coral} />}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: 5, borderRadius: 14, background: 'linear-gradient(180deg, #B4722E, #7C4A1A)', boxSizing: 'border-box', width: 220 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: 5, borderRadius: 14, background: 'linear-gradient(180deg, #B4722E, #7C4A1A)', boxSizing: 'border-box', width: '100%', maxWidth: 220, justifyContent: 'center', margin: '0 auto' }}>
         {store(theirStore, 'Them')}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
           <div style={{ display: 'flex', gap: 2 }}>{theirPits.slice().reverse().map((i) => pit(i, false))}</div>
@@ -21296,7 +21671,7 @@ function PairsCard({ state, myId, live, peerName, onMove, onRematch, fresh }) {
   const { theme } = useTheme();
   const { myMark, finished, myTurn, outcome, status } = useTurnStatus(state, myId, live, peerName);
   useGameResultSound(live, fresh, finished, `${state.id}:${state.n}`, outcome);
-  const faces = useMemo(() => { const picks = seededShuffle(MEMORY_EMOJI, `pairs:${state.id}`).slice(0, 8); return seededShuffle([...picks, ...picks], `deal:${state.id}`); }, [state.id]);
+  const faces = useMemo(() => { const picks = seededShuffle(MEMORY_TOKENS.map((t) => t.k), `pairs:${state.id}`).slice(0, 8); return seededShuffle([...picks, ...picks], `deal:${state.id}`); }, [state.id]);
   const [pick, setPick] = useState(null);
   useEffect(() => { setPick(null); }, [state.n]);
   const mine = state.d.filter((v) => v === myMark).length / 2;
@@ -21324,8 +21699,8 @@ function PairsCard({ state, myId, live, peerName, onMove, onRematch, fresh }) {
           const owner = state.d[i];
           const up = !!owner || pick === i || (showLast && state.last.includes(i));
           return (
-            <div key={i} role={myTurn && !owner ? 'button' : undefined} aria-label={myTurn && !owner ? `Card ${i + 1}` : undefined} data-silent="1" onClick={() => flip(i)} style={{ width: 44, height: 44, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, cursor: myTurn && !owner ? 'pointer' : 'default', background: owner ? (owner === myMark ? 'rgba(251,191,36,0.35)' : 'rgba(244,63,94,0.35)') : up ? (theme.dark ? 'rgba(255,255,255,0.14)' : '#FFFFFF') : theme.coral, border: `1px solid ${owner ? 'transparent' : theme.border}`, transition: 'background 0.2s' }}>
-              {up ? f : <span style={{ color: 'rgba(255,255,255,0.75)', fontSize: 16, fontWeight: 900 }}>Z</span>}
+            <div key={i} role={myTurn && !owner ? 'button' : undefined} aria-label={myTurn && !owner ? `Card ${i + 1}` : undefined} data-silent="1" onClick={() => flip(i)} style={{ width: 44, height: 44, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, cursor: myTurn && !owner ? 'pointer' : 'default', background: owner ? (owner === myMark ? 'rgba(251,191,36,0.35)' : 'rgba(244,63,94,0.35)') : up ? (theme.dark ? 'rgba(255,255,255,0.14)' : '#FFFFFF') : CARD_BACK, border: `1px solid ${owner ? 'transparent' : theme.border}`, transition: 'background 0.2s' }}>
+              {up ? <MemoryToken k={f} size={26} /> : null}
             </div>
           );
         })}
@@ -21395,8 +21770,8 @@ function DiceCard({ state, myId, live, peerName, onMove, onRematch, fresh }) {
           )}
           {roll && <div style={{ fontSize: 11.5, color: theme.muted, textAlign: 'center', marginBottom: 6 }}>{rolls < 2 ? `${diceRank(roll).name}. Tap dice to hold, then roll again` : diceRank(roll).name}</div>}
           <div style={{ display: 'flex', gap: 8 }}>
-            {rolls < 2 && <button onClick={doRoll} className="zchat-press" style={{ flex: 1, height: 34, borderRadius: 10, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontSize: 12.5, fontFamily: FONT, cursor: 'pointer' }}>{roll ? 'Roll again' : 'Roll the dice'}</button>}
-            {roll && <button onClick={send} className="zchat-press" style={{ flex: 1, height: 34, borderRadius: 10, border: `1.5px solid ${theme.coral}`, background: 'transparent', color: theme.coral, fontWeight: 800, fontSize: 12.5, fontFamily: FONT, cursor: 'pointer' }}>Keep these</button>}
+            {rolls < 2 && <button onClick={doRoll} className="zchat-gbtn" style={{ flex: 1, height: 34, borderRadius: 10, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontSize: 12.5, fontFamily: FONT, cursor: 'pointer' , ...gameBtnStyle('gold') }}>{roll ? 'Roll again' : 'Roll the dice'}</button>}
+            {roll && <button onClick={send} className="zchat-gbtn" style={{ flex: 1, height: 34, borderRadius: 10, border: `1.5px solid ${theme.coral}`, background: 'transparent', color: theme.coral, fontWeight: 800, fontSize: 12.5, fontFamily: FONT, cursor: 'pointer' , ...gameBtnStyle('white') }}>Keep these</button>}
           </div>
         </div>
       )}
@@ -21468,8 +21843,8 @@ function BlackjackCard({ state, myId, live, peerName, onMove, onRematch, fresh }
       </div>
       {canAct && (
         <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-          <button onClick={() => act(true)} className="zchat-press" style={{ flex: 1, height: 34, borderRadius: 10, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontSize: 12.5, fontFamily: FONT, cursor: 'pointer' }}>Hit</button>
-          <button onClick={() => act(false)} className="zchat-press" style={{ flex: 1, height: 34, borderRadius: 10, border: `1.5px solid ${theme.coral}`, background: 'transparent', color: theme.coral, fontWeight: 800, fontSize: 12.5, fontFamily: FONT, cursor: 'pointer' }}>Stand</button>
+          <button onClick={() => act(true)} className="zchat-gbtn" style={{ flex: 1, height: 34, borderRadius: 10, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontSize: 12.5, fontFamily: FONT, cursor: 'pointer' , ...gameBtnStyle('gold') }}>Hit</button>
+          <button onClick={() => act(false)} className="zchat-gbtn" style={{ flex: 1, height: 34, borderRadius: 10, border: `1.5px solid ${theme.coral}`, background: 'transparent', color: theme.coral, fontWeight: 800, fontSize: 12.5, fontFamily: FONT, cursor: 'pointer' , ...gameBtnStyle('white') }}>Stand</button>
         </div>
       )}
       {!canAct && !finished && live && <div style={{ marginTop: 8, fontSize: 11.5, color: theme.muted, textAlign: 'center' }}>Closest to 21 without going over wins</div>}
@@ -21629,11 +22004,31 @@ const GAME_RULES = {
   quiz: { how: ['Ten general knowledge questions.', 'Tap the answer you think is right.'], win: 'Get as many right as you can.' },
   echo: { how: ['Watch the pads light up and listen.', 'Repeat the same pattern by tapping the pads.', 'Every round adds one more step.'], win: 'Reach as many levels as you can without a mistake.' },
 };
+Object.assign(GAME_RULES, {
+  paint: { how: ['You start in the top left corner, they start in the bottom right. Your area has a white outline.', 'On your turn pick a colour. Your whole area turns that colour and swallows every touching square of the same colour.', 'You cannot pick your own colour or theirs.'], win: 'Own more than half of the board, or own more when the board is full.' },
+  bomb: { how: ['There are 20 boxes. One of them hides a bomb.', 'Take turns opening one box at a time.'], win: 'Whoever opens the bomb loses. If only the bomb is left, the player who would have to open it loses.' },
+  gem: { how: ['Six gems are buried under a 6 by 6 field.', 'Take turns digging a square. Find a gem and you dig again.', 'An empty square shows how many gems touch it, so use the numbers to find them.'], win: 'First to dig up four gems wins.' },
+  fade: { how: ['Tic tac toe with a twist: each of you can only have three marks on the board.', 'When you place a fourth, your oldest mark disappears. The faded mark is the next one to go.'], win: 'Get three in a row. There are no draws, keep going until someone wins.' },
+  stack: { how: ['A block slides back and forth above your tower.', 'Tap to drop it. Only the part that lands on the tower stays, the rest falls off.', 'Land three perfect drops in a row and your block grows back a little.'], win: 'Build as many floors as you can.' },
+  dash: { how: ['Your cube runs on its own and keeps speeding up.', 'Tap to jump. Tap again in the air for a second jump.', 'Jump over spikes and boxes.'], win: 'Run as far as you can. Every 40 steps is one metre.' },
+  catch: { how: ['Slide your finger to move the basket.', 'Catch fruit for one point and stars for three.', 'Catching a bomb or missing a fruit costs a heart. You have three.'], win: 'Catch as much as you can before the hearts run out.' },
+  ctrap: { how: ['A colour word appears written in a different colour of ink.', 'Tap the colour of the ink, not the word you read.', 'A wrong tap takes a point and one second away.'], win: 'Score as many points as you can in 30 seconds.' },
+  odd: { how: ['A grid of tiles appears. One tile is a slightly different shade.', 'Tap it to go up a level. The grid grows and the difference gets smaller.', 'A wrong tap costs two seconds.'], win: 'Reach the highest level you can in 30 seconds.' },
+  hilo: { how: ['A number from 1 to 99 is shown.', 'Guess if the next number will be higher or lower.'], win: 'Keep your streak going as long as you can. One wrong guess ends the run.' },
+});
+function getRules(k) {
+  if (typeof k === 'string' && k.indexOf('sd:') === 0) {
+    const base = GAME_RULES[k.slice(3)];
+    if (!base) return null;
+    return { how: ['You both play the exact same level on your own phone, whenever you like.', ...base.how, 'When your run ends, tap Send to post your score in the chat.'], win: 'The higher score wins the duel.' };
+  }
+  return GAME_RULES[k] || null;
+}
 function howtoSeen(k) { try { return localStorage.getItem(`zchat-howto-${k}`) === '1'; } catch { return true; } }
 function HowToPlaySheet({ k, onClose }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
-  const rules = GAME_RULES[k] || { how: [], win: '' };
+  const rules = getRules(k) || { how: [], win: '' };
   useEffect(() => { try { localStorage.setItem(`zchat-howto-${k}`, '1'); } catch {} }, [k]);
   return (
     <Portal>
@@ -21641,11 +22036,11 @@ function HowToPlaySheet({ k, onClose }) {
         <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ width: '100%', maxWidth: 480, maxHeight: '88vh', display: 'flex', flexDirection: 'column', background: theme.panelBg, borderRadius: '26px 26px 0 0', overflow: 'hidden', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))' }}>
           <div style={{ padding: '10px 16px 0', flexShrink: 0 }}>
             <div style={{ display: 'flex', justifyContent: 'center', paddingBottom: 10 }}><div style={{ width: 38, height: 4, borderRadius: 2, background: theme.border }} /></div>
-            <div style={{ width: '100%', aspectRatio: '16 / 7', borderRadius: 18, overflow: 'hidden' }}><GameArt k={k} width="100%" height="100%" radius={18} /></div>
+            <div style={{ width: '100%', aspectRatio: '16 / 7', borderRadius: 18, overflow: 'hidden' }}><GameArt k={gameArtKey(k)} width="100%" height="100%" radius={18} /></div>
           </div>
           <div data-sheet-scroll="true" style={{ overflowY: 'auto', minHeight: 0, padding: '14px 20px 6px' }}>
             <div style={{ fontSize: 12, fontWeight: 800, color: theme.coral, letterSpacing: '0.06em', textTransform: 'uppercase' }}>How to play</div>
-            <div style={{ fontSize: 24, fontWeight: 800, color: theme.ink, letterSpacing: '-0.02em', marginTop: 2 }}>{GAME_TITLES[k] || 'Game'}</div>
+            <div style={{ fontSize: 24, fontWeight: 800, color: theme.ink, letterSpacing: '-0.02em', marginTop: 2 }}>{gameKeyTitle(k)}</div>
             <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
               {rules.how.map((t, i) => (
                 <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
@@ -21662,7 +22057,7 @@ function HowToPlaySheet({ k, onClose }) {
             )}
           </div>
           <div style={{ padding: '10px 20px 0', flexShrink: 0 }}>
-            <button onClick={onClose} className="zchat-press" style={{ ...primaryBtn(theme, false), marginTop: 0 }}>Got it</button>
+            <GameButton onClick={onClose} label="Got it" color="green" full />
           </div>
         </div>
       </div>
@@ -21672,14 +22067,14 @@ function HowToPlaySheet({ k, onClose }) {
 function GameInfoButton({ k, small, header, onDark }) {
   const { theme } = useTheme();
   const [open, setOpen] = useState(false);
-  if (!GAME_RULES[k]) return null;
+  if (!getRules(k)) return null;
   const show = (e) => { if (e) { e.stopPropagation(); e.preventDefault(); } setOpen(true); };
   return (
     <>
       {header ? (
         <HeaderIconButton label="How to play" onClick={show}><InfoIcon /></HeaderIconButton>
       ) : (
-        <span role="button" aria-label={`How to play ${GAME_TITLES[k]}`} onClick={show} onPointerDown={(e) => e.stopPropagation()} style={small
+        <span role="button" aria-label={`How to play ${gameKeyTitle(k)}`} onClick={show} onPointerDown={(e) => e.stopPropagation()} style={small
           ? { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 22, height: 22, borderRadius: '50%', color: theme.muted, cursor: 'pointer', flexShrink: 0 }
           : { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, borderRadius: '50%', background: onDark ? 'rgba(0,0,0,0.35)' : theme.rowBg, color: onDark ? 'white' : theme.ink, cursor: 'pointer', flexShrink: 0, backdropFilter: onDark ? 'blur(6px)' : 'none', WebkitBackdropFilter: onDark ? 'blur(6px)' : 'none' }}>
           <InfoIcon size={small ? 15 : 17} />
@@ -21712,10 +22107,10 @@ function GamePickerSheet({ profile, onPick, onMore, onClose }) {
             <div key={group}>
               <div style={{ padding: '12px 18px 4px', fontSize: 12.5, fontWeight: 700, color: theme.muted }}>{group}</div>
               {keys.map((k) => (
-                <div key={k} role="button" aria-label={GAME_TITLES[k]} onClick={() => { onClose(); onPick(k); }} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', gap: 13, padding: '8px 14px 8px 18px', cursor: 'pointer' }}>
+                <div key={k} role="button" aria-label={gameKeyTitle(k)} onClick={() => { onClose(); onPick(k); }} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', gap: 13, padding: '8px 14px 8px 18px', cursor: 'pointer' }}>
                   <GameArt k={k} width={50} height={50} radius={14} style={{ boxShadow: '0 4px 12px rgba(0,0,0,0.22)' }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 15.5, fontWeight: 700, color: theme.ink }}>{GAME_TITLES[k]}</div>
+                    <div style={{ fontSize: 15.5, fontWeight: 700, color: theme.ink }}>{gameKeyTitle(k)}</div>
                     <div style={{ fontSize: 12.5, color: theme.muted, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{FRIEND_GAME_SUBS[k]}</div>
                   </div>
                   <GameInfoButton k={k} />
@@ -21861,7 +22256,877 @@ function NumberGuessCard({ state, myId, live, peerName, onMove, onRematch, fresh
     </GameCardShell>
   );
 }
-const BOARD_CARDS = { gomoku: GomokuCard, reversi: ReversiCard, nim: NimCard, mancala: MancalaCard, pairs: PairsCard, dice: DiceCard, bj: BlackjackCard, war: WarCard, sl: SnakesCard, ship: SeaBattleCard, num: NumberGuessCard };
+
+function useGameRng(seed, salt) {
+  const ref = useRef(null);
+  if (!ref.current) ref.current = seed ? seededRandom(`${salt}:${seed}`) : Math.random;
+  return ref.current;
+}
+function duelOverlayProps(phase, score, onDuelFinish, start, readyTitle, overTitle, text) {
+  if (phase === 'over' && onDuelFinish) return { title: overTitle, text: 'Send your score to the chat. The higher score wins.', button: `Send ${score}`, onStart: () => onDuelFinish(score) };
+  return { title: phase === 'over' ? overTitle : readyTitle, text, button: phase === 'over' ? 'Play again' : 'Start', onStart: start };
+}
+
+function TowerStackGame({ seed, onDuelFinish } = {}) {
+  const { theme } = useTheme();
+  const rnd = useGameRng(seed, 'stack');
+  const canvasRef = useRef(null);
+  const st = useRef(null);
+  const hueRef = useRef(null);
+  if (hueRef.current == null) hueRef.current = Math.floor(rnd() * 360);
+  const hue0 = hueRef.current;
+  const [phase, setPhase] = useState('ready');
+  const [score, setScore] = useState(0);
+  const [best, setBest] = useState(() => readBest('stack'));
+  const W = 320;
+  const H = 480;
+  const BH = 24;
+  const BASEW = 180;
+  const fresh = () => ({ blocks: [{ x: (W - BASEW) / 2, w: BASEW }], mover: { x: -BASEW - 10, w: BASEW, dir: 1 }, falling: [], cam: 0, level: 0, perfect: 0, flash: 0, over: false });
+  if (!st.current) st.current = fresh();
+  const speedFor = (lvl) => Math.min(6.4, 2.3 + lvl * 0.12);
+  const colorFor = (i, l = 58) => `hsl(${(hue0 + i * 9) % 360}, 74%, ${l}%)`;
+  const yFor = (i, cam) => H - 74 - i * BH + cam;
+  const draw = () => {
+    const c = canvasRef.current; if (!c) return;
+    const ctx = c.getContext('2d');
+    const s = st.current;
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, `hsl(${(hue0 + 210) % 360}, 48%, 13%)`);
+    g.addColorStop(1, `hsl(${(hue0 + 250) % 360}, 52%, 30%)`);
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    for (let i = 0; i < 30; i++) { const x = (i * 97 + 13) % W; const y = (((i * 61) % H) + s.cam * 0.25) % H; ctx.fillRect(x, y, i % 3 ? 1.4 : 2.2, i % 3 ? 1.4 : 2.2); }
+    ctx.fillStyle = `hsl(${(hue0 + 250) % 360}, 40%, 18%)`;
+    ctx.fillRect(0, yFor(0, s.cam) + BH - 2, W, H);
+    const block = (x, y, w, i) => {
+      if (w <= 0) return;
+      ctx.fillStyle = colorFor(i, 40); roundRectFill(ctx, x, y + 5, w, BH - 5, 5);
+      ctx.fillStyle = colorFor(i, 58); roundRectFill(ctx, x, y, w, BH - 6, 5);
+      ctx.fillStyle = 'rgba(255,255,255,0.28)'; roundRectFill(ctx, x + 4, y + 3, Math.max(0, w - 8), 4, 2);
+    };
+    s.blocks.forEach((b, i) => { const y = yFor(i, s.cam); if (y > -BH && y < H + BH) block(b.x, y, b.w, i); });
+    if (!s.over) block(s.mover.x, yFor(s.blocks.length, s.cam), s.mover.w, s.blocks.length);
+    s.falling.forEach((f) => { ctx.globalAlpha = Math.max(0, Math.min(1, f.a)); block(f.x, f.y, f.w, f.i); ctx.globalAlpha = 1; });
+    if (s.flash > 0) { ctx.fillStyle = `rgba(255,255,255,${s.flash * 0.3})`; ctx.fillRect(0, 0, W, H); }
+  };
+  useEffect(() => { draw(); });
+  useEffect(() => {
+    if (phase !== 'playing') return undefined;
+    const tick = () => {
+      const s = st.current;
+      if (!s.over) {
+        const m = s.mover;
+        m.x += m.dir * speedFor(s.level);
+        if (m.dir > 0 && m.x + m.w > W + 24) m.dir = -1;
+        if (m.dir < 0 && m.x < -24) m.dir = 1;
+      }
+      s.falling.forEach((f) => { f.vy += 0.5; f.y += f.vy; f.a -= 0.015; });
+      s.falling = s.falling.filter((f) => f.y < H + 60 && f.a > 0);
+      const targetCam = Math.max(0, (s.blocks.length - 11) * BH);
+      s.cam += (targetCam - s.cam) * 0.12;
+      if (s.flash > 0) s.flash = Math.max(0, s.flash - 0.06);
+      return true;
+    };
+    return runFixedLoop(tick, draw);
+  }, [phase]);
+  const finish = (sc) => {
+    setTimeout(() => {
+      setPhase('over');
+      const b = readBest('stack');
+      if (sc > b) { setBest(sc); writeBest('stack', sc); }
+    }, 700);
+  };
+  const drop = () => {
+    const s = st.current;
+    if (s.over) return;
+    const prev = s.blocks[s.blocks.length - 1];
+    const m = s.mover;
+    const i = s.blocks.length;
+    const left = Math.max(prev.x, m.x);
+    const right = Math.min(prev.x + prev.w, m.x + m.w);
+    const ov = right - left;
+    hapticTap();
+    if (ov <= 0) {
+      s.over = true;
+      s.falling.push({ x: m.x, y: yFor(i, s.cam), w: m.w, i, vy: 0, a: 1.2 });
+      playUiSound('lose');
+      finish(s.level);
+      return;
+    }
+    let nx = left;
+    let nw = ov;
+    if (Math.abs(m.x - prev.x) <= 4) {
+      nx = prev.x; nw = prev.w; s.perfect += 1; s.flash = 1;
+      if (s.perfect >= 3 && nw < BASEW) { nw = Math.min(BASEW, nw + 12); nx = Math.max(0, Math.min(W - nw, nx - 6)); }
+      playUiSound('point');
+    } else {
+      s.perfect = 0;
+      if (m.x < prev.x) s.falling.push({ x: m.x, y: yFor(i, s.cam), w: prev.x - m.x, i, vy: 0, a: 1.2 });
+      else s.falling.push({ x: prev.x + prev.w, y: yFor(i, s.cam), w: m.x + m.w - (prev.x + prev.w), i, vy: 0, a: 1.2 });
+      playUiSound('key');
+    }
+    s.blocks.push({ x: nx, w: nw });
+    s.level += 1;
+    setScore(s.level);
+    const dir = s.level % 2 ? -1 : 1;
+    s.mover = { x: dir > 0 ? -nw - 10 : W + 10, w: nw, dir };
+  };
+  const start = () => { if (phase === 'over' && onDuelFinish) return; st.current = fresh(); setScore(0); setPhase('playing'); playUiSound('toggle'); };
+  const press = () => { if (phase !== 'playing') { if (phase === 'ready') start(); return; } drop(); };
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); press(); } };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+  const ov = duelOverlayProps(phase, score, onDuelFinish, start, 'Tower stack', `${score} ${score === 1 ? 'floor' : 'floors'}`, 'Tap to drop the sliding block. Only the part that lands on the tower stays. Land it perfectly to keep it whole.');
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, paddingTop: 8 }}>
+      <GameStats items={[['Floors', score], ['Best', best]]} />
+      <div onPointerDown={(e) => { e.preventDefault(); press(); }} style={{ position: 'relative', width: GAME_TALL_W, aspectRatio: '320 / 480', borderRadius: 18, overflow: 'hidden', touchAction: 'none', userSelect: 'none', border: `1px solid ${theme.border}`, cursor: 'pointer', boxShadow: '0 12px 30px rgba(0,0,0,0.3)' }}>
+        <canvas ref={canvasRef} width={W} height={H} style={{ width: '100%', height: '100%', display: 'block' }} />
+        {phase === 'playing' && <div style={{ position: 'absolute', top: 14, left: 0, right: 0, textAlign: 'center', fontSize: 44, fontWeight: 900, color: 'rgba(255,255,255,0.92)', textShadow: '0 3px 10px rgba(0,0,0,0.35)', pointerEvents: 'none' }}>{score}</div>}
+        {phase !== 'playing' && <GameOverlay {...ov} />}
+      </div>
+    </div>
+  );
+}
+
+function DashGame({ seed, onDuelFinish } = {}) {
+  const { theme } = useTheme();
+  const rnd = useGameRng(seed, 'dash');
+  const canvasRef = useRef(null);
+  const st = useRef(null);
+  const [phase, setPhase] = useState('ready');
+  const [score, setScore] = useState(0);
+  const [best, setBest] = useState(() => readBest('dash'));
+  const W = 320;
+  const H = 300;
+  const GROUND = 244;
+  const P = 24;
+  const PX = 58;
+  const fresh = () => ({ y: GROUND - P, vy: 0, jumps: 0, obs: [], dist: 0, speed: 4.4, nextIn: 160, over: false, rot: 0, shown: 0 });
+  if (!st.current) st.current = fresh();
+  const draw = () => {
+    const c = canvasRef.current; if (!c) return;
+    const ctx = c.getContext('2d');
+    const s = st.current;
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, '#1E1B4B'); g.addColorStop(0.6, '#6D28D9'); g.addColorStop(1, '#F472B6');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#FDE68A'; ctx.beginPath(); ctx.arc(250, 70, 26, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.18)'; ctx.beginPath(); ctx.arc(250, 70, 36, 0, Math.PI * 2); ctx.fill();
+    const hills = (off, amp, base, color, speedK) => {
+      ctx.fillStyle = color; ctx.beginPath(); ctx.moveTo(0, H);
+      for (let x = 0; x <= W; x += 8) { const t = (x + s.dist * speedK) / 60; ctx.lineTo(x, base - Math.sin(t + off) * amp - Math.sin(t * 0.37 + off) * amp * 0.6); }
+      ctx.lineTo(W, H); ctx.closePath(); ctx.fill();
+    };
+    hills(0, 18, 190, 'rgba(49,18,92,0.75)', 0.15);
+    hills(2, 12, 214, 'rgba(76,29,149,0.9)', 0.35);
+    ctx.fillStyle = '#1F1537'; ctx.fillRect(0, GROUND, W, H - GROUND);
+    ctx.fillStyle = '#A78BFA'; ctx.fillRect(0, GROUND, W, 3);
+    ctx.fillStyle = 'rgba(167,139,250,0.25)';
+    for (let x = -((s.dist) % 32); x < W; x += 32) ctx.fillRect(x, GROUND + 14, 16, 3);
+    s.obs.forEach((o) => {
+      if (o.type === 'spike') {
+        for (let k = 0; k < o.n; k++) {
+          const x = o.x + k * 22;
+          const gr = ctx.createLinearGradient(0, GROUND - 26, 0, GROUND);
+          gr.addColorStop(0, '#FCA5A5'); gr.addColorStop(1, '#DC2626');
+          ctx.fillStyle = gr; ctx.beginPath(); ctx.moveTo(x, GROUND); ctx.lineTo(x + 11, GROUND - 26); ctx.lineTo(x + 22, GROUND); ctx.closePath(); ctx.fill();
+        }
+      } else {
+        ctx.fillStyle = '#0EA5E9'; roundRectFill(ctx, o.x, GROUND - o.h, o.w, o.h, 5);
+        ctx.fillStyle = '#7DD3FC'; roundRectFill(ctx, o.x + 3, GROUND - o.h + 3, o.w - 6, 5, 2);
+        ctx.fillStyle = 'rgba(0,0,0,0.18)'; ctx.fillRect(o.x, GROUND - 6, o.w, 6);
+      }
+    });
+    ctx.save();
+    ctx.translate(PX + P / 2, s.y + P / 2);
+    ctx.rotate((s.rot * Math.PI) / 180);
+    ctx.fillStyle = '#FBBF24'; roundRectFill(ctx, -P / 2, -P / 2, P, P, 6);
+    ctx.fillStyle = '#F59E0B'; roundRectFill(ctx, -P / 2, P / 2 - 6, P, 6, 3);
+    ctx.fillStyle = 'white'; ctx.fillRect(1, -6, 6, 7); ctx.fillStyle = '#111827'; ctx.fillRect(4, -4, 3, 4);
+    ctx.restore();
+  };
+  useEffect(() => { draw(); });
+  useEffect(() => {
+    if (phase !== 'playing') return undefined;
+    const tick = () => {
+      const s = st.current;
+      s.speed = Math.min(9.5, 4.4 + s.dist / 2200);
+      s.dist += s.speed;
+      s.vy += 0.66;
+      s.y += s.vy;
+      if (s.y >= GROUND - P) { s.y = GROUND - P; s.vy = 0; s.jumps = 0; s.rot = Math.round(s.rot / 90) * 90; } else s.rot += 6;
+      s.obs.forEach((o) => { o.x -= s.speed; });
+      s.obs = s.obs.filter((o) => o.x + o.w > -30);
+      s.nextIn -= s.speed;
+      if (s.nextIn <= 0) {
+        const r = rnd();
+        if (r < 0.5) { const n = r < 0.18 ? 2 : 1; s.obs.push({ type: 'spike', n, x: W + 20, w: n * 22, h: 26 }); }
+        else { const w = 26 + Math.floor(rnd() * 26); const h = 26 + Math.floor(rnd() * 22); s.obs.push({ type: 'block', x: W + 20, w, h }); }
+        s.nextIn = 190 + rnd() * 200 + s.speed * 9;
+      }
+      const px1 = PX + 4; const px2 = PX + P - 4; const py1 = s.y + 4; const py2 = s.y + P - 2;
+      const hit = s.obs.some((o) => {
+        if (o.type === 'spike') return px2 > o.x + 5 && px1 < o.x + o.w - 5 && py2 > GROUND - 18;
+        return px2 > o.x + 2 && px1 < o.x + o.w - 2 && py2 > GROUND - o.h + 3;
+      });
+      const m = Math.floor(s.dist / 40);
+      if (m !== s.shown) { s.shown = m; setScore(m); }
+      if (hit) {
+        s.over = true;
+        setPhase('over'); playUiSound('lose'); hapticTap();
+        const b = readBest('dash');
+        if (m > b) { setBest(m); writeBest('dash', m); }
+        return false;
+      }
+      return true;
+    };
+    return runFixedLoop(tick, draw);
+  }, [phase]);
+  const start = () => { if (phase === 'over' && onDuelFinish) return; st.current = fresh(); setScore(0); setPhase('playing'); playUiSound('toggle'); };
+  const jump = () => {
+    if (phase !== 'playing') { if (phase === 'ready') start(); return; }
+    const s = st.current;
+    if (s.jumps >= 2) return;
+    s.vy = s.jumps === 0 ? -10.6 : -9;
+    s.jumps += 1;
+    playUiSound('key');
+    hapticTap();
+  };
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === ' ' || e.key === 'ArrowUp') { e.preventDefault(); jump(); } };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+  const ov = duelOverlayProps(phase, score, onDuelFinish, start, 'Dash', `${score} m`, 'Tap to jump, tap again in the air to jump twice. Clear the spikes and the boxes.');
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, paddingTop: 8 }}>
+      <GameStats items={[['Metres', score], ['Best', best]]} />
+      <div onPointerDown={(e) => { e.preventDefault(); jump(); }} style={{ position: 'relative', width: 'min(94vw, 520px)', aspectRatio: '320 / 300', borderRadius: 18, overflow: 'hidden', touchAction: 'none', userSelect: 'none', border: `1px solid ${theme.border}`, cursor: 'pointer', boxShadow: '0 12px 30px rgba(0,0,0,0.3)' }}>
+        <canvas ref={canvasRef} width={W} height={H} style={{ width: '100%', height: '100%', display: 'block' }} />
+        {phase !== 'playing' && <GameOverlay {...ov} />}
+      </div>
+      <div style={{ fontSize: 12.5, color: theme.muted }}>Tap anywhere on the scene to jump</div>
+    </div>
+  );
+}
+
+const CATCH_FRUITS = [
+  { c: ['#FDBA74', '#EA580C'], leaf: true },
+  { c: ['#FCA5A5', '#DC2626'], leaf: true },
+  { c: ['#D9F99D', '#65A30D'], leaf: false },
+  { c: ['#E9D5FF', '#7C3AED'], leaf: true },
+];
+function FruitCatchGame({ seed, onDuelFinish } = {}) {
+  const { theme } = useTheme();
+  const rnd = useGameRng(seed, 'catch');
+  const canvasRef = useRef(null);
+  const boxRef = useRef(null);
+  const st = useRef(null);
+  const [phase, setPhase] = useState('ready');
+  const [score, setScore] = useState(0);
+  const [lives, setLives] = useState(3);
+  const [best, setBest] = useState(() => readBest('catch'));
+  const W = 320;
+  const H = 440;
+  const BW = 76;
+  const BY = H - 52;
+  const fresh = () => ({ bx: W / 2 - BW / 2, target: W / 2 - BW / 2, items: [], lives: 3, score: 0, spawnIn: 30, t: 0, pops: [] });
+  if (!st.current) st.current = fresh();
+  const drawFruit = (ctx, it) => {
+    const r = it.r;
+    if (it.kind === 'bomb') {
+      ctx.fillStyle = '#1F2937'; ctx.beginPath(); ctx.arc(it.x, it.y, r, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.beginPath(); ctx.arc(it.x - r * 0.35, it.y - r * 0.35, r * 0.3, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#A16207'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(it.x + r * 0.4, it.y - r * 0.8); ctx.quadraticCurveTo(it.x + r, it.y - r * 1.4, it.x + r * 1.2, it.y - r * 1.1); ctx.stroke();
+      ctx.fillStyle = (it.t % 10) < 5 ? '#FDE047' : '#F97316'; ctx.beginPath(); ctx.arc(it.x + r * 1.2, it.y - r * 1.1, 3.5, 0, Math.PI * 2); ctx.fill();
+      return;
+    }
+    if (it.kind === 'star') {
+      ctx.save(); ctx.translate(it.x, it.y); ctx.rotate(it.t / 30);
+      ctx.fillStyle = '#FBBF24'; ctx.beginPath();
+      for (let k = 0; k < 10; k++) { const rr = k % 2 ? r * 0.45 : r; const a = (k * Math.PI) / 5 - Math.PI / 2; ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr); }
+      ctx.closePath(); ctx.fill(); ctx.strokeStyle = '#FEF3C7'; ctx.lineWidth = 1.5; ctx.stroke(); ctx.restore();
+      return;
+    }
+    const f = CATCH_FRUITS[it.f];
+    const gr = ctx.createRadialGradient(it.x - r * 0.4, it.y - r * 0.4, r * 0.2, it.x, it.y, r);
+    gr.addColorStop(0, f.c[0]); gr.addColorStop(1, f.c[1]);
+    ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(it.x, it.y, r, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.45)'; ctx.beginPath(); ctx.ellipse(it.x - r * 0.35, it.y - r * 0.4, r * 0.28, r * 0.18, -0.6, 0, Math.PI * 2); ctx.fill();
+    if (f.leaf) { ctx.fillStyle = '#16A34A'; ctx.beginPath(); ctx.ellipse(it.x + 4, it.y - r - 2, 6, 3, -0.5, 0, Math.PI * 2); ctx.fill(); }
+  };
+  const draw = () => {
+    const c = canvasRef.current; if (!c) return;
+    const ctx = c.getContext('2d');
+    const s = st.current;
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, theme.dark ? '#0F172A' : '#7DD3FC'); g.addColorStop(1, theme.dark ? '#312E81' : '#E0F2FE');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = theme.dark ? '#14532D' : '#4ADE80'; ctx.fillRect(0, H - 22, W, 22);
+    ctx.fillStyle = theme.dark ? '#166534' : '#22C55E'; ctx.fillRect(0, H - 22, W, 4);
+    s.items.forEach((it) => drawFruit(ctx, it));
+    s.pops.forEach((p) => { ctx.globalAlpha = Math.max(0, p.a); ctx.fillStyle = p.bad ? '#EF4444' : '#FDE047'; ctx.font = '900 18px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.fillText(p.txt, p.x, p.y); ctx.globalAlpha = 1; });
+    const bx = s.bx;
+    ctx.fillStyle = '#92400E'; roundRectFill(ctx, bx, BY, BW, 30, 8);
+    ctx.fillStyle = '#B45309'; for (let k = 0; k < 5; k++) ctx.fillRect(bx + 6 + k * 14, BY + 6, 8, 20);
+    ctx.fillStyle = '#FDE68A'; roundRectFill(ctx, bx - 4, BY - 4, BW + 8, 9, 4);
+    for (let k = 0; k < 3; k++) {
+      const x = W - 22 - k * 22; const y = 20; const on = k < s.lives;
+      ctx.fillStyle = on ? '#F43F5E' : 'rgba(255,255,255,0.25)';
+      ctx.beginPath(); ctx.moveTo(x, y + 6); ctx.bezierCurveTo(x - 10, y - 2, x - 6, y - 10, x, y - 4); ctx.bezierCurveTo(x + 6, y - 10, x + 10, y - 2, x, y + 6); ctx.fill();
+    }
+  };
+  useEffect(() => { draw(); });
+  useEffect(() => {
+    if (phase !== 'playing') return undefined;
+    const tick = () => {
+      const s = st.current;
+      s.t += 1;
+      s.bx += (s.target - s.bx) * 0.32;
+      s.bx = Math.max(0, Math.min(W - BW, s.bx));
+      s.spawnIn -= 1;
+      if (s.spawnIn <= 0) {
+        const r = rnd();
+        const kind = r < 0.16 ? 'bomb' : r < 0.22 ? 'star' : 'fruit';
+        s.items.push({ kind, f: Math.floor(rnd() * CATCH_FRUITS.length), x: 22 + rnd() * (W - 44), y: -20, r: kind === 'star' ? 14 : 13, vy: 2.3 + Math.min(3.6, s.score * 0.05) + rnd() * 0.8, t: 0 });
+        s.spawnIn = Math.max(18, 46 - s.score * 0.6);
+      }
+      let lost = false;
+      s.items.forEach((it) => {
+        it.y += it.vy; it.t += 1;
+        if (!it.done && it.y + it.r >= BY && it.y - it.r <= BY + 14 && it.x > s.bx - 6 && it.x < s.bx + BW + 6) {
+          it.done = true;
+          if (it.kind === 'bomb') { s.lives -= 1; lost = true; s.pops.push({ x: it.x, y: BY - 10, txt: 'Ouch', a: 1, bad: true }); playUiSound('cancel'); hapticTap(); }
+          else { const add = it.kind === 'star' ? 3 : 1; s.score += add; s.pops.push({ x: it.x, y: BY - 10, txt: `+${add}`, a: 1 }); playUiSound('point'); }
+        }
+        if (!it.done && it.y - it.r > H - 18) { it.done = true; if (it.kind === 'fruit') { s.lives -= 1; lost = true; s.pops.push({ x: it.x, y: H - 30, txt: 'Missed', a: 1, bad: true }); playUiSound('cancel'); } }
+      });
+      s.items = s.items.filter((it) => !it.done);
+      s.pops.forEach((p) => { p.y -= 0.8; p.a -= 0.025; });
+      s.pops = s.pops.filter((p) => p.a > 0);
+      if (s.score !== s.shownScore) { s.shownScore = s.score; setScore(s.score); }
+      if (lost) setLives(Math.max(0, s.lives));
+      if (s.lives <= 0) {
+        setPhase('over'); playUiSound('lose');
+        const b = readBest('catch');
+        if (s.score > b) { setBest(s.score); writeBest('catch', s.score); }
+        return false;
+      }
+      return true;
+    };
+    return runFixedLoop(tick, draw);
+  }, [phase]);
+  const start = () => { if (phase === 'over' && onDuelFinish) return; st.current = fresh(); setScore(0); setLives(3); setPhase('playing'); playUiSound('toggle'); };
+  const aim = (clientX) => {
+    const el = boxRef.current; if (!el) return;
+    const r = el.getBoundingClientRect();
+    st.current.target = ((clientX - r.left) / r.width) * W - BW / 2;
+  };
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === 'ArrowLeft') { e.preventDefault(); st.current.target = Math.max(0, st.current.target - 34); }
+      else if (e.key === 'ArrowRight') { e.preventDefault(); st.current.target = Math.min(W - BW, st.current.target + 34); }
+      else if (e.key === ' ' && phase !== 'playing') { e.preventDefault(); start(); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+  const ov = duelOverlayProps(phase, score, onDuelFinish, start, 'Fruit catch', `${score} caught`, 'Slide to move the basket. Catch every fruit, stars are worth three. Dodge the bombs. Missing a fruit costs a heart.');
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, paddingTop: 8 }}>
+      <GameStats items={[['Score', score], ['Hearts', lives], ['Best', best]]} />
+      <div ref={boxRef} onPointerMove={(e) => aim(e.clientX)} onPointerDown={(e) => { e.preventDefault(); aim(e.clientX); if (phase === 'ready') start(); }} style={{ position: 'relative', width: GAME_TALL_W, aspectRatio: '320 / 440', borderRadius: 18, overflow: 'hidden', touchAction: 'none', userSelect: 'none', border: `1px solid ${theme.border}`, boxShadow: '0 12px 30px rgba(0,0,0,0.3)' }}>
+        <canvas ref={canvasRef} width={W} height={H} style={{ width: '100%', height: '100%', display: 'block' }} />
+        {phase !== 'playing' && <GameOverlay {...ov} />}
+      </div>
+    </div>
+  );
+}
+
+const TRAP_COLORS = [['Red', '#EF4444'], ['Blue', '#3B82F6'], ['Green', '#22C55E'], ['Yellow', '#EAB308'], ['Purple', '#A855F7']];
+function useCountdown(active, seconds, onEnd) {
+  const [left, setLeft] = useState(seconds);
+  const endRef = useRef(0);
+  const penalty = useRef(0);
+  useEffect(() => {
+    if (!active) return undefined;
+    endRef.current = performance.now() + seconds * 1000;
+    penalty.current = 0;
+    setLeft(seconds);
+    const t = setInterval(() => {
+      const rem = Math.max(0, endRef.current - penalty.current - performance.now());
+      setLeft(rem / 1000);
+      if (rem <= 0) { clearInterval(t); onEnd(); }
+    }, 100);
+    return () => clearInterval(t);
+  }, [active]);
+  return [left, (ms) => { penalty.current += ms; }];
+}
+function TimeBar({ left, total }) {
+  const pct = Math.max(0, Math.min(100, (left / total) * 100));
+  return (
+    <div style={{ width: '100%', maxWidth: 520, height: 10, borderRadius: 5, background: 'rgba(127,127,127,0.22)', overflow: 'hidden' }}>
+      <div style={{ width: `${pct}%`, height: '100%', borderRadius: 5, background: pct < 25 ? 'linear-gradient(90deg, #EF4444, #F97316)' : 'linear-gradient(90deg, #22C55E, #A3E635)', transition: 'width 0.1s linear' }} />
+    </div>
+  );
+}
+function ColourTrapGame({ seed, onDuelFinish } = {}) {
+  const { theme } = useTheme();
+  const rnd = useGameRng(seed, 'ctrap');
+  const [phase, setPhase] = useState('ready');
+  const [score, setScore] = useState(0);
+  const [best, setBest] = useState(() => readBest('ctrap'));
+  const [round, setRound] = useState(null);
+  const [shake, setShake] = useState(0);
+  const scoreRef = useRef(0);
+  const nextRound = () => {
+    const w = Math.floor(rnd() * 5);
+    const ink = rnd() < 0.78 ? (w + 1 + Math.floor(rnd() * 4)) % 5 : w;
+    setRound({ w, ink, key: Math.random() });
+  };
+  const end = () => {
+    setPhase('over'); playUiSound('win');
+    const b = readBest('ctrap');
+    if (scoreRef.current > b) { setBest(scoreRef.current); writeBest('ctrap', scoreRef.current); }
+  };
+  const [left, addPenalty] = useCountdown(phase === 'playing', 30, end);
+  const start = () => { if (phase === 'over' && onDuelFinish) return; scoreRef.current = 0; setScore(0); nextRound(); setPhase('playing'); playUiSound('toggle'); };
+  const answer = (ci) => {
+    if (phase !== 'playing' || !round) return;
+    hapticTap();
+    if (ci === round.ink) { scoreRef.current += 1; playUiSound('point'); }
+    else { scoreRef.current = Math.max(0, scoreRef.current - 1); playUiSound('cancel'); setShake((x) => x + 1); addPenalty(1000); }
+    setScore(scoreRef.current);
+    nextRound();
+  };
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, paddingTop: 8 }}>
+      <GameStats items={[['Score', score], ['Time', phase === 'playing' ? Math.ceil(left) : 30], ['Best', best]]} />
+      <TimeBar left={phase === 'playing' ? left : 30} total={30} />
+      <div key={shake} className={shake ? 'zchat-shake' : ''} style={{ width: GAME_SQUARE, aspectRatio: '1.35', borderRadius: 24, background: theme.dark ? 'linear-gradient(160deg, #1E1B3A, #12101F)' : 'linear-gradient(160deg, #FFFFFF, #EEF2FF)', border: `1px solid ${theme.border}`, boxShadow: '0 12px 30px rgba(0,0,0,0.2)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, position: 'relative', overflow: 'hidden' }}>
+        {phase === 'playing' && round ? (
+          <>
+            <div style={{ fontSize: 13, fontWeight: 800, color: theme.muted, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Tap the ink colour</div>
+            <div key={round.key} className="zchat-pop" style={{ fontSize: 'min(16vw, 64px)', fontWeight: 900, letterSpacing: '0.02em', color: TRAP_COLORS[round.ink][1], textShadow: '0 4px 14px rgba(0,0,0,0.18)' }}>{TRAP_COLORS[round.w][0].toUpperCase()}</div>
+          </>
+        ) : (
+          <GameOverlay {...duelOverlayProps(phase, score, onDuelFinish, start, 'Colour trap', `${score} points`, 'A colour word appears in a different colour of ink. Tap the colour of the ink, not the word. You have 30 seconds.')} />
+        )}
+      </div>
+      <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+        {TRAP_COLORS.map(([name, col], i) => (
+          <div key={name} role="button" aria-label={`Ink ${name}`} data-silent="1" onPointerDown={(e) => { e.preventDefault(); answer(i); }} className="zchat-gbtn" style={{ width: 56, height: 56, borderRadius: '50%', background: `radial-gradient(circle at 35% 30%, rgba(255,255,255,0.55), ${col} 45%)`, boxShadow: `0 4px 0 rgba(0,0,0,0.35), 0 8px 14px rgba(0,0,0,0.2)`, '--gb-edge': 'rgba(0,0,0,0.35)', cursor: 'pointer', opacity: phase === 'playing' ? 1 : 0.5 }} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function OddOneOutGame({ seed, onDuelFinish } = {}) {
+  const { theme } = useTheme();
+  const rnd = useGameRng(seed, 'odd');
+  const [phase, setPhase] = useState('ready');
+  const [level, setLevel] = useState(0);
+  const [board, setBoard] = useState(null);
+  const [best, setBest] = useState(() => readBest('odd'));
+  const [shake, setShake] = useState(0);
+  const levelRef = useRef(0);
+  const makeBoard = (L) => {
+    const n = Math.min(7, 2 + Math.floor(L / 2));
+    const hue = Math.floor(rnd() * 360);
+    const odd = Math.floor(rnd() * n * n);
+    const delta = Math.max(4.5, 22 - L * 1.5);
+    const sat = 62 + Math.floor(rnd() * 20);
+    const light = 46 + Math.floor(rnd() * 10);
+    return { n, hue, odd, delta, sat, light };
+  };
+  const end = () => {
+    setPhase('over'); playUiSound('win');
+    const b = readBest('odd');
+    if (levelRef.current > b) { setBest(levelRef.current); writeBest('odd', levelRef.current); }
+  };
+  const [left, addPenalty] = useCountdown(phase === 'playing', 30, end);
+  const start = () => { if (phase === 'over' && onDuelFinish) return; levelRef.current = 0; setLevel(0); setBoard(makeBoard(0)); setPhase('playing'); playUiSound('toggle'); };
+  const tap = (i) => {
+    if (phase !== 'playing' || !board) return;
+    hapticTap();
+    if (i === board.odd) { levelRef.current += 1; setLevel(levelRef.current); setBoard(makeBoard(levelRef.current)); playUiSound('point'); }
+    else { addPenalty(2000); setShake((x) => x + 1); playUiSound('cancel'); }
+  };
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, paddingTop: 8 }}>
+      <GameStats items={[['Level', level], ['Time', phase === 'playing' ? Math.ceil(left) : 30], ['Best', best]]} />
+      <TimeBar left={phase === 'playing' ? left : 30} total={30} />
+      <div key={shake} className={shake ? 'zchat-shake' : ''} style={{ position: 'relative', width: GAME_SQUARE, aspectRatio: '1', borderRadius: 22, padding: 10, boxSizing: 'border-box', background: theme.dark ? '#14111F' : '#FFFFFF', border: `1px solid ${theme.border}`, boxShadow: '0 12px 30px rgba(0,0,0,0.22)' }}>
+        {phase === 'playing' && board ? (
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${board.n}, 1fr)`, gap: board.n > 5 ? 5 : 8, width: '100%', height: '100%' }}>
+            {Array.from({ length: board.n * board.n }).map((_, i) => (
+              <div key={`${level}-${i}`} role="button" aria-label={i === board.odd ? 'Odd tile' : `Tile ${i + 1}`} data-silent="1" onPointerDown={(e) => { e.preventDefault(); tap(i); }} style={{ borderRadius: board.n > 5 ? 8 : 14, cursor: 'pointer', background: `hsl(${board.hue}, ${board.sat}%, ${board.light + (i === board.odd ? board.delta : 0)}%)`, boxShadow: 'inset 0 -4px 0 rgba(0,0,0,0.16), inset 0 2px 0 rgba(255,255,255,0.22)' }} />
+            ))}
+          </div>
+        ) : (
+          <GameOverlay {...duelOverlayProps(phase, level, onDuelFinish, start, 'Odd one out', `Level ${level}`, 'One tile is a slightly different shade. Tap it to go up a level. A wrong tap costs two seconds. You have 30 seconds.')} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function HigherLowerGame({ seed, onDuelFinish } = {}) {
+  const { theme } = useTheme();
+  const rnd = useGameRng(seed, 'hilo');
+  const [phase, setPhase] = useState('ready');
+  const [cur, setCur] = useState(50);
+  const [streak, setStreak] = useState(0);
+  const [history, setHistory] = useState([]);
+  const [reveal, setReveal] = useState(null);
+  const [best, setBest] = useState(() => readBest('hilo'));
+  const busy = useRef(false);
+  const draw = (not) => { let v; do { v = 1 + Math.floor(rnd() * 99); } while (v === not); return v; };
+  const start = () => {
+    if (phase === 'over' && onDuelFinish) return;
+    const first = draw(0);
+    setCur(first); setStreak(0); setHistory([first]); setReveal(null); setPhase('playing'); busy.current = false; playUiSound('toggle');
+  };
+  const guess = (dir) => {
+    if (phase !== 'playing' || busy.current) return;
+    busy.current = true;
+    const nx = draw(cur);
+    const ok = dir === 'up' ? nx > cur : nx < cur;
+    hapticTap();
+    setReveal({ v: nx, ok });
+    playUiSound(ok ? 'point' : 'lose');
+    setTimeout(() => {
+      if (ok) {
+        setStreak((s) => s + 1); setCur(nx); setHistory((h) => [...h, nx].slice(-7)); setReveal(null); busy.current = false;
+      } else {
+        setPhase('over');
+        const sc = streak;
+        const b = readBest('hilo');
+        if (sc > b) { setBest(sc); writeBest('hilo', sc); }
+      }
+    }, 650);
+  };
+  const shown = reveal ? reveal.v : cur;
+  const tint = reveal ? (reveal.ok ? ['#4ADE80', '#16A34A'] : ['#FCA5A5', '#DC2626']) : ['#A78BFA', '#6D28D9'];
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, paddingTop: 8 }}>
+      <GameStats items={[['Streak', streak], ['Best', best]]} />
+      <div style={{ position: 'relative', width: GAME_SQUARE, aspectRatio: '1.15', borderRadius: 24, overflow: 'hidden', background: theme.dark ? '#14111F' : '#FFFFFF', border: `1px solid ${theme.border}`, boxShadow: '0 12px 30px rgba(0,0,0,0.22)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14 }}>
+        {phase === 'playing' ? (
+          <>
+            <div style={{ fontSize: 13, fontWeight: 800, color: theme.muted, letterSpacing: '0.06em', textTransform: 'uppercase' }}>{reveal ? (reveal.ok ? 'Correct' : 'Not this time') : 'Next number is higher or lower?'}</div>
+            <div key={shown} className="zchat-pop" style={{ width: 132, height: 160, borderRadius: 24, background: `linear-gradient(160deg, ${tint[0]}, ${tint[1]})`, boxShadow: '0 6px 0 rgba(0,0,0,0.28), 0 16px 30px rgba(0,0,0,0.25), inset 0 3px 0 rgba(255,255,255,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: 70, fontWeight: 900, textShadow: '0 3px 8px rgba(0,0,0,0.3)' }}>{shown}</div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'center', padding: '0 12px' }}>
+              {history.slice(0, -1).map((v, i) => <span key={i} style={{ padding: '3px 9px', borderRadius: 999, background: theme.rowBg, color: theme.muted, fontSize: 12, fontWeight: 800 }}>{v}</span>)}
+            </div>
+          </>
+        ) : (
+          <GameOverlay {...duelOverlayProps(phase, streak, onDuelFinish, start, 'Higher or lower', `${streak} in a row`, 'A number from 1 to 99 is shown. Guess if the next one is higher or lower. One wrong guess ends the run.')} />
+        )}
+      </div>
+      <div style={{ display: 'flex', gap: 12, width: '100%', maxWidth: 420, justifyContent: 'center' }}>
+        <GameButton label="Lower" color="red" disabled={phase !== 'playing' || !!reveal} onClick={() => guess('down')} style={{ flex: 1, height: 54, fontSize: 17 }} icon={<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20l-8 -10h16z" fill="currentColor" /></svg>} />
+        <GameButton label="Higher" color="green" disabled={phase !== 'playing' || !!reveal} onClick={() => guess('up')} style={{ flex: 1, height: 54, fontSize: 17 }} icon={<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4l8 10H4z" fill="currentColor" /></svg>} />
+      </div>
+    </div>
+  );
+}
+
+const PAINT_COLORS = ['#EF4444', '#F59E0B', '#22C55E', '#3B82F6', '#A855F7'];
+const PAINT_NAMES = ['Red', 'Orange', 'Green', 'Blue', 'Purple'];
+function paintGrow(b, own, mark) {
+  let color = null;
+  for (let i = 0; i < 49; i++) if (own[i] === mark) { color = b[i]; break; }
+  if (color == null) return;
+  const stack = [];
+  for (let i = 0; i < 49; i++) if (own[i] === mark) stack.push(i);
+  while (stack.length) {
+    const i = stack.pop();
+    const x = i % 7;
+    const y = Math.floor(i / 7);
+    [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(([dx, dy]) => {
+      const nx = x + dx; const ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= 7 || ny >= 7) return;
+      const j = ny * 7 + nx;
+      if (!own[j] && b[j] === color) { own[j] = mark; stack.push(j); }
+    });
+  }
+}
+function paintInit(seed) {
+  const rnd = seededRandom(`paint:${seed}`);
+  const b = Array.from({ length: 49 }, () => Math.floor(rnd() * 5));
+  if (b[48] === b[0]) b[48] = (b[0] + 2) % 5;
+  const own = Array(49).fill(0);
+  own[0] = 1; own[48] = 2;
+  paintGrow(b, own, 1);
+  paintGrow(b, own, 2);
+  return { b, own };
+}
+function paintColorOf(state, mark) { const i = state.own.indexOf(mark); return i >= 0 ? state.b[i] : null; }
+function PaintWarCard({ state, myId, live, peerName, onMove, onRematch, fresh }) {
+  const { theme } = useTheme();
+  const { myMark, finished, myTurn, outcome, status } = useTurnStatus(state, myId, live, peerName);
+  useGameResultSound(live, fresh, finished, `${state.id}:${state.n}`, outcome);
+  const me = myMark || 1;
+  const them = me === 1 ? 2 : 1;
+  const myColor = paintColorOf(state, me);
+  const theirColor = paintColorOf(state, them);
+  const mine = state.own.filter((v) => v === me).length;
+  const theirs = state.own.filter((v) => v === them).length;
+  const pick = (ci) => {
+    if (!myTurn || ci === myColor || ci === theirColor) return;
+    const b = state.b.slice();
+    const own = state.own.slice();
+    for (let i = 0; i < 49; i++) if (own[i] === myMark) b[i] = ci;
+    paintGrow(b, own, myMark);
+    const a = own.filter((v) => v === 1).length;
+    const c = own.filter((v) => v === 2).length;
+    let w = null;
+    if (a > 24) w = 'x'; else if (c > 24) w = 'o'; else if (!own.includes(0) || (state.n || 0) + 1 >= 90) w = a > c ? 'x' : c > a ? 'o' : 'd';
+    const gained = (myMark === 1 ? a : c) - (myMark === 1 ? mine : mine);
+    hapticTap();
+    playUiSound(gained > 2 ? 'point' : 'tap');
+    onMove({ ...state, b, own, t: myMark === 1 ? state.o : state.x, n: (state.n || 0) + 1, w });
+  };
+  const cell = 27;
+  return (
+    <GameCardShell k="paint" width={7 * cell + 6 * 2 + 20} live={live} title="Paint war" status={status} hot={myTurn}>
+      <ScoreLine mine={mine} theirs={theirs} peerName={peerName} myColor={myColor != null ? PAINT_COLORS[myColor] : null} theirColor={theirColor != null ? PAINT_COLORS[theirColor] : null} />
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(7, ${cell}px)`, gap: 2, padding: 0 }}>
+        {state.b.map((v, i) => {
+          const o = state.own[i];
+          return (
+            <div key={i} style={{ width: cell, height: cell, borderRadius: 6, background: PAINT_COLORS[v], boxShadow: o ? `inset 0 0 0 2.5px ${o === me ? 'rgba(255,255,255,0.95)' : 'rgba(17,12,40,0.75)'}` : 'inset 0 -3px 0 rgba(0,0,0,0.18)', opacity: o ? 1 : 0.82, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {(i === 0 || i === 48) && <span style={{ width: 8, height: 8, borderRadius: '50%', background: (i === 0 ? 1 : 2) === me ? 'white' : '#1F1537' }} />}
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ fontSize: 11.5, color: theme.muted, margin: '9px 0 6px', textAlign: 'center' }}>{myTurn ? 'Pick a colour to grow your area' : 'White outline is your area'}</div>
+      <div style={{ display: 'flex', justifyContent: 'center', gap: 7 }}>
+        {PAINT_COLORS.map((col, ci) => {
+          const blocked = ci === myColor || ci === theirColor;
+          const can = myTurn && !blocked;
+          return (
+            <div key={ci} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
+              <div role={can ? 'button' : undefined} aria-label={can ? `Paint ${PAINT_NAMES[ci]}` : undefined} data-silent="1" onClick={() => pick(ci)} className="zchat-gbtn" style={{ width: 34, height: 34, borderRadius: '50%', background: `radial-gradient(circle at 35% 30%, rgba(255,255,255,0.6), ${col} 48%)`, boxShadow: can ? '0 3px 0 rgba(0,0,0,0.35)' : 'none', '--gb-edge': 'rgba(0,0,0,0.35)', opacity: blocked ? 0.3 : (myTurn ? 1 : 0.7), cursor: can ? 'pointer' : 'default' }} />
+              <span style={{ fontSize: 9, fontWeight: 800, color: theme.muted, minHeight: 11 }}>{ci === myColor ? 'You' : ci === theirColor ? 'Them' : ''}</span>
+            </div>
+          );
+        })}
+      </div>
+      {live && finished && onRematch && <GameAgainButton onClick={onRematch} />}
+    </GameCardShell>
+  );
+}
+
+const BOMB_TILES = 20;
+function bombIndexFor(id) { return Math.floor(seededRandom(`bomb:${id}`)() * BOMB_TILES); }
+function BombIcon({ size = 22 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="10.5" cy="14" r="7" fill="#111827" />
+      <circle cx="8" cy="11.5" r="2" fill="rgba(255,255,255,0.35)" />
+      <path d="M15 8.5l2 -2" stroke="#A16207" strokeWidth="2" strokeLinecap="round" />
+      <path d="M18.5 3.5l0.7 1.6l1.6 0.7l-1.6 0.7l-0.7 1.6l-0.7 -1.6l-1.6 -0.7l1.6 -0.7z" fill="#FDE047" />
+    </svg>
+  );
+}
+function BombCard({ state, myId, live, peerName, onMove, onRematch, fresh }) {
+  const { theme } = useTheme();
+  const { myMark, finished, myTurn, outcome, status } = useTurnStatus(state, myId, live, peerName);
+  useGameResultSound(live, fresh, finished, `${state.id}:${state.n}`, outcome);
+  const bomb = useMemo(() => bombIndexFor(state.id), [state.id]);
+  const op = Array.isArray(state.op) ? state.op : [];
+  const open = (i) => {
+    if (!myTurn || op.includes(i)) return;
+    const next = [...op, i];
+    let w = null;
+    if (i === bomb) w = myMark === 1 ? 'o' : 'x';
+    else if (BOMB_TILES - next.length === 1) w = myMark === 1 ? 'x' : 'o';
+    hapticTap();
+    playUiSound(i === bomb ? 'lose' : 'point');
+    onMove({ ...state, op: next, t: myMark === 1 ? state.o : state.x, n: (state.n || 0) + 1, w });
+  };
+  const left = BOMB_TILES - op.length;
+  return (
+    <GameCardShell k="bomb" width={5 * 38 + 4 * 5 + 20} live={live} title="Bomb box" status={status} hot={myTurn}>
+      <div style={{ fontSize: 11.5, color: theme.muted, marginBottom: 8, textAlign: 'center' }}>{finished ? (op.includes(bomb) ? 'Boom. The bomb was found' : 'Only the bomb was left') : `${left} boxes left, one hides a bomb`}</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 38px)', gap: 5 }}>
+        {Array.from({ length: BOMB_TILES }).map((_, i) => {
+          const opened = op.includes(i);
+          const isBomb = i === bomb;
+          const showBomb = isBomb && (opened || finished);
+          const can = myTurn && !opened;
+          return (
+            <div key={i} role={can ? 'button' : undefined} aria-label={can ? `Box ${i + 1}` : undefined} data-silent="1" onClick={() => open(i)} className={can ? 'zchat-gbtn' : undefined} style={{
+              width: 38, height: 38, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: can ? 'pointer' : 'default', '--gb-edge': '#B45309',
+              background: showBomb ? 'linear-gradient(180deg, #FCA5A5, #DC2626)' : opened ? (theme.dark ? 'rgba(255,255,255,0.06)' : 'rgba(30,20,60,0.06)') : 'linear-gradient(180deg, #FFE477, #F59E0B)',
+              boxShadow: opened || showBomb ? 'inset 0 2px 4px rgba(0,0,0,0.25)' : '0 3px 0 #B45309, inset 0 2px 0 rgba(255,255,255,0.5)',
+            }}>
+              {showBomb ? <BombIcon size={22} /> : opened ? <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="#22C55E" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" /></svg> : <span style={{ fontSize: 16, fontWeight: 900, color: '#92400E' }}>?</span>}
+            </div>
+          );
+        })}
+      </div>
+      {live && finished && onRematch && <GameAgainButton onClick={onRematch} />}
+    </GameCardShell>
+  );
+}
+
+function gemsFor(id) {
+  const rnd = seededRandom(`gem:${id}`);
+  const set = new Set();
+  while (set.size < 6) set.add(Math.floor(rnd() * 36));
+  return set;
+}
+function GemIcon({ size = 20, color = '#22D3EE' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M6 4h12l4 6l-10 11L2 10z" fill={color} />
+      <path d="M2 10h20M8 4l4 17M16 4l-4 17M6 4l2 6M18 4l-2 6" stroke="rgba(255,255,255,0.55)" strokeWidth="1" fill="none" />
+      <path d="M6 4h12l4 6H2z" fill="rgba(255,255,255,0.28)" />
+    </svg>
+  );
+}
+function GemHuntCard({ state, myId, live, peerName, onMove, onRematch, fresh }) {
+  const { theme } = useTheme();
+  const { myMark, finished, myTurn, outcome, status } = useTurnStatus(state, myId, live, peerName);
+  useGameResultSound(live, fresh, finished, `${state.id}:${state.n}`, outcome);
+  const gems = useMemo(() => gemsFor(state.id), [state.id]);
+  const d = Array.isArray(state.d) ? state.d : Array(36).fill(0);
+  const me = myMark || 1;
+  const count = (m) => d.filter((v, i) => v === m && gems.has(i)).length;
+  const mine = count(me);
+  const theirs = count(me === 1 ? 2 : 1);
+  const near = (i) => { const x = i % 6; const y = Math.floor(i / 6); let c = 0; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { if (!dx && !dy) continue; const nx = x + dx; const ny = y + dy; if (nx >= 0 && ny >= 0 && nx < 6 && ny < 6 && gems.has(ny * 6 + nx)) c += 1; } return c; };
+  const dig = (i) => {
+    if (!myTurn || d[i]) return;
+    const nd = d.slice();
+    nd[i] = myMark;
+    const hit = gems.has(i);
+    const a = nd.filter((v, k) => v === 1 && gems.has(k)).length;
+    const c = nd.filter((v, k) => v === 2 && gems.has(k)).length;
+    let w = null;
+    if (a >= 4) w = 'x'; else if (c >= 4) w = 'o'; else if (a + c === 6) w = a > c ? 'x' : c > a ? 'o' : 'd';
+    hapticTap();
+    playUiSound(hit ? 'point' : 'tap');
+    onMove({ ...state, d: nd, t: w ? state.t : (hit ? myId : (myMark === 1 ? state.o : state.x)), n: (state.n || 0) + 1, w, lastIdx: i });
+  };
+  const numColors = ['', '#3B82F6', '#22C55E', '#F59E0B', '#EF4444', '#A855F7', '#EC4899', '#14B8A6', '#F97316'];
+  const cell = 31;
+  return (
+    <GameCardShell k="gem" width={6 * cell + 5 * 3 + 20} live={live} title="Gem hunt" status={status} hot={myTurn}>
+      <ScoreLine mine={mine} theirs={theirs} peerName={peerName} myColor="#FBBF24" theirColor="#F43F5E" />
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(6, ${cell}px)`, gap: 3 }}>
+        {d.map((v, i) => {
+          const dug = !!v;
+          const gem = gems.has(i);
+          const reveal = finished && gem && !dug;
+          const can = myTurn && !dug;
+          return (
+            <div key={i} role={can ? 'button' : undefined} aria-label={can ? `Dig ${i + 1}` : undefined} data-silent="1" onClick={() => dig(i)} style={{
+              width: cell, height: cell, borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: can ? 'pointer' : 'default', boxSizing: 'border-box',
+              background: dug ? (gem ? (v === me ? 'rgba(251,191,36,0.28)' : 'rgba(244,63,94,0.28)') : (theme.dark ? '#221B33' : '#F3EFE7')) : 'linear-gradient(180deg, #B07A4A, #7C4A22)',
+              boxShadow: dug ? 'inset 0 2px 3px rgba(0,0,0,0.25)' : '0 3px 0 #4A2A10, inset 0 2px 0 rgba(255,255,255,0.22)',
+              border: i === state.lastIdx ? '2px solid #FDE047' : 'none', opacity: reveal ? 0.55 : 1,
+            }}>
+              {(dug && gem) || reveal ? <GemIcon size={20} color={reveal ? '#94A3B8' : v === me ? '#FBBF24' : '#F43F5E'} /> : dug ? <span style={{ fontSize: 13, fontWeight: 900, color: numColors[near(i)] || theme.muted }}>{near(i) || ''}</span> : null}
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ fontSize: 11.5, color: theme.muted, marginTop: 8, textAlign: 'center' }}>{finished ? 'All done' : 'Numbers show how many gems touch that square'}</div>
+      {live && finished && onRematch && <GameAgainButton onClick={onRematch} />}
+    </GameCardShell>
+  );
+}
+
+function FadeTacToeCard({ state, myId, live, peerName, onMove, onRematch, fresh }) {
+  const { theme } = useTheme();
+  const { myMark, finished, myTurn, outcome, status } = useTurnStatus(state, myId, live, peerName);
+  useGameResultSound(live, fresh, finished, `${state.id}:${state.n}`, outcome);
+  const qx = Array.isArray(state.qx) ? state.qx : [];
+  const qo = Array.isArray(state.qo) ? state.qo : [];
+  const res = finished && state.w !== 'd' ? tttWinner(state.b) : null;
+  const winLine = res && res.line ? res.line : [];
+  const fadingX = qx.length >= 3 ? qx[0] : null;
+  const fadingO = qo.length >= 3 ? qo[0] : null;
+  const tap = (i) => {
+    if (!myTurn || state.b[i]) return;
+    const b = state.b.slice();
+    const q = (myMark === 1 ? qx : qo).slice();
+    b[i] = myMark;
+    q.push(i);
+    if (q.length > 3) { const old = q.shift(); b[old] = 0; }
+    const w0 = tttWinner(b);
+    const w = w0 && w0.who !== 3 ? (w0.who === 1 ? 'x' : 'o') : ((state.n || 0) + 1 >= 60 ? 'd' : null);
+    hapticTap();
+    playUiSound('tap');
+    onMove({ ...state, b, [myMark === 1 ? 'qx' : 'qo']: q, t: myMark === 1 ? state.o : state.x, n: (state.n || 0) + 1, w });
+  };
+  const mark = (v, size, faded) => (v === 1
+    ? <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="#38BDF8" strokeWidth="3.4" strokeLinecap="round" aria-hidden="true" style={{ opacity: faded ? 0.3 : 1 }}><path d="M6 6l12 12M18 6L6 18" /></svg>
+    : v === 2 ? <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="#F472B6" strokeWidth="3.4" aria-hidden="true" style={{ opacity: faded ? 0.3 : 1 }}><circle cx="12" cy="12" r="7.5" /></svg> : null);
+  const cell = 56;
+  return (
+    <GameCardShell k="fade" width={3 * cell + 2 * 6 + 20} live={live} title="Fade tac toe" status={status} hot={myTurn}>
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(3, ${cell}px)`, gap: 6 }}>
+        {state.b.map((v, i) => {
+          const faded = (v === 1 && i === fadingX) || (v === 2 && i === fadingO);
+          const can = myTurn && !v;
+          return (
+            <div key={i} role={can ? 'button' : undefined} aria-label={can ? `Cell ${i + 1}` : undefined} data-silent="1" onClick={() => tap(i)} style={{
+              width: cell, height: cell, borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: can ? 'pointer' : 'default',
+              background: winLine.includes(i) ? 'linear-gradient(180deg, #FDE68A, #F59E0B)' : (theme.dark ? 'linear-gradient(180deg, #2A2342, #1C1730)' : 'linear-gradient(180deg, #FFFFFF, #EEF0F8)'),
+              boxShadow: '0 3px 0 rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.12)',
+            }}>{mark(v, 32, faded)}</div>
+          );
+        })}
+      </div>
+      <div style={{ fontSize: 11.5, color: theme.muted, marginTop: 9, textAlign: 'center' }}>Only three marks each. The faded one goes next</div>
+      {live && finished && onRematch && <GameAgainButton onClick={onRematch} />}
+    </GameCardShell>
+  );
+}
+
+const SCORE_DUELS = {
+  stack: { unit: (v) => `${v} ${v === 1 ? 'floor' : 'floors'}` },
+  dash: { unit: (v) => `${v} m` },
+  catch: { unit: (v) => `${v} caught` },
+  ctrap: { unit: (v) => `${v} points` },
+  odd: { unit: (v) => `Level ${v}` },
+  hilo: { unit: (v) => `${v} in a row` },
+  sky: { unit: (v) => `${v} pipes` },
+  snake: { unit: (v) => `${v} eaten` },
+  echo: { unit: (v) => `Level ${v}` },
+  bricks: { unit: (v) => `${v} points` },
+};
+function SoloGame({ k, seed, onDuelFinish }) {
+  const p = seed ? { seed, onDuelFinish } : {};
+  if (k === '2048') return <Game2048 />;
+  if (k === 'memory') return <MemoryGame />;
+  if (k === 'snake') return <SnakeGame {...p} />;
+  if (k === 'sky') return <SkyHopGame {...p} />;
+  if (k === 'bricks') return <BricksGame {...p} />;
+  if (k === 'word') return <WordGame />;
+  if (k === 'reflex') return <ReflexGame />;
+  if (k === 'quiz') return <QuizGame />;
+  if (k === 'echo') return <EchoGame {...p} />;
+  if (k === 'stack') return <TowerStackGame {...p} />;
+  if (k === 'dash') return <DashGame {...p} />;
+  if (k === 'catch') return <FruitCatchGame {...p} />;
+  if (k === 'ctrap') return <ColourTrapGame {...p} />;
+  if (k === 'odd') return <OddOneOutGame {...p} />;
+  if (k === 'hilo') return <HigherLowerGame {...p} />;
+  return null;
+}
+const BOARD_CARDS = { gomoku: GomokuCard, reversi: ReversiCard, nim: NimCard, mancala: MancalaCard, pairs: PairsCard, dice: DiceCard, bj: BlackjackCard, war: WarCard, sl: SnakesCard, ship: SeaBattleCard, num: NumberGuessCard, paint: PaintWarCard, bomb: BombCard, gem: GemHuntCard, fade: FadeTacToeCard };
 
 function MathSprint({ seed, onDuelFinish }) {
   const { theme } = useTheme();
@@ -21903,7 +23168,7 @@ function MathSprint({ seed, onDuelFinish }) {
         <div style={{ textAlign: 'center', padding: '24px 10px' }}>
           <div style={{ fontSize: 26, fontWeight: 900, color: theme.ink }}>{done.right} of 10</div>
           <div style={{ fontSize: 13.5, color: theme.muted, marginTop: 4 }}>in {(done.ms / 1000).toFixed(1)} seconds</div>
-          <button onClick={() => onDuelFinish && onDuelFinish(done.right * 1000000 + Math.max(0, 999999 - Math.min(done.ms, 999999)))} className="zchat-press" style={{ marginTop: 14, padding: '10px 22px', borderRadius: 14, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontFamily: FONT, cursor: 'pointer' }}>Send my result</button>
+          <button onClick={() => onDuelFinish && onDuelFinish(done.right * 1000000 + Math.max(0, 999999 - Math.min(done.ms, 999999)))} className="zchat-gbtn" style={{ marginTop: 14, padding: '10px 22px', borderRadius: 14, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontFamily: FONT, cursor: 'pointer' , ...gameBtnStyle('gold') }}>Send my result</button>
         </div>
       ) : (
         <div style={{ width: '100%', maxWidth: 360 }}>
@@ -21947,7 +23212,7 @@ function TapSprint({ onDuelFinish }) {
         <div style={{ fontSize: 64, fontWeight: 900, lineHeight: 1 }}>{count}</div>
         <div style={{ fontSize: 15, opacity: 0.9 }}>{phase === 'idle' ? 'Tap to start the five seconds' : phase === 'go' ? 'Tap tap tap' : 'Time is up'}</div>
       </div>
-      {phase === 'done' && <button onClick={() => onDuelFinish && onDuelFinish(count)} className="zchat-press" style={{ padding: '11px 24px', borderRadius: 14, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontFamily: FONT, cursor: 'pointer' }}>Send {count} taps</button>}
+      {phase === 'done' && <button onClick={() => onDuelFinish && onDuelFinish(count)} className="zchat-gbtn" style={{ padding: '11px 24px', borderRadius: 14, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontFamily: FONT, cursor: 'pointer' , ...gameBtnStyle('gold') }}>Send {count} taps</button>}
     </div>
   );
 }
@@ -21956,16 +23221,16 @@ function ScoreCard({ state, isMe, senderName, ink, onPlay }) {
   const { theme } = useTheme();
   const title = gameTitle(state);
   return (
-    <div onClick={(e) => e.stopPropagation()} style={{ width: 196, boxSizing: 'border-box', padding: '12px 14px 12px', borderRadius: 18, background: theme.dark ? 'rgba(255,255,255,0.06)' : 'rgba(90,60,180,0.06)', border: `1px solid ${theme.border}` }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: ink || theme.ink }}>
-        <TrophyIcon size={15} color="#F59E0B" />
-        <span style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase' }}>High score</span>
+    <GameCardShell k={state.k} width={212} live title={title} status={isMe ? 'Your high score' : `${senderName || 'Their'} high score`}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ width: 46, height: 46, borderRadius: 14, background: 'linear-gradient(180deg, #FFE477, #F59E0B)', boxShadow: '0 3px 0 #B45309, inset 0 2px 0 rgba(255,255,255,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><TrophyIcon size={24} color="#7C2D12" /></div>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 28, fontWeight: 900, color: theme.ink, letterSpacing: '-0.02em', lineHeight: 1.05 }}>{formatGameScore(state.k, state.s)}</div>
+          <div style={{ fontSize: 12, color: theme.muted, marginTop: 2 }}>{isMe ? 'Can they beat it?' : 'Think you can beat it?'}</div>
+        </div>
       </div>
-      <div style={{ fontSize: 30, fontWeight: 900, color: ink || theme.ink, letterSpacing: '-0.02em', marginTop: 6, lineHeight: 1.05 }}>{formatGameScore(state.k, state.s)}</div>
-      <div style={{ fontSize: 12.5, color: theme.muted, marginTop: 3 }}>{isMe ? 'Your best' : `${senderName || 'Their'} best`} in {title}</div>
-      <button onClick={onPlay} className="zchat-press" style={{ marginTop: 10, width: '100%', height: 34, borderRadius: 10, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontSize: 12.5, fontFamily: FONT, cursor: 'pointer' }}>{isMe ? 'Play again' : 'Try to beat it'}</button>
-      <div style={{ height: 8 }} />
-    </div>
+      <GameAgainButton onClick={onPlay} label={isMe ? 'Play again' : 'Try to beat it'} color="green" />
+    </GameCardShell>
   );
 }
 
@@ -22049,7 +23314,7 @@ function ScreenEffect({ kind, onDone }) {
 function MessageInfoSheet({ m, isMine, peerName, isGroup, onClose }) {
   const { theme } = useTheme();
   const when = (v) => (v ? new Date(v).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit', day: 'numeric', month: 'short' }) : '');
-  const kind = m.type === 'text' ? (parseGameMessage(m.content) ? 'Game' : parseLocationMessage(m.content) ? 'Location' : 'Text') : m.type === 'image' ? 'Photo' : m.type === 'video' ? 'Video' : m.type === 'voice' || m.type === 'audio' ? 'Voice message' : m.type === 'sticker' ? 'Sticker' : 'Message';
+  const kind = m.type === 'text' ? (parseGameMessage(m.content) ? 'Game' : parsePoll(m.content) ? 'Poll' : parseEventMsg(m.content) ? 'Event' : parseLocationMessage(m.content) ? 'Location' : 'Text') : m.type === 'image' ? 'Photo' : m.type === 'video' ? 'Video' : m.type === 'voice' || m.type === 'audio' ? 'Voice message' : m.type === 'sticker' ? 'Sticker' : 'Message';
   const status = m.queued ? 'Waiting to send' : (m.read && !isGroup) ? `Read by ${peerName || 'them'}` : m.delivered ? 'Delivered' : 'Sent';
   const val = (t) => <span style={{ fontSize: 13.5, color: theme.muted, whiteSpace: 'nowrap' }}>{t}</span>;
   const actions = [
@@ -22080,6 +23345,37 @@ function toggleFullscreen() {
     document.documentElement.requestFullscreen().catch(() => {});
   } catch {}
 }
+const sentGameMoveKeys = new Set();
+function stableUuid(str) {
+  const r = seededRandom(String(str));
+  let hex = '';
+  for (let i = 0; i < 32; i++) hex += Math.floor(r() * 16).toString(16);
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-${'89ab'[Math.floor(r() * 4)]}${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+}
+const GAME_BTN_COLORS = {
+  gold: ['#FFE477', '#FFB700', '#C27400', '#5A3000'],
+  green: ['#7BEBA5', '#22C55E', '#15803D', '#FFFFFF'],
+  blue: ['#8CD5FF', '#3B82F6', '#1E40AF', '#FFFFFF'],
+  red: ['#FFA3AE', '#EF4444', '#A31B1B', '#FFFFFF'],
+  white: ['#FFFFFF', '#E8EAF0', '#A3A9B8', '#1F2433'],
+};
+function gameBtnStyle(color = 'gold') {
+  const c = GAME_BTN_COLORS[color] || GAME_BTN_COLORS.gold;
+  return {
+    background: `linear-gradient(180deg, ${c[0]} 0%, ${c[1]} 100%)`, color: c[3], border: 'none', borderRadius: 14,
+    boxShadow: `0 4px 0 ${c[2]}, 0 8px 16px rgba(0,0,0,0.22), inset 0 2px 0 rgba(255,255,255,0.5)`, '--gb-edge': c[2],
+    fontWeight: 900, letterSpacing: '0.01em', textShadow: c[3] === '#FFFFFF' ? '0 1px 1px rgba(0,0,0,0.28)' : '0 1px 0 rgba(255,255,255,0.5)',
+    cursor: 'pointer', fontFamily: FONT, marginBottom: 4,
+  };
+}
+function GameButton({ label, onClick, color = 'gold', full, small, disabled, style, ariaLabel, icon }) {
+  return (
+    <button type="button" aria-label={ariaLabel} disabled={disabled} onClick={(e) => { e.stopPropagation(); if (!disabled && onClick) onClick(e); }} className="zchat-gbtn"
+      style={{ ...gameBtnStyle(color), height: small ? 36 : 44, padding: small ? '0 14px' : '0 20px', width: full ? '100%' : undefined, fontSize: small ? 13 : 15, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, ...style }}>
+      {icon}{label}
+    </button>
+  );
+}
 function runFixedLoop(tick, draw, hz = 60) {
   const STEP = 1000 / hz;
   let last = performance.now();
@@ -22096,6 +23392,624 @@ function runFixedLoop(tick, draw, hz = 60) {
   raf = requestAnimationFrame(frame);
   return () => { alive = false; cancelAnimationFrame(raf); };
 }
+function parsePoll(content) {
+  if (typeof content !== 'string' || content.indexOf('zpoll:') !== 0) return null;
+  try { const p = JSON.parse(content.slice(6)); return p && typeof p.q === 'string' && Array.isArray(p.o) && p.o.length >= 2 ? p : null; } catch { return null; }
+}
+function parseEventMsg(content) {
+  if (typeof content !== 'string' || content.indexOf('zevent:') !== 0) return null;
+  try { const e = JSON.parse(content.slice(7)); return e && typeof e.t === 'string' && typeof e.d === 'string' ? e : null; } catch { return null; }
+}
+function specialPreview(content) {
+  if (typeof content !== 'string') return null;
+  const p = parsePoll(content);
+  if (p) return `Poll: ${p.q}`;
+  const e = parseEventMsg(content);
+  if (e) return `Event: ${e.t}`;
+  const g = parseGameMessage(content);
+  if (g) return g.g === 'score' ? `High score in ${gameTitle(g)}` : gameTitle(g);
+  if (parseLocationMessage(content)) return 'Location';
+  return null;
+}
+function PollIcon({ size = 16, color = 'currentColor', style }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style} aria-hidden="true">
+      <path d="M4 20h16M7 16v-5M12 16V6M17 16v-8" />
+    </svg>
+  );
+}
+function CalendarIcon({ size = 16, color = 'currentColor', style }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style} aria-hidden="true">
+      <rect x="3" y="4" width="18" height="17" rx="3" /><path d="M3 9h18M8 2v4M16 2v4" />
+    </svg>
+  );
+}
+function MapPinIcon({ size = 16, color = 'currentColor', style }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style} aria-hidden="true">
+      <path d="M20 10c0 6 -8 12 -8 12s-8 -6 -8 -12a8 8 0 0 1 16 0z" /><circle cx="12" cy="10" r="3" />
+    </svg>
+  );
+}
+function FeatureCardShell({ width = 252, colors, icon, label, title, children }) {
+  const { theme } = useTheme();
+  return (
+    <div onClick={(e) => e.stopPropagation()} style={{ width, maxWidth: '100%', boxSizing: 'border-box', borderRadius: 22, overflow: 'hidden', background: theme.dark ? '#171129' : '#FFFFFF', border: `1px solid ${theme.dark ? 'rgba(255,255,255,0.09)' : 'rgba(60,30,130,0.12)'}`, boxShadow: theme.dark ? '0 10px 26px rgba(0,0,0,0.38)' : '0 10px 24px rgba(60,30,130,0.14)' }}>
+      <div style={{ position: 'relative', padding: '11px 12px 12px', background: `linear-gradient(135deg, ${colors[0]}, ${colors[1]})` }}>
+        <div aria-hidden="true" style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(255,255,255,0.24), rgba(255,255,255,0.04) 55%, rgba(0,0,0,0.1))', pointerEvents: 'none' }} />
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 7, color: 'rgba(255,255,255,0.92)', fontSize: 11, fontWeight: 900, letterSpacing: '0.08em', textTransform: 'uppercase' }}>{icon}{label}</div>
+        <div style={{ position: 'relative', marginTop: 5, fontSize: 16.5, fontWeight: 900, color: 'white', lineHeight: 1.25, textShadow: '0 1px 2px rgba(0,0,0,0.3)', wordBreak: 'break-word' }}>{title}</div>
+      </div>
+      <div style={{ padding: '10px 10px 12px' }}>{children}</div>
+    </div>
+  );
+}
+function voteIndexOf(votes, userId) {
+  const v = (votes || []).find((r) => r.user_id === userId && typeof r.emoji === 'string' && r.emoji.indexOf('zv:') === 0);
+  return v ? parseInt(v.emoji.slice(3), 10) : -1;
+}
+function PollCard({ poll, votes, myId, onVote, onShowVotes }) {
+  const { theme } = useTheme();
+  const list = (votes || []).filter((r) => typeof r.emoji === 'string' && r.emoji.indexOf('zv:') === 0);
+  const counts = poll.o.map((_, i) => list.filter((r) => r.emoji === `zv:${i}`).length);
+  const total = counts.reduce((a, b) => a + b, 0);
+  const mine = voteIndexOf(list, myId);
+  const top = Math.max(0, ...counts);
+  return (
+    <FeatureCardShell colors={['#7C5CFC', '#2563EB']} icon={<PollIcon size={14} color="white" />} label="Poll" title={poll.q}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+        {poll.o.map((opt, i) => {
+          const pct = total ? Math.round((counts[i] / total) * 100) : 0;
+          const picked = mine === i;
+          const leading = total > 0 && counts[i] === top;
+          return (
+            <div key={i} role="button" aria-label={`Vote ${opt}`} onClick={() => onVote && onVote(i)} className="zchat-press" style={{ position: 'relative', overflow: 'hidden', borderRadius: 12, padding: '10px 12px', cursor: 'pointer', background: theme.dark ? 'rgba(255,255,255,0.06)' : '#F4F2FB', border: `1.5px solid ${picked ? theme.coral : 'transparent'}` }}>
+              <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${pct}%`, background: picked ? `${theme.coral}55` : (leading ? 'rgba(34,197,94,0.22)' : 'rgba(127,127,127,0.18)'), transition: 'width 0.35s ease' }} />
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 9 }}>
+                <span style={{ width: 18, height: 18, borderRadius: '50%', flexShrink: 0, border: `2px solid ${picked ? theme.coral : theme.muted}`, background: picked ? theme.coral : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{picked && <Check size={11} color="white" strokeWidth={3.4} />}</span>
+                <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 700, color: theme.ink, wordBreak: 'break-word' }}>{opt}</span>
+                {total > 0 && <span style={{ fontSize: 12.5, fontWeight: 900, color: picked ? theme.coral : theme.muted }}>{pct}%</span>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 9, fontSize: 11.5, color: theme.muted, fontWeight: 700 }}>
+        {total > 0 && onShowVotes
+          ? <span role="button" aria-label="View votes" onClick={(e) => { e.stopPropagation(); onShowVotes(); }} style={{ whiteSpace: 'nowrap', color: theme.coral, cursor: 'pointer' }}>View {total} {total === 1 ? 'vote' : 'votes'}</span>
+          : <span style={{ whiteSpace: 'nowrap' }}>{total} {total === 1 ? 'vote' : 'votes'}</span>}
+        <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{mine >= 0 ? 'Tap again to undo' : 'Tap to vote'}</span>
+      </div>
+    </FeatureCardShell>
+  );
+}
+function eventDate(ev) { const d = new Date(ev.d); return Number.isNaN(d.getTime()) ? null : d; }
+function eventIcs(ev) {
+  const d = eventDate(ev) || new Date();
+  const end = new Date(d.getTime() + 2 * 3600 * 1000);
+  const f = (x) => x.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+  const esc = (t) => String(t || '').replace(/[,;\\]/g, (m) => `\\${m}`).replace(/\n/g, '\\n');
+  return ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:ZChat', 'BEGIN:VEVENT', `UID:${f(d)}${Math.random().toString(36).slice(2)}@zchat`, `DTSTAMP:${f(new Date())}`, `DTSTART:${f(d)}`, `DTEND:${f(end)}`, `SUMMARY:${esc(ev.t)}`, ev.p ? `LOCATION:${esc(ev.p)}` : '', ev.n ? `DESCRIPTION:${esc(ev.n)}` : '', 'END:VEVENT', 'END:VCALENDAR'].filter(Boolean).join('\r\n');
+}
+const RSVP_OPTIONS = [['Going', 'green'], ['Maybe', 'gold'], ['Can’t go', 'white']];
+function EventCard({ ev, votes, myId, onVote, onShowVotes }) {
+  const { theme } = useTheme();
+  const d = eventDate(ev);
+  const list = (votes || []).filter((r) => typeof r.emoji === 'string' && r.emoji.indexOf('zv:') === 0);
+  const counts = RSVP_OPTIONS.map((_, i) => list.filter((r) => r.emoji === `zv:${i}`).length);
+  const mine = voteIndexOf(list, myId);
+  const past = d && d.getTime() < Date.now() - 3 * 3600 * 1000;
+  const untilMs = d ? d.getTime() - Date.now() : 0;
+  const countdown = !d || past ? '' : untilMs <= 0 ? 'happening now' : untilMs < 3600000 ? `in ${Math.max(1, Math.round(untilMs / 60000))} min` : untilMs < 86400000 ? `in ${Math.round(untilMs / 3600000)} ${Math.round(untilMs / 3600000) === 1 ? 'hour' : 'hours'}` : `in ${Math.round(untilMs / 86400000)} ${Math.round(untilMs / 86400000) === 1 ? 'day' : 'days'}`;
+  const addToCalendar = (e) => {
+    e.stopPropagation();
+    try {
+      const blob = new Blob([eventIcs(ev)], { type: 'text/calendar' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `${(ev.t || 'event').replace(/[^a-z0-9 ]/gi, '').trim() || 'event'}.ics`;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+    } catch {}
+  };
+  return (
+    <FeatureCardShell colors={['#F97316', '#DB2777']} icon={<CalendarIcon size={14} color="white" />} label={past ? 'Event ended' : countdown ? `Event ${countdown}` : 'Event'} title={ev.t}>
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+        <div style={{ width: 54, flexShrink: 0, borderRadius: 14, overflow: 'hidden', textAlign: 'center', boxShadow: '0 3px 0 rgba(0,0,0,0.2)', border: `1px solid ${theme.border}` }}>
+          <div style={{ background: '#EF4444', color: 'white', fontSize: 10.5, fontWeight: 900, padding: '3px 0', letterSpacing: '0.06em' }}>{d ? d.toLocaleString([], { month: 'short' }).toUpperCase() : ''}</div>
+          <div style={{ background: theme.dark ? '#221B33' : '#FFFFFF', color: theme.ink, fontSize: 22, fontWeight: 900, padding: '3px 0 5px' }}>{d ? d.getDate() : '?'}</div>
+        </div>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ fontSize: 13.5, fontWeight: 800, color: theme.ink }}>{d ? (() => { const a = new Date(); a.setHours(0, 0, 0, 0); const b = new Date(d); b.setHours(0, 0, 0, 0); const diff = Math.round((b - a) / 86400000); return diff === 0 ? 'Today' : diff === 1 ? 'Tomorrow' : d.toLocaleString([], { weekday: 'long' }); })() : ''}</div>
+          <div style={{ fontSize: 13, color: theme.muted, marginTop: 1 }}>{d ? d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : ''}</div>
+          {ev.p && <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12.5, color: theme.muted, marginTop: 2, minWidth: 0 }}><MapPinIcon size={13} /><span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ev.p}</span></div>}
+        </div>
+      </div>
+      {ev.n && <div style={{ fontSize: 13, color: theme.ink, marginTop: 9, lineHeight: 1.4, wordBreak: 'break-word' }}>{ev.n}</div>}
+      <div style={{ display: 'flex', gap: 6, marginTop: 11 }}>
+        {RSVP_OPTIONS.map(([l, col], i) => (
+          <button key={l} type="button" aria-label={`Answer ${l}`} onClick={(e) => { e.stopPropagation(); if (onVote) onVote(i); }} className="zchat-gbtn" style={{ ...gameBtnStyle(mine === i ? col : 'white'), flex: 1, height: 40, padding: '0 4px', fontSize: 12, borderRadius: 12, flexDirection: 'column', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1.1 }}>
+            <span>{l}</span><span style={{ fontSize: 10.5, opacity: 0.85 }}>{counts[i]}</span>
+          </button>
+        ))}
+      </div>
+      <div style={{ marginTop: 9, display: 'flex', alignItems: 'center', justifyContent: onShowVotes && list.length ? 'space-between' : 'center', gap: 10, fontSize: 12.5, fontWeight: 800, color: theme.coral }}>
+        {onShowVotes && list.length > 0 && <span role="button" aria-label="See answers" onClick={(e) => { e.stopPropagation(); onShowVotes(); }} style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', whiteSpace: 'nowrap' }}><Users size={14} />See answers</span>}
+        <span role="button" aria-label="Add to calendar" onClick={addToCalendar} style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', whiteSpace: 'nowrap' }}><CalendarIcon size={14} />Add to calendar</span>
+      </div>
+    </FeatureCardShell>
+  );
+}
+
+function PollComposerPage({ onClose, onSend }) {
+  useBackClose(true, onClose);
+  const { theme } = useTheme();
+  const [q, setQ] = useState('');
+  const [opts, setOpts] = useState(['', '']);
+  const [busy, setBusy] = useState(false);
+  const clean = opts.map((o) => o.trim()).filter(Boolean);
+  const ok = q.trim().length > 0 && clean.length >= 2 && new Set(clean.map((o) => o.toLowerCase())).size === clean.length;
+  const field = { ...inputStyle(theme), fontSize: 15.5 };
+  const submit = async () => {
+    if (!ok || busy) return;
+    setBusy(true);
+    await onSend({ q: q.trim().slice(0, 200), o: clean.map((o) => o.slice(0, 80)).slice(0, 8) });
+    setBusy(false);
+  };
+  return (
+    <FullPage title="New poll" subtitle="Everyone in the chat can vote" onBack={onClose} zIndex={70}
+      footer={<GameButton label={busy ? 'Sending' : 'Send poll'} color="green" full disabled={!ok || busy} onClick={submit} />}>
+      <IgHeading>Question</IgHeading>
+      <textarea value={q} onChange={(e) => setQ(e.target.value)} placeholder="Ask something" aria-label="Poll question" maxLength={200} rows={2} style={{ ...field, resize: 'none', lineHeight: 1.4 }} />
+      <IgHeading>Answers</IgHeading>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {opts.map((o, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <input value={o} onChange={(e) => setOpts((p) => p.map((x, k) => (k === i ? e.target.value : x)))} placeholder={`Answer ${i + 1}`} aria-label={`Answer ${i + 1}`} maxLength={80} style={{ ...field, flex: 1 }} />
+            {opts.length > 2 && <div role="button" aria-label={`Remove answer ${i + 1}`} onClick={() => setOpts((p) => p.filter((_, k) => k !== i))} style={{ width: 36, height: 36, borderRadius: '50%', background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.muted, cursor: 'pointer', flexShrink: 0 }}><X size={16} /></div>}
+          </div>
+        ))}
+      </div>
+      {opts.length < 8 && (
+        <div role="button" aria-label="Add answer" onClick={() => setOpts((p) => [...p, ''])} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 2px', color: theme.coral, fontWeight: 800, fontSize: 15, cursor: 'pointer' }}><Plus size={18} />Add an answer</div>
+      )}
+      <div style={{ fontSize: 12.5, color: theme.muted, lineHeight: 1.5, padding: '4px 2px 12px' }}>Each person picks one answer and can change it any time. Results update live for everyone.</div>
+    </FullPage>
+  );
+}
+
+function EventComposerPage({ onClose, onSend }) {
+  useBackClose(true, onClose);
+  const { theme } = useTheme();
+  const pad = (n) => String(n).padStart(2, '0');
+  const now = new Date(Date.now() + 3600 * 1000);
+  const [title, setTitle] = useState('');
+  const [date, setDate] = useState(`${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`);
+  const [time, setTime] = useState(`${pad(now.getHours())}:00`);
+  const [place, setPlace] = useState('');
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const when = new Date(`${date}T${time || '00:00'}`);
+  const ok = title.trim().length > 0 && !Number.isNaN(when.getTime());
+  const field = { ...inputStyle(theme), fontSize: 15.5 };
+  const submit = async () => {
+    if (!ok || busy) return;
+    setBusy(true);
+    await onSend({ t: title.trim().slice(0, 120), d: when.toISOString(), p: place.trim().slice(0, 120) || undefined, n: note.trim().slice(0, 300) || undefined });
+    setBusy(false);
+  };
+  return (
+    <FullPage title="New event" subtitle="Plan something together" onBack={onClose} zIndex={70}
+      footer={<GameButton label={busy ? 'Sending' : 'Send event'} color="green" full disabled={!ok || busy} onClick={submit} />}>
+      <IgHeading>What</IgHeading>
+      <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Movie night, football, study group" aria-label="Event title" maxLength={120} style={field} />
+      <IgHeading>When</IgHeading>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} aria-label="Event date" style={{ ...field, flex: 1.3 }} />
+        <input type="time" value={time} onChange={(e) => setTime(e.target.value)} aria-label="Event time" style={{ ...field, flex: 1 }} />
+      </div>
+      <IgHeading>Where</IgHeading>
+      <input value={place} onChange={(e) => setPlace(e.target.value)} placeholder="Optional" aria-label="Event place" maxLength={120} style={field} />
+      <IgHeading>Note</IgHeading>
+      <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Optional details" aria-label="Event note" maxLength={300} rows={3} style={{ ...field, resize: 'none', lineHeight: 1.4 }} />
+      <div style={{ fontSize: 12.5, color: theme.muted, lineHeight: 1.5, padding: '10px 2px 12px' }}>Friends answer Going, Maybe or Can{'’'}t go and can add it to their calendar.</div>
+    </FullPage>
+  );
+}
+
+function highlightMatch(text, term, color) {
+  const t = String(text || '');
+  const i = t.toLowerCase().indexOf(term.toLowerCase());
+  if (!term || i < 0) return t.slice(0, 140);
+  const start = Math.max(0, i - 40);
+  const pre = (start > 0 ? '…' : '') + t.slice(start, i);
+  return <>{pre}<b style={{ color, fontWeight: 800 }}>{t.slice(i, i + term.length)}</b>{t.slice(i + term.length, i + term.length + 90)}</>;
+}
+function SearchMessagesPage({ myId, groups, hiddenIds, initialQuery, onClose, onOpen }) {
+  useBackClose(true, onClose);
+  const { theme } = useTheme();
+  const [q, setQ] = useState(initialQuery || '');
+  const [results, setResults] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [people, setPeople] = useState({});
+  const reqRef = useRef(0);
+  useEffect(() => {
+    const term = q.trim();
+    if (term.length < 2) { setResults(null); setLoading(false); return undefined; }
+    setLoading(true);
+    const my = ++reqRef.current;
+    const t = setTimeout(async () => {
+      try {
+        const ids = (groups || []).map((g) => g.id).filter(Boolean);
+        const safe = term.replace(/[%,()]/g, ' ');
+        let qb = supabase.from('messages').select('*').eq('type', 'text').eq('deleted', false).ilike('content', `%${safe}%`).order('created_at', { ascending: false }).limit(80);
+        qb = ids.length ? qb.or(`sender_id.eq.${myId},receiver_id.eq.${myId},group_id.in.(${ids.join(',')})`) : qb.or(`sender_id.eq.${myId},receiver_id.eq.${myId}`);
+        const { data } = await qb;
+        if (my !== reqRef.current) return;
+        const hidden = hiddenIds || new Set();
+        const rows = (data || []).filter((m) => !hidden.has(m.id) && !parseGameMessage(m.content) && !isSpecialContent(m.content) && !parseProfileLink(m.content));
+        const otherIds = [...new Set(rows.filter((m) => !m.group_id).map((m) => (m.sender_id === myId ? m.receiver_id : m.sender_id)).filter(Boolean))];
+        const missing = otherIds.filter((id) => !people[id]);
+        let map = people;
+        if (missing.length) {
+          const { data: ps } = await supabase.from('profiles').select('*').in('id', missing);
+          map = { ...people };
+          (ps || []).forEach((p) => { map[p.id] = p; });
+          setPeople(map);
+        }
+        if (my !== reqRef.current) return;
+        setResults(rows);
+      } catch { if (my === reqRef.current) setResults([]); }
+      if (my === reqRef.current) setLoading(false);
+    }, 320);
+    return () => clearTimeout(t);
+  }, [q]);
+  const term = q.trim();
+  return (
+    <FullPage title="Search messages" subtitle="Every chat and group" onBack={onClose} zIndex={66} pad={false}>
+      <div style={{ padding: '6px 16px 8px', position: 'sticky', top: 0, zIndex: 2, background: igPalette(theme).bg }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, height: 42, padding: '0 12px', borderRadius: 12, background: theme.rowBg, color: theme.muted }}>
+          <Search size={17} />
+          <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search your messages" aria-label="Search your messages" autoCapitalize="none" style={{ flex: 1, minWidth: 0, border: 0, outline: 0, background: 'transparent', color: theme.ink, fontFamily: FONT, fontSize: 15.5 }} />
+          {loading ? <Spinner size={14} color={theme.muted} /> : q ? <X size={16} style={{ cursor: 'pointer' }} onClick={() => setQ('')} /> : null}
+        </label>
+      </div>
+      <div style={{ padding: '0 8px calc(24px + env(safe-area-inset-bottom))' }}>
+        {term.length < 2 && <EmptyState icon={<Search />} title="Find any message" text="Type at least two letters to search every chat and group you are in." />}
+        {term.length >= 2 && results && results.length === 0 && !loading && <EmptyState icon={<Search />} title="No messages found" text="Try a different word." />}
+        {term.length >= 2 && results && results.map((m) => {
+          const group = m.group_id ? (groups || []).find((g) => g.id === m.group_id) : null;
+          const other = !m.group_id ? people[m.sender_id === myId ? m.receiver_id : m.sender_id] : null;
+          const name = group ? group.name : other ? other.name : 'Chat';
+          const who = m.sender_id === myId ? 'You: ' : '';
+          return (
+            <div key={m.id} role="button" aria-label={`Open message in ${name}`} onClick={() => onOpen({ group, profile: other, messageId: m.id })} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 8px', borderRadius: 14, cursor: 'pointer' }}>
+              {group ? <GroupAvatar avatar={group.avatar} name={group.name} size={46} /> : <Avatar emoji={other ? other.avatar : null} name={name} frame={other ? other.avatar_frame : null} size={46} />}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 700, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</span>
+                  <span style={{ fontSize: 11.5, color: theme.muted, flexShrink: 0 }}>{m.created_at ? new Date(m.created_at).toLocaleDateString([], { day: 'numeric', month: 'short' }) : ''}</span>
+                </div>
+                <div style={{ fontSize: 13.5, color: theme.muted, marginTop: 2, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', wordBreak: 'break-word' }}>{who}{highlightMatch(m.content, term, theme.coral)}</div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </FullPage>
+  );
+}
+
+const DEFAULT_QUICK_REPLIES = [
+  { k: 'hi', t: 'Hey! How are you doing?' },
+  { k: 'omw', t: 'On my way, see you soon' },
+  { k: 'thanks', t: 'Thank you so much!' },
+  { k: 'later', t: 'Busy right now, I will text you back later' },
+];
+function readQuickReplies() {
+  try { const a = JSON.parse(localStorage.getItem('zchat-quick-replies') || 'null'); if (Array.isArray(a)) return a.filter((x) => x && x.k && x.t); } catch {}
+  return DEFAULT_QUICK_REPLIES;
+}
+function writeQuickReplies(a) { try { localStorage.setItem('zchat-quick-replies', JSON.stringify(a)); } catch {} try { window.dispatchEvent(new Event('zchat-quick-replies')); } catch {} }
+function QuickReplyBar({ draft, onPick }) {
+  const { theme } = useTheme();
+  const [list, setList] = useState(readQuickReplies);
+  useEffect(() => { const on = () => setList(readQuickReplies()); window.addEventListener('zchat-quick-replies', on); return () => window.removeEventListener('zchat-quick-replies', on); }, []);
+  if (typeof draft !== 'string' || draft[0] !== '/' || draft.indexOf(' ') >= 0) return null;
+  const typed = draft.slice(1).toLowerCase();
+  const hits = list.filter((r) => r.k.toLowerCase().indexOf(typed) === 0).slice(0, 5);
+  if (!hits.length) return null;
+  return (
+    <div style={{ borderTop: `1px solid ${theme.border}`, background: theme.glass, flexShrink: 0, padding: '4px 0' }}>
+      {hits.map((r) => (
+        <div key={r.k} role="button" aria-label={`Quick reply ${r.k}`} onPointerDown={(e) => e.preventDefault()} onClick={() => onPick(r.t)} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 16px', cursor: 'pointer' }}>
+          <span style={{ fontSize: 12.5, fontWeight: 900, color: theme.coral, padding: '3px 8px', borderRadius: 8, background: `${theme.coral}1F`, flexShrink: 0 }}>/{r.k}</span>
+          <span style={{ fontSize: 14, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.t}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+function QuickRepliesPage({ onClose }) {
+  useBackClose(true, onClose);
+  const { theme } = useTheme();
+  const [list, setList] = useState(readQuickReplies);
+  const [edit, setEdit] = useState(null);
+  useBackClose(!!edit, () => setEdit(null));
+  const save = (next) => { setList(next); writeQuickReplies(next); };
+  const field = { ...inputStyle(theme), fontSize: 15.5 };
+  const keyOk = edit && /^[a-z0-9]{1,16}$/.test(edit.k) && !list.some((r, i) => r.k === edit.k && i !== edit.i);
+  const ok = edit && keyOk && edit.t.trim().length > 0;
+  return (
+    <>
+      <FullPage title="Quick replies" subtitle="Type a slash in any chat" onBack={onClose} zIndex={72}
+        footer={<GameButton label="Add a quick reply" color="green" full onClick={() => setEdit({ i: -1, k: '', t: '' })} />}>
+        <div style={{ fontSize: 13, color: theme.muted, lineHeight: 1.5, padding: '10px 2px 6px' }}>Save messages you send a lot. In a chat, type a slash and the shortcut, like /thanks, then tap the suggestion.</div>
+        {list.length === 0 && <EmptyState icon={<MessageSquare />} title="No quick replies yet" text="Add one with the button below." />}
+        {list.map((r, i) => (
+          <div key={r.k} role="button" aria-label={`Edit quick reply ${r.k}`} onClick={() => setEdit({ i, k: r.k, t: r.t })} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 2px', borderBottom: `1px solid ${theme.border}`, cursor: 'pointer' }}>
+            <span style={{ fontSize: 13, fontWeight: 900, color: theme.coral, padding: '4px 9px', borderRadius: 9, background: `${theme.coral}1F`, flexShrink: 0 }}>/{r.k}</span>
+            <span style={{ flex: 1, minWidth: 0, fontSize: 14.5, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.t}</span>
+            <ChevronRight size={17} color={theme.muted} />
+          </div>
+        ))}
+      </FullPage>
+      {edit && (
+        <FullPage title={edit.i >= 0 ? 'Edit quick reply' : 'New quick reply'} onBack={() => setEdit(null)} zIndex={73}
+          footer={(
+            <div style={{ display: 'flex', gap: 10 }}>
+              {edit.i >= 0 && <GameButton label="Delete" color="red" onClick={() => { save(list.filter((_, k) => k !== edit.i)); setEdit(null); }} style={{ flex: 1 }} />}
+              <GameButton label="Save" color="green" disabled={!ok} onClick={() => { const item = { k: edit.k, t: edit.t.trim().slice(0, 500) }; save(edit.i >= 0 ? list.map((r, k) => (k === edit.i ? item : r)) : [...list, item]); setEdit(null); }} style={{ flex: 2 }} />
+            </div>
+          )}>
+          <IgHeading>Shortcut</IgHeading>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 20, fontWeight: 900, color: theme.coral }}>/</span>
+            <input value={edit.k} onChange={(e) => setEdit({ ...edit, k: e.target.value.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 16) })} placeholder="thanks" aria-label="Shortcut" autoCapitalize="none" style={{ ...field, flex: 1 }} />
+          </div>
+          {edit.k && !keyOk && <div style={{ fontSize: 12.5, color: theme.danger, marginTop: 6 }}>That shortcut is already used.</div>}
+          <IgHeading>Message</IgHeading>
+          <textarea value={edit.t} onChange={(e) => setEdit({ ...edit, t: e.target.value })} placeholder="The full message" aria-label="Quick reply message" rows={4} maxLength={500} style={{ ...field, resize: 'none', lineHeight: 1.4 }} />
+        </FullPage>
+      )}
+    </>
+  );
+}
+
+function ChatInsightsPage({ messages, myId, title, onClose }) {
+  useBackClose(true, onClose);
+  const { theme } = useTheme();
+  const data = useMemo(() => {
+    const list = (messages || []).filter((m) => !m.deleted && m.type !== 'system' && !String(m.id).startsWith('temp-'));
+    const mine = list.filter((m) => m.sender_id === myId).length;
+    const kinds = { image: 0, video: 0, audio: 0, sticker: 0, game: 0, link: 0 };
+    const emo = {};
+    const hours = Array(24).fill(0);
+    const days = Array(7).fill(0);
+    let words = 0;
+    list.forEach((m) => {
+      if (m.type === 'text') {
+        if (parseGameMessage(m.content)) kinds.game += 1;
+        else if (!isSpecialContent(m.content)) {
+          const t = m.content || '';
+          if (/https?:\/\//i.test(t)) kinds.link += 1;
+          words += t.trim() ? t.trim().split(/\s+/).length : 0;
+          const found = t.match(/\p{Extended_Pictographic}/gu) || [];
+          found.forEach((e) => { emo[e] = (emo[e] || 0) + 1; });
+        }
+      } else if (kinds[m.type] != null) kinds[m.type] += 1;
+      if (m.created_at) { const d = new Date(m.created_at); hours[d.getHours()] += 1; days[d.getDay()] += 1; }
+    });
+    const first = list.length ? new Date(list[0].created_at) : null;
+    const topEmoji = Object.entries(emo).sort((a, b) => b[1] - a[1]).slice(0, 6);
+    const busyHour = hours.indexOf(Math.max(...hours));
+    const busyDay = days.indexOf(Math.max(...days));
+    return { total: list.length, mine, theirs: list.length - mine, kinds, topEmoji, hours, days, first, busyHour, busyDay, words };
+  }, [messages, myId]);
+  const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const hourLabel = (h) => new Date(2020, 0, 1, h).toLocaleTimeString([], { hour: 'numeric' });
+  const tile = (label, value, colors) => (
+    <div style={{ borderRadius: 18, padding: '13px 14px', background: `linear-gradient(150deg, ${colors[0]}, ${colors[1]})`, color: 'white', boxShadow: '0 8px 18px rgba(0,0,0,0.18)' }}>
+      <div style={{ fontSize: 11.5, fontWeight: 800, opacity: 0.9, letterSpacing: '0.04em', textTransform: 'uppercase' }}>{label}</div>
+      <div style={{ fontSize: 26, fontWeight: 900, marginTop: 2, letterSpacing: '-0.02em' }}>{value}</div>
+    </div>
+  );
+  const myPct = data.total ? Math.round((data.mine / data.total) * 100) : 50;
+  const maxHour = Math.max(1, ...data.hours);
+  return (
+    <FullPage title="Chat insights" subtitle={title} onBack={onClose} zIndex={66}>
+      {data.total === 0 ? <EmptyState icon={<Activity />} title="Nothing to show yet" text="Send a few messages and come back." /> : (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10, marginTop: 8 }}>
+            {tile('Messages', formatCount(data.total), ['#7C5CFC', '#4F46E5'])}
+            {tile('Words', formatCount(data.words), ['#EC4899', '#DB2777'])}
+            {tile('Photos and videos', data.kinds.image + data.kinds.video, ['#F59E0B', '#EA580C'])}
+            {tile('Voice notes', data.kinds.audio, ['#14B8A6', '#0F766E'])}
+          </div>
+          <IgHeading>Who talks more</IgHeading>
+          <div style={{ height: 16, borderRadius: 8, overflow: 'hidden', display: 'flex', background: theme.rowBg }}>
+            <div style={{ width: `${myPct}%`, background: 'linear-gradient(90deg, #7C5CFC, #A78BFA)' }} />
+            <div style={{ flex: 1, background: 'linear-gradient(90deg, #F472B6, #EC4899)' }} />
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: theme.muted, marginTop: 6, fontWeight: 700 }}>
+            <span>You {myPct}%</span><span>Others {100 - myPct}%</span>
+          </div>
+          <IgHeading>When you chat</IgHeading>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 90, padding: '6px 2px 0' }}>
+            {data.hours.map((v, h) => <div key={h} title={hourLabel(h)} style={{ flex: 1, height: `${Math.max(4, (v / maxHour) * 100)}%`, borderRadius: 4, background: h === data.busyHour ? 'linear-gradient(180deg, #FDE047, #F59E0B)' : `${theme.coral}88` }} />)}
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: theme.muted, marginTop: 4 }}><span>{hourLabel(0)}</span><span>{hourLabel(12)}</span><span>{hourLabel(23)}</span></div>
+          <div style={{ fontSize: 14, color: theme.ink, marginTop: 10, lineHeight: 1.5 }}>Busiest around <b>{hourLabel(data.busyHour)}</b>, and <b>{dayNames[data.busyDay]}</b> is the busiest day.</div>
+          {data.topEmoji.length > 0 && (
+            <>
+              <IgHeading>Top emoji</IgHeading>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {data.topEmoji.map(([e, n]) => (
+                  <div key={e} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 14, background: theme.rowBg }}><span style={{ fontSize: 22 }}>{e}</span><span style={{ fontSize: 13, fontWeight: 900, color: theme.muted }}>{n}</span></div>
+                ))}
+              </div>
+            </>
+          )}
+          <IgHeading>More</IgHeading>
+          {[['Stickers', data.kinds.sticker], ['Links', data.kinds.link], ['Games played', data.kinds.game], ['First message', data.first ? data.first.toLocaleDateString([], { day: 'numeric', month: 'long', year: 'numeric' }) : '']].map(([l, v]) => (
+            <div key={l} style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 2px', borderBottom: `1px solid ${theme.border}`, fontSize: 15 }}>
+              <span style={{ color: theme.ink, fontWeight: 600 }}>{l}</span><span style={{ color: theme.muted }}>{v}</span>
+            </div>
+          ))}
+          <div style={{ fontSize: 12, color: theme.muted, padding: '12px 2px' }}>Counted from the messages on this phone.</div>
+        </>
+      )}
+    </FullPage>
+  );
+}
+
+function readQuiet() {
+  try { const q = JSON.parse(localStorage.getItem('zchat-quiet') || 'null'); if (q && typeof q === 'object') return { on: !!q.on, from: Number.isInteger(q.from) ? q.from : 22, to: Number.isInteger(q.to) ? q.to : 7 }; } catch {}
+  return { on: false, from: 22, to: 7 };
+}
+function quietNow() {
+  const q = readQuiet();
+  if (!q.on) return false;
+  const h = new Date().getHours();
+  return q.from === q.to ? true : q.from < q.to ? h >= q.from && h < q.to : h >= q.from || h < q.to;
+}
+function QuietHoursSection() {
+  const { theme } = useTheme();
+  const [q, setQ] = useState(readQuiet);
+  const save = (next) => { setQ(next); try { localStorage.setItem('zchat-quiet', JSON.stringify(next)); } catch {} };
+  const hourLabel = (h) => new Date(2020, 0, 1, h).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  const sel = { ...inputStyle(theme), width: 'auto', minWidth: 110, padding: '8px 10px', fontSize: 14.5 };
+  return (
+    <div>
+      <IgRow inset={false} icon={<Moon size={16} />} label="Quiet hours" sub="No message sounds while you sleep" right={<IgToggle on={q.on} onClick={() => save({ ...q, on: !q.on })} />} />
+      {q.on && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 2px', borderBottom: `1px solid ${theme.border}`, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 14.5, color: theme.ink, fontWeight: 600 }}>From</span>
+          <select aria-label="Quiet from" value={q.from} onChange={(e) => save({ ...q, from: parseInt(e.target.value, 10) })} style={sel}>{Array.from({ length: 24 }).map((_, h) => <option key={h} value={h}>{hourLabel(h)}</option>)}</select>
+          <span style={{ fontSize: 14.5, color: theme.ink, fontWeight: 600 }}>to</span>
+          <select aria-label="Quiet to" value={q.to} onChange={(e) => save({ ...q, to: parseInt(e.target.value, 10) })} style={sel}>{Array.from({ length: 24 }).map((_, h) => <option key={h} value={h}>{hourLabel(h)}</option>)}</select>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function readReminders(uid) {
+  try { const a = JSON.parse(localStorage.getItem(`zchat-reminders-${uid}`) || '[]'); return Array.isArray(a) ? a.filter((r) => r && r.id && typeof r.at === 'number') : []; } catch { return []; }
+}
+function writeReminders(uid, list) {
+  try { localStorage.setItem(`zchat-reminders-${uid}`, JSON.stringify(list.slice(-120))); } catch {}
+  try { window.dispatchEvent(new Event('zchat-reminders')); } catch {}
+}
+function reminderWhen(at) {
+  const d = new Date(at);
+  const a = new Date(); a.setHours(0, 0, 0, 0);
+  const b = new Date(d); b.setHours(0, 0, 0, 0);
+  const diff = Math.round((b - a) / 86400000);
+  const t = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  if (diff === 0) return `Today at ${t}`;
+  if (diff === 1) return `Tomorrow at ${t}`;
+  if (diff === -1) return `Yesterday at ${t}`;
+  return `${d.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' })} at ${t}`;
+}
+function reminderChoices() {
+  const now = Date.now();
+  const tonight = new Date(); tonight.setHours(20, 0, 0, 0);
+  const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1); tomorrow.setHours(9, 0, 0, 0);
+  const weekend = new Date(); weekend.setDate(weekend.getDate() + ((6 - weekend.getDay() + 7) % 7 || 7)); weekend.setHours(10, 0, 0, 0);
+  const list = [
+    { label: 'In 20 minutes', at: now + 20 * 60000 },
+    { label: 'In 1 hour', at: now + 3600000 },
+    { label: 'In 3 hours', at: now + 3 * 3600000 },
+  ];
+  if (tonight.getTime() - now > 3600000) list.push({ label: 'Tonight', at: tonight.getTime() });
+  list.push({ label: 'Tomorrow morning', at: tomorrow.getTime() });
+  list.push({ label: 'This weekend', at: weekend.getTime() });
+  return list;
+}
+function RemindersPage({ uid, onClose, onOpen }) {
+  useBackClose(true, onClose);
+  const { theme } = useTheme();
+  const [list, setList] = useState(() => readReminders(uid));
+  useEffect(() => { const on = () => setList(readReminders(uid)); window.addEventListener('zchat-reminders', on); return () => window.removeEventListener('zchat-reminders', on); }, [uid]);
+  const remove = (id) => { const next = readReminders(uid).filter((r) => r.id !== id); writeReminders(uid, next); setList(next); hapticTap(); };
+  const upcoming = list.filter((r) => !r.done).sort((a, b) => a.at - b.at);
+  const past = list.filter((r) => r.done).sort((a, b) => b.at - a.at).slice(0, 30);
+  const item = (r) => (
+    <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 2px', borderBottom: `1px solid ${theme.border}` }}>
+      <div role="button" aria-label={`Open reminder ${r.text}`} onClick={() => onOpen(r)} className="zchat-row-press" style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', opacity: r.done ? 0.62 : 1 }}>
+        {r.chat && r.chat.kind === 'group' ? <GroupAvatar avatar={r.chat.avatar} name={r.chat.name} size={44} /> : <Avatar emoji={r.chat ? r.chat.avatar : null} name={r.chat ? r.chat.name : ''} size={44} />}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 12, fontWeight: 800, color: r.done ? theme.muted : theme.coral, display: 'flex', alignItems: 'center', gap: 5 }}><Clock size={12} />{reminderWhen(r.at)}</div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 1 }}>{r.text || 'Message'}</div>
+          <div style={{ fontSize: 12.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.chat ? r.chat.name : ''}</div>
+        </div>
+      </div>
+      <div role="button" aria-label="Remove reminder" onClick={() => remove(r.id)} style={{ width: 36, height: 36, borderRadius: '50%', background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.muted, cursor: 'pointer', flexShrink: 0 }}><X size={16} /></div>
+    </div>
+  );
+  return (
+    <FullPage title="Reminders" subtitle="Messages to come back to" onBack={onClose} zIndex={66}>
+      {upcoming.length === 0 && past.length === 0 && <EmptyState icon={<Clock />} title="No reminders yet" text="Press and hold any message and tap Remind me. ZChat nudges you when it is time." />}
+      {upcoming.length > 0 && <IgHeading>Coming up</IgHeading>}
+      {upcoming.map(item)}
+      {past.length > 0 && <IgHeading>Done</IgHeading>}
+      {past.map(item)}
+      {past.length > 0 && (
+        <div role="button" aria-label="Clear done reminders" onClick={() => { const next = readReminders(uid).filter((r) => !r.done); writeReminders(uid, next); setList(next); }} style={{ padding: '16px 2px', fontSize: 14, fontWeight: 800, color: theme.coral, cursor: 'pointer' }}>Clear done</div>
+      )}
+    </FullPage>
+  );
+}
+
+function VotesPage({ title, options, votes, myId, onClose, people: peopleWord }) {
+  useBackClose(true, onClose);
+  const { theme } = useTheme();
+  const list = (votes || []).filter((r) => typeof r.emoji === 'string' && r.emoji.indexOf('zv:') === 0);
+  const [people, setPeople] = useState({});
+  const idsKey = [...new Set(list.map((r) => r.user_id))].filter(Boolean).sort().join(',');
+  useEffect(() => {
+    const ids = idsKey ? idsKey.split(',').filter((id) => !people[id]) : [];
+    if (!ids.length) return undefined;
+    let alive = true;
+    supabase.from('profiles').select('id, name, username, avatar, avatar_frame, verified, custom_badge').in('id', ids).then(({ data }) => {
+      if (!alive) return;
+      setPeople((prev) => { const map = { ...prev }; (data || []).forEach((p) => { map[p.id] = p; }); return map; });
+    }, () => {});
+    return () => { alive = false; };
+  }, [idsKey]);
+  return (
+    <FullPage title={peopleWord ? 'Answers' : 'Votes'} subtitle={title} onBack={onClose} zIndex={72}>
+      {options.map((opt, i) => {
+        const voters = list.filter((r) => r.emoji === `zv:${i}`);
+        return (
+          <div key={i}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 2px 6px' }}>
+              <span style={{ fontSize: 15, fontWeight: 800, color: theme.ink, minWidth: 0, wordBreak: 'break-word' }}>{opt}</span>
+              <span style={{ fontSize: 13, fontWeight: 900, color: theme.coral, flexShrink: 0, marginLeft: 10 }}>{voters.length} {peopleWord ? (voters.length === 1 ? 'person' : 'people') : (voters.length === 1 ? 'vote' : 'votes')}</span>
+            </div>
+            {voters.length === 0 && <div style={{ fontSize: 13, color: theme.muted, padding: '4px 2px 8px' }}>{peopleWord ? 'No one yet' : 'No votes yet'}</div>}
+            {voters.map((r) => {
+              const p = people[r.user_id];
+              const name = r.user_id === myId ? 'You' : (p ? p.name : '');
+              return (
+                <div key={r.user_id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 2px' }}>
+                  <Avatar emoji={p ? p.avatar : null} name={p ? p.name : '?'} frame={p ? p.avatar_frame : null} size={38} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 14.5, fontWeight: 700, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name ? <NameBadge name={name} verified={p && r.user_id !== myId ? p.verified : null} custom={p && r.user_id !== myId ? p.custom_badge : null} size={12} /> : <span style={{ color: theme.muted }}>Loading</span>}</div>
+                    {p && p.username && <div style={{ fontSize: 12, color: theme.muted }}>@{p.username}</div>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        );
+      })}
+    </FullPage>
+  );
+}
+
 function GameStats({ items, right }) {
   const { theme } = useTheme();
   return (
@@ -22117,13 +24031,14 @@ function GameOverlay({ title, text, button, onStart }) {
     <div style={{ position: 'absolute', inset: 0, background: 'rgba(10,6,22,0.62)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'white', textAlign: 'center', padding: 20 }}>
       <div style={{ fontSize: 22, fontWeight: 900 }}>{title}</div>
       <div style={{ fontSize: 13.5, color: 'rgba(255,255,255,0.8)', lineHeight: 1.45 }}>{text}</div>
-      <button onClick={(e) => { e.stopPropagation(); onStart(); }} className="zchat-press" style={{ marginTop: 8, padding: '10px 22px', borderRadius: 14, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontFamily: FONT, cursor: 'pointer' }}>{button}</button>
+      <GameButton onClick={() => onStart()} label={button} color="green" style={{ marginTop: 10, minWidth: 150 }} />
     </div>
   );
 }
 
-function SkyHopGame() {
+function SkyHopGame({ seed, onDuelFinish } = {}) {
   const { theme } = useTheme();
+  const rnd = useGameRng(seed, 'sky');
   const canvasRef = useRef(null);
   const st = useRef(null);
   const [phase, setPhase] = useState('ready');
@@ -22167,7 +24082,7 @@ function SkyHopGame() {
       s.vy = Math.min(9, s.vy + 0.34);
       s.y += s.vy;
       if (s.y < 13) { s.y = 13; s.vy = Math.max(0, s.vy); }
-      if (s.frame % 100 === 0) s.pipes.push({ x: W + 10, top: 48 + Math.random() * (H - 28 - GAP - 96), passed: false });
+      if (s.frame % 100 === 0) s.pipes.push({ x: W + 10, top: 48 + rnd() * (H - 28 - GAP - 96), passed: false });
       s.pipes.forEach((p) => { p.x -= 2.4; if (!p.passed && p.x + 46 < 80) { p.passed = true; s.score += 1; setScore(s.score); playUiSound('point'); } });
       s.pipes = s.pipes.filter((p) => p.x > -60);
       const hit = s.y + 12 > H - 28 || s.pipes.some((p) => 80 + 11 > p.x && 80 - 11 < p.x + 46 && (s.y - 11 < p.top || s.y + 11 > p.top + GAP));
@@ -22182,7 +24097,7 @@ function SkyHopGame() {
     return runFixedLoop(tick, draw);
   }, [phase]);
   const flap = () => {
-    if (phase !== 'playing') { reset(); setScore(0); st.current.vy = -6.2; setPhase('playing'); playUiSound('toggle'); return; }
+    if (phase !== 'playing') { if (phase === 'over' && onDuelFinish) return; reset(); setScore(0); st.current.vy = -6.2; setPhase('playing'); playUiSound('toggle'); return; }
     st.current.vy = -6.4;
     playUiSound('key');
     hapticTap();
@@ -22197,14 +24112,15 @@ function SkyHopGame() {
       <GameStats items={[['Score', score], ['Best', best]]} />
       <div onPointerDown={(e) => { e.preventDefault(); flap(); }} style={{ position: 'relative', width: GAME_TALL_W, aspectRatio: '320 / 440', borderRadius: 18, overflow: 'hidden', touchAction: 'none', userSelect: 'none', border: `1px solid ${theme.border}`, cursor: 'pointer', boxShadow: '0 12px 30px rgba(0,0,0,0.25)' }}>
         <canvas ref={canvasRef} width={W} height={H} style={{ width: '100%', height: '100%', display: 'block' }} />
-        {phase !== 'playing' && <GameOverlay title={phase === 'over' ? `You passed ${score}` : 'Sky hop'} text="Tap to flap. Slip through the gaps and do not touch anything." button={phase === 'over' ? 'Play again' : 'Start'} onStart={flap} />}
+        {phase !== 'playing' && <GameOverlay {...duelOverlayProps(phase, score, onDuelFinish, flap, 'Sky hop', `You passed ${score}`, 'Tap to flap. Slip through the gaps and do not touch anything.')} />}
       </div>
     </div>
   );
 }
 
-function BricksGame() {
+function BricksGame({ seed, onDuelFinish } = {}) {
   const { theme } = useTheme();
+  const rnd = useGameRng(seed, 'bricks');
   const canvasRef = useRef(null);
   const st = useRef(null);
   const [phase, setPhase] = useState('ready');
@@ -22219,7 +24135,7 @@ function BricksGame() {
   const BR = 6;
   const COLORS = ['#F87171', '#FB923C', '#FBBF24', '#4ADE80', '#60A5FA'];
   const makeBricks = () => { const out = []; for (let r = 0; r < 5; r++) for (let c = 0; c < 7; c++) out.push({ x: 8 + c * 44, y: 40 + r * 20, w: 40, h: 14, c: COLORS[r], on: true }); return out; };
-  const fresh = () => ({ px: W / 2 - PW / 2, bx: W / 2, by: H - 60, vx: 2.3 * (Math.random() < 0.5 ? -1 : 1), vy: -3.4, bricks: makeBricks(), score: 0, lives: 3, level: 1, launched: false, speed: 1 });
+  const fresh = () => ({ px: W / 2 - PW / 2, bx: W / 2, by: H - 60, vx: 2.3 * (rnd() < 0.5 ? -1 : 1), vy: -3.4, bricks: makeBricks(), score: 0, lives: 3, level: 1, launched: false, speed: 1 });
   if (!st.current) st.current = fresh();
   const draw = () => {
     const c = canvasRef.current; if (!c) return;
@@ -22273,14 +24189,14 @@ function BricksGame() {
             if (s.score > b) { setBest(s.score); writeBest('bricks', s.score); }
             return false;
           }
-          s.launched = false; s.vx = 2.3 * (Math.random() < 0.5 ? -1 : 1); s.vy = -3.4;
+          s.launched = false; s.vx = 2.3 * (rnd() < 0.5 ? -1 : 1); s.vy = -3.4;
         }
       }
       return true;
     };
     return runFixedLoop(tick, draw);
   }, [phase]);
-  const start = () => { st.current = fresh(); setScore(0); setLives(3); setLevel(1); setPhase('playing'); };
+  const start = () => { if (phase === 'over' && onDuelFinish) return; st.current = fresh(); setScore(0); setLives(3); setLevel(1); setPhase('playing'); };
   const moveTo = (clientX, el) => {
     const r = el.getBoundingClientRect();
     const x = ((clientX - r.left) / r.width) * W;
@@ -22302,7 +24218,7 @@ function BricksGame() {
       <GameStats items={[['Score', score], ['Lives', lives], ['Level', level], ['Best', best]]} />
       <div onPointerMove={(e) => moveTo(e.clientX, e.currentTarget)} onPointerDown={(e) => { moveTo(e.clientX, e.currentTarget); launch(); }} style={{ position: 'relative', width: GAME_BRICKS_W, aspectRatio: '320 / 420', borderRadius: 18, overflow: 'hidden', touchAction: 'none', userSelect: 'none', border: `1px solid ${theme.border}`, cursor: 'pointer', boxShadow: '0 12px 30px rgba(0,0,0,0.25)' }}>
         <canvas ref={canvasRef} width={W} height={H} style={{ width: '100%', height: '100%', display: 'block' }} />
-        {phase !== 'playing' && <GameOverlay title={phase === 'over' ? `Game over, ${score} points` : 'Bricks'} text="Slide to move the paddle. Tap to launch the ball and clear every brick." button={phase === 'over' ? 'Play again' : 'Start'} onStart={start} />}
+        {phase !== 'playing' && <GameOverlay {...duelOverlayProps(phase, score, onDuelFinish, start, 'Bricks', `Game over, ${score} points`, 'Slide to move the paddle. Tap to launch the ball and clear every brick.')} />}
       </div>
     </div>
   );
@@ -22401,8 +24317,8 @@ function WordGame({ duelWord, onDuelFinish }) {
         <div style={{ textAlign: 'center', marginTop: 2 }}>
           <div style={{ fontSize: 18, fontWeight: 900, color: theme.ink }}>{done === 'won' ? `Got it in ${rows.length}` : `It was ${answer.toUpperCase()}`}</div>
           {duelWord
-            ? <button onClick={() => onDuelFinish && onDuelFinish(done === 'won' ? rows.length : 7)} className="zchat-press" style={{ marginTop: 8, padding: '9px 20px', borderRadius: 14, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontFamily: FONT, cursor: 'pointer' }}>Send my result</button>
-            : <button onClick={() => newWord(false)} className="zchat-press" style={{ marginTop: 8, padding: '9px 20px', borderRadius: 14, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontFamily: FONT, cursor: 'pointer' }}>Next word</button>}
+            ? <button onClick={() => onDuelFinish && onDuelFinish(done === 'won' ? rows.length : 7)} className="zchat-gbtn" style={{ marginTop: 8, padding: '9px 20px', borderRadius: 14, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontFamily: FONT, cursor: 'pointer' , ...gameBtnStyle('gold') }}>Send my result</button>
+            : <button onClick={() => newWord(false)} className="zchat-gbtn" style={{ marginTop: 8, padding: '9px 20px', borderRadius: 14, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontFamily: FONT, cursor: 'pointer' , ...gameBtnStyle('gold') }}>Next word</button>}
         </div>
       )}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center', width: '100%', maxWidth: 360, marginTop: 4 }}>
@@ -22458,7 +24374,7 @@ function ReflexGame({ duel, onDuelFinish }) {
         <div style={{ fontSize: 14, opacity: 0.85 }}>{duel && phase === 'result' ? 'That is your time for this duel' : text}</div>
       </div>
       {duel && phase === 'result' && ms != null && (
-        <button onClick={() => onDuelFinish && onDuelFinish(ms)} className="zchat-press" style={{ padding: '11px 24px', borderRadius: 14, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontFamily: FONT, cursor: 'pointer' }}>Send {ms} ms</button>
+        <button onClick={() => onDuelFinish && onDuelFinish(ms)} className="zchat-gbtn" style={{ padding: '11px 24px', borderRadius: 14, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontFamily: FONT, cursor: 'pointer' , ...gameBtnStyle('gold') }}>Send {ms} ms</button>
       )}
       {duel && phase === 'idle' && <div style={{ fontSize: 12.5, color: theme.muted, textAlign: 'center' }}>You get one go. Tap too soon and you can retry.</div>}
     </div>
@@ -22542,8 +24458,8 @@ function QuizGame({ seed, count = 10, onDuelFinish }) {
           <div style={{ fontSize: 24, fontWeight: 900, color: theme.ink, marginTop: 8 }}>{score} of {qs.length}</div>
           <div style={{ fontSize: 13.5, color: theme.muted, marginTop: 4 }}>{score >= qs.length * 0.9 ? 'Brilliant' : score >= qs.length * 0.6 ? 'Nice work' : 'Keep practising'}</div>
           {seed
-            ? <button onClick={() => onDuelFinish && onDuelFinish(score)} className="zchat-press" style={{ marginTop: 14, padding: '10px 22px', borderRadius: 14, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontFamily: FONT, cursor: 'pointer' }}>Send my score</button>
-            : <button onClick={restart} className="zchat-press" style={{ marginTop: 14, padding: '10px 22px', borderRadius: 14, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontFamily: FONT, cursor: 'pointer' }}>Play again</button>}
+            ? <button onClick={() => onDuelFinish && onDuelFinish(score)} className="zchat-gbtn" style={{ marginTop: 14, padding: '10px 22px', borderRadius: 14, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontFamily: FONT, cursor: 'pointer' , ...gameBtnStyle('gold') }}>Send my score</button>
+            : <button onClick={restart} className="zchat-gbtn" style={{ marginTop: 14, padding: '10px 22px', borderRadius: 14, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontFamily: FONT, cursor: 'pointer' , ...gameBtnStyle('gold') }}>Play again</button>}
         </div>
       ) : (
         <div style={{ width: '100%', maxWidth: 360 }}>
@@ -22565,8 +24481,9 @@ function QuizGame({ seed, count = 10, onDuelFinish }) {
   );
 }
 
-function EchoGame() {
+function EchoGame({ seed, onDuelFinish } = {}) {
   const { theme } = useTheme();
+  const rnd = useGameRng(seed, 'echo');
   const PADS = [{ c: '#EF4444', k: 'pad1' }, { c: '#22C55E', k: 'pad2' }, { c: '#3B82F6', k: 'pad3' }, { c: '#EAB308', k: 'pad4' }];
   const [seq, setSeq] = useState([]);
   const [lit, setLit] = useState(-1);
@@ -22585,7 +24502,7 @@ function EchoGame() {
     });
     timers.current.push(setTimeout(() => { setPhase('input'); inputRef.current = []; }, 450 * s.length + 420));
   };
-  const start = () => { const s = [Math.floor(Math.random() * 4)]; setSeq(s); play(s); hapticTap(); };
+  const start = () => { if (phase === 'over' && onDuelFinish) return; const s = [Math.floor(rnd() * 4)]; setSeq(s); play(s); hapticTap(); };
   const tap = (p) => {
     if (phase !== 'input') { if (phase === 'idle' || phase === 'over') start(); return; }
     hapticTap();
@@ -22602,7 +24519,7 @@ function EchoGame() {
       return;
     }
     if (inputRef.current.length === seq.length) {
-      const next = [...seq, Math.floor(Math.random() * 4)];
+      const next = [...seq, Math.floor(rnd() * 4)];
       setSeq(next);
       setPhase('show');
       setTimeout(() => playUiSound('point'), 200);
@@ -22618,9 +24535,9 @@ function EchoGame() {
           <div key={pd.k} role="button" aria-label={`Pad ${i + 1}`} data-silent="1" onPointerDown={(e) => { e.preventDefault(); tap(i); }} style={{ borderRadius: i === 0 ? '60% 16px 16px 16px' : i === 1 ? '16px 60% 16px 16px' : i === 2 ? '16px 16px 16px 60%' : '16px 16px 60% 16px', background: pd.c, opacity: lit === i ? 1 : 0.45, transform: lit === i ? 'scale(1.03)' : 'scale(1)', transition: 'opacity 0.12s, transform 0.12s', cursor: 'pointer', touchAction: 'none', boxShadow: lit === i ? `0 0 28px ${pd.c}` : 'none' }} />
         ))}
         {(phase === 'idle' || phase === 'over') && (
-          <div onClick={start} style={{ position: 'absolute', inset: '28%', borderRadius: '50%', background: theme.panelBg, border: `1px solid ${theme.border}`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', cursor: 'pointer', boxShadow: '0 10px 30px rgba(0,0,0,0.25)', padding: 10 }}>
+          <div onClick={phase === 'over' && onDuelFinish ? () => onDuelFinish(Math.max(0, seq.length - 1)) : start} style={{ position: 'absolute', inset: '28%', borderRadius: '50%', background: theme.panelBg, border: `1px solid ${theme.border}`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', cursor: 'pointer', boxShadow: '0 10px 30px rgba(0,0,0,0.25)', padding: 10 }}>
             <div style={{ fontSize: 16, fontWeight: 900, color: theme.ink }}>{phase === 'over' ? `Level ${seq.length - 1}` : 'Echo'}</div>
-            <div style={{ fontSize: 11.5, color: theme.muted, marginTop: 2 }}>{phase === 'over' ? 'Tap to retry' : 'Tap to start'}</div>
+            <div style={{ fontSize: 11.5, color: theme.muted, marginTop: 2 }}>{phase === 'over' ? (onDuelFinish ? 'Tap to send' : 'Tap to retry') : 'Tap to start'}</div>
           </div>
         )}
       </div>
@@ -22634,11 +24551,79 @@ const GAME_ART_BG = {
   ttt: ['#6D4DF5', '#C13BDC'], c4: ['#2563EB', '#06B6D4'], rps: ['#F59E0B', '#F43F5E'], '2048': ['#F59E0B', '#EA580C'],
   dots: ['#0EA5E9', '#6366F1'], hang: ['#F97316', '#DB2777'], wduel: ['#14B8A6', '#2563EB'], rduel: ['#EF4444', '#F59E0B'], qduel: ['#8B5CF6', '#EC4899'],
   ship: ['#0EA5E9', '#1E3A8A'], num: ['#F59E0B', '#DB2777'],
+  paint: ['#8B5CF6', '#EC4899'], bomb: ['#F97316', '#7F1D1D'], gem: ['#92400E', '#1E293B'], fade: ['#0EA5E9', '#7C3AED'],
+  stack: ['#1E1B4B', '#7C3AED'], dash: ['#6D28D9', '#F472B6'], catch: ['#38BDF8', '#22C55E'], ctrap: ['#111827', '#4B5563'], odd: ['#14B8A6', '#0F766E'], hilo: ['#4338CA', '#9333EA'],
   gomoku: ['#B45309', '#78350F'], reversi: ['#15803D', '#064E3B'], nim: ['#D97706', '#9A3412'], mancala: ['#92400E', '#451A03'], pairs: ['#DB2777', '#7C3AED'], dice: ['#DC2626', '#7F1D1D'], bj: ['#047857', '#064E3B'], war: ['#1D4ED8', '#312E81'], sl: ['#CA8A04', '#15803D'], math: ['#0891B2', '#1E40AF'], taps: ['#F97316', '#DC2626'],
   snake: ['#16A34A', '#0D9488'], sky: ['#7DD3FC', '#2563EB'], bricks: ['#7C3AED', '#DB2777'], word: ['#16A34A', '#0F766E'],
   memory: ['#0EA5E9', '#10B981'], reflex: ['#EF4444', '#DC2626'], quiz: ['#4F46E5', '#9333EA'], echo: ['#EC4899', '#BE123C'],
 };
 function gameArtBody(k) {
+  if (k === 'paint') {
+    const cols = ['#EF4444', '#F59E0B', '#22C55E', '#3B82F6', '#A855F7'];
+    const out = [];
+    for (let r = 0; r < 5; r++) for (let c = 0; c < 7; c++) {
+      const own = (r + c < 3) ? 0 : (r + (6 - c) < 3 ? 1 : -1);
+      const col = own === 0 ? '#3B82F6' : own === 1 ? '#F59E0B' : cols[(r * 3 + c * 7) % 5];
+      out.push(<rect key={`${r}${c}`} x={36 + c * 13} y={18 + r * 13} width="12" height="12" rx="2.5" fill={col} stroke={own >= 0 ? 'white' : 'none'} strokeWidth="1.2" opacity={own >= 0 ? 1 : 0.85} />);
+    }
+    return <g>{out}</g>;
+  }
+  if (k === 'bomb') {
+    const out = [];
+    for (let r = 0; r < 3; r++) for (let c = 0; c < 4; c++) {
+      const x = 40 + c * 21; const y = 22 + r * 21;
+      const isBomb = r === 1 && c === 2;
+      out.push(<g key={`${r}${c}`}><rect x={x} y={y + 2} width="18" height="18" rx="4" fill={isBomb ? '#7F1D1D' : '#B45309'} /><rect x={x} y={y} width="18" height="17" rx="4" fill={isBomb ? '#EF4444' : '#FBBF24'} />{!isBomb && <text x={x + 9} y={y + 13} textAnchor="middle" fontFamily={FONT} fontWeight="900" fontSize="11" fill="#92400E">?</text>}</g>);
+    }
+    return <g>{out}<circle cx="91" cy="53" r="6" fill="#111827" /><path d="M95 48l3 -3" stroke="#FDE047" strokeWidth="2" strokeLinecap="round" /><circle cx="128" cy="30" r="10" fill="#111827" /><circle cx="125" cy="27" r="3" fill="rgba(255,255,255,0.35)" /><path d="M134 22l4 -4" stroke="#A16207" strokeWidth="2.4" strokeLinecap="round" /><path d="M140 13l1 2.5l2.5 1l-2.5 1l-1 2.5l-1 -2.5l-2.5 -1l2.5 -1z" fill="#FDE047" /></g>;
+  }
+  if (k === 'gem') {
+    const out = [];
+    for (let r = 0; r < 4; r++) for (let c = 0; c < 6; c++) {
+      const dug = (r + c) % 3 === 0;
+      out.push(<rect key={`${r}${c}`} x={36 + c * 15} y={20 + r * 15} width="13" height="13" rx="2.5" fill={dug ? '#3F2A1A' : '#A16B3B'} />);
+    }
+    return <g>{out}<path d="M112 34h22l7 10l-18 20l-18 -20z" fill="#22D3EE" /><path d="M105 44h36M118 34l5 30M128 34l-5 30" stroke="rgba(255,255,255,0.55)" strokeWidth="1.2" fill="none" /><path d="M112 34h22l7 10h-36z" fill="rgba(255,255,255,0.3)" /><path d="M146 26l1.5 3.5l3.5 1.5l-3.5 1.5l-1.5 3.5l-1.5 -3.5l-3.5 -1.5l3.5 -1.5z" fill="white" /></g>;
+  }
+  if (k === 'fade') {
+    const cell = (c, r) => <rect key={`${c}${r}`} x={48 + c * 22} y={16 + r * 22} width="19" height="19" rx="5" fill="white" opacity="0.2" />;
+    return <g>{[0, 1, 2].map((c) => [0, 1, 2].map((r) => cell(c, r)))}<path d="M52 20l11 11M63 20l-11 11" stroke="white" strokeWidth="3.4" strokeLinecap="round" opacity="0.3" /><path d="M74 42l11 11M85 42l-11 11M96 64l11 11M107 64l-11 11" stroke="white" strokeWidth="3.4" strokeLinecap="round" /><circle cx="101.5" cy="25.5" r="6.5" fill="none" stroke="#FDE047" strokeWidth="3.4" /><circle cx="57.5" cy="69.5" r="6.5" fill="none" stroke="#FDE047" strokeWidth="3.4" /></g>;
+  }
+  if (k === 'stack') {
+    const out = [];
+    const ws = [70, 66, 66, 58, 58, 52, 46];
+    let x = 45;
+    ws.forEach((w, i) => { const y = 82 - i * 10; x = 80 - w / 2 + (i % 2 ? 3 : -2); out.push(<g key={i}><rect x={x} y={y + 2} width={w} height="9" rx="2" fill={`hsl(${260 + i * 14}, 70%, 40%)`} /><rect x={x} y={y} width={w} height="8" rx="2" fill={`hsl(${260 + i * 14}, 75%, 62%)`} /></g>); });
+    return <g>{out}<rect x="96" y="10" width="46" height="9" rx="2" fill="#FDE047" /><path d="M86 14h6M80 14h3" stroke="white" strokeWidth="2" strokeLinecap="round" opacity="0.7" /></g>;
+  }
+  if (k === 'dash') {
+    return (
+      <g>
+        <circle cx="128" cy="26" r="11" fill="#FDE68A" />
+        <path d="M0 70c20 -10 40 -6 60 -2s40 6 60 -4s30 -4 40 0v36H0z" fill="#4C1D95" opacity="0.8" />
+        <rect x="0" y="80" width="160" height="20" fill="#1F1537" />
+        <rect x="0" y="80" width="160" height="2.5" fill="#A78BFA" />
+        <path d="M92 80l8 -16l8 16zM108 80l8 -16l8 16z" fill="#EF4444" />
+        <g transform="rotate(-18 52 52)"><rect x="42" y="42" width="20" height="20" rx="5" fill="#FBBF24" /><rect x="53" y="47" width="5" height="6" fill="white" /><rect x="55.5" y="49" width="2.5" height="3.5" fill="#111827" /></g>
+        <path d="M20 50h14M14 57h18M22 64h10" stroke="white" strokeWidth="2.4" strokeLinecap="round" opacity="0.55" />
+      </g>
+    );
+  }
+  if (k === 'catch') {
+    const fruit = (x, y, c1, c2) => <g key={`${x}${y}`}><circle cx={x} cy={y} r="8" fill={c2} /><circle cx={x - 2.5} cy={y - 2.5} r="3" fill={c1} opacity="0.8" /><ellipse cx={x + 2} cy={y - 9} rx="4" ry="2" fill="#16A34A" transform={`rotate(-25 ${x + 2} ${y - 9})`} /></g>;
+    return <g>{fruit(52, 22, '#FDBA74', '#EA580C')}{fruit(88, 38, '#FCA5A5', '#DC2626')}{fruit(118, 18, '#E9D5FF', '#7C3AED')}<path d="M70 52l2 5l5 2l-5 2l-2 5l-2 -5l-5 -2l5 -2z" fill="#FDE047" /><rect x="52" y="70" width="58" height="20" rx="6" fill="#92400E" /><rect x="48" y="66" width="66" height="7" rx="3.5" fill="#FDE68A" /><path d="M60 74v12M70 74v12M80 74v12M90 74v12M100 74v12" stroke="#B45309" strokeWidth="3" /></g>;
+  }
+  if (k === 'ctrap') {
+    return <g><text x="80" y="54" textAnchor="middle" fontFamily={FONT} fontWeight="900" fontSize="30" fill="#EF4444">BLUE</text><circle cx="44" cy="76" r="7" fill="#EF4444" /><circle cx="62" cy="76" r="7" fill="#3B82F6" /><circle cx="80" cy="76" r="7" fill="#22C55E" /><circle cx="98" cy="76" r="7" fill="#EAB308" /><circle cx="116" cy="76" r="7" fill="#A855F7" /><circle cx="44" cy="76" r="9.5" fill="none" stroke="white" strokeWidth="2" /></g>;
+  }
+  if (k === 'odd') {
+    const out = [];
+    for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) out.push(<rect key={`${r}${c}`} x={50 + c * 16} y={18 + r * 16} width="14" height="14" rx="3" fill={r === 2 && c === 1 ? '#5EEAD4' : '#2DD4BF'} />);
+    return <g>{out}<circle cx="73" cy="57" r="10" fill="none" stroke="white" strokeWidth="2.4" /></g>;
+  }
+  if (k === 'hilo') {
+    return <g><rect x="58" y="16" width="44" height="58" rx="10" fill="white" opacity="0.95" /><text x="80" y="54" textAnchor="middle" fontFamily={FONT} fontWeight="900" fontSize="24" fill="#4338CA">42</text><path d="M120 46l10 -14l10 14z" fill="#4ADE80" /><path d="M120 56l10 14l10 -14z" fill="#F87171" /><path d="M22 46l10 -14l10 14z" fill="white" opacity="0.4" /><path d="M22 56l10 14l10 -14z" fill="white" opacity="0.4" /></g>;
+  }
   if (k === 'ship') {
     return (
       <g>
@@ -22707,7 +24692,7 @@ function gameArtBody(k) {
     return <g><rect x="34" y="26" width="92" height="48" rx="14" fill="#C27A2C" /><rect x="37" y="30" width="10" height="40" rx="5" fill="#FDE68A" /><rect x="113" y="30" width="10" height="40" rx="5" fill="#FDE68A" />{out}</g>;
   }
   if (k === 'pairs') {
-    const card = (x, y, up) => (<g key={`${x}${y}`}><rect x={x} y={y} width="22" height="22" rx="4" fill={up ? '#FFFFFF' : 'rgba(255,255,255,0.3)'} />{up && <text x={x + 11} y={y + 16} textAnchor="middle" fontSize="13">{'⭐'}</text>}{!up && <text x={x + 11} y={y + 16} textAnchor="middle" fontFamily={FONT} fontWeight="900" fontSize="12" fill="white">Z</text>}</g>);
+    const card = (x, y, up) => (<g key={`${x}${y}`}><rect x={x} y={y} width="22" height="22" rx="4" fill={up ? '#FFFFFF' : 'rgba(255,255,255,0.3)'} />{up && <path transform={`translate(${x + 4} ${y + 4}) scale(0.58)`} d={MEMORY_SHAPES.star} fill="#F59E0B" />}{!up && <rect x={x + 6} y={y + 6} width="10" height="10" rx="2" fill="none" stroke="white" strokeWidth="1.8" opacity="0.85" transform={`rotate(45 ${x + 11} ${y + 11})`} />}</g>);
     return <g>{card(43, 26, false)}{card(69, 26, true)}{card(95, 26, false)}{card(43, 52, true)}{card(69, 52, false)}{card(95, 52, false)}</g>;
   }
   if (k === 'dice') {
@@ -22913,7 +24898,7 @@ function gameArtBody(k) {
     const card = (x, up) => (
       <g key={x}>
         <rect x={x} y="31" width="26" height="36" rx="5" fill={up ? 'white' : '#1E293B'} />
-        {up ? <path d={star} transform={`translate(${x + 13} 49) scale(1.15)`} fill="#F59E0B" /> : <text x={x + 13} y="54" textAnchor="middle" fontFamily={FONT} fontWeight="900" fontSize="15" fill="white" opacity="0.8">Z</text>}
+        {up ? <path d={star} transform={`translate(${x + 13} 49) scale(1.15)`} fill="#F59E0B" /> : <g opacity="0.85"><rect x={x + 6} y="42" width="14" height="14" rx="3" fill="none" stroke="#A78BFA" strokeWidth="2" transform={`rotate(45 ${x + 13} 49)`} /><circle cx={x + 13} cy="49" r="2.6" fill="#A78BFA" /></g>}
       </g>
     );
     return <g>{card(38, true)}{card(67, true)}{card(96, false)}</g>;
@@ -22954,23 +24939,41 @@ function gameArtBody(k) {
   }
   return null;
 }
-function GameArt({ k, width = 160, height = 100, radius = 14, style }) {
+function GameArt({ k: kIn, width = 160, height = 100, radius = 14, style }) {
   const rawId = React.useId();
   const id = `ga${rawId.replace(/[^a-zA-Z0-9]/g, '')}`;
+  const duel = typeof kIn === 'string' && kIn.indexOf('sd:') === 0;
+  const k = gameArtKey(kIn);
   const bg = GAME_ART_BG[k] || ['#6D4DF5', '#C13BDC'];
   return (
     <svg width={width} height={height} viewBox="0 0 160 100" preserveAspectRatio="xMidYMid slice" style={{ display: 'block', borderRadius: radius, flexShrink: 0, ...style }} aria-hidden="true">
       <defs>
         <linearGradient id={id} x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor={bg[0]} /><stop offset="1" stopColor={bg[1]} /></linearGradient>
+        <linearGradient id={`${id}s`} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#FFFFFF" stopOpacity="0.2" /><stop offset="0.45" stopColor="#FFFFFF" stopOpacity="0.03" /><stop offset="1" stopColor="#000000" stopOpacity="0.16" /></linearGradient>
       </defs>
       <rect width="160" height="100" fill={`url(#${id})`} />
       <circle cx="138" cy="4" r="54" fill="white" opacity="0.1" />
+      <circle cx="10" cy="104" r="44" fill="black" opacity="0.08" />
       {gameArtBody(k)}
+      <rect width="160" height="100" fill={`url(#${id}s)`} />
+      <rect x="0.5" y="0.5" width="159" height="99" rx="0" fill="none" stroke="rgba(255,255,255,0.18)" />
+      {duel && (
+        <g>
+          <rect x="6" y="6" width="38" height="22" rx="11" fill="#111827" opacity="0.85" />
+          <text x="25" y="21.5" textAnchor="middle" fontFamily={FONT} fontWeight="900" fontSize="12" fill="#FDE047">VS</text>
+        </g>
+      )}
     </svg>
   );
 }
 
 const SOLO_GAMES = [
+  { k: 'stack', sub: 'Build the tallest tower' },
+  { k: 'dash', sub: 'Jump, run, do not stop' },
+  { k: 'catch', sub: 'Fill the basket' },
+  { k: 'ctrap', sub: 'Trust the ink, not the word' },
+  { k: 'odd', sub: 'Spot the different shade' },
+  { k: 'hilo', sub: 'Higher or lower, again and again' },
   { k: '2048', sub: 'Slide and merge the tiles' },
   { k: 'snake', sub: 'Eat, grow, do not crash' },
   { k: 'sky', sub: 'Flap through the gaps' },
@@ -22987,80 +24990,67 @@ function GamesPage({ onClose, onChallenge, onShareScore, initialGame }) {
   const [game, setGame] = useState(() => (initialGame && SOLO_GAMES.some((g) => g.k === initialGame) ? initialGame : null));
   useBackClose(!!game, () => setGame(null));
   const [rulesFor, setRulesFor] = useState(null);
+  const [tab, setTab] = useState('friends');
   const openSolo = (k) => { setGame(k); if (!howtoSeen(k)) setTimeout(() => setRulesFor(k), 380); };
   useEffect(() => { if (game && !howtoSeen(game)) { const t = setTimeout(() => setRulesFor(game), 380); return () => clearTimeout(t); } return undefined; }, []);
-  const friend = [
-    { k: 'ttt', sub: 'Three in a row' },
-    { k: 'c4', sub: 'Drop discs, line up four' },
-    { k: 'rps', sub: 'Best of three rounds' },
-    { k: 'dots', sub: 'Close boxes to score' },
-    { k: 'gomoku', sub: 'Five stones in a line' },
-    { k: 'reversi', sub: 'Flip discs, own the board' },
-    { k: 'ship', sub: 'Find and sink their fleet' },
-    { k: 'num', sub: 'Pick 1 to 100, they guess' },
-    { k: 'pairs', sub: 'Memory, turn by turn' },
-    { k: 'sl', sub: 'Roll up the board' },
-    { k: 'hang', sub: 'You pick a word, they guess' },
-    { k: 'bj', sub: 'Closest to 21 wins' },
-    { k: 'war', sub: 'Five rounds, higher card wins' },
-    { k: 'dice', sub: 'Roll, hold, roll again' },
-    { k: 'wduel', sub: 'Same word, fewer tries wins' },
-    { k: 'rduel', sub: 'Fastest tap wins' },
-    { k: 'qduel', sub: 'Five questions each' },
-    { k: 'math', sub: 'Ten quick sums' },
-    { k: 'taps', sub: 'Five seconds of tapping' },
-  ];
   const bestLabel = (k) => { const b = readBest(k); return b ? `Best ${formatGameScore(k, b)}` : 'No score yet'; };
+  const dayIdx = Math.floor(Date.now() / 86400000);
+  const featured = SOLO_GAMES[dayIdx % SOLO_GAMES.length];
+  const cover = (k, title, sub, foot, footHot, onClick) => (
+    <div key={k} role="button" aria-label={title} onClick={() => { playUiSound('tap'); onClick(); }} className="zchat-press" style={{ borderRadius: 20, padding: 7, paddingBottom: 11, background: theme.dark ? 'linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0.03))' : '#FFFFFF', border: `1px solid ${theme.border}`, boxShadow: theme.dark ? 'none' : '0 6px 16px rgba(60,30,130,0.08)', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 9 }}>
+      <div style={{ width: '100%', aspectRatio: '16 / 10', borderRadius: 14, overflow: 'hidden', boxShadow: '0 8px 18px rgba(0,0,0,0.2)', position: 'relative' }}>
+        <GameArt k={k} width="100%" height="100%" radius={14} />
+        <div style={{ position: 'absolute', top: 6, right: 6 }}><GameInfoButton k={k} onDark /></div>
+      </div>
+      <div style={{ minWidth: 0, padding: '0 5px' }}>
+        <div style={{ fontSize: 15, fontWeight: 800, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</div>
+        <div style={{ fontSize: 12, color: theme.muted, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub}</div>
+        <div style={{ fontSize: 11.5, fontWeight: 800, color: footHot ? theme.coral : theme.muted, marginTop: 5 }}>{foot}</div>
+      </div>
+    </div>
+  );
   return (
     <>
-      <FullPage title="Games" subtitle="Solo or with a friend" onBack={onClose} zIndex={60}>
-        <IgHeading>With a friend</IgHeading>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, paddingBottom: 8 }}>
-          {friend.map((it) => (
-            <div key={it.k} role="button" aria-label={GAME_TITLES[it.k]} onClick={() => { playUiSound('tap'); onChallenge(it.k); }} className="zchat-press" style={{ borderRadius: 18, padding: 8, paddingBottom: 10, background: theme.rowBg, border: `1px solid ${theme.border}`, cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 9 }}>
-              <div style={{ width: '100%', aspectRatio: '16 / 10', borderRadius: 12, overflow: 'hidden', boxShadow: '0 8px 18px rgba(0,0,0,0.18)', position: 'relative' }}>
-                <GameArt k={it.k} width="100%" height="100%" radius={12} />
-                <div style={{ position: 'absolute', top: 6, right: 6 }}><GameInfoButton k={it.k} onDark /></div>
-              </div>
-              <div style={{ minWidth: 0, padding: '0 4px' }}>
-                <div style={{ fontSize: 15, fontWeight: 800, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{GAME_TITLES[it.k]}</div>
-                <div style={{ fontSize: 12, color: theme.muted, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.sub}</div>
-                <div style={{ fontSize: 11.5, fontWeight: 700, color: theme.coral, marginTop: 5 }}>Challenge a friend</div>
-              </div>
+      <FullPage title="Games" subtitle="Play solo or challenge a friend" onBack={onClose} zIndex={60}>
+        <div role="button" aria-label={`Featured ${GAME_TITLES[featured.k]}`} onClick={() => { playUiSound('tap'); openSolo(featured.k); }} className="zchat-press" style={{ position: 'relative', borderRadius: 24, overflow: 'hidden', marginTop: 6, cursor: 'pointer', boxShadow: '0 14px 30px rgba(0,0,0,0.28)' }}>
+          <div style={{ width: '100%', aspectRatio: '16 / 9', position: 'relative', overflow: 'hidden' }}><div style={{ position: 'absolute', left: 0, right: 0, top: '-28%', height: '128%' }}><GameArt k={featured.k} width="100%" height="100%" radius={0} /></div></div>
+          <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '28px 16px 14px', background: 'linear-gradient(180deg, transparent, rgba(0,0,0,0.65))', display: 'flex', alignItems: 'flex-end', gap: 12 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 11, fontWeight: 900, color: '#FDE047', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Game of the day</div>
+              <div style={{ fontSize: 22, fontWeight: 900, color: 'white', textShadow: '0 2px 6px rgba(0,0,0,0.4)' }}>{GAME_TITLES[featured.k]}</div>
+              <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.85)' }}>{featured.sub}</div>
             </div>
+            <GameButton label="Play" color="green" small onClick={() => openSolo(featured.k)} style={{ minWidth: 86 }} />
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 6, padding: 4, borderRadius: 14, background: theme.rowBg, margin: '16px 0 4px' }}>
+          {[['friends', 'With friends'], ['solo', 'Solo']].map(([kk, l]) => (
+            <div key={kk} role="tab" aria-selected={tab === kk} aria-label={l} onClick={() => setTab(kk)} style={{ flex: 1, textAlign: 'center', padding: '9px 0', borderRadius: 11, fontSize: 14, fontWeight: 800, cursor: 'pointer', background: tab === kk ? theme.panelBg : 'transparent', color: tab === kk ? theme.ink : theme.muted, boxShadow: tab === kk ? '0 2px 8px rgba(0,0,0,0.12)' : 'none' }}>{l}</div>
           ))}
         </div>
-        <IgHeading>Solo</IgHeading>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, paddingBottom: 8 }}>
-          {SOLO_GAMES.map((it) => (
-            <div key={it.k} role="button" aria-label={GAME_TITLES[it.k]} onClick={() => { playUiSound('tap'); openSolo(it.k); }} className="zchat-press" style={{ borderRadius: 18, padding: 8, paddingBottom: 10, background: theme.rowBg, border: `1px solid ${theme.border}`, cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 9 }}>
-              <div style={{ width: '100%', aspectRatio: '16 / 10', borderRadius: 12, overflow: 'hidden', boxShadow: '0 8px 18px rgba(0,0,0,0.18)', position: 'relative' }}>
-                <GameArt k={it.k} width="100%" height="100%" radius={12} />
-                <div style={{ position: 'absolute', top: 6, right: 6 }}><GameInfoButton k={it.k} onDark /></div>
-              </div>
-              <div style={{ minWidth: 0, padding: '0 4px' }}>
-                <div style={{ fontSize: 15, fontWeight: 800, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{GAME_TITLES[it.k]}</div>
-                <div style={{ fontSize: 12, color: theme.muted, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.sub}</div>
-                <div style={{ fontSize: 11.5, fontWeight: 700, color: readBest(it.k) ? theme.coral : theme.muted, marginTop: 5 }}>{bestLabel(it.k)}</div>
-              </div>
+        {tab === 'friends' && FRIEND_GAME_GROUPS.map(([group, keys]) => (
+          <div key={group}>
+            <IgHeading>{group}</IgHeading>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10, paddingBottom: 6 }}>
+              {keys.map((k) => cover(k, gameKeyTitle(k), FRIEND_GAME_SUBS[k] || '', 'Challenge a friend', true, () => onChallenge(k)))}
             </div>
-          ))}
-        </div>
-        <div style={{ padding: '4px 2px 10px', fontSize: 12.5, color: theme.muted, lineHeight: 1.5 }}>Scores stay on this phone. Open a game and tap share to send your best to a friend.</div>
+          </div>
+        ))}
+        {tab === 'solo' && (
+          <>
+            <IgHeading>Arcade</IgHeading>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10, paddingBottom: 8 }}>
+              {SOLO_GAMES.map((it) => cover(it.k, GAME_TITLES[it.k], it.sub, bestLabel(it.k), !!readBest(it.k), () => openSolo(it.k)))}
+            </div>
+            <div style={{ padding: '4px 2px 10px', fontSize: 12.5, color: theme.muted, lineHeight: 1.5 }}>Scores stay on this phone. Open a game and tap share to send your best to a friend.</div>
+          </>
+        )}
       </FullPage>
       {game && (
         <FullPage title={GAME_TITLES[game]} subtitle={bestLabel(game)} onBack={() => { if (document.fullscreenElement) toggleFullscreen(); setGame(null); }} zIndex={61}
           bodyStyle={{ background: `linear-gradient(170deg, ${(GAME_ART_BG[game] || ['#6D4DF5', '#C13BDC'])[0]}${theme.dark ? '55' : '33'} 0%, ${(GAME_ART_BG[game] || ['#6D4DF5', '#C13BDC'])[1]}${theme.dark ? '33' : '1F'} 45%, transparent 85%)` }}
           right={<><GameInfoButton k={game} header />{canFullscreen() && <HeaderIconButton label="Fullscreen" onClick={toggleFullscreen}><ExpandIcon /></HeaderIconButton>}<HeaderIconButton label="Share score" onClick={() => onShareScore(game, readBest(game))}><Share2 /></HeaderIconButton></>}>
-          {game === '2048' && <Game2048 />}
-          {game === 'memory' && <MemoryGame />}
-          {game === 'snake' && <SnakeGame />}
-          {game === 'sky' && <SkyHopGame />}
-          {game === 'bricks' && <BricksGame />}
-          {game === 'word' && <WordGame />}
-          {game === 'reflex' && <ReflexGame />}
-          {game === 'quiz' && <QuizGame />}
-          {game === 'echo' && <EchoGame />}
+          <SoloGame k={game} />
         </FullPage>
       )}
       {rulesFor && <HowToPlaySheet k={rulesFor} onClose={() => setRulesFor(null)} />}
@@ -23068,7 +25058,7 @@ function GamesPage({ onClose, onChallenge, onShareScore, initialGame }) {
   );
 }
 
-function AttachSheet({ onClose, onCamera, onGallery, onLocation, onGame, canGame, locating }) {
+function AttachSheet({ onClose, onCamera, onGallery, onLocation, onGame, canGame, locating, onPoll, onEvent }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
   const items = [
@@ -23076,6 +25066,8 @@ function AttachSheet({ onClose, onCamera, onGallery, onLocation, onGame, canGame
     { k: 'gallery', label: 'Photo or video', icon: <ImageIcon size={24} />, bg: 'linear-gradient(135deg, #7C5CFC, #A78BFA)', on: onGallery },
     { k: 'location', label: locating ? 'Finding you' : 'Location', icon: locating ? <Spinner size={18} color="white" /> : <Compass size={24} />, bg: 'linear-gradient(135deg, #10B981, #0EA5E9)', on: onLocation },
     canGame ? { k: 'game', label: 'Games', icon: <GamepadIcon size={24} />, bg: 'linear-gradient(135deg, #F59E0B, #EF4444)', on: onGame } : null,
+    onPoll ? { k: 'poll', label: 'Poll', icon: <PollIcon size={24} color="white" />, bg: 'linear-gradient(135deg, #7C5CFC, #2563EB)', on: onPoll } : null,
+    onEvent ? { k: 'event', label: 'Event', icon: <CalendarIcon size={24} color="white" />, bg: 'linear-gradient(135deg, #F97316, #DB2777)', on: onEvent } : null,
   ].filter(Boolean);
   return (
     <div onClick={onClose} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 94, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontFamily: FONT, background: theme.dark ? 'rgba(3,6,14,0.45)' : 'rgba(230,234,244,0.45)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' }}>
@@ -25976,8 +27968,8 @@ function PublicStorePage() {
           <div style={{ fontSize: 12.5, color: owned ? '#34d399' : 'rgba(255,255,255,0.55)', marginTop: 8, fontWeight: 700 }}>{cta.sub}</div>
 
           <div style={{ display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap', justifyContent: 'center' }}>
-            {['⚡ Instant delivery', '🔁 Not a subscription', '🔒 Secure checkout'].map((t) => (
-              <span key={t} style={{ fontSize: 12, fontWeight: 800, padding: '6px 10px', borderRadius: 10, background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.75)' }}>{t}</span>
+            {[[Sparkles, 'Instant delivery'], [Repeat, 'Not a subscription'], [Lock, 'Secure checkout']].map(([Ic, t]) => (
+              <span key={t} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 800, padding: '6px 10px', borderRadius: 10, background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.75)' }}><Ic size={13} strokeWidth={2.4} />{t}</span>
             ))}
           </div>
         </div>
