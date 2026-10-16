@@ -1,4 +1,4 @@
-const { createClient } = require('@supabase/supabase-js');
+import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.5-flash';
@@ -511,7 +511,7 @@ const handlerCore = async (event) => {
   return { statusCode: 200, body: 'ok' };
 };
 
-exports.handler = async (event, context) => {
+export const handler = async (event, context) => {
   try {
     return await handlerCore(event, context);
   } catch (err) {

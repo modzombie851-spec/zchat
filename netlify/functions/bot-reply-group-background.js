@@ -1,1 +1,1 @@
-exports.handler = require('./bot-reply-group').handler;
+export { handler } from './bot-reply-group.js';
