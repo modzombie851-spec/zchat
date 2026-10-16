@@ -75,9 +75,26 @@ const ThemeContext = createContext(null);
 const useTheme = () => useContext(ThemeContext);
 
 function ThemeProvider({ children }) {
-  const [dark, setDark] = useState(() => {
-    try { const v = localStorage.getItem('zchat-theme'); return v ? v === 'dark' : true; } catch { return true; }
+  const [themeMode, setThemeModeRaw] = useState(() => {
+    try {
+      const m = localStorage.getItem('zchat-theme-mode');
+      if (m === 'light' || m === 'dark' || m === 'auto') return m;
+      const v = localStorage.getItem('zchat-theme');
+      return v ? (v === 'dark' ? 'dark' : 'light') : 'dark';
+    } catch { return 'dark'; }
   });
+  const [sysDark, setSysDark] = useState(() => { try { return window.matchMedia('(prefers-color-scheme: dark)').matches; } catch { return true; } });
+  useEffect(() => {
+    let mq = null;
+    try { mq = window.matchMedia('(prefers-color-scheme: dark)'); } catch { return undefined; }
+    if (!mq) return undefined;
+    const on = () => setSysDark(!!mq.matches);
+    if (mq.addEventListener) mq.addEventListener('change', on); else if (mq.addListener) mq.addListener(on);
+    return () => { if (mq.removeEventListener) mq.removeEventListener('change', on); else if (mq.removeListener) mq.removeListener(on); };
+  }, []);
+  const dark = themeMode === 'auto' ? sysDark : themeMode === 'dark';
+  const setThemeMode = (m) => { setThemeModeRaw(m); try { localStorage.setItem('zchat-theme-mode', m); } catch {} };
+  const setDark = (v) => { const next = typeof v === 'function' ? v(dark) : v; setThemeMode(next ? 'dark' : 'light'); };
   const [accentName, setAccentName] = useState(() => {
     try { return localStorage.getItem('zchat-accent') || 'coral'; } catch { return 'coral'; }
   });
@@ -92,9 +109,6 @@ function ThemeProvider({ children }) {
   });
   const [fontScale, setFontScale] = useState(() => {
     try { return parseFloat(localStorage.getItem('zchat-fontscale')) || 1; } catch { return 1; }
-  });
-  const [chatTheme, setChatTheme] = useState(() => {
-    try { return localStorage.getItem('zchat-chattheme') || 'classic'; } catch { return 'classic'; }
   });
   const [bubbleColor, setBubbleColor] = useState(() => {
     try { return localStorage.getItem('zchat-bubblecolor') || 'default'; } catch { return 'default'; }
@@ -118,13 +132,10 @@ function ThemeProvider({ children }) {
     try { localStorage.setItem('zchat-bgpattern', bgPatternOn ? 'on' : 'off'); } catch {}
   }, [bgPatternOn]);
   useEffect(() => {
-    try { localStorage.setItem('zchat-chattheme', chatTheme); } catch {}
-  }, [chatTheme]);
-  useEffect(() => {
     try { localStorage.setItem('zchat-bubblecolor', bubbleColor); } catch {}
   }, [bubbleColor]);
   const [bubbleStyle, setBubbleStyle] = useState(() => {
-    try { return localStorage.getItem('zchat-bubble-style') || 'classic'; } catch { return 'classic'; }
+    try { return bubbleKeyOf(localStorage.getItem('zchat-bubble-style')) || 'classic'; } catch { return 'classic'; }
   });
   const [keepTextStyle, setKeepTextStyle] = useState(() => {
     try { return localStorage.getItem('zchat-keep-textstyle') === '1'; } catch { return false; }
@@ -140,7 +151,7 @@ function ThemeProvider({ children }) {
   const applyRemotePrefs = (user) => {
     const p = user && user.user_metadata && user.user_metadata.zprefs;
     if (p && typeof p === 'object') {
-      if (typeof p.bs === 'string' && p.bs) setBubbleStyle(p.bs);
+      if (typeof p.bs === 'string' && p.bs) setBubbleStyle(bubbleKeyOf(p.bs) || 'classic');
       if (typeof p.kt === 'boolean') setKeepTextStyle(p.kt);
       if (typeof p.bc === 'string' && p.bc) setBubbleColor(p.bc);
       if (p.ts && typeof p.ts === 'object') {
@@ -199,7 +210,7 @@ function ThemeProvider({ children }) {
   const accent = ACCENT_PALETTES[accentName] || ACCENT_PALETTES.coral;
   const theme = { ...THEMES[dark ? 'dark' : 'light'], ...accent, bubbleMe: dark ? (accent.meDark || THEMES.dark.bubbleMe) : (accent.meLight || THEMES.light.bubbleMe), dark };
   return (
-    <ThemeContext.Provider value={{ theme, dark, setDark, accentName, setAccentName, soundOn, setSoundOn, reactionSoundOn, setReactionSoundOn, bgPatternOn, setBgPatternOn, fontScale, setFontScale, chatTheme, setChatTheme, bubbleColor, setBubbleColor, bubbleStyle, setBubbleStyle, keepTextStyle, setKeepTextStyle }}>
+    <ThemeContext.Provider value={{ theme, dark, setDark, themeMode, setThemeMode, accentName, setAccentName, soundOn, setSoundOn, reactionSoundOn, setReactionSoundOn, bgPatternOn, setBgPatternOn, fontScale, setFontScale, bubbleColor, setBubbleColor, bubbleStyle, setBubbleStyle, keepTextStyle, setKeepTextStyle }}>
       {children}
     </ThemeContext.Provider>
   );
@@ -285,7 +296,7 @@ function fallbackPopAnimation() {
   } catch { return null; }
 }
 function runWithTransition(fn, dir) {
-  if (vtUpdating) { fn(); return; }
+  if (vtUpdating || swipeBackSkipVT) { fn(); return; }
   try {
     const reduce = reducedMotion();
     if (dir === 'pop' && sheetOrDialogShowing()) { fn(); return; }
@@ -346,42 +357,6 @@ function useBackClose(active, onClose) {
   }, [active]);
 }
 
-const HEAVY_BLUR_OK = !(typeof navigator !== 'undefined'
-  && /iPad|iPhone|iPod/.test(navigator.userAgent || '')
-  || (typeof navigator !== 'undefined' && navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
-
-const glass = (theme, extra = {}) => ({
-  background: HEAVY_BLUR_OK ? theme.glass : (theme.panelBg || theme.glass),
-  ...(HEAVY_BLUR_OK ? {
-    backdropFilter: 'blur(20px) saturate(180%)',
-    WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-  } : {}),
-  border: `1px solid ${theme.border}`,
-  ...extra,
-});
-
-function ZBrand({ size = 22, showTag = false }) {
-  const { theme, chatTheme } = useTheme();
-  const dotColor = chatTheme === 'love' ? '#FF4D8D' : chatTheme === 'neon' ? '#00FFDC' : theme.teal;
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span style={{ fontFamily: 'Georgia, serif', fontWeight: 800, fontSize: size, color: theme.coral, letterSpacing: -0.5 }}>Z</span>
-        <span style={{ fontFamily: 'Georgia, serif', fontWeight: 700, fontSize: size * 0.86, color: theme.ink }}>chat</span>
-        <span style={{ width: size * 0.24, height: size * 0.24, borderRadius: '50%', background: dotColor, boxShadow: `0 0 8px ${dotColor}`, flexShrink: 0 }} />
-      </div>
-      {showTag && <div style={{ fontSize: Math.max(9, size * 0.28), letterSpacing: 1.2, color: theme.muted, marginTop: 2, textTransform: 'uppercase' }}>More than messages</div>}
-    </div>
-  );
-}
-
-const CHAT_THEMES = {
-  classic: { label: 'Classic', bubbleRadius: 16, borderStyle: 'solid', glow: false, bg: 'none' },
-  glass: { label: 'Frosted Glass', bubbleRadius: 16, borderStyle: 'solid', glow: false, bg: 'blobs' },
-  love: { label: 'Love', bubbleRadius: 16, borderStyle: 'thin', glow: false, bg: 'hearts' },
-  neon: { label: 'Neon', bubbleRadius: 16, borderStyle: 'thin', glow: false, bg: 'neon' },
-};
-
 const BUBBLE_COLORS = {
   default: { label: 'Default', me: null, them: null },
   coral: { label: 'Coral', me: '#FFDCCB', them: null },
@@ -391,71 +366,6 @@ const BUBBLE_COLORS = {
   sky: { label: 'Sky', me: '#D6ECFF', them: null },
   rose: { label: 'Rose', me: '#FBDCE6', them: null },
 };
-
-function AnimatedChatBackground({ chatTheme }) {
-  const spec = CHAT_THEMES[chatTheme] || CHAT_THEMES.classic;
-  if (spec.bg === 'none') return null;
-  if (spec.bg === 'hearts') {
-    return (
-      <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: -1 }}>
-        <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse at 30% 20%, rgba(120,20,80,0.35), transparent 60%), radial-gradient(ellipse at 80% 80%, rgba(60,10,60,0.3), transparent 55%)' }} />
-        {Array.from({ length: 14 }).map((_, i) => (
-          <span key={i} style={{
-            position: 'absolute', left: `${(i * 37) % 100}%`, bottom: -30,
-            fontSize: 12 + (i % 5) * 6, opacity: 0.18 + (i % 3) * 0.06,
-            animation: `zchat-float-up ${8 + (i % 6)}s linear infinite`, animationDelay: `${i * 1.3}s`,
-          }}>💗</span>
-        ))}
-      </div>
-    );
-  }
-  if (spec.bg === 'blobs') {
-    return (
-      <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: -1 }}>
-        <div style={{
-          position: 'absolute', width: 340, height: 340, borderRadius: '50%', top: '-10%', left: '-15%',
-          background: 'radial-gradient(circle, rgba(255,255,255,0.14), transparent 70%)',
-          animation: 'zchat-drift-a 18s ease-in-out infinite',
-        }} />
-        <div style={{
-          position: 'absolute', width: 280, height: 280, borderRadius: '50%', bottom: '-10%', right: '-10%',
-          background: 'radial-gradient(circle, rgba(255,255,255,0.10), transparent 70%)',
-          animation: 'zchat-drift-b 22s ease-in-out infinite',
-        }} />
-      </div>
-    );
-  }
-  if (spec.bg === 'neon') {
-    return (
-      <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: -1 }}>
-        <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse at 20% 10%, rgba(0,50,60,0.4), transparent 60%), radial-gradient(ellipse at 85% 85%, rgba(40,0,60,0.35), transparent 55%)' }} />
-        <div style={{
-          position: 'absolute', width: 260, height: 260, borderRadius: '50%', top: '10%', right: '-8%',
-          background: 'radial-gradient(circle, rgba(0,255,220,0.16), transparent 70%)',
-          animation: 'zchat-drift-a 14s ease-in-out infinite',
-        }} />
-        <div style={{
-          position: 'absolute', width: 220, height: 220, borderRadius: '50%', bottom: '5%', left: '-8%',
-          background: 'radial-gradient(circle, rgba(190,0,255,0.14), transparent 70%)',
-          animation: 'zchat-drift-b 17s ease-in-out infinite',
-        }} />
-      </div>
-    );
-  }
-  return null;
-}
-
-function bubbleThemeStyle(chatTheme, isMe, theme) {
-  const spec = CHAT_THEMES[chatTheme] || CHAT_THEMES.classic;
-  const base = { borderRadius: spec.bubbleRadius };
-  if (chatTheme === 'love') {
-    base.border = `1px solid ${isMe ? 'rgba(255,77,141,0.4)' : 'rgba(255,182,201,0.3)'}`;
-  }
-  if (chatTheme === 'neon') {
-    base.border = `1px solid ${isMe ? 'rgba(0,255,220,0.4)' : 'rgba(176,38,255,0.35)'}`;
-  }
-  return base;
-}
 
 const COMPOSER_AUTOSIZE = typeof CSS !== 'undefined' && typeof CSS.supports === 'function' && CSS.supports('field-sizing', 'content');
 const FONT = "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
@@ -570,11 +480,12 @@ function GlobalStyle() {
       @keyframes zchat-sending-dots { 0%, 20% { opacity: 0.2; } 50% { opacity: 1; } 100% { opacity: 0.2; } }
       @keyframes zchat-shake { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-9px); } 40% { transform: translateX(8px); } 60% { transform: translateX(-6px); } 80% { transform: translateX(4px); } }
       .zchat-shake { animation: zchat-shake 0.45s ease; }
+      @keyframes zchat-rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+      .zchat-rise { animation: zchat-rise 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+      .zauth-input::placeholder { color: rgba(140,140,150,0.9); }
+      .zauth-input:focus { border-color: var(--zacc) !important; box-shadow: 0 0 0 3px var(--zacc-soft); }
       .zchat-buzz { animation: zchat-shake 0.42s ease 2; }
-      @keyframes zchat-drift-a { 0%, 100% { transform: translate(0,0); } 50% { transform: translate(30px, 20px); } }
-      @keyframes zchat-drift-b { 0%, 100% { transform: translate(0,0); } 50% { transform: translate(-24px, -18px); } }
       @keyframes zchat-love-pulse { 0%, 100% { box-shadow: 0 0 10px rgba(255,77,141,0.28); } 50% { box-shadow: 0 0 20px rgba(255,77,141,0.55); } }
-      @keyframes zchat-neon-pulse { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.18); } }
       @keyframes zchat-wave-pop { 0% { opacity: 0; transform: scale(0.4) translateY(10px); } 60% { opacity: 1; transform: scale(1.08) translateY(-2px); } 100% { opacity: 1; transform: scale(1) translateY(0); } }
       @keyframes zchat-panel-zoom-in { 0% { transform: translateX(100%); } 100% { transform: translateX(0); } }
       @keyframes zchat-panel-zoom-out { 0% { transform: translateX(0); opacity: 1; } 100% { transform: translateX(45%); opacity: 0; } }
@@ -619,7 +530,6 @@ function GlobalStyle() {
       @keyframes zchat-vt-fade-in { from { opacity: 0; } }
       html[data-nav="fade"]::view-transition-old(root) { animation: zchat-vt-fade-out 0.18s ease both; }
       html[data-nav="fade"]::view-transition-new(root) { animation: zchat-vt-fade-in 0.22s ease both; }
-      @keyframes zchat-bot-orb { 0% { transform: translate(0, 0) scale(1); } 100% { transform: translate(40px, -50px) scale(1.18); } }
       @keyframes zchat-dots { 0%, 80%, 100% { opacity: 0.25; } 40% { opacity: 1; } }
       .zchat-toast-in { animation: zchat-toast-in 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.1); }
       .zchat-pop { animation: zchat-pop-in 0.18s cubic-bezier(0.2, 0.9, 0.3, 1.2); }
@@ -629,7 +539,8 @@ function GlobalStyle() {
       @keyframes zchat-call-ring { 0% { transform: scale(0.92); opacity: 0.85; } 100% { transform: scale(1.4); opacity: 0; } }
       .zchat-call-pulse { animation: zchat-call-pulse 1.6s infinite; }
       html, body { overscroll-behavior: none; }
-      [style*="overflow-y: auto"] { overflow-x: hidden; overscroll-behavior-y: contain; -webkit-overflow-scrolling: touch; }
+      [style*="overflow-y: auto"] { overflow-x: hidden; overscroll-behavior-y: contain; overscroll-behavior-x: none; -webkit-overflow-scrolling: touch; }
+      html, body, #root { overscroll-behavior-x: none; }
       @keyframes zchat-confetti { 0% { transform: translateY(-20px) rotate(0deg); } 100% { transform: translateY(110vh) rotate(720deg); } }
       @keyframes zchat-badge-pulse { 0%, 100% { transform: scale(0.94); opacity: 0.75; } 50% { transform: scale(1.06); opacity: 1; } }
       @keyframes zchat-frame-spin { to { transform: rotate(360deg); } }
@@ -643,8 +554,6 @@ function GlobalStyle() {
       .zchat-fire-ring {
         background: linear-gradient(135deg, #FFD23F, #FF6B00, #FF2D55);
       }
-      .zchat-bubble-love { animation: zchat-love-pulse 2.6s ease-in-out infinite; }
-      .zchat-bubble-neon { animation: zchat-neon-pulse 2.2s ease-in-out infinite; }
       .zchat-fade { animation: zchat-fade 0.28s cubic-bezier(0.2, 0.8, 0.2, 1); transform-origin: 50% 60%; }
       .zchat-wave-pop { animation: zchat-wave-pop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1); }
       .zchat-panel-open { animation: zchat-panel-zoom-in 0.3s cubic-bezier(0.32, 0.72, 0, 1); }
@@ -683,18 +592,6 @@ function GlobalStyle() {
   );
 }
 
-function ThemeToggleIcon({ size = 18 }) {
-  const { dark, setDark } = useTheme();
-  return (
-    <div onClick={() => setDark((d) => !d)} style={{
-      width: 36, height: 36, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-      cursor: 'pointer', flexShrink: 0,
-    }}>
-      {dark ? <Sun size={size} color="#F2F1F6" /> : <Moon size={size} color="#1B1B1F" />}
-    </div>
-  );
-}
-
 const AVATAR_COLORS = ['#FF6B4A', '#29C7B3', '#7C5CFC', '#F3B54C', '#FF4D8D', '#3DA5F5', '#4CC98A', '#E85B81'];
 function hiddenAccountProfile(profile) {
   if (!profile) return profile;
@@ -715,7 +612,7 @@ function colorForName(name) {
 }
 
 function Avatar({ emoji, name = '', online, size = 40, ring = false, frame = null, frameFit }) {
-  const { chatTheme, theme } = useTheme();
+  const { theme } = useTheme();
   const frameUrl = useFrameUrl(frame && size >= 22 ? frame : null);
   const frameSpec = frame ? AVATAR_FRAMES[frame] : null;
   const fitFrame = frameSpec ? (frameFit === undefined ? size <= 72 : !!frameFit) : false;
@@ -724,7 +621,7 @@ function Avatar({ emoji, name = '', online, size = 40, ring = false, frame = nul
   const [imgFailed, setImgFailed] = useState(false);
   const isImage = typeof emoji === 'string' && emoji.startsWith('http') && !imgFailed;
   const initial = (name || '?').trim().charAt(0).toUpperCase() || '?';
-  const ringColor = chatTheme === 'love' ? '#FF4D8D' : chatTheme === 'neon' ? '#00FFDC' : theme.coral;
+  const ringColor = theme.coral;
   return (
     <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
       <div style={{
@@ -758,52 +655,220 @@ function Avatar({ emoji, name = '', online, size = 40, ring = false, frame = nul
   );
 }
 
-function AuthBackdrop() {
-  const { theme } = useTheme();
-  const a = theme.dark ? 0.55 : 0.32;
-  const b = theme.dark ? 0.36 : 0.22;
-  const c = theme.dark ? 0.3 : 0.18;
+const WELCOME_PHOTO = '/welcome-night.webp';
+
+const WELCOME_LQIP = 'data:image/webp;base64,UklGRvYAAABXRUJQVlA4IOoAAAAQBgCdASoYADQAPu1mrU8ppaQiKBgNUTAdiUAZAKggxeu3sfoQJVfhevyWRquQ/22UFJCPd8Z/HgAA/vbBWkOBv72v+rMl0XyvLbAD23GchiCl+clKY+ntZA6VyYgMy2RDum1kDQuIIB9d1sOtZ3sel4Nxqz4W1HkyRyg9ReETitCbc3vYr76GIhcDrd4A1g6fulM3k0cW6FkDTj/3Nd59D7jvHksM9BrFK+o89Y57+7wpXphLwRmQ0QouSuuzjIBjnnYMcRI1FRneqA2MBfS+SWS87sPDzUq0c3dDqK2gFlmSSj17eioAAAA=';
+
+const AUTH_BG = '#03040B';
+
+function useAuthViewport() {
+  const read = () => {
+    if (typeof window === 'undefined') return { h: 0, top: 0, wide: false };
+    const vv = window.visualViewport;
+    return { h: Math.round(vv ? vv.height : window.innerHeight), top: Math.round(vv ? vv.offsetTop : 0), wide: window.innerWidth >= 900 };
+  };
+  const [box, setBox] = useState(read);
+  useEffect(() => {
+    const on = () => setBox((prev) => { const n = read(); return (n.h === prev.h && n.top === prev.top && n.wide === prev.wide) ? prev : n; });
+    const vv = window.visualViewport;
+    window.addEventListener('resize', on);
+    if (vv) { vv.addEventListener('resize', on); vv.addEventListener('scroll', on); }
+    return () => {
+      window.removeEventListener('resize', on);
+      if (vv) { vv.removeEventListener('resize', on); vv.removeEventListener('scroll', on); }
+    };
+  }, []);
+  return box;
+}
+
+function AuthPhoto({ shade = 0, card = false }) {
+  const [ok, setOk] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const top = card ? '0%' : '-9%';
   return (
-    <div aria-hidden="true" style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none' }}>
-      <div style={{ position: 'absolute', width: 380, height: 380, borderRadius: '50%', left: -130, top: -90, background: `radial-gradient(circle, rgba(124,92,252,${a}), rgba(124,92,252,0) 70%)`, filter: 'blur(28px)', animation: 'zchat-drift-a 14s ease-in-out infinite' }} />
-      <div style={{ position: 'absolute', width: 440, height: 440, borderRadius: '50%', right: -170, top: '28%', background: `radial-gradient(circle, rgba(236,72,153,${b}), rgba(236,72,153,0) 70%)`, filter: 'blur(36px)', animation: 'zchat-drift-b 18s ease-in-out infinite' }} />
-      <div style={{ position: 'absolute', width: 400, height: 400, borderRadius: '50%', left: '18%', bottom: -220, background: `radial-gradient(circle, rgba(0,194,168,${c}), rgba(0,194,168,0) 70%)`, filter: 'blur(34px)', animation: 'zchat-drift-a 22s ease-in-out infinite reverse' }} />
-      <div style={{ position: 'absolute', inset: 0, backgroundImage: `radial-gradient(${theme.dark ? 'rgba(255,255,255,0.075)' : 'rgba(0,0,0,0.08)'} 1px, transparent 1.3px)`, backgroundSize: '26px 26px' }} />
-      {[[8, 14, 1.6], [26, 62, 1.2], [68, 9, 1.4], [84, 40, 1.1], [52, 86, 1.5], [14, 88, 1], [92, 76, 1.3], [40, 30, 0.9]].map(([x, y, r], i) => (
-        <div key={i} style={{ position: 'absolute', left: `${x}%`, top: `${y}%`, width: r * 3, height: r * 3, borderRadius: '50%', background: theme.dark ? '#E9E1FF' : '#7C5CFC', opacity: theme.dark ? 0.55 : 0.35, animation: `zchat-badge-pulse ${3 + i * 0.6}s ease-in-out infinite`, boxShadow: theme.dark ? '0 0 8px rgba(233,225,255,0.6)' : 'none' }} />
-      ))}
+    <div aria-hidden="true" style={{ position: 'absolute', inset: 0, overflow: 'hidden', background: AUTH_BG, borderRadius: card ? 30 : 0, pointerEvents: 'none' }}>
+      <div style={{ position: 'absolute', left: -30, right: -30, top: card ? -30 : '-12%', bottom: -30, backgroundImage: `url(${WELCOME_LQIP})`, backgroundSize: 'cover', backgroundPosition: '50% 58%', filter: 'blur(22px)', opacity: ok ? 0 : 0.9, transition: 'opacity 0.6s ease' }} />
+      {!failed && (
+        <img src={WELCOME_PHOTO} alt="" draggable={false} decoding="async" onLoad={() => setOk(true)} onError={() => setFailed(true)}
+          style={{ position: 'absolute', left: 0, top, width: '100%', height: '100%', objectFit: 'cover', objectPosition: '50% 58%', opacity: ok ? 1 : 0, transition: 'opacity 0.7s ease' }} />
+      )}
+      <div style={{ position: 'absolute', inset: 0, background: card
+        ? 'linear-gradient(180deg, rgba(3,4,11,0) 62%, rgba(3,4,11,0.5) 100%)'
+        : 'linear-gradient(180deg, rgba(3,4,11,0.55) 0%, rgba(3,4,11,0) 15%, rgba(3,4,11,0) 47%, rgba(3,4,11,0.8) 67%, #03040B 84%)' }} />
+      {shade > 0 && <div style={{ position: 'absolute', inset: 0, background: `rgba(3,4,11,${shade})` }} />}
     </div>
   );
 }
 
-function AuthShell({ children }) {
-  const { theme } = useTheme();
+function ZMark({ size = 32 }) {
   return (
-    <div id="zapp-root" style={{
-      minHeight: '100dvh', width: '100%', background: theme.dark ? '#0A0716' : '#F3EEFF',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      fontFamily: FONT, padding: 20, boxSizing: 'border-box', overflowY: 'auto', position: 'relative',
-      paddingTop: 'calc(24px + env(safe-area-inset-top))',
-      paddingBottom: 'calc(24px + env(safe-area-inset-bottom))',
-      paddingLeft: 'calc(18px + env(safe-area-inset-left))',
-      paddingRight: 'calc(18px + env(safe-area-inset-right))',
-    }}>
-      <GlobalStyle />
-      <AuthBackdrop />
-      <div style={{ position: 'absolute', top: 'calc(14px + env(safe-area-inset-top))', right: 16, zIndex: 2 }}><ThemeToggleIcon /></div>
-      <div style={{ width: '100%', maxWidth: 400, position: 'relative', zIndex: 1 }} className="zchat-fade">
-        <div style={{ textAlign: 'center', marginBottom: 20 }}>
-          <div style={{ display: 'inline-flex' }}><ZBrand size={40} showTag /></div>
-          <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginTop: 14, flexWrap: 'wrap' }}>
-            {[[<MessageSquare size={12} />, 'Chats'], [<Camera size={12} />, 'Moments'], [<Phone size={12} />, 'Calls'], [<Sparkles size={12} />, 'Collection']].map(([icon, label]) => (
-              <span key={label} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 999, fontSize: 11.5, fontWeight: 700, color: theme.dark ? '#D9CCFF' : '#4A3F80', background: theme.dark ? 'rgba(124,92,252,0.16)' : 'rgba(124,92,252,0.1)', border: `1px solid ${theme.dark ? 'rgba(183,156,255,0.22)' : 'rgba(124,92,252,0.18)'}` }}>{icon}{label}</span>
-            ))}
-          </div>
-        </div>
-        <div style={{ borderRadius: 28, padding: '24px 22px', background: theme.dark ? 'rgba(18,18,20,0.74)' : 'rgba(255,255,255,0.84)', border: `1px solid ${theme.dark ? 'rgba(183,156,255,0.16)' : 'rgba(0,0,0,0.12)'}`, backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', boxShadow: theme.dark ? '0 24px 60px rgba(5,2,20,0.55)' : '0 20px 50px rgba(0,0,0,0.14)' }}>
-          {children}
+    <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden="true" style={{ display: 'block', flexShrink: 0 }}>
+      <rect width="64" height="64" rx="17" fill="#0D1122" />
+      <rect x="0.75" y="0.75" width="62.5" height="62.5" rx="16.25" fill="none" stroke="rgba(255,255,255,0.14)" strokeWidth="1.5" />
+      <path d="M20 21h24.5L21.5 43H44" fill="none" stroke="#5B8CFF" strokeWidth="7.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function welcomeBtnStyle(primary) {
+  return {
+    width: '100%', height: 54, borderRadius: 16, fontFamily: FONT, fontSize: 16.5, fontWeight: 700, cursor: 'pointer',
+    border: primary ? 'none' : '1px solid rgba(255,255,255,0.32)',
+    background: primary ? '#FFFFFF' : 'rgba(3,4,11,0.35)', color: primary ? '#0A0B12' : '#FFFFFF',
+  };
+}
+
+function WelcomeScreen({ onCreate, onLogin }) {
+  const vp = useAuthViewport();
+  const links = [['/?page=terms', 'Terms'], ['/?page=privacy', 'Privacy'], ['/?page=refund', 'Refunds'], ['/?page=store', 'Store']];
+  const brand = (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+      <ZMark size={30} />
+      <span style={{ fontSize: 21, fontWeight: 900, letterSpacing: '-0.05em', color: '#FFFFFF', lineHeight: 1 }}>zchat</span>
+    </div>
+  );
+  const body = (
+    <>
+      <div className="zchat-rise" style={{ fontSize: vp.wide ? 46 : 34, lineHeight: 1.04, fontWeight: 800, letterSpacing: '-0.035em', color: '#FFFFFF' }}>Stay up talking.</div>
+      <div className="zchat-rise" style={{ fontSize: 15.5, lineHeight: 1.45, color: 'rgba(255,255,255,0.72)', marginTop: 10, maxWidth: 330, animationDelay: '60ms' }}>Messages, calls and little moments with your favourite people.</div>
+      <div className="zchat-rise" style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 26, animationDelay: '120ms' }}>
+        <button type="button" onClick={() => { hapticTap(); onCreate(); }} className="zchat-press" style={welcomeBtnStyle(true)}>Create account</button>
+        <button type="button" onClick={() => { hapticTap(); onLogin(); }} className="zchat-press" style={welcomeBtnStyle(false)}>Log in</button>
+      </div>
+      <div style={{ display: 'flex', justifyContent: vp.wide ? 'flex-start' : 'center', gap: 20, flexWrap: 'wrap', marginTop: 20 }}>
+        {links.map(([href, label]) => <a key={href} href={href} style={{ color: 'rgba(255,255,255,0.5)', fontSize: 12.5, fontWeight: 600, textDecoration: 'none', fontFamily: FONT }}>{label}</a>)}
+      </div>
+    </>
+  );
+  if (vp.wide) {
+    return (
+      <div id="zapp-root" style={{ position: 'fixed', inset: 0, background: AUTH_BG, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 80, padding: 32, fontFamily: FONT, color: '#fff', overflow: 'auto' }}>
+        <GlobalStyle />
+        <div style={{ position: 'relative', height: 'min(86vh, 860px)', aspectRatio: '852 / 1846', borderRadius: 30, overflow: 'hidden', flexShrink: 0, boxShadow: '0 30px 80px rgba(0,0,0,0.6)' }}><AuthPhoto card /></div>
+        <div style={{ width: 400, maxWidth: '100%' }}>
+          {brand}
+          <div style={{ height: 56 }} />
+          {body}
         </div>
       </div>
+    );
+  }
+  return (
+    <div id="zapp-root" style={{ position: 'fixed', left: 0, right: 0, top: 0, bottom: 0, background: AUTH_BG, fontFamily: FONT, overflow: 'hidden', color: '#fff' }}>
+      <GlobalStyle />
+      <AuthPhoto />
+      <div style={{ position: 'absolute', top: 'calc(18px + env(safe-area-inset-top))', left: 22 }}>{brand}</div>
+      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '0 22px calc(20px + env(safe-area-inset-bottom))', maxWidth: 520, margin: '0 auto' }}>
+        {body}
+      </div>
+    </div>
+  );
+}
+
+function authInputStyle(theme, extra) {
+  return {
+    width: '100%', height: 52, padding: '0 16px', borderRadius: 14, boxSizing: 'border-box',
+    border: `1px solid ${theme.dark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.13)'}`,
+    background: theme.dark ? '#16171D' : '#F5F5F7', color: theme.ink, fontSize: 16, fontFamily: FONT, outline: 'none',
+    transition: 'border-color 0.15s ease, box-shadow 0.15s ease', ...(extra || {}),
+  };
+}
+
+function authPrimaryStyle(theme, disabled, extra) {
+  return {
+    width: '100%', height: 52, borderRadius: 14, border: 'none', background: theme.coral, color: '#FFFFFF',
+    fontSize: 16, fontWeight: 700, fontFamily: FONT, cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.4 : 1,
+    display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'opacity 0.15s ease', ...(extra || {}),
+  };
+}
+
+function authLinkStyle(theme, accent) {
+  return { background: 'none', border: 'none', padding: 0, color: accent ? theme.coral : theme.ink, fontWeight: 700, fontSize: 14.5, cursor: 'pointer', fontFamily: FONT };
+}
+
+function AuthTitle({ title, sub }) {
+  const { theme } = useTheme();
+  return (
+    <div style={{ marginBottom: 20 }}>
+      <div style={{ fontSize: 27, fontWeight: 800, letterSpacing: '-0.03em', color: theme.ink, lineHeight: 1.1 }}>{title}</div>
+      {sub && <div style={{ fontSize: 14.5, color: theme.muted, marginTop: 7, lineHeight: 1.45 }}>{sub}</div>}
+    </div>
+  );
+}
+
+function AuthError({ text }) {
+  const { theme } = useTheme();
+  if (!text) return null;
+  return <div role="alert" className="zchat-fade" style={{ color: theme.danger, fontSize: 13.5, marginTop: 10, lineHeight: 1.4, fontWeight: 600 }}>{text}</div>;
+}
+
+function PasswordInput({ value, onChange, placeholder, onEnter, autoComplete, ariaLabel, style }) {
+  const { theme } = useTheme();
+  const [show, setShow] = useState(false);
+  return (
+    <div style={{ position: 'relative', ...(style || {}) }}>
+      <input className="zauth-input" type={show ? 'text' : 'password'} value={value} placeholder={placeholder} autoComplete={autoComplete} aria-label={ariaLabel || placeholder}
+        onChange={(e) => onChange(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && onEnter) onEnter(); }}
+        style={authInputStyle(theme, { paddingRight: 72 })} />
+      {value ? (
+        <button type="button" onClick={() => setShow((s) => !s)} aria-label={show ? 'Hide password' : 'Show password'}
+          style={{ position: 'absolute', right: 6, top: 6, height: 40, padding: '0 12px', border: 'none', background: 'transparent', color: theme.ink, fontWeight: 700, fontSize: 14, cursor: 'pointer', fontFamily: FONT }}>{show ? 'Hide' : 'Show'}</button>
+      ) : null}
+    </div>
+  );
+}
+
+function AuthShell({ children, onBack }) {
+  const { theme } = useTheme();
+  const vp = useAuthViewport();
+  const sheetBg = theme.dark ? '#0E0F14' : '#FFFFFF';
+  const vars = { '--zacc': theme.coral, '--zacc-soft': `${theme.coral}38` };
+  const scrollFocused = (e) => {
+    const t = e.target;
+    if (!t || t.tagName !== 'INPUT') return;
+    setTimeout(() => { try { t.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch {} }, 320);
+  };
+  if (vp.wide) {
+    return (
+      <div id="zapp-root" style={{ position: 'fixed', inset: 0, background: theme.dark ? AUTH_BG : '#EFEFF3', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 72, padding: 32, fontFamily: FONT, overflow: 'auto', ...vars }}>
+        <GlobalStyle />
+        <div style={{ position: 'relative', height: 'min(86vh, 860px)', aspectRatio: '852 / 1846', borderRadius: 30, overflow: 'hidden', flexShrink: 0, boxShadow: '0 30px 80px rgba(0,0,0,0.45)' }}><AuthPhoto card /></div>
+        <div style={{ width: 420, maxWidth: '100%' }}>
+          {onBack && (
+            <button type="button" aria-label="Back" onClick={onBack} className="zchat-press" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: 16, background: 'none', border: 'none', color: theme.dark ? 'rgba(255,255,255,0.8)' : theme.ink, fontSize: 15, fontWeight: 700, cursor: 'pointer', padding: '6px 0', fontFamily: FONT }}>
+              <ArrowLeft size={19} />Back
+            </button>
+          )}
+          <div style={{ background: sheetBg, borderRadius: 26, padding: '28px 26px 24px', border: `1px solid ${theme.border}`, color: theme.ink }}>{children}</div>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div id="zapp-root" style={{ position: 'fixed', left: 0, right: 0, top: vp.top, height: vp.h || '100%', background: AUTH_BG, fontFamily: FONT, overflow: 'hidden', display: 'flex', flexDirection: 'column', ...vars }}>
+      <GlobalStyle />
+      <AuthPhoto shade={0.3} />
+      <div style={{ position: 'relative', zIndex: 2, padding: 'calc(10px + env(safe-area-inset-top)) 12px 0', flexShrink: 0, minHeight: 52, display: 'flex', alignItems: 'center' }}>
+        {onBack && (
+          <button type="button" aria-label="Back" onClick={onBack} className="zchat-press" style={{ width: 42, height: 42, borderRadius: '50%', border: 'none', background: 'rgba(3,4,11,0.55)', color: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 }}>
+            <ArrowLeft size={22} />
+          </button>
+        )}
+      </div>
+      <div style={{ flex: 1, minHeight: 20 }} />
+      <div className="zchat-sheet-up" onFocusCapture={scrollFocused} style={{ position: 'relative', zIndex: 2, background: sheetBg, color: theme.ink, borderRadius: '26px 26px 0 0', maxHeight: 'calc(100% - 60px)', overflowY: 'auto', overscrollBehavior: 'contain', padding: '24px 22px calc(20px + env(safe-area-inset-bottom))', boxSizing: 'border-box', width: '100%', maxWidth: 560, margin: '0 auto' }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function BootScreen() {
+  const { theme } = useTheme();
+  return (
+    <div style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 18, background: theme.bgGradient }}>
+      <ZMark size={56} />
+      <Spinner size={20} color={theme.muted} />
     </div>
   );
 }
@@ -814,6 +879,15 @@ function AppleLogo({ size = 18, color = 'currentColor' }) {
       <path d="M16.37 12.6c-.02-2.3 1.88-3.4 1.97-3.46-1.07-1.57-2.74-1.78-3.33-1.81-1.42-.14-2.77.84-3.49.84-.72 0-1.83-.82-3.01-.8-1.55.02-2.98.9-3.78 2.29-1.61 2.8-.41 6.94 1.16 9.21.77 1.11 1.68 2.36 2.88 2.32 1.16-.05 1.6-.75 3-.75s1.79.75 3.01.73c1.24-.02 2.03-1.13 2.79-2.25.88-1.29 1.24-2.54 1.26-2.6-.03-.01-2.42-.93-2.46-3.72zM14.08 5.84c.64-.77 1.07-1.85.95-2.92-.92.04-2.03.61-2.69 1.38-.59.68-1.11 1.78-.97 2.83 1.03.08 2.07-.52 2.71-1.29z" />
     </svg>
   );
+}
+
+function socialBtnStyle(theme, loading) {
+  return {
+    flex: 1, minWidth: 0, height: 50, borderRadius: 14, fontFamily: FONT, fontSize: 15, fontWeight: 700,
+    border: `1px solid ${theme.dark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.13)'}`,
+    background: theme.dark ? '#16171D' : '#FFFFFF', color: theme.ink, cursor: loading ? 'default' : 'pointer',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9,
+  };
 }
 
 function AppleButton({ onError }) {
@@ -834,15 +908,9 @@ function AppleButton({ onError }) {
       if (onError) onError("Couldn't start Apple sign in. Try again.");
     }
   };
-  const dark = theme.dark;
   return (
-    <button onClick={click} disabled={loading} aria-label="Continue with Apple" className="zchat-press" style={{
-      width: '100%', height: 48, borderRadius: 15, border: dark ? 'none' : '1.5px solid #000',
-      background: dark ? '#FFFFFF' : '#000000', color: dark ? '#000000' : '#FFFFFF',
-      fontSize: 15, fontWeight: 700, cursor: loading ? 'default' : 'pointer', fontFamily: FONT,
-      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9,
-    }}>
-      {loading ? <Spinner size={15} color={dark ? '#000' : '#fff'} /> : (<><AppleLogo size={19} color={dark ? '#000' : '#fff'} />Continue with Apple</>)}
+    <button type="button" onClick={click} disabled={loading} aria-label="Continue with Apple" className="zchat-press" style={socialBtnStyle(theme, loading)}>
+      {loading ? <Spinner size={15} color={theme.ink} /> : (<><AppleLogo size={19} color={theme.ink} />Apple</>)}
     </button>
   );
 }
@@ -893,8 +961,8 @@ function randomNonce() {
 function GoogleButton({ onError }) {
   const { theme } = useTheme();
   const [loading, setLoading] = useState(false);
-
   const handleClick = async () => {
+    if (loading) return;
     setLoading(true);
     try {
       const rawNonce = randomNonce();
@@ -907,9 +975,7 @@ function GoogleButton({ onError }) {
         use_fedcm_for_prompt: true,
         callback: async (response) => {
           setLoading(false);
-          const { error } = await supabase.auth.signInWithIdToken({
-            provider: 'google', token: response.credential, nonce: rawNonce,
-          });
+          const { error } = await supabase.auth.signInWithIdToken({ provider: 'google', token: response.credential, nonce: rawNonce });
           if (error && onError) onError(friendlyError(error, "Couldn't sign in with Google. Try again."));
         },
       });
@@ -921,33 +987,22 @@ function GoogleButton({ onError }) {
       });
     } catch {
       setLoading(false);
-      if (onError) onError("Couldn't load Google sign-in. Check your connection and try again.");
+      if (onError) onError("Couldn't load Google sign in. Check your connection and try again.");
     }
   };
-
   return (
-    <button
-      onClick={handleClick}
-      disabled={loading}
-      className="zchat-press"
-      style={{
-        width: '100%', height: 48, borderRadius: 15, border: `1.5px solid ${theme.border}`,
-        background: theme.dark ? 'rgba(255,255,255,0.05)' : 'white', color: theme.ink,
-        fontSize: 15, fontWeight: 700, cursor: loading ? 'default' : 'pointer', fontFamily: FONT,
-        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginTop: 10,
-      }}>
-      {loading ? <Spinner size={15} color={theme.ink} /> : (<><GoogleLogo size={18} />Continue with Google</>)}
+    <button type="button" onClick={handleClick} disabled={loading} aria-label="Continue with Google" className="zchat-press" style={socialBtnStyle(theme, loading)}>
+      {loading ? <Spinner size={15} color={theme.ink} /> : (<><GoogleLogo size={18} />Google</>)}
     </button>
   );
 }
 
 function OrDivider() {
   const { theme } = useTheme();
+  const line = <div style={{ flex: 1, height: 1, background: theme.dark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)' }} />;
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '16px 0' }}>
-      <div style={{ flex: 1, height: 1, background: theme.border }} />
-      <span style={{ fontSize: 11.5, color: theme.muted, fontWeight: 600 }}>OR</span>
-      <div style={{ flex: 1, height: 1, background: theme.border }} />
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '20px 0' }}>
+      {line}<span style={{ fontSize: 13, color: theme.muted, fontWeight: 600 }}>or</span>{line}
     </div>
   );
 }
@@ -956,50 +1011,43 @@ function LoginStep({ onSuccess, onForgot, onGoRegister }) {
   const { theme } = useTheme();
   const [email, setEmail] = useState('');
   const [password, setPasswordVal] = useState('');
-  const [showPw, setShowPw] = useState(false);
   const [err, setErr] = useState('');
   const [loading, setLoading] = useState(false);
-  const valid = /\S+@\S+\.\S+/.test(email) && password.length >= 6;
-
+  const cleanEmail = email.trim();
+  const valid = /\S+@\S+\.\S+/.test(cleanEmail) && password.length >= 6;
   const submit = async () => {
     if (!valid || loading) return;
     setLoading(true); setErr('');
-    if (await isBlockedHere(email)) {
+    if (await isBlockedHere(cleanEmail)) {
       setLoading(false);
       setErr(BLOCKED_MESSAGE);
       return;
     }
-    const { data, error } = await signInWithPassword(email, password);
+    const { data, error } = await signInWithPassword(cleanEmail, password);
     setLoading(false);
-    if (error) { setErr('Incorrect email or password.'); return; }
+    if (error) { setErr('That email and password do not match. Try again.'); return; }
     onSuccess(data.session);
   };
-
   return (
-    <div>
-      <div style={{ fontSize: 24, fontWeight: 800, color: theme.ink, letterSpacing: '-0.02em' }}>Welcome back</div>
-      <div style={{ fontSize: 13.5, color: theme.muted, marginTop: 4, marginBottom: 18 }}>Sign in to pick up your chats where you left them.</div>
-      <AppleButton onError={setErr} />
-      <GoogleButton onError={setErr} />
-      <OrDivider />
-      <input style={{ ...inputStyle(theme), marginBottom: 10 }} placeholder="Email" autoCapitalize="none"
-        value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && submit()} />
-      <div style={{ position: 'relative' }}>
-        <input style={inputStyle(theme)} type={showPw ? 'text' : 'password'} placeholder="Password"
-          value={password} onChange={(e) => setPasswordVal(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && submit()} />
-        <div onClick={() => setShowPw((s) => !s)} style={{ position: 'absolute', right: 13, top: 14, cursor: 'pointer', color: theme.muted }}>
-          {showPw ? <EyeOff size={18} /> : <Eye size={18} />}
-        </div>
+    <div className="zchat-tab-in">
+      <AuthTitle title="Log in" />
+      <input className="zauth-input" type="email" inputMode="email" autoComplete="email" autoCapitalize="none" spellCheck={false} placeholder="Email" aria-label="Email"
+        value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && submit()} style={authInputStyle(theme, { marginBottom: 10 })} />
+      <PasswordInput value={password} onChange={setPasswordVal} placeholder="Password" autoComplete="current-password" onEnter={submit} />
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
+        <button type="button" onClick={onForgot} style={{ ...authLinkStyle(theme), fontSize: 14 }}>Forgot password?</button>
       </div>
-      <div style={{ textAlign: 'right', marginTop: 9 }}>
-        <span style={ghostBtn(theme)} onClick={onForgot}>Forgot password?</span>
-      </div>
-      {err && <div style={{ color: theme.danger, fontSize: 12.5, marginTop: 8 }} className="zchat-fade">{err}</div>}
-      <button style={primaryBtn(theme, !valid || loading)} disabled={!valid || loading} onClick={submit}>
-        {loading ? <Spinner /> : 'Sign in'}
+      <AuthError text={err} />
+      <button type="button" style={authPrimaryStyle(theme, !valid || loading, { marginTop: 16 })} disabled={!valid || loading} onClick={submit}>
+        {loading ? <Spinner /> : 'Log in'}
       </button>
-      <div style={{ textAlign: 'center', marginTop: 18, fontSize: 13.5, color: theme.muted }}>
-        New here? <span style={ghostBtn(theme)} onClick={onGoRegister}>Create an account</span>
+      <OrDivider />
+      <div style={{ display: 'flex', gap: 10 }}>
+        <AppleButton onError={setErr} />
+        <GoogleButton onError={setErr} />
+      </div>
+      <div style={{ textAlign: 'center', marginTop: 24, fontSize: 14.5, color: theme.muted }}>
+        New here? <button type="button" onClick={onGoRegister} style={authLinkStyle(theme, true)}>Create account</button>
       </div>
     </div>
   );
@@ -1010,79 +1058,72 @@ function ForgotStep({ onBack }) {
   const [email, setEmail] = useState('');
   const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
-  const valid = /\S+@\S+\.\S+/.test(email);
-
+  const cleanEmail = email.trim();
+  const valid = /\S+@\S+\.\S+/.test(cleanEmail);
   const submit = async () => {
     if (!valid || loading) return;
     setLoading(true);
-    await sendPasswordReset(email);
+    await sendPasswordReset(cleanEmail);
     setLoading(false);
     setSent(true);
   };
-
   if (sent) {
     return (
-      <div style={{ textAlign: 'center' }} className="zchat-fade">
-        <Mail size={32} color={theme.coral} style={{ marginBottom: 12 }} />
-        <div style={{ fontWeight: 800, fontSize: 16.5, marginBottom: 6, color: theme.ink }}>Check your inbox</div>
-        <div style={{ fontSize: 13.5, color: theme.muted, marginBottom: 20, lineHeight: 1.5 }}>
-          We sent a reset link to<br /><strong style={{ color: theme.ink }}>{email}</strong>
-        </div>
-        <span style={ghostBtn(theme)} onClick={onBack}>Back to sign in</span>
+      <div className="zchat-tab-in">
+        <AuthTitle title="Check your email" sub={<>We sent a link to <b style={{ color: theme.ink }}>{cleanEmail}</b>. Open it on this phone to pick a new password. It can take a minute to arrive.</>} />
+        <button type="button" style={authPrimaryStyle(theme, false)} onClick={onBack}>Back to log in</button>
       </div>
     );
   }
   return (
-    <div>
-      <div style={{ fontSize: 19, fontWeight: 800, marginBottom: 6, color: theme.ink }}>Reset your password</div>
-      <div style={{ fontSize: 13, color: theme.muted, marginBottom: 16 }}>We'll email you a secure link.</div>
-      <input style={inputStyle(theme)} placeholder="Email" autoCapitalize="none" value={email} onChange={(e) => setEmail(e.target.value)} />
-      <button style={primaryBtn(theme, !valid || loading)} disabled={!valid || loading} onClick={submit}>
-        {loading ? <Spinner /> : 'Send reset link'}
+    <div className="zchat-tab-in">
+      <AuthTitle title="Reset password" sub="Type the email you signed up with and we will send you a link to pick a new password." />
+      <input className="zauth-input" type="email" inputMode="email" autoComplete="email" autoCapitalize="none" spellCheck={false} placeholder="Email" aria-label="Email"
+        value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && submit()} style={authInputStyle(theme)} />
+      <button type="button" style={authPrimaryStyle(theme, !valid || loading, { marginTop: 16 })} disabled={!valid || loading} onClick={submit}>
+        {loading ? <Spinner /> : 'Send link'}
       </button>
-      <div style={{ textAlign: 'center', marginTop: 16 }}>
-        <span style={ghostBtn(theme)} onClick={onBack}>Back to sign in</span>
+      <div style={{ textAlign: 'center', marginTop: 20 }}>
+        <button type="button" onClick={onBack} style={authLinkStyle(theme)}>Back to log in</button>
       </div>
     </div>
   );
 }
 
-
 function OtpBoxes({ value, onChange, onSubmit }) {
   const { theme } = useTheme();
   const refs = useRef([]);
   const digits = value.split('').concat(Array(6).fill('')).slice(0, 6);
-
   const setDigit = (idx, val) => {
-    const clean = val.replace(/\D/g, '').slice(-1);
+    const clean = val.replace(/\D/g, '');
+    if (clean.length > 1) {
+      const joined = clean.slice(0, 6);
+      onChange(joined);
+      refs.current[Math.min(5, joined.length)]?.focus();
+      if (joined.length === 6) onSubmit(joined);
+      return;
+    }
     const next = digits.slice();
-    next[idx] = clean;
+    next[idx] = clean.slice(-1);
     const joined = next.join('');
     onChange(joined);
     if (clean && idx < 5) refs.current[idx + 1]?.focus();
     if (joined.replace(/\D/g, '').length === 6) onSubmit(joined);
   };
-
   const handleKeyDown = (idx, e) => {
     if (e.key === 'Backspace' && !digits[idx] && idx > 0) refs.current[idx - 1]?.focus();
     if (e.key === 'Enter') onSubmit(value);
   };
-
   const handlePaste = (e) => {
     const text = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
     if (text) { e.preventDefault(); onChange(text); if (text.length === 6) onSubmit(text); }
   };
-
   return (
-    <div style={{ display: 'flex', gap: '2.5%', justifyContent: 'space-between', width: '100%' }}>
+    <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between', width: '100%' }}>
       {digits.map((d, i) => (
-        <input key={i} ref={(el) => (refs.current[i] = el)} maxLength={1} inputMode="numeric" value={d}
+        <input key={i} ref={(el) => (refs.current[i] = el)} className="zauth-input" inputMode="numeric" autoComplete={i === 0 ? 'one-time-code' : 'off'} value={d} aria-label={`Digit ${i + 1}`}
           onChange={(e) => setDigit(i, e.target.value)} onKeyDown={(e) => handleKeyDown(i, e)} onPaste={handlePaste}
-          style={{
-            flex: '1 1 0', minWidth: 0, maxWidth: 48, aspectRatio: '1 / 1.15', textAlign: 'center', fontSize: '5.5vw', fontWeight: 800,
-            borderRadius: 14, border: `1.5px solid ${theme.border}`, background: theme.inputBg,
-            color: theme.ink, outline: 'none', fontFamily: FONT, boxSizing: 'border-box', padding: 0,
-          }} />
+          style={authInputStyle(theme, { flex: '1 1 0', minWidth: 0, width: 'auto', height: 58, padding: 0, textAlign: 'center', fontSize: 23, fontWeight: 800 })} />
       ))}
     </div>
   );
@@ -1096,7 +1137,6 @@ function ResendRow({ onResend }) {
   const [cooldown, setCooldown] = useState(RESEND_COOLDOWN);
   const [sending, setSending] = useState(false);
   const [justSent, setJustSent] = useState(false);
-
   useEffect(() => {
     const t = setInterval(() => {
       setSecondsLeft((s) => (s > 0 ? s - 1 : 0));
@@ -1104,9 +1144,7 @@ function ResendRow({ onResend }) {
     }, 1000);
     return () => clearInterval(t);
   }, []);
-
   const fmt = (total) => `${Math.floor(total / 60)}:${(total % 60).toString().padStart(2, '0')}`;
-
   const handleResend = async () => {
     setSending(true);
     const ok = await onResend();
@@ -1120,28 +1158,19 @@ function ResendRow({ onResend }) {
       setCooldown(10);
     }
   };
-
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 16 }}>
-      <div style={{ fontSize: 12, color: secondsLeft <= 20 ? theme.danger : theme.muted, fontWeight: secondsLeft <= 20 ? 700 : 500 }}>
-        {secondsLeft > 0 ? `Expires in ${fmt(secondsLeft)}` : 'Code expired'}
-      </div>
-      <div style={{ minHeight: 18 }}>
-        {justSent ? (
-          <span style={{ fontSize: 12.5, color: theme.teal, fontWeight: 700 }}>Sent</span>
-        ) : cooldown > 0 ? (
-          <span style={{ fontSize: 12.5, color: theme.muted }}>Resend in {cooldown}s</span>
-        ) : (
-          <span style={ghostBtn(theme)} onClick={sending ? undefined : handleResend}>
-            {sending ? 'Sending...' : 'Resend code'}
-          </span>
-        )}
-      </div>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 14, fontSize: 13.5 }}>
+      <span style={{ color: secondsLeft <= 20 ? theme.danger : theme.muted, fontWeight: 600 }}>{secondsLeft > 0 ? `Code works for ${fmt(secondsLeft)}` : 'Code expired'}</span>
+      {justSent ? <span style={{ color: theme.ink, fontWeight: 700 }}>Sent</span>
+        : cooldown > 0 ? <span style={{ color: theme.muted }}>Send again in {cooldown}s</span>
+        : <button type="button" onClick={sending ? undefined : handleResend} style={{ ...authLinkStyle(theme, true), fontSize: 13.5 }}>{sending ? 'Sending' : 'Send again'}</button>}
     </div>
   );
 }
 
-function RegisterFlow({ onDone, onBack, onStart, initialStage = 'email' }) {
+const REG_STAGES = ['email', 'otp', 'password', 'username', 'avatar'];
+
+function RegisterFlow({ onDone, onBack, onStart, onStageChange, initialStage = 'email' }) {
   const { theme } = useTheme();
   const [stage, setStage] = useState(initialStage);
   const [email, setEmail] = useState('');
@@ -1158,7 +1187,11 @@ function RegisterFlow({ onDone, onBack, onStart, initialStage = 'email' }) {
   const [avatarUrl, setAvatarUrl] = useState('');
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [cropFile, setCropFile] = useState(null);
-
+  const fileRef = useRef(null);
+  const usernameTimer = useRef(null);
+  const cleanEmail = email.trim();
+  useEffect(() => { if (onStageChange) onStageChange(stage); }, [stage]);
+  useEffect(() => () => { if (onStageChange) onStageChange(null); }, []);
   useEffect(() => {
     if (initialStage !== 'username') return;
     (async () => {
@@ -1168,42 +1201,40 @@ function RegisterFlow({ onDone, onBack, onStart, initialStage = 'email' }) {
       if (meta?.avatar_url && !avatarUrl) setAvatarUrl(meta.avatar_url);
     })();
   }, [initialStage]);
-  const usernameTimer = useRef(null);
-
+  const go = (s) => { setErr(''); setStage(s); };
   const sendCode = async () => {
+    if (loading) return false;
     setLoading(true); setErr('');
-    if (await isBlockedHere(email)) {
+    if (await isBlockedHere(cleanEmail)) {
       setLoading(false);
       setErr(BLOCKED_MESSAGE);
       return false;
     }
-    const { error } = await registerWithEmail(email);
+    const { error } = await registerWithEmail(cleanEmail);
     setLoading(false);
     if (error) { setErr(friendlyError(error, "Couldn't send the code. Try again.")); return false; }
-    setStage('otp');
+    go('otp');
     return true;
   };
-
   const verify = async (codeOverride) => {
     const c = codeOverride ?? code;
     if (c.length < 6 || loading) return;
     setLoading(true); setErr('');
-    const { error } = await verifyOtp(email, c);
+    const { error } = await verifyOtp(cleanEmail, c);
     setLoading(false);
-    if (error) { setErr('Incorrect or expired code.'); return; }
+    if (error) { setErr('That code is not right or it expired. Check the newest email.'); return; }
     onStart();
-    setStage('password');
+    go('password');
   };
-
   const savePw = async () => {
-    if (pw.length < 6 || pw !== pw2) { setErr('Passwords must match and be at least 6 characters.'); return; }
+    if (pw.length < 6 || pw !== pw2) { setErr('Both passwords need to match and be at least 6 characters.'); return; }
+    if (loading) return;
     setLoading(true); setErr('');
     const { error } = await setPassword(pw);
     setLoading(false);
     if (error) { setErr(friendlyError(error, "Couldn't save your password. Try again.")); return; }
-    setStage('username');
+    go('username');
   };
-
   const checkUsername = (val) => {
     const clean = val.toLowerCase().replace(/[^a-z0-9._]/g, '').slice(0, USERNAME_MAX);
     setUsername(clean);
@@ -1212,14 +1243,16 @@ function RegisterFlow({ onDone, onBack, onStart, initialStage = 'email' }) {
     if (clean.length >= 3) {
       setCheckingUsername(true);
       usernameTimer.current = setTimeout(async () => {
-        const { taken } = await checkUsernameTaken(clean);
-        setTaken(taken);
+        const { taken: t } = await checkUsernameTaken(clean);
+        setTaken(t);
         setCheckingUsername(false);
       }, 400);
+    } else {
+      setCheckingUsername(false);
     }
   };
-
   const finish = async () => {
+    if (loading) return;
     setLoading(true); setErr('');
     const { data: sessionData } = await supabase.auth.getSession();
     const userId = sessionData.session.user.id;
@@ -1227,85 +1260,80 @@ function RegisterFlow({ onDone, onBack, onStart, initialStage = 'email' }) {
     setLoading(false);
     if (error) {
       const msg = (error.message || '').toLowerCase();
-      if (msg.includes('duplicate') || msg.includes('unique') || error.code === '23505') {
-        setErr('That username was just taken. Try a different one.');
-      } else {
-        setErr(friendlyError(error, "Couldn't create your profile. Try again."));
-      }
+      if (msg.includes('duplicate') || msg.includes('unique') || error.code === '23505') setErr('Someone just took that username. Try another one.');
+      else setErr(friendlyError(error, "Couldn't create your profile. Try again."));
       return;
     }
     setNewUserId(userId);
-    setStage('avatar');
+    go('avatar');
   };
-
   const handleAvatarPick = (e) => {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (file) setCropFile(file);
   };
-
   const uploadCroppedAvatar = async (blob) => {
     setCropFile(null);
     setAvatarUploading(true);
     const namedFile = new File([blob], 'avatar.jpg', { type: 'image/jpeg' });
     const { url, error } = await uploadMedia(namedFile, newUserId);
     if (!error && url) setAvatarUrl(url);
+    else setErr("Couldn't upload that photo. Try another one.");
     setAvatarUploading(false);
   };
-
   const finishOnboarding = async () => {
     if (avatarUrl && newUserId) await updateProfile(newUserId, { avatar: avatarUrl });
     onDone();
   };
-
-  const StepDots = ({ active }) => (
-    <div style={{ display: 'flex', gap: 5, justifyContent: 'center', marginBottom: 18 }}>
-      {['email', 'otp', 'password', 'username', 'avatar'].map((s) => (
-        <div key={s} style={{
-          width: s === active ? 16 : 6, height: 6, borderRadius: 3,
-          background: s === active ? theme.coral : theme.border, transition: 'all 0.2s',
-        }} />
+  const at = Math.max(0, REG_STAGES.indexOf(stage));
+  const progress = (
+    <div aria-hidden="true" style={{ display: 'flex', gap: 5, marginBottom: 22 }}>
+      {REG_STAGES.map((s, i) => (
+        <div key={s} style={{ flex: 1, height: 4, borderRadius: 2, background: i <= at ? theme.coral : (theme.dark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.09)'), transition: 'background 0.25s ease' }} />
       ))}
     </div>
   );
+  const sheetBg = theme.dark ? '#0E0F14' : '#FFFFFF';
 
   if (stage === 'email') {
-    const valid = /\S+@\S+\.\S+/.test(email);
+    const valid = /\S+@\S+\.\S+/.test(cleanEmail);
     return (
-      <div className="zchat-fade">
-        <StepDots active="email" />
-        <div style={{ fontSize: 22, fontWeight: 800, color: theme.ink, letterSpacing: '-0.02em', marginBottom: 4 }}>Create your account</div>
-        <div style={{ fontSize: 13.5, color: theme.muted, marginBottom: 16 }}>Takes about a minute.</div>
-        <AppleButton onError={setErr} />
-        <GoogleButton onError={setErr} />
-        <OrDivider />
-        <input style={inputStyle(theme)} placeholder="you@example.com" autoCapitalize="none"
-          value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && sendCode()} />
-        {err && <div style={{ color: theme.danger, fontSize: 12.5, marginTop: 8 }}>{err}</div>}
-        <button style={primaryBtn(theme, !valid || loading)} disabled={!valid || loading} onClick={sendCode}>
+      <div className="zchat-tab-in" key="email">
+        {progress}
+        <AuthTitle title="Create account" sub="Start with your email. We will send you a 6 digit code to check it is yours." />
+        <input className="zauth-input" type="email" inputMode="email" autoComplete="email" autoCapitalize="none" spellCheck={false} placeholder="Email" aria-label="Email"
+          value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && valid && sendCode()} style={authInputStyle(theme)} />
+        <AuthError text={err} />
+        <button type="button" style={authPrimaryStyle(theme, !valid || loading, { marginTop: 16 })} disabled={!valid || loading} onClick={sendCode}>
           {loading ? <Spinner /> : 'Send code'}
         </button>
-        <div style={{ textAlign: 'center', marginTop: 16 }}><span style={ghostBtn(theme)} onClick={onBack}>Back to sign in</span></div>
+        <OrDivider />
+        <div style={{ display: 'flex', gap: 10 }}>
+          <AppleButton onError={setErr} />
+          <GoogleButton onError={setErr} />
+        </div>
+        {onBack && (
+          <div style={{ textAlign: 'center', marginTop: 24, fontSize: 14.5, color: theme.muted }}>
+            Have an account? <button type="button" onClick={onBack} style={authLinkStyle(theme, true)}>Log in</button>
+          </div>
+        )}
       </div>
     );
   }
 
   if (stage === 'otp') {
     return (
-      <div className="zchat-fade">
-        <StepDots active="otp" />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-          <ShieldCheck size={18} color={theme.muted} /><span style={{ fontSize: 13.5, color: theme.muted }}>Enter the code sent to</span>
-        </div>
-        <div style={{ fontSize: 14.5, fontWeight: 800, marginBottom: 16, color: theme.ink }}>{email}</div>
+      <div className="zchat-tab-in" key="otp">
+        {progress}
+        <AuthTitle title="Enter the code" sub={<>We sent a 6 digit code to <b style={{ color: theme.ink }}>{cleanEmail}</b></>} />
         <OtpBoxes value={code} onChange={setCode} onSubmit={verify} />
-        {err && <div style={{ color: theme.danger, fontSize: 12.5, marginTop: 10, textAlign: 'center' }} className="zchat-fade">{err}</div>}
+        <AuthError text={err} />
         <ResendRow onResend={sendCode} />
-        <button style={primaryBtn(theme, code.length < 6 || loading)} disabled={code.length < 6 || loading} onClick={() => verify()}>
+        <button type="button" style={authPrimaryStyle(theme, code.length < 6 || loading, { marginTop: 18 })} disabled={code.length < 6 || loading} onClick={() => verify()}>
           {loading ? <Spinner /> : 'Verify'}
         </button>
-        <div style={{ textAlign: 'center', marginTop: 12 }}>
-          <span style={{ ...ghostBtn(theme), color: theme.muted }} onClick={() => setStage('email')}>Use a different email</span>
+        <div style={{ textAlign: 'center', marginTop: 18 }}>
+          <button type="button" onClick={() => { setCode(''); go('email'); }} style={authLinkStyle(theme)}>Use another email</button>
         </div>
       </div>
     );
@@ -1314,87 +1342,82 @@ function RegisterFlow({ onDone, onBack, onStart, initialStage = 'email' }) {
   if (stage === 'password') {
     const okPw = pw.length >= 6 && pw === pw2;
     return (
-      <div className="zchat-fade">
-        <StepDots active="password" />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-          <Lock size={18} color={theme.muted} /><span style={{ fontSize: 13.5, color: theme.muted }}>Create a password</span>
-        </div>
-        <input style={{ ...inputStyle(theme), marginBottom: 10 }} type="password" placeholder="Password (min 6 characters)"
-          value={pw} onChange={(e) => setPw(e.target.value)} />
-        <input style={inputStyle(theme)} type="password" placeholder="Confirm password"
-          value={pw2} onChange={(e) => setPw2(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && savePw()} />
-        {pw2 && !okPw && pw !== pw2 && <div style={{ color: theme.danger, fontSize: 12, marginTop: 8 }}>Passwords don't match</div>}
-        {err && <div style={{ color: theme.danger, fontSize: 12.5, marginTop: 8 }}>{err}</div>}
-        <button style={primaryBtn(theme, !okPw || loading)} disabled={!okPw || loading} onClick={savePw}>
+      <div className="zchat-tab-in" key="password">
+        {progress}
+        <AuthTitle title="Pick a password" sub="Use 6 or more characters. Something only you would know." />
+        <PasswordInput value={pw} onChange={setPw} placeholder="Password" autoComplete="new-password" style={{ marginBottom: 10 }} />
+        <PasswordInput value={pw2} onChange={setPw2} placeholder="Type it again" ariaLabel="Confirm password" autoComplete="new-password" onEnter={savePw} />
+        {pw2 && pw !== pw2 && <div style={{ color: theme.danger, fontSize: 13.5, marginTop: 10, fontWeight: 600 }}>The two passwords are not the same</div>}
+        <AuthError text={err} />
+        <button type="button" style={authPrimaryStyle(theme, !okPw || loading, { marginTop: 16 })} disabled={!okPw || loading} onClick={savePw}>
           {loading ? <Spinner /> : 'Continue'}
         </button>
       </div>
     );
   }
 
-  const validU = !usernameProblem(username);
+  const usernameIssue = usernameProblem(username);
+  const validU = !usernameIssue;
   const validN = name.trim().length >= 2;
   const canFinish = validU && validN && !taken && !checkingUsername;
   if (stage === 'username') {
+    let hint = null;
+    if (username.length > 0 && username.length < 3) hint = { c: theme.muted, t: 'At least 3 characters' };
+    else if (username.length >= 3 && !validU) hint = { c: theme.danger, t: usernameIssue };
+    else if (validU && checkingUsername) hint = { c: theme.muted, t: 'Checking' };
+    else if (validU && taken) hint = { c: theme.danger, t: 'That username is taken' };
+    else if (validU) hint = { c: theme.ink, t: `@${username} is free` };
     return (
-      <div className="zchat-fade">
-        <StepDots active="username" />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-          <AtSign size={18} color={theme.muted} /><span style={{ fontSize: 13.5, color: theme.muted }}>Choose your identity</span>
-        </div>
-        <input style={{ ...inputStyle(theme), marginBottom: 10 }} placeholder="Full name"
-          value={name} maxLength={NAME_MAX} onChange={(e) => setName(e.target.value.slice(0, NAME_MAX))} />
+      <div className="zchat-tab-in" key="username">
+        {progress}
+        <AuthTitle title="Your name" sub="This is how friends find you. You can change both later." />
+        <input className="zauth-input" placeholder="Full name" aria-label="Full name" autoComplete="name" value={name} maxLength={NAME_MAX}
+          onChange={(e) => setName(e.target.value.slice(0, NAME_MAX))} style={authInputStyle(theme, { marginBottom: 10 })} />
         <div style={{ position: 'relative' }}>
-          <span style={{ position: 'absolute', left: 14, top: 13, color: theme.muted, fontSize: 16 }}>@</span>
-          <input style={{ ...inputStyle(theme), paddingLeft: 26 }} placeholder="username" autoCapitalize="none"
-            value={username} onChange={(e) => checkUsername(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && canFinish && finish()} />
+          <span style={{ position: 'absolute', left: 16, top: 0, height: 52, display: 'flex', alignItems: 'center', color: theme.muted, fontSize: 16, pointerEvents: 'none' }}>@</span>
+          <input className="zauth-input" placeholder="username" aria-label="Username" autoCapitalize="none" spellCheck={false} value={username}
+            onChange={(e) => checkUsername(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && canFinish && finish()} style={authInputStyle(theme, { paddingLeft: 34 })} />
         </div>
-        <div style={{ minHeight: 18, marginTop: 8 }}>
-          {username.length > 0 && username.length < 3 && (
-            <div style={{ fontSize: 12, color: theme.muted }}>At least 3 characters</div>
-          )}
-          {username.length >= 3 && !validU && (
-            <div style={{ fontSize: 12, color: theme.danger }}>{usernameProblem(username)}</div>
-          )}
-          {validU && checkingUsername && <div style={{ fontSize: 12, color: theme.muted }}>Checking...</div>}
-          {validU && !checkingUsername && taken && <div style={{ fontSize: 12, color: theme.danger }}>That username is taken</div>}
-          {validU && !checkingUsername && !taken && <div style={{ fontSize: 12, color: theme.teal }}>@{username} is available</div>}
-        </div>
-        {err && <div style={{ color: theme.danger, fontSize: 12.5, marginTop: 4 }}>{err}</div>}
-        <button style={primaryBtn(theme, !canFinish || loading)} disabled={!canFinish || loading} onClick={finish}>
-          {loading ? <Spinner /> : 'Finish'}
+        <div style={{ minHeight: 20, marginTop: 9, fontSize: 13.5, fontWeight: 600, color: hint ? hint.c : theme.muted }}>{hint ? hint.t : ''}</div>
+        <AuthError text={err} />
+        <button type="button" style={authPrimaryStyle(theme, !canFinish || loading, { marginTop: 12 })} disabled={!canFinish || loading} onClick={finish}>
+          {loading ? <Spinner /> : 'Continue'}
         </button>
       </div>
     );
   }
 
   return (
-    <div className="zchat-fade">
-      <StepDots active="avatar" />
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-        <ImageIcon size={18} color={theme.muted} /><span style={{ fontSize: 13.5, color: theme.muted }}>Add a profile photo</span>
-      </div>
-      <div style={{ textAlign: 'center', margin: '10px 0 22px' }}>
-        <div style={{ width: 100, height: 100, margin: '0 auto', position: 'relative' }}>
-          <Avatar emoji={avatarUrl} name={name} size={100} />
-          <label style={{
-            position: 'absolute', bottom: -2, right: -2, width: 30, height: 30, borderRadius: '50%',
-            background: theme.coral, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            cursor: 'pointer', border: '3px solid white',
-          }}>
-            {avatarUploading ? <Spinner size={13} /> : <ImageIcon size={14} color="white" />}
-            <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleAvatarPick} />
-          </label>
+    <div className="zchat-tab-in" key="avatar">
+      {progress}
+      <AuthTitle title="Add a photo" sub="So your friends know it is really you." />
+      <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleAvatarPick} />
+      <div style={{ display: 'flex', justifyContent: 'center', margin: '4px 0 24px' }}>
+        <div role="button" aria-label="Choose a profile photo" onClick={() => { if (!avatarUploading && fileRef.current) fileRef.current.click(); }} className="zchat-press"
+          style={{ position: 'relative', width: 120, height: 120, borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', border: avatarUrl ? 'none' : `2px dashed ${theme.dark ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.2)'}`, background: avatarUrl ? 'transparent' : (theme.dark ? '#16171D' : '#F5F5F7') }}>
+          {avatarUrl ? <Avatar emoji={avatarUrl} name={name} size={120} /> : avatarUploading ? <Spinner color={theme.muted} /> : <Camera size={32} color={theme.muted} strokeWidth={1.7} />}
+          {avatarUrl && (
+            <span style={{ position: 'absolute', right: 0, bottom: 2, width: 36, height: 36, borderRadius: '50%', background: theme.coral, border: `3px solid ${sheetBg}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {avatarUploading ? <Spinner size={13} /> : <Pencil size={15} color="#FFFFFF" />}
+            </span>
+          )}
         </div>
       </div>
-      <button style={primaryBtn(theme, avatarUploading)} disabled={avatarUploading} onClick={finishOnboarding}>
-        {avatarUrl ? 'Continue' : 'Skip for now'}
-      </button>
+      <AuthError text={err} />
+      {avatarUrl ? (
+        <button type="button" style={authPrimaryStyle(theme, avatarUploading)} disabled={avatarUploading} onClick={finishOnboarding}>Continue</button>
+      ) : (
+        <button type="button" style={authPrimaryStyle(theme, avatarUploading)} disabled={avatarUploading} onClick={() => { if (fileRef.current) fileRef.current.click(); }}>Choose a photo</button>
+      )}
+      {!avatarUrl && (
+        <div style={{ textAlign: 'center', marginTop: 18 }}>
+          <button type="button" onClick={finishOnboarding} disabled={avatarUploading} style={authLinkStyle(theme)}>Skip for now</button>
+        </div>
+      )}
       {cropFile && <PhotoCropEditor file={cropFile} isAvatar onCancel={() => setCropFile(null)} onConfirm={(blob) => uploadCroppedAvatar(blob)} />}
     </div>
   );
 }
-
 
 const COUNTRIES = [
   ['AF','Afghanistan'],['AL','Albania'],['DZ','Algeria'],['AD','Andorra'],['AO','Angola'],['AR','Argentina'],['AM','Armenia'],['AU','Australia'],['AT','Austria'],['AZ','Azerbaijan'],
@@ -1494,7 +1517,7 @@ function LogoutConfirm({ onCancel, onConfirm }) {
   const { theme } = useTheme();
   return (
     <div style={{
-      position: 'absolute', inset: 0, background: 'rgba(10,8,6,0.45)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)',
+      position: 'absolute', inset: 0, background: 'rgba(10,8,6,0.5)',
       display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 60, padding: 24,
     }} className="zchat-fade">
       <div style={{
@@ -1535,7 +1558,7 @@ function DeleteAccountConfirm({ onCancel, onConfirm }) {
   const ok = text.trim().toUpperCase() === 'DELETE';
   return (
     <div style={{
-      position: 'absolute', inset: 0, background: 'rgba(10,8,6,0.45)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)',
+      position: 'absolute', inset: 0, background: 'rgba(10,8,6,0.5)',
       display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 60, padding: 24,
     }} className="zchat-fade">
       <div style={{
@@ -1660,14 +1683,996 @@ function FullPage({ title, subtitle, onBack, right, zIndex = 60, children, pad =
   return portal ? <Portal>{body}</Portal> : body;
 }
 
-function EmptyState({ icon, title, text, action }) {
+const ART_INK = '#2B2540';
+const ART_C = {
+  fur: '#9AA0B4', furDark: '#70778F', white: '#FCF9F3', ear: '#F6AAC0', nose: '#E8788F', blush: '#FF9DB6',
+  yellow: '#FFD24D', yellowDeep: '#F2B632', coral: '#FF7D6B', coralDeep: '#E8604F', violet: '#8C6CFF', lilac: '#D7CCFF',
+  mint: '#46CFA0', mintLight: '#C4F1DF', blue: '#5B8CFF', sky: '#CFE0FF', pink: '#FF96B8', cream: '#FFF3DC',
+  card: '#FFFFFF', steel: '#D9DCE8', cardboard: '#E7B47C', cardboardDeep: '#C88E57', night: '#2F3470',
+};
+const ART_BG = {
+  lilac: ['#ECE6FF', '#262142'], mint: ['#DCF4E9', '#13342C'], peach: ['#FFE6D9', '#3A241D'], sky: ['#DFEAFF', '#172447'],
+  butter: ['#FFF1C7', '#332A12'], pink: ['#FFE1EB', '#381C29'], night: ['#30356F', '#1C1F45'],
+};
+const ak = { stroke: ART_INK, strokeWidth: 3, strokeLinecap: 'round', strokeLinejoin: 'round' };
+const ArtCtx = createContext(false);
+function useArtLine() { return useContext(ArtCtx) ? '#E9E5FF' : ART_INK; }
+function useArtBody() { return useContext(ArtCtx) ? '#514A7C' : ART_INK; }
+
+function artTube(d, color, w = 6) {
+  return (
+    <>
+      <path d={d} fill="none" stroke={ART_INK} strokeWidth={w + 5.5} strokeLinecap="round" strokeLinejoin="round" />
+      <path d={d} fill="none" stroke={color} strokeWidth={w} strokeLinecap="round" strokeLinejoin="round" />
+    </>
+  );
+}
+
+function ArtCatFace({ eyes = 'happy', look = [0, 0] }) {
+  const [lx, ly] = look;
+  return (
+    <>
+      <path d="M44 25 L45.4 31 M50 24 L50 31 M56 25 L54.6 31" stroke={ART_C.furDark} strokeWidth="2.6" strokeLinecap="round" fill="none" />
+      <ellipse cx="50" cy="51.5" rx="12.5" ry="8.8" fill={ART_C.white} />
+      {eyes === 'happy' && <path d="M35 43 Q39.5 38.5 44 43 M56 43 Q60.5 38.5 65 43" fill="none" stroke={ART_INK} strokeWidth="2.8" strokeLinecap="round" />}
+      {eyes === 'sleep' && <path d="M35 41.5 Q39.5 45.5 44 41.5 M56 41.5 Q60.5 45.5 65 41.5" fill="none" stroke={ART_INK} strokeWidth="2.8" strokeLinecap="round" />}
+      {(eyes === 'open' || eyes === 'wide') && (
+        <>
+          <ellipse cx={39.5 + lx} cy={42 + ly} rx={eyes === 'wide' ? 4.6 : 3.7} ry={eyes === 'wide' ? 5.4 : 4.5} fill={ART_INK} />
+          <ellipse cx={60.5 + lx} cy={42 + ly} rx={eyes === 'wide' ? 4.6 : 3.7} ry={eyes === 'wide' ? 5.4 : 4.5} fill={ART_INK} />
+          <circle cx={41 + lx} cy={40.2 + ly} r="1.5" fill="#FFFFFF" />
+          <circle cx={62 + lx} cy={40.2 + ly} r="1.5" fill="#FFFFFF" />
+        </>
+      )}
+      {eyes === 'wink' && (
+        <>
+          <ellipse cx={39.5 + lx} cy={42 + ly} rx="3.7" ry="4.5" fill={ART_INK} />
+          <circle cx={41 + lx} cy={40.2 + ly} r="1.5" fill="#FFFFFF" />
+          <path d="M56 43 Q60.5 38.5 65 43" fill="none" stroke={ART_INK} strokeWidth="2.8" strokeLinecap="round" />
+        </>
+      )}
+      <path d="M47 48.4 H53 L50 51.6 Z" fill={ART_C.nose} stroke={ART_C.nose} strokeWidth="1.4" strokeLinejoin="round" />
+      <path d={eyes === 'wide' ? 'M46.5 55 Q50 59 53.5 55 Z' : 'M50 51.6 Q50 55 46.6 55.4 M50 51.6 Q50 55 53.4 55.4'} fill={eyes === 'wide' ? ART_INK : 'none'} stroke={ART_INK} strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+      <ellipse cx="30.5" cy="51" rx="4.2" ry="2.6" fill={ART_C.blush} opacity="0.55" />
+      <ellipse cx="69.5" cy="51" rx="4.2" ry="2.6" fill={ART_C.blush} opacity="0.55" />
+      <path d="M29 50 L16 48 M29 53.5 L16 55.5 M71 50 L84 48 M71 53.5 L84 55.5" stroke={ART_INK} strokeWidth="1.4" strokeLinecap="round" opacity="0.5" />
+    </>
+  );
+}
+
+function ArtCatHead({ eyes, look }) {
+  return (
+    <>
+      <path d="M29 36 L25 12 C24.6 8.5 27 7.6 29.5 9.6 L45 23" fill={ART_C.fur} {...ak} />
+      <path d="M71 36 L75 12 C75.4 8.5 73 7.6 70.5 9.6 L55 23" fill={ART_C.fur} {...ak} />
+      <path d="M30.5 28 L29 15.5 L39 23.2 Z" fill={ART_C.ear} />
+      <path d="M69.5 28 L71 15.5 L61 23.2 Z" fill={ART_C.ear} />
+      <path d="M22 46 C21 31 33 21 50 21 C67 21 79 31 78 46 C77 57 66 64 50 64 C34 64 23 57 22 46 Z" fill={ART_C.fur} {...ak} />
+      <ArtCatFace eyes={eyes} look={look} />
+    </>
+  );
+}
+
+function ArtCat({ x, y, s = 1, eyes = 'happy', look, flip = false, wave = false, tail = true, hold = null }) {
+  const t = flip ? `translate(${x + 50 * s} ${y - 100 * s}) scale(${-s} ${s})` : `translate(${x - 50 * s} ${y - 100 * s}) scale(${s})`;
+  return (
+    <g transform={t}>
+      {tail && artTube('M68 92 C86 96 96 84 90 71 C88 66 92 61 97 64', ART_C.fur, 6)}
+      <path d="M32 57 C25 69 23 84 28 98 C28.6 99.4 30 100 31.6 100 H68.4 C70 100 71.4 99.4 72 98 C77 84 75 69 68 57 Z" fill={ART_C.fur} {...ak} />
+      <path d="M43 62 C40 73 41 85 44 96.5 H56 C59 85 60 73 57 62 Z" fill={ART_C.white} />
+      <ellipse cx="41" cy="99" rx="8" ry="4.6" fill={ART_C.white} {...ak} />
+      {!wave && !hold && <ellipse cx="59" cy="99" rx="8" ry="4.6" fill={ART_C.white} {...ak} />}
+      {(wave || hold) && <ellipse cx="59" cy="99" rx="8" ry="4.6" fill={ART_C.white} {...ak} />}
+      <ArtCatHead eyes={eyes} look={look || [0, 0]} />
+      {wave && (
+        <>
+          {artTube('M67 70 C77 64 82 55 81 45', ART_C.fur, 7)}
+          <ellipse cx="81" cy="42" rx="7" ry="6.4" fill={ART_C.white} {...ak} />
+        </>
+      )}
+      {hold && (
+        <>
+          {artTube('M64 72 C70 74 76 74 82 71', ART_C.fur, 7)}
+          <ellipse cx="84" cy="70" rx="6.6" ry="6" fill={ART_C.white} {...ak} />
+        </>
+      )}
+    </g>
+  );
+}
+
+function ArtCatPeek({ x, y, s = 1, eyes = 'open', look, flip = false, part = 'all' }) {
+  const t = flip ? `translate(${x + 50 * s} ${y - 66 * s}) scale(${-s} ${s})` : `translate(${x - 50 * s} ${y - 66 * s}) scale(${s})`;
+  return (
+    <g transform={t}>
+      {part !== 'paws' && <ArtCatHead eyes={eyes} look={look || [0, 0]} />}
+      {part !== 'head' && (
+        <>
+          <ellipse cx="33" cy="66" rx="8.5" ry="5.6" fill={ART_C.white} {...ak} />
+          <ellipse cx="67" cy="66" rx="8.5" ry="5.6" fill={ART_C.white} {...ak} />
+          <path d="M30.5 64.5 V68 M35.5 64.5 V68 M64.5 64.5 V68 M69.5 64.5 V68" stroke={ART_INK} strokeWidth="1.3" strokeLinecap="round" opacity="0.45" />
+        </>
+      )}
+    </g>
+  );
+}
+
+function ArtCatLoaf({ x, y, s = 1, flip = false }) {
+  const t = flip ? `translate(${x + 60 * s} ${y - 72 * s}) scale(${-s} ${s})` : `translate(${x - 60 * s} ${y - 72 * s}) scale(${s})`;
+  return (
+    <g transform={t}>
+      {artTube('M100 64 C116 66 116 76 98 74 L66 73', ART_C.fur, 7)}
+      <path d="M20 66 C16 44 36 30 66 30 C96 30 114 44 110 64 C109 69 105 72 99 72 H28 C23 72 20.6 70 20 66 Z" fill={ART_C.fur} {...ak} />
+      <path d="M66 33 L65 40 M77 34 L74.5 40.5 M87 37 L83 42.5 M56 34 L57 40.5" stroke={ART_C.furDark} strokeWidth="2.8" strokeLinecap="round" fill="none" />
+      <g transform="translate(-10 12) scale(0.9)">
+        <ArtCatHead eyes="sleep" look={[0, 0]} />
+      </g>
+      <ellipse cx="46" cy="71" rx="9" ry="4.4" fill={ART_C.white} {...ak} />
+      <ellipse cx="62" cy="71.5" rx="8" ry="4" fill={ART_C.white} {...ak} />
+    </g>
+  );
+}
+
+function ArtZzz({ x, y, s = 1, color }) {
+  const line = useArtLine();
+  return (
+    <g transform={`translate(${x} ${y}) scale(${s})`} fill="none" stroke={color || line} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M0 0 H9 L0 10 H9" />
+      <path d="M14 -12 H21 L14 -4 H21" opacity="0.8" />
+      <path d="M26 -22 H31 L26 -16.5 H31" opacity="0.6" />
+    </g>
+  );
+}
+
+function ArtSpark({ x, y, r = 6, color = ART_C.yellow, stroke = true }) {
+  const d = `M${x} ${y - r} Q${x} ${y} ${x + r} ${y} Q${x} ${y} ${x} ${y + r} Q${x} ${y} ${x - r} ${y} Q${x} ${y} ${x} ${y - r} Z`;
+  return <path d={d} fill={color} stroke={stroke ? ART_INK : 'none'} strokeWidth="2" strokeLinejoin="round" />;
+}
+
+function ArtDot({ x, y, r = 3, color, o = 0.25 }) {
+  const line = useArtLine();
+  return <circle cx={x} cy={y} r={r} fill={color || line} opacity={o} />;
+}
+
+function artStarPath(cx, cy, R, r) {
+  let d = '';
+  for (let i = 0; i < 10; i++) {
+    const a = -Math.PI / 2 + (i * Math.PI) / 5;
+    const rr = i % 2 ? r : R;
+    d += `${i ? 'L' : 'M'}${(cx + rr * Math.cos(a)).toFixed(1)} ${(cy + rr * Math.sin(a)).toFixed(1)} `;
+  }
+  return `${d}Z`;
+}
+
+function ArtFloor({ y = 152, color }) {
+  const dark = useContext(ArtCtx);
+  return <path d={`M-10 ${y} Q80 ${y - 7} 160 ${y} T330 ${y} V190 H-10 Z`} fill={color || (dark ? 'rgba(255,255,255,0.05)' : 'rgba(43,37,64,0.07)')} />;
+}
+
+function ArtPhone({ x, y, w = 50, h = 88, screen = ART_C.cream, children }) {
+  const body = useArtBody();
+  return (
+    <g>
+      <rect x={x} y={y} width={w} height={h} rx={10} fill={body} {...ak} />
+      <rect x={x + 4.5} y={y + 4.5} width={w - 9} height={h - 9} rx={6.5} fill={screen} />
+      <rect x={x + w / 2 - 7} y={y + 7} width={14} height={3.4} rx={1.7} fill={ART_INK} opacity="0.9" />
+      {children}
+    </g>
+  );
+}
+
+function ArtBell({ x, y, s = 1 }) {
+  const line = useArtLine();
+  return (
+    <g transform={`translate(${x} ${y}) scale(${s})`}>
+      <path d="M8 26 Q2 36 6 47 M72 26 Q78 36 74 47" fill="none" stroke={line} strokeWidth="3" strokeLinecap="round" />
+      <path d="M2 18 Q-6 36 0 55 M78 18 Q86 36 80 55" fill="none" stroke={line} strokeWidth="3" strokeLinecap="round" opacity="0.45" />
+      <circle cx="40" cy="70" r="7" fill={ART_C.coral} {...ak} />
+      <path d="M18 60 C18 34 26 18 40 18 C54 18 62 34 62 60 L70 67 H10 Z" fill={ART_C.yellow} {...ak} />
+      <path d="M27 46 C27 34 31 27 37 25" fill="none" stroke="#FFFFFF" strokeWidth="3.4" strokeLinecap="round" opacity="0.75" />
+      <circle cx="40" cy="15" r="5" fill={ART_C.yellow} {...ak} />
+    </g>
+  );
+}
+
+function ArtLock({ x, y, s = 1, color = ART_C.yellow }) {
+  return (
+    <g transform={`translate(${x} ${y}) scale(${s})`}>
+      <path d="M22 40 V27 C22 15 30 8 40 8 C50 8 58 15 58 27 V40" fill="none" stroke={ART_INK} strokeWidth="13" strokeLinecap="round" />
+      <path d="M22 40 V27 C22 15 30 8 40 8 C50 8 58 15 58 27 V40" fill="none" stroke={ART_C.steel} strokeWidth="7" strokeLinecap="round" />
+      <rect x="10" y="36" width="60" height="48" rx="11" fill={color} {...ak} />
+      <circle cx="40" cy="56" r="5.6" fill={ART_INK} />
+      <rect x="37.6" y="58" width="4.8" height="11" rx="2.4" fill={ART_INK} />
+      <path d="M18 44 V60" stroke="#FFFFFF" strokeWidth="3.4" strokeLinecap="round" opacity="0.6" />
+    </g>
+  );
+}
+
+function ArtKey({ x, y, s = 1, rot = 0, color = ART_C.yellow }) {
+  return (
+    <g transform={`translate(${x} ${y}) rotate(${rot}) scale(${s})`}>
+      <path d="M30 16 H76 V25 H70 V33 H62 V25 H56 V29 H50 V25 H30 Z" fill={color} {...ak} />
+      <circle cx="20" cy="20" r="15" fill={color} {...ak} />
+      <circle cx="17" cy="20" r="5" fill={ART_C.cream} {...ak} />
+    </g>
+  );
+}
+
+function ArtShield({ x, y, s = 1, color = ART_C.mint }) {
+  return (
+    <g transform={`translate(${x} ${y}) scale(${s})`}>
+      <path d="M30 4 C40 10 50 12 58 12 C58 40 50 58 30 68 C10 58 2 40 2 12 C10 12 20 10 30 4 Z" fill={color} {...ak} />
+      <path d="M17 36 L26 45 L44 26" fill="none" stroke="#FFFFFF" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
+    </g>
+  );
+}
+
+function ArtMoon({ x, y, r = 24, cut }) {
+  return (
+    <g>
+      <circle cx={x} cy={y} r={r} fill={ART_C.yellow} {...ak} />
+      <circle cx={x + r * 0.5} cy={y - r * 0.32} r={r * 0.86} fill={cut} />
+      <circle cx={x - r * 0.42} cy={y + r * 0.2} r={r * 0.12} fill={ART_C.yellowDeep} />
+      <circle cx={x - r * 0.12} cy={y + r * 0.6} r={r * 0.08} fill={ART_C.yellowDeep} />
+    </g>
+  );
+}
+
+function ArtStar({ x, y, r = 8, color = ART_C.yellow }) {
+  return <path d={artStarPath(x, y, r, r * 0.45)} fill={color} stroke={ART_INK} strokeWidth="2.2" strokeLinejoin="round" />;
+}
+
+function ArtClock({ x, y, s = 1 }) {
+  const line = useArtLine();
+  return (
+    <g transform={`translate(${x} ${y}) scale(${s})`}>
+      {artTube('M22 78 L15 88', ART_C.coralDeep, 4)}
+      {artTube('M58 78 L65 88', ART_C.coralDeep, 4)}
+      <path d="M6 22 C4 12 12 4 22 6 Z" fill={ART_C.coral} {...ak} />
+      <path d="M74 22 C76 12 68 4 58 6 Z" fill={ART_C.coral} {...ak} />
+      <circle cx="40" cy="50" r="34" fill={ART_C.coral} {...ak} />
+      <circle cx="40" cy="50" r="25" fill={ART_C.card} {...ak} />
+      <path d="M40 50 V34 M40 50 L50 56" stroke={ART_INK} strokeWidth="3.4" strokeLinecap="round" />
+      <circle cx="40" cy="50" r="3" fill={ART_INK} />
+      <path d="M40 28 V31 M62 50 H59 M40 72 V69 M18 50 H21" stroke={ART_INK} strokeWidth="2.4" strokeLinecap="round" />
+      <path d="M-4 30 L-12 26 M-6 44 H-14 M84 30 L92 26 M86 44 H94" stroke={line} strokeWidth="3" strokeLinecap="round" />
+    </g>
+  );
+}
+
+function ArtCalendar({ x, y, s = 1, day = '14' }) {
+  const body = useArtBody();
+  return (
+    <g transform={`translate(${x} ${y}) scale(${s})`}>
+      <rect x="0" y="8" width="84" height="80" rx="12" fill={ART_C.card} {...ak} />
+      <path d="M0 20 C0 13 5 8 12 8 H72 C79 8 84 13 84 20 V30 H0 Z" fill={ART_C.coral} {...ak} />
+      <rect x="18" y="0" width="8" height="18" rx="4" fill={body} stroke={ART_INK} strokeWidth="2" />
+      <rect x="58" y="0" width="8" height="18" rx="4" fill={body} stroke={ART_INK} strokeWidth="2" />
+      <text x="42" y="73" textAnchor="middle" fontFamily="-apple-system, Segoe UI, Roboto, sans-serif" fontWeight="900" fontSize="34" fill={ART_INK}>{day}</text>
+    </g>
+  );
+}
+
+function ArtBubble({ x, y, w = 90, h = 40, fill = ART_C.card, tail = 'left', lines = 2, lineColor = 'rgba(43,37,64,0.22)' }) {
+  const r = Math.min(16, h / 2.4);
+  const bottom = tail === 'left'
+    ? `H${x + 30} L${x + 8} ${y + h + 12} L${x + 16} ${y + h}`
+    : `H${x + w - 16} L${x + w - 8} ${y + h + 12} L${x + w - 30} ${y + h}`;
+  const d = `M${x + r} ${y} H${x + w - r} Q${x + w} ${y} ${x + w} ${y + r} V${y + h - r} Q${x + w} ${y + h} ${x + w - r} ${y + h} ${bottom} H${x + r} Q${x} ${y + h} ${x} ${y + h - r} V${y + r} Q${x} ${y} ${x + r} ${y} Z`;
+  const bars = [];
+  for (let i = 0; i < lines; i++) {
+    const bw = i === lines - 1 && lines > 1 ? (w - 28) * 0.6 : w - 28;
+    bars.push(<rect key={i} x={x + 14} y={y + (lines === 1 ? h / 2 - 3 : 12 + i * 11)} width={bw} height="6" rx="3" fill={lineColor} />);
+  }
+  return (
+    <g>
+      <path d={d} fill={fill} {...ak} />
+      {bars}
+    </g>
+  );
+}
+
+function ArtGlass({ x, y, s = 1 }) {
+  return (
+    <g transform={`translate(${x} ${y}) scale(${s})`}>
+      <path d="M52 52 L74 74" stroke={ART_INK} strokeWidth="15" strokeLinecap="round" />
+      <path d="M54 54 L73 73" stroke={ART_C.violet} strokeWidth="8" strokeLinecap="round" />
+      <circle cx="32" cy="32" r="28" fill={ART_C.sky} {...ak} strokeWidth="3.4" />
+      <circle cx="32" cy="32" r="28" fill="none" stroke={ART_C.steel} strokeWidth="5" />
+      <circle cx="32" cy="32" r="30.6" fill="none" stroke={ART_INK} strokeWidth="3" />
+      <circle cx="32" cy="32" r="25.4" fill="none" stroke={ART_INK} strokeWidth="2" opacity="0.5" />
+      <path d="M17 26 C19 19 24 15 31 14" fill="none" stroke="#FFFFFF" strokeWidth="4" strokeLinecap="round" opacity="0.85" />
+    </g>
+  );
+}
+
+function ArtBoxBack({ x, y, w = 110 }) {
+  return (
+    <g>
+      <path d={`M${x + 6} ${y} L${x - 16} ${y - 20} L${x + 22} ${y - 26} L${x + 34} ${y} Z`} fill={ART_C.cardboard} {...ak} />
+      <path d={`M${x + w - 6} ${y} L${x + w + 16} ${y - 20} L${x + w - 22} ${y - 26} L${x + w - 34} ${y} Z`} fill={ART_C.cardboard} {...ak} />
+      <rect x={x} y={y - 8} width={w} height={16} rx="3" fill={ART_C.cardboardDeep} {...ak} />
+    </g>
+  );
+}
+
+function ArtBoxFront({ x, y, w = 110, h = 58 }) {
+  return (
+    <g>
+      <rect x={x} y={y} width={w} height={h} rx="5" fill={ART_C.cardboard} {...ak} />
+      <rect x={x + w / 2 - 12} y={y} width="24" height={h * 0.45} fill="#F3D3A6" stroke={ART_INK} strokeWidth="2" />
+      <path d={`M${x + 12} ${y + h - 16} H${x + 34} M${x + 12} ${y + h - 9} H${x + 26}`} stroke={ART_INK} strokeWidth="2.4" strokeLinecap="round" opacity="0.45" />
+    </g>
+  );
+}
+
+function ArtLaptop({ x, y, s = 1 }) {
+  const body = useArtBody();
+  return (
+    <g transform={`translate(${x} ${y}) scale(${s})`}>
+      <rect x="12" y="0" width="96" height="62" rx="8" fill={body} {...ak} />
+      <rect x="18" y="6" width="84" height="50" rx="4" fill={ART_C.sky} />
+      <rect x="26" y="15" width="40" height="9" rx="4.5" fill={ART_C.card} />
+      <rect x="44" y="30" width="48" height="9" rx="4.5" fill={ART_C.violet} />
+      <path d="M0 66 H120 L114 76 H6 Z" fill={ART_C.steel} {...ak} />
+      <rect x="48" y="66" width="24" height="4" rx="2" fill={ART_INK} opacity="0.4" />
+    </g>
+  );
+}
+
+function ArtMic({ x, y, s = 1 }) {
+  const line = useArtLine();
+  return (
+    <g transform={`translate(${x} ${y}) scale(${s})`}>
+      <path d="M8 40 C8 58 20 68 34 68 C48 68 60 58 60 40" fill="none" stroke={line} strokeWidth="4" strokeLinecap="round" />
+      <path d="M34 68 V84 M22 86 H46" stroke={line} strokeWidth="4" strokeLinecap="round" />
+      <rect x="18" y="0" width="32" height="56" rx="16" fill={ART_C.violet} {...ak} />
+      <path d="M18 22 H50 M18 32 H50" stroke={ART_INK} strokeWidth="2.4" opacity="0.4" />
+      <path d="M26 10 V18" stroke="#FFFFFF" strokeWidth="3.4" strokeLinecap="round" opacity="0.7" />
+    </g>
+  );
+}
+
+function ArtNote({ x, y, s = 1, color = ART_C.pink }) {
+  return (
+    <g transform={`translate(${x} ${y}) scale(${s})`}>
+      <path d="M12 4 L30 0 V22" fill="none" stroke={ART_INK} strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M12 4 V28" stroke={ART_INK} strokeWidth="3.4" strokeLinecap="round" />
+      <ellipse cx="7" cy="29" rx="7" ry="5.4" fill={color} {...ak} strokeWidth="2.4" />
+      <ellipse cx="25" cy="23" rx="7" ry="5.4" fill={color} {...ak} strokeWidth="2.4" />
+    </g>
+  );
+}
+
+function ArtDice({ x, y, s = 1, rot = 0, pips = 5, color = ART_C.card }) {
+  const P = { 1: [[1, 1]], 2: [[0, 0], [2, 2]], 3: [[0, 0], [1, 1], [2, 2]], 4: [[0, 0], [2, 0], [0, 2], [2, 2]], 5: [[0, 0], [2, 0], [1, 1], [0, 2], [2, 2]], 6: [[0, 0], [2, 0], [0, 1], [2, 1], [0, 2], [2, 2]] };
+  return (
+    <g transform={`translate(${x} ${y}) rotate(${rot} 22 22) scale(${s})`}>
+      <rect x="0" y="0" width="44" height="44" rx="10" fill={color} {...ak} />
+      {(P[pips] || P[5]).map(([px, py], i) => <circle key={i} cx={10 + px * 12} cy={10 + py * 12} r="4" fill={ART_INK} />)}
+    </g>
+  );
+}
+
+function ArtFingerprint({ x, y, s = 1 }) {
+  return (
+    <g transform={`translate(${x} ${y}) scale(${s})`} fill="none" stroke={ART_C.violet} strokeWidth="3.4" strokeLinecap="round">
+      <path d="M8 26 C8 14 18 6 30 6 C42 6 52 14 52 26" />
+      <path d="M14 40 C14 30 14 26 18 22 C22 18 26 16 30 16 C40 16 46 22 46 32 C46 40 44 46 42 52" />
+      <path d="M22 48 C22 38 22 32 25 29 C27 27 33 27 35 30 C37 33 37 40 35 50" />
+      <path d="M30 34 C30 42 30 48 28 56" />
+    </g>
+  );
+}
+
+function ArtCurtain({ x, y, w = 70, h = 120, flip = false }) {
+  const t = flip ? `translate(${x + w} ${y}) scale(-1 1)` : `translate(${x} ${y})`;
+  return (
+    <g transform={t}>
+      <path d={`M0 6 C${w * 0.3} 8 ${w * 0.62} 16 ${w * 0.78} 34 C${w * 0.92} 52 ${w * 0.6} 76 ${w * 0.66} ${h} H0 Z`} fill={ART_C.coral} {...ak} />
+      <path d={`M${w * 0.22} 12 C${w * 0.2} 50 ${w * 0.28} 90 ${w * 0.24} ${h} M${w * 0.44} 16 C${w * 0.44} 50 ${w * 0.4} 90 ${w * 0.44} ${h}`} fill="none" stroke={ART_C.coralDeep} strokeWidth="3" strokeLinecap="round" />
+      <path d={`M${w * 0.62} 42 C${w * 0.72} 46 ${w * 0.78} 44 ${w * 0.82} 38`} fill="none" stroke={ART_INK} strokeWidth="5" strokeLinecap="round" />
+    </g>
+  );
+}
+
+function ArtBars({ x, y, s = 1 }) {
+  return (
+    <g transform={`translate(${x} ${y}) scale(${s})`}>
+      <rect x="0" y="0" width="100" height="84" rx="14" fill={ART_C.card} {...ak} />
+      <rect x="16" y="44" width="16" height="26" rx="4" fill={ART_C.mint} {...ak} />
+      <rect x="42" y="28" width="16" height="42" rx="4" fill={ART_C.violet} {...ak} />
+      <rect x="68" y="14" width="16" height="56" rx="4" fill={ART_C.yellow} {...ak} />
+      <path d="M10 71 H90" stroke={ART_INK} strokeWidth="3" strokeLinecap="round" />
+    </g>
+  );
+}
+
+function ArtBallot({ x, y, s = 1 }) {
+  return (
+    <g transform={`translate(${x} ${y}) scale(${s})`}>
+      <rect x="22" y="-10" width="46" height="40" rx="5" fill={ART_C.card} {...ak} transform="rotate(-8 45 10)" />
+      <path d="M33 8 L40 15 L54 1" fill="none" stroke={ART_C.mint} strokeWidth="4.4" strokeLinecap="round" strokeLinejoin="round" transform="rotate(-8 45 10)" />
+      <path d="M0 26 H90 L84 34 H6 Z" fill={ART_C.violet} {...ak} />
+      <rect x="6" y="32" width="78" height="54" rx="6" fill={ART_C.lilac} {...ak} />
+      <rect x="22" y="26" width="46" height="5" rx="2.5" fill={ART_INK} />
+      <path d="M30 56 H60" stroke={ART_INK} strokeWidth="3" strokeLinecap="round" opacity="0.35" />
+    </g>
+  );
+}
+
+function ArtPlant({ x, y, s = 1 }) {
+  return (
+    <g transform={`translate(${x} ${y}) scale(${s})`}>
+      <path d="M20 30 C8 22 4 8 8 0 C18 4 24 16 22 30" fill={ART_C.mint} {...ak} />
+      <path d="M22 30 C30 14 42 8 50 10 C48 22 36 30 24 32" fill={ART_C.mint} {...ak} />
+      <path d="M21 32 C20 20 22 10 28 4" fill="none" stroke={ART_INK} strokeWidth="2.4" strokeLinecap="round" />
+      <path d="M6 32 H40 L36 58 C35.6 60 34 61 32 61 H14 C12 61 10.4 60 10 58 Z" fill={ART_C.coral} {...ak} />
+      <path d="M6 32 H40" stroke={ART_INK} strokeWidth="3" />
+      <rect x="4" y="30" width="38" height="8" rx="3" fill={ART_C.coral} {...ak} />
+    </g>
+  );
+}
+
+function ArtRibbon({ x, y, s = 1, color = ART_C.violet }) {
+  return (
+    <g transform={`translate(${x} ${y}) scale(${s})`}>
+      <path d="M4 10 C4 4 8 0 14 0 H46 C52 0 56 4 56 10 V86 L30 70 L4 86 Z" fill={color} {...ak} />
+      <path d="M16 12 V52" stroke="#FFFFFF" strokeWidth="4" strokeLinecap="round" opacity="0.5" />
+    </g>
+  );
+}
+
+function ArtGift({ x, y, s = 1 }) {
+  return (
+    <g transform={`translate(${x} ${y}) scale(${s})`}>
+      <path d="M44 22 C30 4 16 8 20 18 C23 25 36 24 44 22 Z" fill={ART_C.yellow} {...ak} />
+      <path d="M46 22 C60 4 74 8 70 18 C67 25 54 24 46 22 Z" fill={ART_C.yellow} {...ak} />
+      <rect x="8" y="44" width="74" height="50" rx="6" fill={ART_C.pink} {...ak} />
+      <rect x="2" y="24" width="86" height="22" rx="6" fill={ART_C.pink} {...ak} />
+      <rect x="38" y="24" width="14" height="70" fill={ART_C.yellow} {...ak} />
+    </g>
+  );
+}
+
+function ArtEnvelope({ x, y, s = 1 }) {
+  return (
+    <g transform={`translate(${x} ${y}) scale(${s})`}>
+      <rect x="0" y="0" width="96" height="64" rx="9" fill={ART_C.card} {...ak} />
+      <path d="M4 6 L48 38 L92 6" fill="none" stroke={ART_INK} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M4 60 L36 30 M92 60 L60 30" stroke={ART_INK} strokeWidth="2.4" strokeLinecap="round" opacity="0.4" />
+      <path d="M48 52 C40 46 38 40 42 37 C45 35 48 37 48 40 C48 37 51 35 54 37 C58 40 56 46 48 52 Z" fill={ART_C.coral} {...ak} strokeWidth="2.4" />
+    </g>
+  );
+}
+
+function ArtCamera({ x, y, s = 1 }) {
+  return (
+    <g transform={`translate(${x} ${y}) scale(${s})`}>
+      <path d="M26 12 L32 2 H58 L64 12 Z" fill={ART_INK} {...ak} />
+      <rect x="0" y="10" width="90" height="62" rx="12" fill={ART_C.coral} {...ak} />
+      <circle cx="45" cy="41" r="22" fill={ART_C.card} {...ak} />
+      <circle cx="45" cy="41" r="13" fill={ART_INK} />
+      <circle cx="40" cy="36" r="4" fill="#FFFFFF" opacity="0.85" />
+      <rect x="70" y="18" width="12" height="7" rx="3" fill={ART_C.yellow} {...ak} strokeWidth="2.2" />
+    </g>
+  );
+}
+
+function ArtFolder({ x, y, s = 1, color = ART_C.yellow, back = ART_C.yellowDeep }) {
+  return (
+    <g transform={`translate(${x} ${y}) scale(${s})`}>
+      <path d="M0 12 C0 6 4 2 10 2 H30 L38 10 H82 C88 10 92 14 92 20 V66 C92 72 88 76 82 76 H10 C4 76 0 72 0 66 Z" fill={back} {...ak} />
+      <rect x="12" y="16" width="64" height="40" rx="5" fill={ART_C.card} {...ak} transform="rotate(-6 44 36)" />
+      <path d="M0 30 C0 26 3 24 7 24 H85 C89 24 92 26 92 30 V66 C92 72 88 76 82 76 H10 C4 76 0 72 0 66 Z" fill={color} {...ak} />
+    </g>
+  );
+}
+
+function ArtPlane({ x, y, s = 1 }) {
+  const line = useArtLine();
+  return (
+    <g transform={`translate(${x} ${y}) scale(${s})`}>
+      <path d="M-70 52 C-50 44 -40 60 -22 50 C-10 43 -6 40 2 36" fill="none" stroke={line} strokeWidth="3" strokeLinecap="round" strokeDasharray="2 9" />
+      <path d="M0 34 L84 0 L56 68 L40 46 Z" fill={ART_C.card} {...ak} />
+      <path d="M40 46 L84 0 L30 50 L28 70 L40 46" fill={ART_C.sky} {...ak} />
+    </g>
+  );
+}
+
+function ArtPin({ x, y, s = 1 }) {
+  const dark = useContext(ArtCtx);
+  return (
+    <g transform={`translate(${x} ${y}) scale(${s})`}>
+      <ellipse cx="30" cy="80" rx="16" ry="5" fill={dark ? '#000000' : ART_INK} opacity={dark ? 0.35 : 0.18} />
+      <path d="M30 78 C18 62 4 48 4 30 C4 14 16 4 30 4 C44 4 56 14 56 30 C56 48 42 62 30 78 Z" fill={ART_C.coral} {...ak} />
+      <circle cx="30" cy="30" r="10" fill={ART_C.card} {...ak} />
+    </g>
+  );
+}
+
+function ArtMap({ x, y, s = 1 }) {
+  return (
+    <g transform={`translate(${x} ${y}) scale(${s})`}>
+      <path d="M0 10 L36 0 L72 10 L108 0 V70 L72 80 L36 70 L0 80 Z" fill={ART_C.mintLight} {...ak} />
+      <path d="M36 0 V70 M72 10 V80" stroke={ART_INK} strokeWidth="2.4" opacity="0.45" />
+      <path d="M8 56 C24 40 40 54 58 38 C72 26 86 40 100 22" fill="none" stroke={ART_C.blue} strokeWidth="4" strokeLinecap="round" strokeDasharray="1 8" />
+    </g>
+  );
+}
+
+function ArtKeyboard({ x, y, s = 1 }) {
+  const keys = [];
+  for (let r = 0; r < 3; r++) for (let c = 0; c < 8; c++) keys.push(<rect key={`${r}${c}`} x={8 + c * 15 + (r === 1 ? 4 : 0)} y={8 + r * 14} width="11" height="10" rx="2.5" fill={ART_C.card} stroke={ART_INK} strokeWidth="1.8" />);
+  return (
+    <g transform={`translate(${x} ${y}) scale(${s})`}>
+      <rect x="0" y="0" width="132" height="66" rx="10" fill={ART_C.steel} {...ak} />
+      {keys}
+      <rect x="34" y="50" width="64" height="9" rx="3" fill={ART_C.card} stroke={ART_INK} strokeWidth="1.8" />
+    </g>
+  );
+}
+
+function ArtPalette({ x, y, s = 1 }) {
+  return (
+    <g transform={`translate(${x} ${y}) scale(${s})`}>
+      <path d="M48 4 C78 4 98 22 96 44 C94 60 80 60 72 56 C64 52 58 58 62 66 C66 76 56 84 44 82 C18 78 0 62 2 40 C4 18 24 4 48 4 Z" fill={ART_C.cream} {...ak} />
+      <circle cx="26" cy="38" r="8" fill={ART_C.coral} {...ak} strokeWidth="2.4" />
+      <circle cx="40" cy="20" r="8" fill={ART_C.yellow} {...ak} strokeWidth="2.4" />
+      <circle cx="62" cy="20" r="8" fill={ART_C.mint} {...ak} strokeWidth="2.4" />
+      <circle cx="78" cy="36" r="8" fill={ART_C.blue} {...ak} strokeWidth="2.4" />
+      <circle cx="34" cy="60" r="8" fill={ART_C.violet} {...ak} strokeWidth="2.4" />
+    </g>
+  );
+}
+
+function ArtBrush({ x, y, s = 1, rot = 0, tip = ART_C.violet }) {
+  return (
+    <g transform={`translate(${x} ${y}) rotate(${rot}) scale(${s})`}>
+      <rect x="-5" y="0" width="10" height="52" rx="5" fill={ART_C.cardboard} {...ak} />
+      <rect x="-6.5" y="50" width="13" height="12" rx="2" fill={ART_C.steel} {...ak} />
+      <path d="M-6.5 62 C-8 72 -3 82 0 86 C3 82 8 72 6.5 62 Z" fill={tip} {...ak} />
+    </g>
+  );
+}
+
+function ArtChain({ x, y, s = 1 }) {
+  return (
+    <g transform={`translate(${x} ${y}) scale(${s})`} fill="none" strokeLinecap="round">
+      <rect x="0" y="14" width="54" height="30" rx="15" stroke={ART_INK} strokeWidth="13" transform="rotate(-24 27 29)" />
+      <rect x="0" y="14" width="54" height="30" rx="15" stroke={ART_C.blue} strokeWidth="7" transform="rotate(-24 27 29)" />
+      <rect x="36" y="30" width="54" height="30" rx="15" stroke={ART_INK} strokeWidth="13" transform="rotate(-24 63 45)" />
+      <rect x="36" y="30" width="54" height="30" rx="15" stroke={ART_C.mint} strokeWidth="7" transform="rotate(-24 63 45)" />
+    </g>
+  );
+}
+
+function ArtStop({ x, y, r = 30 }) {
+  return (
+    <g>
+      <circle cx={x} cy={y} r={r} fill={ART_C.coral} {...ak} />
+      <rect x={x - r * 0.62} y={y - r * 0.16} width={r * 1.24} height={r * 0.32} rx={r * 0.12} fill="#FFFFFF" stroke={ART_INK} strokeWidth="2.4" />
+    </g>
+  );
+}
+
+function ArtQr({ x, y, s = 1 }) {
+  const finder = (fx, fy) => (
+    <g key={`f${fx}${fy}`}>
+      <rect x={fx} y={fy} width="20" height="20" rx="4" fill="none" stroke={ART_INK} strokeWidth="4" />
+      <rect x={fx + 6} y={fy + 6} width="8" height="8" rx="1.5" fill={ART_INK} />
+    </g>
+  );
+  const bits = [[38, 10], [46, 18], [38, 26], [10, 38], [22, 46], [34, 38], [46, 38], [58, 46], [38, 50], [50, 58], [62, 58], [46, 62], [58, 34], [26, 58]];
+  return (
+    <g transform={`translate(${x} ${y}) scale(${s})`}>
+      <rect x="0" y="0" width="80" height="80" rx="12" fill={ART_C.card} {...ak} />
+      {finder(8, 8)}{finder(52, 8)}{finder(8, 52)}
+      {bits.map(([bx, by]) => <rect key={`${bx}-${by}`} x={bx} y={by} width="7" height="7" rx="1.5" fill={ART_INK} />)}
+    </g>
+  );
+}
+
+function ArtMailbox({ x, y, s = 1 }) {
+  return (
+    <g transform={`translate(${x} ${y}) scale(${s})`}>
+      <rect x="40" y="56" width="12" height="44" fill={ART_C.cardboardDeep} {...ak} />
+      <path d="M22 4 H70 C84 4 92 14 92 28 V60 H22 Z" fill={ART_C.blue} {...ak} />
+      <path d="M22 4 C8 4 0 14 0 28 V60 H44 V28 C44 14 36 4 22 4 Z" fill={ART_C.sky} {...ak} />
+      <rect x="8" y="30" width="28" height="7" rx="3.5" fill={ART_INK} />
+      <path d="M76 26 V0 H92 V12 H80" fill={ART_C.coral} {...ak} />
+    </g>
+  );
+}
+
+function ArtPhoto({ x, y, s = 1, rot = 0, sky = ART_C.sky }) {
+  return (
+    <g transform={`translate(${x} ${y}) rotate(${rot}) scale(${s})`}>
+      <rect x="0" y="0" width="64" height="74" rx="5" fill={ART_C.card} {...ak} />
+      <rect x="7" y="7" width="50" height="46" rx="3" fill={sky} />
+      <path d="M7 44 C18 34 28 38 36 42 C42 36 50 34 57 40 V53 H7 Z" fill={ART_C.mint} />
+      <circle cx="44" cy="20" r="6" fill={ART_C.yellow} />
+      <rect x="7" y="7" width="50" height="46" rx="3" fill="none" stroke={ART_INK} strokeWidth="2.2" />
+    </g>
+  );
+}
+
+function ArtHandset({ x, y, s = 1 }) {
+  const line = useArtLine();
+  return (
+    <g transform={`translate(${x} ${y}) scale(${s})`}>
+      <path d="M14 6 C20 2 28 4 30 10 L36 26 C38 32 34 36 28 38 C30 48 38 58 48 62 C50 56 54 52 60 54 L76 60 C82 62 84 70 80 76 C74 86 62 90 50 84 C26 72 8 54 2 30 C0 20 4 12 14 6 Z" fill={ART_C.mint} {...ak} />
+      <path d="M64 6 C76 8 86 18 88 30 M62 20 C68 21 73 26 74 32" fill="none" stroke={line} strokeWidth="3.4" strokeLinecap="round" />
+    </g>
+  );
+}
+
+function ArtGlasses({ x, y, s = 1 }) {
+  return (
+    <g transform={`translate(${x} ${y}) scale(${s})`} fill="none" stroke={ART_INK} strokeWidth="2.8">
+      <circle cx="0" cy="0" r="8.5" fill="rgba(255,255,255,0.35)" />
+      <circle cx="21" cy="0" r="8.5" fill="rgba(255,255,255,0.35)" />
+      <path d="M8.5 0 H12.5" />
+    </g>
+  );
+}
+
+function ArtBolt({ x, y, s = 1 }) {
+  return <path transform={`translate(${x} ${y}) scale(${s})`} d="M24 0 L4 34 H20 L14 62 L40 22 H24 L30 0 Z" fill={ART_C.yellow} {...ak} />;
+}
+
+const SPOT_SCENES = {
+  notifications: { bg: 'sky', draw: () => (<>
+    <ArtFloor />
+    <ArtBell x={170} y={28} s={1.12} />
+    <ArtCat x={94} y={156} s={1.02} eyes="open" look={[2, -2]} />
+    <ArtSpark x={270} y={44} r={7} />
+    <ArtSpark x={250} y={130} r={5} color={ART_C.pink} />
+    <ArtDot x={46} y={52} r={4} />
+  </>) },
+  quiet: { bg: 'night', draw: (b) => (<>
+    <ArtFloor color="rgba(0,0,0,0.2)" />
+    <ArtMoon x={240} y={58} r={28} cut={b} />
+    <ArtStar x={172} y={36} r={7} />
+    <ArtStar x={292} y={112} r={5} />
+    <ArtSpark x={58} y={42} r={5} color="#FFFFFF" stroke={false} />
+    <ArtSpark x={120} y={64} r={4} color="#FFFFFF" stroke={false} />
+    <ArtCatLoaf x={128} y={156} s={1.08} />
+    <ArtZzz x={70} y={92} s={1.1} color="#FFFFFF" />
+  </>) },
+  privacy: { bg: 'peach', draw: () => (<>
+    <rect x="150" y="18" width="150" height="138" rx="10" fill={ART_C.sky} {...ak} />
+    <path d="M150 112 C180 98 214 120 240 106 C262 94 282 102 300 98 V146 C300 151 296 156 290 156 H160 C154 156 150 151 150 146 Z" fill={ART_C.mintLight} />
+    <circle cx="264" cy="52" r="12" fill={ART_C.yellow} {...ak} />
+    <ArtCatPeek x={228} y={158} s={0.95} eyes="open" look={[-2, 0]} />
+    <ArtCurtain x={136} y={12} w={92} h={148} />
+    <path d="M128 14 H308" stroke={ART_INK} strokeWidth="5" strokeLinecap="round" />
+    <ArtPlant x={38} y={95} s={1} />
+    <ArtSpark x={100} y={42} r={6} />
+  </>) },
+  twofactor: { bg: 'mint', draw: () => (<>
+    <ArtFloor />
+    <ArtPhone x={190} y={36} w={62} h={110} screen={ART_C.cream}>
+      <rect x={200} y={66} width={42} height={24} rx={8} fill={ART_C.card} {...ak} strokeWidth="2.4" />
+      <circle cx={210} cy={78} r={2.6} fill={ART_INK} /><circle cx={221} cy={78} r={2.6} fill={ART_INK} /><circle cx={232} cy={78} r={2.6} fill={ART_INK} />
+      <ArtShield x={207} y={98} s={0.46} />
+    </ArtPhone>
+    <ArtKey x={124} y={118} s={0.6} rot={-30} />
+    <ArtCat x={98} y={156} s={1} eyes="happy" hold />
+    <ArtSpark x={284} y={46} r={7} />
+    <ArtSpark x={44} y={58} r={5} color={ART_C.pink} />
+  </>) },
+  sessions: { bg: 'lilac', draw: () => (<>
+    <ArtFloor />
+    <ArtLaptop x={34} y={74} s={1.05} />
+    <ArtPhone x={168} y={80} w={36} h={66} screen={ART_C.mintLight} />
+    <circle cx="182" cy="76" r="7" fill={ART_C.mint} {...ak} strokeWidth="2.4" />
+    <circle cx="56" cy="70" r="7" fill={ART_C.mint} {...ak} strokeWidth="2.4" />
+    <ArtCat x={254} y={156} s={0.98} eyes="open" look={[3, 0]} flip />
+    <ArtSpark x={140} y={38} r={6} />
+  </>) },
+  password: { bg: 'butter', draw: () => (<>
+    <ArtFloor />
+    <rect x="134" y="108" width="160" height="40" rx="20" fill={ART_C.card} {...ak} />
+    {[0, 1, 2, 3, 4, 5].map((i) => <ArtStar key={i} x={160 + i * 22} y={128} r={6} color={ART_C.violet} />)}
+    <ArtLock x={176} y={20} s={0.94} color={ART_C.coral} />
+    <ArtCat x={74} y={156} s={0.96} eyes="wink" />
+    <ArtSpark x={296} y={44} r={6} />
+  </>) },
+  applock: { bg: 'lilac', draw: () => (<>
+    <ArtFloor />
+    <ArtPhone x={126} y={50} w={66} h={106} screen={ART_C.sky}>
+      <ArtLock x={139} y={74} s={0.5} color={ART_C.yellow} />
+    </ArtPhone>
+    <ArtCatLoaf x={240} y={156} s={0.88} />
+    <ArtZzz x={262} y={72} s={0.9} />
+    <ArtSpark x={70} y={50} r={7} />
+    <ArtDot x={90} y={120} r={4} />
+  </>) },
+  storage: { bg: 'peach', draw: () => (<>
+    <ArtFloor />
+    <ArtBoxBack x={102} y={98} w={124} />
+    <ArtPhoto x={112} y={44} s={0.62} rot={-16} />
+    <ArtCatPeek x={170} y={108} s={0.96} eyes="happy" part="head" />
+    <ArtBoxFront x={102} y={96} w={124} h={58} />
+    <ArtCatPeek x={170} y={108} s={0.96} part="paws" />
+    <ArtPhoto x={246} y={90} s={0.66} rot={12} sky={ART_C.lilac} />
+    <ArtSpark x={60} y={52} r={7} />
+    <ArtDot x={290} y={44} r={4} />
+  </>) },
+  chats: { bg: 'mint', draw: () => (<>
+    <ArtFloor />
+    <ArtBubble x={34} y={30} w={124} h={42} fill={ART_C.card} tail="left" />
+    <ArtBubble x={62} y={90} w={104} h={40} fill={ART_C.violet} tail="right" lineColor="rgba(255,255,255,0.7)" />
+    <ArtCat x={238} y={156} s={1} eyes="open" look={[3, -1]} flip />
+    <ArtSpark x={290} y={44} r={6} />
+  </>) },
+  about: { bg: 'lilac', draw: () => (<>
+    <ArtFloor />
+    <ArtPhone x={190} y={42} w={64} h={108} screen="#0D1122">
+      <path d="M208 82 H236 L210 108 H236" fill="none" stroke="#5B8CFF" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" />
+    </ArtPhone>
+    <ArtCat x={110} y={156} s={1.02} eyes="happy" wave />
+    <ArtSpark x={280} y={44} r={7} />
+    <ArtSpark x={52} y={58} r={5} color={ART_C.pink} />
+  </>) },
+  linked: { bg: 'sky', draw: () => (<>
+    <ArtFloor />
+    <ArtChain x={168} y={42} s={1.1} />
+    <ArtCat x={90} y={156} s={0.98} eyes="happy" />
+    <ArtSpark x={292} y={50} r={6} />
+  </>) },
+  blocked: { bg: 'peach', draw: () => (<>
+    <ArtFloor />
+    <rect x="212" y="78" width="10" height="76" rx="3" fill={ART_C.steel} {...ak} />
+    <ArtStop x={217} y={68} r={34} />
+    <ArtCat x={104} y={156} s={1} eyes="open" wave />
+    <ArtDot x={50} y={46} r={4} />
+  </>) },
+  search: { bg: 'butter', draw: () => (<>
+    <ArtFloor />
+    <ArtBubble x={154} y={34} w={96} h={36} tail="left" lines={1} />
+    <ArtBubble x={196} y={92} w={96} h={36} fill={ART_C.violet} tail="right" lines={1} lineColor="rgba(255,255,255,0.7)" />
+    <ArtGlass x={176} y={46} s={1.05} />
+    <ArtCat x={86} y={156} s={0.98} eyes="open" look={[3, 0]} />
+  </>) },
+  nothing: { bg: 'butter', draw: () => (<>
+    <ArtFloor />
+    <ArtGlass x={172} y={34} s={1.1} />
+    <text x="207" y="80" textAnchor="middle" fontFamily="-apple-system, Segoe UI, Roboto, sans-serif" fontWeight="900" fontSize="30" fill={ART_INK}>?</text>
+    <ArtCat x={92} y={156} s={0.98} eyes="open" look={[2, -2]} />
+  </>) },
+  reminders: { bg: 'peach', draw: () => (<>
+    <ArtFloor />
+    <ArtClock x={180} y={44} s={1.02} />
+    <ArtCat x={88} y={156} s={1} eyes="wide" look={[2, -1]} />
+    <ArtSpark x={292} y={36} r={6} />
+  </>) },
+  poll: { bg: 'mint', draw: () => (<>
+    <ArtFloor />
+    <ArtBallot x={176} y={56} s={1.08} />
+    <g transform="rotate(-14 136 110)">
+      <rect x="122" y="92" width="30" height="36" rx="4" fill={ART_C.card} {...ak} />
+      <path d="M129 109 L135 115 L145 103" fill="none" stroke={ART_C.mint} strokeWidth="3.6" strokeLinecap="round" strokeLinejoin="round" />
+    </g>
+    <ArtCat x={90} y={156} s={1} eyes="happy" hold />
+    <ArtSpark x={292} y={42} r={6} />
+  </>) },
+  event: { bg: 'butter', draw: () => (<>
+    <ArtFloor />
+    <EventBunting />
+    <ArtCalendar x={176} y={62} s={1} />
+    <ArtCat x={90} y={156} s={1} eyes="happy" wave />
+  </>) },
+  insights: { bg: 'sky', draw: () => (<>
+    <ArtFloor />
+    <ArtBars x={176} y={50} s={1.04} />
+    <ArtCat x={96} y={156} s={1} eyes="open" look={[3, 0]} />
+    <ArtGlasses x={86.5} y={98} s={1} />
+    <ArtSpark x={294} y={38} r={6} />
+  </>) },
+  saved: { bg: 'lilac', draw: () => (<>
+    <ArtFloor />
+    <ArtRibbon x={70} y={36} s={1.08} />
+    <ArtCat x={220} y={156} s={1} eyes="happy" flip />
+    <ArtSpark x={156} y={50} r={7} />
+    <ArtSpark x={282} y={58} r={5} color={ART_C.pink} />
+  </>) },
+  archive: { bg: 'mint', draw: () => (<>
+    <ArtFloor />
+    <rect x="104" y="96" width="124" height="58" rx="6" fill={ART_C.cardboard} {...ak} />
+    <rect x="98" y="84" width="136" height="18" rx="5" fill={ART_C.cardboardDeep} {...ak} />
+    <rect x="148" y="112" width="36" height="14" rx="4" fill={ART_C.card} {...ak} strokeWidth="2.2" />
+    <ArtCatLoaf x={168} y={88} s={0.78} />
+    <ArtZzz x={228} y={50} s={0.8} />
+    <ArtSpark x={60} y={50} r={6} />
+  </>) },
+  gifts: { bg: 'pink', draw: () => (<>
+    <ArtFloor />
+    <ArtGift x={60} y={58} s={1.02} />
+    <ArtCat x={226} y={156} s={1} eyes="wide" look={[3, 0]} flip />
+    <ArtSpark x={170} y={40} r={8} />
+    <ArtSpark x={50} y={36} r={5} />
+  </>) },
+  requests: { bg: 'peach', draw: () => (<>
+    <ArtFloor />
+    <ArtEnvelope x={176} y={64} s={1.06} />
+    <ArtCat x={94} y={156} s={1} eyes="happy" wave />
+    <ArtSpark x={292} y={50} r={6} />
+  </>) },
+  nochats: { bg: 'lilac', draw: () => (<>
+    <ArtFloor />
+    <ArtBubble x={172} y={26} w={86} h={38} tail="left" lines={0} />
+    <text x="215" y="52" textAnchor="middle" fontFamily="-apple-system, Segoe UI, Roboto, sans-serif" fontWeight="900" fontSize="20" fill={ART_INK}>hi!</text>
+    <ArtPhone x={196} y={78} w={48} h={76} screen={ART_C.cream}>
+      <rect x={204} y={96} width={26} height={8} rx={4} fill={ART_C.violet} />
+      <rect x={210} y={110} width={26} height={8} rx={4} fill={ART_C.steel} />
+    </ArtPhone>
+    <ArtCat x={110} y={156} s={1} eyes="open" look={[3, -1]} />
+  </>) },
+  calls: { bg: 'mint', draw: () => (<>
+    <ArtFloor />
+    <ArtHandset x={44} y={40} s={1.05} />
+    <ArtCat x={232} y={156} s={1} eyes="open" look={[3, -1]} flip />
+    <ArtSpark x={292} y={44} r={6} />
+  </>) },
+  moments: { bg: 'butter', draw: () => (<>
+    <ArtFloor />
+    <ArtCamera x={176} y={60} s={1.05} />
+    <ArtCat x={96} y={156} s={1} eyes="wink" wave />
+    <ArtSpark x={294} y={44} r={7} />
+  </>) },
+  mail: { bg: 'sky', draw: () => (<>
+    <ArtFloor />
+    <ArtMailbox x={48} y={54} s={1.02} />
+    <ArtCat x={232} y={156} s={1} eyes="open" look={[3, -1]} flip />
+    <ArtSpark x={292} y={46} r={6} />
+  </>) },
+  folders: { bg: 'butter', draw: () => (<>
+    <ArtFloor />
+    <ArtFolder x={180} y={62} s={1.02} color={ART_C.violet} back={ART_C.lilac} />
+    <ArtFolder x={150} y={84} s={0.8} />
+    <ArtCat x={86} y={156} s={0.96} eyes="happy" />
+  </>) },
+  later: { bg: 'sky', draw: () => (<>
+    <ArtFloor />
+    <ArtPlane x={196} y={30} s={1.05} />
+    <ArtClock x={214} y={98} s={0.52} />
+    <ArtCat x={86} y={156} s={0.98} eyes="open" look={[3, -2]} />
+  </>) },
+  paint: { bg: 'peach', draw: () => (<>
+    <ArtFloor />
+    <ArtPalette x={168} y={52} s={1.05} />
+    <ArtBrush x={284} y={30} s={1} rot={28} />
+    <ArtCat x={90} y={156} s={1} eyes="happy" hold />
+    <ArtSpark x={50} y={50} r={6} />
+  </>) },
+  discover: { bg: 'mint', draw: () => (<>
+    <ArtFloor />
+    <ArtMap x={170} y={64} s={1.02} />
+    <ArtPin x={226} y={10} s={0.9} />
+    <ArtCat x={90} y={156} s={1} eyes="open" look={[3, -1]} />
+  </>) },
+  shortcuts: { bg: 'lilac', draw: () => (<>
+    <ArtFloor />
+    <ArtCatPeek x={206} y={92} s={0.86} eyes="happy" part="head" />
+    <ArtKeyboard x={138} y={88} s={1.08} />
+    <ArtCatPeek x={206} y={92} s={0.86} part="paws" />
+    <ArtSpark x={70} y={50} r={7} />
+    <ArtDot x={96} y={120} r={4} />
+  </>) },
+  theme: { bg: 'pink', draw: () => (<>
+    <ArtFloor />
+    <ArtPalette x={40} y={46} s={1.1} />
+    <ArtBrush x={166} y={34} s={0.9} rot={24} tip={ART_C.coral} />
+    <ArtCat x={238} y={156} s={0.96} eyes="happy" flip />
+  </>) },
+  quick: { bg: 'butter', draw: () => (<>
+    <ArtFloor />
+    <ArtBubble x={156} y={44} w={130} h={52} tail="left" lines={2} />
+    <ArtBolt x={264} y={18} s={1} />
+    <ArtCat x={88} y={156} s={0.98} eyes="happy" />
+  </>) },
+  collage: { bg: 'pink', draw: () => (<>
+    <ArtFloor />
+    <ArtPhoto x={150} y={40} s={1} rot={-10} />
+    <ArtPhoto x={226} y={32} s={1} rot={8} sky={ART_C.lilac} />
+    <ArtCat x={88} y={156} s={0.98} eyes="open" look={[3, -1]} />
+  </>) },
+  qr: { bg: 'sky', draw: () => (<>
+    <ArtFloor />
+    <ArtQr x={182} y={42} s={1.1} />
+    <ArtCat x={96} y={156} s={1} eyes="open" look={[3, -1]} />
+  </>) },
+  voice: { bg: 'lilac', draw: () => (<>
+    <ArtFloor />
+    <ArtMic x={186} y={40} s={1.05} />
+    <ArtNote x={262} y={40} s={1} />
+    <ArtNote x={150} y={30} s={0.8} color={ART_C.yellow} />
+    <ArtCat x={90} y={156} s={1} eyes="happy" />
+  </>) },
+  dice: { bg: 'mint', draw: () => (<>
+    <ArtFloor />
+    <ArtDice x={168} y={88} s={1.2} rot={-12} pips={5} />
+    <ArtDice x={236} y={70} s={1.2} rot={14} pips={3} color={ART_C.yellow} />
+    <ArtSpark x={290} y={40} r={6} />
+    <ArtCat x={88} y={156} s={1} eyes="wide" look={[3, 0]} />
+  </>) },
+  unlock: { bg: 'sky', draw: () => (<>
+    <ArtFloor />
+    <ArtPhone x={190} y={34} w={66} h={114} screen={ART_C.cream}>
+      <ArtFingerprint x={201} y={60} s={0.75} />
+    </ArtPhone>
+    <ArtCat x={96} y={156} s={1} eyes="happy" hold />
+    <ArtSpark x={284} y={46} r={7} />
+  </>) },
+  effects: { bg: 'pink', draw: () => (<>
+    <ArtFloor />
+    <ArtBubble x={160} y={62} w={120} h={46} fill={ART_C.violet} tail="right" lines={2} lineColor="rgba(255,255,255,0.7)" />
+    {[[176, 38, ART_C.yellow, 20], [210, 24, ART_C.mint, -30], [248, 36, ART_C.coral, 40], [284, 54, ART_C.blue, -10], [150, 50, ART_C.pink, 60]].map(([cx, cy, c, r], i) => <rect key={i} x={cx - 5} y={cy - 9} width="10" height="18" rx="3" fill={c} {...ak} strokeWidth="2.2" transform={`rotate(${r} ${cx} ${cy})`} />)}
+    <ArtCat x={88} y={156} s={1} eyes="wide" look={[3, -1]} />
+  </>) },
+  wallpaper: { bg: 'butter', draw: () => (<>
+    <ArtFloor />
+    <ArtPhone x={192} y={34} w={66} h={116} screen={ART_C.sky}>
+      <path d="M196.5 110 C210 96 224 104 236 110 C244 102 250 100 253.5 104 V145.5 H196.5 Z" fill={ART_C.mint} />
+      <circle cx="238" cy="66" r="9" fill={ART_C.yellow} />
+    </ArtPhone>
+    <ArtBrush x={168} y={40} s={0.8} rot={-20} tip={ART_C.mint} />
+    <ArtCat x={96} y={156} s={1} eyes="happy" />
+  </>) },
+};
+
+function EventBunting() {
+  const line = useArtLine();
+  return (
+    <g>
+      <path d="M128 26 Q200 52 296 22" fill="none" stroke={line} strokeWidth="2.4" />
+      {[[146, 31, ART_C.coral], [176, 39, ART_C.blue], [206, 42, ART_C.mint], [236, 40, ART_C.pink], [266, 33, ART_C.violet]].map(([fx, fy, c], i) => <path key={i} d={`M${fx - 8} ${fy} L${fx + 8} ${fy} L${fx} ${fy + 16} Z`} fill={c} {...ak} strokeWidth="2.2" />)}
+    </g>
+  );
+}
+
+function SpotArt({ k, dark = false, radius = 22, style }) {
+  const sc = SPOT_SCENES[k] || SPOT_SCENES.chats;
+  const pair = ART_BG[sc.bg] || ART_BG.lilac;
+  const bg = dark ? pair[1] : pair[0];
+  return (
+    <ArtCtx.Provider value={!!dark}>
+      <svg viewBox="0 0 320 180" preserveAspectRatio="xMidYMid slice" aria-hidden="true" style={{ display: 'block', width: '100%', aspectRatio: '2 / 1', borderRadius: radius, background: bg, ...(style || {}) }}>
+        {sc.draw(bg)}
+      </svg>
+    </ArtCtx.Provider>
+  );
+}
+
+function SettingsLayer({ onBack, children, z = 2 }) {
+  const { theme } = useTheme();
+  const swipe = useEdgeSwipeBack(true, onBack);
+  return (
+    <div {...swipe} className="zchat-panel-open" style={{ position: 'absolute', inset: 0, zIndex: z, background: igPalette(theme).bg, overflowY: 'auto', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
+      <div style={{ padding: '0 16px calc(24px + env(safe-area-inset-bottom))' }}>{children}</div>
+    </div>
+  );
+}
+
+function PageArt({ k, text, style }) {
   const { theme } = useTheme();
   return (
-    <div style={{ textAlign: 'center', padding: '56px 24px 40px', color: theme.muted }}>
-      {icon && <div style={{ margin: '0 auto 12px', color: theme.muted, display: 'flex', justifyContent: 'center' }}>{React.isValidElement(icon) ? React.cloneElement(icon, { size: 42, strokeWidth: 1.4 }) : icon}</div>}
-      <div style={{ fontSize: 16.5, fontWeight: 800, color: theme.ink }}>{title}</div>
-      {text && <div style={{ fontSize: 13.5, lineHeight: 1.55, marginTop: 6 }}>{text}</div>}
-      {action && <div style={{ marginTop: 16, display: 'flex', justifyContent: 'center' }}>{action}</div>}
+    <div style={{ padding: '8px 0 6px', ...(style || {}) }}>
+      <div style={{ maxWidth: 400, margin: '0 auto' }}><SpotArt k={k} dark={theme.dark} /></div>
+      {text && <div style={{ fontSize: 14, lineHeight: 1.5, color: theme.muted, margin: '12px auto 8px', maxWidth: 360, textAlign: 'center', padding: '0 6px' }}>{text}</div>}
+    </div>
+  );
+}
+
+function EmptyState({ icon, art, title, text, action }) {
+  const { theme } = useTheme();
+  return (
+    <div style={{ textAlign: 'center', padding: art ? '16px 8px 34px' : '56px 24px 40px', color: theme.muted }}>
+      {art ? <div style={{ maxWidth: 300, margin: '0 auto 18px' }}><SpotArt k={art} dark={theme.dark} /></div> : icon && <div style={{ margin: '0 auto 12px', color: theme.muted, display: 'flex', justifyContent: 'center' }}>{React.isValidElement(icon) ? React.cloneElement(icon, { size: 42, strokeWidth: 1.4 }) : icon}</div>}
+      <div style={{ fontSize: 17, fontWeight: 800, color: theme.ink, letterSpacing: '-0.01em' }}>{title}</div>
+      {text && <div style={{ fontSize: 14, lineHeight: 1.55, marginTop: 6, maxWidth: 330, marginLeft: 'auto', marginRight: 'auto' }}>{text}</div>}
+      {action && <div style={{ marginTop: 18, display: 'flex', justifyContent: 'center' }}>{action}</div>}
     </div>
   );
 }
@@ -1683,11 +2688,6 @@ function PillButton({ label, onClick, primary, danger, disabled, small, style, a
       cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.55 : 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, ...(style || {}),
     }}>{label}</button>
   );
-}
-
-function CardGroup({ children, style }) {
-  const { theme } = useTheme();
-  return <div style={{ padding: '0 16px', borderRadius: 18, background: theme.rowBg, ...(style || {}) }}>{children}</div>;
 }
 
 function SettingsRow({ icon, label, sub, onClick, danger, right }) {
@@ -1726,9 +2726,8 @@ function ToggleSwitch({ on, onClick }) {
   );
 }
 
-function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideActivity, onToggleActivity, onOpenAccounts, onOpenDelete, onOpenBlocked, blockedCount = 0, chatLockSet, chatLockHash, onSetChatLockPassword, onTurnOffChatLock, autoOpenLockSetup, onConsumedAutoOpen, me, rewardCount, onOpenCollection, onEditProfile, onPrivacySaved, isZAdmin, onOpenReports, onOpenAdmin, hasPasswordLogin, onOpenSaved, onOpenProfile, sessionForLinks, onOpenWhatsNew }) {
+function SettingsPanel({ onClose, onOpenPrivacy, onLogout, hideActivity, onToggleActivity, onOpenAccounts, onOpenDelete, onOpenBlocked, blockedCount = 0, chatLockSet, chatLockHash, onSetChatLockPassword, onTurnOffChatLock, autoOpenLockSetup, onConsumedAutoOpen, me, onEditProfile, onPrivacySaved, isZAdmin, onOpenReports, onOpenAdmin, hasPasswordLogin, sessionForLinks, onOpenWhatsNew }) {
   useBackClose(true, onClose);
-  const edgeBack = useEdgeSwipeBack(true);
   const [permText, setPermText] = useState('Checking…');
   const notifState = (typeof Notification !== 'undefined' && Notification.permission) || 'default';
   const checkPerms = async () => {
@@ -1755,62 +2754,20 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
     }
     checkPerms();
   };
-  const { theme, dark, setDark, accentName, setAccentName, soundOn, setSoundOn, reactionSoundOn, setReactionSoundOn, bgPatternOn, setBgPatternOn, fontScale, setFontScale, chatTheme, setChatTheme, bubbleColor, setBubbleColor, bubbleStyle, setBubbleStyle } = useTheme();
+  const { theme, themeMode, soundOn, setSoundOn, reactionSoundOn, setReactionSoundOn } = useTheme();
   const [lockFlow, setLockFlow] = useState(null);
   const [igQuery, setIgQuery] = useState('');
-  const [followerCount, setFollowerCount] = useState(null);
-  const [followingCount, setFollowingCount] = useState(null);
-  const [listModal, setListModal] = useState(null);
-  const [shareNote, setShareNote] = useState('');
-  useEffect(() => {
-    if (!me || !me.id) return undefined;
-    let alive = true;
-    (async () => {
-      try {
-        const [fr, fg] = await Promise.all([
-          supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', me.id).eq('status', 'accepted'),
-          supabase.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', me.id).eq('status', 'accepted'),
-        ]);
-        if (!alive) return;
-        setFollowerCount(fr && fr.count != null ? fr.count : 0);
-        setFollowingCount(fg && fg.count != null ? fg.count : 0);
-      } catch {}
-    })();
-    return () => { alive = false; };
-  }, [me && me.id]);
-  const shareMyProfile = async () => {
-    if (!me) return;
-    const link = profileShareLink(me.id);
-    try {
-      if (navigator.share) await navigator.share({ title: `${me.name} on ZChat`, text: `See ${me.name} on ZChat`, url: link });
-      else { await copyTextToClipboard(link); setShareNote('Link copied'); setTimeout(() => setShareNote(''), 1800); }
-    } catch {}
-  };
   const [section, setSection] = useState('main');
-  useBackClose(section !== 'main', () => setSection('main'));
+  const edgeBack = useEdgeSwipeBack(section === 'main');
+  const SETTINGS_PARENT = { whocansee: 'privacy' };
+  useBackClose(section !== 'main', () => setSection(SETTINGS_PARENT[section] || 'main'));
+  const layerSections = section === 'main' ? [] : (SETTINGS_PARENT[section] ? [SETTINGS_PARENT[section], section] : [section]);
   const [appLockOn, setAppLockOn] = useState(() => !!readAppLock().h);
   useEffect(() => {
     const on = () => setAppLockOn(!!readAppLock().h);
     window.addEventListener('zchat-applock-changed', on);
     return () => window.removeEventListener('zchat-applock-changed', on);
   }, []);
-  const [dragX, setDragX] = useState(0);
-  const dragStartRef = useRef(null);
-  const draggingRef = useRef(false);
-
-  const onDragStart = (e) => { dragStartRef.current = e.touches[0].clientX; draggingRef.current = false; };
-  const onDragMove = (e) => {
-    if (dragStartRef.current == null) return;
-    const dx = e.touches[0].clientX - dragStartRef.current;
-    if (dx < 0) { draggingRef.current = true; setDragX(Math.max(dx, -320)); }
-  };
-  const onDragEnd = () => {
-    if (draggingRef.current && dragX < -70) { onClose(); }
-    setDragX(0);
-    dragStartRef.current = null;
-    draggingRef.current = false;
-  };
-
   useEffect(() => {
     if (autoOpenLockSetup) {
       setSection('privacy');
@@ -1819,35 +2776,18 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
     }
   }, [autoOpenLockSetup]);
 
-  const CategoryRow = ({ icon, label, sub, onClick }) => (
-    <div onClick={onClick} style={{
-      display: 'flex', alignItems: 'center', gap: 12, padding: '14px 4px', cursor: 'pointer',
-      borderBottom: `1px solid ${theme.border}`,
-    }}>
-      <div style={{
-        width: 36, height: 36, borderRadius: 11, display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: 'transparent', color: theme.ink, flexShrink: 0,
-      }}>{icon}</div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: theme.ink }}>{label}</div>
-        {sub && <div style={{ fontSize: 11.5, color: theme.muted, marginTop: 1 }}>{sub}</div>}
-      </div>
-      <ChevronRight size={17} color={theme.muted} />
-    </div>
-  );
-
   const c = igPalette(theme);
   const SettingsRow = (p) => <IgRow {...p} inset={false} />;
   const ToggleSwitch = IgToggle;
   const SectionHeader = ({ title }) => <IgTopBar title={title} onBack={() => setSection('main')} sticky bleed={16} />;
 
   const notifValue = notifState === 'granted' ? 'On' : notifState === 'denied' ? 'Blocked' : 'Off';
+  const themeLabel = { light: 'Light', dark: 'Dark', auto: 'Auto' }[themeMode] || 'Light';
+  const finePointer = (() => { try { return window.matchMedia('(hover: hover) and (pointer: fine)').matches; } catch { return false; } })();
   const igGroups = [
     { title: 'Your account', rows: [
       { icon: <User />, label: 'Edit profile', onClick: onEditProfile },
       { icon: <UserPlus />, label: 'Switch account', onClick: onOpenAccounts },
-      { icon: <Bell />, label: 'Follow requests', onClick: onOpenRequests },
-      { icon: <Bookmark />, label: 'Saved messages', onClick: onOpenSaved },
     ] },
     { title: 'Login and security', rows: [
       { icon: <Lock />, label: 'Change password', onClick: () => setSection('password') },
@@ -1862,18 +2802,17 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
       { icon: <Ban />, label: 'Blocked accounts', value: blockedCount ? String(blockedCount) : 'None', onClick: onOpenBlocked },
     ] },
     { title: 'Your app', rows: [
-      { icon: dark ? <Sun /> : <Moon />, label: 'Dark mode', toggle: !!dark, onClick: () => setDark(!dark) },
+      { icon: <Palette />, label: 'Theme', value: themeLabel, onClick: () => setSection('appearance') },
       { icon: soundOn ? <Volume2 /> : <VolumeX />, label: 'Sounds', toggle: !!soundOn, onClick: () => setSoundOn(!soundOn) },
       { icon: <Bell />, label: 'Notifications', value: notifValue, onClick: () => setSection('notifications') },
       { icon: <Camera />, label: 'Camera & microphone', value: permText, onClick: fixPermissions },
-      { icon: <Palette />, label: 'Theme', onClick: () => setSection('appearance') },
       { icon: <MessageSquare />, label: 'Chats', onClick: () => setSection('chats') },
-      { icon: <KeyboardIcon />, label: 'Keyboard shortcuts', onClick: () => setSection('shortcuts') },
+      ...(finePointer ? [{ icon: <KeyboardIcon />, label: 'Keyboard shortcuts', onClick: () => setSection('shortcuts') }] : []),
       { icon: <Database />, label: 'Storage', onClick: () => setSection('storage') },
     ] },
     { title: 'Admin', rows: isZAdmin ? [{ icon: <ShieldCheck />, label: 'Admin panel', onClick: onOpenAdmin }, { icon: <ShieldAlert />, label: 'Report queue', onClick: onOpenReports }] : [] },
     { title: 'More info and support', rows: [
-      { icon: <Sparkles />, label: 'What is new', value: APP_VERSION, onClick: () => { if (onOpenWhatsNew) onOpenWhatsNew(); } },
+      { icon: <Megaphone />, label: 'What is new', value: APP_VERSION, onClick: () => { if (onOpenWhatsNew) onOpenWhatsNew(); } },
       { icon: <HelpCircle />, label: 'About ZChat', value: `Version ${APP_VERSION}`, onClick: () => setSection('about') },
     ] },
     { title: 'Login', rows: [
@@ -1890,9 +2829,9 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
     <div {...edgeBack} style={{
       position: 'fixed', inset: 0, zIndex: 30, background: c.bg, color: c.fg, fontFamily: FONT,
     }} className="zchat-panel-open">
-      <div style={{ height: '100%', overflowY: 'auto', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
+      <div style={{ height: '100%', overflowY: 'auto', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain', position: 'relative', zIndex: 1 }}>
 
-        {section === 'main' && (
+        {(
           <>
             <IgTopBar title="Settings" onBack={onClose} sticky />
             <div style={{ padding: '4px 16px 0' }}>
@@ -1903,48 +2842,6 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
                 {igQuery && <X size={16} style={{ cursor: 'pointer' }} onClick={() => setIgQuery('')} />}
               </label>
             </div>
-            {me && !igTerm && (
-              <div style={{ textAlign: 'center', padding: '14px 16px 4px' }}>
-                <div role="button" aria-label="Edit profile photo" onClick={onEditProfile} style={{ display: 'inline-flex', cursor: 'pointer' }}>
-                  {me.avatar_frame ? (
-                    <Avatar emoji={me.avatar} name={me.name} size={112} frame={me.avatar_frame} frameFit />
-                  ) : (
-                    <div data-testid="hero-ring" style={{ padding: 3, borderRadius: '50%', background: `conic-gradient(from 210deg, ${theme.coral}, ${theme.gold}, ${theme.teal}, ${theme.coralDeep}, ${theme.coral})` }}>
-                      <div style={{ borderRadius: '50%', border: `3px solid ${c.bg}`, display: 'flex' }}>
-                        <Avatar emoji={me.avatar} name={me.name} size={104} />
-                      </div>
-                    </div>
-                  )}
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'center', marginTop: 14, padding: '0 4px' }}>
-                  <NameBadge name={me.name} verified={me.verified} custom={me.custom_badge} size={me.name.length > 24 ? 16 : 20} lines={2}
-                    style={{ justifyContent: 'center', textAlign: 'center', fontWeight: 800, fontSize: me.name.length > 36 ? 18 : me.name.length > 22 ? 21 : 25 }} />
-                </div>
-                <div style={{ fontSize: 14, color: c.dim, marginTop: 4, padding: '0 16px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>@{me.username}</div>
-                {me.verified && VERIFIED_TIERS[me.verified] && (
-                  <div style={{ display: 'inline-block', marginTop: 8, padding: '3px 11px', borderRadius: 999, border: `1px solid ${c.line}`, fontSize: 12, fontWeight: 700 }}>{VERIFIED_TIERS[me.verified].label}</div>
-                )}
-                <div style={{ display: 'flex', justifyContent: 'center', gap: 24, marginTop: 16, fontSize: 14, color: c.dim }}>
-                  <span role="button" aria-label="Followers" onClick={() => setListModal('followers')} style={{ cursor: 'pointer' }}>
-                    <b style={{ color: c.fg, fontSize: 16 }}>{followerCount == null ? '\u2013' : formatCount(followerCount)}</b> followers
-                  </span>
-                  <span role="button" aria-label="Following" onClick={() => setListModal('following')} style={{ cursor: 'pointer' }}>
-                    <b style={{ color: c.fg, fontSize: 16 }}>{followingCount == null ? '\u2013' : formatCount(followingCount)}</b> following
-                  </span>
-                  <span role="button" aria-label="Collection" onClick={() => onOpenCollection && onOpenCollection()} style={{ cursor: 'pointer' }}>
-                    <b style={{ color: c.fg, fontSize: 16 }}>{rewardCount != null ? rewardCount : 0}</b> collected
-                  </span>
-                </div>
-                <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
-                  <div role="button" aria-label="Edit profile button" onClick={onEditProfile} style={{ flex: 1, height: 36, borderRadius: 10, background: c.field, color: c.fg, fontWeight: 700, fontSize: 13.5, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, cursor: 'pointer' }}>
-                    <User size={16} strokeWidth={1.8} />Edit profile
-                  </div>
-                  <div role="button" aria-label="Share profile button" onClick={shareMyProfile} style={{ flex: 1, height: 36, borderRadius: 10, background: c.field, color: c.fg, fontWeight: 700, fontSize: 13.5, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, cursor: 'pointer' }}>
-                    <Share2 size={16} strokeWidth={1.8} />{shareNote || 'Share profile'}
-                  </div>
-                </div>
-              </div>
-            )}
             {igVisible.map((g) => (
               <div key={g.title}>
                 <IgHeading>{g.title}</IgHeading>
@@ -1961,42 +2858,45 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
           </>
         )}
 
-        {section !== 'main' && (
-        <div style={{ padding: '0 16px calc(24px + env(safe-area-inset-bottom))' }}>
-        {section === 'twofactor' && (
+      </div>
+      {layerSections.filter((sec) => sec !== 'whocansee').map((sec, li) => (
+        <SettingsLayer key={sec} z={3 + li} onBack={() => setSection('main')}>
+        {sec === 'twofactor' && (
           <>
             <SectionHeader title="Two factor authentication" />
+            <PageArt k="twofactor" text="Add a second step when you log in. Even if someone learns your password, they still cannot get in." />
             <TwoFactorSection />
           </>
         )}
 
-        {section === 'sessions' && (
+        {sec === 'sessions' && (
           <>
             <SectionHeader title="Active sessions" />
+            <PageArt k="sessions" text="These are the places your account is logged in right now. Log out anything you do not recognise." />
             <SessionsSection userId={me && me.id} />
           </>
         )}
 
-        {section === 'password' && (
+        {sec === 'password' && (
           <>
             <SectionHeader title="Change password" />
+            <PageArt k="password" text="Use something long that you do not use on any other app." />
             <ChangePasswordForm email={me && me.email} hasPassword={!!hasPasswordLogin} onDone={() => setSection('main')} />
           </>
         )}
 
-        {section === 'appearance' && (
+        {sec === 'appearance' && (
           <>
             <SectionHeader title="Theme" />
             <AppearanceSection />
           </>
         )}
 
-        {section === 'privacy' && (
+        {sec === 'privacy' && (
           <>
             <SectionHeader title="Privacy & Security" />
+            <PageArt k="privacy" text="Choose who can see your profile and who can reach you." />
             <SettingsRow icon={<Eye size={16} />} label="Who can see what" sub="Profile, bio, online, tags, groups" onClick={() => setSection('whocansee')} />
-            <SettingsRow icon={<EyeOff size={16} />} label="Hide activity status" right={<ToggleSwitch on={hideActivity} onClick={onToggleActivity} />} />
-            <SettingsRow icon={<Ban size={16} />} label="Blocked accounts" onClick={onOpenBlocked} right={<span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, color: theme.muted }}>{blockedCount > 0 ? blockedCount : ''}<ChevronRight size={16} /></span>} />
             <SettingsRow icon={<Lock size={16} />} label={chatLockSet ? 'Change Chat Lock password' : 'Set Chat Lock password'} onClick={() => setLockFlow(chatLockSet ? 'verify-then-change' : 'set')} />
             {chatLockSet && (
               <SettingsRow icon={<Lock size={16} />} label="Turn off Chat Lock" danger onClick={() => setLockFlow('verify-then-off')} />
@@ -2004,41 +2904,43 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
           </>
         )}
 
-        {section === 'whocansee' && me && (
-          <WhoCanSeePanel me={me} onBack={() => setSection('privacy')} onSaved={onPrivacySaved} />
-        )}
 
-        {section === 'storage' && (
+        {sec === 'storage' && (
           <>
             <SectionHeader title="Storage" />
+            <PageArt k="storage" text="ZChat keeps photos, stickers and frames on this phone so they open fast. Clearing them is safe, nothing is lost." />
             <StorageSection />
           </>
         )}
 
-        {section === 'chats' && (
+        {sec === 'chats' && (
           <>
             <SectionHeader title="Chats" />
+            <PageArt k="chats" text="Change how your chats look and behave on this phone." />
             <ChatsPrefsSection />
           </>
         )}
 
-        {section === 'applock' && (
+        {sec === 'applock' && (
           <>
             <SectionHeader title="App lock" />
+            <PageArt k="applock" text="Lock ZChat with a code so nobody can open it when you hand someone your phone." />
             <AppLockSection />
           </>
         )}
 
-        {section === 'shortcuts' && (
+        {sec === 'shortcuts' && (
           <>
             <SectionHeader title="Keyboard shortcuts" />
+            <PageArt k="shortcuts" text="Get around faster with your keyboard." />
             <ShortcutsSection />
           </>
         )}
 
-        {section === 'notifications' && (
+        {sec === 'notifications' && (
           <>
             <SectionHeader title="Notifications" />
+            <PageArt k="notifications" text="Pick how ZChat gets your attention. Quiet hours keep it calm at night." />
             <SettingsRow icon={soundOn ? <Volume2 size={16} /> : <VolumeX size={16} />} label="Message sound" right={<ToggleSwitch on={soundOn} onClick={() => setSoundOn((s) => !s)} />} />
             <SettingsRow icon={reactionSoundOn ? <Volume2 size={16} /> : <VolumeX size={16} />} label="Reaction sound" right={<ToggleSwitch on={reactionSoundOn} onClick={() => setReactionSoundOn((s) => !s)} />} />
             <IgHeading>Message tone</IgHeading>
@@ -2048,36 +2950,31 @@ function SettingsPanel({ onClose, onOpenPrivacy, onOpenRequests, onLogout, hideA
           </>
         )}
 
-        {section === 'about' && (
+        {sec === 'about' && (
           <>
             <SectionHeader title="About" />
-            <SettingsRow icon={<FileText size={16} />} label="Privacy policy" onClick={onOpenPrivacy} />
+            <PageArt k="about" text="ZChat is made by Zombie, one late night at a time. Thanks for being here." />
+            <SettingsRow icon={<Megaphone size={16} />} label="What is new" value={APP_VERSION} onClick={() => { if (onOpenWhatsNew) onOpenWhatsNew(); }} />
+            <SettingsRow icon={<FileText size={16} />} label="Terms of use" onClick={() => { try { window.open('/?page=terms', '_blank'); } catch {} }} />
+            <SettingsRow icon={<ShieldCheck size={16} />} label="Privacy policy" onClick={onOpenPrivacy} />
+            <SettingsRow icon={<FileText size={16} />} label="Refund policy" onClick={() => { try { window.open('/?page=refund', '_blank'); } catch {} }} />
+            <div style={{ textAlign: 'center', padding: '22px 0 6px', fontSize: 12.5, color: theme.muted }}>Version {APP_VERSION}</div>
 
           </>
         )}
 
-        {section === 'account' && (
-          <>
-            <SectionHeader title="Account" />
-            <SettingsRow icon={<Bell size={16} />} label="Follow requests" onClick={onOpenRequests} />
-            <SettingsRow icon={<UserPlus size={16} />} label="Switch account" onClick={onOpenAccounts} />
-            <SettingsRow icon={<Trash2 size={16} />} label="Delete my account" danger onClick={onOpenDelete} />
-          </>
-        )}
-
-        {section === 'linked' && (
+        {sec === 'linked' && (
           <>
             <SectionHeader title="Sign in methods" />
+            <PageArt k="linked" text="The ways you can log in to this account." />
             <LinkedAccountsSection session={sessionForLinks} />
           </>
         )}
 
-        </div>
-        )}
-      </div>
-      {listModal && me && (
-        <FollowListModal userId={me.id} viewerId={me.id} mode={listModal} onClose={() => setListModal(null)}
-          onOpenProfile={(p) => { setListModal(null); if (onOpenProfile) onOpenProfile(p); }} />
+        </SettingsLayer>
+      ))}
+      {section === 'whocansee' && me && (
+        <WhoCanSeePanel me={me} onBack={() => setSection('privacy')} onSaved={onPrivacySaved} />
       )}
       {lockFlow === 'set' && (
         <ChatLockSetup onCancel={() => setLockFlow(null)} onConfirm={(pin) => { onSetChatLockPassword(pin); setLockFlow(null); }} />
@@ -2166,6 +3063,7 @@ const PRIVACY_ITEMS = [
 function WhoCanSeePanel({ me, onBack, onSaved }) {
   useBackClose(true, onBack);
   const { theme } = useTheme();
+  const swipe = useEdgeSwipeBack(true, onBack);
   const [values, setValues] = useState(() => {
     const v = {};
     PRIVACY_ITEMS.forEach(([key]) => { v[key] = (me && me[key]) || 'everyone'; });
@@ -2213,7 +3111,7 @@ function WhoCanSeePanel({ me, onBack, onSaved }) {
   const label = (v) => (PRIVACY_CHOICES.find(([k]) => k === v) || PRIVACY_CHOICES[0])[1];
 
   return (
-    <div style={{ position: 'absolute', inset: 0, background: theme.bgGradient, zIndex: 33, display: 'flex', flexDirection: 'column' }} className="zchat-panel-open">
+    <div {...swipe} style={{ position: 'absolute', inset: 0, background: theme.bgGradient, zIndex: 33, display: 'flex', flexDirection: 'column' }} className="zchat-panel-open">
       <IgTopBar title="Who can see what" onBack={onBack} />
       <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0 40px' }}>
         {PRIVACY_ITEMS.map(([key, title, sub]) => (
@@ -2405,7 +3303,7 @@ function FollowListModal({ userId, viewerId, mode, onClose, onOpenProfile }) {
       {list === null ? (
         <div style={{ display: 'flex', justifyContent: 'center', padding: 30 }}><Spinner color={theme.muted} /></div>
       ) : list.length === 0 ? (
-        <EmptyState icon={<Users />} title="Nobody here yet" text={mode === 'followers' ? 'People who follow this account will show up here.' : mode === 'mutual' ? 'Friends you both follow will show up here.' : 'Accounts being followed will show up here.'} />
+        <EmptyState art="nochats" title="Nobody here yet" text={mode === 'followers' ? 'People who follow this account will show up here.' : mode === 'mutual' ? 'Friends you both follow will show up here.' : 'Accounts being followed will show up here.'} />
       ) : (
         list.map((p) => (
           <UserListRow key={p.id} profile={p} onClick={() => onOpenProfile(p)} rightContent={
@@ -2476,7 +3374,7 @@ function FollowRequestsPanel({ userId, onClose, onOpenProfile }) {
       {requests === null ? (
         <div style={{ display: 'flex', justifyContent: 'center', padding: 30 }}><Spinner color={theme.muted} /></div>
       ) : requests.length === 0 ? (
-        <EmptyState icon={<UserPlus />} title="No requests right now" text="When someone asks to follow you, it shows up here so you can accept or decline." />
+        <EmptyState art="requests" title="No requests right now" text="When someone asks to follow you, it shows up here so you can say yes or no." />
       ) : (
         requests.filter(({ profile: p }) => handled[p.id] !== 'declined').map(({ profile: p }) => (
           <UserListRow key={p.id} profile={p} onClick={() => onOpenProfile(p)} sub={handled[p.id] === 'accepted' ? 'Now following you' : 'Wants to follow you'} rightContent={handled[p.id] === 'accepted' ? (
@@ -2542,7 +3440,7 @@ function DiscoverPanel({ myId, blockedIds, onClose, onOpenProfile }) {
         {people === null ? (
           <div style={{ display: 'flex', justifyContent: 'center', padding: 30 }}><Spinner color={theme.ink} /></div>
         ) : people.length === 0 ? (
-          <EmptyState icon={<Compass />} title="No one to discover yet" text="Public accounts will show up here as people join ZChat." />
+          <EmptyState art="discover" title="No one to discover yet" text="Public accounts show up here as people join ZChat." />
         ) : (
           people.map((p) => (
             <UserListRow key={p.id} profile={p} onClick={() => onOpenProfile(p)} rightContent={
@@ -2553,15 +3451,6 @@ function DiscoverPanel({ myId, blockedIds, onClose, onOpenProfile }) {
         )}
       </div>
     </div>
-  );
-}
-
-
-function IconDownload({ size = 15, color = 'currentColor' }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 3v12" /><path d="M7 10l5 5 5-5" /><path d="M4 20h16" />
-    </svg>
   );
 }
 
@@ -3077,13 +3966,13 @@ function StickerPicker({ onPick, onClose, userId }) {
       position: 'absolute', inset: 0, background: 'rgba(20,16,14,0.5)', zIndex: 93,
       display: 'flex', alignItems: 'flex-end', justifyContent: 'center', padding: 0,
     }} className="zchat-fade" onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} style={glass(theme, {
-        borderRadius: '26px 26px 0 0', padding: '16px 14px 14px', width: '100%', maxWidth: 460,
+      <div onClick={(e) => e.stopPropagation()} style={{
+        background: theme.panelBg, borderRadius: '26px 26px 0 0', padding: '16px 14px 14px', width: '100%', maxWidth: 460,
         height: '48vh', maxHeight: 430, minHeight: 330, display: 'flex', flexDirection: 'column',
         paddingBottom: 'calc(14px + env(safe-area-inset-bottom))',
         border: 'none', borderTop: `1px solid ${theme.border}`,
         boxShadow: '0 -8px 40px rgba(0,0,0,0.18)',
-      })}>
+      }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, flexShrink: 0 }}>
           <div style={{ fontWeight: 800, fontSize: 15, color: theme.ink }}>Stickers</div>
           <div role="button" aria-label="Close stickers" onClick={onClose} style={{
@@ -3194,32 +4083,6 @@ function FullEmojiPicker({ onPick, onClose }) {
           ))}
         </div>
       </div>
-    </div>
-  );
-}
-function EmojiPickerBar({ onPick, onClose }) {
-  useBackClose(true, onClose);
-  const { theme } = useTheme();
-  const [showFullEmoji, setShowFullEmoji] = useState(false);
-  return (
-    <div style={{
-      position: 'absolute', inset: 0, background: 'rgba(20,16,14,0.5)', zIndex: 91,
-      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 18,
-    }} className="zchat-fade" onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} style={{
-        background: theme.panelBg, borderRadius: 22, padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 14,
-      }}>
-        {getQuickReactions().map((e) => (
-          <div key={e} onClick={() => onPick(e)} style={{ fontSize: 26, cursor: 'pointer' }}>{e}</div>
-        ))}
-        <div onClick={() => setShowFullEmoji(true)} style={{
-          width: 30, height: 30, borderRadius: '50%', background: theme.rowBg, display: 'flex',
-          alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0,
-        }}><span style={{ fontSize: 18, fontWeight: 800, color: theme.muted, lineHeight: 1 }}>+</span></div>
-      </div>
-      {showFullEmoji && (
-        <FullEmojiPicker onClose={() => setShowFullEmoji(false)} onPick={(e) => { onPick(e); setShowFullEmoji(false); }} />
-      )}
     </div>
   );
 }
@@ -3408,7 +4271,7 @@ function MailPanel({ myId, onClose, initialMailId }) {
           {sortedMails === null ? (
             <div style={{ display: 'flex', justifyContent: 'center', padding: 30 }}><Spinner color={theme.ink} /></div>
           ) : sortedMails.length === 0 ? (
-            <EmptyState icon={<Mail />} title="No mail yet" text="Messages from the ZChat team and account notices land here." />
+            <EmptyState art="mail" title="No mail yet" text="Notes from the ZChat team and account notices land here." />
           ) : (
             sortedMails.map((m) => (
               <div key={m.id} onClick={() => (picking ? togglePick(m.id) : openMail(m))}
@@ -3501,7 +4364,7 @@ function ArchivedChatsPanel({ conversations, onClose, onOpenChat, onUnarchive })
       <IgTopBar title="Archived chats" subtitle={conversations.length ? `${conversations.length} ${conversations.length === 1 ? 'chat' : 'chats'}` : undefined} onBack={onClose} />
       <div style={{ overflowY: 'auto', flex: 1, minHeight: 0, padding: '4px 18px', paddingBottom: 'calc(4px + env(safe-area-inset-bottom))' }}>
         {conversations.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: 30, fontSize: 13, color: theme.muted }}>No archived chats</div>
+          <EmptyState art="archive" title="Nothing archived" text="Swipe a chat to the left and tap Archive to tuck it away here." />
         ) : (
           conversations.map((c) => (
             <UserListRow key={c.id} profile={c.otherProfile} onClick={() => onOpenChat(c)} rightContent={
@@ -3566,10 +4429,17 @@ const WALLPAPER_PRESETS = [
 ];
 
 function wallpaperBgStyle(key) {
-  const preset = WALLPAPER_PRESETS.find((p) => p.key === key);
-  if (!preset) return null;
+  if (!key) return null;
+  let url = null;
+  if (String(key).indexOf(WALL_PHOTO_PREFIX) === 0) url = wallPhotoData(key);
+  else {
+    const preset = WALLPAPER_PRESETS.find((p) => p.key === key);
+    if (preset) url = preset.file;
+  }
+  if (!url) return null;
+  const dim = wallDimFor(key);
   return {
-    backgroundImage: `url('${preset.file}')`,
+    backgroundImage: dim > 0 ? `linear-gradient(rgba(0,0,0,${dim}), rgba(0,0,0,${dim})), url('${url}')` : `url('${url}')`,
     backgroundSize: 'cover',
     backgroundPosition: 'center',
     backgroundRepeat: 'no-repeat',
@@ -3580,7 +4450,21 @@ function WallpaperPicker({ value, onSelect, onClose, title, avatar }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
   const [pick, setPick] = useState(value || null);
+  const [dimTick, setDimTick] = useState(0);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const photoRef = useRef(null);
   const changed = (pick || null) !== (value || null);
+  const dim = pick ? wallDimFor(pick) : 0;
+  void dimTick;
+  const pickPhoto = async (e) => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!f) return;
+    setPhotoBusy(true);
+    const key = await makeWallPhoto(f);
+    setPhotoBusy(false);
+    if (key) { hapticTap(); setPick(key); } else alert('That photo could not be used. Try a different one.');
+  };
   const tile = (key, label, style) => {
     const on = (pick || null) === key;
     return (
@@ -3594,10 +4478,22 @@ function WallpaperPicker({ value, onSelect, onClose, title, avatar }) {
     <FullPage title="Chat wallpaper" subtitle="Only you see it" onBack={onClose} zIndex={96}
       footer={<BigButton label={changed ? 'Set wallpaper' : 'Done'} onClick={() => { if (changed) onSelect(pick); onClose(); }} />}>
       <div style={{ position: 'sticky', top: 0, zIndex: 2, background: igPalette(theme).bg, padding: '8px 0 12px' }}>
-        <ChatLookPreview wallpaper={pick} title={title} avatar={avatar} height={150} />
+        <ChatLookPreview key={`${pick}-${dimTick}`} wallpaper={pick} title={title} avatar={avatar} height={150} />
+        {pick && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingTop: 10 }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: theme.muted, whiteSpace: 'nowrap' }}>Dim</span>
+            <input type="range" min={0} max={70} step={5} value={Math.round(dim * 100)} aria-label="Dim wallpaper" onChange={(e) => { setWallDim(pick, Number(e.target.value) / 100); setDimTick((t) => t + 1); }} style={{ flex: 1, accentColor: theme.coral }} />
+            <span style={{ fontSize: 13, fontWeight: 800, color: theme.ink, width: 40, textAlign: 'right' }}>{Math.round(dim * 100)}%</span>
+          </div>
+        )}
       </div>
+      <input ref={photoRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={pickPhoto} />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10, paddingBottom: 12 }}>
         {tile(null, 'Default', { background: theme.bgGradient })}
+        <div role="button" aria-label="Wallpaper your photo" onClick={() => { if (!photoBusy && photoRef.current) photoRef.current.click(); }}
+          style={{ aspectRatio: '3 / 4', borderRadius: 12, cursor: 'pointer', position: 'relative', overflow: 'hidden', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, color: theme.ink, fontSize: 12.5, fontWeight: 700, boxShadow: pick && String(pick).indexOf(WALL_PHOTO_PREFIX) === 0 ? `0 0 0 2.5px ${theme.coral}` : `inset 0 0 0 1.5px ${theme.border}`, ...(pick && String(pick).indexOf(WALL_PHOTO_PREFIX) === 0 ? wallpaperBgStyle(pick) : { background: theme.rowBg }) }}>
+          {photoBusy ? <Spinner color={theme.muted} /> : (!(pick && String(pick).indexOf(WALL_PHOTO_PREFIX) === 0) && <><ImageIcon size={22} />Your photo</>)}
+        </div>
         {WALLPAPER_PRESETS.map((p) => tile(p.key, p.label, wallpaperBgStyle(p.key)))}
       </div>
     </FullPage>
@@ -3883,26 +4779,6 @@ function NicknamesModal({ conv, myAvatar, myName, currentNickname, currentAlias,
   );
 }
 
-function PillRow({ icon, label, onClick, danger }) {
-  const { theme } = useTheme();
-  return (
-    <div onClick={onClick} style={{
-      display: 'flex', alignItems: 'center', gap: 12, padding: '11px 16px', marginBottom: 8,
-      borderRadius: 999, cursor: 'pointer',
-      background: theme.dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.035)',
-      border: `1px solid ${theme.dark ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.06)'}`,
-      backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
-    }}>
-      <div style={{
-        width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: 'transparent', color: danger ? theme.danger : theme.ink, flexShrink: 0,
-      }}>{icon}</div>
-      <div style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 700, color: danger ? theme.danger : theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</div>
-      {!danger && <ChevronRight size={14} color={theme.muted} style={{ flexShrink: 0 }} />}
-    </div>
-  );
-}
-
 function ChatSettingsPanel({ conv, myId, meAvatar, meName, isPinned, isLocked, wallpaper, nameBar, chatLockAvailable, onClose, onTogglePin, onToggleArchive, onSetWallpaper, onSetNameBar, onEnableLock, onDisableLock, onDeleteChat, onReportUser, onNicknameSaved, onNeedChatLockSetup, onOpenProfile, isMuted, onSetMute, onCall, disappearSecs, onSetDisappear }) {
   const [showDisappear, setShowDisappear] = useState(false);
   useBackClose(true, onClose);
@@ -4015,7 +4891,7 @@ function ChatSettingsPanel({ conv, myId, meAvatar, meName, isPinned, isLocked, w
 
         <IgHeading>Look</IgHeading>
         <IgRow icon={<ImageIcon />} label="Chat wallpaper" onClick={() => setShowWallpaper(true)} />
-        <IgRow icon={<Sparkles />} label="Header style" onClick={() => setShowNameBar(true)} />
+        <IgRow icon={<Palette />} label="Header style" onClick={() => setShowNameBar(true)} />
 
         {onSetMute && (
           <>
@@ -4440,7 +5316,7 @@ function GroupInfoPanel({ group, members, myId, iFollowIds, privacyAllowed, myRo
         <IgRow icon={<ImageIcon />} label="Wallpaper" onClick={() => setShowWallpaper(true)} />
         {isAdmin && <IgRow icon={<Palette />} label="Header style" onClick={() => setShowHeaderStyle(true)} />}
         <IgRow icon={<Timer />} label="Disappearing messages" value={disappearLabel(disappearSecs)} onClick={() => setShowDisappear(true)} />
-        {isAdmin && <IgRow icon={<Sparkles />} label="Group colour" onClick={() => setShowColour(true)} right={<span style={{ width: 22, height: 22, borderRadius: '50%', background: accent, border: `2px solid ${c.line}`, flex: 'none' }} />} />}
+        {isAdmin && <IgRow icon={<Palette />} label="Group colour" onClick={() => setShowColour(true)} right={<span style={{ width: 22, height: 22, borderRadius: '50%', background: accent, border: `2px solid ${c.line}`, flex: 'none' }} />} />}
         {onOpenSettings && <IgRow icon={<SettingsIcon />} label="Group settings" onClick={onOpenSettings} />}
 
         <div style={{ display: 'flex', borderBottom: `1px solid ${c.line}`, marginTop: 14 }}>
@@ -5583,13 +6459,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
                   const fw = photo * (fspec ? fspec.scale : 1);
                   return (
                     <>
-                      {!fspec && (
-                        <>
-                          <div style={{ position: 'absolute', inset: off - 6, borderRadius: '50%', background: 'conic-gradient(#7C5CFC, #A78BFA, #C4B5FD, #6B48F0, #7C5CFC)', animation: 'zchat-frame-spin 6s linear infinite' }} />
-                          <div style={{ position: 'absolute', inset: off - 3, borderRadius: '50%', background: pageBg }} />
-                        </>
-                      )}
-                      <div style={{ position: 'absolute', left: off, top: off, width: photo, height: photo, borderRadius: '50%', overflow: 'hidden', background: hasPhoto ? '#000' : colorForName(profile.name), boxShadow: '0 20px 60px rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <div style={{ position: 'absolute', left: off, top: off, width: photo, height: photo, borderRadius: '50%', overflow: 'hidden', background: hasPhoto ? '#000' : colorForName(profile.name), boxShadow: '0 6px 18px rgba(0,0,0,0.22)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         {hasPhoto
                           ? <img src={shownPhoto} alt="" draggable={false} onContextMenu={(e) => e.preventDefault()} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
                           : <span style={{ fontSize: photo * 0.46, fontWeight: 800, color: 'rgba(255,255,255,0.92)', fontFamily: FONT }}>{initial}</span>}
@@ -6126,11 +6996,47 @@ function mergeDuelState(st, merge) {
   }
   return st;
 }
+function bubblePropsEqual(a, b) {
+  if (b.holder) b.holder.current = b;
+  for (const k in b) {
+    if (k === 'holder') continue;
+    const x = a[k];
+    const y = b[k];
+    if (x === y) continue;
+    if (typeof x === 'function' && typeof y === 'function') continue;
+    if (x && y && typeof x === 'object' && typeof y === 'object' && !Array.isArray(x) && !Array.isArray(y)) {
+      const kx = Object.keys(x);
+      if (kx.length !== Object.keys(y).length) return false;
+      for (let i = 0; i < kx.length; i++) if (x[kx[i]] !== y[kx[i]]) return false;
+      continue;
+    }
+    return false;
+  }
+  for (const k in a) if (!(k in b)) return false;
+  return true;
+}
+
+const MessageBubbleMemo = React.memo(function MessageBubbleMemo(props) {
+  const { holder } = props;
+  holder.current = props;
+  const fns = useRef({});
+  const out = {};
+  for (const k in props) {
+    if (k === 'holder') continue;
+    const v = props[k];
+    if (typeof v === 'function') {
+      if (!fns.current[k]) fns.current[k] = (...args) => { const f = holder.current && holder.current[k]; return typeof f === 'function' ? f(...args) : undefined; };
+      out[k] = fns.current[k];
+    } else out[k] = v;
+  }
+  return <MessageBubble {...out} />;
+}, bubblePropsEqual);
+
 function MessageBubble({ onOpenOnce, onVote, onShowVotes, gameMerge, gameLive, onGameMove, onGameRematch, onOpenGame, onPlayDuel, peerName, myId, isBot, m, isMe, onDelete, selectionMode, selected, onToggleSelect, onLongPress, onOpenImage, onOpenVideo, reactions, onReact, onOpenWhoReacted, replyPreview, onSwipeReply, onJumpToMessage, highlighted, senderLabel, senderAvatar, hideReadStatus, onOpenSenderProfile, canModerate, onOpenMention, mentionsMe, onOpenStoryRef, onCallBack, onOpenSticker, tightBelow, senderVerified, onOpenPost, tightAbove, senderFrame, senderCustomBadge }) {
   const mediaOnly = !m.deleted && (m.type === 'image' || m.type === 'video')
     && !replyPreview && !senderLabel && !m.forwarded
     && !(m.content && !String(m.content).startsWith('/'));
-  const { theme, fontScale, chatTheme, bubbleColor } = useTheme();
+  const { theme, fontScale, bubbleColor } = useTheme();
   const cachedVideoSrc = useCachedMedia(m.type === 'video' ? m.media_url : null);
   const [hover, setHover] = useState(false);
   const [burstHeart, setBurstHeart] = useState(false);
@@ -6152,6 +7058,7 @@ function MessageBubble({ onOpenOnce, onVote, onShowVotes, gameMerge, gameLive, o
   const pollData = m.type === 'text' && !m.deleted ? parsePoll(m.content) : null;
   const onceInfo = !m.deleted ? parseOnce(m) : null;
   const eventData = m.type === 'text' && !m.deleted && !pollData ? parseEventMsg(m.content) : null;
+  const diceData = m.type === 'text' && !m.deleted && !pollData && !eventData ? parseDice(m.content) : null;
   const gameState = mergeDuelState(m.type === 'text' && !m.deleted ? parseGameMessage(m.content) : null, gameMerge);
   const gameFresh = !!gameState && !!m.created_at && (Date.now() - new Date(m.created_at).getTime()) < 20000;
   const moveKey = gameState ? `${gameState.id}:${gameState.n}` : null;
@@ -6166,10 +7073,10 @@ function MessageBubble({ onOpenOnce, onVote, onShowVotes, gameMerge, gameLive, o
     }).catch(() => { sentGameMoveKeys.delete(moveKey); setSendingMove(false); });
   };
   const moveSent = !!moveKey && (sendingMove || sentGameMoveKeys.has(moveKey));
-  const bareCard = !m.deleted && m.type === 'text' && (!!gameState || !!pollData || !!eventData);
-  const locationShare = m.type === 'text' && !m.deleted && !gameState && !pollData && !eventData ? parseLocationMessage(m.content) : null;
-  const linkPreviewUrl = m.type === 'text' && !m.deleted && !sharedPostId && !sharedProfileId && !gameState && !locationShare && !pollData && !eventData ? firstPreviewableUrl(m.content) : null;
-  const inlineTime = m.type === 'text' && !m.deleted && !!m.content && !sharedProfileId && !sharedPostId && !gameState && !locationShare && !pollData && !eventData && !(m.story_id && (m.content === STORY_MENTION_TEXT || m.content === STORY_GROUP_MENTION_TEXT || m.content === STORY_SHARE_TEXT));
+  const bareCard = !m.deleted && m.type === 'text' && (!!gameState || !!pollData || !!eventData || !!diceData);
+  const locationShare = m.type === 'text' && !m.deleted && !gameState && !pollData && !eventData && !diceData ? parseLocationMessage(m.content) : null;
+  const linkPreviewUrl = m.type === 'text' && !m.deleted && !sharedPostId && !sharedProfileId && !gameState && !locationShare && !pollData && !eventData && !diceData ? firstPreviewableUrl(m.content) : null;
+  const inlineTime = m.type === 'text' && !m.deleted && !!m.content && !sharedProfileId && !sharedPostId && !gameState && !locationShare && !pollData && !eventData && !diceData && !(m.story_id && (m.content === STORY_MENTION_TEXT || m.content === STORY_GROUP_MENTION_TEXT || m.content === STORY_SHARE_TEXT));
 
   if (m.type === 'system' && parseCallLog(m.content)) {
     return <CallLogBubble m={m} isMe={isMe} onCallBack={onCallBack} />;
@@ -6197,7 +7104,7 @@ function MessageBubble({ onOpenOnce, onVote, onShowVotes, gameMerge, gameLive, o
     const now = Date.now();
     if (onceInfo) {
       if (onOpenOnce && !isMe) onOpenOnce(m);
-    } else if (now - lastTapRef.current < 350 && prefOn('zchat-doubletap') && !pollData && !eventData) {
+    } else if (now - lastTapRef.current < 350 && prefOn('zchat-doubletap') && !pollData && !eventData && !diceData) {
       onReact(m.id, '\u2764\u{FE0F}');
       setBurstHeart(true);
       setTimeout(() => setBurstHeart(false), 650);
@@ -6256,7 +7163,7 @@ function MessageBubble({ onOpenOnce, onVote, onShowVotes, gameMerge, gameLive, o
     }
   };
 
-  const bubbleKey = !m.deleted && m.type !== 'system' && m.bubble_style && BUBBLE_STYLES[m.bubble_style] ? m.bubble_style : null;
+  const bubbleKey = !m.deleted && m.type !== 'system' ? bubbleKeyOf(m.bubble_style) : null;
   const bubbleSpec = bubbleKey ? resolveBubbleSpec(BUBBLE_STYLES[bubbleKey], theme) : null;
   const bubbleBg = m.deleted ? theme.rowBg : (isMe ? (bubbleColorSpec.me || theme.bubbleMe) : (bubbleColorSpec.them || theme.bubbleThem));
 
@@ -6313,7 +7220,7 @@ function MessageBubble({ onOpenOnce, onVote, onShowVotes, gameMerge, gameLive, o
         )}
         <div ref={bubbleWrapRef} style={{ transform: 'translateX(0px)' }}>
         <div style={{ position: 'relative' }}>
-        <div className={bubbleSpec && bubbleSpec.cls ? bubbleSpec.cls : undefined} style={glass(theme, {
+        <div style={{
           background: bubbleBg,
           borderRadius: 19,
           borderBottomRightRadius: isMe && !m.deleted ? 5 : 19,
@@ -6322,12 +7229,12 @@ function MessageBubble({ onOpenOnce, onVote, onShowVotes, gameMerge, gameLive, o
           border: m.deleted ? `1px dashed ${theme.border}` : mentionsMe ? `1.5px solid ${theme.coral}` : (mediaOnly ? 'none' : `1px solid ${theme.dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)'}`),
           boxShadow: m.deleted || mediaOnly ? 'none' : '0 1px 2px rgba(0,0,0,0.06)',
           ...(mediaOnly ? { background: 'transparent', overflow: 'hidden' } : {}),
-          ...(m.deleted ? {} : bubbleThemeStyle(chatTheme, isMe, theme)),
+          ...(m.deleted ? {} : { borderRadius: 16 }),
           ...(bubbleSpec && m.type !== 'sticker' ? bubbleStyleCss(bubbleSpec, isMe) : {}),
           ...(bubbleSpec && mediaOnly ? { overflow: 'visible' } : {}),
-          ...(m.type === 'sticker' && !m.deleted ? { background: 'transparent', border: 'none', boxShadow: 'none', padding: 0, backdropFilter: 'none', WebkitBackdropFilter: 'none', overflow: 'visible' } : {}),
-          ...(bareCard ? { background: 'transparent', border: 'none', boxShadow: 'none', padding: 0, backdropFilter: 'none', WebkitBackdropFilter: 'none', overflow: 'visible' } : {}),
-        })}>
+          ...(m.type === 'sticker' && !m.deleted ? { background: 'transparent', border: 'none', boxShadow: 'none', padding: 0, overflow: 'visible' } : {}),
+          ...(bareCard ? { background: 'transparent', border: 'none', boxShadow: 'none', padding: 0, overflow: 'visible' } : {}),
+        }}>
           {bubbleSpec && bubbleSpec.deco && BUBBLE_DECO[bubbleKey] && m.type !== 'sticker' && !bareCard && <div aria-hidden="true" style={{ position: 'absolute', pointerEvents: 'none', zIndex: 1, ...bubbleSpec.deco }}>{BUBBLE_DECO[bubbleKey]()}</div>}
           {senderLabel && !m.deleted && !tightAbove && (
             <div style={{ fontSize: 11.5, fontWeight: 700, color: theme.coralDeep, marginBottom: 3, padding: m.type !== 'text' ? '0 4px' : 0 }}>
@@ -6444,6 +7351,11 @@ function MessageBubble({ onOpenOnce, onVote, onShowVotes, gameMerge, gameLive, o
                   <PollCard poll={pollData} votes={reactions} myId={myId} onVote={onVote ? (i) => onVote(m, i) : null} onShowVotes={onShowVotes ? () => onShowVotes(m) : null} />
                 </div>
               )}
+              {diceData && (
+                <div style={{ paddingTop: 2, paddingBottom: 18 }}>
+                  <RollCard d={diceData} ink={bubbleSpec ? bubbleSpec.ink : undefined} fresh={(() => { if (diceRolledOnce.has(m.id)) return false; diceRolledOnce.add(m.id); return !!m.created_at && Date.now() - new Date(m.created_at).getTime() < 9000; })()} />
+                </div>
+              )}
               {eventData && (
                 <div style={{ paddingTop: 2, paddingBottom: 18 }}>
                   <EventCard ev={eventData} votes={reactions} myId={myId} onVote={onVote ? (i) => onVote(m, i) : null} onShowVotes={onShowVotes ? () => onShowVotes(m) : null} />
@@ -6454,7 +7366,7 @@ function MessageBubble({ onOpenOnce, onVote, onShowVotes, gameMerge, gameLive, o
                   <LocationCard loc={locationShare} isMe={isMe} ink={bubbleSpec ? bubbleSpec.ink : undefined} />
                 </div>
               )}
-              {m.type === 'text' && m.content && !sharedProfileId && !sharedPostId && !gameState && !locationShare && !pollData && !eventData && !(m.story_id && (m.content === STORY_MENTION_TEXT || m.content === STORY_GROUP_MENTION_TEXT || m.content === STORY_SHARE_TEXT)) && (
+              {m.type === 'text' && m.content && !sharedProfileId && !sharedPostId && !gameState && !locationShare && !pollData && !eventData && !diceData && !(m.story_id && (m.content === STORY_MENTION_TEXT || m.content === STORY_GROUP_MENTION_TEXT || m.content === STORY_SHARE_TEXT)) && (
                 <div style={{
                   fontSize: (m.text_size ? textSizePx(m.text_size) : 15) * fontScale,
                   fontWeight: m.text_size === 'l' || m.text_size === 'xl' ? 800 : 400,
@@ -6523,30 +7435,205 @@ function pairKey(a, b) { return a < b ? [a, b] : [b, a]; }
 
 function ImageViewer({ url, onClose, onForward, onReport, once, caption }) {
   useBackClose(true, onClose);
+  const [ui, setUi] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
+  const rootRef = useRef(null);
+  const imgRef = useRef(null);
+  const bgRef = useRef(null);
+  const g = useRef({ s: 1, x: 0, y: 0, dy: 0, pts: new Map(), mode: null, start: null, pinch: null, lastTap: 0, tapTimer: null, moved: false, samples: [], closing: false });
+  const paint = (anim) => {
+    const st = g.current;
+    const el = imgRef.current;
+    if (el) {
+      el.style.transition = anim ? 'transform 0.26s cubic-bezier(0.2, 0.8, 0.2, 1)' : 'none';
+      el.style.transform = `translate3d(${st.x}px, ${st.y + st.dy}px, 0) scale(${st.s})`;
+    }
+    const bg = bgRef.current;
+    if (bg) {
+      bg.style.transition = anim ? 'opacity 0.26s ease' : 'none';
+      bg.style.opacity = String(1 - Math.min(0.85, Math.abs(st.dy) / 420));
+    }
+  };
+  const bounds = () => {
+    const el = imgRef.current;
+    const st = g.current;
+    if (!el) return { mx: 0, my: 0 };
+    const w = el.offsetWidth * st.s;
+    const h = el.offsetHeight * st.s;
+    return { mx: Math.max(0, (w - window.innerWidth) / 2), my: Math.max(0, (h - window.innerHeight) / 2) };
+  };
+  const clampPan = () => {
+    const st = g.current;
+    const b = bounds();
+    st.x = Math.max(-b.mx, Math.min(b.mx, st.x));
+    st.y = Math.max(-b.my, Math.min(b.my, st.y));
+  };
+  const zoomAt = (cx, cy, target) => {
+    const st = g.current;
+    const el = imgRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const ccx = r.left + r.width / 2 - st.x;
+    const ccy = r.top + r.height / 2 - st.y;
+    const qx = (cx - ccx - st.x) / st.s;
+    const qy = (cy - ccy - st.y) / st.s;
+    st.s = target;
+    st.x = cx - ccx - target * qx;
+    st.y = cy - ccy - target * qy;
+    if (target <= 1.001) { st.s = 1; st.x = 0; st.y = 0; }
+    clampPan();
+    paint(true);
+  };
+  const closeBySwipe = (dir) => {
+    const st = g.current;
+    st.closing = true;
+    st.dy = dir * window.innerHeight;
+    paint(true);
+    if (rootRef.current) rootRef.current.setAttribute('data-ghost-skip', '1');
+    setTimeout(onClose, 200);
+  };
+  const onDown = (e) => {
+    const st = g.current;
+    if (st.closing) return;
+    if (e.target && e.target.closest && e.target.closest('[data-viewer-ui]')) return;
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
+    st.pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    st.moved = false;
+    if (st.pts.size === 1) {
+      st.mode = null;
+      st.start = { x: e.clientX, y: e.clientY, sx: st.x, sy: st.y, t: Date.now() };
+      st.samples = [[e.clientY, Date.now()]];
+    } else if (st.pts.size === 2) {
+      const [a, b] = [...st.pts.values()];
+      const el = imgRef.current;
+      const r = el ? el.getBoundingClientRect() : { left: 0, top: 0, width: 0, height: 0 };
+      st.mode = 'pinch';
+      st.dy = 0;
+      st.pinch = { d0: Math.hypot(a.x - b.x, a.y - b.y) || 1, s0: st.s, mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2, x0: st.x, y0: st.y, cx: r.left + r.width / 2 - st.x, cy: r.top + r.height / 2 - st.y };
+      clearTimeout(st.tapTimer);
+    }
+  };
+  const onMove = (e) => {
+    const st = g.current;
+    if (!st.pts.has(e.pointerId) || st.closing) return;
+    st.pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (st.mode === 'pinch' && st.pts.size >= 2) {
+      const [a, b] = [...st.pts.values()];
+      const p = st.pinch;
+      const d = Math.hypot(a.x - b.x, a.y - b.y) || 1;
+      const s = Math.max(0.8, Math.min(5, p.s0 * (d / p.d0)));
+      const mx = (a.x + b.x) / 2;
+      const my = (a.y + b.y) / 2;
+      const qx = (p.mx - p.cx - p.x0) / p.s0;
+      const qy = (p.my - p.cy - p.y0) / p.s0;
+      st.s = s;
+      st.x = mx - p.cx - s * qx;
+      st.y = my - p.cy - s * qy;
+      st.moved = true;
+      paint(false);
+      return;
+    }
+    if (st.pts.size !== 1 || !st.start) return;
+    const dx = e.clientX - st.start.x;
+    const dy = e.clientY - st.start.y;
+    if (!st.moved && Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+    st.moved = true;
+    if (st.s > 1.02) {
+      st.mode = 'pan';
+      st.x = st.start.sx + dx;
+      st.y = st.start.sy + dy;
+      paint(false);
+      return;
+    }
+    if (!st.mode) st.mode = Math.abs(dy) > Math.abs(dx) ? 'dismiss' : 'none';
+    if (st.mode === 'dismiss') {
+      st.dy = dy;
+      st.samples.push([e.clientY, Date.now()]);
+      if (st.samples.length > 5) st.samples.shift();
+      paint(false);
+    }
+  };
+  const onUp = (e) => {
+    const st = g.current;
+    if (!st.pts.has(e.pointerId)) return;
+    st.pts.delete(e.pointerId);
+    if (st.closing) return;
+    if (st.mode === 'pinch') {
+      if (st.pts.size === 1) {
+        const [p] = [...st.pts.values()];
+        st.mode = 'pan';
+        st.start = { x: p.x, y: p.y, sx: st.x, sy: st.y, t: Date.now() };
+        return;
+      }
+      if (st.s < 1) { st.s = 1; st.x = 0; st.y = 0; }
+      clampPan();
+      paint(true);
+      st.mode = null;
+      return;
+    }
+    if (st.pts.size > 0) return;
+    if (st.mode === 'dismiss') {
+      const a = st.samples[0];
+      const b = st.samples[st.samples.length - 1];
+      const v = a && b && b[1] > a[1] ? (b[0] - a[0]) / (b[1] - a[1]) : 0;
+      if (Math.abs(st.dy) > 120 || Math.abs(v) > 0.7) { closeBySwipe(st.dy >= 0 ? 1 : -1); return; }
+      st.dy = 0;
+      paint(true);
+      st.mode = null;
+      return;
+    }
+    if (st.mode === 'pan') { clampPan(); paint(true); st.mode = null; return; }
+    if (!st.moved) {
+      const now = Date.now();
+      if (now - st.lastTap < 280) {
+        clearTimeout(st.tapTimer);
+        st.lastTap = 0;
+        zoomAt(e.clientX, e.clientY, st.s > 1.05 ? 1 : 2.6);
+        return;
+      }
+      st.lastTap = now;
+      clearTimeout(st.tapTimer);
+      st.tapTimer = setTimeout(() => { setMenuOpen(false); setUi((v) => !v); }, 270);
+    }
+    st.mode = null;
+  };
+  const onWheel = (e) => {
+    const st = g.current;
+    const next = Math.max(1, Math.min(5, st.s * (e.deltaY < 0 ? 1.15 : 0.87)));
+    zoomAt(e.clientX, e.clientY, next);
+  };
+  useEffect(() => () => clearTimeout(g.current.tapTimer), []);
   const item = (label, onClick, danger) => (
     <div role="button" onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onClick(); }} style={{ padding: '13px 16px', fontSize: 15, fontWeight: 600, color: danger ? '#FF6B6B' : 'white', cursor: 'pointer', borderTop: '1px solid rgba(255,255,255,0.08)' }}>{label}</div>
   );
+  const chrome = { transition: 'opacity 0.2s ease, visibility 0.2s', opacity: ui ? 1 : 0, visibility: ui ? 'visible' : 'hidden' };
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }} className="zchat-fade">
-      <ViewerTopBar onClose={onClose} title={once ? 'View once' : ''} right={once ? null : (
-        <div style={{ position: 'relative', pointerEvents: 'auto' }}>
-          <ViewerButton label="More" onClick={() => setMenuOpen((v) => !v)}><MoreVertical size={22} /></ViewerButton>
-          {menuOpen && (
-            <div onClick={(e) => e.stopPropagation()} style={{ position: 'absolute', top: 54, right: 0, background: '#1C1C1F', borderRadius: 14, overflow: 'hidden', width: 200, boxShadow: '0 12px 32px rgba(0,0,0,0.5)', fontFamily: FONT }}>
-              <div style={{ marginTop: -1 }}>
-                {item('Save to phone', () => silentDownload(url, 'zchat-photo.jpg'))}
-                {onForward && item('Forward', onForward)}
-                {onReport && item('Report', onReport, true)}
+    <div ref={rootRef} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 200, overflow: 'hidden' }}>
+      <div ref={bgRef} style={{ position: 'absolute', inset: 0, background: '#000' }} />
+      <div onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp} onWheel={onWheel} data-no-swipe="true"
+        style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', touchAction: 'none' }}>
+        <img ref={imgRef} src={url} alt="" onContextMenu={(e) => e.preventDefault()} draggable={false}
+          style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', transformOrigin: '50% 50%', willChange: 'transform', pointerEvents: 'none' }} />
+      </div>
+      <div data-viewer-ui="true" style={chrome}>
+        <ViewerTopBar onClose={onClose} title={once ? 'View once' : ''} right={once ? null : (
+          <div style={{ position: 'relative', pointerEvents: 'auto' }}>
+            <ViewerButton label="More" onClick={() => setMenuOpen((v) => !v)}><MoreVertical size={22} /></ViewerButton>
+            {menuOpen && (
+              <div onClick={(e) => e.stopPropagation()} style={{ position: 'absolute', top: 54, right: 0, background: '#1C1C1F', borderRadius: 14, overflow: 'hidden', width: 200, boxShadow: '0 12px 32px rgba(0,0,0,0.5)', fontFamily: FONT }}>
+                <div style={{ marginTop: -1 }}>
+                  {item('Save to phone', () => silentDownload(url, 'zchat-photo.jpg'))}
+                  {onForward && item('Forward', onForward)}
+                  {onReport && item('Report', onReport, true)}
+                </div>
               </div>
-            </div>
-          )}
-        </div>
-      )} />
-      <img src={url} alt="" onClick={(e) => e.stopPropagation()} onContextMenu={(e) => e.preventDefault()} draggable={false} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none' }} />
-      {caption && (
-        <div onClick={(e) => e.stopPropagation()} style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '34px 18px calc(20px + env(safe-area-inset-bottom))', background: 'linear-gradient(180deg, transparent, rgba(0,0,0,0.75))', color: 'white', fontSize: 15, lineHeight: 1.4, textAlign: 'center', fontFamily: FONT, wordBreak: 'break-word' }}>{caption}</div>
-      )}
+            )}
+          </div>
+        )} />
+        {caption && (
+          <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '34px 18px calc(20px + env(safe-area-inset-bottom))', background: 'linear-gradient(180deg, transparent, rgba(0,0,0,0.75))', color: 'white', fontSize: 15, lineHeight: 1.4, textAlign: 'center', fontFamily: FONT, wordBreak: 'break-word', pointerEvents: 'none' }}>{caption}</div>
+        )}
+      </div>
     </div>
   );
 }
@@ -6619,7 +7706,7 @@ function ForwardPicker({ conversations, groups = [], onCancel, onPick, myId }) {
       </label>
       {!searchingMode && list.length > 0 && <div style={{ padding: '14px 2px 4px', fontSize: 13, fontWeight: 600, color: theme.muted }}>Recent chats</div>}
       {list.length === 0 && (searchingMode || !groups.length) && (
-        <EmptyState icon={<Forward />} title={searchingMode ? 'No one found' : 'No chats yet'} text={searchingMode ? 'Check the spelling of the username.' : 'Search for someone by username to forward this to them.'} />
+        <EmptyState art={searchingMode ? 'nothing' : 'nochats'} title={searchingMode ? 'No one found' : 'No chats yet'} text={searchingMode ? 'Check the spelling of the username.' : 'Search for someone by username to forward this to them.'} />
       )}
       {list.map((p) => (
         <UserListRow key={p.id} profile={p} onClick={() => onPick(p)} rightContent={<ChevronRight size={18} color={theme.muted} />} />
@@ -6640,38 +7727,12 @@ function ForwardPicker({ conversations, groups = [], onCancel, onPick, myId }) {
 }
 
 
-function ReportMessageModal({ onCancel, onSubmit, title = 'Report message' }) {
-  useBackClose(true, onCancel);
-  const { theme } = useTheme();
-  const [reason, setReason] = useState('');
-  return (
-    <div style={{
-      position: 'absolute', inset: 0, background: 'rgba(20,16,14,0.5)', zIndex: 90,
-      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 18,
-    }} className="zchat-fade">
-      <div style={{ background: theme.panelBg, borderRadius: 22, padding: 22, width: '100%', maxWidth: 320 }}>
-        <div style={{ fontWeight: 800, fontSize: 16, color: theme.ink, marginBottom: 12 }}>{title}</div>
-        <textarea value={reason} onChange={(e) => setReason(e.target.value)} placeholder="What's wrong with this message?"
-          style={{ ...inputStyle(theme), height: 64, resize: 'none', fontFamily: FONT, marginBottom: 12 }} />
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={onCancel} style={{
-            flex: 1, padding: 11, borderRadius: 13, border: `1.5px solid ${theme.border}`,
-            background: 'transparent', color: theme.ink, fontWeight: 700, fontSize: 13.5, cursor: 'pointer', fontFamily: FONT,
-          }}>Cancel</button>
-          <button disabled={!reason.trim()} onClick={() => onSubmit(reason)} style={primaryBtn(theme, !reason.trim(), theme.danger)}>Send</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-
 function DeleteChatConfirm({ name, onCancel, onConfirm }) {
   useBackClose(true, onCancel);
   const { theme } = useTheme();
   return (
     <div style={{
-      position: 'absolute', inset: 0, background: 'rgba(10,8,6,0.45)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)',
+      position: 'absolute', inset: 0, background: 'rgba(10,8,6,0.5)',
       display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 90, padding: 24,
     }} className="zchat-fade">
       <div style={{ background: theme.panelBg, borderRadius: 20, padding: '24px 22px', width: '100%', maxWidth: 280, textAlign: 'center' }}>
@@ -6699,7 +7760,7 @@ function AccountGoneModal({ name, onOk }) {
   const { theme } = useTheme();
   return (
     <div style={{
-      position: 'absolute', inset: 0, background: 'rgba(10,8,6,0.45)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)',
+      position: 'absolute', inset: 0, background: 'rgba(10,8,6,0.5)',
       display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 90, padding: 24,
     }} className="zchat-fade">
       <div style={{ background: theme.panelBg, borderRadius: 20, padding: '24px 22px', width: '100%', maxWidth: 280, textAlign: 'center' }}>
@@ -6726,7 +7787,7 @@ function DeleteMessageConfirm({ onCancel, onConfirm }) {
   const { theme } = useTheme();
   return (
     <div style={{
-      position: 'absolute', inset: 0, background: 'rgba(10,8,6,0.45)', backdropFilter: 'blur(3px)', WebkitBackdropFilter: 'blur(3px)',
+      position: 'absolute', inset: 0, background: 'rgba(10,8,6,0.5)',
       display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 92, padding: 24,
     }} className="zchat-fade">
       <div style={{ background: theme.panelBg, borderRadius: 20, padding: '24px 22px', width: '100%', maxWidth: 280, textAlign: 'center' }}>
@@ -6835,12 +7896,12 @@ function EnableNotificationsBanner({ onEnable, onDismiss, top, inline }) {
   return (
     <div style={{
       position: inline ? 'relative' : 'absolute', top: inline ? 'auto' : top, left: inline ? 'auto' : 10, right: inline ? 'auto' : 10, zIndex: 14, maxWidth: inline ? 'none' : 340, margin: inline ? '8px 12px 0' : '0 auto',
-      background: theme.panelBg, borderRadius: 14, padding: '10px 12px', boxShadow: '0 6px 20px rgba(0,0,0,0.22)',
+      background: theme.panelBg, borderRadius: 14, padding: '11px 12px', boxShadow: 'none',
       border: `1px solid ${theme.border}`, display: 'flex', alignItems: 'center', gap: 10,
     }} className="zchat-fade">
       <Bell size={16} color={theme.coral} style={{ flexShrink: 0 }} />
-      <div style={{ flex: 1, fontSize: 11, color: theme.ink, fontWeight: 600 }}>Get notified when someone messages you</div>
-      <span onClick={onEnable} style={{ fontSize: 11.5, color: theme.coral, fontWeight: 800, cursor: 'pointer', flexShrink: 0 }}>Turn on</span>
+      <div style={{ flex: 1, fontSize: 13, color: theme.ink, fontWeight: 600, lineHeight: 1.3 }}>Get notified when someone messages you</div>
+      <span onClick={onEnable} style={{ fontSize: 13.5, color: theme.coral, fontWeight: 800, cursor: 'pointer', flexShrink: 0, padding: '4px 2px' }}>Turn on</span>
       <X size={15} color={theme.muted} style={{ cursor: 'pointer', flexShrink: 0 }} onClick={onDismiss} />
     </div>
   );
@@ -6851,12 +7912,12 @@ function NotificationPermissionBanner({ onOpenHelp, onDismiss, top, inline }) {
   return (
     <div style={{
       position: inline ? 'relative' : 'absolute', top: inline ? 'auto' : top, left: inline ? 'auto' : 10, right: inline ? 'auto' : 10, zIndex: 14, maxWidth: inline ? 'none' : 340, margin: inline ? '8px 12px 0' : '0 auto',
-      background: theme.panelBg, borderRadius: 14, padding: '10px 12px', boxShadow: '0 6px 20px rgba(0,0,0,0.22)',
+      background: theme.panelBg, borderRadius: 14, padding: '11px 12px', boxShadow: 'none',
       border: `1px solid ${theme.border}`, display: 'flex', alignItems: 'center', gap: 10,
     }} className="zchat-fade">
       <Bell size={16} color={theme.danger} style={{ flexShrink: 0 }} />
-      <div style={{ flex: 1, fontSize: 11, color: theme.ink, fontWeight: 600 }}>Notifications are off for ZChat</div>
-      <span onClick={onOpenHelp} style={{ fontSize: 11.5, color: theme.coral, fontWeight: 800, cursor: 'pointer', flexShrink: 0 }}>Fix</span>
+      <div style={{ flex: 1, fontSize: 13, color: theme.ink, fontWeight: 600, lineHeight: 1.3 }}>Notifications are off for ZChat</div>
+      <span onClick={onOpenHelp} style={{ fontSize: 13.5, color: theme.coral, fontWeight: 800, cursor: 'pointer', flexShrink: 0, padding: '4px 2px' }}>Fix</span>
       <X size={15} color={theme.muted} style={{ cursor: 'pointer', flexShrink: 0 }} onClick={onDismiss} />
     </div>
   );
@@ -6867,12 +7928,12 @@ function InstallAppBanner({ onOpenHelp, onInstallNow, canInstallDirectly, onDism
   return (
     <div style={{
       position: inline ? 'relative' : 'absolute', top: inline ? 'auto' : top, left: inline ? 'auto' : 10, right: inline ? 'auto' : 10, zIndex: 14, maxWidth: inline ? 'none' : 340, margin: inline ? '8px 12px 0' : '0 auto',
-      background: theme.panelBg, borderRadius: 14, padding: '10px 12px', boxShadow: '0 6px 20px rgba(0,0,0,0.22)',
+      background: theme.panelBg, borderRadius: 14, padding: '11px 12px', boxShadow: 'none',
       border: `1px solid ${theme.border}`, display: 'flex', alignItems: 'center', gap: 10,
     }} className="zchat-fade">
       <Download size={16} color={theme.coral} style={{ flexShrink: 0 }} />
-      <div style={{ flex: 1, fontSize: 11, color: theme.ink, fontWeight: 600 }}>Install ZChat on your home screen</div>
-      <span onClick={canInstallDirectly ? onInstallNow : onOpenHelp} style={{ fontSize: 11.5, color: theme.coral, fontWeight: 800, cursor: 'pointer', flexShrink: 0 }}>Install</span>
+      <div style={{ flex: 1, fontSize: 13, color: theme.ink, fontWeight: 600, lineHeight: 1.3 }}>Install ZChat on your home screen</div>
+      <span onClick={canInstallDirectly ? onInstallNow : onOpenHelp} style={{ fontSize: 13.5, color: theme.coral, fontWeight: 800, cursor: 'pointer', flexShrink: 0, padding: '4px 2px' }}>Install</span>
       <X size={15} color={theme.muted} style={{ cursor: 'pointer', flexShrink: 0 }} onClick={onDismiss} />
     </div>
   );
@@ -7013,7 +8074,7 @@ function ReplyQuote({ m, label, onClick, bar, dim, compact }) {
     </div>
   );
 }
-const SPECIAL_PREFIXES = ['zpoll:', 'zevent:'];
+const SPECIAL_PREFIXES = ['zpoll:', 'zevent:', 'zdice:'];
 function isSpecialContent(content) {
   return typeof content === 'string' && SPECIAL_PREFIXES.some((p) => content.indexOf(p) === 0);
 }
@@ -7026,6 +8087,8 @@ function quoteTextFor(m) {
     if (qp) return `Poll: ${qp.q}`;
     const qe = parseEventMsg(m.content);
     if (qe) return `Event: ${qe.t}`;
+    const qd = parseDice(m.content);
+    if (qd) return diceSummary(qd);
     if (parseLocationMessage(m.content)) return 'Location';
     if (parseProfileLink(m.content)) return 'Profile';
     if (parsePostLink(m.content)) return 'Post';
@@ -7080,6 +8143,8 @@ function describeMessage(m) {
       if (dp) return { kind: 'poll', text: `Poll: ${dp.q}` };
       const de = parseEventMsg(m.content);
       if (de) return { kind: 'event', text: `Event: ${de.t}` };
+      const ddc = parseDice(m.content);
+      if (ddc) return { kind: 'text', text: diceSummary(ddc) };
       if (parseLocationMessage(m.content)) return { kind: 'location', text: 'Location' };
       return { kind: 'text', text: parseProfileLink(m.content) ? 'Shared a profile' : parsePostLink(m.content) ? 'Shared a post' : plainPreviewText(m.content || '') };
     }
@@ -7154,8 +8219,7 @@ function InAppMessageToast({ toast, top, onOpen, onDismiss }) {
       style={{
         position: 'fixed', top, left: 10, right: 10, zIndex: 300, maxWidth: 420, margin: '0 auto',
         display: 'flex', alignItems: 'center', gap: 11, padding: '11px 14px 11px 11px', borderRadius: 20,
-        background: theme.dark ? 'rgba(20,26,44,0.96)' : 'rgba(255,255,255,0.97)',
-        backdropFilter: 'blur(22px) saturate(160%)', WebkitBackdropFilter: 'blur(22px) saturate(160%)',
+        background: theme.dark ? '#1A1C24' : '#FFFFFF',
         border: `1px solid ${theme.border}`, borderLeft: toast.accent === 'missed' ? '4px solid #FF3B30' : `1px solid ${theme.border}`, boxShadow: '0 12px 32px rgba(0,0,0,0.3)',
         transform: `translateY(${dragY}px)`, transition: startRef.current ? 'none' : 'transform 0.2s ease',
         cursor: 'pointer', touchAction: 'pan-x', userSelect: 'none', WebkitTapHighlightColor: 'transparent',
@@ -7191,8 +8255,7 @@ function ChatRowSheet({ title, subtitle, avatar, actions, onClose, zIndex = 94, 
   const body = (
     <div onClick={onClose} className="zchat-fade" style={{
       position: 'fixed', inset: 0, zIndex, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontFamily: FONT,
-      background: theme.dark ? 'rgba(3,6,14,0.5)' : 'rgba(230,234,244,0.5)',
-      backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
+      background: 'rgba(0,0,0,0.45)',
     }}>
       <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ transform: drag.sheetStyle.transform, transition: drag.sheetStyle.transition,
         width: '100%', maxWidth: 460, maxHeight: '86vh', display: 'flex', flexDirection: 'column', background: theme.panelBg, borderRadius: '24px 24px 0 0', overflow: 'hidden',
@@ -7237,7 +8300,7 @@ function ConfirmSheet({ title, text, confirmLabel = 'Confirm', danger = true, on
   useBackClose(true, onCancel);
   const { theme } = useTheme();
   return (
-    <div onClick={() => !busy && onCancel()} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontFamily: FONT, background: theme.dark ? 'rgba(3,6,14,0.5)' : 'rgba(230,234,244,0.5)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)' }}>
+    <div onClick={() => !busy && onCancel()} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontFamily: FONT, background: 'rgba(0,0,0,0.45)' }}>
       <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ width: '100%', maxWidth: 460, background: theme.panelBg, borderRadius: '24px 24px 0 0', padding: '18px 16px', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))', boxShadow: '0 -10px 40px rgba(0,0,0,0.25)' }}>
         <div style={{ textAlign: 'center', padding: '4px 10px 14px' }}>
           <div style={{ fontSize: 17, fontWeight: 800, color: theme.ink }}>{title}</div>
@@ -7250,7 +8313,7 @@ function ConfirmSheet({ title, text, confirmLabel = 'Confirm', danger = true, on
   );
 }
 
-function MessageContextMenu({ onRemind, message, isMine, canEditText, canModerate, anchorRect, bubble, isPinned, onPin, onUnpin, onClose, onReact, onReply, onCopy, onEdit, onForward, onReport, onDeleteForMe, onDeleteForEveryone, onSelectMultiple, onSave, onToggleSave, isSaved, onInfo }) {
+function MessageContextMenu({ onReadAloud, onRemind, message, isMine, canEditText, canModerate, anchorRect, bubble, isPinned, onPin, onUnpin, onClose, onReact, onReply, onCopy, onEdit, onForward, onReport, onDeleteForMe, onDeleteForEveryone, onSelectMultiple, onSave, onToggleSave, isSaved, onInfo }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
   const [showFullEmoji, setShowFullEmoji] = useState(false);
@@ -7302,8 +8365,7 @@ function MessageContextMenu({ onRemind, message, isMine, canEditText, canModerat
     <div onClick={guard(onClose)} onContextMenu={(e) => e.preventDefault()} style={{ position: 'fixed', inset: 0, zIndex: 95 }}>
       <div className="zchat-fade" style={{
         position: 'absolute', inset: 0,
-        background: theme.dark ? 'rgba(3,6,14,0.5)' : 'rgba(235,239,247,0.5)',
-        backdropFilter: 'blur(18px) saturate(140%)', WebkitBackdropFilter: 'blur(18px) saturate(140%)',
+        background: theme.dark ? 'rgba(0,0,0,0.6)' : 'rgba(18,18,26,0.38)',
       }} />
       {!message.deleted && !onceMsg && !(message.type === 'text' && isSpecialContent(message.content)) && (
         <div onClick={(e) => e.stopPropagation()} className={ready ? 'zchat-pop' : ''} style={{
@@ -7334,6 +8396,7 @@ function MessageContextMenu({ onRemind, message, isMine, canEditText, canModerat
         <div style={{ marginTop: -1 }}>
           {!message.deleted && row(<Reply size={18} />, 'Reply', onReply)}
           {!message.deleted && message.type === 'text' && !special && row(<Copy size={18} />, 'Copy', onCopy)}
+          {!message.deleted && message.type === 'text' && !special && onReadAloud && row(<Volume2 size={18} />, 'Read aloud', onReadAloud)}
           {!message.deleted && canEditText && !special && row(<Edit3 size={18} />, 'Edit', onEdit)}
           {!message.deleted && !onceMsg && (message.type === 'image' || message.type === 'video') && row(<Download size={18} />, 'Save', onSave)}
           {!message.deleted && stickerMatch && row(<Star_ size={18} color="#FFB800" filled={favKeys.has(stickerMatch.key)} />, favKeys.has(stickerMatch.key) ? 'Remove from favorites' : 'Add to favorites', () => { setFavKeys(new Set(toggleFavoriteSticker(stickerMatch.key))); onClose(); })}
@@ -8223,6 +9286,15 @@ function VideoViewer({ url, trimStart, trimEnd, overlayUrl, onClose, onForward, 
   useBackClose(true, onClose);
   const seekedRef = useRef(false);
   const [ratio, setRatio] = useState(null);
+  const [ui, setUi] = useState(true);
+  const hideRef = useRef(null);
+  const playingRef = useRef(false);
+  const wake = () => {
+    setUi(true);
+    clearTimeout(hideRef.current);
+    if (playingRef.current) hideRef.current = setTimeout(() => setUi(false), 2600);
+  };
+  useEffect(() => () => clearTimeout(hideRef.current), []);
   const onLoadedMetadata = (e) => {
     const v = e.currentTarget;
     if (v.videoWidth && v.videoHeight) setRatio(v.videoWidth / v.videoHeight);
@@ -8238,15 +9310,17 @@ function VideoViewer({ url, trimStart, trimEnd, overlayUrl, onClose, onForward, 
     ? { position: 'relative', width: `min(100vw, calc(100dvh * ${ratio}))`, aspectRatio: String(ratio), maxHeight: '100dvh' }
     : { position: 'relative', maxWidth: '100%', maxHeight: '100%' };
   return (
-    <div style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }} className="zchat-fade">
-      <ViewerTopBar onClose={onClose} title={once ? 'View once' : ''} right={once ? null : (
-        <>
-          <ViewerButton label="Save video" onClick={() => silentDownload(url, 'zchat-video.mp4')}><Download size={21} /></ViewerButton>
-          {onForward && <ViewerButton label="Forward" onClick={onForward}><Forward size={21} /></ViewerButton>}
-        </>
-      )} />
-      <div style={boxStyle}>
-        <video src={url} controls autoPlay playsInline controlsList={once ? 'nodownload noplaybackrate' : undefined} disablePictureInPicture={!!once} onContextMenu={(e) => e.preventDefault()} onLoadedMetadata={onLoadedMetadata} onTimeUpdate={onTimeUpdate}
+    <div onPointerDown={wake} style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }} className="zchat-fade">
+      <div style={{ transition: 'opacity 0.2s ease, visibility 0.2s', opacity: ui ? 1 : 0, visibility: ui ? 'visible' : 'hidden' }}>
+        <ViewerTopBar onClose={onClose} title={once ? 'View once' : ''} right={once ? null : (
+          <>
+            <ViewerButton label="Save video" onClick={() => silentDownload(url, 'zchat-video.mp4')}><Download size={21} /></ViewerButton>
+            {onForward && <ViewerButton label="Forward" onClick={onForward}><Forward size={21} /></ViewerButton>}
+          </>
+        )} />
+      </div>
+      <div style={boxStyle} data-no-swipe="true">
+        <video src={url} controls autoPlay playsInline onPlay={() => { playingRef.current = true; wake(); }} onPause={() => { playingRef.current = false; clearTimeout(hideRef.current); setUi(true); }} onEnded={() => { playingRef.current = false; setUi(true); }} controlsList={once ? 'nodownload noplaybackrate' : undefined} disablePictureInPicture={!!once} onContextMenu={(e) => e.preventDefault()} onLoadedMetadata={onLoadedMetadata} onTimeUpdate={onTimeUpdate}
           style={ratio ? { width: '100%', height: '100%', display: 'block', objectFit: 'contain' } : { maxWidth: '100vw', maxHeight: '100dvh', display: 'block' }} />
         {overlayUrl && ratio && (
           <img src={overlayUrl} alt="" draggable={false} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', objectFit: 'contain' }} />
@@ -8322,7 +9396,7 @@ function ConfirmDialog({ title, body, confirmLabel = 'Delete', onCancel, onConfi
   const [busy, setBusy] = useState(false);
   return (
     <div onClick={onCancel} className="zchat-fade" style={{
-      position: 'fixed', inset: 0, zIndex: layer, background: 'rgba(5,8,16,0.55)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
+      position: 'fixed', inset: 0, zIndex: layer, background: 'rgba(5,8,16,0.55)',
       display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
     }}>
       <div onClick={(e) => e.stopPropagation()} className="zchat-pop" style={{ background: theme.panelBg, borderRadius: 22, padding: '22px 20px 18px', width: '100%', maxWidth: 300, textAlign: 'center', boxShadow: '0 20px 50px rgba(0,0,0,0.35)' }}>
@@ -8372,7 +9446,7 @@ function PinnedMessagesBar({ pins, index, labelFor, onOpen }) {
   return (
     <div onClick={onOpen} style={{
       display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', cursor: 'pointer', flexShrink: 0,
-      background: theme.glass, backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)', borderBottom: `1px solid ${theme.border}`,
+      background: theme.panelBg, borderBottom: `1px solid ${theme.border}`,
     }} className="zchat-fade">
       {pins.length > 1 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignSelf: 'stretch', justifyContent: 'center' }}>
@@ -8612,23 +9686,17 @@ function MailBadgeIcon({ type, size = 42, badgeTier = null }) {
   const mention = type === 'mention';
   const update = type === 'update';
   const badge = type === 'badge';
-  const bg = warning ? 'linear-gradient(135deg, #FF5F6D 0%, #FF2E4D 55%, #B3122E 100%)'
-    : mention ? 'linear-gradient(135deg, #7C5CFC 0%, #9D7BFF 100%)'
-      : update ? 'linear-gradient(135deg, #5E3AE0 0%, #7C5CFC 55%, #A78BFA 100%)'
-        : badge ? 'linear-gradient(135deg, #2A1F4D 0%, #140E24 100%)'
-      : 'linear-gradient(135deg, #7C5CFC 0%, #A78BFA 100%)';
+  const bg = warning ? '#E5383B' : mention ? '#6F55E8' : update ? '#2F2A44' : badge ? '#1E1A2E' : '#6F55E8';
   return (
     <div style={{
       width: size, height: size, borderRadius: size * 0.32, flexShrink: 0, position: 'relative',
       background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center',
-      boxShadow: warning ? '0 4px 14px rgba(255,46,77,0.35)' : '0 4px 14px rgba(124,92,252,0.35)',
     }}>
       {badge ? <VerifiedBadge tier={badgeTier || 'blue'} size={size * 0.62} style={{ marginLeft: 0, filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.35))' }} />
         : warning ? <ShieldAlert size={size * 0.5} color="white" strokeWidth={2.2} />
         : mention ? <AtSign size={size * 0.46} color="white" strokeWidth={2.4} />
-          : update ? <Sparkles size={size * 0.48} color="white" strokeWidth={2.2} />
+          : update ? <Megaphone size={size * 0.46} color="white" strokeWidth={2.2} />
           : <span style={{ fontFamily: 'Georgia, serif', fontWeight: 800, fontSize: size * 0.5, color: 'white', lineHeight: 1 }}>Z</span>}
-      <div style={{ position: 'absolute', inset: 0, borderRadius: size * 0.32, boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.35)', pointerEvents: 'none' }} />
     </div>
   );
 }
@@ -9827,7 +10895,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-const APP_VERSION = '13.1V';
+const APP_VERSION = '14.0V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -9858,7 +10926,7 @@ function BlockConfirmSheet({ profile, onCancel, onConfirm }) {
   const drag = useSheetDrag(onCancel);
   const [busy, setBusy] = useState(false);
   return (
-    <div onClick={onCancel} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 420, background: 'rgba(5,8,16,0.55)', backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+    <div onClick={onCancel} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 420, background: 'rgba(5,8,16,0.55)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
       <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" {...drag.sheetProps} style={{ ...drag.sheetStyle, width: '100%', maxWidth: 460, background: theme.panelBg, borderRadius: '26px 26px 0 0', padding: '10px 22px', paddingBottom: 'calc(18px + env(safe-area-inset-bottom))' }}>
         <div style={{ display: 'flex', justifyContent: 'center', padding: '2px 0 14px' }}><div style={{ width: 38, height: 4, borderRadius: 2, background: theme.border }} /></div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
@@ -9871,7 +10939,7 @@ function BlockConfirmSheet({ profile, onCancel, onConfirm }) {
         </div>
         <div style={{ marginTop: 14 }}>
           <BlockBullet icon={<Send size={15} />} text="They won't be able to message you, call you or find your profile." />
-          <BlockBullet icon={<Sparkles size={15} />} text="They won't see your status, and you'll both stop following each other." />
+          <BlockBullet icon={<EyeOff size={15} />} text="They won't see your status, and you'll both stop following each other." />
           <BlockBullet icon={<BellOff size={15} />} text="They won't be notified that you blocked them." />
           <BlockBullet icon={<SettingsIcon size={15} />} text="You can unblock them anytime in Settings." />
         </div>
@@ -9889,7 +10957,7 @@ function UnblockConfirmSheet({ profile, onCancel, onConfirm }) {
   const { theme } = useTheme();
   const [busy, setBusy] = useState(false);
   return (
-    <div onClick={onCancel} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 420, background: 'rgba(5,8,16,0.55)', backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+    <div onClick={onCancel} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 420, background: 'rgba(5,8,16,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
       <div onClick={(e) => e.stopPropagation()} className="zchat-pop" style={{ width: '100%', maxWidth: 320, background: theme.panelBg, borderRadius: 24, padding: '22px 20px 14px', textAlign: 'center', boxShadow: '0 20px 50px rgba(0,0,0,0.35)' }}>
         <div style={{ display: 'flex', justifyContent: 'center' }}><Avatar emoji={profile.avatar} name={profile.name} frame={profile.avatar_frame} size={60} /></div>
         <div style={{ fontSize: 17, fontWeight: 800, color: theme.ink, marginTop: 12 }}>Unblock {profile.name}?</div>
@@ -9941,11 +11009,7 @@ function BlockedAccountsPanel({ myId, blockedIds, onClose, onUnblock, onOpenProf
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 8px', paddingBottom: 'calc(16px + env(safe-area-inset-bottom))' }}>
         {rows === null && <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><Spinner size={22} color={theme.ink} /></div>}
         {rows && rows.length === 0 && (
-          <div style={{ textAlign: 'center', padding: '60px 30px' }}>
-            <div style={{ width: 78, height: 78, borderRadius: '50%', margin: '0 auto', border: `2px solid ${theme.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.muted }}><Ban size={34} /></div>
-            <div style={{ fontWeight: 800, fontSize: 16, color: theme.ink, marginTop: 16 }}>No blocked accounts</div>
-            <div style={{ fontSize: 13, color: theme.muted, marginTop: 6, lineHeight: 1.5 }}>When you block someone, they'll show up here. You can unblock them anytime.</div>
-          </div>
+          <EmptyState art="blocked" title="No blocked accounts" text="When you block someone they show up here. You can unblock them any time." />
         )}
         {shown.map((r) => (
           <div key={r.profile.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 8px' }}>
@@ -10120,7 +11184,7 @@ function StickerPreviewSheet({ message, isMine, onClose, onReport, userId, onNot
     </div>
   );
   return (
-    <div onClick={onClose} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 96, background: theme.dark ? 'rgba(3,6,14,0.55)' : 'rgba(230,234,244,0.55)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+    <div onClick={onClose} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 96, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
       <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" {...drag.sheetProps} style={{ ...drag.sheetStyle, width: '100%', maxWidth: 440, background: theme.panelBg, borderRadius: '26px 26px 0 0', paddingBottom: 'calc(8px + env(safe-area-inset-bottom))' }}>
         <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 4px' }}><div style={{ width: 38, height: 4, borderRadius: 2, background: theme.border }} /></div>
         <div style={{ display: 'flex', justifyContent: 'center', padding: '14px 0 18px' }}>
@@ -10153,7 +11217,7 @@ function AvatarPeek({ profile, online, lastSeen, hasStory, storySeen, canCall, o
   return (
     <div onClick={onClose} className="zchat-fade" style={{
       position: 'fixed', inset: 0, zIndex: 96, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
-      background: theme.dark ? 'rgba(3,6,14,0.6)' : 'rgba(230,234,244,0.6)', backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)',
+      background: 'rgba(0,0,0,0.55)',
     }}>
       <div onClick={(e) => e.stopPropagation()} className="zchat-pop" style={{ width: '100%', maxWidth: 300, borderRadius: 28, overflow: 'hidden', background: theme.panelBg, boxShadow: '0 28px 70px rgba(0,0,0,0.5)' }}>
         <div onClick={() => { onClose(); if (hasStory) onStory(); else onProfile(); }} style={{ position: 'relative', aspectRatio: '1 / 1', background: photo ? '#000' : colorForName(profile.name), cursor: 'pointer' }}>
@@ -10796,27 +11860,9 @@ function VerifiedCelebration({ tier, name, onClose }) {
   );
 }
 
-function AvatarFrame({ size, tier, children }) {
-  const palette = tier === 'red' ? ['#FF2D55', '#FF9500', '#FF2D55']
-    : tier === 'gold' ? ['#F5B800', '#FFF1A8', '#C98A00']
-      : tier === 'pink' ? ['#FF4FA3', '#FFB3D9', '#C026D3']
-        : tier === 'green' ? ['#22C55E', '#A7F3D0', '#059669']
-          : tier === 'purple' ? ['#8B5CF6', '#C4B5FD', '#6D28D9']
-            : ['#7C5CFC', '#A78BFA', '#C4B5FD'];
-  const pad = Math.max(3, Math.round(size * 0.08));
-  const outer = size + pad * 2;
+function AvatarFrame({ size, children }) {
   return (
-    <div style={{ position: 'relative', width: outer, height: outer, flexShrink: 0 }}>
-      <div style={{ position: 'absolute', inset: -3, borderRadius: '50%', background: `radial-gradient(circle, ${palette[0]}55 40%, transparent 72%)`, animation: 'zchat-badge-pulse 2.4s ease-in-out infinite' }} />
-      <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: `conic-gradient(from 0deg, ${palette[0]}, ${palette[1]}, ${palette[2]}, transparent 60%, ${palette[0]})`, animation: 'zchat-frame-spin 2.8s linear infinite' }} />
-      <div style={{ position: 'absolute', inset: -2, borderRadius: '50%', animation: 'zchat-frame-spin 4.5s linear infinite reverse' }}>
-        <span style={{ position: 'absolute', top: 0, left: '50%', width: 5, height: 5, marginLeft: -2.5, borderRadius: '50%', background: 'white', boxShadow: `0 0 8px 2px ${palette[1]}` }} />
-        <span style={{ position: 'absolute', bottom: 0, left: '50%', width: 4, height: 4, marginLeft: -2, borderRadius: '50%', background: palette[2], boxShadow: `0 0 8px 2px ${palette[0]}` }} />
-      </div>
-      <div style={{ position: 'absolute', inset: pad - 1, borderRadius: '50%', background: '#0C0C0E', padding: 1 }}>
-        <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{children}</div>
-      </div>
-    </div>
+    <div style={{ width: size + 6, height: size + 6, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{children}</div>
   );
 }
 
@@ -11040,11 +12086,6 @@ function ProfilePosts({ profile, isSelf, userId, meProfile }) {
   );
 }
 
-function postShareLink(postId) {
-  const origin = siteOrigin();
-  return `${origin}/?post=${postId}`;
-}
-
 function timeAgoLong(iso) {
   const diff = Math.max(0, Date.now() - new Date(iso).getTime());
   const m = Math.floor(diff / 60000);
@@ -11062,237 +12103,6 @@ function InstaCommentIcon({ size = 24, color = 'currentColor' }) {
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
       <path d="M20.656 17.008a9.993 9.993 0 1 0-3.59 3.615L22 22Z" stroke={color} strokeWidth="2" strokeLinejoin="round" />
     </svg>
-  );
-}
-
-function InstaShareIcon({ size = 24, color = 'currentColor' }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
-      <line x1="22" y1="3" x2="9.218" y2="10.083" stroke={color} strokeWidth="2" strokeLinejoin="round" />
-      <polygon points="11.698 20.334 22 3.001 2 3.001 9.218 10.084 11.698 20.334" stroke={color} strokeWidth="2" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-const COMMENT_QUICK_EMOJIS = ['\u2764\uFE0F', '\u{1F64C}', '\u{1F525}', '\u{1F44F}', '\u{1F622}', '\u{1F60D}', '\u{1F62E}', '\u{1F602}'];
-
-function CommentBody({ content, theme }) {
-  if (typeof content === 'string' && content.startsWith('sticker:')) {
-    const src = content.slice(8);
-    return <img src={src} alt="sticker" draggable={false} style={{ width: 88, height: 88, objectFit: 'contain', display: 'block', marginTop: 4 }} />;
-  }
-  return <div style={{ fontSize: 14.5, lineHeight: 1.45, marginTop: 2, wordBreak: 'break-word', color: theme.ink }}>{content}</div>;
-}
-
-function PostViewer({ post, owner, userId, meProfile, onClose, onDeleted }) {
-  useBackClose(true, onClose);
-  const { theme } = useTheme();
-  const [likes, setLikes] = useState([]);
-  const [likerNames, setLikerNames] = useState({});
-  const [comments, setComments] = useState(null);
-  const [text, setText] = useState('');
-  const [sheet, setSheet] = useState(null);
-  const [burst, setBurst] = useState(false);
-  const [flash, setFlash] = useState('');
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const lastTapRef = useRef(0);
-  const [commentStickers, setCommentStickers] = useState(false);
-  useBackClose(!!sheet, () => { setSheet(null); setCommentStickers(false); });
-  const drag = useSheetDrag(() => { setSheet(null); setCommentStickers(false); });
-  const liked = likes.some((l) => l.user_id === userId);
-  const bg = theme.dark ? '#000' : '#fff';
-  const link = postShareLink(post.id);
-
-  const load = async () => {
-    const { data: l } = await supabase.from('post_likes').select('*').eq('post_id', post.id).order('created_at', { ascending: false });
-    setLikes(l || []);
-    const { data: c } = await supabase.from('post_comments').select('*').eq('post_id', post.id).order('created_at', { ascending: true });
-    const ids = [...new Set([...(c || []).map((x) => x.user_id), ...((l || []).slice(0, 1).map((x) => x.user_id))])];
-    const byId = {};
-    if (ids.length) {
-      const { data: profs } = await supabase.from('profiles').select('*').in('id', ids);
-      sanitizeAvatarList(profs, userId).forEach((p) => { byId[p.id] = p; });
-    }
-    setLikerNames(byId);
-    setComments((c || []).map((x) => ({ ...x, profile: byId[x.user_id] })));
-  };
-  useEffect(() => {
-    load();
-    const ch = supabase.channel(`post-${post.id}-${Math.random().toString(36).slice(2, 7)}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'post_likes' }, () => load())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'post_comments' }, () => load())
-      .subscribe();
-    return () => supabase.removeChannel(ch);
-  }, [post.id]);
-
-  const say = (t) => { setFlash(t); setTimeout(() => setFlash(''), 1600); };
-  const like = async (force) => {
-    if (liked && force) return;
-    if (liked) {
-      setLikes((p) => p.filter((l) => l.user_id !== userId));
-      await supabase.from('post_likes').delete().eq('post_id', post.id).eq('user_id', userId);
-      return;
-    }
-    playUiSound('like');
-    setLikes((p) => [{ post_id: post.id, user_id: userId }, ...p]);
-    await supabase.from('post_likes').upsert({ post_id: post.id, user_id: userId }, { onConflict: 'post_id,user_id' });
-    if (owner.id !== userId) sendPushNotification(owner.id, 'ZChat', `${(meProfile && meProfile.name) || 'Someone'} liked your post`, link, meProfile && meProfile.avatar);
-  };
-  const onMediaTap = () => {
-    const now = Date.now();
-    if (now - lastTapRef.current < 300) {
-      setBurst(true);
-      setTimeout(() => setBurst(false), 850);
-      like(true);
-      lastTapRef.current = 0;
-    } else {
-      lastTapRef.current = now;
-    }
-  };
-  const sendComment = async () => {
-    const value = text.trim();
-    if (!value) return;
-    setText('');
-    await supabase.from('post_comments').insert({ post_id: post.id, user_id: userId, content: value.slice(0, 500) });
-    if (owner.id !== userId) sendPushNotification(owner.id, 'ZChat', `${(meProfile && meProfile.name) || 'Someone'} commented: ${value.slice(0, 80)}`, link, meProfile && meProfile.avatar);
-    load();
-  };
-  const sendStickerComment = async (file) => {
-    setCommentStickers(false);
-    await supabase.from('post_comments').insert({ post_id: post.id, user_id: userId, content: `sticker:${file}` });
-    if (owner.id !== userId) sendPushNotification(owner.id, 'ZChat', `${(meProfile && meProfile.name) || 'Someone'} commented with a sticker`, link, meProfile && meProfile.avatar);
-    load();
-  };
-  const deleteComment = async (c) => {
-    setComments((prev) => (prev || []).filter((x) => x.id !== c.id));
-    await supabase.from('post_comments').delete().eq('id', c.id);
-  };
-  const firstLiker = likes.length ? likerNames[likes[0].user_id] : null;
-  const iconBtn = (icon, onClick, label) => (
-    <div role="button" aria-label={label} onClick={onClick} style={{ padding: '8px 8px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>{icon}</div>
-  );
-
-  return (
-    <div className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 90, background: bg, color: theme.ink, display: 'flex', flexDirection: 'column', fontFamily: FONT }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '10px 14px', paddingTop: 'calc(10px + env(safe-area-inset-top))', borderBottom: `1px solid ${theme.border}` }}>
-        <ArrowLeft size={24} style={{ cursor: 'pointer', flexShrink: 0 }} onClick={onClose} />
-        <div style={{ flex: 1, textAlign: 'center', marginRight: 38, lineHeight: 1.2 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: theme.muted, textTransform: 'uppercase', letterSpacing: 0.4 }}>{owner.username}</div>
-          <div style={{ fontSize: 16, fontWeight: 800 }}>Posts</div>
-        </div>
-      </div>
-      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px' }}>
-          <FramedAvatar frame={owner.avatar_frame} size={34}><Avatar emoji={owner.avatar} name={owner.name} frame={owner.avatar_frame} size={34} /></FramedAvatar>
-          <div style={{ flex: 1, minWidth: 0, fontWeight: 700, fontSize: 14, marginLeft: owner.avatar_frame ? 6 : 0 }}><NameBadge name={owner.username} verified={owner.verified} custom={owner.custom_badge} size={13} /></div>
-          <MoreVertical size={20} style={{ cursor: 'pointer', transform: 'rotate(90deg)' }} onClick={() => setSheet('more')} />
-        </div>
-        <div onClick={onMediaTap} style={{ position: 'relative', background: '#000', userSelect: 'none' }}>
-          {post.media_type === 'video'
-            ? <video src={post.media_url} playsInline controls style={{ width: '100%', maxHeight: '78vh', display: 'block', objectFit: 'contain' }} />
-            : <img src={post.media_url} alt="" draggable={false} style={{ width: '100%', maxHeight: '78vh', display: 'block', objectFit: 'contain' }} />}
-          {post.overlay_url && post.media_type === 'video' && <img src={post.overlay_url} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }} />}
-          {burst && (
-            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-              <div style={{ animation: 'zchat-post-heart 0.85s ease forwards' }}><Heart size={96} color="white" fill="white" style={{ filter: 'drop-shadow(0 6px 20px rgba(0,0,0,0.35))' }} /></div>
-            </div>
-          )}
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', padding: '6px 6px 0' }}>
-          {iconBtn(<><Heart size={27} strokeWidth={2} color={liked ? '#FF3040' : theme.ink} fill={liked ? '#FF3040' : 'none'} style={{ transition: 'transform 0.18s cubic-bezier(0.2, 0.9, 0.3, 1.4)', transform: liked ? 'scale(1.1)' : 'scale(1)' }} />{likes.length > 0 && <span style={{ fontSize: 14, fontWeight: 700, marginLeft: 6, color: theme.ink }}>{formatCount(likes.length)}</span>}</>, () => like(false), 'Like')}
-          {iconBtn(<><InstaCommentIcon size={25} color={theme.ink} />{comments && comments.length > 0 && <span style={{ fontSize: 14, fontWeight: 700, marginLeft: 6, color: theme.ink }}>{formatCount(comments.length)}</span>}</>, () => setSheet('comments'), 'Comments')}
-          {iconBtn(<InstaShareIcon size={24} color={theme.ink} />, () => setSheet('share'), 'Share')}
-        </div>
-        <div style={{ padding: '2px 14px', fontSize: 14, fontWeight: 700 }}>
-          {likes.length === 0 ? 'Be the first to like this' : likes.length === 1 && firstLiker ? <>Liked by <NameBadge name={firstLiker.username} verified={firstLiker.verified} custom={firstLiker.custom_badge} size={12} /></> : firstLiker ? <>Liked by <NameBadge name={firstLiker.username} verified={firstLiker.verified} custom={firstLiker.custom_badge} size={12} /> and {formatCount(likes.length - 1)} others</> : `${formatCount(likes.length)} likes`}
-        </div>
-        {post.caption && (
-          <div style={{ padding: '4px 14px 0', fontSize: 14, lineHeight: 1.45, wordBreak: 'break-word' }}>
-            <b>{owner.username}</b><VerifiedBadge tier={owner.verified} custom={owner.custom_badge} size={12} /> {post.caption}
-          </div>
-        )}
-        {comments && comments.length > 2 && (
-          <div onClick={() => setSheet('comments')} style={{ padding: '6px 14px 0', fontSize: 14, color: theme.muted, cursor: 'pointer' }}>
-            View all {comments.length} comments
-          </div>
-        )}
-        {(comments || []).slice(-2).map((c) => (
-          <div key={c.id} onClick={() => setSheet('comments')} style={{ padding: '4px 14px 0', fontSize: 14, lineHeight: 1.4, color: theme.ink, cursor: 'pointer', wordBreak: 'break-word' }}>
-            <b>{c.profile ? c.profile.username : 'user'}</b><VerifiedBadge tier={c.profile && c.profile.verified} custom={c.profile && c.profile.custom_badge} size={11} />{' '}
-            {typeof c.content === 'string' && c.content.startsWith('sticker:') ? <span style={{ color: theme.muted }}>sent a sticker</span> : c.content}
-          </div>
-        ))}
-        <div style={{ padding: '6px 14px 18px', fontSize: 11.5, color: theme.muted }}>{timeAgoLong(post.created_at)}</div>
-      </div>
-
-      {sheet === 'comments' && (
-        <div onClick={() => setSheet(null)} style={{ position: 'absolute', inset: 0, zIndex: 5, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'flex-end' }}>
-          <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" {...drag.sheetProps} style={{ ...drag.sheetStyle, width: '100%', height: '78%', background: bg, borderRadius: '22px 22px 0 0', display: 'flex', flexDirection: 'column' }}>
-            <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 4px' }}><div style={{ width: 38, height: 4, borderRadius: 2, background: theme.border }} /></div>
-            <div style={{ textAlign: 'center', fontWeight: 800, fontSize: 15, padding: '4px 0 12px', borderBottom: `1px solid ${theme.border}` }}>Comments</div>
-            <div data-sheet-scroll style={{ flex: 1, overflowY: 'auto', padding: '6px 0', touchAction: 'pan-y' }}>
-              {comments && !comments.length && (
-                <div style={{ textAlign: 'center', padding: '50px 20px' }}>
-                  <div style={{ fontWeight: 800, fontSize: 20 }}>No comments yet</div>
-                  <div style={{ fontSize: 13.5, color: theme.muted, marginTop: 6 }}>Start the conversation.</div>
-                </div>
-              )}
-              {(comments || []).map((c) => (
-                <div key={c.id} style={{ display: 'flex', gap: 12, padding: '12px 16px' }}>
-                  <Avatar emoji={c.profile && c.profile.avatar} name={(c.profile && c.profile.name) || '?'} frame={c.profile && c.profile.avatar_frame} size={36} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 12.5 }}><b>{c.profile ? c.profile.username : 'user'}</b><VerifiedBadge tier={c.profile && c.profile.verified} custom={c.profile && c.profile.custom_badge} size={11} /> <span style={{ color: theme.muted }}>{timeShort(c.created_at)}</span></div>
-                    <CommentBody content={c.content} theme={theme} />
-                  </div>
-                  {(c.user_id === userId || owner.id === userId) && <Trash2 size={15} color={theme.muted} style={{ cursor: 'pointer', flexShrink: 0, marginTop: 4 }} onClick={() => deleteComment(c)} />}
-                </div>
-              ))}
-            </div>
-            {commentStickers && (
-              <div data-sheet-scroll style={{ maxHeight: 220, overflowY: 'auto', display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6, padding: '8px 12px', borderTop: `1px solid ${theme.border}`, touchAction: 'pan-y' }}>
-                {orderStickersForPick().map((stk) => (
-                  <div key={stk.key} onClick={() => sendStickerComment(stk.file)} style={{ aspectRatio: '1 / 1', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', borderRadius: 12, background: theme.rowBg }}>
-                    <img src={stk.file} alt="" loading="lazy" draggable={false} style={{ width: '80%', height: '80%', objectFit: 'contain' }} />
-                  </div>
-                ))}
-              </div>
-            )}
-            <div style={{ display: 'flex', justifyContent: 'space-around', padding: '10px 10px 2px', borderTop: `1px solid ${theme.border}` }}>
-              {COMMENT_QUICK_EMOJIS.map((emo) => (
-                <span key={emo} onClick={() => setText((t) => `${t}${emo}`)} style={{ fontSize: 26, cursor: 'pointer', lineHeight: 1 }}>{emo}</span>
-              ))}
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', paddingBottom: 'calc(10px + env(safe-area-inset-bottom))' }}>
-              <Avatar emoji={meProfile && meProfile.avatar} name={(meProfile && meProfile.name) || '?'} frame={meProfile && meProfile.avatar_frame} size={34} />
-              <input autoFocus value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') sendComment(); }}
-                placeholder={`Add a comment for ${owner.username}`} style={{ flex: 1, minWidth: 0, border: `1px solid ${theme.border}`, borderRadius: 22, padding: '11px 16px', background: theme.rowBg, color: theme.ink, outline: 'none', fontFamily: FONT, fontSize: 14 }} />
-              <div role="button" aria-label="Stickers" onClick={() => setCommentStickers((v) => !v)} style={{ display: 'flex', cursor: 'pointer', color: commentStickers ? theme.coral : theme.ink }}><Smile size={24} /></div>
-              {text.trim() && <span onClick={sendComment} style={{ fontWeight: 800, color: theme.coral, cursor: 'pointer' }}>Post</span>}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {(sheet === 'share' || sheet === 'more') && (
-        <div onClick={() => setSheet(null)} style={{ position: 'absolute', inset: 0, zIndex: 5, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'flex-end' }}>
-          <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" {...drag.sheetProps} style={{ ...drag.sheetStyle, width: '100%', background: bg, borderRadius: '22px 22px 0 0', padding: '8px 0', paddingBottom: 'calc(10px + env(safe-area-inset-bottom))' }}>
-            <div style={{ display: 'flex', justifyContent: 'center', padding: '4px 0 10px' }}><div style={{ width: 38, height: 4, borderRadius: 2, background: theme.border }} /></div>
-            {[
-              { icon: <Copy size={20} />, label: 'Copy link', onClick: async () => { const ok = await copyTextToClipboard(link); say(ok ? 'Link copied' : "Couldn't copy the link"); } },
-              { icon: <Share2 size={20} />, label: 'Share to apps', onClick: async () => { if (navigator.share) { try { await navigator.share({ title: `${owner.username} on ZChat`, url: link }); } catch {} } else { const ok = await copyTextToClipboard(link); say(ok ? 'Link copied' : "Couldn't copy the link"); } } },
-              { icon: <Send size={20} />, label: 'Share on WhatsApp', onClick: () => window.open(`https://wa.me/?text=${encodeURIComponent(`See this post on ZChat ${link}`)}`, '_blank', 'noopener') },
-              owner.id === userId && sheet === 'more' ? { icon: <Trash2 size={20} />, label: 'Delete post', danger: true, onClick: () => setConfirmDelete(true) } : null,
-            ].filter(Boolean).map((a) => (
-              <div key={a.label} onClick={() => { setSheet(null); a.onClick(); }} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 20px', cursor: 'pointer', fontSize: 15, fontWeight: 600, color: a.danger ? theme.danger : theme.ink }}>
-                {a.icon}{a.label}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-      {flash && <div className="zchat-pop" style={{ position: 'absolute', left: '50%', bottom: 'calc(90px + env(safe-area-inset-bottom))', transform: 'translateX(-50%)', background: theme.ink, color: bg, padding: '9px 16px', borderRadius: 20, fontSize: 13, fontWeight: 700, zIndex: 6 }}>{flash}</div>}
-      {confirmDelete && <ConfirmDialog title="Delete this post?" body="It will be removed from your profile." onCancel={() => setConfirmDelete(false)} onConfirm={async () => { await supabase.from('posts').delete().eq('id', post.id).eq('user_id', userId); onDeleted(); }} />}
-    </div>
   );
 }
 
@@ -11383,64 +12193,6 @@ function PostLinkCard({ postId, onOpen }) {
           <b>{data.owner.username}</b> {data.post.caption}
         </div>
       )}
-    </div>
-  );
-}
-
-function getBottomShift() {
-  try { const v = parseInt(localStorage.getItem('zchat-bottom-shift') || '0', 10); return Number.isFinite(v) ? Math.max(-60, Math.min(90, v)) : 0; } catch { return 0; }
-}
-function setBottomShift(v) {
-  try { localStorage.setItem('zchat-bottom-shift', String(v)); } catch {}
-  try { window.dispatchEvent(new CustomEvent('zchat-bottom-shift')); } catch {}
-}
-
-function BottomPositionSetting() {
-  const { theme } = useTheme();
-  const [value, setValue] = useState(() => getBottomShift());
-  if (!isAppleMobile()) return null;
-  const update = (v) => { const next = Math.max(-60, Math.min(90, v)); setValue(next); setBottomShift(next); };
-  const btn = (label, onClick) => (
-    <div role="button" onClick={onClick} style={{ width: 38, height: 38, borderRadius: 12, background: theme.rowBg, border: `1px solid ${theme.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: theme.ink, fontSize: 20, fontWeight: 700, userSelect: 'none' }}>{label}</div>
-  );
-  return (
-    <div style={{ padding: '12px 4px', borderBottom: `1px solid ${theme.border}` }}>
-      <div style={{ fontSize: 14, fontWeight: 600, color: theme.ink }}>Message bar position</div>
-      <div style={{ fontSize: 12, color: theme.muted, marginTop: 2, lineHeight: 1.45 }}>If there's empty space under the message bar, tap + until it touches the bottom of the screen. If the bar is hidden, tap −.</div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 10 }}>
-        {btn('−', () => update(value - 4))}
-        <div style={{ minWidth: 60, textAlign: 'center', fontWeight: 800, color: theme.ink, fontVariantNumeric: 'tabular-nums' }}>{value > 0 ? `+${value}` : value}</div>
-        {btn('+', () => update(value + 4))}
-        <div role="button" onClick={() => update(0)} style={{ marginLeft: 'auto', fontSize: 12.5, fontWeight: 700, color: theme.coral, cursor: 'pointer' }}>Reset</div>
-      </div>
-    </div>
-  );
-}
-
-function ScreenDebugInfo() {
-  const { theme } = useTheme();
-  const [info, setInfo] = useState(null);
-  const measure = () => {
-    const vv = window.visualViewport;
-    const probe = (side) => { const el = document.createElement('div'); el.style.cssText = `position:fixed;top:0;left:0;width:1px;height:env(safe-area-inset-${side});visibility:hidden;pointer-events:none;`; document.body.appendChild(el); const h = el.getBoundingClientRect().height; document.body.removeChild(el); return h; };
-    const root = document.getElementById('zapp-root');
-    const r = root ? root.getBoundingClientRect() : null;
-    setInfo({
-      standalone: String(window.navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)),
-      innerHeight: window.innerHeight, innerWidth: window.innerWidth, outerHeight: window.outerHeight,
-      screen: `${window.screen.width} x ${window.screen.height}`, docHeight: document.documentElement.clientHeight,
-      vvHeight: vv ? Math.round(vv.height) : 'n/a', vvOffsetTop: vv ? Math.round(vv.offsetTop) : 'n/a', vvScale: vv ? vv.scale : 'n/a',
-      safeTop: probe('top'), safeBottom: probe('bottom'), scrollY: window.scrollY,
-      rootTop: r ? Math.round(r.top) : 'n/a', rootBottom: r ? Math.round(r.bottom) : 'n/a', rootHeight: r ? Math.round(r.height) : 'n/a',
-      shift: getBottomShift(), dpr: window.devicePixelRatio, transitions: VT_SUPPORTED ? 'native' : 'fallback', reduceMotion: String(reducedMotion()), ua: navigator.userAgent.slice(0, 80),
-    });
-  };
-  useEffect(() => { measure(); const t = setInterval(measure, 2000); return () => clearInterval(t); }, []);
-  if (!info) return null;
-  return (
-    <div style={{ marginTop: 12, padding: 12, borderRadius: 14, background: theme.rowBg, fontSize: 11.5, fontFamily: 'ui-monospace, monospace', color: theme.ink, lineHeight: 1.6, wordBreak: 'break-all' }}>
-      <div style={{ fontWeight: 800, marginBottom: 4 }}>Screen info (send a screenshot of this)</div>
-      {Object.entries(info).map(([k, v]) => <div key={k}>{k}: {String(v)}</div>)}
     </div>
   );
 }
@@ -11981,7 +12733,7 @@ function ReportThanksSheet({ profile, isBlocked, onBlock, onClose }) {
   const { theme } = useTheme();
   const drag = useSheetDrag(onClose);
   return (
-    <div onClick={onClose} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 430, background: 'rgba(5,8,16,0.55)', backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+    <div onClick={onClose} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 430, background: 'rgba(5,8,16,0.55)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
       <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" {...drag.sheetProps} style={{ ...drag.sheetStyle, width: '100%', maxWidth: 460, background: theme.panelBg, borderRadius: '26px 26px 0 0', padding: '10px 22px', paddingBottom: 'calc(18px + env(safe-area-inset-bottom))', textAlign: 'center' }}>
         <div style={{ display: 'flex', justifyContent: 'center', padding: '2px 0 16px' }}><div style={{ width: 38, height: 4, borderRadius: 2, background: theme.border }} /></div>
         <div className="zchat-pop" style={{ width: 72, height: 72, borderRadius: '50%', margin: '0 auto', background: `${theme.teal}22`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -12311,9 +13063,9 @@ function ProfileCollectionShowcase({ profile, rewards, isSelf, onPreview, onOpen
   if (!total) return null;
   const best = frames.length ? (RARITY_STYLE[AVATAR_FRAMES[frames[0].reward_key].rarity] || RARITY_STYLE.epic) : RARITY_STYLE.epic;
   return (
-    <div style={{ marginTop: 18, borderRadius: 22, overflow: 'hidden', background: theme.dark ? 'linear-gradient(160deg, #15121f 0%, #0c0d13 100%)' : 'linear-gradient(160deg, #f6f4ff 0%, #ffffff 100%)', border: `1px solid ${theme.dark ? 'rgba(255,255,255,0.08)' : theme.border}`, textAlign: 'left' }}>
+    <div style={{ marginTop: 18, borderRadius: 22, overflow: 'hidden', background: theme.dark ? '#15141B' : '#FFFFFF', border: `1px solid ${theme.dark ? 'rgba(255,255,255,0.08)' : theme.border}`, textAlign: 'left' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px 10px' }}>
-        <div style={{ width: 30, height: 30, borderRadius: 10, background: `linear-gradient(135deg, ${best.color}, #f97316)`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Sparkles size={16} color="#1a0f02" /></div>
+        <div style={{ width: 30, height: 30, borderRadius: 10, background: best.color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><CollectionIcon size={16} color="#1a0f02" /></div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 14.5, fontWeight: 900, color: theme.ink }}>Collection</div>
           <div style={{ fontSize: 11.5, color: theme.muted, fontWeight: 600 }}>{total} unlocked{frames.length ? ` · ${frames.length} ${frames.length === 1 ? 'frame' : 'frames'}` : ''}{plates.length ? ` · ${plates.length} ${plates.length === 1 ? 'nameplate' : 'nameplates'}` : ''}</div>
@@ -12953,7 +13705,7 @@ function CollectionPanel({ me, rewards, onClose, onEquip, userEmail, isAdmin }) 
         const has = rw && rewardActive(rw);
         const isEq = (isPlate ? me.nameplate : isCharm ? me.custom_badge : me.avatar_frame) === tryOn.key;
         const equipLabel = isPlate ? 'Equip this nameplate' : isCharm ? 'Equip this charm' : 'Equip this frame';
-        const lockedSub = isPlate ? 'Earn this nameplate from ZChat events and gifts' : isCharm ? 'Earn this charm from ZChat events and gifts' : 'This frame goes on sale very soon';
+        const lockedSub = isPlate ? 'Earn this nameplate from ZChat events and gifts' : isCharm ? 'Earn this charm from ZChat events and gifts' : 'Earn this frame from ZChat events and gifts';
         const action = has
           ? { label: isEq ? '✓ Equipped' : equipLabel, disabled: isEq || busy, onClick: async () => { await equip(tryOn.kind, tryOn.key); setTryOn(null); }, sub: daysLeft(rw) != null ? `${daysLeft(rw)} days left` : 'Yours to keep' }
           : !isCharm && !isPlate && FRAME_STORE.checkoutUrl
@@ -13519,49 +14271,53 @@ function ensureTextFonts() {
 
 
 const BUBBLE_POLKA = 'radial-gradient(circle, rgba(255,255,255,0.8) 2.6px, transparent 3px)';
+const BUBBLE_WAVES = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='12'%3E%3Cpath d='M0 7c5 0 5-4 10-4s5 4 10 4 5-4 10-4 5 4 10 4' fill='none' stroke='rgba(255,255,255,0.22)' stroke-width='1.6'/%3E%3C/svg%3E\")";
 const BUBBLE_STYLES = {
   strawberry: { label: 'Strawberry', fill: { backgroundColor: '#FFD3E0', backgroundImage: 'linear-gradient(90deg, rgba(255,105,150,0.42) 50%, transparent 50%), linear-gradient(rgba(255,105,150,0.42) 50%, transparent 50%)', backgroundSize: '14px 14px' }, line: '#C2415E', ink: '#7A1630', deco: { right: -8, top: -15, transform: 'rotate(12deg)' }, top: 15 },
-  bow: { label: 'Bow', fill: { background: 'linear-gradient(180deg, #FFC2DA, #FF9BC2)' }, line: '#C2418A', ink: '#7A1556', deco: { left: -9, top: -14, transform: 'rotate(-14deg)' }, top: 14 },
+  bow: { label: 'Bow', fill: { background: '#FFB8D4' }, line: '#C2418A', ink: '#7A1556', deco: { left: -9, top: -14, transform: 'rotate(-14deg)' }, top: 14 },
   cherry: { label: 'Cherry', fill: { background: '#FFF0E6' }, line: '#B3261E', ink: '#7A1410', deco: { right: -6, top: -20, transform: 'rotate(8deg)' }, top: 20 },
   daisy: { label: 'Daisy', fill: { backgroundColor: '#FFE680', backgroundImage: BUBBLE_POLKA, backgroundSize: '15px 15px' }, line: '#C99A00', ink: '#5A4300', deco: { left: -10, top: -14, transform: 'rotate(-10deg)' }, top: 14 },
   moon: { label: 'Moonlight', fill: { backgroundColor: '#2B3478', backgroundImage: 'radial-gradient(circle, #fff 1.1px, transparent 1.6px), radial-gradient(circle, rgba(255,255,255,0.7) 0.8px, transparent 1.3px)', backgroundSize: '34px 30px, 21px 19px', backgroundPosition: '6px 5px, 15px 14px' }, line: '#0D1233', ink: '#EEF1FF', deco: { right: -8, top: -15, transform: 'rotate(14deg)' }, top: 15 },
   bunny: { label: 'Bunny', fill: { background: '#FFFFFF' }, line: '#E58FB0', ink: '#8A3A5C', deco: { left: '50%', marginLeft: -31, top: -27 }, top: 27 },
   matcha: { label: 'Matcha', fill: { backgroundColor: '#BFE3B0', backgroundImage: BUBBLE_POLKA, backgroundSize: '15px 15px' }, line: '#4E8B3A', ink: '#24501A', deco: { left: -10, top: -17, transform: 'rotate(-8deg)' }, top: 17 },
-  paws: { label: 'Paws', fill: { background: 'linear-gradient(180deg, #E4D6FF, #CDB8FF)' }, line: '#7C5CD6', ink: '#3F2A8C', deco: { right: -8, top: -16, transform: 'rotate(16deg)' }, top: 16 },
+  paws: { label: 'Paws', fill: { background: '#DCCBFF' }, line: '#7C5CD6', ink: '#3F2A8C', deco: { right: -8, top: -16, transform: 'rotate(16deg)' }, top: 16 },
   cloud: { label: 'Cloud', fill: { background: '#FFFFFF' }, line: '#BFDBFE', ink: '#1E3A8A', css: { border: '2px solid #BFDBFE', boxShadow: '0 6px 0 #BFDBFE' }, radius: { me: '26px 26px 10px 26px', them: '26px 26px 26px 10px' }, deco: { left: -10, top: -14 }, top: 14 },
-  frost: { label: 'Frost', fill: { background: 'linear-gradient(180deg, #E0F2FE, #BAE6FD)' }, line: '#38BDF8', ink: '#0C4A6E', css: { border: '2px solid #7DD3FC', boxShadow: '0 3px 0 #38BDF8, 0 0 14px rgba(56,189,248,0.35)' }, deco: { right: -8, top: -14, transform: 'rotate(12deg)' }, top: 14 },
-  ocean: { label: 'Ocean', fill: { background: 'linear-gradient(135deg, #22D3EE 0%, #2563EB 100%)' }, line: '#1E3A8A', ink: '#F0FDFF', css: { border: 'none', boxShadow: '0 4px 0 #1E3A8A' }, deco: { right: -6, top: -12 }, top: 12 },
-  lava: { label: 'Lava', fill: { background: 'linear-gradient(180deg, #FDBA74 0%, #F97316 45%, #DC2626 100%)' }, line: '#7F1D1D', ink: '#FFF7ED', css: { border: 'none', boxShadow: '0 4px 0 #7F1D1D' }, deco: { right: -4, top: -18 }, top: 18 },
-  sunset: { label: 'Sunset', fill: { background: 'linear-gradient(135deg, #F97316, #EC4899 55%, #8B5CF6)' }, line: 'rgba(255,255,255,0.55)', ink: '#FFFFFF', css: { border: 'none', boxShadow: '0 6px 18px rgba(236,72,153,0.35)' }, top: 0 },
-  royal: { label: 'Royal', fill: { background: 'linear-gradient(180deg, #3B1B7A, #22104A)' }, line: '#E7B94C', ink: '#FFF1C9', css: { border: '2px solid #E7B94C', boxShadow: '0 3px 0 #9A7420' }, deco: { left: -8, top: -17, transform: 'rotate(-14deg)' }, top: 17 },
-  galaxy: { label: 'Galaxy', fill: { backgroundColor: '#1A1038', backgroundImage: 'radial-gradient(circle at 15% 25%, rgba(167,139,250,0.55), transparent 40%), radial-gradient(circle at 85% 70%, rgba(56,189,248,0.4), transparent 45%), radial-gradient(circle, rgba(255,255,255,0.75) 0.9px, transparent 1.4px), radial-gradient(circle, rgba(255,255,255,0.45) 0.7px, transparent 1.1px)', backgroundSize: '100% 100%, 100% 100%, 47px 41px, 29px 37px', backgroundPosition: '0 0, 0 0, 9px 6px, 21px 19px' }, line: '#7C5CFC', ink: '#F3EEFF', css: { border: '1.5px solid #7C5CFC', boxShadow: '0 0 0 3px rgba(124,92,252,0.18)' }, deco: { right: -8, top: -14 }, top: 14 },
-  neon: { label: 'Neon', fill: { background: '#13082B' }, line: '#D946EF', ink: '#FBE8FF', css: { border: '1.5px solid #D946EF', boxShadow: '0 0 16px rgba(217,70,239,0.55), inset 0 0 12px rgba(217,70,239,0.18)' }, cls: 'zchat-bubble-neon', top: 0 },
+  frost: { label: 'Frost', fill: { background: '#DDF1FB' }, line: '#38BDF8', ink: '#0C4A6E', css: { border: '2px solid #7DD3FC', boxShadow: '0 3px 0 #38BDF8' }, deco: { right: -8, top: -14, transform: 'rotate(12deg)' }, top: 14 },
+  ocean: { label: 'Ocean', fill: { backgroundColor: '#3E8FD0', backgroundImage: BUBBLE_WAVES, backgroundSize: '40px 12px' }, line: '#1E4E7A', ink: '#F2FAFF', css: { border: 'none', boxShadow: '0 4px 0 #1E4E7A' }, deco: { right: -6, top: -12 }, top: 12 },
+  lava: { label: 'Lava', fill: { background: '#F26B3A' }, line: '#7F1D1D', ink: '#FFF7ED', css: { border: 'none', boxShadow: '0 4px 0 #7F1D1D' }, deco: { right: -4, top: -18 }, top: 18 },
+  royal: { label: 'Royal', fill: { background: '#33186B' }, line: '#E7B94C', ink: '#FFF1C9', css: { border: '2px solid #E7B94C', boxShadow: '0 3px 0 #9A7420' }, deco: { left: -8, top: -17, transform: 'rotate(-14deg)' }, top: 17 },
+  galaxy: { label: 'Galaxy', fill: { backgroundColor: '#1E1838', backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.75) 0.9px, transparent 1.4px), radial-gradient(circle, rgba(255,255,255,0.45) 0.7px, transparent 1.1px)', backgroundSize: '47px 41px, 29px 37px', backgroundPosition: '9px 6px, 21px 19px' }, line: '#4C3D8F', ink: '#F3EEFF', css: { border: '1.5px solid #4C3D8F', boxShadow: '0 3px 0 #0E0A22' }, deco: { right: -8, top: -14 }, top: 14 },
   pixel: { label: 'Pixel', fill: { background: '#1F2937' }, line: '#F9FAFB', ink: '#F9FAFB', css: { border: '3px solid #F9FAFB', boxShadow: '4px 4px 0 #000' }, radius: { me: 4, them: 4 }, top: 0 },
   comic: { label: 'Comic', fill: { background: '#FFFFFF' }, line: '#111111', ink: '#111111', css: { border: '3px solid #111111', boxShadow: '5px 5px 0 #111111' }, radius: { me: '18px 18px 4px 18px', them: '18px 18px 18px 4px' }, top: 0 },
   paper: { label: 'Paper', fill: { backgroundColor: '#FBF7EE', backgroundImage: 'repeating-linear-gradient(0deg, transparent 0 21px, rgba(90,70,40,0.14) 21px 22px)' }, line: '#8B6B3E', ink: '#3B2A14', css: { border: '1px solid #D9C8A8', boxShadow: '2px 3px 0 rgba(90,70,40,0.25)' }, radius: { me: 6, them: 6 }, top: 0 },
-  glass: { label: 'Glass', fill: (t) => ({ background: t.dark ? 'linear-gradient(135deg, rgba(255,255,255,0.2), rgba(255,255,255,0.06))' : 'linear-gradient(135deg, rgba(124,92,252,0.24), rgba(124,92,252,0.08))' }), line: (t) => (t.dark ? 'rgba(255,255,255,0.5)' : 'rgba(124,92,252,0.5)'), ink: (t) => t.ink, css: (t) => ({ border: `1px solid ${t.dark ? 'rgba(255,255,255,0.4)' : 'rgba(124,92,252,0.4)'}`, boxShadow: '0 8px 24px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.35)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)' }), top: 0 },
   outline: { label: 'Outline', fill: { background: 'transparent' }, line: (t) => t.coral, ink: (t) => t.ink, css: (t) => ({ border: `1.5px solid ${t.coral}`, boxShadow: 'none', background: 'transparent' }), top: 0 },
   candy: { label: 'Candy', fill: { backgroundColor: '#FFE1EC', backgroundImage: 'repeating-linear-gradient(135deg, rgba(255,105,150,0.35) 0 8px, transparent 8px 16px)' }, line: '#F472B6', ink: '#831843', top: 0 },
-  peach: { label: 'Peach', fill: { background: 'linear-gradient(180deg, #FFE4CC, #FFB899)' }, line: '#F97316', ink: '#7C2D12', top: 0 },
+  peach: { label: 'Peach', fill: { background: '#FFCFAE' }, line: '#F97316', ink: '#7C2D12', top: 0 },
   lavender: { label: 'Lavender', fill: { backgroundColor: '#E9D8FF', backgroundImage: BUBBLE_POLKA, backgroundSize: '13px 13px' }, line: '#A78BFA', ink: '#4C1D95', top: 0 },
   mint: { label: 'Mint', fill: { backgroundColor: '#D1FAE5', backgroundImage: 'repeating-linear-gradient(90deg, rgba(16,185,129,0.22) 0 6px, transparent 6px 14px)' }, line: '#10B981', ink: '#064E3B', top: 0 },
-  cotton: { label: 'Cotton', fill: { background: 'linear-gradient(135deg, #FFD6E8, #D6E4FF)' }, line: '#C4B5FD', ink: '#3B2A8C', css: { border: '2px solid #FFFFFF', boxShadow: '0 4px 0 #C4B5FD' }, top: 0 },
-  honey: { label: 'Honey', fill: { background: 'linear-gradient(180deg, #FDE68A, #F59E0B)' }, line: '#B45309', ink: '#451A03', css: { border: '2px solid #FBBF24', boxShadow: '0 4px 0 #B45309' }, top: 0 },
-  fire: { label: 'Fire', fill: { background: 'linear-gradient(180deg, #FF8A3D 0%, #EF4444 60%, #991B1B 100%)' }, line: '#FDE047', ink: '#FFF7ED', css: { border: '2px solid #FDE047', boxShadow: '0 0 16px rgba(239,68,68,0.55), 0 3px 0 #7F1D1D' }, top: 0 },
-  toxic: { label: 'Toxic', fill: { background: '#0B1A0F' }, line: '#A3E635', ink: '#ECFCCB', css: { border: '2px solid #A3E635', boxShadow: '0 0 14px rgba(163,230,53,0.55), inset 0 0 10px rgba(163,230,53,0.15)' }, top: 0 },
-  midnight: { label: 'Midnight', fill: { background: 'linear-gradient(180deg, #111827, #030712)' }, line: '#F59E0B', ink: '#FEF3C7', css: { border: '1.5px solid #F59E0B', boxShadow: '0 3px 0 #78350F' }, top: 0 },
-  cyber: { label: 'Cyber', fill: { background: 'linear-gradient(135deg, #0F172A, #1E1B4B)' }, line: '#22D3EE', ink: '#CFFAFE', css: { border: '1.5px solid #22D3EE', boxShadow: '0 0 14px rgba(34,211,238,0.5)' }, radius: { me: '16px 4px 16px 4px', them: '4px 16px 4px 16px' }, top: 0 },
-  gold: { label: 'Gold', fill: { background: 'linear-gradient(135deg, #FDE68A 0%, #D4A017 45%, #FDE68A 100%)' }, line: '#92400E', ink: '#3F2305', css: { border: '2px solid #92400E', boxShadow: '0 3px 0 #92400E, 0 0 12px rgba(212,160,23,0.5)' }, top: 0 },
-  ruby: { label: 'Ruby', fill: { background: 'linear-gradient(135deg, #BE123C, #881337)' }, line: '#FDA4AF', ink: '#FFE4E6', css: { border: '2px solid #FDA4AF', boxShadow: '0 3px 0 #4C0519' }, top: 0 },
-  sand: { label: 'Sand', fill: { background: 'linear-gradient(180deg, #F5EBDD, #E7D5BB)' }, line: '#A16207', ink: '#422006', css: { border: '1.5px solid #D6B98C', boxShadow: '0 3px 0 #C8A878' }, top: 0 },
-  forest: { label: 'Forest', fill: { background: 'linear-gradient(180deg, #14532D, #052E16)' }, line: '#86EFAC', ink: '#DCFCE7', css: { border: '1.5px solid #4ADE80', boxShadow: '0 3px 0 #022C22' }, top: 0 },
-  aurora: { label: 'Aurora', fill: { background: 'linear-gradient(135deg, #0D9488 0%, #2563EB 50%, #7C3AED 100%)' }, line: 'rgba(255,255,255,0.55)', ink: '#FFFFFF', css: { border: 'none', boxShadow: '0 6px 18px rgba(37,99,235,0.35)' }, top: 0 },
-  stone: { label: 'Stone', fill: { background: 'linear-gradient(180deg, #E5E7EB, #CBD5E1)' }, line: '#64748B', ink: '#1E293B', css: { border: '1.5px solid #94A3B8', boxShadow: '0 3px 0 #64748B' }, top: 0 },
+  cotton: { label: 'Cotton', fill: { background: '#FFDDEB' }, line: '#C4B5FD', ink: '#3B2A8C', css: { border: '2px solid #FFFFFF', boxShadow: '0 4px 0 #C4B5FD' }, top: 0 },
+  honey: { label: 'Honey', fill: { background: '#FBD25C' }, line: '#B45309', ink: '#451A03', css: { border: '2px solid #E2A019', boxShadow: '0 4px 0 #B45309' }, top: 0 },
+  midnight: { label: 'Midnight', fill: { background: '#151B2B' }, line: '#F59E0B', ink: '#FEF3C7', css: { border: '1.5px solid #F59E0B', boxShadow: '0 3px 0 #78350F' }, top: 0 },
+  gold: { label: 'Gold', fill: { background: '#E9B949' }, line: '#7A4A0B', ink: '#3B2604', css: { border: '2px solid #7A4A0B', boxShadow: '0 3px 0 #7A4A0B' }, top: 0 },
+  ruby: { label: 'Ruby', fill: { background: '#A8153A' }, line: '#FDA4AF', ink: '#FFE4E6', css: { border: '2px solid #FDA4AF', boxShadow: '0 3px 0 #4C0519' }, top: 0 },
+  sand: { label: 'Sand', fill: { background: '#EDDFC9' }, line: '#A16207', ink: '#422006', css: { border: '1.5px solid #D6B98C', boxShadow: '0 3px 0 #C8A878' }, top: 0 },
+  forest: { label: 'Forest', fill: { background: '#1C4A2E' }, line: '#86EFAC', ink: '#DCFCE7', css: { border: '1.5px solid #4ADE80', boxShadow: '0 3px 0 #022C22' }, top: 0 },
+  stone: { label: 'Stone', fill: { background: '#DADFE6' }, line: '#64748B', ink: '#1E293B', css: { border: '1.5px solid #94A3B8', boxShadow: '0 3px 0 #64748B' }, top: 0 },
+  denim: { label: 'Denim', fill: { backgroundColor: '#3B5878', backgroundImage: 'repeating-linear-gradient(45deg, rgba(255,255,255,0.07) 0 2px, transparent 2px 5px)' }, line: '#1F3550', ink: '#F3F6FA', css: { border: '2px solid #1F3550', boxShadow: '0 3px 0 #1F3550', outline: '1.5px dashed rgba(244,201,107,0.95)', outlineOffset: '-6px' }, top: 0 },
+  kraft: { label: 'Kraft', fill: { backgroundColor: '#C9A47A', backgroundImage: 'radial-gradient(circle, rgba(90,60,30,0.22) 0.8px, transparent 1.2px), radial-gradient(circle, rgba(255,255,255,0.18) 0.7px, transparent 1.1px)', backgroundSize: '9px 11px, 13px 7px', backgroundPosition: '0 0, 4px 3px' }, line: '#7A5A36', ink: '#2E1F0E', css: { border: '2px solid #7A5A36', boxShadow: '0 3px 0 #7A5A36', outline: '1.5px dashed rgba(255,255,255,0.8)', outlineOffset: '-6px' }, top: 0 },
+  notebook: { label: 'Notebook', fill: { backgroundColor: '#FFFFFF', backgroundImage: 'linear-gradient(rgba(59,130,246,0.2) 1px, transparent 1px), linear-gradient(90deg, rgba(59,130,246,0.2) 1px, transparent 1px)', backgroundSize: '12px 12px', backgroundPosition: '-1px -1px' }, line: '#3B82F6', ink: '#1E293B', css: { border: '1.5px solid #93B4E8', boxShadow: '0 3px 0 #93B4E8' }, radius: { me: 8, them: 8 }, top: 0 },
 };
+const BUBBLE_ALIAS = { sunset: 'peach', neon: 'midnight', glass: 'outline', fire: 'lava', toxic: 'forest', cyber: 'pixel', aurora: 'ocean' };
+function bubbleKeyOf(k) {
+  if (!k) return null;
+  if (BUBBLE_STYLES[k]) return k;
+  const alias = BUBBLE_ALIAS[k];
+  return alias && BUBBLE_STYLES[alias] ? alias : null;
+}
 const BUBBLE_GROUPS = [
   ['Cute', ['strawberry', 'bow', 'cherry', 'daisy', 'bunny', 'matcha', 'paws', 'cloud', 'candy', 'peach', 'lavender', 'mint', 'cotton', 'honey']],
-  ['Bold', ['neon', 'pixel', 'comic', 'lava', 'sunset', 'royal', 'fire', 'toxic', 'midnight', 'cyber', 'gold', 'ruby']],
-  ['Calm', ['moon', 'galaxy', 'ocean', 'frost', 'glass', 'paper', 'outline', 'sand', 'forest', 'aurora', 'stone']],
+  ['Bold', ['comic', 'pixel', 'denim', 'lava', 'royal', 'midnight', 'gold', 'ruby']],
+  ['Calm', ['paper', 'notebook', 'kraft', 'moon', 'galaxy', 'ocean', 'frost', 'outline', 'sand', 'forest', 'stone']],
 ];
 function resolveBubbleSpec(spec, theme) {
   if (!spec) return null;
@@ -13617,7 +14373,7 @@ function bubbleStyleCss(spec, isMe) {
   return {
     ...spec.fill, border: `2.5px solid ${spec.line}`, color: spec.ink,
     borderRadius: isMe ? '22px 22px 6px 22px' : '22px 22px 22px 6px',
-    boxShadow: `0 3px 0 ${spec.line}`, position: 'relative', backdropFilter: 'none', WebkitBackdropFilter: 'none',
+    boxShadow: `0 3px 0 ${spec.line}`, position: 'relative',
     ...(spec.css || {}),
     ...(spec.radius ? { borderRadius: isMe ? spec.radius.me : spec.radius.them } : {}),
   };
@@ -13627,7 +14383,7 @@ function BubbleSample({ k, text, isMe = true }) {
   const spec = resolveBubbleSpec(BUBBLE_STYLES[k], theme);
   if (!spec) return null;
   return (
-    <div className={spec.cls} style={{ position: 'relative', ...bubbleStyleCss(spec, isMe), padding: '8px 14px', fontSize: 13.5, fontWeight: 800, lineHeight: 1.3, marginTop: spec.top || 0 }}>
+    <div style={{ position: 'relative', ...bubbleStyleCss(spec, isMe), padding: '8px 14px', fontSize: 13.5, fontWeight: 800, lineHeight: 1.3, marginTop: spec.top || 0 }}>
       {spec.deco && BUBBLE_DECO[k] && <div style={{ position: 'absolute', pointerEvents: 'none', zIndex: 1, ...spec.deco }}>{BUBBLE_DECO[k]()}</div>}
       <span style={{ position: 'relative' }}>{text}</span>
     </div>
@@ -13757,7 +14513,7 @@ function TextStylePanel({ draft, font, size, color, onFont, onSize, onColor, onD
   return (
     <div className="zchat-sheet-up" style={{ padding: '10px 14px 12px', background: theme.panelBg, borderTop: `1px solid ${theme.border}`, borderRadius: '22px 22px 0 0', display: 'flex', flexDirection: 'column', gap: 10, flexShrink: 0 }}>
       <div style={{ display: 'flex', justifyContent: 'flex-end', minHeight: 44, paddingTop: previewSpec ? (previewSpec.top || 0) : 0 }}>
-        <div className={previewSpec ? previewSpec.cls : undefined} style={{ maxWidth: '88%', background: theme.bubbleMe, borderRadius: 19, borderBottomRightRadius: 5, padding: '8px 13px', lineHeight: 1.3, wordBreak: 'break-word', maxHeight: 74, position: 'relative', ...(previewSpec ? bubbleStyleCss(previewSpec, true) : {}), ...fontStyleCss(font), color: color || (previewSpec ? previewSpec.ink : theme.ink), fontSize: previewPx }}>
+        <div style={{ maxWidth: '88%', background: theme.bubbleMe, borderRadius: 19, borderBottomRightRadius: 5, padding: '8px 13px', lineHeight: 1.3, wordBreak: 'break-word', maxHeight: 74, position: 'relative', ...(previewSpec ? bubbleStyleCss(previewSpec, true) : {}), ...fontStyleCss(font), color: color || (previewSpec ? previewSpec.ink : theme.ink), fontSize: previewPx }}>
           {previewSpec && previewSpec.deco && BUBBLE_DECO[bubbleStyle] && <div aria-hidden="true" style={{ position: 'absolute', pointerEvents: 'none', zIndex: 1, ...previewSpec.deco }}>{BUBBLE_DECO[bubbleStyle]()}</div>}
           <span style={{ position: 'relative' }}>{draft.trim() ? draft.trim().slice(0, 90) : 'Your message'}</span>
         </div>
@@ -13826,50 +14582,6 @@ function TextStylePanel({ draft, font, size, color, onFont, onSize, onColor, onD
   );
 }
 
-function TextStyleBar({ font, size, color, onFont, onSize, onColor }) {
-  const { theme } = useTheme();
-  const rowStyle = { display: 'flex', gap: 8, overflowX: 'auto', padding: '0 14px', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' };
-  return (
-    <div className="zchat-fade" style={{ padding: '8px 0 4px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <div data-testid="font-row" style={rowStyle}>
-        {FONT_STYLES.map((f) => {
-          const on = (font || 'classic') === f.key;
-          return (
-            <div key={f.key} role="button" aria-label={`Font ${f.label}`} onClick={() => onFont(f.key === 'classic' ? null : f.key)} style={{
-              flex: '0 0 auto', minWidth: 68, padding: '7px 10px 6px', borderRadius: 14, textAlign: 'center', cursor: 'pointer',
-              background: on ? theme.coral : theme.rowBg, color: on ? 'white' : theme.ink, border: `1px solid ${on ? theme.coral : theme.border}`,
-            }}>
-              <div style={{ fontSize: 19, lineHeight: '24px', ...fontStyleCss(f.key) }}>Aa</div>
-              <div style={{ fontSize: 9.5, fontWeight: 700, marginTop: 1, opacity: 0.85, whiteSpace: 'nowrap' }}>{f.label}</div>
-            </div>
-          );
-        })}
-      </div>
-      <div data-testid="size-row" style={rowStyle}>
-        {TEXT_SIZES.map(([key, label, px]) => (
-          <div key={key} role="button" aria-label={`Size ${label}`} onClick={() => onSize(key)} style={{
-            flex: '1 0 auto', textAlign: 'center', padding: '7px 12px', borderRadius: 12, cursor: 'pointer',
-            background: size === key ? theme.coral : theme.rowBg, color: size === key ? 'white' : theme.ink,
-            fontWeight: 800, fontSize: Math.min(16, Math.max(10, px * 0.7)), whiteSpace: 'nowrap',
-          }}>{label}</div>
-        ))}
-      </div>
-      <div data-testid="color-row" style={{ ...rowStyle, alignItems: 'center' }}>
-        <div role="button" aria-label="Default colour" onClick={() => onColor(null)} style={{
-          width: 30, height: 30, borderRadius: 15, cursor: 'pointer', flexShrink: 0, border: `2px solid ${color ? theme.border : theme.coral}`,
-          display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 900, color: theme.muted,
-        }}>A</div>
-        {TEXT_COLORS.map((col) => (
-          <div key={col} role="button" aria-label={`Colour ${col}`} onClick={() => onColor(col)} style={{
-            width: 30, height: 30, borderRadius: 15, background: col, cursor: 'pointer', flexShrink: 0,
-            border: color === col ? `3px solid ${theme.ink}` : `1px solid ${theme.border}`,
-          }} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function privacyAllows(owner, scope, viewerId, iFollow, allowed) {
   if (!owner || !owner.id || owner.id === viewerId) return true;
   const setting = owner[scope] || 'everyone';
@@ -13896,31 +14608,118 @@ function Portal({ children }) {
 }
 
 const EDGE_BACK_PX = 24;
-function useEdgeSwipeBack(enabled, onBack) {
+
+let swipeBackSkipVT = false;
+
+function swipeStartBlocked(target, root) {
+  let el = target;
+  let hops = 0;
+  while (el && el.nodeType === 1 && hops < 40) {
+    if (el.getAttribute('data-no-swipe') != null) return true;
+    const tag = el.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'CANVAS' || tag === 'VIDEO' || tag === 'IFRAME') return true;
+    if (el.scrollWidth > el.clientWidth + 4) {
+      const ox = window.getComputedStyle(el).overflowX;
+      if (ox === 'auto' || ox === 'scroll') return true;
+    }
+    if (el === root) break;
+    el = el.parentElement;
+    hops += 1;
+  }
+  return false;
+}
+
+function useEdgeSwipeBack(enabled, onBack, opts) {
   const ref = useRef(null);
+  const backRef = useRef(onBack);
+  backRef.current = onBack;
+  const optsRef = useRef(opts);
+  optsRef.current = opts;
   if (!enabled) return {};
+  const clear = (el) => {
+    if (!el) return;
+    el.style.transition = '';
+    el.style.transform = '';
+    el.style.boxShadow = '';
+    el.style.willChange = '';
+  };
+  const settle = (st, go) => {
+    const el = st.el;
+    const o = optsRef.current || {};
+    el.style.transition = 'transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1)';
+    if (!go) {
+      el.style.transform = 'translate3d(0,0,0)';
+      setTimeout(() => { if (!ref.current || ref.current.el !== el) { clear(el); if (o.onRelease) o.onRelease(false); } }, 240);
+      return;
+    }
+    el.style.transform = `translate3d(${Math.round(st.w + 40)}px,0,0)`;
+    hapticTap();
+    setTimeout(() => {
+      try { el.setAttribute('data-ghost-skip', '1'); } catch {}
+      swipeBackSkipVT = true;
+      const fn = backRef.current;
+      try { if (fn) fn(); else window.history.back(); } catch {}
+      setTimeout(() => {
+        swipeBackSkipVT = false;
+        if (el.isConnected) { clear(el); el.removeAttribute('data-ghost-skip'); }
+        if (o.onRelease) o.onRelease(true);
+      }, 480);
+    }, 190);
+  };
   return {
     onTouchStart: (e) => {
+      const ne = e.nativeEvent;
+      if (ne && ne.__zswipe) { ref.current = null; return; }
+      if (ne) ne.__zswipe = true;
       const t = e.touches && e.touches[0];
-      if (!t || e.touches.length > 1 || t.clientX > EDGE_BACK_PX || window.innerWidth >= 900) { ref.current = null; return; }
-      ref.current = { x: t.clientX, y: t.clientY, fired: false };
+      if (!t || e.touches.length > 1 || window.innerWidth >= 900) { ref.current = null; return; }
+      const edgeOnly = !!(optsRef.current && optsRef.current.edgeOnly);
+      if (edgeOnly ? t.clientX > EDGE_BACK_PX + 8 : swipeStartBlocked(e.target, e.currentTarget)) { ref.current = null; return; }
+      const el = e.currentTarget;
+      ref.current = { x: t.clientX, y: t.clientY, x0: 0, el, on: false, dead: false, off: 0, w: el.getBoundingClientRect().width || window.innerWidth, samples: [] };
     },
     onTouchMove: (e) => {
       const st = ref.current;
-      if (!st || st.fired) return;
+      if (!st || st.dead) return;
       const t = e.touches && e.touches[0];
-      if (!t) return;
+      if (!t || e.touches.length > 1) { if (st.on) settle(st, false); ref.current = null; return; }
       const dx = t.clientX - st.x;
       const dy = t.clientY - st.y;
-      if (Math.abs(dy) > 44 && Math.abs(dy) > dx) { ref.current = null; return; }
-      if (dx > 64) {
-        st.fired = true;
-        hapticTap();
-        if (onBack) onBack(); else { try { window.history.back(); } catch {} }
+      if (!st.on) {
+        if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
+        if (dx > 10 && Math.abs(dx) > Math.abs(dy) * 1.3) {
+          st.on = true;
+          st.x0 = t.clientX;
+          st.el.style.transition = 'none';
+          st.el.style.willChange = 'transform';
+          st.el.style.boxShadow = '-18px 0 40px rgba(0,0,0,0.3)';
+          const o = optsRef.current || {};
+          if (o.onEngage) o.onEngage();
+        } else {
+          st.dead = true;
+          return;
+        }
       }
+      st.off = Math.max(0, t.clientX - st.x0);
+      const now = Date.now();
+      st.samples.push([t.clientX, now]);
+      while (st.samples.length > 2 && now - st.samples[0][1] > 90) st.samples.shift();
+      st.el.style.transform = `translate3d(${st.off}px,0,0)`;
     },
-    onTouchEnd: () => { ref.current = null; },
-    onTouchCancel: () => { ref.current = null; },
+    onTouchEnd: () => {
+      const st = ref.current;
+      ref.current = null;
+      if (!st || !st.on) return;
+      const a = st.samples[0];
+      const b = st.samples[st.samples.length - 1];
+      const v = a && b && b[1] > a[1] ? (b[0] - a[0]) / (b[1] - a[1]) : 0;
+      settle(st, st.off > st.w * 0.33 || (v > 0.45 && st.off > 30));
+    },
+    onTouchCancel: () => {
+      const st = ref.current;
+      ref.current = null;
+      if (st && st.on) settle(st, false);
+    },
   };
 }
 
@@ -14099,8 +14898,7 @@ function BottomTabBar({ tab, onChange, onCreate, badges }) {
   return (
     <div style={{
       flexShrink: 0, position: 'relative', zIndex: 20,
-      background: theme.dark ? 'rgba(18,18,20,0.92)' : 'rgba(255,255,255,0.92)',
-      backdropFilter: 'blur(18px)', WebkitBackdropFilter: 'blur(18px)',
+      background: igPalette(theme).bg,
       borderTop: `1px solid ${theme.border}`,
       paddingBottom: 'env(safe-area-inset-bottom)',
     }}>
@@ -14221,11 +15019,7 @@ function MomentsTab({ me, userId, myStories, trayUsers, seen, onAddStory, onOpen
         {items === null ? (
           <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><Spinner size={22} color={theme.coral} /></div>
         ) : !items.length ? (
-          <div style={{ textAlign: 'center', padding: '44px 24px', color: theme.muted }}>
-            <div style={{ width: 64, height: 64, borderRadius: 22, margin: '0 auto 12px', background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.ink }}><ImageIcon size={26} /></div>
-            <div style={{ fontWeight: 800, fontSize: 16, color: theme.ink }}>{tab === 'following' ? 'Nothing from people you follow yet' : 'No posts yet'}</div>
-            <div style={{ fontSize: 13, marginTop: 6, lineHeight: 1.5 }}>{tab === 'following' ? 'Follow more people to fill this up.' : 'Be the first. Tap the plus button to share a post.'}</div>
-          </div>
+          <EmptyState art="moments" title={tab === 'following' ? 'Nothing from people you follow yet' : 'No posts yet'} text={tab === 'following' ? 'Follow more people to fill this up.' : 'Be the first. Tap the plus button to share a post.'} />
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2, padding: '0 0 16px' }}>
             {items.map((p) => (
@@ -14281,7 +15075,7 @@ function NewCallPage({ userId, onClose, onCall }) {
       {people === null ? (
         <div style={{ display: 'flex', justifyContent: 'center', padding: 30 }}><Spinner color={theme.muted} /></div>
       ) : !shown.length ? (
-        <EmptyState icon={<Phone />} title={term ? 'No one matches' : 'Nobody to call yet'} text={term ? 'Try another name.' : 'You can call people once you follow each other.'} />
+        <EmptyState art={term ? 'nothing' : 'calls'} title={term ? 'No one matches' : 'Nobody to call yet'} text={term ? 'Try another name.' : 'You can call people once you follow each other.'} />
       ) : shown.map((p) => (
         <UserListRow key={p.id} profile={p} rightContent={
           <div style={{ display: 'flex', gap: 8 }}>
@@ -14362,7 +15156,7 @@ function NewChatPage({ userId, blockedIds, onClose, onPick, onNewGroup, onDiscov
           {extra.length > 0 && <div style={{ padding: '14px 2px 4px', fontSize: 13, fontWeight: 600, color: theme.muted }}>More people</div>}
           {extra.map((p) => <UserListRow key={p.id} profile={p} onClick={() => onPick(p)} rightContent={<ChevronRight size={18} color={theme.muted} />} />)}
           {!local.length && !extra.length && (
-            <EmptyState icon={<Search />} title={term ? (term.length < 2 ? 'Keep typing' : searching ? 'Searching' : 'No one found') : 'Nobody to show yet'} text={term ? 'Search by the exact username to find anyone on ZChat.' : 'Follow people and they will show up here, or search a username above.'} />
+            <EmptyState art={term ? 'nothing' : 'nochats'} title={term ? (term.length < 2 ? 'Keep typing' : searching ? 'Searching' : 'No one found') : 'Nobody to show yet'} text={term ? 'Search by the exact username to find anyone on ZChat.' : 'Follow people and they will show up here, or search a username above.'} />
           )}
         </>
       )}
@@ -14405,11 +15199,7 @@ function CallsTab({ userId, groups, onCall, onOpenProfile, version }) {
         {rows === null ? (
           <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><Spinner size={22} color={theme.coral} /></div>
         ) : !rows.length ? (
-          <div style={{ textAlign: 'center', padding: '50px 24px', color: theme.muted }}>
-            <div style={{ width: 64, height: 64, borderRadius: 22, margin: '0 auto 12px', background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.ink }}><Phone size={26} /></div>
-            <div style={{ fontWeight: 800, fontSize: 16, color: theme.ink }}>No calls yet</div>
-            <div style={{ fontSize: 13, marginTop: 6, lineHeight: 1.5 }}>Tap the phone button above to call someone who follows you back.</div>
-          </div>
+          <EmptyState art="calls" title="No calls yet" text="Tap the phone button above to call someone who follows you back." />
         ) : rows.map((c) => {
           const d = describe(c);
           return (
@@ -14488,7 +15278,7 @@ function MeTab({ me, counts, onOpenProfile, onEditProfile, onSettings, onCollect
         </div>
         <IgHeading>Your stuff</IgHeading>
         {row(<GamepadIcon size={22} />, 'Games', onGames)}
-        {row(<Sparkles />, 'Collection', onCollection, { value: counts.rewards ? `${counts.rewards} unlocked` : undefined })}
+        {row(<CollectionIcon />, 'Collection', onCollection, { value: counts.rewards ? `${counts.rewards} unlocked` : undefined })}
         {row(<Bookmark />, 'Saved messages', onSaved)}
         {onReminders && row(<Clock />, 'Reminders', onReminders, { value: counts.reminders ? String(counts.reminders) : undefined })}
         {onSearchMessages && row(<Search />, 'Search messages', onSearchMessages)}
@@ -14510,7 +15300,7 @@ function MeTab({ me, counts, onOpenProfile, onEditProfile, onSettings, onCollect
 }
 
 function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAccount, onAddAccount, onRemoveAccount, switchingAccountId }) {
-  const { theme, bgPatternOn, chatTheme, bubbleStyle, keepTextStyle, setDark } = useTheme();
+  const { theme, bgPatternOn, bubbleStyle, keepTextStyle, setDark } = useTheme();
   const assetProgress = useAssetPrefetch();
   const [notifPermission, setNotifPermission] = useState(typeof Notification !== 'undefined' ? Notification.permission : 'default');
   const [notifBannerDismissed, setNotifBannerDismissed] = useState(() => {
@@ -14843,6 +15633,32 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [votesFor, setVotesFor] = useState(null);
   const [onceViewer, setOnceViewer] = useState(null);
   const [showDoodle, setShowDoodle] = useState(false);
+  const [diceSheet, setDiceSheet] = useState(false);
+  const [voiceTyping, setVoiceTyping] = useState(false);
+  const [collageFiles, setCollageFiles] = useState(null);
+  const collageInputRef = useRef(null);
+  const [speaking, setSpeaking] = useState(false);
+  const [sendOptions, setSendOptions] = useState(false);
+  const [laterAsk, setLaterAsk] = useState(null);
+  const [laterPick, setLaterPick] = useState(null);
+  const [showScheduled, setShowScheduled] = useState(false);
+  const [laterList, setLaterList] = useState(() => readLater(session.user.id));
+  const [folders, setFoldersRaw] = useState(() => readFolders(session.user.id));
+  const [folderEdit, setFolderEdit] = useState(null);
+  const [voiceFx, setVoiceFx] = useState('normal');
+  const voiceFxRef = useRef('normal');
+  voiceFxRef.current = voiceFx;
+  const pendingEffectRef = useRef(null);
+  const sendPressRef = useRef({ t: null, fired: false });
+  const fxPlayedRef = useRef(new Set());
+  const laterSendRef = useRef(null);
+  const setFolders = (next) => { setFoldersRaw(next); writeFolders(session.user.id, next); };
+  useEffect(() => {
+    const on = () => setLaterList(readLater(session.user.id));
+    window.addEventListener('zchat-later', on);
+    return () => window.removeEventListener('zchat-later', on);
+  }, []);
+  useEffect(() => () => { try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch {} }, []);
   const [showQrScan, setShowQrScan] = useState(false);
   const [buzzing, setBuzzing] = useState(false);
   const onceNextRef = useRef(false);
@@ -14906,6 +15722,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [showGroupMembers, setShowGroupMembers] = useState(false);
   const [showAddMembersFromMembers, setShowAddMembersFromMembers] = useState(false);
   const [myLocks, setMyLocks] = useState({});
+  const locksLoadedAtRef = useRef(0);
   const [unlockedChats, setUnlockedChats] = useState(new Set());
   const lastLeftChatAtRef = useRef({});
   const [lockPromptFor, setLockPromptFor] = useState(null);
@@ -14926,7 +15743,15 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const pullStartYRef = useRef(null);
   const sidebarListRef = useRef(null);
   const sidebarScrollRef = useRef(0);
-  const [visibleCount, setVisibleCount] = useState(120);
+  const [visibleCount, setVisibleCount] = useState(36);
+  const growRef = useRef(null);
+  const bubbleHoldersRef = useRef(new Map());
+  const holderFor = (id) => {
+    const mp = bubbleHoldersRef.current;
+    let h = mp.get(id);
+    if (!h) { h = { current: null }; mp.set(id, h); }
+    return h;
+  };
   const [unreadAnchor, setUnreadAnchor] = useState(null);
   const [unreadPillOn, setUnreadPillOn] = useState(false);
   const unreadPillOnRef = useRef(false);
@@ -15176,7 +16001,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const ok = await copyTextToClipboard(link);
     showSnack(ok ? 'Link copied' : link);
   };
-  const chatEdgeBack = useEdgeSwipeBack(mobileShowChat && !isWide);
+  const [peekList, setPeekList] = useState(false);
+  const chatEdgeBack = useEdgeSwipeBack(mobileShowChat && !isWide, null, { edgeOnly: true, onEngage: () => setPeekList(true), onRelease: () => setPeekList(false) });
   const scrollRef = useRef(null);
   useEffect(() => {
     if (!keyboardOpen) return undefined;
@@ -15367,11 +16193,17 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   };
 
   const loadMyLocks = async () => {
-    const { data } = await supabase.from('chat_locks').select('*').eq('owner_id', session.user.id);
+    const { data, error } = await supabase.from('chat_locks').select('*').eq('owner_id', session.user.id);
     const map = {};
     (data || []).forEach((l) => { map[l.conversation_id] = true; });
     setMyLocks(map);
+    if (!error && data) locksLoadedAtRef.current = Date.now();
   };
+  useEffect(() => {
+    const onShow = () => { if (document.visibilityState === 'visible') loadMyLocks(); };
+    document.addEventListener('visibilitychange', onShow);
+    return () => document.removeEventListener('visibilitychange', onShow);
+  }, []);
 
   const loadMyBlocks = async () => {
     const { data } = await supabase.from('blocks').select('blocked_id').eq('blocker_id', session.user.id);
@@ -15955,6 +16787,11 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         const targetMsg = messagesRef.current.find((x) => x.id === msgId);
         if (!targetMsg) return;
         if (payload.eventType === 'INSERT' && row.user_id !== me.id && targetMsg.sender_id === me.id && !isHiddenReaction(row.emoji)) playReactionPing();
+        if (payload.eventType !== 'DELETE' && typeof row.emoji === 'string' && row.emoji.indexOf('zfx:') === 0 && row.user_id !== me.id && targetMsg.sender_id === row.user_id && !fxPlayedRef.current.has(msgId)) {
+          fxPlayedRef.current.add(msgId);
+          const age = targetMsg.created_at ? Date.now() - new Date(targetMsg.created_at).getTime() : 0;
+          if (age < 180000 && prefOn('zchat-effects') && !reducedMotion()) setScreenEffect({ kind: row.emoji.slice(4), key: Date.now() });
+        }
         setMessageLikes((prev) => {
           const next = { ...prev };
           const list = (next[msgId] || []).filter((r) => r.user_id !== row.user_id);
@@ -16247,7 +17084,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const el = scrollRef.current;
     if (!el) return;
     // scrolling near the top brings older messages back in
-    if (el.scrollTop < 120) {
+    if (el.scrollTop < 120 && messagesRef.current.length > visibleCount) {
+      growRef.current = { h: el.scrollHeight, top: el.scrollTop };
       setVisibleCount((n) => (messagesRef.current.length > n ? n + 120 : n));
     }
     const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
@@ -16619,7 +17457,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     }
     if (convId) {
       let isLocked = !!myLocks[convId];
-      if (!isLocked) {
+      if (!isLocked && Date.now() - locksLoadedAtRef.current > 600000) {
         const { data: lockRow } = await supabase.from('chat_locks').select('conversation_id').eq('conversation_id', convId).eq('owner_id', session.user.id).maybeSingle();
         isLocked = !!lockRow;
       }
@@ -16671,16 +17509,20 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     setEditingMessage(null);
     setPendingForwardItems([]);
     if (convId) markRead(convId);
-    const { data: followRow } = await supabase.from('follows').select('status').eq('follower_id', session.user.id).eq('following_id', profile.id).maybeSingle();
-    setActiveFollowState(followRow ? followRow.status : 'none');
-    const { data: theyFollowMeRow } = await supabase.from('follows').select('status').eq('follower_id', profile.id).eq('following_id', session.user.id).eq('status', 'accepted').maybeSingle();
-    setActiveFollowerFollowsMe(!!theyFollowMeRow);
     const myId = session.user.id;
-    const { data: newestFirst } = await supabase.from('messages').select('*')
-      .or(`and(sender_id.eq.${myId},receiver_id.eq.${profile.id}),and(sender_id.eq.${profile.id},receiver_id.eq.${myId})`)
-      .is('group_id', null)
-      .order('created_at', { ascending: false })
-      .limit(CHAT_HISTORY_LIMIT);
+    const [followRes, theyRes, msgRes] = await Promise.all([
+      supabase.from('follows').select('status').eq('follower_id', myId).eq('following_id', profile.id).maybeSingle(),
+      supabase.from('follows').select('status').eq('follower_id', profile.id).eq('following_id', myId).eq('status', 'accepted').maybeSingle(),
+      supabase.from('messages').select('*')
+        .or(`and(sender_id.eq.${myId},receiver_id.eq.${profile.id}),and(sender_id.eq.${profile.id},receiver_id.eq.${myId})`)
+        .is('group_id', null)
+        .order('created_at', { ascending: false })
+        .limit(CHAT_HISTORY_LIMIT),
+    ]);
+    const followRow = followRes && followRes.data;
+    setActiveFollowState(followRow ? followRow.status : 'none');
+    setActiveFollowerFollowsMe(!!(theyRes && theyRes.data));
+    const newestFirst = msgRes && msgRes.data;
     const data = (newestFirst || []).slice().reverse();
     const hidden = getHiddenMsgIds();
     const visible = (data || []).filter((m) => !hidden.has(m.id) && !(m.expires_at && new Date(m.expires_at).getTime() <= Date.now()));
@@ -16689,14 +17531,16 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     setMessages([...visible, ...queuedMessagesFor('dm', profile.id)]);
     setLoadingConvo(false);
     const unreadIds = visible.filter((m) => m.sender_id === profile.id && !m.read).map((m) => m.id);
+    const [, likesRes] = await Promise.all([
+      unreadIds.length ? supabase.from('messages').update({ read: true, delivered: true }).in('id', unreadIds) : null,
+      visible.length ? supabase.from('message_likes').select('*').in('message_id', visible.map((m) => m.id)) : null,
+    ]);
     if (unreadIds.length) {
-      await supabase.from('messages').update({ read: true, delivered: true }).in('id', unreadIds);
       setMessages((prev) => prev.map((m) => (unreadIds.includes(m.id) ? { ...m, read: true, delivered: true } : m)));
       loadUnreadCounts();
     }
     if (visible.length) {
-      const ids = visible.map((m) => m.id);
-      const { data: likes } = await supabase.from('message_likes').select('*').in('message_id', ids);
+      const likes = likesRes && likesRes.data;
       const grouped = {};
       (likes || []).forEach((l) => { grouped[l.message_id] = grouped[l.message_id] || []; grouped[l.message_id].push({ user_id: l.user_id, emoji: l.emoji }); });
       setMessageLikes(grouped);
@@ -16730,6 +17574,32 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       if (r.status === 404 || r.status === 405) await send(path).catch(() => {});
     } catch {
       try { await send(path); } catch {}
+    }
+  };
+  const askBotAboutImage = async (file, prompt) => {
+    try {
+      const { data: bots } = await supabase.from('profiles').select('id').eq('is_bot', true).limit(1);
+      const botId = bots && bots[0] && bots[0].id;
+      if (!botId) return { error: 'ZChat Bot is not around right now. Try again later.' };
+      let mediaUrl = null;
+      if (file) {
+        const up = await uploadMedia(file, session.user.id);
+        if (up.error || !up.url) return { error: "Couldn't upload your drawing. Check your connection and try again." };
+        mediaUrl = up.url;
+      }
+      const since = new Date(Date.now() - 1500).toISOString();
+      await sendMessage(session.user.id, botId, file ? 'image' : 'text', prompt, mediaUrl);
+      upsertConversation(botId, file ? 'Photo' : prompt, file ? 'image' : 'text');
+      callBotFn('/.netlify/functions/bot-reply', JSON.stringify({ userId: session.user.id, botId, text: prompt, mediaType: file ? 'image' : null, mediaUrl }));
+      const started = Date.now();
+      while (Date.now() - started < 45000) {
+        await new Promise((r) => setTimeout(r, 1800));
+        const { data } = await supabase.from('messages').select('id, content, created_at').eq('sender_id', botId).eq('receiver_id', session.user.id).gt('created_at', since).order('created_at', { ascending: false }).limit(1);
+        if (data && data.length && data[0].content) return { text: data[0].content };
+      }
+      return { error: 'ZChat Bot is still thinking. The answer will show up in your chat with ZChat Bot.' };
+    } catch {
+      return { error: 'ZChat Bot could not answer right now. Try again in a moment.' };
     }
   };
   const [botWaitBase, setBotWaitBase] = useState(null);
@@ -16846,6 +17716,60 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       sendingRef.current = false;
     }
   };
+  const applySendEffect = (row) => {
+    const fx = pendingEffectRef.current;
+    pendingEffectRef.current = null;
+    if (!fx || !row || !row.id) return;
+    fxPlayedRef.current.add(row.id);
+    if (!reducedMotion()) setScreenEffect({ kind: fx, key: Date.now() });
+    supabase.from('message_likes').upsert({ message_id: row.id, user_id: session.user.id, emoji: `zfx:${fx}` }, { onConflict: 'message_id,user_id' }).then(() => {}, () => {});
+  };
+  const sendWithEffect = async (fx) => {
+    setSendOptions(false);
+    pendingEffectRef.current = fx;
+    playUiSound('send');
+    await send();
+    pendingEffectRef.current = null;
+  };
+  const scheduleDraft = (at) => {
+    const text = bakeTextFont(draft.trim().slice(0, MAX_CHARS), textFont);
+    if (!text || (!activeProfile && !activeGroup)) return;
+    const item = { id: `l${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`, kind: activeGroup ? 'group' : 'dm', targetId: activeGroup ? activeGroup.id : activeProfile.id, targetName: activeGroup ? activeGroup.name : activeProfile.name, text, at, created: Date.now() };
+    writeLater(session.user.id, [...readLater(session.user.id), item]);
+    setDraft('');
+    setLaterAsk(null);
+    setLaterPick(null);
+    hapticTap();
+    showSnack(`Scheduled for ${reminderWhen(at)}`);
+  };
+  const sendScheduledItem = async (it) => {
+    const row = it.kind === 'group'
+      ? { sender_id: session.user.id, group_id: it.targetId, type: 'text', content: it.text, client_id: newClientId() }
+      : { sender_id: session.user.id, receiver_id: it.targetId, group_id: null, type: 'text', content: it.text, client_id: newClientId() };
+    const res = await insertMessageSafe(row);
+    const data = res && res.data;
+    if (!data) return false;
+    const openNow = it.kind === 'group' ? activeGroupIdRef.current === it.targetId : !!(activeProfileRefForCalls.current && activeProfileRefForCalls.current.id === it.targetId);
+    if (openNow) setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
+    if (it.kind === 'dm') {
+      upsertConversation(it.targetId, it.text, 'text');
+      if (me) notifyUser(it.targetId, me.name, it.text, `/?dm=${session.user.id}`, me.avatar);
+    } else loadGroups();
+    return true;
+  };
+  laterSendRef.current = sendScheduledItem;
+  const readAloud = (m) => {
+    try {
+      const synth = window.speechSynthesis;
+      if (!synth) { showSnack('Reading aloud is not available here'); return; }
+      synth.cancel();
+      const u = new SpeechSynthesisUtterance(plainPreviewText(m.content || '').slice(0, 1500));
+      u.onend = () => setSpeaking(false);
+      u.onerror = () => setSpeaking(false);
+      setSpeaking(true);
+      synth.speak(u);
+    } catch { showSnack('Reading aloud is not available here'); }
+  };
   const sendingRef = useRef(false);
   const send = async () => {
     if (sendingRef.current) return;
@@ -16935,7 +17859,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       const repliedToBot = !!(replyingTo && groupBotUserId && replyingTo.sender_id === groupBotUserId);
       const repliedToText = repliedToBot ? String(replyingTo.content || '').slice(0, 400) : '';
       setReplyingTo(null);
-      await sendGroupMessage('text', text, null, soloForwardName, groupReplyId, (textSize !== 'm' || textColor || textFont) ? { text_size: textSize === 'm' ? null : textSize, text_color: textColor, ...(textFont ? { text_font: textFont } : {}) } : null);
+      const gSent = await sendGroupMessage('text', text, null, soloForwardName, groupReplyId, (textSize !== 'm' || textColor || textFont) ? { text_size: textSize === 'm' ? null : textSize, text_color: textColor, ...(textFont ? { text_font: textFont } : {}) } : null);
+      applySendEffect(gSent);
       if (text.toLowerCase().includes(BOT_MENTION) || repliedToBot) {
         startBotWait();
         callBotFn('/.netlify/functions/bot-reply-group', JSON.stringify({ userId: session.user.id, groupId: activeGroup.id, text, replyToText: repliedToText || undefined }));
@@ -16985,6 +17910,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     }
     if (data) {
       setMessages((prev) => prev.filter((x) => x.id !== tempId));
+      applySendEffect(data);
       if (wasForward) {
         await supabase.from('messages').update({ forwarded: true, forwarded_from_name: items[0].forwarded_from_name || null }).eq('id', data.id);
         data.forwarded = true;
@@ -17091,8 +18017,14 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           return;
         }
         playUiSound('send');
-        const file = new File([blob], `voice.${ext}`, { type: actualMime });
+        let file = new File([blob], `voice.${ext}`, { type: actualMime });
         setUploading(true);
+        const fxNow = voiceFxRef.current;
+        if (fxNow && fxNow !== 'normal') {
+          const changed = await applyVoiceFx(blob, fxNow);
+          if (changed) file = changed;
+          setVoiceFx('normal');
+        }
         const { url, error } = await uploadMedia(file, session.user.id);
         if (!error && url) {
           if (activeGroup) {
@@ -17919,6 +18851,28 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   callEngineRef.current = callEngine;
   useEffect(() => {
     if (!me) return undefined;
+    let busy = false;
+    const tick = async () => {
+      if (busy || (typeof navigator !== 'undefined' && navigator.onLine === false)) return;
+      const due = readLater(session.user.id).filter((x) => x.at <= Date.now());
+      if (!due.length || !laterSendRef.current) return;
+      busy = true;
+      const sent = new Set();
+      for (const it of due) {
+        try { if (await laterSendRef.current(it)) sent.add(it.id); } catch {}
+      }
+      if (sent.size) {
+        writeLater(session.user.id, readLater(session.user.id).filter((x) => !sent.has(x.id)));
+        showSnack(sent.size === 1 ? 'Your scheduled message went out' : `${sent.size} scheduled messages went out`);
+      }
+      busy = false;
+    };
+    const first = setTimeout(tick, 2500);
+    const iv = setInterval(tick, 15000);
+    return () => { clearTimeout(first); clearInterval(iv); };
+  }, [me && me.id]);
+  useEffect(() => {
+    if (!me) return undefined;
     try { window.history.replaceState({ zchat: 'root' }, ''); window.history.pushState({ zchat: 'app' }, ''); } catch {}
     const onPop = () => {
       let closed = false;
@@ -18499,7 +19453,24 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (el && sidebarScrollRef.current) el.scrollTop = sidebarScrollRef.current;
   }, [mobileShowChat, isWide]);
 
-  useEffect(() => { setVisibleCount(120); }, [activeProfile && activeProfile.id, activeGroup && activeGroup.id]);
+  useEffect(() => { setVisibleCount(36); }, [activeProfile && activeProfile.id, activeGroup && activeGroup.id]);
+  useEffect(() => {
+    if (visibleCount >= 120 || loadingConvo || !messages.length) return undefined;
+    const t = setTimeout(() => {
+      const el = scrollRef.current;
+      if (el) growRef.current = { h: el.scrollHeight, top: el.scrollTop };
+      setVisibleCount((n) => Math.max(n, 120));
+    }, 280);
+    return () => clearTimeout(t);
+  }, [visibleCount, loadingConvo, messages.length > 0, chatKey]);
+  useLayoutEffect(() => {
+    const g = growRef.current;
+    growRef.current = null;
+    const el = scrollRef.current;
+    if (!g || !el || stickToBottomRef.current) return;
+    const delta = el.scrollHeight - g.h;
+    if (delta > 0) el.scrollTop = g.top + delta;
+  }, [visibleCount]);
   useEffect(() => {
     if (!jumpReq) return undefined;
     const idx = messages.findIndex((x) => x.id === jumpReq.id);
@@ -18727,7 +19698,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                   const isPrivateBot = !activeGroup && !!m.bot_reply;
                   const isUnreadAnchor = !!unreadAnchor && unreadAnchor.chat === chatKey && unreadAnchor.id === m.id;
                   const bubble = (
-                    <MessageBubble
+                    <MessageBubbleMemo holder={holderFor(m.id)}
                       key={m.id} m={m} isMe={isMe} isBot={isBotAuthored(m)}
                       selectionMode={selectionMode} selected={selectedIds.has(m.id)} onToggleSelect={toggleSelect}
                       onLongPress={() => {
@@ -18813,6 +19784,13 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       : listFilter === 'unread'
         ? [...conversations.filter(isUnread).map((c) => ({ ...c, __kind: 'dm' })), ...groups.filter((g) => !g.archived && g.unread > 0).map((g) => ({ ...g, __kind: 'group' }))]
             .sort((a, b) => displayListSortByPin(a, b, (x) => (x.__kind === 'dm' ? isPinnedByMe(x) : x.pinned)))
+      : listFilter.indexOf('f:') === 0
+        ? (() => {
+          const fo = folders.find((f) => `f:${f.id}` === listFilter);
+          const mem = new Set(fo ? fo.members : []);
+          return [...conversations.filter((c) => c.otherProfile && mem.has(`dm-${c.otherProfile.id}`)).map((c) => ({ ...c, __kind: 'dm' })), ...groups.filter((g) => !g.archived && mem.has(`group-${g.id}`)).map((g) => ({ ...g, __kind: 'group' }))]
+            .sort((a, b) => displayListSortByPin(a, b, (x) => (x.__kind === 'dm' ? isPinnedByMe(x) : x.pinned)));
+        })()
       : listFilter === 'favs'
         ? [...conversations.filter((c) => c.otherProfile && favChats.has(`dm-${c.otherProfile.id}`)).map((c) => ({ ...c, __kind: 'dm' })), ...groups.filter((g) => !g.archived && favChats.has(`group-${g.id}`)).map((g) => ({ ...g, __kind: 'group' }))]
             .sort((a, b) => displayListSortByPin(a, b, (x) => (x.__kind === 'dm' ? isPinnedByMe(x) : x.pinned)))
@@ -18874,6 +19852,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         width: isWide ? 360 : (mobileShowChat ? 0 : '100%'), maxWidth: isWide ? 360 : (mobileShowChat ? 0 : '100%'), overflow: 'hidden',
         borderRight: (isWide || !mobileShowChat) ? `1px solid ${theme.border}` : 'none', display: 'flex', flexDirection: 'column', flexShrink: 0,
         transition: 'none',
+        ...(peekList && mobileShowChat && !isWide ? { position: 'absolute', left: 0, right: 0, bottom: 0, top: callBarShown ? 'calc(env(safe-area-inset-top) + 42px)' : 'env(safe-area-inset-top)', width: '100%', maxWidth: '100%', zIndex: 0, pointerEvents: 'none' } : {}),
       }} className="zchat-sidebar-desktop">
         <input ref={storyInputRef} type="file" accept="image/*,video/*" multiple style={{ display: 'none' }}
           onChange={(e) => {
@@ -18887,7 +19866,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             e.target.value = '';
             if (picked.length && !blockedByRestriction('post')) setPostComposer({ key: Date.now(), files: picked });
           }} />
-        {(isWide || !mobileShowChat) && (<>
+        {(isWide || !mobileShowChat || peekList) && (<>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
         {notifPermission === 'default' && pushSupported() && !notifBannerDismissed && (
           <EnableNotificationsBanner inline
@@ -18898,7 +19877,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           <NotificationPermissionBanner inline onOpenHelp={() => setShowNotifHelp(true)}
             onDismiss={() => { setNotifBannerDismissed(true); try { sessionStorage.setItem('zchat-notif-banner-dismissed', '1'); } catch {} }} />
         )}
-        {!isStandaloneApp && !installBannerDismissed && (
+        {!isStandaloneApp && !installBannerDismissed && !(!notifBannerDismissed && ((notifPermission === 'default' && pushSupported()) || notifPermission === 'denied')) && (
           <InstallAppBanner
             inline
             canInstallDirectly={!!deferredInstallPrompt} onInstallNow={handleInstallNow} onOpenHelp={() => setShowInstallHelp(true)}
@@ -18963,7 +19942,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             ))}
             {term.length >= 2 && people.length > 0 && sectionTitle('People')}
             {term.length < 2 && chatHits.length === 0 && groupHits.length === 0 && <div style={{ textAlign: 'center', padding: 24, fontSize: 13, color: theme.muted }}>Keep typing to search people by username</div>}
-            {term.length >= 2 && people.length === 0 && chatHits.length === 0 && groupHits.length === 0 && !searching && <EmptyState icon={<Search />} title="No one found" text="Try the exact username." />}
+            {term.length >= 2 && people.length === 0 && chatHits.length === 0 && groupHits.length === 0 && !searching && <EmptyState art="nothing" title="No one found" text="Try the exact username." />}
             {people.map((p) => (
               <div key={p.id} onClick={() => { setSearch(''); setResults([]); setProfileOf(p); }} style={{
                 display: 'flex', alignItems: 'center', gap: 12, padding: '10px 8px', cursor: 'pointer', borderRadius: 14,
@@ -18987,11 +19966,11 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                 const unreadDms = conversations.filter(isUnread).length;
                 const unreadGroups = liveGroups.filter((g) => g.unread > 0).length;
                 const chips = [
-                  { k: 'all', l: 'All', n: conversations.length + liveGroups.length },
+                  { k: 'all', l: 'All', n: 0 },
                   { k: 'unread', l: 'Unread', n: unreadDms + unreadGroups, hot: true },
-                  { k: 'favs', l: 'Favourites', n: conversations.filter((c) => c.otherProfile && favChats.has(`dm-${c.otherProfile.id}`)).length + liveGroups.filter((g) => favChats.has(`group-${g.id}`)).length },
-                  { k: 'groups', l: 'Groups', n: liveGroups.length },
-                  { k: 'dms', l: 'Chats', n: conversations.length },
+                  { k: 'favs', l: 'Favourites', n: 0 },
+                  { k: 'groups', l: 'Groups', n: 0 },
+                  ...folders.map((f) => ({ k: `f:${f.id}`, l: f.name, n: 0, folder: f })),
                 ];
                 return [...chips.map((f) => {
                   const on = listFilter === f.k;
@@ -19002,6 +19981,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                       background: on ? theme.coral : theme.rowBg, color: on ? 'white' : theme.muted,
                     }}>
                       {f.l}
+                      {f.folder && on && <span role="button" aria-label={`Edit folder ${f.l}`} onClick={(e) => { e.stopPropagation(); setFolderEdit(f.folder); }} style={{ display: 'inline-flex', marginLeft: 2, marginRight: -4 }}><Pencil size={12} /></span>}
                       {f.n > 0 && (
                         <span style={{
                           minWidth: 18, height: 18, padding: '0 5px', borderRadius: 9, fontSize: 10.5, fontWeight: 900,
@@ -19012,7 +19992,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                       )}
                     </div>
                   );
-                }), <div key="spacer" style={{ width: 6, flexShrink: 0 }} />];
+                }), <div key="newfolder" role="button" aria-label="New folder" onClick={() => { playUiSound('tap'); setFolderEdit({ __new: true }); }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 30, borderRadius: 20, cursor: 'pointer', flexShrink: 0, background: theme.rowBg, color: theme.muted }}><Plus size={16} /></div>, <div key="spacer" style={{ width: 6, flexShrink: 0 }} />];
               })()}
             </div>
             <div
@@ -19042,11 +20022,13 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                   <ChevronRight size={16} color={theme.muted} />
                 </div>
               )}
-              {displayList.length === 0 && (
-                <div style={{ textAlign: 'center', padding: 30, fontSize: 13, color: theme.muted }}>
-                  {listFilter === 'unread' ? 'No unread chats' : listFilter === 'favs' ? 'No favourites yet. Press and hold a chat, then tap Add to favourites.' : 'Search a username above to start chatting, or create a group.'}
+              {displayList.length === 0 && (listFilter === 'all' || listFilter === 'dms' ? (
+                <EmptyState art="nochats" title="No chats yet" text="Find a friend by their username, or start a group." action={<PillButton primary label="Start a chat" onClick={() => setShowNewChat(true)} />} />
+              ) : (
+                <div style={{ textAlign: 'center', padding: 30, fontSize: 13.5, color: theme.muted }}>
+                  {listFilter === 'unread' ? 'You are all caught up.' : listFilter === 'favs' ? 'No favourites yet. Press and hold a chat, then tap Add to favourites.' : 'No groups yet. Tap the pencil above to start one.'}
                 </div>
-              )}
+              ))}
               {(() => {
                 const renderRow = (item) => {
                 const isGroup = item.__kind === 'group' || (!item.__kind && listFilter === 'groups');
@@ -19205,7 +20187,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               transform: 'translateZ(0)',
               ...(activeNameBarKey
                 ? (nameBarBgStyle(activeNameBarKey) || {})
-                : { background: theme.dark ? 'rgba(10,13,22,0.68)' : 'rgba(255,255,255,0.72)', backdropFilter: 'blur(26px) saturate(180%)', WebkitBackdropFilter: 'blur(26px) saturate(180%)' }),
+                : { background: theme.dark ? 'rgba(14,15,20,0.97)' : 'rgba(255,255,255,0.97)' }),
               boxShadow: activeNameBarKey ? '0 2px 16px rgba(0,0,0,0.28)' : 'none',
             }}>
               {activeNameBarKey && (
@@ -19306,7 +20288,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain', touchAction: 'pan-y',
             }}>
               <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', maxWidth: isWide ? 760 : 'none', width: '100%', margin: isWide ? '0 auto' : 0 }}>
-              {!activeWallpaperKey && !(activeProfile && activeProfile.is_bot) && <AnimatedChatBackground chatTheme={chatTheme} />}
               {bgPatternOn && !activeWallpaperKey && !(activeProfile && activeProfile.is_bot) && (
                 <div style={{
                   position: 'absolute', inset: 0, opacity: theme.dark ? 0.05 : 0.04, pointerEvents: 'none',
@@ -19327,7 +20308,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               {loadingConvo ? (
                 <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 40 }}><Spinner size={22} color={theme.ink} /></div>
               ) : messages.length === 0 ? (
-                <div style={{ textAlign: 'center', paddingTop: 60, color: theme.muted, fontSize: 13 }}>
+                <div style={{ textAlign: 'center', padding: '36px 24px 0', color: theme.muted, fontSize: 14 }}>
+                  <div style={{ maxWidth: 260, margin: '0 auto 14px' }}><SpotArt k="nochats" dark={theme.dark} /></div>
                   {activeGroup ? 'No messages yet. Say hello!' : `No messages yet. Say hi to ${activeProfile.name}!`}
                 </div>
               ) : (
@@ -19414,6 +20396,21 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               </div>
             )}
 
+            {(() => {
+              const here = laterList.filter((x) => x.targetId === (activeGroup ? activeGroup.id : activeProfile && activeProfile.id));
+              if (!here.length) return null;
+              const next = here.slice().sort((a, b) => a.at - b.at)[0];
+              return (
+                <div role="button" aria-label="Scheduled messages" onClick={() => setShowScheduled(true)} className="zchat-row-press"
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '0 14px 4px', padding: '8px 12px', borderRadius: 14, background: theme.rowBg, cursor: 'pointer', flexShrink: 0 }}>
+                  <Clock size={16} color={theme.coral} />
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {here.length === 1 ? `1 message goes out ${reminderWhen(next.at).replace(/^Today at /, 'at ')}` : `${here.length} scheduled, next ${reminderWhen(next.at).replace(/^Today at /, 'at ')}`}
+                  </span>
+                  <ChevronRight size={16} color={theme.muted} />
+                </div>
+              );
+            })()}
             {showTextStyle && !editingMessage && (
               <TextStylePanel draft={draft} font={textFont} size={textSize} color={textColor} onFont={setTextFont} onSize={setTextSize} onColor={setTextColor} onDone={() => setShowTextStyle(false)} />
             )}
@@ -19440,8 +20437,12 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                   <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 10, background: theme.inputBg, borderRadius: 22, padding: '10px 16px', border: `1px solid ${theme.border}` }}>
                     <div style={{ width: 9, height: 9, borderRadius: '50%', background: '#FF3B30', animation: 'zchat-love-pulse 1s infinite' }} />
                     <span style={{ fontSize: 14, color: theme.ink, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{Math.floor(recordSeconds / 60)}:{(recordSeconds % 60).toString().padStart(2, '0')}</span>
-                    <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 2, height: 18, overflow: 'hidden' }}>
+                    <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 2, height: 18, overflow: 'hidden', minWidth: 30 }}>
                       {Array.from({ length: 30 }).map((_, i) => { const lv = recordLevels[recordLevels.length - 30 + i]; return <div key={i} style={{ flex: 1, height: `${Math.round(Math.max(0.12, lv || 0) * 100)}%`, borderRadius: 2, background: theme.coral, opacity: lv != null ? 0.9 : 0.3, transition: 'height 0.08s linear' }} />; })}
+                    </div>
+                    <div role="button" aria-label="Change voice" onClick={() => { hapticTap(); const i = VOICE_FX.findIndex((x) => x[0] === voiceFx); setVoiceFx(VOICE_FX[(i + 1) % VOICE_FX.length][0]); }} className="zchat-press"
+                      style={{ flexShrink: 0, padding: '4px 10px', borderRadius: 12, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap', background: voiceFx === 'normal' ? 'transparent' : theme.coral, color: voiceFx === 'normal' ? theme.muted : '#fff', border: voiceFx === 'normal' ? `1px solid ${theme.border}` : 'none' }}>
+                      {(VOICE_FX.find((x) => x[0] === voiceFx) || VOICE_FX[0])[1]}
                     </div>
                   </div>
                   <div role="button" aria-label="Send voice message" onClick={() => { setRecordLocked(false); stopRecording(); }} style={{ width: 44, height: 44, borderRadius: '50%', background: theme.coral, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}><Send size={18} color="white" style={{ marginLeft: -1 }} /></div>
@@ -19515,7 +20516,17 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                   </>
                   )}
                   {(!recording && (draft.trim() || pendingMedia.length > 0)) ? (
-                    <div role="button" aria-label={editingMessage ? 'Save edit' : 'Send message'} onPointerDown={(e) => e.preventDefault()} onMouseDown={(e) => e.preventDefault()} onClick={() => { if (!editingMessage) playUiSound('send'); (editingMessage ? saveEdit : send)(); }} style={{
+                    <div role="button" aria-label={editingMessage ? 'Save edit' : 'Send message'}
+                      onPointerDown={(e) => {
+                        e.preventDefault();
+                        const sp = sendPressRef.current;
+                        sp.fired = false;
+                        clearTimeout(sp.t);
+                        if (!editingMessage && !pendingMedia.length && draft.trim()) sp.t = setTimeout(() => { sp.fired = true; hapticTap(); setSendOptions(true); }, 450);
+                      }}
+                      onPointerUp={() => clearTimeout(sendPressRef.current.t)} onPointerLeave={() => clearTimeout(sendPressRef.current.t)} onPointerCancel={() => clearTimeout(sendPressRef.current.t)}
+                      onContextMenu={(e) => { e.preventDefault(); if (!editingMessage && !pendingMedia.length && draft.trim()) setSendOptions(true); }}
+                      onMouseDown={(e) => e.preventDefault()} onClick={() => { if (sendPressRef.current.fired) { sendPressRef.current.fired = false; return; } if (!editingMessage) playUiSound('send'); (editingMessage ? saveEdit : send)(); }} style={{
                       width: 40, height: 40, borderRadius: '50%', background: theme.coral, display: 'flex',
                       alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, WebkitTapHighlightColor: 'transparent', outline: 'none', border: 'none',
                     }}><Send size={17} color="white" style={{ marginLeft: -1 }} /></div>
@@ -19564,6 +20575,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                 onGallery={() => { setShowAttach(false); onceNextRef.current = false; if (cameraGalleryRef.current) cameraGalleryRef.current.click(); }}
                 onOnce={activeProfile && activeProfile.is_bot ? null : () => { setShowAttach(false); onceNextRef.current = true; if (cameraGalleryRef.current) cameraGalleryRef.current.click(); }}
                 onDoodle={() => { setShowAttach(false); setShowDoodle(true); }}
+                onCollage={() => { setShowAttach(false); if (collageInputRef.current) collageInputRef.current.click(); }}
+                onVoiceType={typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition) ? () => { setShowAttach(false); setVoiceTyping(true); } : null}
+                onDice={activeProfile && activeProfile.is_bot ? null : () => { setShowAttach(false); setDiceSheet(true); }}
                 onBuzz={activeProfile && activeProfile.is_bot ? null : () => { setShowAttach(false); sendBuzz(); }}
                 onLocation={activeGroup ? null : shareMyLocation}
                 canGame={!!activeProfile && !activeGroup && !activeProfile.is_bot}
@@ -19577,9 +20591,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             )}
           </>
         ) : (
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 10, color: theme.muted }}>
-            <ZBrand size={30} />
-            <div style={{ fontSize: 13 }}>Select a conversation to start chatting</div>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 14, color: theme.muted }}>
+            <div style={{ width: 340, maxWidth: '80%' }}><SpotArt k="chats" dark={theme.dark} /></div>
+            <div style={{ fontSize: 14.5 }}>Pick a chat on the left to start talking</div>
           </div>
         )}
       </div>
@@ -19603,19 +20617,15 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       {showSettings && (
         <SettingsPanel
           onPrivacySaved={(patch) => setMe((prev) => (prev ? { ...prev, ...patch } : prev))}
-          me={me} rewardCount={(myRewards || []).filter(rewardActive).length}
-          onOpenCollection={() => { setShowSettings(false); setCollectionOpen(true); }}
+          me={me}
           onEditProfile={() => { setShowSettings(false); setProfileOf({ ...me, email: session.user.email }); }}
           onClose={() => setShowSettings(false)}
           onOpenPrivacy={() => setShowPrivacy(true)}
-          onOpenRequests={() => { setShowSettings(false); setShowFollowRequests(true); }}
           onLogout={() => setShowLogoutConfirm(true)}
           hideActivity={!!me.hide_activity} onToggleActivity={toggleHideActivity}
           onOpenAccounts={() => { setShowSettings(false); setShowAccountSwitcher(true); }}
           onOpenBlocked={() => setShowBlockedList(true)} blockedCount={myBlockedIds.size}
           isZAdmin={isZAdmin} onOpenReports={() => { setShowSettings(false); setShowReportQueue(true); }} onOpenAdmin={() => { setShowSettings(false); setShowAdminPanel(true); }}
-          onOpenSaved={() => { setShowSettings(false); setShowSaved(true); }}
-          onOpenProfile={(p) => { setShowSettings(false); setProfileOf(p); }}
           hasPasswordLogin={(() => {
             const meta = session.user.app_metadata || {};
             const provs = Array.isArray(meta.providers) ? meta.providers : (meta.provider ? [meta.provider] : []);
@@ -19693,6 +20703,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             onUnpin={() => { setContextMenuFor(null); unpinMessage(m); }}
             onInfo={() => { setContextMenuFor(null); setInfoFor(m); }}
             onRemind={String(m.id).startsWith('temp-') ? null : () => { setContextMenuFor(null); setRemindFor(m); }}
+            onReadAloud={typeof window !== 'undefined' && window.speechSynthesis ? () => { setContextMenuFor(null); readAloud(m); } : null}
           />
         );
       })()}
@@ -20023,6 +21034,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         <div className="zchat-pop" style={{ position: 'fixed', left: '50%', bottom: 'calc(150px + env(safe-area-inset-bottom))', transform: 'translateX(-50%)', zIndex: 320, background: theme.ink, color: theme.panelBg, padding: '10px 16px', borderRadius: 22, fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', boxShadow: '0 8px 24px rgba(0,0,0,0.3)' }}>{snack}</div>
       )}
       {chatMenuAnchor && (activeProfile || activeGroup) && (() => {
+        const laterHere = laterList.filter((x) => x.targetId === (activeGroup ? activeGroup.id : activeProfile.id));
         const groupRow = activeGroup ? (groups.find((x) => x.id === activeGroup.id) || activeGroup) : null;
         const mutedUntil = activeGroup ? groupRow?.mutedUntil : (activeConvForBar ? activeConvForBar[myConvMuteField(activeConvForBar)] : null);
         const muteTarget = activeGroup ? { kind: 'group', id: activeGroup.id } : (activeConvForBar ? { kind: 'dm', conv: activeConvForBar } : null);
@@ -20033,7 +21045,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           item(<Users size={17} />, 'Group info', () => setShowGroupInfo(true)),
           item(<Search size={17} />, 'Search', () => setChatSearch({ query: '', pos: 0 })),
           item(<ImageIcon size={17} />, 'Media, links and voice', () => setShowChatMedia(true)),
-          item(<Sparkles size={17} />, 'Chat bubbles', () => setShowBubbleSheet(true), false, bubbleStyle && bubbleStyle !== 'classic' && BUBBLE_STYLES[bubbleStyle] ? BUBBLE_STYLES[bubbleStyle].label : null),
+          item(<BubblesIcon size={17} />, 'Chat bubbles', () => setShowBubbleSheet(true), false, bubbleStyle && bubbleStyle !== 'classic' && BUBBLE_STYLES[bubbleStyle] ? BUBBLE_STYLES[bubbleStyle].label : null),
           item(<Phone size={17} />, activeGroupCall ? 'Join voice call' : 'Group voice call', () => startGroupCall(activeGroup, 'voice')),
           item(<VideoIcon size={17} />, activeGroupCall ? 'Join video call' : 'Group video call', () => startGroupCall(activeGroup, 'video')),
           pinnedMessages.length ? item(<Pin_ size={17} color={theme.muted} />, `Pinned messages (${pinnedMessages.length})`, () => jumpToMessage(pinnedMessages[0].id)) : null,
@@ -20043,7 +21055,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           item(<User size={17} />, `View ${activeProfile.name}`, () => setProfileOf(activeProfile)),
           item(<Search size={17} />, 'Search', () => setChatSearch({ query: '', pos: 0 })),
           item(<ImageIcon size={17} />, 'Media, links and voice', () => setShowChatMedia(true)),
-          item(<Sparkles size={17} />, 'Chat bubbles', () => setShowBubbleSheet(true), false, bubbleStyle && bubbleStyle !== 'classic' && BUBBLE_STYLES[bubbleStyle] ? BUBBLE_STYLES[bubbleStyle].label : null),
+          item(<BubblesIcon size={17} />, 'Chat bubbles', () => setShowBubbleSheet(true), false, bubbleStyle && bubbleStyle !== 'classic' && BUBBLE_STYLES[bubbleStyle] ? BUBBLE_STYLES[bubbleStyle].label : null),
           !activeProfile.is_bot ? item(<GamepadIcon size={17} />, 'Play a game', () => setGameSheetFor(activeProfile)) : null,
           canCall(activeProfile) ? item(<Phone size={17} />, 'Voice call', () => startDirectCall(activeProfile, 'voice')) : null,
           canCall(activeProfile) ? item(<VideoIcon size={17} />, 'Video call', () => startDirectCall(activeProfile, 'video')) : null,
@@ -20056,9 +21068,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         ];
         const extras = [
           item(<Activity size={17} />, 'Chat insights', () => setInsightsOpen(true)),
-          (activeGroup || (activeProfile && !activeProfile.is_bot)) ? item(<BuzzIcon size={17} />, 'Buzz', () => sendBuzz()) : null,
-          (activeGroup || (activeProfile && !activeProfile.is_bot)) ? item(<PollIcon size={17} />, 'New poll', () => setPollComposer(true)) : null,
-          (activeGroup || (activeProfile && !activeProfile.is_bot)) ? item(<CalendarIcon size={17} />, 'New event', () => setEventComposer(true)) : null,
+          laterHere.length ? item(<Clock size={17} />, `Scheduled messages (${laterHere.length})`, () => setShowScheduled(true)) : null,
           item(<Download size={17} />, 'Export chat', () => exportChat()),
           messages.length ? item(<Trash2 size={17} />, 'Clear chat', () => setClearChatAsk(true), true) : null,
         ];
@@ -20117,9 +21127,64 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       {onceViewer && (onceViewer.type === 'video'
         ? <VideoViewer url={onceViewer.media_url} trimStart={onceViewer.trim_start} trimEnd={onceViewer.trim_end} overlayUrl={onceViewer.overlay_url} once onClose={() => setOnceViewer(null)} />
         : <ImageViewer url={onceViewer.media_url} once caption={(parseOnce(onceViewer) || {}).c} onClose={() => setOnceViewer(null)} />)}
+      <input ref={collageInputRef} type="file" accept="image/*" multiple style={{ display: 'none' }}
+        onChange={(e) => {
+          const picked = Array.from(e.target.files || []).filter((f) => (f.type || '').startsWith('image')).slice(0, 6);
+          e.target.value = '';
+          if (picked.length < 2) { if (picked.length) showSnack('Pick 2 to 6 photos for a collage'); return; }
+          setCollageFiles(picked);
+        }} />
+      {collageFiles && (activeProfile || activeGroup) && (
+        <CollagePage files={collageFiles} onClose={() => setCollageFiles(null)}
+          onSend={async (file) => { setCollageFiles(null); await sendMediaItems([{ kind: 'image', file, url: null }], ''); }} />
+      )}
+      {diceSheet && (activeProfile || activeGroup) && (
+        <ActionSheet title="Dice and coin" onClose={() => setDiceSheet(false)} items={[
+          { k: 'd1', label: 'Roll a dice', icon: <EmojiIcon e={'\u{1F3B2}'} />, on: () => { setDiceSheet(false); sendSpecial(`zdice:${JSON.stringify({ k: 'dice', v: [1 + Math.floor(Math.random() * 6)] })}`, 'Rolled a dice'); } },
+          { k: 'd2', label: 'Roll two dice', icon: <EmojiIcon e={'\u{1F3B2}'} />, on: () => { setDiceSheet(false); sendSpecial(`zdice:${JSON.stringify({ k: 'dice', v: [1 + Math.floor(Math.random() * 6), 1 + Math.floor(Math.random() * 6)] })}`, 'Rolled two dice'); } },
+          { k: 'coin', label: 'Flip a coin', icon: <EmojiIcon e={'\u{1FA99}'} />, on: () => { setDiceSheet(false); sendSpecial(`zdice:${JSON.stringify({ k: 'coin', v: [Math.random() < 0.5 ? 'h' : 't'] })}`, 'Flipped a coin'); } },
+        ]} />
+      )}
+      {voiceTyping && (activeProfile || activeGroup) && (
+        <VoiceTypingSheet onClose={() => setVoiceTyping(false)} onText={(t) => { setDraft((d) => (d.trim() ? `${d.trim()} ${t}` : t).slice(0, MAX_CHARS)); setTimeout(() => focusComposer(), 80); }} />
+      )}
+      {sendOptions && (activeProfile || activeGroup) && (
+        <ActionSheet title="Send options" onClose={() => setSendOptions(false)} items={[
+          { k: 'later', label: 'Send later', icon: <Clock />, on: () => { setSendOptions(false); setLaterAsk(true); } },
+          ...SEND_EFFECTS.map(([k, label, e]) => ({ k: `fx-${k}`, label: `Send with ${label.toLowerCase()}`, icon: <EmojiIcon e={e} />, on: () => sendWithEffect(k) })),
+        ]} />
+      )}
+      {laterAsk && (activeProfile || activeGroup) && (
+        <ChatRowSheet title="Send later" subtitle={draft.trim().slice(0, 90) || 'Message'}
+          avatar={<div style={{ width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.ink }}><Clock size={26} strokeWidth={1.8} /></div>}
+          onClose={() => setLaterAsk(null)}
+          actions={[...reminderChoices().map((c) => ({ icon: <Clock size={18} />, label: c.label, hint: reminderWhen(c.at), onClick: () => scheduleDraft(c.at) })), { icon: <CalendarIcon size={18} />, label: 'Pick a date and time', onClick: () => { setLaterAsk(null); setLaterPick(true); } }]} />
+      )}
+      {laterPick && (activeProfile || activeGroup) && <LaterPickPage onClose={() => setLaterPick(null)} onPick={(at) => scheduleDraft(at)} />}
+      {showScheduled && (activeProfile || activeGroup) && (() => {
+        const here = laterList.filter((x) => x.targetId === (activeGroup ? activeGroup.id : activeProfile.id)).sort((a, b) => a.at - b.at);
+        if (!here.length) return null;
+        return (
+          <ScheduledSheet items={here} onClose={() => setShowScheduled(false)}
+            onSendNow={async (it) => { setShowScheduled(false); const ok = await sendScheduledItem(it); if (ok) writeLater(session.user.id, readLater(session.user.id).filter((x) => x.id !== it.id)); else showSnack('Could not send. Try again'); }}
+            onDelete={(it) => { writeLater(session.user.id, readLater(session.user.id).filter((x) => x.id !== it.id)); if (here.length <= 1) setShowScheduled(false); }} />
+        );
+      })()}
+      {speaking && (
+        <div className="zchat-pop" style={{ position: 'fixed', left: '50%', top: 'calc(env(safe-area-inset-top) + 86px)', transform: 'translateX(-50%)', zIndex: 330, display: 'flex', alignItems: 'center', gap: 10, padding: '7px 8px 7px 14px', borderRadius: 20, background: theme.ink, color: theme.panelBg, fontSize: 13, fontWeight: 700, boxShadow: '0 8px 24px rgba(0,0,0,0.3)' }}>
+          <Volume2 size={15} />Reading aloud
+          <button type="button" onClick={() => { try { window.speechSynthesis.cancel(); } catch {} setSpeaking(false); }} style={{ height: 26, padding: '0 10px', borderRadius: 13, border: 'none', background: 'rgba(127,127,127,0.25)', color: 'inherit', fontWeight: 800, fontSize: 12, cursor: 'pointer', fontFamily: FONT }}>Stop</button>
+        </div>
+      )}
+      {folderEdit && (
+        <FolderEditorPage folder={folderEdit.__new ? null : folderEdit} conversations={conversations} groups={groups} onClose={() => setFolderEdit(null)}
+          onSave={(f) => { const next = folders.some((x) => x.id === f.id) ? folders.map((x) => (x.id === f.id ? f : x)) : [...folders, f]; setFolders(next); setFolderEdit(null); setListFilter(`f:${f.id}`); showSnack(`Folder ${f.name} saved`); }}
+          onDelete={(f) => { setFolders(folders.filter((x) => x.id !== f.id)); setFolderEdit(null); if (listFilter === `f:${f.id}`) setListFilter('all'); }} />
+      )}
       {showDoodle && (activeProfile || activeGroup) && (
-        <DoodlePage recipientName={activeGroup ? activeGroup.name : activeProfile.name} onClose={() => setShowDoodle(false)}
-          onSend={async (file) => { setShowDoodle(false); await sendMediaItems([{ kind: 'image', file, url: null }], ''); }} />
+        <PaintStudio recipientName={activeGroup ? activeGroup.name : activeProfile.name} onClose={() => setShowDoodle(false)}
+          onSend={async (file) => { setShowDoodle(false); await sendMediaItems([{ kind: 'image', file, url: null }], ''); }}
+          onAskBot={askBotAboutImage} />
       )}
       {showQrScan && (
         <QrScanPage onClose={() => setShowQrScan(false)}
@@ -20249,24 +21314,28 @@ function DayDivider({ label }) {
   const { theme } = useTheme();
   return (
     <div style={{ display: 'flex', justifyContent: 'center', margin: '10px 0 12px' }}>
-      <span style={{ fontSize: 11.5, fontWeight: 700, color: theme.muted, padding: '4px 11px', borderRadius: 12, background: theme.dark ? 'rgba(18,18,20,0.75)' : 'rgba(255,255,255,0.75)', border: `1px solid ${theme.border}`, backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}>{label}</span>
+      <span style={{ fontSize: 11.5, fontWeight: 700, color: theme.muted, padding: '4px 11px', borderRadius: 12, background: theme.dark ? '#1C1C20' : '#FFFFFF', border: `1px solid ${theme.border}` }}>{label}</span>
     </div>
   );
 }
 
 const WHATS_NEW = [
-  { title: 'View once', text: 'Send a photo or video that can be opened one time. You can see when it was opened.' },
-  { title: 'Camera filters', text: 'Ten filters right in the camera, and the same filters when you edit a photo before sending.' },
-  { title: 'Doodle', text: 'Draw something with your finger and send it. Find it in the attach menu.' },
-  { title: 'Buzz', text: 'Shake your friend\u2019s chat to get their attention. Find it in the attach menu or the chat menu.' },
-  { title: 'Spoilers', text: 'Put two bars on each side of words, like ||this||, and they stay hidden until someone taps them.' },
-  { title: 'Screenshot alerts', text: 'When someone takes a screenshot of your chat on a computer, a note shows up in the chat.' },
-  { title: 'Scan a QR code', text: 'Scan a friend\u2019s ZChat code from the Me tab to open their profile.' },
-  { title: 'See it before you use it', text: 'Chat bubbles, wallpapers and header styles now show a live preview first.' },
-  { title: 'Easier voice notes', text: 'Tap the mic to record without holding, then send when you are ready. Holding and letting go still works too.' },
-  { title: 'Claim all', text: 'Got several gifts at once? Claim them all with one tap.' },
-  { title: 'A fresh look', text: 'Cleaner icons and colours everywhere, a new home screen with friends who are online and new stories, and a clearer photo viewer.' },
-  { title: 'Bug fixes', text: 'Bug fixes and a smoother app.' },
+  { title: 'A new welcome', text: 'Logging in and signing up got a calmer new look, with Apple and Google right there.' },
+  { title: 'Paint', text: 'Doodle grew into a real paint app with brushes, shapes, fill, text, stickers, colouring pages and mirror drawing. Stuck for ideas? Ask ZChat Bot.' },
+  { title: 'Swipe back', text: 'Swipe from the left edge to go back on almost every page, just like Instagram.' },
+  { title: 'Photo viewer', text: 'Tap once to hide everything, double tap or pinch to zoom, and swipe down to close.' },
+  { title: 'Send with effects', text: 'Hold the send button to send with confetti, hearts, balloons, fireworks or snow.' },
+  { title: 'Send later', text: 'Hold the send button and pick a time. Keep ZChat open and it goes out right on time.' },
+  { title: 'Folders', text: 'Put chats into your own folders like Family or Squad. Tap the plus next to the chat filters.' },
+  { title: 'Dice and coin', text: 'Roll dice or flip a coin in any chat. Everyone sees the same result.' },
+  { title: 'Collage', text: 'Put up to six photos together in one picture before you send it.' },
+  { title: 'Read aloud and voice typing', text: 'Hold a message to hear it read out loud, or talk instead of typing from the attach menu.' },
+  { title: 'Fingerprint unlock', text: 'App lock can open with your fingerprint or face on phones that support it.' },
+  { title: 'Your own wallpaper', text: 'Use any photo as a chat wallpaper and dim it so messages stay easy to read.' },
+  { title: 'Auto theme', text: 'The theme can follow your phone, light in the day and dark at night.' },
+  { title: 'Voice changer', text: 'Lock a voice note while recording and tap Change voice to sound like a chipmunk, a robot and more.' },
+  { title: 'New bubbles', text: 'Denim, Kraft and Notebook bubbles are here, and every bubble got a cleaner look.' },
+  { title: 'Bug fixes', text: 'Bug fixes, faster chats and smoother scrolling.' },
 ];
 
 function WhatsNewSheet({ onClose }) {
@@ -20274,7 +21343,7 @@ function WhatsNewSheet({ onClose }) {
   const { theme } = useTheme();
   return (
     <Portal>
-      <div onClick={onClose} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 660, background: 'rgba(5,8,16,0.55)', backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontFamily: FONT }}>
+      <div onClick={onClose} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 660, background: 'rgba(5,8,16,0.55)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontFamily: FONT }}>
         <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ width: '100%', maxWidth: 480, maxHeight: '86vh', display: 'flex', flexDirection: 'column', background: theme.panelBg, borderRadius: '28px 28px 0 0', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))', overflow: 'hidden' }}>
           <div style={{ padding: '14px 20px 6px', flexShrink: 0 }}>
             <div style={{ display: 'flex', justifyContent: 'center', paddingBottom: 12 }}><div style={{ width: 38, height: 4, borderRadius: 2, background: theme.border }} /></div>
@@ -20610,6 +21679,30 @@ function parseLocationMessage(content) {
 function readBest(key) { try { return parseInt(localStorage.getItem(`zchat-best-${key}`) || '0', 10) || 0; } catch { return 0; } }
 function writeBest(key, v) { try { localStorage.setItem(`zchat-best-${key}`, String(v)); } catch {} }
 
+function CollectionIcon({ size = 24, color = 'currentColor', strokeWidth = 2, style }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" style={style} aria-hidden="true">
+      <path d="M7 4h10l4 5-9 11L3 9z" /><path d="M3 9h18" /><path d="M10 4 8 9l4 11 4-11-2-5" />
+    </svg>
+  );
+}
+
+function PartyIcon({ size = 24, color = 'currentColor', strokeWidth = 2, style }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" style={style} aria-hidden="true">
+      <path d="M3 21 8.2 9.2l6.6 6.6z" /><path d="M13.5 8.5c.6-1.6.3-3-.8-4.2" /><path d="M15.5 10.5c1.6-.6 3-.3 4.2.8" /><path d="M17 3.5v.01M21 7v.01M20 14v.01M10.5 3v.01" />
+    </svg>
+  );
+}
+
+function BubblesIcon({ size = 24, color = 'currentColor', strokeWidth = 2, style }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" style={style} aria-hidden="true">
+      <path d="M4 4h9a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2H8.5L5 16v-3H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" /><path d="M18 8h2a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-1v3l-3.5-3H12a2 2 0 0 1-2-2v-.5" />
+    </svg>
+  );
+}
+
 function GamepadIcon({ size = 16, color = 'currentColor', style }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style} aria-hidden="true">
@@ -20807,7 +21900,6 @@ function MemoryToken({ k, size = 30 }) {
 }
 function tokenLabel(k) { const t = MEMORY_TOKENS.find((x) => x.k === k); return t ? t.l : 'Card'; }
 const CARD_BACK = 'repeating-linear-gradient(45deg, rgba(255,255,255,0.14) 0 6px, rgba(255,255,255,0) 6px 12px), linear-gradient(160deg, #8B6CFF, #5B3FD6)';
-const MEMORY_EMOJI_OLD = ['\u{1F436}', '\u{1F431}', '\u{1F98A}', '\u{1F43C}', '\u{1F428}', '\u{1F42F}', '\u{1F984}', '\u{1F419}', '\u{1F98B}', '\u{1F41D}', '\u{1F40B}', '\u{1F99C}'];
 function MemoryGame() {
   const { theme } = useTheme();
   const deal = () => { const picks = MEMORY_TOKENS.map((t) => t.k).sort(() => Math.random() - 0.5).slice(0, 8); return [...picks, ...picks].sort(() => Math.random() - 0.5).map((e, i) => ({ id: i, e })); };
@@ -21017,7 +22109,7 @@ function ChatsPrefsSection() {
       {row(<Heart size={16} />, 'Double tap to heart', 'Tap a message twice to react with a heart', dbl, setDbl)}
       {row(<Reply size={16} />, 'Swipe to reply', 'Drag a message to the right to reply to it', swipe, setSwipe)}
       {row(<Type size={16} />, 'Text formatting', 'Stars for bold, tildes to strike, low lines for italic, two bars for a spoiler', fmt, setFmt)}
-      {row(<Sparkles size={16} />, 'Message effects', 'Confetti, hearts, balloons and snow fill the screen for party emoji', fx, setFx)}
+      {row(<PartyIcon size={16} />, 'Message effects', 'Confetti, hearts, balloons and snow fill the screen for party emoji', fx, setFx)}
       <IgHeading>Quick reactions</IgHeading>
       <div style={{ padding: '4px 2px 10px', fontSize: 13, color: theme.muted, lineHeight: 1.5 }}>These six show when you hold a message. Tap one to swap it.</div>
       <div style={{ display: 'flex', gap: 8, padding: '0 2px 12px' }}>
@@ -21133,6 +22225,15 @@ function AppLockScreen({ onUnlock, onForgot }) {
   const [err, setErr] = useState(0);
   const [tries, setTries] = useState(0);
   const [askForgot, setAskForgot] = useState(false);
+  const bioId = readAppLock().b || null;
+  const [bioBusy, setBioBusy] = useState(false);
+  const tryBio = async () => {
+    if (!bioId || bioBusy) return;
+    setBioBusy(true);
+    try { if (await bioVerify(bioId)) { playUiSound('toggle'); onUnlock(); return; } } catch {}
+    setBioBusy(false);
+  };
+  useEffect(() => { if (bioId) { const t = setTimeout(tryBio, 350); return () => clearTimeout(t); } return undefined; }, []);
   const check = async (pin) => {
     const ok = await verifyPin(pin);
     if (ok) { playUiSound('toggle'); onUnlock(); }
@@ -21140,11 +22241,19 @@ function AppLockScreen({ onUnlock, onForgot }) {
   };
   return (
     <Portal>
-      <div className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 980, background: 'linear-gradient(160deg, #1B1340 0%, #3B2A7A 55%, #22104A 100%)', color: 'white', fontFamily: FONT, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px 16px calc(24px + env(safe-area-inset-bottom))', overflowY: 'auto' }}>
-        <div style={{ width: 70, height: 70, borderRadius: 24, background: 'rgba(255,255,255,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}><Lock size={30} /></div>
-        <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.01em' }}>ZChat is locked</div>
-        <AppPinPad light subtitle={tries ? 'Wrong PIN, try again' : 'Enter your PIN'} onComplete={check} error={err} />
-        <div role="button" aria-label="Forgot PIN" onClick={() => setAskForgot(true)} style={{ marginTop: 28, fontSize: 14, fontWeight: 700, color: 'rgba(255,255,255,0.8)', cursor: 'pointer' }}>Forgot your PIN?</div>
+      <div className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 980, background: AUTH_BG, color: 'white', fontFamily: FONT, overflow: 'hidden' }}>
+        <AuthPhoto shade={0.62} />
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px 16px calc(24px + env(safe-area-inset-bottom))', overflowY: 'auto' }}>
+          <ZMark size={56} />
+          <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.01em', marginTop: 16 }}>ZChat is locked</div>
+          <AppPinPad light subtitle={tries ? 'Wrong PIN, try again' : 'Enter your PIN'} onComplete={check} error={err} />
+          {bioId && (
+            <button type="button" onClick={tryBio} disabled={bioBusy} className="zchat-press" style={{ marginTop: 22, height: 44, padding: '0 18px', borderRadius: 22, border: '1px solid rgba(255,255,255,0.32)', background: 'rgba(3,4,11,0.35)', color: '#fff', fontWeight: 700, fontSize: 14.5, fontFamily: FONT, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
+              {bioBusy ? <Spinner size={14} /> : <ShieldCheck size={17} />}Use fingerprint or face
+            </button>
+          )}
+          <div role="button" aria-label="Forgot PIN" onClick={() => setAskForgot(true)} style={{ marginTop: 22, fontSize: 14, fontWeight: 700, color: 'rgba(255,255,255,0.8)', cursor: 'pointer' }}>Forgot your PIN?</div>
+        </div>
         {askForgot && (
           <ConfirmSheet title="Forgot your PIN?" text="You will be logged out and the PIN removed. Sign in again to get back into your chats." confirmLabel="Log out" zIndex={990}
             onCancel={() => setAskForgot(false)} onConfirm={onForgot} />
@@ -21159,6 +22268,19 @@ function AppLockSection() {
   const [cfg, setCfg] = useState(readAppLock);
   const [flow, setFlow] = useState(null);
   const [err, setErr] = useState(0);
+  const [bioOk, setBioOk] = useState(false);
+  const [bioBusy, setBioBusy] = useState(false);
+  useEffect(() => { let alive = true; bioPlatformReady().then((v) => { if (alive) setBioOk(!!v); }); return () => { alive = false; }; }, []);
+  const toggleBio = async () => {
+    if (bioBusy) return;
+    if (cfg.b) { const next = { ...cfg }; delete next.b; writeAppLock(next); setCfg(next); return; }
+    setBioBusy(true);
+    try {
+      const id = await bioRegister();
+      if (id) { const next = { ...cfg, b: id }; writeAppLock(next); setCfg(next); playUiSound('like'); }
+    } catch {}
+    setBioBusy(false);
+  };
   useBackClose(!!flow, () => setFlow(null));
   const save = (next) => { writeAppLock(next); setCfg(next); };
   const begin = (mode, next) => { setErr(0); setFlow({ mode, next }); };
@@ -21175,7 +22297,7 @@ function AppLockSection() {
     if (flow.mode === 'confirm') {
       if (pin !== flow.first) { setErr((e) => e + 1); setFlow({ mode: 'set', mismatch: true }); return; }
       const h = await hashAppPin(pin);
-      save({ h, d: cfg.d || 0 });
+      save({ h, d: cfg.d || 0, ...(cfg.b ? { b: cfg.b } : {}) });
       setFlow(null);
       playUiSound('like');
     }
@@ -21188,6 +22310,7 @@ function AppLockSection() {
     <div>
       <div style={{ padding: '12px 2px 6px', fontSize: 13, color: theme.muted, lineHeight: 1.5 }}>Ask for a PIN when you come back to ZChat. Your chats stay hidden until you enter it.</div>
       <IgRow inset={false} icon={<Lock size={16} />} label="Require PIN" right={<IgToggle on={on} onClick={() => (on ? begin('verify', 'off') : begin('set'))} />} />
+      {on && bioOk && <IgRow inset={false} icon={<ShieldCheck size={16} />} label="Fingerprint or face" sub="Unlock without typing your PIN" right={bioBusy ? <Spinner size={16} color={theme.muted} /> : <IgToggle on={!!cfg.b} onClick={toggleBio} />} />}
       {on && <IgRow inset={false} icon={<Pencil size={16} />} label="Change PIN" onClick={() => begin('verify', 'change')} />}
       {on && <IgRow inset={false} icon={<EyeOff size={16} />} label="Lock now" onClick={() => { try { window.dispatchEvent(new Event('zchat-lock-now')); } catch {} }} />}
       {on && (
@@ -21345,13 +22468,12 @@ function GameCardShell({ width, live, children, title, status, hot, icon, k }) {
   const bg = GAME_ART_BG[gk] || ['#6D4DF5', '#C13BDC'];
   return (
     <div onClick={(e) => e.stopPropagation()} style={{ width, boxSizing: 'border-box', borderRadius: 22, overflow: 'hidden', background: theme.dark ? '#18181B' : '#FFFFFF', border: `1px solid ${theme.dark ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.12)'}`, boxShadow: theme.dark ? '0 10px 26px rgba(0,0,0,0.38)' : '0 10px 24px rgba(0,0,0,0.14)', opacity: live ? 1 : 0.8, filter: live ? 'none' : 'saturate(0.7)' }}>
-      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 9, padding: '9px 9px 9px 9px', background: `linear-gradient(135deg, ${bg[0]}, ${bg[1]})`, overflow: 'hidden' }}>
-        <div aria-hidden="true" style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(255,255,255,0.26) 0%, rgba(255,255,255,0.06) 48%, rgba(0,0,0,0.12) 100%)', pointerEvents: 'none' }} />
-        <div style={{ position: 'relative', width: 36, height: 36, borderRadius: 11, overflow: 'hidden', flexShrink: 0, boxShadow: '0 3px 8px rgba(0,0,0,0.3), 0 0 0 2px rgba(255,255,255,0.4)' }}>
+      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 9, padding: '9px 9px 9px 9px', background: bg[0], overflow: 'hidden' }}>
+        <div style={{ position: 'relative', width: 36, height: 36, borderRadius: 11, overflow: 'hidden', flexShrink: 0, boxShadow: '0 0 0 2px rgba(255,255,255,0.35)' }}>
           {gk ? <GameArt k={gk} width={36} height={36} radius={11} /> : <div style={{ width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white' }}>{icon}</div>}
         </div>
         <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 14, fontWeight: 900, color: 'white', letterSpacing: '-0.01em', textShadow: '0 1px 2px rgba(0,0,0,0.35)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</div>
+          <div style={{ fontSize: 14, fontWeight: 900, color: 'white', letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</div>
           <div className={hot ? 'zchat-turn-pulse' : undefined} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 3, padding: '2px 8px', borderRadius: 999, maxWidth: '100%', boxSizing: 'border-box', fontSize: 10.5, fontWeight: 900, background: hot ? '#FDE047' : 'rgba(0,0,0,0.28)', color: hot ? '#6B3A00' : 'rgba(255,255,255,0.95)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {hot && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#16A34A', flexShrink: 0 }} />}
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{status}</span>
@@ -21557,7 +22679,7 @@ function WordPromptSheet({ title, text, placeholder, onSubmit, onCancel, numeric
   const submitValue = () => onSubmit(numeric ? parseInt(clean, 10) : clean);
   return (
     <Portal>
-      <div onClick={onCancel} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 95, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontFamily: FONT, background: theme.dark ? 'rgba(3,6,14,0.5)' : 'rgba(230,234,244,0.5)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)' }}>
+      <div onClick={onCancel} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 95, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontFamily: FONT, background: 'rgba(0,0,0,0.45)' }}>
         <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ width: '100%', maxWidth: 460, background: theme.panelBg, borderRadius: '24px 24px 0 0', padding: '10px 20px', paddingBottom: 'calc(18px + env(safe-area-inset-bottom))', boxShadow: '0 -10px 40px rgba(0,0,0,0.25)' }}>
           <div style={{ display: 'flex', justifyContent: 'center', padding: '2px 0 12px' }}><div style={{ width: 38, height: 4, borderRadius: 2, background: theme.border }} /></div>
           <div style={{ fontSize: 18, fontWeight: 800, color: theme.ink }}>{title}</div>
@@ -22151,7 +23273,7 @@ function HowToPlaySheet({ k, onClose }) {
   useEffect(() => { try { localStorage.setItem(`zchat-howto-${k}`, '1'); } catch {} }, [k]);
   return (
     <Portal>
-      <div onClick={(e) => { e.stopPropagation(); onClose(); }} onPointerDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} onContextMenu={(e) => e.stopPropagation()} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 700, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontFamily: FONT, background: 'rgba(5,8,16,0.55)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' }}>
+      <div onClick={(e) => { e.stopPropagation(); onClose(); }} onPointerDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} onContextMenu={(e) => e.stopPropagation()} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 700, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontFamily: FONT, background: 'rgba(5,8,16,0.55)' }}>
         <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ width: '100%', maxWidth: 480, maxHeight: '88vh', display: 'flex', flexDirection: 'column', background: theme.panelBg, borderRadius: '26px 26px 0 0', overflow: 'hidden', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))' }}>
           <div style={{ padding: '10px 16px 0', flexShrink: 0 }}>
             <div style={{ display: 'flex', justifyContent: 'center', paddingBottom: 10 }}><div style={{ width: 38, height: 4, borderRadius: 2, background: theme.border }} /></div>
@@ -22209,7 +23331,7 @@ function GamePickerSheet({ profile, onPick, onMore, onClose }) {
   const { theme } = useTheme();
   const drag = useSheetDrag(onClose);
   return (
-    <div onClick={onClose} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 94, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontFamily: FONT, background: theme.dark ? 'rgba(3,6,14,0.5)' : 'rgba(230,234,244,0.5)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)' }}>
+    <div onClick={onClose} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 94, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontFamily: FONT, background: 'rgba(0,0,0,0.45)' }}>
       <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ transform: drag.sheetStyle.transform, transition: drag.sheetStyle.transition, width: '100%', maxWidth: 480, maxHeight: '88vh', display: 'flex', flexDirection: 'column', background: theme.panelBg, borderRadius: '24px 24px 0 0', overflow: 'hidden', paddingBottom: 'calc(8px + env(safe-area-inset-bottom))', boxShadow: '0 -10px 40px rgba(0,0,0,0.25)' }}>
         <div {...drag.sheetProps} style={{ touchAction: 'none', flexShrink: 0 }}>
           <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 2px' }}><div style={{ width: 38, height: 4, borderRadius: 2, background: theme.border }} /></div>
@@ -22238,7 +23360,7 @@ function GamePickerSheet({ profile, onPick, onMore, onClose }) {
             </div>
           ))}
           <div role="button" aria-label="More games" onClick={() => { onClose(); onMore(); }} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', gap: 13, padding: '12px 14px 8px 18px', cursor: 'pointer', borderTop: `1px solid ${theme.border}`, marginTop: 8 }}>
-            <div style={{ width: 50, height: 50, borderRadius: 14, background: 'linear-gradient(135deg, #F59E0B, #EF4444)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><TrophyIcon size={24} color="white" /></div>
+            <div style={{ width: 50, height: 50, borderRadius: 14, background: '#F2683C', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><TrophyIcon size={24} color="white" /></div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 15.5, fontWeight: 700, color: theme.ink }}>More games</div>
               <div style={{ fontSize: 12.5, color: theme.muted, marginTop: 1 }}>Solo games and high scores</div>
@@ -23386,6 +24508,42 @@ function ScreenEffect({ kind, onDone }) {
     const H = c.height = window.innerHeight;
     const ctx = c.getContext('2d');
     const colors = ['#F43F5E', '#F59E0B', '#22C55E', '#3B82F6', '#A855F7', '#EC4899', '#FBBF24'];
+    if (kind === 'fireworks') {
+      const sparks = [];
+      const bursts = Array.from({ length: 7 }, (_, i) => ({ at: i * 360 + Math.random() * 200, x: W * (0.15 + Math.random() * 0.7), y: H * (0.15 + Math.random() * 0.4), c: colors[i % colors.length], done: false }));
+      const t0 = performance.now();
+      let raf2 = 0;
+      const step = (now) => {
+        const t = now - t0;
+        ctx.clearRect(0, 0, W, H);
+        bursts.forEach((b) => {
+          if (b.done || t < b.at) return;
+          b.done = true;
+          for (let k = 0; k < 54; k++) {
+            const a = (k / 54) * Math.PI * 2 + Math.random() * 0.1;
+            const sp = 2.2 + Math.random() * 3.4;
+            sparks.push({ x: b.x, y: b.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 1, c: b.c });
+          }
+        });
+        sparks.forEach((s) => {
+          s.vx *= 0.985;
+          s.vy = s.vy * 0.985 + 0.045;
+          s.x += s.vx;
+          s.y += s.vy;
+          s.life -= 0.012;
+          if (s.life <= 0) return;
+          ctx.globalAlpha = Math.max(0, s.life);
+          ctx.fillStyle = s.c;
+          ctx.beginPath();
+          ctx.arc(s.x, s.y, 2.4, 0, Math.PI * 2);
+          ctx.fill();
+        });
+        ctx.globalAlpha = 1;
+        if (t < 3600) raf2 = requestAnimationFrame(step); else onDone();
+      };
+      raf2 = requestAnimationFrame(step);
+      return () => cancelAnimationFrame(raf2);
+    }
     const parts = [];
     const n = kind === 'confetti' ? 140 : kind === 'hearts' ? 26 : kind === 'balloons' ? 14 : 110;
     for (let i = 0; i < n; i++) {
@@ -23525,6 +24683,8 @@ function specialPreview(content) {
   if (p) return `Poll: ${p.q}`;
   const e = parseEventMsg(content);
   if (e) return `Event: ${e.t}`;
+  const dd = parseDice(content);
+  if (dd) return diceSummary(dd);
   const g = parseGameMessage(content);
   if (g) return g.g === 'score' ? `High score in ${gameTitle(g)}` : gameTitle(g);
   if (parseLocationMessage(content)) return 'Location';
@@ -23553,17 +24713,18 @@ function MapPinIcon({ size = 16, color = 'currentColor', style }) {
 }
 function FeatureCardShell({ width = 252, colors, icon, label, title, children }) {
   const { theme } = useTheme();
+  const tint = colors[0];
   return (
-    <div onClick={(e) => e.stopPropagation()} style={{ width, maxWidth: '100%', boxSizing: 'border-box', borderRadius: 22, overflow: 'hidden', background: theme.dark ? '#18181B' : '#FFFFFF', border: `1px solid ${theme.dark ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.12)'}`, boxShadow: theme.dark ? '0 10px 26px rgba(0,0,0,0.38)' : '0 10px 24px rgba(0,0,0,0.14)' }}>
-      <div style={{ position: 'relative', padding: '11px 12px 12px', background: `linear-gradient(135deg, ${colors[0]}, ${colors[1]})` }}>
-        <div aria-hidden="true" style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(255,255,255,0.24), rgba(255,255,255,0.04) 55%, rgba(0,0,0,0.1))', pointerEvents: 'none' }} />
-        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 7, color: 'rgba(255,255,255,0.92)', fontSize: 11, fontWeight: 900, letterSpacing: '0.08em', textTransform: 'uppercase' }}>{icon}{label}</div>
-        <div style={{ position: 'relative', marginTop: 5, fontSize: 16.5, fontWeight: 900, color: 'white', lineHeight: 1.25, textShadow: '0 1px 2px rgba(0,0,0,0.3)', wordBreak: 'break-word' }}>{title}</div>
+    <div onClick={(e) => e.stopPropagation()} style={{ width, maxWidth: '100%', boxSizing: 'border-box', borderRadius: 18, overflow: 'hidden', background: theme.dark ? '#18181B' : '#FFFFFF', border: `1px solid ${theme.dark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`, borderTop: `4px solid ${tint}` }}>
+      <div style={{ padding: '10px 12px 2px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: tint, fontSize: 12, fontWeight: 800 }}>{icon}{label}</div>
+        <div style={{ marginTop: 4, fontSize: 16, fontWeight: 800, color: theme.ink, lineHeight: 1.25, wordBreak: 'break-word' }}>{title}</div>
       </div>
-      <div style={{ padding: '10px 10px 12px' }}>{children}</div>
+      <div style={{ padding: '8px 10px 12px' }}>{children}</div>
     </div>
   );
 }
+
 function voteIndexOf(votes, userId) {
   const v = (votes || []).find((r) => r.user_id === userId && typeof r.emoji === 'string' && r.emoji.indexOf('zv:') === 0);
   return v ? parseInt(v.emoji.slice(3), 10) : -1;
@@ -23576,7 +24737,7 @@ function PollCard({ poll, votes, myId, onVote, onShowVotes }) {
   const mine = voteIndexOf(list, myId);
   const top = Math.max(0, ...counts);
   return (
-    <FeatureCardShell colors={['#7C5CFC', '#2563EB']} icon={<PollIcon size={14} color="white" />} label="Poll" title={poll.q}>
+    <FeatureCardShell colors={[theme.coral]} icon={<PollIcon size={14} />} label="Poll" title={poll.q}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
         {poll.o.map((opt, i) => {
           const pct = total ? Math.round((counts[i] / total) * 100) : 0;
@@ -23633,7 +24794,7 @@ function EventCard({ ev, votes, myId, onVote, onShowVotes }) {
     } catch {}
   };
   return (
-    <FeatureCardShell colors={['#F97316', '#DB2777']} icon={<CalendarIcon size={14} color="white" />} label={past ? 'Event ended' : countdown ? `Event ${countdown}` : 'Event'} title={ev.t}>
+    <FeatureCardShell colors={['#E8590C']} icon={<CalendarIcon size={14} />} label={past ? 'Event ended' : countdown ? `Event ${countdown}` : 'Event'} title={ev.t}>
       <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
         <div style={{ width: 54, flexShrink: 0, borderRadius: 14, overflow: 'hidden', textAlign: 'center', boxShadow: '0 3px 0 rgba(0,0,0,0.2)', border: `1px solid ${theme.border}` }}>
           <div style={{ background: '#EF4444', color: 'white', fontSize: 10.5, fontWeight: 900, padding: '3px 0', letterSpacing: '0.06em' }}>{d ? d.toLocaleString([], { month: 'short' }).toUpperCase() : ''}</div>
@@ -23679,6 +24840,7 @@ function PollComposerPage({ onClose, onSend }) {
   return (
     <FullPage title="New poll" subtitle="Everyone in the chat can vote" onBack={onClose} zIndex={70}
       footer={<BigButton label={busy ? 'Sending' : 'Send poll'} disabled={!ok || busy} onClick={submit} />}>
+      <PageArt k="poll" text="Ask anything. Everyone picks one answer and can change it later." />
       <IgHeading>Question</IgHeading>
       <textarea value={q} onChange={(e) => setQ(e.target.value)} placeholder="Ask something" aria-label="Poll question" maxLength={200} rows={2} style={{ ...field, resize: 'none', lineHeight: 1.4 }} />
       <IgHeading>Answers</IgHeading>
@@ -23721,6 +24883,7 @@ function EventComposerPage({ onClose, onSend }) {
   return (
     <FullPage title="New event" subtitle="Plan something together" onBack={onClose} zIndex={70}
       footer={<BigButton label={busy ? 'Sending' : 'Send event'} disabled={!ok || busy} onClick={submit} />}>
+      <PageArt k="event" text="Plan something. Everyone can say if they are going." />
       <IgHeading>What</IgHeading>
       <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Movie night, football, study group" aria-label="Event title" maxLength={120} style={field} />
       <IgHeading>When</IgHeading>
@@ -23795,8 +24958,8 @@ function SearchMessagesPage({ myId, groups, hiddenIds, initialQuery, onClose, on
         </label>
       </div>
       <div style={{ padding: '0 8px calc(24px + env(safe-area-inset-bottom))' }}>
-        {term.length < 2 && <EmptyState icon={<Search />} title="Find any message" text="Type at least two letters to search every chat and group you are in." />}
-        {term.length >= 2 && results && results.length === 0 && !loading && <EmptyState icon={<Search />} title="No messages found" text="Try a different word." />}
+        {term.length < 2 && <EmptyState art="search" title="Find any message" text="Type at least two letters to search every chat and group you are in." />}
+        {term.length >= 2 && results && results.length === 0 && !loading && <EmptyState art="nothing" title="No messages found" text="Try a different word." />}
         {term.length >= 2 && results && results.map((m) => {
           const group = m.group_id ? (groups || []).find((g) => g.id === m.group_id) : null;
           const other = !m.group_id ? people[m.sender_id === myId ? m.receiver_id : m.sender_id] : null;
@@ -23865,7 +25028,7 @@ function QuickRepliesPage({ onClose }) {
       <FullPage title="Quick replies" subtitle="Type a slash in any chat" onBack={onClose} zIndex={72}
         footer={<BigButton label="Add a quick reply" onClick={() => setEdit({ i: -1, k: '', t: '' })} />}>
         <div style={{ fontSize: 13, color: theme.muted, lineHeight: 1.5, padding: '10px 2px 6px' }}>Save messages you send a lot. In a chat, type a slash and the shortcut, like /thanks, then tap the suggestion.</div>
-        {list.length === 0 && <EmptyState icon={<MessageSquare />} title="No quick replies yet" text="Add one with the button below." />}
+        {list.length === 0 && <EmptyState art="quick" title="No quick replies yet" text="Save the things you type a lot and send them with one tap." />}
         {list.map((r, i) => (
           <div key={r.k} role="button" aria-label={`Edit quick reply ${r.k}`} onClick={() => setEdit({ i, k: r.k, t: r.t })} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 2px', borderBottom: `1px solid ${theme.border}`, cursor: 'pointer' }}>
             <span style={{ fontSize: 13, fontWeight: 900, color: theme.coral, padding: '4px 9px', borderRadius: 9, background: `${theme.coral}1F`, flexShrink: 0 }}>/{r.k}</span>
@@ -23929,17 +25092,18 @@ function ChatInsightsPage({ messages, myId, title, onClose }) {
   const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const hourLabel = (h) => new Date(2020, 0, 1, h).toLocaleTimeString([], { hour: 'numeric' });
   const tile = (label, value, colors) => (
-    <div style={{ borderRadius: 18, padding: '13px 14px', background: `linear-gradient(150deg, ${colors[0]}, ${colors[1]})`, color: 'white', boxShadow: '0 8px 18px rgba(0,0,0,0.18)' }}>
-      <div style={{ fontSize: 11.5, fontWeight: 800, opacity: 0.9, letterSpacing: '0.04em', textTransform: 'uppercase' }}>{label}</div>
-      <div style={{ fontSize: 26, fontWeight: 900, marginTop: 2, letterSpacing: '-0.02em' }}>{value}</div>
+    <div style={{ borderRadius: 16, padding: '13px 14px', background: theme.rowBg }}>
+      <div style={{ fontSize: 13, fontWeight: 600, color: theme.muted }}>{label}</div>
+      <div style={{ fontSize: 26, fontWeight: 800, marginTop: 2, letterSpacing: '-0.02em', color: colors[0] }}>{value}</div>
     </div>
   );
   const myPct = data.total ? Math.round((data.mine / data.total) * 100) : 50;
   const maxHour = Math.max(1, ...data.hours);
   return (
     <FullPage title="Chat insights" subtitle={title} onBack={onClose} zIndex={66}>
-      {data.total === 0 ? <EmptyState icon={<Activity />} title="Nothing to show yet" text="Send a few messages and come back." /> : (
+      {data.total === 0 ? <EmptyState art="insights" title="Nothing to show yet" text="Send a few messages and come back." /> : (
         <>
+          <PageArt k="insights" />
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10, marginTop: 8 }}>
             {tile('Messages', formatCount(data.total), ['#7C5CFC', '#4F46E5'])}
             {tile('Words', formatCount(data.words), ['#EC4899', '#DB2777'])}
@@ -24070,7 +25234,7 @@ function RemindersPage({ uid, onClose, onOpen }) {
   );
   return (
     <FullPage title="Reminders" subtitle="Messages to come back to" onBack={onClose} zIndex={66}>
-      {upcoming.length === 0 && past.length === 0 && <EmptyState icon={<Clock />} title="No reminders yet" text="Press and hold any message and tap Remind me. ZChat nudges you when it is time." />}
+      {upcoming.length === 0 && past.length === 0 && <EmptyState art="reminders" title="No reminders yet" text="Press and hold any message and tap Remind me. ZChat nudges you when it is time." />}
       {upcoming.length > 0 && <IgHeading>Coming up</IgHeading>}
       {upcoming.map(item)}
       {past.length > 0 && <IgHeading>Done</IgHeading>}
@@ -24145,7 +25309,7 @@ function ChatLookPreview({ wallpaper, nameBar, bubbleStyle: styleIn, title, avat
   );
   const mine = (text) => (spec ? (
     <div style={{ alignSelf: 'flex-end', maxWidth: '78%', marginTop: spec.top || 0 }}>
-      <div className={spec.cls} style={{ position: 'relative', ...bubbleStyleCss(spec, true), padding: '8px 12px', fontSize: fs, lineHeight: 1.35 }}>
+      <div style={{ position: 'relative', ...bubbleStyleCss(spec, true), padding: '8px 12px', fontSize: fs, lineHeight: 1.35 }}>
         {spec.deco && BUBBLE_DECO[styleKey] && <div style={{ position: 'absolute', pointerEvents: 'none', zIndex: 1, ...spec.deco }}>{BUBBLE_DECO[styleKey]()}</div>}
         <span style={{ position: 'relative' }}>{text}</span>
       </div>
@@ -24273,7 +25437,7 @@ function FilterIcon({ size = 20, color = 'currentColor', strokeWidth = 1.9, styl
 }
 
 function AppearanceSection() {
-  const { theme, dark, setDark, accentName, setAccentName, bubbleColor, setBubbleColor, bubbleStyle, setBubbleStyle, fontScale, setFontScale } = useTheme();
+  const { theme, dark, setDark, themeMode, setThemeMode, accentName, setAccentName, bubbleColor, setBubbleColor, bubbleStyle, setBubbleStyle, fontScale, setFontScale } = useTheme();
   const c = igPalette(theme);
   const swatch = (key, color, on, onPick, label) => (
     <div key={key} role="button" aria-label={label} onClick={() => { hapticTap(); playUiSound('tap'); onPick(); }} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: 'pointer', width: 52 }}>
@@ -24296,7 +25460,8 @@ function AppearanceSection() {
         <ChatLookPreview height={132} />
       </div>
       <IgHeading>Mode</IgHeading>
-      {seg([[false, 'Light'], [true, 'Dark']], !!dark, (v) => setDark(v))}
+      {seg([['light', 'Light'], ['dark', 'Dark'], ['auto', 'Auto']], themeMode || (dark ? 'dark' : 'light'), (v) => setThemeMode(v))}
+      {themeMode === 'auto' && <div style={{ fontSize: 13, color: theme.muted, padding: '8px 2px 0' }}>Follows your phone. Light in the day, dark at night if your phone does that.</div>}
       <IgHeading>App color</IgHeading>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
         {Object.entries(ACCENT_PALETTES).map(([key, spec]) => swatch(key, spec.coral, accentName === key, () => setAccentName(key), spec.label))}
@@ -24319,7 +25484,7 @@ function parseOnce(m) {
   try { const o = JSON.parse(m.content.slice(6)); return o && typeof o === 'object' ? o : {}; } catch { return {}; }
 }
 function isHiddenReaction(emoji) {
-  return typeof emoji === 'string' && (emoji.indexOf('zv:') === 0 || emoji === 'zo');
+  return typeof emoji === 'string' && (emoji.indexOf('zv:') === 0 || emoji === 'zo' || emoji.indexOf('zfx:') === 0);
 }
 function onceSeenSet() {
   try { const a = JSON.parse(localStorage.getItem('zchat-once-seen') || '[]'); return new Set(Array.isArray(a) ? a : []); } catch { return new Set(); }
@@ -24476,120 +25641,2108 @@ function FilterStrip({ value, onPick, thumb, dark = true }) {
   );
 }
 
-const DOODLE_COLORS = ['#111111', '#FFFFFF', '#EF4444', '#F59E0B', '#FACC15', '#22C55E', '#3B82F6', '#A855F7', '#EC4899'];
-const DOODLE_BGS = [['#FFFFFF', 'White'], ['#111113', 'Black'], ['#FFF4D6', 'Paper'], ['#DDEBFF', 'Sky']];
-function drawDoodle(ctx, W, H, strokes, bg) {
-  ctx.fillStyle = bg;
-  ctx.fillRect(0, 0, W, H);
-  strokes.forEach((st) => {
-    if (!st.p.length) return;
-    ctx.strokeStyle = st.c;
-    ctx.lineWidth = (st.w * W) / 360;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.beginPath();
-    st.p.forEach(([x, y], i) => { if (i === 0) ctx.moveTo(x * W, y * H); else ctx.lineTo(x * W, y * H); });
-    if (st.p.length === 1) ctx.lineTo(st.p[0][0] * W + 0.1, st.p[0][1] * H + 0.1);
-    ctx.stroke();
-  });
+const PAINT_PALETTE = ['#111111', '#4B5563', '#9CA3AF', '#FFFFFF', '#7F1D1D', '#EF4444', '#F97316', '#F59E0B', '#FACC15', '#FDE68A', '#14532D', '#22C55E', '#86EFAC', '#0E7490', '#06B6D4', '#1E3A8A', '#3B82F6', '#93C5FD', '#4C1D95', '#8B5CF6', '#C4B5FD', '#9D174D', '#EC4899', '#F9A8D4', '#78350F', '#B45309', '#D6A77A', '#FDE7D3'];
+const PAINT_BRUSHES = [
+  { k: 'pen', label: 'Pen' }, { k: 'pencil', label: 'Pencil' }, { k: 'marker', label: 'Marker' }, { k: 'highlighter', label: 'Highlighter' },
+  { k: 'crayon', label: 'Crayon' }, { k: 'spray', label: 'Spray' }, { k: 'calligraphy', label: 'Calligraphy' }, { k: 'neon', label: 'Neon' },
+];
+const PAINT_SHAPES = [
+  { k: 'line', label: 'Line' }, { k: 'arrow', label: 'Arrow' }, { k: 'rect', label: 'Box' }, { k: 'round', label: 'Rounded box' },
+  { k: 'ellipse', label: 'Circle' }, { k: 'triangle', label: 'Triangle' }, { k: 'star', label: 'Star' }, { k: 'heart', label: 'Heart' }, { k: 'bubble', label: 'Speech bubble' },
+];
+const PAINT_SIZES = { square: [1080, 1080, 'Square'], portrait: [1080, 1350, 'Portrait'], story: [1080, 1920, 'Story'] };
+const PAINT_BACKGROUNDS = [['white', '#FFFFFF', 'White'], ['paper', '#FBF6EC', 'Paper'], ['black', '#141416', 'Black'], ['grid', '#FFFFFF', 'Grid'], ['dots', '#FFFFFF', 'Dots'], ['lines', '#FFFFFF', 'Lines'], ['sky', '#E6F0FF', 'Sky'], ['mint', '#E3F6EE', 'Mint']];
+const PAINT_STAMPS = ['❤️', '⭐', '✨', '\u{1F525}', '\u{1F602}', '\u{1F970}', '\u{1F60E}', '\u{1F431}', '\u{1F436}', '\u{1F338}', '\u{1F308}', '☀️', '\u{1F319}', '\u{1F389}', '\u{1F44D}', '\u{1F4AF}'];
+const PAINT_FONTS = [['sans', 'Clean', `800 {s}px ${FONT}`], ['serif', 'Classic', '700 {s}px Georgia, "Times New Roman", serif'], ['mono', 'Typewriter', '700 {s}px "Courier New", Courier, monospace'], ['hand', 'Hand', '700 {s}px "Comic Sans MS", "Chalkboard SE", "Marker Felt", cursive']];
+const PAINT_IDEAS = ['A cat in a spaceship', 'Your dream house', 'A monster eating pizza', 'Your best friend as a superhero', 'A city at night', 'A tiny dragon', 'Breakfast with a face', 'A robot walking a dog', 'The view from your window', 'A fish wearing a hat', 'Your pet as a king', 'A rainy day', 'An alien at the beach', 'A treehouse', 'A birthday cake for a friend', 'A dinosaur playing football', 'Your favourite food', 'A happy cloud', 'A snowman on holiday', 'A secret door in a tree', 'The moon having a party', 'A cactus with feelings', 'A bus full of animals', 'A castle made of candy', 'Your face as an emoji', 'A sleepy owl', 'Two cats asleep on a bed at night', 'A rocket made of fruit', 'A shark at the dentist', 'A garden on a roof'];
+const PAINT_BOT_ASKS = [
+  { k: 'guess', label: 'What did I draw?', sub: 'Let ZChat Bot guess', prompt: 'Look at my drawing and guess what it is. Keep it short and fun, like a friend guessing.' },
+  { k: 'rate', label: 'Rate my drawing', sub: 'A score and one thing it likes', prompt: 'Rate my drawing out of 10 and tell me one thing you like about it. Be kind and short.' },
+  { k: 'tip', label: 'How can I make it better?', sub: 'One simple tip', prompt: 'Give me one simple tip to make this drawing better. One or two short sentences.' },
+  { k: 'idea', label: 'What should I draw?', sub: 'A fresh idea', prompt: 'Give me one fun idea for what to draw next. Just the idea in one short sentence.' },
+];
+
+function paintRng(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a += 0x6D2B79F5;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
 }
-function DoodlePage({ onClose, onSend, recipientName }) {
+
+function paintSymXf(sym, W, H) {
+  const id = (x, y) => [x, y];
+  if (sym === 'mirror') return [id, (x, y) => [W - x, y]];
+  if (sym === 'quad') return [id, (x, y) => [W - x, y], (x, y) => [x, H - y], (x, y) => [W - x, H - y]];
+  if (sym === 'radial') {
+    const cx = W / 2;
+    const cy = H / 2;
+    return [0, 1, 2, 3, 4, 5].map((k) => {
+      const a = (k * Math.PI) / 3;
+      const c = Math.cos(a);
+      const s = Math.sin(a);
+      return (x, y) => [cx + (x - cx) * c - (y - cy) * s, cy + (x - cx) * s + (y - cy) * c];
+    });
+  }
+  return [id];
+}
+
+function paintStrokeWidth(op, p) {
+  if (op.brush === 'pen' && op.pressure) return Math.max(1, op.size * (0.25 + (p || 0.5) * 1.1));
+  if (op.brush === 'pencil') return Math.max(1, op.size * 0.55);
+  if (op.brush === 'highlighter') return op.size * 1.6;
+  if (op.brush === 'marker') return op.size * 1.2;
+  return op.size;
+}
+
+function makePaintRenderer(op, W, H) {
+  const rnd = paintRng(op.seed || 7);
+  const xfs = paintSymXf(op.sym || 'off', W, H);
+  const brush = op.eraser ? 'pen' : op.brush;
+  let i = 0;
+  let tailDone = false;
+  const color = op.eraser ? '#000000' : op.color;
+  const mid = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+  const smoothSeg = (ctx, pts, k) => {
+    const w = paintStrokeWidth(op, pts[k][2]);
+    xfs.forEach((xf) => {
+      ctx.beginPath();
+      if (k === 0) {
+        const [x, y] = xf(pts[0][0], pts[0][1]);
+        ctx.arc(x, y, w / 2, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
+        return;
+      }
+      const a = k === 1 ? pts[0] : mid(pts[k - 2], pts[k - 1]);
+      const c = pts[k - 1];
+      const b = mid(pts[k - 1], pts[k]);
+      const A = xf(a[0], a[1]);
+      const C = xf(c[0], c[1]);
+      const B = xf(b[0], b[1]);
+      ctx.moveTo(A[0], A[1]);
+      if (k === 1) ctx.lineTo(B[0], B[1]); else ctx.quadraticCurveTo(C[0], C[1], B[0], B[1]);
+      ctx.lineWidth = w;
+      ctx.strokeStyle = color;
+      ctx.stroke();
+    });
+  };
+  const point = (ctx, pts, k) => {
+    const p = pts[k];
+    const prev = k > 0 ? pts[k - 1] : p;
+    if (brush === 'pen' || brush === 'marker' || brush === 'neon' || brush === 'highlighter') {
+      ctx.lineCap = brush === 'highlighter' ? 'square' : 'round';
+      ctx.lineJoin = 'round';
+      if (brush === 'neon') { ctx.shadowColor = color; ctx.shadowBlur = op.size * 1.4; }
+      smoothSeg(ctx, pts, k);
+      if (brush === 'neon') {
+        ctx.shadowBlur = 0;
+        const w = Math.max(1, op.size * 0.32);
+        xfs.forEach((xf) => {
+          const A = xf(prev[0], prev[1]);
+          const B = xf(p[0], p[1]);
+          ctx.beginPath();
+          ctx.moveTo(A[0], A[1]);
+          ctx.lineTo(B[0], B[1]);
+          ctx.lineWidth = w;
+          ctx.lineCap = 'round';
+          ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+          ctx.stroke();
+        });
+      }
+      return;
+    }
+    const dx = p[0] - prev[0];
+    const dy = p[1] - prev[1];
+    const len = Math.hypot(dx, dy);
+    if (brush === 'pencil') {
+      const w = paintStrokeWidth(op, p[2]);
+      xfs.forEach((xf) => {
+        for (let j = 0; j < 3; j++) {
+          const jx = (rnd() - 0.5) * w * 0.9;
+          const jy = (rnd() - 0.5) * w * 0.9;
+          const A = xf(prev[0] + jx, prev[1] + jy);
+          const B = xf(p[0] + jx, p[1] + jy);
+          ctx.beginPath();
+          ctx.moveTo(A[0], A[1]);
+          ctx.lineTo(B[0], B[1]);
+          ctx.lineWidth = Math.max(0.8, w * (0.35 + rnd() * 0.4));
+          ctx.lineCap = 'round';
+          ctx.globalAlpha = 0.28 + rnd() * 0.4;
+          ctx.strokeStyle = color;
+          ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+      });
+      return;
+    }
+    if (brush === 'crayon') {
+      const step = Math.max(1.5, op.size * 0.22);
+      const n = Math.max(1, Math.ceil(len / step));
+      xfs.forEach((xf) => {
+        for (let j = 0; j <= n; j++) {
+          const t = j / n;
+          for (let q = 0; q < 4; q++) {
+            const ox = (rnd() - 0.5) * op.size * 0.9;
+            const oy = (rnd() - 0.5) * op.size * 0.9;
+            const [x, y] = xf(prev[0] + dx * t + ox, prev[1] + dy * t + oy);
+            const r = op.size * (0.08 + rnd() * 0.12);
+            ctx.globalAlpha = 0.35 + rnd() * 0.55;
+            ctx.fillStyle = color;
+            ctx.fillRect(x - r, y - r, r * 2, r * 2);
+          }
+        }
+        ctx.globalAlpha = 1;
+      });
+      return;
+    }
+    if (brush === 'spray') {
+      const r0 = op.size * 1.3;
+      const n = Math.ceil(op.size * 1.1) + Math.ceil(len * 0.4);
+      xfs.forEach((xf) => {
+        for (let j = 0; j < n; j++) {
+          const a = rnd() * Math.PI * 2;
+          const rr = Math.sqrt(rnd()) * r0;
+          const t = rnd();
+          const [x, y] = xf(prev[0] + dx * t + Math.cos(a) * rr, prev[1] + dy * t + Math.sin(a) * rr);
+          const d = Math.max(0.6, op.size * 0.05) * (0.6 + rnd() * 0.9);
+          ctx.fillStyle = color;
+          ctx.fillRect(x - d / 2, y - d / 2, d, d);
+        }
+      });
+      return;
+    }
+    if (brush === 'calligraphy') {
+      const nx = Math.cos(-Math.PI / 4) * op.size * 0.55;
+      const ny = Math.sin(-Math.PI / 4) * op.size * 0.55;
+      xfs.forEach((xf) => {
+        const A1 = xf(prev[0] + nx, prev[1] + ny);
+        const B1 = xf(p[0] + nx, p[1] + ny);
+        const B2 = xf(p[0] - nx, p[1] - ny);
+        const A2 = xf(prev[0] - nx, prev[1] - ny);
+        ctx.beginPath();
+        ctx.moveTo(A1[0], A1[1]);
+        ctx.lineTo(B1[0], B1[1]);
+        ctx.lineTo(B2[0], B2[1]);
+        ctx.lineTo(A2[0], A2[1]);
+        ctx.closePath();
+        ctx.fillStyle = color;
+        ctx.fill();
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = color;
+        ctx.stroke();
+      });
+    }
+  };
+  return (ctx, upto, final) => {
+    const pts = op.pts;
+    const end = Math.min(upto == null ? pts.length : upto, pts.length);
+    ctx.save();
+    for (; i < end; i++) point(ctx, pts, i);
+    if (final && !tailDone && pts.length > 1 && (brush === 'pen' || brush === 'marker' || brush === 'neon' || brush === 'highlighter')) {
+      tailDone = true;
+      const n = pts.length;
+      const w = paintStrokeWidth(op, pts[n - 1][2]);
+      if (brush === 'neon') { ctx.shadowColor = color; ctx.shadowBlur = op.size * 1.4; }
+      xfs.forEach((xf) => {
+        const a = mid(pts[n - 2], pts[n - 1]);
+        const A = xf(a[0], a[1]);
+        const B = xf(pts[n - 1][0], pts[n - 1][1]);
+        ctx.beginPath();
+        ctx.moveTo(A[0], A[1]);
+        ctx.lineTo(B[0], B[1]);
+        ctx.lineWidth = w;
+        ctx.lineCap = brush === 'highlighter' ? 'square' : 'round';
+        ctx.strokeStyle = color;
+        ctx.stroke();
+      });
+    }
+    ctx.restore();
+  };
+}
+
+function paintShapePath(ctx, op) {
+  const { kind } = op;
+  const x0 = op.x0;
+  const y0 = op.y0;
+  const x1 = op.x1;
+  const y1 = op.y1;
+  const l = Math.min(x0, x1);
+  const t = Math.min(y0, y1);
+  const w = Math.abs(x1 - x0);
+  const h = Math.abs(y1 - y0);
+  ctx.beginPath();
+  if (kind === 'line' || kind === 'arrow') {
+    ctx.moveTo(x0, y0);
+    ctx.lineTo(x1, y1);
+    if (kind === 'arrow') {
+      const a = Math.atan2(y1 - y0, x1 - x0);
+      const hl = Math.max(22, op.size * 3.2);
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x1 - hl * Math.cos(a - 0.45), y1 - hl * Math.sin(a - 0.45));
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x1 - hl * Math.cos(a + 0.45), y1 - hl * Math.sin(a + 0.45));
+    }
+    return false;
+  }
+  if (kind === 'poly' && op.pts) {
+    op.pts.forEach(([x, y], k) => (k ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+    ctx.closePath();
+    return true;
+  }
+  if (kind === 'rect') ctx.rect(l, t, w, h);
+  else if (kind === 'round') {
+    const r = Math.min(w, h) * 0.2;
+    ctx.moveTo(l + r, t);
+    ctx.arcTo(l + w, t, l + w, t + h, r);
+    ctx.arcTo(l + w, t + h, l, t + h, r);
+    ctx.arcTo(l, t + h, l, t, r);
+    ctx.arcTo(l, t, l + w, t, r);
+    ctx.closePath();
+  } else if (kind === 'ellipse') ctx.ellipse(l + w / 2, t + h / 2, Math.max(0.5, w / 2), Math.max(0.5, h / 2), 0, 0, Math.PI * 2);
+  else if (kind === 'triangle') {
+    ctx.moveTo(l + w / 2, t);
+    ctx.lineTo(l + w, t + h);
+    ctx.lineTo(l, t + h);
+    ctx.closePath();
+  } else if (kind === 'star') {
+    const cx = l + w / 2;
+    const cy = t + h / 2 + h * 0.04;
+    for (let k = 0; k < 10; k++) {
+      const a = -Math.PI / 2 + (k * Math.PI) / 5;
+      const rx = (k % 2 ? 0.2 : 0.5) * w;
+      const ry = (k % 2 ? 0.2 : 0.5) * h;
+      const px = cx + Math.cos(a) * rx;
+      const py = cy + Math.sin(a) * ry;
+      if (k) ctx.lineTo(px, py); else ctx.moveTo(px, py);
+    }
+    ctx.closePath();
+  } else if (kind === 'heart') {
+    ctx.moveTo(l + w / 2, t + h * 0.95);
+    ctx.bezierCurveTo(l - w * 0.1, t + h * 0.5, l + w * 0.1, t - h * 0.08, l + w / 2, t + h * 0.28);
+    ctx.bezierCurveTo(l + w * 0.9, t - h * 0.08, l + w * 1.1, t + h * 0.5, l + w / 2, t + h * 0.95);
+    ctx.closePath();
+  } else if (kind === 'bubble') {
+    const bh = h * 0.78;
+    const r = Math.min(w, bh) * 0.3;
+    ctx.moveTo(l + r, t);
+    ctx.arcTo(l + w, t, l + w, t + bh, r);
+    ctx.arcTo(l + w, t + bh, l, t + bh, r);
+    ctx.lineTo(l + w * 0.36, t + bh);
+    ctx.lineTo(l + w * 0.18, t + h);
+    ctx.lineTo(l + w * 0.22, t + bh);
+    ctx.arcTo(l, t + bh, l, t, r);
+    ctx.arcTo(l, t, l + w, t, r);
+    ctx.closePath();
+  }
+  return true;
+}
+
+function paintDrawShape(ctx, op) {
+  ctx.save();
+  ctx.strokeStyle = op.color;
+  ctx.fillStyle = op.color;
+  ctx.lineWidth = op.size;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  const closed = paintShapePath(ctx, op);
+  if (closed && op.fill) ctx.fill(); else ctx.stroke();
+  ctx.restore();
+}
+
+function paintFontFor(op) {
+  const f = PAINT_FONTS.find((x) => x[0] === op.font) || PAINT_FONTS[0];
+  return f[2].replace('{s}', String(Math.round(op.size)));
+}
+
+function paintDrawText(ctx, op) {
+  ctx.save();
+  ctx.font = paintFontFor(op);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const lines = String(op.text || '').split('\n');
+  const lh = op.size * 1.18;
+  const top = op.y - ((lines.length - 1) * lh) / 2;
+  lines.forEach((ln, k) => {
+    if (op.outline) {
+      ctx.lineWidth = Math.max(3, op.size * 0.16);
+      ctx.strokeStyle = op.outline;
+      ctx.lineJoin = 'round';
+      ctx.strokeText(ln, op.x, top + k * lh);
+    }
+    ctx.fillStyle = op.color;
+    ctx.fillText(ln, op.x, top + k * lh);
+  });
+  ctx.restore();
+}
+
+function paintDrawStamp(ctx, op) {
+  ctx.save();
+  ctx.font = `${Math.round(op.size)}px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.translate(op.x, op.y);
+  if (op.rot) ctx.rotate(op.rot);
+  ctx.fillText(op.emoji, 0, 0);
+  ctx.restore();
+}
+
+function paintHexToRgb(hex) {
+  const h = String(hex || '#000000').replace('#', '');
+  const v = h.length === 3 ? h.split('').map((c) => c + c).join('') : h.padEnd(6, '0');
+  return [parseInt(v.slice(0, 2), 16) || 0, parseInt(v.slice(2, 4), 16) || 0, parseInt(v.slice(4, 6), 16) || 0];
+}
+
+function paintFloodMask(img, W, H, sx, sy, tol) {
+  const d = img.data;
+  const x0 = Math.floor(sx);
+  const y0 = Math.floor(sy);
+  if (x0 < 0 || y0 < 0 || x0 >= W || y0 >= H) return null;
+  const i0 = (y0 * W + x0) * 4;
+  const tr = d[i0];
+  const tg = d[i0 + 1];
+  const tb = d[i0 + 2];
+  const ta = d[i0 + 3];
+  const mask = new Uint8Array(W * H);
+  const same = (p) => {
+    const k = p * 4;
+    return Math.abs(d[k] - tr) <= tol && Math.abs(d[k + 1] - tg) <= tol && Math.abs(d[k + 2] - tb) <= tol && Math.abs(d[k + 3] - ta) <= tol;
+  };
+  const stack = [x0, y0];
+  let count = 0;
+  while (stack.length) {
+    const y = stack.pop();
+    const x = stack.pop();
+    let lx = x;
+    const row = y * W;
+    while (lx > 0 && !mask[row + lx - 1] && same(row + lx - 1)) lx -= 1;
+    let rx = x;
+    while (rx < W - 1 && !mask[row + rx + 1] && same(row + rx + 1)) rx += 1;
+    for (let xx = lx; xx <= rx; xx++) {
+      const p = row + xx;
+      if (mask[p]) continue;
+      mask[p] = 1;
+      count += 1;
+      if (y > 0) { const q = p - W; if (!mask[q] && same(q)) stack.push(xx, y - 1); }
+      if (y < H - 1) { const q = p + W; if (!mask[q] && same(q)) stack.push(xx, y + 1); }
+    }
+  }
+  if (!count) return null;
+  const grown = new Uint8Array(mask);
+  for (let y = 1; y < H - 1; y++) {
+    for (let x = 1; x < W - 1; x++) {
+      const p = y * W + x;
+      if (mask[p]) continue;
+      if (mask[p - 1] || mask[p + 1] || mask[p - W] || mask[p + W]) grown[p] = 1;
+    }
+  }
+  return grown;
+}
+
+const PAINT_TEMPLATES = {
+  cat: { label: 'Cat', draw: (ctx) => {
+    const P = (d) => ctx.stroke(new Path2D(d));
+    ctx.save();
+    ctx.translate(100, 70);
+    ctx.scale(8, 8);
+    ctx.lineWidth = 1.4;
+    P('M68 92 C86 96 96 84 90 71 C88.5 67.5 91.5 64.5 95 66.5 L97.5 61.5 C91 58 84.5 63 85.4 71.6 C90 82 82 89 68 87');
+    P('M32 57 C25 69 23 84 28 98 C28.6 99.4 30 100 31.6 100 H68.4 C70 100 71.4 99.4 72 98 C77 84 75 69 68 57');
+    P('M43 62 C40 73 41 85 44 96.5 H56 C59 85 60 73 57 62');
+    P('M33 99 C33 96 37 94.4 41 94.4 C45 94.4 49 96 49 99 M51 99 C51 96 55 94.4 59 94.4 C63 94.4 67 96 67 99');
+    P('M29 36 L25 12 C24.6 8.5 27 7.6 29.5 9.6 L45 23 M71 36 L75 12 C75.4 8.5 73 7.6 70.5 9.6 L55 23');
+    P('M30.5 28 L29 15.5 L39 23.2 Z M69.5 28 L71 15.5 L61 23.2 Z');
+    P('M22 46 C21 31 33 21 50 21 C67 21 79 31 78 46 C77 57 66 64 50 64 C34 64 23 57 22 46 Z');
+    P('M37.5 51.5 C37.5 46 43 43 50 43 C57 43 62.5 46 62.5 51.5 C62.5 57 57 60.3 50 60.3 C43 60.3 37.5 57 37.5 51.5 Z');
+    P('M35 43 Q39.5 38.5 44 43 M56 43 Q60.5 38.5 65 43');
+    P('M47 48.4 H53 L50 51.6 Z M50 51.6 Q50 55 46.6 55.4 M50 51.6 Q50 55 53.4 55.4');
+    P('M29 50 L16 48 M29 53.5 L16 55.5 M71 50 L84 48 M71 53.5 L84 55.5');
+    P('M44 25 L45.4 31 M50 24 L50 31 M56 25 L54.6 31');
+    ctx.restore();
+  } },
+  house: { label: 'House', draw: (ctx) => {
+    const P = (d) => ctx.stroke(new Path2D(d));
+    P('M200 480 L500 220 L800 480 Z');
+    P('M250 478 H750 V830 H250 Z');
+    P('M440 830 V650 Q440 615 475 615 H525 Q560 615 560 650 V830');
+    P('M300 540 H405 V640 H300 Z M352 540 V640 M300 590 H405');
+    P('M595 540 H700 V640 H595 Z M647 540 V640 M595 590 H700');
+    P('M630 350 V250 H700 V410');
+    P('M60 830 H940');
+    P('M790 160 A62 62 0 1 0 914 160 A62 62 0 1 0 790 160 Z');
+    P('M852 60 V76 M852 244 V260 M752 160 H768 M936 160 H952 M781 89 L792 100 M912 220 L923 231 M781 231 L792 220 M912 100 L923 89');
+    P('M120 300 C108 262 150 238 186 256 C206 222 268 226 280 268 C318 266 334 306 300 322 H140 C104 322 94 296 120 300 Z');
+    P('M100 830 C100 770 180 760 200 810 C210 780 260 780 262 830 M740 830 C740 780 800 770 820 810 C830 784 890 786 900 830');
+  } },
+  flower: { label: 'Flower', draw: (ctx) => {
+    const P = (d) => ctx.stroke(new Path2D(d));
+    for (let k = 0; k < 8; k++) {
+      const a = (k * Math.PI) / 4;
+      ctx.beginPath();
+      ctx.ellipse(500 + Math.cos(a) * 128, 330 + Math.sin(a) * 128, 78, 46, a, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.save(); ctx.globalCompositeOperation = 'destination-out'; ctx.beginPath(); ctx.arc(500, 330, 72, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+    ctx.beginPath(); ctx.arc(500, 330, 72, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(500, 330, 34, 0, Math.PI * 2); ctx.stroke();
+    P('M500 470 C488 590 516 700 500 830');
+    P('M504 640 C580 580 660 590 704 622 C642 672 570 680 504 640 Z');
+    P('M496 720 C420 660 340 670 296 702 C358 752 430 760 496 720 Z');
+    P('M370 830 H630 L600 960 H400 Z M352 830 H648 V870 H352 Z');
+  } },
+  fish: { label: 'Fish', draw: (ctx) => {
+    const P = (d) => ctx.stroke(new Path2D(d));
+    P('M200 500 C290 330 560 320 700 500 C560 680 290 670 200 500 Z');
+    P('M690 500 L870 370 Q835 500 870 630 Z');
+    ctx.beginPath(); ctx.arc(320, 470, 28, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(326, 466, 10, 0, Math.PI * 2); ctx.fill();
+    P('M420 410 Q378 500 420 590');
+    P('M430 372 Q500 262 600 366');
+    P('M470 628 Q510 712 576 648');
+    P('M500 470 Q530 450 560 470 M540 520 Q570 500 600 520 M480 540 Q510 520 540 540');
+    ctx.beginPath(); ctx.arc(170, 300, 30, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(130, 220, 20, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(186, 160, 14, 0, Math.PI * 2); ctx.stroke();
+    P('M40 860 Q140 800 240 860 T440 860 T640 860 T840 860 T1000 860');
+  } },
+  rocket: { label: 'Rocket', draw: (ctx) => {
+    const P = (d) => ctx.stroke(new Path2D(d));
+    P('M500 120 C610 230 650 400 626 650 H374 C350 400 390 230 500 120 Z');
+    ctx.beginPath(); ctx.arc(500, 380, 64, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(500, 380, 40, 0, Math.PI * 2); ctx.stroke();
+    P('M380 520 L270 690 L376 650 Z M620 520 L730 690 L624 650 Z');
+    P('M420 652 Q500 930 580 652 M456 652 Q500 810 544 652');
+    P('M440 220 Q500 200 560 220');
+    [[180, 200], [820, 280], [170, 720], [840, 760]].forEach(([x, y]) => {
+      ctx.beginPath();
+      for (let k = 0; k < 10; k++) {
+        const a = -Math.PI / 2 + (k * Math.PI) / 5;
+        const r = k % 2 ? 18 : 42;
+        const px = x + Math.cos(a) * r;
+        const py = y + Math.sin(a) * r;
+        if (k) ctx.lineTo(px, py); else ctx.moveTo(px, py);
+      }
+      ctx.closePath();
+      ctx.stroke();
+    });
+  } },
+  mandala: { label: 'Mandala', draw: (ctx) => {
+    [70, 150, 250, 350, 440].forEach((r) => { ctx.beginPath(); ctx.arc(500, 500, r, 0, Math.PI * 2); ctx.stroke(); });
+    for (let k = 0; k < 12; k++) {
+      const a = (k * Math.PI) / 6;
+      ctx.beginPath();
+      ctx.ellipse(500 + Math.cos(a) * 200, 500 + Math.sin(a) * 200, 50, 26, a, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(500 + Math.cos(a) * 70, 500 + Math.sin(a) * 70);
+      ctx.lineTo(500 + Math.cos(a) * 150, 500 + Math.sin(a) * 150);
+      ctx.stroke();
+    }
+    for (let k = 0; k < 24; k++) {
+      const a = (k * Math.PI) / 12;
+      ctx.beginPath();
+      ctx.arc(500 + Math.cos(a) * 300, 500 + Math.sin(a) * 300, 24, 0, Math.PI * 2);
+      ctx.stroke();
+      const a2 = a + Math.PI / 24;
+      ctx.beginPath();
+      ctx.moveTo(500 + Math.cos(a) * 350, 500 + Math.sin(a) * 350);
+      ctx.quadraticCurveTo(500 + Math.cos(a2) * 470, 500 + Math.sin(a2) * 470, 500 + Math.cos(a + Math.PI / 12) * 350, 500 + Math.sin(a + Math.PI / 12) * 350);
+      ctx.stroke();
+    }
+  } },
+};
+
+function paintRecognize(pts) {
+  const n = pts.length;
+  if (n < 6) return null;
+  let L = 0;
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (let k = 0; k < n; k++) {
+    const [x, y] = pts[k];
+    if (k) L += Math.hypot(x - pts[k - 1][0], y - pts[k - 1][1]);
+    minX = Math.min(minX, x); minY = Math.min(minY, y); maxX = Math.max(maxX, x); maxY = Math.max(maxY, y);
+  }
+  const w = maxX - minX;
+  const h = maxY - minY;
+  const diag = Math.hypot(w, h);
+  if (diag < 40) return null;
+  const first = pts[0];
+  const last = pts[n - 1];
+  const gap = Math.hypot(last[0] - first[0], last[1] - first[1]);
+  if (gap > Math.max(30, L * 0.16)) {
+    const d = gap;
+    if (d < 40 || L / d > 1.12) return null;
+    let dev = 0;
+    for (let k = 0; k < n; k++) {
+      const [x, y] = pts[k];
+      const t = Math.abs((last[1] - first[1]) * x - (last[0] - first[0]) * y + last[0] * first[1] - last[1] * first[0]) / d;
+      dev = Math.max(dev, t);
+    }
+    if (dev > Math.max(8, d * 0.06)) return null;
+    return { kind: 'line', x0: first[0], y0: first[1], x1: last[0], y1: last[1] };
+  }
+  const cx = minX + w / 2;
+  const cy = minY + h / 2;
+  let err = 0;
+  for (let k = 0; k < n; k++) {
+    const [x, y] = pts[k];
+    const r = Math.hypot((x - cx) / Math.max(1, w / 2), (y - cy) / Math.max(1, h / 2));
+    err += Math.abs(r - 1);
+  }
+  err /= n;
+  const simplify = (list, eps) => {
+    if (list.length < 3) return list;
+    let idx = -1;
+    let dmax = 0;
+    const a = list[0];
+    const b = list[list.length - 1];
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+    for (let k = 1; k < list.length - 1; k++) {
+      const p = list[k];
+      const dd = Math.abs((b[1] - a[1]) * p[0] - (b[0] - a[0]) * p[1] + b[0] * a[1] - b[1] * a[0]) / len;
+      if (dd > dmax) { dmax = dd; idx = k; }
+    }
+    if (dmax > eps) {
+      const l1 = simplify(list.slice(0, idx + 1), eps);
+      const l2 = simplify(list.slice(idx), eps);
+      return [...l1.slice(0, -1), ...l2];
+    }
+    return [a, b];
+  };
+  let far = 0;
+  let fi = 0;
+  for (let k = 0; k < n; k++) {
+    const dd = Math.hypot(pts[k][0] - first[0], pts[k][1] - first[1]);
+    if (dd > far) { far = dd; fi = k; }
+  }
+  const eps = diag * 0.07;
+  const half1 = simplify(pts.slice(0, fi + 1).map((p) => [p[0], p[1]]), eps);
+  const half2 = simplify(pts.slice(fi).map((p) => [p[0], p[1]]), eps);
+  let verts = [...half1.slice(0, -1), ...half2.slice(0, -1)];
+  const merged = [];
+  verts.forEach((v) => {
+    const prev = merged[merged.length - 1];
+    if (!prev || Math.hypot(v[0] - prev[0], v[1] - prev[1]) > diag * 0.12) merged.push(v);
+  });
+  if (merged.length > 2 && Math.hypot(merged[0][0] - merged[merged.length - 1][0], merged[0][1] - merged[merged.length - 1][1]) < diag * 0.12) merged.pop();
+  verts = merged;
+  if (verts.length === 3 && err > 0.1) return { kind: 'poly', pts: verts, x0: minX, y0: minY, x1: maxX, y1: maxY };
+  if (verts.length === 4 && err > 0.1) {
+    let ok = true;
+    for (let k = 0; k < 4; k++) {
+      const a = verts[(k + 3) % 4];
+      const b = verts[k];
+      const c = verts[(k + 1) % 4];
+      const v1 = [a[0] - b[0], a[1] - b[1]];
+      const v2 = [c[0] - b[0], c[1] - b[1]];
+      const cos = (v1[0] * v2[0] + v1[1] * v2[1]) / ((Math.hypot(v1[0], v1[1]) * Math.hypot(v2[0], v2[1])) || 1);
+      if (Math.abs(cos) > 0.42) ok = false;
+    }
+    if (ok) return { kind: 'rect', x0: minX, y0: minY, x1: maxX, y1: maxY };
+    return { kind: 'poly', pts: verts, x0: minX, y0: minY, x1: maxX, y1: maxY };
+  }
+  if (err < 0.14) return { kind: 'ellipse', x0: minX, y0: minY, x1: maxX, y1: maxY };
+  return null;
+}
+
+function paintHsv(hex) {
+  const [r, g, b] = paintHexToRgb(hex).map((v) => v / 255);
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const d = max - min;
+  let h = 0;
+  if (d) {
+    if (max === r) h = ((g - b) / d) % 6;
+    else if (max === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    h *= 60;
+    if (h < 0) h += 360;
+  }
+  return [h, max ? d / max : 0, max];
+}
+function paintHex(h, s, v) {
+  const c = v * s;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = v - c;
+  let rgb = [0, 0, 0];
+  if (h < 60) rgb = [c, x, 0]; else if (h < 120) rgb = [x, c, 0]; else if (h < 180) rgb = [0, c, x]; else if (h < 240) rgb = [0, x, c]; else if (h < 300) rgb = [x, 0, c]; else rgb = [c, 0, x];
+  return `#${rgb.map((u) => Math.round((u + m) * 255).toString(16).padStart(2, '0')).join('')}`.toUpperCase();
+}
+
+function PaintSheet({ title, onClose, children, z = 120 }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
-  const canvasRef = useRef(null);
-  const wrapRef = useRef(null);
-  const strokesRef = useRef([]);
-  const curRef = useRef(null);
-  const [count, setCount] = useState(0);
-  const [color, setColor] = useState('#111111');
-  const [size, setSize] = useState(6);
-  const [bg, setBg] = useState('#FFFFFF');
-  const [busy, setBusy] = useState(false);
-  const bgRef = useRef(bg);
-  bgRef.current = bg;
-  const redraw = () => {
-    const c = canvasRef.current;
-    if (!c) return;
-    drawDoodle(c.getContext('2d'), c.width, c.height, curRef.current ? [...strokesRef.current, curRef.current] : strokesRef.current, bgRef.current);
+  const drag = useSheetDrag(onClose);
+  return (
+    <div onClick={onClose} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: z, background: 'rgba(0,0,0,0.42)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontFamily: FONT }}>
+      <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" {...drag.sheetProps} style={{ ...drag.sheetStyle, width: '100%', maxWidth: 520, maxHeight: '82vh', display: 'flex', flexDirection: 'column', background: theme.panelBg, borderRadius: '22px 22px 0 0', paddingBottom: 'calc(12px + env(safe-area-inset-bottom))' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 0 2px' }}><div style={{ width: 36, height: 4, borderRadius: 2, background: theme.border }} /></div>
+        {title && <div style={{ fontSize: 16, fontWeight: 800, color: theme.ink, padding: '8px 18px 10px' }}>{title}</div>}
+        <div data-sheet-scroll="true" style={{ overflowY: 'auto', minHeight: 0, padding: '0 18px 6px', touchAction: 'pan-y' }}>{children}</div>
+      </div>
+    </div>
+  );
+}
+
+function PaintColorPanel({ color, alpha, onColor, onAlpha, recent }) {
+  const { theme } = useTheme();
+  const [hsv, setHsv] = useState(() => paintHsv(color));
+  const [hexText, setHexText] = useState(color);
+  const svRef = useRef(null);
+  const hueRef = useRef(null);
+  const alphaRef = useRef(null);
+  useEffect(() => { setHexText(color); }, [color]);
+  const commit = (h, s, v) => { setHsv([h, s, v]); onColor(paintHex(h, s, v)); };
+  const dragOn = (ref, fn) => (e) => {
+    const el = ref.current;
+    if (!el) return;
+    e.stopPropagation();
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
+    const go = (ev) => { const r = el.getBoundingClientRect(); fn(Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width)), Math.max(0, Math.min(1, (ev.clientY - r.top) / r.height))); };
+    go(e);
+    const mv = (ev) => go(ev);
+    const up = () => { window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up); };
+    window.addEventListener('pointermove', mv);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
   };
-  useEffect(() => {
-    const fit = () => {
-      const c = canvasRef.current;
-      const w = wrapRef.current;
-      if (!c || !w) return;
-      const side = Math.max(120, Math.min(w.clientWidth, w.clientHeight));
-      const dpr = Math.min(2, window.devicePixelRatio || 1);
-      c.style.width = `${side}px`;
-      c.style.height = `${side}px`;
-      c.width = Math.round(side * dpr);
-      c.height = Math.round(side * dpr);
-      redraw();
-    };
-    fit();
-    window.addEventListener('resize', fit);
-    return () => window.removeEventListener('resize', fit);
-  }, []);
-  useEffect(() => { redraw(); }, [bg, count]);
-  useEffect(() => {
-    if (bg === '#111113' && color === '#111111') setColor('#FFFFFF');
-    if (bg !== '#111113' && color === '#FFFFFF') setColor('#111111');
-  }, [bg]);
-  const pt = (e) => {
-    const r = canvasRef.current.getBoundingClientRect();
-    return [Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)), Math.max(0, Math.min(1, (e.clientY - r.top) / r.height))];
-  };
-  const down = (e) => { e.preventDefault(); try { e.currentTarget.setPointerCapture(e.pointerId); } catch {} curRef.current = { c: color, w: size, p: [pt(e)] }; redraw(); };
-  const move = (e) => { if (!curRef.current) return; curRef.current.p.push(pt(e)); redraw(); };
-  const up = () => { if (!curRef.current) return; strokesRef.current = [...strokesRef.current, curRef.current]; curRef.current = null; setCount(strokesRef.current.length); };
-  const undo = () => { strokesRef.current = strokesRef.current.slice(0, -1); setCount(strokesRef.current.length); };
-  const clear = () => { strokesRef.current = []; setCount(0); };
-  const send = async () => {
-    if (busy || !strokesRef.current.length) return;
-    setBusy(true);
-    const out = document.createElement('canvas');
-    out.width = 1080;
-    out.height = 1080;
-    drawDoodle(out.getContext('2d'), 1080, 1080, strokesRef.current, bg);
-    const blob = await new Promise((res) => out.toBlob(res, 'image/png'));
-    if (blob) await onSend(new File([blob], `doodle-${Date.now()}.png`, { type: 'image/png' }));
-    setBusy(false);
-  };
-  const small = (label, onClick, disabled) => (
-    <button type="button" aria-label={label} onClick={onClick} disabled={disabled} style={{ height: 48, padding: '0 16px', borderRadius: 12, border: 'none', background: theme.dark ? '#2A2A2E' : '#EDEDF0', color: theme.ink, fontFamily: FONT, fontSize: 15, fontWeight: 700, cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.45 : 1, flexShrink: 0 }}>{label}</button>
+  const [h, s, v] = hsv;
+  const dot = (c, key) => (
+    <div key={key} role="button" aria-label={`Color ${c}`} onClick={() => { hapticTap(); setHsv(paintHsv(c)); onColor(c); }}
+      style={{ width: 34, height: 34, borderRadius: '50%', background: c, cursor: 'pointer', boxShadow: c.toUpperCase() === String(color).toUpperCase() ? `0 0 0 2px ${theme.panelBg}, 0 0 0 4px ${theme.ink}` : `inset 0 0 0 1px ${theme.border}` }} />
   );
   return (
-    <FullPage title="Doodle" subtitle={recipientName ? `To ${recipientName}` : undefined} onBack={onClose} zIndex={90} pad={false}
+    <div>
+      <div ref={svRef} onPointerDown={dragOn(svRef, (x, y) => commit(h, x, 1 - y))} style={{ position: 'relative', height: 170, borderRadius: 14, cursor: 'crosshair', touchAction: 'none', background: `linear-gradient(to top, #000, rgba(0,0,0,0)), linear-gradient(to right, #fff, hsl(${Math.round(h)}, 100%, 50%))` }}>
+        <div style={{ position: 'absolute', left: `${s * 100}%`, top: `${(1 - v) * 100}%`, width: 22, height: 22, marginLeft: -11, marginTop: -11, borderRadius: '50%', border: '3px solid #fff', boxShadow: '0 1px 4px rgba(0,0,0,0.5)', background: color, pointerEvents: 'none' }} />
+      </div>
+      <div ref={hueRef} onPointerDown={dragOn(hueRef, (x) => commit(x * 359.9, s || 0.8, v || 0.8))} style={{ position: 'relative', height: 22, borderRadius: 11, marginTop: 14, cursor: 'pointer', touchAction: 'none', background: 'linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00)' }}>
+        <div style={{ position: 'absolute', left: `${(h / 360) * 100}%`, top: '50%', width: 24, height: 24, marginLeft: -12, marginTop: -12, borderRadius: '50%', border: '3px solid #fff', boxShadow: '0 1px 4px rgba(0,0,0,0.5)', background: `hsl(${Math.round(h)}, 100%, 50%)`, pointerEvents: 'none' }} />
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 14 }}>
+        <span style={{ fontSize: 13, fontWeight: 700, color: theme.muted, whiteSpace: 'nowrap' }}>See through</span>
+        <div ref={alphaRef} onPointerDown={dragOn(alphaRef, (x) => onAlpha(Math.max(0.05, Math.round(x * 100) / 100)))} style={{ position: 'relative', flex: 1, height: 22, borderRadius: 11, cursor: 'pointer', touchAction: 'none', backgroundColor: '#ccc', backgroundImage: `linear-gradient(to right, rgba(0,0,0,0), ${color}), linear-gradient(45deg, #999 25%, transparent 25%, transparent 75%, #999 75%), linear-gradient(45deg, #999 25%, transparent 25%, transparent 75%, #999 75%)`, backgroundSize: '100% 100%, 12px 12px, 12px 12px', backgroundPosition: '0 0, 0 0, 6px 6px' }}>
+          <div style={{ position: 'absolute', left: `${alpha * 100}%`, top: '50%', width: 24, height: 24, marginLeft: -12, marginTop: -12, borderRadius: '50%', border: '3px solid #fff', boxShadow: '0 1px 4px rgba(0,0,0,0.5)', background: color, opacity: Math.max(0.3, alpha), pointerEvents: 'none' }} />
+        </div>
+        <span style={{ fontSize: 13, fontWeight: 800, color: theme.ink, width: 40, textAlign: 'right' }}>{Math.round(alpha * 100)}%</span>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 14 }}>
+        <div style={{ width: 40, height: 40, borderRadius: 12, background: color, boxShadow: `inset 0 0 0 1px ${theme.border}`, flexShrink: 0 }} />
+        <input value={hexText} aria-label="Color code" onChange={(e) => {
+          const t = e.target.value.toUpperCase();
+          setHexText(t);
+          if (/^#[0-9A-F]{6}$/.test(t)) { setHsv(paintHsv(t)); onColor(t); }
+        }} style={{ ...inputStyle(theme), fontFamily: '"Courier New", monospace', fontWeight: 700, letterSpacing: 1 }} />
+      </div>
+      {recent && recent.length > 0 && (
+        <>
+          <div style={{ fontSize: 13, fontWeight: 700, color: theme.muted, margin: '16px 0 8px' }}>Recent</div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>{recent.map((c) => dot(c, `r${c}`))}</div>
+        </>
+      )}
+      <div style={{ fontSize: 13, fontWeight: 700, color: theme.muted, margin: '16px 0 8px' }}>Colours</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 34px)', gap: 10, justifyContent: 'space-between', paddingBottom: 6 }}>{PAINT_PALETTE.map((c) => dot(c, c))}</div>
+    </div>
+  );
+}
+
+function PaintToolIcon({ k, size = 24 }) {
+  const p = { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': 'true' };
+  if (k === 'brush') return <svg {...p}><path d="M18.5 3.5c1 1 1 2.6 0 3.6L10 15.6 8.4 14 16.9 5.5c1-1 .6-1 1.6-2z" /><path d="M8.4 14c-2.1 0-3.6 1.6-3.6 3.6 0 1.1-.6 2-1.8 2.4 1.2.7 2.6 1 3.9 1 2.6 0 4.7-2.1 4.7-4.7L10 15.6" /></svg>;
+  if (k === 'eraser') return <svg {...p}><path d="M7 20h11" /><path d="M5.6 15.4l8.8-8.8c.8-.8 2-.8 2.8 0l2.2 2.2c.8.8.8 2 0 2.8L12 19H8.6c-.5 0-1-.2-1.4-.6l-1.6-1.6c-.8-.8-.8-1.6 0-1.4z" /><path d="M9.5 11.5l5 5" /></svg>;
+  if (k === 'fill') return <svg {...p}><path d="M5 12l6.4-6.4c.6-.6 1.5-.6 2.1 0l4.9 4.9c.6.6.6 1.5 0 2.1L12 19c-.6.6-1.5.6-2.1 0L5 14.1c-.6-.6-.6-1.5 0-2.1z" /><path d="M8.5 3.5l3 3" /><path d="M5 12.5h13.5" /><path d="M20.5 15.5s1.5 2 1.5 3a1.5 1.5 0 0 1-3 0c0-1 1.5-3 1.5-3z" /></svg>;
+  if (k === 'shapes') return <svg {...p}><rect x="3.5" y="12.5" width="8" height="8" rx="1.6" /><circle cx="16.5" cy="7.5" r="4" /><path d="M14 20.5l3.2-5.5 3.3 5.5z" /></svg>;
+  if (k === 'text') return <svg {...p}><path d="M5 6.5V5h14v1.5" /><path d="M12 5v14" /><path d="M9 19h6" /></svg>;
+  if (k === 'stamp') return <svg {...p}><circle cx="12" cy="12" r="8.5" /><path d="M8.6 14.2c.8 1.1 2 1.8 3.4 1.8s2.6-.7 3.4-1.8" /><circle cx="9.2" cy="10" r=".6" fill="currentColor" /><circle cx="14.8" cy="10" r=".6" fill="currentColor" /></svg>;
+  if (k === 'picker') return <svg {...p}><path d="M14.5 5.5l4 4" /><path d="M16.8 3.2a2 2 0 0 1 2.8 0l1.2 1.2a2 2 0 0 1 0 2.8l-2.3 2.3-4-4z" /><path d="M14.5 5.5L5 15v4h4l9.5-9.5" /></svg>;
+  if (k === 'undo') return <svg {...p}><path d="M9 14L4 9l5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" /></svg>;
+  if (k === 'redo') return <svg {...p}><path d="M15 14l5-5-5-5" /><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13" /></svg>;
+  if (k === 'more') return <svg {...p}><circle cx="5.5" cy="12" r="1.2" fill="currentColor" /><circle cx="12" cy="12" r="1.2" fill="currentColor" /><circle cx="18.5" cy="12" r="1.2" fill="currentColor" /></svg>;
+  if (k === 'bot') return <svg {...p}><rect x="4.5" y="7.5" width="15" height="11.5" rx="3.5" /><path d="M12 7.5V4.5" /><circle cx="12" cy="3.6" r="1" fill="currentColor" /><circle cx="9.3" cy="13" r="1.3" fill="currentColor" stroke="none" /><circle cx="14.7" cy="13" r="1.3" fill="currentColor" stroke="none" /><path d="M2.5 12v2.5M21.5 12v2.5" /></svg>;
+  if (k === 'fit') return <svg {...p}><path d="M4 9V5a1 1 0 0 1 1-1h4" /><path d="M15 4h4a1 1 0 0 1 1 1v4" /><path d="M20 15v4a1 1 0 0 1-1 1h-4" /><path d="M9 20H5a1 1 0 0 1-1-1v-4" /></svg>;
+  return null;
+}
+
+function paintBrushPreview(k, color) {
+  const c = document.createElement('canvas');
+  c.width = 220;
+  c.height = 64;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fillRect(0, 0, 220, 64);
+  const pts = [];
+  for (let i = 0; i <= 40; i++) { const t = i / 40; pts.push([18 + t * 184, 32 + Math.sin(t * Math.PI * 2) * 14, 0.5]); }
+  const op = { brush: k, color, size: k === 'spray' ? 9 : k === 'pencil' ? 6 : 8, pts, seed: 11, sym: 'off' };
+  const r = makePaintRenderer(op, 220, 64);
+  if (k === 'marker' || k === 'highlighter') {
+    const t = document.createElement('canvas');
+    t.width = 220; t.height = 64;
+    r(t.getContext('2d'), null, true);
+    ctx.globalAlpha = k === 'highlighter' ? 0.4 : 0.75;
+    ctx.drawImage(t, 0, 0);
+    ctx.globalAlpha = 1;
+  } else r(ctx, null, true);
+  return c.toDataURL();
+}
+
+function PaintStudio({ onClose, onSend, recipientName, onAskBot }) {
+  const { theme } = useTheme();
+  const stageRef = useRef(null);
+  const viewRef = useRef(null);
+  const L = useRef(null);
+  const [docKey, setDocKey] = useState('square');
+  const [W, H] = PAINT_SIZES[docKey];
+  const [tool, setTool] = useState('brush');
+  const [brush, setBrush] = useState('pen');
+  const [shape, setShape] = useState('rect');
+  const [shapeFill, setShapeFill] = useState(false);
+  const [color, setColor] = useState('#111111');
+  const [alpha, setAlpha] = useState(1);
+  const [size, setSize] = useState(12);
+  const [sym, setSym] = useState('off');
+  const [steady, setSteady] = useState(0);
+  const [magic, setMagic] = useState(false);
+  const [bgKey, setBgKey] = useState('white');
+  const [bgPhoto, setBgPhoto] = useState(null);
+  const [template, setTemplate] = useState(null);
+  const [stamp, setStamp] = useState(PAINT_STAMPS[0]);
+  const [recent, setRecent] = useState([]);
+  const [count, setCount] = useState(0);
+  const [redoCount, setRedoCount] = useState(0);
+  const [sheet, setSheet] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [toast, setToast] = useState('');
+  const [askState, setAskState] = useState(null);
+  const [textEdit, setTextEdit] = useState(null);
+  const [confirmLeave, setConfirmLeave] = useState(false);
+  const [confirmClear, setConfirmClear] = useState(false);
+  const [idea, setIdea] = useState('');
+  const [zoomPct, setZoomPct] = useState(100);
+  const photoInputRef = useRef(null);
+  const st = useRef({ ops: [], redo: [], cps: [], live: null, liveRender: null, shape: null, pointers: new Map(), pinch: null, view: { s: 1, ox: 0, oy: 0, z: 1, px: 0, py: 0 }, dirty: true, raf: 0, steadyPt: null, magicUndo: null, downAt: 0, textDrag: null });
+  const toolRef = useRef({});
+  toolRef.current = { tool, brush, shape, shapeFill, color, alpha, size, sym, steady, magic, stamp, textEdit };
+
+  const toastTimer = useRef(null);
+  const say = (t) => { setToast(t); clearTimeout(toastTimer.current); toastTimer.current = setTimeout(() => { setToast(''); st.current.magicUndo = null; }, 2600); };
+  const mk = (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
+  if (!L.current || L.current.W !== W || L.current.H !== H) {
+    const tmp = mk(W, H);
+    tmp.getContext('2d', { willReadFrequently: true });
+    L.current = { W, H, bg: mk(W, H), paint: mk(W, H), live: mk(W, H), art: mk(W, H), work: mk(W, H), tmp, fillc: mk(W, H) };
+  }
+
+  const drawBg = () => {
+    const { bg } = L.current;
+    const ctx = bg.getContext('2d');
+    const spec = PAINT_BACKGROUNDS.find((b) => b[0] === bgKey) || PAINT_BACKGROUNDS[0];
+    ctx.fillStyle = spec[1];
+    ctx.fillRect(0, 0, W, H);
+    if (bgPhoto) {
+      const iw = bgPhoto.naturalWidth || bgPhoto.width;
+      const ih = bgPhoto.naturalHeight || bgPhoto.height;
+      const s = Math.max(W / iw, H / ih);
+      ctx.drawImage(bgPhoto, (W - iw * s) / 2, (H - ih * s) / 2, iw * s, ih * s);
+      return;
+    }
+    if (bgKey === 'grid') {
+      ctx.strokeStyle = 'rgba(80,90,120,0.18)';
+      ctx.lineWidth = 2;
+      for (let x = 45; x < W; x += 45) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+      for (let y = 45; y < H; y += 45) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+    } else if (bgKey === 'dots') {
+      ctx.fillStyle = 'rgba(80,90,120,0.28)';
+      for (let x = 30; x < W; x += 40) for (let y = 30; y < H; y += 40) { ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2); ctx.fill(); }
+    } else if (bgKey === 'lines') {
+      ctx.strokeStyle = 'rgba(70,110,200,0.25)';
+      ctx.lineWidth = 2;
+      for (let y = 120; y < H; y += 60) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+      ctx.strokeStyle = 'rgba(230,80,90,0.35)';
+      ctx.beginPath(); ctx.moveTo(110, 0); ctx.lineTo(110, H); ctx.stroke();
+    }
+  };
+  const drawArt = () => {
+    const { art } = L.current;
+    const ctx = art.getContext('2d');
+    ctx.clearRect(0, 0, W, H);
+    const tpl = template && PAINT_TEMPLATES[template];
+    if (!tpl) return;
+    const s = (Math.min(W, H) / 1000) * 0.92;
+    ctx.save();
+    ctx.translate((W - 1000 * s) / 2, (H - 1000 * s) / 2);
+    ctx.scale(s, s);
+    ctx.strokeStyle = '#141416';
+    ctx.fillStyle = '#141416';
+    ctx.lineWidth = 11;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    tpl.draw(ctx);
+    ctx.restore();
+  };
+  const composite = () => {
+    const { tmp, bg, paint, art } = L.current;
+    const ctx = tmp.getContext('2d');
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+    ctx.clearRect(0, 0, W, H);
+    ctx.drawImage(bg, 0, 0);
+    ctx.drawImage(paint, 0, 0);
+    ctx.drawImage(art, 0, 0);
+    return ctx;
+  };
+  const applyOp = (op, ctx) => {
+    ctx.save();
+    if (op.t === 'clear') { ctx.clearRect(0, 0, W, H); ctx.restore(); return; }
+    if (op.t === 'stroke') {
+      const { work } = L.current;
+      const wctx = work.getContext('2d');
+      wctx.clearRect(0, 0, W, H);
+      makePaintRenderer(op, W, H)(wctx, null, true);
+      ctx.globalAlpha = op.alpha * (op.brush === 'highlighter' ? 0.4 : op.brush === 'marker' ? 0.8 : 1);
+      ctx.globalCompositeOperation = op.eraser ? 'destination-out' : 'source-over';
+      ctx.drawImage(work, 0, 0);
+    } else if (op.t === 'shape') {
+      ctx.globalAlpha = op.alpha;
+      paintDrawShape(ctx, op);
+    } else if (op.t === 'text') {
+      ctx.globalAlpha = op.alpha;
+      paintDrawText(ctx, op);
+    } else if (op.t === 'stamp') {
+      paintDrawStamp(ctx, op);
+    } else if (op.t === 'fill') {
+      const cctx = composite();
+      let img;
+      try { img = cctx.getImageData(0, 0, W, H); } catch { ctx.restore(); return; }
+      const mask = paintFloodMask(img, W, H, op.x, op.y, op.tol || 40);
+      if (mask) {
+        const fc = L.current.fillc;
+        const fctx = fc.getContext('2d');
+        const out = fctx.createImageData(W, H);
+        const d = out.data;
+        const [r, g, b] = paintHexToRgb(op.color);
+        const a = Math.round(255 * op.alpha);
+        for (let p = 0; p < mask.length; p++) {
+          if (!mask[p]) continue;
+          const k = p * 4;
+          d[k] = r;
+          d[k + 1] = g;
+          d[k + 2] = b;
+          d[k + 3] = a;
+        }
+        fctx.putImageData(out, 0, 0);
+        ctx.globalAlpha = 1;
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.drawImage(fc, 0, 0);
+      }
+    }
+    ctx.restore();
+  };
+  const rebuild = () => {
+    const s = st.current;
+    const { paint } = L.current;
+    const ctx = paint.getContext('2d');
+    ctx.clearRect(0, 0, W, H);
+    const n = s.ops.length;
+    const cp = s.cps.filter((c) => c.i <= n).sort((a, b) => b.i - a.i)[0];
+    let from = 0;
+    if (cp) { ctx.drawImage(cp.c, 0, 0); from = cp.i; }
+    for (let k = from; k < n; k++) applyOp(s.ops[k], ctx);
+    s.dirty = true;
+    schedule();
+  };
+  const pushOp = (op) => {
+    const s = st.current;
+    s.ops.push(op);
+    s.redo = [];
+    s.cps = s.cps.filter((c) => c.i <= s.ops.length - 1);
+    applyOp(op, L.current.paint.getContext('2d'));
+    if (s.ops.length % 12 === 0) {
+      const c = mk(W, H);
+      c.getContext('2d').drawImage(L.current.paint, 0, 0);
+      s.cps.push({ i: s.ops.length, c });
+      if (s.cps.length > 4) s.cps.shift();
+    }
+    setCount(s.ops.length);
+    setRedoCount(0);
+    s.dirty = true;
+    schedule();
+  };
+  const undo = () => {
+    const s = st.current;
+    if (!s.ops.length) return;
+    hapticTap();
+    s.redo.push(s.ops.pop());
+    s.magicUndo = null;
+    rebuild();
+    setCount(s.ops.length);
+    setRedoCount(s.redo.length);
+  };
+  const redo = () => {
+    const s = st.current;
+    if (!s.redo.length) return;
+    hapticTap();
+    const op = s.redo.pop();
+    s.ops.push(op);
+    applyOp(op, L.current.paint.getContext('2d'));
+    setCount(s.ops.length);
+    setRedoCount(s.redo.length);
+    s.dirty = true;
+    schedule();
+  };
+
+  const fit = () => {
+    const stage = stageRef.current;
+    const cv = viewRef.current;
+    if (!stage || !cv) return;
+    const sw = stage.clientWidth;
+    const sh = stage.clientHeight;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    cv.width = Math.round(sw * dpr);
+    cv.height = Math.round(sh * dpr);
+    cv.style.width = `${sw}px`;
+    cv.style.height = `${sh}px`;
+    const v = st.current.view;
+    const base = Math.min((sw - 24) / W, (sh - 24) / H);
+    v.base = base;
+    v.dpr = dpr;
+    v.sw = sw;
+    v.sh = sh;
+    applyZoom(v.z || 1, v.px || 0, v.py || 0);
+  };
+  const applyZoom = (z, px, py) => {
+    const v = st.current.view;
+    v.z = Math.max(1, Math.min(6, z));
+    v.s = v.base * v.z;
+    const maxX = Math.max(0, (W * v.s - v.sw) / 2 + 40);
+    const maxY = Math.max(0, (H * v.s - v.sh) / 2 + 40);
+    v.px = v.z <= 1.001 ? 0 : Math.max(-maxX, Math.min(maxX, px));
+    v.py = v.z <= 1.001 ? 0 : Math.max(-maxY, Math.min(maxY, py));
+    v.ox = (v.sw - W * v.s) / 2 + v.px;
+    v.oy = (v.sh - H * v.s) / 2 + v.py;
+    setZoomPct(Math.round(v.z * 100));
+    st.current.dirty = true;
+    schedule();
+  };
+  const schedule = () => {
+    const s = st.current;
+    if (s.raf) return;
+    s.raf = requestAnimationFrame(frame);
+  };
+  const frame = () => {
+    const s = st.current;
+    s.raf = 0;
+    const cv = viewRef.current;
+    if (!cv || !L.current) return;
+    const ctx = cv.getContext('2d');
+    const v = s.view;
+    const { bg, paint, live, art, work } = L.current;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    ctx.setTransform(v.dpr * v.s, 0, 0, v.dpr * v.s, v.dpr * v.ox, v.dpr * v.oy);
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,0.28)';
+    ctx.shadowBlur = 18 / v.s;
+    ctx.shadowOffsetY = 4 / v.s;
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, W, H);
+    ctx.restore();
+    ctx.imageSmoothingEnabled = v.s < 1.5;
+    ctx.drawImage(bg, 0, 0);
+    if (s.live && s.live.eraser) {
+      const w = work.getContext('2d');
+      w.globalCompositeOperation = 'source-over';
+      w.globalAlpha = 1;
+      w.clearRect(0, 0, W, H);
+      w.drawImage(paint, 0, 0);
+      w.globalCompositeOperation = 'destination-out';
+      w.globalAlpha = s.live.alpha;
+      w.drawImage(live, 0, 0);
+      w.globalCompositeOperation = 'source-over';
+      w.globalAlpha = 1;
+      ctx.drawImage(work, 0, 0);
+    } else {
+      ctx.drawImage(paint, 0, 0);
+      if (s.live) {
+        ctx.save();
+        ctx.globalAlpha = s.live.alpha * (s.live.brush === 'highlighter' ? 0.4 : s.live.brush === 'marker' ? 0.8 : 1);
+        ctx.drawImage(live, 0, 0);
+        ctx.restore();
+      }
+    }
+    ctx.drawImage(art, 0, 0);
+    if (s.shape) { ctx.save(); ctx.globalAlpha = s.shape.alpha; paintDrawShape(ctx, s.shape); ctx.restore(); }
+    const te = toolRef.current.textEdit;
+    if (te && te.text) {
+      ctx.save();
+      ctx.globalAlpha = te.alpha;
+      paintDrawText(ctx, te);
+      ctx.restore();
+      ctx.save();
+      ctx.font = paintFontFor(te);
+      const lines = te.text.split('\n');
+      const wmax = Math.max(...lines.map((l) => ctx.measureText(l).width));
+      const hh = lines.length * te.size * 1.18;
+      ctx.setLineDash([10 / v.s, 8 / v.s]);
+      ctx.lineWidth = 2 / v.s;
+      ctx.strokeStyle = '#8C6CFF';
+      ctx.strokeRect(te.x - wmax / 2 - 14, te.y - hh / 2 - 10, wmax + 28, hh + 20);
+      ctx.restore();
+    }
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+  };
+
+  useEffect(() => { drawBg(); st.current.dirty = true; schedule(); }, [bgKey, bgPhoto, W, H]);
+  useEffect(() => { drawArt(); st.current.dirty = true; schedule(); }, [template, W, H]);
+  useEffect(() => { schedule(); }, [textEdit]);
+  useEffect(() => {
+    fit();
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => fit()) : null;
+    if (ro && stageRef.current) ro.observe(stageRef.current);
+    window.addEventListener('resize', fit);
+    return () => { if (ro) ro.disconnect(); window.removeEventListener('resize', fit); cancelAnimationFrame(st.current.raf); };
+  }, [W, H]);
+
+  const toDoc = (e) => {
+    const r = viewRef.current.getBoundingClientRect();
+    const v = st.current.view;
+    return [(e.clientX - r.left - v.ox) / v.s, (e.clientY - r.top - v.oy) / v.s];
+  };
+  const rememberColor = (c) => setRecent((prev) => [c, ...prev.filter((x) => x !== c)].slice(0, 8));
+  const sampleAt = (x, y) => {
+    const ctx = composite();
+    try {
+      const d = ctx.getImageData(Math.max(0, Math.min(W - 1, Math.floor(x))), Math.max(0, Math.min(H - 1, Math.floor(y))), 1, 1).data;
+      return `#${[d[0], d[1], d[2]].map((u) => u.toString(16).padStart(2, '0')).join('')}`.toUpperCase();
+    } catch { return null; }
+  };
+  const beginStroke = (x, y, e) => {
+    const t = toolRef.current;
+    const eraser = t.tool === 'eraser';
+    const op = { t: 'stroke', brush: eraser ? 'pen' : t.brush, eraser, color: t.color, alpha: eraser ? 1 : t.alpha, size: eraser ? Math.max(6, t.size * 1.6) : t.size, sym: t.sym, seed: Math.floor(Math.random() * 1e9), pressure: e.pointerType === 'pen', pts: [[x, y, e.pressure || 0.5]] };
+    const s = st.current;
+    s.live = op;
+    s.steadyPt = [x, y];
+    L.current.live.getContext('2d').clearRect(0, 0, W, H);
+    s.liveRender = makePaintRenderer(op, W, H);
+    s.liveRender(L.current.live.getContext('2d'));
+    s.dirty = true;
+    schedule();
+  };
+  const extendStroke = (x, y, p) => {
+    const s = st.current;
+    const op = s.live;
+    if (!op) return;
+    let nx = x;
+    let ny = y;
+    const R = toolRef.current.steady * 5;
+    if (R > 0 && s.steadyPt) {
+      const dx = x - s.steadyPt[0];
+      const dy = y - s.steadyPt[1];
+      const d = Math.hypot(dx, dy);
+      if (d <= R) return;
+      nx = s.steadyPt[0] + (dx / d) * (d - R);
+      ny = s.steadyPt[1] + (dy / d) * (d - R);
+      s.steadyPt = [nx, ny];
+    }
+    const last = op.pts[op.pts.length - 1];
+    if (Math.hypot(nx - last[0], ny - last[1]) < 1.2) return;
+    op.pts.push([nx, ny, p || 0.5]);
+    s.liveRender(L.current.live.getContext('2d'));
+    s.dirty = true;
+    schedule();
+  };
+  const endStroke = (discard) => {
+    const s = st.current;
+    const op = s.live;
+    if (!op) return;
+    s.live = null;
+    const lctx = L.current.live.getContext('2d');
+    if (!discard && op.pts.length) {
+      const t = toolRef.current;
+      const shapeGuess = t.magic && !op.eraser && op.pts.length > 5 && (op.brush === 'pen' || op.brush === 'marker' || op.brush === 'pencil' || op.brush === 'crayon' || op.brush === 'neon') ? paintRecognize(op.pts) : null;
+      if (shapeGuess) {
+        pushOp({ t: 'shape', ...shapeGuess, color: op.color, size: Math.max(2, op.size), alpha: op.alpha, fill: false });
+        s.magicUndo = op;
+        say(shapeGuess.kind === 'ellipse' ? 'Made it a circle' : shapeGuess.kind === 'rect' ? 'Made it a box' : shapeGuess.kind === 'line' ? 'Made it a straight line' : 'Made it neat');
+      } else {
+        pushOp(op);
+      }
+    }
+    lctx.clearRect(0, 0, W, H);
+    s.dirty = true;
+    schedule();
+  };
+  const keepMyLine = () => {
+    const s = st.current;
+    if (!s.magicUndo) return;
+    const op = s.magicUndo;
+    s.magicUndo = null;
+    s.ops.pop();
+    rebuild();
+    pushOp(op);
+    setToast('');
+  };
+
+  const onDown = (e) => {
+    const s = st.current;
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
+    s.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (s.pointers.size === 2) {
+      if (s.live) endStroke(s.live.pts.length < 6 || Date.now() - s.downAt < 180);
+      if (s.shape) s.shape = null;
+      const [a, b] = [...s.pointers.values()];
+      const v = s.view;
+      s.pinch = { d0: Math.hypot(a.x - b.x, a.y - b.y) || 1, z0: v.z, mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2, px0: v.px, py0: v.py };
+      return;
+    }
+    if (s.pointers.size > 2 || s.pinch) return;
+    s.downAt = Date.now();
+    const [x, y] = toDoc(e);
+    const t = toolRef.current;
+    s.tap = { x, y, cx: e.clientX, cy: e.clientY, moved: false };
+    if (t.textEdit) {
+      const te = t.textEdit;
+      if (Math.abs(x - te.x) < 400 && Math.abs(y - te.y) < Math.max(80, te.size * 2)) s.textDrag = { dx: te.x - x, dy: te.y - y };
+      return;
+    }
+    if (t.tool === 'brush' || t.tool === 'eraser') beginStroke(x, y, e);
+    else if (t.tool === 'shapes') s.shape = { t: 'shape', kind: t.shape, x0: x, y0: y, x1: x, y1: y, color: t.color, size: t.size, alpha: t.alpha, fill: t.shapeFill };
+  };
+  const onMove = (e) => {
+    const s = st.current;
+    if (!s.pointers.has(e.pointerId)) return;
+    s.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (s.pinch && s.pointers.size >= 2) {
+      const [a, b] = [...s.pointers.values()];
+      const p = s.pinch;
+      const z = p.z0 * ((Math.hypot(a.x - b.x, a.y - b.y) || 1) / p.d0);
+      const mx = (a.x + b.x) / 2;
+      const my = (a.y + b.y) / 2;
+      applyZoom(z, p.px0 + (mx - p.mx), p.py0 + (my - p.my));
+      return;
+    }
+    if (s.tap && Math.hypot(e.clientX - s.tap.cx, e.clientY - s.tap.cy) > 6) s.tap.moved = true;
+    if (s.textDrag && toolRef.current.textEdit) {
+      const [x, y] = toDoc(e);
+      setTextEdit((te) => (te ? { ...te, x: x + s.textDrag.dx, y: y + s.textDrag.dy } : te));
+      return;
+    }
+    if (s.live) {
+      const evs = typeof e.getCoalescedEvents === 'function' ? e.getCoalescedEvents() : null;
+      (evs && evs.length ? evs : [e]).forEach((ev) => { const [x, y] = toDoc(ev); extendStroke(x, y, ev.pressure); });
+      return;
+    }
+    if (s.shape) {
+      const [x, y] = toDoc(e);
+      s.shape.x1 = x;
+      s.shape.y1 = y;
+      s.dirty = true;
+      schedule();
+    }
+  };
+  const onUp = (e) => {
+    const s = st.current;
+    if (!s.pointers.has(e.pointerId)) return;
+    s.pointers.delete(e.pointerId);
+    if (s.pinch) { if (s.pointers.size === 0) s.pinch = null; return; }
+    if (s.pointers.size > 0) return;
+    const t = toolRef.current;
+    const tap = s.tap;
+    s.tap = null;
+    if (s.textDrag) { s.textDrag = null; return; }
+    if (s.live) { endStroke(false); return; }
+    if (s.shape) {
+      const sh = s.shape;
+      s.shape = null;
+      if (Math.hypot(sh.x1 - sh.x0, sh.y1 - sh.y0) > 6) pushOp(sh);
+      else { s.dirty = true; schedule(); }
+      return;
+    }
+    if (!tap || tap.moved) return;
+    if (tap.x < 0 || tap.y < 0 || tap.x > W || tap.y > H) return;
+    if (t.tool === 'fill') {
+      hapticTap();
+      pushOp({ t: 'fill', x: tap.x, y: tap.y, color: t.color, alpha: t.alpha, tol: 40 });
+      rememberColor(t.color);
+    } else if (t.tool === 'picker') {
+      const c = sampleAt(tap.x, tap.y);
+      if (c) { setColor(c); rememberColor(c); setTool(toolRef.current.prevTool || 'brush'); say('Colour picked'); }
+    } else if (t.tool === 'stamp') {
+      hapticTap();
+      pushOp({ t: 'stamp', x: tap.x, y: tap.y, emoji: t.stamp, size: Math.max(40, t.size * 6), rot: (Math.random() - 0.5) * 0.5 });
+    } else if (t.tool === 'text' && t.textEdit) {
+      setTextEdit((te) => (te ? { ...te, x: tap.x, y: tap.y } : te));
+    } else if (t.tool === 'text' && !t.textEdit) {
+      setTextEdit({ x: tap.x, y: tap.y, text: '', font: 'sans', size: Math.max(48, t.size * 4), color: t.color, alpha: t.alpha, outline: null });
+    }
+  };
+  const onWheel = (e) => {
+    const v = st.current.view;
+    applyZoom(v.z * (e.deltaY < 0 ? 1.12 : 0.9), v.px, v.py);
+  };
+  useEffect(() => {
+    const onKey = (e) => {
+      const tag = e.target && e.target.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); return; }
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const map = { b: 'brush', e: 'eraser', g: 'fill', s: 'shapes', t: 'text', i: 'picker' };
+      const k = map[e.key.toLowerCase()];
+      if (k) setTool(k);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  const pickTool = (k) => {
+    hapticTap();
+    if (k === 'picker') toolRef.current.prevTool = tool === 'picker' ? 'brush' : tool;
+    if (textEdit && k !== 'text') commitText();
+    setTool(k);
+    if (k === 'shapes' && tool === 'shapes') setSheet('shapes');
+    if (k === 'brush' && tool === 'brush') setSheet('brush');
+    if (k === 'stamp' && tool === 'stamp') setSheet('stamp');
+  };
+  const commitText = () => {
+    const te = textEdit;
+    setTextEdit(null);
+    if (te && te.text.trim()) { pushOp({ t: 'text', ...te, text: te.text.replace(/\s+$/, '') }); rememberColor(te.color); }
+  };
+  const exportBlob = async () => {
+    const out = mk(W, H);
+    const ctx = out.getContext('2d');
+    ctx.drawImage(L.current.bg, 0, 0);
+    ctx.drawImage(L.current.paint, 0, 0);
+    ctx.drawImage(L.current.art, 0, 0);
+    const type = bgPhoto ? 'image/jpeg' : 'image/png';
+    return new Promise((res) => out.toBlob(res, type, 0.92));
+  };
+  const hasWork = () => st.current.ops.length > 0 || !!template || !!bgPhoto;
+  const send = async () => {
+    if (busy || !hasWork()) return;
+    if (textEdit) commitText();
+    setBusy(true);
+    const blob = await exportBlob();
+    if (blob) await onSend(new File([blob], `drawing-${Date.now()}.${blob.type === 'image/jpeg' ? 'jpg' : 'png'}`, { type: blob.type }));
+    setBusy(false);
+  };
+  const saveToPhone = async () => {
+    const blob = await exportBlob();
+    if (!blob) return;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `zchat-drawing-${Date.now()}.${blob.type === 'image/jpeg' ? 'jpg' : 'png'}`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    say('Saved');
+  };
+  const ask = async (q) => {
+    if (!onAskBot) return;
+    setAskState({ k: q.k, loading: true, text: '' });
+    let file = null;
+    if (q.k !== 'idea' && hasWork()) {
+      const blob = await exportBlob();
+      if (blob) file = new File([blob], `drawing-${Date.now()}.${blob.type === 'image/jpeg' ? 'jpg' : 'png'}`, { type: blob.type });
+    }
+    if (q.k !== 'idea' && !file) { setAskState({ k: q.k, loading: false, text: 'Draw something first, then ask again.' }); return; }
+    const res = await onAskBot(file, q.prompt);
+    setAskState({ k: q.k, loading: false, text: (res && (res.text || res.error)) || 'ZChat Bot could not answer right now. Try again in a moment.' });
+  };
+  const [backGen, setBackGen] = useState(0);
+  const requestClose = (fromBack) => {
+    if (sheet) { setSheet(null); if (fromBack) setBackGen((g) => g + 1); return; }
+    if (hasWork()) { setConfirmLeave(true); if (fromBack) setBackGen((g) => g + 1); return; }
+    onClose();
+  };
+  const reqCloseRef = useRef(requestClose);
+  reqCloseRef.current = requestClose;
+  useEffect(() => {
+    const entry = () => { reqCloseRef.current(true); };
+    backStack.push(entry);
+    return () => { const i = backStack.lastIndexOf(entry); if (i >= 0) backStack.splice(i, 1); };
+  }, [backGen]);
+  const pickPhoto = (e) => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!f) return;
+    const url = URL.createObjectURL(f);
+    const img = new Image();
+    img.onload = () => { setBgPhoto(img); setTimeout(() => URL.revokeObjectURL(url), 2000); };
+    img.onerror = () => { URL.revokeObjectURL(url); say('That photo could not be opened'); };
+    img.src = url;
+    setSheet(null);
+  };
+  const changeSize = (k) => {
+    if (k === docKey) return;
+    if (st.current.ops.length) { say('Clear the canvas first to change its shape'); return; }
+    st.current.cps = [];
+    st.current.view.z = 1;
+    st.current.view.px = 0;
+    st.current.view.py = 0;
+    setDocKey(k);
+  };
+  useEffect(() => { rebuild(); }, [W, H]);
+
+  const c = igPalette(theme);
+  const barBtn = (k, label, onClick, disabled) => (
+    <button type="button" aria-label={label} onClick={onClick} disabled={disabled} className="zchat-press"
+      style={{ width: 42, height: 42, borderRadius: 12, border: 'none', background: 'transparent', color: disabled ? c.faint : c.fg, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: disabled ? 'default' : 'pointer', padding: 0, flexShrink: 0 }}>
+      <PaintToolIcon k={k} />
+    </button>
+  );
+  const tools = [['brush', 'Brush'], ['eraser', 'Eraser'], ['fill', 'Fill'], ['shapes', 'Shapes'], ['text', 'Text'], ['stamp', 'Stickers'], ['picker', 'Pick colour']];
+  const brushLabel = (PAINT_BRUSHES.find((b) => b.k === brush) || PAINT_BRUSHES[0]).label;
+  const shapeLabel = (PAINT_SHAPES.find((b) => b.k === shape) || PAINT_SHAPES[0]).label;
+  const chip = (label, onClick, on, aria) => (
+    <button type="button" aria-label={aria || label} onClick={onClick} className="zchat-press"
+      style={{ height: 34, padding: '0 12px', borderRadius: 17, border: 'none', background: on ? c.fg : c.field, color: on ? c.bg : c.fg, fontWeight: 700, fontSize: 13.5, fontFamily: FONT, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6 }}>{label}</button>
+  );
+  const rowLabel = (t) => <div style={{ fontSize: 13, fontWeight: 700, color: theme.muted, margin: '16px 0 8px' }}>{t}</div>;
+  const optionRow = (label, sub, right, onClick) => (
+    <div role={onClick ? 'button' : undefined} onClick={onClick} className={onClick ? 'zchat-row-press' : undefined} style={{ display: 'flex', alignItems: 'center', gap: 12, minHeight: 52, cursor: onClick ? 'pointer' : 'default' }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 15, fontWeight: 600, color: theme.ink }}>{label}</div>
+        {sub && <div style={{ fontSize: 12.5, color: theme.muted, marginTop: 1 }}>{sub}</div>}
+      </div>
+      {right}
+    </div>
+  );
+  const previews = useMemo(() => {
+    if (sheet !== 'brush') return {};
+    const out = {};
+    const pc = /^#F[0-9A-F]F[0-9A-F]F[0-9A-F]$/i.test(color) || color.toUpperCase() === '#FFFFFF' ? '#111111' : color;
+    PAINT_BRUSHES.forEach((b) => { out[b.k] = paintBrushPreview(b.k, pc); });
+    return out;
+  }, [sheet, color]);
+
+  return (
+    <Portal>
+      <div className="zchat-panel-open" data-no-swipe="true" style={{ position: 'fixed', left: 0, right: 0, top: 'var(--zvp-top, 0px)', height: 'var(--zvp-h, 100%)', zIndex: 90, background: c.bg, color: c.fg, fontFamily: FONT, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{ paddingTop: 'env(safe-area-inset-top)', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', height: 54, padding: '0 6px', gap: 2 }}>
+            <button type="button" aria-label="Close" onClick={() => requestClose(false)} className="zchat-press" style={{ width: 44, height: 44, border: 'none', background: 'transparent', color: c.fg, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 }}><X size={24} /></button>
+            {barBtn('undo', 'Undo', undo, !count)}
+            {barBtn('redo', 'Redo', redo, !redoCount)}
+            <div style={{ flex: 1, minWidth: 0, textAlign: 'center', fontSize: 12.5, color: c.dim, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{zoomPct > 100 ? `${zoomPct}%` : (recipientName ? `To ${recipientName}` : '')}</div>
+            {zoomPct > 100 && barBtn('fit', 'Fit to screen', () => applyZoom(1, 0, 0))}
+            {onAskBot && barBtn('bot', 'Ask ZChat Bot', () => { setAskState(null); setSheet('ask'); })}
+            {barBtn('more', 'More options', () => setSheet('more'))}
+            {onSend && (
+              <button type="button" onClick={send} disabled={busy || !(count || template || bgPhoto)} className="zchat-press"
+                style={{ height: 38, padding: '0 16px', marginLeft: 4, borderRadius: 19, border: 'none', background: theme.coral, color: '#fff', fontWeight: 800, fontSize: 14.5, fontFamily: FONT, cursor: 'pointer', opacity: busy || !(count || template || bgPhoto) ? 0.45 : 1, flexShrink: 0 }}>{busy ? 'Sending' : 'Send'}</button>
+            )}
+          </div>
+        </div>
+        <div ref={stageRef} style={{ flex: 1, minHeight: 0, position: 'relative', background: theme.dark ? '#121214' : '#E7E7EC', overflow: 'hidden' }}>
+          <canvas ref={viewRef} aria-label="Drawing area" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp} onWheel={onWheel}
+            style={{ position: 'absolute', left: 0, top: 0, touchAction: 'none', cursor: tool === 'picker' ? 'copy' : tool === 'text' ? 'text' : 'crosshair' }} />
+          {(sym !== 'off' || magic || steady > 0 || template) && (
+            <div style={{ position: 'absolute', left: 10, top: 10, display: 'flex', gap: 6, flexWrap: 'wrap', pointerEvents: 'none' }}>
+              {sym !== 'off' && <span style={{ fontSize: 12, fontWeight: 800, padding: '4px 9px', borderRadius: 10, background: 'rgba(0,0,0,0.55)', color: '#fff' }}>{sym === 'mirror' ? 'Mirror' : sym === 'quad' ? 'Four way' : 'Kaleidoscope'}</span>}
+              {magic && <span style={{ fontSize: 12, fontWeight: 800, padding: '4px 9px', borderRadius: 10, background: 'rgba(0,0,0,0.55)', color: '#fff' }}>Magic shapes</span>}
+              {steady > 0 && <span style={{ fontSize: 12, fontWeight: 800, padding: '4px 9px', borderRadius: 10, background: 'rgba(0,0,0,0.55)', color: '#fff' }}>Steady {steady}</span>}
+            </div>
+          )}
+          {toast && (
+            <div className="zchat-pop" style={{ position: 'absolute', left: '50%', bottom: 14, transform: 'translateX(-50%)', display: 'flex', alignItems: 'center', gap: 10, padding: '8px 8px 8px 14px', borderRadius: 18, background: 'rgba(20,20,24,0.9)', color: '#fff', fontSize: 13.5, fontWeight: 700, whiteSpace: 'nowrap' }}>
+              {toast}
+              {st.current.magicUndo && <button type="button" onClick={keepMyLine} style={{ height: 28, padding: '0 10px', borderRadius: 14, border: 'none', background: 'rgba(255,255,255,0.16)', color: '#fff', fontWeight: 800, fontSize: 12.5, cursor: 'pointer', fontFamily: FONT }}>Keep my line</button>}
+            </div>
+          )}
+          {idea && (
+            <div style={{ position: 'absolute', left: 12, right: 12, top: 12, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
+              <div style={{ maxWidth: 360, padding: '9px 14px', borderRadius: 14, background: theme.panelBg, color: theme.ink, fontSize: 14, fontWeight: 700, boxShadow: '0 6px 20px rgba(0,0,0,0.25)', textAlign: 'center' }}>Draw this: {idea}</div>
+            </div>
+          )}
+        </div>
+        {textEdit ? (
+          <div style={{ flexShrink: 0, padding: '10px 12px', paddingBottom: 'calc(10px + env(safe-area-inset-bottom))', borderTop: `1px solid ${c.line}`, background: c.bg }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+              <textarea autoFocus value={textEdit.text} onChange={(e) => setTextEdit((te) => ({ ...te, text: e.target.value.slice(0, 200) }))} placeholder="Type something" aria-label="Text to add" rows={2}
+                style={{ ...inputStyle(theme), flex: 1, resize: 'none', fontSize: 16, lineHeight: 1.35 }} />
+              <button type="button" onClick={commitText} style={{ height: 44, padding: '0 16px', borderRadius: 12, border: 'none', background: theme.coral, color: '#fff', fontWeight: 800, fontSize: 14.5, fontFamily: FONT, cursor: 'pointer', flexShrink: 0 }}>Done</button>
+            </div>
+            <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingTop: 10, scrollbarWidth: 'none' }}>
+              {PAINT_FONTS.map(([k, label]) => chip(label, () => setTextEdit((te) => ({ ...te, font: k })), textEdit.font === k, `Font ${label}`))}
+              {chip(textEdit.outline ? 'Outline on' : 'Outline', () => setTextEdit((te) => ({ ...te, outline: te.outline ? null : (te.color.toUpperCase() === '#FFFFFF' ? '#111111' : '#FFFFFF') })), !!textEdit.outline)}
+              {chip('Smaller', () => setTextEdit((te) => ({ ...te, size: Math.max(20, te.size - 10) })), false)}
+              {chip('Bigger', () => setTextEdit((te) => ({ ...te, size: Math.min(320, te.size + 10) })), false)}
+            </div>
+            <div style={{ fontSize: 12.5, color: c.dim, paddingTop: 8 }}>Drag the text on the canvas to move it.</div>
+          </div>
+        ) : (
+          <div style={{ flexShrink: 0, background: c.bg, borderTop: `1px solid ${c.line}`, paddingBottom: 'calc(8px + env(safe-area-inset-bottom))' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-around', padding: '6px 4px 2px' }}>
+              {tools.map(([k, label]) => (
+                <button key={k} type="button" aria-label={label} aria-pressed={tool === k} onClick={() => pickTool(k)} className="zchat-press"
+                  style={{ width: 46, height: 46, borderRadius: 14, border: 'none', background: tool === k ? (theme.dark ? '#2A2A30' : '#E8E8EE') : 'transparent', color: tool === k ? theme.coral : c.fg, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 }}>
+                  <PaintToolIcon k={k} />
+                </button>
+              ))}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 14px 4px' }}>
+              <button type="button" aria-label="Choose colour" onClick={() => setSheet('color')} className="zchat-press"
+                style={{ width: 36, height: 36, borderRadius: '50%', border: 'none', padding: 0, cursor: 'pointer', flexShrink: 0, background: color, boxShadow: `0 0 0 2px ${c.bg}, 0 0 0 3.5px ${c.line}`, opacity: Math.max(0.35, alpha) }} />
+              {tool === 'brush' && chip(`${brushLabel} ▾`, () => setSheet('brush'), false, 'Choose brush')}
+              {tool === 'shapes' && chip(`${shapeLabel} ▾`, () => setSheet('shapes'), false, 'Choose shape')}
+              {tool === 'shapes' && chip(shapeFill ? 'Filled' : 'Outline', () => setShapeFill((v) => !v), shapeFill, 'Fill shape')}
+              {tool === 'stamp' && chip(`${stamp} ▾`, () => setSheet('stamp'), false, 'Choose sticker')}
+              {tool === 'fill' && <span style={{ fontSize: 13, color: c.dim, fontWeight: 600, flex: 1 }}>Tap an area to fill it</span>}
+              {tool === 'picker' && <span style={{ fontSize: 13, color: c.dim, fontWeight: 600, flex: 1 }}>Tap the drawing to pick a colour</span>}
+              {tool === 'text' && <span style={{ fontSize: 13, color: c.dim, fontWeight: 600, flex: 1 }}>Tap where the text should go</span>}
+              {(tool === 'brush' || tool === 'eraser' || tool === 'shapes' || tool === 'stamp') && (
+                <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                  <input type="range" min={1} max={80} value={size} aria-label="Size" onChange={(e) => setSize(Number(e.target.value))} style={{ flex: 1, minWidth: 0, accentColor: theme.coral }} />
+                  <div style={{ width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <div style={{ width: Math.max(3, Math.min(28, size * 0.45)), height: Math.max(3, Math.min(28, size * 0.45)), borderRadius: '50%', background: tool === 'eraser' ? 'transparent' : color, border: tool === 'eraser' ? `2px solid ${c.fg}` : 'none' }} />
+                  </div>
+                </div>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: 9, overflowX: 'auto', padding: '6px 14px 2px', scrollbarWidth: 'none' }}>
+              {[...recent, ...PAINT_PALETTE.filter((x) => !recent.includes(x))].map((col) => (
+                <div key={col} role="button" aria-label={`Color ${col}`} onClick={() => { hapticTap(); setColor(col); rememberColor(col); if (tool === 'eraser' || tool === 'picker') setTool('brush'); }}
+                  style={{ width: 28, height: 28, borderRadius: '50%', background: col, cursor: 'pointer', flexShrink: 0, boxShadow: color === col ? `0 0 0 2px ${c.bg}, 0 0 0 4px ${c.fg}` : `inset 0 0 0 1px ${c.line}` }} />
+              ))}
+            </div>
+          </div>
+        )}
+        <input ref={photoInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={pickPhoto} />
+      </div>
+      {sheet === 'color' && (
+        <PaintSheet title="Colour" onClose={() => { setSheet(null); rememberColor(color); }}>
+          <PaintColorPanel color={color} alpha={alpha} onColor={(x) => { setColor(x); if (tool === 'eraser' || tool === 'picker') setTool('brush'); }} onAlpha={setAlpha} recent={recent} />
+        </PaintSheet>
+      )}
+      {sheet === 'brush' && (
+        <PaintSheet title="Brushes" onClose={() => setSheet(null)}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10, paddingBottom: 8 }}>
+            {PAINT_BRUSHES.map((b) => (
+              <div key={b.k} role="button" aria-label={`Brush ${b.label}`} onClick={() => { hapticTap(); setBrush(b.k); setTool('brush'); setSheet(null); }} className="zchat-press"
+                style={{ borderRadius: 14, overflow: 'hidden', cursor: 'pointer', boxShadow: brush === b.k ? `0 0 0 2.5px ${theme.coral}` : `inset 0 0 0 1px ${theme.border}` }}>
+                {previews[b.k] && <img src={previews[b.k]} alt="" style={{ display: 'block', width: '100%', height: 54, objectFit: 'cover' }} />}
+                <div style={{ fontSize: 13.5, fontWeight: 700, color: theme.ink, padding: '7px 10px' }}>{b.label}</div>
+              </div>
+            ))}
+          </div>
+        </PaintSheet>
+      )}
+      {sheet === 'shapes' && (
+        <PaintSheet title="Shapes" onClose={() => setSheet(null)}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10, paddingBottom: 8 }}>
+            {PAINT_SHAPES.map((sp) => (
+              <div key={sp.k} role="button" aria-label={`Shape ${sp.label}`} onClick={() => { hapticTap(); setShape(sp.k); setTool('shapes'); setSheet(null); }} className="zchat-press"
+                style={{ height: 84, borderRadius: 14, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, boxShadow: shape === sp.k ? `0 0 0 2.5px ${theme.coral}` : `inset 0 0 0 1px ${theme.border}` }}>
+                <PaintShapeIcon k={sp.k} color={theme.ink} />
+                <div style={{ fontSize: 12.5, fontWeight: 700, color: theme.ink }}>{sp.label}</div>
+              </div>
+            ))}
+          </div>
+          {optionRow('Fill shapes', 'Solid shapes instead of outlines', <IgToggle on={shapeFill} onClick={() => setShapeFill((v) => !v)} />)}
+        </PaintSheet>
+      )}
+      {sheet === 'stamp' && (
+        <PaintSheet title="Stickers" onClose={() => setSheet(null)}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10, paddingBottom: 10 }}>
+            {PAINT_STAMPS.map((em) => (
+              <div key={em} role="button" aria-label={`Sticker ${em}`} onClick={() => { hapticTap(); setStamp(em); setTool('stamp'); setSheet(null); }} className="zchat-press"
+                style={{ height: 64, borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 34, cursor: 'pointer', boxShadow: stamp === em ? `0 0 0 2.5px ${theme.coral}` : `inset 0 0 0 1px ${theme.border}` }}>{em}</div>
+            ))}
+          </div>
+        </PaintSheet>
+      )}
+      {sheet === 'ask' && (
+        <PaintSheet title="Ask ZChat Bot" onClose={() => setSheet(null)}>
+          {!askState && (
+            <>
+              <div style={{ fontSize: 13.5, color: theme.muted, lineHeight: 1.5, marginBottom: 6 }}>ZChat Bot looks at your drawing and answers. Your question and drawing also show up in your chat with ZChat Bot.</div>
+              {PAINT_BOT_ASKS.map((q) => optionRow(q.label, q.sub, <ChevronRight size={18} color={theme.muted} />, () => ask(q)))}
+            </>
+          )}
+          {askState && askState.loading && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '24px 4px' }}>
+              <Spinner size={20} color={theme.coral} />
+              <div style={{ fontSize: 15, fontWeight: 600, color: theme.ink }}>ZChat Bot is looking</div>
+            </div>
+          )}
+          {askState && !askState.loading && (
+            <div style={{ padding: '6px 0 10px' }}>
+              <div style={{ fontSize: 15.5, lineHeight: 1.55, color: theme.ink, background: theme.rowBg, borderRadius: 16, padding: '14px 16px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{askState.text}</div>
+              <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+                <div style={{ flex: 1 }}><BigButton label="Ask something else" tone="plain" onClick={() => setAskState(null)} /></div>
+                <div style={{ flex: 1 }}><BigButton label="Back to drawing" onClick={() => setSheet(null)} /></div>
+              </div>
+            </div>
+          )}
+        </PaintSheet>
+      )}
+      {sheet === 'more' && (
+        <PaintSheet title="Options" onClose={() => setSheet(null)}>
+          {rowLabel('Drawing help')}
+          {optionRow('Magic shapes', 'Draw a rough circle, box or line and it snaps neat', <IgToggle on={magic} onClick={() => setMagic((v) => !v)} />)}
+          {optionRow('Steady hand', steady ? `Smoothing ${steady} of 10` : 'Smooths shaky lines', <input type="range" min={0} max={10} value={steady} aria-label="Steady hand" onChange={(e) => setSteady(Number(e.target.value))} style={{ width: 130, accentColor: theme.coral }} />)}
+          {optionRow('Need an idea?', idea || 'Get something fun to draw', <span style={{ fontSize: 13.5, fontWeight: 800, color: theme.coral }}>{idea ? 'Another' : 'Give me one'}</span>, () => { const pool = PAINT_IDEAS.filter((x) => x !== idea); setIdea(pool[Math.floor(Math.random() * pool.length)]); })}
+          {idea && optionRow('Hide the idea', null, null, () => setIdea(''))}
+          {rowLabel('Mirror')}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {[['off', 'Off'], ['mirror', 'Mirror'], ['quad', 'Four way'], ['radial', 'Kaleidoscope']].map(([k, label]) => chip(label, () => setSym(k), sym === k, `Mirror ${label}`))}
+          </div>
+          {rowLabel('Background')}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {PAINT_BACKGROUNDS.map(([k, , label]) => chip(label, () => { setBgPhoto(null); setBgKey(k); if (k === 'black' && color === '#111111') setColor('#FFFFFF'); if (k !== 'black' && bgKey === 'black' && color === '#FFFFFF') setColor('#111111'); }, !bgPhoto && bgKey === k, `Background ${label}`))}
+            {chip(bgPhoto ? 'Photo on' : 'Draw on a photo', () => { if (photoInputRef.current) photoInputRef.current.click(); }, !!bgPhoto, 'Draw on a photo')}
+          </div>
+          {rowLabel('Colouring pages')}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {chip('None', () => setTemplate(null), !template, 'No colouring page')}
+            {Object.entries(PAINT_TEMPLATES).map(([k, tpl]) => chip(tpl.label, () => { setTemplate(k); setTool('fill'); setSheet(null); say('Pick a colour and tap to fill'); }, template === k, `Colouring page ${tpl.label}`))}
+          </div>
+          {rowLabel('Canvas')}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {Object.entries(PAINT_SIZES).map(([k, v]) => chip(v[2], () => changeSize(k), docKey === k, `Canvas ${v[2]}`))}
+          </div>
+          <div style={{ height: 10 }} />
+          {optionRow('Save to phone', 'Download as a picture', <Download size={18} color={theme.muted} />, saveToPhone)}
+          {optionRow('Clear canvas', 'Start over', <Trash2 size={18} color={theme.danger} />, () => { if (st.current.ops.length) setConfirmClear(true); })}
+        </PaintSheet>
+      )}
+      {confirmClear && (
+        <ConfirmDialog title="Clear the canvas?" body="You can still undo this." confirmLabel="Clear" onCancel={() => setConfirmClear(false)}
+          onConfirm={() => { setConfirmClear(false); setSheet(null); pushOp({ t: 'clear' }); }} />
+      )}
+      {confirmLeave && (
+        <ConfirmDialog title="Throw away this drawing?" body="It has not been sent or saved yet." confirmLabel="Throw away" onCancel={() => setConfirmLeave(false)}
+          onConfirm={() => { setConfirmLeave(false); onClose(); }} />
+      )}
+    </Portal>
+  );
+}
+
+function PaintShapeIcon({ k, color }) {
+  const d = (() => {
+    if (k === 'line') return 'M6 34 L38 6';
+    if (k === 'arrow') return 'M6 34 L38 6 M38 6 L26 8 M38 6 L36 18';
+    if (k === 'rect') return 'M6 8 H38 V34 H6 Z';
+    if (k === 'round') return 'M14 8 H30 Q38 8 38 16 V26 Q38 34 30 34 H14 Q6 34 6 26 V16 Q6 8 14 8 Z';
+    if (k === 'ellipse') return 'M22 7 C32 7 39 13 39 21 C39 29 32 35 22 35 C12 35 5 29 5 21 C5 13 12 7 22 7 Z';
+    if (k === 'triangle') return 'M22 6 L39 35 H5 Z';
+    if (k === 'star') return 'M22 4 L27 15.5 L39 16.5 L30 24.5 L33 36 L22 29.5 L11 36 L14 24.5 L5 16.5 L17 15.5 Z';
+    if (k === 'heart') return 'M22 36 C6 26 2 16 8 10 C13 5 19 7 22 12 C25 7 31 5 36 10 C42 16 38 26 22 36 Z';
+    if (k === 'bubble') return 'M12 6 H32 Q39 6 39 13 V22 Q39 29 32 29 H18 L10 36 L12 29 Q5 29 5 22 V13 Q5 6 12 6 Z';
+    return '';
+  })();
+  return <svg width="44" height="40" viewBox="0 0 44 40" fill="none" stroke={color} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={d} /></svg>;
+}
+
+function EmojiIcon({ e }) {
+  return <span aria-hidden="true" style={{ fontSize: 22, lineHeight: 1, width: 26, textAlign: 'center' }}>{e}</span>;
+}
+
+const SEND_EFFECTS = [['confetti', 'Confetti', '\u{1F389}'], ['hearts', 'Hearts', '❤️'], ['balloons', 'Balloons', '\u{1F388}'], ['fireworks', 'Fireworks', '\u{1F386}'], ['snow', 'Snow', '❄️']];
+
+function readLater(uid) {
+  try { const a = JSON.parse(localStorage.getItem(`zchat-later-${uid}`) || '[]'); return Array.isArray(a) ? a : []; } catch { return []; }
+}
+function writeLater(uid, list) {
+  try { localStorage.setItem(`zchat-later-${uid}`, JSON.stringify((list || []).slice(-100))); } catch {}
+  try { window.dispatchEvent(new Event('zchat-later')); } catch {}
+}
+function laterPad(n) { return String(n).padStart(2, '0'); }
+function laterInputValue(ms) {
+  const d = new Date(ms);
+  return `${d.getFullYear()}-${laterPad(d.getMonth() + 1)}-${laterPad(d.getDate())}T${laterPad(d.getHours())}:${laterPad(d.getMinutes())}`;
+}
+
+function LaterPickPage({ onClose, onPick, title = 'Pick a time' }) {
+  useBackClose(true, onClose);
+  const { theme } = useTheme();
+  const [value, setValue] = useState(() => laterInputValue(Date.now() + 2 * 3600000));
+  const at = value ? new Date(value).getTime() : NaN;
+  const ok = Number.isFinite(at) && at > Date.now() + 30000;
+  return (
+    <FullPage title={title} onBack={onClose} zIndex={96}
+      footer={<BigButton label={ok ? `Schedule for ${reminderWhen(at)}` : 'Pick a time later than now'} disabled={!ok} onClick={() => onPick(at)} />}>
+      <PageArt k="later" text="Your message goes out at this time while ZChat is open on this phone. If ZChat is closed, it goes out the next time you open it." />
+      <IgHeading>Date and time</IgHeading>
+      <input type="datetime-local" value={value} onChange={(e) => setValue(e.target.value)} aria-label="Date and time" style={{ ...inputStyle(theme), fontSize: 16 }} />
+    </FullPage>
+  );
+}
+
+function ScheduledSheet({ items, onClose, onSendNow, onDelete }) {
+  const { theme } = useTheme();
+  return (
+    <ChatRowSheet title="Scheduled messages" subtitle={`${items.length} waiting to go out`}
+      avatar={<div style={{ width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.ink }}><Clock size={26} strokeWidth={1.8} /></div>}
+      onClose={onClose}
+      actions={items.flatMap((it) => [
+        { icon: <Send size={18} />, label: it.text.length > 46 ? `${it.text.slice(0, 46)}…` : it.text, hint: `${reminderWhen(it.at)} · tap to send now`, onClick: () => onSendNow(it) },
+        { icon: <Trash2 size={18} />, label: 'Delete this one', danger: true, onClick: () => onDelete(it) },
+      ])} />
+  );
+}
+
+function readFolders(uid) {
+  try { const a = JSON.parse(localStorage.getItem(`zchat-folders-${uid}`) || '[]'); return Array.isArray(a) ? a.filter((f) => f && f.id && f.name && Array.isArray(f.members)) : []; } catch { return []; }
+}
+function writeFolders(uid, list) {
+  try { localStorage.setItem(`zchat-folders-${uid}`, JSON.stringify(list || [])); } catch {}
+}
+
+function FolderEditorPage({ folder, conversations, groups, onClose, onSave, onDelete }) {
+  useBackClose(true, onClose);
+  const { theme } = useTheme();
+  const [name, setName] = useState(folder ? folder.name : '');
+  const [members, setMembers] = useState(() => new Set(folder ? folder.members : []));
+  const [q, setQ] = useState('');
+  const term = q.trim().toLowerCase();
+  const rows = [
+    ...conversations.filter((c) => c.otherProfile).map((c) => ({ key: `dm-${c.otherProfile.id}`, name: c.otherProfile.name, sub: `@${c.otherProfile.username}`, avatar: <Avatar emoji={c.otherProfile.avatar} name={c.otherProfile.name} size={42} /> })),
+    ...groups.filter((g) => !g.archived).map((g) => ({ key: `group-${g.id}`, name: g.name, sub: 'Group', avatar: <GroupAvatar avatar={g.avatar} name={g.name} size={42} /> })),
+  ].filter((r) => !term || (r.name || '').toLowerCase().includes(term) || (r.sub || '').toLowerCase().includes(term));
+  const toggle = (k) => setMembers((prev) => { const n = new Set(prev); if (n.has(k)) n.delete(k); else n.add(k); return n; });
+  const ok = name.trim().length > 0 && members.size > 0;
+  return (
+    <FullPage title={folder ? 'Edit folder' : 'New folder'} onBack={onClose} zIndex={70}
       footer={(
         <div style={{ display: 'flex', gap: 8 }}>
-          {small('Undo', undo, !count)}
-          {small('Clear', clear, !count)}
-          <div style={{ flex: 1 }}><BigButton label={busy ? 'Sending' : 'Send'} disabled={!count || busy} onClick={send} /></div>
+          {folder && <div style={{ width: 120 }}><BigButton label="Delete" tone="plain" onClick={() => onDelete(folder)} /></div>}
+          <div style={{ flex: 1 }}><BigButton label={ok ? `Save ${members.size} ${members.size === 1 ? 'chat' : 'chats'}` : 'Save'} disabled={!ok} onClick={() => onSave({ id: folder ? folder.id : `f${Date.now().toString(36)}`, name: name.trim().slice(0, 24), members: [...members] })} /></div>
         </div>
       )}>
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 420 }}>
-        <div ref={wrapRef} style={{ flex: 1, minHeight: 240, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 12 }}>
-          <canvas ref={canvasRef} aria-label="Drawing area" onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up}
-            style={{ borderRadius: 16, touchAction: 'none', boxShadow: `0 0 0 1px ${theme.border}`, cursor: 'crosshair' }} />
-        </div>
-        <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap', padding: '4px 14px 10px' }}>
-          {DOODLE_COLORS.map((col) => (
-            <div key={col} role="button" aria-label={`Color ${col}`} onClick={() => { hapticTap(); setColor(col); }} style={{ width: 30, height: 30, borderRadius: '50%', background: col, cursor: 'pointer', boxShadow: color === col ? `0 0 0 2px ${theme.bgGradient}, 0 0 0 4px ${theme.ink}` : `inset 0 0 0 1px ${theme.border}` }} />
-          ))}
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14, padding: '0 14px 12px', flexWrap: 'wrap' }}>
-          {[3, 6, 12].map((w) => (
-            <div key={w} role="button" aria-label={`Brush ${w}`} onClick={() => setSize(w)} style={{ width: 36, height: 36, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: size === w ? igPalette(theme).field : 'transparent' }}>
-              <div style={{ width: w + 4, height: w + 4, borderRadius: '50%', background: theme.ink }} />
+      {!folder && <PageArt k="folders" text="Group the chats you care about, like Family, Work or Squad. Folders show up as tabs above your chats." />}
+      <IgHeading>Folder name</IgHeading>
+      <input value={name} onChange={(e) => setName(e.target.value.slice(0, 24))} placeholder="Family, Work, Squad" aria-label="Folder name" style={{ ...inputStyle(theme), fontSize: 16 }} />
+      <IgHeading>Chats in this folder</IgHeading>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 8, height: 40, padding: '0 12px', borderRadius: 12, background: theme.rowBg, color: theme.muted, marginBottom: 6 }}>
+        <Search size={17} />
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search" aria-label="Search chats for folder" style={{ flex: 1, minWidth: 0, border: 0, outline: 0, background: 'transparent', color: theme.ink, fontFamily: FONT, fontSize: 15 }} />
+      </label>
+      {rows.map((r) => {
+        const on = members.has(r.key);
+        return (
+          <div key={r.key} role="button" aria-label={`${on ? 'Remove' : 'Add'} ${r.name}`} onClick={() => { hapticTap(); toggle(r.key); }} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 2px', cursor: 'pointer', borderRadius: 12 }}>
+            {r.avatar}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.name}</div>
+              <div style={{ fontSize: 12.5, color: theme.muted }}>{r.sub}</div>
             </div>
-          ))}
-          <div style={{ width: 1, height: 24, background: theme.border }} />
-          {DOODLE_BGS.map(([col, l]) => (
-            <div key={col} role="button" aria-label={`Background ${l}`} onClick={() => setBg(col)} style={{ padding: '7px 11px', borderRadius: 14, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', color: bg === col ? theme.bgGradient : theme.ink, background: bg === col ? theme.ink : igPalette(theme).field }}>{l}</div>
-          ))}
-        </div>
+            <div style={{ width: 24, height: 24, borderRadius: 12, border: `2px solid ${on ? theme.coral : theme.border}`, background: on ? theme.coral : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{on && <Check size={14} color="#fff" strokeWidth={3} />}</div>
+          </div>
+        );
+      })}
+    </FullPage>
+  );
+}
+
+function parseDice(content) {
+  if (typeof content !== 'string' || content.indexOf('zdice:') !== 0) return null;
+  try {
+    const d = JSON.parse(content.slice(6));
+    if (!d || !Array.isArray(d.v) || !d.v.length) return null;
+    if (d.k === 'coin') return d.v.every((x) => x === 'h' || x === 't') ? d : null;
+    if (d.k === 'dice') return d.v.every((x) => Number.isInteger(x) && x >= 1 && x <= 6) ? d : null;
+    return null;
+  } catch { return null; }
+}
+function diceSummary(d) {
+  if (!d) return '';
+  if (d.k === 'coin') return `Flipped a coin: ${d.v[0] === 'h' ? 'heads' : 'tails'}`;
+  if (d.v.length > 1) return `Rolled ${d.v.join(' and ')}`;
+  return `Rolled a ${d.v[0]}`;
+}
+const diceRolledOnce = new Set();
+
+function RollDie({ n, size = 58 }) {
+  const P = { 1: [[1, 1]], 2: [[0, 0], [2, 2]], 3: [[0, 0], [1, 1], [2, 2]], 4: [[0, 0], [2, 0], [0, 2], [2, 2]], 5: [[0, 0], [2, 0], [1, 1], [0, 2], [2, 2]], 6: [[0, 0], [2, 0], [0, 1], [2, 1], [0, 2], [2, 2]] };
+  return (
+    <svg width={size} height={size} viewBox="0 0 60 60" aria-hidden="true" style={{ display: 'block' }}>
+      <rect x="3" y="5" width="54" height="52" rx="13" fill="#D9D4E8" />
+      <rect x="3" y="2" width="54" height="52" rx="13" fill="#FFFFFF" stroke="#2B2540" strokeWidth="2.6" />
+      {(P[n] || P[1]).map(([px, py], i) => <circle key={i} cx={15 + px * 15} cy={13 + py * 15} r="5" fill={n === 1 ? '#E8604F' : '#2B2540'} />)}
+    </svg>
+  );
+}
+function RollCoin({ side, size = 64 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden="true" style={{ display: 'block' }}>
+      <circle cx="32" cy="34" r="28" fill="#C88A12" />
+      <circle cx="32" cy="31" r="28" fill="#FFD24D" stroke="#2B2540" strokeWidth="2.6" />
+      <circle cx="32" cy="31" r="20" fill="none" stroke="#E0A92E" strokeWidth="3" />
+      {side === 'h'
+        ? <path d="M23 22 H41 L24 40 H41" fill="none" stroke="#7A4E05" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
+        : <path d={artStarPath(32, 31, 13, 6)} fill="#7A4E05" />}
+    </svg>
+  );
+}
+function RollCard({ d, fresh, ink }) {
+  const { theme } = useTheme();
+  const [faces, setFaces] = useState(() => (fresh ? d.v.map(() => (d.k === 'coin' ? 'h' : 1)) : d.v));
+  const [rolling, setRolling] = useState(!!fresh);
+  useEffect(() => {
+    if (!fresh) return undefined;
+    let n = 0;
+    const iv = setInterval(() => {
+      n += 1;
+      if (n >= 10) { clearInterval(iv); setFaces(d.v); setRolling(false); hapticTap(); return; }
+      setFaces(d.v.map(() => (d.k === 'coin' ? (n % 2 ? 't' : 'h') : 1 + Math.floor(Math.random() * 6))));
+    }, 85);
+    return () => clearInterval(iv);
+  }, []);
+  const total = d.k === 'dice' ? d.v.reduce((a, b) => a + b, 0) : 0;
+  const label = rolling ? (d.k === 'coin' ? 'Flipping' : 'Rolling') : d.k === 'coin' ? (d.v[0] === 'h' ? 'Heads' : 'Tails') : d.v.length > 1 ? `${d.v.join(' + ')} = ${total}` : `You got ${d.v[0]}`;
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 18, background: theme.dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', minWidth: 170 }}>
+      <div style={{ display: 'flex', gap: 8 }}>
+        {faces.map((f, i) => (
+          <div key={i} style={{ transform: rolling ? `rotate(${(i % 2 ? -1 : 1) * (8 + Math.random() * 18)}deg)` : 'none', transition: 'transform 0.08s linear' }}>
+            {d.k === 'coin' ? <RollCoin side={f} /> : <RollDie n={f} />}
+          </div>
+        ))}
+      </div>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: ink || theme.muted, opacity: ink ? 0.75 : 1 }}>{d.k === 'coin' ? 'Coin flip' : d.v.length > 1 ? 'Two dice' : 'Dice'}</div>
+        <div style={{ fontSize: 17, fontWeight: 800, color: ink || theme.ink, marginTop: 1 }}>{label}</div>
+      </div>
+    </div>
+  );
+}
+
+const COLLAGE_LAYOUTS = {
+  2: [[[0, 0, 0.5, 1], [0.5, 0, 0.5, 1]], [[0, 0, 1, 0.5], [0, 0.5, 1, 0.5]]],
+  3: [[[0, 0, 0.5, 1], [0.5, 0, 0.5, 0.5], [0.5, 0.5, 0.5, 0.5]], [[0, 0, 1, 0.5], [0, 0.5, 0.5, 0.5], [0.5, 0.5, 0.5, 0.5]], [[0, 0, 1 / 3, 1], [1 / 3, 0, 1 / 3, 1], [2 / 3, 0, 1 / 3, 1]]],
+  4: [[[0, 0, 0.5, 0.5], [0.5, 0, 0.5, 0.5], [0, 0.5, 0.5, 0.5], [0.5, 0.5, 0.5, 0.5]], [[0, 0, 1, 0.6], [0, 0.6, 1 / 3, 0.4], [1 / 3, 0.6, 1 / 3, 0.4], [2 / 3, 0.6, 1 / 3, 0.4]], [[0, 0, 0.6, 1], [0.6, 0, 0.4, 1 / 3], [0.6, 1 / 3, 0.4, 1 / 3], [0.6, 2 / 3, 0.4, 1 / 3]]],
+  5: [[[0, 0, 0.5, 0.5], [0.5, 0, 0.5, 0.5], [0, 0.5, 1 / 3, 0.5], [1 / 3, 0.5, 1 / 3, 0.5], [2 / 3, 0.5, 1 / 3, 0.5]], [[0, 0, 0.6, 0.6], [0.6, 0, 0.4, 0.3], [0.6, 0.3, 0.4, 0.3], [0, 0.6, 0.5, 0.4], [0.5, 0.6, 0.5, 0.4]]],
+  6: [[[0, 0, 1 / 3, 0.5], [1 / 3, 0, 1 / 3, 0.5], [2 / 3, 0, 1 / 3, 0.5], [0, 0.5, 1 / 3, 0.5], [1 / 3, 0.5, 1 / 3, 0.5], [2 / 3, 0.5, 1 / 3, 0.5]], [[0, 0, 0.5, 1 / 3], [0.5, 0, 0.5, 1 / 3], [0, 1 / 3, 0.5, 1 / 3], [0.5, 1 / 3, 0.5, 1 / 3], [0, 2 / 3, 0.5, 1 / 3], [0.5, 2 / 3, 0.5, 1 / 3]]],
+};
+
+function drawCollage(ctx, W, H, imgs, layout, gap, round, bg) {
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+  layout.forEach(([x, y, w, h], i) => {
+    const img = imgs[i % imgs.length];
+    if (!img) return;
+    const ax = gap / 2 + x * (W - gap);
+    const ay = gap / 2 + y * (H - gap);
+    const px = ax + gap / 2;
+    const py = ay + gap / 2;
+    const cw = Math.max(1, w * (W - gap) - gap);
+    const ch = Math.max(1, h * (H - gap) - gap);
+    ctx.save();
+    ctx.beginPath();
+    const r = Math.min(round, cw / 2, ch / 2);
+    if (r > 0) {
+      ctx.moveTo(px + r, py);
+      ctx.arcTo(px + cw, py, px + cw, py + ch, r);
+      ctx.arcTo(px + cw, py + ch, px, py + ch, r);
+      ctx.arcTo(px, py + ch, px, py, r);
+      ctx.arcTo(px, py, px + cw, py, r);
+      ctx.closePath();
+    } else ctx.rect(px, py, cw, ch);
+    ctx.clip();
+    const iw = img.naturalWidth || img.width;
+    const ih = img.naturalHeight || img.height;
+    const s = Math.max(cw / iw, ch / ih);
+    ctx.drawImage(img, px + (cw - iw * s) / 2, py + (ch - ih * s) / 2, iw * s, ih * s);
+    ctx.restore();
+  });
+}
+
+function CollagePage({ files, onClose, onSend }) {
+  useBackClose(true, onClose);
+  const { theme } = useTheme();
+  const [imgs, setImgs] = useState([]);
+  const [layoutIdx, setLayoutIdx] = useState(0);
+  const [gapOn, setGapOn] = useState(true);
+  const [roundOn, setRoundOn] = useState(false);
+  const [dark, setDark] = useState(false);
+  const [tall, setTall] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const cvRef = useRef(null);
+  useEffect(() => {
+    let alive = true;
+    const urls = files.map((f) => URL.createObjectURL(f));
+    Promise.all(urls.map((u) => new Promise((res) => { const im = new Image(); im.onload = () => res(im); im.onerror = () => res(null); im.src = u; })))
+      .then((list) => { if (alive) setImgs(list.filter(Boolean)); });
+    return () => { alive = false; setTimeout(() => urls.forEach((u) => URL.revokeObjectURL(u)), 1500); };
+  }, []);
+  const n = Math.max(2, Math.min(6, imgs.length || files.length));
+  const layouts = COLLAGE_LAYOUTS[n] || COLLAGE_LAYOUTS[2];
+  const layout = layouts[layoutIdx % layouts.length];
+  const W = 1440;
+  const H = tall ? 1800 : 1440;
+  const gap = gapOn ? 24 : 0;
+  const round = roundOn ? 36 : 0;
+  const bg = dark ? '#111113' : '#FFFFFF';
+  useEffect(() => {
+    const c = cvRef.current;
+    if (!c || !imgs.length) return;
+    c.width = 720;
+    c.height = tall ? 900 : 720;
+    const ctx = c.getContext('2d');
+    ctx.save();
+    ctx.scale(0.5, 0.5);
+    drawCollage(ctx, W, H, imgs, layout, gap, round, bg);
+    ctx.restore();
+  }, [imgs, layoutIdx, gapOn, roundOn, dark, tall]);
+  const send = async () => {
+    if (busy || !imgs.length) return;
+    setBusy(true);
+    const c = document.createElement('canvas');
+    c.width = W;
+    c.height = H;
+    drawCollage(c.getContext('2d'), W, H, imgs, layout, gap, round, bg);
+    const blob = await new Promise((res) => c.toBlob(res, 'image/jpeg', 0.9));
+    if (blob) await onSend(new File([blob], `collage-${Date.now()}.jpg`, { type: 'image/jpeg' }));
+    setBusy(false);
+  };
+  const chip = (label, on, onClick) => (
+    <button type="button" aria-label={label} onClick={() => { hapticTap(); onClick(); }} className="zchat-press" style={{ height: 36, padding: '0 14px', borderRadius: 18, border: 'none', background: on ? theme.ink : igPalette(theme).field, color: on ? igPalette(theme).bg : theme.ink, fontWeight: 700, fontSize: 13.5, fontFamily: FONT, cursor: 'pointer', flexShrink: 0 }}>{label}</button>
+  );
+  return (
+    <FullPage title="Collage" subtitle={`${imgs.length || files.length} photos`} onBack={onClose} zIndex={90}
+      footer={<BigButton label={busy ? 'Sending' : 'Send collage'} disabled={busy || imgs.length < 2} onClick={send} />}>
+      <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 14px' }}>
+        {imgs.length ? <canvas ref={cvRef} aria-label="Collage preview" style={{ width: '100%', maxWidth: 380, height: 'auto', borderRadius: 14, boxShadow: `0 0 0 1px ${theme.border}` }} /> : <div style={{ padding: 60 }}><Spinner color={theme.muted} /></div>}
+      </div>
+      <IgHeading>Layout</IgHeading>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        {layouts.map((ly, i) => (
+          <div key={i} role="button" aria-label={`Layout ${i + 1}`} onClick={() => { hapticTap(); setLayoutIdx(i); }} className="zchat-press"
+            style={{ width: 58, height: tall ? 72 : 58, borderRadius: 10, position: 'relative', cursor: 'pointer', background: igPalette(theme).field, boxShadow: layoutIdx % layouts.length === i ? `0 0 0 2.5px ${theme.coral}` : 'none' }}>
+            {ly.map(([x, y, w, h], k) => <div key={k} style={{ position: 'absolute', left: `calc(${x * 100}% + 3px)`, top: `calc(${y * 100}% + 3px)`, width: `calc(${w * 100}% - 6px)`, height: `calc(${h * 100}% - 6px)`, borderRadius: 3, background: theme.muted, opacity: 0.55 }} />)}
+          </div>
+        ))}
+      </div>
+      <IgHeading>Style</IgHeading>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', paddingBottom: 14 }}>
+        {chip('Spacing', gapOn, () => setGapOn((v) => !v))}
+        {chip('Round corners', roundOn, () => setRoundOn((v) => !v))}
+        {chip('Dark back', dark, () => setDark((v) => !v))}
+        {chip('Tall', tall, () => setTall((v) => !v))}
+        {chip('Shuffle', false, () => setImgs((list) => (list.length > 1 ? [...list.slice(1), list[0]] : list)))}
       </div>
     </FullPage>
   );
+}
+
+function VoiceTypingSheet({ onClose, onText }) {
+  const { theme } = useTheme();
+  const [text, setText] = useState('');
+  const [interim, setInterim] = useState('');
+  const [state, setState] = useState('starting');
+  const recRef = useRef(null);
+  const start = () => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { setState('unsupported'); return; }
+    try { if (recRef.current) recRef.current.abort(); } catch {}
+    const rec = new SR();
+    rec.lang = navigator.language || 'en-US';
+    rec.interimResults = true;
+    rec.continuous = true;
+    rec.onresult = (e) => {
+      let fin = '';
+      let mid = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const r = e.results[i];
+        if (r.isFinal) fin += r[0].transcript; else mid += r[0].transcript;
+      }
+      if (fin.trim()) setText((t) => (t ? `${t} ${fin.trim()}` : fin.trim()));
+      setInterim(mid);
+    };
+    rec.onerror = (e) => setState(e && (e.error === 'not-allowed' || e.error === 'service-not-allowed') ? 'denied' : 'stopped');
+    rec.onend = () => { setInterim(''); setState((s) => (s === 'listening' ? 'stopped' : s)); };
+    try { rec.start(); setState('listening'); } catch { setState('stopped'); }
+    recRef.current = rec;
+  };
+  useEffect(() => { start(); return () => { try { const r = recRef.current; if (r) { r.onresult = null; r.onend = null; r.onerror = null; r.abort(); } } catch {} }; }, []);
+  const stop = () => { try { if (recRef.current) recRef.current.stop(); } catch {} setState('stopped'); };
+  const finish = () => { stop(); const t = `${text}${interim ? ` ${interim}` : ''}`.trim(); if (t) onText(t); onClose(); };
+  const listening = state === 'listening';
+  return (
+    <PaintSheet title="Voice typing" onClose={onClose} z={96}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '6px 0 4px' }}>
+        <div role="button" aria-label={listening ? 'Stop listening' : 'Start listening'} onClick={() => (listening ? stop() : start())} className={listening ? 'zchat-call-pulse' : 'zchat-press'}
+          style={{ width: 84, height: 84, borderRadius: '50%', background: listening ? theme.coral : theme.rowBg, color: listening ? '#fff' : theme.ink, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+          <Mic size={34} />
+        </div>
+        <div style={{ fontSize: 14, fontWeight: 700, color: theme.muted, marginTop: 12 }}>
+          {state === 'unsupported' ? 'This browser cannot do voice typing' : state === 'denied' ? 'Allow the microphone to use voice typing' : listening ? 'Listening, just talk' : 'Tap the mic to talk again'}
+        </div>
+      </div>
+      <div style={{ minHeight: 90, margin: '14px 0 12px', padding: '12px 14px', borderRadius: 14, background: theme.rowBg, fontSize: 16, lineHeight: 1.45, color: theme.ink, wordBreak: 'break-word' }}>
+        {text}{interim && <span style={{ color: theme.muted }}>{text ? ' ' : ''}{interim}</span>}
+        {!text && !interim && <span style={{ color: theme.muted }}>Your words show up here</span>}
+      </div>
+      <div style={{ display: 'flex', gap: 8, paddingBottom: 6 }}>
+        <div style={{ flex: 1 }}><BigButton label="Clear" tone="plain" disabled={!text} onClick={() => setText('')} /></div>
+        <div style={{ flex: 1 }}><BigButton label="Add to message" disabled={!text && !interim} onClick={finish} /></div>
+      </div>
+    </PaintSheet>
+  );
+}
+
+function bioB64u(buf) {
+  const bytes = new Uint8Array(buf);
+  let s = '';
+  for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]);
+  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function bioUnb64u(str) {
+  const t = String(str).replace(/-/g, '+').replace(/_/g, '/');
+  const bin = atob(t + '='.repeat((4 - (t.length % 4)) % 4));
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+async function bioPlatformReady() {
+  try {
+    if (typeof window === 'undefined' || !window.PublicKeyCredential || !navigator.credentials) return false;
+    if (typeof window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable !== 'function') return false;
+    return await window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+  } catch { return false; }
+}
+async function bioRegister() {
+  const challenge = crypto.getRandomValues(new Uint8Array(32));
+  const userId = crypto.getRandomValues(new Uint8Array(16));
+  const cred = await navigator.credentials.create({ publicKey: {
+    challenge, rp: { name: 'ZChat' }, user: { id: userId, name: 'ZChat app lock', displayName: 'ZChat app lock' },
+    pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+    authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'discouraged' },
+    timeout: 60000, attestation: 'none',
+  } });
+  return cred && cred.rawId ? bioB64u(cred.rawId) : null;
+}
+async function bioVerify(id) {
+  const challenge = crypto.getRandomValues(new Uint8Array(32));
+  const res = await navigator.credentials.get({ publicKey: { challenge, allowCredentials: [{ type: 'public-key', id: bioUnb64u(id) }], userVerification: 'required', timeout: 60000 } });
+  return !!res;
+}
+
+const WALL_PHOTO_PREFIX = 'photo:';
+const wallPhotoCache = new Map();
+function wallPhotoData(key) {
+  if (wallPhotoCache.has(key)) return wallPhotoCache.get(key);
+  let v = null;
+  try { v = localStorage.getItem(`zchat-wall-${key}`); } catch {}
+  wallPhotoCache.set(key, v);
+  return v;
+}
+function wallDimFor(key) {
+  try { const m = JSON.parse(localStorage.getItem('zchat-wall-dim') || '{}'); return Math.max(0, Math.min(0.8, Number(m[key]) || 0)); } catch { return 0; }
+}
+function setWallDim(key, v) {
+  try { const m = JSON.parse(localStorage.getItem('zchat-wall-dim') || '{}'); m[key] = Math.round(v * 100) / 100; localStorage.setItem('zchat-wall-dim', JSON.stringify(m)); } catch {}
+}
+async function makeWallPhoto(file) {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = url; });
+    const max = 1280;
+    const s = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+    const c = document.createElement('canvas');
+    c.width = Math.round(img.naturalWidth * s);
+    c.height = Math.round(img.naturalHeight * s);
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    const data = c.toDataURL('image/jpeg', 0.8);
+    const key = `${WALL_PHOTO_PREFIX}${Date.now().toString(36)}`;
+    try { localStorage.setItem(`zchat-wall-${key}`, data); } catch {
+      try { Object.keys(localStorage).filter((k) => k.indexOf(`zchat-wall-${WALL_PHOTO_PREFIX}`) === 0).forEach((k) => localStorage.removeItem(k)); } catch {}
+      try { localStorage.setItem(`zchat-wall-${key}`, data); } catch { return null; }
+    }
+    wallPhotoCache.set(key, data);
+    return key;
+  } catch { return null; } finally { setTimeout(() => URL.revokeObjectURL(url), 1500); }
+}
+
+const VOICE_FX = [['normal', 'Normal voice'], ['chipmunk', 'Chipmunk'], ['deep', 'Deep'], ['robot', 'Robot'], ['echo', 'Echo']];
+function encodeWav(buf) {
+  const ch = buf.getChannelData(0);
+  const sr = buf.sampleRate;
+  const out = new DataView(new ArrayBuffer(44 + ch.length * 2));
+  const w = (o, s) => { for (let i = 0; i < s.length; i++) out.setUint8(o + i, s.charCodeAt(i)); };
+  w(0, 'RIFF');
+  out.setUint32(4, 36 + ch.length * 2, true);
+  w(8, 'WAVE');
+  w(12, 'fmt ');
+  out.setUint32(16, 16, true);
+  out.setUint16(20, 1, true);
+  out.setUint16(22, 1, true);
+  out.setUint32(24, sr, true);
+  out.setUint32(28, sr * 2, true);
+  out.setUint16(32, 2, true);
+  out.setUint16(34, 16, true);
+  w(36, 'data');
+  out.setUint32(40, ch.length * 2, true);
+  let peak = 0;
+  for (let i = 0; i < ch.length; i++) peak = Math.max(peak, Math.abs(ch[i]));
+  const gain = peak > 0.98 ? 0.98 / peak : 1;
+  for (let i = 0; i < ch.length; i++) {
+    const v = Math.max(-1, Math.min(1, ch[i] * gain));
+    out.setInt16(44 + i * 2, v < 0 ? v * 0x8000 : v * 0x7FFF, true);
+  }
+  return new Blob([out], { type: 'audio/wav' });
+}
+async function applyVoiceFx(blob, fx) {
+  try {
+    const ACtx = window.AudioContext || window.webkitAudioContext;
+    const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if (!ACtx || !OAC) return null;
+    const ab = await blob.arrayBuffer();
+    const dctx = new ACtx();
+    const src = await new Promise((res, rej) => { const p = dctx.decodeAudioData(ab, res, rej); if (p && typeof p.then === 'function') p.then(res, rej); });
+    try { dctx.close(); } catch {}
+    const rate = fx === 'chipmunk' ? 1.45 : fx === 'deep' ? 0.76 : 1;
+    const sr = 24000;
+    const tail = fx === 'echo' ? 1 : 0.05;
+    const len = Math.max(1, Math.ceil((src.duration / rate + tail) * sr));
+    const oc = new OAC(1, len, sr);
+    const node = oc.createBufferSource();
+    node.buffer = src;
+    node.playbackRate.value = rate;
+    if (fx === 'robot') {
+      const mod = oc.createGain();
+      mod.gain.value = 0;
+      const osc = oc.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.value = 52;
+      osc.connect(mod.gain);
+      const boost = oc.createGain();
+      boost.gain.value = 1.8;
+      node.connect(mod);
+      mod.connect(boost);
+      boost.connect(oc.destination);
+      osc.start(0);
+    } else if (fx === 'echo') {
+      const d = oc.createDelay(1);
+      d.delayTime.value = 0.21;
+      const fb = oc.createGain();
+      fb.gain.value = 0.38;
+      node.connect(oc.destination);
+      node.connect(d);
+      d.connect(fb);
+      fb.connect(d);
+      d.connect(oc.destination);
+    } else {
+      node.connect(oc.destination);
+    }
+    node.start(0);
+    const rendered = await oc.startRendering();
+    return new File([encodeWav(rendered)], 'voice.wav', { type: 'audio/wav' });
+  } catch {
+    return null;
+  }
 }
 
 function QrScanPage({ onClose, onFound }) {
@@ -25698,7 +28851,7 @@ function GamesPage({ onClose, onChallenge, onShareScore, initialGame }) {
   );
 }
 
-function AttachSheet({ onClose, onCamera, onGallery, onLocation, onGame, canGame, locating, onPoll, onEvent, onOnce, onDoodle, onBuzz }) {
+function AttachSheet({ onClose, onCamera, onGallery, onLocation, onGame, canGame, locating, onPoll, onEvent, onOnce, onDoodle, onBuzz, onDice, onCollage, onVoiceType }) {
   return (
     <ActionSheet onClose={onClose} zIndex={94} items={[
       { k: 'camera', label: 'Camera', icon: <Camera />, on: onCamera },
@@ -25707,7 +28860,10 @@ function AttachSheet({ onClose, onCamera, onGallery, onLocation, onGame, canGame
       onLocation ? { k: 'location', label: locating ? 'Finding you' : 'Location', icon: <Compass />, on: onLocation, busy: locating } : null,
       onPoll ? { k: 'poll', label: 'Poll', icon: <PollIcon />, on: onPoll } : null,
       onEvent ? { k: 'event', label: 'Event', icon: <CalendarIcon />, on: onEvent } : null,
-      onDoodle ? { k: 'doodle', label: 'Doodle', icon: <DoodleIcon />, on: onDoodle } : null,
+      onCollage ? { k: 'collage', label: 'Collage', icon: <LayoutDashboard />, on: onCollage } : null,
+      onDoodle ? { k: 'doodle', label: 'Paint', icon: <DoodleIcon />, on: onDoodle } : null,
+      onVoiceType ? { k: 'voicetype', label: 'Voice typing', icon: <Mic />, on: onVoiceType } : null,
+      onDice ? { k: 'dice', label: 'Dice and coin', icon: <EmojiIcon e={'\u{1F3B2}'} />, on: onDice } : null,
       canGame ? { k: 'game', label: 'Games', icon: <GamepadIcon />, on: onGame } : null,
       onBuzz ? { k: 'buzz', label: 'Buzz', icon: <BuzzIcon />, on: onBuzz } : null,
     ]} />
@@ -26048,22 +29204,7 @@ function BotTypingBubble() {
 
 function BotBackdrop() {
   const { theme } = useTheme();
-  const dark = !!theme.dark;
-  const base = dark
-    ? 'linear-gradient(180deg, #100A1F 0%, #1B1238 55%, #140E2B 100%)'
-    : 'linear-gradient(180deg, #F4F0FF 0%, #ECE4FF 55%, #F1ECFF 100%)';
-  const line = dark ? 'rgba(255,255,255,0.09)' : 'rgba(110,70,220,0.07)';
-  const orbs = dark
-    ? ['rgba(124,92,252,0.30)', 'rgba(183,156,255,0.22)', 'rgba(94,58,224,0.22)']
-    : ['rgba(124,92,252,0.20)', 'rgba(183,156,255,0.16)', 'rgba(94,58,224,0.12)'];
-  return (
-    <div aria-hidden="true" style={{ position: 'absolute', inset: 0, zIndex: -1, pointerEvents: 'none', overflow: 'hidden', background: base }}>
-      <div style={{ position: 'absolute', inset: 0, backgroundImage: `linear-gradient(${line} 1px, transparent 1px), linear-gradient(90deg, ${line} 1px, transparent 1px)`, backgroundSize: '34px 34px', WebkitMaskImage: 'radial-gradient(ellipse at 50% 40%, #000 20%, transparent 85%)', maskImage: 'radial-gradient(ellipse at 50% 40%, #000 20%, transparent 85%)' }} />
-      {orbs.map((c, i) => (
-        <div key={i} style={{ position: 'absolute', width: 260 + i * 50, height: 260 + i * 50, borderRadius: '50%', background: `radial-gradient(circle, ${c}, transparent 68%)`, left: `${[ -8, 55, 20 ][i]}%`, top: `${[ 8, 30, 68 ][i]}%`, animation: `zchat-bot-orb ${14 + i * 4}s ease-in-out infinite alternate`, animationDelay: `${i * -3}s` }} />
-      ))}
-    </div>
-  );
+  return <div aria-hidden="true" style={{ position: 'absolute', inset: 0, zIndex: -1, pointerEvents: 'none', background: theme.dark ? '#121117' : '#F5F3EE' }} />;
 }
 
 function BotMessageActions({ m, onRegenerate, onSave, saved }) {
@@ -26123,19 +29264,6 @@ function AdminSheet({ title, body, confirmLabel, danger, busy, onConfirm, onClos
         )}
         <div onClick={() => !busy && onClose()} style={{ textAlign: 'center', padding: '14px 0 2px', fontWeight: 700, color: theme.muted, cursor: 'pointer' }}>Cancel</div>
       </div>
-    </div>
-  );
-}
-
-function AdminCosmeticThumb({ kind, k }) {
-  const f = useFrameUrl(kind === 'frame' ? k : null);
-  const n = useNameplateUrl(kind === 'nameplate' ? k : null);
-  const c = useCustomBadgeUrl(kind === 'charm' ? k : null);
-  const url = kind === 'frame' ? f : kind === 'nameplate' ? n : c;
-  const w = kind === 'nameplate' ? 78 : 44;
-  return (
-    <div style={{ width: w, height: 44, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', borderRadius: 10 }}>
-      {url ? <img src={url} alt="" draggable={false} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} /> : <span style={{ width: 18, height: 18, borderRadius: 9, background: 'rgba(128,128,128,0.25)' }} />}
     </div>
   );
 }
@@ -26524,7 +29652,7 @@ function AdminPanel({ myId, onClose, onOpenProfile, onOpenReports }) {
         {tab === 'home' && (
           <>
             {statsError && <div style={{ background: `${theme.danger}18`, color: theme.danger, borderRadius: 12, padding: '9px 12px', fontSize: 12.5, fontWeight: 700, marginBottom: 10 }}>{statsError}</div>}
-            <div style={{ borderRadius: 24, padding: '18px 18px 16px', marginBottom: 12, color: 'white', background: `linear-gradient(135deg, ${theme.coral}, ${theme.coralDeep || theme.coral})`, boxShadow: `0 14px 32px ${theme.coral}44` }}>
+            <div style={{ borderRadius: 20, padding: '18px 18px 16px', marginBottom: 12, color: 'white', background: theme.coral }}>
               <div style={{ fontSize: 12.5, fontWeight: 800, opacity: 0.85 }}>ZChat right now</div>
               <div style={{ display: 'flex', alignItems: 'flex-end', gap: 22, marginTop: 8 }}>
                 <div><div style={{ fontSize: 34, fontWeight: 900, letterSpacing: '-0.03em', lineHeight: 1 }}>{stats && stats.online_now != null ? formatCount(Number(stats.online_now) || 0) : '\u2014'}</div><div style={{ fontSize: 12, fontWeight: 700, opacity: 0.85, marginTop: 4 }}>online now</div></div>
@@ -27561,18 +30689,16 @@ function MfaChallengeScreen({ onPassed, onCancel }) {
     setBusy(false);
   };
   return (
-    <AuthShell>
-      <div style={{ textAlign: 'center', marginBottom: 14 }}>
-        <ShieldCheck size={30} color={theme.coral} />
-      </div>
-      <div style={{ fontSize: 19, fontWeight: 800, marginBottom: 6, color: theme.ink, textAlign: 'center' }}>Enter your code</div>
-      <div style={{ fontSize: 13, color: theme.muted, marginBottom: 16, textAlign: 'center' }}>Open your authenticator app and type the 6 digit code for ZChat.</div>
-      <input autoFocus value={code} inputMode="numeric" autoComplete="one-time-code" maxLength={6} placeholder="6 digit code"
+    <AuthShell onBack={onCancel}>
+      <AuthTitle title="Enter your code" sub="Open your authenticator app and type the 6 digit code it shows for ZChat." />
+      <input autoFocus className="zauth-input" value={code} inputMode="numeric" autoComplete="one-time-code" maxLength={6} placeholder="000000" aria-label="6 digit code"
         onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))} onKeyDown={(e) => e.key === 'Enter' && submit()}
-        style={{ ...inputStyle(theme), textAlign: 'center', letterSpacing: 6, fontSize: 20, fontWeight: 800 }} />
-      {err && <div style={{ color: theme.danger, fontSize: 12.5, marginTop: 8, textAlign: 'center' }}>{err}</div>}
-      <button style={primaryBtn(theme, busy || code.length !== 6)} disabled={busy || code.length !== 6} onClick={submit}>{busy ? <Spinner /> : 'Continue'}</button>
-      <div role="button" onClick={onCancel} style={{ textAlign: 'center', padding: '16px 0 2px', fontWeight: 700, color: theme.muted, cursor: 'pointer' }}>Use a different account</div>
+        style={authInputStyle(theme, { textAlign: 'center', letterSpacing: 8, fontSize: 22, fontWeight: 800, height: 58 })} />
+      <AuthError text={err} />
+      <button type="button" style={authPrimaryStyle(theme, busy || code.length !== 6, { marginTop: 16 })} disabled={busy || code.length !== 6} onClick={submit}>{busy ? <Spinner /> : 'Continue'}</button>
+      <div style={{ textAlign: 'center', marginTop: 18 }}>
+        <button type="button" onClick={onCancel} style={authLinkStyle(theme)}>Use a different account</button>
+      </div>
     </AuthShell>
   );
 }
@@ -27694,11 +30820,7 @@ function SavedMessagesPanel({ myId, onClose, onChanged, onOpenChat }) {
         {rows === null ? (
           <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><Spinner size={22} color={theme.ink} /></div>
         ) : shown.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '50px 24px', color: theme.muted }}>
-            <Bookmark size={30} color={theme.muted} />
-            <div style={{ fontWeight: 800, fontSize: 15, color: theme.ink, marginTop: 10 }}>{term ? 'Nothing found' : 'Nothing saved yet'}</div>
-            <div style={{ fontSize: 12.5, marginTop: 6, lineHeight: 1.5 }}>{term ? 'Try a different word.' : 'Press and hold any message in a chat and choose Add to Saved. You can also write a note to yourself below.'}</div>
-          </div>
+          <EmptyState art={term ? 'nothing' : 'saved'} title={term ? 'Nothing found' : 'Nothing saved yet'} text={term ? 'Try a different word.' : 'Press and hold any message in a chat and choose Add to Saved. You can also write a note to yourself below.'} />
         ) : shown.map((r) => (
           <div key={r.id} style={{ background: theme.rowBg, border: `1px solid ${theme.border}`, borderRadius: 18, padding: 12, marginBottom: 10 }}>
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
@@ -28188,7 +31310,6 @@ function ResetPasswordScreen({ onDone }) {
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
   const okPw = pw.length >= 6 && pw === pw2;
-
   const submit = async () => {
     if (!okPw || loading) return;
     setLoading(true); setErr('');
@@ -28198,29 +31319,22 @@ function ResetPasswordScreen({ onDone }) {
     setDone(true);
     setTimeout(onDone, 1400);
   };
-
   if (done) {
     return (
       <AuthShell>
-        <div style={{ textAlign: 'center' }} className="zchat-fade">
-          <ShieldCheck size={32} color={theme.teal} style={{ marginBottom: 12 }} />
-          <div style={{ fontWeight: 800, fontSize: 16.5, color: theme.ink }}>Password updated</div>
-        </div>
+        <AuthTitle title="All set" sub="Your new password is saved. Taking you in." />
       </AuthShell>
     );
   }
-
   return (
     <AuthShell>
-      <div style={{ fontSize: 19, fontWeight: 800, marginBottom: 6, color: theme.ink }}>Set a new password</div>
-      <div style={{ fontSize: 13, color: theme.muted, marginBottom: 16 }}>Choose something secure you haven't used before.</div>
-      <input style={{ ...inputStyle(theme), marginBottom: 10 }} type="password" placeholder="New password"
-        value={pw} onChange={(e) => setPw(e.target.value)} />
-      <input style={inputStyle(theme)} type="password" placeholder="Confirm new password"
-        value={pw2} onChange={(e) => setPw2(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && submit()} />
-      {err && <div style={{ color: theme.danger, fontSize: 12.5, marginTop: 8 }}>{err}</div>}
-      <button style={primaryBtn(theme, !okPw || loading)} disabled={!okPw || loading} onClick={submit}>
-        {loading ? <Spinner /> : 'Update password'}
+      <AuthTitle title="New password" sub="Pick something you have not used before. 6 or more characters." />
+      <PasswordInput value={pw} onChange={setPw} placeholder="New password" autoComplete="new-password" style={{ marginBottom: 10 }} />
+      <PasswordInput value={pw2} onChange={setPw2} placeholder="Type it again" ariaLabel="Confirm new password" autoComplete="new-password" onEnter={submit} />
+      {pw2 && pw !== pw2 && <div style={{ color: theme.danger, fontSize: 13.5, marginTop: 10, fontWeight: 600 }}>The two passwords are not the same</div>}
+      <AuthError text={err} />
+      <button type="button" style={authPrimaryStyle(theme, !okPw || loading, { marginTop: 16 })} disabled={!okPw || loading} onClick={submit}>
+        {loading ? <Spinner /> : 'Save password'}
       </button>
     </AuthShell>
   );
@@ -28228,7 +31342,10 @@ function ResetPasswordScreen({ onDone }) {
 
 function AppInner() {
   const [session, setSession] = useState(undefined);
-  const [screen, setScreen] = useState('login');
+  const [screen, setScreen] = useState('welcome');
+  const [regStage, setRegStage] = useState(null);
+  const authPushedRef = useRef(false);
+  const authBackRef = useRef(null);
   const [needsProfile, setNeedsProfile] = useState(false);
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
   const [switchingAccountId, setSwitchingAccountId] = useState(null);
@@ -28383,31 +31500,58 @@ function AppInner() {
     if (session?.user) { try { localStorage.removeItem(`zchat-session-${session.user.id}`); } catch {} removeAccountEntry(session.user.id); }
     await signOut();
     setSession(null);
-    setScreen('login');
+    setScreen('welcome');
+  };
+
+  const leaveAuth = () => {
+    if (shareLanding && authRequested) { setAuthRequested(false); setAuthNote(''); return; }
+    setScreen('welcome');
+  };
+  const authBackFn = registering ? 'block' : screen === 'forgot' ? () => setScreen('login') : leaveAuth;
+  const onAuthPage = !session && !needsProfile && (screen !== 'welcome' || !!(shareLanding && authRequested));
+  authBackRef.current = onAuthPage || registering ? authBackFn : null;
+  useEffect(() => {
+    if (session && !registering) return undefined;
+    const onPop = () => {
+      const fn = authBackRef.current;
+      authPushedRef.current = false;
+      if (fn === 'block') { try { window.history.pushState({ zauth: 1 }, ''); authPushedRef.current = true; } catch {} return; }
+      if (typeof fn === 'function') fn();
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, [!!session && !registering]);
+  useEffect(() => {
+    if (!(onAuthPage || registering) || authPushedRef.current) return;
+    try { window.history.pushState({ zauth: 1 }, ''); authPushedRef.current = true; } catch {}
+  }, [onAuthPage, registering, screen]);
+  const uiAuthBack = (fn) => {
+    if (!fn || fn === 'block') return null;
+    return () => {
+      if (authPushedRef.current) { try { window.history.back(); return; } catch {} }
+      fn();
+    };
   };
 
   if (isPasswordRecovery) {
     return <ResetPasswordScreen onDone={() => { setIsPasswordRecovery(false); window.location.hash = ''; }} />;
   }
 
-  if (session === undefined) {
-    return (
-      <div style={{ height: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <Spinner size={26} color="#1B1B1F" />
-      </div>
-    );
-  }
+  if (session === undefined) return <BootScreen />;
 
   if (!session || needsProfile || registering) {
     if (needsProfile) {
       const isGoogleUser = ['google', 'apple'].includes(session?.user?.app_metadata?.provider);
+      const leave = () => { setRegistering(false); setNeedsProfile(false); supabase.auth.signOut(); setSession(null); setScreen('welcome'); };
+      const canLeave = regStage === 'email' || regStage === 'otp' || (isGoogleUser && regStage === 'username');
       return (
-        <AuthShell>
+        <AuthShell onBack={canLeave ? leave : null}>
           <RegisterFlow
             initialStage={isGoogleUser ? 'username' : 'email'}
+            onStageChange={setRegStage}
             onStart={() => setRegistering(true)}
             onDone={() => { setRegistering(false); setNeedsProfile(false); }}
-            onBack={() => { setRegistering(false); setNeedsProfile(false); supabase.auth.signOut(); setSession(null); }}
+            onBack={leave}
           />
         </AuthShell>
       );
@@ -28422,38 +31566,28 @@ function AppInner() {
         }} />
       );
     }
+    if (screen === 'welcome' && !registering && !(shareLanding && authRequested)) {
+      return <WelcomeScreen onCreate={() => setScreen('register')} onLogin={() => setScreen('login')} />;
+    }
+    const shownScreen = screen === 'welcome' ? 'login' : screen;
     return (
-      <AuthShell>
-        {shareLanding && authNote && screen === 'login' && (
-          <div style={{ background: 'rgba(124,92,252,0.16)', border: '1px solid rgba(124,92,252,0.4)', color: '#C4B5FD', borderRadius: 12, padding: '10px 12px', fontSize: 13, fontWeight: 700, textAlign: 'center', marginBottom: 14, fontFamily: FONT }}>{authNote}</div>
+      <AuthShell onBack={uiAuthBack(authBackFn)}>
+        {shareLanding && authNote && shownScreen === 'login' && (
+          <div style={{ background: 'rgba(124,92,252,0.14)', color: '#B9A8FF', borderRadius: 12, padding: '10px 12px', fontSize: 13.5, fontWeight: 700, marginBottom: 16, fontFamily: FONT }}>{authNote}</div>
         )}
-        {screen === 'login' && (
+        {shownScreen === 'login' && (
           <LoginStep onSuccess={setSession} onForgot={() => setScreen('forgot')} onGoRegister={() => setScreen('register')} />
         )}
-        {screen === 'forgot' && <ForgotStep onBack={() => setScreen('login')} />}
-        {screen === 'register' && (
-          <RegisterFlow onStart={() => setRegistering(true)} onDone={() => { setRegistering(false); setScreen('login'); }} onBack={() => { setRegistering(false); setScreen('login'); }} />
-        )}
-        <div style={{ display: 'flex', justifyContent: 'center', gap: 14, flexWrap: 'wrap', marginTop: 22, fontSize: 12.5, fontFamily: FONT }}>
-          {[['/?page=store', 'Store'], ['/?page=terms', 'Terms'], ['/?page=refund', 'Refunds'], ['/?page=privacy', 'Privacy']].map(([href, label]) => (
-            <a key={href} href={href} style={{ color: 'rgba(140,150,170,0.95)', textDecoration: 'none', fontWeight: 700 }}>{label}</a>
-          ))}
-        </div>
-        {shareLanding && (
-          <div role="button" onClick={() => { setAuthRequested(false); setAuthNote(''); }} style={{ textAlign: 'center', marginTop: 16, fontSize: 13, fontWeight: 800, color: '#8ab4ff', cursor: 'pointer', fontFamily: FONT }}>Back to the preview</div>
+        {shownScreen === 'forgot' && <ForgotStep onBack={() => setScreen('login')} />}
+        {shownScreen === 'register' && (
+          <RegisterFlow onStageChange={setRegStage} onStart={() => setRegistering(true)} onDone={() => { setRegistering(false); setScreen('welcome'); }} onBack={() => setScreen('login')} />
         )}
       </AuthShell>
     );
   }
 
   const mfaState = mfaGate.uid === session.user.id ? mfaGate.state : 'checking';
-  if (mfaState === 'checking') {
-    return (
-      <div style={{ height: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <Spinner size={26} color="#1B1B1F" />
-      </div>
-    );
-  }
+  if (mfaState === 'checking') return <BootScreen />;
   if (mfaState === 'need') {
     return <MfaChallengeScreen onPassed={() => setMfaGate({ uid: session.user.id, state: 'clear' })} onCancel={handleLogout} />;
   }
