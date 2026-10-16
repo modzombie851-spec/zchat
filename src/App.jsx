@@ -33,6 +33,44 @@ import {
   };
 })();
 
+(function patchOlderBrowsers() {
+  if (typeof window === 'undefined') return;
+  try {
+    const c = window.crypto;
+    if (c && typeof c.randomUUID !== 'function' && typeof c.getRandomValues === 'function') {
+      c.randomUUID = () => {
+        const b = c.getRandomValues(new Uint8Array(16));
+        b[6] = (b[6] & 0x0f) | 0x40;
+        b[8] = (b[8] & 0x3f) | 0x80;
+        const h = Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
+        return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+      };
+    }
+  } catch {}
+  if (window.__zchatWheelX) return;
+  window.__zchatWheelX = true;
+  try {
+    window.addEventListener('wheel', (e) => {
+      if (e.ctrlKey || e.shiftKey || e.defaultPrevented || !e.deltaY || Math.abs(e.deltaX) > Math.abs(e.deltaY) * 0.5) return;
+      let el = e.target && e.target.nodeType === 1 ? e.target : null;
+      while (el && el !== document.body && el !== document.documentElement) {
+        const cs = getComputedStyle(el);
+        if ((cs.overflowY === 'auto' || cs.overflowY === 'scroll') && el.scrollHeight > el.clientHeight + 1) return;
+        if ((cs.overflowX === 'auto' || cs.overflowX === 'scroll') && el.scrollWidth > el.clientWidth + 1) {
+          const max = el.scrollWidth - el.clientWidth;
+          const step = e.deltaMode === 1 ? e.deltaY * 32 : e.deltaY;
+          const next = Math.max(0, Math.min(max, el.scrollLeft + step));
+          if (Math.abs(next - el.scrollLeft) < 0.5) return;
+          el.scrollLeft = next;
+          e.preventDefault();
+          return;
+        }
+        el = el.parentElement;
+      }
+    }, { passive: false });
+  } catch {}
+})();
+
 
 const ACCENT_PALETTES = {
   coral: { label: 'Violet', coral: '#7C5CFC', coralDeep: '#6B48F0', gold: '#B79CFF', teal: '#00C2A8', danger: '#ED4956', meDark: '#3D2F86', meLight: '#E4DCFF' },
@@ -465,12 +503,22 @@ function GlobalStyle() {
   return (
     <style>{`
       @keyframes zchat-spin { to { transform: rotate(360deg); } }
+      @keyframes zchat-story-in-next { from { transform: translateX(30%); opacity: 0.35; } to { transform: none; opacity: 1; } }
+      @keyframes zchat-story-in-prev { from { transform: translateX(-30%); opacity: 0.35; } to { transform: none; opacity: 1; } }
+      .zchat-story-upload { animation: zchat-spin 1.1s linear infinite; transform-origin: 50% 50%; }
       @keyframes zchat-fade { from { opacity: 0; transform: scale(0.965) translateY(8px); } to { opacity: 1; transform: scale(1) translateY(0); } }
       @keyframes zchat-repost-ring { 0% { opacity: 0.9; transform: scale(0.4); } 100% { opacity: 0; transform: scale(2.2); } }
       @keyframes zchat-heart-burst { 0% { opacity: 0; transform: scale(0.3); } 30% { opacity: 1; transform: scale(1.2); } 100% { opacity: 0; transform: scale(1.6); } }
       @keyframes zchat-mail-zoom-in { 0% { opacity: 0; transform: scale(0.82); } 100% { opacity: 1; transform: scale(1); } }
       .zchat-mail-zoom { animation: zchat-mail-zoom-in 0.22s cubic-bezier(.2,.8,.3,1); }
       .zchat-wall { height: 100vh; height: 100lvh; }
+      :root { --zfull: 100vh; }
+      @media (min-width: 900px) and (min-height: 480px) {
+        .zchat-wide-page { left: calc(50% - 400px) !important; right: calc(50% - 400px) !important; box-shadow: 0 24px 80px rgba(0,0,0,0.5); }
+        .zchat-wide-dim { display: block !important; }
+        .zchat-wide-feed { left: calc(50% - 300px) !important; right: calc(50% - 300px) !important; box-shadow: 0 24px 80px rgba(0,0,0,0.5); }
+      }
+      @supports (height: 100dvh) { :root { --zfull: 100dvh; } }
       @keyframes zchat-float-up { 0% { transform: translateY(0) translateX(0); opacity: 0; } 10% { opacity: 1; } 100% { transform: translateY(-620px) translateX(18px); opacity: 0; } }
       .zchat-gbtn { transition: transform 0.07s ease, box-shadow 0.07s ease, filter 0.12s ease; -webkit-tap-highlight-color: transparent; }
       .zchat-gbtn:active:not(:disabled) { transform: translateY(3px); box-shadow: 0 1px 0 var(--gb-edge, #C77800), 0 3px 6px rgba(0,0,0,0.18), inset 0 2px 0 rgba(255,255,255,0.4) !important; }
@@ -1669,16 +1717,23 @@ function IgTopBar({ title, subtitle, onBack, sticky, bleed = 0, right, line }) {
   );
 }
 
+function WideDim({ onClose, z }) {
+  return <div className="zchat-wide-dim" aria-hidden="true" onClick={onClose} style={{ display: 'none', position: 'fixed', inset: 0, zIndex: z, background: 'rgba(5,8,16,0.55)' }} />;
+}
+
 function FullPage({ title, subtitle, onBack, right, zIndex = 60, children, pad = true, portal = true, footer, bodyStyle, scrollRef }) {
   const { theme } = useTheme();
   const c = igPalette(theme);
   const edgeBack = useEdgeSwipeBack(true);
   const body = (
-    <div {...edgeBack} className="zchat-panel-open" style={{ position: 'fixed', left: 0, right: 0, top: 'var(--zvp-top, 0px)', height: 'var(--zvp-h, 100%)', zIndex, background: c.bg, color: c.fg, fontFamily: FONT, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+    <>
+    <WideDim onClose={onBack} z={zIndex} />
+    <div {...edgeBack} className="zchat-panel-open zchat-wide-page" style={{ position: 'fixed', left: 0, right: 0, top: 'var(--zvp-top, 0px)', height: 'var(--zvp-h, 100%)', zIndex, background: c.bg, color: c.fg, fontFamily: FONT, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <IgTopBar title={title} subtitle={subtitle} onBack={onBack} right={right} />
       <div ref={scrollRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain', padding: pad ? '4px 16px' : 0, paddingBottom: footer ? 16 : 'calc(28px + env(safe-area-inset-bottom))', ...(bodyStyle || {}) }}>{children}</div>
       {footer && <div style={{ flexShrink: 0, padding: '10px 16px', paddingBottom: 'calc(12px + env(safe-area-inset-bottom))', background: c.bg, borderTop: `1px solid ${c.line}` }}>{footer}</div>}
     </div>
+    </>
   );
   return portal ? <Portal>{body}</Portal> : body;
 }
@@ -2826,9 +2881,11 @@ function SettingsPanel({ onClose, onOpenPrivacy, onLogout, hideActivity, onToggl
     .filter((g) => g.rows.length);
 
   return (
+    <>
+    <WideDim onClose={onClose} z={30} />
     <div {...edgeBack} style={{
       position: 'fixed', inset: 0, zIndex: 30, background: c.bg, color: c.fg, fontFamily: FONT,
-    }} className="zchat-panel-open">
+    }} className="zchat-panel-open zchat-wide-page">
       <div style={{ height: '100%', overflowY: 'auto', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain', position: 'relative', zIndex: 1 }}>
 
         {(
@@ -2986,6 +3043,7 @@ function SettingsPanel({ onClose, onOpenPrivacy, onLogout, hideActivity, onToggl
         <ChatLockUnlock correctHash={chatLockHash} onCancel={() => setLockFlow(null)} onUnlock={() => { onTurnOffChatLock(); setLockFlow(null); }} />
       )}
     </div>
+    </>
   );
 }
 
@@ -3431,10 +3489,12 @@ function DiscoverPanel({ myId, blockedIds, onClose, onOpenProfile }) {
   };
 
   return (
+    <>
+    <WideDim onClose={onClose} z={25} />
     <div {...edgeBack} style={{
       position: 'fixed', inset: 0, background: theme.bgGradient, zIndex: 25,
       display: 'flex', flexDirection: 'column',
-    }} className="zchat-panel-open">
+    }} className="zchat-panel-open zchat-wide-page">
       <IgTopBar title="Discover people" subtitle={people && people.length ? `${people.length} public accounts` : undefined} onBack={onClose} />
       <div style={{ overflowY: 'auto', flex: 1, minHeight: 0, padding: '4px 18px', paddingBottom: 'calc(4px + env(safe-area-inset-bottom))' }}>
         {people === null ? (
@@ -3451,6 +3511,7 @@ function DiscoverPanel({ myId, blockedIds, onClose, onOpenProfile }) {
         )}
       </div>
     </div>
+    </>
   );
 }
 
@@ -4239,7 +4300,9 @@ function MailPanel({ myId, onClose, initialMailId }) {
   };
 
   return (
-    <div {...edgeBack} style={{ position: 'fixed', inset: 0, background: theme.bgGradient, zIndex: 34, display: 'flex', flexDirection: 'column' }} className="zchat-panel-open">
+    <>
+    <WideDim onClose={onClose} z={34} />
+    <div {...edgeBack} style={{ position: 'fixed', inset: 0, background: theme.bgGradient, zIndex: 34, display: 'flex', flexDirection: 'column' }} className="zchat-panel-open zchat-wide-page">
       <IgTopBar title={selected ? 'Message' : picking ? `${picked.size} selected` : 'Mail'} onBack={() => (selected ? setSelected(null) : onClose())}
         right={selected ? (
           <div role="button" aria-label="Delete mail" onClick={() => setConfirmDeleteId(selected.id)} style={{ width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: theme.danger }}><Trash2 size={20} /></div>
@@ -4349,6 +4412,7 @@ function MailPanel({ myId, onClose, initialMailId }) {
           onConfirm={deletePicked} />
       )}
     </div>
+    </>
   );
 }
 
@@ -4357,10 +4421,12 @@ function ArchivedChatsPanel({ conversations, onClose, onOpenChat, onUnarchive })
   const edgeBack = useEdgeSwipeBack(true);
   const { theme } = useTheme();
   return (
+    <>
+    <WideDim onClose={onClose} z={26} />
     <div {...edgeBack} style={{
       position: 'fixed', inset: 0, background: theme.bgGradient, zIndex: 26,
       display: 'flex', flexDirection: 'column',
-    }} className="zchat-panel-open">
+    }} className="zchat-panel-open zchat-wide-page">
       <IgTopBar title="Archived chats" subtitle={conversations.length ? `${conversations.length} ${conversations.length === 1 ? 'chat' : 'chats'}` : undefined} onBack={onClose} />
       <div style={{ overflowY: 'auto', flex: 1, minHeight: 0, padding: '4px 18px', paddingBottom: 'calc(4px + env(safe-area-inset-bottom))' }}>
         {conversations.length === 0 ? (
@@ -4377,6 +4443,7 @@ function ArchivedChatsPanel({ conversations, onClose, onOpenChat, onUnarchive })
         )}
       </div>
     </div>
+    </>
   );
 }
 
@@ -4849,10 +4916,12 @@ function ChatSettingsPanel({ conv, myId, meAvatar, meName, isPinned, isLocked, w
   const muteLabel = isMuted === true ? 'Muted' : isMuted ? `Muted until ${new Date(isMuted).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}` : 'Off';
 
   return (
+    <>
+    <WideDim onClose={onClose} z={33} />
     <div {...edgeBack} style={{
       position: 'fixed', inset: 0, background: c.bg, color: c.fg, zIndex: 33, fontFamily: FONT,
       display: 'flex', flexDirection: 'column', overflow: 'hidden',
-    }} className="zchat-panel-open">
+    }} className="zchat-panel-open zchat-wide-page">
       <IgTopBar title="Chat settings" onBack={onClose} />
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', paddingBottom: 'calc(28px + env(safe-area-inset-bottom))' }}>
         <div style={{ textAlign: 'center', padding: '8px 20px 4px' }}>
@@ -4947,6 +5016,7 @@ function ChatSettingsPanel({ conv, myId, meAvatar, meName, isPinned, isLocked, w
           onOpenProfile={(pf) => { setListModal(null); onOpenProfile(pf); }} />
       )}
     </div>
+    </>
   );
 }
 
@@ -5056,7 +5126,9 @@ function CreateGroupPanel({ myId, onClose, onCreated }) {
   const canNext = selected.length > 0;
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: theme.bgGradient, zIndex: 40, display: 'flex', flexDirection: 'column', fontFamily: FONT }} className="zchat-panel-open">
+    <>
+    <WideDim onClose={onClose} z={40} />
+    <div style={{ position: 'fixed', inset: 0, background: theme.bgGradient, zIndex: 40, display: 'flex', flexDirection: 'column', fontFamily: FONT }} className="zchat-panel-open zchat-wide-page">
       <IgTopBar title={heading} subtitle={step === 'members' ? 'Step 1 of 2' : 'Step 2 of 2'} onBack={() => (step === 'details' ? setStep('members') : onClose())} />
 
       {step === 'members' ? (
@@ -5147,6 +5219,7 @@ function CreateGroupPanel({ myId, onClose, onCreated }) {
         }} />
       )}
     </div>
+    </>
   );
 }
 
@@ -5256,7 +5329,9 @@ function GroupInfoPanel({ group, members, myId, iFollowIds, privacyAllowed, myRo
   const nameLen = (group.name || '').length;
 
   return (
-    <div {...edgeBack} style={{ position: 'fixed', inset: 0, background: c.bg, color: c.fg, zIndex: 40, display: 'flex', flexDirection: 'column', fontFamily: FONT }} className="zchat-panel-open">
+    <>
+    <WideDim onClose={onClose} z={40} />
+    <div {...edgeBack} style={{ position: 'fixed', inset: 0, background: c.bg, color: c.fg, zIndex: 40, display: 'flex', flexDirection: 'column', fontFamily: FONT }} className="zchat-panel-open zchat-wide-page">
       <div style={{ paddingTop: 'env(safe-area-inset-top)', flexShrink: 0 }}>
         <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 52, padding: '0 8px' }}>
           <div role="button" aria-label="Back" onClick={onClose} style={{ width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><ArrowLeft size={24} strokeWidth={2} /></div>
@@ -5351,7 +5426,7 @@ function GroupInfoPanel({ group, members, myId, iFollowIds, privacyAllowed, myRo
             {media.map((m) => (
               <div key={m.id} role="button" onClick={() => onOpenMedia && onOpenMedia(m)} style={{ position: 'relative', aspectRatio: '1 / 1', background: c.field, overflow: 'hidden', cursor: 'pointer' }}>
                 {m.type === 'video'
-                  ? <video src={`${m.media_url}#t=0.1`} muted playsInline preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} />
+                  ? <VideoThumb src={m.media_url} style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} />
                   : <img src={m.media_url} alt="" loading="lazy" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
                 {m.type === 'video' && <Play size={15} color="white" style={{ position: 'absolute', top: 6, right: 6, filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.6))' }} />}
               </div>
@@ -5412,6 +5487,7 @@ function GroupInfoPanel({ group, members, myId, iFollowIds, privacyAllowed, myRo
           onAdd={(people) => { onAddMembers(people); setShowAddMembers(false); }} />
       )}
     </div>
+    </>
   );
 }
 
@@ -5498,7 +5574,9 @@ function GroupSettingsPanel({ group, myId, isAdmin, isOwner, isMuted, onSetMute,
     </div>
   );
   return (
-    <div style={{ position: 'fixed', inset: 0, background: c.bg, color: c.fg, zIndex: 34, display: 'flex', flexDirection: 'column', overflow: 'hidden', fontFamily: FONT }} className="zchat-panel-open">
+    <>
+    <WideDim onClose={onClose} z={34} />
+    <div style={{ position: 'fixed', inset: 0, background: c.bg, color: c.fg, zIndex: 34, display: 'flex', flexDirection: 'column', overflow: 'hidden', fontFamily: FONT }} className="zchat-panel-open zchat-wide-page">
       <IgTopBar title="Group settings" onBack={onClose} />
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', paddingBottom: 'calc(28px + env(safe-area-inset-bottom))' }}>
         <IgHeading>Your settings</IgHeading>
@@ -5565,6 +5643,7 @@ function GroupSettingsPanel({ group, myId, isAdmin, isOwner, isMuted, onSetMute,
         />
       )}
     </div>
+    </>
   );
 }
 
@@ -5591,7 +5670,9 @@ function GroupMembersPanel({ group, members, myId, isAdmin, isOwner, onClose, on
   const sheetMember = sheetFor ? members.find((m) => m.user_id === sheetFor) : null;
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: theme.bgGradient, zIndex: 35, display: 'flex', flexDirection: 'column', overflow: 'hidden' }} className="zchat-panel-open">
+    <>
+    <WideDim onClose={onClose} z={35} />
+    <div style={{ position: 'fixed', inset: 0, background: theme.bgGradient, zIndex: 35, display: 'flex', flexDirection: 'column', overflow: 'hidden' }} className="zchat-panel-open zchat-wide-page">
       <IgTopBar title="Members" onBack={onClose} right={isAdmin ? <div role="button" aria-label="Add members" onClick={onAddMembers} style={{ fontSize: 14, fontWeight: 800, color: theme.coral, cursor: 'pointer', padding: '0 10px', height: 44, display: 'flex', alignItems: 'center' }}>Add</div> : null} />
       <div style={{ padding: '12px 18px 0', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, height: 40, borderRadius: 13, background: theme.rowBg, border: `1px solid ${theme.border}`, padding: '0 12px' }}>
@@ -5657,6 +5738,7 @@ function GroupMembersPanel({ group, members, myId, isAdmin, isOwner, onClose, on
         </div>
       )}
     </div>
+    </>
   );
 }
 function AddMembersPanel({ myId, existingIds, onClose, onAdd, iFollowIds, privacyAllowed }) {
@@ -5700,7 +5782,9 @@ function AddMembersPanel({ myId, existingIds, onClose, onAdd, iFollowIds, privac
   };
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: theme.bgGradient, zIndex: 45, display: 'flex', flexDirection: 'column' }} className="zchat-panel-open">
+    <>
+    <WideDim onClose={onClose} z={45} />
+    <div style={{ position: 'fixed', inset: 0, background: theme.bgGradient, zIndex: 45, display: 'flex', flexDirection: 'column' }} className="zchat-panel-open zchat-wide-page">
       <IgTopBar title="Add members" subtitle={selected.length ? `${selected.length} selected` : undefined} onBack={onClose} />
       <div style={{ padding: '14px 18px 8px' }}>
         <div style={{ position: 'relative' }}>
@@ -5730,6 +5814,7 @@ function AddMembersPanel({ myId, existingIds, onClose, onAdd, iFollowIds, privac
         </button>
       </div>
     </div>
+    </>
   );
 }
 
@@ -7263,7 +7348,7 @@ function MessageBubble({ onOpenOnce, onVote, onShowVotes, gameMerge, gameLive, o
               {m.type === 'image' && !onceInfo && <ChatImage src={m.media_url} caption={m.content} />}
               {m.type === 'video' && !onceInfo && (
                 <div onClick={(e) => { e.stopPropagation(); onOpenVideo({ url: m.media_url, trimStart: m.trim_start, trimEnd: m.trim_end, overlayUrl: m.overlay_url }); }} style={{ position: 'relative', width: 240, maxWidth: '100%', height: 240, borderRadius: 14, overflow: 'hidden', marginBottom: m.content ? 4 : 2, background: '#000', cursor: 'pointer' }}>
-                  <video src={cachedVideoSrc ? `${cachedVideoSrc}#t=0.1` : (m.media_url ? `${m.media_url}#t=0.1` : undefined)} preload="metadata" playsInline muted onContextMenu={(e) => e.preventDefault()} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none' }} />
+                  <VideoThumb src={USE_VIDEO_THUMBS ? m.media_url : (cachedVideoSrc || m.media_url)} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none' }} />
                   {m.overlay_url && <img src={m.overlay_url} alt="" draggable={false} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} />}
                   <div style={{
                     position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none',
@@ -7433,7 +7518,7 @@ function playReactionPing() {
 function pairKey(a, b) { return a < b ? [a, b] : [b, a]; }
 
 
-function ImageViewer({ url, onClose, onForward, onReport, once, caption }) {
+function ImageViewer({ url, onClose, onForward, onReport, once, caption, onEdit }) {
   useBackClose(true, onClose);
   const [ui, setUi] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -7603,10 +7688,18 @@ function ImageViewer({ url, onClose, onForward, onReport, once, caption }) {
     zoomAt(e.clientX, e.clientY, next);
   };
   useEffect(() => () => clearTimeout(g.current.tapTimer), []);
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el) return undefined;
+    const h = (e) => { if (e.ctrlKey || e.metaKey) e.preventDefault(); };
+    el.addEventListener('wheel', h, { passive: false });
+    return () => el.removeEventListener('wheel', h);
+  }, []);
   const item = (label, onClick, danger) => (
     <div role="button" onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onClick(); }} style={{ padding: '13px 16px', fontSize: 15, fontWeight: 600, color: danger ? '#FF6B6B' : 'white', cursor: 'pointer', borderTop: '1px solid rgba(255,255,255,0.08)' }}>{label}</div>
   );
   const chrome = { transition: 'opacity 0.2s ease, visibility 0.2s', opacity: ui ? 1 : 0, visibility: ui ? 'visible' : 'hidden' };
+  const art = !once && !!onEdit && isPaintUrl(url);
   return (
     <div ref={rootRef} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 200, overflow: 'hidden' }}>
       <div ref={bgRef} style={{ position: 'absolute', inset: 0, background: '#000' }} />
@@ -7622,6 +7715,7 @@ function ImageViewer({ url, onClose, onForward, onReport, once, caption }) {
             {menuOpen && (
               <div onClick={(e) => e.stopPropagation()} style={{ position: 'absolute', top: 54, right: 0, background: '#1C1C1F', borderRadius: 14, overflow: 'hidden', width: 200, boxShadow: '0 12px 32px rgba(0,0,0,0.5)', fontFamily: FONT }}>
                 <div style={{ marginTop: -1 }}>
+                  {onEdit && item(art ? 'Edit this art' : 'Draw on it', () => onEdit(url))}
                   {item('Save to phone', () => silentDownload(url, 'zchat-photo.jpg'))}
                   {onForward && item('Forward', onForward)}
                   {onReport && item('Report', onReport, true)}
@@ -7630,8 +7724,16 @@ function ImageViewer({ url, onClose, onForward, onReport, once, caption }) {
             )}
           </div>
         )} />
-        {caption && (
-          <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '34px 18px calc(20px + env(safe-area-inset-bottom))', background: 'linear-gradient(180deg, transparent, rgba(0,0,0,0.75))', color: 'white', fontSize: 15, lineHeight: 1.4, textAlign: 'center', fontFamily: FONT, wordBreak: 'break-word', pointerEvents: 'none' }}>{caption}</div>
+        {(caption || art) && (
+          <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '34px 18px calc(20px + env(safe-area-inset-bottom))', background: caption ? 'linear-gradient(180deg, transparent, rgba(0,0,0,0.75))' : 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, fontFamily: FONT, pointerEvents: 'none' }}>
+            {art && (
+              <button type="button" onClick={(e) => { e.stopPropagation(); onEdit(url); }}
+                style={{ pointerEvents: 'auto', height: 46, padding: '0 22px', borderRadius: 23, border: '1.5px solid rgba(255,255,255,0.32)', background: 'rgba(24,24,27,0.84)', color: 'white', fontWeight: 800, fontSize: 15, fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', boxShadow: '0 4px 14px rgba(0,0,0,0.5)' }}>
+                <PaintToolIcon k="brush" size={19} />Edit this art
+              </button>
+            )}
+            {caption && <div style={{ width: '100%', color: 'white', fontSize: 15, lineHeight: 1.4, textAlign: 'center', wordBreak: 'break-word' }}>{caption}</div>}
+          </div>
         )}
       </div>
     </div>
@@ -7971,30 +8073,34 @@ function InstallAppHelpModal({ onClose }) {
 function SmartMenu({ anchorEl, open, onClose, children, width = 170 }) {
   useBackClose(!!open, onClose);
   const [pos, setPos] = useState(null);
-  useEffect(() => {
-    if (!open || !anchorEl) { setPos(null); return; }
+  const boxRef = useRef(null);
+  useLayoutEffect(() => {
+    if (!open || !anchorEl) { setPos(null); return undefined; }
     const compute = () => {
       const r = anchorEl.getBoundingClientRect();
-      const vw = window.innerWidth, vh = window.innerHeight;
-      const estHeight = 170;
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const maxH = Math.max(120, vh - 16);
+      const h = Math.min(boxRef.current ? boxRef.current.scrollHeight : 170, maxH);
       let top = r.bottom + 6;
-      if (top + estHeight > vh - 8) top = Math.max(8, r.top - estHeight - 6);
+      if (top + h > vh - 8) top = r.top - h - 6 >= 8 ? r.top - h - 6 : Math.max(8, vh - 8 - h);
       let left = r.right - width;
       if (left < 8) left = 8;
-      if (left + width > vw - 8) left = vw - width - 8;
-      setPos({ top, left });
+      if (left + width > vw - 8) left = Math.max(8, vw - width - 8);
+      setPos({ top, left, maxH });
     };
+    const onScroll = (e) => { if (boxRef.current && e.target && e.target.nodeType === 1 && boxRef.current.contains(e.target)) return; onClose(); };
     compute();
     window.addEventListener('resize', compute);
-    window.addEventListener('scroll', onClose, true);
-    return () => { window.removeEventListener('resize', compute); window.removeEventListener('scroll', onClose, true); };
+    window.addEventListener('scroll', onScroll, true);
+    return () => { window.removeEventListener('resize', compute); window.removeEventListener('scroll', onScroll, true); };
   }, [open, anchorEl, onClose]);
 
-  if (!open || !pos) return null;
+  if (!open || !anchorEl) return null;
   return ReactDOM.createPortal(
     <>
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 998 }} />
-      <div style={{ position: 'fixed', top: pos.top, left: pos.left, width, zIndex: 999 }} onClick={(e) => e.stopPropagation()} className="zchat-fade">
+      <div ref={boxRef} style={{ position: 'fixed', top: pos ? pos.top : 0, left: pos ? pos.left : 0, width, zIndex: 999, maxHeight: pos ? pos.maxH : undefined, overflowY: 'auto', overscrollBehavior: 'contain', visibility: pos ? 'visible' : 'hidden', borderRadius: 14 }} onClick={(e) => e.stopPropagation()} className="zchat-fade">
         {children}
       </div>
     </>,
@@ -8051,7 +8157,7 @@ function ReplyQuote({ m, label, onClick, bar, dim, compact }) {
     <div style={{ width: compact ? 34 : 40, height: compact ? 34 : 40, borderRadius: 8, overflow: 'hidden', flexShrink: 0, background: 'rgba(0,0,0,0.25)', position: 'relative' }}>
       {m.type === 'image'
         ? <img src={m.media_url} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-        : <video src={m.media_url} muted playsInline preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />}
+        : <VideoThumb src={m.media_url} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />}
       {m.type === 'video' && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Play size={14} color="white" fill="white" /></div>}
     </div>
   ) : isStickerImg ? (
@@ -8258,7 +8364,7 @@ function ChatRowSheet({ title, subtitle, avatar, actions, onClose, zIndex = 94, 
       background: 'rgba(0,0,0,0.45)',
     }}>
       <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ transform: drag.sheetStyle.transform, transition: drag.sheetStyle.transition,
-        width: '100%', maxWidth: 460, maxHeight: '86vh', display: 'flex', flexDirection: 'column', background: theme.panelBg, borderRadius: '24px 24px 0 0', overflow: 'hidden',
+        width: '100%', maxWidth: 460, maxHeight: 'min(86vh, calc(100% - 24px))', display: 'flex', flexDirection: 'column', background: theme.panelBg, borderRadius: '24px 24px 0 0', overflow: 'hidden',
         paddingBottom: 'calc(8px + env(safe-area-inset-bottom))', boxShadow: '0 -10px 40px rgba(0,0,0,0.25)',
       }}>
         <div {...drag.sheetProps} style={{ touchAction: 'none', flexShrink: 0 }}>
@@ -8313,7 +8419,7 @@ function ConfirmSheet({ title, text, confirmLabel = 'Confirm', danger = true, on
   );
 }
 
-function MessageContextMenu({ onReadAloud, onRemind, message, isMine, canEditText, canModerate, anchorRect, bubble, isPinned, onPin, onUnpin, onClose, onReact, onReply, onCopy, onEdit, onForward, onReport, onDeleteForMe, onDeleteForEveryone, onSelectMultiple, onSave, onToggleSave, isSaved, onInfo }) {
+function MessageContextMenu({ onReadAloud, onRemind, message, isMine, canEditText, canModerate, anchorRect, bubble, isPinned, onPin, onUnpin, onClose, onReact, onReply, onCopy, onEdit, onForward, onReport, onDeleteForMe, onDeleteForEveryone, onSelectMultiple, onSave, onToggleSave, isSaved, onInfo, onEditArt }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
   const [showFullEmoji, setShowFullEmoji] = useState(false);
@@ -8399,6 +8505,7 @@ function MessageContextMenu({ onReadAloud, onRemind, message, isMine, canEditTex
           {!message.deleted && message.type === 'text' && !special && onReadAloud && row(<Volume2 size={18} />, 'Read aloud', onReadAloud)}
           {!message.deleted && canEditText && !special && row(<Edit3 size={18} />, 'Edit', onEdit)}
           {!message.deleted && !onceMsg && (message.type === 'image' || message.type === 'video') && row(<Download size={18} />, 'Save', onSave)}
+          {!message.deleted && !onceMsg && message.type === 'image' && onEditArt && row(<PaintToolIcon k="brush" size={18} />, isPaintUrl(message.media_url) ? 'Edit this art' : 'Draw on it', onEditArt)}
           {!message.deleted && stickerMatch && row(<Star_ size={18} color="#FFB800" filled={favKeys.has(stickerMatch.key)} />, favKeys.has(stickerMatch.key) ? 'Remove from favorites' : 'Add to favorites', () => { setFavKeys(new Set(toggleFavoriteSticker(stickerMatch.key))); onClose(); })}
           {!message.deleted && !onceMsg && !(message.type === 'text' && parseGameMessage(message.content)) && row(<Forward size={18} />, 'Forward', onForward)}
           {!message.deleted && !onceMsg && message.type !== 'system' && onToggleSave && row(<Bookmark size={18} fill={isSaved ? 'currentColor' : 'none'} />, isSaved ? 'Remove from Saved' : 'Add to Saved', onToggleSave)}
@@ -9165,7 +9272,7 @@ function MediaComposer({ files, recipientName, onCancel, onSend, onActivity, mod
                 }}>
                   {it.kind === 'image'
                     ? <img src={it.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-                    : <video src={it.url} muted playsInline preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />}
+                    : <VideoThumb src={it.url} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />}
                   {i === index && (
                     <div onClick={(e) => { e.stopPropagation(); removeItem(it.id); }} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       <Trash2 size={16} color="white" />
@@ -9307,7 +9414,7 @@ function VideoViewer({ url, trimStart, trimEnd, overlayUrl, onClose, onForward, 
     }
   };
   const boxStyle = ratio
-    ? { position: 'relative', width: `min(100vw, calc(100dvh * ${ratio}))`, aspectRatio: String(ratio), maxHeight: '100dvh' }
+    ? { position: 'relative', width: `min(100vw, calc(var(--zfull, 100vh) * ${ratio}))`, aspectRatio: String(ratio), maxHeight: 'var(--zfull, 100vh)' }
     : { position: 'relative', maxWidth: '100%', maxHeight: '100%' };
   return (
     <div onPointerDown={wake} style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }} className="zchat-fade">
@@ -9321,7 +9428,7 @@ function VideoViewer({ url, trimStart, trimEnd, overlayUrl, onClose, onForward, 
       </div>
       <div style={boxStyle} data-no-swipe="true">
         <video src={url} controls autoPlay playsInline onPlay={() => { playingRef.current = true; wake(); }} onPause={() => { playingRef.current = false; clearTimeout(hideRef.current); setUi(true); }} onEnded={() => { playingRef.current = false; setUi(true); }} controlsList={once ? 'nodownload noplaybackrate' : undefined} disablePictureInPicture={!!once} onContextMenu={(e) => e.preventDefault()} onLoadedMetadata={onLoadedMetadata} onTimeUpdate={onTimeUpdate}
-          style={ratio ? { width: '100%', height: '100%', display: 'block', objectFit: 'contain' } : { maxWidth: '100vw', maxHeight: '100dvh', display: 'block' }} />
+          style={ratio ? { width: '100%', height: '100%', display: 'block', objectFit: 'contain' } : { maxWidth: '100vw', maxHeight: 'var(--zfull, 100vh)', display: 'block' }} />
         {overlayUrl && ratio && (
           <img src={overlayUrl} alt="" draggable={false} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', objectFit: 'contain' }} />
         )}
@@ -9545,7 +9652,9 @@ function ChatMediaPanel({ title, myId, otherId, groupId, hiddenIds, labelFor, on
   };
 
   return (
-    <div {...edgeBack} style={{ position: 'fixed', inset: 0, zIndex: 60, background: theme.bgGradient, display: 'flex', flexDirection: 'column' }} className="zchat-panel-open">
+    <>
+    <WideDim onClose={onClose} z={60} />
+    <div {...edgeBack} style={{ position: 'fixed', inset: 0, zIndex: 60, background: theme.bgGradient, display: 'flex', flexDirection: 'column' }} className="zchat-panel-open zchat-wide-page">
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', paddingTop: 'calc(14px + env(safe-area-inset-top))', flexShrink: 0 }}>
         <div role="button" aria-label="Back" onClick={onClose} style={{ cursor: 'pointer', color: theme.ink, display: 'flex' }}><ArrowLeft size={20} /></div>
         <div style={{ minWidth: 0 }}>
@@ -9588,7 +9697,7 @@ function ChatMediaPanel({ title, myId, otherId, groupId, hiddenIds, labelFor, on
                         style={{ position: 'relative', aspectRatio: '1 / 1', background: '#000', cursor: 'pointer', overflow: 'hidden' }}>
                         {m.type === 'image'
                           ? <img src={m.media_url} alt="" loading="lazy" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', opacity: picking && !picked.has(m.id) ? 0.5 : 1 }} />
-                          : <video src={`${m.media_url}#t=0.1`} muted playsInline preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none', opacity: picking && !picked.has(m.id) ? 0.5 : 1 }} />}
+                          : <VideoThumb src={m.media_url} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none', opacity: picking && !picked.has(m.id) ? 0.5 : 1 }} />}
                         {m.type === 'video' && !picking && (
                           <div style={{ position: 'absolute', left: 6, bottom: 6, width: 22, height: 22, borderRadius: '50%', background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                             <Play size={11} color="white" style={{ marginLeft: 1 }} />
@@ -9645,6 +9754,7 @@ function ChatMediaPanel({ title, myId, otherId, groupId, hiddenIds, labelFor, on
         )}
       </div>
     </div>
+    </>
   );
 }
 
@@ -9717,27 +9827,358 @@ function VerifiedTick({ size = 13 }) {
   );
 }
 
-function StoryAvatar({ profile, size = 64, ring = 'none', onClick, badgePlus = false, dim = false }) {
+function StoryAvatar({ profile, size = 64, ring = 'none', onClick, badgePlus = false, dim = false, segments = null, uploading = false }) {
   const { theme } = useTheme();
   const framed = !!(profile && AVATAR_FRAMES[profile.avatar_frame]);
-  const pad = ring === 'none' || framed ? 0 : 3;
-  const ringBg = ring === 'unseen'
-    ? `conic-gradient(from 210deg, ${theme.coral}, ${theme.teal}, ${theme.gold}, ${theme.coral})`
-    : ring === 'seen' ? theme.border : 'transparent';
+  const hasRing = ring !== 'none' || uploading;
+  const pad = !hasRing || framed ? 0 : 4;
   return (
-    <div onClick={onClick} style={{ position: 'relative', width: size, height: size, flexShrink: 0, cursor: onClick ? 'pointer' : 'default', opacity: dim ? 0.55 : 1 }}>
-      <div style={{ width: size, height: size, borderRadius: '50%', padding: pad, boxSizing: 'border-box', background: framed ? 'transparent' : ringBg }}>
-        <div style={{ width: '100%', height: '100%', borderRadius: '50%', padding: framed ? 0 : (ring === 'none' ? 0 : 2), boxSizing: 'border-box', background: framed ? 'transparent' : theme.panelBg }}>
-          <Avatar emoji={profile?.avatar} name={profile?.name || '?'} frame={profile?.avatar_frame} size={size - (framed || ring === 'none' ? 0 : 10)} />
-        </div>
+    <div onClick={onClick} style={{ position: 'relative', width: size, height: size, flexShrink: 0, cursor: onClick ? 'pointer' : 'default', opacity: dim ? 0.5 : 1 }}>
+      <div style={{ width: size, height: size, borderRadius: '50%', padding: pad, boxSizing: 'border-box' }}>
+        <Avatar emoji={profile?.avatar} name={profile?.name || '?'} frame={profile?.avatar_frame} size={size - (framed || !hasRing ? 0 : 8)} />
       </div>
-      {framed && ring !== 'none' && (
+      {uploading ? (
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="zchat-story-upload" style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }} aria-hidden="true">
+          <circle cx={size / 2} cy={size / 2} r={size / 2 - 1.5} fill="none" stroke={theme.coral} strokeWidth="2.6" strokeLinecap="round" strokeDasharray={`${size * 0.9} ${size * 0.5}`} />
+        </svg>
+      ) : !framed && ring !== 'none' ? (
+        <StoryRing size={size} segments={segments && segments.length ? segments : [ring === 'seen']} color={theme.coral} seenColor={theme.dark ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.2)'} />
+      ) : null}
+      {framed && ring !== 'none' && !uploading && (
         <div style={{ position: 'absolute', inset: -3, borderRadius: '50%', border: `2px solid ${ring === 'unseen' ? theme.coral : theme.border}`, pointerEvents: 'none' }} />
       )}
       {badgePlus && (
         <div style={{ position: 'absolute', right: 0, bottom: 0, zIndex: 6, width: size * 0.32, height: size * 0.32, borderRadius: '50%', background: theme.coral, border: `2.5px solid ${theme.panelBg}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800, fontSize: size * 0.22, lineHeight: 1 }}>+</div>
       )}
     </div>
+  );
+}
+
+const TEXT_STORY_BGS = [
+  { k: 'violet', label: 'Violet', bg: '#5B3FD0', ink: '#FFFFFF' },
+  { k: 'coral', label: 'Coral', bg: '#E8573F', ink: '#FFFFFF' },
+  { k: 'teal', label: 'Teal', bg: '#0F8B83', ink: '#FFFFFF' },
+  { k: 'ink', label: 'Ink', bg: '#16161C', ink: '#FFFFFF' },
+  { k: 'butter', label: 'Butter', bg: '#F6D35B', ink: '#2B2208' },
+  { k: 'rose', label: 'Rose', bg: '#F2A7BE', ink: '#3A1020' },
+  { k: 'sky', label: 'Sky', bg: '#3B82C4', ink: '#FFFFFF' },
+  { k: 'forest', label: 'Forest', bg: '#24563A', ink: '#F2FFF4' },
+  { k: 'paper', label: 'Paper', bg: '#F4EEDF', ink: '#2E2618', lines: 'rgba(80,60,30,0.16)' },
+  { k: 'dots', label: 'Dots', bg: '#2E2A6B', ink: '#FFFFFF', dots: 'rgba(255,255,255,0.14)' },
+  { k: 'grid', label: 'Grid', bg: '#FFFFFF', ink: '#1C2333', grid: 'rgba(59,130,246,0.18)' },
+];
+const TEXT_STORY_FONTS = [
+  { k: 'classic', label: 'Classic', css: `800 {px}px ${FONT}` },
+  { k: 'serif', label: 'Serif', css: '700 {px}px Georgia, "Times New Roman", serif' },
+  { k: 'type', label: 'Typewriter', css: '600 {px}px ui-monospace, Menlo, Consolas, "Courier New", monospace' },
+  { k: 'marker', label: 'Marker', css: '700 {px}px "Marker Felt", "Comic Sans MS", "Chalkboard SE", cursive' },
+  { k: 'round', label: 'Rounded', css: '800 {px}px ui-rounded, "SF Pro Rounded", "Nunito", "Varela Round", system-ui, sans-serif' },
+];
+function textStoryFont(fontIdx, px) {
+  const f = TEXT_STORY_FONTS[fontIdx] || TEXT_STORY_FONTS[0];
+  return f.css.replace('{px}', String(px));
+}
+function wrapStoryLines(ctx, text, maxW) {
+  const out = [];
+  String(text || '').split('\n').forEach((para) => {
+    const words = para.split(/\s+/).filter(Boolean);
+    if (!words.length) { out.push(''); return; }
+    let line = '';
+    words.forEach((w) => {
+      const tryLine = line ? `${line} ${w}` : w;
+      if (ctx.measureText(tryLine).width <= maxW || !line) {
+        if (!line && ctx.measureText(w).width > maxW) {
+          let chunk = '';
+          Array.from(w).forEach((ch) => {
+            if (ctx.measureText(chunk + ch).width > maxW && chunk) { out.push(chunk); chunk = ch; } else chunk += ch;
+          });
+          line = chunk;
+        } else line = tryLine;
+      } else { out.push(line); line = w; }
+    });
+    out.push(line);
+  });
+  return out;
+}
+function paintTextStoryBg(ctx, W, H, b) {
+  ctx.fillStyle = b.bg;
+  ctx.fillRect(0, 0, W, H);
+  if (b.lines) {
+    ctx.strokeStyle = b.lines; ctx.lineWidth = 3;
+    for (let y = 140; y < H; y += 84) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+    ctx.strokeStyle = 'rgba(220,80,80,0.28)'; ctx.beginPath(); ctx.moveTo(120, 0); ctx.lineTo(120, H); ctx.stroke();
+  }
+  if (b.dots) {
+    ctx.fillStyle = b.dots;
+    for (let y = 30; y < H; y += 60) for (let x = (y / 60) % 2 ? 30 : 60; x < W; x += 60) { ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI * 2); ctx.fill(); }
+  }
+  if (b.grid) {
+    ctx.strokeStyle = b.grid; ctx.lineWidth = 2;
+    for (let x = 0; x < W; x += 54) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+    for (let y = 0; y < H; y += 54) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+  }
+}
+function layoutTextStory(ctx, text, fontIdx, W, H) {
+  const maxW = W - 180;
+  const maxH = H - 520;
+  let px = 128;
+  let lines = [];
+  for (; px >= 46; px -= 6) {
+    ctx.font = textStoryFont(fontIdx, px);
+    lines = wrapStoryLines(ctx, text, maxW);
+    if (lines.length * px * 1.22 <= maxH) break;
+  }
+  return { px, lines };
+}
+async function renderTextStory(text, bgIdx, fontIdx, align) {
+  const W = 1080;
+  const H = 1920;
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const ctx = c.getContext('2d');
+  const b = TEXT_STORY_BGS[bgIdx] || TEXT_STORY_BGS[0];
+  paintTextStoryBg(ctx, W, H, b);
+  try { if (document.fonts && document.fonts.ready) await document.fonts.ready; } catch {}
+  const { px, lines } = layoutTextStory(ctx, text, fontIdx, W, H);
+  ctx.font = textStoryFont(fontIdx, px);
+  ctx.fillStyle = b.ink;
+  ctx.textBaseline = 'middle';
+  ctx.textAlign = align === 'left' ? 'left' : 'center';
+  const lh = px * 1.22;
+  const top = H / 2 - ((lines.length - 1) * lh) / 2;
+  lines.forEach((ln, i) => ctx.fillText(ln, align === 'left' ? 90 : W / 2, top + i * lh));
+  const blob = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.92));
+  if (!blob) return null;
+  return new File([blob], `zchat-text-story-${Date.now()}.jpg`, { type: 'image/jpeg' });
+}
+
+function TextStoryComposer({ onClose, onShare }) {
+  useBackClose(true, onClose);
+  const [text, setText] = useState('');
+  const [bgIdx, setBgIdx] = useState(() => { try { const v = parseInt(localStorage.getItem('zchat-textstory-bg') || '0', 10); return Number.isFinite(v) ? v % TEXT_STORY_BGS.length : 0; } catch { return 0; } });
+  const [fontIdx, setFontIdx] = useState(0);
+  const [align, setAlign] = useState('center');
+  const [busy, setBusy] = useState(false);
+  const [showColors, setShowColors] = useState(false);
+  const areaRef = useRef(null);
+  const b = TEXT_STORY_BGS[bgIdx] || TEXT_STORY_BGS[0];
+  useEffect(() => { try { localStorage.setItem('zchat-textstory-bg', String(bgIdx)); } catch {} }, [bgIdx]);
+  useEffect(() => { const t = setTimeout(() => { try { areaRef.current && areaRef.current.focus(); } catch {} }, 250); return () => clearTimeout(t); }, []);
+  const len = text.trim().length;
+  const previewPx = len < 20 ? 40 : len < 60 ? 32 : len < 140 ? 26 : 21;
+  const f = TEXT_STORY_FONTS[fontIdx] || TEXT_STORY_FONTS[0];
+  const fam = f.css.replace(/^\d+ \{px\}px /, '');
+  const weight = (f.css.match(/^(\d+)/) || [0, 700])[1];
+  const bgCss = b.lines ? { backgroundColor: b.bg, backgroundImage: `repeating-linear-gradient(0deg, transparent 0 26px, ${b.lines} 26px 27px)` }
+    : b.dots ? { backgroundColor: b.bg, backgroundImage: `radial-gradient(circle, ${b.dots} 1.6px, transparent 2px)`, backgroundSize: '19px 19px' }
+      : b.grid ? { backgroundColor: b.bg, backgroundImage: `linear-gradient(${b.grid} 1px, transparent 1px), linear-gradient(90deg, ${b.grid} 1px, transparent 1px)`, backgroundSize: '17px 17px' }
+        : { background: b.bg };
+  const share = async () => {
+    if (!len || busy) return;
+    setBusy(true);
+    const file = await renderTextStory(text.trim(), bgIdx, fontIdx, align);
+    setBusy(false);
+    if (file) onShare(file);
+  };
+  const btn = { width: 42, height: 42, borderRadius: 21, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: 'rgba(0,0,0,0.22)', color: '#FFFFFF', fontFamily: FONT, border: 'none' };
+  return (
+    <Portal>
+      <div className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 640, ...bgCss, display: 'flex', flexDirection: 'column', fontFamily: FONT, color: b.ink, transition: 'background-color 0.2s ease' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', paddingTop: 'calc(10px + env(safe-area-inset-top))' }}>
+          <button type="button" aria-label="Back" onClick={onClose} style={btn}><X size={22} color="#FFFFFF" /></button>
+          <div style={{ flex: 1 }} />
+          <button type="button" aria-label="Change font" onClick={() => setFontIdx((i) => (i + 1) % TEXT_STORY_FONTS.length)} style={{ ...btn, width: 'auto', padding: '0 14px', fontWeight: 800, fontSize: 15 }}>
+            <span style={{ fontFamily: fam, fontWeight: weight }}>Aa</span><span style={{ fontSize: 12.5, marginLeft: 7, opacity: 0.9 }}>{f.label}</span>
+          </button>
+          <button type="button" aria-label="Change alignment" onClick={() => setAlign((a) => (a === 'center' ? 'left' : 'center'))} style={btn}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">{align === 'center' ? <path d="M4 6h16M7 12h10M5 18h14" /> : <path d="M4 6h16M4 12h10M4 18h14" />}</svg>
+          </button>
+          <button type="button" aria-label="Change colour" onClick={() => setShowColors((s) => !s)} style={btn}>
+            <span style={{ width: 20, height: 20, borderRadius: '50%', background: b.bg, border: '2.5px solid #FFFFFF', boxSizing: 'border-box' }} />
+          </button>
+        </div>
+        {showColors && (
+          <div style={{ display: 'flex', gap: 10, overflowX: 'auto', padding: '4px 14px 10px', scrollbarWidth: 'none' }}>
+            {TEXT_STORY_BGS.map((o, i) => (
+              <div key={o.k} role="button" aria-label={`Background ${o.label}`} onClick={() => setBgIdx(i)} style={{ width: 34, height: 34, flexShrink: 0, borderRadius: '50%', background: o.bg, border: i === bgIdx ? '3px solid #FFFFFF' : '2px solid rgba(255,255,255,0.5)', boxSizing: 'border-box', cursor: 'pointer', boxShadow: '0 0 0 1px rgba(0,0,0,0.15)' }} />
+            ))}
+          </div>
+        )}
+        <div onClick={() => { try { areaRef.current && areaRef.current.focus(); } catch {} }} style={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 26px', cursor: 'text' }}>
+          <textarea ref={areaRef} value={text} onChange={(e) => setText(e.target.value.slice(0, 700))} placeholder="Type a status" aria-label="Status text" rows={1}
+            style={{ width: '100%', maxHeight: '100%', resize: 'none', border: 'none', outline: 'none', background: 'transparent', color: b.ink, textAlign: align, fontFamily: fam, fontWeight: weight, fontSize: previewPx, lineHeight: 1.22, caretColor: b.ink, overflow: 'auto', fieldSizing: 'content', minHeight: previewPx * 1.3 }} />
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))' }}>
+          <div style={{ flex: 1, fontSize: 12.5, opacity: 0.85, fontWeight: 600 }}>{len ? `${len}/700` : 'Shared with your followers for 24 hours'}</div>
+          <button type="button" aria-label="Share to your story" disabled={!len || busy} onClick={share} style={{ height: 44, padding: '0 18px', borderRadius: 22, border: 'none', background: '#FFFFFF', color: '#111', fontFamily: FONT, fontWeight: 800, fontSize: 14.5, display: 'flex', alignItems: 'center', gap: 8, cursor: len ? 'pointer' : 'default', opacity: len ? 1 : 0.55 }}>
+            {busy ? <Spinner size={16} color="#111" /> : <StatusIcon size={17} color="#111" />}Your story
+          </button>
+        </div>
+      </div>
+    </Portal>
+  );
+}
+
+function StoryCreateSheet({ onClose, onCamera, onGallery, onText, onDraw }) {
+  useBackClose(true, onClose);
+  const { theme } = useTheme();
+  const drag = useSheetDrag(onClose);
+  const items = [
+    { k: 'camera', label: 'Camera', icon: <Camera />, on: onCamera, bg: '#F05A4F' },
+    { k: 'gallery', label: 'Photos and videos', short: 'Gallery', icon: <ImageIcon />, on: onGallery, bg: '#3D7FF0' },
+    { k: 'text', label: 'Text', icon: <Type />, on: onText, bg: '#7A55D6' },
+    { k: 'draw', label: 'Draw', icon: <DoodleIcon />, on: onDraw, bg: '#E14B8E' },
+  ];
+  return (
+    <Portal>
+      <div onClick={onClose} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 640, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontFamily: FONT }}>
+        <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" {...drag.sheetProps} style={{ ...drag.sheetStyle, width: '100%', maxWidth: 480, background: theme.panelBg, borderRadius: '22px 22px 0 0', paddingBottom: 'calc(16px + env(safe-area-inset-bottom))' }}>
+          <div data-sheet-handle="true" style={{ display: 'flex', justifyContent: 'center', padding: '9px 0 4px', touchAction: 'none' }}><div style={{ width: 36, height: 4, borderRadius: 2, background: theme.border }} /></div>
+          <div style={{ fontSize: 16, fontWeight: 800, color: theme.ink, textAlign: 'center', padding: '6px 16px 14px' }}>New story</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 6, padding: '0 12px 4px' }}>
+            {items.map((it) => (
+              <div key={it.k} role="button" aria-label={it.label} onClick={() => { playUiSound('tap'); it.on(); }} className="zchat-press" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                <div style={{ width: 58, height: 58, borderRadius: 19, background: it.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{React.cloneElement(it.icon, { size: 26, strokeWidth: 1.9, color: '#FFFFFF' })}</div>
+                <div style={{ fontSize: 12.5, fontWeight: 600, color: theme.ink }}>{it.short || it.label}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ fontSize: 12, color: theme.muted, textAlign: 'center', padding: '14px 24px 0', lineHeight: 1.45 }}>Stories disappear after 24 hours. Your followers can see them.</div>
+        </div>
+      </div>
+    </Portal>
+  );
+}
+
+function readStoryMutes(uid) {
+  try { const a = JSON.parse(localStorage.getItem(`zchat-story-mutes-${uid}`) || '[]'); return new Set(Array.isArray(a) ? a : []); } catch { return new Set(); }
+}
+function writeStoryMutes(uid, set) {
+  try { localStorage.setItem(`zchat-story-mutes-${uid}`, JSON.stringify([...set].slice(-500))); } catch {}
+  try { window.dispatchEvent(new Event('zchat-story-mutes')); } catch {}
+}
+
+function StoryRing({ size, segments, color, seenColor, gap = 6, width = 2.6 }) {
+  const n = segments.length;
+  const r = size / 2 - width / 2;
+  const circ = 2 * Math.PI * r;
+  const gapLen = n > 1 ? Math.min(gap, circ / n / 3) : 0;
+  const seg = circ / n - gapLen;
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ position: 'absolute', inset: 0, transform: 'rotate(-90deg)', pointerEvents: 'none' }} aria-hidden="true">
+      {segments.map((seen, i) => (
+        <circle key={i} cx={size / 2} cy={size / 2} r={r} fill="none" stroke={seen ? seenColor : color} strokeWidth={seen ? Math.max(1.6, width - 1) : width} strokeLinecap="round"
+          strokeDasharray={`${Math.max(0.1, seg)} ${circ}`} strokeDashoffset={-(i * (seg + gapLen))} />
+      ))}
+    </svg>
+  );
+}
+
+function AddToHighlightSheet({ userId, story, onClose, onDone }) {
+  useBackClose(true, onClose);
+  const { theme } = useTheme();
+  const drag = useSheetDrag(onClose);
+  const [list, setList] = useState(null);
+  const [busy, setBusy] = useState(null);
+  const [creating, setCreating] = useState(false);
+  const [title, setTitle] = useState('');
+  useEffect(() => {
+    let alive = true;
+    supabase.from('highlights').select('*').eq('user_id', userId).order('created_at', { ascending: false }).then(({ data }) => { if (alive) setList(data || []); });
+    return () => { alive = false; };
+  }, [userId]);
+  const item = (hid) => ({ highlight_id: hid, user_id: userId, media_url: story.media_url, media_type: story.media_type, overlay_url: story.overlay_url || null, caption: story.caption || null });
+  const addTo = async (h) => {
+    if (busy) return;
+    setBusy(h.id);
+    const { error } = await supabase.from('highlight_items').insert(item(h.id));
+    setBusy(null);
+    onDone(error ? "Couldn't add it. Try again." : `Added to ${h.title}`);
+  };
+  const createNew = async () => {
+    if (busy) return;
+    setBusy('new');
+    const { data: h, error } = await supabase.from('highlights').insert({ user_id: userId, title: (title.trim() || 'Highlights').slice(0, 20), cover_url: story.media_url, cover_type: story.media_type }).select().single();
+    if (error || !h) { setBusy(null); onDone("Couldn't make the highlight. Try again."); return; }
+    await supabase.from('highlight_items').insert(item(h.id));
+    setBusy(null);
+    onDone(`Added to ${h.title}`);
+  };
+  return (
+    <Portal>
+      <div onClick={onClose} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 700, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontFamily: FONT }}>
+        <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" {...drag.sheetProps} style={{ ...drag.sheetStyle, width: '100%', maxWidth: 480, maxHeight: 'min(80vh, calc(100% - 24px))', overflowY: 'auto', background: theme.panelBg, borderRadius: '22px 22px 0 0', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))' }}>
+          <div data-sheet-handle="true" style={{ display: 'flex', justifyContent: 'center', padding: '9px 0 4px', touchAction: 'none' }}><div style={{ width: 36, height: 4, borderRadius: 2, background: theme.border }} /></div>
+          <div style={{ fontSize: 16, fontWeight: 800, color: theme.ink, textAlign: 'center', padding: '6px 16px 12px' }}>Add to highlight</div>
+          <div style={{ display: 'flex', gap: 14, overflowX: 'auto', padding: '2px 16px 10px', scrollbarWidth: 'none' }}>
+            <div role="button" aria-label="New highlight" onClick={() => setCreating(true)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, flexShrink: 0, cursor: 'pointer', width: 70 }}>
+              <div style={{ width: 64, height: 64, borderRadius: '50%', border: `2px dashed ${theme.muted}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.ink }}><Plus size={24} /></div>
+              <div style={{ fontSize: 12, color: theme.ink, fontWeight: 600 }}>New</div>
+            </div>
+            {list === null && <div style={{ display: 'flex', alignItems: 'center', padding: '0 10px' }}><Spinner size={18} color={theme.muted} /></div>}
+            {(list || []).map((h) => (
+              <div key={h.id} role="button" aria-label={`Highlight ${h.title}`} onClick={() => addTo(h)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, flexShrink: 0, cursor: 'pointer', width: 70, opacity: busy && busy !== h.id ? 0.5 : 1 }}>
+                <div style={{ width: 64, height: 64, borderRadius: '50%', overflow: 'hidden', background: theme.rowBg, border: `2px solid ${theme.border}`, position: 'relative' }}>
+                  {h.cover_type === 'video' ? <VideoThumb src={h.cover_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <img src={h.cover_url} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
+                  {busy === h.id && <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Spinner size={16} color="#FFFFFF" /></div>}
+                </div>
+                <div style={{ fontSize: 12, color: theme.ink, fontWeight: 600, maxWidth: 70, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{h.title}</div>
+              </div>
+            ))}
+          </div>
+          {creating && (
+            <div style={{ display: 'flex', gap: 8, padding: '6px 16px 4px' }}>
+              <input autoFocus value={title} onChange={(e) => setTitle(e.target.value.slice(0, 20))} placeholder="Highlight name" aria-label="Highlight name" style={{ ...inputStyle(theme), flex: 1 }} />
+              <button type="button" onClick={createNew} disabled={busy === 'new'} style={{ padding: '0 16px', borderRadius: 12, border: 'none', background: theme.coral, color: '#FFFFFF', fontWeight: 800, fontFamily: FONT, cursor: 'pointer' }}>{busy === 'new' ? <Spinner size={14} color="#FFFFFF" /> : 'Add'}</button>
+            </div>
+          )}
+        </div>
+      </div>
+    </Portal>
+  );
+}
+
+function StoryArchivePage({ userId, onClose, onOpen }) {
+  useBackClose(true, onClose);
+  const { theme } = useTheme();
+  const [rows, setRows] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    supabase.from('stories').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(300).then(({ data }) => { if (alive) setRows((data || []).filter((s) => !s.repost_of)); });
+    return () => { alive = false; };
+  }, [userId]);
+  const groups = [];
+  (rows || []).forEach((s) => {
+    const d = new Date(s.created_at);
+    const key = `${d.getFullYear()}-${d.getMonth()}`;
+    const label = d.toLocaleDateString([], { month: 'long', year: 'numeric' });
+    let g = groups.find((x) => x.key === key);
+    if (!g) { g = { key, label, items: [] }; groups.push(g); }
+    g.items.push(s);
+  });
+  const all = rows || [];
+  return (
+    <FullPage title="Story archive" subtitle={rows ? `${rows.length} ${rows.length === 1 ? 'story' : 'stories'}` : null} onBack={onClose} zIndex={90} pad={false} portal={false}>
+      {rows === null && <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><Spinner size={22} color={theme.coral} /></div>}
+      {rows && !rows.length && <EmptyState art="moments" title="No old stories yet" text="Stories you share are kept here after they disappear, only you can see this." />}
+      {groups.map((g) => (
+        <div key={g.key}>
+          <div style={{ fontSize: 13, fontWeight: 800, color: theme.muted, padding: '14px 16px 8px' }}>{g.label}</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2 }}>
+            {g.items.map((s) => (
+              <div key={s.id} role="button" aria-label="Open old story" onClick={() => onOpen(all, s.id)} style={{ position: 'relative', aspectRatio: '9 / 16', background: theme.rowBg, overflow: 'hidden', cursor: 'pointer' }}>
+                {s.media_type === 'video' ? <VideoThumb src={s.media_url} style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} /> : <img src={s.media_url} alt="" loading="lazy" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />}
+                <div style={{ position: 'absolute', left: 6, top: 6, background: 'rgba(0,0,0,0.5)', color: '#FFFFFF', borderRadius: 8, padding: '3px 7px', fontSize: 11.5, fontWeight: 800, lineHeight: 1.1, textAlign: 'center' }}>
+                  <div>{new Date(s.created_at).getDate()}</div>
+                  <div style={{ fontSize: 9.5, fontWeight: 700, opacity: 0.85 }}>{new Date(s.created_at).toLocaleDateString([], { month: 'short' })}</div>
+                </div>
+                {isActiveUntil(s.expires_at) && <div style={{ position: 'absolute', right: 6, bottom: 6, background: theme.coral, color: '#FFFFFF', borderRadius: 7, padding: '2px 6px', fontSize: 10, fontWeight: 800 }}>Live</div>}
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </FullPage>
   );
 }
 
@@ -9805,7 +10246,7 @@ function StoryMentionPicker({ myId, groups, privacyCtx, onPick, onClose }) {
   );
 }
 
-function StoryViewer({ groupsList, startGroup = 0, startStoryId = null, onAddStory, onShare, externalPause = false, readOnly = false, highlightLike = null, initialRepostedIds = null, myId, seen, liked, onSeen, onClose, onLike, onReply, onRepost, onDelete, onReport, onOpenProfile, onOpenMention }) {
+function StoryViewer({ groupsList, startGroup = 0, startStoryId = null, onAddStory, onShare, externalPause = false, readOnly = false, highlightLike = null, initialRepostedIds = null, myId, seen, liked, onSeen, onClose, onLike, onReply, onRepost, onDelete, onReport, onOpenProfile, onOpenMention, mutedIds = null, onToggleMute, onAddToHighlight, onOpenArchive, extraActions }) {
   useBackClose(true, onClose);
   const [gi, setGi] = useState(startGroup);
   const [si, setSi] = useState(() => {
@@ -9818,17 +10259,19 @@ function StoryViewer({ groupsList, startGroup = 0, startStoryId = null, onAddSto
     const idx = g.stories.findIndex((s) => !seen.has(s.id));
     return idx >= 0 && g.profile.id !== myId ? idx : 0;
   });
-  const [progress, setProgress] = useState(0);
   const [paused, setPaused] = useState(false);
   const [holding, setHolding] = useState(false);
+  const [hideUi, setHideUi] = useState(false);
   const [loaded, setLoaded] = useState(false);
-  const [muted, setMuted] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const [muted, setMuted] = useState(() => { try { return localStorage.getItem('zchat-story-muted') === '1'; } catch { return false; } });
   const [reply, setReply] = useState('');
   const [replyFocus, setReplyFocus] = useState(false);
   const [showViewers, setShowViewers] = useState(false);
   const [menu, setMenu] = useState(false);
   useBackClose(menu, () => setMenu(false));
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmRepost, setConfirmRepost] = useState(false);
   const [flash, setFlash] = useState('');
   const [viewCount, setViewCount] = useState(null);
   const [likeBurst, setLikeBurst] = useState(false);
@@ -9838,6 +10281,59 @@ function StoryViewer({ groupsList, startGroup = 0, startStoryId = null, onAddSto
   const [repostPop, setRepostPop] = useState(false);
   const [keyboardLift, setKeyboardLift] = useState(0);
   const [viewTop, setViewTop] = useState(0);
+  const [dragX, setDragX] = useState(0);
+  const [settling, setSettling] = useState(false);
+  const [slideIn, setSlideIn] = useState('');
+  const [pageHidden, setPageHidden] = useState(false);
+  const [wide, setWide] = useState(() => typeof window !== 'undefined' && window.innerWidth >= 760);
+  const videoRef = useRef(null);
+  const elapsedRef = useRef(0);
+  const lastTickRef = useRef(0);
+  const durationRef = useRef(STORY_IMAGE_MS);
+  const progressRef = useRef(0);
+  const pressRef = useRef(null);
+  const barRefs = useRef([]);
+  const flashTimer = useRef(0);
+  const stageRef = useRef(null);
+
+  const group = groupsList[gi];
+  const story = group ? group.stories[Math.min(si, group.stories.length - 1)] : null;
+  const isMine = !!group && group.profile.id === myId;
+  const stopped = paused || holding || replyFocus || showViewers || menu || confirmDelete || confirmRepost || externalPause || !loaded || pageHidden || dragX !== 0 || settling;
+  const stoppedRef = useRef(stopped);
+  stoppedRef.current = stopped;
+
+  const showFlash = (text, ms = 1500) => { clearTimeout(flashTimer.current); setFlash(text); flashTimer.current = setTimeout(() => setFlash(''), ms); };
+
+  function goNext() {
+    if (!group) return;
+    if (si < group.stories.length - 1) { setSi(si + 1); return; }
+    if (gi < groupsList.length - 1) {
+      const nextGroup = groupsList[gi + 1];
+      const idx = nextGroup.stories.findIndex((s) => !seen.has(s.id));
+      setSlideIn('next');
+      setGi(gi + 1);
+      setSi(idx >= 0 ? idx : 0);
+      return;
+    }
+    onClose();
+  }
+  function goPrev() {
+    if (!group) return;
+    if (si > 0) { setSi(si - 1); return; }
+    if (gi > 0) { setSlideIn('prev'); setSi(groupsList[gi - 1].stories.length - 1); setGi(gi - 1); return; }
+    elapsedRef.current = 0;
+    progressRef.current = 0;
+    const bar = barRefs.current[si];
+    if (bar) bar.style.width = '0%';
+    if (videoRef.current) { try { videoRef.current.currentTime = 0; } catch {} }
+  }
+  function goGroup(dir) {
+    if (dir > 0) {
+      if (gi < groupsList.length - 1) { const ng = groupsList[gi + 1]; const idx = ng.stories.findIndex((s) => !seen.has(s.id)); setSlideIn('next'); setGi(gi + 1); setSi(idx >= 0 ? idx : 0); } else onClose();
+    } else if (gi > 0) { setSlideIn('prev'); setGi(gi - 1); setSi(0); } else { goPrev(); }
+  }
+
   useEffect(() => {
     const vv = window.visualViewport;
     if (!vv) return undefined;
@@ -9851,79 +10347,113 @@ function StoryViewer({ groupsList, startGroup = 0, startStoryId = null, onAddSto
     update();
     return () => { cancelAnimationFrame(frame); vv.removeEventListener('resize', update); vv.removeEventListener('scroll', update); };
   }, []);
-  const videoRef = useRef(null);
-  const elapsedRef = useRef(0);
-  const lastTickRef = useRef(0);
-  const durationRef = useRef(STORY_IMAGE_MS);
-  const pressRef = useRef(null);
-
-  const group = groupsList[gi];
-  const story = group ? group.stories[Math.min(si, group.stories.length - 1)] : null;
-  const isMine = group && group.profile.id === myId;
-  const stopped = paused || holding || replyFocus || showViewers || menu || confirmDelete || externalPause || !loaded;
-
+  useEffect(() => {
+    const onVis = () => setPageHidden(document.visibilityState === 'hidden');
+    const onResize = () => setWide(window.innerWidth >= 760);
+    document.addEventListener('visibilitychange', onVis);
+    window.addEventListener('resize', onResize);
+    return () => { document.removeEventListener('visibilitychange', onVis); window.removeEventListener('resize', onResize); clearTimeout(flashTimer.current); };
+  }, []);
+  useEffect(() => {
+    if (!groupsList.length) { onClose(); return; }
+    if (!groupsList[gi]) { setGi(groupsList.length - 1); setSi(0); return; }
+    const count = groupsList[gi].stories.length;
+    if (si >= count) setSi(Math.max(0, count - 1));
+  }, [groupsList]);
   useEffect(() => {
     if (!story) return;
     elapsedRef.current = 0;
-    setProgress(0);
+    progressRef.current = 0;
     setLoaded(false);
+    setFailed(false);
     durationRef.current = STORY_IMAGE_MS;
     onSeen(story);
     setViewCount(null);
     if (!readOnly && group.profile.id === myId) {
       supabase.from('story_views').select('*', { count: 'exact', head: true }).eq('story_id', story.id).then(({ count }) => setViewCount(count || 0));
     }
+    const pre = [];
+    if (group.stories[si + 1]) pre.push(group.stories[si + 1]);
+    const ng = groupsList[gi + 1];
+    if (ng && ng.stories.length) pre.push(ng.stories[Math.max(0, ng.stories.findIndex((s) => !seen.has(s.id)))]);
+    pre.forEach((s) => {
+      if (!s || !s.media_url) return;
+      if (s.media_type === 'video') { const v = document.createElement('video'); v.preload = 'auto'; v.muted = true; v.src = s.media_url; } else { const im = new Image(); im.decoding = 'async'; im.src = s.media_url; }
+    });
   }, [story && story.id]);
-
   useEffect(() => {
+    if (!slideIn) return undefined;
+    const t = setTimeout(() => setSlideIn(''), 320);
+    return () => clearTimeout(t);
+  }, [slideIn, gi]);
+  useEffect(() => {
+    if (!holding) { setHideUi(false); return undefined; }
+    const t = setTimeout(() => setHideUi(true), 240);
+    return () => clearTimeout(t);
+  }, [holding]);
+  useEffect(() => {
+    if (!story) return undefined;
     let frame = 0;
     lastTickRef.current = performance.now();
     const tick = (t) => {
-      const dt = t - lastTickRef.current;
+      const dt = Math.min(100, t - lastTickRef.current);
       lastTickRef.current = t;
-      if (!stopped) {
-        elapsedRef.current += dt;
-        const p = Math.min(1, elapsedRef.current / durationRef.current);
-        setProgress(p);
+      if (!stoppedRef.current) {
+        let p;
+        const v = videoRef.current;
+        if (story.media_type === 'video' && v && !failed && Number.isFinite(v.duration) && v.duration > 0) {
+          const total = Math.min(v.duration, 60);
+          p = v.ended ? 1 : Math.min(1, v.currentTime / total);
+          if (v.currentTime >= total - 0.04) p = 1;
+        } else {
+          elapsedRef.current += dt;
+          p = Math.min(1, elapsedRef.current / durationRef.current);
+        }
+        progressRef.current = p;
+        const bar = barRefs.current[si];
+        if (bar) bar.style.width = `${p * 100}%`;
         if (p >= 1) { goNext(); return; }
       }
       frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [stopped, gi, si]);
-
+  }, [gi, si, story && story.id, failed]);
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
-    if (stopped && loaded) v.pause(); else if (!stopped) v.play().catch(() => { setMuted(true); });
+    if (stopped && loaded) v.pause(); else if (!stopped) v.play().catch(() => { if (!v.muted) { setMuted(true); } });
   }, [stopped, loaded, story && story.id]);
+  useEffect(() => {
+    const onKey = (e) => {
+      const tag = e.target && e.target.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      if (e.key === 'ArrowRight') { e.preventDefault(); goNext(); }
+      else if (e.key === 'ArrowLeft') { e.preventDefault(); goPrev(); }
+      else if (e.key === ' ') { e.preventDefault(); setPaused((p) => !p); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
 
   if (!group || !story) return null;
 
-  function goNext() {
-    if (si < group.stories.length - 1) { setSi(si + 1); return; }
-    if (gi < groupsList.length - 1) {
-      const nextGroup = groupsList[gi + 1];
-      const idx = nextGroup.stories.findIndex((s) => !seen.has(s.id));
-      setGi(gi + 1);
-      setSi(idx >= 0 ? idx : 0);
-      return;
-    }
-    onClose();
-  }
-  function goPrev() {
-    if (si > 0) { setSi(si - 1); return; }
-    if (gi > 0) { setSi(groupsList[gi - 1].stories.length - 1); setGi(gi - 1); return; }
-    elapsedRef.current = 0;
-    setProgress(0);
-    if (videoRef.current) videoRef.current.currentTime = 0;
-  }
-
+  const width = () => (stageRef.current ? stageRef.current.getBoundingClientRect().width : window.innerWidth);
   const onDown = (e) => {
     if (e.target.closest && e.target.closest('[data-story-control]')) return;
-    pressRef.current = { x: e.clientX, y: e.clientY, t: Date.now() };
+    pressRef.current = { x: e.clientX, y: e.clientY, t: Date.now(), horiz: false };
     setHolding(true);
+  };
+  const onMove = (e) => {
+    const p = pressRef.current;
+    if (!p || replyFocus) return;
+    const dx = e.clientX - p.x;
+    const dy = e.clientY - p.y;
+    if (!p.horiz && Math.abs(dx) > 14 && Math.abs(dx) > Math.abs(dy) * 1.2) p.horiz = true;
+    if (p.horiz) {
+      const atEdge = dx > 0 && gi === 0;
+      setDragX(atEdge ? dx * 0.3 : dx);
+    }
   };
   const onUp = (e) => {
     const p = pressRef.current;
@@ -9938,12 +10468,24 @@ function StoryViewer({ groupsList, startGroup = 0, startStoryId = null, onAddSto
     }
     const dx = e.clientX - p.x;
     const dy = e.clientY - p.y;
+    if (p.horiz) {
+      const w = width();
+      const fast = Math.abs(dx) / Math.max(1, Date.now() - p.t) > 0.5;
+      if ((Math.abs(dx) > w * 0.22 || (fast && Math.abs(dx) > 40)) && !(dx > 0 && gi === 0)) {
+        setDragX(0);
+        goGroup(dx < 0 ? 1 : -1);
+      } else {
+        setSettling(true);
+        setDragX(0);
+        setTimeout(() => setSettling(false), 200);
+      }
+      return;
+    }
     if (dy > 90 && Math.abs(dy) > Math.abs(dx)) { onClose(); return; }
     if (dy < -70 && Math.abs(dy) > Math.abs(dx) && isMine && !readOnly) { setShowViewers(true); return; }
     if (dy < -70 && Math.abs(dy) > Math.abs(dx) && !isMine && !readOnly) { setReplyFocus(true); const el = document.querySelector('[data-story-reply]'); if (el) el.focus(); return; }
     if (Date.now() - p.t > 260 || Math.abs(dx) > 14 || Math.abs(dy) > 14) return;
-    const width = e.currentTarget.getBoundingClientRect().width;
-    if (e.clientX < width * 0.32) goPrev(); else goNext();
+    if (e.clientX - (stageRef.current ? stageRef.current.getBoundingClientRect().left : 0) < width() * 0.3) goPrev(); else goNext();
   };
 
   const isLiked = liked.has(story.id);
@@ -9951,13 +10493,20 @@ function StoryViewer({ groupsList, startGroup = 0, startStoryId = null, onAddSto
     if (!isLiked) { setLikeBurst(true); setTimeout(() => setLikeBurst(false), 700); }
     onLike(story, !isLiked);
   };
-  const repostedHere = !!(story && repostedIds.has(story.id));
-  useEffect(() => {
-    if (!groupsList.length) { onClose(); return; }
-    if (!groupsList[gi]) { setGi(groupsList.length - 1); setSi(0); return; }
-    const count = groupsList[gi].stories.length;
-    if (si >= count) setSi(Math.max(0, count - 1));
-  }, [groupsList]);
+  const repostedHere = repostedIds.has(story.id);
+  const doRepost = async () => {
+    setConfirmRepost(false);
+    playUiSound('repost');
+    setRepostBusy(true);
+    const result = await onRepost(story, group.profile);
+    setRepostBusy(false);
+    if (result === 'ok' || result === 'already') {
+      setRepostedIds((prev) => new Set(prev).add(story.id));
+      setRepostPop(true);
+      setTimeout(() => setRepostPop(false), 700);
+      showFlash(result === 'ok' ? 'Added to your story' : 'Already on your story', 1600);
+    }
+  };
   const sendReply = async () => {
     const text = reply.trim();
     if (!text) return;
@@ -9965,8 +10514,7 @@ function StoryViewer({ groupsList, startGroup = 0, startStoryId = null, onAddSto
     const el = document.querySelector('[data-story-reply]');
     if (el) el.blur();
     setReplyFocus(false);
-    setFlash('Sent');
-    setTimeout(() => setFlash(''), 1400);
+    showFlash('Sent', 1400);
     await onReply(story, group.profile, text);
   };
   const sendQuickReaction = async (emo) => {
@@ -9978,39 +10526,64 @@ function StoryViewer({ groupsList, startGroup = 0, startStoryId = null, onAddSto
     await onReply(story, group.profile, emo);
   };
   const mentions = Array.isArray(story.mentions) ? story.mentions : [];
+  const ownerMuted = !!(mutedIds && !isMine && mutedIds.has(group.profile.id));
+  const uiFade = { opacity: hideUi ? 0 : 1, transition: 'opacity 0.18s ease', pointerEvents: hideUi ? 'none' : undefined };
+  const menuItems = isMine && !readOnly ? [
+    onShare ? { k: 'share', label: 'Share', on: () => onShare(story, group.profile) } : null,
+    onAddToHighlight ? { k: 'hl', label: 'Add to highlight', on: () => onAddToHighlight(story) } : null,
+    { k: 'save', label: 'Save to phone', on: () => { silentDownload(story.media_url, story.media_type === 'video' ? 'zchat-story.mp4' : 'zchat-story.jpg'); showFlash('Saving'); } },
+    onOpenArchive ? { k: 'archive', label: 'Story archive', on: () => onOpenArchive() } : null,
+    { k: 'delete', label: 'Delete story', danger: true, on: () => setConfirmDelete(true) },
+  ] : [
+    onShare ? { k: 'share', label: 'Share', on: () => onShare(story, group.profile) } : null,
+    onToggleMute ? { k: 'mute', label: ownerMuted ? `Unmute stories from ${(group.profile.name || '').split(' ')[0]}` : `Mute stories from ${(group.profile.name || '').split(' ')[0]}`, on: () => { const nowMuted = !ownerMuted; onToggleMute(group.profile, nowMuted); showFlash(nowMuted ? 'Muted' : 'Unmuted'); } } : null,
+    { k: 'profile', label: 'View profile', on: () => onOpenProfile(group.profile) },
+    { k: 'report', label: 'Report', danger: true, on: () => onReport(group.profile) },
+  ];
+  const navBtn = { position: 'absolute', top: '50%', marginTop: -22, width: 44, height: 44, borderRadius: '50%', background: 'rgba(255,255,255,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 20, border: 'none' };
+  const stageAnim = slideIn === 'next' ? 'zchat-story-in-next 0.3s cubic-bezier(0.2, 0.9, 0.3, 1)' : slideIn === 'prev' ? 'zchat-story-in-prev 0.3s cubic-bezier(0.2, 0.9, 0.3, 1)' : undefined;
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 250, background: '#000', display: 'flex', justifyContent: 'center' }} className="zchat-fade">
-      <div style={{ position: 'relative', width: '100%', maxWidth: 520, height: '100%', overflow: 'hidden', color: 'white' }}>
-        <div onPointerDown={onDown} onPointerUp={onUp} onPointerCancel={() => { pressRef.current = null; setHolding(false); }}
-          onDoubleClick={() => { if (!isMine) toggleLike(); }}
+      {wide && (gi > 0 || si > 0) && <button type="button" aria-label="Previous story" data-story-control onClick={goPrev} style={{ ...navBtn, left: 'calc(50% - 320px)' }}><ChevronLeft size={24} color="#FFFFFF" /></button>}
+      {wide && <button type="button" aria-label="Next story" data-story-control onClick={goNext} style={{ ...navBtn, right: 'calc(50% - 320px)' }}><ChevronRight size={24} color="#FFFFFF" /></button>}
+      <div ref={stageRef} key={`g-${gi}`} style={{ position: 'relative', width: '100%', maxWidth: 520, height: '100%', overflow: 'hidden', color: 'white', transform: dragX ? `translateX(${dragX}px)` : undefined, transition: settling ? 'transform 0.2s ease' : 'none', animation: stageAnim, borderRadius: wide ? 14 : 0 }}>
+        <div onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={() => { pressRef.current = null; setHolding(false); setDragX(0); }}
+          onDoubleClick={() => { if (!isMine && !readOnly) toggleLike(); }}
           style={{ position: 'absolute', inset: 0, touchAction: 'none', userSelect: 'none' }}>
           {story.media_type === 'video' ? (
             <video key={story.id} ref={videoRef} src={story.media_url} playsInline autoPlay muted={muted}
               onLoadedMetadata={(e) => { const d = e.currentTarget.duration; durationRef.current = Number.isFinite(d) && d > 0 ? Math.min(d, 60) * 1000 : 15000; setLoaded(true); }}
-              onError={() => setLoaded(true)}
+              onError={() => { setFailed(true); setLoaded(true); }}
               style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block', pointerEvents: 'none' }} />
           ) : (
-            <img key={story.id} src={story.media_url} alt="" draggable={false} onLoad={() => setLoaded(true)} onError={() => setLoaded(true)}
+            <img key={story.id} src={story.media_url} alt="" draggable={false} onLoad={() => setLoaded(true)} onError={() => { setFailed(true); setLoaded(true); }}
               style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block', pointerEvents: 'none' }} />
           )}
-          {story.overlay_url && story.media_type === 'video' && (
+          {story.overlay_url && story.media_type === 'video' && !failed && (
             <img src={story.overlay_url} alt="" draggable={false} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }} />
           )}
           {!loaded && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Spinner size={26} /></div>}
+          {failed && (
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, padding: 30, textAlign: 'center' }}>
+              <div style={{ fontSize: 15, fontWeight: 700 }}>This story couldn't load</div>
+              <div style={{ fontSize: 13, opacity: 0.7 }}>Check your connection. It moves on by itself.</div>
+            </div>
+          )}
+          {paused && !holding && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}><div style={{ width: 64, height: 64, borderRadius: '50%', background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Pause size={28} color="#FFFFFF" /></div></div>}
           {burstEmoji && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none', fontSize: 120, animation: 'zchat-heart-burst 0.9s ease' }}>{burstEmoji}</div>}
           {likeBurst && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none', animation: 'zchat-heart-burst 0.7s ease' }}><Heart size={110} color="#FF3B5C" fill="#FF3B5C" /></div>}
         </div>
 
-        <div style={{ position: 'absolute', left: 0, right: 0, top: viewTop, zIndex: 5, padding: 'calc(8px + env(safe-area-inset-top)) 10px 28px', background: 'linear-gradient(180deg, rgba(0,0,0,0.55), rgba(0,0,0,0))', pointerEvents: 'none' }}>
+        <div style={{ position: 'absolute', left: 0, right: 0, top: viewTop, zIndex: 5, padding: 'calc(8px + env(safe-area-inset-top)) 10px 28px', background: 'linear-gradient(180deg, rgba(0,0,0,0.55), rgba(0,0,0,0))', pointerEvents: 'none', ...uiFade }}>
           <div style={{ display: 'flex', gap: 3 }}>
             {group.stories.map((s, i) => (
               <div key={s.id} style={{ flex: 1, height: 2.5, borderRadius: 2, background: 'rgba(255,255,255,0.35)', overflow: 'hidden' }}>
-                <div style={{ height: '100%', background: 'white', width: `${i < si ? 100 : i === si ? progress * 100 : 0}%` }} />
+                <div ref={(el) => { barRefs.current[i] = el; }} style={{ height: '100%', background: 'white', width: `${i < si ? 100 : i === si ? progressRef.current * 100 : 0}%` }} />
               </div>
             ))}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10, pointerEvents: 'auto' }} data-story-control>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 10, pointerEvents: hideUi ? 'none' : 'auto' }} data-story-control>
             <div onClick={() => onOpenProfile(group.profile)} style={{ display: 'flex', alignItems: 'center', gap: 9, flex: 1, minWidth: 0, cursor: 'pointer' }}>
               <Avatar emoji={group.profile.avatar} name={group.profile.name} frame={group.profile.avatar_frame} size={34} />
               <div style={{ minWidth: 0 }}>
@@ -10021,17 +10594,18 @@ function StoryViewer({ groupsList, startGroup = 0, startStoryId = null, onAddSto
                 {story.repost_of && <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, opacity: 0.8 }}><Repeat size={11} /> Reposted{story.repost_label ? ` from @${story.repost_label}` : ''}</div>}
               </div>
             </div>
+            <div role="button" aria-label={paused ? 'Play story' : 'Pause story'} onClick={() => setPaused((pp) => !pp)} style={{ padding: 6, cursor: 'pointer', display: 'flex' }}>{paused ? <Play size={20} color="white" /> : <Pause size={20} color="white" />}</div>
             {story.media_type === 'video' && (
-              <div onClick={() => setMuted((m) => !m)} style={{ padding: 6, cursor: 'pointer' }}>{muted ? <VolumeX size={20} color="white" /> : <Volume2 size={20} color="white" />}</div>
+              <div role="button" aria-label={muted ? 'Sound on' : 'Sound off'} onClick={() => { setMuted((m) => { const n = !m; try { localStorage.setItem('zchat-story-muted', n ? '1' : '0'); } catch {} return n; }); }} style={{ padding: 6, cursor: 'pointer', display: 'flex' }}>{muted ? <VolumeX size={20} color="white" /> : <Volume2 size={20} color="white" />}</div>
             )}
-            {!readOnly && <div onClick={() => setMenu(true)} style={{ padding: 6, cursor: 'pointer' }}><MoreVertical size={20} color="white" /></div>}
-            <div onClick={onClose} style={{ padding: 6, cursor: 'pointer' }}><X size={22} color="white" /></div>
+            {!readOnly && <div role="button" aria-label="Story options" onClick={() => setMenu(true)} style={{ padding: 6, cursor: 'pointer', display: 'flex' }}><MoreVertical size={20} color="white" /></div>}
+            <div role="button" aria-label="Close story" onClick={onClose} style={{ padding: 6, cursor: 'pointer', display: 'flex' }}><X size={22} color="white" /></div>
           </div>
         </div>
 
         {(story.caption || mentions.length > 0) && !replyFocus && (
-          <div data-story-control style={{ position: 'absolute', left: 14, right: 14, bottom: 'calc(84px + env(safe-area-inset-bottom))', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-            {story.caption && <div style={{ background: 'rgba(0,0,0,0.45)', padding: '8px 14px', borderRadius: 14, fontSize: 14.5, fontWeight: 600, textAlign: 'center', maxWidth: '100%', wordBreak: 'break-word' }}>{story.caption}</div>}
+          <div data-story-control style={{ position: 'absolute', left: 14, right: 14, bottom: `calc(${readOnly && extraActions && extraActions.length ? 136 : 84}px + env(safe-area-inset-bottom))`, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, ...uiFade }}>
+            {story.caption && <div style={{ background: 'rgba(0,0,0,0.45)', padding: '8px 14px', borderRadius: 14, fontSize: 14.5, fontWeight: 600, textAlign: 'center', maxWidth: '100%', wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}><RichText text={story.caption} onMention={(p) => onOpenProfile(p)} /></div>}
             {mentions.length > 0 && (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'center' }}>
                 {mentions.map((mn) => (
@@ -10048,7 +10622,7 @@ function StoryViewer({ groupsList, startGroup = 0, startStoryId = null, onAddSto
           <div onPointerDown={(e) => { e.preventDefault(); const el = document.querySelector('[data-story-reply]'); if (el) el.blur(); setReplyFocus(false); }}
             className="zchat-fade" style={{ position: 'absolute', inset: 0, zIndex: 3, background: 'rgba(0,0,0,0.55)' }} />
         )}
-        <div data-story-control style={{ position: 'absolute', left: 0, right: 0, bottom: keyboardLift, zIndex: 4, padding: '14px 12px', paddingBottom: keyboardLift ? 10 : 'calc(14px + env(safe-area-inset-bottom))', background: replyFocus ? 'transparent' : 'linear-gradient(0deg, rgba(0,0,0,0.6), rgba(0,0,0,0))', display: 'flex', alignItems: 'center', gap: 10, transition: 'bottom 0.18s ease' }}>
+        <div data-story-control style={{ position: 'absolute', left: 0, right: 0, bottom: keyboardLift, zIndex: 4, padding: '14px 12px', paddingBottom: keyboardLift ? 10 : 'calc(14px + env(safe-area-inset-bottom))', background: replyFocus ? 'transparent' : 'linear-gradient(0deg, rgba(0,0,0,0.6), rgba(0,0,0,0))', display: 'flex', alignItems: 'center', gap: 10, transition: 'bottom 0.18s ease, opacity 0.18s ease', opacity: hideUi ? 0 : 1, pointerEvents: hideUi ? 'none' : undefined }}>
           {readOnly ? (
             highlightLike ? (
               <>
@@ -10058,6 +10632,12 @@ function StoryViewer({ groupsList, startGroup = 0, startStoryId = null, onAddSto
                   <span style={{ fontSize: 14, fontWeight: 800 }}>{highlightLike.count > 0 ? formatCount(highlightLike.count) : ''}</span>
                 </div>
               </>
+            ) : extraActions && extraActions.length ? (
+              <div style={{ display: 'flex', gap: 8, width: '100%', justifyContent: 'center', flexWrap: 'wrap' }}>
+                {extraActions.map((a) => (
+                  <div key={a.label} role="button" aria-label={a.label} onClick={() => a.on(story)} style={{ height: 42, padding: '0 16px', borderRadius: 21, background: 'rgba(255,255,255,0.16)', display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', fontWeight: 700, fontSize: 13.5 }}>{a.icon}{a.label}</div>
+                ))}
+              </div>
             ) : null
           ) : isMine ? (
             <>
@@ -10065,19 +10645,19 @@ function StoryViewer({ groupsList, startGroup = 0, startStoryId = null, onAddSto
                 <ChevronRight size={18} style={{ transform: 'rotate(-90deg)' }} />
                 <span style={{ fontSize: 11.5, fontWeight: 700 }}>Swipe up for activity</span>
               </div>
-              <div onClick={() => setShowViewers(true)} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 14px', borderRadius: 22, background: 'rgba(255,255,255,0.14)', cursor: 'pointer', fontSize: 13.5, fontWeight: 700 }}>
+              <div role="button" aria-label="Story viewers" onClick={() => setShowViewers(true)} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 14px', borderRadius: 22, background: 'rgba(255,255,255,0.14)', cursor: 'pointer', fontSize: 13.5, fontWeight: 700 }}>
                 <Eye size={17} /> {viewCount == null ? 'Viewers' : `${viewCount} ${viewCount === 1 ? 'viewer' : 'viewers'}`}
               </div>
               <div style={{ position: 'relative', zIndex: 12, flex: 1 }} />
               {onShare && (
-                <div onClick={() => onShare(story, group.profile)} style={{ width: 42, height: 42, borderRadius: '50%', background: 'rgba(255,255,255,0.14)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><Share2 size={18} color="white" /></div>
+                <div role="button" aria-label="Share story" onClick={() => onShare(story, group.profile)} style={{ width: 42, height: 42, borderRadius: '50%', background: 'rgba(255,255,255,0.14)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><Share2 size={18} color="white" /></div>
               )}
               {onAddStory && (
-                <div onClick={onAddStory} style={{ height: 42, padding: '0 14px', borderRadius: 21, background: 'rgba(255,255,255,0.14)', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontWeight: 700, fontSize: 13.5 }}>
+                <div role="button" aria-label="Add to your story" onClick={onAddStory} style={{ height: 42, padding: '0 14px', borderRadius: 21, background: 'rgba(255,255,255,0.14)', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontWeight: 700, fontSize: 13.5 }}>
                   <span style={{ fontSize: 20, lineHeight: 1 }}>+</span> Add
                 </div>
               )}
-              <div onClick={() => setConfirmDelete(true)} style={{ width: 42, height: 42, borderRadius: '50%', background: 'rgba(255,255,255,0.14)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><Trash2 size={18} color="white" /></div>
+              <div role="button" aria-label="Delete story" onClick={() => setConfirmDelete(true)} style={{ width: 42, height: 42, borderRadius: '50%', background: 'rgba(255,255,255,0.14)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><Trash2 size={18} color="white" /></div>
             </>
           ) : (
             <>
@@ -10091,28 +10671,17 @@ function StoryViewer({ groupsList, startGroup = 0, startStoryId = null, onAddSto
               )}
               <input data-story-reply value={reply} onChange={(e) => setReply(e.target.value.slice(0, 1000))} onFocus={() => setReplyFocus(true)} onBlur={() => setTimeout(() => { if (document.activeElement && document.activeElement.hasAttribute && document.activeElement.hasAttribute('data-story-reply')) return; setReplyFocus(false); }, 160)}
                 onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); sendReply(); } }}
-                placeholder={`Reply to ${(group.profile.name || '').split(' ')[0]}`}
+                placeholder={`Reply to ${(group.profile.name || '').split(' ')[0]}`} aria-label="Reply to story"
                 style={{ flex: 1, minWidth: 0, padding: '11px 16px', borderRadius: 24, border: '1.5px solid rgba(255,255,255,0.55)', background: 'rgba(0,0,0,0.25)', color: 'white', outline: 'none', fontFamily: FONT, fontSize: 15 }} />
               {reply.trim() ? (
-                <div onPointerDown={(e) => e.preventDefault()} onClick={sendReply} style={{ padding: '10px 14px', fontWeight: 800, fontSize: 14.5, cursor: 'pointer' }}>Send</div>
+                <div role="button" aria-label="Send reply" onPointerDown={(e) => e.preventDefault()} onClick={sendReply} style={{ padding: '10px 14px', fontWeight: 800, fontSize: 14.5, cursor: 'pointer' }}>Send</div>
               ) : (
                 <>
-                  <div onClick={toggleLike} style={{ padding: 6, cursor: 'pointer', position: 'relative', zIndex: 12 }}><Heart size={26} color={isLiked ? '#FF3B5C' : 'white'} fill={isLiked ? '#FF3B5C' : 'none'} /></div>
-                  <div role="button" aria-label="Repost" onClick={async () => {
+                  <div role="button" aria-label={isLiked ? 'Unlike story' : 'Like story'} onClick={toggleLike} style={{ padding: 6, cursor: 'pointer', position: 'relative', zIndex: 12, display: 'flex' }}><Heart size={26} color={isLiked ? '#FF3B5C' : 'white'} fill={isLiked ? '#FF3B5C' : 'none'} /></div>
+                  <div role="button" aria-label="Repost" onClick={() => {
                     if (repostBusy) return;
-                    if (repostedHere) { setFlash('Already on your story'); setTimeout(() => setFlash(''), 1600); return; }
-                    if (!window.confirm(`Add ${(group.profile.name || 'this').split(' ')[0]}'s status to your story?`)) return;
-                    playUiSound('repost');
-                    setRepostBusy(true);
-                    const result = await onRepost(story, group.profile);
-                    setRepostBusy(false);
-                    if (result === 'ok' || result === 'already') {
-                      setRepostedIds((prev) => new Set(prev).add(story.id));
-                      setRepostPop(true);
-                      setTimeout(() => setRepostPop(false), 700);
-                      setFlash(result === 'ok' ? 'Added to your story' : 'Already on your story');
-                      setTimeout(() => setFlash(''), 1600);
-                    }
+                    if (repostedHere) { showFlash('Already on your story', 1600); return; }
+                    setConfirmRepost(true);
                   }} style={{ padding: 6, cursor: 'pointer', position: 'relative', display: 'flex' }}>
                     {repostPop && <div style={{ position: 'absolute', inset: -4, borderRadius: '50%', border: '2px solid #34D399', animation: 'zchat-repost-ring 0.6s ease-out', pointerEvents: 'none' }} />}
                     <div style={{ transition: 'transform 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.5)', transform: repostPop ? 'rotate(180deg) scale(1.25)' : 'rotate(0deg) scale(1)', display: 'flex' }}>
@@ -10120,31 +10689,23 @@ function StoryViewer({ groupsList, startGroup = 0, startStoryId = null, onAddSto
                     </div>
                     {repostedHere && <div style={{ position: 'absolute', right: 1, bottom: 2, width: 13, height: 13, borderRadius: '50%', background: '#34D399', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid black' }}><Check size={8} color="black" strokeWidth={4} /></div>}
                   </div>
-                  {onShare && <div onClick={() => onShare(story, group.profile)} style={{ padding: 6, cursor: 'pointer' }}><Send size={23} color="white" /></div>}
+                  {onShare && <div role="button" aria-label="Send story" onClick={() => onShare(story, group.profile)} style={{ padding: 6, cursor: 'pointer', display: 'flex' }}><Send size={23} color="white" /></div>}
                 </>
               )}
             </>
           )}
         </div>
 
-        {flash && <div style={{ position: 'absolute', left: '50%', top: '45%', transform: 'translate(-50%, -50%)', background: 'rgba(0,0,0,0.7)', padding: '9px 16px', borderRadius: 20, fontSize: 13.5, fontWeight: 700 }} className="zchat-pop">{flash}</div>}
+        {flash && <div style={{ position: 'absolute', left: '50%', top: '45%', transform: 'translate(-50%, -50%)', background: 'rgba(0,0,0,0.7)', padding: '9px 16px', borderRadius: 20, fontSize: 13.5, fontWeight: 700, zIndex: 30, pointerEvents: 'none' }} className="zchat-pop">{flash}</div>}
 
         {menu && (
           <div onClick={() => setMenu(false)} style={{ position: 'absolute', inset: 0, zIndex: 9, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'flex-end' }}>
-            <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ width: '100%', background: '#11151F', borderRadius: '22px 22px 0 0', padding: '8px 0', paddingBottom: 'calc(8px + env(safe-area-inset-bottom))' }}>
-              {isMine ? (
-                <>
-                  {onShare && <div onClick={() => { setMenu(false); onShare(story, group.profile); }} style={{ padding: '15px 22px', fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>Share</div>}
-                  <div onClick={() => { setMenu(false); setConfirmDelete(true); }} style={{ padding: '15px 22px', color: '#FF5A6A', fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>Delete story</div>
-                </>
-              ) : (
-                <>
-                  {onShare && <div onClick={() => { setMenu(false); onShare(story, group.profile); }} style={{ padding: '15px 22px', fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>Share</div>}
-                  <div onClick={() => { setMenu(false); onOpenProfile(group.profile); }} style={{ padding: '15px 22px', fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>View profile</div>
-                  <div onClick={() => { setMenu(false); onReport(group.profile); }} style={{ padding: '15px 22px', color: '#FF5A6A', fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>Report</div>
-                </>
-              )}
-              <div onClick={() => setMenu(false)} style={{ padding: '15px 22px', opacity: 0.7, fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>Cancel</div>
+            <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ width: '100%', background: '#15151B', borderRadius: '22px 22px 0 0', padding: '8px 0', paddingBottom: 'calc(8px + env(safe-area-inset-bottom))' }}>
+              <div style={{ display: 'flex', justifyContent: 'center', padding: '2px 0 6px' }}><div style={{ width: 36, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.25)' }} /></div>
+              {menuItems.filter(Boolean).map((it) => (
+                <div key={it.k} role="button" aria-label={it.label} onClick={() => { setMenu(false); it.on(); }} style={{ padding: '15px 22px', fontWeight: 700, fontSize: 15, cursor: 'pointer', color: it.danger ? '#FF5A6A' : '#FFFFFF' }}>{it.label}</div>
+              ))}
+              <div role="button" onClick={() => setMenu(false)} style={{ padding: '15px 22px', opacity: 0.7, fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>Cancel</div>
             </div>
           </div>
         )}
@@ -10153,6 +10714,10 @@ function StoryViewer({ groupsList, startGroup = 0, startStoryId = null, onAddSto
           <ConfirmDialog title="Delete this story?" body="It will be removed for everyone right away."
             onCancel={() => setConfirmDelete(false)}
             onConfirm={async () => { setConfirmDelete(false); const remaining = group.stories.length - 1; await onDelete(story); if (remaining <= 0) onClose(); else if (si >= remaining) setSi(remaining - 1); }} />
+        )}
+        {confirmRepost && (
+          <ConfirmDialog title="Add to your story?" body={`${(group.profile.name || 'Their').split(' ')[0]}'s story will show on your story for 24 hours, with their name on it.`} confirmLabel="Add" danger={false} layer={420}
+            onCancel={() => setConfirmRepost(false)} onConfirm={doRepost} />
         )}
       </div>
     </div>
@@ -10840,28 +11405,43 @@ function GroupCallBar({ row, onJoin }) {
   );
 }
 
-function StoryTray({ me, myStories, trayUsers, seen, onAdd, onOpen }) {
+function storyLongPress(store, key, onLong) {
+  const clear = () => { clearTimeout(store.t); };
+  return {
+    onPointerDown: (e) => { if (!onLong) return; store.fired = false; store.x = e.clientX; store.y = e.clientY; clear(); store.t = setTimeout(() => { store.fired = key; hapticTap(); onLong(); }, 480); },
+    onPointerMove: (e) => { if (Math.abs(e.clientX - (store.x || 0)) > 10 || Math.abs(e.clientY - (store.y || 0)) > 10) clear(); },
+    onPointerUp: clear,
+    onPointerCancel: clear,
+    onContextMenu: (e) => { if (onLong) e.preventDefault(); },
+  };
+}
+
+function StoryTray({ me, myStories, trayUsers, seen, onAdd, onOpen, uploading = false, onLongPress }) {
   const { theme } = useTheme();
+  const lp = useRef({});
   const hasMine = myStories.length > 0;
   const label = (text, highlight) => (
     <div style={{ fontSize: 11, fontWeight: highlight ? 700 : 600, color: highlight ? theme.ink : theme.muted, marginTop: 5, maxWidth: 66, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'center' }}>{text}</div>
   );
+  const tap = (key, fn) => () => { if (lp.current.fired === key) { lp.current.fired = false; return; } fn(); };
   return (
-    <div style={{ display: 'flex', gap: 16, padding: '16px 18px 12px', marginTop: -14, overflowX: 'auto', overflowY: 'hidden', flexShrink: 0, WebkitOverflowScrolling: 'touch' }}>
-      <div onClick={() => (hasMine ? onOpen(me.id) : onAdd())} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0, cursor: 'pointer', position: 'relative' }}>
-        <StoryAvatar profile={me} size={62} ring={hasMine ? (myStories.every((s) => seen.has(s.id)) ? 'seen' : 'unseen') : 'none'} />
+    <div style={{ display: 'flex', gap: 16, padding: '16px 18px 12px', marginTop: -14, overflowX: 'auto', overflowY: 'hidden', flexShrink: 0, WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}>
+      <div role="button" aria-label="Your story" onClick={() => (hasMine ? onOpen(me.id) : onAdd())} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0, cursor: 'pointer', position: 'relative' }}>
+        <StoryAvatar profile={me} size={62} ring={hasMine ? 'seen' : 'none'} segments={hasMine ? myStories.map(() => true) : null} uploading={uploading} />
         <div role="button" aria-label="Add to your story" onClick={(e) => { e.stopPropagation(); onAdd(); }} style={{
           position: 'absolute', right: -2, top: 42, zIndex: 6, width: 24, height: 24, borderRadius: '50%', background: theme.coral, border: `2.5px solid ${theme.panelBg}`,
           display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800, fontSize: 17, lineHeight: 1, boxSizing: 'border-box',
         }}>+</div>
-        {label('Your story', true)}
+        {label(uploading ? 'Sharing' : 'Your story', true)}
       </div>
       {trayUsers.map((u) => {
         const allSeen = u.stories.every((s) => seen.has(s.id));
+        const key = u.profile.id;
         return (
-          <div key={u.profile.id} onClick={() => onOpen(u.profile.id)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0, cursor: 'pointer' }}>
-            <StoryAvatar profile={u.profile} size={62} ring={allSeen ? 'seen' : 'unseen'} />
-            {label(<>{(u.profile.name || u.profile.username || '').split(' ')[0]}<VerifiedBadge tier={u.profile.verified} custom={u.profile.custom_badge} size={10} style={{ marginLeft: 2 }} /></>, !allSeen)}
+          <div key={key} role="button" aria-label={`Story of ${u.profile.name}`} onClick={tap(key, () => onOpen(u.profile.id))} {...storyLongPress(lp.current, key, onLongPress ? () => onLongPress(u.profile, !!u.muted) : null)}
+            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0, cursor: 'pointer', WebkitTouchCallout: 'none', userSelect: 'none' }}>
+            <StoryAvatar profile={u.profile} size={62} ring={allSeen || u.muted ? 'seen' : 'unseen'} segments={u.stories.map((s) => !!u.muted || seen.has(s.id))} dim={!!u.muted} />
+            {label(<>{(u.profile.name || u.profile.username || '').split(' ')[0]}<VerifiedBadge tier={u.profile.verified} custom={u.profile.custom_badge} size={10} style={{ marginLeft: 2 }} /></>, !allSeen && !u.muted)}
           </div>
         );
       })}
@@ -10869,8 +11449,6 @@ function StoryTray({ me, myStories, trayUsers, seen, onAdd, onOpen }) {
   );
 }
 
-// The handle people type to call the bot into a group conversation, e.g. "@zchatbot how do I reset my password".
-// Keep this in sync with the username given to the bot's profile row (see the setup SQL).
 const BOT_MENTION = '@zchatbot';
 const BOT_FOLLOWER_BASE = 2193;
 function useBotFollowerCount(botId) {
@@ -10895,7 +11473,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-const APP_VERSION = '14.0V';
+const APP_VERSION = '14.1V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -10998,7 +11576,9 @@ function BlockedAccountsPanel({ myId, blockedIds, onClose, onUnblock, onOpenProf
   const term = q.trim().toLowerCase();
   const shown = (rows || []).filter((r) => !term || (r.profile.name || '').toLowerCase().includes(term) || (r.profile.username || '').toLowerCase().includes(term));
   return (
-    <div {...edgeBack} className="zchat-panel-open" style={{ position: 'fixed', inset: 0, zIndex: 70, background: theme.bgGradient, display: 'flex', flexDirection: 'column' }}>
+    <>
+    <WideDim onClose={onClose} z={70} />
+    <div {...edgeBack} className="zchat-panel-open zchat-wide-page" style={{ position: 'fixed', inset: 0, zIndex: 70, background: theme.bgGradient, display: 'flex', flexDirection: 'column' }}>
       <IgTopBar title="Blocked accounts" subtitle={rows ? `${rows.length} ${rows.length === 1 ? 'account' : 'accounts'}` : 'Loading'} onBack={onClose} />
       {rows && rows.length > 4 && (
         <div style={{ padding: '0 16px 10px', position: 'relative', flexShrink: 0 }}>
@@ -11025,6 +11605,7 @@ function BlockedAccountsPanel({ myId, blockedIds, onClose, onUnblock, onOpenProf
         ))}
       </div>
     </div>
+    </>
   );
 }
 
@@ -11267,10 +11848,10 @@ function StoryRefCard({ m, isMe, onOpen }) {
         {src ? (
           <>
             {isVideo
-              ? <video src={`${src}#t=0.1`} muted playsInline preload="metadata" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', filter: 'blur(14px) brightness(0.6)', transform: 'scale(1.2)', pointerEvents: 'none' }} />
+              ? <VideoThumb src={src} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', filter: 'blur(14px) brightness(0.6)', transform: 'scale(1.2)', pointerEvents: 'none' }} />
               : <img src={src} alt="" draggable={false} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', filter: 'blur(14px) brightness(0.6)', transform: 'scale(1.2)' }} />}
             {isVideo
-              ? <video src={`${src}#t=0.1`} muted playsInline preload="metadata" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }} />
+              ? <VideoThumb src={src} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }} />
               : <img src={src} alt="" loading="lazy" draggable={false} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain' }} />}
             {isVideo && <div style={{ position: 'absolute', left: 8, bottom: 8, width: 24, height: 24, borderRadius: '50%', background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Play size={12} color="white" style={{ marginLeft: 1 }} /></div>}
           </>
@@ -11293,13 +11874,16 @@ function StoryViewersSheet({ story, myId, onClose, onOpenProfile }) {
     (async () => {
       const { data: views } = await supabase.from('story_views').select('*').eq('story_id', story.id);
       const { data: likes } = await supabase.from('story_likes').select('*').eq('story_id', story.id);
-      const ids = [...new Set([...(views || []).map((v) => v.viewer_id), ...(likes || []).map((l) => l.user_id)])].filter((id) => id !== myId);
+      const { data: reps } = await supabase.from('messages').select('sender_id, content, created_at').eq('story_id', story.id).eq('receiver_id', myId).order('created_at', { ascending: false }).limit(300);
+      const replyBy = {};
+      (reps || []).forEach((r) => { if (r && r.sender_id && replyBy[r.sender_id] == null && typeof r.content === 'string') replyBy[r.sender_id] = r.content; });
+      const ids = [...new Set([...(views || []).map((v) => v.viewer_id), ...(likes || []).map((l) => l.user_id), ...Object.keys(replyBy)])].filter((id) => id !== myId);
       if (!ids.length) { if (!cancelled) setRows([]); return; }
       const { data: profs } = await supabase.from('profiles').select('*').in('id', ids);
       const likedSet = new Set((likes || []).map((l) => l.user_id));
       const viewedAt = {};
       (views || []).forEach((v) => { viewedAt[v.viewer_id] = v.viewed_at; });
-      const list = sanitizeAvatarList(profs, myId).map((p) => ({ profile: p, liked: likedSet.has(p.id), at: viewedAt[p.id] }))
+      const list = sanitizeAvatarList(profs, myId).map((p) => ({ profile: p, liked: likedSet.has(p.id), at: viewedAt[p.id], reply: replyBy[p.id] || null }))
         .sort((a, b) => (b.liked - a.liked) || (new Date(b.at || 0) - new Date(a.at || 0)));
       if (!cancelled) setRows(list);
     })();
@@ -11314,7 +11898,7 @@ function StoryViewersSheet({ story, myId, onClose, onOpenProfile }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px 0', borderBottom: `1px solid ${theme.border}` }}>
           {[{ k: 'views', icon: <Eye size={16} />, n: rows ? rows.length : null, l: 'Viewers' }, { k: 'likes', icon: <Heart size={16} />, n: rows ? likedRows.length : null, l: 'Likes' }].map((t) => (
             <div key={t.k} onClick={() => setTab(t.k)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 12px', cursor: 'pointer', fontSize: 13.5, fontWeight: 800, color: tab === t.k ? theme.ink : theme.muted, borderBottom: tab === t.k ? `2.5px solid ${theme.coral}` : '2.5px solid transparent' }}>
-              {t.icon}{t.n == null ? t.l : `${t.n} ${t.l.toLowerCase()}`}
+              {t.icon}{t.n == null ? t.l : `${t.n} ${t.n === 1 ? t.l.toLowerCase().replace(/s$/, '') : t.l.toLowerCase()}`}
             </div>
           ))}
           <div style={{ flex: 1 }} />
@@ -11332,6 +11916,7 @@ function StoryViewersSheet({ story, myId, onClose, onOpenProfile }) {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 700, fontSize: 14, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><NameBadge name={r.profile.name} verified={r.profile.verified} custom={r.profile.custom_badge} size={12} /></div>
                 <div style={{ fontSize: 11.5, color: theme.muted }}>@{r.profile.username}{r.at ? ` · ${timeShort(r.at)}` : ''}</div>
+                {r.reply && <div style={{ fontSize: 12.5, color: theme.ink, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Replied: {r.reply}</div>}
               </div>
             </div>
           ))}
@@ -11924,7 +12509,7 @@ function ProfileHighlights({ profile, isSelf, userId, onOpenHighlight }) {
             onClick={() => { if (pressRef.current.fired) { pressRef.current.fired = false; return; } onOpenHighlight(h); }}
             style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: 'pointer', flexShrink: 0, width: 74 }}>
             {circle(h.cover_url
-              ? (h.cover_type === 'video' ? <video src={`${h.cover_url}#t=0.1`} muted playsInline preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} /> : <img src={h.cover_url} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />)
+              ? (h.cover_type === 'video' ? <VideoThumb src={h.cover_url} style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} /> : <img src={h.cover_url} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />)
               : null)}
             <span style={{ fontSize: 12.5, color: theme.ink, maxWidth: 74, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{h.title}</span>
           </div>
@@ -12004,7 +12589,7 @@ function HighlightCreator({ userId, onClose, onCreated }) {
           const on = picked.includes(s.id);
           return (
             <div key={s.id} onClick={() => setPicked((p) => (on ? p.filter((x) => x !== s.id) : [...p, s.id]))} style={{ position: 'relative', aspectRatio: '9 / 16', background: '#111', cursor: 'pointer' }}>
-              {s.media_type === 'video' ? <video src={`${s.media_url}#t=0.1`} muted playsInline preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} /> : <img src={s.media_url} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
+              {s.media_type === 'video' ? <VideoThumb src={s.media_url} style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} /> : <img src={s.media_url} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
               <div style={{ position: 'absolute', top: 6, right: 6, width: 22, height: 22, borderRadius: '50%', border: '2px solid white', background: on ? theme.coral : 'rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: 11, fontWeight: 800 }}>{on ? picked.indexOf(s.id) + 1 : ''}</div>
               <div style={{ position: 'absolute', left: 6, bottom: 6, fontSize: 10, color: 'white', textShadow: '0 1px 3px rgba(0,0,0,0.7)' }}>{new Date(s.created_at).toLocaleDateString([], { day: 'numeric', month: 'short' })}</div>
             </div>
@@ -12068,7 +12653,7 @@ function ProfilePosts({ profile, isSelf, userId, meProfile }) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2 }}>
         {(posts || []).map((p) => (
           <div key={p.id} onClick={() => setOpenPost(p)} style={{ position: 'relative', aspectRatio: '3 / 4', background: theme.rowBg, cursor: 'pointer', overflow: 'hidden' }}>
-            {p.media_type === 'video' ? <video src={`${p.media_url}#t=0.1`} muted playsInline preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} /> : <img src={p.media_url} alt="" loading="lazy" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
+            {p.media_type === 'video' ? <VideoThumb src={p.media_url} style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} /> : <img src={p.media_url} alt="" loading="lazy" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
             {p.media_type === 'video' && <Play size={16} color="white" style={{ position: 'absolute', top: 8, right: 8, filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.6))' }} />}
           </div>
         ))}
@@ -12109,12 +12694,33 @@ function InstaCommentIcon({ size = 24, color = 'currentColor' }) {
 function useSheetDrag(onClose) {
   const [dy, setDy] = useState(0);
   const [dragging, setDragging] = useState(false);
+  const [canScroll, setCanScroll] = useState(false);
   const startRef = useRef(null);
+  const elRef = useRef(null);
+  useLayoutEffect(() => {
+    const el = elRef.current;
+    if (!el) return undefined;
+    const measure = () => {
+      const inner = el.querySelector('[data-sheet-scroll]');
+      const s = el.scrollHeight > el.clientHeight + 2 || (inner && inner.scrollHeight > inner.clientHeight + 2);
+      setCanScroll((prev) => (prev === !!s ? prev : !!s));
+    };
+    measure();
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    const inner = el.querySelector('[data-sheet-scroll]');
+    if (inner) ro.observe(inner);
+    return () => ro.disconnect();
+  }, []);
   const onPointerDown = (e) => {
     const t = e.target;
     if (t.closest && t.closest('input, textarea, select')) return;
+    const onHandle = !!(t.closest && t.closest('[data-sheet-handle]'));
+    if (canScroll && e.pointerType !== 'mouse' && !onHandle) return;
     const scroller = t.closest && t.closest('[data-sheet-scroll]');
-    if (scroller && scroller.scrollTop > 0) return;
+    if (!onHandle && scroller && scroller.scrollTop > 0) return;
+    if (!onHandle && elRef.current && elRef.current.scrollTop > 0) return;
     startRef.current = { y: e.clientY, t: Date.now() };
   };
   const onPointerMove = (e) => {
@@ -12139,8 +12745,8 @@ function useSheetDrag(onClose) {
     }
   };
   return {
-    sheetProps: { onPointerDown, onPointerMove, onPointerUp: finish, onPointerCancel: () => { startRef.current = null; setDragging(false); setDy(0); } },
-    sheetStyle: { transform: `translateY(${dy}px)`, transition: dragging ? 'none' : 'transform 0.24s cubic-bezier(0.2, 0.9, 0.3, 1)', touchAction: 'none' },
+    sheetProps: { ref: elRef, onPointerDown, onPointerMove, onPointerUp: finish, onPointerCancel: () => { startRef.current = null; setDragging(false); setDy(0); } },
+    sheetStyle: { transform: `translateY(${dy}px)`, transition: dragging ? 'none' : 'transform 0.24s cubic-bezier(0.2, 0.9, 0.3, 1)', touchAction: canScroll ? 'pan-y' : 'none', overscrollBehavior: 'contain' },
     dragging,
   };
 }
@@ -12183,7 +12789,7 @@ function PostLinkCard({ postId, onOpen }) {
       </div>
       <div style={{ position: 'relative', aspectRatio: '1 / 1', background: '#111' }}>
         {data ? (data.post.media_type === 'video'
-          ? <video src={`${data.post.media_url}#t=0.1`} muted playsInline preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} />
+          ? <VideoThumb src={data.post.media_url} style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} />
           : <img src={data.post.media_url} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />)
           : <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Spinner size={18} /></div>}
         {data && data.post.media_type === 'video' && <Play size={18} color="white" style={{ position: 'absolute', top: 8, right: 8, filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.6))' }} />}
@@ -12235,6 +12841,11 @@ function ChatImage({ src, onOpen, caption }) {
         position: 'absolute', top: 6, right: 6, width: 26, height: 26, borderRadius: '50%',
         background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
       }}><Download size={13} color="white" /></div>
+      {isPaintUrl(src) && (
+        <div aria-hidden="true" style={{ position: 'absolute', left: 6, bottom: 6, height: 24, padding: '0 9px 0 7px', borderRadius: 12, background: 'rgba(0,0,0,0.5)', color: 'white', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11.5, fontWeight: 800, fontFamily: FONT, pointerEvents: 'none' }}>
+          <PaintToolIcon k="brush" size={13} />Drawing
+        </div>
+      )}
     </div>
   );
 }
@@ -12472,6 +13083,120 @@ async function cachedMediaBlobUrl(url, retried) {
     return null;
   }
 }
+const USE_VIDEO_THUMBS = typeof navigator !== 'undefined' && !/iPhone|iPad|iPod|Macintosh/.test(navigator.userAgent || '');
+const videoThumbMem = new Map();
+const videoThumbPending = new Map();
+let videoThumbActive = 0;
+const videoThumbQueue = [];
+function videoThumbKey(url) {
+  return `https://thumbs.zchat.local/v1?u=${encodeURIComponent(url)}`;
+}
+function runVideoThumbQueue() {
+  while (videoThumbActive < 2 && videoThumbQueue.length) {
+    const job = videoThumbQueue.shift();
+    videoThumbActive += 1;
+    job().finally(() => { videoThumbActive -= 1; runVideoThumbQueue(); });
+  }
+}
+function grabVideoFrame(url) {
+  return new Promise((resolve) => {
+    let done = false;
+    const v = document.createElement('video');
+    const finish = (blob) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      try { v.pause(); v.removeAttribute('src'); v.load(); } catch {}
+      resolve(blob || null);
+    };
+    const timer = setTimeout(() => finish(null), 9000);
+    const draw = () => {
+      try {
+        const vw = v.videoWidth || 0;
+        const vh = v.videoHeight || 0;
+        if (!vw || !vh) { finish(null); return; }
+        const w = Math.min(420, vw);
+        const h = Math.max(1, Math.round((w * vh) / vw));
+        const c = document.createElement('canvas');
+        c.width = w;
+        c.height = h;
+        c.getContext('2d').drawImage(v, 0, 0, w, h);
+        c.toBlob((b) => finish(b), 'image/jpeg', 0.74);
+      } catch { finish(null); }
+    };
+    v.crossOrigin = 'anonymous';
+    v.muted = true;
+    v.playsInline = true;
+    v.preload = 'auto';
+    v.onloadeddata = () => {
+      try {
+        const t = Math.min(0.1, Number.isFinite(v.duration) && v.duration > 0 ? v.duration / 2 : 0.1);
+        if (Math.abs(v.currentTime - t) < 0.01) draw(); else v.currentTime = t;
+      } catch { draw(); }
+    };
+    v.onseeked = draw;
+    v.onerror = () => finish(null);
+    v.src = url;
+    try { v.load(); } catch {}
+  });
+}
+function videoThumbUrl(url) {
+  if (!url) return Promise.resolve(null);
+  if (videoThumbMem.has(url)) return Promise.resolve(videoThumbMem.get(url));
+  if (videoThumbPending.has(url)) return videoThumbPending.get(url);
+  const p = new Promise((resolve) => {
+    videoThumbQueue.push(async () => {
+      let out = null;
+      try {
+        let cache = null;
+        try { cache = typeof caches !== 'undefined' && !/^(blob|data):/i.test(url) ? await caches.open('zchat-thumbs-v1') : null; } catch {}
+        let blob = null;
+        if (cache) {
+          try { const hit = await cache.match(videoThumbKey(url)); if (hit) blob = await hit.blob(); } catch {}
+        }
+        if (!blob || !blob.size) {
+          blob = await grabVideoFrame(url);
+          if (blob && cache) { try { await cache.put(videoThumbKey(url), new Response(blob, { headers: { 'Content-Type': 'image/jpeg' } })); } catch {} }
+        }
+        out = blob && blob.size ? URL.createObjectURL(blob) : '';
+      } catch { out = ''; }
+      videoThumbMem.set(url, out);
+      videoThumbPending.delete(url);
+      resolve(out);
+    });
+    runVideoThumbQueue();
+  });
+  videoThumbPending.set(url, p);
+  return p;
+}
+
+function VideoThumb({ src, style, fallback, imgStyle }) {
+  const { theme } = useTheme();
+  const boxRef = useRef(null);
+  const [thumb, setThumb] = useState(() => (USE_VIDEO_THUMBS && src && videoThumbMem.has(src) ? videoThumbMem.get(src) : null));
+  const [near, setNear] = useState(false);
+  useEffect(() => {
+    if (!USE_VIDEO_THUMBS || !src || thumb !== null) return undefined;
+    const el = boxRef.current;
+    if (!el || typeof IntersectionObserver === 'undefined') { setNear(true); return undefined; }
+    const io = new IntersectionObserver((entries) => { if (entries.some((e) => e.isIntersecting)) { setNear(true); io.disconnect(); } }, { rootMargin: '300px' });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [src, thumb]);
+  useEffect(() => {
+    if (!USE_VIDEO_THUMBS || !src) return undefined;
+    if (videoThumbMem.has(src)) { setThumb(videoThumbMem.get(src)); return undefined; }
+    if (!near) return undefined;
+    let alive = true;
+    videoThumbUrl(src).then((u) => { if (alive) setThumb(u); });
+    return () => { alive = false; };
+  }, [src, near]);
+  if (!src) return <div style={{ ...style, background: fallback || theme.rowBg }} />;
+  if (!USE_VIDEO_THUMBS) return <video src={`${src}#t=0.1`} muted playsInline preload="metadata" onContextMenu={(e) => e.preventDefault()} style={{ ...style, ...(imgStyle || {}) }} />;
+  if (thumb) return <img src={thumb} alt="" draggable={false} onContextMenu={(e) => e.preventDefault()} style={{ ...style, ...(imgStyle || {}), display: 'block' }} />;
+  return <div ref={boxRef} style={{ ...style, background: fallback || (theme.dark ? '#1E1E22' : '#E9E9EE') }} />;
+}
+
 function useCachedMedia(rawUrl) {
   const [url, setUrl] = useState(() => (rawUrl ? mediaBlobCache.get(rawUrl) || rawUrl : null));
   useEffect(() => {
@@ -12777,7 +13502,11 @@ function CameraCapture({ onClose, onCapture, onPickGallery }) {
     (async () => {
       try {
         if (streamRef.current) streamRef.current.getTracks().forEach((t) => t.stop());
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: true });
+        const md = navigator.mediaDevices;
+        if (!md || !md.getUserMedia) { setError('This browser cannot open the camera. Pick from your gallery instead.'); return; }
+        const video = { facingMode: facing, width: { ideal: 1920 }, height: { ideal: 1080 } };
+        let stream = null;
+        try { stream = await md.getUserMedia({ video, audio: true }); } catch { stream = await md.getUserMedia({ video, audio: false }); }
         if (cancelled) { stream.getTracks().forEach((t) => t.stop()); return; }
         streamRef.current = stream;
         const v = videoRef.current;
@@ -13594,7 +14323,9 @@ function CollectionPanel({ me, rewards, onClose, onEquip, userEmail, isAdmin }) 
   const sel = selected ? items.find((it) => it.key === selected) : null;
 
   return (
-    <div {...edgeBack} className="zchat-panel-open" style={{ position: 'fixed', inset: 0, zIndex: 620, background: 'radial-gradient(circle at 50% 0%, #1b1533 0%, #07080d 55%)', color: 'white', display: 'flex', flexDirection: 'column', fontFamily: FONT }}>
+    <>
+    <WideDim onClose={onClose} z={620} />
+    <div {...edgeBack} className="zchat-panel-open zchat-wide-page" style={{ position: 'fixed', inset: 0, zIndex: 620, background: 'radial-gradient(circle at 50% 0%, #1b1533 0%, #07080d 55%)', color: 'white', display: 'flex', flexDirection: 'column', fontFamily: FONT }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px 8px', paddingTop: 'calc(12px + env(safe-area-inset-top))' }}>
         <div role="button" aria-label="Close collection" onClick={onClose} style={{ width: 38, height: 38, borderRadius: '50%', background: 'rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><ArrowLeft size={19} /></div>
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -13714,6 +14445,7 @@ function CollectionPanel({ me, rewards, onClose, onEquip, userEmail, isAdmin }) 
         return <FrameTryOnPage me={me} frameKey={isCharm || isPlate ? null : tryOn.key} charmKey={isCharm ? tryOn.key : null} plateKey={isPlate ? tryOn.key : null} onClose={() => setTryOn(null)} action={action} />;
       })()}
     </div>
+    </>
   );
 }
 
@@ -13862,7 +14594,9 @@ function FeedPanel({ me, userId, onClose, onOpenProfile, ownerFilter = null, sta
   );
 
   return (
-    <div className="zchat-panel-open" style={{ position: 'fixed', inset: 0, zIndex: 600, background: '#000', color: 'white', fontFamily: FONT }}>
+    <>
+    <WideDim onClose={onClose} z={600} />
+    <div className="zchat-panel-open zchat-wide-feed" style={{ position: 'fixed', inset: 0, zIndex: 600, background: '#000', color: 'white', fontFamily: FONT }}>
       <div style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 22, padding: '10px 16px', paddingTop: 'calc(12px + env(safe-area-inset-top))', background: 'linear-gradient(180deg, rgba(0,0,0,0.5), transparent)' }}>
         <div role="button" aria-label="Close feed" onClick={onClose} style={{ position: 'absolute', left: 12, top: 'calc(10px + env(safe-area-inset-top))', width: 36, height: 36, borderRadius: '50%', background: 'rgba(0,0,0,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><ArrowLeft size={19} /></div>
         {ownerFilter && <div style={{ fontSize: 15.5, fontWeight: 800 }}>Posts</div>}
@@ -13910,7 +14644,7 @@ function FeedPanel({ me, userId, onClose, onOpenProfile, ownerFilter = null, sta
                   {railBtn(<Share2 size={26} />, 'Share', async () => {
                     const link = `${siteOrigin()}/?post=${post.id}`;
                     playUiSound('tap');
-                    try { if (navigator.share) await navigator.share({ title: `${post.owner.name} on ZChat`, text: `See this post by ${post.owner.name} on ZChat`, url: link }); else { await navigator.clipboard.writeText(link); } } catch {}
+                    try { if (navigator.share) await navigator.share({ title: `${post.owner.name} on ZChat`, text: `See this post by ${post.owner.name} on ZChat`, url: link }); else { await copyTextToClipboard(link); } } catch {}
                   })}
                   {railBtn(<Download size={25} />, 'Save file', () => download(post))}
                   {post.user_id === userId && railBtn(<Trash2 size={25} />, 'Delete', () => setConfirmDeletePost(post))}
@@ -13947,6 +14681,7 @@ function FeedPanel({ me, userId, onClose, onOpenProfile, ownerFilter = null, sta
           onCount={(n) => setCounts((p) => ({ ...p, [commentsFor.id]: { ...countOf(commentsFor.id), comments: n } }))} />
       )}
     </div>
+    </>
   );
 }
 
@@ -14975,13 +15710,19 @@ function CreateSheet({ onClose, onPost, onStory, onGroup, onChat, onGames, onSca
   );
 }
 
-function MomentsTab({ me, userId, myStories, trayUsers, seen, onAddStory, onOpenStory, onOpenPost, onOpenProfile, onDiscover, version, unseenStories }) {
+const momentsCache = { uid: null, tab: 'foryou', foryou: null, following: null };
+function MomentsTab({ me, userId, myStories, trayUsers, seen, onAddStory, onOpenStory, onOpenPost, onOpenProfile, onDiscover, version, unseenStories, storyUploading, onStoryLongPress }) {
   const { theme } = useTheme();
-  const [tab, setTab] = useState('foryou');
-  const [items, setItems] = useState(null);
+  if (momentsCache.uid !== userId) { momentsCache.uid = userId; momentsCache.tab = 'foryou'; momentsCache.foryou = null; momentsCache.following = null; }
+  const [tab, setTabRaw] = useState(() => momentsCache.tab || 'foryou');
+  const setTab = (k) => { momentsCache.tab = k; setTabRaw(k); };
+  const [items, setItems] = useState(() => momentsCache[momentsCache.tab || 'foryou'] || null);
   const [refreshing, setRefreshing] = useState(false);
+  const tabRef = useRef(tab);
+  tabRef.current = tab;
   const load = async (quiet) => {
-    if (!quiet) setItems(null);
+    const want = tab;
+    if (!quiet) setItems(momentsCache[want] || null);
     let followingIds = null;
     if (tab === 'following') {
       const { data: f } = await supabase.from('follows').select('following_id').eq('follower_id', userId).eq('status', 'accepted');
@@ -14997,7 +15738,9 @@ function MomentsTab({ me, userId, myStories, trayUsers, seen, onAddStory, onOpen
       const { data: profs } = await supabase.from('profiles').select('*').in('id', ids);
       sanitizeAvatarList(profs, userId).forEach((p) => { byId[p.id] = p; });
     }
-    setItems(rows.map((p) => ({ ...p, owner: byId[p.user_id] })).filter((p) => p.owner && !p.owner.is_deleted));
+    const next = rows.map((p) => ({ ...p, owner: byId[p.user_id] })).filter((p) => p.owner && !p.owner.is_deleted);
+    momentsCache[want] = next;
+    if (tabRef.current === want) setItems(next);
     setRefreshing(false);
   };
   useEffect(() => { load(); }, [tab]);
@@ -15006,12 +15749,12 @@ function MomentsTab({ me, userId, myStories, trayUsers, seen, onAddStory, onOpen
     <div key={k} role="button" onClick={() => { if (tab !== k) { setTab(k); playUiSound('tap'); } }} style={{ flex: 1, textAlign: 'center', padding: '8px 0', borderRadius: 12, fontSize: 13.5, fontWeight: 800, cursor: 'pointer', color: tab === k ? '#fff' : theme.muted, background: tab === k ? theme.coral : 'transparent', transition: 'background 0.18s ease, color 0.18s ease' }}>{label}</div>
   );
   return (
-    <div className="zchat-tab-in" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
       <HomeHeader title="Moments" subtitle={unseenStories > 0 ? `${unseenStories} new ${unseenStories === 1 ? 'story' : 'stories'}` : null}
         right={<HeaderIconButton label="Discover people" onClick={onDiscover}><Compass size={19} /></HeaderIconButton>} />
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
         <div style={{ paddingTop: 14 }}>
-          <StoryTray me={me} myStories={myStories} trayUsers={trayUsers} seen={seen} onAdd={onAddStory} onOpen={onOpenStory} />
+          <StoryTray me={me} myStories={myStories} trayUsers={trayUsers} seen={seen} onAdd={onAddStory} onOpen={onOpenStory} uploading={!!storyUploading} onLongPress={onStoryLongPress} />
         </div>
         <div style={{ display: 'flex', gap: 6, margin: '2px 16px 10px', padding: 4, borderRadius: 16, background: theme.rowBg }}>
           {seg('foryou', 'For you')}{seg('following', 'Following')}
@@ -15022,11 +15765,11 @@ function MomentsTab({ me, userId, myStories, trayUsers, seen, onAddStory, onOpen
           <EmptyState art="moments" title={tab === 'following' ? 'Nothing from people you follow yet' : 'No posts yet'} text={tab === 'following' ? 'Follow more people to fill this up.' : 'Be the first. Tap the plus button to share a post.'} />
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2, padding: '0 0 16px' }}>
-            {items.map((p) => (
+            {items.map((p, i) => (
               <div key={p.id} role="button" onClick={() => onOpenPost(p, tab)} style={{ position: 'relative', aspectRatio: '3 / 4', background: theme.rowBg, cursor: 'pointer', overflow: 'hidden' }}>
                 {p.media_type === 'video'
-                  ? <video src={`${p.media_url}#t=0.1`} muted playsInline preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} />
-                  : <img src={p.media_url} alt="" loading="lazy" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />}
+                  ? <VideoThumb src={p.media_url} style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} />
+                  : <img src={p.media_url} alt="" loading={i < 12 ? 'eager' : 'lazy'} decoding="async" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />}
                 {p.media_type === 'video' && <Play size={15} color="white" fill="white" style={{ position: 'absolute', top: 7, right: 7, filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.6))' }} />}
                 <div style={{ position: 'absolute', left: 6, bottom: 6, display: 'flex', alignItems: 'center', gap: 5, maxWidth: 'calc(100% - 12px)' }}>
                   <Avatar emoji={p.owner.avatar} name={p.owner.name} size={18} />
@@ -15223,7 +15966,15 @@ function CallsTab({ userId, groups, onCall, onOpenProfile, version }) {
   );
 }
 
-function MeTab({ me, counts, onOpenProfile, onEditProfile, onSettings, onCollection, onSaved, onArchive, onMail, onRequests, onDiscover, onSwitchAccount, onShare, onInvite, onGames, onReminders, onSearchMessages, onScan }) {
+function StoryArchiveIcon({ size = 24, color = 'currentColor', strokeWidth = 2, style }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" style={style} aria-hidden="true">
+      <path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1L3.5 8.4" /><path d="M3.5 3.8v4.6h4.6" /><path d="M12 7.5V12l3 2" />
+    </svg>
+  );
+}
+
+function MeTab({ me, counts, onOpenProfile, onEditProfile, onSettings, onCollection, onSaved, onArchive, onMail, onRequests, onDiscover, onSwitchAccount, onShare, onInvite, onGames, onReminders, onStoryArchive, onSearchMessages, onScan }) {
   const { theme } = useTheme();
   const c = igPalette(theme);
   const [social, setSocial] = useState(() => { try { return JSON.parse(localStorage.getItem('zchat-me-social') || 'null') || { followers: 0, following: 0, posts: 0 }; } catch { return { followers: 0, following: 0, posts: 0 }; } });
@@ -15280,6 +16031,7 @@ function MeTab({ me, counts, onOpenProfile, onEditProfile, onSettings, onCollect
         {row(<GamepadIcon size={22} />, 'Games', onGames)}
         {row(<CollectionIcon />, 'Collection', onCollection, { value: counts.rewards ? `${counts.rewards} unlocked` : undefined })}
         {row(<Bookmark />, 'Saved messages', onSaved)}
+        {onStoryArchive && row(<StoryArchiveIcon />, 'Story archive', onStoryArchive)}
         {onReminders && row(<Clock />, 'Reminders', onReminders, { value: counts.reminders ? String(counts.reminders) : undefined })}
         {onSearchMessages && row(<Search />, 'Search messages', onSearchMessages)}
         {row(<Archive />, 'Archived chats', onArchive, { value: counts.archived ? String(counts.archived) : undefined })}
@@ -15494,6 +16246,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [feedOpen, setFeedOpen] = useNavState(false);
   const [feedStart, setFeedStart] = useState(null);
   const [homeTab, setHomeTab] = useState('chats');
+  const [momentsKept, setMomentsKept] = useState(false);
+  useEffect(() => { if (homeTab === 'moments') setMomentsKept(true); }, [homeTab]);
   const [showCreate, setShowCreate] = useState(false);
   const [postComposer, setPostComposer] = useState(null);
   const [postsVersion, setPostsVersion] = useState(0);
@@ -15582,6 +16336,27 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const callEngineRef = useRef(null);
   const handleCallRowRef = useRef(null);
   const [storyComposer, setStoryComposer] = useState(null);
+  const [storyCreate, setStoryCreate] = useState(false);
+  const [textStory, setTextStory] = useState(false);
+  const [storyPaint, setStoryPaint] = useState(false);
+  const [storyCamera, setStoryCamera] = useState(false);
+  const [storyArchive, setStoryArchive] = useState(false);
+  const [highlightFor, setHighlightFor] = useState(null);
+  const [storyUploading, setStoryUploading] = useState(false);
+  const [storyPeek, setStoryPeek] = useState(null);
+  const [storyMutes, setStoryMutes] = useState(() => readStoryMutes(session.user.id));
+  const startStory = () => { if (blockedByRestriction('status')) return; setStoryCreate(true); };
+  const toggleStoryMute = (p, on) => {
+    setStoryMutes((prev) => { const next = new Set(prev); if (on) next.add(p.id); else next.delete(p.id); writeStoryMutes(session.user.id, next); return next; });
+    showSnack(on ? `Stories from ${(p.name || '').split(' ')[0]} are muted` : `Stories from ${(p.name || '').split(' ')[0]} are back`);
+  };
+  const reshareOwnStory = async (story) => {
+    const { error } = await supabase.from('stories').insert({ user_id: session.user.id, media_url: story.media_url, media_type: story.media_type, overlay_url: story.overlay_url || null, caption: story.caption || null, mentions: [] });
+    if (error) { showSnack(friendlyError(error, "Couldn't share it again. Try again.")); return; }
+    if (storyFeedRef.current) storyFeedRef.current.send({ type: 'broadcast', event: 'story', payload: { userId: session.user.id } });
+    showSnack('Shared to your story');
+    loadStories();
+  };
   const [avatarPeek, setAvatarPeek] = useState(null);
   const [snack, setSnack] = useState('');
   const [showJumpButton, setShowJumpButton] = useState(false);
@@ -15633,6 +16408,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [votesFor, setVotesFor] = useState(null);
   const [onceViewer, setOnceViewer] = useState(null);
   const [showDoodle, setShowDoodle] = useState(false);
+  const [paintSeed, setPaintSeed] = useState(null);
   const [diceSheet, setDiceSheet] = useState(false);
   const [voiceTyping, setVoiceTyping] = useState(false);
   const [collageFiles, setCollageFiles] = useState(null);
@@ -18127,7 +18903,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   };
 
   const doCopy = () => {
-    if (selectedMessages[0]?.content) navigator.clipboard?.writeText(selectedMessages[0].content);
+    if (selectedMessages[0]?.content) copyTextToClipboard(selectedMessages[0].content).then((ok) => showSnack(ok ? 'Copied' : "Couldn't copy that"));
     cancelSelection();
   };
 
@@ -18178,7 +18954,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     }
   };
 
-  const doCopySingle = (m) => { if (m.content) navigator.clipboard?.writeText(m.content); setContextMenuFor(null); };
+  const doCopySingle = (m) => { if (m.content) copyTextToClipboard(m.content).then((ok) => showSnack(ok ? 'Copied' : "Couldn't copy that")); setContextMenuFor(null); };
   const focusComposer = () => {
     const el = composerRef.current;
     if (!el) return;
@@ -18604,8 +19380,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const activeStoriesOf = (userId, data = storyData) => (data.byUser[userId] || []).filter((s) => isActiveUntil(s.expires_at));
   const trayUsers = Object.keys(storyData.byUser)
     .filter((id) => id !== session.user.id && activeStoriesOf(id).length && storyData.profiles[id])
-    .map((id) => ({ profile: storyData.profiles[id], stories: activeStoriesOf(id) }))
+    .map((id) => ({ profile: storyData.profiles[id], stories: activeStoriesOf(id), muted: storyMutes.has(id) }))
     .sort((a, b) => {
+      if (a.muted !== b.muted) return a.muted ? 1 : -1;
       const ua = a.stories.every((s) => storyData.seen.has(s.id)) ? 1 : 0;
       const ub = b.stories.every((s) => storyData.seen.has(s.id)) ? 1 : 0;
       if (ua !== ub) return ua - ub;
@@ -18634,9 +19411,11 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         if (ua !== ub) return ua - ub;
         return new Date(b.stories[b.stories.length - 1].created_at) - new Date(a.stories[a.stories.length - 1].created_at);
       });
-    const start = order.findIndex((g) => g.profile.id === userId);
+    const mutedOpen = storyMutes.has(userId);
+    const list = order.filter((g) => storyMutes.has(g.profile.id) === mutedOpen);
+    const start = list.findIndex((g) => g.profile.id === userId);
     if (start < 0) return;
-    setStoryViewer({ key: Date.now(), groupsList: order, startGroup: start });
+    setStoryViewer({ key: Date.now(), groupsList: list, startGroup: start });
   };
 
   const markStorySeen = (story) => {
@@ -18721,6 +19500,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const postStories = async (outputs, caption, mentionsRaw) => {
     setStoryComposer(null);
     if (!outputs.length) return;
+    setStoryUploading(true);
+    try { await postStoriesNow(outputs, caption, mentionsRaw); } finally { setStoryUploading(false); }
+  };
+  const postStoriesNow = async (outputs, caption, mentionsRaw) => {
     showSnack('Sharing to your story\u2026');
     const mentions = await filterTaggableMentions(mentionsRaw || []);
     let firstStory = null;
@@ -19371,6 +20154,62 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     setMediaComposer({ key: Date.now(), files: list, once: !!(opts && opts.once) });
   };
 
+  const [dropHint, setDropHint] = useState(false);
+  const dropRef = useRef({ n: 0, target: null });
+  dropRef.current.target = (activeProfile || activeGroup) && !mediaComposer && !showDoodle ? (files) => openMediaComposer(files) : null;
+  useEffect(() => {
+    const hasFiles = (e) => { try { return Array.from((e.dataTransfer && e.dataTransfer.types) || []).includes('Files'); } catch { return false; } };
+    const hide = () => { clearTimeout(dropRef.current.timer); dropRef.current.n = 0; setDropHint(false); };
+    const over = (e) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      try { e.dataTransfer.dropEffect = dropRef.current.target ? 'copy' : 'none'; } catch {}
+      clearTimeout(dropRef.current.timer);
+      dropRef.current.timer = setTimeout(hide, 450);
+    };
+    const enter = (e) => {
+      if (!hasFiles(e)) return;
+      dropRef.current.n += 1;
+      if (dropRef.current.target) setDropHint(true);
+    };
+    const leave = () => {
+      dropRef.current.n = Math.max(0, dropRef.current.n - 1);
+      if (!dropRef.current.n) hide();
+    };
+    const drop = (e) => {
+      if (!hasFiles(e)) { hide(); return; }
+      e.preventDefault();
+      hide();
+      const files = Array.from((e.dataTransfer && e.dataTransfer.files) || []);
+      if (!files.length) return;
+      const t = dropRef.current.target;
+      if (!t) return;
+      const media = files.filter((f) => /^(image|video)\//.test(f.type || ''));
+      if (!media.length) { showSnack('Only photos and videos can be dropped here'); return; }
+      t(media);
+    };
+    window.addEventListener('dragenter', enter);
+    window.addEventListener('dragover', over);
+    window.addEventListener('dragleave', leave);
+    window.addEventListener('drop', drop);
+    window.addEventListener('blur', hide);
+    return () => {
+      clearTimeout(dropRef.current.timer);
+      window.removeEventListener('blur', hide);
+      window.removeEventListener('dragenter', enter);
+      window.removeEventListener('dragover', over);
+      window.removeEventListener('dragleave', leave);
+      window.removeEventListener('drop', drop);
+    };
+  }, []);
+  const openPaintFor = async (url) => {
+    if (!url || (!activeProfile && !activeGroup)) return;
+    showSnack(isPaintUrl(url) ? 'Opening your drawing' : 'Opening in Paint');
+    const seed = await paintLoadSeed(url);
+    if (!seed) { showSnack('That picture could not be opened'); return; }
+    setPaintSeed(seed);
+    setShowDoodle(true);
+  };
   const sendMediaItems = async (outputs, caption, mentionsIn, opts) => {
     const once = !!(opts && opts.once);
     const bodyFor = (cap) => (once ? `zonce:${JSON.stringify({ c: cap || '' })}` : (cap || null));
@@ -19383,7 +20222,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     setUploading(outputs.length);
     for (let i = 0; i < outputs.length; i++) {
       const item = outputs[i];
-      const { url, error } = await uploadMedia(item.file, session.user.id);
+      const { url, error } = item.paint ? await uploadPaintFile(item.file, session.user.id) : await uploadMedia(item.file, session.user.id);
       if (error || !url) { showSnack(`Upload failed: ${(error && error.message) || 'no file'}`); continue; }
       if (!error && url) {
         const captionForThis = i === 0 ? (caption || null) : null;
@@ -19765,7 +20604,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
   if (!me) {
     return (
-      <div style={{ height: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: theme.bgGradient }}>
+      <div style={{ height: 'var(--zfull, 100vh)', display: 'flex', alignItems: 'center', justifyContent: 'center', background: theme.bgGradient }}>
         <Spinner size={28} color={theme.ink} />
       </div>
     );
@@ -19802,11 +20641,12 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const mineStories = activeStoriesOf(session.user.id);
     const firstName = (n) => String(n || '').split(' ')[0];
     out.push({ key: 'me', label: 'Your story', name: 'Your story', profile: me, ring: mineStories.length ? (mineStories.every((st) => storyData.seen.has(st.id)) ? 'seen' : 'unseen') : 'none', plus: !mineStories.length,
-      onClick: () => { if (mineStories.length) openStoriesFor(session.user.id); else if (!blockedByRestriction('status') && storyInputRef.current) storyInputRef.current.click(); } });
+      segments: mineStories.length ? mineStories.map(() => true) : null, uploading: storyUploading,
+      onClick: () => { if (mineStories.length) openStoriesFor(session.user.id); else startStory(); } });
     const taken = new Set([session.user.id]);
     trayUsers.forEach((t) => {
       const unseen = !t.stories.every((st) => storyData.seen.has(st.id));
-      out.push({ key: `s-${t.profile.id}`, label: `Story of ${t.profile.name}`, name: firstName(t.profile.name), profile: t.profile, ring: unseen ? 'unseen' : 'seen', online: isUserOnline(t.profile) && !t.profile.hide_activity && !t.profile.is_bot, onClick: () => openStoriesFor(t.profile.id) });
+      out.push({ key: `s-${t.profile.id}`, label: `Story of ${t.profile.name}`, name: firstName(t.profile.name), profile: t.profile, ring: unseen && !t.muted ? 'unseen' : 'seen', segments: t.stories.map((st) => !!t.muted || storyData.seen.has(st.id)), muted: !!t.muted, onLong: () => setStoryPeek({ profile: t.profile, muted: !!t.muted }), online: isUserOnline(t.profile) && !t.profile.hide_activity && !t.profile.is_bot, onClick: () => openStoriesFor(t.profile.id) });
       taken.add(t.profile.id);
     });
     conversations.forEach((c) => {
@@ -20139,18 +20979,20 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           </>
         )}
         </div>)}
-        {homeTab === 'moments' && (
+        {(homeTab === 'moments' || momentsKept) && (
+          <div style={{ display: homeTab === 'moments' ? 'contents' : 'none' }}>
           <MomentsTab key="tab-moments" me={me} userId={session.user.id} myStories={activeStoriesOf(session.user.id)} trayUsers={trayUsers} seen={storyData.seen} version={postsVersion}
             unseenStories={trayUsers.filter((u) => !u.stories.every((st) => storyData.seen.has(st.id))).length}
-            onAddStory={() => { if (blockedByRestriction('status')) return; if (storyInputRef.current) storyInputRef.current.click(); }} onOpenStory={(id) => openStoriesFor(id)}
+            onAddStory={startStory} onOpenStory={(id) => openStoriesFor(id)} storyUploading={storyUploading} onStoryLongPress={(pr, isMuted) => setStoryPeek({ profile: pr, muted: isMuted })}
             onOpenPost={(p, tab) => openFeedAt(p, tab)} onOpenProfile={(p) => setProfileOf(sanitizeAvatar(p, session.user.id))} onDiscover={() => setShowDiscover(true)} />
+          </div>
         )}
         {homeTab === 'calls' && (
           <CallsTab key="tab-calls" userId={session.user.id} groups={groups} version={callEngine.call ? 1 : 0} onCall={(p, kind) => { if (canCall(p)) startDirectCall(p, kind); else showSnack('You can call people who follow you back'); }} onOpenProfile={(p) => setProfileOf(p)} />
         )}
         {homeTab === 'me' && (
           <MeTab key="tab-me" me={me} counts={{ rewards: (myRewards || []).filter(rewardActive).length, archived: archivedConversations.length, requests: followRequestCount, mail: unreadMailCount, reminders: reminderTick >= 0 ? readReminders(session.user.id).filter((r) => !r.done).length : 0 }}
-            onReminders={() => setShowReminders(true)} onSearchMessages={() => setMsgSearchOpen('')} onScan={() => setShowQrScan(true)}
+            onReminders={() => setShowReminders(true)} onStoryArchive={() => setStoryArchive(true)} onSearchMessages={() => setMsgSearchOpen('')} onScan={() => setShowQrScan(true)}
             onOpenProfile={() => setProfileOf(me)} onEditProfile={() => setProfileOf({ ...me, __edit: true })} onSettings={() => setShowSettings(true)} onCollection={() => setCollectionOpen(true)}
             onSaved={() => setShowSaved(true)} onArchive={() => setShowArchived(true)} onMail={() => setShowMail(true)} onRequests={() => setShowFollowRequests(true)} onDiscover={() => setShowDiscover(true)}
             onSwitchAccount={() => setShowAccountSwitcher(true)} onShare={() => setProfileOf({ ...me, __share: true })} onInvite={inviteFriends} onGames={() => setShowGames(true)} />
@@ -20205,8 +21047,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                 }}
                 onClick={() => (activeGroup ? setShowGroupInfo(true) : setProfileOf(activeProfile))}>
               {activeGroup && <div aria-hidden="true" style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 2, background: `linear-gradient(90deg, ${groupAccent(activeGroup)}, transparent 80%)`, pointerEvents: 'none' }} />}
-              <ArrowLeft size={20} style={{ cursor: 'pointer', color: activeNameBarKey ? 'white' : theme.ink, flexShrink: 0, filter: activeNameBarKey ? 'drop-shadow(0 1px 3px rgba(0,0,0,0.6))' : 'none', position: 'relative' }}
-                onClick={(e) => { e.stopPropagation(); if (activeConvForBar && myLocks[activeConvForBar.id]) lastLeftChatAtRef.current[activeConvForBar.id] = Date.now(); if (activeGroup) markGroupRead(activeGroup.id); if (reloadListsRef.current) reloadListsRef.current(); loadUnreadCounts(); runWithTransition(() => { setMobileShowChat(false); setActiveProfile(null); setActiveGroup(null); }); }} />
+              <div role="button" aria-label="Back" className="zchat-press" style={{ width: 40, height: 40, margin: '0 -6px 0 -10px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, position: 'relative' }}
+                onClick={(e) => { e.stopPropagation(); if (activeConvForBar && myLocks[activeConvForBar.id]) lastLeftChatAtRef.current[activeConvForBar.id] = Date.now(); if (activeGroup) markGroupRead(activeGroup.id); if (reloadListsRef.current) reloadListsRef.current(); loadUnreadCounts(); runWithTransition(() => { setMobileShowChat(false); setActiveProfile(null); setActiveGroup(null); }); }}>
+                <ArrowLeft size={22} style={{ color: activeNameBarKey ? 'white' : theme.ink, filter: activeNameBarKey ? 'drop-shadow(0 1px 3px rgba(0,0,0,0.6))' : 'none' }} />
+              </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, position: 'relative' }}>
                 {activeGroup ? <GroupAvatar avatar={activeGroup.avatar} name={activeGroup.name} size={38} /> : AVATAR_FRAMES[activeProfile.avatar_frame] ? <div style={{ margin: '0 6px' }}><FramedAvatar frame={activeProfile.avatar_frame} size={36}><Avatar emoji={activeProfile.avatar} name={activeProfile.name} frame={activeProfile.avatar_frame} frameFit={false} online={isUserOnline(activeProfile) && !activeProfile.hide_activity} size={36} /></FramedAvatar></div> : <AvatarFrame size={34} tier={activeProfile.verified}><Avatar emoji={activeProfile.avatar} name={activeProfile.name} frame={activeProfile.avatar_frame} online={isUserOnline(activeProfile) && !activeProfile.hide_activity} size={34} /></AvatarFrame>}
                 <div style={{ minWidth: 0, flex: 1 }}>
@@ -20373,7 +21217,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                     {item.kind === 'image' ? (
                       <img src={item.url} alt="" onContextMenu={(e) => e.preventDefault()} draggable={false} style={{ width: 64, height: 64, borderRadius: 12, objectFit: 'cover' }} />
                     ) : (
-                      <video src={item.url} onContextMenu={(e) => e.preventDefault()} style={{ width: 64, height: 64, borderRadius: 12, objectFit: 'cover', background: '#000' }} />
+                      <VideoThumb src={item.url} style={{ width: 64, height: 64, borderRadius: 12, overflow: 'hidden', background: '#000' }} imgStyle={{ objectFit: 'cover' }} />
                     )}
                     <div onClick={() => removePendingMedia(i)} style={{
                       position: 'absolute', top: -5, right: -5, width: 18, height: 18, borderRadius: '50%',
@@ -20592,8 +21436,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           </>
         ) : (
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 14, color: theme.muted }}>
-            <div style={{ width: 340, maxWidth: '80%' }}><SpotArt k="chats" dark={theme.dark} /></div>
-            <div style={{ fontSize: 14.5 }}>Pick a chat on the left to start talking</div>
+            <div style={{ width: 340, maxWidth: '80%' }}><SpotArt k={homeTab === 'calls' ? 'calls' : homeTab === 'moments' ? 'moments' : 'chats'} dark={theme.dark} /></div>
+            <div style={{ fontSize: 14.5, textAlign: 'center', padding: '0 20px' }}>{homeTab === 'moments' ? 'Tap a post or a story on the left to open it' : homeTab === 'calls' ? 'Pick someone on the left to call them' : homeTab === 'me' ? 'Pick something on the left to open it' : 'Pick a chat on the left to start talking'}</div>
           </div>
         )}
       </div>
@@ -20686,6 +21530,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             )}
             isSaved={savedIds.has(String(m.id))} onToggleSave={String(m.id).startsWith('temp-') ? null : () => toggleSaveMessage(m)}
             onSave={() => { silentDownload(m.media_url, m.type === 'video' ? 'zchat-video.mp4' : 'zchat-photo.jpg'); setContextMenuFor(null); }}
+            onEditArt={m.type === 'image' && m.media_url && !String(m.id).startsWith('temp-') ? () => { setContextMenuFor(null); openPaintFor(m.media_url); } : null}
             canEditText={isMine && m.type === 'text' && !m.deleted}
             canModerate={activeGroup ? (groupMembers.find((gm) => gm.user_id === session.user.id)?.role === 'admin') : false}
             onClose={() => setContextMenuFor(null)}
@@ -20724,7 +21569,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           onRemoveMine={(emoji) => reactToMessage(whoReactedFor.messageId, emoji)} />
       )}
       {viewerUrl && (
-        <ImageViewer url={viewerUrl} onClose={() => setViewerUrl(null)} onForward={() => { openForward(); }} onReport={() => setReportModalFor('__viewer__')} />
+        <ImageViewer url={viewerUrl} onClose={() => setViewerUrl(null)} onForward={() => { openForward(); }} onReport={() => setReportModalFor('__viewer__')}
+          onEdit={activeProfile || activeGroup ? (u) => { setViewerUrl(null); openPaintFor(u); } : null} />
       )}
       {viewerVideoUrl && (
         <VideoViewer url={viewerVideoUrl.url} trimStart={viewerVideoUrl.trimStart} trimEnd={viewerVideoUrl.trimEnd} overlayUrl={viewerVideoUrl.overlayUrl} onClose={() => setViewerVideoUrl(null)} onForward={() => { setViewerVideoUrl(null); openForward(); }} />
@@ -20839,7 +21685,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       {showCreate && (
         <CreateSheet onClose={() => setShowCreate(false)}
           onPost={() => { if (blockedByRestriction('post')) return; if (postInputRef.current) postInputRef.current.click(); }}
-          onStory={() => { if (blockedByRestriction('status')) return; if (storyInputRef.current) storyInputRef.current.click(); }}
+          onStory={startStory}
           onGroup={() => setShowCreateGroup(true)}
           onChat={() => setShowNewChat(true)} onGames={() => setShowGames(true)} onScan={() => setShowQrScan(true)} />
       )}
@@ -21004,6 +21850,31 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         <StickerPreviewSheet message={stickerSheetFor} isMine={stickerSheetFor.sender_id === session.user.id}
           onClose={() => setStickerSheetFor(null)} onReport={() => doReportSingle(stickerSheetFor)} userId={session.user.id} onNotice={showSnack} />
       )}
+      {storyCreate && (
+        <StoryCreateSheet onClose={() => setStoryCreate(false)}
+          onCamera={() => { setStoryCreate(false); setStoryCamera(true); }}
+          onGallery={() => { setStoryCreate(false); if (storyInputRef.current) storyInputRef.current.click(); }}
+          onText={() => { setStoryCreate(false); setTextStory(true); }}
+          onDraw={() => { setStoryCreate(false); setStoryPaint(true); }} />
+      )}
+      {textStory && <TextStoryComposer onClose={() => setTextStory(false)} onShare={(file) => { setTextStory(false); postStories([{ file, kind: 'image', url: null }], '', []); }} />}
+      {storyPaint && <PaintStudio recipientName="Your story" onClose={() => setStoryPaint(false)} onSend={(file) => { setStoryPaint(false); setStoryComposer({ key: Date.now(), files: [file] }); }} onAskBot={askBotAboutImage} />}
+      {storyCamera && (
+        <CameraCapture onClose={() => setStoryCamera(false)}
+          onPickGallery={() => { setStoryCamera(false); if (storyInputRef.current) storyInputRef.current.click(); }}
+          onCapture={(file) => { setStoryCamera(false); setStoryComposer({ key: Date.now(), files: [file] }); }} />
+      )}
+      {storyArchive && (
+        <StoryArchivePage userId={session.user.id} onClose={() => setStoryArchive(false)}
+          onOpen={(all, id) => setStoryViewer({ key: Date.now(), groupsList: [{ profile: me, stories: all.slice().reverse() }], startGroup: 0, startStoryId: id, readOnly: true, archive: true })} />
+      )}
+      {highlightFor && <AddToHighlightSheet userId={session.user.id} story={highlightFor} onClose={() => setHighlightFor(null)} onDone={(msg) => { setHighlightFor(null); showSnack(msg); }} />}
+      {storyPeek && (
+        <ActionSheet title={storyPeek.profile.name} onClose={() => setStoryPeek(null)} zIndex={660} items={[
+          { k: 'mute', label: storyPeek.muted ? 'Unmute stories' : 'Mute stories', icon: storyPeek.muted ? <Volume2 /> : <VolumeX />, on: () => { const pr = storyPeek.profile; const m = storyPeek.muted; setStoryPeek(null); toggleStoryMute(pr, !m); } },
+          { k: 'profile', label: 'View profile', icon: <User />, on: () => { const pr = storyPeek.profile; setStoryPeek(null); setProfileOf(pr); } },
+        ]} />
+      )}
       {storyComposer && (
         <MediaComposer key={storyComposer.key} files={storyComposer.files} mode="story" myId={session.user.id} privacyCtx={{ iFollow: iFollowIds, allowed: privacyAllowed }}
           mentionGroups={groups} onCancel={() => setStoryComposer(null)} onSend={postStories} />
@@ -21015,8 +21886,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           onSeen={markStorySeen} onClose={() => setStoryViewer(null)} onLike={likeStory} onReply={replyToStory} onRepost={repostStory}
           initialRepostedIds={(storyData.byUser[session.user.id] || []).map((s) => s.repost_of).filter(Boolean)}
           onDelete={deleteStory} onReport={(p) => { setStoryViewer(null); setReportUserTarget(p); }}
-          onAddStory={() => { setStoryViewer(null); if (blockedByRestriction('status')) return; if (storyInputRef.current) storyInputRef.current.click(); }}
-          onShare={(story, owner) => setStoryShareFor({ story, owner })} externalPause={!!storyShareFor}
+          onAddStory={() => { setStoryViewer(null); startStory(); }}
+          mutedIds={storyMutes} onToggleMute={toggleStoryMute} onAddToHighlight={(s) => setHighlightFor(s)} onOpenArchive={() => { setStoryViewer(null); setStoryArchive(true); }}
+          extraActions={storyViewer.archive ? [{ label: 'Share again', icon: <StatusIcon size={16} color="#FFFFFF" />, on: (s) => reshareOwnStory(s) }, { label: 'Add to highlight', icon: <Plus size={16} color="#FFFFFF" />, on: (s) => setHighlightFor(s) }, { label: 'Save', icon: <Download size={16} color="#FFFFFF" />, on: (s) => silentDownload(s.media_url, s.media_type === 'video' ? 'zchat-story.mp4' : 'zchat-story.jpg') }] : null}
+          onShare={(story, owner) => setStoryShareFor({ story, owner })} externalPause={!!storyShareFor || !!highlightFor}
           onOpenProfile={(p) => { setStoryViewer(null); setProfileOf(p); }} onOpenMention={openStoryMention} />
       )}
       {avatarPeek && (() => {
@@ -21181,9 +22054,18 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           onSave={(f) => { const next = folders.some((x) => x.id === f.id) ? folders.map((x) => (x.id === f.id ? f : x)) : [...folders, f]; setFolders(next); setFolderEdit(null); setListFilter(`f:${f.id}`); showSnack(`Folder ${f.name} saved`); }}
           onDelete={(f) => { setFolders(folders.filter((x) => x.id !== f.id)); setFolderEdit(null); if (listFilter === `f:${f.id}`) setListFilter('all'); }} />
       )}
+      {dropHint && (activeProfile || activeGroup) && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 400, pointerEvents: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(10,8,20,0.45)', fontFamily: FONT }}>
+          <div className="zchat-pop" style={{ padding: '26px 30px', borderRadius: 22, border: '2px dashed rgba(255,255,255,0.7)', background: 'rgba(24,22,34,0.92)', color: 'white', textAlign: 'center', maxWidth: 320 }}>
+            <ImageIcon size={30} />
+            <div style={{ fontSize: 16, fontWeight: 800, marginTop: 10 }}>Drop to send</div>
+            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', marginTop: 4 }}>Photos and videos go to {activeGroup ? activeGroup.name : activeProfile.name}</div>
+          </div>
+        </div>
+      )}
       {showDoodle && (activeProfile || activeGroup) && (
-        <PaintStudio recipientName={activeGroup ? activeGroup.name : activeProfile.name} onClose={() => setShowDoodle(false)}
-          onSend={async (file) => { setShowDoodle(false); await sendMediaItems([{ kind: 'image', file, url: null }], ''); }}
+        <PaintStudio initial={paintSeed} recipientName={activeGroup ? activeGroup.name : activeProfile.name} onClose={() => { setShowDoodle(false); setPaintSeed(null); }}
+          onSend={async (file) => { setShowDoodle(false); setPaintSeed(null); await sendMediaItems([{ kind: 'image', file, url: null, paint: true }], ''); }}
           onAskBot={askBotAboutImage} />
       )}
       {showQrScan && (
@@ -21320,22 +22202,19 @@ function DayDivider({ label }) {
 }
 
 const WHATS_NEW = [
-  { title: 'A new welcome', text: 'Logging in and signing up got a calmer new look, with Apple and Google right there.' },
-  { title: 'Paint', text: 'Doodle grew into a real paint app with brushes, shapes, fill, text, stickers, colouring pages and mirror drawing. Stuck for ideas? Ask ZChat Bot.' },
-  { title: 'Swipe back', text: 'Swipe from the left edge to go back on almost every page, just like Instagram.' },
-  { title: 'Photo viewer', text: 'Tap once to hide everything, double tap or pinch to zoom, and swipe down to close.' },
-  { title: 'Send with effects', text: 'Hold the send button to send with confetti, hearts, balloons, fireworks or snow.' },
+  { title: 'Stories, rebuilt', text: 'Write text stories, swipe between friends, hold to pause, mute people, add stories to highlights and keep old ones in your story archive.' },
+  { title: 'See who replied', text: 'Your story viewers list now shows replies right under each name.' },
+  { title: 'Move what you drew', text: 'Paint has a Move tool. Drag, resize, turn, copy or delete any part of your drawing, or drag across a few parts to move them together.' },
+  { title: 'Edit this art', text: 'Tap a drawing you sent and pick Edit this art to keep working on it with every part still editable. Any photo can be drawn on too.' },
+  { title: 'Edit your text', text: 'Tap text you added in Paint to change it, even after moving it.' },
+  { title: 'Smoother Moments', text: 'Videos show quick previews, so Moments no longer flashes black on Android.' },
+  { title: 'New attach menu', text: 'Everything you can send fits on one screen now, even on small phones.' },
+  { title: 'Drop to send', text: 'On a computer, drag photos or videos into a chat to send them. Mouse wheels scroll sideways rows too.' },
+  { title: 'A way back everywhere', text: 'Every page has a back button now, including Store, Terms, Refunds and Privacy.' },
+  { title: 'Paint', text: 'Brushes, shapes, fill, text, stickers, colouring pages and mirror drawing. Stuck for ideas? Ask ZChat Bot.' },
   { title: 'Send later', text: 'Hold the send button and pick a time. Keep ZChat open and it goes out right on time.' },
   { title: 'Folders', text: 'Put chats into your own folders like Family or Squad. Tap the plus next to the chat filters.' },
-  { title: 'Dice and coin', text: 'Roll dice or flip a coin in any chat. Everyone sees the same result.' },
-  { title: 'Collage', text: 'Put up to six photos together in one picture before you send it.' },
-  { title: 'Read aloud and voice typing', text: 'Hold a message to hear it read out loud, or talk instead of typing from the attach menu.' },
-  { title: 'Fingerprint unlock', text: 'App lock can open with your fingerprint or face on phones that support it.' },
-  { title: 'Your own wallpaper', text: 'Use any photo as a chat wallpaper and dim it so messages stay easy to read.' },
-  { title: 'Auto theme', text: 'The theme can follow your phone, light in the day and dark at night.' },
-  { title: 'Voice changer', text: 'Lock a voice note while recording and tap Change voice to sound like a chipmunk, a robot and more.' },
-  { title: 'New bubbles', text: 'Denim, Kraft and Notebook bubbles are here, and every bubble got a cleaner look.' },
-  { title: 'Bug fixes', text: 'Bug fixes, faster chats and smoother scrolling.' },
+  { title: 'Bug fixes', text: 'Fixes for Android, iPhone, iPad, Mac and Windows, plus faster chats and smoother scrolling.' },
 ];
 
 function WhatsNewSheet({ onClose }) {
@@ -21344,7 +22223,7 @@ function WhatsNewSheet({ onClose }) {
   return (
     <Portal>
       <div onClick={onClose} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 660, background: 'rgba(5,8,16,0.55)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontFamily: FONT }}>
-        <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ width: '100%', maxWidth: 480, maxHeight: '86vh', display: 'flex', flexDirection: 'column', background: theme.panelBg, borderRadius: '28px 28px 0 0', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))', overflow: 'hidden' }}>
+        <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ width: '100%', maxWidth: 480, maxHeight: 'min(86vh, calc(100% - 24px))', display: 'flex', flexDirection: 'column', background: theme.panelBg, borderRadius: '28px 28px 0 0', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))', overflow: 'hidden' }}>
           <div style={{ padding: '14px 20px 6px', flexShrink: 0 }}>
             <div style={{ display: 'flex', justifyContent: 'center', paddingBottom: 12 }}><div style={{ width: 38, height: 4, borderRadius: 2, background: theme.border }} /></div>
             <div style={{ fontSize: 12, fontWeight: 800, color: theme.coral, letterSpacing: '0.06em', textTransform: 'uppercase' }}>ZChat {APP_VERSION}</div>
@@ -23274,7 +24153,7 @@ function HowToPlaySheet({ k, onClose }) {
   return (
     <Portal>
       <div onClick={(e) => { e.stopPropagation(); onClose(); }} onPointerDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} onContextMenu={(e) => e.stopPropagation()} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 700, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontFamily: FONT, background: 'rgba(5,8,16,0.55)' }}>
-        <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ width: '100%', maxWidth: 480, maxHeight: '88vh', display: 'flex', flexDirection: 'column', background: theme.panelBg, borderRadius: '26px 26px 0 0', overflow: 'hidden', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))' }}>
+        <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ width: '100%', maxWidth: 480, maxHeight: 'min(88vh, calc(100% - 24px))', display: 'flex', flexDirection: 'column', background: theme.panelBg, borderRadius: '26px 26px 0 0', overflow: 'hidden', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))' }}>
           <div style={{ padding: '10px 16px 0', flexShrink: 0 }}>
             <div style={{ display: 'flex', justifyContent: 'center', paddingBottom: 10 }}><div style={{ width: 38, height: 4, borderRadius: 2, background: theme.border }} /></div>
             <div style={{ width: '100%', aspectRatio: '16 / 7', borderRadius: 18, overflow: 'hidden' }}><GameArt k={gameArtKey(k)} width="100%" height="100%" radius={18} /></div>
@@ -23332,7 +24211,7 @@ function GamePickerSheet({ profile, onPick, onMore, onClose }) {
   const drag = useSheetDrag(onClose);
   return (
     <div onClick={onClose} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 94, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontFamily: FONT, background: 'rgba(0,0,0,0.45)' }}>
-      <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ transform: drag.sheetStyle.transform, transition: drag.sheetStyle.transition, width: '100%', maxWidth: 480, maxHeight: '88vh', display: 'flex', flexDirection: 'column', background: theme.panelBg, borderRadius: '24px 24px 0 0', overflow: 'hidden', paddingBottom: 'calc(8px + env(safe-area-inset-bottom))', boxShadow: '0 -10px 40px rgba(0,0,0,0.25)' }}>
+      <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ transform: drag.sheetStyle.transform, transition: drag.sheetStyle.transition, width: '100%', maxWidth: 480, maxHeight: 'min(88vh, calc(100% - 24px))', display: 'flex', flexDirection: 'column', background: theme.panelBg, borderRadius: '24px 24px 0 0', overflow: 'hidden', paddingBottom: 'calc(8px + env(safe-area-inset-bottom))', boxShadow: '0 -10px 40px rgba(0,0,0,0.25)' }}>
         <div {...drag.sheetProps} style={{ touchAction: 'none', flexShrink: 0 }}>
           <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 2px' }}><div style={{ width: 38, height: 4, borderRadius: 2, background: theme.border }} /></div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 18px 12px', borderBottom: `1px solid ${theme.border}` }}>
@@ -25360,16 +26239,17 @@ function HomeTopBar({ me, onAvatar, right }) {
 
 function ActiveStrip({ items }) {
   const { theme } = useTheme();
+  const lp = useRef({});
   if (!items || !items.length) return null;
   return (
     <div style={{ display: 'flex', gap: 12, overflowX: 'auto', padding: '2px 16px 12px', flexShrink: 0, scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
       {items.map((it) => (
-        <div key={it.key} role="button" aria-label={it.label} onClick={it.onClick} className="zchat-press" style={{ width: 64, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, cursor: 'pointer' }}>
+        <div key={it.key} role="button" aria-label={it.label} onClick={() => { if (lp.current.fired === it.key) { lp.current.fired = false; return; } it.onClick(); }} {...storyLongPress(lp.current, it.key, it.onLong || null)} className="zchat-press" style={{ width: 64, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, cursor: 'pointer', WebkitTouchCallout: 'none', userSelect: 'none' }}>
           <div style={{ position: 'relative' }}>
-            <StoryAvatar profile={it.profile} size={60} ring={it.ring || 'none'} badgePlus={!!it.plus} />
+            <StoryAvatar profile={it.profile} size={60} ring={it.ring || 'none'} badgePlus={!!it.plus} segments={it.segments || null} uploading={!!it.uploading} dim={!!it.muted} />
             {it.online && <span style={{ position: 'absolute', right: 3, bottom: 3, width: 14, height: 14, borderRadius: '50%', background: '#22C55E', border: `2.5px solid ${theme.bgGradient}`, zIndex: 7 }} />}
           </div>
-          <div style={{ fontSize: 11.5, color: it.ring === 'unseen' ? theme.ink : theme.muted, fontWeight: it.ring === 'unseen' ? 700 : 500, maxWidth: 64, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.name}</div>
+          <div style={{ fontSize: 11.5, color: it.ring === 'unseen' ? theme.ink : theme.muted, fontWeight: it.ring === 'unseen' ? 700 : 500, maxWidth: 64, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.uploading ? 'Sharing' : it.name}</div>
         </div>
       ))}
     </div>
@@ -25383,9 +26263,9 @@ function ActionSheet({ title, items, onClose, zIndex = 640 }) {
   return (
     <Portal>
       <div onClick={onClose} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontFamily: FONT }}>
-        <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" {...drag.sheetProps} style={{ ...drag.sheetStyle, width: '100%', maxWidth: 480, maxHeight: '86vh', overflowY: 'auto', background: theme.panelBg, borderRadius: '20px 20px 0 0', paddingBottom: 'calc(10px + env(safe-area-inset-bottom))' }}>
-          <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 0 4px' }}><div style={{ width: 36, height: 4, borderRadius: 2, background: theme.border }} /></div>
-          {title && <div style={{ fontSize: 15, fontWeight: 800, color: theme.ink, textAlign: 'center', padding: '6px 16px 10px' }}>{title}</div>}
+        <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" {...drag.sheetProps} style={{ ...drag.sheetStyle, width: '100%', maxWidth: 480, maxHeight: 'min(86vh, calc(100% - 24px))', overflowY: 'auto', background: theme.panelBg, borderRadius: '20px 20px 0 0', paddingBottom: 'calc(10px + env(safe-area-inset-bottom))' }}>
+          <div data-sheet-handle="true" style={{ display: 'flex', justifyContent: 'center', padding: '8px 0 6px', touchAction: 'none' }}><div style={{ width: 36, height: 4, borderRadius: 2, background: theme.border }} /></div>
+          {title && <div data-sheet-handle="true" style={{ fontSize: 15, fontWeight: 800, color: theme.ink, textAlign: 'center', padding: '6px 16px 10px', touchAction: 'none' }}>{title}</div>}
           {items.filter(Boolean).map((it) => (
             <div key={it.k} role="button" aria-label={it.label} onClick={() => { if (it.busy) return; playUiSound('tap'); it.on(); }} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '0 20px', height: 54, cursor: 'pointer', color: it.danger ? theme.danger : theme.ink }}>
               <span style={{ width: 26, display: 'flex', justifyContent: 'center', flexShrink: 0 }}>{it.busy ? <Spinner size={18} color={theme.muted} /> : React.isValidElement(it.icon) ? React.cloneElement(it.icon, { size: 24, strokeWidth: 1.8, color: it.danger ? theme.danger : theme.ink }) : it.icon}</span>
@@ -26281,7 +27161,7 @@ function PaintSheet({ title, onClose, children, z = 120 }) {
   const drag = useSheetDrag(onClose);
   return (
     <div onClick={onClose} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: z, background: 'rgba(0,0,0,0.42)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontFamily: FONT }}>
-      <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" {...drag.sheetProps} style={{ ...drag.sheetStyle, width: '100%', maxWidth: 520, maxHeight: '82vh', display: 'flex', flexDirection: 'column', background: theme.panelBg, borderRadius: '22px 22px 0 0', paddingBottom: 'calc(12px + env(safe-area-inset-bottom))' }}>
+      <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" {...drag.sheetProps} style={{ ...drag.sheetStyle, width: '100%', maxWidth: 520, maxHeight: 'min(82vh, calc(100% - 24px))', display: 'flex', flexDirection: 'column', background: theme.panelBg, borderRadius: '22px 22px 0 0', paddingBottom: 'calc(12px + env(safe-area-inset-bottom))' }}>
         <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 0 2px' }}><div style={{ width: 36, height: 4, borderRadius: 2, background: theme.border }} /></div>
         {title && <div style={{ fontSize: 16, fontWeight: 800, color: theme.ink, padding: '8px 18px 10px' }}>{title}</div>}
         <div data-sheet-scroll="true" style={{ overflowY: 'auto', minHeight: 0, padding: '0 18px 6px', touchAction: 'pan-y' }}>{children}</div>
@@ -26352,6 +27232,279 @@ function PaintColorPanel({ color, alpha, onColor, onAlpha, recent }) {
   );
 }
 
+const PAINT_DATA_KEY = 'zchatpaint';
+let paintCrcTable = null;
+function paintCrc32(bytes, start, end) {
+  if (!paintCrcTable) {
+    paintCrcTable = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) {
+      let c = n;
+      for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
+      paintCrcTable[n] = c >>> 0;
+    }
+  }
+  let c = 0xFFFFFFFF;
+  for (let i = start; i < end; i++) c = paintCrcTable[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+async function paintZip(bytes, dir) {
+  try {
+    if (dir === 'in' && typeof CompressionStream === 'undefined') return null;
+    if (dir === 'out' && typeof DecompressionStream === 'undefined') return null;
+    const stream = new Blob([bytes]).stream().pipeThrough(dir === 'in' ? new CompressionStream('deflate') : new DecompressionStream('deflate'));
+    return new Uint8Array(await new Response(stream).arrayBuffer());
+  } catch { return null; }
+}
+function paintCompactOps(ops) {
+  const r1 = (n) => Math.round(n * 10) / 10;
+  return ops.map((op) => {
+    const o = { ...op };
+    const keepP = o.t === 'stroke' && o.pressure;
+    if (Array.isArray(o.pts)) o.pts = o.pts.map((p) => (keepP && p.length > 2 ? [r1(p[0]), r1(p[1]), Math.round((p[2] || 0) * 100) / 100] : [r1(p[0]), r1(p[1])]));
+    ['x', 'y', 'x0', 'y0', 'x1', 'y1'].forEach((k) => { if (typeof o[k] === 'number') o[k] = r1(o[k]); });
+    if (Array.isArray(o.m)) o.m = o.m.map((v, i) => (i < 4 ? Math.round(v * 1e4) / 1e4 : r1(v)));
+    return o;
+  });
+}
+async function paintEmbedProject(blob, project) {
+  try {
+    const json = new TextEncoder().encode(JSON.stringify(project));
+    const packed = await paintZip(json, 'in');
+    const payload = packed || json;
+    const flag = packed ? 1 : 0;
+    const src = new Uint8Array(await blob.arrayBuffer());
+    if (src[0] === 0x89 && src[1] === 0x50 && src[2] === 0x4E && src[3] === 0x47) {
+      if (src.length < 33 || String.fromCharCode(src[12], src[13], src[14], src[15]) !== 'IHDR') return blob;
+      const at = 8 + 12 + (((src[8] << 24) | (src[9] << 16) | (src[10] << 8) | src[11]) >>> 0);
+      if (at > src.length) return blob;
+      const key = new TextEncoder().encode(PAINT_DATA_KEY);
+      const dataLen = key.length + 5 + payload.length;
+      const chunk = new Uint8Array(12 + dataLen);
+      const dv = new DataView(chunk.buffer);
+      dv.setUint32(0, dataLen);
+      chunk.set([0x69, 0x54, 0x58, 0x74], 4);
+      let o = 8;
+      chunk.set(key, o); o += key.length;
+      chunk[o++] = 0; chunk[o++] = flag; chunk[o++] = 0; chunk[o++] = 0; chunk[o++] = 0;
+      chunk.set(payload, o); o += payload.length;
+      dv.setUint32(o, paintCrc32(chunk, 4, o));
+      const out = new Uint8Array(src.length + chunk.length);
+      out.set(src.subarray(0, at), 0);
+      out.set(chunk, at);
+      out.set(src.subarray(at), at + chunk.length);
+      return new Blob([out], { type: 'image/png' });
+    }
+    if (src[0] === 0xFF && src[1] === 0xD8) {
+      const head = new TextEncoder().encode('ZCPAINT');
+      const per = 65000;
+      const total = Math.ceil(payload.length / per);
+      if (!total || total > 250) return blob;
+      const segs = [];
+      for (let k = 0; k < total; k++) {
+        const part = payload.subarray(k * per, Math.min(payload.length, (k + 1) * per));
+        const seg = new Uint8Array(15 + part.length);
+        const L = 13 + part.length;
+        seg[0] = 0xFF; seg[1] = 0xEB; seg[2] = (L >> 8) & 0xFF; seg[3] = L & 0xFF;
+        seg.set(head, 4); seg[11] = 0; seg[12] = k; seg[13] = total; seg[14] = flag;
+        seg.set(part, 15);
+        segs.push(seg);
+      }
+      let at = 2;
+      while (at + 4 <= src.length && src[at] === 0xFF && src[at + 1] >= 0xE0 && src[at + 1] <= 0xEF) at += 2 + ((src[at + 2] << 8) | src[at + 3]);
+      if (at > src.length) at = 2;
+      const extra = segs.reduce((a, sg) => a + sg.length, 0);
+      const out = new Uint8Array(src.length + extra);
+      out.set(src.subarray(0, at), 0);
+      let o = at;
+      segs.forEach((sg) => { out.set(sg, o); o += sg.length; });
+      out.set(src.subarray(at), o);
+      return new Blob([out], { type: 'image/jpeg' });
+    }
+  } catch {}
+  return blob;
+}
+async function paintReadProjectBytes(src) {
+  try {
+    let payload = null;
+    let flag = 0;
+    if (src[0] === 0x89 && src[1] === 0x50 && src[2] === 0x4E && src[3] === 0x47) {
+      let i = 8;
+      while (i + 8 <= src.length) {
+        const len = ((src[i] << 24) | (src[i + 1] << 16) | (src[i + 2] << 8) | src[i + 3]) >>> 0;
+        const type = String.fromCharCode(src[i + 4], src[i + 5], src[i + 6], src[i + 7]);
+        if (type === 'iTXt') {
+          const d = src.subarray(i + 8, i + 8 + len);
+          const z = d.indexOf(0);
+          if (z > 0 && String.fromCharCode(...d.subarray(0, z)) === PAINT_DATA_KEY) {
+            flag = d[z + 1];
+            const z2 = d.indexOf(0, z + 3);
+            const z3 = d.indexOf(0, z2 + 1);
+            payload = d.subarray(z3 + 1);
+            break;
+          }
+        }
+        if (type === 'IEND') break;
+        i += 12 + len;
+      }
+    } else if (src[0] === 0xFF && src[1] === 0xD8) {
+      const parts = [];
+      let total = 0;
+      let i = 2;
+      while (i + 4 <= src.length && src[i] === 0xFF) {
+        const m = src[i + 1];
+        if (m === 0xFF) { i += 1; continue; }
+        if (m === 0xD8 || m === 0x01 || (m >= 0xD0 && m <= 0xD7)) { i += 2; continue; }
+        if (m === 0xDA || m === 0xD9) break;
+        const L = (src[i + 2] << 8) | src[i + 3];
+        if (m === 0xEB && L > 13 && String.fromCharCode(...src.subarray(i + 4, i + 11)) === 'ZCPAINT') {
+          parts[src[i + 12]] = src.subarray(i + 15, i + 2 + L);
+          total = src[i + 13];
+          flag = src[i + 14];
+        }
+        i += 2 + L;
+      }
+      if (total && parts.length === total && parts.every(Boolean)) {
+        const size = parts.reduce((a, p) => a + p.length, 0);
+        payload = new Uint8Array(size);
+        let o = 0;
+        parts.forEach((p) => { payload.set(p, o); o += p.length; });
+      }
+    }
+    if (!payload) return null;
+    const bytes = flag ? await paintZip(payload, 'out') : payload;
+    if (!bytes) return null;
+    const obj = JSON.parse(new TextDecoder().decode(bytes));
+    return obj && obj.v === 1 && Array.isArray(obj.ops) ? obj : null;
+  } catch { return null; }
+}
+let paintMeasureCanvas = null;
+function paintMeasure() {
+  if (!paintMeasureCanvas) paintMeasureCanvas = document.createElement('canvas');
+  return paintMeasureCanvas.getContext('2d');
+}
+function paintOpBox(op, W, H) {
+  if (!op) return null;
+  if (op.t === 'stroke' && Array.isArray(op.pts) && op.pts.length) {
+    const xfs = paintSymXf(op.sym || 'off', W, H);
+    let x0 = Infinity; let y0 = Infinity; let x1 = -Infinity; let y1 = -Infinity;
+    op.pts.forEach((p) => xfs.forEach((xf) => { const q = xf(p[0], p[1]); x0 = Math.min(x0, q[0]); y0 = Math.min(y0, q[1]); x1 = Math.max(x1, q[0]); y1 = Math.max(y1, q[1]); }));
+    const f = op.brush === 'spray' ? 1.4 : op.brush === 'neon' ? 1.5 : op.brush === 'highlighter' ? 0.85 : 0.7;
+    const pad = (op.size || 8) * f + 2;
+    return [x0 - pad, y0 - pad, x1 + pad, y1 + pad];
+  }
+  if (op.t === 'shape') {
+    const pad = (op.size || 6) / 2 + (op.kind === 'arrow' ? Math.max(22, (op.size || 6) * 3.2) : 2);
+    if (op.kind === 'poly' && Array.isArray(op.pts) && op.pts.length) {
+      const xs = op.pts.map((p) => p[0]);
+      const ys = op.pts.map((p) => p[1]);
+      return [Math.min(...xs) - pad, Math.min(...ys) - pad, Math.max(...xs) + pad, Math.max(...ys) + pad];
+    }
+    return [Math.min(op.x0, op.x1) - pad, Math.min(op.y0, op.y1) - pad, Math.max(op.x0, op.x1) + pad, Math.max(op.y0, op.y1) + pad];
+  }
+  if (op.t === 'text') {
+    const ctx = paintMeasure();
+    ctx.font = paintFontFor(op);
+    const lines = String(op.text || '').split('\n');
+    const w = Math.max(10, ...lines.map((l) => ctx.measureText(l).width));
+    const h = lines.length * op.size * 1.18;
+    const pad = op.outline ? Math.max(3, op.size * 0.16) : 4;
+    return [op.x - w / 2 - pad, op.y - h / 2 - pad, op.x + w / 2 + pad, op.y + h / 2 + pad];
+  }
+  if (op.t === 'stamp') {
+    const r = (op.size || 60) * 0.62;
+    return [op.x - r, op.y - r, op.x + r, op.y + r];
+  }
+  return null;
+}
+function paintMatMul(D, M) {
+  return [
+    D[0] * M[0] + D[2] * M[1], D[1] * M[0] + D[3] * M[1],
+    D[0] * M[2] + D[2] * M[3], D[1] * M[2] + D[3] * M[3],
+    D[0] * M[4] + D[2] * M[5] + D[4], D[1] * M[4] + D[3] * M[5] + D[5],
+  ];
+}
+function paintMatInv(M) {
+  const det = M[0] * M[3] - M[1] * M[2] || 1e-9;
+  return [M[3] / det, -M[1] / det, -M[2] / det, M[0] / det, (M[2] * M[5] - M[3] * M[4]) / det, (M[1] * M[4] - M[0] * M[5]) / det];
+}
+function paintMatApply(M, x, y) {
+  return [M[0] * x + M[2] * y + M[4], M[1] * x + M[3] * y + M[5]];
+}
+function paintMatIsId(M) {
+  return !M || (Math.abs(M[0] - 1) < 1e-6 && Math.abs(M[1]) < 1e-6 && Math.abs(M[2]) < 1e-6 && Math.abs(M[3] - 1) < 1e-6 && Math.abs(M[4]) < 0.01 && Math.abs(M[5]) < 0.01);
+}
+function paintMatScale(M) {
+  return Math.sqrt(Math.abs(M[0] * M[3] - M[1] * M[2])) || 1;
+}
+function paintMatGesture(cx, cy, dx, dy, s, th) {
+  const a = s * Math.cos(th);
+  const b = s * Math.sin(th);
+  return [a, b, -b, a, cx + dx - (a * cx - b * cy), cy + dy - (b * cx + a * cy)];
+}
+function paintBoxXf(b, M) {
+  if (!b || !M) return b;
+  const pts = [paintMatApply(M, b[0], b[1]), paintMatApply(M, b[2], b[1]), paintMatApply(M, b[2], b[3]), paintMatApply(M, b[0], b[3])];
+  return [Math.min(...pts.map((p) => p[0])), Math.min(...pts.map((p) => p[1])), Math.max(...pts.map((p) => p[0])), Math.max(...pts.map((p) => p[1]))];
+}
+function paintHitOp(op, x, y, W, H, M, tol) {
+  let ux = x;
+  let uy = y;
+  let t = tol;
+  if (M) {
+    const q = paintMatApply(paintMatInv(M), x, y);
+    ux = q[0];
+    uy = q[1];
+    t = tol / paintMatScale(M);
+  }
+  if (op.t === 'stroke') {
+    const xfs = paintSymXf(op.sym || 'off', W, H);
+    const lim = (op.size || 8) / 2 + t;
+    const pts = op.pts || [];
+    for (const xf of xfs) {
+      for (let k = 0; k < pts.length; k++) {
+        const p = xf(pts[k][0], pts[k][1]);
+        if (k === 0) { if (Math.hypot(ux - p[0], uy - p[1]) <= lim) return true; continue; }
+        const q = xf(pts[k - 1][0], pts[k - 1][1]);
+        const dx = p[0] - q[0];
+        const dy = p[1] - q[1];
+        const L2 = dx * dx + dy * dy || 1;
+        const tt = Math.max(0, Math.min(1, ((ux - q[0]) * dx + (uy - q[1]) * dy) / L2));
+        if (Math.hypot(ux - (q[0] + tt * dx), uy - (q[1] + tt * dy)) <= lim) return true;
+      }
+    }
+    return false;
+  }
+  const b = paintOpBox(op, W, H);
+  if (!b) return false;
+  return ux >= b[0] - t && ux <= b[2] + t && uy >= b[1] - t && uy <= b[3] + t;
+}
+function isPaintUrl(url) {
+  return /-zpaint\.(png|jpe?g)(\?|#|$)/i.test(String(url || ''));
+}
+async function uploadPaintFile(file, userId) {
+  try {
+    const ext = file.type === 'image/jpeg' ? 'jpg' : 'png';
+    const path = `${userId}/${crypto.randomUUID()}-zpaint.${ext}`;
+    const { error } = await supabase.storage.from('chat-media').upload(path, file, { contentType: file.type || 'image/png' });
+    if (!error) {
+      const { data } = supabase.storage.from('chat-media').getPublicUrl(path);
+      if (data && data.publicUrl) return { url: data.publicUrl, error: null };
+    }
+  } catch {}
+  return uploadMedia(file, userId);
+}
+async function paintLoadSeed(url) {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const buf = new Uint8Array(await res.arrayBuffer());
+    const project = await paintReadProjectBytes(buf);
+    if (project) return { project };
+    const type = res.headers.get('content-type') || '';
+    return { photo: new Blob([buf], { type: /^image\//.test(type) ? type : 'image/jpeg' }) };
+  } catch { return null; }
+}
+
 function PaintToolIcon({ k, size = 24 }) {
   const p = { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': 'true' };
   if (k === 'brush') return <svg {...p}><path d="M18.5 3.5c1 1 1 2.6 0 3.6L10 15.6 8.4 14 16.9 5.5c1-1 .6-1 1.6-2z" /><path d="M8.4 14c-2.1 0-3.6 1.6-3.6 3.6 0 1.1-.6 2-1.8 2.4 1.2.7 2.6 1 3.9 1 2.6 0 4.7-2.1 4.7-4.7L10 15.6" /></svg>;
@@ -26360,6 +27513,7 @@ function PaintToolIcon({ k, size = 24 }) {
   if (k === 'shapes') return <svg {...p}><rect x="3.5" y="12.5" width="8" height="8" rx="1.6" /><circle cx="16.5" cy="7.5" r="4" /><path d="M14 20.5l3.2-5.5 3.3 5.5z" /></svg>;
   if (k === 'text') return <svg {...p}><path d="M5 6.5V5h14v1.5" /><path d="M12 5v14" /><path d="M9 19h6" /></svg>;
   if (k === 'stamp') return <svg {...p}><circle cx="12" cy="12" r="8.5" /><path d="M8.6 14.2c.8 1.1 2 1.8 3.4 1.8s2.6-.7 3.4-1.8" /><circle cx="9.2" cy="10" r=".6" fill="currentColor" /><circle cx="14.8" cy="10" r=".6" fill="currentColor" /></svg>;
+  if (k === 'move') return <svg {...p}><path d="M12 3v18M3 12h18" /><path d="M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3" /></svg>;
   if (k === 'picker') return <svg {...p}><path d="M14.5 5.5l4 4" /><path d="M16.8 3.2a2 2 0 0 1 2.8 0l1.2 1.2a2 2 0 0 1 0 2.8l-2.3 2.3-4-4z" /><path d="M14.5 5.5L5 15v4h4l9.5-9.5" /></svg>;
   if (k === 'undo') return <svg {...p}><path d="M9 14L4 9l5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" /></svg>;
   if (k === 'redo') return <svg {...p}><path d="M15 14l5-5-5-5" /><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13" /></svg>;
@@ -26391,7 +27545,7 @@ function paintBrushPreview(k, color) {
   return c.toDataURL();
 }
 
-function PaintStudio({ onClose, onSend, recipientName, onAskBot }) {
+function PaintStudio({ onClose, onSend, recipientName, onAskBot, initial }) {
   const { theme } = useTheme();
   const stageRef = useRef(null);
   const viewRef = useRef(null);
@@ -26424,8 +27578,10 @@ function PaintStudio({ onClose, onSend, recipientName, onAskBot }) {
   const [confirmClear, setConfirmClear] = useState(false);
   const [idea, setIdea] = useState('');
   const [zoomPct, setZoomPct] = useState(100);
+  const [selInfo, setSelInfo] = useState(null);
+  const [loadGen, setLoadGen] = useState(0);
   const photoInputRef = useRef(null);
-  const st = useRef({ ops: [], redo: [], cps: [], live: null, liveRender: null, shape: null, pointers: new Map(), pinch: null, view: { s: 1, ox: 0, oy: 0, z: 1, px: 0, py: 0 }, dirty: true, raf: 0, steadyPt: null, magicUndo: null, downAt: 0, textDrag: null });
+  const st = useRef({ ops: [], redo: [], cps: [], live: null, liveRender: null, shape: null, pointers: new Map(), pinch: null, view: { s: 1, ox: 0, oy: 0, z: 1, px: 0, py: 0 }, dirty: true, raf: 0, steadyPt: null, magicUndo: null, downAt: 0, textDrag: null, idSeq: 0, xf: new Map(), hide: new Set(), lift: new Map(), liftAt: new Map(), idx: new Map(), sel: null, mv: null, marquee: null, pinchHold: false, keyTimer: 0 });
   const toolRef = useRef({});
   toolRef.current = { tool, brush, shape, shapeFill, color, alpha, size, sym, steady, magic, stamp, textEdit };
 
@@ -26435,7 +27591,7 @@ function PaintStudio({ onClose, onSend, recipientName, onAskBot }) {
   if (!L.current || L.current.W !== W || L.current.H !== H) {
     const tmp = mk(W, H);
     tmp.getContext('2d', { willReadFrequently: true });
-    L.current = { W, H, bg: mk(W, H), paint: mk(W, H), live: mk(W, H), art: mk(W, H), work: mk(W, H), tmp, fillc: mk(W, H) };
+    L.current = { W, H, bg: mk(W, H), paint: mk(W, H), live: mk(W, H), art: mk(W, H), work: mk(W, H), tmp, fillc: mk(W, H), objc: mk(W, H) };
   }
 
   const drawBg = () => {
@@ -26496,30 +27652,37 @@ function PaintStudio({ onClose, onSend, recipientName, onAskBot }) {
     ctx.drawImage(art, 0, 0);
     return ctx;
   };
-  const applyOp = (op, ctx) => {
+  const applyOpRaw = (op, ctx, M) => {
     ctx.save();
     if (op.t === 'clear') { ctx.clearRect(0, 0, W, H); ctx.restore(); return; }
     if (op.t === 'stroke') {
       const { work } = L.current;
       const wctx = work.getContext('2d');
+      wctx.setTransform(1, 0, 0, 1, 0, 0);
       wctx.clearRect(0, 0, W, H);
+      if (M) wctx.setTransform(M[0], M[1], M[2], M[3], M[4], M[5]);
       makePaintRenderer(op, W, H)(wctx, null, true);
+      wctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.globalAlpha = op.alpha * (op.brush === 'highlighter' ? 0.4 : op.brush === 'marker' ? 0.8 : 1);
       ctx.globalCompositeOperation = op.eraser ? 'destination-out' : 'source-over';
       ctx.drawImage(work, 0, 0);
     } else if (op.t === 'shape') {
       ctx.globalAlpha = op.alpha;
+      if (M) ctx.transform(M[0], M[1], M[2], M[3], M[4], M[5]);
       paintDrawShape(ctx, op);
     } else if (op.t === 'text') {
       ctx.globalAlpha = op.alpha;
+      if (M) ctx.transform(M[0], M[1], M[2], M[3], M[4], M[5]);
       paintDrawText(ctx, op);
     } else if (op.t === 'stamp') {
+      if (M) ctx.transform(M[0], M[1], M[2], M[3], M[4], M[5]);
       paintDrawStamp(ctx, op);
     } else if (op.t === 'fill') {
       const cctx = composite();
       let img;
       try { img = cctx.getImageData(0, 0, W, H); } catch { ctx.restore(); return; }
-      const mask = paintFloodMask(img, W, H, op.x, op.y, op.tol || 40);
+      const seed = M ? paintMatApply(M, op.x, op.y) : [op.x, op.y];
+      const mask = paintFloodMask(img, W, H, seed[0], seed[1], op.tol || 40);
       if (mask) {
         const fc = L.current.fillc;
         const fctx = fc.getContext('2d');
@@ -26543,33 +27706,122 @@ function PaintStudio({ onClose, onSend, recipientName, onAskBot }) {
     }
     ctx.restore();
   };
-  const rebuild = () => {
+  const computeXf = () => {
     const s = st.current;
+    const xf = new Map();
+    const hide = new Set();
+    const lift = new Map();
+    const liftAt = new Map();
+    const idx = new Map();
+    s.ops.forEach((op, k) => {
+      if (op.t !== 'xform') { if (op.id != null) idx.set(op.id, k); return; }
+      (op.refs || []).forEach((id) => {
+        if (op.hide) { hide.add(id); return; }
+        if (!Array.isArray(op.m)) return;
+        const prev = xf.get(id);
+        xf.set(id, prev ? paintMatMul(op.m, prev) : op.m.slice());
+        lift.set(id, k);
+      });
+    });
+    lift.forEach((k, id) => {
+      const j = idx.get(id);
+      if (j == null || j > k) return;
+      if (!liftAt.has(k)) liftAt.set(k, []);
+      liftAt.get(k).push(j);
+    });
+    liftAt.forEach((arr) => arr.sort((a, b) => a - b));
+    s.xf = xf;
+    s.hide = hide;
+    s.lift = lift;
+    s.liftAt = liftAt;
+    s.idx = idx;
+  };
+  const matFor = (op) => {
+    const d = op.id != null ? st.current.xf.get(op.id) : null;
+    if (op.m && d) return paintMatMul(d, op.m);
+    return d || op.m || null;
+  };
+  const hiddenOp = (op, extra) => st.current.hide.has(op.id) || !!(extra && extra.has(op.id));
+  const drawStep = (k, ctx, extra) => {
+    const s = st.current;
+    const op = s.ops[k];
+    if (op.t === 'xform') {
+      const list = s.liftAt.get(k);
+      if (list) list.forEach((j) => { const o = s.ops[j]; if (!hiddenOp(o, extra)) applyOpRaw(o, ctx, matFor(o)); });
+      return;
+    }
+    if (s.lift.has(op.id) || hiddenOp(op, extra)) return;
+    applyOpRaw(op, ctx, matFor(op));
+  };
+  const drawOrder = () => {
+    const s = st.current;
+    const out = [];
+    s.ops.forEach((op, k) => {
+      if (op.t === 'xform') { const list = s.liftAt.get(k); if (list) list.forEach((j) => out.push(j)); return; }
+      if (s.lift.has(op.id)) return;
+      out.push(k);
+    });
+    return out;
+  };
+  const rebuild = (extraIn) => {
+    const s = st.current;
+    const extra = s.editHide != null ? new Set([...(extraIn || []), s.editHide]) : extraIn;
+    computeXf();
     const { paint } = L.current;
     const ctx = paint.getContext('2d');
     ctx.clearRect(0, 0, W, H);
     const n = s.ops.length;
-    const cp = s.cps.filter((c) => c.i <= n).sort((a, b) => b.i - a.i)[0];
+    let lastX = -1;
+    let minHide = n;
+    for (let k = 0; k < n; k++) {
+      const op = s.ops[k];
+      if (op.t === 'xform') lastX = k;
+      if (extra && minHide === n && extra.has(op.id)) minHide = k;
+    }
+    const cp = s.cps.filter((c) => c.i <= n && c.i > lastX && c.i <= minHide).sort((a, b) => b.i - a.i)[0];
     let from = 0;
     if (cp) { ctx.drawImage(cp.c, 0, 0); from = cp.i; }
-    for (let k = from; k < n; k++) applyOp(s.ops[k], ctx);
+    for (let k = from; k < n; k++) drawStep(k, ctx, extra);
     s.dirty = true;
     schedule();
   };
+  const snapshot = () => {
+    const s = st.current;
+    const c = mk(W, H);
+    c.getContext('2d').drawImage(L.current.paint, 0, 0);
+    s.cps = s.cps.filter((x) => x.i !== s.ops.length);
+    s.cps.push({ i: s.ops.length, c });
+    if (s.cps.length > 4) s.cps.shift();
+  };
   const pushOp = (op) => {
     const s = st.current;
+    if (op.id == null) { s.idSeq += 1; op.id = s.idSeq; }
     s.ops.push(op);
     s.redo = [];
     s.cps = s.cps.filter((c) => c.i <= s.ops.length - 1);
-    applyOp(op, L.current.paint.getContext('2d'));
-    if (s.ops.length % 12 === 0) {
-      const c = mk(W, H);
-      c.getContext('2d').drawImage(L.current.paint, 0, 0);
-      s.cps.push({ i: s.ops.length, c });
-      if (s.cps.length > 4) s.cps.shift();
+    if (op.t === 'xform') {
+      rebuild();
+      snapshot();
+    } else {
+      s.idx.set(op.id, s.ops.length - 1);
+      applyOpRaw(op, L.current.paint.getContext('2d'), matFor(op));
+      if (s.ops.length % 12 === 0) snapshot();
     }
     setCount(s.ops.length);
     setRedoCount(0);
+    s.dirty = true;
+    schedule();
+    return op;
+  };
+  const clearSel = () => {
+    const s = st.current;
+    clearTimeout(s.keyTimer);
+    const lifted = s.mv && s.mv.lifted;
+    s.sel = null;
+    s.mv = null;
+    s.marquee = null;
+    if (lifted) rebuild();
+    setSelInfo(null);
     s.dirty = true;
     schedule();
   };
@@ -26577,8 +27829,13 @@ function PaintStudio({ onClose, onSend, recipientName, onAskBot }) {
     const s = st.current;
     if (!s.ops.length) return;
     hapticTap();
-    s.redo.push(s.ops.pop());
+    if (textEdit && textEdit.replaces != null) { s.editHide = null; setTextEdit(null); }
+    const b = s.ops[s.ops.length - 1].batch;
+    do { s.redo.push(s.ops.pop()); } while (b && s.ops.length && s.ops[s.ops.length - 1].batch === b);
     s.magicUndo = null;
+    s.sel = null;
+    s.mv = null;
+    setSelInfo(null);
     rebuild();
     setCount(s.ops.length);
     setRedoCount(s.redo.length);
@@ -26587,13 +27844,230 @@ function PaintStudio({ onClose, onSend, recipientName, onAskBot }) {
     const s = st.current;
     if (!s.redo.length) return;
     hapticTap();
-    const op = s.redo.pop();
-    s.ops.push(op);
-    applyOp(op, L.current.paint.getContext('2d'));
+    if (textEdit && textEdit.replaces != null) { s.editHide = null; setTextEdit(null); }
+    const b = s.redo[s.redo.length - 1].batch;
+    const back = [];
+    do { back.push(s.redo.pop()); } while (b && s.redo.length && s.redo[s.redo.length - 1].batch === b);
+    s.sel = null;
+    s.mv = null;
+    setSelInfo(null);
+    back.forEach((op) => s.ops.push(op));
+    if (back.some((op) => op.t === 'xform')) rebuild();
+    else {
+      computeXf();
+      back.forEach((op) => applyOpRaw(op, L.current.paint.getContext('2d'), matFor(op)));
+    }
     setCount(s.ops.length);
     setRedoCount(s.redo.length);
     s.dirty = true;
     schedule();
+  };
+
+  const boxOf = (op) => {
+    const b = paintOpBox(op, W, H);
+    const M = matFor(op);
+    return M ? paintBoxXf(b, M) : b;
+  };
+  const visibleObjects = () => {
+    const s = st.current;
+    const order = drawOrder();
+    const out = [];
+    for (let q = order.length - 1; q >= 0; q--) {
+      const op = s.ops[order[q]];
+      if (op.t === 'clear') break;
+      if (op.t === 'fill' || (op.t === 'stroke' && op.eraser) || s.hide.has(op.id)) continue;
+      out.push(order[q]);
+    }
+    return out;
+  };
+  const hitAt = (x, y, pointerType, only) => {
+    const s = st.current;
+    const tol = (pointerType === 'touch' ? 16 : 8) / s.view.s;
+    const list = visibleObjects();
+    for (let q = 0; q < list.length; q++) {
+      const op = s.ops[list[q]];
+      if (only && op.t !== only) continue;
+      if (paintHitOp(op, x, y, W, H, matFor(op), tol)) return list[q];
+    }
+    return -1;
+  };
+  const selBox = () => {
+    const s = st.current;
+    if (!s.sel) return null;
+    let b = null;
+    s.sel.ids.forEach((id) => {
+      const k = s.idx.get(id);
+      if (k == null || s.hide.has(id)) return;
+      const bb = boxOf(s.ops[k]);
+      if (!bb) return;
+      b = b ? [Math.min(b[0], bb[0]), Math.min(b[1], bb[1]), Math.max(b[2], bb[2]), Math.max(b[3], bb[3])] : bb.slice();
+    });
+    return b;
+  };
+  const groupFor = (ids) => {
+    const s = st.current;
+    const set = new Set(ids);
+    const order = drawOrder();
+    const pos = new Map();
+    order.forEach((k, q) => pos.set(k, q));
+    const boxes = [];
+    let firstPos = Infinity;
+    ids.forEach((id) => {
+      const k = s.idx.get(id);
+      if (k == null) return;
+      const b = boxOf(s.ops[k]);
+      if (b) boxes.push(b);
+      firstPos = Math.min(firstPos, pos.has(k) ? pos.get(k) : Infinity);
+    });
+    let lastClear = -1;
+    order.forEach((k, q) => { if (s.ops[k].t === 'clear') lastClear = q; });
+    const owners = [];
+    order.forEach((k, q) => {
+      const op = s.ops[k];
+      if (q <= lastClear || s.hide.has(op.id) || op.t === 'fill' || op.t === 'clear' || (op.t === 'stroke' && op.eraser)) return;
+      const b = boxOf(op);
+      if (b) owners.push({ q, id: op.id, b, area: Math.max(1, (b[2] - b[0]) * (b[3] - b[1])) });
+    });
+    order.forEach((k, q) => {
+      const op = s.ops[k];
+      if (q <= firstPos || q <= lastClear || set.has(op.id) || s.hide.has(op.id)) return;
+      if (op.t === 'fill') {
+        const M = matFor(op);
+        const p = M ? paintMatApply(M, op.x, op.y) : [op.x, op.y];
+        let best = null;
+        owners.forEach((o) => {
+          if (o.q >= q || p[0] < o.b[0] || p[0] > o.b[2] || p[1] < o.b[1] || p[1] > o.b[3]) return;
+          if (!best || o.area < best.area || (o.area === best.area && o.q > best.q)) best = o;
+        });
+        if (best && set.has(best.id)) set.add(op.id);
+      } else if (op.t === 'stroke' && op.eraser) {
+        const b = boxOf(op);
+        if (!b) return;
+        const area = Math.max(1, (b[2] - b[0]) * (b[3] - b[1]));
+        const inside = boxes.some((g) => {
+          const ix = Math.max(0, Math.min(b[2], g[2]) - Math.max(b[0], g[0]));
+          const iy = Math.max(0, Math.min(b[3], g[3]) - Math.max(b[1], g[1]));
+          return (ix * iy) / area >= 0.7;
+        });
+        if (inside) set.add(op.id);
+      }
+    });
+    return [...set];
+  };
+  const setSelection = (ids) => {
+    const s = st.current;
+    if (!ids || !ids.length) { clearSel(); return; }
+    s.sel = { ids: ids.slice(), group: groupFor(ids), box: null };
+    s.sel.box = selBox();
+    const one = ids.length === 1 ? s.ops[s.idx.get(ids[0])] : null;
+    setSelInfo({ n: ids.length, text: !!(one && one.t === 'text') });
+    s.dirty = true;
+    schedule();
+  };
+  const liftSel = () => {
+    const s = st.current;
+    if (!s.sel) return;
+    const hideSet = new Set(s.sel.group);
+    rebuild(hideSet);
+    const { objc } = L.current;
+    const octx = objc.getContext('2d');
+    octx.setTransform(1, 0, 0, 1, 0, 0);
+    octx.globalAlpha = 1;
+    octx.globalCompositeOperation = 'source-over';
+    octx.clearRect(0, 0, W, H);
+    const keep = L.current.paint;
+    L.current.paint = objc;
+    try {
+      drawOrder().forEach((k) => { const o = s.ops[k]; if (hideSet.has(o.id) && !s.hide.has(o.id)) applyOpRaw(o, octx, matFor(o)); });
+    } finally { L.current.paint = keep; }
+  };
+  const finishMove = () => {
+    const s = st.current;
+    const mv = s.mv;
+    s.mv = null;
+    clearTimeout(s.keyTimer);
+    if (!mv || !mv.lifted) return;
+    if (s.sel && !paintMatIsId(mv.D)) { pushOp({ t: 'xform', refs: s.sel.group.slice(), m: mv.D }); hapticTap(); }
+    else rebuild();
+    if (s.sel) s.sel.box = selBox();
+    s.dirty = true;
+    schedule();
+  };
+  const deleteSel = () => {
+    const s = st.current;
+    if (!s.sel) return;
+    if (s.mv) finishMove();
+    if (!s.sel) return;
+    hapticTap();
+    pushOp({ t: 'xform', refs: s.sel.group.slice(), hide: true });
+    clearSel();
+    say('Deleted');
+  };
+  const frontSel = () => {
+    const s = st.current;
+    if (!s.sel) return;
+    if (s.mv) finishMove();
+    if (!s.sel) return;
+    hapticTap();
+    pushOp({ t: 'xform', refs: s.sel.group.slice(), m: [1, 0, 0, 1, 0, 0] });
+    s.sel.box = selBox();
+    say('Moved to the front');
+  };
+  const copySel = () => {
+    const s = st.current;
+    if (!s.sel) return;
+    if (s.mv) finishMove();
+    if (!s.sel) return;
+    hapticTap();
+    const group = new Set(s.sel.group);
+    const batch = `c${Date.now()}`;
+    const off = [1, 0, 0, 1, 36, 36];
+    const map = new Map();
+    drawOrder().forEach((k) => {
+      const o = s.ops[k];
+      if (!group.has(o.id) || s.hide.has(o.id)) return;
+      const c = JSON.parse(JSON.stringify(o));
+      delete c.id;
+      c.m = paintMatMul(off, matFor(o) || [1, 0, 0, 1, 0, 0]);
+      c.batch = batch;
+      pushOp(c);
+      map.set(o.id, c.id);
+    });
+    setSelection(s.sel.ids.map((id) => map.get(id)).filter((x) => x != null));
+    say('Copied');
+  };
+  const selectAll = () => {
+    const s = st.current;
+    const ids = visibleObjects().map((k) => s.ops[k].id);
+    if (!ids.length) { say('Draw something first'); return; }
+    hapticTap();
+    setSelection(ids);
+  };
+  const nudge = (dx, dy) => {
+    const s = st.current;
+    if (!s.sel) return;
+    if (s.mv && s.mv.kind !== 'key') return;
+    if (!s.mv) { liftSel(); s.mv = { kind: 'key', D: [1, 0, 0, 1, 0, 0], lifted: true }; }
+    s.mv.D = [1, 0, 0, 1, s.mv.D[4] + dx, s.mv.D[5] + dy];
+    clearTimeout(s.keyTimer);
+    s.keyTimer = setTimeout(() => finishMove(), 650);
+    s.dirty = true;
+    schedule();
+  };
+  const editText = (op, from) => {
+    const M = matFor(op);
+    clearSel();
+    st.current.editHide = op.id;
+    rebuild();
+    setTextEdit({ x: op.x, y: op.y, text: op.text, font: op.font || 'sans', size: op.size, color: op.color, alpha: op.alpha == null ? 1 : op.alpha, outline: op.outline || null, m: M, replaces: op.id, from });
+    setTool('text');
+  };
+  const rawPt = (te, x, y) => (te && te.m ? paintMatApply(paintMatInv(te.m), x, y) : [x, y]);
+  const hasVisible = () => {
+    const s = st.current;
+    let start = 0;
+    s.ops.forEach((op, k) => { if (op.t === 'clear') start = k + 1; });
+    return s.ops.slice(start).some((op) => op.t !== 'xform' && op.t !== 'clear' && !(op.t === 'stroke' && op.eraser) && !s.hide.has(op.id));
   };
 
   const fit = () => {
@@ -26675,30 +28149,107 @@ function PaintStudio({ onClose, onSend, recipientName, onAskBot }) {
         ctx.restore();
       }
     }
+    const mv = s.mv;
+    if (mv && mv.lifted) {
+      ctx.save();
+      ctx.transform(mv.D[0], mv.D[1], mv.D[2], mv.D[3], mv.D[4], mv.D[5]);
+      ctx.drawImage(L.current.objc, 0, 0);
+      ctx.restore();
+    }
     ctx.drawImage(art, 0, 0);
     if (s.shape) { ctx.save(); ctx.globalAlpha = s.shape.alpha; paintDrawShape(ctx, s.shape); ctx.restore(); }
     const te = toolRef.current.textEdit;
     if (te && te.text) {
+      const k = te.m ? paintMatScale(te.m) : 1;
       ctx.save();
+      if (te.m) ctx.transform(te.m[0], te.m[1], te.m[2], te.m[3], te.m[4], te.m[5]);
       ctx.globalAlpha = te.alpha;
       paintDrawText(ctx, te);
       ctx.restore();
       ctx.save();
+      if (te.m) ctx.transform(te.m[0], te.m[1], te.m[2], te.m[3], te.m[4], te.m[5]);
       ctx.font = paintFontFor(te);
       const lines = te.text.split('\n');
       const wmax = Math.max(...lines.map((l) => ctx.measureText(l).width));
       const hh = lines.length * te.size * 1.18;
-      ctx.setLineDash([10 / v.s, 8 / v.s]);
-      ctx.lineWidth = 2 / v.s;
+      ctx.setLineDash([10 / (v.s * k), 8 / (v.s * k)]);
+      ctx.lineWidth = 2 / (v.s * k);
       ctx.strokeStyle = '#8C6CFF';
       ctx.strokeRect(te.x - wmax / 2 - 14, te.y - hh / 2 - 10, wmax + 28, hh + 20);
       ctx.restore();
     }
+    if (s.sel && s.sel.box && toolRef.current.tool === 'move') {
+      const cs = selCorners(s.sel.box, mv && mv.lifted ? mv.D : null);
+      const hd = selHandles(cs);
+      const poly = () => { ctx.beginPath(); cs.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]))); ctx.closePath(); };
+      ctx.save();
+      ctx.lineWidth = 3.4 / v.s;
+      ctx.strokeStyle = 'rgba(255,255,255,0.92)';
+      poly();
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(hd.top[0], hd.top[1]);
+      ctx.lineTo(hd.rotate[0], hd.rotate[1]);
+      ctx.stroke();
+      ctx.setLineDash([9 / v.s, 6 / v.s]);
+      ctx.lineWidth = 1.8 / v.s;
+      ctx.strokeStyle = '#8C6CFF';
+      poly();
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.moveTo(hd.top[0], hd.top[1]);
+      ctx.lineTo(hd.rotate[0], hd.rotate[1]);
+      ctx.stroke();
+      [hd.scale, hd.rotate].forEach((p) => {
+        ctx.beginPath();
+        ctx.arc(p[0], p[1], 10 / v.s, 0, Math.PI * 2);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fill();
+        ctx.lineWidth = 2.6 / v.s;
+        ctx.strokeStyle = '#8C6CFF';
+        ctx.stroke();
+      });
+      ctx.restore();
+    }
+    if (s.marquee) {
+      const q = s.marquee;
+      const x0 = Math.min(q.x0, q.x1);
+      const y0 = Math.min(q.y0, q.y1);
+      ctx.save();
+      ctx.fillStyle = 'rgba(140,108,255,0.10)';
+      ctx.fillRect(x0, y0, Math.abs(q.x1 - q.x0), Math.abs(q.y1 - q.y0));
+      ctx.setLineDash([9 / v.s, 6 / v.s]);
+      ctx.lineWidth = 1.8 / v.s;
+      ctx.strokeStyle = '#8C6CFF';
+      ctx.strokeRect(x0, y0, Math.abs(q.x1 - q.x0), Math.abs(q.y1 - q.y0));
+      ctx.restore();
+    }
     ctx.setTransform(1, 0, 0, 1, 0, 0);
   };
+  const selCorners = (b, D) => {
+    const pad = 8 / st.current.view.s;
+    const c = [[b[0] - pad, b[1] - pad], [b[2] + pad, b[1] - pad], [b[2] + pad, b[3] + pad], [b[0] - pad, b[3] + pad]];
+    return D ? c.map((p) => paintMatApply(D, p[0], p[1])) : c;
+  };
+  const selHandles = (cs) => {
+    const off = 34 / st.current.view.s;
+    const cx = (cs[0][0] + cs[2][0]) / 2;
+    const cy = (cs[0][1] + cs[2][1]) / 2;
+    const tx = (cs[0][0] + cs[1][0]) / 2;
+    const ty = (cs[0][1] + cs[1][1]) / 2;
+    const len = Math.hypot(tx - cx, ty - cy) || 1;
+    return { scale: cs[2], rotate: [tx + ((tx - cx) / len) * off, ty + ((ty - cy) / len) * off], top: [tx, ty], c: [cx, cy] };
+  };
 
-  useEffect(() => { drawBg(); st.current.dirty = true; schedule(); }, [bgKey, bgPhoto, W, H]);
-  useEffect(() => { drawArt(); st.current.dirty = true; schedule(); }, [template, W, H]);
+  const refreshFills = () => {
+    const s = st.current;
+    if (!s.ops.some((o) => o.t === 'fill')) return;
+    s.cps = [];
+    rebuild();
+  };
+  useEffect(() => { drawBg(); refreshFills(); st.current.dirty = true; schedule(); }, [bgKey, bgPhoto, W, H]);
+  useEffect(() => { drawArt(); refreshFills(); st.current.dirty = true; schedule(); }, [template, W, H]);
   useEffect(() => { schedule(); }, [textEdit]);
   useEffect(() => {
     fit();
@@ -26707,11 +28258,18 @@ function PaintStudio({ onClose, onSend, recipientName, onAskBot }) {
     window.addEventListener('resize', fit);
     return () => { if (ro) ro.disconnect(); window.removeEventListener('resize', fit); cancelAnimationFrame(st.current.raf); };
   }, [W, H]);
+  useEffect(() => () => clearTimeout(st.current.keyTimer), []);
 
-  const toDoc = (e) => {
+  const toDocXY = (cx, cy) => {
     const r = viewRef.current.getBoundingClientRect();
     const v = st.current.view;
-    return [(e.clientX - r.left - v.ox) / v.s, (e.clientY - r.top - v.oy) / v.s];
+    return [(cx - r.left - v.ox) / v.s, (cy - r.top - v.oy) / v.s];
+  };
+  const toDoc = (e) => toDocXY(e.clientX, e.clientY);
+  const toScreen = (p) => {
+    const r = viewRef.current.getBoundingClientRect();
+    const v = st.current.view;
+    return [r.left + v.ox + p[0] * v.s, r.top + v.oy + p[1] * v.s];
   };
   const rememberColor = (c) => setRecent((prev) => [c, ...prev.filter((x) => x !== c)].slice(0, 8));
   const sampleAt = (x, y) => {
@@ -26791,12 +28349,41 @@ function PaintStudio({ onClose, onSend, recipientName, onAskBot }) {
 
   const onDown = (e) => {
     const s = st.current;
+    if (e.pointerType === 'mouse' && (e.button === 1 || (e.button === 0 && s.spaceHeld))) {
+      e.preventDefault();
+      try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
+      s.panDrag = { id: e.pointerId, x: e.clientX, y: e.clientY, px: s.view.px, py: s.view.py };
+      return;
+    }
     if (e.pointerType === 'mouse' && e.button !== 0) return;
+    if (e.pointerType === 'touch' && [...s.pointers.values()].some((p) => p.pen)) return;
+    if (e.pointerType === 'pen') {
+      let dropped = false;
+      s.pointers.forEach((pt, id) => { if (!pt.pen) { s.pointers.delete(id); dropped = true; } });
+      if (dropped) {
+        if (s.live) endStroke(true);
+        s.pinch = null;
+        s.shape = null;
+        s.marquee = null;
+        if (s.mv && s.mv.kind === 'pinch') finishMove();
+        s.pinchHold = false;
+      }
+    }
     try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
-    s.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    s.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, pen: e.pointerType === 'pen' });
+    if (s.pinchHold) return;
+    if (s.mv && s.mv.kind === 'key') finishMove();
     if (s.pointers.size === 2) {
       if (s.live) endStroke(s.live.pts.length < 6 || Date.now() - s.downAt < 180);
       if (s.shape) s.shape = null;
+      if (s.marquee) { s.marquee = null; s.dirty = true; schedule(); }
+      if (toolRef.current.tool === 'move' && s.sel) {
+        if (!s.mv || !s.mv.lifted) liftSel();
+        const base = s.mv && s.mv.lifted ? s.mv.D : [1, 0, 0, 1, 0, 0];
+        s.mv = { kind: 'pinch', base, D: base, lifted: true, p0: [...s.pointers.values()].slice(0, 2).map((p) => toDocXY(p.x, p.y)) };
+        s.tap = null;
+        return;
+      }
       const [a, b] = [...s.pointers.values()];
       const v = s.view;
       s.pinch = { d0: Math.hypot(a.x - b.x, a.y - b.y) || 1, z0: v.z, mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2, px0: v.px, py0: v.py };
@@ -26809,7 +28396,25 @@ function PaintStudio({ onClose, onSend, recipientName, onAskBot }) {
     s.tap = { x, y, cx: e.clientX, cy: e.clientY, moved: false };
     if (t.textEdit) {
       const te = t.textEdit;
-      if (Math.abs(x - te.x) < 400 && Math.abs(y - te.y) < Math.max(80, te.size * 2)) s.textDrag = { dx: te.x - x, dy: te.y - y };
+      const [rx, ry] = rawPt(te, x, y);
+      if (Math.abs(rx - te.x) < 400 && Math.abs(ry - te.y) < Math.max(80, te.size * 2)) s.textDrag = { dx: te.x - rx, dy: te.y - ry };
+      return;
+    }
+    if (t.tool === 'move') {
+      const I = [1, 0, 0, 1, 0, 0];
+      const near = (p, rad) => { const q = toScreen(p); return Math.hypot(e.clientX - q[0], e.clientY - q[1]) <= rad; };
+      if (s.sel && s.sel.box) {
+        const hd = selHandles(selCorners(s.sel.box, null));
+        if (near(hd.rotate, 26)) { s.mv = { kind: 'rotate', c: hd.c, a0: Math.atan2(y - hd.c[1], x - hd.c[0]), D: I, lifted: false }; return; }
+        if (near(hd.scale, 26)) { s.mv = { kind: 'scale', c: hd.c, d0: Math.max(1, Math.hypot(x - hd.c[0], y - hd.c[1])), D: I, lifted: false }; return; }
+        const b = s.sel.box;
+        const pad = 10 / s.view.s;
+        if (x >= b[0] - pad && x <= b[2] + pad && y >= b[1] - pad && y <= b[3] + pad) { s.mv = { kind: 'drag', x0: x, y0: y, D: I, lifted: false, wasSel: true }; return; }
+      }
+      const k = hitAt(x, y, e.pointerType);
+      if (k >= 0) { setSelection([s.ops[k].id]); s.mv = { kind: 'drag', x0: x, y0: y, D: I, lifted: false, wasSel: false }; return; }
+      if (s.sel) clearSel();
+      s.marquee = { x0: x, y0: y, x1: x, y1: y };
       return;
     }
     if (t.tool === 'brush' || t.tool === 'eraser') beginStroke(x, y, e);
@@ -26817,8 +28422,26 @@ function PaintStudio({ onClose, onSend, recipientName, onAskBot }) {
   };
   const onMove = (e) => {
     const s = st.current;
+    if (s.panDrag && s.panDrag.id === e.pointerId) {
+      applyZoom(s.view.z, s.panDrag.px + (e.clientX - s.panDrag.x), s.panDrag.py + (e.clientY - s.panDrag.y));
+      return;
+    }
     if (!s.pointers.has(e.pointerId)) return;
-    s.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    s.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, pen: e.pointerType === 'pen' });
+    if (s.pinchHold) return;
+    if (s.mv && s.mv.kind === 'pinch') {
+      if (s.pointers.size < 2) return;
+      const [a, b] = [...s.pointers.values()].slice(0, 2).map((p) => toDocXY(p.x, p.y));
+      const [a0, b0] = s.mv.p0;
+      const m0 = [(a0[0] + b0[0]) / 2, (a0[1] + b0[1]) / 2];
+      const m1 = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+      const sc = Math.max(0.05, Math.min(20, (Math.hypot(a[0] - b[0], a[1] - b[1]) || 1) / (Math.hypot(a0[0] - b0[0], a0[1] - b0[1]) || 1)));
+      const th = Math.atan2(b[1] - a[1], b[0] - a[0]) - Math.atan2(b0[1] - a0[1], b0[0] - a0[0]);
+      s.mv.D = paintMatMul(paintMatGesture(m0[0], m0[1], m1[0] - m0[0], m1[1] - m0[1], sc, th), s.mv.base);
+      s.dirty = true;
+      schedule();
+      return;
+    }
     if (s.pinch && s.pointers.size >= 2) {
       const [a, b] = [...s.pointers.values()];
       const p = s.pinch;
@@ -26831,7 +28454,36 @@ function PaintStudio({ onClose, onSend, recipientName, onAskBot }) {
     if (s.tap && Math.hypot(e.clientX - s.tap.cx, e.clientY - s.tap.cy) > 6) s.tap.moved = true;
     if (s.textDrag && toolRef.current.textEdit) {
       const [x, y] = toDoc(e);
-      setTextEdit((te) => (te ? { ...te, x: x + s.textDrag.dx, y: y + s.textDrag.dy } : te));
+      setTextEdit((te) => { if (!te) return te; const [rx, ry] = rawPt(te, x, y); return { ...te, x: rx + s.textDrag.dx, y: ry + s.textDrag.dy }; });
+      return;
+    }
+    if (s.mv && s.mv.kind !== 'key') {
+      const mv = s.mv;
+      const [x, y] = toDoc(e);
+      if (!mv.lifted) {
+        if (!s.tap || Math.hypot(e.clientX - s.tap.cx, e.clientY - s.tap.cy) < 4) return;
+        liftSel();
+        mv.lifted = true;
+      }
+      if (mv.kind === 'drag') mv.D = [1, 0, 0, 1, x - mv.x0, y - mv.y0];
+      else if (mv.kind === 'scale') mv.D = paintMatGesture(mv.c[0], mv.c[1], 0, 0, Math.max(0.05, Math.min(20, Math.hypot(x - mv.c[0], y - mv.c[1]) / mv.d0)), 0);
+      else if (mv.kind === 'rotate') {
+        let th = Math.atan2(y - mv.c[1], x - mv.c[0]) - mv.a0;
+        th = Math.atan2(Math.sin(th), Math.cos(th));
+        const snap = Math.round(th / (Math.PI / 4)) * (Math.PI / 4);
+        if (Math.abs(th - snap) < 0.055) th = snap;
+        mv.D = paintMatGesture(mv.c[0], mv.c[1], 0, 0, 1, th);
+      }
+      s.dirty = true;
+      schedule();
+      return;
+    }
+    if (s.marquee) {
+      const [x, y] = toDoc(e);
+      s.marquee.x1 = x;
+      s.marquee.y1 = y;
+      s.dirty = true;
+      schedule();
       return;
     }
     if (s.live) {
@@ -26849,14 +28501,45 @@ function PaintStudio({ onClose, onSend, recipientName, onAskBot }) {
   };
   const onUp = (e) => {
     const s = st.current;
+    if (s.panDrag && s.panDrag.id === e.pointerId) { s.panDrag = null; return; }
     if (!s.pointers.has(e.pointerId)) return;
     s.pointers.delete(e.pointerId);
+    if (s.mv && s.mv.kind === 'pinch') { finishMove(); s.pinchHold = s.pointers.size > 0; return; }
+    if (s.pinchHold) { if (s.pointers.size === 0) s.pinchHold = false; return; }
     if (s.pinch) { if (s.pointers.size === 0) s.pinch = null; return; }
     if (s.pointers.size > 0) return;
     const t = toolRef.current;
     const tap = s.tap;
     s.tap = null;
     if (s.textDrag) { s.textDrag = null; return; }
+    if (s.mv && s.mv.kind !== 'key') {
+      const mv = s.mv;
+      if (mv.lifted) { finishMove(); return; }
+      s.mv = null;
+      if (mv.wasSel && tap && !tap.moved && s.sel && s.sel.ids.length === 1) {
+        const one = s.ops[s.idx.get(s.sel.ids[0])];
+        if (one && one.t === 'text') editText(one, 'move');
+      }
+      return;
+    }
+    if (s.marquee) {
+      const q = s.marquee;
+      s.marquee = null;
+      const r = [Math.min(q.x0, q.x1), Math.min(q.y0, q.y1), Math.max(q.x0, q.x1), Math.max(q.y0, q.y1)];
+      if (r[2] - r[0] > 6 / s.view.s && r[3] - r[1] > 6 / s.view.s) {
+        const ids = visibleObjects().map((k) => s.ops[k]).filter((op) => {
+          const b = boxOf(op);
+          if (!b) return false;
+          const ix = Math.max(0, Math.min(b[2], r[2]) - Math.max(b[0], r[0]));
+          const iy = Math.max(0, Math.min(b[3], r[3]) - Math.max(b[1], r[1]));
+          return (ix * iy) / Math.max(1, (b[2] - b[0]) * (b[3] - b[1])) >= 0.6;
+        }).map((op) => op.id);
+        if (ids.length) { hapticTap(); setSelection(ids); } else say('Nothing there to pick');
+      }
+      s.dirty = true;
+      schedule();
+      return;
+    }
     if (s.live) { endStroke(false); return; }
     if (s.shape) {
       const sh = s.shape;
@@ -26878,35 +28561,98 @@ function PaintStudio({ onClose, onSend, recipientName, onAskBot }) {
       hapticTap();
       pushOp({ t: 'stamp', x: tap.x, y: tap.y, emoji: t.stamp, size: Math.max(40, t.size * 6), rot: (Math.random() - 0.5) * 0.5 });
     } else if (t.tool === 'text' && t.textEdit) {
-      setTextEdit((te) => (te ? { ...te, x: tap.x, y: tap.y } : te));
+      setTextEdit((te) => { if (!te) return te; const [rx, ry] = rawPt(te, tap.x, tap.y); return { ...te, x: rx, y: ry }; });
     } else if (t.tool === 'text' && !t.textEdit) {
+      const k = hitAt(tap.x, tap.y, e.pointerType, 'text');
+      if (k >= 0) { editText(st.current.ops[k], 'text'); return; }
       setTextEdit({ x: tap.x, y: tap.y, text: '', font: 'sans', size: Math.max(48, t.size * 4), color: t.color, alpha: t.alpha, outline: null });
     }
   };
+  const zoomAt = (cx, cy, z) => {
+    const v = st.current.view;
+    const r = viewRef.current.getBoundingClientRect();
+    const mx = cx - r.left;
+    const my = cy - r.top;
+    const dx = (mx - v.ox) / v.s;
+    const dy = (my - v.oy) / v.s;
+    const nz = Math.max(1, Math.min(6, z));
+    const ns = v.base * nz;
+    applyZoom(nz, mx - (v.sw - W * ns) / 2 - dx * ns, my - (v.sh - H * ns) / 2 - dy * ns);
+  };
+  const zoomRef = useRef(null);
+  zoomRef.current = zoomAt;
+  useEffect(() => {
+    const el = viewRef.current;
+    if (!el) return undefined;
+    let g0 = null;
+    const wheel = (e) => { if (e.ctrlKey || e.metaKey) e.preventDefault(); };
+    const gs = (e) => { e.preventDefault(); g0 = st.current.pointers.size ? null : st.current.view.z; };
+    const gc = (e) => { e.preventDefault(); if (g0 != null && !st.current.pointers.size && zoomRef.current) zoomRef.current(e.clientX, e.clientY, g0 * (e.scale || 1)); };
+    const ge = (e) => { e.preventDefault(); g0 = null; };
+    el.addEventListener('wheel', wheel, { passive: false });
+    el.addEventListener('gesturestart', gs);
+    el.addEventListener('gesturechange', gc);
+    el.addEventListener('gestureend', ge);
+    return () => {
+      el.removeEventListener('wheel', wheel);
+      el.removeEventListener('gesturestart', gs);
+      el.removeEventListener('gesturechange', gc);
+      el.removeEventListener('gestureend', ge);
+    };
+  }, []);
   const onWheel = (e) => {
     const v = st.current.view;
-    applyZoom(v.z * (e.deltaY < 0 ? 1.12 : 0.9), v.px, v.py);
+    const pixel = e.deltaMode === 0;
+    const trackpad = pixel && (Math.abs(e.deltaX) > 0.5 || (Math.abs(e.deltaY) < 40 && !Number.isInteger(e.deltaY)));
+    if (e.ctrlKey || e.metaKey) { zoomAt(e.clientX, e.clientY, v.z * Math.exp(-e.deltaY * (pixel ? 0.01 : 0.3))); return; }
+    if (trackpad) { if (v.z > 1.001) applyZoom(v.z, v.px - e.deltaX, v.py - e.deltaY); return; }
+    zoomAt(e.clientX, e.clientY, v.z * (e.deltaY < 0 ? 1.15 : 0.87));
+  };
+  const keyRef = useRef(null);
+  keyRef.current = (e) => {
+    const tag = e.target && e.target.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || sheet || confirmLeave || confirmClear) return;
+    const key = String(e.key || '');
+    const low = key.toLowerCase();
+    if (key === ' ' && !textEdit) { e.preventDefault(); st.current.spaceHeld = true; return; }
+    if ((e.ctrlKey || e.metaKey) && low === 'z') { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
+    if ((e.ctrlKey || e.metaKey) && low === 'y') { e.preventDefault(); redo(); return; }
+    const sel = st.current.sel;
+    if ((e.ctrlKey || e.metaKey) && low === 'd' && sel) { e.preventDefault(); copySel(); return; }
+    if ((e.ctrlKey || e.metaKey) && low === 'a' && tool === 'move') { e.preventDefault(); selectAll(); return; }
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (sel && (key === 'Delete' || key === 'Backspace')) { e.preventDefault(); deleteSel(); return; }
+    if (sel && key === 'Escape') { e.preventDefault(); e.stopPropagation(); clearSel(); return; }
+    if (sel && key.startsWith('Arrow')) {
+      e.preventDefault();
+      const d = e.shiftKey ? 10 : 2;
+      nudge(key === 'ArrowLeft' ? -d : key === 'ArrowRight' ? d : 0, key === 'ArrowUp' ? -d : key === 'ArrowDown' ? d : 0);
+      return;
+    }
+    const map = { b: 'brush', e: 'eraser', g: 'fill', s: 'shapes', t: 'text', i: 'picker', v: 'move' };
+    const k = map[low];
+    if (k && !textEdit) switchTool(k);
   };
   useEffect(() => {
-    const onKey = (e) => {
-      const tag = e.target && e.target.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); return; }
-      if (e.ctrlKey || e.metaKey || e.altKey) return;
-      const map = { b: 'brush', e: 'eraser', g: 'fill', s: 'shapes', t: 'text', i: 'picker' };
-      const k = map[e.key.toLowerCase()];
-      if (k) setTool(k);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    const onKey = (e) => { if (keyRef.current) keyRef.current(e); };
+    const onKeyUp = (e) => { if (e.key === ' ') st.current.spaceHeld = false; };
+    const onBlur = () => { st.current.spaceHeld = false; };
+    window.addEventListener('keydown', onKey, true);
+    window.addEventListener('keyup', onKeyUp, true);
+    window.addEventListener('blur', onBlur);
+    return () => { window.removeEventListener('keydown', onKey, true); window.removeEventListener('keyup', onKeyUp, true); window.removeEventListener('blur', onBlur); };
   }, []);
+  const switchTool = (k) => {
+    if (k !== 'move' && st.current.sel) { if (st.current.mv) finishMove(); clearSel(); }
+    setTool(k);
+  };
 
   const pickTool = (k) => {
     hapticTap();
     if (k === 'picker') toolRef.current.prevTool = tool === 'picker' ? 'brush' : tool;
     if (textEdit && k !== 'text') commitText();
-    setTool(k);
+    switchTool(k);
+    if (k === 'move' && tool !== 'move' && !st.current.sel) say('Tap something you drew, then drag it');
     if (k === 'shapes' && tool === 'shapes') setSheet('shapes');
     if (k === 'brush' && tool === 'brush') setSheet('brush');
     if (k === 'stamp' && tool === 'stamp') setSheet('stamp');
@@ -26914,28 +28660,96 @@ function PaintStudio({ onClose, onSend, recipientName, onAskBot }) {
   const commitText = () => {
     const te = textEdit;
     setTextEdit(null);
-    if (te && te.text.trim()) { pushOp({ t: 'text', ...te, text: te.text.replace(/\s+$/, '') }); rememberColor(te.color); }
+    st.current.editHide = null;
+    if (!te) return;
+    const text = te.text.replace(/\s+$/, '');
+    const { m, replaces, from, ...rest } = te;
+    if (replaces != null) {
+      const s = st.current;
+      const prev = s.ops[s.idx.get(replaces)];
+      const same = prev && prev.text === text && prev.font === rest.font && prev.size === rest.size && prev.color === rest.color && (prev.outline || null) === (rest.outline || null) && prev.x === rest.x && prev.y === rest.y;
+      if (same || !prev) rebuild();
+      else {
+        const batch = `t${Date.now()}`;
+        pushOp({ t: 'xform', refs: [replaces], hide: true, batch });
+        if (text.trim()) { const op = { t: 'text', ...rest, text, batch }; if (m) op.m = m; pushOp(op); }
+      }
+    } else if (text.trim()) pushOp({ t: 'text', ...rest, text });
+    if (text.trim()) rememberColor(te.color);
+    if (from) setTool(from);
   };
-  const exportBlob = async () => {
+  const projectData = () => {
+    const s = st.current;
+    let start = 0;
+    s.ops.forEach((op, k) => { if (op.t === 'clear') start = k + 1; });
+    let photo = null;
+    if (bgPhoto) { try { photo = L.current.bg.toDataURL('image/jpeg', 0.82); } catch {} }
+    return { v: 1, doc: docKey, bg: bgKey, tpl: template || null, photo, ops: paintCompactOps(s.ops.slice(start)) };
+  };
+  const exportBlob = async (withProject) => {
+    if (st.current.mv) finishMove();
     const out = mk(W, H);
     const ctx = out.getContext('2d');
     ctx.drawImage(L.current.bg, 0, 0);
     ctx.drawImage(L.current.paint, 0, 0);
     ctx.drawImage(L.current.art, 0, 0);
     const type = bgPhoto ? 'image/jpeg' : 'image/png';
-    return new Promise((res) => out.toBlob(res, type, 0.92));
+    const blob = await new Promise((res) => out.toBlob(res, type, 0.92));
+    if (!blob || !withProject) return blob;
+    return paintEmbedProject(blob, projectData());
   };
+  const loadProject = (p) => {
+    const s = st.current;
+    const ops = (Array.isArray(p.ops) ? p.ops : []).filter((o) => o && typeof o.t === 'string').slice(0, 6000);
+    s.idSeq = ops.reduce((mx, o) => Math.max(mx, Number(o.id) || 0), 0);
+    ops.forEach((o) => { if (o.id == null) { s.idSeq += 1; o.id = s.idSeq; } });
+    s.ops = ops;
+    s.loadedLen = ops.length;
+    s.redo = [];
+    s.cps = [];
+    s.sel = null;
+    s.mv = null;
+    setSelInfo(null);
+    setDocKey(PAINT_SIZES[p.doc] ? p.doc : 'square');
+    setBgKey(PAINT_BACKGROUNDS.some((b) => b[0] === p.bg) ? p.bg : 'white');
+    setTemplate(p.tpl && PAINT_TEMPLATES[p.tpl] ? p.tpl : null);
+    if (typeof p.photo === 'string' && p.photo.startsWith('data:image/')) {
+      const img = new Image();
+      img.onload = () => setBgPhoto(img);
+      img.src = p.photo;
+    } else setBgPhoto(null);
+    setCount(ops.length);
+    setRedoCount(0);
+    setLoadGen((g) => g + 1);
+  };
+  useEffect(() => { if (loadGen) rebuild(); }, [loadGen]);
+  useEffect(() => {
+    if (!initial) return;
+    if (initial.project) { loadProject(initial.project); say('Your drawing is ready to edit'); return; }
+    if (!initial.photo) return;
+    st.current.loadedLen = 0;
+    const url = URL.createObjectURL(initial.photo);
+    const img = new Image();
+    img.onload = () => {
+      const r = (img.naturalHeight || 1) / Math.max(1, img.naturalWidth || 1);
+      setDocKey(r >= 1.55 ? 'story' : r >= 1.12 ? 'portrait' : 'square');
+      setBgPhoto(img);
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); say('That photo could not be opened'); };
+    img.src = url;
+  }, []);
   const hasWork = () => st.current.ops.length > 0 || !!template || !!bgPhoto;
   const send = async () => {
     if (busy || !hasWork()) return;
     if (textEdit) commitText();
     setBusy(true);
-    const blob = await exportBlob();
+    const blob = await exportBlob(true);
     if (blob) await onSend(new File([blob], `drawing-${Date.now()}.${blob.type === 'image/jpeg' ? 'jpg' : 'png'}`, { type: blob.type }));
     setBusy(false);
   };
   const saveToPhone = async () => {
-    const blob = await exportBlob();
+    const blob = await exportBlob(true);
     if (!blob) return;
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -26952,7 +28766,7 @@ function PaintStudio({ onClose, onSend, recipientName, onAskBot }) {
     setAskState({ k: q.k, loading: true, text: '' });
     let file = null;
     if (q.k !== 'idea' && hasWork()) {
-      const blob = await exportBlob();
+      const blob = await exportBlob(false);
       if (blob) file = new File([blob], `drawing-${Date.now()}.${blob.type === 'image/jpeg' ? 'jpg' : 'png'}`, { type: blob.type });
     }
     if (q.k !== 'idea' && !file) { setAskState({ k: q.k, loading: false, text: 'Draw something first, then ask again.' }); return; }
@@ -26962,6 +28776,8 @@ function PaintStudio({ onClose, onSend, recipientName, onAskBot }) {
   const [backGen, setBackGen] = useState(0);
   const requestClose = (fromBack) => {
     if (sheet) { setSheet(null); if (fromBack) setBackGen((g) => g + 1); return; }
+    if (fromBack && st.current.sel) { clearSel(); setBackGen((g) => g + 1); return; }
+    if (hasWork() && st.current.loadedLen != null && st.current.ops.length === st.current.loadedLen && !textEdit) { onClose(); return; }
     if (hasWork()) { setConfirmLeave(true); if (fromBack) setBackGen((g) => g + 1); return; }
     onClose();
   };
@@ -26972,20 +28788,31 @@ function PaintStudio({ onClose, onSend, recipientName, onAskBot }) {
     backStack.push(entry);
     return () => { const i = backStack.lastIndexOf(entry); if (i >= 0) backStack.splice(i, 1); };
   }, [backGen]);
-  const pickPhoto = (e) => {
+  const pickPhoto = async (e) => {
     const f = e.target.files && e.target.files[0];
     e.target.value = '';
     if (!f) return;
+    setSheet(null);
+    if (!hasWork()) {
+      try {
+        const project = await paintReadProjectBytes(new Uint8Array(await f.arrayBuffer()));
+        if (project) { loadProject(project); say('Opened your drawing'); return; }
+      } catch {}
+    }
     const url = URL.createObjectURL(f);
     const img = new Image();
     img.onload = () => { setBgPhoto(img); setTimeout(() => URL.revokeObjectURL(url), 2000); };
     img.onerror = () => { URL.revokeObjectURL(url); say('That photo could not be opened'); };
     img.src = url;
-    setSheet(null);
   };
   const changeSize = (k) => {
     if (k === docKey) return;
-    if (st.current.ops.length) { say('Clear the canvas first to change its shape'); return; }
+    if (hasVisible()) { say('Clear the canvas first to change its shape'); return; }
+    clearSel();
+    st.current.ops = [];
+    st.current.redo = [];
+    setCount(0);
+    setRedoCount(0);
     st.current.cps = [];
     st.current.view.z = 1;
     st.current.view.px = 0;
@@ -27001,7 +28828,7 @@ function PaintStudio({ onClose, onSend, recipientName, onAskBot }) {
       <PaintToolIcon k={k} />
     </button>
   );
-  const tools = [['brush', 'Brush'], ['eraser', 'Eraser'], ['fill', 'Fill'], ['shapes', 'Shapes'], ['text', 'Text'], ['stamp', 'Stickers'], ['picker', 'Pick colour']];
+  const tools = [['brush', 'Brush'], ['eraser', 'Eraser'], ['fill', 'Fill'], ['shapes', 'Shapes'], ['text', 'Text'], ['stamp', 'Stickers'], ['move', 'Move'], ['picker', 'Pick colour']];
   const brushLabel = (PAINT_BRUSHES.find((b) => b.k === brush) || PAINT_BRUSHES[0]).label;
   const shapeLabel = (PAINT_SHAPES.find((b) => b.k === shape) || PAINT_SHAPES[0]).label;
   const chip = (label, onClick, on, aria) => (
@@ -27046,7 +28873,7 @@ function PaintStudio({ onClose, onSend, recipientName, onAskBot }) {
         </div>
         <div ref={stageRef} style={{ flex: 1, minHeight: 0, position: 'relative', background: theme.dark ? '#121214' : '#E7E7EC', overflow: 'hidden' }}>
           <canvas ref={viewRef} aria-label="Drawing area" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp} onWheel={onWheel}
-            style={{ position: 'absolute', left: 0, top: 0, touchAction: 'none', cursor: tool === 'picker' ? 'copy' : tool === 'text' ? 'text' : 'crosshair' }} />
+            style={{ position: 'absolute', left: 0, top: 0, touchAction: 'none', cursor: tool === 'picker' ? 'copy' : tool === 'text' ? 'text' : tool === 'move' ? 'move' : 'crosshair' }} />
           {(sym !== 'off' || magic || steady > 0 || template) && (
             <div style={{ position: 'absolute', left: 10, top: 10, display: 'flex', gap: 6, flexWrap: 'wrap', pointerEvents: 'none' }}>
               {sym !== 'off' && <span style={{ fontSize: 12, fontWeight: 800, padding: '4px 9px', borderRadius: 10, background: 'rgba(0,0,0,0.55)', color: '#fff' }}>{sym === 'mirror' ? 'Mirror' : sym === 'quad' ? 'Four way' : 'Kaleidoscope'}</span>}
@@ -27068,6 +28895,7 @@ function PaintStudio({ onClose, onSend, recipientName, onAskBot }) {
         </div>
         {textEdit ? (
           <div style={{ flexShrink: 0, padding: '10px 12px', paddingBottom: 'calc(10px + env(safe-area-inset-bottom))', borderTop: `1px solid ${c.line}`, background: c.bg }}>
+            <div style={{ maxWidth: 760, margin: '0 auto' }}>
             <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
               <textarea autoFocus value={textEdit.text} onChange={(e) => setTextEdit((te) => ({ ...te, text: e.target.value.slice(0, 200) }))} placeholder="Type something" aria-label="Text to add" rows={2}
                 style={{ ...inputStyle(theme), flex: 1, resize: 'none', fontSize: 16, lineHeight: 1.35 }} />
@@ -27079,19 +28907,45 @@ function PaintStudio({ onClose, onSend, recipientName, onAskBot }) {
               {chip('Smaller', () => setTextEdit((te) => ({ ...te, size: Math.max(20, te.size - 10) })), false)}
               {chip('Bigger', () => setTextEdit((te) => ({ ...te, size: Math.min(320, te.size + 10) })), false)}
             </div>
-            <div style={{ fontSize: 12.5, color: c.dim, paddingTop: 8 }}>Drag the text on the canvas to move it.</div>
+            <div style={{ fontSize: 12.5, color: c.dim, paddingTop: 8 }}>{textEdit.replaces != null ? 'Editing your text. Clear it all to delete it.' : 'Drag the text on the canvas to move it.'}</div>
+            </div>
           </div>
         ) : (
           <div style={{ flexShrink: 0, background: c.bg, borderTop: `1px solid ${c.line}`, paddingBottom: 'calc(8px + env(safe-area-inset-bottom))' }}>
+            <div style={{ maxWidth: 760, margin: '0 auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-around', padding: '6px 4px 2px' }}>
               {tools.map(([k, label]) => (
                 <button key={k} type="button" aria-label={label} aria-pressed={tool === k} onClick={() => pickTool(k)} className="zchat-press"
-                  style={{ width: 46, height: 46, borderRadius: 14, border: 'none', background: tool === k ? (theme.dark ? '#2A2A30' : '#E8E8EE') : 'transparent', color: tool === k ? theme.coral : c.fg, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 }}>
+                  style={{ flex: '0 1 46px', minWidth: 34, height: 46, borderRadius: 14, border: 'none', background: tool === k ? (theme.dark ? '#2A2A30' : '#E8E8EE') : 'transparent', color: tool === k ? theme.coral : c.fg, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 }}>
                   <PaintToolIcon k={k} />
                 </button>
               ))}
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 14px 4px' }}>
+            {tool === 'move' ? (
+              <>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 14px 4px', minHeight: 36, overflowX: 'auto', scrollbarWidth: 'none' }}>
+                  {selInfo ? (
+                    <>
+                      {chip('Copy', copySel, false, 'Copy selection')}
+                      {chip('Bring to front', frontSel, false)}
+                      {selInfo.text && chip('Edit text', () => { const s = st.current; const one = s.sel && s.ops[s.idx.get(s.sel.ids[0])]; if (one) editText(one, 'move'); }, false)}
+                      {chip('Delete', deleteSel, false, 'Delete selection')}
+                      {chip('Done', () => { hapticTap(); if (st.current.mv) finishMove(); clearSel(); }, true, 'Done moving')}
+                    </>
+                  ) : (
+                    <>
+                      <span style={{ fontSize: 13, color: c.dim, fontWeight: 600, flex: 1, minWidth: 0 }}>Tap something you drew to move it</span>
+                      {chip('Select all', selectAll, false)}
+                    </>
+                  )}
+                </div>
+                <div style={{ height: 28, margin: '6px 14px 2px', display: 'flex', alignItems: 'center', fontSize: 12.5, color: c.dim, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {selInfo ? (selInfo.n === 1 ? 'Drag to move it. Corner dot resizes, top dot turns.' : `${selInfo.n} parts picked. Drag to move them together.`) : 'Or drag across a few parts to pick them together.'}
+                </div>
+              </>
+            ) : (
+            <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 14px 4px', minHeight: 36 }}>
               <button type="button" aria-label="Choose colour" onClick={() => setSheet('color')} className="zchat-press"
                 style={{ width: 36, height: 36, borderRadius: '50%', border: 'none', padding: 0, cursor: 'pointer', flexShrink: 0, background: color, boxShadow: `0 0 0 2px ${c.bg}, 0 0 0 3.5px ${c.line}`, opacity: Math.max(0.35, alpha) }} />
               {tool === 'brush' && chip(`${brushLabel} ▾`, () => setSheet('brush'), false, 'Choose brush')}
@@ -27115,6 +28969,9 @@ function PaintStudio({ onClose, onSend, recipientName, onAskBot }) {
                 <div key={col} role="button" aria-label={`Color ${col}`} onClick={() => { hapticTap(); setColor(col); rememberColor(col); if (tool === 'eraser' || tool === 'picker') setTool('brush'); }}
                   style={{ width: 28, height: 28, borderRadius: '50%', background: col, cursor: 'pointer', flexShrink: 0, boxShadow: color === col ? `0 0 0 2px ${c.bg}, 0 0 0 4px ${c.fg}` : `inset 0 0 0 1px ${c.line}` }} />
               ))}
+            </div>
+            </>
+            )}
             </div>
           </div>
         )}
@@ -27219,7 +29076,7 @@ function PaintStudio({ onClose, onSend, recipientName, onAskBot }) {
       )}
       {confirmClear && (
         <ConfirmDialog title="Clear the canvas?" body="You can still undo this." confirmLabel="Clear" onCancel={() => setConfirmClear(false)}
-          onConfirm={() => { setConfirmClear(false); setSheet(null); pushOp({ t: 'clear' }); }} />
+          onConfirm={() => { setConfirmClear(false); setSheet(null); clearSel(); pushOp({ t: 'clear' }); }} />
       )}
       {confirmLeave && (
         <ConfirmDialog title="Throw away this drawing?" body="It has not been sent or saved yet." confirmLabel="Throw away" onCancel={() => setConfirmLeave(false)}
@@ -28851,22 +30708,51 @@ function GamesPage({ onClose, onChallenge, onShareScore, initialGame }) {
   );
 }
 
-function AttachSheet({ onClose, onCamera, onGallery, onLocation, onGame, canGame, locating, onPoll, onEvent, onOnce, onDoodle, onBuzz, onDice, onCollage, onVoiceType }) {
+function DiceLineIcon({ size = 24, color = 'currentColor', strokeWidth = 2, style }) {
   return (
-    <ActionSheet onClose={onClose} zIndex={94} items={[
-      { k: 'camera', label: 'Camera', icon: <Camera />, on: onCamera },
-      { k: 'gallery', label: 'Photos and videos', icon: <ImageIcon />, on: onGallery },
-      onOnce ? { k: 'once', label: 'View once', icon: <OnceIcon />, on: onOnce } : null,
-      onLocation ? { k: 'location', label: locating ? 'Finding you' : 'Location', icon: <Compass />, on: onLocation, busy: locating } : null,
-      onPoll ? { k: 'poll', label: 'Poll', icon: <PollIcon />, on: onPoll } : null,
-      onEvent ? { k: 'event', label: 'Event', icon: <CalendarIcon />, on: onEvent } : null,
-      onCollage ? { k: 'collage', label: 'Collage', icon: <LayoutDashboard />, on: onCollage } : null,
-      onDoodle ? { k: 'doodle', label: 'Paint', icon: <DoodleIcon />, on: onDoodle } : null,
-      onVoiceType ? { k: 'voicetype', label: 'Voice typing', icon: <Mic />, on: onVoiceType } : null,
-      onDice ? { k: 'dice', label: 'Dice and coin', icon: <EmojiIcon e={'\u{1F3B2}'} />, on: onDice } : null,
-      canGame ? { k: 'game', label: 'Games', icon: <GamepadIcon />, on: onGame } : null,
-      onBuzz ? { k: 'buzz', label: 'Buzz', icon: <BuzzIcon />, on: onBuzz } : null,
-    ]} />
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" style={style} aria-hidden="true">
+      <rect x="3.5" y="3.5" width="17" height="17" rx="4" /><circle cx="8.5" cy="8.5" r="1.1" fill={color} stroke="none" /><circle cx="15.5" cy="8.5" r="1.1" fill={color} stroke="none" /><circle cx="12" cy="12" r="1.1" fill={color} stroke="none" /><circle cx="8.5" cy="15.5" r="1.1" fill={color} stroke="none" /><circle cx="15.5" cy="15.5" r="1.1" fill={color} stroke="none" />
+    </svg>
+  );
+}
+
+function AttachSheet({ onClose, onCamera, onGallery, onLocation, onGame, canGame, locating, onPoll, onEvent, onOnce, onDoodle, onBuzz, onDice, onCollage, onVoiceType }) {
+  useBackClose(true, onClose);
+  const { theme } = useTheme();
+  const drag = useSheetDrag(onClose);
+  const items = [
+    { k: 'camera', label: 'Camera', icon: <Camera />, on: onCamera, bg: '#F05A4F' },
+    { k: 'gallery', label: 'Photos and videos', short: 'Gallery', icon: <ImageIcon />, on: onGallery, bg: '#3D7FF0' },
+    onOnce ? { k: 'once', label: 'View once', icon: <OnceIcon />, on: onOnce, bg: '#7A55D6' } : null,
+    onLocation ? { k: 'location', label: locating ? 'Finding you' : 'Location', icon: <Compass />, on: onLocation, busy: locating, bg: '#22A867' } : null,
+    onPoll ? { k: 'poll', label: 'Poll', icon: <PollIcon />, on: onPoll, bg: '#E89A12' } : null,
+    onEvent ? { k: 'event', label: 'Event', icon: <CalendarIcon />, on: onEvent, bg: '#E2622A' } : null,
+    onCollage ? { k: 'collage', label: 'Collage', icon: <LayoutDashboard />, on: onCollage, bg: '#0E9E9A' } : null,
+    onDoodle ? { k: 'doodle', label: 'Paint', icon: <DoodleIcon />, on: onDoodle, bg: '#E14B8E' } : null,
+    onVoiceType ? { k: 'voicetype', label: 'Voice typing', icon: <Mic />, on: onVoiceType, bg: '#4F5BD5' } : null,
+    onDice ? { k: 'dice', label: 'Dice and coin', icon: <DiceLineIcon />, on: onDice, bg: '#8A6A55' } : null,
+    canGame ? { k: 'game', label: 'Games', icon: <GamepadIcon />, on: onGame, bg: '#2F9E44' } : null,
+    onBuzz ? { k: 'buzz', label: 'Buzz', icon: <BuzzIcon />, on: onBuzz, bg: '#C98A0B' } : null,
+  ].filter(Boolean);
+  return (
+    <Portal>
+      <div onClick={onClose} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 94, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontFamily: FONT }}>
+        <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" {...drag.sheetProps} style={{ ...drag.sheetStyle, width: '100%', maxWidth: 480, maxHeight: 'calc(100% - 40px)', overflowY: 'auto', background: theme.panelBg, borderRadius: '22px 22px 0 0', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))', boxSizing: 'border-box' }}>
+          <div data-sheet-handle="true" style={{ display: 'flex', justifyContent: 'center', padding: '9px 0 12px', touchAction: 'none' }}><div style={{ width: 36, height: 4, borderRadius: 2, background: theme.border }} /></div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', rowGap: 18, columnGap: 6, padding: '2px 12px 6px' }}>
+            {items.map((it) => (
+              <div key={it.k} role="button" aria-label={it.label} onClick={() => { if (it.busy) return; playUiSound('tap'); it.on(); }} className="zchat-press"
+                style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 7, cursor: it.busy ? 'default' : 'pointer', WebkitTapHighlightColor: 'transparent', minWidth: 0 }}>
+                <div style={{ width: 54, height: 54, borderRadius: 18, background: it.bg, color: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  {it.busy ? <Spinner size={20} color="#FFFFFF" /> : React.cloneElement(it.icon, { size: 25, strokeWidth: 1.9, color: '#FFFFFF' })}
+                </div>
+                <div style={{ fontSize: 12.5, fontWeight: 600, color: theme.ink, textAlign: 'center', lineHeight: 1.25, padding: '0 2px', maxWidth: '100%', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{it.short || it.label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </Portal>
   );
 }
 
@@ -29403,7 +31289,7 @@ function AdminContent({ onOpenProfile }) {
     if (!r.media_url) return null;
     const isVideo = r.media_type === 'video' || /\.(mp4|mov|webm)(\?|$)/i.test(r.media_url);
     const st = { width: '100%', maxHeight: 220, borderRadius: 12, objectFit: 'cover', background: '#000', display: 'block', marginTop: 8 };
-    return isVideo ? <video src={r.media_url} controls preload="metadata" style={st} /> : <img src={r.media_url} alt="" style={st} loading="lazy" />;
+    return isVideo ? <video src={r.media_url} controls playsInline preload="metadata" style={st} /> : <img src={r.media_url} alt="" style={st} loading="lazy" />;
   };
 
   return (
@@ -30137,7 +32023,7 @@ function AdminRowCard({ table, row, names, onDeleted, onSaved }) {
         {!open && keys.length > 4 && <div style={{ fontSize: 11.5, color: theme.coral, fontWeight: 800, marginTop: 4 }}>{`Tap for all ${keys.length} fields`}</div>}
       </div>
       {row.media_url && typeof row.media_url === 'string' && (isVideo
-        ? <video src={row.media_url} controls preload="metadata" style={{ width: '100%', maxHeight: 220, borderRadius: 12, marginTop: 8, background: '#000' }} />
+        ? <video src={row.media_url} controls playsInline preload="metadata" style={{ width: '100%', maxHeight: 220, borderRadius: 12, marginTop: 8, background: '#000' }} />
         : <img src={row.media_url} alt="" loading="lazy" style={{ width: '100%', maxHeight: 220, objectFit: 'cover', borderRadius: 12, marginTop: 8 }} />)}
       {err && <div style={{ color: theme.danger, fontSize: 12.5, fontWeight: 700, marginTop: 8 }}>{err}</div>}
       {canAct && (
@@ -30388,7 +32274,9 @@ function ReportQueuePanel({ onClose, onOpenProfile }) {
   );
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 40, background: theme.bgGradient, display: 'flex', flexDirection: 'column', fontFamily: FONT }} className="zchat-panel-open">
+    <>
+    <WideDim onClose={onClose} z={40} />
+    <div style={{ position: 'fixed', inset: 0, zIndex: 40, background: theme.bgGradient, display: 'flex', flexDirection: 'column', fontFamily: FONT }} className="zchat-panel-open zchat-wide-page">
       <IgTopBar title="Report queue" onBack={onClose} right={<div role="button" aria-label="Refresh reports" onClick={load} style={{ fontSize: 14, fontWeight: 800, color: theme.coral, cursor: 'pointer', padding: '0 10px', height: 44, display: 'flex', alignItems: 'center' }}>Refresh</div>} />
       <div style={{ display: 'flex', gap: 8, padding: '0 16px 10px' }}>
         {[['open', `Open ${openCount}`], ['handled', `Handled ${doneCount}`]].map(([k, label]) => (
@@ -30454,6 +32342,7 @@ function ReportQueuePanel({ onClose, onOpenProfile }) {
         </div>
       )}
     </div>
+    </>
   );
 }
 
@@ -30807,7 +32696,9 @@ function SavedMessagesPanel({ myId, onClose, onChanged, onOpenChat }) {
   const term = q.trim().toLowerCase();
   const shown = (rows || []).filter((r) => !term || (r.content || '').toLowerCase().includes(term) || (r.from_name || '').toLowerCase().includes(term) || (r.chat_label || '').toLowerCase().includes(term));
   return (
-    <div {...edgeBack} style={{ position: 'fixed', inset: 0, zIndex: 40, background: theme.bgGradient, display: 'flex', flexDirection: 'column', fontFamily: FONT }} className="zchat-panel-open">
+    <>
+    <WideDim onClose={onClose} z={40} />
+    <div {...edgeBack} style={{ position: 'fixed', inset: 0, zIndex: 40, background: theme.bgGradient, display: 'flex', flexDirection: 'column', fontFamily: FONT }} className="zchat-panel-open zchat-wide-page">
       <IgTopBar title="Saved messages" onBack={onClose} />
       <div style={{ padding: '0 16px 10px' }}>
         <div style={{ position: 'relative' }}>
@@ -30865,6 +32756,7 @@ function SavedMessagesPanel({ myId, onClose, onChanged, onOpenChat }) {
         </div>
       )}
     </div>
+    </>
   );
 }
 
@@ -31144,7 +33036,7 @@ function SharePreviewScreen({ landing: initialLanding, onAuth }) {
               {more.map((p) => (
                 <div key={p.id} role="button" onClick={() => openPost(p.id)} style={{ position: 'relative', aspectRatio: '3 / 4', background: CARD, cursor: 'pointer', overflow: 'hidden' }}>
                   {p.media_type === 'video'
-                    ? <video src={`${p.media_url}#t=0.1`} muted playsInline preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} />
+                    ? <VideoThumb src={p.media_url} style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} />
                     : <img src={p.media_url} alt="" loading="lazy" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
                   {p.media_type === 'video' && <Play size={15} color="white" style={{ position: 'absolute', top: 6, right: 6, filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.6))' }} />}
                 </div>
@@ -31196,7 +33088,7 @@ function SharePreviewScreen({ landing: initialLanding, onAuth }) {
             {posts.map((p) => (
               <div key={p.id} role="button" onClick={() => openPost(p.id)} style={{ position: 'relative', aspectRatio: '3 / 4', background: CARD, cursor: 'pointer', overflow: 'hidden' }}>
                 {p.media_type === 'video'
-                  ? <video src={`${p.media_url}#t=0.1`} muted playsInline preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} />
+                  ? <VideoThumb src={p.media_url} style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} />
                   : <img src={p.media_url} alt="" loading="lazy" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
                 {p.media_type === 'video' && <Play size={15} color="white" style={{ position: 'absolute', top: 6, right: 6, filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.6))' }} />}
               </div>
@@ -31281,7 +33173,7 @@ function LikersSheet({ post, meId, onClose, onOpenProfile }) {
   }, [post.id]);
   const sheet = (
     <div onClick={onClose} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 720, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'flex-end', fontFamily: FONT }}>
-      <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ width: '100%', maxHeight: '70vh', display: 'flex', flexDirection: 'column', background: '#12141c', color: 'white', borderRadius: '22px 22px 0 0', paddingBottom: 'env(safe-area-inset-bottom)' }}>
+      <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ width: '100%', maxHeight: 'min(70vh, calc(100% - 24px))', display: 'flex', flexDirection: 'column', background: '#12141c', color: 'white', borderRadius: '22px 22px 0 0', paddingBottom: 'env(safe-area-inset-bottom)' }}>
         <div style={{ textAlign: 'center', fontWeight: 800, fontSize: 15, padding: '16px 0 12px', borderBottom: '1px solid #22252e' }}>Likes</div>
         <div style={{ overflowY: 'auto', padding: '6px 16px 16px' }}>
           {rows === null && <div style={{ display: 'flex', justifyContent: 'center', padding: 24 }}><Spinner size={20} color="white" /></div>}
@@ -31614,14 +33506,28 @@ function PublicShell({ title, children, wide }) {
   const nav = [['/?page=store', 'Store'], ['/?page=terms', 'Terms'], ['/?page=refund', 'Refunds'], ['/?page=privacy', 'Privacy']];
   const pageParam = (new URLSearchParams(window.location.search).get('page') || '').toLowerCase();
   const here = pageParam ? `/?page=${pageParam}` : '';
+  const goBack = () => {
+    try {
+      const sameOrigin = document.referrer && new URL(document.referrer).origin === window.location.origin;
+      if (sameOrigin && window.history.length > 1) { window.history.back(); return; }
+      if (window.opener && !window.opener.closed) window.close();
+    } catch {}
+    setTimeout(() => { window.location.href = '/'; }, 80);
+  };
   return (
     <div style={{ position: 'fixed', inset: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain', background: '#07080d', color: '#e8eaf0', fontFamily: FONT }}>
       <div style={{ position: 'sticky', top: 0, zIndex: 20, background: 'rgba(7,8,13,0.82)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
         <div style={{ maxWidth: wide ? 960 : 820, margin: '0 auto', padding: '10px 14px 8px', paddingTop: 'calc(10px + env(safe-area-inset-top))' }}>
-          <a href="/" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, textDecoration: 'none', color: 'white' }}>
-            <div style={{ width: 32, height: 32, borderRadius: 10, background: 'linear-gradient(135deg, #7C5CFC, #A78BFA)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 16 }}>Z</div>
-            <div style={{ fontWeight: 900, fontSize: 17 }}>ZChat</div>
-          </a>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <button type="button" aria-label="Back" onClick={goBack}
+              style={{ width: 38, height: 38, borderRadius: 12, border: 'none', background: 'rgba(255,255,255,0.08)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0, flexShrink: 0 }}>
+              <ArrowLeft size={20} />
+            </button>
+            <a href="/" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, textDecoration: 'none', color: 'white' }}>
+              <div style={{ width: 32, height: 32, borderRadius: 10, background: 'linear-gradient(135deg, #7C5CFC, #A78BFA)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, fontSize: 16 }}>Z</div>
+              <div style={{ fontWeight: 900, fontSize: 17 }}>ZChat</div>
+            </a>
+          </div>
           <div style={{ display: 'flex', gap: 6, marginTop: 8, overflowX: 'auto', scrollbarWidth: 'none' }}>
             {nav.map(([href, label]) => (
               <a key={href} href={href} style={{ flexShrink: 0, padding: '7px 14px', borderRadius: 11, fontSize: 13, fontWeight: 800, textDecoration: 'none', whiteSpace: 'nowrap', color: here === href ? '#1a0f02' : 'rgba(255,255,255,0.75)', background: here === href ? 'linear-gradient(135deg, #fbbf24, #f97316)' : 'rgba(255,255,255,0.06)' }}>{label}</a>
