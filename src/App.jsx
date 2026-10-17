@@ -574,6 +574,14 @@ function GlobalStyle() {
       .zchat-coin-flip { animation: zchat-coin-flip 0.88s ease-in-out both; }
       @keyframes zchat-roll-land { 0% { transform: scale(1.14); } 60% { transform: scale(0.97); } 100% { transform: scale(1); } }
       .zchat-roll-land { animation: zchat-roll-land 0.32s ease-out; }
+      @keyframes zchat-live-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+      .zchat-live-dot { animation: zchat-live-dot 1.1s ease-in-out infinite; }
+      @keyframes zchat-live-ping { 0% { transform: scale(0.45); opacity: 0.95; } 100% { transform: scale(1.5); opacity: 0; } }
+      .zchat-live-ping { animation: zchat-live-ping 1.8s ease-out infinite; }
+      @keyframes zchat-emote-up { 0% { transform: translateY(0) scale(0.6); opacity: 0; } 15% { opacity: 1; transform: translateY(-20px) scale(1.15); } 100% { transform: translateY(-260px) scale(1); opacity: 0; } }
+      @keyframes zchat-emote-down { 0% { transform: translateY(0) scale(0.6); opacity: 0; } 15% { opacity: 1; transform: translateY(20px) scale(1.15); } 100% { transform: translateY(260px) scale(1); opacity: 0; } }
+      .zchat-emote-up { animation: zchat-emote-up 2.1s ease-out forwards; }
+      .zchat-emote-down { animation: zchat-emote-down 2.1s ease-out forwards; }
       @keyframes zchat-pick-spin { to { transform: rotate(360deg); } }
       .zchat-pick-spin { animation: zchat-pick-spin 0.45s linear infinite; }
       @keyframes zchat-dice-wiggle { 0%, 100% { transform: rotate(0); } 30% { transform: rotate(-9deg); } 65% { transform: rotate(7deg); } }
@@ -1305,6 +1313,7 @@ function AppleLogo({ size = 18, color = 'currentColor' }) {
 function AppleButton({ onError, onBegin }) {
   const { theme } = useTheme();
   const [loading, setLoading] = useState(false);
+  const providers = useAuthProviders();
   const click = async () => {
     if (loading) return;
     setLoading(true);
@@ -1321,6 +1330,7 @@ function AppleButton({ onError, onBegin }) {
       if (onError) onError("Couldn't start Apple sign in. Try again.");
     }
   };
+  if (!providers || !providers.apple) return null;
   return (
     <button type="button" onClick={click} disabled={loading} aria-label="Continue with Apple" className="zchat-press" style={socialBtnStyle(theme, loading)}>
       {loading ? <Spinner size={15} color={theme.ink} /> : (<><AppleLogo size={19} color={theme.ink} />Apple</>)}
@@ -1983,7 +1993,7 @@ function DeleteAccountConfirm({ onCancel, onConfirm }) {
             flex: 1, padding: 11, borderRadius: 13, border: `1.5px solid ${theme.border}`,
             background: 'transparent', color: theme.ink, fontWeight: 700, fontSize: 13.5, cursor: 'pointer', fontFamily: FONT,
           }}>Cancel</button>
-          <button onClick={async () => { setBusy(true); await onConfirm(); }} disabled={!ok || busy} style={{
+          <button onClick={async () => { setBusy(true); const done = await onConfirm(); if (done === false) setBusy(false); }} disabled={!ok || busy} style={{
             flex: 1, padding: 11, borderRadius: 13, border: 'none', background: theme.danger, opacity: (!ok || busy) ? 0.5 : 1,
             color: 'white', fontWeight: 700, fontSize: 13.5, cursor: (!ok || busy) ? 'default' : 'pointer', fontFamily: FONT,
           }}>{busy ? <Spinner size={13} /> : 'Delete'}</button>
@@ -2050,6 +2060,14 @@ function IgHeading({ children }) {
 function IgTopBar({ title, subtitle, onBack, sticky, bleed = 0, right, line }) {
   const { theme } = useTheme();
   const c = igPalette(theme);
+  const rightRef = useRef(null);
+  const [rightW, setRightW] = useState(0);
+  useLayoutEffect(() => {
+    const el = rightRef.current;
+    const w = el ? el.offsetWidth : 0;
+    setRightW((prev) => (Math.abs(prev - w) < 2 ? prev : w));
+  });
+  const wideRight = rightW > 56;
   return (
     <div style={{
       position: sticky ? 'sticky' : 'relative', top: 0, zIndex: 4, background: c.bg, flexShrink: 0,
@@ -2060,11 +2078,11 @@ function IgTopBar({ title, subtitle, onBack, sticky, bleed = 0, right, line }) {
         <div role="button" aria-label="Back" className="zchat-press" onClick={() => runWithTransition(() => { if (onBack) onBack(); }, 'pop')} style={{ width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: c.fg, flexShrink: 0 }}>
           <ArrowLeft size={24} strokeWidth={2} />
         </div>
-        <div style={{ position: 'absolute', left: 60, right: 60, textAlign: 'center', pointerEvents: 'none' }}>
+        <div style={{ position: 'absolute', left: wideRight ? 54 : 60, right: wideRight ? rightW + 14 : 60, textAlign: wideRight ? 'left' : 'center', pointerEvents: 'none' }}>
           <div style={{ fontSize: 16, fontWeight: 700, color: c.fg, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: '20px' }}>{title}</div>
           {subtitle && <div style={{ fontSize: 12, fontWeight: 600, color: c.dim, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: '15px' }}>{subtitle}</div>}
         </div>
-        {right && <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0, position: 'relative', zIndex: 1 }}>{right}</div>}
+        {right && <div ref={rightRef} style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0, position: 'relative', zIndex: 1 }}>{right}</div>}
       </div>
     </div>
   );
@@ -3134,7 +3152,773 @@ function ToggleSwitch({ on, onClick }) {
   );
 }
 
-function SettingsPanel({ onClose, onOpenPrivacy, onLogout, hideActivity, onToggleActivity, onOpenAccounts, onOpenDelete, onOpenBlocked, blockedCount = 0, chatLockSet, chatLockHash, onSetChatLockPassword, onTurnOffChatLock, autoOpenLockSetup, onConsumedAutoOpen, me, onEditProfile, onPrivacySaved, isZAdmin, onOpenReports, onOpenAdmin, hasPasswordLogin, sessionForLinks, onOpenWhatsNew, onOpenUsage }) {
+const CLOSE_GREEN = '#1DB954';
+
+function CloseFriendsIcon({ size = 20, color = 'currentColor', filled = false, bare = false }) {
+  if (bare) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 2.8l2.75 5.86 6.4.72-4.75 4.36 1.3 6.32L12 16.9l-5.7 3.16 1.3-6.32L2.85 9.38l6.4-.72z" fill={color} />
+      </svg>
+    );
+  }
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="10" stroke={color} strokeWidth="2" fill={filled ? color : 'none'} />
+      <path d="M12 6.6l1.6 3.4 3.7.4-2.8 2.5.8 3.6L12 14.6l-3.3 1.9.8-3.6-2.8-2.5 3.7-.4z" fill={filled ? '#FFFFFF' : color} />
+    </svg>
+  );
+}
+
+function CloseFriendsBadge() {
+  return (
+    <span aria-label="Close friends" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '2px 7px 2px 5px', borderRadius: 10, background: CLOSE_GREEN, color: '#FFFFFF', fontSize: 10.5, fontWeight: 800, flexShrink: 0, lineHeight: 1.3 }}>
+      <CloseFriendsIcon size={11} color="#FFFFFF" bare />Close friends
+    </span>
+  );
+}
+
+function RequestsIcon({ size = 22, color = 'currentColor' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 5.5h16v10H9l-5 4z" /><path d="M9 9.5h6M9 12.5h4" />
+    </svg>
+  );
+}
+
+function RequestsPage({ items, onOpen, onClose, unreadOf, hidePreviews }) {
+  useBackClose(true, onClose);
+  const { theme } = useTheme();
+  return (
+    <FullPage title="Message requests" subtitle={items.length ? `${items.length} waiting` : 'Nothing waiting'} onBack={onClose} zIndex={58} pad={false}>
+      <div style={{ padding: '10px 18px 6px', fontSize: 13, color: theme.muted, lineHeight: 1.5 }}>Chats from people you do not follow land here. They will not know you saw a message until you accept.</div>
+      <div style={{ padding: '0 8px calc(24px + env(safe-area-inset-bottom))' }}>
+        {!items.length && <EmptyState art="requests" title="No requests" text="When someone you do not follow messages you, it shows up here first." />}
+        {items.map((c) => {
+          const p = c.otherProfile;
+          const unread = unreadOf ? unreadOf(c) : 0;
+          const pv = hidePreviews ? { kind: 'text', text: unread ? 'New message' : 'Message hidden' } : (c.preview && c.preview.text ? c.preview : { kind: 'text', text: 'Sent you a message' });
+          return (
+            <div key={p.id} role="button" aria-label={`Request from ${p.name}`} onClick={() => onOpen(c)} className="zchat-row-press"
+              style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 10px', borderRadius: 14, cursor: 'pointer' }}>
+              <Avatar emoji={p.avatar} name={p.name} frame={p.avatar_frame} size={50} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 15, fontWeight: unread ? 800 : 700, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><NameBadge name={p.name} verified={p.verified} custom={p.custom_badge} size={12} /></div>
+                <PreviewLine preview={pv} color={unread ? theme.ink : theme.muted} weight={unread ? 700 : 400} size={13} />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5, flexShrink: 0 }}>
+                <span style={{ fontSize: 11.5, color: unread ? theme.coral : theme.muted, fontWeight: unread ? 700 : 400 }}>{c.sortTime || c.last_message_at ? formatListTime(c.sortTime || c.last_message_at) : ''}</span>
+                {unread > 0 && <span style={{ minWidth: 20, height: 20, padding: '0 5px', boxSizing: 'border-box', borderRadius: 10, background: theme.coral, color: '#FFFFFF', fontSize: 10.5, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{unread > 99 ? '99+' : unread}</span>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </FullPage>
+  );
+}
+
+function RequestBar({ name, onAccept, onDelete, onBlock, busy }) {
+  const { theme } = useTheme();
+  const first = String(name || 'They').split(' ')[0];
+  const btn = (label, onClick, tone) => (
+    <div role="button" aria-label={`${label} request`} onClick={busy ? undefined : onClick} className="zchat-press"
+      style={{ flex: 1, textAlign: 'center', padding: '11px 0', borderRadius: 14, fontSize: 14.5, fontWeight: 800, cursor: busy ? 'default' : 'pointer', background: tone === 'accent' ? theme.coral : theme.rowBg, color: tone === 'accent' ? '#FFFFFF' : tone === 'danger' ? theme.danger : theme.ink, opacity: busy ? 0.6 : 1 }}>{label}</div>
+  );
+  return (
+    <div className="zchat-fade" style={{ flex: 1, minWidth: 0, padding: '6px 0 2px' }}>
+      <div style={{ fontSize: 14.5, fontWeight: 800, color: theme.ink, textAlign: 'center' }}>{first} wants to chat with you</div>
+      <div style={{ fontSize: 12.5, color: theme.muted, textAlign: 'center', margin: '4px 6px 10px', lineHeight: 1.45 }}>{first} will not see that you read this until you accept.</div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        {btn('Block', onBlock, 'danger')}
+        {btn('Delete', onDelete)}
+        {btn('Accept', onAccept, 'accent')}
+      </div>
+    </div>
+  );
+}
+
+function DmClosedBar({ name }) {
+  const { theme } = useTheme();
+  const first = String(name || 'They').split(' ')[0];
+  return (
+    <div className="zchat-fade" style={{ flex: 1, textAlign: 'center', padding: '10px 6px', fontSize: 12.5, color: theme.muted, fontWeight: 600, lineHeight: 1.45 }}>
+      {first} only gets messages from people they follow.
+    </div>
+  );
+}
+
+function RequestsRow({ count, unread, onClick }) {
+  const { theme } = useTheme();
+  return (
+    <div role="button" aria-label={`Message requests ${count}`} onClick={onClick} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 8px', cursor: 'pointer', borderRadius: 16 }}>
+      <div style={{ width: 52, height: 46, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.ink, flexShrink: 0 }}><RequestsIcon size={22} /></div>
+      <div style={{ flex: 1, fontWeight: 700, fontSize: 14, color: theme.ink }}>Message requests</div>
+      {unread > 0 && <span style={{ width: 9, height: 9, borderRadius: '50%', background: theme.coral, flexShrink: 0 }} />}
+      <span style={{ fontSize: 12.5, color: theme.muted, fontWeight: 700 }}>{count}</span>
+      <ChevronRight size={16} color={theme.muted} />
+    </div>
+  );
+}
+
+function MessagePrivacyPage({ me, onClose, onSaved }) {
+  useBackClose(true, onClose);
+  const { theme } = useTheme();
+  const [value, setValue] = useState((me && me.privacy_messages) || 'everyone');
+  const [readOn, setReadOn] = useState(!(me && me.read_receipts === false));
+  const [err, setErr] = useState('');
+  const save = async (patch, revert) => {
+    setErr('');
+    const { error } = await supabase.from('profiles').update(patch).eq('id', me.id);
+    if (error) { revert(); setErr('That could not be saved yet. Try again in a little while.'); return; }
+    onSaved(patch);
+  };
+  const pick = (v) => { if (v === value) return; const before = value; setValue(v); hapticTap(); save({ privacy_messages: v }, () => setValue(before)); };
+  const toggleRead = () => { const next = !readOn; setReadOn(next); hapticTap(); save({ read_receipts: next }, () => setReadOn(!next)); };
+  const choice = (v, title, sub) => (
+    <div role="button" aria-label={title} onClick={() => pick(v)} className="zchat-row-press"
+      style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 4px', cursor: 'pointer', borderBottom: `1px solid ${theme.border}` }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: theme.ink }}>{title}</div>
+        <div style={{ fontSize: 12.5, color: theme.muted, marginTop: 2, lineHeight: 1.4 }}>{sub}</div>
+      </div>
+      <span style={{ width: 22, height: 22, borderRadius: '50%', border: `2px solid ${value === v ? theme.coral : theme.muted}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        {value === v && <span style={{ width: 12, height: 12, borderRadius: '50%', background: theme.coral }} />}
+      </span>
+    </div>
+  );
+  return (
+    <FullPage title="Messages and requests" onBack={onClose} zIndex={70}>
+      <IgHeading>Who can message me</IgHeading>
+      {choice('everyone', 'Everyone', 'People you do not follow go to Message requests first.')}
+      {choice('following', 'Only people I follow', 'Anyone else cannot start a new chat with you.')}
+      <IgHeading>Read receipts</IgHeading>
+      <div role="button" aria-label={readOn ? 'Read receipts on' : 'Read receipts off'} onClick={toggleRead} className="zchat-row-press"
+        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 4px', cursor: 'pointer' }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: theme.ink }}>Show when I read messages</div>
+          <div style={{ fontSize: 12.5, color: theme.muted, marginTop: 2, lineHeight: 1.4 }}>When this is off, you also will not see when others read yours.</div>
+        </div>
+        <IgToggle on={readOn} />
+      </div>
+      {err && <div role="alert" style={{ padding: '10px 4px', fontSize: 13, color: theme.danger, fontWeight: 700 }}>{err}</div>}
+    </FullPage>
+  );
+}
+
+function PeoplePickerPage({ title, subtitle, note, table, ownerCol, otherCol, myId, onClose, onCount, zIndex = 70 }) {
+  useBackClose(true, onClose);
+  const { theme } = useTheme();
+  const [people, setPeople] = useState(null);
+  const [picked, setPicked] = useState(() => new Set());
+  const [q, setQ] = useState('');
+  const [unavailable, setUnavailable] = useState(false);
+  const busy = useRef(new Set());
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const [{ data: a }, { data: b }, { data: cur, error }] = await Promise.all([
+        supabase.from('follows').select('following_id').eq('follower_id', myId).eq('status', 'accepted'),
+        supabase.from('follows').select('follower_id').eq('following_id', myId).eq('status', 'accepted'),
+        supabase.from(table).select(otherCol).eq(ownerCol, myId).limit(2000),
+      ]);
+      if (!alive) return;
+      if (error) setUnavailable(true);
+      const chosen = new Set((cur || []).map((r) => r[otherCol]));
+      setPicked(chosen);
+      const ids = [...new Set([...(a || []).map((r) => r.following_id), ...(b || []).map((r) => r.follower_id), ...chosen])].filter((x) => x && x !== myId);
+      if (!ids.length) { setPeople([]); return; }
+      const { data: profs } = await supabase.from('profiles').select('id, name, username, avatar, avatar_frame, verified, custom_badge, is_bot, is_deleted').in('id', ids);
+      if (!alive) return;
+      setPeople(sanitizeAvatarList(profs || [], myId).filter((x) => !x.is_deleted && !x.is_bot).sort((x, y) => (x.name || '').localeCompare(y.name || '')));
+    })();
+    return () => { alive = false; };
+  }, []);
+  useEffect(() => { if (onCount) onCount(picked.size); }, [picked]);
+  const toggle = async (id) => {
+    if (unavailable || busy.current.has(id)) return;
+    busy.current.add(id);
+    const has = picked.has(id);
+    setPicked((prev) => { const n = new Set(prev); if (has) n.delete(id); else n.add(id); return n; });
+    hapticTap();
+    const res = has
+      ? await supabase.from(table).delete().eq(ownerCol, myId).eq(otherCol, id)
+      : await supabase.from(table).insert({ [ownerCol]: myId, [otherCol]: id });
+    busy.current.delete(id);
+    if (res && res.error) {
+      setPicked((prev) => { const n = new Set(prev); if (has) n.add(id); else n.delete(id); return n; });
+      setUnavailable(true);
+    }
+  };
+  const term = q.trim().toLowerCase();
+  const shown = (people || []).filter((p) => !term || String(p.name || '').toLowerCase().includes(term) || String(p.username || '').toLowerCase().includes(term));
+  return (
+    <FullPage title={title} subtitle={`${picked.size} picked`} onBack={onClose} zIndex={zIndex} pad={false}>
+      <div style={{ padding: '6px 16px 4px', fontSize: 13, color: theme.muted, lineHeight: 1.5 }}>{subtitle}</div>
+      <div style={{ padding: '6px 16px 8px', position: 'sticky', top: 0, zIndex: 2, background: igPalette(theme).bg }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, height: 40, padding: '0 12px', borderRadius: 12, background: theme.rowBg, color: theme.muted }}>
+          <Search size={17} />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search" aria-label={`Search ${title}`} autoCapitalize="none" style={{ flex: 1, minWidth: 0, border: 0, outline: 0, background: 'transparent', color: theme.ink, fontFamily: FONT, fontSize: 15 }} />
+        </label>
+      </div>
+      {unavailable && <div role="alert" style={{ margin: '4px 16px 8px', padding: 12, borderRadius: 14, background: theme.rowBg, fontSize: 13, color: theme.muted, lineHeight: 1.5 }}>This list is almost ready. It switches on once the latest ZChat setup is finished.</div>}
+      <div style={{ padding: '0 8px calc(24px + env(safe-area-inset-bottom))' }}>
+        {people === null && <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><Spinner size={20} color={theme.muted} /></div>}
+        {people && !people.length && <EmptyState art="nothing" title="Nobody to pick yet" text="Follow people or get followers and they show up here." />}
+        {shown.map((p) => {
+          const on = picked.has(p.id);
+          return (
+            <div key={p.id} role="button" aria-label={`${on ? 'Remove' : 'Add'} ${p.name}`} onClick={() => toggle(p.id)} className="zchat-row-press"
+              style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 10px', borderRadius: 14, cursor: 'pointer' }}>
+              <Avatar emoji={p.avatar} name={p.name} frame={p.avatar_frame} size={46} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><NameBadge name={p.name} verified={p.verified} custom={p.custom_badge} size={12} /></div>
+                <div style={{ fontSize: 12.5, color: theme.muted }}>@{p.username}</div>
+              </div>
+              <span style={{ width: 24, height: 24, borderRadius: '50%', border: `2px solid ${on ? theme.coral : theme.muted}`, background: on ? theme.coral : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                {on && <Check size={14} color="#FFFFFF" strokeWidth={3} />}
+              </span>
+            </div>
+          );
+        })}
+        {note && <div style={{ padding: '14px 10px', fontSize: 12.5, color: theme.muted, lineHeight: 1.5 }}>{note}</div>}
+      </div>
+    </FullPage>
+  );
+}
+
+function ChangeEmailPage({ email, onClose }) {
+  useBackClose(true, onClose);
+  const { theme } = useTheme();
+  const [next, setNext] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const [sent, setSent] = useState('');
+  const clean = next.trim().toLowerCase();
+  const valid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean) && clean !== String(email || '').toLowerCase();
+  const submit = async () => {
+    if (!valid || busy) return;
+    setBusy(true); setErr('');
+    try {
+      const { error } = await supabase.auth.updateUser({ email: clean }, { emailRedirectTo: window.location.origin });
+      if (error) {
+        const msg = String(error.message || '');
+        setErr(/already|registered|exists/i.test(msg) ? 'That email is already used by another account.' : /rate|seconds|too many/i.test(msg) ? 'Please wait a minute before trying again.' : 'Could not change your email right now. Try again soon.');
+      } else setSent(clean);
+    } catch { setErr('Could not change your email right now. Try again soon.'); }
+    setBusy(false);
+  };
+  return (
+    <FullPage title="Email address" subtitle={email || ''} onBack={onClose} zIndex={70}
+      footer={sent ? <BigButton label="Done" onClick={onClose} /> : <BigButton label={busy ? 'Sending' : 'Send confirmation'} disabled={!valid || busy} onClick={submit} />}>
+      {sent ? (
+        <div style={{ textAlign: 'center', padding: '36px 10px' }}>
+          <div style={{ width: 64, height: 64, margin: '0 auto 14px', borderRadius: '50%', background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.coral }}><Mail size={28} /></div>
+          <div style={{ fontSize: 19, fontWeight: 900, color: theme.ink }}>Check your inbox</div>
+          <div style={{ fontSize: 14, color: theme.muted, lineHeight: 1.55, marginTop: 8 }}>We sent a link to {sent}. Open it to finish the change. You may also get a link at your current email, open that one too.</div>
+        </div>
+      ) : (
+        <>
+          <div style={{ fontSize: 13.5, color: theme.muted, lineHeight: 1.55, padding: '12px 2px 4px' }}>Your current email is {email || 'not set'}. You keep using it to log in until you confirm the new one.</div>
+          <IgHeading>New email</IgHeading>
+          <input value={next} onChange={(e) => { setNext(e.target.value); setErr(''); }} placeholder="you@example.com" aria-label="New email" type="email" autoCapitalize="none" autoComplete="email"
+            onKeyDown={(e) => { if (e.key === 'Enter') submit(); }} style={{ ...inputStyle(theme), fontSize: 16 }} />
+          {err && <div role="alert" style={{ fontSize: 13, color: theme.danger, fontWeight: 700, padding: '10px 2px 0' }}>{err}</div>}
+        </>
+      )}
+    </FullPage>
+  );
+}
+
+function useCloseFriendCount(myId) {
+  const [n, setN] = useState(null);
+  const load = () => {
+    if (!myId) return;
+    supabase.from('close_friends').select('friend_id').eq('owner_id', myId).limit(1000)
+      .then(({ data, error }) => setN(error ? -1 : (data || []).length), () => setN(-1));
+  };
+  useEffect(load, [myId]);
+  return [n, load];
+}
+
+function CloseFriendsPicker({ myId, onClose, zIndex }) {
+  return (
+    <PeoplePickerPage title="Close friends" zIndex={zIndex} myId={myId} onClose={onClose} table="close_friends" ownerCol="owner_id" otherCol="friend_id"
+      subtitle="Only people on this list see stories you share to close friends. Nobody is told when you add or remove them." />
+  );
+}
+
+function StoryHiddenPicker({ myId, onClose, zIndex }) {
+  return (
+    <PeoplePickerPage title="Hide story from" zIndex={zIndex} myId={myId} onClose={onClose} table="story_hidden" ownerCol="owner_id" otherCol="hidden_id"
+      subtitle="People you pick here will not see any of your stories. They are not told." />
+  );
+}
+
+function CloseShareButton({ count, onShare, onEmpty, disabled, busy, size = 46 }) {
+  if (count === -1) return null;
+  const tap = () => {
+    if (disabled) return;
+    hapticTap();
+    if (!count) { if (onEmpty) onEmpty(); return; }
+    onShare();
+  };
+  return (
+    <div role="button" aria-label="Share to close friends" onPointerDown={(e) => e.preventDefault()} onClick={tap} className="zchat-press"
+      style={{ width: size, height: size, borderRadius: '50%', background: CLOSE_GREEN, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: disabled ? 'default' : 'pointer', flexShrink: 0, opacity: disabled ? 0.55 : 1 }}>
+      {busy ? <Spinner size={16} color="#FFFFFF" /> : <CloseFriendsIcon size={Math.round(size * 0.46)} color="#FFFFFF" bare />}
+    </div>
+  );
+}
+
+function CloseShareHint({ count, onEdit, base }) {
+  return (
+    <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.65)', padding: '6px 18px 0', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+      <span>{base}</span>
+      {count > 0 && <span role="button" aria-label="Edit close friends" onClick={onEdit} style={{ color: '#7CF0A6', fontWeight: 800, cursor: 'pointer' }}>Close friends {count}</span>}
+      {count === 0 && <span role="button" aria-label="Edit close friends" onClick={onEdit} style={{ color: '#7CF0A6', fontWeight: 800, cursor: 'pointer' }}>Pick close friends</span>}
+    </div>
+  );
+}
+
+async function zchatTools(action, payload, timeoutMs = 20000) {
+  let token = '';
+  try { const { data } = await supabase.auth.getSession(); token = (data && data.session && data.session.access_token) || ''; } catch {}
+  if (!token) return { error: 'Please log in again.', status: 401 };
+  const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timer = ctrl ? setTimeout(() => ctrl.abort(), timeoutMs) : 0;
+  try {
+    const res = await fetch('/.netlify/functions/zchat-tools', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ ...(payload || {}), action }),
+      signal: ctrl ? ctrl.signal : undefined,
+    });
+    const json = await res.json().catch(() => null);
+    if (!res.ok) return { error: (json && json.error) || '', status: res.status };
+    return { data: json || {}, status: res.status };
+  } catch {
+    return { error: '', status: 0 };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+const iceStore = { list: null, at: 0, job: null };
+function prefetchIce(force) {
+  if (!force && iceStore.list && Date.now() - iceStore.at < 6 * 3600000) return Promise.resolve(iceStore.list);
+  if (iceStore.job) return iceStore.job;
+  iceStore.job = zchatTools('turn', {}, 7000)
+    .then((r) => {
+      const raw = r && r.data && Array.isArray(r.data.iceServers) ? r.data.iceServers : null;
+      if (raw) {
+        iceStore.list = raw.filter((s) => s && (typeof s.urls === 'string' || Array.isArray(s.urls)));
+        iceStore.at = Date.now();
+      }
+      return iceStore.list;
+    }, () => iceStore.list)
+    .then((v) => { iceStore.job = null; return v; });
+  return iceStore.job;
+}
+function waitIce(ms = 2500) {
+  return Promise.race([prefetchIce(), new Promise((r) => setTimeout(r, ms))]).catch(() => null);
+}
+
+let authProvidersJob = null;
+function readAuthProviders() {
+  try {
+    const c = JSON.parse(localStorage.getItem('zchat-auth-providers') || 'null');
+    return c && c.v && Date.now() - c.at < 12 * 3600000 ? c.v : null;
+  } catch { return null; }
+}
+function loadAuthProviders() {
+  if (authProvidersJob) return authProvidersJob;
+  authProvidersJob = (async () => {
+    try {
+      const au = supabase && supabase.auth;
+      const authUrl = String((au && au.url) || (supabase && supabase.supabaseUrl ? `${String(supabase.supabaseUrl).replace(/\/+$/, '')}/auth/v1` : '')).replace(/\/+$/, '');
+      const key = (au && au.headers && au.headers.apikey) || (supabase && supabase.supabaseKey) || '';
+      if (!authUrl || !key) return null;
+      const res = await fetch(`${authUrl}/settings`, { headers: { apikey: key } });
+      if (!res.ok) return null;
+      const j = await res.json();
+      const ext = (j && j.external) || {};
+      const v = { apple: !!ext.apple, google: !!ext.google };
+      try { localStorage.setItem('zchat-auth-providers', JSON.stringify({ at: Date.now(), v })); } catch {}
+      return v;
+    } catch { return null; }
+  })();
+  return authProvidersJob;
+}
+function useAuthProviders() {
+  const [v, setV] = useState(() => readAuthProviders());
+  useEffect(() => {
+    let alive = true;
+    loadAuthProviders().then((x) => { if (alive && x) setV(x); });
+    return () => { alive = false; };
+  }, []);
+  return v;
+}
+
+const MEDIA_SIGN_TTL = 21600;
+const signedMedia = new Map();
+const signWaiters = new Map();
+let signQueue = [];
+let signTimer = 0;
+function isPrivateMedia(u) { return typeof u === 'string' && u.indexOf('zp:') === 0; }
+function signedMediaNow(u) {
+  if (!isPrivateMedia(u)) return u || null;
+  const hit = signedMedia.get(u.slice(3));
+  if (!hit) return null;
+  const margin = Math.min(120000, hit.ttl * 250);
+  return hit.exp - Date.now() > margin ? hit.url : null;
+}
+function rememberSigned(path, url, ttl) {
+  signedMedia.set(path, { url, exp: Date.now() + ttl * 1000, ttl });
+  if (signedMedia.size > 1500) signedMedia.delete(signedMedia.keys().next().value);
+}
+function settleSign(path, url) {
+  const ws = signWaiters.get(path) || [];
+  signWaiters.delete(path);
+  ws.forEach((w) => { try { w(url); } catch {} });
+}
+function flushSignQueue() {
+  signTimer = 0;
+  const paths = [...new Set(signQueue)];
+  signQueue = [];
+  for (let i = 0; i < paths.length; i += 100) {
+    const chunk = paths.slice(i, i + 100);
+    let job;
+    try { job = supabase.storage.from('chat-private').createSignedUrls(chunk, MEDIA_SIGN_TTL); } catch { job = Promise.resolve({ data: null }); }
+    Promise.resolve(job).then(({ data }) => {
+      const byPath = new Map();
+      (data || []).forEach((d) => { if (d && d.path && d.signedUrl && !d.error) byPath.set(d.path, d.signedUrl); });
+      chunk.forEach((p) => {
+        const url = byPath.get(p) || null;
+        if (url) rememberSigned(p, url, MEDIA_SIGN_TTL);
+        settleSign(p, url);
+      });
+    }, () => chunk.forEach((p) => settleSign(p, null)));
+  }
+}
+function resolveMedia(u) {
+  if (!isPrivateMedia(u)) return Promise.resolve(u || null);
+  const now = signedMediaNow(u);
+  if (now) return Promise.resolve(now);
+  const p = u.slice(3);
+  return new Promise((resolve) => {
+    const ws = signWaiters.get(p);
+    if (ws) { ws.push(resolve); return; }
+    signWaiters.set(p, [resolve]);
+    signQueue.push(p);
+    if (!signTimer) signTimer = setTimeout(flushSignQueue, 25);
+  });
+}
+async function resolveMediaShort(u, ttl = 300) {
+  if (!isPrivateMedia(u)) return u || null;
+  const p = u.slice(3);
+  try {
+    const { data } = await supabase.storage.from('chat-private').createSignedUrl(p, ttl);
+    const url = data && data.signedUrl;
+    if (!url) return null;
+    rememberSigned(p, url, ttl);
+    return url;
+  } catch { return null; }
+}
+function useMediaUrl(u) {
+  const [state, setState] = useState(() => ({ src: u, url: signedMediaNow(u) }));
+  const current = state.src === u ? state.url : signedMediaNow(u);
+  useEffect(() => {
+    if (!isPrivateMedia(u)) { setState((s) => (s.src === u && s.url === (u || null) ? s : { src: u, url: u || null })); return undefined; }
+    const now = signedMediaNow(u);
+    if (now) { setState((s) => (s.src === u && s.url === now ? s : { src: u, url: now })); return undefined; }
+    let alive = true;
+    resolveMedia(u).then((url) => { if (alive) setState({ src: u, url }); });
+    return () => { alive = false; };
+  }, [u]);
+  return current;
+}
+function MediaImg({ src, alt = '', style, ...rest }) {
+  const url = useMediaUrl(src);
+  if (!url) return <span aria-hidden="true" style={{ display: 'block', background: 'rgba(127,127,127,0.18)', ...(style || {}) }} />;
+  return <img src={url} alt={alt} style={style} {...rest} />;
+}
+function MediaVideo({ src, style, ...rest }) {
+  const url = useMediaUrl(src);
+  if (!url) return <span aria-hidden="true" style={{ display: 'block', minHeight: 120, background: 'rgba(0,0,0,0.35)', ...(style || {}) }} />;
+  return <video src={url} style={style} {...rest} />;
+}
+function MediaAudio({ src, ...rest }) {
+  const url = useMediaUrl(src);
+  return url ? <audio src={url} {...rest} /> : null;
+}
+let privateBucketOff = false;
+async function uploadChatMedia(file, userId) {
+  if (!privateBucketOff && file && userId) {
+    try {
+      const fromName = (String(file.name || '').match(/\.([a-z0-9]{2,5})$/i) || [])[1];
+      const fromType = String(file.type || '').split('/')[1] || '';
+      const ext = String(fromName || fromType.replace(/[^a-z0-9]/gi, '').slice(0, 5) || 'bin').toLowerCase();
+      const id = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+      const path = `${userId}/${id}.${ext}`;
+      const { error } = await supabase.storage.from('chat-private').upload(path, file, { contentType: file.type || 'application/octet-stream', cacheControl: '31536000' });
+      if (!error) return { url: `zp:${path}`, error: null };
+      const msg = `${error.statusCode || ''} ${error.message || ''} ${error.error || ''}`;
+      if (/bucket|not ?found|security|policy|unauthori|forbidden|40[134]/i.test(msg)) privateBucketOff = true;
+    } catch {}
+  }
+  return uploadMedia(file, userId);
+}
+
+const crashState = { sent: 0, last: '', at: 0, installed: false };
+const CRASH_IGNORE = /ResizeObserver loop|^Script error\.?$|Load failed|NetworkError|Failed to fetch|AbortError|The play\(\) request|NotAllowedError|The operation was aborted|cancelled|Importing a module script failed|dynamically imported module|ServiceWorker|Push subscription|push service|QuotaExceeded/i;
+function reportClientError(message, stack, extra) {
+  try {
+    const msg = String(message || '').slice(0, 1500);
+    if (!msg || CRASH_IGNORE.test(msg)) return;
+    const now = Date.now();
+    if (crashState.sent >= 15) return;
+    if (msg === crashState.last && now - crashState.at < 120000) return;
+    crashState.last = msg;
+    crashState.at = now;
+    crashState.sent += 1;
+    const url = `${window.location.pathname}${window.location.search ? '?' : ''}`.slice(0, 120);
+    supabase.from('client_errors').insert({ message: msg, stack: String(stack || '').slice(0, 6000), url, ua: String(navigator.userAgent || '').slice(0, 300), version: APP_VERSION, extra: extra || null }).then(() => {}, () => {});
+  } catch {}
+}
+function installCrashReporter() {
+  if (crashState.installed || typeof window === 'undefined') return;
+  crashState.installed = true;
+  window.addEventListener('error', (e) => {
+    if (!e) return;
+    if (e.target && e.target !== window && !e.error) return;
+    reportClientError(e.message || (e.error && e.error.message), e.error && e.error.stack, { kind: 'error', line: e.lineno || null, col: e.colno || null });
+  });
+  window.addEventListener('unhandledrejection', (e) => {
+    const r = e && e.reason;
+    if (!r) return;
+    const message = typeof r === 'string' ? r : r.message || String(r);
+    if (r && typeof r === 'object' && (r.code || r.status) && !r.stack) return;
+    reportClientError(message, r && r.stack, { kind: 'promise' });
+  });
+}
+
+function AdminErrors() {
+  const { theme } = useTheme();
+  const [rows, setRows] = useState(null);
+  const [err, setErr] = useState('');
+  const [open, setOpen] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const load = async () => {
+    setErr('');
+    const { data, error } = await supabase.from('client_errors').select('*').order('created_at', { ascending: false }).limit(300);
+    if (error) { setRows([]); setErr('Crash reports switch on once the latest ZChat setup is finished.'); return; }
+    setRows(data || []);
+  };
+  useEffect(() => { load(); }, []);
+  const groupsList = (() => {
+    const map = new Map();
+    (rows || []).forEach((r) => {
+      const k = String(r.message || '').slice(0, 160);
+      const g = map.get(k) || { key: k, message: r.message, count: 0, last: r.created_at, versions: new Set(), people: new Set(), sample: r };
+      g.count += 1;
+      if (r.version) g.versions.add(r.version);
+      if (r.user_id) g.people.add(r.user_id);
+      map.set(k, g);
+    });
+    return [...map.values()].sort((a, b) => new Date(b.last) - new Date(a.last));
+  })();
+  const clearAll = async () => {
+    if (busy) return;
+    setBusy(true);
+    await supabase.from('client_errors').delete().gt('id', 0);
+    setBusy(false);
+    load();
+  };
+  const card = { background: theme.rowBg, border: `1px solid ${theme.border}`, borderRadius: 18, padding: 14, marginBottom: 10 };
+  return (
+    <div>
+      <div style={{ ...card, display: 'flex', alignItems: 'center', gap: 10 }}>
+        <Activity size={18} color={theme.coral} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontWeight: 900, fontSize: 15, color: theme.ink }}>Crash reports</div>
+          <div style={{ fontSize: 12, color: theme.muted, marginTop: 2 }}>{rows === null ? 'Loading' : `${rows.length} in the last 30 days`}</div>
+        </div>
+        <div role="button" aria-label="Refresh crash reports" onClick={load} style={{ fontSize: 12.5, fontWeight: 800, color: theme.coral, cursor: 'pointer' }}>Refresh</div>
+        {rows && rows.length > 0 && <div role="button" aria-label="Clear crash reports" onClick={clearAll} style={{ fontSize: 12.5, fontWeight: 800, color: theme.danger, cursor: 'pointer', marginLeft: 6 }}>{busy ? 'Clearing' : 'Clear'}</div>}
+      </div>
+      {err && <div style={{ ...card, fontSize: 13, color: theme.muted }}>{err}</div>}
+      {rows && !rows.length && !err && <div style={{ ...card, fontSize: 13, color: theme.muted }}>No crashes reported. Nice.</div>}
+      {groupsList.map((g) => (
+        <div key={g.key} style={card}>
+          <div role="button" onClick={() => setOpen(open === g.key ? null : g.key)} style={{ cursor: 'pointer' }}>
+            <div style={{ fontSize: 13.5, fontWeight: 800, color: theme.ink, wordBreak: 'break-word', lineHeight: 1.4 }}>{g.message}</div>
+            <div style={{ fontSize: 11.5, color: theme.muted, marginTop: 5 }}>{`${g.count} ${g.count === 1 ? 'time' : 'times'} · ${g.people.size} ${g.people.size === 1 ? 'person' : 'people'} · ${[...g.versions].slice(0, 3).join(', ') || 'no version'} · ${adminDate(g.last)}`}</div>
+          </div>
+          {open === g.key && (
+            <div style={{ marginTop: 10, fontSize: 11.5, color: theme.muted, whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'ui-monospace, Menlo, monospace', maxHeight: 260, overflowY: 'auto', background: theme.panelBg, borderRadius: 12, padding: 10 }}>
+              {`${g.sample.url || ''}\n${g.sample.ua || ''}\n\n${g.sample.stack || 'No stack'}`}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+const LIVE_LOC_PREFIX = 'zlive:';
+function parseLiveLoc(content) {
+  if (typeof content !== 'string' || content.indexOf(LIVE_LOC_PREFIX) !== 0) return null;
+  try {
+    const d = JSON.parse(content.slice(LIVE_LOC_PREFIX.length));
+    if (!d || !Number.isFinite(d.lat) || !Number.isFinite(d.lng) || !Number.isFinite(d.until)) return null;
+    return d;
+  } catch { return null; }
+}
+function liveLocContent(lat, lng, acc, until, on) {
+  return `${LIVE_LOC_PREFIX}${JSON.stringify({ lat: Math.round(lat * 1e6) / 1e6, lng: Math.round(lng * 1e6) / 1e6, acc: Math.round(acc || 0), u: Date.now(), until, on: !!on })}`;
+}
+function metersBetween(a, b) {
+  const R = 6371000;
+  const toR = (x) => (x * Math.PI) / 180;
+  const dLat = toR(b.lat - a.lat);
+  const dLng = toR(b.lng - a.lng);
+  const s = Math.sin(dLat / 2) ** 2 + Math.cos(toR(a.lat)) * Math.cos(toR(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(s)));
+}
+function readLiveShares(uid) {
+  try { const a = JSON.parse(localStorage.getItem(`zchat-live-${uid}`) || '[]'); return Array.isArray(a) ? a.filter((x) => x && x.id && x.until > Date.now() - 60000) : []; } catch { return []; }
+}
+function writeLiveShares(uid, list) {
+  try { localStorage.setItem(`zchat-live-${uid}`, JSON.stringify(list.slice(-10))); } catch {}
+  try { window.dispatchEvent(new Event('zchat-live-shares')); } catch {}
+}
+function liveLeftText(ms) {
+  const m = Math.max(1, Math.round(ms / 60000));
+  if (m < 60) return `${m} min left`;
+  const h = Math.floor(m / 60);
+  const r = m % 60;
+  return r ? `${h} h ${r} min left` : `${h} h left`;
+}
+function LiveLocationCard({ live, isMe, messageId }) {
+  const { theme } = useTheme();
+  const now = Date.now();
+  const active = !!live.on && live.until > now;
+  useTicker(active, 30000);
+  const green = '#16A34A';
+  const url = `https://maps.google.com/?q=${live.lat},${live.lng}`;
+  const updated = live.u ? Math.max(0, now - live.u) : 0;
+  const updatedText = updated < 60000 ? 'Updated just now' : `Updated ${Math.round(updated / 60000)} min ago`;
+  return (
+    <FeatureCardShell colors={[green]} icon={<Compass size={14} />} label={active ? 'Live location' : 'Live location ended'} title={isMe ? (active ? 'You are sharing where you are' : 'You stopped sharing') : (active ? 'Sharing where they are' : 'Sharing ended')}>
+      <a href={url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ display: 'block', textDecoration: 'none' }}>
+        <div style={{ height: 92, borderRadius: 14, position: 'relative', overflow: 'hidden', background: active ? 'linear-gradient(135deg, #0F3D2A, #15623F 60%, #0B2E1F)' : (theme.dark ? '#26262B' : '#E7E7EC') }}>
+          <div style={{ position: 'absolute', inset: 0, backgroundImage: 'linear-gradient(rgba(255,255,255,0.09) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.09) 1px, transparent 1px)', backgroundSize: '20px 20px' }} />
+          <div style={{ position: 'absolute', left: '50%', top: '50%', width: 18, height: 18, marginLeft: -9, marginTop: -9, borderRadius: '50%', background: active ? '#4ADE80' : theme.muted, border: '3px solid #FFFFFF', boxShadow: '0 2px 8px rgba(0,0,0,0.35)' }} />
+          {active && <div className="zchat-live-ping" style={{ position: 'absolute', left: '50%', top: '50%', width: 46, height: 46, marginLeft: -23, marginTop: -23, borderRadius: '50%', border: '2px solid rgba(74,222,128,0.8)' }} />}
+        </div>
+      </a>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 9 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 12.5, fontWeight: 700, color: theme.ink }}>{active ? liveLeftText(live.until - now) : 'Last place shared'}</div>
+          <div style={{ fontSize: 11.5, color: theme.muted, marginTop: 1 }}>{updatedText}</div>
+        </div>
+        <a href={url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ fontSize: 12.5, fontWeight: 800, color: green, textDecoration: 'none', flexShrink: 0 }}>Open in Maps</a>
+      </div>
+      {isMe && active && (
+        <div role="button" aria-label="Stop sharing live location" onClick={(e) => { e.stopPropagation(); hapticTap(); try { window.dispatchEvent(new CustomEvent('zchat-live-stop', { detail: messageId })); } catch {} }} className="zchat-press"
+          style={{ marginTop: 10, textAlign: 'center', padding: '9px 0', borderRadius: 12, background: theme.dark ? 'rgba(239,68,68,0.16)' : 'rgba(239,68,68,0.1)', color: theme.danger, fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>Stop sharing</div>
+      )}
+    </FeatureCardShell>
+  );
+}
+
+const TRANSLATE_LANGS = [['en', 'English'], ['si', 'Sinhala'], ['ta', 'Tamil'], ['hi', 'Hindi'], ['ar', 'Arabic'], ['es', 'Spanish'], ['fr', 'French'], ['de', 'German'], ['pt', 'Portuguese'], ['ru', 'Russian'], ['ja', 'Japanese'], ['ko', 'Korean'], ['zh', 'Chinese'], ['id', 'Indonesian'], ['ms', 'Malay'], ['th', 'Thai'], ['tr', 'Turkish'], ['it', 'Italian'], ['ur', 'Urdu'], ['bn', 'Bengali']];
+function defaultTranslateLang() {
+  try {
+    const saved = localStorage.getItem('zchat-translate-to');
+    if (saved && TRANSLATE_LANGS.some(([k]) => k === saved)) return saved;
+  } catch {}
+  const nav = String((typeof navigator !== 'undefined' && navigator.language) || 'en').slice(0, 2).toLowerCase();
+  return TRANSLATE_LANGS.some(([k]) => k === nav) ? nav : 'en';
+}
+const toolResultCache = new Map();
+function toolErrorText(r, kind) {
+  if (r.status === 429) return r.error || 'You have used this a lot today. Try again tomorrow.';
+  if (r.status === 503 && /set up/i.test(r.error || '')) return `${kind} switches on once the ZChat tools are set up.`;
+  if (r.status === 404 && !r.error) return `${kind} switches on once the ZChat tools are set up.`;
+  if (r.status === 0) return 'No connection. Try again.';
+  return r.error || `${kind} did not work this time. Try again.`;
+}
+function TextToolSheet({ title, subtitle, text, busy, error, onClose, onCopy, footer }) {
+  const { theme } = useTheme();
+  const peek = (
+    <div style={{ padding: '12px 20px 6px' }}>
+      {busy ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: theme.muted, fontSize: 14, padding: '10px 0' }}><Spinner size={16} color={theme.muted} />Working on it</div>
+      ) : error ? (
+        <div role="alert" style={{ fontSize: 14, color: theme.danger, fontWeight: 700, lineHeight: 1.5, padding: '6px 0' }}>{error}</div>
+      ) : (
+        <div style={{ fontSize: 16, color: theme.ink, lineHeight: 1.55, whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: '42vh', overflowY: 'auto' }}>{text}</div>
+      )}
+      {footer}
+    </div>
+  );
+  const actions = !busy && !error && text ? [{ icon: <Copy size={18} />, label: 'Copy text', onClick: onCopy }] : [];
+  return <ChatRowSheet title={title} subtitle={subtitle} peek={peek} actions={actions} onClose={onClose} zIndex={97} />;
+}
+function TranslateSheet({ message, onClose, onCopied }) {
+  const { theme } = useTheme();
+  const [lang, setLang] = useState(defaultTranslateLang);
+  const [state, setState] = useState({ busy: true, text: '', error: '' });
+  useEffect(() => {
+    let alive = true;
+    const key = `tr:${message.id}:${lang}`;
+    const hit = toolResultCache.get(key);
+    if (hit) { setState({ busy: false, text: hit, error: '' }); return undefined; }
+    setState({ busy: true, text: '', error: '' });
+    zchatTools('translate', { text: String(message.content || '').slice(0, 3000), to: lang }, 30000).then((r) => {
+      if (!alive) return;
+      if (r.data && r.data.text) { toolResultCache.set(key, r.data.text); setState({ busy: false, text: r.data.text, error: '' }); } else setState({ busy: false, text: '', error: toolErrorText(r, 'Translate') });
+    });
+    return () => { alive = false; };
+  }, [lang, message.id]);
+  const name = (TRANSLATE_LANGS.find(([k]) => k === lang) || [0, 'English'])[1];
+  const pick = (k) => { setLang(k); try { localStorage.setItem('zchat-translate-to', k); } catch {} };
+  const footer = (
+    <div style={{ display: 'flex', gap: 6, overflowX: 'auto', padding: '12px 0 4px', scrollbarWidth: 'none' }}>
+      {TRANSLATE_LANGS.map(([k, label]) => (
+        <div key={k} role="button" aria-label={`Translate to ${label}`} onClick={() => pick(k)} className="zchat-press"
+          style={{ flexShrink: 0, padding: '7px 12px', borderRadius: 14, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', background: k === lang ? theme.coral : theme.rowBg, color: k === lang ? '#FFFFFF' : theme.ink }}>{label}</div>
+      ))}
+    </div>
+  );
+  return <TextToolSheet title="Translation" subtitle={`Into ${name}`} text={state.text} busy={state.busy} error={state.error} footer={footer} onClose={onClose} onCopy={() => { copyTextToClipboard(state.text); if (onCopied) onCopied(); }} />;
+}
+function TranscribeSheet({ message, onClose, onCopied }) {
+  const [state, setState] = useState({ busy: true, text: '', error: '' });
+  useEffect(() => {
+    let alive = true;
+    const key = `vt:${message.id}`;
+    const hit = toolResultCache.get(key);
+    if (hit) { setState({ busy: false, text: hit, error: '' }); return undefined; }
+    zchatTools('transcribe', { messageId: message.id }, 60000).then((r) => {
+      if (!alive) return;
+      if (r.data && r.data.text) { toolResultCache.set(key, r.data.text); setState({ busy: false, text: r.data.text, error: '' }); } else setState({ busy: false, text: '', error: toolErrorText(r, 'Voice to text') });
+    });
+    return () => { alive = false; };
+  }, [message.id]);
+  return <TextToolSheet title="Voice to text" subtitle="What was said" text={state.text} busy={state.busy} error={state.error} onClose={onClose} onCopy={() => { copyTextToClipboard(state.text); if (onCopied) onCopied(); }} />;
+}
+function TranslateIcon({ size = 18, color = 'currentColor' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 5h8M8 3v2M10.5 5c-.6 3.6-2.8 6.4-6 8" /><path d="M6 9c1 1.8 2.6 3.2 4.6 4" /><path d="M13 21l4-9 4 9M14.4 18h5.2" />
+    </svg>
+  );
+}
+
+function SettingsPanel({ onClose, onOpenPrivacy, onLogout, hideActivity, onToggleActivity, onOpenAccounts, onOpenDelete, onOpenBlocked, blockedCount = 0, chatLockSet, chatLockHash, onSetChatLockPassword, onTurnOffChatLock, autoOpenLockSetup, onConsumedAutoOpen, me, onEditProfile, onPrivacySaved, isZAdmin, onOpenReports, onOpenAdmin, hasPasswordLogin, sessionForLinks, onOpenWhatsNew, onOpenUsage, initialSection }) {
   useBackClose(true, onClose);
   const [permText, setPermText] = useState('Checking…');
   const notifState = (typeof Notification !== 'undefined' && Notification.permission) || 'default';
@@ -3165,7 +3949,9 @@ function SettingsPanel({ onClose, onOpenPrivacy, onLogout, hideActivity, onToggl
   const { theme, themeMode, soundOn, setSoundOn, reactionSoundOn, setReactionSoundOn } = useTheme();
   const [lockFlow, setLockFlow] = useState(null);
   const [igQuery, setIgQuery] = useState('');
-  const [section, setSection] = useState('main');
+  const [section, setSection] = useState(() => (initialSection && String(initialSection).indexOf('sub:') !== 0 ? String(initialSection).split(':')[0] : 'main'));
+  const [subPage, setSubPage] = useState(() => (initialSection && String(initialSection).indexOf('sub:') === 0 ? String(initialSection).slice(4) : null));
+  const currentEmail = (sessionForLinks && sessionForLinks.user && sessionForLinks.user.email) || (me && me.email) || '';
   const edgeBack = useEdgeSwipeBack(section === 'main');
   const SETTINGS_PARENT = { whocansee: 'privacy' };
   useBackClose(section !== 'main', () => setSection(SETTINGS_PARENT[section] || 'main'));
@@ -3196,6 +3982,7 @@ function SettingsPanel({ onClose, onOpenPrivacy, onLogout, hideActivity, onToggl
     { title: 'Your account', rows: [
       { icon: <User />, label: 'Edit profile', onClick: onEditProfile },
       { icon: <UserPlus />, label: 'Switch account', onClick: onOpenAccounts },
+      { icon: <Mail />, label: 'Email address', value: currentEmail.length > 20 ? `${currentEmail.slice(0, 18)}\u2026` : currentEmail, onClick: () => setSubPage('email') },
     ] },
     { title: 'Login and security', rows: [
       { icon: <Lock />, label: 'Change password', onClick: () => setSection('password') },
@@ -3206,8 +3993,13 @@ function SettingsPanel({ onClose, onOpenPrivacy, onLogout, hideActivity, onToggl
     ] },
     { title: 'Who can see your content', rows: [
       { icon: <Eye />, label: 'Privacy', onClick: () => setSection('privacy') },
+      { icon: <CloseFriendsIcon />, label: 'Close friends', onClick: () => setSubPage('close') },
       { icon: <EyeOff />, label: 'Hide activity status', toggle: !!hideActivity, onClick: onToggleActivity },
       { icon: <Ban />, label: 'Blocked accounts', value: blockedCount ? String(blockedCount) : 'None', onClick: onOpenBlocked },
+    ] },
+    { title: 'How others can reach you', rows: [
+      { icon: <MessageSquare />, label: 'Messages and requests', value: me && me.privacy_messages === 'following' ? 'People I follow' : undefined, onClick: () => setSubPage('messages') },
+      { icon: <StatusIcon />, label: 'Hide story from', onClick: () => setSubPage('hidden') },
     ] },
     { title: 'Your app', rows: [
       { icon: <Palette />, label: 'Theme', value: themeLabel, onClick: () => setSection('appearance') },
@@ -3307,7 +4099,10 @@ function SettingsPanel({ onClose, onOpenPrivacy, onLogout, hideActivity, onToggl
           <>
             <SectionHeader title="Privacy & Security" />
             <PageArt k="privacy" text="Choose who can see your profile and who can reach you." />
-            <SettingsRow icon={<Eye size={16} />} label="Who can see what" sub="Profile, bio, online, tags, groups" onClick={() => setSection('whocansee')} />
+            <SettingsRow icon={<Eye size={16} />} label="Who can see what" sub="Profile, bio, online, tags, groups, leaderboards" onClick={() => setSection('whocansee')} />
+            <SettingsRow icon={<MessageSquare size={16} />} label="Messages and requests" sub="Who can message me, read receipts" onClick={() => setSubPage('messages')} />
+            <SettingsRow icon={<CloseFriendsIcon size={16} />} label="Close friends" sub="Share stories with a smaller group" onClick={() => setSubPage('close')} />
+            <SettingsRow icon={<StatusIcon size={16} />} label="Hide story from" sub="Keep your stories from certain people" onClick={() => setSubPage('hidden')} />
             <SettingsRow icon={<Lock size={16} />} label={chatLockSet ? 'Change Chat Lock password' : 'Set Chat Lock password'} onClick={() => setLockFlow(chatLockSet ? 'verify-then-change' : 'set')} />
             {chatLockSet && (
               <SettingsRow icon={<Lock size={16} />} label="Turn off Chat Lock" danger onClick={() => setLockFlow('verify-then-off')} />
@@ -3384,8 +4179,12 @@ function SettingsPanel({ onClose, onOpenPrivacy, onLogout, hideActivity, onToggl
 
         </SettingsLayer>
       ))}
+      {subPage === 'messages' && me && <MessagePrivacyPage me={me} onClose={() => setSubPage(null)} onSaved={(patch) => { if (onPrivacySaved) onPrivacySaved(patch); }} />}
+      {subPage === 'close' && me && <CloseFriendsPicker myId={me.id} onClose={() => setSubPage(null)} />}
+      {subPage === 'hidden' && me && <StoryHiddenPicker myId={me.id} onClose={() => setSubPage(null)} />}
+      {subPage === 'email' && <ChangeEmailPage email={currentEmail} onClose={() => setSubPage(null)} />}
       {section === 'whocansee' && me && (
-        <WhoCanSeePanel me={me} onBack={() => setSection('privacy')} onSaved={onPrivacySaved} />
+        <WhoCanSeePanel me={me} onBack={() => setSection('privacy')} onSaved={onPrivacySaved} initialOpen={initialSection && String(initialSection).indexOf('whocansee:') === 0 ? String(initialSection).slice(10) : null} />
       )}
       {lockFlow === 'set' && (
         <ChatLockSetup onCancel={() => setLockFlow(null)} onConfirm={(pin) => { onSetChatLockPassword(pin); setLockFlow(null); }} />
@@ -3470,9 +4269,12 @@ const PRIVACY_ITEMS = [
   ['privacy_lastseen', 'Who can see my last seen', 'When you were last on ZChat'],
   ['privacy_tags', 'Who can tag me in a status', 'Mentions in someone else story'],
   ['privacy_groups', 'Who can add me to groups', 'Everyone else has to ask first'],
+  ['privacy_leaderboard', 'Who can see me on leaderboards', 'Others see Hidden player and cannot open your profile from there'],
 ];
+const PRIVACY_EXTRA_CHOICES = { privacy_leaderboard: [['nobody', 'Nobody']] };
+function privacyChoicesFor(key) { return [...PRIVACY_CHOICES, ...(PRIVACY_EXTRA_CHOICES[key] || [])]; }
 
-function WhoCanSeePanel({ me, onBack, onSaved }) {
+function WhoCanSeePanel({ me, onBack, onSaved, initialOpen }) {
   useBackClose(true, onBack);
   const { theme } = useTheme();
   const swipe = useEdgeSwipeBack(true, onBack);
@@ -3481,7 +4283,13 @@ function WhoCanSeePanel({ me, onBack, onSaved }) {
     PRIVACY_ITEMS.forEach(([key]) => { v[key] = (me && me[key]) || 'everyone'; });
     return v;
   });
-  const [openKey, setOpenKey] = useState(null);
+  const [openKey, setOpenKey] = useState(initialOpen || null);
+  const [saveErr, setSaveErr] = useState('');
+  useEffect(() => {
+    if (!initialOpen) return undefined;
+    const t = setTimeout(() => { const el = document.querySelector(`[data-privacy-key="${initialOpen}"]`); if (el) { try { el.scrollIntoView({ block: 'center' }); } catch {} } }, 350);
+    return () => clearTimeout(t);
+  }, []);
   const [chosenFor, setChosenFor] = useState(null);
   const [people, setPeople] = useState(null);
   const [allow, setAllow] = useState(() => new Set());
@@ -3489,9 +4297,16 @@ function WhoCanSeePanel({ me, onBack, onSaved }) {
   useBackClose(!!chosenFor, () => setChosenFor(null));
 
   const save = async (key, value) => {
+    const before = values[key];
     setValues((prev) => ({ ...prev, [key]: value }));
     setOpenKey(null);
-    await supabase.from('profiles').update({ [key]: value }).eq('id', me.id);
+    setSaveErr('');
+    const { error } = await supabase.from('profiles').update({ [key]: value }).eq('id', me.id);
+    if (error) {
+      setValues((prev) => ({ ...prev, [key]: before }));
+      setSaveErr('That setting could not be saved yet. Try again in a little while.');
+      return;
+    }
     onSaved({ [key]: value });
     if (value === 'chosen') openChosen(key);
   };
@@ -3520,26 +4335,26 @@ function WhoCanSeePanel({ me, onBack, onSaved }) {
     setBusy(false);
   };
 
-  const label = (v) => (PRIVACY_CHOICES.find(([k]) => k === v) || PRIVACY_CHOICES[0])[1];
+  const label = (v, key) => (privacyChoicesFor(key).find(([k]) => k === v) || PRIVACY_CHOICES[0])[1];
 
   return (
     <div {...swipe} style={{ position: 'absolute', inset: 0, background: theme.bgGradient, zIndex: 33, display: 'flex', flexDirection: 'column' }} className="zchat-panel-open">
       <IgTopBar title="Who can see what" onBack={onBack} />
       <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0 40px' }}>
         {PRIVACY_ITEMS.map(([key, title, sub]) => (
-          <div key={key}>
-            <div role="button" onClick={() => setOpenKey(openKey === key ? null : key)} style={{ padding: '14px 18px', cursor: 'pointer', borderBottom: `1px solid ${theme.border}` }}>
+          <div key={key} data-privacy-key={key}>
+            <div role="button" aria-label={title} onClick={() => setOpenKey(openKey === key ? null : key)} style={{ padding: '14px 18px', cursor: 'pointer', borderBottom: `1px solid ${theme.border}` }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 14.5, fontWeight: 700, color: theme.ink }}>{title}</div>
                   <div style={{ fontSize: 12, color: theme.muted, marginTop: 2 }}>{sub}</div>
                 </div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: theme.coral }}>{label(values[key])}</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: theme.coral, flexShrink: 0 }}>{label(values[key], key)}</div>
               </div>
               {openKey === key && (
                 <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {PRIVACY_CHOICES.map(([v, text]) => (
-                    <div key={v} role="button" onClick={(e) => { e.stopPropagation(); save(key, v); }}
+                  {privacyChoicesFor(key).map(([v, text]) => (
+                    <div key={v} role="button" aria-label={`${title} ${text}`} onClick={(e) => { e.stopPropagation(); save(key, v); }}
                       style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 12, cursor: 'pointer',
                         background: values[key] === v ? `${theme.coral}1A` : 'transparent', border: `1px solid ${values[key] === v ? theme.coral : theme.border}` }}>
                       <div style={{ width: 16, height: 16, borderRadius: 8, border: `2px solid ${values[key] === v ? theme.coral : theme.muted}`, background: values[key] === v ? theme.coral : 'transparent' }} />
@@ -3556,6 +4371,7 @@ function WhoCanSeePanel({ me, onBack, onSaved }) {
             </div>
           </div>
         ))}
+        {saveErr && <div role="alert" style={{ padding: '12px 18px 0', fontSize: 13, color: theme.danger, fontWeight: 700 }}>{saveErr}</div>}
         <div style={{ padding: '16px 18px', fontSize: 12.5, color: theme.muted, lineHeight: 1.7 }}>
           Chosen people are picked from your followers. Anyone you have not chosen simply will not see that part of your profile.
         </div>
@@ -5842,7 +6658,7 @@ function GroupInfoPanel({ group, members, myId, iFollowIds, privacyAllowed, myRo
               <div key={m.id} role="button" onClick={() => onOpenMedia && onOpenMedia(m)} style={{ position: 'relative', aspectRatio: '1 / 1', background: c.field, overflow: 'hidden', cursor: 'pointer' }}>
                 {m.type === 'video'
                   ? <VideoThumb src={m.media_url} style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} />
-                  : <img src={m.media_url} alt="" loading="lazy" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
+                  : <MediaImg src={m.media_url} loading="lazy" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
                 {m.type === 'video' && <Play size={15} color="white" style={{ position: 'absolute', top: 6, right: 6, filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.6))' }} />}
               </div>
             ))}
@@ -7532,12 +8348,12 @@ const MessageBubbleMemo = React.memo(function MessageBubbleMemo(props) {
   return <MessageBubble {...out} />;
 }, bubblePropsEqual);
 
-function MessageBubble({ onOpenOnce, onVote, onShowVotes, gameMerge, gameLive, onGameMove, onGameRematch, onOpenGame, onPlayDuel, peerName, myId, isBot, m, isMe, onDelete, selectionMode, selected, onToggleSelect, onLongPress, onOpenImage, onOpenVideo, reactions, onReact, onOpenWhoReacted, replyPreview, onSwipeReply, onJumpToMessage, highlighted, senderLabel, senderAvatar, hideReadStatus, onOpenSenderProfile, canModerate, onOpenMention, mentionsMe, onOpenStoryRef, onCallBack, onOpenSticker, tightBelow, senderVerified, onOpenPost, tightAbove, senderFrame, senderCustomBadge }) {
+function MessageBubble({ onOpenLive, onOpenOnce, onVote, onShowVotes, gameMerge, gameLive, onGameMove, onGameRematch, onOpenGame, onPlayDuel, peerName, myId, isBot, m, isMe, onDelete, selectionMode, selected, onToggleSelect, onLongPress, onOpenImage, onOpenVideo, reactions, onReact, onOpenWhoReacted, replyPreview, onSwipeReply, onJumpToMessage, highlighted, senderLabel, senderAvatar, hideReadStatus, onOpenSenderProfile, canModerate, onOpenMention, mentionsMe, onOpenStoryRef, onCallBack, onOpenSticker, tightBelow, senderVerified, onOpenPost, tightAbove, senderFrame, senderCustomBadge, noReceipts }) {
   const mediaOnly = !m.deleted && (m.type === 'image' || m.type === 'video')
     && !replyPreview && !senderLabel && !m.forwarded
     && !(m.content && !String(m.content).startsWith('/'));
   const { theme, fontScale, bubbleColor } = useTheme();
-  const cachedVideoSrc = useCachedMedia(m.type === 'video' ? m.media_url : null);
+  const cachedVideoSrc = useCachedMedia(m.type === 'video' && !parseOnce(m) ? m.media_url : null);
   const [hover, setHover] = useState(false);
   const [burstHeart, setBurstHeart] = useState(false);
   const lastTapRef = useRef(0);
@@ -7576,6 +8392,8 @@ function MessageBubble({ onOpenOnce, onVote, onShowVotes, gameMerge, gameLive, o
     }).catch(() => { sentGameMoveKeys.delete(moveKey); setSendingMove(false); });
   };
   const moveSent = !!moveKey && (sendingMove || sentGameMoveKeys.has(moveKey));
+  const finishedGameKey = gameState && gameState.w && gameLive && !String(m.id).startsWith('temp-') ? `${gameState.id}:${gameState.w}` : '';
+  useEffect(() => { if (finishedGameKey) queueGameRecord(gameState, myId); }, [finishedGameKey]);
   const bareCard = !m.deleted && m.type === 'text' && (!!gameState || !!pollData || !!eventData || !!diceData || !!extraCard);
   const locationShare = m.type === 'text' && !m.deleted && !gameState && !pollData && !eventData && !diceData && !extraCard ? parseLocationMessage(m.content) : null;
   const linkPreviewUrl = m.type === 'text' && !m.deleted && !sharedPostId && !sharedProfileId && !gameState && !locationShare && !pollData && !eventData && !diceData && !extraCard ? firstPreviewableUrl(m.content) : null;
@@ -7762,7 +8580,7 @@ function MessageBubble({ onOpenOnce, onVote, onShowVotes, gameMerge, gameLive, o
             <div style={{ fontSize: 13, color: theme.muted, fontStyle: 'italic' }}>This message was deleted</div>
           ) : (
             <>
-              {onceInfo && <OnceChip m={m} isMe={isMe} reactions={reactions} myId={myId} onOpen={onOpenOnce} ink={bubbleSpec ? bubbleSpec.ink : undefined} isGroup={!!senderLabel || !!hideReadStatus} />}
+              {onceInfo && <OnceChip m={m} isMe={isMe} reactions={reactions} myId={myId} onOpen={onOpenOnce} ink={bubbleSpec ? bubbleSpec.ink : undefined} isGroup={!!senderLabel || !!hideReadStatus} noReads={!!noReceipts} />}
               {m.type === 'image' && !onceInfo && <BlurGate on={!!blurInfo} id={m.id}><ChatImage src={m.media_url} caption={mediaCaption} /></BlurGate>}
               {m.type === 'video' && !onceInfo && (<BlurGate on={!!blurInfo} id={m.id}>
                 <div onClick={(e) => { e.stopPropagation(); onOpenVideo({ url: m.media_url, trimStart: m.trim_start, trimEnd: m.trim_end, overlayUrl: m.overlay_url }); }} style={{ position: 'relative', width: 240, maxWidth: '100%', height: 240, borderRadius: 14, overflow: 'hidden', marginBottom: m.content ? 4 : 2, background: '#000', cursor: 'pointer' }}>
@@ -7846,6 +8664,9 @@ function MessageBubble({ onOpenOnce, onVote, onShowVotes, gameMerge, gameLive, o
                     <DuelCard state={gameState} myId={myId} live={!!gameLive} fresh={gameFresh} peerName={peerName} ink={bubbleSpec ? bubbleSpec.ink : undefined}
                       onPlay={() => onPlayDuel && onPlayDuel(gameState)} onRematch={onGameRematch ? () => onGameRematch(gameState) : null} />
                   )}
+                  {LIVE_GAME_KEYS.includes(gameState.g) && (
+                    <LiveGameCard state={gameState} myId={myId} peerName={peerName} onOpen={() => onOpenLive && onOpenLive(gameState)} onRematch={onGameRematch ? () => onGameRematch(gameState) : null} />
+                  )}
                   {BOARD_CARDS[gameState.g] && React.createElement(BOARD_CARDS[gameState.g], { state: gameState, myId, live: !!gameLive, fresh: gameFresh, peerName, onMove: guardedGameMove, onRematch: onGameRematch ? () => onGameRematch(gameState) : null })}
                 </div>
               )}
@@ -7874,6 +8695,7 @@ function MessageBubble({ onOpenOnce, onVote, onShowVotes, gameMerge, gameLive, o
                   {extraCard.k === 'list' && <ChecklistCard list={extraCard.d} votes={reactions} onToggle={onVote ? (i) => onVote(m, i) : null} />}
                   {extraCard.k === 'bill' && <BillCard bill={extraCard.d} votes={reactions} myId={myId} senderId={m.sender_id} onToggle={onVote ? () => onVote(m, 0) : null} onShowVotes={onShowVotes ? () => onShowVotes(m) : null} />}
                   {extraCard.k === 'count' && <CountdownCard cd={extraCard.d} />}
+                  {extraCard.k === 'live' && <LiveLocationCard live={extraCard.d} isMe={isMe} messageId={m.id} />}
                 </div>
               )}
               {locationShare && (
@@ -7896,7 +8718,7 @@ function MessageBubble({ onOpenOnce, onVote, onShowVotes, gameMerge, gameLive, o
                   <span data-msg-time="true" style={{ float: 'right', display: 'inline-flex', alignItems: 'center', gap: 3, marginLeft: 10, marginTop: 7, marginBottom: -3, height: 14, lineHeight: 1, position: 'relative', top: 1, userSelect: 'none' }}>
                     {m.edited && <span style={{ fontSize: 8, color: theme.muted, fontStyle: 'italic' }}>edited</span>}
                     <span style={{ fontSize: 10.5, color: bubbleSpec ? bubbleSpec.ink : theme.muted, opacity: bubbleSpec ? 0.7 : 1 }}>{time}</span>
-                    {isMe && <StatusTicks status={m.queued ? 'queued' : (!hideReadStatus && m.read) ? 'read' : m.delivered ? 'delivered' : 'sent'} />}
+                    {isMe && <StatusTicks status={m.queued ? 'queued' : (!hideReadStatus && !noReceipts && m.read) ? 'read' : m.delivered ? 'delivered' : 'sent'} />}
                   </span>
                 </div>
               )}
@@ -7910,7 +8732,7 @@ function MessageBubble({ onOpenOnce, onVote, onShowVotes, gameMerge, gameLive, o
             }}>
               {m.edited && <span style={{ fontSize: 8, color: m.type === 'text' ? theme.muted : 'rgba(255,255,255,0.85)', fontStyle: 'italic' }}>edited</span>}
               <span style={{ fontSize: 10.5, color: m.type === 'text' ? theme.muted : 'rgba(255,255,255,0.85)' }}>{time}</span>
-              {isMe && <StatusTicks status={m.queued ? 'queued' : (!hideReadStatus && m.read) ? 'read' : m.delivered ? 'delivered' : 'sent'} />}
+              {isMe && <StatusTicks status={m.queued ? 'queued' : (!hideReadStatus && !noReceipts && m.read) ? 'read' : m.delivered ? 'delivered' : 'sent'} />}
             </div>
           )}
         </div>
@@ -7948,7 +8770,8 @@ function playReactionPing() {
 function pairKey(a, b) { return a < b ? [a, b] : [b, a]; }
 
 
-function ImageViewer({ url, onClose, onForward, onReport, once, caption, onEdit }) {
+function ImageViewer({ url: rawUrl, onClose, onForward, onReport, once, caption, onEdit }) {
+  const url = useMediaUrl(rawUrl);
   useBackClose(true, onClose);
   const [ui, setUi] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -8190,7 +9013,7 @@ function MessageActionBar({ count, canEditActions, onCancel, onForward, onDelete
   );
 }
 
-function ForwardPicker({ conversations, groups = [], onCancel, onPick, myId }) {
+function ForwardPicker({ conversations, groups = [], onCancel, onPick, myId, title = 'Forward to', subtitle = 'Pick a person' }) {
   useBackClose(true, onCancel);
   const { theme } = useTheme();
   const [q, setQ] = useState('');
@@ -8229,7 +9052,7 @@ function ForwardPicker({ conversations, groups = [], onCancel, onPick, myId }) {
 
   const searchingMode = q.trim().length >= 2;
   return (
-    <FullPage title="Forward to" subtitle="Pick a person" onBack={onCancel} zIndex={90}>
+    <FullPage title={title} subtitle={subtitle} onBack={onCancel} zIndex={90}>
       <label style={{ display: 'flex', alignItems: 'center', gap: 8, height: 40, padding: '0 12px', borderRadius: 12, background: theme.rowBg, color: theme.muted, margin: '8px 0 6px' }}>
         <Search size={17} />
         <input value={q} onChange={(e) => doSearch(e.target.value)} placeholder="Search by username" aria-label="Search people to forward to" autoCapitalize="none"
@@ -8586,7 +9409,7 @@ function ReplyQuote({ m, label, onClick, bar, dim, compact }) {
   const thumb = m && (m.type === 'image' || m.type === 'video') && m.media_url && !parseOnce(m) ? (
     <div style={{ width: compact ? 34 : 40, height: compact ? 34 : 40, borderRadius: 8, overflow: 'hidden', flexShrink: 0, background: 'rgba(0,0,0,0.25)', position: 'relative' }}>
       {m.type === 'image'
-        ? <img src={m.media_url} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+        ? <MediaImg src={m.media_url} draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
         : <VideoThumb src={m.media_url} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />}
       {m.type === 'video' && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Play size={14} color="white" fill="white" /></div>}
     </div>
@@ -8610,7 +9433,7 @@ function ReplyQuote({ m, label, onClick, bar, dim, compact }) {
     </div>
   );
 }
-const SPECIAL_PREFIXES = ['zpoll:', 'zevent:', 'zdice:', 'zlist:', 'zbill:', 'zcount:'];
+const SPECIAL_PREFIXES = ['zpoll:', 'zevent:', 'zdice:', 'zlist:', 'zbill:', 'zcount:', 'zlive:'];
 function isSpecialContent(content) {
   return typeof content === 'string' && SPECIAL_PREFIXES.some((p) => content.indexOf(p) === 0);
 }
@@ -8693,7 +9516,7 @@ function describeMessage(m) {
   }
 }
 
-const PREVIEW_ICONS = { image: Camera, video: VideoIcon, audio: Mic, sticker: Smile, deleted: Ban, story: StatusIcon, call: Phone, callmissed: PhoneMissedIcon, game: GamepadIcon, location: Compass, poll: PollIcon, event: CalendarIcon, list: ChecklistIcon, bill: BillIcon, count: CountdownIcon, contact: ContactCardIcon, hidden: HiddenPhotoIcon };
+const PREVIEW_ICONS = { image: Camera, video: VideoIcon, audio: Mic, sticker: Smile, deleted: Ban, story: StatusIcon, call: Phone, callmissed: PhoneMissedIcon, game: GamepadIcon, location: Compass, poll: PollIcon, event: CalendarIcon, list: ChecklistIcon, bill: BillIcon, count: CountdownIcon, live: Compass, contact: ContactCardIcon, hidden: HiddenPhotoIcon };
 function PhoneMissedIcon({ size = 14, style }) { return <Phone size={size} color="#FF3B30" style={style} />; }
 
 function PreviewLine({ preview, prefix, color, weight = 400, size = 12 }) {
@@ -8858,7 +9681,7 @@ function ConfirmSheet({ title, text, confirmLabel = 'Confirm', danger = true, on
   );
 }
 
-function MessageContextMenu({ onReadAloud, onRemind, message, isMine, canEditText, canModerate, anchorRect, bubble, isPinned, onPin, onUnpin, onClose, onReact, onReply, onCopy, onEdit, onForward, onReport, onDeleteForMe, onDeleteForEveryone, onSelectMultiple, onSave, onToggleSave, isSaved, onInfo, onEditArt, onShareImage }) {
+function MessageContextMenu({ onTranslate, onTranscribe, onReadAloud, onRemind, message, isMine, canEditText, canModerate, anchorRect, bubble, isPinned, onPin, onUnpin, onClose, onReact, onReply, onCopy, onEdit, onForward, onReport, onDeleteForMe, onDeleteForEveryone, onSelectMultiple, onSave, onToggleSave, isSaved, onInfo, onEditArt, onShareImage }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
   const [showFullEmoji, setShowFullEmoji] = useState(false);
@@ -8925,6 +9748,8 @@ function MessageContextMenu({ onReadAloud, onRemind, message, isMine, canEditTex
     isMine && nd && { k: 'unsend', main: true, icon: <Trash2 size={18} />, label: 'Unsend', on: onDeleteForEveryone, danger: true },
     nd && plainText && onReadAloud && { k: 'read', icon: <Volume2 size={18} />, label: 'Read aloud', on: onReadAloud },
     nd && plainText && onShareImage && { k: 'img', icon: <ImageIcon size={18} />, label: 'Share as image', on: onShareImage },
+    nd && plainText && onTranslate && { k: 'tr', icon: <TranslateIcon size={18} />, label: 'Translate', on: onTranslate },
+    nd && onTranscribe && (message.type === 'audio' || message.type === 'voice') && { k: 'stt', main: true, icon: <FileText size={18} />, label: 'Voice to text', on: onTranscribe },
     nd && !onceMsg && message.type !== 'system' && onToggleSave && { k: 'saved', icon: <Bookmark size={18} fill={isSaved ? 'currentColor' : 'none'} />, label: isSaved ? 'Remove from Saved' : 'Add to Saved', on: onToggleSave },
     nd && message.type !== 'system' && onPin && { k: 'pin', icon: <Pin_ size={18} color={theme.ink} />, label: isPinned ? 'Unpin' : 'Pin', on: isPinned ? onUnpin : onPin },
     nd && message.type !== 'system' && onRemind && { k: 'remind', icon: <Clock size={18} />, label: 'Remind me', on: onRemind },
@@ -9255,6 +10080,9 @@ function MediaComposer({ files, recipientName, onCancel, onSend, onActivity, mod
   const [selectedSticker, setSelectedSticker] = useState(null);
   const isStory = composerMode === 'story';
   const isPost = composerMode === 'post';
+  const [closeCount, reloadClose] = useCloseFriendCount(isStory ? myId : null);
+  const [closeEdit, setCloseEdit] = useState(false);
+  const closeShareRef = useRef(false);
   const stageRef = useRef(null);
   const innerRef = useRef(null);
   const videoRef = useRef(null);
@@ -9514,8 +10342,9 @@ function MediaComposer({ files, recipientName, onCancel, onSend, onActivity, mod
         }
       }
       sentRef.current = true;
-      onSend(outputs, caption.trim(), mentions, { once: !isPost && !isStory && once, blur: !isPost && !isStory && !once && hideIt });
+      onSend(outputs, caption.trim(), mentions, { once: !isPost && !isStory && once, blur: !isPost && !isStory && !once && hideIt, audience: isStory && closeShareRef.current ? 'close' : undefined });
     } catch {
+      closeShareRef.current = false;
       setSending(false);
     }
   };
@@ -9778,9 +10607,12 @@ function MediaComposer({ files, recipientName, onCancel, onSend, onActivity, mod
                 height: 48, padding: '0 18px', borderRadius: 24, background: theme.coral, color: 'white', display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', flexShrink: 0, fontWeight: 800, fontSize: 14,
               }}>{sending ? <Spinner size={16} /> : <><ImageIcon size={17} color="white" /> Share post</>}</div>
             ) : isStory ? (
-              <div onPointerDown={(e) => e.preventDefault()} onClick={send} role="button" aria-label="Share to your story" style={{
-                height: 48, padding: '0 16px', borderRadius: 24, background: 'white', color: '#000', display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', flexShrink: 0, fontWeight: 800, fontSize: 14,
-              }}>{sending ? <Spinner size={16} color="#000" /> : <><StatusIcon size={17} color="#000" /> Your story</>}</div>
+              <>
+                <div onPointerDown={(e) => e.preventDefault()} onClick={() => { closeShareRef.current = false; send(); }} role="button" aria-label="Share to your story" style={{
+                  height: 48, padding: '0 16px', borderRadius: 24, background: 'white', color: '#000', display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', flexShrink: 0, fontWeight: 800, fontSize: 14,
+                }}>{sending && !closeShareRef.current ? <Spinner size={16} color="#000" /> : <><StatusIcon size={17} color="#000" /> Your story</>}</div>
+                <CloseShareButton count={closeCount} size={48} disabled={sending} busy={sending && closeShareRef.current} onEmpty={() => setCloseEdit(true)} onShare={() => { closeShareRef.current = true; send(); }} />
+              </>
             ) : (
               <div onPointerDown={(e) => e.preventDefault()} onClick={send} role="button" aria-label="Send" style={{
                 width: 48, height: 48, borderRadius: '50%', background: theme.coral, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0,
@@ -9790,8 +10622,9 @@ function MediaComposer({ files, recipientName, onCancel, onSend, onActivity, mod
           {isPost
             ? <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.6)', padding: '6px 18px 0' }}>Shows on your profile and in Moments</div>
             : isStory
-            ? <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.6)', padding: '6px 18px 0' }}>Shared with your followers for 24 hours</div>
+            ? (closeCount === -1 || closeCount === null ? <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.6)', padding: '6px 18px 0' }}>Shared with your followers for 24 hours</div> : <CloseShareHint count={closeCount} base="Shared with your followers for 24 hours" onEdit={() => setCloseEdit(true)} />)
             : recipientName && <div style={{ fontSize: 11.5, color: once || hideIt ? 'white' : 'rgba(255,255,255,0.6)', fontWeight: once || hideIt ? 700 : 400, padding: '6px 18px 0' }}>To {recipientName}{once ? ', opens once' : hideIt ? ', hidden until they tap' : ''}</div>}
+          {closeEdit && <CloseFriendsPicker myId={myId} zIndex={700} onClose={() => { setCloseEdit(false); reloadClose(); }} />}
         </div>
       )}
 
@@ -9862,7 +10695,8 @@ function MediaComposer({ files, recipientName, onCancel, onSend, onActivity, mod
   );
 }
 
-function VideoViewer({ url, trimStart, trimEnd, overlayUrl, onClose, onForward, once }) {
+function VideoViewer({ url: rawUrl, trimStart, trimEnd, overlayUrl, onClose, onForward, once }) {
+  const url = useMediaUrl(rawUrl);
   const [pip, setPip] = useState(false);
   useBackClose(!pip, onClose);
   const seekedRef = useRef(false);
@@ -9940,8 +10774,10 @@ function VideoViewer({ url, trimStart, trimEnd, overlayUrl, onClose, onForward, 
   );
 }
 
-async function silentDownload(url, filename) {
+async function silentDownload(rawUrl, filename) {
   try {
+    const url = await resolveMedia(rawUrl);
+    if (!url) return false;
     const res = await fetch(url);
     if (!res.ok) throw new Error('download');
     const blob = await res.blob();
@@ -10073,7 +10909,7 @@ function PinnedMessagesBar({ pins, index, labelFor, onOpen }) {
         <PreviewLine preview={preview} prefix={`${labelFor(current.sender_id)}: `} color={theme.ink} size={12.5} />
       </div>
       {(current.type === 'image') && current.media_url && (
-        <img src={current.media_url} alt="" style={{ width: 34, height: 34, borderRadius: 8, objectFit: 'cover', flexShrink: 0 }} />
+        <MediaImg src={current.media_url} style={{ width: 34, height: 34, borderRadius: 8, objectFit: 'cover', flexShrink: 0 }} />
       )}
     </div>
   );
@@ -10121,14 +10957,14 @@ function ChatMediaPanel({ title, myId, otherId, groupId, hiddenIds, labelFor, on
 
   const downloadOne = async (m) => {
     try {
-      const res = await fetch(m.media_url);
+      const res = await fetch(await resolveMedia(m.media_url));
       const blob = await res.blob();
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
       a.download = `zchat-${m.type}-${m.id}.${m.type === 'video' ? 'mp4' : 'jpg'}`;
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-    } catch { window.open(m.media_url, '_blank'); }
+    } catch { const u = signedMediaNow(m.media_url); if (u) window.open(u, '_blank'); }
   };
   const downloadPicked = async (items) => {
     for (const m of items) { if (picked.has(m.id)) await downloadOne(m); }
@@ -10199,7 +11035,7 @@ function ChatMediaPanel({ title, myId, otherId, groupId, hiddenIds, labelFor, on
                       <div key={m.id} onClick={() => (picking ? togglePick(m.id) : (m.type === 'image' ? onOpenImage(m.media_url) : onOpenVideo({ url: m.media_url, trimStart: m.trim_start, trimEnd: m.trim_end, overlayUrl: m.overlay_url })))}
                         style={{ position: 'relative', aspectRatio: '1 / 1', background: '#000', cursor: 'pointer', overflow: 'hidden' }}>
                         {m.type === 'image'
-                          ? <img src={m.media_url} alt="" loading="lazy" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', opacity: picking && !picked.has(m.id) ? 0.5 : 1 }} />
+                          ? <MediaImg src={m.media_url} loading="lazy" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', opacity: picking && !picked.has(m.id) ? 0.5 : 1 }} />
                           : <VideoThumb src={m.media_url} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none', opacity: picking && !picked.has(m.id) ? 0.5 : 1 }} />}
                         {m.type === 'video' && !picking && (
                           <div style={{ position: 'absolute', left: 6, bottom: 6, width: 22, height: 22, borderRadius: '50%', background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -10330,7 +11166,7 @@ function VerifiedTick({ size = 13 }) {
   );
 }
 
-function StoryAvatar({ profile, size = 64, ring = 'none', onClick, badgePlus = false, dim = false, segments = null, uploading = false }) {
+function StoryAvatar({ profile, size = 64, ring = 'none', onClick, badgePlus = false, dim = false, segments = null, uploading = false, close = false }) {
   const { theme } = useTheme();
   const framed = !!(profile && AVATAR_FRAMES[profile.avatar_frame]);
   const hasRing = ring !== 'none' || uploading;
@@ -10345,10 +11181,10 @@ function StoryAvatar({ profile, size = 64, ring = 'none', onClick, badgePlus = f
           <circle cx={size / 2} cy={size / 2} r={size / 2 - 1.5} fill="none" stroke={theme.coral} strokeWidth="2.6" strokeLinecap="round" strokeDasharray={`${size * 0.9} ${size * 0.5}`} />
         </svg>
       ) : !framed && ring !== 'none' ? (
-        <StoryRing size={size} segments={segments && segments.length ? segments : [ring === 'seen']} color={theme.coral} seenColor={theme.dark ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.2)'} />
+        <StoryRing size={size} segments={segments && segments.length ? segments : [ring === 'seen']} color={close ? CLOSE_GREEN : theme.coral} seenColor={theme.dark ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.2)'} />
       ) : null}
       {framed && ring !== 'none' && !uploading && (
-        <div style={{ position: 'absolute', inset: -3, borderRadius: '50%', border: `2px solid ${ring === 'unseen' ? theme.coral : theme.border}`, pointerEvents: 'none' }} />
+        <div style={{ position: 'absolute', inset: -3, borderRadius: '50%', border: `2px solid ${ring === 'unseen' ? (close ? CLOSE_GREEN : theme.coral) : theme.border}`, pointerEvents: 'none' }} />
       )}
       {badgePlus && (
         <div style={{ position: 'absolute', right: 0, bottom: 0, zIndex: 6, width: size * 0.32, height: size * 0.32, borderRadius: '50%', background: theme.coral, border: `2.5px solid ${theme.panelBg}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800, fontSize: size * 0.22, lineHeight: 1 }}>+</div>
@@ -10455,8 +11291,11 @@ async function renderTextStory(text, bgIdx, fontIdx, align) {
   return new File([blob], `zchat-text-story-${Date.now()}.jpg`, { type: 'image/jpeg' });
 }
 
-function TextStoryComposer({ onClose, onShare }) {
+function TextStoryComposer({ onClose, onShare, myId }) {
   useBackClose(true, onClose);
+  const [closeCount, reloadClose] = useCloseFriendCount(myId || null);
+  const [closeEdit, setCloseEdit] = useState(false);
+  const [closeBusy, setCloseBusy] = useState(false);
   const [text, setText] = useState('');
   const [bgIdx, setBgIdx] = useState(() => { try { const v = parseInt(localStorage.getItem('zchat-textstory-bg') || '0', 10); return Number.isFinite(v) ? v % TEXT_STORY_BGS.length : 0; } catch { return 0; } });
   const [fontIdx, setFontIdx] = useState(0);
@@ -10476,12 +11315,15 @@ function TextStoryComposer({ onClose, onShare }) {
     : b.dots ? { backgroundColor: b.bg, backgroundImage: `radial-gradient(circle, ${b.dots} 1.6px, transparent 2px)`, backgroundSize: '19px 19px' }
       : b.grid ? { backgroundColor: b.bg, backgroundImage: `linear-gradient(${b.grid} 1px, transparent 1px), linear-gradient(90deg, ${b.grid} 1px, transparent 1px)`, backgroundSize: '17px 17px' }
         : { background: b.bg };
-  const share = async () => {
+  const share = async (close) => {
     if (!len || busy) return;
+    const toClose = close === true;
     setBusy(true);
+    if (toClose) setCloseBusy(true);
     const file = await renderTextStory(text.trim(), bgIdx, fontIdx, align);
     setBusy(false);
-    if (file) onShare(file);
+    setCloseBusy(false);
+    if (file) onShare(file, toClose ? { audience: 'close' } : undefined);
   };
   const btn = { width: 42, height: 42, borderRadius: 21, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: 'rgba(0,0,0,0.22)', color: '#FFFFFF', fontFamily: FONT, border: 'none' };
   return (
@@ -10514,9 +11356,11 @@ function TextStoryComposer({ onClose, onShare }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))' }}>
           <div style={{ flex: 1, fontSize: 12.5, opacity: 0.85, fontWeight: 600 }}>{len ? `${len}/700` : 'Shared with your followers for 24 hours'}</div>
           <button type="button" aria-label="Share to your story" disabled={!len || busy} onClick={share} style={{ height: 44, padding: '0 18px', borderRadius: 22, border: 'none', background: '#FFFFFF', color: '#111', fontFamily: FONT, fontWeight: 800, fontSize: 14.5, display: 'flex', alignItems: 'center', gap: 8, cursor: len ? 'pointer' : 'default', opacity: len ? 1 : 0.55 }}>
-            {busy ? <Spinner size={16} color="#111" /> : <StatusIcon size={17} color="#111" />}Your story
+            {busy && !closeBusy ? <Spinner size={16} color="#111" /> : <StatusIcon size={17} color="#111" />}Your story
           </button>
+          <CloseShareButton count={closeCount} size={44} disabled={!len || busy} busy={closeBusy} onEmpty={() => setCloseEdit(true)} onShare={() => share(true)} />
         </div>
+        {closeEdit && <CloseFriendsPicker myId={myId} zIndex={700} onClose={() => { setCloseEdit(false); reloadClose(); }} />}
       </div>
     </Portal>
   );
@@ -11093,6 +11937,7 @@ function StoryViewer({ groupsList, startGroup = 0, startStoryId = null, onAddSto
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 7 }}>
                   <span style={{ fontWeight: 800, fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{isMine && !readOnly ? 'Your story' : group.profile.name}<VerifiedBadge tier={group.profile.verified} custom={group.profile.custom_badge} size={13} /></span>
                   <span style={{ fontSize: 12, opacity: 0.75, flexShrink: 0 }}>{timeShort(story.created_at)}</span>
+                  {story.audience === 'close' && <CloseFriendsBadge />}
                 </div>
                 {story.repost_of && <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, opacity: 0.8 }}><Repeat size={11} /> Reposted{story.repost_label ? ` from @${story.repost_label}` : ''}</div>}
               </div>
@@ -11267,7 +12112,8 @@ const CALL_RING_MS = 45000;
 
 function callIceConfig() {
   const servers = [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302', 'stun:stun.cloudflare.com:3478'] }];
-  if (CALL_TURN_URLS) servers.push({ urls: CALL_TURN_URLS.split(',').map((u) => u.trim()).filter(Boolean), username: CALL_TURN_USERNAME, credential: CALL_TURN_CREDENTIAL });
+  if (iceStore.list && iceStore.list.length) iceStore.list.forEach((s) => servers.push(s));
+  else if (CALL_TURN_URLS) servers.push({ urls: CALL_TURN_URLS.split(',').map((u) => u.trim()).filter(Boolean), username: CALL_TURN_USERNAME, credential: CALL_TURN_CREDENTIAL });
   return { iceServers: servers, iceCandidatePoolSize: 4 };
 }
 
@@ -11555,7 +12401,7 @@ function useCallEngine(options) {
     if (callRef.current && callRef.current.status === 'ended') put(null);
     if (callRef.current) return;
     const opts = optsRef.current;
-    const local = await getMedia(kind);
+    const [local] = await Promise.all([getMedia(kind), waitIce()]);
     if (!local) return;
     localRef.current = local;
     const { data: row, error } = await supabase.from('calls').insert({ caller_id: opts.myId, callee_id: profile.id, kind, status: 'ringing' }).select().single();
@@ -11579,7 +12425,7 @@ function useCallEngine(options) {
     if (callRef.current && callRef.current.status === 'ended') put(null);
     if (callRef.current) return;
     const opts = optsRef.current;
-    const local = await getMedia(kind);
+    const [local] = await Promise.all([getMedia(kind), waitIce()]);
     if (!local) return;
     localRef.current = local;
     const { data: row, error } = await supabase.from('calls').insert({ caller_id: opts.myId, group_id: group.id, kind, status: 'ringing' }).select().single();
@@ -11598,7 +12444,7 @@ function useCallEngine(options) {
   const joinGroupCall = async (row, group, joinOpts = {}) => {
     if (callRef.current && callRef.current.status === 'ended') put(null);
     if (callRef.current) return;
-    const local = await getMedia(row.kind);
+    const [local] = await Promise.all([getMedia(row.kind), waitIce()]);
     if (!local) return;
     localRef.current = local;
     if (joinOpts.cameraOff) local.getVideoTracks().forEach((t) => { t.enabled = false; });
@@ -11616,6 +12462,7 @@ function useCallEngine(options) {
     }
     put({ id: row.id, mode: row.group_id ? 'group' : 'direct', kind: row.kind, direction: 'incoming', status: 'ringing', peer: caller, group: group || null, row, localStream: null, remoteStreams: {}, participants: [], muted: false, cameraOff: false, facing: 'user' });
     playTone('incoming');
+    prefetchIce();
     const age = Math.max(0, Date.now() - new Date(row.created_at || Date.now()).getTime());
     timersRef.current.ringOut = setTimeout(() => {
       const current = callRef.current;
@@ -11638,7 +12485,7 @@ function useCallEngine(options) {
       await joinGroupCall(c.row || { id: c.id, kind: c.kind }, c.group, acceptOpts);
       return;
     }
-    const local = await getMedia(c.kind);
+    const [local] = await Promise.all([getMedia(c.kind), waitIce(1500)]);
     if (!local) { decline(); return; }
     localRef.current = local;
     if (acceptOpts.cameraOff) local.getVideoTracks().forEach((t) => { t.enabled = false; });
@@ -11976,7 +12823,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-const APP_VERSION = '15.0V';
+const APP_VERSION = '16.0V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -13315,7 +14162,8 @@ function PostLinkCard({ postId, onOpen }) {
 
 const imageAspectCache = new Map();
 
-function ChatImage({ src, onOpen, caption }) {
+function ChatImage({ src: rawSrc, onOpen, caption }) {
+  const src = useMediaUrl(rawSrc);
   const cachedSrc = useCachedMedia(src);
   const [aspect, setAspect] = useState(() => imageAspectCache.get(src) || null);
   const maxW = 250;
@@ -13340,7 +14188,7 @@ function ChatImage({ src, onOpen, caption }) {
           }
         }}
         style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-      <div onClick={(e) => { e.stopPropagation(); silentDownload(src, 'zchat-photo.jpg'); }} style={{
+      <div onClick={(e) => { e.stopPropagation(); silentDownload(rawSrc, 'zchat-photo.jpg'); }} style={{
         position: 'absolute', top: 6, right: 6, width: 26, height: 26, borderRadius: '50%',
         background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
       }}><Download size={13} color="white" /></div>
@@ -13444,7 +14292,8 @@ function voiceBars(seed, count = 30) {
   return out;
 }
 
-function AudioBubble({ url, isMe, ink, line }) {
+function AudioBubble({ url: rawUrl, isMe, ink, line }) {
+  const url = useMediaUrl(rawUrl);
   const { theme } = useTheme();
   const audioRef = useRef(null);
   const rootRef = useRef(null);
@@ -13453,7 +14302,7 @@ function AudioBubble({ url, isMe, ink, line }) {
   const [progress, setProgress] = useState(0);
   const [speed, setSpeed] = useState(1);
   const fixingRef = useRef(false);
-  const bars = useMemo(() => voiceBars(url), [url]);
+  const bars = useMemo(() => voiceBars(rawUrl), [rawUrl]);
 
   const fmt = (s) => {
     const v = Number.isFinite(s) ? Math.max(0, s) : 0;
@@ -13674,7 +14523,8 @@ function videoThumbUrl(url) {
   return p;
 }
 
-function VideoThumb({ src, style, fallback, imgStyle }) {
+function VideoThumb({ src: rawSrc, style, fallback, imgStyle }) {
+  const src = useMediaUrl(rawSrc);
   const { theme } = useTheme();
   const boxRef = useRef(null);
   const [thumb, setThumb] = useState(() => (USE_VIDEO_THUMBS && src && videoThumbMem.has(src) ? videoThumbMem.get(src) : null));
@@ -13701,7 +14551,10 @@ function VideoThumb({ src, style, fallback, imgStyle }) {
   return <div ref={boxRef} style={{ ...style, background: fallback || (theme.dark ? '#1E1E22' : '#E9E9EE') }} />;
 }
 
-function useCachedMedia(rawUrl) {
+function useCachedMedia(rawIn) {
+  const resolvedIn = useMediaUrl(rawIn);
+  const signedIn = !!resolvedIn && resolvedIn.indexOf('/object/sign/') >= 0;
+  const rawUrl = signedIn ? null : resolvedIn;
   const [url, setUrl] = useState(() => (rawUrl ? mediaBlobCache.get(rawUrl) || rawUrl : null));
   useEffect(() => {
     if (!rawUrl) { setUrl(null); return undefined; }
@@ -13716,7 +14569,7 @@ function useCachedMedia(rawUrl) {
     });
     return () => { alive = false; };
   }, [rawUrl]);
-  return url;
+  return signedIn ? resolvedIn : url;
 }
 
 async function cachedAssetUrl(url, retried) {
@@ -16906,6 +17759,21 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [whoReactedFor, setWhoReactedFor] = useState(null);
   const [showArchived, setShowArchived] = useNavState(false);
   const [archivedConversations, setArchivedConversations] = useState([]);
+  const [acceptedIds, setAcceptedIds] = useState(null);
+  const [showRequests, setShowRequests] = useNavState(false);
+  const [requestBusy, setRequestBusy] = useState(false);
+  const [dmClosedFor, setDmClosedFor] = useState(null);
+  const requestIdsRef = useRef(new Set());
+  const openDeepLinkRef = useRef(null);
+  const [incomingShare, setIncomingShare] = useState(null);
+  const pendingShareRef = useRef(null);
+  const openMediaComposerRef = useRef(null);
+  const [toolSheet, setToolSheet] = useState(null);
+  const [locationAsk, setLocationAsk] = useState(false);
+  const [liveShares, setLiveShares] = useState(() => readLiveShares(session.user.id));
+  const liveLastRef = useRef({});
+  const pushLiveRef = useRef(null);
+  const stopLiveShareRef = useRef(null);
   const [showChatSettings, setShowChatSettings] = useNavState(false);
   const [showAccountSwitcher, setShowAccountSwitcher] = useNavState(false);
   const [showDeleteAccount, setShowDeleteAccount] = useState(false);
@@ -17132,13 +18000,14 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const title = gameTitle(state);
     const low = title.toLowerCase();
     upsertConversation(profile.id, state.g === 'score' ? `High score in ${title}` : title, 'text');
-    const text = state.g === 'score' ? `Scored ${formatGameScore(state.k, state.s)} in ${title}` : state.n === 0 ? `Challenged you to ${low}` : (state.w ? `Finished your ${low} game` : `Made a move in ${low}`);
+    const text = state.g === 'score' ? `Scored ${formatGameScore(state.k, state.s)} in ${title}` : LIVE_GAME_KEYS.includes(state.g) ? `Wants to play ${low} with you right now` : state.n === 0 ? `Challenged you to ${low}` : (state.w ? `Finished your ${low} game` : `Made a move in ${low}`);
     notifyUser(profile.id, me.name, text, `/?dm=${session.user.id}`, me.avatar);
     playUiSound('send');
-    return true;
+    return data;
   };
   const newGameState = (kind, profile, extra) => {
     const base = { id: newClientId(), x: session.user.id, o: profile.id, w: null, n: 0 };
+    if (LIVE_GAME_KEYS.includes(kind)) return { g: kind, st: 'wait', exp: Date.now() + LIVE_INVITE_MS, sx: 0, so: 0, ...base };
     if (kind === 'c4') return { g: 'c4', b: Array(42).fill(0), t: profile.id, ...base };
     if (kind === 'rps') return { g: 'rps', r: [{ x: null, o: null }], ...base };
     if (kind === 'dots') return { g: 'dots', h: Array(12).fill(0), v: Array(12).fill(0), bx: Array(9).fill(0), t: profile.id, ...base };
@@ -17166,6 +18035,35 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     return { g: 'ttt', b: [0, 0, 0, 0, 0, 0, 0, 0, 0], t: profile.id, ...base };
   };
   const [setupFor, setSetupFor] = useState(null);
+  const [liveGame, setLiveGame] = useState(null);
+  const [leaderboardFor, setLeaderboardFor] = useState(null);
+  const [settingsOpenTo, setSettingsOpenTo] = useState(null);
+  const startLiveGame = async (profile, kind) => {
+    if (!profile || profile.is_bot) return;
+    if (!activeProfileRef.current || activeProfileRef.current.id !== profile.id) await openChat(profile, null);
+    const state = newGameState(kind, profile);
+    const row = await sendGameStateTo(profile, state);
+    if (!row || row === true) return;
+    setLiveGame({ state, messageId: row.id, peer: profile });
+  };
+  const openLiveGame = (st, msg) => {
+    const peer = activeProfileRef.current;
+    if (!peer || !msg || String(msg.id).startsWith('temp-')) return;
+    if (st.x !== session.user.id && st.o !== session.user.id) return;
+    setLiveGame({ state: st, messageId: msg.id, peer });
+  };
+  const saveLiveState = async (messageId, next) => {
+    const content = encodeGameMessage(next);
+    setMessages((prev) => prev.map((x) => (x.id === messageId ? { ...x, content } : x)));
+    try { await supabase.from('messages').update({ content }).eq('id', messageId).eq('sender_id', session.user.id); } catch {}
+    if (next.st === 'done' && next.w) setTimeout(() => queueGameRecord(next, session.user.id), 600);
+  };
+  const pingLivePeer = (st) => {
+    if (!me) return;
+    const peerId = st.x === session.user.id ? st.o : st.x;
+    notifyUser(peerId, me.name, `Is waiting to play ${GAME_TITLES[st.g] || 'a game'} with you now`, `/?dm=${session.user.id}`, me.avatar);
+  };
+  const gameFriends = conversations.map((c) => c.otherProfile).filter((pp) => pp && !pp.is_bot && !pp.is_deleted).slice(0, 20);
   const [duelPlay, setDuelPlay] = useState(null);
   useBackClose(!!duelPlay, () => setDuelPlay(null));
   const lastGameStartRef = useRef(0);
@@ -17181,6 +18079,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     }
     if (Date.now() - lastGameStartRef.current < 1500) return;
     lastGameStartRef.current = Date.now();
+    if (LIVE_GAME_KEYS.includes(kind)) { startLiveGame(profile, kind); return; }
     if (!activeProfileRef.current || activeProfileRef.current.id !== profile.id) await openChat(profile, null);
     sendGameStateTo(profile, newGameState(kind || 'ttt', profile, extra));
   };
@@ -17257,6 +18156,55 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
+  const pushLive = async (share, pos, on) => {
+    const content = liveLocContent(pos.lat, pos.lng, pos.acc, share.until, on);
+    let q = supabase.from('messages').update({ content }).eq('id', share.id).eq('sender_id', session.user.id);
+    if (on) q = q.like('content', '%"on":true%');
+    const { data: rows, error } = await q.select('id');
+    if (error) return false;
+    if (on && Array.isArray(rows) && !rows.length) {
+      writeLiveShares(session.user.id, readLiveShares(session.user.id).filter((x) => x.id !== share.id));
+      return false;
+    }
+    liveLastRef.current[share.id] = { ...pos, at: Date.now() };
+    setMessages((prev) => (prev.some((m) => m.id === share.id) ? prev.map((m) => (m.id === share.id ? { ...m, content } : m)) : prev));
+    return true;
+  };
+  pushLiveRef.current = pushLive;
+  const stopLiveShare = async (id, quiet) => {
+    const uid = session.user.id;
+    const list = readLiveShares(uid);
+    const share = list.find((x) => x.id === id);
+    writeLiveShares(uid, list.filter((x) => x.id !== id));
+    let last = liveLastRef.current[id] || (share && share.pos);
+    if (!last) {
+      const m = messages.find((x) => x.id === id);
+      const lv = m ? parseLiveLoc(m.content) : null;
+      if (lv) last = { lat: lv.lat, lng: lv.lng, acc: lv.acc };
+    }
+    if (last) await pushLive({ id, until: Math.min(share ? share.until : Date.now(), Date.now()) }, last, false);
+    if (!quiet) showSnack('Stopped sharing your live location');
+  };
+  stopLiveShareRef.current = stopLiveShare;
+  const startLiveShare = (minutes) => {
+    if (!activeProfile || activeGroup) return;
+    if (!navigator.geolocation) { showSnack('Location is not available on this device'); return; }
+    const target = activeProfile;
+    setLocating(true);
+    showSnack('Finding where you are');
+    navigator.geolocation.getCurrentPosition(async (pp) => {
+      setLocating(false);
+      const pos = { lat: pp.coords.latitude, lng: pp.coords.longitude, acc: pp.coords.accuracy };
+      const until = Date.now() + minutes * 60000;
+      const { data } = await sendMessage(session.user.id, target.id, 'text', liveLocContent(pos.lat, pos.lng, pos.acc, until, true), null);
+      if (!data) { showSnack('Could not share your location. Try again.'); return; }
+      liveLastRef.current[data.id] = { ...pos, at: Date.now() };
+      writeLiveShares(session.user.id, [...readLiveShares(session.user.id), { id: data.id, until, peer: target.id, pos }]);
+      setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
+      upsertConversation(target.id, 'Live location', 'text');
+      notifyUser(target.id, me.name, 'Sharing live location', `/?dm=${session.user.id}`, me.avatar);
+    }, () => { setLocating(false); showSnack('Could not get your location. Check location permission.'); }, { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 });
+  };
   const shareMyLocation = () => {
     if (!activeProfile || activeGroup) return;
     if (!navigator.geolocation) { showSnack('Location is not available on this device'); return; }
@@ -17358,10 +18306,15 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
   const hiddenMsgKey = () => `zchat-hidden-msgs-${session.user.id}`;
   const getHiddenMsgIds = () => { try { return new Set(JSON.parse(localStorage.getItem(hiddenMsgKey()) || '[]')); } catch { return new Set(); } };
+  const pushHiddenRows = (keys) => {
+    const rows = keys.filter((k) => typeof k === 'string' && k && k.indexOf('temp-') !== 0).slice(0, 2000).map((k) => ({ user_id: session.user.id, message_id: k }));
+    for (let i = 0; i < rows.length; i += 500) supabase.from('hidden_messages').upsert(rows.slice(i, i + 500), { onConflict: 'user_id,message_id', ignoreDuplicates: true }).then(() => {}, () => {});
+  };
   const hideMessagesLocally = (ids) => {
     const cur = getHiddenMsgIds();
     ids.forEach((id) => cur.add(id));
     try { localStorage.setItem(hiddenMsgKey(), JSON.stringify([...cur])); } catch {}
+    pushHiddenRows(ids.map(String));
   };
 
   const hiddenChatsKey = () => `zchat-hidden-chats-${session.user.id}`;
@@ -17383,8 +18336,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   };
   const hideChatLocally = (otherUserId) => {
     const map = getHiddenChatMap();
-    map[otherUserId] = Date.now();
+    const at = Date.now();
+    map[otherUserId] = at;
     saveHiddenChatMap(map);
+    pushHiddenRows([`chat:${otherUserId}:${at}`]);
   };
   const unhideChatLocally = (otherUserId) => {
     const map = getHiddenChatMap();
@@ -17574,9 +18529,15 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   }, [profileOf, blockedByIds]);
 
   const deleteMyAccount = async () => {
-    await supabase.from('profiles').update({ is_deleted: true }).eq('id', session.user.id);
+    const r = await zchatTools('delete_account', { confirm: 'DELETE' }, 60000);
+    if (!(r.data && r.data.ok)) {
+      if (![404, 405, 503].includes(r.status)) { showSnack("Couldn't delete your account right now. Try again."); return false; }
+      const { error } = await supabase.from('profiles').update({ is_deleted: true }).eq('id', session.user.id);
+      if (error) { showSnack("Couldn't delete your account right now. Try again."); return false; }
+    }
     removeAccountEntry(session.user.id);
     onLogout();
+    return true;
   };
 
   const enableChatLock = async (conv) => {
@@ -17623,7 +18584,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       .or(`sender_id.eq.${myId},receiver_id.eq.${myId}`).is('group_id', null)
       .order('created_at', { ascending: false }).limit(400);
     const lastByOther = {};
+    const sentTo = new Set();
     (recentMsgs || []).forEach((m) => {
+      if (m.sender_id === myId && m.receiver_id) sentTo.add(m.receiver_id);
       if (hiddenMsgs.has(m.id)) return;
       if (m.expires_at && new Date(m.expires_at).getTime() <= Date.now()) return;
       const otherId = m.sender_id === myId ? m.receiver_id : m.sender_id;
@@ -17664,7 +18627,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         const lastFromMe = useStored ? c.last_sender_id === myId : last.sender_id === myId;
         return {
           ...c, otherProfile: profile.is_deleted ? hiddenAccountProfile(profile) : (nick && foundProfile ? { ...profile, name: nick.nickname } : { ...profile, name: baseName }), realName: profile.name,
-          preview, lastFromMe, sortTime: Math.max(convTime, msgTime),
+          preview, lastFromMe, sortTime: Math.max(convTime, msgTime), mineAny: sentTo.has(otherId),
           lastMineRead: last && last.sender_id === myId ? !!last.read : false,
           lastMineDelivered: last && last.sender_id === myId ? !!last.delivered : false,
         };
@@ -17779,10 +18742,62 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   useEffect(() => {
     if (me) { loadConversations(); loadUnreadCounts(); loadMyLocks(); loadGroups(); loadMyBlocks(); loadStories(); subscribeToPush(session.user.id, false); loadFollowRequestCount(); loadUnreadMailCount(); supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', me.id).then(() => {}, () => {}); }
   }, [me && me.id]);
-
   useEffect(() => {
-    if (!me) return;
-    const params = new URLSearchParams(window.location.search);
+    if (!me) return undefined;
+    installCrashReporter();
+    const t = setTimeout(() => prefetchIce(), 6000);
+    return () => clearTimeout(t);
+  }, [me && me.id]);
+  useEffect(() => {
+    if (!me) return undefined;
+    let alive = true;
+    const uid = session.user.id;
+    (async () => {
+      const { data, error } = await supabase.from('hidden_messages').select('message_id, created_at').eq('user_id', uid).order('created_at', { ascending: false }).limit(5000);
+      if (!alive || error) return;
+      const rows = data || [];
+      const cur = getHiddenMsgIds();
+      const map = getHiddenChatMap();
+      const doneKey = `zchat-hidden-chat-synced-${uid}`;
+      let done;
+      try { done = new Set(JSON.parse(localStorage.getItem(doneKey) || '[]')); } catch { done = new Set(); }
+      const onServer = new Set();
+      let msgChanged = false;
+      let mapChanged = false;
+      rows.forEach((r) => {
+        const k = String(r.message_id || '');
+        onServer.add(k);
+        if (k.indexOf('chat:') === 0) {
+          if (done.has(k)) return;
+          done.add(k);
+          const parts = k.split(':');
+          const other = parts[1];
+          const at = Number(parts[2]) || 0;
+          if (other && (!(other in map) || Number(map[other]) < at)) { map[other] = at; mapChanged = true; }
+          return;
+        }
+        if (k && !cur.has(k)) { cur.add(k); msgChanged = true; }
+      });
+      if (msgChanged) { try { localStorage.setItem(hiddenMsgKey(), JSON.stringify([...cur])); } catch {} }
+      if (mapChanged) saveHiddenChatMap(map);
+      try { localStorage.setItem(doneKey, JSON.stringify([...done].slice(-400))); } catch {}
+      const pushedKey = `zchat-hidden-pushed-${uid}`;
+      let pushed = false;
+      try { pushed = localStorage.getItem(pushedKey) === '1'; } catch {}
+      if (!pushed) {
+        const missing = [...cur].map(String).filter((k) => !onServer.has(k));
+        if (missing.length) pushHiddenRows(missing);
+        try { localStorage.setItem(pushedKey, '1'); } catch {}
+      }
+      if (msgChanged || mapChanged) {
+        loadConversations();
+        setMessages((prev) => (prev.some((m) => cur.has(m.id)) ? prev.filter((m) => !cur.has(m.id)) : prev));
+      }
+    })();
+    return () => { alive = false; };
+  }, [me && me.id]);
+
+  const openDeepLink = (params) => {
     const acc = params.get('acc');
     if (acc && acc !== session.user.id) {
       ['dm', 'group', 'post', 'story', 'mail', 's', 'acc'].forEach((k) => params.delete(k));
@@ -17856,7 +18871,104 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       })();
     }
     if (dmId || groupId || profileId || requestsFlag || mailFlag || storyFlag || callFlag || postFlag) window.history.replaceState({}, '', window.location.pathname);
+  };
+  openDeepLinkRef.current = openDeepLink;
+  useEffect(() => {
+    if (!me) return;
+    openDeepLink(new URLSearchParams(window.location.search));
   }, [me && me.id]);
+  useEffect(() => {
+    if (!me || typeof navigator === 'undefined' || !navigator.serviceWorker) return undefined;
+    const onMsg = (e) => {
+      const d = (e && e.data) || {};
+      if (d.type !== 'zchat-open') return;
+      let ok = false;
+      try {
+        const u = new URL(d.url || '/', window.location.origin);
+        if (u.origin === window.location.origin && openDeepLinkRef.current) {
+          setShowSettings(false); setProfileOf(null); setShowArchived(false); setShowRequests(false); setShowMail(false); setStoryViewer(null); setShowGames(false); setLeaderboardFor(null); setHomeTab('chats');
+          openDeepLinkRef.current(new URLSearchParams(u.search));
+          ok = true;
+        }
+      } catch {}
+      try { if (e.ports && e.ports[0]) e.ports[0].postMessage({ ok }); } catch {}
+    };
+    navigator.serviceWorker.addEventListener('message', onMsg);
+    return () => navigator.serviceWorker.removeEventListener('message', onMsg);
+  }, [me && me.id]);
+  useEffect(() => {
+    if (!me) return undefined;
+    let params;
+    try { params = new URLSearchParams(window.location.search); } catch { return undefined; }
+    if (params.get('share') !== '1') return undefined;
+    try { window.history.replaceState({}, '', window.location.pathname); } catch {}
+    (async () => {
+      try {
+        if (typeof caches === 'undefined') return;
+        const cache = await caches.open('zchat-share');
+        const metaRes = await cache.match('/__share/meta');
+        if (!metaRes) return;
+        const meta = await metaRes.json().catch(() => ({}));
+        const files = [];
+        for (let i = 0; i < Math.min(10, Number(meta.count) || 0); i++) {
+          const r = await cache.match(`/__share/file-${i}`);
+          if (!r) continue;
+          const blob = await r.blob();
+          let name = `shared-${i}`;
+          try { name = decodeURIComponent(r.headers.get('x-name') || name); } catch {}
+          files.push(new File([blob], name, { type: blob.type || r.headers.get('content-type') || 'application/octet-stream' }));
+        }
+        const keys = await cache.keys();
+        await Promise.all(keys.map((k) => cache.delete(k)));
+        const text = String(meta.text || '').slice(0, MAX_CHARS);
+        if (!text && !files.length) return;
+        setIncomingShare({ text, files });
+      } catch {}
+    })();
+    return undefined;
+  }, [me && me.id]);
+  useEffect(() => {
+    const pend = pendingShareRef.current;
+    if (!pend || (!activeProfile && !activeGroup)) return undefined;
+    pendingShareRef.current = null;
+    const t = setTimeout(() => {
+      if (pend.text) setDraft((d) => (d && d.trim() ? `${d.trim()} ${pend.text}` : pend.text).slice(0, MAX_CHARS));
+      const media = (pend.files || []).filter((f) => /^(image|video)\//.test(f.type || ''));
+      if (media.length && openMediaComposerRef.current) openMediaComposerRef.current(media);
+    }, 450);
+    return () => clearTimeout(t);
+  }, [activeProfile && activeProfile.id, activeGroup && activeGroup.id]);
+  useEffect(() => {
+    const on = () => setLiveShares(readLiveShares(session.user.id));
+    const onStop = (e) => { if (e && e.detail && stopLiveShareRef.current) stopLiveShareRef.current(e.detail); };
+    window.addEventListener('zchat-live-shares', on);
+    window.addEventListener('zchat-live-stop', onStop);
+    return () => { window.removeEventListener('zchat-live-shares', on); window.removeEventListener('zchat-live-stop', onStop); };
+  }, []);
+  useEffect(() => {
+    const uid = session.user.id;
+    const active = liveShares.filter((x) => x.until > Date.now());
+    if (!me || !active.length || typeof navigator === 'undefined' || !navigator.geolocation) return undefined;
+    let watchId = null;
+    let latest = null;
+    const flush = () => {
+      readLiveShares(uid).forEach((share) => {
+        if (share.until <= Date.now()) { if (stopLiveShareRef.current) stopLiveShareRef.current(share.id, true); return; }
+        if (!latest) return;
+        const last = liveLastRef.current[share.id];
+        const moved = last ? metersBetween(last, latest) : Infinity;
+        const age = last ? Date.now() - last.at : Infinity;
+        if ((moved > 25 && age > 20000) || age > 120000) { if (pushLiveRef.current) pushLiveRef.current(share, latest, true); }
+      });
+    };
+    const onPos = (pp) => {
+      latest = { lat: pp.coords.latitude, lng: pp.coords.longitude, acc: pp.coords.accuracy };
+      flush();
+    };
+    try { watchId = navigator.geolocation.watchPosition(onPos, () => {}, { enableHighAccuracy: true, maximumAge: 15000, timeout: 30000 }); } catch {}
+    const tick = setInterval(flush, 15000);
+    return () => { try { if (watchId != null) navigator.geolocation.clearWatch(watchId); } catch {} clearInterval(tick); };
+  }, [me && me.id, liveShares.map((x) => x.id).join(',')]);
 
   useEffect(() => {
     if (!me) return;
@@ -18004,7 +19116,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             showMessageToast(msg);
           }
         } else {
-          supabase.from('messages').update({ read: true, delivered: true }).eq('id', msg.id).then(() => {}, () => {});
+          supabase.from('messages').update(requestIdsRef.current.has(msg.sender_id) ? { delivered: true } : { read: true, delivered: true }).eq('id', msg.id).then(() => {}, () => {});
           setActivityFrom(null);
         }
         loadUnreadCounts();
@@ -18301,7 +19413,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             });
           }
         }
-        if (!mobileShowChatRef.current) return;
+        if (!mobileShowChatRef.current || requestIdsRef.current.has(activeProfileIdForPoll)) return;
         const theirUnread = new Set(currentMessages.filter((m) => m.sender_id === activeProfileIdForPoll && !m.read).map((m) => m.id));
         if (theirUnread.size) {
           await supabase.from('messages').update({ read: true, delivered: true }).in('id', [...theirUnread]);
@@ -18857,6 +19969,16 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const followRow = followRes && followRes.data;
     setActiveFollowState(followRow ? followRow.status : 'none');
     setActiveFollowerFollowsMe(!!(theyRes && theyRes.data));
+    setDmClosedFor(null);
+    if (!profile.is_bot && !(theyRes && theyRes.data)) {
+      supabase.from('profiles').select('privacy_messages').eq('id', profile.id).maybeSingle().then(({ data: pm }) => {
+        if (!pm || pm.privacy_messages !== 'following') return;
+        supabase.rpc('zchat_can_dm', { p_from: myId, p_to: profile.id }).then(({ data: ok, error }) => {
+          const cur = activeProfileRefForCalls.current;
+          if (!error && ok === false && cur && cur.id === profile.id) setDmClosedFor(profile.id);
+        }, () => {});
+      }, () => {});
+    }
     const newestFirst = msgRes && msgRes.data;
     const data = (newestFirst || []).slice().reverse();
     const hidden = getHiddenMsgIds();
@@ -18865,7 +19987,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     setUnreadAnchor(unreadFromThem.length ? { chat: profile.id, id: unreadFromThem[0].id, count: unreadFromThem.length } : null);
     setMessages([...visible, ...queuedMessagesFor('dm', profile.id)]);
     setLoadingConvo(false);
-    const unreadIds = visible.filter((m) => m.sender_id === profile.id && !m.read).map((m) => m.id);
+    const unreadIds = requestIdsRef.current.has(profile.id) ? [] : visible.filter((m) => m.sender_id === profile.id && !m.read).map((m) => m.id);
     const [, likesRes] = await Promise.all([
       unreadIds.length ? supabase.from('messages').update({ read: true, delivered: true }).in('id', unreadIds) : null,
       visible.length ? supabase.from('message_likes').select('*').in('message_id', visible.map((m) => m.id)) : null,
@@ -18949,7 +20071,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       if (!botId) return { error: 'ZChat Bot is not around right now. Try again later.' };
       let mediaUrl = null;
       if (file) {
-        const up = await uploadMedia(file, session.user.id);
+        const up = await uploadChatMedia(file, session.user.id);
         if (up.error || !up.url) return { error: "Couldn't upload your drawing. Check your connection and try again." };
         mediaUrl = up.url;
       }
@@ -19102,13 +20224,30 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (!text || (!activeProfile && !activeGroup)) return;
     const item = { id: `l${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`, kind: activeGroup ? 'group' : 'dm', targetId: activeGroup ? activeGroup.id : activeProfile.id, targetName: activeGroup ? activeGroup.name : activeProfile.name, text, at, created: Date.now() };
     writeLater(session.user.id, [...readLater(session.user.id), item]);
+    supabase.from('scheduled_messages').insert({ sender_id: session.user.id, ...(item.kind === 'group' ? { group_id: item.targetId } : { receiver_id: item.targetId }), content: text, send_at: new Date(at).toISOString() }).select('id').single().then(({ data }) => {
+      if (!data || !data.id) return;
+      writeLater(session.user.id, readLater(session.user.id).map((x) => (x.id === item.id ? { ...x, sid: data.id } : x)));
+    }, () => {});
     setDraft('');
     setLaterAsk(null);
     setLaterPick(null);
     hapticTap();
     showSnack(`Scheduled for ${reminderWhen(at)}`);
   };
+  const claimScheduled = async (it) => {
+    try {
+      let q = supabase.from('scheduled_messages').delete().eq('sender_id', session.user.id);
+      q = it.sid ? q.eq('id', it.sid) : q.eq('content', it.text).eq('send_at', new Date(it.at).toISOString());
+      const { data, error } = await q.select('id');
+      if (error) return /PGRST20|42P01|schema cache|does not exist/i.test(`${error.code || ''} ${error.message || ''}`) ? 'none' : 'error';
+      if (data && data.length) return 'claimed';
+      return it.sid ? 'gone' : 'none';
+    } catch { return 'error'; }
+  };
   const sendScheduledItem = async (it) => {
+    const claim = await claimScheduled(it);
+    if (claim === 'gone') return true;
+    if (claim === 'error') return false;
     const row = it.kind === 'group'
       ? { sender_id: session.user.id, group_id: it.targetId, type: 'text', content: it.text, client_id: newClientId() }
       : { sender_id: session.user.id, receiver_id: it.targetId, group_id: null, type: 'text', content: it.text, client_id: newClientId() };
@@ -19181,7 +20320,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       setDraft('');
       setUploading(true);
       for (let i = 0; i < items.length; i++) {
-        const { url, error } = await uploadMedia(items[i].file, session.user.id);
+        const { url, error } = await uploadChatMedia(items[i].file, session.user.id);
         if (!error && url) {
           const captionForThis = i === 0 ? (caption || null) : null;
           let insertedRow = null;
@@ -19393,7 +20532,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           if (changed) file = changed;
           setVoiceFx('normal');
         }
-        const { url, error } = await uploadMedia(file, session.user.id);
+        const { url, error } = await uploadChatMedia(file, session.user.id);
         if (!error && url) {
           if (activeGroup) {
             await sendGroupMessage('audio', null, url);
@@ -19985,6 +21124,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (!list.length) return 'none';
     return list.every((s) => storyData.seen.has(s.id)) ? 'seen' : 'unseen';
   };
+  const storyCloseFor = (userId) => activeStoriesOf(userId).some((s) => s.audience === 'close' && !storyData.seen.has(s.id));
 
   const openStoriesFor = (userId, dataOverride) => {
     const data = dataOverride || storyDataRef.current || storyData;
@@ -20043,6 +21183,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const repostStory = async (story, owner) => {
     const mine = (storyData.byUser[session.user.id] || []);
     if (mine.some((s) => s.repost_of === story.id)) return 'already';
+    if (story.audience === 'close') { showSnack('Close friends stories stay with close friends'); return 'error'; }
     const { data: existing } = await supabase.from('stories').select('id').eq('user_id', session.user.id).eq('repost_of', story.id).gt('expires_at', new Date().toISOString()).limit(1);
     if (existing && existing.length) return 'already';
     playUiSound('repost');
@@ -20089,15 +21230,21 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     return (list || []).filter((mn) => mn.kind === 'group' || !blocked.has(mn.id));
   };
 
-  const postStories = async (outputs, caption, mentionsRaw) => {
+  const postStories = async (outputs, caption, mentionsRaw, opts) => {
     setStoryComposer(null);
     if (!outputs.length) return;
     setStoryUploading(true);
-    try { await postStoriesNow(outputs, caption, mentionsRaw); } finally { setStoryUploading(false); }
+    try { await postStoriesNow(outputs, caption, mentionsRaw, opts); } finally { setStoryUploading(false); }
   };
-  const postStoriesNow = async (outputs, caption, mentionsRaw) => {
-    showSnack('Sharing to your story\u2026');
-    const mentions = await filterTaggableMentions(mentionsRaw || []);
+  const postStoriesNow = async (outputs, caption, mentionsRaw, opts) => {
+    const toClose = !!(opts && opts.audience === 'close');
+    showSnack(toClose ? 'Sharing with your close friends\u2026' : 'Sharing to your story\u2026');
+    let mentions = await filterTaggableMentions(mentionsRaw || []);
+    if (toClose && mentions.length) {
+      const { data: cfRows } = await supabase.from('close_friends').select('friend_id').eq('owner_id', session.user.id).limit(1000);
+      const cfSet = new Set((cfRows || []).map((r) => r.friend_id));
+      mentions = mentions.filter((mn) => mn.kind !== 'group' && cfSet.has(mn.id));
+    }
     let firstStory = null;
     for (const item of outputs) {
       const { url, error } = await uploadMedia(item.file, session.user.id);
@@ -20109,9 +21256,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       }
       const { data, error: insertError } = await supabase.from('stories').insert({
         user_id: session.user.id, media_url: url, media_type: item.kind === 'video' ? 'video' : 'image', overlay_url: overlayUrl,
-        caption: caption || null, mentions: mentions || [],
+        caption: caption || null, mentions: mentions || [], ...(toClose ? { audience: 'close' } : {}),
       }).select().single();
-      if (insertError) { showSnack(friendlyError(insertError, "Couldn't share your story. Try again.")); return; }
+      if (insertError) { showSnack(toClose && /audience|column|schema/i.test(String(insertError.message || '')) ? 'Close friends stories switch on once the latest ZChat setup is finished.' : friendlyError(insertError, "Couldn't share your story. Try again.")); return; }
       if (!firstStory) firstStory = data;
       if (item.url) { const doneUrl = item.url; setTimeout(() => URL.revokeObjectURL(doneUrl), 5000); }
     }
@@ -20129,7 +21276,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         notifyUser(mn.id, 'ZChat', `${me.name} mentioned you in their story`, `/?story=${session.user.id}`, me.avatar);
       }
     }
-    showSnack('Shared to your story');
+    showSnack(toClose ? 'Shared with your close friends' : 'Shared to your story');
     loadStories();
     loadConversations();
     loadGroups();
@@ -20184,6 +21331,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     setMutualIds(new Set((incomingRows || []).map((r) => r.follower_id).filter((id) => iFollow.has(id))));
     const { data: allowRows } = await supabase.from('privacy_allow').select('user_id, scope').eq('viewer_id', myId);
     setPrivacyAllowed(new Set((allowRows || []).map((r) => `${r.user_id}:${r.scope}`)));
+    const { data: accRows, error: accErr } = await supabase.from('chat_accepts').select('other_id').eq('user_id', myId).limit(5000);
+    setAcceptedIds(accErr ? null : new Set((accRows || []).map((r) => r.other_id)));
   };
   followRefreshRef.current = () => { loadMutuals(); loadStories(); };
   const canCall = (profile) => !!profile && profile.id !== session.user.id && !profile.is_deleted && mutualIds.has(profile.id) && !myBlockedIds.has(profile.id) && !blockedByIds.has(profile.id);
@@ -20738,6 +21887,20 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     loadUnreadCounts();
   };
 
+  const acceptRequest = async () => {
+    const p0 = activeProfile;
+    if (!p0 || requestBusy) return;
+    setRequestBusy(true);
+    const { error } = await supabase.from('chat_accepts').insert({ user_id: session.user.id, other_id: p0.id });
+    setRequestBusy(false);
+    if (error && !/duplicate|23505/i.test(`${error.code || ''} ${error.message || ''}`)) { showSnack("Couldn't accept right now. Try again."); return; }
+    hapticTap();
+    setAcceptedIds((prev) => { const n = new Set(prev || []); n.add(p0.id); return n; });
+    setMessages((prev) => prev.map((m) => (m.sender_id === p0.id && !m.read ? { ...m, read: true, delivered: true } : m)));
+    markChatRead(p0.id);
+    showSnack(`You can chat with ${String(p0.name || '').split(' ')[0] || 'them'} now`);
+  };
+
   const openMediaComposer = (files, opts) => {
     const list = Array.from(files || []).filter((f) => f && ((f.type || '').startsWith('image') || (f.type || '').startsWith('video'))).slice(0, MAX_PHOTOS_PER_SEND);
     if (!list.length || (!activeProfile && !activeGroup)) return;
@@ -20746,6 +21909,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     setShowStickers(false);
     setMediaComposer({ key: Date.now(), files: list, once: !!(opts && opts.once), hidden: !!(opts && opts.hidden) });
   };
+  openMediaComposerRef.current = openMediaComposer;
 
   const [dropHint, setDropHint] = useState(false);
   const dropRef = useRef({ n: 0, target: null });
@@ -20816,7 +21980,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     setUploading(outputs.length);
     for (let i = 0; i < outputs.length; i++) {
       const item = outputs[i];
-      const { url, error } = item.paint ? await uploadPaintFile(item.file, session.user.id) : await uploadMedia(item.file, session.user.id);
+      const { url, error } = item.paint ? await uploadPaintFile(item.file, session.user.id) : await uploadChatMedia(item.file, session.user.id);
       if (error || !url) { showSnack(`Upload failed: ${(error && error.message) || 'no file'}`); continue; }
       if (!error && url) {
         const captionForThis = i === 0 ? (caption || null) : null;
@@ -20971,11 +22135,15 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     setTimeout(() => setJumpReq((j) => (j && j.id === r.msgId ? null : j)), 9000);
     if (!activeProfile || activeProfile.id !== profile.id || activeGroup) await openChat(profile, conv ? conv.id : undefined);
   };
-  const openOnce = (m) => {
+  const openOnce = async (m) => {
     if (!m || m.sender_id === session.user.id) return;
     const uid = session.user.id;
     const opened = (messageLikes[m.id] || []).some((r) => r.user_id === uid && r.emoji === 'zo') || onceSeenSet().has(m.id);
     if (opened) { showSnack('Already opened'); return; }
+    if (isPrivateMedia(m.media_url)) {
+      const ready = await resolveMediaShort(m.media_url, 300);
+      if (!ready) { showSnack("Couldn't open it. Try again."); return; }
+    }
     markOnceSeen(m.id);
     setMessageLikes((prev) => ({ ...prev, [m.id]: [...(prev[m.id] || []).filter((r) => r.user_id !== uid), { user_id: uid, emoji: 'zo' }] }));
     supabase.from('message_likes').upsert({ message_id: m.id, user_id: uid, emoji: 'zo' }, { onConflict: 'message_id,user_id' }).then(() => {}, () => {});
@@ -21072,14 +22240,14 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (kind) setScreenEffect({ kind, key: Date.now() });
   }, [messages, chatKey]);
   useEffect(() => {
-    const n = conversations.filter(isUnread).length + groups.filter((g) => !g.archived && g.unread > 0).length;
+    const n = conversations.filter((c) => isUnread(c) && !requestIdsRef.current.has(c.otherProfile.id)).length + groups.filter((g) => !g.archived && g.unread > 0).length;
     try { document.title = n > 0 ? `(${n}) ZChat` : 'ZChat'; } catch {}
     try {
       const nav = navigator;
       if (n > 0 && prefOn('zchat-app-badge') && nav.setAppBadge) nav.setAppBadge(n).catch(() => {});
       else if (nav.clearAppBadge) nav.clearAppBadge().catch(() => {});
     } catch {}
-  }, [conversations, groups, unreadCounts, badgePrefTick]);
+  }, [conversations, groups, unreadCounts, badgePrefTick, acceptedIds, iFollowIds]);
   useEffect(() => {
     const onKey = (e) => {
       if (e.key !== 'Escape' || e.defaultPrevented) return;
@@ -21158,7 +22326,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                       senderAvatar={showSenderLabel ? groupMembers.find((gm) => gm.user_id === m.sender_id)?.profile.avatar : (isPrivateBot ? '/bot-avatar.jpg' : null)}
                       senderFrame={showSenderLabel ? ((groupMembers.find((gm) => gm.user_id === m.sender_id) || {}).profile || {}).avatar_frame : null}
                       senderCustomBadge={showSenderLabel ? ((groupMembers.find((gm) => gm.user_id === m.sender_id) || {}).profile || {}).custom_badge : null}
-                      hideReadStatus={!!activeGroup}
+                      hideReadStatus={!!activeGroup} noReceipts={!activeGroup && !!activeProfile && !!me && (me.read_receipts === false || activeProfile.read_receipts === false)}
                       onOpenSenderProfile={showSenderLabel ? () => { const p = groupMembers.find((gm) => gm.user_id === m.sender_id)?.profile; if (p) setProfileOf(p); } : null}
                       canModerate={activeGroup ? (groupMembers.find((gm) => gm.user_id === session.user.id)?.role === 'admin') : false}
                       onOpenMention={(p) => setProfileOf(sanitizeAvatar(p, session.user.id))}
@@ -21173,8 +22341,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                       gameLive={(() => { const st = m.type === 'text' && !m.deleted ? parseGameMessage(m.content) : null; return !!st && latestGame[st.id] === m.id; })()}
                       gameMerge={(() => { const st = m.type === 'text' && !m.deleted ? parseGameMessage(m.content) : null; return st ? duelMerge[st.id] : null; })()}
                       onGameMove={(next) => (activeProfile ? sendGameStateTo(activeProfile, next) : false)}
+                      onOpenLive={(st) => openLiveGame(st, m)}
                       onGameRematch={(st) => {
                         if (!activeProfile) return;
+                        if (LIVE_GAME_KEYS.includes(st.g)) { if (!rematchLockRef.current.has(st.id)) { rematchLockRef.current.add(st.id); startLiveGame(activeProfile, st.g); } return; }
                         if (st.g === 'hang' || st.g === 'num') { setSetupFor({ profile: activeProfile, kind: st.g }); return; }
                         if (rematchLockRef.current.has(st.id)) return;
                         rematchLockRef.current.add(st.id);
@@ -21215,27 +22385,43 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     return new Date(b.last_message_at) - new Date(a.last_message_at);
   };
 
+  const requestIds = (() => {
+    const out = new Set();
+    if (!acceptedIds) return out;
+    conversations.forEach((c) => {
+      const p = c.otherProfile;
+      if (!p || p.is_bot || p.is_deleted || p.id === session.user.id) return;
+      if (iFollowIds.has(p.id) || acceptedIds.has(p.id) || c.mineAny || c.lastFromMe) return;
+      if (c.last_sender_id ? c.last_sender_id !== p.id : !(c.preview && c.preview.text)) return;
+      out.add(p.id);
+    });
+    return out;
+  })();
+  requestIdsRef.current = requestIds;
+  const requestList = requestIds.size ? conversations.filter((c) => requestIds.has(c.otherProfile.id)) : [];
+  const primaryConversations = requestIds.size ? conversations.filter((c) => !requestIds.has(c.otherProfile.id)) : conversations;
+
   const displayListRaw = listFilter === 'groups'
     ? groups.filter((g) => !g.archived).sort((a, b) => displayListSortByPin(a, b, (x) => x.pinned))
     : listFilter === 'dms'
-      ? conversations
+      ? primaryConversations
       : listFilter === 'unread'
-        ? [...conversations.filter(isUnread).map((c) => ({ ...c, __kind: 'dm' })), ...groups.filter((g) => !g.archived && g.unread > 0).map((g) => ({ ...g, __kind: 'group' }))]
+        ? [...primaryConversations.filter(isUnread).map((c) => ({ ...c, __kind: 'dm' })), ...groups.filter((g) => !g.archived && g.unread > 0).map((g) => ({ ...g, __kind: 'group' }))]
             .sort((a, b) => displayListSortByPin(a, b, (x) => (x.__kind === 'dm' ? isPinnedByMe(x) : x.pinned)))
       : listFilter.indexOf('f:') === 0
         ? (() => {
           const fo = folders.find((f) => `f:${f.id}` === listFilter);
           const mem = new Set(fo ? fo.members : []);
-          return [...conversations.filter((c) => c.otherProfile && mem.has(`dm-${c.otherProfile.id}`)).map((c) => ({ ...c, __kind: 'dm' })), ...groups.filter((g) => !g.archived && mem.has(`group-${g.id}`)).map((g) => ({ ...g, __kind: 'group' }))]
+          return [...primaryConversations.filter((c) => c.otherProfile && mem.has(`dm-${c.otherProfile.id}`)).map((c) => ({ ...c, __kind: 'dm' })), ...groups.filter((g) => !g.archived && mem.has(`group-${g.id}`)).map((g) => ({ ...g, __kind: 'group' }))]
             .sort((a, b) => displayListSortByPin(a, b, (x) => (x.__kind === 'dm' ? isPinnedByMe(x) : x.pinned)));
         })()
       : listFilter === 'unanswered'
-        ? conversations.filter((c) => c.otherProfile && !c.otherProfile.is_bot && c.last_sender_id && c.last_sender_id === c.otherProfile.id && !myBlockedIds.has(c.otherProfile.id))
+        ? primaryConversations.filter((c) => c.otherProfile && !c.otherProfile.is_bot && c.last_sender_id && c.last_sender_id === c.otherProfile.id && !myBlockedIds.has(c.otherProfile.id))
             .map((c) => ({ ...c, __kind: 'dm' })).sort((a, b) => new Date(a.last_message_at) - new Date(b.last_message_at))
       : listFilter === 'favs'
-        ? [...conversations.filter((c) => c.otherProfile && favChats.has(`dm-${c.otherProfile.id}`)).map((c) => ({ ...c, __kind: 'dm' })), ...groups.filter((g) => !g.archived && favChats.has(`group-${g.id}`)).map((g) => ({ ...g, __kind: 'group' }))]
+        ? [...primaryConversations.filter((c) => c.otherProfile && favChats.has(`dm-${c.otherProfile.id}`)).map((c) => ({ ...c, __kind: 'dm' })), ...groups.filter((g) => !g.archived && favChats.has(`group-${g.id}`)).map((g) => ({ ...g, __kind: 'group' }))]
             .sort((a, b) => displayListSortByPin(a, b, (x) => (x.__kind === 'dm' ? isPinnedByMe(x) : x.pinned)))
-        : [...conversations.map((c) => ({ ...c, __kind: 'dm' })), ...groups.filter((g) => !g.archived).map((g) => ({ ...g, __kind: 'group' }))]
+        : [...primaryConversations.map((c) => ({ ...c, __kind: 'dm' })), ...groups.filter((g) => !g.archived).map((g) => ({ ...g, __kind: 'group' }))]
             .sort((a, b) => displayListSortByPin(a, b, (x) => (x.__kind === 'dm' ? isPinnedByMe(x) : x.pinned)));
 
   const activeStripItems = (() => {
@@ -21248,10 +22434,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const taken = new Set([session.user.id]);
     trayUsers.forEach((t) => {
       const unseen = !t.stories.every((st) => storyData.seen.has(st.id));
-      out.push({ key: `s-${t.profile.id}`, label: `Story of ${t.profile.name}`, name: firstName(t.profile.name), profile: t.profile, ring: unseen && !t.muted ? 'unseen' : 'seen', segments: t.stories.map((st) => !!t.muted || storyData.seen.has(st.id)), muted: !!t.muted, onLong: () => setStoryPeek({ profile: t.profile, muted: !!t.muted }), online: isUserOnline(t.profile) && !t.profile.hide_activity && !t.profile.is_bot, onClick: () => openStoriesFor(t.profile.id) });
+      out.push({ key: `s-${t.profile.id}`, label: `Story of ${t.profile.name}`, name: firstName(t.profile.name), profile: t.profile, ring: unseen && !t.muted ? 'unseen' : 'seen', close: unseen && !t.muted && t.stories.some((st) => st.audience === 'close' && !storyData.seen.has(st.id)), segments: t.stories.map((st) => !!t.muted || storyData.seen.has(st.id)), muted: !!t.muted, onLong: () => setStoryPeek({ profile: t.profile, muted: !!t.muted }), online: isUserOnline(t.profile) && !t.profile.hide_activity && !t.profile.is_bot, onClick: () => openStoriesFor(t.profile.id) });
       taken.add(t.profile.id);
     });
-    conversations.forEach((c) => {
+    primaryConversations.forEach((c) => {
       const p = c.otherProfile;
       if (!p || taken.has(p.id) || p.is_bot || p.hide_activity || !isUserOnline(p)) return;
       out.push({ key: `o-${p.id}`, label: `Chat with ${p.name}`, name: firstName(p.name), profile: p, online: true, onClick: () => openChat(p, c.id) });
@@ -21405,7 +22591,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             <div style={{ display: 'flex', gap: 6, padding: '0 16px 10px', flexShrink: 0, overflowX: 'auto' }}>
               {(() => {
                 const liveGroups = groups.filter((g) => !g.archived);
-                const unreadDms = conversations.filter(isUnread).length;
+                const unreadDms = primaryConversations.filter(isUnread).length;
                 const unreadGroups = liveGroups.filter((g) => g.unread > 0).length;
                 const chips = [
                   { k: 'all', l: 'All', n: 0 },
@@ -21465,7 +22651,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                   <ChevronRight size={16} color={theme.muted} />
                 </div>
               )}
-              {displayList.length === 0 && (listFilter === 'all' || listFilter === 'dms' ? (
+              {requestList.length > 0 && (listFilter === 'all' || listFilter === 'dms') && (
+                <RequestsRow count={requestList.length} unread={requestList.filter(isUnread).length} onClick={() => setShowRequests(true)} />
+              )}
+              {displayList.length === 0 && (listFilter === 'all' || listFilter === 'dms') && requestList.length > 0 ? null : displayList.length === 0 && (listFilter === 'all' || listFilter === 'dms' ? (
                 <EmptyState art="nochats" title="No chats yet" text="Find a friend by their username, or start a group." action={<PillButton primary label="Start a chat" onClick={() => setShowNewChat(true)} />} />
               ) : (
                 <div style={{ textAlign: 'center', padding: 30, fontSize: 13.5, color: theme.muted }}>
@@ -21540,7 +22729,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                   }}>
                     <div onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); setAvatarPeek(c); }} style={{ position: 'relative', flexShrink: 0, cursor: 'pointer' }}>
                       {storyRingFor(c.otherProfile.id) !== 'none'
-                        ? <StoryAvatar profile={c.otherProfile} size={50} ring={storyRingFor(c.otherProfile.id)} />
+                        ? <StoryAvatar profile={c.otherProfile} size={50} ring={storyRingFor(c.otherProfile.id)} close={storyCloseFor(c.otherProfile.id)} />
                         : <Avatar emoji={c.otherProfile.avatar} name={c.otherProfile.name} frame={c.otherProfile.avatar_frame} online={isUserOnline(c.otherProfile) && !c.otherProfile.hide_activity} size={46} />}
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
@@ -21555,7 +22744,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                           <div style={{ fontSize: 13, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><span style={{ color: theme.danger, fontWeight: 700 }}>Draft: </span>{draftMap[c.otherProfile.id].trim()}</div>
                         ) : (
                           <>
-                            {c.lastFromMe && c.preview && c.preview.kind !== 'deleted' && c.preview.kind !== 'system' && <StatusTicks status={c.lastMineRead ? 'read' : c.lastMineDelivered ? 'delivered' : 'sent'} />}
+                            {c.lastFromMe && c.preview && c.preview.kind !== 'deleted' && c.preview.kind !== 'system' && <StatusTicks status={c.lastMineRead && me.read_receipts !== false && c.otherProfile.read_receipts !== false ? 'read' : c.lastMineDelivered ? 'delivered' : 'sent'} />}
                             {hidePreviews && c.preview && c.preview.text
                               ? <PreviewLine preview={{ kind: 'text', text: unread ? 'New message' : 'Message hidden' }} color={unread ? theme.ink : theme.muted} weight={unread ? 700 : 400} />
                               : <PreviewLine preview={c.preview && c.preview.text ? c.preview : { kind: 'text', text: 'Say hi \u{1F44B}' }} color={unread ? theme.ink : theme.muted} weight={unread ? 700 : 400} />}
@@ -21606,7 +22795,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             onMentions={() => setMentionsOpen(true)} onUsage={() => setUsageOpen(true)} />
         )}
         <BottomTabBar tab={homeTab} onChange={(k) => setHomeTab(k)} onCreate={() => setShowCreate(true)}
-          badges={{ chats: conversations.filter(isUnread).length + groups.filter((g) => !g.archived && g.unread > 0).length, moments: trayUsers.some((u) => !u.stories.every((st) => storyData.seen.has(st.id))), calls: 0, me: followRequestCount + unreadMailCount }} />
+          badges={{ chats: primaryConversations.filter(isUnread).length + groups.filter((g) => !g.archived && g.unread > 0).length, moments: trayUsers.some((u) => !u.stories.every((st) => storyData.seen.has(st.id))), calls: 0, me: followRequestCount + unreadMailCount }} />
         </>)}
       </div>
 
@@ -21885,6 +23074,12 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                 <div style={{ flex: 1, textAlign: 'center', padding: '10px 4px', fontSize: 12.5, color: theme.muted, fontWeight: 600 }}>
                   This account no longer exists. You can't send new messages here.
                 </div>
+              ) : activeProfile && !activeGroup && requestIds.has(activeProfile.id) ? (
+                <RequestBar name={activeProfile.name} busy={requestBusy} onAccept={acceptRequest}
+                  onDelete={() => { const c = conversations.find((x) => x.otherProfile.id === activeProfile.id); if (c) setDeleteConvoTarget(c); }}
+                  onBlock={() => setBlockConfirmFor(activeProfile)} />
+              ) : activeProfile && !activeGroup && dmClosedFor === activeProfile.id ? (
+                <DmClosedBar name={activeProfile.name} />
               ) : (recording && recordLocked) ? (
                 <div className="zchat-fade" style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 10 }}>
                   <div role="button" aria-label="Delete recording" onClick={cancelRecording} style={{ width: 40, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: theme.danger, flexShrink: 0 }}><Trash2 size={20} /></div>
@@ -22033,7 +23228,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                 onVoiceType={typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition) ? () => { setShowAttach(false); setVoiceTyping(true); } : null}
                 onDice={activeProfile && activeProfile.is_bot ? null : () => { setShowAttach(false); setDiceSheet(true); }}
                 onBuzz={activeProfile && activeProfile.is_bot ? null : () => { setShowAttach(false); sendBuzz(); }}
-                onLocation={activeGroup ? null : shareMyLocation}
+                onLocation={activeGroup ? null : () => { setShowAttach(false); setLocationAsk(true); }}
                 canGame={!!activeProfile && !activeGroup && !activeProfile.is_bot}
                 onGame={() => { setShowAttach(false); setGameSheetFor(activeProfile); }}
                 onPoll={activeGroup || (activeProfile && !activeProfile.is_bot) ? () => { setShowAttach(false); setPollComposer(true); } : null}
@@ -22057,29 +23252,31 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         )}
       </div>
 
-      {profileOf && (
+      {profileOf && (() => { const panel = (
         <ProfilePanel initialEdit={!!profileOf.__edit} initialShare={!!profileOf.__share}
           profile={profileOf} isSelf={profileOf.id === session.user.id} userId={session.user.id}
           isOnline={isUserOnline(profileOf) && !profileOf.hide_activity} onClose={() => setProfileOf(null)}
           onReport={handleReport} onSaved={(updated) => { setProfileOf({ ...updated, email: me.email }); if (updated.id === me.id) setMe((prev) => ({ ...prev, ...updated, email: prev.email })); }}
           onOpenSettings={() => { setProfileOf(null); setShowSettings(true); }}
           onOpenProfile={(p) => setProfileOf(p)}
-          onMessage={(p) => { openChat(p, null); setProfileOf(null); }}
+          onMessage={(p) => { if (profileOf.__top) { setLeaderboardFor(null); setShowGames(false); } openChat(p, null); setProfileOf(null); }}
           isBlocked={myBlockedIds.has(profileOf.id)} onBlock={() => setBlockConfirmFor(profileOf)} onUnblock={() => setUnblockConfirmFor(profileOf)}
           isZAdmin={isZAdmin} iFollowIds={iFollowIds} privacyAllowed={privacyAllowed}
           shareConversations={conversations} shareGroups={groups.filter((g) => !g.archived)} onShareToChats={shareProfileToChats}
           canCall={canCall(profileOf)} onCall={(kind) => { const target = profileOf; setProfileOf(null); startDirectCall(target, kind); }}
           onOpenHighlight={openHighlight} meProfile={me} onOpenCollection={() => setCollectionOpen(true)}
         />
-      )}
+      ); return profileOf.__top ? <Portal><div style={{ position: 'relative', zIndex: 76 }}>{panel}</div></Portal> : panel; })()}
 
       {showSettings && (
         <SettingsPanel
+          key={settingsOpenTo || 'settings'}
+          initialSection={settingsOpenTo}
           onOpenUsage={() => setUsageOpen(true)}
           onPrivacySaved={(patch) => setMe((prev) => (prev ? { ...prev, ...patch } : prev))}
           me={me}
           onEditProfile={() => { setShowSettings(false); setProfileOf({ ...me, email: session.user.email }); }}
-          onClose={() => setShowSettings(false)}
+          onClose={() => { setShowSettings(false); setSettingsOpenTo(null); }}
           onOpenPrivacy={() => setShowPrivacy(true)}
           onLogout={() => setShowLogoutConfirm(true)}
           hideActivity={!!me.hide_activity} onToggleActivity={toggleHideActivity}
@@ -22165,6 +23362,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             onInfo={() => { setContextMenuFor(null); setInfoFor(m); }}
             onRemind={String(m.id).startsWith('temp-') ? null : () => { setContextMenuFor(null); setRemindFor(m); }}
             onReadAloud={typeof window !== 'undefined' && window.speechSynthesis ? () => { setContextMenuFor(null); readAloud(m); } : null}
+            onTranslate={m.type === 'text' && !m.deleted && String(m.content || '').trim() && !isSpecialContent(m.content) && !parseGameMessage(m.content) ? () => { setContextMenuFor(null); setToolSheet({ kind: 'tr', m }); } : null}
+            onTranscribe={(m.type === 'audio' || m.type === 'voice') && !m.deleted && m.media_url && !String(m.id).startsWith('temp-') ? () => { setContextMenuFor(null); setToolSheet({ kind: 'vt', m }); } : null}
             onShareImage={m.type === 'text' && !isSpecialContent(m.content) && !parseGameMessage(m.content) ? () => { setContextMenuFor(null); shareMessageAsImage(m, labelForSender(m.sender_id) === 'You' ? (me && me.name) : labelForSender(m.sender_id), theme.dark).then((ok) => { if (ok) showSnack('Image ready'); }); } : null}
           />
         );
@@ -22195,6 +23394,26 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       )}
       {viewerVideoUrl && (
         <VideoViewer url={viewerVideoUrl.url} trimStart={viewerVideoUrl.trimStart} trimEnd={viewerVideoUrl.trimEnd} overlayUrl={viewerVideoUrl.overlayUrl} onClose={() => setViewerVideoUrl(null)} onForward={() => { setViewerVideoUrl(null); openForward(); }} />
+      )}
+      {incomingShare && (
+        <ForwardPicker title="Send to" subtitle={incomingShare.files.length ? `${incomingShare.files.length} ${incomingShare.files.length === 1 ? 'file' : 'files'} from another app` : 'Shared from another app'}
+          conversations={conversations} groups={groups.filter((g) => !g.archived)} myId={session.user.id}
+          onCancel={() => setIncomingShare(null)}
+          onPick={(t) => { const share = incomingShare; setIncomingShare(null); pendingShareRef.current = share; if (t && t.__group) openGroup(t.__group); else if (t) actuallyOpenChat(sanitizeAvatar(t, session.user.id), null); }} />
+      )}
+      {locationAsk && (
+        <ChatRowSheet title="Share location" subtitle={activeProfile ? `With ${activeProfile.name}` : undefined} onClose={() => setLocationAsk(false)} actions={[
+          { icon: <Compass size={18} />, label: 'Send where I am now', onClick: () => { showSnack('Finding where you are'); shareMyLocation(); } },
+          { icon: <Clock size={18} />, label: 'Share live for 15 minutes', hint: 'Updates while ZChat is open', onClick: () => startLiveShare(15) },
+          { icon: <Clock size={18} />, label: 'Share live for 1 hour', hint: 'Updates while ZChat is open', onClick: () => startLiveShare(60) },
+          { icon: <Clock size={18} />, label: 'Share live for 8 hours', hint: 'Updates while ZChat is open', onClick: () => startLiveShare(480) },
+        ]} />
+      )}
+      {toolSheet && toolSheet.kind === 'tr' && <TranslateSheet message={toolSheet.m} onClose={() => setToolSheet(null)} onCopied={() => showSnack('Copied')} />}
+      {toolSheet && toolSheet.kind === 'vt' && <TranscribeSheet message={toolSheet.m} onClose={() => setToolSheet(null)} onCopied={() => showSnack('Copied')} />}
+      {showRequests && (
+        <RequestsPage items={requestList} hidePreviews={hidePreviews} unreadOf={(c) => unreadCounts[c.otherProfile.id] || 0}
+          onClose={() => setShowRequests(false)} onOpen={(c) => { setShowRequests(false); openChat(c.otherProfile, c.id); }} />
       )}
       {showArchived && (
         <ArchivedChatsPanel conversations={archivedConversations} onClose={() => setShowArchived(false)}
@@ -22482,7 +23701,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           onText={() => { setStoryCreate(false); setTextStory(true); }}
           onDraw={() => { setStoryCreate(false); setStoryPaint(true); }} />
       )}
-      {textStory && <TextStoryComposer onClose={() => setTextStory(false)} onShare={(file) => { setTextStory(false); postStories([{ file, kind: 'image', url: null }], '', []); }} />}
+      {textStory && <TextStoryComposer myId={session.user.id} onClose={() => setTextStory(false)} onShare={(file, opts) => { setTextStory(false); postStories([{ file, kind: 'image', url: null }], '', [], opts); }} />}
       {storyPaint && <PaintStudio recipientName="Your story" onClose={() => setStoryPaint(false)} onSend={(file) => { setStoryPaint(false); setStoryComposer({ key: Date.now(), files: [file] }); }} onAskBot={askBotAboutImage} />}
       {storyCamera && (
         <CameraCapture onClose={() => setStoryCamera(false)}
@@ -22638,7 +23857,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         return (
           <ScheduledSheet items={here} onClose={() => setShowScheduled(false)}
             onSendNow={async (it) => { setShowScheduled(false); const ok = await sendScheduledItem(it); if (ok) writeLater(session.user.id, readLater(session.user.id).filter((x) => x.id !== it.id)); else showSnack('Could not send. Try again'); }}
-            onDelete={(it) => { writeLater(session.user.id, readLater(session.user.id).filter((x) => x.id !== it.id)); if (here.length <= 1) setShowScheduled(false); }} />
+            onDelete={(it) => { writeLater(session.user.id, readLater(session.user.id).filter((x) => x.id !== it.id)); claimScheduled(it); if (here.length <= 1) setShowScheduled(false); }} />
         );
       })()}
       {speaking && (
@@ -22677,6 +23896,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       {showWhatsNew && <WhatsNewSheet onClose={() => setShowWhatsNew(false)} />}
       {showGames && (
         <GamesPage key={showGames.at || 'games'} initialGame={showGames.game || null} onClose={() => setShowGames(false)}
+          friends={gameFriends}
+          onPlayWith={(pp) => { setShowGames(false); setTimeout(() => setGameSheetFor(pp), 120); }}
+          onStartLive={(kind) => { setShowGames(false); setTimeout(() => setGamePicker({ kind }), 80); }}
+          onOpenLeaderboard={(k) => setLeaderboardFor({ game: k || 'all', at: Date.now() })}
           onChallenge={(kind) => { setShowGames(false); setTimeout(() => setGamePicker({ kind: kind || 'ttt' }), 80); }}
           onShareScore={(k, sc) => { if (!sc) { showSnack('Play a round first to get a score'); return; } setShowGames(false); setTimeout(() => setGamePicker({ kind: 'score', k, s: sc }), 80); }} />
       )}
@@ -22699,6 +23922,19 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           onCancel={() => setSetupFor(null)}
           onSubmit={(v) => { const p = setupFor.profile; setSetupFor(null); startGameWith(p, 'num', { sv: v }); }} />
       )}
+      {liveGame && me && (
+        <LiveGamePage key={liveGame.state.id} initial={liveGame.state} me={me} peer={liveGame.peer} myId={session.user.id}
+          onClose={() => setLiveGame(null)}
+          onSaveState={(next) => saveLiveState(liveGame.messageId, next)}
+          onPeerAway={pingLivePeer}
+          onRematch={() => { const pp = liveGame.peer; const k = liveGame.state.g; setLiveGame(null); setTimeout(() => startLiveGame(pp, k), 140); }} />
+      )}
+      {leaderboardFor && (
+        <LeaderboardPage key={leaderboardFor.at} initialGame={leaderboardFor.game} onClose={() => setLeaderboardFor(null)}
+          onOpenProfile={async (id) => { const pp = await cachedProfile(id); if (pp) setProfileOf({ ...pp, __top: true }); }}
+          onOpenPrivacy={() => { setLeaderboardFor(null); setShowGames(false); setSettingsOpenTo('whocansee:privacy_leaderboard'); setTimeout(() => setShowSettings(true), 60); }}
+          onPlay={(k) => { setLeaderboardFor(null); if (isSoloGameKey(k)) setShowGames({ game: k, at: Date.now() }); else { setShowGames(false); setTimeout(() => setGamePicker({ kind: k }), 80); } }} />
+      )}
       {duelPlay && activeProfile && (
         <FullPage title={gameTitle(duelPlay)} subtitle={`Your round against ${activeProfile.name}`} onBack={() => setDuelPlay(null)} zIndex={62} right={<GameInfoButton k={duelPlay.g === 'sd' ? `sd:${duelPlay.k}` : duelPlay.g} header />}
           bodyStyle={duelPlay.g === 'sd' ? { background: `linear-gradient(170deg, ${(GAME_ART_BG[duelPlay.k] || ['#6D4DF5', '#C13BDC'])[0]}55 0%, ${(GAME_ART_BG[duelPlay.k] || ['#6D4DF5', '#C13BDC'])[1]}33 45%, transparent 85%)` } : undefined}>
@@ -22711,7 +23947,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         </FullPage>
       )}
       {screenEffect && <ScreenEffect key={screenEffect.key} kind={screenEffect.kind} onDone={() => setScreenEffect(null)} />}
-      {infoFor && <MessageInfoSheet m={infoFor} isMine={infoFor.sender_id === session.user.id} peerName={activeGroup ? labelForSender(infoFor.sender_id) : (activeProfile ? activeProfile.name : '')} isGroup={!!activeGroup} onClose={() => setInfoFor(null)} />}
+      {infoFor && <MessageInfoSheet m={infoFor} isMine={infoFor.sender_id === session.user.id} peerName={activeGroup ? labelForSender(infoFor.sender_id) : (activeProfile ? activeProfile.name : '')} isGroup={!!activeGroup || !!(activeProfile && (me.read_receipts === false || activeProfile.read_receipts === false))} onClose={() => setInfoFor(null)} />}
       {appLocked && <AppLockScreen onUnlock={() => setAppLocked(false)} onForgot={() => { writeAppLock({}); setAppLocked(false); onLogout(); }} />}
       {showChatMedia && (activeProfile || activeGroup) && (
         <ChatMediaPanel title={activeGroup ? activeGroup.name : activeProfile.name}
@@ -22800,29 +24036,27 @@ function DayDivider({ label }) {
 }
 
 const WHATS_NEW = [
-  { title: 'A fresh sign in', text: 'New Sign in and Register pages with friendly drawings, an eye to show your password and a Remember me switch.' },
-  { title: 'Smoother back', text: 'Swiping back and the back button close one page at a time, with no double jumps or freezes. On the main screen one press closes ZChat, like other apps.' },
-  { title: 'Chat details', text: 'Tap the name at the top of a chat for everything in one place: search, media, mute, wallpaper, bubbles, notes and more.' },
-  { title: 'Shorter message menu', text: 'Hold a message to see the few things you use most. Tap More for the rest.' },
-  { title: 'Checklists', text: 'Share a list in a chat and tick things off together. Ticks update live for everyone.' },
-  { title: 'Split the bill', text: 'Send a bill, see what each person owes and who has paid you back.' },
-  { title: 'Countdowns', text: 'Count down to a trip or a birthday together, with confetti when it hits zero.' },
-  { title: 'Pick one for us', text: 'In Dice and coin, add a few choices and ZChat picks one at random for everyone.' },
-  { title: 'Share a contact', text: 'Send someone\'s profile card straight from the attach menu.' },
-  { title: 'Hidden photos', text: 'Send a photo that stays blurred until they tap it.' },
-  { title: 'Sticker suggestions', text: 'Type lol, hi or a single emoji and matching stickers show up above the keyboard.' },
-  { title: 'Voice messages in a row', text: 'When one voice message ends, the next one starts by itself.' },
-  { title: 'Picture in picture', text: 'Keep a video playing in a small window while you keep chatting.' },
-  { title: 'Unanswered', text: 'A new filter in your chat list shows chats still waiting for your reply.' },
-  { title: 'Peek at a chat', text: 'Press and hold a chat to read the latest messages without opening it.' },
-  { title: 'Private notes', text: 'Keep a note about someone in Chat details. Only you can see it.' },
-  { title: 'Jump to a date', text: 'Go straight to any day in a chat from Chat details.' },
-  { title: 'Mentions', text: 'Every group message that tags you, together in one list under Me.' },
-  { title: 'Share as image', text: 'Turn any message into a picture you can share anywhere. Find it under More.' },
-  { title: 'Time on ZChat', text: 'See how long you spend each day and set a gentle daily reminder.' },
-  { title: 'More privacy', text: 'Hide message previews, stop showing when you are typing, and show unread counts on the app icon.' },
-  { title: 'Cleaner look', text: 'Dice and coin are drawn by hand now, and menus lost their coloured boxes.' },
-  { title: 'Bug fixes', text: 'Fixes for Android, iPhone, iPad, Mac and Windows.' },
+  { title: 'A new Games home', text: 'Games now has its own home with friends, solo games and ranks in one place, plus a game of the day.' },
+  { title: 'Live games', text: 'Tug of war, Quiz race and Reaction race. Play at the same time as a friend and send quick reactions while you play.' },
+  { title: 'Leaderboards', text: 'Every game has a leaderboard. See your friends or everyone, all time or this week.' },
+  { title: 'Stay off leaderboards', text: 'Choose who can see you on leaderboards. Everyone else sees Hidden player and cannot open your profile from there.' },
+  { title: 'Message requests', text: 'Chats from people you do not follow wait in Message requests. They will not know you read them until you accept.' },
+  { title: 'Who can message you', text: 'Let everyone message you, or only people you follow. Find it in Settings under Messages and requests.' },
+  { title: 'Read receipts', text: 'Turn off showing when you read messages in your chats.' },
+  { title: 'Close friends', text: 'Share a story with just your close friends. Their stories show a green ring.' },
+  { title: 'Hide your story', text: 'Pick people who will not see any of your stories.' },
+  { title: 'Live location', text: 'Share where you are for 15 minutes, 1 hour or 8 hours. Stop any time.' },
+  { title: 'Translate', text: 'Hold a message and tap More, then Translate.' },
+  { title: 'Voice to text', text: 'Hold a voice message and tap Voice to text to read it instead.' },
+  { title: 'Private chat photos', text: 'New photos, videos and voice messages in chats can only be opened by the people in that chat.' },
+  { title: 'Deletes that follow you', text: 'Delete for me and Delete chat now carry over to your other phones and computers.' },
+  { title: 'Scheduled messages', text: 'Scheduled messages now go out on time even when ZChat is closed.' },
+  { title: 'Share to ZChat', text: 'On Android, add ZChat to your home screen, then share photos, videos and links from other apps straight into a chat.' },
+  { title: 'Opens offline', text: 'ZChat now opens even when you have no connection.' },
+  { title: 'Tidy notifications', text: 'Several messages from the same chat now stack into one notification.' },
+  { title: 'Change your email', text: 'Change the email you log in with from Settings.' },
+  { title: 'Delete your account fully', text: 'Deleting your account now removes your profile, posts and stories for good.' },
+  { title: 'Bug fixes', text: 'Lots of fixes and smoother games, menus and pages.' },
 ];
 
 function WhatsNewSheet({ onClose }) {
@@ -22857,17 +24091,57 @@ function WhatsNewSheet({ onClose }) {
   );
 }
 
+async function linkGoogleWithTap() {
+  try {
+    const rawNonce = randomNonce();
+    const hashedNonce = await sha256Hex(rawNonce);
+    await loadGoogleIdentityScript();
+    if (!window.google || !window.google.accounts || !window.google.accounts.id) return 'skip';
+    return await new Promise((resolve) => {
+      let done = false;
+      const finish = (v) => { if (!done) { done = true; resolve(v); } };
+      window.google.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        nonce: hashedNonce,
+        use_fedcm_for_prompt: true,
+        callback: async (response) => {
+          try {
+            const { error } = await supabase.auth.linkIdentity({ provider: 'google', token: response.credential, nonce: rawNonce });
+            finish(error || 'linked');
+          } catch (err) { finish(err || 'skip'); }
+        },
+      });
+      window.google.accounts.id.prompt((n) => {
+        if ((n.isNotDisplayed && n.isNotDisplayed()) || (n.isSkippedMoment && n.isSkippedMoment())) setTimeout(() => finish('skip'), 50);
+      });
+      setTimeout(() => finish('skip'), 90000);
+    });
+  } catch { return 'skip'; }
+}
+
 function LinkedAccountsSection({ session }) {
   const { theme } = useTheme();
   const [busy, setBusy] = useState('');
   const [note, setNote] = useState('');
+  const [linkedNow, setLinkedNow] = useState(() => new Set());
+  const providers = useAuthProviders();
   const identities = (session && session.user && session.user.identities) || [];
-  const has = (p) => identities.some((i) => i.provider === p);
+  const has = (p) => linkedNow.has(p) || identities.some((i) => i.provider === p);
   const link = async (provider) => {
     setBusy(provider);
     setNote('');
     try {
       if (!supabase.auth.linkIdentity) throw new Error('unsupported');
+      if (provider === 'google') {
+        const tap = await linkGoogleWithTap();
+        if (tap === 'linked') {
+          setBusy('');
+          setLinkedNow((s) => new Set([...s, 'google']));
+          try { await supabase.auth.refreshSession(); } catch {}
+          return;
+        }
+        if (tap && tap !== 'skip') throw tap;
+      }
       const { error } = await supabase.auth.linkIdentity({ provider, options: { redirectTo: window.location.origin } });
       if (error) throw error;
     } catch (e) {
@@ -22898,7 +24172,7 @@ function LinkedAccountsSection({ session }) {
       <div style={{ padding: '12px 2px 6px', fontSize: 13, color: theme.muted, lineHeight: 1.5 }}>Ways you can sign in to this ZChat account.</div>
       {row(<Mail size={20} strokeWidth={1.7} />, 'Email and password', 'email', session && session.user && session.user.email)}
       {row(<GoogleLogo size={18} />, 'Google', 'google', 'Linked')}
-      {row(<AppleLogo size={19} />, 'Apple', 'apple', 'Linked')}
+      {(has('apple') || (providers && providers.apple)) && row(<AppleLogo size={19} />, 'Apple', 'apple', 'Linked')}
       {note && <div style={{ padding: '12px 2px 0', fontSize: 12.5, color: theme.danger, lineHeight: 1.5 }}>{note}</div>}
     </div>
   );
@@ -23069,6 +24343,7 @@ function parseGameMessage(content) {
     if (st.g === 'bomb') return Array.isArray(st.op) ? st : null;
     if (st.g === 'gem') return Array.isArray(st.d) && st.d.length === 36 ? st : null;
     if (st.g === 'fade') return Array.isArray(st.b) && st.b.length === 9 ? st : null;
+    if (st.g === 'tug' || st.g === 'qrace' || st.g === 'rrace') return typeof st.x === 'string' && typeof st.o === 'string' ? st : null;
     return null;
   } catch { return null; }
 }
@@ -23310,7 +24585,7 @@ function Game2048() {
     setGrid(next);
     const sc = score + gained;
     setScore(sc);
-    if (sc > best) { setBest(sc); writeBest('2048', sc); }
+    if (sc > best) { setBest(sc); writeBest('2048', sc); noteSoloScore('2048', sc); }
     if (!canMove(next)) { setOver(true); playUiSound('lose'); } else if (next.includes(2048) && !grid.includes(2048)) playUiSound('win'); else if (gained) playUiSound('point'); else playUiSound('key');
     hapticTap();
   };
@@ -23397,7 +24672,7 @@ function MemoryGame() {
   const [best, setBest] = useState(() => readBest('memory'));
   const lock = useRef(false);
   const finished = done.size === cards.length;
-  useEffect(() => { if (finished && moves) { playUiSound('win'); if (!best || moves < best) { setBest(moves); writeBest('memory', moves); } } }, [finished]);
+  useEffect(() => { if (finished && moves) { playUiSound('win'); noteSoloScore('memory', moves); if (!best || moves < best) { setBest(moves); writeBest('memory', moves); } } }, [finished]);
   const flip = (c) => {
     if (lock.current || open.includes(c.id) || done.has(c.id)) return;
     hapticTap();
@@ -23466,7 +24741,7 @@ function SnakeGame({ seed, onDuelFinish } = {}) {
       st.dir = st.next;
       const head = [st.snake[0][0] + st.dir[0], st.snake[0][1] + st.dir[1]];
       if (head[0] < 0 || head[1] < 0 || head[0] >= N || head[1] >= N || st.snake.some((p) => p[0] === head[0] && p[1] === head[1])) {
-        setPhase('over'); playUiSound('lose'); if (st.score > best) { setBest(st.score); writeBest('snake', st.score); }
+        setPhase('over'); playUiSound('lose'); noteSoloScore('snake', st.score); if (st.score > best) { setBest(st.score); writeBest('snake', st.score); }
         return;
       }
       st.snake.unshift(head);
@@ -25074,6 +26349,7 @@ function TowerStackGame({ seed, onDuelFinish } = {}) {
   const finish = (sc) => {
     setTimeout(() => {
       setPhase('over');
+      noteSoloScore('stack', sc);
       const b = readBest('stack');
       if (sc > b) { setBest(sc); writeBest('stack', sc); }
     }, 700);
@@ -25219,7 +26495,8 @@ function DashGame({ seed, onDuelFinish } = {}) {
       if (hit) {
         s.over = true;
         setPhase('over'); playUiSound('lose'); hapticTap();
-        const b = readBest('dash');
+        noteSoloScore('dash', m);
+      const b = readBest('dash');
         if (m > b) { setBest(m); writeBest('dash', m); }
         return false;
       }
@@ -25353,7 +26630,8 @@ function FruitCatchGame({ seed, onDuelFinish } = {}) {
       if (lost) setLives(Math.max(0, s.lives));
       if (s.lives <= 0) {
         setPhase('over'); playUiSound('lose');
-        const b = readBest('catch');
+        noteSoloScore('catch', s.score);
+      const b = readBest('catch');
         if (s.score > b) { setBest(s.score); writeBest('catch', s.score); }
         return false;
       }
@@ -25431,7 +26709,8 @@ function ColourTrapGame({ seed, onDuelFinish } = {}) {
   };
   const end = () => {
     setPhase('over'); playUiSound('win');
-    const b = readBest('ctrap');
+    noteSoloScore('ctrap', scoreRef.current);
+      const b = readBest('ctrap');
     if (scoreRef.current > b) { setBest(scoreRef.current); writeBest('ctrap', scoreRef.current); }
   };
   const [left, addPenalty] = useCountdown(phase === 'playing', 30, end);
@@ -25487,7 +26766,8 @@ function OddOneOutGame({ seed, onDuelFinish } = {}) {
   };
   const end = () => {
     setPhase('over'); playUiSound('win');
-    const b = readBest('odd');
+    noteSoloScore('odd', levelRef.current);
+      const b = readBest('odd');
     if (levelRef.current > b) { setBest(levelRef.current); writeBest('odd', levelRef.current); }
   };
   const [left, addPenalty] = useCountdown(phase === 'playing', 30, end);
@@ -25547,7 +26827,8 @@ function HigherLowerGame({ seed, onDuelFinish } = {}) {
       } else {
         setPhase('over');
         const sc = streak;
-        const b = readBest('hilo');
+        noteSoloScore('hilo', sc);
+      const b = readBest('hilo');
         if (sc > b) { setBest(sc); writeBest('hilo', sc); }
       }
     }, 650);
@@ -26391,6 +27672,8 @@ function parseExtraCard(content) {
   if (b) return { k: 'bill', d: b };
   const c = parseCountdown(content);
   if (c) return { k: 'count', d: c };
+  const lv = parseLiveLoc(content);
+  if (lv) return { k: 'live', d: lv };
   return null;
 }
 function billMoney(c, v) {
@@ -26404,6 +27687,7 @@ function extraCardSummary(content) {
   if (!x) return null;
   if (x.k === 'list') return `Checklist: ${x.d.t}`;
   if (x.k === 'bill') return `Split bill: ${x.d.t}`;
+  if (x.k === 'live') return 'Live location';
   return `Countdown: ${x.d.t}`;
 }
 function checklistState(votes) {
@@ -27819,7 +29103,7 @@ function ActiveStrip({ items }) {
       {items.map((it) => (
         <div key={it.key} role="button" aria-label={it.label} onClick={() => { if (lp.current.fired === it.key) { lp.current.fired = false; return; } it.onClick(); }} {...storyLongPress(lp.current, it.key, it.onLong || null)} className="zchat-press" style={{ width: 64, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, cursor: 'pointer', WebkitTouchCallout: 'none', userSelect: 'none' }}>
           <div style={{ position: 'relative' }}>
-            <StoryAvatar profile={it.profile} size={60} ring={it.ring || 'none'} badgePlus={!!it.plus} segments={it.segments || null} uploading={!!it.uploading} dim={!!it.muted} />
+            <StoryAvatar profile={it.profile} size={60} ring={it.ring || 'none'} badgePlus={!!it.plus} segments={it.segments || null} uploading={!!it.uploading} dim={!!it.muted} close={!!it.close} />
             {it.online && <span style={{ position: 'absolute', right: 3, bottom: 3, width: 14, height: 14, borderRadius: '50%', background: '#22C55E', border: `2.5px solid ${theme.bgGradient}`, zIndex: 7 }} />}
           </div>
           <div style={{ fontSize: 11.5, color: it.ring === 'unseen' ? theme.ink : theme.muted, fontWeight: it.ring === 'unseen' ? 700 : 500, maxWidth: 64, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.uploading ? 'Sharing' : it.name}</div>
@@ -27945,13 +29229,13 @@ function onceSeenSet() {
 function markOnceSeen(id) {
   try { const set = onceSeenSet(); set.add(id); localStorage.setItem('zchat-once-seen', JSON.stringify([...set].slice(-500))); } catch {}
 }
-function OnceChip({ m, isMe, reactions, myId, onOpen, ink, isGroup }) {
+function OnceChip({ m, isMe, reactions, myId, onOpen, ink, isGroup, noReads }) {
   const { theme } = useTheme();
   const kind = m.type === 'video' ? 'Video' : 'Photo';
   const openers = (reactions || []).filter((r) => r.emoji === 'zo' && r.user_id !== m.sender_id);
   const mineOpened = openers.some((r) => r.user_id === myId) || onceSeenSet().has(m.id);
   const color = ink || theme.ink;
-  const status = isMe ? (openers.length ? (isGroup ? `Opened by ${openers.length}` : 'Opened') : 'Not opened yet') : (mineOpened ? 'Opened' : 'Tap to view');
+  const status = isMe ? (noReads ? 'Sent' : openers.length ? (isGroup ? `Opened by ${openers.length}` : 'Opened') : 'Not opened yet') : (mineOpened ? 'Opened' : 'Tap to view');
   const active = !isMe && !mineOpened;
   return (
     <div role="button" aria-label={active ? `Open view once ${kind.toLowerCase()}` : `View once ${kind.toLowerCase()}`} onClick={(e) => { e.stopPropagation(); if (active && onOpen) onOpen(m); }}
@@ -29066,8 +30350,10 @@ async function uploadPaintFile(file, userId) {
   } catch {}
   return uploadMedia(file, userId);
 }
-async function paintLoadSeed(url) {
+async function paintLoadSeed(rawUrl) {
   try {
+    const url = await resolveMedia(rawUrl);
+    if (!url) return null;
     const res = await fetch(url);
     if (!res.ok) return null;
     const buf = new Uint8Array(await res.arrayBuffer());
@@ -31359,7 +32645,8 @@ function SkyHopGame({ seed, onDuelFinish } = {}) {
       const hit = s.y + 12 > H - 28 || s.pipes.some((p) => 80 + 11 > p.x && 80 - 11 < p.x + 46 && (s.y - 11 < p.top || s.y + 11 > p.top + GAP));
       if (hit) {
         setPhase('over'); playUiSound('lose'); hapticTap();
-        const b = readBest('sky');
+        noteSoloScore('sky', s.score);
+      const b = readBest('sky');
         if (s.score > b) { setBest(s.score); writeBest('sky', s.score); }
         return false;
       }
@@ -31456,7 +32743,8 @@ function BricksGame({ seed, onDuelFinish } = {}) {
           s.lives -= 1; setLives(s.lives); hapticTap(); playUiSound('cancel');
           if (s.lives <= 0) {
             setPhase('over'); playUiSound('lose');
-            const b = readBest('bricks');
+            noteSoloScore('bricks', s.score);
+      const b = readBest('bricks');
             if (s.score > b) { setBest(s.score); writeBest('bricks', s.score); }
             return false;
           }
@@ -31524,7 +32812,7 @@ function WordGame({ duelWord, onDuelFinish }) {
   const [shake, setShake] = useState(false);
   const [streak, setStreak] = useState(() => { try { return parseInt(localStorage.getItem('zchat-word-streak') || '0', 10) || 0; } catch { return 0; } });
   const [best, setBest] = useState(() => readBest('word'));
-  const saveStreak = (n) => { setStreak(n); try { localStorage.setItem('zchat-word-streak', String(n)); } catch {} if (n > readBest('word')) { setBest(n); writeBest('word', n); } };
+  const saveStreak = (n) => { setStreak(n); try { localStorage.setItem('zchat-word-streak', String(n)); } catch {} if (n > 0) noteSoloScore('word', n); if (n > readBest('word')) { setBest(n); writeBest('word', n); } };
   const colors = { correct: '#22C55E', present: '#EAB308', absent: theme.dark ? '#3A3550' : '#9CA3AF' };
   const keyState = {};
   rows.forEach((r) => r.marks.forEach((mk, i) => { const ch = r.word[i]; const rank = { absent: 1, present: 2, correct: 3 }; if (!keyState[ch] || rank[mk] > rank[keyState[ch]]) keyState[ch] = mk; }));
@@ -31628,6 +32916,7 @@ function ReflexGame({ duel, onDuelFinish }) {
       const t = Math.round(performance.now() - goAt.current);
       setMs(t); setPhase('result'); hapticTap();
       const next = [...runs, t].slice(-5); setRuns(next);
+      noteSoloScore('reflex', t);
       const b = readBest('reflex');
       if (!b || t < b) { setBest(t); writeBest('reflex', t); playUiSound('win'); } else playUiSound('like');
     }
@@ -31715,7 +33004,7 @@ function QuizGame({ seed, count = 10, onDuelFinish }) {
     const sc = score + (ok ? 1 : 0);
     if (ok) { setScore(sc); playUiSound('like'); } else playUiSound('cancel');
     setTimeout(() => {
-      if (at + 1 >= qs.length) { setOver(true); playUiSound(sc >= Math.ceil(qs.length * 0.6) ? 'win' : 'lose'); if (!seed) { const b = readBest('quiz'); if (sc > b) { setBest(sc); writeBest('quiz', sc); } } }
+      if (at + 1 >= qs.length) { setOver(true); playUiSound(sc >= Math.ceil(qs.length * 0.6) ? 'win' : 'lose'); if (!seed) { noteSoloScore('quiz', sc); const b = readBest('quiz'); if (sc > b) { setBest(sc); writeBest('quiz', sc); } } }
       else { setAt(at + 1); setPicked(null); }
     }, 750);
   };
@@ -31785,6 +33074,7 @@ function EchoGame({ seed, onDuelFinish } = {}) {
     if (seq[i] !== p) {
       setPhase('over'); setTimeout(() => playUiSound('lose'), 220);
       const level = seq.length - 1;
+      noteSoloScore('echo', level);
       const b = readBest('echo');
       if (level > b) { setBest(level); writeBest('echo', level); }
       return;
@@ -31829,6 +33119,8 @@ const GAME_ART_BG = {
   memory: ['#0EA5E9', '#10B981'], reflex: ['#EF4444', '#DC2626'], quiz: ['#4F46E5', '#9333EA'], echo: ['#EC4899', '#BE123C'],
 };
 function gameArtBody(k) {
+  const liveArt = liveGameArt(k);
+  if (liveArt) return liveArt;
   if (k === 'paint') {
     const cols = ['#EF4444', '#F59E0B', '#22C55E', '#3B82F6', '#A855F7'];
     const out = [];
@@ -32238,6 +33530,983 @@ function GameArt({ k: kIn, width = 160, height = 100, radius = 14, style }) {
   );
 }
 
+const LIVE_GAME_KEYS = ['tug', 'qrace', 'rrace'];
+const LIVE_GAME_INFO = {
+  tug: { title: 'Tug of war', sub: 'Tap faster to pull the rope your way', secs: 15 },
+  qrace: { title: 'Quiz race', sub: 'Same questions, the fastest right answer scores', rounds: 7 },
+  rrace: { title: 'Reaction race', sub: 'First to tap on green, best of five', rounds: 5 },
+};
+Object.assign(GAME_TITLES, { tug: 'Tug of war', qrace: 'Quiz race', rrace: 'Reaction race' });
+Object.assign(FRIEND_GAME_SUBS, { tug: 'Live, tap faster than them', qrace: 'Live, fastest right answer', rrace: 'Live, first to tap on green' });
+Object.assign(GAME_ART_BG, { tug: ['#F97316', '#E11D48'], qrace: ['#7C3AED', '#2563EB'], rrace: ['#10B981', '#0EA5E9'] });
+Object.assign(GAME_RULES, {
+  tug: { how: ['You both play at the same moment. Open the game and wait for your friend to join.', 'When the countdown ends, tap the big button as fast as you can.', 'Every tap pulls the rope toward you.'], win: 'After 15 seconds, whoever pulled the rope to their side wins.' },
+  qrace: { how: ['You both play at the same moment and see the same question together.', 'Tap the right answer before your friend does.', 'A wrong answer locks you out of that question.'], win: 'Seven questions. Whoever scores more wins.' },
+  rrace: { how: ['You both play at the same moment.', 'Wait for the pad to turn green, then tap it before your friend.', 'Tapping too early gives the point to them.'], win: 'First to win three rounds wins.' },
+});
+
+function liveGameArt(k) {
+  if (k === 'tug') {
+    return (
+      <g>
+        <path d="M18 54 Q80 64 142 54" stroke="#FDE68A" strokeWidth="5" fill="none" strokeLinecap="round" />
+        <path d="M18 54 Q80 64 142 54" stroke="#92400E" strokeWidth="1.5" strokeDasharray="4 5" fill="none" />
+        <rect x="74" y="50" width="12" height="16" rx="3" fill="#EF4444" stroke="white" strokeWidth="2" />
+        <circle cx="26" cy="40" r="11" fill="white" /><circle cx="134" cy="40" r="11" fill="#1F1537" />
+        <path d="M18 70 l8 -12 l8 12" stroke="white" strokeWidth="5" strokeLinecap="round" fill="none" />
+        <path d="M126 70 l8 -12 l8 12" stroke="#1F1537" strokeWidth="5" strokeLinecap="round" fill="none" />
+      </g>
+    );
+  }
+  if (k === 'qrace') {
+    const bubble = (x, c, t) => (
+      <g transform={`translate(${x} 30)`}>
+        <rect width="42" height="34" rx="10" fill={c} />
+        <text x="21" y="24" textAnchor="middle" fontFamily={FONT} fontWeight="900" fontSize="20" fill="white">{t}</text>
+      </g>
+    );
+    return (
+      <g>
+        {bubble(20, '#22C55E', 'A')}{bubble(98, '#F59E0B', 'B')}
+        <circle cx="80" cy="47" r="14" fill="#1F1537" />
+        <path d="M80 37 v10 l6 5" stroke="white" strokeWidth="3" strokeLinecap="round" fill="none" />
+        <rect x="24" y="74" width="112" height="7" rx="3.5" fill="rgba(255,255,255,0.35)" />
+        <rect x="24" y="74" width="70" height="7" rx="3.5" fill="white" />
+      </g>
+    );
+  }
+  if (k === 'rrace') {
+    return (
+      <g>
+        <circle cx="48" cy="50" r="24" fill="#22C55E" stroke="white" strokeWidth="4" />
+        <circle cx="112" cy="50" r="24" fill="#DC2626" stroke="white" strokeWidth="4" />
+        <path transform="translate(48 50) scale(1.1)" d="M0 -14l-8 16h7l-2 12l10 -17h-7z" fill="white" />
+        <path transform="translate(112 50) scale(1.1)" d="M0 -14l-8 16h7l-2 12l10 -17h-7z" fill="white" opacity="0.55" />
+        <circle cx="80" cy="50" r="12" fill="#1F1537" />
+        <text x="80" y="54.5" textAnchor="middle" fontFamily={FONT} fontWeight="900" fontSize="11" fill="white">VS</text>
+      </g>
+    );
+  }
+  return null;
+}
+
+function CrownIcon({ size = 18, color = '#F5B301' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M3 8.5 7.5 12 12 5l4.5 7L21 8.5 19.2 18H4.8z" fill={color} stroke="rgba(0,0,0,0.25)" strokeWidth="1" strokeLinejoin="round" />
+      <rect x="4.8" y="18.6" width="14.4" height="2.4" rx="1.2" fill={color} />
+    </svg>
+  );
+}
+
+function isSoloGameKey(k) { return SOLO_GAMES.some((g) => g.k === k); }
+function boardKind(k) { return k !== 'all' && isSoloGameKey(k) ? 'best' : 'wins'; }
+function boardValueText(k, v) {
+  if (boardKind(k) === 'best') return formatGameScore(k, v);
+  return `${v} ${v === 1 ? 'win' : 'wins'}`;
+}
+function leaderboardKeys() {
+  const seen = new Set();
+  const out = [{ k: 'all', title: 'All games' }];
+  const add = (k) => { if (seen.has(k)) return; seen.add(k); out.push({ k, title: gameKeyTitle(k) }); };
+  SOLO_GAMES.forEach((g) => add(g.k));
+  LIVE_GAME_KEYS.forEach(add);
+  FRIEND_GAME_GROUPS.forEach(([, keys]) => keys.forEach(add));
+  return out;
+}
+
+const gameNet = { missing: false, mine: null, mineAt: 0, loading: null, listeners: new Set(), recorded: null, queue: [], busy: false, pendingSolo: new Map() };
+function gameNetMissing(error) {
+  if (!error) return false;
+  const code = String(error.code || '');
+  const msg = String(error.message || '');
+  return code === 'PGRST202' || code === '42883' || code === 'PGRST205' || code === '42P01' || /Could not find the function|does not exist|schema cache/i.test(msg);
+}
+async function loadMyGames(force) {
+  if (gameNet.missing) return gameNet.mine;
+  if (!force && gameNet.mine && Date.now() - gameNet.mineAt < 60000) return gameNet.mine;
+  if (gameNet.loading && !force) return gameNet.loading;
+  gameNet.loading = (async () => {
+    try {
+      const { data, error } = await supabase.rpc('zchat_my_games');
+      if (error) { if (gameNetMissing(error)) gameNet.missing = true; return gameNet.mine; }
+      const map = {};
+      (Array.isArray(data) ? data : []).forEach((r) => { if (r && r.game) map[r.game] = r; });
+      gameNet.mine = map;
+      gameNet.mineAt = Date.now();
+      gameNet.listeners.forEach((f) => { try { f(map); } catch {} });
+      return map;
+    } catch { return gameNet.mine; } finally { gameNet.loading = null; }
+  })();
+  return gameNet.loading;
+}
+function useMyGames() {
+  const [mine, setMine] = useState(gameNet.mine);
+  useEffect(() => {
+    gameNet.listeners.add(setMine);
+    loadMyGames(false).then((m) => { if (m) setMine(m); });
+    return () => { gameNet.listeners.delete(setMine); };
+  }, []);
+  return mine || {};
+}
+async function sendSoloScore(k, v) {
+  if (gameNet.missing) return;
+  try {
+    const { data, error } = await supabase.rpc('zchat_submit_score', { p_game: k, p_score: Math.round(v) });
+    if (error) { if (gameNetMissing(error)) gameNet.missing = true; return; }
+    if (data && data.ok) {
+      try { window.dispatchEvent(new CustomEvent('zchat-game-score', { detail: { k, score: Math.round(v), ...data } })); } catch {}
+      loadMyGames(true);
+    }
+  } catch {}
+}
+function noteSoloScore(k, score) {
+  const v = Math.round(Number(score));
+  if (!Number.isFinite(v) || v <= 0 || !isSoloGameKey(k)) return;
+  const lower = k === 'memory' || k === 'reflex';
+  const prev = gameNet.pendingSolo.get(k);
+  const keep = prev ? (lower ? Math.min(prev.v, v) : Math.max(prev.v, v)) : v;
+  if (prev) clearTimeout(prev.t);
+  const t = setTimeout(() => { gameNet.pendingSolo.delete(k); sendSoloScore(k, keep); }, 1600);
+  gameNet.pendingSolo.set(k, { v: keep, t });
+}
+function recordedGameIds() {
+  if (!gameNet.recorded) {
+    try { gameNet.recorded = new Set(JSON.parse(localStorage.getItem('zchat-games-recorded') || '[]')); } catch { gameNet.recorded = new Set(); }
+  }
+  return gameNet.recorded;
+}
+function queueGameRecord(st, myId) {
+  if (!st || !st.id || !st.w || !myId || gameNet.missing || st.g === 'score') return;
+  const peer = st.x === myId ? st.o : st.o === myId ? st.x : null;
+  if (!peer || String(st.id).indexOf('temp') === 0) return;
+  if (recordedGameIds().has(st.id) || gameNet.queue.some((q) => q.id === st.id)) return;
+  gameNet.queue.push({ id: st.id, peer });
+  setTimeout(pumpGameRecords, 900);
+}
+async function pumpGameRecords() {
+  if (gameNet.busy) return;
+  gameNet.busy = true;
+  let any = false;
+  try {
+    while (gameNet.queue.length && !gameNet.missing) {
+      const q = gameNet.queue.shift();
+      try {
+        const { data, error } = await supabase.rpc('zchat_record_game', { p_game_id: q.id, p_peer: q.peer });
+        if (error) { if (gameNetMissing(error)) { gameNet.missing = true; break; } continue; }
+        if (data && (data.ok || data.unknown)) {
+          any = any || !data.dup;
+          const done = recordedGameIds();
+          done.add(q.id);
+          try { localStorage.setItem('zchat-games-recorded', JSON.stringify([...done].slice(-800))); } catch {}
+        }
+      } catch {}
+      await new Promise((r) => setTimeout(r, 220));
+    }
+  } finally {
+    gameNet.busy = false;
+  }
+  if (any) loadMyGames(true);
+}
+
+function HiddenPlayerAvatar({ size = 44 }) {
+  const { theme } = useTheme();
+  return (
+    <div aria-hidden="true" style={{ width: size, height: size, borderRadius: '50%', flexShrink: 0, background: theme.dark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.muted }}>
+      <EyeOff size={Math.round(size * 0.42)} />
+    </div>
+  );
+}
+
+function LbSegment({ value, options, onChange, label }) {
+  const { theme } = useTheme();
+  return (
+    <div role="tablist" aria-label={label} style={{ display: 'flex', gap: 4, padding: 3, borderRadius: 12, background: theme.rowBg, flex: 1, minWidth: 0 }}>
+      {options.map(([k, l]) => (
+        <div key={k} role="tab" aria-selected={value === k} aria-label={l} onClick={() => { if (value !== k) { hapticTap(); onChange(k); } }}
+          style={{ flex: 1, textAlign: 'center', padding: '7px 4px', borderRadius: 9, fontSize: 13, fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap', background: value === k ? theme.panelBg : 'transparent', color: value === k ? theme.ink : theme.muted, boxShadow: value === k ? '0 2px 6px rgba(0,0,0,0.12)' : 'none', transition: 'background 0.15s ease' }}>{l}</div>
+      ))}
+    </div>
+  );
+}
+
+function PodiumSpot({ row, place, game, onOpen }) {
+  const { theme } = useTheme();
+  const medal = place === 1 ? '#F5B301' : place === 2 ? '#AEB8C4' : '#D08A4E';
+  const size = place === 1 ? 82 : 64;
+  const tappable = row && !row.hidden && row.user_id && onOpen;
+  return (
+    <div role={tappable ? 'button' : undefined} aria-label={row ? `${row.hidden ? 'Hidden player' : row.name} place ${place}` : undefined} onClick={tappable ? () => onOpen(row) : undefined}
+      style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: place === 1 ? 0 : 26, cursor: tappable ? 'pointer' : 'default' }}>
+      <div style={{ height: 22, display: 'flex', alignItems: 'flex-end' }}>{place === 1 && row && <CrownIcon size={24} />}</div>
+      <div style={{ position: 'relative' }}>
+        {row ? (row.hidden ? <HiddenPlayerAvatar size={size} /> : <Avatar emoji={row.avatar} name={row.name} frame={row.avatar_frame} size={size} />) : <div style={{ width: size, height: size, borderRadius: '50%', border: `2px dashed ${theme.border}` }} />}
+        <div style={{ position: 'absolute', left: '50%', bottom: -9, transform: 'translateX(-50%)', width: 24, height: 24, borderRadius: '50%', background: medal, color: '#1F1537', fontSize: 12.5, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', border: `2px solid ${theme.panelBg}`, zIndex: 4 }}>{place}</div>
+      </div>
+      <div style={{ marginTop: 14, fontSize: 13.5, fontWeight: 800, color: row ? theme.ink : theme.muted, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', padding: '0 4px' }}>{row ? (row.is_me ? 'You' : (row.name || 'Player')) : 'Open spot'}</div>
+      <div style={{ fontSize: 12.5, fontWeight: 800, color: place === 1 ? '#D99A00' : theme.muted, marginTop: 1 }}>{row ? boardValueText(game, row.value) : ' '}</div>
+    </div>
+  );
+}
+
+function LeaderRow({ row, game, onOpen, mine }) {
+  const { theme } = useTheme();
+  const tappable = !row.hidden && row.user_id && onOpen;
+  return (
+    <div role={tappable ? 'button' : undefined} aria-label={`${row.hidden ? 'Hidden player' : row.name} rank ${row.rank}`} onClick={tappable ? () => onOpen(row) : undefined} className={tappable ? 'zchat-row-press' : undefined}
+      style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 10px', borderRadius: 14, cursor: tappable ? 'pointer' : 'default', background: mine ? (theme.dark ? 'rgba(124,92,255,0.16)' : 'rgba(124,92,255,0.09)') : 'transparent' }}>
+      <div style={{ width: 30, textAlign: 'center', fontSize: 14, fontWeight: 900, color: theme.muted, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>{row.rank}</div>
+      {row.hidden ? <HiddenPlayerAvatar size={42} /> : <Avatar emoji={row.avatar} name={row.name} frame={row.avatar_frame} size={42} />}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 14.5, fontWeight: 700, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {row.hidden ? 'Hidden player' : <NameBadge name={row.is_me ? `${row.name} (you)` : row.name} verified={row.verified} custom={row.custom_badge} size={12} />}
+        </div>
+        {!row.hidden && row.username && <div style={{ fontSize: 12, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>@{row.username}</div>}
+      </div>
+      <div style={{ fontSize: 14, fontWeight: 900, color: theme.ink, flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>{boardValueText(game, row.value)}</div>
+    </div>
+  );
+}
+
+function LeaderboardPage({ initialGame, onClose, onOpenProfile, onOpenPrivacy, onPlay }) {
+  useBackClose(true, onClose);
+  const { theme } = useTheme();
+  const keys = useMemo(() => leaderboardKeys(), []);
+  const [game, setGame] = useState(() => (keys.some((x) => x.k === initialGame) ? initialGame : 'all'));
+  const [scope, setScopeRaw] = useState(() => { try { return localStorage.getItem('zchat-lb-scope') === 'everyone' ? 'everyone' : 'friends'; } catch { return 'friends'; } });
+  const [period, setPeriod] = useState('all');
+  const [rows, setRows] = useState(null);
+  const [failed, setFailed] = useState('');
+  const reqRef = useRef(0);
+  const stripRef = useRef(null);
+  const setScope = (v) => { setScopeRaw(v); try { localStorage.setItem('zchat-lb-scope', v); } catch {} };
+  useEffect(() => {
+    const my = ++reqRef.current;
+    setRows(null);
+    setFailed('');
+    (async () => {
+      if (gameNet.missing) { setFailed('missing'); setRows([]); return; }
+      try {
+        const { data, error } = await supabase.rpc('zchat_leaderboard', { p_game: game, p_scope: scope, p_period: period, p_limit: 50 });
+        if (my !== reqRef.current) return;
+        if (error) { if (gameNetMissing(error)) gameNet.missing = true; setFailed(gameNetMissing(error) ? 'missing' : 'error'); setRows([]); return; }
+        setRows((Array.isArray(data) ? data : []).filter((r) => r && r.value > 0));
+      } catch { if (my === reqRef.current) { setFailed('error'); setRows([]); } }
+    })();
+  }, [game, scope, period]);
+  useEffect(() => {
+    const strip = stripRef.current;
+    if (!strip) return;
+    const el = strip.querySelector('[data-selected="1"]');
+    if (el) { try { el.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' }); } catch {} }
+  }, [game]);
+  const open = (r) => { if (onOpenProfile && r && r.user_id) onOpenProfile(r.user_id); };
+  const list = rows || [];
+  const top = list.slice(0, 3);
+  const restRows = list.slice(3);
+  const me = list.find((r) => r.is_me);
+  const lastTop = restRows.length ? restRows[restRows.length - 1] : null;
+  const meOutside = me && lastTop && me === lastTop && restRows.length > 1 && me.rank > restRows[restRows.length - 2].rank + 1;
+  const title = (keys.find((x) => x.k === game) || { title: 'All games' }).title;
+  return (
+    <FullPage title="Leaderboards" subtitle={title} onBack={onClose} zIndex={66} pad={false}
+      footer={me ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ fontSize: 13, fontWeight: 800, color: theme.muted }}>Your spot</div>
+          <div style={{ flex: 1, fontSize: 15, fontWeight: 900, color: theme.ink }}>#{me.rank}</div>
+          <div style={{ fontSize: 15, fontWeight: 900, color: theme.coral }}>{boardValueText(game, me.value)}</div>
+        </div>
+      ) : null}>
+      <div ref={stripRef} style={{ display: 'flex', gap: 8, overflowX: 'auto', padding: '8px 16px 4px', scrollbarWidth: 'none' }}>
+        {keys.map((x) => {
+          const on = x.k === game;
+          return (
+            <div key={x.k} data-selected={on ? '1' : '0'} role="button" aria-label={`Leaderboard ${x.title}`} aria-pressed={on} onClick={() => { hapticTap(); setGame(x.k); }} className="zchat-press"
+              style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, padding: '5px 12px 5px 5px', borderRadius: 999, cursor: 'pointer', border: `1.5px solid ${on ? theme.coral : theme.border}`, background: on ? `${theme.coral}18` : 'transparent' }}>
+              {x.k === 'all'
+                ? <span style={{ width: 28, height: 28, borderRadius: 9, background: 'linear-gradient(180deg, #FFE477, #F59E0B)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><TrophyIcon size={16} color="#7C2D12" /></span>
+                : <GameArt k={x.k} width={28} height={28} radius={9} />}
+              <span style={{ fontSize: 13, fontWeight: 800, color: on ? theme.ink : theme.muted, whiteSpace: 'nowrap' }}>{x.title}</span>
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ display: 'flex', gap: 8, padding: '8px 16px 2px' }}>
+        <LbSegment label="Who to show" value={scope} onChange={setScope} options={[['friends', 'Friends'], ['everyone', 'Everyone']]} />
+        <LbSegment label="Time" value={period} onChange={setPeriod} options={[['all', 'All time'], ['week', 'This week']]} />
+      </div>
+      <div style={{ padding: '6px 12px 10px' }}>
+        {rows === null && <div style={{ display: 'flex', justifyContent: 'center', padding: 48 }}><Spinner size={22} color={theme.muted} /></div>}
+        {rows !== null && failed === 'missing' && <EmptyState art="search" title="Leaderboards are almost ready" text="They switch on once the latest ZChat setup is finished. Your scores are saved on this phone until then." />}
+        {rows !== null && failed === 'error' && <EmptyState art="search" title="Could not load the leaderboard" text="Check your connection and try again." />}
+        {rows !== null && !failed && !list.length && (
+          <EmptyState art="search" title="No scores yet" text={scope === 'friends' ? 'Be the first of your friends on this board.' : 'Be the first on this board.'}
+            action={onPlay && game !== 'all' ? <GameButton label="Play now" color="green" small onClick={() => onPlay(game)} /> : null} />
+        )}
+        {rows !== null && !failed && list.length > 0 && (
+          <>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, padding: '14px 4px 20px', margin: '6px 0 10px', borderRadius: 22, background: theme.dark ? 'linear-gradient(180deg, rgba(124,92,255,0.18), rgba(124,92,255,0.04))' : 'linear-gradient(180deg, rgba(124,92,255,0.12), rgba(124,92,255,0.02))' }}>
+              <PodiumSpot row={top[1]} place={2} game={game} onOpen={open} />
+              <PodiumSpot row={top[0]} place={1} game={game} onOpen={open} />
+              <PodiumSpot row={top[2]} place={3} game={game} onOpen={open} />
+            </div>
+            {restRows.map((r, i) => (
+              <React.Fragment key={`${r.rank}-${r.user_id || i}`}>
+                {meOutside && r === me && <div aria-hidden="true" style={{ textAlign: 'center', color: theme.muted, fontWeight: 900, letterSpacing: 3, padding: '2px 0' }}>...</div>}
+                <LeaderRow row={r} game={game} onOpen={open} mine={r.is_me} />
+              </React.Fragment>
+            ))}
+          </>
+        )}
+        {onOpenPrivacy && (
+          <div style={{ fontSize: 12.5, color: theme.muted, lineHeight: 1.5, padding: '14px 8px 4px', textAlign: 'center' }}>
+            People who are not allowed to see you get Hidden player instead of your name.{' '}
+            <span role="button" aria-label="Who can see me on leaderboards" onClick={onOpenPrivacy} style={{ color: theme.coral, fontWeight: 800, cursor: 'pointer' }}>Choose who sees you</span>
+          </div>
+        )}
+      </div>
+    </FullPage>
+  );
+}
+
+function GameScoreToast({ k }) {
+  const { theme } = useTheme();
+  const [msg, setMsg] = useState(null);
+  useEffect(() => {
+    let t = 0;
+    const on = (e) => {
+      const d = e && e.detail;
+      if (!d || d.k !== k || !d.new_best) return;
+      const where = d.friend_rank ? `#${d.friend_rank} among friends` : d.rank ? `#${d.rank} on ZChat` : '';
+      setMsg({ key: Date.now(), text: `New best, ${formatGameScore(k, d.best)}`, sub: where });
+      clearTimeout(t);
+      t = setTimeout(() => setMsg(null), 3200);
+    };
+    window.addEventListener('zchat-game-score', on);
+    return () => { window.removeEventListener('zchat-game-score', on); clearTimeout(t); };
+  }, [k]);
+  if (!msg) return null;
+  return (
+    <div key={msg.key} className="zchat-fade" role="status" style={{ position: 'fixed', left: '50%', top: 'calc(70px + env(safe-area-inset-top))', transform: 'translateX(-50%)', zIndex: 120, display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px 10px 12px', borderRadius: 18, background: theme.dark ? '#221B3A' : '#FFFFFF', boxShadow: '0 12px 30px rgba(0,0,0,0.28)', border: `1px solid ${theme.border}`, pointerEvents: 'none', maxWidth: 'calc(100vw - 32px)' }}>
+      <span style={{ width: 32, height: 32, borderRadius: 10, background: 'linear-gradient(180deg, #FFE477, #F59E0B)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><TrophyIcon size={18} color="#7C2D12" /></span>
+      <span style={{ minWidth: 0 }}>
+        <span style={{ display: 'block', fontSize: 14, fontWeight: 900, color: theme.ink, whiteSpace: 'nowrap' }}>{msg.text}</span>
+        {msg.sub && <span style={{ display: 'block', fontSize: 12, fontWeight: 700, color: theme.muted }}>{msg.sub}</span>}
+      </span>
+    </div>
+  );
+}
+
+function FriendsPlayRow({ friends, onPick }) {
+  const { theme } = useTheme();
+  if (!friends || !friends.length) return null;
+  return (
+    <>
+      <IgHeading>Play with friends</IgHeading>
+      <div style={{ display: 'flex', gap: 14, overflowX: 'auto', padding: '2px 2px 8px', scrollbarWidth: 'none' }}>
+        {friends.slice(0, 16).map((p) => (
+          <div key={p.id} role="button" aria-label={`Play with ${p.name}`} onClick={() => { playUiSound('tap'); onPick(p); }} className="zchat-press"
+            style={{ width: 66, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+            <div style={{ position: 'relative' }}>
+              <Avatar emoji={p.avatar} name={p.name} frame={p.avatar_frame} size={58} />
+              <span style={{ position: 'absolute', right: -2, bottom: -2, width: 24, height: 24, borderRadius: '50%', background: theme.coral, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', border: `2px solid ${theme.panelBg}`, zIndex: 4 }}><GamepadIcon size={13} color="white" /></span>
+            </div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: theme.ink, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{String(p.name || '').split(' ')[0]}</div>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
+function LiveGamesRow({ onStart }) {
+  const { theme } = useTheme();
+  return (
+    <>
+      <IgHeading>Live with a friend</IgHeading>
+      <div style={{ display: 'flex', gap: 10, overflowX: 'auto', padding: '2px 2px 10px', scrollbarWidth: 'none' }}>
+        {LIVE_GAME_KEYS.map((k) => (
+          <div key={k} role="button" aria-label={`Live ${GAME_TITLES[k]}`} onClick={() => { playUiSound('tap'); onStart(k); }} className="zchat-press"
+            style={{ width: 200, flexShrink: 0, borderRadius: 20, overflow: 'hidden', position: 'relative', cursor: 'pointer', boxShadow: '0 10px 22px rgba(0,0,0,0.24)' }}>
+            <GameArt k={k} width="100%" height={118} radius={0} />
+            <span style={{ position: 'absolute', top: 8, left: 8, display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 9px', borderRadius: 999, background: '#EF4444', color: 'white', fontSize: 10.5, fontWeight: 900, letterSpacing: '0.06em' }}>
+              <span className="zchat-live-dot" style={{ width: 6, height: 6, borderRadius: '50%', background: 'white' }} />LIVE
+            </span>
+            <div style={{ padding: '9px 12px 11px', background: theme.dark ? '#1C1730' : '#FFFFFF' }}>
+              <div style={{ fontSize: 15, fontWeight: 900, color: theme.ink }}>{GAME_TITLES[k]}</div>
+              <div style={{ fontSize: 12, color: theme.muted, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{LIVE_GAME_INFO[k].sub}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
+function GameRanksPanel({ mine, onOpenBoard }) {
+  const { theme } = useTheme();
+  const all = mine.all || null;
+  const solo = SOLO_GAMES.map((g) => g.k).filter((k) => mine[k] && mine[k].best);
+  const duels = leaderboardKeys().map((x) => x.k).filter((k) => k !== 'all' && !isSoloGameKey(k) && mine[k] && mine[k].plays);
+  const stat = (label, value) => (
+    <div style={{ flex: 1, minWidth: 0, padding: '12px 10px', borderRadius: 16, background: theme.rowBg, textAlign: 'center' }}>
+      <div style={{ fontSize: 22, fontWeight: 900, color: theme.ink, fontVariantNumeric: 'tabular-nums' }}>{value}</div>
+      <div style={{ fontSize: 11.5, fontWeight: 800, color: theme.muted, marginTop: 2 }}>{label}</div>
+    </div>
+  );
+  const row = (k, line) => (
+    <div key={k} role="button" aria-label={`Open leaderboard ${gameKeyTitle(k)}`} onClick={() => onOpenBoard(k)} className="zchat-row-press"
+      style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 4px', cursor: 'pointer', borderBottom: `1px solid ${theme.border}` }}>
+      <GameArt k={k} width={44} height={44} radius={12} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 14.5, fontWeight: 800, color: theme.ink }}>{gameKeyTitle(k)}</div>
+        <div style={{ fontSize: 12.5, color: theme.muted }}>{line}</div>
+      </div>
+      <ChevronRight size={18} color={theme.muted} />
+    </div>
+  );
+  return (
+    <>
+      <div role="button" aria-label="Open leaderboards" onClick={() => onOpenBoard('all')} className="zchat-press"
+        style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px 16px', marginTop: 14, borderRadius: 22, cursor: 'pointer', background: 'linear-gradient(135deg, #7C3AED, #DB2777)', color: 'white', boxShadow: '0 12px 26px rgba(124,58,237,0.35)' }}>
+        <span style={{ width: 46, height: 46, borderRadius: 14, background: 'linear-gradient(180deg, #FFE477, #F59E0B)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><TrophyIcon size={26} color="#7C2D12" /></span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 17, fontWeight: 900 }}>Leaderboards</div>
+          <div style={{ fontSize: 12.5, opacity: 0.9 }}>See who is on top among your friends and on ZChat</div>
+        </div>
+        <ChevronRight size={20} color="white" />
+      </div>
+      <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+        {stat('Wins', all ? all.wins : 0)}
+        {stat('Games played', all ? all.plays : 0)}
+        {stat('Rank in friends', all && all.wins ? `#${all.friend_rank}` : 'None')}
+      </div>
+      {solo.length > 0 && <IgHeading>Your best scores</IgHeading>}
+      {solo.map((k) => row(k, `Best ${formatGameScore(k, mine[k].best)}${mine[k].friend_rank ? `, #${mine[k].friend_rank} among friends` : ''}`))}
+      {duels.length > 0 && <IgHeading>Your wins</IgHeading>}
+      {duels.map((k) => row(k, `${mine[k].wins} ${mine[k].wins === 1 ? 'win' : 'wins'}, ${mine[k].losses} lost${mine[k].friend_rank ? `, #${mine[k].friend_rank} among friends` : ''}`))}
+      {!solo.length && !duels.length && <div style={{ fontSize: 13, color: theme.muted, lineHeight: 1.5, padding: '14px 4px' }}>Play a solo game or beat a friend and your scores show up here.</div>}
+    </>
+  );
+}
+
+FRIEND_GAME_GROUPS.unshift(['Play live now', LIVE_GAME_KEYS.slice()]);
+const LIVE_INVITE_MS = 10 * 60 * 1000;
+
+function liveStatusFor(state, myId, peerName) {
+  const host = state.x === myId;
+  const first = String(peerName || 'They').split(' ')[0];
+  if (state.st === 'done') return state.w === 'd' ? 'Draw' : ((state.w === 'x') === host ? 'You won' : `${first} won`);
+  if (state.st === 'gone') return 'Game stopped';
+  if (state.st === 'live') return 'Playing now';
+  if (state.exp && Date.now() > state.exp) return 'Invite ended';
+  return host ? `Waiting for ${first}` : 'Wants to play now';
+}
+
+function LiveGameCard({ state, myId, peerName, onOpen, onRematch }) {
+  const { theme } = useTheme();
+  const host = state.x === myId;
+  const waiting = state.st === 'wait' && (!state.exp || Date.now() <= state.exp);
+  useTicker(waiting, 1000);
+  const left = state.exp ? Math.max(0, Math.round((state.exp - Date.now()) / 1000)) : 0;
+  const first = String(peerName || 'They').split(' ')[0];
+  const mine = host ? state.sx || 0 : state.so || 0;
+  const theirs = host ? state.so || 0 : state.sx || 0;
+  const status = liveStatusFor(state, myId, peerName);
+  const hot = waiting && !host;
+  const ended = state.st === 'done' || state.st === 'gone' || (state.st === 'wait' && !waiting);
+  return (
+    <GameCardShell k={state.g} width={236} live title={GAME_TITLES[state.g]} status={status} hot={hot}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '2px 0 4px' }}>
+        <span style={{ fontSize: 12.5, fontWeight: 800, color: theme.muted }}>You</span>
+        <span style={{ fontSize: 24, fontWeight: 900, color: theme.ink, fontVariantNumeric: 'tabular-nums' }}>{mine} : {theirs}</span>
+        <span style={{ fontSize: 12.5, fontWeight: 800, color: theme.muted, maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{first}</span>
+      </div>
+      {waiting && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: theme.muted, marginTop: 2 }}>
+          <span className="zchat-live-dot" style={{ width: 7, height: 7, borderRadius: '50%', background: '#EF4444' }} />
+          {`Open for ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`}
+        </div>
+      )}
+      {state.st === 'live' && <div style={{ textAlign: 'center', fontSize: 12, fontWeight: 700, color: theme.muted }}>A round is happening right now</div>}
+      {!ended && <GameAgainButton onClick={onOpen} label={host ? 'Open the game' : 'Join now'} color={host ? 'gold' : 'green'} />}
+      {ended && onRematch && <GameAgainButton onClick={onRematch} label={state.st === 'done' ? 'Rematch' : 'Play again'} color="green" />}
+    </GameCardShell>
+  );
+}
+
+function liveQuestions(seed, n) {
+  const rnd = seededRandom(`qrace:${seed}`);
+  const pool = QUIZ_POOL.slice();
+  for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); const t = pool[i]; pool[i] = pool[j]; pool[j] = t; }
+  return pool.slice(0, n);
+}
+
+function LiveScoreBar({ me, peer, mineScore, theirScore, isHost }) {
+  const { theme } = useTheme();
+  const side = (p, label, s, right) => (
+    <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 8, flexDirection: right ? 'row-reverse' : 'row' }}>
+      <Avatar emoji={p && p.avatar} name={(p && p.name) || label} frame={p && p.avatar_frame} size={40} />
+      <div style={{ minWidth: 0, textAlign: right ? 'right' : 'left' }}>
+        <div style={{ fontSize: 12.5, fontWeight: 800, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</div>
+        <div style={{ fontSize: 22, fontWeight: 900, color: theme.ink, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{s}</div>
+      </div>
+    </div>
+  );
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 18, background: theme.rowBg }}>
+      {side(me, 'You', mineScore, false)}
+      <div style={{ fontSize: 12, fontWeight: 900, color: theme.muted }}>VS</div>
+      {side(peer, String((peer && peer.name) || 'Friend').split(' ')[0], theirScore, true)}
+    </div>
+  );
+}
+
+function TugBoard({ isHost, bus, onHostFinish, onProgress }) {
+  const { theme } = useTheme();
+  const secs = LIVE_GAME_INFO.tug.secs;
+  const [mine, setMine] = useState(0);
+  const [theirs, setTheirs] = useState(0);
+  const [left, setLeft] = useState(secs);
+  const [over, setOver] = useState(false);
+  const mineRef = useRef(0);
+  const theirsRef = useRef(0);
+  const sentRef = useRef(0);
+  const endAt = useRef(performance.now() + secs * 1000);
+  const peerFinal = useRef(null);
+  const finishedRef = useRef(false);
+  useEffect(() => bus.listen((p) => {
+    if (p.t === 'n' || p.t === 'fin') {
+      theirsRef.current = Math.max(theirsRef.current, Number(p.c) || 0);
+      setTheirs(theirsRef.current);
+      if (p.t === 'fin') peerFinal.current = theirsRef.current;
+    }
+  }), [bus]);
+  useEffect(() => { if (onProgress) onProgress(mine, theirs); }, [mine, theirs]);
+  useEffect(() => {
+    const iv = setInterval(() => {
+      if (mineRef.current !== sentRef.current && !finishedRef.current) { sentRef.current = mineRef.current; bus.send({ t: 'n', c: mineRef.current }); }
+      const rem = Math.max(0, endAt.current - performance.now());
+      setLeft(rem / 1000);
+      if (rem <= 0 && !finishedRef.current) {
+        finishedRef.current = true;
+        setOver(true);
+        bus.send({ t: 'fin', c: mineRef.current });
+        if (isHost) {
+          const started = Date.now();
+          const wait = setInterval(() => {
+            if (peerFinal.current != null || Date.now() - started > 1800) {
+              clearInterval(wait);
+              onHostFinish({ sx: mineRef.current, so: Math.max(theirsRef.current, peerFinal.current || 0) });
+            }
+          }, 100);
+        }
+      }
+    }, 110);
+    return () => clearInterval(iv);
+  }, []);
+  const tap = () => {
+    if (finishedRef.current) return;
+    mineRef.current += 1;
+    setMine(mineRef.current);
+    if (mineRef.current % 3 === 0) hapticTap();
+  };
+  const diff = mine - theirs;
+  const pos = Math.max(-1, Math.min(1, diff / 30));
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, width: '100%' }}>
+      <div style={{ fontSize: 15, fontWeight: 900, color: left < 4 ? theme.danger : theme.ink, fontVariantNumeric: 'tabular-nums' }}>{over ? 'Time' : `${left.toFixed(1)}s`}</div>
+      <div aria-label="Rope" role="img" style={{ position: 'relative', width: '100%', maxWidth: 420, height: 64, overflow: 'hidden' }}>
+        <div style={{ position: 'absolute', left: '50%', top: 6, bottom: 6, width: 2, background: theme.border, transform: 'translateX(-1px)' }} />
+        <div style={{ position: 'absolute', left: 0, right: 0, top: 28, height: 8, borderRadius: 4, background: 'repeating-linear-gradient(90deg, #D6A35C 0 10px, #B7813F 10px 20px)', transform: `translateX(${-pos * 18}%)`, transition: 'transform 0.12s linear' }} />
+        <div style={{ position: 'absolute', top: 20, left: '50%', width: 22, height: 24, borderRadius: 6, background: '#EF4444', border: '3px solid white', boxShadow: '0 4px 10px rgba(0,0,0,0.3)', transform: `translateX(calc(-50% + ${-pos * 160}px))`, transition: 'transform 0.12s linear' }} />
+        <div style={{ position: 'absolute', left: 0, top: 0, fontSize: 11.5, fontWeight: 900, color: theme.coral }}>YOUR SIDE</div>
+        <div style={{ position: 'absolute', right: 0, top: 0, fontSize: 11.5, fontWeight: 900, color: theme.muted }}>THEIR SIDE</div>
+      </div>
+      <div role="button" aria-label="Pull" data-silent="1" onPointerDown={(e) => { e.preventDefault(); tap(); }}
+        style={{ width: 'min(70vw, 260px)', aspectRatio: '1', borderRadius: '50%', background: over ? theme.rowBg : 'radial-gradient(circle at 35% 30%, #FDBA74, #F97316 55%, #C2410C)', color: 'white', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', boxShadow: over ? 'none' : '0 14px 30px rgba(249,115,22,0.45), inset 0 -8px 0 rgba(0,0,0,0.15)', cursor: 'pointer', userSelect: 'none', touchAction: 'none', transform: `scale(${over ? 0.96 : 1})`, transition: 'transform 0.08s ease' }}>
+        <div style={{ fontSize: 46, fontWeight: 900, lineHeight: 1, color: over ? theme.muted : 'white' }}>{mine}</div>
+        <div style={{ fontSize: 15, fontWeight: 900, letterSpacing: '0.08em', color: over ? theme.muted : 'white', marginTop: 4 }}>{over ? 'DONE' : 'PULL'}</div>
+      </div>
+    </div>
+  );
+}
+
+function QuizRaceBoard({ isHost, bus, seed, onHostFinish, onScore }) {
+  const { theme } = useTheme();
+  const rounds = LIVE_GAME_INFO.qrace.rounds;
+  const qs = useMemo(() => liveQuestions(seed, rounds), [seed]);
+  const [qi, setQi] = useState(-1);
+  const [picked, setPicked] = useState(null);
+  const [result, setResult] = useState(null);
+  const [score, setScore] = useState({ x: 0, o: 0 });
+  const [left, setLeft] = useState(9);
+  const shownAt = useRef(0);
+  const myRole = isHost ? 'x' : 'o';
+  const host = useRef({ i: -1, answers: {}, decided: false, timer: 0, score: { x: 0, o: 0 } });
+  const decide = (i) => {
+    const h = host.current;
+    if (h.i !== i || h.decided) return;
+    h.decided = true;
+    clearTimeout(h.timer);
+    const ok = ['x', 'o'].filter((r) => h.answers[r] && h.answers[r].ok).sort((a, b) => h.answers[a].ms - h.answers[b].ms);
+    const win = ok[0] || null;
+    if (win) h.score = { ...h.score, [win]: h.score[win] + 1 };
+    const payload = { t: 'r', i, win, sx: h.score.x, so: h.score.o };
+    bus.send(payload);
+    applyResult(payload);
+    setTimeout(() => {
+      if (i + 1 >= rounds) onHostFinish({ sx: h.score.x, so: h.score.o });
+      else ask(i + 1);
+    }, 1700);
+  };
+  const ask = (i) => {
+    const h = host.current;
+    h.i = i;
+    h.answers = {};
+    h.decided = false;
+    bus.send({ t: 'q', i });
+    showQuestion(i);
+    clearTimeout(h.timer);
+    h.timer = setTimeout(() => decide(i), 9200);
+  };
+  const hostAnswer = (role, a) => {
+    const h = host.current;
+    if (a.i !== h.i || h.decided || h.answers[role]) return;
+    h.answers[role] = a;
+    const both = h.answers.x && h.answers.o;
+    if (both) { decide(a.i); return; }
+    if (a.ok) { clearTimeout(h.timer); h.timer = setTimeout(() => decide(a.i), 450); }
+  };
+  const showQuestion = (i) => { setQi(i); setPicked(null); setResult(null); shownAt.current = performance.now(); setLeft(9); };
+  const applyResult = (p) => { setResult(p); setScore({ x: p.sx, o: p.so }); if (onScore) onScore(p.sx, p.so); if (p.win === myRole) playUiSound('like'); };
+  useEffect(() => bus.listen((p) => {
+    if (p.t === 'q' && !isHost) showQuestion(p.i);
+    else if (p.t === 'r' && !isHost) applyResult(p);
+    else if (p.t === 'a' && isHost) hostAnswer('o', p);
+  }), [bus]);
+  useEffect(() => { if (isHost) { const t = setTimeout(() => ask(0), 400); return () => clearTimeout(t); } return undefined; }, []);
+  useEffect(() => () => clearTimeout(host.current.timer), []);
+  useEffect(() => {
+    if (qi < 0 || result) return undefined;
+    const iv = setInterval(() => setLeft(Math.max(0, 9 - (performance.now() - shownAt.current) / 1000)), 100);
+    return () => clearInterval(iv);
+  }, [qi, result]);
+  const choose = (idx) => {
+    if (picked != null || result || qi < 0) return;
+    setPicked(idx);
+    hapticTap();
+    const ok = idx === qs[qi][2];
+    if (!ok) playUiSound('cancel');
+    const a = { t: 'a', i: qi, ok, ms: Math.round(performance.now() - shownAt.current) };
+    if (isHost) hostAnswer('x', a); else bus.send(a);
+  };
+  if (qi < 0) return <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><Spinner size={22} color={theme.muted} /></div>;
+  const q = qs[qi];
+  return (
+    <div style={{ width: '100%', maxWidth: 440, display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, fontWeight: 800, color: theme.muted }}>
+        <span>Question {qi + 1} of {rounds}</span>
+        <span style={{ color: left < 3 && !result ? theme.danger : theme.muted, fontVariantNumeric: 'tabular-nums' }}>{result ? 'Done' : `${Math.ceil(left)}s`}</span>
+      </div>
+      <div style={{ height: 6, borderRadius: 3, background: theme.rowBg, overflow: 'hidden' }}>
+        <div style={{ width: `${result ? 0 : (left / 9) * 100}%`, height: '100%', background: theme.coral, transition: 'width 0.1s linear' }} />
+      </div>
+      <div style={{ padding: '20px 16px', borderRadius: 20, background: theme.dark ? 'rgba(255,255,255,0.07)' : 'rgba(255,255,255,0.85)', border: `1px solid ${theme.border}`, fontSize: 19, fontWeight: 800, color: theme.ink, textAlign: 'center', lineHeight: 1.35 }}>{q[0]}</div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+        {q[1].map((opt, idx) => {
+          const right = idx === q[2];
+          const showRight = !!result && right;
+          const wrongPick = picked === idx && !right;
+          return (
+            <div key={idx} role="button" aria-label={`Answer ${opt}`} data-silent="1" onClick={() => choose(idx)} className="zchat-press"
+              style={{ padding: '14px 10px', borderRadius: 16, textAlign: 'center', fontSize: 15, fontWeight: 800, cursor: picked == null && !result ? 'pointer' : 'default', border: `1.5px solid ${showRight ? '#22C55E' : wrongPick ? theme.danger : theme.border}`, background: showRight ? '#22C55E' : wrongPick ? `${theme.danger}22` : picked === idx ? `${theme.coral}22` : theme.panelBg, color: showRight ? 'white' : theme.ink, transition: 'background 0.15s ease' }}>{opt}</div>
+          );
+        })}
+      </div>
+      <div style={{ minHeight: 22, textAlign: 'center', fontSize: 14, fontWeight: 900, color: result && result.win === myRole ? '#16A34A' : theme.muted }}>
+        {result ? (result.win === myRole ? 'Point to you' : result.win ? 'Point to them' : 'Nobody scored') : picked != null ? (picked === q[2] ? 'Right, waiting for the result' : 'Wrong, you are out of this one') : ' '}
+      </div>
+    </div>
+  );
+}
+
+function ReactionBoard({ isHost, bus, onHostFinish, onScore }) {
+  const { theme } = useTheme();
+  const need = 3;
+  const maxRounds = LIVE_GAME_INFO.rrace.rounds;
+  const [phase, setPhase] = useState('wait');
+  const [round, setRound] = useState(0);
+  const [note, setNote] = useState('');
+  const goAt = useRef(0);
+  const tapped = useRef(false);
+  const myRole = isHost ? 'x' : 'o';
+  const host = useRef({ r: -1, taps: {}, decided: false, timer: 0, goTimer: 0, score: { x: 0, o: 0 } });
+  const startRound = (r) => {
+    const h = host.current;
+    h.r = r;
+    h.taps = {};
+    h.decided = false;
+    bus.send({ t: 'ready', r });
+    showReady(r);
+    clearTimeout(h.goTimer);
+    h.goTimer = setTimeout(() => { bus.send({ t: 'go', r }); showGo(r); clearTimeout(h.timer); h.timer = setTimeout(() => decide(r), 3200); }, 1200 + Math.random() * 2300);
+  };
+  const decide = (r) => {
+    const h = host.current;
+    if (h.r !== r || h.decided) return;
+    h.decided = true;
+    clearTimeout(h.timer);
+    clearTimeout(h.goTimer);
+    const foul = ['x', 'o'].find((k) => h.taps[k] && h.taps[k].foul);
+    let win = null;
+    if (foul) win = foul === 'x' ? 'o' : 'x';
+    else {
+      const ok = ['x', 'o'].filter((k) => h.taps[k] && !h.taps[k].foul).sort((a, b) => h.taps[a].ms - h.taps[b].ms);
+      win = ok[0] || null;
+    }
+    if (win) h.score = { ...h.score, [win]: h.score[win] + 1 };
+    const payload = { t: 'r', r, win, foul: foul || null, sx: h.score.x, so: h.score.o, mx: h.taps.x && h.taps.x.ms, mo: h.taps.o && h.taps.o.ms };
+    bus.send(payload);
+    applyResult(payload);
+    setTimeout(() => {
+      if (h.score.x >= need || h.score.o >= need || r + 1 >= maxRounds) onHostFinish({ sx: h.score.x, so: h.score.o });
+      else startRound(r + 1);
+    }, 1500);
+  };
+  const hostTap = (role, a) => {
+    const h = host.current;
+    if (a.r !== h.r || h.decided || h.taps[role]) return;
+    h.taps[role] = a;
+    if (a.foul) { decide(a.r); return; }
+    if (h.taps.x && h.taps.o) { decide(a.r); return; }
+    clearTimeout(h.timer);
+    h.timer = setTimeout(() => decide(a.r), 300);
+  };
+  const showReady = (r) => { setRound(r); setPhase('wait'); setNote(''); tapped.current = false; };
+  const showGo = () => { setPhase('go'); goAt.current = performance.now(); };
+  const applyResult = (p) => {
+    setPhase('done');
+    if (onScore) onScore(p.sx, p.so);
+    const mine = myRole === 'x' ? p.mx : p.mo;
+    if (p.foul) setNote(p.foul === myRole ? 'Too early, point to them' : 'They tapped too early, point to you');
+    else if (!p.win) setNote('Nobody tapped');
+    else setNote(p.win === myRole ? `You were faster${mine ? `, ${mine} ms` : ''}` : 'They were faster');
+    if (p.win === myRole) playUiSound('like');
+  };
+  useEffect(() => bus.listen((p) => {
+    if (!isHost && p.t === 'ready') showReady(p.r);
+    else if (!isHost && p.t === 'go') showGo(p.r);
+    else if (!isHost && p.t === 'r') applyResult(p);
+    else if (isHost && p.t === 'tap') hostTap('o', p);
+  }), [bus]);
+  useEffect(() => { if (isHost) { const t = setTimeout(() => startRound(0), 500); return () => clearTimeout(t); } return undefined; }, []);
+  useEffect(() => () => { clearTimeout(host.current.timer); clearTimeout(host.current.goTimer); }, []);
+  const tap = () => {
+    if (tapped.current || phase === 'done') return;
+    tapped.current = true;
+    hapticTap();
+    const a = phase === 'go' ? { t: 'tap', r: round, ms: Math.round(performance.now() - goAt.current) } : { t: 'tap', r: round, foul: true };
+    if (phase !== 'go') setNote('Too early');
+    if (isHost) hostTap('x', a); else bus.send(a);
+  };
+  const bg = phase === 'go' ? 'radial-gradient(circle at 35% 30%, #86EFAC, #22C55E 55%, #15803D)' : phase === 'done' ? theme.rowBg : 'radial-gradient(circle at 35% 30%, #FCA5A5, #DC2626 55%, #7F1D1D)';
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, width: '100%' }}>
+      <div style={{ fontSize: 13, fontWeight: 800, color: theme.muted }}>Round {round + 1}, first to {need}</div>
+      <div role="button" aria-label="Reaction pad" data-silent="1" onPointerDown={(e) => { e.preventDefault(); tap(); }}
+        style={{ width: 'min(76vw, 280px)', aspectRatio: '1', borderRadius: 40, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: 20, boxSizing: 'border-box', cursor: 'pointer', userSelect: 'none', touchAction: 'none', boxShadow: phase === 'done' ? 'none' : '0 14px 30px rgba(0,0,0,0.3)', transition: 'background 0.08s linear' }}>
+        <div style={{ fontSize: phase === 'go' ? 44 : 22, fontWeight: 900, color: phase === 'done' ? theme.ink : 'white', lineHeight: 1.15 }}>{phase === 'go' ? 'TAP' : phase === 'done' ? (note || 'Next round') : (tapped.current ? 'Too early' : 'Wait for green')}</div>
+      </div>
+      <div style={{ minHeight: 20, fontSize: 13.5, fontWeight: 800, color: theme.muted }}>{phase !== 'done' ? note : ' '}</div>
+    </div>
+  );
+}
+
+const LIVE_EMOTES = ['😂', '🔥', '😮', '👏', '😤'];
+
+function LiveGamePage({ initial, me, peer, myId, onClose, onSaveState, onRematch, onPeerAway }) {
+  const { theme } = useTheme();
+  const [st, setSt] = useState(initial);
+  const isHost = st.x === myId;
+  const kind = st.g;
+  const startPhase = initial.st === 'done' ? 'end' : initial.st === 'gone' ? 'gone' : 'lobby';
+  const [phase, setPhase] = useState(startPhase);
+  const [peerHere, setPeerHere] = useState(false);
+  const [count, setCount] = useState(3);
+  const [scores, setScores] = useState({ x: initial.sx || 0, o: initial.so || 0 });
+  const [floats, setFloats] = useState([]);
+  const [leaveAsk, setLeaveAsk] = useState(false);
+  const chRef = useRef(null);
+  const listeners = useRef(new Set());
+  const phaseRef = useRef(phase);
+  phaseRef.current = phase;
+  const stRef = useRef(st);
+  stRef.current = st;
+  const awaySince = useRef(0);
+  const pingedRef = useRef(false);
+  const bus = useMemo(() => ({
+    send: (payload) => { const ch = chRef.current; if (!ch) return; try { const r = ch.send({ type: 'broadcast', event: 'g', payload: { ...payload, from: myId } }); if (r && r.catch) r.catch(() => {}); } catch {} },
+    listen: (fn) => { listeners.current.add(fn); return () => listeners.current.delete(fn); },
+  }), [myId]);
+  const save = (next) => { setSt(next); stRef.current = next; if (isHost && onSaveState) onSaveState(next); };
+  const floatEmote = (e, mine) => {
+    const id = `${Date.now()}${Math.random()}`;
+    setFloats((f) => [...f.slice(-10), { id, e, mine, x: 12 + Math.random() * 70 }]);
+    setTimeout(() => setFloats((f) => f.filter((x) => x.id !== id)), 2200);
+  };
+  const finishHost = ({ sx, so }) => {
+    if (phaseRef.current === 'end') return;
+    const w = sx === so ? 'd' : sx > so ? 'x' : 'o';
+    bus.send({ t: 'end', sx, so, w });
+    showEnd({ sx, so, w });
+    save({ ...stRef.current, st: 'done', sx, so, w, n: (stRef.current.n || 0) + 1 });
+  };
+  const showEnd = ({ sx, so, w }) => {
+    setScores({ x: sx, o: so });
+    setSt((prev) => ({ ...prev, st: 'done', sx, so, w }));
+    setPhase('end');
+    const iWon = (w === 'x') === isHost && w !== 'd';
+    playUiSound(iWon ? 'win' : w === 'd' ? 'like' : 'lose');
+    if (iWon) { try { window.dispatchEvent(new CustomEvent('zchat-screen-fx', { detail: 'confetti' })); } catch {} }
+  };
+  const beginCountdown = () => {
+    if (phaseRef.current !== 'lobby') return;
+    setPhase('count');
+    setCount(3);
+    playUiSound('toggle');
+    let n = 3;
+    const iv = setInterval(() => {
+      n -= 1;
+      if (n <= 0) { clearInterval(iv); setPhase('play'); playUiSound('send'); hapticTap(); }
+      else { setCount(n); playUiSound('toggle'); }
+    }, 800);
+  };
+  useEffect(() => {
+    const ch = supabase.channel(`zrt-${initial.id}`, { config: { broadcast: { self: false }, presence: { key: myId } } });
+    chRef.current = ch;
+    ch.on('presence', { event: 'sync' }, () => {
+      let here = false;
+      try { here = Object.keys(ch.presenceState() || {}).some((k) => k !== myId); } catch {}
+      setPeerHere(here);
+    });
+    ch.on('broadcast', { event: 'g' }, ({ payload }) => {
+      if (!payload || payload.from === myId) return;
+      if (payload.t === 'start' && !isHost) beginCountdown();
+      else if (payload.t === 'end' && !isHost) showEnd(payload);
+      else if (payload.t === 'emo' && LIVE_EMOTES.includes(payload.e)) floatEmote(payload.e, false);
+      else if (payload.t === 'bye') { if (phaseRef.current === 'play' || phaseRef.current === 'count') { setPhase('gone'); if (isHost) save({ ...stRef.current, st: 'gone' }); } }
+      listeners.current.forEach((fn) => { try { fn(payload); } catch {} });
+    });
+    ch.subscribe((status) => { if (status === 'SUBSCRIBED') { try { const r = ch.track({ at: Date.now() }); if (r && r.catch) r.catch(() => {}); } catch {} } });
+    return () => {
+      try { ch.send({ type: 'broadcast', event: 'g', payload: { t: 'bye', from: myId } }); } catch {}
+      try { ch.untrack(); } catch {}
+      try { supabase.removeChannel(ch); } catch {}
+      chRef.current = null;
+    };
+  }, [initial.id]);
+  useEffect(() => {
+    if (!isHost || phase !== 'lobby' || !peerHere) return undefined;
+    const t = setTimeout(() => {
+      if (phaseRef.current !== 'lobby') return;
+      bus.send({ t: 'start' });
+      if (stRef.current.st !== 'live') save({ ...stRef.current, st: 'live' });
+      beginCountdown();
+    }, 700);
+    return () => clearTimeout(t);
+  }, [isHost, phase, peerHere]);
+  useEffect(() => {
+    if (phase !== 'lobby' || peerHere || pingedRef.current || !onPeerAway) return undefined;
+    const t = setTimeout(() => { if (phaseRef.current === 'lobby') { pingedRef.current = true; onPeerAway(stRef.current); } }, 2500);
+    return () => clearTimeout(t);
+  }, [phase, peerHere]);
+  useEffect(() => {
+    if (phase !== 'play') { awaySince.current = 0; return undefined; }
+    const iv = setInterval(() => {
+      if (peerHere) { awaySince.current = 0; return; }
+      if (!awaySince.current) awaySince.current = Date.now();
+      if (Date.now() - awaySince.current > 7000 && phaseRef.current === 'play') {
+        setPhase('gone');
+        if (isHost) save({ ...stRef.current, st: 'gone' });
+      }
+    }, 1000);
+    return () => clearInterval(iv);
+  }, [phase, peerHere]);
+  const leave = () => {
+    if (phase === 'play' || phase === 'count') { setLeaveAsk(true); return; }
+    onClose();
+  };
+  useBackClose(true, leave);
+  useBackClose(leaveAsk, () => setLeaveAsk(false));
+  const emote = (e) => { hapticTap(); floatEmote(e, true); bus.send({ t: 'emo', e }); };
+  const first = String((peer && peer.name) || 'Your friend').split(' ')[0];
+  const mineScore = isHost ? scores.x : scores.o;
+  const theirScore = isHost ? scores.o : scores.x;
+  const expired = st.st === 'wait' && st.exp && Date.now() > st.exp && !peerHere;
+  const iWon = st.w && st.w !== 'd' && (st.w === 'x') === isHost;
+  const onScore = (sx, so) => setScores({ x: sx, o: so });
+  return (
+    <FullPage title={GAME_TITLES[kind]} subtitle={phase === 'lobby' ? (peerHere ? `${first} is here` : `Waiting for ${first}`) : phase === 'play' ? 'Live now' : phase === 'count' ? 'Get ready' : phase === 'end' ? 'Game over' : 'Game stopped'} onBack={leave} zIndex={64}
+      right={<GameInfoButton k={kind} header />}
+      bodyStyle={{ background: `linear-gradient(170deg, ${(GAME_ART_BG[kind] || ['#6D4DF5', '#C13BDC'])[0]}${theme.dark ? '44' : '2A'} 0%, transparent 70%)` }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, padding: '8px 0 12px', position: 'relative', minHeight: '60vh' }}>
+        <div style={{ width: '100%' }}><LiveScoreBar me={me} peer={peer} mineScore={mineScore} theirScore={theirScore} isHost={isHost} /></div>
+        {phase === 'lobby' && (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, paddingTop: 20, textAlign: 'center' }}>
+            <GameArt k={kind} width={220} height={130} radius={22} style={{ boxShadow: '0 14px 30px rgba(0,0,0,0.3)' }} />
+            <div style={{ fontSize: 20, fontWeight: 900, color: theme.ink }}>{expired ? 'This invite has ended' : peerHere ? 'Starting' : `Waiting for ${first}`}</div>
+            <div style={{ fontSize: 14, color: theme.muted, lineHeight: 1.5, maxWidth: 300 }}>{expired ? 'Send a new one and play right away.' : peerHere ? 'Get ready to play.' : `The game starts as soon as ${first} opens it. Stay on this screen.`}</div>
+            {!peerHere && !expired && <Spinner size={22} color={theme.coral} />}
+            {expired && onRematch && <GameButton label="Send a new invite" color="green" onClick={onRematch} />}
+          </div>
+        )}
+        {phase === 'count' && (
+          <div key={count} className="zchat-roll-land" style={{ fontSize: 96, fontWeight: 900, color: theme.coral, paddingTop: 40, textShadow: '0 8px 30px rgba(0,0,0,0.25)' }}>{count}</div>
+        )}
+        {phase === 'play' && kind === 'tug' && <TugBoard isHost={isHost} bus={bus} onHostFinish={finishHost} onProgress={(a, b) => setScores(isHost ? { x: a, o: b } : { x: b, o: a })} />}
+        {phase === 'play' && kind === 'qrace' && <QuizRaceBoard isHost={isHost} bus={bus} seed={initial.id} onHostFinish={finishHost} onScore={onScore} />}
+        {phase === 'play' && kind === 'rrace' && <ReactionBoard isHost={isHost} bus={bus} onHostFinish={finishHost} onScore={onScore} />}
+        {phase === 'end' && (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, paddingTop: 16, textAlign: 'center' }}>
+            <div style={{ position: 'relative' }}>
+              {iWon && <div style={{ position: 'absolute', top: -26, left: '50%', transform: 'translateX(-50%)', zIndex: 5 }}><CrownIcon size={32} /></div>}
+              <Avatar emoji={st.w === 'd' ? (me && me.avatar) : iWon ? (me && me.avatar) : (peer && peer.avatar)} name={iWon || st.w === 'd' ? (me && me.name) : (peer && peer.name)} frame={iWon || st.w === 'd' ? (me && me.avatar_frame) : (peer && peer.avatar_frame)} size={104} />
+            </div>
+            <div style={{ fontSize: 26, fontWeight: 900, color: theme.ink }}>{st.w === 'd' ? 'It is a draw' : iWon ? 'You won' : `${first} won`}</div>
+            <div style={{ fontSize: 15, fontWeight: 800, color: theme.muted }}>{mineScore} to {theirScore}</div>
+            <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
+              {onRematch && <GameButton label="Rematch" color="green" onClick={onRematch} />}
+              <GameButton label="Back to chat" color="white" onClick={onClose} />
+            </div>
+          </div>
+        )}
+        {phase === 'gone' && (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, paddingTop: 30, textAlign: 'center' }}>
+            <div style={{ fontSize: 22, fontWeight: 900, color: theme.ink }}>{first} left the game</div>
+            <div style={{ fontSize: 14, color: theme.muted }}>Nobody gets a win for this one.</div>
+            <div style={{ display: 'flex', gap: 10, marginTop: 6 }}>
+              {onRematch && <GameButton label="Play again" color="green" onClick={onRematch} />}
+              <GameButton label="Back to chat" color="white" onClick={onClose} />
+            </div>
+          </div>
+        )}
+        {(phase === 'play' || phase === 'count' || phase === 'lobby') && (
+          <div style={{ display: 'flex', gap: 8, marginTop: 'auto', padding: '6px 10px', borderRadius: 999, background: theme.rowBg }}>
+            {LIVE_EMOTES.map((e) => (
+              <div key={e} role="button" aria-label={`Send ${e}`} data-silent="1" onClick={() => emote(e)} className="zchat-press" style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, cursor: 'pointer', userSelect: 'none' }}>{e}</div>
+            ))}
+          </div>
+        )}
+        {floats.map((f) => (
+          <div key={f.id} className={f.mine ? 'zchat-emote-up' : 'zchat-emote-down'} aria-hidden="true" style={{ position: 'absolute', left: `${f.x}%`, [f.mine ? 'bottom' : 'top']: 40, fontSize: 40, pointerEvents: 'none', zIndex: 6 }}>{f.e}</div>
+        ))}
+      </div>
+      {leaveAsk && <ConfirmSheet title="Leave the game?" text={`${first} will see that you left and nobody gets a win.`} confirmLabel="Leave" onConfirm={() => { setLeaveAsk(false); bus.send({ t: 'bye' }); if (isHost) save({ ...stRef.current, st: 'gone' }); onClose(); }} onCancel={() => setLeaveAsk(false)} zIndex={120} />}
+    </FullPage>
+  );
+}
+
 const SOLO_GAMES = [
   { k: 'stack', sub: 'Build the tallest tower' },
   { k: 'dash', sub: 'Jump, run, do not stop' },
@@ -32255,55 +34524,78 @@ const SOLO_GAMES = [
   { k: 'quiz', sub: 'Ten quick questions' },
   { k: 'echo', sub: 'Repeat the pattern' },
 ];
-function GamesPage({ onClose, onChallenge, onShareScore, initialGame }) {
+function GamesPage({ onClose, onChallenge, onShareScore, initialGame, friends, onPlayWith, onStartLive, onOpenLeaderboard }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
+  const mine = useMyGames();
   const [game, setGame] = useState(() => (initialGame && SOLO_GAMES.some((g) => g.k === initialGame) ? initialGame : null));
   useBackClose(!!game, () => setGame(null));
   const [rulesFor, setRulesFor] = useState(null);
-  const [tab, setTab] = useState('friends');
+  const [tab, setTabRaw] = useState(() => { try { const t = localStorage.getItem('zchat-games-tab'); return ['friends', 'solo', 'ranks'].includes(t) ? t : 'friends'; } catch { return 'friends'; } });
+  const setTab = (t) => { setTabRaw(t); try { localStorage.setItem('zchat-games-tab', t); } catch {} };
   const openSolo = (k) => { setGame(k); if (!howtoSeen(k)) setTimeout(() => setRulesFor(k), 380); };
   useEffect(() => { if (game && !howtoSeen(game)) { const t = setTimeout(() => setRulesFor(game), 380); return () => clearTimeout(t); } return undefined; }, []);
-  const bestLabel = (k) => { const b = readBest(k); return b ? `Best ${formatGameScore(k, b)}` : 'No score yet'; };
+  const bestOf = (k) => {
+    const local = readBest(k);
+    const remote = mine[k] && mine[k].best ? mine[k].best : 0;
+    if (!local) return remote;
+    if (!remote) return local;
+    return k === 'memory' || k === 'reflex' ? Math.min(local, remote) : Math.max(local, remote);
+  };
+  const bestLabel = (k) => { const b = bestOf(k); return b ? `Best ${formatGameScore(k, b)}` : 'No score yet'; };
+  const soloFoot = (k) => {
+    const b = bestOf(k);
+    if (!b) return 'No score yet';
+    const fr = mine[k] && mine[k].friend_rank;
+    return `Best ${formatGameScore(k, b)}${fr ? `, #${fr} in friends` : ''}`;
+  };
+  const friendFoot = (k) => {
+    const s = mine[k];
+    return s && s.wins ? `${s.wins} ${s.wins === 1 ? 'win' : 'wins'}, play again` : 'Challenge a friend';
+  };
   const dayIdx = Math.floor(Date.now() / 86400000);
   const featured = SOLO_GAMES[dayIdx % SOLO_GAMES.length];
-  const cover = (k, title, sub, foot, footHot, onClick) => (
+  const cover = (k, title, sub, foot, footHot, onClick, live) => (
     <div key={k} role="button" aria-label={title} onClick={() => { playUiSound('tap'); onClick(); }} className="zchat-press" style={{ borderRadius: 20, padding: 7, paddingBottom: 11, background: theme.dark ? 'linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0.03))' : '#FFFFFF', border: `1px solid ${theme.border}`, boxShadow: theme.dark ? 'none' : '0 6px 16px rgba(0,0,0,0.08)', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 9 }}>
       <div style={{ width: '100%', aspectRatio: '16 / 10', borderRadius: 14, overflow: 'hidden', boxShadow: '0 8px 18px rgba(0,0,0,0.2)', position: 'relative' }}>
         <GameArt k={k} width="100%" height="100%" radius={14} />
+        {live && <span style={{ position: 'absolute', top: 6, left: 6, padding: '2px 8px', borderRadius: 999, background: '#EF4444', color: 'white', fontSize: 10, fontWeight: 900, letterSpacing: '0.06em' }}>LIVE</span>}
         <div style={{ position: 'absolute', top: 6, right: 6 }}><GameInfoButton k={k} onDark /></div>
       </div>
       <div style={{ minWidth: 0, padding: '0 5px' }}>
         <div style={{ fontSize: 15, fontWeight: 800, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</div>
         <div style={{ fontSize: 12, color: theme.muted, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub}</div>
-        <div style={{ fontSize: 11.5, fontWeight: 800, color: footHot ? theme.coral : theme.muted, marginTop: 5 }}>{foot}</div>
+        <div style={{ fontSize: 11.5, fontWeight: 800, color: footHot ? theme.coral : theme.muted, marginTop: 5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{foot}</div>
       </div>
     </div>
   );
   return (
     <>
-      <FullPage title="Games" subtitle="Play solo or challenge a friend" onBack={onClose} zIndex={60}>
+      <FullPage title="Games" subtitle="Play live, solo or with friends" onBack={onClose} zIndex={60}
+        right={onOpenLeaderboard ? <HeaderIconButton label="Leaderboards" onClick={() => onOpenLeaderboard('all')}><TrophyIcon size={20} /></HeaderIconButton> : null}>
         <div role="button" aria-label={`Featured ${GAME_TITLES[featured.k]}`} onClick={() => { playUiSound('tap'); openSolo(featured.k); }} className="zchat-press" style={{ position: 'relative', borderRadius: 24, overflow: 'hidden', marginTop: 6, cursor: 'pointer', boxShadow: '0 14px 30px rgba(0,0,0,0.28)' }}>
           <div style={{ width: '100%', aspectRatio: '16 / 9', position: 'relative', overflow: 'hidden' }}><div style={{ position: 'absolute', left: 0, right: 0, top: '-28%', height: '128%' }}><GameArt k={featured.k} width="100%" height="100%" radius={0} /></div></div>
           <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '28px 16px 14px', background: 'linear-gradient(180deg, transparent, rgba(0,0,0,0.65))', display: 'flex', alignItems: 'flex-end', gap: 12 }}>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 11, fontWeight: 900, color: '#FDE047', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Game of the day</div>
               <div style={{ fontSize: 22, fontWeight: 900, color: 'white', textShadow: '0 2px 6px rgba(0,0,0,0.4)' }}>{GAME_TITLES[featured.k]}</div>
-              <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.85)' }}>{featured.sub}</div>
+              <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.85)' }}>{bestOf(featured.k) ? `Your best ${formatGameScore(featured.k, bestOf(featured.k))}` : featured.sub}</div>
             </div>
             <GameButton label="Play" color="green" small onClick={() => openSolo(featured.k)} style={{ minWidth: 86 }} />
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 6, padding: 4, borderRadius: 14, background: theme.rowBg, margin: '16px 0 4px' }}>
-          {[['friends', 'With friends'], ['solo', 'Solo']].map(([kk, l]) => (
+        {onPlayWith && <FriendsPlayRow friends={friends} onPick={onPlayWith} />}
+        {onStartLive && <LiveGamesRow onStart={onStartLive} />}
+        <div role="tablist" style={{ display: 'flex', gap: 6, padding: 4, borderRadius: 14, background: theme.rowBg, margin: '12px 0 4px' }}>
+          {[['friends', 'With friends'], ['solo', 'Solo'], ['ranks', 'Ranks']].map(([kk, l]) => (
             <div key={kk} role="tab" aria-selected={tab === kk} aria-label={l} onClick={() => setTab(kk)} style={{ flex: 1, textAlign: 'center', padding: '9px 0', borderRadius: 11, fontSize: 14, fontWeight: 800, cursor: 'pointer', background: tab === kk ? theme.panelBg : 'transparent', color: tab === kk ? theme.ink : theme.muted, boxShadow: tab === kk ? '0 2px 8px rgba(0,0,0,0.12)' : 'none' }}>{l}</div>
           ))}
         </div>
-        {tab === 'friends' && FRIEND_GAME_GROUPS.map(([group, keys]) => (
+        {tab === 'friends' && FRIEND_GAME_GROUPS.filter(([group]) => !(onStartLive && group === 'Play live now')).map(([group, keys]) => (
           <div key={group}>
             <IgHeading>{group}</IgHeading>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10, paddingBottom: 6 }}>
-              {keys.map((k) => cover(k, gameKeyTitle(k), FRIEND_GAME_SUBS[k] || '', 'Challenge a friend', true, () => onChallenge(k)))}
+              {keys.map((k) => cover(k, gameKeyTitle(k), FRIEND_GAME_SUBS[k] || '', friendFoot(k), true, () => (LIVE_GAME_KEYS.includes(k) && onStartLive ? onStartLive(k) : onChallenge(k)), LIVE_GAME_KEYS.includes(k)))}
             </div>
           </div>
         ))}
@@ -32311,17 +34603,19 @@ function GamesPage({ onClose, onChallenge, onShareScore, initialGame }) {
           <>
             <IgHeading>Arcade</IgHeading>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10, paddingBottom: 8 }}>
-              {SOLO_GAMES.map((it) => cover(it.k, GAME_TITLES[it.k], it.sub, bestLabel(it.k), !!readBest(it.k), () => openSolo(it.k)))}
+              {SOLO_GAMES.map((it) => cover(it.k, GAME_TITLES[it.k], it.sub, soloFoot(it.k), !!bestOf(it.k), () => openSolo(it.k)))}
             </div>
-            <div style={{ padding: '4px 2px 10px', fontSize: 12.5, color: theme.muted, lineHeight: 1.5 }}>Scores stay on this phone. Open a game and tap share to send your best to a friend.</div>
+            <div style={{ padding: '4px 2px 10px', fontSize: 12.5, color: theme.muted, lineHeight: 1.5 }}>Your best scores go on the leaderboards. Open a game and tap share to send one to a friend.</div>
           </>
         )}
+        {tab === 'ranks' && onOpenLeaderboard && <GameRanksPanel mine={mine} onOpenBoard={onOpenLeaderboard} />}
       </FullPage>
       {game && (
         <FullPage title={GAME_TITLES[game]} subtitle={bestLabel(game)} onBack={() => { if (document.fullscreenElement) toggleFullscreen(); setGame(null); }} zIndex={61}
           bodyStyle={{ background: `linear-gradient(170deg, ${(GAME_ART_BG[game] || ['#6D4DF5', '#C13BDC'])[0]}${theme.dark ? '55' : '33'} 0%, ${(GAME_ART_BG[game] || ['#6D4DF5', '#C13BDC'])[1]}${theme.dark ? '33' : '1F'} 45%, transparent 85%)` }}
-          right={<><GameInfoButton k={game} header />{canFullscreen() && <HeaderIconButton label="Fullscreen" onClick={toggleFullscreen}><ExpandIcon /></HeaderIconButton>}<HeaderIconButton label="Share score" onClick={() => onShareScore(game, readBest(game))}><Share2 /></HeaderIconButton></>}>
+          right={<><GameInfoButton k={game} header />{onOpenLeaderboard && <HeaderIconButton label="Leaderboard" onClick={() => onOpenLeaderboard(game)}><TrophyIcon size={19} /></HeaderIconButton>}{canFullscreen() && <HeaderIconButton label="Fullscreen" onClick={toggleFullscreen}><ExpandIcon /></HeaderIconButton>}<HeaderIconButton label="Share score" onClick={() => onShareScore(game, bestOf(game))}><Share2 /></HeaderIconButton></>}>
           <SoloGame k={game} />
+          <GameScoreToast k={game} />
         </FullPage>
       )}
       {rulesFor && <HowToPlaySheet k={rulesFor} onClose={() => setRulesFor(null)} />}
@@ -32915,7 +35209,7 @@ function AdminContent({ onOpenProfile }) {
     if (!r.media_url) return null;
     const isVideo = r.media_type === 'video' || /\.(mp4|mov|webm)(\?|$)/i.test(r.media_url);
     const st = { width: '100%', maxHeight: 220, borderRadius: 12, objectFit: 'cover', background: '#000', display: 'block', marginTop: 8 };
-    return isVideo ? <video src={r.media_url} controls playsInline preload="metadata" style={st} /> : <img src={r.media_url} alt="" style={st} loading="lazy" />;
+    return isVideo ? <MediaVideo src={r.media_url} controls playsInline preload="metadata" style={st} /> : <MediaImg src={r.media_url} style={st} loading="lazy" />;
   };
 
   return (
@@ -33173,7 +35467,7 @@ function AdminPanel({ myId, onClose, onOpenProfile, onOpenReports }) {
               </div>
             </div>
             <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 12, scrollbarWidth: 'none' }}>
-              {[[ShieldAlert, `Reports${stats && Number(stats.open_reports) ? ` ${stats.open_reports}` : ''}`, onOpenReports], [Megaphone, 'Announce', () => setTab('announce')], [Sparkles, 'Teach the bot', () => setTab('bot')], [Database, 'Browse data', () => setTab('data')]].map(([Icon, label, go]) => (
+              {[[ShieldAlert, `Reports${stats && Number(stats.open_reports) ? ` ${stats.open_reports}` : ''}`, onOpenReports], [Activity, 'Crash reports', () => setTab('errors')], [Megaphone, 'Announce', () => setTab('announce')], [Sparkles, 'Teach the bot', () => setTab('bot')], [Database, 'Browse data', () => setTab('data')]].map(([Icon, label, go]) => (
                 <div key={label} role="button" onClick={go} style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 7, padding: '9px 14px', borderRadius: 16, background: theme.rowBg, border: `1px solid ${theme.border}`, color: theme.ink, fontSize: 13, fontWeight: 800, cursor: 'pointer' }}><Icon size={16} color={theme.coral} />{label}</div>
               ))}
             </div>
@@ -33223,6 +35517,7 @@ function AdminPanel({ myId, onClose, onOpenProfile, onOpenReports }) {
         {tab === 'content' && <AdminContent onOpenProfile={onOpenProfile} />}
         {tab === 'bot' && <AdminKnowledge />}
         {tab === 'data' && <AdminDataBrowser />}
+        {tab === 'errors' && <AdminErrors />}
 
         {tab === 'announce' && (
           <div style={card}>
@@ -33649,8 +35944,8 @@ function AdminRowCard({ table, row, names, onDeleted, onSaved }) {
         {!open && keys.length > 4 && <div style={{ fontSize: 11.5, color: theme.coral, fontWeight: 800, marginTop: 4 }}>{`Tap for all ${keys.length} fields`}</div>}
       </div>
       {row.media_url && typeof row.media_url === 'string' && (isVideo
-        ? <video src={row.media_url} controls playsInline preload="metadata" style={{ width: '100%', maxHeight: 220, borderRadius: 12, marginTop: 8, background: '#000' }} />
-        : <img src={row.media_url} alt="" loading="lazy" style={{ width: '100%', maxHeight: 220, objectFit: 'cover', borderRadius: 12, marginTop: 8 }} />)}
+        ? <MediaVideo src={row.media_url} controls playsInline preload="metadata" style={{ width: '100%', maxHeight: 220, borderRadius: 12, marginTop: 8, background: '#000' }} />
+        : <MediaImg src={row.media_url} loading="lazy" style={{ width: '100%', maxHeight: 220, objectFit: 'cover', borderRadius: 12, marginTop: 8 }} />)}
       {err && <div style={{ color: theme.danger, fontSize: 12.5, fontWeight: 700, marginTop: 8 }}>{err}</div>}
       {canAct && (
         <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
@@ -34354,9 +36649,9 @@ function SavedMessagesPanel({ myId, onClose, onChanged, onOpenChat }) {
               </div>
               <div style={{ fontSize: 11, color: theme.muted, flexShrink: 0 }}>{timeAgoLong(r.message_created_at || r.created_at)}</div>
             </div>
-            {r.kind === 'image' && r.media_url && <img src={r.media_url} alt="" onClick={() => setLightbox(r.media_url)} style={{ width: '100%', maxHeight: 280, objectFit: 'cover', borderRadius: 12, cursor: 'pointer', display: 'block' }} />}
-            {r.kind === 'video' && r.media_url && <video src={r.media_url} controls playsInline preload="metadata" style={{ width: '100%', maxHeight: 280, borderRadius: 12, background: '#000', display: 'block' }} />}
-            {r.kind === 'audio' && r.media_url && <audio src={r.media_url} controls preload="none" style={{ width: '100%' }} />}
+            {r.kind === 'image' && r.media_url && <MediaImg src={r.media_url} onClick={() => setLightbox(r.media_url)} style={{ width: '100%', maxHeight: 280, objectFit: 'cover', borderRadius: 12, cursor: 'pointer', display: 'block' }} />}
+            {r.kind === 'video' && r.media_url && <MediaVideo src={r.media_url} controls playsInline preload="metadata" style={{ width: '100%', maxHeight: 280, borderRadius: 12, background: '#000', display: 'block' }} />}
+            {r.kind === 'audio' && r.media_url && <MediaAudio src={r.media_url} controls preload="none" style={{ width: '100%' }} />}
             {r.kind === 'sticker' && r.content && <img src={r.content} alt="" style={{ width: 110, height: 110, objectFit: 'contain' }} />}
             {(r.kind === 'text' || r.kind === 'note' || ((r.kind === 'image' || r.kind === 'video') && r.content)) && r.content && (
               <div style={{ fontSize: 14, color: theme.ink, lineHeight: 1.45, wordBreak: 'break-word', marginTop: r.media_url ? 8 : 0 }}><RichText text={r.content} /></div>
@@ -34379,7 +36674,7 @@ function SavedMessagesPanel({ myId, onClose, onChanged, onOpenChat }) {
       </div>
       {lightbox && (
         <div onClick={() => setLightbox(null)} style={{ position: 'fixed', inset: 0, zIndex: 250, background: 'rgba(0,0,0,0.94)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-          <img src={lightbox} alt="" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: 8 }} />
+          <MediaImg src={lightbox} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: 8 }} />
         </div>
       )}
     </div>
