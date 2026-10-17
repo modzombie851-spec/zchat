@@ -1,0 +1,244 @@
+import { createClient } from '@supabase/supabase-js';
+
+const SUPABASE_URL = process.env.SUPABASE_URL || 'https://etcmbghcmlgeezwgnwuz.supabase.co';
+const supabase = createClient(SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY || 'missing', { auth: { persistSession: false, autoRefreshToken: false } });
+const GEMINI_MODEL = process.env.GEMINI_TOOLS_MODEL || process.env.GEMINI_MODEL || 'gemini-3.5-flash';
+const GEMINI_FALLBACK = process.env.GEMINI_FALLBACK_MODEL || 'gemini-3.8-flash';
+const OLLAMA_URL = (process.env.OLLAMA_URL || '').replace(/\/+$/, '');
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'qwen3:14b';
+const LIMITS = { translate: 150, transcribe: 40 };
+const MAX_AUDIO_BYTES = 12 * 1024 * 1024;
+const LANGS = { en: 'English', si: 'Sinhala', ta: 'Tamil', hi: 'Hindi', ar: 'Arabic', es: 'Spanish', fr: 'French', de: 'German', pt: 'Portuguese', ru: 'Russian', ja: 'Japanese', ko: 'Korean', zh: 'Chinese', id: 'Indonesian', ms: 'Malay', th: 'Thai', tr: 'Turkish', it: 'Italian', ur: 'Urdu', bn: 'Bengali' };
+
+let turnCache = { at: 0, data: null };
+
+const reply = (status, body) => ({ statusCode: status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' }, body: JSON.stringify(body) });
+
+async function callerFrom(event) {
+  try {
+    const h = event.headers || {};
+    const token = String(h.authorization || h.Authorization || '').replace(/^Bearer\s+/i, '').trim();
+    if (!token) return null;
+    const { data, error } = await supabase.auth.getUser(token);
+    if (error || !data || !data.user) return null;
+    return data.user;
+  } catch { return null; }
+}
+
+async function bumpUsage(uid, kind) {
+  try {
+    const { data, error } = await supabase.rpc('zchat_ai_bump', { p_user: uid, p_kind: kind });
+    if (error) return 0;
+    return Number(data) || 0;
+  } catch { return 0; }
+}
+
+function cleanIceServers(list) {
+  return (Array.isArray(list) ? list : []).map((s) => {
+    const urls = (Array.isArray(s.urls) ? s.urls : [s.urls]).filter((u) => typeof u === 'string' && !/:53(\?|$)/.test(u));
+    return urls.length ? { ...s, urls } : null;
+  }).filter(Boolean);
+}
+
+async function turnServers() {
+  if (turnCache.data && Date.now() - turnCache.at < 10 * 60 * 1000) return turnCache.data;
+  const keyId = process.env.CF_TURN_KEY_ID;
+  const keyToken = process.env.CF_TURN_API_TOKEN;
+  if (keyId && keyToken) {
+    try {
+      const res = await fetch(`https://rtc.live.cloudflare.com/v1/turn/keys/${encodeURIComponent(keyId)}/credentials/generate-ice-servers`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${keyToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ttl: 86400 }),
+      });
+      const json = await res.json().catch(() => null);
+      const raw = json ? json.iceServers : null;
+      const list = cleanIceServers(Array.isArray(raw) ? raw : raw ? [raw] : []);
+      if (res.ok && list.length) {
+        turnCache = { at: Date.now(), data: { iceServers: list, ttl: 86400, source: 'cloudflare' } };
+        return turnCache.data;
+      }
+      console.error('Cloudflare TURN failed', res.status);
+    } catch (err) { console.error('Cloudflare TURN error', err && err.name); }
+  }
+  const urls = String(process.env.TURN_URLS || '').split(',').map((u) => u.trim()).filter(Boolean);
+  if (urls.length) {
+    const data = { iceServers: [{ urls, username: process.env.TURN_USERNAME || '', credential: process.env.TURN_CREDENTIAL || '' }], ttl: 86400, source: 'static' };
+    turnCache = { at: Date.now(), data };
+    return data;
+  }
+  return { iceServers: [], ttl: 3600, source: 'none' };
+}
+
+async function geminiText(parts, systemText, timeoutMs = 20000) {
+  if (!process.env.GEMINI_API_KEY) return null;
+  for (const model of [...new Set([GEMINI_MODEL, GEMINI_FALLBACK])]) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY },
+        body: JSON.stringify({ systemInstruction: { parts: [{ text: systemText }] }, contents: [{ role: 'user', parts }], generationConfig: { maxOutputTokens: 4096, temperature: 0.2 } }),
+        signal: ctrl.signal,
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) { console.error('Gemini tools error', model, res.status); if (res.status === 429) return { limited: true }; continue; }
+      const cand = json && json.candidates && json.candidates[0];
+      const text = ((cand && cand.content && cand.content.parts) || []).filter((p) => typeof p.text === 'string' && !p.thought).map((p) => p.text).join('').trim();
+      if (text) return { text };
+    } catch (err) {
+      console.error('Gemini tools failed', model, err && err.name);
+    } finally { clearTimeout(timer); }
+  }
+  return null;
+}
+
+async function ollamaText(systemText, userText, timeoutMs = 9000) {
+  if (!OLLAMA_URL) return null;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const headers = { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '1' };
+    if (process.env.OLLAMA_AUTH) headers.Authorization = `Basic ${Buffer.from(process.env.OLLAMA_AUTH).toString('base64')}`;
+    const res = await fetch(`${OLLAMA_URL}/api/chat`, {
+      method: 'POST', headers, signal: ctrl.signal,
+      body: JSON.stringify({ model: OLLAMA_MODEL, stream: false, think: false, options: { temperature: 0.2 }, messages: [{ role: 'system', content: systemText }, { role: 'user', content: userText }] }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json().catch(() => null);
+    const text = json && json.message && typeof json.message.content === 'string' ? json.message.content.replace(/<think>[\s\S]*?<\/think>/g, '').trim() : '';
+    return text ? { text } : null;
+  } catch { return null; } finally { clearTimeout(timer); }
+}
+
+async function translate(user, body) {
+  const text = String(body.text || '').trim().slice(0, 3000);
+  const to = LANGS[String(body.to || 'en').slice(0, 2).toLowerCase()] || 'English';
+  if (!text) return reply(400, { error: 'Nothing to translate' });
+  if ((await bumpUsage(user.id, 'translate')) > LIMITS.translate) return reply(429, { error: 'You have translated a lot today. Try again tomorrow.' });
+  const systemText = `You translate chat messages into ${to}. Keep the meaning, tone, emojis, names, numbers and links exactly. If the message is already in ${to}, return it unchanged. Reply with only the translated message and nothing else.`;
+  const out = (await ollamaText(systemText, text)) || (await geminiText([{ text }], systemText));
+  if (!out || out.limited || !out.text) return reply(503, { error: 'Translation is busy right now. Try again soon.' });
+  return reply(200, { text: out.text.slice(0, 6000), to });
+}
+
+async function readMedia(url) {
+  if (typeof url !== 'string') return null;
+  if (url.startsWith('zp:')) {
+    const { data, error } = await supabase.storage.from('chat-private').download(url.slice(3));
+    if (error || !data) return null;
+    const buf = Buffer.from(await data.arrayBuffer());
+    return { mimeType: data.type || 'audio/webm', buf };
+  }
+  const allowed = `${SUPABASE_URL}/storage/v1/object/public/`;
+  if (!url.startsWith(allowed)) return null;
+  const res = await fetch(url);
+  if (!res.ok) return null;
+  const buf = Buffer.from(await res.arrayBuffer());
+  return { mimeType: (res.headers.get('content-type') || 'audio/webm').split(';')[0], buf };
+}
+
+async function transcribe(user, body) {
+  const messageId = String(body.messageId || '');
+  if (!messageId) return reply(400, { error: 'Missing message' });
+  const { data: m } = await supabase.from('messages').select('id, sender_id, receiver_id, group_id, type, media_url, deleted').eq('id', messageId).maybeSingle();
+  if (!m || m.deleted || !m.media_url || !['audio', 'voice'].includes(m.type)) return reply(404, { error: 'That voice message is not available' });
+  let allowed = m.sender_id === user.id || m.receiver_id === user.id;
+  if (!allowed && m.group_id) {
+    const { data: gm } = await supabase.from('group_members').select('user_id').eq('group_id', m.group_id).eq('user_id', user.id).maybeSingle();
+    allowed = !!gm;
+  }
+  if (!allowed) return reply(403, { error: 'That voice message is not available' });
+  if ((await bumpUsage(user.id, 'transcribe')) > LIMITS.transcribe) return reply(429, { error: 'You have turned a lot of voice messages into text today. Try again tomorrow.' });
+  const media = await readMedia(m.media_url);
+  if (!media || !media.buf.length || media.buf.length > MAX_AUDIO_BYTES) return reply(404, { error: 'Could not open that voice message' });
+  const mimeType = /^audio\//.test(media.mimeType) || /^video\//.test(media.mimeType) ? media.mimeType : 'audio/webm';
+  const out = await geminiText([
+    { inlineData: { mimeType, data: media.buf.toString('base64') } },
+    { text: 'Write down exactly what is said in this voice message, in the language it is spoken in. Use normal punctuation. If nothing can be heard, reply with only: (no speech)' },
+  ], 'You turn voice messages into text. Reply with only the words that were said.', 40000);
+  if (!out || out.limited || !out.text) return reply(503, { error: 'Voice to text is busy right now. Try again soon.' });
+  return reply(200, { text: out.text.slice(0, 6000) });
+}
+
+async function safe(fn) { try { return await fn(); } catch { return null; } }
+
+function storagePathFrom(url) {
+  if (typeof url !== 'string') return null;
+  const marker = '/storage/v1/object/public/chat-media/';
+  const i = url.indexOf(marker);
+  if (i < 0) return null;
+  return decodeURIComponent(url.slice(i + marker.length).split('?')[0].split('#')[0]);
+}
+
+async function deleteAccount(user) {
+  const uid = user.id;
+  const files = new Set();
+  const collect = (url) => { const p = storagePathFrom(url); if (p && p.startsWith(`${uid}/`)) files.add(p); };
+  const { data: prof } = await supabase.from('profiles').select('*').eq('id', uid).maybeSingle();
+  if (prof) collect(prof.avatar);
+  const grab = async (table, cols, col) => {
+    const { data } = await supabase.from(table).select(cols).eq(col, uid).limit(5000);
+    (data || []).forEach((r) => Object.values(r).forEach(collect));
+  };
+  await safe(() => grab('posts', 'media_url, overlay_url', 'user_id'));
+  await safe(() => grab('stories', 'media_url, overlay_url', 'user_id'));
+  await safe(() => grab('highlights', 'cover_url', 'user_id'));
+  await safe(() => grab('highlight_items', 'media_url', 'user_id'));
+  await safe(() => grab('user_stickers', 'url', 'user_id'));
+  const wipe = async (table, col, value = uid) => { await safe(() => supabase.from(table).delete().eq(col, value)); };
+  const plan = [
+    ['post_comment_likes', 'user_id'], ['post_comments', 'user_id'], ['post_likes', 'user_id'], ['posts', 'user_id'],
+    ['story_views', 'viewer_id'], ['story_likes', 'user_id'], ['stories', 'user_id'],
+    ['highlight_likes', 'user_id'], ['highlight_items', 'user_id'], ['highlights', 'user_id'],
+    ['follows', 'follower_id'], ['follows', 'following_id'], ['group_members', 'user_id'],
+    ['saved_messages', 'user_id'], ['user_rewards', 'user_id'], ['user_devices', 'user_id'], ['push_subscriptions', 'user_id'],
+    ['privacy_allow', 'user_id'], ['privacy_allow', 'viewer_id'], ['chat_locks', 'owner_id'], ['blocks', 'blocker_id'], ['blocks', 'blocked_id'],
+    ['contact_nicknames', 'owner_id'], ['self_aliases', 'user_id'], ['user_stickers', 'user_id'], ['sticker_favorites', 'user_id'],
+    ['message_likes', 'user_id'], ['mails', 'recipient_id'], ['game_stats', 'user_id'], ['close_friends', 'owner_id'], ['close_friends', 'friend_id'],
+    ['story_hidden', 'owner_id'], ['story_hidden', 'hidden_id'], ['chat_accepts', 'user_id'], ['chat_accepts', 'other_id'],
+    ['hidden_messages', 'user_id'], ['scheduled_messages', 'sender_id'], ['ai_usage', 'user_id'],
+  ];
+  for (const [table, col] of plan) await wipe(table, col);
+  const list = [...files];
+  for (let i = 0; i < list.length; i += 100) await safe(() => supabase.storage.from('chat-media').remove(list.slice(i, i + 100)));
+  const short = uid.replace(/-/g, '').slice(0, 10);
+  const blank = { name: 'Deleted Account', username: `deleted${short}`, avatar: null, bio: null, is_deleted: true };
+  const optional = ['pronouns', 'country', 'age', 'social_links', 'whatsapp', 'avatar_frame', 'nameplate', 'charm', 'name_bar', 'device_id', 'chat_lock_hash', 'website', 'birthday', 'location', 'banner', 'cover_url'];
+  const patch = { ...blank };
+  if (prof) optional.forEach((k) => { if (Object.prototype.hasOwnProperty.call(prof, k)) patch[k] = null; });
+  const upd = await safe(() => supabase.from('profiles').update(patch).eq('id', uid));
+  if (!upd || upd.error) await safe(() => supabase.from('profiles').update(blank).eq('id', uid));
+  const del = await safe(() => supabase.auth.admin.deleteUser(uid));
+  if (del && !del.error) return reply(200, { ok: true, mode: 'deleted' });
+  console.error('Auth delete failed, closing the login instead', del && del.error && del.error.message);
+  const closed = await safe(() => supabase.auth.admin.updateUserById(uid, { ban_duration: '876000h', email: `closed${short}@users.getzchat.com`, email_confirm: true }));
+  if (closed && !closed.error) return reply(200, { ok: true, mode: 'closed' });
+  const banOnly = await safe(() => supabase.auth.admin.updateUserById(uid, { ban_duration: '876000h' }));
+  if (banOnly && !banOnly.error) return reply(200, { ok: true, mode: 'closed' });
+  return reply(500, { error: 'Could not finish deleting the account' });
+}
+
+export const handler = async (event) => {
+  if (event.httpMethod !== 'POST') return reply(405, { error: 'Method not allowed' });
+  let body = {};
+  try { body = JSON.parse(event.body || '{}'); } catch { return reply(400, { error: 'Bad request' }); }
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return reply(503, { error: 'Not set up yet' });
+  const user = await callerFrom(event);
+  if (!user) return reply(401, { error: 'Not signed in' });
+  try {
+    if (body.action === 'turn') return reply(200, await turnServers());
+    if (body.action === 'translate') return await translate(user, body);
+    if (body.action === 'transcribe') return await transcribe(user, body);
+    if (body.action === 'delete_account') {
+      if (String(body.confirm || '') !== 'DELETE') return reply(400, { error: 'Not confirmed' });
+      return await deleteAccount(user);
+    }
+    if (body.action === 'status') return reply(200, { turn: !!(process.env.CF_TURN_KEY_ID || process.env.TURN_URLS), ai: !!process.env.GEMINI_API_KEY, ollama: !!OLLAMA_URL });
+    return reply(400, { error: 'Unknown action' });
+  } catch (err) {
+    console.error('zchat tools failed', body.action, err && err.message);
+    return reply(500, { error: 'Something went wrong' });
+  }
+};

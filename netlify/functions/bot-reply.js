@@ -75,6 +75,13 @@ function extractReplyAndSuggestions(rawText) {
 
 async function fetchAsInlineData(url) {
   try {
+    if (typeof url === 'string' && url.startsWith('zp:')) {
+      const { data, error } = await supabase.storage.from('chat-private').download(url.slice(3));
+      if (error || !data) return null;
+      const buf = await data.arrayBuffer();
+      if (buf.byteLength === 0 || buf.byteLength > MAX_INLINE_BYTES) return null;
+      return { mimeType: data.type || 'application/octet-stream', data: Buffer.from(buf).toString('base64') };
+    }
     const res = await fetch(url);
     if (!res.ok) return null;
     const contentType = (res.headers.get('content-type') || '').split(';')[0] || 'application/octet-stream';
@@ -377,6 +384,66 @@ async function runGemini({ systemText, contents, background }) {
   return { reply: null, suggestions: [], rawText: null, status: lastStatus };
 }
 
+const OLLAMA_URL = (process.env.OLLAMA_URL || '').replace(/\/+$/, '');
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'qwen3:14b';
+
+function ollamaMessages(systemText, contents) {
+  const msgs = [{ role: 'system', content: `${systemText}\nReply with JSON only, shaped like {"reply": "your full answer", "suggestions": ["short follow up", "short follow up"]}.` }];
+  for (const c of contents || []) {
+    const parts = (c && c.parts) || [];
+    if (parts.some((p) => p && p.inlineData)) return null;
+    const text = parts.map((p) => (p && typeof p.text === 'string' ? p.text : '')).join('\n').trim();
+    if (!text) continue;
+    msgs.push({ role: c.role === 'model' ? 'assistant' : 'user', content: text });
+  }
+  return msgs.length > 1 ? msgs : null;
+}
+
+async function ollamaOnce({ systemText, contents, timeoutMs }) {
+  if (!OLLAMA_URL) return null;
+  const messages = ollamaMessages(systemText, contents);
+  if (!messages) return null;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const headers = { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '1' };
+    if (process.env.OLLAMA_AUTH) headers.Authorization = `Basic ${Buffer.from(process.env.OLLAMA_AUTH).toString('base64')}`;
+    const res = await fetch(`${OLLAMA_URL}/api/chat`, {
+      method: 'POST',
+      headers,
+      signal: ctrl.signal,
+      body: JSON.stringify({
+        model: OLLAMA_MODEL,
+        messages,
+        stream: false,
+        think: false,
+        format: { type: 'object', properties: { reply: { type: 'string' }, suggestions: { type: 'array', items: { type: 'string' } } }, required: ['reply'] },
+        options: { temperature: 0.7, num_ctx: 8192 },
+      }),
+    });
+    if (!res.ok) { console.error('Ollama error', res.status); return null; }
+    const json = await res.json().catch(() => null);
+    const raw = json && json.message && typeof json.message.content === 'string' ? json.message.content.replace(/<think>[\s\S]*?<\/think>/g, '').trim() : '';
+    const ex = extractReplyAndSuggestions(raw);
+    if (ex.reply) return { reply: ex.reply, suggestions: ex.suggestions, rawText: raw, status: 200 };
+    if (raw && !/^\s*[{\[]/.test(raw)) return { reply: raw, suggestions: [], rawText: null, status: 200 };
+    return null;
+  } catch (err) {
+    console.error('Ollama request failed', err && err.name);
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function runModel(args) {
+  if (OLLAMA_URL) {
+    const out = await ollamaOnce({ systemText: args.systemText, contents: args.contents, timeoutMs: args.background ? 45000 : 6000 });
+    if (out) return out;
+  }
+  return runGemini(args);
+}
+
 function failureText(status, again) {
   if (status === 429) return `I'm getting too many requests right now. ${again} (Error code 429)`;
   return `Sorry, I couldn't come up with a reply just now. ${again}${status ? ` (Error code ${status})` : ''}`;
@@ -486,7 +553,7 @@ const handlerCore = async (event) => {
   const failAgain = "Try asking again in a moment.";
   let reply = failureText(null, failAgain);
   let suggestions = [];
-  const gem = await runGemini({ systemText: `${SYSTEM_INSTRUCTION}\nThe person you are talking to is named: ${senderName}.${knowledgeBlock(knowledge)}${wolfCoinBlock(wolfContext(text, history))}${peerNote}`, contents, background: /background/.test(event.path || '') });
+  const gem = await runModel({ systemText: `${SYSTEM_INSTRUCTION}\nThe person you are talking to is named: ${senderName}.${knowledgeBlock(knowledge)}${wolfCoinBlock(wolfContext(text, history))}${peerNote}`, contents, background: /background/.test(event.path || '') });
   if (!gem.reply) reply = failureText(gem.status, failAgain);
   if (gem.reply) {
     reply = gem.reply;
