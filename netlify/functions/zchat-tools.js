@@ -6,12 +6,13 @@ const GEMINI_MODEL = process.env.GEMINI_TOOLS_MODEL || process.env.GEMINI_MODEL 
 const GEMINI_FALLBACK = process.env.GEMINI_FALLBACK_MODEL || 'gemini-3.8-flash';
 const OLLAMA_URL = (process.env.OLLAMA_URL || '').replace(/\/+$/, '');
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'qwen3:14b';
-const LIMITS = { translate: 150, transcribe: 40, summary: 40, translate_many: 150, gifs: 400 };
+const LIMITS = { translate: 150, transcribe: 40, summary: 40, translate_many: 150, gifs: 400, music: 300 };
 const MAX_AUDIO_BYTES = 12 * 1024 * 1024;
 const LANGS = { en: 'English', si: 'Sinhala', ta: 'Tamil', hi: 'Hindi', ar: 'Arabic', es: 'Spanish', fr: 'French', de: 'German', pt: 'Portuguese', ru: 'Russian', ja: 'Japanese', ko: 'Korean', zh: 'Chinese', id: 'Indonesian', ms: 'Malay', th: 'Thai', tr: 'Turkish', it: 'Italian', ur: 'Urdu', bn: 'Bengali' };
 
 let turnCache = { at: 0, data: null };
 const gifCache = new Map();
+const musicCache = new Map();
 
 const reply = (status, body) => ({ statusCode: status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' }, body: JSON.stringify(body) });
 
@@ -212,6 +213,75 @@ async function gifs(user, body) {
   } finally { clearTimeout(timer); }
 }
 
+function appleUrl(u, hosts) {
+  try {
+    const x = new URL(String(u || ''));
+    if (x.protocol !== 'https:' || !hosts.test(x.hostname)) return null;
+    return x.toString();
+  } catch { return null; }
+}
+
+async function getJson(url, ms) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms || 7000);
+  try {
+    const res = await fetch(url, { signal: ctrl.signal, headers: { accept: 'application/json', 'user-agent': 'ZChat/18 (+https://getzchat.com)' } });
+    if (!res.ok) return { status: res.status, json: null };
+    return { status: res.status, json: await res.json().catch(() => null) };
+  } catch { return { status: 0, json: null }; } finally { clearTimeout(timer); }
+}
+
+function songItem(r) {
+  if (!r || r.kind !== 'song' || !r.trackId || !r.previewUrl) return null;
+  const p = appleUrl(r.previewUrl, /(^|\.)(apple|mzstatic)\.com$/i);
+  if (!p) return null;
+  const artRaw = appleUrl(r.artworkUrl100 || r.artworkUrl60, /(^|\.)mzstatic\.com$/i);
+  return {
+    id: String(r.trackId),
+    t: String(r.trackName || '').trim().slice(0, 120),
+    a: String(r.artistName || '').trim().slice(0, 120),
+    art: artRaw ? artRaw.replace(/\/\d+x\d+bb\./, '/200x200bb.') : null,
+    p,
+    u: appleUrl(r.trackViewUrl, /^music\.apple\.com$/i),
+  };
+}
+
+async function topSongs(country) {
+  const feed = await getJson(`https://rss.applemarketingtools.com/api/v2/${country}/music/most-played/25/songs.json`);
+  const ids = ((feed.json && feed.json.feed && feed.json.feed.results) || []).map((r) => String(r.id || '')).filter((id) => /^\d+$/.test(id)).slice(0, 25);
+  if (!ids.length) return null;
+  const look = await getJson(`https://itunes.apple.com/lookup?${new URLSearchParams({ id: ids.join(','), country }).toString()}`);
+  const rows = (look.json && Array.isArray(look.json.results)) ? look.json.results : null;
+  if (!rows) return null;
+  const byId = new Map(rows.map((r) => [String(r.trackId), r]));
+  return ids.map((id) => songItem(byId.get(id))).filter(Boolean);
+}
+
+async function searchSongs(q, country) {
+  const r = await getJson(`https://itunes.apple.com/search?${new URLSearchParams({ term: q, media: 'music', entity: 'song', limit: '25', country }).toString()}`);
+  if (!r.json || !Array.isArray(r.json.results)) return r.status === 403 || r.status === 429 ? 'busy' : null;
+  return r.json.results.map(songItem).filter(Boolean);
+}
+
+async function music(user, body) {
+  const q = String(body.q || '').replace(/\s+/g, ' ').trim().slice(0, 60);
+  const country = /^[A-Za-z]{2}$/.test(String(body.country || '')) ? String(body.country).toLowerCase() : 'us';
+  const ck = `${country}|${q.toLowerCase()}`;
+  const hit = musicCache.get(ck);
+  if (hit && Date.now() - hit.at < 30 * 60 * 1000) return reply(200, { items: hit.items });
+  if ((await bumpUsage(user.id, 'music')) > LIMITS.music) return reply(429, { error: 'Lots of song searches today. Try again tomorrow.' });
+  let items = q ? await searchSongs(q, country) : await topSongs(country);
+  if (items === 'busy') return reply(429, { error: 'Lots of song searches right now. Try again soon.' });
+  if ((!items || !items.length) && country !== 'us') {
+    const again = q ? await searchSongs(q, 'us') : await topSongs('us');
+    if (Array.isArray(again)) items = again;
+  }
+  if (!Array.isArray(items)) return reply(503, { error: 'Songs did not load. Try again.' });
+  if (musicCache.size > 400) musicCache.clear();
+  musicCache.set(ck, { at: Date.now(), items });
+  return reply(200, { items });
+}
+
 async function readMedia(url) {
   if (typeof url !== 'string') return null;
   if (url.startsWith('zp:')) {
@@ -330,11 +400,13 @@ export const handler = async (event) => {
     if (body.action === 'translate_many') return await translateMany(user, body);
     if (body.action === 'summary') return await summary(user, body);
     if (body.action === 'gifs') return await gifs(user, body);
+    if (body.action === 'music') return await music(user, body);
+    if (body.action === 'mapkey') return reply(200, { key: process.env.CARTO_KEY || process.env.CARTO_BASEMAPS_KEY || null });
     if (body.action === 'delete_account') {
       if (String(body.confirm || '') !== 'DELETE') return reply(400, { error: 'Not confirmed' });
       return await deleteAccount(user);
     }
-    if (body.action === 'status') return reply(200, { turn: !!(process.env.CF_TURN_KEY_ID || process.env.TURN_URLS), ai: !!process.env.GEMINI_API_KEY, ollama: !!OLLAMA_URL, gifs: !!(process.env.GIPHY_KEY || process.env.GIPHY_API_KEY) });
+    if (body.action === 'status') return reply(200, { turn: !!(process.env.CF_TURN_KEY_ID || process.env.TURN_URLS), ai: !!process.env.GEMINI_API_KEY, ollama: !!OLLAMA_URL, gifs: !!(process.env.GIPHY_KEY || process.env.GIPHY_API_KEY), music: true });
     return reply(400, { error: 'Unknown action' });
   } catch (err) {
     console.error('zchat tools failed', body.action, err && err.message);
