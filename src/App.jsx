@@ -547,6 +547,7 @@ function GlobalStyle() {
       @keyframes zchat-story-in-prev { from { transform: translateX(-30%); opacity: 0.35; } to { transform: none; opacity: 1; } }
       .zchat-story-upload { animation: zchat-spin 1.1s linear infinite; transform-origin: 50% 50%; }
       @keyframes zchat-fade { from { opacity: 0; transform: scale(0.965) translateY(8px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+      @keyframes zchat-skel { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
       @keyframes zchat-repost-ring { 0% { opacity: 0.9; transform: scale(0.4); } 100% { opacity: 0; transform: scale(2.2); } }
       @keyframes zchat-heart-burst { 0% { opacity: 0; transform: scale(0.3); } 30% { opacity: 1; transform: scale(1.2); } 100% { opacity: 0; transform: scale(1.6); } }
       @keyframes zchat-mail-zoom-in { 0% { opacity: 0; transform: scale(0.82); } 100% { opacity: 1; transform: scale(1); } }
@@ -2015,7 +2016,7 @@ function IgRow({ icon, label, sub, onClick, danger, right, value, bold, inset = 
   const showChevron = !right && !danger && !!onClick;
   return (
     <div role={onClick ? 'button' : undefined} aria-label={onClick && typeof label === 'string' ? label : undefined} onClick={onClick} className={onClick ? 'zchat-row-press' : undefined} style={{
-      display: 'flex', alignItems: 'center', gap: 16, minHeight: sub ? 60 : 52, padding: inset ? '0 16px' : '0',
+      display: 'flex', alignItems: 'center', gap: 16, minHeight: sub ? 60 : 52, padding: inset ? '6px 16px' : '6px 0', boxSizing: 'border-box',
       cursor: onClick ? 'pointer' : 'default', color: c.fg, WebkitTapHighlightColor: 'transparent',
     }}>
       {icon && (
@@ -2025,7 +2026,7 @@ function IgRow({ icon, label, sub, onClick, danger, right, value, bold, inset = 
       )}
       <span style={{ flex: 1, minWidth: 0 }}>
         <span style={{ display: 'block', fontSize: 15, lineHeight: '20px', fontWeight: bold || danger ? 700 : 500 }}>{label}</span>
-        {sub && <span style={{ display: 'block', fontSize: 12.5, lineHeight: '17px', color: c.dim, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub}</span>}
+        {sub && <span style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', fontSize: 12.5, lineHeight: '17px', color: c.dim, marginTop: 1 }}>{sub}</span>}
       </span>
       {value != null && value !== '' && <span style={{ flex: 'none', fontSize: 14, color: c.dim }}>{value}</span>}
       {right}
@@ -3116,6 +3117,35 @@ function PillButton({ label, onClick, primary, danger, disabled, small, style, a
   );
 }
 
+function ReminderAlertsSection({ me, onSaved }) {
+  const { theme } = useTheme();
+  const [busy, setBusy] = useState('');
+  const [err, setErr] = useState('');
+  if (!me) return null;
+  const flip = async (key) => {
+    if (busy) return;
+    const next = me[key] === false;
+    setBusy(key);
+    setErr('');
+    const { error } = await supabase.from('profiles').update({ [key]: next }).eq('id', me.id);
+    setBusy('');
+    if (error) { setErr(/alert|column|schema/i.test(String(error.message || '')) ? 'These switch on once the latest ZChat setup is finished.' : 'That could not be saved. Try again.'); return; }
+    if (onSaved) onSaved({ [key]: next });
+  };
+  const row = (key, icon, label, sub) => {
+    const on = me[key] !== false;
+    return <IgRow inset={false} icon={icon} label={label} sub={sub} right={<IgToggle on={on} onClick={() => flip(key)} />} />;
+  };
+  return (
+    <>
+      <IgHeading>Reminders</IgHeading>
+      {row('alert_moment', <MomentIcon size={16} />, 'Daily moment', 'A heads up when it is time to post')}
+      {row('alert_birthday', <CakeIcon size={16} />, 'Friends birthdays', 'A reminder on the day so you can wish them')}
+      {err && <div role="alert" style={{ padding: '10px 12px 0', fontSize: 12.5, fontWeight: 700, color: theme.danger }}>{err}</div>}
+    </>
+  );
+}
+
 function SettingsRow({ icon, label, sub, onClick, danger, right }) {
   const { theme } = useTheme();
   return (
@@ -3638,8 +3668,10 @@ function useMediaUrl(u) {
   }, [u]);
   return current;
 }
-function MediaImg({ src, alt = '', style, ...rest }) {
-  const url = useMediaUrl(src);
+function MediaImg({ src, alt = '', style, live, ...rest }) {
+  const cached = useCachedMedia(live ? null : src);
+  const signed = useMediaUrl(live ? src : null);
+  const url = live ? signed : cached;
   if (!url) return <span aria-hidden="true" style={{ display: 'block', background: 'rgba(127,127,127,0.18)', ...(style || {}) }} />;
   return <img src={url} alt={alt} style={style} {...rest} />;
 }
@@ -3850,6 +3882,10 @@ function toolErrorText(r, kind) {
   if (r.status === 0) return 'No connection. Try again.';
   return r.error || `${kind} did not work this time. Try again.`;
 }
+function tidyBullets(text) {
+  return String(text || '').split('\n').map((l) => l.replace(/^\s*(?:[-*•–—]|\d+[.)])\s+/, '• ').replace(/\*\*(.+?)\*\*/g, '$1')).join('\n').trim();
+}
+
 function TextToolSheet({ title, subtitle, text, busy, error, onClose, onCopy, footer }) {
   const { theme } = useTheme();
   const peek = (
@@ -3947,6 +3983,7 @@ function SettingsPanel({ onClose, onOpenPrivacy, onLogout, hideActivity, onToggl
     checkPerms();
   };
   const { theme, themeMode, soundOn, setSoundOn, reactionSoundOn, setReactionSoundOn } = useTheme();
+  const [dataSaver, setDataSaver] = usePref('zchat-data-saver');
   const [lockFlow, setLockFlow] = useState(null);
   const [igQuery, setIgQuery] = useState('');
   const [section, setSection] = useState(() => (initialSection && String(initialSection).indexOf('sub:') !== 0 ? String(initialSection).split(':')[0] : 'main'));
@@ -4000,6 +4037,7 @@ function SettingsPanel({ onClose, onOpenPrivacy, onLogout, hideActivity, onToggl
     { title: 'How others can reach you', rows: [
       { icon: <MessageSquare />, label: 'Messages and requests', value: me && me.privacy_messages === 'following' ? 'People I follow' : undefined, onClick: () => setSubPage('messages') },
       { icon: <StatusIcon />, label: 'Hide story from', onClick: () => setSubPage('hidden') },
+      { icon: <Clock />, label: 'Away message', value: me && me.away_on ? 'On' : 'Off', onClick: () => setSubPage('away') },
     ] },
     { title: 'Your app', rows: [
       { icon: <Palette />, label: 'Theme', value: themeLabel, onClick: () => setSection('appearance') },
@@ -4010,6 +4048,7 @@ function SettingsPanel({ onClose, onOpenPrivacy, onLogout, hideActivity, onToggl
       ...(onOpenUsage ? [{ icon: <Timer />, label: 'Time on ZChat', value: fmtUsage(readUsage()[usageDayKey()] || 0), onClick: onOpenUsage }] : []),
       ...(finePointer ? [{ icon: <KeyboardIcon />, label: 'Keyboard shortcuts', onClick: () => setSection('shortcuts') }] : []),
       { icon: <Database />, label: 'Storage', onClick: () => setSection('storage') },
+      { icon: <Activity />, label: 'Data saver', toggle: !!dataSaver, onClick: () => setDataSaver(!dataSaver) },
     ] },
     { title: 'Admin', rows: isZAdmin ? [{ icon: <ShieldCheck />, label: 'Admin panel', onClick: onOpenAdmin }, { icon: <ShieldAlert />, label: 'Report queue', onClick: onOpenReports }] : [] },
     { title: 'More info and support', rows: [
@@ -4046,13 +4085,12 @@ function SettingsPanel({ onClose, onOpenPrivacy, onLogout, hideActivity, onToggl
               </label>
             </div>
             {igVisible.map((g) => (
-              <div key={g.title}>
-                <IgHeading>{g.title}</IgHeading>
-                {g.rows.map((r) => (
-                  <IgRow key={r.label} icon={r.icon} label={r.label} value={r.value} bold={r.bold} onClick={r.onClick}
+              <DetailSection key={g.title} title={g.title === 'Login' ? null : g.title}>
+                {detailRows(g.rows.map((r) => (
+                  <DetailRow icon={r.icon} label={r.label} value={r.value} danger={!!r.bold} onClick={r.onClick}
                     right={r.toggle !== undefined ? <IgToggle on={r.toggle} /> : undefined} />
-                ))}
-              </div>
+                )))}
+              </DetailSection>
             ))}
             {igTerm && igVisible.length === 0 && (
               <div style={{ textAlign: 'center', padding: '40px 20px', color: c.dim, fontSize: 14 }}>No settings match that.</div>
@@ -4114,8 +4152,8 @@ function SettingsPanel({ onClose, onOpenPrivacy, onLogout, hideActivity, onToggl
         {sec === 'storage' && (
           <>
             <SectionHeader title="Storage" />
-            <PageArt k="storage" text="ZChat keeps photos, stickers and frames on this phone so they open fast. Clearing them is safe, nothing is lost." />
-            <StorageSection />
+            <PageArt k="storage" text="ZChat keeps your chats, photos and stickers on this phone so they open fast, even with no connection. Clearing them is safe, nothing is lost." />
+            <StorageSection uid={me && me.id} />
           </>
         )}
 
@@ -4153,6 +4191,7 @@ function SettingsPanel({ onClose, onOpenPrivacy, onLogout, hideActivity, onToggl
             <ToneList />
             <IgHeading>Quiet hours</IgHeading>
             <QuietHoursSection />
+            <ReminderAlertsSection me={me} onSaved={onPrivacySaved} />
           </>
         )}
 
@@ -4180,6 +4219,7 @@ function SettingsPanel({ onClose, onOpenPrivacy, onLogout, hideActivity, onToggl
         </SettingsLayer>
       ))}
       {subPage === 'messages' && me && <MessagePrivacyPage me={me} onClose={() => setSubPage(null)} onSaved={(patch) => { if (onPrivacySaved) onPrivacySaved(patch); }} />}
+      {subPage === 'away' && me && <AwayMessagePage me={me} onClose={() => setSubPage(null)} onSaved={(patch) => { if (onPrivacySaved) onPrivacySaved(patch); }} />}
       {subPage === 'close' && me && <CloseFriendsPicker myId={me.id} onClose={() => setSubPage(null)} />}
       {subPage === 'hidden' && me && <StoryHiddenPicker myId={me.id} onClose={() => setSubPage(null)} />}
       {subPage === 'email' && <ChangeEmailPage email={currentEmail} onClose={() => setSubPage(null)} />}
@@ -5136,9 +5176,29 @@ function StickerCreator({ file, userId, onCancel, onSaved }) {
   );
 }
 
-function StickerPicker({ onPick, onClose, userId }) {
+function StickerPicker({ onPick, onClose, userId, onPickGif, onSharePack }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
+  const [packs, setPacks] = useState(() => readPacks(userId));
+  const [packEdit, setPackEdit] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const ids = readPacks(userId).map((x) => x.id);
+      const [{ data: owned }, { data: added }] = await Promise.all([
+        supabase.from('sticker_packs').select('*').eq('owner_id', userId).order('created_at', { ascending: false }).limit(40),
+        ids.length ? supabase.from('sticker_packs').select('*').in('id', ids) : Promise.resolve({ data: [] }),
+      ]);
+      if (!alive) return;
+      const byId = new Map();
+      [...(owned || []), ...(added || [])].forEach((r) => { if (r && r.id) byId.set(r.id, { id: r.id, name: r.name, stickers: Array.isArray(r.stickers) ? r.stickers : [], owner_id: r.owner_id }); });
+      const keep = readPacks(userId).filter((x) => byId.has(x.id) || !added).map((x) => byId.get(x.id) || x);
+      const next = [...(owned || []).map((r) => byId.get(r.id)), ...keep.filter((x) => !(owned || []).some((o) => o.id === x.id))];
+      setPacks(next);
+      writePacks(userId, next.filter((x) => x.owner_id !== userId));
+    })();
+    return () => { alive = false; };
+  }, [userId]);
   const [favKeys, setFavKeys] = useState(() => [...getFavoriteStickerKeys()]);
   const [recents, setRecents] = useState(() => readRecentStickers(userId));
   const [mine, setMine] = useState(() => readMyStickersLocal(userId));
@@ -5187,9 +5247,15 @@ function StickerPicker({ onPick, onClose, userId }) {
   else if (category === 'recent') list = recents.map((r) => byKey.get(r.key) || { key: r.key, label: r.label, file: r.file }).filter((x) => x && x.file);
   else if (category === 'favorites') list = favKeys.map((k) => byKey.get(k)).filter(Boolean);
   else if (category === 'mine') list = mineStickers;
+  else if (category === 'gif') list = [];
+  else if (category.indexOf('pack:') === 0) {
+    const pk = packs.find((x) => `pack:${x.id}` === category);
+    list = pk ? pk.stickers.map((u, i) => ({ key: `pk:${pk.id}:${i}`, label: pk.name, file: u })) : [];
+  }
   else list = STICKERS.filter((x) => x.category === category);
+  const curPack = category.indexOf('pack:') === 0 ? packs.find((x) => `pack:${x.id}` === category) : null;
 
-  const tabs = [{ key: 'recent', label: 'Recent' }, { key: 'favorites', label: 'Favorites' }, { key: 'mine', label: 'My stickers' }, ...STICKER_CATEGORIES.filter((x) => x.key !== 'favorites')];
+  const tabs = [{ key: 'recent', label: 'Recent' }, { key: 'favorites', label: 'Favorites' }, ...(onPickGif ? [{ key: 'gif', label: 'GIFs' }] : []), { key: 'mine', label: 'My stickers' }, ...packs.map((x) => ({ key: `pack:${x.id}`, label: x.name })), ...STICKER_CATEGORIES.filter((x) => x.key !== 'favorites')];
   const emptyText = category === 'recent' ? 'Stickers you send show up here' : category === 'favorites' ? 'No favorites yet, tap the star on any sticker' : 'No stickers found';
 
   return (
@@ -5211,11 +5277,13 @@ function StickerPicker({ onPick, onClose, userId }) {
             display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
           }}><X size={14} color={theme.muted} /></div>
         </div>
+        {category !== 'gif' && (
         <div style={{ position: 'relative', marginBottom: 8, flexShrink: 0 }}>
           <Search size={14} color={theme.muted} style={{ position: 'absolute', left: 11, top: 10 }} />
           <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search stickers"
             style={{ ...inputStyle(theme), padding: '8px 12px 8px 32px', fontSize: 13 }} />
         </div>
+        )}
         {!term && (
           <div style={{ display: 'flex', gap: 6, marginBottom: 8, overflowX: 'auto', flexShrink: 0, scrollbarWidth: 'none' }}>
             {tabs.map((tb) => (
@@ -5227,12 +5295,33 @@ function StickerPicker({ onPick, onClose, userId }) {
                 {tb.key === 'favorites' && <Star_ size={11} color={category === tb.key ? 'white' : '#FFB800'} filled />}
                 {tb.key === 'recent' && <Clock size={11} />}
                 {tb.key === 'mine' && <Plus size={11} />}
+                {tb.key === 'gif' && <GifIcon size={12} />}
+                {tb.key.indexOf('pack:') === 0 && <PackIcon size={11} />}
                 {tb.label}
               </div>
             ))}
           </div>
         )}
-        <div data-testid="sticker-grid" style={{ overflowY: 'auto', flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 8, alignContent: 'start' }}>
+        {category === 'gif' && !term && onPickGif && <GifGrid onPick={(g) => onPickGif(g)} />}
+        {curPack && !term && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexShrink: 0 }}>
+            <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{curPack.stickers.length} stickers{curPack.owner_id === userId ? ', made by you' : ''}</span>
+            {curPack.owner_id === userId && <span role="button" aria-label="Edit sticker pack" onClick={() => setPackEdit(curPack)} style={{ fontSize: 12.5, fontWeight: 800, color: theme.muted, cursor: 'pointer' }}>Edit</span>}
+            {onSharePack && <span role="button" aria-label="Share sticker pack" onClick={() => onSharePack(curPack)} style={{ fontSize: 12.5, fontWeight: 800, color: theme.coral, cursor: 'pointer' }}>Share in chat</span>}
+            {curPack.owner_id !== userId && <span role="button" aria-label="Remove sticker pack" onClick={() => { const next = packs.filter((x) => x.id !== curPack.id); setPacks(next); writePacks(userId, next.filter((x) => x.owner_id !== userId)); setCategory('mine'); }} style={{ fontSize: 12.5, fontWeight: 800, color: theme.danger, cursor: 'pointer' }}>Remove</span>}
+          </div>
+        )}
+        <div data-testid="sticker-grid" style={{ overflowY: 'auto', flex: 1, minHeight: 0, display: category === 'gif' && !term ? 'none' : 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 8, alignContent: 'start' }}>
+          {category === 'mine' && !term && mine.length > 0 && (
+            <div role="button" aria-label="Make a sticker pack" onClick={() => setPackEdit({})} style={{
+              position: 'relative', width: '100%', paddingBottom: '100%', borderRadius: 12, cursor: 'pointer',
+              border: `1.5px dashed ${theme.coral}`, color: theme.coral,
+            }}>
+              <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, fontSize: 10, fontWeight: 800 }}>
+                <PackIcon size={18} />Pack
+              </div>
+            </div>
+          )}
           {category === 'mine' && !term && (
             <div role="button" aria-label="Create sticker" onClick={() => fileRef.current && fileRef.current.click()} style={{
               position: 'relative', width: '100%', paddingBottom: '100%', borderRadius: 12, cursor: 'pointer',
@@ -5279,6 +5368,12 @@ function StickerPicker({ onPick, onClose, userId }) {
       {creatorFile && (
         <div onClick={(e) => e.stopPropagation()} style={{ display: 'contents' }}>
           <StickerCreator file={creatorFile} userId={userId} onCancel={() => setCreatorFile(null)} onSaved={onCreated} />
+        </div>
+      )}
+      {packEdit && (
+        <div onClick={(e) => e.stopPropagation()} style={{ display: 'contents' }}>
+          <PackEditorPage userId={userId} mine={mine} pack={packEdit.id ? packEdit : null} onClose={() => setPackEdit(null)}
+            onSaved={(row) => { const pk = { id: row.id, name: row.name, stickers: Array.isArray(row.stickers) ? row.stickers : [], owner_id: row.owner_id }; setPacks((prev) => [pk, ...prev.filter((x) => x.id !== pk.id)]); setPackEdit(null); setCategory(`pack:${pk.id}`); }} />
         </div>
       )}
     </div>
@@ -6016,7 +6111,109 @@ function NicknamesModal({ conv, myAvatar, myName, currentNickname, currentAlias,
   );
 }
 
-function ChatSettingsPanel({ conv, myId, meAvatar, meName, isPinned, isLocked, wallpaper, nameBar, chatLockAvailable, onClose, onTogglePin, onToggleArchive, onSetWallpaper, onSetNameBar, onEnableLock, onDisableLock, onDeleteChat, onReportUser, onNicknameSaved, onNeedChatLockSetup, onOpenProfile, isMuted, onSetMute, onCall, disappearSecs, onSetDisappear, tools }) {
+function detailsCardBg(theme) { return theme.dark ? 'rgba(255,255,255,0.045)' : '#F5F5F8'; }
+function DetailSection({ title, right, children, flush }) {
+  const { theme } = useTheme();
+  return (
+    <div style={{ margin: '18px 16px 0' }}>
+      {(title || right) && (
+        <div style={{ display: 'flex', alignItems: 'center', padding: '0 4px 8px' }}>
+          <div style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 700, color: theme.muted }}>{title}</div>
+          {right}
+        </div>
+      )}
+      {flush ? children : <div style={{ borderRadius: 18, background: detailsCardBg(theme), border: `1px solid ${theme.border}`, overflow: 'hidden' }}>{children}</div>}
+    </div>
+  );
+}
+function DetailRow({ icon, label, sub, value, onClick, right, danger, last }) {
+  const { theme } = useTheme();
+  const color = danger ? theme.danger : theme.ink;
+  return (
+    <div role={onClick ? 'button' : undefined} aria-label={onClick && typeof label === 'string' ? label : undefined} onClick={onClick} className={onClick ? 'zchat-row-press' : undefined} style={{
+      display: 'flex', alignItems: 'center', gap: 12, minHeight: sub ? 58 : 50, padding: '0 14px', cursor: onClick ? 'pointer' : 'default', position: 'relative',
+    }}>
+      {icon && <span style={{ display: 'flex', color: danger ? theme.danger : theme.ink, flexShrink: 0 }}>{React.cloneElement(icon, { size: 20 })}</span>}
+      <div style={{ flex: 1, minWidth: 0, padding: '10px 0' }}>
+        <div style={{ fontSize: 15, fontWeight: danger ? 700 : 500, color, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</div>
+        {sub && <div style={{ fontSize: 12.5, color: theme.muted, marginTop: 2, lineHeight: 1.35, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{sub}</div>}
+      </div>
+      {value && <span style={{ fontSize: 13.5, color: theme.muted, flexShrink: 0, maxWidth: 140, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{value}</span>}
+      {right || (onClick && !danger ? <ChevronRight size={18} color={theme.muted} style={{ flexShrink: 0 }} /> : null)}
+      {!last && <div style={{ position: 'absolute', left: icon ? 46 : 14, right: 0, bottom: 0, height: 1, background: theme.border }} />}
+    </div>
+  );
+}
+function DetailTiles({ items }) {
+  const { theme } = useTheme();
+  const list = items.filter(Boolean);
+  if (!list.length) return null;
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(76px, 1fr))', gap: 8 }}>
+      {list.map((t) => (
+        <div key={t.label} role="button" aria-label={t.aria || t.label} onClick={t.onClick} className="zchat-press" style={{
+          position: 'relative', borderRadius: 16, background: detailsCardBg(theme), border: `1px solid ${theme.border}`, padding: '12px 4px 10px',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 7, cursor: 'pointer', minWidth: 0,
+        }}>
+          <div style={{ width: 38, height: 38, borderRadius: 12, background: t.dot || `${theme.coral}24`, color: t.dot ? '#FFFFFF' : theme.coral, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {React.cloneElement(t.icon, { size: 19, color: t.dot ? '#FFFFFF' : theme.coral })}
+          </div>
+          <div style={{ fontSize: 11.5, fontWeight: 700, color: theme.ink, textAlign: 'center', lineHeight: 1.2, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', padding: '0 2px' }}>{t.label}</div>
+          {t.sub ? <div style={{ fontSize: 10.5, fontWeight: 600, color: theme.muted, marginTop: -4, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', padding: '0 2px' }}>{t.sub}</div> : null}
+          {t.badge ? <span style={{ position: 'absolute', top: 6, right: 6, minWidth: 18, height: 18, padding: '0 5px', boxSizing: 'border-box', borderRadius: 9, background: theme.coral, color: 'white', fontSize: 10.5, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{t.badge}</span> : null}
+
+        </div>
+      ))}
+    </div>
+  );
+}
+function MediaStrip({ media, onOpen, onSeeAll }) {
+  const { theme } = useTheme();
+  const list = (media || []).slice(0, 10);
+  return (
+    <DetailSection title="Media, links and voice" right={<div role="button" aria-label="See all media" onClick={onSeeAll} style={{ fontSize: 13, fontWeight: 800, color: theme.coral, cursor: 'pointer', padding: '2px 0 2px 10px' }}>See all</div>} flush>
+      {list.length ? (
+        <div style={{ display: 'flex', gap: 6, overflowX: 'auto', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch', margin: '0 -16px', padding: '0 16px' }}>
+          {list.map((m) => (
+            <div key={m.id} role="button" aria-label={m.type === 'video' ? 'Open video' : 'Open photo'} onClick={() => onOpen && onOpen(m)} style={{ position: 'relative', width: 78, height: 78, flexShrink: 0, borderRadius: 12, overflow: 'hidden', background: detailsCardBg(theme), cursor: 'pointer' }}>
+              {m.type === 'video'
+                ? <VideoThumb src={m.media_url} style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} />
+                : <MediaImg src={m.media_url} loading="lazy" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />}
+              {m.type === 'video' && <Play size={14} color="white" style={{ position: 'absolute', top: 6, right: 6, filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.6))' }} />}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div role="button" aria-label="Open media, links and voice" onClick={onSeeAll} style={{ borderRadius: 18, background: detailsCardBg(theme), border: `1px solid ${theme.border}`, padding: '14px', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer' }}>
+          <ImageIcon size={20} color={theme.muted} />
+          <div style={{ flex: 1, fontSize: 13.5, color: theme.muted }}>Photos, videos, links and voice notes show up here</div>
+          <ChevronRight size={18} color={theme.muted} />
+        </div>
+      )}
+    </DetailSection>
+  );
+}
+function DetailActions({ items }) {
+  const { theme } = useTheme();
+  const c = igPalette(theme);
+  return (
+    <div style={{ display: 'flex', justifyContent: 'center', gap: 10, marginTop: 16, flexWrap: 'wrap', padding: '0 12px' }}>
+      {items.filter(Boolean).map(([icon, label, fn, on]) => (
+        <div key={label} role="button" aria-label={label} onClick={fn} style={{ textAlign: 'center', cursor: 'pointer', width: 60 }}>
+          <div style={{ width: 52, height: 52, borderRadius: 18, border: `1px solid ${on ? theme.coral : c.line}`, background: on ? `${theme.coral}22` : c.field, color: on ? theme.coral : theme.ink, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 6px' }}>{icon}</div>
+          <div style={{ fontSize: 12, color: on ? theme.coral : c.dim, fontWeight: on ? 700 : 500 }}>{label}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function detailRows(rows) {
+  const list = rows.filter(Boolean);
+  return list.map((r, i) => React.cloneElement(r, { key: i, last: i === list.length - 1 }));
+}
+
+function ChatSettingsPanel({ conv, myId, meAvatar, meName, isPinned, isLocked, wallpaper, nameBar, chatLockAvailable, onClose, onTogglePin, onToggleArchive, onSetWallpaper, onSetNameBar, onEnableLock, onDisableLock, onDeleteChat, onReportUser, onNicknameSaved, onNeedChatLockSetup, onOpenProfile, isMuted, onSetMute, onCall, disappearSecs, onSetDisappear, tools, messages = [], onOpenMedia }) {
   const [showDisappear, setShowDisappear] = useState(false);
   useBackClose(true, onClose);
   const edgeBack = useEdgeSwipeBack(true);
@@ -6034,18 +6231,24 @@ function ChatSettingsPanel({ conv, myId, meAvatar, meName, isPinned, isLocked, w
   const [listModal, setListModal] = useState(null);
   const [note, setNote] = useState(() => contactNoteFor(conv.otherProfile.id));
   const [noteOpen, setNoteOpen] = useState(false);
+  const [bioOpen, setBioOpen] = useState(false);
 
   useEffect(() => {
+    let alive = true;
     (async () => {
-      const { data } = await supabase.from('contact_nicknames').select('nickname').eq('owner_id', myId).eq('contact_id', conv.otherProfile.id).maybeSingle();
-      setNickname(data ? data.nickname : '');
-      const { data: aliasRow } = await supabase.from('self_aliases').select('alias').eq('user_id', myId).eq('viewer_id', conv.otherProfile.id).maybeSingle();
-      setMyAlias(aliasRow ? aliasRow.alias : '');
-      const { count: followers } = await supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', conv.otherProfile.id).eq('status', 'accepted');
-      setFollowerCount(followers || 0);
-      const { count: following } = await supabase.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', conv.otherProfile.id).eq('status', 'accepted');
-      setFollowingCount(following || 0);
+      const [nickRes, aliasRes, folRes, fingRes] = await Promise.all([
+        supabase.from('contact_nicknames').select('nickname').eq('owner_id', myId).eq('contact_id', conv.otherProfile.id).maybeSingle(),
+        supabase.from('self_aliases').select('alias').eq('user_id', myId).eq('viewer_id', conv.otherProfile.id).maybeSingle(),
+        supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', conv.otherProfile.id).eq('status', 'accepted'),
+        supabase.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', conv.otherProfile.id).eq('status', 'accepted'),
+      ]);
+      if (!alive) return;
+      if (!nickRes.error) setNickname(nickRes.data ? nickRes.data.nickname : '');
+      if (!aliasRes.error) setMyAlias(aliasRes.data ? aliasRes.data.alias : '');
+      if (!folRes.error) setFollowerCount(folRes.count || 0);
+      if (!fingRes.error) setFollowingCount(fingRes.count || 0);
     })();
+    return () => { alive = false; };
   }, [conv.otherProfile.id]);
 
   const saveMyAlias = async (val) => {
@@ -6086,6 +6289,7 @@ function ChatSettingsPanel({ conv, myId, meAvatar, meName, isPinned, isLocked, w
   );
   const c = igPalette(theme);
   const muteLabel = isMuted === true ? 'Muted' : isMuted ? `Muted until ${new Date(isMuted).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}` : 'Off';
+  const dmMedia = messages.filter((m) => !m.deleted && (m.type === 'image' || m.type === 'video') && m.media_url && !parseOnce(m)).slice(-10).reverse();
 
   return (
     <>
@@ -6094,90 +6298,91 @@ function ChatSettingsPanel({ conv, myId, meAvatar, meName, isPinned, isLocked, w
       position: 'fixed', inset: 0, background: c.bg, color: c.fg, zIndex: 33, fontFamily: FONT,
       display: 'flex', flexDirection: 'column', overflow: 'hidden',
     }} className="zchat-panel-open zchat-wide-page">
-      <IgTopBar title="Chat settings" onBack={onClose} />
+      <IgTopBar title="Chat details" onBack={onClose} />
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', paddingBottom: 'calc(28px + env(safe-area-inset-bottom))' }}>
-        <div style={{ textAlign: 'center', padding: '8px 20px 4px' }}>
-          <div role="button" onClick={() => onOpenProfile(p)} style={{ display: 'flex', justifyContent: 'center', cursor: 'pointer' }}>
-            <Avatar emoji={conv.otherProfile.avatar} name={otherName} frame={conv.otherProfile.avatar_frame} size={92} frameFit />
+        <div style={{ textAlign: 'center', padding: '6px 20px 0' }}>
+          <div role="button" aria-label="Open profile" onClick={() => onOpenProfile(p)} style={{ display: 'flex', justifyContent: 'center', cursor: 'pointer' }}>
+            <Avatar emoji={conv.otherProfile.avatar} name={otherName} frame={conv.otherProfile.avatar_frame} size={84} frameFit />
           </div>
           <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12, padding: '0 6px' }}>
             <NameBadge name={otherName} verified={p.verified} custom={p.custom_badge} size={15} lines={2} style={{ justifyContent: 'center', textAlign: 'center', fontWeight: 700, fontSize: otherName.length > 30 ? 16 : 18 }} />
           </div>
-          <div style={{ fontSize: 13, color: c.dim, marginTop: 3, padding: '0 16px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>@{conv.otherProfile.username}</div>
-          {infoBits.length > 0 && <div style={{ fontSize: 13, color: c.dim, marginTop: 6 }}>{infoBits.join(' \u00b7 ')}</div>}
-          {showBio && <div style={{ fontSize: 13.5, marginTop: 8, lineHeight: 1.45, padding: '0 8px' }}><RichText text={p.bio} onMention={onOpenProfile} /></div>}
-          <div style={{ display: 'flex', justifyContent: 'center', gap: 26, marginTop: 14 }}>
-            <div role="button" onClick={conv.otherProfile.is_bot ? undefined : () => setListModal('followers')} style={{ cursor: conv.otherProfile.is_bot ? 'default' : 'pointer' }}>
-              <span style={{ fontWeight: 700, fontSize: 15 }}>{conv.otherProfile.is_bot ? (BOT_FOLLOWER_BASE + (followerCount || 0)).toLocaleString('en-US') : followerCount}</span> <span style={{ fontSize: 13, color: c.dim }}>followers</span>
+          <div style={{ fontSize: 13, color: c.dim, marginTop: 3, padding: '0 16px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>@{conv.otherProfile.username}{infoBits.length ? ` \u00b7 ${infoBits.join(' \u00b7 ')}` : ''}</div>
+          {tools && tools.headerExtra}
+          {showBio && (
+            <div onClick={() => setBioOpen(true)} style={{ fontSize: 13.5, marginTop: 8, lineHeight: 1.45, padding: '0 8px', overflow: 'hidden', display: bioOpen ? 'block' : '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', cursor: bioOpen ? 'default' : 'pointer' }}>
+              <RichText text={p.bio} onMention={onOpenProfile} />
+            </div>
+          )}
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 22, marginTop: 10 }}>
+            <div role="button" aria-label="Followers" onClick={conv.otherProfile.is_bot ? undefined : () => setListModal('followers')} style={{ cursor: conv.otherProfile.is_bot ? 'default' : 'pointer' }}>
+              <span style={{ fontWeight: 700, fontSize: 14.5 }}>{conv.otherProfile.is_bot ? (BOT_FOLLOWER_BASE + (followerCount || 0)).toLocaleString('en-US') : followerCount}</span> <span style={{ fontSize: 13, color: c.dim }}>{!conv.otherProfile.is_bot && followerCount === 1 ? 'follower' : 'followers'}</span>
             </div>
             {!conv.otherProfile.is_bot && (
-              <div role="button" onClick={() => setListModal('following')} style={{ cursor: 'pointer' }}>
-                <span style={{ fontWeight: 700, fontSize: 15 }}>{followingCount}</span> <span style={{ fontSize: 13, color: c.dim }}>following</span>
+              <div role="button" aria-label="Following" onClick={() => setListModal('following')} style={{ cursor: 'pointer' }}>
+                <span style={{ fontWeight: 700, fontSize: 14.5 }}>{followingCount}</span> <span style={{ fontSize: 13, color: c.dim }}>following</span>
               </div>
             )}
           </div>
-          <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 18, flexWrap: 'wrap' }}>
-            {[
-              [<User size={21} strokeWidth={1.6} />, 'Profile', () => onOpenProfile(p)],
-              ...(onCall ? [[<Phone size={21} strokeWidth={1.6} />, 'Call', () => onCall('voice')], [<VideoIcon size={21} strokeWidth={1.6} />, 'Video', () => onCall('video')]] : []),
-              ...(tools && tools.onSearch ? [[<Search size={21} strokeWidth={1.6} />, 'Search', tools.onSearch]] : []),
-              ...(onSetMute ? [[isMuted ? <BellOff size={21} strokeWidth={1.6} /> : <Bell size={21} strokeWidth={1.6} />, isMuted ? 'Muted' : 'Mute', () => setShowMuteOptions(true)]] : []),
-            ].map(([icon, label, fn]) => (
-              <div key={label} role="button" aria-label={label} onClick={fn} style={{ textAlign: 'center', cursor: 'pointer', width: 56 }}>
-                <div style={{ width: 52, height: 52, borderRadius: '50%', border: `1px solid ${c.line}`, background: c.field, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 6px' }}>{icon}</div>
-                <div style={{ fontSize: 12, color: c.dim }}>{label}</div>
-              </div>
-            ))}
-          </div>
         </div>
+        <DetailActions items={[
+          [<User size={21} strokeWidth={1.7} />, 'Profile', () => onOpenProfile(p)],
+          onCall ? [<Phone size={21} strokeWidth={1.7} />, 'Call', () => onCall('voice')] : null,
+          onCall ? [<VideoIcon size={21} strokeWidth={1.7} />, 'Video', () => onCall('video')] : null,
+          tools && tools.onSearch ? [<Search size={21} strokeWidth={1.7} />, 'Search', tools.onSearch] : null,
+          onSetMute ? [isMuted ? <BellOff size={21} strokeWidth={1.7} /> : <Bell size={21} strokeWidth={1.7} />, isMuted ? 'Muted' : 'Mute', () => setShowMuteOptions(true), !!isMuted] : null,
+        ]} />
 
-        <IgHeading>Private note</IgHeading>
-        {note ? (
-          <div role="button" aria-label="Edit private note" onClick={() => setNoteOpen(true)} className="zchat-row-press" style={{ margin: '2px 16px 6px', padding: '12px 14px', borderRadius: 14, background: c.field, border: `1px solid ${c.line}`, cursor: 'pointer' }}>
-            <div style={{ fontSize: 14, lineHeight: 1.45, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{note}</div>
-            <div style={{ fontSize: 11.5, color: c.dim, marginTop: 6 }}>Only you can see this. Tap to edit.</div>
-          </div>
-        ) : (
-          <IgRow icon={<Pencil />} label="Add a private note" sub="Only you can see it" onClick={() => setNoteOpen(true)} />
-        )}
+        {tools && <MediaStrip media={dmMedia} onOpen={onOpenMedia} onSeeAll={tools.onMedia} />}
+
         {tools && (
-          <>
-            <IgHeading>In this chat</IgHeading>
-            <IgRow icon={<ImageIcon />} label="Media, links and voice" onClick={tools.onMedia} />
-            {tools.onJumpDate && <IgRow icon={<CalendarIcon />} label="Jump to a date" onClick={tools.onJumpDate} />}
-            {tools.onPinned && <IgRow icon={<Pin_ color="currentColor" />} label="Pinned messages" value={String(tools.pinnedCount)} onClick={tools.onPinned} />}
-            {tools.onScheduled && <IgRow icon={<Clock />} label="Scheduled messages" value={String(tools.scheduledCount)} onClick={tools.onScheduled} />}
-            {tools.onGame && <IgRow icon={<GamepadIcon />} label="Play a game" onClick={tools.onGame} />}
-            <IgRow icon={<Activity />} label="Chat insights" onClick={tools.onInsights} />
-            <IgRow icon={<Download />} label="Export chat" onClick={tools.onExport} />
-          </>
+          <DetailSection title="In this chat" flush>
+            <DetailTiles items={[
+              tools.onPinned ? { icon: <Pin_ color="currentColor" />, label: 'Pinned', aria: 'Pinned messages', badge: tools.pinnedCount, onClick: tools.onPinned } : null,
+              tools.onJumpDate ? { icon: <CalendarIcon />, label: 'Jump to date', aria: 'Jump to a date', onClick: tools.onJumpDate } : null,
+              tools.onScheduled ? { icon: <Clock />, label: 'Scheduled', aria: 'Scheduled messages', badge: tools.scheduledCount, onClick: tools.onScheduled } : null,
+              tools.onGame ? { icon: <GamepadIcon />, label: 'Games', aria: 'Play a game', onClick: tools.onGame } : null,
+              ...(tools.moreTiles || []),
+              { icon: <Activity />, label: 'Insights', aria: 'Chat insights', onClick: tools.onInsights },
+              { icon: <Download />, label: 'Export', aria: 'Export chat', onClick: tools.onExport },
+            ]} />
+          </DetailSection>
         )}
 
-        <IgHeading>Look</IgHeading>
-        <IgRow icon={<ImageIcon />} label="Chat wallpaper" onClick={() => setShowWallpaper(true)} />
-        <IgRow icon={<Palette />} label="Header style" onClick={() => setShowNameBar(true)} />
-        {tools && <IgRow icon={<BubblesIcon />} label="Chat bubbles" value={tools.bubbleLabel || ''} onClick={tools.onBubbles} />}
-        <IgRow icon={<AtSign />} label="Nicknames" onClick={() => setShowNicknames(true)} />
+        <DetailSection title="Customize" flush>
+          <DetailTiles items={[
+            { icon: <ImageIcon />, label: 'Wallpaper', aria: 'Chat wallpaper', onClick: () => setShowWallpaper(true) },
+            { icon: <Palette />, label: 'Header', aria: 'Header style', onClick: () => setShowNameBar(true) },
+            tools ? { icon: <BubblesIcon />, label: 'Bubbles', aria: 'Chat bubbles', onClick: tools.onBubbles } : null,
+            { icon: <AtSign />, label: 'Nicknames', onClick: () => setShowNicknames(true) },
+            ...((tools && tools.moreCustomize) || []),
+          ]} />
+        </DetailSection>
 
-        {onSetMute && (
-          <>
-            <IgHeading>Notifications</IgHeading>
-            <IgRow icon={isMuted ? <BellOff /> : <Bell />} label="Mute notifications" value={muteLabel} onClick={() => setShowMuteOptions(true)} />
-          </>
-        )}
+        <DetailSection title="Privacy and safety">
+          {detailRows([
+            onSetMute ? <DetailRow icon={isMuted ? <BellOff /> : <Bell />} label="Mute notifications" value={muteLabel} onClick={() => setShowMuteOptions(true)} /> : null,
+            <DetailRow icon={<Timer />} label="Disappearing messages" value={disappearLabel(disappearSecs)} onClick={() => setShowDisappear(true)} />,
+            <DetailRow icon={<Lock />} label="Lock this chat" onClick={() => { if (isLocked) onDisableLock(); else if (chatLockAvailable) onEnableLock(); else onNeedChatLockSetup(); }} right={<IgToggle on={!!isLocked} />} />,
+            <DetailRow icon={<Pin_ color="currentColor" />} label="Pin chat" onClick={onTogglePin} right={<IgToggle on={!!isPinned} />} />,
+            <DetailRow icon={<Archive />} label="Archive chat" onClick={onToggleArchive} />,
+            ...((tools && tools.morePrivacy) || []),
+          ])}
+        </DetailSection>
 
-        <IgHeading>Privacy and manage</IgHeading>
-        <IgRow icon={<Timer />} label="Disappearing messages" value={disappearLabel(disappearSecs)} onClick={() => setShowDisappear(true)} />
+        <DetailSection title="Private note">
+          <DetailRow icon={<Pencil />} label={note ? note.split('\n')[0] : 'Add a private note'} sub={note ? 'Only you can see this. Tap to edit.' : 'Only you can see it'} onClick={() => setNoteOpen(true)} last />
+        </DetailSection>
+
+        <DetailSection>
+          {detailRows([
+            tools && tools.onClear ? <DetailRow icon={<Trash2 />} label="Clear chat" danger onClick={tools.onClear} /> : null,
+            tools && tools.onToggleBlock ? <DetailRow icon={<Ban />} label={tools.blocked ? `Unblock ${otherName}` : `Block ${otherName}`} danger onClick={tools.onToggleBlock} /> : null,
+            !(tools && tools.isBot) ? <DetailRow icon={<Flag />} label={`Report ${otherName}`} danger onClick={() => setShowReportUser(true)} /> : null,
+            !(tools && tools.isBot) ? <DetailRow icon={<Trash2 />} label={`Delete chat with ${otherName}`} danger onClick={onDeleteChat} /> : null,
+          ])}
+        </DetailSection>
         {showDisappear && <DisappearSheet value={disappearSecs} subject="this chat" onPick={onSetDisappear} onClose={() => setShowDisappear(false)} />}
-        <IgRow icon={<Pin_ color="currentColor" />} label="Pin chat" onClick={onTogglePin} right={<IgToggle on={!!isPinned} />} />
-        <IgRow icon={<Archive />} label="Archive chat" onClick={onToggleArchive} />
-        <IgRow icon={<Lock />} label="Lock this chat" onClick={() => { if (isLocked) onDisableLock(); else if (chatLockAvailable) onEnableLock(); else onNeedChatLockSetup(); }} right={<IgToggle on={!!isLocked} />} />
-
-        <IgHeading>More</IgHeading>
-        {tools && tools.onClear && <IgRow icon={<Trash2 />} label="Clear chat" bold onClick={tools.onClear} />}
-        {tools && tools.onToggleBlock && <IgRow icon={<Ban />} label={tools.blocked ? `Unblock ${otherName}` : `Block ${otherName}`} bold onClick={tools.onToggleBlock} />}
-        {!(tools && tools.isBot) && <IgRow icon={<Flag />} label={`Report ${otherName}`} bold onClick={() => setShowReportUser(true)} />}
-        {!(tools && tools.isBot) && <IgRow icon={<Trash2 />} label={`Delete chat with ${otherName}`} bold onClick={onDeleteChat} />}
       </div>
       {showMuteOptions && onSetMute && (
         <div onClick={() => setShowMuteOptions(false)} style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end' }}>
@@ -6446,17 +6651,17 @@ function GroupColourSheet({ value, onPick, onClose }) {
   );
 }
 
-function GroupInfoPanel({ group, members, myId, iFollowIds, privacyAllowed, myRole, isOwner, onClose, onPromote, onDemote, onMute, onUnmute, onKick, onLeave, onOpenProfile, onSaveBio, onSaveName, onSaveAvatar, onAddMembers, onTransferOwnership, onSetWallpaper, onSetHeaderStyle, onOpenSettings, messages = [], onSetAccent, disappearSecs, onSetDisappear, onOpenMedia, onJumpToMessage, tools }) {
+function GroupInfoPanel({ group, members, myId, iFollowIds, privacyAllowed, myRole, isOwner, onClose, onPromote, onDemote, onMute, onUnmute, onKick, onLeave, onOpenProfile, onSaveBio, onSaveName, onSaveAvatar, onAddMembers, onTransferOwnership, onSetWallpaper, onSetHeaderStyle, onOpenSettings, onOpenMembers, messages = [], onSetAccent, disappearSecs, onSetDisappear, onOpenMedia, onJumpToMessage, tools }) {
   useBackClose(true, onClose);
   const edgeBack = useEdgeSwipeBack(true);
   const { theme } = useTheme();
   const c = igPalette(theme);
   const isAdmin = myRole === 'admin';
   const accent = groupAccent(group);
-  const [tab, setTab] = useState('members');
-  const [q, setQ] = useState('');
+  const [bioOpen, setBioOpen] = useState(false);
   const [menuFor, setMenuFor] = useState(null);
   const [menuAnchor, setMenuAnchor] = useState(null);
+  const [titleFor, setTitleFor] = useState(null);
   const [editingBio, setEditingBio] = useState(false);
   const [bio, setBio] = useState(group.bio || '');
   const [editingName, setEditingName] = useState(false);
@@ -6473,26 +6678,10 @@ function GroupInfoPanel({ group, members, myId, iFollowIds, privacyAllowed, myRo
   const dayAgo = Date.now() - 86400000;
   const todayCount = messages.filter((m) => m.type !== 'system' && !m.deleted && new Date(m.created_at).getTime() > dayAgo).length;
   const nameOf = (id) => { const f = members.find((x) => x.user_id === id); return f && f.profile ? f.profile.name : 'Someone'; };
-  const term = q.trim().toLowerCase();
   const rank = (m) => (m.user_id === group.created_by ? 0 : m.role === 'admin' ? 1 : 2);
-  const shown = members
-    .filter((m) => m.profile && (!term || (m.profile.name || '').toLowerCase().includes(term) || (m.profile.username || '').toLowerCase().includes(term)))
-    .sort((a, b) => rank(a) - rank(b) || (a.profile.name || '').localeCompare(b.profile.name || ''));
-  const media = messages.filter((m) => !m.deleted && (m.type === 'image' || m.type === 'video') && m.media_url).slice().reverse().slice(0, 90);
-  const links = [];
-  const seenLinks = new Set();
-  for (let i = messages.length - 1; i >= 0 && links.length < 40; i--) {
-    const m = messages[i];
-    if (m.deleted || m.type !== 'text') continue;
-    for (const url of extractLinks(m.content)) {
-      if (seenLinks.has(url)) continue;
-      seenLinks.add(url);
-      links.push({ url, from: nameOf(m.sender_id), at: m.created_at });
-    }
-  }
-  const pinned = messages.filter((m) => !m.deleted && m.type !== 'system' && isActiveUntil(m.pinned_until)).slice().reverse();
-  const domainOf = (u) => { try { return new URL(/^https?:/i.test(u) ? u : `https://${u}`).hostname.replace(/^www\./, ''); } catch { return u; } };
-  const hrefOf = (u) => (u.includes('@') && !/^https?:|^www\./i.test(u) ? `mailto:${u}` : (/^https?:/i.test(u) ? u : `https://${u}`));
+  const ranked = members.filter((m) => m.profile).sort((a, b) => rank(a) - rank(b) || (a.profile.name || '').localeCompare(b.profile.name || ''));
+  const preview = ranked.length > 6 ? ranked.slice(0, 5) : ranked;
+  const media = messages.filter((m) => !m.deleted && (m.type === 'image' || m.type === 'video') && m.media_url && !parseOnce(m)).slice(-10).reverse();
   const chip = (label) => (
     <span style={{ flex: 'none', fontSize: 10.5, fontWeight: 800, padding: '1px 7px', borderRadius: 8, border: `1px solid ${c.line}`, color: c.dim }}>{label}</span>
   );
@@ -6510,24 +6699,20 @@ function GroupInfoPanel({ group, members, myId, iFollowIds, privacyAllowed, myRo
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3, fontSize: 12, color: c.dim, minWidth: 0 }}>
               {isOwnerRow ? chip('Owner') : m.role === 'admin' ? chip('Admin') : null}
+              {m.title && chip(m.title)}
               {m.muted && chip('Muted')}
               <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: on ? '#34d399' : c.dim, fontWeight: on ? 700 : 400 }}>{on ? 'Online now' : `@${m.profile.username}`}</span>
             </div>
           </div>
         </div>
         {isAdmin && m.user_id !== myId && !isOwnerRow && (
-          <MoreVertical size={18} color={c.dim} style={{ cursor: 'pointer', flexShrink: 0 }}
-            onClick={(e) => { e.stopPropagation(); setMenuAnchor(e.currentTarget); setMenuFor(menuFor === m.user_id ? null : m.user_id); }} />
+          <div role="button" aria-label={`Options for ${m.profile.name}`} onClick={(e) => { e.stopPropagation(); setMenuAnchor(e.currentTarget); setMenuFor(menuFor === m.user_id ? null : m.user_id); }}
+            style={{ display: 'flex', padding: 9, margin: -9, cursor: 'pointer', flexShrink: 0 }}><MoreVertical size={18} color={c.dim} /></div>
         )}
       </div>
     );
   };
 
-  const sectionTitle = (label, n) => (
-    <div style={{ fontSize: 12, fontWeight: 700, color: c.dim, margin: '12px 16px 2px' }}>{label} {n}</div>
-  );
-  const tabs = [['members', 'Members', members.length], ['media', 'Media', media.length], ['links', 'Links', links.length], ['pinned', 'Pinned', pinned.length]];
-  const empty = (text) => <div style={{ textAlign: 'center', padding: '28px 16px', fontSize: 13, color: c.dim }}>{text}</div>;
   const nameLen = (group.name || '').length;
 
   return (
@@ -6576,116 +6761,85 @@ function GroupInfoPanel({ group, members, myId, iFollowIds, privacyAllowed, myRo
         </div>
 
         {tools && (
-          <div style={{ display: 'flex', justifyContent: 'center', gap: 12, margin: '16px 0 4px', flexWrap: 'wrap' }}>
-            {[
-              [<Search size={21} strokeWidth={1.6} />, 'Search', tools.onSearch],
-              tools.onMute ? [tools.muted ? <BellOff size={21} strokeWidth={1.6} /> : <Bell size={21} strokeWidth={1.6} />, tools.muted ? 'Muted' : 'Mute', tools.onMute] : null,
-              tools.onCall ? [<Phone size={21} strokeWidth={1.6} />, tools.inCall ? 'Join' : 'Call', () => tools.onCall('voice')] : null,
-              tools.onCall ? [<VideoIcon size={21} strokeWidth={1.6} />, 'Video', () => tools.onCall('video')] : null,
-            ].filter(Boolean).map(([icon, label, fn]) => (
-              <div key={label} role="button" aria-label={label} onClick={fn} style={{ textAlign: 'center', cursor: 'pointer', width: 58 }}>
-                <div style={{ width: 52, height: 52, borderRadius: '50%', border: `1px solid ${c.line}`, background: c.field, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 6px' }}>{icon}</div>
-                <div style={{ fontSize: 12, color: c.dim }}>{label}</div>
-              </div>
-            ))}
-          </div>
+          <DetailActions items={[
+            [<Search size={21} strokeWidth={1.7} />, 'Search', tools.onSearch],
+            tools.onMute ? [tools.muted ? <BellOff size={21} strokeWidth={1.7} /> : <Bell size={21} strokeWidth={1.7} />, tools.muted ? 'Muted' : 'Mute', tools.onMute, !!tools.muted] : null,
+            tools.onCall ? [<Phone size={21} strokeWidth={1.7} />, tools.inCall ? 'Join' : 'Call', () => tools.onCall('voice'), !!tools.inCall] : null,
+            tools.onCall ? [<VideoIcon size={21} strokeWidth={1.7} />, 'Video', () => tools.onCall('video')] : null,
+            isAdmin ? [<UserPlus size={21} strokeWidth={1.7} />, 'Add', () => setShowAddMembers(true)] : null,
+          ]} />
         )}
 
-        <IgHeading>About</IgHeading>
-        <div style={{ padding: '0 16px 6px' }}>
-          {editingBio ? (
-            <div style={{ display: 'flex', gap: 6 }}>
-              <input value={bio} onChange={(e) => setBio(e.target.value.slice(0, 120))} placeholder="What's this group about?" style={{ ...inputStyle(theme), fontSize: 13 }} />
-              <button onClick={() => { onSaveBio(bio); setEditingBio(false); }} style={{ padding: '0 16px', borderRadius: 13, border: 'none', background: c.fg, color: c.bg, fontWeight: 800, fontSize: 12.5, cursor: 'pointer', fontFamily: FONT }}>Save</button>
-            </div>
-          ) : (
-            <div onClick={() => isAdmin && setEditingBio(true)} style={{ fontSize: 14, lineHeight: 1.5, color: group.bio ? c.fg : c.dim, cursor: isAdmin ? 'pointer' : 'default', wordBreak: 'break-word' }}>
-              {group.bio ? <RichText text={group.bio} onMention={onOpenProfile} /> : (isAdmin ? 'Add a group bio' : 'No bio yet')}
+        <DetailSection title="About">
+          <div style={{ padding: '12px 14px' }}>
+            {editingBio ? (
+              <div style={{ display: 'flex', gap: 6 }}>
+                <input value={bio} onChange={(e) => setBio(e.target.value.slice(0, 120))} placeholder="What is this group about?" aria-label="Group bio" style={{ ...inputStyle(theme), fontSize: 13 }} />
+                <button onClick={() => { onSaveBio(bio); setEditingBio(false); }} style={{ padding: '0 16px', borderRadius: 13, border: 'none', background: c.fg, color: c.bg, fontWeight: 800, fontSize: 12.5, cursor: 'pointer', fontFamily: FONT }}>Save</button>
+              </div>
+            ) : (
+              <div role={isAdmin ? 'button' : undefined} aria-label={isAdmin ? 'Edit group bio' : undefined} onClick={() => { if (isAdmin) setEditingBio(true); else setBioOpen(true); }} style={{ fontSize: 14, lineHeight: 1.5, color: group.bio ? c.fg : c.dim, cursor: 'pointer', wordBreak: 'break-word', overflow: 'hidden', display: bioOpen ? 'block' : '-webkit-box', WebkitLineClamp: 4, WebkitBoxOrient: 'vertical' }}>
+                {group.bio ? <RichText text={group.bio} onMention={onOpenProfile} /> : (isAdmin ? 'Add a group bio' : 'No bio yet')}
+              </div>
+            )}
+          </div>
+        </DetailSection>
+
+        {tools && <MediaStrip media={media} onOpen={onOpenMedia} onSeeAll={tools.onMedia} />}
+
+        {tools && (
+          <DetailSection title="In this chat" flush>
+            <DetailTiles items={[
+              tools.onPinned ? { icon: <Pin_ color="currentColor" />, label: 'Pinned', aria: 'Pinned messages', badge: tools.pinnedCount, onClick: tools.onPinned } : null,
+              tools.onJumpDate ? { icon: <CalendarIcon />, label: 'Jump to date', aria: 'Jump to a date', onClick: tools.onJumpDate } : null,
+              tools.onScheduled ? { icon: <Clock />, label: 'Scheduled', aria: 'Scheduled messages', badge: tools.scheduledCount, onClick: tools.onScheduled } : null,
+              ...(tools.moreTiles || []),
+              { icon: <Activity />, label: 'Insights', aria: 'Chat insights', onClick: tools.onInsights },
+              { icon: <Download />, label: 'Export', aria: 'Export chat', onClick: tools.onExport },
+            ]} />
+          </DetailSection>
+        )}
+
+        <DetailSection title="Customize" flush>
+          <DetailTiles items={[
+            ...((tools && tools.moreCustomize) || []),
+            { icon: <ImageIcon />, label: 'Wallpaper', onClick: () => setShowWallpaper(true) },
+            isAdmin ? { icon: <Palette />, label: 'Header', aria: 'Header style', onClick: () => setShowHeaderStyle(true) } : null,
+            tools ? { icon: <BubblesIcon />, label: 'Bubbles', aria: 'Chat bubbles', onClick: tools.onBubbles } : null,
+            isAdmin ? { icon: <Sparkles />, label: 'Colour', aria: 'Group colour', dot: accent, onClick: () => setShowColour(true) } : null,
+          ]} />
+        </DetailSection>
+
+        <DetailSection title="Group">
+          {detailRows([
+            <DetailRow icon={<Timer />} label="Disappearing messages" value={disappearLabel(disappearSecs)} onClick={() => setShowDisappear(true)} />,
+            onOpenSettings ? <DetailRow icon={<SettingsIcon />} label="Group settings" sub={isAdmin ? 'Who can send, add people, invite link' : 'Notifications, pin and more'} onClick={onOpenSettings} /> : null,
+            ...((tools && tools.morePrivacy) || []),
+          ])}
+        </DetailSection>
+
+        <DetailSection title={`${members.length} ${members.length === 1 ? 'member' : 'members'}`} right={ranked.length > preview.length ? <div role="button" aria-label="See all members" onClick={() => (onOpenMembers ? onOpenMembers() : null)} style={{ fontSize: 13, fontWeight: 800, color: theme.coral, cursor: 'pointer', padding: '2px 0 2px 10px' }}>See all</div> : null}>
+          {isAdmin && (
+            <div role="button" aria-label="Add people" onClick={() => setShowAddMembers(true)} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', cursor: 'pointer', borderBottom: `1px solid ${theme.border}` }}>
+              <div style={{ width: 48, height: 48, borderRadius: '50%', background: `${theme.coral}24`, color: theme.coral, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><UserPlus size={21} /></div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: theme.ink }}>Add people</div>
             </div>
           )}
-        </div>
-        <div style={{ height: 8 }} />
-        {isAdmin && <IgRow icon={<UserPlus />} label="Add people" onClick={() => setShowAddMembers(true)} />}
-        <IgRow icon={<ImageIcon />} label="Wallpaper" onClick={() => setShowWallpaper(true)} />
-        {isAdmin && <IgRow icon={<Palette />} label="Header style" onClick={() => setShowHeaderStyle(true)} />}
-        <IgRow icon={<Timer />} label="Disappearing messages" value={disappearLabel(disappearSecs)} onClick={() => setShowDisappear(true)} />
-        {isAdmin && <IgRow icon={<Palette />} label="Group colour" onClick={() => setShowColour(true)} right={<span style={{ width: 22, height: 22, borderRadius: '50%', background: accent, border: `2px solid ${c.line}`, flex: 'none' }} />} />}
-        {onOpenSettings && <IgRow icon={<SettingsIcon />} label="Group settings" onClick={onOpenSettings} />}
-        {tools && (
-          <>
-            <IgHeading>In this chat</IgHeading>
-            <IgRow icon={<ImageIcon />} label="Media, links and voice" onClick={tools.onMedia} />
-            {tools.onJumpDate && <IgRow icon={<CalendarIcon />} label="Jump to a date" onClick={tools.onJumpDate} />}
-            {tools.onPinned && <IgRow icon={<Pin_ color="currentColor" />} label="Pinned messages" value={String(tools.pinnedCount)} onClick={tools.onPinned} />}
-            {tools.onScheduled && <IgRow icon={<Clock />} label="Scheduled messages" value={String(tools.scheduledCount)} onClick={tools.onScheduled} />}
-            <IgRow icon={<BubblesIcon />} label="Chat bubbles" value={tools.bubbleLabel || ''} onClick={tools.onBubbles} />
-            <IgRow icon={<Activity />} label="Chat insights" onClick={tools.onInsights} />
-            <IgRow icon={<Download />} label="Export chat" onClick={tools.onExport} />
-            {tools.onClear && <IgRow icon={<Trash2 />} label="Clear chat" bold onClick={tools.onClear} />}
-          </>
-        )}
-
-        <div style={{ display: 'flex', borderBottom: `1px solid ${c.line}`, marginTop: 14 }}>
-          {tabs.map(([k, label, n]) => (
-            <div key={k} role="button" aria-label={`Tab ${label}`} onClick={() => setTab(k)} style={{
-              flex: 1, textAlign: 'center', padding: '12px 2px', fontSize: 13.5, fontWeight: 700, cursor: 'pointer',
-              color: tab === k ? c.fg : c.dim, borderBottom: tab === k ? `2px solid ${accent}` : '2px solid transparent', marginBottom: -1,
-            }}>{label}{n ? ` ${n}` : ''}</div>
-          ))}
-        </div>
-
-        {tab === 'members' && (
-          <>
-            {members.length > 6 && (
-              <div style={{ position: 'relative', margin: '10px 16px 4px' }}>
-                <Search size={15} color={c.dim} style={{ position: 'absolute', left: 12, top: 12 }} />
-                <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search members" autoCapitalize="none" style={{ ...inputStyle(theme), padding: '9px 12px 9px 34px', fontSize: 13.5 }} />
-              </div>
-            )}
-            {term ? (shown.length ? shown.map(memberRow) : empty('No member matches that.')) : (
-              [[0, 'Owner'], [1, 'Admins'], [2, 'Members']].map(([r, label]) => {
-                const list = shown.filter((m) => rank(m) === r);
-                if (!list.length) return null;
-                return <div key={r}>{sectionTitle(label, list.length)}{list.map(memberRow)}</div>;
-              })
-            )}
-          </>
-        )}
-
-        {tab === 'media' && (media.length ? (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2, marginTop: 2 }}>
-            {media.map((m) => (
-              <div key={m.id} role="button" onClick={() => onOpenMedia && onOpenMedia(m)} style={{ position: 'relative', aspectRatio: '1 / 1', background: c.field, overflow: 'hidden', cursor: 'pointer' }}>
-                {m.type === 'video'
-                  ? <VideoThumb src={m.media_url} style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} />
-                  : <MediaImg src={m.media_url} loading="lazy" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
-                {m.type === 'video' && <Play size={15} color="white" style={{ position: 'absolute', top: 6, right: 6, filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.6))' }} />}
-              </div>
-            ))}
-          </div>
-        ) : empty('Photos and videos shared in this group show up here.'))}
-
-        {tab === 'links' && (links.length ? links.map((l) => (
-          <a key={l.url} href={hrefOf(l.url)} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '11px 16px', textDecoration: 'none', color: 'inherit' }}>
-            <LinkIcon size={22} strokeWidth={1.6} style={{ flex: 'none' }} />
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontWeight: 700, fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{domainOf(l.url)}</div>
-              <div style={{ fontSize: 12, color: c.dim, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Shared by {l.from} {timeAgoLong(l.at)}</div>
+          <div style={{ padding: '4px 0' }}>{preview.map(memberRow)}</div>
+          {ranked.length > preview.length && (
+            <div role="button" aria-label="Show all members" onClick={() => (onOpenMembers ? onOpenMembers() : null)} style={{ borderTop: `1px solid ${theme.border}`, padding: '13px 16px', textAlign: 'center', fontSize: 14, fontWeight: 700, color: theme.coral, cursor: 'pointer' }}>
+              See all {members.length} members
             </div>
-          </a>
-        )) : empty('Links shared in this group show up here.'))}
+          )}
+        </DetailSection>
 
-        {tab === 'pinned' && (pinned.length ? pinned.map((m) => (
-          <div key={m.id} role="button" onClick={() => onJumpToMessage && onJumpToMessage(m.id)} style={{ padding: '11px 16px', cursor: 'pointer', borderBottom: `1px solid ${c.line}` }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: c.dim, marginBottom: 3 }}>{nameOf(m.sender_id)}</div>
-            <div style={{ fontSize: 14, lineHeight: 1.4, wordBreak: 'break-word' }}>{String(describeMessage(m).text || '').slice(0, 200)}</div>
-          </div>
-        )) : empty('Pinned messages show up here.'))}
-
-        <div style={{ marginTop: 18, opacity: (soleAdmin || isOwner) ? 0.55 : 1 }}>
-          <IgRow icon={<LogOut />} bold onClick={() => { if (!soleAdmin && !isOwner) onLeave(); }}
-            label={isOwner ? 'Transfer ownership before leaving' : soleAdmin ? 'Leave group (assign a new admin first)' : 'Leave group'} />
-        </div>
+        <DetailSection>
+          {detailRows([
+            tools && tools.onClear ? <DetailRow icon={<Trash2 />} label="Clear chat" danger onClick={tools.onClear} /> : null,
+            <DetailRow icon={<LogOut />} danger onClick={() => { if (!soleAdmin && !isOwner) onLeave(); }}
+              label={isOwner ? 'Transfer ownership before leaving' : soleAdmin ? 'Leave group (assign a new admin first)' : 'Leave group'} />,
+          ])}
+        </DetailSection>
       </div>
 
       <SmartMenu anchorEl={menuAnchor} open={!!menuFor} onClose={() => setMenuFor(null)} width={200}>
@@ -6699,12 +6853,14 @@ function GroupInfoPanel({ group, members, myId, iFollowIds, privacyAllowed, myRo
             <div style={{ background: theme.panelBg, borderRadius: 14, boxShadow: '0 8px 24px rgba(0,0,0,0.2)', border: `1px solid ${theme.border}`, overflow: 'hidden' }}>
               {isOwner && (mm.role === 'admin' ? item('Remove as admin', () => onDemote(mm.user_id)) : item('Make admin', () => onPromote(mm.user_id)))}
               {isOwner && item('Transfer ownership', () => onTransferOwnership(mm.user_id), accent)}
+              {tools && tools.onSetTitle && item(mm.title ? 'Change title' : 'Give a title', () => setTitleFor(mm))}
               {mm.muted ? item('Unmute member', () => onUnmute(mm.user_id)) : item('Mute member', () => onMute(mm.user_id))}
               {item('Remove from group', () => onKick(mm.user_id), theme.danger, true)}
             </div>
           );
         })()}
       </SmartMenu>
+      {titleFor && tools && tools.onSetTitle && <MemberTitleSheet member={titleFor} onClose={() => setTitleFor(null)} onSave={(t) => tools.onSetTitle(titleFor.user_id, t)} />}
       {cropFile && (
         <PhotoCropEditor file={cropFile} isAvatar onCancel={() => setCropFile(null)} onConfirm={(blob) => { onSaveAvatar(blob); setCropFile(null); }} />
       )}
@@ -6730,6 +6886,10 @@ function GroupSettingsPanel({ group, myId, isAdmin, isOwner, isMuted, onSetMute,
   useBackClose(showMuteOptions, () => setShowMuteOptions(false));
   const [addPolicy, setAddPolicy] = useState(group.add_members_policy || 'everyone');
   const [sendPolicy, setSendPolicy] = useState(group.send_policy || 'everyone');
+  const [slowSecs, setSlowSecs] = useState(Number(group.slow_secs || 0));
+  const [mentionAll, setMentionAll] = useState(group.mention_all || 'everyone');
+  const [slowSheet, setSlowSheet] = useState(false);
+  const [mentionSheet, setMentionSheet] = useState(false);
   const [inviteCode, setInviteCode] = useState(group.invite_code || '');
   const [inviteEnabled, setInviteEnabled] = useState(group.invite_enabled !== false);
   const [copied, setCopied] = useState(false);
@@ -6792,13 +6952,13 @@ function GroupSettingsPanel({ group, myId, isAdmin, isOwner, isMuted, onSetMute,
 
   const c = igPalette(theme);
   const segRow = (label, value, onPick) => (
-    <div style={{ padding: '8px 16px 12px' }}>
-      <div style={{ fontSize: 15, fontWeight: 500, marginBottom: 8 }}>{label}</div>
+    <div style={{ padding: '12px 14px' }}>
+      <div style={{ fontSize: 15, fontWeight: 500, marginBottom: 9 }}>{label}</div>
       <div style={{ display: 'flex', gap: 8 }}>
         {[['everyone', 'Everyone'], ['admins', 'Admins only']].map(([val, lab]) => (
-          <div key={val} role="button" aria-label={`${label} ${lab}`} onClick={() => onPick(val)} style={{
-            flex: 1, textAlign: 'center', padding: '9px 6px', borderRadius: 10, fontSize: 13.5, fontWeight: 700, cursor: 'pointer',
-            background: value === val ? c.fg : c.field, color: value === val ? c.bg : c.fg,
+          <div key={val} role="button" aria-label={`${label} ${lab}`} aria-pressed={value === val} onClick={() => onPick(val)} style={{
+            flex: 1, textAlign: 'center', padding: '9px 6px', borderRadius: 11, fontSize: 13.5, fontWeight: 700, cursor: 'pointer',
+            background: value === val ? theme.coral : c.field, color: value === val ? '#FFFFFF' : c.fg,
           }}>{lab}</div>
         ))}
       </div>
@@ -6810,45 +6970,61 @@ function GroupSettingsPanel({ group, myId, isAdmin, isOwner, isMuted, onSetMute,
     <div style={{ position: 'fixed', inset: 0, background: c.bg, color: c.fg, zIndex: 34, display: 'flex', flexDirection: 'column', overflow: 'hidden', fontFamily: FONT }} className="zchat-panel-open zchat-wide-page">
       <IgTopBar title="Group settings" onBack={onClose} />
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', paddingBottom: 'calc(28px + env(safe-area-inset-bottom))' }}>
-        <IgHeading>Your settings</IgHeading>
-        <IgRow icon={isMuted ? <BellOff /> : <Bell />} label="Mute notifications" value={muteLabel} onClick={() => setShowMuteOptions(true)} />
-        <IgRow icon={<Pin_ color="currentColor" />} label="Pin group" onClick={onTogglePin} right={<IgToggle on={!!isPinned} />} />
-        <IgRow icon={<Timer />} label="Disappearing messages" value={disappearLabel(disappearSecs)} onClick={() => setShowDisappear(true)} />
+        <DetailSection title="Your settings">
+          {detailRows([
+            <DetailRow icon={isMuted ? <BellOff /> : <Bell />} label="Mute notifications" value={muteLabel} onClick={() => setShowMuteOptions(true)} />,
+            <DetailRow icon={<Pin_ color="currentColor" />} label="Pin group" onClick={onTogglePin} right={<IgToggle on={!!isPinned} />} />,
+            <DetailRow icon={<Timer />} label="Disappearing messages" value={disappearLabel(disappearSecs)} onClick={() => setShowDisappear(true)} />,
+          ])}
+        </DetailSection>
         {showDisappear && <DisappearSheet value={disappearSecs} subject="this group" canEdit={isAdmin} onPick={onSetDisappear} onClose={() => setShowDisappear(false)} />}
 
         {isAdmin && (
           <>
-            <IgHeading>Admin controls</IgHeading>
-            <IgRow icon={<Pencil />} label="Edit name, photo and description" onClick={onOpenEdit} />
-            <IgRow icon={<ShieldCheck />} label="Manage members and admins" onClick={onOpenAdmins} />
-            {segRow('Who can add members', addPolicy, (val) => savePolicy('add_members_policy', val, setAddPolicy))}
-            {segRow('Who can send messages', sendPolicy, (val) => savePolicy('send_policy', val, setSendPolicy))}
-            <IgRow icon={<LinkIcon />} label="Invite link" onClick={toggleInvite} right={<IgToggle on={inviteEnabled} />} />
-            {inviteEnabled && (
-              <div style={{ padding: '0 16px 12px 56px' }}>
-                <div style={{ fontSize: 12.5, color: c.dim, marginBottom: 8, wordBreak: 'break-all' }}>{siteOrigin()}/?join={inviteCode}</div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <div role="button" aria-label="Share invite link" onClick={copyInvite} style={{ flex: 1, textAlign: 'center', padding: '9px 6px', borderRadius: 10, fontSize: 13.5, fontWeight: 700, cursor: 'pointer', background: c.fg, color: c.bg }}>{copied ? 'Copied' : 'Share link'}</div>
+            <DetailSection title="Admin controls">
+              {detailRows([
+                <DetailRow icon={<Pencil />} label="Edit name, photo and description" onClick={onOpenEdit} />,
+                <DetailRow icon={<ShieldCheck />} label="Manage members and admins" onClick={onOpenAdmins} />,
+              ])}
+            </DetailSection>
+            <DetailSection title="Permissions">
+              {segRow('Who can add members', addPolicy, (val) => savePolicy('add_members_policy', val, setAddPolicy))}
+              <div style={{ height: 1, background: theme.border, marginLeft: 14 }} />
+              {segRow('Who can send messages', sendPolicy, (val) => savePolicy('send_policy', val, setSendPolicy))}
+              <div style={{ height: 1, background: theme.border, marginLeft: 14 }} />
+              <DetailRow icon={<Timer />} label="Slow mode" sub="Members wait between messages" value={slowModeLabel(slowSecs)} onClick={() => setSlowSheet(true)} />
+              <DetailRow icon={<AtSign />} label="Mention everyone" sub="Who can use @everyone" value={mentionAll === 'admins' ? 'Admins only' : 'Everyone'} onClick={() => setMentionSheet(true)} last />
+            </DetailSection>
+            <DetailSection title="Invite link">
+              <DetailRow icon={<LinkIcon />} label="Invite link" sub={inviteEnabled ? 'Anyone with the link can join' : 'Turned off'} onClick={toggleInvite} right={<IgToggle on={inviteEnabled} />} last={!inviteEnabled} />
+              {inviteEnabled && (
+                <div style={{ padding: '2px 14px 14px 46px' }}>
+                  <div style={{ fontSize: 12.5, color: c.dim, marginBottom: 9, wordBreak: 'break-all' }}>{siteOrigin()}/?join={inviteCode}</div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                  <div role="button" aria-label="Share invite link" onClick={copyInvite} style={{ flex: 1, textAlign: 'center', padding: '9px 6px', borderRadius: 10, fontSize: 13.5, fontWeight: 700, cursor: 'pointer', background: theme.coral, color: '#FFFFFF' }}>{copied ? 'Copied' : 'Share link'}</div>
                   <div role="button" aria-label="Reset invite link" onClick={resetInvite} style={{ flex: 1, textAlign: 'center', padding: '9px 6px', borderRadius: 10, fontSize: 13.5, fontWeight: 700, cursor: 'pointer', background: c.field, color: c.fg }}>Reset link</div>
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+            </DetailSection>
           </>
         )}
 
-        <IgHeading>Activity</IgHeading>
-        {activity === null ? (
-          <div style={{ padding: 20, textAlign: 'center' }}><Spinner size={18} color={c.dim} /></div>
-        ) : (
-          <>
-            {activity.top && <IgRow icon={<Users />} label="Most active this week" sub={`${activity.top.name} \u00b7 ${activity.top.count} messages`} />}
-            <IgRow icon={<Clock />} label="Last activity" sub={activity.lastActivity ? timeAgoLong(activity.lastActivity) : 'No messages this week'} />
-          </>
-        )}
+        <DetailSection title="Activity">
+          {activity === null ? (
+            <div style={{ padding: 20, textAlign: 'center' }}><Spinner size={18} color={c.dim} /></div>
+          ) : detailRows([
+            activity.top ? <DetailRow icon={<Users />} label="Most active this week" sub={`${activity.top.name} \u00b7 ${activity.top.count} messages`} /> : null,
+            <DetailRow icon={<Clock />} label="Last activity" sub={activity.lastActivity ? timeAgoLong(activity.lastActivity) : 'No messages this week'} />,
+          ])}
+        </DetailSection>
 
-        <IgHeading>More</IgHeading>
-        <IgRow icon={<LogOut />} label="Leave group" bold onClick={onLeave} />
-        {isOwner && <IgRow icon={<Trash2 />} label="Delete group" bold onClick={() => setConfirmDelete(true)} />}
+        <DetailSection>
+          {detailRows([
+            <DetailRow icon={<LogOut />} label="Leave group" danger onClick={onLeave} />,
+            isOwner ? <DetailRow icon={<Trash2 />} label="Delete group" danger onClick={() => setConfirmDelete(true)} /> : null,
+          ])}
+        </DetailSection>
       </div>
 
       {showMuteOptions && (
@@ -6863,6 +7039,8 @@ function GroupSettingsPanel({ group, myId, isAdmin, isOwner, isMuted, onSetMute,
         </div>
       )}
 
+      {slowSheet && <SlowModeSheet value={slowSecs} onClose={() => setSlowSheet(false)} onPick={(v) => savePolicy('slow_secs', v, setSlowSecs)} />}
+      {mentionSheet && <MentionAllSheet value={mentionAll} onClose={() => setMentionSheet(false)} onPick={(v) => savePolicy('mention_all', v, setMentionAll)} />}
       {confirmDelete && (
         <ConfirmDialog
           title={`Delete ${group.name}?`}
@@ -6878,12 +7056,13 @@ function GroupSettingsPanel({ group, myId, isAdmin, isOwner, isMuted, onSetMute,
   );
 }
 
-function GroupMembersPanel({ group, members, myId, isAdmin, isOwner, onClose, onOpenProfile, onAddMembers, onPromote, onDemote, onKick, onMute, onUnmute, onTransferOwnership }) {
+function GroupMembersPanel({ group, members, myId, isAdmin, isOwner, onClose, onOpenProfile, onAddMembers, onPromote, onDemote, onKick, onMute, onUnmute, onTransferOwnership, onSetTitle }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
   const [q, setQ] = useState('');
   const [tab, setTab] = useState('all');
   const [sheetFor, setSheetFor] = useState(null);
+  const [titleFor, setTitleFor] = useState(null);
   useBackClose(!!sheetFor, () => setSheetFor(null));
 
   const isOnline = (m) => m.profile && !m.profile.hide_activity && m.profile.last_seen && Date.now() - new Date(m.profile.last_seen).getTime() < 3 * 60 * 1000;
@@ -6929,6 +7108,7 @@ function GroupMembersPanel({ group, members, myId, isAdmin, isOwner, onClose, on
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontWeight: 700, fontSize: 14, color: theme.ink, display: 'flex', alignItems: 'center', gap: 6 }}>
                 <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.profile.name}</span><VerifiedBadge tier={m.profile.verified} custom={m.profile.custom_badge} size={12} />
+                {m.title && <span style={{ flexShrink: 0, fontSize: 10, fontWeight: 800, padding: '1px 6px', borderRadius: 7, background: theme.rowBg, color: theme.muted }}>{m.title}</span>}
               </div>
               <div style={{ fontSize: 11.5, color: theme.muted, display: 'flex', gap: 6, alignItems: 'center' }}>
                 {isOnline(m) ? <span style={{ color: '#22c55e', fontWeight: 700 }}>Online</span> : (m.profile.last_seen ? timeAgoLong(m.profile.last_seen) : '')}
@@ -6941,6 +7121,7 @@ function GroupMembersPanel({ group, members, myId, isAdmin, isOwner, onClose, on
         ))}
       </div>
 
+      {titleFor && onSetTitle && <MemberTitleSheet member={titleFor} onClose={() => setTitleFor(null)} onSave={(t) => onSetTitle(titleFor.user_id, t)} />}
       {sheetMember && (
         <div onClick={() => setSheetFor(null)} style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end' }}>
           <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ width: '100%', background: theme.panelBg, borderRadius: '22px 22px 0 0', padding: '18px 18px calc(18px + env(safe-area-inset-bottom))' }}>
@@ -6963,6 +7144,7 @@ function GroupMembersPanel({ group, members, myId, isAdmin, isOwner, onClose, on
               ) : (
                 <div role="button" onClick={() => { onMute(sheetMember.user_id); setSheetFor(null); }} style={{ padding: '12px 8px', borderRadius: 13, background: theme.rowBg, textAlign: 'center', fontSize: 13, fontWeight: 700, color: theme.ink, cursor: 'pointer' }}>Mute in group</div>
               )}
+              {onSetTitle && <div role="button" aria-label="Give a title" onClick={() => { setTitleFor(sheetMember); setSheetFor(null); }} style={{ padding: '12px 8px', borderRadius: 13, background: theme.rowBg, textAlign: 'center', fontSize: 13, fontWeight: 700, color: theme.ink, cursor: 'pointer' }}>{sheetMember.title ? 'Change title' : 'Give a title'}</div>}
               <div role="button" onClick={() => { onKick(sheetMember.user_id); setSheetFor(null); }} style={{ padding: '12px 8px', borderRadius: 13, background: `${theme.danger}1A`, textAlign: 'center', fontSize: 13, fontWeight: 700, color: theme.danger, cursor: 'pointer' }}>Remove</div>
             </div>
           </div>
@@ -7206,11 +7388,262 @@ function ProfileLinkCard({ profileId, onOpen }) {
   );
 }
 
+const QR_ECC_PER_BLOCK = [-1, 10, 16, 26, 18, 24, 16, 18, 22, 22, 26, 30, 22, 22, 24, 24, 28, 28, 26, 26, 26];
+const QR_BLOCKS = [-1, 1, 1, 1, 2, 2, 4, 4, 4, 5, 5, 5, 8, 9, 9, 10, 10, 11, 13, 14, 16];
+function qrRawModules(ver) {
+  let result = (16 * ver + 128) * ver + 64;
+  if (ver >= 2) {
+    const n = Math.floor(ver / 7) + 2;
+    result -= (25 * n - 10) * n - 55;
+    if (ver >= 7) result -= 36;
+  }
+  return result;
+}
+function qrDataCodewords(ver) { return Math.floor(qrRawModules(ver) / 8) - QR_ECC_PER_BLOCK[ver] * QR_BLOCKS[ver]; }
+function qrMul(x, y) {
+  let z = 0;
+  for (let i = 7; i >= 0; i--) {
+    z = (z << 1) ^ ((z >>> 7) * 0x11D);
+    z ^= ((y >>> i) & 1) * x;
+  }
+  return z & 0xFF;
+}
+function qrDivisor(degree) {
+  const result = [];
+  for (let i = 0; i < degree - 1; i++) result.push(0);
+  result.push(1);
+  let root = 1;
+  for (let i = 0; i < degree; i++) {
+    for (let j = 0; j < result.length; j++) {
+      result[j] = qrMul(result[j], root);
+      if (j + 1 < result.length) result[j] ^= result[j + 1];
+    }
+    root = qrMul(root, 0x02);
+  }
+  return result;
+}
+function qrRemainder(data, divisor) {
+  const result = divisor.map(() => 0);
+  data.forEach((b) => {
+    const factor = b ^ result.shift();
+    result.push(0);
+    divisor.forEach((coef, i) => { result[i] ^= qrMul(coef, factor); });
+  });
+  return result;
+}
+function qrAlignments(ver) {
+  if (ver === 1) return [];
+  const n = Math.floor(ver / 7) + 2;
+  const step = Math.ceil((ver * 4 + 4) / (n * 2 - 2)) * 2;
+  const result = [6];
+  for (let pos = ver * 4 + 10; result.length < n; pos -= step) result.splice(1, 0, pos);
+  return result;
+}
+function qrMatrix(text) {
+  const bytes = Array.from(new TextEncoder().encode(String(text || '')));
+  let ver = 1;
+  while (ver <= 20 && qrDataCodewords(ver) * 8 < 4 + (ver <= 9 ? 8 : 16) + bytes.length * 8) ver += 1;
+  if (ver > 20) return null;
+  const bits = [];
+  const put = (val, len) => { for (let i = len - 1; i >= 0; i--) bits.push((val >>> i) & 1); };
+  put(4, 4);
+  put(bytes.length, ver <= 9 ? 8 : 16);
+  bytes.forEach((b) => put(b, 8));
+  const cap = qrDataCodewords(ver) * 8;
+  put(0, Math.min(4, cap - bits.length));
+  put(0, (8 - (bits.length % 8)) % 8);
+  for (let pad = 0xEC; bits.length < cap; pad ^= 0xEC ^ 0x11) put(pad, 8);
+  const data = [];
+  for (let i = 0; i < bits.length; i += 8) {
+    let v = 0;
+    for (let j = 0; j < 8; j++) v = (v << 1) | bits[i + j];
+    data.push(v);
+  }
+  const numBlocks = QR_BLOCKS[ver];
+  const eccLen = QR_ECC_PER_BLOCK[ver];
+  const raw = Math.floor(qrRawModules(ver) / 8);
+  const numShort = numBlocks - (raw % numBlocks);
+  const shortLen = Math.floor(raw / numBlocks);
+  const div = qrDivisor(eccLen);
+  const blocks = [];
+  for (let i = 0, k = 0; i < numBlocks; i++) {
+    const dat = data.slice(k, k + shortLen - eccLen + (i < numShort ? 0 : 1));
+    k += dat.length;
+    const ecc = qrRemainder(dat, div);
+    if (i < numShort) dat.push(0);
+    blocks.push(dat.concat(ecc));
+  }
+  const words = [];
+  for (let i = 0; i < blocks[0].length; i++) {
+    blocks.forEach((block, j) => { if (i !== shortLen - eccLen || j >= numShort) words.push(block[i]); });
+  }
+  const size = ver * 4 + 17;
+  const mods = [];
+  const fn = [];
+  for (let y = 0; y < size; y++) { mods.push(new Array(size).fill(false)); fn.push(new Array(size).fill(false)); }
+  const setF = (x, y, dark) => { mods[y][x] = dark; fn[y][x] = true; };
+  for (let i = 0; i < size; i++) { setF(6, i, i % 2 === 0); setF(i, 6, i % 2 === 0); }
+  const finder = (cx, cy) => {
+    for (let dy = -4; dy <= 4; dy++) {
+      for (let dx = -4; dx <= 4; dx++) {
+        const d = Math.max(Math.abs(dx), Math.abs(dy));
+        const x = cx + dx;
+        const y = cy + dy;
+        if (x >= 0 && x < size && y >= 0 && y < size) setF(x, y, d !== 2 && d !== 4);
+      }
+    }
+  };
+  finder(3, 3);
+  finder(size - 4, 3);
+  finder(3, size - 4);
+  const al = qrAlignments(ver);
+  const last = al.length - 1;
+  al.forEach((ax, i) => al.forEach((ay, j) => {
+    if ((i === 0 && j === 0) || (i === 0 && j === last) || (i === last && j === 0)) return;
+    for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) setF(ax + dx, ay + dy, Math.max(Math.abs(dx), Math.abs(dy)) !== 1);
+  }));
+  const formatBits = (mask) => {
+    const d = (0 << 3) | mask;
+    let rem = d;
+    for (let i = 0; i < 10; i++) rem = (rem << 1) ^ ((rem >>> 9) * 0x537);
+    const b = ((d << 10) | rem) ^ 0x5412;
+    const bit = (i) => ((b >>> i) & 1) !== 0;
+    for (let i = 0; i <= 5; i++) setF(8, i, bit(i));
+    setF(8, 7, bit(6));
+    setF(8, 8, bit(7));
+    setF(7, 8, bit(8));
+    for (let i = 9; i < 15; i++) setF(14 - i, 8, bit(i));
+    for (let i = 0; i < 8; i++) setF(size - 1 - i, 8, bit(i));
+    for (let i = 8; i < 15; i++) setF(8, size - 15 + i, bit(i));
+    setF(8, size - 8, true);
+  };
+  formatBits(0);
+  if (ver >= 7) {
+    let rem = ver;
+    for (let i = 0; i < 12; i++) rem = (rem << 1) ^ ((rem >>> 11) * 0x1F25);
+    const vb = (ver << 12) | rem;
+    for (let i = 0; i < 18; i++) {
+      const dark = ((vb >>> i) & 1) !== 0;
+      const a = size - 11 + (i % 3);
+      const c = Math.floor(i / 3);
+      setF(a, c, dark);
+      setF(c, a, dark);
+    }
+  }
+  let idx = 0;
+  for (let right = size - 1; right >= 1; right -= 2) {
+    if (right === 6) right = 5;
+    for (let vert = 0; vert < size; vert++) {
+      for (let j = 0; j < 2; j++) {
+        const x = right - j;
+        const upward = ((right + 1) & 2) === 0;
+        const y = upward ? size - 1 - vert : vert;
+        if (!fn[y][x] && idx < words.length * 8) {
+          mods[y][x] = ((words[idx >>> 3] >>> (7 - (idx & 7))) & 1) !== 0;
+          idx += 1;
+        }
+      }
+    }
+  }
+  const flip = (mask) => {
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        if (fn[y][x]) continue;
+        let inv = false;
+        if (mask === 0) inv = (x + y) % 2 === 0;
+        else if (mask === 1) inv = y % 2 === 0;
+        else if (mask === 2) inv = x % 3 === 0;
+        else if (mask === 3) inv = (x + y) % 3 === 0;
+        else if (mask === 4) inv = (Math.floor(x / 3) + Math.floor(y / 2)) % 2 === 0;
+        else if (mask === 5) inv = ((x * y) % 2) + ((x * y) % 3) === 0;
+        else if (mask === 6) inv = (((x * y) % 2) + ((x * y) % 3)) % 2 === 0;
+        else inv = (((x + y) % 2) + ((x * y) % 3)) % 2 === 0;
+        if (inv) mods[y][x] = !mods[y][x];
+      }
+    }
+  };
+  const penalty = () => {
+    let score = 0;
+    const runs = (get) => {
+      for (let a = 0; a < size; a++) {
+        let color = get(a, 0);
+        let len = 1;
+        for (let b = 1; b <= size; b++) {
+          const cur = b < size ? get(a, b) : null;
+          if (cur === color) { len += 1; continue; }
+          if (len >= 5) score += 3 + (len - 5);
+          color = cur;
+          len = 1;
+        }
+        for (let b = 0; b + 6 < size; b++) {
+          if (get(a, b) && !get(a, b + 1) && get(a, b + 2) && get(a, b + 3) && get(a, b + 4) && !get(a, b + 5) && get(a, b + 6)) {
+            const before = b >= 4 && !get(a, b - 1) && !get(a, b - 2) && !get(a, b - 3) && !get(a, b - 4);
+            const after = b + 10 < size && !get(a, b + 7) && !get(a, b + 8) && !get(a, b + 9) && !get(a, b + 10);
+            if (before || after) score += 40;
+          }
+        }
+      }
+    };
+    runs((a, b) => mods[a][b]);
+    runs((a, b) => mods[b][a]);
+    let dark = 0;
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        if (mods[y][x]) dark += 1;
+        if (y < size - 1 && x < size - 1) {
+          const c = mods[y][x];
+          if (c === mods[y][x + 1] && c === mods[y + 1][x] && c === mods[y + 1][x + 1]) score += 3;
+        }
+      }
+    }
+    const total = size * size;
+    score += (Math.ceil(Math.abs(dark * 20 - total * 10) / total) - 1) * 10;
+    return score;
+  };
+  let best = 0;
+  let bestScore = Infinity;
+  for (let m = 0; m < 8; m++) {
+    flip(m);
+    formatBits(m);
+    const s = penalty();
+    if (s < bestScore) { bestScore = s; best = m; }
+    flip(m);
+  }
+  flip(best);
+  formatBits(best);
+  return mods;
+}
+function qrDataUrl(text, px = 360, dark = '#111114', light = '#FFFFFF') {
+  try {
+    const mods = qrMatrix(text);
+    if (!mods || typeof document === 'undefined') return '';
+    const size = mods.length;
+    const quiet = 3;
+    const cells = size + quiet * 2;
+    const scale = Math.max(2, Math.floor(px / cells));
+    const canvas = document.createElement('canvas');
+    canvas.width = cells * scale;
+    canvas.height = cells * scale;
+    const g = canvas.getContext('2d');
+    g.fillStyle = light;
+    g.fillRect(0, 0, canvas.width, canvas.height);
+    g.fillStyle = dark;
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        if (mods[y][x]) g.fillRect((x + quiet) * scale, (y + quiet) * scale, scale, scale);
+      }
+    }
+    return canvas.toDataURL('image/png');
+  } catch {
+    return '';
+  }
+}
+
 function ShareProfileSheet({ profile, myId, conversations, groups, onSend, onClose }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
   const link = profileShareLink(profile.id);
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=360x360&margin=10&data=${encodeURIComponent(link)}`;
+  const qrUrl = useMemo(() => qrDataUrl(link, 360) || `https://api.qrserver.com/v1/create-qr-code/?size=360x360&margin=10&data=${encodeURIComponent(link)}`, [link]);
   const [q, setQ] = useState('');
   const [results, setResults] = useState([]);
   const [selected, setSelected] = useState([]);
@@ -7420,6 +7853,9 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
   const [ownedRewards, setOwnedRewards] = useState([]);
   const [profileTab, setProfileTab] = useState('posts');
   const [tryOnFrame, setTryOnFrame] = useState(null);
+  const [statusOpen, setStatusOpen] = useState(false);
+  const [bdayOpen, setBdayOpen] = useState(false);
+  const [avatarMaker, setAvatarMaker] = useState(false);
   useEffect(() => {
     let alive = true;
     let retryTimer = null;
@@ -7716,6 +8152,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
 
           <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '0 20px 18px', color: 'white', zIndex: 1 }}>
             {editing ? (
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <label style={{
                 display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 24, cursor: 'pointer',
                 background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', fontSize: 13.5, fontWeight: 700,
@@ -7724,6 +8161,11 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
                 Change photo
                 <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleAvatarChange} />
               </label>
+              <div role="button" aria-label="Make an avatar" onClick={() => setAvatarMaker(true)} style={{
+                display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 24, cursor: 'pointer',
+                background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', fontSize: 13.5, fontWeight: 700,
+              }}><AvatarMakerIcon size={16} />Make an avatar</div>
+              </div>
             ) : (
               <>
                 {statusText && (
@@ -7857,6 +8299,10 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
                 </div>
               </div>
               <PronounsPicker value={pronouns} onChange={setPronouns} labelStyle={labelStyle} />
+              <div style={{ ...labelStyle, marginTop: 14 }}>Birthday</div>
+              <div role="button" aria-label="Edit birthday" onClick={() => setBdayOpen(true)} style={{ ...inputStyle(theme), cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <CakeIcon size={18} /><span style={{ color: theme.muted }}>Add or change your birthday</span>
+              </div>
               <div style={{ height: 18 }} />
               <div style={{ display: 'flex', gap: 8 }}>
                 <button onClick={cancelEditing} style={pillBtn(false)}>Cancel</button>
@@ -7926,6 +8372,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
                       <RichText text={profile.bio} onMention={(p) => onOpenProfile(sanitizeAvatar(p, userId))} />
                     </div>
                   )}
+                  {!profile.is_bot && <ProfileExtras profile={profile} isSelf={isSelf} onEditStatus={() => setStatusOpen(true)} onEditBirthday={() => setBdayOpen(true)} />}
                   {profile.is_bot && (
                     <div style={{ marginTop: 16, padding: '14px 14px 12px', borderRadius: 20, background: theme.rowBg, border: `1px solid ${theme.border}` }}>
                       <div style={{ fontSize: 13, fontWeight: 900, color: theme.ink, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 7 }}><Sparkles size={15} color={theme.coral} /> What I can do</div>
@@ -8056,6 +8503,19 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
       {listModal && (
         <FollowListModal userId={profile.id} viewerId={userId} mode={listModal} onClose={() => setListModal(null)}
           onOpenProfile={(p) => { setListModal(null); onOpenProfile(p); }} />
+      )}
+      {statusOpen && isSelf && <StatusSheet me={profile} onClose={() => setStatusOpen(false)} onSaved={(patch) => onSaved({ ...profile, ...patch })} />}
+      {bdayOpen && isSelf && <BirthdaySheet userId={profile.id} onClose={() => setBdayOpen(false)} />}
+      {avatarMaker && isSelf && (
+        <AvatarMakerPage initial={profile.avatar_cfg} onClose={() => setAvatarMaker(false)} onSave={async (blob, cfg) => {
+          setAvatarUploading(true);
+          const { url, error } = await uploadMedia(new File([blob], 'avatar.png', { type: 'image/png' }), userId);
+          setAvatarUploading(false);
+          if (error || !url) return false;
+          setAvatar(url);
+          supabase.from('profiles').update({ avatar_cfg: cfg }).eq('id', userId).then(() => {}, () => {});
+          return true;
+        }} />
       )}
       {showPrivacySettings && (
         <AccountPrivacyPanel profile={profile} onClose={() => setShowPrivacySettings(false)}
@@ -8206,12 +8666,13 @@ function RichText({ text, onMention }) {
     if (typeof part === 'string') splitMentions(part).forEach((seg) => pieces.push(seg));
     else pieces.push(part);
   });
-  const names = [...new Set(pieces.filter((seg) => seg && seg.mention).map((seg) => seg.mention))];
+  const names = [...new Set(pieces.filter((seg) => seg && seg.mention && seg.mention !== 'everyone' && seg.mention !== 'all').map((seg) => seg.mention))];
   useMentionProfiles(names);
   return (
     <>
       {pieces.map((seg, i) => {
         if (!seg || !seg.mention) return <React.Fragment key={i}>{typeof seg === 'string' ? formatInline(seg, i) : seg}</React.Fragment>;
+        if (seg.mention === 'everyone' || seg.mention === 'all') return <span key={i} style={{ color: theme.dark ? theme.gold : theme.coralDeep, fontWeight: 800 }}>{seg.raw}</span>;
         const found = mentionCache.get(seg.mention);
         if (!found) return <React.Fragment key={i}>{seg.raw}</React.Fragment>;
         return (
@@ -8243,7 +8704,7 @@ function applyMention(text, mention, username, maxLen) {
   return { value, caret: Math.min(before.length + insert.length, value.length) };
 }
 
-function MentionSuggestions({ query, priority, excludeIds, myId, onPick }) {
+function MentionSuggestions({ query, priority, excludeIds, myId, onPick, allowAll }) {
   const { theme } = useTheme();
   const [remote, setRemote] = useState([]);
   useEffect(() => {
@@ -8270,13 +8731,27 @@ function MentionSuggestions({ query, priority, excludeIds, myId, onPick }) {
   };
   (priority || []).forEach(consider);
   remote.forEach(consider);
-  if (!list.length) return null;
+  const showAll = !!allowAll && ('everyone'.startsWith(query || '') || 'all'.startsWith(query || ''));
+  if (!list.length && !showAll) return null;
 
   return (
     <div className="zchat-fade" style={{
       background: theme.panelBg, border: `1px solid ${theme.border}`, borderRadius: 16,
       boxShadow: '0 8px 24px rgba(0,0,0,0.18)', maxHeight: 208, overflowY: 'auto', WebkitOverflowScrolling: 'touch',
     }}>
+      {showAll && (
+        <div role="button" aria-label="Mention everyone"
+          onPointerDown={(e) => e.preventDefault()}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => onPick({ id: '__all', username: 'everyone' })}
+          style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', cursor: 'pointer' }}>
+          <div style={{ width: 30, height: 30, borderRadius: '50%', background: `${theme.coral}22`, color: theme.coral, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Users size={16} /></div>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: theme.ink }}>everyone</div>
+            <div style={{ fontSize: 11.5, color: theme.muted }}>Notify everyone in this group</div>
+          </div>
+        </div>
+      )}
       {list.slice(0, 8).map((p, i) => (
         <div key={p.id}
           onPointerDown={(e) => e.preventDefault()}
@@ -8284,7 +8759,7 @@ function MentionSuggestions({ query, priority, excludeIds, myId, onPick }) {
           onClick={() => onPick(p)}
           style={{
             display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', cursor: 'pointer',
-            borderTop: i ? `1px solid ${theme.border}` : 'none',
+            borderTop: i || showAll ? `1px solid ${theme.border}` : 'none',
           }}>
           <Avatar emoji={p.avatar} name={p.name} frame={p.avatar_frame} size={30} />
           <div style={{ minWidth: 0, flex: 1 }}>
@@ -8348,7 +8823,7 @@ const MessageBubbleMemo = React.memo(function MessageBubbleMemo(props) {
   return <MessageBubble {...out} />;
 }, bubblePropsEqual);
 
-function MessageBubble({ onOpenLive, onOpenOnce, onVote, onShowVotes, gameMerge, gameLive, onGameMove, onGameRematch, onOpenGame, onPlayDuel, peerName, myId, isBot, m, isMe, onDelete, selectionMode, selected, onToggleSelect, onLongPress, onOpenImage, onOpenVideo, reactions, onReact, onOpenWhoReacted, replyPreview, onSwipeReply, onJumpToMessage, highlighted, senderLabel, senderAvatar, hideReadStatus, onOpenSenderProfile, canModerate, onOpenMention, mentionsMe, onOpenStoryRef, onCallBack, onOpenSticker, tightBelow, senderVerified, onOpenPost, tightAbove, senderFrame, senderCustomBadge, noReceipts }) {
+function MessageBubble({ onCard, translation, senderTitle, onOpenLive, onOpenOnce, onVote, onShowVotes, gameMerge, gameLive, onGameMove, onGameRematch, onOpenGame, onPlayDuel, peerName, myId, isBot, m, isMe, onDelete, selectionMode, selected, onToggleSelect, onLongPress, onOpenImage, onOpenVideo, reactions, onReact, onOpenWhoReacted, replyPreview, onSwipeReply, onJumpToMessage, highlighted, senderLabel, senderAvatar, hideReadStatus, onOpenSenderProfile, canModerate, onOpenMention, mentionsMe, onOpenStoryRef, onCallBack, onOpenSticker, tightBelow, senderVerified, onOpenPost, tightAbove, senderFrame, senderCustomBadge, noReceipts }) {
   const mediaOnly = !m.deleted && (m.type === 'image' || m.type === 'video')
     && !replyPreview && !senderLabel && !m.forwarded
     && !(m.content && !String(m.content).startsWith('/'));
@@ -8376,6 +8851,9 @@ function MessageBubble({ onOpenLive, onOpenOnce, onVote, onShowVotes, gameMerge,
   const eventData = m.type === 'text' && !m.deleted && !pollData ? parseEventMsg(m.content) : null;
   const diceData = m.type === 'text' && !m.deleted && !pollData && !eventData ? parseDice(m.content) : null;
   const extraCard = m.type === 'text' && !m.deleted && !pollData && !eventData && !diceData ? parseExtraCard(m.content) : null;
+  const wrapped = m.type === 'text' && !m.deleted ? parseWrapped(m.content) : null;
+  const round = !m.deleted && isRoundVideo(m);
+  const [showOriginal, setShowOriginal] = useState(false);
   const blurInfo = !m.deleted && !onceInfo ? parseBlur(m) : null;
   const mediaCaption = blurInfo ? blurInfo.c : m.content;
   const gameState = mergeDuelState(m.type === 'text' && !m.deleted ? parseGameMessage(m.content) : null, gameMerge);
@@ -8396,7 +8874,7 @@ function MessageBubble({ onOpenLive, onOpenOnce, onVote, onShowVotes, gameMerge,
   useEffect(() => { if (finishedGameKey) queueGameRecord(gameState, myId); }, [finishedGameKey]);
   const bareCard = !m.deleted && m.type === 'text' && (!!gameState || !!pollData || !!eventData || !!diceData || !!extraCard);
   const locationShare = m.type === 'text' && !m.deleted && !gameState && !pollData && !eventData && !diceData && !extraCard ? parseLocationMessage(m.content) : null;
-  const linkPreviewUrl = m.type === 'text' && !m.deleted && !sharedPostId && !sharedProfileId && !gameState && !locationShare && !pollData && !eventData && !diceData && !extraCard ? firstPreviewableUrl(m.content) : null;
+  const linkPreviewUrl = m.type === 'text' && !m.deleted && !sharedPostId && !sharedProfileId && !gameState && !locationShare && !pollData && !eventData && !diceData && !extraCard ? firstPreviewableUrl(wrapped ? (wrapped.k === 'sec' ? '' : wrapped.text) : m.content) : null;
   const inlineTime = m.type === 'text' && !m.deleted && !!m.content && !sharedProfileId && !sharedPostId && !gameState && !locationShare && !pollData && !eventData && !diceData && !extraCard && !(m.story_id && (m.content === STORY_MENTION_TEXT || m.content === STORY_GROUP_MENTION_TEXT || m.content === STORY_SHARE_TEXT));
 
   if (m.type === 'system' && parseCallLog(m.content)) {
@@ -8431,7 +8909,7 @@ function MessageBubble({ onOpenLive, onOpenOnce, onVote, onShowVotes, gameMerge,
       setTimeout(() => setBurstHeart(false), 650);
     } else if (m.type === 'image') {
       onOpenImage(m.media_url);
-    } else if (m.type === 'video') {
+    } else if (m.type === 'video' && !round) {
       onOpenVideo({ url: m.media_url, trimStart: m.trim_start, trimEnd: m.trim_end, overlayUrl: m.overlay_url });
     }
     lastTapRef.current = now;
@@ -8551,15 +9029,16 @@ function MessageBubble({ onOpenLive, onOpenOnce, onVote, onShowVotes, gameMerge,
           boxShadow: m.deleted || mediaOnly ? 'none' : '0 1px 2px rgba(0,0,0,0.06)',
           ...(mediaOnly ? { background: 'transparent', overflow: 'hidden' } : {}),
           ...(m.deleted ? {} : { borderRadius: 16 }),
-          ...(bubbleSpec && m.type !== 'sticker' ? bubbleStyleCss(bubbleSpec, isMe) : {}),
+          ...(bubbleSpec && m.type !== 'sticker' && !round ? bubbleStyleCss(bubbleSpec, isMe) : {}),
           ...(bubbleSpec && mediaOnly ? { overflow: 'visible' } : {}),
-          ...(m.type === 'sticker' && !m.deleted ? { background: 'transparent', border: 'none', boxShadow: 'none', padding: 0, overflow: 'visible' } : {}),
+          ...((m.type === 'sticker' || round) && !m.deleted ? { background: 'transparent', border: 'none', boxShadow: 'none', padding: 0, overflow: 'visible' } : {}),
           ...(bareCard ? { background: 'transparent', border: 'none', boxShadow: 'none', padding: 0, overflow: 'visible' } : {}),
         }}>
-          {bubbleSpec && bubbleSpec.deco && BUBBLE_DECO[bubbleKey] && m.type !== 'sticker' && !bareCard && <div aria-hidden="true" style={{ position: 'absolute', pointerEvents: 'none', zIndex: 1, ...bubbleSpec.deco }}>{BUBBLE_DECO[bubbleKey]()}</div>}
+          {bubbleSpec && bubbleSpec.deco && BUBBLE_DECO[bubbleKey] && m.type !== 'sticker' && !round && !bareCard && <div aria-hidden="true" style={{ position: 'absolute', pointerEvents: 'none', zIndex: 1, ...bubbleSpec.deco }}>{BUBBLE_DECO[bubbleKey]()}</div>}
           {senderLabel && !m.deleted && !tightAbove && (
-            <div style={{ fontSize: 11.5, fontWeight: 700, color: theme.coralDeep, marginBottom: 3, padding: m.type !== 'text' ? '0 4px' : 0 }}>
+            <div style={{ fontSize: 11.5, fontWeight: 700, color: theme.coralDeep, marginBottom: 3, padding: m.type !== 'text' ? '0 4px' : 0, display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
               <NameBadge name={senderLabel} verified={senderVerified} custom={senderCustomBadge} size={11} />
+              {senderTitle && <span style={{ flexShrink: 0, fontSize: 10, fontWeight: 800, padding: '1px 6px', borderRadius: 7, background: theme.dark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)', color: theme.muted }}>{senderTitle}</span>}
             </div>
           )}
           {m.forwarded && !m.deleted && (
@@ -8582,7 +9061,8 @@ function MessageBubble({ onOpenLive, onOpenOnce, onVote, onShowVotes, gameMerge,
             <>
               {onceInfo && <OnceChip m={m} isMe={isMe} reactions={reactions} myId={myId} onOpen={onOpenOnce} ink={bubbleSpec ? bubbleSpec.ink : undefined} isGroup={!!senderLabel || !!hideReadStatus} noReads={!!noReceipts} />}
               {m.type === 'image' && !onceInfo && <BlurGate on={!!blurInfo} id={m.id}><ChatImage src={m.media_url} caption={mediaCaption} /></BlurGate>}
-              {m.type === 'video' && !onceInfo && (<BlurGate on={!!blurInfo} id={m.id}>
+              {m.type === 'video' && !onceInfo && round && <RoundVideoBubble m={m} />}
+              {m.type === 'video' && !onceInfo && !round && (<BlurGate on={!!blurInfo} id={m.id}>
                 <div onClick={(e) => { e.stopPropagation(); onOpenVideo({ url: m.media_url, trimStart: m.trim_start, trimEnd: m.trim_end, overlayUrl: m.overlay_url }); }} style={{ position: 'relative', width: 240, maxWidth: '100%', height: 240, borderRadius: 14, overflow: 'hidden', marginBottom: m.content ? 4 : 2, background: '#000', cursor: 'pointer' }}>
                   <VideoThumb src={USE_VIDEO_THUMBS ? m.media_url : (cachedVideoSrc || m.media_url)} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none' }} />
                   {m.overlay_url && <img src={m.overlay_url} alt="" draggable={false} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} />}
@@ -8600,7 +9080,7 @@ function MessageBubble({ onOpenLive, onOpenOnce, onVote, onShowVotes, gameMerge,
                   }}><Download size={13} color="white" /></div>
                 </div>
               </BlurGate>)}
-              {(m.type === 'image' || m.type === 'video') && !onceInfo && mediaCaption && !String(mediaCaption).startsWith('/') && (
+              {(m.type === 'image' || m.type === 'video') && !onceInfo && !round && mediaCaption && !String(mediaCaption).startsWith('/') && (
                 <div style={{ fontSize: 15 * fontScale, color: bubbleSpec ? bubbleSpec.ink : theme.ink, wordBreak: 'break-word', whiteSpace: 'pre-wrap', lineHeight: 1.32, padding: '2px 2px 16px', maxWidth: 250 }}>
                   <RichText text={mediaCaption} onMention={onOpenMention} />
                 </div>
@@ -8696,6 +9176,11 @@ function MessageBubble({ onOpenLive, onOpenOnce, onVote, onShowVotes, gameMerge,
                   {extraCard.k === 'bill' && <BillCard bill={extraCard.d} votes={reactions} myId={myId} senderId={m.sender_id} onToggle={onVote ? () => onVote(m, 0) : null} onShowVotes={onShowVotes ? () => onShowVotes(m) : null} />}
                   {extraCard.k === 'count' && <CountdownCard cd={extraCard.d} />}
                   {extraCard.k === 'live' && <LiveLocationCard live={extraCard.d} isMe={isMe} messageId={m.id} />}
+                  {extraCard.k === 'focus' && <FocusCard d={extraCard.d} reactions={reactions} myId={myId} senderId={m.sender_id} onJoin={onCard ? () => onCard('focus', extraCard.d, m) : null} />}
+                  {extraCard.k === 'watch' && <WatchCard d={extraCard.d} onOpen={onCard ? () => onCard('watch', extraCard.d, m) : null} />}
+                  {extraCard.k === 'album' && <AlbumCard d={extraCard.d} onOpen={onCard ? () => onCard('album', extraCard.d, m) : null} />}
+                  {extraCard.k === 'pack' && <PackCard d={extraCard.d} added={isMe || readPacks(myId).some((pk) => pk.id === extraCard.d.i)} onAdd={onCard ? () => onCard('pack', extraCard.d, m) : null} />}
+                  {extraCard.k === 'chan' && <ChannelCard d={extraCard.d} onOpen={onCard ? () => onCard('chan', extraCard.d, m) : null} />}
                 </div>
               )}
               {locationShare && (
@@ -8713,7 +9198,15 @@ function MessageBubble({ onOpenLive, onOpenOnce, onVote, onShowVotes, gameMerge,
                   lineHeight: m.text_size === 'xl' ? 1.12 : m.text_size === 'l' ? 1.2 : 1.32,
                   display: 'flow-root',
                 }}>
-                  {isBot ? <BotRichText text={m.content} onMention={onOpenMention} /> : <RichText text={m.content} onMention={onOpenMention} />}
+                  {wrapped && <WrappedHead w={wrapped} isMe={isMe} ink={bubbleSpec ? bubbleSpec.ink : undefined} />}
+                  {wrapped && wrapped.k === 'sec' ? <SecretText m={m} myId={myId} onMention={onOpenMention} />
+                    : translation && !showOriginal ? <RichText text={translation} onMention={onOpenMention} />
+                    : isBot ? <BotRichText text={m.content} onMention={onOpenMention} /> : <RichText text={wrapped ? wrapped.text : m.content} onMention={onOpenMention} />}
+                  {translation && (
+                    <span role="button" aria-label={showOriginal ? 'Show translation' : 'Show original message'} onClick={(e) => { e.stopPropagation(); setShowOriginal((v) => !v); }} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 700, opacity: 0.65, marginTop: 4, cursor: 'pointer' }}>
+                      <TranslateIcon size={11} />{showOriginal ? 'Show translation' : 'Translated, tap for original'}
+                    </span>
+                  )}
                   {linkPreviewUrl && <LinkPreviewCard url={linkPreviewUrl} />}
                   <span data-msg-time="true" style={{ float: 'right', display: 'inline-flex', alignItems: 'center', gap: 3, marginLeft: 10, marginTop: 7, marginBottom: -3, height: 14, lineHeight: 1, position: 'relative', top: 1, userSelect: 'none' }}>
                     {m.edited && <span style={{ fontSize: 8, color: theme.muted, fontStyle: 'italic' }}>edited</span>}
@@ -8757,9 +9250,9 @@ function MessageBubble({ onOpenLive, onOpenOnce, onVote, onShowVotes, gameMerge,
     </div>
   );
 }
-function playPing() {
+function playPing(key) {
   if (quietNow()) return;
-  playUiSound('receive');
+  playUiSound('receive', chatToneFor(key));
 }
 function playReactionPing() {
   if (quietNow()) return;
@@ -8771,7 +9264,9 @@ function pairKey(a, b) { return a < b ? [a, b] : [b, a]; }
 
 
 function ImageViewer({ url: rawUrl, onClose, onForward, onReport, once, caption, onEdit }) {
-  const url = useMediaUrl(rawUrl);
+  const cachedView = useCachedMedia(once ? null : rawUrl);
+  const liveView = useMediaUrl(once ? rawUrl : null);
+  const url = once ? liveView : cachedView;
   useBackClose(true, onClose);
   const [ui, setUi] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -8952,7 +9447,7 @@ function ImageViewer({ url: rawUrl, onClose, onForward, onReport, once, caption,
     <div role="button" onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onClick(); }} style={{ padding: '13px 16px', fontSize: 15, fontWeight: 600, color: danger ? '#FF6B6B' : 'white', cursor: 'pointer', borderTop: '1px solid rgba(255,255,255,0.08)' }}>{label}</div>
   );
   const chrome = { transition: 'opacity 0.2s ease, visibility 0.2s', opacity: ui ? 1 : 0, visibility: ui ? 'visible' : 'hidden' };
-  const art = !once && !!onEdit && isPaintUrl(url);
+  const art = !once && !!onEdit && isPaintUrl(rawUrl || url);
   return (
     <div ref={rootRef} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 200, overflow: 'hidden' }}>
       <div ref={bgRef} style={{ position: 'absolute', inset: 0, background: '#000' }} />
@@ -9433,7 +9928,7 @@ function ReplyQuote({ m, label, onClick, bar, dim, compact }) {
     </div>
   );
 }
-const SPECIAL_PREFIXES = ['zpoll:', 'zevent:', 'zdice:', 'zlist:', 'zbill:', 'zcount:', 'zlive:'];
+const SPECIAL_PREFIXES = ['zpoll:', 'zevent:', 'zdice:', 'zlist:', 'zbill:', 'zcount:', 'zlive:', 'zfocus:', 'zwatch:', 'zalbum:', 'zpack:', 'zchan:'];
 function isSpecialContent(content) {
   return typeof content === 'string' && SPECIAL_PREFIXES.some((p) => content.indexOf(p) === 0);
 }
@@ -9453,15 +9948,17 @@ function quoteTextFor(m) {
     if (parseLocationMessage(m.content)) return 'Location';
     if (parseProfileLink(m.content)) return 'Profile';
     if (parsePostLink(m.content)) return 'Post';
+    const qw = parseWrapped(m.content);
+    if (qw) return qw.k === 'sec' ? (openedSecretMem.get(m.id) || 'Secret message') : qw.text;
     return m.content || '';
   }
   if (parseOnce(m)) return m.type === 'video' ? 'View once video' : 'View once photo';
   if (parseBlur(m)) return m.type === 'video' ? 'Hidden video' : 'Hidden photo';
-  if (m.type === 'image') return 'Photo';
+  if (m.type === 'image') return isGifUrl(m.media_url) ? 'GIF' : 'Photo';
   if (m.type === 'audio' || m.type === 'voice') return 'Voice message';
   if (m.type === 'sticker') return 'Sticker';
   if (m.type === 'system') return 'Message';
-  return 'Video';
+  return isRoundVideo(m) ? 'Video message' : 'Video';
 }
 function plainPreviewText(text) {
   return String(text || '')
@@ -9484,8 +9981,8 @@ function describeMessage(m) {
     return { kind: 'story', text: `Story reply: ${m.content || ''}` };
   }
   switch (m.type) {
-    case 'image': return parseBlur(m) ? { kind: 'hidden', text: 'Hidden photo' } : { kind: 'image', text: parseOnce(m) ? 'View once photo' : (m.content || 'Photo') };
-    case 'video': return parseBlur(m) ? { kind: 'hidden', text: 'Hidden video' } : { kind: 'video', text: parseOnce(m) ? 'View once video' : (m.content || 'Video') };
+    case 'image': return parseBlur(m) ? { kind: 'hidden', text: 'Hidden photo' } : { kind: 'image', text: parseOnce(m) ? 'View once photo' : (m.content || (isGifUrl(m.media_url) ? 'GIF' : 'Photo')) };
+    case 'video': return isRoundVideo(m) ? { kind: 'video', text: 'Video message' } : parseBlur(m) ? { kind: 'hidden', text: 'Hidden video' } : { kind: 'video', text: parseOnce(m) ? 'View once video' : (m.content || 'Video') };
     case 'audio': return { kind: 'audio', text: 'Voice message' };
     case 'sticker': return { kind: 'sticker', text: 'Sticker' };
     case 'system': {
@@ -9499,6 +9996,8 @@ function describeMessage(m) {
       return { kind: 'system', text: note ? note.text : (m.content || '') };
     }
     default: {
+      const dw = parseWrapped(m.content);
+      if (dw) return { kind: dw.k === 'sec' ? 'secret' : 'text', text: wrappedSummary(m.content) };
       const gs = parseGameMessage(m.content);
       if (gs) return { kind: 'game', text: gs.g === 'score' ? `High score in ${gameTitle(gs)}` : gameTitle(gs) };
       const dp = parsePoll(m.content);
@@ -9516,7 +10015,7 @@ function describeMessage(m) {
   }
 }
 
-const PREVIEW_ICONS = { image: Camera, video: VideoIcon, audio: Mic, sticker: Smile, deleted: Ban, story: StatusIcon, call: Phone, callmissed: PhoneMissedIcon, game: GamepadIcon, location: Compass, poll: PollIcon, event: CalendarIcon, list: ChecklistIcon, bill: BillIcon, count: CountdownIcon, live: Compass, contact: ContactCardIcon, hidden: HiddenPhotoIcon };
+const PREVIEW_ICONS = { image: Camera, video: VideoIcon, audio: Mic, sticker: Smile, deleted: Ban, story: StatusIcon, call: Phone, callmissed: PhoneMissedIcon, game: GamepadIcon, location: Compass, poll: PollIcon, event: CalendarIcon, list: ChecklistIcon, bill: BillIcon, count: CountdownIcon, live: Compass, contact: ContactCardIcon, hidden: HiddenPhotoIcon, secret: Lock, focus: FocusIcon, watch: WatchIcon, album: AlbumIcon, pack: PackIcon, chan: ChannelIcon };
 function PhoneMissedIcon({ size = 14, style }) { return <Phone size={size} color="#FF3B30" style={style} />; }
 
 function PreviewLine({ preview, prefix, color, weight = 400, size = 12 }) {
@@ -9681,7 +10180,7 @@ function ConfirmSheet({ title, text, confirmLabel = 'Confirm', danger = true, on
   );
 }
 
-function MessageContextMenu({ onTranslate, onTranscribe, onReadAloud, onRemind, message, isMine, canEditText, canModerate, anchorRect, bubble, isPinned, onPin, onUnpin, onClose, onReact, onReply, onCopy, onEdit, onForward, onReport, onDeleteForMe, onDeleteForEveryone, onSelectMultiple, onSave, onToggleSave, isSaved, onInfo, onEditArt, onShareImage }) {
+function MessageContextMenu({ onReplyPrivately, onAddToAlbum, onTranslate, onTranscribe, onReadAloud, onRemind, message, isMine, canEditText, canModerate, anchorRect, bubble, isPinned, onPin, onUnpin, onClose, onReact, onReply, onCopy, onEdit, onForward, onReport, onDeleteForMe, onDeleteForEveryone, onSelectMultiple, onSave, onToggleSave, isSaved, onInfo, onEditArt, onShareImage }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
   const [showFullEmoji, setShowFullEmoji] = useState(false);
@@ -9739,6 +10238,7 @@ function MessageContextMenu({ onTranslate, onTranscribe, onReadAloud, onRemind, 
   const paintImg = message.type === 'image' && !!onEditArt && !onceMsg && isPaintUrl(message.media_url);
   const allRows = [
     nd && { k: 'reply', main: true, icon: <Reply size={18} />, label: 'Reply', on: onReply },
+    nd && onReplyPrivately && { k: 'privreply', main: true, icon: <MessageSquare size={18} />, label: 'Reply privately', on: onReplyPrivately },
     nd && plainText && { k: 'copy', main: true, icon: <Copy size={18} />, label: 'Copy', on: onCopy },
     nd && !onceMsg && (message.type === 'image' || message.type === 'video') && { k: 'save', main: true, icon: <Download size={18} />, label: 'Save', on: onSave },
     nd && canEditText && !special && { k: 'edit', main: true, icon: <Edit3 size={18} />, label: 'Edit', on: onEdit },
@@ -9750,6 +10250,7 @@ function MessageContextMenu({ onTranslate, onTranscribe, onReadAloud, onRemind, 
     nd && plainText && onShareImage && { k: 'img', icon: <ImageIcon size={18} />, label: 'Share as image', on: onShareImage },
     nd && plainText && onTranslate && { k: 'tr', icon: <TranslateIcon size={18} />, label: 'Translate', on: onTranslate },
     nd && onTranscribe && (message.type === 'audio' || message.type === 'voice') && { k: 'stt', main: true, icon: <FileText size={18} />, label: 'Voice to text', on: onTranscribe },
+    nd && !onceMsg && onAddToAlbum && (message.type === 'image' || message.type === 'video') && !isRoundVideo(message) && { k: 'album', icon: <AlbumIcon size={18} />, label: 'Add to album', on: onAddToAlbum },
     nd && !onceMsg && message.type !== 'system' && onToggleSave && { k: 'saved', icon: <Bookmark size={18} fill={isSaved ? 'currentColor' : 'none'} />, label: isSaved ? 'Remove from Saved' : 'Add to Saved', on: onToggleSave },
     nd && message.type !== 'system' && onPin && { k: 'pin', icon: <Pin_ size={18} color={theme.ink} />, label: isPinned ? 'Unpin' : 'Pin', on: isPinned ? onUnpin : onPin },
     nd && message.type !== 'system' && onRemind && { k: 'remind', icon: <Clock size={18} />, label: 'Remind me', on: onRemind },
@@ -10004,15 +10505,16 @@ async function loadStickerImages(item) {
 
 async function prepareImageFile(file, url) {
   if (/gif/i.test(file.type)) return file;
-  if (file.size < 1.8 * 1024 * 1024 && /jpe?g|png|webp/i.test(file.type)) return file;
+  const saver = dataSaverOn();
+  if (file.size < (saver ? 0.5 : 1.8) * 1024 * 1024 && /jpe?g|png|webp/i.test(file.type)) return file;
   try {
     const img = await loadImageElement(url);
-    const scale = Math.min(1, 2560 / Math.max(img.naturalWidth, img.naturalHeight));
+    const scale = Math.min(1, (saver ? 1600 : 2560) / Math.max(img.naturalWidth, img.naturalHeight));
     const canvas = document.createElement('canvas');
     canvas.width = Math.round(img.naturalWidth * scale);
     canvas.height = Math.round(img.naturalHeight * scale);
     canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-    const blob = await new Promise((res) => canvas.toBlob(res, 'image/jpeg', 0.88));
+    const blob = await new Promise((res) => canvas.toBlob(res, 'image/jpeg', saver ? 0.76 : 0.88));
     return blob ? new File([blob], 'photo.jpg', { type: 'image/jpeg' }) : file;
   } catch {
     return file;
@@ -10029,7 +10531,7 @@ async function exportEditedImage(item) {
   const c = item.crop || { x: 0, y: 0, w: 1, h: 1 };
   const rw = c.w * W;
   const rh = c.h * H;
-  const scale = Math.min(1, 2560 / Math.max(rw, rh));
+  const scale = Math.min(1, (dataSaverOn() ? 1600 : 2560) / Math.max(rw, rh));
   const canvas = document.createElement('canvas');
   canvas.width = Math.max(1, Math.round(rw * scale));
   canvas.height = Math.max(1, Math.round(rh * scale));
@@ -10037,7 +10539,7 @@ async function exportEditedImage(item) {
   ctx.drawImage(img, c.x * W, c.y * H, rw, rh, 0, 0, canvas.width, canvas.height);
   if (item.filter && item.filter !== 'none') applyPhotoFilter(ctx, canvas.width, canvas.height, item.filter);
   paintEdits(ctx, item, W, H, c.x * W * scale, c.y * H * scale, scale, await loadStickerImages(item));
-  const blob = await new Promise((res) => canvas.toBlob(res, 'image/jpeg', 0.9));
+  const blob = await new Promise((res) => canvas.toBlob(res, 'image/jpeg', dataSaverOn() ? 0.78 : 0.9));
   return blob ? new File([blob], 'photo.jpg', { type: 'image/jpeg' }) : item.file;
 }
 
@@ -10054,7 +10556,7 @@ async function exportVideoOverlay(item) {
   return blob ? new File([blob], 'overlay.png', { type: 'image/png' }) : null;
 }
 
-function MediaComposer({ files, recipientName, onCancel, onSend, onActivity, mode: composerMode = 'chat', mentionGroups = [], myId, privacyCtx, onceDefault, hiddenDefault }) {
+function MediaComposer({ files, recipientName, onCancel, onSend, onActivity, mode: composerMode = 'chat', mentionGroups = [], myId, privacyCtx, onceDefault, hiddenDefault, initialSticker }) {
   useBackClose(true, onCancel);
   const { theme } = useTheme();
   const [items, setItems] = useState(() => files.map((f, i) => ({
@@ -10080,6 +10582,10 @@ function MediaComposer({ files, recipientName, onCancel, onSend, onActivity, mod
   const [selectedSticker, setSelectedSticker] = useState(null);
   const isStory = composerMode === 'story';
   const isPost = composerMode === 'post';
+  const [storySticker, setStorySticker] = useState(() => validStorySticker(initialSticker) || null);
+  const [stickerEdit, setStickerEdit] = useState(false);
+  const [collab, setCollab] = useState(null);
+  const [pickCollab, setPickCollab] = useState(false);
   const [closeCount, reloadClose] = useCloseFriendCount(isStory ? myId : null);
   const [closeEdit, setCloseEdit] = useState(false);
   const closeShareRef = useRef(false);
@@ -10342,7 +10848,7 @@ function MediaComposer({ files, recipientName, onCancel, onSend, onActivity, mod
         }
       }
       sentRef.current = true;
-      onSend(outputs, caption.trim(), mentions, { once: !isPost && !isStory && once, blur: !isPost && !isStory && !once && hideIt, audience: isStory && closeShareRef.current ? 'close' : undefined });
+      onSend(outputs, caption.trim(), mentions, { once: !isPost && !isStory && once, blur: !isPost && !isStory && !once && hideIt, audience: isStory && closeShareRef.current ? 'close' : undefined, sticker: isStory && storySticker ? storySticker : undefined, collab: isPost && collab ? { id: collab.id, name: collab.name } : undefined });
     } catch {
       closeShareRef.current = false;
       setSending(false);
@@ -10381,6 +10887,8 @@ function MediaComposer({ files, recipientName, onCancel, onSend, onActivity, mod
               {toolBtn(<Type size={18} />, 'Add text', () => setTextDraft({ id: null, text: '', color: '#FFFFFF', size: 0.07 }))}
               {toolBtn(<Pencil size={18} />, 'Draw', () => { setMode('draw'); if (videoRef.current) videoRef.current.pause(); })}
               {isStory && toolBtn(<AtSign size={18} />, 'Mention', () => setShowMentionPicker(true))}
+              {isStory && !(storySticker && storySticker.k === 'moment') && toolBtn(<StickerQIcon size={18} />, 'Story sticker', () => { setStickerEdit(true); if (videoRef.current) videoRef.current.pause(); }, !!storySticker)}
+              {isPost && myId && toolBtn(<UserPlus size={18} />, 'Invite a collaborator', () => setPickCollab(true), !!collab)}
             </div>
           </>
         )}
@@ -10588,6 +11096,11 @@ function MediaComposer({ files, recipientName, onCancel, onSend, onActivity, mod
               ))}
             </div>
           )}
+          {isPost && collab && (
+            <div style={{ display: 'flex', padding: '8px 12px 0' }}>
+              <div role="button" aria-label="Remove collaborator" onClick={() => setCollab(null)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 14, background: 'rgba(255,255,255,0.16)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}><UserPlus size={12} />With {collab.name}<X size={12} /></div>
+            </div>
+          )}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px 0' }}>
             {!isPost && !isStory && (
               <div role="button" aria-label={once ? 'View once on' : 'View once off'} onClick={() => { hapticTap(); playUiSound('toggle'); setOnce((v) => { if (!v) setHideIt(false); return !v; }); }} style={{ width: 46, height: 46, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, background: once ? 'white' : 'rgba(255,255,255,0.14)' }}>
@@ -10620,7 +11133,7 @@ function MediaComposer({ files, recipientName, onCancel, onSend, onActivity, mod
             )}
           </div>
           {isPost
-            ? <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.6)', padding: '6px 18px 0' }}>Shows on your profile and in Moments</div>
+            ? <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.6)', padding: '6px 18px 0' }}>{items.length > 1 ? `All ${items.length} go in one post, people swipe through them` : collab ? `Shows on your profile, and on ${collab.name.split(' ')[0]}'s once they accept` : 'Shows on your profile and in Moments'}</div>
             : isStory
             ? (closeCount === -1 || closeCount === null ? <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.6)', padding: '6px 18px 0' }}>Shared with your followers for 24 hours</div> : <CloseShareHint count={closeCount} base="Shared with your followers for 24 hours" onEdit={() => setCloseEdit(true)} />)
             : recipientName && <div style={{ fontSize: 11.5, color: once || hideIt ? 'white' : 'rgba(255,255,255,0.6)', fontWeight: once || hideIt ? 700 : 400, padding: '6px 18px 0' }}>To {recipientName}{once ? ', opens once' : hideIt ? ', hidden until they tap' : ''}</div>}
@@ -10628,6 +11141,16 @@ function MediaComposer({ files, recipientName, onCancel, onSend, onActivity, mod
         </div>
       )}
 
+      {isStory && storySticker && mode === 'view' && (
+        <div style={{ position: 'absolute', left: 0, right: 0, top: storySticker.k === 'moment' ? 'calc(76px + env(safe-area-inset-top))' : '44%', transform: storySticker.k === 'moment' ? 'none' : 'translateY(-50%)', display: 'flex', justifyContent: 'center', zIndex: 5, pointerEvents: 'none' }}>
+          <div style={{ position: 'relative', pointerEvents: 'auto', display: 'flex', justifyContent: 'center', width: '100%' }}>
+            <StoryStickerPreview sticker={storySticker} />
+            {storySticker.k !== 'moment' && <div role="button" aria-label="Remove story sticker" onClick={() => setStorySticker(null)} style={{ position: 'absolute', top: -12, right: 'calc(50% - 146px)', width: 28, height: 28, borderRadius: '50%', background: '#FF3B30', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={15} color="white" /></div>}
+          </div>
+        </div>
+      )}
+      {stickerEdit && <StoryStickerEditor onClose={() => setStickerEdit(false)} onDone={(s) => { setStorySticker(s); setStickerEdit(false); }} />}
+      {pickCollab && myId && <PickPeoplePage userId={myId} title="Invite a collaborator" subtitle="They accept to show it on their profile too" multi={false} onClose={() => setPickCollab(false)} onDone={(list) => { setCollab(list[0] || null); setPickCollab(false); }} zIndex={760} />}
       {selectedSticker && mode === 'view' && (cur.stickers || []).some((x) => x.id === selectedSticker) && (
         <div className="zchat-pop" style={{ position: 'absolute', left: '50%', top: 'calc(70px + env(safe-area-inset-top))', transform: 'translateX(-50%)', zIndex: 6, display: 'flex', gap: 8, padding: 6, borderRadius: 22, background: 'rgba(0,0,0,0.65)' }}>
           {[{ l: 'Smaller', f: 0.8 }, { l: 'Bigger', f: 1.25 }].map((b) => (
@@ -10696,7 +11219,9 @@ function MediaComposer({ files, recipientName, onCancel, onSend, onActivity, mod
 }
 
 function VideoViewer({ url: rawUrl, trimStart, trimEnd, overlayUrl, onClose, onForward, once }) {
-  const url = useMediaUrl(rawUrl);
+  const localUrl = useLocalFirstMedia(once ? null : rawUrl);
+  const liveUrl = useMediaUrl(once ? rawUrl : null);
+  const url = once ? liveUrl : localUrl;
   const [pip, setPip] = useState(false);
   useBackClose(!pip, onClose);
   const seekedRef = useRef(false);
@@ -11106,6 +11631,7 @@ const STORY_IMAGE_MS = 5000;
 
 function usernameProblem(u) {
   if (!u) return 'Choose a username';
+  if (['everyone', 'all', 'here'].includes(u)) return 'That username is not available';
   if (u.length < 3) return 'Use at least 3 characters';
   if (u.length > USERNAME_MAX) return `Use ${USERNAME_MAX} characters or fewer`;
   if (!/^[a-z0-9._]+$/.test(u)) return 'Only letters, numbers, periods and underscores';
@@ -11632,6 +12158,8 @@ function StoryViewer({ groupsList, startGroup = 0, startStoryId = null, onAddSto
   const [settling, setSettling] = useState(false);
   const [slideIn, setSlideIn] = useState('');
   const [pageHidden, setPageHidden] = useState(false);
+  const [stickerBusy, setStickerBusy] = useState(false);
+  const [showResponses, setShowResponses] = useState(false);
   const [wide, setWide] = useState(() => typeof window !== 'undefined' && window.innerWidth >= 760);
   const videoRef = useRef(null);
   const elapsedRef = useRef(0);
@@ -11646,7 +12174,7 @@ function StoryViewer({ groupsList, startGroup = 0, startStoryId = null, onAddSto
   const group = groupsList[gi];
   const story = group ? group.stories[Math.min(si, group.stories.length - 1)] : null;
   const isMine = !!group && group.profile.id === myId;
-  const stopped = paused || holding || replyFocus || showViewers || menu || confirmDelete || confirmRepost || externalPause || !loaded || pageHidden || dragX !== 0 || settling;
+  const stopped = paused || holding || replyFocus || showViewers || menu || confirmDelete || confirmRepost || externalPause || !loaded || pageHidden || dragX !== 0 || settling || stickerBusy || showResponses;
   const stoppedRef = useRef(stopped);
   stoppedRef.current = stopped;
 
@@ -11922,6 +12450,7 @@ function StoryViewer({ groupsList, startGroup = 0, startStoryId = null, onAddSto
           {likeBurst && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none', animation: 'zchat-heart-burst 0.7s ease' }}><Heart size={110} color="#FF3B5C" fill="#FF3B5C" /></div>}
         </div>
 
+        {story.sticker && !failed && <StoryStickerView key={`sk-${story.id}`} story={story} isMine={isMine && !readOnly} myId={myId} onBusy={setStickerBusy} onOpenResponses={() => setShowResponses(true)} />}
         <div style={{ position: 'absolute', left: 0, right: 0, top: viewTop, zIndex: 5, padding: 'calc(8px + env(safe-area-inset-top)) 10px 28px', background: 'linear-gradient(180deg, rgba(0,0,0,0.55), rgba(0,0,0,0))', pointerEvents: 'none', ...uiFade }}>
           <div style={{ display: 'flex', gap: 3 }}>
             {group.stories.map((s, i) => (
@@ -12058,6 +12587,7 @@ function StoryViewer({ groupsList, startGroup = 0, startStoryId = null, onAddSto
           </div>
         )}
         {showViewers && <StoryViewersSheet story={story} myId={myId} onClose={() => setShowViewers(false)} onOpenProfile={(p) => { setShowViewers(false); onOpenProfile(p); }} />}
+        {showResponses && <StoryResponsesSheet story={story} onClose={() => setShowResponses(false)} onOpenProfile={(p) => { setShowResponses(false); onOpenProfile(p); }} />}
         {confirmDelete && (
           <ConfirmDialog title="Delete this story?" body="It will be removed for everyone right away."
             onCancel={() => setConfirmDelete(false)}
@@ -12823,7 +13353,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-const APP_VERSION = '16.0V';
+const APP_VERSION = '17.0V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -13958,7 +14488,8 @@ function ProfilePosts({ profile, isSelf, userId, meProfile }) {
   const [posting, setPosting] = useState(false);
   const inputRef = useRef(null);
   const load = async () => {
-    const { data } = await supabase.from('posts').select('*').eq('user_id', profile.id).order('created_at', { ascending: false }).limit(120);
+    let { data, error } = await supabase.from('posts').select('*').or(`user_id.eq.${profile.id},and(collab_id.eq.${profile.id},collab_status.eq.accepted)`).order('created_at', { ascending: false }).limit(120);
+    if (error) ({ data } = await supabase.from('posts').select('*').eq('user_id', profile.id).order('created_at', { ascending: false }).limit(120));
     setPosts(data || []);
   };
   useEffect(() => {
@@ -13972,21 +14503,15 @@ function ProfilePosts({ profile, isSelf, userId, meProfile }) {
     return () => supabase.removeChannel(ch);
   }, [profile.id]);
   const [postError, setPostError] = useState('');
-  const share = async (outputs, caption) => {
+  const share = async (outputs, caption, mentionsIn, opts) => {
     setComposer(null);
     setPosting(true);
     setPostError('');
-    let failed = 0;
-    for (const item of outputs) {
-      const { url, error } = await uploadMedia(item.file, userId);
-      if (error || !url) { failed += 1; continue; }
-      let overlayUrl = null;
-      if (item.overlayFile) { const up = await uploadMedia(item.overlayFile, userId); if (!up.error) overlayUrl = up.url; }
-      const { error: insErr } = await supabase.from('posts').insert({ user_id: userId, media_url: url, media_type: item.kind === 'video' ? 'video' : 'image', overlay_url: overlayUrl, caption: caption || null });
-      if (insErr) failed += 1;
-    }
+    const res = await createPostFromOutputs(userId, outputs, caption, opts);
     setPosting(false);
-    if (failed) setPostError(failed === outputs.length ? 'Could not post. Check your connection and try again.' : `${failed} of ${outputs.length} did not post.`);
+    if (!res.done) setPostError('Could not post. Check your connection and try again.');
+    else if (res.failed) setPostError(`${res.failed} of ${outputs.length} did not post.`);
+    if (res.post && res.collab) sendPushNotification(res.collab.id, 'ZChat', `${(meProfile && meProfile.name) || 'Someone'} invited you to share a post`, `/?post=${res.post.id}`, meProfile && meProfile.avatar);
     load();
   };
   return (
@@ -14004,7 +14529,7 @@ function ProfilePosts({ profile, isSelf, userId, meProfile }) {
         {(posts || []).map((p) => (
           <div key={p.id} onClick={() => setOpenPost(p)} style={{ position: 'relative', aspectRatio: '3 / 4', background: theme.rowBg, cursor: 'pointer', overflow: 'hidden' }}>
             {p.media_type === 'video' ? <VideoThumb src={p.media_url} style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} /> : <img src={p.media_url} alt="" loading="lazy" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
-            {p.media_type === 'video' && <Play size={16} color="white" style={{ position: 'absolute', top: 8, right: 8, filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.6))' }} />}
+            {isCarouselPost(p) ? <CarouselMark /> : p.media_type === 'video' && <Play size={16} color="white" style={{ position: 'absolute', top: 8, right: 8, filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.6))' }} />}
           </div>
         ))}
       </div>
@@ -14015,7 +14540,7 @@ function ProfilePosts({ profile, isSelf, userId, meProfile }) {
           {isSelf && <div onClick={() => inputRef.current && inputRef.current.click()} style={{ marginTop: 8, color: theme.coral, fontWeight: 700, fontSize: 13.5, cursor: 'pointer' }}>Share a photo or video</div>}
         </div>
       )}
-      {composer && <Portal><MediaComposer key={composer.key} files={composer.files} recipientName="your profile" mode="post" onCancel={() => setComposer(null)} onSend={share} /></Portal>}
+      {composer && <Portal><MediaComposer key={composer.key} files={composer.files} recipientName="your profile" mode="post" myId={userId} onCancel={() => setComposer(null)} onSend={share} /></Portal>}
       {openPost && <Portal><FeedPanel me={meProfile} userId={userId} ownerFilter={profile} startPostId={openPost.id} seedPost={openPost} onClose={() => setOpenPost(null)} onOpenProfile={() => setOpenPost(null)} onPostDeleted={() => load()} /></Portal>}
     </div>
   );
@@ -14162,10 +14687,25 @@ function PostLinkCard({ postId, onOpen }) {
 
 const imageAspectCache = new Map();
 
-function ChatImage({ src: rawSrc, onOpen, caption }) {
-  const src = useMediaUrl(rawSrc);
-  const cachedSrc = useCachedMedia(src);
-  const [aspect, setAspect] = useState(() => imageAspectCache.get(src) || null);
+function ChatImage(props) {
+  const [load, setLoad] = useState(() => !dataSaverOn() || !props.src || mediaBlobCache.has(mediaCacheKey(props.src)));
+  useEffect(() => {
+    if (load || !props.src) return undefined;
+    let alive = true;
+    cachedMediaLookup(props.src).then((u) => { if (alive && u) setLoad(true); });
+    return () => { alive = false; };
+  }, [props.src, load]);
+  if (load) return <ChatImageInner {...props} />;
+  return (
+    <div role="button" aria-label="Load photo" onClick={(e) => { e.stopPropagation(); setLoad(true); }} style={{ width: 230, maxWidth: '100%', height: 170, borderRadius: 14, marginBottom: props.caption ? 4 : 2, background: 'rgba(127,127,127,0.18)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer' }}>
+      <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Download size={20} color="white" /></div>
+      <span style={{ fontSize: 12, fontWeight: 700, opacity: 0.8 }}>Tap to load</span>
+    </div>
+  );
+}
+function ChatImageInner({ src: rawSrc, onOpen, caption }) {
+  const shown = useCachedMedia(rawSrc);
+  const [aspect, setAspect] = useState(() => imageAspectCache.get(rawSrc) || null);
   const maxW = 250;
   const box = (() => {
     if (!aspect) return { width: 230, height: 230 };
@@ -14178,12 +14718,12 @@ function ChatImage({ src: rawSrc, onOpen, caption }) {
   })();
   return (
     <div style={{ position: 'relative', width: box.width, maxWidth: '100%', height: box.height, borderRadius: 14, overflow: 'hidden', marginBottom: caption ? 4 : 2, background: 'rgba(0,0,0,0.18)' }}>
-      <img src={cachedSrc || src} alt="" loading="lazy" draggable={false} onContextMenu={(e) => e.preventDefault()}
+      <img src={shown || undefined} alt="" loading="lazy" draggable={false} onContextMenu={(e) => e.preventDefault()}
         onLoad={(e) => {
           const img = e.currentTarget;
           if (img.naturalWidth && img.naturalHeight) {
             const a = img.naturalWidth / img.naturalHeight;
-            imageAspectCache.set(src, a);
+            imageAspectCache.set(rawSrc, a);
             setAspect((prev) => (prev && Math.abs(prev - a) < 0.01 ? prev : a));
           }
         }}
@@ -14192,7 +14732,7 @@ function ChatImage({ src: rawSrc, onOpen, caption }) {
         position: 'absolute', top: 6, right: 6, width: 26, height: 26, borderRadius: '50%',
         background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
       }}><Download size={13} color="white" /></div>
-      {isPaintUrl(src) && (
+      {isPaintUrl(rawSrc) && (
         <div aria-hidden="true" style={{ position: 'absolute', left: 6, bottom: 6, height: 24, padding: '0 9px 0 7px', borderRadius: 12, background: 'rgba(0,0,0,0.5)', color: 'white', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11.5, fontWeight: 800, fontFamily: FONT, pointerEvents: 'none' }}>
           <PaintToolIcon k="brush" size={13} />Drawing
         </div>
@@ -14203,7 +14743,7 @@ function ChatImage({ src: rawSrc, onOpen, caption }) {
 
 let uiAudioCtx = null;
 let lastTapSoundAt = 0;
-function playUiSound(kind) {
+function playUiSound(kind, toneOverride) {
   try {
     if (localStorage.getItem('zchat-sound') === 'off') return;
     if (kind === 'tap') { const now = Date.now(); if (now - lastTapSoundAt < 90) return; lastTapSoundAt = now; }
@@ -14250,11 +14790,15 @@ function playUiSound(kind) {
     const bell = (freq, start, length, volume) => { tone(freq, freq, start, length, volume); tone(freq * 2, freq * 2, start, length * 0.55, volume * 0.22); };
     if (kind === 'send') { swish(0, 0.16, 0.07, 1400, 0.7, 3600); tone(620, 920, 0.02, 0.09, 0.05); }
     else if (kind === 'receive') {
-      const tn = readTone();
+      const tn = toneOverride || readTone();
       if (tn === 'pop') { tone(520, 980, 0, 0.08, 0.09); tone(980, 1400, 0.07, 0.1, 0.06); }
       else if (tn === 'drop') { tone(1500, 500, 0, 0.18, 0.08); bell(740, 0.12, 0.2, 0.05); }
       else if (tn === 'bell') { bell(1760, 0, 0.5, 0.07); bell(2217, 0.16, 0.5, 0.045); }
       else if (tn === 'pulse') { tone(660, 660, 0, 0.07, 0.07, 'triangle'); tone(660, 660, 0.12, 0.07, 0.07, 'triangle'); tone(880, 880, 0.24, 0.12, 0.07, 'triangle'); }
+      else if (tn === 'harp') { bell(784, 0, 0.26, 0.06); bell(988, 0.07, 0.26, 0.055); bell(1175, 0.14, 0.3, 0.05); bell(1568, 0.21, 0.36, 0.045); }
+      else if (tn === 'marimba') { tone(523, 523, 0, 0.14, 0.09); tone(1046, 1046, 0, 0.05, 0.025); tone(784, 784, 0.12, 0.16, 0.08); tone(1568, 1568, 0.12, 0.05, 0.02); }
+      else if (tn === 'chirp') { tone(1800, 2700, 0, 0.06, 0.05); tone(2000, 3100, 0.09, 0.07, 0.05); }
+      else if (tn === 'glass') { bell(1568, 0, 0.7, 0.05); bell(2093, 0.03, 0.55, 0.03); bell(2637, 0.06, 0.4, 0.02); }
       else { bell(988, 0, 0.22, 0.09); bell(1319, 0.09, 0.3, 0.075); }
     }
     else if (kind === 'pad1') { tone(392, 392, 0, 0.28, 0.08); }
@@ -14293,7 +14837,7 @@ function voiceBars(seed, count = 30) {
 }
 
 function AudioBubble({ url: rawUrl, isMe, ink, line }) {
-  const url = useMediaUrl(rawUrl);
+  const url = useLocalFirstMedia(rawUrl);
   const { theme } = useTheme();
   const audioRef = useRef(null);
   const rootRef = useRef(null);
@@ -14405,36 +14949,116 @@ function frameMaskStyle(spec) {
 const frameUrlCache = new Map();
 const frameWaiters = new Map();
 const frameImageKeep = [];
-// Chat photos and videos are shown instantly from their normal link
-// (so opening a chat never feels slow), but every one is also quietly
-// saved on the phone the first time it's seen. Next time that same
-// photo or video is needed, it's read straight from the phone instead
-// of downloading it from the server all over again. Kept in its own
-// storage bucket, separate from frames, so one can never crowd out
-// the other, and it self-heals exactly like the frame cache does.
 const mediaBlobCache = new Map();
-async function cachedMediaBlobUrl(url, retried) {
-  if (!url) return null;
+const mediaFetches = new Map();
+function mediaCacheKey(raw) {
+  if (!raw) return null;
+  return isPrivateMedia(raw) ? `https://media.zchat.local/p/${raw.slice(3)}` : raw;
+}
+function mediaStreamUrl(raw) {
+  if (!raw) return null;
+  return isPrivateMedia(raw) ? signedMediaNow(raw) : raw;
+}
+async function cachedMediaLookup(raw) {
+  const key = mediaCacheKey(raw);
+  if (!key) return null;
+  if (mediaBlobCache.has(key)) return mediaBlobCache.get(key);
   try {
-    if (typeof caches === 'undefined') return null;
+    if (typeof caches === 'undefined' || /^(blob|data):/i.test(key)) return null;
     const cache = await caches.open('zchat-media-v1');
-    let res = await cache.match(url);
-    const fromCache = !!res;
-    if (!res) {
-      const net = await fetch(url, { cache: 'no-cache' });
-      if (!net.ok) return null;
-      await cache.put(url, net.clone());
-      res = net;
-    }
+    const res = await cache.match(key);
+    if (!res) return null;
     const blob = await res.blob();
-    if (!blob.size) {
-      if (fromCache && !retried) { await cache.delete(url); return cachedMediaBlobUrl(url, true); }
-      return null;
-    }
-    return URL.createObjectURL(blob);
-  } catch {
-    return null;
-  }
+    if (!blob.size) { try { await cache.delete(key); } catch {} return null; }
+    if (mediaBlobCache.has(key)) return mediaBlobCache.get(key);
+    const u = URL.createObjectURL(blob);
+    mediaBlobCache.set(key, u);
+    return u;
+  } catch { return null; }
+}
+async function primeSentMedia(raw, file) {
+  const key = mediaCacheKey(raw);
+  if (!key || !file || mediaBlobCache.has(key)) return;
+  try { mediaBlobCache.set(key, URL.createObjectURL(file)); } catch { return; }
+  try {
+    if (typeof caches === 'undefined' || /^(blob|data):/i.test(key)) return;
+    const cache = await caches.open('zchat-media-v1');
+    await cache.put(key, new Response(file, { headers: { 'Content-Type': file.type || 'application/octet-stream' } }));
+  } catch {}
+}
+
+function cachedMediaFor(raw) {
+  const key = mediaCacheKey(raw);
+  if (!key) return Promise.resolve(null);
+  if (mediaBlobCache.has(key)) return Promise.resolve(mediaBlobCache.get(key));
+  if (mediaFetches.has(key)) return mediaFetches.get(key);
+  const job = (async () => {
+    try {
+      const hit = await cachedMediaLookup(raw);
+      if (hit) return hit;
+      if (typeof caches === 'undefined' || /^(blob|data):/i.test(key)) return null;
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) return null;
+      const src = isPrivateMedia(raw) ? await resolveMedia(raw) : raw;
+      if (!src) return null;
+      const net = await fetch(src, { cache: isPrivateMedia(raw) ? 'default' : 'no-cache' });
+      if (!net.ok) return null;
+      const cache = await caches.open('zchat-media-v1');
+      await cache.put(key, net.clone());
+      const blob = await net.blob();
+      if (!blob.size) { try { await cache.delete(key); } catch {} return null; }
+      if (mediaBlobCache.has(key)) return mediaBlobCache.get(key);
+      const u = URL.createObjectURL(blob);
+      mediaBlobCache.set(key, u);
+      return u;
+    } catch { return null; } finally { mediaFetches.delete(key); }
+  })();
+  mediaFetches.set(key, job);
+  return job;
+}
+function useCachedMedia(raw) {
+  const key = mediaCacheKey(raw);
+  const first = () => (key ? (mediaBlobCache.get(key) || mediaStreamUrl(raw)) : null);
+  const [state, setState] = useState(() => ({ key, url: first() }));
+  const url = state.key === key ? state.url : first();
+  useEffect(() => {
+    if (!key) { setState({ key, url: null }); return undefined; }
+    const hit = mediaBlobCache.get(key);
+    if (hit) { setState({ key, url: hit }); return undefined; }
+    let alive = true;
+    setState((s) => (s.key === key ? s : { key, url: mediaStreamUrl(raw) }));
+    cachedMediaLookup(raw).then((u) => {
+      if (!alive) return;
+      if (u) { setState({ key, url: u }); return; }
+      if (isPrivateMedia(raw) && !signedMediaNow(raw)) {
+        resolveMedia(raw).then((s2) => { if (alive && s2) setState((s) => (s.key === key && !s.url ? { key, url: s2 } : s)); });
+      }
+      cachedMediaFor(raw).then((u2) => { if (alive && u2) setState({ key, url: u2 }); });
+    });
+    return () => { alive = false; };
+  }, [key]);
+  return url;
+}
+function useLocalFirstMedia(raw) {
+  const key = mediaCacheKey(raw);
+  const first = () => (key ? (mediaBlobCache.get(key) || mediaStreamUrl(raw)) : null);
+  const [state, setState] = useState(() => ({ key, url: first() }));
+  const url = state.key === key ? state.url : first();
+  useEffect(() => {
+    if (!key) { setState({ key, url: null }); return undefined; }
+    if (mediaBlobCache.get(key)) { setState({ key, url: mediaBlobCache.get(key) }); return undefined; }
+    let alive = true;
+    cachedMediaLookup(raw).then((u) => {
+      if (!alive) return;
+      if (u) { setState({ key, url: u }); return; }
+      const stream = mediaStreamUrl(raw);
+      if (stream) setState({ key, url: stream });
+      else if (isPrivateMedia(raw)) resolveMedia(raw).then((s2) => { if (alive) setState({ key, url: s2 }); });
+      else setState({ key, url: raw });
+      setTimeout(() => { cachedMediaFor(raw); }, 1500);
+    });
+    return () => { alive = false; };
+  }, [key]);
+  return url;
 }
 const USE_VIDEO_THUMBS = typeof navigator !== 'undefined' && !/iPhone|iPad|iPod|Macintosh/.test(navigator.userAgent || '');
 const videoThumbMem = new Map();
@@ -14493,83 +15117,67 @@ function grabVideoFrame(url) {
     try { v.load(); } catch {}
   });
 }
-function videoThumbUrl(url) {
-  if (!url) return Promise.resolve(null);
-  if (videoThumbMem.has(url)) return Promise.resolve(videoThumbMem.get(url));
-  if (videoThumbPending.has(url)) return videoThumbPending.get(url);
+function videoThumbUrl(url, key) {
+  const k = key || url;
+  if (!k) return Promise.resolve(null);
+  if (videoThumbMem.has(k)) return Promise.resolve(videoThumbMem.get(k));
+  if (videoThumbPending.has(k)) return videoThumbPending.get(k);
   const p = new Promise((resolve) => {
     videoThumbQueue.push(async () => {
       let out = null;
       try {
         let cache = null;
-        try { cache = typeof caches !== 'undefined' && !/^(blob|data):/i.test(url) ? await caches.open('zchat-thumbs-v1') : null; } catch {}
+        try { cache = typeof caches !== 'undefined' && !/^(blob|data):/i.test(k) ? await caches.open('zchat-thumbs-v1') : null; } catch {}
         let blob = null;
         if (cache) {
-          try { const hit = await cache.match(videoThumbKey(url)); if (hit) blob = await hit.blob(); } catch {}
+          try { const hit = await cache.match(videoThumbKey(k)); if (hit) blob = await hit.blob(); } catch {}
         }
-        if (!blob || !blob.size) {
+        if ((!blob || !blob.size) && url) {
           blob = await grabVideoFrame(url);
-          if (blob && cache) { try { await cache.put(videoThumbKey(url), new Response(blob, { headers: { 'Content-Type': 'image/jpeg' } })); } catch {} }
+          if (blob && cache) { try { await cache.put(videoThumbKey(k), new Response(blob, { headers: { 'Content-Type': 'image/jpeg' } })); } catch {} }
         }
-        out = blob && blob.size ? URL.createObjectURL(blob) : '';
-      } catch { out = ''; }
-      videoThumbMem.set(url, out);
-      videoThumbPending.delete(url);
+        out = blob && blob.size ? URL.createObjectURL(blob) : (url ? '' : null);
+      } catch { out = url ? '' : null; }
+      if (out !== null) videoThumbMem.set(k, out);
+      videoThumbPending.delete(k);
       resolve(out);
     });
     runVideoThumbQueue();
   });
-  videoThumbPending.set(url, p);
+  videoThumbPending.set(k, p);
   return p;
 }
 
 function VideoThumb({ src: rawSrc, style, fallback, imgStyle }) {
   const src = useMediaUrl(rawSrc);
+  const tkey = rawSrc ? mediaCacheKey(rawSrc) : null;
   const { theme } = useTheme();
   const boxRef = useRef(null);
-  const [thumb, setThumb] = useState(() => (USE_VIDEO_THUMBS && src && videoThumbMem.has(src) ? videoThumbMem.get(src) : null));
+  const [thumb, setThumb] = useState(() => (USE_VIDEO_THUMBS && tkey && videoThumbMem.has(tkey) ? videoThumbMem.get(tkey) : null));
   const [near, setNear] = useState(false);
   useEffect(() => {
-    if (!USE_VIDEO_THUMBS || !src || thumb !== null) return undefined;
+    if (!USE_VIDEO_THUMBS || !tkey || thumb !== null) return undefined;
     const el = boxRef.current;
     if (!el || typeof IntersectionObserver === 'undefined') { setNear(true); return undefined; }
     const io = new IntersectionObserver((entries) => { if (entries.some((e) => e.isIntersecting)) { setNear(true); io.disconnect(); } }, { rootMargin: '300px' });
     io.observe(el);
     return () => io.disconnect();
-  }, [src, thumb]);
+  }, [tkey, thumb]);
   useEffect(() => {
-    if (!USE_VIDEO_THUMBS || !src) return undefined;
-    if (videoThumbMem.has(src)) { setThumb(videoThumbMem.get(src)); return undefined; }
-    if (!near) return undefined;
+    if (!USE_VIDEO_THUMBS || !tkey) return undefined;
+    if (videoThumbMem.has(tkey)) { setThumb(videoThumbMem.get(tkey)); return undefined; }
+    if (!near || dataSaverOn()) return undefined;
     let alive = true;
-    videoThumbUrl(src).then((u) => { if (alive) setThumb(u); });
+    videoThumbUrl(src, tkey).then((u) => { if (alive && u !== null) setThumb(u); });
     return () => { alive = false; };
-  }, [src, near]);
-  if (!src) return <div style={{ ...style, background: fallback || theme.rowBg }} />;
-  if (!USE_VIDEO_THUMBS) return <video src={`${src}#t=0.1`} muted playsInline preload="metadata" onContextMenu={(e) => e.preventDefault()} style={{ ...style, ...(imgStyle || {}) }} />;
+  }, [tkey, src, near]);
+  if (!tkey) return <div style={{ ...style, background: fallback || theme.rowBg }} />;
+  if (!USE_VIDEO_THUMBS) {
+    if (!src) return <div style={{ ...style, background: fallback || theme.rowBg }} />;
+    return <video src={`${src}#t=0.1`} muted playsInline preload={dataSaverOn() ? 'none' : 'metadata'} onContextMenu={(e) => e.preventDefault()} style={{ ...style, ...(imgStyle || {}) }} />;
+  }
   if (thumb) return <img src={thumb} alt="" draggable={false} onContextMenu={(e) => e.preventDefault()} style={{ ...style, ...(imgStyle || {}), display: 'block' }} />;
   return <div ref={boxRef} style={{ ...style, background: fallback || (theme.dark ? '#1E1E22' : '#E9E9EE') }} />;
-}
-
-function useCachedMedia(rawIn) {
-  const resolvedIn = useMediaUrl(rawIn);
-  const signedIn = !!resolvedIn && resolvedIn.indexOf('/object/sign/') >= 0;
-  const rawUrl = signedIn ? null : resolvedIn;
-  const [url, setUrl] = useState(() => (rawUrl ? mediaBlobCache.get(rawUrl) || rawUrl : null));
-  useEffect(() => {
-    if (!rawUrl) { setUrl(null); return undefined; }
-    const already = mediaBlobCache.get(rawUrl);
-    if (already) { setUrl(already); return undefined; }
-    setUrl(rawUrl);
-    let alive = true;
-    cachedMediaBlobUrl(rawUrl).then((blobUrl) => {
-      if (!alive || !blobUrl) return;
-      mediaBlobCache.set(rawUrl, blobUrl);
-      setUrl(blobUrl);
-    });
-    return () => { alive = false; };
-  }, [rawUrl]);
-  return signedIn ? resolvedIn : url;
 }
 
 async function cachedAssetUrl(url, retried) {
@@ -14989,7 +15597,7 @@ function CameraCapture({ onClose, onCapture, onPickGallery }) {
       {!recordingVideo && !error && <div style={{ position: 'relative', marginBottom: 12 }}><FilterStrip value={filter} onPick={setFilter} /></div>}
       <div style={{ position: 'relative', textAlign: 'center', fontSize: 12.5, fontWeight: 600, opacity: 0.85, marginBottom: 14 }}>{recordingVideo ? 'Release to stop' : 'Tap for photo, hold for video'}</div>
       <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-around', padding: '0 24px', paddingBottom: 'calc(30px + env(safe-area-inset-bottom))' }}>
-        <div role="button" aria-label="Gallery" onClick={onPickGallery} style={{ width: 48, height: 48, borderRadius: 14, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', visibility: recordingVideo ? 'hidden' : 'visible' }}><ImageIcon size={22} /></div>
+        {onPickGallery ? <div role="button" aria-label="Gallery" onClick={onPickGallery} style={{ width: 48, height: 48, borderRadius: 14, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', visibility: recordingVideo ? 'hidden' : 'visible' }}><ImageIcon size={22} /></div> : <div style={{ width: 48, height: 48 }} />}
         <div role="button" aria-label="Shutter" onPointerDown={onShutterDown} onPointerUp={onShutterUp} onPointerCancel={onShutterUp} onContextMenu={(e) => e.preventDefault()}
           style={{ position: 'relative', width: 84, height: 84, cursor: 'pointer', touchAction: 'none', userSelect: 'none' }}>
           <svg width="84" height="84" viewBox="0 0 84 84" style={{ position: 'absolute', inset: 0, transform: 'rotate(-90deg)' }}>
@@ -15340,7 +15948,10 @@ function firstPreviewableUrl(text) {
   } catch { return null; }
 }
 
-function LinkPreviewCard({ url }) {
+function LinkPreviewCard(props) {
+  return dataSaverOn() ? null : <LinkPreviewCardInner {...props} />;
+}
+function LinkPreviewCardInner({ url }) {
   const { theme } = useTheme();
   const [data, setData] = useState(() => linkPreviewCache.get(url) || null);
   useEffect(() => {
@@ -15876,11 +16487,12 @@ function FeedPanel({ me, userId, onClose, onOpenProfile, ownerFilter = null, sta
     }
     let q = supabase.from('posts').select('*').order('created_at', { ascending: false }).limit(60);
     if (followingIds) q = q.in('user_id', followingIds);
-    if (ownerFilter) q = q.eq('user_id', ownerFilter.id);
-    const { data: posts } = await q;
+    if (ownerFilter) q = q.or(`user_id.eq.${ownerFilter.id},and(collab_id.eq.${ownerFilter.id},collab_status.eq.accepted)`);
+    let { data: posts, error: postsErr } = await q;
+    if (postsErr && ownerFilter) ({ data: posts } = await supabase.from('posts').select('*').eq('user_id', ownerFilter.id).order('created_at', { ascending: false }).limit(60));
     let rows = posts || [];
     if (seedPost && !rows.some((p) => p.id === seedPost.id)) rows = [seedPost, ...rows].sort((x, y) => new Date(y.created_at) - new Date(x.created_at));
-    const ids = [...new Set(rows.map((p) => p.user_id))];
+    const ids = [...new Set(rows.flatMap((p) => [p.user_id, p.collab_id || null]).filter(Boolean))];
     const byId = {};
     if (ids.length) {
       const { data: profs } = await supabase.from('profiles').select('*').in('id', ids);
@@ -15905,9 +16517,16 @@ function FeedPanel({ me, userId, onClose, onOpenProfile, ownerFilter = null, sta
     }
     setLikes(likeMap);
     setCounts(countMap);
-    setItems(rows.map((p) => ({ ...p, owner: byId[p.user_id] })).filter((p) => p.owner && !p.owner.is_deleted));
+    setItems(rows.map((p) => ({ ...p, owner: byId[p.user_id], collab: p.collab_id && (p.collab_status === 'accepted' || p.collab_status === 'pending') ? byId[p.collab_id] || null : null })).filter((p) => p.owner && !p.owner.is_deleted));
   };
   useEffect(() => { setItems(null); load(); }, [tab]);
+  const respondCollab = async (post, accept) => {
+    const { data, error } = await supabase.rpc('zchat_collab_respond', { p_post: post.id, p_accept: accept });
+    if (error || data === false) return;
+    setItems((prev) => (prev || []).map((x) => (x.id === post.id ? { ...x, collab_status: accept ? 'accepted' : 'declined' } : x)));
+    playUiSound(accept ? 'like' : 'tap');
+    if (accept && post.user_id !== userId) sendPushNotification(post.user_id, 'ZChat', `${(me && me.name) || 'Someone'} accepted your collab post`, `/?post=${post.id}`, me && me.avatar);
+  };
   useEffect(() => {
     if (!startPostId || startedRef.current || !items || !items.length || !scrollerRef.current) return;
     startedRef.current = true;
@@ -15978,11 +16597,13 @@ function FeedPanel({ me, userId, onClose, onOpenProfile, ownerFilter = null, sta
             const isVideo = post.media_type === 'video';
             return (
               <div key={post.id} style={{ position: 'relative', height: '100%', scrollSnapAlign: 'start', scrollSnapStop: 'always', overflow: 'hidden' }}>
-                <div onClick={() => { if (!isVideo) onTapMedia(post); }} style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#05060a' }}>
-                  {isVideo
+                <div onClick={() => { if (!isVideo && !isCarouselPost(post)) onTapMedia(post); }} style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#05060a' }}>
+                  {isCarouselPost(post)
+                    ? <PostMediaCarousel post={post} rootRef={scrollerRef} onTap={() => onTapMedia(post)} onDoubleTap={() => { setBurst(post.id); setTimeout(() => setBurst(null), 700); toggleLike(post); }} />
+                    : isVideo
                     ? <ReelVideo post={post} rootRef={scrollerRef} onDoubleTap={() => { setBurst(post.id); setTimeout(() => setBurst(null), 700); toggleLike(post); }} />
                     : <img src={post.media_url} alt="" loading="lazy" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />}
-                  {post.overlay_url && <img src={post.overlay_url} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }} />}
+                  {post.overlay_url && !isCarouselPost(post) && <img src={post.overlay_url} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }} />}
                   {burst === post.id && <Heart size={110} color="#ff2d55" fill="#ff2d55" className="zchat-heart-burst" style={{ position: 'absolute' }} />}
                 </div>
                 <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(0,0,0,0.45) 0%, transparent 20%, transparent 55%, rgba(0,0,0,0.75) 100%)', pointerEvents: 'none' }} />
@@ -16011,8 +16632,17 @@ function FeedPanel({ me, userId, onClose, onOpenProfile, ownerFilter = null, sta
                 <div style={{ position: 'absolute', left: 14, right: 80, bottom: 26, zIndex: 3, opacity: hideUi ? 0 : 1, transition: 'opacity 0.2s' }}>
                   <div role="button" onClick={() => onOpenProfile(post.owner)} style={{ fontWeight: 900, fontSize: 16, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', textShadow: '0 1px 6px rgba(0,0,0,0.6)' }}>
                     <Avatar emoji={post.owner.avatar} name={post.owner.name} size={30} frame={post.owner.avatar_frame} />
-                    <span style={{ display: 'flex', alignItems: 'center', minWidth: 0, flex: 1 }}><NameBadge name={post.owner.name} verified={post.owner.verified} custom={post.owner.custom_badge} size={15} /></span>
+                    <span style={{ display: 'flex', alignItems: 'center', minWidth: 0, flex: 1, flexWrap: 'wrap', gap: 4 }}><NameBadge name={post.owner.name} verified={post.owner.verified} custom={post.owner.custom_badge} size={15} />{post.collab && post.collab_status === 'accepted' && <span style={{ fontWeight: 800 }}>and {post.collab.name}</span>}</span>
                   </div>
+                  {post.collab_id === userId && post.collab_status === 'pending' && (
+                    <div style={{ marginTop: 10, padding: 10, borderRadius: 14, background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, lineHeight: 1.4 }}>{(post.owner.name || '').split(' ')[0]} invited you to share this post. It shows on your profile too if you accept.</div>
+                      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                        <div role="button" aria-label="Accept collab" onClick={() => respondCollab(post, true)} style={{ flex: 1, height: 36, borderRadius: 11, background: '#FFFFFF', color: '#111', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13.5, cursor: 'pointer' }}>Accept</div>
+                        <div role="button" aria-label="Decline collab" onClick={() => respondCollab(post, false)} style={{ flex: 1, height: 36, borderRadius: 11, background: 'rgba(255,255,255,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13.5, cursor: 'pointer' }}>Decline</div>
+                      </div>
+                    </div>
+                  )}
                   {post.caption && <div style={{ fontSize: 14, marginTop: 6, lineHeight: 1.45, textShadow: '0 1px 6px rgba(0,0,0,0.6)', wordBreak: 'break-word' }}>{post.caption}</div>}
                   <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.65)', marginTop: 4 }}>{timeAgoLong(post.created_at)}</div>
                 </div>
@@ -16483,7 +17113,7 @@ function BubbleSample({ k, text, isMe = true }) {
   );
 }
 
-function BubbleStyleGrid({ value, onPick, columns = 3 }) {
+function BubbleStyleGrid({ value, onPick, columns = 3, only }) {
   const { theme } = useTheme();
   const cell = (key) => {
     const on = (value || 'classic') === key;
@@ -16503,7 +17133,7 @@ function BubbleStyleGrid({ value, onPick, columns = 3 }) {
   };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      {[['Classic', ['classic']], ...BUBBLE_GROUPS].map(([name, keys]) => (
+      {[['Classic', ['classic']], ...BUBBLE_GROUPS].filter(([name]) => !only || only === name).map(([name, keys]) => (
         <div key={name}>
           <div style={{ fontSize: 12.5, fontWeight: 700, color: theme.muted, padding: '10px 2px 6px' }}>{name}</div>
           <div style={{ display: 'grid', gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, gap: 8 }}>{keys.map(cell)}</div>
@@ -16516,12 +17146,25 @@ function BubbleStyleGrid({ value, onPick, columns = 3 }) {
 function BubbleStyleSheet({ onClose }) {
   useBackClose(true, onClose);
   const { theme, bubbleStyle, setBubbleStyle } = useTheme();
+  const [only, setOnly] = useState(null);
+  const tabs = [[null, 'All'], ...BUBBLE_GROUPS.map(([name]) => [name, name]), ['Classic', 'Classic']];
   return (
     <FullPage title="Chat bubbles" subtitle="Everyone sees your style" onBack={onClose} zIndex={650} footer={<BigButton label="Done" onClick={onClose} />}>
-      <div style={{ position: 'sticky', top: 0, zIndex: 2, background: igPalette(theme).bg, padding: '8px 0 10px' }}>
-        <ChatLookPreview height={118} />
+      <div style={{ position: 'sticky', top: 0, zIndex: 2, background: igPalette(theme).bg, padding: '8px 0 6px' }}>
+        <ChatLookPreview height={104} />
+        <div style={{ display: 'flex', gap: 8, padding: '12px 0 4px', overflowX: 'auto', scrollbarWidth: 'none' }}>
+          {tabs.map(([k, label]) => {
+            const on = only === k;
+            return (
+              <div key={label} role="button" aria-label={`Show ${label} bubbles`} aria-pressed={on} onClick={() => { hapticTap(); setOnly(k); }} style={{
+                flexShrink: 0, padding: '7px 15px', borderRadius: 18, fontSize: 13, fontWeight: 800, cursor: 'pointer',
+                background: on ? theme.coral : theme.rowBg, color: on ? '#FFFFFF' : theme.ink,
+              }}>{label}</div>
+            );
+          })}
+        </div>
       </div>
-      <BubbleStyleGrid value={bubbleStyle} onPick={(k) => { hapticTap(); playUiSound('tap'); setBubbleStyle(k); }} />
+      <BubbleStyleGrid only={only} value={bubbleStyle} onPick={(k) => { hapticTap(); playUiSound('tap'); setBubbleStyle(k); }} />
     </FullPage>
   );
 }
@@ -16945,7 +17588,7 @@ function getQuickReactions() {
   return REACTION_EMOJIS;
 }
 function setQuickReactions(a) { try { localStorage.setItem('zchat-quick-reactions', JSON.stringify(a)); } catch {} }
-const NOTIF_TONES = [{ k: 'chime', l: 'Chime' }, { k: 'pop', l: 'Pop' }, { k: 'drop', l: 'Drop' }, { k: 'bell', l: 'Bell' }, { k: 'pulse', l: 'Pulse' }];
+const NOTIF_TONES = [{ k: 'chime', l: 'Chime' }, { k: 'pop', l: 'Pop' }, { k: 'drop', l: 'Drop' }, { k: 'bell', l: 'Bell' }, { k: 'pulse', l: 'Pulse' }, { k: 'harp', l: 'Harp' }, { k: 'marimba', l: 'Marimba' }, { k: 'chirp', l: 'Chirp' }, { k: 'glass', l: 'Glass' }];
 function readTone() { try { return localStorage.getItem('zchat-tone') || 'chime'; } catch { return 'chime'; } }
 function readAppLock() {
   try { const o = JSON.parse(localStorage.getItem('zchat-applock') || 'null'); return o && typeof o === 'object' ? o : {}; } catch { return {}; }
@@ -17060,7 +17703,7 @@ function HeaderIconButton({ label, onClick, children, badge, accent }) {
   );
 }
 
-function CreateSheet({ onClose, onPost, onStory, onGroup, onChat, onGames, onScan, onDoodle }) {
+function CreateSheet({ onClose, onPost, onStory, onGroup, onChat, onGames, onScan, onDoodle, onChannel, onBroadcast }) {
   const run = (fn) => () => { onClose(); setTimeout(fn, 60); };
   return (
     <ActionSheet title="Create" onClose={onClose} items={[
@@ -17068,6 +17711,8 @@ function CreateSheet({ onClose, onPost, onStory, onGroup, onChat, onGames, onSca
       { k: 'story', label: 'Story', icon: <StatusIcon />, on: run(onStory) },
       { k: 'chat', label: 'Message', icon: <Edit3 />, on: run(onChat) },
       { k: 'group', label: 'Group', icon: <Users />, on: run(onGroup) },
+      onChannel ? { k: 'channel', label: 'Channel', icon: <ChannelIcon />, on: run(onChannel) } : null,
+      onBroadcast ? { k: 'broadcast', label: 'Broadcast list', icon: <BroadcastIcon />, on: run(onBroadcast) } : null,
       onDoodle ? { k: 'doodle', label: 'Doodle', icon: <DoodleIcon />, on: run(onDoodle) } : null,
       onGames ? { k: 'games', label: 'Games', icon: <GamepadIcon />, on: run(onGames) } : null,
       onScan ? { k: 'scan', label: 'Scan a QR code', icon: <QrIcon />, on: run(onScan) } : null,
@@ -17076,7 +17721,7 @@ function CreateSheet({ onClose, onPost, onStory, onGroup, onChat, onGames, onSca
 }
 
 const momentsCache = { uid: null, tab: 'foryou', foryou: null, following: null };
-function MomentsTab({ me, userId, myStories, trayUsers, seen, onAddStory, onOpenStory, onOpenPost, onOpenProfile, onDiscover, version, unseenStories, storyUploading, onStoryLongPress }) {
+function MomentsTab({ me, userId, myStories, trayUsers, seen, onAddStory, onOpenStory, onOpenPost, onOpenProfile, onDiscover, version, unseenStories, storyUploading, onStoryLongPress, topExtra }) {
   const { theme } = useTheme();
   if (momentsCache.uid !== userId) { momentsCache.uid = userId; momentsCache.tab = 'foryou'; momentsCache.foryou = null; momentsCache.following = null; }
   const [tab, setTabRaw] = useState(() => momentsCache.tab || 'foryou');
@@ -17121,6 +17766,7 @@ function MomentsTab({ me, userId, myStories, trayUsers, seen, onAddStory, onOpen
         <div style={{ paddingTop: 14 }}>
           <StoryTray me={me} myStories={myStories} trayUsers={trayUsers} seen={seen} onAdd={onAddStory} onOpen={onOpenStory} uploading={!!storyUploading} onLongPress={onStoryLongPress} />
         </div>
+        {topExtra}
         <div style={{ display: 'flex', gap: 6, margin: '2px 16px 10px', padding: 4, borderRadius: 16, background: theme.rowBg }}>
           {seg('foryou', 'For you')}{seg('following', 'Following')}
         </div>
@@ -17131,11 +17777,11 @@ function MomentsTab({ me, userId, myStories, trayUsers, seen, onAddStory, onOpen
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2, padding: '0 0 16px' }}>
             {items.map((p, i) => (
-              <div key={p.id} role="button" onClick={() => onOpenPost(p, tab)} style={{ position: 'relative', aspectRatio: '3 / 4', background: theme.rowBg, cursor: 'pointer', overflow: 'hidden' }}>
+              <div key={p.id} role="button" aria-label={isCarouselPost(p) ? `Open post with ${p.media_urls.filter((x) => x && x.u).length} items` : 'Open post'} onClick={() => onOpenPost(p, tab)} style={{ position: 'relative', aspectRatio: '3 / 4', background: theme.rowBg, cursor: 'pointer', overflow: 'hidden' }}>
                 {p.media_type === 'video'
                   ? <VideoThumb src={p.media_url} style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} />
                   : <img src={p.media_url} alt="" loading={i < 12 ? 'eager' : 'lazy'} decoding="async" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />}
-                {p.media_type === 'video' && <Play size={15} color="white" fill="white" style={{ position: 'absolute', top: 7, right: 7, filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.6))' }} />}
+                {isCarouselPost(p) ? <CarouselMark /> : p.media_type === 'video' && <Play size={15} color="white" fill="white" style={{ position: 'absolute', top: 7, right: 7, filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.6))' }} />}
                 <div style={{ position: 'absolute', left: 6, bottom: 6, display: 'flex', alignItems: 'center', gap: 5, maxWidth: 'calc(100% - 12px)' }}>
                   <Avatar emoji={p.owner.avatar} name={p.owner.name} size={18} />
                   <span style={{ fontSize: 10.5, fontWeight: 800, color: 'white', textShadow: '0 1px 4px rgba(0,0,0,0.8)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{(p.owner.name || '').split(' ')[0]}</span>
@@ -17339,7 +17985,7 @@ function StoryArchiveIcon({ size = 24, color = 'currentColor', strokeWidth = 2, 
   );
 }
 
-function MeTab({ me, counts, onOpenProfile, onEditProfile, onSettings, onCollection, onSaved, onArchive, onMail, onRequests, onDiscover, onSwitchAccount, onShare, onInvite, onGames, onReminders, onStoryArchive, onSearchMessages, onScan, onMentions, onUsage }) {
+function MeTab({ me, counts, onOpenProfile, onEditProfile, onSettings, onCollection, onSaved, onArchive, onMail, onRequests, onDiscover, onSwitchAccount, onShare, onInvite, onGames, onReminders, onStoryArchive, onSearchMessages, onScan, onMentions, onUsage, onStatus, onHidden, onMemories, onRecap, onAvatar, onChannels, onBroadcast }) {
   const { theme } = useTheme();
   const c = igPalette(theme);
   const [social, setSocial] = useState(() => { try { return JSON.parse(localStorage.getItem('zchat-me-social') || 'null') || { followers: 0, following: 0, posts: 0 }; } catch { return { followers: 0, following: 0, posts: 0 }; } });
@@ -17364,6 +18010,7 @@ function MeTab({ me, counts, onOpenProfile, onEditProfile, onSettings, onCollect
       <IgRow icon={icon} label={label} onClick={() => { playUiSound('tap'); onClick(); }} value={extra.value} sub={extra.sub} right={extra.badge ? <>{extra.badge}<ChevronRight size={18} color={c.faint} style={{ flex: 'none' }} /></> : undefined} />
     </div>
   );
+  const tapThen = (fn) => () => { playUiSound('tap'); if (fn) fn(); };
   const btn = (label, icon, onClick, ariaLabel) => (
     <div role="button" aria-label={ariaLabel || label} onClick={() => { playUiSound('tap'); onClick(); }} className="zchat-press" style={{ flex: 1, height: 38, borderRadius: 10, background: c.field, color: c.fg, fontWeight: 700, fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, cursor: 'pointer' }}>{icon}{label}</div>
   );
@@ -17392,28 +18039,3551 @@ function MeTab({ me, counts, onOpenProfile, onEditProfile, onSettings, onCollect
           {btn('Edit profile', <Edit3 size={16} strokeWidth={1.9} />, onEditProfile)}
           {btn('Share profile', <Share2 size={16} strokeWidth={1.9} />, onShare)}
         </div>
-        <IgHeading>Your stuff</IgHeading>
-        {row(<GamepadIcon size={22} />, 'Games', onGames)}
-        {row(<CollectionIcon />, 'Collection', onCollection, { value: counts.rewards ? `${counts.rewards} unlocked` : undefined })}
-        {row(<Bookmark />, 'Saved messages', onSaved)}
-        {onStoryArchive && row(<StoryArchiveIcon />, 'Story archive', onStoryArchive)}
-        {onReminders && row(<Clock />, 'Reminders', onReminders, { value: counts.reminders ? String(counts.reminders) : undefined })}
-        {onSearchMessages && row(<Search />, 'Search messages', onSearchMessages)}
-        {onMentions && row(<AtSign />, 'Mentions', onMentions)}
-        {onUsage && row(<Timer />, 'Time on ZChat', onUsage, { value: fmtUsage(readUsage()[usageDayKey()] || 0) })}
-        {row(<Archive />, 'Archived chats', onArchive, { value: counts.archived ? String(counts.archived) : undefined })}
-        <IgHeading>Inbox</IgHeading>
-        {row(<Bell />, 'Follow requests', onRequests, { badge: badge(counts.requests) })}
-        {row(<Mail />, 'Mail', onMail, { badge: badge(counts.mail) })}
-        <IgHeading>People</IgHeading>
-        {row(<Compass />, 'Discover people', onDiscover)}
-        {row(<UserPlus />, 'Invite friends', onInvite)}
-        {onScan && row(<QrIcon />, 'Scan a QR code', onScan)}
-        <IgHeading>Account</IgHeading>
-        {row(<Users />, 'Switch account', onSwitchAccount)}
-        {row(<SettingsIcon />, 'Settings', onSettings)}
+        {onStatus && (() => {
+          const st = activeStatusOf(me);
+          return (
+            <div style={{ padding: '4px 16px 0' }}>
+              <div role="button" aria-label="Set your status" onClick={tapThen(onStatus)} className="zchat-press" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 12, background: c.field, cursor: 'pointer' }}>
+                <span style={{ width: 22, display: 'flex', justifyContent: 'center', fontSize: 17, color: theme.muted }}>{st ? (st.e || '\u{1F4AC}') : <Plus size={17} />}</span>
+                <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, color: st ? theme.ink : theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{st ? st.t : 'Set a status'}</span>
+                {me.away_on && <span style={{ fontSize: 11.5, fontWeight: 800, color: theme.coral, flexShrink: 0 }}>Away message on</span>}
+                <ChevronRight size={17} color={c.faint} style={{ flexShrink: 0 }} />
+              </div>
+            </div>
+          );
+        })()}
+        <DetailSection title="Your stuff" flush>
+          <DetailTiles items={[
+            { icon: <GamepadIcon />, label: 'Games', onClick: tapThen(onGames) },
+            { icon: <CollectionIcon />, label: 'Collection', sub: counts.rewards ? `${counts.rewards} unlocked` : null, onClick: tapThen(onCollection) },
+            { icon: <Bookmark />, label: 'Saved', aria: 'Saved messages', onClick: tapThen(onSaved) },
+            onStoryArchive ? { icon: <StoryArchiveIcon />, label: 'Archive', aria: 'Story archive', sub: 'Stories', onClick: tapThen(onStoryArchive) } : null,
+            onReminders ? { icon: <Clock />, label: 'Reminders', badge: counts.reminders || null, onClick: tapThen(onReminders) } : null,
+            onSearchMessages ? { icon: <Search />, label: 'Search', aria: 'Search messages', sub: 'Messages', onClick: tapThen(onSearchMessages) } : null,
+            onMentions ? { icon: <AtSign />, label: 'Mentions', onClick: tapThen(onMentions) } : null,
+            onUsage ? { icon: <Timer />, label: 'Time', aria: 'Time on ZChat', sub: (() => { const m = Math.round((readUsage()[usageDayKey()] || 0) / 60); return m < 60 ? `${m} min today` : `${Math.floor(m / 60)} h ${m % 60} min`; })(), onClick: tapThen(onUsage) } : null,
+            { icon: <Archive />, label: 'Archived', aria: 'Archived chats', sub: 'Chats', badge: counts.archived || null, onClick: tapThen(onArchive) },
+            onHidden ? { icon: <EyeOff />, label: 'Hidden', aria: 'Hidden chats', sub: 'With a PIN', onClick: tapThen(onHidden) } : null,
+            onMemories ? { icon: <MemoriesIcon />, label: 'Memories', sub: 'On this day', onClick: tapThen(onMemories) } : null,
+            onRecap ? { icon: <RecapIcon />, label: 'Recap', aria: 'Year recap', sub: `Your ${new Date().getMonth() === 0 ? new Date().getFullYear() - 1 : new Date().getFullYear()}`, onClick: tapThen(onRecap) } : null,
+            onAvatar ? { icon: <AvatarMakerIcon />, label: 'Avatar', aria: 'Avatar maker', sub: 'Make one', onClick: tapThen(onAvatar) } : null,
+          ]} />
+        </DetailSection>
+        <DetailSection title="Inbox">
+          {detailRows([
+            <DetailRow icon={<Bell />} label="Follow requests" onClick={tapThen(onRequests)} right={counts.requests ? <>{badge(counts.requests)}<ChevronRight size={18} color={theme.muted} style={{ flexShrink: 0 }} /></> : null} />,
+            <DetailRow icon={<Mail />} label="Mail" onClick={tapThen(onMail)} right={counts.mail ? <>{badge(counts.mail)}<ChevronRight size={18} color={theme.muted} style={{ flexShrink: 0 }} /></> : null} />,
+          ])}
+        </DetailSection>
+        <DetailSection title="People" flush>
+          <DetailTiles items={[
+            { icon: <Compass />, label: 'Discover', aria: 'Discover people', sub: 'People', onClick: tapThen(onDiscover) },
+            { icon: <UserPlus />, label: 'Invite', aria: 'Invite friends', sub: 'Friends', onClick: tapThen(onInvite) },
+            onScan ? { icon: <QrIcon />, label: 'Scan', aria: 'Scan a QR code', sub: 'QR code', onClick: tapThen(onScan) } : null,
+            { icon: <Users />, label: 'Accounts', aria: 'Switch account', sub: 'Switch', onClick: tapThen(onSwitchAccount) },
+            onChannels ? { icon: <ChannelIcon />, label: 'Channels', sub: 'Updates', onClick: tapThen(onChannels) } : null,
+            onBroadcast ? { icon: <BroadcastIcon />, label: 'Broadcast', aria: 'Broadcast lists', sub: 'Lists', onClick: tapThen(onBroadcast) } : null,
+          ]} />
+        </DetailSection>
+        <DetailSection>
+          <DetailRow icon={<SettingsIcon />} label="Settings" onClick={tapThen(onSettings)} last />
+        </DetailSection>
         <div style={{ textAlign: 'center', fontSize: 12, color: c.faint, padding: '22px 16px 8px' }}>ZChat {APP_VERSION}</div>
       </div>
+    </div>
+  );
+}
+
+const HOME_SNAP_V = 1;
+const homeSnapMem = {};
+const homeSnapDirty = new Set();
+let homeSnapTimer = 0;
+function keepChatsLocal() {
+  try { return localStorage.getItem('zchat-keep-chats') !== '0'; } catch { return true; }
+}
+function homeSnapKey(uid) { return `zchat-home-${uid}`; }
+function readHomeSnap(uid) {
+  if (!uid) return null;
+  if (Object.prototype.hasOwnProperty.call(homeSnapMem, uid)) return homeSnapMem[uid];
+  let o = null;
+  if (keepChatsLocal()) {
+    try { o = JSON.parse(localStorage.getItem(homeSnapKey(uid)) || 'null'); } catch {}
+  }
+  if (!o || o.v !== HOME_SNAP_V) o = null;
+  homeSnapMem[uid] = o;
+  return o;
+}
+function homeSnapPart(uid, k, fallback) {
+  const o = readHomeSnap(uid);
+  return o && o[k] !== undefined && o[k] !== null ? o[k] : fallback;
+}
+function homeSnapSet(uid, k) {
+  const v = homeSnapPart(uid, k, null);
+  return new Set(Array.isArray(v) ? v : []);
+}
+function flushHomeSnap() {
+  if (homeSnapTimer) { clearTimeout(homeSnapTimer); homeSnapTimer = 0; }
+  homeSnapDirty.forEach((uid) => {
+    const o = homeSnapMem[uid];
+    if (!o || !keepChatsLocal()) return;
+    try {
+      localStorage.setItem(homeSnapKey(uid), JSON.stringify(o));
+    } catch {
+      try {
+        const slim = { ...o, stories: null, arch: (o.arch || []).slice(0, 20), convs: (o.convs || []).slice(0, 50), groups: (o.groups || []).slice(0, 30) };
+        localStorage.setItem(homeSnapKey(uid), JSON.stringify(slim));
+      } catch {}
+    }
+  });
+  homeSnapDirty.clear();
+}
+function saveHomeSnap(uid, patch) {
+  if (!uid || !keepChatsLocal()) return;
+  const cur = readHomeSnap(uid) || { v: HOME_SNAP_V };
+  homeSnapMem[uid] = { ...cur, ...patch, v: HOME_SNAP_V, at: Date.now() };
+  homeSnapDirty.add(uid);
+  if (!homeSnapTimer) homeSnapTimer = setTimeout(flushHomeSnap, 2500);
+}
+function dropHomeSnap(uid) {
+  delete homeSnapMem[uid];
+  homeSnapDirty.delete(uid);
+  try { localStorage.removeItem(homeSnapKey(uid)); } catch {}
+}
+
+const LOCAL_DB = 'zchat-local';
+let localDbPromise = null;
+function localDb() {
+  if (localDbPromise) return localDbPromise;
+  localDbPromise = new Promise((resolve) => {
+    let done = false;
+    const finish = (db) => { if (!done) { done = true; resolve(db); } };
+    try {
+      if (typeof indexedDB === 'undefined' || !indexedDB) { finish(null); return; }
+      const req = indexedDB.open(LOCAL_DB, 1);
+      req.onupgradeneeded = () => {
+        try { const db = req.result; if (!db.objectStoreNames.contains('chats')) db.createObjectStore('chats'); } catch {}
+      };
+      req.onsuccess = () => {
+        const db = req.result;
+        db.onversionchange = () => { try { db.close(); } catch {} localDbPromise = null; };
+        db.onclose = () => { localDbPromise = null; };
+        finish(db);
+      };
+      req.onerror = () => { localDbPromise = null; finish(null); };
+      req.onblocked = () => finish(null);
+      setTimeout(() => { if (!done) { localDbPromise = null; finish(null); } }, 4000);
+    } catch { localDbPromise = null; finish(null); }
+  });
+  return localDbPromise;
+}
+function localDbGet(key) {
+  return localDb().then((db) => new Promise((resolve) => {
+    if (!db) { resolve(null); return; }
+    try {
+      const r = db.transaction('chats', 'readonly').objectStore('chats').get(key);
+      r.onsuccess = () => resolve(r.result || null);
+      r.onerror = () => resolve(null);
+    } catch { localDbPromise = null; resolve(null); }
+  }));
+}
+function localDbPut(key, value) {
+  return localDb().then((db) => new Promise((resolve) => {
+    if (!db) { resolve(false); return; }
+    try {
+      const tx = db.transaction('chats', 'readwrite');
+      tx.objectStore('chats').put(value, key);
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => resolve(false);
+      tx.onabort = () => resolve(false);
+    } catch { localDbPromise = null; resolve(false); }
+  }));
+}
+function localDbKeys(prefix) {
+  return localDb().then((db) => new Promise((resolve) => {
+    if (!db) { resolve([]); return; }
+    try {
+      const store = db.transaction('chats', 'readonly').objectStore('chats');
+      const range = IDBKeyRange.bound(prefix, `${prefix}￿`);
+      if (store.getAllKeys) {
+        const r = store.getAllKeys(range);
+        r.onsuccess = () => resolve(r.result || []);
+        r.onerror = () => resolve([]);
+        return;
+      }
+      const keys = [];
+      const c = store.openCursor(range);
+      c.onsuccess = () => { const cur = c.result; if (cur) { keys.push(cur.key); cur.continue(); } else resolve(keys); };
+      c.onerror = () => resolve(keys);
+    } catch { resolve([]); }
+  }));
+}
+function localDbDelete(keys) {
+  if (!keys || !keys.length) return Promise.resolve(true);
+  return localDb().then((db) => new Promise((resolve) => {
+    if (!db) { resolve(false); return; }
+    try {
+      const tx = db.transaction('chats', 'readwrite');
+      const store = tx.objectStore('chats');
+      keys.forEach((k) => store.delete(k));
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => resolve(false);
+      tx.onabort = () => resolve(false);
+    } catch { resolve(false); }
+  }));
+}
+
+const CHAT_KEEP = 160;
+const chatMem = new Map();
+const chatPending = new Map();
+const chatWriteTimers = new Map();
+function chatLocalKey(uid, kind, id) { return `${uid}|${kind}:${id}`; }
+function readChatLocal(uid, kind, id) {
+  if (!uid || !id || !keepChatsLocal()) return Promise.resolve(null);
+  const k = chatLocalKey(uid, kind, id);
+  if (chatPending.has(k)) return Promise.resolve(chatPending.get(k));
+  if (chatMem.has(k)) return Promise.resolve(chatMem.get(k));
+  return localDbGet(k).then((v) => {
+    if (v && !chatMem.has(k)) {
+      chatMem.set(k, v);
+      if (chatMem.size > 40) chatMem.delete(chatMem.keys().next().value);
+    }
+    return chatPending.get(k) || chatMem.get(k) || v || null;
+  });
+}
+function keepableRows(rows) {
+  const now = Date.now();
+  return (rows || []).filter((m) => m && m.id && !String(m.id).startsWith('temp-') && !m.queued && !m.sending && !m.failed
+    && !(m.expires_at && new Date(m.expires_at).getTime() <= now)).slice(-CHAT_KEEP);
+}
+const CHAT_INDEX_MAX = 150;
+function touchChatIndex(uid, k) {
+  const snap = readHomeSnap(uid) || {};
+  const prev = snap.cidx || {};
+  if (prev[k] && Date.now() - prev[k] < 60000) return;
+  const idx = { ...prev, [k]: Date.now() };
+  const keys = Object.keys(idx);
+  if (keys.length > CHAT_INDEX_MAX) {
+    const old = keys.sort((a, b) => idx[a] - idx[b]).slice(0, keys.length - CHAT_INDEX_MAX);
+    old.forEach((x) => { delete idx[x]; chatMem.delete(x); });
+    localDbDelete(old);
+  }
+  saveHomeSnap(uid, { cidx: idx });
+}
+function saveChatLocal(uid, kind, id, patch) {
+  if (!uid || !id || !keepChatsLocal()) return;
+  const k = chatLocalKey(uid, kind, id);
+  touchChatIndex(uid, k);
+  const cur = chatPending.get(k) || chatMem.get(k) || {};
+  const next = { ...cur, ...patch, at: Date.now() };
+  chatPending.set(k, next);
+  chatMem.set(k, next);
+  if (chatMem.size > 40) { const first = chatMem.keys().next().value; if (first !== k) chatMem.delete(first); }
+  clearTimeout(chatWriteTimers.get(k));
+  chatWriteTimers.set(k, setTimeout(() => {
+    chatWriteTimers.delete(k);
+    const v = chatPending.get(k);
+    chatPending.delete(k);
+    if (v) localDbPut(k, v);
+  }, 700));
+}
+function flushChatLocal() {
+  chatWriteTimers.forEach((t) => clearTimeout(t));
+  chatWriteTimers.clear();
+  chatPending.forEach((v, k) => { localDbPut(k, v); });
+  chatPending.clear();
+}
+function mergeChatRows(oldRows, freshAsc, limitHit) {
+  const fresh = freshAsc || [];
+  const old = oldRows || [];
+  const oldestFresh = fresh.length ? new Date(fresh[0].created_at).getTime() : 0;
+  const newestOld = old.length ? new Date(old[old.length - 1].created_at).getTime() : 0;
+  const gap = limitHit && fresh.length && newestOld && newestOld < oldestFresh;
+  const byId = new Map();
+  (gap ? [] : old).forEach((m) => byId.set(m.id, m));
+  fresh.forEach((m) => byId.set(m.id, m));
+  return keepableRows([...byId.values()].sort((a, b) => new Date(a.created_at) - new Date(b.created_at)));
+}
+function dropChatLocal(uid) {
+  if (!uid) return Promise.resolve();
+  const prefix = `${uid}|`;
+  [...chatMem.keys()].filter((k) => k.startsWith(prefix)).forEach((k) => chatMem.delete(k));
+  [...chatPending.keys()].filter((k) => k.startsWith(prefix)).forEach((k) => { chatPending.delete(k); clearTimeout(chatWriteTimers.get(k)); chatWriteTimers.delete(k); });
+  return localDbKeys(prefix).then((keys) => localDbDelete(keys));
+}
+function countChatLocal(uid) {
+  if (!uid) return Promise.resolve(0);
+  return localDbKeys(`${uid}|`).then((keys) => keys.length);
+}
+function forgetLocalUser(uid) {
+  dropHomeSnap(uid);
+  return dropChatLocal(uid);
+}
+if (typeof window !== 'undefined') {
+  const flushAllLocal = () => { flushHomeSnap(); flushChatLocal(); };
+  window.addEventListener('pagehide', flushAllLocal);
+  if (typeof document !== 'undefined') document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flushAllLocal(); });
+}
+
+function readStoredAuth() {
+  try {
+    const keys = Object.keys(localStorage).filter((k) => /^sb-.*-auth-token$/.test(k));
+    for (let i = 0; i < keys.length; i++) {
+      const raw = JSON.parse(localStorage.getItem(keys[i]) || 'null');
+      const s = raw && raw.currentSession ? raw.currentSession : raw;
+      if (s && s.access_token && s.refresh_token && s.user && s.user.id) return s;
+    }
+  } catch {}
+  return null;
+}
+function jwtClaims(token) {
+  try {
+    const part = String(token || '').split('.')[1];
+    if (!part) return null;
+    return JSON.parse(atob(part.replace(/-/g, '+').replace(/_/g, '/')));
+  } catch { return null; }
+}
+function localMfaState(sess) {
+  const claims = jwtClaims(sess && sess.access_token);
+  const level = claims && claims.aal ? claims.aal : 'aal1';
+  const factors = (sess && sess.user && Array.isArray(sess.user.factors)) ? sess.user.factors : [];
+  return level !== 'aal2' && factors.some((f) => f && f.status === 'verified') ? 'need' : 'clear';
+}
+function bootStoredSession() {
+  try {
+    if (typeof window === 'undefined') return undefined;
+    const viaLink = /access_token|type=recovery|error_description/.test(window.location.hash) || /[?&]code=/.test(window.location.search);
+    if (viaLink) return undefined;
+    const beat = Number(localStorage.getItem('zchat-live-beat') || 0);
+    if (localStorage.getItem('zchat-remember') === '0' && !sessionStorage.getItem('zchat-live') && !(Date.now() - beat < 90000)) return undefined;
+    const s = readStoredAuth();
+    if (!s) return undefined;
+    const cached = JSON.parse(localStorage.getItem(`zchat-me-cache-${s.user.id}`) || 'null');
+    if (!cached || cached.id !== s.user.id || cached.banned || cached.is_deleted) return undefined;
+    return s;
+  } catch { return undefined; }
+}
+function readMeCache(uid, email) {
+  try {
+    const cached = JSON.parse(localStorage.getItem(`zchat-me-cache-${uid}`) || 'null');
+    if (cached && cached.id === uid && !cached.banned && !cached.is_deleted) return { ...cached, email };
+  } catch {}
+  return null;
+}
+function isNoRowError(error) {
+  return !!error && (error.code === 'PGRST116' || /0 rows|no rows|Expected one row, got 0/i.test(String(error.message || '')));
+}
+
+const SNAP_DROP_KEYS = ['chat_lock_hash', 'device_id', 'push_subscription', 'push_endpoint', 'email'];
+function slimProfile(pr) {
+  if (!pr || typeof pr !== 'object') return pr;
+  const out = { ...pr };
+  SNAP_DROP_KEYS.forEach((k) => { if (k in out) delete out[k]; });
+  return out;
+}
+function slimConv(c) {
+  if (!c || !c.otherProfile) return c;
+  return { ...c, otherProfile: slimProfile(c.otherProfile) };
+}
+
+try {
+  const apiOrigin = supabase && supabase.supabaseUrl ? new URL(String(supabase.supabaseUrl)).origin : '';
+  if (apiOrigin && typeof document !== 'undefined' && document.head && !document.querySelector(`link[rel="preconnect"][href="${apiOrigin}"]`)) {
+    const link = document.createElement('link');
+    link.rel = 'preconnect';
+    link.href = apiOrigin;
+    link.crossOrigin = 'anonymous';
+    document.head.appendChild(link);
+  }
+} catch {}
+let swUpdateReady = false;
+if (typeof navigator !== 'undefined' && navigator.serviceWorker && typeof window !== 'undefined') {
+  try {
+    window.addEventListener('unhandledrejection', (e) => {
+      const why = String((e && e.reason && (e.reason.message || e.reason)) || '');
+      if (/ServiceWorker/i.test(why) && /fetch|network|update/i.test(why)) e.preventDefault();
+    });
+    navigator.serviceWorker.addEventListener('message', (e) => {
+      const d = e && e.data;
+      if (d && d.type === 'zchat-update-ready') {
+        swUpdateReady = true;
+        try { window.dispatchEvent(new Event('zchat-update-ready')); } catch {}
+      }
+    });
+  } catch {}
+}
+
+function ChatListSkeleton() {
+  const { theme } = useTheme();
+  const tone = theme.dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)';
+  return (
+    <div aria-label="Loading chats" style={{ padding: '6px 8px' }}>
+      {[0, 1, 2, 3, 4, 5].map((i) => (
+        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 8px', animation: `zchat-skel 1.4s ease-in-out ${i * 0.12}s infinite` }}>
+          <div style={{ width: 52, height: 52, borderRadius: '50%', background: tone, flexShrink: 0 }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ width: `${48 + ((i * 17) % 30)}%`, height: 13, borderRadius: 7, background: tone }} />
+            <div style={{ width: `${62 + ((i * 23) % 28)}%`, height: 11, borderRadius: 6, background: tone, marginTop: 9 }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function readJsonLs(key, dflt) {
+  try { const v = JSON.parse(localStorage.getItem(key) || 'null'); return v == null ? dflt : v; } catch { return dflt; }
+}
+function writeJsonLs(key, v) {
+  try { localStorage.setItem(key, JSON.stringify(v)); } catch {}
+}
+function chatPrefKey(kind, id) { return `${kind === 'group' ? 'group' : 'dm'}-${id}`; }
+function albumChatKey(myId, otherId, groupId) {
+  if (groupId) return `g:${groupId}`;
+  const [a, b] = [myId, otherId].sort();
+  return `dm:${a}:${b}`;
+}
+
+const WRAP_KINDS = ['zquote:', 'znote:', 'zaway:', 'zsec:'];
+function parseWrapped(content) {
+  if (typeof content !== 'string' || content.charCodeAt(0) !== 122) return null;
+  for (let i = 0; i < WRAP_KINDS.length; i++) {
+    const p = WRAP_KINDS[i];
+    if (content.indexOf(p) !== 0) continue;
+    try {
+      const d = JSON.parse(content.slice(p.length));
+      if (!d || typeof d !== 'object') return null;
+      const k = p.slice(1, -1);
+      const text = k === 'away' ? String(d.t || '') : k === 'sec' ? '' : String(d.x || '');
+      return { k, d, text };
+    } catch { return null; }
+  }
+  return null;
+}
+function wrappedSummary(content) {
+  const w = parseWrapped(content);
+  if (!w) return null;
+  if (w.k === 'sec') return 'Secret message';
+  if (w.k === 'away') return `Away message: ${plainPreviewText(w.text)}`;
+  if (w.k === 'note') return `Note reply: ${plainPreviewText(w.text)}`;
+  return plainPreviewText(w.text) || 'Message';
+}
+function jsonAfter(content, prefix) {
+  if (typeof content !== 'string' || content.indexOf(prefix) !== 0) return null;
+  try { const d = JSON.parse(content.slice(prefix.length)); return d && typeof d === 'object' ? d : null; } catch { return null; }
+}
+function parseFeatureCard(content) {
+  if (typeof content !== 'string' || content.charCodeAt(0) !== 122) return null;
+  let d = jsonAfter(content, 'zfocus:');
+  if (d && Number(d.m) > 0 && typeof d.at === 'string') return { k: 'focus', d };
+  d = jsonAfter(content, 'zwatch:');
+  if (d && typeof d.v === 'string' && /^[A-Za-z0-9_-]{6,15}$/.test(d.v)) return { k: 'watch', d };
+  d = jsonAfter(content, 'zalbum:');
+  if (d && typeof d.a === 'string') return { k: 'album', d };
+  d = jsonAfter(content, 'zpack:');
+  if (d && typeof d.i === 'string') return { k: 'pack', d };
+  d = jsonAfter(content, 'zchan:');
+  if (d && typeof d.i === 'string') return { k: 'chan', d };
+  return null;
+}
+function featureCardSummary(x) {
+  if (x.k === 'focus') return `Focus session: ${Math.round(Number(x.d.m) || 0)} min`;
+  if (x.k === 'watch') return x.d.t ? `Watch together: ${x.d.t}` : 'Watch together';
+  if (x.k === 'album') return `Album: ${x.d.t || 'Photos'}`;
+  if (x.k === 'pack') return `Sticker pack: ${x.d.n || 'Stickers'}`;
+  if (x.k === 'chan') return `Channel: ${x.d.n || 'Channel'}`;
+  return null;
+}
+function isRoundVideo(m) { return !!m && m.type === 'video' && typeof m.content === 'string' && m.content.indexOf('zround:') === 0; }
+function isGifUrl(u) { return typeof u === 'string' && /^https:\/\/[a-z0-9.]*giphy\.com\//i.test(u); }
+
+const chatToneCache = { v: null };
+function readChatTones() {
+  if (!chatToneCache.v) chatToneCache.v = readJsonLs('zchat-chat-tones', {});
+  return chatToneCache.v;
+}
+function chatToneFor(key) { const t = key ? readChatTones()[key] : null; return typeof t === 'string' ? t : null; }
+function setChatTone(key, tone) {
+  const m = { ...readChatTones() };
+  if (tone) m[key] = tone; else delete m[key];
+  chatToneCache.v = m;
+  writeJsonLs('zchat-chat-tones', m);
+}
+
+function dataSaverOn() { return prefOn('zchat-data-saver'); }
+
+function vaultStoreKey(uid) { return `zchat-vault-${uid}`; }
+function readVault(uid) {
+  const v = readJsonLs(vaultStoreKey(uid), null);
+  return v && typeof v === 'object' ? { h: v.h || null, keys: Array.isArray(v.keys) ? v.keys.filter((k) => typeof k === 'string') : [] } : { h: null, keys: [] };
+}
+async function writeWorkerPref(key, update) {
+  try {
+    if (typeof caches === 'undefined') return;
+    const c = await caches.open('zchat-prefs');
+    let cur = {};
+    try { const hit = await c.match(key); if (hit) cur = await hit.json(); } catch {}
+    if (!cur || typeof cur !== 'object' || Array.isArray(cur)) cur = {};
+    await c.put(key, new Response(JSON.stringify(update(cur)), { headers: { 'content-type': 'application/json' } }));
+  } catch {}
+}
+function syncVaultToWorker(uid, keys) {
+  if (!uid) return;
+  writeWorkerPref('/__hidden', (cur) => ({ ...cur, [uid]: keys || [] }));
+}
+function writeVault(uid, v) {
+  writeJsonLs(vaultStoreKey(uid), { h: v.h || null, keys: v.keys || [] });
+  syncVaultToWorker(uid, v.keys || []);
+  try { window.dispatchEvent(new Event('zchat-vault-changed')); } catch {}
+}
+function useVault(uid) {
+  const [v, setV] = useState(() => readVault(uid));
+  useEffect(() => {
+    const on = () => setV(readVault(uid));
+    window.addEventListener('zchat-vault-changed', on);
+    return () => window.removeEventListener('zchat-vault-changed', on);
+  }, [uid]);
+  return v;
+}
+
+function readFocus() {
+  const f = readJsonLs('zchat-focus', null);
+  return f && Number(f.until) > Date.now() ? f : null;
+}
+function writeFocus(f) {
+  writeJsonLs('zchat-focus', f);
+  writeWorkerPref('/__focus', () => (f ? { until: Number(f.until) || 0, chat: f.chat || '' } : {}));
+  try { window.dispatchEvent(new Event('zchat-focus-changed')); } catch {}
+}
+function useFocusState() {
+  const [f, setF] = useState(readFocus);
+  useEffect(() => {
+    const on = () => setF(readFocus());
+    window.addEventListener('zchat-focus-changed', on);
+    const t = setInterval(on, 15000);
+    return () => { window.removeEventListener('zchat-focus-changed', on); clearInterval(t); };
+  }, []);
+  return f;
+}
+
+function activeStatusOf(p) {
+  if (!p || (!p.status_text && !p.status_emoji)) return null;
+  if (p.status_until && new Date(p.status_until).getTime() <= Date.now()) return null;
+  return { e: p.status_emoji || '', t: p.status_text || '' };
+}
+function statusLabel(s) { return s ? `${s.e ? `${s.e} ` : ''}${s.t || ''}`.trim() : ''; }
+
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+function mdOf(d) {
+  const x = d || new Date();
+  return `${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
+}
+function birthdayMdsToday(d) {
+  const x = d || new Date();
+  const md = mdOf(x);
+  const y = x.getFullYear();
+  const leap = (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+  return md === '02-28' && !leap ? ['02-28', '02-29'] : [md];
+}
+function birthdayLabel(md) {
+  const [m, d] = String(md || '').split('-').map((n) => parseInt(n, 10));
+  if (!m || !d) return '';
+  return `${MONTH_NAMES[m - 1]} ${d}`;
+}
+
+function momentDayNumber(d) {
+  const x = d || new Date();
+  return Math.floor(Date.UTC(x.getUTCFullYear(), x.getUTCMonth(), x.getUTCDate()) / 86400000);
+}
+function momentTimeFor(d) {
+  const day = momentDayNumber(d);
+  const minute = 210 + 30 * ((day * 7919 + 1237) % 25);
+  return new Date(day * 86400000 + minute * 60000);
+}
+const MOMENT_WINDOW_MS = 120000;
+
+function localTz() {
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch { return 'UTC'; }
+}
+
+function FlameIcon({ size = 14, color = '#FF7A1A', style }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" style={style}>
+      <path d="M12.6 2.2c.5 3.1-1.1 4.8-2.6 6.4-1.5 1.6-3 3.2-3 6a5 5 0 0 0 10 0c0-1.9-.8-3.3-1.7-4.4.1 1.5-.4 2.7-1.5 3.3.4-3.7-.6-7.6-1.2-11.3z" fill={color} />
+      <path d="M12 21a2.9 2.9 0 0 1-2.9-2.9c0-1.6 1-2.6 1.9-3.6.3 1.2 1 1.8 1.8 2 .6-.8.7-1.7.6-2.6 1 .9 1.6 2.3 1.6 3.9A2.9 2.9 0 0 1 12 21z" fill="#FFD24D" />
+    </svg>
+  );
+}
+function HourglassIcon({ size = 13, color = 'currentColor', style }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style} aria-hidden="true">
+      <path d="M6 3h12M6 21h12M7 3c0 5 5 6 5 9s-5 4-5 9M17 3c0 5-5 6-5 9s5 4 5 9" />
+    </svg>
+  );
+}
+function StreakBadge({ s, size = 12, color }) {
+  const { theme } = useTheme();
+  if (!s || !(s.days >= 2)) return null;
+  const late = !s.today_done && new Date().getHours() >= 18;
+  return (
+    <span aria-label={`${s.days} day streak${late ? ', send a message today to keep it' : ''}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 1, fontSize: size, fontWeight: 800, color: color || theme.ink, flexShrink: 0, lineHeight: 1 }}>
+      <FlameIcon size={size + 2} />{s.days}{late && <HourglassIcon size={size} color="#F59E0B" style={{ marginLeft: 2 }} />}
+    </span>
+  );
+}
+function CakeIcon({ size = 16, style }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" style={style}>
+      <rect x="4" y="12" width="16" height="9" rx="2.5" fill="#FF96B8" />
+      <path d="M4 15.5c1.6 1.2 3.4 1.2 5.3 0s3.7-1.2 5.4 0 3.6 1.2 5.3 0" fill="none" stroke="#FFF3DC" strokeWidth="1.8" strokeLinecap="round" />
+      <rect x="11" y="6.5" width="2" height="5.5" rx="1" fill="#8C6CFF" />
+      <path d="M12 2.6c1 1.1 1.4 1.9 1.4 2.6a1.4 1.4 0 0 1-2.8 0c0-.7.4-1.5 1.4-2.6z" fill="#FFD24D" />
+    </svg>
+  );
+}
+function FocusIcon({ size = 16, color = 'currentColor', style }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style} aria-hidden="true">
+      <circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="4.5" /><circle cx="12" cy="12" r="0.8" fill={color} />
+    </svg>
+  );
+}
+function WatchIcon({ size = 16, color = 'currentColor', style }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style} aria-hidden="true">
+      <rect x="2.5" y="4.5" width="19" height="13" rx="3" /><path d="M10 8.5v5l4.5-2.5z" fill={color} /><path d="M8 21h8" />
+    </svg>
+  );
+}
+function AlbumIcon({ size = 16, color = 'currentColor', style }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style} aria-hidden="true">
+      <rect x="6" y="6" width="15" height="14" rx="2.5" /><path d="M3 16V5.5A2.5 2.5 0 0 1 5.5 3H16" /><path d="M8.5 17l3.5-4 3 3 2-2 2 3" />
+    </svg>
+  );
+}
+function PackIcon({ size = 16, color = 'currentColor', style }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style} aria-hidden="true">
+      <path d="M20 12.5V7a3 3 0 0 0-3-3H7a3 3 0 0 0-3 3v10a3 3 0 0 0 3 3h5.5z" /><path d="M20 12.5L12.5 20v-4.5a3 3 0 0 1 3-3z" /><circle cx="9" cy="10" r="1" fill={color} /><circle cx="15" cy="10" r="1" fill={color} />
+    </svg>
+  );
+}
+function ChannelIcon({ size = 16, color = 'currentColor', style }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style} aria-hidden="true">
+      <circle cx="12" cy="12" r="2" /><path d="M7.8 7.8a6 6 0 0 0 0 8.4M16.2 16.2a6 6 0 0 0 0-8.4" /><path d="M4.9 4.9a10 10 0 0 0 0 14.2M19.1 19.1a10 10 0 0 0 0-14.2" />
+    </svg>
+  );
+}
+function RoundVideoIcon({ size = 16, color = 'currentColor', style }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style} aria-hidden="true">
+      <circle cx="12" cy="12" r="9.2" /><path d="M10 8.8v6.4l5.2-3.2z" fill={color} />
+    </svg>
+  );
+}
+function GifIcon({ size = 16, color = 'currentColor', style }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style} aria-hidden="true">
+      <rect x="2.5" y="5" width="19" height="14" rx="3.5" /><path d="M10 10H8a1.5 1.5 0 0 0-1.5 1.5v1A1.5 1.5 0 0 0 8 14h2v-2H8.8M12.6 10v4M15.5 14v-4h2.4M15.5 12h1.8" />
+    </svg>
+  );
+}
+function RecapIcon({ size = 16, color = 'currentColor', style }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style} aria-hidden="true">
+      <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" /><circle cx="19" cy="6" r="2" />
+    </svg>
+  );
+}
+function MemoriesIcon({ size = 16, color = 'currentColor', style }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style} aria-hidden="true">
+      <path d="M3 12a9 9 0 1 0 3-6.7" /><path d="M3 4v4.5h4.5" /><path d="M12 7.5V12l3 1.8" />
+    </svg>
+  );
+}
+function AvatarMakerIcon({ size = 16, color = 'currentColor', style }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style} aria-hidden="true">
+      <circle cx="12" cy="12" r="9" /><circle cx="9" cy="10.5" r="0.9" fill={color} /><circle cx="15" cy="10.5" r="0.9" fill={color} /><path d="M8.8 14.6c1.8 1.7 4.6 1.7 6.4 0" /><path d="M6.5 6.8c2-1.9 6.8-2.6 10.4.2" />
+    </svg>
+  );
+}
+function BroadcastIcon({ size = 16, color = 'currentColor', style }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style} aria-hidden="true">
+      <path d="M3 11v2.5a1 1 0 0 0 1 1h2.5L12 19V5L6.5 9.5H4a1 1 0 0 0-1 1.5z" /><path d="M16 9a4 4 0 0 1 0 6M18.8 6.3a8 8 0 0 1 0 11.4" />
+    </svg>
+  );
+}
+function NoteIcon({ size = 16, color = 'currentColor', style }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style} aria-hidden="true">
+      <path d="M5 4.5h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-7l-4.5 3.5V16.5H5a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2z" /><path d="M7.5 9h9M7.5 12.5h6" />
+    </svg>
+  );
+}
+function MomentIcon({ size = 16, color = 'currentColor', style }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style} aria-hidden="true">
+      <rect x="3" y="6" width="18" height="14" rx="3" /><path d="M8 6l1.4-2h5.2L16 6" /><circle cx="12" cy="13" r="3.5" /><circle cx="18" cy="9" r="0.8" fill={color} />
+    </svg>
+  );
+}
+
+function useNow(ms) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!ms) return undefined;
+    const t = setInterval(() => setNow(Date.now()), ms);
+    return () => clearInterval(t);
+  }, [ms]);
+  return now;
+}
+function mmss(ms) {
+  const s = Math.max(0, Math.ceil(ms / 1000));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const r = s % 60;
+  return h ? `${h}:${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}` : `${m}:${String(r).padStart(2, '0')}`;
+}
+
+const SEC_DB = 'zchat-secure';
+function secDb() {
+  return new Promise((resolve) => {
+    try {
+      if (typeof indexedDB === 'undefined') { resolve(null); return; }
+      const r = indexedDB.open(SEC_DB, 1);
+      r.onupgradeneeded = () => { try { r.result.createObjectStore('keys'); } catch {} };
+      r.onsuccess = () => resolve(r.result);
+      r.onerror = () => resolve(null);
+    } catch { resolve(null); }
+  });
+}
+async function secGet(k) {
+  const db = await secDb();
+  if (!db) return null;
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction('keys', 'readonly');
+      const q = tx.objectStore('keys').get(k);
+      q.onsuccess = () => resolve(q.result || null);
+      q.onerror = () => resolve(null);
+    } catch { resolve(null); }
+  });
+}
+async function secPut(k, v) {
+  const db = await secDb();
+  if (!db) return false;
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction('keys', 'readwrite');
+      tx.objectStore('keys').put(v, k);
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => resolve(false);
+    } catch { resolve(false); }
+  });
+}
+function bytesToB64(buf) {
+  const a = new Uint8Array(buf);
+  let s = '';
+  for (let i = 0; i < a.length; i++) s += String.fromCharCode(a[i]);
+  return btoa(s);
+}
+function b64ToBytes(s) {
+  const bin = atob(String(s || ''));
+  const a = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i);
+  return a;
+}
+function secretSupported() {
+  try { return typeof crypto !== 'undefined' && !!crypto.subtle && typeof indexedDB !== 'undefined'; } catch { return false; }
+}
+async function jwkFingerprint(jwk) {
+  const h = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${jwk.crv}|${jwk.x}|${jwk.y}`));
+  return Array.from(new Uint8Array(h)).slice(0, 10).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+const myKeyMem = new Map();
+async function myDeviceKey(uid, create) {
+  if (myKeyMem.has(uid)) return myKeyMem.get(uid);
+  const rec = await secGet(`me-${uid}`);
+  if (rec && rec.priv && rec.pub && rec.fp) { myKeyMem.set(uid, rec); return rec; }
+  if (!create || !secretSupported()) return null;
+  const pair = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveKey', 'deriveBits']);
+  const raw = await crypto.subtle.exportKey('jwk', pair.publicKey);
+  const pub = { kty: raw.kty, crv: raw.crv, x: raw.x, y: raw.y };
+  const fp = await jwkFingerprint(pub);
+  const out = { priv: pair.privateKey, pub, fp, at: Date.now() };
+  const ok = await secPut(`me-${uid}`, out);
+  if (!ok) return null;
+  myKeyMem.set(uid, out);
+  return out;
+}
+const pubKeyMem = new Map();
+function rememberPub(fp, jwk) {
+  if (!fp || !jwk) return;
+  pubKeyMem.set(fp, jwk);
+  const all = readJsonLs('zchat-pubs', {});
+  if (all[fp]) return;
+  all[fp] = jwk;
+  const keys = Object.keys(all);
+  if (keys.length > 300) delete all[keys[0]];
+  writeJsonLs('zchat-pubs', all);
+}
+function knownPub(fp) {
+  if (pubKeyMem.has(fp)) return pubKeyMem.get(fp);
+  const all = readJsonLs('zchat-pubs', {});
+  return all[fp] || null;
+}
+async function fetchPeerKey(userId) {
+  try {
+    const { data, error } = await supabase.from('device_keys').select('pub, fp').eq('user_id', userId).maybeSingle();
+    if (error || !data || !data.pub || !data.fp) return null;
+    rememberPub(data.fp, data.pub);
+    return { fp: data.fp, pub: data.pub };
+  } catch { return null; }
+}
+async function publishDeviceKey(uid, force) {
+  const mine = await myDeviceKey(uid, true);
+  if (!mine) return { ok: false, reason: 'unsupported' };
+  try {
+    const { data, error } = await supabase.from('device_keys').select('fp').eq('user_id', uid).maybeSingle();
+    if (error && !/PGRST116/.test(String(error.code || ''))) return { ok: false, reason: 'setup', mine };
+    if (data && data.fp === mine.fp) return { ok: true, mine };
+    if (data && data.fp && !force) return { ok: false, reason: 'other', mine };
+    const { error: upErr } = await supabase.from('device_keys').upsert({ user_id: uid, pub: mine.pub, fp: mine.fp, updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
+    if (upErr) return { ok: false, reason: 'setup', mine };
+    rememberPub(mine.fp, mine.pub);
+    return { ok: true, mine };
+  } catch { return { ok: false, reason: 'setup', mine }; }
+}
+const derivedKeyMem = new Map();
+async function sharedKeyFor(mine, peerFp, peerJwk) {
+  const id = `${mine.fp}:${peerFp}`;
+  if (derivedKeyMem.has(id)) return derivedKeyMem.get(id);
+  const peer = await crypto.subtle.importKey('jwk', { kty: peerJwk.kty, crv: peerJwk.crv, x: peerJwk.x, y: peerJwk.y, ext: true }, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
+  const bits = await crypto.subtle.deriveBits({ name: 'ECDH', public: peer }, mine.priv, 256);
+  const base = await crypto.subtle.importKey('raw', bits, 'HKDF', false, ['deriveKey']);
+  const salt = new TextEncoder().encode([mine.fp, peerFp].sort().join(':'));
+  const key = await crypto.subtle.deriveKey({ name: 'HKDF', hash: 'SHA-256', salt, info: new TextEncoder().encode('zchat secret v1') }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+  derivedKeyMem.set(id, key);
+  return key;
+}
+async function sealSecret(uid, peerId, text) {
+  const mine = await myDeviceKey(uid, false);
+  if (!mine) throw new Error('nokey');
+  const peer = await fetchPeerKey(peerId);
+  if (!peer) throw new Error('nopeer');
+  const key = await sharedKeyFor(mine, peer.fp, peer.pub);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(text));
+  return `zsec:${JSON.stringify({ v: 1, iv: bytesToB64(iv), c: bytesToB64(ct), f: mine.fp, r: peer.fp })}`;
+}
+const openedSecretMem = new Map();
+async function openSecret(uid, m) {
+  if (!m) return null;
+  if (openedSecretMem.has(m.id)) return openedSecretMem.get(m.id);
+  const w = parseWrapped(m.content);
+  if (!w || w.k !== 'sec') return null;
+  const d = w.d || {};
+  try {
+    const mine = await myDeviceKey(uid, false);
+    if (!mine) return null;
+    const mineIsSender = m.sender_id === uid;
+    const myFp = mineIsSender ? d.f : d.r;
+    const peerFp = mineIsSender ? d.r : d.f;
+    if (!myFp || myFp !== mine.fp || !peerFp) return null;
+    let peerJwk = knownPub(peerFp);
+    if (!peerJwk) {
+      const fresh = await fetchPeerKey(mineIsSender ? m.receiver_id : m.sender_id);
+      if (fresh && fresh.fp === peerFp) peerJwk = fresh.pub;
+    }
+    if (!peerJwk) return null;
+    const key = await sharedKeyFor(mine, peerFp, peerJwk);
+    const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64ToBytes(d.iv) }, key, b64ToBytes(d.c));
+    const text = new TextDecoder().decode(pt);
+    openedSecretMem.set(m.id, text);
+    return text;
+  } catch { return null; }
+}
+async function safetyCodeFor(fpA, fpB) {
+  const h = await crypto.subtle.digest('SHA-256', new TextEncoder().encode([fpA, fpB].sort().join('|')));
+  const a = new Uint8Array(h);
+  let digits = '';
+  for (let i = 0; digits.length < 12 && i < a.length; i++) digits += String(a[i] % 10);
+  return `${digits.slice(0, 4)} ${digits.slice(4, 8)} ${digits.slice(8, 12)}`;
+}
+function readSecretChats(uid) { const a = readJsonLs(`zchat-secret-${uid}`, []); return new Set(Array.isArray(a) ? a : []); }
+function writeSecretChats(uid, set) {
+  writeJsonLs(`zchat-secret-${uid}`, [...set]);
+  try { window.dispatchEvent(new Event('zchat-secret-changed')); } catch {}
+}
+
+const trMem = new Map();
+function trKey(id, lang) { return `${id}:${lang}`; }
+function readTrStore() {
+  if (trMem.size) return;
+  const all = readJsonLs('zchat-tr-cache', null);
+  if (all && typeof all === 'object') Object.keys(all).forEach((k) => trMem.set(k, all[k]));
+}
+let trSaveTimer = 0;
+function rememberTranslation(id, lang, text) {
+  trMem.set(trKey(id, lang), text);
+  clearTimeout(trSaveTimer);
+  trSaveTimer = setTimeout(() => {
+    const entries = [...trMem.entries()].slice(-600);
+    const out = {};
+    entries.forEach(([k, v]) => { out[k] = v; });
+    writeJsonLs('zchat-tr-cache', out);
+  }, 800);
+}
+function readAutoTr() { return readJsonLs('zchat-autotr', {}); }
+function autoTrFor(key) { const m = readAutoTr(); return key && typeof m[key] === 'string' ? m[key] : null; }
+function setAutoTr(key, lang) {
+  const m = { ...readAutoTr() };
+  if (lang) m[key] = lang; else delete m[key];
+  writeJsonLs('zchat-autotr', m);
+  try { window.dispatchEvent(new Event('zchat-autotr-changed')); } catch {}
+}
+
+function readPacks(uid) { const a = readJsonLs(`zchat-packs-${uid}`, []); return Array.isArray(a) ? a.filter((p) => p && p.id) : []; }
+function writePacks(uid, list) {
+  writeJsonLs(`zchat-packs-${uid}`, list.slice(0, 40));
+  try { window.dispatchEvent(new Event('zchat-packs-changed')); } catch {}
+}
+
+function youtubeIdOf(text) {
+  const s = String(text || '').trim();
+  const m = s.match(/(?:youtube\.com\/(?:watch\?(?:[^#\s]*&)?v=|shorts\/|embed\/|live\/)|youtu\.be\/)([A-Za-z0-9_-]{6,15})/i);
+  return m ? m[1] : null;
+}
+
+function WrappedHead({ w, isMe, ink }) {
+  const { theme } = useTheme();
+  const color = ink || theme.ink;
+  const d = w.d || {};
+  const small = { display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 700, color, opacity: 0.72, marginBottom: 4 };
+  if (w.k === 'away') return <div style={small}><Clock size={12} />Away message</div>;
+  if (w.k === 'sec') return <div style={small}><Lock size={12} />Secret message</div>;
+  if (w.k === 'note') {
+    return (
+      <div style={{ marginBottom: 6 }}>
+        <div style={small}><NoteIcon size={12} />{isMe ? 'You replied to their note' : 'Replied to your note'}</div>
+        <div style={{ display: 'inline-block', maxWidth: '100%', boxSizing: 'border-box', padding: '6px 11px', borderRadius: 14, background: theme.dark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)', fontSize: 13, color, lineHeight: 1.35, wordBreak: 'break-word' }}>{String(d.n || '').slice(0, 80)}</div>
+      </div>
+    );
+  }
+  const where = String(d.gn || 'a group').slice(0, 60);
+  return (
+    <div style={{ marginBottom: 6, minWidth: 160 }}>
+      <div style={small}><Reply size={12} />Private reply</div>
+      <div style={{ borderLeft: `3px solid ${theme.coral}`, padding: '3px 0 3px 9px', borderRadius: 2 }}>
+        <div style={{ fontSize: 11.5, fontWeight: 800, color: theme.coralDeep, display: 'flex', alignItems: 'center', gap: 4 }}><Users size={11} />{isMe ? `${String(d.s || 'Someone').slice(0, 40)} in ${where}` : `You in ${where}`}</div>
+        <div style={{ fontSize: 12.5, color, opacity: 0.78, lineHeight: 1.35, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', wordBreak: 'break-word' }}>{String(d.q || '').slice(0, 200)}</div>
+      </div>
+    </div>
+  );
+}
+
+function SecretText({ m, myId, onMention }) {
+  const { theme } = useTheme();
+  const [text, setText] = useState(() => openedSecretMem.get(m.id) || null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    if (text != null) return undefined;
+    let alive = true;
+    openSecret(myId, m).then((t) => { if (!alive) return; if (t == null) setFailed(true); else setText(t); });
+    return () => { alive = false; };
+  }, [m.id]);
+  if (text != null) return <RichText text={text} onMention={onMention} />;
+  if (failed) return <span style={{ fontStyle: 'italic', opacity: 0.75 }}>Locked message. It can only be read on the phone it was sent to.</span>;
+  return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, opacity: 0.7 }}><Spinner size={12} color={theme.muted} />Unlocking</span>;
+}
+
+function focusJoinedIds(d, reactions, senderId) {
+  const ids = new Set([senderId]);
+  (reactions || []).forEach((r) => { if (r && r.emoji === 'zfj') ids.add(r.user_id); });
+  return ids;
+}
+function FocusCard({ d, reactions, myId, senderId, onJoin }) {
+  const { theme } = useTheme();
+  const now = useNow(1000);
+  const start = new Date(d.at).getTime();
+  const end = start + Math.round(Number(d.m) || 25) * 60000;
+  const left = end - now;
+  const done = left <= 0;
+  const joined = focusJoinedIds(d, reactions, senderId);
+  const iJoined = joined.has(myId);
+  const pct = Math.max(0, Math.min(1, (now - start) / Math.max(1, end - start)));
+  const R = 30;
+  const C = 2 * Math.PI * R;
+  const tint = '#7C5CFF';
+  return (
+    <FeatureCardShell colors={[tint]} icon={<FocusIcon size={14} />} label={done ? 'Focus session done' : 'Focus together'} title={String(d.t || 'Focus time').slice(0, 60)}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '2px 4px 10px' }}>
+        <svg width="72" height="72" viewBox="0 0 72 72" aria-hidden="true" style={{ flexShrink: 0 }}>
+          <circle cx="36" cy="36" r={R} fill="none" stroke={theme.dark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)'} strokeWidth="6" />
+          <circle cx="36" cy="36" r={R} fill="none" stroke={tint} strokeWidth="6" strokeLinecap="round" strokeDasharray={C} strokeDashoffset={C * (1 - pct)} transform="rotate(-90 36 36)" />
+          <text x="36" y="40" textAnchor="middle" fontSize="13" fontWeight="800" fill={theme.ink} fontFamily={FONT}>{done ? 'Done' : `${Math.round(Number(d.m) || 25)}m`}</text>
+        </svg>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 22, fontWeight: 800, color: theme.ink, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.02em' }}>{done ? 'Nice work' : mmss(left)}</div>
+          <div style={{ fontSize: 12.5, color: theme.muted, marginTop: 2 }}>{joined.size === 1 ? 'Just one so far' : `${joined.size} people focusing`}</div>
+        </div>
+      </div>
+      {!done && (
+        <div role="button" aria-label={iJoined ? 'You joined this focus session' : 'Join focus session'} onClick={(e) => { e.stopPropagation(); if (!iJoined && onJoin) onJoin(); }} className="zchat-press"
+          style={{ height: 40, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 14, fontWeight: 800, cursor: iJoined ? 'default' : 'pointer', background: iJoined ? `${tint}22` : tint, color: iJoined ? tint : '#FFFFFF' }}>
+          {iJoined ? <><Check size={16} />Focusing</> : 'Join and focus'}
+        </div>
+      )}
+    </FeatureCardShell>
+  );
+}
+
+function WatchCard({ d, onOpen }) {
+  const { theme } = useTheme();
+  const tint = '#FF3B30';
+  return (
+    <FeatureCardShell colors={[tint]} icon={<WatchIcon size={14} />} label="Watch together" title={String(d.t || 'YouTube video').slice(0, 80)}>
+      <div role="button" aria-label="Open watch party" onClick={(e) => { e.stopPropagation(); if (onOpen) onOpen(); }} style={{ position: 'relative', width: '100%', aspectRatio: '16 / 9', borderRadius: 12, overflow: 'hidden', background: '#000', cursor: 'pointer' }}>
+        <img src={`https://i.ytimg.com/vi/${d.v}/hqdefault.jpg`} alt="" loading="lazy" draggable={false} onError={(e) => { e.currentTarget.style.visibility = 'hidden'; }} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.22)' }}>
+          <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Play size={22} color="white" style={{ marginLeft: 3 }} /></div>
+        </div>
+      </div>
+      <div role="button" aria-label="Join the watch party" onClick={(e) => { e.stopPropagation(); if (onOpen) onOpen(); }} className="zchat-press" style={{ marginTop: 10, height: 40, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 14, fontWeight: 800, cursor: 'pointer', background: theme.dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)', color: theme.ink }}>
+        <Users size={16} />Watch with everyone
+      </div>
+    </FeatureCardShell>
+  );
+}
+
+function AlbumCard({ d, onOpen }) {
+  const { theme } = useTheme();
+  const pics = (Array.isArray(d.p) ? d.p : []).slice(0, 4);
+  const tint = '#0EA5E9';
+  return (
+    <FeatureCardShell colors={[tint]} icon={<AlbumIcon size={14} />} label="Shared album" title={String(d.t || 'Album').slice(0, 60)}>
+      <div role="button" aria-label="Open album" onClick={(e) => { e.stopPropagation(); if (onOpen) onOpen(); }} style={{ display: 'grid', gridTemplateColumns: pics.length > 1 ? '1fr 1fr' : '1fr', gap: 4, borderRadius: 12, overflow: 'hidden', cursor: 'pointer' }}>
+        {pics.length ? pics.map((u, i) => (
+          <MediaImg key={i} src={u} loading="lazy" draggable={false} style={{ width: '100%', aspectRatio: pics.length > 1 ? '1 / 1' : '4 / 3', objectFit: 'cover', display: 'block', background: theme.rowBg }} />
+        )) : <div style={{ aspectRatio: '4 / 3', background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.muted }}><AlbumIcon size={28} /></div>}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 9, padding: '0 2px' }}>
+        <span style={{ fontSize: 12.5, color: theme.muted }}>{Number(d.n) > 0 ? `${d.n} new ${Number(d.n) === 1 ? 'photo' : 'photos'}` : 'New album'}</span>
+        <span role="button" onClick={(e) => { e.stopPropagation(); if (onOpen) onOpen(); }} style={{ fontSize: 13, fontWeight: 800, color: tint, cursor: 'pointer' }}>Open</span>
+      </div>
+    </FeatureCardShell>
+  );
+}
+
+function PackCard({ d, added: addedIn, onAdd }) {
+  const { theme } = useTheme();
+  const [added, setAdded] = useState(!!addedIn);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { if (addedIn) setAdded(true); }, [addedIn]);
+  const pics = (Array.isArray(d.p) ? d.p : []).slice(0, 4);
+  const tint = '#F59E0B';
+  const add = async (e) => {
+    e.stopPropagation();
+    if (added || busy || !onAdd) return;
+    setBusy(true);
+    const ok = await onAdd();
+    setBusy(false);
+    if (ok) setAdded(true);
+  };
+  return (
+    <FeatureCardShell colors={[tint]} icon={<PackIcon size={14} />} label="Sticker pack" title={String(d.n || 'Stickers').slice(0, 40)}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, padding: '2px 0 10px' }}>
+        {pics.map((u, i) => (
+          <div key={i} style={{ aspectRatio: '1 / 1', borderRadius: 10, background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+            <img src={u} alt="" loading="lazy" draggable={false} style={{ width: '82%', height: '82%', objectFit: 'contain' }} />
+          </div>
+        ))}
+      </div>
+      <div role="button" aria-label={added ? 'Sticker pack added' : 'Add sticker pack'} onClick={add} className="zchat-press"
+        style={{ height: 40, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 14, fontWeight: 800, cursor: added ? 'default' : 'pointer', background: added ? `${tint}22` : tint, color: added ? tint : '#FFFFFF' }}>
+        {busy ? <Spinner size={15} color="#FFFFFF" /> : added ? <><Check size={16} />In your stickers</> : `Add ${Number(d.c) || pics.length} stickers`}
+      </div>
+    </FeatureCardShell>
+  );
+}
+
+function ChannelCard({ d, onOpen }) {
+  const { theme } = useTheme();
+  const tint = '#22C55E';
+  return (
+    <FeatureCardShell colors={[tint]} icon={<ChannelIcon size={14} />} label="Channel" title={String(d.n || 'Channel').slice(0, 60)}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '2px 2px 10px' }}>
+        <Avatar emoji={d.a || null} name={d.n || 'Channel'} size={46} />
+        <div style={{ fontSize: 12.5, color: theme.muted, lineHeight: 1.4, minWidth: 0, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{d.b ? String(d.b).slice(0, 120) : 'Follow to get their updates'}</div>
+      </div>
+      <div role="button" aria-label="View channel" onClick={(e) => { e.stopPropagation(); if (onOpen) onOpen(); }} className="zchat-press" style={{ height: 40, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 800, cursor: 'pointer', background: tint, color: '#FFFFFF' }}>View channel</div>
+    </FeatureCardShell>
+  );
+}
+
+function RoundVideoBubble({ m }) {
+  const { theme } = useTheme();
+  const src = useLocalFirstMedia(m.media_url);
+  const info = jsonAfter(m.content, 'zround:') || {};
+  const knownSecs = Math.max(1, Number(info.d) || 0);
+  const ref = useRef(null);
+  const wrapRef = useRef(null);
+  const [mode, setMode] = useState('preview');
+  const [prog, setProg] = useState(0);
+  const [visible, setVisible] = useState(false);
+  const saver = dataSaverOn();
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el || typeof IntersectionObserver === 'undefined') { setVisible(true); return undefined; }
+    const io = new IntersectionObserver((es) => { es.forEach((e) => setVisible(e.isIntersecting)); }, { threshold: 0.4 });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+  useEffect(() => {
+    const v = ref.current;
+    if (!v || !src) return;
+    if (mode === 'play') return;
+    v.muted = true;
+    if (visible && !saver) v.play().catch(() => {}); else v.pause();
+  }, [visible, src, mode, saver]);
+  const tap = (e) => {
+    e.stopPropagation();
+    const v = ref.current;
+    if (!v) return;
+    if (mode === 'play') {
+      if (v.paused) v.play().catch(() => {}); else v.pause();
+      return;
+    }
+    try { v.currentTime = 0; } catch {}
+    v.muted = false;
+    v.loop = false;
+    setMode('play');
+    v.play().catch(() => { v.muted = true; v.play().catch(() => {}); });
+  };
+  const size = 210;
+  const R = size / 2 - 3;
+  const C = 2 * Math.PI * R;
+  return (
+    <div ref={wrapRef} role="button" aria-label="Play video message" onClick={tap} style={{ position: 'relative', width: size, height: size, marginBottom: 16, cursor: 'pointer' }}>
+      <div style={{ position: 'absolute', inset: 4, borderRadius: '50%', overflow: 'hidden', background: '#000' }}>
+        {src && (
+          <video ref={ref} src={src} playsInline muted loop={mode !== 'play'} preload={saver ? 'none' : 'metadata'}
+            onTimeUpdate={(e) => { const v = e.currentTarget; if (mode !== 'play') return; const dur = Number.isFinite(v.duration) && v.duration > 0 ? v.duration : knownSecs; setProg(Math.min(1, v.currentTime / dur)); }}
+            onEnded={() => { setMode('preview'); setProg(0); const v = ref.current; if (v) { v.muted = true; v.loop = true; if (!saver) v.play().catch(() => {}); } }}
+            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+        )}
+      </div>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }} aria-hidden="true">
+        <circle cx={size / 2} cy={size / 2} r={R} fill="none" stroke={theme.dark ? 'rgba(255,255,255,0.16)' : 'rgba(0,0,0,0.1)'} strokeWidth="4" />
+        {mode === 'play' && <circle cx={size / 2} cy={size / 2} r={R} fill="none" stroke={theme.coral} strokeWidth="4" strokeLinecap="round" strokeDasharray={C} strokeDashoffset={C * (1 - prog)} transform={`rotate(-90 ${size / 2} ${size / 2})`} />}
+      </svg>
+      {mode !== 'play' && (
+        <div style={{ position: 'absolute', right: 18, bottom: 18, width: 30, height: 30, borderRadius: '50%', background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+          {saver ? <Play size={14} color="white" style={{ marginLeft: 2 }} /> : <VolumeX size={14} color="white" />}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PickPeoplePage({ userId, title, subtitle, multi = true, max = 256, initial, onDone, onClose, actionLabel = 'Done', blockedIds, zIndex = 75 }) {
+  useBackClose(true, onClose);
+  const { theme } = useTheme();
+  const [people, setPeople] = useState(null);
+  const [q, setQ] = useState('');
+  const [results, setResults] = useState(null);
+  const [picked, setPicked] = useState(() => new Map((initial || []).map((p) => [p.id, p])));
+  const timer = useRef(null);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const { data: f } = await supabase.from('follows').select('following_id').eq('follower_id', userId).eq('status', 'accepted').limit(500);
+      const ids = (f || []).map((x) => x.following_id);
+      const known = (initial || []).map((p) => p.id);
+      const all = [...new Set([...ids, ...known])];
+      if (!all.length) { if (alive) setPeople([]); return; }
+      const { data: profs } = await supabase.from('profiles').select('*').in('id', all);
+      if (!alive) return;
+      setPeople(sanitizeAvatarList(profs || [], userId).filter((p) => !p.is_deleted && !p.is_bot && p.id !== userId && !(blockedIds && blockedIds.has(p.id))).sort((a, b) => (a.name || '').localeCompare(b.name || '')));
+    })();
+    return () => { alive = false; };
+  }, [userId]);
+  const doSearch = (val) => {
+    setQ(val);
+    clearTimeout(timer.current);
+    if (val.trim().length < 2) { setResults(null); return; }
+    timer.current = setTimeout(async () => {
+      const { data } = await searchAccounts(val.trim());
+      setResults(sanitizeAvatarList(data || [], userId).filter((u) => u.id !== userId && !u.is_bot && !(blockedIds && blockedIds.has(u.id))));
+    }, 280);
+  };
+  const toggle = (p) => {
+    hapticTap();
+    if (!multi) { onDone([p]); return; }
+    setPicked((prev) => {
+      const next = new Map(prev);
+      if (next.has(p.id)) next.delete(p.id);
+      else if (next.size < max) next.set(p.id, p);
+      return next;
+    });
+  };
+  const term = q.trim().toLowerCase();
+  const local = (people || []).filter((p) => !term || (p.name || '').toLowerCase().includes(term) || (p.username || '').toLowerCase().includes(term));
+  const localIds = new Set(local.map((p) => p.id));
+  const extra = (results || []).filter((p) => !localIds.has(p.id));
+  const tick = (on) => (
+    <span style={{ width: 24, height: 24, borderRadius: '50%', border: `2px solid ${on ? theme.coral : theme.border}`, background: on ? theme.coral : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      {on && <Check size={14} color="#FFFFFF" strokeWidth={3} />}
+    </span>
+  );
+  return (
+    <FullPage title={title} subtitle={multi ? (picked.size ? `${picked.size} picked` : subtitle) : subtitle} onBack={onClose} zIndex={zIndex}
+      right={multi ? <div role="button" aria-label={actionLabel} onClick={() => { if (picked.size) onDone([...picked.values()]); }} style={{ padding: '0 12px', height: 44, display: 'flex', alignItems: 'center', fontSize: 15, fontWeight: 800, color: picked.size ? theme.coral : theme.muted, cursor: picked.size ? 'pointer' : 'default' }}>{actionLabel}</div> : null}>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 8, height: 40, padding: '0 12px', borderRadius: 12, background: theme.rowBg, color: theme.muted, margin: '8px 0 6px' }}>
+        <Search size={17} />
+        <input value={q} onChange={(e) => doSearch(e.target.value)} placeholder="Search by name or username" aria-label="Search people" autoCapitalize="none"
+          style={{ flex: 1, minWidth: 0, border: 0, outline: 0, background: 'transparent', color: theme.ink, fontFamily: FONT, fontSize: 15 }} />
+        {q ? <X size={16} style={{ cursor: 'pointer' }} onClick={() => doSearch('')} /> : null}
+      </label>
+      {multi && picked.size > 0 && (
+        <div style={{ display: 'flex', gap: 10, overflowX: 'auto', padding: '8px 0 6px', scrollbarWidth: 'none' }}>
+          {[...picked.values()].map((p) => (
+            <div key={p.id} role="button" aria-label={`Remove ${p.name}`} onClick={() => toggle(p)} style={{ width: 56, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
+              <div style={{ position: 'relative' }}>
+                <Avatar emoji={p.avatar} name={p.name} size={46} />
+                <span style={{ position: 'absolute', right: -2, top: -2, width: 18, height: 18, borderRadius: '50%', background: theme.ink, color: theme.bgGradient, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={11} /></span>
+              </div>
+              <span style={{ fontSize: 11, color: theme.ink, maxWidth: 56, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{(p.name || '').split(' ')[0]}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {people === null ? (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: 30 }}><Spinner color={theme.muted} /></div>
+      ) : (
+        <>
+          {local.map((p) => <UserListRow key={p.id} profile={p} onClick={() => toggle(p)} rightContent={multi ? tick(picked.has(p.id)) : <ChevronRight size={18} color={theme.muted} />} />)}
+          {extra.length > 0 && <div style={{ padding: '14px 2px 4px', fontSize: 13, fontWeight: 600, color: theme.muted }}>More people</div>}
+          {extra.map((p) => <UserListRow key={p.id} profile={p} onClick={() => toggle(p)} rightContent={multi ? tick(picked.has(p.id)) : <ChevronRight size={18} color={theme.muted} />} />)}
+          {!local.length && !extra.length && <EmptyState art="nothing" title={term ? 'No one found' : 'Nobody to show yet'} text={term ? 'Try their exact username.' : 'Follow people and they show up here.'} />}
+        </>
+      )}
+    </FullPage>
+  );
+}
+
+function ChatTonePage({ chatKey, name, onClose }) {
+  useBackClose(true, onClose);
+  const { theme } = useTheme();
+  const [tone, setTone] = useState(() => chatToneFor(chatKey));
+  const appTone = (NOTIF_TONES.find((t) => t.k === readTone()) || NOTIF_TONES[0]).l;
+  const pick = (k) => {
+    setChatTone(chatKey, k);
+    setTone(k);
+    hapticTap();
+    playUiSound('receive', k || null);
+  };
+  const row = (k, label, sub) => (
+    <div key={k || 'default'} role="button" aria-label={`Tone ${label}`} onClick={() => pick(k)} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 2px', borderBottom: `1px solid ${theme.border}`, cursor: 'pointer' }}>
+      <span style={{ width: 24, display: 'flex', justifyContent: 'center', color: theme.muted }}><Play size={15} /></span>
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ display: 'block', fontSize: 15, fontWeight: 600, color: theme.ink }}>{label}</span>
+        {sub && <span style={{ display: 'block', fontSize: 12.5, color: theme.muted, marginTop: 1 }}>{sub}</span>}
+      </span>
+      {(tone || null) === (k || null) && <Check size={18} color={theme.coral} strokeWidth={2.6} />}
+    </div>
+  );
+  return (
+    <FullPage title="Chat tone" subtitle={name} onBack={onClose} zIndex={70}>
+      <div style={{ padding: '10px 2px 6px', fontSize: 13, color: theme.muted, lineHeight: 1.5 }}>Pick a sound just for this chat, so you know who it is without looking.</div>
+      {row(null, 'Same as the app', appTone)}
+      {NOTIF_TONES.map((t) => row(t.k, t.l))}
+    </FullPage>
+  );
+}
+
+function VaultPinPage({ mode, uid, onDone, onClose, title }) {
+  useBackClose(true, onClose);
+  const [step, setStep] = useState(mode === 'set' ? 'set' : 'check');
+  const [first, setFirst] = useState('');
+  const [err, setErr] = useState(0);
+  const [mismatch, setMismatch] = useState(false);
+  const onPin = async (pin) => {
+    const v = readVault(uid);
+    if (step === 'check') {
+      const h = await hashAppPin(`vault:${uid}:${pin}`);
+      if (h === v.h) { playUiSound('toggle'); onDone(pin); } else { setErr((e) => e + 1); playUiSound('cancel'); }
+      return;
+    }
+    if (step === 'set') { setFirst(pin); setMismatch(false); setStep('confirm'); return; }
+    if (pin !== first) { setErr((e) => e + 1); setMismatch(true); setStep('set'); return; }
+    const h = await hashAppPin(`vault:${uid}:${pin}`);
+    writeVault(uid, { ...v, h });
+    playUiSound('like');
+    onDone(pin);
+  };
+  const sub = step === 'check' ? (err ? 'Wrong PIN, try again' : 'Enter your hidden chats PIN') : step === 'set' ? (mismatch ? 'The PINs did not match, start again' : 'Pick four digits for your hidden chats') : 'Type the same PIN again';
+  return (
+    <FullPage title={title || (step === 'check' ? 'Hidden chats' : 'Hidden chats PIN')} onBack={onClose} zIndex={90}>
+      <div style={{ display: 'flex', justifyContent: 'center', padding: '18px 0 0', color: 'inherit' }}><EyeOff size={30} /></div>
+      <AppPinPad key={step} subtitle={sub} onComplete={onPin} error={err} />
+    </FullPage>
+  );
+}
+
+function HiddenChatsPage({ uid, conversations, archived, groups, onOpenDm, onOpenGroup, onClose }) {
+  useBackClose(true, onClose);
+  const { theme } = useTheme();
+  const vault = useVault(uid);
+  const [changePin, setChangePin] = useState(false);
+  const [askOff, setAskOff] = useState(null);
+  const keys = new Set(vault.keys);
+  const dms = [...(conversations || []), ...(archived || [])].filter((c) => c.otherProfile && keys.has(chatPrefKey('dm', c.otherProfile.id)));
+  const gs = (groups || []).filter((g) => keys.has(chatPrefKey('group', g.id)));
+  const unhide = (key) => {
+    const v = readVault(uid);
+    writeVault(uid, { ...v, keys: v.keys.filter((k) => k !== key) });
+    hapticTap();
+  };
+  const unhideBtn = (key, name) => (
+    <div role="button" aria-label={`Show ${name} in chats`} onClick={(e) => { e.stopPropagation(); setAskOff({ key, name }); }} className="zchat-press" style={{ padding: '7px 12px', borderRadius: 12, background: theme.rowBg, fontSize: 12.5, fontWeight: 800, color: theme.ink, cursor: 'pointer' }}>Unhide</div>
+  );
+  return (
+    <FullPage title="Hidden chats" subtitle="Only you can open these" onBack={onClose} zIndex={80}
+      right={<div role="button" aria-label="Change hidden chats PIN" onClick={() => setChangePin(true)} style={{ padding: '0 12px', height: 44, display: 'flex', alignItems: 'center', cursor: 'pointer', color: theme.ink }}><Pencil size={19} /></div>}>
+      <div style={{ padding: '10px 2px 8px', fontSize: 13, color: theme.muted, lineHeight: 1.5 }}>Hidden chats stay out of your chat list, search and notifications. New messages still arrive here.</div>
+      {!dms.length && !gs.length && <EmptyState art="nothing" title="No hidden chats" text="Press and hold a chat in your list, then tap Hide chat." />}
+      {dms.map((c) => (
+        <UserListRow key={c.id} profile={c.otherProfile} sub={c.preview && c.preview.text ? c.preview.text : `@${c.otherProfile.username}`} onClick={() => onOpenDm(c)} rightContent={unhideBtn(chatPrefKey('dm', c.otherProfile.id), c.otherProfile.name)} />
+      ))}
+      {gs.map((g) => (
+        <div key={g.id} role="button" onClick={() => onOpenGroup(g)} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '9px 0', cursor: 'pointer' }}>
+          <GroupAvatar avatar={g.avatar} name={g.name} size={48} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontWeight: 700, fontSize: 15, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{g.name}</div>
+            <div style={{ fontSize: 13, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{(g.preview && g.preview.text) || 'Group'}</div>
+          </div>
+          {unhideBtn(chatPrefKey('group', g.id), g.name)}
+        </div>
+      ))}
+      {changePin && <VaultPinPage mode="set" uid={uid} title="New PIN" onClose={() => setChangePin(false)} onDone={() => setChangePin(false)} />}
+      {askOff && (
+        <ConfirmSheet title={`Show ${askOff.name} again?`} text="It goes back to your chat list and notifications." confirmLabel="Unhide" danger={false} zIndex={95}
+          onCancel={() => setAskOff(null)} onConfirm={() => { unhide(askOff.key); setAskOff(null); }} />
+      )}
+    </FullPage>
+  );
+}
+
+function TranslateChatSheet({ chatKey, name, onClose }) {
+  const { theme } = useTheme();
+  const [cur, setCur] = useState(() => autoTrFor(chatKey));
+  const pick = (k) => { setAutoTr(chatKey, k); setCur(k); hapticTap(); onClose(); };
+  const peek = (
+    <div style={{ padding: '10px 18px 6px' }}>
+      <div style={{ fontSize: 13, color: theme.muted, lineHeight: 1.5, marginBottom: 10 }}>New messages from {name} show up in the language you pick. Tap a message to see what they really wrote.</div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, paddingBottom: 8 }}>
+        <div role="button" aria-label="Translate off" onClick={() => pick(null)} className="zchat-press" style={{ padding: '8px 13px', borderRadius: 14, fontSize: 13, fontWeight: 800, cursor: 'pointer', background: !cur ? theme.coral : theme.rowBg, color: !cur ? '#FFFFFF' : theme.ink }}>Off</div>
+        {TRANSLATE_LANGS.map(([k, label]) => (
+          <div key={k} role="button" aria-label={`Translate into ${label}`} onClick={() => pick(k)} className="zchat-press" style={{ padding: '8px 13px', borderRadius: 14, fontSize: 13, fontWeight: 800, cursor: 'pointer', background: cur === k ? theme.coral : theme.rowBg, color: cur === k ? '#FFFFFF' : theme.ink }}>{label}</div>
+        ))}
+      </div>
+    </div>
+  );
+  return <ChatRowSheet title="Translate this chat" subtitle={cur ? `On, into ${(TRANSLATE_LANGS.find(([k]) => k === cur) || [0, 'English'])[1]}` : 'Off'} peek={peek} actions={[]} onClose={onClose} zIndex={96} />;
+}
+
+const FOCUS_LENGTHS = [15, 25, 45, 60];
+const FOCUS_LABELS = ['Study', 'Work', 'Read', 'Workout', 'Clean up', 'Create'];
+function FocusComposerSheet({ onSend, onClose }) {
+  useBackClose(true, onClose);
+  const { theme } = useTheme();
+  const [mins, setMins] = useState(25);
+  const [label, setLabel] = useState('Study');
+  const [busy, setBusy] = useState(false);
+  const chip = (on, text, fn, aria) => (
+    <div key={text} role="button" aria-label={aria || text} onClick={fn} className="zchat-press" style={{ padding: '9px 14px', borderRadius: 14, fontSize: 14, fontWeight: 800, cursor: 'pointer', background: on ? '#7C5CFF' : theme.rowBg, color: on ? '#FFFFFF' : theme.ink }}>{text}</div>
+  );
+  return (
+    <FullPage title="Focus together" onBack={onClose} zIndex={96}
+      footer={<BigButton label={busy ? 'Starting' : `Start ${mins} minutes`} disabled={busy} onClick={async () => { setBusy(true); const ok = await onSend({ m: mins, t: label.trim().slice(0, 40) || 'Focus', at: new Date().toISOString() }); if (!ok) setBusy(false); }} />}>
+      <div style={{ display: 'flex', justifyContent: 'center', padding: '18px 0 8px', color: '#7C5CFF' }}><FocusIcon size={44} /></div>
+      <div style={{ textAlign: 'center', fontSize: 13.5, color: theme.muted, lineHeight: 1.5, padding: '0 10px 8px' }}>Start a timer and invite the chat to focus with you. While it runs, other chats stay quiet for everyone who joins.</div>
+      <IgHeading>How long</IgHeading>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', padding: '0 2px' }}>{FOCUS_LENGTHS.map((m) => chip(mins === m, `${m} min`, () => setMins(m), `${m} minutes`))}</div>
+      <IgHeading>What for</IgHeading>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', padding: '0 2px 10px' }}>{FOCUS_LABELS.map((l) => chip(label === l, l, () => setLabel(l)))}</div>
+      <input value={label} onChange={(e) => setLabel(e.target.value.slice(0, 40))} placeholder="Name it" aria-label="Focus session name" style={{ ...inputStyle(theme), marginTop: 4 }} />
+    </FullPage>
+  );
+}
+
+function BroadcastPage({ userId, me, blockedIds, onClose, onSend }) {
+  useBackClose(true, onClose);
+  const { theme } = useTheme();
+  const [lists, setLists] = useState(null);
+  const [setupMissing, setSetupMissing] = useState(false);
+  const [edit, setEdit] = useState(null);
+  const [compose, setCompose] = useState(null);
+  const load = async () => {
+    const { data, error } = await supabase.from('broadcast_lists').select('*').eq('owner_id', userId).order('created_at', { ascending: false });
+    if (error) { setSetupMissing(true); setLists([]); return; }
+    setLists(data || []);
+  };
+  useEffect(() => { load(); }, [userId]);
+  return (
+    <FullPage title="Broadcast lists" subtitle="Send one message to many people" onBack={onClose} zIndex={70}
+      right={<div role="button" aria-label="New broadcast list" onClick={() => setEdit({ name: '', members: [] })} style={{ padding: '0 12px', height: 44, display: 'flex', alignItems: 'center', cursor: 'pointer', color: theme.ink }}><Plus size={22} /></div>}>
+      <div style={{ padding: '10px 2px 8px', fontSize: 13, color: theme.muted, lineHeight: 1.5 }}>Everyone gets it as a normal private message from you. They do not see who else got it, and replies come back to your chats.</div>
+      {setupMissing && <div style={{ padding: '6px 2px 12px', fontSize: 13, fontWeight: 700, color: theme.danger }}>Broadcast lists switch on once the latest ZChat setup is finished.</div>}
+      {lists === null ? <div style={{ display: 'flex', justifyContent: 'center', padding: 30 }}><Spinner color={theme.muted} /></div> : (
+        <>
+          {!lists.length && !setupMissing && <EmptyState art="nochats" title="No lists yet" text="Make a list, like Family or Team, then message them all at once." action={<PillButton primary label="New list" onClick={() => setEdit({ name: '', members: [] })} />} />}
+          {lists.map((l) => (
+            <div key={l.id} role="button" aria-label={`Open list ${l.name}`} onClick={() => setCompose(l)} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 2px', borderBottom: `1px solid ${theme.border}`, cursor: 'pointer' }}>
+              <div style={{ width: 46, height: 46, borderRadius: '50%', background: `${theme.coral}22`, color: theme.coral, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><BroadcastIcon size={22} /></div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.name}</div>
+                <div style={{ fontSize: 12.5, color: theme.muted }}>{(l.member_ids || []).length} {(l.member_ids || []).length === 1 ? 'person' : 'people'}</div>
+              </div>
+              <div role="button" aria-label={`Edit list ${l.name}`} onClick={(e) => { e.stopPropagation(); setEdit(l); }} style={{ padding: 8, color: theme.muted, cursor: 'pointer' }}><Pencil size={17} /></div>
+            </div>
+          ))}
+        </>
+      )}
+      {edit && <BroadcastEditPage userId={userId} list={edit} blockedIds={blockedIds} onClose={() => setEdit(null)} onSaved={() => { setEdit(null); load(); }} />}
+      {compose && <BroadcastComposePage userId={userId} me={me} list={compose} onClose={() => setCompose(null)} onSend={onSend} onEdit={() => { setEdit(compose); }} />}
+    </FullPage>
+  );
+}
+
+function BroadcastEditPage({ userId, list, blockedIds, onClose, onSaved }) {
+  useBackClose(true, onClose);
+  const { theme } = useTheme();
+  const [name, setName] = useState(list.name || '');
+  const [members, setMembers] = useState(null);
+  const [picking, setPicking] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const [askDelete, setAskDelete] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    const ids = list.member_ids || [];
+    if (!ids.length) { setMembers([]); return undefined; }
+    supabase.from('profiles').select('*').in('id', ids).then(({ data }) => { if (alive) setMembers(sanitizeAvatarList(data || [], userId)); });
+    return () => { alive = false; };
+  }, [list.id]);
+  const save = async () => {
+    if (busy) return;
+    const clean = name.trim().slice(0, 40);
+    if (!clean) { setErr('Give the list a name'); return; }
+    if (!members || !members.length) { setErr('Add at least one person'); return; }
+    setBusy(true);
+    setErr('');
+    const row = { owner_id: userId, name: clean, member_ids: members.map((p) => p.id) };
+    const res = list.id ? await supabase.from('broadcast_lists').update(row).eq('id', list.id).eq('owner_id', userId) : await supabase.from('broadcast_lists').insert(row);
+    setBusy(false);
+    if (res.error) { setErr('That could not be saved. Try again.'); return; }
+    onSaved();
+  };
+  const remove = async () => {
+    await supabase.from('broadcast_lists').delete().eq('id', list.id).eq('owner_id', userId);
+    onSaved();
+  };
+  return (
+    <FullPage title={list.id ? 'Edit list' : 'New list'} onBack={onClose} zIndex={76} footer={<BigButton label={busy ? 'Saving' : 'Save list'} disabled={busy} onClick={save} />}>
+      <div style={{ fontSize: 13, fontWeight: 700, color: theme.muted, padding: '12px 2px 6px' }}>List name</div>
+      <input value={name} onChange={(e) => setName(e.target.value.slice(0, 40))} placeholder="Family, Team, Classmates" aria-label="List name" style={inputStyle(theme)} />
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 2px 6px' }}>
+        <span style={{ fontSize: 13, fontWeight: 700, color: theme.muted }}>{members ? `${members.length} people` : 'People'}</span>
+        <span role="button" aria-label="Add people to list" onClick={() => setPicking(true)} style={{ fontSize: 14, fontWeight: 800, color: theme.coral, cursor: 'pointer' }}>Add people</span>
+      </div>
+      {members === null ? <div style={{ display: 'flex', justifyContent: 'center', padding: 20 }}><Spinner color={theme.muted} /></div> : members.map((p) => (
+        <UserListRow key={p.id} profile={p} rightContent={<div role="button" aria-label={`Remove ${p.name}`} onClick={() => setMembers((prev) => prev.filter((x) => x.id !== p.id))} style={{ padding: 8, cursor: 'pointer', color: theme.muted }}><X size={18} /></div>} />
+      ))}
+      {err && <div role="alert" style={{ padding: '10px 2px', fontSize: 13, fontWeight: 700, color: theme.danger }}>{err}</div>}
+      {list.id && <div role="button" aria-label="Delete list" onClick={() => setAskDelete(true)} style={{ padding: '22px 2px 6px', fontSize: 14.5, fontWeight: 800, color: theme.danger, cursor: 'pointer' }}>Delete list</div>}
+      {picking && <PickPeoplePage userId={userId} title="Add people" subtitle="Pick who gets your broadcasts" initial={members || []} blockedIds={blockedIds} onClose={() => setPicking(false)} onDone={(list2) => { setMembers(list2); setPicking(false); }} zIndex={80} />}
+      {askDelete && <ConfirmSheet title="Delete this list?" text="The people in it are not told." confirmLabel="Delete" zIndex={95} onCancel={() => setAskDelete(false)} onConfirm={remove} />}
+    </FullPage>
+  );
+}
+
+function BroadcastComposePage({ userId, list, onClose, onSend, onEdit }) {
+  useBackClose(true, onClose);
+  const { theme } = useTheme();
+  const [text, setText] = useState('');
+  const [file, setFile] = useState(null);
+  const [preview, setPreview] = useState('');
+  const [state, setState] = useState(null);
+  const fileRef = useRef(null);
+  useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
+  const count = (list.member_ids || []).length;
+  const go = async () => {
+    if (state && state.busy) return;
+    if (!text.trim() && !file) return;
+    if (navigator.onLine === false) { setState({ done: true, error: 'No connection. Try again when you are back online.' }); return; }
+    setState({ busy: true, sent: 0, total: count });
+    const res = await onSend(list, text.trim(), file, (n) => setState((s) => ({ ...(s || {}), busy: true, sent: n, total: count })));
+    setState({ done: true, ...res });
+    if (res && res.sent) { setText(''); setFile(null); setPreview(''); }
+  };
+  return (
+    <FullPage title={list.name} subtitle={`${count} ${count === 1 ? 'person' : 'people'}`} onBack={onClose} zIndex={76}
+      right={<div role="button" aria-label="Edit this list" onClick={onEdit} style={{ padding: '0 12px', height: 44, display: 'flex', alignItems: 'center', cursor: 'pointer', color: theme.ink }}><Pencil size={19} /></div>}
+      footer={<BigButton label={state && state.busy ? `Sending ${state.sent} of ${state.total}` : `Send to ${count}`} disabled={(!text.trim() && !file) || !!(state && state.busy)} onClick={go} />}>
+      <div style={{ padding: '12px 2px 8px', fontSize: 13, color: theme.muted, lineHeight: 1.5 }}>Each person gets this as a private message from you.</div>
+      <textarea value={text} onChange={(e) => setText(e.target.value.slice(0, MAX_CHARS))} placeholder="Write your message" aria-label="Broadcast message" rows={5} style={{ ...inputStyle(theme), resize: 'none', fontFamily: FONT, minHeight: 120 }} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10 }}>
+        {preview ? (
+          <div style={{ position: 'relative' }}>
+            <img src={preview} alt="" style={{ width: 84, height: 84, objectFit: 'cover', borderRadius: 14, display: 'block' }} />
+            <div role="button" aria-label="Remove photo" onClick={() => { setFile(null); setPreview(''); }} style={{ position: 'absolute', top: -6, right: -6, width: 22, height: 22, borderRadius: '50%', background: theme.danger, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={12} color="#FFFFFF" /></div>
+          </div>
+        ) : (
+          <div role="button" aria-label="Add a photo" onClick={() => fileRef.current && fileRef.current.click()} className="zchat-press" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderRadius: 14, background: theme.rowBg, color: theme.ink, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}><ImageIcon size={18} />Add a photo</div>
+        )}
+      </div>
+      <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files && e.target.files[0]; e.target.value = ''; if (f) { setFile(f); setPreview(URL.createObjectURL(f)); } }} />
+      {state && state.done && (
+        <div role="status" style={{ marginTop: 16, padding: '12px 14px', borderRadius: 14, background: theme.rowBg, fontSize: 13.5, fontWeight: 700, color: state.error ? theme.danger : theme.ink }}>
+          {state.error || (state.failed ? `Sent to ${state.sent}. ${state.failed} could not get it.` : `Sent to ${state.sent === 1 ? '1 person' : `${state.sent} people`}.`)}
+        </div>
+      )}
+    </FullPage>
+  );
+}
+
+const STATUS_PRESETS = [['\u{1F4DA}', 'In class'], ['\u{1F4BC}', 'At work'], ['\u{1F3AE}', 'Gaming'], ['\u{1F634}', 'Sleeping'], ['\u{1F3C3}', 'At the gym'], ['✈️', 'Travelling'], ['\u{1F37F}', 'Watching a movie'], ['\u{1F3A7}', 'Listening to music'], ['\u{1F697}', 'Driving'], ['\u{1F515}', 'Busy, reply later']];
+const STATUS_EMOJIS = ['\u{1F60A}', '\u{1F4DA}', '\u{1F4BC}', '\u{1F3AE}', '\u{1F634}', '\u{1F3C3}', '✈️', '\u{1F37F}', '\u{1F3A7}', '\u{1F697}', '\u{1F515}', '❤️', '\u{1F389}', '☕', '\u{1F334}', '\u{1F60E}'];
+const STATUS_TIMES = [['1 hour', 3600000], ['4 hours', 14400000], ['Today', 'today'], ['This week', 604800000], ['Keep it', null]];
+function statusUntilFor(v) {
+  if (v === null) return null;
+  if (v === 'today') { const d = new Date(); d.setHours(23, 59, 0, 0); return d.toISOString(); }
+  return new Date(Date.now() + v).toISOString();
+}
+function statusLeftLabel(iso) {
+  if (!iso) return 'Stays until you clear it';
+  const ms = new Date(iso).getTime() - Date.now();
+  if (ms <= 0) return 'Cleared';
+  const h = Math.round(ms / 3600000);
+  if (h < 1) return `Clears in ${Math.max(1, Math.round(ms / 60000))} min`;
+  if (h < 24) return `Clears in ${h} ${h === 1 ? 'hour' : 'hours'}`;
+  const d = Math.round(h / 24);
+  return `Clears in ${d} ${d === 1 ? 'day' : 'days'}`;
+}
+function StatusSheet({ me, onClose, onSaved }) {
+  useBackClose(true, onClose);
+  const { theme } = useTheme();
+  const cur = activeStatusOf(me);
+  const [emoji, setEmoji] = useState(cur ? cur.e : '\u{1F60A}');
+  const [text, setText] = useState(cur ? cur.t : '');
+  const [time, setTime] = useState('today');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const [pickEmoji, setPickEmoji] = useState(false);
+  const save = async (clear) => {
+    if (busy) return;
+    const patch = clear ? { status_text: null, status_emoji: null, status_until: null } : { status_text: text.trim().slice(0, 60) || null, status_emoji: emoji || null, status_until: statusUntilFor(time) };
+    if (!clear && !patch.status_text) { setErr('Write a few words'); return; }
+    setBusy(true);
+    setErr('');
+    const { error } = await supabase.from('profiles').update(patch).eq('id', me.id);
+    setBusy(false);
+    if (error) { setErr(/status|column|schema/i.test(String(error.message || '')) ? 'Status switches on once the latest ZChat setup is finished.' : 'That could not be saved. Try again.'); return; }
+    hapticTap();
+    onSaved(patch);
+    onClose();
+  };
+  return (
+    <FullPage title="Your status" subtitle="Shows on your profile and in chats" onBack={onClose} zIndex={72}
+      footer={<div style={{ display: 'flex', gap: 8 }}>{cur && <BigButton label="Clear" tone="plain" onClick={() => save(true)} style={{ flex: '0 0 110px' }} />}<BigButton label={busy ? 'Saving' : 'Set status'} disabled={busy} onClick={() => save(false)} /></div>}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 14 }}>
+        <div role="button" aria-label="Pick status emoji" onClick={() => setPickEmoji(true)} className="zchat-press" style={{ width: 50, height: 50, borderRadius: 16, background: theme.rowBg, border: `1px solid ${theme.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, cursor: 'pointer', flexShrink: 0 }}>{emoji || '\u{1F60A}'}</div>
+        <input value={text} onChange={(e) => setText(e.target.value.slice(0, 60))} placeholder="What are you up to?" aria-label="Status text" style={{ ...inputStyle(theme), flex: 1 }} />
+      </div>
+      <div style={{ display: 'flex', gap: 6, overflowX: 'auto', padding: '10px 0 2px', scrollbarWidth: 'none' }}>
+        {STATUS_EMOJIS.map((e) => (
+          <div key={e} role="button" aria-label={`Emoji ${e}`} onClick={() => setEmoji(e)} style={{ width: 38, height: 38, flexShrink: 0, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 21, cursor: 'pointer', background: emoji === e ? `${theme.coral}22` : 'transparent', border: `1px solid ${emoji === e ? theme.coral : 'transparent'}` }}>{e}</div>
+        ))}
+      </div>
+      <IgHeading>Ideas</IgHeading>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '0 2px' }}>
+        {STATUS_PRESETS.map(([e, t]) => (
+          <div key={t} role="button" aria-label={`Use status ${t}`} onClick={() => { setEmoji(e); setText(t); hapticTap(); }} className="zchat-press" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 14, background: theme.rowBg, fontSize: 13.5, fontWeight: 700, color: theme.ink, cursor: 'pointer' }}><span style={{ fontSize: 15 }}>{e}</span>{t}</div>
+        ))}
+      </div>
+      <IgHeading>Clear after</IgHeading>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '0 2px' }}>
+        {STATUS_TIMES.map(([l, v]) => (
+          <div key={l} role="button" aria-label={`Clear after ${l}`} onClick={() => setTime(v)} className="zchat-press" style={{ padding: '8px 13px', borderRadius: 14, fontSize: 13.5, fontWeight: 800, cursor: 'pointer', background: time === v ? theme.coral : theme.rowBg, color: time === v ? '#FFFFFF' : theme.ink }}>{l}</div>
+        ))}
+      </div>
+      {cur && <div style={{ padding: '14px 2px 0', fontSize: 12.5, color: theme.muted }}>Now: {statusLabel(cur)} · {statusLeftLabel(me.status_until)}</div>}
+      {err && <div role="alert" style={{ padding: '12px 2px 0', fontSize: 13, fontWeight: 700, color: theme.danger }}>{err}</div>}
+      {pickEmoji && <FullEmojiPicker onClose={() => setPickEmoji(false)} onPick={(e) => { setEmoji(e); setPickEmoji(false); }} />}
+    </FullPage>
+  );
+}
+
+const BIRTHDAY_SHOW = [['followers', 'My followers'], ['mutual', 'Friends who follow back'], ['everyone', 'Everyone'], ['nobody', 'Only me']];
+function BirthdaySheet({ userId, onClose }) {
+  useBackClose(true, onClose);
+  const { theme } = useTheme();
+  const [row, setRow] = useState(undefined);
+  const [month, setMonth] = useState(1);
+  const [day, setDay] = useState(1);
+  const [show, setShow] = useState('followers');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  useEffect(() => {
+    let alive = true;
+    supabase.from('birthdays').select('*').eq('user_id', userId).maybeSingle().then(({ data, error }) => {
+      if (!alive) return;
+      if (error) { setRow(null); setErr('Birthdays switch on once the latest ZChat setup is finished.'); return; }
+      setRow(data || null);
+      if (data && data.md) { const [m, d] = data.md.split('-').map((n) => parseInt(n, 10)); if (m) setMonth(m); if (d) setDay(d); setShow(data.show || 'followers'); }
+    });
+    return () => { alive = false; };
+  }, [userId]);
+  const daysIn = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1];
+  const md = `${String(month).padStart(2, '0')}-${String(Math.min(day, daysIn)).padStart(2, '0')}`;
+  const save = async () => {
+    if (busy) return;
+    setBusy(true);
+    setErr('');
+    const { error } = await supabase.from('birthdays').upsert({ user_id: userId, md, show, updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
+    setBusy(false);
+    if (error) { setErr('That could not be saved. Try again.'); return; }
+    hapticTap();
+    try { window.dispatchEvent(new Event('zchat-birthday-changed')); } catch {}
+    onClose();
+  };
+  const remove = async () => {
+    await supabase.from('birthdays').delete().eq('user_id', userId);
+    try { window.dispatchEvent(new Event('zchat-birthday-changed')); } catch {}
+    onClose();
+  };
+  const sel = { ...inputStyle(theme), appearance: 'none', WebkitAppearance: 'none', cursor: 'pointer' };
+  return (
+    <FullPage title="Birthday" subtitle="Only the day and month, never the year" onBack={onClose} zIndex={72}
+      footer={<div style={{ display: 'flex', gap: 8 }}>{row && <BigButton label="Remove" tone="plain" onClick={remove} style={{ flex: '0 0 110px' }} />}<BigButton label={busy ? 'Saving' : 'Save birthday'} disabled={busy || row === undefined} onClick={save} /></div>}>
+      <div style={{ display: 'flex', justifyContent: 'center', padding: '18px 0 4px' }}><CakeIcon size={52} /></div>
+      <div style={{ textAlign: 'center', fontSize: 13.5, color: theme.muted, lineHeight: 1.5, padding: '0 10px 10px' }}>Friends get a little reminder on your day so they can wish you.</div>
+      <div style={{ display: 'flex', gap: 10 }}>
+        <select value={month} onChange={(e) => setMonth(parseInt(e.target.value, 10))} aria-label="Birthday month" style={{ ...sel, flex: 2 }}>
+          {MONTH_NAMES.map((n, i) => <option key={n} value={i + 1}>{n}</option>)}
+        </select>
+        <select value={Math.min(day, daysIn)} onChange={(e) => setDay(parseInt(e.target.value, 10))} aria-label="Birthday day" style={{ ...sel, flex: 1 }}>
+          {Array.from({ length: daysIn }).map((_, i) => <option key={i} value={i + 1}>{i + 1}</option>)}
+        </select>
+      </div>
+      <IgHeading>Who can see it</IgHeading>
+      {BIRTHDAY_SHOW.map(([k, l]) => (
+        <div key={k} role="button" aria-label={`Birthday visible to ${l}`} onClick={() => setShow(k)} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', padding: '13px 2px', borderBottom: `1px solid ${theme.border}`, cursor: 'pointer' }}>
+          <span style={{ flex: 1, fontSize: 15, fontWeight: 600, color: theme.ink }}>{l}</span>
+          {show === k && <Check size={18} color={theme.coral} strokeWidth={2.6} />}
+        </div>
+      ))}
+      {err && <div role="alert" style={{ padding: '12px 2px 0', fontSize: 13, fontWeight: 700, color: theme.danger }}>{err}</div>}
+    </FullPage>
+  );
+}
+
+const AWAY_PRESETS = ['I am away right now and will reply when I am back.', 'On holiday for a few days. I will get back to you soon.', 'Busy at the moment, I will reply later today.', 'Driving now, talk soon.'];
+function AwayMessagePage({ me, onClose, onSaved }) {
+  useBackClose(true, onClose);
+  const { theme } = useTheme();
+  const [on, setOn] = useState(!!(me && me.away_on));
+  const [text, setText] = useState((me && me.away_text) || AWAY_PRESETS[0]);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const [saved, setSaved] = useState(false);
+  const save = async (nextOn) => {
+    if (busy) return;
+    const clean = text.trim().slice(0, 300);
+    if (nextOn && !clean) { setErr('Write your away message first'); return; }
+    setBusy(true);
+    setErr('');
+    const patch = { away_on: !!nextOn, away_text: clean || null };
+    const { error } = await supabase.from('profiles').update(patch).eq('id', me.id);
+    setBusy(false);
+    if (error) { setErr(/away|column|schema/i.test(String(error.message || '')) ? 'Away messages switch on once the latest ZChat setup is finished.' : 'That could not be saved. Try again.'); return; }
+    setOn(!!nextOn);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 1600);
+    onSaved(patch);
+  };
+  return (
+    <FullPage title="Away message" onBack={onClose} zIndex={72} footer={<BigButton label={busy ? 'Saving' : saved ? 'Saved' : 'Save message'} disabled={busy} onClick={() => save(on)} />}>
+      <div style={{ padding: '12px 2px 6px', fontSize: 13, color: theme.muted, lineHeight: 1.5 }}>When this is on, people who message you get this reply. Each person gets it at most once every 6 hours. Groups never get it.</div>
+      <IgRow inset={false} icon={<Clock size={16} />} label="Send away message" sub={on ? 'On' : 'Off'} right={<IgToggle on={on} onClick={() => save(!on)} />} />
+      <IgHeading>Message</IgHeading>
+      <textarea value={text} onChange={(e) => setText(e.target.value.slice(0, 300))} rows={4} aria-label="Away message text" style={{ ...inputStyle(theme), resize: 'none', fontFamily: FONT }} />
+      <div style={{ textAlign: 'right', fontSize: 12, color: theme.muted, padding: '4px 2px 0' }}>{text.length}/300</div>
+      <IgHeading>Quick picks</IgHeading>
+      {AWAY_PRESETS.map((t) => (
+        <div key={t} role="button" aria-label={`Use ${t}`} onClick={() => { setText(t); hapticTap(); }} className="zchat-row-press" style={{ padding: '12px 2px', borderBottom: `1px solid ${theme.border}`, fontSize: 14, color: theme.ink, cursor: 'pointer', lineHeight: 1.4 }}>{t}</div>
+      ))}
+      {err && <div role="alert" style={{ padding: '12px 2px 0', fontSize: 13, fontWeight: 700, color: theme.danger }}>{err}</div>}
+    </FullPage>
+  );
+}
+
+function NoteBubble({ text, muted, onClick, label }) {
+  const { theme } = useTheme();
+  const bg = theme.dark ? '#2A2A30' : '#FFFFFF';
+  return (
+    <div role="button" aria-label={label} onClick={(e) => { e.stopPropagation(); if (onClick) onClick(); }} style={{ position: 'relative', zIndex: 8, maxWidth: 82, minWidth: 34, boxSizing: 'border-box', padding: '5px 8px', borderRadius: 14, background: bg, boxShadow: '0 2px 8px rgba(0,0,0,0.16)', cursor: 'pointer', marginBottom: -8 }}>
+      <div style={{ fontSize: 10.5, fontWeight: 600, lineHeight: 1.25, color: muted ? theme.muted : theme.ink, textAlign: 'center', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', wordBreak: 'break-word' }}>{text}</div>
+      <span aria-hidden="true" style={{ position: 'absolute', left: 14, bottom: -4, width: 7, height: 7, borderRadius: '50%', background: bg }} />
+    </div>
+  );
+}
+
+function NoteComposerSheet({ userId, mine, onClose, onSaved }) {
+  useBackClose(true, onClose);
+  const { theme } = useTheme();
+  const [text, setText] = useState(mine ? mine.text : '');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const share = async () => {
+    const clean = text.trim().slice(0, 60);
+    if (!clean || busy) return;
+    setBusy(true);
+    setErr('');
+    const now = new Date();
+    const row = { user_id: userId, text: clean, created_at: now.toISOString(), expires_at: new Date(now.getTime() + 86400000).toISOString() };
+    const { error } = await supabase.from('notes').upsert(row, { onConflict: 'user_id' });
+    setBusy(false);
+    if (error) { setErr(/notes|schema|relation/i.test(String(error.message || '')) ? 'Notes switch on once the latest ZChat setup is finished.' : 'That could not be shared. Try again.'); return; }
+    hapticTap();
+    onSaved(row);
+    onClose();
+  };
+  const remove = async () => {
+    await supabase.from('notes').delete().eq('user_id', userId);
+    onSaved(null);
+    onClose();
+  };
+  return (
+    <FullPage title="New note" subtitle="Mutual friends see it for 24 hours" onBack={onClose} zIndex={72}
+      footer={<div style={{ display: 'flex', gap: 8 }}>{mine && <BigButton label="Delete" tone="plain" onClick={remove} style={{ flex: '0 0 110px' }} />}<BigButton label={busy ? 'Sharing' : 'Share note'} disabled={busy || !text.trim()} onClick={share} /></div>}>
+      <div style={{ display: 'flex', justifyContent: 'center', padding: '30px 0 8px' }}>
+        <div style={{ padding: '12px 18px', borderRadius: 22, background: theme.rowBg, border: `1px solid ${theme.border}`, maxWidth: 260, textAlign: 'center', fontSize: 16, fontWeight: 700, color: text.trim() ? theme.ink : theme.muted, wordBreak: 'break-word' }}>{text.trim() || 'Share a thought'}</div>
+      </div>
+      <input value={text} onChange={(e) => setText(e.target.value.slice(0, 60))} placeholder="What is on your mind?" aria-label="Note text" autoFocus style={{ ...inputStyle(theme), marginTop: 14, textAlign: 'center' }} />
+      <div style={{ textAlign: 'center', fontSize: 12, color: theme.muted, padding: '6px 0 0' }}>{text.length}/60</div>
+      {err && <div role="alert" style={{ padding: '12px 2px 0', fontSize: 13, fontWeight: 700, color: theme.danger, textAlign: 'center' }}>{err}</div>}
+    </FullPage>
+  );
+}
+
+function NoteReplySheet({ note, profile, onClose, onSend }) {
+  const { theme } = useTheme();
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const send = async () => {
+    const clean = text.trim();
+    if (!clean || busy) return;
+    setBusy(true);
+    const ok = await onSend(clean);
+    setBusy(false);
+    if (ok) onClose();
+  };
+  const peek = (
+    <div style={{ padding: '14px 18px 10px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '6px 0 14px' }}>
+        <div style={{ padding: '10px 16px', borderRadius: 20, background: theme.rowBg, border: `1px solid ${theme.border}`, fontSize: 15.5, fontWeight: 700, color: theme.ink, textAlign: 'center', maxWidth: 280, wordBreak: 'break-word' }}>{note.text}</div>
+        <Avatar emoji={profile.avatar} name={profile.name} size={58} />
+        <div style={{ fontSize: 12.5, color: theme.muted }}>{timeAgoLong(note.created_at)}</div>
+      </div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <input value={text} onChange={(e) => setText(e.target.value.slice(0, 500))} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); send(); } }} placeholder={`Reply to ${(profile.name || '').split(' ')[0]}`} aria-label="Reply to note" autoFocus style={{ ...inputStyle(theme), flex: 1 }} />
+        <div role="button" aria-label="Send note reply" onClick={send} style={{ width: 44, height: 44, borderRadius: '50%', background: text.trim() ? theme.coral : theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>{busy ? <Spinner size={16} /> : <Send size={18} color={text.trim() ? '#FFFFFF' : theme.muted} />}</div>
+      </div>
+    </div>
+  );
+  return <ChatRowSheet title={profile.name} subtitle="Note" peek={peek} actions={[]} onClose={onClose} zIndex={96} />;
+}
+
+const birthdayRowMem = new Map();
+function useBirthdayOf(userId) {
+  const [row, setRow] = useState(() => (birthdayRowMem.has(userId) ? birthdayRowMem.get(userId) : undefined));
+  useEffect(() => {
+    let alive = true;
+    const load = () => supabase.from('birthdays').select('md, show').eq('user_id', userId).maybeSingle().then(({ data, error }) => {
+      if (!alive) return;
+      const v = error ? null : (data || null);
+      birthdayRowMem.set(userId, v);
+      setRow(v);
+    });
+    load();
+    window.addEventListener('zchat-birthday-changed', load);
+    return () => { alive = false; window.removeEventListener('zchat-birthday-changed', load); };
+  }, [userId]);
+  return row;
+}
+function ProfileExtras({ profile, isSelf, onEditStatus, onEditBirthday }) {
+  const { theme } = useTheme();
+  const st = activeStatusOf(profile);
+  const bd = useBirthdayOf(profile.id);
+  const today = bd && birthdayMdsToday().includes(bd.md);
+  if (!st && !bd && !isSelf) return null;
+  const chip = (key, icon, text, onClick, strong) => (
+    <div key={key} role={onClick ? 'button' : undefined} aria-label={onClick ? text : undefined} onClick={onClick} className={onClick ? 'zchat-press' : undefined} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 16, background: strong ? `${theme.coral}22` : theme.rowBg, border: `1px solid ${strong ? `${theme.coral}55` : theme.border}`, fontSize: 13, fontWeight: 700, color: theme.ink, cursor: onClick ? 'pointer' : 'default', maxWidth: '100%' }}>
+      {icon}<span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{text}</span>
+    </div>
+  );
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center', marginTop: 14, padding: '0 6px' }}>
+      {st ? chip('st', <span style={{ fontSize: 15 }}>{st.e || '\u{1F4AC}'}</span>, st.t || 'Status', isSelf ? onEditStatus : null)
+        : isSelf ? chip('st', <Plus size={14} />, 'Set a status', onEditStatus) : null}
+      {bd ? chip('bd', <CakeIcon size={15} />, today ? (isSelf ? 'Happy birthday!' : 'Birthday today') : `Birthday ${birthdayLabel(bd.md)}`, isSelf ? onEditBirthday : null, today)
+        : isSelf ? chip('bd', <CakeIcon size={15} />, 'Add birthday', onEditBirthday) : null}
+    </div>
+  );
+}
+
+const SLOW_MODE_STEPS = [[0, 'Off'], [10, '10 seconds'], [30, '30 seconds'], [60, '1 minute'], [300, '5 minutes'], [900, '15 minutes'], [3600, '1 hour']];
+function slowModeLabel(secs) {
+  const hit = SLOW_MODE_STEPS.find(([v]) => v === Number(secs || 0));
+  if (hit) return hit[1];
+  const s = Number(secs || 0);
+  return s >= 60 ? `${Math.round(s / 60)} min` : `${s} s`;
+}
+function SlowModeSheet({ value, onPick, onClose }) {
+  const { theme } = useTheme();
+  return (
+    <ChatRowSheet title="Slow mode" subtitle="Members wait between messages. Admins are not slowed." onClose={onClose} zIndex={96}
+      actions={SLOW_MODE_STEPS.map(([v, l]) => ({ label: l, icon: <Timer size={18} />, onClick: () => onPick(v), right: Number(value || 0) === v ? <Check size={18} color={theme.coral} strokeWidth={2.6} /> : null }))} />
+  );
+}
+function MentionAllSheet({ value, onPick, onClose }) {
+  const { theme } = useTheme();
+  return (
+    <ChatRowSheet title="Who can mention everyone" subtitle="Typing @everyone notifies the whole group" onClose={onClose} zIndex={96}
+      actions={[['everyone', 'Everyone'], ['admins', 'Admins only']].map(([v, l]) => ({ label: l, icon: <AtSign size={18} />, onClick: () => onPick(v), right: (value || 'everyone') === v ? <Check size={18} color={theme.coral} strokeWidth={2.6} /> : null }))} />
+  );
+}
+const TITLE_IDEAS = ['Captain', 'Planner', 'DJ', 'Photographer', 'Gamer', 'Chef', 'Helper', 'Legend'];
+function MemberTitleSheet({ member, onSave, onClose }) {
+  useBackClose(true, onClose);
+  const { theme } = useTheme();
+  const [text, setText] = useState(member.title || '');
+  const [busy, setBusy] = useState(false);
+  const save = async (val) => {
+    if (busy) return;
+    setBusy(true);
+    const ok = await onSave(val);
+    setBusy(false);
+    if (ok) onClose();
+  };
+  return (
+    <FullPage title="Member title" subtitle={member.profile ? member.profile.name : ''} onBack={onClose} zIndex={72}
+      footer={<div style={{ display: 'flex', gap: 8 }}>{member.title && <BigButton label="Remove" tone="plain" onClick={() => save('')} style={{ flex: '0 0 110px' }} />}<BigButton label={busy ? 'Saving' : 'Save title'} disabled={busy || !text.trim()} onClick={() => save(text.trim())} /></div>}>
+      <div style={{ padding: '12px 2px 8px', fontSize: 13, color: theme.muted, lineHeight: 1.5 }}>Titles show next to their name in the group, so everyone knows who does what.</div>
+      <input value={text} onChange={(e) => setText(e.target.value.slice(0, 24))} placeholder="Like Captain or Planner" aria-label="Title" autoFocus style={inputStyle(theme)} />
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '12px 0 0' }}>
+        {TITLE_IDEAS.map((t) => <div key={t} role="button" aria-label={`Use title ${t}`} onClick={() => setText(t)} className="zchat-press" style={{ padding: '8px 12px', borderRadius: 14, background: theme.rowBg, fontSize: 13.5, fontWeight: 700, color: theme.ink, cursor: 'pointer' }}>{t}</div>)}
+      </div>
+    </FullPage>
+  );
+}
+
+async function loadAlbumsFor(chatKey) {
+  const { data, error } = await supabase.from('albums').select('*').eq('chat_key', chatKey).order('created_at', { ascending: false }).limit(100);
+  if (error) return { error };
+  const albums = data || [];
+  if (!albums.length) return { albums: [] };
+  const ids = albums.map((a) => a.id);
+  const { data: photos } = await supabase.from('album_photos').select('id, album_id, media_url, media_type, created_at').in('album_id', ids).order('created_at', { ascending: false }).limit(1000);
+  const byAlbum = {};
+  (photos || []).forEach((p) => { (byAlbum[p.album_id] = byAlbum[p.album_id] || []).push(p); });
+  return { albums: albums.map((a) => ({ ...a, photos: byAlbum[a.id] || [] })) };
+}
+async function addPhotosToAlbum(album, userId, files, onProgress) {
+  const rows = [];
+  let failed = 0;
+  for (let i = 0; i < files.length; i++) {
+    const f = files[i];
+    const kind = (f.type || '').startsWith('video') ? 'video' : 'image';
+    let file = f;
+    if (kind === 'image') { try { const u = URL.createObjectURL(f); file = await prepareImageFile(f, u); URL.revokeObjectURL(u); } catch {} }
+    const { url, error } = await uploadChatMedia(file, userId);
+    if (error || !url) { failed += 1; continue; }
+    const { data, error: insErr } = await supabase.from('album_photos').insert({ album_id: album.id, user_id: userId, media_url: url, media_type: kind }).select().single();
+    if (insErr || !data) { failed += 1; continue; }
+    rows.push(data);
+    if (onProgress) onProgress(i + 1);
+  }
+  return { rows, failed };
+}
+
+function AlbumsPage({ chatKey, chatName, userId, onClose, onAdded, initialAlbumId }) {
+  useBackClose(true, onClose);
+  const { theme } = useTheme();
+  const [albums, setAlbums] = useState(null);
+  const [err, setErr] = useState('');
+  const [open, setOpen] = useState(null);
+  const [creating, setCreating] = useState(false);
+  const [title, setTitle] = useState('');
+  const load = async () => {
+    const r = await loadAlbumsFor(chatKey);
+    if (r.error) { setErr('Shared albums switch on once the latest ZChat setup is finished.'); setAlbums([]); return; }
+    setAlbums(r.albums);
+    if (open) setOpen((cur) => (cur ? r.albums.find((a) => a.id === cur.id) || cur : cur));
+  };
+  useEffect(() => { load(); }, [chatKey]);
+  const autoOpenRef = useRef(false);
+  useEffect(() => {
+    if (!initialAlbumId || autoOpenRef.current || !albums) return;
+    autoOpenRef.current = true;
+    const a = albums.find((x) => x.id === initialAlbumId);
+    if (a) setOpen(a); else setErr('That album is not available anymore.');
+  }, [albums]);
+  const create = async () => {
+    const t = title.trim().slice(0, 60);
+    if (!t) return;
+    const { data, error } = await supabase.from('albums').insert({ chat_key: chatKey, title: t, created_by: userId }).select().single();
+    if (error || !data) { setErr('That album could not be made. Try again.'); return; }
+    setCreating(false);
+    setTitle('');
+    await load();
+    setOpen({ ...data, photos: [] });
+  };
+  return (
+    <FullPage title="Shared albums" subtitle={chatName} onBack={onClose} zIndex={72}
+      right={<div role="button" aria-label="New album" onClick={() => setCreating(true)} style={{ padding: '0 12px', height: 44, display: 'flex', alignItems: 'center', cursor: 'pointer', color: theme.ink }}><Plus size={22} /></div>}>
+      <div style={{ padding: '10px 2px 10px', fontSize: 13, color: theme.muted, lineHeight: 1.5 }}>Everyone in this chat can add photos and videos to an album. Great for trips, parties and class projects.</div>
+      {err && <div role="alert" style={{ padding: '4px 2px 10px', fontSize: 13, fontWeight: 700, color: theme.danger }}>{err}</div>}
+      {albums === null ? <div style={{ display: 'flex', justifyContent: 'center', padding: 30 }}><Spinner color={theme.muted} /></div> : !albums.length && !err ? (
+        <EmptyState art="moments" title="No albums yet" text="Make the first one and start adding photos." action={<PillButton primary label="New album" onClick={() => setCreating(true)} />} />
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 }}>
+          {albums.map((a) => (
+            <div key={a.id} role="button" aria-label={`Open album ${a.title}`} onClick={() => setOpen(a)} className="zchat-press" style={{ cursor: 'pointer', minWidth: 0 }}>
+              <div style={{ aspectRatio: '1 / 1', borderRadius: 16, overflow: 'hidden', background: theme.rowBg, display: 'grid', gridTemplateColumns: a.photos.length > 1 ? '1fr 1fr' : '1fr', gap: 2 }}>
+                {a.photos.length ? a.photos.slice(0, a.photos.length > 3 ? 4 : 1).map((p) => <MediaImg key={p.id} src={p.media_url} loading="lazy" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />)
+                  : <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.muted }}><AlbumIcon size={30} /></div>}
+              </div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: theme.ink, marginTop: 7, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.title}</div>
+              <div style={{ fontSize: 12, color: theme.muted }}>{a.photos.length} {a.photos.length === 1 ? 'item' : 'items'}</div>
+            </div>
+          ))}
+        </div>
+      )}
+      {creating && (
+        <ChatRowSheet title="New album" onClose={() => setCreating(false)} zIndex={96} actions={[]}
+          peek={(
+            <div style={{ padding: '12px 18px 10px' }}>
+              <input value={title} onChange={(e) => setTitle(e.target.value.slice(0, 60))} onKeyDown={(e) => { if (e.key === 'Enter') create(); }} placeholder="Name your album" aria-label="Album name" autoFocus style={inputStyle(theme)} />
+              <div style={{ marginTop: 10 }}><BigButton label="Create album" disabled={!title.trim()} onClick={create} /></div>
+            </div>
+          )} />
+      )}
+      {open && <AlbumPage album={open} userId={userId} onClose={() => { setOpen(null); load(); }} onAdded={(rows) => { if (onAdded) onAdded(open, rows); load(); }} />}
+    </FullPage>
+  );
+}
+
+function AlbumPage({ album, userId, onClose, onAdded }) {
+  useBackClose(true, onClose);
+  const { theme } = useTheme();
+  const [photos, setPhotos] = useState(album.photos || null);
+  const [busy, setBusy] = useState(null);
+  const [view, setView] = useState(null);
+  const [askDelete, setAskDelete] = useState(null);
+  const [askAlbumDelete, setAskAlbumDelete] = useState(false);
+  const fileRef = useRef(null);
+  const pressRef = useRef({});
+  const load = async () => {
+    const { data } = await supabase.from('album_photos').select('*').eq('album_id', album.id).order('created_at', { ascending: false }).limit(1000);
+    setPhotos(data || []);
+  };
+  useEffect(() => { load(); }, [album.id]);
+  const add = async (files) => {
+    if (!files.length) return;
+    if (navigator.onLine === false) { setBusy({ error: 'No connection. Try again when you are back online.' }); return; }
+    setBusy({ n: 0, total: files.length });
+    const { rows, failed } = await addPhotosToAlbum(album, userId, files.slice(0, 30), (n) => setBusy({ n, total: files.length }));
+    setBusy(failed ? { error: `${failed} could not be added. Try those again.` } : null);
+    if (rows.length) { setPhotos((prev) => [...rows.slice().reverse(), ...(prev || [])]); if (onAdded) onAdded(rows); }
+  };
+  const remove = async (p) => {
+    setPhotos((prev) => (prev || []).filter((x) => x.id !== p.id));
+    await supabase.from('album_photos').delete().eq('id', p.id);
+  };
+  const removeAlbum = async () => {
+    await supabase.from('albums').delete().eq('id', album.id).eq('created_by', userId);
+    onClose();
+  };
+  const startPress = (p) => {
+    clearTimeout(pressRef.current.t);
+    pressRef.current.fired = false;
+    if (p.user_id !== userId && album.created_by !== userId) return;
+    pressRef.current.t = setTimeout(() => { pressRef.current.fired = true; hapticTap(); setAskDelete(p); }, 520);
+  };
+  const endPress = () => clearTimeout(pressRef.current.t);
+  return (
+    <FullPage title={album.title} subtitle={photos ? `${photos.length} ${photos.length === 1 ? 'item' : 'items'}` : ''} onBack={onClose} zIndex={78} pad={false}
+      right={album.created_by === userId ? <div role="button" aria-label="Delete album" onClick={() => setAskAlbumDelete(true)} style={{ padding: '0 12px', height: 44, display: 'flex', alignItems: 'center', cursor: 'pointer', color: theme.muted }}><Trash2 size={19} /></div> : null}
+      footer={<BigButton label={busy && busy.total ? `Adding ${busy.n} of ${busy.total}` : 'Add photos and videos'} disabled={!!(busy && busy.total)} onClick={() => fileRef.current && fileRef.current.click()} />}>
+      {busy && busy.error && <div role="alert" style={{ padding: '10px 16px', fontSize: 13, fontWeight: 700, color: theme.danger }}>{busy.error}</div>}
+      {photos === null ? <div style={{ display: 'flex', justifyContent: 'center', padding: 30 }}><Spinner color={theme.muted} /></div> : !photos.length ? (
+        <EmptyState art="moments" title="Nothing here yet" text="Add the first photos. Everyone in the chat can see them." />
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2 }}>
+          {photos.map((p) => (
+            <div key={p.id} role="button" aria-label={p.media_type === 'video' ? 'Open video' : 'Open photo'}
+              onPointerDown={() => startPress(p)} onPointerUp={endPress} onPointerLeave={endPress} onPointerCancel={endPress}
+              onContextMenu={(e) => { e.preventDefault(); if (p.user_id === userId || album.created_by === userId) setAskDelete(p); }}
+              onClick={() => { if (pressRef.current.fired) { pressRef.current.fired = false; return; } setView(p); }}
+              style={{ position: 'relative', aspectRatio: '1 / 1', background: theme.rowBg, cursor: 'pointer', overflow: 'hidden', WebkitTouchCallout: 'none' }}>
+              {p.media_type === 'video'
+                ? <VideoThumb src={p.media_url} style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} />
+                : <MediaImg src={p.media_url} loading="lazy" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none' }} />}
+              {p.media_type === 'video' && <Play size={15} color="white" fill="white" style={{ position: 'absolute', top: 7, right: 7, filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.6))' }} />}
+            </div>
+          ))}
+        </div>
+      )}
+      <input ref={fileRef} type="file" accept="image/*,video/*" multiple style={{ display: 'none' }} onChange={(e) => { const files = Array.from(e.target.files || []); e.target.value = ''; add(files); }} />
+      {view && view.media_type !== 'video' && <Portal><ImageViewer url={view.media_url} onClose={() => setView(null)} /></Portal>}
+      {view && view.media_type === 'video' && <Portal><VideoViewer url={view.media_url} onClose={() => setView(null)} /></Portal>}
+      {askDelete && <ConfirmSheet title="Remove from album?" text="It is removed for everyone in the chat." confirmLabel="Remove" zIndex={96} onCancel={() => setAskDelete(null)} onConfirm={() => { const p = askDelete; setAskDelete(null); remove(p); }} />}
+      {askAlbumDelete && <ConfirmSheet title={`Delete ${album.title}?`} text="The album and everything in it is removed for everyone." confirmLabel="Delete album" zIndex={96} onCancel={() => setAskAlbumDelete(false)} onConfirm={removeAlbum} />}
+    </FullPage>
+  );
+}
+
+function AlbumPickSheet({ chatKey, userId, onPick, onClose }) {
+  const { theme } = useTheme();
+  const [albums, setAlbums] = useState(null);
+  const [title, setTitle] = useState('');
+  const [err, setErr] = useState('');
+  useEffect(() => {
+    let alive = true;
+    loadAlbumsFor(chatKey).then((r) => { if (!alive) return; if (r.error) { setErr('Shared albums switch on once the latest ZChat setup is finished.'); setAlbums([]); } else setAlbums(r.albums); });
+    return () => { alive = false; };
+  }, [chatKey]);
+  const create = async () => {
+    const t = title.trim().slice(0, 60);
+    if (!t) return;
+    const { data, error } = await supabase.from('albums').insert({ chat_key: chatKey, title: t, created_by: userId }).select().single();
+    if (error || !data) { setErr('That album could not be made. Try again.'); return; }
+    onPick(data);
+  };
+  const peek = (
+    <div style={{ padding: '8px 18px 10px' }}>
+      {err && <div role="alert" style={{ padding: '4px 0 10px', fontSize: 13, fontWeight: 700, color: theme.danger }}>{err}</div>}
+      <div style={{ display: 'flex', gap: 8 }}>
+        <input value={title} onChange={(e) => setTitle(e.target.value.slice(0, 60))} placeholder="New album name" aria-label="New album name" style={{ ...inputStyle(theme), flex: 1 }} />
+        <div role="button" aria-label="Create album and add" onClick={create} style={{ padding: '0 16px', borderRadius: 14, background: title.trim() ? theme.coral : theme.rowBg, color: title.trim() ? '#FFFFFF' : theme.muted, display: 'flex', alignItems: 'center', fontWeight: 800, fontSize: 14, cursor: 'pointer' }}>Create</div>
+      </div>
+      {albums === null && <div style={{ display: 'flex', justifyContent: 'center', padding: 16 }}><Spinner color={theme.muted} /></div>}
+    </div>
+  );
+  return (
+    <ChatRowSheet title="Add to album" subtitle="Pick an album in this chat" peek={peek} onClose={onClose} zIndex={96}
+      actions={(albums || []).map((a) => ({ label: a.title, hint: `${a.photos.length} ${a.photos.length === 1 ? 'item' : 'items'}`, icon: <AlbumIcon size={18} />, onClick: () => onPick(a) }))} />
+  );
+}
+
+function pickRecorderType() {
+  try {
+    if (typeof MediaRecorder === 'undefined') return '';
+    const list = ['video/mp4;codecs=avc1,mp4a', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+    return list.find((t) => { try { return MediaRecorder.isTypeSupported(t); } catch { return false; } }) || '';
+  } catch { return ''; }
+}
+const ROUND_MAX_SECS = 60;
+function RoundRecorder({ onClose, onSend }) {
+  useBackClose(true, onClose);
+  const { theme } = useTheme();
+  const [stage, setStage] = useState('starting');
+  const [facing, setFacing] = useState('user');
+  const [secs, setSecs] = useState(0);
+  const [clip, setClip] = useState(null);
+  const videoRef = useRef(null);
+  const lastReviewRef = useRef(null);
+  const streamRef = useRef(null);
+  const recRef = useRef(null);
+  const chunksRef = useRef([]);
+  const timerRef = useRef(0);
+  const startedRef = useRef(0);
+  const stopStream = () => { try { (streamRef.current ? streamRef.current.getTracks() : []).forEach((t) => t.stop()); } catch {} streamRef.current = null; };
+  useEffect(() => {
+    if (stage === 'review' || stage === 'sending') return undefined;
+    let alive = true;
+    (async () => {
+      try {
+        stopStream();
+        const st = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing, width: { ideal: 480 }, height: { ideal: 480 } }, audio: { echoCancellation: true, noiseSuppression: true } });
+        if (!alive) { st.getTracks().forEach((t) => t.stop()); return; }
+        streamRef.current = st;
+        if (videoRef.current) { videoRef.current.srcObject = st; videoRef.current.play().catch(() => {}); }
+        setStage((s) => (s === 'starting' || s === 'error' ? 'ready' : s));
+      } catch {
+        if (alive) setStage('error');
+      }
+    })();
+    return () => { alive = false; };
+  }, [facing, stage === 'review']);
+  useEffect(() => () => { clearInterval(timerRef.current); try { if (recRef.current && recRef.current.state !== 'inactive') recRef.current.stop(); } catch {} stopStream(); }, []);
+  useEffect(() => () => {
+    if (!clip || !clip.url) return;
+    const v = lastReviewRef.current;
+    if (v) { try { v.pause(); v.removeAttribute('src'); v.load(); } catch {} }
+    setTimeout(() => { try { URL.revokeObjectURL(clip.url); } catch {} }, 2000);
+  }, [clip]);
+  const stop = () => {
+    clearInterval(timerRef.current);
+    try { if (recRef.current && recRef.current.state !== 'inactive') recRef.current.stop(); } catch {}
+  };
+  const start = () => {
+    const st = streamRef.current;
+    if (!st || stage !== 'ready') return;
+    const type = pickRecorderType();
+    let rec;
+    try { rec = new MediaRecorder(st, type ? { mimeType: type, videoBitsPerSecond: 900000 } : undefined); } catch { setStage('error'); return; }
+    chunksRef.current = [];
+    rec.ondataavailable = (e) => { if (e.data && e.data.size) chunksRef.current.push(e.data); };
+    rec.onstop = () => {
+      const used = Math.max(1, Math.round((Date.now() - startedRef.current) / 1000));
+      const mime = (rec.mimeType || type || 'video/webm').split(';')[0];
+      const blob = new Blob(chunksRef.current, { type: mime });
+      if (!blob.size) { setStage('ready'); return; }
+      setClip({ blob, url: URL.createObjectURL(blob), secs: Math.min(ROUND_MAX_SECS, used), mime });
+      setStage('review');
+      stopStream();
+    };
+    recRef.current = rec;
+    startedRef.current = Date.now();
+    setSecs(0);
+    rec.start(250);
+    playUiSound('record-start');
+    hapticTap();
+    setStage('rec');
+    timerRef.current = setInterval(() => {
+      const s = Math.floor((Date.now() - startedRef.current) / 1000);
+      setSecs(s);
+      if (s >= ROUND_MAX_SECS) stop();
+    }, 200);
+  };
+  const send = async () => {
+    if (!clip || stage === 'sending') return;
+    setStage('sending');
+    const ext = /mp4/.test(clip.mime) ? 'mp4' : 'webm';
+    const file = new File([clip.blob], `round-${Date.now()}.${ext}`, { type: clip.mime });
+    const ok = await onSend(file, clip.secs);
+    if (ok) onClose(); else setStage('review');
+  };
+  const retake = () => { setClip(null); setSecs(0); setStage('starting'); };
+  const size = Math.min(300, (typeof window !== 'undefined' ? window.innerWidth : 360) - 60);
+  const R = size / 2 + 6;
+  const C = 2 * Math.PI * R;
+  const pct = stage === 'rec' ? Math.min(1, secs / ROUND_MAX_SECS) : 0;
+  return (
+    <Portal>
+      <div className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 640, background: 'rgba(6,6,12,0.94)', color: 'white', fontFamily: FONT, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px 16px calc(24px + env(safe-area-inset-bottom))' }}>
+        <div role="button" aria-label="Close video message" onClick={onClose} style={{ position: 'absolute', top: 'calc(12px + env(safe-area-inset-top))', left: 12, width: 40, height: 40, borderRadius: '50%', background: 'rgba(255,255,255,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={20} /></div>
+        <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 18 }}>{stage === 'review' || stage === 'sending' ? 'Send this video message?' : stage === 'rec' ? mmss(secs * 1000) : 'Video message'}</div>
+        <div style={{ position: 'relative', width: size + 24, height: size + 24, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <svg width={size + 24} height={size + 24} style={{ position: 'absolute', inset: 0 }} aria-hidden="true">
+            <circle cx={(size + 24) / 2} cy={(size + 24) / 2} r={R} fill="none" stroke="rgba(255,255,255,0.14)" strokeWidth="5" />
+            {stage === 'rec' && <circle cx={(size + 24) / 2} cy={(size + 24) / 2} r={R} fill="none" stroke="#FF3B30" strokeWidth="5" strokeLinecap="round" strokeDasharray={C} strokeDashoffset={C * (1 - pct)} transform={`rotate(-90 ${(size + 24) / 2} ${(size + 24) / 2})`} />}
+          </svg>
+          <div style={{ width: size, height: size, borderRadius: '50%', overflow: 'hidden', background: '#000' }}>
+            {(stage === 'review' || stage === 'sending') && clip
+              ? <video ref={(el) => { if (el) lastReviewRef.current = el; }} src={clip.url} autoPlay loop playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              : <video ref={videoRef} muted playsInline autoPlay style={{ width: '100%', height: '100%', objectFit: 'cover', transform: facing === 'user' ? 'scaleX(-1)' : 'none' }} />}
+          </div>
+          {stage === 'error' && <div style={{ position: 'absolute', inset: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', fontSize: 14, lineHeight: 1.5, color: 'rgba(255,255,255,0.85)' }}>ZChat needs your camera and microphone. Allow them in your phone settings and try again.</div>}
+          {stage === 'starting' && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Spinner size={26} /></div>}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 28, marginTop: 30, minHeight: 78 }}>
+          {(stage === 'review' || stage === 'sending') ? (
+            <>
+              <div role="button" aria-label="Record again" onClick={retake} style={{ width: 54, height: 54, borderRadius: '50%', background: 'rgba(255,255,255,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><Undo2 size={22} /></div>
+              <div role="button" aria-label="Send video message" onClick={send} style={{ width: 74, height: 74, borderRadius: '50%', background: theme.coral, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>{stage === 'sending' ? <Spinner size={24} /> : <Send size={28} color="white" style={{ marginLeft: -2 }} />}</div>
+            </>
+          ) : (
+            <>
+              <div role="button" aria-label="Switch camera" onClick={() => { if (stage !== 'rec') setFacing((f) => (f === 'user' ? 'environment' : 'user')); }} style={{ width: 54, height: 54, borderRadius: '50%', background: 'rgba(255,255,255,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: stage === 'rec' ? 'default' : 'pointer', opacity: stage === 'rec' ? 0.4 : 1 }}><SwitchCamera size={22} /></div>
+              <div role="button" aria-label={stage === 'rec' ? 'Stop recording' : 'Start recording'} onClick={() => (stage === 'rec' ? stop() : start())} style={{ width: 78, height: 78, borderRadius: '50%', border: '4px solid white', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxSizing: 'border-box' }}>
+                <div style={{ width: stage === 'rec' ? 28 : 60, height: stage === 'rec' ? 28 : 60, borderRadius: stage === 'rec' ? 8 : '50%', background: '#FF3B30', transition: 'all 0.18s ease' }} />
+              </div>
+              <div style={{ width: 54 }} />
+            </>
+          )}
+        </div>
+        <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.6)', marginTop: 14 }}>{stage === 'rec' ? 'Tap the square to stop' : `Up to ${ROUND_MAX_SECS} seconds`}</div>
+      </div>
+    </Portal>
+  );
+}
+
+function WatchComposerSheet({ links, onSend, onClose }) {
+  useBackClose(true, onClose);
+  const { theme } = useTheme();
+  const [text, setText] = useState('');
+  const [title, setTitle] = useState('');
+  const [busy, setBusy] = useState(false);
+  const vid = youtubeIdOf(text);
+  const recent = (links || []).map((u) => ({ u, v: youtubeIdOf(u) })).filter((x) => x.v).slice(0, 6);
+  const go = async (v) => {
+    if (!v || busy) return;
+    setBusy(true);
+    const ok = await onSend({ v, t: title.trim().slice(0, 80) || '', at: new Date().toISOString() });
+    if (!ok) setBusy(false);
+  };
+  return (
+    <FullPage title="Watch together" onBack={onClose} zIndex={96} footer={<BigButton label={busy ? 'Starting' : 'Start watch party'} disabled={!vid || busy} onClick={() => go(vid)} />}>
+      <div style={{ display: 'flex', justifyContent: 'center', padding: '18px 0 6px', color: '#FF3B30' }}><WatchIcon size={44} /></div>
+      <div style={{ textAlign: 'center', fontSize: 13.5, color: theme.muted, lineHeight: 1.5, padding: '0 8px 12px' }}>Paste a YouTube link. When anyone plays, pauses or skips, it happens for everyone watching.</div>
+      <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Paste a YouTube link" aria-label="YouTube link" autoCapitalize="none" style={inputStyle(theme)} />
+      {text && !vid && <div style={{ fontSize: 12.5, color: theme.danger, padding: '6px 2px 0', fontWeight: 700 }}>That does not look like a YouTube link</div>}
+      {vid && (
+        <div style={{ marginTop: 12, borderRadius: 14, overflow: 'hidden', aspectRatio: '16 / 9', background: '#000' }}>
+          <img src={`https://i.ytimg.com/vi/${vid}/hqdefault.jpg`} alt="" onError={(e) => { e.currentTarget.style.visibility = 'hidden'; }} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+        </div>
+      )}
+      <input value={title} onChange={(e) => setTitle(e.target.value.slice(0, 80))} placeholder="Give it a name (optional)" aria-label="Watch party name" style={{ ...inputStyle(theme), marginTop: 12 }} />
+      {recent.length > 0 && (
+        <>
+          <IgHeading>From this chat</IgHeading>
+          {recent.map((x) => (
+            <div key={x.u} role="button" aria-label="Use this video" onClick={() => setText(x.u)} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 2px', cursor: 'pointer' }}>
+              <img src={`https://i.ytimg.com/vi/${x.v}/default.jpg`} alt="" onError={(e) => { e.currentTarget.style.visibility = 'hidden'; }} style={{ width: 72, height: 54, borderRadius: 8, objectFit: 'cover', flexShrink: 0, background: theme.rowBg }} />
+              <span style={{ fontSize: 13, color: theme.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{x.u}</span>
+            </div>
+          ))}
+        </>
+      )}
+    </FullPage>
+  );
+}
+
+function WatchPartyPage({ msgId, d, me, onClose }) {
+  useBackClose(true, onClose);
+  const frameRef = useRef(null);
+  const chRef = useRef(null);
+  const applyRef = useRef(0);
+  const infoRef = useRef({ t: 0, st: -1 });
+  const askedRef = useRef(0);
+  const [viewers, setViewers] = useState([]);
+  const [note, setNote] = useState('');
+  const noteTimer = useRef(0);
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  const src = `https://www.youtube.com/embed/${encodeURIComponent(d.v)}?enablejsapi=1&playsinline=1&rel=0&modestbranding=1&origin=${encodeURIComponent(origin)}`;
+  const flash = (t) => { clearTimeout(noteTimer.current); setNote(t); noteTimer.current = setTimeout(() => setNote(''), 2200); };
+  const post = (obj) => { try { if (frameRef.current && frameRef.current.contentWindow) frameRef.current.contentWindow.postMessage(JSON.stringify(obj), '*'); } catch {} };
+  const cmd = (func, args) => post({ event: 'command', func, args: args || [], id: 1, channel: 'widget' });
+  const send = (a, t) => {
+    if (!chRef.current) return;
+    chRef.current.send({ type: 'broadcast', event: 'sync', payload: { a, t: Math.max(0, Number(t) || 0), at: Date.now(), by: me.id, n: (me.name || '').split(' ')[0] } });
+  };
+  const apply = (p) => {
+    applyRef.current = Date.now();
+    const lag = Math.max(0, (Date.now() - Number(p.at || Date.now())) / 1000);
+    const target = Math.max(0, Number(p.t || 0) + (p.a === 'play' ? Math.min(lag, 3) : 0));
+    cmd('seekTo', [target, true]);
+    if (p.a === 'play') cmd('playVideo'); else cmd('pauseVideo');
+    if (p.n) flash(p.a === 'play' ? `${p.n} pressed play` : `${p.n} paused`);
+  };
+  useEffect(() => {
+    const onMsg = (e) => {
+      let host = '';
+      try { host = new URL(e.origin).hostname; } catch { return; }
+      if (!/(^|\.)youtube(-nocookie)?\.com$/.test(host)) return;
+      let data = e.data;
+      try { if (typeof data === 'string') data = JSON.parse(data); } catch { return; }
+      if (!data || typeof data !== 'object') return;
+      if (data.event === 'onReady') {
+        cmd('addEventListener', ['onStateChange']);
+        if (chRef.current && !askedRef.current) { askedRef.current = Date.now(); chRef.current.send({ type: 'broadcast', event: 'need', payload: { by: me.id } }); }
+      }
+      const info = data.info;
+      if (data.event === 'infoDelivery' && info && typeof info.currentTime === 'number') infoRef.current.t = info.currentTime;
+      const stNow = data.event === 'onStateChange' ? Number(info) : (data.event === 'infoDelivery' && info && typeof info.playerState === 'number' ? info.playerState : null);
+      if (stNow == null || Number.isNaN(stNow)) return;
+      const prev = infoRef.current.st;
+      infoRef.current.st = stNow;
+      if (Date.now() - applyRef.current < 1500 || stNow === prev) return;
+      if (stNow === 1) send('play', infoRef.current.t);
+      else if (stNow === 2) send('pause', infoRef.current.t);
+    };
+    window.addEventListener('message', onMsg);
+    return () => window.removeEventListener('message', onMsg);
+  }, []);
+  useEffect(() => {
+    const ch = supabase.channel(`watch-${msgId}`, { config: { presence: { key: me.id }, broadcast: { self: false } } });
+    const sync = () => {
+      const st = ch.presenceState ? ch.presenceState() : {};
+      const list = [];
+      Object.keys(st || {}).forEach((k) => { const v = (st[k] || [])[0]; if (v) list.push({ id: k, name: v.name || 'Someone', avatar: v.avatar || null }); });
+      setViewers(list);
+    };
+    ch.on('presence', { event: 'sync' }, sync)
+      .on('broadcast', { event: 'sync' }, (msg) => { const p = msg && msg.payload; if (p && p.by !== me.id) apply(p); })
+      .on('broadcast', { event: 'need' }, () => {
+        const st = infoRef.current.st;
+        if (st === 1 || st === 2) send(st === 1 ? 'play' : 'pause', infoRef.current.t);
+      })
+      .subscribe((status) => { if (status === 'SUBSCRIBED') { try { ch.track({ name: me.name || 'Someone', avatar: me.avatar || null, at: Date.now() }); } catch {} } });
+    chRef.current = ch;
+    return () => { try { supabase.removeChannel(ch); } catch {} chRef.current = null; };
+  }, [msgId]);
+  const others = viewers.filter((v) => v.id !== me.id);
+  return (
+    <Portal>
+      <div className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 640, background: '#05060A', color: 'white', fontFamily: FONT, display: 'flex', flexDirection: 'column' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 'calc(10px + env(safe-area-inset-top)) 12px 10px' }}>
+          <div role="button" aria-label="Leave watch party" onClick={onClose} style={{ width: 40, height: 40, borderRadius: '50%', background: 'rgba(255,255,255,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}><ArrowLeft size={20} /></div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 15.5, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.t || 'Watch together'}</div>
+            <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.65)' }}>{others.length ? `${others.length + 1} watching now` : 'Waiting for others to join'}</div>
+          </div>
+        </div>
+        <div style={{ position: 'relative', width: '100%', aspectRatio: '16 / 9', background: '#000', flexShrink: 0 }}>
+          <iframe ref={frameRef} title="YouTube video" src={src} allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+            onLoad={() => post({ event: 'listening', id: 1, channel: 'widget' })}
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 0 }} />
+          {note && <div className="zchat-pop" style={{ position: 'absolute', left: '50%', top: 10, transform: 'translateX(-50%)', padding: '6px 12px', borderRadius: 14, background: 'rgba(0,0,0,0.7)', fontSize: 12.5, fontWeight: 700, pointerEvents: 'none' }}>{note}</div>}
+        </div>
+        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '16px 16px calc(20px + env(safe-area-inset-bottom))' }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,0.65)', marginBottom: 10 }}>Watching</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+            {[{ id: me.id, name: 'You', avatar: me.avatar }, ...others].map((v) => (
+              <div key={v.id} style={{ width: 60, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}>
+                <Avatar emoji={v.avatar} name={v.name} size={46} />
+                <span style={{ fontSize: 11.5, maxWidth: 60, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{(v.name || '').split(' ')[0]}</span>
+              </div>
+            ))}
+          </div>
+          <div role="button" aria-label="Bring everyone to my spot" onClick={() => { const st = infoRef.current.st; send(st === 1 ? 'play' : 'pause', infoRef.current.t); flash('Everyone is now at your spot'); }} className="zchat-press"
+            style={{ marginTop: 22, height: 46, borderRadius: 14, background: 'rgba(255,255,255,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontWeight: 800, fontSize: 14.5, cursor: 'pointer' }}><Repeat size={17} />Bring everyone to my spot</div>
+          <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.55)', lineHeight: 1.5, marginTop: 12 }}>Play, pause and skip on the video and everyone here follows along.</div>
+        </div>
+      </div>
+    </Portal>
+  );
+}
+
+function gifErrorText(r) {
+  if (r.status === 0) return 'No connection. Try again.';
+  if (r.status === 503 || r.status === 404 || /set up|key/i.test(r.error || '')) return 'GIF search switches on once a GIPHY key is added to ZChat.';
+  if (r.status === 429) return r.error || 'Lots of GIF searches today. Try again soon.';
+  return 'GIFs did not load. Try again.';
+}
+const gifMem = new Map();
+function GifGrid({ onPick }) {
+  const { theme } = useTheme();
+  const [q, setQ] = useState('');
+  const [items, setItems] = useState(() => gifMem.get('') || null);
+  const [err, setErr] = useState('');
+  useEffect(() => {
+    let alive = true;
+    const term = q.trim().slice(0, 50);
+    const hit = gifMem.get(term);
+    if (hit) { setItems(hit); setErr(''); return undefined; }
+    const t = setTimeout(async () => {
+      const r = await zchatTools('gifs', { q: term, limit: 24 }, 12000);
+      if (!alive) return;
+      if (r.data && Array.isArray(r.data.items)) { gifMem.set(term, r.data.items); setItems(r.data.items); setErr(''); }
+      else { setItems([]); setErr(gifErrorText(r)); }
+    }, term ? 380 : 0);
+    return () => { alive = false; clearTimeout(t); };
+  }, [q]);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+      <div style={{ position: 'relative', marginBottom: 8, flexShrink: 0 }}>
+        <Search size={14} color={theme.muted} style={{ position: 'absolute', left: 11, top: 10 }} />
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search GIFs" aria-label="Search GIFs" style={{ ...inputStyle(theme), padding: '8px 12px 8px 32px', fontSize: 13 }} />
+      </div>
+      <div style={{ overflowY: 'auto', flex: 1, minHeight: 0, columnCount: 2, columnGap: 6 }}>
+        {items === null && <div style={{ display: 'flex', justifyContent: 'center', padding: 20 }}><Spinner color={theme.muted} /></div>}
+        {err && <div style={{ textAlign: 'center', padding: 20, fontSize: 12.5, color: theme.muted, columnSpan: 'all' }}>{err}</div>}
+        {(items || []).map((g) => (
+          <div key={g.id} role="button" aria-label={`Send GIF ${g.title || ''}`.trim()} onClick={() => onPick(g)} style={{ breakInside: 'avoid', marginBottom: 6, borderRadius: 10, overflow: 'hidden', background: theme.rowBg, cursor: 'pointer' }}>
+            <img src={g.preview || g.url} alt={g.title || 'GIF'} loading="lazy" draggable={false} style={{ width: '100%', display: 'block', aspectRatio: g.w && g.h ? `${g.w} / ${g.h}` : undefined, objectFit: 'cover' }} />
+          </div>
+        ))}
+      </div>
+      <div style={{ fontSize: 10.5, color: theme.muted, textAlign: 'center', paddingTop: 6, flexShrink: 0 }}>Powered by GIPHY</div>
+    </div>
+  );
+}
+
+function PackEditorPage({ userId, mine, pack, onClose, onSaved }) {
+  useBackClose(true, onClose);
+  const { theme } = useTheme();
+  const [name, setName] = useState(pack ? pack.name : '');
+  const [picked, setPicked] = useState(() => new Set(pack ? pack.stickers : []));
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const toggle = (u) => setPicked((prev) => { const n = new Set(prev); if (n.has(u)) n.delete(u); else if (n.size < 120) n.add(u); return n; });
+  const save = async () => {
+    const clean = name.trim().slice(0, 40);
+    if (!clean) { setErr('Give your pack a name'); return; }
+    if (!picked.size) { setErr('Pick at least one sticker'); return; }
+    setBusy(true);
+    setErr('');
+    const row = { owner_id: userId, name: clean, stickers: [...picked], updated_at: new Date().toISOString() };
+    const res = pack && pack.id ? await supabase.from('sticker_packs').update(row).eq('id', pack.id).eq('owner_id', userId).select().single() : await supabase.from('sticker_packs').insert(row).select().single();
+    setBusy(false);
+    if (res.error || !res.data) { setErr(/sticker_packs|schema|relation/i.test(String((res.error && res.error.message) || '')) ? 'Sticker packs switch on once the latest ZChat setup is finished.' : 'That pack could not be saved. Try again.'); return; }
+    onSaved(res.data);
+  };
+  return (
+    <FullPage title={pack ? 'Edit pack' : 'New sticker pack'} subtitle={`${picked.size} picked`} onBack={onClose} zIndex={720} footer={<BigButton label={busy ? 'Saving' : 'Save pack'} disabled={busy} onClick={save} />}>
+      <div style={{ padding: '12px 2px 8px', fontSize: 13, color: theme.muted, lineHeight: 1.5 }}>Bundle your stickers into a pack, then share it so friends can add all of them at once.</div>
+      <input value={name} onChange={(e) => setName(e.target.value.slice(0, 40))} placeholder="Pack name" aria-label="Pack name" style={inputStyle(theme)} />
+      {!mine.length && <EmptyState art="nothing" title="No stickers yet" text="Make a few stickers from your photos first, then come back here." />}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 8, paddingTop: 14 }}>
+        {mine.map((s) => {
+          const on = picked.has(s.url);
+          return (
+            <div key={s.id} role="button" aria-label={on ? 'Remove sticker from pack' : 'Add sticker to pack'} onClick={() => toggle(s.url)} style={{ position: 'relative', aspectRatio: '1 / 1', borderRadius: 14, background: theme.rowBg, border: `2px solid ${on ? theme.coral : 'transparent'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+              <img src={s.url} alt="" loading="lazy" draggable={false} style={{ width: '78%', height: '78%', objectFit: 'contain' }} />
+              {on && <span style={{ position: 'absolute', top: 4, right: 4, width: 20, height: 20, borderRadius: '50%', background: theme.coral, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Check size={12} color="#FFFFFF" strokeWidth={3} /></span>}
+            </div>
+          );
+        })}
+      </div>
+      {err && <div role="alert" style={{ padding: '12px 2px 0', fontSize: 13, fontWeight: 700, color: theme.danger }}>{err}</div>}
+    </FullPage>
+  );
+}
+
+function StickerQIcon({ size = 18, color = 'currentColor', style }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style} aria-hidden="true">
+      <rect x="3" y="3" width="18" height="18" rx="5" /><path d="M9.6 9.4a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1.1.9-1.1 1.6v.4" /><circle cx="12" cy="16.8" r="0.6" fill={color} />
+    </svg>
+  );
+}
+function validStorySticker(s) {
+  if (!s || typeof s !== 'object') return null;
+  if (s.k === 'question' && typeof s.q === 'string') return s;
+  if (s.k === 'poll' && typeof s.q === 'string' && Array.isArray(s.a) && s.a.length >= 2) return s;
+  if (s.k === 'slider' && typeof s.q === 'string') return s;
+  if (s.k === 'moment') return s;
+  return null;
+}
+const SLIDER_EMOJIS = ['\u{1F60D}', '\u{1F525}', '\u{1F602}', '\u{1F44F}', '\u{1F62E}', '\u{1F4AF}', '❤️', '\u{1F92F}'];
+function StoryStickerEditor({ onDone, onClose }) {
+  useBackClose(true, onClose);
+  const [kind, setKind] = useState('question');
+  const [q, setQ] = useState('Ask me anything');
+  const [opts, setOpts] = useState(['Yes', 'No']);
+  const [emoji, setEmoji] = useState(SLIDER_EMOJIS[0]);
+  const presetQ = { question: 'Ask me anything', poll: 'Which one?', slider: 'How much do you like this?' };
+  const pickKind = (k) => { setKind(k); setQ(presetQ[k]); };
+  const ok = q.trim() && (kind !== 'poll' || opts.filter((o) => o.trim()).length >= 2);
+  const done = () => {
+    if (!ok) return;
+    if (kind === 'poll') onDone({ k: 'poll', q: q.trim().slice(0, 80), a: opts.map((o) => o.trim().slice(0, 30)).filter(Boolean).slice(0, 4) });
+    else if (kind === 'slider') onDone({ k: 'slider', q: q.trim().slice(0, 80), e: emoji });
+    else onDone({ k: 'question', q: q.trim().slice(0, 80) });
+  };
+  const tab = (k, label) => (
+    <div key={k} role="button" aria-label={`${label} sticker`} onClick={() => pickKind(k)} style={{ flex: 1, textAlign: 'center', padding: '9px 0', borderRadius: 12, fontSize: 13.5, fontWeight: 800, cursor: 'pointer', background: kind === k ? '#FFFFFF' : 'rgba(255,255,255,0.12)', color: kind === k ? '#111' : '#FFFFFF' }}>{label}</div>
+  );
+  const field = { width: '100%', boxSizing: 'border-box', padding: '12px 14px', borderRadius: 14, border: 'none', outline: 'none', background: 'rgba(255,255,255,0.12)', color: '#FFFFFF', fontFamily: FONT, fontSize: 15 };
+  return (
+    <div onClick={onClose} className="zchat-fade" style={{ position: 'absolute', inset: 0, zIndex: 20, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'flex-end' }}>
+      <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ width: '100%', background: '#15151B', borderRadius: '22px 22px 0 0', padding: '16px 16px calc(16px + env(safe-area-inset-bottom))', color: '#FFFFFF', fontFamily: FONT }}>
+        <div style={{ fontSize: 16, fontWeight: 800, textAlign: 'center', marginBottom: 12 }}>Add a sticker</div>
+        <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>{tab('question', 'Question')}{tab('poll', 'Poll')}{tab('slider', 'Slider')}</div>
+        <input value={q} onChange={(e) => setQ(e.target.value.slice(0, 80))} placeholder="Your question" aria-label="Sticker question" style={field} />
+        {kind === 'poll' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
+            {opts.map((o, i) => (
+              <div key={i} style={{ display: 'flex', gap: 8 }}>
+                <input value={o} onChange={(e) => { const v = e.target.value.slice(0, 30); setOpts((prev) => prev.map((x, j) => (j === i ? v : x))); }} placeholder={`Option ${i + 1}`} aria-label={`Poll option ${i + 1}`} style={{ ...field, flex: 1 }} />
+                {opts.length > 2 && <div role="button" aria-label={`Remove option ${i + 1}`} onClick={() => setOpts((prev) => prev.filter((_, j) => j !== i))} style={{ width: 44, borderRadius: 14, background: 'rgba(255,255,255,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={16} /></div>}
+              </div>
+            ))}
+            {opts.length < 4 && <div role="button" aria-label="Add poll option" onClick={() => setOpts((prev) => [...prev, ''])} style={{ fontSize: 14, fontWeight: 800, color: '#C9B8FF', cursor: 'pointer', padding: '4px 2px' }}>Add an option</div>}
+          </div>
+        )}
+        {kind === 'slider' && (
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 12 }}>
+            {SLIDER_EMOJIS.map((e) => <div key={e} role="button" aria-label={`Slider emoji ${e}`} onClick={() => setEmoji(e)} style={{ width: 44, height: 44, borderRadius: 14, fontSize: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: emoji === e ? 'rgba(255,255,255,0.28)' : 'rgba(255,255,255,0.1)' }}>{e}</div>)}
+          </div>
+        )}
+        <div role="button" aria-label="Add sticker to story" onClick={done} style={{ marginTop: 16, height: 48, borderRadius: 14, background: ok ? '#FFFFFF' : 'rgba(255,255,255,0.2)', color: ok ? '#111' : 'rgba(255,255,255,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 15, cursor: ok ? 'pointer' : 'default' }}>Add to story</div>
+      </div>
+    </div>
+  );
+}
+
+const STICKER_GRAD = 'linear-gradient(135deg, #8B5CF6, #EC4899 55%, #F59E0B)';
+function StickerCardFrame({ title, children, width = 270 }) {
+  return (
+    <div data-story-control onPointerDown={(e) => e.stopPropagation()} style={{ width, maxWidth: '86%', borderRadius: 22, overflow: 'hidden', background: '#FFFFFF', color: '#111', boxShadow: '0 12px 34px rgba(0,0,0,0.35)', fontFamily: FONT }}>
+      <div style={{ background: STICKER_GRAD, color: '#FFFFFF', padding: '12px 16px', fontSize: 15.5, fontWeight: 800, textAlign: 'center', lineHeight: 1.3, wordBreak: 'break-word' }}>{title}</div>
+      <div style={{ padding: 12 }}>{children}</div>
+    </div>
+  );
+}
+function StoryStickerPreview({ sticker }) {
+  if (!sticker) return null;
+  if (sticker.k === 'moment') return <MomentBadge late={!!sticker.late} />;
+  if (sticker.k === 'poll') {
+    return <StickerCardFrame title={sticker.q}>{sticker.a.map((o, i) => <div key={i} style={{ padding: '11px 14px', borderRadius: 14, background: '#F2F2F5', fontWeight: 700, fontSize: 14.5, marginTop: i ? 8 : 0, textAlign: 'center' }}>{o}</div>)}</StickerCardFrame>;
+  }
+  if (sticker.k === 'slider') {
+    return <StickerCardFrame title={sticker.q}><div style={{ position: 'relative', height: 34, display: 'flex', alignItems: 'center' }}><div style={{ flex: 1, height: 8, borderRadius: 4, background: '#ECECF1' }} /><span style={{ position: 'absolute', left: '10%', fontSize: 28 }}>{sticker.e}</span></div></StickerCardFrame>;
+  }
+  return <StickerCardFrame title={sticker.q}><div style={{ padding: '11px 14px', borderRadius: 14, background: '#F2F2F5', color: '#8A8A95', fontSize: 14.5, textAlign: 'center' }}>Type something</div></StickerCardFrame>;
+}
+function MomentBadge({ late }) {
+  return (
+    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 16, background: 'rgba(0,0,0,0.55)', color: '#FFFFFF', fontSize: 12.5, fontWeight: 800, fontFamily: FONT }}>
+      <MomentIcon size={14} />{late ? 'Late daily moment' : 'Daily moment'}
+    </div>
+  );
+}
+
+const storyResultMem = new Map();
+function StoryStickerView({ story, isMine, myId, onBusy, onOpenResponses }) {
+  const sticker = validStorySticker(story.sticker);
+  const [res, setRes] = useState(() => storyResultMem.get(story.id) || null);
+  const [mine, setMine] = useState(() => ((storyResultMem.get(story.id) || {}).mine || {}));
+  const [answer, setAnswer] = useState('');
+  const [typing, setTyping] = useState(false);
+  const [drag, setDrag] = useState(null);
+  const [sent, setSent] = useState(false);
+  const trackRef = useRef(null);
+  const load = async () => {
+    const { data, error } = await supabase.rpc('zchat_story_results', { p_story: story.id });
+    if (error || !data) return;
+    storyResultMem.set(story.id, data);
+    setRes(data);
+    setMine(data.mine || {});
+  };
+  useEffect(() => { if (sticker && sticker.k !== 'moment') load(); }, [story.id]);
+  useEffect(() => { if (onBusy) onBusy(typing || drag != null); }, [typing, drag != null]);
+  useEffect(() => () => { if (onBusy) onBusy(false); }, []);
+  if (!sticker) return null;
+  const respond = async (kind, value, num) => {
+    const row = { story_id: story.id, user_id: myId, kind, value: value == null ? null : String(value).slice(0, 300), num: num == null ? null : num };
+    const { error } = await supabase.from('story_responses').upsert(row, { onConflict: 'story_id,user_id,kind' });
+    if (!error) load();
+    return !error;
+  };
+  const wrap = (child) => <div style={{ position: 'absolute', left: 0, right: 0, top: sticker.k === 'moment' ? 'calc(70px + env(safe-area-inset-top))' : '52%', transform: sticker.k === 'moment' ? 'none' : 'translateY(-50%)', zIndex: 4, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}><div style={{ pointerEvents: 'auto', display: 'flex', justifyContent: 'center', width: '100%' }}>{child}</div></div>;
+  if (sticker.k === 'moment') return wrap(<MomentBadge late={!!sticker.late} />);
+  const seeAll = isMine && onOpenResponses ? (
+    <div role="button" aria-label="See responses" onClick={onOpenResponses} style={{ marginTop: 10, textAlign: 'center', fontSize: 13.5, fontWeight: 800, color: '#8B5CF6', cursor: 'pointer' }}>See responses</div>
+  ) : null;
+  if (sticker.k === 'poll') {
+    const counts = (res && res.poll) || {};
+    const total = sticker.a.reduce((n, _, i) => n + (Number(counts[String(i)]) || 0), 0);
+    const voted = mine.poll != null && mine.poll !== '';
+    const showPct = voted || isMine;
+    return wrap(
+      <StickerCardFrame title={sticker.q}>
+        {sticker.a.map((o, i) => {
+          const n = Number(counts[String(i)]) || 0;
+          const pct = total ? Math.round((n / total) * 100) : 0;
+          const me = String(mine.poll) === String(i);
+          return (
+            <div key={i} role="button" aria-label={`Vote ${o}`} onClick={() => { if (isMine) return; hapticTap(); setMine((m) => ({ ...m, poll: String(i) })); respond('poll', i, null); }}
+              style={{ position: 'relative', overflow: 'hidden', padding: '11px 14px', borderRadius: 14, background: '#F2F2F5', fontWeight: 700, fontSize: 14.5, marginTop: i ? 8 : 0, cursor: isMine ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', border: me ? '2px solid #8B5CF6' : '2px solid transparent' }}>
+              {showPct && <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${pct}%`, background: 'rgba(139,92,246,0.22)', transition: 'width 0.4s ease' }} />}
+              <span style={{ position: 'relative' }}>{o}</span>
+              {showPct && <span style={{ position: 'relative', fontSize: 13, color: '#6B6B76' }}>{pct}%</span>}
+            </div>
+          );
+        })}
+        {showPct && <div style={{ fontSize: 12, color: '#8A8A95', textAlign: 'center', marginTop: 8 }}>{total} {total === 1 ? 'vote' : 'votes'}</div>}
+        {seeAll}
+      </StickerCardFrame>
+    );
+  }
+  if (sticker.k === 'slider') {
+    const avg = res && res.slider ? Number(res.slider.avg) || 0 : 0;
+    const n = res && res.slider ? Number(res.slider.n) || 0 : 0;
+    const my = mine.slider != null ? Number(mine.slider) : null;
+    const pos = drag != null ? drag : (my != null ? my : 0.1);
+    const fromEvent = (e) => { const el = trackRef.current; if (!el) return 0; const r = el.getBoundingClientRect(); return Math.max(0, Math.min(1, (e.clientX - r.left) / Math.max(1, r.width))); };
+    return wrap(
+      <StickerCardFrame title={sticker.q}>
+        <div ref={trackRef} role="slider" aria-label={sticker.q} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(pos * 100)}
+          onPointerDown={(e) => { if (isMine || my != null) return; e.currentTarget.setPointerCapture(e.pointerId); setDrag(fromEvent(e)); }}
+          onPointerMove={(e) => { if (drag != null) setDrag(fromEvent(e)); }}
+          onPointerUp={(e) => { if (drag == null) return; const v = fromEvent(e); setDrag(null); setMine((m) => ({ ...m, slider: String(v) })); hapticTap(); respond('slider', null, Math.round(v * 1000) / 1000); }}
+          style={{ position: 'relative', height: 40, display: 'flex', alignItems: 'center', touchAction: 'none', cursor: isMine || my != null ? 'default' : 'pointer' }}>
+          <div style={{ position: 'absolute', left: 0, right: 0, height: 8, borderRadius: 4, background: '#ECECF1' }} />
+          <div style={{ position: 'absolute', left: 0, width: `${pos * 100}%`, height: 8, borderRadius: 4, background: STICKER_GRAD }} />
+          {(my != null || isMine) && n > 0 && <div title="Average" style={{ position: 'absolute', left: `calc(${avg * 100}% - 7px)`, width: 14, height: 14, borderRadius: '50%', background: '#111', border: '3px solid #FFFFFF', boxShadow: '0 1px 4px rgba(0,0,0,0.3)' }} />}
+          {!isMine && <span style={{ position: 'absolute', left: `calc(${pos * 100}% - 16px)`, fontSize: drag != null ? 36 : 30, transition: drag != null ? 'none' : 'font-size 0.15s ease', lineHeight: 1 }}>{sticker.e}</span>}
+        </div>
+        {(my != null || isMine) && <div style={{ fontSize: 12, color: '#8A8A95', textAlign: 'center', marginTop: 4 }}>{n ? `Average ${Math.round(avg * 100)}% from ${n} ${n === 1 ? 'person' : 'people'}` : 'No answers yet'}</div>}
+        {seeAll}
+      </StickerCardFrame>
+    );
+  }
+  const answered = sent || (mine.answer != null && mine.answer !== '');
+  return wrap(
+    <StickerCardFrame title={sticker.q}>
+      {isMine ? (
+        <div style={{ textAlign: 'center', fontSize: 14, fontWeight: 700, color: '#6B6B76', padding: '6px 0' }}>{res ? `${Number(res.answers) || 0} ${Number(res.answers) === 1 ? 'answer' : 'answers'}` : 'Answers show here'}</div>
+      ) : answered && !typing ? (
+        <div style={{ textAlign: 'center', fontSize: 14, fontWeight: 700, color: '#6B6B76', padding: '6px 0', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}><Check size={16} color="#22C55E" />Sent. Only they can see it.</div>
+      ) : typing ? (
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input value={answer} onChange={(e) => setAnswer(e.target.value.slice(0, 300))} autoFocus placeholder="Type something" aria-label="Your answer"
+            onKeyDown={(e) => { if (e.key === 'Enter' && answer.trim()) { e.preventDefault(); const t = answer.trim(); setTyping(false); setSent(true); setAnswer(''); respond('answer', t, null); } }}
+            onBlur={() => { if (!answer.trim()) setTyping(false); }}
+            style={{ flex: 1, minWidth: 0, padding: '11px 12px', borderRadius: 12, border: '1px solid #E4E4EA', outline: 'none', fontFamily: FONT, fontSize: 14.5, color: '#111', background: '#FFFFFF' }} />
+          <div role="button" aria-label="Send answer" onPointerDown={(e) => e.preventDefault()} onClick={() => { const t = answer.trim(); if (!t) return; setTyping(false); setSent(true); setAnswer(''); respond('answer', t, null); }} style={{ padding: '0 14px', borderRadius: 12, background: answer.trim() ? '#8B5CF6' : '#ECECF1', color: answer.trim() ? '#FFFFFF' : '#8A8A95', display: 'flex', alignItems: 'center', fontWeight: 800, cursor: 'pointer' }}>Send</div>
+        </div>
+      ) : (
+        <div role="button" aria-label="Answer the question" onClick={() => setTyping(true)} style={{ padding: '11px 14px', borderRadius: 14, background: '#F2F2F5', color: '#8A8A95', fontSize: 14.5, textAlign: 'center', cursor: 'text' }}>Type something</div>
+      )}
+      {seeAll}
+    </StickerCardFrame>
+  );
+}
+
+function StoryResponsesSheet({ story, onClose, onOpenProfile }) {
+  useBackClose(true, onClose);
+  const sticker = validStorySticker(story.sticker) || {};
+  const [rows, setRows] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const { data } = await supabase.from('story_responses').select('*').eq('story_id', story.id).order('created_at', { ascending: false }).limit(500);
+      const list = data || [];
+      const ids = [...new Set(list.map((r) => r.user_id))];
+      const byId = {};
+      if (ids.length) {
+        const { data: profs } = await supabase.from('profiles').select('id, name, username, avatar, avatar_frame, verified').in('id', ids);
+        (profs || []).forEach((p) => { byId[p.id] = p; });
+      }
+      if (alive) setRows(list.map((r) => ({ ...r, profile: byId[r.user_id] })).filter((r) => r.profile));
+    })();
+    return () => { alive = false; };
+  }, [story.id]);
+  const label = (r) => {
+    if (r.kind === 'poll') return `Voted ${(sticker.a || [])[Number(r.value)] || ''}`.trim();
+    if (r.kind === 'slider') return `Slid to ${Math.round((Number(r.num) || 0) * 100)}%`;
+    return r.value || '';
+  };
+  return (
+    <div onClick={onClose} className="zchat-fade" style={{ position: 'absolute', inset: 0, zIndex: 12, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end' }}>
+      <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ width: '100%', maxHeight: '70%', display: 'flex', flexDirection: 'column', background: '#15151B', color: '#FFFFFF', borderRadius: '22px 22px 0 0', paddingBottom: 'calc(10px + env(safe-area-inset-bottom))', fontFamily: FONT }}>
+        <div style={{ padding: '14px 18px 10px', fontSize: 16, fontWeight: 800, textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>{sticker.q || 'Responses'}</div>
+        <div style={{ overflowY: 'auto', padding: '6px 14px' }}>
+          {rows === null && <div style={{ display: 'flex', justifyContent: 'center', padding: 24 }}><Spinner /></div>}
+          {rows && !rows.length && <div style={{ textAlign: 'center', padding: 28, fontSize: 14, color: 'rgba(255,255,255,0.65)' }}>No responses yet</div>}
+          {(rows || []).map((r) => (
+            <div key={r.id || `${r.user_id}-${r.kind}`} role="button" onClick={() => onOpenProfile && onOpenProfile(r.profile)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 4px', cursor: 'pointer' }}>
+              <Avatar emoji={r.profile.avatar} name={r.profile.name} size={40} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 700 }}>{r.profile.name}</div>
+                <div style={{ fontSize: 13.5, color: 'rgba(255,255,255,0.78)', marginTop: 2, wordBreak: 'break-word' }}>{label(r)}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PostMediaCarousel({ post, rootRef, onTap, onDoubleTap }) {
+  const list = Array.isArray(post.media_urls) ? post.media_urls.filter((x) => x && x.u) : [];
+  const [idx, setIdx] = useState(0);
+  const ref = useRef(null);
+  const onScroll = () => { const el = ref.current; if (!el) return; const i = Math.round(el.scrollLeft / Math.max(1, el.clientWidth)); if (i !== idx) setIdx(i); };
+  return (
+    <div style={{ position: 'absolute', inset: 0 }}>
+      <div ref={ref} onScroll={onScroll} style={{ position: 'absolute', inset: 0, display: 'flex', overflowX: 'auto', scrollSnapType: 'x mandatory', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
+        {list.map((it, i) => (
+          <div key={i} onClick={() => { if (it.t !== 'video' && onTap) onTap(); }} style={{ position: 'relative', flex: '0 0 100%', height: '100%', scrollSnapAlign: 'start', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#05060a' }}>
+            {it.t === 'video'
+              ? <ReelVideo post={{ ...post, media_url: it.u, media_type: 'video', overlay_url: it.o || null }} rootRef={rootRef} onDoubleTap={onDoubleTap} />
+              : <img src={it.u} alt="" loading={i < 2 ? 'eager' : 'lazy'} draggable={false} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />}
+            {it.o && it.t !== 'video' && <img src={it.o} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', pointerEvents: 'none' }} />}
+          </div>
+        ))}
+      </div>
+      {list.length > 1 && (
+        <>
+          <div style={{ position: 'absolute', top: 'calc(64px + env(safe-area-inset-top))', right: 14, padding: '4px 10px', borderRadius: 12, background: 'rgba(0,0,0,0.55)', fontSize: 12, fontWeight: 800, pointerEvents: 'none' }}>{idx + 1}/{list.length}</div>
+          <div style={{ position: 'absolute', left: 0, right: 0, bottom: 12, display: 'flex', justifyContent: 'center', gap: 5, pointerEvents: 'none' }}>
+            {list.map((_, i) => <span key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: i === idx ? '#FFFFFF' : 'rgba(255,255,255,0.45)' }} />)}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+function isCarouselPost(p) { return !!p && Array.isArray(p.media_urls) && p.media_urls.filter((x) => x && x.u).length > 1; }
+function CarouselMark({ size = 15 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinejoin="round" aria-hidden="true" style={{ position: 'absolute', top: 7, right: 7, filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.6))' }}>
+      <rect x="7" y="7" width="13" height="13" rx="2.5" fill="rgba(255,255,255,0.25)" /><path d="M4 16V6a2 2 0 0 1 2-2h10" />
+    </svg>
+  );
+}
+async function createPostFromOutputs(userId, outputs, caption, opts) {
+  const uploaded = [];
+  let failed = 0;
+  for (const item of outputs) {
+    const { url, error } = await uploadMedia(item.file, userId);
+    if (error || !url) { failed += 1; continue; }
+    let overlayUrl = null;
+    if (item.overlayFile) { const up = await uploadMedia(item.overlayFile, userId); if (!up.error) overlayUrl = up.url; }
+    uploaded.push({ u: url, t: item.kind === 'video' ? 'video' : 'image', o: overlayUrl });
+  }
+  if (!uploaded.length) return { done: 0, failed };
+  const collab = opts && opts.collab ? opts.collab : null;
+  const base = (it) => ({ user_id: userId, media_url: it.u, media_type: it.t, overlay_url: it.o, caption: caption || null });
+  const single = !(opts && opts.separate) && uploaded.length > 1;
+  if (single || collab) {
+    const row = { ...base(uploaded[0]), ...(single ? { media_urls: uploaded } : {}), ...(collab ? { collab_id: collab.id } : {}) };
+    const { data, error } = await supabase.from('posts').insert(row).select().single();
+    if (!error && data) return { done: 1, failed, post: data, collab };
+    if (!/media_urls|collab|column|schema/i.test(String((error && error.message) || ''))) return { done: 0, failed: failed + uploaded.length };
+  }
+  let done = 0;
+  for (const it of uploaded) {
+    const { error } = await supabase.from('posts').insert(base(it));
+    if (error) failed += 1; else done += 1;
+  }
+  return { done, failed, fallback: single || !!collab };
+}
+
+const memoriesMem = { at: 0, rows: null };
+function groupMemories(rows) {
+  const now = new Date().getFullYear();
+  const out = {};
+  (rows || []).forEach((r) => { const y = now - new Date(r.created_at).getFullYear(); if (y >= 1) (out[y] = out[y] || []).push(r); });
+  return Object.keys(out).map(Number).sort((a, b) => a - b).map((y) => ({ y, items: out[y] }));
+}
+async function loadMemories() {
+  if (memoriesMem.rows && Date.now() - memoriesMem.at < 600000) return memoriesMem.rows;
+  const { data, error } = await supabase.rpc('zchat_memories', { p_tz: localTz() });
+  if (error || !Array.isArray(data)) return [];
+  memoriesMem.rows = data;
+  memoriesMem.at = Date.now();
+  return data;
+}
+function MemoriesPage({ onClose, onShare }) {
+  useBackClose(true, onClose);
+  const { theme } = useTheme();
+  const [rows, setRows] = useState(null);
+  const [view, setView] = useState(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { let alive = true; loadMemories().then((r) => { if (alive) setRows(r); }); return () => { alive = false; }; }, []);
+  const groups = groupMemories(rows);
+  const today = new Date().toLocaleDateString(undefined, { month: 'long', day: 'numeric' });
+  return (
+    <FullPage title="Memories" subtitle={`On this day, ${today}`} onBack={onClose} zIndex={72}>
+      {rows === null ? <div style={{ display: 'flex', justifyContent: 'center', padding: 30 }}><Spinner color={theme.muted} /></div> : !groups.length ? (
+        <EmptyState art="moments" title="No memories today" text="Photos and stories you shared on this day in past years show up here. Check back tomorrow." />
+      ) : groups.map((g) => (
+        <div key={g.y}>
+          <IgHeading>{g.y === 1 ? '1 year ago' : `${g.y} years ago`}</IgHeading>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 3 }}>
+            {g.items.map((it) => (
+              <div key={`${it.kind}-${it.id}`} role="button" aria-label="Open memory" onClick={() => setView(it)} style={{ position: 'relative', aspectRatio: '3 / 4', borderRadius: 10, overflow: 'hidden', background: theme.rowBg, cursor: 'pointer' }}>
+                {it.media_type === 'video'
+                  ? <VideoThumb src={it.media_url} style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} />
+                  : <MediaImg src={it.media_url} loading="lazy" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />}
+                <span style={{ position: 'absolute', left: 6, bottom: 6, padding: '2px 7px', borderRadius: 8, background: 'rgba(0,0,0,0.5)', color: 'white', fontSize: 10.5, fontWeight: 800 }}>{it.kind === 'story' ? 'Story' : it.kind === 'post' ? 'Post' : 'Chat'}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+      {view && (
+        <Portal>
+          {view.media_type === 'video' ? <VideoViewer url={view.media_url} onClose={() => setView(null)} /> : <ImageViewer url={view.media_url} caption={view.caption || ''} onClose={() => setView(null)} />}
+          {onShare && (
+            <div role="button" aria-label="Share memory to your story" onClick={async () => { if (busy) return; setBusy(true); const ok = await onShare(view); setBusy(false); if (ok) setView(null); }} className="zchat-press"
+              style={{ position: 'fixed', left: '50%', bottom: 'calc(26px + env(safe-area-inset-bottom))', transform: 'translateX(-50%)', zIndex: 1300, height: 46, padding: '0 20px', borderRadius: 23, background: '#FFFFFF', color: '#111', display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, fontSize: 14.5, fontFamily: FONT, cursor: 'pointer', boxShadow: '0 8px 24px rgba(0,0,0,0.35)' }}>
+              {busy ? <Spinner size={16} color="#111" /> : <StatusIcon size={17} color="#111" />}Share to story
+            </div>
+          )}
+        </Portal>
+      )}
+    </FullPage>
+  );
+}
+function MemoriesCard({ onOpen }) {
+  const { theme } = useTheme();
+  const [rows, setRows] = useState(() => memoriesMem.rows);
+  useEffect(() => { let alive = true; loadMemories().then((r) => { if (alive) setRows(r); }); return () => { alive = false; }; }, []);
+  const groups = groupMemories(rows);
+  if (!groups.length) return null;
+  const first = groups[0].items[0];
+  const n = groups.reduce((s, g) => s + g.items.length, 0);
+  return (
+    <div role="button" aria-label="Open memories" onClick={onOpen} className="zchat-press" style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '0 16px 12px', padding: 10, borderRadius: 18, background: theme.rowBg, border: `1px solid ${theme.border}`, cursor: 'pointer' }}>
+      <div style={{ width: 54, height: 54, borderRadius: 14, overflow: 'hidden', flexShrink: 0, background: theme.panelBg }}>
+        {first.media_type === 'video' ? <VideoThumb src={first.media_url} style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} /> : <MediaImg src={first.media_url} draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 14.5, fontWeight: 800, color: theme.ink, display: 'flex', alignItems: 'center', gap: 6 }}><MemoriesIcon size={15} color={theme.coral} />On this day</div>
+        <div style={{ fontSize: 12.5, color: theme.muted, marginTop: 2 }}>{n} {n === 1 ? 'memory' : 'memories'} from {groups.length > 1 ? 'past years' : groups[0].y === 1 ? 'last year' : `${groups[0].y} years ago`}</div>
+      </div>
+      <ChevronRight size={18} color={theme.muted} />
+    </div>
+  );
+}
+
+function myMomentToday(myStories) {
+  const day = momentDayNumber();
+  return (myStories || []).find((s) => s && s.sticker && s.sticker.k === 'moment' && Number(s.sticker.d) === day) || null;
+}
+function DailyMomentCard({ myStories, trayUsers, onTake, onOpenStory }) {
+  const { theme } = useTheme();
+  const now = useNow(1000);
+  const at = momentTimeFor().getTime();
+  const day = momentDayNumber();
+  const posted = myMomentToday(myStories);
+  const live = now >= at && now < at + MOMENT_WINDOW_MS;
+  const before = now < at;
+  const friends = (trayUsers || []).map((t) => ({ t, s: (t.stories || []).find((st) => st.sticker && st.sticker.k === 'moment' && Number(st.sticker.d) === day) })).filter((x) => x.s);
+  const tint = '#F97316';
+  return (
+    <div style={{ margin: '0 16px 12px', padding: 14, borderRadius: 20, background: live ? `linear-gradient(135deg, ${tint}, #EC4899)` : theme.rowBg, border: live ? 'none' : `1px solid ${theme.border}`, color: live ? '#FFFFFF' : theme.ink }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ width: 44, height: 44, borderRadius: 14, background: live ? 'rgba(255,255,255,0.22)' : `${tint}22`, color: live ? '#FFFFFF' : tint, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><MomentIcon size={22} /></div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 15, fontWeight: 800 }}>{posted ? 'Your daily moment is up' : live ? 'Time for your daily moment' : before ? 'Daily moment' : 'You missed it'}</div>
+          <div style={{ fontSize: 12.5, opacity: 0.8, marginTop: 2 }}>{posted ? (posted.sticker.late ? 'Posted late today' : 'Posted right on time') : live ? `${mmss(at + MOMENT_WINDOW_MS - now)} left to post on time` : before ? 'Everyone gets the same surprise time today. Keep notifications on.' : 'Post a late moment so friends still see your day'}</div>
+        </div>
+        {!posted && !before && (
+          <div role="button" aria-label="Take your daily moment" onClick={() => onTake(!live)} className="zchat-press" style={{ padding: '9px 14px', borderRadius: 14, background: live ? '#FFFFFF' : tint, color: live ? tint : '#FFFFFF', fontWeight: 800, fontSize: 13.5, cursor: 'pointer', flexShrink: 0 }}>{live ? 'Take it' : 'Post late'}</div>
+        )}
+      </div>
+      {friends.length > 0 && (
+        <div style={{ display: 'flex', gap: 10, overflowX: 'auto', marginTop: 12, scrollbarWidth: 'none' }}>
+          {friends.map(({ t, s }) => (
+            <div key={t.profile.id} role="button" aria-label={`Daily moment of ${t.profile.name}`} onClick={() => { if (posted) onOpenStory(t.profile.id, s.id); }} style={{ position: 'relative', width: 74, height: 100, flexShrink: 0, borderRadius: 14, overflow: 'hidden', background: '#000', cursor: posted ? 'pointer' : 'default' }}>
+              {s.media_type === 'video' ? <VideoThumb src={s.media_url} style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none', filter: posted ? 'none' : 'blur(12px)' }} /> : <img src={s.media_url} alt="" loading="lazy" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', filter: posted ? 'none' : 'blur(12px)' }} />}
+              <div style={{ position: 'absolute', left: 4, right: 4, bottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+                <Avatar emoji={t.profile.avatar} name={t.profile.name} size={18} />
+                <span style={{ fontSize: 10, fontWeight: 800, color: 'white', textShadow: '0 1px 3px rgba(0,0,0,0.8)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{(t.profile.name || '').split(' ')[0]}</span>
+              </div>
+              {!posted && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Lock size={16} color="white" /></div>}
+            </div>
+          ))}
+        </div>
+      )}
+      {friends.length > 0 && !posted && <div style={{ fontSize: 12, opacity: 0.75, marginTop: 8 }}>Post yours to see what your friends are up to</div>}
+    </div>
+  );
+}
+
+async function loadChannels(q) {
+  const { data, error } = await supabase.rpc('zchat_channels', { p_query: q || null, p_limit: 60 });
+  if (error) return { error };
+  return { rows: Array.isArray(data) ? data : [] };
+}
+function ChannelRow({ c, onOpen, onFollow, busy }) {
+  const { theme } = useTheme();
+  return (
+    <div role="button" aria-label={`Open channel ${c.name}`} onClick={onOpen} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 2px', cursor: 'pointer' }}>
+      <Avatar emoji={c.avatar} name={c.name} size={50} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name}</div>
+        <div style={{ fontSize: 12.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{formatCount(Number(c.followers) || 0)} {Number(c.followers) === 1 ? 'follower' : 'followers'}{c.bio ? ` · ${c.bio}` : ''}</div>
+      </div>
+      {onFollow && (
+        <div role="button" aria-label={c.following ? `Following ${c.name}` : `Follow ${c.name}`} onClick={(e) => { e.stopPropagation(); onFollow(c); }} className="zchat-press" style={{ padding: '8px 14px', borderRadius: 12, background: c.following ? theme.rowBg : theme.coral, color: c.following ? theme.ink : '#FFFFFF', fontSize: 13, fontWeight: 800, cursor: 'pointer', flexShrink: 0 }}>{busy ? <Spinner size={13} color={c.following ? theme.ink : '#FFFFFF'} /> : c.following ? 'Following' : 'Follow'}</div>
+      )}
+    </div>
+  );
+}
+async function setChannelFollow(channelId, userId, on) {
+  if (on) return supabase.from('channel_follows').upsert({ channel_id: channelId, user_id: userId }, { onConflict: 'channel_id,user_id' });
+  return supabase.from('channel_follows').delete().eq('channel_id', channelId).eq('user_id', userId);
+}
+function ChannelsPage({ userId, me, onClose, onShare, initialId }) {
+  useBackClose(true, onClose);
+  const { theme } = useTheme();
+  const [tab, setTab] = useState('following');
+  const [q, setQ] = useState('');
+  const [rows, setRows] = useState(null);
+  const [err, setErr] = useState('');
+  const [open, setOpen] = useState(initialId ? { id: initialId } : null);
+  const [creating, setCreating] = useState(false);
+  const [busyId, setBusyId] = useState(null);
+  const load = async () => {
+    const r = await loadChannels(tab === 'discover' ? q.trim() : '');
+    if (r.error) { setErr('Channels switch on once the latest ZChat setup is finished.'); setRows([]); return; }
+    setErr('');
+    setRows(r.rows);
+  };
+  useEffect(() => { const t = setTimeout(load, tab === 'discover' && q ? 300 : 0); return () => clearTimeout(t); }, [tab, q]);
+  const follow = async (c) => {
+    setBusyId(c.id);
+    const { error } = await setChannelFollow(c.id, userId, !c.following);
+    setBusyId(null);
+    if (!error) setRows((prev) => (prev || []).map((x) => (x.id === c.id ? { ...x, following: !c.following, followers: Number(x.followers || 0) + (c.following ? -1 : 1) } : x)));
+  };
+  const mine = (rows || []).filter((c) => c.owner_id === userId);
+  const following = (rows || []).filter((c) => c.following && c.owner_id !== userId);
+  const discover = (rows || []).filter((c) => c.owner_id !== userId);
+  const seg = (k, l) => <div key={k} role="button" aria-label={l} onClick={() => setTab(k)} style={{ flex: 1, textAlign: 'center', padding: '8px 0', borderRadius: 12, fontSize: 13.5, fontWeight: 800, cursor: 'pointer', background: tab === k ? theme.coral : 'transparent', color: tab === k ? '#FFFFFF' : theme.muted }}>{l}</div>;
+  return (
+    <FullPage title="Channels" subtitle="Updates from people and pages you follow" onBack={onClose} zIndex={70}
+      right={<div role="button" aria-label="Create a channel" onClick={() => setCreating(true)} style={{ padding: '0 12px', height: 44, display: 'flex', alignItems: 'center', cursor: 'pointer', color: theme.ink }}><Plus size={22} /></div>}>
+      <div style={{ display: 'flex', gap: 6, margin: '8px 0 10px', padding: 4, borderRadius: 16, background: theme.rowBg }}>{seg('following', 'Following')}{seg('discover', 'Find channels')}</div>
+      {tab === 'discover' && (
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, height: 40, padding: '0 12px', borderRadius: 12, background: theme.rowBg, color: theme.muted, marginBottom: 6 }}>
+          <Search size={17} />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search channels" aria-label="Search channels" style={{ flex: 1, minWidth: 0, border: 0, outline: 0, background: 'transparent', color: theme.ink, fontFamily: FONT, fontSize: 15 }} />
+        </label>
+      )}
+      {err && <div role="alert" style={{ padding: '8px 2px', fontSize: 13, fontWeight: 700, color: theme.danger }}>{err}</div>}
+      {rows === null ? <div style={{ display: 'flex', justifyContent: 'center', padding: 30 }}><Spinner color={theme.muted} /></div> : tab === 'following' ? (
+        <>
+          {mine.length > 0 && <IgHeading>Your channels</IgHeading>}
+          {mine.map((c) => <ChannelRow key={c.id} c={c} onOpen={() => setOpen(c)} />)}
+          {following.length > 0 && <IgHeading>Following</IgHeading>}
+          {following.map((c) => <ChannelRow key={c.id} c={c} onOpen={() => setOpen(c)} />)}
+          {!mine.length && !following.length && !err && <EmptyState art="moments" title="No channels yet" text="Find channels to follow, or start your own to share updates with everyone." action={<PillButton primary label="Find channels" onClick={() => setTab('discover')} />} />}
+        </>
+      ) : (
+        <>
+          {discover.map((c) => <ChannelRow key={c.id} c={c} busy={busyId === c.id} onOpen={() => setOpen(c)} onFollow={follow} />)}
+          {!discover.length && !err && <EmptyState art="nothing" title={q ? 'No channels found' : 'No channels to show'} text={q ? 'Try another word.' : 'Be the first and create one.'} />}
+        </>
+      )}
+      {creating && <CreateChannelPage userId={userId} onClose={() => setCreating(false)} onCreated={(c) => { setCreating(false); load(); setOpen(c); }} />}
+      {open && <ChannelPage channelId={open.id} seed={open.name ? open : null} userId={userId} me={me} onShare={onShare} onClose={() => { setOpen(null); load(); }} />}
+    </FullPage>
+  );
+}
+
+function CreateChannelPage({ userId, onClose, onCreated }) {
+  useBackClose(true, onClose);
+  const { theme } = useTheme();
+  const [name, setName] = useState('');
+  const [bio, setBio] = useState('');
+  const [avatar, setAvatar] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const [cropFile, setCropFile] = useState(null);
+  const fileRef = useRef(null);
+  const pickAvatar = async (blob) => {
+    setCropFile(null);
+    setBusy(true);
+    const { url, error } = await uploadMedia(new File([blob], 'channel.jpg', { type: 'image/jpeg' }), userId);
+    setBusy(false);
+    if (!error && url) setAvatar(url);
+  };
+  const create = async () => {
+    const n = name.trim().slice(0, 60);
+    if (!n) { setErr('Give your channel a name'); return; }
+    setBusy(true);
+    setErr('');
+    const { data, error } = await supabase.from('channels').insert({ owner_id: userId, name: n, bio: bio.trim().slice(0, 300) || null, avatar }).select().single();
+    if (error || !data) { setBusy(false); setErr(/channels|schema|relation/i.test(String((error && error.message) || '')) ? 'Channels switch on once the latest ZChat setup is finished.' : 'The channel could not be made. Try again.'); return; }
+    await setChannelFollow(data.id, userId, true);
+    setBusy(false);
+    onCreated(data);
+  };
+  return (
+    <FullPage title="New channel" onBack={onClose} zIndex={76} footer={<BigButton label={busy ? 'Working' : 'Create channel'} disabled={busy} onClick={create} />}>
+      <div style={{ display: 'flex', justifyContent: 'center', padding: '18px 0 10px' }}>
+        <div role="button" aria-label="Channel photo" onClick={() => fileRef.current && fileRef.current.click()} style={{ position: 'relative', cursor: 'pointer' }}>
+          <Avatar emoji={avatar} name={name || 'Channel'} size={92} />
+          <span style={{ position: 'absolute', right: -2, bottom: -2, width: 30, height: 30, borderRadius: '50%', background: theme.ink, color: theme.bgGradient, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Camera size={15} /></span>
+        </div>
+      </div>
+      <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files && e.target.files[0]; e.target.value = ''; if (f) setCropFile(f); }} />
+      <div style={{ fontSize: 13, fontWeight: 700, color: theme.muted, padding: '8px 2px 6px' }}>Name</div>
+      <input value={name} onChange={(e) => setName(e.target.value.slice(0, 60))} placeholder="Like Campus News or Daily Memes" aria-label="Channel name" style={inputStyle(theme)} />
+      <div style={{ fontSize: 13, fontWeight: 700, color: theme.muted, padding: '14px 2px 6px' }}>About</div>
+      <textarea value={bio} onChange={(e) => setBio(e.target.value.slice(0, 300))} placeholder="What will you post here?" aria-label="Channel description" rows={3} style={{ ...inputStyle(theme), resize: 'none', fontFamily: FONT }} />
+      <div style={{ fontSize: 12.5, color: theme.muted, lineHeight: 1.5, padding: '10px 2px 0' }}>Anyone on ZChat can find and follow your channel. Only you can post in it. Followers do not see each other.</div>
+      {err && <div role="alert" style={{ padding: '12px 2px 0', fontSize: 13, fontWeight: 700, color: theme.danger }}>{err}</div>}
+      {cropFile && <PhotoCropEditor file={cropFile} isAvatar onCancel={() => setCropFile(null)} onConfirm={pickAvatar} />}
+    </FullPage>
+  );
+}
+
+function ChannelPage({ channelId, seed, userId, me, onClose, onShare }) {
+  useBackClose(true, onClose);
+  const { theme } = useTheme();
+  const [ch, setCh] = useState(seed || null);
+  const [posts, setPosts] = useState(null);
+  const [stats, setStats] = useState({});
+  const [follow, setFollow] = useState(seed ? { on: !!seed.following, n: Number(seed.followers) || 0 } : { on: false, n: 0 });
+  const [text, setText] = useState('');
+  const [file, setFile] = useState(null);
+  const [preview, setPreview] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const [view, setView] = useState(null);
+  const [askDelete, setAskDelete] = useState(null);
+  const fileRef = useRef(null);
+  const isAdmin = !!ch && (ch.owner_id === userId || (Array.isArray(ch.admin_ids) && ch.admin_ids.includes(userId)));
+  const load = async () => {
+    const [{ data: c }, { data: list }, st, fol, cnt] = await Promise.all([
+      supabase.from('channels').select('*').eq('id', channelId).maybeSingle(),
+      supabase.from('channel_posts').select('*').eq('channel_id', channelId).order('created_at', { ascending: false }).limit(100),
+      supabase.rpc('zchat_channel_post_stats', { p_channel: channelId }),
+      supabase.from('channel_follows').select('user_id, muted').eq('channel_id', channelId).eq('user_id', userId).maybeSingle(),
+      supabase.rpc('zchat_channels', { p_query: null, p_limit: 100 }),
+    ]);
+    if (!c) { setErr('This channel is not available.'); setPosts([]); return; }
+    setCh(c);
+    setPosts(list || []);
+    const m = {};
+    (Array.isArray(st.data) ? st.data : []).forEach((r) => { m[r.post_id] = { likes: Number(r.likes) || 0, liked: !!r.liked }; });
+    setStats(m);
+    const row = (Array.isArray(cnt.data) ? cnt.data : []).find((x) => x.id === channelId);
+    setFollow({ on: !!(fol.data), muted: !!(fol.data && fol.data.muted), n: row ? Number(row.followers) || 0 : follow.n });
+  };
+  useEffect(() => { load(); }, [channelId]);
+  useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
+  const toggleFollow = async () => {
+    const on = !follow.on;
+    setFollow((f) => ({ ...f, on, n: Math.max(0, f.n + (on ? 1 : -1)) }));
+    hapticTap();
+    const { error } = await setChannelFollow(channelId, userId, on);
+    if (error) setFollow((f) => ({ ...f, on: !on, n: Math.max(0, f.n + (on ? -1 : 1)) }));
+  };
+  const toggleMute = async () => {
+    const muted = !follow.muted;
+    setFollow((f) => ({ ...f, muted }));
+    await supabase.from('channel_follows').update({ muted }).eq('channel_id', channelId).eq('user_id', userId);
+  };
+  const like = async (p) => {
+    const cur = stats[p.id] || { likes: 0, liked: false };
+    const next = { likes: Math.max(0, cur.likes + (cur.liked ? -1 : 1)), liked: !cur.liked };
+    setStats((s) => ({ ...s, [p.id]: next }));
+    if (!cur.liked) playUiSound('like');
+    const { error } = cur.liked
+      ? await supabase.from('channel_post_likes').delete().eq('post_id', p.id).eq('user_id', userId)
+      : await supabase.from('channel_post_likes').upsert({ post_id: p.id, user_id: userId }, { onConflict: 'post_id,user_id' });
+    if (error) setStats((s) => ({ ...s, [p.id]: cur }));
+  };
+  const post = async () => {
+    if (busy || (!text.trim() && !file)) return;
+    setBusy(true);
+    setErr('');
+    let media = null;
+    if (file) {
+      let f = file;
+      try { const u = URL.createObjectURL(file); f = await prepareImageFile(file, u); URL.revokeObjectURL(u); } catch {}
+      const up = await uploadMedia(f, userId);
+      if (up.error || !up.url) { setBusy(false); setErr('The photo did not upload. Try again.'); return; }
+      media = up.url;
+    }
+    const { data, error } = await supabase.from('channel_posts').insert({ channel_id: channelId, author_id: userId, content: text.trim().slice(0, 4000) || null, media_url: media, media_type: media ? 'image' : null }).select().single();
+    setBusy(false);
+    if (error || !data) { setErr('That did not post. Try again.'); return; }
+    setPosts((prev) => [data, ...(prev || [])]);
+    setText(''); setFile(null); setPreview('');
+    playUiSound('send');
+    (async () => {
+      const { data: fol } = await supabase.from('channel_follows').select('user_id, muted').eq('channel_id', channelId).limit(300);
+      (fol || []).filter((r) => r.user_id !== userId && !r.muted).forEach((r) => sendPushNotification(r.user_id, ch.name, data.content ? String(data.content).slice(0, 120) : 'New photo', `/?channel=${channelId}`, ch.avatar || undefined));
+    })();
+  };
+  const removePost = async (p) => {
+    setPosts((prev) => (prev || []).filter((x) => x.id !== p.id));
+    await supabase.from('channel_posts').delete().eq('id', p.id);
+  };
+  const share = async () => {
+    if (!ch) return;
+    const link = `${siteOrigin()}/?channel=${channelId}`;
+    if (onShare) { onShare(ch); return; }
+    try { if (navigator.share) await navigator.share({ title: ch.name, text: `Follow ${ch.name} on ZChat`, url: link }); else await copyTextToClipboard(link); } catch {}
+  };
+  return (
+    <FullPage title={ch ? ch.name : 'Channel'} subtitle={`${formatCount(follow.n)} ${Number(follow.n) === 1 ? 'follower' : 'followers'}`} onBack={onClose} zIndex={78}
+      right={<div role="button" aria-label="Share channel" onClick={share} style={{ padding: '0 12px', height: 44, display: 'flex', alignItems: 'center', cursor: 'pointer', color: theme.ink }}><Share2 size={20} /></div>}
+      footer={isAdmin ? (
+        <div>
+          {preview && (
+            <div style={{ position: 'relative', display: 'inline-block', marginBottom: 8 }}>
+              <img src={preview} alt="" style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 12, display: 'block' }} />
+              <div role="button" aria-label="Remove photo" onClick={() => { setFile(null); setPreview(''); }} style={{ position: 'absolute', top: -6, right: -6, width: 20, height: 20, borderRadius: '50%', background: theme.danger, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={11} color="#FFFFFF" /></div>
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+            <div role="button" aria-label="Add photo to post" onClick={() => fileRef.current && fileRef.current.click()} style={{ width: 42, height: 42, borderRadius: '50%', background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, color: theme.ink }}><ImageIcon size={19} /></div>
+            <textarea value={text} onChange={(e) => setText(e.target.value.slice(0, 4000))} placeholder="Post an update" aria-label="Channel update" rows={1} style={{ ...inputStyle(theme), flex: 1, resize: 'none', fontFamily: FONT, maxHeight: 120 }} />
+            <div role="button" aria-label="Post update" onClick={post} style={{ width: 42, height: 42, borderRadius: '50%', background: text.trim() || file ? theme.coral : theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>{busy ? <Spinner size={16} /> : <Send size={17} color={text.trim() || file ? '#FFFFFF' : theme.muted} />}</div>
+          </div>
+          <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files && e.target.files[0]; e.target.value = ''; if (f) { setFile(f); setPreview(URL.createObjectURL(f)); } }} />
+        </div>
+      ) : null}>
+      {ch && (
+        <div style={{ textAlign: 'center', padding: '16px 6px 4px' }}>
+          <div style={{ display: 'flex', justifyContent: 'center' }}><Avatar emoji={ch.avatar} name={ch.name} size={84} /></div>
+          <div style={{ fontSize: 20, fontWeight: 800, color: theme.ink, marginTop: 10, wordBreak: 'break-word' }}>{ch.name}</div>
+          {ch.bio && <div style={{ fontSize: 13.5, color: theme.muted, lineHeight: 1.5, marginTop: 6, wordBreak: 'break-word' }}>{ch.bio}</div>}
+          {!isAdmin && (
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 14 }}>
+              <div role="button" aria-label={follow.on ? 'Unfollow channel' : 'Follow channel'} onClick={toggleFollow} className="zchat-press" style={{ padding: '10px 22px', borderRadius: 14, background: follow.on ? theme.rowBg : theme.coral, color: follow.on ? theme.ink : '#FFFFFF', fontWeight: 800, fontSize: 14, cursor: 'pointer' }}>{follow.on ? 'Following' : 'Follow'}</div>
+              {follow.on && <div role="button" aria-label={follow.muted ? 'Turn on channel alerts' : 'Mute channel alerts'} onClick={toggleMute} className="zchat-press" style={{ width: 42, borderRadius: 14, background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: theme.ink }}>{follow.muted ? <BellOff size={18} /> : <Bell size={18} />}</div>}
+            </div>
+          )}
+        </div>
+      )}
+      {err && <div role="alert" style={{ padding: '10px 2px', fontSize: 13, fontWeight: 700, color: theme.danger, textAlign: 'center' }}>{err}</div>}
+      {posts === null ? <div style={{ display: 'flex', justifyContent: 'center', padding: 30 }}><Spinner color={theme.muted} /></div> : !posts.length && !err ? (
+        <EmptyState art="moments" title="No updates yet" text={isAdmin ? 'Post your first update below. Followers get a notification.' : 'Follow to get updates when they post.'} />
+      ) : posts.map((p) => {
+        const st = stats[p.id] || { likes: 0, liked: false };
+        return (
+          <div key={p.id} style={{ margin: '14px 0 0', padding: 12, borderRadius: 18, background: detailsCardBg(theme), border: `1px solid ${theme.border}` }}>
+            {p.content && <div style={{ fontSize: 14.5, color: theme.ink, lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}><RichText text={p.content} /></div>}
+            {p.media_url && <img src={p.media_url} alt="" loading="lazy" draggable={false} onClick={() => setView(p)} style={{ width: '100%', borderRadius: 14, marginTop: p.content ? 10 : 0, display: 'block', cursor: 'pointer', maxHeight: 420, objectFit: 'cover' }} />}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 10 }}>
+              <div role="button" aria-label={st.liked ? 'Unlike update' : 'Like update'} onClick={() => like(p)} style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', color: st.liked ? '#FF2D55' : theme.muted, fontSize: 13, fontWeight: 700 }}><Heart size={18} fill={st.liked ? '#FF2D55' : 'none'} />{st.likes || ''}</div>
+              <span style={{ flex: 1 }} />
+              <span style={{ fontSize: 12, color: theme.muted }}>{timeAgoLong(p.created_at)}</span>
+              {isAdmin && <div role="button" aria-label="Delete update" onClick={() => setAskDelete(p)} style={{ color: theme.muted, cursor: 'pointer', display: 'flex' }}><Trash2 size={16} /></div>}
+            </div>
+          </div>
+        );
+      })}
+      {view && <Portal><ImageViewer url={view.media_url} caption={view.content || ''} onClose={() => setView(null)} /></Portal>}
+      {askDelete && <ConfirmSheet title="Delete this update?" confirmLabel="Delete" zIndex={96} onCancel={() => setAskDelete(null)} onConfirm={() => { const p = askDelete; setAskDelete(null); removePost(p); }} />}
+    </FullPage>
+  );
+}
+
+const RECAP_BG = ['linear-gradient(160deg, #6D28D9, #DB2777)', 'linear-gradient(160deg, #0EA5E9, #6366F1)', 'linear-gradient(160deg, #F97316, #E11D48)', 'linear-gradient(160deg, #10B981, #0EA5E9)', 'linear-gradient(160deg, #F59E0B, #EF4444)', 'linear-gradient(160deg, #8B5CF6, #0EA5E9)', 'linear-gradient(160deg, #EC4899, #8B5CF6)', 'linear-gradient(160deg, #111827, #4C1D95)'];
+function hourLabel(h) {
+  if (h == null) return '';
+  const n = Number(h);
+  const ampm = n >= 12 ? 'PM' : 'AM';
+  const hh = n % 12 === 0 ? 12 : n % 12;
+  return `${hh} ${ampm}`;
+}
+function recapSlides(r, me) {
+  const out = [];
+  const year = r.year;
+  out.push({ big: `${year}`, title: 'Your year on ZChat', sub: `A look back at everything you shared, ${(me.name || '').split(' ')[0] || 'friend'}.`, avatar: true });
+  out.push({ big: formatCount(Number(r.sent) || 0), title: 'Messages you sent', sub: `And ${formatCount(Number(r.received) || 0)} came back to you.` });
+  if (Array.isArray(r.top) && r.top.length) out.push({ title: 'Your top people', list: r.top.slice(0, 5) });
+  if (r.day && r.day.d) out.push({ big: new Date(`${r.day.d}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }), title: 'Your busiest day', sub: `${formatCount(Number(r.day.n) || 0)} messages in one day.${r.hour != null ? ` You chat most around ${hourLabel(r.hour)}.` : ''}` });
+  if (Number(r.streak) >= 2) out.push({ big: `${r.streak} days`, title: 'Your longest streak', sub: 'Chatting every single day. That is dedication.', flame: true });
+  if (Array.isArray(r.emoji) && r.emoji.length) out.push({ title: 'Your favourite reactions', emoji: r.emoji.slice(0, 3) });
+  out.push({ title: 'What you shared', grid: [[formatCount(Number(r.photos) || 0), 'photos and videos'], [formatCount(Number(r.voice) || 0), 'voice messages'], [formatCount(Number(r.stickers) || 0), 'stickers'], [formatCount(Number(r.stories) || 0), 'stories'], [formatCount(Number(r.posts) || 0), 'posts'], [formatCount(Number(r.games) || 0), 'games won']] });
+  if (r.group && r.group.name) out.push({ big: r.group.name, title: 'Your favourite group', sub: `${formatCount(Number(r.group.n) || 0)} messages from you in there.`, smallBig: true });
+  out.push({ title: 'Thanks for a great year', sub: 'Share your recap and see what your friends got.', share: true });
+  return out;
+}
+async function recapImage(r, me) {
+  const W = 1080;
+  const H = 1920;
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const g = c.getContext('2d');
+  const grad = g.createLinearGradient(0, 0, W, H);
+  grad.addColorStop(0, '#6D28D9'); grad.addColorStop(0.55, '#DB2777'); grad.addColorStop(1, '#F59E0B');
+  g.fillStyle = grad; g.fillRect(0, 0, W, H);
+  g.fillStyle = 'rgba(255,255,255,0.12)';
+  for (let i = 0; i < 14; i++) { g.beginPath(); g.arc((i * 211) % W, (i * 367) % H, 60 + (i % 5) * 30, 0, Math.PI * 2); g.fill(); }
+  g.fillStyle = '#FFFFFF';
+  g.textAlign = 'center';
+  g.font = '800 64px Manrope, system-ui, sans-serif';
+  g.fillText(`My ${r.year} on ZChat`, W / 2, 230);
+  g.font = '600 42px Manrope, system-ui, sans-serif';
+  g.fillText(`@${me.username || ''}`, W / 2, 300);
+  const stats = [[formatCount(Number(r.sent) || 0), 'messages sent'], [formatCount(Number(r.photos) || 0), 'photos and videos'], [`${Number(r.streak) || 0} days`, 'longest streak'], [formatCount(Number(r.stories) || 0), 'stories shared']];
+  stats.forEach(([n, l], i) => {
+    const y = 520 + i * 260;
+    g.font = '900 120px Manrope, system-ui, sans-serif';
+    g.fillText(n, W / 2, y);
+    g.font = '700 46px Manrope, system-ui, sans-serif';
+    g.fillStyle = 'rgba(255,255,255,0.85)';
+    g.fillText(l, W / 2, y + 70);
+    g.fillStyle = '#FFFFFF';
+  });
+  if (Array.isArray(r.top) && r.top[0]) {
+    g.font = '700 46px Manrope, system-ui, sans-serif';
+    g.fillText(`Top person: ${String(r.top[0].name || '').slice(0, 24)}`, W / 2, 1620);
+  }
+  g.font = '900 72px Manrope, system-ui, sans-serif';
+  g.fillText('zchat', W / 2, 1800);
+  return new Promise((res) => c.toBlob(res, 'image/png'));
+}
+function RecapPage({ me, onClose }) {
+  useBackClose(true, onClose);
+  const now = new Date();
+  const year = now.getMonth() === 0 && now.getDate() <= 31 ? now.getFullYear() - 1 : now.getFullYear();
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState('');
+  const [i, setI] = useState(0);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    supabase.rpc('zchat_recap', { p_year: year, p_tz: localTz() }).then(({ data: d, error }) => {
+      if (!alive) return;
+      if (error || !d) { setErr('Your recap switches on once the latest ZChat setup is finished.'); return; }
+      setData(d);
+    });
+    return () => { alive = false; };
+  }, []);
+  const slides = data ? recapSlides(data, me) : [];
+  const s = slides[i];
+  const go = (dir) => { setI((x) => Math.max(0, Math.min(slides.length - 1, x + dir))); hapticTap(); };
+  const share = async () => {
+    if (busy || !data) return;
+    setBusy(true);
+    try {
+      const blob = await recapImage(data, me);
+      if (blob) {
+        const file = new File([blob], `zchat-${data.year}-recap.png`, { type: 'image/png' });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) await navigator.share({ files: [file], title: 'My ZChat recap' });
+        else { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = file.name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); }
+      }
+    } catch {}
+    setBusy(false);
+  };
+  return (
+    <Portal>
+      <div className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 700, background: '#05060A', display: 'flex', justifyContent: 'center' }}>
+      <div style={{ position: 'relative', width: '100%', maxWidth: 480, height: '100%', background: s ? RECAP_BG[i % RECAP_BG.length] : '#111', color: '#FFFFFF', fontFamily: FONT, display: 'flex', flexDirection: 'column', transition: 'background 0.4s ease' }}>
+        <div style={{ display: 'flex', gap: 4, padding: 'calc(10px + env(safe-area-inset-top)) 12px 0' }}>
+          {slides.map((_, k) => <div key={k} style={{ flex: 1, height: 3, borderRadius: 2, background: k <= i ? '#FFFFFF' : 'rgba(255,255,255,0.35)' }} />)}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', padding: '8px 8px 0' }}>
+          <div style={{ flex: 1, fontSize: 14, fontWeight: 800, paddingLeft: 8 }}>{data ? `${data.year} recap` : 'Recap'}</div>
+          <div role="button" aria-label="Close recap" onClick={onClose} style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={22} /></div>
+        </div>
+        <div style={{ position: 'relative', flex: 1, minHeight: 0 }}>
+          {!data && !err && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Spinner size={28} /></div>}
+          {err && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 30, textAlign: 'center', fontSize: 15, lineHeight: 1.5 }}>{err}</div>}
+          {s && (
+            <div key={i} className="zchat-pop" style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px 26px', textAlign: 'center' }}>
+              {s.avatar && <div style={{ marginBottom: 18 }}><Avatar emoji={me.avatar} name={me.name} size={96} /></div>}
+              {s.flame && <FlameIcon size={64} />}
+              {s.big && <div style={{ fontSize: s.smallBig ? 34 : 64, fontWeight: 900, letterSpacing: '-0.03em', lineHeight: 1.05, wordBreak: 'break-word' }}>{s.big}</div>}
+              <div style={{ fontSize: 22, fontWeight: 800, marginTop: s.big ? 12 : 0 }}>{s.title}</div>
+              {s.sub && <div style={{ fontSize: 15, opacity: 0.88, marginTop: 10, lineHeight: 1.5, maxWidth: 320 }}>{s.sub}</div>}
+              {s.list && (
+                <div style={{ marginTop: 20, width: '100%', maxWidth: 340 }}>
+                  {s.list.map((p, k) => (
+                    <div key={p.id || k} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 12px', borderRadius: 16, background: 'rgba(255,255,255,0.14)', marginTop: k ? 8 : 0 }}>
+                      <span style={{ width: 22, fontWeight: 900, fontSize: 16 }}>{k + 1}</span>
+                      <Avatar emoji={p.avatar} name={p.name} size={40} />
+                      <span style={{ flex: 1, minWidth: 0, textAlign: 'left', fontWeight: 800, fontSize: 15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</span>
+                      <span style={{ fontSize: 13, opacity: 0.85 }}>{formatCount(Number(p.n) || 0)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {s.emoji && <div style={{ display: 'flex', gap: 18, marginTop: 22 }}>{s.emoji.map((e) => <div key={e.e} style={{ textAlign: 'center' }}><div style={{ fontSize: 54 }}>{e.e}</div><div style={{ fontSize: 13, opacity: 0.85, marginTop: 4 }}>{formatCount(Number(e.n) || 0)}</div></div>)}</div>}
+              {s.grid && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 20, width: '100%', maxWidth: 340 }}>
+                  {s.grid.map(([n, l]) => <div key={l} style={{ padding: '14px 8px', borderRadius: 16, background: 'rgba(255,255,255,0.14)' }}><div style={{ fontSize: 26, fontWeight: 900 }}>{n}</div><div style={{ fontSize: 12.5, opacity: 0.85, marginTop: 2 }}>{l}</div></div>)}
+                </div>
+              )}
+              {s.share && (
+                <div role="button" aria-label="Share your recap" onClick={share} className="zchat-press" style={{ marginTop: 26, height: 50, padding: '0 26px', borderRadius: 25, background: '#FFFFFF', color: '#111', display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, fontSize: 15.5, cursor: 'pointer' }}>{busy ? <Spinner size={16} color="#111" /> : <Share2 size={18} />}Share my recap</div>
+              )}
+            </div>
+          )}
+          {s && <div role="button" aria-label="Previous" onClick={() => go(-1)} style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '30%' }} />}
+          {s && !s.share && <div role="button" aria-label="Next" onClick={() => go(1)} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: '45%' }} />}
+        </div>
+        <div style={{ textAlign: 'center', fontSize: 12, opacity: 0.7, padding: '0 0 calc(18px + env(safe-area-inset-bottom))' }}>{s && !s.share ? 'Tap to keep going' : ''}</div>
+      </div>
+      </div>
+    </Portal>
+  );
+}
+
+const AV_SKIN = ['#FFE0C7', '#F9C9A6', '#EDB48C', '#D99A6C', '#B97A4F', '#8D5A3B', '#6B4128', '#4A2C1A'];
+const AV_HAIRC = ['#1F1A17', '#3B2A1E', '#6B4A2E', '#A0703F', '#D9A55B', '#F1D38A', '#B23A2E', '#E65A9A', '#6C63FF', '#3BA8E0', '#9AA0AA', '#F2F2F2'];
+const AV_SHIRT = ['#6C63FF', '#FF6B6B', '#2BB673', '#F7B731', '#2D98DA', '#222831', '#F78FB3', '#FFFFFF'];
+const AV_BG = ['#ECE6FF', '#DCF4E9', '#FFE6D9', '#DFEAFF', '#FFF1C7', '#FFE1EB', '#30356F', '#1F1A2E', '#CFF5F0', '#FDE2E4'];
+const AV_HAIR = ['short', 'fringe', 'long', 'bun', 'curly', 'spiky', 'side', 'pony', 'buzz', 'none'];
+const AV_EYES = ['dots', 'happy', 'big', 'sleepy', 'wink', 'lashes'];
+const AV_MOUTH = ['smile', 'grin', 'small', 'o', 'tongue', 'flat'];
+const AV_FACE = ['round', 'oval', 'soft'];
+const AV_GLASSES = ['none', 'round', 'square', 'shades'];
+const AV_EXTRA = ['none', 'earrings', 'headphones', 'cap', 'flower', 'bow', 'freckles'];
+const AV_DEFAULT = { skin: 1, face: 0, hair: 'short', hairColor: 1, eyes: 'dots', mouth: 'smile', glasses: 'none', extra: 'none', shirt: 0, bg: 0, cheeks: true };
+function avatarCfgOf(raw) {
+  const c = { ...AV_DEFAULT, ...(raw && typeof raw === 'object' ? raw : {}) };
+  const clampI = (v, n) => Math.max(0, Math.min(n - 1, Number(v) || 0));
+  return {
+    skin: clampI(c.skin, AV_SKIN.length), face: clampI(c.face, AV_FACE.length), hair: AV_HAIR.includes(c.hair) ? c.hair : 'short', hairColor: clampI(c.hairColor, AV_HAIRC.length),
+    eyes: AV_EYES.includes(c.eyes) ? c.eyes : 'dots', mouth: AV_MOUTH.includes(c.mouth) ? c.mouth : 'smile', glasses: AV_GLASSES.includes(c.glasses) ? c.glasses : 'none',
+    extra: AV_EXTRA.includes(c.extra) ? c.extra : 'none', shirt: clampI(c.shirt, AV_SHIRT.length), bg: clampI(c.bg, AV_BG.length), cheeks: c.cheeks !== false,
+  };
+}
+function shade(hex, amt) {
+  const n = parseInt(String(hex).slice(1), 16);
+  const r = Math.max(0, Math.min(255, (n >> 16) + amt));
+  const g = Math.max(0, Math.min(255, ((n >> 8) & 255) + amt));
+  const b = Math.max(0, Math.min(255, (n & 255) + amt));
+  return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
+}
+function avatarSvg(raw) {
+  const c = avatarCfgOf(raw);
+  const skin = AV_SKIN[c.skin];
+  const skinD = shade(skin, -28);
+  const hair = AV_HAIRC[c.hairColor];
+  const hairD = shade(hair, -26);
+  const shirt = AV_SHIRT[c.shirt];
+  const ink = '#2B2540';
+  const parts = [];
+  parts.push(`<rect width="200" height="200" fill="${AV_BG[c.bg]}"/>`);
+  if (c.hair === 'long') parts.push(`<path d="M52 92C50 52 76 34 100 34s50 18 48 58v62c0 14-10 22-24 22H76c-14 0-24-8-24-22z" fill="${hairD}"/>`);
+  if (c.hair === 'pony') parts.push(`<path d="M138 62c22 6 30 34 22 62-4 14-14 22-22 24 6-20 8-46 0-86z" fill="${hairD}"/>`);
+  parts.push(`<path d="M44 200c0-34 24-56 56-56s56 22 56 56z" fill="${shirt}"/><path d="M84 146c4 10 28 10 32 0" fill="none" stroke="${shade(shirt, -40)}" stroke-width="5" stroke-linecap="round"/>`);
+  parts.push(`<rect x="88" y="122" width="24" height="30" rx="11" fill="${skinD}"/>`);
+  parts.push(`<circle cx="54" cy="100" r="11" fill="${skin}"/><circle cx="146" cy="100" r="11" fill="${skin}"/><circle cx="54" cy="100" r="5" fill="${skinD}" opacity="0.5"/><circle cx="146" cy="100" r="5" fill="${skinD}" opacity="0.5"/>`);
+  if (c.face === 1) parts.push(`<ellipse cx="100" cy="96" rx="44" ry="54" fill="${skin}"/>`);
+  else if (c.face === 2) parts.push(`<rect x="56" y="44" width="88" height="102" rx="38" fill="${skin}"/>`);
+  else parts.push(`<ellipse cx="100" cy="96" rx="47" ry="50" fill="${skin}"/>`);
+  if (c.extra === 'freckles') parts.push(`<g fill="${skinD}" opacity="0.8"><circle cx="76" cy="114" r="1.6"/><circle cx="82" cy="118" r="1.6"/><circle cx="72" cy="119" r="1.6"/><circle cx="124" cy="114" r="1.6"/><circle cx="118" cy="118" r="1.6"/><circle cx="128" cy="119" r="1.6"/></g>`);
+  if (c.cheeks) parts.push(`<ellipse cx="74" cy="116" rx="9" ry="6" fill="#FF8FA3" opacity="0.45"/><ellipse cx="126" cy="116" rx="9" ry="6" fill="#FF8FA3" opacity="0.45"/>`);
+  const eye = (x, kind) => {
+    if (kind === 'happy') return `<path d="M${x - 7} ${101}q7-9 14 0" fill="none" stroke="${ink}" stroke-width="4" stroke-linecap="round"/>`;
+    if (kind === 'big') return `<ellipse cx="${x}" cy="99" rx="8" ry="9" fill="#FFFFFF"/><circle cx="${x + 1}" cy="100" r="5" fill="${ink}"/><circle cx="${x + 3}" cy="97" r="1.8" fill="#FFFFFF"/>`;
+    if (kind === 'sleepy') return `<path d="M${x - 7} 100q7 6 14 0" fill="none" stroke="${ink}" stroke-width="4" stroke-linecap="round"/>`;
+    if (kind === 'lashes') return `<circle cx="${x}" cy="100" r="5" fill="${ink}"/><path d="M${x - 6} 94l-3-3M${x} 93v-4M${x + 6} 94l3-3" stroke="${ink}" stroke-width="2.4" stroke-linecap="round"/>`;
+    return `<circle cx="${x}" cy="100" r="5.2" fill="${ink}"/><circle cx="${x + 1.8}" cy="98" r="1.5" fill="#FFFFFF"/>`;
+  };
+  if (c.eyes === 'wink') parts.push(eye(82, 'dots') + `<path d="M111 101q7-8 14 0" fill="none" stroke="${ink}" stroke-width="4" stroke-linecap="round"/>`);
+  else parts.push(eye(82, c.eyes) + eye(118, c.eyes));
+  parts.push(`<path d="M74 86q8-5 16-1M110 85q8-4 16 1" fill="none" stroke="${hairD}" stroke-width="3.6" stroke-linecap="round"/>`);
+  parts.push(`<path d="M99 106q-3 8 3 9" fill="none" stroke="${skinD}" stroke-width="3" stroke-linecap="round"/>`);
+  if (c.mouth === 'grin') parts.push(`<path d="M84 122h32q-2 16-16 16t-16-16z" fill="#7A2335"/><path d="M86 122h28v5H86z" fill="#FFFFFF"/>`);
+  else if (c.mouth === 'small') parts.push(`<path d="M93 125q7 5 14 0" fill="none" stroke="${ink}" stroke-width="3.6" stroke-linecap="round"/>`);
+  else if (c.mouth === 'o') parts.push(`<ellipse cx="100" cy="127" rx="6" ry="7" fill="#7A2335"/>`);
+  else if (c.mouth === 'tongue') parts.push(`<path d="M86 122q14 14 28 0" fill="none" stroke="${ink}" stroke-width="3.6" stroke-linecap="round"/><path d="M95 128q5 9 10 0z" fill="#FF6B81"/>`);
+  else if (c.mouth === 'flat') parts.push(`<path d="M90 126h20" stroke="${ink}" stroke-width="3.6" stroke-linecap="round"/>`);
+  else parts.push(`<path d="M86 121q14 14 28 0" fill="none" stroke="${ink}" stroke-width="3.8" stroke-linecap="round"/>`);
+  const cap = `M52 92C50 52 76 34 100 34s50 18 48 58c-8-22-26-34-48-34S60 70 52 92z`;
+  if (c.hair === 'short' || c.hair === 'long' || c.hair === 'pony') parts.push(`<path d="${cap}" fill="${hair}"/>`);
+  if (c.hair === 'fringe') parts.push(`<path d="${cap}" fill="${hair}"/><path d="M58 78c10-20 30-26 46-22-4 10-14 18-30 24 10 0 22-4 32-12 4 8 16 14 34 16-6-22-24-34-44-34-20 0-34 10-38 28z" fill="${hair}"/>`);
+  if (c.hair === 'bun') parts.push(`<circle cx="100" cy="30" r="17" fill="${hair}"/><path d="${cap}" fill="${hair}"/>`);
+  if (c.hair === 'curly') parts.push(`<g fill="${hair}">${[[58, 78], [64, 60], [78, 46], [96, 40], [114, 42], [130, 50], [142, 64], [146, 82], [52, 92], [70, 52], [124, 44], [88, 42]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="15"/>`).join('')}</g>`);
+  if (c.hair === 'spiky') parts.push(`<path d="M52 90l2-26 10 8 4-26 12 16 8-26 12 22 10-24 10 22 12-18 4 26 10-8 2 34c-10-20-28-30-48-30s-38 10-48 30z" fill="${hair}"/>`);
+  if (c.hair === 'side') parts.push(`<path d="M52 94C48 52 78 32 106 34c26 2 44 22 42 58-10-18-24-28-40-30-10 12-30 20-56 32z" fill="${hair}"/>`);
+  if (c.hair === 'buzz') parts.push(`<path d="${cap}" fill="${hair}" opacity="0.55"/>`);
+  if (c.glasses === 'round') parts.push(`<g fill="none" stroke="${ink}" stroke-width="3"><circle cx="82" cy="100" r="13"/><circle cx="118" cy="100" r="13"/><path d="M95 100h10M69 98l-14-4M131 98l14-4"/></g>`);
+  if (c.glasses === 'square') parts.push(`<g fill="none" stroke="${ink}" stroke-width="3"><rect x="68" y="89" width="28" height="22" rx="5"/><rect x="104" y="89" width="28" height="22" rx="5"/><path d="M96 99h8M68 97l-13-3M132 97l13-3"/></g>`);
+  if (c.glasses === 'shades') parts.push(`<g><rect x="66" y="90" width="31" height="20" rx="9" fill="${ink}"/><rect x="103" y="90" width="31" height="20" rx="9" fill="${ink}"/><path d="M97 98h6" stroke="${ink}" stroke-width="4"/><path d="M72 95l8 0" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" opacity="0.6"/></g>`);
+  if (c.extra === 'earrings') parts.push(`<circle cx="54" cy="114" r="4" fill="#F7C548"/><circle cx="146" cy="114" r="4" fill="#F7C548"/>`);
+  if (c.extra === 'headphones') parts.push(`<path d="M48 104c0-40 22-62 52-62s52 22 52 62" fill="none" stroke="${ink}" stroke-width="7" stroke-linecap="round"/><rect x="38" y="92" width="18" height="30" rx="8" fill="#FF6B6B"/><rect x="144" y="92" width="18" height="30" rx="8" fill="#FF6B6B"/>`);
+  if (c.extra === 'cap') parts.push(`<path d="M50 78c4-30 26-44 50-44s46 14 50 44z" fill="#2D98DA"/><path d="M100 70c20 0 46 2 66 12-20 4-44 2-66-2z" fill="#1F6FA8"/><circle cx="100" cy="36" r="5" fill="#1F6FA8"/>`);
+  if (c.extra === 'flower') parts.push(`<g transform="translate(136 56)">${[0, 72, 144, 216, 288].map((a) => `<ellipse rx="7" ry="11" fill="#FF8FB1" transform="rotate(${a}) translate(0 -9)"/>`).join('')}<circle r="6" fill="#FFD24D"/></g>`);
+  if (c.extra === 'bow') parts.push(`<g transform="translate(132 46)"><path d="M0 0l-18-10v20zM0 0l18-10v20z" fill="#FF6B9A"/><circle r="5" fill="#E04F82"/></g>`);
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">${parts.join('')}</svg>`;
+}
+function avatarSvgUrl(cfg) { return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(avatarSvg(cfg))}`; }
+function avatarPngBlob(cfg, size = 512) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const c = document.createElement('canvas');
+        c.width = size; c.height = size;
+        c.getContext('2d').drawImage(img, 0, 0, size, size);
+        c.toBlob((b) => resolve(b), 'image/png');
+      } catch { resolve(null); }
+    };
+    img.onerror = () => resolve(null);
+    img.src = avatarSvgUrl(cfg);
+  });
+}
+function AvatarMakerPage({ initial, onClose, onSave }) {
+  useBackClose(true, onClose);
+  const { theme } = useTheme();
+  const [cfg, setCfg] = useState(() => avatarCfgOf(initial));
+  const [tab, setTab] = useState('skin');
+  const [busy, setBusy] = useState(false);
+  const set = (k, v) => { setCfg((c) => ({ ...c, [k]: v })); hapticTap(); };
+  const random = () => {
+    const pick = (a) => a[Math.floor(Math.random() * a.length)];
+    setCfg(avatarCfgOf({ skin: Math.floor(Math.random() * AV_SKIN.length), face: Math.floor(Math.random() * AV_FACE.length), hair: pick(AV_HAIR), hairColor: Math.floor(Math.random() * AV_HAIRC.length), eyes: pick(AV_EYES), mouth: pick(AV_MOUTH), glasses: Math.random() < 0.7 ? 'none' : pick(AV_GLASSES), extra: Math.random() < 0.5 ? 'none' : pick(AV_EXTRA), shirt: Math.floor(Math.random() * AV_SHIRT.length), bg: Math.floor(Math.random() * AV_BG.length), cheeks: Math.random() < 0.7 }));
+    playUiSound('tap');
+  };
+  const tabs = [['skin', 'Skin'], ['face', 'Face'], ['hair', 'Hair'], ['hairColor', 'Hair colour'], ['eyes', 'Eyes'], ['mouth', 'Mouth'], ['glasses', 'Glasses'], ['extra', 'Extras'], ['shirt', 'Top'], ['bg', 'Background']];
+  const swatches = (list, key) => (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+      {list.map((col, i) => <div key={col} role="button" aria-label={`${key} colour ${i + 1}`} onClick={() => set(key, i)} style={{ width: 44, height: 44, borderRadius: '50%', background: col, border: cfg[key] === i ? `3px solid ${theme.coral}` : `1px solid ${theme.border}`, boxSizing: 'border-box', cursor: 'pointer' }} />)}
+    </div>
+  );
+  const options = (list, key) => (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 8 }}>
+      {list.map((v, idx) => {
+        const val = key === 'face' ? idx : v;
+        const on = cfg[key] === val;
+        return (
+          <div key={String(v)} role="button" aria-label={`${key} ${v}`} onClick={() => set(key, val)} style={{ aspectRatio: '1 / 1', borderRadius: 16, overflow: 'hidden', border: on ? `3px solid ${theme.coral}` : `1px solid ${theme.border}`, cursor: 'pointer', background: theme.rowBg }}>
+            <img src={avatarSvgUrl({ ...cfg, [key]: val })} alt="" draggable={false} style={{ width: '100%', height: '100%', display: 'block' }} />
+          </div>
+        );
+      })}
+    </div>
+  );
+  const save = async () => {
+    if (busy) return;
+    setBusy(true);
+    const blob = await avatarPngBlob(cfg);
+    if (!blob) { setBusy(false); return; }
+    const ok = await onSave(blob, cfg);
+    setBusy(false);
+    if (ok !== false) onClose();
+  };
+  return (
+    <FullPage title="Avatar maker" onBack={onClose} zIndex={720} pad={false}
+      right={<div role="button" aria-label="Random avatar" onClick={random} style={{ padding: '0 12px', height: 44, display: 'flex', alignItems: 'center', cursor: 'pointer', color: theme.ink }}><Sparkles size={20} /></div>}
+      footer={<BigButton label={busy ? 'Saving' : 'Use as my photo'} disabled={busy} onClick={save} />}>
+      <div style={{ display: 'flex', justifyContent: 'center', padding: '14px 0 10px' }}>
+        <img src={avatarSvgUrl(cfg)} alt="Your avatar" draggable={false} style={{ width: 168, height: 168, borderRadius: '50%', boxShadow: '0 10px 30px rgba(0,0,0,0.18)' }} />
+      </div>
+      <div style={{ display: 'flex', gap: 6, overflowX: 'auto', padding: '4px 16px 10px', scrollbarWidth: 'none' }}>
+        {tabs.map(([k, l]) => <div key={k} role="button" aria-label={l} onClick={() => setTab(k)} style={{ flexShrink: 0, padding: '8px 13px', borderRadius: 14, fontSize: 13, fontWeight: 800, cursor: 'pointer', background: tab === k ? theme.coral : theme.rowBg, color: tab === k ? '#FFFFFF' : theme.ink }}>{l}</div>)}
+      </div>
+      <div style={{ padding: '4px 16px 20px' }}>
+        {tab === 'skin' && swatches(AV_SKIN, 'skin')}
+        {tab === 'hairColor' && swatches(AV_HAIRC, 'hairColor')}
+        {tab === 'shirt' && swatches(AV_SHIRT, 'shirt')}
+        {tab === 'bg' && swatches(AV_BG, 'bg')}
+        {tab === 'face' && options(AV_FACE, 'face')}
+        {tab === 'hair' && options(AV_HAIR, 'hair')}
+        {tab === 'eyes' && options(AV_EYES, 'eyes')}
+        {tab === 'mouth' && options(AV_MOUTH, 'mouth')}
+        {tab === 'glasses' && options(AV_GLASSES, 'glasses')}
+        {tab === 'extra' && (
+          <>
+            {options(AV_EXTRA, 'extra')}
+            <IgRow inset={false} label="Rosy cheeks" right={<IgToggle on={cfg.cheeks} onClick={() => set('cheeks', !cfg.cheeks)} />} />
+          </>
+        )}
+      </div>
+    </FullPage>
+  );
+}
+
+function SecretChatPage({ uid, peer, on, onToggle, onClose }) {
+  useBackClose(true, onClose);
+  const { theme } = useTheme();
+  const [state, setState] = useState({ busy: true });
+  const load = async () => {
+    if (!secretSupported()) { setState({ unsupported: true }); return; }
+    const mine = await myDeviceKey(uid, false);
+    const server = await fetchPeerKey(uid);
+    const theirs = await fetchPeerKey(peer.id);
+    let code = '';
+    if (mine && theirs) { try { code = await safetyCodeFor(mine.fp, theirs.fp); } catch {} }
+    setState({ mine, server, theirs, code, otherPhone: !!(mine && server && server.fp !== mine.fp) || (!mine && !!server) });
+  };
+  useEffect(() => { load(); }, [peer.id]);
+  const turnOn = async (force) => {
+    setState((s) => ({ ...s, busy: true }));
+    const r = await publishDeviceKey(uid, !!force);
+    if (!r.ok) { setState((s) => ({ ...s, busy: false, otherPhone: r.reason === 'other', error: r.reason === 'setup' ? 'Secret chats switch on once the latest ZChat setup is finished.' : r.reason === 'unsupported' ? 'This browser cannot do secret chats.' : '' })); return; }
+    const theirs = await fetchPeerKey(peer.id);
+    if (!theirs) { setState((s) => ({ ...s, busy: false, mine: r.mine, error: `${(peer.name || '').split(' ')[0]} needs to open the new ZChat once before you can start a secret chat.` })); return; }
+    onToggle(true);
+    await load();
+  };
+  const first = (peer.name || '').split(' ')[0] || 'them';
+  return (
+    <FullPage title="Secret chat" subtitle={peer.name} onBack={onClose} zIndex={72}>
+      <div style={{ display: 'flex', justifyContent: 'center', padding: '20px 0 8px', color: theme.coral }}><Lock size={42} /></div>
+      <div style={{ textAlign: 'center', fontSize: 14, color: theme.muted, lineHeight: 1.55, padding: '0 10px 6px' }}>Messages you send while this is on are locked on your phone and can only be unlocked on {first}'s phone. Not even ZChat can read them.</div>
+      {state.unsupported ? <div style={{ textAlign: 'center', padding: 16, fontWeight: 700, color: theme.danger }}>This browser cannot do secret chats.</div> : (
+        <>
+          <IgRow inset={false} icon={<Lock size={16} />} label="Secret chat" sub={on ? 'On. New text messages are locked.' : 'Off'} right={state.busy ? <Spinner size={16} color={theme.muted} /> : <IgToggle on={!!on} onClick={() => { if (on) { onToggle(false); load(); } else turnOn(false); }} />} />
+          {state.otherPhone && !on && (
+            <div style={{ margin: '10px 0', padding: 14, borderRadius: 16, background: theme.rowBg, border: `1px solid ${theme.border}` }}>
+              <div style={{ fontSize: 14, fontWeight: 800, color: theme.ink }}>Your secret chats live on another phone</div>
+              <div style={{ fontSize: 12.5, color: theme.muted, lineHeight: 1.5, marginTop: 4 }}>You can move them here. Secret messages sent before the move can only be read on the old phone.</div>
+              <div role="button" aria-label="Use this phone for secret chats" onClick={() => turnOn(true)} className="zchat-press" style={{ marginTop: 10, height: 42, borderRadius: 12, background: theme.coral, color: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 14, cursor: 'pointer' }}>Use this phone</div>
+            </div>
+          )}
+          {state.error && <div role="alert" style={{ padding: '10px 2px', fontSize: 13, fontWeight: 700, color: theme.danger }}>{state.error}</div>}
+          {state.code && (
+            <>
+              <IgHeading>Security code</IgHeading>
+              <div style={{ textAlign: 'center', fontSize: 26, fontWeight: 800, letterSpacing: '0.08em', color: theme.ink, fontVariantNumeric: 'tabular-nums', padding: '6px 0' }}>{state.code}</div>
+              <div style={{ textAlign: 'center', fontSize: 12.5, color: theme.muted, lineHeight: 1.5, padding: '0 10px' }}>Check that {first} sees the same code. If it matches, nobody is in the middle.</div>
+            </>
+          )}
+          <IgHeading>Good to know</IgHeading>
+          <div style={{ fontSize: 13, color: theme.muted, lineHeight: 1.6, padding: '0 2px' }}>Only text messages are locked. Photos, voice notes and stickers are sent the normal way. If you clear this app or change phones, old secret messages cannot be opened again.</div>
+        </>
+      )}
+    </FullPage>
+  );
+}
+
+function messageTextFor(m) {
+  if (!m) return '';
+  if (m.type !== 'text') return m.content || '';
+  const w = parseWrapped(m.content);
+  if (w) return w.k === 'sec' ? (openedSecretMem.get(m.id) || '') : w.text;
+  return m.content || '';
+}
+function BirthdayBanner({ people, mine, myName, onWish, onDismiss }) {
+  const { theme } = useTheme();
+  if (!mine && !people.length) return null;
+  const first = people[0];
+  const names = people.map((p) => (p.name || '').split(' ')[0]).filter(Boolean);
+  const label = mine ? `Happy birthday, ${(myName || '').split(' ')[0] || 'friend'}!` : names.length === 1 ? `It is ${names[0]}'s birthday today` : `${names.slice(0, 2).join(' and ')}${names.length > 2 ? ` and ${names.length - 2} more` : ''} have birthdays today`;
+  return (
+    <div style={{ margin: '0 6px 10px', padding: '10px 12px', borderRadius: 18, background: theme.dark ? 'linear-gradient(135deg, rgba(255,150,184,0.18), rgba(140,108,255,0.18))' : 'linear-gradient(135deg, #FFE1EB, #ECE6FF)', display: 'flex', alignItems: 'center', gap: 10 }}>
+      <CakeIcon size={30} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 14, fontWeight: 800, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</div>
+        <div style={{ fontSize: 12, color: theme.muted, marginTop: 1 }}>{mine ? 'Have the best day' : 'Send them a wish'}</div>
+      </div>
+      {!mine && first && <div role="button" aria-label={`Wish ${first.name} a happy birthday`} onClick={() => onWish(first)} className="zchat-press" style={{ padding: '8px 12px', borderRadius: 12, background: theme.coral, color: '#FFFFFF', fontSize: 13, fontWeight: 800, cursor: 'pointer', flexShrink: 0 }}>Wish</div>}
+      <div role="button" aria-label="Hide birthday reminder" onClick={onDismiss} style={{ padding: 4, cursor: 'pointer', color: theme.muted, display: 'flex', flexShrink: 0 }}><X size={16} /></div>
+    </div>
+  );
+}
+function FocusBanner({ focus, onEnd }) {
+  const { theme } = useTheme();
+  const now = useNow(1000);
+  const left = Number(focus.until) - now;
+  useEffect(() => { if (left <= 0) onEnd(true); }, [left <= 0]);
+  if (left <= 0) return null;
+  return (
+    <div role="status" style={{ margin: '0 6px 10px', padding: '9px 12px', borderRadius: 16, background: '#7C5CFF', color: '#FFFFFF', display: 'flex', alignItems: 'center', gap: 10 }}>
+      <FocusIcon size={20} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Focusing{focus.t ? ` on ${focus.t}` : ''}</div>
+        <div style={{ fontSize: 12, opacity: 0.85 }}>{mmss(left)} left. Other chats stay quiet.</div>
+      </div>
+      <div role="button" aria-label="End focus" onClick={() => onEnd(false)} className="zchat-press" style={{ padding: '7px 12px', borderRadius: 12, background: 'rgba(255,255,255,0.2)', fontSize: 12.5, fontWeight: 800, cursor: 'pointer', flexShrink: 0 }}>End</div>
+    </div>
+  );
+}
+function ChannelsEntryRow({ onOpen }) {
+  const { theme } = useTheme();
+  return (
+    <div role="button" aria-label="Open channels" onClick={onOpen} className="zchat-press" style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '0 16px 12px', padding: '10px 12px', borderRadius: 18, background: theme.rowBg, border: `1px solid ${theme.border}`, cursor: 'pointer' }}>
+      <div style={{ width: 40, height: 40, borderRadius: 13, background: 'rgba(34,197,94,0.15)', color: '#22C55E', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><ChannelIcon size={20} /></div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 14.5, fontWeight: 800, color: theme.ink }}>Channels</div>
+        <div style={{ fontSize: 12.5, color: theme.muted, marginTop: 1 }}>Follow updates from people and pages</div>
+      </div>
+      <ChevronRight size={18} color={theme.muted} />
     </div>
   );
 }
@@ -17541,7 +21711,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     await deferredInstallPrompt.userChoice;
     setDeferredInstallPrompt(null);
   };
-  const [me, setMe] = useState(null);
+  const [me, setMe] = useState(() => readMeCache(session.user.id, session.user.email));
   const [isZAdmin, setIsZAdmin] = useState(false);
   const [profileCheckFailed, setProfileCheckFailed] = useState(false);
   const [results, setResults] = useState([]);
@@ -17565,7 +21735,13 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [mobileShowChat, setMobileShowChat] = useNavState(false);
   const [uploading, setUploading] = useState(false);
   const [loadingConvo, setLoadingConvo] = useState(false);
-  const [conversations, setConversations] = useState([]);
+  const [conversations, setConversations] = useState(() => homeSnapPart(session.user.id, 'convs', []));
+  const [listReady, setListReady] = useState(() => !!readHomeSnap(session.user.id));
+  useEffect(() => {
+    if (listReady) return undefined;
+    const t = setTimeout(() => setListReady(true), 8000);
+    return () => clearTimeout(t);
+  }, [listReady]);
   const [onlineIds, setOnlineIds] = useState(new Set());
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState(new Set());
@@ -17592,12 +21768,20 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [pinSheetFor, setPinSheetFor] = useState(null);
   const [muteSheet, setMuteSheet] = useState(null);
   const [mailOpenId, setMailOpenId] = useState(null);
-  const [storyData, setStoryData] = useState({ byUser: {}, profiles: {}, seen: new Set(), liked: new Set(), ready: false });
+  const [storyData, setStoryData] = useState(() => {
+    const st = homeSnapPart(session.user.id, 'stories', null);
+    if (!st || !st.byUser) return { byUser: {}, profiles: {}, seen: new Set(), liked: new Set(), ready: false };
+    return { byUser: st.byUser, profiles: st.profiles || {}, seen: new Set(st.seen || []), liked: new Set(st.liked || []), ready: true };
+  });
   const [storyViewer, setStoryViewer] = useState(null);
-  const [mutualIds, setMutualIds] = useState(new Set());
-  const [iFollowIds, setIFollowIds] = useState(new Set());
-  const [privacyAllowed, setPrivacyAllowed] = useState(new Set());
-  const [blockedByIds, setBlockedByIds] = useState(new Set());
+  const [mutualIds, setMutualIds] = useState(() => homeSnapSet(session.user.id, 'mutual'));
+  const [iFollowIds, setIFollowIds] = useState(() => homeSnapSet(session.user.id, 'ifollow'));
+  const [privacyAllowed, setPrivacyAllowed] = useState(() => homeSnapSet(session.user.id, 'allowed'));
+  const [blockedByIds, setBlockedByIds] = useState(() => {
+    const ids = homeSnapSet(session.user.id, 'blockedBy');
+    ids.forEach((id) => accountsThatBlockedMe.add(id));
+    return ids;
+  });
   const [blockConfirmFor, setBlockConfirmFor] = useState(null);
   const [unblockConfirmFor, setUnblockConfirmFor] = useState(null);
   const [showBlockedList, setShowBlockedList] = useState(false);
@@ -17620,23 +21804,16 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const postInputRef = useRef(null);
   const searchInputRef = useRef(null);
   const openFeedAt = (post, tab) => { setFeedStart(post ? { postId: post.id, tab: tab || 'foryou' } : (tab ? { postId: null, tab } : null)); setFeedOpen(true); };
-  const sharePost = async (outputs, caption) => {
+  const sharePost = async (outputs, caption, mentionsIn, opts) => {
     setPostComposer(null);
-    let done = 0;
-    let failed = 0;
     setSnack('Posting');
-    for (const item of outputs) {
-      const { url, error } = await uploadMedia(item.file, session.user.id);
-      if (error || !url) { failed += 1; continue; }
-      let overlayUrl = null;
-      if (item.overlayFile) { const up = await uploadMedia(item.overlayFile, session.user.id); if (!up.error) overlayUrl = up.url; }
-      const { error: insErr } = await supabase.from('posts').insert({ user_id: session.user.id, media_url: url, media_type: item.kind === 'video' ? 'video' : 'image', overlay_url: overlayUrl, caption: caption || null });
-      if (insErr) failed += 1; else done += 1;
-    }
+    const res = await createPostFromOutputs(session.user.id, outputs, caption, opts);
     setPostsVersion((v) => v + 1);
-    if (failed && !done) showSnack('Could not post. Check your connection and try again.');
-    else if (failed) showSnack(`Posted ${done}, ${failed} failed`);
-    else showSnack(done === 1 ? 'Posted to your profile' : `Posted ${done} items`);
+    if (!res.done) showSnack('Could not post. Check your connection and try again.');
+    else if (res.failed) showSnack(`Posted, but ${res.failed} did not upload`);
+    else if (res.fallback && outputs.length > 1) showSnack(`Posted ${res.done} items`);
+    else showSnack(res.collab ? `Posted. ${String(res.collab.name || '').split(' ')[0]} was invited` : 'Posted to your profile');
+    if (res.post && res.collab && me) notifyUser(res.collab.id, 'ZChat', `${me.name} invited you to share a post`, `/?post=${res.post.id}`, me.avatar);
     playUiSound('tap');
   };
   const swipeRef = useRef(null);
@@ -17758,8 +21935,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [activeFollowerFollowsMe, setActiveFollowerFollowsMe] = useState(false);
   const [whoReactedFor, setWhoReactedFor] = useState(null);
   const [showArchived, setShowArchived] = useNavState(false);
-  const [archivedConversations, setArchivedConversations] = useState([]);
-  const [acceptedIds, setAcceptedIds] = useState(null);
+  const [archivedConversations, setArchivedConversations] = useState(() => homeSnapPart(session.user.id, 'arch', []));
+  const [acceptedIds, setAcceptedIds] = useState(() => { const v = homeSnapPart(session.user.id, 'accepted', null); return Array.isArray(v) ? new Set(v) : null; });
   const [showRequests, setShowRequests] = useNavState(false);
   const [requestBusy, setRequestBusy] = useState(false);
   const [dmClosedFor, setDmClosedFor] = useState(null);
@@ -17777,10 +21954,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [showChatSettings, setShowChatSettings] = useNavState(false);
   const [showAccountSwitcher, setShowAccountSwitcher] = useNavState(false);
   const [showDeleteAccount, setShowDeleteAccount] = useState(false);
-  const [myBlockedIds, setMyBlockedIds] = useState(new Set());
-  const [followRequestCount, setFollowRequestCount] = useState(0);
+  const [myBlockedIds, setMyBlockedIds] = useState(() => homeSnapSet(session.user.id, 'blocks'));
+  const [followRequestCount, setFollowRequestCount] = useState(() => Number(homeSnapPart(session.user.id, 'freq', 0)) || 0);
   const [showMail, setShowMail] = useNavState(false);
-  const [unreadMailCount, setUnreadMailCount] = useState(0);
+  const [unreadMailCount, setUnreadMailCount] = useState(() => Number(homeSnapPart(session.user.id, 'mail', 0)) || 0);
   const [listFilter, setListFilter] = useState('all');
   const [pollComposer, setPollComposer] = useState(false);
   const [eventComposer, setEventComposer] = useState(false);
@@ -17850,7 +22027,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     try { localStorage.setItem(favStoreKey, JSON.stringify([...next])); } catch {}
     showSnack(on ? 'Added to favourites' : 'Removed from favourites');
   };
-  const [groups, setGroups] = useState([]);
+  const [groups, setGroups] = useState(() => homeSnapPart(session.user.id, 'groups', []));
   const [activeGroup, setActiveGroup] = useState(null);
   const [composerTall, setComposerTall] = useState(false);
   const draftLenRef = useRef(0);
@@ -17891,7 +22068,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [showGroupSettings, setShowGroupSettings] = useState(false);
   const [showGroupMembers, setShowGroupMembers] = useState(false);
   const [showAddMembersFromMembers, setShowAddMembersFromMembers] = useState(false);
-  const [myLocks, setMyLocks] = useState({});
+  const [myLocks, setMyLocks] = useState(() => homeSnapPart(session.user.id, 'locks', {}));
   const locksLoadedAtRef = useRef(0);
   const [unlockedChats, setUnlockedChats] = useState(new Set());
   const lastLeftChatAtRef = useRef({});
@@ -18285,7 +22462,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const recordTimerRef = useRef(null);
   const recordStartRef = useRef(0);
   const pendingStopRef = useRef(false);
-  const [unreadCounts, setUnreadCounts] = useState({});
+  const [unreadCounts, setUnreadCounts] = useState(() => homeSnapPart(session.user.id, 'unread', {}));
   const conversationsRef = useRef([]);
   const groupsRef = useRef([]);
   const blockedRef = useRef(new Set());
@@ -18463,6 +22640,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
   const loadMyLocks = async () => {
     const { data, error } = await supabase.from('chat_locks').select('*').eq('owner_id', session.user.id);
+    if (error || !data) return;
     const map = {};
     (data || []).forEach((l) => { map[l.conversation_id] = true; });
     setMyLocks(map);
@@ -18475,22 +22653,28 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   }, []);
 
   const loadMyBlocks = async () => {
-    const { data } = await supabase.from('blocks').select('blocked_id').eq('blocker_id', session.user.id);
-    setMyBlockedIds(new Set((data || []).map((b) => b.blocked_id)));
-    const { data: against } = await supabase.from('blocks').select('blocker_id').eq('blocked_id', session.user.id);
-    const ids = new Set((against || []).map((b) => b.blocker_id));
+    const [mine, theirs] = await Promise.all([
+      supabase.from('blocks').select('blocked_id').eq('blocker_id', session.user.id),
+      supabase.from('blocks').select('blocker_id').eq('blocked_id', session.user.id),
+    ]);
+    if (mine.error || !mine.data) return;
+    setMyBlockedIds(new Set(mine.data.map((b) => b.blocked_id)));
+    if (theirs.error || !theirs.data) return;
+    const ids = new Set(theirs.data.map((b) => b.blocker_id));
     accountsThatBlockedMe.clear();
     ids.forEach((id) => accountsThatBlockedMe.add(id));
     setBlockedByIds(ids);
   };
 
   const loadFollowRequestCount = async () => {
-    const { count } = await supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', session.user.id).eq('status', 'pending');
+    const { count, error } = await supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', session.user.id).eq('status', 'pending');
+    if (error) return;
     setFollowRequestCount(count || 0);
   };
 
   const loadUnreadMailCount = async () => {
-    const { count } = await supabase.from('mails').select('*', { count: 'exact', head: true }).eq('recipient_id', session.user.id).eq('read', false);
+    const { count, error } = await supabase.from('mails').select('*', { count: 'exact', head: true }).eq('recipient_id', session.user.id).eq('read', false);
+    if (error) return;
     setUnreadMailCount(count || 0);
   };
 
@@ -18563,26 +22747,36 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   };
 
   const loadUnreadCounts = async () => {
-    const { data } = await supabase.from('messages').select('sender_id')
+    const { data, error } = await supabase.from('messages').select('sender_id')
       .eq('receiver_id', session.user.id).eq('read', false).not('deleted', 'is', true);
+    if (error || !data) return;
     const map = {};
     (data || []).forEach((m) => { map[m.sender_id] = (map[m.sender_id] || 0) + 1; });
     setUnreadCounts(map);
   };
 
+  const convLoadSeqRef = useRef(0);
   const loadConversations = async () => {
     const myId = session.user.id;
+    const seq = ++convLoadSeqRef.current;
     const hiddenMap = getHiddenChatMap();
     const hiddenMsgs = getHiddenMsgIds();
     const archived = getArchivedChatIds();
-    const { data } = await supabase.from('conversations').select('*')
-      .or(`user_a.eq.${myId},user_b.eq.${myId}`)
-      .order('last_message_at', { ascending: false });
-    if (!data || data.length === 0) { setConversations([]); setArchivedConversations([]); return; }
-    const { data: recentMsgs } = await supabase.from('messages')
-      .select('id, sender_id, receiver_id, type, content, deleted, created_at, read, delivered, story_id, expires_at')
-      .or(`sender_id.eq.${myId},receiver_id.eq.${myId}`).is('group_id', null)
-      .order('created_at', { ascending: false }).limit(400);
+    const [convRes, recentRes, nickRes, aliasRes] = await Promise.all([
+      supabase.from('conversations').select('*').or(`user_a.eq.${myId},user_b.eq.${myId}`).order('last_message_at', { ascending: false }),
+      supabase.from('messages')
+        .select('id, sender_id, receiver_id, type, content, deleted, created_at, read, delivered, story_id, expires_at')
+        .or(`sender_id.eq.${myId},receiver_id.eq.${myId}`).is('group_id', null)
+        .order('created_at', { ascending: false }).limit(400),
+      supabase.from('contact_nicknames').select('*').eq('owner_id', myId),
+      supabase.from('self_aliases').select('*').eq('viewer_id', myId),
+    ]);
+    if (convRes.error || !convRes.data) return;
+    const data = convRes.data;
+    if (data.length === 0) { if (seq === convLoadSeqRef.current) { setConversations([]); setArchivedConversations([]); setListReady(true); } return; }
+    const recentMsgs = recentRes.data;
+    const nicks = nickRes.data;
+    const aliasesForMe = aliasRes.data;
     const lastByOther = {};
     const sentTo = new Set();
     (recentMsgs || []).forEach((m) => {
@@ -18607,16 +22801,15 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (hiddenChanged) saveHiddenChatMap(hiddenMap);
     const otherIds = visible.map((c) => (c.user_a === myId ? c.user_b : c.user_a));
     const noIds = ['00000000-0000-0000-0000-000000000000'];
-    const { data: profsRaw } = await supabase.from('profiles').select('*').in('id', otherIds.length ? otherIds : noIds);
+    const { data: profsRaw, error: profErr } = await supabase.from('profiles').select('*').in('id', otherIds.length ? otherIds : noIds);
+    if (profErr || !profsRaw) return;
     const profs = sanitizeAvatarList(profsRaw, myId);
-    const { data: nicks } = await supabase.from('contact_nicknames').select('*').eq('owner_id', myId);
-    const { data: aliasesForMe } = await supabase.from('self_aliases').select('*').eq('viewer_id', myId);
     const mergedAll = visible
       .map((c) => {
         const otherId = c.user_a === myId ? c.user_b : c.user_a;
         const nick = nicks?.find((n) => n.contact_id === otherId);
         const theirAlias = aliasesForMe?.find((al) => al.user_id === otherId);
-        const foundProfile = profs?.find((p) => p.id === otherId);
+        const foundProfile = profs?.find((pr) => pr.id === otherId);
         const profile = foundProfile || { id: otherId, name: 'Deleted Account', username: 'deleted', avatar: '', is_deleted: true };
         const baseName = theirAlias ? theirAlias.alias : profile.name;
         const last = lastByOther[otherId];
@@ -18639,6 +22832,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         if (px !== py) return py - px;
         return y.sortTime - x.sortTime;
       });
+    if (seq !== convLoadSeqRef.current) return;
+    setListReady(true);
     setConversations(uniqueBy(mergedAll.filter((c) => !archived.has(c.id)), (c) => c.id));
     setArchivedConversations(uniqueBy(mergedAll.filter((c) => archived.has(c.id)), (c) => c.id));
   };
@@ -18658,54 +22853,58 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     );
   };
 
+  const refreshMeRef = useRef(null);
   useEffect(() => {
     let cancelled = false;
+    let retryTimer = 0;
     const meCacheKey = `zchat-me-cache-${session.user.id}`;
-    try {
-      const cached = JSON.parse(localStorage.getItem(meCacheKey) || 'null');
-      if (cached && cached.id === session.user.id && !cached.banned && !cached.is_deleted) setMe((prev) => prev || { ...cached, email: session.user.email });
-    } catch {}
     if (DEEP_DM_ID && !deepDmPrefetch.current) deepDmPrefetch.current = getProfile(DEEP_DM_ID);
-    getProfile(session.user.id)
-      .then(async ({ data }) => {
-        if (cancelled) return;
-        if (data) {
-          try { const { chat_lock_hash, ...safe } = data; localStorage.setItem(meCacheKey, JSON.stringify(safe)); } catch {}
-          // Someone can end up back on an account they previously deleted
-          // (their login remembers their email). Welcome them back instead
-          // of silently leaving them hidden and unable to be messaged.
-          if (data.is_deleted) {
-            const { data: restored } = await supabase.from('profiles')
-              .update({ is_deleted: false })
-              .eq('id', session.user.id)
-              .select()
-              .single();
-            setMe({ ...(restored || data), is_deleted: false, email: session.user.email });
+    const fetchMe = () => {
+      clearTimeout(retryTimer);
+      getProfile(session.user.id)
+        .then(async ({ data, error }) => {
+          if (cancelled) return;
+          if (data) {
+            try { const { chat_lock_hash, ...safe } = data; localStorage.setItem(meCacheKey, JSON.stringify(safe)); } catch {}
+            if (data.is_deleted) {
+              const { data: restored } = await supabase.from('profiles')
+                .update({ is_deleted: false })
+                .eq('id', session.user.id)
+                .select()
+                .single();
+              setMe({ ...(restored || data), is_deleted: false, email: session.user.email });
+              return;
+            }
+            if (data.banned) {
+              await signOut();
+              alert(BLOCKED_MESSAGE);
+              window.location.replace('/');
+              return;
+            }
+            const fp = deviceFingerprint();
+            if (fp && data.device_id !== fp) {
+              supabase.from('profiles').update({ device_id: fp }).eq('id', session.user.id).then(() => {}, () => {});
+            }
+            isBlockedHere(session.user.email).then(async (blocked) => {
+              if (!blocked) return;
+              await signOut();
+              alert(BLOCKED_MESSAGE);
+              window.location.replace('/');
+            });
+            setMe({ ...data, email: session.user.email, device_id: fp || data.device_id });
             return;
           }
-          if (data.banned) {
-            await signOut();
-            alert(BLOCKED_MESSAGE);
-            window.location.replace('/');
+          if (error && !isNoRowError(error)) {
+            retryTimer = setTimeout(fetchMe, typeof navigator !== 'undefined' && navigator.onLine === false ? 20000 : 8000);
             return;
           }
-          const fp = deviceFingerprint();
-          if (fp && data.device_id !== fp) {
-            supabase.from('profiles').update({ device_id: fp }).eq('id', session.user.id).then(() => {}, () => {});
-          }
-          isBlockedHere(session.user.email).then(async (blocked) => {
-            if (!blocked) return;
-            await signOut();
-            alert(BLOCKED_MESSAGE);
-            window.location.replace('/');
-          });
-          setMe({ ...data, email: session.user.email, device_id: fp || data.device_id });
-          return;
-        }
-        setProfileCheckFailed(true);
-      })
-      .catch(() => { if (!cancelled) setProfileCheckFailed(true); });
-    return () => { cancelled = true; };
+          setProfileCheckFailed(true);
+        })
+        .catch(() => { if (!cancelled) retryTimer = setTimeout(fetchMe, 10000); });
+    };
+    refreshMeRef.current = fetchMe;
+    fetchMe();
+    return () => { cancelled = true; clearTimeout(retryTimer); };
   }, []);
 
   useEffect(() => {
@@ -18740,7 +22939,15 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   }, [me && me.id]);
 
   useEffect(() => {
-    if (me) { loadConversations(); loadUnreadCounts(); loadMyLocks(); loadGroups(); loadMyBlocks(); loadStories(); subscribeToPush(session.user.id, false); loadFollowRequestCount(); loadUnreadMailCount(); supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', me.id).then(() => {}, () => {}); }
+    if (!me) return undefined;
+    loadConversations(); loadUnreadCounts(); loadMyLocks(); loadGroups(); loadMyBlocks(); loadStories();
+    const later = setTimeout(() => {
+      subscribeToPush(session.user.id, false);
+      loadFollowRequestCount();
+      loadUnreadMailCount();
+      supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', session.user.id).then(() => {}, () => {});
+    }, 1200);
+    return () => clearTimeout(later);
   }, [me && me.id]);
   useEffect(() => {
     if (!me) return undefined;
@@ -18845,6 +23052,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         if (callRow && handleCallRowRef.current) handleCallRowRef.current(callRow);
       })();
     }
+    const channelFlag = params.get('channel');
+    const momentFlag = params.get('moment');
+    if (channelFlag) setChannelsOpen({ id: channelFlag });
+    if (momentFlag) setHomeTab('moments');
     if (storyFlag) pendingStoryUserRef.current = storyFlag;
     if (requestsFlag) setShowFollowRequests(true);
     if (mailFlag) setShowMail(true);
@@ -18870,7 +23081,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         if (data) setProfileOf(sanitizeAvatar(data, session.user.id));
       })();
     }
-    if (dmId || groupId || profileId || requestsFlag || mailFlag || storyFlag || callFlag || postFlag) window.history.replaceState({}, '', window.location.pathname);
+    if (dmId || groupId || profileId || requestsFlag || mailFlag || storyFlag || callFlag || postFlag || channelFlag || momentFlag) window.history.replaceState({}, '', window.location.pathname);
   };
   openDeepLinkRef.current = openDeepLink;
   useEffect(() => {
@@ -19111,8 +23322,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         if (msg.sender_id !== (current && current.id) || !mobileShowChatRef.current) {
           supabase.from('messages').update({ delivered: true }).eq('id', msg.id).then(() => {}, () => {});
           const senderConv = conversationsRef.current.find((c) => c.otherProfile.id === msg.sender_id) || archivedConversationsRef.current.find((c) => c.otherProfile.id === msg.sender_id);
-          if (!(senderConv && isActiveUntil(senderConv[senderConv.user_a === me.id ? 'muted_until_a' : 'muted_until_b']))) {
-            playPing();
+          const alertKey = chatPrefKey('dm', msg.sender_id);
+          if (!(senderConv && isActiveUntil(senderConv[senderConv.user_a === me.id ? 'muted_until_a' : 'muted_until_b'])) && !vaultKeysRef.current.has(alertKey) && !(focusRef.current && focusRef.current.chat !== alertKey)) {
+            playPing(alertKey);
             showMessageToast(msg);
           }
         } else {
@@ -19281,8 +23493,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         if (row.sender_id !== me.id && (!activeGroup || row.group_id !== activeGroup.id)) {
           supabase.from('messages').update({ delivered: true }).eq('id', row.id).then(() => {}, () => {});
           const mutedGroup = groupsRef.current.find((x) => x.id === row.group_id);
-          const mentioned = row.type === 'text' && extractMentions(row.content || '').has((me.username || '').toLowerCase());
-          if (!(mutedGroup && isActiveUntil(mutedGroup.mutedUntil)) || mentioned) { playPing(); showMessageToast(row); }
+          const ments = row.type === 'text' ? extractMentions(row.content || '') : new Set();
+          const mentioned = ments.has((me.username || '').toLowerCase()) || ments.has('everyone') || ments.has('all');
+          const gAlertKey = chatPrefKey('group', row.group_id);
+          if ((!(mutedGroup && isActiveUntil(mutedGroup.mutedUntil)) || mentioned) && !vaultKeysRef.current.has(gAlertKey) && !(focusRef.current && focusRef.current.chat !== gAlertKey)) { playPing(gAlertKey); showMessageToast(row); }
         }
         if (row.sender_id !== me.id && activeGroup && row.group_id === activeGroup.id) { markGroupRead(activeGroup.id); supabase.from('messages').update({ read: true, delivered: true }).eq('id', row.id).then(() => {}, () => {}); }
         setMessages((prev) => {
@@ -19357,6 +23571,21 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   useEffect(() => { messagesRef.current = messages; }, [messages]);
   const mobileShowChatRef = useRef(mobileShowChat);
   useEffect(() => { mobileShowChatRef.current = mobileShowChat; }, [mobileShowChat]);
+  const [updateReady, setUpdateReady] = useState(false);
+  const bootAtRef = useRef(Date.now());
+  useEffect(() => {
+    const handle = () => {
+      const el = typeof document !== 'undefined' ? document.activeElement : null;
+      const typing = !!el && (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT' || el.isContentEditable);
+      const inCall = !!(callEngineRef.current && callEngineRef.current.call && callEngineRef.current.call.status !== 'ended');
+      const quiet = Date.now() - bootAtRef.current < 12000 && !mobileShowChatRef.current && !typing && !inCall;
+      if (quiet) { try { window.location.reload(); } catch {} return; }
+      setUpdateReady(true);
+    };
+    if (swUpdateReady) handle();
+    window.addEventListener('zchat-update-ready', handle);
+    return () => window.removeEventListener('zchat-update-ready', handle);
+  }, []);
 
   useEffect(() => {
     if (draft === '') setComposerMention(null);
@@ -19547,14 +23776,24 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const getGroupReadAt = (groupId) => { try { return localStorage.getItem(groupReadKey(groupId)); } catch { return null; } };
   const activeGroupIdRef = useRef(null);
   useEffect(() => { activeGroupIdRef.current = activeGroup ? activeGroup.id : null; }, [activeGroup]);
+  const openSeqRef = useRef(0);
+  const msgOwnerRef = useRef(null);
 
+  const groupLoadSeqRef = useRef(0);
   const loadGroups = async () => {
-    const { data: mems } = await supabase.from('group_members').select('*').eq('user_id', session.user.id);
-    if (!mems || !mems.length) { setGroups([]); return; }
+    const seq = ++groupLoadSeqRef.current;
+    const { data: mems, error: memErr } = await supabase.from('group_members').select('*').eq('user_id', session.user.id);
+    if (memErr || !mems) return;
+    if (!mems.length) { if (seq === groupLoadSeqRef.current) setGroups([]); return; }
     const ids = mems.map((m) => m.group_id);
-    const { data: groupRows } = await supabase.from('groups').select('*').in('id', ids);
-    const { data: recent } = await supabase.from('messages').select('id, group_id, sender_id, type, content, created_at, deleted, expires_at')
-      .in('group_id', ids).order('created_at', { ascending: false }).limit(Math.min(1500, ids.length * 60));
+    const [groupRes, recentRes] = await Promise.all([
+      supabase.from('groups').select('*').in('id', ids),
+      supabase.from('messages').select('id, group_id, sender_id, type, content, created_at, deleted, expires_at')
+        .in('group_id', ids).order('created_at', { ascending: false }).limit(Math.min(1500, ids.length * 60)),
+    ]);
+    if (groupRes.error || !groupRes.data || recentRes.error) return;
+    const groupRows = groupRes.data;
+    const recent = recentRes.data;
     const hiddenMsgs = getHiddenMsgIds();
     const visibleRecent = (recent || []).filter((m) => !hiddenMsgs.has(m.id) && !(m.expires_at && new Date(m.expires_at).getTime() <= Date.now()));
     const lastSenderIds = [...new Set(ids.map((gid) => visibleRecent.find((m) => m.group_id === gid)).filter((m) => m && m.sender_id !== session.user.id && m.type !== 'system').map((m) => m.sender_id))];
@@ -19575,8 +23814,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       const previewPrefix = !last || last.type === 'system' ? '' : last.sender_id === session.user.id ? 'You: ' : `${(senderNames[last.sender_id] || 'Someone').split(' ')[0]}: `;
       return { ...g, myRole: mine?.role || 'member', pinned: mine?.pinned || false, archived: mine?.archived || false, last_message: last?.deleted ? 'This message was deleted' : last?.content, last_message_type: last?.deleted ? 'text' : last?.type, last_message_at: last?.created_at || g.created_at, unread, preview, previewPrefix, mutedUntil: mine?.notify_muted_until || null };
     }).sort((a, b) => new Date(b.last_message_at) - new Date(a.last_message_at));
+    if (seq !== groupLoadSeqRef.current) return;
     setGroups(uniqueBy(merged, (g) => g.id));
   };
+
 
   const toggleGroupPin = async (g) => {
     await supabase.from('group_members').update({ pinned: !g.pinned }).eq('group_id', g.id).eq('user_id', session.user.id);
@@ -19601,15 +23842,21 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   };
 
   const loadGroupMembers = async (groupId) => {
-    const { data: mems } = await supabase.from('group_members').select('*').eq('group_id', groupId);
-    const ids = (mems || []).map((m) => m.user_id);
+    const { data: mems, error } = await supabase.from('group_members').select('*').eq('group_id', groupId);
+    if (error || !mems) return;
+    const ids = mems.map((m) => m.user_id);
     if (!ids.length) { setGroupMembers([]); return; }
-    const { data: profs } = await supabase.from('profiles').select('*').in('id', ids);
+    const { data: profs, error: profErr } = await supabase.from('profiles').select('*').in('id', ids);
+    if (profErr || !profs) return;
     const sanitized = sanitizeAvatarList(profs, session.user.id);
-    setGroupMembers((mems || []).map((m) => ({ ...m, profile: sanitized.find((p) => p.id === m.user_id) })).filter((m) => m.profile));
+    const list = mems.map((m) => ({ ...m, profile: sanitized.find((pr) => pr.id === m.user_id) })).filter((m) => m.profile);
+    setGroupMembers(list);
+    saveChatLocal(session.user.id, 'g', groupId, { members: list.map((m) => ({ ...m, profile: slimProfile(m.profile) })) });
   };
 
   const openGroup = async (group) => {
+    const seq = ++openSeqRef.current;
+    msgOwnerRef.current = null;
     setActiveGroupCall(null);
     supabase.from('calls').select('*').eq('group_id', group.id).in('status', ['ringing', 'active']).order('created_at', { ascending: false }).limit(1)
       .then(({ data }) => {
@@ -19632,8 +23879,35 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     setReplyingTo(null);
     setEditingMessage(null);
     setPendingForwardItems([]);
-    const { data: newestFirst } = await supabase.from('messages').select('*').eq('group_id', group.id).order('created_at', { ascending: false }).limit(CHAT_HISTORY_LIMIT);
-    const data = (newestFirst || []).slice().reverse();
+    const gKey = `g:${group.id}`;
+    let netSettled = false;
+    let fromCache = false;
+    const applyCached = (entry) => {
+      if (!entry || netSettled || fromCache || openSeqRef.current !== seq) return;
+      const hiddenNow = getHiddenMsgIds();
+      const rows = (entry.rows || []).filter((m) => !hiddenNow.has(m.id) && !(m.expires_at && new Date(m.expires_at).getTime() <= Date.now()));
+      fromCache = true;
+      msgOwnerRef.current = gKey;
+      if (entry.members && entry.members.length) setGroupMembers(entry.members);
+      setMessages([...rows, ...queuedMessagesFor('group', group.id)]);
+      setMessageLikes(entry.likes || {});
+      setLoadingConvo(false);
+    };
+    const cachedP = readChatLocal(session.user.id, 'g', group.id);
+    cachedP.then(applyCached);
+    const { data: newestFirst, error: groupMsgErr } = await supabase.from('messages').select('*').eq('group_id', group.id).order('created_at', { ascending: false }).limit(CHAT_HISTORY_LIMIT);
+    if (openSeqRef.current !== seq) return;
+    if (groupMsgErr || !newestFirst) {
+      if (!fromCache) applyCached(await cachedP);
+      netSettled = true;
+      if (openSeqRef.current !== seq) return;
+      if (!fromCache) setMessages([...queuedMessagesFor('group', group.id)]);
+      setLoadingConvo(false);
+      loadGroupMembers(group.id);
+      return;
+    }
+    netSettled = true;
+    const data = newestFirst.slice().reverse();
     const hidden = getHiddenMsgIds();
     const visible = (data || []).filter((m) => !hidden.has(m.id) && !(m.expires_at && new Date(m.expires_at).getTime() <= Date.now()));
     const readAtMs = prevGroupReadAt ? new Date(prevGroupReadAt).getTime() : 0;
@@ -19641,12 +23915,14 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       ? visible.filter((m) => m.sender_id !== session.user.id && !m.deleted && m.type !== 'system' && new Date(m.created_at).getTime() > readAtMs)
       : [];
     setUnreadAnchor(groupUnread.length ? { chat: group.id, id: groupUnread[0].id, count: groupUnread.length } : null);
+    msgOwnerRef.current = gKey;
     setMessages([...visible, ...queuedMessagesFor('group', group.id)]);
     setLoadingConvo(false);
     loadGroupMembers(group.id);
     const ids = visible.map((m) => m.id).slice(-400);
     if (ids.length) {
-      const { data: likes } = await supabase.from('message_likes').select('*').in('message_id', ids);
+      const { data: likes, error: likesErr } = await supabase.from('message_likes').select('*').in('message_id', ids);
+      if (likesErr || openSeqRef.current !== seq) return;
       const grouped = {};
       (likes || []).forEach((l) => { grouped[l.message_id] = grouped[l.message_id] || []; grouped[l.message_id].push({ user_id: l.user_id, emoji: l.emoji }); });
       setMessageLikes(grouped);
@@ -19685,14 +23961,18 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       return null;
     }
     if (tempId) setMessages((prev) => prev.filter((x) => x.id !== tempId || (error ? true : false)).map((x) => (x.id === tempId && error ? { ...x, sending: false, failed: true } : x)));
+    if (error && /slow mode/i.test(String(error.message || ''))) showSnack('Slow mode is on. Wait a little before sending again');
     if (!error && data) {
       setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
       loadGroups();
       if (type !== 'system') {
         const preview = type === 'text' ? (specialPreview(content) || (parseProfileLink(content) ? 'Shared a profile' : content)) : type === 'image' ? 'Photo' : type === 'audio' ? 'Voice message' : type === 'sticker' ? 'Sticker' : 'Video';
         const mentioned = extractMentions(content || '');
+        const toEveryone = type === 'text' && (mentioned.has('everyone') || mentioned.has('all')) && canMentionAll();
         groupMembers.filter((m) => m.user_id !== session.user.id).forEach((m) => {
-          if (mentioned.has((m.profile?.username || '').toLowerCase())) {
+          if (toEveryone) {
+            notifyUser(m.user_id, `${me.name} mentioned everyone in ${activeGroup.name}`, preview, `/?group=${activeGroup.id}`, me.avatar);
+          } else if (mentioned.has((m.profile?.username || '').toLowerCase())) {
             notifyUser(m.user_id, `${me.name} mentioned you in ${activeGroup.name}`, preview, `/?group=${activeGroup.id}`, me.avatar);
           } else if (!m.muted) {
             notifyUser(m.user_id, `${me.name} in ${activeGroup.name}`, preview, `/?group=${activeGroup.id}`, me.avatar);
@@ -19895,7 +24175,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (activeConvForBar && activeConvForBar.otherProfile.id !== profile.id && myLocks[activeConvForBar.id]) {
       lastLeftChatAtRef.current[activeConvForBar.id] = Date.now();
     }
-    if (!convId) {
+    if (!convId && !(typeof navigator !== 'undefined' && navigator.onLine === false)) {
       const { data: freshCheck } = await getProfile(profile.id);
       if (freshCheck?.is_deleted) {
         setDeletedAccountAlertFor(profile.name || 'This person');
@@ -19938,6 +24218,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   };
 
   const actuallyOpenChat = async (profile, convId) => {
+    const seq = ++openSeqRef.current;
+    msgOwnerRef.current = null;
     setActiveGroupCall(null);
     setChatSearch(null);
     setShowChatMedia(false);
@@ -19957,6 +24239,22 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     setPendingForwardItems([]);
     if (convId) markRead(convId);
     const myId = session.user.id;
+    const dKey = `dm:${profile.id}`;
+    let netSettled = false;
+    let fromCache = false;
+    const applyCached = (entry) => {
+      if (!entry || netSettled || fromCache || openSeqRef.current !== seq) return;
+      const hiddenNow = getHiddenMsgIds();
+      const rows = (entry.rows || []).filter((m) => !hiddenNow.has(m.id) && !(m.expires_at && new Date(m.expires_at).getTime() <= Date.now()));
+      fromCache = true;
+      msgOwnerRef.current = dKey;
+      if (entry.follow) { setActiveFollowState(entry.follow.s || 'none'); setActiveFollowerFollowsMe(!!entry.follow.b); }
+      setMessages([...rows, ...queuedMessagesFor('dm', profile.id)]);
+      setMessageLikes(entry.likes || {});
+      setLoadingConvo(false);
+    };
+    const cachedP = readChatLocal(myId, 'dm', profile.id);
+    cachedP.then(applyCached);
     const [followRes, theyRes, msgRes] = await Promise.all([
       supabase.from('follows').select('status').eq('follower_id', myId).eq('following_id', profile.id).maybeSingle(),
       supabase.from('follows').select('status').eq('follower_id', profile.id).eq('following_id', myId).eq('status', 'accepted').maybeSingle(),
@@ -19966,9 +24264,23 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         .order('created_at', { ascending: false })
         .limit(CHAT_HISTORY_LIMIT),
     ]);
+    if (openSeqRef.current !== seq) return;
+    if (!msgRes || msgRes.error || !msgRes.data) {
+      if (!fromCache) applyCached(await cachedP);
+      netSettled = true;
+      if (openSeqRef.current !== seq) return;
+      if (!fromCache) { setActiveFollowState('none'); setMessages([...queuedMessagesFor('dm', profile.id)]); setMessageLikes({}); }
+      setLoadingConvo(false);
+      return;
+    }
+    netSettled = true;
     const followRow = followRes && followRes.data;
-    setActiveFollowState(followRow ? followRow.status : 'none');
-    setActiveFollowerFollowsMe(!!(theyRes && theyRes.data));
+    const followOk = followRes && !followRes.error && theyRes && !theyRes.error;
+    if (followOk) {
+      setActiveFollowState(followRow ? followRow.status : 'none');
+      setActiveFollowerFollowsMe(!!(theyRes && theyRes.data));
+      saveChatLocal(myId, 'dm', profile.id, { follow: { s: followRow ? followRow.status : 'none', b: !!(theyRes && theyRes.data) } });
+    }
     setDmClosedFor(null);
     if (!profile.is_bot && !(theyRes && theyRes.data)) {
       supabase.from('profiles').select('privacy_messages').eq('id', profile.id).maybeSingle().then(({ data: pm }) => {
@@ -19985,6 +24297,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const visible = (data || []).filter((m) => !hidden.has(m.id) && !(m.expires_at && new Date(m.expires_at).getTime() <= Date.now()));
     const unreadFromThem = visible.filter((m) => m.sender_id === profile.id && !m.read && !m.deleted && m.type !== 'system');
     setUnreadAnchor(unreadFromThem.length ? { chat: profile.id, id: unreadFromThem[0].id, count: unreadFromThem.length } : null);
+    msgOwnerRef.current = dKey;
     setMessages([...visible, ...queuedMessagesFor('dm', profile.id)]);
     setLoadingConvo(false);
     const unreadIds = requestIdsRef.current.has(profile.id) ? [] : visible.filter((m) => m.sender_id === profile.id && !m.read).map((m) => m.id);
@@ -19992,11 +24305,13 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       unreadIds.length ? supabase.from('messages').update({ read: true, delivered: true }).in('id', unreadIds) : null,
       visible.length ? supabase.from('message_likes').select('*').in('message_id', visible.map((m) => m.id)) : null,
     ]);
+    if (openSeqRef.current !== seq) return;
     if (unreadIds.length) {
       setMessages((prev) => prev.map((m) => (unreadIds.includes(m.id) ? { ...m, read: true, delivered: true } : m)));
       loadUnreadCounts();
     }
     if (visible.length) {
+      if (likesRes && likesRes.error) return;
       const likes = likesRes && likesRes.data;
       const grouped = {};
       (likes || []).forEach((l) => { grouped[l.message_id] = grouped[l.message_id] || []; grouped[l.message_id].push({ user_id: l.user_id, emoji: l.emoji }); });
@@ -20037,6 +24352,33 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       onCall: activeGroup ? (kind) => { closeAll(); startGroupCall(activeGroup, kind); } : null,
       blocked,
       onToggleBlock: activeProfile && !activeProfile.is_bot ? () => (blocked ? setUnblockConfirmFor(activeProfile) : setBlockConfirmFor(activeProfile)) : null,
+      onSetTitle: activeGroup ? setMemberTitle : null,
+      moreTiles: [
+        chatAlbumKey && !(activeProfile && activeProfile.is_bot) ? { icon: <AlbumIcon />, label: 'Albums', aria: 'Shared albums', onClick: () => setAlbumsOpen({ key: chatAlbumKey, name: chatName }) } : null,
+        messages.length >= 3 ? { icon: <Sparkles />, label: 'Catch up', aria: 'Catch me up', onClick: () => { closeAll(); runCatchUp(); } } : null,
+      ],
+      moreCustomize: chatPref ? [
+        { icon: <Bell />, label: 'Tone', aria: 'Chat tone', sub: chatToneFor(chatPref) ? ((NOTIF_TONES.find((t) => t.k === chatToneFor(chatPref)) || {}).l || null) : null, onClick: () => setTonePage({ key: chatPref, name: chatName }) },
+        !(activeProfile && activeProfile.is_bot) ? { icon: <TranslateIcon />, label: 'Translate', aria: 'Translate this chat', sub: autoTrLang ? ((TRANSLATE_LANGS.find(([k]) => k === autoTrLang) || [0, ''])[1]) : null, onClick: () => setTrSheet({ key: chatPref, name: chatName }) } : null,
+      ] : [],
+      morePrivacy: [
+        activeProfile && !activeGroup && !activeProfile.is_bot ? <DetailRow icon={<Lock />} label="Secret chat" value={secretSet.has(activeProfile.id) ? 'On' : 'Off'} onClick={() => setSecretPage(true)} /> : null,
+        chatPref ? <DetailRow icon={<EyeOff />} label={activeGroup ? 'Hide this group' : 'Hide this chat'} sub="Keep it behind your PIN" onClick={() => { closeAll(); hideChat(chatPref); }} /> : null,
+      ],
+      headerExtra: activeProfile && !activeGroup ? (() => {
+        const st = activeStatusOf(activeProfile);
+        const sk = streaks[activeProfile.id];
+        const bd = bdayIds.has(activeProfile.id);
+        if (!st && !(sk && sk.days >= 2) && !bd) return null;
+        const chip = (k, body) => <span key={k} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 14, background: theme.rowBg, border: `1px solid ${theme.border}`, fontSize: 12.5, fontWeight: 700, color: theme.ink, maxWidth: '100%' }}>{body}</span>;
+        return (
+          <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 6, marginTop: 10, padding: '0 10px' }}>
+            {st && chip('st', <><span>{st.e || '\u{1F4AC}'}</span><span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{st.t}</span></>)}
+            {sk && sk.days >= 2 && chip('sk', <><FlameIcon size={14} />{sk.days} day streak</>)}
+            {bd && chip('bd', <><CakeIcon size={14} />Birthday today</>)}
+          </div>
+        );
+      })() : null,
     };
   };
   const activeConvNameBar = activeConvForBar?.name_bar || null;
@@ -20268,7 +24610,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       const synth = window.speechSynthesis;
       if (!synth) { showSnack('Reading aloud is not available here'); return; }
       synth.cancel();
-      const u = new SpeechSynthesisUtterance(plainPreviewText(m.content || '').slice(0, 1500));
+      const u = new SpeechSynthesisUtterance(plainPreviewText(messageTextFor(m)).slice(0, 1500));
       u.onend = () => setSpeaking(false);
       u.onerror = () => setSpeaking(false);
       setSpeaking(true);
@@ -20279,6 +24621,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const send = async () => {
     if (sendingRef.current) return;
     if (blockedByRestriction('chat')) return;
+    if (activeGroup) { const left = slowModeLeft(); if (left > 0) { showSnack(`Slow mode is on. Wait ${mmss(left)} before sending again`); return; } }
     sendingRef.current = true;
     try {
       await sendInner();
@@ -20313,14 +24656,16 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const sendInner = async () => {
     if (!activeProfile && !activeGroup) return;
     if (pendingMedia.length) {
-      if (navigator.onLine === false) { showSnack('No connection. Photos and videos send once you are back online.'); return; }
+      if (navigator.onLine === false) { showSnack('No connection. Your photos stay here, tap send when you are back online.'); return; }
       const items = pendingMedia;
       setPendingMedia([]);
       const caption = draft.trim().slice(0, MAX_CHARS);
       setDraft('');
       setUploading(true);
+      const failedItems = [];
       for (let i = 0; i < items.length; i++) {
         const { url, error } = await uploadChatMedia(items[i].file, session.user.id);
+        if (error || !url) { failedItems.push(items[i]); continue; }
         if (!error && url) {
           const captionForThis = i === 0 ? (caption || null) : null;
           let insertedRow = null;
@@ -20344,7 +24689,12 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         }
         URL.revokeObjectURL(items[i].url);
       }
-      if (activeProfile) await upsertConversation(activeProfile.id, caption || null, items[items.length - 1].kind);
+      if (failedItems.length) {
+        setPendingMedia((prev) => [...failedItems, ...prev]);
+        if (failedItems.length === items.length && caption) setDraft((d) => d || caption);
+        showSnack(failedItems.length === 1 ? 'One file did not send. Check your connection and tap send again.' : `${failedItems.length} files did not send. Check your connection and tap send again.`);
+      }
+      if (activeProfile && failedItems.length < items.length) await upsertConversation(activeProfile.id, caption || null, items[items.length - 1].kind);
       setUploading(false);
       return;
     }
@@ -20389,12 +24739,23 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (!draft.trim()) return;
     const text = bakeTextFont(draft.trim().slice(0, MAX_CHARS), textFont);
     setDraft('');
+    let dmContent = text;
+    let dmNotify = parseProfileLink(text) ? 'Shared a profile' : text;
+    const pr = privateReply && privateReply.sid === activeProfile.id ? privateReply : null;
+    if (pr) { dmContent = `zquote:${JSON.stringify({ g: pr.g, gn: pr.gn, s: pr.s, q: pr.q, x: text })}`; setPrivateReply(null); }
+    else if (secretSet.has(activeProfile.id) && !activeProfile.is_bot) {
+      try { dmContent = await sealSecret(uid, activeProfile.id, text); dmNotify = 'Secret message'; } catch (err) {
+        setDraft(text);
+        showSnack(err && err.message === 'nopeer' ? `${(activeProfile.name || '').split(' ')[0]} needs the new ZChat before secret messages work` : 'Secret chat needs this phone set up first. Open chat details to fix it.');
+        return;
+      }
+    }
     const replyId = replyingTo?.id || null;
     const repliedBotText = replyingTo && replyingTo.bot_reply ? String(replyingTo.content || '').slice(0, 400) : null;
     setReplyingTo(null);
     const wasForward = items.length === 1 && items[0].type === 'text';
     const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    const dmRow = { sender_id: session.user.id, receiver_id: activeProfile.id, group_id: null, type: 'text', content: text, reply_to_id: replyId || null, text_size: textSize === 'm' ? null : textSize, text_color: textColor, client_id: newClientId(), ...(bubbleStyle && bubbleStyle !== 'classic' ? { bubble_style: bubbleStyle } : {}), ...(textFont ? { text_font: textFont } : {}) };
+    const dmRow = { sender_id: session.user.id, receiver_id: activeProfile.id, group_id: null, type: 'text', content: dmContent, reply_to_id: replyId || null, text_size: textSize === 'm' ? null : textSize, text_color: textColor, client_id: newClientId(), ...(bubbleStyle && bubbleStyle !== 'classic' ? { bubble_style: bubbleStyle } : {}), ...(textFont ? { text_font: textFont } : {}) };
     const optimistic = { ...dmRow, id: tempId, media_url: null, created_at: new Date().toISOString(), read: false, delivered: false, deleted: false, sending: true };
     const dmTarget = activeProfile.id;
     if (navigator.onLine === false) {
@@ -20422,10 +24783,11 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         data.forwarded_from_name = items[0].forwarded_from_name || null;
       }
       setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
-      upsertConversation(activeProfile.id, text, 'text');
-      notifyUser(activeProfile.id, me.name, parseProfileLink(text) ? 'Shared a profile' : text, `/?dm=${session.user.id}`, me.avatar);
+      upsertConversation(activeProfile.id, dmContent, 'text');
+      notifyUser(activeProfile.id, me.name, dmNotify, `/?dm=${session.user.id}`, me.avatar);
       triggerBotDM(text, null, null);
-      if (!activeProfile.is_bot) triggerBotInPrivate(text, activeProfile.id, repliedBotText);
+      if (!activeProfile.is_bot && dmContent === text) triggerBotInPrivate(text, activeProfile.id, repliedBotText);
+      bumpStreaks();
     }
   };
 
@@ -20685,7 +25047,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     }
   };
 
-  const doCopySingle = (m) => { if (m.content) copyTextToClipboard(m.content).then((ok) => showSnack(ok ? 'Copied' : "Couldn't copy that")); setContextMenuFor(null); };
+  const doCopySingle = (m) => { const t = messageTextFor(m); if (t) copyTextToClipboard(t).then((ok) => showSnack(ok ? 'Copied' : "Couldn't copy that")); setContextMenuFor(null); };
   const focusComposer = () => {
     const el = composerRef.current;
     if (!el) return;
@@ -20697,7 +25059,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const doStartReplySingle = (m) => { setReplyingTo(m); setEditingMessage(null); setContextMenuFor(null); focusComposer(); };
   const doDeleteForMeSingle = (m) => { hideMessagesLocally([m.id]); setMessages((prev) => prev.filter((x) => x.id !== m.id)); setContextMenuFor(null); };
   const doDeleteForEveryoneSingle = async (m) => { await deleteMessage(m.id); setMessages((prev) => prev.map((x) => (x.id === m.id ? { ...x, deleted: true } : x))); setContextMenuFor(null); };
-  const openForwardSingle = (m) => { setForwardTargets([{ ...m, forwarded_from_name: labelForSender(m.sender_id) }]); setForwardOpen(true); setContextMenuFor(null); };
+  const openForwardSingle = (m) => { setForwardTargets([{ ...m, ...(parseWrapped(m.content) ? { content: messageTextFor(m) } : {}), forwarded_from_name: labelForSender(m.sender_id) }]); setForwardOpen(true); setContextMenuFor(null); };
   const doReportSingle = (m) => { setReportModalFor(m.id); setContextMenuFor(null); };
   const doSelectMultipleFrom = (m) => { setContextMenuFor(null); toggleSelect(m.id); };
   const doReactSingle = (m, emoji) => { reactToMessage(m.id, emoji); setContextMenuFor(null); };
@@ -20908,7 +25270,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     return () => clearInterval(t);
   }, []);
 
-  useEffect(() => { ensureTextFonts(); }, []);
+  useEffect(() => { const t = setTimeout(ensureTextFonts, 2500); return () => clearTimeout(t); }, []);
 
   useEffect(() => {
     if (draft.trim()) return;
@@ -21037,6 +25399,103 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   blockedRef.current = myBlockedIds;
   locksRef.current = myLocks;
   reloadListsRef.current = () => { loadConversations(); loadGroups(); };
+  const activeChatKey = activeGroup ? `g:${activeGroup.id}` : activeProfile ? `dm:${activeProfile.id}` : null;
+  const activeChatKeyRef = useRef(null);
+  activeChatKeyRef.current = activeChatKey;
+  useEffect(() => {
+    if (!activeChatKey || loadingConvo || msgOwnerRef.current !== activeChatKey) return;
+    const cut = activeChatKey.indexOf(':');
+    const rows = keepableRows(messages);
+    const ids = new Set(rows.map((m) => String(m.id)));
+    const likes = {};
+    Object.keys(messageLikes || {}).forEach((k) => { if (ids.has(String(k))) likes[k] = messageLikes[k]; });
+    saveChatLocal(session.user.id, activeChatKey.slice(0, cut), activeChatKey.slice(cut + 1), { rows, likes });
+  }, [messages, messageLikes, activeChatKey, loadingConvo]);
+  useEffect(() => {
+    if (!me) return;
+    saveHomeSnap(session.user.id, {
+      convs: conversations.slice(0, 120).map(slimConv),
+      arch: archivedConversations.slice(0, 60).map(slimConv),
+      groups: groups.slice(0, 80),
+      unread: unreadCounts,
+      locks: myLocks,
+      blocks: [...myBlockedIds],
+      blockedBy: [...blockedByIds],
+      mutual: [...mutualIds],
+      ifollow: [...iFollowIds],
+      allowed: [...privacyAllowed],
+      accepted: acceptedIds ? [...acceptedIds] : null,
+      freq: followRequestCount,
+      mail: unreadMailCount,
+    });
+  }, [me && me.id, conversations, archivedConversations, groups, unreadCounts, myLocks, myBlockedIds, blockedByIds, mutualIds, iFollowIds, privacyAllowed, acceptedIds, followRequestCount, unreadMailCount]);
+  useEffect(() => {
+    if (!me || !storyData.ready) return;
+    const total = Object.keys(storyData.byUser).reduce((n, k) => n + (storyData.byUser[k] || []).length, 0);
+    const profiles = {};
+    Object.keys(storyData.profiles || {}).forEach((k) => { profiles[k] = slimProfile(storyData.profiles[k]); });
+    saveHomeSnap(session.user.id, { stories: total > 300 ? null : { byUser: storyData.byUser, profiles, seen: [...storyData.seen], liked: [...storyData.liked] } });
+  }, [me && me.id, storyData]);
+  const prefetchStateRef = useRef({ running: false, at: 0 });
+  const prefetchChats = async () => {
+    const st = prefetchStateRef.current;
+    if (st.running || !keepChatsLocal() || (typeof navigator !== 'undefined' && navigator.onLine === false)) return;
+    if (Date.now() - st.at < 120000) return;
+    st.running = true;
+    st.at = Date.now();
+    try {
+      const myId = session.user.id;
+      const conn = (typeof navigator !== 'undefined' && navigator.connection) || {};
+      const cheap = !conn.saveData && (conn.type === 'wifi' || conn.type === 'ethernet' || (!conn.type && conn.effectiveType !== '2g' && conn.effectiveType !== 'slow-2g'));
+      const dms = (conversationsRef.current || []).filter((c) => c.otherProfile && !c.otherProfile.is_deleted && !c.otherProfile.is_bot)
+        .slice(0, cheap ? 14 : 6).map((c) => ({ kind: 'dm', id: c.otherProfile.id, t: c.sortTime || 0 }));
+      const gs = (groupsRef.current || []).filter((g) => !g.archived)
+        .slice(0, cheap ? 8 : 3).map((g) => ({ kind: 'g', id: g.id, t: g.last_message_at ? new Date(g.last_message_at).getTime() : 0 }));
+      const photos = [];
+      const list = [...dms, ...gs].sort((a, b) => b.t - a.t);
+      for (let i = 0; i < list.length; i++) {
+        const item = list[i];
+        if (document.visibilityState !== 'visible' || (typeof navigator !== 'undefined' && navigator.onLine === false)) break;
+        if (activeChatKeyRef.current === `${item.kind}:${item.id}`) continue;
+        const entry = await readChatLocal(myId, item.kind, item.id);
+        const rowsNow = entry && entry.rows ? entry.rows : [];
+        const newest = rowsNow.length ? new Date(rowsNow[rowsNow.length - 1].created_at).getTime() : 0;
+        const fresh = entry && (!item.t || newest >= item.t - 2000);
+        if (!fresh) {
+          let q = supabase.from('messages').select('*');
+          q = item.kind === 'g' ? q.eq('group_id', item.id) : q.or(`and(sender_id.eq.${myId},receiver_id.eq.${item.id}),and(sender_id.eq.${item.id},receiver_id.eq.${myId})`).is('group_id', null);
+          const { data, error } = await q.order('created_at', { ascending: false }).limit(60);
+          if (error || !data) break;
+          const rows = mergeChatRows(rowsNow, data.slice().reverse(), data.length >= 60);
+          saveChatLocal(myId, item.kind, item.id, { rows });
+          if (cheap) rows.slice(-10).forEach((m) => { if (m.media_url && m.type === 'image' && !m.deleted && !parseOnce(m)) photos.push(m.media_url); });
+        }
+        if (item.kind === 'g' && !(entry && entry.members && entry.members.length)) {
+          const { data: mems, error: memErr } = await supabase.from('group_members').select('*').eq('group_id', item.id);
+          if (!memErr && mems && mems.length) {
+            const { data: profs, error: profErr } = await supabase.from('profiles').select('*').in('id', mems.map((m) => m.user_id));
+            if (!profErr && profs) {
+              const sanitized = sanitizeAvatarList(profs, myId);
+              const members = mems.map((m) => ({ ...m, profile: slimProfile(sanitized.find((pr) => pr.id === m.user_id)) })).filter((m) => m.profile);
+              saveChatLocal(myId, 'g', item.id, { members });
+            }
+          }
+        }
+        await new Promise((r) => setTimeout(r, 200));
+      }
+      for (let i = 0; i < photos.length && i < 30; i++) {
+        if (document.visibilityState !== 'visible') break;
+        await cachedMediaFor(photos[i]);
+      }
+    } catch {} finally {
+      st.running = false;
+    }
+  };
+  useEffect(() => {
+    if (!me) return undefined;
+    const t = setTimeout(() => { prefetchChats(); }, 6000);
+    return () => clearTimeout(t);
+  }, [me && me.id, conversations.length, groups.length]);
 
   const notifyUser = async (userId, title, body, url, icon) => {
     if (!userId || visibleIdsRef.current.has(userId)) return;
@@ -21047,7 +25506,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           .or(`and(user_a.eq.${me_},user_b.eq.${userId}),and(user_a.eq.${userId},user_b.eq.${me_})`).maybeSingle();
         if (conv && isActiveUntil(conv[conv.user_a === userId ? 'muted_until_a' : 'muted_until_b'])) return;
       }
-      if (url && url.startsWith('/?group=') && !/mentioned you|added you/.test(title || '')) {
+      if (url && url.startsWith('/?group=') && !/mentioned (you|everyone)|added you/.test(title || '')) {
         const gid = new URLSearchParams(url.slice(url.indexOf('?'))).get('group');
         if (gid) {
           const { data: member } = await supabase.from('group_members').select('notify_muted_until').eq('group_id', gid).eq('user_id', userId).maybeSingle();
@@ -21067,8 +25526,13 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
   const loadStories = async () => {
     const myId = session.user.id;
-    const { data: fol } = await supabase.from('follows').select('following_id').eq('follower_id', myId).eq('status', 'accepted');
-    const { data: fans } = await supabase.from('follows').select('follower_id').eq('following_id', myId).eq('status', 'accepted');
+    const [folRes, fansRes] = await Promise.all([
+      supabase.from('follows').select('following_id').eq('follower_id', myId).eq('status', 'accepted'),
+      supabase.from('follows').select('follower_id').eq('following_id', myId).eq('status', 'accepted'),
+    ]);
+    if (folRes.error || fansRes.error) { setStoryData((prev) => (prev.ready ? prev : { ...prev, ready: true })); return; }
+    const fol = folRes.data;
+    const fans = fansRes.data;
     const iFollowSet = new Set((fol || []).map((r) => r.following_id));
     const followsMeSet = new Set((fans || []).map((r) => r.follower_id));
     const ids = [...new Set([myId, ...iFollowSet, ...followsMeSet])].filter((id) => !myBlockedIds.has(id) && !accountsThatBlockedMe.has(id));
@@ -21080,19 +25544,18 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const storyIds = (rows || []).map((s) => s.id);
     let seen = new Set();
     let liked = new Set();
-    if (storyIds.length) {
-      const { data: views } = await supabase.from('story_views').select('story_id').eq('viewer_id', myId).in('story_id', storyIds);
-      seen = new Set((views || []).map((v) => v.story_id));
-      const { data: likes } = await supabase.from('story_likes').select('story_id').eq('user_id', myId).in('story_id', storyIds);
-      liked = new Set((likes || []).map((l) => l.story_id));
-    }
-    (byUser[myId] || []).forEach((s) => seen.add(s.id));
     const userIds = Object.keys(byUser);
     const profiles = {};
-    if (userIds.length) {
-      const { data: profs } = await supabase.from('profiles').select('*').in('id', userIds);
-      sanitizeAvatarList(profs, myId).forEach((p) => { profiles[p.id] = p; });
-    }
+    const [viewsRes, likesRes, profsRes] = await Promise.all([
+      storyIds.length ? supabase.from('story_views').select('story_id').eq('viewer_id', myId).in('story_id', storyIds) : null,
+      storyIds.length ? supabase.from('story_likes').select('story_id').eq('user_id', myId).in('story_id', storyIds) : null,
+      userIds.length ? supabase.from('profiles').select('*').in('id', userIds) : null,
+    ]);
+    if (profsRes && (profsRes.error || !profsRes.data)) { setStoryData((prev) => (prev.ready ? prev : { ...prev, ready: true })); return; }
+    if (viewsRes) seen = new Set((viewsRes.data || []).map((v) => v.story_id));
+    if (likesRes) liked = new Set((likesRes.data || []).map((l) => l.story_id));
+    (byUser[myId] || []).forEach((s) => seen.add(s.id));
+    if (profsRes) sanitizeAvatarList(profsRes.data, myId).forEach((pr) => { profiles[pr.id] = pr; });
     Object.keys(byUser).forEach((uid) => {
       if (uid === myId) return;
       const owner = profiles[uid];
@@ -21254,10 +25717,17 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         const up = await uploadMedia(item.overlayFile, session.user.id);
         if (!up.error && up.url) overlayUrl = up.url;
       }
-      const { data, error: insertError } = await supabase.from('stories').insert({
+      const storyRow = {
         user_id: session.user.id, media_url: url, media_type: item.kind === 'video' ? 'video' : 'image', overlay_url: overlayUrl,
         caption: caption || null, mentions: mentions || [], ...(toClose ? { audience: 'close' } : {}),
-      }).select().single();
+        ...(opts && opts.sticker && !firstStory ? { sticker: opts.sticker } : {}),
+      };
+      let { data, error: insertError } = await supabase.from('stories').insert(storyRow).select().single();
+      if (insertError && storyRow.sticker && /sticker/i.test(String(insertError.message || ''))) {
+        delete storyRow.sticker;
+        ({ data, error: insertError } = await supabase.from('stories').insert(storyRow).select().single());
+        if (!insertError) showSnack('Story stickers switch on once the latest ZChat setup is finished.');
+      }
       if (insertError) { showSnack(toClose && /audience|column|schema/i.test(String(insertError.message || '')) ? 'Close friends stories switch on once the latest ZChat setup is finished.' : friendlyError(insertError, "Couldn't share your story. Try again.")); return; }
       if (!firstStory) firstStory = data;
       if (item.url) { const doneUrl = item.url; setTimeout(() => URL.revokeObjectURL(doneUrl), 5000); }
@@ -21324,15 +25794,19 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
   const loadMutuals = async () => {
     const myId = session.user.id;
-    const { data: outgoing } = await supabase.from('follows').select('following_id').eq('follower_id', myId).eq('status', 'accepted');
-    const { data: incomingRows } = await supabase.from('follows').select('follower_id').eq('following_id', myId).eq('status', 'accepted');
-    const iFollow = new Set((outgoing || []).map((r) => r.following_id));
+    const [outRes, inRes, allowRes, accRes] = await Promise.all([
+      supabase.from('follows').select('following_id').eq('follower_id', myId).eq('status', 'accepted'),
+      supabase.from('follows').select('follower_id').eq('following_id', myId).eq('status', 'accepted'),
+      supabase.from('privacy_allow').select('user_id, scope').eq('viewer_id', myId),
+      supabase.from('chat_accepts').select('other_id').eq('user_id', myId).limit(5000),
+    ]);
+    if (outRes.error || inRes.error || !outRes.data || !inRes.data) return;
+    const iFollow = new Set(outRes.data.map((r) => r.following_id));
     setIFollowIds(iFollow);
-    setMutualIds(new Set((incomingRows || []).map((r) => r.follower_id).filter((id) => iFollow.has(id))));
-    const { data: allowRows } = await supabase.from('privacy_allow').select('user_id, scope').eq('viewer_id', myId);
-    setPrivacyAllowed(new Set((allowRows || []).map((r) => `${r.user_id}:${r.scope}`)));
-    const { data: accRows, error: accErr } = await supabase.from('chat_accepts').select('other_id').eq('user_id', myId).limit(5000);
-    setAcceptedIds(accErr ? null : new Set((accRows || []).map((r) => r.other_id)));
+    setMutualIds(new Set(inRes.data.map((r) => r.follower_id).filter((id) => iFollow.has(id))));
+    if (!allowRes.error) setPrivacyAllowed(new Set((allowRes.data || []).map((r) => `${r.user_id}:${r.scope}`)));
+    if (accRes.error) { if (!isNetworkProblem(accRes.error)) setAcceptedIds(null); }
+    else setAcceptedIds(new Set((accRes.data || []).map((r) => r.other_id)));
   };
   followRefreshRef.current = () => { loadMutuals(); loadStories(); };
   const canCall = (profile) => !!profile && profile.id !== session.user.id && !profile.is_deleted && mutualIds.has(profile.id) && !myBlockedIds.has(profile.id) && !blockedByIds.has(profile.id);
@@ -21655,6 +26129,14 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         if (reloadListsRef.current) reloadListsRef.current();
         loadUnreadCounts();
         if (reloadStoriesRef.current) reloadStoriesRef.current();
+        if (force) {
+          loadMyLocks();
+          loadMyBlocks();
+          loadMutuals();
+          loadFollowRequestCount();
+          loadUnreadMailCount();
+          if (refreshMeRef.current) refreshMeRef.current();
+        }
         await refreshActiveChat();
         if (awayMs > 60000) {
           setTimeout(() => {
@@ -22240,7 +26722,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (kind) setScreenEffect({ kind, key: Date.now() });
   }, [messages, chatKey]);
   useEffect(() => {
-    const n = conversations.filter((c) => isUnread(c) && !requestIdsRef.current.has(c.otherProfile.id)).length + groups.filter((g) => !g.archived && g.unread > 0).length;
+    const hk = vaultKeysRef.current || new Set();
+    const n = conversations.filter((c) => isUnread(c) && !requestIdsRef.current.has(c.otherProfile.id) && !hk.has(chatPrefKey('dm', c.otherProfile.id))).length + groups.filter((g) => !g.archived && g.unread > 0 && !hk.has(chatPrefKey('group', g.id))).length;
     try { document.title = n > 0 ? `(${n}) ZChat` : 'ZChat'; } catch {}
     try {
       const nav = navigator;
@@ -22262,6 +26745,406 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   useBackClose(search.trim().length >= 2 && !mobileShowChat, () => { setSearch(''); setResults([]); });
 
   const botFollowers = useBotFollowerCount(activeProfile && activeProfile.is_bot ? activeProfile.id : null);
+  const uid = session.user.id;
+  const vault = useVault(uid);
+  const vaultKeys = useMemo(() => new Set(vault.keys), [vault]);
+  const vaultKeysRef = useRef(vaultKeys);
+  vaultKeysRef.current = vaultKeys;
+  const focusState = useFocusState();
+  const focusRef = useRef(focusState);
+  focusRef.current = focusState;
+  const [vaultFlow, setVaultFlow] = useState(null);
+  const [hiddenOpen, setHiddenOpen] = useState(false);
+  const [privateReply, setPrivateReply] = useState(null);
+  const [secretSet, setSecretSet] = useState(() => readSecretChats(uid));
+  const [secretPage, setSecretPage] = useState(false);
+  const [tonePage, setTonePage] = useState(null);
+  const [trSheet, setTrSheet] = useState(null);
+  const [trTick, setTrTick] = useState(0);
+  const [trMap, setTrMap] = useState({});
+  const [catchUp, setCatchUp] = useState(null);
+  const [focusSheetOpen, setFocusSheetOpen] = useState(false);
+  const [watchComposer, setWatchComposer] = useState(false);
+  const [watchParty, setWatchParty] = useState(null);
+  const [roundOpen, setRoundOpen] = useState(false);
+  const [albumsOpen, setAlbumsOpen] = useState(null);
+  const [albumPickFor, setAlbumPickFor] = useState(null);
+  const [broadcastOpen, setBroadcastOpen] = useState(false);
+  const [statusOpen, setStatusOpen] = useState(false);
+  const [noteSheet, setNoteSheet] = useState(false);
+  const [noteReply, setNoteReply] = useState(null);
+  const [notes, setNotes] = useState(() => readJsonLs(`zchat-notes-${uid}`, null) || { on: false, mine: null, list: [], profiles: {} });
+  const [streaks, setStreaks] = useState(() => readJsonLs(`zchat-streaks-${uid}`, {}));
+  const [bdays, setBdays] = useState([]);
+  const [bdayHidden, setBdayHidden] = useState(() => readJsonLs(`zchat-bday-hide-${uid}`, ''));
+  const [memoriesOpen, setMemoriesOpen] = useState(false);
+  const [recapOpen, setRecapOpen] = useState(false);
+  const [avatarOpen, setAvatarOpen] = useState(false);
+  const [channelsOpen, setChannelsOpen] = useState(null);
+  const [shareCard, setShareCard] = useState(null);
+  const [momentCam, setMomentCam] = useState(null);
+  const [slowTick, setSlowTick] = useState(0);
+  const chatPref = activeGroup ? chatPrefKey('group', activeGroup.id) : activeProfile ? chatPrefKey('dm', activeProfile.id) : null;
+  const chatAlbumKey = activeGroup ? albumChatKey(uid, null, activeGroup.id) : activeProfile ? albumChatKey(uid, activeProfile.id) : null;
+  const chatName = activeGroup ? activeGroup.name : activeProfile ? activeProfile.name : '';
+  const autoTrLang = useMemo(() => (chatPref ? autoTrFor(chatPref) : null), [chatPref, trTick]);
+  const trPendingRef = useRef(new Set());
+  useEffect(() => { syncVaultToWorker(uid, readVault(uid).keys); }, [uid]);
+  useEffect(() => {
+    const onSecret = () => setSecretSet(readSecretChats(uid));
+    const onTr = () => setTrTick((t) => t + 1);
+    window.addEventListener('zchat-secret-changed', onSecret);
+    window.addEventListener('zchat-autotr-changed', onTr);
+    return () => { window.removeEventListener('zchat-secret-changed', onSecret); window.removeEventListener('zchat-autotr-changed', onTr); };
+  }, [uid]);
+  useEffect(() => {
+    if (!secretSupported()) return undefined;
+    const t = setTimeout(async () => {
+      try {
+        const server = await fetchPeerKey(uid);
+        if (!server) await publishDeviceKey(uid, false);
+      } catch {}
+    }, 9000);
+    return () => clearTimeout(t);
+  }, [uid]);
+  const loadNotes = async () => {
+    try {
+      const { data, error } = await supabase.from('notes').select('*').gt('expires_at', new Date().toISOString()).limit(300);
+      if (error || !Array.isArray(data)) { setNotes((n) => (n.on ? { ...n, on: false } : n)); return; }
+      const mine = data.find((r) => r.user_id === uid) || null;
+      const list = data.filter((r) => r.user_id !== uid && !myBlockedIds.has(r.user_id));
+      const known = new Set(conversationsRef.current.map((c) => c.otherProfile && c.otherProfile.id));
+      const missing = list.map((r) => r.user_id).filter((id) => !known.has(id));
+      const profiles = {};
+      if (missing.length) {
+        const { data: profs } = await supabase.from('profiles').select('*').in('id', missing.slice(0, 100));
+        sanitizeAvatarList(profs || [], uid).forEach((pr) => { profiles[pr.id] = slimProfile(pr); });
+      }
+      const next = { on: true, mine, list, profiles };
+      setNotes(next);
+      writeJsonLs(`zchat-notes-${uid}`, next);
+    } catch {}
+  };
+  const loadStreaks = async () => {
+    try {
+      const { data, error } = await supabase.rpc('zchat_streaks', { p_tz: localTz() });
+      if (error || !Array.isArray(data)) return;
+      const m = {};
+      data.forEach((r) => { if (r && r.other_id) m[r.other_id] = { days: Number(r.days) || 0, today_done: !!r.today_done }; });
+      setStreaks(m);
+      writeJsonLs(`zchat-streaks-${uid}`, m);
+    } catch {}
+  };
+  const loadBirthdays = async () => {
+    try {
+      const { data, error } = await supabase.from('birthdays').select('user_id, md').in('md', birthdayMdsToday());
+      if (error || !Array.isArray(data)) return;
+      setBdays(data);
+    } catch {}
+  };
+  const streakTimerRef = useRef(0);
+  const bumpStreaks = () => { clearTimeout(streakTimerRef.current); streakTimerRef.current = setTimeout(loadStreaks, 4000); };
+  useEffect(() => {
+    const t1 = setTimeout(() => { loadNotes(); loadStreaks(); loadBirthdays(); }, 2500);
+    const t2 = setInterval(() => { if (document.visibilityState === 'visible') { loadNotes(); loadStreaks(); } }, 300000);
+    return () => { clearTimeout(t1); clearInterval(t2); clearTimeout(streakTimerRef.current); };
+  }, [uid]);
+  const notesBy = useMemo(() => {
+    const m = new Map();
+    (notes.list || []).forEach((r) => { if (r && r.user_id && new Date(r.expires_at).getTime() > Date.now()) m.set(r.user_id, r); });
+    return m;
+  }, [notes]);
+  const bdayIds = useMemo(() => new Set((bdays || []).map((b) => b.user_id).filter((id) => id !== uid)), [bdays]);
+  const myBdayToday = (bdays || []).some((b) => b.user_id === uid);
+  const bdayPeople = (bdays || []).filter((b) => b.user_id !== uid && (iFollowIds.has(b.user_id) || conversations.some((c) => c.otherProfile && c.otherProfile.id === b.user_id)))
+    .map((b) => { const c = conversations.find((x) => x.otherProfile && x.otherProfile.id === b.user_id); return c ? c.otherProfile : null; }).filter(Boolean);
+  useEffect(() => { setTrMap({}); }, [autoTrLang, chatPref]);
+  useEffect(() => {
+    if (!autoTrLang || !messages.length) return undefined;
+    readTrStore();
+    const lang = autoTrLang;
+    const want = messages.slice(-40).filter((m) => m.sender_id !== uid && m.type === 'text' && !m.deleted && m.content && !isSpecialContent(m.content) && !parseGameMessage(m.content) && !(parseWrapped(m.content) && parseWrapped(m.content).k === 'sec') && !String(m.id).startsWith('temp-'));
+    const have = {};
+    const need = [];
+    want.forEach((m) => {
+      const hit = trMem.get(trKey(m.id, lang));
+      if (hit != null) have[m.id] = hit;
+      else if (!trPendingRef.current.has(trKey(m.id, lang))) need.push(m);
+    });
+    if (Object.keys(have).length) setTrMap((prev) => (Object.keys(have).every((k) => prev[k] === have[k]) ? prev : { ...prev, ...have }));
+    if (!need.length || (typeof navigator !== 'undefined' && navigator.onLine === false)) return undefined;
+    const batch = need.slice(-12);
+    batch.forEach((m) => trPendingRef.current.add(trKey(m.id, lang)));
+    zchatTools('translate_many', { to: lang, items: batch.map((m) => ({ id: m.id, t: messageTextFor(m).slice(0, 1000) })) }, 30000).then((r) => {
+      const items = r && r.data && Array.isArray(r.data.items) ? r.data.items : [];
+      const add = {};
+      items.forEach((it) => { if (it && it.id && typeof it.t === 'string') { rememberTranslation(it.id, lang, it.t); add[it.id] = it.t; } });
+      if (!items.length) setTimeout(() => batch.forEach((m) => trPendingRef.current.delete(trKey(m.id, lang))), 60000);
+      else batch.forEach((m) => trPendingRef.current.delete(trKey(m.id, lang)));
+      if (Object.keys(add).length) setTrMap((prev) => ({ ...prev, ...add }));
+    });
+    return undefined;
+  }, [autoTrLang, messages.length, chatPref]);
+  const myGroupRole = activeGroup ? ((groupMembers.find((gm) => gm.user_id === uid) || {}).role || 'member') : null;
+  const canMentionAll = () => {
+    if (!activeGroup) return false;
+    const g = groups.find((x) => x.id === activeGroup.id) || activeGroup;
+    return (g.mention_all || 'everyone') !== 'admins' || myGroupRole === 'admin' || g.created_by === uid;
+  };
+  const slowModeLeft = () => {
+    if (!activeGroup) return 0;
+    const g = groups.find((x) => x.id === activeGroup.id) || activeGroup;
+    const secs = Number(g.slow_secs || 0);
+    if (!secs || myGroupRole === 'admin' || g.created_by === uid) return 0;
+    let last = null;
+    for (let i = messages.length - 1; i >= 0; i--) { const x = messages[i]; if (x.sender_id === uid && x.type !== 'system' && !x.failed && !x.queued && !String(x.id).startsWith('temp-')) { last = x; break; } }
+    if (!last || !last.created_at) return 0;
+    return Math.max(0, new Date(last.created_at).getTime() + secs * 1000 - Date.now());
+  };
+  const slowLeftMs = activeGroup ? slowModeLeft() : 0;
+  useEffect(() => {
+    if (!slowLeftMs) return undefined;
+    const t = setTimeout(() => setSlowTick((v) => v + 1), 1000);
+    return () => clearTimeout(t);
+  }, [slowLeftMs, slowTick]);
+  const headerStatusLine = () => {
+    if (!activeProfile) return '';
+    const st = activeStatusOf(activeProfile);
+    const base = isUserOnline(activeProfile) ? 'Online' : (privacyAllows(activeProfile, 'privacy_lastseen', session.user.id, iFollowIds, privacyAllowed) ? (formatLastSeen(activeProfile.last_seen) || 'Last seen recently') : '');
+    if (st) return base === 'Online' ? `Online · ${statusLabel(st)}` : statusLabel(st);
+    return base;
+  };
+  const hideChat = (key) => {
+    const go = () => {
+      const cur = readVault(uid);
+      writeVault(uid, { ...cur, keys: [...new Set([...cur.keys, key])] });
+      if (chatPref === key) runWithTransition(() => { setMobileShowChat(false); setActiveProfile(null); setActiveGroup(null); });
+      showSnack('Chat hidden. Open it again from Me, Hidden.');
+    };
+    if (!readVault(uid).h) setVaultFlow({ mode: 'set', then: go });
+    else go();
+  };
+  const openHidden = () => {
+    if (!readVault(uid).h) { setVaultFlow({ mode: 'set', then: () => setHiddenOpen(true) }); return; }
+    setVaultFlow({ mode: 'check', then: () => setHiddenOpen(true) });
+  };
+  const endFocus = (expired) => {
+    writeFocus(null);
+    if (expired) { showSnack('Focus session done. Nice work'); playUiSound('win'); }
+  };
+  const joinFocus = async (d, m) => {
+    const until = new Date(d.at).getTime() + Math.round(Number(d.m) || 25) * 60000;
+    if (until <= Date.now()) return;
+    setMessageLikes((prev) => ({ ...prev, [m.id]: [...(prev[m.id] || []).filter((r) => r.user_id !== uid), { user_id: uid, emoji: 'zfj' }] }));
+    writeFocus({ until, chat: chatPref, msg: m.id, t: d.t || '' });
+    hapticTap();
+    const { error } = await supabase.from('message_likes').upsert({ message_id: m.id, user_id: uid, emoji: 'zfj' }, { onConflict: 'message_id,user_id' });
+    if (!error && m.sender_id !== uid) notifyUser(m.sender_id, me.name, 'Joined your focus session', activeGroup ? `/?group=${activeGroup.id}` : `/?dm=${uid}`, me.avatar);
+  };
+  const addPackById = async (d) => {
+    try {
+      const { data } = await supabase.from('sticker_packs').select('*').eq('id', d.i).maybeSingle();
+      if (!data) { showSnack('That sticker pack is not available'); return false; }
+      const pk = { id: data.id, name: data.name, stickers: Array.isArray(data.stickers) ? data.stickers : [], owner_id: data.owner_id };
+      writePacks(uid, [pk, ...readPacks(uid).filter((x) => x.id !== pk.id)]);
+      showSnack(`${pk.name} added to your stickers`);
+      playUiSound('like');
+      return true;
+    } catch { showSnack('That sticker pack could not be added'); return false; }
+  };
+  const handleCard = (kind, d, m) => {
+    if (kind === 'focus') return joinFocus(d, m);
+    if (kind === 'watch') { setWatchParty({ msgId: m.id, d }); return true; }
+    if (kind === 'album') { setAlbumsOpen({ key: chatAlbumKey, name: chatName, albumId: d.a }); return true; }
+    if (kind === 'pack') return addPackById(d);
+    if (kind === 'chan') { setChannelsOpen({ id: d.i }); return true; }
+    return false;
+  };
+  const runCatchUp = async () => {
+    const base = messages.filter((m) => !m.deleted && m.type !== 'system' && !String(m.id).startsWith('temp-') && !(parseWrapped(m.content) && parseWrapped(m.content).k === 'sec'));
+    const take = unreadAnchor && unreadAnchor.chat === chatKey ? Math.max(12, Math.min(150, (unreadAnchor.count || 0) + 6)) : 80;
+    const items = base.slice(-take).map((m) => ({ n: m.sender_id === uid ? 'Me' : labelForSender(m.sender_id), t: plainPreviewText(m.type === 'text' ? messageTextFor(m) : quoteTextFor(m)).slice(0, 500) })).filter((x) => x.t);
+    if (items.length < 3) { showSnack('Not much to catch up on yet'); return; }
+    setCatchUp({ busy: true, n: items.length });
+    const r = await zchatTools('summary', { chat: chatName.slice(0, 80), items }, 45000);
+    if (r.data && r.data.text) setCatchUp({ busy: false, text: tidyBullets(r.data.text), n: items.length });
+    else setCatchUp({ busy: false, error: toolErrorText(r, 'Catch me up'), n: items.length });
+  };
+  const startPrivateReply = async (m) => {
+    const gm = groupMembers.find((x) => x.user_id === m.sender_id);
+    const prof = gm && gm.profile;
+    if (!prof || prof.is_bot || prof.is_deleted) { showSnack('You can not reply privately to this message'); return; }
+    if (myBlockedIds.has(prof.id) || blockedByIds.has(prof.id)) { showSnack('You can not message this person'); return; }
+    setPrivateReply({ sid: prof.id, g: activeGroup.id, gn: activeGroup.name, s: prof.name, q: plainPreviewText(quoteTextFor(m)).slice(0, 200) });
+    const conv = conversations.find((c) => c.otherProfile && c.otherProfile.id === prof.id);
+    await openChat(prof, conv ? conv.id : null);
+    setTimeout(() => focusComposer(), 350);
+  };
+  const setMemberTitle = async (userId, title) => {
+    if (!activeGroup) return false;
+    const { error } = await supabase.rpc('zchat_set_member_title', { p_group: activeGroup.id, p_user: userId, p_title: title || '' });
+    if (error) { showSnack(/function|schema|find/i.test(String(error.message || '')) ? 'Member titles switch on once the latest ZChat setup is finished.' : 'That title could not be saved'); return false; }
+    const clean = String(title || '').trim().slice(0, 24) || null;
+    setGroupMembers((prev) => prev.map((x) => (x.user_id === userId ? { ...x, title: clean } : x)));
+    return true;
+  };
+  const sendRoundVideo = async (file, secs) => {
+    if (!activeProfile && !activeGroup) return false;
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) { showSnack('No connection. Try again when you are back online'); return false; }
+    const content = `zround:${JSON.stringify({ d: Math.max(1, Math.round(secs || 1)) })}`;
+    setUploading(true);
+    const { url, error } = await uploadChatMedia(file, uid);
+    if (error || !url) { setUploading(false); showSnack('The video message did not send. Try again.'); return false; }
+    await primeSentMedia(url, file);
+    if (activeGroup) { const row = await sendGroupMessage('video', content, url); setUploading(false); if (row) playUiSound('send'); return !!row; }
+    const target = activeProfile;
+    const { data } = await insertMessageSafe({ sender_id: uid, receiver_id: target.id, group_id: null, type: 'video', content, media_url: url, client_id: newClientId() });
+    setUploading(false);
+    if (!data) { showSnack('The video message did not send. Try again.'); return false; }
+    if (activeProfileRef.current && activeProfileRef.current.id === target.id) setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
+    upsertConversation(target.id, 'Video message', 'system');
+    notifyUser(target.id, me.name, 'Video message', `/?dm=${uid}`, me.avatar);
+    playUiSound('send');
+    bumpStreaks();
+    return true;
+  };
+  const sendGif = async (g) => {
+    setShowStickers(false);
+    if (!g || !g.url || (!activeProfile && !activeGroup)) return;
+    if (blockedByRestriction('chat')) return;
+    if (activeGroup) { await sendGroupMessage('image', null, g.url); return; }
+    const target = activeProfile;
+    const { data } = await insertMessageSafe({ sender_id: uid, receiver_id: target.id, group_id: null, type: 'image', content: null, media_url: g.url, client_id: newClientId() });
+    if (!data) { showSnack('That GIF did not send. Try again.'); return; }
+    setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
+    upsertConversation(target.id, 'GIF', 'system');
+    notifyUser(target.id, me.name, 'GIF', `/?dm=${uid}`, me.avatar);
+    playUiSound('send');
+    bumpStreaks();
+  };
+  const sharePack = async (pk) => {
+    setShowStickers(false);
+    const content = `zpack:${JSON.stringify({ i: pk.id, n: String(pk.name || 'Stickers').slice(0, 40), c: pk.stickers.length, p: pk.stickers.slice(0, 4) })}`;
+    await sendSpecial(content, `Shared a sticker pack: ${pk.name}`);
+  };
+  const sendFocus = async (d) => {
+    const ok = await sendSpecial(`zfocus:${JSON.stringify(d)}`, `Started a ${d.m} minute focus session`);
+    if (ok) { setFocusSheetOpen(false); writeFocus({ until: new Date(d.at).getTime() + d.m * 60000, chat: chatPref, t: d.t || '' }); }
+    return ok;
+  };
+  const sendWatch = async (d) => {
+    const ok = await sendSpecial(`zwatch:${JSON.stringify(d)}`, d.t ? `Watch together: ${d.t}` : 'Started a watch party');
+    if (ok) setWatchComposer(false);
+    return ok;
+  };
+  const postAlbumCard = (album, rows) => {
+    if (!rows || !rows.length) return;
+    sendSpecial(`zalbum:${JSON.stringify({ a: album.id, t: String(album.title || 'Album').slice(0, 60), n: rows.length, p: rows.slice(0, 4).map((r) => r.media_url) })}`, `Added ${rows.length} to the album ${album.title}`);
+  };
+  const addMessageToAlbum = async (album, m) => {
+    setAlbumPickFor(null);
+    const { error } = await supabase.from('album_photos').insert({ album_id: album.id, user_id: uid, media_url: m.media_url, media_type: m.type === 'video' ? 'video' : 'image' });
+    if (error) { showSnack('That could not be added. Try again.'); return; }
+    hapticTap();
+    showSnack(`Added to ${album.title}`);
+  };
+  const sendContentTo = async (t, content, notifyText) => {
+    if (t.kind === 'group') {
+      const { data } = await insertMessageSafe({ sender_id: uid, group_id: t.id, type: 'text', content, client_id: newClientId() });
+      if (data && activeGroupIdRef.current === t.id) setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
+      return !!data;
+    }
+    const { data } = await insertMessageSafe({ sender_id: uid, receiver_id: t.id, group_id: null, type: 'text', content, client_id: newClientId() });
+    if (!data) return false;
+    if (activeProfileRef.current && activeProfileRef.current.id === t.id) setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
+    upsertConversation(t.id, content, 'text');
+    notifyUser(t.id, me.name, notifyText, `/?dm=${uid}`, me.avatar);
+    return true;
+  };
+  const shareChannel = (ch) => {
+    setShareCard({ content: `zchan:${JSON.stringify({ i: ch.id, n: String(ch.name || 'Channel').slice(0, 60), a: ch.avatar || null, b: ch.bio ? String(ch.bio).slice(0, 120) : null })}`, notify: `Shared the channel ${ch.name}` });
+  };
+  const sendBroadcast = async (list, text, file, onProgress) => {
+    const ids = [...new Set((list.member_ids || []).filter((id) => id && id !== uid && !myBlockedIds.has(id) && !blockedByIds.has(id)))];
+    let mediaUrl = null;
+    if (file) {
+      let f = file;
+      try { const u = URL.createObjectURL(file); f = await prepareImageFile(file, u); URL.revokeObjectURL(u); } catch {}
+      const up = await uploadChatMedia(f, uid);
+      if (up.error || !up.url) return { sent: 0, failed: ids.length, error: 'The photo did not upload. Try again.' };
+      mediaUrl = up.url;
+    }
+    let sent = 0;
+    let failed = 0;
+    for (let i = 0; i < ids.length; i++) {
+      const to = ids[i];
+      const row = mediaUrl
+        ? { sender_id: uid, receiver_id: to, group_id: null, type: 'image', content: text || null, media_url: mediaUrl, client_id: newClientId() }
+        : { sender_id: uid, receiver_id: to, group_id: null, type: 'text', content: text, client_id: newClientId() };
+      const { data } = await insertMessageSafe(row);
+      if (data) {
+        sent += 1;
+        upsertConversation(to, mediaUrl ? (text || null) : text, mediaUrl ? 'image' : 'text');
+        notifyUser(to, me.name, mediaUrl ? (text || 'Photo') : text, `/?dm=${uid}`, me.avatar);
+        if (activeProfileRef.current && activeProfileRef.current.id === to) setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
+      } else failed += 1;
+      if (onProgress) onProgress(i + 1);
+    }
+    loadConversations();
+    bumpStreaks();
+    return { sent, failed };
+  };
+  const sendNoteReply = async (note, profile, text) => {
+    const content = `znote:${JSON.stringify({ n: String(note.text || '').slice(0, 60), x: text.slice(0, MAX_CHARS) })}`;
+    const { data } = await insertMessageSafe({ sender_id: uid, receiver_id: profile.id, group_id: null, type: 'text', content, client_id: newClientId() });
+    if (!data) { showSnack('That did not send. Try again.'); return false; }
+    if (activeProfileRef.current && activeProfileRef.current.id === profile.id) setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
+    upsertConversation(profile.id, content, 'text');
+    notifyUser(profile.id, me.name, `Replied to your note: ${text}`, `/?dm=${uid}`, me.avatar);
+    showSnack(`Sent to ${(profile.name || '').split(' ')[0]}`);
+    loadConversations();
+    bumpStreaks();
+    return true;
+  };
+  const wishBirthday = async (p) => {
+    const conv = conversations.find((c) => c.otherProfile && c.otherProfile.id === p.id);
+    await openChat(p, conv ? conv.id : null);
+    setTimeout(() => { setDraft('Happy birthday! \u{1F382}'); focusComposer(); }, 350);
+  };
+  const toggleSecret = (on) => {
+    if (!activeProfile) return;
+    const next = new Set(readSecretChats(uid));
+    if (on) next.add(activeProfile.id); else next.delete(activeProfile.id);
+    writeSecretChats(uid, next);
+    setSecretSet(next);
+    showSnack(on ? 'Secret chat is on. New text messages are locked.' : 'Secret chat is off');
+  };
+  const saveMadeAvatar = async (blob, cfg) => {
+    const { url, error } = await uploadMedia(new File([blob], 'avatar.png', { type: 'image/png' }), uid);
+    if (error || !url) { showSnack('Your avatar did not save. Try again.'); return false; }
+    const { error: upErr } = await supabase.from('profiles').update({ avatar: url, avatar_cfg: cfg }).eq('id', uid);
+    if (upErr) {
+      const { error: e2 } = await supabase.from('profiles').update({ avatar: url }).eq('id', uid);
+      if (e2) { showSnack('Your avatar did not save. Try again.'); return false; }
+    }
+    setMe((prev) => (prev ? { ...prev, avatar: url, avatar_cfg: cfg } : prev));
+    showSnack('New profile photo saved');
+    return true;
+  };
+  const shareMemoryToStory = async (item) => {
+    try {
+      const src = isPrivateMedia(item.media_url) ? await resolveMedia(item.media_url) : item.media_url;
+      if (!src) { showSnack('That memory could not be opened'); return false; }
+      const res = await fetch(src);
+      const blob = await res.blob();
+      const isVid = item.media_type === 'video';
+      const file = new File([blob], `memory-${Date.now()}.${isVid ? 'mp4' : 'jpg'}`, { type: blob.type || (isVid ? 'video/mp4' : 'image/jpeg') });
+      setMemoriesOpen(false);
+      setStoryComposer({ key: Date.now(), files: [file] });
+      return true;
+    } catch { showSnack('That memory could not be opened'); return false; }
+  };
+
   const renderedMessages = useMemo(() => {
     if (!me || (!activeProfile && !activeGroup)) return null;
     const byId = new Map(messages.map((x) => [x.id, x]));
@@ -22330,7 +27213,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                       onOpenSenderProfile={showSenderLabel ? () => { const p = groupMembers.find((gm) => gm.user_id === m.sender_id)?.profile; if (p) setProfileOf(p); } : null}
                       canModerate={activeGroup ? (groupMembers.find((gm) => gm.user_id === session.user.id)?.role === 'admin') : false}
                       onOpenMention={(p) => setProfileOf(sanitizeAvatar(p, session.user.id))}
-                      mentionsMe={!!activeGroup && !isMe && !m.deleted && m.type === 'text' && extractMentions(m.content).has((me.username || '').toLowerCase())}
+                      mentionsMe={!!activeGroup && !isMe && !m.deleted && m.type === 'text' && (() => { const mm = extractMentions(m.content); return mm.has((me.username || '').toLowerCase()) || mm.has('everyone') || mm.has('all'); })()}
                       onOpenStoryRef={openStoryRef}
                       tightBelow={tightBelow}
                       tightAbove={tightAbove}
@@ -22354,6 +27237,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                       }}
                       onPlayDuel={(st) => setDuelPlay(st)}
                       onOpenGame={(k) => setShowGames({ game: k, at: Date.now() })}
+                      onCard={handleCard}
+                      translation={autoTrLang && trMap[m.id] && trMap[m.id].trim() !== messageTextFor(m).trim() ? trMap[m.id] : undefined}
+                      senderTitle={showSenderLabel ? ((groupMembers.find((gm) => gm.user_id === m.sender_id) || {}).title || null) : null}
                     />
                   );
                   const showBotActions = ((!!botSenderId && m.sender_id === botSenderId) || !!m.bot_reply) && m.type === 'text' && !!m.content && !m.deleted && !m.sending && !selectionMode;
@@ -22369,7 +27255,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                   );
                 })
     );
-  }, [messages, visibleCount, messageLikes, selectionMode, selectedIds, highlightedMsgId, activeGroup, activeProfile, groupMembers, me, mutualIds, myBlockedIds, blockedByIds, activeGroupCall, unreadAnchor, chatKey, savedIds]);
+  }, [messages, visibleCount, messageLikes, selectionMode, selectedIds, highlightedMsgId, activeGroup, activeProfile, groupMembers, me, mutualIds, myBlockedIds, blockedByIds, activeGroupCall, unreadAnchor, chatKey, savedIds, trMap, autoTrLang]);
 
   if (!me) {
     return (
@@ -22428,24 +27314,39 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const out = [];
     const mineStories = activeStoriesOf(session.user.id);
     const firstName = (n) => String(n || '').split(' ')[0];
+    const myNoteText = notes.on ? ((notes.mine && new Date(notes.mine.expires_at).getTime() > Date.now() && notes.mine.text) || '') : null;
     out.push({ key: 'me', label: 'Your story', name: 'Your story', profile: me, ring: mineStories.length ? (mineStories.every((st) => storyData.seen.has(st.id)) ? 'seen' : 'unseen') : 'none', plus: !mineStories.length,
       segments: mineStories.length ? mineStories.map(() => true) : null, uploading: storyUploading,
-      onClick: () => { if (mineStories.length) openStoriesFor(session.user.id); else startStory(); } });
+      onClick: () => { if (mineStories.length) openStoriesFor(session.user.id); else startStory(); },
+      note: myNoteText, noteLabel: myNoteText ? 'Your note' : 'Add a note', onNote: () => setNoteSheet(true) });
     const taken = new Set([session.user.id]);
+    const withNote = (item, profile) => {
+      const n = notesBy.get(profile.id);
+      return n ? { ...item, note: n.text, noteLabel: `Note from ${profile.name}`, onNote: () => setNoteReply({ note: n, profile }) } : item;
+    };
     trayUsers.forEach((t) => {
       const unseen = !t.stories.every((st) => storyData.seen.has(st.id));
-      out.push({ key: `s-${t.profile.id}`, label: `Story of ${t.profile.name}`, name: firstName(t.profile.name), profile: t.profile, ring: unseen && !t.muted ? 'unseen' : 'seen', close: unseen && !t.muted && t.stories.some((st) => st.audience === 'close' && !storyData.seen.has(st.id)), segments: t.stories.map((st) => !!t.muted || storyData.seen.has(st.id)), muted: !!t.muted, onLong: () => setStoryPeek({ profile: t.profile, muted: !!t.muted }), online: isUserOnline(t.profile) && !t.profile.hide_activity && !t.profile.is_bot, onClick: () => openStoriesFor(t.profile.id) });
+      out.push(withNote({ key: `s-${t.profile.id}`, label: `Story of ${t.profile.name}`, name: firstName(t.profile.name), profile: t.profile, ring: unseen && !t.muted ? 'unseen' : 'seen', close: unseen && !t.muted && t.stories.some((st) => st.audience === 'close' && !storyData.seen.has(st.id)), segments: t.stories.map((st) => !!t.muted || storyData.seen.has(st.id)), muted: !!t.muted, onLong: () => setStoryPeek({ profile: t.profile, muted: !!t.muted }), online: isUserOnline(t.profile) && !t.profile.hide_activity && !t.profile.is_bot, onClick: () => openStoriesFor(t.profile.id) }, t.profile));
       taken.add(t.profile.id);
+    });
+    notesBy.forEach((n, id) => {
+      if (taken.has(id)) return;
+      const conv = conversations.find((c) => c.otherProfile && c.otherProfile.id === id);
+      const prof = conv ? conv.otherProfile : (notes.profiles || {})[id];
+      if (!prof) return;
+      out.push({ key: `n-${id}`, label: `Note from ${prof.name}`, name: firstName(prof.name), profile: prof, online: isUserOnline(prof) && !prof.hide_activity, note: n.text, noteLabel: `Note from ${prof.name}`, onNote: () => setNoteReply({ note: n, profile: prof }), onClick: () => setNoteReply({ note: n, profile: prof }) });
+      taken.add(id);
     });
     primaryConversations.forEach((c) => {
       const p = c.otherProfile;
-      if (!p || taken.has(p.id) || p.is_bot || p.hide_activity || !isUserOnline(p)) return;
+      if (!p || taken.has(p.id) || p.is_bot || p.hide_activity || !isUserOnline(p) || vaultKeys.has(chatPrefKey('dm', p.id))) return;
       out.push({ key: `o-${p.id}`, label: `Chat with ${p.name}`, name: firstName(p.name), profile: p, online: true, onClick: () => openChat(p, c.id) });
       taken.add(p.id);
     });
-    return out.slice(0, 24);
+    return out.slice(0, 30);
   })();
-  const displayList = uniqueBy(displayListRaw, (x) => `${x.__kind || (listFilter === 'groups' ? 'group' : 'dm')}-${x.id}`);
+  const displayList = uniqueBy(displayListRaw, (x) => `${x.__kind || (listFilter === 'groups' ? 'group' : 'dm')}-${x.id}`)
+    .filter((x) => !vaultKeys.has((x.__kind || (listFilter === 'groups' ? 'group' : 'dm')) === 'group' ? chatPrefKey('group', x.id) : chatPrefKey('dm', x.otherProfile ? x.otherProfile.id : '')));
   displayListRef.current = displayList;
   navActionsRef.current = { openChat, openGroup };
 
@@ -22470,7 +27371,16 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           padding: '7px 16px', borderRadius: 18, fontSize: 12.5, fontWeight: 800, fontFamily: FONT, color: 'white', whiteSpace: 'nowrap',
           background: online ? '#1f9d55' : '#2b2f3a', boxShadow: '0 6px 20px rgba(0,0,0,0.3)', pointerEvents: 'none',
         }}>
-          {online ? 'Back online' : `No connection${outboxCount ? ` \u00b7 ${outboxCount} waiting to send` : ''}`}
+          {online ? 'Back online' : `Offline \u00b7 ${outboxCount ? `${outboxCount} waiting to send` : 'showing saved chats'}`}
+        </div>
+      )}
+      {online && updateReady && !showBackOnline && (
+        <div role="button" aria-label="Update ZChat" onClick={() => { try { window.location.reload(); } catch {} }} style={{
+          position: 'fixed', top: 'calc(env(safe-area-inset-top) + 8px)', left: '50%', transform: 'translateX(-50%)', zIndex: 300,
+          padding: '8px 16px', borderRadius: 18, fontSize: 12.5, fontWeight: 800, fontFamily: FONT, color: 'white', whiteSpace: 'nowrap', cursor: 'pointer',
+          background: theme.coral, boxShadow: '0 6px 20px rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', gap: 8,
+        }}>
+          <Sparkles size={14} />New version ready. Tap to update
         </div>
       )}
       <AssetDownloadBar progress={assetProgress} />
@@ -22530,8 +27440,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
         {search.trim().length >= 1 ? (() => {
           const term = search.trim().toLowerCase();
-          const chatHits = conversations.filter((c) => (c.otherProfile.name || '').toLowerCase().includes(term) || (c.otherProfile.username || '').toLowerCase().includes(term));
-          const groupHits = groups.filter((g) => !g.archived && (g.name || '').toLowerCase().includes(term));
+          const chatHits = conversations.filter((c) => !vaultKeys.has(chatPrefKey('dm', c.otherProfile.id)) && ((c.otherProfile.name || '').toLowerCase().includes(term) || (c.otherProfile.username || '').toLowerCase().includes(term)));
+          const groupHits = groups.filter((g) => !g.archived && !vaultKeys.has(chatPrefKey('group', g.id)) && (g.name || '').toLowerCase().includes(term));
           const hitIds = new Set(chatHits.map((c) => c.otherProfile.id));
           const people = results.filter((p) => !hitIds.has(p.id));
           const sectionTitle = (t) => <div style={{ padding: '12px 6px 4px', fontSize: 13, fontWeight: 600, color: theme.muted }}>{t}</div>;
@@ -22591,8 +27501,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             <div style={{ display: 'flex', gap: 6, padding: '0 16px 10px', flexShrink: 0, overflowX: 'auto' }}>
               {(() => {
                 const liveGroups = groups.filter((g) => !g.archived);
-                const unreadDms = primaryConversations.filter(isUnread).length;
-                const unreadGroups = liveGroups.filter((g) => g.unread > 0).length;
+                const unreadDms = primaryConversations.filter((c) => isUnread(c) && !vaultKeys.has(chatPrefKey('dm', c.otherProfile.id))).length;
+                const unreadGroups = liveGroups.filter((g) => g.unread > 0 && !vaultKeys.has(chatPrefKey('group', g.id))).length;
                 const chips = [
                   { k: 'all', l: 'All', n: 0 },
                   { k: 'unread', l: 'Unread', n: unreadDms + unreadGroups, hot: true },
@@ -22643,6 +27553,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                 </div>
               )}
               {listFilter === 'all' && <div style={{ margin: '0 -10px' }}><ActiveStrip items={activeStripItems} /></div>}
+              {focusState && <FocusBanner focus={focusState} onEnd={endFocus} />}
+              {listFilter === 'all' && (bdayPeople.length > 0 || myBdayToday) && bdayHidden !== mdOf() && (
+                <BirthdayBanner people={bdayPeople} mine={myBdayToday} myName={me && me.name} onWish={wishBirthday} onDismiss={() => { const d = mdOf(); setBdayHidden(d); writeJsonLs(`zchat-bday-hide-${uid}`, d); }} />
+              )}
               {archivedConversations.length > 0 && listFilter === 'all' && (
                 <div role="button" onClick={() => setShowArchived(true)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 8px', cursor: 'pointer', borderRadius: 16 }}>
                   <div style={{ width: 52, height: 46, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.ink, flexShrink: 0 }}><Archive size={22} strokeWidth={1.8} /></div>
@@ -22654,7 +27568,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               {requestList.length > 0 && (listFilter === 'all' || listFilter === 'dms') && (
                 <RequestsRow count={requestList.length} unread={requestList.filter(isUnread).length} onClick={() => setShowRequests(true)} />
               )}
-              {displayList.length === 0 && (listFilter === 'all' || listFilter === 'dms') && requestList.length > 0 ? null : displayList.length === 0 && (listFilter === 'all' || listFilter === 'dms' ? (
+              {displayList.length === 0 && !listReady && listFilter === 'all' ? <ChatListSkeleton /> : displayList.length === 0 && (listFilter === 'all' || listFilter === 'dms') && requestList.length > 0 ? null : displayList.length === 0 && (listFilter === 'all' || listFilter === 'dms' ? (
                 <EmptyState art="nochats" title="No chats yet" text="Find a friend by their username, or start a group." action={<PillButton primary label="Start a chat" onClick={() => setShowNewChat(true)} />} />
               ) : (
                 <div style={{ textAlign: 'center', padding: 30, fontSize: 13.5, color: theme.muted }}>
@@ -22736,6 +27650,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <span style={{ fontWeight: unread ? 800 : 700, fontSize: 14, color: theme.ink, display: 'flex', alignItems: 'center', gap: 4, minWidth: 0, flex: '1 1 auto', marginRight: 8 }}>
                           {isPinnedByMe(c) && <Pin_ size={13} color={theme.coral} />}<NameBadge name={c.otherProfile.name} verified={c.otherProfile.verified} custom={c.otherProfile.custom_badge} size={13} />
+                          {(() => { const st = activeStatusOf(c.otherProfile); return st && st.e ? <span aria-label={statusLabel(st)} style={{ fontSize: 12, flexShrink: 0 }}>{st.e}</span> : null; })()}
+                          {bdayIds.has(c.otherProfile.id) && <CakeIcon size={13} style={{ flexShrink: 0 }} />}
+                          <StreakBadge s={streaks[c.otherProfile.id]} size={11} />
                         </span>
                         {(c.sortTime || c.last_message_at) && <span style={{ fontSize: 10.5, color: unread ? theme.coral : theme.muted, fontWeight: unread ? 700 : 400, flexShrink: 0 }}>{formatListTime(c.sortTime || c.last_message_at)}</span>}
                       </div>
@@ -22780,7 +27697,12 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           <MomentsTab key="tab-moments" me={me} userId={session.user.id} myStories={activeStoriesOf(session.user.id)} trayUsers={trayUsers} seen={storyData.seen} version={postsVersion}
             unseenStories={trayUsers.filter((u) => !u.stories.every((st) => storyData.seen.has(st.id))).length}
             onAddStory={startStory} onOpenStory={(id) => openStoriesFor(id)} storyUploading={storyUploading} onStoryLongPress={(pr, isMuted) => setStoryPeek({ profile: pr, muted: isMuted })}
-            onOpenPost={(p, tab) => openFeedAt(p, tab)} onOpenProfile={(p) => setProfileOf(sanitizeAvatar(p, session.user.id))} onDiscover={() => setShowDiscover(true)} />
+            onOpenPost={(p, tab) => openFeedAt(p, tab)} onOpenProfile={(p) => setProfileOf(sanitizeAvatar(p, session.user.id))} onDiscover={() => setShowDiscover(true)}
+            topExtra={<>
+              <DailyMomentCard myStories={activeStoriesOf(session.user.id)} trayUsers={trayUsers} onTake={(late) => setMomentCam({ late })} onOpenStory={(userId) => openStoriesFor(userId)} />
+              <MemoriesCard onOpen={() => setMemoriesOpen(true)} />
+              <ChannelsEntryRow onOpen={() => setChannelsOpen({})} />
+            </>} />
           </div>
         )}
         {homeTab === 'calls' && (
@@ -22792,10 +27714,11 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             onOpenProfile={() => setProfileOf(me)} onEditProfile={() => setProfileOf({ ...me, __edit: true })} onSettings={() => setShowSettings(true)} onCollection={() => setCollectionOpen(true)}
             onSaved={() => setShowSaved(true)} onArchive={() => setShowArchived(true)} onMail={() => setShowMail(true)} onRequests={() => setShowFollowRequests(true)} onDiscover={() => setShowDiscover(true)}
             onSwitchAccount={() => setShowAccountSwitcher(true)} onShare={() => setProfileOf({ ...me, __share: true })} onInvite={inviteFriends} onGames={() => setShowGames(true)}
-            onMentions={() => setMentionsOpen(true)} onUsage={() => setUsageOpen(true)} />
+            onMentions={() => setMentionsOpen(true)} onUsage={() => setUsageOpen(true)}
+            onStatus={() => setStatusOpen(true)} onHidden={openHidden} onMemories={() => setMemoriesOpen(true)} onRecap={() => setRecapOpen(true)} onAvatar={() => setAvatarOpen(true)} onChannels={() => setChannelsOpen({})} onBroadcast={() => setBroadcastOpen(true)} />
         )}
         <BottomTabBar tab={homeTab} onChange={(k) => setHomeTab(k)} onCreate={() => setShowCreate(true)}
-          badges={{ chats: primaryConversations.filter(isUnread).length + groups.filter((g) => !g.archived && g.unread > 0).length, moments: trayUsers.some((u) => !u.stories.every((st) => storyData.seen.has(st.id))), calls: 0, me: followRequestCount + unreadMailCount }} />
+          badges={{ chats: primaryConversations.filter((c) => isUnread(c) && !vaultKeys.has(chatPrefKey('dm', c.otherProfile.id))).length + groups.filter((g) => !g.archived && g.unread > 0 && !vaultKeys.has(chatPrefKey('group', g.id))).length, moments: trayUsers.some((u) => !u.stories.every((st) => storyData.seen.has(st.id))), calls: 0, me: followRequestCount + unreadMailCount }} />
         </>)}
       </div>
 
@@ -22859,13 +27782,16 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                     {(activeGroup ? !!(groups.find((x) => x.id === activeGroup.id) || {}).pinned : !!(activeConvForBar && isPinnedByMe(activeConvForBar))) && <span style={{ marginRight: 4, display: 'inline-flex', verticalAlign: 'middle' }}><Pin_ size={12} /></span>}
                     {activeGroup ? activeGroup.name : <NameBadge name={activeProfile.name} verified={activeProfile.verified} custom={activeProfile.custom_badge} size={13} />}
                     {disappearOn && <Timer size={12} style={{ marginLeft: 5, verticalAlign: 'middle', opacity: 0.85 }} />}
+                    {!activeGroup && secretSet.has(activeProfile.id) && <Lock size={11} style={{ marginLeft: 5, verticalAlign: 'middle', opacity: 0.85 }} />}
+                    {!activeGroup && bdayIds.has(activeProfile.id) && <CakeIcon size={14} style={{ marginLeft: 5, verticalAlign: 'middle' }} />}
+                    {!activeGroup && streaks[activeProfile.id] && streaks[activeProfile.id].days >= 2 && <span style={{ marginLeft: 6, verticalAlign: 'middle', display: 'inline-flex' }}><StreakBadge s={streaks[activeProfile.id]} size={11} color={activeNameBarKey ? 'white' : undefined} /></span>}
                   </div>
                   <div style={{ fontSize: 11, color: activeNameBarKey ? 'rgba(255,255,255,0.85)' : theme.muted, textShadow: activeNameBarKey ? '0 1px 4px rgba(0,0,0,0.7)' : 'none' }}>
                     {activityFrom ? (
                       <span style={{ color: activeNameBarKey ? 'white' : theme.coral, fontWeight: 700 }}>
                         {activeGroup ? `${(groupMembers.find((gm) => gm.user_id === activityFrom.from)?.profile.name || 'Someone').split(' ')[0]} is ` : ''}{activityLabel(activityFrom.kind)}
                       </span>
-                    ) : activeGroup ? <GroupHeaderLine members={groupMembers} /> : activeProfile.is_bot ? (botWaitBase != null ? 'typing\u2026' : `${botFollowers.toLocaleString('en-US')} followers \u00b7 Online`) : (blockedByIds.has(activeProfile.id) || myBlockedIds.has(activeProfile.id) || activeProfile.hide_activity) ? '' : isUserOnline(activeProfile) ? 'Online' : (privacyAllows(activeProfile, 'privacy_lastseen', session.user.id, iFollowIds, privacyAllowed) ? (formatLastSeen(activeProfile.last_seen) || 'Last seen recently') : '')}
+                    ) : activeGroup ? <GroupHeaderLine members={groupMembers} /> : activeProfile.is_bot ? (botWaitBase != null ? 'typing\u2026' : `${botFollowers.toLocaleString('en-US')} followers \u00b7 Online`) : (blockedByIds.has(activeProfile.id) || myBlockedIds.has(activeProfile.id) || activeProfile.hide_activity) ? '' : headerStatusLine()}
                   </div>
                 </div>
               </div>
@@ -22943,6 +27869,11 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                     <ChevronRight size={15} style={{ transform: 'rotate(-90deg)' }} />
                     {unreadAnchor.count} unread {unreadAnchor.count === 1 ? 'message' : 'messages'}
                   </div>
+                  {unreadAnchor.count >= 8 && (
+                    <div role="button" aria-label="Catch me up" onPointerDown={(e) => e.preventDefault()} onClick={runCatchUp} className="zchat-pop" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 18, background: theme.panelBg, color: theme.ink, fontSize: 12.5, fontWeight: 800, boxShadow: '0 6px 18px rgba(0,0,0,0.28)', cursor: 'pointer', whiteSpace: 'nowrap', marginLeft: 8 }}>
+                      <Sparkles size={14} color={theme.coral} />Catch me up
+                    </div>
+                  )}
                 </div>
               )}
               {loadingConvo ? (
@@ -22950,7 +27881,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               ) : messages.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '36px 24px 0', color: theme.muted, fontSize: 14 }}>
                   <div style={{ maxWidth: 260, margin: '0 auto 14px' }}><SpotArt k="nochats" dark={theme.dark} /></div>
-                  {activeGroup ? 'No messages yet. Say hello!' : `No messages yet. Say hi to ${activeProfile.name}!`}
+                  {!online ? 'You are offline. This chat loads when you are back online.' : activeGroup ? 'No messages yet. Say hello!' : `No messages yet. Say hi to ${activeProfile.name}!`}
                 </div>
               ) : (
                 renderedMessages
@@ -22984,6 +27915,16 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             )}
             {!editingMessage && (
               <QuickReplyBar draft={draft} onPick={(t) => { const next = t.slice(0, MAX_CHARS); setDraft(next); setTimeout(() => { const el = composerRef.current; if (el) { try { el.focus(); el.setSelectionRange(next.length, next.length); } catch {} } }, 0); }} />
+            )}
+            {privateReply && activeProfile && !activeGroup && privateReply.sid === activeProfile.id && !editingMessage && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderTop: `1px solid ${theme.border}`, background: theme.glass, flexShrink: 0 }}>
+                <div style={{ width: 3, alignSelf: 'stretch', background: theme.coral, borderRadius: 2, flexShrink: 0 }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: theme.coralDeep, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Replying privately to {privateReply.s} in {privateReply.gn}</div>
+                  <div style={{ fontSize: 12, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{privateReply.q}</div>
+                </div>
+                <X size={16} aria-label="Cancel private reply" style={{ cursor: 'pointer', color: theme.muted, flexShrink: 0 }} onClick={() => setPrivateReply(null)} />
+              </div>
             )}
             {(replyingTo || editingMessage) && (
               <div style={{
@@ -23032,6 +27973,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                 <MentionSuggestions
                   query={composerMention.query}
                   myId={session.user.id}
+                  allowAll={!!activeGroup && canMentionAll()}
                   priority={activeGroup ? groupMembers.map((gm) => gm.profile) : (activeProfile ? [activeProfile] : [])}
                   excludeIds={[session.user.id, ...myBlockedIds]}
                   onPick={pickComposerMention}
@@ -23054,6 +27996,11 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                 </div>
               );
             })()}
+            {activeProfile && !activeGroup && secretSet.has(activeProfile.id) && !editingMessage && (
+              <div role="button" aria-label="Secret chat settings" onClick={() => setSecretPage(true)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '4px 14px 2px', fontSize: 11.5, fontWeight: 700, color: theme.muted, cursor: 'pointer', flexShrink: 0 }}>
+                <Lock size={12} />Secret chat on. Text you send is locked end to end.
+              </div>
+            )}
             {showTextStyle && !editingMessage && (
               <TextStylePanel draft={draft} font={textFont} size={textSize} color={textColor} onFont={setTextFont} onSize={setTextSize} onColor={setTextColor} onDone={() => setShowTextStyle(false)} />
             )}
@@ -23150,7 +28097,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                         if (mine) { e.preventDefault(); doStartEditSingle(mine); }
                       }
                     }}
-                    placeholder={editingMessage ? 'Edit message' : 'Message'}
+                    placeholder={editingMessage ? 'Edit message' : slowLeftMs > 0 ? `Slow mode, wait ${mmss(slowLeftMs)}` : (activeProfile && !activeGroup && secretSet.has(activeProfile.id)) ? 'Secret message' : 'Message'}
                     rows={1}
                     style={{
                       ...(COMPOSER_AUTOSIZE ? { fieldSizing: 'content', overflowY: 'auto' } : {}),
@@ -23237,11 +28184,15 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                 onBill={activeGroup || (activeProfile && !activeProfile.is_bot) ? () => { setShowAttach(false); setBillComposer(true); } : null}
                 onCountdown={activeGroup || (activeProfile && !activeProfile.is_bot) ? () => { setShowAttach(false); setCountdownComposer(true); } : null}
                 onContact={activeProfile && activeProfile.is_bot ? null : () => { setShowAttach(false); setContactPicker(true); }}
-                onHidden={activeProfile && activeProfile.is_bot ? null : () => { setShowAttach(false); onceNextRef.current = false; hiddenNextRef.current = true; if (cameraGalleryRef.current) cameraGalleryRef.current.click(); }} />
+                onHidden={activeProfile && activeProfile.is_bot ? null : () => { setShowAttach(false); onceNextRef.current = false; hiddenNextRef.current = true; if (cameraGalleryRef.current) cameraGalleryRef.current.click(); }}
+                onRound={activeProfile && activeProfile.is_bot ? null : () => { setShowAttach(false); setRoundOpen(true); }}
+                onAlbum={activeProfile && activeProfile.is_bot ? null : () => { setShowAttach(false); setAlbumsOpen({ key: chatAlbumKey, name: chatName }); }}
+                onWatch={activeProfile && activeProfile.is_bot ? null : () => { setShowAttach(false); setWatchComposer(true); }}
+                onFocus={activeProfile && activeProfile.is_bot ? null : () => { setShowAttach(false); setFocusSheetOpen(true); }} />
             )}
 
             {showStickers && (
-              <StickerPicker onPick={sendSticker} userId={session.user.id} onClose={() => setShowStickers(false)} />
+              <StickerPicker onPick={sendSticker} userId={session.user.id} onClose={() => setShowStickers(false)} onPickGif={sendGif} onSharePack={sharePack} />
             )}
           </>
         ) : (
@@ -23333,6 +28284,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         return (
           <MessageContextMenu
             message={m} isMine={isMine} anchorRect={contextRect}
+            onReplyPrivately={activeGroup && !isMine && !m.deleted && m.type !== 'system' && !String(m.id).startsWith('temp-') ? () => { setContextMenuFor(null); startPrivateReply(m); } : null}
+            onAddToAlbum={(m.type === 'image' || m.type === 'video') && !m.deleted && m.media_url && !String(m.id).startsWith('temp-') && !parseOnce(m) && !(activeProfile && activeProfile.is_bot) ? () => { setContextMenuFor(null); setAlbumPickFor(m); } : null}
             bubble={(
               <MessageBubble m={m} isMe={isMine} myId={session.user.id} selectionMode={false} selected={false} onToggleSelect={noop} onLongPress={noop} onDelete={noop}
                 onOpenImage={noop} onOpenVideo={noop} reactions={messageLikes[m.id]} onReact={noop} onOpenWhoReacted={noop}
@@ -23344,7 +28297,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             isSaved={savedIds.has(String(m.id))} onToggleSave={String(m.id).startsWith('temp-') ? null : () => toggleSaveMessage(m)}
             onSave={() => { silentDownload(m.media_url, m.type === 'video' ? 'zchat-video.mp4' : 'zchat-photo.jpg'); setContextMenuFor(null); }}
             onEditArt={m.type === 'image' && m.media_url && !String(m.id).startsWith('temp-') ? () => { setContextMenuFor(null); openPaintFor(m.media_url); } : null}
-            canEditText={isMine && m.type === 'text' && !m.deleted}
+            canEditText={isMine && m.type === 'text' && !m.deleted && !parseWrapped(m.content)}
             canModerate={activeGroup ? (groupMembers.find((gm) => gm.user_id === session.user.id)?.role === 'admin') : false}
             onClose={() => setContextMenuFor(null)}
             onReact={(emoji) => doReactSingle(m, emoji)}
@@ -23362,9 +28315,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             onInfo={() => { setContextMenuFor(null); setInfoFor(m); }}
             onRemind={String(m.id).startsWith('temp-') ? null : () => { setContextMenuFor(null); setRemindFor(m); }}
             onReadAloud={typeof window !== 'undefined' && window.speechSynthesis ? () => { setContextMenuFor(null); readAloud(m); } : null}
-            onTranslate={m.type === 'text' && !m.deleted && String(m.content || '').trim() && !isSpecialContent(m.content) && !parseGameMessage(m.content) ? () => { setContextMenuFor(null); setToolSheet({ kind: 'tr', m }); } : null}
+            onTranslate={m.type === 'text' && !m.deleted && messageTextFor(m).trim() && !isSpecialContent(m.content) && !parseGameMessage(m.content) && !(parseWrapped(m.content) && parseWrapped(m.content).k === 'sec') ? () => { setContextMenuFor(null); setToolSheet({ kind: 'tr', m: { ...m, content: messageTextFor(m) } }); } : null}
             onTranscribe={(m.type === 'audio' || m.type === 'voice') && !m.deleted && m.media_url && !String(m.id).startsWith('temp-') ? () => { setContextMenuFor(null); setToolSheet({ kind: 'vt', m }); } : null}
-            onShareImage={m.type === 'text' && !isSpecialContent(m.content) && !parseGameMessage(m.content) ? () => { setContextMenuFor(null); shareMessageAsImage(m, labelForSender(m.sender_id) === 'You' ? (me && me.name) : labelForSender(m.sender_id), theme.dark).then((ok) => { if (ok) showSnack('Image ready'); }); } : null}
+            onShareImage={m.type === 'text' && !isSpecialContent(m.content) && !parseGameMessage(m.content) ? () => { setContextMenuFor(null); shareMessageAsImage({ ...m, content: messageTextFor(m) }, labelForSender(m.sender_id) === 'You' ? (me && me.name) : labelForSender(m.sender_id), theme.dark).then((ok) => { if (ok) showSnack('Image ready'); }); } : null}
           />
         );
       })()}
@@ -23445,9 +28398,36 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           onNicknameSaved={(nick, otherId) => setConversations((prev) => prev.map((c) => (c.otherProfile.id === otherId ? { ...c, otherProfile: { ...c.otherProfile, name: nick || c.realName } } : c)))}
           onNeedChatLockSetup={() => { setShowChatSettings(false); setShowSettings(true); setAutoOpenLockSetup(true); }}
           onOpenProfile={(p) => { setShowChatSettings(false); setProfileOf(p); }}
+          messages={messages}
+          onOpenMedia={(m) => { setShowChatSettings(false); if (m.type === 'video') setViewerVideoUrl({ url: m.media_url }); else setViewerUrl(m.media_url); }}
           tools={chatTools()}
         />
       )}
+      {vaultFlow && <VaultPinPage mode={vaultFlow.mode} uid={uid} onClose={() => setVaultFlow(null)} onDone={() => { const f = vaultFlow; setVaultFlow(null); if (f && f.then) f.then(); }} />}
+      {hiddenOpen && <HiddenChatsPage uid={uid} conversations={conversations} archived={archivedConversations} groups={groups} onClose={() => setHiddenOpen(false)} onOpenDm={(c) => { setHiddenOpen(false); openChat(c.otherProfile, c.id); }} onOpenGroup={(g) => { setHiddenOpen(false); openGroup(g); }} />}
+      {secretPage && activeProfile && !activeGroup && <SecretChatPage uid={uid} peer={activeProfile} on={secretSet.has(activeProfile.id)} onToggle={toggleSecret} onClose={() => setSecretPage(false)} />}
+      {tonePage && <ChatTonePage chatKey={tonePage.key} name={tonePage.name} onClose={() => setTonePage(null)} />}
+      {trSheet && <TranslateChatSheet chatKey={trSheet.key} name={trSheet.name} onClose={() => setTrSheet(null)} />}
+      {catchUp && <TextToolSheet title="Catch me up" subtitle={`From the last ${catchUp.n} messages`} text={catchUp.text} busy={catchUp.busy} error={catchUp.error} onClose={() => setCatchUp(null)} onCopy={() => { copyTextToClipboard(catchUp.text || ''); showSnack('Copied'); }} />}
+      {focusSheetOpen && <FocusComposerSheet onClose={() => setFocusSheetOpen(false)} onSend={sendFocus} />}
+      {watchComposer && <WatchComposerSheet links={messages.filter((m) => m.type === 'text' && !m.deleted && youtubeIdOf(m.content)).slice(-10).reverse().map((m) => (String(m.content).match(/https?:\/\/\S+/) || [m.content])[0])} onClose={() => setWatchComposer(false)} onSend={sendWatch} />}
+      {watchParty && me && <WatchPartyPage msgId={watchParty.msgId} d={watchParty.d} me={me} onClose={() => setWatchParty(null)} />}
+      {roundOpen && <RoundRecorder onClose={() => setRoundOpen(false)} onSend={sendRoundVideo} />}
+      {albumsOpen && albumsOpen.key && <AlbumsPage chatKey={albumsOpen.key} chatName={albumsOpen.name} initialAlbumId={albumsOpen.albumId || null} userId={uid} onClose={() => setAlbumsOpen(null)} onAdded={postAlbumCard} />}
+      {albumPickFor && chatAlbumKey && <AlbumPickSheet chatKey={chatAlbumKey} userId={uid} onClose={() => setAlbumPickFor(null)} onPick={(a) => addMessageToAlbum(a, albumPickFor)} />}
+      {broadcastOpen && me && <BroadcastPage userId={uid} me={me} blockedIds={myBlockedIds} onClose={() => setBroadcastOpen(false)} onSend={sendBroadcast} />}
+      {statusOpen && me && <StatusSheet me={me} onClose={() => setStatusOpen(false)} onSaved={(patch) => setMe((prev) => (prev ? { ...prev, ...patch } : prev))} />}
+      {noteSheet && <NoteComposerSheet userId={uid} mine={notes.mine} onClose={() => setNoteSheet(false)} onSaved={(row) => setNotes((n) => ({ ...n, on: true, mine: row }))} />}
+      {noteReply && <NoteReplySheet note={noteReply.note} profile={noteReply.profile} onClose={() => setNoteReply(null)} onSend={(text) => sendNoteReply(noteReply.note, noteReply.profile, text)} />}
+      {memoriesOpen && <MemoriesPage onClose={() => setMemoriesOpen(false)} onShare={shareMemoryToStory} />}
+      {recapOpen && me && <RecapPage me={me} onClose={() => setRecapOpen(false)} />}
+      {avatarOpen && me && <AvatarMakerPage initial={me.avatar_cfg} onClose={() => setAvatarOpen(false)} onSave={saveMadeAvatar} />}
+      {channelsOpen && me && <ChannelsPage userId={uid} me={me} initialId={channelsOpen.id || null} onClose={() => setChannelsOpen(null)} onShare={shareChannel} />}
+      {shareCard && (
+        <ForwardPicker title="Share to" subtitle="Pick a chat" conversations={conversations.filter((c) => !myBlockedIds.has(c.otherProfile.id))} groups={groups.filter((g) => !g.archived)} myId={uid} onCancel={() => setShareCard(null)}
+          onPick={async (target) => { const sc = shareCard; setShareCard(null); if (!target) return; const t = target.__group ? { kind: 'group', id: target.__group.id } : { kind: 'dm', id: target.id }; const ok = await sendContentTo(t, sc.content, sc.notify); showSnack(ok ? 'Sent' : 'That did not send. Try again.'); }} />
+      )}
+      {momentCam && <CameraCapture onClose={() => setMomentCam(null)} onCapture={(file) => { const late = !!momentCam.late; setMomentCam(null); setStoryComposer({ key: Date.now(), files: [file], sticker: { k: 'moment', late, d: momentDayNumber() } }); }} />}
       {showCreateGroup && (
         <CreateGroupPanel myId={session.user.id} onClose={() => setShowCreateGroup(false)}
           onCreated={(g) => { setShowCreateGroup(false); loadGroups(); openGroup({ ...g, myRole: 'admin' }); }} />
@@ -23468,7 +28448,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           messages={messages} onSetAccent={setGroupAccent}
           disappearSecs={(groups.find((g) => g.id === activeGroup.id) || activeGroup).disappear_secs}
           onSetDisappear={(secs) => setDisappear({ kind: 'group' }, secs)}
-          onOpenMedia={(m) => { setShowGroupInfo(false); if (m.type === 'video') setViewerVideoUrl(m.media_url); else setViewerUrl(m.media_url); }}
+          onOpenMedia={(m) => { setShowGroupInfo(false); if (m.type === 'video') setViewerVideoUrl({ url: m.media_url }); else setViewerUrl(m.media_url); }}
           onJumpToMessage={(id) => { setShowGroupInfo(false); setTimeout(() => jumpToMessage(id), 250); }}
           onOpenSettings={() => { setShowGroupInfo(false); setShowGroupSettings(true); }}
           onOpenMembers={() => { setShowGroupInfo(false); setShowGroupMembers(true); }}
@@ -23484,7 +28464,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           onOpenProfile={(p) => { setShowGroupMembers(false); setProfileOf(p); }}
           onAddMembers={() => setShowAddMembersFromMembers(true)}
           onPromote={promoteMember} onDemote={demoteMember} onMute={muteMember} onUnmute={unmuteMember}
-          onKick={kickMember} onTransferOwnership={transferOwnership}
+          onKick={kickMember} onTransferOwnership={transferOwnership} onSetTitle={setMemberTitle}
         />
       )}
       {showAddMembersFromMembers && activeGroup && (
@@ -23529,7 +28509,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           onPost={() => { if (blockedByRestriction('post')) return; if (postInputRef.current) postInputRef.current.click(); }}
           onStory={startStory}
           onGroup={() => setShowCreateGroup(true)}
-          onChat={() => setShowNewChat(true)} onGames={() => setShowGames(true)} onScan={() => setShowQrScan(true)} />
+          onChat={() => setShowNewChat(true)} onGames={() => setShowGames(true)} onScan={() => setShowQrScan(true)}
+          onChannel={() => setChannelsOpen({})} onBroadcast={() => setBroadcastOpen(true)} />
       )}
       {showNewChat && (
         <NewChatPage userId={session.user.id} blockedIds={myBlockedIds} onClose={() => setShowNewChat(false)}
@@ -23537,7 +28518,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           onNewGroup={() => setShowCreateGroup(true)} onDiscover={() => setShowDiscover(true)} />
       )}
       {postComposer && (
-        <MediaComposer key={postComposer.key} files={postComposer.files} recipientName="your profile" mode="post"
+        <MediaComposer key={postComposer.key} files={postComposer.files} recipientName="your profile" mode="post" myId={session.user.id}
           onCancel={() => setPostComposer(null)} onSend={sharePost} />
       )}
       {inAppToast && (
@@ -23557,6 +28538,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               { icon: <Star_ size={18} color="#FFB800" filled={favChats.has(`dm-${c.otherProfile.id}`)} />, label: favChats.has(`dm-${c.otherProfile.id}`) ? 'Remove from favourites' : 'Add to favourites', onClick: () => toggleFavChat(`dm-${c.otherProfile.id}`) },
               isUnread(c) ? { icon: <CheckCheck size={18} />, label: 'Mark as read', onClick: () => { setManualUnreadFor(c.otherProfile.id, false); markChatRead(c.otherProfile.id); } } : { icon: <Mail size={18} />, label: 'Mark as unread', onClick: () => setManualUnreadFor(c.otherProfile.id, true) },
               { icon: <Archive size={18} />, label: 'Archive chat', onClick: () => toggleArchive(c.id, true) },
+              { icon: <EyeOff size={18} />, label: 'Hide chat', hint: 'Keep it behind your PIN', onClick: () => hideChat(chatPrefKey('dm', c.otherProfile.id)) },
               { icon: isConvMutedForMe(c) ? <Bell size={18} /> : <BellOff size={18} />, label: isConvMutedForMe(c) ? 'Unmute notifications' : 'Mute notifications', onClick: () => (isConvMutedForMe(c) ? setChatMute({ kind: 'dm', conv: c }, null) : setMuteSheet({ kind: 'dm', conv: c })) },
               { icon: <User size={18} />, label: 'View profile', onClick: () => setProfileOf(c.otherProfile) },
               canCall(c.otherProfile) ? { icon: <Phone size={18} />, label: 'Voice call', onClick: () => startDirectCall(c.otherProfile, 'voice') } : null,
@@ -23579,6 +28561,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               { icon: <Star_ size={18} color="#FFB800" filled={favChats.has(`group-${g.id}`)} />, label: favChats.has(`group-${g.id}`) ? 'Remove from favourites' : 'Add to favourites', onClick: () => toggleFavChat(`group-${g.id}`) },
               g.unread > 0 ? { icon: <CheckCheck size={18} />, label: 'Mark as read', onClick: () => { markGroupRead(g.id); setGroups((prev) => prev.map((x) => (x.id === g.id ? { ...x, unread: 0 } : x))); } } : null,
               { icon: <Archive size={18} />, label: 'Archive group', onClick: () => toggleGroupArchive(g) },
+              { icon: <EyeOff size={18} />, label: 'Hide group', hint: 'Keep it behind your PIN', onClick: () => hideChat(chatPrefKey('group', g.id)) },
               { icon: isActiveUntil(g.mutedUntil) ? <Bell size={18} /> : <BellOff size={18} />, label: isActiveUntil(g.mutedUntil) ? 'Unmute notifications' : 'Mute notifications', onClick: () => (isActiveUntil(g.mutedUntil) ? setChatMute({ kind: 'group', id: g.id }, null) : setMuteSheet({ kind: 'group', id: g.id })) },
               { icon: <Users size={18} />, label: 'Group info', onClick: async () => { await openGroup(g); setShowGroupInfo(true); } },
               { icon: <Phone size={18} />, label: 'Group voice call', onClick: async () => { await openGroup(g); startGroupCall(g, 'voice'); } },
@@ -23720,7 +28703,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         ]} />
       )}
       {storyComposer && (
-        <MediaComposer key={storyComposer.key} files={storyComposer.files} mode="story" myId={session.user.id} privacyCtx={{ iFollow: iFollowIds, allowed: privacyAllowed }}
+        <MediaComposer key={storyComposer.key} files={storyComposer.files} mode="story" myId={session.user.id} initialSticker={storyComposer.sticker || null} privacyCtx={{ iFollow: iFollowIds, allowed: privacyAllowed }}
           mentionGroups={groups} onCancel={() => setStoryComposer(null)} onSend={postStories} />
       )}
       {storyViewer && (
@@ -24036,27 +29019,33 @@ function DayDivider({ label }) {
 }
 
 const WHATS_NEW = [
-  { title: 'A new Games home', text: 'Games now has its own home with friends, solo games and ranks in one place, plus a game of the day.' },
-  { title: 'Live games', text: 'Tug of war, Quiz race and Reaction race. Play at the same time as a friend and send quick reactions while you play.' },
-  { title: 'Leaderboards', text: 'Every game has a leaderboard. See your friends or everyone, all time or this week.' },
-  { title: 'Stay off leaderboards', text: 'Choose who can see you on leaderboards. Everyone else sees Hidden player and cannot open your profile from there.' },
-  { title: 'Message requests', text: 'Chats from people you do not follow wait in Message requests. They will not know you read them until you accept.' },
-  { title: 'Who can message you', text: 'Let everyone message you, or only people you follow. Find it in Settings under Messages and requests.' },
-  { title: 'Read receipts', text: 'Turn off showing when you read messages in your chats.' },
-  { title: 'Close friends', text: 'Share a story with just your close friends. Their stories show a green ring.' },
-  { title: 'Hide your story', text: 'Pick people who will not see any of your stories.' },
-  { title: 'Live location', text: 'Share where you are for 15 minutes, 1 hour or 8 hours. Stop any time.' },
-  { title: 'Translate', text: 'Hold a message and tap More, then Translate.' },
-  { title: 'Voice to text', text: 'Hold a voice message and tap Voice to text to read it instead.' },
-  { title: 'Private chat photos', text: 'New photos, videos and voice messages in chats can only be opened by the people in that chat.' },
-  { title: 'Deletes that follow you', text: 'Delete for me and Delete chat now carry over to your other phones and computers.' },
-  { title: 'Scheduled messages', text: 'Scheduled messages now go out on time even when ZChat is closed.' },
-  { title: 'Share to ZChat', text: 'On Android, add ZChat to your home screen, then share photos, videos and links from other apps straight into a chat.' },
-  { title: 'Opens offline', text: 'ZChat now opens even when you have no connection.' },
-  { title: 'Tidy notifications', text: 'Several messages from the same chat now stack into one notification.' },
-  { title: 'Change your email', text: 'Change the email you log in with from Settings.' },
-  { title: 'Delete your account fully', text: 'Deleting your account now removes your profile, posts and stories for good.' },
-  { title: 'Bug fixes', text: 'Lots of fixes and smoother games, menus and pages.' },
+  { title: 'Streaks', text: 'Chat with a friend every day to grow a streak 🔥 and keep it going.' },
+  { title: 'Notes', text: 'Leave a short note above your story. Mutual friends see it for 24 hours and can reply.' },
+  { title: 'Status', text: 'Tell people what you are up to, like In class or Gaming. It shows in chats and on your profile.' },
+  { title: 'Away message', text: 'Turn it on in Settings and people who message you get a reply while you are busy.' },
+  { title: 'Secret chats', text: 'Text messages in a secret chat are locked on your phone. Not even ZChat can read them.' },
+  { title: 'Hidden chats', text: 'Keep a chat behind a PIN. It leaves your chat list, search and notifications.' },
+  { title: 'Catch me up', text: 'Missed a lot? Get a quick summary of the chat in a few lines.' },
+  { title: 'Auto translate', text: 'Pick a language in chat details and new messages arrive already translated.' },
+  { title: 'Video messages', text: 'Record a round video message of up to 60 seconds from the attach menu.' },
+  { title: 'Watch together', text: 'Share a YouTube link and watch with your chat. Play and pause stay in sync for everyone.' },
+  { title: 'Focus together', text: 'Start a focus timer in a chat. Friends can join and other chats stay quiet.' },
+  { title: 'Shared albums', text: 'Make albums inside a chat and everyone in it can add photos and videos.' },
+  { title: 'GIFs and sticker packs', text: 'Search GIFs from the sticker menu. Bundle your stickers into a pack and share it with friends.' },
+  { title: 'Chat tones', text: 'Give each chat its own sound so you know who it is without looking.' },
+  { title: 'Group tools', text: 'Slow mode, member titles, @everyone and Reply privately for busy groups.' },
+  { title: 'Broadcast lists', text: 'Send one message to many people. Each one gets it as a private message.' },
+  { title: 'Channels', text: 'Follow channels for updates from people and pages, or start your own.' },
+  { title: 'Daily moment', text: 'Once a day at a surprise time, everyone gets 2 minutes to post what they are doing.' },
+  { title: 'Story stickers', text: 'Add a question, a poll or an emoji slider to your story and see what everyone answered.' },
+  { title: 'Posts with more photos', text: 'Put up to 10 photos and videos in one post and invite a friend to share it with you.' },
+  { title: 'Birthdays', text: 'Add your birthday and friends get a reminder on the day so they can wish you.' },
+  { title: 'Memories and Year recap', text: 'See what you shared on this day in past years, and swipe through your year on ZChat.' },
+  { title: 'Avatar maker', text: 'Make a cartoon avatar and use it as your profile photo.' },
+  { title: 'Data saver', text: 'Load smaller photos and stop videos playing on their own. Find it in Settings.' },
+  { title: 'Chats saved on your phone', text: 'ZChat opens fast and shows your chats even with no connection.' },
+  { title: 'A fresh look', text: 'A new Theme page, and cleaner chat details, group info and settings.' },
+  { title: 'Bug fixes', text: 'Lots of fixes and a faster, smoother ZChat.' },
 ];
 
 function WhatsNewSheet({ onClose }) {
@@ -27460,6 +32449,8 @@ function parseEventMsg(content) {
 }
 function specialPreview(content) {
   if (typeof content !== 'string') return null;
+  const ws = wrappedSummary(content);
+  if (ws) return ws;
   const p = parsePoll(content);
   if (p) return `Poll: ${p.q}`;
   const e = parseEventMsg(content);
@@ -27666,6 +32657,8 @@ function parseCountdown(content) {
   } catch { return null; }
 }
 function parseExtraCard(content) {
+  const fc = parseFeatureCard(content);
+  if (fc) return fc;
   const l = parseChecklist(content);
   if (l) return { k: 'list', d: l };
   const b = parseBill(content);
@@ -27685,6 +32678,8 @@ function billMoney(c, v) {
 function extraCardSummary(content) {
   const x = parseExtraCard(content);
   if (!x) return null;
+  const fs = featureCardSummary(x);
+  if (fs) return fs;
   if (x.k === 'list') return `Checklist: ${x.d.t}`;
   if (x.k === 'bill') return `Split bill: ${x.d.t}`;
   if (x.k === 'live') return 'Live location';
@@ -29029,8 +34024,8 @@ function VotesPage({ title, options, votes, myId, onClose, people: peopleWord, h
   );
 }
 
-function ChatLookPreview({ wallpaper, nameBar, bubbleStyle: styleIn, title, avatar, height = 168 }) {
-  const { theme, bubbleColor, bubbleStyle: styleTheme, fontScale } = useTheme();
+function ChatLookPreview({ wallpaper, nameBar, bubbleStyle: styleIn, title, avatar, height = 168, composer }) {
+  const { theme, bubbleColor, bubbleStyle: styleTheme, fontScale, bgPatternOn } = useTheme();
   const styleKey = styleIn !== undefined ? styleIn : styleTheme;
   const colorSpec = BUBBLE_COLORS[bubbleColor] || BUBBLE_COLORS.default;
   const meBg = colorSpec.me || theme.bubbleMe;
@@ -29065,10 +34060,19 @@ function ChatLookPreview({ wallpaper, nameBar, bubbleStyle: styleIn, title, avat
         </div>
       </div>
       <div style={{ position: 'relative', padding: '12px', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', gap: 6, minHeight: height, boxSizing: 'border-box', ...(wp || {}) }}>
-        {them('Are we still on for tonight?')}
-        {mine('Yes, see you at 8')}
-        {them('Perfect')}
+        {!wp && bgPatternOn && <div style={{ position: 'absolute', inset: 0, opacity: theme.dark ? 0.06 : 0.05, pointerEvents: 'none', backgroundImage: 'radial-gradient(circle, currentColor 1px, transparent 1px)', backgroundSize: '18px 18px', color: theme.ink }} />}
+        <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {them('Are we still on for tonight?')}
+          {mine('Yes, see you at 8')}
+          {them('Perfect')}
+        </div>
       </div>
+      {composer && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderTop: `1px solid ${theme.border}`, background: theme.panelBg }}>
+          <div style={{ flex: 1, height: 32, borderRadius: 16, background: theme.inputBg, display: 'flex', alignItems: 'center', padding: '0 12px', fontSize: 13 * (fontScale || 1), color: theme.muted }}>Message</div>
+          <div style={{ width: 32, height: 32, borderRadius: '50%', background: theme.coral, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Send size={15} color="white" /></div>
+        </div>
+      )}
     </div>
   );
 }
@@ -29098,10 +34102,16 @@ function ActiveStrip({ items }) {
   const { theme } = useTheme();
   const lp = useRef({});
   if (!items || !items.length) return null;
+  const anyNote = items.some((it) => it.note != null);
   return (
     <div style={{ display: 'flex', gap: 12, overflowX: 'auto', padding: '2px 16px 12px', flexShrink: 0, scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
       {items.map((it) => (
         <div key={it.key} role="button" aria-label={it.label} onClick={() => { if (lp.current.fired === it.key) { lp.current.fired = false; return; } it.onClick(); }} {...storyLongPress(lp.current, it.key, it.onLong || null)} className="zchat-press" style={{ width: 64, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, cursor: 'pointer', WebkitTouchCallout: 'none', userSelect: 'none' }}>
+          {anyNote && (
+            <div style={{ height: 36, width: 84, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', marginBottom: -4, position: 'relative', zIndex: 8 }}>
+              {it.note != null && <NoteBubble text={it.note || '+ Note'} muted={!it.note} label={it.noteLabel || 'Note'} onClick={it.onNote} />}
+            </div>
+          )}
           <div style={{ position: 'relative' }}>
             <StoryAvatar profile={it.profile} size={60} ring={it.ring || 'none'} badgePlus={!!it.plus} segments={it.segments || null} uploading={!!it.uploading} dim={!!it.muted} close={!!it.close} />
             {it.online && <span style={{ position: 'absolute', right: 3, bottom: 3, width: 14, height: 14, borderRadius: '50%', background: '#22C55E', border: `2.5px solid ${theme.bgGradient}`, zIndex: 7 }} />}
@@ -29173,45 +34183,206 @@ function FilterIcon({ size = 20, color = 'currentColor', strokeWidth = 1.9, styl
   );
 }
 
-function AppearanceSection() {
-  const { theme, dark, setDark, themeMode, setThemeMode, accentName, setAccentName, bubbleColor, setBubbleColor, bubbleStyle, setBubbleStyle, fontScale, setFontScale } = useTheme();
-  const c = igPalette(theme);
-  const swatch = (key, color, on, onPick, label) => (
-    <div key={key} role="button" aria-label={label} onClick={() => { hapticTap(); playUiSound('tap'); onPick(); }} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: 'pointer', width: 52 }}>
-      <div style={{ width: 38, height: 38, borderRadius: '50%', background: color, boxShadow: on ? `0 0 0 2px ${c.bg}, 0 0 0 4px ${theme.ink}` : `inset 0 0 0 1px ${theme.dark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.1)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        {on && <Check size={17} color={key === 'default' || /^#F|^#E|^#D/i.test(String(color)) ? '#15151A' : 'white'} strokeWidth={3} />}
-      </div>
-      <span style={{ fontSize: 11.5, color: on ? theme.ink : theme.muted, fontWeight: on ? 700 : 500, whiteSpace: 'nowrap' }}>{label}</span>
-    </div>
-  );
-  const seg = (options, value, onPick) => (
-    <div style={{ display: 'flex', padding: 3, borderRadius: 12, background: c.field }}>
-      {options.map(([v, l]) => (
-        <div key={l} role="button" aria-label={l} onClick={() => { hapticTap(); playUiSound('tap'); onPick(v); }} style={{ flex: 1, textAlign: 'center', padding: '9px 0', borderRadius: 9, fontSize: 14, fontWeight: 700, cursor: 'pointer', color: value === v ? theme.ink : theme.muted, background: value === v ? (theme.dark ? '#2A2A2E' : '#FFFFFF') : 'transparent', boxShadow: value === v ? '0 1px 3px rgba(0,0,0,0.18)' : 'none' }}>{l}</div>
-      ))}
-    </div>
+const THEME_TEXT_SIZES = [[0.88, 'Smallest'], [0.94, 'Small'], [1, 'Default'], [1.09, 'Large'], [1.18, 'Largest']];
+const QUICK_BUBBLES = ['classic', 'strawberry', 'cloud', 'lava', 'royal', 'galaxy', 'paper', 'frost'];
+function ModeArt({ kind, theme }) {
+  const lightMe = (ACCENT_PALETTES[theme.accentKey] || {}).meLight || '#E4DCFF';
+  const darkMe = (ACCENT_PALETTES[theme.accentKey] || {}).meDark || '#3D2F86';
+  const screen = (bg, bar, them, me, line) => (
+    <>
+      <rect x="0" y="0" width="100" height="66" rx="10" fill={bg} />
+      <rect x="0" y="0" width="100" height="14" rx="10" fill={bar} />
+      <rect x="0" y="8" width="100" height="6" fill={bar} />
+      <circle cx="10" cy="7" r="3.4" fill={line} />
+      <rect x="17" y="5" width="26" height="4" rx="2" fill={line} />
+      <rect x="8" y="22" width="44" height="11" rx="5.5" fill={them} />
+      <rect x="44" y="37" width="48" height="11" rx="5.5" fill={me} />
+      <rect x="8" y="52" width="30" height="9" rx="4.5" fill={them} />
+    </>
   );
   return (
-    <div style={{ paddingBottom: 24 }}>
-      <div style={{ position: 'sticky', top: 'calc(52px + env(safe-area-inset-top))', zIndex: 3, background: c.bg, padding: '6px 0 10px' }}>
-        <ChatLookPreview height={132} />
+    <svg viewBox="0 0 100 66" aria-hidden="true" style={{ display: 'block', width: '100%', borderRadius: 10 }}>
+      {kind === 'auto' ? (
+        <>
+          <defs>
+            <clipPath id="zmode-cut"><path d="M0 0H100L0 66Z" /></clipPath>
+          </defs>
+          {screen('#17171B', '#222228', '#2E2E35', darkMe, '#4A4A54')}
+          <g clipPath="url(#zmode-cut)">{screen('#F3F3F6', '#FFFFFF', '#E3E3E9', lightMe, '#C9C9D2')}</g>
+        </>
+      ) : kind === 'dark'
+        ? screen('#17171B', '#222228', '#2E2E35', darkMe, '#4A4A54')
+        : screen('#F3F3F6', '#FFFFFF', '#E3E3E9', lightMe, '#C9C9D2')}
+    </svg>
+  );
+}
+
+function ThemeCard({ title, sub, children, pad = true }) {
+  const { theme } = useTheme();
+  return (
+    <div style={{ marginTop: 14 }}>
+      {title && <div style={{ fontSize: 13, fontWeight: 700, color: theme.muted, padding: '0 4px 8px', letterSpacing: '0.01em' }}>{title}</div>}
+      <div style={{ borderRadius: 20, background: theme.dark ? 'rgba(255,255,255,0.045)' : '#F5F5F8', border: `1px solid ${theme.border}`, padding: pad ? 14 : 0, overflow: 'hidden' }}>
+        {children}
       </div>
-      <IgHeading>Mode</IgHeading>
-      {seg([['light', 'Light'], ['dark', 'Dark'], ['auto', 'Auto']], themeMode || (dark ? 'dark' : 'light'), (v) => setThemeMode(v))}
-      {themeMode === 'auto' && <div style={{ fontSize: 13, color: theme.muted, padding: '8px 2px 0' }}>Follows your phone. Light in the day, dark at night if your phone does that.</div>}
-      <IgHeading>App color</IgHeading>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-        {Object.entries(ACCENT_PALETTES).map(([key, spec]) => swatch(key, spec.coral, accentName === key, () => setAccentName(key), spec.label))}
+      {sub && <div style={{ fontSize: 12.5, color: theme.muted, padding: '8px 6px 0', lineHeight: 1.45 }}>{sub}</div>}
+    </div>
+  );
+}
+
+function AppearanceSection() {
+  const { theme, dark, themeMode, setThemeMode, accentName, setAccentName, bubbleColor, setBubbleColor, bubbleStyle, setBubbleStyle, fontScale, setFontScale, bgPatternOn, setBgPatternOn } = useTheme();
+  const [allStyles, setAllStyles] = useState(false);
+  const tap = () => { hapticTap(); playUiSound('tap'); };
+  const mode = themeMode || (dark ? 'dark' : 'light');
+  const artTheme = { ...theme, accentKey: accentName };
+  const sizeIdx = (() => {
+    let best = 2;
+    let gap = 9;
+    THEME_TEXT_SIZES.forEach(([v], i) => { const d = Math.abs(v - (fontScale || 1)); if (d < gap) { gap = d; best = i; } });
+    return best;
+  })();
+  const styleKey = bubbleStyle && BUBBLE_STYLES[bubbleStyle] ? bubbleStyle : 'classic';
+  const quick = QUICK_BUBBLES.includes(styleKey) ? QUICK_BUBBLES : [styleKey, ...QUICK_BUBBLES.filter((k) => k !== 'classic').slice(0, 6), 'classic'];
+  const styleLabel = styleKey === 'classic' ? 'Classic' : BUBBLE_STYLES[styleKey].label;
+  const isDefault = mode === 'dark' && accentName === 'coral' && (bubbleColor || 'default') === 'default' && styleKey === 'classic' && Math.abs((fontScale || 1) - 1) < 0.01 && !bgPatternOn;
+  const reset = () => {
+    tap();
+    setThemeMode('dark');
+    setAccentName('coral');
+    setBubbleColor('default');
+    setBubbleStyle('classic');
+    setFontScale(1);
+    setBgPatternOn(false);
+  };
+  const ring = (on) => (on ? `0 0 0 2.5px ${theme.dark ? '#0C0C0E' : '#FFFFFF'}, 0 0 0 5px ${theme.coral}` : `inset 0 0 0 1px ${theme.dark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.1)'}`);
+  const dotSwatch = (key, color, on, onPick, label, size, hideLabel) => (
+    <div key={key} role="button" aria-label={label} aria-pressed={on} onClick={() => { tap(); onPick(); }} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 7, cursor: 'pointer', minWidth: 0, flex: 1, padding: hideLabel ? '3px 0' : 0 }}>
+      <div style={{ width: size, height: size, borderRadius: '50%', background: color, boxShadow: ring(on), display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'box-shadow 0.18s ease, transform 0.18s ease', transform: on ? 'scale(1.04)' : 'none' }}>
+        {on && <Check size={size > 40 ? 18 : 15} color={/^#F|^#E|^#D/i.test(String(color)) ? '#15151A' : 'white'} strokeWidth={3} />}
       </div>
-      <IgHeading>Your bubble color</IgHeading>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-        {Object.entries(BUBBLE_COLORS).map(([key, spec]) => swatch(key, spec.me || theme.bubbleMe, bubbleColor === key, () => setBubbleColor(key), key === 'default' ? 'App' : spec.label))}
+      {!hideLabel && <span style={{ fontSize: 11, color: on ? theme.ink : theme.muted, fontWeight: on ? 800 : 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>{label}</span>}
+    </div>
+  );
+  const colorKey = BUBBLE_COLORS[bubbleColor] ? bubbleColor : 'default';
+  const colorLabel = colorKey === 'default' ? 'Same as app color' : BUBBLE_COLORS[colorKey].label;
+  return (
+    <div style={{ paddingBottom: 28 }}>
+      <div style={{ paddingTop: 6 }}>
+        <ChatLookPreview height={124} composer />
       </div>
-      <IgHeading>Text size</IgHeading>
-      {seg([[0.88, 'Small'], [1, 'Default'], [1.18, 'Large']], fontScale, (v) => setFontScale(v))}
-      <IgHeading>Bubble style</IgHeading>
-      <div style={{ fontSize: 13, color: theme.muted, padding: '0 2px 8px' }}>Everyone you chat with sees your style.</div>
-      <BubbleStyleGrid value={bubbleStyle} onPick={(k) => { hapticTap(); playUiSound('tap'); setBubbleStyle(k); }} />
+
+      <ThemeCard title="Mode" sub={mode === 'auto' ? 'Follows your phone. Light in the day and dark at night if your phone does that.' : null}>
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+          {[['light', 'Light', <Sun key="s" size={14} />], ['dark', 'Dark', <Moon key="m" size={14} />], ['auto', 'Auto', <Smartphone key="p" size={14} />]].map(([k, label, icon]) => {
+            const on = mode === k;
+            return (
+              <div key={k} role="button" aria-label={label} aria-pressed={on} onClick={() => { tap(); setThemeMode(k); }} style={{ flex: 1, minWidth: 0, maxWidth: 170, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 9 }}>
+                <div style={{ width: '100%', borderRadius: 13, padding: 3, boxSizing: 'border-box', background: on ? theme.coral : 'transparent', boxShadow: on ? 'none' : `inset 0 0 0 1px ${theme.border}`, transition: 'background 0.18s ease' }}>
+                  <ModeArt kind={k} theme={artTheme} />
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: on ? 800 : 600, color: on ? theme.ink : theme.muted }}>
+                  {icon}{label}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </ThemeCard>
+
+      <ThemeCard title="App color" sub="Buttons, links and highlights across ZChat.">
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 4 }}>
+          {Object.entries(ACCENT_PALETTES).map(([key, spec]) => dotSwatch(key, spec.coral, accentName === key, () => setAccentName(key), spec.label, 42))}
+        </div>
+      </ThemeCard>
+
+      <ThemeCard title="Your bubbles" pad={false}>
+        <div style={{ padding: '14px 14px 4px' }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 12 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: theme.ink }}>Color</div>
+            <div style={{ fontSize: 12, color: theme.muted, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{colorLabel}</div>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
+            {Object.entries(BUBBLE_COLORS).map(([key, spec]) => dotSwatch(key, spec.me || theme.bubbleMe, colorKey === key, () => setBubbleColor(key), key === 'default' ? 'Bubble color same as app' : `Bubble color ${spec.label}`, 36, true))}
+          </div>
+        </div>
+        <div style={{ height: 1, background: theme.border, margin: '14px 0 0' }} />
+        <div style={{ padding: '14px 0 14px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', padding: '0 14px', marginBottom: 10 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: theme.ink }}>Style</div>
+              <div style={{ fontSize: 12, color: theme.muted, marginTop: 2 }}>{styleLabel}. Everyone you chat with sees it.</div>
+            </div>
+            <div role="button" aria-label="All bubble styles" onClick={() => { tap(); setAllStyles(true); }} style={{ fontSize: 13, fontWeight: 800, color: theme.coral, cursor: 'pointer', padding: '6px 2px 6px 10px', whiteSpace: 'nowrap' }}>See all</div>
+          </div>
+          <div style={{ display: 'flex', gap: 8, overflowX: 'auto', padding: '6px 14px 4px', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
+            {quick.map((k) => {
+              const on = styleKey === k;
+              const label = k === 'classic' ? 'Classic' : BUBBLE_STYLES[k].label;
+              return (
+                <div key={k} role="button" aria-label={`Bubble style ${label}`} aria-pressed={on} onClick={() => { tap(); setBubbleStyle(k); }} style={{
+                  flexShrink: 0, width: 92, height: 92, borderRadius: 16, cursor: 'pointer', position: 'relative', boxSizing: 'border-box',
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', gap: 7, padding: '0 4px 9px',
+                  background: theme.dark ? 'rgba(255,255,255,0.05)' : '#FFFFFF', border: on ? `2px solid ${theme.coral}` : `1px solid ${theme.border}`,
+                }}>
+                  {k === 'classic'
+                    ? <div style={{ background: theme.bubbleMe, color: theme.ink, borderRadius: 17, borderBottomRightRadius: 5, padding: '7px 12px', fontSize: 12.5, fontWeight: 700 }}>Hi</div>
+                    : <div style={{ transform: 'scale(0.86)', transformOrigin: 'bottom center' }}><BubbleSample k={k} text="Hi" /></div>}
+                  <div style={{ fontSize: 11, fontWeight: 800, color: on ? theme.ink : theme.muted }}>{label}</div>
+                </div>
+              );
+            })}
+            <div role="button" aria-label="More bubble styles" onClick={() => { tap(); setAllStyles(true); }} style={{
+              flexShrink: 0, width: 92, height: 92, borderRadius: 16, cursor: 'pointer', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6,
+              border: `1.5px dashed ${theme.border}`, color: theme.muted, fontSize: 11.5, fontWeight: 800,
+            }}>
+              <Palette size={20} color={theme.coral} />
+              {`${Object.keys(BUBBLE_STYLES).length} more`}
+            </div>
+          </div>
+        </div>
+      </ThemeCard>
+
+      <ThemeCard title="Text size">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span aria-hidden="true" style={{ fontSize: 13, fontWeight: 800, color: theme.muted, width: 14, textAlign: 'center' }}>A</span>
+          <div style={{ position: 'relative', flex: 1, height: 34 }}>
+            <div style={{ position: 'absolute', left: 9, right: 9, top: 15, height: 4, borderRadius: 2, background: theme.dark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.1)' }} />
+            <div style={{ position: 'absolute', left: 9, top: 15, height: 4, borderRadius: 2, width: `calc((100% - 18px) * ${sizeIdx / (THEME_TEXT_SIZES.length - 1)})`, background: theme.coral, transition: 'width 0.18s ease' }} />
+            {THEME_TEXT_SIZES.map(([v, label], i) => {
+              const on = i === sizeIdx;
+              return (
+                <div key={label} role="button" aria-label={`Text size ${label}`} aria-pressed={on} onClick={() => { tap(); setFontScale(v); }} style={{
+                  position: 'absolute', top: 0, left: `calc(9px + (100% - 18px) * ${i / (THEME_TEXT_SIZES.length - 1)} - 17px)`, width: 34, height: 34,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+                }}>
+                  <div style={{ width: on ? 22 : 10, height: on ? 22 : 10, borderRadius: '50%', background: on ? '#FFFFFF' : (i < sizeIdx ? theme.coral : (theme.dark ? '#3A3A42' : '#D5D5DC')), boxShadow: on ? `0 2px 8px rgba(0,0,0,0.3), 0 0 0 3px ${theme.coral}` : 'none', transition: 'all 0.18s ease' }} />
+                </div>
+              );
+            })}
+          </div>
+          <span aria-hidden="true" style={{ fontSize: 20, fontWeight: 800, color: theme.muted, width: 16, textAlign: 'center' }}>A</span>
+        </div>
+        <div style={{ textAlign: 'center', fontSize: 12.5, fontWeight: 700, color: theme.muted, marginTop: 6 }}>{THEME_TEXT_SIZES[sizeIdx][1]}</div>
+      </ThemeCard>
+
+      <ThemeCard title="Chat background" pad={false}>
+        <div role="button" aria-label="Dot pattern" aria-pressed={!!bgPatternOn} onClick={() => { tap(); setBgPatternOn(!bgPatternOn); }} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', cursor: 'pointer' }}>
+          <div style={{ width: 44, height: 44, borderRadius: 12, flexShrink: 0, background: theme.bgGradient, border: `1px solid ${theme.border}`, position: 'relative', overflow: 'hidden' }}>
+            <div style={{ position: 'absolute', inset: 0, opacity: theme.dark ? 0.3 : 0.22, backgroundImage: 'radial-gradient(circle, currentColor 1px, transparent 1px)', backgroundSize: '8px 8px', color: theme.ink }} />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 14.5, fontWeight: 700, color: theme.ink }}>Dot pattern</div>
+            <div style={{ fontSize: 12, color: theme.muted, marginTop: 2, lineHeight: 1.35 }}>A soft pattern behind chats with no wallpaper</div>
+          </div>
+          <IgToggle on={!!bgPatternOn} />
+        </div>
+      </ThemeCard>
+
+      {!isDefault && (
+        <div role="button" aria-label="Reset theme" onClick={reset} style={{ marginTop: 22, textAlign: 'center', fontSize: 14, fontWeight: 800, color: theme.coral, cursor: 'pointer', padding: 10 }}>Reset to default</div>
+      )}
+      {allStyles && <BubbleStyleSheet onClose={() => setAllStyles(false)} />}
     </div>
   );
 }
@@ -29221,7 +34392,7 @@ function parseOnce(m) {
   try { const o = JSON.parse(m.content.slice(6)); return o && typeof o === 'object' ? o : {}; } catch { return {}; }
 }
 function isHiddenReaction(emoji) {
-  return typeof emoji === 'string' && (emoji.indexOf('zv:') === 0 || emoji === 'zo' || emoji.indexOf('zfx:') === 0 || emoji.indexOf('zl:') === 0);
+  return typeof emoji === 'string' && (emoji.indexOf('zv:') === 0 || emoji === 'zo' || emoji === 'zfj' || emoji.indexOf('zfx:') === 0 || emoji.indexOf('zl:') === 0);
 }
 function onceSeenSet() {
   try { const a = JSON.parse(localStorage.getItem('zchat-once-seen') || '[]'); return new Set(Array.isArray(a) ? a : []); } catch { return new Set(); }
@@ -34631,13 +39802,14 @@ function DiceLineIcon({ size = 24, color = 'currentColor', strokeWidth = 2, styl
   );
 }
 
-function AttachSheet({ onClose, onCamera, onGallery, onLocation, onGame, canGame, locating, onPoll, onEvent, onOnce, onDoodle, onBuzz, onDice, onCollage, onVoiceType, onChecklist, onBill, onCountdown, onContact, onHidden }) {
+function AttachSheet({ onClose, onCamera, onGallery, onLocation, onGame, canGame, locating, onPoll, onEvent, onOnce, onDoodle, onBuzz, onDice, onCollage, onVoiceType, onChecklist, onBill, onCountdown, onContact, onHidden, onRound, onWatch, onFocus, onAlbum }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
   const drag = useSheetDrag(onClose);
   const items = [
     { k: 'camera', label: 'Camera', icon: <Camera />, on: onCamera },
     { k: 'gallery', label: 'Photos and videos', short: 'Gallery', icon: <ImageIcon />, on: onGallery },
+    onRound ? { k: 'round', label: 'Video message', icon: <RoundVideoIcon />, on: onRound } : null,
     onOnce ? { k: 'once', label: 'View once', icon: <OnceIcon />, on: onOnce } : null,
     onHidden ? { k: 'hidden', label: 'Hidden photo', icon: <HiddenPhotoIcon />, on: onHidden } : null,
     onLocation ? { k: 'location', label: locating ? 'Finding you' : 'Location', icon: <Compass />, on: onLocation, busy: locating } : null,
@@ -34647,6 +39819,9 @@ function AttachSheet({ onClose, onCamera, onGallery, onLocation, onGame, canGame
     onBill ? { k: 'bill', label: 'Split bill', icon: <BillIcon />, on: onBill } : null,
     onCountdown ? { k: 'count', label: 'Countdown', icon: <CountdownIcon />, on: onCountdown } : null,
     onContact ? { k: 'contact', label: 'Contact', icon: <ContactCardIcon />, on: onContact } : null,
+    onAlbum ? { k: 'album', label: 'Shared album', short: 'Album', icon: <AlbumIcon />, on: onAlbum } : null,
+    onWatch ? { k: 'watch', label: 'Watch together', icon: <WatchIcon />, on: onWatch } : null,
+    onFocus ? { k: 'focus', label: 'Focus together', short: 'Focus', icon: <FocusIcon />, on: onFocus } : null,
     onCollage ? { k: 'collage', label: 'Collage', icon: <LayoutDashboard />, on: onCollage } : null,
     onDoodle ? { k: 'doodle', label: 'Paint', icon: <DoodleIcon />, on: onDoodle } : null,
     onVoiceType ? { k: 'voicetype', label: 'Voice typing', icon: <Mic />, on: onVoiceType } : null,
@@ -34676,28 +39851,51 @@ function AttachSheet({ onClose, onCamera, onGallery, onLocation, onGame, canGame
   );
 }
 
-function StorageSection() {
+function StorageSection({ uid: uidIn }) {
   const { theme } = useTheme();
+  const [saver, setSaver] = usePref('zchat-data-saver');
   const [info, setInfo] = useState(null);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');
+  const [keep, setKeep] = useState(() => keepChatsLocal());
+  const [chatCount, setChatCount] = useState(null);
+  const [chatBusy, setChatBusy] = useState(false);
+  const uid = uidIn || (() => { const s = readStoredAuth(); return s && s.user ? s.user.id : null; })();
   const load = async () => {
     let usage = null;
     let quota = null;
     let cacheCount = 0;
     try { if (navigator.storage && navigator.storage.estimate) { const e = await navigator.storage.estimate(); usage = e.usage || 0; quota = e.quota || 0; } } catch {}
-    try { if (window.caches) { const keys = await caches.keys(); cacheCount = keys.length; } } catch {}
+    try { if (window.caches) { const keys = await caches.keys(); cacheCount = keys.filter((k) => !/^zchat-(shell|share|prefs)/.test(k)).length; } } catch {}
     setInfo({ usage, quota, cacheCount });
+    setChatCount(uid ? await countChatLocal(uid) : 0);
   };
   useEffect(() => { load(); }, []);
   const fmt = (b) => (b == null ? 'Unknown' : b < 1048576 ? `${Math.max(1, Math.round(b / 1024))} KB` : b < 1073741824 ? `${(b / 1048576).toFixed(1)} MB` : `${(b / 1073741824).toFixed(2)} GB`);
   const clear = async () => {
     setBusy(true);
-    try { if (window.caches) { const keys = await caches.keys(); await Promise.all(keys.map((k) => caches.delete(k))); } } catch {}
+    try { if (window.caches) { const keys = await caches.keys(); await Promise.all(keys.filter((k) => !/^zchat-(shell|share|prefs)/.test(k)).map((k) => caches.delete(k))); } } catch {}
     try { Object.keys(localStorage).filter((k) => k.startsWith('zchat-img-') || k.startsWith('zchat-media-')).forEach((k) => localStorage.removeItem(k)); } catch {}
+    mediaBlobCache.clear();
     setBusy(false);
     setNote('Cached photos and videos were cleared. They download again when you open them.');
     load();
+  };
+  const clearChats = async () => {
+    if (!uid) return;
+    setChatBusy(true);
+    await forgetLocalUser(uid);
+    setChatBusy(false);
+    setNote('Saved chats were removed from this phone. Your chats are still safe on the server.');
+    load();
+  };
+  const toggleKeep = async () => {
+    const next = !keep;
+    hapticTap();
+    try { localStorage.setItem('zchat-keep-chats', next ? '1' : '0'); } catch {}
+    setKeep(next);
+    if (!next && uid) { await forgetLocalUser(uid); load(); }
+    setNote(next ? 'Chats will be saved on this phone again as you use ZChat.' : 'Chats are no longer saved on this phone. ZChat needs a connection to show them.');
   };
   const pct = info && info.quota ? Math.min(100, Math.round((info.usage / info.quota) * 100)) : 0;
   const line = (label, value) => (
@@ -34708,7 +39906,6 @@ function StorageSection() {
   );
   return (
     <div>
-      <div style={{ padding: '12px 2px 6px', fontSize: 13, color: theme.muted, lineHeight: 1.5 }}>Photos, videos and app files kept on this phone so ZChat opens fast.</div>
       {info === null ? (
         <div style={{ display: 'flex', justifyContent: 'center', padding: 30 }}><Spinner color={theme.muted} /></div>
       ) : (
@@ -34718,11 +39915,27 @@ function StorageSection() {
           </div>
           {line('Used by ZChat', fmt(info.usage))}
           {line('Space the phone allows', fmt(info.quota))}
+          {line('Chats saved on this phone', chatCount == null ? '...' : String(chatCount))}
           {line('Cached folders', String(info.cacheCount))}
         </>
       )}
+      <div role="button" aria-label="Data saver" onClick={() => setSaver(!saver)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 2px', borderBottom: `1px solid ${theme.border}`, cursor: 'pointer' }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 15, color: theme.ink, fontWeight: 600 }}>Data saver</div>
+          <div style={{ fontSize: 12.5, color: theme.muted, marginTop: 2, lineHeight: 1.4 }}>Photos and videos load when you tap them, video messages do not play by themselves and your uploads are smaller</div>
+        </div>
+        <IgToggle on={saver} />
+      </div>
+      <div role="button" aria-label="Keep chats on this phone" onClick={toggleKeep} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 2px', borderBottom: `1px solid ${theme.border}`, cursor: 'pointer' }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 15, color: theme.ink, fontWeight: 600 }}>Keep chats on this phone</div>
+          <div style={{ fontSize: 12.5, color: theme.muted, marginTop: 2, lineHeight: 1.4 }}>Open ZChat and read your recent chats with no connection</div>
+        </div>
+        <IgToggle on={keep} />
+      </div>
       <button onClick={clear} disabled={busy} className="zchat-press" style={{ ...primaryBtn(theme, busy), marginTop: 22 }}>{busy ? <Spinner /> : 'Clear cached photos and videos'}</button>
-      <div style={{ padding: '12px 2px 0', fontSize: 12.5, color: theme.muted, lineHeight: 1.6 }}>{note || 'Your messages and photos stay safe on the server. This only removes the downloaded copies on this phone.'}</div>
+      {keep && uid && <button onClick={clearChats} disabled={chatBusy} className="zchat-press" style={{ ...primaryBtn(theme, chatBusy), marginTop: 10, background: theme.rowBg, color: theme.ink }}>{chatBusy ? <Spinner color={theme.ink} /> : 'Clear saved chats'}</button>}
+      <div style={{ padding: '12px 2px 0', fontSize: 12.5, color: theme.muted, lineHeight: 1.6 }}>{note || 'Your messages and photos stay safe on the server. This only removes the copies on this phone.'}</div>
     </div>
   );
 }
@@ -35209,7 +40422,7 @@ function AdminContent({ onOpenProfile }) {
     if (!r.media_url) return null;
     const isVideo = r.media_type === 'video' || /\.(mp4|mov|webm)(\?|$)/i.test(r.media_url);
     const st = { width: '100%', maxHeight: 220, borderRadius: 12, objectFit: 'cover', background: '#000', display: 'block', marginTop: 8 };
-    return isVideo ? <MediaVideo src={r.media_url} controls playsInline preload="metadata" style={st} /> : <MediaImg src={r.media_url} style={st} loading="lazy" />;
+    return isVideo ? <MediaVideo src={r.media_url} controls playsInline preload="metadata" style={st} /> : <MediaImg live src={r.media_url} style={st} loading="lazy" />;
   };
 
   return (
@@ -35945,7 +41158,7 @@ function AdminRowCard({ table, row, names, onDeleted, onSaved }) {
       </div>
       {row.media_url && typeof row.media_url === 'string' && (isVideo
         ? <MediaVideo src={row.media_url} controls playsInline preload="metadata" style={{ width: '100%', maxHeight: 220, borderRadius: 12, marginTop: 8, background: '#000' }} />
-        : <MediaImg src={row.media_url} loading="lazy" style={{ width: '100%', maxHeight: 220, objectFit: 'cover', borderRadius: 12, marginTop: 8 }} />)}
+        : <MediaImg live src={row.media_url} loading="lazy" style={{ width: '100%', maxHeight: 220, objectFit: 'cover', borderRadius: 12, marginTop: 8 }} />)}
       {err && <div style={{ color: theme.danger, fontSize: 12.5, fontWeight: 700, marginTop: 8 }}>{err}</div>}
       {canAct && (
         <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
@@ -37157,7 +42370,9 @@ function ResetPasswordScreen({ onDone }) {
 }
 
 function AppInner() {
-  const [session, setSession] = useState(undefined);
+  const bootRef = useRef(undefined);
+  if (bootRef.current === undefined) bootRef.current = bootStoredSession() || null;
+  const [session, setSession] = useState(bootRef.current || undefined);
   const [screen, setScreen] = useState('login');
   const [regStage, setRegStage] = useState(null);
   const authPushedRef = useRef(false);
@@ -37166,7 +42381,7 @@ function AppInner() {
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
   const [switchingAccountId, setSwitchingAccountId] = useState(null);
   const [registering, setRegistering] = useState(false);
-  const [mfaGate, setMfaGate] = useState({ uid: null, state: 'checking' });
+  const [mfaGate, setMfaGate] = useState(() => (bootRef.current ? { uid: bootRef.current.user.id, state: localMfaState(bootRef.current) } : { uid: null, state: 'checking' }));
   const [shareLanding, setShareLanding] = useState(() => parseShareLanding());
   const [authRequested, setAuthRequested] = useState(false);
   const [authNote, setAuthNote] = useState('');
@@ -37191,6 +42406,9 @@ function AppInner() {
     const uid = session && session.user ? session.user.id : null;
     if (!uid) return undefined;
     let alive = true;
+    const slow = setTimeout(() => {
+      if (alive) setMfaGate((prev) => (prev.uid === uid && prev.state !== 'checking' ? prev : { uid, state: localMfaState(session) }));
+    }, 2500);
     (async () => {
       let next = 'clear';
       try {
@@ -37198,8 +42416,10 @@ function AppInner() {
         if (mfa && mfa.getAuthenticatorAssuranceLevel) {
           const { data, error } = await mfa.getAuthenticatorAssuranceLevel();
           if (!error && data && data.nextLevel === 'aal2' && data.currentLevel !== 'aal2') next = 'need';
+          else if (error) next = localMfaState(session);
         }
-      } catch {}
+      } catch { next = localMfaState(session); }
+      clearTimeout(slow);
       if (alive) setMfaGate((prev) => (prev.uid === uid && prev.state === next ? prev : { uid, state: next }));
     })();
     return () => { alive = false; };
@@ -37225,6 +42445,10 @@ function AppInner() {
       forgetting = localStorage.getItem('zchat-remember') === '0' && !sessionStorage.getItem('zchat-live') && !(Date.now() - beat < 90000) && !viaLink;
     } catch {}
     const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+    if (!forgetting && typeof navigator !== 'undefined' && navigator.onLine === false) {
+      const storedNow = readStoredAuth();
+      if (storedNow) setSession((prev) => (prev === undefined ? storedNow : prev));
+    }
     (async () => {
       if (forgetting) {
         try {
@@ -37241,7 +42465,7 @@ function AppInner() {
         return;
       }
       let found = null;
-      for (let attempt = 0; attempt < (hasStoredLogin ? 4 : 1) && !found; attempt++) {
+      for (let attempt = 0; attempt < (hasStoredLogin && !(typeof navigator !== 'undefined' && navigator.onLine === false) ? 4 : 1) && !found; attempt++) {
         if (attempt > 0) await pause(1200 * attempt);
         try {
           const r = await getSession();
@@ -37343,10 +42567,11 @@ function AppInner() {
   const handleRemoveAccount = (id) => {
     removeAccountEntry(id);
     try { localStorage.removeItem(`zchat-session-${id}`); } catch {}
+    forgetLocalUser(id);
   };
 
   const handleLogout = async () => {
-    if (session?.user) { try { localStorage.removeItem(`zchat-session-${session.user.id}`); } catch {} removeAccountEntry(session.user.id); }
+    if (session?.user) { try { localStorage.removeItem(`zchat-session-${session.user.id}`); } catch {} removeAccountEntry(session.user.id); forgetLocalUser(session.user.id); }
     await signOut();
     setSession(null);
     setScreen('login');
