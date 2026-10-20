@@ -6,11 +6,12 @@ const GEMINI_MODEL = process.env.GEMINI_TOOLS_MODEL || process.env.GEMINI_MODEL 
 const GEMINI_FALLBACK = process.env.GEMINI_FALLBACK_MODEL || 'gemini-3.8-flash';
 const OLLAMA_URL = (process.env.OLLAMA_URL || '').replace(/\/+$/, '');
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'qwen3:14b';
-const LIMITS = { translate: 150, transcribe: 40 };
+const LIMITS = { translate: 150, transcribe: 40, summary: 40, translate_many: 150, gifs: 400 };
 const MAX_AUDIO_BYTES = 12 * 1024 * 1024;
 const LANGS = { en: 'English', si: 'Sinhala', ta: 'Tamil', hi: 'Hindi', ar: 'Arabic', es: 'Spanish', fr: 'French', de: 'German', pt: 'Portuguese', ru: 'Russian', ja: 'Japanese', ko: 'Korean', zh: 'Chinese', id: 'Indonesian', ms: 'Malay', th: 'Thai', tr: 'Turkish', it: 'Italian', ur: 'Urdu', bn: 'Bengali' };
 
 let turnCache = { at: 0, data: null };
+const gifCache = new Map();
 
 const reply = (status, body) => ({ statusCode: status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' }, body: JSON.stringify(body) });
 
@@ -70,7 +71,7 @@ async function turnServers() {
   return { iceServers: [], ttl: 3600, source: 'none' };
 }
 
-async function geminiText(parts, systemText, timeoutMs = 20000) {
+async function geminiText(parts, systemText, timeoutMs = 20000, asJson = false) {
   if (!process.env.GEMINI_API_KEY) return null;
   for (const model of [...new Set([GEMINI_MODEL, GEMINI_FALLBACK])]) {
     const ctrl = new AbortController();
@@ -79,7 +80,7 @@ async function geminiText(parts, systemText, timeoutMs = 20000) {
       const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-goog-api-key': process.env.GEMINI_API_KEY },
-        body: JSON.stringify({ systemInstruction: { parts: [{ text: systemText }] }, contents: [{ role: 'user', parts }], generationConfig: { maxOutputTokens: 4096, temperature: 0.2 } }),
+        body: JSON.stringify({ systemInstruction: { parts: [{ text: systemText }] }, contents: [{ role: 'user', parts }], generationConfig: { maxOutputTokens: 4096, temperature: 0.2, ...(asJson ? { responseMimeType: 'application/json' } : {}) } }),
         signal: ctrl.signal,
       });
       const json = await res.json().catch(() => null);
@@ -94,7 +95,7 @@ async function geminiText(parts, systemText, timeoutMs = 20000) {
   return null;
 }
 
-async function ollamaText(systemText, userText, timeoutMs = 9000) {
+async function ollamaText(systemText, userText, timeoutMs = 9000, asJson = false) {
   if (!OLLAMA_URL) return null;
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
@@ -103,7 +104,7 @@ async function ollamaText(systemText, userText, timeoutMs = 9000) {
     if (process.env.OLLAMA_AUTH) headers.Authorization = `Basic ${Buffer.from(process.env.OLLAMA_AUTH).toString('base64')}`;
     const res = await fetch(`${OLLAMA_URL}/api/chat`, {
       method: 'POST', headers, signal: ctrl.signal,
-      body: JSON.stringify({ model: OLLAMA_MODEL, stream: false, think: false, options: { temperature: 0.2 }, messages: [{ role: 'system', content: systemText }, { role: 'user', content: userText }] }),
+      body: JSON.stringify({ model: OLLAMA_MODEL, stream: false, think: false, ...(asJson ? { format: 'json' } : {}), options: { temperature: 0.2 }, messages: [{ role: 'system', content: systemText }, { role: 'user', content: userText }] }),
     });
     if (!res.ok) return null;
     const json = await res.json().catch(() => null);
@@ -121,6 +122,94 @@ async function translate(user, body) {
   const out = (await ollamaText(systemText, text)) || (await geminiText([{ text }], systemText));
   if (!out || out.limited || !out.text) return reply(503, { error: 'Translation is busy right now. Try again soon.' });
   return reply(200, { text: out.text.slice(0, 6000), to });
+}
+
+function jsonItems(text) {
+  const raw = String(text || '').replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
+  const pick = (v) => (Array.isArray(v) ? v : v && Array.isArray(v.items) ? v.items : null);
+  try { const v = pick(JSON.parse(raw)); if (v) return v; } catch {}
+  for (const [a, b] of [['{', '}'], ['[', ']']]) {
+    const i = raw.indexOf(a);
+    const j = raw.lastIndexOf(b);
+    if (i >= 0 && j > i) { try { const v = pick(JSON.parse(raw.slice(i, j + 1))); if (v) return v; } catch {} }
+  }
+  return null;
+}
+
+async function translateMany(user, body) {
+  const to = LANGS[String(body.to || 'en').slice(0, 2).toLowerCase()] || 'English';
+  const items = (Array.isArray(body.items) ? body.items : []).slice(0, 20)
+    .map((x) => ({ id: String((x && x.id) || '').slice(0, 64), t: String((x && x.t) || '').trim().slice(0, 1000) }))
+    .filter((x) => x.id && x.t);
+  if (!items.length) return reply(400, { error: 'Nothing to translate' });
+  if ((await bumpUsage(user.id, 'translate_many')) > LIMITS.translate_many) return reply(429, { error: 'Auto translate is resting for today. It comes back tomorrow.' });
+  const systemText = `You translate chat messages into ${to}. You get JSON like {"items":[{"id":"1","t":"text"}]}. Reply with only JSON in the same shape, with the same ids and each "t" holding the translation. Keep the meaning, tone, emojis, names, numbers and links exactly. If a message is already in ${to}, keep it unchanged.`;
+  const input = JSON.stringify({ items });
+  const out = (await ollamaText(systemText, input, 15000, true)) || (await geminiText([{ text: input }], systemText, 30000, true));
+  if (!out || out.limited || !out.text) return reply(503, { error: 'Translation is busy right now. Try again soon.' });
+  const ids = new Set(items.map((x) => x.id));
+  const done = (jsonItems(out.text) || [])
+    .filter((x) => x && ids.has(String(x.id)) && typeof x.t === 'string' && x.t.trim())
+    .map((x) => ({ id: String(x.id), t: x.t.slice(0, 3000) }));
+  if (!done.length) return reply(503, { error: 'Translation is busy right now. Try again soon.' });
+  return reply(200, { items: done, to });
+}
+
+async function summary(user, body) {
+  const items = (Array.isArray(body.items) ? body.items : []).slice(-150)
+    .map((x) => ({ n: String((x && x.n) || 'Someone').replace(/\s+/g, ' ').trim().slice(0, 40), t: String((x && x.t) || '').replace(/\s+/g, ' ').trim().slice(0, 500) }))
+    .filter((x) => x.t);
+  if (items.length < 3) return reply(400, { error: 'Not much to catch up on yet' });
+  if ((await bumpUsage(user.id, 'summary')) > LIMITS.summary) return reply(429, { error: 'You have used Catch me up a lot today. Try again tomorrow.' });
+  const chat = String(body.chat || '').replace(/\s+/g, ' ').trim().slice(0, 80);
+  const transcript = `${chat ? `Chat: ${chat}\n` : ''}${items.map((x) => `${x.n}: ${x.t}`).join('\n')}`.slice(0, 24000);
+  const systemText = 'You catch someone up on a chat they missed. The person reading is called "Me" in the chat. Write 2 to 6 short lines, each starting with "• ". Cover plans, decisions, questions still waiting for an answer and anything that needs the reader. Use first names. Keep it friendly and plain. Never use hyphens, dashes or underscores. Write in the main language of the chat. Reply with only the lines.';
+  const out = (await ollamaText(systemText, transcript, 15000)) || (await geminiText([{ text: transcript }], systemText, 30000));
+  if (!out || out.limited || !out.text) return reply(503, { error: 'Catch me up is busy right now. Try again soon.' });
+  return reply(200, { text: out.text.slice(0, 3000) });
+}
+
+function cleanGifUrl(u) {
+  try { const x = new URL(u); return /(^|\.)giphy\.com$/i.test(x.hostname) ? `https://${x.hostname}${x.pathname}` : null; } catch { return null; }
+}
+
+async function gifs(user, body) {
+  const key = process.env.GIPHY_KEY || process.env.GIPHY_API_KEY;
+  if (!key) return reply(503, { error: 'GIF search is not set up yet' });
+  const q = String(body.q || '').replace(/\s+/g, ' ').trim().slice(0, 50);
+  const limit = Math.max(6, Math.min(30, parseInt(body.limit, 10) || 24));
+  const rating = ['g', 'pg', 'pg-13', 'r'].includes(String(process.env.GIPHY_RATING || '').toLowerCase()) ? String(process.env.GIPHY_RATING).toLowerCase() : 'pg';
+  const ck = `${q.toLowerCase()}|${limit}`;
+  const hit = gifCache.get(ck);
+  if (hit && Date.now() - hit.at < 15 * 60 * 1000) return reply(200, { items: hit.items });
+  if ((await bumpUsage(user.id, 'gifs')) > LIMITS.gifs) return reply(429, { error: 'Lots of GIF searches today. Try again tomorrow.' });
+  const base = q ? 'https://api.giphy.com/v1/gifs/search' : 'https://api.giphy.com/v1/gifs/trending';
+  const params = new URLSearchParams({ api_key: key, limit: String(limit), rating, bundle: 'messaging_non_clips' });
+  if (q) { params.set('q', q); params.set('lang', 'en'); }
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 8000);
+  try {
+    const res = await fetch(`${base}?${params.toString()}`, { signal: ctrl.signal });
+    const json = await res.json().catch(() => null);
+    if (!res.ok || !json || !Array.isArray(json.data)) {
+      console.error('Giphy failed', res.status);
+      return res.status === 429 ? reply(429, { error: 'Lots of GIF searches right now. Try again soon.' }) : reply(503, { error: 'GIFs did not load. Try again.' });
+    }
+    const items = json.data.map((g) => {
+      const im = (g && g.images) || {};
+      const full = im.downsized_medium || im.downsized || im.fixed_width || im.original || {};
+      const small = im.fixed_width_downsampled || im.fixed_width || full;
+      const url = cleanGifUrl(full.url);
+      if (!url) return null;
+      return { id: String(g.id), title: String(g.title || '').replace(/\s+GIF\b.*$/i, '').trim().slice(0, 60), url, preview: cleanGifUrl(small.url) || url, w: Number(small.width) || Number(full.width) || 200, h: Number(small.height) || Number(full.height) || 200 };
+    }).filter(Boolean);
+    if (gifCache.size > 300) gifCache.clear();
+    gifCache.set(ck, { at: Date.now(), items });
+    return reply(200, { items });
+  } catch (err) {
+    console.error('Giphy error', err && err.name);
+    return reply(503, { error: 'GIFs did not load. Try again.' });
+  } finally { clearTimeout(timer); }
 }
 
 async function readMedia(url) {
@@ -187,6 +276,9 @@ async function deleteAccount(user) {
   await safe(() => grab('highlights', 'cover_url', 'user_id'));
   await safe(() => grab('highlight_items', 'media_url', 'user_id'));
   await safe(() => grab('user_stickers', 'url', 'user_id'));
+  await safe(() => grab('album_photos', 'media_url', 'user_id'));
+  await safe(() => grab('channel_posts', 'media_url', 'author_id'));
+  await safe(() => grab('channels', 'avatar', 'owner_id'));
   const wipe = async (table, col, value = uid) => { await safe(() => supabase.from(table).delete().eq(col, value)); };
   const plan = [
     ['post_comment_likes', 'user_id'], ['post_comments', 'user_id'], ['post_likes', 'user_id'], ['posts', 'user_id'],
@@ -199,13 +291,17 @@ async function deleteAccount(user) {
     ['message_likes', 'user_id'], ['mails', 'recipient_id'], ['game_stats', 'user_id'], ['close_friends', 'owner_id'], ['close_friends', 'friend_id'],
     ['story_hidden', 'owner_id'], ['story_hidden', 'hidden_id'], ['chat_accepts', 'user_id'], ['chat_accepts', 'other_id'],
     ['hidden_messages', 'user_id'], ['scheduled_messages', 'sender_id'], ['ai_usage', 'user_id'],
+    ['notes', 'user_id'], ['birthdays', 'user_id'], ['story_responses', 'user_id'], ['broadcast_lists', 'owner_id'],
+    ['album_photos', 'user_id'], ['sticker_packs', 'owner_id'], ['device_keys', 'user_id'], ['channel_post_likes', 'user_id'],
+    ['channel_follows', 'user_id'], ['channel_posts', 'author_id'], ['channels', 'owner_id'], ['away_log', 'owner_id'], ['away_log', 'sender_id'],
   ];
+  await safe(() => supabase.from('albums').update({ created_by: null }).eq('created_by', uid));
   for (const [table, col] of plan) await wipe(table, col);
   const list = [...files];
   for (let i = 0; i < list.length; i += 100) await safe(() => supabase.storage.from('chat-media').remove(list.slice(i, i + 100)));
   const short = uid.replace(/-/g, '').slice(0, 10);
   const blank = { name: 'Deleted Account', username: `deleted${short}`, avatar: null, bio: null, is_deleted: true };
-  const optional = ['pronouns', 'country', 'age', 'social_links', 'whatsapp', 'avatar_frame', 'nameplate', 'charm', 'name_bar', 'device_id', 'chat_lock_hash', 'website', 'birthday', 'location', 'banner', 'cover_url'];
+  const optional = ['pronouns', 'country', 'age', 'social_links', 'whatsapp', 'avatar_frame', 'nameplate', 'charm', 'name_bar', 'device_id', 'chat_lock_hash', 'website', 'birthday', 'location', 'banner', 'cover_url', 'status_text', 'status_emoji', 'status_until', 'away_text', 'avatar_cfg'];
   const patch = { ...blank };
   if (prof) optional.forEach((k) => { if (Object.prototype.hasOwnProperty.call(prof, k)) patch[k] = null; });
   const upd = await safe(() => supabase.from('profiles').update(patch).eq('id', uid));
@@ -231,11 +327,14 @@ export const handler = async (event) => {
     if (body.action === 'turn') return reply(200, await turnServers());
     if (body.action === 'translate') return await translate(user, body);
     if (body.action === 'transcribe') return await transcribe(user, body);
+    if (body.action === 'translate_many') return await translateMany(user, body);
+    if (body.action === 'summary') return await summary(user, body);
+    if (body.action === 'gifs') return await gifs(user, body);
     if (body.action === 'delete_account') {
       if (String(body.confirm || '') !== 'DELETE') return reply(400, { error: 'Not confirmed' });
       return await deleteAccount(user);
     }
-    if (body.action === 'status') return reply(200, { turn: !!(process.env.CF_TURN_KEY_ID || process.env.TURN_URLS), ai: !!process.env.GEMINI_API_KEY, ollama: !!OLLAMA_URL });
+    if (body.action === 'status') return reply(200, { turn: !!(process.env.CF_TURN_KEY_ID || process.env.TURN_URLS), ai: !!process.env.GEMINI_API_KEY, ollama: !!OLLAMA_URL, gifs: !!(process.env.GIPHY_KEY || process.env.GIPHY_API_KEY) });
     return reply(400, { error: 'Unknown action' });
   } catch (err) {
     console.error('zchat tools failed', body.action, err && err.message);
