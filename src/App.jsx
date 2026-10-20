@@ -4,7 +4,7 @@ import {
   Send, Paperclip, Search, Mail, ShieldCheck, ShieldOff, AtSign, LogOut, Eye, EyeOff, Lock,
   Flag, X, Trash2, User, Phone, MoreVertical, Image as ImageIcon, Video as VideoIcon, Pin,
   Smile, ArrowLeft, Check, CheckCheck, Settings as SettingsIcon, Moon, Sun, UserPlus,
-  FileText, HelpCircle, ChevronRight, ChevronLeft, Compass, Bell, Volume2, Volume1, VolumeX, Palette, Mic, Play, Pause, Download, Users, Camera, Reply, Forward, Ban, Edit3, Archive, Sparkles, Bookmark, Share2, Copy, Crop, Type, Pencil, Undo2, Scissors, BellOff, Link as LinkIcon, ShieldAlert, Heart, Repeat, PhoneOff, MicOff, VideoOff, SwitchCamera, Clock, Timer, Smartphone, Plus, ThumbsUp, ThumbsDown, LayoutDashboard, Megaphone, Database, Activity, MessageSquare,
+  FileText, HelpCircle, ChevronRight, ChevronLeft, Compass, Bell, Volume2, Volume1, VolumeX, Palette, Mic, Play, Pause, Download, Users, Camera, Reply, Forward, Ban, Edit3, Archive, Bookmark, Share2, Copy, Crop, Type, Pencil, Undo2, Scissors, BellOff, Link as LinkIcon, ShieldAlert, Heart, Repeat, PhoneOff, MicOff, VideoOff, SwitchCamera, Clock, Timer, Smartphone, Plus, ThumbsUp, ThumbsDown, LayoutDashboard, Megaphone, Database, Activity, MessageSquare,
 } from 'lucide-react';
 import {
   supabase, registerWithEmail, verifyOtp, setPassword, signInWithPassword,
@@ -523,7 +523,6 @@ function primaryBtn(theme, disabled, color) {
     background: disabled ? (theme.dark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.12)') : (color || theme.coral),
     color: 'white', fontFamily: FONT,
     fontSize: 15.5, fontWeight: 700, cursor: disabled ? 'default' : 'pointer', marginTop: 14,
-    boxShadow: disabled ? 'none' : `0 10px 22px ${(color || theme.coral)}40`,
   };
 }
 function ghostBtn(theme) {
@@ -1936,11 +1935,8 @@ function LogoutConfirm({ onCancel, onConfirm }) {
         background: theme.panelBg, borderRadius: 20, padding: '24px 22px', width: '100%', maxWidth: 280,
         textAlign: 'center', boxShadow: '0 20px 50px rgba(0,0,0,0.3)',
       }}>
-        <div style={{
-          width: 52, height: 52, borderRadius: '50%', margin: '0 auto 14px',
-          background: `${theme.danger}20`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.danger,
-        }}>
-          <LogOut size={22} />
+        <div style={{ margin: '0 auto 12px', display: 'flex', justifyContent: 'center', color: theme.danger }}>
+          <LogOut size={30} strokeWidth={1.7} />
         </div>
         <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 6, color: theme.ink }}>Log out of ZChat?</div>
         <div style={{ fontSize: 12.5, marginBottom: 20, lineHeight: 1.5, color: theme.muted }}>
@@ -1977,11 +1973,8 @@ function DeleteAccountConfirm({ onCancel, onConfirm }) {
         background: theme.panelBg, borderRadius: 20, padding: '24px 22px', width: '100%', maxWidth: 300,
         textAlign: 'center', boxShadow: '0 20px 50px rgba(0,0,0,0.3)',
       }}>
-        <div style={{
-          width: 52, height: 52, borderRadius: '50%', margin: '0 auto 14px',
-          background: `${theme.danger}20`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.danger,
-        }}>
-          <Trash2 size={22} />
+        <div style={{ display: 'flex', justifyContent: 'center', margin: '0 auto 12px', color: theme.danger }}>
+          <Trash2 size={28} strokeWidth={1.6} />
         </div>
         <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 6, color: theme.ink }}>Delete your account?</div>
         <div style={{ fontSize: 12.5, marginBottom: 16, lineHeight: 1.5, color: theme.muted }}>
@@ -2052,6 +2045,23 @@ function IgToggle({ on, onClick }) {
   );
 }
 
+function UnderTabs({ tabs, value, onChange, style }) {
+  const { theme } = useTheme();
+  return (
+    <div style={{ display: 'flex', borderBottom: `1px solid ${theme.border}`, ...(style || {}) }}>
+      {tabs.map(([k, label, aria]) => {
+        const on = value === k;
+        return (
+          <div key={k} role="button" aria-label={aria || label} aria-pressed={on} onClick={() => { if (!on) onChange(k); }} style={{
+            flex: 1, minWidth: 0, textAlign: 'center', padding: '11px 4px 9px', marginBottom: -1, fontSize: 14, fontWeight: on ? 700 : 600, cursor: 'pointer', whiteSpace: 'nowrap',
+            color: on ? theme.ink : theme.muted, borderBottom: `2px solid ${on ? theme.ink : 'transparent'}`, transition: 'color 0.15s ease, border-color 0.15s ease',
+          }}>{label}</div>
+        );
+      })}
+    </div>
+  );
+}
+
 function IgHeading({ children }) {
   const { theme } = useTheme();
   const c = igPalette(theme);
@@ -2108,6 +2118,32 @@ function FullPage({ title, subtitle, onBack, right, zIndex = 60, children, pad =
     </>
   );
   return portal ? <Portal>{body}</Portal> : body;
+}
+
+function artStarPath(cx, cy, R, r) {
+  let d = '';
+  for (let i = 0; i < 10; i++) {
+    const a = -Math.PI / 2 + (i * Math.PI) / 5;
+    const rr = i % 2 ? r : R;
+    d += `${i ? 'L' : 'M'}${(cx + rr * Math.cos(a)).toFixed(1)} ${(cy + rr * Math.sin(a)).toFixed(1)} `;
+  }
+  return `${d}Z`;
+}
+
+function SettingsLayer({ onBack, children, z = 2 }) {
+  const { theme } = useTheme();
+  const swipe = useEdgeSwipeBack(true, onBack);
+  return (
+    <div {...swipe} className="zchat-panel-open" style={{ position: 'absolute', inset: 0, zIndex: z, background: igPalette(theme).bg, overflowY: 'auto', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
+      <div style={{ padding: '0 16px calc(24px + env(safe-area-inset-bottom))' }}>{children}</div>
+    </div>
+  );
+}
+
+function PageArt({ text, style }) {
+  const { theme } = useTheme();
+  if (!text) return null;
+  return <div style={{ fontSize: 13.5, lineHeight: 1.5, color: theme.muted, padding: '2px 4px 12px', ...(style || {}) }}>{text}</div>;
 }
 
 const ART_INK = '#2B2540';
@@ -2207,22 +2243,6 @@ function ArtCat({ x, y, s = 1, eyes = 'happy', look, flip = false, wave = false,
   );
 }
 
-function ArtCatPeek({ x, y, s = 1, eyes = 'open', look, flip = false, part = 'all' }) {
-  const t = flip ? `translate(${x + 50 * s} ${y - 66 * s}) scale(${-s} ${s})` : `translate(${x - 50 * s} ${y - 66 * s}) scale(${s})`;
-  return (
-    <g transform={t}>
-      {part !== 'paws' && <ArtCatHead eyes={eyes} look={look || [0, 0]} />}
-      {part !== 'head' && (
-        <>
-          <ellipse cx="33" cy="66" rx="8.5" ry="5.6" fill={ART_C.white} {...ak} />
-          <ellipse cx="67" cy="66" rx="8.5" ry="5.6" fill={ART_C.white} {...ak} />
-          <path d="M30.5 64.5 V68 M35.5 64.5 V68 M64.5 64.5 V68 M69.5 64.5 V68" stroke={ART_INK} strokeWidth="1.3" strokeLinecap="round" opacity="0.45" />
-        </>
-      )}
-    </g>
-  );
-}
-
 function ArtCatLoaf({ x, y, s = 1, flip = false }) {
   const t = flip ? `translate(${x + 60 * s} ${y - 72 * s}) scale(${-s} ${s})` : `translate(${x - 60 * s} ${y - 72 * s}) scale(${s})`;
   return (
@@ -2260,16 +2280,6 @@ function ArtDot({ x, y, r = 3, color, o = 0.25 }) {
   return <circle cx={x} cy={y} r={r} fill={color || line} opacity={o} />;
 }
 
-function artStarPath(cx, cy, R, r) {
-  let d = '';
-  for (let i = 0; i < 10; i++) {
-    const a = -Math.PI / 2 + (i * Math.PI) / 5;
-    const rr = i % 2 ? r : R;
-    d += `${i ? 'L' : 'M'}${(cx + rr * Math.cos(a)).toFixed(1)} ${(cy + rr * Math.sin(a)).toFixed(1)} `;
-  }
-  return `${d}Z`;
-}
-
 function ArtFloor({ y = 152, color }) {
   const dark = useContext(ArtCtx);
   return <path d={`M-10 ${y} Q80 ${y - 7} 160 ${y} T330 ${y} V190 H-10 Z`} fill={color || (dark ? 'rgba(255,255,255,0.05)' : 'rgba(43,37,64,0.07)')} />;
@@ -2287,67 +2297,6 @@ function ArtPhone({ x, y, w = 50, h = 88, screen = ART_C.cream, children }) {
   );
 }
 
-function ArtBell({ x, y, s = 1 }) {
-  const line = useArtLine();
-  return (
-    <g transform={`translate(${x} ${y}) scale(${s})`}>
-      <path d="M8 26 Q2 36 6 47 M72 26 Q78 36 74 47" fill="none" stroke={line} strokeWidth="3" strokeLinecap="round" />
-      <path d="M2 18 Q-6 36 0 55 M78 18 Q86 36 80 55" fill="none" stroke={line} strokeWidth="3" strokeLinecap="round" opacity="0.45" />
-      <circle cx="40" cy="70" r="7" fill={ART_C.coral} {...ak} />
-      <path d="M18 60 C18 34 26 18 40 18 C54 18 62 34 62 60 L70 67 H10 Z" fill={ART_C.yellow} {...ak} />
-      <path d="M27 46 C27 34 31 27 37 25" fill="none" stroke="#FFFFFF" strokeWidth="3.4" strokeLinecap="round" opacity="0.75" />
-      <circle cx="40" cy="15" r="5" fill={ART_C.yellow} {...ak} />
-    </g>
-  );
-}
-
-function ArtLock({ x, y, s = 1, color = ART_C.yellow }) {
-  return (
-    <g transform={`translate(${x} ${y}) scale(${s})`}>
-      <path d="M22 40 V27 C22 15 30 8 40 8 C50 8 58 15 58 27 V40" fill="none" stroke={ART_INK} strokeWidth="13" strokeLinecap="round" />
-      <path d="M22 40 V27 C22 15 30 8 40 8 C50 8 58 15 58 27 V40" fill="none" stroke={ART_C.steel} strokeWidth="7" strokeLinecap="round" />
-      <rect x="10" y="36" width="60" height="48" rx="11" fill={color} {...ak} />
-      <circle cx="40" cy="56" r="5.6" fill={ART_INK} />
-      <rect x="37.6" y="58" width="4.8" height="11" rx="2.4" fill={ART_INK} />
-      <path d="M18 44 V60" stroke="#FFFFFF" strokeWidth="3.4" strokeLinecap="round" opacity="0.6" />
-    </g>
-  );
-}
-
-function ArtKey({ x, y, s = 1, rot = 0, color = ART_C.yellow }) {
-  return (
-    <g transform={`translate(${x} ${y}) rotate(${rot}) scale(${s})`}>
-      <path d="M30 16 H76 V25 H70 V33 H62 V25 H56 V29 H50 V25 H30 Z" fill={color} {...ak} />
-      <circle cx="20" cy="20" r="15" fill={color} {...ak} />
-      <circle cx="17" cy="20" r="5" fill={ART_C.cream} {...ak} />
-    </g>
-  );
-}
-
-function ArtShield({ x, y, s = 1, color = ART_C.mint }) {
-  return (
-    <g transform={`translate(${x} ${y}) scale(${s})`}>
-      <path d="M30 4 C40 10 50 12 58 12 C58 40 50 58 30 68 C10 58 2 40 2 12 C10 12 20 10 30 4 Z" fill={color} {...ak} />
-      <path d="M17 36 L26 45 L44 26" fill="none" stroke="#FFFFFF" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
-    </g>
-  );
-}
-
-function ArtMoon({ x, y, r = 24, cut }) {
-  return (
-    <g>
-      <circle cx={x} cy={y} r={r} fill={ART_C.yellow} {...ak} />
-      <circle cx={x + r * 0.5} cy={y - r * 0.32} r={r * 0.86} fill={cut} />
-      <circle cx={x - r * 0.42} cy={y + r * 0.2} r={r * 0.12} fill={ART_C.yellowDeep} />
-      <circle cx={x - r * 0.12} cy={y + r * 0.6} r={r * 0.08} fill={ART_C.yellowDeep} />
-    </g>
-  );
-}
-
-function ArtStar({ x, y, r = 8, color = ART_C.yellow }) {
-  return <path d={artStarPath(x, y, r, r * 0.45)} fill={color} stroke={ART_INK} strokeWidth="2.2" strokeLinejoin="round" />;
-}
-
 function ArtClock({ x, y, s = 1 }) {
   const line = useArtLine();
   return (
@@ -2362,19 +2311,6 @@ function ArtClock({ x, y, s = 1 }) {
       <circle cx="40" cy="50" r="3" fill={ART_INK} />
       <path d="M40 28 V31 M62 50 H59 M40 72 V69 M18 50 H21" stroke={ART_INK} strokeWidth="2.4" strokeLinecap="round" />
       <path d="M-4 30 L-12 26 M-6 44 H-14 M84 30 L92 26 M86 44 H94" stroke={line} strokeWidth="3" strokeLinecap="round" />
-    </g>
-  );
-}
-
-function ArtCalendar({ x, y, s = 1, day = '14' }) {
-  const body = useArtBody();
-  return (
-    <g transform={`translate(${x} ${y}) scale(${s})`}>
-      <rect x="0" y="8" width="84" height="80" rx="12" fill={ART_C.card} {...ak} />
-      <path d="M0 20 C0 13 5 8 12 8 H72 C79 8 84 13 84 20 V30 H0 Z" fill={ART_C.coral} {...ak} />
-      <rect x="18" y="0" width="8" height="18" rx="4" fill={body} stroke={ART_INK} strokeWidth="2" />
-      <rect x="58" y="0" width="8" height="18" rx="4" fill={body} stroke={ART_INK} strokeWidth="2" />
-      <text x="42" y="73" textAnchor="middle" fontFamily="-apple-system, Segoe UI, Roboto, sans-serif" fontWeight="900" fontSize="34" fill={ART_INK}>{day}</text>
     </g>
   );
 }
@@ -2412,96 +2348,6 @@ function ArtGlass({ x, y, s = 1 }) {
   );
 }
 
-function ArtBoxBack({ x, y, w = 110 }) {
-  return (
-    <g>
-      <path d={`M${x + 6} ${y} L${x - 16} ${y - 20} L${x + 22} ${y - 26} L${x + 34} ${y} Z`} fill={ART_C.cardboard} {...ak} />
-      <path d={`M${x + w - 6} ${y} L${x + w + 16} ${y - 20} L${x + w - 22} ${y - 26} L${x + w - 34} ${y} Z`} fill={ART_C.cardboard} {...ak} />
-      <rect x={x} y={y - 8} width={w} height={16} rx="3" fill={ART_C.cardboardDeep} {...ak} />
-    </g>
-  );
-}
-
-function ArtBoxFront({ x, y, w = 110, h = 58 }) {
-  return (
-    <g>
-      <rect x={x} y={y} width={w} height={h} rx="5" fill={ART_C.cardboard} {...ak} />
-      <rect x={x + w / 2 - 12} y={y} width="24" height={h * 0.45} fill="#F3D3A6" stroke={ART_INK} strokeWidth="2" />
-      <path d={`M${x + 12} ${y + h - 16} H${x + 34} M${x + 12} ${y + h - 9} H${x + 26}`} stroke={ART_INK} strokeWidth="2.4" strokeLinecap="round" opacity="0.45" />
-    </g>
-  );
-}
-
-function ArtLaptop({ x, y, s = 1 }) {
-  const body = useArtBody();
-  return (
-    <g transform={`translate(${x} ${y}) scale(${s})`}>
-      <rect x="12" y="0" width="96" height="62" rx="8" fill={body} {...ak} />
-      <rect x="18" y="6" width="84" height="50" rx="4" fill={ART_C.sky} />
-      <rect x="26" y="15" width="40" height="9" rx="4.5" fill={ART_C.card} />
-      <rect x="44" y="30" width="48" height="9" rx="4.5" fill={ART_C.violet} />
-      <path d="M0 66 H120 L114 76 H6 Z" fill={ART_C.steel} {...ak} />
-      <rect x="48" y="66" width="24" height="4" rx="2" fill={ART_INK} opacity="0.4" />
-    </g>
-  );
-}
-
-function ArtMic({ x, y, s = 1 }) {
-  const line = useArtLine();
-  return (
-    <g transform={`translate(${x} ${y}) scale(${s})`}>
-      <path d="M8 40 C8 58 20 68 34 68 C48 68 60 58 60 40" fill="none" stroke={line} strokeWidth="4" strokeLinecap="round" />
-      <path d="M34 68 V84 M22 86 H46" stroke={line} strokeWidth="4" strokeLinecap="round" />
-      <rect x="18" y="0" width="32" height="56" rx="16" fill={ART_C.violet} {...ak} />
-      <path d="M18 22 H50 M18 32 H50" stroke={ART_INK} strokeWidth="2.4" opacity="0.4" />
-      <path d="M26 10 V18" stroke="#FFFFFF" strokeWidth="3.4" strokeLinecap="round" opacity="0.7" />
-    </g>
-  );
-}
-
-function ArtNote({ x, y, s = 1, color = ART_C.pink }) {
-  return (
-    <g transform={`translate(${x} ${y}) scale(${s})`}>
-      <path d="M12 4 L30 0 V22" fill="none" stroke={ART_INK} strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M12 4 V28" stroke={ART_INK} strokeWidth="3.4" strokeLinecap="round" />
-      <ellipse cx="7" cy="29" rx="7" ry="5.4" fill={color} {...ak} strokeWidth="2.4" />
-      <ellipse cx="25" cy="23" rx="7" ry="5.4" fill={color} {...ak} strokeWidth="2.4" />
-    </g>
-  );
-}
-
-function ArtDice({ x, y, s = 1, rot = 0, pips = 5, color = ART_C.card }) {
-  const P = { 1: [[1, 1]], 2: [[0, 0], [2, 2]], 3: [[0, 0], [1, 1], [2, 2]], 4: [[0, 0], [2, 0], [0, 2], [2, 2]], 5: [[0, 0], [2, 0], [1, 1], [0, 2], [2, 2]], 6: [[0, 0], [2, 0], [0, 1], [2, 1], [0, 2], [2, 2]] };
-  return (
-    <g transform={`translate(${x} ${y}) rotate(${rot} 22 22) scale(${s})`}>
-      <rect x="0" y="0" width="44" height="44" rx="10" fill={color} {...ak} />
-      {(P[pips] || P[5]).map(([px, py], i) => <circle key={i} cx={10 + px * 12} cy={10 + py * 12} r="4" fill={ART_INK} />)}
-    </g>
-  );
-}
-
-function ArtFingerprint({ x, y, s = 1 }) {
-  return (
-    <g transform={`translate(${x} ${y}) scale(${s})`} fill="none" stroke={ART_C.violet} strokeWidth="3.4" strokeLinecap="round">
-      <path d="M8 26 C8 14 18 6 30 6 C42 6 52 14 52 26" />
-      <path d="M14 40 C14 30 14 26 18 22 C22 18 26 16 30 16 C40 16 46 22 46 32 C46 40 44 46 42 52" />
-      <path d="M22 48 C22 38 22 32 25 29 C27 27 33 27 35 30 C37 33 37 40 35 50" />
-      <path d="M30 34 C30 42 30 48 28 56" />
-    </g>
-  );
-}
-
-function ArtCurtain({ x, y, w = 70, h = 120, flip = false }) {
-  const t = flip ? `translate(${x + w} ${y}) scale(-1 1)` : `translate(${x} ${y})`;
-  return (
-    <g transform={t}>
-      <path d={`M0 6 C${w * 0.3} 8 ${w * 0.62} 16 ${w * 0.78} 34 C${w * 0.92} 52 ${w * 0.6} 76 ${w * 0.66} ${h} H0 Z`} fill={ART_C.coral} {...ak} />
-      <path d={`M${w * 0.22} 12 C${w * 0.2} 50 ${w * 0.28} 90 ${w * 0.24} ${h} M${w * 0.44} 16 C${w * 0.44} 50 ${w * 0.4} 90 ${w * 0.44} ${h}`} fill="none" stroke={ART_C.coralDeep} strokeWidth="3" strokeLinecap="round" />
-      <path d={`M${w * 0.62} 42 C${w * 0.72} 46 ${w * 0.78} 44 ${w * 0.82} 38`} fill="none" stroke={ART_INK} strokeWidth="5" strokeLinecap="round" />
-    </g>
-  );
-}
-
 function ArtBars({ x, y, s = 1 }) {
   return (
     <g transform={`translate(${x} ${y}) scale(${s})`}>
@@ -2514,49 +2360,11 @@ function ArtBars({ x, y, s = 1 }) {
   );
 }
 
-function ArtBallot({ x, y, s = 1 }) {
-  return (
-    <g transform={`translate(${x} ${y}) scale(${s})`}>
-      <rect x="22" y="-10" width="46" height="40" rx="5" fill={ART_C.card} {...ak} transform="rotate(-8 45 10)" />
-      <path d="M33 8 L40 15 L54 1" fill="none" stroke={ART_C.mint} strokeWidth="4.4" strokeLinecap="round" strokeLinejoin="round" transform="rotate(-8 45 10)" />
-      <path d="M0 26 H90 L84 34 H6 Z" fill={ART_C.violet} {...ak} />
-      <rect x="6" y="32" width="78" height="54" rx="6" fill={ART_C.lilac} {...ak} />
-      <rect x="22" y="26" width="46" height="5" rx="2.5" fill={ART_INK} />
-      <path d="M30 56 H60" stroke={ART_INK} strokeWidth="3" strokeLinecap="round" opacity="0.35" />
-    </g>
-  );
-}
-
-function ArtPlant({ x, y, s = 1 }) {
-  return (
-    <g transform={`translate(${x} ${y}) scale(${s})`}>
-      <path d="M20 30 C8 22 4 8 8 0 C18 4 24 16 22 30" fill={ART_C.mint} {...ak} />
-      <path d="M22 30 C30 14 42 8 50 10 C48 22 36 30 24 32" fill={ART_C.mint} {...ak} />
-      <path d="M21 32 C20 20 22 10 28 4" fill="none" stroke={ART_INK} strokeWidth="2.4" strokeLinecap="round" />
-      <path d="M6 32 H40 L36 58 C35.6 60 34 61 32 61 H14 C12 61 10.4 60 10 58 Z" fill={ART_C.coral} {...ak} />
-      <path d="M6 32 H40" stroke={ART_INK} strokeWidth="3" />
-      <rect x="4" y="30" width="38" height="8" rx="3" fill={ART_C.coral} {...ak} />
-    </g>
-  );
-}
-
 function ArtRibbon({ x, y, s = 1, color = ART_C.violet }) {
   return (
     <g transform={`translate(${x} ${y}) scale(${s})`}>
       <path d="M4 10 C4 4 8 0 14 0 H46 C52 0 56 4 56 10 V86 L30 70 L4 86 Z" fill={color} {...ak} />
       <path d="M16 12 V52" stroke="#FFFFFF" strokeWidth="4" strokeLinecap="round" opacity="0.5" />
-    </g>
-  );
-}
-
-function ArtGift({ x, y, s = 1 }) {
-  return (
-    <g transform={`translate(${x} ${y}) scale(${s})`}>
-      <path d="M44 22 C30 4 16 8 20 18 C23 25 36 24 44 22 Z" fill={ART_C.yellow} {...ak} />
-      <path d="M46 22 C60 4 74 8 70 18 C67 25 54 24 46 22 Z" fill={ART_C.yellow} {...ak} />
-      <rect x="8" y="44" width="74" height="50" rx="6" fill={ART_C.pink} {...ak} />
-      <rect x="2" y="24" width="86" height="22" rx="6" fill={ART_C.pink} {...ak} />
-      <rect x="38" y="24" width="14" height="70" fill={ART_C.yellow} {...ak} />
     </g>
   );
 }
@@ -2585,27 +2393,6 @@ function ArtCamera({ x, y, s = 1 }) {
   );
 }
 
-function ArtFolder({ x, y, s = 1, color = ART_C.yellow, back = ART_C.yellowDeep }) {
-  return (
-    <g transform={`translate(${x} ${y}) scale(${s})`}>
-      <path d="M0 12 C0 6 4 2 10 2 H30 L38 10 H82 C88 10 92 14 92 20 V66 C92 72 88 76 82 76 H10 C4 76 0 72 0 66 Z" fill={back} {...ak} />
-      <rect x="12" y="16" width="64" height="40" rx="5" fill={ART_C.card} {...ak} transform="rotate(-6 44 36)" />
-      <path d="M0 30 C0 26 3 24 7 24 H85 C89 24 92 26 92 30 V66 C92 72 88 76 82 76 H10 C4 76 0 72 0 66 Z" fill={color} {...ak} />
-    </g>
-  );
-}
-
-function ArtPlane({ x, y, s = 1 }) {
-  const line = useArtLine();
-  return (
-    <g transform={`translate(${x} ${y}) scale(${s})`}>
-      <path d="M-70 52 C-50 44 -40 60 -22 50 C-10 43 -6 40 2 36" fill="none" stroke={line} strokeWidth="3" strokeLinecap="round" strokeDasharray="2 9" />
-      <path d="M0 34 L84 0 L56 68 L40 46 Z" fill={ART_C.card} {...ak} />
-      <path d="M40 46 L84 0 L30 50 L28 70 L40 46" fill={ART_C.sky} {...ak} />
-    </g>
-  );
-}
-
 function ArtPin({ x, y, s = 1 }) {
   const dark = useContext(ArtCtx);
   return (
@@ -2627,74 +2414,11 @@ function ArtMap({ x, y, s = 1 }) {
   );
 }
 
-function ArtKeyboard({ x, y, s = 1 }) {
-  const keys = [];
-  for (let r = 0; r < 3; r++) for (let c = 0; c < 8; c++) keys.push(<rect key={`${r}${c}`} x={8 + c * 15 + (r === 1 ? 4 : 0)} y={8 + r * 14} width="11" height="10" rx="2.5" fill={ART_C.card} stroke={ART_INK} strokeWidth="1.8" />);
-  return (
-    <g transform={`translate(${x} ${y}) scale(${s})`}>
-      <rect x="0" y="0" width="132" height="66" rx="10" fill={ART_C.steel} {...ak} />
-      {keys}
-      <rect x="34" y="50" width="64" height="9" rx="3" fill={ART_C.card} stroke={ART_INK} strokeWidth="1.8" />
-    </g>
-  );
-}
-
-function ArtPalette({ x, y, s = 1 }) {
-  return (
-    <g transform={`translate(${x} ${y}) scale(${s})`}>
-      <path d="M48 4 C78 4 98 22 96 44 C94 60 80 60 72 56 C64 52 58 58 62 66 C66 76 56 84 44 82 C18 78 0 62 2 40 C4 18 24 4 48 4 Z" fill={ART_C.cream} {...ak} />
-      <circle cx="26" cy="38" r="8" fill={ART_C.coral} {...ak} strokeWidth="2.4" />
-      <circle cx="40" cy="20" r="8" fill={ART_C.yellow} {...ak} strokeWidth="2.4" />
-      <circle cx="62" cy="20" r="8" fill={ART_C.mint} {...ak} strokeWidth="2.4" />
-      <circle cx="78" cy="36" r="8" fill={ART_C.blue} {...ak} strokeWidth="2.4" />
-      <circle cx="34" cy="60" r="8" fill={ART_C.violet} {...ak} strokeWidth="2.4" />
-    </g>
-  );
-}
-
-function ArtBrush({ x, y, s = 1, rot = 0, tip = ART_C.violet }) {
-  return (
-    <g transform={`translate(${x} ${y}) rotate(${rot}) scale(${s})`}>
-      <rect x="-5" y="0" width="10" height="52" rx="5" fill={ART_C.cardboard} {...ak} />
-      <rect x="-6.5" y="50" width="13" height="12" rx="2" fill={ART_C.steel} {...ak} />
-      <path d="M-6.5 62 C-8 72 -3 82 0 86 C3 82 8 72 6.5 62 Z" fill={tip} {...ak} />
-    </g>
-  );
-}
-
-function ArtChain({ x, y, s = 1 }) {
-  return (
-    <g transform={`translate(${x} ${y}) scale(${s})`} fill="none" strokeLinecap="round">
-      <rect x="0" y="14" width="54" height="30" rx="15" stroke={ART_INK} strokeWidth="13" transform="rotate(-24 27 29)" />
-      <rect x="0" y="14" width="54" height="30" rx="15" stroke={ART_C.blue} strokeWidth="7" transform="rotate(-24 27 29)" />
-      <rect x="36" y="30" width="54" height="30" rx="15" stroke={ART_INK} strokeWidth="13" transform="rotate(-24 63 45)" />
-      <rect x="36" y="30" width="54" height="30" rx="15" stroke={ART_C.mint} strokeWidth="7" transform="rotate(-24 63 45)" />
-    </g>
-  );
-}
-
 function ArtStop({ x, y, r = 30 }) {
   return (
     <g>
       <circle cx={x} cy={y} r={r} fill={ART_C.coral} {...ak} />
       <rect x={x - r * 0.62} y={y - r * 0.16} width={r * 1.24} height={r * 0.32} rx={r * 0.12} fill="#FFFFFF" stroke={ART_INK} strokeWidth="2.4" />
-    </g>
-  );
-}
-
-function ArtQr({ x, y, s = 1 }) {
-  const finder = (fx, fy) => (
-    <g key={`f${fx}${fy}`}>
-      <rect x={fx} y={fy} width="20" height="20" rx="4" fill="none" stroke={ART_INK} strokeWidth="4" />
-      <rect x={fx + 6} y={fy + 6} width="8" height="8" rx="1.5" fill={ART_INK} />
-    </g>
-  );
-  const bits = [[38, 10], [46, 18], [38, 26], [10, 38], [22, 46], [34, 38], [46, 38], [58, 46], [38, 50], [50, 58], [62, 58], [46, 62], [58, 34], [26, 58]];
-  return (
-    <g transform={`translate(${x} ${y}) scale(${s})`}>
-      <rect x="0" y="0" width="80" height="80" rx="12" fill={ART_C.card} {...ak} />
-      {finder(8, 8)}{finder(52, 8)}{finder(8, 52)}
-      {bits.map(([bx, by]) => <rect key={`${bx}-${by}`} x={bx} y={by} width="7" height="7" rx="1.5" fill={ART_INK} />)}
     </g>
   );
 }
@@ -2707,18 +2431,6 @@ function ArtMailbox({ x, y, s = 1 }) {
       <path d="M22 4 C8 4 0 14 0 28 V60 H44 V28 C44 14 36 4 22 4 Z" fill={ART_C.sky} {...ak} />
       <rect x="8" y="30" width="28" height="7" rx="3.5" fill={ART_INK} />
       <path d="M76 26 V0 H92 V12 H80" fill={ART_C.coral} {...ak} />
-    </g>
-  );
-}
-
-function ArtPhoto({ x, y, s = 1, rot = 0, sky = ART_C.sky }) {
-  return (
-    <g transform={`translate(${x} ${y}) rotate(${rot}) scale(${s})`}>
-      <rect x="0" y="0" width="64" height="74" rx="5" fill={ART_C.card} {...ak} />
-      <rect x="7" y="7" width="50" height="46" rx="3" fill={sky} />
-      <path d="M7 44 C18 34 28 38 36 42 C42 36 50 34 57 40 V53 H7 Z" fill={ART_C.mint} />
-      <circle cx="44" cy="20" r="6" fill={ART_C.yellow} />
-      <rect x="7" y="7" width="50" height="46" rx="3" fill="none" stroke={ART_INK} strokeWidth="2.2" />
     </g>
   );
 }
@@ -2748,105 +2460,12 @@ function ArtBolt({ x, y, s = 1 }) {
 }
 
 const SPOT_SCENES = {
-  notifications: { bg: 'sky', draw: () => (<>
-    <ArtFloor />
-    <ArtBell x={170} y={28} s={1.12} />
-    <ArtCat x={94} y={156} s={1.02} eyes="open" look={[2, -2]} />
-    <ArtSpark x={270} y={44} r={7} />
-    <ArtSpark x={250} y={130} r={5} color={ART_C.pink} />
-    <ArtDot x={46} y={52} r={4} />
-  </>) },
-  quiet: { bg: 'night', draw: (b) => (<>
-    <ArtFloor color="rgba(0,0,0,0.2)" />
-    <ArtMoon x={240} y={58} r={28} cut={b} />
-    <ArtStar x={172} y={36} r={7} />
-    <ArtStar x={292} y={112} r={5} />
-    <ArtSpark x={58} y={42} r={5} color="#FFFFFF" stroke={false} />
-    <ArtSpark x={120} y={64} r={4} color="#FFFFFF" stroke={false} />
-    <ArtCatLoaf x={128} y={156} s={1.08} />
-    <ArtZzz x={70} y={92} s={1.1} color="#FFFFFF" />
-  </>) },
-  privacy: { bg: 'peach', draw: () => (<>
-    <rect x="150" y="18" width="150" height="138" rx="10" fill={ART_C.sky} {...ak} />
-    <path d="M150 112 C180 98 214 120 240 106 C262 94 282 102 300 98 V146 C300 151 296 156 290 156 H160 C154 156 150 151 150 146 Z" fill={ART_C.mintLight} />
-    <circle cx="264" cy="52" r="12" fill={ART_C.yellow} {...ak} />
-    <ArtCatPeek x={228} y={158} s={0.95} eyes="open" look={[-2, 0]} />
-    <ArtCurtain x={136} y={12} w={92} h={148} />
-    <path d="M128 14 H308" stroke={ART_INK} strokeWidth="5" strokeLinecap="round" />
-    <ArtPlant x={38} y={95} s={1} />
-    <ArtSpark x={100} y={42} r={6} />
-  </>) },
-  twofactor: { bg: 'mint', draw: () => (<>
-    <ArtFloor />
-    <ArtPhone x={190} y={36} w={62} h={110} screen={ART_C.cream}>
-      <rect x={200} y={66} width={42} height={24} rx={8} fill={ART_C.card} {...ak} strokeWidth="2.4" />
-      <circle cx={210} cy={78} r={2.6} fill={ART_INK} /><circle cx={221} cy={78} r={2.6} fill={ART_INK} /><circle cx={232} cy={78} r={2.6} fill={ART_INK} />
-      <ArtShield x={207} y={98} s={0.46} />
-    </ArtPhone>
-    <ArtKey x={124} y={118} s={0.6} rot={-30} />
-    <ArtCat x={98} y={156} s={1} eyes="happy" hold />
-    <ArtSpark x={284} y={46} r={7} />
-    <ArtSpark x={44} y={58} r={5} color={ART_C.pink} />
-  </>) },
-  sessions: { bg: 'lilac', draw: () => (<>
-    <ArtFloor />
-    <ArtLaptop x={34} y={74} s={1.05} />
-    <ArtPhone x={168} y={80} w={36} h={66} screen={ART_C.mintLight} />
-    <circle cx="182" cy="76" r="7" fill={ART_C.mint} {...ak} strokeWidth="2.4" />
-    <circle cx="56" cy="70" r="7" fill={ART_C.mint} {...ak} strokeWidth="2.4" />
-    <ArtCat x={254} y={156} s={0.98} eyes="open" look={[3, 0]} flip />
-    <ArtSpark x={140} y={38} r={6} />
-  </>) },
-  password: { bg: 'butter', draw: () => (<>
-    <ArtFloor />
-    <rect x="134" y="108" width="160" height="40" rx="20" fill={ART_C.card} {...ak} />
-    {[0, 1, 2, 3, 4, 5].map((i) => <ArtStar key={i} x={160 + i * 22} y={128} r={6} color={ART_C.violet} />)}
-    <ArtLock x={176} y={20} s={0.94} color={ART_C.coral} />
-    <ArtCat x={74} y={156} s={0.96} eyes="wink" />
-    <ArtSpark x={296} y={44} r={6} />
-  </>) },
-  applock: { bg: 'lilac', draw: () => (<>
-    <ArtFloor />
-    <ArtPhone x={126} y={50} w={66} h={106} screen={ART_C.sky}>
-      <ArtLock x={139} y={74} s={0.5} color={ART_C.yellow} />
-    </ArtPhone>
-    <ArtCatLoaf x={240} y={156} s={0.88} />
-    <ArtZzz x={262} y={72} s={0.9} />
-    <ArtSpark x={70} y={50} r={7} />
-    <ArtDot x={90} y={120} r={4} />
-  </>) },
-  storage: { bg: 'peach', draw: () => (<>
-    <ArtFloor />
-    <ArtBoxBack x={102} y={98} w={124} />
-    <ArtPhoto x={112} y={44} s={0.62} rot={-16} />
-    <ArtCatPeek x={170} y={108} s={0.96} eyes="happy" part="head" />
-    <ArtBoxFront x={102} y={96} w={124} h={58} />
-    <ArtCatPeek x={170} y={108} s={0.96} part="paws" />
-    <ArtPhoto x={246} y={90} s={0.66} rot={12} sky={ART_C.lilac} />
-    <ArtSpark x={60} y={52} r={7} />
-    <ArtDot x={290} y={44} r={4} />
-  </>) },
   chats: { bg: 'mint', draw: () => (<>
     <ArtFloor />
     <ArtBubble x={34} y={30} w={124} h={42} fill={ART_C.card} tail="left" />
     <ArtBubble x={62} y={90} w={104} h={40} fill={ART_C.violet} tail="right" lineColor="rgba(255,255,255,0.7)" />
     <ArtCat x={238} y={156} s={1} eyes="open" look={[3, -1]} flip />
     <ArtSpark x={290} y={44} r={6} />
-  </>) },
-  about: { bg: 'lilac', draw: () => (<>
-    <ArtFloor />
-    <ArtPhone x={190} y={42} w={64} h={108} screen="#0D1122">
-      <path d="M208 82 H236 L210 108 H236" fill="none" stroke="#5B8CFF" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round" />
-    </ArtPhone>
-    <ArtCat x={110} y={156} s={1.02} eyes="happy" wave />
-    <ArtSpark x={280} y={44} r={7} />
-    <ArtSpark x={52} y={58} r={5} color={ART_C.pink} />
-  </>) },
-  linked: { bg: 'sky', draw: () => (<>
-    <ArtFloor />
-    <ArtChain x={168} y={42} s={1.1} />
-    <ArtCat x={90} y={156} s={0.98} eyes="happy" />
-    <ArtSpark x={292} y={50} r={6} />
   </>) },
   blocked: { bg: 'peach', draw: () => (<>
     <ArtFloor />
@@ -2874,22 +2493,6 @@ const SPOT_SCENES = {
     <ArtCat x={88} y={156} s={1} eyes="wide" look={[2, -1]} />
     <ArtSpark x={292} y={36} r={6} />
   </>) },
-  poll: { bg: 'mint', draw: () => (<>
-    <ArtFloor />
-    <ArtBallot x={176} y={56} s={1.08} />
-    <g transform="rotate(-14 136 110)">
-      <rect x="122" y="92" width="30" height="36" rx="4" fill={ART_C.card} {...ak} />
-      <path d="M129 109 L135 115 L145 103" fill="none" stroke={ART_C.mint} strokeWidth="3.6" strokeLinecap="round" strokeLinejoin="round" />
-    </g>
-    <ArtCat x={90} y={156} s={1} eyes="happy" hold />
-    <ArtSpark x={292} y={42} r={6} />
-  </>) },
-  event: { bg: 'butter', draw: () => (<>
-    <ArtFloor />
-    <EventBunting />
-    <ArtCalendar x={176} y={62} s={1} />
-    <ArtCat x={90} y={156} s={1} eyes="happy" wave />
-  </>) },
   insights: { bg: 'sky', draw: () => (<>
     <ArtFloor />
     <ArtBars x={176} y={50} s={1.04} />
@@ -2912,13 +2515,6 @@ const SPOT_SCENES = {
     <ArtCatLoaf x={168} y={88} s={0.78} />
     <ArtZzz x={228} y={50} s={0.8} />
     <ArtSpark x={60} y={50} r={6} />
-  </>) },
-  gifts: { bg: 'pink', draw: () => (<>
-    <ArtFloor />
-    <ArtGift x={60} y={58} s={1.02} />
-    <ArtCat x={226} y={156} s={1} eyes="wide" look={[3, 0]} flip />
-    <ArtSpark x={170} y={40} r={8} />
-    <ArtSpark x={50} y={36} r={5} />
   </>) },
   requests: { bg: 'peach', draw: () => (<>
     <ArtFloor />
@@ -2954,44 +2550,11 @@ const SPOT_SCENES = {
     <ArtCat x={232} y={156} s={1} eyes="open" look={[3, -1]} flip />
     <ArtSpark x={292} y={46} r={6} />
   </>) },
-  folders: { bg: 'butter', draw: () => (<>
-    <ArtFloor />
-    <ArtFolder x={180} y={62} s={1.02} color={ART_C.violet} back={ART_C.lilac} />
-    <ArtFolder x={150} y={84} s={0.8} />
-    <ArtCat x={86} y={156} s={0.96} eyes="happy" />
-  </>) },
-  later: { bg: 'sky', draw: () => (<>
-    <ArtFloor />
-    <ArtPlane x={196} y={30} s={1.05} />
-    <ArtClock x={214} y={98} s={0.52} />
-    <ArtCat x={86} y={156} s={0.98} eyes="open" look={[3, -2]} />
-  </>) },
-  paint: { bg: 'peach', draw: () => (<>
-    <ArtFloor />
-    <ArtPalette x={168} y={52} s={1.05} />
-    <ArtBrush x={284} y={30} s={1} rot={28} />
-    <ArtCat x={90} y={156} s={1} eyes="happy" hold />
-    <ArtSpark x={50} y={50} r={6} />
-  </>) },
   discover: { bg: 'mint', draw: () => (<>
     <ArtFloor />
     <ArtMap x={170} y={64} s={1.02} />
     <ArtPin x={226} y={10} s={0.9} />
     <ArtCat x={90} y={156} s={1} eyes="open" look={[3, -1]} />
-  </>) },
-  shortcuts: { bg: 'lilac', draw: () => (<>
-    <ArtFloor />
-    <ArtCatPeek x={206} y={92} s={0.86} eyes="happy" part="head" />
-    <ArtKeyboard x={138} y={88} s={1.08} />
-    <ArtCatPeek x={206} y={92} s={0.86} part="paws" />
-    <ArtSpark x={70} y={50} r={7} />
-    <ArtDot x={96} y={120} r={4} />
-  </>) },
-  theme: { bg: 'pink', draw: () => (<>
-    <ArtFloor />
-    <ArtPalette x={40} y={46} s={1.1} />
-    <ArtBrush x={166} y={34} s={0.9} rot={24} tip={ART_C.coral} />
-    <ArtCat x={238} y={156} s={0.96} eyes="happy" flip />
   </>) },
   quick: { bg: 'butter', draw: () => (<>
     <ArtFloor />
@@ -2999,65 +2562,7 @@ const SPOT_SCENES = {
     <ArtBolt x={264} y={18} s={1} />
     <ArtCat x={88} y={156} s={0.98} eyes="happy" />
   </>) },
-  collage: { bg: 'pink', draw: () => (<>
-    <ArtFloor />
-    <ArtPhoto x={150} y={40} s={1} rot={-10} />
-    <ArtPhoto x={226} y={32} s={1} rot={8} sky={ART_C.lilac} />
-    <ArtCat x={88} y={156} s={0.98} eyes="open" look={[3, -1]} />
-  </>) },
-  qr: { bg: 'sky', draw: () => (<>
-    <ArtFloor />
-    <ArtQr x={182} y={42} s={1.1} />
-    <ArtCat x={96} y={156} s={1} eyes="open" look={[3, -1]} />
-  </>) },
-  voice: { bg: 'lilac', draw: () => (<>
-    <ArtFloor />
-    <ArtMic x={186} y={40} s={1.05} />
-    <ArtNote x={262} y={40} s={1} />
-    <ArtNote x={150} y={30} s={0.8} color={ART_C.yellow} />
-    <ArtCat x={90} y={156} s={1} eyes="happy" />
-  </>) },
-  dice: { bg: 'mint', draw: () => (<>
-    <ArtFloor />
-    <ArtDice x={168} y={88} s={1.2} rot={-12} pips={5} />
-    <ArtDice x={236} y={70} s={1.2} rot={14} pips={3} color={ART_C.yellow} />
-    <ArtSpark x={290} y={40} r={6} />
-    <ArtCat x={88} y={156} s={1} eyes="wide" look={[3, 0]} />
-  </>) },
-  unlock: { bg: 'sky', draw: () => (<>
-    <ArtFloor />
-    <ArtPhone x={190} y={34} w={66} h={114} screen={ART_C.cream}>
-      <ArtFingerprint x={201} y={60} s={0.75} />
-    </ArtPhone>
-    <ArtCat x={96} y={156} s={1} eyes="happy" hold />
-    <ArtSpark x={284} y={46} r={7} />
-  </>) },
-  effects: { bg: 'pink', draw: () => (<>
-    <ArtFloor />
-    <ArtBubble x={160} y={62} w={120} h={46} fill={ART_C.violet} tail="right" lines={2} lineColor="rgba(255,255,255,0.7)" />
-    {[[176, 38, ART_C.yellow, 20], [210, 24, ART_C.mint, -30], [248, 36, ART_C.coral, 40], [284, 54, ART_C.blue, -10], [150, 50, ART_C.pink, 60]].map(([cx, cy, c, r], i) => <rect key={i} x={cx - 5} y={cy - 9} width="10" height="18" rx="3" fill={c} {...ak} strokeWidth="2.2" transform={`rotate(${r} ${cx} ${cy})`} />)}
-    <ArtCat x={88} y={156} s={1} eyes="wide" look={[3, -1]} />
-  </>) },
-  wallpaper: { bg: 'butter', draw: () => (<>
-    <ArtFloor />
-    <ArtPhone x={192} y={34} w={66} h={116} screen={ART_C.sky}>
-      <path d="M196.5 110 C210 96 224 104 236 110 C244 102 250 100 253.5 104 V145.5 H196.5 Z" fill={ART_C.mint} />
-      <circle cx="238" cy="66" r="9" fill={ART_C.yellow} />
-    </ArtPhone>
-    <ArtBrush x={168} y={40} s={0.8} rot={-20} tip={ART_C.mint} />
-    <ArtCat x={96} y={156} s={1} eyes="happy" />
-  </>) },
 };
-
-function EventBunting() {
-  const line = useArtLine();
-  return (
-    <g>
-      <path d="M128 26 Q200 52 296 22" fill="none" stroke={line} strokeWidth="2.4" />
-      {[[146, 31, ART_C.coral], [176, 39, ART_C.blue], [206, 42, ART_C.mint], [236, 40, ART_C.pink], [266, 33, ART_C.violet]].map(([fx, fy, c], i) => <path key={i} d={`M${fx - 8} ${fy} L${fx + 8} ${fy} L${fx} ${fy + 16} Z`} fill={c} {...ak} strokeWidth="2.2" />)}
-    </g>
-  );
-}
 
 function SpotArt({ k, dark = false, radius = 22, style }) {
   const sc = SPOT_SCENES[k] || SPOT_SCENES.chats;
@@ -3071,27 +2576,6 @@ function SpotArt({ k, dark = false, radius = 22, style }) {
     </ArtCtx.Provider>
   );
 }
-
-function SettingsLayer({ onBack, children, z = 2 }) {
-  const { theme } = useTheme();
-  const swipe = useEdgeSwipeBack(true, onBack);
-  return (
-    <div {...swipe} className="zchat-panel-open" style={{ position: 'absolute', inset: 0, zIndex: z, background: igPalette(theme).bg, overflowY: 'auto', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' }}>
-      <div style={{ padding: '0 16px calc(24px + env(safe-area-inset-bottom))' }}>{children}</div>
-    </div>
-  );
-}
-
-function PageArt({ k, text, style }) {
-  const { theme } = useTheme();
-  return (
-    <div style={{ padding: '8px 0 6px', ...(style || {}) }}>
-      <div style={{ maxWidth: 400, margin: '0 auto' }}><SpotArt k={k} dark={theme.dark} /></div>
-      {text && <div style={{ fontSize: 14, lineHeight: 1.5, color: theme.muted, margin: '12px auto 8px', maxWidth: 360, textAlign: 'center', padding: '0 6px' }}>{text}</div>}
-    </div>
-  );
-}
-
 function EmptyState({ icon, art, title, text, action }) {
   const { theme } = useTheme();
   return (
@@ -3140,7 +2624,7 @@ function ReminderAlertsSection({ me, onSaved }) {
     <>
       <IgHeading>Reminders</IgHeading>
       {row('alert_moment', <MomentIcon size={16} />, 'Daily moment', 'A heads up when it is time to post')}
-      {row('alert_birthday', <CakeIcon size={16} />, 'Friends birthdays', 'A reminder on the day so you can wish them')}
+      {row('alert_birthday', <CakeLineIcon size={16} />, 'Friends birthdays', 'A reminder on the day so you can wish them')}
       {err && <div role="alert" style={{ padding: '10px 12px 0', fontSize: 12.5, fontWeight: 700, color: theme.danger }}>{err}</div>}
     </>
   );
@@ -3443,7 +2927,7 @@ function ChangeEmailPage({ email, onClose }) {
       footer={sent ? <BigButton label="Done" onClick={onClose} /> : <BigButton label={busy ? 'Sending' : 'Send confirmation'} disabled={!valid || busy} onClick={submit} />}>
       {sent ? (
         <div style={{ textAlign: 'center', padding: '36px 10px' }}>
-          <div style={{ width: 64, height: 64, margin: '0 auto 14px', borderRadius: '50%', background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.coral }}><Mail size={28} /></div>
+          <div style={{ display: 'flex', justifyContent: 'center', margin: '0 auto 14px', color: theme.ink }}><Mail size={40} strokeWidth={1.4} /></div>
           <div style={{ fontSize: 19, fontWeight: 900, color: theme.ink }}>Check your inbox</div>
           <div style={{ fontSize: 14, color: theme.muted, lineHeight: 1.55, marginTop: 8 }}>We sent a link to {sent}. Open it to finish the change. You may also get a link at your current email, open that one too.</div>
         </div>
@@ -4105,7 +3589,6 @@ function SettingsPanel({ onClose, onOpenPrivacy, onLogout, hideActivity, onToggl
         {sec === 'twofactor' && (
           <>
             <SectionHeader title="Two factor authentication" />
-            <PageArt k="twofactor" text="Add a second step when you log in. Even if someone learns your password, they still cannot get in." />
             <TwoFactorSection />
           </>
         )}
@@ -4113,7 +3596,6 @@ function SettingsPanel({ onClose, onOpenPrivacy, onLogout, hideActivity, onToggl
         {sec === 'sessions' && (
           <>
             <SectionHeader title="Active sessions" />
-            <PageArt k="sessions" text="These are the places your account is logged in right now. Log out anything you do not recognise." />
             <SessionsSection userId={me && me.id} />
           </>
         )}
@@ -4168,7 +3650,6 @@ function SettingsPanel({ onClose, onOpenPrivacy, onLogout, hideActivity, onToggl
         {sec === 'applock' && (
           <>
             <SectionHeader title="App lock" />
-            <PageArt k="applock" text="Lock ZChat with a code so nobody can open it when you hand someone your phone." />
             <AppLockSection />
           </>
         )}
@@ -4211,7 +3692,6 @@ function SettingsPanel({ onClose, onOpenPrivacy, onLogout, hideActivity, onToggl
         {sec === 'linked' && (
           <>
             <SectionHeader title="Sign in methods" />
-            <PageArt k="linked" text="The ways you can log in to this account." />
             <LinkedAccountsSection session={sessionForLinks} />
           </>
         )}
@@ -5605,14 +5085,9 @@ function MailPanel({ myId, onClose, initialMailId }) {
               <div key={m.id} onClick={() => (picking ? togglePick(m.id) : openMail(m))}
                 onPointerDown={() => !picking && startPress(m)} onPointerUp={cancelPress} onPointerLeave={cancelPress} onPointerCancel={cancelPress}
                 style={{
-                position: 'relative', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 12px', cursor: 'pointer', borderRadius: 18, marginBottom: 8,
-                border: `1px solid ${picked.has(m.id) ? theme.coral : m.read ? theme.border : `${theme.coral}55`}`,
-                boxShadow: m.read ? 'none' : `0 6px 18px ${theme.coral}14`,
-                background: picked.has(m.id) ? `${theme.coral}1A` : pinnedIds.has(m.id) ? `${theme.coral}0F` : m.read ? theme.panelBg : theme.rowBg,
+                position: 'relative', display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', cursor: 'pointer', borderRadius: 14, marginBottom: 2,
+                background: picked.has(m.id) ? `${theme.coral}1A` : pinnedIds.has(m.id) ? `${theme.coral}0F` : 'transparent',
               }}>
-                {!m.read && !picking && (
-                  <div style={{ position: 'absolute', top: 8, right: 10, padding: '2px 7px', borderRadius: 7, background: theme.coral, color: 'white', fontSize: 9.5, fontWeight: 900, letterSpacing: '0.06em' }}>NEW</div>
-                )}
                 {picking && (
                   <div style={{ width: 22, height: 22, borderRadius: '50%', flexShrink: 0, border: `2px solid ${picked.has(m.id) ? theme.coral : theme.border}`, background: picked.has(m.id) ? theme.coral : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     {picked.has(m.id) && <Check size={13} color="white" strokeWidth={4} />}
@@ -6149,24 +5624,22 @@ function DetailTiles({ items }) {
   const list = items.filter(Boolean);
   if (!list.length) return null;
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(76px, 1fr))', gap: 8 }}>
-      {list.map((t) => (
-        <div key={t.label} role="button" aria-label={t.aria || t.label} onClick={t.onClick} className="zchat-press" style={{
-          position: 'relative', borderRadius: 16, background: detailsCardBg(theme), border: `1px solid ${theme.border}`, padding: '12px 4px 10px',
-          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 7, cursor: 'pointer', minWidth: 0,
-        }}>
-          <div style={{ width: 38, height: 38, borderRadius: 12, background: t.dot || `${theme.coral}24`, color: t.dot ? '#FFFFFF' : theme.coral, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            {React.cloneElement(t.icon, { size: 19, color: t.dot ? '#FFFFFF' : theme.coral })}
-          </div>
-          <div style={{ fontSize: 11.5, fontWeight: 700, color: theme.ink, textAlign: 'center', lineHeight: 1.2, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', padding: '0 2px' }}>{t.label}</div>
-          {t.sub ? <div style={{ fontSize: 10.5, fontWeight: 600, color: theme.muted, marginTop: -4, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', padding: '0 2px' }}>{t.sub}</div> : null}
-          {t.badge ? <span style={{ position: 'absolute', top: 6, right: 6, minWidth: 18, height: 18, padding: '0 5px', boxSizing: 'border-box', borderRadius: 9, background: theme.coral, color: 'white', fontSize: 10.5, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{t.badge}</span> : null}
-
-        </div>
-      ))}
+    <div style={{ borderRadius: 18, background: detailsCardBg(theme), border: `1px solid ${theme.border}`, overflow: 'hidden' }}>
+      {list.map((t, i) => {
+        const name = t.aria || t.label;
+        const right = t.badge || t.dot ? (
+          <>
+            {t.dot ? <span aria-hidden="true" style={{ width: 18, height: 18, borderRadius: '50%', background: t.dot, flexShrink: 0 }} /> : null}
+            {t.badge ? <span style={{ minWidth: 20, height: 20, padding: '0 6px', boxSizing: 'border-box', borderRadius: 10, background: theme.danger, color: '#FFFFFF', fontSize: 11, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{t.badge > 99 ? '99+' : t.badge}</span> : null}
+            <ChevronRight size={18} color={theme.muted} style={{ flexShrink: 0 }} />
+          </>
+        ) : undefined;
+        return <DetailRow key={name} icon={t.icon} label={name} value={t.value || null} onClick={t.onClick} right={right} last={i === list.length - 1} />;
+      })}
     </div>
   );
 }
+
 function MediaStrip({ media, onOpen, onSeeAll }) {
   const { theme } = useTheme();
   const list = (media || []).slice(0, 10);
@@ -6197,11 +5670,11 @@ function DetailActions({ items }) {
   const { theme } = useTheme();
   const c = igPalette(theme);
   return (
-    <div style={{ display: 'flex', justifyContent: 'center', gap: 10, marginTop: 16, flexWrap: 'wrap', padding: '0 12px' }}>
+    <div style={{ display: 'flex', justifyContent: 'center', gap: 4, marginTop: 14, padding: '0 8px' }}>
       {items.filter(Boolean).map(([icon, label, fn, on]) => (
-        <div key={label} role="button" aria-label={label} onClick={fn} style={{ textAlign: 'center', cursor: 'pointer', width: 60 }}>
-          <div style={{ width: 52, height: 52, borderRadius: 18, border: `1px solid ${on ? theme.coral : c.line}`, background: on ? `${theme.coral}22` : c.field, color: on ? theme.coral : theme.ink, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 6px' }}>{icon}</div>
-          <div style={{ fontSize: 12, color: on ? theme.coral : c.dim, fontWeight: on ? 700 : 500 }}>{label}</div>
+        <div key={label} role="button" aria-label={label} onClick={fn} className="zchat-press" style={{ flex: '0 1 72px', minWidth: 56, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '8px 2px 4px', cursor: 'pointer', color: on ? theme.coral : theme.ink }}>
+          {React.cloneElement(icon, { size: 24, strokeWidth: 1.6 })}
+          <div style={{ fontSize: 12, fontWeight: on ? 700 : 500, color: on ? theme.coral : c.dim }}>{label}</div>
         </div>
       ))}
     </div>
@@ -6806,7 +6279,7 @@ function GroupInfoPanel({ group, members, myId, iFollowIds, privacyAllowed, myRo
             { icon: <ImageIcon />, label: 'Wallpaper', onClick: () => setShowWallpaper(true) },
             isAdmin ? { icon: <Palette />, label: 'Header', aria: 'Header style', onClick: () => setShowHeaderStyle(true) } : null,
             tools ? { icon: <BubblesIcon />, label: 'Bubbles', aria: 'Chat bubbles', onClick: tools.onBubbles } : null,
-            isAdmin ? { icon: <Sparkles />, label: 'Colour', aria: 'Group colour', dot: accent, onClick: () => setShowColour(true) } : null,
+            isAdmin ? { icon: <SwatchIcon />, label: 'Colour', aria: 'Group colour', dot: accent, onClick: () => setShowColour(true) } : null,
           ]} />
         </DetailSection>
 
@@ -6821,7 +6294,7 @@ function GroupInfoPanel({ group, members, myId, iFollowIds, privacyAllowed, myRo
         <DetailSection title={`${members.length} ${members.length === 1 ? 'member' : 'members'}`} right={ranked.length > preview.length ? <div role="button" aria-label="See all members" onClick={() => (onOpenMembers ? onOpenMembers() : null)} style={{ fontSize: 13, fontWeight: 800, color: theme.coral, cursor: 'pointer', padding: '2px 0 2px 10px' }}>See all</div> : null}>
           {isAdmin && (
             <div role="button" aria-label="Add people" onClick={() => setShowAddMembers(true)} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', cursor: 'pointer', borderBottom: `1px solid ${theme.border}` }}>
-              <div style={{ width: 48, height: 48, borderRadius: '50%', background: `${theme.coral}24`, color: theme.coral, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><UserPlus size={21} /></div>
+              <div style={{ width: 48, height: 48, color: theme.coral, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><UserPlus size={24} strokeWidth={1.8} /></div>
               <div style={{ fontSize: 15, fontWeight: 700, color: theme.ink }}>Add people</div>
             </div>
           )}
@@ -7726,8 +7199,8 @@ function ShareProfileSheet({ profile, myId, conversations, groups, onSend, onClo
 
   const actionBtn = (icon, label, onClick) => (
     <div onClick={onClick} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: 'pointer', flex: 1 }}>
-      <div style={{ width: 52, height: 52, borderRadius: '50%', background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.ink }}>{icon}</div>
-      <span style={{ fontSize: 11.5, color: theme.muted, fontWeight: 600 }}>{label}</span>
+      <div style={{ height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.ink }}>{React.cloneElement(icon, { size: 24, strokeWidth: 1.6 })}</div>
+      <span style={{ fontSize: 12, color: theme.ink, fontWeight: 500 }}>{label}</span>
     </div>
   );
 
@@ -8091,30 +7564,15 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
   const showBio = canSeeDetails && allowsBio && profile.bio && (isSelf || !profile.hide_bio);
   const labelStyle = { fontSize: 13, color: theme.muted, marginBottom: 6, fontWeight: 700 };
   const pillBtn = (primary) => ({
-    flex: 1, height: 46, padding: '0 10px', borderRadius: 16, cursor: 'pointer', fontFamily: FONT, fontSize: 13.5, fontWeight: 700, boxSizing: 'border-box', whiteSpace: 'nowrap', minWidth: 0,
+    flex: 1, height: 46, padding: '0 10px', borderRadius: 12, cursor: 'pointer', fontFamily: FONT, fontSize: 13.5, fontWeight: 700, boxSizing: 'border-box', whiteSpace: 'nowrap', minWidth: 0,
     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
     border: primary ? 'none' : `1px solid ${theme.dark ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.06)'}`,
-    background: primary ? `linear-gradient(135deg, ${theme.coral}, #8b5cf6)` : (theme.dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)'),
+    background: primary ? theme.coral : (theme.dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)'),
     color: primary ? 'white' : theme.ink,
-    boxShadow: primary ? `0 6px 16px ${theme.coral}40` : 'none',
   });
 
-  const stat = (value, label, onClick) => (
-    <div onClick={onClick} style={{ flex: 1, textAlign: 'center', cursor: onClick ? 'pointer' : 'default', padding: '4px 2px' }}>
-      <div style={{ fontSize: 19, fontWeight: 800, color: theme.ink, letterSpacing: '-0.02em', minHeight: 24 }}>{value == null ? '' : formatCount(value)}</div>
-      <div style={{ fontSize: 13, color: theme.muted, fontWeight: 500, marginTop: 1 }}>{label}</div>
-    </div>
-  );
-  const statDivider = <div style={{ width: 1, height: 16, background: theme.border, alignSelf: 'center' }} />;
   const pageBg = theme.bgGradient;
-  const glassFill = theme.dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)';
   const glassCircle = { width: 38, height: 38, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: theme.ink, background: theme.dark ? 'rgba(0,0,0,0.35)' : 'rgba(255,255,255,0.65)', border: `1px solid ${theme.dark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.06)'}`, backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' };
-  const statTile = (value, label, onClick) => (
-    <div role={onClick ? 'button' : undefined} onClick={onClick} style={{ padding: '11px 4px', borderRadius: 18, textAlign: 'center', cursor: onClick ? 'pointer' : 'default', background: glassFill, border: `1px solid ${theme.dark ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.06)'}` }}>
-      <div style={{ fontSize: 19, fontWeight: 800, color: theme.ink, letterSpacing: '-0.02em', minHeight: 23 }}>{value == null ? '' : formatCount(value)}</div>
-      <div style={{ fontSize: 11.5, color: theme.muted, fontWeight: 600, marginTop: 1 }}>{label}</div>
-    </div>
-  );
 
   const sheetRow = (icon, label, onClick, danger) => (
     <div onClick={onClick} style={{
@@ -8301,7 +7759,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
               <PronounsPicker value={pronouns} onChange={setPronouns} labelStyle={labelStyle} />
               <div style={{ ...labelStyle, marginTop: 14 }}>Birthday</div>
               <div role="button" aria-label="Edit birthday" onClick={() => setBdayOpen(true)} style={{ ...inputStyle(theme), cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
-                <CakeIcon size={18} /><span style={{ color: theme.muted }}>Add or change your birthday</span>
+                <CakeLineIcon size={18} color={theme.muted} /><span style={{ color: theme.muted }}>Add or change your birthday</span>
               </div>
               <div style={{ height: 18 }} />
               <div style={{ display: 'flex', gap: 8 }}>
@@ -8314,17 +7772,16 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
           ) : (
             <>
               {canSeeDetails && (
-                <div style={{ display: 'flex', alignItems: 'center', height: 62, borderRadius: 18, marginBottom: 10, background: glassFill, border: `1px solid ${theme.dark ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.06)'}` }}>
+                <div style={{ display: 'flex', alignItems: 'center', height: 58, marginBottom: 10 }}>
                   {[
                     !profile.is_bot && { v: postCount, l: 'Posts', on: null },
                     { v: profile.is_bot ? BOT_FOLLOWER_BASE + (followerCount || 0) : followerCount, l: 'Followers', on: profile.is_bot ? null : () => setListModal('followers') },
                     !profile.is_bot && { v: followingCount, l: 'Following', on: () => setListModal('following') },
-                  ].filter(Boolean).map((c, i) => (
+                  ].filter(Boolean).map((c) => (
                     <React.Fragment key={c.l}>
-                      {i > 0 && <div style={{ width: 1, height: 28, background: theme.border }} />}
                       <div role={c.on ? 'button' : undefined} onClick={c.on || undefined} style={{ flex: 1, textAlign: 'center', cursor: c.on ? 'pointer' : 'default' }}>
                         <div style={{ fontSize: 20, fontWeight: 900, color: theme.ink, letterSpacing: '-0.02em', minHeight: 24 }}>{c.v == null ? '' : formatCount(c.v)}</div>
-                        <div style={{ fontSize: 11.5, color: theme.muted, fontWeight: 600 }}>{c.l}</div>
+                        <div style={{ fontSize: 12.5, color: theme.muted, fontWeight: 500 }}>{c.l}</div>
                       </div>
                     </React.Fragment>
                   ))}
@@ -8375,10 +7832,10 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
                   {!profile.is_bot && <ProfileExtras profile={profile} isSelf={isSelf} onEditStatus={() => setStatusOpen(true)} onEditBirthday={() => setBdayOpen(true)} />}
                   {profile.is_bot && (
                     <div style={{ marginTop: 16, padding: '14px 14px 12px', borderRadius: 20, background: theme.rowBg, border: `1px solid ${theme.border}` }}>
-                      <div style={{ fontSize: 13, fontWeight: 900, color: theme.ink, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 7 }}><Sparkles size={15} color={theme.coral} /> What I can do</div>
+                      <div style={{ fontSize: 13.5, fontWeight: 800, color: theme.ink, marginBottom: 10 }}>What I can do</div>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
                         {['Answer anything', 'Write and fix code', 'Translate', 'Look at photos and videos', 'Understand voice messages', 'Remember our chat', 'Help in groups with @zchatbot'].map((t) => (
-                          <span key={t} style={{ fontSize: 12.5, fontWeight: 700, color: theme.ink, padding: '6px 11px', borderRadius: 14, background: `${theme.coral}1A`, border: `1px solid ${theme.coral}33` }}>{t}</span>
+                          <span key={t} style={{ fontSize: 12.5, fontWeight: 600, color: theme.ink, padding: '6px 11px', borderRadius: 14, background: theme.panelBg, border: `1px solid ${theme.border}` }}>{t}</span>
                         ))}
                       </div>
                     </div>
@@ -8390,11 +7847,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
                   )}
                   {!editing && !profile.is_bot && (
                     <>
-                      <div style={{ display: 'flex', gap: 6, marginTop: 14, padding: 4, borderRadius: 16, background: glassFill }}>
-                        {[['posts', 'Posts'], ['highlights', 'Highlights'], ['collection', 'Collection'], ['links', 'Links']].map(([k, label]) => (
-                          <div key={k} role="button" onClick={() => setProfileTab(k)} style={{ flex: 1, textAlign: 'center', padding: '9px 0', borderRadius: 12, fontSize: 13, fontWeight: 800, cursor: 'pointer', color: profileTab === k ? '#fff' : theme.muted, background: profileTab === k ? theme.coral : 'transparent', transition: 'background 0.18s ease, color 0.18s ease' }}>{label}</div>
-                        ))}
-                      </div>
+                      <UnderTabs style={{ marginTop: 10 }} value={profileTab} onChange={setProfileTab} tabs={[['posts', 'Posts'], ['highlights', 'Highlights'], ['collection', 'Collection'], ['links', 'Links']]} />
                       {profileTab === 'posts' && <ProfilePosts profile={profile} isSelf={isSelf} userId={userId} meProfile={meProfile} />}
                       {profileTab === 'highlights' && <ProfileHighlights profile={profile} isSelf={isSelf} userId={userId} onOpenHighlight={(h) => onOpenHighlight && onOpenHighlight(h, profile)} />}
                       {profileTab === 'collection' && <ProfileCollectionShowcase profile={profile} rewards={ownedRewards} isSelf={isSelf} onPreview={(k) => setTryOnFrame(k)} onOpenCollection={onOpenCollection} />}
@@ -8745,7 +8198,7 @@ function MentionSuggestions({ query, priority, excludeIds, myId, onPick, allowAl
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => onPick({ id: '__all', username: 'everyone' })}
           style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', cursor: 'pointer' }}>
-          <div style={{ width: 30, height: 30, borderRadius: '50%', background: `${theme.coral}22`, color: theme.coral, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Users size={16} /></div>
+          <div style={{ width: 30, height: 30, color: theme.ink, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Users size={19} strokeWidth={1.8} /></div>
           <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: theme.ink }}>everyone</div>
             <div style={{ fontSize: 11.5, color: theme.muted }}>Notify everyone in this group</div>
@@ -11398,10 +10851,10 @@ function ChatSearchBar({ query, onChange, count, position, onPrev, onNext, onClo
       <span style={{ fontSize: 12, color: theme.muted, minWidth: 44, textAlign: 'center', fontWeight: 600 }}>
         {query.trim() ? (count ? `${position} of ${count}` : 'No results') : ''}
       </span>
-      <div role="button" aria-label="Older result" onClick={onPrev} style={{ width: 32, height: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: count ? 'pointer' : 'default', color: count ? theme.ink : theme.muted, background: theme.rowBg }}>
+      <div role="button" aria-label="Older result" onClick={onPrev} style={{ width: 32, height: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: count ? 'pointer' : 'default', color: count ? theme.ink : theme.muted }}>
         <ChevronRight size={17} style={{ transform: 'rotate(-90deg)' }} />
       </div>
-      <div role="button" aria-label="Newer result" onClick={onNext} style={{ width: 32, height: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: count ? 'pointer' : 'default', color: count ? theme.ink : theme.muted, background: theme.rowBg }}>
+      <div role="button" aria-label="Newer result" onClick={onNext} style={{ width: 32, height: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: count ? 'pointer' : 'default', color: count ? theme.ink : theme.muted }}>
         <ChevronRight size={17} style={{ transform: 'rotate(90deg)' }} />
       </div>
       <X size={19} color={theme.muted} style={{ cursor: 'pointer', flexShrink: 0 }} onClick={onClose} />
@@ -11578,8 +11031,8 @@ function ChatMediaPanel({ title, myId, otherId, groupId, hiddenIds, labelFor, on
                 );
                 return (
                   <>
-                    {thisWeek.length > 0 && <><div style={{ fontSize: 11, fontWeight: 900, color: theme.muted, letterSpacing: '0.08em', padding: '10px 14px 4px' }}>THIS WEEK</div>{grid(thisWeek)}</>}
-                    {earlier.length > 0 && <><div style={{ fontSize: 11, fontWeight: 900, color: theme.muted, letterSpacing: '0.08em', padding: '10px 14px 4px' }}>EARLIER</div>{grid(earlier)}</>}
+                    {thisWeek.length > 0 && <><div style={{ fontSize: 13, fontWeight: 600, color: theme.muted, padding: '10px 14px 4px' }}>This week</div>{grid(thisWeek)}</>}
+                    {earlier.length > 0 && <><div style={{ fontSize: 13, fontWeight: 600, color: theme.muted, padding: '10px 14px 4px' }}>Earlier</div>{grid(earlier)}</>}
                   </>
                 );
               })()}
@@ -11657,20 +11110,21 @@ function badgeTierFromTitle(title) {
 }
 
 function MailBadgeIcon({ type, size = 42, badgeTier = null }) {
+  const { theme } = useTheme();
   const warning = type === 'report_warning';
   const mention = type === 'mention';
   const update = type === 'update';
   const badge = type === 'badge';
-  const bg = warning ? '#E5383B' : mention ? '#6F55E8' : update ? '#2F2A44' : badge ? '#1E1A2E' : '#6F55E8';
+  const plain = warning || mention || update || badge;
   return (
     <div style={{
-      width: size, height: size, borderRadius: size * 0.32, flexShrink: 0, position: 'relative',
-      background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center',
+      width: size, height: size, borderRadius: '50%', flexShrink: 0, position: 'relative',
+      background: plain ? 'transparent' : '#6F55E8', display: 'flex', alignItems: 'center', justifyContent: 'center',
     }}>
-      {badge ? <VerifiedBadge tier={badgeTier || 'blue'} size={size * 0.62} style={{ marginLeft: 0, filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.35))' }} />
-        : warning ? <ShieldAlert size={size * 0.5} color="white" strokeWidth={2.2} />
-        : mention ? <AtSign size={size * 0.46} color="white" strokeWidth={2.4} />
-          : update ? <Megaphone size={size * 0.46} color="white" strokeWidth={2.2} />
+      {badge ? <VerifiedBadge tier={badgeTier || 'blue'} size={size * 0.7} style={{ marginLeft: 0 }} />
+        : warning ? <ShieldAlert size={size * 0.62} color={theme.danger} strokeWidth={1.7} />
+        : mention ? <AtSign size={size * 0.58} color={theme.ink} strokeWidth={1.7} />
+          : update ? <Megaphone size={size * 0.58} color={theme.ink} strokeWidth={1.7} />
           : <span style={{ fontFamily: 'Georgia, serif', fontWeight: 800, fontSize: size * 0.5, color: 'white', lineHeight: 1 }}>Z</span>}
     </div>
   );
@@ -13273,8 +12727,8 @@ function GroupCallBar({ row, onJoin }) {
   const { theme } = useTheme();
   return (
     <div className="zchat-fade" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 14px', flexShrink: 0, background: `${theme.teal}1F`, borderBottom: `1px solid ${theme.border}` }}>
-      <div style={{ width: 32, height: 32, borderRadius: '50%', background: '#34C759', display: 'flex', alignItems: 'center', justifyContent: 'center' }} className="zchat-call-pulse">
-        {row.kind === 'video' ? <VideoIcon size={16} color="white" /> : <Phone size={16} color="white" />}
+      <div style={{ display: 'flex', flexShrink: 0, color: '#1FA855' }}>
+        {row.kind === 'video' ? <VideoIcon size={22} /> : <Phone size={22} />}
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 13, fontWeight: 800, color: theme.ink }}>{row.kind === 'video' ? 'Video call' : 'Voice call'} in progress</div>
@@ -13353,7 +12807,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-const APP_VERSION = '17.0V';
+const APP_VERSION = '17.1V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -13372,8 +12826,8 @@ function BlockBullet({ icon, text }) {
   const { theme } = useTheme();
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, padding: '9px 0' }}>
-      <div style={{ width: 34, height: 34, borderRadius: '50%', background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.ink, flexShrink: 0 }}>{icon}</div>
-      <div style={{ fontSize: 13.5, color: theme.ink, lineHeight: 1.45, paddingTop: 7 }}>{text}</div>
+      <div style={{ width: 24, display: 'flex', justifyContent: 'center', color: theme.ink, flexShrink: 0, paddingTop: 1 }}>{React.cloneElement(icon, { size: 20, strokeWidth: 1.6 })}</div>
+      <div style={{ fontSize: 13.5, color: theme.ink, lineHeight: 1.45 }}>{text}</div>
     </div>
   );
 }
@@ -13508,7 +12962,7 @@ function StoryShareSheet({ story, owner, conversations, groups, onSend, onClose 
   const say = (text) => { setFlash(text); setTimeout(() => setFlash(''), 1600); };
   const action = (icon, label, onClick) => (
     <div onClick={onClick} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: 'pointer', width: 76 }}>
-      <div style={{ width: 52, height: 52, borderRadius: '50%', background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.ink }}>{icon}</div>
+      <div style={{ height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.ink }}>{React.cloneElement(icon, { size: 24, strokeWidth: 1.6 })}</div>
       <span style={{ fontSize: 11.5, fontWeight: 600, color: theme.ink, textAlign: 'center' }}>{label}</span>
     </div>
   );
@@ -13601,10 +13055,10 @@ function CallLogBubble({ m, isMe, onCallBack }) {
         display: 'flex', alignItems: 'center', gap: 11, padding: '10px 14px 10px 10px', borderRadius: 18, cursor: 'pointer', minWidth: 210,
         background: isMe ? theme.bubbleMe : theme.bubbleThem, border: `1px solid ${theme.border}`,
       }}>
-        <div style={{ width: 40, height: 40, borderRadius: '50%', background: missed ? `${theme.danger}22` : `${theme.teal}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', flexShrink: 0 }}>
-          <Icon size={18} color={missed ? theme.danger : theme.teal} />
+        <div style={{ width: 30, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', flexShrink: 0 }}>
+          <Icon size={22} color={missed ? theme.danger : theme.ink} />
           <svg width="14" height="14" viewBox="0 0 14 14" style={{ position: 'absolute', right: -1, bottom: -1, background: theme.panelBg, borderRadius: '50%' }}>
-            <path d={isMe ? 'M4 10 L10 4 M5.5 4 H10 V8.5' : 'M10 4 L4 10 M4 5.5 V10 H8.5'} stroke={missed ? theme.danger : theme.teal} strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+            <path d={isMe ? 'M4 10 L10 4 M5.5 4 H10 V8.5' : 'M10 4 L4 10 M4 5.5 V10 H8.5'} stroke={missed ? theme.danger : theme.ink} strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -13669,7 +13123,7 @@ function AvatarPeek({ profile, online, lastSeen, hasStory, storySeen, canCall, o
   const btn = (icon, label, onClick, primary) => (
     <div role="button" onClick={() => { onClose(); onClick(); }} style={{
       flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '11px 4px', cursor: 'pointer', borderRadius: 16,
-      background: primary ? `linear-gradient(135deg, ${theme.coral}, ${theme.teal})` : theme.rowBg, color: primary ? 'white' : theme.ink,
+      background: primary ? theme.coral : theme.rowBg, color: primary ? 'white' : theme.ink,
     }}>
       {icon}
       <span style={{ fontSize: 11.5, fontWeight: 800 }}>{label}</span>
@@ -13921,7 +13375,7 @@ function CallScreen({ call, me, nameFor, avatarFor, onAccept, onDecline, onHangu
       <div role="button" aria-label={label} onClick={onClick} style={{
         width: 60, height: 60, borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
         background: variant === 'end' ? '#FF3B30' : variant === 'on' ? 'white' : 'rgba(255,255,255,0.16)', color: variant === 'on' ? '#140E24' : 'white',
-        boxShadow: variant === 'end' ? '0 8px 22px rgba(255,59,48,0.45)' : 'none', transition: 'background 0.2s ease',
+        transition: 'background 0.2s ease',
       }}>{icon}</div>
       <span style={{ fontSize: 11.5, fontWeight: 700, color: 'rgba(255,255,255,0.85)' }}>{label}</span>
     </div>
@@ -14046,7 +13500,7 @@ function CallScreen({ call, me, nameFor, avatarFor, onAccept, onDecline, onHangu
           )}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', maxWidth: 320, margin: '0 auto' }}>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
-              <div role="button" aria-label="Decline" onClick={onDecline} style={{ width: 76, height: 76, borderRadius: '50%', background: '#FF3B30', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 10px 28px rgba(255,59,48,0.45)' }}><PhoneOff size={30} /></div>
+              <div role="button" aria-label="Decline" onClick={onDecline} style={{ width: 76, height: 76, borderRadius: '50%', background: '#FF3B30', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><PhoneOff size={30} /></div>
               <span style={{ fontSize: 13, fontWeight: 700 }}>Decline</span>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
@@ -14098,12 +13552,12 @@ function CallMiniBar({ call, remoteVideo, onOpen, onHangup }) {
     <>
       <div onClick={onOpen} className="zchat-fade" style={{
         position: 'fixed', top: 0, left: 0, right: 0, zIndex: 480, cursor: 'pointer',
-        background: 'linear-gradient(90deg, #1FA855, #34C759)', color: 'white',
+        background: '#1FA855', color: 'white',
         paddingTop: 'env(safe-area-inset-top)', boxShadow: '0 4px 16px rgba(0,0,0,0.25)',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 14px' }}>
-          <div className="zchat-call-pulse" style={{ width: 26, height: 26, borderRadius: '50%', background: 'rgba(255,255,255,0.22)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            {call.kind === 'video' ? <VideoIcon size={14} /> : <Phone size={13} />}
+          <div style={{ display: 'flex', flexShrink: 0 }}>
+            {call.kind === 'video' ? <VideoIcon size={17} /> : <Phone size={16} />}
           </div>
           <div style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {title} <span style={{ fontWeight: 600, opacity: 0.9 }}>· Tap to return</span>
@@ -14161,16 +13615,15 @@ function followLabel(state, theyFollowMe) {
 function FollowActionButton({ state, theyFollowMe, busy, onClick, size = 'md', onDark = false }) {
   const { theme } = useTheme();
   const filled = state !== 'accepted' && state !== 'pending';
-  const dims = size === 'sm' ? { width: 104, height: 32, fontSize: 12, radius: 10 } : { width: '100%', height: 46, fontSize: 14, radius: 16 };
+  const dims = size === 'sm' ? { width: 104, height: 32, fontSize: 12, radius: 10 } : { width: '100%', height: 46, fontSize: 14, radius: 12 };
   return (
     <button onClick={(e) => { e.stopPropagation(); if (!busy) onClick(); }} disabled={busy} style={{
       width: dims.width, minWidth: dims.width, height: dims.height, borderRadius: dims.radius, flexShrink: 0, boxSizing: 'border-box',
       display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, cursor: busy ? 'default' : 'pointer', fontFamily: FONT,
       fontSize: dims.fontSize, fontWeight: 700, letterSpacing: 0.1, transition: 'background 0.2s ease, color 0.2s ease',
       border: filled ? 'none' : `1px solid ${onDark ? 'rgba(255,255,255,0.45)' : theme.border}`,
-      background: filled ? `linear-gradient(135deg, ${theme.coral}, ${size === 'sm' ? (theme.coralDeep || theme.coral) : '#8b5cf6'})` : (onDark ? 'rgba(0,0,0,0.35)' : (size === 'sm' ? theme.rowBg : (theme.dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)'))),
+      background: filled ? theme.coral : (onDark ? 'rgba(0,0,0,0.35)' : (size === 'sm' ? theme.rowBg : (theme.dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)'))),
       color: filled || onDark ? 'white' : theme.ink,
-      boxShadow: filled ? `0 6px 16px ${theme.coral}40` : 'none',
     }}>
       {busy ? <Spinner size={13} color={filled || onDark ? 'white' : theme.ink} /> : followLabel(state, theyFollowMe)}
     </button>
@@ -15426,8 +14879,8 @@ function ReportThanksSheet({ profile, isBlocked, onBlock, onClose }) {
     <div onClick={onClose} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 430, background: 'rgba(5,8,16,0.55)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
       <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" {...drag.sheetProps} style={{ ...drag.sheetStyle, width: '100%', maxWidth: 460, background: theme.panelBg, borderRadius: '26px 26px 0 0', padding: '10px 22px', paddingBottom: 'calc(18px + env(safe-area-inset-bottom))', textAlign: 'center' }}>
         <div style={{ display: 'flex', justifyContent: 'center', padding: '2px 0 16px' }}><div style={{ width: 38, height: 4, borderRadius: 2, background: theme.border }} /></div>
-        <div className="zchat-pop" style={{ width: 72, height: 72, borderRadius: '50%', margin: '0 auto', background: `${theme.teal}22`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <CheckCheck size={34} color={theme.teal} />
+        <div className="zchat-pop" style={{ margin: '0 auto', display: 'flex', justifyContent: 'center' }}>
+          <CheckCheck size={44} strokeWidth={1.6} color={theme.teal} />
         </div>
         <div style={{ fontSize: 19, fontWeight: 800, color: theme.ink, marginTop: 14 }}>Thanks for letting us know</div>
         <div style={{ fontSize: 13.5, color: theme.muted, lineHeight: 1.55, marginTop: 8 }}>
@@ -15871,7 +15324,7 @@ function SocialLinksEditor({ links, onChange, whatsapp, onWhatsappChange, labelS
         ))}
         {!adding && list.length < SOCIAL_MAX && (
           <div role="button" onClick={() => setAdding(true)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px', cursor: 'pointer' }}>
-            <div style={{ width: 36, height: 36, borderRadius: '50%', background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.ink, fontSize: 20 }}>+</div>
+            <span style={{ display: 'flex', color: theme.ink }}><Plus size={22} strokeWidth={1.6} /></span>
             <span style={{ fontSize: 14, fontWeight: 700, color: theme.ink }}>Add link</span>
           </div>
         )}
@@ -16057,7 +15510,7 @@ function RewardCelebration({ kind, rewardKey, me, onClaim, count = 1, onClaimAll
       {pieces.map((i) => (
         <span key={i} style={{ position: 'absolute', top: -20, left: `${(i * 97) % 100}%`, width: 7, height: 13, borderRadius: 2, background: [glow, '#FFFFFF', '#7C5CFC', '#fbbf24'][i % 4], opacity: 0.85, animation: `zchat-confetti ${2.8 + (i % 5) * 0.4}s linear ${(i % 9) * 0.25}s infinite` }} />
       ))}
-      <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: '0.18em', color: glow, textTransform: 'uppercase' }}>{isFrame ? 'New avatar frame' : isPlate ? 'New nameplate' : 'New name charm'}</div>
+      <div style={{ fontSize: 14, fontWeight: 700, color: glow }}>{isFrame ? 'New avatar frame' : isPlate ? 'New nameplate' : 'New name charm'}</div>
       <div style={{ fontSize: 28, fontWeight: 900, marginTop: 8 }}>{spec.label}</div>
       <div style={{ fontSize: 14.5, opacity: 0.7, marginTop: 6, maxWidth: 300, lineHeight: 1.5 }}>Added to your Collection.</div>
 
@@ -16082,7 +15535,7 @@ function RewardCelebration({ kind, rewardKey, me, onClaim, count = 1, onClaimAll
         <div style={{ marginTop: 14, padding: '8px 14px', borderRadius: 14, background: 'rgba(255,255,255,0.08)', fontSize: 13, opacity: 0.85 }}>Shows next to your name everywhere on ZChat</div>
       )}
 
-      <button disabled={claiming} onClick={async () => { setClaiming(true); await onClaim(); }} style={{ marginTop: 30, padding: '15px 56px', borderRadius: 18, border: 'none', background: `linear-gradient(135deg, ${glow}, #8b5cf6)`, color: 'white', fontWeight: 900, fontSize: 16, cursor: 'pointer', fontFamily: FONT, boxShadow: `0 12px 34px ${glow}66`, opacity: claiming ? 0.7 : 1 }}>
+      <button disabled={claiming} onClick={async () => { setClaiming(true); await onClaim(); }} style={{ marginTop: 30, padding: '15px 56px', borderRadius: 18, border: 'none', background: '#FFFFFF', color: '#111114', fontWeight: 800, fontSize: 16, cursor: 'pointer', fontFamily: FONT, opacity: claiming ? 0.7 : 1 }}>
         {claiming ? 'Claiming…' : 'Claim & equip'}
       </button>
       {count > 1 && onClaimAll && (
@@ -16115,7 +15568,7 @@ function FrameTryOnPage({ me, frameKey, charmKey, plateKey, onClose, action }) {
   const now = new Date();
   const time = now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   const mockCard = { borderRadius: 20, background: '#0f1117', border: '1px solid rgba(255,255,255,0.08)', overflow: 'hidden' };
-  const label = { fontSize: 11, fontWeight: 900, letterSpacing: '0.14em', color: 'rgba(255,255,255,0.5)', margin: '22px 4px 8px' };
+  const label = { fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.55)', margin: '22px 4px 8px' };
   return (
     <div className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 900, background: '#07080d', color: 'white', fontFamily: FONT, display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', paddingTop: 'calc(10px + env(safe-area-inset-top))', borderBottom: '1px solid rgba(255,255,255,0.06)', background: 'rgba(7,8,13,0.9)', zIndex: 2 }}>
@@ -16127,7 +15580,7 @@ function FrameTryOnPage({ me, frameKey, charmKey, plateKey, onClose, action }) {
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '0 14px 130px' }}>
-        <div style={label}>YOUR PROFILE</div>
+        <div style={label}>Your profile</div>
         <div style={{ ...mockCard, position: 'relative' }}>
           <div style={{ position: 'absolute', left: -40, right: -40, top: -40, height: 330, overflow: 'hidden', pointerEvents: 'none' }}>
             {photo
@@ -16165,7 +15618,7 @@ function FrameTryOnPage({ me, frameKey, charmKey, plateKey, onClose, action }) {
           </div>
         </div>
 
-        <div style={label}>IN THE CHAT LIST</div>
+        <div style={label}>In the chat list</div>
         <div style={mockCard}>
           {[
             { me: true, text: 'Love my new frame 😍', unread: 2, time },
@@ -16192,7 +15645,7 @@ function FrameTryOnPage({ me, frameKey, charmKey, plateKey, onClose, action }) {
           ))}
         </div>
 
-        <div style={label}>IN A CHAT</div>
+        <div style={label}>In a chat</div>
         <div style={mockCard}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderBottom: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.02)' }}>
             <ChevronLeft size={20} color="rgba(255,255,255,0.7)" />
@@ -16206,14 +15659,14 @@ function FrameTryOnPage({ me, frameKey, charmKey, plateKey, onClose, action }) {
           </div>
           <div style={{ padding: '14px 12px 16px', display: 'flex', flexDirection: 'column', gap: 8, background: 'linear-gradient(180deg, #0d1016, #0b0d12)' }}>
             <div style={{ alignSelf: 'flex-start', maxWidth: '78%', padding: '8px 12px', borderRadius: '16px 16px 16px 4px', background: '#1c1f27', fontSize: 14 }}>Your frame looks amazing 🔥</div>
-            <div style={{ alignSelf: 'flex-end', maxWidth: '78%', padding: '8px 12px', borderRadius: '16px 16px 4px 16px', background: '#6B48F0', fontSize: 14 }}>Thanks! Just got it ✨</div>
+            <div style={{ alignSelf: 'flex-end', maxWidth: '78%', padding: '8px 12px', borderRadius: '16px 16px 4px 16px', background: '#6B48F0', fontSize: 14 }}>Thanks! Just got it</div>
           </div>
         </div>
       </div>
 
       {action && (
         <div style={{ position: 'absolute', zIndex: 40, left: 0, right: 0, bottom: 0, padding: '12px 16px', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))', background: 'linear-gradient(180deg, rgba(7,8,13,0) 0%, rgba(7,8,13,0.96) 30%)' }}>
-          <button onClick={action.onClick} disabled={action.disabled} style={{ width: '100%', padding: '15px 16px', borderRadius: 18, border: 'none', fontFamily: FONT, fontWeight: 900, fontSize: 16.5, cursor: action.disabled ? 'default' : 'pointer', color: action.disabled ? 'rgba(255,255,255,0.6)' : '#1a0f02', background: action.disabled ? 'rgba(255,255,255,0.1)' : 'linear-gradient(135deg, #fde047, #f59e0b 45%, #ea580c)', boxShadow: action.disabled ? 'none' : '0 12px 30px rgba(245,158,11,0.35)' }}>{action.label}</button>
+          <button onClick={action.onClick} disabled={action.disabled} style={{ width: '100%', padding: '15px 16px', borderRadius: 18, border: 'none', fontFamily: FONT, fontWeight: 900, fontSize: 16.5, cursor: action.disabled ? 'default' : 'pointer', color: action.disabled ? 'rgba(255,255,255,0.6)' : '#1a0f02', background: action.disabled ? 'rgba(255,255,255,0.1)' : '#F5A524' }}>{action.label}</button>
           {action.sub && <div style={{ textAlign: 'center', fontSize: 12, color: 'rgba(255,255,255,0.55)', marginTop: 6, fontWeight: 700 }}>{action.sub}</div>}
         </div>
       )}
@@ -16303,7 +15756,7 @@ function CollectionPanel({ me, rewards, onClose, onEquip, userEmail, isAdmin }) 
         <div style={{ fontSize: 20, fontWeight: 900, color: '#B79CFF' }}>{pct}%</div>
       </div>
       <div style={{ margin: '0 16px 14px', height: 8, borderRadius: 4, background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
-        <div style={{ width: `${pct}%`, height: '100%', background: 'linear-gradient(90deg, #7C5CFC, #B79CFF)', transition: 'width 0.4s ease' }} />
+        <div style={{ width: `${pct}%`, height: '100%', background: '#7C5CFC', transition: 'width 0.4s ease' }} />
       </div>
       <div style={{ display: 'flex', gap: 8, padding: '0 16px 14px', overflowX: 'auto', scrollbarWidth: 'none' }}>
         {[['frame', 'Frames'], ['nameplate', 'Nameplates'], ['charm', 'Charms'], ['badge', 'Badges']].map(([k, label]) => (
@@ -16318,7 +15771,7 @@ function CollectionPanel({ me, rewards, onClose, onEquip, userEmail, isAdmin }) 
             const left = daysLeft(it.reward);
             return (
               <div key={it.key} role="button" onClick={() => { setSelected(it.key); playUiSound('tap'); }} style={{ position: 'relative', borderRadius: 20, padding: '12px 10px 14px', cursor: 'pointer', textAlign: 'center', overflow: 'hidden', background: it.owned ? r.bg : 'linear-gradient(160deg, #151620 0%, #0a0b0f 100%)', border: `1.5px solid ${selected === it.key ? '#fbbf24' : it.owned ? `${r.color}66` : 'rgba(255,255,255,0.07)'}`, boxShadow: it.equipped ? `0 0 20px ${r.glow}` : 'none' }}>
-                {it.equipped && <div style={{ position: 'absolute', top: 8, left: 8, padding: '2px 7px', borderRadius: 7, background: '#22c55e', color: '#052e1c', fontSize: 9.5, fontWeight: 900 }}>EQUIPPED</div>}
+                {it.equipped && <div style={{ position: 'absolute', top: 8, left: 8, padding: '2px 7px', borderRadius: 7, background: '#22c55e', color: '#052e1c', fontSize: 10, fontWeight: 800 }}>Equipped</div>}
                 {!it.owned && <div style={{ position: 'absolute', top: 8, right: 8 }}><Lock size={13} color="rgba(255,255,255,0.6)" /></div>}
                 <div style={{ height: 96, display: 'flex', alignItems: 'center', justifyContent: 'center', filter: it.owned ? 'none' : 'grayscale(1) brightness(0.5)' }}>
                   {tab === 'frame' ? <Avatar emoji={me.avatar} name={me.name} size={92} frame={it.key} />
@@ -16371,19 +15824,19 @@ function CollectionPanel({ me, rewards, onClose, onEquip, userEmail, isAdmin }) 
               <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
                 {tab === 'badge' ? (
                   isAdmin ? (
-                    <button disabled={busy || sel.equipped} onClick={() => equip('badge', sel.key)} style={{ padding: '10px 22px', borderRadius: 12, border: 'none', fontWeight: 900, fontFamily: FONT, fontSize: 13.5, cursor: sel.equipped ? 'default' : 'pointer', background: sel.equipped ? 'rgba(52,211,153,0.2)' : 'linear-gradient(135deg, #fbbf24, #ea580c)', color: sel.equipped ? '#34d399' : '#1a0f02' }}>{sel.equipped ? '\u2713 EQUIPPED' : busy ? 'EQUIPPING\u2026' : 'EQUIP'}</button>
+                    <button disabled={busy || sel.equipped} onClick={() => equip('badge', sel.key)} style={{ padding: '10px 22px', borderRadius: 12, border: 'none', fontWeight: 900, fontFamily: FONT, fontSize: 13.5, cursor: sel.equipped ? 'default' : 'pointer', background: sel.equipped ? 'rgba(52,211,153,0.2)' : '#F5A524', color: sel.equipped ? '#34d399' : '#1a0f02' }}>{sel.equipped ? 'Equipped' : busy ? 'Equipping\u2026' : 'Equip'}</button>
                   ) : (
                     <div style={{ padding: '10px 14px', borderRadius: 12, background: 'rgba(255,255,255,0.07)', fontSize: 12.5, fontWeight: 800, color: 'rgba(255,255,255,0.7)' }}>{sel.owned ? 'You are wearing this badge' : 'Given by the ZChat team'}</div>
                   )
                 ) : sel.owned ? (
                   <>
-                    <button disabled={busy || sel.equipped} onClick={() => equip(tab, sel.key)} style={{ padding: '10px 22px', borderRadius: 12, border: 'none', fontWeight: 900, fontFamily: FONT, fontSize: 13.5, cursor: sel.equipped ? 'default' : 'pointer', background: sel.equipped ? 'rgba(52,211,153,0.2)' : 'linear-gradient(135deg, #fbbf24, #ea580c)', color: sel.equipped ? '#34d399' : '#1a0f02' }}>{sel.equipped ? '✓ EQUIPPED' : busy ? 'EQUIPPING…' : 'EQUIP'}</button>
+                    <button disabled={busy || sel.equipped} onClick={() => equip(tab, sel.key)} style={{ padding: '10px 22px', borderRadius: 12, border: 'none', fontWeight: 900, fontFamily: FONT, fontSize: 13.5, cursor: sel.equipped ? 'default' : 'pointer', background: sel.equipped ? 'rgba(52,211,153,0.2)' : '#F5A524', color: sel.equipped ? '#34d399' : '#1a0f02' }}>{sel.equipped ? 'Equipped' : busy ? 'Equipping…' : 'Equip'}</button>
                     <button onClick={() => setTryOn({ kind: tab, key: sel.key })} style={{ padding: '10px 14px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.14)', background: 'transparent', color: 'white', fontWeight: 800, fontFamily: FONT, fontSize: 13, cursor: 'pointer' }}>Preview</button>
                   </>
                 ) : (
                   <>
                     {tab === 'frame' && FRAME_STORE.checkoutUrl ? (
-                      <button onClick={() => openFrameCheckout(me.id, userEmail, sel.key)} style={{ padding: '11px 20px', borderRadius: 12, border: 'none', fontWeight: 900, fontFamily: FONT, fontSize: 13.5, cursor: 'pointer', background: 'linear-gradient(135deg, #fbbf24, #ea580c)', color: '#1a0f02' }}>UNLOCK · {FRAME_STORE.priceLabel} for {FRAME_STORE.periodLabel}</button>
+                      <button onClick={() => openFrameCheckout(me.id, userEmail, sel.key)} style={{ padding: '11px 20px', borderRadius: 12, border: 'none', fontWeight: 900, fontFamily: FONT, fontSize: 13.5, cursor: 'pointer', background: '#F5A524', color: '#1a0f02' }}>Unlock {FRAME_STORE.priceLabel} for {FRAME_STORE.periodLabel}</button>
                     ) : (
                       <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '10px 14px', borderRadius: 12, background: 'rgba(255,255,255,0.07)', fontSize: 12.5, fontWeight: 800, color: 'rgba(255,255,255,0.7)' }}><Lock size={13} /> Locked · Earn it from ZChat events and gifts</div>
                     )}
@@ -17240,12 +16693,6 @@ function TextStylePanel({ draft, font, size, color, onFont, onSize, onColor, onD
   const sizeIdx = Math.max(0, TEXT_SIZES.findIndex(([k]) => k === size));
   const previewPx = Math.min(24, Math.max(11, textSizePx(size)));
   const reset = () => { onFont(null); onSize('m'); onColor(null); };
-  const tabBtn = (key, label) => (
-    <div role="button" aria-label={`Tab ${label}`} onClick={() => setTab(key)} style={{
-      flex: 1, textAlign: 'center', padding: '8px 0', borderRadius: 12, fontSize: 13, fontWeight: 800, cursor: 'pointer',
-      color: tab === key ? 'white' : theme.muted, background: tab === key ? theme.coral : 'transparent',
-    }}>{label}</div>
-  );
   return (
     <div className="zchat-sheet-up" style={{ padding: '10px 14px 12px', background: theme.panelBg, borderTop: `1px solid ${theme.border}`, borderRadius: '22px 22px 0 0', display: 'flex', flexDirection: 'column', gap: 10, flexShrink: 0 }}>
       <div style={{ display: 'flex', justifyContent: 'flex-end', minHeight: 44, paddingTop: previewSpec ? (previewSpec.top || 0) : 0 }}>
@@ -17260,9 +16707,7 @@ function TextStylePanel({ draft, font, size, color, onFont, onSize, onColor, onD
           aria-label="Text size" style={{ flex: 1, accentColor: theme.coral, height: 28 }} />
         <span style={{ fontSize: 20, fontWeight: 800, color: theme.ink }}>Aa</span>
       </div>
-      <div style={{ display: 'flex', gap: 4, padding: 3, borderRadius: 15, background: theme.rowBg }}>
-        {tabBtn('font', 'Font')}{tabBtn('colour', 'Colour')}{tabBtn('bubble', 'Bubble')}
-      </div>
+      <UnderTabs value={tab} onChange={setTab} tabs={[['font', 'Font', 'Tab Font'], ['colour', 'Colour', 'Tab Colour'], ['bubble', 'Bubble', 'Tab Bubble']]} />
       {tab === 'bubble' ? (
         <div data-testid="bubble-row" style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4, scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch', maxHeight: 142 }}>
           {['classic', ...BUBBLE_GROUPS.flatMap(([, keys]) => keys)].map((key) => {
@@ -17755,9 +17200,6 @@ function MomentsTab({ me, userId, myStories, trayUsers, seen, onAddStory, onOpen
   };
   useEffect(() => { load(); }, [tab]);
   useEffect(() => { if (version) load(true); }, [version]);
-  const seg = (k, label) => (
-    <div key={k} role="button" onClick={() => { if (tab !== k) { setTab(k); playUiSound('tap'); } }} style={{ flex: 1, textAlign: 'center', padding: '8px 0', borderRadius: 12, fontSize: 13.5, fontWeight: 800, cursor: 'pointer', color: tab === k ? '#fff' : theme.muted, background: tab === k ? theme.coral : 'transparent', transition: 'background 0.18s ease, color 0.18s ease' }}>{label}</div>
-  );
   return (
     <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
       <HomeHeader title="Moments" subtitle={unseenStories > 0 ? `${unseenStories} new ${unseenStories === 1 ? 'story' : 'stories'}` : null}
@@ -17767,15 +17209,13 @@ function MomentsTab({ me, userId, myStories, trayUsers, seen, onAddStory, onOpen
           <StoryTray me={me} myStories={myStories} trayUsers={trayUsers} seen={seen} onAdd={onAddStory} onOpen={onOpenStory} uploading={!!storyUploading} onLongPress={onStoryLongPress} />
         </div>
         {topExtra}
-        <div style={{ display: 'flex', gap: 6, margin: '2px 16px 10px', padding: 4, borderRadius: 16, background: theme.rowBg }}>
-          {seg('foryou', 'For you')}{seg('following', 'Following')}
-        </div>
+        <UnderTabs style={{ borderTop: `1px solid ${theme.border}` }} value={tab} onChange={(k) => { setTab(k); playUiSound('tap'); }} tabs={[['foryou', 'For you'], ['following', 'Following']]} />
         {items === null ? (
           <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><Spinner size={22} color={theme.coral} /></div>
         ) : !items.length ? (
           <EmptyState art="moments" title={tab === 'following' ? 'Nothing from people you follow yet' : 'No posts yet'} text={tab === 'following' ? 'Follow more people to fill this up.' : 'Be the first. Tap the plus button to share a post.'} />
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2, padding: '0 0 16px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 2, padding: '2px 0 16px' }}>
             {items.map((p, i) => (
               <div key={p.id} role="button" aria-label={isCarouselPost(p) ? `Open post with ${p.media_urls.filter((x) => x && x.u).length} items` : 'Open post'} onClick={() => onOpenPost(p, tab)} style={{ position: 'relative', aspectRatio: '3 / 4', background: theme.rowBg, cursor: 'pointer', overflow: 'hidden' }}>
                 {p.media_type === 'video'
@@ -17833,8 +17273,8 @@ function NewCallPage({ userId, onClose, onCall }) {
       ) : shown.map((p) => (
         <UserListRow key={p.id} profile={p} rightContent={
           <div style={{ display: 'flex', gap: 8 }}>
-            <div role="button" aria-label={`Voice call ${p.name}`} onClick={() => { onClose(); setTimeout(() => onCall(p, 'voice'), 60); }} style={{ width: 40, height: 40, borderRadius: 14, background: theme.rowBg, color: theme.coral, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><Phone size={18} /></div>
-            <div role="button" aria-label={`Video call ${p.name}`} onClick={() => { onClose(); setTimeout(() => onCall(p, 'video'), 60); }} style={{ width: 40, height: 40, borderRadius: 14, background: theme.rowBg, color: theme.coral, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><VideoIcon size={19} /></div>
+            <div role="button" aria-label={`Voice call ${p.name}`} onClick={() => { onClose(); setTimeout(() => onCall(p, 'voice'), 60); }} className="zchat-press" style={{ width: 44, height: 44, color: theme.ink, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><Phone size={21} strokeWidth={1.8} /></div>
+            <div role="button" aria-label={`Video call ${p.name}`} onClick={() => { onClose(); setTimeout(() => onCall(p, 'video'), 60); }} className="zchat-press" style={{ width: 44, height: 44, color: theme.ink, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><VideoIcon size={23} strokeWidth={1.8} /></div>
           </div>
         } />
       ))}
@@ -17966,8 +17406,8 @@ function CallsTab({ userId, groups, onCall, onOpenProfile, version }) {
                   {d.text} · {formatListTime(c.created_at)}
                 </div>
               </div>
-              <div role="button" aria-label={c.kind === 'video' ? 'Video call' : 'Voice call'} onClick={() => onCall(c.peer, c.kind === 'video' ? 'video' : 'voice')} style={{ width: 40, height: 40, borderRadius: 14, background: theme.rowBg, color: theme.coral, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
-                {c.kind === 'video' ? <VideoIcon size={19} /> : <Phone size={18} />}
+              <div role="button" aria-label={c.kind === 'video' ? 'Video call' : 'Voice call'} onClick={() => onCall(c.peer, c.kind === 'video' ? 'video' : 'voice')} className="zchat-press" style={{ width: 44, height: 44, color: theme.ink, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+                {c.kind === 'video' ? <VideoIcon size={23} strokeWidth={1.8} /> : <Phone size={21} strokeWidth={1.8} />}
               </div>
             </div>
           );
@@ -18054,19 +17494,23 @@ function MeTab({ me, counts, onOpenProfile, onEditProfile, onSettings, onCollect
         })()}
         <DetailSection title="Your stuff" flush>
           <DetailTiles items={[
-            { icon: <GamepadIcon />, label: 'Games', onClick: tapThen(onGames) },
-            { icon: <CollectionIcon />, label: 'Collection', sub: counts.rewards ? `${counts.rewards} unlocked` : null, onClick: tapThen(onCollection) },
             { icon: <Bookmark />, label: 'Saved', aria: 'Saved messages', onClick: tapThen(onSaved) },
-            onStoryArchive ? { icon: <StoryArchiveIcon />, label: 'Archive', aria: 'Story archive', sub: 'Stories', onClick: tapThen(onStoryArchive) } : null,
+            onStoryArchive ? { icon: <StoryArchiveIcon />, label: 'Archive', aria: 'Story archive', onClick: tapThen(onStoryArchive) } : null,
+            onMemories ? { icon: <MemoriesIcon />, label: 'Memories', onClick: tapThen(onMemories) } : null,
+            onRecap ? { icon: <RecapIcon />, label: 'Recap', aria: 'Year recap', value: String(new Date().getMonth() === 0 ? new Date().getFullYear() - 1 : new Date().getFullYear()), onClick: tapThen(onRecap) } : null,
+            { icon: <CollectionIcon />, label: 'Collection', value: counts.rewards ? `${counts.rewards} unlocked` : null, onClick: tapThen(onCollection) },
+            onAvatar ? { icon: <AvatarMakerIcon />, label: 'Avatar', aria: 'Avatar maker', onClick: tapThen(onAvatar) } : null,
+            { icon: <GamepadIcon />, label: 'Games', onClick: tapThen(onGames) },
+            onUsage ? { icon: <Timer />, label: 'Time', aria: 'Time on ZChat', value: (() => { const m = Math.round((readUsage()[usageDayKey()] || 0) / 60); return m < 60 ? `${m} min today` : `${Math.floor(m / 60)} h ${m % 60} min`; })(), onClick: tapThen(onUsage) } : null,
+          ]} />
+        </DetailSection>
+        <DetailSection title="Chats" flush>
+          <DetailTiles items={[
+            { icon: <Archive />, label: 'Archived', aria: 'Archived chats', badge: counts.archived || null, onClick: tapThen(onArchive) },
+            onHidden ? { icon: <EyeOff />, label: 'Hidden', aria: 'Hidden chats', onClick: tapThen(onHidden) } : null,
             onReminders ? { icon: <Clock />, label: 'Reminders', badge: counts.reminders || null, onClick: tapThen(onReminders) } : null,
-            onSearchMessages ? { icon: <Search />, label: 'Search', aria: 'Search messages', sub: 'Messages', onClick: tapThen(onSearchMessages) } : null,
             onMentions ? { icon: <AtSign />, label: 'Mentions', onClick: tapThen(onMentions) } : null,
-            onUsage ? { icon: <Timer />, label: 'Time', aria: 'Time on ZChat', sub: (() => { const m = Math.round((readUsage()[usageDayKey()] || 0) / 60); return m < 60 ? `${m} min today` : `${Math.floor(m / 60)} h ${m % 60} min`; })(), onClick: tapThen(onUsage) } : null,
-            { icon: <Archive />, label: 'Archived', aria: 'Archived chats', sub: 'Chats', badge: counts.archived || null, onClick: tapThen(onArchive) },
-            onHidden ? { icon: <EyeOff />, label: 'Hidden', aria: 'Hidden chats', sub: 'With a PIN', onClick: tapThen(onHidden) } : null,
-            onMemories ? { icon: <MemoriesIcon />, label: 'Memories', sub: 'On this day', onClick: tapThen(onMemories) } : null,
-            onRecap ? { icon: <RecapIcon />, label: 'Recap', aria: 'Year recap', sub: `Your ${new Date().getMonth() === 0 ? new Date().getFullYear() - 1 : new Date().getFullYear()}`, onClick: tapThen(onRecap) } : null,
-            onAvatar ? { icon: <AvatarMakerIcon />, label: 'Avatar', aria: 'Avatar maker', sub: 'Make one', onClick: tapThen(onAvatar) } : null,
+            onSearchMessages ? { icon: <Search />, label: 'Search', aria: 'Search messages', onClick: tapThen(onSearchMessages) } : null,
           ]} />
         </DetailSection>
         <DetailSection title="Inbox">
@@ -18077,12 +17521,12 @@ function MeTab({ me, counts, onOpenProfile, onEditProfile, onSettings, onCollect
         </DetailSection>
         <DetailSection title="People" flush>
           <DetailTiles items={[
-            { icon: <Compass />, label: 'Discover', aria: 'Discover people', sub: 'People', onClick: tapThen(onDiscover) },
-            { icon: <UserPlus />, label: 'Invite', aria: 'Invite friends', sub: 'Friends', onClick: tapThen(onInvite) },
-            onScan ? { icon: <QrIcon />, label: 'Scan', aria: 'Scan a QR code', sub: 'QR code', onClick: tapThen(onScan) } : null,
-            { icon: <Users />, label: 'Accounts', aria: 'Switch account', sub: 'Switch', onClick: tapThen(onSwitchAccount) },
-            onChannels ? { icon: <ChannelIcon />, label: 'Channels', sub: 'Updates', onClick: tapThen(onChannels) } : null,
-            onBroadcast ? { icon: <BroadcastIcon />, label: 'Broadcast', aria: 'Broadcast lists', sub: 'Lists', onClick: tapThen(onBroadcast) } : null,
+            { icon: <Compass />, label: 'Discover', aria: 'Discover people', onClick: tapThen(onDiscover) },
+            { icon: <UserPlus />, label: 'Invite', aria: 'Invite friends', onClick: tapThen(onInvite) },
+            onScan ? { icon: <QrIcon />, label: 'Scan', aria: 'Scan a QR code', onClick: tapThen(onScan) } : null,
+            onChannels ? { icon: <ChannelIcon />, label: 'Channels', onClick: tapThen(onChannels) } : null,
+            onBroadcast ? { icon: <BroadcastIcon />, label: 'Broadcast', aria: 'Broadcast lists', onClick: tapThen(onBroadcast) } : null,
+            { icon: <Users />, label: 'Accounts', aria: 'Switch account', onClick: tapThen(onSwitchAccount) },
           ]} />
         </DetailSection>
         <DetailSection>
@@ -18696,6 +18140,29 @@ function RecapIcon({ size = 16, color = 'currentColor', style }) {
     </svg>
   );
 }
+function CakeLineIcon({ size = 16, color = 'currentColor', style }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style} aria-hidden="true">
+      <path d="M3.5 21h17" /><path d="M5 21v-6.5A2.5 2.5 0 0 1 7.5 12h9a2.5 2.5 0 0 1 2.5 2.5V21" /><path d="M5 16.2c1.2.9 2.6.9 3.8 0s2.6-.9 3.8 0 2.6.9 3.8 0 1.7-.7 2.6-.3" /><path d="M12 12V8.6" /><path d="M12 6.2c.9-.8.9-1.9 0-2.7-.9.8-.9 1.9 0 2.7Z" />
+    </svg>
+  );
+}
+
+function CatchUpIcon({ size = 16, color = 'currentColor', style }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style} aria-hidden="true">
+      <path d="M20.5 11.5a8 8 0 0 1-11.9 7L4 19.8l1.3-4.3A8 8 0 1 1 20.5 11.5Z" /><path d="M8.6 9.6h7M8.6 13.2h4.6" />
+    </svg>
+  );
+}
+function SwatchIcon({ size = 16, color = 'currentColor', style }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style} aria-hidden="true">
+      <path d="M12 3.2c3.4 4.1 5.9 7.2 5.9 10.4a5.9 5.9 0 0 1-11.8 0c0-3.2 2.5-6.3 5.9-10.4Z" />
+    </svg>
+  );
+}
+
 function MemoriesIcon({ size = 16, color = 'currentColor', style }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style} aria-hidden="true">
@@ -19445,7 +18912,7 @@ function BroadcastPage({ userId, me, blockedIds, onClose, onSend }) {
           {!lists.length && !setupMissing && <EmptyState art="nochats" title="No lists yet" text="Make a list, like Family or Team, then message them all at once." action={<PillButton primary label="New list" onClick={() => setEdit({ name: '', members: [] })} />} />}
           {lists.map((l) => (
             <div key={l.id} role="button" aria-label={`Open list ${l.name}`} onClick={() => setCompose(l)} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 2px', borderBottom: `1px solid ${theme.border}`, cursor: 'pointer' }}>
-              <div style={{ width: 46, height: 46, borderRadius: '50%', background: `${theme.coral}22`, color: theme.coral, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><BroadcastIcon size={22} /></div>
+              <div style={{ width: 46, height: 46, color: theme.ink, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><BroadcastIcon size={24} /></div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 15, fontWeight: 700, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.name}</div>
                 <div style={{ fontSize: 12.5, color: theme.muted }}>{(l.member_ids || []).length} {(l.member_ids || []).length === 1 ? 'person' : 'people'}</div>
@@ -19672,7 +19139,7 @@ function BirthdaySheet({ userId, onClose }) {
   return (
     <FullPage title="Birthday" subtitle="Only the day and month, never the year" onBack={onClose} zIndex={72}
       footer={<div style={{ display: 'flex', gap: 8 }}>{row && <BigButton label="Remove" tone="plain" onClick={remove} style={{ flex: '0 0 110px' }} />}<BigButton label={busy ? 'Saving' : 'Save birthday'} disabled={busy || row === undefined} onClick={save} /></div>}>
-      <div style={{ display: 'flex', justifyContent: 'center', padding: '18px 0 4px' }}><CakeIcon size={52} /></div>
+      <div aria-hidden="true" style={{ textAlign: 'center', fontSize: 44, lineHeight: 1, padding: '20px 0 8px' }}>{'\u{1F382}'}</div>
       <div style={{ textAlign: 'center', fontSize: 13.5, color: theme.muted, lineHeight: 1.5, padding: '0 10px 10px' }}>Friends get a little reminder on your day so they can wish you.</div>
       <div style={{ display: 'flex', gap: 10 }}>
         <select value={month} onChange={(e) => setMonth(parseInt(e.target.value, 10))} aria-label="Birthday month" style={{ ...sel, flex: 2 }}>
@@ -20831,12 +20298,12 @@ function MemoriesCard({ onOpen }) {
   const first = groups[0].items[0];
   const n = groups.reduce((s, g) => s + g.items.length, 0);
   return (
-    <div role="button" aria-label="Open memories" onClick={onOpen} className="zchat-press" style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '0 16px 12px', padding: 10, borderRadius: 18, background: theme.rowBg, border: `1px solid ${theme.border}`, cursor: 'pointer' }}>
-      <div style={{ width: 54, height: 54, borderRadius: 14, overflow: 'hidden', flexShrink: 0, background: theme.panelBg }}>
+    <div role="button" aria-label="Open memories" onClick={onOpen} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', borderTop: `1px solid ${theme.border}`, cursor: 'pointer' }}>
+      <div style={{ width: 44, height: 44, borderRadius: 10, overflow: 'hidden', flexShrink: 0, background: theme.rowBg }}>
         {first.media_type === 'video' ? <VideoThumb src={first.media_url} style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} /> : <MediaImg src={first.media_url} draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />}
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 14.5, fontWeight: 800, color: theme.ink, display: 'flex', alignItems: 'center', gap: 6 }}><MemoriesIcon size={15} color={theme.coral} />On this day</div>
+        <div style={{ fontSize: 14.5, fontWeight: 700, color: theme.ink }}>On this day</div>
         <div style={{ fontSize: 12.5, color: theme.muted, marginTop: 2 }}>{n} {n === 1 ? 'memory' : 'memories'} from {groups.length > 1 ? 'past years' : groups[0].y === 1 ? 'last year' : `${groups[0].y} years ago`}</div>
       </div>
       <ChevronRight size={18} color={theme.muted} />
@@ -20859,15 +20326,15 @@ function DailyMomentCard({ myStories, trayUsers, onTake, onOpenStory }) {
   const friends = (trayUsers || []).map((t) => ({ t, s: (t.stories || []).find((st) => st.sticker && st.sticker.k === 'moment' && Number(st.sticker.d) === day) })).filter((x) => x.s);
   const tint = '#F97316';
   return (
-    <div style={{ margin: '0 16px 12px', padding: 14, borderRadius: 20, background: live ? `linear-gradient(135deg, ${tint}, #EC4899)` : theme.rowBg, border: live ? 'none' : `1px solid ${theme.border}`, color: live ? '#FFFFFF' : theme.ink }}>
+    <div style={{ padding: '12px 16px', borderTop: `1px solid ${theme.border}`, background: live ? `${tint}14` : 'transparent', color: theme.ink }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 14, background: live ? 'rgba(255,255,255,0.22)' : `${tint}22`, color: live ? '#FFFFFF' : tint, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><MomentIcon size={22} /></div>
+        <span style={{ width: 44, display: 'flex', justifyContent: 'center', color: live ? tint : theme.ink, flexShrink: 0 }}><MomentIcon size={24} /></span>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 15, fontWeight: 800 }}>{posted ? 'Your daily moment is up' : live ? 'Time for your daily moment' : before ? 'Daily moment' : 'You missed it'}</div>
-          <div style={{ fontSize: 12.5, opacity: 0.8, marginTop: 2 }}>{posted ? (posted.sticker.late ? 'Posted late today' : 'Posted right on time') : live ? `${mmss(at + MOMENT_WINDOW_MS - now)} left to post on time` : before ? 'Everyone gets the same surprise time today. Keep notifications on.' : 'Post a late moment so friends still see your day'}</div>
+          <div style={{ fontSize: 14.5, fontWeight: 700 }}>{posted ? 'Your daily moment is up' : live ? 'Time for your daily moment' : before ? 'Daily moment' : 'You missed it'}</div>
+          <div style={{ fontSize: 12.5, color: live ? tint : theme.muted, fontWeight: live ? 700 : 400, marginTop: 1, fontVariantNumeric: 'tabular-nums' }}>{posted ? (posted.sticker.late ? 'Posted late today' : 'Posted right on time') : live ? `${mmss(at + MOMENT_WINDOW_MS - now)} left to post on time` : before ? 'Everyone gets the same surprise time today. Keep notifications on.' : 'Post a late moment so friends still see your day'}</div>
         </div>
         {!posted && !before && (
-          <div role="button" aria-label="Take your daily moment" onClick={() => onTake(!live)} className="zchat-press" style={{ padding: '9px 14px', borderRadius: 14, background: live ? '#FFFFFF' : tint, color: live ? tint : '#FFFFFF', fontWeight: 800, fontSize: 13.5, cursor: 'pointer', flexShrink: 0 }}>{live ? 'Take it' : 'Post late'}</div>
+          <div role="button" aria-label="Take your daily moment" onClick={() => onTake(!live)} className="zchat-press" style={{ padding: '8px 14px', borderRadius: 12, background: live ? tint : 'transparent', color: live ? '#FFFFFF' : theme.coral, fontWeight: 800, fontSize: 14, cursor: 'pointer', flexShrink: 0 }}>{live ? 'Take it' : 'Post late'}</div>
         )}
       </div>
       {friends.length > 0 && (
@@ -20884,7 +20351,7 @@ function DailyMomentCard({ myStories, trayUsers, onTake, onOpenStory }) {
           ))}
         </div>
       )}
-      {friends.length > 0 && !posted && <div style={{ fontSize: 12, opacity: 0.75, marginTop: 8 }}>Post yours to see what your friends are up to</div>}
+      {friends.length > 0 && !posted && <div style={{ fontSize: 12, color: theme.muted, marginTop: 8 }}>Post yours to see what your friends are up to</div>}
     </div>
   );
 }
@@ -20939,11 +20406,10 @@ function ChannelsPage({ userId, me, onClose, onShare, initialId }) {
   const mine = (rows || []).filter((c) => c.owner_id === userId);
   const following = (rows || []).filter((c) => c.following && c.owner_id !== userId);
   const discover = (rows || []).filter((c) => c.owner_id !== userId);
-  const seg = (k, l) => <div key={k} role="button" aria-label={l} onClick={() => setTab(k)} style={{ flex: 1, textAlign: 'center', padding: '8px 0', borderRadius: 12, fontSize: 13.5, fontWeight: 800, cursor: 'pointer', background: tab === k ? theme.coral : 'transparent', color: tab === k ? '#FFFFFF' : theme.muted }}>{l}</div>;
   return (
     <FullPage title="Channels" subtitle="Updates from people and pages you follow" onBack={onClose} zIndex={70}
       right={<div role="button" aria-label="Create a channel" onClick={() => setCreating(true)} style={{ padding: '0 12px', height: 44, display: 'flex', alignItems: 'center', cursor: 'pointer', color: theme.ink }}><Plus size={22} /></div>}>
-      <div style={{ display: 'flex', gap: 6, margin: '8px 0 10px', padding: 4, borderRadius: 16, background: theme.rowBg }}>{seg('following', 'Following')}{seg('discover', 'Find channels')}</div>
+      <UnderTabs style={{ margin: '2px 0 10px' }} value={tab} onChange={setTab} tabs={[['following', 'Following'], ['discover', 'Find channels']]} />
       {tab === 'discover' && (
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, height: 40, padding: '0 12px', borderRadius: 12, background: theme.rowBg, color: theme.muted, marginBottom: 6 }}>
           <Search size={17} />
@@ -21449,7 +20915,7 @@ function AvatarMakerPage({ initial, onClose, onSave }) {
   };
   return (
     <FullPage title="Avatar maker" onBack={onClose} zIndex={720} pad={false}
-      right={<div role="button" aria-label="Random avatar" onClick={random} style={{ padding: '0 12px', height: 44, display: 'flex', alignItems: 'center', cursor: 'pointer', color: theme.ink }}><Sparkles size={20} /></div>}
+      right={<div role="button" aria-label="Random avatar" onClick={random} style={{ padding: '0 12px', height: 44, display: 'flex', alignItems: 'center', cursor: 'pointer', color: theme.ink }}><DiceLineIcon size={21} /></div>}
       footer={<BigButton label={busy ? 'Saving' : 'Use as my photo'} disabled={busy} onClick={save} />}>
       <div style={{ display: 'flex', justifyContent: 'center', padding: '14px 0 10px' }}>
         <img src={avatarSvgUrl(cfg)} alt="Your avatar" draggable={false} style={{ width: 168, height: 168, borderRadius: '50%', boxShadow: '0 10px 30px rgba(0,0,0,0.18)' }} />
@@ -21546,17 +21012,18 @@ function BirthdayBanner({ people, mine, myName, onWish, onDismiss }) {
   const names = people.map((p) => (p.name || '').split(' ')[0]).filter(Boolean);
   const label = mine ? `Happy birthday, ${(myName || '').split(' ')[0] || 'friend'}!` : names.length === 1 ? `It is ${names[0]}'s birthday today` : `${names.slice(0, 2).join(' and ')}${names.length > 2 ? ` and ${names.length - 2} more` : ''} have birthdays today`;
   return (
-    <div style={{ margin: '0 6px 10px', padding: '10px 12px', borderRadius: 18, background: theme.dark ? 'linear-gradient(135deg, rgba(255,150,184,0.18), rgba(140,108,255,0.18))' : 'linear-gradient(135deg, #FFE1EB, #ECE6FF)', display: 'flex', alignItems: 'center', gap: 10 }}>
-      <CakeIcon size={30} />
+    <div style={{ margin: '0 6px 10px', padding: '10px 6px 10px 14px', borderRadius: 16, background: theme.rowBg, display: 'flex', alignItems: 'center', gap: 12 }}>
+      <span aria-hidden="true" style={{ fontSize: 22, lineHeight: 1, flexShrink: 0 }}>{'\u{1F382}'}</span>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 14, fontWeight: 800, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</div>
-        <div style={{ fontSize: 12, color: theme.muted, marginTop: 1 }}>{mine ? 'Have the best day' : 'Send them a wish'}</div>
+        <div style={{ fontSize: 14, fontWeight: 700, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</div>
+        <div style={{ fontSize: 12.5, color: theme.muted, marginTop: 1 }}>{mine ? 'Have the best day' : 'Send them a wish'}</div>
       </div>
-      {!mine && first && <div role="button" aria-label={`Wish ${first.name} a happy birthday`} onClick={() => onWish(first)} className="zchat-press" style={{ padding: '8px 12px', borderRadius: 12, background: theme.coral, color: '#FFFFFF', fontSize: 13, fontWeight: 800, cursor: 'pointer', flexShrink: 0 }}>Wish</div>}
-      <div role="button" aria-label="Hide birthday reminder" onClick={onDismiss} style={{ padding: 4, cursor: 'pointer', color: theme.muted, display: 'flex', flexShrink: 0 }}><X size={16} /></div>
+      {!mine && first && <div role="button" aria-label={`Wish ${first.name} a happy birthday`} onClick={() => onWish(first)} className="zchat-press" style={{ padding: '8px 8px', color: theme.coral, fontSize: 14, fontWeight: 800, cursor: 'pointer', flexShrink: 0 }}>Wish</div>}
+      <div role="button" aria-label="Hide birthday reminder" onClick={onDismiss} style={{ padding: 8, cursor: 'pointer', color: theme.muted, display: 'flex', flexShrink: 0 }}><X size={16} /></div>
     </div>
   );
 }
+
 function FocusBanner({ focus, onEnd }) {
   const { theme } = useTheme();
   const now = useNow(1000);
@@ -21564,23 +21031,24 @@ function FocusBanner({ focus, onEnd }) {
   useEffect(() => { if (left <= 0) onEnd(true); }, [left <= 0]);
   if (left <= 0) return null;
   return (
-    <div role="status" style={{ margin: '0 6px 10px', padding: '9px 12px', borderRadius: 16, background: '#7C5CFF', color: '#FFFFFF', display: 'flex', alignItems: 'center', gap: 10 }}>
-      <FocusIcon size={20} />
+    <div role="status" style={{ margin: '0 6px 10px', padding: '10px 6px 10px 14px', borderRadius: 16, background: theme.rowBg, display: 'flex', alignItems: 'center', gap: 12 }}>
+      <span style={{ display: 'flex', color: theme.coral, flexShrink: 0 }}><FocusIcon size={20} /></span>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 13.5, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Focusing{focus.t ? ` on ${focus.t}` : ''}</div>
-        <div style={{ fontSize: 12, opacity: 0.85 }}>{mmss(left)} left. Other chats stay quiet.</div>
+        <div style={{ fontSize: 14, fontWeight: 700, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Focusing{focus.t ? ` on ${focus.t}` : ''}</div>
+        <div style={{ fontSize: 12.5, color: theme.muted, marginTop: 1, fontVariantNumeric: 'tabular-nums' }}>{mmss(left)} left. Other chats stay quiet.</div>
       </div>
-      <div role="button" aria-label="End focus" onClick={() => onEnd(false)} className="zchat-press" style={{ padding: '7px 12px', borderRadius: 12, background: 'rgba(255,255,255,0.2)', fontSize: 12.5, fontWeight: 800, cursor: 'pointer', flexShrink: 0 }}>End</div>
+      <div role="button" aria-label="End focus" onClick={() => onEnd(false)} className="zchat-press" style={{ padding: '8px 10px', color: theme.coral, fontSize: 14, fontWeight: 800, cursor: 'pointer', flexShrink: 0 }}>End</div>
     </div>
   );
 }
+
 function ChannelsEntryRow({ onOpen }) {
   const { theme } = useTheme();
   return (
-    <div role="button" aria-label="Open channels" onClick={onOpen} className="zchat-press" style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '0 16px 12px', padding: '10px 12px', borderRadius: 18, background: theme.rowBg, border: `1px solid ${theme.border}`, cursor: 'pointer' }}>
-      <div style={{ width: 40, height: 40, borderRadius: 13, background: 'rgba(34,197,94,0.15)', color: '#22C55E', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><ChannelIcon size={20} /></div>
+    <div role="button" aria-label="Open channels" onClick={onOpen} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderTop: `1px solid ${theme.border}`, cursor: 'pointer' }}>
+      <span style={{ width: 44, display: 'flex', justifyContent: 'center', color: theme.ink, flexShrink: 0 }}><ChannelIcon size={24} /></span>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 14.5, fontWeight: 800, color: theme.ink }}>Channels</div>
+        <div style={{ fontSize: 14.5, fontWeight: 700, color: theme.ink }}>Channels</div>
         <div style={{ fontSize: 12.5, color: theme.muted, marginTop: 1 }}>Follow updates from people and pages</div>
       </div>
       <ChevronRight size={18} color={theme.muted} />
@@ -24355,11 +23823,11 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       onSetTitle: activeGroup ? setMemberTitle : null,
       moreTiles: [
         chatAlbumKey && !(activeProfile && activeProfile.is_bot) ? { icon: <AlbumIcon />, label: 'Albums', aria: 'Shared albums', onClick: () => setAlbumsOpen({ key: chatAlbumKey, name: chatName }) } : null,
-        messages.length >= 3 ? { icon: <Sparkles />, label: 'Catch up', aria: 'Catch me up', onClick: () => { closeAll(); runCatchUp(); } } : null,
+        messages.length >= 3 ? { icon: <CatchUpIcon />, label: 'Catch up', aria: 'Catch me up', onClick: () => { closeAll(); runCatchUp(); } } : null,
       ],
       moreCustomize: chatPref ? [
-        { icon: <Bell />, label: 'Tone', aria: 'Chat tone', sub: chatToneFor(chatPref) ? ((NOTIF_TONES.find((t) => t.k === chatToneFor(chatPref)) || {}).l || null) : null, onClick: () => setTonePage({ key: chatPref, name: chatName }) },
-        !(activeProfile && activeProfile.is_bot) ? { icon: <TranslateIcon />, label: 'Translate', aria: 'Translate this chat', sub: autoTrLang ? ((TRANSLATE_LANGS.find(([k]) => k === autoTrLang) || [0, ''])[1]) : null, onClick: () => setTrSheet({ key: chatPref, name: chatName }) } : null,
+        { icon: <Bell />, label: 'Tone', aria: 'Chat tone', value: chatToneFor(chatPref) ? ((NOTIF_TONES.find((t) => t.k === chatToneFor(chatPref)) || {}).l || null) : null, onClick: () => setTonePage({ key: chatPref, name: chatName }) },
+        !(activeProfile && activeProfile.is_bot) ? { icon: <TranslateIcon />, label: 'Translate', aria: 'Translate this chat', value: autoTrLang ? ((TRANSLATE_LANGS.find(([k]) => k === autoTrLang) || [0, ''])[1]) : null, onClick: () => setTrSheet({ key: chatPref, name: chatName }) } : null,
       ] : [],
       morePrivacy: [
         activeProfile && !activeGroup && !activeProfile.is_bot ? <DetailRow icon={<Lock />} label="Secret chat" value={secretSet.has(activeProfile.id) ? 'On' : 'Off'} onClick={() => setSecretPage(true)} /> : null,
@@ -27380,7 +26848,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           padding: '8px 16px', borderRadius: 18, fontSize: 12.5, fontWeight: 800, fontFamily: FONT, color: 'white', whiteSpace: 'nowrap', cursor: 'pointer',
           background: theme.coral, boxShadow: '0 6px 20px rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', gap: 8,
         }}>
-          <Sparkles size={14} />New version ready. Tap to update
+          <Repeat size={14} />New version ready. Tap to update
         </div>
       )}
       <AssetDownloadBar progress={assetProgress} />
@@ -27871,7 +27339,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                   </div>
                   {unreadAnchor.count >= 8 && (
                     <div role="button" aria-label="Catch me up" onPointerDown={(e) => e.preventDefault()} onClick={runCatchUp} className="zchat-pop" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 18, background: theme.panelBg, color: theme.ink, fontSize: 12.5, fontWeight: 800, boxShadow: '0 6px 18px rgba(0,0,0,0.28)', cursor: 'pointer', whiteSpace: 'nowrap', marginLeft: 8 }}>
-                      <Sparkles size={14} color={theme.coral} />Catch me up
+                      <CatchUpIcon size={15} />Catch me up
                     </div>
                   )}
                 </div>
@@ -28153,7 +27621,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               )}
             </div>
 
-            {showJumpButton && !selectionMode && (
+            {showJumpButton && !selectionMode && !(showTextStyle && !editingMessage) && (
               <JumpToLatestButton count={newBelowCount} bottom={pendingMedia.length ? 150 : (replyingTo || editingMessage) ? 118 : (draft[0] === '/' && draft.indexOf(' ') < 0) ? 136 : 72} onClick={() => scrollChatToBottom(true)} />
             )}
 
@@ -28941,7 +28409,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       )}
       {muteSheet && (
         <ChatRowSheet title="Mute notifications" subtitle={muteSheet.kind === 'group' ? 'Mentions will still notify you' : 'No sounds or alerts for this chat'}
-          avatar={<div style={{ width: 44, height: 44, borderRadius: '50%', background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.ink }}><BellOff size={20} /></div>}
           onClose={() => setMuteSheet(null)}
           actions={[
             { icon: <BellOff size={18} />, label: '8 hours', onClick: () => setChatMute(muteSheet, muteFor('8h')) },
@@ -28951,7 +28418,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       )}
       {pinSheetFor && (
         <ChatRowSheet title="Pin message" subtitle="Choose how long it stays pinned"
-          avatar={<div style={{ width: 44, height: 44, borderRadius: '50%', background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Pin_ size={20} color={theme.coral} /></div>}
           onClose={() => setPinSheetFor(null)}
           actions={[
             { icon: <Pin_ size={18} color={theme.muted} />, label: '24 hours', onClick: () => pinMessage(pinSheetFor, 1) },
@@ -29019,6 +28485,7 @@ function DayDivider({ label }) {
 }
 
 const WHATS_NEW = [
+  { title: 'A cleaner look', text: 'Simple lists and plain icons everywhere, from chat details and group info to your profile, Moments and settings. Plus a new Theme page.' },
   { title: 'Streaks', text: 'Chat with a friend every day to grow a streak 🔥 and keep it going.' },
   { title: 'Notes', text: 'Leave a short note above your story. Mutual friends see it for 24 hours and can reply.' },
   { title: 'Status', text: 'Tell people what you are up to, like In class or Gaming. It shows in chats and on your profile.' },
@@ -29044,7 +28511,6 @@ const WHATS_NEW = [
   { title: 'Avatar maker', text: 'Make a cartoon avatar and use it as your profile photo.' },
   { title: 'Data saver', text: 'Load smaller photos and stop videos playing on their own. Find it in Settings.' },
   { title: 'Chats saved on your phone', text: 'ZChat opens fast and shows your chats even with no connection.' },
-  { title: 'A fresh look', text: 'A new Theme page, and cleaner chat details, group info and settings.' },
   { title: 'Bug fixes', text: 'Lots of fixes and a faster, smoother ZChat.' },
 ];
 
@@ -29057,13 +28523,12 @@ function WhatsNewSheet({ onClose }) {
         <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ width: '100%', maxWidth: 480, maxHeight: 'min(86vh, calc(100% - 24px))', display: 'flex', flexDirection: 'column', background: theme.panelBg, borderRadius: '28px 28px 0 0', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))', overflow: 'hidden' }}>
           <div style={{ padding: '14px 20px 6px', flexShrink: 0 }}>
             <div style={{ display: 'flex', justifyContent: 'center', paddingBottom: 12 }}><div style={{ width: 38, height: 4, borderRadius: 2, background: theme.border }} /></div>
-            <div style={{ fontSize: 12, fontWeight: 800, color: theme.coral, letterSpacing: '0.06em', textTransform: 'uppercase' }}>ZChat {APP_VERSION}</div>
-            <div style={{ fontSize: 24, fontWeight: 800, color: theme.ink, letterSpacing: '-0.02em', marginTop: 2 }}>What is new</div>
+            <div style={{ fontSize: 24, fontWeight: 800, color: theme.ink, letterSpacing: '-0.02em' }}>What is new</div>
+            <div style={{ fontSize: 13.5, color: theme.muted, marginTop: 2 }}>ZChat {APP_VERSION}</div>
           </div>
           <div data-sheet-scroll="true" style={{ overflowY: 'auto', minHeight: 0, padding: '6px 20px 10px', WebkitOverflowScrolling: 'touch' }}>
             {WHATS_NEW.map((it, i) => (
               <div key={it.title} style={{ display: 'flex', gap: 14, padding: '12px 0', borderBottom: i < WHATS_NEW.length - 1 ? `1px solid ${theme.border}` : 'none' }}>
-                <div style={{ width: 22, flexShrink: 0, fontWeight: 800, fontSize: 15, color: theme.muted, paddingTop: 1 }}>{i + 1}</div>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 15.5, fontWeight: 700, color: theme.ink }}>{it.title}</div>
                   <div style={{ fontSize: 13.5, color: theme.muted, lineHeight: 1.5, marginTop: 2 }}>{it.text}</div>
@@ -29072,7 +28537,7 @@ function WhatsNewSheet({ onClose }) {
             ))}
           </div>
           <div style={{ padding: '10px 20px 0', flexShrink: 0 }}>
-            <GameButton onClick={onClose} label="Got it" color="green" full />
+            <BigButton label="Got it" onClick={onClose} />
           </div>
         </div>
       </div>
@@ -30695,7 +30160,7 @@ function PairsCard({ state, myId, live, peerName, onMove, onRematch, fresh }) {
   };
   const showLast = live && Array.isArray(state.last) && state.n > 0;
   return (
-    <GameCardShell width={228} live={live} title="Pairs" status={status} hot={myTurn} icon={<Sparkles size={15} color={theme.coral} />}>
+    <GameCardShell width={228} live={live} title="Pairs" status={status} hot={myTurn} icon={<Copy size={15} color={theme.coral} />}>
       <ScoreLine mine={mine} theirs={theirs} peerName={peerName} myColor="#FBBF24" theirColor="#F43F5E" />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 44px)', gap: 4 }}>
         {faces.map((f, i) => {
@@ -31042,12 +30507,12 @@ function HowToPlaySheet({ k, onClose }) {
             <div style={{ width: '100%', aspectRatio: '16 / 7', borderRadius: 18, overflow: 'hidden' }}><GameArt k={gameArtKey(k)} width="100%" height="100%" radius={18} /></div>
           </div>
           <div data-sheet-scroll="true" style={{ overflowY: 'auto', minHeight: 0, padding: '14px 20px 6px' }}>
-            <div style={{ fontSize: 12, fontWeight: 800, color: theme.coral, letterSpacing: '0.06em', textTransform: 'uppercase' }}>How to play</div>
-            <div style={{ fontSize: 24, fontWeight: 800, color: theme.ink, letterSpacing: '-0.02em', marginTop: 2 }}>{gameKeyTitle(k)}</div>
+            <div style={{ fontSize: 24, fontWeight: 800, color: theme.ink, letterSpacing: '-0.02em' }}>{gameKeyTitle(k)}</div>
+            <div style={{ fontSize: 13.5, color: theme.muted, marginTop: 2 }}>How to play</div>
             <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
               {rules.how.map((t, i) => (
                 <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-                  <div style={{ width: 24, height: 24, borderRadius: 8, background: `${theme.coral}22`, color: theme.coralDeep, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12.5, fontWeight: 900, flexShrink: 0 }}>{i + 1}</div>
+                  <div style={{ width: 18, flexShrink: 0, fontSize: 14.5, fontWeight: 700, color: theme.muted, lineHeight: 1.45 }}>{i + 1}</div>
                   <div style={{ fontSize: 14.5, color: theme.ink, lineHeight: 1.45 }}>{t}</div>
                 </div>
               ))}
@@ -31719,7 +31184,7 @@ function ColourTrapGame({ seed, onDuelFinish } = {}) {
       <div key={shake} className={shake ? 'zchat-shake' : ''} style={{ width: GAME_SQUARE, aspectRatio: '1.35', borderRadius: 24, background: theme.dark ? 'linear-gradient(160deg, #1E1B3A, #12101F)' : 'linear-gradient(160deg, #FFFFFF, #EEF2FF)', border: `1px solid ${theme.border}`, boxShadow: '0 12px 30px rgba(0,0,0,0.2)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, position: 'relative', overflow: 'hidden' }}>
         {phase === 'playing' && round ? (
           <>
-            <div style={{ fontSize: 13, fontWeight: 800, color: theme.muted, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Tap the ink colour</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: theme.muted }}>Tap the ink colour</div>
             <div key={round.key} className="zchat-pop" style={{ fontSize: 'min(16vw, 64px)', fontWeight: 900, letterSpacing: '0.02em', color: TRAP_COLORS[round.ink][1], textShadow: '0 4px 14px rgba(0,0,0,0.18)' }}>{TRAP_COLORS[round.w][0].toUpperCase()}</div>
           </>
         ) : (
@@ -31830,7 +31295,7 @@ function HigherLowerGame({ seed, onDuelFinish } = {}) {
       <div style={{ position: 'relative', width: GAME_SQUARE, aspectRatio: '1.15', borderRadius: 24, overflow: 'hidden', background: theme.dark ? '#14111F' : '#FFFFFF', border: `1px solid ${theme.border}`, boxShadow: '0 12px 30px rgba(0,0,0,0.22)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14 }}>
         {phase === 'playing' ? (
           <>
-            <div style={{ fontSize: 13, fontWeight: 800, color: theme.muted, letterSpacing: '0.06em', textTransform: 'uppercase' }}>{reveal ? (reveal.ok ? 'Correct' : 'Not this time') : 'Next number is higher or lower?'}</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: theme.muted }}>{reveal ? (reveal.ok ? 'Correct' : 'Not this time') : 'Next number is higher or lower?'}</div>
             <div key={shown} className="zchat-pop" style={{ width: 132, height: 160, borderRadius: 24, background: `linear-gradient(160deg, ${tint[0]}, ${tint[1]})`, boxShadow: '0 6px 0 rgba(0,0,0,0.28), 0 16px 30px rgba(0,0,0,0.25), inset 0 3px 0 rgba(255,255,255,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: 70, fontWeight: 900, textShadow: '0 3px 8px rgba(0,0,0,0.3)' }}>{shown}</div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'center', padding: '0 12px' }}>
               {history.slice(0, -1).map((v, i) => <span key={i} style={{ padding: '3px 9px', borderRadius: 999, background: theme.rowBg, color: theme.muted, fontSize: 12, fontWeight: 800 }}>{v}</span>)}
@@ -32234,7 +31699,7 @@ function ScoreCard({ state, isMe, senderName, ink, onPlay }) {
   return (
     <GameCardShell k={state.k} width={212} live title={title} status={isMe ? 'Your high score' : `${senderName || 'Their'} high score`}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <div style={{ width: 46, height: 46, borderRadius: 14, background: 'linear-gradient(180deg, #FFE477, #F59E0B)', boxShadow: '0 3px 0 #B45309, inset 0 2px 0 rgba(255,255,255,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><TrophyIcon size={24} color="#7C2D12" /></div>
+        <div style={{ display: 'flex', flexShrink: 0 }}><TrophyIcon size={34} color="#F59E0B" /></div>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 28, fontWeight: 900, color: theme.ink, letterSpacing: '-0.02em', lineHeight: 1.05 }}>{formatGameScore(state.k, state.s)}</div>
           <div style={{ fontSize: 12, color: theme.muted, marginTop: 2 }}>{isMe ? 'Can they beat it?' : 'Think you can beat it?'}</div>
@@ -32488,11 +31953,10 @@ function MapPinIcon({ size = 16, color = 'currentColor', style }) {
 }
 function FeatureCardShell({ width = 252, colors, icon, label, title, children }) {
   const { theme } = useTheme();
-  const tint = colors[0];
   return (
-    <div onClick={(e) => e.stopPropagation()} style={{ width, maxWidth: '100%', boxSizing: 'border-box', borderRadius: 18, overflow: 'hidden', background: theme.dark ? '#18181B' : '#FFFFFF', border: `1px solid ${theme.dark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`, borderTop: `4px solid ${tint}` }}>
-      <div style={{ padding: '10px 12px 2px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: tint, fontSize: 12, fontWeight: 800 }}>{icon}{label}</div>
+    <div onClick={(e) => e.stopPropagation()} style={{ width, maxWidth: '100%', boxSizing: 'border-box', borderRadius: 18, overflow: 'hidden', background: theme.dark ? '#18181B' : '#FFFFFF', border: `1px solid ${theme.dark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}` }}>
+      <div style={{ padding: '11px 12px 2px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: theme.muted, fontSize: 12, fontWeight: 600 }}>{icon}{label}</div>
         <div style={{ marginTop: 4, fontSize: 16, fontWeight: 800, color: theme.ink, lineHeight: 1.25, wordBreak: 'break-word' }}>{title}</div>
       </div>
       <div style={{ padding: '8px 10px 12px' }}>{children}</div>
@@ -33822,10 +33286,10 @@ function ChatInsightsPage({ messages, myId, title, onClose }) {
   }, [messages, myId]);
   const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const hourLabel = (h) => new Date(2020, 0, 1, h).toLocaleTimeString([], { hour: 'numeric' });
-  const tile = (label, value, colors) => (
+  const tile = (label, value) => (
     <div style={{ borderRadius: 16, padding: '13px 14px', background: theme.rowBg }}>
       <div style={{ fontSize: 13, fontWeight: 600, color: theme.muted }}>{label}</div>
-      <div style={{ fontSize: 26, fontWeight: 800, marginTop: 2, letterSpacing: '-0.02em', color: colors[0] }}>{value}</div>
+      <div style={{ fontSize: 26, fontWeight: 800, marginTop: 2, letterSpacing: '-0.02em', color: theme.ink }}>{value}</div>
     </div>
   );
   const myPct = data.total ? Math.round((data.mine / data.total) * 100) : 50;
@@ -33836,22 +33300,22 @@ function ChatInsightsPage({ messages, myId, title, onClose }) {
         <>
           <PageArt k="insights" />
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10, marginTop: 8 }}>
-            {tile('Messages', formatCount(data.total), ['#7C5CFC', '#4F46E5'])}
-            {tile('Words', formatCount(data.words), ['#EC4899', '#DB2777'])}
-            {tile('Photos and videos', data.kinds.image + data.kinds.video, ['#F59E0B', '#EA580C'])}
-            {tile('Voice notes', data.kinds.audio, ['#14B8A6', '#0F766E'])}
+            {tile('Messages', formatCount(data.total))}
+            {tile('Words', formatCount(data.words))}
+            {tile('Photos and videos', data.kinds.image + data.kinds.video)}
+            {tile('Voice notes', data.kinds.audio)}
           </div>
           <IgHeading>Who talks more</IgHeading>
           <div style={{ height: 16, borderRadius: 8, overflow: 'hidden', display: 'flex', background: theme.rowBg }}>
-            <div style={{ width: `${myPct}%`, background: 'linear-gradient(90deg, #7C5CFC, #A78BFA)' }} />
-            <div style={{ flex: 1, background: 'linear-gradient(90deg, #F472B6, #EC4899)' }} />
+            <div style={{ width: `${myPct}%`, background: theme.coral }} />
+            <div style={{ flex: 1, background: theme.dark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.14)' }} />
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: theme.muted, marginTop: 6, fontWeight: 700 }}>
             <span>You {myPct}%</span><span>Others {100 - myPct}%</span>
           </div>
           <IgHeading>When you chat</IgHeading>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 90, padding: '6px 2px 0' }}>
-            {data.hours.map((v, h) => <div key={h} title={hourLabel(h)} style={{ flex: 1, height: `${Math.max(4, (v / maxHour) * 100)}%`, borderRadius: 4, background: h === data.busyHour ? 'linear-gradient(180deg, #FDE047, #F59E0B)' : `${theme.coral}88` }} />)}
+            {data.hours.map((v, h) => <div key={h} title={hourLabel(h)} style={{ flex: 1, height: `${Math.max(4, (v / maxHour) * 100)}%`, borderRadius: 4, background: h === data.busyHour ? theme.coral : `${theme.coral}55` }} />)}
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: theme.muted, marginTop: 4 }}><span>{hourLabel(0)}</span><span>{hourLabel(12)}</span><span>{hourLabel(23)}</span></div>
           <div style={{ fontSize: 14, color: theme.ink, marginTop: 10, lineHeight: 1.5 }}>Busiest around <b>{hourLabel(data.busyHour)}</b>, and <b>{dayNames[data.busyDay]}</b> is the busiest day.</div>
@@ -37744,7 +37208,7 @@ function GameStats({ items, right }) {
     <div style={{ display: 'flex', gap: 10, width: '100%', maxWidth: 520 }}>
       {items.map(([l, v]) => (
         <div key={l} style={{ flex: 1, padding: '10px 12px', borderRadius: 14, background: theme.dark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.7)', textAlign: 'center', border: `1px solid ${theme.border}` }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: theme.muted, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{l}</div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: theme.muted }}>{l}</div>
           <div style={{ fontSize: 22, fontWeight: 900, color: theme.ink }}>{v}</div>
         </div>
       ))}
@@ -38995,7 +38459,7 @@ function LeaderboardPage({ initialGame, onClose, onOpenProfile, onOpenPrivacy, o
             <div key={x.k} data-selected={on ? '1' : '0'} role="button" aria-label={`Leaderboard ${x.title}`} aria-pressed={on} onClick={() => { hapticTap(); setGame(x.k); }} className="zchat-press"
               style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, padding: '5px 12px 5px 5px', borderRadius: 999, cursor: 'pointer', border: `1.5px solid ${on ? theme.coral : theme.border}`, background: on ? `${theme.coral}18` : 'transparent' }}>
               {x.k === 'all'
-                ? <span style={{ width: 28, height: 28, borderRadius: 9, background: 'linear-gradient(180deg, #FFE477, #F59E0B)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><TrophyIcon size={16} color="#7C2D12" /></span>
+                ? <span style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><TrophyIcon size={20} color="#F59E0B" /></span>
                 : <GameArt k={x.k} width={28} height={28} radius={9} />}
               <span style={{ fontSize: 13, fontWeight: 800, color: on ? theme.ink : theme.muted, whiteSpace: 'nowrap' }}>{x.title}</span>
             </div>
@@ -39016,7 +38480,7 @@ function LeaderboardPage({ initialGame, onClose, onOpenProfile, onOpenPrivacy, o
         )}
         {rows !== null && !failed && list.length > 0 && (
           <>
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, padding: '14px 4px 20px', margin: '6px 0 10px', borderRadius: 22, background: theme.dark ? 'linear-gradient(180deg, rgba(124,92,255,0.18), rgba(124,92,255,0.04))' : 'linear-gradient(180deg, rgba(124,92,255,0.12), rgba(124,92,255,0.02))' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, padding: '14px 4px 20px', margin: '6px 0 10px', borderRadius: 22, background: theme.rowBg }}>
               <PodiumSpot row={top[1]} place={2} game={game} onOpen={open} />
               <PodiumSpot row={top[0]} place={1} game={game} onOpen={open} />
               <PodiumSpot row={top[2]} place={3} game={game} onOpen={open} />
@@ -39059,7 +38523,7 @@ function GameScoreToast({ k }) {
   if (!msg) return null;
   return (
     <div key={msg.key} className="zchat-fade" role="status" style={{ position: 'fixed', left: '50%', top: 'calc(70px + env(safe-area-inset-top))', transform: 'translateX(-50%)', zIndex: 120, display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px 10px 12px', borderRadius: 18, background: theme.dark ? '#221B3A' : '#FFFFFF', boxShadow: '0 12px 30px rgba(0,0,0,0.28)', border: `1px solid ${theme.border}`, pointerEvents: 'none', maxWidth: 'calc(100vw - 32px)' }}>
-      <span style={{ width: 32, height: 32, borderRadius: 10, background: 'linear-gradient(180deg, #FFE477, #F59E0B)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><TrophyIcon size={18} color="#7C2D12" /></span>
+      <span style={{ display: 'flex', flexShrink: 0 }}><TrophyIcon size={24} color="#F59E0B" /></span>
       <span style={{ minWidth: 0 }}>
         <span style={{ display: 'block', fontSize: 14, fontWeight: 900, color: theme.ink, whiteSpace: 'nowrap' }}>{msg.text}</span>
         {msg.sub && <span style={{ display: 'block', fontSize: 12, fontWeight: 700, color: theme.muted }}>{msg.sub}</span>}
@@ -39138,14 +38602,14 @@ function GameRanksPanel({ mine, onOpenBoard }) {
   );
   return (
     <>
-      <div role="button" aria-label="Open leaderboards" onClick={() => onOpenBoard('all')} className="zchat-press"
-        style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px 16px', marginTop: 14, borderRadius: 22, cursor: 'pointer', background: 'linear-gradient(135deg, #7C3AED, #DB2777)', color: 'white', boxShadow: '0 12px 26px rgba(124,58,237,0.35)' }}>
-        <span style={{ width: 46, height: 46, borderRadius: 14, background: 'linear-gradient(180deg, #FFE477, #F59E0B)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><TrophyIcon size={26} color="#7C2D12" /></span>
+      <div role="button" aria-label="Open leaderboards" onClick={() => onOpenBoard('all')} className="zchat-row-press"
+        style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 14px', marginTop: 14, borderRadius: 16, cursor: 'pointer', background: theme.rowBg, color: theme.ink }}>
+        <span style={{ display: 'flex', flexShrink: 0 }}><TrophyIcon size={24} color="#F59E0B" /></span>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 17, fontWeight: 900 }}>Leaderboards</div>
-          <div style={{ fontSize: 12.5, opacity: 0.9 }}>See who is on top among your friends and on ZChat</div>
+          <div style={{ fontSize: 15.5, fontWeight: 700 }}>Leaderboards</div>
+          <div style={{ fontSize: 12.5, color: theme.muted, marginTop: 1 }}>See who is on top among your friends and on ZChat</div>
         </div>
-        <ChevronRight size={20} color="white" />
+        <ChevronRight size={18} color={theme.muted} />
       </div>
       <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
         {stat('Wins', all ? all.wins : 0)}
@@ -39291,8 +38755,8 @@ function TugBoard({ isHost, bus, onHostFinish, onProgress }) {
         <div style={{ position: 'absolute', left: '50%', top: 6, bottom: 6, width: 2, background: theme.border, transform: 'translateX(-1px)' }} />
         <div style={{ position: 'absolute', left: 0, right: 0, top: 28, height: 8, borderRadius: 4, background: 'repeating-linear-gradient(90deg, #D6A35C 0 10px, #B7813F 10px 20px)', transform: `translateX(${-pos * 18}%)`, transition: 'transform 0.12s linear' }} />
         <div style={{ position: 'absolute', top: 20, left: '50%', width: 22, height: 24, borderRadius: 6, background: '#EF4444', border: '3px solid white', boxShadow: '0 4px 10px rgba(0,0,0,0.3)', transform: `translateX(calc(-50% + ${-pos * 160}px))`, transition: 'transform 0.12s linear' }} />
-        <div style={{ position: 'absolute', left: 0, top: 0, fontSize: 11.5, fontWeight: 900, color: theme.coral }}>YOUR SIDE</div>
-        <div style={{ position: 'absolute', right: 0, top: 0, fontSize: 11.5, fontWeight: 900, color: theme.muted }}>THEIR SIDE</div>
+        <div style={{ position: 'absolute', left: 0, top: 0, fontSize: 12, fontWeight: 800, color: theme.coral }}>Your side</div>
+        <div style={{ position: 'absolute', right: 0, top: 0, fontSize: 12, fontWeight: 800, color: theme.muted }}>Their side</div>
       </div>
       <div role="button" aria-label="Pull" data-silent="1" onPointerDown={(e) => { e.preventDefault(); tap(); }}
         style={{ width: 'min(70vw, 260px)', aspectRatio: '1', borderRadius: '50%', background: over ? theme.rowBg : 'radial-gradient(circle at 35% 30%, #FDBA74, #F97316 55%, #C2410C)', color: 'white', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', boxShadow: over ? 'none' : '0 14px 30px rgba(249,115,22,0.45), inset 0 -8px 0 rgba(0,0,0,0.15)', cursor: 'pointer', userSelect: 'none', touchAction: 'none', transform: `scale(${over ? 0.96 : 1})`, transition: 'transform 0.08s ease' }}>
@@ -39748,7 +39212,7 @@ function GamesPage({ onClose, onChallenge, onShareScore, initialGame, friends, o
           <div style={{ width: '100%', aspectRatio: '16 / 9', position: 'relative', overflow: 'hidden' }}><div style={{ position: 'absolute', left: 0, right: 0, top: '-28%', height: '128%' }}><GameArt k={featured.k} width="100%" height="100%" radius={0} /></div></div>
           <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '28px 16px 14px', background: 'linear-gradient(180deg, transparent, rgba(0,0,0,0.65))', display: 'flex', alignItems: 'flex-end', gap: 12 }}>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 11, fontWeight: 900, color: '#FDE047', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Game of the day</div>
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: 'rgba(255,255,255,0.85)' }}>Game of the day</div>
               <div style={{ fontSize: 22, fontWeight: 900, color: 'white', textShadow: '0 2px 6px rgba(0,0,0,0.4)' }}>{GAME_TITLES[featured.k]}</div>
               <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.85)' }}>{bestOf(featured.k) ? `Your best ${formatGameScore(featured.k, bestOf(featured.k))}` : featured.sub}</div>
             </div>
@@ -40097,7 +39561,7 @@ function RestrictionNotice({ restriction, onClose }) {
   return ReactDOM.createPortal(
     <div onClick={onClose} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 900, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, fontFamily: FONT }}>
       <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 340, background: theme.panelBg, borderRadius: 26, padding: '26px 22px 8px', textAlign: 'center', boxShadow: '0 20px 60px rgba(0,0,0,0.45)' }}>
-        <div style={{ width: 64, height: 64, borderRadius: 32, margin: '0 auto 14px', background: `${theme.danger}1F`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Lock size={28} color={theme.danger} /></div>
+        <div style={{ margin: '0 auto 12px', display: 'flex', justifyContent: 'center' }}><Lock size={34} strokeWidth={1.6} color={theme.danger} /></div>
         <div style={{ fontWeight: 900, fontSize: 19, color: theme.ink }}>{copy.title}</div>
         <div style={{ fontSize: 14, color: theme.muted, lineHeight: 1.55, marginTop: 8 }}>
           {`You can't ${copy.action} right now. This is paused until ${adminDate(restriction.until)}.`}
@@ -40116,7 +39580,7 @@ function ChatPausedBar({ restriction }) {
   const { theme } = useTheme();
   return (
     <div className="zchat-fade" style={{ flex: 1, minWidth: 0, fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 20, background: `${theme.danger}14`, border: `1px solid ${theme.danger}40` }}>
-      <div style={{ width: 40, height: 40, borderRadius: 20, background: `${theme.danger}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Lock size={19} color={theme.danger} /></div>
+      <div style={{ display: 'flex', flexShrink: 0 }}><Lock size={21} color={theme.danger} /></div>
       <div style={{ minWidth: 0, flex: 1 }}>
         <div style={{ fontWeight: 900, fontSize: 14, color: theme.ink }}>Messaging is paused</div>
         <div style={{ fontSize: 12.5, color: theme.muted, marginTop: 2, lineHeight: 1.4 }}>{`Until ${adminDate(restriction.until)}. ${restrictionTimeLeft(restriction.until)} left.`}</div>
@@ -40354,7 +39818,7 @@ function AdminPeople({ onManage }) {
               </div>
               <div style={{ fontSize: 12, color: theme.muted, marginTop: 1 }}>@{p.username} {p.created_at ? `· joined ${adminDate(p.created_at).split(',')[0]}` : ''}</div>
             </div>
-            {p.banned && <span style={{ fontSize: 10.5, fontWeight: 900, color: theme.danger, background: `${theme.danger}1F`, padding: '3px 8px', borderRadius: 8 }}>BANNED</span>}
+            {p.banned && <span style={{ fontSize: 10.5, fontWeight: 900, color: theme.danger, background: `${theme.danger}1F`, padding: '3px 8px', borderRadius: 8 }}>Banned</span>}
             {p.is_bot && <span style={{ fontSize: 10.5, fontWeight: 900, color: theme.coral, background: `${theme.coral}1F`, padding: '3px 8px', borderRadius: 8 }}>BOT</span>}
             <ChevronRight size={17} color={theme.muted} />
           </div>
@@ -40537,7 +40001,7 @@ function AdminKnowledge() {
   return (
     <>
       <div style={{ borderRadius: 22, padding: 16, marginBottom: 12, color: 'white', background: 'linear-gradient(135deg, #7C3AED, #06B6D4)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 900, fontSize: 16 }}><Sparkles size={18} /> What ZChat Bot has learned</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 900, fontSize: 16 }}>What ZChat Bot has learned</div>
         <div style={{ fontSize: 12.5, opacity: 0.9, marginTop: 6, lineHeight: 1.5 }}>People teach it in chat. It shares what it learned with others who ask, without saying who taught it. Private details, links and anything unsafe are filtered out before they are saved.</div>
       </div>
       {note && <div style={{ ...card, padding: '10px 12px', fontSize: 13, fontWeight: 700, color: theme.ink }}>{note}</div>}
@@ -40640,16 +40104,16 @@ function AdminPanel({ myId, onClose, onOpenProfile, onOpenReports }) {
   };
 
   const card = { background: theme.rowBg, border: `1px solid ${theme.border}`, borderRadius: 20, padding: 14 };
-  const tile = (Icon, label, value, color, onClick) => (
+  const tile = (Icon, label, value, onClick) => (
     <div role={onClick ? 'button' : undefined} onClick={onClick} style={{ ...card, boxSizing: 'border-box', flex: '1 1 calc(50% - 5px)', minWidth: 140, maxWidth: 'calc(50% - 5px)', cursor: onClick ? 'pointer' : 'default' }}>
-      <div style={{ color, display: 'flex', marginBottom: 10 }}><Icon size={22} strokeWidth={1.8} /></div>
+      <div style={{ color: theme.muted, display: 'flex', marginBottom: 10 }}><Icon size={22} strokeWidth={1.6} /></div>
       <div style={{ fontSize: 26, fontWeight: 900, color: theme.ink, letterSpacing: '-0.02em', lineHeight: 1 }}>{value == null ? '—' : formatCount(Number(value) || 0)}</div>
       <div style={{ fontSize: 12, color: theme.muted, fontWeight: 700, marginTop: 5 }}>{label}</div>
     </div>
   );
   const signups = (stats && stats.signups) || [];
   const maxN = Math.max(1, ...signups.map((d) => Number(d.n) || 0));
-  const TABS = [['home', 'Home', LayoutDashboard], ['people', 'People', Users], ['content', 'Content', ImageIcon], ['bot', 'Bot', Sparkles], ['announce', 'Announce', Megaphone], ['data', 'Data', Database]];
+  const TABS = [['home', 'Home', LayoutDashboard], ['people', 'People', Users], ['content', 'Content', ImageIcon], ['bot', 'Bot', MessageSquare], ['announce', 'Announce', Megaphone], ['data', 'Data', Database]];
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 40, background: theme.panelBg, display: 'flex', flexDirection: 'column', fontFamily: FONT, isolation: 'isolate' }} className="zchat-panel-open">
@@ -40680,22 +40144,22 @@ function AdminPanel({ myId, onClose, onOpenProfile, onOpenReports }) {
               </div>
             </div>
             <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 12, scrollbarWidth: 'none' }}>
-              {[[ShieldAlert, `Reports${stats && Number(stats.open_reports) ? ` ${stats.open_reports}` : ''}`, onOpenReports], [Activity, 'Crash reports', () => setTab('errors')], [Megaphone, 'Announce', () => setTab('announce')], [Sparkles, 'Teach the bot', () => setTab('bot')], [Database, 'Browse data', () => setTab('data')]].map(([Icon, label, go]) => (
+              {[[ShieldAlert, `Reports${stats && Number(stats.open_reports) ? ` ${stats.open_reports}` : ''}`, onOpenReports], [Activity, 'Crash reports', () => setTab('errors')], [Megaphone, 'Announce', () => setTab('announce')], [MessageSquare, 'Teach the bot', () => setTab('bot')], [Database, 'Browse data', () => setTab('data')]].map(([Icon, label, go]) => (
                 <div key={label} role="button" onClick={go} style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 7, padding: '9px 14px', borderRadius: 16, background: theme.rowBg, border: `1px solid ${theme.border}`, color: theme.ink, fontSize: 13, fontWeight: 800, cursor: 'pointer' }}><Icon size={16} color={theme.coral} />{label}</div>
               ))}
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-              {tile(UserPlus, 'Joined this week', stats && stats.new_week, '#8B5CF6')}
-              {tile(Clock, 'Active in 24 hours', stats && stats.active_day, '#F59E0B')}
-              {tile(Mail, 'All messages', stats && stats.messages, '#14B8A6')}
-              {tile(ImageIcon, 'Posts', stats && stats.posts, '#EC4899')}
-              {tile(Camera, 'Live stories', stats && stats.stories_live, '#F97316')}
-              {tile(Users, 'Groups', stats && stats.groups, '#6366F1')}
-              {tile(Sparkles, 'Bot messages', stats && stats.bot_messages, '#06B6D4')}
-              {tile(Sparkles, 'Facts the bot learned', knowCount, '#7C3AED', () => setTab('bot'))}
-              {tile(ShieldAlert, 'Open reports', stats && stats.open_reports, '#EF4444', onOpenReports)}
-              {tile(Ban, 'Banned', stats && stats.banned, '#EF4444', () => setTab('people'))}
-              {tile(Timer, 'Paused right now', stats && stats.paused, '#F59E0B', () => setTab('people'))}
+              {tile(UserPlus, 'Joined this week', stats && stats.new_week)}
+              {tile(Clock, 'Active in 24 hours', stats && stats.active_day)}
+              {tile(Mail, 'All messages', stats && stats.messages)}
+              {tile(ImageIcon, 'Posts', stats && stats.posts)}
+              {tile(Camera, 'Live stories', stats && stats.stories_live)}
+              {tile(Users, 'Groups', stats && stats.groups)}
+              {tile(MessageSquare, 'Bot messages', stats && stats.bot_messages)}
+              {tile(FileText, 'Facts the bot learned', knowCount, () => setTab('bot'))}
+              {tile(ShieldAlert, 'Open reports', stats && stats.open_reports, onOpenReports)}
+              {tile(Ban, 'Banned', stats && stats.banned, () => setTab('people'))}
+              {tile(Timer, 'Paused right now', stats && stats.paused, () => setTab('people'))}
             </div>
             <AdminNewest onManage={(p) => { setTab('people'); setManageFor(p); }} />
             <div style={{ ...card, marginTop: 12 }}>
@@ -40964,7 +40428,7 @@ function AdminUserPanel({ person, myId, onClose, onChanged, onOpenProfile }) {
               [['', 'No badge', theme.muted], ...Object.entries(VERIFIED_TIERS).map(([k, t]) => [k, t.label, t.color])].map(([k, label, color]) => (
                 <div key={k || 'none'} style={{ ...card, display: 'flex', alignItems: 'center', gap: 10, padding: '11px 12px' }}>
                   <span style={{ flex: 1, fontWeight: 800, fontSize: 15, color: theme.ink, display: 'flex', alignItems: 'center', minWidth: 0 }}><NameBadge name={profile.name} verified={k || null} size={20} />{k ? <span style={{ fontSize: 11.5, color: theme.muted, fontWeight: 700, marginLeft: 8, flexShrink: 0 }}>{label}</span> : <span style={{ fontSize: 11.5, color: theme.muted, fontWeight: 700, marginLeft: 8 }}>No badge</span>}</span>
-                  {(profile.verified || '') === k ? <span style={{ fontSize: 11.5, fontWeight: 900, color: theme.coral }}>ACTIVE</span> : pill('Set', () => act(() => supabase.rpc('admin_set_verified', { p_user_id: person.id, p_tier: k || null }), 'Badge updated.', () => onChanged({ verified: k || null })), 'main', busy)}
+                  {(profile.verified || '') === k ? <span style={{ fontSize: 12, fontWeight: 800, color: theme.coral }}>Active</span> : pill('Set', () => act(() => supabase.rpc('admin_set_verified', { p_user_id: person.id, p_tier: k || null }), 'Badge updated.', () => onChanged({ verified: k || null })), 'main', busy)}
                 </div>
               ))
             ) : Object.entries(catalog).map(([key, spec]) => {
@@ -42117,7 +41581,7 @@ function SharePreviewScreen({ landing: initialLanding, onAuth }) {
     const faces = data.faces || [];
     body = (
       <div style={{ textAlign: 'center', paddingTop: 26 }}>
-        <div style={{ display: 'inline-block', borderRadius: 34, boxShadow: '0 12px 40px rgba(59,130,246,0.35)' }}><GroupAvatar avatar={data.avatar} name={data.name} size={104} /></div>
+        <div style={{ display: 'inline-block' }}><GroupAvatar avatar={data.avatar} name={data.name} size={104} /></div>
         <div style={{ fontWeight: 900, fontSize: 22, marginTop: 16, wordBreak: 'break-word' }}>{data.name}</div>
         <div style={{ color: MUTED, fontSize: 13.5, marginTop: 4 }}>Group with {data.member_count} {data.member_count === 1 ? 'member' : 'members'}</div>
         {faces.length > 0 && (
@@ -42827,7 +42291,6 @@ function PublicStorePage() {
     <PublicShell wide>
       <style>{`
         @keyframes zs-glow { 0%,100% { opacity: .55; transform: scale(1); } 50% { opacity: .9; transform: scale(1.08); } }
-        @keyframes zs-shine { 0% { transform: translateX(-120%) skewX(-20deg); } 60%,100% { transform: translateX(220%) skewX(-20deg); } }
         @keyframes zs-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
         .zs-card { transition: transform .18s ease, border-color .18s ease; }
         .zs-card:active { transform: scale(.97); }
@@ -42838,7 +42301,7 @@ function PublicStorePage() {
         <div style={{ position: 'absolute', left: '50%', top: 40, width: 320, height: 320, marginLeft: -160, borderRadius: '50%', background: `radial-gradient(circle, ${r.glow} 0%, transparent 65%)`, animation: 'zs-glow 3.2s ease-in-out infinite', pointerEvents: 'none' }} />
         <div style={{ position: 'relative', padding: '18px 18px 22px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
           <div style={{ alignSelf: 'stretch', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: '0.14em', color: 'rgba(255,255,255,0.55)' }}>AVATAR FRAME STORE</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.6)' }}>Avatar frame store</div>
             {me && <div style={{ fontSize: 11.5, fontWeight: 800, padding: '4px 10px', borderRadius: 10, background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.8)' }}>{ownedCount} owned</div>}
           </div>
 
@@ -42861,14 +42324,13 @@ function PublicStorePage() {
             <span style={{ fontSize: 14, fontWeight: 700, color: 'rgba(255,255,255,0.6)' }}>for {FRAME_STORE.periodLabel}</span>
           </div>
 
-          <button onClick={buy} disabled={cta.disabled} style={{ position: 'relative', overflow: 'hidden', marginTop: 14, width: '100%', maxWidth: 360, padding: '16px 18px', borderRadius: 18, border: 'none', fontFamily: FONT, fontWeight: 900, fontSize: 17, letterSpacing: '0.02em', cursor: cta.disabled ? 'default' : 'pointer', color: cta.disabled ? 'rgba(255,255,255,0.6)' : '#1a0f02', background: cta.disabled ? 'rgba(255,255,255,0.1)' : 'linear-gradient(135deg, #fde047, #f59e0b 45%, #ea580c)', boxShadow: cta.disabled ? 'none' : '0 12px 30px rgba(245,158,11,0.35)' }}>
-            {!cta.disabled && <span style={{ position: 'absolute', top: 0, bottom: 0, width: '40%', background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.55), transparent)', animation: 'zs-shine 2.6s ease-in-out infinite' }} />}
+          <button onClick={buy} disabled={cta.disabled} style={{ position: 'relative', overflow: 'hidden', marginTop: 14, width: '100%', maxWidth: 360, padding: '16px 18px', borderRadius: 18, border: 'none', fontFamily: FONT, fontWeight: 900, fontSize: 17, letterSpacing: '0.02em', cursor: cta.disabled ? 'default' : 'pointer', color: cta.disabled ? 'rgba(255,255,255,0.6)' : '#1a0f02', background: cta.disabled ? 'rgba(255,255,255,0.1)' : '#F5A524' }}>
             <span style={{ position: 'relative' }}>{cta.label}</span>
           </button>
           <div style={{ fontSize: 12.5, color: owned ? '#34d399' : 'rgba(255,255,255,0.55)', marginTop: 8, fontWeight: 700 }}>{cta.sub}</div>
 
           <div style={{ display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap', justifyContent: 'center' }}>
-            {[[Sparkles, 'Instant delivery'], [Repeat, 'Not a subscription'], [Lock, 'Secure checkout']].map(([Ic, t]) => (
+            {[[BoltIcon, 'Instant delivery'], [Repeat, 'Not a subscription'], [Lock, 'Secure checkout']].map(([Ic, t]) => (
               <span key={t} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 800, padding: '6px 10px', borderRadius: 10, background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.75)' }}><Ic size={13} strokeWidth={2.4} />{t}</span>
             ))}
           </div>
