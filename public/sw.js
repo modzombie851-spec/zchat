@@ -269,6 +269,8 @@ function accountOf(url) {
 self.addEventListener('push', (event) => {
   let data = { title: 'ZChat', body: 'You have a new message', url: '/', icon: '/icon-192.png' };
   try { data = { ...data, ...event.data.json() }; } catch {}
+  const hush = typeof data.body === 'string' && data.body.charCodeAt(0) === 0x2063;
+  if (hush) data.body = data.body.slice(1);
   event.waitUntil((async () => {
     const tag = data.tag || tagFor(data.url);
     if (tag) {
@@ -286,9 +288,23 @@ self.addEventListener('push', (event) => {
         });
         return;
       }
+      const limited = await readPref('/__restricted');
+      const rkeys = limited && acc && Array.isArray(limited[acc]) ? limited[acc] : [];
+      if (rkeys.includes(tag)) {
+        await self.registration.showNotification('ZChat', {
+          body: 'New message request',
+          icon: '/icon-192.png',
+          badge: '/badge-192.png',
+          tag: 'zchat-requests',
+          silent: true,
+          renotify: false,
+          data: { url: acc ? `/?acc=${encodeURIComponent(acc)}` : '/' },
+        });
+        return;
+      }
     }
     const focus = await readPref('/__focus');
-    const quiet = !!(focus && Number(focus.until) > Date.now() && tag !== focus.chat);
+    const quiet = hush || !!(focus && Number(focus.until) > Date.now() && tag !== focus.chat);
     let title = data.title;
     let body = data.body;
     let lines = [data.body];
