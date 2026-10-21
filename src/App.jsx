@@ -869,17 +869,11 @@ function GlobalStyle() {
       .zchat-panel-open, .zchat-sidebar-desktop { touch-action: pan-y; }
       @keyframes zchat-confetti { 0% { transform: translateY(-20px) rotate(0deg); } 100% { transform: translateY(110vh) rotate(720deg); } }
       @keyframes zchat-badge-pulse { 0%, 100% { transform: scale(0.94); opacity: 0.75; } 50% { transform: scale(1.06); opacity: 1; } }
-      @keyframes zchat-frame-spin { to { transform: rotate(360deg); } }
-      @keyframes zchat-frame-fire { 0%, 100% { filter: brightness(1) saturate(1.05) drop-shadow(0 0 4px rgba(255,90,20,0.45)); } 25% { filter: brightness(1.12) saturate(1.2) drop-shadow(0 0 9px rgba(255,120,30,0.7)); } 50% { filter: brightness(0.96) saturate(1.1) drop-shadow(0 0 5px rgba(255,70,10,0.5)); } 75% { filter: brightness(1.18) saturate(1.25) drop-shadow(0 0 11px rgba(255,140,40,0.75)); } }
-      @keyframes zchat-frame-ice { 0%, 100% { filter: brightness(1) drop-shadow(0 0 4px rgba(56,189,248,0.4)); } 50% { filter: brightness(1.15) drop-shadow(0 0 12px rgba(56,189,248,0.8)); } }
-      .zchat-frame-mask { -webkit-mask-image: radial-gradient(circle closest-side, #000 84%, rgba(0,0,0,0) 100%); mask-image: radial-gradient(circle closest-side, #000 84%, rgba(0,0,0,0) 100%); }
+      @keyframes zdec-in { from { opacity: 0; } to { opacity: 1; } }
       @keyframes zchat-post-heart { 0% { transform: scale(0); opacity: 0; } 15% { transform: scale(1.2); opacity: 1; } 30% { transform: scale(0.95); } 45% { transform: scale(1); } 80% { transform: scale(1); opacity: 1; } 100% { transform: scale(0.2) translateY(-60px); opacity: 0; } }
       img, video { -webkit-touch-callout: none; -webkit-user-drag: none; }
       body { -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
       .zchat-call-ring { animation: zchat-call-ring 1.8s ease-out infinite; }
-      .zchat-fire-ring {
-        background: linear-gradient(135deg, #FFD23F, #FF6B00, #FF2D55);
-      }
       .zchat-fade { animation: zchat-fade 0.28s cubic-bezier(0.2, 0.8, 0.2, 1); transform-origin: 50% 60%; }
       .zchat-wave-pop { animation: zchat-wave-pop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1); }
       .zchat-panel-open { animation: zchat-panel-zoom-in 0.3s cubic-bezier(0.32, 0.72, 0, 1); }
@@ -937,13 +931,8 @@ function colorForName(name) {
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
 }
 
-function Avatar({ emoji, name = '', online, size = 40, ring = false, frame = null, frameFit }) {
+function Avatar({ emoji, name = '', online, size = 40, ring = false }) {
   const { theme } = useTheme();
-  const frameUrl = useFrameUrl(frame && size >= 22 ? frame : null);
-  const frameSpec = frame ? AVATAR_FRAMES[frame] : null;
-  const fitFrame = frameSpec ? (frameFit === undefined ? size <= 72 : !!frameFit) : false;
-  const photo = fitFrame ? Math.round(size / frameSpec.scale) : size;
-  const inset = (size - photo) / 2;
   const [imgFailed, setImgFailed] = useState(false);
   const isImage = typeof emoji === 'string' && emoji.startsWith('http') && !imgFailed;
   const initial = (name || '?').trim().charAt(0).toUpperCase() || '?';
@@ -951,11 +940,11 @@ function Avatar({ emoji, name = '', online, size = 40, ring = false, frame = nul
   return (
     <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
       <div style={{
-        position: 'absolute', left: inset, top: inset,
-        width: photo, height: photo, borderRadius: '50%',
+        position: 'absolute', left: 0, top: 0,
+        width: size, height: size, borderRadius: '50%',
         background: isImage ? 'transparent' : colorForName(name),
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: photo * 0.42, fontWeight: 800, color: 'white', fontFamily: FONT,
+        fontSize: size * 0.42, fontWeight: 800, color: 'white', fontFamily: FONT,
         boxShadow: (ring && ringColor) ? `0 0 0 2.5px ${ringColor}, 0 0 10px ${ringColor}88` : 'inset 0 0 0 1px rgba(255,255,255,0.25)',
         overflow: 'hidden',
       }}>
@@ -963,17 +952,9 @@ function Avatar({ emoji, name = '', online, size = 40, ring = false, frame = nul
           ? <img src={emoji} alt="" onError={() => setImgFailed(true)} onContextMenu={(e) => e.preventDefault()} draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           : initial}
       </div>
-      {frameUrl && frameSpec && (() => {
-        const spec = frameSpec;
-        const w = photo * spec.scale;
-        return (
-          <img src={frameUrl} alt="" draggable={false} aria-hidden="true"
-            style={{ ...frameMaskStyle(spec), position: 'absolute', width: w, height: w, left: size / 2 - w * (spec.centerX ?? 0.5), top: size / 2 - w * spec.centerY, pointerEvents: 'none', userSelect: 'none', zIndex: 2, maxWidth: 'none', animation: (theme.dark ? spec.animation : (spec.animationLight || spec.animation)) || 'none' }} />
-        );
-      })()}
       {online != null && (
         <div style={{
-          position: 'absolute', bottom: inset, right: inset, width: photo * 0.28, height: photo * 0.28, zIndex: 3,
+          position: 'absolute', bottom: 0, right: 0, width: size * 0.28, height: size * 0.28, zIndex: 3,
           borderRadius: '50%', background: online ? '#31D158' : '#B9BCC3', border: '2px solid white',
         }} />
       )}
@@ -2933,7 +2914,7 @@ function RequestsPage({ items, onOpen, onClose, unreadOf, hidePreviews, spamCoun
           return (
             <div key={p.id} role="button" aria-label={`Request from ${p.name}`} onClick={() => onOpen(c)} className="zchat-row-press"
               style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 10px', borderRadius: 14, cursor: 'pointer' }}>
-              <Avatar emoji={p.avatar} name={p.name} frame={p.avatar_frame} size={50} />
+              <Avatar emoji={p.avatar} name={p.name} size={50} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 15, fontWeight: unread ? 800 : 700, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><NameBadge name={p.name} verified={p.verified} custom={p.custom_badge} size={12} /></div>
                 <PreviewLine preview={pv} color={unread ? theme.ink : theme.muted} weight={unread ? 700 : 400} size={13} />
@@ -3077,7 +3058,7 @@ function PeoplePickerPage({ title, subtitle, note, table, ownerCol, otherCol, my
       setPicked(chosen);
       const ids = [...new Set([...(a || []).map((r) => r.following_id), ...(b || []).map((r) => r.follower_id), ...chosen])].filter((x) => x && x !== myId);
       if (!ids.length) { setPeople([]); return; }
-      const { data: profs } = await supabase.from('profiles').select('id, name, username, avatar, avatar_frame, verified, custom_badge, is_bot, is_deleted').in('id', ids);
+      const { data: profs } = await supabase.from('profiles').select('id, name, username, avatar, avatar_frame, nameplate, verified, custom_badge, is_bot, is_deleted').in('id', ids);
       if (!alive) return;
       setPeople(sanitizeAvatarList(profs || [], myId).filter((x) => !x.is_deleted && !x.is_bot).sort((x, y) => (x.name || '').localeCompare(y.name || '')));
     })();
@@ -3119,7 +3100,7 @@ function PeoplePickerPage({ title, subtitle, note, table, ownerCol, otherCol, my
           return (
             <div key={p.id} role="button" aria-label={`${on ? 'Remove' : 'Add'} ${p.name}`} onClick={() => toggle(p.id)} className="zchat-row-press"
               style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 10px', borderRadius: 14, cursor: 'pointer' }}>
-              <Avatar emoji={p.avatar} name={p.name} frame={p.avatar_frame} size={46} />
+              <Avatar emoji={p.avatar} name={p.name} size={46} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 15, fontWeight: 700, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><NameBadge name={p.name} verified={p.verified} custom={p.custom_badge} size={12} /></div>
                 <div style={{ fontSize: 12.5, color: theme.muted }}>@{p.username}</div>
@@ -3840,7 +3821,7 @@ function RestrictedAccountsPage({ myId, ids, onClose, onUnrestrict, onOpenProfil
     let alive = true;
     const list = [...ids];
     if (!list.length) { setRows([]); return undefined; }
-    supabase.from('profiles').select('id, name, username, avatar, avatar_frame, verified, custom_badge, is_deleted').in('id', list).then(({ data }) => {
+    supabase.from('profiles').select('id, name, username, avatar, avatar_frame, nameplate, verified, custom_badge, is_deleted').in('id', list).then(({ data }) => {
       if (alive) setRows(sanitizeAvatarList(data || [], myId).filter((p) => !p.is_deleted));
     }, () => { if (alive) setRows([]); });
     return () => { alive = false; };
@@ -3857,7 +3838,7 @@ function RestrictedAccountsPage({ myId, ids, onClose, onUnrestrict, onOpenProfil
           {rows.map((p) => (
             <div key={p.id} role="listitem" aria-label={`Restricted ${p.name}`} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 16px' }}>
               <div role="button" onClick={() => onOpenProfile && onOpenProfile(p)} style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0, cursor: 'pointer' }}>
-                <Avatar emoji={p.avatar} name={p.name} frame={p.avatar_frame} size={48} />
+                <Avatar emoji={p.avatar} name={p.name} size={48} />
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 15, fontWeight: 700, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><NameBadge name={p.name} verified={p.verified} custom={p.custom_badge} size={12} /></div>
                   <div style={{ fontSize: 13, color: theme.muted }}>@{p.username}</div>
@@ -4624,7 +4605,7 @@ function AccountSwitcherPanel({ accounts, currentId, switchingId, onBack, onSwit
       <div>
         {accounts.map((a, idx) => (
           <div key={a.id} role="button" aria-label={`Account ${a.name}`} onClick={() => a.id !== currentId && !switchingId && onSwitch(a)} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '11px 4px', minHeight: 70, borderRadius: 14, cursor: a.id !== currentId && !switchingId ? 'pointer' : 'default', opacity: switchingId && switchingId !== a.id ? 0.5 : 1 }}>
-            <Avatar emoji={a.avatar} name={a.name} frame={a.avatar_frame} size={50} />
+            <Avatar emoji={a.avatar} name={a.name} size={50} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontWeight: 700, fontSize: 15, color: theme.ink, display: 'flex', alignItems: 'center', minWidth: 0 }}>
                 <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{a.name}</span><VerifiedBadge tier={tiers[a.id] || a.verified} custom={a.custom_badge} size={14} />
@@ -4723,7 +4704,7 @@ function WhoCanSeePanel({ me, onBack, onSaved, initialOpen }) {
     setAllow(new Set((allowRows || []).map((r) => r.viewer_id)));
     const ids = [...new Set((followers || []).map((f) => f.follower_id))];
     if (!ids.length) { setPeople([]); return; }
-    const { data: profs } = await supabase.from('profiles').select('id, name, username, avatar, avatar_frame, verified, custom_badge').in('id', ids);
+    const { data: profs } = await supabase.from('profiles').select('id, name, username, avatar, avatar_frame, nameplate, verified, custom_badge').in('id', ids);
     setPeople(sanitizeAvatarList(profs, me.id).filter((x) => !x.is_deleted));
   };
 
@@ -4789,7 +4770,7 @@ function WhoCanSeePanel({ me, onBack, onSaved, initialOpen }) {
             ) : people.map((u) => (
               <div key={u.id} role="button" onClick={() => !busy && toggleAllow(u.id)}
                 style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', cursor: 'pointer', borderBottom: `1px solid ${theme.border}` }}>
-                <Avatar emoji={u.avatar} name={u.name} size={40} frame={u.avatar_frame} />
+                <Avatar emoji={u.avatar} name={u.name} size={40} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 14.5, fontWeight: 700, color: theme.ink, display: 'flex', alignItems: 'center' }}>
                     <NameBadge name={u.name} verified={u.verified} custom={u.custom_badge} size={12} />
@@ -4875,7 +4856,7 @@ function UserListRow({ profile, rightContent, onClick, sub }) {
     <div onClick={onClick} role={onClick ? 'button' : undefined} className={onClick ? 'zchat-row-press' : undefined} style={{
       display: 'flex', alignItems: 'center', gap: 14, padding: '9px 4px', margin: '0 -4px', minHeight: 66, boxSizing: 'border-box', borderRadius: 14, cursor: onClick ? 'pointer' : 'default',
     }}>
-      <FramedAvatar frame={profile.avatar_frame} size={48}><Avatar emoji={profile.avatar} name={profile.name} frame={profile.avatar_frame} size={48} /></FramedAvatar>
+      <Avatar emoji={profile.avatar} name={profile.name} size={48} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontWeight: 700, fontSize: 15, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><NameBadge name={profile.name} verified={profile.verified} custom={profile.custom_badge} size={13} /></div>
         <div style={{ fontSize: 13, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 1 }}>{sub || `@${profile.username}`}</div>
@@ -5051,9 +5032,10 @@ function CoinIcon({ size = 20, style }) {
 
 const DAILY_COINS = [5, 5, 10, 10, 15, 20, 40];
 const SHOP_PRICES = { epic: 300, legendary: 600, mythic: 1000, rare: 150 };
-const SHOP_DAYS = 30;
 function shopPrice(kind, key) {
-  const spec = kind === 'frame' ? AVATAR_FRAMES[key] : kind === 'nameplate' ? NAMEPLATES[key] : kind === 'charm' ? CUSTOM_BADGES[key] : null;
+  if (kind === 'frame' || kind === 'nameplate') return isDecorKey(key) ? DECOR_PRICE : null;
+  if (kind === 'set') return isDecorKey(key) ? DECOR_PRICE * 2 : null;
+  const spec = kind === 'charm' ? CUSTOM_BADGES[key] : null;
   if (!spec) return null;
   return SHOP_PRICES[spec.rarity] || SHOP_PRICES.epic;
 }
@@ -5069,8 +5051,8 @@ async function loadWallet(uid, force) {
     const { data, error } = await supabase.rpc('zchat_wallet', { p_tz: tz });
     const row = Array.isArray(data) ? data[0] : data;
     const out = !error && row && typeof row === 'object'
-      ? { ready: true, coins: Number(row.coins) || 0, streak: Number(row.streak) || 0, canClaim: !!row.can_claim, day: Math.min(7, Math.max(1, Number(row.day) || 1)), invites: Number(row.invites) || 0, canRedeem: !!row.can_redeem }
-      : { ready: false, coins: 0, streak: 0, canClaim: false, day: 1, invites: 0, canRedeem: false };
+      ? { ready: true, coins: Number(row.coins) || 0, streak: Number(row.streak) || 0, canClaim: !!row.can_claim, day: Math.min(7, Math.max(1, Number(row.day) || 1)), invites: Number(row.invites) || 0, canRedeem: !!row.can_redeem, freeSets: Math.max(0, Number(row.free_sets) || 0) }
+      : { ready: false, coins: 0, streak: 0, canClaim: false, day: 1, invites: 0, canRedeem: false, freeSets: 0 };
     walletMem.data = out;
     walletMem.at = Date.now();
     walletMem.job = null;
@@ -5192,7 +5174,7 @@ function WalletPage({ uid, me, onClose, onOpenCollection }) {
     announceWallet();
     flash(`You got ${row.added} coins`);
   };
-  const reasonLabel = (r) => ({ daily: 'Daily reward', invite: 'Friend joined with your link', invited: 'Joined with an invite', gift_in: 'Gift received', gift_out: 'Gift sent', shop: 'Unlocked in Collection', gift_item: 'Gift sent', admin: 'From the ZChat team', achievement: 'Achievement reward' }[r] || 'Coins');
+  const reasonLabel = (r) => ({ daily: 'Daily reward', invite: 'Friend joined with your link', invited: 'Joined with an invite', gift_in: 'Gift received', gift_out: 'Gift sent', shop: 'Spent in your Collection', gift_item: 'Gift sent', admin: 'From the ZChat team', achievement: 'Achievement reward' }[r] || 'Coins');
   const day = w ? w.day : 1;
   const claimed = w && w.ready && !w.canClaim;
   return (
@@ -5245,11 +5227,11 @@ function WalletPage({ uid, me, onClose, onOpenCollection }) {
             <input value={code} onChange={(e) => setCode(e.target.value.slice(0, 32))} placeholder="Their username" aria-label="Friend's username" autoCapitalize="none" style={{ ...inputStyle(theme), flex: 1, fontSize: 15.5 }} />
             <div role="button" aria-label="Use invite" onClick={redeem} style={{ height: 46, padding: '0 16px', borderRadius: 12, background: code.trim() ? theme.coral : theme.soft, color: code.trim() ? '#FFFFFF' : theme.muted, display: 'flex', alignItems: 'center', fontSize: 15, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>{redeemBusy ? <Spinner size={15} /> : 'Use'}</div>
           </div>
-          <div style={{ fontSize: 12.5, color: theme.muted, padding: '8px 4px 0' }}>Works in your first 3 days on ZChat.</div>
+          <div style={{ fontSize: 12.5, color: theme.muted, padding: '8px 4px 0' }}>Works in your first 14 days on ZChat.</div>
         </>
       )}
       <IgHeading>Spend coins</IgHeading>
-      <IgRow inset={false} icon={<CollectionIcon />} label="Frames, nameplates and charms" sub="Unlock them for 30 days in your Collection" onClick={onOpenCollection} />
+      <IgRow inset={false} icon={<CollectionIcon />} label="Frames, nameplates and charms" sub="Get them in your Collection, yours to keep" onClick={onOpenCollection} />
       <IgRow inset={false} icon={<GiftIcon />} label="Send a gift" sub="Open someone's profile and tap the gift button" />
       <IgHeading>History</IgHeading>
       {ledger === null ? <div style={{ display: 'flex', justifyContent: 'center', padding: 20 }}><Spinner color={theme.muted} /></div> : !ledger.length ? (
@@ -5277,17 +5259,37 @@ function GiftSheet({ uid, me, to, onClose, onSent }) {
   const [tab, setTab] = useState('coins');
   const [amount, setAmount] = useState(25);
   const [noteText, setNoteText] = useState('');
-  const [item, setItem] = useState(null);
+  const [pick, setPick] = useState(null);
+  const [part, setPart] = useState('set');
+  const [theirs, setTheirs] = useState(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const gridRef = useRef(null);
+  const gw = useWidthOf(gridRef, typeof window === 'undefined' ? 390 : Math.min(window.innerWidth, 480)) - 40;
+  useEffect(() => {
+    if (tab !== 'item' || theirs) return undefined;
+    let alive = true;
+    supabase.from('user_rewards').select('kind, reward_key, expires_at').eq('user_id', to.id).then(({ data }) => { if (alive) setTheirs(data || []); }, () => { if (alive) setTheirs([]); });
+    return () => { alive = false; };
+  }, [tab]);
   const first = String((to && to.name) || '').split(' ')[0] || 'them';
   const balance = w ? w.coins : 0;
-  const cost = tab === 'coins' ? amount : item ? shopPrice(item.kind, item.key) || 0 : 0;
+  const set = pick ? DECOR_BY_KEY[pick] : null;
+  const own = set ? decorOwned(theirs, set.key) : { frame: false, plate: false };
+  const ask = set ? decorAsk(set, part, own) : { missing: [], what: 'set', price: 0 };
+  const cost = tab === 'coins' ? amount : ask.price;
   const enough = balance >= cost && cost > 0;
+  const cardW = Math.max(100, Math.floor((gw - 8) / 2) - 8);
+  const giftStack = tab === 'item' && DECOR_SETS.some((s) => {
+    const o = decorOwned(theirs, s.key);
+    const lw = decorTextW(o.frame && o.plate ? 'They have it' : String(o.frame || o.plate ? DECOR_PRICE : DECOR_PRICE * 2), 700, 11.5);
+    return decorTextW(s.name, 700, 12.5) + 4 + lw > cardW - 14;
+  });
+  useDecorLoaded(tab === 'item' ? DECOR_SPRITE : null);
   const send = async () => {
     if (busy || !enough) return;
     setBusy(true); setErr('');
-    const args = tab === 'coins' ? { p_to: to.id, p_amount: amount, p_note: noteText.trim().slice(0, 80) || null } : { p_to: to.id, p_kind: item.kind, p_key: item.key, p_note: noteText.trim().slice(0, 80) || null };
+    const args = tab === 'coins' ? { p_to: to.id, p_amount: amount, p_note: noteText.trim().slice(0, 80) || null } : { p_to: to.id, p_kind: part === 'set' ? 'set' : part, p_key: set.key, p_note: noteText.trim().slice(0, 80) || null };
     const { data, error } = await supabase.rpc(tab === 'coins' ? 'zchat_send_gift' : 'zchat_gift_item', args);
     setBusy(false);
     const row = Array.isArray(data) ? data[0] : data;
@@ -5297,16 +5299,19 @@ function GiftSheet({ uid, me, to, onClose, onSent }) {
     hapticTap();
     playUiSound('like');
     sendPushNotification(to.id, 'ZChat', `${(me && me.name) || 'Someone'} sent you a gift`, '/?requests=1', me && me.avatar);
-    onSent(tab === 'coins' ? `You sent ${first} ${amount} coins` : `You sent ${first} a gift`);
+    onSent(tab === 'coins' ? `You sent ${first} ${amount} coins` : `You sent ${first} the ${set.name} ${ask.what}`);
   };
-  const items = [
-    ...Object.entries(AVATAR_FRAMES).map(([key, spec]) => ({ kind: 'frame', key, spec })),
-    ...Object.entries(NAMEPLATES).map(([key, spec]) => ({ kind: 'nameplate', key, spec })),
-  ];
+  const choose = (k) => {
+    setPick(k);
+    setErr('');
+    hapticTap();
+    const o = decorOwned(theirs, k);
+    setPart(o.frame && !o.plate ? 'nameplate' : o.plate && !o.frame ? 'frame' : 'set');
+  };
   return (
     <Portal>
       <div onClick={onClose} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 760, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontFamily: FONT }}>
-        <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ transform: drag.sheetStyle.transform, transition: drag.sheetStyle.transition, width: '100%', maxWidth: 480, maxHeight: '86%', background: theme.panelBg, borderRadius: '22px 22px 0 0', display: 'flex', flexDirection: 'column', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))' }}>
+        <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ transform: drag.sheetStyle.transform, transition: drag.sheetStyle.transition, width: '100%', maxWidth: 480, maxHeight: '88%', background: theme.panelBg, borderRadius: '22px 22px 0 0', display: 'flex', flexDirection: 'column', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))' }}>
           <div {...drag.sheetProps} data-sheet-handle="true" style={{ flexShrink: 0, touchAction: 'none' }}>
             <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 0 4px' }}><div style={{ width: 36, height: 4, borderRadius: 2, background: theme.soft2 }} /></div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 20px 12px' }}>
@@ -5316,9 +5321,9 @@ function GiftSheet({ uid, me, to, onClose, onSent }) {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13, color: theme.muted, marginTop: 1 }}><CoinIcon size={14} />You have {formatCount(balance)} coins</div>
               </div>
             </div>
-            <SegmentedControl style={{ margin: '0 20px 12px' }} value={tab} onChange={(k) => { setTab(k); setErr(''); }} options={[['coins', 'Coins'], ['item', 'Frames and nameplates']]} />
+            <SegmentedControl style={{ margin: '0 20px 12px' }} value={tab} onChange={(k) => { setTab(k); setErr(''); }} options={[['coins', 'Coins'], ['item', 'Sets']]} />
           </div>
-          <div data-sheet-scroll="true" style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 20px' }}>
+          <div ref={gridRef} data-sheet-scroll="true" style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 20px' }}>
             {tab === 'coins' ? (
               <div role="radiogroup" aria-label="Amount" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, padding: '4px 0 6px' }}>
                 {GIFT_AMOUNTS.map((n) => {
@@ -5331,28 +5336,43 @@ function GiftSheet({ uid, me, to, onClose, onSent }) {
                 })}
               </div>
             ) : (
-              <div role="radiogroup" aria-label="Pick a gift" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8, padding: '4px 0 6px' }}>
-                {items.map((it) => {
-                  const on = item && item.key === it.key && item.kind === it.kind;
-                  const price = shopPrice(it.kind, it.key);
-                  return (
-                    <div key={`${it.kind}-${it.key}`} role="radio" aria-checked={!!on} aria-label={`${it.spec.label}, ${price} coins`} onClick={() => { setItem(it); hapticTap(); }} className="zchat-press" style={{ borderRadius: 14, padding: '8px 4px 8px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, cursor: 'pointer', background: theme.soft, boxShadow: on ? `inset 0 0 0 2px ${theme.coral}` : 'none', minWidth: 0 }}>
-                      <div style={{ height: 64, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', overflow: 'hidden' }}>
-                        {it.kind === 'frame' ? <Avatar emoji={to.avatar} name={to.name} size={58} frame={it.key} /> : <PlatePreview plate={it.key} width={96} />}
+              <>
+                <div role="radiogroup" aria-label="Pick a set" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8, padding: '4px 0 6px' }}>
+                  {DECOR_SETS.map((s) => {
+                    const on = pick === s.key;
+                    const o = decorOwned(theirs, s.key);
+                    const full = o.frame && o.plate;
+                    return (
+                      <div key={s.key} role="radio" aria-checked={on} aria-label={`${s.name} set${full ? ', they have it' : ''}`} onClick={() => { if (!full) choose(s.key); }} className="zchat-press" style={{ position: 'relative', borderRadius: 16, padding: '6px 2px 9px', display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: full ? 'default' : 'pointer', background: `radial-gradient(120% 85% at 50% 20%, ${s.accent}30 0%, rgba(13,14,20,0) 64%), #12131b`, boxShadow: on ? `0 0 0 2px ${theme.coral}` : 'none', opacity: full ? 0.5 : 1 }}>
+                        <DecorHero frameKey={s.key} plateKey={s.key} width={cardW} photo={to.avatar} name={to.name} live={false} compact gapColor="#12131b" />
+                        <div style={{ alignSelf: 'stretch', display: 'flex', flexDirection: giftStack ? 'column' : 'row', alignItems: giftStack ? 'flex-start' : 'center', gap: giftStack ? 1 : 4, padding: '4px 8px 0' }}>
+                          <span style={{ flex: giftStack ? 'none' : 1, minWidth: 0, maxWidth: '100%', fontSize: giftStack ? Math.max(11, Math.min(12.5, (cardW - 14) / Math.max(0.5, decorTextW(s.name, 700, 100) / 100))) : 12.5, fontWeight: 700, color: '#FFFFFF', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.name}</span>
+                          <span style={{ fontSize: 11.5, fontWeight: 700, color: full ? '#34d399' : '#FFD66B', flexShrink: 0 }}>{full ? 'They have it' : o.frame || o.plate ? DECOR_PRICE : DECOR_PRICE * 2}</span>
+                        </div>
                       </div>
-                      <div style={{ fontSize: 11.5, fontWeight: 600, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%', padding: '0 4px' }}>{it.spec.label.replace(/ (frame|nameplate)$/i, '')}</div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 11.5, fontWeight: 700, color: theme.muted }}><CoinIcon size={12} />{price}</div>
+                    );
+                  })}
+                </div>
+                {set && (
+                  <div style={{ padding: '10px 0 2px' }}>
+                    <div role="radiogroup" aria-label="What to send" style={{ display: 'flex', gap: 6 }}>
+                      {[['set', 'Set', DECOR_PRICE * 2, !own.frame && !own.plate], ['frame', 'Frame', DECOR_PRICE, !own.frame], ['nameplate', 'Nameplate', DECOR_PRICE, !own.plate]].map(([k, l, p, ok]) => (
+                        <div key={k} role="radio" aria-checked={part === k} aria-disabled={!ok} onClick={() => { if (ok) { setPart(k); hapticTap(); } }} style={{ flex: 1, minWidth: 0, borderRadius: 12, padding: '8px 4px', textAlign: 'center', cursor: ok ? 'pointer' : 'default', background: part === k ? theme.coral : theme.soft, color: part === k ? '#FFFFFF' : theme.ink, opacity: ok ? 1 : 0.4 }}>
+                          <div style={{ fontSize: 13.5, fontWeight: 700 }}>{l}</div>
+                          <div style={{ fontSize: 11.5, fontWeight: 600, opacity: 0.85, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3, marginTop: 1 }}>{ok ? <><CoinIcon size={11} />{p}</> : 'They have it'}</div>
+                        </div>
+                      ))}
                     </div>
-                  );
-                })}
-              </div>
+                  </div>
+                )}
+              </>
             )}
-            <input value={noteText} onChange={(e) => setNoteText(e.target.value.slice(0, 80))} placeholder="Add a note" aria-label="Gift note" style={{ ...inputStyle(theme), fontSize: 15.5, marginTop: 8 }} />
-            {tab === 'item' && <div style={{ fontSize: 12.5, color: theme.muted, padding: '8px 2px 0' }}>{first} can wear it for {SHOP_DAYS} days.</div>}
+            <input value={noteText} onChange={(e) => setNoteText(e.target.value.slice(0, 80))} placeholder="Add a note" aria-label="Gift note" style={{ ...inputStyle(theme), fontSize: 15.5, marginTop: 10 }} />
+            {tab === 'item' && <div style={{ fontSize: 12.5, color: theme.muted, padding: '8px 2px 0' }}>It is theirs to keep and shows on their profile.</div>}
             {err && <div role="alert" style={{ fontSize: 13.5, color: theme.danger, fontWeight: 600, padding: '10px 2px 0' }}>{err}</div>}
           </div>
           <div style={{ padding: '12px 20px 0', flexShrink: 0 }}>
-            <BigButton label={busy ? 'Sending' : !cost ? 'Pick a gift' : enough ? `Send for ${formatCount(cost)} coins` : `You need ${formatCount(cost - balance)} more coins`} disabled={busy || !enough} onClick={send} />
+            <BigButton label={busy ? 'Sending' : !cost ? (tab === 'item' ? 'Pick a set' : 'Pick a gift') : enough ? `Send for ${formatCount(cost)} coins` : `You need ${formatCount(cost - balance)} more coins`} disabled={busy || !enough} onClick={send} />
           </div>
         </div>
       </div>
@@ -5363,10 +5383,28 @@ function GiftSheet({ uid, me, to, onClose, onSent }) {
 async function buyShopItem(kind, key) {
   const { data, error } = await supabase.rpc('zchat_buy_item', { p_kind: kind, p_key: key });
   const row = Array.isArray(data) ? data[0] : data;
-  if (error || !row || !row.ok) return { error: (row && row.reason) || (error ? 'Coins switch on once the latest ZChat setup is finished.' : 'That did not work. Try again.') };
+  if (error || !row || !row.ok) return { error: (row && row.reason) || (error ? 'The shop switches on once the latest ZChat setup is finished.' : 'That did not work. Try again.') };
   walletMem.data = null;
   announceWallet();
-  return { ok: true, expires: row.expires_at || null };
+  return { ok: true };
+}
+
+async function buyDecorSet(key) {
+  const { data, error } = await supabase.rpc('zchat_buy_set', { p_key: key });
+  const row = Array.isArray(data) ? data[0] : data;
+  if (error || !row || !row.ok) return { error: (row && row.reason) || (error ? 'The shop switches on once the latest ZChat setup is finished.' : 'That did not work. Try again.') };
+  walletMem.data = null;
+  announceWallet();
+  return { ok: true };
+}
+
+async function claimFreeSet(key) {
+  const { data, error } = await supabase.rpc('zchat_claim_free_set', { p_key: key });
+  const row = Array.isArray(data) ? data[0] : data;
+  if (error || !row || !row.ok) return { error: (row && row.reason) || (error ? 'Free sets switch on once the latest ZChat setup is finished.' : 'That did not work. Try again.') };
+  walletMem.data = null;
+  announceWallet();
+  return { ok: true, left: Number(row.left) || 0 };
 }
 
 const achToastMem = { ran: false };
@@ -5697,7 +5735,7 @@ function NotificationsPage({ myId, onClose, onOpenProfile, onOpenPost, onOpenSto
     const actorIds = [...new Set(rows.flatMap((r) => [r.actor, ...(r.others || [])]).filter(Boolean))];
     const postIds = [...new Set(rows.map((r) => r.post_id).filter(Boolean))];
     const [profs, posts] = await Promise.all([
-      actorIds.length ? supabase.from('profiles').select('id, name, username, avatar, avatar_frame, verified, custom_badge, is_private, is_deleted').in('id', actorIds.slice(0, 300)) : Promise.resolve({ data: [] }),
+      actorIds.length ? supabase.from('profiles').select('id, name, username, avatar, avatar_frame, nameplate, verified, custom_badge, is_private, is_deleted').in('id', actorIds.slice(0, 300)) : Promise.resolve({ data: [] }),
       postIds.length ? supabase.from('posts').select('*').in('id', postIds.slice(0, 200)) : Promise.resolve({ data: [] }),
     ]);
     const byId = {};
@@ -6105,7 +6143,7 @@ function SearchPage({ myId, me, blockedIds, onClose, onOpenProfile, onOpenTag, o
             {res.people.length > 0 && heading('People')}
             {res.people.map((p) => (
               <div key={p.id} role="button" aria-label={`Open ${p.name}`} onClick={() => openPerson(p)} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 20px', cursor: 'pointer' }}>
-                <Avatar emoji={p.avatar} name={p.name} frame={p.avatar_frame} size={48} />
+                <Avatar emoji={p.avatar} name={p.name} size={48} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 15, fontWeight: 700, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><NameBadge name={p.username} verified={p.verified} custom={p.custom_badge} size={12} /></div>
                   <div style={{ fontSize: 13, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}{follows.get(p.id) === 'accepted' ? ', following' : ''}</div>
@@ -7388,7 +7426,7 @@ function MailPanel({ myId, onClose, initialMailId }) {
                 <div style={{ position: 'relative', flexShrink: 0 }}>
                   {m.sender
                     ? <div style={{ position: 'relative', width: 46, height: 46, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                        <Avatar emoji={m.sender.avatar} name={m.sender.name} size={44} frame={m.sender.avatar_frame} />
+                        <Avatar emoji={m.sender.avatar} name={m.sender.name} size={44} />
                         <div style={{ position: 'absolute', right: -4, bottom: -4, width: 20, height: 20, borderRadius: 7, background: theme.panelBg, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 4 }}><MailIcon m={m} size={16} /></div>
                       </div>
                     : <MailIcon m={m} size={42} />}
@@ -8153,7 +8191,7 @@ function ChatSettingsPanel({ conv, myId, meAvatar, meName, isPinned, isLocked, w
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', paddingBottom: 'calc(28px + env(safe-area-inset-bottom))' }}>
         <div style={{ textAlign: 'center', padding: '6px 20px 0' }}>
           <div role="button" aria-label="Open profile" onClick={() => onOpenProfile(p)} style={{ display: 'flex', justifyContent: 'center', cursor: 'pointer' }}>
-            <Avatar emoji={conv.otherProfile.avatar} name={otherName} frame={conv.otherProfile.avatar_frame} size={84} frameFit />
+            <Avatar emoji={conv.otherProfile.avatar} name={otherName} size={84} />
           </div>
           <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12, padding: '0 6px' }}>
             <NameBadge name={otherName} verified={p.verified} custom={p.custom_badge} size={15} lines={2} style={{ justifyContent: 'center', textAlign: 'center', fontWeight: 700, fontSize: otherName.length > 30 ? 16 : 18 }} />
@@ -8416,7 +8454,7 @@ function CreateGroupPanel({ myId, onClose, onCreated }) {
             {!q.trim() && suggested.length > 0 && <div style={{ fontSize: 11.5, fontWeight: 800, color: theme.muted, margin: '4px 2px' }}>People you follow</div>}
             {results.map((p) => (
               <div key={p.id} onClick={() => toggleSelect(p)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 4px', cursor: 'pointer' }}>
-                <Avatar emoji={p.avatar} name={p.name} frame={p.avatar_frame} size={42} />
+                <Avatar emoji={p.avatar} name={p.name} size={42} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 800, fontSize: 14, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><NameBadge name={p.name} verified={p.verified} custom={p.custom_badge} size={12} /></div>
                   <div style={{ fontSize: 11.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>@{p.username}</div>
@@ -8547,7 +8585,7 @@ function GroupInfoPanel({ group, members, myId, iFollowIds, privacyAllowed, myRo
     return (
       <div key={m.user_id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 16px' }}>
         <div onClick={() => onOpenProfile(m.profile)} style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0, cursor: 'pointer' }}>
-          <Avatar emoji={m.profile.avatar} name={m.profile.name} frame={m.profile.avatar_frame} online={on ? true : null} size={48} />
+          <Avatar emoji={m.profile.avatar} name={m.profile.name} online={on ? true : null} size={48} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', minWidth: 0, fontWeight: 700, fontSize: 14.5 }}>
               <NameBadge name={`${m.profile.name}${m.user_id === myId ? ' (you)' : ''}`} verified={m.profile.verified} custom={m.profile.custom_badge} size={13} />
@@ -8866,7 +8904,7 @@ function JoinRequestsPage({ group, onClose, onReview }) {
       if (!alive) return;
       if (error || !data || !data.length) { setRows([]); return; }
       const ids = data.map((r) => r.user_id);
-      const { data: profs } = await supabase.from('profiles').select('id, name, username, avatar, avatar_frame, verified, custom_badge').in('id', ids);
+      const { data: profs } = await supabase.from('profiles').select('id, name, username, avatar, avatar_frame, nameplate, verified, custom_badge').in('id', ids);
       if (!alive) return;
       const byId = {};
       (profs || []).forEach((pr) => { byId[pr.id] = pr; });
@@ -8896,7 +8934,7 @@ function JoinRequestsPage({ group, onClose, onReview }) {
       {rows && !rows.length && <EmptyState art="requests" title="No one is waiting" text="When someone opens your invite link, their request shows up here." />}
       {(rows || []).map((r) => (
         <div key={r.user_id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0' }}>
-          <Avatar emoji={r.profile.avatar} name={r.profile.name} frame={r.profile.avatar_frame} size={46} />
+          <Avatar emoji={r.profile.avatar} name={r.profile.name} size={46} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 15, fontWeight: 700, color: theme.ink, minWidth: 0 }}><NameBadge name={r.profile.name} verified={r.profile.verified} custom={r.profile.custom_badge} size={13} /></div>
             <div style={{ fontSize: 12.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 1 }}>{timeAgoLong(r.created_at)}</div>
@@ -9143,7 +9181,7 @@ function GroupMembersPanel({ group, members, myId, isAdmin, isOwner, onClose, on
         ) : filtered.map((m) => (
           <div key={m.user_id} role="button" onClick={() => (isAdmin && m.user_id !== myId && m.user_id !== group.created_by ? setSheetFor(m.user_id) : onOpenProfile(m.profile))}
             style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 4px', cursor: 'pointer' }}>
-            <Avatar emoji={m.profile.avatar} name={m.profile.name} frame={m.profile.avatar_frame} size={42} />
+            <Avatar emoji={m.profile.avatar} name={m.profile.name} size={42} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontWeight: 700, fontSize: 14, color: theme.ink, display: 'flex', alignItems: 'center', gap: 6 }}>
                 <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.profile.name}</span><VerifiedBadge tier={m.profile.verified} custom={m.profile.custom_badge} size={12} />
@@ -9165,7 +9203,7 @@ function GroupMembersPanel({ group, members, myId, isAdmin, isOwner, onClose, on
         <div onClick={() => setSheetFor(null)} style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end' }}>
           <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ width: '100%', background: theme.panelBg, borderRadius: '22px 22px 0 0', padding: '18px 18px calc(18px + env(safe-area-inset-bottom))' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-              <Avatar emoji={sheetMember.profile.avatar} name={sheetMember.profile.name} frame={sheetMember.profile.avatar_frame} size={42} />
+              <Avatar emoji={sheetMember.profile.avatar} name={sheetMember.profile.name} size={42} />
               <div>
                 <div style={{ fontWeight: 900, fontSize: 15, color: theme.ink }}>{sheetMember.profile.name}</div>
                 <div style={{ fontSize: 12, color: theme.muted }}>@{sheetMember.profile.username}</div>
@@ -9248,7 +9286,7 @@ function AddMembersPanel({ myId, existingIds, onClose, onAdd, iFollowIds, privac
       <div style={{ overflowY: 'auto', flex: 1, padding: '0 18px' }}>
         {results.map((p) => (
           <div key={p.id} onClick={() => toggleSelect(p)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 4px', cursor: 'pointer' }}>
-            <Avatar emoji={p.avatar} name={p.name} frame={p.avatar_frame} size={40} />
+            <Avatar emoji={p.avatar} name={p.name} size={40} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontWeight: 700, fontSize: 14, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><NameBadge name={p.name} verified={p.verified} custom={p.custom_badge} size={12} /></div>
               <div style={{ fontSize: 11.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>@{p.username}</div>
@@ -9817,7 +9855,7 @@ function ShareProfileSheet({ profile, myId, conversations, groups, onSend, onClo
           )}
           {list.map((item) => (
             <div key={item.key} onClick={() => toggle(item)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 6px', cursor: 'pointer', borderRadius: 12 }}>
-              {item.kind === 'group' ? <GroupAvatar avatar={item.avatar} name={item.name} size={42} /> : <Avatar emoji={item.avatar} name={item.name} frame={item.avatar_frame} size={42} />}
+              {item.kind === 'group' ? <GroupAvatar avatar={item.avatar} name={item.name} size={42} /> : <Avatar emoji={item.avatar} name={item.name} size={42} />}
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 700, fontSize: 14, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.name}</div>
                 <div style={{ fontSize: 11.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.sub}</div>
@@ -9897,7 +9935,7 @@ function ProfileVisitorsPage({ myId, me, onClose, onOpenProfile, onToggle }) {
       const { data } = await supabase.from('profile_visits').select('viewer_id, viewed_at, n').eq('profile_id', myId).gt('viewed_at', since).order('viewed_at', { ascending: false }).limit(200);
       const list = data || [];
       if (!list.length) { if (alive) setRows([]); return; }
-      const { data: profs } = await supabase.from('profiles').select('id, name, username, avatar, avatar_frame, verified, custom_badge, is_deleted').in('id', list.map((r) => r.viewer_id));
+      const { data: profs } = await supabase.from('profiles').select('id, name, username, avatar, avatar_frame, nameplate, verified, custom_badge, is_deleted').in('id', list.map((r) => r.viewer_id));
       const byId = {};
       sanitizeAvatarList(profs || [], myId).forEach((pr) => { if (!pr.is_deleted) byId[pr.id] = pr; });
       if (alive) setRows(list.map((r) => ({ ...r, profile: byId[r.viewer_id] })).filter((r) => r.profile));
@@ -9927,7 +9965,7 @@ function ProfileVisitorsPage({ myId, me, onClose, onOpenProfile, onToggle }) {
           <div role="list" aria-label="Profile visitors" style={{ padding: '6px 0 10px' }}>
             {rows.map((r) => (
               <div key={r.viewer_id} role="listitem" aria-label={`Visitor ${r.profile.name}`} onClick={() => onOpenProfile(r.profile)} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 16px', cursor: 'pointer' }}>
-                <Avatar emoji={r.profile.avatar} name={r.profile.name} frame={r.profile.avatar_frame} size={50} />
+                <Avatar emoji={r.profile.avatar} name={r.profile.name} size={50} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 15.5, fontWeight: 700, color: theme.ink, minWidth: 0 }}><NameBadge name={r.profile.name} verified={r.profile.verified} custom={r.profile.custom_badge} size={13} /></div>
                   <div style={{ fontSize: 13, color: theme.muted, marginTop: 1 }}>{visitAgoText(r.viewed_at)}{Number(r.n) > 1 ? `, ${r.n} visits` : ''}</div>
@@ -10145,7 +10183,6 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
   const [postCount, setPostCount] = useState(cachedStats.posts ?? null);
   const [ownedRewards, setOwnedRewards] = useState([]);
   const [profileTab, setProfileTab] = useState('posts');
-  const [tryOnFrame, setTryOnFrame] = useState(null);
   const [statusOpen, setStatusOpen] = useState(false);
   const [bdayOpen, setBdayOpen] = useState(false);
   const [avatarMaker, setAvatarMaker] = useState(false);
@@ -10166,7 +10203,6 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
     load(0);
     return () => { alive = false; clearTimeout(retryTimer); };
   }, [profile.id]);
-  const profileFrameUrl = useFrameUrl(profile.avatar_frame);
   useEffect(() => {
     let cancelled = false;
     supabase.from('posts').select('*', { count: 'exact', head: true }).eq('user_id', profile.id).then(({ count, error }) => {
@@ -10392,7 +10428,9 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
     background: primary ? theme.coral : theme.soft, color: primary ? '#FFFFFF' : theme.ink, fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap',
   });
 
-  const plateOn = !!NAMEPLATES[profile.nameplate];
+  const decorFrame = isDecorKey(profile.avatar_frame) ? profile.avatar_frame : null;
+  const decorPlate = isDecorKey(profile.nameplate) ? profile.nameplate : null;
+  const plateOn = !!(decorFrame || decorPlate);
   const plateMeta = [profile.pronouns, ...infoBits].filter(Boolean).join(', ');
   const statCells = [
     !profile.is_bot && { v: postCount, l: 'posts', on: null },
@@ -10518,7 +10556,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
             )}
             {plateOn ? (
               <>
-                <ProfilePlateHero profile={profile} photo={shownPhoto} storyRing={storyRing} onOpenStory={onOpenStory} isOnline={isOnline} overCover={!!coverUrl} />
+                <ProfileDecorHero profile={profile} photo={shownPhoto} frameKey={decorFrame} plateKey={decorPlate} storyRing={storyRing} onOpenStory={onOpenStory} isOnline={isOnline} overCover={!!coverUrl} />
                 {(plateMeta || statusText) && (
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, padding: '2px 20px 0', textAlign: 'center' }}>
                     {plateMeta && <div style={{ fontSize: 13.5, color: theme.muted, lineHeight: 1.4 }}>{plateMeta}</div>}
@@ -10540,9 +10578,9 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
               <>
             <div style={{ display: 'flex', alignItems: 'center', gap: 'clamp(8px, 4vw, 16px)', padding: '0 16px 0 20px', marginTop: coverUrl ? -40 : 8, position: 'relative' }}>
               <div role="button" aria-label={storyRing !== 'none' ? `Story of ${profile.name}` : 'Profile photo'} onClick={() => { if (storyRing !== 'none' && onOpenStory) onOpenStory(profile.id); }} style={{ position: 'relative', flexShrink: 0, borderRadius: '50%', padding: coverUrl ? 4 : 0, background: coverUrl ? theme.bgGradient : 'transparent', cursor: storyRing !== 'none' ? 'pointer' : 'default' }}>
-                {storyRing !== 'none' && !AVATAR_FRAMES[profile.avatar_frame]
+                {storyRing !== 'none'
                   ? <StoryAvatar profile={{ ...profile, avatar: shownPhoto }} size={90} ring={storyRing} />
-                  : <Avatar emoji={shownPhoto} name={profile.name} frame={profile.avatar_frame} frameFit size={88} />}
+                  : <Avatar emoji={shownPhoto} name={profile.name} size={88} />}
                 {isOnline && <span style={{ position: 'absolute', right: coverUrl ? 9 : 5, bottom: coverUrl ? 9 : 5, width: 18, height: 18, borderRadius: '50%', background: '#22C55E', border: `3px solid ${theme.bgGradient}` }} />}
               </div>
               {canSeeDetails && (
@@ -10687,7 +10725,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
                       <ProfileIconTabs value={profileTab} onChange={setProfileTab} tabs={[['posts', 'Posts', ProfileGridIcon], ['clips', 'Clips', ProfileClipsIcon], ['collection', 'Collection', ProfileGemIcon], ...(readSocialLinks(profile.social_links).length || profile.whatsapp ? [['links', 'Links', ProfileLinkTabIcon]] : [])]} />
                       {(profileTab === 'posts' || profileTab === 'highlights') && <ProfilePosts profile={profile} isSelf={isSelf} userId={userId} meProfile={meProfile} bare />}
                       {profileTab === 'clips' && <ProfilePosts profile={profile} isSelf={isSelf} userId={userId} meProfile={meProfile} bare mode="clips" />}
-                      {profileTab === 'collection' && <div style={{ padding: '6px 14px' }}><ProfileCollectionShowcase profile={profile} rewards={ownedRewards} isSelf={isSelf} onPreview={(k) => setTryOnFrame(k)} onOpenCollection={onOpenCollection} /></div>}
+                      {profileTab === 'collection' && <div style={{ padding: '6px 14px' }}><ProfileCollectionShowcase profile={profile} rewards={ownedRewards} isSelf={isSelf} onOpenSet={onOpenCollection ? (k) => onOpenCollection(k) : null} onOpenCollection={onOpenCollection} /></div>}
                       {profileTab === 'links' && <div style={{ padding: '6px 14px' }}><ProfileSocialRow links={profile.social_links} whatsapp={profile.whatsapp} /></div>}
                     </>
                   )}
@@ -10776,9 +10814,6 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
             )}
           </div>
         </div>
-      )}
-      {tryOnFrame && (
-        <FrameTryOnPage me={profile} frameKey={tryOnFrame} onClose={() => setTryOnFrame(null)} action={null} />
       )}
       {showShare && (
         <ShareProfileSheet profile={profile} myId={userId} conversations={shareConversations} groups={shareGroups}
@@ -11399,7 +11434,7 @@ function MentionSuggestions({ query, priority, excludeIds, myId, onPick, allowAl
             display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', cursor: 'pointer',
             borderTop: i || showAll ? `1px solid ${theme.border}` : 'none',
           }}>
-          <Avatar emoji={p.avatar} name={p.name} frame={p.avatar_frame} size={30} />
+          <Avatar emoji={p.avatar} name={p.name} size={30} />
           <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ fontSize: 13, fontWeight: 700, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><NameBadge name={p.name} verified={p.verified} custom={p.custom_badge} size={12} /></div>
             <div style={{ fontSize: 11.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>@{p.username}</div>
@@ -11461,7 +11496,7 @@ const MessageBubbleMemo = React.memo(function MessageBubbleMemo(props) {
   return <MessageBubble {...out} />;
 }, bubblePropsEqual);
 
-function MessageBubble({ onCard, translation, senderTitle, onOpenLive, onOpenOnce, onVote, onShowVotes, gameMerge, gameLive, onGameMove, onGameRematch, onOpenGame, onPlayDuel, peerName, myId, isBot, m, isMe, onDelete, selectionMode, selected, onToggleSelect, onLongPress, onOpenImage, onOpenVideo, reactions, onReact, onOpenWhoReacted, replyPreview, onSwipeReply, onJumpToMessage, highlighted, senderLabel, senderAvatar, hideReadStatus, onOpenSenderProfile, canModerate, onOpenMention, mentionsMe, onOpenStoryRef, onCallBack, onOpenSticker, tightBelow, senderVerified, onOpenPost, tightAbove, senderFrame, senderCustomBadge, noReceipts, meTint, threadN, onOpenThread, hwv, topicTag, topicColor, locPin }) {
+function MessageBubble({ onCard, translation, senderTitle, onOpenLive, onOpenOnce, onVote, onShowVotes, gameMerge, gameLive, onGameMove, onGameRematch, onOpenGame, onPlayDuel, peerName, myId, isBot, m, isMe, onDelete, selectionMode, selected, onToggleSelect, onLongPress, onOpenImage, onOpenVideo, reactions, onReact, onOpenWhoReacted, replyPreview, onSwipeReply, onJumpToMessage, highlighted, senderLabel, senderAvatar, hideReadStatus, onOpenSenderProfile, canModerate, onOpenMention, mentionsMe, onOpenStoryRef, onCallBack, onOpenSticker, tightBelow, senderVerified, onOpenPost, tightAbove, senderCustomBadge, noReceipts, meTint, threadN, onOpenThread, hwv, topicTag, topicColor, locPin }) {
   const mediaOnly = !m.deleted && (m.type === 'image' || m.type === 'video')
     && !replyPreview && !senderLabel && !topicTag && !m.forwarded
     && !(m.content && !String(m.content).startsWith('/'));
@@ -11644,7 +11679,7 @@ function MessageBubble({ onCard, translation, senderTitle, onOpenLive, onOpenOnc
           ? <div style={{ width: 24, flexShrink: 0 }} />
           : (
             <div onClick={(e) => { e.stopPropagation(); onOpenSenderProfile && onOpenSenderProfile(); }} style={{ cursor: onOpenSenderProfile ? 'pointer' : 'default', flexShrink: 0, alignSelf: 'flex-end' }}>
-              <Avatar emoji={senderAvatar} name={senderLabel} frame={senderFrame} size={24} />
+              <Avatar emoji={senderAvatar} name={senderLabel} size={24} />
             </div>
           )
       )}
@@ -12749,13 +12784,13 @@ function InAppMessageToast({ toast, top, onOpen, onDismiss }) {
       <div style={{ position: 'relative', flexShrink: 0, pointerEvents: 'none' }}>
         {toast.kind === 'notice' ? (
           toast.icon ? <MailBadgeIcon type={toast.icon === 'warning' ? 'report_warning' : toast.icon === 'mention' ? 'mention' : toast.icon === 'update' ? 'update' : toast.icon === 'badge' ? 'badge' : 'mail'} badgeTier={toast.badgeTier} size={42} />
-            : toast.isGroupIcon ? <GroupAvatar avatar={toast.groupAvatar} name={toast.title} size={42} /> : <Avatar emoji={toast.avatar} name={toast.avatarName} frame={toast.frame} size={42} />
+            : toast.isGroupIcon ? <GroupAvatar avatar={toast.groupAvatar} name={toast.title} size={42} /> : <Avatar emoji={toast.avatar} name={toast.avatarName} size={42} />
         ) : toast.kind === 'group'
           ? <GroupAvatar avatar={toast.groupAvatar} name={toast.title} size={42} />
-          : <Avatar emoji={toast.avatar} name={toast.avatarName} frame={toast.frame} size={42} />}
+          : <Avatar emoji={toast.avatar} name={toast.avatarName} size={42} />}
         {toast.kind === 'group' && (
           <div style={{ position: 'absolute', right: -4, bottom: -4, borderRadius: '50%', border: `2px solid ${theme.panelBg}` }}>
-            <Avatar emoji={toast.avatar} name={toast.avatarName} frame={toast.frame} size={20} />
+            <Avatar emoji={toast.avatar} name={toast.avatarName} size={20} />
           </div>
         )}
       </div>
@@ -14440,24 +14475,20 @@ function VerifiedTick({ size = 13 }) {
 
 function StoryAvatar({ profile, size = 64, ring = 'none', onClick, badgePlus = false, dim = false, segments = null, uploading = false, close = false }) {
   const { theme } = useTheme();
-  const framed = !!(profile && AVATAR_FRAMES[profile.avatar_frame]);
   const hasRing = ring !== 'none' || uploading;
-  const pad = !hasRing || framed ? 0 : 4;
+  const pad = hasRing ? 4 : 0;
   return (
     <div onClick={onClick} style={{ position: 'relative', width: size, height: size, flexShrink: 0, cursor: onClick ? 'pointer' : 'default', opacity: dim ? 0.5 : 1 }}>
       <div style={{ width: size, height: size, borderRadius: '50%', padding: pad, boxSizing: 'border-box' }}>
-        <Avatar emoji={profile?.avatar} name={profile?.name || '?'} frame={profile?.avatar_frame} size={size - (framed || !hasRing ? 0 : 8)} />
+        <Avatar emoji={profile?.avatar} name={profile?.name || '?'} size={size - (hasRing ? 8 : 0)} />
       </div>
       {uploading ? (
         <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="zchat-story-upload" style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }} aria-hidden="true">
           <circle cx={size / 2} cy={size / 2} r={size / 2 - 1.5} fill="none" stroke={theme.coral} strokeWidth="2.6" strokeLinecap="round" strokeDasharray={`${size * 0.9} ${size * 0.5}`} />
         </svg>
-      ) : !framed && ring !== 'none' ? (
+      ) : ring !== 'none' ? (
         <StoryRing size={size} segments={segments && segments.length ? segments : [ring === 'seen']} color={close ? CLOSE_GREEN : theme.coral} seenColor={theme.dark ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.2)'} />
       ) : null}
-      {framed && ring !== 'none' && !uploading && (
-        <div style={{ position: 'absolute', inset: -3, borderRadius: '50%', border: `2px solid ${ring === 'unseen' ? (close ? CLOSE_GREEN : theme.coral) : theme.border}`, pointerEvents: 'none' }} />
-      )}
       {badgePlus && (
         <div style={{ position: 'absolute', right: 0, bottom: 0, zIndex: 6, width: size * 0.32, height: size * 0.32, borderRadius: '50%', background: theme.coral, border: `2.5px solid ${theme.panelBg}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontWeight: 800, fontSize: size * 0.22, lineHeight: 1 }}>+</div>
       )}
@@ -14846,7 +14877,7 @@ function StoryMentionPicker({ myId, groups, privacyCtx, onPick, onClose }) {
           ))}
           {people.map((p) => (
             <div key={p.id} onClick={() => onPick({ id: p.id, kind: 'user', label: p.username })} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px', cursor: 'pointer', color: 'white' }}>
-              <Avatar emoji={p.avatar} name={p.name} frame={p.avatar_frame} size={38} />
+              <Avatar emoji={p.avatar} name={p.name} size={38} />
               <div><div style={{ fontWeight: 700, fontSize: 14 }}>{p.name}</div><div style={{ fontSize: 11.5, opacity: 0.6 }}>@{p.username}</div></div>
             </div>
           ))}
@@ -15267,7 +15298,7 @@ function StoryViewer({ onAddYours, groupsList, startGroup = 0, startStoryId = nu
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 10, pointerEvents: hideUi ? 'none' : 'auto' }} data-story-control>
             <div onClick={() => onOpenProfile(group.profile)} style={{ display: 'flex', alignItems: 'center', gap: 9, flex: 1, minWidth: 0, cursor: 'pointer' }}>
-              <Avatar emoji={group.profile.avatar} name={group.profile.name} frame={group.profile.avatar_frame} size={34} />
+              <Avatar emoji={group.profile.avatar} name={group.profile.name} size={34} />
               <div style={{ minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 7 }}>
                   <span style={{ fontWeight: 800, fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{isMine && !readOnly ? 'Your story' : group.profile.name}<VerifiedBadge tier={group.profile.verified} custom={group.profile.custom_badge} size={13} /></span>
@@ -16232,7 +16263,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-const APP_VERSION = '19.1V';
+const APP_VERSION = '20.0V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -16268,7 +16299,7 @@ function BlockConfirmSheet({ profile, onCancel, onConfirm, onBlockReport }) {
         <div style={{ display: 'flex', justifyContent: 'center', padding: '2px 0 14px' }}><div style={{ width: 38, height: 4, borderRadius: 2, background: theme.border }} /></div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
           <div style={{ position: 'relative' }}>
-            <Avatar emoji={profile.avatar} name={profile.name} frame={profile.avatar_frame} size={72} />
+            <Avatar emoji={profile.avatar} name={profile.name} size={72} />
             <div style={{ position: 'absolute', right: -4, bottom: -2, width: 28, height: 28, borderRadius: '50%', background: theme.danger, border: `3px solid ${theme.panelBg}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Ban size={14} color="white" /></div>
           </div>
           <div style={{ fontSize: 18, fontWeight: 800, color: theme.ink, marginTop: 12 }}>Block <NameBadge name={profile.name} verified={profile.verified} custom={profile.custom_badge} size={15} />?</div>
@@ -16301,7 +16332,7 @@ function UnblockConfirmSheet({ profile, onCancel, onConfirm }) {
   return (
     <div onClick={onCancel} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 420, background: 'rgba(5,8,16,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
       <div onClick={(e) => e.stopPropagation()} className="zchat-pop" style={{ width: '100%', maxWidth: 320, background: theme.panelBg, borderRadius: 24, padding: '22px 20px 14px', textAlign: 'center', boxShadow: '0 20px 50px rgba(0,0,0,0.35)' }}>
-        <div style={{ display: 'flex', justifyContent: 'center' }}><Avatar emoji={profile.avatar} name={profile.name} frame={profile.avatar_frame} size={60} /></div>
+        <div style={{ display: 'flex', justifyContent: 'center' }}><Avatar emoji={profile.avatar} name={profile.name} size={60} /></div>
         <div style={{ fontSize: 17, fontWeight: 800, color: theme.ink, marginTop: 12 }}>Unblock {profile.name}?</div>
         <div style={{ fontSize: 13, color: theme.muted, lineHeight: 1.5, marginTop: 8 }}>
           They'll be able to message you, call you, see your status and follow you again. They won't be notified that you unblocked them.
@@ -16358,7 +16389,7 @@ function BlockedAccountsPanel({ myId, blockedIds, onClose, onUnblock, onOpenProf
         {shown.map((r) => (
           <div key={r.profile.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 8px' }}>
             <div onClick={() => !r.profile.is_deleted && onOpenProfile(r.profile)} style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0, cursor: 'pointer' }}>
-              <Avatar emoji={r.profile.avatar} name={r.profile.name} frame={r.profile.avatar_frame} size={46} />
+              <Avatar emoji={r.profile.avatar} name={r.profile.name} size={46} />
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontWeight: 700, fontSize: 14.5, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><NameBadge name={r.profile.name} verified={r.profile.verified} custom={r.profile.custom_badge} size={12} /></div>
                 <div style={{ fontSize: 12, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>@{r.profile.username}</div>
@@ -16413,7 +16444,7 @@ function StoryShareSheet({ story, owner, conversations, groups, onSend, onClose 
               return (
                 <div key={it.key} onClick={() => toggle(it)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '8px 2px', cursor: 'pointer' }}>
                   <div style={{ position: 'relative' }}>
-                    {it.kind === 'group' ? <GroupAvatar avatar={it.avatar} name={it.name} size={56} /> : <Avatar emoji={it.avatar} name={it.name} frame={it.avatar_frame} size={56} />}
+                    {it.kind === 'group' ? <GroupAvatar avatar={it.avatar} name={it.name} size={56} /> : <Avatar emoji={it.avatar} name={it.name} size={56} />}
                     {on && <div style={{ position: 'absolute', right: -2, bottom: -2, width: 22, height: 22, borderRadius: '50%', background: theme.coral, border: `2.5px solid ${theme.panelBg}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Check size={12} color="white" /></div>}
                   </div>
                   <div style={{ fontSize: 11.5, fontWeight: on ? 800 : 600, color: theme.ink, marginTop: 5, maxWidth: '100%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.name.split(' ')[0]}</div>
@@ -16674,7 +16705,7 @@ function StoryViewersSheet({ story, myId, onClose, onOpenProfile }) {
           {shown.map((r) => (
             <div key={r.profile.id} onClick={() => onOpenProfile(r.profile)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 8px', cursor: 'pointer' }}>
               <div style={{ position: 'relative' }}>
-                <Avatar emoji={r.profile.avatar} name={r.profile.name} frame={r.profile.avatar_frame} size={44} />
+                <Avatar emoji={r.profile.avatar} name={r.profile.name} size={44} />
                 {r.liked && <div style={{ position: 'absolute', right: -3, bottom: -3, width: 20, height: 20, borderRadius: '50%', background: theme.panelBg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Heart size={13} color="#FF3B5C" fill="#FF3B5C" /></div>}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -16749,7 +16780,7 @@ function CallScreen({ call, me, nameFor, avatarFor, onAccept, onDecline, onHangu
           <div role="button" aria-label="Close" onClick={onCloseSummary} style={{ width: 40, height: 40, borderRadius: '50%', background: 'rgba(255,255,255,0.14)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={20} /></div>
         </div>
         <div style={{ position: 'relative', flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, textAlign: 'center' }}>
-          {isGroup ? <GroupAvatar avatar={call.group && call.group.avatar} name={title} size={112} /> : <Avatar emoji={call.peer && call.peer.avatar} name={title} frame={call.peer && call.peer.avatar_frame} size={112} frameFit />}
+          {isGroup ? <GroupAvatar avatar={call.group && call.group.avatar} name={title} size={112} /> : <Avatar emoji={call.peer && call.peer.avatar} name={title} size={112} />}
           <div style={{ fontSize: String(title || '').length > 28 ? 20 : 26, fontWeight: 800, marginTop: 18, padding: '0 24px', textAlign: 'center', wordBreak: 'break-word', lineHeight: 1.15 }}>{title}{!isGroup && call.peer && <VerifiedBadge tier={call.peer.verified} custom={call.peer.custom_badge} size={20} />}</div>
           <div style={{ fontSize: 15, color: 'rgba(255,255,255,0.75)', marginTop: 6 }}>{call.endLabel || 'Call ended'}</div>
           <div style={{ marginTop: 14, fontSize: 34, fontWeight: 300, letterSpacing: 1, fontVariantNumeric: 'tabular-nums' }}>{d > 0 ? formatCallDuration(d) : '0:00'}</div>
@@ -16925,7 +16956,7 @@ function CallScreen({ call, me, nameFor, avatarFor, onAccept, onDecline, onHangu
                 <div className="zchat-call-ring" style={{ position: 'absolute', inset: -16, borderRadius: '50%', border: '2px solid rgba(255,255,255,0.18)', animationDelay: '0.9s' }} />
               </>
             )}
-            {isGroup ? <GroupAvatar avatar={call.group && call.group.avatar} name={title} size={122} /> : <Avatar emoji={call.peer && call.peer.avatar} name={title} frame={call.peer && call.peer.avatar_frame} size={122} frameFit />}
+            {isGroup ? <GroupAvatar avatar={call.group && call.group.avatar} name={title} size={122} /> : <Avatar emoji={call.peer && call.peer.avatar} name={title} size={122} />}
           </div>
           <div style={{ marginTop: 22, fontSize: String(title || '').length > 28 ? 21 : 29, fontWeight: 800, padding: '0 24px', textAlign: 'center', wordBreak: 'break-word', lineHeight: 1.15, textShadow: '0 2px 14px rgba(0,0,0,0.5)' }}>{title}{!isGroup && call.peer && <VerifiedBadge tier={call.peer.verified} custom={call.peer.custom_badge} size={22} />}</div>
           <div style={{ marginTop: 6, fontSize: 15, color: 'rgba(255,255,255,0.82)', fontVariantNumeric: 'tabular-nums' }}>{status}</div>
@@ -16988,7 +17019,7 @@ function CallScreen({ call, me, nameFor, avatarFor, onAccept, onDecline, onHangu
         <div onClick={() => setTileMenu(null)} style={{ position: 'absolute', inset: 0, zIndex: 10, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'flex-end' }}>
           <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ width: '100%', background: '#141926', borderRadius: '24px 24px 0 0', padding: '14px 0', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '4px 20px 12px' }}>
-              <Avatar emoji={tileMenu.avatar} name={tileMenu.name} frame={tileMenu.avatar_frame} size={40} />
+              <Avatar emoji={tileMenu.avatar} name={tileMenu.name} size={40} />
               <div style={{ fontWeight: 800, fontSize: 15 }}>{tileMenu.name}</div>
             </div>
             <div onClick={() => { onMuteOther(tileMenu.id); setTileMenu(null); }} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 20px', cursor: 'pointer', fontWeight: 700, opacity: remoteMuted[tileMenu.id] ? 0.45 : 1 }}>
@@ -17869,7 +17900,7 @@ function PostLinkCard({ postId, onOpen }) {
     <div onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); if (data && onOpen) onOpen(data.post, data.owner); }}
       style={{ width: 230, borderRadius: 16, overflow: 'hidden', background: theme.dark ? '#0d0d0d' : '#fff', border: `1px solid ${theme.border}`, cursor: 'pointer' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px' }}>
-        <Avatar emoji={data && data.owner.avatar} name={(data && data.owner.name) || '?'} frame={data && data.owner.avatar_frame} size={24} />
+        <Avatar emoji={data && data.owner.avatar} name={(data && data.owner.name) || '?'} size={24} />
         <span style={{ fontSize: 13, fontWeight: 700, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{data ? data.owner.username : ''}</span>
         {data && <VerifiedBadge tier={data.owner.verified} custom={data.owner.custom_badge} size={12} />}
       </div>
@@ -18150,29 +18181,6 @@ function AudioBubble({ url: rawUrl, isMe, ink, line, fx }) {
   );
 }
 
-const AVATAR_FRAMES = {
-  fire_wolf: { file: '/frames/frame-fire-wolf.webp', fallback: '/frame-fire-wolf.webp', label: 'Inferno wolf frame', scale: 1.428, centerX: 0.5002, centerY: 0.4605, glow: '#ff5a1f', rarity: 'mythic' },
-  ice_wolf: { file: '/frames/frame-ice-wolf.webp', fallback: '/frame-ice-wolf.webp', label: 'Frost wolf frame', scale: 1.399, centerX: 0.4968, centerY: 0.4791, glow: '#38bdf8', rarity: 'mythic' },
-  frost_dragon: { file: '/frames/frame-frost-dragon.webp', fallback: '/frame-frost-dragon.webp', label: 'Frost dragon frame', scale: 1.521, centerX: 0.4802, centerY: 0.5087, mask: false, rarity: 'legendary' },
-  emerald_lion: { file: '/frames/frame-emerald-lion.webp', fallback: '/frame-emerald-lion.webp', label: 'Emerald lion frame', scale: 1.567, centerX: 0.4978, centerY: 0.4488, mask: false, rarity: 'legendary' },
-  crystal_deer: { file: '/frames/frame-crystal-deer.webp', fallback: '/frame-crystal-deer.webp', label: 'Crystal deer frame', scale: 1.413, centerX: 0.4877, centerY: 0.4499, mask: false, rarity: 'epic' },
-  azure_phoenix: { file: '/frames/frame-azure-phoenix.webp', fallback: '/frame-azure-phoenix.webp', label: 'Azure phoenix frame', scale: 1.4, centerX: 0.5081, centerY: 0.4923, mask: false, rarity: 'legendary' },
-  lilac_kitty: { file: '/frames/frame-lilac-kitty.webp', fallback: '/frame-lilac-kitty.webp', label: 'Lilac kitty frame', scale: 1.38, centerX: 0.4907, centerY: 0.477, mask: false, rarity: 'epic' },
-  fairy_princess: { file: '/frames/frame-fairy-princess.webp', fallback: '/frame-fairy-princess.webp', label: 'Fairy princess frame', scale: 1.416, centerX: 0.5068, centerY: 0.4836, mask: false, rarity: 'legendary' },
-  rose_hearts: { file: '/frames/frame-rose-hearts.webp', fallback: '/frame-rose-hearts.webp', label: 'Rose hearts frame', scale: 1.604, centerX: 0.5132, centerY: 0.4549, mask: false, rarity: 'epic' },
-  crimson_lily: { file: '/frames/frame-crimson-lily.webp', fallback: '/frame-crimson-lily.webp', label: 'Crimson lily frame', scale: 1.309, centerX: 0.5151, centerY: 0.4588, mask: false, rarity: 'epic' },
-  sapphire_butterfly: { file: '/frames/frame-sapphire-butterfly.webp', fallback: '/frame-sapphire-butterfly.webp', label: 'Sapphire butterfly frame', scale: 1.317, centerX: 0.4983, centerY: 0.5, mask: false, rarity: 'epic' },
-};
-
-function frameMaskStyle(spec) {
-  if (spec.mask === false) return {};
-  const inner = Math.max(0, Math.min(80, 90 / (spec.scale || 1.5)));
-  const mask = `radial-gradient(circle closest-side, rgba(0,0,0,0) ${inner.toFixed(1)}%, #000 ${(inner + 4).toFixed(1)}%, #000 86%, rgba(0,0,0,0) 100%)`;
-  return { WebkitMaskImage: mask, maskImage: mask };
-}
-const frameUrlCache = new Map();
-const frameWaiters = new Map();
-const frameImageKeep = [];
 const mediaBlobCache = new Map();
 const mediaFetches = new Map();
 function mediaCacheKey(raw) {
@@ -18432,224 +18440,198 @@ async function cachedAssetUrl(url, retried) {
     return url;
   }
 }
-function loadFrameImage(rawUrl, retried) {
-  return new Promise(async (resolve) => {
-    if (!rawUrl) { resolve(null); return; }
-    const url = await cachedAssetUrl(rawUrl);
-    if (!url) { resolve(null); return; }
+const DECOR_SETS = [
+  ['koi_pond', 'Koi Pond', 0, 632, 658, 395, '#4FC3D9', '#0E5064', 'Two koi circle a lily pond while a frog keeps an eye on a dragonfly.'],
+  ['neon_city', 'Neon City', 16, 634, 640, 371, '#FF4FA3', '#100820', 'A night skyline with neon signs that flicker to life.'],
+  ['dragon_hoard', 'Dragon Hoard', 20, 630, 633, 404, '#F2C14E', '#331D10', 'A sleepy dragon curled around its pile of gold and gems.'],
+  ['snow_globe', 'Snow Globe', 0, 624, 641, 467, '#8CCBF2', '#1D4269', 'A penguin slides across a snowy globe while the snowman waves.'],
+  ['lofi_beats', 'Lofi Beats', 34, 636, 650, 386, '#EE8AD8', '#22113F', 'A cat in headphones, a cassette and a plant, on a chill loop.'],
+  ['space_explorer', 'Space Explorer', 8, 634, 663, 371, '#8B7CF6', '#1D1B50', 'An astronaut drifts past planets, rockets and a friendly star.'],
+  ['sakura_shrine', 'Sakura Shrine', 8, 624, 669, 403, '#F28DB2', '#510C19', 'Cherry blossoms, a red gate and a little white fox.'],
+  ['campfire_night', 'Campfire Night', 29, 623, 648, 395, '#FF9F43', '#171F52', 'A raccoon by the fire, a tent and the moon over the trees.'],
+  ['bubble_tea', 'Bubble Tea', 50, 635, 645, 398, '#D9A273', '#2F170C', 'A cookie ring with a bunny, a strawberry and a sundae on top.'],
+  ['ocean_reef', 'Ocean Reef', 72, 621, 657, 396, '#3FB6EC', '#144882', 'A seahorse, a crab and bright coral on a blue reef.'],
+  ['pixel_quest', 'Pixel Quest', 8, 632, 632, 383, '#6BCB4C', '#1A1533', 'A tiny hero runs the ring and grabs coins past the slimes.'],
+  ['midnight_ramen', 'Midnight Ramen', 11, 640, 648, 371, '#F2A541', '#191C49', 'A late night bowl of ramen with a bear peeking over the rim.'],
+  ['cozy_rain', 'Cozy Rain', 12, 618, 628, 388, '#8FB8D4', '#2B3C4F', 'Fluffy clouds, a hedgehog under a leaf and a rainbow after the rain.'],
+  ['robot_buddy', 'Robot Buddy', 12, 634, 650, 381, '#5EE0C1', '#0A132D', 'A little robot with a screen face, spinning gears and a bright idea.'],
+  ['honey_bees', 'Honey Bees', 35, 636, 655, 407, '#F7C342', '#583108', 'A honeycomb ring with busy bees and a sunflower.'],
+  ['witch_brew', 'Witch Brew', 18, 628, 649, 439, '#B48CF2', '#240E5B', 'A bubbling cauldron, candles, potions and a sleepy moon.'],
+  ['hot_air_balloon', 'Hot Air Balloon', 28, 634, 671, 471, '#F7A9A8', '#3D2C69', 'Balloons float through a pastel sky with birds and the sun.'],
+  ['jungle_swing', 'Jungle Swing', 8, 626, 661, 414, '#4CB86E', '#113A22', 'A monkey swings past a toucan, flowers and big green leaves.'],
+  ['spooky_pumpkin', 'Spooky Pumpkin', 3, 630, 648, 416, '#FF8A2B', '#31224B', 'A friendly ghost, glowing pumpkins and bats out for the night.'],
+  ['race_track', 'Race Track', 9, 634, 670, 418, '#FF5A6E', '#1A1C23', 'A race car laps the track past the flag, the lights and the trophy.'],
+  ['cricket_match', 'Cricket Match', 10, 636, 652, 472, '#6CC35F', '#123B24', 'The ball, the bat and the stumps, with a bird watching the game.'],
+].map(([key, name, ft, fb, fbmax, pb, accent, tint, about], i) => ({ key, name, ft, fb, fbmax, pb, accent, tint, about, i, file: key.replace(/_/g, '-') }));
+const DECOR_BY_KEY = Object.fromEntries(DECOR_SETS.map((s) => [s.key, s]));
+const DECOR_PRICE = 250;
+const DECOR_FRAME_CATALOG = Object.fromEntries(DECOR_SETS.map((s) => [s.key, { label: `${s.name} frame`, rarity: 'epic' }]));
+const DECOR_PLATE_CATALOG = Object.fromEntries(DECOR_SETS.map((s) => [s.key, { label: `${s.name} nameplate`, rarity: 'epic' }]));
+const DECOR_SPRITE = '/set-thumbs.webp';
+function isDecorKey(key) {
+  return !!(key && DECOR_BY_KEY[key]);
+}
+function decorSrc(key, part) {
+  const s = DECOR_BY_KEY[key];
+  return s ? `/set-${s.file}-${part === 'plate' ? 'plate' : 'frame'}.webp` : null;
+}
+const decorLoaded = new Set();
+const decorWaits = new Map();
+function preloadDecor(url) {
+  if (!url) return Promise.resolve(false);
+  if (decorLoaded.has(url)) return Promise.resolve(true);
+  if (decorWaits.has(url)) return decorWaits.get(url);
+  const job = new Promise((resolve) => {
     const img = new Image();
     img.decoding = 'async';
-    img.onload = () => {
-      frameImageKeep.push(img);
-      const done = () => resolve(url);
-      if (img.decode) img.decode().then(done, done); else done();
-    };
-    img.onerror = async () => {
-      if (!retried && typeof caches !== 'undefined') {
-        try { const cache = await caches.open('zchat-assets-v1'); await cache.delete(rawUrl); } catch {}
-        resolve(await loadFrameImage(rawUrl, true));
-      } else {
-        resolve(null);
-      }
-    };
+    img.onload = () => { decorLoaded.add(url); decorWaits.delete(url); resolve(true); };
+    img.onerror = () => { decorWaits.delete(url); resolve(false); };
     img.src = url;
   });
+  decorWaits.set(url, job);
+  return job;
 }
-function measureFrameGeometry(url) {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.onload = () => {
-      try {
-        const N = 320;
-        const c = document.createElement('canvas');
-        c.width = N; c.height = N;
-        const g = c.getContext('2d', { willReadFrequently: true });
-        g.drawImage(img, 0, 0, N, N);
-        const d = g.getImageData(0, 0, N, N).data;
-        const A = (x, y) => d[(Math.min(N - 1, Math.max(0, Math.round(y))) * N + Math.min(N - 1, Math.max(0, Math.round(x)))) * 4 + 3];
-        let cx = N / 2;
-        let cy = N / 2;
-        if (A(cx, cy) > 60) { resolve(null); return; }
-        for (let pass = 0; pass < 3; pass++) {
-          const pts = [];
-          for (let i = 0; i < 72; i++) {
-            const a = (i / 72) * Math.PI * 2;
-            let r = 2;
-            while (r < N * 0.6) {
-              const x = cx + Math.cos(a) * r;
-              const y = cy + Math.sin(a) * r;
-              if (x < 0 || y < 0 || x >= N || y >= N || A(x, y) > 60) break;
-              r++;
-            }
-            pts.push({ x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r, r });
-          }
-          const sorted = pts.map((p) => p.r).sort((p, q) => p - q);
-          const med = sorted[Math.floor(sorted.length / 2)];
-          const good = pts.filter((p) => p.r > med * 0.8 && p.r < med * 1.2);
-          if (good.length < 36 || med < N * 0.12) { resolve(null); return; }
-          cx = good.reduce((sum, p) => sum + p.x, 0) / good.length;
-          cy = good.reduce((sum, p) => sum + p.y, 0) / good.length;
-          if (pass === 2) {
-            const rad = good.reduce((sum, p) => sum + Math.hypot(p.x - cx, p.y - cy), 0) / good.length;
-            resolve({ scale: N / (2 * rad * 1.04), centerX: cx / N, centerY: cy / N });
-            return;
-          }
-        }
-      } catch { resolve(null); }
-    };
-    img.onerror = () => resolve(null);
-    img.src = url;
-  });
-}
-function resolveFrameUrl(key) {
-  const spec = AVATAR_FRAMES[key];
-  if (!spec) return Promise.resolve(null);
-  if (frameUrlCache.has(key)) return Promise.resolve(frameUrlCache.get(key));
-  if (frameWaiters.has(key)) return frameWaiters.get(key);
-  const p = loadFrameImage(spec.file)
-    .then((u) => u || loadFrameImage(spec.fallback))
-    .then(async (u) => {
-      if (u && !spec.measured && spec.centerY === undefined) {
-        spec.measured = true;
-        const geo = await measureFrameGeometry(u);
-        if (geo && geo.scale > 1.1 && geo.scale < 2.1 && Math.abs(geo.centerX - 0.5) < 0.15 && Math.abs(geo.centerY - 0.5) < 0.15) Object.assign(spec, geo);
-      }
-      return u;
-    })
-    .then((u) => {
-      frameWaiters.delete(key);
-      if (u) frameUrlCache.set(key, u);
-      return u;
-    });
-  frameWaiters.set(key, p);
-  return p;
-}
-function useFrameUrl(key) {
-  const [url, setUrl] = useState(() => (key && frameUrlCache.has(key) ? frameUrlCache.get(key) : null));
+function useDecorLoaded(url) {
+  const [state, setState] = useState(() => ({ url, ok: !!url && decorLoaded.has(url) }));
+  const ok = state.url === url ? state.ok : (!!url && decorLoaded.has(url));
   useEffect(() => {
+    if (!url) { setState({ url, ok: false }); return undefined; }
+    if (decorLoaded.has(url)) { setState({ url, ok: true }); return undefined; }
     let alive = true;
-    if (!key || !AVATAR_FRAMES[key]) { setUrl(null); return undefined; }
-    if (frameUrlCache.has(key)) { setUrl(frameUrlCache.get(key)); return undefined; }
-    setUrl(null);
-    resolveFrameUrl(key).then((u) => { if (alive) setUrl(u); });
+    setState({ url, ok: false });
+    preloadDecor(url).then((v) => { if (alive) setState({ url, ok: v }); });
     return () => { alive = false; };
-  }, [key]);
-  return url;
+  }, [url]);
+  return ok;
+}
+let decorMeasure = null;
+function decorTextW(text, weight, size) {
+  try {
+    if (!decorMeasure) decorMeasure = document.createElement('canvas').getContext('2d');
+    decorMeasure.font = `${weight} ${size}px ${FONT}`;
+    return decorMeasure.measureText(String(text || '')).width;
+  } catch {
+    return String(text || '').length * size * 0.6;
+  }
+}
+function decorOwned(rewards, key) {
+  const has = (kind) => (rewards || []).find((r) => r.kind === kind && r.reward_key === key && rewardActive(r)) || null;
+  const f = has('frame');
+  const p = has('nameplate');
+  return { frame: !!f, plate: !!p, frameLeft: f ? daysLeft(f) : null, plateLeft: p ? daysLeft(p) : null };
 }
 
-function FramedAvatar({ children }) {
-  return children;
-}
-
-const NAMEPLATES = {
-  sakura_neon: { file: '/nameplates/nameplate-sakura-neon.webp', fallback: '/nameplate-sakura-neon.webp', label: 'Sakura Neon', rarity: 'mythic', glow: '#ff4d9d', ratio: 0.4333, anchorY: 0.4206, box: [0.325, 0.4956, 0.675, 0.715] },
-  frost_lily: { file: '/nameplates/nameplate-frost-lily.webp', fallback: '/nameplate-frost-lily.webp', label: 'Frost Lily', rarity: 'mythic', glow: '#60a5fa', ratio: 0.4333, anchorY: 0.4424, box: [0.325, 0.5174, 0.675, 0.715] },
-  midnight_wanderer: { file: '/nameplates/nameplate-midnight-wanderer.webp', fallback: '/nameplate-midnight-wanderer.webp', label: 'Midnight Wanderer', rarity: 'legendary', glow: '#7c8cff', ratio: 0.4333, anchorY: 0.4364, box: [0.325, 0.5114, 0.675, 0.715] },
-  blue_flame: { file: '/nameplates/nameplate-blue-flame.webp', fallback: '/nameplate-blue-flame.webp', label: 'Blue Flame', rarity: 'legendary', glow: '#22d3ee', ratio: 0.425, anchorY: 0.3864, box: [0.325, 0.4614, 0.675, 0.715] },
-  deep_blue: { file: '/nameplates/nameplate-deep-blue.webp', fallback: '/nameplate-deep-blue.webp', label: 'Deep Blue', rarity: 'legendary', glow: '#38bdf8', ratio: 0.4333, anchorY: 0.4558, box: [0.325, 0.5308, 0.675, 0.715] },
-  azure_bloom: { file: '/nameplates/nameplate-azure-bloom.webp', fallback: '/nameplate-azure-bloom.webp', label: 'Azure Bloom', rarity: 'epic', glow: '#2dd4bf', ratio: 0.4275, anchorY: 0.427, box: [0.325, 0.502, 0.675, 0.715] },
-};
-const nameplateUrlCache = new Map();
-function useNameplateUrl(key) {
-  const [url, setUrl] = useState(() => (key && nameplateUrlCache.has(key) ? nameplateUrlCache.get(key) : null));
-  useEffect(() => {
-    let alive = true;
-    const spec = key && NAMEPLATES[key];
-    if (!spec) { setUrl(null); return undefined; }
-    if (nameplateUrlCache.has(key)) { setUrl(nameplateUrlCache.get(key)); return undefined; }
-    cachedAssetUrl(spec.file).then((u) => u || cachedAssetUrl(spec.fallback)).then((u) => new Promise((resolve) => {
-      if (!u || spec.measured) { resolve(u); return; }
-      const probe = new Image();
-      probe.onload = () => {
-        spec.measured = true;
-        const natural = probe.naturalHeight / probe.naturalWidth;
-        if (natural > 0.15 && natural < 1.2) spec.ratio = natural;
-        resolve(u);
-      };
-      probe.onerror = () => resolve(u);
-      probe.src = u;
-    })).then((u) => {
-      if (u) nameplateUrlCache.set(key, u);
-      if (alive) setUrl(u);
-    });
-    return () => { alive = false; };
-  }, [key]);
-  return url;
-}
-
-function nameplatePull(key) {
-  const spec = NAMEPLATES[key];
-  if (!spec) return 0;
-  return spec.anchorY * spec.ratio * 100;
-}
-
-function PlatePreview({ plate, width }) {
-  const spec = NAMEPLATES[plate];
-  const url = useNameplateUrl(plate);
-  if (!spec) return null;
+function DecorStill({ setKey, part, width, style }) {
+  const s = DECOR_BY_KEY[setKey];
+  const ok = useDecorLoaded(s ? DECOR_SPRITE : null);
+  if (!s) return null;
+  const isFrame = part !== 'plate';
+  const cell = isFrame ? 300 : 420;
+  const sc = width / cell;
+  const col = isFrame ? s.i % 7 : s.i % 5;
+  const row = isFrame ? Math.floor(s.i / 7) : Math.floor(s.i / 5);
   return (
-    <div style={{ width, height: Math.round(width * spec.ratio), display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      {url && <img src={url} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />}
+    <div aria-hidden="true" style={{
+      width, height: isFrame ? width : width * 0.4, backgroundImage: ok ? `url(${DECOR_SPRITE})` : 'none', backgroundRepeat: 'no-repeat',
+      backgroundSize: `${2100 * sc}px ${1740 * sc}px`, backgroundPosition: `${-col * cell * sc}px ${-(isFrame ? row * 300 : 900 + row * 168) * sc}px`,
+      pointerEvents: 'none', ...(style || {}),
+    }} />
+  );
+}
+
+function DecorArt({ setKey, part, width, live = true, style }) {
+  const set = DECOR_BY_KEY[setKey];
+  const src = live ? decorSrc(setKey, part) : null;
+  const ready = useDecorLoaded(src);
+  const stillOk = useDecorLoaded(set ? DECOR_SPRITE : null);
+  const [failed, setFailed] = useState(null);
+  const on = !!src && ready && failed !== src;
+  const isPlate = part === 'plate';
+  const h = isPlate ? width * 0.4 : width;
+  return (
+    <div aria-hidden="true" style={{ position: 'absolute', width, height: h, pointerEvents: 'none', ...(style || {}) }}>
+      {isPlate && set && !on && !stillOk && <div style={{ position: 'absolute', left: width * 0.1167, top: h * 0.3125, width: width * 0.7667, height: h * 0.4417, borderRadius: width * 0.0867, background: set.tint, boxShadow: `inset 0 0 0 ${Math.max(2, Math.round(width * 0.011))}px ${set.accent}` }} />}
+      <DecorStill setKey={setKey} part={part} width={width} style={{ position: 'absolute', left: 0, top: 0, opacity: on ? 0 : 1, transition: on ? 'opacity 0.25s ease 0.3s' : 'none' }} />
+      {on && <img key={src} src={src} alt="" draggable={false} onError={() => setFailed(src)} onContextMenu={(e) => e.preventDefault()} style={{ position: 'absolute', left: 0, top: 0, width, height: h, maxWidth: 'none', animation: 'zdec-in 0.35s ease both' }} />}
     </div>
   );
 }
 
-function NameplateBanner({ plate, name, username, verified, custom }) {
-  const spec = NAMEPLATES[plate];
-  const url = useNameplateUrl(plate);
-  const ref = useRef(null);
-  const [width, setWidth] = useState(0);
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (!el) return undefined;
-    const measure = () => setWidth(el.clientWidth);
-    measure();
-    if (typeof ResizeObserver === 'undefined') {
-      window.addEventListener('resize', measure);
-      return () => window.removeEventListener('resize', measure);
-    }
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [plate]);
-  if (!spec) return null;
-  const bx0 = spec.box[0];
-  const by0 = spec.box[1];
-  const bx1 = spec.box[2];
-  const by1 = spec.box[3];
-  const boxW = width * (bx1 - bx0);
-  const boxH = width * spec.ratio * (by1 - by0);
+function decorLayout(frameKey, plateKey, width) {
+  const F = DECOR_BY_KEY[frameKey] || null;
+  const P = DECOR_BY_KEY[plateKey] || null;
+  if (!F && !P) return null;
+  const W = width;
+  const s = W / 1200;
+  if (F) {
+    const photo = Math.round(W * 0.4222);
+    const k = photo / 440;
+    const cut = Math.max(0, F.ft - 4) * k;
+    const plateTop = P ? F.fb * k - cut - 172 * s : null;
+    const bottom = Math.max(F.fbmax * k - cut, P ? plateTop + P.pb * s : 0);
+    return { F, P, W, s, photo, k, fsz: 720 * k, frameTop: -cut, photoTop: 140 * k - cut, plateTop, h: Math.ceil(bottom + 2) };
+  }
+  const photo = Math.round(W * 0.36);
+  const plateTop = photo - 186 * s;
+  return { F, P, W, s, photo, k: 0, fsz: 0, frameTop: 0, photoTop: 0, plateTop, h: Math.ceil(plateTop + P.pb * s + 2) };
+}
+
+function DecorPlateText({ L, name, username, verified, custom, compact }) {
+  const bw = L.W * 0.66;
+  const bh = L.W * 0.124;
   const shown = (name || '').trim() || 'ZChat user';
-  const handle = '@' + (username || 'zchatuser');
-  const badgeRoom = (verified && VERIFIED_TIERS[verified]) || (custom && CUSTOM_BADGES[custom]) ? boxH * 0.62 : 0;
-  const nameSize = Math.max(10, Math.min(boxH * 0.5, (boxW * 0.94 - badgeRoom) / Math.max(4, shown.length * 0.62)));
-  const userSize = Math.max(9, Math.min(boxH * 0.3, boxW / Math.max(5, handle.length * 0.56)));
+  const handle = `@${username || 'zchatuser'}`;
+  const charm = !compact && custom && CUSTOM_BADGES[custom] ? CUSTOM_BADGES[custom] : null;
+  const tier = !compact && verified && VERIFIED_TIERS[verified] ? VERIFIED_TIERS[verified] : null;
+  const roomEm = (charm ? 0.74 * 1.18 * charm.ratio : 0) + (tier ? 0.74 : 0);
+  const roomPx = (charm ? 3 : 0) + (tier ? (charm ? 2 : 4) : 0);
+  const w1 = decorTextW(shown, 800, 100) / 100;
+  const ns = Math.max(compact ? 7 : 11, Math.min(compact ? bh * 0.58 : bh * 0.46, (bw * 0.92 - roomPx) / Math.max(0.5, w1 + roomEm)));
+  const w2 = decorTextW(handle, 600, 100) / 100;
+  const hs = Math.max(8, Math.min(bh * 0.25, (bw * 0.9) / Math.max(0.5, w2)));
   return (
-    <div ref={ref} style={{ position: 'relative', width: '100%', height: 0, paddingBottom: (spec.ratio * 100).toFixed(3) + '%' }}>
-      {url && <img src={url} alt="" draggable={false} onContextMenu={(e) => e.preventDefault()} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'fill', pointerEvents: 'none' }} />}
-      <div style={{
-        position: 'absolute', left: (bx0 * 100) + '%', top: (by0 * 100) + '%', width: ((bx1 - bx0) * 100) + '%', height: ((by1 - by0) * 100) + '%',
-        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: Math.max(1, boxH * 0.035),
-        opacity: width ? 1 : 0, transition: 'opacity 0.15s ease', pointerEvents: 'none',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', maxWidth: '100%', minWidth: 0 }}>
-          <span style={{ fontSize: nameSize, fontWeight: 900, color: '#ffffff', lineHeight: 1.05, letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textShadow: '0 2px 10px rgba(0,0,0,0.55)' }}>{shown}</span>
-          <VerifiedBadge tier={verified} custom={custom} size={Math.max(11, Math.round(nameSize * 0.68))} />
-        </div>
-        <div style={{ fontSize: userSize, fontWeight: 600, color: 'rgba(255,255,255,0.82)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%', textShadow: '0 1px 7px rgba(0,0,0,0.55)' }}>{handle}</div>
+    <div style={{ position: 'absolute', left: L.W * 0.17, top: L.plateTop + L.W * 0.162, width: bw, height: bh, zIndex: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: Math.max(0, Math.round(bh * 0.03)), pointerEvents: 'none' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', maxWidth: '100%', minWidth: 0 }}>
+        <span style={{ fontSize: ns, fontWeight: 800, color: '#FFFFFF', lineHeight: 1.1, letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textShadow: '0 2px 8px rgba(0,0,0,0.6)' }}>{shown}</span>
+        {(charm || tier) && <VerifiedBadge tier={tier ? verified : null} custom={charm ? custom : null} size={Math.max(11, Math.round(ns * 0.74))} />}
       </div>
+      {!compact && <div style={{ fontSize: hs, fontWeight: 600, color: 'rgba(240,246,255,0.86)', lineHeight: 1.15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%', textShadow: '0 1px 6px rgba(0,0,0,0.6)' }}>{handle}</div>}
     </div>
   );
 }
 
-function ProfilePlateHero({ profile, photo, storyRing = 'none', onOpenStory, isOnline, overCover, maxPlate = 360 }) {
+function DecorHero({ frameKey, plateKey, width, photo, name, username, verified, custom, live = true, compact = false, ring = 'none', close = false, online = false, onPhoto, gapColor }) {
   const { theme } = useTheme();
-  const ref = useRef(null);
-  const [w, setW] = useState(() => (typeof window === 'undefined' ? 390 : Math.min(window.innerWidth, 640)));
+  const L = decorLayout(frameKey, plateKey, width);
+  if (!L) return null;
+  const pc = L.photo;
+  const ringed = ring !== 'none';
+  const ringCol = close ? CLOSE_GREEN : theme.coral;
+  const gap = gapColor || theme.bgGradient;
+  const dot = Math.max(12, Math.round(pc * 0.12));
+  return (
+    <div style={{ position: 'relative', width: L.W, height: L.h, flexShrink: 0, isolation: 'isolate' }}>
+      {L.P && <DecorArt setKey={plateKey} part="plate" width={L.W} live={live} style={{ left: 0, top: L.plateTop, zIndex: 1 }} />}
+      {L.P && <DecorPlateText L={L} name={name} username={username} verified={verified} custom={custom} compact={compact} />}
+      <div role={onPhoto ? 'button' : undefined} aria-label={onPhoto ? `Story of ${name || 'this person'}` : undefined} onClick={onPhoto || undefined}
+        style={{ position: 'absolute', left: (L.W - pc) / 2, top: L.photoTop, width: pc, height: pc, borderRadius: '50%', zIndex: L.F ? 2 : 3, cursor: onPhoto ? 'pointer' : 'default', boxShadow: L.F ? 'none' : `0 0 0 ${Math.max(3, Math.round(pc * 0.03))}px ${gap}`, background: L.F ? 'transparent' : gap }}>
+        {!L.F && ringed
+          ? <StoryAvatar profile={{ avatar: photo, name }} size={pc} ring={ring} close={close} />
+          : <Avatar emoji={photo} name={name} size={pc} />}
+        {L.F && ring === 'unseen' && <div aria-hidden="true" style={{ position: 'absolute', inset: 0, borderRadius: '50%', boxShadow: `inset 0 0 0 ${Math.max(3, Math.round(pc * 0.03))}px ${ringCol}`, pointerEvents: 'none' }} />}
+        {!L.F && online && <span style={{ position: 'absolute', right: pc * 0.07, bottom: pc * 0.07, width: dot, height: dot, borderRadius: '50%', background: '#22C55E', border: `3px solid ${gap}`, boxSizing: 'content-box' }} />}
+      </div>
+      {L.F && <DecorArt setKey={frameKey} part="frame" width={L.fsz} live={live} style={{ left: (L.W - L.fsz) / 2, top: L.frameTop, zIndex: 3 }} />}
+    </div>
+  );
+}
+
+function useWidthOf(ref, fallback) {
+  const [w, setW] = useState(fallback);
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return undefined;
-    const measure = () => { const cw = el.clientWidth; if (cw) setW(cw); };
+    const measure = () => { const cw = el.clientWidth; if (cw) setW((prev) => (Math.abs(prev - cw) < 1 ? prev : cw)); };
     measure();
     if (typeof ResizeObserver === 'undefined') {
       window.addEventListener('resize', measure);
@@ -18659,26 +18641,42 @@ function ProfilePlateHero({ profile, photo, storyRing = 'none', onOpenStory, isO
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
-  if (!NAMEPLATES[profile.nameplate]) return null;
-  const framed = !!AVATAR_FRAMES[profile.avatar_frame];
-  const plateW = Math.round(Math.max(220, Math.min(maxPlate, w - 28)));
-  const box = Math.round(plateW * 0.5833);
-  const bare = Math.round(box * 0.8);
-  const avH = framed ? box : bare;
-  const pull = Math.round(nameplatePull(profile.nameplate) * plateW / 100) + Math.round(plateW * 0.022);
+  return w;
+}
+
+function ProfileDecorHero({ profile, photo, frameKey, plateKey, storyRing = 'none', close = false, onOpenStory, isOnline, overCover, maxWidth = 420, gapColor }) {
+  const { theme } = useTheme();
+  const ref = useRef(null);
+  const w = useWidthOf(ref, typeof window === 'undefined' ? 390 : Math.min(window.innerWidth, 640));
+  const W = Math.round(Math.max(240, Math.min(maxWidth, w - 12)));
+  const L = decorLayout(frameKey, plateKey, W);
+  if (!L) return <div ref={ref} />;
   const ringed = storyRing !== 'none';
-  const dot = Math.max(14, Math.round(bare * 0.11));
+  const lift = overCover ? Math.round(L.photoTop + L.photo * 0.42) : 0;
+  const live = !reducedMotion() && !dataSaverOn();
   return (
-    <div ref={ref} style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: overCover ? -Math.round(avH * 0.42) : 0 }}>
-      <div role="button" aria-label={ringed ? `Story of ${profile.name}` : 'Profile photo'} onClick={() => { if (ringed && onOpenStory) onOpenStory(profile.id); }} style={{ position: 'relative', zIndex: 3, width: box, height: avH, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: ringed ? 'pointer' : 'default' }}>
-        {ringed && !framed
-          ? <StoryAvatar profile={{ ...profile, avatar: photo }} size={bare} ring={storyRing} />
-          : <div style={{ borderRadius: '50%', boxShadow: overCover && !framed ? `0 0 0 4px ${theme.bgGradient}` : 'none' }}><Avatar emoji={photo} name={profile.name} frame={profile.avatar_frame} frameFit size={avH} /></div>}
-        {isOnline && !framed && <span style={{ position: 'absolute', zIndex: 4, left: box / 2 + bare * 0.354 - dot / 2, top: avH / 2 + bare * 0.354 - dot / 2, width: dot, height: dot, borderRadius: '50%', background: '#22C55E', border: `3px solid ${theme.bgGradient}`, boxSizing: 'content-box' }} />}
-      </div>
-      <div style={{ position: 'relative', zIndex: 2, width: plateW, marginTop: -pull }}>
-        <NameplateBanner plate={profile.nameplate} name={profile.name} username={profile.username} verified={profile.verified} custom={profile.custom_badge} />
-      </div>
+    <div ref={ref} style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: overCover ? -lift : 4 }}>
+      <DecorHero frameKey={frameKey} plateKey={plateKey} width={W} photo={photo} name={profile.name} username={profile.username} verified={profile.verified} custom={profile.custom_badge}
+        live={live} ring={storyRing} close={close} online={isOnline} onPhoto={ringed && onOpenStory ? () => onOpenStory(profile.id) : null} gapColor={gapColor || theme.bgGradient} />
+      {L.F && !L.P && (
+        <div style={{ maxWidth: '100%', padding: '2px 20px 0', boxSizing: 'border-box', textAlign: 'center' }}>
+          <div style={{ fontSize: 22, fontWeight: 800, color: theme.ink, letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', justifyContent: 'center', minWidth: 0 }}>
+            <span style={{ minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{profile.name}</span>
+            <VerifiedBadge tier={profile.verified} custom={profile.custom_badge} size={19} />
+          </div>
+          <div style={{ fontSize: 14, color: theme.muted, marginTop: 1 }}>@{profile.username}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DecorPlateOnly({ setKey, width, name, username, verified, custom, live = false, compact = false }) {
+  if (!isDecorKey(setKey)) return null;
+  return (
+    <div style={{ position: 'relative', width, height: width * 0.4, flexShrink: 0, isolation: 'isolate' }}>
+      <DecorArt setKey={setKey} part="plate" width={width} live={live} style={{ left: 0, top: 0 }} />
+      <DecorPlateText L={{ W: width, plateTop: 0 }} name={name} username={username} verified={verified} custom={custom} compact={compact} />
     </div>
   );
 }
@@ -19156,55 +19154,53 @@ function SocialIcon({ platform, size = 40, round = false }) {
   );
 }
 
-function ProfileCollectionShowcase({ profile, rewards, isSelf, onPreview, onOpenCollection }) {
-  const { theme } = useTheme();
-  const frames = (rewards || [])
-    .filter((r) => r.kind === 'frame' && AVATAR_FRAMES[r.reward_key] && rewardActive(r))
-    .sort((a, b) => (STORE_RARITY_ORDER[AVATAR_FRAMES[a.reward_key].rarity] ?? 9) - (STORE_RARITY_ORDER[AVATAR_FRAMES[b.reward_key].rarity] ?? 9));
-  const charms = (rewards || []).filter((r) => r.kind === 'charm' && CUSTOM_BADGES[r.reward_key] && rewardActive(r));
-  const plates = (rewards || []).filter((r) => r.kind === 'nameplate' && NAMEPLATES[r.reward_key] && rewardActive(r));
-  const total = frames.length + charms.length + plates.length;
-  if (!total) return null;
-  const best = frames.length ? (RARITY_STYLE[AVATAR_FRAMES[frames[0].reward_key].rarity] || RARITY_STYLE.epic) : RARITY_STYLE.epic;
+function DecorFrameBadge({ setKey, size, photo, name, live = false }) {
+  const pc = Math.round(size * 0.6111);
   return (
-    <div style={{ marginTop: 18, borderRadius: 22, overflow: 'hidden', background: theme.dark ? '#15141B' : '#FFFFFF', border: `1px solid ${theme.dark ? 'rgba(255,255,255,0.08)' : theme.border}`, textAlign: 'left' }}>
+    <div style={{ position: 'relative', width: size, height: size, flexShrink: 0, isolation: 'isolate' }}>
+      <div style={{ position: 'absolute', left: (size - pc) / 2, top: (size - pc) / 2, width: pc, height: pc }}><Avatar emoji={photo} name={name} size={pc} /></div>
+      <DecorArt setKey={setKey} part="frame" width={size} live={live} style={{ left: 0, top: 0 }} />
+    </div>
+  );
+}
+
+function ProfileCollectionShowcase({ profile, rewards, isSelf, onOpenSet, onOpenCollection }) {
+  const { theme } = useTheme();
+  const act = (rewards || []).filter(rewardActive);
+  const sets = DECOR_SETS.map((s) => ({ s, f: act.some((r) => r.kind === 'frame' && r.reward_key === s.key), p: act.some((r) => r.kind === 'nameplate' && r.reward_key === s.key) })).filter((x) => x.f || x.p);
+  const charms = act.filter((r) => r.kind === 'charm' && CUSTOM_BADGES[r.reward_key]);
+  useDecorLoaded(sets.length ? DECOR_SPRITE : null);
+  const parts = sets.reduce((n, x) => n + (x.f ? 1 : 0) + (x.p ? 1 : 0), 0);
+  if (!sets.length && !charms.length) {
+    return (
+      <div style={{ marginTop: 18, padding: '22px 16px', borderRadius: 20, background: theme.soft, textAlign: 'center' }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: theme.ink }}>{isSelf ? 'Your Collection is empty' : 'Nothing here yet'}</div>
+        <div style={{ fontSize: 13, color: theme.muted, marginTop: 4, lineHeight: 1.5 }}>{isSelf ? 'Get an animated frame and nameplate for your profile.' : `${profile.name} has no frames, nameplates or charms yet.`}</div>
+        {isSelf && onOpenCollection && <div role="button" onClick={() => onOpenCollection()} className="zchat-press" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 12, height: 38, padding: '0 16px', borderRadius: 19, background: theme.coral, color: '#FFFFFF', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}><CollectionIcon size={16} />See the sets</div>}
+      </div>
+    );
+  }
+  const summary = [sets.length ? `${sets.length} ${sets.length === 1 ? 'set' : 'sets'}` : null, charms.length ? `${charms.length} ${charms.length === 1 ? 'charm' : 'charms'}` : null].filter(Boolean).join(', ');
+  return (
+    <div style={{ marginTop: 18, borderRadius: 22, overflow: 'hidden', background: '#101119', border: `1px solid ${theme.dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'}`, textAlign: 'left' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px 10px' }}>
-        <CollectionIcon size={22} color={best.color} style={{ flexShrink: 0 }} />
+        <CollectionIcon size={22} color="#B79CFF" style={{ flexShrink: 0 }} />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 14.5, fontWeight: 900, color: theme.ink }}>Collection</div>
-          <div style={{ fontSize: 11.5, color: theme.muted, fontWeight: 600 }}>{total} unlocked{frames.length ? `, ${frames.length} ${frames.length === 1 ? 'frame' : 'frames'}` : ''}{plates.length ? `, ${plates.length} ${plates.length === 1 ? 'nameplate' : 'nameplates'}` : ''}</div>
+          <div style={{ fontSize: 14.5, fontWeight: 900, color: '#FFFFFF' }}>Collection</div>
+          <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.55)', fontWeight: 600 }}>{parts + charms.length} unlocked, {summary}</div>
         </div>
         {isSelf && onOpenCollection && (
-          <div role="button" onClick={onOpenCollection} style={{ fontSize: 12.5, fontWeight: 800, color: '#fbbf24', cursor: 'pointer', padding: '6px 10px', borderRadius: 10, background: 'rgba(245,158,11,0.12)' }}>Manage</div>
+          <div role="button" onClick={() => onOpenCollection()} style={{ fontSize: 12.5, fontWeight: 800, color: '#fbbf24', cursor: 'pointer', padding: '6px 10px', borderRadius: 10, background: 'rgba(245,158,11,0.12)' }}>Manage</div>
         )}
       </div>
       <div style={{ display: 'flex', gap: 10, overflowX: 'auto', padding: '0 14px 14px', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
-        {frames.map((r) => {
-          const spec = AVATAR_FRAMES[r.reward_key];
-          const rr = RARITY_STYLE[spec.rarity] || RARITY_STYLE.epic;
-          return (
-            <div key={r.reward_key} role="button" onClick={() => onPreview(r.reward_key)} style={{ flexShrink: 0, width: 104, borderRadius: 16, padding: '8px 6px 10px', cursor: 'pointer', background: rr.bg, border: `1px solid ${rr.color}55`, textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
-              <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 3, background: rr.color }} />
-              <div style={{ height: 74, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Avatar emoji={profile.avatar} name={profile.name} size={68} frame={r.reward_key} />
-              </div>
-              <div style={{ fontSize: 11, fontWeight: 800, color: 'white', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{spec.label.replace(/ frame$/i, '')}</div>
-              <div style={{ fontSize: 10.5, fontWeight: 800, color: rr.color, marginTop: 2 }}>{rr.label}</div>
-            </div>
-          );
-        })}
-        {plates.map((r) => {
-          const spec = NAMEPLATES[r.reward_key];
-          const rr = RARITY_STYLE[spec.rarity] || RARITY_STYLE.epic;
-          return (
-            <div key={`p-${r.reward_key}`} style={{ flexShrink: 0, width: 160, borderRadius: 16, padding: '8px 6px 10px', background: rr.bg, border: `1px solid ${rr.color}55`, textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
-              <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 3, background: rr.color }} />
-              <div style={{ height: 74, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><PlatePreview plate={r.reward_key} width={146} /></div>
-              <div style={{ fontSize: 11, fontWeight: 800, color: 'white', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{spec.label}</div>
-              <div style={{ fontSize: 10.5, fontWeight: 800, color: rr.color, marginTop: 2 }}>Nameplate</div>
-            </div>
-          );
-        })}
+        {sets.map(({ s, f, p }) => (
+          <div key={s.key} role="button" aria-label={`${s.name} ${f && p ? 'set' : f ? 'frame' : 'nameplate'}`} onClick={() => onOpenSet && onOpenSet(s.key)} className="zchat-press" style={{ flexShrink: 0, width: 150, borderRadius: 16, padding: '6px 4px 9px', cursor: onOpenSet ? 'pointer' : 'default', background: `radial-gradient(120% 85% at 50% 20%, ${s.accent}33 0%, rgba(13,14,20,0) 64%), #171826`, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <DecorHero frameKey={f ? s.key : null} plateKey={p ? s.key : null} width={140} photo={profile.avatar} name={profile.name} live={false} compact gapColor="#171826" />
+            <div style={{ fontSize: 12, fontWeight: 800, color: '#FFFFFF', marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%', padding: '0 6px' }}>{s.name}</div>
+            <div style={{ fontSize: 10.5, fontWeight: 800, color: s.accent, marginTop: 1 }}>{f && p ? 'Set' : f ? 'Frame' : 'Nameplate'}</div>
+          </div>
+        ))}
         {charms.map((r) => {
           const spec = CUSTOM_BADGES[r.reward_key];
           const rr = RARITY_STYLE[spec.rarity] || RARITY_STYLE.epic;
@@ -19218,6 +19214,103 @@ function ProfileCollectionShowcase({ profile, rewards, isSelf, onPreview, onOpen
           );
         })}
       </div>
+    </div>
+  );
+}
+
+function RewardCelebration({ kind, rewardKey, me, onClaim, count = 1, onClaimAll, isSet = false }) {
+  const [claiming, setClaiming] = useState(false);
+  const isCharm = kind === 'charm';
+  const charm = isCharm ? CUSTOM_BADGES[rewardKey] : null;
+  const set = isCharm ? null : DECOR_BY_KEY[rewardKey];
+  if (!charm && !set) return null;
+  const glow = set ? set.accent : '#f472b6';
+  const frameKey = set ? (isSet || kind === 'frame' ? set.key : (isDecorKey(me.avatar_frame) ? me.avatar_frame : null)) : null;
+  const plateKey = set ? (isSet || kind === 'nameplate' ? set.key : (isDecorKey(me.nameplate) ? me.nameplate : null)) : null;
+  const W = Math.round(Math.min(360, (typeof window === 'undefined' ? 390 : window.innerWidth) - 48));
+  const more = count - (isSet ? 2 : 1);
+  const pieces = Array.from({ length: 30 }, (_, i) => i);
+  const claim = async (wear) => { setClaiming(true); await onClaim(wear); };
+  return (
+    <div className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 701, color: 'white', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, overflow: 'hidden', fontFamily: FONT, textAlign: 'center', background: `radial-gradient(circle at 50% 44%, ${glow}38 0%, rgba(11,15,25,0) 55%), #0C0C0E` }}>
+      {pieces.map((i) => (
+        <span key={i} style={{ position: 'absolute', top: -20, left: `${(i * 97) % 100}%`, width: 7, height: 13, borderRadius: 2, background: [glow, '#FFFFFF', '#7C5CFC', '#fbbf24'][i % 4], opacity: 0.85, animation: `zchat-confetti ${2.8 + (i % 5) * 0.4}s linear ${(i % 9) * 0.25}s infinite` }} />
+      ))}
+      <div style={{ fontSize: 14, fontWeight: 700, color: glow }}>{isCharm ? 'New name charm' : isSet ? 'New set' : kind === 'frame' ? 'New frame' : 'New nameplate'}</div>
+      <div style={{ fontSize: 28, fontWeight: 900, marginTop: 6 }}>{isCharm ? charm.label : set.name}</div>
+      <div style={{ fontSize: 14.5, opacity: 0.7, marginTop: 6, maxWidth: 300, lineHeight: 1.5 }}>Added to your Collection. Yours to keep.</div>
+      {set ? (
+        <div className="zchat-pop" style={{ marginTop: 18, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <DecorHero frameKey={frameKey} plateKey={plateKey} width={W} photo={me.avatar} name={me.name} username={me.username} verified={me.verified} custom={me.custom_badge} gapColor="#0C0C0E" />
+          {frameKey && !plateKey && (
+            <div style={{ marginTop: 2 }}>
+              <div style={{ fontSize: 22, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{me.name}<VerifiedBadge tier={me.verified} custom={me.custom_badge} size={18} /></div>
+              <div style={{ fontSize: 14, opacity: 0.6, marginTop: 1 }}>@{me.username}</div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <>
+          <div className="zchat-pop" style={{ position: 'relative', margin: '30px 0 18px', width: 132, height: 132 }}>
+            <div style={{ position: 'absolute', inset: -36, borderRadius: '50%', background: `radial-gradient(circle, ${glow}55 0%, transparent 70%)`, animation: 'zchat-badge-pulse 2.2s ease-in-out infinite' }} />
+            <Avatar emoji={me.avatar} name={me.name} size={132} />
+          </div>
+          <div style={{ fontSize: 24, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>{me.name}<VerifiedBadge tier={me.verified} custom={rewardKey} size={20} /></div>
+          <div style={{ fontSize: 14, opacity: 0.6, marginTop: 2 }}>@{me.username}</div>
+          <div style={{ marginTop: 14, padding: '8px 14px', borderRadius: 14, background: 'rgba(255,255,255,0.08)', fontSize: 13, opacity: 0.85 }}>Shows next to your name everywhere on ZChat</div>
+        </>
+      )}
+      <button disabled={claiming} onClick={() => claim(true)} style={{ marginTop: 26, padding: '15px 48px', borderRadius: 18, border: 'none', background: '#FFFFFF', color: '#111114', fontWeight: 800, fontSize: 16, cursor: 'pointer', fontFamily: FONT, opacity: claiming ? 0.7 : 1 }}>
+        {claiming ? 'Saving' : isSet ? 'Wear the set' : 'Wear it now'}
+      </button>
+      <button type="button" disabled={claiming} onClick={() => { if (more > 0 && onClaimAll) { setClaiming(true); onClaimAll(); } else claim(false); }} style={{ marginTop: 10, padding: '11px 26px', borderRadius: 16, border: '1.5px solid rgba(255,255,255,0.3)', background: 'transparent', color: 'white', fontWeight: 800, fontSize: 14.5, cursor: 'pointer', fontFamily: FONT }}>
+        {more > 0 && onClaimAll ? `Add all ${count} to my Collection` : 'Keep it for later'}
+      </button>
+    </div>
+  );
+}
+
+function FreeSetsSheet({ me, count, onPick, onClose }) {
+  useBackClose(true, onClose);
+  const name = (me && me.name) || 'You';
+  return (
+    <Portal>
+      <div onClick={onClose} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 702, background: 'rgba(5,6,12,0.74)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, fontFamily: FONT }}>
+        <div onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Free sets" className="zchat-pop" style={{ position: 'relative', width: '100%', maxWidth: 380, borderRadius: 28, padding: '20px 18px 16px', background: 'radial-gradient(120% 70% at 50% 0%, #3b2a7a 0%, #12101f 62%)', border: '1px solid rgba(183,156,255,0.3)', color: 'white', textAlign: 'center', overflow: 'hidden' }}>
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 134 }}>
+            <div style={{ marginRight: -26, transform: 'translateY(10px) rotate(-8deg)' }}><DecorFrameBadge setKey="neon_city" size={104} photo={me && me.avatar} name={name} /></div>
+            <div style={{ position: 'relative', zIndex: 2 }}><DecorFrameBadge setKey="koi_pond" size={134} photo={me && me.avatar} name={name} live={!dataSaverOn()} /></div>
+            <div style={{ marginLeft: -26, transform: 'translateY(10px) rotate(8deg)' }}><DecorFrameBadge setKey="dragon_hoard" size={104} photo={me && me.avatar} name={name} /></div>
+          </div>
+          <div style={{ fontSize: 24, fontWeight: 900, marginTop: 12, letterSpacing: '-0.01em' }}>{count === 1 ? 'A free set for you' : `${count} free sets for you`}</div>
+          <div style={{ fontSize: 14.5, color: 'rgba(255,255,255,0.76)', lineHeight: 1.5, marginTop: 8 }}>Pick {count === 1 ? 'any set' : `any ${count}`} of the {DECOR_SETS.length} new animated sets. Each one has a frame and a nameplate, and they are yours to keep.</div>
+          <button onClick={onPick} style={{ marginTop: 18, width: '100%', height: 52, borderRadius: 16, border: 'none', background: '#FFFFFF', color: '#111114', fontWeight: 800, fontSize: 16, fontFamily: FONT, cursor: 'pointer' }}>Pick my sets</button>
+          <button onClick={onClose} style={{ marginTop: 4, width: '100%', height: 44, borderRadius: 14, border: 'none', background: 'transparent', color: 'rgba(255,255,255,0.72)', fontWeight: 700, fontSize: 15, fontFamily: FONT, cursor: 'pointer' }}>Later</button>
+        </div>
+      </div>
+    </Portal>
+  );
+}
+
+function WnDecorArt({ me, thumb = false }) {
+  const ref = useRef(null);
+  const w = useWidthOf(ref, thumb ? 74 : 360);
+  const name = (me && me.name) || 'You';
+  const photo = me && me.avatar;
+  useDecorLoaded(DECOR_SPRITE);
+  return (
+    <div ref={ref} style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden', background: 'radial-gradient(120% 80% at 50% 30%, #2c2160 0%, #0d0b1a 72%)', display: 'flex', alignItems: thumb ? 'center' : 'flex-end', justifyContent: 'center' }}>
+      {thumb ? (
+        <DecorFrameBadge setKey="koi_pond" size={56} photo={photo} name={name} />
+      ) : (
+        <>
+          <div style={{ position: 'absolute', left: -22, top: '12%', transform: 'rotate(-10deg)', opacity: 0.9 }}><DecorFrameBadge setKey="neon_city" size={112} photo={photo} name={name} /></div>
+          <div style={{ position: 'absolute', right: -22, top: '6%', transform: 'rotate(10deg)', opacity: 0.9 }}><DecorFrameBadge setKey="snow_globe" size={112} photo={photo} name={name} /></div>
+          <div style={{ position: 'relative', zIndex: 2, paddingBottom: 46 }}>
+            <DecorHero frameKey="koi_pond" plateKey="koi_pond" width={Math.max(220, Math.min(340, w - 48))} photo={photo} name={name} username={me && me.username} verified={me && me.verified} custom={me && me.custom_badge} live={!dataSaverOn()} gapColor="#0d0b1a" />
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -19452,58 +19545,6 @@ function UpdateAvailableBanner({ onUpdate, onLater }) {
   );
 }
 
-function RewardCelebration({ kind, rewardKey, me, onClaim, count = 1, onClaimAll }) {
-  const [claiming, setClaiming] = useState(false);
-  const isFrame = kind === 'frame';
-  const isPlate = kind === 'nameplate';
-  const spec = isFrame ? AVATAR_FRAMES[rewardKey] : isPlate ? NAMEPLATES[rewardKey] : CUSTOM_BADGES[rewardKey];
-  if (!spec) return null;
-  const glow = (isFrame ? (spec.glow || (RARITY_STYLE[spec.rarity] || RARITY_STYLE.epic).color) : isPlate ? (spec.glow || '#8b5cf6') : '#f472b6') || '#8b5cf6';
-  const shownFrame = isFrame ? rewardKey : (AVATAR_FRAMES[me.avatar_frame] ? me.avatar_frame : null);
-  const frameRoom = shownFrame ? Math.round(150 * ((AVATAR_FRAMES[shownFrame].scale || 1.5) - 1) / 2) + 14 : 22;
-  const pieces = Array.from({ length: 30 }, (_, i) => i);
-  return (
-    <div className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 701, color: 'white', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 28, overflow: 'hidden', fontFamily: FONT, textAlign: 'center', background: `radial-gradient(circle at 50% 44%, ${glow}38 0%, rgba(11,15,25,0) 55%), #0C0C0E` }}>
-      {pieces.map((i) => (
-        <span key={i} style={{ position: 'absolute', top: -20, left: `${(i * 97) % 100}%`, width: 7, height: 13, borderRadius: 2, background: [glow, '#FFFFFF', '#7C5CFC', '#fbbf24'][i % 4], opacity: 0.85, animation: `zchat-confetti ${2.8 + (i % 5) * 0.4}s linear ${(i % 9) * 0.25}s infinite` }} />
-      ))}
-      <div style={{ fontSize: 14, fontWeight: 700, color: glow }}>{isFrame ? 'New avatar frame' : isPlate ? 'New nameplate' : 'New name charm'}</div>
-      <div style={{ fontSize: 28, fontWeight: 900, marginTop: 8 }}>{spec.label}</div>
-      <div style={{ fontSize: 14.5, opacity: 0.7, marginTop: 6, maxWidth: 300, lineHeight: 1.5 }}>Added to your Collection.</div>
-
-      <div className="zchat-pop" style={{ position: 'relative', marginTop: frameRoom + 12, marginBottom: frameRoom, width: 150, height: 150 }}>
-        <div style={{ position: 'absolute', inset: -40, borderRadius: '50%', background: `radial-gradient(circle, ${glow}55 0%, transparent 70%)`, animation: 'zchat-badge-pulse 2.2s ease-in-out infinite' }} />
-        <Avatar emoji={me.avatar} name={me.name} size={150} frame={shownFrame} />
-      </div>
-
-      {isPlate ? (
-        <div style={{ width: '100%', maxWidth: 440, marginTop: 6 }}>
-          <NameplateBanner plate={rewardKey} name={me.name} username={me.username} verified={me.verified} custom={me.custom_badge} />
-        </div>
-      ) : (
-        <>
-          <div style={{ fontSize: 24, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
-            {me.name}<VerifiedBadge tier={me.verified} custom={isFrame ? me.custom_badge : rewardKey} size={20} />
-          </div>
-          <div style={{ fontSize: 14, opacity: 0.6, marginTop: 2 }}>@{me.username}</div>
-        </>
-      )}
-      {!isFrame && !isPlate && (
-        <div style={{ marginTop: 14, padding: '8px 14px', borderRadius: 14, background: 'rgba(255,255,255,0.08)', fontSize: 13, opacity: 0.85 }}>Shows next to your name everywhere on ZChat</div>
-      )}
-
-      <button disabled={claiming} onClick={async () => { setClaiming(true); await onClaim(); }} style={{ marginTop: 30, padding: '15px 56px', borderRadius: 18, border: 'none', background: '#FFFFFF', color: '#111114', fontWeight: 800, fontSize: 16, cursor: 'pointer', fontFamily: FONT, opacity: claiming ? 0.7 : 1 }}>
-        {claiming ? 'Claiming…' : 'Claim & equip'}
-      </button>
-      {count > 1 && onClaimAll && (
-        <button type="button" disabled={claiming} onClick={async () => { setClaiming(true); await onClaimAll(); }} style={{ marginTop: 12, padding: '12px 30px', borderRadius: 16, border: '1.5px solid rgba(255,255,255,0.35)', background: 'transparent', color: 'white', fontWeight: 800, fontSize: 15, cursor: 'pointer', fontFamily: FONT }}>
-          Claim all {count}
-        </button>
-      )}
-    </div>
-  );
-}
-
 const RARITY_STYLE = {
   mythic: { label: 'Mythic', color: '#ff4d6d', bg: 'linear-gradient(160deg, #3b0a17 0%, #16060b 100%)', glow: 'rgba(255,77,109,0.55)' },
   legendary: { label: 'Legendary', color: '#fbbf24', bg: 'linear-gradient(160deg, #3a2606 0%, #140d02 100%)', glow: 'rgba(251,191,36,0.5)' },
@@ -19511,19 +19552,15 @@ const RARITY_STYLE = {
   rare: { label: 'Rare', color: '#60a5fa', bg: 'linear-gradient(160deg, #0b2447 0%, #060d1a 100%)', glow: 'rgba(96,165,250,0.45)' },
 };
 
-function FrameTryOnPage({ me, frameKey, charmKey, plateKey, onClose, action }) {
+function CharmTryOnPage({ me, charmKey, onClose, action }) {
   useBackClose(true, onClose);
-  const isCharm = !!charmKey;
-  const isPlate = !!plateKey;
-  const spec = isPlate ? NAMEPLATES[plateKey] : isCharm ? CUSTOM_BADGES[charmKey] : AVATAR_FRAMES[frameKey];
+  const spec = CUSTOM_BADGES[charmKey];
   if (!spec) return null;
   const r = RARITY_STYLE[spec.rarity] || RARITY_STYLE.epic;
   const name = me ? (me.name || me.username || 'You') : 'You';
   const username = me ? me.username : 'you';
   const photo = me && typeof me.avatar === 'string' && me.avatar.startsWith('http') ? me.avatar : null;
-  const bg = photo ? null : colorForName(name);
-  const now = new Date();
-  const time = fmtHM(now);
+  const time = fmtHM(new Date());
   const mockCard = { borderRadius: 20, background: '#0f1117', border: '1px solid rgba(255,255,255,0.08)', overflow: 'hidden' };
   const label = { fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.55)', margin: '22px 4px 8px' };
   return (
@@ -19532,65 +19569,40 @@ function FrameTryOnPage({ me, frameKey, charmKey, plateKey, onClose, action }) {
         <div role="button" aria-label="Close preview" onClick={onClose} style={{ width: 38, height: 38, borderRadius: '50%', background: 'rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={19} /></div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 16, fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{spec.label}</div>
-          <div style={{ fontSize: 12.5, fontWeight: 800, color: r.color }}>{r.label}{spec.animated ? ', animated' : ''} preview</div>
+          <div style={{ fontSize: 12.5, fontWeight: 800, color: r.color }}>{r.label} preview</div>
         </div>
       </div>
-
       <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '0 14px 130px' }}>
-        <div style={label}>Your profile</div>
+        <div style={label}>Next to your name</div>
         <div style={{ ...mockCard, position: 'relative' }}>
-          <div style={{ position: 'absolute', left: -40, right: -40, top: -40, height: 330, overflow: 'hidden', pointerEvents: 'none' }}>
+          <div style={{ position: 'absolute', left: -40, right: -40, top: -40, height: 260, overflow: 'hidden', pointerEvents: 'none' }}>
             {photo
-              ? <img src={photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'blur(18px) saturate(1.25)', opacity: 0.9, transform: 'scale(1.08)' }} />
-              : <div style={{ position: 'absolute', inset: 0, background: bg, filter: 'blur(40px)', opacity: 0.75 }} />}
+              ? <img src={photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'blur(18px) saturate(1.25)', opacity: 0.8, transform: 'scale(1.08)' }} />
+              : <div style={{ position: 'absolute', inset: 0, background: colorForName(name), filter: 'blur(40px)', opacity: 0.7 }} />}
           </div>
-          <div style={{ position: 'absolute', left: 0, right: 0, top: 0, height: 300, background: 'linear-gradient(180deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0) 40%, #0f1117 100%)', pointerEvents: 'none' }} />
-          <div style={{ position: 'relative', padding: '26px 16px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
-            <div style={{ position: 'relative', zIndex: 2, width: 230, height: 230, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Avatar emoji={me ? me.avatar : ''} name={name} size={138} frame={isCharm || isPlate ? (me && me.avatar_frame) : frameKey} />
+          <div style={{ position: 'absolute', left: 0, right: 0, top: 0, height: 240, background: 'linear-gradient(180deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0) 40%, #0f1117 100%)', pointerEvents: 'none' }} />
+          <div style={{ position: 'relative', padding: '26px 16px 22px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+            <Avatar emoji={me ? me.avatar : ''} name={name} size={104} />
+            <div style={{ fontSize: 24, fontWeight: 900, marginTop: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
+              {name}{me && <VerifiedBadge tier={me.verified} custom={charmKey} size={19} />}
             </div>
-            {isPlate ? (
-              <div style={{ position: 'relative', zIndex: 1, width: '100%', marginTop: `calc(-${nameplatePull(plateKey).toFixed(2)}% - 6px)` }}>
-                <NameplateBanner plate={plateKey} name={name} username={username} verified={me && me.verified} custom={me && me.custom_badge} />
-              </div>
-            ) : (
-              <>
-                <div style={{ fontSize: 24, fontWeight: 900, marginTop: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
-                  {name}{me && <VerifiedBadge tier={me.verified} custom={isCharm ? charmKey : me.custom_badge} size={19} />}
-                </div>
-                <div style={{ fontSize: 13.5, color: 'rgba(255,255,255,0.6)', marginTop: 2 }}>@{username}</div>
-              </>
-            )}
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 800, marginTop: 10, padding: '4px 11px', borderRadius: 14, color: '#22c55e', background: 'rgba(34,197,94,0.12)' }}>
-              <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#22c55e' }} />Online now
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, alignSelf: 'stretch', marginTop: 16 }}>
-              {[['Posts', '24'], ['Followers', '1.2K'], ['Following', '312']].map(([k, v]) => (
-                <div key={k} style={{ padding: '10px 0', borderRadius: 14, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)' }}>
-                  <div style={{ fontSize: 17, fontWeight: 900 }}>{v}</div>
-                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.55)', fontWeight: 700 }}>{k}</div>
-                </div>
-              ))}
-            </div>
+            <div style={{ fontSize: 13.5, color: 'rgba(255,255,255,0.6)', marginTop: 2 }}>@{username}</div>
           </div>
         </div>
-
         <div style={label}>In the chat list</div>
         <div style={mockCard}>
           {[
-            { me: true, text: 'Love my new frame 😍', unread: 2, time },
-            { me: false, name: 'Alex', text: 'See you tomorrow!', time: 'Yesterday', color: '#29C7B3' },
+            { mine: true, text: 'Look at my new charm', unread: 2, time },
+            { mine: false, name: 'Alex', text: 'See you tomorrow!', time: 'Yesterday', color: '#29C7B3' },
           ].map((row, i) => (
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderTop: i ? '1px solid rgba(255,255,255,0.06)' : 'none' }}>
-              <div style={{ width: 62, height: 62, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                {row.me
-                  ? <Avatar emoji={me ? me.avatar : ''} name={name} size={46} frame={isCharm || isPlate ? (me && me.avatar_frame) : frameKey} />
-                  : <div style={{ width: 46, height: 46, borderRadius: '50%', background: row.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900 }}>{row.name[0]}</div>}
-              </div>
+              {row.mine
+                ? <Avatar emoji={me ? me.avatar : ''} name={name} size={46} />
+                : <div style={{ width: 46, height: 46, borderRadius: '50%', background: row.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, flexShrink: 0 }}>{row.name[0]}</div>}
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 900, fontSize: 15, display: 'flex', alignItems: 'center' }}>
-                  <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.me ? name : row.name}</span>
-                  {row.me && me && <VerifiedBadge tier={me.verified} custom={isCharm ? charmKey : me.custom_badge} size={13} />}
+                  <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.mine ? name : row.name}</span>
+                  {row.mine && me && <VerifiedBadge tier={me.verified} custom={charmKey} size={13} />}
                 </div>
                 <div style={{ fontSize: 13, color: row.unread ? 'white' : 'rgba(255,255,255,0.55)', fontWeight: row.unread ? 700 : 500, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.text}</div>
               </div>
@@ -19601,26 +19613,7 @@ function FrameTryOnPage({ me, frameKey, charmKey, plateKey, onClose, action }) {
             </div>
           ))}
         </div>
-
-        <div style={label}>In a chat</div>
-        <div style={mockCard}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderBottom: '1px solid rgba(255,255,255,0.06)', background: 'rgba(255,255,255,0.02)' }}>
-            <ChevronLeft size={20} color="rgba(255,255,255,0.7)" />
-            <div style={{ width: 52, height: 52, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Avatar emoji={me ? me.avatar : ''} name={name} size={38} frame={isCharm || isPlate ? (me && me.avatar_frame) : frameKey} />
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontWeight: 900, fontSize: 15, display: 'flex', alignItems: 'center' }}>{name}{me && <VerifiedBadge tier={me.verified} custom={isCharm ? charmKey : me.custom_badge} size={13} />}</div>
-              <div style={{ fontSize: 12, color: '#22c55e', fontWeight: 700 }}>Online</div>
-            </div>
-          </div>
-          <div style={{ padding: '14px 12px 16px', display: 'flex', flexDirection: 'column', gap: 8, background: 'linear-gradient(180deg, #0d1016, #0b0d12)' }}>
-            <div style={{ alignSelf: 'flex-start', maxWidth: '78%', padding: '8px 12px', borderRadius: '16px 16px 16px 4px', background: '#1c1f27', fontSize: 14 }}>Your frame looks amazing 🔥</div>
-            <div style={{ alignSelf: 'flex-end', maxWidth: '78%', padding: '8px 12px', borderRadius: '16px 16px 4px 16px', background: '#6B48F0', fontSize: 14 }}>Thanks! Just got it</div>
-          </div>
-        </div>
       </div>
-
       {action && (
         <div style={{ position: 'absolute', zIndex: 40, left: 0, right: 0, bottom: 0, padding: '12px 16px', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))', background: 'linear-gradient(180deg, rgba(7,8,13,0) 0%, rgba(7,8,13,0.96) 30%)' }}>
           <button onClick={action.onClick} disabled={action.disabled} style={{ width: '100%', padding: '15px 16px', borderRadius: 18, border: 'none', fontFamily: FONT, fontWeight: 900, fontSize: 16.5, cursor: action.disabled ? 'default' : 'pointer', color: action.disabled ? 'rgba(255,255,255,0.6)' : '#1a0f02', background: action.disabled ? 'rgba(255,255,255,0.1)' : '#F5A524' }}>{action.label}</button>
@@ -19631,12 +19624,6 @@ function FrameTryOnPage({ me, frameKey, charmKey, plateKey, onClose, action }) {
   );
 }
 
-const FRAME_STORE = {
-  checkoutUrl: '',
-  priceLabel: '$2',
-  periodLabel: '2 months',
-};
-
 function rewardActive(r) {
   return !r.expires_at || new Date(r.expires_at).getTime() > Date.now();
 }
@@ -19646,27 +19633,273 @@ function daysLeft(r) {
   return Math.max(0, Math.ceil((new Date(r.expires_at).getTime() - Date.now()) / 86400000));
 }
 
-function openFrameCheckout(userId, email, frameKey) {
-  if (!FRAME_STORE.checkoutUrl || !AVATAR_FRAMES[frameKey]) return false;
-  const params = new URLSearchParams();
-  params.set('checkout[custom][user_id]', userId);
-  params.set('checkout[custom][frame]', frameKey);
-  if (email) params.set('checkout[email]', email);
-  const sep = FRAME_STORE.checkoutUrl.includes('?') ? '&' : '?';
-  window.location.href = `${FRAME_STORE.checkoutUrl}${sep}${params.toString()}`;
-  return true;
+function decorAsk(set, mode, own) {
+  const missing = mode === 'set' ? [!own.frame && 'frame', !own.plate && 'nameplate'].filter(Boolean) : mode === 'frame' ? (own.frame ? [] : ['frame']) : (own.plate ? [] : ['nameplate']);
+  const what = mode === 'set' ? (missing.length === 1 ? missing[0] : 'set') : mode;
+  return { missing, what, price: missing.length * DECOR_PRICE };
 }
 
-function CollectionPanel({ me, rewards, onClose, onEquip, userEmail, isAdmin, onRewardsChanged, onOpenWallet }) {
+function DecorConfetti({ colors }) {
+  const pieces = Array.from({ length: 26 }, (_, i) => i);
+  return (
+    <div aria-hidden="true" style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none', zIndex: 5 }}>
+      {pieces.map((i) => (
+        <span key={i} style={{ position: 'absolute', top: -20, left: `${(i * 37) % 100}%`, width: 7, height: 12, borderRadius: 2, background: colors[i % colors.length], opacity: 0.9, animation: `zchat-confetti ${1.9 + (i % 5) * 0.3}s linear ${(i % 7) * 0.08}s 1 both` }} />
+      ))}
+    </div>
+  );
+}
+
+function SetCard({ set, me, own, wearing, free, width, stack = false, onOpen }) {
+  const full = own.frame && own.plate;
+  const half = own.frame !== own.plate;
+  const nameSize = stack ? Math.max(12, Math.min(14, (width - 18) / Math.max(0.5, decorTextW(set.name, 800, 100) / 100))) : 14;
+  return (
+    <div role="button" aria-label={`${set.name} set`} onClick={onOpen} className="zchat-press" style={{
+      position: 'relative', borderRadius: 20, padding: '8px 4px 11px', overflow: 'hidden', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center',
+      background: `radial-gradient(120% 85% at 50% 20%, ${set.accent}33 0%, rgba(13,14,20,0) 64%), linear-gradient(180deg, #161724 0%, #0b0c12 100%)`,
+      border: `1px solid ${wearing ? set.accent : 'rgba(255,255,255,0.08)'}`, boxShadow: wearing ? `0 0 18px ${set.accent}55` : 'none',
+    }}>
+      {wearing && <div style={{ position: 'absolute', top: 8, left: 8, zIndex: 6, padding: '2px 8px', borderRadius: 8, background: set.accent, color: '#0b0c12', fontSize: 10.5, fontWeight: 800 }}>Wearing</div>}
+      <DecorHero frameKey={set.key} plateKey={set.key} width={width} photo={me.avatar} name={me.name} live={false} compact />
+      <div style={{ alignSelf: 'stretch', display: 'flex', flexDirection: stack ? 'column' : 'row', alignItems: stack ? 'flex-start' : 'center', gap: stack ? 1 : 6, padding: '6px 8px 0' }}>
+        <div style={{ flex: stack ? 'none' : 1, minWidth: 0, maxWidth: '100%', fontWeight: 800, fontSize: nameSize, color: '#FFFFFF', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{set.name}</div>
+        {full
+          ? <span style={{ fontSize: 11.5, fontWeight: 800, color: '#34d399', flexShrink: 0 }}>Yours</span>
+          : free
+            ? <span style={{ fontSize: 11.5, fontWeight: 800, color: '#FFD66B', flexShrink: 0 }}>Free</span>
+            : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 12, fontWeight: 800, color: '#FFD66B', flexShrink: 0 }}><CoinIcon size={13} />{half ? DECOR_PRICE : DECOR_PRICE * 2}</span>}
+      </div>
+    </div>
+  );
+}
+
+function SetShopPage({ me, setKey, rewards, wallet, onClose, onPick, onWear, onRefresh, onOpenWallet }) {
+  useBackClose(true, onClose);
+  const set = DECOR_BY_KEY[setKey] || DECOR_SETS[0];
+  const [mode, setMode] = useState('set');
+  const [busy, setBusy] = useState(false);
+  const [ask, setAsk] = useState(null);
+  const [note, setNote] = useState('');
+  const [party, setParty] = useState(0);
+  const boxRef = useRef(null);
+  const swipeRef = useRef(null);
+  const bw = useWidthOf(boxRef, typeof window === 'undefined' ? 390 : Math.min(window.innerWidth, 560));
+  const W = Math.round(Math.max(240, Math.min(400, bw - 28)));
+  const own = decorOwned(rewards, set.key);
+  const freeSets = wallet && wallet.ready ? wallet.freeSets || 0 : 0;
+  const coins = wallet && wallet.ready ? wallet.coins : 0;
+  const wearF = me.avatar_frame === set.key;
+  const wearP = me.nameplate === set.key;
+  const { missing, what, price } = decorAsk(set, mode, own);
+  const wearing = mode === 'set' ? wearF && wearP : mode === 'frame' ? wearF : wearP;
+  const word = mode === 'set' ? 'set' : mode;
+  const previewFrame = mode === 'nameplate' ? (isDecorKey(me.avatar_frame) ? me.avatar_frame : null) : set.key;
+  const previewPlate = mode === 'frame' ? (isDecorKey(me.nameplate) ? me.nameplate : null) : set.key;
+  const idx = set.i;
+  const go = (d) => {
+    const n = DECOR_SETS[(idx + d + DECOR_SETS.length) % DECOR_SETS.length];
+    hapticTap();
+    onPick(n.key);
+  };
+  const flash = (t) => { setNote(t); setTimeout(() => setNote(''), 2600); };
+  const finish = async (kinds, label) => {
+    hapticTap();
+    playUiSound('like');
+    setParty(Date.now());
+    if (onRefresh) await onRefresh();
+    const patch = {};
+    if (kinds.includes('frame')) patch.avatar_frame = set.key;
+    if (kinds.includes('nameplate')) patch.nameplate = set.key;
+    if (Object.keys(patch).length) await onWear(patch);
+    flash(`${label} is yours`);
+  };
+  const runBuy = async () => {
+    setAsk(null);
+    if (busy) return;
+    setBusy(true);
+    const r = mode === 'set' && missing.length === 2 ? await buyDecorSet(set.key) : await buyShopItem(missing[0], set.key);
+    setBusy(false);
+    if (r.error) { flash(r.error); return; }
+    await finish(mode === 'set' ? ['frame', 'nameplate'] : missing, mode === 'set' && missing.length === 2 ? `${set.name} set` : `${set.name} ${what}`);
+  };
+  const runFree = async () => {
+    setAsk(null);
+    if (busy) return;
+    setBusy(true);
+    const r = await claimFreeSet(set.key);
+    setBusy(false);
+    if (r.error) { flash(r.error); return; }
+    await finish(['frame', 'nameplate'], `${set.name} set`);
+  };
+  const wear = async () => {
+    if (busy) return;
+    setBusy(true);
+    const patch = mode === 'set' ? { avatar_frame: set.key, nameplate: set.key } : mode === 'frame' ? { avatar_frame: set.key } : { nameplate: set.key };
+    await onWear(patch);
+    setBusy(false);
+  };
+  const takeOff = async () => {
+    if (busy) return;
+    setBusy(true);
+    const patch = {};
+    if ((mode === 'set' || mode === 'frame') && wearF) patch.avatar_frame = null;
+    if ((mode === 'set' || mode === 'nameplate') && wearP) patch.nameplate = null;
+    if (Object.keys(patch).length) await onWear(patch);
+    setBusy(false);
+  };
+  const shopReady = () => {
+    if (!wallet) return false;
+    if (!wallet.ready) { flash('The shop switches on once the latest ZChat setup is finished.'); return false; }
+    return true;
+  };
+  const tapGet = () => {
+    if (busy || !shopReady()) return;
+    if (freeSets > 0) { setAsk('free'); return; }
+    setAsk(coins >= price ? 'buy' : 'coins');
+  };
+  const tapCoins = () => {
+    if (busy || !shopReady()) return;
+    setAsk(coins >= price ? 'buy' : 'coins');
+  };
+  const onDown = (e) => { swipeRef.current = { x: e.clientX, y: e.clientY, id: e.pointerId }; };
+  const onUp = (e) => {
+    const d = swipeRef.current;
+    swipeRef.current = null;
+    if (!d || d.id !== e.pointerId) return;
+    const dx = e.clientX - d.x;
+    if (Math.abs(dx) > 48 && Math.abs(dx) > Math.abs(e.clientY - d.y) * 1.4) go(dx < 0 ? 1 : -1);
+  };
+  const leftBits = [own.frame && own.frameLeft != null ? `frame for ${own.frameLeft} more ${own.frameLeft === 1 ? 'day' : 'days'}` : null, own.plate && own.plateLeft != null ? `nameplate for ${own.plateLeft} more ${own.plateLeft === 1 ? 'day' : 'days'}` : null].filter(Boolean);
+  const btn = (primary) => ({ height: 52, borderRadius: 16, border: 'none', fontFamily: FONT, fontWeight: 800, fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '0 18px', width: '100%', background: primary ? '#F5A524' : 'rgba(255,255,255,0.08)', color: primary ? '#1a0f02' : '#FFFFFF' });
+  return (
+    <div className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 640, background: `radial-gradient(130% 70% at 50% 18%, ${set.accent}40 0%, rgba(7,8,13,0) 62%), #07080d`, color: 'white', display: 'flex', flexDirection: 'column', fontFamily: FONT, transition: 'background 0.4s ease' }}>
+      {party > 0 && <DecorConfetti key={party} colors={[set.accent, '#FFFFFF', '#FFD66B', '#7C5CFC']} />}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px 4px', paddingTop: 'calc(10px + env(safe-area-inset-top))' }}>
+        <div role="button" aria-label="Back to sets" onClick={onClose} style={{ width: 38, height: 38, borderRadius: '50%', background: 'rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}><ArrowLeft size={19} /></div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 19, fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{set.name}</div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.55)' }}>{idx + 1} of {DECOR_SETS.length}</div>
+        </div>
+        <div role="button" aria-label={`${formatCount(coins)} coins`} onClick={onOpenWallet} style={{ display: 'flex', alignItems: 'center', gap: 6, height: 34, padding: '0 12px', borderRadius: 17, background: 'rgba(255,255,255,0.08)', fontSize: 14.5, fontWeight: 800, cursor: 'pointer', flexShrink: 0 }}><CoinIcon size={18} />{formatCount(coins)}</div>
+      </div>
+      <div ref={boxRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '0 14px calc(24px + env(safe-area-inset-bottom))' }}>
+        <div data-no-swipe="true" onPointerDown={onDown} onPointerUp={onUp} onPointerCancel={() => { swipeRef.current = null; }} style={{ position: 'relative', display: 'flex', justifyContent: 'center', padding: '10px 0 6px', touchAction: 'pan-y', minHeight: Math.round(W * 0.82) }}>
+          <div key={`${set.key}-${mode}`} className="zchat-pop" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <DecorHero frameKey={previewFrame} plateKey={previewPlate} width={W} photo={me.avatar} name={me.name} username={me.username} verified={me.verified} custom={me.custom_badge} gapColor="#0b0c12" />
+            {previewFrame && !previewPlate && (
+              <div style={{ textAlign: 'center', marginTop: 2 }}>
+                <div style={{ fontSize: 21, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{me.name}<VerifiedBadge tier={me.verified} custom={me.custom_badge} size={18} /></div>
+                <div style={{ fontSize: 13.5, color: 'rgba(255,255,255,0.6)', marginTop: 1 }}>@{me.username}</div>
+              </div>
+            )}
+          </div>
+          <div role="button" aria-label="Previous set" onClick={() => go(-1)} style={{ position: 'absolute', left: -6, top: '42%', width: 40, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'rgba(255,255,255,0.75)' }}><ChevronLeft size={24} /></div>
+          <div role="button" aria-label="Next set" onClick={() => go(1)} style={{ position: 'absolute', right: -6, top: '42%', width: 40, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'rgba(255,255,255,0.75)' }}><ChevronRight size={24} /></div>
+        </div>
+        <div role="tablist" aria-label="Preview" style={{ display: 'flex', gap: 4, padding: 4, borderRadius: 14, background: 'rgba(255,255,255,0.07)', maxWidth: 400, margin: '6px auto 0' }}>
+          {[['set', 'Set'], ['frame', 'Frame'], ['nameplate', 'Nameplate']].map(([k, l]) => (
+            <div key={k} role="tab" aria-selected={mode === k} onClick={() => { setMode(k); playUiSound('tap'); }} style={{ flex: 1, height: 36, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 800, cursor: 'pointer', background: mode === k ? '#FFFFFF' : 'transparent', color: mode === k ? '#0b0c12' : 'rgba(255,255,255,0.75)', transition: 'background 0.2s ease, color 0.2s ease' }}>{l}</div>
+          ))}
+        </div>
+        <div style={{ maxWidth: 400, margin: '16px auto 0' }}>
+          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.72)', lineHeight: 1.5, textAlign: 'center', padding: '0 6px' }}>{set.about}</div>
+          {mode !== 'set' && <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.5)', lineHeight: 1.5, textAlign: 'center', marginTop: 6 }}>{mode === 'frame' ? (isDecorKey(me.nameplate) && me.nameplate !== set.key ? 'Shown with the nameplate you wear now.' : 'Shown on your photo.') : (isDecorKey(me.avatar_frame) && me.avatar_frame !== set.key ? 'Shown with the frame you wear now.' : 'Shown with your name.')}</div>}
+          <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {missing.length === 0 ? (
+              wearing
+                ? <button disabled style={{ ...btn(false), cursor: 'default', color: '#34d399', background: 'rgba(52,211,153,0.14)' }}><Check size={18} strokeWidth={3} />Wearing</button>
+                : <button disabled={busy} onClick={wear} style={btn(true)}>{busy ? <Spinner size={16} color="#1a0f02" /> : `Wear the ${word}`}</button>
+            ) : (
+              <button disabled={busy} onClick={tapGet} aria-label={freeSets > 0 ? 'Get it free' : `Get the ${what} for ${price} coins`} style={btn(true)}>
+                {busy ? <Spinner size={16} color="#1a0f02" /> : freeSets > 0 ? (mode === 'set' ? 'Get it free' : 'Get the whole set free') : <>Get the {what}<span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginLeft: 4 }}><CoinIcon size={18} />{price}</span></>}
+              </button>
+            )}
+            {missing.length === 0 && (wearF || wearP) && (mode === 'set' || (mode === 'frame' ? wearF : wearP)) && <button disabled={busy} onClick={takeOff} style={btn(false)}>Take off</button>}
+            {missing.length > 0 && freeSets > 0 && <button disabled={busy} onClick={tapCoins} style={{ ...btn(false), height: 44, fontSize: 14.5 }}>Use {price} coins instead</button>}
+          </div>
+          <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.55)', textAlign: 'center', marginTop: 12, lineHeight: 1.5 }}>
+            {missing.length > 0
+              ? (freeSets > 0 ? `You have ${freeSets} free ${freeSets === 1 ? 'set' : 'sets'}. A free set comes with the frame and the nameplate.` : 'Yours to keep. It shows on your profile.')
+              : leftBits.length ? `You have the ${leftBits.join(' and the ')}.` : 'Yours to keep. It shows on your profile.'}
+          </div>
+        </div>
+      </div>
+      {ask === 'free' && (
+        <ConfirmDialog layer={720} danger={false} title={`Get ${set.name} free?`} confirmLabel="Get it free"
+          body={`This uses 1 of your ${freeSets} free ${freeSets === 1 ? 'set' : 'sets'}. ${own.frame || own.plate ? `You already have the ${own.frame ? 'frame' : 'nameplate'}, so you get the ${own.frame ? 'nameplate' : 'frame'} to keep.` : 'You get the frame and the nameplate to keep.'}`}
+          onCancel={() => setAsk(null)} onConfirm={runFree} />
+      )}
+      {ask === 'buy' && (
+        <ConfirmDialog layer={720} danger={false} title={`Get the ${set.name} ${what}?`} confirmLabel={`Use ${formatCount(price)} coins`}
+          body={`It is yours to keep. You have ${formatCount(coins)} coins.`}
+          onCancel={() => setAsk(null)} onConfirm={runBuy} />
+      )}
+      {ask === 'coins' && (
+        <ConfirmDialog layer={720} danger={false} title="Not enough coins" confirmLabel="Get coins"
+          body={`This costs ${formatCount(price)} coins and you have ${formatCount(coins)}. Claim daily coins or invite friends to get more.`}
+          onCancel={() => setAsk(null)} onConfirm={() => { setAsk(null); if (onOpenWallet) onOpenWallet(); }} />
+      )}
+      {note && <div className="zchat-pop" role="status" style={{ position: 'absolute', left: '50%', top: 'calc(64px + env(safe-area-inset-top))', transform: 'translateX(-50%)', zIndex: 40, padding: '9px 16px', borderRadius: 18, background: 'rgba(255,255,255,0.95)', color: '#111', fontSize: 13.5, fontWeight: 700, whiteSpace: 'nowrap', maxWidth: 'calc(100% - 32px)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{note}</div>}
+    </div>
+  );
+}
+
+function CollectionPanel({ me, rewards, onClose, onEquip, onWear, isAdmin, onRewardsChanged, onOpenWallet, startSet = null }) {
   useBackClose(true, onClose);
   const edgeBack = useEdgeSwipeBack(true);
-  const [tab, setTab] = useState('frame');
+  const [tab, setTab] = useState('sets');
+  const [filter, setFilter] = useState('all');
+  const [openSet, setOpenSet] = useState(null);
+  useEffect(() => { if (isDecorKey(startSet)) setOpenSet(startSet); }, []);
   const [selected, setSelected] = useState(null);
   const [busy, setBusy] = useState(false);
   const [tryOn, setTryOn] = useState(null);
   const wallet = useWallet(me.id);
   const [buyAsk, setBuyAsk] = useState(null);
   const [buyNote, setBuyNote] = useState('');
+  const gridRef = useRef(null);
+  const gw = useWidthOf(gridRef, typeof window === 'undefined' ? 390 : Math.min(window.innerWidth, 560)) - 28;
+  useDecorLoaded(DECOR_SPRITE);
+  useBackClose(!!selected, () => setSelected(null));
+  const freeSets = wallet && wallet.ready ? wallet.freeSets || 0 : 0;
+  const active = (rewards || []).filter(rewardActive);
+  const ownedFrames = new Set(active.filter((r) => r.kind === 'frame' && isDecorKey(r.reward_key)).map((r) => r.reward_key));
+  const ownedPlates = new Set(active.filter((r) => r.kind === 'nameplate' && isDecorKey(r.reward_key)).map((r) => r.reward_key));
+  const ownedCharms = new Set(active.filter((r) => r.kind === 'charm' && CUSTOM_BADGES[r.reward_key]).map((r) => r.reward_key));
+  const totalOwned = ownedFrames.size + ownedPlates.size + ownedCharms.size;
+  const totalItems = DECOR_SETS.length * 2 + Object.keys(CUSTOM_BADGES).length;
+  const pct = totalItems ? Math.round((totalOwned / totalItems) * 100) : 0;
+  const mine = DECOR_SETS.filter((s) => ownedFrames.has(s.key) || ownedPlates.has(s.key));
+  const shown = filter === 'mine' && mine.length ? mine : DECOR_SETS;
+  const cols = gw >= 700 ? 4 : gw >= 500 ? 3 : gw >= 280 ? 2 : 1;
+  const cardW = Math.max(110, Math.floor((gw - (cols - 1) * 10) / cols) - 8);
+  const stackFoot = tab === 'sets' && shown.some((s) => {
+    const f = ownedFrames.has(s.key);
+    const p = ownedPlates.has(s.key);
+    const lw = f && p ? decorTextW('Yours', 800, 11.5) : freeSets > 0 ? decorTextW('Free', 800, 11.5) : 16 + decorTextW(String(f !== p ? DECOR_PRICE : DECOR_PRICE * 2), 800, 12);
+    return decorTextW(s.name, 800, 14) + 6 + lw > cardW - 18;
+  });
+  const wearF = isDecorKey(me.avatar_frame) ? me.avatar_frame : null;
+  const wearP = isDecorKey(me.nameplate) ? me.nameplate : null;
+  const rarity = (spec) => RARITY_STYLE[spec.rarity] || RARITY_STYLE.epic;
+  const rewardFor = (kind, key) => (rewards || []).find((r) => r.kind === kind && r.reward_key === key) || null;
+  const items = tab === 'charm'
+    ? Object.entries(CUSTOM_BADGES).map(([key, spec]) => ({ key, spec, owned: ownedCharms.has(key), equipped: me.custom_badge === key, reward: rewardFor('charm', key) }))
+    : tab === 'badge'
+      ? Object.entries(VERIFIED_TIERS).map(([key, t]) => ({ key, spec: { label: `${t.label} badge`, rarity: key === 'red' ? 'mythic' : key === 'gold' ? 'legendary' : 'epic', color: t.color }, owned: isAdmin || me.verified === key, equipped: me.verified === key, reward: null }))
+      : [];
+  const sorted = [...items].sort((x, y) => Number(y.owned) - Number(x.owned) || (STORE_RARITY_ORDER[x.spec.rarity] ?? 9) - (STORE_RARITY_ORDER[y.spec.rarity] ?? 9));
+  const sel = selected ? items.find((it) => it.key === selected) : null;
+  const equippedCharm = tab === 'charm' && me.custom_badge && CUSTOM_BADGES[me.custom_badge] ? me.custom_badge : null;
+  const refresh = async () => { if (onRewardsChanged) await onRewardsChanged(); };
+  const equip = async (kind, key) => {
+    if (busy || (kind === 'badge' && !isAdmin)) return;
+    setBusy(true);
+    playUiSound('like');
+    await onEquip(kind, key);
+    setBusy(false);
+  };
   const doBuy = async () => {
     const it = buyAsk;
     setBuyAsk(null);
@@ -19677,46 +19910,11 @@ function CollectionPanel({ me, rewards, onClose, onEquip, userEmail, isAdmin, on
     if (r.error) { setBuyNote(r.error); setTimeout(() => setBuyNote(''), 2600); return; }
     hapticTap();
     playUiSound('like');
-    setBuyNote('Unlocked for 30 days');
+    setBuyNote('Yours to keep');
     setTimeout(() => setBuyNote(''), 2200);
-    if (onRewardsChanged) onRewardsChanged();
+    await refresh();
   };
-  useBackClose(!!selected, () => setSelected(null));
-  const rewardFor = (kind, key) => (rewards || []).find((r) => r.kind === kind && r.reward_key === key) || null;
-  const activeRewards = (rewards || []).filter(rewardActive);
-  const ownedFrames = new Set(activeRewards.filter((r) => r.kind === 'frame').map((r) => r.reward_key));
-  const ownedCharms = new Set(activeRewards.filter((r) => r.kind === 'charm').map((r) => r.reward_key));
-  const ownedPlates = new Set(activeRewards.filter((r) => r.kind === 'nameplate').map((r) => r.reward_key));
-
-  const items = tab === 'frame'
-    ? Object.entries(AVATAR_FRAMES).map(([key, spec]) => ({ key, spec, owned: ownedFrames.has(key), equipped: me.avatar_frame === key, reward: rewardFor('frame', key) }))
-    : tab === 'nameplate'
-    ? Object.entries(NAMEPLATES).map(([key, spec]) => ({ key, spec, owned: ownedPlates.has(key), equipped: me.nameplate === key, reward: rewardFor('nameplate', key) }))
-    : tab === 'charm'
-      ? Object.entries(CUSTOM_BADGES).map(([key, spec]) => ({ key, spec, owned: ownedCharms.has(key), equipped: me.custom_badge === key, reward: rewardFor('charm', key) }))
-      : Object.entries(VERIFIED_TIERS).map(([key, t]) => ({ key, spec: { label: `${t.label} badge`, rarity: key === 'red' ? 'mythic' : key === 'gold' ? 'legendary' : 'epic', color: t.color }, owned: isAdmin || me.verified === key, equipped: me.verified === key, reward: null, badge: true }));
-
-  const sorted = [...items].sort((x, y) => Number(y.owned) - Number(x.owned)
-    || (STORE_RARITY_ORDER[x.spec.rarity] ?? 9) - (STORE_RARITY_ORDER[y.spec.rarity] ?? 9));
-  const totalOwned = ownedFrames.size + ownedCharms.size + ownedPlates.size;
-  const totalItems = Object.keys(AVATAR_FRAMES).length + Object.keys(CUSTOM_BADGES).length + Object.keys(NAMEPLATES).length;
-  const pct = totalItems ? Math.round((totalOwned / totalItems) * 100) : 0;
-  const rarity = (spec) => RARITY_STYLE[spec.rarity] || RARITY_STYLE.epic;
-  const equippedNow = tab === 'frame' ? (me.avatar_frame && AVATAR_FRAMES[me.avatar_frame] ? { key: me.avatar_frame, spec: AVATAR_FRAMES[me.avatar_frame], kind: 'frame' } : null)
-    : tab === 'nameplate' ? (me.nameplate && NAMEPLATES[me.nameplate] ? { key: me.nameplate, spec: NAMEPLATES[me.nameplate], kind: 'nameplate' } : null)
-    : tab === 'charm' ? (me.custom_badge && CUSTOM_BADGES[me.custom_badge] ? { key: me.custom_badge, spec: CUSTOM_BADGES[me.custom_badge], kind: 'charm' } : null)
-      : (me.verified && VERIFIED_TIERS[me.verified] ? { key: me.verified, spec: { label: `${VERIFIED_TIERS[me.verified].label} badge`, rarity: 'epic' }, kind: 'badge' } : null);
-
-  const equip = async (kind, key) => {
-    if (busy || (kind === 'badge' && !isAdmin)) return;
-    setBusy(true);
-    playUiSound('like');
-    await onEquip(kind, key);
-    setBusy(false);
-  };
-
-  const sel = selected ? items.find((it) => it.key === selected) : null;
-
+  const bottomBar = tab === 'sets' ? !!(wearF || wearP) : !!(tab === 'charm' && equippedCharm && !sel);
   return (
     <>
     <WideDim onClose={onClose} z={620} />
@@ -19725,102 +19923,127 @@ function CollectionPanel({ me, rewards, onClose, onEquip, userEmail, isAdmin, on
         <div role="button" aria-label="Close collection" onClick={onClose} style={{ width: 38, height: 38, borderRadius: '50%', background: 'rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><ArrowLeft size={19} /></div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 21, fontWeight: 900 }}>Collection</div>
-          <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.55)', fontWeight: 700 }}>{totalOwned} of {totalItems} unlocked{tab === 'badge' ? ', badges not counted' : ''}</div>
+          <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.55)', fontWeight: 700 }}>{totalOwned} of {totalItems} unlocked</div>
         </div>
-        <div role="button" aria-label={`${wallet && wallet.ready ? wallet.coins : 0} coins`} style={{ display: 'flex', alignItems: 'center', gap: 6, height: 34, padding: '0 12px', borderRadius: 17, background: 'rgba(255,255,255,0.08)', fontSize: 14.5, fontWeight: 800 }}><CoinIcon size={18} />{wallet && wallet.ready ? formatCount(wallet.coins) : '0'}</div>
+        <div role="button" aria-label={`${wallet && wallet.ready ? wallet.coins : 0} coins`} onClick={onOpenWallet} style={{ display: 'flex', alignItems: 'center', gap: 6, height: 34, padding: '0 12px', borderRadius: 17, background: 'rgba(255,255,255,0.08)', fontSize: 14.5, fontWeight: 800, cursor: 'pointer' }}><CoinIcon size={18} />{wallet && wallet.ready ? formatCount(wallet.coins) : '0'}</div>
       </div>
       <div style={{ margin: '0 16px 14px', height: 8, borderRadius: 4, background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
         <div style={{ width: `${pct}%`, height: '100%', background: '#7C5CFC', transition: 'width 0.4s ease' }} />
       </div>
       <div style={{ display: 'flex', gap: 8, padding: '0 16px 14px', overflowX: 'auto', scrollbarWidth: 'none' }}>
-        {[['frame', 'Frames'], ['nameplate', 'Nameplates'], ['charm', 'Charms'], ['badge', 'Badges']].map(([k, label]) => (
+        {[['sets', 'Sets'], ['charm', 'Charms'], ['badge', 'Badges']].map(([k, label]) => (
           <div key={k} role="button" onClick={() => { setTab(k); setSelected(null); playUiSound('tap'); }} style={{ flexShrink: 0, padding: '9px 16px', borderRadius: 13, fontWeight: 900, fontSize: 13, cursor: 'pointer', background: tab === k ? '#7C5CFC' : 'rgba(255,255,255,0.06)', color: tab === k ? '#FFFFFF' : 'rgba(255,255,255,0.75)' }}>{label}</div>
         ))}
       </div>
 
-      <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: `0 14px ${equippedNow ? 130 : 30}px` }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
-          {sorted.map((it) => {
-            const r = rarity(it.spec);
-            const left = daysLeft(it.reward);
-            return (
-              <div key={it.key} role="button" onClick={() => { setSelected(it.key); playUiSound('tap'); }} style={{ position: 'relative', borderRadius: 20, padding: '12px 10px 14px', cursor: 'pointer', textAlign: 'center', overflow: 'hidden', background: it.owned ? r.bg : 'linear-gradient(160deg, #151620 0%, #0a0b0f 100%)', border: `1.5px solid ${selected === it.key ? '#fbbf24' : it.owned ? `${r.color}66` : 'rgba(255,255,255,0.07)'}`, boxShadow: it.equipped ? `0 0 20px ${r.glow}` : 'none' }}>
-                {it.equipped && <div style={{ position: 'absolute', top: 8, left: 8, zIndex: 5, padding: '2px 7px', borderRadius: 7, background: '#22c55e', color: '#052e1c', fontSize: 10, fontWeight: 800 }}>Equipped</div>}
-                {!it.owned && <div style={{ position: 'absolute', top: 8, right: 8, zIndex: 5 }}><Lock size={13} color="rgba(255,255,255,0.6)" /></div>}
-                <div style={{ height: tab === 'frame' ? 118 : 96, display: 'flex', alignItems: 'center', justifyContent: 'center', filter: it.owned ? 'none' : 'grayscale(1) brightness(0.5)' }}>
-                  {tab === 'frame' ? <Avatar emoji={me.avatar} name={me.name} size={116} frame={it.key} frameFit />
-                    : tab === 'nameplate' ? <PlatePreview plate={it.key} width={148} />
-                    : tab === 'charm' ? <CharmPreview charm={it.key} size={56} />
-                      : <svg width="56" height="56" viewBox="0 0 24 24"><path fill={it.spec.color} d={BADGE_SHAPE_PATH} /><path d="M8.6 12.3l2.3 2.2 4.6-3.6" fill="none" stroke="white" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round" /></svg>}
-                </div>
-                <div style={{ fontWeight: 900, fontSize: 13.5, marginTop: 8, color: it.owned ? 'white' : 'rgba(255,255,255,0.55)' }}>{it.spec.label.replace(/ (frame|charm|badge)$/i, '')}</div>
-                <div style={{ fontSize: 11, fontWeight: 800, color: it.owned ? r.color : 'rgba(255,255,255,0.45)', marginTop: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
-                  {it.owned ? `${r.label}${left != null ? `, ${left}d left` : ''}` : shopPrice(tab, it.key) ? <><CoinIcon size={12} />{formatCount(shopPrice(tab, it.key))}</> : tab === 'frame' && FRAME_STORE.checkoutUrl ? `Locked, ${FRAME_STORE.priceLabel}` : 'Locked'}
+      <div ref={gridRef} style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: `0 14px ${bottomBar ? 132 : 30}px` }}>
+        {tab === 'sets' ? (
+          <>
+            {freeSets > 0 && (
+              <div className="zchat-fade" style={{ marginBottom: 12, padding: '12px 14px', borderRadius: 18, background: 'linear-gradient(135deg, #3b2a7a 0%, #1d1840 100%)', border: '1px solid rgba(183,156,255,0.35)', display: 'flex', alignItems: 'center', gap: 12 }}>
+                <GiftIcon size={28} color="#FFD66B" />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 900, fontSize: 15 }}>{freeSets === 1 ? '1 free set left' : `${freeSets} free sets for you`}</div>
+                  <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.72)', marginTop: 2, lineHeight: 1.4 }}>Pick any set below and get it free, frame and nameplate.</div>
                 </div>
               </div>
-            );
-          })}
-        </div>
+            )}
+            {mine.length > 0 && (
+              <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                {[['all', `All ${DECOR_SETS.length}`], ['mine', `Yours ${mine.length}`]].map(([k, l]) => (
+                  <div key={k} role="button" aria-pressed={filter === k} onClick={() => { setFilter(k); playUiSound('tap'); }} style={{ padding: '7px 14px', borderRadius: 12, fontSize: 13, fontWeight: 800, cursor: 'pointer', background: filter === k ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.06)', color: filter === k ? '#0b0c12' : 'rgba(255,255,255,0.75)' }}>{l}</div>
+                ))}
+              </div>
+            )}
+            <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gap: 10 }}>
+              {shown.map((s) => {
+                const own = { frame: ownedFrames.has(s.key), plate: ownedPlates.has(s.key) };
+                return <SetCard key={s.key} set={s} me={me} own={own} wearing={wearF === s.key || wearP === s.key} free={freeSets > 0 && !(own.frame && own.plate)} width={cardW} stack={stackFoot} onOpen={() => { setOpenSet(s.key); playUiSound('tap'); }} />;
+              })}
+            </div>
+            <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.45)', textAlign: 'center', margin: '16px 8px 0', lineHeight: 1.5 }}>A frame or a nameplate is {DECOR_PRICE} coins, a full set is {DECOR_PRICE * 2}. They show on your profile and are yours to keep.</div>
+          </>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
+            {sorted.map((it) => {
+              const r = rarity(it.spec);
+              const left = daysLeft(it.reward);
+              return (
+                <div key={it.key} role="button" onClick={() => { setSelected(it.key); playUiSound('tap'); }} style={{ position: 'relative', borderRadius: 20, padding: '12px 10px 14px', cursor: 'pointer', textAlign: 'center', overflow: 'hidden', background: it.owned ? r.bg : 'linear-gradient(160deg, #151620 0%, #0a0b0f 100%)', border: `1.5px solid ${selected === it.key ? '#fbbf24' : it.owned ? `${r.color}66` : 'rgba(255,255,255,0.07)'}`, boxShadow: it.equipped ? `0 0 20px ${r.glow}` : 'none' }}>
+                  {it.equipped && <div style={{ position: 'absolute', top: 8, left: 8, zIndex: 5, padding: '2px 7px', borderRadius: 7, background: '#22c55e', color: '#052e1c', fontSize: 10, fontWeight: 800 }}>Equipped</div>}
+                  {!it.owned && <div style={{ position: 'absolute', top: 8, right: 8, zIndex: 5 }}><Lock size={13} color="rgba(255,255,255,0.6)" /></div>}
+                  <div style={{ height: 96, display: 'flex', alignItems: 'center', justifyContent: 'center', filter: it.owned ? 'none' : 'grayscale(1) brightness(0.5)' }}>
+                    {tab === 'charm' ? <CharmPreview charm={it.key} size={56} />
+                      : <svg width="56" height="56" viewBox="0 0 24 24"><path fill={it.spec.color} d={BADGE_SHAPE_PATH} /><path d="M8.6 12.3l2.3 2.2 4.6-3.6" fill="none" stroke="white" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round" /></svg>}
+                  </div>
+                  <div style={{ fontWeight: 900, fontSize: 13.5, marginTop: 8, color: it.owned ? 'white' : 'rgba(255,255,255,0.55)' }}>{it.spec.label.replace(/ (charm|badge)$/i, '')}</div>
+                  <div style={{ fontSize: 11, fontWeight: 800, color: it.owned ? r.color : 'rgba(255,255,255,0.45)', marginTop: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+                    {it.owned ? `${r.label}${left != null ? `, ${left}d left` : ''}` : tab === 'charm' && shopPrice('charm', it.key) ? <><CoinIcon size={12} />{formatCount(shopPrice('charm', it.key))}</> : 'Locked'}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
-      {equippedNow && !sel && (
-        <div style={{ position: 'absolute', left: 12, right: 12, bottom: 'calc(14px + env(safe-area-inset-bottom))', padding: '12px 14px', borderRadius: 20, background: 'rgba(18,20,28,0.97)', border: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ width: 84, height: 64, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            {equippedNow.kind === 'frame' ? <Avatar emoji={me.avatar} name={me.name} size={62} frame={equippedNow.key} />
-              : equippedNow.kind === 'nameplate' ? <PlatePreview plate={equippedNow.key} width={82} />
-              : equippedNow.kind === 'charm' ? <CharmPreview charm={equippedNow.key} size={42} />
-                : <svg width="40" height="40" viewBox="0 0 24 24"><path fill={(VERIFIED_TIERS[me.verified] || {}).color} d={BADGE_SHAPE_PATH} /><path d="M8.6 12.3l2.3 2.2 4.6-3.6" fill="none" stroke="white" strokeWidth="1.65" strokeLinecap="round" /></svg>}
+      {tab === 'sets' && (wearF || wearP) && !openSet && (
+        <div style={{ position: 'absolute', zIndex: 12, left: 12, right: 12, bottom: 'calc(14px + env(safe-area-inset-bottom))', padding: '10px 12px', borderRadius: 20, background: 'rgba(18,20,28,0.97)', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 -10px 30px rgba(0,0,0,0.35)', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ width: wearF ? 60 : 96, height: 56, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            {wearF ? <DecorFrameBadge setKey={wearF} size={58} photo={me.avatar} name={me.name} /> : <DecorStill setKey={wearP} part="plate" width={96} />}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 11, fontWeight: 800, color: rarity(equippedNow.spec).color }}>{rarity(equippedNow.spec).label}</div>
-            <div style={{ fontWeight: 900, fontSize: 15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{equippedNow.spec.label.replace(/ (frame|charm|badge)$/i, '')}</div>
-            <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.55)', fontWeight: 700 }}>Wearing now</div>
+            <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.55)', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Wearing now</div>
+            <div style={{ fontWeight: 900, fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{wearF && wearP && wearF === wearP ? `${DECOR_BY_KEY[wearF].name} set` : [wearF && `${DECOR_BY_KEY[wearF].name} frame`, wearP && `${DECOR_BY_KEY[wearP].name} nameplate`].filter(Boolean).join(', ')}</div>
           </div>
-          {equippedNow.kind !== 'badge' && (
-            <button disabled={busy} onClick={() => equip(equippedNow.kind, null)} style={{ padding: '10px 14px', borderRadius: 12, border: 'none', background: 'rgba(255,255,255,0.1)', color: 'white', fontWeight: 900, fontSize: 12.5, fontFamily: FONT, cursor: 'pointer' }}>Take off</button>
-          )}
+          <button disabled={busy} onClick={async () => { setBusy(true); await onWear({ avatar_frame: null, nameplate: null }); setBusy(false); }} style={{ padding: '10px 14px', borderRadius: 12, border: 'none', background: 'rgba(255,255,255,0.1)', color: 'white', fontWeight: 900, fontSize: 12.5, fontFamily: FONT, cursor: 'pointer', flexShrink: 0 }}>Take off</button>
+        </div>
+      )}
+
+      {tab === 'charm' && equippedCharm && !sel && (
+        <div style={{ position: 'absolute', zIndex: 12, left: 12, right: 12, bottom: 'calc(14px + env(safe-area-inset-bottom))', padding: '12px 14px', borderRadius: 20, background: 'rgba(18,20,28,0.97)', border: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ width: 64, height: 54, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><CharmPreview charm={equippedCharm} size={42} /></div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.55)', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Wearing now</div>
+            <div style={{ fontWeight: 900, fontSize: 15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{CUSTOM_BADGES[equippedCharm].label.replace(/ charm$/i, '')}</div>
+          </div>
+          <button disabled={busy} onClick={() => equip('charm', null)} style={{ padding: '10px 14px', borderRadius: 12, border: 'none', background: 'rgba(255,255,255,0.1)', color: 'white', fontWeight: 900, fontSize: 12.5, fontFamily: FONT, cursor: 'pointer' }}>Take off</button>
         </div>
       )}
 
       {sel && (
         <div className="zchat-sheet-up" style={{ position: 'absolute', zIndex: 30, left: 0, right: 0, bottom: 0, padding: '16px 16px', paddingBottom: 'calc(16px + env(safe-area-inset-bottom))', background: 'linear-gradient(180deg, rgba(20,18,32,0.98), #0a0a10)', borderTop: '1px solid rgba(255,255,255,0.1)', borderRadius: '24px 24px 0 0' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-            <div role="button" onClick={() => tab !== 'badge' && setTryOn({ kind: tab, key: sel.key })} style={{ width: tab === 'nameplate' ? 132 : 92, height: 92, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: tab === 'badge' ? 'default' : 'pointer', filter: sel.owned ? 'none' : 'grayscale(0.2)' }}>
-              {tab === 'frame' ? <Avatar emoji={me.avatar} name={me.name} size={92} frame={sel.key} frameFit />
-                : tab === 'nameplate' ? <PlatePreview plate={sel.key} width={130} />
-                : tab === 'charm' ? <CharmPreview charm={sel.key} size={54} />
-                  : <svg width="54" height="54" viewBox="0 0 24 24"><path fill={sel.spec.color} d={BADGE_SHAPE_PATH} /><path d="M8.6 12.3l2.3 2.2 4.6-3.6" fill="none" stroke="white" strokeWidth="1.65" strokeLinecap="round" /></svg>}
+            <div role="button" onClick={() => tab === 'charm' && setTryOn(sel.key)} style={{ width: 92, height: 92, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: tab === 'charm' ? 'pointer' : 'default' }}>
+              {tab === 'charm' ? <CharmPreview charm={sel.key} size={54} />
+                : <svg width="54" height="54" viewBox="0 0 24 24"><path fill={sel.spec.color} d={BADGE_SHAPE_PATH} /><path d="M8.6 12.3l2.3 2.2 4.6-3.6" fill="none" stroke="white" strokeWidth="1.65" strokeLinecap="round" /></svg>}
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 12, fontWeight: 800, color: rarity(sel.spec).color }}>{rarity(sel.spec).label}{sel.spec.animated ? ', animated' : ''}</div>
               <div style={{ fontSize: 17, fontWeight: 900, marginTop: 2 }}>{sel.spec.label}</div>
-              {sel.owned && daysLeft(sel.reward) != null && <div style={{ fontSize: 12, fontWeight: 700, color: daysLeft(sel.reward) <= 5 ? '#fca5a5' : 'rgba(255,255,255,0.6)', marginTop: 3 }}>Expires in {daysLeft(sel.reward)} days</div>}
+              {sel.owned && daysLeft(sel.reward) != null && <div style={{ fontSize: 12, fontWeight: 700, color: daysLeft(sel.reward) <= 5 ? '#fca5a5' : 'rgba(255,255,255,0.6)', marginTop: 3 }}>Yours for {daysLeft(sel.reward)} more days</div>}
               <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
                 {tab === 'badge' ? (
                   isAdmin ? (
-                    <button disabled={busy || sel.equipped} onClick={() => equip('badge', sel.key)} style={{ padding: '10px 22px', borderRadius: 12, border: 'none', fontWeight: 900, fontFamily: FONT, fontSize: 13.5, cursor: sel.equipped ? 'default' : 'pointer', background: sel.equipped ? 'rgba(52,211,153,0.2)' : '#F5A524', color: sel.equipped ? '#34d399' : '#1a0f02' }}>{sel.equipped ? 'Equipped' : busy ? 'Equipping\u2026' : 'Equip'}</button>
+                    <button disabled={busy || sel.equipped} onClick={() => equip('badge', sel.key)} style={{ padding: '10px 22px', borderRadius: 12, border: 'none', fontWeight: 900, fontFamily: FONT, fontSize: 13.5, cursor: sel.equipped ? 'default' : 'pointer', background: sel.equipped ? 'rgba(52,211,153,0.2)' : '#F5A524', color: sel.equipped ? '#34d399' : '#1a0f02' }}>{sel.equipped ? 'Equipped' : busy ? 'Equipping' : 'Equip'}</button>
                   ) : (
                     <div style={{ padding: '10px 14px', borderRadius: 12, background: 'rgba(255,255,255,0.07)', fontSize: 12.5, fontWeight: 800, color: 'rgba(255,255,255,0.7)' }}>{sel.owned ? 'You are wearing this badge' : 'Given by the ZChat team'}</div>
                   )
                 ) : sel.owned ? (
                   <>
-                    <button disabled={busy || sel.equipped} onClick={() => equip(tab, sel.key)} style={{ padding: '10px 22px', borderRadius: 12, border: 'none', fontWeight: 900, fontFamily: FONT, fontSize: 13.5, cursor: sel.equipped ? 'default' : 'pointer', background: sel.equipped ? 'rgba(52,211,153,0.2)' : '#F5A524', color: sel.equipped ? '#34d399' : '#1a0f02' }}>{sel.equipped ? 'Equipped' : busy ? 'Equipping…' : 'Equip'}</button>
-                    <button onClick={() => setTryOn({ kind: tab, key: sel.key })} style={{ padding: '10px 14px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.14)', background: 'transparent', color: 'white', fontWeight: 800, fontFamily: FONT, fontSize: 13, cursor: 'pointer' }}>Preview</button>
+                    <button disabled={busy || sel.equipped} onClick={() => equip('charm', sel.key)} style={{ padding: '10px 22px', borderRadius: 12, border: 'none', fontWeight: 900, fontFamily: FONT, fontSize: 13.5, cursor: sel.equipped ? 'default' : 'pointer', background: sel.equipped ? 'rgba(52,211,153,0.2)' : '#F5A524', color: sel.equipped ? '#34d399' : '#1a0f02' }}>{sel.equipped ? 'Equipped' : busy ? 'Equipping' : 'Equip'}</button>
+                    <button onClick={() => setTryOn(sel.key)} style={{ padding: '10px 14px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.14)', background: 'transparent', color: 'white', fontWeight: 800, fontFamily: FONT, fontSize: 13, cursor: 'pointer' }}>Preview</button>
+                    {daysLeft(sel.reward) != null && shopPrice('charm', sel.key) && <button onClick={() => setBuyAsk({ kind: 'charm', key: sel.key, label: sel.spec.label, price: shopPrice('charm', sel.key) })} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '10px 14px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.14)', background: 'transparent', color: 'white', fontWeight: 800, fontFamily: FONT, fontSize: 13, cursor: 'pointer' }}><CoinIcon size={15} />Keep it</button>}
                   </>
                 ) : (
                   <>
-                    {shopPrice(tab, sel.key) ? (
-                      <button onClick={() => setBuyAsk({ kind: tab, key: sel.key, label: sel.spec.label, price: shopPrice(tab, sel.key) })} aria-label={`Unlock for ${shopPrice(tab, sel.key)} coins`} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderRadius: 12, border: 'none', fontWeight: 800, fontFamily: FONT, fontSize: 13.5, cursor: 'pointer', background: '#F5A524', color: '#1a0f02' }}><CoinIcon size={16} />Unlock for {formatCount(shopPrice(tab, sel.key))}</button>
-                    ) : tab === 'frame' && FRAME_STORE.checkoutUrl ? (
-                      <button onClick={() => openFrameCheckout(me.id, userEmail, sel.key)} style={{ padding: '11px 20px', borderRadius: 12, border: 'none', fontWeight: 900, fontFamily: FONT, fontSize: 13.5, cursor: 'pointer', background: '#F5A524', color: '#1a0f02' }}>Unlock {FRAME_STORE.priceLabel} for {FRAME_STORE.periodLabel}</button>
+                    {shopPrice('charm', sel.key) ? (
+                      <button onClick={() => setBuyAsk({ kind: 'charm', key: sel.key, label: sel.spec.label, price: shopPrice('charm', sel.key) })} aria-label={`Get for ${shopPrice('charm', sel.key)} coins`} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderRadius: 12, border: 'none', fontWeight: 800, fontFamily: FONT, fontSize: 13.5, cursor: 'pointer', background: '#F5A524', color: '#1a0f02' }}><CoinIcon size={16} />Get for {formatCount(shopPrice('charm', sel.key))}</button>
                     ) : (
-                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '10px 14px', borderRadius: 12, background: 'rgba(255,255,255,0.07)', fontSize: 12.5, fontWeight: 800, color: 'rgba(255,255,255,0.7)' }}><Lock size={13} /> Locked. Earn it from ZChat events and gifts</div>
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '10px 14px', borderRadius: 12, background: 'rgba(255,255,255,0.07)', fontSize: 12.5, fontWeight: 800, color: 'rgba(255,255,255,0.7)' }}><Lock size={13} /> Earn it from ZChat events and gifts</div>
                     )}
-                    <button onClick={() => setTryOn({ kind: tab, key: sel.key })} style={{ padding: '10px 14px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.14)', background: 'transparent', color: 'white', fontWeight: 800, fontFamily: FONT, fontSize: 13, cursor: 'pointer' }}>Preview</button>
+                    <button onClick={() => setTryOn(sel.key)} style={{ padding: '10px 14px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.14)', background: 'transparent', color: 'white', fontWeight: 800, fontFamily: FONT, fontSize: 13, cursor: 'pointer' }}>Preview</button>
                   </>
-                )}
-                {sel.owned && daysLeft(sel.reward) != null && shopPrice(tab, sel.key) && (
-                  <button onClick={() => setBuyAsk({ kind: tab, key: sel.key, label: sel.spec.label, price: shopPrice(tab, sel.key), extend: true })} aria-label="Add 30 days" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '10px 14px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.14)', background: 'transparent', color: 'white', fontWeight: 800, fontFamily: FONT, fontSize: 13, cursor: 'pointer' }}><CoinIcon size={15} />Add 30 days</button>
                 )}
               </div>
             </div>
@@ -19834,26 +20057,27 @@ function CollectionPanel({ me, rewards, onClose, onEquip, userEmail, isAdmin, on
           body={`This costs ${formatCount(buyAsk.price)} coins and you have ${formatCount(wallet.coins)}. Claim daily coins or invite friends to get more.`}
           onCancel={() => setBuyAsk(null)} onConfirm={() => { setBuyAsk(null); if (onOpenWallet) onOpenWallet(); }} />
       ) : (
-        <ConfirmDialog layer={720} danger={false} title={buyAsk.extend ? `Add 30 days to ${buyAsk.label}?` : `Unlock ${buyAsk.label}?`} confirmLabel={`Use ${formatCount(buyAsk.price)} coins`}
-          body={`It is yours for 30 days. You have ${formatCount((wallet && wallet.coins) || 0)} coins.`}
+        <ConfirmDialog layer={720} danger={false} title={`Get ${buyAsk.label}?`} confirmLabel={`Use ${formatCount(buyAsk.price)} coins`}
+          body={`It is yours to keep. You have ${formatCount((wallet && wallet.coins) || 0)} coins.`}
           onCancel={() => setBuyAsk(null)} onConfirm={doBuy} />
       ))}
       {buyNote && <div className="zchat-pop" role="status" style={{ position: 'absolute', left: '50%', top: 'calc(70px + env(safe-area-inset-top))', transform: 'translateX(-50%)', zIndex: 40, padding: '9px 16px', borderRadius: 18, background: 'rgba(255,255,255,0.94)', color: '#111', fontSize: 13.5, fontWeight: 700, whiteSpace: 'nowrap' }}>{buyNote}</div>}
       {tryOn && (() => {
-        const isCharm = tryOn.kind === 'charm';
-        const isPlate = tryOn.kind === 'nameplate';
-        const rw = rewardFor(tryOn.kind, tryOn.key);
+        const rw = rewardFor('charm', tryOn);
         const has = rw && rewardActive(rw);
-        const isEq = (isPlate ? me.nameplate : isCharm ? me.custom_badge : me.avatar_frame) === tryOn.key;
-        const equipLabel = isPlate ? 'Equip this nameplate' : isCharm ? 'Equip this charm' : 'Equip this frame';
-        const lockedSub = isPlate ? 'Earn this nameplate from ZChat events and gifts' : isCharm ? 'Earn this charm from ZChat events and gifts' : 'Earn this frame from ZChat events and gifts';
+        const isEq = me.custom_badge === tryOn;
+        const price = shopPrice('charm', tryOn);
         const action = has
-          ? { label: isEq ? '✓ Equipped' : equipLabel, disabled: isEq || busy, onClick: async () => { await equip(tryOn.kind, tryOn.key); setTryOn(null); }, sub: daysLeft(rw) != null ? `${daysLeft(rw)} days left` : 'Yours to keep' }
-          : !isCharm && !isPlate && FRAME_STORE.checkoutUrl
-            ? { label: `Unlock for ${FRAME_STORE.priceLabel}, ${FRAME_STORE.periodLabel}`, onClick: () => openFrameCheckout(me.id, userEmail, tryOn.key), sub: 'Single payment, secure checkout by Lemon Squeezy' }
-            : { label: 'Locked', disabled: true, sub: lockedSub };
-        return <FrameTryOnPage me={me} frameKey={isCharm || isPlate ? null : tryOn.key} charmKey={isCharm ? tryOn.key : null} plateKey={isPlate ? tryOn.key : null} onClose={() => setTryOn(null)} action={action} />;
+          ? { label: isEq ? 'Equipped' : 'Equip this charm', disabled: isEq || busy, onClick: async () => { await equip('charm', tryOn); setTryOn(null); }, sub: daysLeft(rw) != null ? `${daysLeft(rw)} days left` : 'Yours to keep' }
+          : price
+            ? { label: `Get it for ${formatCount(price)} coins`, onClick: () => { const spec = CUSTOM_BADGES[tryOn]; setTryOn(null); setBuyAsk({ kind: 'charm', key: tryOn, label: spec.label, price }); }, sub: 'Yours to keep' }
+            : { label: 'Locked', disabled: true, sub: 'Earn this charm from ZChat events and gifts' };
+        return <CharmTryOnPage me={me} charmKey={tryOn} onClose={() => setTryOn(null)} action={action} />;
       })()}
+      {openSet && (
+        <SetShopPage me={me} setKey={openSet} rewards={rewards} wallet={wallet} onClose={() => setOpenSet(null)} onPick={(k) => setOpenSet(k)}
+          onWear={onWear} onRefresh={refresh} onOpenWallet={onOpenWallet} />
+      )}
     </div>
     </>
   );
@@ -20093,7 +20317,7 @@ function FeedPanel({ me, userId, onClose, onOpenProfile, ownerFilter = null, sta
 
                 <div style={{ position: 'absolute', right: 10, bottom: 110, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 18, zIndex: 3, opacity: hideUi ? 0 : 1, transition: 'opacity 0.2s', pointerEvents: hideUi ? 'none' : 'auto' }}>
                   <div role="button" onClick={() => onOpenProfile(post.owner)} style={{ cursor: 'pointer', marginBottom: 2 }}>
-                    <Avatar emoji={post.owner.avatar} name={post.owner.name} size={48} frame={post.owner.avatar_frame} />
+                    <Avatar emoji={post.owner.avatar} name={post.owner.name} size={48} />
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, color: 'white' }}>
                     <div role="button" aria-label="Like" onClick={() => toggleLike(post)} style={{ display: 'flex', cursor: 'pointer' }}>
@@ -20115,7 +20339,7 @@ function FeedPanel({ me, userId, onClose, onOpenProfile, ownerFilter = null, sta
 
                 <div style={{ position: 'absolute', left: 14, right: 80, bottom: 26, zIndex: 3, opacity: hideUi ? 0 : 1, transition: 'opacity 0.2s' }}>
                   <div role="button" onClick={() => onOpenProfile(post.owner)} style={{ fontWeight: 900, fontSize: 16, display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', textShadow: '0 1px 6px rgba(0,0,0,0.6)' }}>
-                    <Avatar emoji={post.owner.avatar} name={post.owner.name} size={30} frame={post.owner.avatar_frame} />
+                    <Avatar emoji={post.owner.avatar} name={post.owner.name} size={30} />
                     <span style={{ display: 'flex', alignItems: 'center', minWidth: 0, flex: 1, flexWrap: 'wrap', gap: 4 }}><NameBadge name={post.owner.name} verified={post.owner.verified} custom={post.owner.custom_badge} size={15} />{post.collab && post.collab_status === 'accepted' && <span style={{ fontWeight: 800 }}>and {post.collab.name}</span>}</span>
                   </div>
                   {post.collab_id === userId && post.collab_status === 'pending' && (
@@ -22995,7 +23219,7 @@ function CallsTab({ userId, me, groups, onCall, onGroupCall, onOpenProfile, onOp
               const name = c.group ? c.group.name : c.peer.name;
               return (
                 <div key={c.id} role="listitem" aria-label={`${d.text} ${name}`} onClick={() => (c.group ? onGroupCall(c.group, c.kind === 'video' ? 'video' : 'voice') : onCall(c.peer, c.kind === 'video' ? 'video' : 'voice'))} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '8px 12px 8px 20px', cursor: 'pointer' }}>
-                  <div style={{ flexShrink: 0 }}>{c.group ? <GroupAvatar avatar={c.group.avatar} name={c.group.name} size={52} /> : <Avatar emoji={c.peer.avatar} name={c.peer.name} frame={c.peer.avatar_frame} size={52} />}</div>
+                  <div style={{ flexShrink: 0 }}>{c.group ? <GroupAvatar avatar={c.group.avatar} name={c.group.name} size={52} /> : <Avatar emoji={c.peer.avatar} name={c.peer.name} size={52} />}</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 600, fontSize: 16, letterSpacing: '-0.01em', color: d.missed ? theme.danger : theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.group ? name : <NameBadge name={c.peer.name} verified={c.peer.verified} custom={c.peer.custom_badge} size={13} />}</div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13.5, color: tone, marginTop: 2, minWidth: 0 }}>
@@ -23069,7 +23293,7 @@ function MeTab({ asPage = false, covered = false, onCoins, onQuestions, onClose,
         )}
         {!asPage && <>
         <div role="button" aria-label="Open my profile" onClick={onOpenProfile} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '8px 16px 12px', cursor: 'pointer' }}>
-          <Avatar emoji={me.avatar} name={me.name} frame={me.avatar_frame} size={72} />
+          <Avatar emoji={me.avatar} name={me.name} size={72} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 20, fontWeight: 800, color: theme.ink, display: 'flex', alignItems: 'center', gap: 4, minWidth: 0, letterSpacing: '-0.01em' }}><span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{me.name}</span><VerifiedBadge tier={me.verified} custom={me.custom_badge} size={16} /></div>
             <div style={{ fontSize: 14, color: theme.muted, marginTop: 1 }}>@{me.username}</div>
@@ -25781,7 +26005,7 @@ function NoteReplySheet({ note, profile, onClose, onSend }) {
               <span aria-hidden="true" style={{ position: 'absolute', left: 22, bottom: -7, width: 14, height: 14, borderRadius: '50%', background: bubbleBg }} />
               <span aria-hidden="true" style={{ position: 'absolute', left: 14, bottom: -16, width: 8, height: 8, borderRadius: '50%', background: bubbleBg }} />
             </div>
-            <div style={{ marginTop: 24 }}><Avatar emoji={profile.avatar} name={profile.name} frame={profile.avatar_frame} size={84} /></div>
+            <div style={{ marginTop: 24 }}><Avatar emoji={profile.avatar} name={profile.name} size={84} /></div>
             <div style={{ marginTop: 12, fontSize: 17, fontWeight: 800, color: '#FFFFFF', letterSpacing: '-0.01em', textAlign: 'center' }}>{profile.name}</div>
             <div style={{ marginTop: 3, fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>{timeAgoLong(note.created_at)}</div>
           </div>
@@ -27069,7 +27293,7 @@ function StoryResponsesSheet({ story, onClose, onOpenProfile }) {
       const ids = [...new Set(list.map((r) => r.user_id))];
       const byId = {};
       if (ids.length) {
-        const { data: profs } = await supabase.from('profiles').select('id, name, username, avatar, avatar_frame, verified').in('id', ids);
+        const { data: profs } = await supabase.from('profiles').select('id, name, username, avatar, avatar_frame, nameplate, verified').in('id', ids);
         (profs || []).forEach((p) => { byId[p.id] = p; });
       }
       if (alive) setRows(list.map((r) => ({ ...r, profile: byId[r.user_id] })).filter((r) => r.profile));
@@ -29793,6 +30017,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     }, () => { setLocating(false); showSnack('Could not get your location. Check location permission.'); }, { enableHighAccuracy: true, timeout: 12000, maximumAge: 30000 });
   };
   const [showWhatsNew, setShowWhatsNew] = useState(false);
+  const [wnQueued, setWnQueued] = useState(false);
   const toastBusy = (mobileShowChat && !isWide) || !!storyViewer || !!cameraOpen || showWhatsNew;
   useEffect(() => {
     try {
@@ -29800,7 +30025,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       if (!seen) { localStorage.setItem('zchat-seen-version', APP_VERSION); return; }
       if (seen !== APP_VERSION) {
         localStorage.setItem('zchat-seen-version', APP_VERSION);
-        if (String(seen).split('.')[0] !== APP_VERSION.split('.')[0]) setTimeout(() => setShowWhatsNew(true), 1600);
+        if (String(seen).split('.')[0] !== APP_VERSION.split('.')[0]) { setWnQueued(true); setTimeout(() => { setShowWhatsNew(true); setWnQueued(false); }, 1600); }
       }
     } catch {}
   }, []);
@@ -30494,6 +30719,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const callLinkFlag = params.get('cl');
     const askFlag = params.get('ask');
     const newFlag = params.get('new');
+    const setsFlag = params.get('sets');
+    if (setsFlag) setCollectionOpen(isDecorKey(setsFlag) ? setsFlag : true);
     if (newFlag === 'chat') setShowNewChat(true);
     if (newFlag === 'post') setShowCreate(true);
     if (askFlag && /^[\w.]{2,30}$/.test(askFlag)) setAskFor(askFlag);
@@ -30542,7 +30769,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         if (data) setProfileOf(sanitizeAvatar(data, session.user.id));
       })();
     }
-    if (dmId || groupId || profileId || requestsFlag || mailFlag || storyFlag || callFlag || postFlag || channelFlag || momentFlag || charFlag || callLinkFlag || askFlag || newFlag) window.history.replaceState(window.history.state, '', window.location.pathname);
+    if (dmId || groupId || profileId || requestsFlag || mailFlag || storyFlag || callFlag || postFlag || channelFlag || momentFlag || charFlag || callLinkFlag || askFlag || newFlag || setsFlag) window.history.replaceState(window.history.state, '', window.location.pathname);
   };
   openDeepLinkRef.current = openDeepLink;
   useEffect(() => {
@@ -33561,17 +33788,27 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     document.addEventListener('visibilitychange', onVisible);
     return () => { alive = false; clearTimeout(retryTimer); document.removeEventListener('visibilitychange', onVisible); supabase.removeChannel(ch); };
   }, [me && me.id]);
-  const unseenRewards = (myRewards || []).filter((r) => !r.seen && rewardActive(r) && (r.kind === 'frame' ? AVATAR_FRAMES[r.reward_key] : r.kind === 'nameplate' ? NAMEPLATES[r.reward_key] : CUSTOM_BADGES[r.reward_key]));
+  const unseenRewards = (myRewards || []).filter((r) => !r.seen && rewardActive(r) && (r.kind === 'frame' || r.kind === 'nameplate' ? isDecorKey(r.reward_key) : r.kind === 'charm' ? !!CUSTOM_BADGES[r.reward_key] : false));
   const pendingReward = unseenRewards[0] || null;
+  const pendingPair = pendingReward && pendingReward.kind !== 'charm' ? unseenRewards.find((r) => r !== pendingReward && r.reward_key === pendingReward.reward_key && r.kind === (pendingReward.kind === 'frame' ? 'nameplate' : 'frame')) || null : null;
+  const [freeSetsAsk, setFreeSetsAsk] = useState(false);
+  const freeSetsNow = walletNow && walletNow.ready ? walletNow.freeSets || 0 : 0;
   useEffect(() => {
-    if (!me) return;
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('purchase') !== 'done') return;
-    params.delete('purchase');
-    const q = params.toString();
-    window.history.replaceState(window.history.state, '', `${window.location.pathname}${q ? `?${q}` : ''}`);
-    showSnack('Payment received! Your frame unlocks in a few seconds.');
-  }, [me && me.id]);
+    if (!me || freeSetsNow < 1 || freeSetsAsk || showWhatsNew || wnQueued || pendingReward || celebrateTier || collectionOpen) return undefined;
+    const key = `zchat-free-sets-${session.user.id}`;
+    let seen = 0;
+    try { seen = Number(localStorage.getItem(key)) || 0; } catch {}
+    if (seen >= freeSetsNow) return undefined;
+    const t = setTimeout(() => {
+      try { localStorage.setItem(key, String(freeSetsNow)); } catch {}
+      setFreeSetsAsk(true);
+    }, 2400);
+    return () => clearTimeout(t);
+  }, [me && me.id, freeSetsNow, showWhatsNew, wnQueued, !!pendingReward, !!celebrateTier, !!collectionOpen]);
+  useEffect(() => {
+    if (!collectionOpen || freeSetsNow < 1) return;
+    try { localStorage.setItem(`zchat-free-sets-${session.user.id}`, String(freeSetsNow)); } catch {}
+  }, [!!collectionOpen, freeSetsNow]);
   const equipReward = async (kind, key) => {
     const field = kind === 'frame' ? 'avatar_frame' : kind === 'nameplate' ? 'nameplate' : kind === 'badge' ? 'verified' : 'custom_badge';
     const prevValue = me[field];
@@ -33586,23 +33823,28 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     playUiSound('like');
     return true;
   };
+  const equipDecor = async (patch) => {
+    if (!me || !patch) return false;
+    const keys = Object.keys(patch).filter((k) => k === 'avatar_frame' || k === 'nameplate');
+    if (!keys.length) return false;
+    const clean = {};
+    const prev = {};
+    keys.forEach((k) => { clean[k] = patch[k] || null; prev[k] = me[k] || null; });
+    setMe((p) => (p ? { ...p, ...clean } : p));
+    const { error } = await supabase.from('profiles').update(clean).eq('id', session.user.id);
+    if (error) { setMe((p) => (p ? { ...p, ...prev } : p)); showSnack("Couldn't wear that. Try again."); return false; }
+    playUiSound('like');
+    return true;
+  };
   useEffect(() => {
     if (!me) return undefined;
     let alive = true;
     const markReady = (id) => { if (alive) setRewardReady((prev) => (prev[id] ? prev : { ...prev, [id]: true })); };
-    if (pendingReward && pendingReward.kind === 'frame') {
-      const id = `frame:${pendingReward.reward_key}`;
-      const timer = setTimeout(() => markReady(id), 8000);
-      resolveFrameUrl(pendingReward.reward_key).then(() => { clearTimeout(timer); markReady(id); });
-    }
-    if (pendingReward && pendingReward.kind === 'nameplate') {
-      const id = `nameplate:${pendingReward.reward_key}`;
-      const spec = NAMEPLATES[pendingReward.reward_key];
-      const timer = setTimeout(() => markReady(id), 8000);
-      cachedAssetUrl(spec.file).then((u) => u || cachedAssetUrl(spec.fallback)).then((u) => {
-        if (u) nameplateUrlCache.set(pendingReward.reward_key, u);
-        clearTimeout(timer); markReady(id);
-      });
+    if (pendingReward && (pendingReward.kind === 'frame' || pendingReward.kind === 'nameplate')) {
+      const id = `${pendingReward.kind}:${pendingReward.reward_key}`;
+      const timer = setTimeout(() => markReady(id), 6000);
+      const key = pendingReward.reward_key;
+      Promise.all([preloadDecor(DECOR_SPRITE), preloadDecor(decorSrc(key, pendingReward.kind === 'frame' ? 'frame' : 'plate'))]).then(() => { clearTimeout(timer); markReady(id); });
     }
     if (pendingReward && pendingReward.kind === 'charm') {
       const id = `charm:${pendingReward.reward_key}`;
@@ -33619,18 +33861,11 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     let cancelled = false;
     const warm = () => {
       if (cancelled) return;
-      Object.keys(AVATAR_FRAMES).forEach((k) => { resolveFrameUrl(k); });
       Object.values(CUSTOM_BADGES).forEach((b) => { cachedAssetUrl(b.file).then((u) => { if (!u) cachedAssetUrl(b.fallback); }); });
     };
     const t = setTimeout(() => { if (window.requestIdleCallback) window.requestIdleCallback(warm, { timeout: 4000 }); else warm(); }, 2500);
     return () => { cancelled = true; clearTimeout(t); };
   }, []);
-  useEffect(() => {
-    const used = new Set();
-    if (me && me.avatar_frame) used.add(me.avatar_frame);
-    conversations.forEach((c) => { if (c.otherProfile && c.otherProfile.avatar_frame) used.add(c.otherProfile.avatar_frame); });
-    used.forEach((k) => { if (AVATAR_FRAMES[k]) resolveFrameUrl(k); });
-  }, [me && me.avatar_frame, conversations]);
   useEffect(() => {
     if (!storyViewer || storyViewer.readOnly || storyViewer.detached) return;
     const live = new Set();
@@ -33975,14 +34210,14 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       const g = groupsRef.current.find((x) => x.id === msg.group_id);
       if (!g) return;
       const sender = await cachedProfile(msg.sender_id);
-      setInAppToast({ key: msg.id, kind: 'group', group: g, title: g.name, groupAvatar: g.avatar, avatar: sender?.avatar, frame: sender?.avatar_frame, avatarName: sender?.name || g.name, prefix: `${(sender?.name || 'Someone').split(' ')[0]}: `, preview });
+      setInAppToast({ key: msg.id, kind: 'group', group: g, title: g.name, groupAvatar: g.avatar, avatar: sender?.avatar, avatarName: sender?.name || g.name, prefix: `${(sender?.name || 'Someone').split(' ')[0]}: `, preview });
       return;
     }
     const conv = conversationsRef.current.find((c) => c.otherProfile.id === msg.sender_id);
     const profile = conv ? conv.otherProfile : await cachedProfile(msg.sender_id);
     if (!profile) return;
     const locked = conv && locksRef.current[conv.id];
-    setInAppToast({ key: msg.id, kind: 'dm', profile, convId: conv ? conv.id : null, title: profile.name, verified: profile.verified, customBadge: profile.custom_badge, avatar: profile.avatar, frame: profile.avatar_frame, avatarName: profile.name, prefix: '', preview: locked ? { kind: 'text', text: 'New message' } : preview });
+    setInAppToast({ key: msg.id, kind: 'dm', profile, convId: conv ? conv.id : null, title: profile.name, verified: profile.verified, customBadge: profile.custom_badge, avatar: profile.avatar, avatarName: profile.name, prefix: '', preview: locked ? { kind: 'text', text: 'New message' } : preview });
   };
 
   const openToast = (toast) => {
@@ -35095,7 +35330,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                       senderLabel={showSenderLabel ? memberName(m.sender_id) : (isPrivateBot ? 'ZChat Bot' : null)}
                       senderVerified={showSenderLabel ? ((groupMembers.find((gm) => gm.user_id === m.sender_id) || {}).profile || {}).verified : null}
                       senderAvatar={showSenderLabel ? groupMembers.find((gm) => gm.user_id === m.sender_id)?.profile.avatar : (isPrivateBot ? '/bot-avatar.jpg' : null)}
-                      senderFrame={showSenderLabel ? ((groupMembers.find((gm) => gm.user_id === m.sender_id) || {}).profile || {}).avatar_frame : null}
                       senderCustomBadge={showSenderLabel ? ((groupMembers.find((gm) => gm.user_id === m.sender_id) || {}).profile || {}).custom_badge : null}
                       hideReadStatus={!!activeGroup} noReceipts={!activeGroup && !!activeProfile && !!me && (me.read_receipts === false || activeProfile.read_receipts === false)}
                       onOpenSenderProfile={showSenderLabel ? () => { const p = groupMembers.find((gm) => gm.user_id === m.sender_id)?.profile; if (p) setProfileOf(p); } : null}
@@ -35358,7 +35592,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             {(chatHits.length > 0 || groupHits.length > 0) && sectionTitle('Your chats')}
             {chatHits.map((c) => (
               <div key={'s-c-' + c.id} role="button" aria-label={`Open chat with ${c.otherProfile.name}`} onClick={() => { setSearch(''); setResults([]); openChat(c.otherProfile, c.id); }} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 8px', cursor: 'pointer', borderRadius: 14 }}>
-                <Avatar emoji={c.otherProfile.avatar} name={c.otherProfile.name} frame={c.otherProfile.avatar_frame} size={46} />
+                <Avatar emoji={c.otherProfile.avatar} name={c.otherProfile.name} size={46} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 700, fontSize: 14.5, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><NameBadge name={c.otherProfile.name} verified={c.otherProfile.verified} custom={c.otherProfile.custom_badge} size={13} /></div>
                   <PreviewLine preview={c.preview && c.preview.text ? c.preview : { kind: 'text', text: `@${c.otherProfile.username}` }} color={theme.muted} weight={400} />
@@ -35383,7 +35617,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               <div key={p.id} onClick={() => { setSearch(''); setResults([]); setProfileOf(p); }} style={{
                 display: 'flex', alignItems: 'center', gap: 12, padding: '10px 8px', cursor: 'pointer', borderRadius: 14,
               }}>
-                <Avatar emoji={p.avatar} name={p.name} frame={p.avatar_frame} size={42} />
+                <Avatar emoji={p.avatar} name={p.name} size={42} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 700, fontSize: 14, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><NameBadge name={p.name} verified={p.verified} custom={p.custom_badge} size={12} /></div>
                   <div style={{ fontSize: 11.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>@{p.username}</div>
@@ -35578,7 +35812,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                     <div onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); setAvatarPeek(c); }} style={{ position: 'relative', flexShrink: 0, cursor: 'pointer' }}>
                       {storyRingFor(c.otherProfile.id) !== 'none'
                         ? <StoryAvatar profile={c.otherProfile} size={62} ring={storyRingFor(c.otherProfile.id)} close={storyCloseFor(c.otherProfile.id)} />
-                        : <Avatar emoji={c.otherProfile.avatar} name={c.otherProfile.name} frame={c.otherProfile.avatar_frame} online={isUserOnline(c.otherProfile) && !c.otherProfile.hide_activity} size={56} />}
+                        : <Avatar emoji={c.otherProfile.avatar} name={c.otherProfile.name} online={isUserOnline(c.otherProfile) && !c.otherProfile.hide_activity} size={56} />}
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
@@ -35658,7 +35892,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             onOpenSettings={() => setShowSettings(true)} onOpenProfile={(pr) => setProfileOf(pr)} onMessage={(pr) => openChat(pr, null)}
             isZAdmin={isZAdmin} iFollowIds={iFollowIds} privacyAllowed={privacyAllowed}
             shareConversations={conversations} shareGroups={groups.filter((g) => !g.archived)} onShareToChats={shareProfileToChats}
-            onOpenHighlight={openHighlight} meProfile={me} onOpenCollection={() => setCollectionOpen(true)}
+            onOpenHighlight={openHighlight} meProfile={me} onOpenCollection={(k) => setCollectionOpen(isDecorKey(k) ? k : true)}
             onCreate={() => setShowCreate(true)} onMenu={() => setMeMenuOpen(true)} onDiscover={() => setShowDiscover(true)}
             onOpenAchievements={(pr) => setAchievementsFor(pr)} storyRing={storyRingFor(session.user.id)} onOpenStory={(id) => openStoriesFor(id)}
             onEditOverride={() => setProfileOf({ ...me, email: session.user.email, __edit: true })} />
@@ -35719,7 +35953,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                 <ArrowLeft size={22} style={{ color: activeNameBarKey ? 'white' : theme.ink, filter: activeNameBarKey ? 'drop-shadow(0 1px 3px rgba(0,0,0,0.6))' : 'none' }} />
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, position: 'relative' }}>
-                {activeGroup ? <GroupAvatar avatar={activeGroup.avatar} name={activeGroup.name} size={38} /> : AVATAR_FRAMES[activeProfile.avatar_frame] ? <div style={{ margin: '0 6px' }}><FramedAvatar frame={activeProfile.avatar_frame} size={36}><Avatar emoji={activeProfile.avatar} name={activeProfile.name} frame={activeProfile.avatar_frame} frameFit={false} online={isUserOnline(activeProfile) && !activeProfile.hide_activity} size={36} /></FramedAvatar></div> : <AvatarFrame size={34} tier={activeProfile.verified}><Avatar emoji={activeProfile.avatar} name={activeProfile.name} frame={activeProfile.avatar_frame} online={isUserOnline(activeProfile) && !activeProfile.hide_activity} size={34} /></AvatarFrame>}
+                {activeGroup ? <GroupAvatar avatar={activeGroup.avatar} name={activeGroup.name} size={38} /> : <AvatarFrame size={34} tier={activeProfile.verified}><Avatar emoji={activeProfile.avatar} name={activeProfile.name} online={isUserOnline(activeProfile) && !activeProfile.hide_activity} size={34} /></AvatarFrame>}
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <div style={{
                     fontWeight: 800, fontSize: 14.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
@@ -36245,7 +36479,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           isZAdmin={isZAdmin} iFollowIds={iFollowIds} privacyAllowed={privacyAllowed}
           shareConversations={conversations} shareGroups={groups.filter((g) => !g.archived)} onShareToChats={shareProfileToChats}
           canCall={canCall(profileOf)} onCall={(kind) => { const target = profileOf; setProfileOf(null); startDirectCall(target, kind); }}
-          onOpenHighlight={openHighlight} meProfile={me} onOpenCollection={() => setCollectionOpen(true)}
+          onOpenHighlight={openHighlight} meProfile={me} onOpenCollection={(k) => setCollectionOpen(isDecorKey(k) ? k : true)}
           onOpenAchievements={(pr) => setAchievementsFor(pr)} onGift={(pr) => setGiftFor(pr)} onDiscover={() => setShowDiscover(true)}
           storyRing={storyRingFor(profileOf.id)} onOpenStory={(id) => openStoriesFor(id)}
         />
@@ -36299,7 +36533,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         <LogoutConfirm onCancel={() => setShowLogoutConfirm(false)} onConfirm={onLogout} />
       )}
         {meMenuOpen && (
-          <MeTab key="me-menu" asPage onCoins={() => setWalletOpen(true)} onQuestions={() => setQuestionsOpen(true)} onClose={() => setMeMenuOpen(false)} me={me} counts={{ coins: walletNow && walletNow.ready ? walletNow.coins : null, rewards: (myRewards || []).filter(rewardActive).length, archived: archivedConversations.length, requests: followRequestCount, mail: unreadMailCount, reminders: reminderTick >= 0 ? readReminders(session.user.id).filter((r) => !r.done).length : 0 }}
+          <MeTab key="me-menu" asPage onCoins={() => setWalletOpen(true)} onQuestions={() => setQuestionsOpen(true)} onClose={() => setMeMenuOpen(false)} me={me} counts={{ coins: walletNow && walletNow.ready ? walletNow.coins : null, rewards: (myRewards || []).filter((r) => rewardActive(r) && (r.kind === 'charm' ? !!CUSTOM_BADGES[r.reward_key] : isDecorKey(r.reward_key))).length, archived: archivedConversations.length, requests: followRequestCount, mail: unreadMailCount, reminders: reminderTick >= 0 ? readReminders(session.user.id).filter((r) => !r.done).length : 0 }}
             onReminders={() => setShowReminders(true)} onStoryArchive={() => setStoryArchive(true)} onSearchMessages={() => setMsgSearchOpen('')} onScan={() => setShowQrScan(true)}
             onOpenProfile={() => setProfileOf(me)} onEditProfile={() => setProfileOf({ ...me, __edit: true })} onSettings={() => setShowSettings(true)} onCollection={() => setCollectionOpen(true)}
             onSaved={() => setShowSaved(true)} onArchive={() => setShowArchived(true)} onMail={() => setShowMail(true)} onRequests={() => setShowFollowRequests(true)} onDiscover={() => setShowDiscover(true)}
@@ -36652,7 +36886,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         const blocked = myBlockedIds.has(c.otherProfile.id);
         return (
           <ChatRowSheet title={<><NameBadge name={c.otherProfile.name} verified={c.otherProfile.verified} custom={c.otherProfile.custom_badge} size={13} /></>} subtitle={`@${c.otherProfile.username}`}
-            avatar={<Avatar emoji={c.otherProfile.avatar} name={c.otherProfile.name} frame={c.otherProfile.avatar_frame} size={44} />}
+            avatar={<Avatar emoji={c.otherProfile.avatar} name={c.otherProfile.name} size={44} />}
             onClose={() => setRowSheet(null)}
             peek={<ChatPeek myId={session.user.id} otherId={c.otherProfile.id} />}
             actions={[
@@ -36771,7 +37005,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           onClose={() => setDeepPost(null)} onOpenProfile={(p) => { setDeepPost(null); setProfileOf(p); }} />
       )}
       {!celebrateTier && me && pendingReward && rewardReady[`${pendingReward.kind}:${pendingReward.reward_key}`] && (
-        <RewardCelebration kind={pendingReward.kind} rewardKey={pendingReward.reward_key} me={me}
+        <RewardCelebration kind={pendingReward.kind} rewardKey={pendingReward.reward_key} me={me} isSet={!!pendingPair}
           count={unseenRewards.length}
           onClaimAll={async () => {
             const list = unseenRewards;
@@ -36782,13 +37016,19 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             }
             showSnack(`${list.length} items added to your Collection`);
           }}
-          onClaim={async () => {
-            const reward = pendingReward;
-            setMyRewards((prev) => prev.map((r) => (r.id === reward.id ? { ...r, seen: true } : r)));
-            await supabase.from('user_rewards').update({ seen: true }).eq('id', reward.id);
-            await equipReward(reward.kind, reward.reward_key);
+          onClaim={async (wear) => {
+            const list = [pendingReward, pendingPair].filter(Boolean);
+            setMyRewards((prev) => prev.map((r) => (list.includes(r) ? { ...r, seen: true } : r)));
+            for (const r of list) {
+              if (r.id) await supabase.from('user_rewards').update({ seen: true }).eq('id', r.id);
+              else await supabase.from('user_rewards').update({ seen: true }).eq('user_id', session.user.id).eq('kind', r.kind).eq('reward_key', r.reward_key);
+            }
+            if (!wear) { showSnack('Added to your Collection'); return; }
+            if (pendingReward.kind === 'charm') await equipReward('charm', pendingReward.reward_key);
+            else await equipDecor(pendingPair ? { avatar_frame: pendingReward.reward_key, nameplate: pendingReward.reward_key } : { [pendingReward.kind === 'frame' ? 'avatar_frame' : 'nameplate']: pendingReward.reward_key });
           }} />
       )}
+      {freeSetsAsk && me && <FreeSetsSheet me={me} count={Math.max(1, freeSetsNow)} onPick={() => { setFreeSetsAsk(false); setTimeout(() => setCollectionOpen(true), 60); }} onClose={() => setFreeSetsAsk(false)} />}
       {callLinkSheet && <CallLinkSheet link={callLinkSheet} onClose={() => setCallLinkSheet(null)} onSnack={showSnack} onJoin={() => { const l = callLinkSheet; setCallLinkSheet(null); joinLinkCall(l); }} />}
       {callJoin && <CallJoinSheet link={callJoin.link} host={callJoin.host} onClose={() => setCallJoin(null)} onJoin={(opts) => { const l = callJoin.link; setCallJoin(null); joinLinkCall(l, opts); }} />}
       {clipsOpen && me && (
@@ -36800,7 +37040,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           onOpenProfile={(p) => { setFeedOpen(false); setProfileOf(sanitizeAvatar(p, session.user.id)); }} />
       )}
       {collectionOpen && me && (
-        <CollectionPanel me={me} rewards={myRewards} userEmail={session.user.email} isAdmin={isZAdmin} onClose={() => setCollectionOpen(false)} onEquip={equipReward} onOpenWallet={() => setWalletOpen(true)} onRewardsChanged={() => { supabase.from('user_rewards').select('*').eq('user_id', session.user.id).order('granted_at', { ascending: true }).then(({ data }) => { if (data) setMyRewards(data); }, () => {}); }} />
+        <CollectionPanel me={me} rewards={myRewards} isAdmin={isZAdmin} startSet={typeof collectionOpen === 'string' ? collectionOpen : null} onClose={() => setCollectionOpen(false)} onEquip={equipReward} onWear={equipDecor} onOpenWallet={() => setWalletOpen(true)} onRewardsChanged={async () => { const { data } = await supabase.from('user_rewards').select('*').eq('user_id', session.user.id).order('granted_at', { ascending: true }); if (data) setMyRewards(data); }} />
       )}
       {celebrateTier && (
         <VerifiedCelebration tier={celebrateTier} name={me.name}
@@ -37049,7 +37289,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       {msgSearchOpen != null && (
         <SearchMessagesPage myId={session.user.id} groups={groups} hiddenIds={getHiddenMsgIds()} initialQuery={msgSearchOpen} onClose={() => setMsgSearchOpen(null)} onOpen={openSearchHit} />
       )}
-      {showWhatsNew && <WhatsNewSheet onClose={() => setShowWhatsNew(false)} onTry={(g) => { if (g === 'map') setMapOpen(true); else if (g === 'song' && me) setProfileOf({ ...me, __song: true }); else if (g === 'ai') setAiStudio({ mode: 'image' }); else if (g === 'chars') setCharsOpen(true); else if (g === 'coins') setWalletOpen(true); else if (g === 'folders') { setHomeTab('chats'); setFoldersOpen(true); } }} />}
+      {showWhatsNew && <WhatsNewSheet me={me} onClose={() => setShowWhatsNew(false)} onTry={(g) => { if (g === 'sets') setCollectionOpen(true); else if (g === 'map') setMapOpen(true); else if (g === 'song' && me) setProfileOf({ ...me, __song: true }); else if (g === 'ai') setAiStudio({ mode: 'image' }); else if (g === 'chars') setCharsOpen(true); else if (g === 'coins') setWalletOpen(true); else if (g === 'folders') { setHomeTab('chats'); setFoldersOpen(true); } }} />}
       {showGames && (
         <GamesPage key={showGames.at || 'games'} initialGame={showGames.game || null} onClose={() => setShowGames(false)}
           friends={gameFriends}
@@ -37879,72 +38119,33 @@ function WnSegments({ total, at, onArt, dark }) {
 }
 
 const WN_HIGHLIGHTS = [
-  { k: 'aiart', title: 'Create with AI', text: 'Describe a picture and ZChat draws it. Make wallpapers and profile photos, or turn a real photo of you into an avatar.', cta: 'Make a picture', go: 'ai' },
-  { k: 'chars', title: 'AI characters', text: 'Give a character a name and a personality, then chat with it. Keep it to yourself or share it so friends can chat too.', cta: 'Meet the characters', go: 'chars' },
-  { k: 'walls', title: 'Make every chat yours', text: 'Put your own photo or a pattern behind any chat, and send voice messages that sound like a giant, a robot or a radio host.' },
-  { k: 'coins', title: 'Coins and gifts', text: 'Collect coins every day, unlock frames and nameplates, and send coins or gifts to the people you love.', cta: 'Open coins', go: 'coins' },
-  { k: 'folders', title: 'Swipe and folders', text: 'Swipe a chat to pin, mute or archive it. Make folders like Family or Work and ZChat fills them for you.', cta: 'Set up folders', go: 'folders' },
+  { k: 'decor', title: 'Frames and nameplates that move', text: '21 brand new animated sets, each with its own little story. Wear a frame and a nameplate on your profile and watch them come alive.', cta: 'See the sets', go: 'sets' },
+  { k: 'gift', title: 'Mix, match and gift', text: 'Wear a frame from one set with a nameplate from another, and send a frame, a nameplate or a whole set to a friend.' },
+  { k: 'coins', title: 'Yours to keep', text: 'A frame or a nameplate is 250 coins and a full set is 500. Everything you get with coins, charms too, stays yours for good.', cta: 'Open coins', go: 'coins' },
 ];
 const WN_SECTIONS = [
-  { title: 'AI', items: [
-    { art: 'aiart', title: 'Create with AI', text: 'Pictures, wallpapers and profile photos from a few words.' },
-    { art: 'eye', title: 'AI avatar', text: 'Turn a real photo of you into an avatar that still looks like you.' },
-    { art: 'chars', title: 'AI characters', text: 'Make a character and chat with it, or try ones friends made.' },
-    { art: 'quick', title: 'Writing help', text: 'Fix spelling or make a message shorter, kinder or more fun.' },
+  { title: 'Frames and nameplates', items: [
+    { art: 'decor', title: '21 animated sets', text: 'From a koi pond to a neon city, every set has a frame and a nameplate.' },
+    { art: 'eye', title: 'Try before you get it', text: 'See every set on your own photo and name, and swipe through them all.' },
+    { art: 'stickers', title: 'Mix and match', text: 'Wear any frame with any nameplate.' },
+    { art: 'gift', title: 'Gift a set', text: 'Send a frame, a nameplate or both to a friend.' },
+    { art: 'coins', title: 'Yours to keep', text: 'Frames, nameplates and charms you get with coins never run out.' },
   ] },
-  { title: 'Chats', items: [
-    { art: 'walls', title: 'Chat backgrounds', text: 'A pattern or your own photo, just for you or for both of you.' },
-    { art: 'voice', title: 'Voice effects', text: 'Giant, robot, radio, underwater and more before you send.' },
-    { art: 'folders', title: 'Chat folders', text: 'Tabs like Family or Work that sort your chats on their own.' },
-    { art: 'chats', title: 'Swipe actions', text: 'Swipe right to pin or mark read, left to mute, delete or archive.' },
-    { art: 'effects', title: 'Emoji suggestions', text: 'Type a word and tap the emoji that fits.' },
-    { art: 'privacy', title: 'Typing privacy', text: 'Choose who sees you typing, or hide it in one chat.' },
-    { art: 'shield', title: 'Spam filter', text: 'Spam goes to its own folder and risky links get a warning.' },
-    { art: 'backup', title: 'Chat backup', text: 'Save all your chats to a file and open it any time.' },
-    { art: 'link', title: 'Call links', text: 'Make a link anyone can tap to join your call.' },
-  ] },
-  { title: 'Posts and stories', items: [
-    { art: 'songs', title: 'Music on stories', text: 'Add a song and it plays for everyone who watches.' },
-    { art: 'trend', title: 'Trending', text: 'See the hashtags people love right now and follow your favourites.' },
-    { art: 'threads', title: 'Comment replies', text: 'Reply to a comment, like it, pin the best one or translate it.' },
-    { art: 'insights', title: 'Post insights', text: 'Views, reach and the hours people look at your posts.' },
-    { art: 'reminders', title: 'Scheduled posts', text: 'Pick a time and your post goes up on its own.' },
-    { art: 'files', title: 'Drafts', text: 'Leave a post half done and finish it later.' },
-    { art: 'camera', title: 'Edit posts', text: 'Change the caption or place, hide likes or turn off comments.' },
-    { art: 'saved', title: 'Collections', text: 'Sort saved posts into collections with your own names.' },
-  ] },
-  { title: 'Friends and profile', items: [
-    { art: 'eye', title: 'Profile visitors', text: 'See who looked at your profile. Turn it off to stay hidden too.' },
-    { art: 'ask', title: 'Ask me anything', text: 'Share a link and friends ask questions without their name.' },
-    { art: 'medal', title: 'Achievements', text: 'Earn badges as you post, chat and keep streaks going.' },
-    { art: 'friends', title: 'Friend anniversaries', text: 'A little note on the day you and a friend met on ZChat.' },
-    { art: 'map', title: 'Friends nearby', text: 'A heads up when a friend who shares their place is close.' },
-    { art: 'search', title: 'Cover photo and interests', text: 'Add a cover to your profile and find people who like the same things.' },
-    { art: 'activity', title: 'Activity page', text: 'Likes, comments, mentions, gifts and new logins in one place.' },
-  ] },
-  { title: 'Coins', items: [
-    { art: 'coins', title: 'Daily coins', text: 'Open ZChat every day for a bigger reward.' },
-    { art: 'gift', title: 'Gifts', text: 'Send coins, frames or nameplates to a friend.' },
-    { art: 'requests', title: 'Invite friends', text: 'You get 50 coins and they get 25 when they join with your link.' },
-    { art: 'stickers', title: 'Unlock with coins', text: 'Wear any frame, nameplate or charm for 30 days.' },
-  ] },
-  { title: 'Privacy and safety', items: [
-    { art: 'blocked', title: 'Who can interact', text: 'Pick who can comment, mention you, call you or reply to stories.' },
-    { art: 'quiet', title: 'Limits', text: 'Quiet strangers and new followers for a while when things get busy.' },
-    { art: 'login', title: 'Login activity', text: 'See where you are signed in, log out any device and get alerts.' },
-  ] },
-  { title: 'Look and feel', items: [
-    { art: 'night', title: 'Timed dark mode', text: 'Dark at night and light in the morning, on its own.' },
-    { art: 'theme', title: 'Any accent color', text: 'Pick any color for buttons and highlights, plus pure black.' },
-    { art: 'bell', title: 'Your own sounds', text: 'Record a sound and use it as a notification tone.' },
-    { art: 'install', title: 'Feels like an app', text: 'Add ZChat to your home screen, share photos into it and see unread counts on the icon.' },
-    { art: 'archive', title: 'Storage', text: 'See what takes space and clear chats one by one.' },
+  { title: 'Profile', items: [
+    { art: 'search', title: 'A profile that stands out', text: 'Your frame and nameplate show big and animated on your profile page.' },
   ] },
 ];
 const WN_NEW_COUNT = WN_SECTIONS.reduce((n, sec) => n + sec.items.length, 0);
 const WN_SUMMARY = `${WN_NEW_COUNT} new things to try.`;
 
 const WN_EARLIER = [
+  { title: 'Create with AI and AI characters', text: 'Make pictures and avatars from a few words, and chat with characters you or your friends made.' },
+  { title: 'Coins and gifts', text: 'Daily coins, invite rewards and gifts for the people you love.' },
+  { title: 'Folders and swipe actions', text: 'Sort chats into folders and swipe a chat to pin, mute or archive it.' },
+  { title: 'Music on stories and trending', text: 'Add a song to your story and follow the hashtags people love right now.' },
+  { title: 'Profile visitors and questions', text: 'See who looked at your profile and answer questions friends ask without their name.' },
+  { title: 'Chat backgrounds and voice effects', text: 'Your own photo behind any chat and fun voices before you send.' },
+  { title: 'Spam filter and login activity', text: 'Spam goes to its own folder, and you can see every place you are signed in.' },
   { title: 'Friends map', text: 'See friends who share where they are on a map.' },
   { title: 'Files, threads and topics', text: 'Send any file, reply in threads and split busy groups into topics.' },
   { title: 'Songs on your profile', text: 'Pick a song for your profile and your note.' },
@@ -37982,7 +38183,12 @@ const WN_EARLIER = [
 ];
 
 
-function WhatsNewSheet({ onClose, onTry }) {
+function WnPic({ k, dark, thumb, me }) {
+  if (k === 'decor') return <WnDecorArt me={me} thumb={thumb} />;
+  return <WnArt k={k} dark={dark} thumb={thumb} />;
+}
+
+function WhatsNewSheet({ onClose, onTry, me }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
   const dark = !!theme.dark;
@@ -38051,7 +38257,7 @@ function WhatsNewSheet({ onClose, onTry }) {
             {hl.map((it, i) => (
               <section key={it.k} aria-hidden={at !== i} style={{ position: 'relative', width: `${100 / pages}%`, height: '100%', flexShrink: 0, background: theme.panelBg }}>
                 <div onClick={tapArt} style={{ position: 'absolute', left: 0, right: 0, top: 0, height: artH, overflow: 'hidden', cursor: 'pointer' }}>
-                  <div className={at === i && !still ? 'zwn-pop' : undefined} style={{ position: 'absolute', inset: 0 }}><WnArt k={it.art || it.k} dark={dark} /></div>
+                  <div className={at === i && !still ? 'zwn-pop' : undefined} style={{ position: 'absolute', inset: 0 }}><WnPic k={it.art || it.k} dark={dark} me={me} /></div>
                 </div>
                 <div style={{ position: 'absolute', left: 0, right: 0, top: `calc(${artH} - 30px)`, bottom: 0, background: theme.panelBg, borderRadius: '30px 30px 0 0', padding: '30px 24px calc(18px + env(safe-area-inset-bottom))', display: 'flex', flexDirection: 'column', boxSizing: 'border-box' }}>
                   <div style={{ fontSize: 30, fontWeight: 800, letterSpacing: '-0.025em', color: theme.ink, lineHeight: 1.12 }}>{it.title}</div>
@@ -38072,7 +38278,7 @@ function WhatsNewSheet({ onClose, onTry }) {
                     <div style={{ fontSize: 14, fontWeight: 700, color: theme.muted, marginBottom: 2 }}>{sec.title}</div>
                     {sec.items.map((row, j) => (
                       <div key={row.title} style={{ display: 'flex', gap: 14, alignItems: 'center', padding: '10px 0', borderBottom: j < sec.items.length - 1 ? `1px solid ${theme.border}` : 'none' }}>
-                        <div style={{ width: 74, height: 54, borderRadius: 13, overflow: 'hidden', flexShrink: 0 }}><WnArt k={row.art} dark={dark} thumb /></div>
+                        <div style={{ width: 74, height: 54, borderRadius: 13, overflow: 'hidden', flexShrink: 0 }}><WnPic k={row.art} dark={dark} me={me} thumb /></div>
                         <div style={{ minWidth: 0 }}>
                           <div style={{ fontSize: 15.5, fontWeight: 700, color: theme.ink }}>{row.title}</div>
                           <div style={{ fontSize: 13.5, color: theme.muted, lineHeight: 1.4, marginTop: 2 }}>{row.text}</div>
@@ -41439,7 +41645,7 @@ function GamePickerSheet({ profile, onPick, onMore, onClose }) {
         <div {...drag.sheetProps} style={{ touchAction: 'none', flexShrink: 0 }}>
           <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 2px' }}><div style={{ width: 38, height: 4, borderRadius: 2, background: theme.border }} /></div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 18px 12px', borderBottom: `1px solid ${theme.border}` }}>
-            <Avatar emoji={profile.avatar} name={profile.name} frame={profile.avatar_frame} size={44} />
+            <Avatar emoji={profile.avatar} name={profile.name} size={44} />
             <div style={{ minWidth: 0 }}>
               <div style={{ fontWeight: 800, fontSize: 16, color: theme.ink }}>Play a game</div>
               <div style={{ fontSize: 12.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>With {profile.name}</div>
@@ -43508,7 +43714,7 @@ function ContactPickerPage({ myId, recent, onClose, onPick }) {
         {!list.length && <EmptyState art="search" title={term ? 'Nobody found' : 'No chats yet'} text={term ? 'Try their username.' : 'Search for someone by name or username.'} />}
         {list.map((p) => (
           <div key={p.id} role="button" aria-label={`Share ${p.name}`} onClick={() => onPick(p)} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 8px', borderRadius: 14, cursor: 'pointer' }}>
-            <Avatar emoji={p.avatar} name={p.name} frame={p.avatar_frame} size={46} />
+            <Avatar emoji={p.avatar} name={p.name} size={46} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 15, fontWeight: 700, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><NameBadge name={p.name} verified={p.verified} custom={p.custom_badge} size={12} /></div>
               <div style={{ fontSize: 13, color: theme.muted }}>@{p.username}</div>
@@ -43787,7 +43993,7 @@ function MentionsPage({ myId, username, groups, hiddenIds, onClose, onOpen }) {
           return (
             <div key={m.id} role="button" aria-label={`Open mention in ${group ? group.name : 'group'}`} onClick={() => onOpen({ group, profile: null, messageId: m.id })} className="zchat-row-press"
               style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '11px 8px', borderRadius: 14, cursor: 'pointer' }}>
-              <Avatar emoji={p ? p.avatar : null} name={p ? p.name : 'Someone'} frame={p ? p.avatar_frame : null} size={44} />
+              <Avatar emoji={p ? p.avatar : null} name={p ? p.name : 'Someone'} size={44} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
                   <span style={{ flex: 1, minWidth: 0, fontSize: 14.5, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><b>{p ? p.name : 'Someone'}</b><span style={{ color: theme.muted }}> in {group ? group.name : 'a group'}</span></span>
@@ -44162,7 +44368,7 @@ function SearchMessagesPage({ myId, groups, hiddenIds, initialQuery, onClose, on
           const who = m.sender_id === myId ? 'You: ' : '';
           return (
             <div key={m.id} role="button" aria-label={`Open message in ${name}`} onClick={() => onOpen({ group, profile: other, messageId: m.id })} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 8px', borderRadius: 14, cursor: 'pointer' }}>
-              {group ? <GroupAvatar avatar={group.avatar} name={group.name} size={46} /> : <Avatar emoji={other ? other.avatar : null} name={name} frame={other ? other.avatar_frame : null} size={46} />}
+              {group ? <GroupAvatar avatar={group.avatar} name={group.name} size={46} /> : <Avatar emoji={other ? other.avatar : null} name={name} size={46} />}
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
                   <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 700, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</span>
@@ -44451,7 +44657,7 @@ function VotesPage({ title, options, votes, myId, onClose, people: peopleWord, h
     const ids = idsKey ? idsKey.split(',').filter((id) => !people[id]) : [];
     if (!ids.length) return undefined;
     let alive = true;
-    supabase.from('profiles').select('id, name, username, avatar, avatar_frame, verified, custom_badge').in('id', ids).then(({ data }) => {
+    supabase.from('profiles').select('id, name, username, avatar, avatar_frame, nameplate, verified, custom_badge').in('id', ids).then(({ data }) => {
       if (!alive) return;
       setPeople((prev) => { const map = { ...prev }; (data || []).forEach((p) => { map[p.id] = p; }); return map; });
     }, () => {});
@@ -44473,7 +44679,7 @@ function VotesPage({ title, options, votes, myId, onClose, people: peopleWord, h
               const name = r.user_id === myId ? 'You' : (p ? p.name : '');
               return (
                 <div key={r.user_id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 2px' }}>
-                  <Avatar emoji={p ? p.avatar : null} name={p ? p.name : '?'} frame={p ? p.avatar_frame : null} size={38} />
+                  <Avatar emoji={p ? p.avatar : null} name={p ? p.name : '?'} size={38} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 14.5, fontWeight: 700, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name ? <NameBadge name={name} verified={p && r.user_id !== myId ? p.verified : null} custom={p && r.user_id !== myId ? p.custom_badge : null} size={12} /> : <span style={{ color: theme.muted }}>Loading</span>}</div>
                     {p && p.username && <div style={{ fontSize: 12, color: theme.muted }}>@{p.username}</div>}
@@ -50035,7 +50241,7 @@ function PodiumSpot({ row, place, game, onOpen }) {
       style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: tappable ? 'pointer' : 'default' }}>
       <div style={{ height: 22, display: 'flex', alignItems: 'flex-end' }}>{place === 1 && row && <CrownIcon size={24} />}</div>
       <div style={{ position: 'relative' }}>
-        {row ? (row.hidden ? <HiddenPlayerAvatar size={size} /> : <Avatar emoji={row.avatar} name={row.name} frame={row.avatar_frame} size={size} frameFit />) : <div style={{ width: size, height: size, borderRadius: '50%', border: `2px dashed ${theme.border}` }} />}
+        {row ? (row.hidden ? <HiddenPlayerAvatar size={size} /> : <Avatar emoji={row.avatar} name={row.name} size={size} />) : <div style={{ width: size, height: size, borderRadius: '50%', border: `2px dashed ${theme.border}` }} />}
       </div>
       <div style={{ marginTop: 14, fontSize: 13.5, fontWeight: 800, color: row ? theme.ink : theme.muted, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', padding: '0 4px' }}>{row ? (row.is_me ? 'You' : (row.name || 'Player')) : 'Open spot'}</div>
       <div style={{ fontSize: 12.5, fontWeight: 800, color: place === 1 ? '#D99A00' : theme.muted, marginTop: 1 }}>{row ? boardValueText(game, row.value) : ' '}</div>
@@ -50054,7 +50260,7 @@ function LeaderRow({ row, game, onOpen, mine }) {
     <div role={tappable ? 'button' : undefined} aria-label={`${row.hidden ? 'Hidden player' : row.name} rank ${row.rank}`} onClick={tappable ? () => onOpen(row) : undefined} className={tappable ? 'zchat-row-press' : undefined}
       style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 10px', borderRadius: 14, cursor: tappable ? 'pointer' : 'default', background: mine ? (theme.dark ? 'rgba(124,92,255,0.16)' : 'rgba(124,92,255,0.09)') : 'transparent' }}>
       <div style={{ width: 30, textAlign: 'center', fontSize: 14, fontWeight: 900, color: theme.muted, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>{row.rank}</div>
-      {row.hidden ? <HiddenPlayerAvatar size={42} /> : <Avatar emoji={row.avatar} name={row.name} frame={row.avatar_frame} size={42} />}
+      {row.hidden ? <HiddenPlayerAvatar size={42} /> : <Avatar emoji={row.avatar} name={row.name} size={42} />}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 14.5, fontWeight: 700, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
           {row.hidden ? 'Hidden player' : <NameBadge name={row.is_me ? `${row.name} (you)` : row.name} verified={row.verified} custom={row.custom_badge} size={12} />}
@@ -50206,7 +50412,7 @@ function FriendsPlayRow({ friends, onPick }) {
           <div key={p.id} role="button" aria-label={`Play with ${p.name}`} onClick={() => { playUiSound('tap'); onPick(p); }} className="zchat-press"
             style={{ width: 66, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
             <div style={{ position: 'relative' }}>
-              <Avatar emoji={p.avatar} name={p.name} frame={p.avatar_frame} size={58} />
+              <Avatar emoji={p.avatar} name={p.name} size={58} />
               <span style={{ position: 'absolute', right: -2, bottom: -2, width: 24, height: 24, borderRadius: '50%', background: theme.coral, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', border: `2px solid ${theme.panelBg}`, zIndex: 4 }}><GamepadIcon size={13} color="white" /></span>
             </div>
             <div style={{ fontSize: 12, fontWeight: 700, color: theme.ink, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{String(p.name || '').split(' ')[0]}</div>
@@ -50344,7 +50550,7 @@ function LiveScoreBar({ me, peer, mineScore, theirScore, isHost }) {
   const { theme } = useTheme();
   const side = (p, label, s, right) => (
     <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 8, flexDirection: right ? 'row-reverse' : 'row' }}>
-      <Avatar emoji={p && p.avatar} name={(p && p.name) || label} frame={p && p.avatar_frame} size={40} />
+      <Avatar emoji={p && p.avatar} name={(p && p.name) || label} size={40} />
       <div style={{ minWidth: 0, textAlign: right ? 'right' : 'left' }}>
         <div style={{ fontSize: 12.5, fontWeight: 800, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</div>
         <div style={{ fontSize: 22, fontWeight: 900, color: theme.ink, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{s}</div>
@@ -50768,7 +50974,7 @@ function LiveGamePage({ initial, me, peer, myId, onClose, onSaveState, onRematch
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, paddingTop: 16, textAlign: 'center' }}>
             <div style={{ position: 'relative' }}>
               {iWon && <div style={{ position: 'absolute', top: -26, left: '50%', transform: 'translateX(-50%)', zIndex: 5 }}><CrownIcon size={32} /></div>}
-              <Avatar emoji={st.w === 'd' ? (me && me.avatar) : iWon ? (me && me.avatar) : (peer && peer.avatar)} name={iWon || st.w === 'd' ? (me && me.name) : (peer && peer.name)} frame={iWon || st.w === 'd' ? (me && me.avatar_frame) : (peer && peer.avatar_frame)} size={AVATAR_FRAMES[iWon || st.w === 'd' ? (me && me.avatar_frame) : (peer && peer.avatar_frame)] ? 140 : 104} frameFit />
+              <Avatar emoji={st.w === 'd' ? (me && me.avatar) : iWon ? (me && me.avatar) : (peer && peer.avatar)} name={iWon || st.w === 'd' ? (me && me.name) : (peer && peer.name)} size={104} />
             </div>
             <div style={{ fontSize: 26, fontWeight: 900, color: theme.ink }}>{st.w === 'd' ? 'It is a draw' : iWon ? 'You won' : `${first} won`}</div>
             <div style={{ fontSize: 15, fontWeight: 800, color: theme.muted }}>{mineScore} to {theirScore}</div>
@@ -51407,7 +51613,7 @@ function AdminPeople({ onManage }) {
         : rows.length === 0 ? <div style={{ textAlign: 'center', padding: '44px 20px', color: theme.muted, fontSize: 13.5 }}>Nobody matches this.</div>
         : rows.map((p) => (
           <div key={p.id} role="button" onClick={() => onManage(p)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 12px', marginBottom: 8, borderRadius: 18, background: theme.rowBg, border: `1px solid ${theme.border}`, cursor: 'pointer' }}>
-            <div style={{ position: 'relative', zIndex: 0, isolation: 'isolate', flexShrink: 0 }}><Avatar emoji={p.avatar} name={p.name} size={44} frame={p.avatar_frame} /></div>
+            <div style={{ position: 'relative', zIndex: 0, isolation: 'isolate', flexShrink: 0 }}><Avatar emoji={p.avatar} name={p.name} size={44} /></div>
             <div style={{ minWidth: 0, flex: 1 }}>
               <div style={{ fontWeight: 800, fontSize: 14.5, color: theme.ink, display: 'flex', alignItems: 'center', minWidth: 0 }}>
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
@@ -51456,7 +51662,7 @@ function AdminContent({ onOpenProfile }) {
     const list = data || [];
     const ids = [...new Set(list.map((r) => r[cfg.who]).filter(Boolean))].filter((id) => !people[id]);
     if (ids.length) {
-      const { data: profs } = await supabase.from('profiles').select('id, name, username, avatar, avatar_frame, verified, custom_badge').in('id', ids);
+      const { data: profs } = await supabase.from('profiles').select('id, name, username, avatar, avatar_frame, nameplate, verified, custom_badge').in('id', ids);
       setPeople((prev) => { const next = { ...prev }; sanitizeAvatarList(profs || [], '').forEach((p) => { next[p.id] = p; }); return next; });
     }
     setRows((prev) => (offset === 0 ? list : [...(prev || []), ...list]));
@@ -51508,7 +51714,7 @@ function AdminContent({ onOpenProfile }) {
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 {who ? (
                   <div role="button" onClick={() => onOpenProfile(who)} style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1, cursor: 'pointer' }}>
-                    <div style={{ position: 'relative', zIndex: 0, isolation: 'isolate', flexShrink: 0 }}><Avatar emoji={who.avatar} name={who.name} size={30} frame={who.avatar_frame} /></div>
+                    <div style={{ position: 'relative', zIndex: 0, isolation: 'isolate', flexShrink: 0 }}><Avatar emoji={who.avatar} name={who.name} size={30} /></div>
                     <div style={{ minWidth: 0 }}>
                       <div style={{ fontWeight: 800, fontSize: 13, color: theme.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{who.name}</div>
                       <div style={{ fontSize: 11, color: theme.muted }}>{adminDate(r.created_at)}</div>
@@ -51550,7 +51756,7 @@ function AdminKnowledge() {
     setLoading(true);
     const { data, error: e } = await supabase.rpc('admin_table_rows', { p_table: 'bot_knowledge', p_search: query.trim(), p_limit: PAGE, p_offset: offset });
     setLoading(false);
-    if (e) { setError(friendlyError(e, 'Could not load what the bot has learned. Run bot_knowledge.sql first.')); setRows((p) => p || []); return; }
+    if (e) { setError(friendlyError(e, 'Could not load what the bot has learned. Run the bot knowledge SQL first.')); setRows((p) => p || []); return; }
     setError('');
     const list = data || [];
     const extra = await adminResolveNames(list, names);
@@ -51651,7 +51857,7 @@ function AdminNewest({ onManage }) {
       <div style={{ display: 'flex', gap: 14, overflowX: 'auto', padding: '0 14px', scrollbarWidth: 'none' }}>
         {list.map((p) => (
           <div key={p.id} role="button" onClick={() => onManage(p)} style={{ flexShrink: 0, width: 66, textAlign: 'center', cursor: 'pointer' }}>
-            <div style={{ position: 'relative', zIndex: 0, isolation: 'isolate', display: 'inline-block' }}><Avatar emoji={p.avatar} name={p.name} size={56} frame={p.avatar_frame} /></div>
+            <div style={{ position: 'relative', zIndex: 0, isolation: 'isolate', display: 'inline-block' }}><Avatar emoji={p.avatar} name={p.name} size={56} /></div>
             <div style={{ fontSize: 11.5, fontWeight: 700, color: theme.ink, marginTop: 5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{(p.name || '').split(' ')[0]}</div>
           </div>
         ))}
@@ -51893,7 +52099,7 @@ function AdminUserPanel({ person, myId, onClose, onChanged, onOpenProfile }) {
   const restrictions = ((data && data.restrictions) || []).filter((r) => !r.lifted && new Date(r.until).getTime() > Date.now());
   const ownedKey = (kind, key) => rewards.find((r) => r.kind === kind && r.reward_key === key);
   const equippedKey = giftKind === 'frame' ? profile.avatar_frame : giftKind === 'nameplate' ? profile.nameplate : profile.custom_badge;
-  const catalog = giftKind === 'frame' ? AVATAR_FRAMES : giftKind === 'nameplate' ? NAMEPLATES : CUSTOM_BADGES;
+  const catalog = giftKind === 'frame' ? DECOR_FRAME_CATALOG : giftKind === 'nameplate' ? DECOR_PLATE_CATALOG : CUSTOM_BADGES;
   const fieldOf = (kind) => (kind === 'frame' ? 'avatar_frame' : kind === 'nameplate' ? 'nameplate' : 'custom_badge');
   const isSelf = person.id === myId;
 
@@ -51944,7 +52150,7 @@ function AdminUserPanel({ person, myId, onClose, onChanged, onOpenProfile }) {
     <div style={{ position: 'absolute', inset: 0, zIndex: 20, background: theme.panelBg, display: 'flex', flexDirection: 'column', isolation: 'isolate' }} className="zchat-panel-open">
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px 10px', paddingTop: 'calc(14px + env(safe-area-inset-top))' }}>
         <ArrowLeft size={20} style={{ cursor: 'pointer', color: theme.ink }} onClick={onClose} />
-        <Avatar emoji={profile.avatar} name={profile.name} size={34} frame={profile.avatar_frame} />
+        <Avatar emoji={profile.avatar} name={profile.name} size={34} />
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ fontWeight: 900, fontSize: 16, color: theme.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.name}</div>
           <div style={{ fontSize: 12, color: theme.muted }}>@{profile.username}{profile.banned ? ', banned' : ''}</div>
@@ -51961,11 +52167,11 @@ function AdminUserPanel({ person, myId, onClose, onChanged, onOpenProfile }) {
 
         {data && (section === 'info' || section === 'gifts') && (
           <div style={{ ...card, padding: '16px 14px', textAlign: 'center', overflow: 'hidden' }}>
-            {NAMEPLATES[profile.nameplate] ? (
-              <div style={{ position: 'relative', zIndex: 0, isolation: 'isolate' }}><ProfilePlateHero profile={profile} photo={profile.avatar} maxPlate={320} /></div>
+            {isDecorKey(profile.avatar_frame) || isDecorKey(profile.nameplate) ? (
+              <div style={{ position: 'relative', zIndex: 0, isolation: 'isolate' }}><ProfileDecorHero profile={profile} photo={profile.avatar} frameKey={isDecorKey(profile.avatar_frame) ? profile.avatar_frame : null} plateKey={isDecorKey(profile.nameplate) ? profile.nameplate : null} maxWidth={320} gapColor={theme.rowBg} /></div>
             ) : (
               <>
-                <div style={{ display: 'inline-block', position: 'relative', zIndex: 0, isolation: 'isolate' }}><Avatar emoji={profile.avatar} name={profile.name} size={104} frame={profile.avatar_frame} frameFit /></div>
+                <div style={{ display: 'inline-block', position: 'relative', zIndex: 0, isolation: 'isolate' }}><Avatar emoji={profile.avatar} name={profile.name} size={104} /></div>
                 <div style={{ marginTop: 10, fontWeight: 900, fontSize: 19, color: theme.ink, display: 'flex', justifyContent: 'center' }}><NameBadge name={profile.name} verified={profile.verified} custom={profile.custom_badge} size={18} style={{ justifyContent: 'center' }} /></div>
               </>
             )}
@@ -52034,7 +52240,7 @@ function AdminUserPanel({ person, myId, onClose, onChanged, onOpenProfile }) {
               const own = ownedKey(giftKind, key);
               const worn = equippedKey === key;
               const preview = giftKind === 'frame'
-                ? <div style={{ position: 'relative', zIndex: 0, isolation: 'isolate', flexShrink: 0 }}><Avatar emoji={profile.avatar} name={profile.name} size={78} frame={key} frameFit /></div>
+                ? <div style={{ position: 'relative', zIndex: 0, isolation: 'isolate', flexShrink: 0 }}><DecorFrameBadge setKey={key} size={86} photo={profile.avatar} name={profile.name} /></div>
                 : giftKind === 'charm'
                   ? <div style={{ flex: 1, minWidth: 0, fontWeight: 800, fontSize: 15, color: theme.ink, display: 'flex', alignItems: 'center' }}><NameBadge name={profile.name} verified={profile.verified} custom={key} size={30} /></div>
                   : null;
@@ -52047,8 +52253,8 @@ function AdminUserPanel({ person, myId, onClose, onChanged, onOpenProfile }) {
                     </span>
                   )}
                   {giftKind === 'nameplate' && (
-                    <div style={{ width: '100%', overflow: 'hidden', borderRadius: 12, marginBottom: 10 }}>
-                      <NameplateBanner plate={key} name={profile.name} username={profile.username} verified={profile.verified} custom={profile.custom_badge} />
+                    <div style={{ display: 'flex', justifyContent: 'center', overflow: 'hidden', borderRadius: 12, marginBottom: 8, background: '#101119' }}>
+                      <DecorPlateOnly setKey={key} width={260} name={profile.name} username={profile.username} verified={profile.verified} custom={profile.custom_badge} />
                     </div>
                   )}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -52459,7 +52665,7 @@ function ReportQueuePanel({ onClose, onOpenProfile }) {
       <div style={{ fontSize: 11.5, color: theme.muted, width: 92, flexShrink: 0, fontWeight: 700 }}>{label}</div>
       {p ? (
         <>
-          <Avatar emoji={p.avatar} name={p.name} size={24} frame={p.avatar_frame} />
+          <Avatar emoji={p.avatar} name={p.name} size={24} />
           <div style={{ fontSize: 13, fontWeight: 800, color: theme.ink, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {p.name} <span style={{ color: theme.muted, fontWeight: 600 }}>@{p.username}</span>
           </div>
@@ -53150,7 +53356,7 @@ function SharePreviewScreen({ landing: initialLanding, onAuth }) {
     body = (
       <div style={{ paddingTop: 14 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-          <Avatar emoji={o.avatar} name={o.name || '?'} frame={o.avatar_frame} size={42} />
+          <Avatar emoji={o.avatar} name={o.name || '?'} size={42} />
           <div style={{ minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', fontWeight: 800, fontSize: 15 }}><NameBadge name={o.name} verified={o.verified} custom={o.custom_badge} size={14} /></div>
             <div style={{ color: MUTED, fontSize: 12.5 }}>@{o.username}</div>
@@ -53203,7 +53409,7 @@ function SharePreviewScreen({ landing: initialLanding, onAuth }) {
       <div style={{ textAlign: 'center', paddingTop: 22 }}>
         <div style={{ display: 'inline-flex', borderRadius: '50%', padding: isStory ? 4 : 0, background: isStory ? 'linear-gradient(135deg, #f59e0b, #ec4899, #8b5cf6)' : 'transparent' }}>
           <div style={{ borderRadius: '50%', boxShadow: isStory ? `0 0 0 3px ${BG}` : 'none', display: 'inline-flex' }}>
-            <Avatar emoji={data.avatar} name={data.name || '?'} frame={data.avatar_frame} size={104} frameFit />
+            <Avatar emoji={data.avatar} name={data.name || '?'} size={104} />
           </div>
         </div>
         <div style={{ marginTop: 14 }}>{nameLine(data.name, data.verified, data.custom_badge)}</div>
@@ -53334,7 +53540,7 @@ function LikersSheet({ post, meId, onClose, onOpenProfile }) {
           {rows && rows.length === 0 && <div style={{ textAlign: 'center', padding: 28, color: 'rgba(255,255,255,0.6)', fontSize: 13.5 }}>No likes yet.</div>}
           {(rows || []).map((p) => (
             <div key={p.id} role="button" onClick={() => onOpenProfile(p)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 0', cursor: 'pointer' }}>
-              <Avatar emoji={p.avatar} name={p.name} frame={p.avatar_frame} size={42} />
+              <Avatar emoji={p.avatar} name={p.name} size={42} />
               <div style={{ minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', fontWeight: 800, fontSize: 14 }}><NameBadge name={p.name} verified={p.verified} custom={p.custom_badge} size={12} /></div>
                 <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>@{p.username}</div>
@@ -53788,7 +53994,7 @@ function useStoreViewer() {
         const session = data && data.session;
         if (!session) { if (alive) setViewer({ loading: false, profile: null, rewards: [], email: '' }); return; }
         const [{ data: prof }, { data: rw, error: rwErr }] = await Promise.all([
-          supabase.from('profiles').select('id, name, username, avatar, verified, custom_badge, avatar_frame').eq('id', session.user.id).maybeSingle(),
+          supabase.from('profiles').select('id, name, username, avatar, verified, custom_badge, avatar_frame, nameplate').eq('id', session.user.id).maybeSingle(),
           supabase.from('user_rewards').select('*').eq('user_id', session.user.id),
         ]);
         let rewards = rw || [];
@@ -53811,129 +54017,83 @@ const STORE_RARITY_ORDER = { mythic: 0, legendary: 1, epic: 2, rare: 3 };
 function PublicStorePage() {
   const viewer = useStoreViewer();
   const me = viewer.profile;
-  const frames = Object.entries(AVATAR_FRAMES).sort((a, b) => (STORE_RARITY_ORDER[a[1].rarity] ?? 9) - (STORE_RARITY_ORDER[b[1].rarity] ?? 9));
-  const [filter, setFilter] = useState('all');
-  const [selected, setSelected] = useState(frames[0][0]);
-  const [tryOn, setTryOn] = useState(false);
+  const [selected, setSelected] = useState(DECOR_SETS[0].key);
   const topRef = useRef(null);
-  const spec = AVATAR_FRAMES[selected];
-  const r = RARITY_STYLE[spec.rarity] || RARITY_STYLE.epic;
-  const reward = (viewer.rewards || []).find((x) => x.kind === 'frame' && x.reward_key === selected);
-  const owned = reward && rewardActive(reward);
-  const left = owned ? daysLeft(reward) : null;
-  const shown = frames.filter(([, s]) => filter === 'all' || s.rarity === filter);
-  const displayName = me ? (me.name || me.username) : 'You';
-  const ownedCount = (viewer.rewards || []).filter((x) => x.kind === 'frame' && rewardActive(x) && AVATAR_FRAMES[x.reward_key]).length;
-
-  const buy = () => {
-    if (!me) { window.location.href = '/'; return; }
-    if (!FRAME_STORE.checkoutUrl) return;
-    openFrameCheckout(me.id, viewer.email, selected);
-  };
+  const boxRef = useRef(null);
+  const gridRef = useRef(null);
+  const bw = useWidthOf(boxRef, 360);
+  const gw = useWidthOf(gridRef, 340);
+  useDecorLoaded(DECOR_SPRITE);
+  const set = DECOR_BY_KEY[selected];
+  const own = decorOwned(viewer.rewards, selected);
+  const name = me ? (me.name || me.username) : 'Your name';
+  const username = me ? me.username : 'you';
+  const W = Math.round(Math.max(240, Math.min(400, bw - 36)));
+  const cols = gw >= 640 ? 4 : gw >= 470 ? 3 : 2;
+  const cardW = Math.max(120, Math.floor((gw - (cols - 1) * 10) / cols) - 8);
   const pick = (key) => {
     setSelected(key);
     if (topRef.current) topRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
-
-  const cta = !me
-    ? { label: 'Sign in to buy', sub: 'Free account, takes a minute', disabled: false }
-    : !FRAME_STORE.checkoutUrl
-      ? { label: 'Store opening soon', sub: 'Frames go on sale very soon', disabled: true }
-      : owned
-        ? { label: `Add 2 more months, ${FRAME_STORE.priceLabel}`, sub: `Active, ${left} ${left === 1 ? 'day' : 'days'} left`, disabled: false }
-        : { label: `Unlock for ${FRAME_STORE.priceLabel}`, sub: '2 months, single payment', disabled: false };
-
+  const cta = !me ? { label: 'Sign in to get it', href: '/' } : own.frame && own.plate ? { label: 'Wear it in ZChat', href: `/?sets=${selected}` } : { label: 'Get it in ZChat', href: `/?sets=${selected}` };
   return (
     <PublicShell wide>
       <style>{`
-        @keyframes zs-glow { 0%,100% { opacity: .55; transform: scale(1); } 50% { opacity: .9; transform: scale(1.08); } }
         @keyframes zs-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
         .zs-card { transition: transform .18s ease, border-color .18s ease; }
         .zs-card:active { transform: scale(.97); }
       `}</style>
-
       <div ref={topRef} style={{ scrollMarginTop: 70 }} />
-      <div style={{ position: 'relative', marginTop: 16, borderRadius: 28, overflow: 'hidden', background: `radial-gradient(circle at 50% 30%, ${r.color}33 0%, rgba(10,10,18,0) 60%), linear-gradient(180deg, #120f1f 0%, #0a0a12 100%)`, border: `1px solid ${r.color}40` }}>
-        <div style={{ position: 'absolute', left: '50%', top: 40, width: 320, height: 320, marginLeft: -160, borderRadius: '50%', background: `radial-gradient(circle, ${r.glow} 0%, transparent 65%)`, animation: 'zs-glow 3.2s ease-in-out infinite', pointerEvents: 'none' }} />
-        <div style={{ position: 'relative', padding: '18px 18px 22px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+      <div ref={boxRef} style={{ position: 'relative', marginTop: 16, borderRadius: 28, overflow: 'hidden', background: `radial-gradient(120% 70% at 50% 22%, ${set.accent}3d 0%, rgba(10,10,18,0) 62%), linear-gradient(180deg, #120f1f 0%, #0a0a12 100%)`, border: `1px solid ${set.accent}44`, transition: 'border-color .3s ease' }}>
+        <div style={{ position: 'relative', padding: '18px 18px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
           <div style={{ alignSelf: 'stretch', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.6)' }}>Avatar frame store</div>
-            {me && <div style={{ fontSize: 11.5, fontWeight: 800, padding: '4px 10px', borderRadius: 10, background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.8)' }}>{ownedCount} owned</div>}
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.6)' }}>Frames and nameplates</div>
+            {me && own.frame && own.plate && <div style={{ fontSize: 11.5, fontWeight: 800, padding: '4px 10px', borderRadius: 10, background: 'rgba(52,211,153,0.16)', color: '#34d399' }}>Yours</div>}
           </div>
-
-          <div key={selected} style={{ width: 230, height: 230, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '18px 0 6px', animation: 'zs-rise .35s ease' }}>
-            <Avatar emoji={me ? me.avatar : ''} name={me ? (me.name || me.username) : 'Z'} size={132} frame={selected} />
+          <div key={selected} style={{ margin: '14px 0 2px', animation: 'zs-rise .35s ease' }}>
+            <DecorHero frameKey={selected} plateKey={selected} width={W} photo={me ? me.avatar : ''} name={name} username={username} verified={me && me.verified} custom={me && me.custom_badge} gapColor="#0a0a12" />
           </div>
-
-          <div style={{ fontSize: 20, fontWeight: 900, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
-            {displayName}{me && <VerifiedBadge tier={me.verified} custom={me.custom_badge} size={17} />}
+          <div style={{ fontSize: 26, fontWeight: 900, color: 'white', marginTop: 8 }}>{set.name}</div>
+          <div style={{ fontSize: 14.5, color: 'rgba(255,255,255,0.7)', marginTop: 6, maxWidth: 420, lineHeight: 1.55 }}>{set.about}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 16 }}>
+            <CoinIcon size={28} />
+            <span style={{ fontSize: 32, fontWeight: 900, color: '#fbbf24' }}>{DECOR_PRICE * 2}</span>
+            <span style={{ fontSize: 14, fontWeight: 700, color: 'rgba(255,255,255,0.6)' }}>coins for the set</span>
           </div>
-          {me && <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.5)', marginTop: 1 }}>@{me.username}</div>}
-          {!me && !viewer.loading && <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.5)', marginTop: 2 }}>Sign in to see frames on your own photo</div>}
-
-          <div style={{ marginTop: 14, fontSize: 12.5, fontWeight: 800, color: r.color }}>{r.label}{spec.animated ? ', animated' : ''}</div>
-          <div style={{ fontSize: 24, fontWeight: 900, color: 'white', marginTop: 2 }}>{spec.label.replace(/ frame$/i, '')}</div>
-          <button onClick={() => setTryOn(true)} style={{ marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.14)', background: 'rgba(255,255,255,0.06)', color: 'white', fontFamily: FONT, fontWeight: 800, fontSize: 13, cursor: 'pointer' }}><Eye size={15} /> See it on {me ? 'your profile' : 'a profile'}</button>
-
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginTop: 10 }}>
-            <span style={{ fontSize: 34, fontWeight: 900, color: '#fbbf24' }}>{FRAME_STORE.priceLabel}</span>
-            <span style={{ fontSize: 14, fontWeight: 700, color: 'rgba(255,255,255,0.6)' }}>for {FRAME_STORE.periodLabel}</span>
-          </div>
-
-          <button onClick={buy} disabled={cta.disabled} style={{ position: 'relative', overflow: 'hidden', marginTop: 14, width: '100%', maxWidth: 360, padding: '16px 18px', borderRadius: 18, border: 'none', fontFamily: FONT, fontWeight: 900, fontSize: 17, letterSpacing: '0.02em', cursor: cta.disabled ? 'default' : 'pointer', color: cta.disabled ? 'rgba(255,255,255,0.6)' : '#1a0f02', background: cta.disabled ? 'rgba(255,255,255,0.1)' : '#F5A524' }}>
-            <span style={{ position: 'relative' }}>{cta.label}</span>
-          </button>
-          <div style={{ fontSize: 12.5, color: owned ? '#34d399' : 'rgba(255,255,255,0.55)', marginTop: 8, fontWeight: 700 }}>{cta.sub}</div>
-
+          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)', marginTop: 4 }}>or {DECOR_PRICE} coins for just the frame or the nameplate</div>
+          <a href={cta.href} style={{ marginTop: 16, width: '100%', maxWidth: 360, padding: '16px 18px', borderRadius: 18, boxSizing: 'border-box', fontFamily: FONT, fontWeight: 900, fontSize: 17, textDecoration: 'none', textAlign: 'center', color: '#1a0f02', background: '#F5A524' }}>{cta.label}</a>
+          {!me && !viewer.loading && <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.5)', marginTop: 8 }}>Sign in to see every set on your own photo</div>}
           <div style={{ display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap', justifyContent: 'center' }}>
-            {[[BoltIcon, 'Instant delivery'], [Repeat, 'Not a subscription'], [Lock, 'Secure checkout']].map(([Ic, t]) => (
+            {[[BoltIcon, 'Animated'], [Lock, 'Yours to keep'], [Repeat, 'Mix and match']].map(([Ic, t]) => (
               <span key={t} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 800, padding: '6px 10px', borderRadius: 10, background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.75)' }}><Ic size={13} strokeWidth={2.4} />{t}</span>
             ))}
           </div>
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: 8, margin: '22px 0 12px', overflowX: 'auto', scrollbarWidth: 'none', paddingBottom: 2 }}>
-        {[['all', 'All'], ['mythic', 'Mythic'], ['legendary', 'Legendary'], ['epic', 'Epic'], ['rare', 'Rare']].map(([k, label]) => {
-          const on = filter === k;
-          const c = k === 'all' ? '#fbbf24' : RARITY_STYLE[k].color;
+      <h2 style={{ ...legalH, marginTop: 30 }}>All {DECOR_SETS.length} sets</h2>
+      <div ref={gridRef} style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gap: 10 }}>
+        {DECOR_SETS.map((s) => {
+          const isSel = selected === s.key;
+          const o = decorOwned(viewer.rewards, s.key);
           return (
-            <button key={k} onClick={() => setFilter(k)} style={{ flexShrink: 0, padding: '9px 14px', borderRadius: 12, fontFamily: FONT, fontWeight: 900, fontSize: 13, cursor: 'pointer', border: `1px solid ${on ? c : 'rgba(255,255,255,0.1)'}`, background: on ? `${c}22` : 'rgba(255,255,255,0.04)', color: on ? c : 'rgba(255,255,255,0.7)' }}>{label}</button>
-          );
-        })}
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 10 }}>
-        {shown.map(([key, s]) => {
-          const rr = RARITY_STYLE[s.rarity] || RARITY_STYLE.epic;
-          const rw = (viewer.rewards || []).find((x) => x.kind === 'frame' && x.reward_key === key);
-          const has = rw && rewardActive(rw);
-          const isSel = selected === key;
-          return (
-            <div key={key} className="zs-card" role="button" onClick={() => pick(key)} style={{ position: 'relative', borderRadius: 20, padding: '8px 8px 12px', cursor: 'pointer', background: rr.bg, border: `1.5px solid ${isSel ? '#fbbf24' : `${rr.color}40`}`, boxShadow: isSel ? `0 0 22px ${rr.glow}` : 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', overflow: 'hidden', contentVisibility: 'auto', containIntrinsicSize: '220px' }}>
-              <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 3, background: rr.color }} />
-              {has
-                ? <div style={{ position: 'absolute', top: 8, right: 8, padding: '3px 8px', borderRadius: 8, background: 'rgba(52,211,153,0.9)', color: '#052e1c', fontSize: 10.5, fontWeight: 900 }}>OWNED</div>
-                : <div style={{ position: 'absolute', top: 8, right: 8, padding: '3px 8px', borderRadius: 8, background: 'rgba(245,158,11,0.92)', color: '#1a0f02', fontSize: 10.5, fontWeight: 900 }}>{FRAME_STORE.priceLabel}</div>}
-              <LazyShow height={130}>
-                <div style={{ height: 130, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Avatar emoji={me ? me.avatar : ''} name={me ? (me.name || me.username) : 'Z'} size={70} frame={key} />
-                </div>
+            <div key={s.key} className="zs-card" role="button" aria-label={`${s.name} set`} onClick={() => pick(s.key)} style={{ position: 'relative', borderRadius: 20, padding: '8px 4px 11px', cursor: 'pointer', overflow: 'hidden', display: 'flex', flexDirection: 'column', alignItems: 'center', background: `radial-gradient(120% 85% at 50% 20%, ${s.accent}30 0%, rgba(13,14,20,0) 64%), linear-gradient(180deg, #161724 0%, #0b0c12 100%)`, border: `1.5px solid ${isSel ? '#fbbf24' : 'rgba(255,255,255,0.08)'}` }}>
+              {o.frame && o.plate && <div style={{ position: 'absolute', top: 8, right: 8, zIndex: 6, padding: '2px 8px', borderRadius: 8, background: 'rgba(52,211,153,0.9)', color: '#052e1c', fontSize: 10.5, fontWeight: 900 }}>Yours</div>}
+              <LazyShow height={Math.round(cardW * 0.82)}>
+                <DecorHero frameKey={s.key} plateKey={s.key} width={cardW} photo={me ? me.avatar : ''} name={name} live={false} compact gapColor="#12131b" />
               </LazyShow>
-              <div style={{ fontWeight: 900, fontSize: 14, color: 'white', textAlign: 'center', marginTop: 4 }}>{s.label.replace(/ frame$/i, '')}</div>
-              <div style={{ fontSize: 11.5, fontWeight: 800, color: rr.color, marginTop: 3 }}>{rr.label}{s.animated ? ', animated' : ''}</div>
+              <div style={{ fontWeight: 900, fontSize: 14, color: 'white', textAlign: 'center', marginTop: 4 }}>{s.name}</div>
             </div>
           );
         })}
       </div>
 
-      {tryOn && <FrameTryOnPage me={me} frameKey={selected} onClose={() => setTryOn(false)} action={{ label: cta.label, disabled: cta.disabled, onClick: buy, sub: cta.sub }} />}
       <h2 style={{ ...legalH, marginTop: 34 }}>How it works</h2>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
         {[
-          ['1', 'Pick a frame', 'Preview every frame on your own profile photo right here.'],
-          ['2', 'Pay $2 securely', 'Checkout by Lemon Squeezy. One payment, never charged again.'],
-          ['3', 'Wear it everywhere', 'It appears instantly on your profile, chats, lists and posts for 2 months.'],
+          ['1', 'Pick a set', 'See every frame and nameplate on your own photo and name right here.'],
+          ['2', 'Use your coins', `${DECOR_PRICE * 2} coins for a set, or ${DECOR_PRICE} for a frame or a nameplate on its own.`],
+          ['3', 'Wear it on your profile', 'Your frame and nameplate show big and animated on your profile page.'],
         ].map(([n, t, d]) => (
           <div key={n} style={{ borderRadius: 18, padding: 16, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
             <div style={{ width: 30, height: 30, borderRadius: 10, background: 'linear-gradient(135deg, #fbbf24, #f97316)', color: '#1a0f02', fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{n}</div>
@@ -53945,14 +54105,14 @@ function PublicStorePage() {
 
       <h2 style={legalH}>Questions</h2>
       {[
-        ['Is it a subscription?', 'No. You pay $2 once and the frame stays active for 2 months. Buy again anytime to add another 2 months.'],
-        ['When do I get it?', 'Within seconds of payment. A claim screen appears in ZChat and the frame is equipped for you.'],
-        ['Can I switch frames?', 'Yes. Every frame you own is saved in Profile, Collection, and you can switch anytime.'],
-        ['Refunds?', 'Only for technical problems. See the Refund Policy.'],
+        ['How do I get coins?', 'Claim free coins in ZChat every day, invite friends, or get them as gifts from friends.'],
+        ['Do they run out?', 'No. Frames and nameplates you get with coins are yours to keep.'],
+        ['Can I mix sets?', 'Yes. Wear the frame from one set with the nameplate from another, and switch any time in your Collection.'],
+        ['Can I give one to a friend?', 'Yes. Open their profile, tap the gift button and pick a frame, a nameplate or a whole set.'],
       ].map(([q, a]) => (
         <div key={q} style={{ borderRadius: 16, padding: '12px 14px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', marginBottom: 8 }}>
           <div style={{ fontWeight: 900, color: 'white', fontSize: 14.5 }}>{q}</div>
-          <div style={{ fontSize: 13.5, color: 'rgba(255,255,255,0.65)', marginTop: 4, lineHeight: 1.5 }}>{a}{q === 'Refunds?' && <> <a href="/?page=refund" style={{ color: '#fbbf24' }}>Read it</a></>}</div>
+          <div style={{ fontSize: 13.5, color: 'rgba(255,255,255,0.65)', marginTop: 4, lineHeight: 1.5 }}>{a}</div>
         </div>
       ))}
     </PublicShell>
