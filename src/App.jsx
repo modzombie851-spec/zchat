@@ -409,6 +409,22 @@ function overlayKindOf(n) {
   if (cl.contains('zchat-fade')) return (st.justifyContent === 'center' && st.alignItems === 'center') ? 'dialog' : 'fade';
   return null;
 }
+const LIST_K = (() => {
+  try {
+    if (typeof navigator === 'undefined' || !/Android/i.test(navigator.userAgent || '')) return 1;
+    const a = Number(window.screen && window.screen.width) || window.innerWidth || 400;
+    const b = Number(window.screen && window.screen.height) || window.innerHeight || 800;
+    const sw = Math.min(a, b);
+    const sh = Math.max(a, b);
+    if (sw >= 600) return 1;
+    return Math.max(0.86, Math.min(1, Math.min(sw / 414, sh / 880)));
+  } catch {
+    return 1;
+  }
+})();
+const LIST_F = 1 - (1 - LIST_K) * 0.55;
+function lk(n) { return Math.round(n * LIST_K); }
+function lf(n) { return Math.round(n * LIST_F * 2) / 2; }
 function reducedMotion() {
   if (prefOn('zchat-reduce-motion')) return true;
   try { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); } catch { return false; }
@@ -5320,6 +5336,7 @@ function GiftSheet({ uid, me, to, onClose, onSent }) {
                 <div style={{ fontSize: 16, fontWeight: 700, color: theme.ink }}>Gift for {first}</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13, color: theme.muted, marginTop: 1 }}><CoinIcon size={14} />You have {formatCount(balance)} coins</div>
               </div>
+              <div role="button" aria-label="Close" onPointerDown={(e) => e.stopPropagation()} onClick={onClose} style={{ width: 34, height: 34, borderRadius: 17, background: theme.soft, color: theme.ink, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}><X size={18} /></div>
             </div>
             <SegmentedControl style={{ margin: '0 20px 12px' }} value={tab} onChange={(k) => { setTab(k); setErr(''); }} options={[['coins', 'Coins'], ['item', 'Sets']]} />
           </div>
@@ -5344,7 +5361,7 @@ function GiftSheet({ uid, me, to, onClose, onSent }) {
                     const full = o.frame && o.plate;
                     return (
                       <div key={s.key} role="radio" aria-checked={on} aria-label={`${s.name} set${full ? ', they have it' : ''}`} onClick={() => { if (!full) choose(s.key); }} className="zchat-press" style={{ position: 'relative', borderRadius: 16, padding: '6px 2px 9px', display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: full ? 'default' : 'pointer', background: `radial-gradient(120% 85% at 50% 20%, ${s.accent}30 0%, rgba(13,14,20,0) 64%), #12131b`, boxShadow: on ? `0 0 0 2px ${theme.coral}` : 'none', opacity: full ? 0.5 : 1 }}>
-                        <DecorHero frameKey={s.key} plateKey={s.key} width={cardW} photo={to.avatar} name={to.name} live={false} compact gapColor="#12131b" />
+                        <DecorHero frameKey={s.key} plateKey={s.key} width={cardW} photo={to.avatar} name={to.name} lazy compact gapColor="#12131b" />
                         <div style={{ alignSelf: 'stretch', display: 'flex', flexDirection: giftStack ? 'column' : 'row', alignItems: giftStack ? 'flex-start' : 'center', gap: giftStack ? 1 : 4, padding: '4px 8px 0' }}>
                           <span style={{ flex: giftStack ? 'none' : 1, minWidth: 0, maxWidth: '100%', fontSize: giftStack ? Math.max(11, Math.min(12.5, (cardW - 14) / Math.max(0.5, decorTextW(s.name, 700, 100) / 100))) : 12.5, fontWeight: 700, color: '#FFFFFF', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.name}</span>
                           <span style={{ fontSize: 11.5, fontWeight: 700, color: full ? '#34d399' : '#FFD66B', flexShrink: 0 }}>{full ? 'They have it' : o.frame || o.plate ? DECOR_PRICE : DECOR_PRICE * 2}</span>
@@ -16263,7 +16280,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-const APP_VERSION = '20.0V';
+const APP_VERSION = '20.1V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -18468,6 +18485,8 @@ const DECOR_PRICE = 250;
 const DECOR_FRAME_CATALOG = Object.fromEntries(DECOR_SETS.map((s) => [s.key, { label: `${s.name} frame`, rarity: 'epic' }]));
 const DECOR_PLATE_CATALOG = Object.fromEntries(DECOR_SETS.map((s) => [s.key, { label: `${s.name} nameplate`, rarity: 'epic' }]));
 const DECOR_SPRITE = '/set-thumbs.webp';
+const DECOR_STORE = 'zchat-decor-v1';
+const DECOR_LANES = 3;
 function isDecorKey(key) {
   return !!(key && DECOR_BY_KEY[key]);
 }
@@ -18475,34 +18494,233 @@ function decorSrc(key, part) {
   const s = DECOR_BY_KEY[key];
   return s ? `/set-${s.file}-${part === 'plate' ? 'plate' : 'frame'}.webp` : null;
 }
+const DECOR_FILES = new Set([DECOR_SPRITE, ...DECOR_SETS.flatMap((s) => [`/set-${s.file}-frame.webp`, `/set-${s.file}-plate.webp`])]);
 const decorLoaded = new Set();
+const decorBad = new Set();
 const decorWaits = new Map();
+const decorSaved = new Set();
+const decorSaving = new Map();
+const decorQueued = new Map();
+const decorLine = [];
+let decorBusy = 0;
+let decorSeq = 0;
+let decorScan = null;
+let decorKept = false;
+function decorCanStore() {
+  try { return typeof caches !== 'undefined' && !!caches && typeof caches.open === 'function'; } catch { return false; }
+}
+function decorFileOk(res) {
+  if (!res || res.status !== 200) return false;
+  const ct = (res.headers.get('content-type') || '').toLowerCase();
+  return !/text\/|json|javascript/.test(ct);
+}
+function decorScanStore() {
+  if (!decorScan) {
+    decorScan = (async () => {
+      if (!decorCanStore()) return;
+      try {
+        const store = await caches.open(DECOR_STORE);
+        const keys = await store.keys();
+        keys.forEach((req) => {
+          let path = '';
+          try { path = new URL(req.url).pathname; } catch {}
+          if (DECOR_FILES.has(path)) decorSaved.add(path);
+          else store.delete(req).catch(() => {});
+        });
+      } catch {}
+    })();
+  }
+  return decorScan;
+}
+function decorKeep() {
+  if (decorKept) return;
+  decorKept = true;
+  try {
+    const st = typeof navigator !== 'undefined' ? navigator.storage : null;
+    if (!st || typeof st.persist !== 'function' || typeof st.persisted !== 'function' || /Firefox/i.test(navigator.userAgent || '')) return;
+    st.persisted().then((on) => (on ? null : st.persist())).catch(() => {});
+  } catch {}
+}
+function decorSave(url) {
+  if (!url) return Promise.resolve(false);
+  if (decorSaved.has(url)) return Promise.resolve(true);
+  const had = decorSaving.get(url);
+  if (had) return had;
+  const job = (async () => {
+    if (!decorCanStore()) return false;
+    try {
+      await decorScanStore();
+      if (decorSaved.has(url)) return true;
+      const store = await caches.open(DECOR_STORE);
+      const hit = await store.match(url);
+      if (hit && decorFileOk(hit)) { decorSaved.add(url); return true; }
+      const res = await fetch(url, { headers: { 'x-zc-save': '1' } });
+      if (!decorFileOk(res)) return false;
+      await store.put(url, res);
+      decorSaved.add(url);
+      decorKeep();
+      return true;
+    } catch {
+      return false;
+    }
+  })().then((v) => { decorSaving.delete(url); return v; });
+  decorSaving.set(url, job);
+  return job;
+}
+function decorPump() {
+  while (decorLine.length) {
+    let at = 0;
+    for (let i = 1; i < decorLine.length; i++) {
+      const a = decorLine[i];
+      const b = decorLine[at];
+      if (a.pri < b.pri || (a.pri === b.pri && a.n < b.n)) at = i;
+    }
+    const job = decorLine[at];
+    if (job.pri > 0 && decorBusy >= DECOR_LANES) return;
+    decorLine.splice(at, 1);
+    decorBusy += 1;
+    let freed = false;
+    const free = () => {
+      if (freed) return;
+      freed = true;
+      decorBusy -= 1;
+      decorPump();
+    };
+    const stall = setTimeout(free, 20000);
+    decorSave(job.url).then((ok) => {
+      clearTimeout(stall);
+      decorQueued.delete(job.url);
+      job.done(ok);
+      free();
+    });
+  }
+}
+function decorFetch(url, pri = 1) {
+  if (!url) return Promise.resolve(false);
+  if (decorSaved.has(url)) return Promise.resolve(true);
+  const had = decorQueued.get(url);
+  if (had) {
+    if (pri < had.pri) { had.pri = pri; decorPump(); }
+    return had.promise;
+  }
+  let done = null;
+  const promise = new Promise((resolve) => { done = resolve; });
+  const job = { url, pri, n: decorSeq++, done, promise };
+  decorQueued.set(url, job);
+  decorLine.push(job);
+  decorPump();
+  return promise;
+}
 function preloadDecor(url) {
   if (!url) return Promise.resolve(false);
   if (decorLoaded.has(url)) return Promise.resolve(true);
+  if (decorBad.has(url)) return Promise.resolve(false);
   if (decorWaits.has(url)) return decorWaits.get(url);
   const job = new Promise((resolve) => {
     const img = new Image();
     img.decoding = 'async';
-    img.onload = () => { decorLoaded.add(url); decorWaits.delete(url); resolve(true); };
-    img.onerror = () => { decorWaits.delete(url); resolve(false); };
+    img.onload = () => {
+      decorWaits.delete(url);
+      if (img.naturalWidth > 0) { decorLoaded.add(url); resolve(true); } else { decorBad.add(url); resolve(false); }
+    };
+    img.onerror = () => { decorWaits.delete(url); decorBad.add(url); resolve(false); };
     img.src = url;
   });
   decorWaits.set(url, job);
   return job;
 }
-function useDecorLoaded(url) {
-  const [state, setState] = useState(() => ({ url, ok: !!url && decorLoaded.has(url) }));
-  const ok = state.url === url ? state.ok : (!!url && decorLoaded.has(url));
+function decorReady(url, pri = 1) {
+  if (!url) return Promise.resolve(false);
+  if (decorLoaded.has(url)) return Promise.resolve(true);
+  return decorFetch(url, pri).then(() => preloadDecor(url));
+}
+function decorStateOf(url) {
+  if (!url) return 'none';
+  if (decorLoaded.has(url)) return 'ok';
+  if (decorBad.has(url)) return 'bad';
+  return 'wait';
+}
+const decorRetry = new Set();
+try {
+  if (typeof window !== 'undefined') {
+    window.addEventListener('online', () => {
+      decorBad.clear();
+      decorRetry.forEach((f) => { try { f(); } catch {} });
+    });
+  }
+} catch {}
+function useDecorState(url, pri = 1) {
+  const [st, setSt] = useState(() => ({ url, v: decorStateOf(url) }));
+  const [tries, setTries] = useState(0);
+  const v = st.url === url ? st.v : decorStateOf(url);
   useEffect(() => {
-    if (!url) { setState({ url, ok: false }); return undefined; }
-    if (decorLoaded.has(url)) { setState({ url, ok: true }); return undefined; }
+    const now = decorStateOf(url);
+    if (now !== 'wait') { setSt((p) => (p.url === url && p.v === now ? p : { url, v: now })); return undefined; }
     let alive = true;
-    setState({ url, ok: false });
-    preloadDecor(url).then((v) => { if (alive) setState({ url, ok: v }); });
+    setSt((p) => (p.url === url && p.v === 'wait' ? p : { url, v: 'wait' }));
+    decorReady(url, pri).then((ok) => { if (alive) setSt({ url, v: ok ? 'ok' : 'bad' }); });
     return () => { alive = false; };
-  }, [url]);
-  return ok;
+  }, [url, tries]);
+  useEffect(() => {
+    if (v !== 'bad') return undefined;
+    const f = () => setTries((n) => n + 1);
+    decorRetry.add(f);
+    return () => { decorRetry.delete(f); };
+  }, [v]);
+  return v;
+}
+function useDecorLoaded(url) {
+  return useDecorState(url, -1) === 'ok';
+}
+const decorRoots = new WeakMap();
+function decorScrollRoot(el) {
+  let n = el && el.parentElement;
+  while (n && n !== document.body && n !== document.documentElement) {
+    try {
+      const cs = getComputedStyle(n);
+      if (/(auto|scroll)/.test(`${cs.overflowY} ${cs.overflowX}`)) return n;
+    } catch {}
+    n = n.parentElement;
+  }
+  return null;
+}
+function decorWatch(el, cb) {
+  if (!el) return undefined;
+  if (typeof IntersectionObserver === 'undefined') { cb(); return undefined; }
+  const root = decorScrollRoot(el);
+  const key = root || document;
+  let entry = decorRoots.get(key);
+  if (!entry) {
+    const cbs = new Map();
+    const io = new IntersectionObserver((list) => {
+      list.forEach((e) => {
+        if (!e.isIntersecting) return;
+        const f = cbs.get(e.target);
+        if (!f) return;
+        cbs.delete(e.target);
+        try { io.unobserve(e.target); } catch {}
+        f();
+      });
+    }, { root, rootMargin: '700px' });
+    entry = { io, cbs };
+    decorRoots.set(key, entry);
+  }
+  entry.cbs.set(el, cb);
+  entry.io.observe(el);
+  return () => { entry.cbs.delete(el); try { entry.io.unobserve(el); } catch {} };
+}
+function preloadDecorSet(frameKey, plateKey, pri = 0) {
+  const urls = [DECOR_SPRITE];
+  if (isDecorKey(frameKey)) urls.push(decorSrc(frameKey, 'frame'));
+  if (isDecorKey(plateKey)) urls.push(decorSrc(plateKey, 'plate'));
+  return Promise.all(urls.map((u) => decorReady(u, u === DECOR_SPRITE ? -1 : pri)));
+}
+function saveDecorSets(pairs, pri = 2) {
+  (pairs || []).forEach((pair) => {
+    const [frameKey, plateKey] = pair || [];
+    if (isDecorKey(frameKey)) decorFetch(decorSrc(frameKey, 'frame'), pri);
+    if (isDecorKey(plateKey)) decorFetch(decorSrc(plateKey, 'plate'), pri);
+  });
 }
 let decorMeasure = null;
 function decorTextW(text, weight, size) {
@@ -18539,20 +18757,30 @@ function DecorStill({ setKey, part, width, style }) {
   );
 }
 
-function DecorArt({ setKey, part, width, live = true, style }) {
+function DecorArt({ setKey, part, width, lazy = false, style }) {
   const set = DECOR_BY_KEY[setKey];
-  const src = live ? decorSrc(setKey, part) : null;
-  const ready = useDecorLoaded(src);
-  const stillOk = useDecorLoaded(set ? DECOR_SPRITE : null);
-  const [failed, setFailed] = useState(null);
-  const on = !!src && ready && failed !== src;
   const isPlate = part === 'plate';
   const h = isPlate ? width * 0.4 : width;
+  const src = set ? decorSrc(setKey, part) : null;
+  const boxRef = useRef(null);
+  const [near, setNear] = useState(() => !lazy || (!!src && decorLoaded.has(src)));
+  useEffect(() => {
+    if (near) return undefined;
+    return decorWatch(boxRef.current, () => setNear(true));
+  }, [near]);
+  const state = useDecorState(near ? src : null, lazy ? 1 : 0);
+  const stillOk = useDecorLoaded(set ? DECOR_SPRITE : null);
+  const [failed, setFailed] = useState(null);
+  const on = state === 'ok' && failed !== src;
+  const seen = useRef(null);
+  if (!seen.current) seen.current = new Map();
+  if (src && !seen.current.has(src)) seen.current.set(src, on);
+  const fade = !(src && seen.current.get(src));
   return (
-    <div aria-hidden="true" style={{ position: 'absolute', width, height: h, pointerEvents: 'none', ...(style || {}) }}>
+    <div ref={boxRef} aria-hidden="true" style={{ position: 'absolute', width, height: h, pointerEvents: 'none', ...(style || {}) }}>
       {isPlate && set && !on && !stillOk && <div style={{ position: 'absolute', left: width * 0.1167, top: h * 0.3125, width: width * 0.7667, height: h * 0.4417, borderRadius: width * 0.0867, background: set.tint, boxShadow: `inset 0 0 0 ${Math.max(2, Math.round(width * 0.011))}px ${set.accent}` }} />}
-      <DecorStill setKey={setKey} part={part} width={width} style={{ position: 'absolute', left: 0, top: 0, opacity: on ? 0 : 1, transition: on ? 'opacity 0.25s ease 0.3s' : 'none' }} />
-      {on && <img key={src} src={src} alt="" draggable={false} onError={() => setFailed(src)} onContextMenu={(e) => e.preventDefault()} style={{ position: 'absolute', left: 0, top: 0, width, height: h, maxWidth: 'none', animation: 'zdec-in 0.35s ease both' }} />}
+      {(!on || fade) && <DecorStill setKey={setKey} part={part} width={width} style={{ position: 'absolute', left: 0, top: 0, opacity: on ? 0 : 1, transition: on ? 'opacity 0.3s ease 0.12s' : 'none' }} />}
+      {on && <img key={src} src={src} alt="" draggable={false} onError={() => setFailed(src)} onContextMenu={(e) => e.preventDefault()} style={{ position: 'absolute', left: 0, top: 0, width, height: h, maxWidth: 'none', animation: fade ? 'zdec-in 0.3s ease both' : 'none' }} />}
     </div>
   );
 }
@@ -18600,7 +18828,7 @@ function DecorPlateText({ L, name, username, verified, custom, compact }) {
   );
 }
 
-function DecorHero({ frameKey, plateKey, width, photo, name, username, verified, custom, live = true, compact = false, ring = 'none', close = false, online = false, onPhoto, gapColor }) {
+function DecorHero({ frameKey, plateKey, width, photo, name, username, verified, custom, lazy = false, compact = false, ring = 'none', close = false, online = false, onPhoto, gapColor }) {
   const { theme } = useTheme();
   const L = decorLayout(frameKey, plateKey, width);
   if (!L) return null;
@@ -18611,7 +18839,7 @@ function DecorHero({ frameKey, plateKey, width, photo, name, username, verified,
   const dot = Math.max(12, Math.round(pc * 0.12));
   return (
     <div style={{ position: 'relative', width: L.W, height: L.h, flexShrink: 0, isolation: 'isolate' }}>
-      {L.P && <DecorArt setKey={plateKey} part="plate" width={L.W} live={live} style={{ left: 0, top: L.plateTop, zIndex: 1 }} />}
+      {L.P && <DecorArt setKey={plateKey} part="plate" width={L.W} lazy={lazy} style={{ left: 0, top: L.plateTop, zIndex: 1 }} />}
       {L.P && <DecorPlateText L={L} name={name} username={username} verified={verified} custom={custom} compact={compact} />}
       <div role={onPhoto ? 'button' : undefined} aria-label={onPhoto ? `Story of ${name || 'this person'}` : undefined} onClick={onPhoto || undefined}
         style={{ position: 'absolute', left: (L.W - pc) / 2, top: L.photoTop, width: pc, height: pc, borderRadius: '50%', zIndex: L.F ? 2 : 3, cursor: onPhoto ? 'pointer' : 'default', boxShadow: L.F ? 'none' : `0 0 0 ${Math.max(3, Math.round(pc * 0.03))}px ${gap}`, background: L.F ? 'transparent' : gap }}>
@@ -18621,7 +18849,7 @@ function DecorHero({ frameKey, plateKey, width, photo, name, username, verified,
         {L.F && ring === 'unseen' && <div aria-hidden="true" style={{ position: 'absolute', inset: 0, borderRadius: '50%', boxShadow: `inset 0 0 0 ${Math.max(3, Math.round(pc * 0.03))}px ${ringCol}`, pointerEvents: 'none' }} />}
         {!L.F && online && <span style={{ position: 'absolute', right: pc * 0.07, bottom: pc * 0.07, width: dot, height: dot, borderRadius: '50%', background: '#22C55E', border: `3px solid ${gap}`, boxSizing: 'content-box' }} />}
       </div>
-      {L.F && <DecorArt setKey={frameKey} part="frame" width={L.fsz} live={live} style={{ left: (L.W - L.fsz) / 2, top: L.frameTop, zIndex: 3 }} />}
+      {L.F && <DecorArt setKey={frameKey} part="frame" width={L.fsz} lazy={lazy} style={{ left: (L.W - L.fsz) / 2, top: L.frameTop, zIndex: 3 }} />}
     </div>
   );
 }
@@ -18653,11 +18881,10 @@ function ProfileDecorHero({ profile, photo, frameKey, plateKey, storyRing = 'non
   if (!L) return <div ref={ref} />;
   const ringed = storyRing !== 'none';
   const lift = overCover ? Math.round(L.photoTop + L.photo * 0.42) : 0;
-  const live = !reducedMotion() && !dataSaverOn();
   return (
     <div ref={ref} style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: overCover ? -lift : 4 }}>
       <DecorHero frameKey={frameKey} plateKey={plateKey} width={W} photo={photo} name={profile.name} username={profile.username} verified={profile.verified} custom={profile.custom_badge}
-        live={live} ring={storyRing} close={close} online={isOnline} onPhoto={ringed && onOpenStory ? () => onOpenStory(profile.id) : null} gapColor={gapColor || theme.bgGradient} />
+        ring={storyRing} close={close} online={isOnline} onPhoto={ringed && onOpenStory ? () => onOpenStory(profile.id) : null} gapColor={gapColor || theme.bgGradient} />
       {L.F && !L.P && (
         <div style={{ maxWidth: '100%', padding: '2px 20px 0', boxSizing: 'border-box', textAlign: 'center' }}>
           <div style={{ fontSize: 22, fontWeight: 800, color: theme.ink, letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', justifyContent: 'center', minWidth: 0 }}>
@@ -18671,11 +18898,11 @@ function ProfileDecorHero({ profile, photo, frameKey, plateKey, storyRing = 'non
   );
 }
 
-function DecorPlateOnly({ setKey, width, name, username, verified, custom, live = false, compact = false }) {
+function DecorPlateOnly({ setKey, width, name, username, verified, custom, lazy = false, compact = false }) {
   if (!isDecorKey(setKey)) return null;
   return (
     <div style={{ position: 'relative', width, height: width * 0.4, flexShrink: 0, isolation: 'isolate' }}>
-      <DecorArt setKey={setKey} part="plate" width={width} live={live} style={{ left: 0, top: 0 }} />
+      <DecorArt setKey={setKey} part="plate" width={width} lazy={lazy} style={{ left: 0, top: 0 }} />
       <DecorPlateText L={{ W: width, plateTop: 0 }} name={name} username={username} verified={verified} custom={custom} compact={compact} />
     </div>
   );
@@ -19154,12 +19381,12 @@ function SocialIcon({ platform, size = 40, round = false }) {
   );
 }
 
-function DecorFrameBadge({ setKey, size, photo, name, live = false }) {
+function DecorFrameBadge({ setKey, size, photo, name, lazy = false }) {
   const pc = Math.round(size * 0.6111);
   return (
     <div style={{ position: 'relative', width: size, height: size, flexShrink: 0, isolation: 'isolate' }}>
       <div style={{ position: 'absolute', left: (size - pc) / 2, top: (size - pc) / 2, width: pc, height: pc }}><Avatar emoji={photo} name={name} size={pc} /></div>
-      <DecorArt setKey={setKey} part="frame" width={size} live={live} style={{ left: 0, top: 0 }} />
+      <DecorArt setKey={setKey} part="frame" width={size} lazy={lazy} style={{ left: 0, top: 0 }} />
     </div>
   );
 }
@@ -19196,7 +19423,7 @@ function ProfileCollectionShowcase({ profile, rewards, isSelf, onOpenSet, onOpen
       <div style={{ display: 'flex', gap: 10, overflowX: 'auto', padding: '0 14px 14px', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
         {sets.map(({ s, f, p }) => (
           <div key={s.key} role="button" aria-label={`${s.name} ${f && p ? 'set' : f ? 'frame' : 'nameplate'}`} onClick={() => onOpenSet && onOpenSet(s.key)} className="zchat-press" style={{ flexShrink: 0, width: 150, borderRadius: 16, padding: '6px 4px 9px', cursor: onOpenSet ? 'pointer' : 'default', background: `radial-gradient(120% 85% at 50% 20%, ${s.accent}33 0%, rgba(13,14,20,0) 64%), #171826`, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <DecorHero frameKey={f ? s.key : null} plateKey={p ? s.key : null} width={140} photo={profile.avatar} name={profile.name} live={false} compact gapColor="#171826" />
+            <DecorHero frameKey={f ? s.key : null} plateKey={p ? s.key : null} width={140} photo={profile.avatar} name={profile.name} lazy compact gapColor="#171826" />
             <div style={{ fontSize: 12, fontWeight: 800, color: '#FFFFFF', marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%', padding: '0 6px' }}>{s.name}</div>
             <div style={{ fontSize: 10.5, fontWeight: 800, color: s.accent, marginTop: 1 }}>{f && p ? 'Set' : f ? 'Frame' : 'Nameplate'}</div>
           </div>
@@ -19279,7 +19506,7 @@ function FreeSetsSheet({ me, count, onPick, onClose }) {
         <div onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Free sets" className="zchat-pop" style={{ position: 'relative', width: '100%', maxWidth: 380, borderRadius: 28, padding: '20px 18px 16px', background: 'radial-gradient(120% 70% at 50% 0%, #3b2a7a 0%, #12101f 62%)', border: '1px solid rgba(183,156,255,0.3)', color: 'white', textAlign: 'center', overflow: 'hidden' }}>
           <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 134 }}>
             <div style={{ marginRight: -26, transform: 'translateY(10px) rotate(-8deg)' }}><DecorFrameBadge setKey="neon_city" size={104} photo={me && me.avatar} name={name} /></div>
-            <div style={{ position: 'relative', zIndex: 2 }}><DecorFrameBadge setKey="koi_pond" size={134} photo={me && me.avatar} name={name} live={!dataSaverOn()} /></div>
+            <div style={{ position: 'relative', zIndex: 2 }}><DecorFrameBadge setKey="koi_pond" size={134} photo={me && me.avatar} name={name} /></div>
             <div style={{ marginLeft: -26, transform: 'translateY(10px) rotate(8deg)' }}><DecorFrameBadge setKey="dragon_hoard" size={104} photo={me && me.avatar} name={name} /></div>
           </div>
           <div style={{ fontSize: 24, fontWeight: 900, marginTop: 12, letterSpacing: '-0.01em' }}>{count === 1 ? 'A free set for you' : `${count} free sets for you`}</div>
@@ -19307,7 +19534,7 @@ function WnDecorArt({ me, thumb = false }) {
           <div style={{ position: 'absolute', left: -22, top: '12%', transform: 'rotate(-10deg)', opacity: 0.9 }}><DecorFrameBadge setKey="neon_city" size={112} photo={photo} name={name} /></div>
           <div style={{ position: 'absolute', right: -22, top: '6%', transform: 'rotate(10deg)', opacity: 0.9 }}><DecorFrameBadge setKey="snow_globe" size={112} photo={photo} name={name} /></div>
           <div style={{ position: 'relative', zIndex: 2, paddingBottom: 46 }}>
-            <DecorHero frameKey="koi_pond" plateKey="koi_pond" width={Math.max(220, Math.min(340, w - 48))} photo={photo} name={name} username={me && me.username} verified={me && me.verified} custom={me && me.custom_badge} live={!dataSaverOn()} gapColor="#0d0b1a" />
+            <DecorHero frameKey="koi_pond" plateKey="koi_pond" width={Math.max(220, Math.min(340, w - 48))} photo={photo} name={name} username={me && me.username} verified={me && me.verified} custom={me && me.custom_badge} gapColor="#0d0b1a" />
           </div>
         </>
       )}
@@ -19661,7 +19888,7 @@ function SetCard({ set, me, own, wearing, free, width, stack = false, onOpen }) 
       border: `1px solid ${wearing ? set.accent : 'rgba(255,255,255,0.08)'}`, boxShadow: wearing ? `0 0 18px ${set.accent}55` : 'none',
     }}>
       {wearing && <div style={{ position: 'absolute', top: 8, left: 8, zIndex: 6, padding: '2px 8px', borderRadius: 8, background: set.accent, color: '#0b0c12', fontSize: 10.5, fontWeight: 800 }}>Wearing</div>}
-      <DecorHero frameKey={set.key} plateKey={set.key} width={width} photo={me.avatar} name={me.name} live={false} compact />
+      <DecorHero frameKey={set.key} plateKey={set.key} width={width} photo={me.avatar} name={me.name} lazy compact />
       <div style={{ alignSelf: 'stretch', display: 'flex', flexDirection: stack ? 'column' : 'row', alignItems: stack ? 'flex-start' : 'center', gap: stack ? 1 : 6, padding: '6px 8px 0' }}>
         <div style={{ flex: stack ? 'none' : 1, minWidth: 0, maxWidth: '100%', fontWeight: 800, fontSize: nameSize, color: '#FFFFFF', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{set.name}</div>
         {full
@@ -19702,6 +19929,13 @@ function SetShopPage({ me, setKey, rewards, wallet, onClose, onPick, onWear, onR
     hapticTap();
     onPick(n.key);
   };
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const n = DECOR_SETS.length;
+      saveDecorSets([DECOR_SETS[(idx + 1) % n], DECOR_SETS[(idx + n - 1) % n]].map((s) => [s.key, s.key]), 1);
+    }, 700);
+    return () => clearTimeout(t);
+  }, [idx]);
   const flash = (t) => { setNote(t); setTimeout(() => setNote(''), 2600); };
   const finish = async (kinds, label) => {
     hapticTap();
@@ -19990,7 +20224,7 @@ function CollectionPanel({ me, rewards, onClose, onEquip, onWear, isAdmin, onRew
       {tab === 'sets' && (wearF || wearP) && !openSet && (
         <div style={{ position: 'absolute', zIndex: 12, left: 12, right: 12, bottom: 'calc(14px + env(safe-area-inset-bottom))', padding: '10px 12px', borderRadius: 20, background: 'rgba(18,20,28,0.97)', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 -10px 30px rgba(0,0,0,0.35)', display: 'flex', alignItems: 'center', gap: 12 }}>
           <div style={{ width: wearF ? 60 : 96, height: 56, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            {wearF ? <DecorFrameBadge setKey={wearF} size={58} photo={me.avatar} name={me.name} /> : <DecorStill setKey={wearP} part="plate" width={96} />}
+            {wearF ? <DecorFrameBadge setKey={wearF} size={58} photo={me.avatar} name={me.name} /> : <div style={{ position: 'relative', width: 96, height: 38.4, isolation: 'isolate' }}><DecorArt setKey={wearP} part="plate" width={96} style={{ left: 0, top: 0 }} /></div>}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.55)', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Wearing now</div>
@@ -22408,9 +22642,9 @@ function BottomTabBar({ tab, onChange, onCreate, badges }) {
 function HomeHeader({ title, right, subtitle, small = false }) {
   const { theme } = useTheme();
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px 8px 20px', minHeight: 54, boxSizing: 'border-box', flexShrink: 0 }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: `${lk(8)}px 12px ${lk(8)}px ${lk(20)}px`, minHeight: lk(54), boxSizing: 'border-box', flexShrink: 0 }}>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div role="heading" aria-level={1} style={{ fontSize: small ? 22 : 30, fontWeight: 800, color: theme.ink, letterSpacing: small ? '-0.025em' : '-0.035em', lineHeight: 1.1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</div>
+        <div role="heading" aria-level={1} style={{ fontSize: small ? 22 : lf(30), fontWeight: 800, color: theme.ink, letterSpacing: small ? '-0.025em' : '-0.035em', lineHeight: 1.1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</div>
         {subtitle && <div style={{ fontSize: 13, color: theme.muted, fontWeight: 500, marginTop: 2 }}>{subtitle}</div>}
       </div>
       <div style={{ display: 'flex', gap: 2, alignItems: 'center', flexShrink: 0 }}>{right}</div>
@@ -33791,6 +34025,30 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const unseenRewards = (myRewards || []).filter((r) => !r.seen && rewardActive(r) && (r.kind === 'frame' || r.kind === 'nameplate' ? isDecorKey(r.reward_key) : r.kind === 'charm' ? !!CUSTOM_BADGES[r.reward_key] : false));
   const pendingReward = unseenRewards[0] || null;
   const pendingPair = pendingReward && pendingReward.kind !== 'charm' ? unseenRewards.find((r) => r !== pendingReward && r.reward_key === pendingReward.reward_key && r.kind === (pendingReward.kind === 'frame' ? 'nameplate' : 'frame')) || null : null;
+  useEffect(() => {
+    if (!me || !(isDecorKey(me.avatar_frame) || isDecorKey(me.nameplate))) return undefined;
+    const t = setTimeout(() => preloadDecorSet(me.avatar_frame, me.nameplate), 300);
+    return () => clearTimeout(t);
+  }, [me && me.avatar_frame, me && me.nameplate]);
+  const decorPeers = useMemo(() => (conversations || []).slice(0, 8).map((c) => {
+    const p = c && c.otherProfile;
+    if (!p || p.is_deleted) return '';
+    const f = isDecorKey(p.avatar_frame) ? p.avatar_frame : '';
+    const n = isDecorKey(p.nameplate) ? p.nameplate : '';
+    return f || n ? `${f}|${n}` : '';
+  }).filter(Boolean).join(','), [conversations]);
+  useEffect(() => {
+    if (!me || !decorPeers) return undefined;
+    const t = setTimeout(() => { if (!dataSaverOn()) saveDecorSets(decorPeers.split(',').map((k) => k.split('|'))); }, 6000);
+    return () => clearTimeout(t);
+  }, [me && me.id, decorPeers]);
+  const peerFrame = activeProfile && isDecorKey(activeProfile.avatar_frame) ? activeProfile.avatar_frame : null;
+  const peerPlate = activeProfile && isDecorKey(activeProfile.nameplate) ? activeProfile.nameplate : null;
+  useEffect(() => {
+    if (!peerFrame && !peerPlate) return undefined;
+    const t = setTimeout(() => { if (!dataSaverOn()) preloadDecorSet(peerFrame, peerPlate, 1); }, 1200);
+    return () => clearTimeout(t);
+  }, [peerFrame, peerPlate]);
   const [freeSetsAsk, setFreeSetsAsk] = useState(false);
   const freeSetsNow = walletNow && walletNow.ready ? walletNow.freeSets || 0 : 0;
   useEffect(() => {
@@ -33844,7 +34102,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       const id = `${pendingReward.kind}:${pendingReward.reward_key}`;
       const timer = setTimeout(() => markReady(id), 6000);
       const key = pendingReward.reward_key;
-      Promise.all([preloadDecor(DECOR_SPRITE), preloadDecor(decorSrc(key, pendingReward.kind === 'frame' ? 'frame' : 'plate'))]).then(() => { clearTimeout(timer); markReady(id); });
+      preloadDecorSet(pendingReward.kind === 'frame' || pendingPair ? key : null, pendingReward.kind === 'nameplate' || pendingPair ? key : null).then(() => { clearTimeout(timer); markReady(id); });
     }
     if (pendingReward && pendingReward.kind === 'charm') {
       const id = `charm:${pendingReward.reward_key}`;
@@ -35560,11 +35818,11 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           <HeaderIconButton label="Notifications" onClick={() => setNotifsOpen(true)} badge={followRequestCount + notifUnseen}><Bell /></HeaderIconButton>
           <HeaderIconButton label="New chat" onClick={() => { playUiSound('tap'); setShowNewChat(true); }}><Edit3 /></HeaderIconButton>
         </>} />
-        <div style={{ padding: '2px 20px 10px', flexShrink: 0 }}>
+        <div style={{ padding: `2px ${lk(20)}px ${lk(10)}px`, flexShrink: 0 }}>
           <div style={{ position: 'relative' }}>
-            <Search size={18} color={theme.muted} style={{ position: 'absolute', left: 12, top: 11 }} />
+            <Search size={18} color={theme.muted} style={{ position: 'absolute', left: 12, top: (lk(40) - 18) / 2 }} />
             <input ref={searchInputRef} value={search} onChange={(e) => doSearch(e.target.value)} placeholder="Search" aria-label="Search chats and people" autoCapitalize="none"
-              style={{ ...inputStyle(theme), height: 40, padding: '0 36px 0 38px', fontSize: 16, borderRadius: 12, border: 'none', background: theme.soft }} />
+              style={{ ...inputStyle(theme), height: lk(40), padding: '0 36px 0 38px', fontSize: LIST_K < 1 ? 15 : 16, borderRadius: 12, border: 'none', background: theme.soft }} />
             {searching ? <div style={{ position: 'absolute', right: 12, top: 10 }}><Spinner size={13} color={theme.muted} /></div>
               : search ? <div role="button" aria-label="Clear search" onClick={() => { setSearch(''); setResults([]); }} style={{ position: 'absolute', right: 6, top: 4, width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: theme.muted }}><X size={16} /></div> : null}
           </div>
@@ -35630,7 +35888,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           );
         })() : (
           <>
-            <div style={{ display: 'flex', gap: 8, padding: '0 20px 8px', flexShrink: 0, overflowX: 'auto', scrollbarWidth: 'none' }}>
+            <div style={{ display: 'flex', gap: lk(8), padding: `0 ${lk(20)}px ${lk(8)}px`, flexShrink: 0, overflowX: 'auto', scrollbarWidth: 'none' }}>
               {(() => {
                 const liveGroups = groups.filter((g) => !g.archived);
                 const unreadDms = primaryConversations.filter((c) => isUnread(c) && !vaultKeys.has(chatPrefKey('dm', c.otherProfile.id))).length;
@@ -35652,8 +35910,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                       onPointerDown={() => { const h = chipHoldRef.current; clearTimeout(h.t); h.fired = false; if (f.folder || f.k !== 'all') h.t = setTimeout(() => { h.fired = true; hapticTap(); setFoldersOpen(true); }, 520); }}
                       onPointerUp={() => clearTimeout(chipHoldRef.current.t)} onPointerLeave={() => clearTimeout(chipHoldRef.current.t)} onPointerCancel={() => clearTimeout(chipHoldRef.current.t)}
                       onContextMenu={(e) => { e.preventDefault(); clearTimeout(chipHoldRef.current.t); setFoldersOpen(true); }} className="zchat-press" style={{
-                      display: 'flex', alignItems: 'center', gap: 6, height: 32, boxSizing: 'border-box',
-                      padding: '0 13px', borderRadius: 16, fontSize: 13.5, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
+                      display: 'flex', alignItems: 'center', gap: 6, height: lk(32), boxSizing: 'border-box',
+                      padding: `0 ${lk(13)}px`, borderRadius: 16, fontSize: lf(13.5), fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
                       background: on ? theme.coral : theme.soft, color: on ? '#FFFFFF' : theme.ink2, transition: 'background 160ms, color 160ms',
                     }}>
                       {f.l}
@@ -35742,26 +36000,26 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                       onPointerDown={(e) => startRowPress(e, { kind: 'group', group: g })} onPointerMove={moveRowPress} onPointerUp={endRowPress} onPointerLeave={endRowPress} onPointerCancel={endRowPress}
                       onContextMenu={(e) => { e.preventDefault(); endRowPress(); setRowSheet({ kind: 'group', group: g }); }}
                       style={{
-                      display: 'flex', alignItems: 'center', gap: 14, padding: '9px 20px', cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', gap: lk(14), padding: `${lk(9)}px ${lk(20)}px`, cursor: 'pointer',
                       background: isActive ? theme.rowBg : 'transparent', position: 'relative',
                     }}>
-                      <GroupAvatar avatar={g.avatar} name={g.name} size={56} />
+                      <GroupAvatar avatar={g.avatar} name={g.name} size={lk(56)} />
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                          <span style={{ fontWeight: g.unread ? 700 : 600, fontSize: 16, letterSpacing: '-0.01em', color: theme.ink, display: 'flex', alignItems: 'center', gap: 4, minWidth: 0, flex: '1 1 auto', marginRight: 8 }}>
+                          <span style={{ fontWeight: g.unread ? 700 : 600, fontSize: lf(16), letterSpacing: '-0.01em', color: theme.ink, display: 'flex', alignItems: 'center', gap: 4, minWidth: 0, flex: '1 1 auto', marginRight: 8 }}>
                             {g.pinned && <Pin_ size={13} color={theme.coral} />}<span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.name}</span>
                           </span>
                         </div>
                         {(draftMap[g.id] || '').trim() && !isActive ? (
-                          <div style={{ fontSize: 14.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><span style={{ color: theme.danger, fontWeight: 600 }}>Draft: </span>{draftMap[g.id].trim()}</div>
+                          <div style={{ fontSize: lf(14.5), color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><span style={{ color: theme.danger, fontWeight: 600 }}>Draft: </span>{draftMap[g.id].trim()}</div>
                         ) : (
                           hidePreviews && g.preview
-                            ? <PreviewLine preview={{ kind: 'text', text: g.unread ? 'New messages' : 'Messages hidden' }} color={g.unread ? theme.ink : theme.muted} weight={g.unread ? 600 : 400} size={14.5} />
-                            : <PreviewLine preview={g.preview || { kind: 'text', text: 'No messages yet' }} prefix={g.previewPrefix} color={g.unread ? theme.ink : theme.muted} weight={g.unread ? 600 : 400} size={14.5} />
+                            ? <PreviewLine preview={{ kind: 'text', text: g.unread ? 'New messages' : 'Messages hidden' }} color={g.unread ? theme.ink : theme.muted} weight={g.unread ? 600 : 400} size={lf(14.5)} />
+                            : <PreviewLine preview={g.preview || { kind: 'text', text: 'No messages yet' }} prefix={g.previewPrefix} color={g.unread ? theme.ink : theme.muted} weight={g.unread ? 600 : 400} size={lf(14.5)} />
                         )}
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flexShrink: 0, alignSelf: 'stretch', justifyContent: 'center' }}>
-                        {g.last_message_at && <span style={{ fontSize: 12.5, color: g.unread && !isActiveUntil(g.mutedUntil) ? theme.coral : theme.muted, fontWeight: g.unread ? 600 : 400 }}>{formatListTime(g.last_message_at)}</span>}
+                        {g.last_message_at && <span style={{ fontSize: lf(12.5), color: g.unread && !isActiveUntil(g.mutedUntil) ? theme.coral : theme.muted, fontWeight: g.unread ? 600 : 400 }}>{formatListTime(g.last_message_at)}</span>}
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, minHeight: 20 }}>
                       {isActiveUntil(g.mutedUntil) && <BellOff size={14} color={theme.muted} style={{ flexShrink: 0 }} />}
                       {g.unread > 0 && <div style={{ minWidth: 20, height: 20, padding: '0 6px', boxSizing: 'border-box', borderRadius: 10, background: isActiveUntil(g.mutedUntil) ? theme.muted : theme.coral, color: '#FFFFFF', fontSize: 11.5, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{g.unread > 99 ? '99+' : g.unread}</div>}
@@ -35806,17 +36064,17 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                     onPointerDown={(e) => startRowPress(e, { kind: 'dm', conv: c })} onPointerMove={moveRowPress} onPointerUp={endRowPress} onPointerLeave={endRowPress} onPointerCancel={endRowPress}
                     onContextMenu={(e) => { e.preventDefault(); endRowPress(); setRowSheet({ kind: 'dm', conv: c }); }}
                     style={{
-                    display: 'flex', alignItems: 'center', gap: 14, padding: '9px 20px', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', gap: lk(14), padding: `${lk(9)}px ${lk(20)}px`, cursor: 'pointer',
                     background: isActive ? theme.rowBg : 'transparent', position: 'relative',
                   }}>
                     <div onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); setAvatarPeek(c); }} style={{ position: 'relative', flexShrink: 0, cursor: 'pointer' }}>
                       {storyRingFor(c.otherProfile.id) !== 'none'
-                        ? <StoryAvatar profile={c.otherProfile} size={62} ring={storyRingFor(c.otherProfile.id)} close={storyCloseFor(c.otherProfile.id)} />
-                        : <Avatar emoji={c.otherProfile.avatar} name={c.otherProfile.name} online={isUserOnline(c.otherProfile) && !c.otherProfile.hide_activity} size={56} />}
+                        ? <StoryAvatar profile={c.otherProfile} size={lk(62)} ring={storyRingFor(c.otherProfile.id)} close={storyCloseFor(c.otherProfile.id)} />
+                        : <Avatar emoji={c.otherProfile.avatar} name={c.otherProfile.name} online={isUserOnline(c.otherProfile) && !c.otherProfile.hide_activity} size={lk(56)} />}
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                        <span style={{ fontWeight: unread ? 700 : 600, fontSize: 16, letterSpacing: '-0.01em', color: theme.ink, display: 'flex', alignItems: 'center', gap: 4, minWidth: 0, flex: '1 1 auto', marginRight: 8 }}>
+                        <span style={{ fontWeight: unread ? 700 : 600, fontSize: lf(16), letterSpacing: '-0.01em', color: theme.ink, display: 'flex', alignItems: 'center', gap: 4, minWidth: 0, flex: '1 1 auto', marginRight: 8 }}>
                           {isPinnedByMe(c) && <Pin_ size={13} color={theme.coral} />}<NameBadge name={c.otherProfile.name} verified={c.otherProfile.verified} custom={c.otherProfile.custom_badge} size={13} />
                           {(() => { const st = activeStatusOf(c.otherProfile); return st && st.e ? <span aria-label={statusLabel(st)} style={{ fontSize: 12, flexShrink: 0 }}>{st.e}</span> : null; })()}
                           {bdayIds.has(c.otherProfile.id) && <CakeIcon size={13} style={{ flexShrink: 0 }} />}
@@ -35826,19 +36084,19 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                         {(draftMap[c.otherProfile.id] || '').trim() && !isActive ? (
-                          <div style={{ fontSize: 14.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><span style={{ color: theme.danger, fontWeight: 600 }}>Draft: </span>{draftMap[c.otherProfile.id].trim()}</div>
+                          <div style={{ fontSize: lf(14.5), color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><span style={{ color: theme.danger, fontWeight: 600 }}>Draft: </span>{draftMap[c.otherProfile.id].trim()}</div>
                         ) : (
                           <>
                             {c.lastFromMe && c.preview && c.preview.kind !== 'deleted' && c.preview.kind !== 'system' && <StatusTicks status={c.lastMineRead && me.read_receipts !== false && c.otherProfile.read_receipts !== false ? 'read' : c.lastMineDelivered ? 'delivered' : 'sent'} />}
                             {hidePreviews && c.preview && c.preview.text
-                              ? <PreviewLine preview={{ kind: 'text', text: unread ? 'New message' : 'Message hidden' }} color={unread ? theme.ink : theme.muted} weight={unread ? 600 : 400} size={14.5} />
-                              : <PreviewLine preview={c.preview && c.preview.text ? c.preview : { kind: 'text', text: 'Say hi \u{1F44B}' }} color={unread ? theme.ink : theme.muted} weight={unread ? 600 : 400} size={14.5} />}
+                              ? <PreviewLine preview={{ kind: 'text', text: unread ? 'New message' : 'Message hidden' }} color={unread ? theme.ink : theme.muted} weight={unread ? 600 : 400} size={lf(14.5)} />
+                              : <PreviewLine preview={c.preview && c.preview.text ? c.preview : { kind: 'text', text: 'Say hi \u{1F44B}' }} color={unread ? theme.ink : theme.muted} weight={unread ? 600 : 400} size={lf(14.5)} />}
                           </>
                         )}
                       </div>
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flexShrink: 0, alignSelf: 'stretch', justifyContent: 'center' }}>
-                      {(c.sortTime || c.last_message_at) && <span style={{ fontSize: 12.5, color: unread && !isConvMutedForMe(c) ? theme.coral : theme.muted, fontWeight: unread ? 600 : 400 }}>{formatListTime(c.sortTime || c.last_message_at)}</span>}
+                      {(c.sortTime || c.last_message_at) && <span style={{ fontSize: lf(12.5), color: unread && !isConvMutedForMe(c) ? theme.coral : theme.muted, fontWeight: unread ? 600 : 400 }}>{formatListTime(c.sortTime || c.last_message_at)}</span>}
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, minHeight: 20 }}>
                       {isConvMutedForMe(c) && <BellOff size={14} color={theme.muted} style={{ flexShrink: 0 }} />}
                     {unread && (unreadCounts[c.otherProfile.id] > 0
@@ -35887,7 +36145,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             onGroupCall={(g, kind) => startGroupCall(g, kind)} onOpenGroup={(g) => openGroup(g)} onCreateLink={createCallLink} onOpenLink={(l) => setCallLinkSheet(l)} />
         )}
         {homeTab === 'me' && me && (
-          <ProfilePanel key="tab-me" inline profile={{ ...me, email: session.user.email }} isSelf userId={session.user.id} isOnline={false} selfExtra={<DailyRewardCard uid={session.user.id} onOpenWallet={() => setWalletOpen(true)} />}
+          <PageGuard key="tab-me" name="me" inline><ProfilePanel inline profile={{ ...me, email: session.user.email }} isSelf userId={session.user.id} isOnline={false} selfExtra={<DailyRewardCard uid={session.user.id} onOpenWallet={() => setWalletOpen(true)} />}
             onClose={() => {}} onReport={handleReport} onSaved={(updated) => setMe((prev) => ({ ...prev, ...updated, email: prev.email }))}
             onOpenSettings={() => setShowSettings(true)} onOpenProfile={(pr) => setProfileOf(pr)} onMessage={(pr) => openChat(pr, null)}
             isZAdmin={isZAdmin} iFollowIds={iFollowIds} privacyAllowed={privacyAllowed}
@@ -35895,7 +36153,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             onOpenHighlight={openHighlight} meProfile={me} onOpenCollection={(k) => setCollectionOpen(isDecorKey(k) ? k : true)}
             onCreate={() => setShowCreate(true)} onMenu={() => setMeMenuOpen(true)} onDiscover={() => setShowDiscover(true)}
             onOpenAchievements={(pr) => setAchievementsFor(pr)} storyRing={storyRingFor(session.user.id)} onOpenStory={(id) => openStoriesFor(id)}
-            onEditOverride={() => setProfileOf({ ...me, email: session.user.email, __edit: true })} />
+            onEditOverride={() => setProfileOf({ ...me, email: session.user.email, __edit: true })} /></PageGuard>
         )}
         <BottomTabBar tab={homeTab} onChange={(k) => setHomeTab(k)} onCreate={() => setShowCreate(true)}
           badges={{ chats: primaryConversations.filter((c) => isUnread(c) && !vaultKeys.has(chatPrefKey('dm', c.otherProfile.id))).length + groups.filter((g) => !g.archived && g.unread > 0 && !vaultKeys.has(chatPrefKey('group', g.id))).length, moments: trayUsers.some((u) => !u.stories.every((st) => storyData.seen.has(st.id))), calls: 0, me: followRequestCount + unreadMailCount }} />
@@ -36468,7 +36726,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       </div>
 
       {profileOf && (() => { const panel = (
-        <ProfilePanel initialEdit={!!profileOf.__edit} initialShare={!!profileOf.__share} onAsk={(un) => setAskFor(un)}
+        <PageGuard name="profile" onClose={() => setProfileOf(null)}><ProfilePanel initialEdit={!!profileOf.__edit} initialShare={!!profileOf.__share} onAsk={(un) => setAskFor(un)}
           profile={profileOf} isSelf={profileOf.id === session.user.id} userId={session.user.id}
           isOnline={isUserOnline(profileOf) && !profileOf.hide_activity} onClose={() => setProfileOf(null)}
           onReport={handleReport} onSaved={(updated) => { setProfileOf({ ...updated, email: me.email }); if (updated.id === me.id) setMe((prev) => ({ ...prev, ...updated, email: prev.email })); }}
@@ -36482,7 +36740,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           onOpenHighlight={openHighlight} meProfile={me} onOpenCollection={(k) => setCollectionOpen(isDecorKey(k) ? k : true)}
           onOpenAchievements={(pr) => setAchievementsFor(pr)} onGift={(pr) => setGiftFor(pr)} onDiscover={() => setShowDiscover(true)}
           storyRing={storyRingFor(profileOf.id)} onOpenStory={(id) => openStoriesFor(id)}
-        />
+        /></PageGuard>
       ); return profileOf.__top ? <Portal><div style={{ position: 'relative', zIndex: 76 }}>{panel}</div></Portal> : panel; })()}
 
       {showSettings && (
@@ -36542,10 +36800,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             onStatus={() => setStatusOpen(true)} onHidden={openHidden} onMemories={() => setMemoriesOpen(true)} onRecap={() => setRecapOpen(true)} onAvatar={() => setAiStudio({ mode: 'avatar' })} onCreateAi={() => setAiStudio({ mode: 'image' })} onCharacters={() => setCharsOpen(true)} onChannels={() => setChannelsOpen({})} onBroadcast={() => setBroadcastOpen(true)} onMap={() => setMapOpen(true)} onVisitors={() => setVisitorsOpen(true)} />
         )}
       {nearbyHit && !achToast && !toastBusy && <NearbyToast hit={nearbyHit} onDone={() => setNearbyHit(null)} onOpen={() => { const h = nearbyHit; setNearbyHit(null); openChat(h.profile, null); }} />}
-      {walletOpen && <WalletPage uid={session.user.id} me={me} onClose={() => setWalletOpen(false)} onOpenCollection={() => setCollectionOpen(true)} />}
+      {walletOpen && <PageGuard name="coins" onClose={() => setWalletOpen(false)}><WalletPage uid={session.user.id} me={me} onClose={() => setWalletOpen(false)} onOpenCollection={() => setCollectionOpen(true)} /></PageGuard>}
       {questionsOpen && me && <QuestionsPage me={me} onClose={() => setQuestionsOpen(false)} onSaved={(patch) => setMe((m) => (m ? { ...m, ...patch } : m))} onShareStory={(file) => { setQuestionsOpen(false); setStoryComposer({ key: Date.now(), files: [file] }); }} />}
       {askFor && <AskPage username={askFor} userId={session.user.id} onClose={() => setAskFor(null)} onOwnLink={() => { setAskFor(null); setQuestionsOpen(true); }} />}
-      {giftFor && <GiftSheet uid={session.user.id} me={me} to={giftFor} onClose={() => setGiftFor(null)} onSent={(t) => { setGiftFor(null); showSnack(t); runAchievementCheck(session.user.id); }} />}
+      {giftFor && <PageGuard name="gift" onClose={() => setGiftFor(null)}><GiftSheet uid={session.user.id} me={me} to={giftFor} onClose={() => setGiftFor(null)} onSent={(t) => { setGiftFor(null); showSnack(t); runAchievementCheck(session.user.id); }} /></PageGuard>}
       {achToast && !toastBusy && <AchievementToast k={achToast} onDone={() => setAchToast(null)} onOpen={() => { setAchToast(null); setAchievementsFor(me); }} />}
       {achievementsFor && <AchievementsPage userId={achievementsFor.id} isSelf={achievementsFor.id === session.user.id} name={achievementsFor.name} onClose={() => setAchievementsFor(null)} />}
       {notifsOpen && (
@@ -37005,7 +37263,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           onClose={() => setDeepPost(null)} onOpenProfile={(p) => { setDeepPost(null); setProfileOf(p); }} />
       )}
       {!celebrateTier && me && pendingReward && rewardReady[`${pendingReward.kind}:${pendingReward.reward_key}`] && (
-        <RewardCelebration kind={pendingReward.kind} rewardKey={pendingReward.reward_key} me={me} isSet={!!pendingPair}
+        <PageGuard name="reward" onClose={() => { const list = [pendingReward, pendingPair].filter(Boolean); setMyRewards((prev) => prev.map((r) => (list.includes(r) ? { ...r, seen: true } : r))); }}><RewardCelebration kind={pendingReward.kind} rewardKey={pendingReward.reward_key} me={me} isSet={!!pendingPair}
           count={unseenRewards.length}
           onClaimAll={async () => {
             const list = unseenRewards;
@@ -37026,9 +37284,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             if (!wear) { showSnack('Added to your Collection'); return; }
             if (pendingReward.kind === 'charm') await equipReward('charm', pendingReward.reward_key);
             else await equipDecor(pendingPair ? { avatar_frame: pendingReward.reward_key, nameplate: pendingReward.reward_key } : { [pendingReward.kind === 'frame' ? 'avatar_frame' : 'nameplate']: pendingReward.reward_key });
-          }} />
+          }} /></PageGuard>
       )}
-      {freeSetsAsk && me && <FreeSetsSheet me={me} count={Math.max(1, freeSetsNow)} onPick={() => { setFreeSetsAsk(false); setTimeout(() => setCollectionOpen(true), 60); }} onClose={() => setFreeSetsAsk(false)} />}
+      {freeSetsAsk && me && <PageGuard name="free sets" onClose={() => setFreeSetsAsk(false)}><FreeSetsSheet me={me} count={Math.max(1, freeSetsNow)} onPick={() => { setFreeSetsAsk(false); setTimeout(() => setCollectionOpen(true), 60); }} onClose={() => setFreeSetsAsk(false)} /></PageGuard>}
       {callLinkSheet && <CallLinkSheet link={callLinkSheet} onClose={() => setCallLinkSheet(null)} onSnack={showSnack} onJoin={() => { const l = callLinkSheet; setCallLinkSheet(null); joinLinkCall(l); }} />}
       {callJoin && <CallJoinSheet link={callJoin.link} host={callJoin.host} onClose={() => setCallJoin(null)} onJoin={(opts) => { const l = callJoin.link; setCallJoin(null); joinLinkCall(l, opts); }} />}
       {clipsOpen && me && (
@@ -37040,7 +37298,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           onOpenProfile={(p) => { setFeedOpen(false); setProfileOf(sanitizeAvatar(p, session.user.id)); }} />
       )}
       {collectionOpen && me && (
-        <CollectionPanel me={me} rewards={myRewards} isAdmin={isZAdmin} startSet={typeof collectionOpen === 'string' ? collectionOpen : null} onClose={() => setCollectionOpen(false)} onEquip={equipReward} onWear={equipDecor} onOpenWallet={() => setWalletOpen(true)} onRewardsChanged={async () => { const { data } = await supabase.from('user_rewards').select('*').eq('user_id', session.user.id).order('granted_at', { ascending: true }); if (data) setMyRewards(data); }} />
+        <PageGuard name="collection" onClose={() => setCollectionOpen(false)}><CollectionPanel me={me} rewards={myRewards} isAdmin={isZAdmin} startSet={typeof collectionOpen === 'string' ? collectionOpen : null} onClose={() => setCollectionOpen(false)} onEquip={equipReward} onWear={equipDecor} onOpenWallet={() => setWalletOpen(true)} onRewardsChanged={async () => { const { data } = await supabase.from('user_rewards').select('*').eq('user_id', session.user.id).order('granted_at', { ascending: true }); if (data) setMyRewards(data); }} /></PageGuard>
       )}
       {celebrateTier && (
         <VerifiedCelebration tier={celebrateTier} name={me.name}
@@ -37289,7 +37547,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       {msgSearchOpen != null && (
         <SearchMessagesPage myId={session.user.id} groups={groups} hiddenIds={getHiddenMsgIds()} initialQuery={msgSearchOpen} onClose={() => setMsgSearchOpen(null)} onOpen={openSearchHit} />
       )}
-      {showWhatsNew && <WhatsNewSheet me={me} onClose={() => setShowWhatsNew(false)} onTry={(g) => { if (g === 'sets') setCollectionOpen(true); else if (g === 'map') setMapOpen(true); else if (g === 'song' && me) setProfileOf({ ...me, __song: true }); else if (g === 'ai') setAiStudio({ mode: 'image' }); else if (g === 'chars') setCharsOpen(true); else if (g === 'coins') setWalletOpen(true); else if (g === 'folders') { setHomeTab('chats'); setFoldersOpen(true); } }} />}
+      {showWhatsNew && <PageGuard name="whats new" onClose={() => setShowWhatsNew(false)}><WhatsNewSheet me={me} onClose={() => setShowWhatsNew(false)} onTry={(g) => { if (g === 'sets') setCollectionOpen(true); else if (g === 'map') setMapOpen(true); else if (g === 'song' && me) setProfileOf({ ...me, __song: true }); else if (g === 'ai') setAiStudio({ mode: 'image' }); else if (g === 'chars') setCharsOpen(true); else if (g === 'coins') setWalletOpen(true); else if (g === 'folders') { setHomeTab('chats'); setFoldersOpen(true); } }} /></PageGuard>}
       {showGames && (
         <GamesPage key={showGames.at || 'games'} initialGame={showGames.game || null} onClose={() => setShowGames(false)}
           friends={gameFriends}
@@ -44792,19 +45050,19 @@ function ActiveStrip({ items }) {
   if (!items || !items.length) return null;
   const anyNote = items.some((it) => it.note != null);
   return (
-    <div style={{ display: 'flex', gap: 14, overflowX: 'auto', padding: '4px 20px 10px', flexShrink: 0, scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
+    <div style={{ display: 'flex', gap: lk(14), overflowX: 'auto', padding: `4px ${lk(20)}px ${lk(10)}px`, flexShrink: 0, scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
       {items.map((it) => (
-        <div key={it.key} role="button" aria-label={it.label} onClick={() => { if (lp.current.fired === it.key) { lp.current.fired = false; return; } it.onClick(); }} {...storyLongPress(lp.current, it.key, it.onLong || null)} className="zchat-press" style={{ width: 70, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, cursor: 'pointer', WebkitTouchCallout: 'none', userSelect: 'none' }}>
+        <div key={it.key} role="button" aria-label={it.label} onClick={() => { if (lp.current.fired === it.key) { lp.current.fired = false; return; } it.onClick(); }} {...storyLongPress(lp.current, it.key, it.onLong || null)} className="zchat-press" style={{ width: lk(70), flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, cursor: 'pointer', WebkitTouchCallout: 'none', userSelect: 'none' }}>
           {anyNote && (
-            <div style={{ height: 36, width: 84, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', marginBottom: -4, position: 'relative', zIndex: 8 }}>
+            <div style={{ height: lk(36), width: lk(84), display: 'flex', alignItems: 'flex-end', justifyContent: 'center', marginBottom: -4, position: 'relative', zIndex: 8 }}>
               {it.note != null && <NoteBubble text={it.note || '+ Note'} muted={!it.note} song={it.note ? it.noteSong : null} label={it.noteLabel || 'Note'} onClick={it.onNote} />}
             </div>
           )}
           <div style={{ position: 'relative' }}>
-            <StoryAvatar profile={it.profile} size={68} ring={it.ring || 'none'} badgePlus={!!it.plus} segments={it.segments || null} uploading={!!it.uploading} dim={!!it.muted} close={!!it.close} />
+            <StoryAvatar profile={it.profile} size={lk(68)} ring={it.ring || 'none'} badgePlus={!!it.plus} segments={it.segments || null} uploading={!!it.uploading} dim={!!it.muted} close={!!it.close} />
             {it.online && <span style={{ position: 'absolute', right: 3, bottom: 3, width: 15, height: 15, borderRadius: '50%', background: '#22C55E', border: `2.5px solid ${theme.bgGradient}`, zIndex: 7 }} />}
           </div>
-          <div style={{ fontSize: 12, color: it.ring === 'unseen' ? theme.ink : theme.ink2, fontWeight: it.ring === 'unseen' ? 600 : 500, maxWidth: 70, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.uploading ? 'Sharing' : it.name}</div>
+          <div style={{ fontSize: lf(12), color: it.ring === 'unseen' ? theme.ink : theme.ink2, fontWeight: it.ring === 'unseen' ? 600 : 500, maxWidth: lk(70), whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.uploading ? 'Sharing' : it.name}</div>
         </div>
       ))}
     </div>
@@ -52240,7 +52498,7 @@ function AdminUserPanel({ person, myId, onClose, onChanged, onOpenProfile }) {
               const own = ownedKey(giftKind, key);
               const worn = equippedKey === key;
               const preview = giftKind === 'frame'
-                ? <div style={{ position: 'relative', zIndex: 0, isolation: 'isolate', flexShrink: 0 }}><DecorFrameBadge setKey={key} size={86} photo={profile.avatar} name={profile.name} /></div>
+                ? <div style={{ position: 'relative', zIndex: 0, isolation: 'isolate', flexShrink: 0 }}><DecorFrameBadge setKey={key} size={86} photo={profile.avatar} name={profile.name} lazy /></div>
                 : giftKind === 'charm'
                   ? <div style={{ flex: 1, minWidth: 0, fontWeight: 800, fontSize: 15, color: theme.ink, display: 'flex', alignItems: 'center' }}><NameBadge name={profile.name} verified={profile.verified} custom={key} size={30} /></div>
                   : null;
@@ -52254,7 +52512,7 @@ function AdminUserPanel({ person, myId, onClose, onChanged, onOpenProfile }) {
                   )}
                   {giftKind === 'nameplate' && (
                     <div style={{ display: 'flex', justifyContent: 'center', overflow: 'hidden', borderRadius: 12, marginBottom: 8, background: '#101119' }}>
-                      <DecorPlateOnly setKey={key} width={260} name={profile.name} username={profile.username} verified={profile.verified} custom={profile.custom_badge} />
+                      <DecorPlateOnly setKey={key} width={260} name={profile.name} username={profile.username} verified={profile.verified} custom={profile.custom_badge} lazy />
                     </div>
                   )}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -54080,7 +54338,7 @@ function PublicStorePage() {
             <div key={s.key} className="zs-card" role="button" aria-label={`${s.name} set`} onClick={() => pick(s.key)} style={{ position: 'relative', borderRadius: 20, padding: '8px 4px 11px', cursor: 'pointer', overflow: 'hidden', display: 'flex', flexDirection: 'column', alignItems: 'center', background: `radial-gradient(120% 85% at 50% 20%, ${s.accent}30 0%, rgba(13,14,20,0) 64%), linear-gradient(180deg, #161724 0%, #0b0c12 100%)`, border: `1.5px solid ${isSel ? '#fbbf24' : 'rgba(255,255,255,0.08)'}` }}>
               {o.frame && o.plate && <div style={{ position: 'absolute', top: 8, right: 8, zIndex: 6, padding: '2px 8px', borderRadius: 8, background: 'rgba(52,211,153,0.9)', color: '#052e1c', fontSize: 10.5, fontWeight: 900 }}>Yours</div>}
               <LazyShow height={Math.round(cardW * 0.82)}>
-                <DecorHero frameKey={s.key} plateKey={s.key} width={cardW} photo={me ? me.avatar : ''} name={name} live={false} compact gapColor="#12131b" />
+                <DecorHero frameKey={s.key} plateKey={s.key} width={cardW} photo={me ? me.avatar : ''} name={name} lazy compact gapColor="#12131b" />
               </LazyShow>
               <div style={{ fontWeight: 900, fontSize: 14, color: 'white', textAlign: 'center', marginTop: 4 }}>{s.name}</div>
             </div>
@@ -54191,16 +54449,89 @@ function PublicPage({ path }) {
   return <PublicPrivacyPage />;
 }
 
+function crashRecord(err, info, where) {
+  const msg = String((err && (err.message || err)) || 'Unknown error').slice(0, 400);
+  const stack = String((info && info.componentStack) || '').split('\n').map((s) => s.trim().replace(/^at\s+/, '').split(' (')[0]).filter(Boolean).slice(0, 6).join(' < ');
+  return { at: new Date().toISOString(), v: APP_VERSION, where: where || 'app', msg, stack };
+}
+function rememberCrash(err, info, where) {
+  const rec = crashRecord(err, info, where);
+  try { localStorage.setItem('zchat-last-crash', JSON.stringify(rec)); } catch {}
+  try { console.error('ZChat caught a render error:', rec.where, rec.msg, rec.stack); } catch {}
+  return rec;
+}
+function crashText(rec) {
+  if (!rec) return '';
+  return `ZChat ${rec.v}, ${rec.where}: ${rec.msg}${rec.stack ? `. In ${rec.stack}` : ''}`.replace(/[-_]+/g, ' ');
+}
+function CrashDetails({ rec, dark = true }) {
+  const [open, setOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  if (!rec) return null;
+  const text = crashText(rec);
+  const muted = dark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.5)';
+  return (
+    <div style={{ width: '100%', maxWidth: 320, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+      <div role="button" onClick={() => setOpen((v) => !v)} style={{ fontSize: 12.5, fontWeight: 700, color: muted, cursor: 'pointer', padding: 6 }}>{open ? 'Hide details' : 'Show details'}</div>
+      {open && (
+        <>
+          <div style={{ width: '100%', boxSizing: 'border-box', fontSize: 11.5, lineHeight: 1.5, color: muted, textAlign: 'left', padding: '10px 12px', borderRadius: 12, background: dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)', maxHeight: 150, overflowY: 'auto', wordBreak: 'break-word', userSelect: 'text', WebkitUserSelect: 'text' }}>{text}</div>
+          <div role="button" onClick={() => { try { navigator.clipboard.writeText(text).then(() => setCopied(true), () => {}); } catch {} }} style={{ fontSize: 12.5, fontWeight: 800, color: dark ? '#FFFFFF' : '#111114', cursor: 'pointer', padding: '6px 12px', borderRadius: 10, background: dark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.07)' }}>{copied ? 'Copied' : 'Copy details'}</div>
+        </>
+      )}
+    </div>
+  );
+}
+function PageGuardCard({ rec, inline, onRetry, onClose }) {
+  const { theme } = useTheme();
+  const card = (
+    <div style={{ width: '100%', maxWidth: 340, boxSizing: 'border-box', borderRadius: 22, background: theme.panelBg, border: `1px solid ${theme.border}`, padding: '22px 18px 14px', textAlign: 'center', color: theme.ink, fontFamily: FONT, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+      <div style={{ fontSize: 17, fontWeight: 800 }}>This page hit a snag</div>
+      <div style={{ fontSize: 13.5, color: theme.muted, lineHeight: 1.5, marginTop: 6 }}>Nothing was lost. Try again, or close it and carry on.</div>
+      <div style={{ display: 'flex', gap: 8, width: '100%', marginTop: 16 }}>
+        {onClose && <button onClick={onClose} style={{ flex: 1, height: 44, borderRadius: 13, border: 'none', background: theme.soft, color: theme.ink, fontWeight: 800, fontSize: 14.5, fontFamily: FONT, cursor: 'pointer' }}>Close</button>}
+        <button onClick={onRetry} style={{ flex: 1, height: 44, borderRadius: 13, border: 'none', background: theme.coral, color: '#FFFFFF', fontWeight: 800, fontSize: 14.5, fontFamily: FONT, cursor: 'pointer' }}>Try again</button>
+      </div>
+      <div style={{ marginTop: 6, width: '100%', display: 'flex', justifyContent: 'center' }}><CrashDetails rec={rec} dark={theme.dark} /></div>
+    </div>
+  );
+  if (inline) return <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>{card}</div>;
+  return (
+    <Portal>
+      <div className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 3000, background: 'rgba(5,6,12,0.66)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>{card}</div>
+    </Portal>
+  );
+}
+class PageGuard extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { rec: null };
+  }
+  static getDerivedStateFromError(err) {
+    return { rec: crashRecord(err, null, null) };
+  }
+  componentDidCatch(err, info) {
+    const rec = rememberCrash(err, info, this.props.name);
+    this.setState({ rec });
+  }
+  render() {
+    if (!this.state.rec) return this.props.children;
+    const close = this.props.onClose ? () => { this.setState({ rec: null }); this.props.onClose(); } : null;
+    return <PageGuardCard rec={this.state.rec} inline={!!this.props.inline} onClose={close} onRetry={() => this.setState({ rec: null })} />;
+  }
+}
+
 class ZChatErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
-    this.state = { crashed: false };
+    this.state = { crashed: false, rec: null };
   }
-  static getDerivedStateFromError() {
-    return { crashed: true };
+  static getDerivedStateFromError(err) {
+    return { crashed: true, rec: crashRecord(err, null, null) };
   }
-  componentDidCatch(error) {
-    try { console.error('ZChat caught a render error:', error); } catch {}
+  componentDidCatch(error, info) {
+    const rec = rememberCrash(error, info, 'app');
+    this.setState({ rec });
   }
   render() {
     if (!this.state.crashed) return this.props.children;
@@ -54213,6 +54544,7 @@ class ZChatErrorBoundary extends React.Component {
         <div style={{ fontSize: 18, fontWeight: 900 }}>Something went wrong</div>
         <div style={{ fontSize: 13.5, color: 'rgba(255,255,255,0.6)', maxWidth: 280, lineHeight: 1.5 }}>ZChat hit a snag and needed to stop. Your messages and account are safe. Tap below to reopen.</div>
         <button onClick={() => { try { window.location.reload(); } catch {} }} style={{ padding: '13px 26px', borderRadius: 14, border: 'none', background: 'linear-gradient(135deg, #f59e0b, #ea580c)', color: '#1a0f02', fontWeight: 900, fontSize: 14.5, fontFamily: FONT, cursor: 'pointer' }}>Reopen ZChat</button>
+        <CrashDetails rec={this.state.rec} />
       </div>
     );
   }
