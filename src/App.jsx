@@ -535,6 +535,32 @@ function useNavState(initial) {
   };
   return [value, set];
 }
+function Freeze({ frozen, children }) {
+  const last = useRef(children);
+  if (!frozen) last.current = children;
+  return last.current;
+}
+let rtSeq = 0;
+function rtName(name) {
+  rtSeq += 1;
+  return `${name}-${rtSeq.toString(36)}${Math.random().toString(36).slice(2, 7)}`;
+}
+function rtStale(topic) {
+  const full = `realtime:${topic}`;
+  try { return (supabase.getChannels() || []).filter((c) => c && c.topic === full); } catch { return []; }
+}
+async function rtReady(topic) {
+  const old = rtStale(topic);
+  if (!old.length) return;
+  await Promise.race([
+    Promise.all(old.map((c) => Promise.resolve().then(() => supabase.removeChannel(c)).catch(() => null))),
+    new Promise((r) => setTimeout(r, 1200)),
+  ]);
+  const left = rtStale(topic);
+  if (!left.length) return;
+  left.forEach((c) => { try { c.teardown(); } catch {} });
+  try { const rt = supabase.realtime; if (rt && Array.isArray(rt.channels)) rt.channels = rt.channels.filter((c) => !left.includes(c)); } catch {}
+}
 function useBackClose(active, onClose) {
   const ref = useRef(onClose);
   ref.current = onClose;
@@ -4891,38 +4917,86 @@ function ListModal({ title, subtitle, right, onClose, children, zIndex = 60 }) {
   );
 }
 
-function FollowListModal({ userId, viewerId, mode, onClose, onOpenProfile }) {
-  const { theme } = useTheme();
-  const [list, setList] = useState(null);
-  const [iFollow, setIFollow] = useState(new Set());
-  const [followsMe, setFollowsMe] = useState(new Set());
-
-  const load = async () => {
+const followListCache = new Map();
+const followListJobs = new Map();
+function fetchFollowList(userId, viewerId, mode) {
+  const key = `${viewerId}:${userId}:${mode}`;
+  if (followListJobs.has(key)) return followListJobs.get(key);
+  const job = (async () => {
     let ids = [];
     if (mode === 'mutual') {
-      const { data: theirs } = await supabase.from('follows').select('follower_id').eq('following_id', userId).eq('status', 'accepted');
-      const { data: mine } = await supabase.from('follows').select('following_id').eq('follower_id', viewerId).eq('status', 'accepted');
+      const [{ data: theirs }, { data: mine }] = await Promise.all([
+        supabase.from('follows').select('follower_id').eq('following_id', userId).eq('status', 'accepted'),
+        supabase.from('follows').select('following_id').eq('follower_id', viewerId).eq('status', 'accepted'),
+      ]);
       const mineSet = new Set((mine || []).map((r) => r.following_id));
       ids = (theirs || []).map((r) => r.follower_id).filter((id) => mineSet.has(id));
     } else {
       const col = mode === 'followers' ? 'following_id' : 'follower_id';
       const otherCol = mode === 'followers' ? 'follower_id' : 'following_id';
-      const { data } = await supabase.from('follows').select('*').eq(col, userId).eq('status', 'accepted');
+      const { data, error } = await supabase.from('follows').select('*').eq(col, userId).eq('status', 'accepted');
+      if (error) return followListCache.get(key) || null;
       ids = (data || []).map((r) => r[otherCol]);
     }
-    if (!ids.length) { setList([]); return; }
-    const { data: profs } = await supabase.from('profiles').select('*').in('id', ids);
-    setList(sanitizeAvatarList(profs, viewerId));
-    const { data: mine } = await supabase.from('follows').select('following_id').eq('follower_id', viewerId).eq('status', 'accepted').in('following_id', ids);
-    setIFollow(new Set((mine || []).map((r) => r.following_id)));
-    const { data: theirs } = await supabase.from('follows').select('follower_id').eq('following_id', viewerId).eq('status', 'accepted').in('follower_id', ids);
-    setFollowsMe(new Set((theirs || []).map((r) => r.follower_id)));
-  };
+    if (!ids.length) {
+      const empty = { list: [], iFollow: new Set(), followsMe: new Set(), at: Date.now() };
+      followListCache.set(key, empty);
+      return empty;
+    }
+    const [{ data: profs, error }, { data: mine }, { data: theirs }] = await Promise.all([
+      supabase.from('profiles').select('*').in('id', ids),
+      supabase.from('follows').select('following_id').eq('follower_id', viewerId).eq('status', 'accepted').in('following_id', ids),
+      supabase.from('follows').select('follower_id').eq('following_id', viewerId).eq('status', 'accepted').in('follower_id', ids),
+    ]);
+    if (error) return followListCache.get(key) || null;
+    const out = {
+      list: sanitizeAvatarList(profs || [], viewerId),
+      iFollow: new Set((mine || []).map((r) => r.following_id)),
+      followsMe: new Set((theirs || []).map((r) => r.follower_id)),
+      at: Date.now(),
+    };
+    followListCache.set(key, out);
+    if (followListCache.size > 40) followListCache.delete(followListCache.keys().next().value);
+    return out;
+  })().catch(() => followListCache.get(key) || null).finally(() => { followListJobs.delete(key); });
+  followListJobs.set(key, job);
+  return job;
+}
+function prefetchFollowLists(userId, viewerId) {
+  ['followers', 'following'].forEach((mode) => {
+    const hit = followListCache.get(`${viewerId}:${userId}:${mode}`);
+    if (!hit || Date.now() - hit.at > 60000) fetchFollowList(userId, viewerId, mode);
+  });
+}
 
-  useEffect(() => { load(); }, [userId, mode]);
+function FollowListModal({ userId, viewerId, mode, onClose, onOpenProfile }) {
+  const { theme } = useTheme();
+  const cacheKey = `${viewerId}:${userId}:${mode}`;
+  const first = followListCache.get(cacheKey) || null;
+  const [list, setList] = useState(first ? first.list : null);
+  const [iFollow, setIFollow] = useState(first ? first.iFollow : new Set());
+  const [followsMe, setFollowsMe] = useState(first ? first.followsMe : new Set());
+
+  useEffect(() => {
+    let alive = true;
+    fetchFollowList(userId, viewerId, mode).then((res) => {
+      if (!alive) return;
+      if (!res) { setList((prev) => prev || []); return; }
+      setIFollow(res.iFollow);
+      setFollowsMe(res.followsMe);
+      setList(res.list);
+    });
+    return () => { alive = false; };
+  }, [userId, mode]);
 
   const handleChanged = (theirId, nowFollowing) => {
-    setIFollow((prev) => { const n = new Set(prev); if (nowFollowing) n.add(theirId); else n.delete(theirId); return n; });
+    setIFollow((prev) => {
+      const n = new Set(prev);
+      if (nowFollowing) n.add(theirId); else n.delete(theirId);
+      const hit = followListCache.get(cacheKey);
+      if (hit) followListCache.set(cacheKey, { ...hit, iFollow: n });
+      return n;
+    });
   };
 
   return (
@@ -5920,7 +5994,7 @@ function FollowRequestsPanel({ userId, onClose, onOpenProfile }) {
   };
   useEffect(() => {
     load();
-    const channel = supabase.channel('requests-watch-' + userId)
+    const channel = supabase.channel(rtName('requests-watch-' + userId))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'follows' }, (payload) => {
         const row = payload.new || payload.old;
         if (row.following_id === userId) load();
@@ -8139,8 +8213,8 @@ function ChatSettingsPanel({ conv, myId, meAvatar, meName, isPinned, isLocked, w
   const [showNameBar, setShowNameBar] = useState(false);
   const [showNicknames, setShowNicknames] = useState(false);
   const [showReportUser, setShowReportUser] = useState(false);
-  const [followerCount, setFollowerCount] = useState(0);
-  const [followingCount, setFollowingCount] = useState(0);
+  const [followerCount, setFollowerCount] = useState(() => { const st = profileStatsCache.get(conv.otherProfile.id); return st && st.followers != null ? st.followers : null; });
+  const [followingCount, setFollowingCount] = useState(() => { const st = profileStatsCache.get(conv.otherProfile.id); return st && st.following != null ? st.following : null; });
   const [listModal, setListModal] = useState(null);
   const [note, setNote] = useState(() => contactNoteFor(conv.otherProfile.id));
   const [noteOpen, setNoteOpen] = useState(false);
@@ -8158,8 +8232,8 @@ function ChatSettingsPanel({ conv, myId, meAvatar, meName, isPinned, isLocked, w
       if (!alive) return;
       if (!nickRes.error) setNickname(nickRes.data ? nickRes.data.nickname : '');
       if (!aliasRes.error) setMyAlias(aliasRes.data ? aliasRes.data.alias : '');
-      if (!folRes.error) setFollowerCount(folRes.count || 0);
-      if (!fingRes.error) setFollowingCount(fingRes.count || 0);
+      if (!folRes.error) { setFollowerCount(folRes.count || 0); saveProfileStats(conv.otherProfile.id, { followers: folRes.count || 0 }); }
+      if (!fingRes.error) { setFollowingCount(fingRes.count || 0); saveProfileStats(conv.otherProfile.id, { following: fingRes.count || 0 }); }
     })();
     return () => { alive = false; };
   }, [conv.otherProfile.id]);
@@ -8222,11 +8296,11 @@ function ChatSettingsPanel({ conv, myId, meAvatar, meName, isPinned, isLocked, w
           )}
           <div style={{ display: 'flex', justifyContent: 'center', gap: 22, marginTop: 10 }}>
             <div role="button" aria-label="Followers" onClick={conv.otherProfile.is_bot ? undefined : () => setListModal('followers')} style={{ cursor: conv.otherProfile.is_bot ? 'default' : 'pointer' }}>
-              <span style={{ fontWeight: 700, fontSize: 14.5 }}>{conv.otherProfile.is_bot ? (BOT_FOLLOWER_BASE + (followerCount || 0)).toLocaleString('en-US') : followerCount}</span> <span style={{ fontSize: 13, color: c.dim }}>{!conv.otherProfile.is_bot && followerCount === 1 ? 'follower' : 'followers'}</span>
+              <span style={{ fontWeight: 700, fontSize: 14.5 }}>{conv.otherProfile.is_bot ? (BOT_FOLLOWER_BASE + (followerCount || 0)).toLocaleString('en-US') : (followerCount == null ? <span style={{ opacity: 0 }}>0</span> : followerCount)}</span> <span style={{ fontSize: 13, color: c.dim }}>{!conv.otherProfile.is_bot && followerCount === 1 ? 'follower' : 'followers'}</span>
             </div>
             {!conv.otherProfile.is_bot && (
               <div role="button" aria-label="Following" onClick={() => setListModal('following')} style={{ cursor: 'pointer' }}>
-                <span style={{ fontWeight: 700, fontSize: 14.5 }}>{followingCount}</span> <span style={{ fontSize: 13, color: c.dim }}>following</span>
+                <span style={{ fontWeight: 700, fontSize: 14.5 }}>{followingCount == null ? <span style={{ opacity: 0 }}>0</span> : followingCount}</span> <span style={{ fontSize: 13, color: c.dim }}>following</span>
               </div>
             )}
           </div>
@@ -10273,24 +10347,37 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
   useEffect(() => {
     let cancelled = false;
     const loadCounts = async () => {
-      const { count: followers } = await supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', profile.id).eq('status', 'accepted');
+      const [frRes, fgRes] = await Promise.all([
+        supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', profile.id).eq('status', 'accepted'),
+        supabase.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', profile.id).eq('status', 'accepted'),
+      ]);
+      const followers = frRes ? frRes.count : null;
+      const following = fgRes ? fgRes.count : null;
       if (!cancelled && followers != null) { setFollowerCount((prev) => (prev === followers ? prev : followers)); saveProfileStats(profile.id, { followers }); }
-      const { count: following } = await supabase.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', profile.id).eq('status', 'accepted');
       if (!cancelled && following != null) { setFollowingCount((prev) => (prev === following ? prev : following)); saveProfileStats(profile.id, { following }); }
+      if (!cancelled && ((followers != null && followers <= 400) || (following != null && following <= 400))) {
+        setTimeout(() => {
+          if (cancelled) return;
+          if (followers != null && followers <= 400) fetchFollowList(profile.id, userId, 'followers');
+          if (following != null && following <= 400) fetchFollowList(profile.id, userId, 'following');
+        }, 700);
+      }
       if (isSelf) return;
-      const { data } = await supabase.from('follows').select('status').eq('follower_id', userId).eq('following_id', profile.id).maybeSingle();
+      const [{ data }, { data: back }, { data: myFollowing }] = await Promise.all([
+        supabase.from('follows').select('status').eq('follower_id', userId).eq('following_id', profile.id).maybeSingle(),
+        supabase.from('follows').select('status').eq('follower_id', profile.id).eq('following_id', userId).eq('status', 'accepted').maybeSingle(),
+        supabase.from('follows').select('following_id').eq('follower_id', userId).eq('status', 'accepted'),
+      ]);
       const nextState = data ? data.status : 'none';
       if (!cancelled) { setFollowState((prev) => (prev === nextState ? prev : nextState)); saveProfileStats(profile.id, { followState: nextState }); }
-      const { data: back } = await supabase.from('follows').select('status').eq('follower_id', profile.id).eq('following_id', userId).eq('status', 'accepted').maybeSingle();
       if (!cancelled) { setTheyFollowMe(!!back); saveProfileStats(profile.id, { theyFollowMe: !!back }); }
-      const { data: myFollowing } = await supabase.from('follows').select('following_id').eq('follower_id', userId).eq('status', 'accepted');
       const ids = (myFollowing || []).map((r) => r.following_id).filter((id) => id !== profile.id).slice(0, 300);
       if (!ids.length) { if (!cancelled) { setMutualCount(0); saveProfileStats(profile.id, { mutual: 0 }); } return; }
       const { count: mutual } = await supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', profile.id).eq('status', 'accepted').in('follower_id', ids);
       if (!cancelled) { setMutualCount(mutual || 0); saveProfileStats(profile.id, { mutual: mutual || 0 }); }
     };
     loadCounts();
-    const channel = supabase.channel('profile-follows-' + profile.id)
+    const channel = supabase.channel(rtName('profile-follows-' + profile.id))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'follows' }, (payload) => {
         const row = payload.new || payload.old;
         if (row.following_id === profile.id || row.follower_id === profile.id) loadCounts();
@@ -15779,13 +15866,17 @@ function useCallEngine(options) {
   };
 
   const joinChannel = (callId) => new Promise((resolve) => {
-    const ch = supabase.channel(`call-${callId}`, { config: { broadcast: { self: false } } });
-    ch.on('broadcast', { event: 'signal' }, ({ payload }) => { handleSignal(payload); });
-    channelRef.current = ch;
     let done = false;
     const finishJoin = () => { if (!done) { done = true; resolve(); } };
-    ch.subscribe((status) => { if (status === 'SUBSCRIBED') finishJoin(); });
     setTimeout(finishJoin, 5000);
+    rtReady(`call-${callId}`).then(() => {
+      const cur = callRef.current;
+      if (!cur || cur.id !== callId || cur.status === 'ended') { finishJoin(); return; }
+      const ch = supabase.channel(`call-${callId}`, { config: { broadcast: { self: false } } });
+      ch.on('broadcast', { event: 'signal' }, ({ payload }) => { handleSignal(payload); });
+      channelRef.current = ch;
+      ch.subscribe((status) => { if (status === 'SUBSCRIBED') finishJoin(); });
+    });
   });
 
   const finish = (reason = 'hangup') => {
@@ -16272,7 +16363,7 @@ function useBotFollowerCount(botId) {
       try { localStorage.setItem('zchat-botfollowers', String(count)); } catch {}
     };
     load();
-    const channel = supabase.channel('bot-followers-' + botId)
+    const channel = supabase.channel(rtName('bot-followers-' + botId))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'follows', filter: `following_id=eq.${botId}` }, load)
       .subscribe();
     return () => { cancelled = true; supabase.removeChannel(channel); };
@@ -16280,7 +16371,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-const APP_VERSION = '20.1V';
+const APP_VERSION = '20.2V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -17359,7 +17450,7 @@ function ProfileHighlights({ profile, isSelf, userId, onOpenHighlight }) {
   };
   useEffect(() => {
     load();
-    const ch = supabase.channel(`highlights-${profile.id}-${Math.random().toString(36).slice(2, 7)}`)
+    const ch = supabase.channel(rtName(`highlights-${profile.id}-${Math.random().toString(36).slice(2, 7)}`))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'highlights' }, () => load())
       .subscribe();
     return () => supabase.removeChannel(ch);
@@ -17717,7 +17808,7 @@ function ProfilePosts({ profile, isSelf, userId, meProfile, bare = false, mode =
   };
   useEffect(() => {
     load();
-    const ch = supabase.channel(`posts-${profile.id}-${Math.random().toString(36).slice(2, 7)}`)
+    const ch = supabase.channel(rtName(`posts-${profile.id}-${Math.random().toString(36).slice(2, 7)}`))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'posts' }, (payload) => {
         const row = payload.new && payload.new.user_id ? payload.new : payload.old;
         if (!row || !row.user_id || row.user_id === profile.id) load();
@@ -20809,7 +20900,7 @@ function FeedComments({ post, me, userId, onClose, onCount, onOpenProfile }) {
   useEffect(() => {
     load();
     let timer = null;
-    const ch = supabase.channel(`feedc-${post.id}-${Math.random().toString(36).slice(2, 6)}`)
+    const ch = supabase.channel(rtName(`feedc-${post.id}-${Math.random().toString(36).slice(2, 6)}`))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'post_comments', filter: `post_id=eq.${post.id}` }, () => { clearTimeout(timer); timer = setTimeout(load, 250); })
       .subscribe();
     return () => { clearTimeout(timer); supabase.removeChannel(ch); };
@@ -25281,7 +25372,12 @@ function DrawTogetherPage({ id, me, onClose, onSendImage }) {
     redraw();
   }, [box.w, box.h]);
   useEffect(() => {
+    let alive = true;
+    const hold = { ch: null };
+    rtReady(`draw-${id}`).then(() => {
+    if (!alive) return;
     const ch = supabase.channel(`draw-${id}`, { config: { presence: { key: me.id }, broadcast: { self: false } } });
+    hold.ch = ch;
     const sync = () => {
       const st = ch.presenceState ? ch.presenceState() : {};
       const list = [];
@@ -25318,7 +25414,8 @@ function DrawTogetherPage({ id, me, onClose, onSendImage }) {
         setTimeout(() => { try { ch.send({ type: 'broadcast', event: 'need', payload: { by: me.id } }); } catch {} }, 350);
       });
     chRef.current = ch;
-    return () => { clearInterval(flushRef.current); try { supabase.removeChannel(ch); } catch {} chRef.current = null; };
+    });
+    return () => { alive = false; clearInterval(flushRef.current); if (hold.ch) { try { supabase.removeChannel(hold.ch); } catch {} } chRef.current = null; };
   }, [id]);
   const toNorm = (ev) => {
     const r = canvasRef.current.getBoundingClientRect();
@@ -27009,7 +27106,12 @@ function WatchPartyPage({ msgId, d, me, onClose }) {
     return () => window.removeEventListener('message', onMsg);
   }, []);
   useEffect(() => {
+    let alive = true;
+    const hold = { ch: null };
+    rtReady(`watch-${msgId}`).then(() => {
+    if (!alive) return;
     const ch = supabase.channel(`watch-${msgId}`, { config: { presence: { key: me.id }, broadcast: { self: false } } });
+    hold.ch = ch;
     const sync = () => {
       const st = ch.presenceState ? ch.presenceState() : {};
       const list = [];
@@ -27024,7 +27126,8 @@ function WatchPartyPage({ msgId, d, me, onClose }) {
       })
       .subscribe((status) => { if (status === 'SUBSCRIBED') { try { ch.track({ name: me.name || 'Someone', avatar: me.avatar || null, at: Date.now() }); } catch {} } });
     chRef.current = ch;
-    return () => { try { supabase.removeChannel(ch); } catch {} chRef.current = null; };
+    });
+    return () => { alive = false; if (hold.ch) { try { supabase.removeChannel(hold.ch); } catch {} } chRef.current = null; };
   }, [msgId]);
   const others = viewers.filter((v) => v.id !== me.id);
   return (
@@ -30301,6 +30404,14 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     showSnack(ok ? 'Link copied' : link);
   };
   const [peekList, setPeekList] = useState(false);
+  const homeBoxRef = useRef(null);
+  const homeHidden = !isWide && mobileShowChat && !peekList;
+  useEffect(() => {
+    if (!homeHidden) return;
+    const el = homeBoxRef.current;
+    if (!el) return;
+    el.querySelectorAll('video, audio').forEach((m) => { try { if (!m.paused) m.pause(); } catch {} });
+  }, [homeHidden]);
   const chatEdgeBack = useEdgeSwipeBack(mobileShowChat && !isWide, null, { edgeOnly: true, onEngage: () => setPeekList(true), onRelease: () => setPeekList(false) });
   const scrollRef = useRef(null);
   useEffect(() => {
@@ -31107,7 +31218,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
   useEffect(() => {
     if (!me) return;
-    const channel = supabase.channel('conversations-watch-' + me.id)
+    const channel = supabase.channel(rtName('conversations-watch-' + me.id))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'conversations' }, (payload) => {
         const row = payload.new || payload.old;
         if (row && (row.user_a === me.id || row.user_b === me.id)) {
@@ -31121,7 +31232,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
   useEffect(() => {
     if (!me) return undefined;
-    const channel = supabase.channel('stories-' + me.id)
+    const channel = supabase.channel(rtName('stories-' + me.id))
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'stories' }, (payload) => {
         const row = payload.new;
         if (!row || !storyFollowSetRef.current.has(row.user_id)) return;
@@ -31149,21 +31260,28 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           preview: { kind: 'story', text: 'liked your story' }, action: { type: 'story', userId: me.id } });
       })
       .subscribe();
-    const feed = supabase.channel('story-feed', { config: { broadcast: { self: false } } })
-      .on('broadcast', { event: 'story' }, ({ payload }) => {
-        if (!payload || !storyFollowSetRef.current.has(payload.userId)) return;
-        clearTimeout(storyReloadTimerRef.current);
-        storyReloadTimerRef.current = setTimeout(() => { if (reloadStoriesRef.current) reloadStoriesRef.current(); }, 60);
-      })
-      .subscribe();
-    storyFeedRef.current = feed;
+    let feedAlive = true;
+    const feedHold = { ch: null };
+    rtReady('story-feed').then(() => {
+      if (!feedAlive) return;
+      const feed = supabase.channel('story-feed', { config: { broadcast: { self: false } } })
+        .on('broadcast', { event: 'story' }, ({ payload }) => {
+          if (!payload || !storyFollowSetRef.current.has(payload.userId)) return;
+          clearTimeout(storyReloadTimerRef.current);
+          storyReloadTimerRef.current = setTimeout(() => { if (reloadStoriesRef.current) reloadStoriesRef.current(); }, 60);
+        })
+        .subscribe();
+      feedHold.ch = feed;
+      storyFeedRef.current = feed;
+    });
     const poll = setInterval(() => { if (document.visibilityState === 'visible' && reloadStoriesRef.current) reloadStoriesRef.current(); }, 60000);
     const onVisible = () => { if (document.visibilityState === 'visible' && Date.now() - lastAppResumeRef.current > 3000 && reloadStoriesRef.current) reloadStoriesRef.current(); };
     document.addEventListener('visibilitychange', onVisible);
     window.addEventListener('focus', onVisible);
     return () => {
       supabase.removeChannel(channel);
-      supabase.removeChannel(feed);
+      feedAlive = false;
+      if (feedHold.ch) supabase.removeChannel(feedHold.ch);
       storyFeedRef.current = null;
       clearInterval(poll);
       document.removeEventListener('visibilitychange', onVisible);
@@ -31173,7 +31291,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
   useEffect(() => {
     if (!me) return undefined;
-    const channel = supabase.channel('notices-' + me.id)
+    const channel = supabase.channel(rtName('notices-' + me.id))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'blocks' }, (payload) => {
         const row = payload.new && payload.new.blocker_id ? payload.new : payload.old;
         if (row && row.blocker_id && row.blocker_id !== me.id && row.blocked_id !== me.id) return;
@@ -31227,7 +31345,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
   useEffect(() => {
     if (!me) return;
-    const channel = supabase.channel('mail-watch-' + me.id)
+    const channel = supabase.channel(rtName('mail-watch-' + me.id))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'mails' }, (payload) => {
         const row = payload.new || payload.old;
         if (row && row.recipient_id === me.id) loadUnreadMailCount();
@@ -31263,7 +31381,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       }
       setMessages((prev) => (current && msg.sender_id === current.id && !prev.some((x) => x.id === msg.id) ? [...prev, msg] : prev));
     });
-    const mine = supabase.channel('my-sent-' + me.id)
+    const mine = supabase.channel(rtName('my-sent-' + me.id))
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
         const row = payload.new;
         if (!row || row.sender_id !== me.id || row.group_id) return;
@@ -31273,7 +31391,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         listReloadTimerRef.current = setTimeout(() => { if (reloadListsRef.current) reloadListsRef.current(); }, 400);
       })
       .subscribe();
-    const meWatch = supabase.channel('me-profile-' + me.id)
+    const meWatch = supabase.channel(rtName('me-profile-' + me.id))
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${me.id}` }, (payload) => {
         const row = payload.new;
         if (!row || row.id !== me.id) return;
@@ -31295,7 +31413,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
   useEffect(() => {
     if (!me) return;
-    const channel = supabase.channel('read-receipts-' + me.id)
+    const channel = supabase.channel(rtName('read-receipts-' + me.id))
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, (payload) => {
         const row = payload.new;
         if (!row || !row.id) return;
@@ -31324,7 +31442,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   useEffect(() => {
     if (!me) return undefined;
     let t1 = 0; let t2 = 0; let t3 = 0;
-    const channel = supabase.channel('device-sync-' + me.id)
+    const channel = supabase.channel(rtName('device-sync-' + me.id))
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'group_members', filter: `user_id=eq.${me.id}` }, () => {
         clearTimeout(t1); t1 = setTimeout(() => { loadGroups(); loadUnreadCounts(); }, 400);
       })
@@ -31353,7 +31471,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
   useEffect(() => {
     if (!me || (!activeProfile && !activeGroup)) return;
-    const channel = supabase.channel('reactions-' + (activeGroup ? activeGroup.id : activeProfile.id))
+    const channel = supabase.channel(rtName('reactions-' + (activeGroup ? activeGroup.id : activeProfile.id)))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'message_likes' }, (payload) => {
         const row = payload.new || payload.old;
         const msgId = row.message_id;
@@ -31379,7 +31497,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
   useEffect(() => {
     if (!me || !activeProfile) return;
-    const channel = supabase.channel('follow-watch-' + activeProfile.id)
+    const channel = supabase.channel(rtName('follow-watch-' + activeProfile.id))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'follows' }, (payload) => {
         const row = payload.new || payload.old;
         if (row.follower_id === session.user.id && row.following_id === activeProfile.id) {
@@ -31395,7 +31513,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   useEffect(() => () => clearTimeout(seenFlushRef.current), []);
   useEffect(() => {
     if (!me) return;
-    const channel = supabase.channel('profile-watch-' + me.id)
+    const channel = supabase.channel(rtName('profile-watch-' + me.id))
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles' }, (payload) => {
         const rowRaw = payload.new;
         if (!rowRaw || !rowRaw.id) return;
@@ -31440,7 +31558,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
   useEffect(() => {
     if (!me || !myGroupIds.length) return;
-    const channel = supabase.channel('group-messages-' + me.id)
+    const channel = supabase.channel(rtName('group-messages-' + me.id))
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
         const row = payload.new;
         if (!row.group_id || !myGroupIds.includes(row.group_id)) return;
@@ -31464,7 +31582,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   }, [me && me.id, me && me.username, myGroupIdsKey, activeGroup && activeGroup.id]);
   useEffect(() => {
     if (!me) return;
-    const channel = supabase.channel('group-members-watch-' + me.id)
+    const channel = supabase.channel(rtName('group-members-watch-' + me.id))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'group_members' }, (payload) => {
         const row = payload.new || payload.old;
         if (row.user_id === me.id) loadGroups();
@@ -31479,7 +31597,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
   useEffect(() => {
     if (!me) return;
-    const channel = supabase.channel('groups-watch-' + me.id)
+    const channel = supabase.channel(rtName('groups-watch-' + me.id))
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'groups' }, (payload) => {
         const row = payload.new;
         if (activeGroup && row.id === activeGroup.id) setActiveGroup((prev) => ({ ...prev, ...row }));
@@ -31491,20 +31609,26 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
   useEffect(() => {
     if (!me) return;
-    const channel = supabase.channel('presence-global', { config: { presence: { key: me.id } } });
+    let alive = true;
+    let channel = null;
     let subscribed = false;
-    channel.on('presence', { event: 'sync' }, () => {
-      const state = channel.presenceState();
-      const nextIds = new Set(Object.keys(state));
-      setOnlineIds((prev) => (prev && prev.size === nextIds.size && [...nextIds].every((id) => prev.has(id)) ? prev : nextIds));
-      visibleIdsRef.current = new Set(Object.entries(state).filter(([, metas]) => (metas || []).some((meta) => meta && meta.visible === true)).map(([id]) => id));
-    });
     const trackPresence = () => {
-      if (!subscribed) return;
-      channel.track({ online_at: new Date().toISOString(), visible: document.visibilityState === 'visible' }).catch(() => {});
+      if (!subscribed || !channel) return;
+      try { const r = channel.track({ online_at: new Date().toISOString(), visible: document.visibilityState === 'visible' }); if (r && r.catch) r.catch(() => {}); } catch {}
     };
-    channel.subscribe((status) => {
-      if (status === 'SUBSCRIBED') { subscribed = true; trackPresence(); }
+    rtReady('presence-global').then(() => {
+      if (!alive) return;
+      const ch = supabase.channel('presence-global', { config: { presence: { key: me.id } } });
+      channel = ch;
+      ch.on('presence', { event: 'sync' }, () => {
+        const state = ch.presenceState();
+        const nextIds = new Set(Object.keys(state));
+        setOnlineIds((prev) => (prev && prev.size === nextIds.size && [...nextIds].every((id) => prev.has(id)) ? prev : nextIds));
+        visibleIdsRef.current = new Set(Object.entries(state).filter(([, metas]) => (metas || []).some((meta) => meta && meta.visible === true)).map(([id]) => id));
+      });
+      ch.subscribe((status) => {
+        if (status === 'SUBSCRIBED') { subscribed = true; trackPresence(); }
+      });
     });
     const updateLastSeen = () => { supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', me.id).then(() => {}, () => {}); };
     updateLastSeen();
@@ -31513,7 +31637,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     document.addEventListener('visibilitychange', onVisibility);
     window.addEventListener('pagehide', updateLastSeen);
     return () => {
-      supabase.removeChannel(channel);
+      alive = false;
+      if (channel) supabase.removeChannel(channel);
       clearInterval(heartbeat);
       document.removeEventListener('visibilitychange', onVisibility);
       window.removeEventListener('pagehide', updateLastSeen);
@@ -33460,17 +33585,23 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (activeGroup) key = `typing-group-${activeGroup.id}`;
     else if (activeProfile) { const [a, b] = pairKey(session.user.id, activeProfile.id); key = `typing-${a}-${b}`; }
     if (!key) return undefined;
-    const channel = supabase.channel(key);
-    channel.on('broadcast', { event: 'typing' }, ({ payload }) => {
-      if (!payload || payload.from === session.user.id) return;
-      const kind = payload.kind || 'typing';
-      setActivityFrom((prev) => (prev && prev.from === payload.from && prev.kind === kind ? prev : { kind, from: payload.from }));
-      clearTimeout(typingTimeoutRef.current);
-      typingTimeoutRef.current = setTimeout(() => setActivityFrom(null), 3200);
-    }).subscribe();
-    typingChannelRef.current = channel;
+    let alive = true;
+    const hold = { ch: null };
     activitySentRef.current = {};
-    return () => { supabase.removeChannel(channel); typingChannelRef.current = null; clearTimeout(typingTimeoutRef.current); setActivityFrom(null); };
+    rtReady(key).then(() => {
+      if (!alive) return;
+      const channel = supabase.channel(key);
+      hold.ch = channel;
+      channel.on('broadcast', { event: 'typing' }, ({ payload }) => {
+        if (!payload || payload.from === session.user.id) return;
+        const kind = payload.kind || 'typing';
+        setActivityFrom((prev) => (prev && prev.from === payload.from && prev.kind === kind ? prev : { kind, from: payload.from }));
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = setTimeout(() => setActivityFrom(null), 3200);
+      }).subscribe();
+      typingChannelRef.current = channel;
+    });
+    return () => { alive = false; if (hold.ch) supabase.removeChannel(hold.ch); typingChannelRef.current = null; clearTimeout(typingTimeoutRef.current); setActivityFrom(null); };
   }, [activeProfile?.id, activeGroup?.id]);
 
   const liveActivity = recording ? 'voice' : showStickers ? 'sticker' : null;
@@ -34011,7 +34142,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       setMyRewards(data || []);
     };
     load();
-    const ch = supabase.channel('rewards-' + session.user.id)
+    const ch = supabase.channel(rtName('rewards-' + session.user.id))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'user_rewards' }, (payload) => {
         const row = payload.new && payload.new.user_id ? payload.new : payload.old;
         if (row && row.user_id && row.user_id !== session.user.id) return;
@@ -34186,7 +34317,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       writeFavoriteKeys(new Set(ordered));
     };
     pull();
-    const channel = supabase.channel('favorites-' + me.id)
+    const channel = supabase.channel(rtName('favorites-' + me.id))
       .on('postgres_changes', { event: '*', schema: 'public', table: 'sticker_favorites' }, (payload) => {
         const row = payload.new && payload.new.user_id ? payload.new : payload.old;
         if (row && row.user_id && row.user_id !== me.id) return;
@@ -34368,7 +34499,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
   useEffect(() => {
     if (!me) return undefined;
-    const channel = supabase.channel('calls-' + me.id)
+    const channel = supabase.channel(rtName('calls-' + me.id))
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'calls' }, (payload) => {
         if (handleCallRowRef.current) handleCallRowRef.current(payload.new);
       })
@@ -35776,11 +35907,12 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       <AssetDownloadBar progress={assetProgress} />
       {restrictedNotice && <RestrictionNotice restriction={restrictedNotice} onClose={() => setRestrictedNotice(null)} />}
       {showInstallHelp && <InstallAppHelpModal onClose={() => setShowInstallHelp(false)} />}
-      <div {...feedSwipe} style={{
+      <div {...feedSwipe} ref={homeBoxRef} aria-hidden={homeHidden || undefined} style={{
         width: isWide ? 360 : (mobileShowChat ? 0 : '100%'), maxWidth: isWide ? 360 : (mobileShowChat ? 0 : '100%'), overflow: 'hidden',
         borderRight: (isWide || !mobileShowChat) ? `1px solid ${theme.border}` : 'none', display: 'flex', flexDirection: 'column', flexShrink: 0,
         transition: 'none',
-        ...(peekList && mobileShowChat && !isWide ? { position: 'absolute', left: 0, right: 0, bottom: 0, top: callBarShown ? 'calc(env(safe-area-inset-top) + 42px)' : 'env(safe-area-inset-top)', width: '100%', maxWidth: '100%', zIndex: 0, pointerEvents: 'none' } : {}),
+        ...(mobileShowChat && !isWide ? { position: 'absolute', left: 0, right: 0, bottom: 0, top: callBarShown ? 'calc(env(safe-area-inset-top) + 42px)' : 'env(safe-area-inset-top)', width: '100%', maxWidth: '100%', zIndex: 0, pointerEvents: 'none' } : {}),
+        ...(homeHidden ? { visibility: 'hidden', contentVisibility: 'hidden' } : {}),
       }} className="zchat-sidebar-desktop">
         <input ref={storyInputRef} type="file" accept="image/*,video/*" multiple style={{ display: 'none' }}
           onChange={(e) => {
@@ -35794,7 +35926,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             e.target.value = '';
             if (picked.length && !blockedByRestriction('post')) setPostComposer({ key: Date.now(), files: picked });
           }} />
-        {(isWide || !mobileShowChat || peekList) && (<>
+        <Freeze frozen={homeHidden}>{(<>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
         {notifPermission === 'default' && pushSupported() && !notifBannerDismissed && (
           <EnableNotificationsBanner inline
@@ -35939,7 +36071,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                 overflowY: 'auto', flex: 1, padding: 0, position: 'relative',
                 transform: pullDistance ? `translateY(${pullDistance}px)` : 'none',
                 transition: pullStartYRef.current ? 'none' : 'transform 0.25s ease',
-                scrollBehavior: 'smooth', WebkitOverflowScrolling: 'touch',
+                WebkitOverflowScrolling: 'touch',
               }}
             >
               {(refreshing || pullDistance > 4) && (
@@ -36157,7 +36289,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         )}
         <BottomTabBar tab={homeTab} onChange={(k) => setHomeTab(k)} onCreate={() => setShowCreate(true)}
           badges={{ chats: primaryConversations.filter((c) => isUnread(c) && !vaultKeys.has(chatPrefKey('dm', c.otherProfile.id))).length + groups.filter((g) => !g.archived && g.unread > 0 && !vaultKeys.has(chatPrefKey('group', g.id))).length, moments: trayUsers.some((u) => !u.stories.every((st) => storyData.seen.has(st.id))), calls: 0, me: followRequestCount + unreadMailCount }} />
-        </>)}
+        </>)}</Freeze>
       </div>
 
       <div {...chatEdgeBack} style={{
@@ -51144,7 +51276,12 @@ function LiveGamePage({ initial, me, peer, myId, onClose, onSaveState, onRematch
     }, 800);
   };
   useEffect(() => {
+    let alive = true;
+    const hold = { ch: null };
+    rtReady(`zrt-${initial.id}`).then(() => {
+    if (!alive) return;
     const ch = supabase.channel(`zrt-${initial.id}`, { config: { broadcast: { self: false }, presence: { key: myId } } });
+    hold.ch = ch;
     chRef.current = ch;
     ch.on('presence', { event: 'sync' }, () => {
       let here = false;
@@ -51160,10 +51297,15 @@ function LiveGamePage({ initial, me, peer, myId, onClose, onSaveState, onRematch
       listeners.current.forEach((fn) => { try { fn(payload); } catch {} });
     });
     ch.subscribe((status) => { if (status === 'SUBSCRIBED') { try { const r = ch.track({ at: Date.now() }); if (r && r.catch) r.catch(() => {}); } catch {} } });
+    });
     return () => {
-      try { ch.send({ type: 'broadcast', event: 'g', payload: { t: 'bye', from: myId } }); } catch {}
-      try { ch.untrack(); } catch {}
-      try { supabase.removeChannel(ch); } catch {}
+      alive = false;
+      const ch = hold.ch;
+      if (ch) {
+        try { ch.send({ type: 'broadcast', event: 'g', payload: { t: 'bye', from: myId } }); } catch {}
+        try { ch.untrack(); } catch {}
+        try { supabase.removeChannel(ch); } catch {}
+      }
       chRef.current = null;
     };
   }, [initial.id]);
