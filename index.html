@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>ZChat</title>
   <meta name="description" content="Chat, share and stay close with your people on ZChat." />
   <link rel="canonical" href="https://getzchat.com/" />
@@ -14,7 +14,10 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="ZChat">
-  <meta name="theme-color" content="#050810">
+  <meta name="application-name" content="ZChat">
+  <meta name="format-detection" content="telephone=no, date=no, email=no, address=no">
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#0C0C0E">
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="ZChat" />
   <meta property="og:url" content="https://getzchat.com/" />
@@ -29,15 +32,46 @@
   <meta name="twitter:description" content="Chat, share and stay close with your people." />
   <meta name="twitter:image" content="https://getzchat.com/og-image.png" />
   <style>
-    html, body, #root { height: 100%; margin: 0; padding: 0; background-color: #050810; overflow: hidden; }
+    html, body, #root { height: 100%; margin: 0; padding: 0; background-color: var(--zboot, #0C0C0E); overflow: hidden; }
     body {
       -webkit-font-smoothing: antialiased;
       overscroll-behavior: none;
+      -webkit-tap-highlight-color: transparent;
+      -webkit-text-size-adjust: 100%;
+      text-size-adjust: 100%;
     }
     input, textarea, select { font-size: 16px; }
+    #zsplash { position: fixed; inset: 0; z-index: 10000; display: flex; align-items: center; justify-content: center; background: var(--zboot, #0C0C0E); }
+    #zsplash svg { width: 64px; height: 64px; animation: zsplash-in 0.5s cubic-bezier(.2,.8,.3,1) both; }
+    @keyframes zsplash-in { from { opacity: 0; transform: scale(0.92); } to { opacity: 1; transform: none; } }
+    @media (prefers-reduced-motion: reduce) { #zsplash svg { animation: none; } }
   </style>
+  <script>
+    (function () {
+      try {
+        var ls = window.localStorage;
+        var signedIn = Object.keys(ls).some(function (k) { return /^sb-.*-auth-token$/.test(k); });
+        var mode = ls.getItem('zchat-theme-mode') || (ls.getItem('zchat-theme') === 'light' ? 'light' : 'dark');
+        var dark = mode === 'dark';
+        if (mode === 'auto') dark = !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        if (mode === 'schedule') {
+          var s = JSON.parse(ls.getItem('zchat-theme-sched') || 'null') || { from: '19:00', to: '07:00' };
+          var p = function (x) { var t = String(x || '0:0').split(':'); return (parseInt(t[0], 10) || 0) * 60 + (parseInt(t[1], 10) || 0); };
+          var d = new Date(); var m = d.getHours() * 60 + d.getMinutes(); var a = p(s.from); var b = p(s.to);
+          dark = a === b ? true : (a < b ? (m >= a && m < b) : (m >= a || m < b));
+        }
+        var bg = !signedIn ? '#FFFFFF' : dark ? (ls.getItem('zchat-pure-black') === '1' ? '#000000' : '#0C0C0E') : '#FFFFFF';
+        document.documentElement.style.setProperty('--zboot', bg);
+        var meta = document.querySelector('meta[name="theme-color"]');
+        if (meta) meta.setAttribute('content', bg);
+      } catch (e) {}
+    })();
+  </script>
 </head>
 <body>
+  <div id="zsplash" aria-hidden="true">
+    <svg viewBox="0 0 64 64"><rect width="64" height="64" rx="17" fill="#0D1122" /><rect x="0.75" y="0.75" width="62.5" height="62.5" rx="16.25" fill="none" stroke="rgba(255,255,255,0.14)" stroke-width="1.5" /><path d="M20 21h24.5L21.5 43H44" fill="none" stroke="#5B8CFF" stroke-width="7.5" stroke-linecap="round" stroke-linejoin="round" /></svg>
+  </div>
   <div id="root"></div>
   <script type="module" src="/src/main.jsx"></script>
 </body>
