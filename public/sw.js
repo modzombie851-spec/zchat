@@ -3,10 +3,12 @@ const STATIC = 'zchat-static-v1';
 const REMOTE = 'zchat-remote-v1';
 const SHARE = 'zchat-share';
 const FONTS = 'zchat-fonts-v1';
+const DECOR = 'zchat-decor-v1';
 const ASSET_LIMIT = 60;
 const STATIC_LIMIT = 500;
 const REMOTE_LIMIT = 700;
 const STATIC_EXT = /\.(png|jpe?g|webp|gif|svg|ico|woff2?|ttf|otf)$/i;
+const DECOR_PATH = /^\/set-[a-z0-9-]+\.webp$/i;
 
 function assetsIn(html) {
   const out = new Set();
@@ -90,6 +92,7 @@ self.addEventListener('activate', (event) => {
   event.waitUntil((async () => {
     const keys = await caches.keys();
     await Promise.all(keys.filter((k) => k.startsWith('zchat-shell-') && k !== SHELL).map((k) => caches.delete(k)));
+    await tidyStatic();
     await self.clients.claim();
   })());
 });
@@ -137,12 +140,58 @@ async function stamped(res) {
   return new Response(body, { status: res.status, statusText: res.statusText, headers });
 }
 
+function realFile(res) {
+  if (!res || !res.ok || res.type !== 'basic' || res.status !== 200) return false;
+  const ct = (res.headers.get('content-type') || '').toLowerCase();
+  return !ct.includes('text/html');
+}
+
+function keptFile(res) {
+  if (!res || res.status !== 200) return false;
+  const ct = (res.headers.get('content-type') || '').toLowerCase();
+  return !ct.includes('text/html');
+}
+
+async function tidyStatic() {
+  try {
+    const cache = await caches.open(STATIC);
+    const decor = await caches.open(DECOR);
+    const reqs = await cache.keys();
+    for (const req of reqs) {
+      const res = await cache.match(req);
+      let path = '';
+      try { path = new URL(req.url).pathname; } catch {}
+      if (!keptFile(res) || (DECOR_PATH.test(path) && await decor.match(path))) await cache.delete(req);
+    }
+  } catch {}
+}
+
+async function decorFile(event) {
+  const request = event.request;
+  const key = new URL(request.url).pathname;
+  let store = null;
+  try {
+    store = await caches.open(DECOR);
+    const hit = await store.match(key);
+    if (hit) return hit;
+    const stat = await caches.open(STATIC);
+    const old = await stat.match(request, { ignoreSearch: true });
+    if (keptFile(old)) {
+      event.waitUntil(store.put(key, old.clone()).then(() => stat.delete(request, { ignoreSearch: true })).catch(() => {}));
+      return old;
+    }
+  } catch {}
+  const res = await fetch(request);
+  if (store && realFile(res) && !request.headers.has('x-zc-save')) event.waitUntil(store.put(key, res.clone()).catch(() => {}));
+  return res;
+}
+
 async function staticFile(event) {
   const request = event.request;
   const cache = await caches.open(STATIC);
   const hit = await cache.match(request, { ignoreSearch: true });
   const update = () => fetch(request).then(async (res) => {
-    if (res && res.ok && res.type === 'basic' && res.status === 200) {
+    if (realFile(res)) {
       const copy = await stamped(res.clone());
       await cache.put(request, copy);
       trim(STATIC, STATIC_LIMIT, null);
@@ -234,6 +283,10 @@ self.addEventListener('fetch', (event) => {
   }
   if (url.pathname.startsWith('/assets/')) {
     event.respondWith(assetFirst(request));
+    return;
+  }
+  if (DECOR_PATH.test(url.pathname) && !request.headers.has('range')) {
+    event.respondWith(decorFile(event));
     return;
   }
   if (STATIC_EXT.test(url.pathname) && !request.headers.has('range')) {
