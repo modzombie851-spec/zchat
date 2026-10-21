@@ -699,6 +699,7 @@ function GlobalStyle() {
       @media (max-width: 299px) { .zattach-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
       @media (max-width: 374px) { .zcomp-narrow-hide { display: none !important; } }
       @media (max-width: 329px) { .zcomp-tiny-hide { display: none !important; } }
+      .zprof-chips:empty { display: none; }
       @keyframes zchat-spin { to { transform: rotate(360deg); } }
       @keyframes zchat-story-in-next { from { transform: translateX(30%); opacity: 0.35; } to { transform: none; opacity: 1; } }
       @keyframes zchat-story-in-prev { from { transform: translateX(-30%); opacity: 0.35; } to { transform: none; opacity: 1; } }
@@ -9951,7 +9952,7 @@ function GiftIcon({ size = 20, color = 'currentColor', strokeWidth = 1.9, style 
   );
 }
 
-function MutualFollowersLine({ profileId, myId, iFollowIds, total, onOpen }) {
+function MutualFollowersLine({ profileId, myId, iFollowIds, total, onOpen, center }) {
   const { theme } = useTheme();
   const [people, setPeople] = useState(null);
   useEffect(() => {
@@ -9971,7 +9972,7 @@ function MutualFollowersLine({ profileId, myId, iFollowIds, total, onOpen }) {
   const names = people.list.slice(0, 2).map((p) => p.username || p.name);
   const rest = people.count - names.length;
   return (
-    <div role="button" aria-label="Mutual followers" onClick={onOpen} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 20px 0', cursor: 'pointer' }}>
+    <div role="button" aria-label="Mutual followers" onClick={onOpen} style={{ display: 'flex', alignItems: 'center', justifyContent: center ? 'center' : 'flex-start', gap: 8, padding: '8px 20px 0', cursor: 'pointer' }}>
       <span style={{ display: 'flex', flexShrink: 0 }}>
         {people.list.slice(0, 3).map((p, i) => (
           <span key={p.id} style={{ marginLeft: i ? -7 : 0, borderRadius: '50%', boxShadow: `0 0 0 2px ${theme.bgGradient}`, display: 'flex' }}><Avatar emoji={p.avatar} name={p.name} size={22} /></span>
@@ -10001,7 +10002,7 @@ async function checkMyAchievements(uid, extra) {
     return Array.isArray(data) ? data.filter((k) => ACH_BY_KEY[k]) : [];
   } catch { return []; }
 }
-function AchievementsLine({ userId, onOpen }) {
+function AchievementsLine({ userId, onOpen, center }) {
   const { theme } = useTheme();
   const [list, setList] = useState(() => (achMem.get(userId) || {}).list || null);
   useEffect(() => {
@@ -10013,7 +10014,7 @@ function AchievementsLine({ userId, onOpen }) {
   }, [userId]);
   if (!list || !list.length) return null;
   return (
-    <div role="button" aria-label={`${list.length} achievements`} onClick={onOpen} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 20px 0', cursor: 'pointer' }}>
+    <div role="button" aria-label={`${list.length} achievements`} onClick={onOpen} style={{ display: 'flex', alignItems: 'center', justifyContent: center ? 'center' : 'flex-start', gap: 6, padding: '10px 20px 0', cursor: 'pointer' }}>
       {list.slice(0, 4).map((a) => <AchievementArt key={a.key} k={a.key} size={28} />)}
       <span style={{ fontSize: 13, color: theme.muted, marginLeft: 4 }}>{list.length} {list.length === 1 ? 'achievement' : 'achievements'}</span>
     </div>
@@ -10391,6 +10392,13 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
     background: primary ? theme.coral : theme.soft, color: primary ? '#FFFFFF' : theme.ink, fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap',
   });
 
+  const plateOn = !!NAMEPLATES[profile.nameplate];
+  const plateMeta = [profile.pronouns, ...infoBits].filter(Boolean).join(', ');
+  const statCells = [
+    !profile.is_bot && { v: postCount, l: 'posts', on: null },
+    { v: profile.is_bot ? BOT_FOLLOWER_BASE + (followerCount || 0) : followerCount, l: 'followers', on: profile.is_bot ? null : () => setListModal('followers') },
+    !profile.is_bot && { v: followingCount, l: 'following', on: () => setListModal('following') },
+  ].filter(Boolean);
   const pageBg = theme.bgGradient;
   const glassCircle = { width: 38, height: 38, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: theme.ink, background: theme.dark ? 'rgba(0,0,0,0.35)' : 'rgba(255,255,255,0.65)', border: `1px solid ${theme.dark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.06)'}`, backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' };
 
@@ -10508,6 +10516,28 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
                 )}
               </div>
             )}
+            {plateOn ? (
+              <>
+                <ProfilePlateHero profile={profile} photo={shownPhoto} storyRing={storyRing} onOpenStory={onOpenStory} isOnline={isOnline} overCover={!!coverUrl} />
+                {(plateMeta || statusText) && (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, padding: '2px 20px 0', textAlign: 'center' }}>
+                    {plateMeta && <div style={{ fontSize: 13.5, color: theme.muted, lineHeight: 1.4 }}>{plateMeta}</div>}
+                    {statusText && <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: isOnline ? '#1DB954' : theme.muted, fontWeight: 600 }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: isOnline ? '#22C55E' : theme.muted2 }} />{statusText}</div>}
+                  </div>
+                )}
+                {canSeeDetails && (
+                  <div style={{ display: 'flex', maxWidth: 380, margin: '14px auto 0', padding: '0 12px' }}>
+                    {statCells.map((c) => (
+                      <div key={c.l} role={c.on ? 'button' : undefined} aria-label={`${c.v == null ? '' : c.v} ${c.l}`} onClick={c.on || undefined} style={{ flex: 1, minWidth: 0, textAlign: 'center', cursor: c.on ? 'pointer' : 'default' }}>
+                        <div style={{ fontSize: 18, fontWeight: 800, color: theme.ink, letterSpacing: '-0.02em', minHeight: 22 }}>{c.v == null ? '' : formatCount(c.v)}</div>
+                        <div style={{ fontSize: 13, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.l}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
             <div style={{ display: 'flex', alignItems: 'center', gap: 'clamp(8px, 4vw, 16px)', padding: '0 16px 0 20px', marginTop: coverUrl ? -40 : 8, position: 'relative' }}>
               <div role="button" aria-label={storyRing !== 'none' ? `Story of ${profile.name}` : 'Profile photo'} onClick={() => { if (storyRing !== 'none' && onOpenStory) onOpenStory(profile.id); }} style={{ position: 'relative', flexShrink: 0, borderRadius: '50%', padding: coverUrl ? 4 : 0, background: coverUrl ? theme.bgGradient : 'transparent', cursor: storyRing !== 'none' ? 'pointer' : 'default' }}>
                 {storyRing !== 'none' && !AVATAR_FRAMES[profile.avatar_frame]
@@ -10517,11 +10547,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
               </div>
               {canSeeDetails && (
                 <div style={{ flex: 1, minWidth: 0, display: 'flex', justifyContent: 'space-around', gap: 2, paddingTop: coverUrl ? 34 : 0 }}>
-                  {[
-                    !profile.is_bot && { v: postCount, l: 'posts', on: null },
-                    { v: profile.is_bot ? BOT_FOLLOWER_BASE + (followerCount || 0) : followerCount, l: 'followers', on: profile.is_bot ? null : () => setListModal('followers') },
-                    !profile.is_bot && { v: followingCount, l: 'following', on: () => setListModal('following') },
-                  ].filter(Boolean).map((c) => (
+                  {statCells.map((c) => (
                     <div key={c.l} role={c.on ? 'button' : undefined} aria-label={`${c.v == null ? '' : c.v} ${c.l}`} onClick={c.on || undefined} style={{ textAlign: 'center', cursor: c.on ? 'pointer' : 'default', flex: '0 1 auto', minWidth: 0 }}>
                       <div style={{ fontSize: 18, fontWeight: 800, color: theme.ink, letterSpacing: '-0.02em', minHeight: 22 }}>{c.v == null ? '' : formatCount(c.v)}</div>
                       <div style={{ fontSize: 'clamp(11px, 3.7vw, 13px)', color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.l}</div>
@@ -10539,10 +10565,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
               </div>
               {statusText && <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: isOnline ? '#1DB954' : theme.muted, fontWeight: 600, marginTop: 3 }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: isOnline ? '#22C55E' : theme.muted2 }} />{statusText}</div>}
             </div>
-            {NAMEPLATES[profile.nameplate] && (
-              <div style={{ padding: '10px 16px 0' }}>
-                <NameplateBanner plate={profile.nameplate} name={profile.name} username={profile.username} verified={profile.verified} custom={profile.custom_badge} />
-              </div>
+              </>
             )}
           </div>
         )}
@@ -10606,19 +10629,23 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
           ) : (
             <div style={{ margin: '0 -14px' }}>
               {canSeeDetails && showBio && (
-                <div style={{ fontSize: 14.5, color: theme.ink, lineHeight: 1.45, padding: '6px 20px 0', wordBreak: 'break-word' }}>
+                <div style={{ fontSize: 14.5, color: theme.ink, lineHeight: 1.45, padding: plateOn ? '10px 24px 0' : '6px 20px 0', textAlign: plateOn ? 'center' : 'left', wordBreak: 'break-word' }}>
                   <RichText text={profile.bio} onMention={(p) => onOpenProfile(sanitizeAvatar(p, userId))} />
                 </div>
               )}
               {canSeeDetails && !profile.is_bot && Array.isArray(profile.interests) && profile.interests.length > 0 && (
-                <div role="list" aria-label="Interests" style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '8px 20px 0' }}>
+                <div role="list" aria-label="Interests" style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '8px 20px 0', justifyContent: plateOn ? 'center' : 'flex-start' }}>
                   {profile.interests.slice(0, 8).map((x) => <span key={x} role="listitem" style={{ height: 26, padding: '0 10px', borderRadius: 13, background: theme.soft, color: theme.ink2, fontSize: 12.5, fontWeight: 600, display: 'inline-flex', alignItems: 'center' }}>{x}</span>)}
                 </div>
               )}
-              {canSeeDetails && !profile.is_bot && <div style={{ padding: '0 20px' }}><ProfileExtras profile={profile} isSelf={isSelf} onEditStatus={() => setStatusOpen(true)} onEditBirthday={() => setBdayOpen(true)} /></div>}
-              {canSeeDetails && !profile.is_bot && <div style={{ padding: '0 20px' }}><ProfileSong profile={profile} isSelf={isSelf} /></div>}
-              {canSeeDetails && !isSelf && !profile.is_bot && <MutualFollowersLine profileId={profile.id} myId={userId} iFollowIds={iFollowIds} total={mutualCount} onOpen={() => setListModal('mutual')} />}
-              {canSeeDetails && !profile.is_bot && <AchievementsLine userId={profile.id} onOpen={() => onOpenAchievements && onOpenAchievements(profile)} />}
+              {canSeeDetails && !profile.is_bot && (
+                <div className="zprof-chips" style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: plateOn ? '12px 14px 0' : '12px 20px 0', justifyContent: plateOn ? 'center' : 'flex-start' }}>
+                  <ProfileExtras profile={profile} isSelf={isSelf} onEditStatus={() => setStatusOpen(true)} onEditBirthday={() => setBdayOpen(true)} bare />
+                  <ProfileSong profile={profile} isSelf={isSelf} bare center={plateOn} />
+                </div>
+              )}
+              {canSeeDetails && !isSelf && !profile.is_bot && <MutualFollowersLine profileId={profile.id} myId={userId} iFollowIds={iFollowIds} total={mutualCount} onOpen={() => setListModal('mutual')} center={plateOn} />}
+              {canSeeDetails && !profile.is_bot && <AchievementsLine userId={profile.id} onOpen={() => onOpenAchievements && onOpenAchievements(profile)} center={plateOn} />}
               <div style={{ display: 'flex', gap: 8, padding: '14px 20px 0' }}>
                 {isSelf ? (
                   <>
@@ -16205,7 +16232,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-const APP_VERSION = '19.0V';
+const APP_VERSION = '19.1V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -18610,6 +18637,47 @@ function NameplateBanner({ plate, name, username, verified, custom }) {
           <VerifiedBadge tier={verified} custom={custom} size={Math.max(11, Math.round(nameSize * 0.68))} />
         </div>
         <div style={{ fontSize: userSize, fontWeight: 600, color: 'rgba(255,255,255,0.82)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%', textShadow: '0 1px 7px rgba(0,0,0,0.55)' }}>{handle}</div>
+      </div>
+    </div>
+  );
+}
+
+function ProfilePlateHero({ profile, photo, storyRing = 'none', onOpenStory, isOnline, overCover, maxPlate = 360 }) {
+  const { theme } = useTheme();
+  const ref = useRef(null);
+  const [w, setW] = useState(() => (typeof window === 'undefined' ? 390 : Math.min(window.innerWidth, 640)));
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return undefined;
+    const measure = () => { const cw = el.clientWidth; if (cw) setW(cw); };
+    measure();
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', measure);
+      return () => window.removeEventListener('resize', measure);
+    }
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  if (!NAMEPLATES[profile.nameplate]) return null;
+  const framed = !!AVATAR_FRAMES[profile.avatar_frame];
+  const plateW = Math.round(Math.max(220, Math.min(maxPlate, w - 28)));
+  const box = Math.round(plateW * 0.5833);
+  const bare = Math.round(box * 0.8);
+  const avH = framed ? box : bare;
+  const pull = Math.round(nameplatePull(profile.nameplate) * plateW / 100) + Math.round(plateW * 0.022);
+  const ringed = storyRing !== 'none';
+  const dot = Math.max(14, Math.round(bare * 0.11));
+  return (
+    <div ref={ref} style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: overCover ? -Math.round(avH * 0.42) : 0 }}>
+      <div role="button" aria-label={ringed ? `Story of ${profile.name}` : 'Profile photo'} onClick={() => { if (ringed && onOpenStory) onOpenStory(profile.id); }} style={{ position: 'relative', zIndex: 3, width: box, height: avH, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: ringed ? 'pointer' : 'default' }}>
+        {ringed && !framed
+          ? <StoryAvatar profile={{ ...profile, avatar: photo }} size={bare} ring={storyRing} />
+          : <div style={{ borderRadius: '50%', boxShadow: overCover && !framed ? `0 0 0 4px ${theme.bgGradient}` : 'none' }}><Avatar emoji={photo} name={profile.name} frame={profile.avatar_frame} frameFit size={avH} /></div>}
+        {isOnline && !framed && <span style={{ position: 'absolute', zIndex: 4, left: box / 2 + bare * 0.354 - dot / 2, top: avH / 2 + bare * 0.354 - dot / 2, width: dot, height: dot, borderRadius: '50%', background: '#22C55E', border: `3px solid ${theme.bgGradient}`, boxSizing: 'content-box' }} />}
+      </div>
+      <div style={{ position: 'relative', zIndex: 2, width: plateW, marginTop: -pull }}>
+        <NameplateBanner plate={profile.nameplate} name={profile.name} username={profile.username} verified={profile.verified} custom={profile.custom_badge} />
       </div>
     </div>
   );
@@ -25910,7 +25978,7 @@ function MusicPicker({ onClose, onPick, country, title = 'Add music' }) {
   );
 }
 const profileSongMem = new Map();
-function ProfileSong({ profile, isSelf }) {
+function ProfileSong({ profile, isSelf, bare, center }) {
   const { theme } = useTheme();
   const [song, setSong] = useState(() => (profileSongMem.has(profile.id) ? profileSongMem.get(profile.id) : validSong(profile.song)));
   const [picker, setPicker] = useState(() => !!(isSelf && profile.__song));
@@ -25941,8 +26009,19 @@ function ProfileSong({ profile, isSelf }) {
     profileSongMem.set(profile.id, s);
   };
   if (!song && !isSelf) return null;
+  if (bare && !song) {
+    return (
+      <>
+        <div role="button" aria-label="Add a song to your profile" onClick={() => setPicker(true)} className="zchat-press" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 10px', borderRadius: 16, background: theme.rowBg, border: `1px solid ${theme.border}`, fontSize: 12.5, fontWeight: 700, color: theme.ink, cursor: 'pointer', maxWidth: '100%' }}>
+          <MusicNoteIcon size={14} /><span style={{ whiteSpace: 'nowrap' }}>Add song</span>
+        </div>
+        {note && <div role="alert" style={{ flexBasis: '100%', fontSize: 12.5, color: theme.muted, textAlign: center ? 'center' : 'left' }}>{note}</div>}
+        {picker && <MusicPicker country={profile.country} title="Profile song" onClose={() => setPicker(false)} onPick={(s) => { setPicker(false); save(s); }} />}
+      </>
+    );
+  }
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: 14 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: bare && !center ? 'flex-start' : 'center', marginTop: bare ? 2 : 14, ...(bare ? { flexBasis: '100%', minWidth: 0 } : {}) }}>
       {song ? (
         <SongPill song={song} style={{ width: '100%', maxWidth: 300 }} right={isSelf ? <div role="button" aria-label="Remove profile song" onClick={(e) => { e.stopPropagation(); save(null); }} style={{ width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.muted, cursor: 'pointer', flexShrink: 0 }}><X size={16} /></div> : null} />
       ) : (
@@ -25974,23 +26053,27 @@ function useBirthdayOf(userId) {
   }, [userId]);
   return row;
 }
-function ProfileExtras({ profile, isSelf, onEditStatus, onEditBirthday }) {
+function ProfileExtras({ profile, isSelf, onEditStatus, onEditBirthday, bare }) {
   const { theme } = useTheme();
   const st = activeStatusOf(profile);
   const bd = useBirthdayOf(profile.id);
   const today = bd && birthdayMdsToday().includes(bd.md);
   if (!st && !bd && !isSelf) return null;
   const chip = (key, icon, text, onClick, strong) => (
-    <div key={key} role={onClick ? 'button' : undefined} aria-label={onClick ? text : undefined} onClick={onClick} className={onClick ? 'zchat-press' : undefined} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 16, background: strong ? `${theme.coral}22` : theme.rowBg, border: `1px solid ${strong ? `${theme.coral}55` : theme.border}`, fontSize: 13, fontWeight: 700, color: theme.ink, cursor: onClick ? 'pointer' : 'default', maxWidth: '100%' }}>
+    <div key={key} role={onClick ? 'button' : undefined} aria-label={onClick ? text : undefined} onClick={onClick} className={onClick ? 'zchat-press' : undefined} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 10px', borderRadius: 16, background: strong ? `${theme.coral}22` : theme.rowBg, border: `1px solid ${strong ? `${theme.coral}55` : theme.border}`, fontSize: 12.5, fontWeight: 700, color: theme.ink, cursor: onClick ? 'pointer' : 'default', maxWidth: '100%' }}>
       {icon}<span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{text}</span>
     </div>
   );
+  const chips = [
+    st ? chip('st', <span style={{ fontSize: 15 }}>{st.e || '\u{1F4AC}'}</span>, st.t || 'Status', isSelf ? onEditStatus : null)
+      : isSelf ? chip('st', <Plus size={14} />, 'Add status', onEditStatus) : null,
+    bd ? chip('bd', <CakeIcon size={15} />, today ? (isSelf ? 'Happy birthday!' : 'Birthday today') : `Birthday ${birthdayLabel(bd.md)}`, isSelf ? onEditBirthday : null, today)
+      : isSelf ? chip('bd', <CakeIcon size={15} />, 'Add birthday', onEditBirthday) : null,
+  ];
+  if (bare) return <>{chips}</>;
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center', marginTop: 14, padding: '0 6px' }}>
-      {st ? chip('st', <span style={{ fontSize: 15 }}>{st.e || '\u{1F4AC}'}</span>, st.t || 'Status', isSelf ? onEditStatus : null)
-        : isSelf ? chip('st', <Plus size={14} />, 'Set a status', onEditStatus) : null}
-      {bd ? chip('bd', <CakeIcon size={15} />, today ? (isSelf ? 'Happy birthday!' : 'Birthday today') : `Birthday ${birthdayLabel(bd.md)}`, isSelf ? onEditBirthday : null, today)
-        : isSelf ? chip('bd', <CakeIcon size={15} />, 'Add birthday', onEditBirthday) : null}
+      {chips}
     </div>
   );
 }
@@ -29715,7 +29798,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     try {
       const seen = localStorage.getItem('zchat-seen-version');
       if (!seen) { localStorage.setItem('zchat-seen-version', APP_VERSION); return; }
-      if (seen !== APP_VERSION) { localStorage.setItem('zchat-seen-version', APP_VERSION); setTimeout(() => setShowWhatsNew(true), 1600); }
+      if (seen !== APP_VERSION) {
+        localStorage.setItem('zchat-seen-version', APP_VERSION);
+        if (String(seen).split('.')[0] !== APP_VERSION.split('.')[0]) setTimeout(() => setShowWhatsNew(true), 1600);
+      }
     } catch {}
   }, []);
   const [draftMap, setDraftMap] = useState({});
@@ -51875,11 +51961,13 @@ function AdminUserPanel({ person, myId, onClose, onChanged, onOpenProfile }) {
 
         {data && (section === 'info' || section === 'gifts') && (
           <div style={{ ...card, padding: '16px 14px', textAlign: 'center', overflow: 'hidden' }}>
-            <div style={{ display: 'inline-block', position: 'relative', zIndex: 0, isolation: 'isolate' }}><Avatar emoji={profile.avatar} name={profile.name} size={104} frame={profile.avatar_frame} frameFit /></div>
             {NAMEPLATES[profile.nameplate] ? (
-              <div style={{ width: '100%', marginTop: 8 }}><NameplateBanner plate={profile.nameplate} name={profile.name} username={profile.username} verified={profile.verified} custom={profile.custom_badge} /></div>
+              <div style={{ position: 'relative', zIndex: 0, isolation: 'isolate' }}><ProfilePlateHero profile={profile} photo={profile.avatar} maxPlate={320} /></div>
             ) : (
-              <div style={{ marginTop: 10, fontWeight: 900, fontSize: 19, color: theme.ink, display: 'flex', justifyContent: 'center' }}><NameBadge name={profile.name} verified={profile.verified} custom={profile.custom_badge} size={18} style={{ justifyContent: 'center' }} /></div>
+              <>
+                <div style={{ display: 'inline-block', position: 'relative', zIndex: 0, isolation: 'isolate' }}><Avatar emoji={profile.avatar} name={profile.name} size={104} frame={profile.avatar_frame} frameFit /></div>
+                <div style={{ marginTop: 10, fontWeight: 900, fontSize: 19, color: theme.ink, display: 'flex', justifyContent: 'center' }}><NameBadge name={profile.name} verified={profile.verified} custom={profile.custom_badge} size={18} style={{ justifyContent: 'center' }} /></div>
+              </>
             )}
             <div style={{ fontSize: 12, color: theme.muted, marginTop: 4 }}>This is exactly how they look in ZChat right now.</div>
           </div>
