@@ -1,4 +1,4 @@
-const SHELL = 'zchat-shell-v2';
+const SHELL = 'zchat-shell-v3';
 const STATIC = 'zchat-static-v1';
 const REMOTE = 'zchat-remote-v1';
 const SHARE = 'zchat-share';
@@ -80,7 +80,7 @@ self.addEventListener('install', (event) => {
       const cache = await caches.open(SHELL);
       const res = await fetch('/', { cache: 'no-cache' });
       if (res && res.ok && (res.headers.get('content-type') || '').includes('text/html')) await storeShell(cache, res);
-      await cache.addAll(['/manifest.json', '/icon-192.png']).catch(() => {});
+      await cache.addAll(['/manifest.json', '/icon-192.png', '/icon-512.png', '/badge-192.png']).catch(() => {});
     } catch {}
     await self.skipWaiting();
   })());
@@ -331,7 +331,34 @@ self.addEventListener('push', (event) => {
     if (quiet) options.silent = true;
     if (tag) { options.tag = tag; options.renotify = !quiet; }
     await self.registration.showNotification(title, options);
+    await syncBadge();
   })());
+});
+
+async function syncBadge() {
+  try {
+    const nav = self.navigator;
+    if (!nav || !('setAppBadge' in nav)) return;
+    const list = await self.registration.getNotifications();
+    let n = 0;
+    list.forEach((x) => { n += (x.data && x.data.count) || 1; });
+    if (n > 0) await nav.setAppBadge(n); else await nav.clearAppBadge();
+  } catch {}
+}
+
+self.addEventListener('notificationclose', (event) => { event.waitUntil(syncBadge()); });
+
+self.addEventListener('message', (event) => {
+  const d = event.data || {};
+  if (d.type === 'zchat-clear-notifications') {
+    event.waitUntil((async () => {
+      try {
+        const list = await self.registration.getNotifications(d.tag ? { tag: d.tag } : undefined);
+        list.forEach((x) => x.close());
+      } catch {}
+      await syncBadge();
+    })());
+  }
 });
 
 function askClient(client, url) {
@@ -354,6 +381,7 @@ self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const url = (event.notification.data && event.notification.data.url) || '/';
   event.waitUntil((async () => {
+    await syncBadge();
     const list = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     const client = list.find((c) => c.url.startsWith(self.location.origin));
     if (client) {
