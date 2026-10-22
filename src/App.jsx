@@ -1087,6 +1087,8 @@ function GlobalStyle() {
       @keyframes zchat-bomb-in { 0% { opacity: 0; transform: scale(0.4) translateY(10px); } 70% { opacity: 1; transform: scale(1.06); } 100% { opacity: 1; transform: none; } }
       @keyframes zchat-bomb-pop { 0% { opacity: 0; transform: rotate(var(--r)) scale(0.3); } 16% { opacity: 1; transform: rotate(var(--r)) scale(1.08); } 26% { transform: rotate(var(--r)) scale(1); } 78% { opacity: 1; transform: rotate(var(--r)) scale(1); } 100% { opacity: 0; transform: rotate(var(--r)) translateY(-18px) scale(0.96); } }
       @keyframes zchat-rail-in { from { opacity: 0; transform: translateX(16px) scale(0.94); } to { opacity: 1; transform: none; } }
+      @keyframes zchat-filter-flash { 0% { opacity: 0; transform: scale(0.9); } 14% { opacity: 1; transform: scale(1); } 70% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(1); } }
+      .zchat-filter-flash { animation: zchat-filter-flash 1.1s ease both; }
       .zchat-rail-in { animation: zchat-rail-in 0.24s cubic-bezier(0.2, 0.9, 0.3, 1.2) both; transform-origin: 100% 50%; }
       @keyframes zchat-peek-in { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: none; } }
       .zchat-peek-in { animation: zchat-peek-in 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.12) both; transform-origin: 50% 70%; }
@@ -3800,6 +3802,17 @@ function reportClientError(message, stack, extra) {
     supabase.from('client_errors').insert({ message: msg, stack: String(stack || '').slice(0, 6000), url, ua: String(navigator.userAgent || '').slice(0, 300), version: APP_VERSION, extra: extra || null }).then(() => {}, () => {});
   } catch {}
 }
+function rpcMissing(error) {
+  if (!error) return false;
+  const code = String(error.code || '');
+  return code === 'PGRST202' || code === '42883' || code === '42P01' || /could not find the function|in the schema cache/i.test(String(error.message || ''));
+}
+function rpcFailText(name, error, setupText) {
+  if (rpcMissing(error)) return setupText;
+  if (navigator.onLine === false) return 'No connection. Try again when you are back online.';
+  reportClientError(`${name} failed: ${[error.code, error.message].filter(Boolean).join(' ')}`, [error.details, error.hint].filter(Boolean).join('\n'), { kind: 'rpc', rpc: name, code: error.code || null, status: error.status || null });
+  return 'That did not work. Try again in a moment.';
+}
 function installCrashReporter() {
   if (crashState.installed || typeof window === 'undefined') return;
   crashState.installed = true;
@@ -5529,7 +5542,8 @@ async function claimDailyCoins() {
   try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch {}
   const { data, error } = await supabase.rpc('zchat_daily_reward', { p_tz: tz });
   const row = Array.isArray(data) ? data[0] : data;
-  if (error || !row) return { error: error ? 'Coins switch on once the latest ZChat setup is finished.' : 'Come back tomorrow for more coins.' };
+  if (error) return { error: rpcFailText('Daily coins', error, 'Coins switch on once the latest ZChat setup is finished.') };
+  if (!row) return { error: 'Come back tomorrow for more coins.' };
   walletMem.data = null;
   announceWallet();
   return { added: Number(row.added) || 0, day: Number(row.day) || 1, coins: Number(row.coins) || 0 };
@@ -5874,7 +5888,8 @@ function GiftSheet({ uid, me, to, onClose, onSent, startBubble }) {
     const { data, error } = await supabase.rpc(tab === 'coins' ? 'zchat_send_gift' : 'zchat_gift_item', args);
     setBusy(false);
     const row = Array.isArray(data) ? data[0] : data;
-    if (error || !row || !row.ok) { setErr((row && row.reason) || (error ? 'Gifts switch on once the latest ZChat setup is finished.' : 'That gift could not be sent.')); return; }
+    if (error) { setErr(rpcFailText(tab === 'coins' ? 'Coin gift' : 'Item gift', error, 'Gifts switch on once the latest ZChat setup is finished.')); return; }
+    if (!row || !row.ok) { setErr((row && row.reason) || 'That gift could not be sent.'); return; }
     walletMem.data = null;
     announceWallet();
     hapticTap();
@@ -5973,7 +5988,8 @@ function GiftSheet({ uid, me, to, onClose, onSent, startBubble }) {
 async function buyShopItem(kind, key) {
   const { data, error } = await supabase.rpc('zchat_buy_item', { p_kind: kind, p_key: key });
   const row = Array.isArray(data) ? data[0] : data;
-  if (error || !row || !row.ok) return { error: (row && row.reason) || (error ? 'The shop switches on once the latest ZChat setup is finished.' : 'That did not work. Try again.') };
+  if (error) return { error: rpcFailText('Shop buy', error, 'The shop switches on once the latest ZChat setup is finished.') };
+  if (!row || !row.ok) return { error: (row && row.reason) || 'That did not work. Try again.' };
   walletMem.data = null;
   announceWallet();
   return { ok: true };
@@ -5982,7 +5998,8 @@ async function buyShopItem(kind, key) {
 async function buyDecorSet(key) {
   const { data, error } = await supabase.rpc('zchat_buy_set', { p_key: key });
   const row = Array.isArray(data) ? data[0] : data;
-  if (error || !row || !row.ok) return { error: (row && row.reason) || (error ? 'The shop switches on once the latest ZChat setup is finished.' : 'That did not work. Try again.') };
+  if (error) return { error: rpcFailText('Set buy', error, 'The shop switches on once the latest ZChat setup is finished.') };
+  if (!row || !row.ok) return { error: (row && row.reason) || 'That did not work. Try again.' };
   walletMem.data = null;
   announceWallet();
   return { ok: true };
@@ -5991,7 +6008,8 @@ async function buyDecorSet(key) {
 async function claimFreeSet(key) {
   const { data, error } = await supabase.rpc('zchat_claim_free_set', { p_key: key });
   const row = Array.isArray(data) ? data[0] : data;
-  if (error || !row || !row.ok) return { error: (row && row.reason) || (error ? 'Free sets switch on once the latest ZChat setup is finished.' : 'That did not work. Try again.') };
+  if (error) return { error: rpcFailText('Free set pick', error, 'Free sets switch on once the latest ZChat setup is finished.') };
+  if (!row || !row.ok) return { error: (row && row.reason) || 'That did not work. Try again.' };
   walletMem.data = null;
   announceWallet();
   return { ok: true, left: Number(row.left) || 0 };
@@ -14237,7 +14255,7 @@ function TextLayerEditor({ draft, onChange, onLines, onDone, innerW, frameW, are
   );
 }
 
-function MediaComposer({ files, recipientName, onCancel, onSend, onActivity, mode: composerMode = 'chat', mentionGroups = [], myId, privacyCtx, onceDefault, hiddenDefault, initialSticker, country, draft = null }) {
+function MediaComposer({ files, recipientName, onCancel, onSend, onActivity, mode: composerMode = 'chat', mentionGroups = [], myId, privacyCtx, onceDefault, hiddenDefault, initialSticker, country, draft = null, albumCtx = null }) {
   const requestCloseRef = useRef(onCancel);
   useBackClose(true, () => requestCloseRef.current());
   const { theme } = useTheme();
@@ -14260,6 +14278,8 @@ function MediaComposer({ files, recipientName, onCancel, onSend, onActivity, mod
   const [once, setOnce] = useState(!!onceDefault);
   const [hd, setHd] = useState(false);
   const [hideIt, setHideIt] = useState(!!hiddenDefault && !onceDefault);
+  const [album, setAlbum] = useState(null);
+  const [albumPick, setAlbumPick] = useState(false);
   const [sending, setSending] = useState(false);
   const [stage, setStage] = useState({ w: 0, h: 0 });
   const [draftCrop, setDraftCrop] = useState(null);
@@ -14312,6 +14332,14 @@ function MediaComposer({ files, recipientName, onCancel, onSend, onActivity, mod
     hintTimer.current = setTimeout(() => setLayerHint(''), 2800);
   };
   useEffect(() => () => clearTimeout(hintTimer.current), []);
+  useEffect(() => {
+    if (!files.some((f) => (f.type || '').startsWith('image'))) return undefined;
+    let seen = false;
+    try { seen = localStorage.getItem('zchat-tip-filter-swipe') === '1'; localStorage.setItem('zchat-tip-filter-swipe', '1'); } catch { seen = true; }
+    if (seen) return undefined;
+    const t = setTimeout(() => showLayerHint('filterswipe', 'Swipe the photo to change the filter'), 700);
+    return () => clearTimeout(t);
+  }, []);
   const [collab, setCollab] = useState(() => (draft && draft.collab) || null);
   const [pickCollab, setPickCollab] = useState(false);
   const [closeCount, reloadClose] = useCloseFriendCount(isStory ? myId : null);
@@ -14404,6 +14432,11 @@ function MediaComposer({ files, recipientName, onCancel, onSend, onActivity, mod
   const guideYRef = useRef(null);
   const tapGuardRef = useRef(0);
   const wheelRef = useRef(null);
+  const fsRef = useRef(null);
+  const fsImgRef = useRef(null);
+  const [filterFlash, setFilterFlash] = useState(null);
+  const flashTimer = useRef(0);
+  useEffect(() => () => clearTimeout(flashTimer.current), []);
   const modeRef = useRef(mode);
   modeRef.current = mode;
   useEffect(() => {
@@ -14664,6 +14697,76 @@ function MediaComposer({ files, recipientName, onCancel, onSend, onActivity, mod
     }
     if (key[0] === 't') { const t = cur.texts.find((x) => x.id === key.slice(2)); if (t) openTextEditor(t); }
   };
+  const filterIndexOf = (k) => Math.max(0, PHOTO_FILTERS.findIndex((f) => f.k === (k || 'none')));
+  const flashFilter = (k) => {
+    const i = filterIndexOf(k);
+    clearTimeout(flashTimer.current);
+    setFilterFlash({ k, i, n: Date.now() });
+    flashTimer.current = setTimeout(() => setFilterFlash(null), 1100);
+  };
+  const fsLook = (dx, cand) => {
+    const img = fsImgRef.current;
+    if (!img) return;
+    if (cand == null || !dx) { img.style.display = 'none'; return; }
+    const fr = frameRef.current;
+    const reg = cur.crop || { x: 0, y: 0, w: 1, h: 1 };
+    const left = reg.x * fr.innerW;
+    img.style.display = 'block';
+    img.style.filter = photoFilterCss(PHOTO_FILTERS[cand].k);
+    img.style.clipPath = dx < 0 ? `inset(0 0 0 ${Math.max(0, left + fr.frameW + dx)}px)` : `inset(0 ${Math.max(0, fr.innerW - (left + dx))}px 0 0)`;
+  };
+  const fsDown = (e) => {
+    if ((mode !== 'view' && mode !== 'filter') || !cur || cur.kind !== 'image' || textDraft || sending || gestRef.current || dragKey) return;
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    if (e.target && e.target.closest && e.target.closest('[data-layer], [data-tool], [role="button"]')) return;
+    fsRef.current = { id: e.pointerId, sx: e.clientX, sy: e.clientY, t: Date.now(), dx: 0, on: false, cand: null };
+  };
+  const fsMove = (e) => {
+    const s = fsRef.current;
+    if (!s || s.id !== e.pointerId) return;
+    const dx = e.clientX - s.sx;
+    const dy = e.clientY - s.sy;
+    if (!s.on) {
+      if (Math.abs(dy) > 14 && Math.abs(dy) > Math.abs(dx)) { fsRef.current = null; return; }
+      if (Math.abs(dx) < 10 || Math.abs(dx) < Math.abs(dy) * 1.3) return;
+      if (gestRef.current) { fsRef.current = null; return; }
+      s.on = true;
+      try { stageRef.current.setPointerCapture(e.pointerId); } catch {}
+    }
+    const fw = frameRef.current.frameW || 1;
+    const i = filterIndexOf(cur.filter);
+    const cand = dx < 0 ? (i < PHOTO_FILTERS.length - 1 ? i + 1 : null) : (i > 0 ? i - 1 : null);
+    s.cand = cand;
+    s.dx = cand == null ? dx * 0.18 : Math.max(-fw, Math.min(fw, dx));
+    fsLook(cand == null ? 0 : s.dx, cand);
+  };
+  const fsEnd = (e) => {
+    const s = fsRef.current;
+    if (!s || s.id !== e.pointerId) return;
+    fsRef.current = null;
+    try { stageRef.current.releasePointerCapture(e.pointerId); } catch {}
+    if (!s.on) return;
+    tapGuardRef.current = Date.now();
+    const fw = frameRef.current.frameW || 1;
+    const fast = Math.abs(s.dx) / Math.max(1, Date.now() - s.t) > 0.45 && Math.abs(s.dx) > 34;
+    const img = fsImgRef.current;
+    if (s.cand != null && e.type !== 'pointercancel' && (Math.abs(s.dx) > fw * 0.24 || fast)) {
+      const k = PHOTO_FILTERS[s.cand].k;
+      if (img) { img.style.transition = 'clip-path 0.16s ease-out'; fsLook(s.dx < 0 ? -fw : fw, s.cand); }
+      hapticTap();
+      setTimeout(() => {
+        updateItem(cur.id, { filter: k });
+        flashFilter(k);
+        requestAnimationFrame(() => { if (fsImgRef.current) { fsImgRef.current.style.transition = ''; fsImgRef.current.style.display = 'none'; } });
+      }, 150);
+      return;
+    }
+    if (img && s.cand != null) {
+      img.style.transition = 'clip-path 0.16s ease-out';
+      fsLook(s.dx < 0 ? -0.01 : 0.01, s.cand);
+      setTimeout(() => { if (fsImgRef.current) { fsImgRef.current.style.transition = ''; fsImgRef.current.style.display = 'none'; } }, 170);
+    } else fsLook(0, null);
+  };
   const gStart = (e) => {
     if (mode !== 'view' || textDraft || sending) return;
     const g = gestRef.current;
@@ -14819,7 +14922,7 @@ function MediaComposer({ files, recipientName, onCancel, onSend, onActivity, mod
         }
       }
       sentRef.current = true;
-      onSend(outputs, caption.trim(), mentions, { hd: !isPost && !isStory && hd, once: !isPost && !isStory && once, blur: !isPost && !isStory && !once && hideIt, audience: isStory && closeShareRef.current ? 'close' : undefined, sticker: isStory && storySticker ? (storySticker.k === 'moment' ? storySticker : { ...storySticker, pos: roundLayerPos(storySticker.pos) }) : undefined, song: isStory && storySong ? validSong({ ...storySong, pos: roundLayerPos(storySong.pos) }) || undefined : undefined, collab: isPost && collab ? { id: collab.id, name: collab.name } : undefined, scheduleAt: isPost && scheduleAt ? scheduleAt : undefined, draftId: isPost ? draftIdRef.current || undefined : undefined });
+      onSend(outputs, caption.trim(), mentions, { hd: !isPost && !isStory && hd, once: !isPost && !isStory && once, blur: !isPost && !isStory && !once && hideIt, album: !isPost && !isStory && !once && !hideIt && album ? album : undefined, audience: isStory && closeShareRef.current ? 'close' : undefined, sticker: isStory && storySticker ? (storySticker.k === 'moment' ? storySticker : { ...storySticker, pos: roundLayerPos(storySticker.pos) }) : undefined, song: isStory && storySong ? validSong({ ...storySong, pos: roundLayerPos(storySong.pos) }) || undefined : undefined, collab: isPost && collab ? { id: collab.id, name: collab.name } : undefined, scheduleAt: isPost && scheduleAt ? scheduleAt : undefined, draftId: isPost ? draftIdRef.current || undefined : undefined });
     } catch {
       closeShareRef.current = false;
       setSending(false);
@@ -14881,7 +14984,7 @@ function MediaComposer({ files, recipientName, onCancel, onSend, onActivity, mod
         )}
       </div>
 
-      <div ref={stageRef} onPointerDownCapture={gStart} onPointerMove={gMove} onPointerUp={gEnd} onPointerCancel={gEnd}
+      <div ref={stageRef} onPointerDownCapture={gStart} onPointerDown={fsDown} onPointerMove={(e) => { gMove(e); fsMove(e); }} onPointerUp={(e) => { gEnd(e); fsEnd(e); }} onPointerCancel={(e) => { gEnd(e); fsEnd(e); }}
         onClick={(e) => { if (Date.now() - tapGuardRef.current < 350 || (e.target && e.target.closest && e.target.closest('[data-layer], [data-tool]'))) return; if (mode === 'view' && cur.kind === 'video') togglePlay(); }}
         style={{ flex: 1, minHeight: 0, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', touchAction: 'none' }}>
         {cur.width && stage.w ? (
@@ -14891,7 +14994,10 @@ function MediaComposer({ files, recipientName, onCancel, onSend, onActivity, mod
               onPointerDown={drawDown} onPointerMove={drawMove} onPointerUp={drawUp} onPointerCancel={drawUp}
               style={{ position: 'absolute', left: -region.x * innerW, top: -region.y * innerH, width: innerW, height: innerH, touchAction: 'none', cursor: mode === 'draw' ? 'crosshair' : 'default' }}>
               {cur.kind === 'image' ? (
-                <img src={cur.url} alt="" draggable={false} style={{ width: '100%', height: '100%', display: 'block', userSelect: 'none', pointerEvents: 'none', filter: photoFilterCss(cur.filter) }} />
+                <>
+                  <img src={cur.url} alt="" draggable={false} style={{ width: '100%', height: '100%', display: 'block', userSelect: 'none', pointerEvents: 'none', filter: photoFilterCss(cur.filter) }} />
+                  <img ref={fsImgRef} src={cur.url} alt="" aria-hidden="true" draggable={false} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'none', userSelect: 'none', pointerEvents: 'none', willChange: 'clip-path' }} />
+                </>
               ) : (
                 <video ref={videoRef} src={cur.url} playsInline preload="auto"
                   onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onTimeUpdate={onVideoTime}
@@ -14996,6 +15102,12 @@ function MediaComposer({ files, recipientName, onCancel, onSend, onActivity, mod
           </div>
         )}
         {mode === 'draw' && <EditorSizeRail label="Brush size" value={brushSize} min={2} max={40} onChange={setBrushSize} />}
+        {filterFlash && (mode === 'view' || mode === 'filter') && PHOTO_FILTERS[filterFlash.i] && (
+          <div key={filterFlash.n} className="zchat-filter-flash" role="status" style={{ position: 'absolute', left: 0, right: 0, top: 'calc(50% - 34px)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, pointerEvents: 'none', zIndex: 14 }}>
+            <div style={{ fontSize: 32, fontWeight: 800, color: '#FFFFFF', letterSpacing: '-0.01em', textShadow: '0 2px 18px rgba(0, 0, 0, 0.5)' }}>{PHOTO_FILTERS[filterFlash.i].label}</div>
+            <div style={{ display: 'flex', gap: 5 }}>{PHOTO_FILTERS.map((f, i) => <span key={f.k} style={{ width: i === filterFlash.i ? 14 : 5, height: 5, borderRadius: 3, background: i === filterFlash.i ? '#FFFFFF' : 'rgba(255, 255, 255, 0.45)', boxShadow: '0 1px 4px rgba(0, 0, 0, 0.3)' }} />)}</div>
+          </div>
+        )}
         {layerHint && mode === 'view' && !dragKey && <div className="zchat-pop" role="status" style={{ position: 'absolute', left: '50%', bottom: 26, transform: 'translateX(-50%)', zIndex: 13, padding: '9px 15px', borderRadius: 18, background: 'rgba(18, 18, 24, 0.72)', color: '#FFFFFF', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', pointerEvents: 'none', maxWidth: 'calc(100% - 32px)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{layerHint}</div>}
       </div>
 
@@ -15030,8 +15142,9 @@ function MediaComposer({ files, recipientName, onCancel, onSend, onActivity, mod
 
       {mode === 'filter' && (
         <div style={{ padding: '10px 0', paddingBottom: 'calc(12px + env(safe-area-inset-bottom))', flexShrink: 0 }}>
-          <FilterStrip value={cur.filter} thumb={cur.url} onPick={(k) => updateItem(cur.id, { filter: k })} />
-          <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 12 }}>
+          <FilterStrip value={cur.filter} thumb={cur.url} big onPick={(k) => updateItem(cur.id, { filter: k })} />
+          <div style={{ fontSize: 12.5, color: 'rgba(255, 255, 255, 0.6)', textAlign: 'center', paddingTop: 10 }}>Swipe the photo to try them</div>
+          <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 10 }}>
             <div role="button" aria-label="Done" onClick={() => setMode('view')} style={{ padding: '10px 30px', borderRadius: 20, background: 'white', color: '#000', fontWeight: 800, fontSize: 14.5, cursor: 'pointer' }}>Done</div>
           </div>
         </div>
@@ -15100,17 +15213,21 @@ function MediaComposer({ files, recipientName, onCancel, onSend, onActivity, mod
             </div>
           )}
           {(isPost || isStory) && <TagSuggestBar text={caption} onPick={(tag, typed) => setCaption(applyTagPick(caption, typed, tag).slice(0, MAX_CHARS))} />}
+          {!isPost && !isStory && (
+            <div style={{ display: 'flex', gap: 8, padding: '8px 12px 0', overflowX: 'auto', scrollbarWidth: 'none' }}>
+              {[
+                { k: 'once', on: once, label: 'View once', aria: once ? 'View once on' : 'View once off', icon: <OnceIcon size={17} color={once ? '#000' : 'white'} used={once} />, tap: () => { setOnce((v) => { if (!v) { setHideIt(false); setAlbum(null); } return !v; }); } },
+                { k: 'hidden', on: hideIt, label: 'Hidden', aria: hideIt ? 'Hidden photo on' : 'Hidden photo off', icon: <HiddenPhotoIcon size={16} color={hideIt ? '#000' : 'white'} />, tap: () => { setHideIt((v) => { if (!v) { setOnce(false); setAlbum(null); } return !v; }); } },
+                albumCtx ? { k: 'album', on: !!album, label: album ? String(album.title || 'Album').slice(0, 22) : 'Album', aria: album ? `Adding to the album ${album.title}` : 'Add to a shared album', icon: <AlbumIcon size={16} color={album ? '#000' : 'white'} />, tap: () => { if (album) setAlbum(null); else setAlbumPick(true); } } : null,
+              ].filter(Boolean).map((o) => (
+                <div key={o.k} role="button" aria-label={o.aria} aria-pressed={o.on} onClick={() => { hapticTap(); playUiSound('toggle'); o.tap(); }} className="zchat-press"
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, height: 34, padding: '0 13px 0 11px', borderRadius: 17, background: o.on ? '#FFFFFF' : 'rgba(255,255,255,0.14)', color: o.on ? '#000' : '#FFFFFF', fontSize: 13.5, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0, transition: 'background 0.16s ease, color 0.16s ease' }}>
+                  {o.icon}{o.label}{o.k === 'album' && o.on && <X size={14} style={{ marginLeft: 1, opacity: 0.6 }} />}
+                </div>
+              ))}
+            </div>
+          )}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px 0' }}>
-            {!isPost && !isStory && (
-              <div role="button" aria-label={once ? 'View once on' : 'View once off'} onClick={() => { hapticTap(); playUiSound('toggle'); setOnce((v) => { if (!v) setHideIt(false); return !v; }); }} style={{ width: 46, height: 46, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, background: once ? 'white' : 'rgba(255,255,255,0.14)' }}>
-                <OnceIcon size={24} color={once ? '#000' : 'white'} used={once} />
-              </div>
-            )}
-            {!isPost && !isStory && (
-              <div role="button" aria-label={hideIt ? 'Hidden photo on' : 'Hidden photo off'} onClick={() => { hapticTap(); playUiSound('toggle'); setHideIt((v) => { if (!v) setOnce(false); return !v; }); }} style={{ width: 46, height: 46, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, background: hideIt ? 'white' : 'rgba(255,255,255,0.14)' }}>
-                <HiddenPhotoIcon size={22} color={hideIt ? '#000' : 'white'} />
-              </div>
-            )}
             <input value={caption} onChange={(e) => setCaption(e.target.value.slice(0, MAX_CHARS))} placeholder={isPost ? 'Write a caption' : 'Add a caption'}
               onKeyDown={(e) => { if (e.key === 'Enter' && !isTouchDevice()) { e.preventDefault(); send(); } }}
               style={{ flex: 1, minWidth: 0, padding: '12px 16px', borderRadius: 24, border: 'none', outline: 'none', background: 'rgba(255,255,255,0.14)', color: 'white', fontFamily: FONT, fontSize: 15 }} />
@@ -15147,11 +15264,12 @@ function MediaComposer({ files, recipientName, onCancel, onSend, onActivity, mod
             ? <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.6)', padding: '6px 18px 0' }}>{scheduleAt ? `Goes up ${fmtSchedule(scheduleAt)}. Only you can see it until then.` : items.length > 1 ? `All ${items.length} go in one post, people swipe through them` : collab ? `Shows on your profile, and on ${collab.name.split(' ')[0]}'s once they accept` : 'Shows on your profile and in Vibes'}</div>
             : isStory
             ? (closeCount === -1 || closeCount === null ? <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.6)', padding: '6px 18px 0' }}>Shared with your followers for 24 hours</div> : <CloseShareHint count={closeCount} base="Shared with your followers for 24 hours" onEdit={() => setCloseEdit(true)} />)
-            : recipientName && <div style={{ fontSize: 11.5, color: once || hideIt ? 'white' : 'rgba(255,255,255,0.6)', fontWeight: once || hideIt ? 700 : 400, padding: '6px 18px 0' }}>To {recipientName}{once ? ', opens once' : hideIt ? ', hidden until they tap' : ''}</div>}
+            : recipientName && <div style={{ fontSize: 11.5, color: once || hideIt || album ? 'white' : 'rgba(255,255,255,0.6)', fontWeight: once || hideIt || album ? 700 : 400, padding: '6px 18px 0' }}>{album ? `Goes into the album ${album.title}, everyone in the chat can see it` : `To ${recipientName}${once ? ', opens once' : hideIt ? ', hidden until they tap' : ''}`}</div>}
           {closeEdit && <CloseFriendsPicker myId={myId} zIndex={700} onClose={() => { setCloseEdit(false); reloadClose(); }} />}
         </div>
       )}
       {schedOpen && <SchedulePostSheet value={scheduleAt} onClose={() => setSchedOpen(false)} onPick={(iso) => { setScheduleAt(iso); setSchedOpen(false); }} />}
+      {albumPick && albumCtx && <AlbumPickSheet chatKey={albumCtx.chatKey} userId={albumCtx.userId} zIndex={800} subtitle="Your photos go into it and the chat gets a card" onClose={() => setAlbumPick(false)} onPick={(a) => { setAlbumPick(false); setAlbum({ id: a.id, title: a.title }); setOnce(false); setHideIt(false); hapticTap(); }} />}
       {askClose && (
         <ActionSheet title="Leave this post?" onClose={() => setAskClose(false)} zIndex={900} items={[
           { k: 'draft', label: 'Save draft', icon: <Download />, on: async () => { setAskClose(false); if (await keepDraft()) { sentRef.current = false; onCancel(); } } },
@@ -21472,7 +21590,8 @@ function DropPage({ drop, me, rewards, wallet, onClose, onWear, onRefresh, onOpe
     setBusy(true);
     const { data, error } = await supabase.rpc('zchat_buy_drop', { p_drop: drop.id });
     const row = Array.isArray(data) ? data[0] : data;
-    if (error || !row || !row.ok) { setBusy(false); flash((row && row.reason) || 'Drops switch on once the latest ZChat setup is finished.'); return; }
+    if (error) { setBusy(false); flash(rpcFailText('Drop buy', error, 'Drops switch on once the latest ZChat setup is finished.')); return; }
+    if (!row || !row.ok) { setBusy(false); flash((row && row.reason) || 'That did not work. Try again.'); return; }
     walletMem.data = null;
     announceWallet();
     if (onRefresh) await onRefresh();
@@ -23388,7 +23507,8 @@ function useOwnedBubbles(uid) {
 async function claimFreeBubble(key) {
   const { data, error } = await supabase.rpc('zchat_claim_free_bubble', { p_key: key });
   const row = Array.isArray(data) ? data[0] : data;
-  if (error || !row || !row.ok) return { error: (row && row.reason) || (error ? 'Free bubbles switch on once the latest ZChat setup is finished.' : 'That did not work. Try again.') };
+  if (error) return { error: rpcFailText('Free bubble pick', error, 'Free bubbles switch on once the latest ZChat setup is finished.') };
+  if (!row || !row.ok) return { error: (row && row.reason) || 'That did not work. Try again.' };
   walletMem.data = null;
   announceWallet();
   return { ok: true, left: Number(row.left) || 0 };
@@ -24244,7 +24364,7 @@ function writeTypingOff(set) {
   try { window.dispatchEvent(new Event('zchat-typing-off')); } catch {}
 }
 
-const PREF_DEFAULTS = { 'zchat-enter-send': true, 'zchat-doubletap': true, 'zchat-haptics': true, 'zchat-reduce-motion': false, 'zchat-swipe-reply': true, 'zchat-format': true, 'zchat-effects': true, 'zchat-touch-sounds': true, 'zchat-sticker-suggest': true, 'zchat-voice-autoplay': true, 'zchat-hide-previews': false, 'zchat-typing-indicator': true, 'zchat-app-badge': true, 'zchat-friend-emojis': true, 'zchat-emoji-suggest': true, 'zchat-writing-help': true, 'zchat-saver-cellular': false, 'zchat-login-alerts': true, 'zchat-quick-rail': true };
+const PREF_DEFAULTS = { 'zchat-enter-send': true, 'zchat-doubletap': true, 'zchat-haptics': true, 'zchat-reduce-motion': false, 'zchat-swipe-reply': true, 'zchat-format': true, 'zchat-effects': true, 'zchat-touch-sounds': true, 'zchat-sticker-suggest': true, 'zchat-voice-autoplay': true, 'zchat-hide-previews': false, 'zchat-typing-indicator': true, 'zchat-app-badge': true, 'zchat-friend-emojis': true, 'zchat-emoji-suggest': true, 'zchat-writing-help': true, 'zchat-saver-cellular': false, 'zchat-login-alerts': true, 'zchat-quick-rail': true, 'zchat-rail-tucked': false };
 let touchSoundsInstalled = false;
 function installTouchSounds() {
   if (touchSoundsInstalled) return;
@@ -26142,25 +26262,54 @@ function TextBombSheet({ initial, onClose, onSend }) {
     </Portal>
   );
 }
-function ChatQuickRail({ onBomb, onStyle, onBuzz, onCoin, onHide }) {
+function RailTuckIcon({ size = 20, color = 'currentColor', style }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" style={style} aria-hidden="true">
+      <path d="M19.5 4.5v15" />
+      <path d="M5 12h9.5M11 8.2l3.8 3.8-3.8 3.8" />
+    </svg>
+  );
+}
+function ChatQuickRail({ onBomb, onStyle, onBuzz, onCoin }) {
   const { theme } = useTheme();
   const [open, setOpen] = useState(false);
+  const [tucked, setTucked] = usePref('zchat-rail-tucked');
+  const [hint, setHint] = useState(false);
   const timer = useRef(0);
+  const hintTimer = useRef(0);
+  const swipe = useRef(null);
   const arm = () => { clearTimeout(timer.current); timer.current = setTimeout(() => setOpen(false), 5000); };
-  useEffect(() => () => clearTimeout(timer.current), []);
+  useEffect(() => () => { clearTimeout(timer.current); clearTimeout(hintTimer.current); }, []);
   const items = [
     onBomb ? { k: 'bomb', label: 'Bomb', aria: 'Text bomb', icon: <TextBombIcon size={21} />, on: onBomb } : null,
     onStyle ? { k: 'aa', label: 'Style', aria: 'Text style', icon: <span style={{ fontWeight: 800, fontSize: 17, letterSpacing: '-0.04em', lineHeight: 1 }}>Aa</span>, on: onStyle } : null,
     onBuzz ? { k: 'buzz', label: 'Buzz', aria: 'Buzz', icon: <BuzzIcon size={21} />, on: onBuzz } : null,
     onCoin ? { k: 'coin', label: 'Coin', aria: 'Flip a coin', icon: <CoinFlipIcon size={21} />, on: onCoin } : null,
-    onHide ? { k: 'hide', label: 'Hide', aria: 'Quick hide', icon: <EyeOff size={21} />, on: onHide } : null,
   ].filter(Boolean);
   if (!items.length) return null;
   const glass = { background: theme.dark ? 'rgba(30, 30, 36, 0.78)' : 'rgba(255, 255, 255, 0.82)', backdropFilter: GLASS_OK ? 'blur(16px) saturate(170%)' : undefined, WebkitBackdropFilter: GLASS_OK ? 'blur(16px) saturate(170%)' : undefined, boxShadow: `0 6px 22px rgba(0, 0, 0, ${theme.dark ? 0.4 : 0.14}), inset 0 0 0 0.5px ${theme.border}` };
+  const openRail = () => { if (tucked) setTucked(false); setHint(false); setOpen(true); arm(); hapticTap(); };
+  const tuck = () => {
+    clearTimeout(timer.current);
+    setOpen(false);
+    setTucked(true);
+    hapticTap();
+    setHint(true);
+    clearTimeout(hintTimer.current);
+    hintTimer.current = setTimeout(() => setHint(false), 2600);
+  };
+  const handleDown = (e) => { swipe.current = { x: e.clientX, y: e.clientY, done: false }; try { e.currentTarget.setPointerCapture(e.pointerId); } catch {} };
+  const handleMove = (e) => {
+    const s = swipe.current;
+    if (!s || s.done) return;
+    if (s.x - e.clientX > 14 && Math.abs(e.clientY - s.y) < 40) { s.done = true; openRail(); }
+  };
+  const handleClick = () => { const s = swipe.current; swipe.current = null; if (s && s.done) return; openRail(); };
+  const handleProps = { onPointerDown: handleDown, onPointerMove: handleMove, onClick: handleClick };
   return (
     <div style={{ position: 'absolute', right: 0, top: '50%', transform: 'translateY(-50%)', zIndex: 12, display: 'flex', alignItems: 'center', pointerEvents: 'none' }}>
       {open ? (
-        <div role="toolbar" aria-label="Quick actions" className="zchat-rail-in" style={{ ...glass, pointerEvents: 'auto', marginRight: 8, borderRadius: 26, padding: '6px 0', width: 54, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <div role="toolbar" aria-label="Quick actions" className="zchat-rail-in" style={{ ...glass, pointerEvents: 'auto', marginRight: 8, borderRadius: 26, padding: '6px 0 4px', width: 54, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           {items.map((it) => (
             <div key={it.k} role="button" aria-label={it.aria} onClick={() => { clearTimeout(timer.current); setOpen(false); hapticTap(); it.on(); }} className="zchat-press"
               style={{ width: 54, padding: '7px 0 6px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer', color: theme.ink }}>
@@ -26168,10 +26317,24 @@ function ChatQuickRail({ onBomb, onStyle, onBuzz, onCoin, onHide }) {
               <div style={{ fontSize: 10.5, fontWeight: 600, color: theme.muted }}>{it.label}</div>
             </div>
           ))}
+          <div style={{ width: 26, height: 1, background: theme.border, margin: '3px 0 2px' }} />
+          <div role="button" aria-label="Hide quick actions" onClick={tuck} className="zchat-press"
+            style={{ width: 54, padding: '7px 0 6px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer', color: theme.muted }}>
+            <div style={{ height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><RailTuckIcon size={19} /></div>
+            <div style={{ fontSize: 10.5, fontWeight: 600 }}>Hide</div>
+          </div>
+        </div>
+      ) : tucked ? (
+        <div style={{ display: 'flex', alignItems: 'center' }}>
+          {hint && <div className="zchat-fade" style={{ ...glass, marginRight: 6, padding: '7px 11px', borderRadius: 14, fontSize: 12, fontWeight: 600, color: theme.ink, whiteSpace: 'nowrap' }}>Tap the line to bring it back</div>}
+          <div role="button" aria-label="Show quick actions" {...handleProps} className="zchat-fade"
+            style={{ pointerEvents: 'auto', width: 18, height: 74, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', cursor: 'pointer', touchAction: 'pan-y' }}>
+            <span style={{ width: 4, height: 34, marginRight: 2, borderRadius: 2, background: theme.muted, opacity: theme.dark ? 0.5 : 0.42 }} />
+          </div>
         </div>
       ) : (
-        <div role="button" aria-label="Quick actions" onClick={() => { setOpen(true); arm(); hapticTap(); }} className="zchat-press"
-          style={{ ...glass, pointerEvents: 'auto', width: 20, height: 58, borderRadius: '12px 0 0 12px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: 'pointer' }}>
+        <div role="button" aria-label="Quick actions" {...handleProps} className="zchat-press"
+          style={{ ...glass, pointerEvents: 'auto', width: 20, height: 58, borderRadius: '12px 0 0 12px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: 'pointer', touchAction: 'pan-y' }}>
           {[0, 1, 2].map((i) => <span key={i} style={{ width: 4, height: 4, borderRadius: '50%', background: theme.muted }} />)}
         </div>
       )}
@@ -29177,7 +29340,7 @@ function AlbumPage({ album, userId, onClose, onAdded }) {
   );
 }
 
-function AlbumPickSheet({ chatKey, userId, onPick, onClose }) {
+function AlbumPickSheet({ chatKey, userId, onPick, onClose, zIndex = 96, subtitle = 'Pick an album in this chat' }) {
   const { theme } = useTheme();
   const [albums, setAlbums] = useState(null);
   const [title, setTitle] = useState('');
@@ -29205,7 +29368,7 @@ function AlbumPickSheet({ chatKey, userId, onPick, onClose }) {
     </div>
   );
   return (
-    <ChatRowSheet title="Add to album" subtitle="Pick an album in this chat" peek={peek} onClose={onClose} zIndex={96}
+    <ChatRowSheet title="Add to album" subtitle={subtitle} peek={peek} onClose={onClose} zIndex={zIndex}
       actions={(albums || []).map((a) => ({ label: a.title, hint: `${a.photos.length} ${a.photos.length === 1 ? 'item' : 'items'}`, icon: <AlbumIcon size={18} />, onClick: () => onPick(a) }))} />
   );
 }
@@ -37154,6 +37317,31 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const bodyFor = (cap) => (once ? `zonce:${JSON.stringify({ c: cap || '' })}` : blur ? `zblur:${JSON.stringify({ c: cap || '' })}` : (cap || null));
     setMediaComposer(null);
     if (!outputs.length || (!activeProfile && !activeGroup)) return;
+    if (opts && opts.album && opts.album.id) {
+      const album = opts.album;
+      setUploading(outputs.length);
+      const rows = [];
+      let failed = 0;
+      for (let i = 0; i < outputs.length; i++) {
+        const item = outputs[i];
+        const { url, error } = await uploadChatMedia(item.file, session.user.id);
+        if (error || !url) failed += 1;
+        else {
+          const { data, error: insErr } = await supabase.from('album_photos').insert({ album_id: album.id, user_id: session.user.id, media_url: url, media_type: item.kind === 'video' ? 'video' : 'image' }).select().single();
+          if (insErr || !data) failed += 1; else rows.push(data);
+        }
+        if (item.url) { const doneUrl = item.url; setTimeout(() => URL.revokeObjectURL(doneUrl), 5000); }
+        setUploading((n) => Math.max(0, (typeof n === 'number' ? n : 1) - 1));
+      }
+      setUploading(0);
+      if (rows.length) {
+        postAlbumCard(album, rows);
+        playUiSound('send');
+        if (caption && caption.trim()) sendContentTo(activeGroup ? { kind: 'group', id: activeGroup.id } : { kind: 'user', id: activeProfile.id }, caption.trim().slice(0, 2000), caption.trim().slice(0, 80));
+      }
+      if (failed) showSnack(failed === outputs.length ? 'Those could not go into the album. Try again.' : `${failed} could not go into the album. Try those again.`);
+      return;
+    }
     const targetProfile = activeProfile;
     const targetGroup = activeGroup;
     const replyId = replyingTo?.id || null;
@@ -37426,14 +37614,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const t = setTimeout(() => setLiveSound(null), 2400);
     return () => clearTimeout(t);
   }, [liveSound]);
-  const quickHide = () => {
-    hapticTap();
-    if (activeGroup) markGroupRead(activeGroup.id);
-    setBombOpen(false); setShowTextStyle(false); setShowAttach(false);
-    setMobileShowChat(false); setActiveProfile(null); setActiveGroup(null);
-    setHomeTab('moments');
-    if (readAppLock().h) { try { window.dispatchEvent(new Event('zchat-lock-now')); } catch {} }
-  };
   const sendBuzz = async () => {
     if (!me || (!activeProfile && !activeGroup)) return;
     if (Date.now() - buzzRef.current < 15000) { showSnack('Give them a moment before you buzz again'); return; }
@@ -39258,8 +39438,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                   onBomb={bot ? null : () => setBombOpen(true)}
                   onStyle={() => setShowTextStyle(true)}
                   onBuzz={bot ? null : sendBuzz}
-                  onCoin={bot ? null : () => sendSpecial(`zdice:${JSON.stringify({ k: 'coin', v: [Math.random() < 0.5 ? 'h' : 't'] })}`, 'Flipped a coin')}
-                  onHide={quickHide} />
+                  onCoin={bot ? null : () => sendSpecial(`zdice:${JSON.stringify({ k: 'coin', v: [Math.random() < 0.5 ? 'h' : 't'] })}`, 'Flipped a coin')} />
               );
             })()}
 
@@ -39277,7 +39456,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                 onCamera={() => { setShowAttach(false); onceNextRef.current = false; hiddenNextRef.current = false; setCameraOpen(true); }}
                 onGallery={() => { setShowAttach(false); onceNextRef.current = false; hiddenNextRef.current = false; if (cameraGalleryRef.current) cameraGalleryRef.current.click(); }}
                 onFile={activeProfile && activeProfile.is_bot ? null : () => { setShowAttach(false); if (fileSendRef.current) fileSendRef.current.click(); }}
-                onOnce={activeProfile && activeProfile.is_bot ? null : () => { setShowAttach(false); onceNextRef.current = true; if (cameraGalleryRef.current) cameraGalleryRef.current.click(); }}
                 onDoodle={() => { setShowAttach(false); setShowDoodle(true); }}
                 onAiImage={activeProfile && activeProfile.is_bot ? null : () => { setShowAttach(false); setAiStudio({ mode: 'image', startKind: 'picture', chat: true }); }}
                 onCollage={() => { setShowAttach(false); if (collageInputRef.current) collageInputRef.current.click(); }}
@@ -39300,9 +39478,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                 onBill={activeGroup || (activeProfile && !activeProfile.is_bot) ? () => { setShowAttach(false); setBillComposer(true); } : null}
                 onCountdown={activeGroup || (activeProfile && !activeProfile.is_bot) ? () => { setShowAttach(false); setCountdownComposer(true); } : null}
                 onContact={activeProfile && activeProfile.is_bot ? null : () => { setShowAttach(false); setContactPicker(true); }}
-                onHidden={activeProfile && activeProfile.is_bot ? null : () => { setShowAttach(false); onceNextRef.current = false; hiddenNextRef.current = true; if (cameraGalleryRef.current) cameraGalleryRef.current.click(); }}
                 onRound={activeProfile && activeProfile.is_bot ? null : () => { setShowAttach(false); setRoundOpen(true); }}
-                onAlbum={activeProfile && activeProfile.is_bot ? null : () => { setShowAttach(false); setAlbumsOpen({ key: chatAlbumKey, name: chatName }); }}
                 onWatch={activeProfile && activeProfile.is_bot ? null : () => { setShowAttach(false); setWatchComposer(true); }}
                 onFocus={activeProfile && activeProfile.is_bot ? null : () => { setShowAttach(false); setFocusSheetOpen(true); }} />
             )}
@@ -39701,6 +39877,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       {showNotifHelp && <NotificationHelpModal onClose={() => setShowNotifHelp(false)} />}
       {mediaComposer && (
         <MediaComposer key={mediaComposer.key} files={mediaComposer.files} onceDefault={!!mediaComposer.once} hiddenDefault={!!mediaComposer.hidden}
+          albumCtx={chatAlbumKey && !(activeProfile && activeProfile.is_bot) ? { chatKey: chatAlbumKey, userId: uid } : null}
           recipientName={activeGroup ? activeGroup.name : activeProfile ? activeProfile.name : ''}
           onActivity={sendActivity}
           onCancel={() => setMediaComposer(null)}
@@ -41033,7 +41210,7 @@ const WN_SECTIONS = [
   { title: 'Chats', items: [
     { art: 'chats', title: 'Character bubbles', text: '30 bubbles with little characters on your messages.' },
     { art: 'theme', title: 'Chat themes', text: 'Patterns, scenes and matching bubbles for every chat.' },
-    { art: 'quick', title: 'Quick actions', text: 'A small tab on the right of a chat for text bomb, style, buzz, coin flip and quick hide.' },
+    { art: 'quick', title: 'Quick actions', text: 'A small tab on the right of a chat for text bomb, style, buzz and coin flip. Tuck it away and bring it back with one tap.' },
     { art: 'effects', title: 'Text bomb', text: 'Send one message up to 50 times. It bursts across their screen.' },
     { art: 'voice', title: 'Live sounds', text: 'Real recorded sounds that play for both of you at the same moment.' },
     { art: 'eye', title: 'Peek at a chat', text: 'Hold a chat to read it without opening it. They will not see it as read.' },
@@ -43280,7 +43457,7 @@ function ChatsPrefsSection() {
       {row(<Smile size={16} />, 'Sticker suggestions', 'Type lol, hi or a single emoji to see matching stickers', stk, setStk)}
       {row(<Smile size={16} />, 'Emoji suggestions', 'Type a word like love or party to see matching emoji', emo, setEmo)}
       {row(<AiSparkIcon size={16} />, 'Writing help', 'A sparkle button helps fix spelling or change the tone before you send', wHelp, setWHelp)}
-      {row(<TextBombIcon size={16} />, 'Quick actions in chats', 'A small tab on the right edge for bomb, style, buzz, coin and hide', railOn, setRailOn)}
+      {row(<TextBombIcon size={16} />, 'Quick actions in chats', 'A small tab on the right edge for bomb, style, buzz and coin flip. Tuck it away with Hide', railOn, setRailOn)}
       <IgRow inset={false} icon={<FolderIcon size={16} />} label="Chat folders" sub="Make tabs like Family or Work and pick the order" onClick={() => { try { window.dispatchEvent(new Event('zchat-open-folders')); } catch {} }} />
       {row(<Mic size={16} />, 'Play voice messages in a row', 'The next voice message starts when one ends', vauto, setVauto)}
       <IgHeading>Privacy on this device</IgHeading>
@@ -48319,16 +48496,29 @@ function applyPhotoFilter(ctx, w, h, k) {
   }
   ctx.putImageData(img, 0, 0);
 }
-function FilterStrip({ value, onPick, thumb, dark = true }) {
+function FilterStrip({ value, onPick, thumb, dark = true, big = false }) {
+  const rowRef = useRef(null);
+  const firstRef = useRef(true);
+  useEffect(() => {
+    const row = rowRef.current;
+    if (!row) return;
+    const el = row.querySelector(`[data-filter="${value || 'none'}"]`);
+    if (!el) return;
+    const target = el.offsetLeft - (row.clientWidth - el.offsetWidth) / 2;
+    try { row.scrollTo({ left: Math.max(0, target), behavior: firstRef.current ? 'auto' : 'smooth' }); } catch { row.scrollLeft = Math.max(0, target); }
+    firstRef.current = false;
+  }, [value]);
+  const tw = big ? 70 : 58;
+  const th = big ? 92 : 58;
   return (
-    <div style={{ display: 'flex', gap: 10, overflowX: 'auto', padding: '4px 14px', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
+    <div ref={rowRef} style={{ position: 'relative', display: 'flex', gap: big ? 8 : 10, overflowX: 'auto', padding: '4px 14px', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
       {PHOTO_FILTERS.map((f) => {
         const on = (value || 'none') === f.k;
         return (
-          <div key={f.k} role="button" aria-label={`Filter ${f.label}`} onClick={(e) => { e.stopPropagation(); hapticTap(); playUiSound('tap'); onPick(f.k); }} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, cursor: 'pointer', flexShrink: 0 }}>
+          <div key={f.k} data-filter={f.k} role="button" aria-label={`Filter ${f.label}`} aria-pressed={on} onClick={(e) => { e.stopPropagation(); hapticTap(); playUiSound('tap'); onPick(f.k); }} style={{ display: 'flex', flexDirection: big ? 'column-reverse' : 'column', alignItems: 'center', gap: big ? 7 : 5, cursor: 'pointer', flexShrink: 0 }}>
             {thumb ? (
-              <div style={{ width: 58, height: 58, borderRadius: 12, overflow: 'hidden', boxShadow: on ? '0 0 0 2.5px white' : 'none' }}>
-                <img src={thumb} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', filter: photoFilterCss(f.k) }} />
+              <div style={{ width: tw, height: th, borderRadius: big ? 14 : 12, overflow: 'hidden', boxShadow: on ? '0 0 0 2.5px white' : 'none', transform: big && on ? 'scale(1.04)' : 'none', transition: 'transform 0.18s ease, box-shadow 0.18s ease' }}>
+                <img src={thumb} alt="" draggable={false} loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', filter: photoFilterCss(f.k) }} />
               </div>
             ) : null}
             <span style={thumb
@@ -54117,7 +54307,7 @@ function DrawTogetherIcon({ size = 20, color = 'currentColor', strokeWidth = 1.8
 }
 
 let attachTabMem = 'share';
-function AttachSheet({ onAiImage, onDrawTogether, onSounds, onClose, onCamera, onGallery, onFile, onLocation, onGame, canGame, locating, onPoll, onEvent, onOnce, onDoodle, onBuzz, onDice, onCollage, onVoiceType, onChecklist, onBill, onCountdown, onContact, onHidden, onRound, onWatch, onFocus, onAlbum }) {
+function AttachSheet({ onAiImage, onDrawTogether, onSounds, onClose, onCamera, onGallery, onFile, onLocation, onGame, canGame, locating, onPoll, onEvent, onDoodle, onBuzz, onDice, onCollage, onVoiceType, onChecklist, onBill, onCountdown, onContact, onRound, onWatch, onFocus }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
   const drag = useSheetDrag(onClose);
@@ -54128,8 +54318,6 @@ function AttachSheet({ onAiImage, onDrawTogether, onSounds, onClose, onCamera, o
       onFile ? { k: 'file', label: 'File', icon: <FileText />, on: onFile } : null,
       onLocation ? { k: 'location', label: locating ? 'Finding you' : 'Location', icon: <Compass />, on: onLocation, busy: locating } : null,
       onRound ? { k: 'round', label: 'Video message', short: 'Video note', icon: <RoundVideoIcon />, on: onRound } : null,
-      onOnce ? { k: 'once', label: 'View once', icon: <OnceIcon />, on: onOnce } : null,
-      onHidden ? { k: 'hidden', label: 'Hidden photo', short: 'Hidden', icon: <HiddenPhotoIcon />, on: onHidden } : null,
       onContact ? { k: 'contact', label: 'Contact', icon: <ContactCardIcon />, on: onContact } : null,
       onVoiceType ? { k: 'voicetype', label: 'Voice typing', short: 'Voice type', icon: <Mic />, on: onVoiceType } : null,
     ].filter(Boolean),
@@ -54140,7 +54328,6 @@ function AttachSheet({ onAiImage, onDrawTogether, onSounds, onClose, onCamera, o
       onChecklist ? { k: 'list', label: 'Checklist', icon: <ChecklistIcon />, on: onChecklist } : null,
       onBill ? { k: 'bill', label: 'Split bill', icon: <BillIcon />, on: onBill } : null,
       onCountdown ? { k: 'count', label: 'Countdown', icon: <CountdownIcon />, on: onCountdown } : null,
-      onAlbum ? { k: 'album', label: 'Shared album', short: 'Album', icon: <AlbumIcon />, on: onAlbum } : null,
       onCollage ? { k: 'collage', label: 'Collage', icon: <LayoutDashboard />, on: onCollage } : null,
     ].filter(Boolean),
     fun: [
