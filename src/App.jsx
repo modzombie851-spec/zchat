@@ -3826,6 +3826,8 @@ function appFileList() {
   const add = (group, url) => { if (url && !out.some((x) => x.url === url)) out.push({ group, url }); };
   DECOR_ALL.forEach((st) => { add(st.name, `/set-${st.file}-frame.webp`); add(st.name, `/set-${st.file}-plate.webp`); });
   add('Set pictures', DECOR_SPRITE);
+  add('Profile effects', '/fx-pack.js');
+  Object.values(FX_ART).forEach((u) => add('Profile effects', u));
   Object.values(SOUND_SPRITES).forEach((sp) => add('Sounds', sp.url));
   add('Sign in photo', WELCOME_PHOTO);
   Object.values(CUSTOM_BADGES).forEach((b) => add('Charms', b.file));
@@ -5574,8 +5576,8 @@ function CoinIcon({ size = 20, style }) {
 const DAILY_COINS = [5, 5, 10, 10, 15, 20, 40];
 const SHOP_PRICES = { epic: 300, legendary: 600, mythic: 1000, rare: 150 };
 function shopPrice(kind, key) {
-  if (kind === 'frame' || kind === 'nameplate') return isDecorKey(key) ? DECOR_PRICE : null;
-  if (kind === 'set') return isDecorKey(key) ? DECOR_PRICE * 2 : null;
+  if (kind === 'frame' || kind === 'nameplate') return isDecorKey(key) ? decorPartPrice(key) : null;
+  if (kind === 'set') return isDecorKey(key) ? decorPartPrice(key) * 2 : null;
   const spec = kind === 'charm' ? CUSTOM_BADGES[key] : null;
   if (!spec) return null;
   return SHOP_PRICES[spec.rarity] || SHOP_PRICES.epic;
@@ -5975,7 +5977,7 @@ function GiftSheet({ uid, me, to, onClose, onSent, start }) {
   const cardW = Math.max(100, Math.floor((gw - 8) / 2) - 8);
   const giftStack = tab === 'item' && DECOR_SETS.some((s) => {
     const o = decorOwned(theirs, s.key);
-    const lw = decorTextW(o.frame && o.plate ? 'They have it' : String(o.frame || o.plate ? DECOR_PRICE : DECOR_PRICE * 2), 700, 11.5);
+    const lw = decorTextW(o.frame && o.plate ? 'They have it' : String(decorPartPrice(s.key) * (o.frame || o.plate ? 1 : 2)), 700, 11.5);
     return decorTextW(s.name, 700, 12.5) + 4 + lw > cardW - 14;
   });
   useDecorLoaded(tab === 'item' ? DECOR_SPRITE : null);
@@ -6069,7 +6071,7 @@ function GiftSheet({ uid, me, to, onClose, onSent, start }) {
                         <DecorHero frameKey={s.key} plateKey={s.key} width={cardW} photo={to.avatar} name={to.name} lazy compact gapColor="#12131b" />
                         <div style={{ alignSelf: 'stretch', display: 'flex', flexDirection: giftStack ? 'column' : 'row', alignItems: giftStack ? 'flex-start' : 'center', gap: giftStack ? 1 : 4, padding: '4px 8px 0' }}>
                           <span style={{ flex: giftStack ? 'none' : 1, minWidth: 0, maxWidth: '100%', fontSize: giftStack ? Math.max(11, Math.min(12.5, (cardW - 14) / Math.max(0.5, decorTextW(s.name, 700, 100) / 100))) : 12.5, fontWeight: 700, color: '#FFFFFF', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.name}</span>
-                          <span style={{ fontSize: 11.5, fontWeight: 700, color: full ? '#34d399' : '#FFD66B', flexShrink: 0 }}>{full ? 'They have it' : o.frame || o.plate ? DECOR_PRICE : DECOR_PRICE * 2}</span>
+                          <span style={{ fontSize: 11.5, fontWeight: 700, color: full ? '#34d399' : '#FFD66B', flexShrink: 0 }}>{full ? 'They have it' : decorPartPrice(s.key) * (o.frame || o.plate ? 1 : 2)}</span>
                         </div>
                       </div>
                     );
@@ -6078,7 +6080,7 @@ function GiftSheet({ uid, me, to, onClose, onSent, start }) {
                 {set && (
                   <div style={{ padding: '10px 0 2px' }}>
                     <div role="radiogroup" aria-label="What to send" style={{ display: 'flex', gap: 6 }}>
-                      {[['set', 'Set', DECOR_PRICE * 2, !own.frame && !own.plate], ['frame', 'Frame', DECOR_PRICE, !own.frame], ['nameplate', 'Nameplate', DECOR_PRICE, !own.plate]].map(([k, l, p, ok]) => (
+                      {[['set', 'Set', decorPartPrice(set.key) * 2, !own.frame && !own.plate], ['frame', 'Frame', decorPartPrice(set.key), !own.frame], ['nameplate', 'Nameplate', decorPartPrice(set.key), !own.plate]].map(([k, l, p, ok]) => (
                         <div key={k} role="radio" aria-checked={part === k} aria-disabled={!ok} onClick={() => { if (ok) { setPart(k); hapticTap(); } }} style={{ flex: 1, minWidth: 0, borderRadius: 12, padding: '8px 4px', textAlign: 'center', cursor: ok ? 'pointer' : 'default', background: part === k ? theme.coral : theme.soft, color: part === k ? '#FFFFFF' : theme.ink, opacity: ok ? 1 : 0.4 }}>
                           <div style={{ fontSize: 13.5, fontWeight: 700 }}>{l}</div>
                           <div style={{ fontSize: 11.5, fontWeight: 600, opacity: 0.85, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3, marginTop: 1 }}>{ok ? <><CoinIcon size={11} />{p}</> : 'They have it'}</div>
@@ -11120,6 +11122,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
   const decorFrame = isDecorKey(profile.avatar_frame) ? profile.avatar_frame : null;
   const decorPlate = isDecorKey(profile.nameplate) ? profile.nameplate : null;
   const plateOn = !!(decorFrame || decorPlate);
+  const fxKey = decorFrame && decorFrame === decorPlate && DECOR_BY_KEY[decorFrame].fx ? decorFrame : null;
   const plateMeta = [profile.pronouns, ...infoBits].filter(Boolean).join(', ');
   const statCells = [
     !profile.is_bot && { v: postCount, l: 'posts', on: null },
@@ -11139,6 +11142,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
   return (
     <div {...(inline ? {} : edgeBack)} onClick={(e) => { if (!inline && e.target === e.currentTarget && !editing) onClose(); }} style={inline ? { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' } : { position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(5,8,16,0.6)', display: 'flex', justifyContent: 'center' }} className={inline ? undefined : 'zchat-panel-open'}>
     <div style={{ width: '100%', maxWidth: inline ? 'none' : 560, height: '100%', background: theme.bgGradient, display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden' }}>
+      {!editing && fxKey && <ProfileEffectLayer effectKey={fxKey} z={40} />}
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain', touchAction: 'pan-y', ...(inline ? { paddingLeft: 'max(0px, calc((100% - 640px) / 2))', paddingRight: 'max(0px, calc((100% - 640px) / 2))' } : {}) }}>
         {editing ? (
         <div style={{ position: 'relative', height: 'min(42vh, 320px)', minHeight: 240, background: hasPhoto ? '#000' : colorForName(profile.name), overflow: 'hidden' }}>
@@ -17851,7 +17855,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-const APP_VERSION = '21.3V';
+const APP_VERSION = '21.4V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -20120,7 +20124,28 @@ async function cachedAssetUrl(url, retried) {
     return url;
   }
 }
+const DECOR_FX_KEYS = new Set(['spirit_wolf', 'candy_land', 'festival_elephant', 'jellyfish_glow', 'autumn_fox', 'unicorn_dream', 'lava_island', 'butterfly_garden', 'ninja_cat', 'surf_day', 'royal_crown', 'mushroom_grove', 'pirate_cove', 'love_letters', 'dino_park', 'fireworks_night', 'panda_bamboo', 'origami_cranes', 'goal_rush', 'desert_oasis', 'crystal_phoenix']);
 const DECOR_SETS = [
+  ['spirit_wolf', 'Spirit Wolf', 8, 636, 644, 404, '#313282', '#181753', 'A wolf pup howls at the moon while blue spirit flames dance around the ring.', 1],
+  ['candy_land', 'Candy Land', 8, 628, 632, 415, '#F9CAC6', '#390C2C', 'A gummy bear waves from a candy cane ring full of lollipops and sprinkles.', 1],
+  ['festival_elephant', 'Festival Elephant', 60, 639, 647, 400, '#B23444', '#1F0D3D', 'A baby elephant in festival jewels, with lanterns glowing all around.', 1],
+  ['jellyfish_glow', 'Jellyfish Glow', 44, 636, 650, 382, '#1E2670', '#0C1238', 'Glowing jellyfish drift around the ring in the deep blue sea.', 1],
+  ['autumn_fox', 'Autumn Fox', 8, 616, 638, 435, '#B66129', '#340F14', 'A sleepy fox curls up on a ring of autumn leaves as they drift down.', 1],
+  ['unicorn_dream', 'Unicorn Dream', 10, 620, 647, 400, '#E5D6F4', '#1D133D', 'A baby unicorn flies over the clouds with a rainbow and stars.', 1],
+  ['lava_island', 'Lava Island', 8, 632, 652, 461, '#664332', '#251819', 'A little volcano puffs smoke while a salamander climbs the glowing lava ring.', 1],
+  ['butterfly_garden', 'Butterfly Garden', 12, 630, 646, 450, '#66A64E', '#123122', 'Butterflies flutter over a ring of flowers while a caterpillar has a snack.', 1],
+  ['ninja_cat', 'Ninja Cat', 14, 626, 638, 461, '#AA435B', '#1C1630', 'A ninja cat leaps through the smoke while shuriken spin around the ring.', 1],
+  ['surf_day', 'Surf Day', 10, 630, 630, 400, '#4194AF', '#0E475C', 'An otter rides a wave around the ring under a palm tree and the sun.', 1],
+  ['royal_crown', 'Royal Crown', 9, 635, 649, 456, '#62384B', '#2B1546', 'A lion cub king in a golden crown on a ring of jewels.', 1],
+  ['mushroom_grove', 'Mushroom Grove', 9, 637, 640, 429, '#584C29', '#102817', 'Red mushrooms, a slow snail and blinking fireflies on a mossy log.', 1],
+  ['pirate_cove', 'Pirate Cove', 16, 639, 674, 459, '#97784D', '#0C3239', 'A parrot in a pirate hat guards a treasure chest full of gold.', 1],
+  ['love_letters', 'Love Letters', 18, 638, 646, 429, '#E57C9A', '#2A0918', 'A cupid cat sends love letters flying through a ring of hearts.', 1],
+  ['dino_park', 'Dino Park', 10, 629, 630, 437, '#E7D1A3', '#173020', 'A baby dinosaur peeks over the top while an egg starts to crack.', 1],
+  ['fireworks_night', 'Fireworks Night', 18, 631, 648, 426, '#445AA9', '#0D1434', 'Fireworks burst around the ring while a cat waves a sparkler.', 1],
+  ['panda_bamboo', 'Panda Bamboo', 12, 621, 679, 449, '#91BE64', '#0F2614', 'A panda hugs the bamboo ring and munches a fresh shoot.', 1],
+  ['origami_cranes', 'Origami Cranes', 17, 633, 638, 370, '#CA998F', '#102C33', 'Paper cranes fly around a folded paper ring with a paper boat below.', 1],
+  ['goal_rush', 'Goal Rush', 12, 638, 644, 424, '#54A14C', '#133E1E', 'A bird keeper dives to save the ball in front of the goal.', 1],
+  ['desert_oasis', 'Desert Oasis', 10, 626, 630, 423, '#D5A369', '#0A262D', 'A camel strolls across a sandy ring of cacti under the hot sun.', 1],
   ['koi_pond', 'Koi Pond', 0, 632, 658, 395, '#4FC3D9', '#0E5064', 'Two koi circle a lily pond while a frog keeps an eye on a dragonfly.'],
   ['neon_city', 'Neon City', 16, 634, 640, 371, '#FF4FA3', '#100820', 'A night skyline with neon signs that flicker to life.'],
   ['dragon_hoard', 'Dragon Hoard', 20, 630, 633, 404, '#F2C14E', '#331D10', 'A sleepy dragon curled around its pile of gold and gems.'],
@@ -20142,19 +20167,24 @@ const DECOR_SETS = [
   ['spooky_pumpkin', 'Spooky Pumpkin', 3, 630, 648, 416, '#FF8A2B', '#31224B', 'A friendly ghost, glowing pumpkins and bats out for the night.'],
   ['race_track', 'Race Track', 9, 634, 670, 418, '#FF5A6E', '#1A1C23', 'A race car laps the track past the flag, the lights and the trophy.'],
   ['cricket_match', 'Cricket Match', 10, 636, 652, 472, '#6CC35F', '#123B24', 'The ball, the bat and the stumps, with a bird watching the game.'],
-].map(([key, name, ft, fb, fbmax, pb, accent, tint, about], i) => ({ key, name, ft, fb, fbmax, pb, accent, tint, about, i, file: key.replace(/_/g, '-') }));
+].map(([key, name, ft, fb, fbmax, pb, accent, tint, about, fresh], i) => ({ key, name, ft, fb, fbmax, pb, accent, tint, about, i, file: key.replace(/_/g, '-'), fresh: !!fresh, fx: DECOR_FX_KEYS.has(key) }));
 const DECOR_DROPS = [
-  ['crystal_phoenix', 'Crystal Phoenix', 15, 620, 625, 427, '#6FA8FF', '#11295D', 'A crystal phoenix spreads its wings over blue lotus flowers.'],
-].map(([key, name, ft, fb, fbmax, pb, accent, tint, about], j) => ({ key, name, ft, fb, fbmax, pb, accent, tint, about, i: DECOR_SETS.length + j, file: key.replace(/_/g, '-'), drop: true }));
+  ['crystal_phoenix', 'Crystal Phoenix', 10, 633, 648, 469, '#3460D0', '#091A54', 'A crystal phoenix spreads its wings over a starry ring with blossoms and glass butterflies.'],
+].map(([key, name, ft, fb, fbmax, pb, accent, tint, about], j) => ({ key, name, ft, fb, fbmax, pb, accent, tint, about, i: DECOR_SETS.length + j, file: key.replace(/_/g, '-'), drop: true, fx: DECOR_FX_KEYS.has(key) }));
 const DECOR_ALL = [...DECOR_SETS, ...DECOR_DROPS];
 const DECOR_BY_KEY = Object.fromEntries(DECOR_ALL.map((s) => [s.key, s]));
 const DECOR_PRICE = 250;
-const DECOR_FRAME_CATALOG = Object.fromEntries(DECOR_ALL.map((s) => [s.key, { label: `${s.name} frame`, rarity: s.drop ? 'legendary' : 'epic' }]));
-const DECOR_PLATE_CATALOG = Object.fromEntries(DECOR_ALL.map((s) => [s.key, { label: `${s.name} nameplate`, rarity: s.drop ? 'legendary' : 'epic' }]));
-const DECOR_SPRITE = '/set-thumbs-22.webp';
+const DECOR_FX_PRICE = 375;
+function decorPartPrice(key) {
+  const s = DECOR_BY_KEY[key];
+  return s && s.fx ? DECOR_FX_PRICE : DECOR_PRICE;
+}
+const DECOR_FRAME_CATALOG = Object.fromEntries(DECOR_ALL.map((s) => [s.key, { label: `${s.name} frame`, rarity: s.drop || s.fx ? 'legendary' : 'epic' }]));
+const DECOR_PLATE_CATALOG = Object.fromEntries(DECOR_ALL.map((s) => [s.key, { label: `${s.name} nameplate`, rarity: s.drop || s.fx ? 'legendary' : 'epic' }]));
+const DECOR_SPRITE = '/set-thumbs-42.webp';
 const DECOR_SPRITE_W = 2100;
-const DECOR_SPRITE_H = 2040;
-const DECOR_PLATE_Y = 1200;
+const DECOR_SPRITE_H = 3312;
+const DECOR_PLATE_Y = 1800;
 const DECOR_STORE = 'zchat-decor-v1';
 const DECOR_LANES = 3;
 function isDecorKey(key) {
@@ -20552,7 +20582,7 @@ function ProfileDecorHero({ profile, photo, frameKey, plateKey, storyRing = 'non
   const ringed = storyRing !== 'none';
   const lift = overCover ? Math.round(L.photoTop + L.photo * 0.42) : 0;
   return (
-    <div ref={ref} style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: overCover ? -lift : 4 }}>
+    <div ref={ref} data-fx-hero="1" style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: overCover ? -lift : 4 }}>
       <DecorHero frameKey={frameKey} plateKey={plateKey} width={W} photo={photo} name={profile.name} username={profile.username} verified={profile.verified} custom={profile.custom_badge}
         ring={storyRing} close={close} online={isOnline} onPhoto={ringed && onOpenStory ? () => onOpenStory(profile.id) : null} gapColor={gapColor || theme.bgGradient} />
       {L.F && !L.P && (
@@ -21180,7 +21210,7 @@ function FreeSetsSheet({ me, count, onPick, onClose }) {
             <div style={{ marginLeft: -26, transform: 'translateY(10px) rotate(8deg)' }}><DecorFrameBadge setKey="dragon_hoard" size={104} photo={me && me.avatar} name={name} /></div>
           </div>
           <div style={{ fontSize: 24, fontWeight: 900, marginTop: 12, letterSpacing: '-0.01em' }}>{count === 1 ? 'A free set for you' : `${count} free sets for you`}</div>
-          <div style={{ fontSize: 14.5, color: 'rgba(255,255,255,0.76)', lineHeight: 1.5, marginTop: 8 }}>Pick {count === 1 ? 'any set' : `any ${count}`} of the {DECOR_SETS.length} new animated sets. Each one has a frame and a nameplate, and they are yours to keep.</div>
+          <div style={{ fontSize: 14.5, color: 'rgba(255,255,255,0.76)', lineHeight: 1.5, marginTop: 8 }}>Pick {count === 1 ? 'any set' : `any ${count}`} of the {DECOR_SETS.filter((x) => !x.fx).length} animated sets without a profile effect. Each one has a frame and a nameplate, and they are yours to keep.</div>
           <button onClick={onPick} style={{ marginTop: 18, width: '100%', height: 52, borderRadius: 16, border: 'none', background: '#FFFFFF', color: '#111114', fontWeight: 800, fontSize: 16, fontFamily: FONT, cursor: 'pointer' }}>Pick my sets</button>
           <button onClick={onClose} style={{ marginTop: 4, width: '100%', height: 44, borderRadius: 14, border: 'none', background: 'transparent', color: 'rgba(255,255,255,0.72)', fontWeight: 700, fontSize: 15, fontFamily: FONT, cursor: 'pointer' }}>Later</button>
         </div>
@@ -21189,7 +21219,7 @@ function FreeSetsSheet({ me, count, onPick, onClose }) {
   );
 }
 
-function WnDecorArt({ me, thumb = false }) {
+function WnDecorArt({ me, thumb = false, keys = ['neon_city', 'koi_pond', 'snow_globe'] }) {
   const ref = useRef(null);
   const w = useWidthOf(ref, thumb ? 74 : 360);
   const name = (me && me.name) || 'You';
@@ -21198,13 +21228,13 @@ function WnDecorArt({ me, thumb = false }) {
   return (
     <div ref={ref} style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden', background: 'radial-gradient(120% 80% at 50% 30%, #2c2160 0%, #0d0b1a 72%)', display: 'flex', alignItems: thumb ? 'center' : 'flex-end', justifyContent: 'center' }}>
       {thumb ? (
-        <DecorFrameBadge setKey="koi_pond" size={56} photo={photo} name={name} />
+        <DecorFrameBadge setKey={keys[1]} size={56} photo={photo} name={name} />
       ) : (
         <>
-          <div style={{ position: 'absolute', left: -22, top: '12%', transform: 'rotate(-10deg)', opacity: 0.9 }}><DecorFrameBadge setKey="neon_city" size={112} photo={photo} name={name} /></div>
-          <div style={{ position: 'absolute', right: -22, top: '6%', transform: 'rotate(10deg)', opacity: 0.9 }}><DecorFrameBadge setKey="snow_globe" size={112} photo={photo} name={name} /></div>
+          <div style={{ position: 'absolute', left: -22, top: '12%', transform: 'rotate(-10deg)', opacity: 0.9 }}><DecorFrameBadge setKey={keys[0]} size={112} photo={photo} name={name} /></div>
+          <div style={{ position: 'absolute', right: -22, top: '6%', transform: 'rotate(10deg)', opacity: 0.9 }}><DecorFrameBadge setKey={keys[2]} size={112} photo={photo} name={name} /></div>
           <div style={{ position: 'relative', zIndex: 2, paddingBottom: 46 }}>
-            <DecorHero frameKey="koi_pond" plateKey="koi_pond" width={Math.max(220, Math.min(340, w - 48))} photo={photo} name={name} username={me && me.username} verified={me && me.verified} custom={me && me.custom_badge} gapColor="#0d0b1a" />
+            <DecorHero frameKey={keys[1]} plateKey={keys[1]} width={Math.max(220, Math.min(340, w - 48))} photo={photo} name={name} username={me && me.username} verified={me && me.verified} custom={me && me.custom_badge} gapColor="#0d0b1a" />
           </div>
         </>
       )}
@@ -21530,10 +21560,134 @@ function daysLeft(r) {
   return Math.max(0, Math.ceil((new Date(r.expires_at).getTime() - Date.now()) / 86400000));
 }
 
+const FX_PACK = '/fx-pack.js';
+const FX_ART = { crystal_phoenix: '/fx-crystal-phoenix.webp' };
+const FX_LEN = { crystal_phoenix: 8.8 };
+const fxFactories = new Map();
+const fxArtJobs = new Map();
+let fxPackJob = null;
+function fxDrain() {
+  try {
+    const q = window.__zfxq;
+    if (!Array.isArray(q)) return;
+    while (q.length) {
+      const it = q.shift();
+      if (Array.isArray(it) && typeof it[0] === 'string' && typeof it[1] === 'function') fxFactories.set(it[0], it[1]);
+    }
+  } catch {}
+}
+function fxPack() {
+  if (fxPackJob) return fxPackJob;
+  fxPackJob = fetch(FX_PACK)
+    .then((res) => {
+      const ct = (res.headers.get('content-type') || '').toLowerCase();
+      if (!res.ok || ct.includes('text/html')) return false;
+      return res.text().then((code) => new Promise((resolve) => {
+        const url = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
+        const el = document.createElement('script');
+        el.src = url;
+        el.onload = () => { URL.revokeObjectURL(url); fxDrain(); resolve(!!window.ZFXK); };
+        el.onerror = () => { URL.revokeObjectURL(url); el.remove(); resolve(false); };
+        document.head.appendChild(el);
+      }));
+    })
+    .catch(() => false)
+    .then((ok) => { if (!ok) setTimeout(() => { fxPackJob = null; }, 60000); return ok; });
+  return fxPackJob;
+}
+function fxArtReady(key) {
+  const src = FX_ART[key];
+  if (!src) return Promise.resolve(true);
+  if (!fxArtJobs.has(key)) {
+    fxArtJobs.set(key, new Promise((resolve) => {
+      const img = new Image();
+      img.decoding = 'async';
+      img.onload = () => resolve(true);
+      img.onerror = () => { setTimeout(() => fxArtJobs.delete(key), 60000); resolve(false); };
+      img.src = src;
+    }));
+  }
+  return fxArtJobs.get(key);
+}
+function loadFx(key) {
+  const s = DECOR_BY_KEY[key];
+  if (!s || !s.fx || typeof window === 'undefined') return Promise.resolve(null);
+  return Promise.all([fxPack(), fxArtReady(key)]).then(([ok, art]) => (ok && art ? fxFactories.get(key) || null : null));
+}
+function fxAllowed() {
+  return prefOn('zchat-profile-fx') && !reducedMotion() && !dataSaverOn();
+}
+function wornFxKey(p) {
+  const f = p && p.avatar_frame;
+  return f && f === p.nameplate && DECOR_BY_KEY[f] && DECOR_BY_KEY[f].fx ? f : null;
+}
+function ProfileEffectLayer({ effectKey, runKey = 0, force = false, delay = 280, z = 30 }) {
+  const ref = useRef(null);
+  const [factory, setFactory] = useState(null);
+  const [done, setDone] = useState(false);
+  const want = !!effectKey && (force || fxAllowed());
+  useEffect(() => {
+    let alive = true;
+    setFactory(null);
+    if (!want) return undefined;
+    loadFx(effectKey).then((f) => { if (alive && f) setFactory(() => f); });
+    return () => { alive = false; };
+  }, [effectKey, want]);
+  useEffect(() => { setDone(false); }, [effectKey, runKey]);
+  useEffect(() => {
+    if (!factory || done) return undefined;
+    let m = null;
+    let alive = true;
+    const timer = setTimeout(() => {
+      const cv = ref.current;
+      if (!alive || !cv || !window.ZFXK) return;
+      const r = cv.getBoundingClientRect();
+      if (r.width < 40 || r.height < 40) { setDone(true); return; }
+      const holder = cv.parentElement && cv.parentElement.querySelector('[data-fx-hero]');
+      const hb = holder && holder.firstElementChild ? holder.firstElementChild.getBoundingClientRect() : null;
+      const sc = r.width / (cv.clientWidth || r.width) || 1;
+      const hw = holder && holder.firstElementChild ? holder.firstElementChild.offsetWidth : 0;
+      const place = hb && hw > 60 ? { top: (hb.top - r.top) / sc, heroW: hw, cx: (hb.left - r.left + hb.width / 2) / sc } : {};
+      try {
+        const cores = navigator.hardwareConcurrency || 8;
+        const mem = navigator.deviceMemory || 8;
+        m = window.ZFXK.mount(cv, factory, { stopAfter: FX_LEN[effectKey] || 7.2, dprCap: cores <= 4 || mem <= 3 ? 1.5 : 2, base: '/', loop: 1e6, once: true, ...place, onDone: () => { if (alive) setDone(true); }, onError: (e) => reportClientError(`Profile effect ${effectKey}: ${(e && e.message) || e}`, e && e.stack, { kind: 'fx' }) });
+      } catch (e) {
+        reportClientError(`Profile effect ${effectKey}: ${(e && e.message) || e}`, e && e.stack, { kind: 'fx' });
+        setDone(true);
+      }
+    }, delay);
+    return () => { alive = false; clearTimeout(timer); if (m) m.destroy(); };
+  }, [factory, runKey, done]);
+  if (!want || !factory || done) return null;
+  return <canvas ref={ref} aria-hidden="true" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: z }} />;
+}
+function ProfileFxIcon({ size = 20, color = 'currentColor', strokeWidth = 1.9 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ flexShrink: 0 }}>
+      <circle cx="10" cy="14" r="6.6" stroke={color} strokeWidth={strokeWidth} />
+      <path d="M18.2 1.6c.36 1.95 1.05 2.66 3 3.02-1.95.36-2.64 1.07-3 3.02-.36-1.95-1.05-2.66-3-3.02 1.95-.36 2.64-1.07 3-3.02z" fill={color} />
+      <path d="M20.7 10c.19.95.52 1.3 1.46 1.47-.94.18-1.27.52-1.46 1.47-.19-.95-.52-1.29-1.46-1.47.94-.17 1.27-.52 1.46-1.47z" fill={color} />
+    </svg>
+  );
+}
+function FxPlayRow({ set, onPlay }) {
+  return (
+    <div role="button" aria-label="Play the profile effect" onClick={() => { hapticTap(); onPlay(); }} className="zchat-press" style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 12, padding: '10px 10px 10px 12px', borderRadius: 16, background: 'rgba(255,255,255,0.06)', border: `1px solid ${set.accent}66`, cursor: 'pointer', textAlign: 'left' }}>
+      <div style={{ width: 36, height: 36, borderRadius: 12, background: `${set.accent}55`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#FFFFFF' }}><ProfileFxIcon size={19} /></div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 14, fontWeight: 800, color: '#FFFFFF' }}>Profile effect</div>
+        <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.62)', lineHeight: 1.4, marginTop: 1 }}>Plays when someone opens your profile while you wear the full set</div>
+      </div>
+      <div style={{ height: 32, padding: '0 13px', borderRadius: 16, background: '#FFFFFF', color: '#0B0C12', fontSize: 13.5, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}><Play size={13} fill="#0B0C12" strokeWidth={0} />Play</div>
+    </div>
+  );
+}
+
 function decorAsk(set, mode, own) {
   const missing = mode === 'set' ? [!own.frame && 'frame', !own.plate && 'nameplate'].filter(Boolean) : mode === 'frame' ? (own.frame ? [] : ['frame']) : (own.plate ? [] : ['nameplate']);
   const what = mode === 'set' ? (missing.length === 1 ? missing[0] : 'set') : mode;
-  return { missing, what, price: missing.length * DECOR_PRICE };
+  return { missing, what, price: missing.length * decorPartPrice(set.key) };
 }
 
 function DecorConfetti({ colors }) {
@@ -21558,6 +21712,7 @@ function SetCard({ set, me, own, wearing, free, width, stack = false, onOpen }) 
       border: `1px solid ${wearing ? set.accent : 'rgba(255,255,255,0.08)'}`, boxShadow: wearing ? `0 0 18px ${set.accent}55` : 'none',
     }}>
       {wearing && <div style={{ position: 'absolute', top: 8, left: 8, zIndex: 6, padding: '2px 8px', borderRadius: 8, background: set.accent, color: '#0b0c12', fontSize: 10.5, fontWeight: 800 }}>Wearing</div>}
+      {set.fx ? <div style={{ position: 'absolute', top: 7, right: 7, zIndex: 6, height: 19, padding: '0 6px 0 4px', borderRadius: 7, background: 'linear-gradient(135deg, #9B7DFF 0%, #6A45F5 100%)', color: '#FFFFFF', fontSize: 10, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 2, boxShadow: '0 2px 8px rgba(106,69,245,0.35)' }}><ProfileFxIcon size={11} strokeWidth={2.6} />Effect</div> : set.fresh && !wearing && !full && <div style={{ position: 'absolute', top: 8, right: 8, zIndex: 6, padding: '2px 8px', borderRadius: 8, background: '#7C5CFC', color: '#FFFFFF', fontSize: 10.5, fontWeight: 800 }}>New</div>}
       <DecorHero frameKey={set.key} plateKey={set.key} width={width} photo={me.avatar} name={me.name} lazy compact />
       <div style={{ alignSelf: 'stretch', display: 'flex', flexDirection: stack ? 'column' : 'row', alignItems: stack ? 'flex-start' : 'center', gap: stack ? 1 : 6, padding: '6px 8px 0' }}>
         <div style={{ flex: stack ? 'none' : 1, minWidth: 0, maxWidth: '100%', fontWeight: 800, fontSize: nameSize, color: '#FFFFFF', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{set.name}</div>
@@ -21565,7 +21720,7 @@ function SetCard({ set, me, own, wearing, free, width, stack = false, onOpen }) 
           ? <span style={{ fontSize: 11.5, fontWeight: 800, color: '#34d399', flexShrink: 0 }}>Yours</span>
           : free
             ? <span style={{ fontSize: 11.5, fontWeight: 800, color: '#FFD66B', flexShrink: 0 }}>Free</span>
-            : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 12, fontWeight: 800, color: '#FFD66B', flexShrink: 0 }}><CoinIcon size={13} />{half ? DECOR_PRICE : DECOR_PRICE * 2}</span>}
+            : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 12, fontWeight: 800, color: '#FFD66B', flexShrink: 0 }}><CoinIcon size={13} />{decorPartPrice(set.key) * (half ? 1 : 2)}</span>}
       </div>
     </div>
   );
@@ -21696,6 +21851,7 @@ function DropPage({ drop, me, rewards, wallet, onClose, onWear, onRefresh, onOpe
   const [ask, setAsk] = useState(false);
   const [note, setNote] = useState('');
   const [party, setParty] = useState(0);
+  const [fxRun, setFxRun] = useState(0);
   const [reminded, setReminded] = useState(() => dropsMem.mine.has(drop.id));
   const boxRef = useRef(null);
   const bw = useWidthOf(boxRef, typeof window === 'undefined' ? 390 : Math.min(window.innerWidth, 560));
@@ -21752,13 +21908,14 @@ function DropPage({ drop, me, rewards, wallet, onClose, onWear, onRefresh, onOpe
   return (
     <div className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 650, background: `radial-gradient(120% 64% at 50% 16%, ${accent}4D 0%, rgba(7, 8, 13, 0) 64%), #07080D`, color: '#FFFFFF', display: 'flex', flexDirection: 'column', fontFamily: FONT }}>
       {party > 0 && <DecorConfetti key={party} colors={[accent, '#FFFFFF', '#BFD6FF', '#8B6CFF']} />}
+      {set && set.fx && <ProfileEffectLayer effectKey={set.key} runKey={fxRun} force={fxRun > 0} />}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px 4px', paddingTop: 'calc(10px + env(safe-area-inset-top))' }}>
         <div role="button" aria-label="Back" onClick={onClose} style={{ width: 38, height: 38, borderRadius: '50%', background: 'rgba(255, 255, 255, 0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}><ArrowLeft size={19} /></div>
         <div style={{ flex: 1, minWidth: 0, fontSize: 19, fontWeight: 900 }}>Drop</div>
         <div role="button" aria-label={`${formatCount(coins)} coins`} onClick={onOpenWallet} style={{ display: 'flex', alignItems: 'center', gap: 6, height: 34, padding: '0 12px', borderRadius: 17, background: 'rgba(255, 255, 255, 0.08)', fontSize: 14.5, fontWeight: 800, cursor: 'pointer', flexShrink: 0 }}><CoinIcon size={18} />{formatCount(coins)}</div>
       </div>
       <div ref={boxRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '0 14px calc(24px + env(safe-area-inset-bottom))' }}>
-        <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 0 4px' }}>
+        <div data-fx-hero="1" style={{ display: 'flex', justifyContent: 'center', padding: '8px 0 4px' }}>
           {set ? <DecorHero frameKey={set.key} plateKey={set.key} width={W} photo={me.avatar} name={me.name} username={me.username} verified={me.verified} custom={me.custom_badge} gapColor="#0B0C12" /> : <DropArt drop={drop} me={me} size={180} />}
         </div>
         <div style={{ maxWidth: 400, margin: '6px auto 0', textAlign: 'center' }}>
@@ -21768,6 +21925,7 @@ function DropPage({ drop, me, rewards, wallet, onClose, onWear, onRefresh, onOpe
           </div>
           <div style={{ fontSize: 26, fontWeight: 900, marginTop: 10, letterSpacing: '-0.01em' }}>{drop.title}</div>
           {(drop.blurb || (set && set.about)) && <div style={{ fontSize: 14, color: 'rgba(255, 255, 255, 0.72)', lineHeight: 1.5, marginTop: 6, padding: '0 8px' }}>{drop.blurb || set.about}</div>}
+          {set && set.fx && <FxPlayRow set={set} onPlay={() => setFxRun(Date.now())} />}
           {phase !== 'ended' && !owned && (
             <div style={{ marginTop: 18 }}>
               <div style={{ fontSize: 12.5, fontWeight: 700, color: 'rgba(255, 255, 255, 0.55)', marginBottom: 8 }}>{phase === 'soon' ? 'Opens in' : 'Ends in'}</div>
@@ -21819,6 +21977,9 @@ function SetShopPage({ me, setKey, rewards, wallet, onClose, onPick, onWear, onR
   const W = Math.round(Math.max(240, Math.min(400, bw - 28)));
   const own = decorOwned(rewards, set.key);
   const freeSets = wallet && wallet.ready ? wallet.freeSets || 0 : 0;
+  const freeOk = freeSets > 0 && !set.fx;
+  const [fxRun, setFxRun] = useState(0);
+  useEffect(() => { setFxRun(0); }, [set.key]);
   const coins = wallet && wallet.ready ? wallet.coins : 0;
   const wearF = me.avatar_frame === set.key;
   const wearP = me.nameplate === set.key;
@@ -21893,7 +22054,7 @@ function SetShopPage({ me, setKey, rewards, wallet, onClose, onPick, onWear, onR
   };
   const tapGet = () => {
     if (busy || !shopReady()) return;
-    if (freeSets > 0) { setAsk('free'); return; }
+    if (freeOk) { setAsk('free'); return; }
     setAsk(coins >= price ? 'buy' : 'coins');
   };
   const tapCoins = () => {
@@ -21913,6 +22074,7 @@ function SetShopPage({ me, setKey, rewards, wallet, onClose, onPick, onWear, onR
   return (
     <div className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 640, background: `radial-gradient(130% 70% at 50% 18%, ${set.accent}40 0%, rgba(7,8,13,0) 62%), #07080d`, color: 'white', display: 'flex', flexDirection: 'column', fontFamily: FONT, transition: 'background 0.4s ease' }}>
       {party > 0 && <DecorConfetti key={party} colors={[set.accent, '#FFFFFF', '#FFD66B', '#7C5CFC']} />}
+      {set.fx && <ProfileEffectLayer effectKey={mode === 'set' || fxRun ? set.key : null} runKey={fxRun} force={fxRun > 0} />}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px 4px', paddingTop: 'calc(10px + env(safe-area-inset-top))' }}>
         <div role="button" aria-label="Back to sets" onClick={onClose} style={{ width: 38, height: 38, borderRadius: '50%', background: 'rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}><ArrowLeft size={19} /></div>
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -21923,7 +22085,7 @@ function SetShopPage({ me, setKey, rewards, wallet, onClose, onPick, onWear, onR
       </div>
       <div ref={boxRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '0 14px calc(24px + env(safe-area-inset-bottom))' }}>
         <div data-no-swipe="true" onPointerDown={onDown} onPointerUp={onUp} onPointerCancel={() => { swipeRef.current = null; }} style={{ position: 'relative', display: 'flex', justifyContent: 'center', padding: '10px 0 6px', touchAction: 'pan-y', minHeight: Math.round(W * 0.82) }}>
-          <div key={`${set.key}-${mode}`} className="zchat-pop" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <div key={`${set.key}-${mode}`} data-fx-hero="1" className="zchat-pop" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
             <DecorHero frameKey={previewFrame} plateKey={previewPlate} width={W} photo={me.avatar} name={me.name} username={me.username} verified={me.verified} custom={me.custom_badge} gapColor="#0b0c12" />
             {previewFrame && !previewPlate && (
               <div style={{ textAlign: 'center', marginTop: 2 }}>
@@ -21942,6 +22104,7 @@ function SetShopPage({ me, setKey, rewards, wallet, onClose, onPick, onWear, onR
         </div>
         <div style={{ maxWidth: 400, margin: '16px auto 0' }}>
           <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.72)', lineHeight: 1.5, textAlign: 'center', padding: '0 6px' }}>{set.about}</div>
+          {set.fx && <FxPlayRow set={set} onPlay={() => setFxRun(Date.now())} />}
           {mode !== 'set' && <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.5)', lineHeight: 1.5, textAlign: 'center', marginTop: 6 }}>{mode === 'frame' ? (isDecorKey(me.nameplate) && me.nameplate !== set.key ? 'Shown with the nameplate you wear now.' : 'Shown on your photo.') : (isDecorKey(me.avatar_frame) && me.avatar_frame !== set.key ? 'Shown with the frame you wear now.' : 'Shown with your name.')}</div>}
           <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 10 }}>
             {missing.length === 0 ? (
@@ -21951,17 +22114,17 @@ function SetShopPage({ me, setKey, rewards, wallet, onClose, onPick, onWear, onR
             ) : set.drop ? (
               <button disabled style={{ ...btn(false), cursor: 'default', color: 'rgba(255,255,255,0.7)' }}>Only from the drop</button>
             ) : (
-              <button disabled={busy} onClick={tapGet} aria-label={freeSets > 0 ? 'Get it free' : `Get the ${what} for ${price} coins`} style={btn(true)}>
-                {busy ? <Spinner size={16} color="#1a0f02" /> : freeSets > 0 ? (mode === 'set' ? 'Get it free' : 'Get the whole set free') : <>Get the {what}<span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginLeft: 4 }}><CoinIcon size={18} />{price}</span></>}
+              <button disabled={busy} onClick={tapGet} aria-label={freeOk ? 'Get it free' : `Get the ${what} for ${price} coins`} style={btn(true)}>
+                {busy ? <Spinner size={16} color="#1a0f02" /> : freeOk ? (mode === 'set' ? 'Get it free' : 'Get the whole set free') : <>Get the {what}<span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginLeft: 4 }}><CoinIcon size={18} />{price}</span></>}
               </button>
             )}
             {missing.length === 0 && (wearF || wearP) && (mode === 'set' || (mode === 'frame' ? wearF : wearP)) && <button disabled={busy} onClick={takeOff} style={btn(false)}>Take off</button>}
-            {missing.length > 0 && freeSets > 0 && !set.drop && <button disabled={busy} onClick={tapCoins} style={{ ...btn(false), height: 44, fontSize: 14.5 }}>Use {price} coins instead</button>}
+            {missing.length > 0 && freeOk && !set.drop && <button disabled={busy} onClick={tapCoins} style={{ ...btn(false), height: 44, fontSize: 14.5 }}>Use {price} coins instead</button>}
             {onGift && !set.drop && <button disabled={busy} onClick={() => { hapticTap(); onGift(set.key); }} aria-label={`Send the ${set.name} set as a gift`} style={{ ...btn(false), height: 44, fontSize: 14.5 }}><GiftBoxIcon size={18} />Send as a gift</button>}
           </div>
           <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.55)', textAlign: 'center', marginTop: 12, lineHeight: 1.5 }}>
             {missing.length > 0
-              ? (freeSets > 0 ? `You have ${freeSets} free ${freeSets === 1 ? 'set' : 'sets'}. A free set comes with the frame and the nameplate.` : 'Yours to keep. It shows on your profile.')
+              ? (freeOk ? `You have ${freeSets} free ${freeSets === 1 ? 'set' : 'sets'}. A free set comes with the frame and the nameplate.` : set.fx && freeSets > 0 ? 'Your free sets work on the sets without a profile effect.' : 'Yours to keep. It shows on your profile.')
               : leftBits.length ? `You have the ${leftBits.join(' and the ')}.` : 'Yours to keep. It shows on your profile.'}
           </div>
         </div>
@@ -22030,7 +22193,7 @@ function CollectionPanel({ me, rewards, onClose, onEquip, onWear, isAdmin, onRew
   const stackFoot = tab === 'sets' && shown.some((s) => {
     const f = ownedFrames.has(s.key);
     const p = ownedPlates.has(s.key);
-    const lw = f && p ? decorTextW('Yours', 800, 11.5) : freeSets > 0 ? decorTextW('Free', 800, 11.5) : 16 + decorTextW(String(f !== p ? DECOR_PRICE : DECOR_PRICE * 2), 800, 12);
+    const lw = f && p ? decorTextW('Yours', 800, 11.5) : freeSets > 0 && !s.fx ? decorTextW('Free', 800, 11.5) : 16 + decorTextW(String(decorPartPrice(s.key) * (f !== p ? 1 : 2)), 800, 12);
     return decorTextW(s.name, 800, 14) + 6 + lw > cardW - 18;
   });
   const wearF = isDecorKey(me.avatar_frame) ? me.avatar_frame : null;
@@ -22098,7 +22261,7 @@ function CollectionPanel({ me, rewards, onClose, onEquip, onWear, isAdmin, onRew
                 <GiftIcon size={28} color="#FFD66B" />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 900, fontSize: 15 }}>{freeSets === 1 ? '1 free set left' : `${freeSets} free sets for you`}</div>
-                  <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.72)', marginTop: 2, lineHeight: 1.4 }}>Pick any set below and get it free, frame and nameplate.</div>
+                  <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.72)', marginTop: 2, lineHeight: 1.4 }}>Pick any set without a profile effect and get it free, frame and nameplate.</div>
                 </div>
               </div>
             )}
@@ -22112,10 +22275,10 @@ function CollectionPanel({ me, rewards, onClose, onEquip, onWear, isAdmin, onRew
             <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gap: 10 }}>
               {shown.map((s) => {
                 const own = { frame: ownedFrames.has(s.key), plate: ownedPlates.has(s.key) };
-                return <SetCard key={s.key} set={s} me={me} own={own} wearing={wearF === s.key || wearP === s.key} free={freeSets > 0 && !(own.frame && own.plate)} width={cardW} stack={stackFoot} onOpen={() => { setOpenSet(s.key); playUiSound('tap'); }} />;
+                return <SetCard key={s.key} set={s} me={me} own={own} wearing={wearF === s.key || wearP === s.key} free={freeSets > 0 && !s.fx && !(own.frame && own.plate)} width={cardW} stack={stackFoot} onOpen={() => { setOpenSet(s.key); playUiSound('tap'); }} />;
               })}
             </div>
-            <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.45)', textAlign: 'center', margin: '16px 8px 0', lineHeight: 1.5 }}>A frame or a nameplate is {DECOR_PRICE} coins, a full set is {DECOR_PRICE * 2}. They show on your profile and are yours to keep.</div>
+            <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.45)', textAlign: 'center', margin: '16px 8px 0', lineHeight: 1.5 }}>A set is {DECOR_PRICE * 2} coins, or {DECOR_FX_PRICE * 2} with a profile effect. A frame or a nameplate on its own is half. They show on your profile and are yours to keep.</div>
           </>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
@@ -24597,7 +24760,7 @@ function writeTypingOff(set) {
   try { window.dispatchEvent(new Event('zchat-typing-off')); } catch {}
 }
 
-const PREF_DEFAULTS = { 'zchat-enter-send': true, 'zchat-doubletap': true, 'zchat-haptics': true, 'zchat-reduce-motion': false, 'zchat-swipe-reply': true, 'zchat-format': true, 'zchat-effects': true, 'zchat-touch-sounds': true, 'zchat-sticker-suggest': true, 'zchat-voice-autoplay': true, 'zchat-hide-previews': false, 'zchat-typing-indicator': true, 'zchat-app-badge': true, 'zchat-friend-emojis': true, 'zchat-emoji-suggest': true, 'zchat-writing-help': true, 'zchat-saver-cellular': false, 'zchat-login-alerts': true, 'zchat-quick-rail': true, 'zchat-rail-tucked': false };
+const PREF_DEFAULTS = { 'zchat-enter-send': true, 'zchat-doubletap': true, 'zchat-haptics': true, 'zchat-reduce-motion': false, 'zchat-swipe-reply': true, 'zchat-format': true, 'zchat-effects': true, 'zchat-profile-fx': true, 'zchat-touch-sounds': true, 'zchat-sticker-suggest': true, 'zchat-voice-autoplay': true, 'zchat-hide-previews': false, 'zchat-typing-indicator': true, 'zchat-app-badge': true, 'zchat-friend-emojis': true, 'zchat-emoji-suggest': true, 'zchat-writing-help': true, 'zchat-saver-cellular': false, 'zchat-login-alerts': true, 'zchat-quick-rail': true, 'zchat-rail-tucked': false };
 let touchSoundsInstalled = false;
 function installTouchSounds() {
   if (touchSoundsInstalled) return;
@@ -41442,6 +41605,7 @@ function WnSegments({ total, at, onArt, dark }) {
 }
 
 const WN_HIGHLIGHTS = [
+  { k: 'fxsets', title: 'Sets with profile effects', text: 'Twenty new sets, each with its own effect. Fireworks, falling leaves, jellyfish and more play when someone opens your profile.', cta: 'See the sets', go: 'sets' },
   { k: 'chars', title: 'Character bubbles', text: '30 new chat bubbles with little characters sitting on your messages. Pick two for free and send the rest as gifts.', cta: 'See the bubbles', go: 'bubbles' },
   { k: 'songs', title: 'Stories that move with the music', text: 'Your story now waits for the song, so they always start together. Drag, pinch and turn text, stickers and the music sticker anywhere you like.' },
   { k: 'draw', title: 'Real art tools in Draw together', text: 'Brushes, shapes, stickers and backgrounds that show up live for everyone drawing with you.' },
@@ -41472,7 +41636,8 @@ const WN_SECTIONS = [
     { art: 'coins', title: 'Buy coins', text: 'Pick a coin pack and pay safely with Lemon Squeezy.' },
     { art: 'medal', title: 'ZChat Verified', text: 'A monthly plan for the blue badge. Cancel any time.' },
     { art: 'reminders', title: 'Drops', text: 'Limited releases with a countdown. Tap Remind me to get a heads up.' },
-    { art: 'gift', title: 'Crystal phoenix', text: 'A new set with a glowing blue phoenix frame and nameplate.' },
+    { art: 'fxsets', title: 'Twenty sets with profile effects', text: 'Wear the full set and its effect plays when someone opens your profile. Tap Play on any set to see it first.' },
+    { art: 'gift', title: 'Crystal phoenix', text: 'A crystal phoenix set. Wear it and the phoenix flies across your profile.' },
     { art: 'gift', title: 'Gift from your collection', text: 'Send any set, charm or bubble to a friend straight from your Collection. Charms are in the gift sheet too.' },
     { art: 'chats', title: 'Twenty new bubble animals', text: 'A turtle, a lion, a hippo in a puddle and more. Every bubble animal also got its own pose and spot on your messages.' },
   ] },
@@ -41533,6 +41698,7 @@ const WN_EARLIER = [
 
 function WnPic({ k, dark, thumb, me }) {
   if (k === 'decor') return <WnDecorArt me={me} thumb={thumb} />;
+  if (k === 'fxsets') return <WnDecorArt me={me} thumb={thumb} keys={['jellyfish_glow', 'spirit_wolf', 'unicorn_dream']} />;
   return <WnArt k={k} dark={dark} thumb={thumb} />;
 }
 
@@ -43730,6 +43896,7 @@ function ChatsPrefsSection() {
   const [reduce, setReduce] = usePref('zchat-reduce-motion');
   const [fmt, setFmt] = usePref('zchat-format');
   const [fx, setFx] = usePref('zchat-effects');
+  const [pfx, setPfx] = usePref('zchat-profile-fx');
   const [touch_, setTouch_] = usePref('zchat-touch-sounds');
   const [stk, setStk] = usePref('zchat-sticker-suggest');
   const [emo, setEmo] = usePref('zchat-emoji-suggest');
@@ -43788,6 +43955,7 @@ function ChatsPrefsSection() {
       <IgHeading>Feel</IgHeading>
       {row(<VibrateIcon size={16} />, 'Haptic feedback', 'A small buzz on taps and swipes', haptics, setHaptics)}
       {row(<Volume1 size={16} />, 'Touch sounds', 'A soft tick on every button, row and tile', touch_, setTouch_)}
+      {row(<ProfileFxIcon size={16} />, 'Profile effects', 'Play the animation when you open a profile that wears a set with an effect', pfx, setPfx)}
       {row(<Activity size={16} />, 'Reduce motion', 'Fade between pages instead of sliding', reduce, setReduce)}
       {qrOpen && <QuickRepliesPage onClose={() => setQrOpen(false)} />}
       {editAt != null && <FullEmojiPicker onClose={() => setEditAt(null)} onPick={(e) => { const next = quick.slice(); next[editAt] = e; setQuickReactions(next); setQuick(next); setEditAt(null); hapticTap(); }} />}
@@ -57668,6 +57836,7 @@ function PublicStorePage() {
   const viewer = useStoreViewer();
   const me = viewer.profile;
   const [selected, setSelected] = useState(DECOR_SETS[0].key);
+  const [fxRun, setFxRun] = useState(0);
   const topRef = useRef(null);
   const boxRef = useRef(null);
   const gridRef = useRef(null);
@@ -57695,27 +57864,28 @@ function PublicStorePage() {
       `}</style>
       <div ref={topRef} style={{ scrollMarginTop: 70 }} />
       <div ref={boxRef} style={{ position: 'relative', marginTop: 16, borderRadius: 28, overflow: 'hidden', background: `radial-gradient(120% 70% at 50% 22%, ${set.accent}3d 0%, rgba(10,10,18,0) 62%), linear-gradient(180deg, #120f1f 0%, #0a0a12 100%)`, border: `1px solid ${set.accent}44`, transition: 'border-color .3s ease' }}>
+        {set.fx && <ProfileEffectLayer effectKey={selected} runKey={fxRun} force={fxRun > 0} z={8} />}
         <div style={{ position: 'relative', padding: '18px 18px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
           <div style={{ alignSelf: 'stretch', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.6)' }}>Frames and nameplates</div>
             {me && own.frame && own.plate && <div style={{ fontSize: 11.5, fontWeight: 800, padding: '4px 10px', borderRadius: 10, background: 'rgba(52,211,153,0.16)', color: '#34d399' }}>Yours</div>}
           </div>
-          <div key={selected} style={{ margin: '14px 0 2px', animation: 'zs-rise .35s ease' }}>
+          <div key={selected} data-fx-hero="1" style={{ margin: '14px 0 2px', animation: 'zs-rise .35s ease' }}>
             <DecorHero frameKey={selected} plateKey={selected} width={W} photo={me ? me.avatar : ''} name={name} username={username} verified={me && me.verified} custom={me && me.custom_badge} gapColor="#0a0a12" />
           </div>
           <div style={{ fontSize: 26, fontWeight: 900, color: 'white', marginTop: 8 }}>{set.name}</div>
           <div style={{ fontSize: 14.5, color: 'rgba(255,255,255,0.7)', marginTop: 6, maxWidth: 420, lineHeight: 1.55 }}>{set.about}</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 16 }}>
             <CoinIcon size={28} />
-            <span style={{ fontSize: 32, fontWeight: 800, color: '#FFFFFF' }}>{DECOR_PRICE * 2}</span>
+            <span style={{ fontSize: 32, fontWeight: 800, color: '#FFFFFF' }}>{decorPartPrice(selected) * 2}</span>
             <span style={{ fontSize: 14, fontWeight: 700, color: 'rgba(255,255,255,0.6)' }}>coins for the set</span>
           </div>
-          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)', marginTop: 4 }}>or {DECOR_PRICE} coins for just the frame or the nameplate</div>
+          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)', marginTop: 4 }}>or {decorPartPrice(selected)} coins for just the frame or the nameplate</div>
           <a href={cta.href} style={{ marginTop: 16, width: '100%', maxWidth: 360, padding: '16px 18px', borderRadius: 18, boxSizing: 'border-box', fontFamily: FONT, fontWeight: 800, fontSize: 17, textDecoration: 'none', textAlign: 'center', color: '#FFFFFF', background: PUB_ACCENT }}>{cta.label}</a>
           {!me && !viewer.loading && <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.5)', marginTop: 8 }}>Sign in to see every set on your own photo</div>}
           <div style={{ display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap', justifyContent: 'center' }}>
-            {[[BoltIcon, 'Animated'], [Lock, 'Yours to keep'], [Repeat, 'Mix and match']].map(([Ic, t]) => (
-              <span key={t} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 800, padding: '6px 10px', borderRadius: 10, background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.75)' }}><Ic size={13} strokeWidth={2.4} />{t}</span>
+            {[[BoltIcon, 'Animated'], ...(set.fx ? [[ProfileFxIcon, 'Profile effect']] : []), [Lock, 'Yours to keep'], [Repeat, 'Mix and match']].map(([Ic, t]) => (
+              <span key={t} role={Ic === ProfileFxIcon ? 'button' : undefined} aria-label={Ic === ProfileFxIcon ? 'Play the profile effect' : undefined} onClick={Ic === ProfileFxIcon ? () => setFxRun(Date.now()) : undefined} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 800, padding: '6px 10px', borderRadius: 10, background: Ic === ProfileFxIcon ? 'rgba(139,108,255,0.24)' : 'rgba(255,255,255,0.06)', color: Ic === ProfileFxIcon ? '#FFFFFF' : 'rgba(255,255,255,0.75)', cursor: Ic === ProfileFxIcon ? 'pointer' : 'default' }}><Ic size={13} strokeWidth={2.4} />{t}</span>
             ))}
           </div>
         </div>
@@ -57729,6 +57899,7 @@ function PublicStorePage() {
           return (
             <div key={s.key} className="zs-card" role="button" aria-label={`${s.name} set`} onClick={() => pick(s.key)} style={{ position: 'relative', borderRadius: 20, padding: '8px 4px 11px', cursor: 'pointer', overflow: 'hidden', display: 'flex', flexDirection: 'column', alignItems: 'center', background: `radial-gradient(120% 85% at 50% 20%, ${s.accent}30 0%, rgba(13,14,20,0) 64%), linear-gradient(180deg, #161724 0%, #0b0c12 100%)`, border: `1.5px solid ${isSel ? PUB_ACCENT : 'rgba(255,255,255,0.08)'}` }}>
               {o.frame && o.plate && <div style={{ position: 'absolute', top: 8, right: 8, zIndex: 6, padding: '2px 8px', borderRadius: 8, background: 'rgba(52,211,153,0.9)', color: '#052e1c', fontSize: 10.5, fontWeight: 900 }}>Yours</div>}
+              {s.fx && <div style={{ position: 'absolute', top: 8, left: 8, zIndex: 6, height: 20, padding: '0 7px 0 5px', borderRadius: 8, background: 'linear-gradient(135deg, #9B7DFF 0%, #6A45F5 100%)', color: '#FFFFFF', fontSize: 10.5, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 3 }}><ProfileFxIcon size={12} strokeWidth={2.6} />Effect</div>}
               <LazyShow height={Math.round(cardW * 0.82)}>
                 <DecorHero frameKey={s.key} plateKey={s.key} width={cardW} photo={me ? me.avatar : ''} name={name} lazy compact gapColor="#12131b" />
               </LazyShow>
@@ -57742,7 +57913,7 @@ function PublicStorePage() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
         {[
           ['1', 'Pick a set', 'See every frame and nameplate on your own photo and name right here.'],
-          ['2', 'Use your coins', `${DECOR_PRICE * 2} coins for a set, or ${DECOR_PRICE} for a frame or a nameplate on its own.`],
+          ['2', 'Use your coins', `${DECOR_PRICE * 2} coins for a set, or ${DECOR_FX_PRICE * 2} for a set with a profile effect. A frame or a nameplate on its own is half.`],
           ['3', 'Wear it on your profile', 'Your frame and nameplate show big and animated on your profile page.'],
         ].map(([n, t, d]) => (
           <div key={n} style={{ borderRadius: 18, padding: 16, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
