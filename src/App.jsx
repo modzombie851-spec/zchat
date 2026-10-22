@@ -315,12 +315,13 @@ const deepDmPrefetch = { current: null };
 const backStack = [];
 const navCtl = { enabled: false, depth: 0, silent: 0, silentAt: 0, swipeActive: false, swipeClosedAt: 0, lastBackAt: 0, stale: null, staleN: 0, staleLen: 0, rootOpen: null, rootClose: null, rootCount: null, timer: 0, guard: false, onLeave: null, leaveAt: 0 };
 let uaBackAnim = false;
+const navClosingSet = new Set();
 let uaBackAt = 0;
 function navStateDepth(st) {
   return st && st.zchat === 'app' ? Math.max(1, Number(st.d) || 1) : 0;
 }
 function navWant() {
-  let n = backStack.length;
+  let n = navClosingSet.size ? backStack.filter((e) => !navClosingSet.has(e)).length : backStack.length;
   if (navCtl.rootCount) { try { n += Math.max(0, Number(navCtl.rootCount()) || 0); } catch {} }
   else if (navCtl.rootOpen) { try { if (navCtl.rootOpen()) n += 1; } catch {} }
   return n;
@@ -355,18 +356,24 @@ function navSync() {
     }
   }, 50);
 }
+function navClosing(entry) {
+  navClosingSet.add(entry);
+  runWithTransition(() => { navClosingSet.delete(entry); entry(); }, 'pop');
+}
 function navCloseTop() {
-  const top = backStack[backStack.length - 1];
+  let at = backStack.length - 1;
+  while (at >= 0 && navClosingSet.has(backStack[at])) at -= 1;
+  const top = backStack[at];
   if (top) {
     if (navCtl.stale === top && navCtl.staleLen === backStack.length) navCtl.staleN += 1;
     else { navCtl.stale = top; navCtl.staleLen = backStack.length; navCtl.staleN = 1; }
     if (navCtl.staleN > 2) {
-      backStack.pop();
+      backStack.splice(at, 1);
       navCtl.stale = null;
-      const next = backStack[backStack.length - 1];
-      if (next) runWithTransition(next, 'pop');
+      const next = backStack[at - 1];
+      if (next) navClosing(next);
       else if (navCtl.rootClose) navCtl.rootClose();
-    } else runWithTransition(top, 'pop');
+    } else navClosing(top);
     navSync();
     return true;
   }
@@ -384,7 +391,8 @@ function navOnPop(e) {
   navCtl.lastBackAt = Date.now();
   if (navCtl.swipeActive) { navSync(); return; }
   let closed = 0;
-  uaBackAnim = !!(e && e.hasUAVisualTransition);
+  uaBackAnim = !!(e && e.hasUAVisualTransition) || nativeSwipeBack();
+  edgeTouch.cancelled = false;
   if (uaBackAnim) uaBackAt = Date.now();
   try {
     for (let i = 0; i < steps; i++) { if (navWant() <= 0) break; if (navCloseTop()) closed += 1; else break; }
@@ -400,8 +408,6 @@ function navOnPop(e) {
   navSync();
 }
 
-const VT_SUPPORTED = typeof document !== 'undefined' && typeof document.startViewTransition === 'function';
-let vtUpdating = false;
 function overlayKindOf(n) {
   if (!n || n.nodeType !== 1 || !n.style) return null;
   const st = n.style;
@@ -458,7 +464,6 @@ function installOverlayGhosts() {
         const kind = overlayKindOf(n);
         if (!kind) continue;
         if (n.getAttribute('data-ghost') || n.getAttribute('data-ghost-skip')) continue;
-        if (document.documentElement.classList.contains('zchat-vt')) continue;
         if (Date.now() - uaBackAt < 600) continue;
         if (reducedMotion()) continue;
         if (document.hidden) continue;
@@ -486,55 +491,35 @@ function installOverlayGhosts() {
 let fallbackPopBusy = false;
 function fallbackPopAnimation() {
   try {
-    const els = Array.from(document.querySelectorAll('.zchat-panel-open'));
-    const vis = els.filter((el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; });
-    const top = vis[vis.length - 1];
-    if (!top || !top.classList.contains('zchat-chat-panel')) return null;
-    top.style.animation = 'zchat-panel-zoom-out 0.24s cubic-bezier(0.4, 0, 1, 1) forwards';
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    const hit = document.elementFromPoint(w / 2, h / 2);
+    const top = hit && hit.closest ? hit.closest('.zchat-panel-open') : null;
+    if (!top) return null;
+    const r = top.getBoundingClientRect();
+    if (r.width < w * 0.9 || r.height < h * 0.6) return null;
+    top.style.animation = 'zchat-panel-zoom-out 0.21s cubic-bezier(0.4, 0, 1, 1) forwards';
     top.style.pointerEvents = 'none';
+    top.setAttribute('data-ghost-skip', '1');
     return top;
   } catch { return null; }
 }
 function runWithTransition(fn, dir) {
-  if (vtUpdating || swipeBackSkipVT) { fn(); return; }
+  if (swipeBackSkipVT) { fn(); return; }
   if (uaBackAnim && dir === 'pop') { try { ReactDOM.flushSync(() => { fn(); }); } catch {} return; }
   try {
-    const reduce = reducedMotion();
-    if (dir === 'pop' && sheetOrDialogShowing()) { fn(); return; }
-    if (!reduce && !VT_SUPPORTED && dir === 'pop' && window.innerWidth < 900 && !fallbackPopBusy) {
+    if (dir === 'pop' && !reducedMotion() && window.innerWidth < 900 && !fallbackPopBusy && !sheetOrDialogShowing()) {
       const el = fallbackPopAnimation();
       if (el) {
         fallbackPopBusy = true;
         setTimeout(() => {
           try { fn(); } finally {
             fallbackPopBusy = false;
-            setTimeout(() => { if (el.isConnected) { el.style.animation = ''; el.style.pointerEvents = ''; } }, 60);
+            setTimeout(() => { if (el.isConnected) { el.style.animation = ''; el.style.pointerEvents = ''; el.removeAttribute('data-ghost-skip'); } }, 60);
           }
         }, 220);
         return;
       }
-    }
-    if (VT_SUPPORTED) {
-      const html = document.documentElement;
-      const nav = reduce || window.innerWidth >= 900 ? 'fade' : (dir || 'fade');
-      html.setAttribute('data-nav', nav);
-      html.classList.add('zchat-vt');
-      let ran = false;
-      const run = () => {
-        if (ran) return;
-        ran = true;
-        vtUpdating = true;
-        try { ReactDOM.flushSync(() => { fn(); }); } finally { vtUpdating = false; }
-      };
-      const t = document.startViewTransition(run);
-      const slow = setTimeout(() => {
-        if (ran) return;
-        try { t.skipTransition(); } catch {}
-        run();
-      }, dir === 'pop' ? 140 : 220);
-      const done = () => { clearTimeout(slow); html.classList.remove('zchat-vt'); if (html.getAttribute('data-nav') === nav) html.removeAttribute('data-nav'); };
-      t.finished.then(done, done);
-      return;
     }
   } catch {}
   fn();
@@ -596,6 +581,7 @@ function useBackClose(active, onClose) {
     return () => {
       const i = backStack.lastIndexOf(entry);
       if (i >= 0) backStack.splice(i, 1);
+      navClosingSet.delete(entry);
       navSync();
     };
   }, [active]);
@@ -1198,21 +1184,6 @@ function GlobalStyle() {
       .zchat-press:active { transform: scale(0.94); }
       .zchat-row-press { transition: background 0.12s ease; }
       .zchat-row-press:active { background: rgba(140,120,200,0.14) !important; }
-      @keyframes zchat-vt-out { to { opacity: 0; transform: translateX(22px) scale(0.985); } }
-      @keyframes zchat-vt-in { from { opacity: 0; transform: translateX(-16px); } }
-      ::view-transition-old(root) { animation: zchat-vt-out 0.2s cubic-bezier(0.4, 0, 1, 1) both; }
-      ::view-transition-new(root) { animation: zchat-vt-in 0.26s cubic-bezier(0.16, 1, 0.3, 1) both; }
-      ::view-transition-image-pair(root) { isolation: auto; }
-      ::view-transition-old(root), ::view-transition-new(root) { mix-blend-mode: normal; }
-      @keyframes zchat-vt-push-old { to { transform: translateX(-26%); filter: brightness(0.72); } }
-      @keyframes zchat-vt-push-new { from { transform: translateX(100%); } }
-      @keyframes zchat-vt-pop-old { to { transform: translateX(100%); } }
-      @keyframes zchat-vt-pop-new { from { transform: translateX(-26%); filter: brightness(0.72); } }
-      html[data-nav="push"]::view-transition-old(root) { animation: zchat-vt-push-old 0.34s cubic-bezier(0.32, 0.72, 0, 1) both; }
-      html[data-nav="push"]::view-transition-new(root) { animation: zchat-vt-push-new 0.34s cubic-bezier(0.32, 0.72, 0, 1) both; box-shadow: -14px 0 34px rgba(0,0,0,0.35); }
-      html[data-nav="pop"]::view-transition-old(root) { animation: zchat-vt-pop-old 0.3s cubic-bezier(0.32, 0.72, 0, 1) both; z-index: 2; box-shadow: -14px 0 34px rgba(0,0,0,0.35); }
-      html[data-nav="pop"]::view-transition-new(root) { animation: zchat-vt-pop-new 0.3s cubic-bezier(0.32, 0.72, 0, 1) both; z-index: 1; }
-      html.zchat-vt .zchat-fade, html.zchat-vt .zchat-panel-open, html.zchat-vt .zchat-sheet-up, html.zchat-vt .zchat-pop, html.zchat-vt .zchat-tab-in { animation-duration: 0.001s !important; animation-delay: 0s !important; }
       @keyframes zchat-panel-slide-in { 0% { opacity: 0; transform: translateX(14px) scale(0.985); } 100% { opacity: 1; transform: translateX(0) scale(1); } }
       @keyframes zchat-pull-spin { to { transform: rotate(360deg); } }
       @keyframes zchat-toast-in { 0% { opacity: 0; transform: translateY(-28px) scale(0.97); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
@@ -1229,10 +1200,6 @@ function GlobalStyle() {
       .zchat-ghost-dialog { animation: zchat-ghost-fade 0.18s ease forwards !important; }
       .zchat-ghost-dialog > * { animation: zchat-dialog-out 0.18s ease forwards !important; }
       .zchat-ghost-fade { animation: zchat-ghost-fade 0.2s ease forwards !important; }
-      @keyframes zchat-vt-fade-out { to { opacity: 0; } }
-      @keyframes zchat-vt-fade-in { from { opacity: 0; } }
-      html[data-nav="fade"]::view-transition-old(root) { animation: zchat-vt-fade-out 0.18s ease both; }
-      html[data-nav="fade"]::view-transition-new(root) { animation: zchat-vt-fade-in 0.22s ease both; }
       @keyframes zchat-dots { 0%, 80%, 100% { opacity: 0.25; } 40% { opacity: 1; } }
       .zchat-toast-in { animation: zchat-toast-in 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.1); }
       .zchat-pop { animation: zchat-pop-in 0.18s cubic-bezier(0.2, 0.9, 0.3, 1.2); }
@@ -3854,6 +3821,90 @@ function installCrashReporter() {
   });
 }
 
+function appFileList() {
+  const out = [];
+  const add = (group, url) => { if (url && !out.some((x) => x.url === url)) out.push({ group, url }); };
+  DECOR_ALL.forEach((st) => { add(st.name, `/set-${st.file}-frame.webp`); add(st.name, `/set-${st.file}-plate.webp`); });
+  add('Set pictures', DECOR_SPRITE);
+  Object.values(SOUND_SPRITES).forEach((sp) => add('Sounds', sp.url));
+  add('Sign in photo', WELCOME_PHOTO);
+  Object.values(CUSTOM_BADGES).forEach((b) => add('Charms', b.file));
+  CHAT_THEMES.forEach((th) => { if (th.file) add('Chat themes', th.file); });
+  ['/icon-192.png', '/badge-192.png', '/bot-avatar.jpg', '/manifest.json', '/sw.js'].forEach((u) => add('App', u));
+  return out;
+}
+async function appFileOk(url) {
+  try {
+    const res = await fetch(url, { method: 'HEAD', cache: 'no-store' });
+    if (!res.ok) return false;
+    const ct = (res.headers.get('content-type') || '').toLowerCase();
+    return !(ct.includes('text/html') && !/\.html?$/i.test(url));
+  } catch {
+    return null;
+  }
+}
+function AdminFiles() {
+  const { theme } = useTheme();
+  const [list] = useState(() => appFileList());
+  const [state, setState] = useState({ done: 0, missing: [], offline: 0, running: true });
+  const run = async () => {
+    setState({ done: 0, missing: [], offline: 0, running: true });
+    const missing = [];
+    let offline = 0;
+    let at = 0;
+    let done = 0;
+    const lane = async () => {
+      while (at < list.length) {
+        const it = list[at];
+        at += 1;
+        const ok = await appFileOk(it.url);
+        if (ok === false) missing.push(it);
+        if (ok === null) offline += 1;
+        done += 1;
+        setState({ done, missing: missing.slice(), offline, running: true });
+      }
+    };
+    await Promise.all([lane(), lane(), lane(), lane()]);
+    setState({ done, missing: missing.slice(), offline, running: false });
+  };
+  useEffect(() => { run(); }, []);
+  const card = { background: theme.rowBg, border: `1px solid ${theme.border}`, borderRadius: 18, padding: 14, marginBottom: 10 };
+  const groups = [...new Set(state.missing.map((m) => m.group))];
+  return (
+    <div>
+      <div style={{ ...card, display: 'flex', alignItems: 'center', gap: 10 }}>
+        <FileText size={18} color={theme.coral} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontWeight: 900, fontSize: 15, color: theme.ink }}>App files</div>
+          <div style={{ fontSize: 12, color: theme.muted, marginTop: 2 }}>{state.running ? `Checking ${state.done} of ${list.length}` : `Checked ${list.length} files on the site`}</div>
+        </div>
+        {!state.running && <div role="button" onClick={run} style={{ fontSize: 12.5, fontWeight: 800, color: theme.coral, cursor: 'pointer' }}>Check again</div>}
+      </div>
+      {!state.running && state.offline > 0 && <div style={{ ...card, fontSize: 13, color: theme.muted, lineHeight: 1.5 }}>{state.offline} files could not be checked. Check your connection and try again.</div>}
+      {!state.running && state.missing.length === 0 && state.offline === 0 && (
+        <div style={{ ...card, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <CheckCheck size={20} color={theme.teal} />
+          <div style={{ fontSize: 13.5, fontWeight: 700, color: theme.ink }}>Every file the app needs is on the site.</div>
+        </div>
+      )}
+      {state.missing.length > 0 && (
+        <div style={card}>
+          <div style={{ fontWeight: 900, fontSize: 14.5, color: theme.danger }}>{state.missing.length === 1 ? '1 file is missing' : `${state.missing.length} files are missing`}</div>
+          <div style={{ fontSize: 12.5, color: theme.muted, marginTop: 4, lineHeight: 1.5 }}>Upload these into the public folder on GitHub. They show up after the next deploy.</div>
+          {groups.map((gname) => (
+            <div key={gname} style={{ marginTop: 12 }}>
+              <div style={{ fontSize: 12, fontWeight: 800, color: theme.muted }}>{gname}</div>
+              {state.missing.filter((m) => m.group === gname).map((m) => (
+                <div key={m.url} style={{ fontSize: 13.5, fontWeight: 700, color: theme.ink, padding: '5px 0', wordBreak: 'break-all', userSelect: 'text', WebkitUserSelect: 'text' }}>{m.url.slice(1)}</div>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AdminErrors() {
   const { theme } = useTheme();
   const [rows, setRows] = useState(null);
@@ -5867,16 +5918,25 @@ function WalletPage({ uid, me, onClose, onOpenCollection }) {
 }
 
 const GIFT_AMOUNTS = [10, 25, 50, 100, 250];
-function GiftSheet({ uid, me, to, onClose, onSent, startBubble }) {
+function giftStartTab(start) {
+  const k = start && start.kind;
+  if (k === 'bubble' && bubbleKeyOf(start.key)) return 'bubble';
+  if (k === 'set' && isDecorKey(start.key) && !DECOR_BY_KEY[start.key].drop) return 'item';
+  if (k === 'charm' && CUSTOM_BADGES[start.key]) return 'charm';
+  return 'coins';
+}
+function GiftSheet({ uid, me, to, onClose, onSent, start }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
   const w = useWallet(uid);
   const drag = useSheetDrag(onClose);
-  const [tab, setTab] = useState(() => (bubbleKeyOf(startBubble) ? 'bubble' : 'coins'));
-  const [bub, setBub] = useState(() => bubbleKeyOf(startBubble));
+  const firstTab = giftStartTab(start);
+  const [tab, setTab] = useState(firstTab);
+  const [bub, setBub] = useState(() => (firstTab === 'bubble' ? bubbleKeyOf(start.key) : null));
+  const [charm, setCharm] = useState(() => (firstTab === 'charm' ? start.key : null));
   const [amount, setAmount] = useState(25);
   const [noteText, setNoteText] = useState('');
-  const [pick, setPick] = useState(null);
+  const [pick, setPick] = useState(() => (firstTab === 'item' ? start.key : null));
   const [part, setPart] = useState('set');
   const [theirs, setTheirs] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -5884,11 +5944,22 @@ function GiftSheet({ uid, me, to, onClose, onSent, startBubble }) {
   const gridRef = useRef(null);
   const gw = useWidthOf(gridRef, typeof window === 'undefined' ? 390 : Math.min(window.innerWidth, 480)) - 40;
   useEffect(() => {
-    if ((tab !== 'item' && tab !== 'bubble') || theirs) return undefined;
+    if (tab === 'coins' || theirs) return undefined;
     let alive = true;
     supabase.from('user_rewards').select('kind, reward_key, expires_at').eq('user_id', to.id).then(({ data }) => { if (alive) setTheirs(data || []); }, () => { if (alive) setTheirs([]); });
     return () => { alive = false; };
   }, [tab]);
+  useEffect(() => {
+    if (!theirs) return;
+    if (pick) {
+      const o = decorOwned(theirs, pick);
+      if (o.frame && o.plate) setPick(null);
+      else setPart(o.frame ? 'nameplate' : o.plate ? 'frame' : 'set');
+    }
+    const alive = (r) => !r.expires_at || new Date(r.expires_at).getTime() > Date.now();
+    if (bub && theirs.some((r) => r.kind === 'bubble' && r.reward_key === bub && alive(r))) setBub(null);
+    if (charm && theirs.some((r) => r.kind === 'charm' && r.reward_key === charm && alive(r))) setCharm(null);
+  }, [theirs]);
   const first = String((to && to.name) || '').split(' ')[0] || 'them';
   const balance = w ? w.coins : 0;
   const set = pick ? DECOR_BY_KEY[pick] : null;
@@ -5896,7 +5967,10 @@ function GiftSheet({ uid, me, to, onClose, onSent, startBubble }) {
   const ask = set ? decorAsk(set, part, own) : { missing: [], what: 'set', price: 0 };
   const theirBubbles = new Set((theirs || []).filter((r) => r.kind === 'bubble' && (!r.expires_at || new Date(r.expires_at).getTime() > Date.now())).map((r) => r.reward_key));
   const bubOwned = !!bub && theirBubbles.has(bub);
-  const cost = tab === 'coins' ? amount : tab === 'bubble' ? (bub && !bubOwned ? BUBBLE_PRICE : 0) : ask.price;
+  const theirCharms = new Set((theirs || []).filter((r) => r.kind === 'charm' && (!r.expires_at || new Date(r.expires_at).getTime() > Date.now())).map((r) => r.reward_key));
+  const charmOwned = !!charm && theirCharms.has(charm);
+  const charmPrice = charm ? shopPrice('charm', charm) || 0 : 0;
+  const cost = tab === 'coins' ? amount : tab === 'bubble' ? (bub && !bubOwned ? BUBBLE_PRICE : 0) : tab === 'charm' ? (charm && !charmOwned ? charmPrice : 0) : ask.price;
   const enough = balance >= cost && cost > 0;
   const cardW = Math.max(100, Math.floor((gw - 8) / 2) - 8);
   const giftStack = tab === 'item' && DECOR_SETS.some((s) => {
@@ -5908,7 +5982,7 @@ function GiftSheet({ uid, me, to, onClose, onSent, startBubble }) {
   const send = async () => {
     if (busy || !enough) return;
     setBusy(true); setErr('');
-    const args = tab === 'coins' ? { p_to: to.id, p_amount: amount, p_note: noteText.trim().slice(0, 80) || null } : tab === 'bubble' ? { p_to: to.id, p_kind: 'bubble', p_key: bub, p_note: noteText.trim().slice(0, 80) || null } : { p_to: to.id, p_kind: part === 'set' ? 'set' : part, p_key: set.key, p_note: noteText.trim().slice(0, 80) || null };
+    const args = tab === 'coins' ? { p_to: to.id, p_amount: amount, p_note: noteText.trim().slice(0, 80) || null } : tab === 'bubble' ? { p_to: to.id, p_kind: 'bubble', p_key: bub, p_note: noteText.trim().slice(0, 80) || null } : tab === 'charm' ? { p_to: to.id, p_kind: 'charm', p_key: charm, p_note: noteText.trim().slice(0, 80) || null } : { p_to: to.id, p_kind: part === 'set' ? 'set' : part, p_key: set.key, p_note: noteText.trim().slice(0, 80) || null };
     const { data, error } = await supabase.rpc(tab === 'coins' ? 'zchat_send_gift' : 'zchat_gift_item', args);
     setBusy(false);
     const row = Array.isArray(data) ? data[0] : data;
@@ -5919,7 +5993,7 @@ function GiftSheet({ uid, me, to, onClose, onSent, startBubble }) {
     hapticTap();
     playUiSound('like');
     sendPushNotification(to.id, 'ZChat', `${(me && me.name) || 'Someone'} sent you a gift`, '/?requests=1', me && me.avatar);
-    onSent(tab === 'coins' ? `You sent ${first} ${amount} coins` : tab === 'bubble' ? `You sent ${first} the ${CHAR_BUBBLES[bub].label} bubble` : `You sent ${first} the ${set.name} ${ask.what}`);
+    onSent(tab === 'coins' ? `You sent ${first} ${amount} coins` : tab === 'bubble' ? `You sent ${first} the ${CHAR_BUBBLES[bub].label} bubble` : tab === 'charm' ? `You sent ${first} the ${CUSTOM_BADGES[charm].label}` : `You sent ${first} the ${set.name} ${ask.what}`);
   };
   const choose = (k) => {
     setPick(k);
@@ -5942,10 +6016,30 @@ function GiftSheet({ uid, me, to, onClose, onSent, startBubble }) {
               </div>
               <div role="button" aria-label="Close" onPointerDown={(e) => e.stopPropagation()} onClick={onClose} style={{ width: 34, height: 34, borderRadius: 17, background: theme.soft, color: theme.ink, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}><X size={18} /></div>
             </div>
-            <SegmentedControl style={{ margin: '0 20px 12px' }} value={tab} onChange={(k) => { setTab(k); setErr(''); }} options={[['coins', 'Coins'], ['bubble', 'Bubbles'], ['item', 'Sets']]} />
+            <SegmentedControl style={{ margin: '0 20px 12px' }} value={tab} onChange={(k) => { setTab(k); setErr(''); }} options={[['coins', 'Coins'], ['bubble', 'Bubbles'], ['item', 'Sets'], ['charm', 'Charms']]} />
           </div>
           <div ref={gridRef} data-sheet-scroll="true" style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 20px' }}>
-            {tab === 'bubble' ? (
+            {tab === 'charm' ? (
+              <div role="radiogroup" aria-label="Pick a charm" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8, padding: '4px 0 6px' }}>
+                {giftCharmKeys().map((k) => {
+                  const has = theirCharms.has(k);
+                  const on = charm === k;
+                  const label = CUSTOM_BADGES[k].label.replace(/ charm$/i, '');
+                  return (
+                    <div key={k} role="radio" aria-checked={on} aria-label={`${label} charm${has ? ', they have it' : ''}`} onClick={() => { if (has) return; hapticTap(); setCharm(k); setErr(''); }} className="zchat-press"
+                      style={{ borderRadius: 18, padding: '14px 12px 11px', cursor: has ? 'default' : 'pointer', background: theme.dark ? 'rgba(255,255,255,0.045)' : '#F5F5F7', boxShadow: on ? `inset 0 0 0 2px ${theme.coral}` : 'none', display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 10, minWidth: 0, opacity: has ? 0.6 : 1 }}>
+                      <div style={{ height: 56, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><CharmPreview charm={k} size={50} /></div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                        <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 600, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
+                        {has
+                          ? <span style={{ fontSize: 12, fontWeight: 700, color: theme.dark ? '#5EE0A0' : '#14935A', flexShrink: 0 }}>They have it</span>
+                          : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 12.5, fontWeight: 700, color: theme.ink, flexShrink: 0 }}><CoinIcon size={13} />{formatCount(shopPrice('charm', k) || 0)}</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : tab === 'bubble' ? (
               <div role="radiogroup" aria-label="Pick a bubble" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8, padding: '4px 0 6px' }}>
                 {CHAR_BUBBLE_KEYS.map((k) => {
                   const has = theirBubbles.has(k);
@@ -5998,15 +6092,22 @@ function GiftSheet({ uid, me, to, onClose, onSent, startBubble }) {
             <input value={noteText} onChange={(e) => setNoteText(e.target.value.slice(0, 80))} placeholder="Add a note" aria-label="Gift note" style={{ ...inputStyle(theme), fontSize: 15.5, marginTop: 10 }} />
             {tab === 'item' && <div style={{ fontSize: 12.5, color: theme.muted, padding: '8px 2px 0' }}>It is theirs to keep and shows on their profile.</div>}
             {tab === 'bubble' && <div style={{ fontSize: 12.5, color: theme.muted, padding: '8px 2px 0' }}>It is theirs to keep, and everyone sees it on their messages.</div>}
+            {tab === 'charm' && <div style={{ fontSize: 12.5, color: theme.muted, padding: '8px 2px 0' }}>It is theirs to keep and shows next to their name.</div>}
             {err && <div role="alert" style={{ fontSize: 13.5, color: theme.danger, fontWeight: 600, padding: '10px 2px 0' }}>{err}</div>}
           </div>
           <div style={{ padding: '12px 20px 0', flexShrink: 0 }}>
-            <BigButton label={busy ? 'Sending' : !cost ? (tab === 'item' ? 'Pick a set' : tab === 'bubble' ? 'Pick a bubble' : 'Pick a gift') : enough ? `Send for ${formatCount(cost)} coins` : `You need ${formatCount(cost - balance)} more coins`} disabled={busy || !enough} onClick={send} />
+            <BigButton label={busy ? 'Sending' : !cost ? (tab === 'item' ? 'Pick a set' : tab === 'bubble' ? 'Pick a bubble' : tab === 'charm' ? 'Pick a charm' : 'Pick a gift') : enough ? `Send for ${formatCount(cost)} coins` : `You need ${formatCount(cost - balance)} more coins`} disabled={busy || !enough} onClick={send} />
           </div>
         </div>
       </div>
     </Portal>
   );
+}
+
+let giftCharmList = null;
+function giftCharmKeys() {
+  if (!giftCharmList) giftCharmList = Object.keys(CUSTOM_BADGES).filter((k) => shopPrice('charm', k)).sort((a, b) => (STORE_RARITY_ORDER[CUSTOM_BADGES[a].rarity] ?? 9) - (STORE_RARITY_ORDER[CUSTOM_BADGES[b].rarity] ?? 9));
+  return giftCharmList;
 }
 
 async function buyShopItem(kind, key) {
@@ -10863,6 +10964,10 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
       .subscribe();
     return () => { cancelled = true; supabase.removeChannel(channel); };
   }, [profile.id, isSelf]);
+  useEffect(() => {
+    if (isSelf || followState !== 'accepted' || !iFollowIds || iFollowIds.has(profile.id)) return;
+    try { window.dispatchEvent(new Event('zchat-follows-stale')); } catch {}
+  }, [followState, profile.id]);
 
   const toggleFollow = async () => {
     if (followBusy) return;
@@ -10988,10 +11093,12 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
     );
   }
 
-  const allowsProfile = privacyAllows(profile, 'privacy_profile', userId, iFollowIds, privacyAllowed);
-  const allowsBio = privacyAllows(profile, 'privacy_bio', userId, iFollowIds, privacyAllowed);
-  const allowsLastSeen = privacyAllows(profile, 'privacy_lastseen', userId, iFollowIds, privacyAllowed);
+  const followSet = followState === 'accepted' && iFollowIds && !iFollowIds.has(profile.id) ? new Set([...iFollowIds, profile.id]) : iFollowIds;
+  const allowsProfile = privacyAllows(profile, 'privacy_profile', userId, followSet, privacyAllowed);
+  const allowsBio = privacyAllows(profile, 'privacy_bio', userId, followSet, privacyAllowed);
+  const allowsLastSeen = privacyAllows(profile, 'privacy_lastseen', userId, followSet, privacyAllowed);
   const canSeeDetails = isSelf || ((!profile.is_private || followState === 'accepted') && allowsProfile);
+  const hiddenByChoice = !isSelf && !allowsProfile && (!profile.is_private || followState === 'accepted');
   const shownPhoto = editing ? avatar : ((isSelf || !profile.hide_photo) ? profile.avatar : '');
   const hasPhoto = typeof shownPhoto === 'string' && shownPhoto.startsWith('http');
   const initial = (profile.name || '?').trim().charAt(0).toUpperCase() || '?';
@@ -11315,8 +11422,8 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
               ) : (
                 <div style={{ margin: '20px 20px 0', padding: '22px 16px', textAlign: 'center', borderRadius: 20, background: theme.soft }}>
                   <div style={{ display: 'flex', justifyContent: 'center', color: theme.muted, paddingBottom: 10 }}><Lock size={26} /></div>
-                  <div style={{ fontWeight: 800, fontSize: 15, color: theme.ink, marginBottom: 4 }}>This account is private</div>
-                  <div style={{ fontSize: 13, color: theme.muted, lineHeight: 1.5 }}>Follow {profile.name} to see their posts, followers and more.</div>
+                  <div style={{ fontWeight: 800, fontSize: 15, color: theme.ink, marginBottom: 4 }}>{hiddenByChoice ? 'Profile hidden' : followState === 'pending' ? 'Request sent' : 'This account is private'}</div>
+                  <div style={{ fontSize: 13, color: theme.muted, lineHeight: 1.5 }}>{hiddenByChoice ? `${profile.name} only shows their profile to people they pick.` : followState === 'pending' ? `You will see ${profile.name}'s posts once they accept your request.` : `Follow ${profile.name} to see their posts, followers and more.`}</div>
                 </div>
               )}
               {isSelf && (
@@ -17744,7 +17851,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-const APP_VERSION = '21.1V';
+const APP_VERSION = '21.2V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -18679,23 +18786,23 @@ const VERIFIED_TIERS = {
 };
 
 const CUSTOM_BADGES = {
-  cat: { file: '/badges/badge-cat.webp', fallback: '/badge-cat.webp', label: 'Happy kitty charm', ratio: 1.182, rarity: 'legendary', animated: true },
-  grey_butterfly: { file: '/badges/charm-grey_butterfly.webp', fallback: '/charm-grey_butterfly.webp', label: 'Grey butterfly charm', ratio: 1.018, rarity: 'epic', animated: true },
-  milkbear: { file: '/badges/charm-milkbear.webp', fallback: '/charm-milkbear.webp', label: 'Heart bear charm', ratio: 1.291, rarity: 'epic', animated: true },
-  milkbear2: { file: '/badges/charm-milkbear2.webp', fallback: '/charm-milkbear2.webp', label: 'Shocked bear charm', ratio: 0.809, rarity: 'epic', animated: true },
-  milk2: { file: '/badges/charm-milk2.webp', fallback: '/charm-milk2.webp', label: 'Waving bear charm', ratio: 0.864, rarity: 'epic', animated: true },
-  cathug: { file: '/badges/charm-cathug.webp', fallback: '/charm-cathug.webp', label: 'Cat hug charm', ratio: 0.864, rarity: 'legendary', animated: true },
-  cutecat_heart: { file: '/badges/charm-cutecat_heart.webp', fallback: '/charm-cutecat_heart.webp', label: 'Pixel love charm', ratio: 1.1, rarity: 'legendary', animated: true },
-  milk1: { file: '/badges/charm-milk1.webp', fallback: '/charm-milk1.webp', label: 'Shouting bear charm', ratio: 1.291, rarity: 'epic', animated: true },
-  milk9: { file: '/badges/charm-milk9.webp', fallback: '/charm-milk9.webp', label: 'Cheeky bear charm', ratio: 0.836, rarity: 'epic', animated: true },
-  scuba_cat: { file: '/badges/charm-scuba_cat.webp', fallback: '/charm-scuba_cat.webp', label: 'Scuba cat charm', ratio: 0.964, rarity: 'mythic', animated: true },
-  penguinlove: { file: '/badges/charm-penguinlove.webp', fallback: '/charm-penguinlove.webp', label: 'Penguin love charm', ratio: 1.1, rarity: 'legendary', animated: true },
-  milk10: { file: '/badges/charm-milk10.webp', fallback: '/charm-milk10.webp', label: 'Music bear charm', ratio: 1.245, rarity: 'epic', animated: true },
-  milk6: { file: '/badges/charm-milk6.webp', fallback: '/charm-milk6.webp', label: 'Crying bear charm', ratio: 1.336, rarity: 'epic', animated: true },
-  milk3: { file: '/badges/charm-milk3.webp', fallback: '/charm-milk3.webp', label: 'Lovestruck bear charm', ratio: 1.136, rarity: 'epic', animated: true },
-  milkdance: { file: '/badges/charm-milkdance.webp', fallback: '/charm-milkdance.webp', label: 'Dancing bear charm', ratio: 1.018, rarity: 'legendary', animated: true },
-  milklaughing: { file: '/badges/charm-milklaughing.webp', fallback: '/charm-milklaughing.webp', label: 'Giggling bear charm', ratio: 1.018, rarity: 'epic', animated: true },
-  milkrock: { file: '/badges/charm-milkrock.webp', fallback: '/charm-milkrock.webp', label: 'Rocker bear charm', ratio: 1.082, rarity: 'epic', animated: true },
+  cat: { file: '/badge-cat.webp', fallback: '/badges/badge-cat.webp', label: 'Happy kitty charm', ratio: 1.182, rarity: 'legendary', animated: true },
+  grey_butterfly: { file: '/charm-grey_butterfly.webp', fallback: '/badges/charm-grey_butterfly.webp', label: 'Grey butterfly charm', ratio: 1.018, rarity: 'epic', animated: true },
+  milkbear: { file: '/charm-milkbear.webp', fallback: '/badges/charm-milkbear.webp', label: 'Heart bear charm', ratio: 1.291, rarity: 'epic', animated: true },
+  milkbear2: { file: '/charm-milkbear2.webp', fallback: '/badges/charm-milkbear2.webp', label: 'Shocked bear charm', ratio: 0.809, rarity: 'epic', animated: true },
+  milk2: { file: '/charm-milk2.webp', fallback: '/badges/charm-milk2.webp', label: 'Waving bear charm', ratio: 0.864, rarity: 'epic', animated: true },
+  cathug: { file: '/charm-cathug.webp', fallback: '/badges/charm-cathug.webp', label: 'Cat hug charm', ratio: 0.864, rarity: 'legendary', animated: true },
+  cutecat_heart: { file: '/charm-cutecat_heart.webp', fallback: '/badges/charm-cutecat_heart.webp', label: 'Pixel love charm', ratio: 1.1, rarity: 'legendary', animated: true },
+  milk1: { file: '/charm-milk1.webp', fallback: '/badges/charm-milk1.webp', label: 'Shouting bear charm', ratio: 1.291, rarity: 'epic', animated: true },
+  milk9: { file: '/charm-milk9.webp', fallback: '/badges/charm-milk9.webp', label: 'Cheeky bear charm', ratio: 0.836, rarity: 'epic', animated: true },
+  scuba_cat: { file: '/charm-scuba_cat.webp', fallback: '/badges/charm-scuba_cat.webp', label: 'Scuba cat charm', ratio: 0.964, rarity: 'mythic', animated: true },
+  penguinlove: { file: '/charm-penguinlove.webp', fallback: '/badges/charm-penguinlove.webp', label: 'Penguin love charm', ratio: 1.1, rarity: 'legendary', animated: true },
+  milk10: { file: '/charm-milk10.webp', fallback: '/badges/charm-milk10.webp', label: 'Music bear charm', ratio: 1.245, rarity: 'epic', animated: true },
+  milk6: { file: '/charm-milk6.webp', fallback: '/badges/charm-milk6.webp', label: 'Crying bear charm', ratio: 1.336, rarity: 'epic', animated: true },
+  milk3: { file: '/charm-milk3.webp', fallback: '/badges/charm-milk3.webp', label: 'Lovestruck bear charm', ratio: 1.136, rarity: 'epic', animated: true },
+  milkdance: { file: '/charm-milkdance.webp', fallback: '/badges/charm-milkdance.webp', label: 'Dancing bear charm', ratio: 1.018, rarity: 'legendary', animated: true },
+  milklaughing: { file: '/charm-milklaughing.webp', fallback: '/badges/charm-milklaughing.webp', label: 'Giggling bear charm', ratio: 1.018, rarity: 'epic', animated: true },
+  milkrock: { file: '/charm-milkrock.webp', fallback: '/badges/charm-milkrock.webp', label: 'Rocker bear charm', ratio: 1.082, rarity: 'epic', animated: true },
 };
 const customBadgeUrlCache = new Map();
 function useCustomBadgeUrl(key) {
@@ -21464,13 +21571,22 @@ function SetCard({ set, me, own, wearing, free, width, stack = false, onOpen }) 
 }
 
 const dropsMem = { uid: null, list: null, mine: new Set(), at: 0 };
+const dropArtMem = new Map();
+function dropArtReady(key) {
+  const set = DECOR_BY_KEY[key];
+  if (!set) return Promise.resolve(false);
+  if (!dropArtMem.has(key)) dropArtMem.set(key, Promise.all([appFileOk(`/set-${set.file}-frame.webp`), appFileOk(`/set-${set.file}-plate.webp`)]).then((r) => r.every((v) => v !== false)));
+  return dropArtMem.get(key);
+}
 const dropSubs = new Set();
 async function loadDrops(uid, force) {
   if (!force && dropsMem.list && dropsMem.uid === uid && Date.now() - dropsMem.at < 60000) return dropsMem.list;
   try {
     const { data, error } = await supabase.from('drops').select('id, kind, item_key, title, blurb, price, starts_at, ends_at').gt('ends_at', new Date().toISOString()).order('starts_at', { ascending: true }).limit(6);
     if (error) throw error;
-    const list = (data || []).filter((d) => (d.kind === 'set' ? !!DECOR_BY_KEY[d.item_key] : !!CHAR_BUBBLES[d.item_key]));
+    const known = (data || []).filter((d) => (d.kind === 'set' ? !!DECOR_BY_KEY[d.item_key] : !!CHAR_BUBBLES[d.item_key]));
+    const ready = await Promise.all(known.map((d) => (d.kind === 'set' ? dropArtReady(d.item_key) : true)));
+    const list = known.filter((d, i) => ready[i]);
     let mine = new Set();
     if (uid && list.length) {
       const { data: rem } = await supabase.from('drop_reminders').select('drop_id').eq('user_id', uid).in('drop_id', list.map((d) => d.id));
@@ -21688,7 +21804,7 @@ function DropPage({ drop, me, rewards, wallet, onClose, onWear, onRefresh, onOpe
   );
 }
 
-function SetShopPage({ me, setKey, rewards, wallet, onClose, onPick, onWear, onRefresh, onOpenWallet }) {
+function SetShopPage({ me, setKey, rewards, wallet, onClose, onPick, onWear, onRefresh, onOpenWallet, onGift }) {
   useBackClose(true, onClose);
   const set = DECOR_BY_KEY[setKey] || DECOR_SETS[0];
   const [mode, setMode] = useState('set');
@@ -21840,6 +21956,7 @@ function SetShopPage({ me, setKey, rewards, wallet, onClose, onPick, onWear, onR
             )}
             {missing.length === 0 && (wearF || wearP) && (mode === 'set' || (mode === 'frame' ? wearF : wearP)) && <button disabled={busy} onClick={takeOff} style={btn(false)}>Take off</button>}
             {missing.length > 0 && freeSets > 0 && !set.drop && <button disabled={busy} onClick={tapCoins} style={{ ...btn(false), height: 44, fontSize: 14.5 }}>Use {price} coins instead</button>}
+            {onGift && !set.drop && <button disabled={busy} onClick={() => { hapticTap(); onGift(set.key); }} aria-label={`Send the ${set.name} set as a gift`} style={{ ...btn(false), height: 44, fontSize: 14.5 }}><GiftBoxIcon size={18} />Send as a gift</button>}
           </div>
           <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.55)', textAlign: 'center', marginTop: 12, lineHeight: 1.5 }}>
             {missing.length > 0
@@ -21868,7 +21985,7 @@ function SetShopPage({ me, setKey, rewards, wallet, onClose, onPick, onWear, onR
   );
 }
 
-function CollectionPanel({ me, rewards, onClose, onEquip, onWear, isAdmin, onRewardsChanged, onOpenWallet, startSet = null }) {
+function CollectionPanel({ me, rewards, onClose, onEquip, onWear, isAdmin, onRewardsChanged, onOpenWallet, onGift, startSet = null }) {
   useBackClose(true, onClose);
   const edgeBack = useEdgeSwipeBack(true);
   const [tab, setTab] = useState('sets');
@@ -22081,6 +22198,9 @@ function CollectionPanel({ me, rewards, onClose, onEquip, onWear, isAdmin, onRew
                     <button onClick={() => setTryOn(sel.key)} style={{ padding: '10px 14px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.14)', background: 'transparent', color: 'white', fontWeight: 800, fontFamily: FONT, fontSize: 13, cursor: 'pointer' }}>Preview</button>
                   </>
                 )}
+                {tab === 'charm' && onGift && shopPrice('charm', sel.key) ? (
+                  <button onClick={() => { hapticTap(); onGift('charm', sel.key); }} aria-label={`Send the ${sel.spec.label} as a gift`} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '10px 14px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.14)', background: 'transparent', color: 'white', fontWeight: 800, fontFamily: FONT, fontSize: 13, cursor: 'pointer' }}><GiftBoxIcon size={16} />Gift</button>
+                ) : null}
               </div>
             </div>
             <div role="button" aria-label="Close details" onClick={() => setSelected(null)} style={{ alignSelf: 'flex-start', padding: 4, cursor: 'pointer', color: 'rgba(255,255,255,0.5)' }}><X size={18} /></div>
@@ -22112,10 +22232,10 @@ function CollectionPanel({ me, rewards, onClose, onEquip, onWear, isAdmin, onRew
       })()}
       {openSet && (
         <SetShopPage me={me} setKey={openSet} rewards={rewards} wallet={wallet} onClose={() => setOpenSet(null)} onPick={(k) => setOpenSet(k)}
-          onWear={onWear} onRefresh={refresh} onOpenWallet={onOpenWallet} />
+          onWear={onWear} onRefresh={refresh} onOpenWallet={onOpenWallet} onGift={onGift ? (k) => onGift('set', k) : undefined} />
       )}
       {openDrop && <DropPage drop={openDrop} me={me} rewards={rewards} wallet={wallet} onClose={() => setDropOpen(null)} onWear={onWear} onRefresh={refresh} onOpenWallet={onOpenWallet} />}
-      {bubblesOpen && <BubbleShopPage uid={me.id} zIndex={760} onClose={() => setBubblesOpen(false)} onOpenWallet={onOpenWallet} />}
+      {bubblesOpen && <BubbleShopPage uid={me.id} zIndex={760} onClose={() => setBubblesOpen(false)} onOpenWallet={onOpenWallet} onGift={onGift ? (k) => onGift('bubble', k) : undefined} />}
     </div>
     </>
   );
@@ -23860,14 +23980,28 @@ function Portal({ children }) {
 const EDGE_BACK_PX = 24;
 
 let swipeBackSkipVT = false;
-const IOS_BROWSER_SWIPE = (() => {
+const IOS_NATIVE_SWIPE = (() => {
   try {
     const ua = navigator.userAgent || '';
-    const ios = /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
-    const standalone = navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
-    return ios && !standalone;
+    return /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
   } catch { return false; }
 })();
+const edgeTouch = { at: 0, active: false, cancelled: false, installed: false };
+function installEdgeTouchWatch() {
+  if (!IOS_NATIVE_SWIPE || edgeTouch.installed || typeof document === 'undefined') return;
+  edgeTouch.installed = true;
+  const opts = { passive: true, capture: true };
+  document.addEventListener('touchstart', (e) => {
+    const t = e.touches && e.touches[0];
+    if (t && e.touches.length === 1 && t.clientX < 30) { edgeTouch.at = Date.now(); edgeTouch.active = true; edgeTouch.cancelled = false; }
+    else if (t) { edgeTouch.active = false; edgeTouch.cancelled = false; }
+  }, opts);
+  document.addEventListener('touchend', () => { edgeTouch.active = false; }, opts);
+  document.addEventListener('touchcancel', () => { if (edgeTouch.active) { edgeTouch.cancelled = true; edgeTouch.active = false; } }, opts);
+}
+function nativeSwipeBack() {
+  return IOS_NATIVE_SWIPE && Date.now() - edgeTouch.at < 6000 && (edgeTouch.active || edgeTouch.cancelled);
+}
 let backTapGuardOn = false;
 function installBackTapGuard() {
   if (backTapGuardOn || typeof document === 'undefined') return;
@@ -23952,7 +24086,7 @@ function useEdgeSwipeBack(enabled, onBack, opts) {
       const t = e.touches && e.touches[0];
       if (!t || e.touches.length > 1 || window.innerWidth >= 900) { ref.current = null; return; }
       const edgeOnly = !!(optsRef.current && optsRef.current.edgeOnly);
-      if (IOS_BROWSER_SWIPE && t.clientX < 30) { ref.current = null; return; }
+      if (IOS_NATIVE_SWIPE && t.clientX < 30) { ref.current = null; return; }
       if (Date.now() - navCtl.lastBackAt < 380) { ref.current = null; return; }
       if (edgeOnly ? t.clientX > EDGE_BACK_PX + 8 : swipeStartBlocked(e.target, e.currentTarget)) { ref.current = null; return; }
       const el = e.currentTarget;
@@ -32329,8 +32463,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [achievementsFor, setAchievementsFor] = useState(null);
   const [meMenuOpen, setMeMenuOpen] = useState(false);
   const [giftFor, setGiftFor] = useState(null);
-  const [giftBubble, setGiftBubble] = useState(null);
-  const [bubbleGift, setBubbleGift] = useState(null);
+  const [giftStart, setGiftStart] = useState(null);
+  const [giftPick, setGiftPick] = useState(null);
   useEffect(() => {
     let alive = true;
     const run = () => { if (document.visibilityState !== 'visible') return; countNewNotifs(session.user.id).then((n) => { if (alive) setNotifUnseen(n); }); };
@@ -32961,7 +33095,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       if (!seen) { localStorage.setItem('zchat-seen-version', APP_VERSION); return; }
       if (seen !== APP_VERSION) {
         localStorage.setItem('zchat-seen-version', APP_VERSION);
-        if (String(seen).split('.')[0] !== APP_VERSION.split('.')[0]) { setWnQueued(true); setTimeout(() => { setShowWhatsNew(true); setWnQueued(false); }, 1600); }
+        if ((parseInt(APP_VERSION, 10) || 0) > (parseInt(seen, 10) || 0)) { setWnQueued(true); setTimeout(() => { setShowWhatsNew(true); setWnQueued(false); }, 1600); }
       }
     } catch {}
   }, []);
@@ -36633,6 +36767,12 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     else setAcceptedIds(new Set((accRes.data || []).map((r) => r.other_id)));
   };
   followRefreshRef.current = () => { loadMutuals(); loadStories(); };
+  useEffect(() => {
+    let t = 0;
+    const on = () => { clearTimeout(t); t = setTimeout(() => { if (followRefreshRef.current) followRefreshRef.current(); }, 300); };
+    window.addEventListener('zchat-follows-stale', on);
+    return () => { clearTimeout(t); window.removeEventListener('zchat-follows-stale', on); };
+  }, []);
   const canCall = (profile) => !!profile && profile.id !== session.user.id && !profile.is_deleted && mutualIds.has(profile.id) && !myBlockedIds.has(profile.id) && !blockedByIds.has(profile.id);
 
   const callEngine = useCallEngine({
@@ -36702,6 +36842,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     navCtl.guard = true;
     navCtl.onLeave = () => showSnack('Press back again to leave ZChat');
     installBackTapGuard();
+    installEdgeTouchWatch();
     navSync();
     const onPop = navOnPop;
     window.addEventListener('popstate', onPop);
@@ -39617,8 +39758,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       {walletOpen && <PageGuard name="coins" onClose={() => setWalletOpen(false)}><WalletPage uid={session.user.id} me={me} onClose={() => setWalletOpen(false)} onOpenCollection={() => setCollectionOpen(true)} /></PageGuard>}
       {questionsOpen && me && <QuestionsPage me={me} onClose={() => setQuestionsOpen(false)} onSaved={(patch) => setMe((m) => (m ? { ...m, ...patch } : m))} onShareStory={(file) => { setQuestionsOpen(false); setStoryComposer({ key: Date.now(), files: [file] }); }} />}
       {askFor && <AskPage username={askFor} userId={session.user.id} onClose={() => setAskFor(null)} onOwnLink={() => { setAskFor(null); setQuestionsOpen(true); }} />}
-      {bubbleGift && <PickPeoplePage userId={session.user.id} title="Send a bubble" subtitle="Pick who gets it" multi={false} blockedIds={myBlockedIds} zIndex={700} onClose={() => setBubbleGift(null)} onDone={(list) => { const p = Array.isArray(list) ? list[0] : list; const k = bubbleGift; setBubbleGift(null); if (p) { setGiftBubble(k); setGiftFor(p); } }} />}
-      {giftFor && <PageGuard name="gift" onClose={() => { setGiftFor(null); setGiftBubble(null); }}><GiftSheet uid={session.user.id} me={me} to={giftFor} startBubble={giftBubble} onClose={() => { setGiftFor(null); setGiftBubble(null); }} onSent={(t) => { setGiftFor(null); setGiftBubble(null); showSnack(t); runAchievementCheck(session.user.id); }} /></PageGuard>}
+      {giftPick && <PickPeoplePage userId={session.user.id} title={giftPick.kind === 'bubble' ? 'Send a bubble' : giftPick.kind === 'set' ? 'Send a set' : giftPick.kind === 'charm' ? 'Send a charm' : 'Send a gift'} subtitle="Pick who gets it" multi={false} blockedIds={myBlockedIds} zIndex={790} onClose={() => setGiftPick(null)} onDone={(list) => { const p = Array.isArray(list) ? list[0] : list; const g = giftPick; setGiftPick(null); if (p) { setGiftStart(g); setGiftFor(p); } }} />}
+      {giftFor && <PageGuard name="gift" onClose={() => { setGiftFor(null); setGiftStart(null); }}><GiftSheet uid={session.user.id} me={me} to={giftFor} start={giftStart} onClose={() => { setGiftFor(null); setGiftStart(null); }} onSent={(t) => { setGiftFor(null); setGiftStart(null); showSnack(t); runAchievementCheck(session.user.id); }} /></PageGuard>}
       {achToast && !toastBusy && <AchievementToast k={achToast} onDone={() => setAchToast(null)} onOpen={() => { setAchToast(null); setAchievementsFor(me); }} />}
       {achievementsFor && <AchievementsPage userId={achievementsFor.id} isSelf={achievementsFor.id === session.user.id} name={achievementsFor.name} onClose={() => setAchievementsFor(null)} />}
       {notifsOpen && (
@@ -40150,7 +40291,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           onOpenProfile={(p) => { setFeedOpen(false); setProfileOf(sanitizeAvatar(p, session.user.id)); }} />
       )}
       {collectionOpen && me && (
-        <PageGuard name="collection" onClose={() => setCollectionOpen(false)}><CollectionPanel me={me} rewards={myRewards} isAdmin={isZAdmin} startSet={typeof collectionOpen === 'string' ? collectionOpen : null} onClose={() => setCollectionOpen(false)} onEquip={equipReward} onWear={equipDecor} onOpenWallet={() => setWalletOpen(true)} onRewardsChanged={async () => { const { data } = await supabase.from('user_rewards').select('*').eq('user_id', session.user.id).order('granted_at', { ascending: true }); if (data) setMyRewards(data); }} /></PageGuard>
+        <PageGuard name="collection" onClose={() => setCollectionOpen(false)}><CollectionPanel me={me} rewards={myRewards} isAdmin={isZAdmin} startSet={typeof collectionOpen === 'string' ? collectionOpen : null} onClose={() => setCollectionOpen(false)} onEquip={equipReward} onWear={equipDecor} onOpenWallet={() => setWalletOpen(true)} onGift={(kind, key) => setGiftPick({ kind, key })} onRewardsChanged={async () => { const { data } = await supabase.from('user_rewards').select('*').eq('user_id', session.user.id).order('granted_at', { ascending: true }); if (data) setMyRewards(data); }} /></PageGuard>
       )}
       {celebrateTier && (
         <VerifiedCelebration tier={celebrateTier} name={me.name}
@@ -40227,7 +40368,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           onCancel={() => setClearChatAsk(false)}
           onConfirm={() => { hideMessagesLocally(messages.map((m) => m.id)); setMessages([]); setClearChatAsk(false); showSnack('Chat cleared'); loadConversations(); }} />
       )}
-      {showBubbleSheet && <BubbleShopPage uid={session.user.id} onClose={() => setShowBubbleSheet(false)} onOpenWallet={() => setWalletOpen(true)} onGift={(k) => setBubbleGift(k)} />}
+      {showBubbleSheet && <BubbleShopPage uid={session.user.id} onClose={() => setShowBubbleSheet(false)} onOpenWallet={() => setWalletOpen(true)} onGift={(k) => setGiftPick({ kind: 'bubble', key: k })} />}
       {pollComposer && (activeProfile || activeGroup) && (
         <PollComposerPage onClose={() => setPollComposer(false)}
           onSend={async (p) => { const ok = await sendSpecial(`zpoll:${JSON.stringify(p)}`, `Sent a poll: ${p.q}`); if (ok) { setPollComposer(false); scrollChatToBottom(true); } }} />
@@ -41275,6 +41416,7 @@ const WN_SECTIONS = [
     { art: 'medal', title: 'ZChat Verified', text: 'A monthly plan for the blue badge. Cancel any time.' },
     { art: 'reminders', title: 'Drops', text: 'Limited releases with a countdown. Tap Remind me to get a heads up.' },
     { art: 'gift', title: 'Crystal phoenix', text: 'A new set with a glowing blue phoenix frame and nameplate.' },
+    { art: 'gift', title: 'Gift from your collection', text: 'Send any set, charm or bubble to a friend straight from your Collection. Charms are in the gift sheet too.' },
   ] },
   { title: 'Everywhere', items: [
     { art: 'moments', title: 'Vibes', text: 'Moments has a new name. Posts, stories and clips live in Vibes.' },
@@ -55211,7 +55353,7 @@ function AdminPanel({ myId, onClose, onOpenProfile, onOpenReports }) {
               </div>
             </div>
             <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 12, scrollbarWidth: 'none' }}>
-              {[[ShieldAlert, `Reports${stats && Number(stats.open_reports) ? ` ${stats.open_reports}` : ''}`, onOpenReports], [Activity, 'Crash reports', () => setTab('errors')], [GiftBoxIcon, 'Drops', () => setTab('drops')], [Megaphone, 'Announce', () => setTab('announce')], [MessageSquare, 'Teach the bot', () => setTab('bot')], [Database, 'Browse data', () => setTab('data')]].map(([Icon, label, go]) => (
+              {[[ShieldAlert, `Reports${stats && Number(stats.open_reports) ? ` ${stats.open_reports}` : ''}`, onOpenReports], [Activity, 'Crash reports', () => setTab('errors')], [FileText, 'App files', () => setTab('files')], [GiftBoxIcon, 'Drops', () => setTab('drops')], [Megaphone, 'Announce', () => setTab('announce')], [MessageSquare, 'Teach the bot', () => setTab('bot')], [Database, 'Browse data', () => setTab('data')]].map(([Icon, label, go]) => (
                 <div key={label} role="button" onClick={go} style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 7, padding: '9px 14px', borderRadius: 16, background: theme.rowBg, border: `1px solid ${theme.border}`, color: theme.ink, fontSize: 13, fontWeight: 800, cursor: 'pointer' }}><Icon size={16} color={theme.coral} />{label}</div>
               ))}
             </div>
@@ -55262,6 +55404,7 @@ function AdminPanel({ myId, onClose, onOpenProfile, onOpenReports }) {
         {tab === 'bot' && <AdminKnowledge />}
         {tab === 'data' && <AdminDataBrowser />}
         {tab === 'errors' && <AdminErrors />}
+        {tab === 'files' && <AdminFiles />}
         {tab === 'drops' && <AdminDrops />}
 
         {tab === 'announce' && (
@@ -55308,7 +55451,14 @@ function AdminDrops() {
     setErr('');
     setList(data || []);
   };
-  useEffect(() => { load(); }, []);
+  useEffect(() => { dropArtMem.clear(); load(); }, []);
+  const [artMissing, setArtMissing] = useState({});
+  useEffect(() => {
+    if (!list) return undefined;
+    let off = false;
+    list.filter((d) => d.kind === 'set').forEach((d) => { dropArtReady(d.item_key).then((ok) => { if (!off) setArtMissing((m) => (m[d.item_key] === !ok ? m : { ...m, [d.item_key]: !ok })); }); });
+    return () => { off = true; };
+  }, [list]);
   const fresh = () => {
     const start = new Date(Date.now() + 86400000);
     start.setMinutes(0, 0, 0);
@@ -55386,6 +55536,7 @@ function AdminDrops() {
               <span style={{ fontSize: 11.5, fontWeight: 800, padding: '3px 8px', borderRadius: 8, background: ph === 'live' ? '#FF3B5C' : theme.soft, color: ph === 'live' ? '#FFFFFF' : theme.muted }}>{ph === 'live' ? 'Live' : ph === 'soon' ? 'Coming' : 'Ended'}</span>
             </div>
             <div style={{ fontSize: 12.5, color: theme.muted, marginTop: 4, lineHeight: 1.45 }}>{`${d.price} coins, ${adminDate(d.starts_at)} to ${adminDate(d.ends_at)}`}</div>
+            {d.kind === 'set' && artMissing[d.item_key] && <div style={{ fontSize: 12.5, fontWeight: 700, color: theme.danger, marginTop: 4, lineHeight: 1.45 }}>Hidden from people until its frame and nameplate files are on the site</div>}
             <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
               <div role="button" onClick={() => open(d)} style={{ padding: '7px 12px', borderRadius: 10, background: theme.soft, color: theme.ink, fontSize: 12.5, fontWeight: 800, cursor: 'pointer' }}>Change</div>
               {ph === 'live' && <div role="button" onClick={() => setAsk({ k: 'end', d })} style={{ padding: '7px 12px', borderRadius: 10, background: theme.soft, color: theme.ink, fontSize: 12.5, fontWeight: 800, cursor: 'pointer' }}>End now</div>}
