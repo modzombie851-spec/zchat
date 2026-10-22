@@ -6,7 +6,7 @@ const GEMINI_MODEL = process.env.GEMINI_TOOLS_MODEL || process.env.GEMINI_MODEL 
 const GEMINI_FALLBACK = process.env.GEMINI_FALLBACK_MODEL || 'gemini-3.8-flash';
 const OLLAMA_URL = (process.env.OLLAMA_URL || '').replace(/\/+$/, '');
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'qwen3:14b';
-const LIMITS = { translate: 150, transcribe: 40, summary: 40, translate_many: 150, gifs: 400, music: 300 };
+const LIMITS = { translate: 150, transcribe: 40, summary: 40, translate_many: 150, gifs: 1000, music: 300 };
 const MAX_AUDIO_BYTES = 12 * 1024 * 1024;
 const LANGS = { en: 'English', si: 'Sinhala', ta: 'Tamil', hi: 'Hindi', ar: 'Arabic', es: 'Spanish', fr: 'French', de: 'German', pt: 'Portuguese', ru: 'Russian', ja: 'Japanese', ko: 'Korean', zh: 'Chinese', id: 'Indonesian', ms: 'Malay', th: 'Thai', tr: 'Turkish', it: 'Italian', ur: 'Urdu', bn: 'Bengali' };
 
@@ -178,14 +178,16 @@ async function gifs(user, body) {
   const key = process.env.GIPHY_KEY || process.env.GIPHY_API_KEY;
   if (!key) return reply(503, { error: 'GIF search is not set up yet' });
   const q = String(body.q || '').replace(/\s+/g, ' ').trim().slice(0, 50);
-  const limit = Math.max(6, Math.min(30, parseInt(body.limit, 10) || 24));
+  const limit = Math.max(6, Math.min(50, parseInt(body.limit, 10) || 24));
+  const offset = Math.max(0, Math.min(4900, parseInt(body.offset, 10) || 0));
   const rating = ['g', 'pg', 'pg-13', 'r'].includes(String(process.env.GIPHY_RATING || '').toLowerCase()) ? String(process.env.GIPHY_RATING).toLowerCase() : 'pg';
-  const ck = `${q.toLowerCase()}|${limit}`;
+  const ck = `${q.toLowerCase()}|${limit}|${offset}`;
   const hit = gifCache.get(ck);
-  if (hit && Date.now() - hit.at < 15 * 60 * 1000) return reply(200, { items: hit.items });
+  if (hit && Date.now() - hit.at < 15 * 60 * 1000) return reply(200, { items: hit.items, next: hit.next });
   if ((await bumpUsage(user.id, 'gifs')) > LIMITS.gifs) return reply(429, { error: 'Lots of GIF searches today. Try again tomorrow.' });
   const base = q ? 'https://api.giphy.com/v1/gifs/search' : 'https://api.giphy.com/v1/gifs/trending';
   const params = new URLSearchParams({ api_key: key, limit: String(limit), rating, bundle: 'messaging_non_clips' });
+  if (offset) params.set('offset', String(offset));
   if (q) { params.set('q', q); params.set('lang', 'en'); }
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 8000);
@@ -204,9 +206,12 @@ async function gifs(user, body) {
       if (!url) return null;
       return { id: String(g.id), title: String(g.title || '').replace(/\s+GIF\b.*$/i, '').trim().slice(0, 60), url, preview: cleanGifUrl(small.url) || url, w: Number(small.width) || Number(full.width) || 200, h: Number(small.height) || Number(full.height) || 200 };
     }).filter(Boolean);
+    const pg = json.pagination || {};
+    const seen = offset + (Number(pg.count) || json.data.length);
+    const next = json.data.length && seen < Math.min(Number(pg.total_count) || 0, 4999) ? seen : null;
     if (gifCache.size > 300) gifCache.clear();
-    gifCache.set(ck, { at: Date.now(), items });
-    return reply(200, { items });
+    gifCache.set(ck, { at: Date.now(), items, next });
+    return reply(200, { items, next });
   } catch (err) {
     console.error('Giphy error', err && err.name);
     return reply(503, { error: 'GIFs did not load. Try again.' });
