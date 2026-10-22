@@ -314,6 +314,8 @@ const DEEP_DM_ID = (() => { try { return new URLSearchParams(window.location.sea
 const deepDmPrefetch = { current: null };
 const backStack = [];
 const navCtl = { enabled: false, depth: 0, silent: 0, silentAt: 0, swipeActive: false, swipeClosedAt: 0, lastBackAt: 0, stale: null, staleN: 0, staleLen: 0, rootOpen: null, rootClose: null, rootCount: null, timer: 0, guard: false, onLeave: null, leaveAt: 0 };
+let uaBackAnim = false;
+let uaBackAt = 0;
 function navStateDepth(st) {
   return st && st.zchat === 'app' ? Math.max(1, Number(st.d) || 1) : 0;
 }
@@ -382,7 +384,11 @@ function navOnPop(e) {
   navCtl.lastBackAt = Date.now();
   if (navCtl.swipeActive) { navSync(); return; }
   let closed = 0;
-  for (let i = 0; i < steps; i++) { if (navWant() <= 0) break; if (navCloseTop()) closed += 1; else break; }
+  uaBackAnim = !!(e && e.hasUAVisualTransition);
+  if (uaBackAnim) uaBackAt = Date.now();
+  try {
+    for (let i = 0; i < steps; i++) { if (navWant() <= 0) break; if (navCloseTop()) closed += 1; else break; }
+  } finally { uaBackAnim = false; }
   if (!closed) {
     navCtl.guard = true;
     navCtl.leaveAt = Date.now();
@@ -453,6 +459,7 @@ function installOverlayGhosts() {
         if (!kind) continue;
         if (n.getAttribute('data-ghost') || n.getAttribute('data-ghost-skip')) continue;
         if (document.documentElement.classList.contains('zchat-vt')) continue;
+        if (Date.now() - uaBackAt < 600) continue;
         if (reducedMotion()) continue;
         if (document.hidden) continue;
         try { if (n.getElementsByTagName('*').length > 900) continue; } catch { continue; }
@@ -468,7 +475,8 @@ function installOverlayGhosts() {
         for (let k = 0; k < inner.length; k++) inner[k].classList.remove('zchat-sheet-up', 'zchat-pop', 'zchat-fade', 'zchat-tab-in', 'zchat-panel-open', 'zchat-mail-zoom', 'zchat-wave-pop');
         const media = g.querySelectorAll('video, audio, iframe');
         for (let k = 0; k < media.length; k++) media[k].remove();
-        document.body.appendChild(g);
+        const from = muts[i].target;
+        (from && from.id === 'zchat-layer' && from.isConnected ? from : document.body).appendChild(g);
         setTimeout(() => { try { g.remove(); } catch {} }, kind === 'page' ? 320 : 300);
       }
     }
@@ -489,6 +497,7 @@ function fallbackPopAnimation() {
 }
 function runWithTransition(fn, dir) {
   if (vtUpdating || swipeBackSkipVT) { fn(); return; }
+  if (uaBackAnim && dir === 'pop') { try { ReactDOM.flushSync(() => { fn(); }); } catch {} return; }
   try {
     const reduce = reducedMotion();
     if (dir === 'pop' && sheetOrDialogShowing()) { fn(); return; }
@@ -510,11 +519,20 @@ function runWithTransition(fn, dir) {
       const nav = reduce || window.innerWidth >= 900 ? 'fade' : (dir || 'fade');
       html.setAttribute('data-nav', nav);
       html.classList.add('zchat-vt');
-      const t = document.startViewTransition(() => {
+      let ran = false;
+      const run = () => {
+        if (ran) return;
+        ran = true;
         vtUpdating = true;
         try { ReactDOM.flushSync(() => { fn(); }); } finally { vtUpdating = false; }
-      });
-      const done = () => { html.classList.remove('zchat-vt'); if (html.getAttribute('data-nav') === nav) html.removeAttribute('data-nav'); };
+      };
+      const t = document.startViewTransition(run);
+      const slow = setTimeout(() => {
+        if (ran) return;
+        try { t.skipTransition(); } catch {}
+        run();
+      }, dir === 'pop' ? 140 : 220);
+      const done = () => { clearTimeout(slow); html.classList.remove('zchat-vt'); if (html.getAttribute('data-nav') === nav) html.removeAttribute('data-nav'); };
       t.finished.then(done, done);
       return;
     }
@@ -561,13 +579,19 @@ async function rtReady(topic) {
   left.forEach((c) => { try { c.teardown(); } catch {} });
   try { const rt = supabase.realtime; if (rt && Array.isArray(rt.channels)) rt.channels = rt.channels.filter((c) => !left.includes(c)); } catch {}
 }
+function navPushNow() {
+  if (!navCtl.enabled || navCtl.silent > 0 || typeof window === 'undefined') return;
+  const target = navTarget();
+  if (target > navCtl.depth) navPushTo(target);
+}
 function useBackClose(active, onClose) {
   const ref = useRef(onClose);
   ref.current = onClose;
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!active) return undefined;
     const entry = () => { if (ref.current) ref.current(); };
     backStack.push(entry);
+    navPushNow();
     navSync();
     return () => {
       const i = backStack.lastIndexOf(entry);
@@ -17720,7 +17744,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-const APP_VERSION = '21.0V';
+const APP_VERSION = '21.1V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -23810,9 +23834,27 @@ function mergeProfileRow(prev, row) {
   return { ...prev, ...row, email: prev.email };
 }
 
+let portalLayer = null;
+function getPortalLayer() {
+  if (typeof document === 'undefined' || !document.body) return null;
+  if (portalLayer && portalLayer.isConnected) return portalLayer;
+  if (!document.getElementById('zchat-layer-style')) {
+    const st = document.createElement('style');
+    st.id = 'zchat-layer-style';
+    st.textContent = '#zchat-layer{position:fixed;left:0;right:0;top:0;height:calc(var(--zvp-top, 0px) + var(--zvp-h, 100%));pointer-events:none}#zchat-layer>*{pointer-events:auto}html.zkb #zchat-layer{transform:translateZ(0)}';
+    document.head.appendChild(st);
+  }
+  portalLayer = document.getElementById('zchat-layer');
+  if (!portalLayer) {
+    portalLayer = document.createElement('div');
+    portalLayer.id = 'zchat-layer';
+    document.body.appendChild(portalLayer);
+  }
+  return portalLayer;
+}
 function Portal({ children }) {
   if (typeof document === 'undefined') return children;
-  return ReactDOM.createPortal(children, document.body);
+  return ReactDOM.createPortal(children, getPortalLayer() || document.body);
 }
 
 const EDGE_BACK_PX = 24;
@@ -31977,6 +32019,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         try {
           const de = document.documentElement;
           const root = document.getElementById('zapp-root');
+          de.classList.toggle('zkb', !!next.height);
           if (next.height) {
             de.style.setProperty('--zvp-top', `${next.offset || 0}px`);
             de.style.setProperty('--zvp-h', `${next.height}px`);
@@ -32016,6 +32059,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   }, []);
   useEffect(() => {
     const el = document.documentElement;
+    el.classList.toggle('zkb', !!viewportBox.height);
     if (viewportBox.height) {
       el.style.setProperty('--zvp-top', `${viewportBox.offset || 0}px`);
       el.style.setProperty('--zvp-h', `${viewportBox.height}px`);
@@ -32201,7 +32245,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     hit[1]();
     return true;
   };
-  useEffect(() => { navSync(); });
+  useLayoutEffect(() => { navPushNow(); navSync(); });
   const newVersionAvailable = useNewVersionAvailable();
   const [updateLater, setUpdateLater] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
@@ -41214,12 +41258,14 @@ const WN_SECTIONS = [
     { art: 'effects', title: 'Text bomb', text: 'Send one message up to 50 times. It bursts across their screen.' },
     { art: 'voice', title: 'Live sounds', text: 'Real recorded sounds that play for both of you at the same moment.' },
     { art: 'eye', title: 'Peek at a chat', text: 'Hold a chat to read it without opening it. They will not see it as read.' },
-    { art: 'files', title: 'A tidier attach menu', text: 'Everything you can send, sorted into Share, Create and Fun.' },
+    { art: 'files', title: 'A tidier attach menu', text: 'Everything you can send, sorted into Share, Create and Fun. View once and Hidden now sit right next to your photos.' },
+    { art: 'moments', title: 'Photos into an album', text: 'Pick photos, tap Album and they go straight into a shared album with a card in the chat.' },
   ] },
   { title: 'Stories', items: [
     { art: 'songs', title: 'Music in sync', text: 'Your story waits for the song so both start at the same time.' },
     { art: 'stickers', title: 'Move anything', text: 'Drag, pinch and turn text, stickers and the music sticker. Tap the music sticker to change its look.' },
     { art: 'camera', title: 'New drawing tools', text: 'Pen, marker, neon, highlighter and an eraser for photos and stories.' },
+    { art: 'camera', title: 'Swipe for filters', text: 'Swipe across a photo to try each filter. The name pops up as you go.' },
   ] },
   { title: 'Draw together', items: [
     { art: 'draw', title: 'Art tools', text: 'Eight brushes, shapes, stickers and backgrounds that sync for everyone.' },
@@ -41909,29 +41955,66 @@ function useMapLib() {
   }, [tries]);
   return [state, () => setTries((n) => n + 1)];
 }
-const zmapSnap = { map: null, el: null, queue: [], busy: false, cache: new Map(), idle: 0, dark: null, w: 0, h: 0 };
+const zmapSnap = { map: null, el: null, queue: [], busy: false, cur: null, cache: new Map(), idle: 0, dark: null, w: 0, h: 0 };
 function zmapSnapDrop() {
   if (zmapSnap.map) { try { zmapSnap.map.remove(); } catch {} }
   if (zmapSnap.el) { try { zmapSnap.el.remove(); } catch {} }
   zmapSnap.map = null;
   zmapSnap.el = null;
 }
+const SNAP_STORE = 'zchat-mapsnap-v1';
+function snapStoreUrl(key) { return `/__mapsnap/${encodeURIComponent(key)}`; }
+async function snapStoreGet(key) {
+  try {
+    if (typeof caches === 'undefined') return null;
+    const c = await caches.open(SNAP_STORE);
+    const r = await c.match(snapStoreUrl(key));
+    if (!r) return null;
+    const b = await r.blob();
+    return b && b.size > 500 ? URL.createObjectURL(b) : null;
+  } catch { return null; }
+}
+async function snapStorePut(key, blob) {
+  try {
+    if (typeof caches === 'undefined' || !blob) return;
+    const c = await caches.open(SNAP_STORE);
+    await c.put(snapStoreUrl(key), new Response(blob, { headers: { 'content-type': blob.type || 'image/jpeg' } }));
+    const keys = await c.keys();
+    for (let i = 0; i < keys.length - 240; i++) await c.delete(keys[i]);
+  } catch {}
+}
 function zmapSnapPump() {
-  if (zmapSnap.busy || !zmapSnap.queue.length) return;
+  if (zmapSnap.busy) return;
+  while (zmapSnap.queue.length && zmapSnap.queue[0].want <= 0) zmapSnap.queue.shift().subs.forEach((f) => f(null));
+  if (!zmapSnap.queue.length) return;
   const job = zmapSnap.queue.shift();
   zmapSnap.busy = true;
+  zmapSnap.cur = job;
   const finish = (url) => {
     zmapSnap.busy = false;
+    zmapSnap.cur = null;
     if (url) {
       zmapSnap.cache.set(job.key, url);
       if (zmapSnap.cache.size > 80) zmapSnap.cache.delete(zmapSnap.cache.keys().next().value);
     }
-    job.done(url);
+    job.subs.forEach((f) => f(url));
     clearTimeout(zmapSnap.idle);
     zmapSnap.idle = setTimeout(zmapSnapDrop, 45000);
     zmapSnapPump();
   };
-  loadMapLib().then((lib) => {
+  const begin = () => {
+    if (job.want <= 0) { finish(null); return; }
+    loadMapLib().then(render, () => finish(null));
+  };
+  const lookup = () => {
+    snapStoreGet(job.key).then((u) => {
+      if (u) { finish(u); return; }
+      if (typeof window !== 'undefined' && typeof window.requestIdleCallback === 'function') window.requestIdleCallback(begin, { timeout: 1500 });
+      else setTimeout(begin, 120);
+    }, () => setTimeout(begin, 120));
+  };
+  const render = (lib) => {
+    if (job.want <= 0) { finish(null); return; }
     try {
       if (zmapSnap.map && (zmapSnap.w !== job.w || zmapSnap.h !== job.h)) zmapSnapDrop();
       if (!zmapSnap.map) {
@@ -41950,24 +42033,37 @@ function zmapSnapPump() {
         zmapSnap.map.jumpTo({ center: [job.lng, job.lat], zoom: job.zoom });
       }
       const map = zmapSnap.map;
-      let done = false;
-      const timer = setTimeout(() => { if (!done) { done = true; finish(null); } }, 20000);
+      let ended = false;
+      let timer = 0;
+      const end = (u) => { if (ended) return; ended = true; clearTimeout(timer); finish(u); };
+      timer = setTimeout(() => end(null), 20000);
       map.once('idle', () => {
-        if (done) return;
-        done = true;
-        clearTimeout(timer);
+        if (ended) return;
+        let canvas = null;
+        try { canvas = map.getCanvas(); } catch {}
+        if (!canvas) { end(null); return; }
+        if (typeof canvas.toBlob === 'function') {
+          try { canvas.toBlob((b) => { if (b) snapStorePut(job.key, b); end(b ? URL.createObjectURL(b) : null); }, 'image/jpeg', 0.84); return; } catch {}
+        }
         let url = null;
-        try { url = map.getCanvas().toDataURL('image/jpeg', 0.84); } catch {}
-        finish(url);
+        try { url = canvas.toDataURL('image/jpeg', 0.84); } catch {}
+        end(url);
       });
     } catch { finish(null); }
-  }, () => finish(null));
+  };
+  lookup();
 }
 function mapSnapshot(lat, lng, zoom, dark, w, h) {
   const key = `${dark ? 'd' : 'l'}:${w}x${h}:${zoom}:${lat.toFixed(4)},${lng.toFixed(4)}`;
   const hit = zmapSnap.cache.get(key);
-  if (hit) return Promise.resolve(hit);
-  return new Promise((done) => { zmapSnap.queue.push({ key, lat, lng, zoom, dark, w, h, done }); zmapSnapPump(); });
+  if (hit) return { promise: Promise.resolve(hit), cancel: () => {} };
+  let job = zmapSnap.queue.find((j) => j.key === key) || (zmapSnap.cur && zmapSnap.cur.key === key ? zmapSnap.cur : null);
+  if (!job) { job = { key, lat, lng, zoom, dark, w, h, want: 0, subs: [] }; zmapSnap.queue.push(job); }
+  job.want += 1;
+  let off = false;
+  const promise = new Promise((done) => { job.subs.push((u) => { if (!off) done(u); }); });
+  zmapSnapPump();
+  return { promise, cancel: () => { if (off) return; off = true; job.want -= 1; } };
 }
 function useMapSnapshot(lat, lng, zoom, dark, w, h) {
   const [url, setUrl] = useState(null);
@@ -41976,8 +42072,9 @@ function useMapSnapshot(lat, lng, zoom, dark, w, h) {
     if (!w || !h || !Number.isFinite(lat) || !Number.isFinite(lng)) return undefined;
     let alive = true;
     setFailed(false);
-    mapSnapshot(lat, lng, zoom, dark, w, h).then((u) => { if (!alive) return; if (u) setUrl(u); else setFailed(true); });
-    return () => { alive = false; };
+    const snap = mapSnapshot(lat, lng, zoom, dark, w, h);
+    snap.promise.then((u) => { if (!alive) return; if (u) setUrl(u); else setFailed(true); });
+    return () => { alive = false; snap.cancel(); };
   }, [lat, lng, zoom, dark, w, h]);
   return [url, failed];
 }
