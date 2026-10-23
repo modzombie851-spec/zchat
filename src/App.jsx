@@ -5491,7 +5491,8 @@ const ACH_BY_KEY = Object.fromEntries(ACHIEVEMENTS.map((a) => [a.key, a]));
 function AchievementArt({ k, size = 48, locked = false }) {
   const a = ACH_BY_KEY[k] || { color: '#7C5CFC', glyph: 'star' };
   const c = locked ? '#9A98A2' : a.color;
-  const id = `ach-${k}-${locked ? 'l' : 'o'}`;
+  const uid = React.useId().replace(/[^a-zA-Z0-9]/g, '');
+  const id = `ach${k}${locked ? 'l' : 'o'}${uid}`;
   const g = {
     camera: <><rect x="20" y="25" width="24" height="17" rx="4" /><circle cx="32" cy="33.5" r="5" /><path d="M27 25l2-3h6l2 3" /></>,
     stack: <><rect x="21" y="27" width="20" height="16" rx="3" /><path d="M24 23h17a2 2 0 0 1 2 2v14" /></>,
@@ -17855,7 +17856,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-const APP_VERSION = '21.4V';
+const APP_VERSION = '21.5V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -20384,6 +20385,20 @@ function decorScrollRoot(el) {
   }
   return null;
 }
+const decorLiveSubs = new Map();
+let decorLiveIo = null;
+function decorLiveWatch(el, cb) {
+  if (!el) return undefined;
+  if (typeof IntersectionObserver === 'undefined') { cb(true); return undefined; }
+  if (!decorLiveIo) {
+    decorLiveIo = new IntersectionObserver((list) => {
+      list.forEach((e) => { const f = decorLiveSubs.get(e.target); if (f) f(e.isIntersecting); });
+    }, { threshold: 0 });
+  }
+  decorLiveSubs.set(el, cb);
+  decorLiveIo.observe(el);
+  return () => { decorLiveSubs.delete(el); try { decorLiveIo.unobserve(el); } catch {} };
+}
 function decorWatch(el, cb) {
   if (!el) return undefined;
   if (typeof IntersectionObserver === 'undefined') { cb(); return undefined; }
@@ -20468,14 +20483,16 @@ function DecorArt({ setKey, part, width, lazy = false, style }) {
     if (near) return undefined;
     return decorWatch(boxRef.current, () => setNear(true));
   }, [near]);
+  const [live, setLive] = useState(!lazy);
+  useEffect(() => (lazy ? decorLiveWatch(boxRef.current, setLive) : undefined), [lazy]);
   const state = useDecorState(near ? src : null, lazy ? 1 : 0);
   const stillOk = useDecorLoaded(set ? DECOR_SPRITE : null);
   const [failed, setFailed] = useState(null);
-  const on = state === 'ok' && failed !== src;
+  const on = state === 'ok' && failed !== src && live;
   const seen = useRef(null);
   if (!seen.current) seen.current = new Map();
   if (src && !seen.current.has(src)) seen.current.set(src, on);
-  const fade = !(src && seen.current.get(src));
+  const fade = lazy || !(src && seen.current.get(src));
   return (
     <div ref={boxRef} aria-hidden="true" style={{ position: 'absolute', width, height: h, pointerEvents: 'none', ...(style || {}) }}>
       {isPlate && set && !on && !stillOk && <div style={{ position: 'absolute', left: width * 0.1167, top: h * 0.3125, width: width * 0.7667, height: h * 0.4417, borderRadius: width * 0.0867, background: set.tint, boxShadow: `inset 0 0 0 ${Math.max(2, Math.round(width * 0.011))}px ${set.accent}` }} />}
@@ -21566,6 +21583,12 @@ const FX_LEN = { crystal_phoenix: 8.8 };
 const fxFactories = new Map();
 const fxArtJobs = new Map();
 let fxPackJob = null;
+let fxReported = false;
+function fxReport(msg) {
+  if (fxReported) return;
+  fxReported = true;
+  reportClientError(msg, '', { kind: 'fx' });
+}
 function fxDrain() {
   try {
     const q = window.__zfxq;
@@ -21581,7 +21604,7 @@ function fxPack() {
   fxPackJob = fetch(FX_PACK)
     .then((res) => {
       const ct = (res.headers.get('content-type') || '').toLowerCase();
-      if (!res.ok || ct.includes('text/html')) return false;
+      if (!res.ok || ct.includes('text/html')) { fxReport(`Profile effects file did not load: ${res.status} ${ct}`); return false; }
       return res.text().then((code) => new Promise((resolve) => {
         const url = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
         const el = document.createElement('script');
@@ -21591,7 +21614,7 @@ function fxPack() {
         document.head.appendChild(el);
       }));
     })
-    .catch(() => false)
+    .catch((e) => { fxReport(`Profile effects file did not load: ${(e && e.message) || 'network'}`); return false; })
     .then((ok) => { if (!ok) setTimeout(() => { fxPackJob = null; }, 60000); return ok; });
   return fxPackJob;
 }
@@ -21615,7 +21638,20 @@ function loadFx(key) {
   return Promise.all([fxPack(), fxArtReady(key)]).then(([ok, art]) => (ok && art ? fxFactories.get(key) || null : null));
 }
 function fxAllowed() {
-  return prefOn('zchat-profile-fx') && !reducedMotion() && !dataSaverOn();
+  return prefOn('zchat-profile-fx') && !prefOn('zchat-reduce-motion');
+}
+function fxDprCap() {
+  try {
+    const nav = navigator;
+    const ua = nav.userAgent || '';
+    const cores = nav.hardwareConcurrency || 4;
+    const mem = nav.deviceMemory || 4;
+    if (/iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && nav.maxTouchPoints > 1)) return 1.5;
+    if (/Android/i.test(ua)) return cores >= 8 && mem >= 8 ? 1.25 : 1;
+    return 1.5;
+  } catch {
+    return 1;
+  }
 }
 function wornFxKey(p) {
   const f = p && p.avatar_frame;
@@ -21649,9 +21685,7 @@ function ProfileEffectLayer({ effectKey, runKey = 0, force = false, delay = 280,
       const hw = holder && holder.firstElementChild ? holder.firstElementChild.offsetWidth : 0;
       const place = hb && hw > 60 ? { top: (hb.top - r.top) / sc, heroW: hw, cx: (hb.left - r.left + hb.width / 2) / sc } : {};
       try {
-        const cores = navigator.hardwareConcurrency || 8;
-        const mem = navigator.deviceMemory || 8;
-        m = window.ZFXK.mount(cv, factory, { stopAfter: FX_LEN[effectKey] || 7.2, dprCap: cores <= 4 || mem <= 3 ? 1.5 : 2, base: '/', loop: 1e6, once: true, ...place, onDone: () => { if (alive) setDone(true); }, onError: (e) => reportClientError(`Profile effect ${effectKey}: ${(e && e.message) || e}`, e && e.stack, { kind: 'fx' }) });
+        m = window.ZFXK.mount(cv, factory, { stopAfter: FX_LEN[effectKey] || 7.2, dprCap: fxDprCap(), maxFps: /Android/i.test(navigator.userAgent || '') ? 30 : 0, base: '/', loop: 1e6, once: true, ...place, onDone: () => { if (alive) setDone(true); }, onError: (e) => reportClientError(`Profile effect ${effectKey}: ${(e && e.message) || e}`, e && e.stack, { kind: 'fx' }) });
       } catch (e) {
         reportClientError(`Profile effect ${effectKey}: ${(e && e.message) || e}`, e && e.stack, { kind: 'fx' });
         setDone(true);
@@ -21673,17 +21707,16 @@ function ProfileFxIcon({ size = 20, color = 'currentColor', strokeWidth = 1.9 })
 }
 function FxPlayRow({ set, onPlay }) {
   return (
-    <div role="button" aria-label="Play the profile effect" onClick={() => { hapticTap(); onPlay(); }} className="zchat-press" style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 12, padding: '10px 10px 10px 12px', borderRadius: 16, background: 'rgba(255,255,255,0.06)', border: `1px solid ${set.accent}66`, cursor: 'pointer', textAlign: 'left' }}>
-      <div style={{ width: 36, height: 36, borderRadius: 12, background: `${set.accent}55`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#FFFFFF' }}><ProfileFxIcon size={19} /></div>
+    <div role="button" aria-label="Play the profile effect" onClick={() => { hapticTap(); onPlay(); }} className="zchat-press" style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 12, padding: '12px 12px 12px 14px', borderRadius: 18, background: CL.card, boxShadow: `inset 0 0 0 1px ${CL.line}`, cursor: 'pointer', textAlign: 'left' }}>
+      <div style={{ width: 38, height: 38, borderRadius: 12, background: `${set.accent}4D`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#FFFFFF' }}><ProfileFxIcon size={20} /></div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 14, fontWeight: 800, color: '#FFFFFF' }}>Profile effect</div>
-        <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.62)', lineHeight: 1.4, marginTop: 1 }}>Plays when someone opens your profile while you wear the full set</div>
+        <div style={{ fontSize: 15, fontWeight: 650, color: CL.ink }}>Profile effect</div>
+        <div style={{ fontSize: 12.5, color: CL.ink2, lineHeight: 1.4, marginTop: 1 }}>Plays when someone opens your profile while you wear the full set</div>
       </div>
-      <div style={{ height: 32, padding: '0 13px', borderRadius: 16, background: '#FFFFFF', color: '#0B0C12', fontSize: 13.5, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}><Play size={13} fill="#0B0C12" strokeWidth={0} />Play</div>
+      <div style={{ width: 38, height: 38, borderRadius: 19, background: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Play size={15} fill="#0B0B0F" strokeWidth={0} style={{ marginLeft: 2 }} /></div>
     </div>
   );
 }
-
 function decorAsk(set, mode, own) {
   const missing = mode === 'set' ? [!own.frame && 'frame', !own.plate && 'nameplate'].filter(Boolean) : mode === 'frame' ? (own.frame ? [] : ['frame']) : (own.plate ? [] : ['nameplate']);
   const what = mode === 'set' ? (missing.length === 1 ? missing[0] : 'set') : mode;
@@ -21697,31 +21730,6 @@ function DecorConfetti({ colors }) {
       {pieces.map((i) => (
         <span key={i} style={{ position: 'absolute', top: -20, left: `${(i * 37) % 100}%`, width: 7, height: 12, borderRadius: 2, background: colors[i % colors.length], opacity: 0.9, animation: `zchat-confetti ${1.9 + (i % 5) * 0.3}s linear ${(i % 7) * 0.08}s 1 both` }} />
       ))}
-    </div>
-  );
-}
-
-function SetCard({ set, me, own, wearing, free, width, stack = false, onOpen }) {
-  const full = own.frame && own.plate;
-  const half = own.frame !== own.plate;
-  const nameSize = stack ? Math.max(12, Math.min(14, (width - 18) / Math.max(0.5, decorTextW(set.name, 800, 100) / 100))) : 14;
-  return (
-    <div role="button" aria-label={`${set.name} set`} onClick={onOpen} className="zchat-press" style={{
-      position: 'relative', borderRadius: 20, padding: '8px 4px 11px', overflow: 'hidden', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center',
-      background: `radial-gradient(120% 85% at 50% 20%, ${set.accent}33 0%, rgba(13,14,20,0) 64%), linear-gradient(180deg, #161724 0%, #0b0c12 100%)`,
-      border: `1px solid ${wearing ? set.accent : 'rgba(255,255,255,0.08)'}`, boxShadow: wearing ? `0 0 18px ${set.accent}55` : 'none',
-    }}>
-      {wearing && <div style={{ position: 'absolute', top: 8, left: 8, zIndex: 6, padding: '2px 8px', borderRadius: 8, background: set.accent, color: '#0b0c12', fontSize: 10.5, fontWeight: 800 }}>Wearing</div>}
-      {set.fx ? <div style={{ position: 'absolute', top: 7, right: 7, zIndex: 6, height: 19, padding: '0 6px 0 4px', borderRadius: 7, background: 'linear-gradient(135deg, #9B7DFF 0%, #6A45F5 100%)', color: '#FFFFFF', fontSize: 10, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 2, boxShadow: '0 2px 8px rgba(106,69,245,0.35)' }}><ProfileFxIcon size={11} strokeWidth={2.6} />Effect</div> : set.fresh && !wearing && !full && <div style={{ position: 'absolute', top: 8, right: 8, zIndex: 6, padding: '2px 8px', borderRadius: 8, background: '#7C5CFC', color: '#FFFFFF', fontSize: 10.5, fontWeight: 800 }}>New</div>}
-      <DecorHero frameKey={set.key} plateKey={set.key} width={width} photo={me.avatar} name={me.name} lazy compact />
-      <div style={{ alignSelf: 'stretch', display: 'flex', flexDirection: stack ? 'column' : 'row', alignItems: stack ? 'flex-start' : 'center', gap: stack ? 1 : 6, padding: '6px 8px 0' }}>
-        <div style={{ flex: stack ? 'none' : 1, minWidth: 0, maxWidth: '100%', fontWeight: 800, fontSize: nameSize, color: '#FFFFFF', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{set.name}</div>
-        {full
-          ? <span style={{ fontSize: 11.5, fontWeight: 800, color: '#34d399', flexShrink: 0 }}>Yours</span>
-          : free
-            ? <span style={{ fontSize: 11.5, fontWeight: 800, color: '#FFD66B', flexShrink: 0 }}>Free</span>
-            : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 12, fontWeight: 800, color: '#FFD66B', flexShrink: 0 }}><CoinIcon size={13} />{decorPartPrice(set.key) * (half ? 1 : 2)}</span>}
-      </div>
     </div>
   );
 }
@@ -21906,7 +21914,7 @@ function DropPage({ drop, me, rewards, wallet, onClose, onWear, onRefresh, onOpe
   const btn = (primary) => ({ height: 54, borderRadius: 17, border: 'none', fontFamily: FONT, fontWeight: 800, fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '0 18px', width: '100%', background: primary ? '#FFFFFF' : 'rgba(255, 255, 255, 0.08)', color: primary ? '#0B0C12' : '#FFFFFF' });
   const when = (iso) => fmtDate(new Date(iso), { weekday: 'long', day: 'numeric', month: 'long', hour: 'numeric', minute: '2-digit' });
   return (
-    <div className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 650, background: `radial-gradient(120% 64% at 50% 16%, ${accent}4D 0%, rgba(7, 8, 13, 0) 64%), #07080D`, color: '#FFFFFF', display: 'flex', flexDirection: 'column', fontFamily: FONT }}>
+    <div className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 650, background: `linear-gradient(180deg, ${accent}3D 0%, ${accent}12 30%, rgba(11,11,15,0) 56%), ${CL.bg}`, color: CL.ink, display: 'flex', flexDirection: 'column', fontFamily: FONT }}>
       {party > 0 && <DecorConfetti key={party} colors={[accent, '#FFFFFF', '#BFD6FF', '#8B6CFF']} />}
       {set && set.fx && <ProfileEffectLayer effectKey={set.key} runKey={fxRun} force={fxRun > 0} />}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px 4px', paddingTop: 'calc(10px + env(safe-area-inset-top))' }}>
@@ -22070,18 +22078,18 @@ function SetShopPage({ me, setKey, rewards, wallet, onClose, onPick, onWear, onR
     if (Math.abs(dx) > 48 && Math.abs(dx) > Math.abs(e.clientY - d.y) * 1.4) go(dx < 0 ? 1 : -1);
   };
   const leftBits = [own.frame && own.frameLeft != null ? `frame for ${own.frameLeft} more ${own.frameLeft === 1 ? 'day' : 'days'}` : null, own.plate && own.plateLeft != null ? `nameplate for ${own.plateLeft} more ${own.plateLeft === 1 ? 'day' : 'days'}` : null].filter(Boolean);
-  const btn = (primary) => ({ height: 52, borderRadius: 16, border: 'none', fontFamily: FONT, fontWeight: 800, fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '0 18px', width: '100%', background: primary ? '#F5A524' : 'rgba(255,255,255,0.08)', color: primary ? '#1a0f02' : '#FFFFFF' });
+  const btn = (primary) => ({ height: 52, borderRadius: 14, border: 'none', fontFamily: FONT, fontWeight: 650, fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '0 18px', width: '100%', background: primary ? CL.accent : CL.card2, color: '#FFFFFF' });
   return (
-    <div className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 640, background: `radial-gradient(130% 70% at 50% 18%, ${set.accent}40 0%, rgba(7,8,13,0) 62%), #07080d`, color: 'white', display: 'flex', flexDirection: 'column', fontFamily: FONT, transition: 'background 0.4s ease' }}>
+    <div className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 640, background: `linear-gradient(180deg, ${set.accent}3D 0%, ${set.accent}12 30%, rgba(11,11,15,0) 56%), ${CL.bg}`, color: CL.ink, display: 'flex', flexDirection: 'column', fontFamily: FONT, transition: 'background 0.4s ease' }}>
       {party > 0 && <DecorConfetti key={party} colors={[set.accent, '#FFFFFF', '#FFD66B', '#7C5CFC']} />}
       {set.fx && <ProfileEffectLayer effectKey={mode === 'set' || fxRun ? set.key : null} runKey={fxRun} force={fxRun > 0} />}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px 4px', paddingTop: 'calc(10px + env(safe-area-inset-top))' }}>
-        <div role="button" aria-label="Back to sets" onClick={onClose} style={{ width: 38, height: 38, borderRadius: '50%', background: 'rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}><ArrowLeft size={19} /></div>
+        <div role="button" aria-label="Back to sets" onClick={onClose} style={{ width: 40, height: 40, borderRadius: '50%', background: 'rgba(0,0,0,0.22)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}><ArrowLeft size={19} /></div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 19, fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{set.name}</div>
-          <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.55)' }}>{set.drop ? 'Limited drop' : `${idx + 1} of ${DECOR_SETS.length}`}</div>
+          <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{set.name}</div>
+          <div style={{ fontSize: 12.5, fontWeight: 500, color: CL.ink2 }}>{set.drop ? 'Limited drop' : set.fx ? 'Set with a profile effect' : 'Classic set'}</div>
         </div>
-        <div role="button" aria-label={`${formatCount(coins)} coins`} onClick={onOpenWallet} style={{ display: 'flex', alignItems: 'center', gap: 6, height: 34, padding: '0 12px', borderRadius: 17, background: 'rgba(255,255,255,0.08)', fontSize: 14.5, fontWeight: 800, cursor: 'pointer', flexShrink: 0 }}><CoinIcon size={18} />{formatCount(coins)}</div>
+        <div role="button" aria-label={`${formatCount(coins)} coins`} onClick={onOpenWallet} style={{ display: 'flex', alignItems: 'center', gap: 6, height: 34, padding: '0 12px', borderRadius: 17, background: 'rgba(0,0,0,0.22)', fontSize: 14.5, fontWeight: 650, cursor: 'pointer', flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}><CoinIcon size={18} />{formatCount(coins)}</div>
       </div>
       <div ref={boxRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '0 14px calc(24px + env(safe-area-inset-bottom))' }}>
         <div data-no-swipe="true" onPointerDown={onDown} onPointerUp={onUp} onPointerCancel={() => { swipeRef.current = null; }} style={{ position: 'relative', display: 'flex', justifyContent: 'center', padding: '10px 0 6px', touchAction: 'pan-y', minHeight: Math.round(W * 0.82) }}>
@@ -22097,32 +22105,28 @@ function SetShopPage({ me, setKey, rewards, wallet, onClose, onPick, onWear, onR
           <div role="button" aria-label="Previous set" onClick={() => go(-1)} style={{ position: 'absolute', left: -6, top: '42%', width: 40, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'rgba(255,255,255,0.75)' }}><ChevronLeft size={24} /></div>
           <div role="button" aria-label="Next set" onClick={() => go(1)} style={{ position: 'absolute', right: -6, top: '42%', width: 40, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'rgba(255,255,255,0.75)' }}><ChevronRight size={24} /></div>
         </div>
-        <div role="tablist" aria-label="Preview" style={{ display: 'flex', gap: 4, padding: 4, borderRadius: 14, background: 'rgba(255,255,255,0.07)', maxWidth: 400, margin: '6px auto 0' }}>
-          {[['set', 'Set'], ['frame', 'Frame'], ['nameplate', 'Nameplate']].map(([k, l]) => (
-            <div key={k} role="tab" aria-selected={mode === k} onClick={() => { setMode(k); playUiSound('tap'); }} style={{ flex: 1, height: 36, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 800, cursor: 'pointer', background: mode === k ? '#FFFFFF' : 'transparent', color: mode === k ? '#0b0c12' : 'rgba(255,255,255,0.75)', transition: 'background 0.2s ease, color 0.2s ease' }}>{l}</div>
-          ))}
-        </div>
+        <SegTabs items={[['set', 'Set'], ['frame', 'Frame'], ['nameplate', 'Nameplate']]} value={mode} onChange={(k) => { setMode(k); playUiSound('tap'); }} style={{ maxWidth: 400, margin: '8px auto 0' }} />
         <div style={{ maxWidth: 400, margin: '16px auto 0' }}>
-          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.72)', lineHeight: 1.5, textAlign: 'center', padding: '0 6px' }}>{set.about}</div>
+          <div style={{ fontSize: 14.5, color: CL.ink2, lineHeight: 1.5, textAlign: 'center', padding: '0 8px' }}>{set.about}</div>
           {set.fx && <FxPlayRow set={set} onPlay={() => setFxRun(Date.now())} />}
           {mode !== 'set' && <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.5)', lineHeight: 1.5, textAlign: 'center', marginTop: 6 }}>{mode === 'frame' ? (isDecorKey(me.nameplate) && me.nameplate !== set.key ? 'Shown with the nameplate you wear now.' : 'Shown on your photo.') : (isDecorKey(me.avatar_frame) && me.avatar_frame !== set.key ? 'Shown with the frame you wear now.' : 'Shown with your name.')}</div>}
           <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 10 }}>
             {missing.length === 0 ? (
               wearing
-                ? <button disabled style={{ ...btn(false), cursor: 'default', color: '#34d399', background: 'rgba(52,211,153,0.14)' }}><Check size={18} strokeWidth={3} />Wearing</button>
-                : <button disabled={busy} onClick={wear} style={btn(true)}>{busy ? <Spinner size={16} color="#1a0f02" /> : `Wear the ${word}`}</button>
+                ? <button disabled style={{ ...btn(false), cursor: 'default', color: CL.own, background: 'rgba(61,214,140,0.14)' }}><Check size={18} strokeWidth={3} />Wearing</button>
+                : <button disabled={busy} onClick={wear} style={btn(true)}>{busy ? <Spinner size={16} color="#FFFFFF" /> : `Wear the ${word}`}</button>
             ) : set.drop ? (
               <button disabled style={{ ...btn(false), cursor: 'default', color: 'rgba(255,255,255,0.7)' }}>Only from the drop</button>
             ) : (
               <button disabled={busy} onClick={tapGet} aria-label={freeOk ? 'Get it free' : `Get the ${what} for ${price} coins`} style={btn(true)}>
-                {busy ? <Spinner size={16} color="#1a0f02" /> : freeOk ? (mode === 'set' ? 'Get it free' : 'Get the whole set free') : <>Get the {what}<span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginLeft: 4 }}><CoinIcon size={18} />{price}</span></>}
+                {busy ? <Spinner size={16} color="#FFFFFF" /> : freeOk ? (mode === 'set' ? 'Get it free' : 'Get the whole set free') : <>Get the {what}<span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginLeft: 4 }}><CoinIcon size={18} />{price}</span></>}
               </button>
             )}
             {missing.length === 0 && (wearF || wearP) && (mode === 'set' || (mode === 'frame' ? wearF : wearP)) && <button disabled={busy} onClick={takeOff} style={btn(false)}>Take off</button>}
             {missing.length > 0 && freeOk && !set.drop && <button disabled={busy} onClick={tapCoins} style={{ ...btn(false), height: 44, fontSize: 14.5 }}>Use {price} coins instead</button>}
             {onGift && !set.drop && <button disabled={busy} onClick={() => { hapticTap(); onGift(set.key); }} aria-label={`Send the ${set.name} set as a gift`} style={{ ...btn(false), height: 44, fontSize: 14.5 }}><GiftBoxIcon size={18} />Send as a gift</button>}
           </div>
-          <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.55)', textAlign: 'center', marginTop: 12, lineHeight: 1.5 }}>
+          <div style={{ fontSize: 13, color: CL.ink3, textAlign: 'center', marginTop: 14, lineHeight: 1.5 }}>
             {missing.length > 0
               ? (freeOk ? `You have ${freeSets} free ${freeSets === 1 ? 'set' : 'sets'}. A free set comes with the frame and the nameplate.` : set.fx && freeSets > 0 ? 'Your free sets work on the sets without a profile effect.' : 'Yours to keep. It shows on your profile.')
               : leftBits.length ? `You have the ${leftBits.join(' and the ')}.` : 'Yours to keep. It shows on your profile.'}
@@ -22149,12 +22153,160 @@ function SetShopPage({ me, setKey, rewards, wallet, onClose, onPick, onWear, onR
   );
 }
 
+const CL = { bg: '#0B0B0F', card: '#15151A', card2: '#1E1E25', thumb: '#33333C', line: 'rgba(255,255,255,0.07)', ink: '#F4F4F6', ink2: 'rgba(235,235,245,0.62)', ink3: 'rgba(235,235,245,0.38)', accent: '#8B6CFF', own: '#3DD68C', gold: '#F5B829' };
+
+function SegTabs({ items, value, onChange, style }) {
+  const at = Math.max(0, items.findIndex(([k]) => k === value));
+  return (
+    <div role="tablist" style={{ position: 'relative', display: 'flex', padding: 3, borderRadius: 12, background: CL.card2, ...(style || {}) }}>
+      <div aria-hidden="true" style={{ position: 'absolute', top: 3, bottom: 3, left: 3, width: `calc((100% - 6px) / ${items.length})`, borderRadius: 9, background: CL.thumb, boxShadow: '0 1px 4px rgba(0,0,0,0.35)', transform: `translateX(${at * 100}%)`, transition: reducedMotion() ? 'none' : 'transform 0.28s cubic-bezier(0.25, 0.85, 0.3, 1)' }} />
+      {items.map(([k, label]) => (
+        <div key={k} role="tab" aria-selected={value === k} aria-label={label} onClick={() => { if (value !== k) { hapticTap(); onChange(k); } }}
+          style={{ position: 'relative', zIndex: 1, flex: 1, minWidth: 0, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13.5, fontWeight: 600, color: value === k ? CL.ink : CL.ink2, cursor: 'pointer', transition: 'color 0.2s ease', whiteSpace: 'nowrap' }}>{label}</div>
+      ))}
+    </div>
+  );
+}
+
+function CollSection({ title, sub, children, style }) {
+  return (
+    <section style={{ marginTop: 26, ...(style || {}) }}>
+      <div style={{ padding: '0 2px 12px' }}>
+        <div style={{ fontSize: 20, fontWeight: 700, color: CL.ink, letterSpacing: '-0.015em' }}>{title}</div>
+        {sub && <div style={{ fontSize: 13.5, color: CL.ink2, marginTop: 3, lineHeight: 1.4 }}>{sub}</div>}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function CollPrice({ full, wearing, price, free, size = 14 }) {
+  if (wearing) return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: size - 1, fontWeight: 600, color: '#B9A6FF' }}><span style={{ width: 6, height: 6, borderRadius: 3, background: '#B9A6FF' }} />Wearing</span>;
+  if (full) return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: size - 1, fontWeight: 600, color: CL.own }}><Check size={size} strokeWidth={2.6} />Owned</span>;
+  if (free) return <span style={{ fontSize: size - 1, fontWeight: 600, color: CL.gold }}>Free</span>;
+  return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: size, fontWeight: 650, color: CL.ink, fontVariantNumeric: 'tabular-nums' }}><CoinIcon size={size + 1} />{formatCount(price)}</span>;
+}
+
+function FxSetCard({ set, me, own, wearing, width, onOpen }) {
+  const full = own.frame && own.plate;
+  const price = decorPartPrice(set.key) * (own.frame || own.plate ? 1 : 2);
+  return (
+    <div role="button" aria-label={`${set.name} set`} onClick={onOpen} className="zchat-press"
+      style={{ flex: `0 0 ${width}px`, width, scrollSnapAlign: 'start', borderRadius: 22, overflow: 'hidden', cursor: 'pointer', background: `linear-gradient(180deg, ${set.accent}40 0%, ${set.accent}12 42%, ${CL.card} 70%)`, boxShadow: `inset 0 0 0 1px ${wearing ? `${set.accent}` : CL.line}` }}>
+      <div style={{ display: 'flex', justifyContent: 'center', padding: '14px 10px 0' }}>
+        <DecorHero frameKey={set.key} plateKey={set.key} width={width - 20} photo={me.avatar} name={me.name} lazy compact gapColor={CL.card} />
+      </div>
+      <div style={{ padding: '8px 16px 15px', display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 16.5, fontWeight: 650, color: CL.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', letterSpacing: '-0.01em' }}>{set.name}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12.5, fontWeight: 500, color: CL.ink2, marginTop: 2 }}><ProfileFxIcon size={13} strokeWidth={2.2} />Profile effect</div>
+        </div>
+        <CollPrice full={full} wearing={wearing} price={price} size={15} />
+      </div>
+    </div>
+  );
+}
+
+function SetTile({ set, me, own, wearing, free, width, onOpen }) {
+  const full = own.frame && own.plate;
+  const price = decorPartPrice(set.key) * (own.frame !== own.plate ? 1 : 2);
+  return (
+    <div role="button" aria-label={`${set.name} set`} onClick={onOpen} className="zchat-press"
+      style={{ minWidth: 0, borderRadius: 18, overflow: 'hidden', cursor: 'pointer', background: CL.card, boxShadow: `inset 0 0 0 1px ${wearing ? set.accent : CL.line}`, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 4px 0' }}>
+        <DecorHero frameKey={set.key} plateKey={set.key} width={width} photo={me.avatar} name={me.name} lazy compact gapColor={CL.card} />
+      </div>
+      <div style={{ padding: '6px 12px 12px', minWidth: 0 }}>
+        <div style={{ fontSize: 14.5, fontWeight: 600, color: CL.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{set.name}</div>
+        <div style={{ marginTop: 3 }}><CollPrice full={full} wearing={wearing} price={price} free={free} size={13.5} /></div>
+      </div>
+    </div>
+  );
+}
+
+function CollDropRow({ drop, me, rewards, onOpen }) {
+  useSecondTick(true);
+  const set = drop.kind === 'set' ? DECOR_BY_KEY[drop.item_key] : null;
+  const phase = dropPhase(drop);
+  const owned = dropOwned(drop, rewards);
+  const left = phase === 'soon' ? Date.parse(drop.starts_at) - Date.now() : Date.parse(drop.ends_at) - Date.now();
+  return (
+    <div role="button" aria-label={`Drop ${drop.title}`} onClick={onOpen} className="zchat-press"
+      style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 14, padding: '12px 14px 12px 10px', borderRadius: 20, cursor: 'pointer', background: set ? `linear-gradient(90deg, ${set.accent}33 0%, ${CL.card} 55%)` : CL.card, boxShadow: `inset 0 0 0 1px ${CL.line}` }}>
+      <DropArt drop={drop} me={me} size={76} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 650, color: phase === 'live' ? '#FF6B81' : CL.ink2 }}>
+          {phase === 'live' && <span style={{ width: 7, height: 7, borderRadius: 4, background: '#FF4D6A', animation: reducedMotion() ? 'none' : 'zchat-live-dot 1.4s ease-in-out infinite' }} />}
+          {phase === 'live' ? 'Limited drop, live now' : phase === 'soon' ? 'Next limited drop' : 'Drop ended'}
+        </div>
+        <div style={{ fontSize: 17, fontWeight: 650, color: CL.ink, marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{drop.title}</div>
+        <div style={{ fontSize: 13, color: CL.ink2, marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>{owned ? 'Yours to keep' : phase === 'soon' ? `Opens in ${shortLeft(left)}` : phase === 'live' ? `Ends in ${shortLeft(left)}` : 'This drop has ended'}</div>
+      </div>
+      {!owned && <CollPrice price={drop.price} size={14.5} />}
+      <ChevronRight size={18} color={CL.ink3} style={{ flexShrink: 0 }} />
+    </div>
+  );
+}
+
+function BubbleTileDark({ k, on, status, tone, onPick }) {
+  const spec = CHAR_BUBBLES[k];
+  const label = spec ? spec.label : 'Classic';
+  return (
+    <div role="button" aria-label={`Bubble ${label}${status ? `, ${status}` : ''}`} aria-pressed={on} onClick={onPick} className="zchat-press"
+      style={{ position: 'relative', minWidth: 0, borderRadius: 18, padding: '16px 12px 12px', cursor: 'pointer', background: CL.card, boxShadow: `inset 0 0 0 ${on ? 2 : 1}px ${on ? CL.accent : CL.line}`, display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', minHeight: 60, justifyContent: 'flex-end', paddingRight: 2 }}>
+        <CharBubbleSample k={k} text="Hi there" cw={44} fontSize={13.5} />
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+        <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, color: CL.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
+        {tone === 'coin'
+          ? <CollPrice price={Number(status)} size={13} />
+          : status ? <span style={{ fontSize: 12.5, fontWeight: 600, color: tone === 'use' ? '#B9A6FF' : tone === 'own' ? CL.own : CL.gold, flexShrink: 0 }}>{status}</span> : null}
+      </div>
+    </div>
+  );
+}
+
+function BubbleShopInline({ uid, onGift, onOpenWallet }) {
+  const b = useBubbleShop(uid, null, null, onOpenWallet, true);
+  return (
+    <div style={{ paddingTop: 16 }}>
+      <div aria-label="Preview" style={{ borderRadius: 22, padding: '16px 14px 18px', background: CL.card, boxShadow: `inset 0 0 0 1px ${CL.line}`, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ alignSelf: 'flex-start', maxWidth: '78%', background: '#26262E', color: CL.ink, borderRadius: 18, padding: '8px 13px', fontSize: 14.5, lineHeight: 1.3 }}>Wait, is that a new bubble?</div>
+        <CharBubbleSample k={b.preview} text={b.spec ? `Yes! Meet my ${b.spec.label.toLowerCase()}` : 'Yes, the classic one'} cw={52} fontSize={14.5} />
+      </div>
+      {b.freeLeft > 0 && (
+        <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 16, background: CL.card }}>
+          <GiftBoxIcon size={20} color={CL.gold} />
+          <div style={{ flex: 1, minWidth: 0, fontSize: 13.5, lineHeight: 1.4, color: CL.ink2 }}><b style={{ color: CL.ink, fontWeight: 650 }}>{b.freeLeft === 1 ? '1 free bubble' : `${b.freeLeft} free bubbles`}</b> for you. Pick any one you like.</div>
+        </div>
+      )}
+      <CollSection title="Chat bubbles" sub="Your bubble shows on every message you send">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
+          {b.keys.map((k) => {
+            const [st, tone] = b.statusOf(k);
+            return <BubbleTileDark key={k} k={k} on={b.preview === k} status={st} tone={tone} onPick={() => { hapticTap(); b.setPreview(k); }} />;
+          })}
+        </div>
+      </CollSection>
+      <div style={{ position: 'sticky', bottom: 0, zIndex: 5, margin: '18px -16px 0', padding: '12px 16px calc(12px + env(safe-area-inset-bottom))', background: 'linear-gradient(180deg, rgba(11,11,15,0) 0%, rgba(11,11,15,0.94) 26%, #0B0B0F 100%)', display: 'flex', gap: 8 }}>
+        {b.preview !== 'classic' && onGift && (
+          <div role="button" aria-label={`Gift the ${b.spec ? b.spec.label : ''} bubble`} onClick={() => { hapticTap(); onGift(b.preview); }} className="zchat-press"
+            style={{ width: 50, height: 50, flexShrink: 0, borderRadius: 14, background: CL.card2, color: CL.ink, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><GiftBoxIcon size={20} /></div>
+        )}
+        <button type="button" aria-label={b.action.label} disabled={b.busy || !b.action.on} onClick={b.action.on || undefined} className="zchat-press"
+          style={{ flex: 1, height: 50, borderRadius: 14, border: 'none', fontFamily: FONT, fontSize: 16, fontWeight: 650, cursor: b.action.on ? 'pointer' : 'default', background: b.action.plain ? CL.card2 : CL.accent, color: '#FFFFFF', opacity: b.busy ? 0.6 : 1 }}>{b.action.label}</button>
+      </div>
+      {b.ask && <ConfirmSheet title={`Get the ${CHAR_BUBBLES[b.ask].label} bubble?`} text={`It costs ${BUBBLE_PRICE} coins and it is yours to keep.`} confirmLabel={`Pay ${BUBBLE_PRICE} coins`} danger={false} zIndex={760} onCancel={() => b.setAsk(null)} onConfirm={() => b.buy(b.ask)} />}
+      {b.note && <div className="zchat-pop" role="status" style={{ position: 'fixed', left: '50%', bottom: 'calc(90px + env(safe-area-inset-bottom))', transform: 'translateX(-50%)', zIndex: 770, padding: '9px 16px', borderRadius: 18, background: '#2A2930', color: '#FFFFFF', fontSize: 13.5, fontWeight: 600, maxWidth: 'calc(100% - 32px)', textAlign: 'center' }}>{b.note}</div>}
+    </div>
+  );
+}
+
 function CollectionPanel({ me, rewards, onClose, onEquip, onWear, isAdmin, onRewardsChanged, onOpenWallet, onGift, startSet = null }) {
   useBackClose(true, onClose);
   const edgeBack = useEdgeSwipeBack(true);
   const [tab, setTab] = useState('sets');
-  const [bubblesOpen, setBubblesOpen] = useState(false);
-  const [filter, setFilter] = useState('all');
   const [openSet, setOpenSet] = useState(null);
   useEffect(() => { if (isDecorKey(startSet)) setOpenSet(startSet); }, []);
   const drops = useDrops(me.id);
@@ -22175,27 +22327,21 @@ function CollectionPanel({ me, rewards, onClose, onEquip, onWear, isAdmin, onRew
   const [buyAsk, setBuyAsk] = useState(null);
   const [buyNote, setBuyNote] = useState('');
   const gridRef = useRef(null);
-  const gw = useWidthOf(gridRef, typeof window === 'undefined' ? 390 : Math.min(window.innerWidth, 560)) - 28;
+  const gw = useWidthOf(gridRef, typeof window === 'undefined' ? 390 : Math.min(window.innerWidth, 560)) - 32;
   useDecorLoaded(DECOR_SPRITE);
   useBackClose(!!selected, () => setSelected(null));
   const freeSets = wallet && wallet.ready ? wallet.freeSets || 0 : 0;
+  const coins = wallet && wallet.ready ? wallet.coins : 0;
   const active = (rewards || []).filter(rewardActive);
   const ownedFrames = new Set(active.filter((r) => r.kind === 'frame' && isDecorKey(r.reward_key)).map((r) => r.reward_key));
   const ownedPlates = new Set(active.filter((r) => r.kind === 'nameplate' && isDecorKey(r.reward_key)).map((r) => r.reward_key));
   const ownedCharms = new Set(active.filter((r) => r.kind === 'charm' && CUSTOM_BADGES[r.reward_key]).map((r) => r.reward_key));
-  const totalOwned = ownedFrames.size + ownedPlates.size + ownedCharms.size;
-  const totalItems = DECOR_SETS.length * 2 + Object.keys(CUSTOM_BADGES).length;
-  const pct = totalItems ? Math.min(100, Math.round((totalOwned / totalItems) * 100)) : 0;
   const mine = DECOR_ALL.filter((s) => ownedFrames.has(s.key) || ownedPlates.has(s.key));
-  const shown = filter === 'mine' && mine.length ? mine : DECOR_ALL.filter((s) => !s.drop || ownedFrames.has(s.key) || ownedPlates.has(s.key));
-  const cols = gw >= 700 ? 4 : gw >= 500 ? 3 : gw >= 280 ? 2 : 1;
-  const cardW = Math.max(110, Math.floor((gw - (cols - 1) * 10) / cols) - 8);
-  const stackFoot = tab === 'sets' && shown.some((s) => {
-    const f = ownedFrames.has(s.key);
-    const p = ownedPlates.has(s.key);
-    const lw = f && p ? decorTextW('Yours', 800, 11.5) : freeSets > 0 && !s.fx ? decorTextW('Free', 800, 11.5) : 16 + decorTextW(String(decorPartPrice(s.key) * (f !== p ? 1 : 2)), 800, 12);
-    return decorTextW(s.name, 800, 14) + 6 + lw > cardW - 18;
-  });
+  const fxSets = DECOR_SETS.filter((s) => s.fx);
+  const classicSets = DECOR_SETS.filter((s) => !s.fx);
+  const cols = gw >= 700 ? 4 : gw >= 500 ? 3 : 2;
+  const tileW = Math.max(110, Math.floor((gw - (cols - 1) * 10) / cols) - 8);
+  const cardW = Math.round(Math.min(320, Math.max(220, gw * 0.8)));
   const wearF = isDecorKey(me.avatar_frame) ? me.avatar_frame : null;
   const wearP = isDecorKey(me.nameplate) ? me.nameplate : null;
   const rarity = (spec) => RARITY_STYLE[spec.rarity] || RARITY_STYLE.epic;
@@ -22207,7 +22353,6 @@ function CollectionPanel({ me, rewards, onClose, onEquip, onWear, isAdmin, onRew
       : [];
   const sorted = [...items].sort((x, y) => Number(y.owned) - Number(x.owned) || (STORE_RARITY_ORDER[x.spec.rarity] ?? 9) - (STORE_RARITY_ORDER[y.spec.rarity] ?? 9));
   const sel = selected ? items.find((it) => it.key === selected) : null;
-  const equippedCharm = tab === 'charm' && me.custom_badge && CUSTOM_BADGES[me.custom_badge] ? me.custom_badge : null;
   const refresh = async () => { if (onRewardsChanged) await onRewardsChanged(); };
   const equip = async (kind, key) => {
     if (busy || (kind === 'badge' && !isAdmin)) return;
@@ -22230,144 +22375,141 @@ function CollectionPanel({ me, rewards, onClose, onEquip, onWear, isAdmin, onRew
     setTimeout(() => setBuyNote(''), 2200);
     await refresh();
   };
-  const bottomBar = tab === 'sets' ? !!(wearF || wearP) : !!(tab === 'charm' && equippedCharm && !sel);
+  const openSetPage = (k) => { setOpenSet(k); playUiSound('tap'); };
+  const ownOf = (k) => ({ frame: ownedFrames.has(k), plate: ownedPlates.has(k) });
+  const covered = !!(openSet || openDrop || tryOn);
+  const [hideBody, setHideBody] = useState(false);
+  useEffect(() => {
+    if (!covered) { setHideBody(false); return undefined; }
+    const t = setTimeout(() => setHideBody(true), 420);
+    return () => clearTimeout(t);
+  }, [covered]);
+  const btnStyle = (primary) => ({ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 44, padding: '0 18px', borderRadius: 13, border: 'none', fontFamily: FONT, fontSize: 14.5, fontWeight: 650, cursor: 'pointer', background: primary ? CL.accent : CL.card2, color: '#FFFFFF' });
   return (
     <>
     <WideDim onClose={onClose} z={620} />
-    <div {...edgeBack} className="zchat-panel-open zchat-wide-page" style={{ position: 'fixed', inset: 0, zIndex: 620, background: 'radial-gradient(circle at 50% 0%, #1b1533 0%, #07080d 55%)', color: 'white', display: 'flex', flexDirection: 'column', fontFamily: FONT }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px 8px', paddingTop: 'calc(12px + env(safe-area-inset-top))' }}>
-        <div role="button" aria-label="Close collection" onClick={onClose} style={{ width: 38, height: 38, borderRadius: '50%', background: 'rgba(255,255,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><ArrowLeft size={19} /></div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 21, fontWeight: 900 }}>Collection</div>
-          <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.55)', fontWeight: 700 }}>{totalOwned} of {totalItems} unlocked</div>
-        </div>
-        <div role="button" aria-label={`${wallet && wallet.ready ? wallet.coins : 0} coins`} onClick={onOpenWallet} style={{ display: 'flex', alignItems: 'center', gap: 6, height: 34, padding: '0 12px', borderRadius: 17, background: 'rgba(255,255,255,0.08)', fontSize: 14.5, fontWeight: 800, cursor: 'pointer' }}><CoinIcon size={18} />{wallet && wallet.ready ? formatCount(wallet.coins) : '0'}</div>
+    <div {...edgeBack} className="zchat-panel-open zchat-wide-page" style={{ position: 'fixed', inset: 0, zIndex: 620, background: CL.bg, color: CL.ink, display: 'flex', flexDirection: 'column', fontFamily: FONT }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px 0', paddingTop: 'calc(6px + env(safe-area-inset-top))' }}>
+        <div role="button" aria-label="Close collection" onClick={onClose} style={{ width: 42, height: 42, borderRadius: 21, display: 'flex', alignItems: 'center', justifyContent: 'center', color: CL.ink, cursor: 'pointer' }}><ArrowLeft size={23} /></div>
+        <div style={{ flex: 1 }} />
+        <div role="button" aria-label={`${formatCount(coins)} coins`} onClick={onOpenWallet} className="zchat-press" style={{ display: 'flex', alignItems: 'center', gap: 6, height: 34, padding: '0 13px 0 10px', borderRadius: 17, background: CL.card2, fontSize: 14.5, fontWeight: 650, color: CL.ink, cursor: 'pointer', fontVariantNumeric: 'tabular-nums' }}><CoinIcon size={18} />{formatCount(coins)}</div>
       </div>
-      <div style={{ margin: '0 16px 14px', height: 8, borderRadius: 4, background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
-        <div style={{ width: `${pct}%`, height: '100%', background: '#7C5CFC', transition: 'width 0.4s ease' }} />
-      </div>
-      <div style={{ display: 'flex', gap: 8, padding: '0 16px 14px', overflowX: 'auto', scrollbarWidth: 'none' }}>
-        {[['sets', 'Sets'], ['bubble', 'Bubbles'], ['charm', 'Charms'], ['badge', 'Badges']].map(([k, label]) => (
-          <div key={k} role="button" onClick={() => { playUiSound('tap'); if (k === 'bubble') { setBubblesOpen(true); return; } setTab(k); setSelected(null); }} style={{ flexShrink: 0, padding: '9px 16px', borderRadius: 13, fontWeight: 900, fontSize: 13, cursor: 'pointer', background: tab === k ? '#7C5CFC' : 'rgba(255,255,255,0.06)', color: tab === k ? '#FFFFFF' : 'rgba(255,255,255,0.75)' }}>{label}</div>
-        ))}
+      <div style={{ padding: '4px 16px 14px', fontSize: 31, fontWeight: 750, letterSpacing: '-0.025em' }}>Collection</div>
+      <div style={{ padding: '0 16px 4px' }}>
+        <SegTabs items={[['sets', 'Sets'], ['bubble', 'Bubbles'], ['charm', 'Charms'], ['badge', 'Badges']]} value={tab} onChange={(k) => { setTab(k); setSelected(null); playUiSound('tap'); }} />
       </div>
 
-      <div ref={gridRef} style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: `0 14px ${bottomBar ? 132 : 30}px` }}>
-        {tab === 'sets' ? (
+      <div ref={gridRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain', padding: `0 16px ${tab === 'bubble' ? 0 : 36}px`, visibility: hideBody ? 'hidden' : 'visible' }}>
+        {tab === 'sets' && (
           <>
-            {shownDrops.map((d) => <DropCard key={d.id} drop={d} me={me} rewards={rewards} onOpen={() => { setDropOpen(d.id); playUiSound('tap'); }} />)}
+            {shownDrops.map((d) => <CollDropRow key={d.id} drop={d} me={me} rewards={rewards} onOpen={() => { setDropOpen(d.id); playUiSound('tap'); }} />)}
             {freeSets > 0 && (
-              <div className="zchat-fade" style={{ marginBottom: 12, padding: '12px 14px', borderRadius: 18, background: 'linear-gradient(135deg, #3b2a7a 0%, #1d1840 100%)', border: '1px solid rgba(183,156,255,0.35)', display: 'flex', alignItems: 'center', gap: 12 }}>
-                <GiftIcon size={28} color="#FFD66B" />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 900, fontSize: 15 }}>{freeSets === 1 ? '1 free set left' : `${freeSets} free sets for you`}</div>
-                  <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.72)', marginTop: 2, lineHeight: 1.4 }}>Pick any set without a profile effect and get it free, frame and nameplate.</div>
-                </div>
+              <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 16, background: CL.card }}>
+                <GiftIcon size={22} color={CL.gold} />
+                <div style={{ flex: 1, minWidth: 0, fontSize: 13.5, lineHeight: 1.4, color: CL.ink2 }}><b style={{ color: CL.ink, fontWeight: 650 }}>{freeSets === 1 ? '1 free set' : `${freeSets} free sets`}</b> for you. Pick any classic set and get the frame and the nameplate.</div>
               </div>
             )}
             {mine.length > 0 && (
-              <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-                {[['all', `All ${DECOR_SETS.length}`], ['mine', `Yours ${mine.length}`]].map(([k, l]) => (
-                  <div key={k} role="button" aria-pressed={filter === k} onClick={() => { setFilter(k); playUiSound('tap'); }} style={{ padding: '7px 14px', borderRadius: 12, fontSize: 13, fontWeight: 800, cursor: 'pointer', background: filter === k ? 'rgba(255,255,255,0.92)' : 'rgba(255,255,255,0.06)', color: filter === k ? '#0b0c12' : 'rgba(255,255,255,0.75)' }}>{l}</div>
-                ))}
-              </div>
+              <CollSection title="Yours" sub={`${mine.length} ${mine.length === 1 ? 'set' : 'sets'} in your collection`}>
+                <div style={{ display: 'flex', gap: 16, overflowX: 'auto', scrollbarWidth: 'none', margin: '0 -16px', padding: '0 16px 2px' }}>
+                  {mine.map((s) => {
+                    const on = wearF === s.key || wearP === s.key;
+                    return (
+                      <div key={s.key} role="button" aria-label={`${s.name}, yours`} onClick={() => (s.drop ? null : openSetPage(s.key))} className="zchat-press" style={{ flex: '0 0 auto', width: 78, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: s.drop ? 'default' : 'pointer' }}>
+                        <DecorFrameBadge setKey={s.key} size={74} photo={me.avatar} name={me.name} lazy />
+                        <div style={{ maxWidth: '100%', fontSize: 12, fontWeight: 600, color: on ? '#B9A6FF' : CL.ink2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{on ? 'Wearing' : s.name}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </CollSection>
             )}
-            <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gap: 10 }}>
-              {shown.map((s) => {
-                const own = { frame: ownedFrames.has(s.key), plate: ownedPlates.has(s.key) };
-                return <SetCard key={s.key} set={s} me={me} own={own} wearing={wearF === s.key || wearP === s.key} free={freeSets > 0 && !s.fx && !(own.frame && own.plate)} width={cardW} stack={stackFoot} onOpen={() => { setOpenSet(s.key); playUiSound('tap'); }} />;
+            <CollSection title="Profile effects" sub="Wear the full set and its animation plays when someone opens your profile">
+              <div style={{ display: 'flex', gap: 12, overflowX: 'auto', scrollbarWidth: 'none', scrollSnapType: 'x mandatory', scrollPaddingLeft: 16, margin: '0 -16px', padding: '0 16px 4px' }}>
+                {fxSets.map((s) => <FxSetCard key={s.key} set={s} me={me} own={ownOf(s.key)} wearing={wearF === s.key || wearP === s.key} width={cardW} onOpen={() => openSetPage(s.key)} />)}
+                <div style={{ flex: '0 0 4px' }} />
+              </div>
+            </CollSection>
+            <CollSection title="Classic sets" sub={freeSets > 0 ? 'Free sets work on these' : 'Animated frames and nameplates'}>
+              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gap: 10 }}>
+                {classicSets.map((s) => {
+                  const own = ownOf(s.key);
+                  return <SetTile key={s.key} set={s} me={me} own={own} wearing={wearF === s.key || wearP === s.key} free={freeSets > 0 && !(own.frame && own.plate)} width={tileW} onOpen={() => openSetPage(s.key)} />;
+                })}
+              </div>
+            </CollSection>
+            <div style={{ fontSize: 12.5, color: CL.ink3, textAlign: 'center', margin: '22px 12px 0', lineHeight: 1.5 }}>A classic set is {DECOR_PRICE * 2} coins and a set with a profile effect is {DECOR_FX_PRICE * 2}. A frame or a nameplate on its own is half. Everything is yours to keep.</div>
+          </>
+        )}
+        {tab === 'bubble' && <BubbleShopInline uid={me.id} onOpenWallet={onOpenWallet} onGift={onGift ? (k) => onGift('bubble', k) : undefined} />}
+        {(tab === 'charm' || tab === 'badge') && (
+          <>
+            <div style={{ fontSize: 13.5, color: CL.ink2, lineHeight: 1.4, padding: '18px 2px 12px' }}>{tab === 'charm' ? 'A charm sits next to your name everywhere in ZChat.' : 'Badges show next to your name and are given by the ZChat team.'}</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
+              {sorted.map((it) => {
+                const r = rarity(it.spec);
+                const left = daysLeft(it.reward);
+                const price = tab === 'charm' ? shopPrice('charm', it.key) : null;
+                return (
+                  <div key={it.key} role="button" aria-label={it.spec.label} onClick={() => { setSelected(it.key); playUiSound('tap'); }} className="zchat-press"
+                    style={{ position: 'relative', minWidth: 0, borderRadius: 18, padding: '14px 12px 13px', cursor: 'pointer', background: CL.card, boxShadow: `inset 0 0 0 ${it.equipped ? 2 : 1}px ${it.equipped ? CL.accent : CL.line}` }}>
+                    {!it.owned && !price && <div style={{ position: 'absolute', top: 10, right: 10 }}><Lock size={13} color={CL.ink3} /></div>}
+                    <div style={{ height: 88, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: it.owned || price ? 1 : 0.45 }}>
+                      {tab === 'charm' ? <CharmPreview charm={it.key} size={54} /> : <VerifiedBadge tier={it.key} size={54} style={{ marginLeft: 0, display: 'block' }} />}
+                    </div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: CL.ink, marginTop: 8, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.spec.label.replace(/ (charm|badge)$/i, '')}</div>
+                    <div style={{ marginTop: 3, fontSize: 12.5, fontWeight: 600, color: it.equipped ? '#B9A6FF' : it.owned ? CL.own : CL.ink2, display: 'flex', alignItems: 'center', gap: 4 }}>
+                      {it.equipped ? 'In use' : it.owned ? (left != null ? `${left} days left` : 'Owned') : price ? <CollPrice price={price} size={13} /> : r.label}
+                    </div>
+                  </div>
+                );
               })}
             </div>
-            <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.45)', textAlign: 'center', margin: '16px 8px 0', lineHeight: 1.5 }}>A set is {DECOR_PRICE * 2} coins, or {DECOR_FX_PRICE * 2} with a profile effect. A frame or a nameplate on its own is half. They show on your profile and are yours to keep.</div>
           </>
-        ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
-            {sorted.map((it) => {
-              const r = rarity(it.spec);
-              const left = daysLeft(it.reward);
-              return (
-                <div key={it.key} role="button" onClick={() => { setSelected(it.key); playUiSound('tap'); }} style={{ position: 'relative', borderRadius: 20, padding: '12px 10px 14px', cursor: 'pointer', textAlign: 'center', overflow: 'hidden', background: it.owned ? r.bg : 'linear-gradient(160deg, #151620 0%, #0a0b0f 100%)', border: `1.5px solid ${selected === it.key ? '#fbbf24' : it.owned ? `${r.color}66` : 'rgba(255,255,255,0.07)'}`, boxShadow: it.equipped ? `0 0 20px ${r.glow}` : 'none' }}>
-                  {it.equipped && <div style={{ position: 'absolute', top: 8, left: 8, zIndex: 5, padding: '2px 7px', borderRadius: 7, background: '#22c55e', color: '#052e1c', fontSize: 10, fontWeight: 800 }}>Equipped</div>}
-                  {!it.owned && <div style={{ position: 'absolute', top: 8, right: 8, zIndex: 5 }}><Lock size={13} color="rgba(255,255,255,0.6)" /></div>}
-                  <div style={{ height: 96, display: 'flex', alignItems: 'center', justifyContent: 'center', filter: it.owned ? 'none' : 'grayscale(1) brightness(0.5)' }}>
-                    {tab === 'charm' ? <CharmPreview charm={it.key} size={56} />
-                      : <VerifiedBadge tier={it.key} size={56} style={{ marginLeft: 0, display: 'block' }} />}
-                  </div>
-                  <div style={{ fontWeight: 900, fontSize: 13.5, marginTop: 8, color: it.owned ? 'white' : 'rgba(255,255,255,0.55)' }}>{it.spec.label.replace(/ (charm|badge)$/i, '')}</div>
-                  <div style={{ fontSize: 11, fontWeight: 800, color: it.owned ? r.color : 'rgba(255,255,255,0.45)', marginTop: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
-                    {it.owned ? `${r.label}${left != null ? `, ${left}d left` : ''}` : tab === 'charm' && shopPrice('charm', it.key) ? <><CoinIcon size={12} />{formatCount(shopPrice('charm', it.key))}</> : 'Locked'}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
         )}
       </div>
 
-      {tab === 'sets' && (wearF || wearP) && !openSet && (
-        <div style={{ position: 'absolute', zIndex: 12, left: 12, right: 12, bottom: 'calc(14px + env(safe-area-inset-bottom))', padding: '10px 12px', borderRadius: 20, background: 'rgba(18,20,28,0.97)', border: '1px solid rgba(255,255,255,0.1)', boxShadow: '0 -10px 30px rgba(0,0,0,0.35)', display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ width: wearF ? 60 : 96, height: 56, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            {wearF ? <DecorFrameBadge setKey={wearF} size={58} photo={me.avatar} name={me.name} /> : <div style={{ position: 'relative', width: 96, height: 38.4, isolation: 'isolate' }}><DecorArt setKey={wearP} part="plate" width={96} style={{ left: 0, top: 0 }} /></div>}
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.55)', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Wearing now</div>
-            <div style={{ fontWeight: 900, fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{wearF && wearP && wearF === wearP ? `${DECOR_BY_KEY[wearF].name} set` : [wearF && `${DECOR_BY_KEY[wearF].name} frame`, wearP && `${DECOR_BY_KEY[wearP].name} nameplate`].filter(Boolean).join(', ')}</div>
-          </div>
-          <button disabled={busy} onClick={async () => { setBusy(true); await onWear({ avatar_frame: null, nameplate: null }); setBusy(false); }} style={{ padding: '10px 14px', borderRadius: 12, border: 'none', background: 'rgba(255,255,255,0.1)', color: 'white', fontWeight: 900, fontSize: 12.5, fontFamily: FONT, cursor: 'pointer', flexShrink: 0 }}>Take off</button>
-        </div>
-      )}
-
-      {tab === 'charm' && equippedCharm && !sel && (
-        <div style={{ position: 'absolute', zIndex: 12, left: 12, right: 12, bottom: 'calc(14px + env(safe-area-inset-bottom))', padding: '12px 14px', borderRadius: 20, background: 'rgba(18,20,28,0.97)', border: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ width: 64, height: 54, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><CharmPreview charm={equippedCharm} size={42} /></div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.55)', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Wearing now</div>
-            <div style={{ fontWeight: 900, fontSize: 15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{CUSTOM_BADGES[equippedCharm].label.replace(/ charm$/i, '')}</div>
-          </div>
-          <button disabled={busy} onClick={() => equip('charm', null)} style={{ padding: '10px 14px', borderRadius: 12, border: 'none', background: 'rgba(255,255,255,0.1)', color: 'white', fontWeight: 900, fontSize: 12.5, fontFamily: FONT, cursor: 'pointer' }}>Take off</button>
-        </div>
-      )}
-
       {sel && (
-        <div className="zchat-sheet-up" style={{ position: 'absolute', zIndex: 30, left: 0, right: 0, bottom: 0, padding: '16px 16px', paddingBottom: 'calc(16px + env(safe-area-inset-bottom))', background: 'linear-gradient(180deg, rgba(20,18,32,0.98), #0a0a10)', borderTop: '1px solid rgba(255,255,255,0.1)', borderRadius: '24px 24px 0 0' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-            <div role="button" onClick={() => tab === 'charm' && setTryOn(sel.key)} style={{ width: 92, height: 92, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: tab === 'charm' ? 'pointer' : 'default' }}>
-              {tab === 'charm' ? <CharmPreview charm={sel.key} size={54} />
-                : <VerifiedBadge tier={sel.key} size={54} style={{ marginLeft: 0, display: 'block' }} />}
+        <div className="zchat-sheet-up" style={{ position: 'absolute', zIndex: 30, left: 0, right: 0, bottom: 0, padding: '18px 16px', paddingBottom: 'calc(18px + env(safe-area-inset-bottom))', background: '#17171C', boxShadow: '0 -12px 40px rgba(0,0,0,0.5)', borderRadius: '24px 24px 0 0' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+            <div role="button" onClick={() => tab === 'charm' && setTryOn(sel.key)} style={{ width: 84, height: 84, borderRadius: 18, background: CL.card2, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: tab === 'charm' ? 'pointer' : 'default' }}>
+              {tab === 'charm' ? <CharmPreview charm={sel.key} size={52} /> : <VerifiedBadge tier={sel.key} size={52} style={{ marginLeft: 0, display: 'block' }} />}
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 12, fontWeight: 800, color: rarity(sel.spec).color }}>{rarity(sel.spec).label}{sel.spec.animated ? ', animated' : ''}</div>
-              <div style={{ fontSize: 17, fontWeight: 900, marginTop: 2 }}>{sel.spec.label}</div>
-              {sel.owned && daysLeft(sel.reward) != null && <div style={{ fontSize: 12, fontWeight: 700, color: daysLeft(sel.reward) <= 5 ? '#fca5a5' : 'rgba(255,255,255,0.6)', marginTop: 3 }}>Yours for {daysLeft(sel.reward)} more days</div>}
-              <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
-                {tab === 'badge' ? (
-                  isAdmin ? (
-                    <button disabled={busy || sel.equipped} onClick={() => equip('badge', sel.key)} style={{ padding: '10px 22px', borderRadius: 12, border: 'none', fontWeight: 900, fontFamily: FONT, fontSize: 13.5, cursor: sel.equipped ? 'default' : 'pointer', background: sel.equipped ? 'rgba(52,211,153,0.2)' : '#F5A524', color: sel.equipped ? '#34d399' : '#1a0f02' }}>{sel.equipped ? 'Equipped' : busy ? 'Equipping' : 'Equip'}</button>
-                  ) : (
-                    <div style={{ padding: '10px 14px', borderRadius: 12, background: 'rgba(255,255,255,0.07)', fontSize: 12.5, fontWeight: 800, color: 'rgba(255,255,255,0.7)' }}>{sel.owned ? 'You are wearing this badge' : 'Given by the ZChat team'}</div>
-                  )
-                ) : sel.owned ? (
-                  <>
-                    <button disabled={busy || sel.equipped} onClick={() => equip('charm', sel.key)} style={{ padding: '10px 22px', borderRadius: 12, border: 'none', fontWeight: 900, fontFamily: FONT, fontSize: 13.5, cursor: sel.equipped ? 'default' : 'pointer', background: sel.equipped ? 'rgba(52,211,153,0.2)' : '#F5A524', color: sel.equipped ? '#34d399' : '#1a0f02' }}>{sel.equipped ? 'Equipped' : busy ? 'Equipping' : 'Equip'}</button>
-                    <button onClick={() => setTryOn(sel.key)} style={{ padding: '10px 14px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.14)', background: 'transparent', color: 'white', fontWeight: 800, fontFamily: FONT, fontSize: 13, cursor: 'pointer' }}>Preview</button>
-                    {daysLeft(sel.reward) != null && shopPrice('charm', sel.key) && <button onClick={() => setBuyAsk({ kind: 'charm', key: sel.key, label: sel.spec.label, price: shopPrice('charm', sel.key) })} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '10px 14px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.14)', background: 'transparent', color: 'white', fontWeight: 800, fontFamily: FONT, fontSize: 13, cursor: 'pointer' }}><CoinIcon size={15} />Keep it</button>}
-                  </>
-                ) : (
-                  <>
-                    {shopPrice('charm', sel.key) ? (
-                      <button onClick={() => setBuyAsk({ kind: 'charm', key: sel.key, label: sel.spec.label, price: shopPrice('charm', sel.key) })} aria-label={`Get for ${shopPrice('charm', sel.key)} coins`} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '10px 16px', borderRadius: 12, border: 'none', fontWeight: 800, fontFamily: FONT, fontSize: 13.5, cursor: 'pointer', background: '#F5A524', color: '#1a0f02' }}><CoinIcon size={16} />Get for {formatCount(shopPrice('charm', sel.key))}</button>
-                    ) : (
-                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '10px 14px', borderRadius: 12, background: 'rgba(255,255,255,0.07)', fontSize: 12.5, fontWeight: 800, color: 'rgba(255,255,255,0.7)' }}><Lock size={13} /> Earn it from ZChat events and gifts</div>
-                    )}
-                    <button onClick={() => setTryOn(sel.key)} style={{ padding: '10px 14px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.14)', background: 'transparent', color: 'white', fontWeight: 800, fontFamily: FONT, fontSize: 13, cursor: 'pointer' }}>Preview</button>
-                  </>
-                )}
-                {tab === 'charm' && onGift && shopPrice('charm', sel.key) ? (
-                  <button onClick={() => { hapticTap(); onGift('charm', sel.key); }} aria-label={`Send the ${sel.spec.label} as a gift`} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '10px 14px', borderRadius: 12, border: '1px solid rgba(255,255,255,0.14)', background: 'transparent', color: 'white', fontWeight: 800, fontFamily: FONT, fontSize: 13, cursor: 'pointer' }}><GiftBoxIcon size={16} />Gift</button>
-                ) : null}
-              </div>
+              <div style={{ fontSize: 12.5, fontWeight: 600, color: rarity(sel.spec).color }}>{rarity(sel.spec).label}{sel.spec.animated ? ', animated' : ''}</div>
+              <div style={{ fontSize: 18, fontWeight: 700, marginTop: 2 }}>{sel.spec.label}</div>
+              {sel.owned && daysLeft(sel.reward) != null && <div style={{ fontSize: 12.5, fontWeight: 500, color: daysLeft(sel.reward) <= 5 ? '#FCA5A5' : CL.ink2, marginTop: 3 }}>Yours for {daysLeft(sel.reward)} more days</div>}
             </div>
-            <div role="button" aria-label="Close details" onClick={() => setSelected(null)} style={{ alignSelf: 'flex-start', padding: 4, cursor: 'pointer', color: 'rgba(255,255,255,0.5)' }}><X size={18} /></div>
+            <div role="button" aria-label="Close details" onClick={() => setSelected(null)} style={{ width: 32, height: 32, borderRadius: 16, background: CL.card2, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: CL.ink2, flexShrink: 0 }}><X size={16} /></div>
+          </div>
+          <div style={{ display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
+            {tab === 'badge' ? (
+              isAdmin ? (
+                <button disabled={busy || sel.equipped} onClick={() => equip('badge', sel.key)} style={{ ...btnStyle(!sel.equipped), flex: 1, cursor: sel.equipped ? 'default' : 'pointer', background: sel.equipped ? 'rgba(61,214,140,0.16)' : CL.accent, color: sel.equipped ? CL.own : '#FFFFFF' }}>{sel.equipped ? 'In use' : 'Use this badge'}</button>
+              ) : (
+                <div style={{ flex: 1, padding: '12px 14px', borderRadius: 13, background: CL.card2, fontSize: 13.5, fontWeight: 500, color: CL.ink2 }}>{sel.owned ? 'You are wearing this badge' : 'Given by the ZChat team'}</div>
+              )
+            ) : sel.owned ? (
+              <>
+                {sel.equipped
+                  ? <button disabled={busy} onClick={() => equip('charm', null)} style={{ ...btnStyle(false), flex: 1 }}>Take off</button>
+                  : <button disabled={busy} onClick={() => equip('charm', sel.key)} style={{ ...btnStyle(true), flex: 1 }}>Use this charm</button>}
+                <button onClick={() => setTryOn(sel.key)} style={btnStyle(false)}>Preview</button>
+                {daysLeft(sel.reward) != null && shopPrice('charm', sel.key) && <button onClick={() => setBuyAsk({ kind: 'charm', key: sel.key, label: sel.spec.label, price: shopPrice('charm', sel.key) })} style={btnStyle(false)}>Keep it<CoinIcon size={15} />{formatCount(shopPrice('charm', sel.key))}</button>}
+              </>
+            ) : (
+              <>
+                {shopPrice('charm', sel.key) ? (
+                  <button onClick={() => setBuyAsk({ kind: 'charm', key: sel.key, label: sel.spec.label, price: shopPrice('charm', sel.key) })} aria-label={`Get for ${shopPrice('charm', sel.key)} coins`} style={{ ...btnStyle(true), flex: 1 }}>Get it<CoinIcon size={16} />{formatCount(shopPrice('charm', sel.key))}</button>
+                ) : (
+                  <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 7, padding: '12px 14px', borderRadius: 13, background: CL.card2, fontSize: 13.5, fontWeight: 500, color: CL.ink2 }}><Lock size={14} />Earn it from ZChat events and gifts</div>
+                )}
+                <button onClick={() => setTryOn(sel.key)} style={btnStyle(false)}>Preview</button>
+              </>
+            )}
+            {tab === 'charm' && onGift && shopPrice('charm', sel.key) ? (
+              <button onClick={() => { hapticTap(); onGift('charm', sel.key); }} aria-label={`Send the ${sel.spec.label} as a gift`} style={btnStyle(false)}><GiftBoxIcon size={17} />Gift</button>
+            ) : null}
           </div>
         </div>
       )}
@@ -22381,7 +22523,7 @@ function CollectionPanel({ me, rewards, onClose, onEquip, onWear, isAdmin, onRew
           body={`It is yours to keep. You have ${formatCount((wallet && wallet.coins) || 0)} coins.`}
           onCancel={() => setBuyAsk(null)} onConfirm={doBuy} />
       ))}
-      {buyNote && <div className="zchat-pop" role="status" style={{ position: 'absolute', left: '50%', top: 'calc(70px + env(safe-area-inset-top))', transform: 'translateX(-50%)', zIndex: 40, padding: '9px 16px', borderRadius: 18, background: 'rgba(255,255,255,0.94)', color: '#111', fontSize: 13.5, fontWeight: 700, whiteSpace: 'nowrap' }}>{buyNote}</div>}
+      {buyNote && <div className="zchat-pop" role="status" style={{ position: 'absolute', left: '50%', top: 'calc(70px + env(safe-area-inset-top))', transform: 'translateX(-50%)', zIndex: 40, padding: '9px 16px', borderRadius: 18, background: 'rgba(255,255,255,0.95)', color: '#111', fontSize: 13.5, fontWeight: 600, whiteSpace: 'nowrap' }}>{buyNote}</div>}
       {tryOn && (() => {
         const rw = rewardFor('charm', tryOn);
         const has = rw && rewardActive(rw);
@@ -22399,7 +22541,6 @@ function CollectionPanel({ me, rewards, onClose, onEquip, onWear, isAdmin, onRew
           onWear={onWear} onRefresh={refresh} onOpenWallet={onOpenWallet} onGift={onGift ? (k) => onGift('set', k) : undefined} />
       )}
       {openDrop && <DropPage drop={openDrop} me={me} rewards={rewards} wallet={wallet} onClose={() => setDropOpen(null)} onWear={onWear} onRefresh={refresh} onOpenWallet={onOpenWallet} />}
-      {bubblesOpen && <BubbleShopPage uid={me.id} zIndex={760} onClose={() => setBubblesOpen(false)} onOpenWallet={onOpenWallet} onGift={onGift ? (k) => onGift('bubble', k) : undefined} />}
     </div>
     </>
   );
@@ -23905,8 +24046,7 @@ function BubbleCard({ k, on, status, statusTone, onPick }) {
     </div>
   );
 }
-function BubbleShopPage({ uid, onClose, onGift, onOpenWallet, startKey, zIndex = 650 }) {
-  useBackClose(true, onClose);
+function useBubbleShop(uid, startKey, onClose, onOpenWallet, inline = false) {
   const { theme, bubbleStyle, setBubbleStyle } = useTheme();
   const wallet = useWallet(uid);
   const owned = useOwnedBubbles(uid);
@@ -23923,9 +24063,9 @@ function BubbleShopPage({ uid, onClose, onGift, onOpenWallet, startKey, zIndex =
   const wearing = bubbleKeyOf(bubbleStyle) || 'classic';
   const isOwned = (k) => k === 'classic' || ownSet.has(k);
   const statusOf = (k) => {
-    if (k === wearing) return ['In use', 'own'];
+    if (k === wearing) return ['In use', inline ? 'use' : 'own'];
     if (k === 'classic') return ['Free', 'own'];
-    if (ownSet.has(k)) return ['Yours', 'own'];
+    if (ownSet.has(k)) return [inline ? 'Owned' : 'Yours', 'own'];
     if (freeLeft > 0) return ['Free', 'free'];
     return [String(BUBBLE_PRICE), 'coin'];
   };
@@ -23951,11 +24091,16 @@ function BubbleShopPage({ uid, onClose, onGift, onOpenWallet, startKey, zIndex =
   };
   const spec = CHAR_BUBBLES[preview];
   let action = null;
-  if (preview === wearing) action = { label: 'Done', on: onClose };
+  if (preview === wearing) action = inline ? { label: 'In use', on: null, plain: true } : { label: 'Done', on: onClose };
   else if (isOwned(preview)) action = { label: preview === 'classic' ? 'Use the classic bubble' : 'Use this bubble', on: () => wear(preview) };
   else if (freeLeft > 0) action = { label: busy ? 'Getting it' : `Get it free, ${freeLeft} left`, on: () => getFree(preview) };
   else if (coins >= BUBBLE_PRICE) action = { label: `Get it for ${BUBBLE_PRICE} coins`, on: () => setAsk(preview) };
   else action = { label: `You need ${BUBBLE_PRICE - coins} more coins`, on: onOpenWallet || null, plain: true };
+  return { theme, wallet, coins, freeLeft, wearing, preview, setPreview, busy, ask, setAsk, note, statusOf, action, spec, buy, keys: ['classic', ...CHAR_BUBBLE_KEYS] };
+}
+function BubbleShopPage({ uid, onClose, onGift, onOpenWallet, startKey, zIndex = 650 }) {
+  useBackClose(true, onClose);
+  const { theme, wallet, coins, freeLeft, preview, setPreview, busy, ask, setAsk, note, statusOf, action, spec, buy } = useBubbleShop(uid, startKey, onClose, onOpenWallet);
   return (
     <FullPage title="Chat bubbles" subtitle="Everyone sees your bubble" onBack={onClose} zIndex={zIndex} pad={false}
       right={wallet && wallet.ready ? <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 14, fontWeight: 700, color: theme.ink, paddingRight: 6 }}><CoinIcon size={16} />{formatCount(coins)}</div> : null}
@@ -41637,6 +41782,7 @@ const WN_SECTIONS = [
     { art: 'medal', title: 'ZChat Verified', text: 'A monthly plan for the blue badge. Cancel any time.' },
     { art: 'reminders', title: 'Drops', text: 'Limited releases with a countdown. Tap Remind me to get a heads up.' },
     { art: 'fxsets', title: 'Twenty sets with profile effects', text: 'Wear the full set and its effect plays when someone opens your profile. Tap Play on any set to see it first.' },
+    { art: 'decor', title: 'A new Collection', text: 'Sets, profile effects, bubbles, charms and badges all live together in one cleaner Collection page.' },
     { art: 'gift', title: 'Crystal phoenix', text: 'A crystal phoenix set. Wear it and the phoenix flies across your profile.' },
     { art: 'gift', title: 'Gift from your collection', text: 'Send any set, charm or bubble to a friend straight from your Collection. Charms are in the gift sheet too.' },
     { art: 'chats', title: 'Twenty new bubble animals', text: 'A turtle, a lion, a hippo in a puddle and more. Every bubble animal also got its own pose and spot on your messages.' },
