@@ -432,7 +432,8 @@ function askClient(client, url) {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const url = (event.notification.data && event.notification.data.url) || '/';
+  let url = (event.notification.data && event.notification.data.url) || '/';
+  try { const u = new URL(url, self.location.origin); url = u.origin === self.location.origin ? u.href : '/'; } catch { url = '/'; }
   event.waitUntil((async () => {
     await syncBadge();
     const list = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
