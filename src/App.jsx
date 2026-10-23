@@ -578,13 +578,34 @@ function useBackClose(active, onClose) {
     backStack.push(entry);
     navPushNow();
     navSync();
+    stackPing();
     return () => {
       const i = backStack.lastIndexOf(entry);
       if (i >= 0) backStack.splice(i, 1);
       navClosingSet.delete(entry);
       navSync();
+      stackPing();
     };
   }, [active]);
+}
+const stackSubs = new Set();
+let stackPingT = 0;
+function stackPing() {
+  if (stackPingT || typeof window === 'undefined') return;
+  stackPingT = setTimeout(() => { stackPingT = 0; stackSubs.forEach((fn) => { try { fn(); } catch {} }); }, 0);
+}
+function useStackCovered(on = true) {
+  const base = useRef(-1);
+  const [covered, setCovered] = useState(false);
+  useLayoutEffect(() => {
+    if (!on) return undefined;
+    base.current = backStack.length;
+    setCovered(false);
+    const fn = () => setCovered(backStack.length > base.current);
+    stackSubs.add(fn);
+    return () => { stackSubs.delete(fn); };
+  }, [on]);
+  return covered;
 }
 
 const BUBBLE_COLORS = {
@@ -1184,6 +1205,15 @@ function GlobalStyle() {
       .zchat-press:active { transform: scale(0.94); }
       .zchat-row-press { transition: background 0.12s ease; }
       .zchat-row-press:active { background: rgba(140,120,200,0.14) !important; }
+      @keyframes zchat-twinkle { 0%, 100% { opacity: 0.25; transform: scale(0.7); } 50% { opacity: 1; transform: scale(1.1); } }
+      @keyframes zchat-gift-wobble { 0%, 100% { transform: rotate(0deg) translateY(0); } 20% { transform: rotate(-3deg) translateY(-3px); } 40% { transform: rotate(3deg) translateY(0); } 55% { transform: rotate(-2deg); } 70% { transform: rotate(0deg); } }
+      .zchat-range { -webkit-appearance: none; appearance: none; width: 100%; height: 28px; margin: 0; background: transparent; cursor: pointer; touch-action: pan-y; }
+      .zchat-range::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(90deg, var(--zacc, #7C5CFC) var(--zfill, 0%), rgba(140,138,160,0.32) var(--zfill, 0%)); }
+      .zchat-range::-moz-range-track { height: 4px; border-radius: 2px; background: rgba(140,138,160,0.32); }
+      .zchat-range::-moz-range-progress { height: 4px; border-radius: 2px; background: var(--zacc, #7C5CFC); }
+      .zchat-range::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 24px; height: 24px; margin-top: -10px; border-radius: 50%; background: #FFFFFF; border: none; box-shadow: 0 1px 2px rgba(0,0,0,0.18), 0 3px 10px rgba(0,0,0,0.16), 0 0 0 0.5px rgba(0,0,0,0.06); }
+      .zchat-range::-moz-range-thumb { width: 24px; height: 24px; border-radius: 50%; background: #FFFFFF; border: none; box-shadow: 0 1px 2px rgba(0,0,0,0.18), 0 3px 10px rgba(0,0,0,0.16); }
+      .zchat-range:active::-webkit-slider-thumb { transform: scale(1.08); }
       @keyframes zchat-panel-slide-in { 0% { opacity: 0; transform: translateX(14px) scale(0.985); } 100% { opacity: 1; transform: translateX(0) scale(1); } }
       @keyframes zchat-pull-spin { to { transform: rotate(360deg); } }
       @keyframes zchat-toast-in { 0% { opacity: 0; transform: translateY(-28px) scale(0.97); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
@@ -3671,6 +3701,11 @@ const signWaiters = new Map();
 let signQueue = [];
 let signTimer = 0;
 function isPrivateMedia(u) { return typeof u === 'string' && u.indexOf('zp:') === 0; }
+function safeLinkUrl(u) {
+  if (typeof u !== 'string') return null;
+  const t = u.replace(/[\u0000-\u0020]/g, '');
+  return /^(https?:|blob:)/i.test(t) || /^\/(?!\/)/.test(t) ? u : null;
+}
 function signedMediaNow(u) {
   if (!isPrivateMedia(u)) return u || null;
   const hit = signedMedia.get(u.slice(3));
@@ -3870,7 +3905,7 @@ function AdminFiles() {
     setState({ done, missing: missing.slice(), offline, running: false });
   };
   useEffect(() => { run(); }, []);
-  const card = { background: theme.rowBg, border: `1px solid ${theme.border}`, borderRadius: 18, padding: 14, marginBottom: 10 };
+  const card = { padding: '13px 0', boxShadow: `inset 0 -0.5px 0 ${theme.hair}` };
   const groups = [...new Set(state.missing.map((m) => m.group))];
   return (
     <div>
@@ -3939,7 +3974,7 @@ function AdminErrors() {
     setBusy(false);
     load();
   };
-  const card = { background: theme.rowBg, border: `1px solid ${theme.border}`, borderRadius: 18, padding: 14, marginBottom: 10 };
+  const card = { padding: '13px 0', boxShadow: `inset 0 -0.5px 0 ${theme.hair}` };
   return (
     <div>
       <div style={{ ...card, display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -4272,11 +4307,8 @@ function LimitsPage({ me, onClose, onSaved }) {
       {!active && (
         <>
           <IgHeading>How long</IgHeading>
-          <div role="radiogroup" aria-label="How long" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, padding: '4px 4px 8px' }}>
-            {[[1, '1 day'], [3, '3 days'], [7, '1 week'], [14, '2 weeks'], [28, '4 weeks']].map(([d, l]) => (
-              <div key={d} role="radio" aria-checked={days === d} aria-label={l} onClick={() => { hapticTap(); setDays(d); }} className="zchat-press" style={{ height: 36, padding: '0 15px', borderRadius: 18, display: 'flex', alignItems: 'center', fontSize: 14, fontWeight: 700, cursor: 'pointer', background: days === d ? theme.coral : theme.rowBg, color: days === d ? '#FFFFFF' : theme.ink }}>{l}</div>
-            ))}
-          </div>
+          <ChoiceList label="How long" value={days} onChange={setDays}
+            options={[[1, '1 day'], [3, '3 days'], [7, '1 week'], [14, '2 weeks'], [28, '4 weeks']].map(([d, l]) => ({ k: d, label: l, sub: `Until ${new Date(Date.now() + d * 86400000).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}` }))} />
         </>
       )}
       {err && <div role="alert" style={{ padding: '10px 4px', fontSize: 13, color: theme.danger, fontWeight: 700 }}>{err}</div>}
@@ -5220,33 +5252,26 @@ function WhoCanSeePanel({ me, onBack, onSaved, initialOpen }) {
       <IgTopBar title="Who can see what" onBack={onBack} />
       <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0 40px' }}>
         {PRIVACY_ITEMS.map(([key, title, sub]) => (
-          <div key={key} data-privacy-key={key}>
-            <div role="button" aria-label={title} onClick={() => setOpenKey(openKey === key ? null : key)} style={{ padding: '14px 18px', cursor: 'pointer', borderBottom: `1px solid ${theme.border}` }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 14.5, fontWeight: 700, color: theme.ink }}>{title}</div>
-                  <div style={{ fontSize: 12, color: theme.muted, marginTop: 2 }}>{sub}</div>
-                </div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: theme.coral, flexShrink: 0 }}>{label(values[key], key)}</div>
+          <div key={key} data-privacy-key={key} style={{ borderBottom: `1px solid ${theme.border}` }}>
+            <div role="button" aria-label={title} aria-expanded={openKey === key} onClick={() => setOpenKey(openKey === key ? null : key)} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 18px', cursor: 'pointer' }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14.5, fontWeight: 700, color: theme.ink }}>{title}</div>
+                <div style={{ fontSize: 12, color: theme.muted, marginTop: 2 }}>{sub}</div>
               </div>
-              {openKey === key && (
-                <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {privacyChoicesFor(key).map(([v, text]) => (
-                    <div key={v} role="button" aria-label={`${title} ${text}`} onClick={(e) => { e.stopPropagation(); save(key, v); }}
-                      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 12, cursor: 'pointer',
-                        background: values[key] === v ? `${theme.coral}1A` : 'transparent', border: `1px solid ${values[key] === v ? theme.coral : theme.border}` }}>
-                      <div style={{ width: 16, height: 16, borderRadius: 8, border: `2px solid ${values[key] === v ? theme.coral : theme.muted}`, background: values[key] === v ? theme.coral : 'transparent' }} />
-                      <span style={{ fontSize: 14, fontWeight: 600, color: theme.ink }}>{text}</span>
-                    </div>
-                  ))}
-                  {values[key] === 'chosen' && (
-                    <div role="button" onClick={(e) => { e.stopPropagation(); openChosen(key); }} style={{ fontSize: 13, fontWeight: 700, color: theme.coral, padding: '6px 2px', cursor: 'pointer' }}>
-                      Choose the people
-                    </div>
-                  )}
-                </div>
-              )}
+              <div style={{ fontSize: 13.5, fontWeight: 600, color: openKey === key ? theme.ink : theme.muted, flexShrink: 0, maxWidth: 130, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label(values[key], key)}</div>
+              <ChevronRight size={17} color={theme.muted} style={{ flexShrink: 0, transform: openKey === key ? 'rotate(90deg)' : 'none', transition: reducedMotion() ? 'none' : 'transform 200ms ease-out' }} />
             </div>
+            {openKey === key && (
+              <div className="zchat-fade" style={{ padding: '0 14px 8px 14px' }}>
+                <ChoiceList label={title} value={values[key]} onChange={(v) => save(key, v)}
+                  options={privacyChoicesFor(key).map(([v, text]) => ({ k: v, label: text, aria: `${title} ${text}` }))} />
+                {values[key] === 'chosen' && (
+                  <div role="button" onClick={() => openChosen(key)} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, fontWeight: 700, color: theme.coral, padding: '10px 4px 6px', cursor: 'pointer' }}>
+                    Choose the people<ChevronRight size={16} />
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         ))}
         {saveErr && <div role="alert" style={{ padding: '12px 18px 0', fontSize: 13, color: theme.danger, fontWeight: 700 }}>{saveErr}</div>}
@@ -5577,8 +5602,8 @@ function CoinIcon({ size = 20, style }) {
 const DAILY_COINS = [5, 5, 10, 10, 15, 20, 40];
 const SHOP_PRICES = { epic: 300, legendary: 600, mythic: 1000, rare: 150 };
 function shopPrice(kind, key) {
-  if (kind === 'frame' || kind === 'nameplate') return isDecorKey(key) ? decorPartPrice(key) : null;
-  if (kind === 'set') return isDecorKey(key) ? decorPartPrice(key) * 2 : null;
+  if (kind === 'frame' || kind === 'nameplate' || kind === 'effect') return isDecorKey(key) ? decorPartPrice(key) : null;
+  if (kind === 'set') return isDecorKey(key) ? decorPartPrice(key) * 3 : null;
   const spec = kind === 'charm' ? CUSTOM_BADGES[key] : null;
   if (!spec) return null;
   return SHOP_PRICES[spec.rarity] || SHOP_PRICES.epic;
@@ -5664,7 +5689,7 @@ function DailyRewardCard({ uid, onOpenWallet, style }) {
         <div style={{ fontSize: 14.5, fontWeight: 700, color: theme.ink }}>{done && !done.err ? `${done.added} coins added` : done && done.err ? 'Coins are not ready yet' : 'Your daily coins are ready'}</div>
         <div style={{ fontSize: 12.5, color: theme.muted, marginTop: 1 }}>{done && done.err ? done.err : done ? `Come back tomorrow for day ${Math.min(7, day + 1)}` : `Day ${day} of 7, ${amount} coins`}</div>
       </div>
-      {!done && <div role="button" aria-label="Claim daily coins" onClick={claim} className="zchat-press" style={{ height: 34, padding: '0 16px', borderRadius: 17, background: theme.coral, color: '#FFFFFF', fontSize: 14, fontWeight: 700, display: 'flex', alignItems: 'center', cursor: 'pointer', flexShrink: 0 }}>{busy ? <Spinner size={14} /> : 'Claim'}</div>}
+      {!done && <div role="button" aria-label="Claim daily coins" onClick={claim} className="zchat-press" style={{ height: 34, minWidth: 72, padding: '0 16px', boxSizing: 'border-box', borderRadius: 10, background: theme.coral, color: '#FFFFFF', fontSize: 14, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>{busy ? <Spinner size={14} /> : 'Claim'}</div>}
       {done && !done.err && <CoinBurst amount={done.added} />}
     </div>
   );
@@ -5726,9 +5751,9 @@ function VerifiedPlanCard({ me, plan, onBuy }) {
   const active = !!(until && until.getTime() > Date.now());
   const teamBadge = !!(me && me.verified && !active);
   return (
-    <div style={{ borderRadius: 18, padding: 14, background: theme.dark ? 'linear-gradient(150deg, #1B2A4A 0%, #141420 70%)' : 'linear-gradient(150deg, #E7F0FF 0%, #F6F4FF 70%)', boxShadow: `inset 0 0 0 1px ${theme.dark ? 'rgba(120, 160, 255, 0.22)' : 'rgba(60, 110, 230, 0.16)'}` }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <VerifiedBadge tier="blue" size={26} />
+    <div style={{ padding: '2px 0' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <span style={{ width: 40, display: 'flex', justifyContent: 'center', flexShrink: 0 }}><VerifiedBadge tier="blue" size={28} /></span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 16, fontWeight: 800, color: theme.ink }}>ZChat Verified</div>
           <div style={{ fontSize: 13, color: theme.muted, marginTop: 1 }}>{active ? `Your badge is on until ${fmtDate(until, { day: 'numeric', month: 'long' })}` : teamBadge ? 'You already have a badge from the ZChat team' : plan && plan.price ? `${plan.price} a month, stop any time` : 'A monthly plan, stop any time'}</div>
@@ -5736,15 +5761,43 @@ function VerifiedPlanCard({ me, plan, onBuy }) {
       </div>
       {!active && !teamBadge && (
         <>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, margin: '12px 2px 12px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, margin: '12px 0 14px' }}>
             {['A blue badge next to your name everywhere', 'People know it is really you', 'Supports ZChat so it stays free'].map((t) => (
-              <div key={t} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13.5, color: theme.ink }}><Check size={15} color="#3B82F6" strokeWidth={3} />{t}</div>
+              <div key={t} style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 14, color: theme.ink2 }}><span style={{ width: 40, display: 'flex', justifyContent: 'center', flexShrink: 0 }}><Check size={16} color="#3B82F6" strokeWidth={2.6} /></span>{t}</div>
             ))}
           </div>
           <BigButton label="Get verified" onClick={onBuy} disabled={!plan} />
         </>
       )}
-      {active && <a href="https://app.lemonsqueezy.com/my-orders" target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', marginTop: 10, fontSize: 13.5, fontWeight: 700, color: theme.coral, textDecoration: 'none' }}>Manage your plan</a>}
+      {active && <a href="https://app.lemonsqueezy.com/my-orders" target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', marginTop: 10, marginLeft: 52, fontSize: 13.5, fontWeight: 700, color: theme.coral, textDecoration: 'none' }}>Manage your plan</a>}
+    </div>
+  );
+}
+function DailyStreak({ day, claimed }) {
+  const { theme } = useTheme();
+  const n = DAILY_COINS.length;
+  const last = claimed ? day : day - 1;
+  const fill = n > 1 && last > 1 ? Math.min(1, (last - 1) / (n - 1)) : 0;
+  const page = igPalette(theme).bg;
+  return (
+    <div role="list" aria-label="Daily reward days" style={{ position: 'relative', display: 'flex', paddingTop: 2 }}>
+      <div aria-hidden="true" style={{ position: 'absolute', left: `${50 / n}%`, right: `${50 / n}%`, top: 38.5, height: 3, borderRadius: 2, background: theme.dark ? 'rgba(255,255,255,0.1)' : 'rgba(17,17,19,0.08)' }}>
+        <div style={{ width: `${fill * 100}%`, height: '100%', borderRadius: 2, background: theme.coral, transition: reducedMotion() ? 'none' : 'width 300ms ease-out' }} />
+      </div>
+      {DAILY_COINS.map((amt, i) => {
+        const d = i + 1;
+        const today = d === day;
+        const got = claimed ? d <= day : d < day;
+        return (
+          <div key={d} role="listitem" aria-label={`Day ${d}, ${amt} coins${got ? ', claimed' : ''}`} style={{ position: 'relative', flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <div style={{ height: 16, fontSize: 11, lineHeight: '16px', fontWeight: today ? 800 : 600, color: today ? theme.ink : theme.muted, whiteSpace: 'nowrap' }}>Day {d}</div>
+            <div style={{ marginTop: 6, width: 32, height: 32, borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', background: got ? theme.coral : page, boxShadow: today && !claimed ? `0 0 0 2px ${page}, 0 0 0 4px ${theme.coral}` : 'none' }}>
+              {got ? <Check size={16} color="#FFFFFF" strokeWidth={3} /> : <CoinIcon size={today ? 30 : 25} />}
+            </div>
+            <div style={{ marginTop: 7, fontSize: 12.5, fontWeight: 700, color: got ? theme.muted : theme.ink, fontVariantNumeric: 'tabular-nums' }}>{amt}</div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -5831,79 +5884,59 @@ function WalletPage({ uid, me, onClose, onOpenCollection }) {
       </div>
       {w && !w.ready && <div style={{ fontSize: 13, color: theme.muted, textAlign: 'center', padding: '0 12px 12px', lineHeight: 1.5 }}>Coins switch on once the latest ZChat setup is finished.</div>}
       {pay && pay.packs.length > 0 && (
-        <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10, marginBottom: 10 }}>
+        <KitSection title="Get coins" style={{ marginTop: 4 }}>
+          <div role="list" aria-label="Coin packs">
             {pay.packs.map((pk, i) => (
-              <div key={pk.id} role="button" aria-label={`Buy ${pk.coins} coins${pk.price ? ` for ${pk.price}` : ''}`} onClick={() => buyPack(pk)} className="zchat-press"
-                style={{ position: 'relative', borderRadius: 18, padding: '14px 12px 12px', background: theme.soft, boxShadow: pk.tag ? `inset 0 0 0 1.5px ${theme.coral}` : 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 10 }}>
-                {pk.tag && <div style={{ position: 'absolute', top: 10, right: 10, padding: '2px 8px', borderRadius: 8, background: theme.coral, color: '#FFFFFF', fontSize: 11, fontWeight: 800 }}>{pk.tag}</div>}
-                <CoinPile n={i + 1} size={30} />
-                <div>
-                  <div style={{ fontSize: 20, fontWeight: 800, color: theme.ink, letterSpacing: '-0.01em', fontVariantNumeric: 'tabular-nums' }}>{formatCount(pk.coins)}</div>
-                  <div style={{ fontSize: 12.5, color: theme.muted }}>coins</div>
+              <div key={pk.id} role="button" aria-label={`Buy ${pk.coins} coins${pk.price ? ` for ${pk.price}` : ''}`} onClick={() => buyPack(pk)} className="zchat-row-press"
+                style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 12, minHeight: 62, padding: '6px 0', cursor: 'pointer' }}>
+                <div style={{ width: 52, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><CoinPile n={i + 1} size={26} /></div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: theme.ink, letterSpacing: '-0.01em', fontVariantNumeric: 'tabular-nums' }}>{formatCount(pk.coins)} coins</div>
+                  {pk.tag && <div style={{ fontSize: 12.5, fontWeight: 700, color: kitOnInk(theme), marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{pk.tag}</div>}
                 </div>
-                <div style={{ alignSelf: 'stretch', height: 36, borderRadius: 11, background: theme.ink, color: theme.panelBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14.5, fontWeight: 800 }}>{pk.price || 'Buy'}</div>
+                <div style={{ minWidth: 76, height: 32, padding: '0 14px', boxSizing: 'border-box', borderRadius: 16, background: `${theme.coral}${theme.dark ? '33' : '1A'}`, color: kitOnInk(theme), fontSize: 14.5, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>{pk.price || 'Buy'}</div>
+                {i < pay.packs.length - 1 && <div aria-hidden="true" style={{ position: 'absolute', left: 64, right: 0, bottom: 0, height: 1, background: theme.hair }} />}
               </div>
             ))}
           </div>
-          <div style={{ fontSize: 12, color: theme.muted, lineHeight: 1.5, padding: '0 4px 16px' }}>{waitPay ? 'When your payment goes through, your coins show up here by themselves.' : 'Payments are handled safely by Lemon Squeezy. Coins arrive a few seconds after you pay.'}</div>
-        </>
+          <div style={{ fontSize: 12, color: theme.muted, lineHeight: 1.5, padding: '8px 0 0' }}>{waitPay ? 'When your payment goes through, your coins show up here by themselves.' : 'Payments are handled safely by Lemon Squeezy. Coins arrive a few seconds after you pay.'}</div>
+        </KitSection>
       )}
-      <div style={{ borderRadius: 18, background: theme.soft, padding: '14px 14px 16px' }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
-          <div style={{ fontSize: 15.5, fontWeight: 700, color: theme.ink }}>Daily reward</div>
-          <div style={{ fontSize: 12.5, color: theme.muted }}>{w && w.streak > 1 ? `${w.streak} days in a row` : 'Open ZChat every day'}</div>
-        </div>
-        <div role="list" aria-label="Daily reward days" style={{ display: 'flex', gap: 6, marginTop: 12 }}>
-          {DAILY_COINS.map((n, i) => {
-            const d = i + 1;
-            const today = d === day;
-            const got = claimed ? d <= day : d < day;
-            return (
-              <div key={d} role="listitem" aria-label={`Day ${d}, ${n} coins${got ? ', claimed' : ''}`} style={{ flex: 1, minWidth: 0, borderRadius: 12, padding: '8px 0 7px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, background: today && !claimed ? theme.panelBg : 'transparent', boxShadow: today && !claimed ? `inset 0 0 0 1.5px ${theme.coral}` : 'none', opacity: got && !today ? 0.55 : 1 }}>
-                <div style={{ fontSize: 'clamp(9.5px, 3vw, 11px)', fontWeight: 600, color: theme.muted, whiteSpace: 'nowrap' }}>Day {d}</div>
-                {got ? <div style={{ width: 22, height: 22, borderRadius: '50%', background: theme.coral, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Check size={13} color="#FFFFFF" strokeWidth={3} /></div> : <CoinIcon size={22} />}
-                <div style={{ fontSize: 12, fontWeight: 700, color: theme.ink }}>{n}</div>
-              </div>
-            );
-          })}
-        </div>
-        <div style={{ marginTop: 12 }}>
+      <KitSection title="Daily reward" right={w && w.streak > 1 ? `${w.streak} days in a row` : 'Open ZChat every day'} style={{ marginTop: pay && pay.packs.length > 0 ? 26 : 4 }}>
+        <DailyStreak day={day} claimed={!!claimed} />
+        <div style={{ marginTop: 16 }}>
           <BigButton label={busy ? 'Claiming' : claimed ? 'Come back tomorrow' : `Claim ${DAILY_COINS[day - 1] || 5} coins`} disabled={busy || !w || !w.ready || claimed} onClick={claim} />
         </div>
-      </div>
-      <IgHeading>Invite friends</IgHeading>
-      <div style={{ borderRadius: 18, background: theme.soft, padding: 14 }}>
-        <div style={{ fontSize: 14.5, color: theme.ink, lineHeight: 1.45 }}>When a friend joins ZChat with your link, you get <b>50 coins</b> and they get <b>25</b>.</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, padding: '0 6px 0 12px', height: 44, borderRadius: 12, background: theme.panelBg }}>
+      </KitSection>
+      <KitSection title="Invite friends" style={{ marginTop: 26 }}>
+        <div style={{ fontSize: 14, color: theme.muted, lineHeight: 1.5 }}>When a friend joins ZChat with your link, you get <b style={{ color: theme.ink }}>50 coins</b> and they get <b style={{ color: theme.ink }}>25</b>.</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12, height: 46, padding: '0 4px 0 14px', boxSizing: 'border-box', borderRadius: 12, background: theme.inputBg }}>
+          <LinkIcon size={16} color={theme.muted} style={{ flexShrink: 0 }} />
           <div style={{ flex: 1, minWidth: 0, fontSize: 14, color: theme.ink2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{link.replace(/^https?:\/\//, '')}</div>
-          <div role="button" aria-label="Copy invite link" onClick={async () => { const ok = await copyTextToClipboard(link); flash(ok ? 'Invite link copied' : link); }} style={{ width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: theme.ink2 }}><Copy size={18} /></div>
+          <div role="button" aria-label="Copy invite link" onClick={async () => { const ok = await copyTextToClipboard(link); flash(ok ? 'Invite link copied' : link); }} className="zchat-press" style={{ width: 38, height: 38, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: theme.ink2, flexShrink: 0 }}><Copy size={18} /></div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12 }}>
-          <div style={{ flex: 1 }}><BigButton label="Share invite" onClick={shareInvite} /></div>
-        </div>
+        <div style={{ marginTop: 10 }}><BigButton label="Share invite" onClick={shareInvite} /></div>
         {w && w.invites > 0 && <div style={{ fontSize: 13, color: theme.muted, marginTop: 10 }}>{w.invites === 1 ? '1 friend joined with your link' : `${w.invites} friends joined with your link`}</div>}
-      </div>
+      </KitSection>
       {w && w.canRedeem && (
-        <>
-          <IgHeading>Did a friend invite you?</IgHeading>
+        <KitSection title="Did a friend invite you?" style={{ marginTop: 26 }}>
           <div style={{ display: 'flex', gap: 8 }}>
             <input value={code} onChange={(e) => setCode(e.target.value.slice(0, 32))} placeholder="Their username" aria-label="Friend's username" autoCapitalize="none" style={{ ...inputStyle(theme), flex: 1, fontSize: 15.5 }} />
             <div role="button" aria-label="Use invite" onClick={redeem} style={{ height: 46, padding: '0 16px', borderRadius: 12, background: code.trim() ? theme.coral : theme.soft, color: code.trim() ? '#FFFFFF' : theme.muted, display: 'flex', alignItems: 'center', fontSize: 15, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>{redeemBusy ? <Spinner size={15} /> : 'Use'}</div>
           </div>
-          <div style={{ fontSize: 12.5, color: theme.muted, padding: '8px 4px 0' }}>Works in your first 14 days on ZChat.</div>
-        </>
+          <div style={{ fontSize: 12.5, color: theme.muted, padding: '8px 2px 0' }}>Works in your first 14 days on ZChat.</div>
+        </KitSection>
       )}
       {pay && pay.verified && (
-        <>
-          <IgHeading>Verified</IgHeading>
+        <KitSection title="Verified" style={{ marginTop: 26 }}>
           <VerifiedPlanCard me={me} plan={pay.verified} onBuy={() => { hapticTap(); if (openCheckout(pay.verified.url, uid)) setWaitPay(Date.now()); }} />
-        </>
+        </KitSection>
       )}
-      <IgHeading>Spend coins</IgHeading>
-      <IgRow inset={false} icon={<CollectionIcon />} label="Frames, nameplates and charms" sub="Get them in your Collection, yours to keep" onClick={onOpenCollection} />
-      <IgRow inset={false} icon={<GiftIcon />} label="Send a gift" sub="Open someone's profile and tap the gift button" />
-      <IgHeading>History</IgHeading>
+      <KitSection title="Spend coins" style={{ marginTop: 26 }}>
+        <IgRow inset={false} icon={<CollectionIcon />} label="Frames, nameplates and charms" sub="Get them in your Collection, yours to keep" onClick={onOpenCollection} />
+        <IgRow inset={false} icon={<GiftIcon />} label="Send a gift" sub="Open someone's profile and tap the gift button" />
+      </KitSection>
+      <KitSection title="History" style={{ marginTop: 26 }} />
       {ledger === null ? <div style={{ display: 'flex', justifyContent: 'center', padding: 20 }}><Spinner color={theme.muted} /></div> : !ledger.length ? (
         <div style={{ fontSize: 13.5, color: theme.muted, padding: '4px 4px 10px' }}>Coins you get and spend show up here.</div>
       ) : ledger.map((r) => (
@@ -5920,7 +5953,8 @@ function WalletPage({ uid, me, onClose, onOpenCollection }) {
   );
 }
 
-const GIFT_AMOUNTS = [10, 25, 50, 100, 250];
+const GIFT_AMOUNTS = [10, 50, 100, 500];
+const GIFT_MAX = 1000;
 function giftStartTab(start) {
   const k = start && start.kind;
   if (k === 'bubble' && bubbleKeyOf(start.key)) return 'bubble';
@@ -5928,7 +5962,33 @@ function giftStartTab(start) {
   if (k === 'charm' && CUSTOM_BADGES[start.key]) return 'charm';
   return 'coins';
 }
-function GiftSheet({ uid, me, to, onClose, onSent, start }) {
+function GiftAmountPicker({ value, onChange, max }) {
+  const { theme } = useTheme();
+  const [text, setText] = useState(String(value));
+  useEffect(() => { if (Number(text) !== value) setText(String(value)); }, [value]);
+  const top = Math.max(1, max);
+  const commit = (raw) => {
+    const digits = String(raw).replace(/[^0-9]/g, '').slice(0, 5);
+    setText(digits);
+    const n = Number(digits);
+    if (digits && n >= 1) onChange(Math.min(GIFT_MAX, n));
+  };
+  return (
+    <div style={{ padding: '6px 0 4px' }}>
+      <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '10px 0 2px', cursor: 'text' }}>
+        <CoinIcon size={34} />
+        <input value={text} inputMode="numeric" pattern="[0-9]*" aria-label="Number of coins" onChange={(e) => commit(e.target.value)} onBlur={() => { if (!text || Number(text) < 1) setText(String(value)); }}
+          style={{ width: `${Math.max(2, text.length) * 0.62 + 0.4}em`, minWidth: 0, border: 'none', outline: 'none', background: 'transparent', color: theme.ink, fontFamily: FONT, fontSize: 46, fontWeight: 750, letterSpacing: '-0.02em', textAlign: 'center', padding: 0, fontVariantNumeric: 'tabular-nums' }} />
+      </label>
+      <div style={{ textAlign: 'center', fontSize: 12.5, color: value > max ? theme.danger : theme.muted, marginTop: 2 }}>{value > max ? `You have ${formatCount(Math.max(0, max))} coins` : `Up to ${formatCount(GIFT_MAX)} at a time`}</div>
+      <div style={{ padding: '14px 4px 4px' }}>
+        <KitSlider value={Math.min(value, top)} min={1} max={Math.min(GIFT_MAX, top)} step={1} label="Choose how many coins" onChange={(n) => { onChange(n); setText(String(n)); }} />
+      </div>
+      <SegmentedControl style={{ marginTop: 10 }} value={GIFT_AMOUNTS.includes(value) ? value : null} onChange={(n) => { hapticTap(); onChange(n); setText(String(n)); }} options={GIFT_AMOUNTS.map((n) => [n, formatCount(n)])} />
+    </div>
+  );
+}
+function GiftSheet({ uid, me, to, onClose, onSent, start, onAsk }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
   const w = useWallet(uid);
@@ -5937,7 +5997,7 @@ function GiftSheet({ uid, me, to, onClose, onSent, start }) {
   const [tab, setTab] = useState(firstTab);
   const [bub, setBub] = useState(() => (firstTab === 'bubble' ? bubbleKeyOf(start.key) : null));
   const [charm, setCharm] = useState(() => (firstTab === 'charm' ? start.key : null));
-  const [amount, setAmount] = useState(25);
+  const [amount, setAmount] = useState(() => (start && start.kind === 'coins' && Number(start.amount) > 0 ? Math.min(GIFT_MAX, Math.floor(Number(start.amount))) : 50));
   const [noteText, setNoteText] = useState('');
   const [pick, setPick] = useState(() => (firstTab === 'item' ? start.key : null));
   const [part, setPart] = useState('set');
@@ -5946,46 +6006,47 @@ function GiftSheet({ uid, me, to, onClose, onSent, start }) {
   const [err, setErr] = useState('');
   const gridRef = useRef(null);
   const gw = useWidthOf(gridRef, typeof window === 'undefined' ? 390 : Math.min(window.innerWidth, 480)) - 40;
+  const wish = useWishlist(to.id);
   useEffect(() => {
-    if (tab === 'coins' || theirs) return undefined;
+    if (theirs) return undefined;
     let alive = true;
     supabase.from('user_rewards').select('kind, reward_key, expires_at').eq('user_id', to.id).then(({ data }) => { if (alive) setTheirs(data || []); }, () => { if (alive) setTheirs([]); });
     return () => { alive = false; };
-  }, [tab]);
+  }, []);
+  const forever = (r) => !r.expires_at;
+  const theirBubbles = new Set((theirs || []).filter((r) => r.kind === 'bubble' && forever(r)).map((r) => r.reward_key));
+  const theirCharms = new Set((theirs || []).filter((r) => r.kind === 'charm' && forever(r)).map((r) => r.reward_key));
+  const ownSet = (k) => decorOwned((theirs || []).filter(forever), k);
   useEffect(() => {
     if (!theirs) return;
     if (pick) {
-      const o = decorOwned(theirs, pick);
-      if (o.frame && o.plate) setPick(null);
-      else setPart(o.frame ? 'nameplate' : o.plate ? 'frame' : 'set');
+      const o = ownSet(pick);
+      if (o.full) setPick(null);
+      else setPart(o.any ? (!o.frame ? 'frame' : !o.plate ? 'nameplate' : 'effect') : 'set');
     }
-    const alive = (r) => !r.expires_at || new Date(r.expires_at).getTime() > Date.now();
-    if (bub && theirs.some((r) => r.kind === 'bubble' && r.reward_key === bub && alive(r))) setBub(null);
-    if (charm && theirs.some((r) => r.kind === 'charm' && r.reward_key === charm && alive(r))) setCharm(null);
+    if (bub && theirBubbles.has(bub)) setBub(null);
+    if (charm && theirCharms.has(charm)) setCharm(null);
   }, [theirs]);
   const first = String((to && to.name) || '').split(' ')[0] || 'them';
   const balance = w ? w.coins : 0;
   const set = pick ? DECOR_BY_KEY[pick] : null;
-  const own = set ? decorOwned(theirs, set.key) : { frame: false, plate: false };
+  const own = set ? ownSet(set.key) : { frame: false, plate: false, effect: false, count: 0 };
   const ask = set ? decorAsk(set, part, own) : { missing: [], what: 'set', price: 0 };
-  const theirBubbles = new Set((theirs || []).filter((r) => r.kind === 'bubble' && (!r.expires_at || new Date(r.expires_at).getTime() > Date.now())).map((r) => r.reward_key));
-  const bubOwned = !!bub && theirBubbles.has(bub);
-  const theirCharms = new Set((theirs || []).filter((r) => r.kind === 'charm' && (!r.expires_at || new Date(r.expires_at).getTime() > Date.now())).map((r) => r.reward_key));
-  const charmOwned = !!charm && theirCharms.has(charm);
   const charmPrice = charm ? shopPrice('charm', charm) || 0 : 0;
-  const cost = tab === 'coins' ? amount : tab === 'bubble' ? (bub && !bubOwned ? BUBBLE_PRICE : 0) : tab === 'charm' ? (charm && !charmOwned ? charmPrice : 0) : ask.price;
+  const cost = tab === 'coins' ? amount : tab === 'bubble' ? (bub ? BUBBLE_PRICE : 0) : tab === 'charm' ? (charm ? charmPrice : 0) : ask.price;
   const enough = balance >= cost && cost > 0;
   const cardW = Math.max(100, Math.floor((gw - 8) / 2) - 8);
-  const giftStack = tab === 'item' && DECOR_SETS.some((s) => {
-    const o = decorOwned(theirs, s.key);
-    const lw = decorTextW(o.frame && o.plate ? 'They have it' : String(decorPartPrice(s.key) * (o.frame || o.plate ? 1 : 2)), 700, 11.5);
-    return decorTextW(s.name, 700, 12.5) + 4 + lw > cardW - 14;
-  });
+  const giftSets = DECOR_SETS.filter((s) => !ownSet(s.key).full);
+  const giftBubbles = CHAR_BUBBLE_KEYS.filter((k) => !theirBubbles.has(k));
+  const giftCharms = giftCharmKeys().filter((k) => !theirCharms.has(k));
+  const wished = theirs ? wish.list.filter((x) => (x.kind === 'set' ? !ownSet(x.item_key).full && !DECOR_BY_KEY[x.item_key].drop : x.kind === 'bubble' ? !theirBubbles.has(x.item_key) : !theirCharms.has(x.item_key) && !!shopPrice('charm', x.item_key))) : [];
   useDecorLoaded(tab === 'item' ? DECOR_SPRITE : null);
   const send = async () => {
     if (busy || !enough) return;
+    if (!(await spendGate(tab === 'coins' ? `Send ${amount} coins` : 'Send a gift'))) return;
     setBusy(true); setErr('');
-    const args = tab === 'coins' ? { p_to: to.id, p_amount: amount, p_note: noteText.trim().slice(0, 80) || null } : tab === 'bubble' ? { p_to: to.id, p_kind: 'bubble', p_key: bub, p_note: noteText.trim().slice(0, 80) || null } : tab === 'charm' ? { p_to: to.id, p_kind: 'charm', p_key: charm, p_note: noteText.trim().slice(0, 80) || null } : { p_to: to.id, p_kind: part === 'set' ? 'set' : part, p_key: set.key, p_note: noteText.trim().slice(0, 80) || null };
+    const note = noteText.trim().slice(0, 80) || null;
+    const args = tab === 'coins' ? { p_to: to.id, p_amount: amount, p_note: note } : tab === 'bubble' ? { p_to: to.id, p_kind: 'bubble', p_key: bub, p_note: note } : tab === 'charm' ? { p_to: to.id, p_kind: 'charm', p_key: charm, p_note: note } : { p_to: to.id, p_kind: part === 'set' ? 'set' : part, p_key: set.key, p_note: note };
     const { data, error } = await supabase.rpc(tab === 'coins' ? 'zchat_send_gift' : 'zchat_gift_item', args);
     setBusy(false);
     const row = Array.isArray(data) ? data[0] : data;
@@ -6002,13 +6063,21 @@ function GiftSheet({ uid, me, to, onClose, onSent, start }) {
     setPick(k);
     setErr('');
     hapticTap();
-    const o = decorOwned(theirs, k);
-    setPart(o.frame && !o.plate ? 'nameplate' : o.plate && !o.frame ? 'frame' : 'set');
+    const o = ownSet(k);
+    setPart(o.any ? (!o.frame ? 'frame' : !o.plate ? 'nameplate' : 'effect') : 'set');
   };
+  const pickWish = (x) => {
+    hapticTap();
+    setErr('');
+    if (x.kind === 'set') { setTab('item'); choose(x.item_key); } else if (x.kind === 'bubble') { setTab('bubble'); setBub(x.item_key); } else { setTab('charm'); setCharm(x.item_key); }
+  };
+  const parts = set ? [['set', 'Full set', own.count === 0], ['frame', 'Frame', !own.frame], ['nameplate', 'Nameplate', !own.plate], ['effect', 'Effect', !own.effect]].filter(([, , ok]) => ok) : [];
+  const loading = !theirs;
+  const emptyNote = (t) => <div style={{ textAlign: 'center', fontSize: 14, color: theme.muted, padding: '28px 12px' }}>{t}</div>;
   return (
     <Portal>
       <div onClick={onClose} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 760, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontFamily: FONT }}>
-        <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ transform: drag.sheetStyle.transform, transition: drag.sheetStyle.transition, width: '100%', maxWidth: 480, maxHeight: '88%', background: theme.panelBg, borderRadius: '22px 22px 0 0', display: 'flex', flexDirection: 'column', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))' }}>
+        <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ transform: drag.sheetStyle.transform, transition: drag.sheetStyle.transition, width: '100%', maxWidth: 480, maxHeight: '90%', background: theme.panelBg, borderRadius: '22px 22px 0 0', display: 'flex', flexDirection: 'column', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))' }}>
           <div {...drag.sheetProps} data-sheet-handle="true" style={{ flexShrink: 0, touchAction: 'none' }}>
             <div style={{ display: 'flex', justifyContent: 'center', padding: '8px 0 4px' }}><div style={{ width: 36, height: 4, borderRadius: 2, background: theme.soft2 }} /></div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 20px 12px' }}>
@@ -6019,87 +6088,103 @@ function GiftSheet({ uid, me, to, onClose, onSent, start }) {
               </div>
               <div role="button" aria-label="Close" onPointerDown={(e) => e.stopPropagation()} onClick={onClose} style={{ width: 34, height: 34, borderRadius: 17, background: theme.soft, color: theme.ink, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}><X size={18} /></div>
             </div>
-            <SegmentedControl style={{ margin: '0 20px 12px' }} value={tab} onChange={(k) => { setTab(k); setErr(''); }} options={[['coins', 'Coins'], ['bubble', 'Bubbles'], ['item', 'Sets'], ['charm', 'Charms']]} />
+            <SegmentedControl style={{ margin: '0 20px 12px' }} value={tab} onChange={(k) => { setTab(k); setErr(''); }} options={[['coins', 'Coins'], ['item', 'Sets'], ['bubble', 'Bubbles'], ['charm', 'Charms']]} />
           </div>
           <div ref={gridRef} data-sheet-scroll="true" style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 20px' }}>
-            {tab === 'charm' ? (
-              <div role="radiogroup" aria-label="Pick a charm" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8, padding: '4px 0 6px' }}>
-                {giftCharmKeys().map((k) => {
-                  const has = theirCharms.has(k);
-                  const on = charm === k;
-                  const label = CUSTOM_BADGES[k].label.replace(/ charm$/i, '');
-                  return (
-                    <div key={k} role="radio" aria-checked={on} aria-label={`${label} charm${has ? ', they have it' : ''}`} onClick={() => { if (has) return; hapticTap(); setCharm(k); setErr(''); }} className="zchat-press"
-                      style={{ borderRadius: 18, padding: '14px 12px 11px', cursor: has ? 'default' : 'pointer', background: theme.dark ? 'rgba(255,255,255,0.045)' : '#F5F5F7', boxShadow: on ? `inset 0 0 0 2px ${theme.coral}` : 'none', display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 10, minWidth: 0, opacity: has ? 0.6 : 1 }}>
-                      <div style={{ height: 56, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><CharmPreview charm={k} size={50} /></div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                        <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 600, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
-                        {has
-                          ? <span style={{ fontSize: 12, fontWeight: 700, color: theme.dark ? '#5EE0A0' : '#14935A', flexShrink: 0 }}>They have it</span>
-                          : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 12.5, fontWeight: 700, color: theme.ink, flexShrink: 0 }}><CoinIcon size={13} />{formatCount(shopPrice('charm', k) || 0)}</span>}
+            {tab !== 'coins' && wished.length > 0 && (
+              <div style={{ margin: '2px 0 14px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13.5, fontWeight: 700, color: theme.ink, marginBottom: 8 }}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20.4c-.3 0-.6-.1-.8-.3C6.4 16.1 3 13.1 3 9.3 3 6.6 5.1 4.5 7.7 4.5c1.7 0 3.2.9 4.3 2.3 1.1-1.4 2.6-2.3 4.3-2.3 2.6 0 4.7 2.1 4.7 4.8 0 3.8-3.4 6.8-8.2 10.8-.2.2-.5.3-.8.3z" fill="#FF4D6A" /></svg>
+                  On {first}'s wishlist
+                </div>
+                <div style={{ display: 'flex', gap: 8, overflowX: 'auto', margin: '0 -20px', padding: '0 20px 2px' }}>
+                  {wished.map((x) => {
+                    const on = (x.kind === 'set' && tab === 'item' && pick === x.item_key) || (x.kind === 'bubble' && tab === 'bubble' && bub === x.item_key) || (x.kind === 'charm' && tab === 'charm' && charm === x.item_key);
+                    return (
+                      <div key={`${x.kind}:${x.item_key}`} role="button" aria-label={`${shopItemName(x.kind, x.item_key)}, on their wishlist`} onClick={() => pickWish(x)} className="zchat-press"
+                        style={{ flex: '0 0 88px', borderRadius: 16, padding: '8px 6px 7px', background: theme.dark ? 'rgba(255,255,255,0.05)' : '#F5F5F7', boxShadow: on ? `inset 0 0 0 2px ${theme.coral}` : 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'pointer' }}>
+                        <ShopItemArt kind={x.kind} k={x.item_key} me={to} size={58} />
+                        <div style={{ alignSelf: 'stretch', fontSize: 11.5, fontWeight: 650, color: theme.ink, marginTop: 4, textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{shopItemName(x.kind, x.item_key)}</div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
+            )}
+            {loading && tab !== 'coins' ? <div style={{ display: 'flex', justifyContent: 'center', padding: '32px 0' }}><Spinner size={20} /></div> : tab === 'charm' ? (
+              giftCharms.length ? (
+                <div role="radiogroup" aria-label="Pick a charm" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8, padding: '4px 0 6px' }}>
+                  {giftCharms.map((k) => {
+                    const on = charm === k;
+                    return (
+                      <div key={k} role="radio" aria-checked={on} aria-label={`${shopItemName('charm', k)} charm`} onClick={() => { hapticTap(); setCharm(k); setErr(''); }} className="zchat-press"
+                        style={{ borderRadius: 18, padding: '12px 6px 10px', cursor: 'pointer', background: theme.dark ? 'rgba(255,255,255,0.045)' : '#F5F5F7', boxShadow: on ? `inset 0 0 0 2px ${theme.coral}` : 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                        <div style={{ height: 50, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><CharmPreview charm={k} size={44} /></div>
+                        <span style={{ alignSelf: 'stretch', fontSize: 12.5, fontWeight: 600, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'center' }}>{shopItemName('charm', k)}</span>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 12, fontWeight: 700, color: theme.ink }}><CoinIcon size={12} />{formatCount(shopPrice('charm', k) || 0)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : emptyNote(`${first} already has every charm.`)
             ) : tab === 'bubble' ? (
-              <div role="radiogroup" aria-label="Pick a bubble" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8, padding: '4px 0 6px' }}>
-                {CHAR_BUBBLE_KEYS.map((k) => {
-                  const has = theirBubbles.has(k);
-                  return <BubbleCard key={k} k={k} on={bub === k} status={has ? 'They have it' : String(BUBBLE_PRICE)} statusTone={has ? 'own' : 'coin'} onPick={() => { if (has) return; hapticTap(); setBub(k); setErr(''); }} />;
-                })}
-              </div>
+              giftBubbles.length ? (
+                <div role="radiogroup" aria-label="Pick a bubble" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8, padding: '4px 0 6px' }}>
+                  {giftBubbles.map((k) => <BubbleCard key={k} k={k} on={bub === k} status={String(BUBBLE_PRICE)} statusTone="coin" onPick={() => { hapticTap(); setBub(k); setErr(''); }} />)}
+                </div>
+              ) : emptyNote(`${first} already has every bubble.`)
             ) : tab === 'coins' ? (
-              <div role="radiogroup" aria-label="Amount" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, padding: '4px 0 6px' }}>
-                {GIFT_AMOUNTS.map((n) => {
-                  const on = amount === n;
-                  return (
-                    <div key={n} role="radio" aria-checked={on} aria-label={`${n} coins`} onClick={() => { setAmount(n); hapticTap(); }} className="zchat-press" style={{ display: 'flex', alignItems: 'center', gap: 6, height: 42, padding: '0 16px', borderRadius: 21, background: on ? theme.coral : theme.soft, color: on ? '#FFFFFF' : theme.ink, fontSize: 15, fontWeight: 700, cursor: 'pointer', opacity: n > balance ? 0.45 : 1 }}>
-                      <CoinIcon size={18} />{n}
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
+              <>
+                <GiftAmountPicker value={amount} onChange={(n) => { setAmount(n); setErr(''); }} max={balance} />
+                {onAsk && (
+                  <div role="button" aria-label={`Ask ${first} for coins instead`} onClick={() => { hapticTap(); onAsk(amount); }} className="zchat-press"
+                    style={{ marginTop: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, height: 44, borderRadius: 14, background: theme.soft, color: theme.ink, fontSize: 14.5, fontWeight: 650, cursor: 'pointer' }}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 4v11m0 0-4-4m4 4 4-4" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" /><path d="M5 19h14" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" /></svg>
+                    Ask {first} for {formatCount(amount)} coins instead
+                  </div>
+                )}
+              </>
+            ) : giftSets.length ? (
               <>
                 <div role="radiogroup" aria-label="Pick a set" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8, padding: '4px 0 6px' }}>
-                  {DECOR_SETS.map((s) => {
+                  {giftSets.map((s) => {
                     const on = pick === s.key;
-                    const o = decorOwned(theirs, s.key);
-                    const full = o.frame && o.plate;
+                    const o = ownSet(s.key);
                     return (
-                      <div key={s.key} role="radio" aria-checked={on} aria-label={`${s.name} set${full ? ', they have it' : ''}`} onClick={() => { if (!full) choose(s.key); }} className="zchat-press" style={{ position: 'relative', borderRadius: 16, padding: '6px 2px 9px', display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: full ? 'default' : 'pointer', background: `radial-gradient(120% 85% at 50% 20%, ${s.accent}30 0%, rgba(13,14,20,0) 64%), #12131b`, boxShadow: on ? `0 0 0 2px ${theme.coral}` : 'none', opacity: full ? 0.5 : 1 }}>
+                      <div key={s.key} role="radio" aria-checked={on} aria-label={`${s.name} set`} onClick={() => choose(s.key)} className="zchat-press" style={{ position: 'relative', borderRadius: 16, padding: '6px 2px 9px', display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'pointer', background: `radial-gradient(120% 85% at 50% 20%, ${s.accent}30 0%, rgba(13,14,20,0) 64%), #12131b`, boxShadow: on ? `0 0 0 2px ${theme.coral}` : 'none' }}>
                         <DecorHero frameKey={s.key} plateKey={s.key} width={cardW} photo={to.avatar} name={to.name} lazy compact gapColor="#12131b" />
-                        <div style={{ alignSelf: 'stretch', display: 'flex', flexDirection: giftStack ? 'column' : 'row', alignItems: giftStack ? 'flex-start' : 'center', gap: giftStack ? 1 : 4, padding: '4px 8px 0' }}>
-                          <span style={{ flex: giftStack ? 'none' : 1, minWidth: 0, maxWidth: '100%', fontSize: giftStack ? Math.max(11, Math.min(12.5, (cardW - 14) / Math.max(0.5, decorTextW(s.name, 700, 100) / 100))) : 12.5, fontWeight: 700, color: '#FFFFFF', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.name}</span>
-                          <span style={{ fontSize: 11.5, fontWeight: 700, color: full ? '#34d399' : '#FFD66B', flexShrink: 0 }}>{full ? 'They have it' : decorPartPrice(s.key) * (o.frame || o.plate ? 1 : 2)}</span>
+                        <div style={{ alignSelf: 'stretch', display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px 0' }}>
+                          <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 700, color: '#FFFFFF', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.name}</span>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11.5, fontWeight: 700, color: '#FFD66B', flexShrink: 0 }}><CoinIcon size={11} />{(3 - o.count) * decorPartPrice(s.key)}</span>
                         </div>
                       </div>
                     );
                   })}
                 </div>
-                {set && (
-                  <div style={{ padding: '10px 0 2px' }}>
-                    <div role="radiogroup" aria-label="What to send" style={{ display: 'flex', gap: 6 }}>
-                      {[['set', 'Set', decorPartPrice(set.key) * 2, !own.frame && !own.plate], ['frame', 'Frame', decorPartPrice(set.key), !own.frame], ['nameplate', 'Nameplate', decorPartPrice(set.key), !own.plate]].map(([k, l, p, ok]) => (
-                        <div key={k} role="radio" aria-checked={part === k} aria-disabled={!ok} onClick={() => { if (ok) { setPart(k); hapticTap(); } }} style={{ flex: 1, minWidth: 0, borderRadius: 12, padding: '8px 4px', textAlign: 'center', cursor: ok ? 'pointer' : 'default', background: part === k ? theme.coral : theme.soft, color: part === k ? '#FFFFFF' : theme.ink, opacity: ok ? 1 : 0.4 }}>
-                          <div style={{ fontSize: 13.5, fontWeight: 700 }}>{l}</div>
-                          <div style={{ fontSize: 11.5, fontWeight: 600, opacity: 0.85, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3, marginTop: 1 }}>{ok ? <><CoinIcon size={11} />{p}</> : 'They have it'}</div>
+                {set && parts.length > 0 && (
+                  <div role="radiogroup" aria-label="What to send" style={{ display: 'grid', gridTemplateColumns: `repeat(${parts.length}, minmax(0, 1fr))`, gap: 6, padding: '10px 0 2px' }}>
+                    {parts.map(([k, l]) => {
+                      const on = part === k;
+                      const p = k === 'set' ? decorPartPrice(set.key) * 3 : decorPartPrice(set.key);
+                      return (
+                        <div key={k} role="radio" aria-checked={on} aria-label={`${l}, ${p} coins`} onClick={() => { setPart(k); hapticTap(); }} className="zchat-press"
+                          style={{ minWidth: 0, borderRadius: 14, padding: '9px 4px 8px', cursor: 'pointer', background: on ? (theme.dark ? 'rgba(124,92,252,0.22)' : '#EEE9FF') : theme.soft, boxShadow: on ? `inset 0 0 0 1.5px ${theme.coral}` : 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                          {k === 'set' ? <span style={{ display: 'inline-flex', gap: 2 }}><PieceGlyph k="frame" size={14} color={on ? theme.coral : theme.ink2} /><PieceGlyph k="nameplate" size={14} color={on ? theme.coral : theme.ink2} /><PieceGlyph k="effect" size={14} color={on ? theme.coral : theme.ink2} /></span> : <PieceGlyph k={k} size={18} color={on ? theme.coral : theme.ink2} />}
+                          <div style={{ fontSize: 12.5, fontWeight: 700, color: theme.ink, whiteSpace: 'nowrap' }}>{l}</div>
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11.5, fontWeight: 600, color: theme.muted }}><CoinIcon size={11} />{p}</div>
                         </div>
-                      ))}
-                    </div>
+                      );
+                    })}
                   </div>
                 )}
               </>
-            )}
-            <input value={noteText} onChange={(e) => setNoteText(e.target.value.slice(0, 80))} placeholder="Add a note" aria-label="Gift note" style={{ ...inputStyle(theme), fontSize: 15.5, marginTop: 10 }} />
-            {tab === 'item' && <div style={{ fontSize: 12.5, color: theme.muted, padding: '8px 2px 0' }}>It is theirs to keep and shows on their profile.</div>}
-            {tab === 'bubble' && <div style={{ fontSize: 12.5, color: theme.muted, padding: '8px 2px 0' }}>It is theirs to keep, and everyone sees it on their messages.</div>}
-            {tab === 'charm' && <div style={{ fontSize: 12.5, color: theme.muted, padding: '8px 2px 0' }}>It is theirs to keep and shows next to their name.</div>}
+            ) : emptyNote(`${first} already has every set.`)}
+            <input value={noteText} onChange={(e) => setNoteText(e.target.value.slice(0, 80))} placeholder="Add a note" aria-label="Gift note" style={{ ...inputStyle(theme), fontSize: 15.5, marginTop: 12 }} />
+            <div style={{ fontSize: 12.5, color: theme.muted, padding: '8px 2px 0' }}>{tab === 'coins' ? 'Coins go straight to their wallet.' : tab === 'item' ? 'It is theirs to keep and shows on their profile. The effect plays when they wear the full set.' : tab === 'bubble' ? 'It is theirs to keep, and everyone sees it on their messages.' : 'It is theirs to keep and shows next to their name.'} It arrives wrapped, ready to open.</div>
             {err && <div role="alert" style={{ fontSize: 13.5, color: theme.danger, fontWeight: 600, padding: '10px 2px 0' }}>{err}</div>}
           </div>
           <div style={{ padding: '12px 20px 0', flexShrink: 0 }}>
-            <BigButton label={busy ? 'Sending' : !cost ? (tab === 'item' ? 'Pick a set' : tab === 'bubble' ? 'Pick a bubble' : tab === 'charm' ? 'Pick a charm' : 'Pick a gift') : enough ? `Send for ${formatCount(cost)} coins` : `You need ${formatCount(cost - balance)} more coins`} disabled={busy || !enough} onClick={send} />
+            <BigButton label={busy ? 'Sending' : !cost ? (tab === 'item' ? 'Pick a set' : tab === 'bubble' ? 'Pick a bubble' : tab === 'charm' ? 'Pick a charm' : 'Pick an amount') : enough ? `Send for ${formatCount(cost)} coins` : `You need ${formatCount(cost - balance)} more coins`} disabled={busy || !enough} onClick={send} />
           </div>
         </div>
       </div>
@@ -8626,8 +8711,17 @@ function ChatLockUnlock({ onCancel, onUnlock, correctHash }) {
     setPin(next);
     if (next.length === 4) {
       const h = await hashPin(next);
-      if (h === correctHash) onUnlock();
-      else { setErr('Incorrect PIN'); setTimeout(() => { setPin(''); setErr(''); }, 600); }
+      let ok = h === correctHash;
+      let offline = false;
+      if (!ok && correctHash && !/^[0-9a-f]{64}$/i.test(correctHash)) {
+        try {
+          const { data, error } = await supabase.rpc('zchat_check_chat_pin', { p_hash: h });
+          if (error) offline = true;
+          ok = !error && data === true;
+        } catch { offline = true; }
+      }
+      if (ok) onUnlock();
+      else { setErr(offline ? 'No connection. Try again' : 'Incorrect PIN'); setTimeout(() => { setPin(''); setErr(''); }, offline ? 1400 : 600); }
     }
   };
 
@@ -10814,6 +10908,18 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
   useBackClose(!inline, onClose);
   useEffect(() => { if (!isSelf && profile && profile.id && !profile.is_bot && !profile.is_deleted && !profile.hidden_account && !isBlocked) recordProfileVisit(profile.id); }, [profile && profile.id]);
   const edgeBack = useEdgeSwipeBack(!inline);
+  const fxCovered = useStackCovered(true);
+  const fxScrollRef = useRef(null);
+  const [fxViewH, setFxViewH] = useState(0);
+  useLayoutEffect(() => {
+    const el = fxScrollRef.current;
+    if (!el) return undefined;
+    const fit = () => { const h = el.clientHeight; if (h > 0) setFxViewH((v) => (Math.abs(v - h) > 1 ? h : v)); };
+    fit();
+    let ro = null;
+    try { ro = new ResizeObserver(fit); ro.observe(el); } catch { window.addEventListener('resize', fit); }
+    return () => { if (ro) ro.disconnect(); else window.removeEventListener('resize', fit); };
+  }, []);
   const [coverUrl, setCoverUrl] = useState(profile.cover_url || null);
   const [coverBusy, setCoverBusy] = useState(false);
   useEffect(() => { setCoverUrl(profile.cover_url || null); }, [profile.cover_url]);
@@ -10874,16 +10980,18 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
       });
     };
     load(0);
-    return () => { alive = false; clearTimeout(retryTimer); };
+    const again = () => { if (isSelf) load(0); };
+    window.addEventListener('zchat-rewards', again);
+    return () => { alive = false; clearTimeout(retryTimer); window.removeEventListener('zchat-rewards', again); };
   }, [profile.id]);
   useEffect(() => {
     let cancelled = false;
-    supabase.from('posts').select('*', { count: 'exact', head: true }).eq('user_id', profile.id).then(({ count, error }) => {
-      if (cancelled) return;
-      const value = error ? 0 : (count || 0);
-      setPostCount(value);
-      saveProfileStats(profile.id, { posts: value });
-    });
+    const applyCount = (value) => { if (cancelled) return; setPostCount(value); saveProfileStats(profile.id, { posts: value }); };
+    const headCount = () => supabase.from('posts').select('*', { count: 'exact', head: true }).eq('user_id', profile.id).then(({ count, error }) => applyCount(error ? 0 : (count || 0)));
+    supabase.rpc('zchat_post_count', { p_user: profile.id }).then(({ data, error }) => {
+      if (!error && typeof data === 'number') applyCount(data);
+      else headCount();
+    }, headCount);
     return () => { cancelled = true; };
   }, [profile.id]);
   const [followBusy, setFollowBusy] = useState(false);
@@ -11123,7 +11231,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
   const decorFrame = isDecorKey(profile.avatar_frame) ? profile.avatar_frame : null;
   const decorPlate = isDecorKey(profile.nameplate) ? profile.nameplate : null;
   const plateOn = !!(decorFrame || decorPlate);
-  const fxKey = decorFrame && decorFrame === decorPlate && DECOR_BY_KEY[decorFrame].fx ? decorFrame : null;
+  const fxKey = decorFxOn(ownedRewards, decorFrame, decorPlate);
   const plateMeta = [profile.pronouns, ...infoBits].filter(Boolean).join(', ');
   const statCells = [
     !profile.is_bot && { v: postCount, l: 'posts', on: null },
@@ -11143,8 +11251,8 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
   return (
     <div {...(inline ? {} : edgeBack)} onClick={(e) => { if (!inline && e.target === e.currentTarget && !editing) onClose(); }} style={inline ? { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' } : { position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(5,8,16,0.6)', display: 'flex', justifyContent: 'center' }} className={inline ? undefined : 'zchat-panel-open'}>
     <div style={{ width: '100%', maxWidth: inline ? 'none' : 560, height: '100%', background: theme.bgGradient, display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden' }}>
-      {!editing && fxKey && <ProfileEffectLayer effectKey={fxKey} z={40} />}
-      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain', touchAction: 'pan-y', ...(inline ? { paddingLeft: 'max(0px, calc((100% - 640px) / 2))', paddingRight: 'max(0px, calc((100% - 640px) / 2))' } : {}) }}>
+      <div ref={fxScrollRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain', touchAction: 'pan-y', position: 'relative', ...(inline ? { paddingLeft: 'max(0px, calc((100% - 640px) / 2))', paddingRight: 'max(0px, calc((100% - 640px) / 2))' } : {}) }}>
+        {!editing && fxKey && fxViewH > 0 && <ProfileEffectLayer effectKey={fxKey} z={40} height={fxViewH} covered={fxCovered} repeat={10} watch />}
         {editing ? (
         <div style={{ position: 'relative', height: 'min(42vh, 320px)', minHeight: 240, background: hasPhoto ? '#000' : colorForName(profile.name), overflow: 'hidden' }}>
           {hasPhoto ? (
@@ -11419,7 +11527,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
                       <ProfileIconTabs value={profileTab} onChange={setProfileTab} tabs={[['posts', 'Posts', ProfileGridIcon], ['clips', 'Clips', ProfileClipsIcon], ['collection', 'Collection', ProfileGemIcon], ...(readSocialLinks(profile.social_links).length || profile.whatsapp ? [['links', 'Links', ProfileLinkTabIcon]] : [])]} />
                       {(profileTab === 'posts' || profileTab === 'highlights') && <ProfilePosts profile={profile} isSelf={isSelf} userId={userId} meProfile={meProfile} bare />}
                       {profileTab === 'clips' && <ProfilePosts profile={profile} isSelf={isSelf} userId={userId} meProfile={meProfile} bare mode="clips" />}
-                      {profileTab === 'collection' && <div style={{ padding: '6px 14px' }}><ProfileCollectionShowcase profile={profile} rewards={ownedRewards} isSelf={isSelf} onOpenSet={onOpenCollection ? (k) => onOpenCollection(k) : null} onOpenCollection={onOpenCollection} /></div>}
+                      {profileTab === 'collection' && <div style={{ padding: '6px 14px' }}><ProfileCollectionShowcase profile={profile} rewards={ownedRewards} isSelf={isSelf} onOpenSet={onOpenCollection ? (k) => onOpenCollection(k) : null} onOpenCollection={onOpenCollection} onGift={onGift && !isSelf && !profile.is_bot ? () => onGift(profile) : null} /></div>}
                       {profileTab === 'links' && <div style={{ padding: '6px 14px' }}><ProfileSocialRow links={profile.social_links} whatsapp={profile.whatsapp} /></div>}
                     </>
                   )}
@@ -12563,6 +12671,7 @@ function MessageBubble({ onCard, translation, senderTitle, onOpenLive, onOpenOnc
                   {extraCard.k === 'chan' && <ChannelCard d={extraCard.d} onOpen={onCard ? () => onCard('chan', extraCard.d, m) : null} />}
                   {extraCard.k === 'file' && <FileCard d={extraCard.d} url={m.media_url} />}
                   {extraCard.k === 'draw' && <DrawCard d={extraCard.d} onOpen={onCard ? () => onCard('draw', extraCard.d, m) : null} />}
+                  {extraCard.k === 'ask' && <AskCoinsCard d={extraCard.d} isMe={isMe} name={peerName ? String(peerName).split(' ')[0] : ''} onPay={onCard && !isMe ? (n) => onCard('ask', { n }, m) : null} />}
                   {extraCard.k === 'snd' && <SoundCard d={extraCard.d} id={m.id} isMe={isMe} fresh={!!m.created_at && Date.now() - new Date(m.created_at).getTime() < 15000} />}
                   {extraCard.k === 'bomb' && <TextBombCard d={extraCard.d} id={m.id} isMe={isMe} bg={isMe ? (chatTheme ? themeGradCss(chatTheme) : ((theme.dark ? bubbleColorSpec.meDark : bubbleColorSpec.me) || theme.bubbleMe)) : (themedThem || bubbleColorSpec.them || theme.bubbleThem)} ink={isMe && chatTheme ? chatTheme.ink : theme.ink} fresh={!!m.created_at && Date.now() - new Date(m.created_at).getTime() < 15000} />}
                 </div>
@@ -13322,7 +13431,7 @@ function ReplyQuote({ m, label, onClick, bar, dim, compact }) {
     </div>
   );
 }
-const SPECIAL_PREFIXES = ['zpoll:', 'zevent:', 'zdice:', 'zlist:', 'zbill:', 'zcount:', 'zlive:', 'zfocus:', 'zwatch:', 'zalbum:', 'zpack:', 'zchan:', 'zfile:', 'zsnd:', 'zdraw:', 'zbomb:'];
+const SPECIAL_PREFIXES = ['zpoll:', 'zevent:', 'zdice:', 'zlist:', 'zbill:', 'zcount:', 'zlive:', 'zfocus:', 'zwatch:', 'zalbum:', 'zpack:', 'zchan:', 'zfile:', 'zsnd:', 'zdraw:', 'zbomb:', 'zask:'];
 function isSpecialContent(content) {
   return typeof content === 'string' && SPECIAL_PREFIXES.some((p) => content.indexOf(p) === 0);
 }
@@ -15766,7 +15875,7 @@ function ChatMediaPanel({ title, myId, otherId, groupId, hiddenIds, labelFor, on
       a.download = `zchat-${m.type}-${m.id}.${m.type === 'video' ? 'mp4' : 'jpg'}`;
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-    } catch { const u = signedMediaNow(m.media_url); if (u) window.open(u, '_blank'); }
+    } catch { const u = safeLinkUrl(signedMediaNow(m.media_url)); if (u) window.open(u, '_blank', 'noopener'); }
   };
   const downloadPicked = async (items) => {
     for (const m of items) { if (picked.has(m.id)) await downloadOne(m); }
@@ -17856,7 +17965,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-const APP_VERSION = '21.5V';
+const APP_VERSION = '22.0V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -17988,7 +18097,7 @@ function BlockedAccountsPanel({ myId, blockedIds, onClose, onUnblock, onOpenProf
                 <div style={{ fontSize: 12, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>@{r.profile.username}</div>
               </div>
             </div>
-            <button onClick={() => onUnblock(r.profile)} style={{ padding: '8px 18px', borderRadius: 12, border: `1.5px solid ${theme.border}`, background: theme.rowBg, color: theme.ink, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, flexShrink: 0 }}>Unblock</button>
+            <button onClick={() => onUnblock(r.profile)} aria-label={`Unblock ${r.profile.name}`} className="zchat-press" style={{ height: 34, padding: '0 16px', borderRadius: 10, border: 'none', background: theme.dark ? '#2A2A2E' : '#EDEDF0', color: theme.ink, fontWeight: 700, fontSize: 13.5, cursor: 'pointer', fontFamily: FONT, flexShrink: 0 }}>Unblock</button>
           </div>
         ))}
       </div>
@@ -20168,20 +20277,20 @@ const DECOR_SETS = [
   ['spooky_pumpkin', 'Spooky Pumpkin', 3, 630, 648, 416, '#FF8A2B', '#31224B', 'A friendly ghost, glowing pumpkins and bats out for the night.'],
   ['race_track', 'Race Track', 9, 634, 670, 418, '#FF5A6E', '#1A1C23', 'A race car laps the track past the flag, the lights and the trophy.'],
   ['cricket_match', 'Cricket Match', 10, 636, 652, 472, '#6CC35F', '#123B24', 'The ball, the bat and the stumps, with a bird watching the game.'],
-].map(([key, name, ft, fb, fbmax, pb, accent, tint, about, fresh], i) => ({ key, name, ft, fb, fbmax, pb, accent, tint, about, i, file: key.replace(/_/g, '-'), fresh: !!fresh, fx: DECOR_FX_KEYS.has(key) }));
+].map(([key, name, ft, fb, fbmax, pb, accent, tint, about, fresh], i) => ({ key, name, ft, fb, fbmax, pb, accent, tint, about, i, file: key.replace(/_/g, '-'), fresh: !!fresh, fx: true, rarity: DECOR_FX_KEYS.has(key) ? 'legendary' : 'epic' }));
 const DECOR_DROPS = [
   ['crystal_phoenix', 'Crystal Phoenix', 10, 633, 648, 469, '#3460D0', '#091A54', 'A crystal phoenix spreads its wings over a starry ring with blossoms and glass butterflies.'],
-].map(([key, name, ft, fb, fbmax, pb, accent, tint, about], j) => ({ key, name, ft, fb, fbmax, pb, accent, tint, about, i: DECOR_SETS.length + j, file: key.replace(/_/g, '-'), drop: true, fx: DECOR_FX_KEYS.has(key) }));
+].map(([key, name, ft, fb, fbmax, pb, accent, tint, about], j) => ({ key, name, ft, fb, fbmax, pb, accent, tint, about, i: DECOR_SETS.length + j, file: key.replace(/_/g, '-'), drop: true, fx: true, rarity: 'mythic' }));
 const DECOR_ALL = [...DECOR_SETS, ...DECOR_DROPS];
 const DECOR_BY_KEY = Object.fromEntries(DECOR_ALL.map((s) => [s.key, s]));
 const DECOR_PRICE = 250;
-const DECOR_FX_PRICE = 375;
-function decorPartPrice(key) {
-  const s = DECOR_BY_KEY[key];
-  return s && s.fx ? DECOR_FX_PRICE : DECOR_PRICE;
+const DECOR_PIECES = ['frame', 'nameplate', 'effect'];
+function decorPartPrice() {
+  return DECOR_PRICE;
 }
-const DECOR_FRAME_CATALOG = Object.fromEntries(DECOR_ALL.map((s) => [s.key, { label: `${s.name} frame`, rarity: s.drop || s.fx ? 'legendary' : 'epic' }]));
-const DECOR_PLATE_CATALOG = Object.fromEntries(DECOR_ALL.map((s) => [s.key, { label: `${s.name} nameplate`, rarity: s.drop || s.fx ? 'legendary' : 'epic' }]));
+const DECOR_FRAME_CATALOG = Object.fromEntries(DECOR_ALL.map((s) => [s.key, { label: `${s.name} frame`, rarity: s.rarity }]));
+const DECOR_PLATE_CATALOG = Object.fromEntries(DECOR_ALL.map((s) => [s.key, { label: `${s.name} nameplate`, rarity: s.rarity }]));
+const DECOR_EFFECT_CATALOG = Object.fromEntries(DECOR_ALL.map((s) => [s.key, { label: `${s.name} effect`, rarity: s.rarity }]));
 const DECOR_SPRITE = '/set-thumbs-42.webp';
 const DECOR_SPRITE_W = 2100;
 const DECOR_SPRITE_H = 3312;
@@ -20451,7 +20560,14 @@ function decorOwned(rewards, key) {
   const has = (kind) => (rewards || []).find((r) => r.kind === kind && r.reward_key === key && rewardActive(r)) || null;
   const f = has('frame');
   const p = has('nameplate');
-  return { frame: !!f, plate: !!p, frameLeft: f ? daysLeft(f) : null, plateLeft: p ? daysLeft(p) : null };
+  const s = DECOR_BY_KEY[key];
+  const e = has('effect') || (f && p && !f.expires_at && !p.expires_at && s && s.rarity !== 'epic' && !(rewards || []).some((r) => r.kind === 'effect') ? f : null);
+  const count = (f ? 1 : 0) + (p ? 1 : 0) + (e ? 1 : 0);
+  return { frame: !!f, plate: !!p, effect: !!e, any: count > 0, full: count === 3, count, frameLeft: f ? daysLeft(f) : null, plateLeft: p ? daysLeft(p) : null };
+}
+function decorFxOn(rewards, frameKey, plateKey) {
+  if (!frameKey || frameKey !== plateKey || !DECOR_BY_KEY[frameKey]) return null;
+  return decorOwned(rewards, frameKey).effect ? frameKey : null;
 }
 
 function DecorStill({ setKey, part, width, style }) {
@@ -21108,56 +21224,85 @@ function DecorFrameBadge({ setKey, size, photo, name, lazy = false }) {
   );
 }
 
-function ProfileCollectionShowcase({ profile, rewards, isSelf, onOpenSet, onOpenCollection }) {
+function ProfileCollectionShowcase({ profile, rewards, isSelf, onOpenSet, onOpenCollection, onGift }) {
   const { theme } = useTheme();
+  const wish = useWishlist(isSelf ? null : profile.id);
   const act = (rewards || []).filter(rewardActive);
-  const sets = DECOR_SETS.map((s) => ({ s, f: act.some((r) => r.kind === 'frame' && r.reward_key === s.key), p: act.some((r) => r.kind === 'nameplate' && r.reward_key === s.key) })).filter((x) => x.f || x.p);
+  const sets = DECOR_ALL.map((s) => ({ s, o: decorOwned(rewards, s.key) })).filter((x) => x.o.any);
   const charms = act.filter((r) => r.kind === 'charm' && CUSTOM_BADGES[r.reward_key]);
-  useDecorLoaded(sets.length ? DECOR_SPRITE : null);
-  const parts = sets.reduce((n, x) => n + (x.f ? 1 : 0) + (x.p ? 1 : 0), 0);
-  if (!sets.length && !charms.length) {
+  const bubbles = act.filter((r) => r.kind === 'bubble' && CHAR_BUBBLES[r.reward_key]);
+  const stats = collectionStats(rewards);
+  const wanted = isSelf ? [] : wish.list.filter((w) => (w.kind === 'set' ? !decorOwned(rewards, w.item_key).full : w.kind === 'bubble' ? !bubbles.some((r) => r.reward_key === w.item_key) : !charms.some((r) => r.reward_key === w.item_key))).slice(0, 10);
+  useDecorLoaded(sets.length || wanted.length ? DECOR_SPRITE : null);
+  const first = String(profile.name || '').split(' ')[0] || 'They';
+  const card = { flexShrink: 0, borderRadius: 16, background: '#171826', cursor: 'pointer' };
+  const wishRow = wanted.length > 0 && (
+    <div style={{ padding: '2px 14px 14px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, color: '#FFFFFF', marginBottom: 8 }}>
+        <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20.4c-.3 0-.6-.1-.8-.3C6.4 16.1 3 13.1 3 9.3 3 6.6 5.1 4.5 7.7 4.5c1.7 0 3.2.9 4.3 2.3 1.1-1.4 2.6-2.3 4.3-2.3 2.6 0 4.7 2.1 4.7 4.8 0 3.8-3.4 6.8-8.2 10.8-.2.2-.5.3-.8.3z" fill="#FF4D6A" /></svg>
+        {first}'s wishlist
+      </div>
+      <div style={{ display: 'flex', gap: 8, overflowX: 'auto', margin: '0 -14px', padding: '0 14px' }}>
+        {wanted.map((w) => (
+          <div key={`${w.kind}:${w.item_key}`} role="button" aria-label={`${shopItemName(w.kind, w.item_key)}, send it as a gift`} onClick={() => onGift && onGift()} className="zchat-press" style={{ ...card, width: 92, padding: '8px 6px 8px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <ShopItemArt kind={w.kind} k={w.item_key} me={profile} size={62} />
+            <div style={{ alignSelf: 'stretch', fontSize: 11.5, fontWeight: 650, color: '#FFFFFF', marginTop: 4, textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{shopItemName(w.kind, w.item_key)}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+  if (!sets.length && !charms.length && !bubbles.length) {
     return (
-      <div style={{ marginTop: 18, padding: '22px 16px', borderRadius: 20, background: theme.soft, textAlign: 'center' }}>
-        <div style={{ fontSize: 15, fontWeight: 700, color: theme.ink }}>{isSelf ? 'Your Collection is empty' : 'Nothing here yet'}</div>
-        <div style={{ fontSize: 13, color: theme.muted, marginTop: 4, lineHeight: 1.5 }}>{isSelf ? 'Get an animated frame and nameplate for your profile.' : `${profile.name} has no frames, nameplates or charms yet.`}</div>
-        {isSelf && onOpenCollection && <div role="button" onClick={() => onOpenCollection()} className="zchat-press" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 12, height: 38, padding: '0 16px', borderRadius: 19, background: theme.coral, color: '#FFFFFF', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}><CollectionIcon size={16} />See the sets</div>}
+      <div style={{ marginTop: 18 }}>
+        <div style={{ padding: '22px 16px', borderRadius: 20, background: theme.soft, textAlign: 'center' }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: theme.ink }}>{isSelf ? 'Your Collection is empty' : 'Nothing here yet'}</div>
+          <div style={{ fontSize: 13, color: theme.muted, marginTop: 4, lineHeight: 1.5 }}>{isSelf ? 'Get an animated set with its own profile effect.' : `${profile.name} has no sets, bubbles or charms yet.`}</div>
+          {isSelf && onOpenCollection && <div role="button" onClick={() => onOpenCollection()} className="zchat-press" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 12, height: 38, padding: '0 16px', borderRadius: 19, background: theme.coral, color: '#FFFFFF', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>Open the shop</div>}
+        </div>
+        {wishRow && <div style={{ marginTop: 12, borderRadius: 20, background: '#101119', paddingTop: 12 }}>{wishRow}</div>}
       </div>
     );
   }
-  const summary = [sets.length ? `${sets.length} ${sets.length === 1 ? 'set' : 'sets'}` : null, charms.length ? `${charms.length} ${charms.length === 1 ? 'charm' : 'charms'}` : null].filter(Boolean).join(', ');
   return (
     <div style={{ marginTop: 18, borderRadius: 22, overflow: 'hidden', background: '#101119', border: `1px solid ${theme.dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'}`, textAlign: 'left' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px 10px' }}>
         <CollectionIcon size={22} color="#B79CFF" style={{ flexShrink: 0 }} />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 14.5, fontWeight: 900, color: '#FFFFFF' }}>Collection</div>
-          <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.55)', fontWeight: 600 }}>{parts + charms.length} unlocked, {summary}</div>
+          <div style={{ fontSize: 14.5, fontWeight: 800, color: '#FFFFFF' }}>Collection</div>
+          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.58)', fontWeight: 500 }}>{stats.pct}% collected, {formatCount(stats.owned)} items</div>
         </div>
         {isSelf && onOpenCollection && (
-          <div role="button" onClick={() => onOpenCollection()} style={{ fontSize: 12.5, fontWeight: 800, color: '#fbbf24', cursor: 'pointer', padding: '6px 10px', borderRadius: 10, background: 'rgba(245,158,11,0.12)' }}>Manage</div>
+          <div role="button" onClick={() => onOpenCollection()} className="zchat-press" style={{ display: 'flex', alignItems: 'center', gap: 2, fontSize: 13.5, fontWeight: 650, color: '#B9A6FF', cursor: 'pointer', padding: '6px 4px' }}>Open<ChevronRight size={16} /></div>
         )}
       </div>
-      <div style={{ display: 'flex', gap: 10, overflowX: 'auto', padding: '0 14px 14px', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
-        {sets.map(({ s, f, p }) => (
-          <div key={s.key} role="button" aria-label={`${s.name} ${f && p ? 'set' : f ? 'frame' : 'nameplate'}`} onClick={() => onOpenSet && onOpenSet(s.key)} className="zchat-press" style={{ flexShrink: 0, width: 150, borderRadius: 16, padding: '6px 4px 9px', cursor: onOpenSet ? 'pointer' : 'default', background: `radial-gradient(120% 85% at 50% 20%, ${s.accent}33 0%, rgba(13,14,20,0) 64%), #171826`, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <DecorHero frameKey={f ? s.key : null} plateKey={p ? s.key : null} width={140} photo={profile.avatar} name={profile.name} lazy compact gapColor="#171826" />
-            <div style={{ fontSize: 12, fontWeight: 800, color: '#FFFFFF', marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%', padding: '0 6px' }}>{s.name}</div>
-            <div style={{ fontSize: 10.5, fontWeight: 800, color: s.accent, marginTop: 1 }}>{f && p ? 'Set' : f ? 'Frame' : 'Nameplate'}</div>
+      <div style={{ display: 'flex', gap: 10, overflowX: 'auto', padding: '0 14px 14px', WebkitOverflowScrolling: 'touch' }}>
+        {sets.map(({ s, o }) => (
+          <div key={s.key} role="button" aria-label={`${s.name}, ${o.count} of 3 pieces`} onClick={() => onOpenSet && onOpenSet(s.key)} className="zchat-press" style={{ ...card, width: 150, padding: '6px 4px 10px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <DecorHero frameKey={o.frame ? s.key : null} plateKey={o.plate ? s.key : null} width={140} photo={profile.avatar} name={profile.name} lazy compact gapColor="#171826" />
+            <div style={{ fontSize: 12.5, fontWeight: 700, color: '#FFFFFF', marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%', padding: '0 6px' }}>{s.name}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}><RarityTag rarity={s.rarity} size={11} /><PieceDots own={o} size={11} /></div>
+          </div>
+        ))}
+        {bubbles.map((r) => (
+          <div key={`b-${r.reward_key}`} style={{ ...card, cursor: 'default', width: 104, padding: '10px 6px 10px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <div style={{ height: 70, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{bubbleThumb(r.reward_key, 60)}</div>
+            <div style={{ alignSelf: 'stretch', fontSize: 11.5, fontWeight: 700, color: '#FFFFFF', marginTop: 2, textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{CHAR_BUBBLES[r.reward_key].label}</div>
+            <div style={{ marginTop: 3 }}><RarityTag rarity="rare" size={10.5} /></div>
           </div>
         ))}
         {charms.map((r) => {
           const spec = CUSTOM_BADGES[r.reward_key];
-          const rr = RARITY_STYLE[spec.rarity] || RARITY_STYLE.epic;
           return (
-            <div key={`c-${r.reward_key}`} style={{ flexShrink: 0, width: 104, borderRadius: 16, padding: '8px 6px 10px', background: rr.bg, border: `1px solid ${rr.color}55`, textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
-              <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 3, background: rr.color }} />
-              <div style={{ height: 74, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><CharmPreview charm={r.reward_key} size={54} /></div>
-              <div style={{ fontSize: 11, fontWeight: 800, color: 'white', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{spec.label.replace(/ charm$/i, '')}</div>
-              <div style={{ fontSize: 10.5, fontWeight: 800, color: rr.color, marginTop: 2 }}>Charm</div>
+            <div key={`c-${r.reward_key}`} style={{ ...card, cursor: 'default', width: 104, padding: '10px 6px 10px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <div style={{ height: 70, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><CharmPreview charm={r.reward_key} size={52} /></div>
+              <div style={{ alignSelf: 'stretch', fontSize: 11.5, fontWeight: 700, color: 'white', marginTop: 2, textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{spec.label.replace(/ charm$/i, '')}</div>
+              <div style={{ marginTop: 3 }}><RarityTag rarity={spec.rarity} size={10.5} /></div>
             </div>
           );
         })}
       </div>
+      {wishRow}
     </div>
   );
 }
@@ -21169,8 +21314,8 @@ function RewardCelebration({ kind, rewardKey, me, onClaim, count = 1, onClaimAll
   const set = isCharm ? null : DECOR_BY_KEY[rewardKey];
   if (!charm && !set) return null;
   const glow = set ? set.accent : '#f472b6';
-  const frameKey = set ? (isSet || kind === 'frame' ? set.key : (isDecorKey(me.avatar_frame) ? me.avatar_frame : null)) : null;
-  const plateKey = set ? (isSet || kind === 'nameplate' ? set.key : (isDecorKey(me.nameplate) ? me.nameplate : null)) : null;
+  const frameKey = set ? (isSet || kind === 'frame' || kind === 'effect' ? set.key : (isDecorKey(me.avatar_frame) ? me.avatar_frame : null)) : null;
+  const plateKey = set ? (isSet || kind === 'nameplate' || kind === 'effect' ? set.key : (isDecorKey(me.nameplate) ? me.nameplate : null)) : null;
   const W = Math.round(Math.min(360, (typeof window === 'undefined' ? 390 : window.innerWidth) - 48));
   const more = count - (isSet ? 2 : 1);
   const pieces = Array.from({ length: 30 }, (_, i) => i);
@@ -21180,7 +21325,7 @@ function RewardCelebration({ kind, rewardKey, me, onClaim, count = 1, onClaimAll
       {pieces.map((i) => (
         <span key={i} style={{ position: 'absolute', top: -20, left: `${(i * 97) % 100}%`, width: 7, height: 13, borderRadius: 2, background: [glow, '#FFFFFF', '#7C5CFC', '#fbbf24'][i % 4], opacity: 0.85, animation: `zchat-confetti ${2.8 + (i % 5) * 0.4}s linear ${(i % 9) * 0.25}s infinite` }} />
       ))}
-      <div style={{ fontSize: 14, fontWeight: 700, color: glow }}>{isCharm ? 'New name charm' : isSet ? 'New set' : kind === 'frame' ? 'New frame' : 'New nameplate'}</div>
+      <div style={{ fontSize: 14, fontWeight: 700, color: glow }}>{isCharm ? 'New name charm' : isSet ? 'New set' : kind === 'frame' ? 'New frame' : kind === 'effect' ? 'New profile effect' : 'New nameplate'}</div>
       <div style={{ fontSize: 28, fontWeight: 900, marginTop: 6 }}>{isCharm ? charm.label : set.name}</div>
       <div style={{ fontSize: 14.5, opacity: 0.7, marginTop: 6, maxWidth: 300, lineHeight: 1.5 }}>Added to your Collection. Yours to keep.</div>
       {set ? (
@@ -21490,7 +21635,7 @@ function UpdateAvailableBanner({ onUpdate, onLater }) {
 }
 
 const RARITY_STYLE = {
-  mythic: { label: 'Mythic', color: '#ff4d6d', bg: 'linear-gradient(160deg, #3b0a17 0%, #16060b 100%)', glow: 'rgba(255,77,109,0.55)' },
+  mythic: { label: 'Mythical', color: '#ff4d6d', bg: 'linear-gradient(160deg, #3b0a17 0%, #16060b 100%)', glow: 'rgba(255,77,109,0.55)' },
   legendary: { label: 'Legendary', color: '#fbbf24', bg: 'linear-gradient(160deg, #3a2606 0%, #140d02 100%)', glow: 'rgba(251,191,36,0.5)' },
   epic: { label: 'Epic', color: '#c084fc', bg: 'linear-gradient(160deg, #2a0f45 0%, #0f0719 100%)', glow: 'rgba(192,132,252,0.45)' },
   rare: { label: 'Rare', color: '#60a5fa', bg: 'linear-gradient(160deg, #0b2447 0%, #060d1a 100%)', glow: 'rgba(96,165,250,0.45)' },
@@ -21657,10 +21802,12 @@ function wornFxKey(p) {
   const f = p && p.avatar_frame;
   return f && f === p.nameplate && DECOR_BY_KEY[f] && DECOR_BY_KEY[f].fx ? f : null;
 }
-function ProfileEffectLayer({ effectKey, runKey = 0, force = false, delay = 280, z = 30 }) {
+function ProfileEffectLayer({ effectKey, runKey = 0, force = false, delay = 280, z = 30, height = 0, covered = false, repeat = 0, watch = false }) {
   const ref = useRef(null);
   const [factory, setFactory] = useState(null);
-  const [done, setDone] = useState(false);
+  const [run, setRun] = useState(0);
+  const [playing, setPlaying] = useState(true);
+  const st = useRef({ away: false, pending: false, covered, timer: 0 });
   const want = !!effectKey && (force || fxAllowed());
   useEffect(() => {
     let alive = true;
@@ -21669,32 +21816,85 @@ function ProfileEffectLayer({ effectKey, runKey = 0, force = false, delay = 280,
     loadFx(effectKey).then((f) => { if (alive && f) setFactory(() => f); });
     return () => { alive = false; };
   }, [effectKey, want]);
-  useEffect(() => { setDone(false); }, [effectKey, runKey]);
+  const replay = () => {
+    const o = st.current;
+    clearTimeout(o.timer);
+    if (o.covered || o.away || (typeof document !== 'undefined' && document.hidden)) { o.pending = true; return; }
+    o.pending = false;
+    setPlaying(true);
+    setRun((n) => n + 1);
+  };
+  useEffect(() => { setPlaying(true); setRun((n) => n + 1); }, [effectKey, runKey]);
   useEffect(() => {
-    if (!factory || done) return undefined;
+    const o = st.current;
+    const was = o.covered;
+    o.covered = covered;
+    if (covered) { clearTimeout(o.timer); setPlaying(false); return; }
+    if (was) replay();
+  }, [covered]);
+  useEffect(() => {
+    const onVis = () => { if (!document.hidden && st.current.pending) replay(); };
+    document.addEventListener('visibilitychange', onVis);
+    return () => { document.removeEventListener('visibilitychange', onVis); clearTimeout(st.current.timer); };
+  }, []);
+  useEffect(() => {
+    if (!watch || !factory) return undefined;
+    const cv = ref.current;
+    if (!cv || typeof IntersectionObserver === 'undefined') return undefined;
+    const io = new IntersectionObserver((entries) => {
+      const e = entries[entries.length - 1];
+      const o = st.current;
+      const ratio = e && e.isIntersecting ? e.intersectionRatio : 0;
+      if (ratio < 0.08) {
+        if (!o.away) { o.away = true; clearTimeout(o.timer); setPlaying(false); }
+      } else if (ratio > 0.3 && o.away) {
+        o.away = false;
+        replay();
+      }
+    }, { threshold: [0, 0.08, 0.3, 0.6] });
+    io.observe(cv);
+    return () => io.disconnect();
+  }, [watch, factory]);
+  useEffect(() => {
+    if (!factory || !playing) return undefined;
     let m = null;
     let alive = true;
     const timer = setTimeout(() => {
       const cv = ref.current;
       if (!alive || !cv || !window.ZFXK) return;
       const r = cv.getBoundingClientRect();
-      if (r.width < 40 || r.height < 40) { setDone(true); return; }
+      if (r.width < 40 || r.height < 40) { setPlaying(false); return; }
       const holder = cv.parentElement && cv.parentElement.querySelector('[data-fx-hero]');
       const hb = holder && holder.firstElementChild ? holder.firstElementChild.getBoundingClientRect() : null;
       const sc = r.width / (cv.clientWidth || r.width) || 1;
       const hw = holder && holder.firstElementChild ? holder.firstElementChild.offsetWidth : 0;
       const place = hb && hw > 60 ? { top: (hb.top - r.top) / sc, heroW: hw, cx: (hb.left - r.left + hb.width / 2) / sc } : {};
+      const finish = () => {
+        if (!alive) return;
+        setPlaying(false);
+        if (repeat > 0) {
+          clearTimeout(st.current.timer);
+          st.current.timer = setTimeout(replay, repeat * 1000);
+        }
+      };
       try {
-        m = window.ZFXK.mount(cv, factory, { stopAfter: FX_LEN[effectKey] || 7.2, dprCap: fxDprCap(), maxFps: /Android/i.test(navigator.userAgent || '') ? 30 : 0, base: '/', loop: 1e6, once: true, ...place, onDone: () => { if (alive) setDone(true); }, onError: (e) => reportClientError(`Profile effect ${effectKey}: ${(e && e.message) || e}`, e && e.stack, { kind: 'fx' }) });
+        m = window.ZFXK.mount(cv, factory, { stopAfter: FX_LEN[effectKey] || 7.2, dprCap: fxDprCap(), maxFps: /Android/i.test(navigator.userAgent || '') ? 30 : 0, base: '/', loop: 1e6, once: true, ...place, onDone: finish, onError: (e) => reportClientError(`Profile effect ${effectKey}: ${(e && e.message) || e}`, e && e.stack, { kind: 'fx' }) });
       } catch (e) {
         reportClientError(`Profile effect ${effectKey}: ${(e && e.message) || e}`, e && e.stack, { kind: 'fx' });
-        setDone(true);
+        setPlaying(false);
       }
     }, delay);
-    return () => { alive = false; clearTimeout(timer); if (m) m.destroy(); };
-  }, [factory, runKey, done]);
-  if (!want || !factory || done) return null;
-  return <canvas ref={ref} aria-hidden="true" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: z }} />;
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+      if (m) m.destroy();
+      const cv = ref.current;
+      if (cv) { try { const g = cv.getContext('2d'); g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, cv.width, cv.height); } catch {} }
+    };
+  }, [factory, run, playing]);
+  if (!want || !factory) return null;
+  const box = height > 0 ? { top: 0, left: 0, right: 0, width: '100%', height, WebkitMaskImage: 'linear-gradient(180deg, #000 0%, #000 78%, transparent 100%)', maskImage: 'linear-gradient(180deg, #000 0%, #000 78%, transparent 100%)' } : { inset: 0, width: '100%', height: '100%' };
+  return <canvas ref={ref} aria-hidden="true" data-fx-layer="true" style={{ position: 'absolute', ...box, pointerEvents: 'none', zIndex: z, visibility: playing ? 'visible' : 'hidden' }} />;
 }
 function ProfileFxIcon({ size = 20, color = 'currentColor', strokeWidth = 1.9 }) {
   return (
@@ -21718,8 +21918,9 @@ function FxPlayRow({ set, onPlay }) {
   );
 }
 function decorAsk(set, mode, own) {
-  const missing = mode === 'set' ? [!own.frame && 'frame', !own.plate && 'nameplate'].filter(Boolean) : mode === 'frame' ? (own.frame ? [] : ['frame']) : (own.plate ? [] : ['nameplate']);
-  const what = mode === 'set' ? (missing.length === 1 ? missing[0] : 'set') : mode;
+  const has = { frame: own.frame, nameplate: own.plate, effect: own.effect };
+  const missing = mode === 'set' ? DECOR_PIECES.filter((k) => !has[k]) : has[mode] ? [] : [mode];
+  const what = mode === 'set' ? (missing.length === 1 ? missing[0] : missing.length === 3 ? 'set' : `${missing[0]} and ${missing[1]}`) : mode;
   return { missing, what, price: missing.length * decorPartPrice(set.key) };
 }
 
@@ -21798,7 +21999,7 @@ function useSecondTick(on = true) {
 }
 function dropOwned(drop, rewards) {
   if (!drop) return false;
-  if (drop.kind === 'set') { const o = decorOwned(rewards, drop.item_key); return o.frame && o.plate; }
+  if (drop.kind === 'set') return decorOwned(rewards, drop.item_key).full;
   return (rewards || []).some((r) => r.kind === 'bubble' && r.reward_key === drop.item_key && rewardActive(r));
 }
 function DropArt({ drop, me, size }) {
@@ -21867,10 +22068,10 @@ function DropPage({ drop, me, rewards, wallet, onClose, onWear, onRefresh, onOpe
   const set = drop.kind === 'set' ? DECOR_BY_KEY[drop.item_key] : null;
   const accent = set ? set.accent : '#8B6CFF';
   const phase = dropPhase(drop);
-  const own = set ? decorOwned(rewards, set.key) : { frame: false, plate: false };
+  const own = set ? decorOwned(rewards, set.key) : { frame: false, plate: false, effect: false, count: 0 };
   const owned = dropOwned(drop, rewards);
-  const half = set && (own.frame || own.plate) && !owned;
-  const price = half ? Math.max(1, Math.ceil(drop.price / 2)) : drop.price;
+  const half = set && own.any && !owned;
+  const price = half ? Math.max(1, Math.ceil((drop.price * (3 - own.count)) / 3)) : drop.price;
   const coins = wallet && wallet.ready ? wallet.coins : 0;
   const wearing = set ? me.avatar_frame === set.key && me.nameplate === set.key : false;
   const flash = (t) => { setNote(t); setTimeout(() => setNote(''), 2600); };
@@ -21892,6 +22093,7 @@ function DropPage({ drop, me, rewards, wallet, onClose, onWear, onRefresh, onOpe
   const buy = async () => {
     setAsk(false);
     if (busy) return;
+    if (!(await spendGate(`Get ${drop.title}`))) return;
     setBusy(true);
     const { data, error } = await supabase.rpc('zchat_buy_drop', { p_drop: drop.id });
     const row = Array.isArray(data) ? data[0] : data;
@@ -21957,7 +22159,7 @@ function DropPage({ drop, me, rewards, wallet, onClose, onWear, onRefresh, onOpe
             )}
           </div>
           <div style={{ fontSize: 12.5, color: 'rgba(255, 255, 255, 0.5)', marginTop: 12, lineHeight: 1.5, padding: '0 10px' }}>
-            {owned ? 'It is yours to keep, even after the drop ends.' : half ? 'You already have one part, so the rest is half price.' : set ? 'You get the frame and the nameplate. It is only here while the drop is live.' : 'It is only here while the drop is live.'}
+            {owned ? 'It is yours to keep, even after the drop ends.' : half ? 'You already have part of it, so you only pay for the rest.' : set ? 'You get the frame, the nameplate and the profile effect. It is only here while the drop is live.' : 'It is only here while the drop is live.'}
           </div>
         </div>
       </div>
@@ -21971,10 +22173,10 @@ function DropPage({ drop, me, rewards, wallet, onClose, onWear, onRefresh, onOpe
   );
 }
 
-function SetShopPage({ me, setKey, rewards, wallet, onClose, onPick, onWear, onRefresh, onOpenWallet, onGift }) {
+function SetShopPage({ me, setKey, rewards, wallet, onClose, onPick, onWear, onRefresh, onOpenWallet, onGift, startMode = 'set', list = null }) {
   useBackClose(true, onClose);
   const set = DECOR_BY_KEY[setKey] || DECOR_SETS[0];
-  const [mode, setMode] = useState('set');
+  const [mode, setMode] = useState(startMode);
   const [busy, setBusy] = useState(false);
   const [ask, setAsk] = useState(null);
   const [note, setNote] = useState('');
@@ -21985,30 +22187,40 @@ function SetShopPage({ me, setKey, rewards, wallet, onClose, onPick, onWear, onR
   const W = Math.round(Math.max(240, Math.min(400, bw - 28)));
   const own = decorOwned(rewards, set.key);
   const freeSets = wallet && wallet.ready ? wallet.freeSets || 0 : 0;
-  const freeOk = freeSets > 0 && !set.fx;
+  const freeOk = freeSets > 0 && set.rarity === 'epic' && !set.drop;
   const [fxRun, setFxRun] = useState(0);
   useEffect(() => { setFxRun(0); }, [set.key]);
+  const wish = useWishlist(me.id);
+  const wished = wish.has('set', set.key);
+  const deal = useDeal();
+  const dealOn = !!(deal && deal.kind === 'set' && deal.key === set.key && !own.full && mode === 'set');
   const coins = wallet && wallet.ready ? wallet.coins : 0;
   const wearF = me.avatar_frame === set.key;
   const wearP = me.nameplate === set.key;
-  const { missing, what, price } = decorAsk(set, mode, own);
-  const wearing = mode === 'set' ? wearF && wearP : mode === 'frame' ? wearF : wearP;
-  const word = mode === 'set' ? 'set' : mode;
+  const asked = decorAsk(set, mode, own);
+  const { missing, what } = asked;
+  const price = dealOn ? Math.max(1, Math.ceil((deal.price * missing.length) / 3)) : asked.price;
+  const wearing = mode === 'frame' ? wearF : mode === 'nameplate' ? wearP : wearF && wearP;
+  const word = mode === 'frame' || mode === 'nameplate' ? mode : 'set';
   const previewFrame = mode === 'nameplate' ? (isDecorKey(me.avatar_frame) ? me.avatar_frame : null) : set.key;
   const previewPlate = mode === 'frame' ? (isDecorKey(me.nameplate) ? me.nameplate : null) : set.key;
-  const idx = set.i;
+  const order = list && list.length ? list : DECOR_SETS.map((s) => s.key);
+  const idx = Math.max(0, order.indexOf(set.key));
   const go = (d) => {
-    const n = DECOR_SETS[(idx + d + DECOR_SETS.length) % DECOR_SETS.length];
+    if (order.length < 2) return;
+    const n = order[(idx + d + order.length) % order.length];
     hapticTap();
-    onPick(n.key);
+    onPick(n);
   };
   useEffect(() => {
     const t = setTimeout(() => {
-      const n = DECOR_SETS.length;
-      saveDecorSets([DECOR_SETS[(idx + 1) % n], DECOR_SETS[(idx + n - 1) % n]].map((s) => [s.key, s.key]), 1);
+      const n = order.length;
+      if (n < 2) return;
+      saveDecorSets([order[(idx + 1) % n], order[(idx + n - 1) % n]].map((k) => [k, k]), 1);
     }, 700);
     return () => clearTimeout(t);
   }, [idx]);
+  useEffect(() => { if (mode === 'effect') setFxRun(Date.now()); }, [mode]);
   const flash = (t) => { setNote(t); setTimeout(() => setNote(''), 2600); };
   const finish = async (kinds, label) => {
     hapticTap();
@@ -22016,19 +22228,22 @@ function SetShopPage({ me, setKey, rewards, wallet, onClose, onPick, onWear, onR
     setParty(Date.now());
     if (onRefresh) await onRefresh();
     const patch = {};
-    if (kinds.includes('frame')) patch.avatar_frame = set.key;
-    if (kinds.includes('nameplate')) patch.nameplate = set.key;
+    const after = { frame: own.frame || kinds.includes('frame'), plate: own.plate || kinds.includes('nameplate') };
+    if (kinds.includes('frame') || (kinds.includes('effect') && after.frame && after.plate)) patch.avatar_frame = set.key;
+    if (kinds.includes('nameplate') || (kinds.includes('effect') && after.frame && after.plate)) patch.nameplate = set.key;
     if (Object.keys(patch).length) await onWear(patch);
+    if (kinds.includes('effect') && after.frame && after.plate) setFxRun(Date.now());
     flash(`${label} is yours`);
   };
   const runBuy = async () => {
     setAsk(null);
     if (busy) return;
+    if (!(await spendGate(`Get the ${set.name} ${what}`))) return;
     setBusy(true);
-    const r = mode === 'set' && missing.length === 2 ? await buyDecorSet(set.key) : await buyShopItem(missing[0], set.key);
+    const r = dealOn ? await buyDeal('set', set.key) : missing.length > 1 ? await buyDecorSet(set.key) : await buyShopItem(missing[0], set.key);
     setBusy(false);
     if (r.error) { flash(r.error); return; }
-    await finish(mode === 'set' ? ['frame', 'nameplate'] : missing, mode === 'set' && missing.length === 2 ? `${set.name} set` : `${set.name} ${what}`);
+    await finish(missing, missing.length === 3 ? `${set.name} set` : `${set.name} ${what}`);
   };
   const runFree = async () => {
     setAsk(null);
@@ -22037,21 +22252,22 @@ function SetShopPage({ me, setKey, rewards, wallet, onClose, onPick, onWear, onR
     const r = await claimFreeSet(set.key);
     setBusy(false);
     if (r.error) { flash(r.error); return; }
-    await finish(['frame', 'nameplate'], `${set.name} set`);
+    await finish(DECOR_PIECES.filter((k) => !(k === 'frame' ? own.frame : k === 'nameplate' ? own.plate : own.effect)), `${set.name} set`);
   };
   const wear = async () => {
     if (busy) return;
     setBusy(true);
-    const patch = mode === 'set' ? { avatar_frame: set.key, nameplate: set.key } : mode === 'frame' ? { avatar_frame: set.key } : { nameplate: set.key };
+    const patch = mode === 'frame' ? { avatar_frame: set.key } : mode === 'nameplate' ? { nameplate: set.key } : { avatar_frame: set.key, nameplate: set.key };
     await onWear(patch);
     setBusy(false);
+    if (mode !== 'frame' && mode !== 'nameplate' && own.effect) setFxRun(Date.now());
   };
   const takeOff = async () => {
     if (busy) return;
     setBusy(true);
     const patch = {};
-    if ((mode === 'set' || mode === 'frame') && wearF) patch.avatar_frame = null;
-    if ((mode === 'set' || mode === 'nameplate') && wearP) patch.nameplate = null;
+    if (mode !== 'nameplate' && wearF) patch.avatar_frame = null;
+    if (mode !== 'frame' && wearP) patch.nameplate = null;
     if (Object.keys(patch).length) await onWear(patch);
     setBusy(false);
   };
@@ -22062,12 +22278,17 @@ function SetShopPage({ me, setKey, rewards, wallet, onClose, onPick, onWear, onR
   };
   const tapGet = () => {
     if (busy || !shopReady()) return;
-    if (freeOk) { setAsk('free'); return; }
+    if (freeOk && mode === 'set') { setAsk('free'); return; }
     setAsk(coins >= price ? 'buy' : 'coins');
   };
   const tapCoins = () => {
     if (busy || !shopReady()) return;
     setAsk(coins >= price ? 'buy' : 'coins');
+  };
+  const tapWish = async () => {
+    const r = await wish.toggle('set', set.key);
+    if (r.error) flash(r.error);
+    else flash(r.on ? 'Added to your wishlist' : 'Removed from your wishlist');
   };
   const onDown = (e) => { swipeRef.current = { x: e.clientX, y: e.clientY, id: e.pointerId }; };
   const onUp = (e) => {
@@ -22079,21 +22300,25 @@ function SetShopPage({ me, setKey, rewards, wallet, onClose, onPick, onWear, onR
   };
   const leftBits = [own.frame && own.frameLeft != null ? `frame for ${own.frameLeft} more ${own.frameLeft === 1 ? 'day' : 'days'}` : null, own.plate && own.plateLeft != null ? `nameplate for ${own.plateLeft} more ${own.plateLeft === 1 ? 'day' : 'days'}` : null].filter(Boolean);
   const btn = (primary) => ({ height: 52, borderRadius: 14, border: 'none', fontFamily: FONT, fontWeight: 650, fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '0 18px', width: '100%', background: primary ? CL.accent : CL.card2, color: '#FFFFFF' });
+  const kindLine = set.drop ? 'Mythical drop' : `${(RARITY_STYLE[set.rarity] || RARITY_STYLE.epic).label} set`;
+  const pieceRows = [['frame', 'Frame', own.frame], ['nameplate', 'Nameplate', own.plate], ['effect', 'Profile effect', own.effect]];
+  const canWearSet = own.frame && own.plate;
   return (
     <div className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 640, background: `linear-gradient(180deg, ${set.accent}3D 0%, ${set.accent}12 30%, rgba(11,11,15,0) 56%), ${CL.bg}`, color: CL.ink, display: 'flex', flexDirection: 'column', fontFamily: FONT, transition: 'background 0.4s ease' }}>
       {party > 0 && <DecorConfetti key={party} colors={[set.accent, '#FFFFFF', '#FFD66B', '#7C5CFC']} />}
-      {set.fx && <ProfileEffectLayer effectKey={mode === 'set' || fxRun ? set.key : null} runKey={fxRun} force={fxRun > 0} />}
+      <ProfileEffectLayer effectKey={mode === 'set' || mode === 'effect' || fxRun ? set.key : null} runKey={fxRun} force={fxRun > 0} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px 4px', paddingTop: 'calc(10px + env(safe-area-inset-top))' }}>
         <div role="button" aria-label="Back to sets" onClick={onClose} style={{ width: 40, height: 40, borderRadius: '50%', background: 'rgba(0,0,0,0.22)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}><ArrowLeft size={19} /></div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{set.name}</div>
-          <div style={{ fontSize: 12.5, fontWeight: 500, color: CL.ink2 }}>{set.drop ? 'Limited drop' : set.fx ? 'Set with a profile effect' : 'Classic set'}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12.5, fontWeight: 600, color: (RARITY_STYLE[set.rarity] || RARITY_STYLE.epic).color }}><RarityGem size={11} color={(RARITY_STYLE[set.rarity] || RARITY_STYLE.epic).color} />{kindLine}</div>
         </div>
+        {!own.full && !set.drop && <WishHeart on={wished} onToggle={tapWish} />}
         <div role="button" aria-label={`${formatCount(coins)} coins`} onClick={onOpenWallet} style={{ display: 'flex', alignItems: 'center', gap: 6, height: 34, padding: '0 12px', borderRadius: 17, background: 'rgba(0,0,0,0.22)', fontSize: 14.5, fontWeight: 650, cursor: 'pointer', flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}><CoinIcon size={18} />{formatCount(coins)}</div>
       </div>
       <div ref={boxRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '0 14px calc(24px + env(safe-area-inset-bottom))' }}>
         <div data-no-swipe="true" onPointerDown={onDown} onPointerUp={onUp} onPointerCancel={() => { swipeRef.current = null; }} style={{ position: 'relative', display: 'flex', justifyContent: 'center', padding: '10px 0 6px', touchAction: 'pan-y', minHeight: Math.round(W * 0.82) }}>
-          <div key={`${set.key}-${mode}`} data-fx-hero="1" className="zchat-pop" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <div key={`${set.key}-${mode === 'effect' ? 'set' : mode}`} data-fx-hero="1" className="zchat-pop" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
             <DecorHero frameKey={previewFrame} plateKey={previewPlate} width={W} photo={me.avatar} name={me.name} username={me.username} verified={me.verified} custom={me.custom_badge} gapColor="#0b0c12" />
             {previewFrame && !previewPlate && (
               <div style={{ textAlign: 'center', marginTop: 2 }}>
@@ -22102,40 +22327,52 @@ function SetShopPage({ me, setKey, rewards, wallet, onClose, onPick, onWear, onR
               </div>
             )}
           </div>
-          <div role="button" aria-label="Previous set" onClick={() => go(-1)} style={{ position: 'absolute', left: -6, top: '42%', width: 40, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'rgba(255,255,255,0.75)' }}><ChevronLeft size={24} /></div>
-          <div role="button" aria-label="Next set" onClick={() => go(1)} style={{ position: 'absolute', right: -6, top: '42%', width: 40, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'rgba(255,255,255,0.75)' }}><ChevronRight size={24} /></div>
+          {order.length > 1 && <div role="button" aria-label="Previous set" onClick={() => go(-1)} style={{ position: 'absolute', left: -6, top: '42%', width: 40, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'rgba(255,255,255,0.75)' }}><ChevronLeft size={24} /></div>}
+          {order.length > 1 && <div role="button" aria-label="Next set" onClick={() => go(1)} style={{ position: 'absolute', right: -6, top: '42%', width: 40, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'rgba(255,255,255,0.75)' }}><ChevronRight size={24} /></div>}
         </div>
-        <SegTabs items={[['set', 'Set'], ['frame', 'Frame'], ['nameplate', 'Nameplate']]} value={mode} onChange={(k) => { setMode(k); playUiSound('tap'); }} style={{ maxWidth: 400, margin: '8px auto 0' }} />
-        <div style={{ maxWidth: 400, margin: '16px auto 0' }}>
-          <div style={{ fontSize: 14.5, color: CL.ink2, lineHeight: 1.5, textAlign: 'center', padding: '0 8px' }}>{set.about}</div>
-          {set.fx && <FxPlayRow set={set} onPlay={() => setFxRun(Date.now())} />}
-          {mode !== 'set' && <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.5)', lineHeight: 1.5, textAlign: 'center', marginTop: 6 }}>{mode === 'frame' ? (isDecorKey(me.nameplate) && me.nameplate !== set.key ? 'Shown with the nameplate you wear now.' : 'Shown on your photo.') : (isDecorKey(me.avatar_frame) && me.avatar_frame !== set.key ? 'Shown with the frame you wear now.' : 'Shown with your name.')}</div>}
+        <SegTabs items={[['set', 'Set'], ['frame', 'Frame'], ['nameplate', 'Nameplate'], ['effect', 'Effect']]} value={mode} onChange={(k) => { setMode(k); playUiSound('tap'); }} style={{ maxWidth: 420, margin: '8px auto 0' }} />
+        <div style={{ maxWidth: 420, margin: '16px auto 0' }}>
+          <div style={{ fontSize: 14.5, color: CL.ink2, lineHeight: 1.5, textAlign: 'center', padding: '0 8px' }}>{mode === 'effect' ? 'An animation that plays over your profile when someone opens it. It only plays while you wear the full set.' : set.about}</div>
+          <div role="list" aria-label="Pieces in this set" style={{ marginTop: 16, borderRadius: 18, background: CL.card, boxShadow: `inset 0 0 0 1px ${CL.line}`, overflow: 'hidden' }}>
+            {pieceRows.map(([k, l, has], i) => (
+              <div key={k} role="listitem" aria-label={`${l}, ${has ? 'yours' : `${decorPartPrice(set.key)} coins`}`} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px', borderTop: i ? `1px solid ${CL.line}` : 'none' }}>
+                <div style={{ width: 30, height: 30, borderRadius: 9, background: has ? `${set.accent}40` : CL.card2, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><PieceGlyph k={k} size={17} color={has ? '#FFFFFF' : CL.ink2} /></div>
+                <div style={{ flex: 1, minWidth: 0, fontSize: 14.5, fontWeight: 600, color: has ? CL.ink : CL.ink2 }}>{l}</div>
+                {k === 'effect' && <div role="button" aria-label="Play the profile effect" onClick={() => { hapticTap(); setFxRun(Date.now()); }} className="zchat-press" style={{ height: 30, padding: '0 11px 0 9px', borderRadius: 15, background: 'rgba(255,255,255,0.1)', display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 13, fontWeight: 650, cursor: 'pointer', flexShrink: 0 }}><Play size={12} fill="#FFFFFF" strokeWidth={0} />Play</div>}
+                {has ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 13, fontWeight: 650, color: CL.own, flexShrink: 0 }}><Check size={15} strokeWidth={2.6} />Yours</span> : <CollPrice price={decorPartPrice(set.key)} size={13.5} />}
+              </div>
+            ))}
+          </div>
+          {mode === 'frame' || mode === 'nameplate' ? <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.5)', lineHeight: 1.5, textAlign: 'center', marginTop: 10 }}>{mode === 'frame' ? (isDecorKey(me.nameplate) && me.nameplate !== set.key ? 'Shown with the nameplate you wear now.' : 'Shown on your photo.') : (isDecorKey(me.avatar_frame) && me.avatar_frame !== set.key ? 'Shown with the frame you wear now.' : 'Shown with your name.')}</div> : null}
           <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 10 }}>
             {missing.length === 0 ? (
-              wearing
+              mode === 'effect' && !canWearSet ? (
+                <button disabled style={{ ...btn(false), cursor: 'default', color: CL.ink2 }}>Get the frame and nameplate to use it</button>
+              ) : wearing
                 ? <button disabled style={{ ...btn(false), cursor: 'default', color: CL.own, background: 'rgba(61,214,140,0.14)' }}><Check size={18} strokeWidth={3} />Wearing</button>
                 : <button disabled={busy} onClick={wear} style={btn(true)}>{busy ? <Spinner size={16} color="#FFFFFF" /> : `Wear the ${word}`}</button>
             ) : set.drop ? (
               <button disabled style={{ ...btn(false), cursor: 'default', color: 'rgba(255,255,255,0.7)' }}>Only from the drop</button>
             ) : (
-              <button disabled={busy} onClick={tapGet} aria-label={freeOk ? 'Get it free' : `Get the ${what} for ${price} coins`} style={btn(true)}>
-                {busy ? <Spinner size={16} color="#FFFFFF" /> : freeOk ? (mode === 'set' ? 'Get it free' : 'Get the whole set free') : <>Get the {what}<span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginLeft: 4 }}><CoinIcon size={18} />{price}</span></>}
+              <button disabled={busy} onClick={tapGet} aria-label={freeOk && mode === 'set' ? 'Get it free' : `Get the ${what} for ${price} coins`} style={btn(true)}>
+                {busy ? <Spinner size={16} color="#FFFFFF" /> : freeOk && mode === 'set' ? 'Get it free' : <>Get the {what}<span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginLeft: 4 }}><CoinIcon size={18} />{price}</span>{dealOn && <span style={{ fontSize: 13.5, fontWeight: 500, opacity: 0.6, textDecoration: 'line-through', marginLeft: 2 }}>{asked.price}</span>}</>}
               </button>
             )}
-            {missing.length === 0 && (wearF || wearP) && (mode === 'set' || (mode === 'frame' ? wearF : wearP)) && <button disabled={busy} onClick={takeOff} style={btn(false)}>Take off</button>}
-            {missing.length > 0 && freeOk && !set.drop && <button disabled={busy} onClick={tapCoins} style={{ ...btn(false), height: 44, fontSize: 14.5 }}>Use {price} coins instead</button>}
+            {missing.length === 0 && (wearF || wearP) && mode !== 'effect' && (mode === 'set' || (mode === 'frame' ? wearF : wearP)) && <button disabled={busy} onClick={takeOff} style={btn(false)}>Take off</button>}
+            {missing.length > 0 && freeOk && mode === 'set' && <button disabled={busy} onClick={tapCoins} style={{ ...btn(false), height: 44, fontSize: 14.5 }}>Use {price} coins instead</button>}
             {onGift && !set.drop && <button disabled={busy} onClick={() => { hapticTap(); onGift(set.key); }} aria-label={`Send the ${set.name} set as a gift`} style={{ ...btn(false), height: 44, fontSize: 14.5 }}><GiftBoxIcon size={18} />Send as a gift</button>}
           </div>
           <div style={{ fontSize: 13, color: CL.ink3, textAlign: 'center', marginTop: 14, lineHeight: 1.5 }}>
-            {missing.length > 0
-              ? (freeOk ? `You have ${freeSets} free ${freeSets === 1 ? 'set' : 'sets'}. A free set comes with the frame and the nameplate.` : set.fx && freeSets > 0 ? 'Your free sets work on the sets without a profile effect.' : 'Yours to keep. It shows on your profile.')
-              : leftBits.length ? `You have the ${leftBits.join(' and the ')}.` : 'Yours to keep. It shows on your profile.'}
+            {dealOn ? 'Deal of the day. This price is only for today.'
+              : missing.length > 0
+                ? (freeOk ? `You have ${freeSets} free ${freeSets === 1 ? 'set' : 'sets'}. A free set comes with all three pieces.` : `Every piece is ${decorPartPrice(set.key)} coins and yours to keep. The effect plays when you wear the full set.`)
+                : leftBits.length ? `You have the ${leftBits.join(' and the ')}.` : 'Yours to keep. It shows on your profile.'}
           </div>
         </div>
       </div>
       {ask === 'free' && (
         <ConfirmDialog layer={720} danger={false} title={`Get ${set.name} free?`} confirmLabel="Get it free"
-          body={`This uses 1 of your ${freeSets} free ${freeSets === 1 ? 'set' : 'sets'}. ${own.frame || own.plate ? `You already have the ${own.frame ? 'frame' : 'nameplate'}, so you get the ${own.frame ? 'nameplate' : 'frame'} to keep.` : 'You get the frame and the nameplate to keep.'}`}
+          body={`This uses 1 of your ${freeSets} free ${freeSets === 1 ? 'set' : 'sets'}. You get every piece you do not have yet, to keep.`}
           onCancel={() => setAsk(null)} onConfirm={runFree} />
       )}
       {ask === 'buy' && (
@@ -22153,6 +22390,189 @@ function SetShopPage({ me, setKey, rewards, wallet, onClose, onPick, onWear, onR
   );
 }
 
+function spendGate(reason) {
+  try {
+    if (typeof requireSpendAuth === 'function') return Promise.resolve(requireSpendAuth(reason)).then((v) => v !== false, () => false);
+  } catch {}
+  return Promise.resolve(true);
+}
+const shopMem = { popular: null, popularAt: 0, popularJob: null, deal: null, dealAt: 0, dealJob: null };
+const shopSubs = new Set();
+function shopPing() { shopSubs.forEach((fn) => { try { fn(); } catch {} }); }
+function useShopTick() {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const fn = () => setTick((n) => n + 1);
+    shopSubs.add(fn);
+    return () => { shopSubs.delete(fn); };
+  }, []);
+}
+function loadPopular(force) {
+  if (!force && shopMem.popular && Date.now() - shopMem.popularAt < 600000) return Promise.resolve(shopMem.popular);
+  if (shopMem.popularJob) return shopMem.popularJob;
+  shopMem.popularJob = supabase.rpc('zchat_shop_popular', { p_limit: 16 })
+    .then(({ data, error }) => {
+      const rows = !error && Array.isArray(data) ? data : [];
+      shopMem.popular = rows
+        .map((r) => ({ kind: r.kind, key: r.item_key, owners: Number(r.owners) || 0 }))
+        .filter((r) => (r.kind === 'set' ? isDecorKey(r.key) && !DECOR_BY_KEY[r.key].drop : r.kind === 'bubble' ? !!CHAR_BUBBLES[r.key] : r.kind === 'charm' ? !!CUSTOM_BADGES[r.key] && !!shopPrice('charm', r.key) : false));
+      shopMem.popularAt = Date.now();
+      return shopMem.popular;
+    }, () => { shopMem.popular = []; shopMem.popularAt = Date.now(); return []; })
+    .then((v) => { shopMem.popularJob = null; shopPing(); return v; });
+  return shopMem.popularJob;
+}
+function loadDeal(force) {
+  const d = shopMem.deal;
+  if (!force && d !== null && Date.now() - shopMem.dealAt < 600000 && (!d || Date.parse(d.ends_at) > Date.now())) return Promise.resolve(d);
+  if (shopMem.dealJob) return shopMem.dealJob;
+  shopMem.dealJob = supabase.rpc('zchat_deal_today')
+    .then(({ data, error }) => {
+      const row = Array.isArray(data) ? data[0] : data;
+      const ok = !error && row && typeof row === 'object' && row.key && Number(row.price) > 0 && Number(row.was) > Number(row.price);
+      const known = ok && (row.kind === 'set' ? isDecorKey(row.key) && !DECOR_BY_KEY[row.key].drop : row.kind === 'bubble' ? !!CHAR_BUBBLES[row.key] : row.kind === 'charm' ? !!CUSTOM_BADGES[row.key] : false);
+      shopMem.deal = known ? { kind: row.kind, key: row.key, price: Number(row.price), was: Number(row.was), ends_at: row.ends_at } : false;
+      shopMem.dealAt = Date.now();
+      return shopMem.deal;
+    }, () => { shopMem.deal = false; shopMem.dealAt = Date.now(); return false; })
+    .then((v) => { shopMem.dealJob = null; shopPing(); return v; });
+  return shopMem.dealJob;
+}
+function usePopular() {
+  useShopTick();
+  useEffect(() => { loadPopular(); }, []);
+  return shopMem.popular || [];
+}
+function useDeal() {
+  useShopTick();
+  useEffect(() => { loadDeal(); }, []);
+  const d = shopMem.deal;
+  return d && Date.parse(d.ends_at) > Date.now() ? d : null;
+}
+async function buyDeal(kind, key) {
+  const { data, error } = await supabase.rpc('zchat_buy_deal', { p_kind: kind, p_key: key });
+  const row = Array.isArray(data) ? data[0] : data;
+  if (error) return { error: rpcFailText('Deal', error, 'Deals switch on once the latest ZChat setup is finished.') };
+  if (!row || !row.ok) { loadDeal(true); return { error: (row && row.reason) || 'That did not work. Try again.' }; }
+  walletMem.data = null;
+  announceWallet();
+  return { ok: true, got: row.got || [] };
+}
+const MILESTONES = [[5, 25], [15, 50], [30, 100], [60, 200], [100, 400]];
+const msMem = { uid: null, data: null, job: null };
+function loadMilestones(uid, force) {
+  if (!uid) return Promise.resolve(null);
+  if (!force && msMem.uid === uid && msMem.data) return Promise.resolve(msMem.data);
+  if (msMem.job && msMem.uid === uid) return msMem.job;
+  msMem.uid = uid;
+  msMem.job = supabase.rpc('zchat_milestones')
+    .then(({ data, error }) => {
+      const row = Array.isArray(data) ? data[0] : data;
+      msMem.data = !error && row && typeof row === 'object' ? { count: Number(row.count) || 0, claimed: Array.isArray(row.claimed) ? row.claimed.map(Number) : [] } : { count: 0, claimed: [], off: true };
+      return msMem.data;
+    }, () => { msMem.data = { count: 0, claimed: [], off: true }; return msMem.data; })
+    .then((v) => { msMem.job = null; shopPing(); return v; });
+  return msMem.job;
+}
+function useMilestones(uid, rewardsSig) {
+  useShopTick();
+  useEffect(() => { loadMilestones(uid, true); }, [uid, rewardsSig]);
+  return msMem.uid === uid ? msMem.data : null;
+}
+async function claimMilestone(uid, level) {
+  const { data, error } = await supabase.rpc('zchat_claim_milestone', { p_level: level });
+  const row = Array.isArray(data) ? data[0] : data;
+  if (error) return { error: rpcFailText('Reward', error, 'Rewards switch on once the latest ZChat setup is finished.') };
+  if (!row || !row.ok) return { error: (row && row.reason) || 'That did not work. Try again.' };
+  walletMem.data = null;
+  announceWallet();
+  await loadMilestones(uid, true);
+  return { ok: true, added: Number(row.added) || 0 };
+}
+const wishMem = new Map();
+function loadWishlist(uid, force) {
+  if (!uid) return Promise.resolve([]);
+  const cur = wishMem.get(uid);
+  if (!force && cur && cur.list && Date.now() - cur.at < 120000) return Promise.resolve(cur.list);
+  if (cur && cur.job) return cur.job;
+  const job = supabase.from('wishlist_items').select('kind, item_key, created_at').eq('user_id', uid).order('created_at', { ascending: false }).limit(60)
+    .then(({ data, error }) => {
+      const list = !error && Array.isArray(data) ? data.filter((r) => (r.kind === 'set' ? isDecorKey(r.item_key) : r.kind === 'bubble' ? !!CHAR_BUBBLES[r.item_key] : r.kind === 'charm' ? !!CUSTOM_BADGES[r.item_key] : false)) : [];
+      wishMem.set(uid, { list, at: Date.now(), off: !!error });
+      return list;
+    }, () => { wishMem.set(uid, { list: [], at: Date.now(), off: true }); return []; })
+    .then((v) => { shopPing(); return v; });
+  wishMem.set(uid, { ...(cur || {}), job });
+  return job;
+}
+function useWishlist(uid) {
+  useShopTick();
+  useEffect(() => { loadWishlist(uid); }, [uid]);
+  const cur = wishMem.get(uid);
+  const list = (cur && cur.list) || [];
+  const has = (kind, key) => list.some((r) => r.kind === kind && r.item_key === key);
+  const toggle = async (kind, key) => {
+    const on = has(kind, key);
+    const next = on ? list.filter((r) => !(r.kind === kind && r.item_key === key)) : [{ kind, item_key: key, created_at: new Date().toISOString() }, ...list];
+    wishMem.set(uid, { list: next, at: Date.now() });
+    shopPing();
+    hapticTap();
+    const { error } = on
+      ? await supabase.from('wishlist_items').delete().eq('user_id', uid).eq('kind', kind).eq('item_key', key)
+      : await supabase.from('wishlist_items').insert({ user_id: uid, kind, item_key: key });
+    if (error) { wishMem.set(uid, { list, at: Date.now() }); shopPing(); return { error: on ? 'Could not remove it. Try again.' : /full/i.test(error.message || '') ? 'Your wishlist is full.' : 'Wishlists switch on once the latest ZChat setup is finished.' }; }
+    return { ok: true, on: !on };
+  };
+  return { list, has, toggle, off: !!(cur && cur.off) };
+}
+const looksMem = { uid: null, list: null, job: null };
+function loadLooks(uid, force) {
+  if (!uid) return Promise.resolve([]);
+  if (!force && looksMem.uid === uid && looksMem.list) return Promise.resolve(looksMem.list);
+  if (looksMem.job && looksMem.uid === uid) return looksMem.job;
+  looksMem.uid = uid;
+  looksMem.job = supabase.from('saved_looks').select('slot, name, frame, nameplate, bubble, charm, updated_at').eq('user_id', uid).order('slot', { ascending: true })
+    .then(({ data, error }) => { looksMem.list = !error && Array.isArray(data) ? data : []; looksMem.off = !!error; return looksMem.list; }, () => { looksMem.list = []; looksMem.off = true; return []; })
+    .then((v) => { looksMem.job = null; shopPing(); return v; });
+  return looksMem.job;
+}
+function useLooks(uid) {
+  useShopTick();
+  useEffect(() => { loadLooks(uid); }, [uid]);
+  const list = looksMem.uid === uid ? looksMem.list || [] : [];
+  const save = async (slot, look) => {
+    const row = { user_id: uid, slot, name: String(look.name || '').slice(0, 24), frame: look.frame || null, nameplate: look.nameplate || null, bubble: look.bubble || null, charm: look.charm || null, updated_at: new Date().toISOString() };
+    const prev = list;
+    looksMem.list = [...list.filter((l) => l.slot !== slot), row].sort((a, b) => a.slot - b.slot);
+    shopPing();
+    const { error } = await supabase.from('saved_looks').upsert(row, { onConflict: 'user_id,slot' });
+    if (error) { looksMem.list = prev; shopPing(); return { error: 'Looks switch on once the latest ZChat setup is finished.' }; }
+    return { ok: true };
+  };
+  const remove = async (slot) => {
+    const prev = list;
+    looksMem.list = list.filter((l) => l.slot !== slot);
+    shopPing();
+    const { error } = await supabase.from('saved_looks').delete().eq('user_id', uid).eq('slot', slot);
+    if (error) { looksMem.list = prev; shopPing(); return { error: 'Could not remove it. Try again.' }; }
+    return { ok: true };
+  };
+  return { list, save, remove, off: looksMem.uid === uid && !!looksMem.off };
+}
+function collectionStats(rewards) {
+  const active = (rewards || []).filter(rewardActive);
+  const pick = (kind, ok) => new Set(active.filter((r) => r.kind === kind && ok(r.reward_key)).map((r) => r.reward_key));
+  const frames = pick('frame', isDecorKey);
+  const plates = pick('nameplate', isDecorKey);
+  const effects = new Set(DECOR_ALL.filter((s) => decorOwned(rewards, s.key).effect).map((s) => s.key));
+  const bubbles = pick('bubble', (k) => !!CHAR_BUBBLES[k]);
+  const charms = pick('charm', (k) => !!CUSTOM_BADGES[k]);
+  const fullSets = DECOR_ALL.filter((s) => frames.has(s.key) && plates.has(s.key) && effects.has(s.key)).length;
+  const owned = frames.size + plates.size + effects.size + bubbles.size + charms.size;
+  const total = DECOR_ALL.length * 3 + CHAR_BUBBLE_KEYS.length + Object.keys(CUSTOM_BADGES).length;
+  return { owned, total, frames, plates, effects, bubbles, charms, fullSets, pct: total ? Math.min(100, Math.floor((owned / total) * 100)) : 0 };
+}
+
 const CL = { bg: '#0B0B0F', card: '#15151A', card2: '#1E1E25', thumb: '#33333C', line: 'rgba(255,255,255,0.07)', ink: '#F4F4F6', ink2: 'rgba(235,235,245,0.62)', ink3: 'rgba(235,235,245,0.38)', accent: '#8B6CFF', own: '#3DD68C', gold: '#F5B829' };
 
 function SegTabs({ items, value, onChange, style }) {
@@ -22162,54 +22582,74 @@ function SegTabs({ items, value, onChange, style }) {
       <div aria-hidden="true" style={{ position: 'absolute', top: 3, bottom: 3, left: 3, width: `calc((100% - 6px) / ${items.length})`, borderRadius: 9, background: CL.thumb, boxShadow: '0 1px 4px rgba(0,0,0,0.35)', transform: `translateX(${at * 100}%)`, transition: reducedMotion() ? 'none' : 'transform 0.28s cubic-bezier(0.25, 0.85, 0.3, 1)' }} />
       {items.map(([k, label]) => (
         <div key={k} role="tab" aria-selected={value === k} aria-label={label} onClick={() => { if (value !== k) { hapticTap(); onChange(k); } }}
-          style={{ position: 'relative', zIndex: 1, flex: 1, minWidth: 0, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13.5, fontWeight: 600, color: value === k ? CL.ink : CL.ink2, cursor: 'pointer', transition: 'color 0.2s ease', whiteSpace: 'nowrap' }}>{label}</div>
+          style={{ position: 'relative', zIndex: 1, flex: 1, minWidth: 0, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13.5, fontWeight: 600, color: value === k ? CL.ink : CL.ink2, cursor: 'pointer', transition: 'color 0.2s ease', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', padding: '0 2px' }}>{label}</div>
       ))}
     </div>
   );
 }
 
-function CollSection({ title, sub, children, style }) {
+function CollSection({ title, sub, right, children, style }) {
   return (
     <section style={{ marginTop: 26, ...(style || {}) }}>
-      <div style={{ padding: '0 2px 12px' }}>
-        <div style={{ fontSize: 20, fontWeight: 700, color: CL.ink, letterSpacing: '-0.015em' }}>{title}</div>
-        {sub && <div style={{ fontSize: 13.5, color: CL.ink2, marginTop: 3, lineHeight: 1.4 }}>{sub}</div>}
+      <div style={{ padding: '0 2px 12px', display: 'flex', alignItems: 'flex-end', gap: 12 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 20, fontWeight: 700, color: CL.ink, letterSpacing: '-0.015em' }}>{title}</div>
+          {sub && <div style={{ fontSize: 13.5, color: CL.ink2, marginTop: 3, lineHeight: 1.4 }}>{sub}</div>}
+        </div>
+        {right}
       </div>
       {children}
     </section>
   );
 }
 
-function CollPrice({ full, wearing, price, free, size = 14 }) {
-  if (wearing) return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: size - 1, fontWeight: 600, color: '#B9A6FF' }}><span style={{ width: 6, height: 6, borderRadius: 3, background: '#B9A6FF' }} />Wearing</span>;
-  if (full) return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: size - 1, fontWeight: 600, color: CL.own }}><Check size={size} strokeWidth={2.6} />Owned</span>;
-  if (free) return <span style={{ fontSize: size - 1, fontWeight: 600, color: CL.gold }}>Free</span>;
-  return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: size, fontWeight: 650, color: CL.ink, fontVariantNumeric: 'tabular-nums' }}><CoinIcon size={size + 1} />{formatCount(price)}</span>;
+function RarityGem({ size = 11, color }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 12 12" aria-hidden="true" style={{ flexShrink: 0, display: 'block' }}>
+      <path d="M3.2 1.2h5.6L11 4.3 6 11 1 4.3Z" fill={color} />
+      <path d="M1 4.3h10M3.2 1.2 4.5 4.3 6 11 7.5 4.3 8.8 1.2" fill="none" stroke="rgba(0,0,0,0.32)" strokeWidth="0.7" strokeLinejoin="round" />
+      <path d="M3.4 1.9 2.2 3.8" stroke="rgba(255,255,255,0.75)" strokeWidth="0.8" strokeLinecap="round" />
+    </svg>
+  );
+}
+function RarityTag({ rarity, size = 12 }) {
+  const r = RARITY_STYLE[rarity] || RARITY_STYLE.epic;
+  return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: size, fontWeight: 650, color: r.color, whiteSpace: 'nowrap', minWidth: 0 }}><RarityGem size={size - 1} color={r.color} />{r.label}</span>;
 }
 
-function FxSetCard({ set, me, own, wearing, width, onOpen }) {
-  const full = own.frame && own.plate;
-  const price = decorPartPrice(set.key) * (own.frame || own.plate ? 1 : 2);
+function PieceGlyph({ k, size = 14, color = 'currentColor' }) {
+  const p = { fill: 'none', stroke: color, strokeWidth: 1.9, strokeLinecap: 'round', strokeLinejoin: 'round' };
   return (
-    <div role="button" aria-label={`${set.name} set`} onClick={onOpen} className="zchat-press"
-      style={{ flex: `0 0 ${width}px`, width, scrollSnapAlign: 'start', borderRadius: 22, overflow: 'hidden', cursor: 'pointer', background: `linear-gradient(180deg, ${set.accent}40 0%, ${set.accent}12 42%, ${CL.card} 70%)`, boxShadow: `inset 0 0 0 1px ${wearing ? `${set.accent}` : CL.line}` }}>
-      <div style={{ display: 'flex', justifyContent: 'center', padding: '14px 10px 0' }}>
-        <DecorHero frameKey={set.key} plateKey={set.key} width={width - 20} photo={me.avatar} name={me.name} lazy compact gapColor={CL.card} />
-      </div>
-      <div style={{ padding: '8px 16px 15px', display: 'flex', alignItems: 'center', gap: 10 }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 16.5, fontWeight: 650, color: CL.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', letterSpacing: '-0.01em' }}>{set.name}</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12.5, fontWeight: 500, color: CL.ink2, marginTop: 2 }}><ProfileFxIcon size={13} strokeWidth={2.2} />Profile effect</div>
-        </div>
-        <CollPrice full={full} wearing={wearing} price={price} size={15} />
-      </div>
-    </div>
+    <svg width={size} height={size} viewBox="0 0 16 16" aria-hidden="true" style={{ display: 'block', flexShrink: 0 }}>
+      {k === 'frame' && <><circle cx="8" cy="8" r="5.6" {...p} /><circle cx="8" cy="8" r="2.4" fill={color} stroke="none" opacity="0.45" /></>}
+      {k === 'nameplate' && <><rect x="1.8" y="5" width="12.4" height="6" rx="3" {...p} /><path d="M5.4 8h5.2" {...p} strokeWidth="1.5" /></>}
+      {k === 'effect' && <path d="M8 1.8c.5 2.9 1.4 3.8 4.3 4.3-2.9.5-3.8 1.4-4.3 4.3-.5-2.9-1.4-3.8-4.3-4.3 2.9-.5 3.8-1.4 4.3-4.3zM12.6 10.4c.2 1.1.6 1.5 1.7 1.7-1.1.2-1.5.6-1.7 1.7-.2-1.1-.6-1.5-1.7-1.7 1.1-.2 1.5-.6 1.7-1.7z" fill={color} stroke="none" />}
+    </svg>
+  );
+}
+function PieceDots({ own, size = 13 }) {
+  const items = [['frame', own.frame], ['nameplate', own.plate], ['effect', own.effect]];
+  return (
+    <span aria-label={`${own.count || 0} of 3 pieces`} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
+      {items.map(([k, on]) => <PieceGlyph key={k} k={k} size={size} color={on ? '#F4F4F6' : 'rgba(235,235,245,0.22)'} />)}
+    </span>
   );
 }
 
-function SetTile({ set, me, own, wearing, free, width, onOpen }) {
-  const full = own.frame && own.plate;
-  const price = decorPartPrice(set.key) * (own.frame !== own.plate ? 1 : 2);
+function CollPrice({ full, wearing, price, was, free, size = 14 }) {
+  if (wearing) return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: size - 1, fontWeight: 600, color: '#B9A6FF' }}><span style={{ width: 6, height: 6, borderRadius: 3, background: '#B9A6FF' }} />Wearing</span>;
+  if (full) return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: size - 1, fontWeight: 600, color: CL.own }}><Check size={size} strokeWidth={2.6} />Owned</span>;
+  if (free) return <span style={{ fontSize: size - 1, fontWeight: 650, color: CL.gold }}>Free</span>;
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: size, fontWeight: 650, color: CL.ink, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
+      <CoinIcon size={size + 1} />{formatCount(price)}
+      {was ? <span style={{ fontSize: size - 2, fontWeight: 500, color: CL.ink3, textDecoration: 'line-through', marginLeft: 2 }}>{formatCount(was)}</span> : null}
+    </span>
+  );
+}
+
+function SetCard({ set, me, own, wearing, width, onOpen, owned = false, free = false }) {
+  const missing = 3 - (own.count || 0);
   return (
     <div role="button" aria-label={`${set.name} set`} onClick={onOpen} className="zchat-press"
       style={{ minWidth: 0, borderRadius: 18, overflow: 'hidden', cursor: 'pointer', background: CL.card, boxShadow: `inset 0 0 0 1px ${wearing ? set.accent : CL.line}`, display: 'flex', flexDirection: 'column' }}>
@@ -22218,8 +22658,71 @@ function SetTile({ set, me, own, wearing, free, width, onOpen }) {
       </div>
       <div style={{ padding: '6px 12px 12px', minWidth: 0 }}>
         <div style={{ fontSize: 14.5, fontWeight: 600, color: CL.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{set.name}</div>
-        <div style={{ marginTop: 3 }}><CollPrice full={full} wearing={wearing} price={price} free={free} size={13.5} /></div>
+        <div style={{ marginTop: 5, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, minWidth: 0 }}>
+          <RarityTag rarity={set.rarity} size={11.5} />
+          {owned
+            ? (wearing ? <CollPrice wearing size={12.5} /> : <PieceDots own={own} />)
+            : <CollPrice price={missing * decorPartPrice(set.key)} free={free} size={13} />}
+        </div>
       </div>
+    </div>
+  );
+}
+
+function bubbleThumb(k, size) {
+  return <img src={bubbleArtUri(k)} alt="" draggable={false} style={{ width: size, height: size, objectFit: 'contain', display: 'block' }} />;
+}
+function ShopItemArt({ kind, k, me, size }) {
+  if (kind === 'set') return <DecorFrameBadge setKey={k} size={size} photo={me.avatar} name={me.name} lazy />;
+  if (kind === 'bubble') return <div style={{ width: size, height: size, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{bubbleThumb(k, Math.round(size * 0.82))}</div>;
+  return <div style={{ width: size, height: size, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><CharmPreview charm={k} size={Math.round(size * 0.6)} /></div>;
+}
+function shopItemName(kind, k) {
+  if (kind === 'set') return DECOR_BY_KEY[k] ? DECOR_BY_KEY[k].name : k;
+  if (kind === 'bubble') return CHAR_BUBBLES[k] ? CHAR_BUBBLES[k].label : k;
+  return CUSTOM_BADGES[k] ? CUSTOM_BADGES[k].label.replace(/ charm$/i, '') : k;
+}
+function shopItemRarity(kind, k) {
+  if (kind === 'set') return DECOR_BY_KEY[k] ? DECOR_BY_KEY[k].rarity : 'epic';
+  if (kind === 'bubble') return 'rare';
+  return CUSTOM_BADGES[k] ? CUSTOM_BADGES[k].rarity || 'epic' : 'epic';
+}
+function ShopRowCard({ kind, k, me, line, onOpen, width = 128 }) {
+  return (
+    <div role="button" aria-label={`${shopItemName(kind, k)}${line ? `, ${line}` : ''}`} onClick={onOpen} className="zchat-press"
+      style={{ flex: `0 0 ${width}px`, width, scrollSnapAlign: 'start', borderRadius: 18, background: CL.card, boxShadow: `inset 0 0 0 1px ${CL.line}`, padding: '12px 10px 11px', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+      <ShopItemArt kind={kind} k={k} me={me} size={width - 34} />
+      <div style={{ alignSelf: 'stretch', marginTop: 8, fontSize: 13.5, fontWeight: 600, color: CL.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'center' }}>{shopItemName(kind, k)}</div>
+      {line && <div style={{ alignSelf: 'stretch', marginTop: 2, fontSize: 12, color: CL.ink2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>{line}</div>}
+    </div>
+  );
+}
+function ShopRow({ children }) {
+  return <div style={{ display: 'flex', gap: 10, overflowX: 'auto', scrollSnapType: 'x proximity', scrollPaddingLeft: 16, margin: '0 -16px', padding: '0 16px 4px' }}>{children}<div style={{ flex: '0 0 6px' }} /></div>;
+}
+
+function DealCard({ deal, me, own, onOpen }) {
+  useSecondTick(true);
+  const left = Math.max(0, Date.parse(deal.ends_at) - Date.now());
+  const set = deal.kind === 'set' ? DECOR_BY_KEY[deal.key] : null;
+  const accent = set ? set.accent : deal.kind === 'bubble' ? (CHAR_BUBBLES[deal.key] || {}).line || CL.accent : CL.gold;
+  const partial = set && own && own.any;
+  const price = partial ? Math.max(1, Math.ceil((deal.price * (3 - own.count)) / 3)) : deal.price;
+  const was = partial ? (3 - own.count) * decorPartPrice(deal.key) : deal.was;
+  return (
+    <div role="button" aria-label={`Deal of the day, ${shopItemName(deal.kind, deal.key)}`} onClick={onOpen} className="zchat-press"
+      style={{ marginTop: 18, position: 'relative', overflow: 'hidden', borderRadius: 24, cursor: 'pointer', background: `radial-gradient(120% 140% at 0% 0%, ${accent}66 0%, rgba(0,0,0,0) 60%), ${CL.card}`, boxShadow: `inset 0 0 0 1px ${CL.line}`, display: 'flex', alignItems: 'center', gap: 4, padding: '14px 16px 14px 10px' }}>
+      <div style={{ width: 118, flexShrink: 0, display: 'flex', justifyContent: 'center' }}><ShopItemArt kind={deal.kind} k={deal.key} me={me} size={108} /></div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 700, color: CL.gold }}>
+          <svg width="13" height="13" viewBox="0 0 16 16" aria-hidden="true"><path d="M9.2 1.2 3.4 9h4l-1 5.8L12.6 7h-4z" fill={CL.gold} /></svg>
+          Deal of the day
+        </div>
+        <div style={{ fontSize: 19, fontWeight: 700, color: CL.ink, marginTop: 4, letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{shopItemName(deal.kind, deal.key)}{set ? ' set' : deal.kind === 'bubble' ? ' bubble' : ''}</div>
+        <div style={{ marginTop: 6 }}><CollPrice price={price} was={was} size={17} /></div>
+        <div style={{ fontSize: 12.5, color: CL.ink2, marginTop: 5, fontVariantNumeric: 'tabular-nums' }}>Ends in {shortLeft(left)}</div>
+      </div>
+      <ChevronRight size={18} color={CL.ink3} style={{ flexShrink: 0 }} />
     </div>
   );
 }
@@ -22267,47 +22770,387 @@ function BubbleTileDark({ k, on, status, tone, onPick }) {
   );
 }
 
-function BubbleShopInline({ uid, onGift, onOpenWallet }) {
-  const b = useBubbleShop(uid, null, null, onOpenWallet, true);
+function WishHeart({ on, onToggle, size = 40, light = false }) {
   return (
-    <div style={{ paddingTop: 16 }}>
-      <div aria-label="Preview" style={{ borderRadius: 22, padding: '16px 14px 18px', background: CL.card, boxShadow: `inset 0 0 0 1px ${CL.line}`, display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <div style={{ alignSelf: 'flex-start', maxWidth: '78%', background: '#26262E', color: CL.ink, borderRadius: 18, padding: '8px 13px', fontSize: 14.5, lineHeight: 1.3 }}>Wait, is that a new bubble?</div>
-        <CharBubbleSample k={b.preview} text={b.spec ? `Yes! Meet my ${b.spec.label.toLowerCase()}` : 'Yes, the classic one'} cw={52} fontSize={14.5} />
-      </div>
-      {b.freeLeft > 0 && (
-        <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 16, background: CL.card }}>
-          <GiftBoxIcon size={20} color={CL.gold} />
-          <div style={{ flex: 1, minWidth: 0, fontSize: 13.5, lineHeight: 1.4, color: CL.ink2 }}><b style={{ color: CL.ink, fontWeight: 650 }}>{b.freeLeft === 1 ? '1 free bubble' : `${b.freeLeft} free bubbles`}</b> for you. Pick any one you like.</div>
-        </div>
-      )}
-      <CollSection title="Chat bubbles" sub="Your bubble shows on every message you send">
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
-          {b.keys.map((k) => {
-            const [st, tone] = b.statusOf(k);
-            return <BubbleTileDark key={k} k={k} on={b.preview === k} status={st} tone={tone} onPick={() => { hapticTap(); b.setPreview(k); }} />;
-          })}
-        </div>
-      </CollSection>
-      <div style={{ position: 'sticky', bottom: 0, zIndex: 5, margin: '18px -16px 0', padding: '12px 16px calc(12px + env(safe-area-inset-bottom))', background: 'linear-gradient(180deg, rgba(11,11,15,0) 0%, rgba(11,11,15,0.94) 26%, #0B0B0F 100%)', display: 'flex', gap: 8 }}>
-        {b.preview !== 'classic' && onGift && (
-          <div role="button" aria-label={`Gift the ${b.spec ? b.spec.label : ''} bubble`} onClick={() => { hapticTap(); onGift(b.preview); }} className="zchat-press"
-            style={{ width: 50, height: 50, flexShrink: 0, borderRadius: 14, background: CL.card2, color: CL.ink, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><GiftBoxIcon size={20} /></div>
-        )}
-        <button type="button" aria-label={b.action.label} disabled={b.busy || !b.action.on} onClick={b.action.on || undefined} className="zchat-press"
-          style={{ flex: 1, height: 50, borderRadius: 14, border: 'none', fontFamily: FONT, fontSize: 16, fontWeight: 650, cursor: b.action.on ? 'pointer' : 'default', background: b.action.plain ? CL.card2 : CL.accent, color: '#FFFFFF', opacity: b.busy ? 0.6 : 1 }}>{b.action.label}</button>
-      </div>
-      {b.ask && <ConfirmSheet title={`Get the ${CHAR_BUBBLES[b.ask].label} bubble?`} text={`It costs ${BUBBLE_PRICE} coins and it is yours to keep.`} confirmLabel={`Pay ${BUBBLE_PRICE} coins`} danger={false} zIndex={760} onCancel={() => b.setAsk(null)} onConfirm={() => b.buy(b.ask)} />}
-      {b.note && <div className="zchat-pop" role="status" style={{ position: 'fixed', left: '50%', bottom: 'calc(90px + env(safe-area-inset-bottom))', transform: 'translateX(-50%)', zIndex: 770, padding: '9px 16px', borderRadius: 18, background: '#2A2930', color: '#FFFFFF', fontSize: 13.5, fontWeight: 600, maxWidth: 'calc(100% - 32px)', textAlign: 'center' }}>{b.note}</div>}
+    <div role="button" aria-label={on ? 'Remove from your wishlist' : 'Add to your wishlist'} aria-pressed={on} onClick={(e) => { e.stopPropagation(); onToggle(); }} className="zchat-press"
+      style={{ width: size, height: size, borderRadius: size / 2, background: light ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.22)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+      <svg width={size * 0.5} height={size * 0.5} viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 20.4c-.3 0-.6-.1-.8-.3C6.4 16.1 3 13.1 3 9.3 3 6.6 5.1 4.5 7.7 4.5c1.7 0 3.2.9 4.3 2.3 1.1-1.4 2.6-2.3 4.3-2.3 2.6 0 4.7 2.1 4.7 4.8 0 3.8-3.4 6.8-8.2 10.8-.2.2-.5.3-.8.3z" fill={on ? '#FF4D6A' : 'none'} stroke={on ? '#FF4D6A' : '#FFFFFF'} strokeWidth="1.9" strokeLinejoin="round" />
+      </svg>
     </div>
   );
 }
 
-function CollectionPanel({ me, rewards, onClose, onEquip, onWear, isAdmin, onRewardsChanged, onOpenWallet, onGift, startSet = null }) {
+function ShopBagIcon({ size = 22, color = 'currentColor', strokeWidth = 1.9 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ flexShrink: 0, display: 'block' }}>
+      <path d="M5.2 8.2h13.6l-1 10.4a2.2 2.2 0 0 1-2.2 2H8.4a2.2 2.2 0 0 1-2.2-2z" stroke={color} strokeWidth={strokeWidth} strokeLinejoin="round" />
+      <path d="M8.8 10.4V7.2a3.2 3.2 0 0 1 6.4 0v3.2" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function CollProgress({ stats, ms, onClaim, busy }) {
+  const R = 30;
+  const C = 2 * Math.PI * R;
+  const claimed = new Set((ms && ms.claimed) || []);
+  const count = ms && !ms.off ? Math.max(ms.count, stats.owned) : stats.owned;
+  const next = MILESTONES.find(([lv]) => !claimed.has(lv)) || null;
+  const ready = next && count >= next[0];
+  const prevLv = next ? (MILESTONES[MILESTONES.indexOf(next) - 1] || [0])[0] : 0;
+  const frac = next ? Math.max(0, Math.min(1, (count - prevLv) / (next[0] - prevLv))) : 1;
+  const cats = [['Sets', DECOR_ALL.filter((s) => stats.frames.has(s.key) || stats.plates.has(s.key) || stats.effects.has(s.key)).length, DECOR_ALL.length], ['Effects', stats.effects.size, DECOR_ALL.length], ['Bubbles', stats.bubbles.size, CHAR_BUBBLE_KEYS.length], ['Charms', stats.charms.size, Object.keys(CUSTOM_BADGES).length]];
+  return (
+    <div style={{ marginTop: 6, borderRadius: 22, background: CL.card, boxShadow: `inset 0 0 0 1px ${CL.line}`, padding: '16px 16px 14px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+        <div style={{ position: 'relative', width: 76, height: 76, flexShrink: 0 }}>
+          <svg width="76" height="76" viewBox="0 0 76 76" aria-hidden="true">
+            <circle cx="38" cy="38" r={R} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="7" />
+            <circle cx="38" cy="38" r={R} fill="none" stroke="url(#zcollring)" strokeWidth="7" strokeLinecap="round" strokeDasharray={`${(C * stats.pct) / 100} ${C}`} transform="rotate(-90 38 38)" style={{ transition: 'stroke-dasharray 0.6s ease' }} />
+            <defs><linearGradient id="zcollring" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#A78BFF" /><stop offset="1" stopColor="#6B48F0" /></linearGradient></defs>
+          </svg>
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 750, color: CL.ink, fontVariantNumeric: 'tabular-nums' }}>{stats.pct}%</div>
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 16.5, fontWeight: 700, color: CL.ink }}>{stats.pct}% collected</div>
+          <div style={{ fontSize: 13, color: CL.ink2, marginTop: 2 }}>{formatCount(stats.owned)} of {formatCount(stats.total)} items are yours</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', columnGap: 12, rowGap: 3, marginTop: 8 }}>
+            {cats.map(([l, n, t]) => (
+              <div key={l} style={{ fontSize: 12, color: CL.ink3, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}><span style={{ color: CL.ink2, fontWeight: 600 }}>{l}</span> {n} of {t}</div>
+            ))}
+          </div>
+        </div>
+      </div>
+      {next && (
+        <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${CL.line}`, display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, color: CL.ink2 }}>{ready ? `You reached ${next[0]} items` : `Collect ${next[0]} items to get ${next[1]} coins`}</div>
+            <div style={{ height: 5, borderRadius: 3, background: 'rgba(255,255,255,0.08)', marginTop: 7, overflow: 'hidden' }}><div style={{ height: '100%', width: `${frac * 100}%`, borderRadius: 3, background: ready ? CL.gold : CL.accent, transition: 'width 0.5s ease' }} /></div>
+          </div>
+          {ready && onClaim && (
+            <button type="button" disabled={busy} onClick={() => onClaim(next[0])} aria-label={`Claim ${next[1]} coins`} className="zchat-press"
+              style={{ height: 36, padding: '0 14px', borderRadius: 18, border: 'none', background: CL.gold, color: '#2A1C00', fontFamily: FONT, fontSize: 14, fontWeight: 750, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5, flexShrink: 0, opacity: busy ? 0.6 : 1 }}><CoinIcon size={16} />Claim {next[1]}</button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ShopItemSheet({ me, item, rewards, wallet, onClose, onDone, onOpenWallet, onGift, onPreviewCharm }) {
+  useBackClose(true, onClose);
+  const { setBubbleStyle } = useTheme();
+  const wish = useWishlist(me.id);
+  const deal = useDeal();
+  const [busy, setBusy] = useState(false);
+  const [ask, setAsk] = useState(false);
+  const [err, setErr] = useState('');
+  const drag = useSheetDrag(onClose);
+  const isBubble = item.kind === 'bubble';
+  const name = shopItemName(item.kind, item.key);
+  const owned = (rewards || []).some((r) => r.kind === item.kind && r.reward_key === item.key && rewardActive(r) && !r.expires_at);
+  const freeLeft = isBubble && wallet && wallet.ready ? wallet.freeBubbles || 0 : 0;
+  const dealOn = !!(deal && deal.kind === item.kind && deal.key === item.key);
+  const full = isBubble ? BUBBLE_PRICE : shopPrice('charm', item.key) || 0;
+  const price = dealOn ? deal.price : full;
+  const coins = wallet && wallet.ready ? wallet.coins : 0;
+  const wished = wish.has(item.kind, item.key);
+  const rarity = shopItemRarity(item.kind, item.key);
+  const done = async (label) => {
+    hapticTap();
+    playUiSound('like');
+    if (isBubble) { await loadOwnedBubbles(me.id, true); setBubbleStyle(item.key); }
+    if (onDone) await onDone(label);
+  };
+  const buy = async () => {
+    setAsk(false);
+    if (busy) return;
+    if (!(await spendGate(`Get the ${name}`))) return;
+    setBusy(true); setErr('');
+    const r = dealOn ? await buyDeal(item.kind, item.key) : await buyShopItem(item.kind, item.key);
+    setBusy(false);
+    if (r.error) { setErr(r.error); return; }
+    await done(`${name} is yours`);
+  };
+  const free = async () => {
+    if (busy) return;
+    setBusy(true); setErr('');
+    const r = await claimFreeBubble(item.key);
+    setBusy(false);
+    if (r.error) { setErr(r.error); return; }
+    await done(`${name} is yours`);
+  };
+  const tapGet = () => {
+    if (busy) return;
+    if (!wallet || !wallet.ready) { setErr('The shop switches on once the latest ZChat setup is finished.'); return; }
+    if (freeLeft > 0) { free(); return; }
+    if (coins < price) { if (onOpenWallet) onOpenWallet(); return; }
+    setAsk(true);
+  };
+  const label = owned ? 'Yours' : freeLeft > 0 ? `Get it free, ${freeLeft} left` : coins >= price ? `Get it for ${formatCount(price)} coins` : `You need ${formatCount(price - coins)} more coins`;
+  return (
+    <Portal>
+      <div onClick={onClose} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 700, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontFamily: FONT }}>
+        <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" {...drag.sheetProps} style={{ ...drag.sheetStyle, width: '100%', maxWidth: 520, background: '#16161B', color: CL.ink, borderRadius: '26px 26px 0 0', padding: '8px 18px', paddingBottom: 'calc(18px + env(safe-area-inset-bottom))', boxShadow: '0 -12px 40px rgba(0,0,0,0.45)' }}>
+          <div style={{ display: 'flex', justifyContent: 'center', padding: '0 0 6px' }}><div style={{ width: 36, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.18)' }} /></div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <RarityTag rarity={rarity} size={12} />
+              <div style={{ fontSize: 21, fontWeight: 700, marginTop: 3, letterSpacing: '-0.01em' }}>{name}{isBubble ? ' bubble' : ' charm'}</div>
+            </div>
+            {!owned && <WishHeart on={wished} light onToggle={async () => { const r = await wish.toggle(item.kind, item.key); if (r.error) setErr(r.error); }} />}
+          </div>
+          <div style={{ marginTop: 14, borderRadius: 20, padding: isBubble ? '16px 14px 18px' : '22px 14px', background: '#0F0F13', boxShadow: `inset 0 0 0 1px ${CL.line}`, display: 'flex', flexDirection: 'column', gap: 8, alignItems: isBubble ? 'stretch' : 'center' }}>
+            {isBubble ? (
+              <>
+                <div style={{ alignSelf: 'flex-start', maxWidth: '78%', background: '#26262E', color: CL.ink, borderRadius: 18, padding: '8px 13px', fontSize: 14.5, lineHeight: 1.3 }}>Wait, is that a new bubble?</div>
+                <CharBubbleSample k={item.key} text={`Yes! Meet my ${name.toLowerCase()}`} cw={52} fontSize={14.5} />
+              </>
+            ) : (
+              <div role="button" aria-label="Preview on your profile" onClick={() => onPreviewCharm && onPreviewCharm(item.key)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+                <CharmPreview charm={item.key} size={84} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 17, fontWeight: 700 }}>{me.name}<CharmPreview charm={item.key} size={18} /></div>
+                <div style={{ fontSize: 12.5, color: CL.ink3 }}>Tap to see it on your profile</div>
+              </div>
+            )}
+          </div>
+          <div style={{ fontSize: 13.5, color: CL.ink2, lineHeight: 1.45, marginTop: 12 }}>{isBubble ? 'Your bubble shows on every message you send. Everyone sees it.' : 'A charm sits next to your name everywhere in ZChat.'}{dealOn ? ' Deal of the day, only today.' : ''}</div>
+          {err && <div role="alert" style={{ fontSize: 13.5, color: '#FF8A8A', fontWeight: 600, marginTop: 10 }}>{err}</div>}
+          <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+            {onGift && <div role="button" aria-label={`Gift the ${name}`} onClick={() => { hapticTap(); onGift(item.kind, item.key); }} className="zchat-press" style={{ width: 52, height: 52, borderRadius: 15, background: CL.card2, color: CL.ink, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}><GiftBoxIcon size={21} /></div>}
+            <button type="button" disabled={busy || owned} onClick={tapGet} aria-label={label} className="zchat-press"
+              style={{ flex: 1, height: 52, borderRadius: 15, border: 'none', fontFamily: FONT, fontSize: 16, fontWeight: 650, cursor: owned ? 'default' : 'pointer', background: owned ? 'rgba(61,214,140,0.14)' : coins >= price || freeLeft > 0 ? CL.accent : CL.card2, color: owned ? CL.own : '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+              {busy ? <Spinner size={16} color="#FFFFFF" /> : label}
+              {!busy && dealOn && !owned && freeLeft === 0 && <span style={{ fontSize: 13.5, fontWeight: 500, opacity: 0.6, textDecoration: 'line-through' }}>{full}</span>}
+            </button>
+          </div>
+        </div>
+      </div>
+      {ask && <ConfirmSheet title={`Get the ${name}?`} text={`It costs ${formatCount(price)} coins and it is yours to keep.`} confirmLabel={`Pay ${formatCount(price)} coins`} danger={false} zIndex={760} onCancel={() => setAsk(false)} onConfirm={buy} />}
+    </Portal>
+  );
+}
+
+function ShopPage({ me, rewards, onClose, onWear, onRewardsChanged, onOpenWallet, onGift, onOpenCollection, startTab = 'foryou', startSet = null, startItem = null }) {
   useBackClose(true, onClose);
   const edgeBack = useEdgeSwipeBack(true);
+  const [tab, setTab] = useState(startTab);
+  const [openSet, setOpenSet] = useState(() => (isDecorKey(startSet) ? startSet : null));
+  const [openItem, setOpenItem] = useState(startItem);
+  const [charmTry, setCharmTry] = useState(null);
+  const [dropOpen, setDropOpen] = useState(null);
+  const [toast, setToast] = useState('');
+  const wallet = useWallet(me.id);
+  const drops = useDrops(me.id);
+  const popular = usePopular();
+  const deal = useDeal();
+  const wish = useWishlist(me.id);
+  const gridRef = useRef(null);
+  const gw = useWidthOf(gridRef, typeof window === 'undefined' ? 390 : Math.min(window.innerWidth, 560)) - 32;
+  useDecorLoaded(DECOR_SPRITE);
+  const say = (t) => { setToast(t); setTimeout(() => setToast(''), 2400); };
+  const active = (rewards || []).filter(rewardActive);
+  const ownedBubbles = new Set(active.filter((r) => r.kind === 'bubble' && !r.expires_at).map((r) => r.reward_key));
+  const ownedCharms = new Set(active.filter((r) => r.kind === 'charm' && !r.expires_at).map((r) => r.reward_key));
+  const ownOf = (k) => decorOwned(rewards, k);
+  const ownsItem = (kind, k) => (kind === 'set' ? ownOf(k).full : kind === 'bubble' ? ownedBubbles.has(k) : ownedCharms.has(k));
+  const shopSets = DECOR_SETS.filter((s) => !ownOf(s.key).full);
+  const legendary = shopSets.filter((s) => s.rarity === 'legendary');
+  const epic = shopSets.filter((s) => s.rarity === 'epic');
+  const shopBubbles = CHAR_BUBBLE_KEYS.filter((k) => !ownedBubbles.has(k));
+  const shopCharms = giftCharmKeys().filter((k) => !ownedCharms.has(k));
+  const partial = DECOR_SETS.filter((s) => { const o = ownOf(s.key); return o.any && !o.full; });
+  const pop = popular.filter((p) => !ownsItem(p.kind, p.key)).slice(0, 10);
+  const wished = wish.list.filter((w) => !ownsItem(w.kind, w.item_key)).slice(0, 12);
+  const freshBubbles = CHAR_BUBBLE_KEYS.filter((k) => k === 'wolf' && !ownedBubbles.has(k));
+  const shownDrops = (drops || []).filter((d) => dropPhase(d) !== 'ended' && !dropOwned(d, rewards)).sort((a, b) => (dropPhase(a) === 'live' ? 0 : 1) - (dropPhase(b) === 'live' ? 0 : 1)).slice(0, 2);
+  const openDrop = dropOpen ? (drops || []).find((d) => d.id === dropOpen) || null : null;
+  const freeSets = wallet && wallet.ready ? wallet.freeSets || 0 : 0;
+  const freeBubbles = wallet && wallet.ready ? wallet.freeBubbles || 0 : 0;
+  const coins = wallet && wallet.ready ? wallet.coins : 0;
+  const cols = gw >= 700 ? 4 : gw >= 500 ? 3 : 2;
+  const tileW = Math.max(110, Math.floor((gw - (cols - 1) * 10) / cols) - 8);
+  const refresh = async () => { if (onRewardsChanged) await onRewardsChanged(); loadMilestones(me.id, true); };
+  const open = (kind, k) => {
+    playUiSound('tap');
+    if (kind === 'set') setOpenSet(k);
+    else setOpenItem({ kind, key: k });
+  };
+  const dealVisible = deal && !ownsItem(deal.kind, deal.key);
+  const listKeys = shopSets.map((s) => s.key);
+  const empty = (title, text) => (
+    <div style={{ textAlign: 'center', padding: '22px 8px 30px' }}>
+      <div style={{ maxWidth: 280, margin: '0 auto 16px' }}><SpotArt k="saved" dark /></div>
+      <div style={{ fontSize: 17, fontWeight: 700, color: CL.ink }}>{title}</div>
+      <div style={{ fontSize: 14, color: CL.ink2, marginTop: 6, lineHeight: 1.5 }}>{text}</div>
+      {onOpenCollection && <button type="button" onClick={onOpenCollection} className="zchat-press" style={{ marginTop: 16, height: 42, padding: '0 18px', borderRadius: 21, border: 'none', background: CL.card2, color: CL.ink, fontFamily: FONT, fontSize: 14.5, fontWeight: 650, cursor: 'pointer' }}>Open your Collection</button>}
+    </div>
+  );
+  const setGrid = (list) => (
+    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gap: 10 }}>
+      {list.map((s) => <SetCard key={s.key} set={s} me={me} own={ownOf(s.key)} wearing={false} width={tileW} free={freeSets > 0 && s.rarity === 'epic'} onOpen={() => open('set', s.key)} />)}
+    </div>
+  );
+  const itemGrid = (kind, keys) => (
+    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${kind === 'bubble' ? 2 : cols >= 3 ? 4 : 3}, minmax(0, 1fr))`, gap: 10 }}>
+      {keys.map((k) => kind === 'bubble'
+        ? <BubbleTileDark key={k} k={k} on={false} status={freeBubbles > 0 ? 'Free' : String(BUBBLE_PRICE)} tone={freeBubbles > 0 ? 'free' : 'coin'} onPick={() => open('bubble', k)} />
+        : (
+          <div key={k} role="button" aria-label={`${shopItemName('charm', k)} charm`} onClick={() => open('charm', k)} className="zchat-press"
+            style={{ minWidth: 0, borderRadius: 18, padding: '14px 8px 11px', cursor: 'pointer', background: CL.card, boxShadow: `inset 0 0 0 1px ${CL.line}`, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <div style={{ height: 62, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><CharmPreview charm={k} size={48} /></div>
+            <div style={{ alignSelf: 'stretch', fontSize: 13, fontWeight: 600, color: CL.ink, marginTop: 6, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'center' }}>{shopItemName('charm', k)}</div>
+            <div style={{ marginTop: 3 }}><CollPrice price={shopPrice('charm', k) || 0} size={12.5} /></div>
+          </div>
+        ))}
+    </div>
+  );
+  return (
+    <>
+    <WideDim onClose={onClose} z={625} />
+    <div {...edgeBack} className="zchat-panel-open zchat-wide-page" style={{ position: 'fixed', inset: 0, zIndex: 625, background: CL.bg, color: CL.ink, display: 'flex', flexDirection: 'column', fontFamily: FONT }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px 0', paddingTop: 'calc(6px + env(safe-area-inset-top))' }}>
+        <div role="button" aria-label="Close shop" onClick={onClose} style={{ width: 42, height: 42, borderRadius: 21, display: 'flex', alignItems: 'center', justifyContent: 'center', color: CL.ink, cursor: 'pointer' }}><ArrowLeft size={23} /></div>
+        <div style={{ flex: 1 }} />
+        {onOpenCollection && <div role="button" aria-label="Your collection" onClick={onOpenCollection} className="zchat-press" style={{ height: 34, padding: '0 13px', borderRadius: 17, background: CL.card2, display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, fontWeight: 650, color: CL.ink, cursor: 'pointer' }}><CollectionIcon size={17} />Collection</div>}
+        <div role="button" aria-label={`${formatCount(coins)} coins`} onClick={onOpenWallet} className="zchat-press" style={{ display: 'flex', alignItems: 'center', gap: 6, height: 34, padding: '0 13px 0 10px', borderRadius: 17, background: CL.card2, fontSize: 14.5, fontWeight: 650, color: CL.ink, cursor: 'pointer', fontVariantNumeric: 'tabular-nums' }}><CoinIcon size={18} />{formatCount(coins)}</div>
+      </div>
+      <div style={{ padding: '4px 16px 14px', fontSize: 31, fontWeight: 750, letterSpacing: '-0.025em' }}>Shop</div>
+      <div style={{ padding: '0 16px 4px' }}>
+        <SegTabs items={[['foryou', 'For you'], ['sets', 'Sets'], ['bubbles', 'Bubbles'], ['charms', 'Charms']]} value={tab} onChange={(k) => { setTab(k); playUiSound('tap'); if (gridRef.current) gridRef.current.scrollTop = 0; }} />
+      </div>
+      <div ref={gridRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain', padding: '0 16px 40px', visibility: openSet || openDrop ? 'hidden' : 'visible' }}>
+        {tab === 'foryou' && (
+          <>
+            {dealVisible && <DealCard deal={deal} me={me} own={deal.kind === 'set' ? ownOf(deal.key) : null} onOpen={() => open(deal.kind, deal.key)} />}
+            {shownDrops.map((d) => <CollDropRow key={d.id} drop={d} me={me} rewards={rewards} onOpen={() => { setDropOpen(d.id); playUiSound('tap'); }} />)}
+            {freeSets > 0 && (
+              <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 16, background: CL.card }}>
+                <GiftIcon size={22} color={CL.gold} />
+                <div style={{ flex: 1, minWidth: 0, fontSize: 13.5, lineHeight: 1.4, color: CL.ink2 }}><b style={{ color: CL.ink, fontWeight: 650 }}>{freeSets === 1 ? '1 free set' : `${freeSets} free sets`}</b> for you. Pick any Epic set and get all three pieces.</div>
+              </div>
+            )}
+            {pop.length > 0 && (
+              <CollSection title="Popular" sub="What people pick the most">
+                <ShopRow>{pop.map((p) => <ShopRowCard key={`${p.kind}:${p.key}`} kind={p.kind} k={p.key} me={me} line={`${formatCount(p.owners)} have it`} onOpen={() => open(p.kind, p.key)} />)}</ShopRow>
+              </CollSection>
+            )}
+            {wished.length > 0 && (
+              <CollSection title="Your wishlist" sub="Friends see it when they send you a gift">
+                <ShopRow>{wished.map((w) => <ShopRowCard key={`${w.kind}:${w.item_key}`} kind={w.kind} k={w.item_key} me={me} line={w.kind === 'set' ? `${(3 - ownOf(w.item_key).count) * decorPartPrice(w.item_key)} coins` : `${w.kind === 'bubble' ? BUBBLE_PRICE : shopPrice('charm', w.item_key)} coins`} onOpen={() => open(w.kind, w.item_key)} />)}</ShopRow>
+              </CollSection>
+            )}
+            {partial.length > 0 && (
+              <CollSection title="Finish your sets" sub="Get the pieces you are missing">
+                <ShopRow>{partial.map((s) => { const o = ownOf(s.key); return <ShopRowCard key={s.key} kind="set" k={s.key} me={me} line={`${3 - o.count} more ${3 - o.count === 1 ? 'piece' : 'pieces'}`} onOpen={() => open('set', s.key)} />; })}</ShopRow>
+              </CollSection>
+            )}
+            {freshBubbles.length > 0 && (
+              <CollSection title="New" sub="Just landed in the shop">
+                <ShopRow>{freshBubbles.map((k) => <ShopRowCard key={k} kind="bubble" k={k} me={me} line="New bubble" onOpen={() => open('bubble', k)} />)}</ShopRow>
+              </CollSection>
+            )}
+            {legendary.length > 0 && <CollSection title="Legendary sets" sub="Animated frame, nameplate and profile effect">{setGrid(legendary.slice(0, cols * 2))}</CollSection>}
+            {legendary.length > cols * 2 && <button type="button" onClick={() => { setTab('sets'); if (gridRef.current) gridRef.current.scrollTop = 0; }} className="zchat-press" style={{ marginTop: 12, width: '100%', height: 46, borderRadius: 14, border: 'none', background: CL.card2, color: CL.ink, fontFamily: FONT, fontSize: 14.5, fontWeight: 650, cursor: 'pointer' }}>See all sets</button>}
+            {!dealVisible && !pop.length && !shopSets.length && !shopBubbles.length && !shopCharms.length && empty('You have everything', 'Every set, bubble and charm in the shop is already yours.')}
+          </>
+        )}
+        {tab === 'sets' && (shopSets.length ? (
+          <>
+            {legendary.length > 0 && <CollSection title="Legendary" sub={`${legendary.length} sets`}>{setGrid(legendary)}</CollSection>}
+            {epic.length > 0 && <CollSection title="Epic" sub={freeSets > 0 ? 'Free sets work on these' : `${epic.length} sets`}>{setGrid(epic)}</CollSection>}
+            <div style={{ fontSize: 12.5, color: CL.ink3, textAlign: 'center', margin: '22px 12px 0', lineHeight: 1.5 }}>Every set has a frame, a nameplate and a profile effect. Each piece is {decorPartPrice()} coins and a full set is {decorPartPrice() * 3}. Everything is yours to keep.</div>
+          </>
+        ) : empty('Every set is yours', 'Wear them from your Collection.'))}
+        {tab === 'bubbles' && (shopBubbles.length ? (
+          <CollSection title="Chat bubbles" sub={freeBubbles > 0 ? `${freeBubbles === 1 ? '1 free pick' : `${freeBubbles} free picks`} left. Choose any bubble you like.` : 'Your bubble shows on every message you send'}>{itemGrid('bubble', shopBubbles)}</CollSection>
+        ) : empty('Every bubble is yours', 'Switch bubbles from your Collection.'))}
+        {tab === 'charms' && (shopCharms.length ? (
+          <CollSection title="Charms" sub="A charm sits next to your name everywhere">{itemGrid('charm', shopCharms)}</CollSection>
+        ) : empty('Every charm is yours', 'Use them from your Collection.'))}
+      </div>
+      {openItem && <ShopItemSheet me={me} item={openItem} rewards={rewards} wallet={wallet} onClose={() => setOpenItem(null)} onOpenWallet={onOpenWallet} onGift={onGift ? (kind, k) => { setOpenItem(null); onGift(kind, k); } : undefined} onPreviewCharm={(k) => { setOpenItem(null); setCharmTry(k); }} onDone={async (t) => { setOpenItem(null); say(t); await refresh(); }} />}
+      {charmTry && <CharmTryOnPage me={me} charmKey={charmTry} onClose={() => setCharmTry(null)} action={{ label: `Get it for ${formatCount(shopPrice('charm', charmTry) || 0)} coins`, onClick: () => { const k = charmTry; setCharmTry(null); setOpenItem({ kind: 'charm', key: k }); }, sub: 'Yours to keep' }} />}
+      {openSet && (
+        <SetShopPage me={me} setKey={openSet} rewards={rewards} wallet={wallet} list={listKeys.includes(openSet) ? listKeys : null} onClose={() => setOpenSet(null)} onPick={(k) => setOpenSet(k)}
+          onWear={onWear} onRefresh={refresh} onOpenWallet={onOpenWallet} onGift={onGift ? (k) => onGift('set', k) : undefined} />
+      )}
+      {openDrop && <DropPage drop={openDrop} me={me} rewards={rewards} wallet={wallet} onClose={() => setDropOpen(null)} onWear={onWear} onRefresh={refresh} onOpenWallet={onOpenWallet} />}
+      {toast && <div className="zchat-pop" role="status" style={{ position: 'absolute', left: '50%', top: 'calc(70px + env(safe-area-inset-top))', transform: 'translateX(-50%)', zIndex: 40, padding: '9px 16px', borderRadius: 18, background: 'rgba(255,255,255,0.95)', color: '#111', fontSize: 13.5, fontWeight: 650, whiteSpace: 'nowrap', maxWidth: 'calc(100% - 32px)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{toast}</div>}
+    </div>
+    </>
+  );
+}
+
+function LookSlot({ look, slot, me, current, onApply, onSave, onMenu }) {
+  if (!look) {
+    return (
+      <div role="button" aria-label={`Save what you wear as look ${slot}`} onClick={onSave} className="zchat-press"
+        style={{ minWidth: 0, height: 128, borderRadius: 18, border: `1.5px dashed rgba(235,235,245,0.22)`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer', color: CL.ink2 }}>
+        <Plus size={20} />
+        <div style={{ fontSize: 12.5, fontWeight: 600, textAlign: 'center', lineHeight: 1.3, padding: '0 6px' }}>Save what you wear</div>
+      </div>
+    );
+  }
+  const frameKey = isDecorKey(look.frame) ? look.frame : null;
+  return (
+    <div role="button" aria-label={`Wear ${look.name || `look ${slot}`}`} onClick={onApply} className="zchat-press"
+      style={{ position: 'relative', minWidth: 0, height: 128, borderRadius: 18, background: CL.card, boxShadow: `inset 0 0 0 ${current ? 2 : 1}px ${current ? CL.accent : CL.line}`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, cursor: 'pointer', padding: '8px 6px' }}>
+      {frameKey ? <DecorFrameBadge setKey={frameKey} size={62} photo={me.avatar} name={me.name} lazy /> : <Avatar emoji={me.avatar} name={me.name} size={50} />}
+      <div style={{ maxWidth: '100%', fontSize: 12.5, fontWeight: 650, color: current ? '#B9A6FF' : CL.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', padding: '0 4px' }}>{current ? 'Wearing' : look.name || `Look ${slot}`}</div>
+      <div role="button" aria-label={`Options for ${look.name || `look ${slot}`}`} onClick={(e) => { e.stopPropagation(); onMenu(); }} style={{ position: 'absolute', top: 4, right: 4, width: 30, height: 30, borderRadius: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', color: CL.ink2, cursor: 'pointer' }}><MoreVertical size={16} /></div>
+    </div>
+  );
+}
+
+function LookMenuSheet({ look, slot, onClose, onUpdate, onRename, onRemove }) {
+  useBackClose(true, onClose);
+  const [name, setName] = useState(look.name || `Look ${slot}`);
+  const drag = useSheetDrag(onClose);
+  const row = (icon, label, fn, danger) => (
+    <div role="button" aria-label={label} onClick={fn} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', gap: 14, minHeight: 52, padding: '0 6px', borderRadius: 12, cursor: 'pointer', color: danger ? '#FF8A8A' : CL.ink, fontSize: 15.5, fontWeight: 600 }}>{icon}{label}</div>
+  );
+  return (
+    <Portal>
+      <div onClick={onClose} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 720, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontFamily: FONT }}>
+        <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" {...drag.sheetProps} style={{ ...drag.sheetStyle, width: '100%', maxWidth: 520, background: '#16161B', color: CL.ink, borderRadius: '26px 26px 0 0', padding: '8px 16px', paddingBottom: 'calc(16px + env(safe-area-inset-bottom))' }}>
+          <div style={{ display: 'flex', justifyContent: 'center', padding: '0 0 10px' }}><div style={{ width: 36, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.18)' }} /></div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '0 4px 10px' }}>
+            <input value={name} onChange={(e) => setName(e.target.value.slice(0, 24))} aria-label="Look name" placeholder={`Look ${slot}`}
+              style={{ flex: 1, minWidth: 0, height: 46, borderRadius: 14, border: 'none', outline: 'none', background: CL.card2, color: CL.ink, padding: '0 14px', fontFamily: FONT, fontSize: 16 }} />
+            <button type="button" onClick={() => onRename(name.trim() || `Look ${slot}`)} className="zchat-press" style={{ height: 46, padding: '0 16px', borderRadius: 14, border: 'none', background: CL.accent, color: '#FFFFFF', fontFamily: FONT, fontSize: 15, fontWeight: 650, cursor: 'pointer' }}>Save name</button>
+          </div>
+          {row(<Repeat size={19} />, 'Replace with what I wear now', onUpdate)}
+          {row(<Trash2 size={19} />, 'Remove this look', onRemove, true)}
+        </div>
+      </div>
+    </Portal>
+  );
+}
+
+function EffectRow({ set, me, own, wearing, onOpen }) {
+  const can = own.frame && own.plate;
+  return (
+    <div role="button" aria-label={`${set.name} effect`} onClick={onOpen} className="zchat-press"
+      style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '10px 14px 10px 10px', borderRadius: 18, background: wearing ? `linear-gradient(90deg, ${set.accent}38 0%, ${CL.card} 70%)` : CL.card, boxShadow: `inset 0 0 0 1px ${wearing ? `${set.accent}88` : CL.line}`, cursor: 'pointer', marginBottom: 10 }}>
+      <DecorFrameBadge setKey={set.key} size={64} photo={me.avatar} name={me.name} lazy />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 15.5, fontWeight: 650, color: CL.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{set.name}</div>
+        <div style={{ marginTop: 3 }}><RarityTag rarity={set.rarity} size={11.5} /></div>
+        <div style={{ fontSize: 12.5, color: wearing ? '#B9A6FF' : CL.ink2, marginTop: 4, lineHeight: 1.35 }}>{wearing ? 'Playing on your profile' : can ? 'Wear the full set to play it' : 'Get the frame and nameplate to play it'}</div>
+      </div>
+      <div style={{ width: 36, height: 36, borderRadius: 18, background: 'rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Play size={14} fill="#FFFFFF" strokeWidth={0} style={{ marginLeft: 2 }} /></div>
+    </div>
+  );
+}
+
+function CollectionPanel({ me, rewards, onClose, onEquip, onWear, isAdmin, onRewardsChanged, onOpenWallet, onGift, startSet = null, onOpenShop }) {
+  useBackClose(true, onClose);
+  const edgeBack = useEdgeSwipeBack(true);
+  const { bubbleStyle, setBubbleStyle } = useTheme();
   const [tab, setTab] = useState('sets');
   const [openSet, setOpenSet] = useState(null);
+  const [openMode, setOpenMode] = useState('set');
   useEffect(() => { if (isDecorKey(startSet)) setOpenSet(startSet); }, []);
   const drops = useDrops(me.id);
   const [dropOpen, setDropOpen] = useState(null);
@@ -22318,42 +23161,50 @@ function CollectionPanel({ me, rewards, onClose, onEquip, onWear, isAdmin, onRew
     const d = drops.find((x) => dropPhase(x) === 'live') || drops[0];
     if (d) setDropOpen(d.id);
   }, [drops]);
-  const shownDrops = (drops || []).filter((d) => dropPhase(d) !== 'ended').sort((a, b) => (dropPhase(a) === 'live' ? 0 : 1) - (dropPhase(b) === 'live' ? 0 : 1)).slice(0, 2);
   const openDrop = dropOpen ? (drops || []).find((d) => d.id === dropOpen) || null : null;
   const [selected, setSelected] = useState(null);
   const [busy, setBusy] = useState(false);
   const [tryOn, setTryOn] = useState(null);
+  const [toast, setToast] = useState('');
+  const [lookMenu, setLookMenu] = useState(null);
   const wallet = useWallet(me.id);
-  const [buyAsk, setBuyAsk] = useState(null);
-  const [buyNote, setBuyNote] = useState('');
   const gridRef = useRef(null);
   const gw = useWidthOf(gridRef, typeof window === 'undefined' ? 390 : Math.min(window.innerWidth, 560)) - 32;
   useDecorLoaded(DECOR_SPRITE);
   useBackClose(!!selected, () => setSelected(null));
-  const freeSets = wallet && wallet.ready ? wallet.freeSets || 0 : 0;
+  const say = (t) => { setToast(t); setTimeout(() => setToast(''), 2400); };
   const coins = wallet && wallet.ready ? wallet.coins : 0;
+  const stats = collectionStats(rewards);
+  const rewardsSig = `${(rewards || []).length}:${stats.owned}`;
+  const ms = useMilestones(me.id, rewardsSig);
+  const [msBusy, setMsBusy] = useState(false);
+  const looks = useLooks(me.id);
   const active = (rewards || []).filter(rewardActive);
-  const ownedFrames = new Set(active.filter((r) => r.kind === 'frame' && isDecorKey(r.reward_key)).map((r) => r.reward_key));
-  const ownedPlates = new Set(active.filter((r) => r.kind === 'nameplate' && isDecorKey(r.reward_key)).map((r) => r.reward_key));
-  const ownedCharms = new Set(active.filter((r) => r.kind === 'charm' && CUSTOM_BADGES[r.reward_key]).map((r) => r.reward_key));
-  const mine = DECOR_ALL.filter((s) => ownedFrames.has(s.key) || ownedPlates.has(s.key));
-  const fxSets = DECOR_SETS.filter((s) => s.fx);
-  const classicSets = DECOR_SETS.filter((s) => !s.fx);
-  const cols = gw >= 700 ? 4 : gw >= 500 ? 3 : 2;
-  const tileW = Math.max(110, Math.floor((gw - (cols - 1) * 10) / cols) - 8);
-  const cardW = Math.round(Math.min(320, Math.max(220, gw * 0.8)));
+  const ownOf = (k) => decorOwned(rewards, k);
   const wearF = isDecorKey(me.avatar_frame) ? me.avatar_frame : null;
   const wearP = isDecorKey(me.nameplate) ? me.nameplate : null;
+  const mine = DECOR_ALL.filter((s) => ownOf(s.key).any).sort((a, b) => {
+    const wa = (wearF === a.key || wearP === a.key) ? 0 : 1;
+    const wb = (wearF === b.key || wearP === b.key) ? 0 : 1;
+    return wa - wb || ownOf(b.key).count - ownOf(a.key).count;
+  });
+  const mineKeys = mine.map((s) => s.key);
+  const myFx = DECOR_ALL.filter((s) => ownOf(s.key).effect).sort((a, b) => Number(wearF === b.key && wearP === b.key) - Number(wearF === a.key && wearP === a.key));
+  const ownedCharms = new Set(active.filter((r) => r.kind === 'charm' && CUSTOM_BADGES[r.reward_key]).map((r) => r.reward_key));
+  const myBubbles = ['classic', ...CHAR_BUBBLE_KEYS.filter((k) => stats.bubbles.has(k))];
+  const wearingBubble = bubbleKeyOf(bubbleStyle) || 'classic';
+  const cols = gw >= 700 ? 4 : gw >= 500 ? 3 : 2;
+  const tileW = Math.max(110, Math.floor((gw - (cols - 1) * 10) / cols) - 8);
   const rarity = (spec) => RARITY_STYLE[spec.rarity] || RARITY_STYLE.epic;
   const rewardFor = (kind, key) => (rewards || []).find((r) => r.kind === kind && r.reward_key === key) || null;
   const items = tab === 'charm'
-    ? Object.entries(CUSTOM_BADGES).map(([key, spec]) => ({ key, spec, owned: ownedCharms.has(key), equipped: me.custom_badge === key, reward: rewardFor('charm', key) }))
+    ? Object.entries(CUSTOM_BADGES).filter(([key]) => ownedCharms.has(key)).map(([key, spec]) => ({ key, spec, owned: true, equipped: me.custom_badge === key, reward: rewardFor('charm', key) }))
     : tab === 'badge'
-      ? Object.entries(VERIFIED_TIERS).map(([key, t]) => ({ key, spec: { label: `${t.label} badge`, rarity: key === 'red' ? 'mythic' : key === 'gold' ? 'legendary' : 'epic', color: t.color }, owned: isAdmin || me.verified === key, equipped: me.verified === key, reward: null }))
+      ? Object.entries(VERIFIED_TIERS).filter(([key]) => isAdmin || me.verified === key).map(([key, t]) => ({ key, spec: { label: `${t.label} badge`, rarity: key === 'red' ? 'mythic' : key === 'gold' ? 'legendary' : 'epic', color: t.color }, owned: true, equipped: me.verified === key, reward: null }))
       : [];
-  const sorted = [...items].sort((x, y) => Number(y.owned) - Number(x.owned) || (STORE_RARITY_ORDER[x.spec.rarity] ?? 9) - (STORE_RARITY_ORDER[y.spec.rarity] ?? 9));
+  const sorted = [...items].sort((x, y) => Number(y.equipped) - Number(x.equipped) || (STORE_RARITY_ORDER[x.spec.rarity] ?? 9) - (STORE_RARITY_ORDER[y.spec.rarity] ?? 9));
   const sel = selected ? items.find((it) => it.key === selected) : null;
-  const refresh = async () => { if (onRewardsChanged) await onRewardsChanged(); };
+  const refresh = async () => { if (onRewardsChanged) await onRewardsChanged(); loadMilestones(me.id, true); };
   const equip = async (kind, key) => {
     if (busy || (kind === 'badge' && !isAdmin)) return;
     setBusy(true);
@@ -22361,22 +23212,38 @@ function CollectionPanel({ me, rewards, onClose, onEquip, onWear, isAdmin, onRew
     await onEquip(kind, key);
     setBusy(false);
   };
-  const doBuy = async () => {
-    const it = buyAsk;
-    setBuyAsk(null);
-    if (!it) return;
+  const openSetPage = (k, mode = 'set') => { setOpenMode(mode); setOpenSet(k); playUiSound('tap'); };
+  const claim = async (level) => {
+    if (msBusy) return;
+    setMsBusy(true);
+    const r = await claimMilestone(me.id, level);
+    setMsBusy(false);
+    if (r.error) { say(r.error); return; }
+    hapticTap();
+    playUiSound('win');
+    say(`${r.added} coins added`);
+  };
+  const currentLook = { frame: wearF, nameplate: wearP, bubble: wearingBubble === 'classic' ? null : wearingBubble, charm: me.custom_badge || null };
+  const sameLook = (l) => (l.frame || null) === currentLook.frame && (l.nameplate || null) === currentLook.nameplate && (l.bubble || null) === currentLook.bubble && (l.charm || null) === currentLook.charm;
+  const saveLook = async (slot, name) => {
+    const r = await looks.save(slot, { ...currentLook, name: name || `Look ${slot}` });
+    if (r.error) say(r.error); else { hapticTap(); say('Look saved'); }
+  };
+  const applyLook = async (l) => {
+    if (busy) return;
     setBusy(true);
-    const r = await buyShopItem(it.kind, it.key);
+    const ownsK = (kind, k) => !k || active.some((r) => r.kind === kind && r.reward_key === k);
+    const patch = {};
+    if (ownsK('frame', l.frame) && (l.frame || null) !== wearF) patch.avatar_frame = l.frame || null;
+    if (ownsK('nameplate', l.nameplate) && (l.nameplate || null) !== wearP) patch.nameplate = l.nameplate || null;
+    if (Object.keys(patch).length) await onWear(patch);
+    if (!l.bubble || stats.bubbles.has(l.bubble)) setBubbleStyle(l.bubble || 'classic');
+    if ((l.charm || null) !== (me.custom_badge || null) && (!l.charm || ownedCharms.has(l.charm))) await onEquip('charm', l.charm || null);
     setBusy(false);
-    if (r.error) { setBuyNote(r.error); setTimeout(() => setBuyNote(''), 2600); return; }
     hapticTap();
     playUiSound('like');
-    setBuyNote('Yours to keep');
-    setTimeout(() => setBuyNote(''), 2200);
-    await refresh();
+    say(`${l.name || 'Look'} is on`);
   };
-  const openSetPage = (k) => { setOpenSet(k); playUiSound('tap'); };
-  const ownOf = (k) => ({ frame: ownedFrames.has(k), plate: ownedPlates.has(k) });
   const covered = !!(openSet || openDrop || tryOn);
   const [hideBody, setHideBody] = useState(false);
   useEffect(() => {
@@ -22385,6 +23252,14 @@ function CollectionPanel({ me, rewards, onClose, onEquip, onWear, isAdmin, onRew
     return () => clearTimeout(t);
   }, [covered]);
   const btnStyle = (primary) => ({ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 44, padding: '0 18px', borderRadius: 13, border: 'none', fontFamily: FONT, fontSize: 14.5, fontWeight: 650, cursor: 'pointer', background: primary ? CL.accent : CL.card2, color: '#FFFFFF' });
+  const emptyTab = (title, text) => (
+    <div style={{ textAlign: 'center', padding: '24px 8px 30px' }}>
+      <div style={{ maxWidth: 280, margin: '0 auto 16px' }}><SpotArt k="saved" dark /></div>
+      <div style={{ fontSize: 17, fontWeight: 700, color: CL.ink }}>{title}</div>
+      <div style={{ fontSize: 14, color: CL.ink2, marginTop: 6, lineHeight: 1.5 }}>{text}</div>
+      {onOpenShop && <button type="button" onClick={() => onOpenShop()} className="zchat-press" style={{ marginTop: 16, height: 44, padding: '0 20px', borderRadius: 22, border: 'none', background: CL.accent, color: '#FFFFFF', fontFamily: FONT, fontSize: 15, fontWeight: 650, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8 }}><ShopBagIcon size={18} />Open the shop</button>}
+    </div>
+  );
   return (
     <>
     <WideDim onClose={onClose} z={620} />
@@ -22392,81 +23267,65 @@ function CollectionPanel({ me, rewards, onClose, onEquip, onWear, isAdmin, onRew
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px 0', paddingTop: 'calc(6px + env(safe-area-inset-top))' }}>
         <div role="button" aria-label="Close collection" onClick={onClose} style={{ width: 42, height: 42, borderRadius: 21, display: 'flex', alignItems: 'center', justifyContent: 'center', color: CL.ink, cursor: 'pointer' }}><ArrowLeft size={23} /></div>
         <div style={{ flex: 1 }} />
+        {onOpenShop && <div role="button" aria-label="Open the shop" onClick={() => { playUiSound('tap'); onOpenShop(); }} className="zchat-press" style={{ height: 34, padding: '0 13px 0 11px', borderRadius: 17, background: CL.accent, display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, fontWeight: 650, color: '#FFFFFF', cursor: 'pointer' }}><ShopBagIcon size={17} />Shop</div>}
         <div role="button" aria-label={`${formatCount(coins)} coins`} onClick={onOpenWallet} className="zchat-press" style={{ display: 'flex', alignItems: 'center', gap: 6, height: 34, padding: '0 13px 0 10px', borderRadius: 17, background: CL.card2, fontSize: 14.5, fontWeight: 650, color: CL.ink, cursor: 'pointer', fontVariantNumeric: 'tabular-nums' }}><CoinIcon size={18} />{formatCount(coins)}</div>
       </div>
-      <div style={{ padding: '4px 16px 14px', fontSize: 31, fontWeight: 750, letterSpacing: '-0.025em' }}>Collection</div>
-      <div style={{ padding: '0 16px 4px' }}>
-        <SegTabs items={[['sets', 'Sets'], ['bubble', 'Bubbles'], ['charm', 'Charms'], ['badge', 'Badges']]} value={tab} onChange={(k) => { setTab(k); setSelected(null); playUiSound('tap'); }} />
-      </div>
-
-      <div ref={gridRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain', padding: `0 16px ${tab === 'bubble' ? 0 : 36}px`, visibility: hideBody ? 'hidden' : 'visible' }}>
-        {tab === 'sets' && (
-          <>
-            {shownDrops.map((d) => <CollDropRow key={d.id} drop={d} me={me} rewards={rewards} onOpen={() => { setDropOpen(d.id); playUiSound('tap'); }} />)}
-            {freeSets > 0 && (
-              <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 16, background: CL.card }}>
-                <GiftIcon size={22} color={CL.gold} />
-                <div style={{ flex: 1, minWidth: 0, fontSize: 13.5, lineHeight: 1.4, color: CL.ink2 }}><b style={{ color: CL.ink, fontWeight: 650 }}>{freeSets === 1 ? '1 free set' : `${freeSets} free sets`}</b> for you. Pick any classic set and get the frame and the nameplate.</div>
-              </div>
-            )}
-            {mine.length > 0 && (
-              <CollSection title="Yours" sub={`${mine.length} ${mine.length === 1 ? 'set' : 'sets'} in your collection`}>
-                <div style={{ display: 'flex', gap: 16, overflowX: 'auto', scrollbarWidth: 'none', margin: '0 -16px', padding: '0 16px 2px' }}>
-                  {mine.map((s) => {
-                    const on = wearF === s.key || wearP === s.key;
-                    return (
-                      <div key={s.key} role="button" aria-label={`${s.name}, yours`} onClick={() => (s.drop ? null : openSetPage(s.key))} className="zchat-press" style={{ flex: '0 0 auto', width: 78, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: s.drop ? 'default' : 'pointer' }}>
-                        <DecorFrameBadge setKey={s.key} size={74} photo={me.avatar} name={me.name} lazy />
-                        <div style={{ maxWidth: '100%', fontSize: 12, fontWeight: 600, color: on ? '#B9A6FF' : CL.ink2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{on ? 'Wearing' : s.name}</div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </CollSection>
-            )}
-            <CollSection title="Profile effects" sub="Wear the full set and its animation plays when someone opens your profile">
-              <div style={{ display: 'flex', gap: 12, overflowX: 'auto', scrollbarWidth: 'none', scrollSnapType: 'x mandatory', scrollPaddingLeft: 16, margin: '0 -16px', padding: '0 16px 4px' }}>
-                {fxSets.map((s) => <FxSetCard key={s.key} set={s} me={me} own={ownOf(s.key)} wearing={wearF === s.key || wearP === s.key} width={cardW} onOpen={() => openSetPage(s.key)} />)}
-                <div style={{ flex: '0 0 4px' }} />
-              </div>
-            </CollSection>
-            <CollSection title="Classic sets" sub={freeSets > 0 ? 'Free sets work on these' : 'Animated frames and nameplates'}>
-              <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gap: 10 }}>
-                {classicSets.map((s) => {
-                  const own = ownOf(s.key);
-                  return <SetTile key={s.key} set={s} me={me} own={own} wearing={wearF === s.key || wearP === s.key} free={freeSets > 0 && !(own.frame && own.plate)} width={tileW} onOpen={() => openSetPage(s.key)} />;
-                })}
-              </div>
-            </CollSection>
-            <div style={{ fontSize: 12.5, color: CL.ink3, textAlign: 'center', margin: '22px 12px 0', lineHeight: 1.5 }}>A classic set is {DECOR_PRICE * 2} coins and a set with a profile effect is {DECOR_FX_PRICE * 2}. A frame or a nameplate on its own is half. Everything is yours to keep.</div>
-          </>
+      <div ref={gridRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain', padding: '0 16px 40px', visibility: hideBody ? 'hidden' : 'visible' }}>
+        <div style={{ padding: '4px 0 12px', fontSize: 31, fontWeight: 750, letterSpacing: '-0.025em' }}>Collection</div>
+        <CollProgress stats={stats} ms={ms} onClaim={claim} busy={msBusy} />
+        {!looks.off && (
+          <CollSection title="Looks" sub="Save what you wear and switch in one tap" style={{ marginTop: 22 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10 }}>
+              {[1, 2, 3].map((slot) => {
+                const l = looks.list.find((x) => x.slot === slot) || null;
+                return <LookSlot key={slot} slot={slot} look={l} me={me} current={!!l && sameLook(l)} onSave={() => saveLook(slot)} onApply={() => applyLook(l)} onMenu={() => setLookMenu(slot)} />;
+              })}
+            </div>
+          </CollSection>
         )}
-        {tab === 'bubble' && <BubbleShopInline uid={me.id} onOpenWallet={onOpenWallet} onGift={onGift ? (k) => onGift('bubble', k) : undefined} />}
-        {(tab === 'charm' || tab === 'badge') && (
+        <div style={{ position: 'sticky', top: 0, zIndex: 6, margin: '20px -16px 0', padding: '8px 16px', background: CL.bg }}>
+          <SegTabs items={[['sets', 'Sets'], ['effects', 'Effects'], ['bubble', 'Bubbles'], ['charm', 'Charms'], ['badge', 'Badges']]} value={tab} onChange={(k) => { setTab(k); setSelected(null); playUiSound('tap'); }} />
+        </div>
+        {tab === 'sets' && (mine.length ? (
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gap: 10, marginTop: 12 }}>
+            {mine.map((s) => <SetCard key={s.key} set={s} me={me} own={ownOf(s.key)} owned wearing={wearF === s.key && wearP === s.key} width={tileW} onOpen={() => openSetPage(s.key)} />)}
+          </div>
+        ) : emptyTab('No sets yet', 'Sets you get show up here. Every set comes with a frame, a nameplate and a profile effect.'))}
+        {tab === 'effects' && (myFx.length ? (
+          <div style={{ marginTop: 12 }}>
+            <div style={{ fontSize: 13.5, color: CL.ink2, lineHeight: 1.45, padding: '0 2px 12px' }}>An effect plays when someone opens your profile, while you wear its full set.</div>
+            {myFx.map((s) => <EffectRow key={s.key} set={s} me={me} own={ownOf(s.key)} wearing={wearF === s.key && wearP === s.key} onOpen={() => openSetPage(s.key, 'effect')} />)}
+          </div>
+        ) : emptyTab('No effects yet', 'Every set has its own profile effect. Get one in the shop.'))}
+        {tab === 'bubble' && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10, marginTop: 12 }}>
+            {myBubbles.map((k) => <BubbleTileDark key={k} k={k} on={wearingBubble === k} status={wearingBubble === k ? 'In use' : k === 'classic' ? 'Free' : 'Yours'} tone={wearingBubble === k ? 'use' : 'own'} onPick={() => { if (wearingBubble === k) return; hapticTap(); playUiSound('like'); setBubbleStyle(k); say(k === 'classic' ? 'Back to the classic bubble' : `${CHAR_BUBBLES[k].label} is on. Everyone sees it.`); }} />)}
+            {myBubbles.length === 1 && <div style={{ gridColumn: '1 / -1' }}>{emptyTab('Only the classic bubble', 'Get a bubble with a little character on it in the shop.')}</div>}
+          </div>
+        )}
+        {(tab === 'charm' || tab === 'badge') && (sorted.length ? (
           <>
-            <div style={{ fontSize: 13.5, color: CL.ink2, lineHeight: 1.4, padding: '18px 2px 12px' }}>{tab === 'charm' ? 'A charm sits next to your name everywhere in ZChat.' : 'Badges show next to your name and are given by the ZChat team.'}</div>
+            <div style={{ fontSize: 13.5, color: CL.ink2, lineHeight: 1.4, padding: '14px 2px 12px' }}>{tab === 'charm' ? 'A charm sits next to your name everywhere in ZChat.' : 'Badges show next to your name and are given by the ZChat team.'}</div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
               {sorted.map((it) => {
-                const r = rarity(it.spec);
                 const left = daysLeft(it.reward);
-                const price = tab === 'charm' ? shopPrice('charm', it.key) : null;
                 return (
                   <div key={it.key} role="button" aria-label={it.spec.label} onClick={() => { setSelected(it.key); playUiSound('tap'); }} className="zchat-press"
                     style={{ position: 'relative', minWidth: 0, borderRadius: 18, padding: '14px 12px 13px', cursor: 'pointer', background: CL.card, boxShadow: `inset 0 0 0 ${it.equipped ? 2 : 1}px ${it.equipped ? CL.accent : CL.line}` }}>
-                    {!it.owned && !price && <div style={{ position: 'absolute', top: 10, right: 10 }}><Lock size={13} color={CL.ink3} /></div>}
-                    <div style={{ height: 88, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: it.owned || price ? 1 : 0.45 }}>
+                    <div style={{ height: 88, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       {tab === 'charm' ? <CharmPreview charm={it.key} size={54} /> : <VerifiedBadge tier={it.key} size={54} style={{ marginLeft: 0, display: 'block' }} />}
                     </div>
                     <div style={{ fontSize: 14, fontWeight: 600, color: CL.ink, marginTop: 8, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.spec.label.replace(/ (charm|badge)$/i, '')}</div>
-                    <div style={{ marginTop: 3, fontSize: 12.5, fontWeight: 600, color: it.equipped ? '#B9A6FF' : it.owned ? CL.own : CL.ink2, display: 'flex', alignItems: 'center', gap: 4 }}>
-                      {it.equipped ? 'In use' : it.owned ? (left != null ? `${left} days left` : 'Owned') : price ? <CollPrice price={price} size={13} /> : r.label}
+                    <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                      <RarityTag rarity={it.spec.rarity} size={11.5} />
+                      <span style={{ fontSize: 12, fontWeight: 600, color: it.equipped ? '#B9A6FF' : CL.own, flexShrink: 0 }}>{it.equipped ? 'In use' : left != null ? `${left} days left` : 'Yours'}</span>
                     </div>
                   </div>
                 );
               })}
             </div>
           </>
-        )}
+        ) : emptyTab(tab === 'charm' ? 'No charms yet' : 'No badges yet', tab === 'charm' ? 'Charms sit next to your name. Find them in the shop.' : 'Badges are given by the ZChat team.'))}
       </div>
 
       {sel && (
@@ -22476,9 +23335,9 @@ function CollectionPanel({ me, rewards, onClose, onEquip, onWear, isAdmin, onRew
               {tab === 'charm' ? <CharmPreview charm={sel.key} size={52} /> : <VerifiedBadge tier={sel.key} size={52} style={{ marginLeft: 0, display: 'block' }} />}
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 12.5, fontWeight: 600, color: rarity(sel.spec).color }}>{rarity(sel.spec).label}{sel.spec.animated ? ', animated' : ''}</div>
-              <div style={{ fontSize: 18, fontWeight: 700, marginTop: 2 }}>{sel.spec.label}</div>
-              {sel.owned && daysLeft(sel.reward) != null && <div style={{ fontSize: 12.5, fontWeight: 500, color: daysLeft(sel.reward) <= 5 ? '#FCA5A5' : CL.ink2, marginTop: 3 }}>Yours for {daysLeft(sel.reward)} more days</div>}
+              <RarityTag rarity={sel.spec.rarity} size={12.5} />
+              <div style={{ fontSize: 18, fontWeight: 700, marginTop: 3 }}>{sel.spec.label}</div>
+              {daysLeft(sel.reward) != null && <div style={{ fontSize: 12.5, fontWeight: 500, color: daysLeft(sel.reward) <= 5 ? '#FCA5A5' : CL.ink2, marginTop: 3 }}>Yours for {daysLeft(sel.reward)} more days</div>}
             </div>
             <div role="button" aria-label="Close details" onClick={() => setSelected(null)} style={{ width: 32, height: 32, borderRadius: 16, background: CL.card2, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: CL.ink2, flexShrink: 0 }}><X size={16} /></div>
           </div>
@@ -22487,62 +23346,252 @@ function CollectionPanel({ me, rewards, onClose, onEquip, onWear, isAdmin, onRew
               isAdmin ? (
                 <button disabled={busy || sel.equipped} onClick={() => equip('badge', sel.key)} style={{ ...btnStyle(!sel.equipped), flex: 1, cursor: sel.equipped ? 'default' : 'pointer', background: sel.equipped ? 'rgba(61,214,140,0.16)' : CL.accent, color: sel.equipped ? CL.own : '#FFFFFF' }}>{sel.equipped ? 'In use' : 'Use this badge'}</button>
               ) : (
-                <div style={{ flex: 1, padding: '12px 14px', borderRadius: 13, background: CL.card2, fontSize: 13.5, fontWeight: 500, color: CL.ink2 }}>{sel.owned ? 'You are wearing this badge' : 'Given by the ZChat team'}</div>
+                <div style={{ flex: 1, padding: '12px 14px', borderRadius: 13, background: CL.card2, fontSize: 13.5, fontWeight: 500, color: CL.ink2 }}>You are wearing this badge</div>
               )
-            ) : sel.owned ? (
+            ) : (
               <>
                 {sel.equipped
                   ? <button disabled={busy} onClick={() => equip('charm', null)} style={{ ...btnStyle(false), flex: 1 }}>Take off</button>
                   : <button disabled={busy} onClick={() => equip('charm', sel.key)} style={{ ...btnStyle(true), flex: 1 }}>Use this charm</button>}
                 <button onClick={() => setTryOn(sel.key)} style={btnStyle(false)}>Preview</button>
-                {daysLeft(sel.reward) != null && shopPrice('charm', sel.key) && <button onClick={() => setBuyAsk({ kind: 'charm', key: sel.key, label: sel.spec.label, price: shopPrice('charm', sel.key) })} style={btnStyle(false)}>Keep it<CoinIcon size={15} />{formatCount(shopPrice('charm', sel.key))}</button>}
-              </>
-            ) : (
-              <>
-                {shopPrice('charm', sel.key) ? (
-                  <button onClick={() => setBuyAsk({ kind: 'charm', key: sel.key, label: sel.spec.label, price: shopPrice('charm', sel.key) })} aria-label={`Get for ${shopPrice('charm', sel.key)} coins`} style={{ ...btnStyle(true), flex: 1 }}>Get it<CoinIcon size={16} />{formatCount(shopPrice('charm', sel.key))}</button>
-                ) : (
-                  <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 7, padding: '12px 14px', borderRadius: 13, background: CL.card2, fontSize: 13.5, fontWeight: 500, color: CL.ink2 }}><Lock size={14} />Earn it from ZChat events and gifts</div>
-                )}
-                <button onClick={() => setTryOn(sel.key)} style={btnStyle(false)}>Preview</button>
               </>
             )}
-            {tab === 'charm' && onGift && shopPrice('charm', sel.key) ? (
-              <button onClick={() => { hapticTap(); onGift('charm', sel.key); }} aria-label={`Send the ${sel.spec.label} as a gift`} style={btnStyle(false)}><GiftBoxIcon size={17} />Gift</button>
-            ) : null}
           </div>
         </div>
       )}
-
-      {buyAsk && (wallet && wallet.ready && wallet.coins < buyAsk.price ? (
-        <ConfirmDialog layer={720} danger={false} title="Not enough coins" confirmLabel="Get coins"
-          body={`This costs ${formatCount(buyAsk.price)} coins and you have ${formatCount(wallet.coins)}. Claim daily coins or invite friends to get more.`}
-          onCancel={() => setBuyAsk(null)} onConfirm={() => { setBuyAsk(null); if (onOpenWallet) onOpenWallet(); }} />
-      ) : (
-        <ConfirmDialog layer={720} danger={false} title={`Get ${buyAsk.label}?`} confirmLabel={`Use ${formatCount(buyAsk.price)} coins`}
-          body={`It is yours to keep. You have ${formatCount((wallet && wallet.coins) || 0)} coins.`}
-          onCancel={() => setBuyAsk(null)} onConfirm={doBuy} />
-      ))}
-      {buyNote && <div className="zchat-pop" role="status" style={{ position: 'absolute', left: '50%', top: 'calc(70px + env(safe-area-inset-top))', transform: 'translateX(-50%)', zIndex: 40, padding: '9px 16px', borderRadius: 18, background: 'rgba(255,255,255,0.95)', color: '#111', fontSize: 13.5, fontWeight: 600, whiteSpace: 'nowrap' }}>{buyNote}</div>}
+      {toast && <div className="zchat-pop" role="status" style={{ position: 'absolute', left: '50%', top: 'calc(70px + env(safe-area-inset-top))', transform: 'translateX(-50%)', zIndex: 40, padding: '9px 16px', borderRadius: 18, background: 'rgba(255,255,255,0.95)', color: '#111', fontSize: 13.5, fontWeight: 650, whiteSpace: 'nowrap', maxWidth: 'calc(100% - 32px)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{toast}</div>}
       {tryOn && (() => {
         const rw = rewardFor('charm', tryOn);
-        const has = rw && rewardActive(rw);
         const isEq = me.custom_badge === tryOn;
-        const price = shopPrice('charm', tryOn);
-        const action = has
-          ? { label: isEq ? 'Equipped' : 'Equip this charm', disabled: isEq || busy, onClick: async () => { await equip('charm', tryOn); setTryOn(null); }, sub: daysLeft(rw) != null ? `${daysLeft(rw)} days left` : 'Yours to keep' }
-          : price
-            ? { label: `Get it for ${formatCount(price)} coins`, onClick: () => { const spec = CUSTOM_BADGES[tryOn]; setTryOn(null); setBuyAsk({ kind: 'charm', key: tryOn, label: spec.label, price }); }, sub: 'Yours to keep' }
-            : { label: 'Locked', disabled: true, sub: 'Earn this charm from ZChat events and gifts' };
-        return <CharmTryOnPage me={me} charmKey={tryOn} onClose={() => setTryOn(null)} action={action} />;
+        return <CharmTryOnPage me={me} charmKey={tryOn} onClose={() => setTryOn(null)} action={{ label: isEq ? 'Equipped' : 'Equip this charm', disabled: isEq || busy, onClick: async () => { await equip('charm', tryOn); setTryOn(null); }, sub: daysLeft(rw) != null ? `${daysLeft(rw)} days left` : 'Yours to keep' }} />;
       })()}
+      {lookMenu && looks.list.find((x) => x.slot === lookMenu) && (
+        <LookMenuSheet look={looks.list.find((x) => x.slot === lookMenu)} slot={lookMenu} onClose={() => setLookMenu(null)}
+          onRename={async (name) => { const l = looks.list.find((x) => x.slot === lookMenu); setLookMenu(null); const r = await looks.save(l.slot, { ...l, name }); if (r.error) say(r.error); }}
+          onUpdate={async () => { const l = looks.list.find((x) => x.slot === lookMenu); setLookMenu(null); await saveLook(l.slot, l.name); }}
+          onRemove={async () => { const s = lookMenu; setLookMenu(null); const r = await looks.remove(s); if (r.error) say(r.error); }} />
+      )}
       {openSet && (
-        <SetShopPage me={me} setKey={openSet} rewards={rewards} wallet={wallet} onClose={() => setOpenSet(null)} onPick={(k) => setOpenSet(k)}
+        <SetShopPage me={me} setKey={openSet} rewards={rewards} wallet={wallet} startMode={openMode} list={mineKeys.includes(openSet) ? mineKeys : null} onClose={() => setOpenSet(null)} onPick={(k) => setOpenSet(k)}
           onWear={onWear} onRefresh={refresh} onOpenWallet={onOpenWallet} onGift={onGift ? (k) => onGift('set', k) : undefined} />
       )}
       {openDrop && <DropPage drop={openDrop} me={me} rewards={rewards} wallet={wallet} onClose={() => setDropOpen(null)} onWear={onWear} onRefresh={refresh} onOpenWallet={onOpenWallet} />}
     </div>
     </>
+  );
+}
+
+function giftOpenStore(uid) {
+  const k = `zchat-gift-open-${uid}`;
+  const read = () => { try { const v = JSON.parse(localStorage.getItem(k) || '[]'); return Array.isArray(v) ? v : []; } catch { return []; } };
+  const add = (id) => { try { const v = read().filter((x) => x !== id); v.push(id); localStorage.setItem(k, JSON.stringify(v.slice(-200))); } catch {} };
+  return { read, add };
+}
+function giftSince(uid) {
+  const k = `zchat-gift-since-${uid}`;
+  try {
+    const v = localStorage.getItem(k);
+    if (v) return v;
+    const now = new Date().toISOString();
+    localStorage.setItem(k, now);
+    return now;
+  } catch { return new Date().toISOString(); }
+}
+function giftOfNote(n) {
+  const m = n && n.meta && typeof n.meta === 'object' ? n.meta : {};
+  if (Number(m.coins) > 0) return { kind: 'coins', coins: Math.floor(Number(m.coins)) };
+  const coinText = /^(\d+) coins/.exec(String((n && n.text) || ''));
+  if (coinText && !m.key) return { kind: 'coins', coins: Number(coinText[1]) };
+  if (m.key && (m.kind === 'set' || m.kind === 'frame' || m.kind === 'nameplate' || m.kind === 'effect') && isDecorKey(m.key)) return { kind: m.kind, key: m.key };
+  if (m.key && m.kind === 'bubble' && CHAR_BUBBLES[m.key]) return { kind: 'bubble', key: m.key };
+  if (m.key && m.kind === 'charm' && CUSTOM_BADGES[m.key]) return { kind: 'charm', key: m.key };
+  return null;
+}
+function giftNoteText(n) {
+  const t = String((n && n.text) || '');
+  const m = /, "(.*)"$/.exec(t);
+  return m ? m[1] : '';
+}
+function useGiftInbox(uid) {
+  const [list, setList] = useState([]);
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    if (!uid) return undefined;
+    let alive = true;
+    const since = giftSince(uid);
+    const load = async () => {
+      const { data, error } = await supabase.from('notifications').select('id, actor_id, kind, text, meta, created_at').eq('user_id', uid).eq('kind', 'gift').gt('created_at', since).order('created_at', { ascending: true }).limit(20);
+      if (!alive || error) return;
+      const opened = new Set(giftOpenStore(uid).read());
+      const rows = (data || []).filter((n) => !opened.has(n.id) && giftOfNote(n));
+      const ids = [...new Set(rows.map((n) => n.actor_id).filter(Boolean))];
+      let people = [];
+      if (ids.length) {
+        const r = await supabase.from('profiles').select('id, name, username, avatar, verified, custom_badge').in('id', ids);
+        people = r.data || [];
+      }
+      if (!alive) return;
+      setList(rows.map((n) => ({ id: n.id, gift: giftOfNote(n), note: giftNoteText(n), from: people.find((p) => p.id === n.actor_id) || null, at: n.created_at })));
+    };
+    load();
+    const ch = supabase.channel(rtName(`gifts-${uid}`))
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${uid}` }, (payload) => { if (payload.new && payload.new.kind === 'gift') setTimeout(load, 400); })
+      .subscribe();
+    const onVis = () => { if (document.visibilityState === 'visible') load(); };
+    document.addEventListener('visibilitychange', onVis);
+    return () => { alive = false; document.removeEventListener('visibilitychange', onVis); supabase.removeChannel(ch); };
+  }, [uid, tick]);
+  const opened = (id) => {
+    giftOpenStore(uid).add(id);
+    setList((prev) => prev.filter((g) => g.id !== id));
+  };
+  return { list, opened, reload: () => setTick((n) => n + 1) };
+}
+
+function GiftBoxArt({ open, accent = '#7C5CFC', size = 200 }) {
+  const still = reducedMotion();
+  const ease = 'cubic-bezier(0.2, 0.9, 0.25, 1.15)';
+  return (
+    <div aria-hidden="true" style={{ position: 'relative', width: size, height: size }}>
+      <div style={{ position: 'absolute', left: '50%', bottom: size * 0.04, width: size * 0.74, height: size * 0.08, transform: 'translateX(-50%)', borderRadius: '50%', background: 'rgba(0,0,0,0.35)', filter: 'blur(6px)' }} />
+      {!open && [[16, 30, 0], [176, 52, 0.6], [30, 150, 1.2], [182, 140, 1.8]].map(([x, y, d]) => (
+        <svg key={`${x}`} width="18" height="18" viewBox="0 0 16 16" style={{ position: 'absolute', left: (x / 200) * size - 9, top: (y / 200) * size - 9, animation: still ? 'none' : `zchat-twinkle 1.8s ease-in-out ${d}s infinite` }}>
+          <path d="M8 0c.6 4.4 1.6 5.4 6 6-4.4.6-5.4 1.6-6 6-.6-4.4-1.6-5.4-6-6 4.4-.6 5.4-1.6 6-6z" fill="#FFE58A" />
+        </svg>
+      ))}
+      <svg width={size} height={size} viewBox="0 0 200 200" style={{ position: 'absolute', inset: 0, transition: `transform 0.5s ${ease}, opacity 0.45s ease`, transform: open ? 'translateY(26px) scale(0.86)' : 'none', opacity: open ? 0 : 1, animation: !open && !still ? 'zchat-gift-wobble 2.4s ease-in-out infinite' : 'none', transformOrigin: '50% 90%' }}>
+        <defs>
+          <linearGradient id="zgbody" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor={accent} /><stop offset="1" stopColor={mixHex(accent, '#000000', 0.62)} /></linearGradient>
+          <linearGradient id="zgrib" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#FFE58A" /><stop offset="1" stopColor="#F2B52A" /></linearGradient>
+        </defs>
+        <rect x="36" y="86" width="128" height="94" rx="14" fill="url(#zgbody)" />
+        <rect x="36" y="86" width="128" height="22" rx="6" fill="rgba(0,0,0,0.18)" />
+        <rect x="90" y="86" width="20" height="94" fill="url(#zgrib)" />
+        <path d="M44 96h40" stroke="rgba(255,255,255,0.35)" strokeWidth="4" strokeLinecap="round" />
+      </svg>
+      <svg width={size} height={size} viewBox="0 0 200 200" style={{ position: 'absolute', inset: 0, transition: `transform 0.7s ${ease}, opacity 0.5s ease 0.15s`, transform: open ? 'translate(34px, -150px) rotate(28deg)' : 'none', opacity: open ? 0 : 1, transformOrigin: '50% 60%', animation: !open && !still ? 'zchat-gift-wobble 2.4s ease-in-out infinite' : 'none' }}>
+        <path d="M100 66c-10-22-40-30-44-12-3 14 22 18 44 12z" fill="url(#zgrib)" stroke="#D9951C" strokeWidth="2" strokeLinejoin="round" />
+        <path d="M100 66c10-22 40-30 44-12 3 14-22 18-44 12z" fill="url(#zgrib)" stroke="#D9951C" strokeWidth="2" strokeLinejoin="round" />
+        <rect x="28" y="64" width="144" height="30" rx="10" fill="url(#zgbody)" />
+        <rect x="88" y="64" width="24" height="30" fill="url(#zgrib)" />
+        <circle cx="100" cy="66" r="8" fill="#F2B52A" stroke="#D9951C" strokeWidth="2" />
+        <path d="M38 72h46" stroke="rgba(255,255,255,0.4)" strokeWidth="4" strokeLinecap="round" />
+      </svg>
+    </div>
+  );
+}
+
+function GiftUnwrapPage({ entry, me, onOpened, onClose, onThank, onWear, onUseBubble, onUseCharm }) {
+  useBackClose(true, onClose);
+  const [open, setOpen] = useState(false);
+  const [shown, setShown] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [thanked, setThanked] = useState(false);
+  const [fx, setFx] = useState(0);
+  const g = entry.gift;
+  const from = entry.from;
+  const first = String((from && from.name) || 'A friend').split(' ')[0];
+  const set = g.key && DECOR_BY_KEY[g.key] ? DECOR_BY_KEY[g.key] : null;
+  const accent = set && hexLum(set.accent) > 0.08 ? set.accent : g.kind === 'coins' ? '#E9A115' : '#7C5CFC';
+  const W = Math.round(Math.min(340, (typeof window === 'undefined' ? 390 : window.innerWidth) - 56));
+  const label = g.kind === 'coins' ? `${formatCount(g.coins)} coins` : g.kind === 'bubble' ? `the ${CHAR_BUBBLES[g.key].label} bubble` : g.kind === 'charm' ? `the ${CUSTOM_BADGES[g.key].label}` : `the ${set.name} ${g.kind === 'set' ? 'set' : g.kind}`;
+  const tapOpen = () => {
+    if (open) return;
+    hapticTap();
+    playUiSound('repost');
+    setOpen(true);
+    onOpened(entry);
+    setTimeout(() => { setShown(true); playUiSound('win'); if (g.kind === 'set' || g.kind === 'effect') setFx(Date.now()); }, 420);
+  };
+  const thank = async () => {
+    if (busy || thanked || !from) return;
+    setBusy(true);
+    await onThank(from, label);
+    setBusy(false);
+    setThanked(true);
+  };
+  const wear = async () => {
+    if (busy) return;
+    setBusy(true);
+    if (g.kind === 'bubble') onUseBubble(g.key);
+    else if (g.kind === 'charm') await onUseCharm(g.key);
+    else if (set) await onWear(g.kind === 'frame' ? { avatar_frame: set.key } : g.kind === 'nameplate' ? { nameplate: set.key } : { avatar_frame: set.key, nameplate: set.key });
+    setBusy(false);
+    onClose();
+  };
+  const pieces = Array.from({ length: 34 }, (_, i) => i);
+  const canWear = g.kind !== 'coins';
+  return (
+    <div className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 702, color: '#FFFFFF', fontFamily: FONT, background: `radial-gradient(120% 70% at 50% 30%, ${accent}55 0%, rgba(8,8,12,0) 60%), #08080C`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, overflow: 'hidden', textAlign: 'center' }}>
+      {shown && (set || g.kind === 'effect') && <ProfileEffectLayer effectKey={set.key} runKey={fx} force z={1} />}
+      {shown && pieces.map((i) => (
+        <span key={i} aria-hidden="true" style={{ position: 'absolute', top: -20, left: `${(i * 89) % 100}%`, width: 7, height: 13, borderRadius: 2, background: [accent, '#FFFFFF', '#FFD66B', '#A78BFF'][i % 4], opacity: 0.9, animation: `zchat-confetti ${2.4 + (i % 5) * 0.35}s linear ${(i % 7) * 0.07}s 1 both` }} />
+      ))}
+      <div role="button" aria-label="Close" onClick={onClose} style={{ position: 'absolute', top: 'calc(12px + env(safe-area-inset-top))', right: 14, width: 40, height: 40, borderRadius: 20, background: 'rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 3 }}><X size={19} /></div>
+      <div style={{ position: 'relative', zIndex: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', maxWidth: 380 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+          {from && <Avatar emoji={from.avatar} name={from.name} size={34} />}
+          <div style={{ fontSize: 15, fontWeight: 650, color: 'rgba(255,255,255,0.86)' }}>{from ? `${first} sent you a gift` : 'You got a gift'}</div>
+        </div>
+        {entry.note && <div style={{ fontSize: 15, color: 'rgba(255,255,255,0.7)', fontStyle: 'italic', maxWidth: 300, lineHeight: 1.45, marginTop: 2 }}>"{entry.note}"</div>}
+        {!shown ? (
+          <div role="button" aria-label="Open your gift" onClick={tapOpen} style={{ marginTop: 22, cursor: 'pointer' }}>
+            <GiftBoxArt open={open} accent={accent} size={210} />
+            <div style={{ fontSize: 14, fontWeight: 650, color: 'rgba(255,255,255,0.7)', marginTop: 10, opacity: open ? 0 : 1, transition: 'opacity 0.2s ease' }}>Tap to open</div>
+          </div>
+        ) : (
+          <div className="zchat-pop" style={{ marginTop: 18, display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}>
+            {g.kind === 'coins' ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                <CoinIcon size={96} />
+                <div style={{ fontSize: 40, fontWeight: 800, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums' }}>+{formatCount(g.coins)}</div>
+                <div style={{ fontSize: 14.5, color: 'rgba(255,255,255,0.65)' }}>Added to your coins</div>
+              </div>
+            ) : g.kind === 'bubble' ? (
+              <div style={{ width: '100%', borderRadius: 22, padding: '18px 14px 20px', background: 'rgba(255,255,255,0.06)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ alignSelf: 'flex-start', maxWidth: '78%', background: '#26262E', borderRadius: 18, padding: '8px 13px', fontSize: 14.5 }}>Is that a new bubble?</div>
+                <CharBubbleSample k={g.key} text={`Yes, the ${CHAR_BUBBLES[g.key].label.toLowerCase()}!`} cw={52} fontSize={14.5} />
+              </div>
+            ) : g.kind === 'charm' ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+                <CharmPreview charm={g.key} size={110} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 19, fontWeight: 700 }}>{me.name}<CharmPreview charm={g.key} size={20} /></div>
+              </div>
+            ) : (
+              <DecorHero frameKey={g.kind === 'nameplate' ? (isDecorKey(me.avatar_frame) ? me.avatar_frame : null) : set.key} plateKey={g.kind === 'frame' ? (isDecorKey(me.nameplate) ? me.nameplate : null) : set.key} width={W} photo={me.avatar} name={me.name} username={me.username} verified={me.verified} custom={me.custom_badge} gapColor="#08080C" />
+            )}
+            <div style={{ fontSize: 23, fontWeight: 800, marginTop: 14, letterSpacing: '-0.01em' }}>{g.kind === 'coins' ? 'Coins from a friend' : shopItemName(g.kind === 'set' || g.kind === 'frame' || g.kind === 'nameplate' || g.kind === 'effect' ? 'set' : g.kind, g.key)}</div>
+            <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.62)', marginTop: 4 }}>{g.kind === 'coins' ? 'Spend them in the shop or send them on.' : `It is yours to keep${g.kind === 'set' ? ', with its profile effect' : ''}.`}</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%', marginTop: 22 }}>
+              {canWear && <button type="button" disabled={busy} onClick={wear} className="zchat-press" style={{ height: 52, borderRadius: 15, border: 'none', background: '#7C5CFC', color: '#FFFFFF', fontFamily: FONT, fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>{g.kind === 'bubble' || g.kind === 'charm' ? 'Use it now' : 'Wear it now'}</button>}
+              {from && <button type="button" disabled={busy || thanked} onClick={thank} className="zchat-press" style={{ height: 50, borderRadius: 15, border: 'none', background: 'rgba(255,255,255,0.12)', color: '#FFFFFF', fontFamily: FONT, fontSize: 15.5, fontWeight: 650, cursor: thanked ? 'default' : 'pointer' }}>{thanked ? `Thanks sent to ${first}` : `Say thanks to ${first}`}</button>}
+              <button type="button" onClick={onClose} className="zchat-press" style={{ height: 44, borderRadius: 14, border: 'none', background: 'transparent', color: 'rgba(255,255,255,0.7)', fontFamily: FONT, fontSize: 15, fontWeight: 600, cursor: 'pointer' }}>Done</button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AskCoinsCard({ d, isMe, name, onPay }) {
+  const { theme } = useTheme();
+  const n = Math.max(1, Math.min(GIFT_MAX, Math.floor(Number(d.n) || 0)));
+  return (
+    <div style={{ width: 236, borderRadius: 18, overflow: 'hidden', background: theme.dark ? '#1C1A24' : '#FFFFFF', boxShadow: `inset 0 0 0 1px ${theme.border}`, color: theme.ink }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 14px 10px' }}>
+        <div style={{ width: 46, height: 46, borderRadius: 23, background: 'radial-gradient(circle at 35% 30%, #FFE7A3 0%, #F5B829 70%)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><CoinIcon size={30} /></div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.01em', fontVariantNumeric: 'tabular-nums' }}>{formatCount(n)}</div>
+          <div style={{ fontSize: 12.5, color: theme.muted }}>{isMe ? 'You asked for coins' : `${name || 'They'} asked for coins`}</div>
+        </div>
+      </div>
+      {d.t && <div style={{ padding: '0 14px 10px', fontSize: 13.5, lineHeight: 1.4, color: theme.ink2 || theme.ink }}>{d.t}</div>}
+      {!isMe && onPay && (
+        <div role="button" aria-label={`Send ${n} coins`} onClick={(e) => { e.stopPropagation(); hapticTap(); onPay(n); }} className="zchat-press"
+          style={{ margin: '0 10px 10px', height: 40, borderRadius: 12, background: theme.coral, color: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 14.5, fontWeight: 700, cursor: 'pointer' }}>Send {formatCount(n)} coins</div>
+      )}
+    </div>
   );
 }
 
@@ -22616,7 +23665,7 @@ function FeedPanel({ me, userId, onClose, onOpenProfile, ownerFilter = null, sta
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(a.href), 4000);
       playUiSound('tap');
-    } catch { window.open(post.media_url, '_blank'); }
+    } catch { const u = safeLinkUrl(post.media_url); if (u) window.open(u, '_blank', 'noopener'); }
   };
   const tabSwipe = {
     onTouchStart: (e) => { const t = e.touches && e.touches[0]; tabSwipeRef.current = t ? { x: t.clientX, y: t.clientY } : null; holdRef.current = setTimeout(() => setHideUi(true), 450); },
@@ -23889,6 +24938,7 @@ const CHAR_BUBBLE_DATA = [
   ['raccoon', 'Raccoon', '#B6CCDF', '#7C98B2', '#182635', "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 96'><defs><radialGradient id='raccoonF' cx='.42' cy='.3' r='.8'><stop offset='0' stop-color='#C4BFC2'/><stop offset='.75' stop-color='#A7A1A6'/><stop offset='1' stop-color='#8E888E'/></radialGradient><radialGradient id='raccoonC' cx='.4' cy='.35' r='.75'><stop offset='0' stop-color='#F6CF94'/><stop offset='1' stop-color='#D99A52'/></radialGradient><clipPath id='raccoonK'><path clip-rule='evenodd' d='M-50-50H200V200H-50ZM128.7 4.5A47 47 0 0 0 81.7 51.4V60.6A47 47 0 0 0 128.7 107.5H200V4.5Z'/></clipPath></defs><g clip-path='url(#raccoonK)'><path d='M34 58C32 70 37 83 49 86.5C61 90 73 83 83.2 69H121.7V50L60 50z' fill='url(#raccoonF)' stroke='#33303A' stroke-width='3.2' stroke-linejoin='round'/><g transform='translate(51 39) rotate(-13) scale(.94) translate(-60 -43)'><g stroke='#33303A' stroke-width='3.2' stroke-linejoin='round' stroke-linecap='round'><path d='M33.5 33c-3.5-6.5-4-14.5-1-20 6.5 .5 12.5 4.5 15.5 10zM86.5 33c3.5-6.5 4-14.5 1-20-6.5 .5-12.5 4.5-15.5 10z' fill='url(#raccoonF)'/><path d='M60 17c20 0 33 11 33 25 0 5.5-1.4 9.6-4 13l7.5 4.5c-6.5 6-20.5 10-36.5 10s-30-4-36.5-10l7.5-4.5c-2.6-3.4-4-7.5-4-13 0-14 13-25 33-25z' fill='url(#raccoonF)'/></g><path d='M36 28.5c-1.5-4-1.5-8.5 0-11.3 3.6 .8 6.6 3.2 8.2 6.2zM84 28.5c1.5-4 1.5-8.5 0-11.3-3.6 .8-6.6 3.2-8.2 6.2z' fill='#EDE8EA'/><g fill='#F6F3F1'><ellipse cx='44.5' cy='30.6' rx='7' ry='3'/><ellipse cx='75.5' cy='30.6' rx='7' ry='3'/><path d='M60 46.5c7.5 0 12.5 4.2 12.5 9.6 0 6-5.5 9.6-12.5 9.6s-12.5-3.6-12.5-9.6c0-5.4 5-9.6 12.5-9.6z'/></g><path d='M58.5 40c-2.5-4.5-9.5-6.5-16-5.5-7 1-11 5.5-10.5 10.5 .5 4 5 5 9.5 3.5 6-2 12-3.5 15.5-5 1.6-.7 2-2.1 1.5-3.5zM61.5 40c2.5-4.5 9.5-6.5 16-5.5 7 1 11 5.5 10.5 10.5-.5 4-5 5-9.5 3.5-6-2-12-3.5-15.5-5-1.6-.7-2-2.1-1.5-3.5z' fill='#4A4552'/><g fill='#120F16'><ellipse cx='46' cy='42' rx='4.2' ry='5'/><ellipse cx='74' cy='42' rx='4.2' ry='5'/></g><g fill='#fff'><circle cx='47.6' cy='40' r='1.9'/><circle cx='75.6' cy='40' r='1.9'/><circle cx='44.8' cy='44.2' r='.8' opacity='.7'/><circle cx='72.8' cy='44.2' r='.8' opacity='.7'/></g><g fill='#FF8C9E' opacity='.5'><ellipse cx='35.5' cy='55.5' rx='5.2' ry='3.1'/><ellipse cx='84.5' cy='55.5' rx='5.2' ry='3.1'/></g><path d='M55.8 50.2c0-2 2-3.2 4.2-3.2s4.2 1.2 4.2 3.2-2.2 3.6-4.2 3.6-4.2-1.6-4.2-3.6z' fill='#33303A'/><path d='M60 54v2.2m-3.8 .6c1.2 2 3 2.2 3.8 .4.8 1.8 2.6 1.6 3.8-.4' fill='none' stroke='#33303A' stroke-width='1.8' stroke-linecap='round'/><g fill='none' stroke='#fff' stroke-linecap='round'><path d='M42 25c4-3 9-4.6 16-4.6' stroke-width='2.8' opacity='.4'/><path d='M57.5 49.4c.8-.8 1.9-1 2.9-.8' stroke-width='1.2' opacity='.6'/></g></g></g><g transform='translate(41 73) rotate(-10) scale(.86) translate(-60 -86)'><path d='M64.7 74.5a11.5 11.5 0 1 0 6.5 7.7 3.8 3.8 0 0 1-5-2.4 3.8 3.8 0 0 1-1.5-5.3z' fill='url(#raccoonC)' stroke='#6E4320' stroke-width='3' stroke-linejoin='round'/><g fill='#5B3520'><circle cx='54.5' cy='80' r='2'/><circle cx='62.5' cy='87.5' r='2'/><circle cx='53.5' cy='90.5' r='1.8'/><circle cx='65.5' cy='93' r='1.8'/></g><path d='M52 77.5c1.6-1.6 3.6-2.6 5.8-2.8' fill='none' stroke='#fff' stroke-width='1.8' stroke-linecap='round' opacity='.6'/></g><g stroke='#33303A' stroke-width='3' stroke-linejoin='round' fill='#4A4552'><ellipse cx='0' cy='0' rx='6' ry='5.2' transform='translate(31.5 76) rotate(-24)'/><ellipse cx='0' cy='0' rx='6' ry='5.2' transform='translate(51 76.5) rotate(24)'/></g><path d='M28.6 74.4c.8-1.6 2.2-2.6 3.8-2.8' fill='none' stroke='#fff' stroke-width='1.4' stroke-linecap='round' opacity='.3'/></svg>", ['side', 100, 96, 0.833, 84, 56, 0]],
   ['seal', 'Seal', '#D5F5F8', '#86CFD9', '#0F3438', "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 152 84'><defs><radialGradient id='sealF' cx='.62' cy='.22' r='.85'><stop offset='0' stop-color='#F8FBFC'/><stop offset='.7' stop-color='#E2EAF0'/><stop offset='1' stop-color='#C8D5DF'/></radialGradient></defs><g transform='translate(-14 6)'><g stroke='#2E4A58' stroke-width='3.2' stroke-linejoin='round' stroke-linecap='round'><g transform='translate(51 43) rotate(-22)'><path d='M-5 2C-5.6-4-8.4-9-13.4-13.4-15.6-15.4-14-18.8-10.6-18-6.4-17-2.4-14.2 0-10.6 2.2-14.8 6.2-18.6 10.6-19.8 14-20.6 15.6-17.4 13.4-15.2 9.4-11 6.6-5.8 5.6 1.6z' fill='#C9D6E0'/></g><path d='M140 58c6 .4 12.5 3 16.6 7.6 1.8 2.4 .2 5-2.8 4.4-6-1.2-11.4-3.6-15.2-7.2z' fill='#C9D6E0'/><path d='M50 37C51.83 34.17 55.67 32.17 60 30C64.33 27.83 70.67 26.33 76 24C81.33 21.67 86.83 18.33 92 16C97.17 13.67 101.67 11.5 107 10C112.33 8.5 118.17 6.83 124 7C129.83 7.17 136.83 8.17 142 11C147.17 13.83 152.33 19.17 155 24C157.67 28.83 158.67 34.83 158 40C157.33 45.17 155.17 50.92 151 55C146.83 59.08 140.17 62.58 133 64.5C125.83 66.42 116.17 66.17 108 66.5C99.83 66.83 91 66.83 84 66.5C77 66.17 70.83 65.92 66 64.5C61.17 63.08 57.83 60.92 55 58C52.17 55.08 49.83 50.5 49 47C48.17 43.5 48.17 39.83 50 37Z' fill='url(#sealF)'/><path d='M121 57c-6.5 1.6-12 6.4-14.8 13-1.2 3 .9 5.6 4 4.4 6-2.4 11-6.6 13.6-11.2z' fill='#C9D6E0'/></g><path d='M110.2 72.5c1.6-2.2 3.4-4 5.8-5.4M149.5 66.6c-2.2-1.2-4.6-2-7-2.4M44.6 33.6c1-2.4 2.4-4.4 4.4-6' fill='none' stroke='#2E4A58' stroke-width='1.4' stroke-linecap='round' opacity='.45'/><g transform='translate(64 -19)'><g fill='#101E26'><ellipse cx='46' cy='50' rx='4.8' ry='5.6'/><ellipse cx='74' cy='50' rx='4.8' ry='5.6'/></g><g fill='#fff'><circle cx='47.6' cy='48' r='2'/><circle cx='75.6' cy='48' r='2'/><circle cx='44.8' cy='52.2' r='.8' opacity='.7'/><circle cx='72.8' cy='52.2' r='.8' opacity='.7'/></g><g fill='#FF8C9E' opacity='.5'><ellipse cx='36' cy='59.5' rx='5.6' ry='3.3'/><ellipse cx='84' cy='59.5' rx='5.6' ry='3.3'/></g><g fill='#fff'><ellipse cx='55.2' cy='61.6' rx='5.6' ry='4.4'/><ellipse cx='64.8' cy='61.6' rx='5.6' ry='4.4'/></g><path d='M56.8 56.6c0-1.6 1.5-2.4 3.2-2.4s3.2 .8 3.2 2.4-1.7 2.8-3.2 2.8-3.2-1.2-3.2-2.8z' fill='#2E4A58'/><path d='M60 59.4v2M56 61.8c1.3 2 3 2.2 4 .4 1 1.8 2.7 1.6 4-.4' fill='none' stroke='#2E4A58' stroke-width='1.8' stroke-linecap='round'/><g fill='#8FA6B5'><circle cx='52' cy='60.6' r='.9'/><circle cx='53.2' cy='63.8' r='.9'/><circle cx='68' cy='60.6' r='.9'/><circle cx='66.8' cy='63.8' r='.9'/></g><path d='M48 60l-8.4-2M48 63.2l-8.4 1.4M72 60l8.4-2M72 63.2l8.4 1.4' fill='none' stroke='#2E4A58' stroke-width='1.3' stroke-linecap='round' opacity='.5'/><path d='M42 38c4-3.6 10-5.6 17-5.8' fill='none' stroke='#fff' stroke-width='2.8' stroke-linecap='round' opacity='.5'/></g><g transform='translate(-15.5 3.5) translate(62 17) scale(.95) translate(-62 -17)'><path d='M66.9 4.9a13 13 22 0 0-9.8 24.2c-5.3-8.1 .3-22.1 9.8-24.2z' fill='#FF6B6B'/><path d='M66.9 4.9a13 13 22 0 1-9.8 24.2c9.5-2.1 15.1-16.1 9.8-24.2z' fill='#4FB0FF'/><path d='M66.9 4.9c-9.5 2.1-15.1 16.1-9.8 24.2 9.5-2.1 15.1-16.1 9.8-24.2z' fill='#FFD54F'/><path d='M66.9 4.9c-9.5 2.1-15.1 16.1-9.8 24.2M66.9 4.9c5.3 8.1-.3 22.1-9.8 24.2' fill='none' stroke='#2E4A58' stroke-width='1.8'/><circle cx='62' cy='17' r='13' fill='none' stroke='#2E4A58' stroke-width='3.4'/><path d='M53.6 12c1.4-2.6 3.8-4.4 6.6-5' fill='none' stroke='#fff' stroke-width='2.2' stroke-linecap='round' opacity='.9'/></g></g></svg>", ['top', 152, 84, 1.267, 20, 76, 0]],
   ['bee', 'Bee', '#FFC958', '#D9981C', '#3D2806', "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 118 106'><defs><radialGradient id='beeF' cx='.42' cy='.3' r='.8'><stop offset='0' stop-color='#FFF1A0'/><stop offset='.75' stop-color='#FFD94E'/><stop offset='1' stop-color='#F2BC2A'/></radialGradient><radialGradient id='beeW' cx='.4' cy='.35' r='.8'><stop offset='0' stop-color='#FFFFFF'/><stop offset='1' stop-color='#C8E9FF'/></radialGradient><clipPath id='beeK'><ellipse rx='27' ry='21.5'/></clipPath></defs><g transform='scale(1.08)'><ellipse cx='0' cy='0' rx='15' ry='9' transform='translate(33 31) rotate(-130)' fill='url(#beeW)' stroke='#3D2A12' stroke-width='2' opacity='0.3'/><ellipse cx='0' cy='0' rx='14' ry='8.6' transform='translate(52 26) rotate(-76)' fill='url(#beeW)' stroke='#3D2A12' stroke-width='2' opacity='0.3'/><ellipse cx='0' cy='0' rx='15.5' ry='9.4' transform='translate(37 34) rotate(-112)' fill='url(#beeW)' stroke='#3D2A12' stroke-width='2.6' opacity='0.92'/><ellipse cx='0' cy='0' rx='14.5' ry='9' transform='translate(53 30) rotate(-92)' fill='url(#beeW)' stroke='#3D2A12' stroke-width='2.6' opacity='0.92'/><g fill='none' stroke='#3D2A12' stroke-linecap='round' stroke-width='1.8' opacity='.5'><path d='M19 21q-2.6 5-1 10.4'/><path d='M25.5 11q5-4.6 11.6-4.6'/><path d='M48 6.4q6-1.6 11 1.2'/></g><path d='M37 83.5l-3 6.2M47 81.6l-.6 7' fill='none' stroke='#3D2A12' stroke-width='3.6' stroke-linecap='round'/><path d='M17.8 72.4l-10.2 4.8 11.2 1.6z' fill='#4A3216' stroke='#3D2A12' stroke-width='2.6' stroke-linejoin='round'/><g transform='translate(42 64) rotate(-18)'><ellipse rx='27' ry='21.5' fill='url(#beeF)'/><g clip-path='url(#beeK)' fill='#4A3216'><rect x='-13' y='-30' width='7.6' height='60'/><rect x='2' y='-30' width='7.6' height='60'/><rect x='-30' y='-30' width='5' height='60'/></g><ellipse rx='27' ry='21.5' fill='none' stroke='#3D2A12' stroke-width='3.2'/><path d='M-17-6c2-4.6 5.4-8.4 9.8-10.6' fill='none' stroke='#fff' stroke-width='2.2' stroke-linecap='round' opacity='.6'/></g><g transform='translate(73 42) rotate(8) scale(.88) translate(-60 -42)'><g stroke='#3D2A12' stroke-linejoin='round' stroke-linecap='round'><path d='M51 21C49 15 45.5 10.5 41 9M69 21C71 15 74.5 10.5 79 9' fill='none' stroke-width='3.2'/><circle cx='40.5' cy='8.8' r='3.8' fill='#4A3216' stroke-width='2.6'/><circle cx='79.5' cy='8.8' r='3.8' fill='#4A3216' stroke-width='2.6'/><path d='M51.5 20.5a4.2 4.2 0 0 1 5.6-4.4 4.2 4.2 0 0 1 5.8 0 4.2 4.2 0 0 1 5.6 4.4' fill='url(#beeF)' stroke-width='3.2'/><path d='M60 17c19 0 32 11 32 26s-13 24-32 24-32-9-32-24 13-26 32-26z' fill='url(#beeF)' stroke-width='3.4'/></g><g fill='#24170A'><ellipse cx='48' cy='41' rx='4.4' ry='5.2'/><ellipse cx='74' cy='41' rx='4.4' ry='5.2'/></g><g fill='#fff'><circle cx='49.7' cy='38.9' r='1.8'/><circle cx='75.7' cy='38.9' r='1.8'/><circle cx='46.8' cy='43.3' r='.8' opacity='.7'/><circle cx='72.8' cy='43.3' r='.8' opacity='.7'/></g><g fill='#FF8C9E' opacity='.5'><ellipse cx='38' cy='50' rx='5.6' ry='3.3'/><ellipse cx='84' cy='50' rx='5.6' ry='3.3'/></g><path d='M57 51c2.2 2 5.8 2 8 0' fill='none' stroke='#3D2A12' stroke-width='2.2' stroke-linecap='round'/><path d='M42 25c4-3 9-4.6 16-4.6' fill='none' stroke='#fff' stroke-width='2.8' stroke-linecap='round' opacity='.5'/></g><g transform='translate(66 80) rotate(-38)'><path d='M-14 0H6' fill='none' stroke='#6B3A0E' stroke-width='5.6' stroke-linecap='round'/><path d='M-14 0H6' fill='none' stroke='#E0A86A' stroke-width='2.6' stroke-linecap='round'/><path d='M5-6.4h8c2.4 0 4 2.6 4 6.4s-1.6 6.4-4 6.4h-8c-1.6 0-2.6-2.8-2.6-6.4s1-6.4 2.6-6.4z' fill='#FFC468' stroke='#6B3A0E' stroke-width='2.6' stroke-linejoin='round'/><path d='M7.6-5.6v11.2M11.8-5.6v11.2' stroke='#C77A1E' stroke-width='1.6'/></g><path d='M82.4 70.6c1.8 2.2 2.6 5 2.2 7.6-.4 2.2-2.8 2.6-3.4.4-.4-1.8-.2-3.8.4-5.6z' fill='#FFB648' stroke='#6B3A0E' stroke-width='1.8' stroke-linejoin='round'/><g stroke='#3D2A12' stroke-width='3' fill='#4A3216'><ellipse cx='0' cy='0' rx='5.6' ry='4.8' transform='translate(58.5 79) rotate(-30)'/><ellipse cx='0' cy='0' rx='5.4' ry='4.6' transform='translate(68 75.5) rotate(-30)'/></g></g></svg>", ['side', 118, 106, 0.983, 100, 104, 0]],
+  ['wolf', 'Wolf', '#AAB3CC', '#66748F', '#0C1220', "<svg xmlns='http://www.w3.org/2000/svg' viewBox='-12.5 1.75 140 147'><defs><radialGradient id='wolfF' cx='.42' cy='.3' r='.8'><stop offset='0' stop-color='#AEBBCE'/><stop offset='.7' stop-color='#8999B1'/><stop offset='1' stop-color='#73829C'/></radialGradient><radialGradient id='wolfH' cx='.42' cy='.3' r='.8'><stop offset='0' stop-color='#BFCADA'/><stop offset='.75' stop-color='#9AA8BD'/><stop offset='1' stop-color='#8593AB'/></radialGradient><radialGradient id='wolfC' cx='.5' cy='.35' r='.7'><stop offset='0' stop-color='#FFFAF1'/><stop offset='1' stop-color='#F4E4CA'/></radialGradient><clipPath id='wolfT'><path d='M52 98C49.1 95.5 40.8 95 34.9 95.2C29.1 95.5 22 97.9 17 99.5C12.1 101.1 5.8 104.5 5.2 105C4.5 105.4 3.8 108.2 1.9 110.6C0 113 -6.1 118.7 -6.5 119.4C-6.8 120 -5.9 123.2 -6.5 125.4C-7.2 127.5 -10.4 131.8 -10.3 132.3C-10.3 132.7 -7 134.2 -6.2 135.6C-5.4 137 -5.5 139 -5.6 140.7C-5.7 142.4 -7.1 145.6 -6.9 145.9C-6.7 146.1 -4.4 146.7 -1.6 146.5C1.1 146.3 6.8 146.4 9.5 144.4C12.2 142.4 12.9 137.4 14.6 134.4C16.3 131.5 17.6 129.2 19.8 126.6C22 124 25 121.3 28.1 119C31.1 116.7 34.1 114.4 38.1 112.9C42.1 111.5 49.7 112.5 52 110C54.3 107.5 54.8 100.5 52 98Z'/></clipPath><clipPath id='wolfB'><path d='M74 66C79.2 67.1 82.1 70.5 84.4 74C86.7 77.5 87.5 82.7 88 87C88.5 91.3 88.2 96.1 87.4 100C86.6 103.9 87.6 108.5 83.4 110.6C79.2 112.7 68.7 112.5 62 112.8C55.3 113.1 47.7 113.7 43 112.6C38.3 111.5 35.7 109.4 34 106C32.3 102.6 32.1 96.6 33 92C33.9 87.4 36.1 82.5 39.4 78.4C42.7 74.3 47.2 69.5 53 67.4C58.8 65.3 68.8 64.9 74 66Z'/></clipPath><clipPath id='wolfK'><path d='M52 12.4C57.7 12.3 65.7 13.6 71 15.6C76.3 17.6 80.7 21.5 83.6 24.6C86.5 27.7 86.2 32.4 88.4 34.4C90.6 36.4 93.8 36.1 97 36.8C100.2 37.5 104.9 37.7 107.6 38.8C110.3 39.9 112.2 41.5 113.2 43.6C114.2 45.7 114.2 49.1 113.4 51.4C112.6 53.7 110.9 55.9 108.4 57.6C105.9 59.3 101.9 60.3 98.4 61.4C94.9 62.5 90.7 62.9 87.6 64.4C84.5 65.9 82.9 68.7 80 70.6C77.1 72.5 72 75.5 70.4 75.8C68.8 76.1 66.9 73.3 64.4 73.6C61.9 73.9 57.1 77.7 55.6 77.6C54.1 77.5 51.1 73.8 47.6 73C44.1 72.2 35.9 73.4 34.4 72.8C32.9 72.2 31.9 67.6 29.4 65.6C26.9 63.6 19.9 61.9 19.4 61C18.9 60.1 21.6 55.3 21.8 52C22 48.7 20 45.2 20.6 41C21.2 36.8 22.9 30.7 25.6 26.6C28.3 22.5 32.2 18.8 36.6 16.4C41 14 46.3 12.5 52 12.4Z'/></clipPath></defs><path d='M52 98C49.1 95.5 40.8 95 34.9 95.2C29.1 95.5 22 97.9 17 99.5C12.1 101.1 5.8 104.5 5.2 105C4.5 105.4 3.8 108.2 1.9 110.6C0 113 -6.1 118.7 -6.5 119.4C-6.8 120 -5.9 123.2 -6.5 125.4C-7.2 127.5 -10.4 131.8 -10.3 132.3C-10.3 132.7 -7 134.2 -6.2 135.6C-5.4 137 -5.5 139 -5.6 140.7C-5.7 142.4 -7.1 145.6 -6.9 145.9C-6.7 146.1 -4.4 146.7 -1.6 146.5C1.1 146.3 6.8 146.4 9.5 144.4C12.2 142.4 12.9 137.4 14.6 134.4C16.3 131.5 17.6 129.2 19.8 126.6C22 124 25 121.3 28.1 119C31.1 116.7 34.1 114.4 38.1 112.9C42.1 111.5 49.7 112.5 52 110C54.3 107.5 54.8 100.5 52 98Z' fill='url(#wolfF)'/><path clip-path='url(#wolfT)' d='M15.6 143C14 140.5 13.7 136.8 13.2 136.5C12.7 136.2 8.1 139.3 6.6 138.6C5.1 137.9 4.8 132.4 4.3 132.1C3.7 131.8 -0.8 134.9 -2.3 134.2C-3.8 133.5 -4.2 127.9 -4.7 127.7C-5.2 127.4 -8.9 129.7 -11.3 129.8C-13.7 129.9 -18.3 129.3 -19.3 128.3C-20.3 127.3 -17 119.3 -17.1 123.8C-17.2 128.2 -24.6 148.2 -20.1 154.9C-15.6 161.5 2.8 164 9.9 163.4C17 162.9 21.7 155.1 22.6 151.7C23.6 148.3 17.2 145.5 15.6 143Z' fill='#5D6A82'/><path d='M52 98C49.1 95.5 40.8 95 34.9 95.2C29.1 95.5 22 97.9 17 99.5C12.1 101.1 5.8 104.5 5.2 105C4.5 105.4 3.8 108.2 1.9 110.6C0 113 -6.1 118.7 -6.5 119.4C-6.8 120 -5.9 123.2 -6.5 125.4C-7.2 127.5 -10.4 131.8 -10.3 132.3C-10.3 132.7 -7 134.2 -6.2 135.6C-5.4 137 -5.5 139 -5.6 140.7C-5.7 142.4 -7.1 145.6 -6.9 145.9C-6.7 146.1 -4.4 146.7 -1.6 146.5C1.1 146.3 6.8 146.4 9.5 144.4C12.2 142.4 12.9 137.4 14.6 134.4C16.3 131.5 17.6 129.2 19.8 126.6C22 124 25 121.3 28.1 119C31.1 116.7 34.1 114.4 38.1 112.9C42.1 111.5 49.7 112.5 52 110C54.3 107.5 54.8 100.5 52 98Z' fill='none' stroke='#262E3D' stroke-width='3.2' stroke-linejoin='round'/><path d='M40 104.6c-8 .8-15 4.6-19.4 10.4' fill='none' stroke='#fff' stroke-width='2.4' stroke-linecap='round' opacity='.35'/><path d='M74 66C79.2 67.1 82.1 70.5 84.4 74C86.7 77.5 87.5 82.7 88 87C88.5 91.3 88.2 96.1 87.4 100C86.6 103.9 87.6 108.5 83.4 110.6C79.2 112.7 68.7 112.5 62 112.8C55.3 113.1 47.7 113.7 43 112.6C38.3 111.5 35.7 109.4 34 106C32.3 102.6 32.1 96.6 33 92C33.9 87.4 36.1 82.5 39.4 78.4C42.7 74.3 47.2 69.5 53 67.4C58.8 65.3 68.8 64.9 74 66Z' fill='url(#wolfF)'/><path clip-path='url(#wolfB)' d='M60 62C62.2 59.3 74 58.3 80 60C86 61.7 93.3 64.7 96 72C98.7 79.3 97.3 98.6 96 104C94.7 109.4 90.1 105.5 88 104.6C85.9 103.7 84.1 98.8 83.4 98.6C82.7 98.4 79.8 102.5 78 102C76.2 101.5 73.2 96.6 72.6 95.6C72 94.6 69.6 90.3 68.6 87C67.6 83.7 68 80.2 66.6 76C65.2 71.8 57.8 64.7 60 62Z' fill='url(#wolfC)'/><path d='M74 66C79.2 67.1 82.1 70.5 84.4 74C86.7 77.5 87.5 82.7 88 87C88.5 91.3 88.2 96.1 87.4 100C86.6 103.9 87.6 108.5 83.4 110.6C79.2 112.7 68.7 112.5 62 112.8C55.3 113.1 47.7 113.7 43 112.6C38.3 111.5 35.7 109.4 34 106C32.3 102.6 32.1 96.6 33 92C33.9 87.4 36.1 82.5 39.4 78.4C42.7 74.3 47.2 69.5 53 67.4C58.8 65.3 68.8 64.9 74 66Z' fill='none' stroke='#262E3D' stroke-width='3.2' stroke-linejoin='round'/><path d='M36.2 108.6c-3.2-9.6 2.2-19 13.4-20.6' fill='none' stroke='#262E3D' stroke-width='2.6' stroke-linecap='round' opacity='.8'/><path d='M40.6 81c3.4-4 8.4-6.6 14-7.4' fill='none' stroke='#fff' stroke-width='2.6' stroke-linecap='round' opacity='.38'/><ellipse cx='49.6' cy='109.6' rx='9.6' ry='5' fill='#FFF6E8' stroke='#262E3D' stroke-width='3'/><path d='M86 99L87.4 104.6' fill='none' stroke='#262E3D' stroke-width='16.4' stroke-linecap='round'/><path d='M86 99L87.4 104.6' fill='none' stroke='#A9B5C7' stroke-width='10' stroke-linecap='round'/><ellipse cx='88.8' cy='109.2' rx='7.4' ry='4.8' fill='#FFF6E8' stroke='#262E3D' stroke-width='3'/><path d='M74.4 99.6L75.4 105.4' fill='none' stroke='#262E3D' stroke-width='16.4' stroke-linecap='round'/><path d='M74.4 99.6L75.4 105.4' fill='none' stroke='#B3BFD0' stroke-width='10' stroke-linecap='round'/><ellipse cx='76.6' cy='109.6' rx='8.2' ry='5.2' fill='#FFF6E8' stroke='#262E3D' stroke-width='3'/><path d='M73.4 110.6v2.4M79 110.8v2.4M86.4 110v2.2M91.2 110v2.2' fill='none' stroke='#262E3D' stroke-width='1.5' stroke-linecap='round' opacity='.7'/><g transform='translate(63 48) rotate(-33) translate(-58 -44)'><g stroke='#262E3D' stroke-width='3.2' stroke-linejoin='round'><path d='M58.6 17.6C56.1 14.9 59.7 11.2 61.4 8C63.1 4.8 69 -1.4 69 -1.4C69 -1.4 72.3 3.8 73.6 8C74.9 12.2 79.1 22.4 76.6 24C74.1 25.6 61.1 20.3 58.6 17.6Z' fill='#8E9CB3'/><path d='M30 32C25.9 32.4 26 25.2 25.6 20C25.2 14.8 27.4 0.6 27.4 0.6C27.4 0.6 35.2 2.2 39 5C42.8 7.8 51.5 12.9 50 17.4C48.5 21.9 34.1 31.6 30 32Z' fill='#9AA8BD'/></g><path d='M62.4 17C61 15.2 62.9 11.8 64 9.6C65.1 7.4 68.8 4 68.8 4C68.8 4 70.8 8.2 71.4 11C72 13.8 74.1 19.6 72.6 20.6C71.1 21.6 63.8 18.8 62.4 17Z' fill='#4E5A71'/><path d='M32.6 27.4C30 27.1 30.3 20.5 30 17C29.7 13.5 30.6 6.6 30.6 6.6C30.6 6.6 36.1 8.4 38.6 10.4C41.1 12.4 46.6 15.8 45.6 18.6C44.6 21.4 35.2 27.7 32.6 27.4Z' fill='#4E5A71'/><path d='M52 12.4C57.7 12.3 65.7 13.6 71 15.6C76.3 17.6 80.7 21.5 83.6 24.6C86.5 27.7 86.2 32.4 88.4 34.4C90.6 36.4 93.8 36.1 97 36.8C100.2 37.5 104.9 37.7 107.6 38.8C110.3 39.9 112.2 41.5 113.2 43.6C114.2 45.7 114.2 49.1 113.4 51.4C112.6 53.7 110.9 55.9 108.4 57.6C105.9 59.3 101.9 60.3 98.4 61.4C94.9 62.5 90.7 62.9 87.6 64.4C84.5 65.9 82.9 68.7 80 70.6C77.1 72.5 72 75.5 70.4 75.8C68.8 76.1 66.9 73.3 64.4 73.6C61.9 73.9 57.1 77.7 55.6 77.6C54.1 77.5 51.1 73.8 47.6 73C44.1 72.2 35.9 73.4 34.4 72.8C32.9 72.2 31.9 67.6 29.4 65.6C26.9 63.6 19.9 61.9 19.4 61C18.9 60.1 21.6 55.3 21.8 52C22 48.7 20 45.2 20.6 41C21.2 36.8 22.9 30.7 25.6 26.6C28.3 22.5 32.2 18.8 36.6 16.4C41 14 46.3 12.5 52 12.4Z' fill='url(#wolfH)'/><path clip-path='url(#wolfK)' d='M114 38.4C112 33.5 108.8 40.2 106 40.6C103.2 41 99.8 40.6 97 40.8C94.2 41 91.4 40.8 89.4 41.8C87.4 42.8 86 44.6 85 46.6C84 48.6 83.4 51.3 83.4 53.6C83.4 55.9 85.3 58.5 84.8 60.6C84.3 62.7 82.7 64.7 80.6 66.4C78.5 68.1 75.1 69 72 70.6C68.9 72.2 62.3 72.8 62 76C61.7 79.2 60.7 91 70 90C79.3 89 110.7 78.6 118 70C125.3 61.4 116 43.3 114 38.4Z' fill='url(#wolfC)'/><path d='M52 12.4C57.7 12.3 65.7 13.6 71 15.6C76.3 17.6 80.7 21.5 83.6 24.6C86.5 27.7 86.2 32.4 88.4 34.4C90.6 36.4 93.8 36.1 97 36.8C100.2 37.5 104.9 37.7 107.6 38.8C110.3 39.9 112.2 41.5 113.2 43.6C114.2 45.7 114.2 49.1 113.4 51.4C112.6 53.7 110.9 55.9 108.4 57.6C105.9 59.3 101.9 60.3 98.4 61.4C94.9 62.5 90.7 62.9 87.6 64.4C84.5 65.9 82.9 68.7 80 70.6C77.1 72.5 72 75.5 70.4 75.8C68.8 76.1 66.9 73.3 64.4 73.6C61.9 73.9 57.1 77.7 55.6 77.6C54.1 77.5 51.1 73.8 47.6 73C44.1 72.2 35.9 73.4 34.4 72.8C32.9 72.2 31.9 67.6 29.4 65.6C26.9 63.6 19.9 61.9 19.4 61C18.9 60.1 21.6 55.3 21.8 52C22 48.7 20 45.2 20.6 41C21.2 36.8 22.9 30.7 25.6 26.6C28.3 22.5 32.2 18.8 36.6 16.4C41 14 46.3 12.5 52 12.4Z' fill='none' stroke='#262E3D' stroke-width='3.2' stroke-linejoin='round'/><path d='M33.6 30c3.6-5.4 9.4-9.2 16.4-10.6' fill='none' stroke='#fff' stroke-width='2.8' stroke-linecap='round' opacity='.42'/><path d='M48.4 43q6.6-7 13.2 0M77 40.4q4.4-5 8.8-.6' fill='none' stroke='#1E2430' stroke-width='2.7' stroke-linecap='round'/><g fill='#FF8C9E' opacity='.55'><ellipse cx='46.6' cy='53.6' rx='5.8' ry='3.4'/><ellipse cx='87.4' cy='49.6' rx='3.6' ry='2.4'/></g><ellipse cx='110.6' cy='42.8' rx='4.9' ry='3.6' transform='rotate(40 110.6 42.8)' fill='#2A3242'/><path d='M108.4 41c.8-.8 2-1.1 3.1-.9' fill='none' stroke='#fff' stroke-width='1.2' stroke-linecap='round' opacity='.7'/><ellipse cx='107' cy='54.6' rx='3' ry='3.6' transform='rotate(24 107 54.6)' fill='#3A2430' stroke='#262E3D' stroke-width='1.2'/><ellipse cx='106.6' cy='56.2' rx='1.7' ry='1.3' transform='rotate(24 106.6 56.2)' fill='#F2899A'/></g><path d='M119.6 16.4Q120.5 11.5 115.6 10.4M125.5 14.2Q125.7 8.1 120.1 5.8' fill='none' stroke='#6F7D96' stroke-width='2.6' stroke-linecap='round'/></svg>", ['top', 140, 147, 1.293, 20.5, 110.25, 0], 1],
 ];
 const BUBBLE_PRICE = 100;
 const BUBBLE_FREE_PICKS = 2;
@@ -25407,6 +26457,140 @@ function SegmentedControl({ value, onChange, options, style }) {
   );
 }
 
+function kitOnInk(theme) {
+  return theme.dark ? '#A895FF' : theme.coral;
+}
+function PickTiles({ options, value, onChange, label, size = 64, wrap = false, fit = false, bleed = 6, ringBg, style }) {
+  const { theme } = useTheme();
+  const multi = Array.isArray(value);
+  const ring = ringBg || theme.panelBg;
+  const r = Math.round(size * 0.28);
+  const line = theme.dark ? 'rgba(255,255,255,0.13)' : 'rgba(17,17,19,0.09)';
+  const box = fit
+    ? { display: 'grid', gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))`, gap: 6, padding: '6px 0 4px' }
+    : { display: 'flex', gap: wrap ? 12 : 14, flexWrap: wrap ? 'wrap' : 'nowrap', overflowX: wrap ? 'visible' : 'auto', padding: `6px ${wrap ? 6 : bleed}px 4px`, margin: `0 -${wrap ? 6 : bleed}px`, scrollSnapType: wrap ? undefined : 'x proximity', scrollPaddingInline: wrap ? 6 : bleed };
+  return (
+    <div role={multi ? 'group' : 'radiogroup'} aria-label={label} style={{ ...box, ...(style || {}) }}>
+      {options.map((o) => {
+        const on = multi ? value.includes(o.k) : value === o.k;
+        return (
+          <div key={o.k} role={multi ? 'checkbox' : 'radio'} aria-checked={on} aria-label={o.aria || o.label} aria-disabled={o.disabled || undefined}
+            onClick={() => { if (o.disabled) return; hapticTap(); onChange(o.k); }} className={o.disabled ? undefined : 'zchat-press'}
+            style={{ width: fit ? 'auto' : size, minWidth: 0, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: o.disabled ? 'default' : 'pointer', opacity: o.disabled ? 0.38 : 1, scrollSnapAlign: 'start' }}>
+            <div style={{ position: 'relative', width: size, height: size, borderRadius: r, background: o.bg || (theme.dark ? '#1F1E25' : '#F1F0F6'), boxShadow: on ? `0 0 0 2px ${ring}, 0 0 0 4px ${theme.coral}` : 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', color: on ? kitOnInk(theme) : theme.ink2, transition: 'box-shadow 160ms ease, color 160ms ease' }}>
+              {typeof o.art === 'function' ? o.art(on) : o.art}
+              {!on && <div aria-hidden="true" style={{ position: 'absolute', inset: 0, borderRadius: r, boxShadow: `inset 0 0 0 1px ${line}`, pointerEvents: 'none' }} />}
+              {multi && on && (
+                <div aria-hidden="true" style={{ position: 'absolute', top: 5, right: 5, width: 18, height: 18, borderRadius: 9, background: theme.coral, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.25)' }}><Check size={12} strokeWidth={3} color="#FFFFFF" /></div>
+              )}
+            </div>
+            <div style={{ marginTop: 7, width: fit ? '100%' : size + 12, fontSize: 12.5, lineHeight: 1.2, fontWeight: on ? 700 : 600, color: on ? kitOnInk(theme) : theme.ink2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'center' }}>{o.label}</div>
+            {o.sub && <div style={{ width: fit ? '100%' : size + 12, fontSize: 11, lineHeight: 1.2, color: theme.muted, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'center' }}>{o.sub}</div>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+function KitTabs({ value, onChange, options, label, style }) {
+  const { theme } = useTheme();
+  const wrapRef = useRef(null);
+  const [bar, setBar] = useState(null);
+  useLayoutEffect(() => {
+    const w = wrapRef.current;
+    if (!w) return;
+    const el = w.querySelector(`[data-kit-tab="${value}"]`);
+    if (!el) { setBar(null); return; }
+    setBar({ x: el.offsetLeft + 6, w: Math.max(12, el.offsetWidth - 12) });
+    if (el.offsetLeft < w.scrollLeft || el.offsetLeft + el.offsetWidth > w.scrollLeft + w.clientWidth) w.scrollTo({ left: Math.max(0, el.offsetLeft - 24), behavior: 'smooth' });
+  }, [value, options.length]);
+  return (
+    <div ref={wrapRef} role="tablist" aria-label={label} style={{ position: 'relative', display: 'flex', gap: 2, overflowX: 'auto', borderBottom: `1px solid ${theme.hair}`, ...(style || {}) }}>
+      {options.map((o) => {
+        const k = Array.isArray(o) ? o[0] : o.k;
+        const l = Array.isArray(o) ? o[1] : o.label;
+        const n = Array.isArray(o) ? o[2] : o.count;
+        const on = value === k;
+        return (
+          <div key={k} data-kit-tab={k} role="tab" aria-selected={on} aria-label={n ? `${l}, ${n}` : l} onClick={() => { if (!on) { hapticTap(); onChange(k); } }}
+            style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, height: 42, padding: '0 12px', cursor: 'pointer', fontSize: 15, fontWeight: on ? 700 : 600, color: on ? theme.ink : theme.muted, whiteSpace: 'nowrap', transition: 'color 160ms ease' }}>
+            {l}
+            {n ? <span style={{ minWidth: 18, height: 18, padding: '0 5px', boxSizing: 'border-box', borderRadius: 9, background: on ? theme.coral : theme.soft2, color: on ? '#FFFFFF' : theme.ink2, fontSize: 11, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{n > 99 ? '99+' : n}</span> : null}
+          </div>
+        );
+      })}
+      {bar && <div aria-hidden="true" style={{ position: 'absolute', left: 0, bottom: -1, height: 2.5, borderRadius: 2, width: bar.w, transform: `translateX(${bar.x}px)`, background: theme.coral, transition: 'transform 240ms cubic-bezier(0.2, 0.8, 0.2, 1), width 240ms cubic-bezier(0.2, 0.8, 0.2, 1)' }} />}
+    </div>
+  );
+}
+function ChoiceList({ options, value, onChange, label, style }) {
+  const { theme } = useTheme();
+  const multi = Array.isArray(value);
+  return (
+    <div role={multi ? 'group' : 'radiogroup'} aria-label={label} style={{ display: 'flex', flexDirection: 'column', ...(style || {}) }}>
+      {options.map((o, i) => {
+        const on = multi ? value.includes(o.k) : value === o.k;
+        return (
+          <div key={o.k} role={multi ? 'checkbox' : 'radio'} aria-checked={on} aria-label={o.aria || o.label} aria-disabled={o.disabled || undefined}
+            onClick={() => { if (o.disabled) return; hapticTap(); onChange(o.k); }} className={o.disabled ? undefined : 'zchat-row-press'}
+            style={{ display: 'flex', alignItems: 'center', gap: 14, minHeight: 54, padding: '8px 4px', borderRadius: 12, cursor: o.disabled ? 'default' : 'pointer', opacity: o.disabled ? 0.4 : 1, position: 'relative' }}>
+            {o.icon && <div style={{ width: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: on ? kitOnInk(theme) : theme.ink2 }}>{o.icon}</div>}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 15.5, fontWeight: 600, color: theme.ink, lineHeight: 1.25 }}>{o.label}</div>
+              {o.sub && <div style={{ fontSize: 12.5, color: theme.muted, marginTop: 2, lineHeight: 1.35 }}>{o.sub}</div>}
+            </div>
+            {o.right}
+            <div aria-hidden="true" style={{ width: 22, height: 22, borderRadius: multi ? 7 : 11, flexShrink: 0, boxSizing: 'border-box', border: on ? 'none' : `1.6px solid ${theme.muted2}`, background: on ? theme.coral : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 150ms ease' }}>{on && <Check size={14} strokeWidth={3} color="#FFFFFF" />}</div>
+            {i < options.length - 1 && <div aria-hidden="true" style={{ position: 'absolute', left: o.icon ? 46 : 4, right: 4, bottom: 0, height: 1, background: theme.hair }} />}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+function KitSlider({ value, min = 0, max = 100, step = 1, onChange, label, style }) {
+  const { theme } = useTheme();
+  const pct = max > min ? ((value - min) / (max - min)) * 100 : 0;
+  return (
+    <input type="range" className="zchat-range" min={min} max={max} step={step} value={value} aria-label={label}
+      onChange={(e) => onChange(Number(e.target.value))}
+      style={{ '--zfill': `${Math.max(0, Math.min(100, pct))}%`, '--zacc': theme.coral, ...(style || {}) }} />
+  );
+}
+function KitSection({ title, right, children, style }) {
+  const { theme } = useTheme();
+  return (
+    <div style={{ marginTop: 18, ...(style || {}) }}>
+      {(title || right) && (
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, marginBottom: 8 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: theme.ink, letterSpacing: '-0.01em' }}>{title}</div>
+          {right && <div style={{ fontSize: 13, color: theme.muted, flexShrink: 0 }}>{right}</div>}
+        </div>
+      )}
+      {children}
+    </div>
+  );
+}
+function KitGlyph({ k, size = 30, color = 'currentColor', sw = 1.8 }) {
+  const p = { fill: 'none', stroke: color, strokeWidth: sw, strokeLinecap: 'round', strokeLinejoin: 'round' };
+  const dash = { ...p, strokeWidth: 1.2, strokeDasharray: '2 2.4', opacity: 0.55 };
+  const wave = 'M7 21c2.2-6 4.8-9 7-9 2 0 2.2 3.4.6 5.6';
+  const body = (() => {
+    if (k === 'sym_off') return <path d="M8 22c3-7.5 6.6-11.5 9.6-11.5 3 0 3.2 4.6 1 7.6" {...p} />;
+    if (k === 'sym_mirror') return <><path d="M16 5v22" {...dash} /><path d="M6.6 21c1.8-5.2 4-7.8 6-7.8 1.6 0 1.8 2.8.6 4.6" {...p} /><path d="M25.4 21c-1.8-5.2-4-7.8-6-7.8-1.6 0-1.8 2.8-.6 4.6" {...p} /></>;
+    if (k === 'sym_quad') return <><path d="M16 4v24M4 16h24" {...dash} /><g {...p}><path d="M7.4 13c.8-3 2.2-4.6 3.6-4.6.9 0 1 1.6.3 2.6" /><path d="M24.6 13c-.8-3-2.2-4.6-3.6-4.6-.9 0-1 1.6-.3 2.6" /><path d="M7.4 19c.8 3 2.2 4.6 3.6 4.6.9 0 1-1.6.3-2.6" /><path d="M24.6 19c-.8 3-2.2 4.6-3.6 4.6-.9 0-1-1.6-.3-2.6" /></g></>;
+    if (k === 'sym_radial') return <><g {...dash}><path d="M16 4v24" /><path d="M5.6 10l20.8 12" /><path d="M5.6 22l20.8-12" /></g><g {...p}>{[0, 60, 120, 180, 240, 300].map((a) => <path key={a} d="M16 8.6c1.6 1.4 2 3 1.2 4.4" transform={`rotate(${a} 16 16)`} />)}</g><circle cx="16" cy="16" r="1.6" fill={color} stroke="none" /></>;
+    if (k === 'size_square') return <rect x="7.5" y="7.5" width="17" height="17" rx="2.6" {...p} />;
+    if (k === 'size_portrait') return <rect x="8.6" y="5.8" width="14.8" height="20.4" rx="2.6" {...p} />;
+    if (k === 'size_story') return <rect x="10.2" y="3.6" width="11.6" height="24.8" rx="2.6" {...p} />;
+    if (k === 'none') return <><rect x="7" y="7" width="18" height="18" rx="4" {...p} /><path d="M9.5 22.5l13-13" {...p} /></>;
+    if (k === 'photo') return <><rect x="5.5" y="7.5" width="21" height="17" rx="3.4" {...p} /><circle cx="12" cy="13.4" r="2.1" {...p} /><path d="M6 22.4l6.2-5.6 4.4 3.8 3.4-2.8 6.4 5" {...p} /></>;
+    if (k === 'wave') return <path d={wave} {...p} />;
+    return null;
+  })();
+  return <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true" style={{ display: 'block', flexShrink: 0 }}>{body}</svg>;
+}
+
 function usePullRefresh(scrollRef, onRefresh) {
   const st = useRef({ y: 0, active: false, dist: 0 });
   const [dist, setDist] = useState(0);
@@ -25897,7 +27081,7 @@ function StoryArchiveIcon({ size = 24, color = 'currentColor', strokeWidth = 2, 
   );
 }
 
-function MeTab({ asPage = false, covered = false, onCoins, onQuestions, onClose, me, counts, onOpenProfile, onEditProfile, onSettings, onCollection, onSaved, onArchive, onMail, onRequests, onDiscover, onSwitchAccount, onShare, onInvite, onGames, onReminders, onStoryArchive, onSearchMessages, onScan, onMentions, onUsage, onStatus, onHidden, onMemories, onRecap, onAvatar, onChannels, onBroadcast, onMap, onVisitors, onCreateAi, onCharacters }) {
+function MeTab({ asPage = false, covered = false, onCoins, onQuestions, onClose, me, counts, onOpenProfile, onEditProfile, onSettings, onCollection, onShop, onSaved, onArchive, onMail, onRequests, onDiscover, onSwitchAccount, onShare, onInvite, onGames, onReminders, onStoryArchive, onSearchMessages, onScan, onMentions, onUsage, onStatus, onHidden, onMemories, onRecap, onAvatar, onChannels, onBroadcast, onMap, onVisitors, onCreateAi, onCharacters }) {
   const { theme } = useTheme();
   const c = igPalette(theme);
   const [social, setSocial] = useState(() => { try { return JSON.parse(localStorage.getItem('zchat-me-social') || 'null') || { followers: 0, following: 0, posts: 0 }; } catch { return { followers: 0, following: 0, posts: 0 }; } });
@@ -25974,6 +27158,7 @@ function MeTab({ asPage = false, covered = false, onCoins, onQuestions, onClose,
             onMemories ? { icon: <MemoriesIcon />, label: 'Memories', onClick: tapThen(onMemories) } : null,
             onRecap ? { icon: <RecapIcon />, label: 'Recap', aria: 'Year recap', value: String(new Date().getMonth() === 0 ? new Date().getFullYear() - 1 : new Date().getFullYear()), onClick: tapThen(onRecap) } : null,
             { icon: <CollectionIcon />, label: 'Collection', value: counts.rewards ? `${counts.rewards} unlocked` : null, onClick: tapThen(onCollection) },
+            onShop ? { icon: <ShopBagIcon />, label: 'Shop', onClick: tapThen(onShop) } : null,
             onCoins ? { icon: <CoinIcon size={22} />, label: 'Coins', value: counts.coins != null ? formatCount(counts.coins) : null, onClick: tapThen(onCoins) } : null,
             onQuestions ? { icon: <QuestionIcon />, label: 'Questions', aria: 'Ask me anything questions', onClick: tapThen(onQuestions) } : null,
             onAvatar ? { icon: <AvatarMakerIcon />, label: 'Avatar', aria: 'AI avatar', onClick: tapThen(onAvatar) } : null,
@@ -26471,6 +27656,7 @@ function FileCard({ d, url }) {
         const { data } = await supabase.storage.from('chat-private').createSignedUrl(url.slice(3), 900, download ? { download: String(d.n || 'file') } : undefined);
         link = data && data.signedUrl;
       }
+      link = safeLinkUrl(link);
       if (link) {
         if (download) {
           const a = document.createElement('a');
@@ -27045,11 +28231,16 @@ function HiddenWordsPage({ onClose }) {
         <button type="button" onClick={add} disabled={!draft.trim()} style={{ height: 46, padding: '0 16px', borderRadius: 13, border: 'none', background: draft.trim() ? theme.coral : theme.rowBg, color: draft.trim() ? 'white' : theme.muted, fontFamily: FONT, fontWeight: 800, fontSize: 14, cursor: draft.trim() ? 'pointer' : 'default' }}>Add</button>
       </div>
       {cfg.words.length === 0 && <div style={{ fontSize: 13, color: theme.muted, padding: '14px 2px' }}>Words you add show up here.</div>}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, padding: '14px 0' }}>
-        {cfg.words.map((w) => (
-          <div key={w} role="button" aria-label={`Remove ${w}`} onClick={() => commit({ ...cfg, words: cfg.words.filter((x) => x !== w) })} style={{ display: 'flex', alignItems: 'center', gap: 6, height: 34, padding: '0 8px 0 13px', borderRadius: 17, background: theme.rowBg, color: theme.ink, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>{w}<X size={14} color={theme.muted} /></div>
-        ))}
-      </div>
+      {cfg.words.length > 0 && (
+        <div role="list" aria-label="Your hidden words" style={{ padding: '8px 0 14px' }}>
+          {cfg.words.map((w, i) => (
+            <div key={w} role="listitem" style={{ display: 'flex', alignItems: 'center', gap: 12, minHeight: 48, paddingLeft: 2, boxShadow: i < cfg.words.length - 1 ? `0 0.5px 0 ${theme.hair}` : 'none' }}>
+              <span style={{ flex: 1, minWidth: 0, fontSize: 15, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{w}</span>
+              <div role="button" aria-label={`Remove ${w}`} onClick={() => { hapticTap(); commit({ ...cfg, words: cfg.words.filter((x) => x !== w) }); }} className="zchat-press" style={{ width: 40, height: 40, marginRight: -8, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.muted, cursor: 'pointer', flexShrink: 0 }}><X size={18} /></div>
+            </div>
+          ))}
+        </div>
+      )}
     </FullPage>
   );
 }
@@ -27074,6 +28265,8 @@ function parseFeatureCard(content) {
   if (d && typeof d.i === 'string') return { k: 'draw', d };
   d = jsonAfter(content, 'zbomb:');
   if (d && typeof d.t === 'string' && d.t.trim() && Number.isInteger(d.n) && d.n >= 2 && d.n <= BOMB_MAX) return { k: 'bomb', d: { t: d.t.slice(0, 200), n: d.n } };
+  d = jsonAfter(content, 'zask:');
+  if (d && Number.isInteger(d.n) && d.n >= 1 && d.n <= 1000) return { k: 'ask', d: { n: d.n, t: typeof d.t === 'string' ? d.t.slice(0, 80) : '' } };
   return null;
 }
 function featureCardSummary(x) {
@@ -27086,6 +28279,7 @@ function featureCardSummary(x) {
   if (x.k === 'file') return `File: ${x.d.n || 'File'}`;
   if (x.k === 'snd') return `Sound: ${(SOUNDBOARD.find((s) => s[0] === x.d.k) || SOUNDBOARD[0])[1]}`;
   if (x.k === 'draw') return 'Draw together';
+  if (x.k === 'ask') return `Asked for ${x.d.n} coins`;
   return null;
 }
 function isRoundVideo(m) { return !!m && m.type === 'video' && typeof m.content === 'string' && m.content.indexOf('zround:') === 0; }
@@ -32456,7 +33650,7 @@ function ChannelsEntryRow({ onOpen }) {
 }
 
 function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAccount, onAddAccount, onRemoveAccount, switchingAccountId }) {
-  const { theme, bgPatternOn, bubbleStyle, keepTextStyle, setDark } = useTheme();
+  const { theme, bgPatternOn, bubbleStyle, setBubbleStyle, keepTextStyle, setDark } = useTheme();
   const assetProgress = useAssetPrefetch();
   const [notifPermission, setNotifPermission] = useState(typeof Notification !== 'undefined' ? Notification.permission : 'default');
   const [notifBannerDismissed, setNotifBannerDismissed] = useState(() => {
@@ -32682,6 +33876,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [rewardReady, setRewardReady] = useState({});
   const [myRewards, setMyRewards] = useState([]);
   const [collectionOpen, setCollectionOpen] = useNavState(false);
+  const [shopOpen, setShopOpen] = useNavState(false);
+  const [unwrapGift, setUnwrapGift] = useState(null);
   const [feedOpen, setFeedOpen] = useNavState(false);
   const [feedStart, setFeedStart] = useState(null);
   const [homeTab, setHomeTab] = useState('chats');
@@ -33661,7 +34857,15 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const g = joinPrompt.group;
     setJoiningGroup(true);
     if (g.join_approval) { await askToJoinGroup(g); return; }
-    const { error: joinErr } = await supabase.from('group_members').insert({ group_id: g.id, user_id: session.user.id, role: 'member' });
+    let joinErr = null;
+    const joinRes = joinPrompt.code ? await supabase.rpc('zchat_join_group', { p_code: joinPrompt.code }) : null;
+    if (joinRes && !rpcMissing(joinRes.error)) {
+      const jr = joinRes.error ? null : joinRes.data;
+      if (jr && jr.approval) { await askToJoinGroup({ ...g, join_approval: true }); return; }
+      if (!jr || !jr.ok) { setJoiningGroup(false); setJoinPrompt(null); showSnack((jr && jr.reason) || "Couldn't join that group"); return; }
+    } else {
+      ({ error: joinErr } = await supabase.from('group_members').insert({ group_id: g.id, user_id: session.user.id, role: 'member' }));
+    }
     if (joinErr && /approval/i.test(String(joinErr.message || ''))) { await askToJoinGroup({ ...g, join_approval: true }); return; }
     if (joinErr) { setJoiningGroup(false); setJoinPrompt(null); showSnack("Couldn't join that group"); return; }
     const name = realName(session.user.id);
@@ -34105,6 +35309,15 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         params.delete('join');
         const rest = params.toString();
         window.history.replaceState(window.history.state, '', `${window.location.pathname}${rest ? `?${rest}` : ''}`);
+        const inv = await supabase.rpc('zchat_group_invite', { p_code: joinCode });
+        if (!rpcMissing(inv.error)) {
+          const info = inv.error ? null : inv.data;
+          const ig = info && info.group;
+          if (!ig) { showSnack("This invite link isn't valid anymore"); return; }
+          if (info.role) { await loadGroups(); openGroup({ ...ig, myRole: info.role }); return; }
+          setJoinPrompt({ group: ig, count: Number(info.count) || 0, requested: info.request === 'pending', code: joinCode });
+          return;
+        }
         const { data: g } = await supabase.from('groups').select('*').eq('invite_code', joinCode).maybeSingle();
         if (!g || g.invite_enabled === false) { showSnack("This invite link isn't valid anymore"); return; }
         const { data: memberRows } = await supabase.from('group_members').select('user_id, role').eq('group_id', g.id);
@@ -34115,7 +35328,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           const { data: req } = await supabase.from('group_join_requests').select('status').eq('group_id', g.id).eq('user_id', session.user.id).maybeSingle();
           requested = !!req && req.status === 'pending';
         }
-        setJoinPrompt({ group: g, count: (memberRows || []).length, requested });
+        setJoinPrompt({ group: g, count: (memberRows || []).length, requested, code: joinCode });
       })();
       return;
     }
@@ -34998,8 +36211,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       if ((adminCount || 0) <= 1 && (memberCount || 0) > 1) { await openGroup(g); setShowGroupInfo(true); return; }
     }
     const name = realName(session.user.id);
-    await supabase.from('group_members').delete().eq('group_id', g.id).eq('user_id', session.user.id);
     await supabase.from('messages').insert({ sender_id: session.user.id, group_id: g.id, type: 'system', content: `${name} left the group` });
+    await supabase.from('group_members').delete().eq('group_id', g.id).eq('user_id', session.user.id);
     if (activeGroup?.id === g.id) { setActiveGroup(null); setMobileShowChat(false); }
     loadGroups();
   };
@@ -35185,6 +36398,60 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       specialLockRef.current = false;
     }
   };
+  const sendDmTo = async (who, content, notifyText) => {
+    if (!who || !who.id || who.id === session.user.id) return false;
+    try {
+      const { data } = await insertMessageSafe({ sender_id: session.user.id, receiver_id: who.id, group_id: null, type: 'text', content, client_id: newClientId() });
+      if (!data) { showSnack('Could not send. Try again'); return false; }
+      if (activeProfileRef.current && activeProfileRef.current.id === who.id) setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
+      upsertConversation(who.id, specialPreview(content) || content, 'text');
+      notifyUser(who.id, me.name, notifyText || content, `/?dm=${session.user.id}`, me.avatar);
+      playUiSound('send');
+      return true;
+    } catch {
+      showSnack('Could not send. Try again');
+      return false;
+    }
+  };
+  const sendRoll = async (kind, options) => {
+    const notifyText = kind === 'coin' ? 'Flipped a coin' : kind === 'pick' ? 'Picked one for you' : kind === 'dice2' ? 'Rolled two dice' : 'Rolled a dice';
+    if (specialLockRef.current) return false;
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) { showSnack('No connection. Try again when you are back online'); return false; }
+    const group = activeGroup;
+    const profile = group ? null : activeProfile;
+    if (!group && !profile) return false;
+    specialLockRef.current = true;
+    let res;
+    try {
+      res = await supabase.rpc('zchat_roll', { p_kind: kind, p_to: profile ? profile.id : null, p_group: group ? group.id : null, p_options: kind === 'pick' ? options : null, p_topic: group ? (groupTopicRef.current || null) : null });
+    } catch (err) {
+      res = { data: null, error: err };
+    } finally {
+      specialLockRef.current = false;
+    }
+    const row = res && !res.error ? (Array.isArray(res.data) ? res.data[0] : res.data) : null;
+    if (!row || !row.id) {
+      if (res && rpcMissing(res.error)) {
+        const r6 = () => 1 + Math.floor(Math.random() * 6);
+        const card = kind === 'coin' ? { k: 'coin', v: [Math.random() < 0.5 ? 'h' : 't'] } : kind === 'pick' ? { k: 'pick', o: options, v: [Math.floor(Math.random() * options.length)] } : { k: 'dice', v: kind === 'dice2' ? [r6(), r6()] : [r6()] };
+        return sendSpecial(`zdice:${JSON.stringify(card)}`, notifyText);
+      }
+      showSnack(/slow mode/i.test(String((res && res.error && res.error.message) || '')) ? 'Slow mode is on. Wait a little before sending again' : 'Could not send. Try again');
+      return false;
+    }
+    const preview = specialPreview(row.content) || 'Message';
+    if (group) {
+      if (activeGroupRef.current && activeGroupRef.current.id === group.id) setMessages((prev) => (prev.some((x) => x.id === row.id) ? prev : [...prev, row]));
+      loadGroups();
+      groupMembers.filter((m) => m.user_id !== session.user.id && !m.muted).forEach((m) => notifyUser(m.user_id, `${me.name} in ${group.name}`, preview, `/?group=${group.id}`, me.avatar));
+    } else {
+      if (activeProfileRef.current && activeProfileRef.current.id === profile.id) setMessages((prev) => (prev.some((x) => x.id === row.id) ? prev : [...prev, row]));
+      upsertConversation(profile.id, preview, 'text');
+      notifyUser(profile.id, me.name, notifyText, `/?dm=${session.user.id}`, me.avatar);
+    }
+    playUiSound('send');
+    return true;
+  };
   const toggleChecklistItem = async (msg, idx) => {
     const before = messageLikes[msg.id] || [];
     const st = checklistState(before);
@@ -35343,8 +36610,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   };
   const leaveGroup = async () => {
     const name = realName(session.user.id);
-    await supabase.from('group_members').delete().eq('group_id', activeGroup.id).eq('user_id', session.user.id);
     await supabase.from('messages').insert({ sender_id: session.user.id, group_id: activeGroup.id, type: 'system', content: `${name} left the group` });
+    await supabase.from('group_members').delete().eq('group_id', activeGroup.id).eq('user_id', session.user.id);
     setShowGroupInfo(false);
     setShowGroupSettings(false);
     setActiveGroup(null);
@@ -36288,7 +37555,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
   const openForward = () => {
     const targets = selectedMessages.length ? selectedMessages : (viewerUrl ? [{ type: 'image', media_url: viewerUrl, content: null }] : []);
-    setForwardTargets(targets.map((m) => (m.sender_id ? { ...m, forwarded_from_name: labelForSender(m.sender_id) } : m)));
+    setForwardTargets(targets.map((m) => (m.sender_id ? { ...m, ...(m.type === 'text' && parseDice(m.content) ? { content: diceSummary(parseDice(m.content)) } : {}), forwarded_from_name: labelForSender(m.sender_id) } : m)));
     setForwardOpen(true);
   };
 
@@ -36315,7 +37582,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const doStartReplySingle = (m) => { setReplyingTo(m); setEditingMessage(null); setContextMenuFor(null); focusComposer(); };
   const doDeleteForMeSingle = (m) => { hideMessagesLocally([m.id]); setMessages((prev) => prev.filter((x) => x.id !== m.id)); setContextMenuFor(null); };
   const doDeleteForEveryoneSingle = async (m) => { await deleteMessage(m.id); setMessages((prev) => prev.map((x) => (x.id === m.id ? { ...x, deleted: true } : x))); setContextMenuFor(null); };
-  const openForwardSingle = (m) => { setForwardTargets([{ ...m, ...(parseWrapped(m.content) ? { content: messageTextFor(m) } : {}), forwarded_from_name: labelForSender(m.sender_id) }]); setForwardOpen(true); setContextMenuFor(null); };
+  const openForwardSingle = (m) => { setForwardTargets([{ ...m, ...(parseWrapped(m.content) ? { content: messageTextFor(m) } : {}), ...(m.type === 'text' && parseDice(m.content) ? { content: diceSummary(parseDice(m.content)) } : {}), forwarded_from_name: labelForSender(m.sender_id) }]); setForwardOpen(true); setContextMenuFor(null); };
   const doReportSingle = (m) => { setReportModalFor(m.id); setContextMenuFor(null); };
   const doSelectMultipleFrom = (m) => { setContextMenuFor(null); toggleSelect(m.id); };
   const doReactSingle = (m, emoji) => { reactToMessage(m.id, emoji); setContextMenuFor(null); };
@@ -37256,9 +38523,34 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     document.addEventListener('visibilitychange', onVisible);
     return () => { alive = false; clearTimeout(retryTimer); document.removeEventListener('visibilitychange', onVisible); supabase.removeChannel(ch); };
   }, [me && me.id]);
-  const unseenRewards = (myRewards || []).filter((r) => !r.seen && rewardActive(r) && (r.kind === 'frame' || r.kind === 'nameplate' ? isDecorKey(r.reward_key) : r.kind === 'charm' ? !!CUSTOM_BADGES[r.reward_key] : false));
+  useEffect(() => { try { window.dispatchEvent(new Event('zchat-rewards')); } catch {} }, [myRewards]);
+  const reloadMyRewards = async () => { const { data } = await supabase.from('user_rewards').select('*').eq('user_id', session.user.id).order('granted_at', { ascending: true }); if (data) setMyRewards(data); };
+  const giftInbox = useGiftInbox(me ? session.user.id : null);
+  const giftKeys = new Set(giftInbox.list.map((e) => e.gift && e.gift.key).filter(Boolean));
+  const markGiftRewardsSeen = async (e) => {
+    const k = e && e.gift && e.gift.key;
+    if (!k) { walletMem.data = null; announceWallet(); return; }
+    const kinds = e.gift.kind === 'set' ? ['frame', 'nameplate', 'effect'] : [e.gift.kind];
+    const list = (myRewards || []).filter((r) => r.reward_key === k && kinds.includes(r.kind) && !r.seen);
+    if (!list.length) return;
+    setMyRewards((prev) => prev.map((r) => (list.includes(r) ? { ...r, seen: true } : r)));
+    for (const r of list) {
+      if (r.id) await supabase.from('user_rewards').update({ seen: true }).eq('id', r.id);
+      else await supabase.from('user_rewards').update({ seen: true }).eq('user_id', session.user.id).eq('kind', r.kind).eq('reward_key', r.reward_key);
+    }
+  };
+  useEffect(() => {
+    if (unwrapGift || !me || !giftInbox.list.length) return undefined;
+    const t = setTimeout(() => {
+      const busyCall = callEngine && callEngine.call;
+      if (!busyCall && !document.hidden) setUnwrapGift(giftInbox.list[0]);
+    }, 1200);
+    return () => clearTimeout(t);
+  }, [giftInbox.list.length, !!unwrapGift, !!me]);
+  const unseenRewards = (myRewards || []).filter((r) => !r.seen && rewardActive(r) && !giftKeys.has(r.reward_key) && (r.kind === 'frame' || r.kind === 'nameplate' || r.kind === 'effect' ? isDecorKey(r.reward_key) : r.kind === 'charm' ? !!CUSTOM_BADGES[r.reward_key] : false));
   const pendingReward = unseenRewards[0] || null;
-  const pendingPair = pendingReward && pendingReward.kind !== 'charm' ? unseenRewards.find((r) => r !== pendingReward && r.reward_key === pendingReward.reward_key && r.kind === (pendingReward.kind === 'frame' ? 'nameplate' : 'frame')) || null : null;
+  const pendingPair = pendingReward && pendingReward.kind !== 'charm' && pendingReward.kind !== 'effect' ? unseenRewards.find((r) => r !== pendingReward && r.reward_key === pendingReward.reward_key && r.kind === (pendingReward.kind === 'frame' ? 'nameplate' : 'frame')) || null : null;
+  const pendingFx = pendingReward && pendingReward.kind !== 'charm' ? unseenRewards.find((r) => r !== pendingReward && r.kind === 'effect' && r.reward_key === pendingReward.reward_key) || null : null;
   useEffect(() => {
     if (!me || !(isDecorKey(me.avatar_frame) || isDecorKey(me.nameplate))) return undefined;
     const t = setTimeout(() => preloadDecorSet(me.avatar_frame, me.nameplate), 300);
@@ -38547,6 +39839,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (kind === 'chan') { setChannelsOpen({ id: d.i }); return true; }
     if (kind === 'pollend') { setEndPollFor(m); return true; }
     if (kind === 'draw') { setDrawRoom({ id: d.i }); return true; }
+    if (kind === 'ask') { const who = activeProfile; if (who && m && m.sender_id === who.id) { setGiftStart({ kind: 'coins', amount: d.n, asked: true }); setGiftFor(who); } return true; }
     return false;
   };
   const sendThreadReply = async (root, text) => {
@@ -39797,6 +41090,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                 <div style={{ flex: 1, textAlign: 'center', padding: '10px 4px', fontSize: 12.5, color: theme.muted, fontWeight: 600 }}>
                   This account no longer exists. You can't send new messages here.
                 </div>
+              ) : activeGroup && activeGroup.send_policy === 'admins' && activeGroup.created_by !== session.user.id && groupMembers.some((gm) => gm.user_id === session.user.id && gm.role !== 'admin') ? (
+                <div className="zchat-fade" style={{ flex: 1, textAlign: 'center', padding: '12px 4px', fontSize: 12.5, color: theme.muted, fontWeight: 600 }}>
+                  Only admins can send messages in this group.
+                </div>
               ) : activeProfile && !activeGroup && requestIds.has(activeProfile.id) && !restrictedIds.has(activeProfile.id) && activeSpam ? (
                 <SpamBar name={activeProfile.name} reasons={activeSpam.reasons} busy={spamBusy}
                   onNotSpam={async () => { const p0 = activeProfile; setSpamBusy(true); await setSpamVerdict(session.user.id, p0.id, 'ok'); setSpamBusy(false); hapticTap(); showSnack('Moved to message requests'); }}
@@ -39988,7 +41285,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                   onBomb={bot ? null : () => setBombOpen(true)}
                   onStyle={() => setShowTextStyle(true)}
                   onBuzz={bot ? null : sendBuzz}
-                  onCoin={bot ? null : () => sendSpecial(`zdice:${JSON.stringify({ k: 'coin', v: [Math.random() < 0.5 ? 'h' : 't'] })}`, 'Flipped a coin')} />
+                  onCoin={bot ? null : () => sendRoll('coin')} />
               );
             })()}
 
@@ -40113,7 +41410,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         {meMenuOpen && (
           <MeTab key="me-menu" asPage onCoins={() => setWalletOpen(true)} onQuestions={() => setQuestionsOpen(true)} onClose={() => setMeMenuOpen(false)} me={me} counts={{ coins: walletNow && walletNow.ready ? walletNow.coins : null, rewards: (myRewards || []).filter((r) => rewardActive(r) && (r.kind === 'charm' ? !!CUSTOM_BADGES[r.reward_key] : isDecorKey(r.reward_key))).length, archived: archivedConversations.length, requests: followRequestCount, mail: unreadMailCount, reminders: reminderTick >= 0 ? readReminders(session.user.id).filter((r) => !r.done).length : 0 }}
             onReminders={() => setShowReminders(true)} onStoryArchive={() => setStoryArchive(true)} onSearchMessages={() => setMsgSearchOpen('')} onScan={() => setShowQrScan(true)}
-            onOpenProfile={() => setProfileOf(me)} onEditProfile={() => setProfileOf({ ...me, __edit: true })} onSettings={() => setShowSettings(true)} onCollection={() => setCollectionOpen(true)}
+            onOpenProfile={() => setProfileOf(me)} onEditProfile={() => setProfileOf({ ...me, __edit: true })} onSettings={() => setShowSettings(true)} onCollection={() => setCollectionOpen(true)} onShop={() => setShopOpen(true)}
             onSaved={() => setShowSaved(true)} onArchive={() => setShowArchived(true)} onMail={() => setShowMail(true)} onRequests={() => setShowFollowRequests(true)} onDiscover={() => setShowDiscover(true)}
             onSwitchAccount={() => setShowAccountSwitcher(true)} onShare={() => setProfileOf({ ...me, __share: true })} onInvite={inviteFriends} onGames={() => setShowGames(true)}
             onMentions={() => setMentionsOpen(true)} onUsage={() => setUsageOpen(true)}
@@ -40124,7 +41421,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       {questionsOpen && me && <QuestionsPage me={me} onClose={() => setQuestionsOpen(false)} onSaved={(patch) => setMe((m) => (m ? { ...m, ...patch } : m))} onShareStory={(file) => { setQuestionsOpen(false); setStoryComposer({ key: Date.now(), files: [file] }); }} />}
       {askFor && <AskPage username={askFor} userId={session.user.id} onClose={() => setAskFor(null)} onOwnLink={() => { setAskFor(null); setQuestionsOpen(true); }} />}
       {giftPick && <PickPeoplePage userId={session.user.id} title={giftPick.kind === 'bubble' ? 'Send a bubble' : giftPick.kind === 'set' ? 'Send a set' : giftPick.kind === 'charm' ? 'Send a charm' : 'Send a gift'} subtitle="Pick who gets it" multi={false} blockedIds={myBlockedIds} zIndex={790} onClose={() => setGiftPick(null)} onDone={(list) => { const p = Array.isArray(list) ? list[0] : list; const g = giftPick; setGiftPick(null); if (p) { setGiftStart(g); setGiftFor(p); } }} />}
-      {giftFor && <PageGuard name="gift" onClose={() => { setGiftFor(null); setGiftStart(null); }}><GiftSheet uid={session.user.id} me={me} to={giftFor} start={giftStart} onClose={() => { setGiftFor(null); setGiftStart(null); }} onSent={(t) => { setGiftFor(null); setGiftStart(null); showSnack(t); runAchievementCheck(session.user.id); }} /></PageGuard>}
+      {giftFor && <PageGuard name="gift" onClose={() => { setGiftFor(null); setGiftStart(null); }}><GiftSheet uid={session.user.id} me={me} to={giftFor} start={giftStart} onAsk={giftFor && !giftFor.is_bot && !(giftStart && giftStart.asked) ? async (n) => { const who = giftFor; setGiftFor(null); setGiftStart(null); const ok = await sendDmTo(who, `zask:${JSON.stringify({ n })}`, `Asked you for ${n} coins`); if (ok) showSnack(`Asked ${String(who.name || '').split(' ')[0] || 'them'} for ${n} coins`); } : undefined} onClose={() => { setGiftFor(null); setGiftStart(null); }} onSent={(t) => { setGiftFor(null); setGiftStart(null); showSnack(t); runAchievementCheck(session.user.id); }} /></PageGuard>}
       {achToast && !toastBusy && <AchievementToast k={achToast} onDone={() => setAchToast(null)} onOpen={() => { setAchToast(null); setAchievementsFor(me); }} />}
       {achievementsFor && <AchievementsPage userId={achievementsFor.id} isSelf={achievementsFor.id === session.user.id} name={achievementsFor.name} onClose={() => setAchievementsFor(null)} />}
       {notifsOpen && (
@@ -40621,7 +41918,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           onClose={() => setDeepPost(null)} onOpenProfile={(p) => { setDeepPost(null); setProfileOf(p); }} />
       )}
       {!celebrateTier && me && pendingReward && rewardReady[`${pendingReward.kind}:${pendingReward.reward_key}`] && (
-        <PageGuard name="reward" onClose={() => { const list = [pendingReward, pendingPair].filter(Boolean); setMyRewards((prev) => prev.map((r) => (list.includes(r) ? { ...r, seen: true } : r))); }}><RewardCelebration kind={pendingReward.kind} rewardKey={pendingReward.reward_key} me={me} isSet={!!pendingPair}
+        <PageGuard name="reward" onClose={() => { const list = [pendingReward, pendingPair, pendingFx].filter(Boolean); setMyRewards((prev) => prev.map((r) => (list.includes(r) ? { ...r, seen: true } : r))); }}><RewardCelebration kind={pendingReward.kind} rewardKey={pendingReward.reward_key} me={me} isSet={!!pendingPair}
           count={unseenRewards.length}
           onClaimAll={async () => {
             const list = unseenRewards;
@@ -40633,7 +41930,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             showSnack(`${list.length} items added to your Collection`);
           }}
           onClaim={async (wear) => {
-            const list = [pendingReward, pendingPair].filter(Boolean);
+            const list = [pendingReward, pendingPair, pendingFx].filter(Boolean);
             setMyRewards((prev) => prev.map((r) => (list.includes(r) ? { ...r, seen: true } : r)));
             for (const r of list) {
               if (r.id) await supabase.from('user_rewards').update({ seen: true }).eq('id', r.id);
@@ -40641,7 +41938,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             }
             if (!wear) { showSnack('Added to your Collection'); return; }
             if (pendingReward.kind === 'charm') await equipReward('charm', pendingReward.reward_key);
-            else await equipDecor(pendingPair ? { avatar_frame: pendingReward.reward_key, nameplate: pendingReward.reward_key } : { [pendingReward.kind === 'frame' ? 'avatar_frame' : 'nameplate']: pendingReward.reward_key });
+            else await equipDecor(pendingPair || pendingReward.kind === 'effect' ? { avatar_frame: pendingReward.reward_key, nameplate: pendingReward.reward_key } : { [pendingReward.kind === 'frame' ? 'avatar_frame' : 'nameplate']: pendingReward.reward_key });
           }} /></PageGuard>
       )}
       {freeSetsAsk && me && <PageGuard name="free sets" onClose={() => setFreeSetsAsk(false)}><FreeSetsSheet me={me} count={Math.max(1, freeSetsNow)} onPick={() => { setFreeSetsAsk(false); setTimeout(() => setCollectionOpen(true), 60); }} onClose={() => setFreeSetsAsk(false)} /></PageGuard>}
@@ -40656,7 +41953,16 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           onOpenProfile={(p) => { setFeedOpen(false); setProfileOf(sanitizeAvatar(p, session.user.id)); }} />
       )}
       {collectionOpen && me && (
-        <PageGuard name="collection" onClose={() => setCollectionOpen(false)}><CollectionPanel me={me} rewards={myRewards} isAdmin={isZAdmin} startSet={typeof collectionOpen === 'string' ? collectionOpen : null} onClose={() => setCollectionOpen(false)} onEquip={equipReward} onWear={equipDecor} onOpenWallet={() => setWalletOpen(true)} onGift={(kind, key) => setGiftPick({ kind, key })} onRewardsChanged={async () => { const { data } = await supabase.from('user_rewards').select('*').eq('user_id', session.user.id).order('granted_at', { ascending: true }); if (data) setMyRewards(data); }} /></PageGuard>
+        <PageGuard name="collection" onClose={() => setCollectionOpen(false)}><CollectionPanel me={me} rewards={myRewards} isAdmin={isZAdmin} startSet={typeof collectionOpen === 'string' ? collectionOpen : null} onClose={() => setCollectionOpen(false)} onEquip={equipReward} onWear={equipDecor} onOpenWallet={() => setWalletOpen(true)} onGift={(kind, key) => setGiftPick({ kind, key })} onRewardsChanged={reloadMyRewards} onOpenShop={() => { setCollectionOpen(false); setTimeout(() => setShopOpen(true), 30); }} /></PageGuard>
+      )}
+      {shopOpen && me && (
+        <PageGuard name="shop" onClose={() => setShopOpen(false)}><ShopPage me={me} rewards={myRewards} startSet={typeof shopOpen === 'string' ? shopOpen : null} onClose={() => setShopOpen(false)} onWear={equipDecor} onOpenWallet={() => setWalletOpen(true)} onGift={(kind, key) => setGiftPick({ kind, key })} onRewardsChanged={reloadMyRewards} onOpenCollection={() => { setShopOpen(false); setTimeout(() => setCollectionOpen(true), 30); }} /></PageGuard>
+      )}
+      {unwrapGift && me && (
+        <PageGuard name="gift box" onClose={() => setUnwrapGift(null)}><GiftUnwrapPage entry={unwrapGift} me={me} onClose={() => setUnwrapGift(null)}
+          onOpened={(e) => { giftInbox.opened(e.id); markGiftRewardsSeen(e); }}
+          onThank={async (who, label) => { await sendDmTo(who, `Thank you for ${label}!`, 'Said thanks for your gift'); }}
+          onWear={equipDecor} onUseBubble={(k) => setBubbleStyle(k)} onUseCharm={(k) => equipReward('charm', k)} /></PageGuard>
       )}
       {celebrateTier && (
         <VerifiedCelebration tier={celebrateTier} name={me.name}
@@ -40756,7 +42062,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       )}
       {pickComposer && (activeProfile || activeGroup) && (
         <PickComposerSheet onClose={() => setPickComposer(false)}
-          onSend={async (o) => { const ok = await sendSpecial(`zdice:${JSON.stringify({ k: 'pick', o, v: [Math.floor(Math.random() * o.length)] })}`, 'Picked one for you'); if (ok) { setPickComposer(false); scrollChatToBottom(true); } }} />
+          onSend={async (o) => { const ok = await sendRoll('pick', o); if (ok) { setPickComposer(false); scrollChatToBottom(true); } }} />
       )}
       {contactPicker && (activeProfile || activeGroup) && (
         <ContactPickerPage myId={session.user.id} recent={conversations.map((c) => c.otherProfile).filter((pp) => pp && !pp.is_bot)} onClose={() => setContactPicker(false)}
@@ -40840,11 +42146,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       {diceSheet && (activeProfile || activeGroup) && (
         <DiceSheet onClose={() => setDiceSheet(false)} onPick={(k) => {
           setDiceSheet(false);
-          const r6 = () => 1 + Math.floor(Math.random() * 6);
           if (k === 'pick') { setTimeout(() => setPickComposer(true), 60); return; }
-          if (k === 'coin') sendSpecial(`zdice:${JSON.stringify({ k: 'coin', v: [Math.random() < 0.5 ? 'h' : 't'] })}`, 'Flipped a coin');
-          else if (k === 'd2') sendSpecial(`zdice:${JSON.stringify({ k: 'dice', v: [r6(), r6()] })}`, 'Rolled two dice');
-          else sendSpecial(`zdice:${JSON.stringify({ k: 'dice', v: [r6()] })}`, 'Rolled a dice');
+          sendRoll(k === 'coin' ? 'coin' : k === 'd2' ? 'dice2' : 'dice');
         }} />
       )}
       {voiceTyping && (activeProfile || activeGroup) && (
@@ -40920,7 +42223,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       {msgSearchOpen != null && (
         <SearchMessagesPage myId={session.user.id} groups={groups} hiddenIds={getHiddenMsgIds()} initialQuery={msgSearchOpen} onClose={() => setMsgSearchOpen(null)} onOpen={openSearchHit} />
       )}
-      {showWhatsNew && <PageGuard name="whats new" onClose={() => setShowWhatsNew(false)}><WhatsNewSheet me={me} onClose={() => setShowWhatsNew(false)} onTry={(g) => { if (g === 'sets') setCollectionOpen(true); else if (g === 'map') setMapOpen(true); else if (g === 'song' && me) setProfileOf({ ...me, __song: true }); else if (g === 'ai') setAiStudio({ mode: 'image' }); else if (g === 'chars') setCharsOpen(true); else if (g === 'coins') setWalletOpen(true); else if (g === 'bubbles') setShowBubbleSheet(true); else if (g === 'drops') setCollectionOpen('__drop'); else if (g === 'folders') { setHomeTab('chats'); setFoldersOpen(true); } }} /></PageGuard>}
+      {showWhatsNew && <PageGuard name="whats new" onClose={() => setShowWhatsNew(false)}><WhatsNewSheet me={me} onClose={() => setShowWhatsNew(false)} onTry={(g) => { if (g === 'sets') setCollectionOpen(true); else if (g === 'shop') setShopOpen(true); else if (g === 'map') setMapOpen(true); else if (g === 'song' && me) setProfileOf({ ...me, __song: true }); else if (g === 'ai') setAiStudio({ mode: 'image' }); else if (g === 'chars') setCharsOpen(true); else if (g === 'coins') setWalletOpen(true); else if (g === 'bubbles') setShowBubbleSheet(true); else if (g === 'drops') setCollectionOpen('__drop'); else if (g === 'folders') { setHomeTab('chats'); setFoldersOpen(true); } }} /></PageGuard>}
       {showGames && (
         <GamesPage key={showGames.at || 'games'} initialGame={showGames.game || null} onClose={() => setShowGames(false)}
           friends={gameFriends}
@@ -41750,47 +43053,40 @@ function WnSegments({ total, at, onArt, dark }) {
 }
 
 const WN_HIGHLIGHTS = [
-  { k: 'fxsets', title: 'Sets with profile effects', text: 'Twenty new sets, each with its own effect. Fireworks, falling leaves, jellyfish and more play when someone opens your profile.', cta: 'See the sets', go: 'sets' },
-  { k: 'chars', title: 'Character bubbles', text: '30 new chat bubbles with little characters sitting on your messages. Pick two for free and send the rest as gifts.', cta: 'See the bubbles', go: 'bubbles' },
-  { k: 'songs', title: 'Stories that move with the music', text: 'Your story now waits for the song, so they always start together. Drag, pinch and turn text, stickers and the music sticker anywhere you like.' },
-  { k: 'draw', title: 'Real art tools in Draw together', text: 'Brushes, shapes, stickers and backgrounds that show up live for everyone drawing with you.' },
-  { k: 'walls', title: 'Chat themes', text: 'New themes with patterns, scenes and bubbles that match. Open a chat, tap its name and pick Theme.' },
-  { k: 'coins', title: 'Coins and ZChat Verified', text: 'Get coin packs, try a monthly ZChat Verified plan, and never miss a limited drop.', cta: 'Open coins', go: 'coins' },
+  { k: 'fxall', title: 'An effect for every set', text: 'Every set now has its own profile effect, the third piece next to the frame and the nameplate. Wear the full set and it plays when someone opens your profile.', cta: 'See your sets', go: 'sets' },
+  { k: 'coins', title: 'A brand new Shop', text: 'Only what you do not have yet, a deal every day and what everyone loves right now. What you buy moves to your Collection.', cta: 'Open the shop', go: 'shop' },
+  { k: 'gift', title: 'Gifts you unwrap', text: 'Gifts now arrive wrapped. Open them, wear them and say thanks in one tap. Send any number of coins, or ask a friend for some.' },
+  { k: 'chars', title: 'The Wolf bubble', text: 'A little wolf pup that howls on your messages. Find it in the Shop.', cta: 'Open the shop', go: 'shop' },
+  { k: 'shield', title: 'Face ID and a spending lock', text: 'Unlock with Face ID or your fingerprint, ask for your PIN before any coins leave, and get an alert when someone signs in.' },
 ];
 const WN_SECTIONS = [
+  { title: 'Shop and Collection', items: [
+    { art: 'coins', title: 'The Shop', text: 'Everything you can get, minus what you already have. A Popular row shows what people pick the most.' },
+    { art: 'reminders', title: 'Deal of the day', text: 'One set, bubble or charm at a lower price every day.' },
+    { art: 'fxsets', title: 'Effects for every set', text: 'Every set has a frame, a nameplate and a profile effect, each 250 coins. Already had a full set? Its effect is yours.' },
+    { art: 'decor', title: 'A Collection of what you own', text: 'Epic, Legendary and Mythical labels, how much you have collected and rewards when you reach a goal.' },
+    { art: 'theme', title: 'Looks', text: 'Save what you wear, your set, bubble and charm, and switch in one tap.' },
+    { art: 'love', title: 'Wishlist', text: 'Tap the heart on anything in the Shop. Friends see it when they send you a gift.' },
+  ] },
+  { title: 'Gifts', items: [
+    { art: 'gift', title: 'Wrapped gifts', text: 'Tap the box to open your gift, then wear it or say thanks.' },
+    { art: 'coins', title: 'Any amount of coins', text: 'Type how many coins to send, or slide to pick.' },
+    { art: 'chats', title: 'Ask for coins', text: 'Ask a friend for coins with a card they can pay in one tap.' },
+    { art: 'gift', title: 'Smarter gifting', text: 'The gift sheet hides what your friend already has.' },
+  ] },
   { title: 'Chats', items: [
-    { art: 'chats', title: 'Character bubbles', text: '30 bubbles with little characters on your messages.' },
-    { art: 'theme', title: 'Chat themes', text: 'Patterns, scenes and matching bubbles for every chat.' },
-    { art: 'quick', title: 'Quick actions', text: 'A small tab on the right of a chat for text bomb, style, buzz and coin flip. Tuck it away and bring it back with one tap.' },
-    { art: 'effects', title: 'Text bomb', text: 'Send one message up to 50 times. It bursts across their screen.' },
-    { art: 'voice', title: 'Live sounds', text: 'Real recorded sounds that play for both of you at the same moment.' },
-    { art: 'eye', title: 'Peek at a chat', text: 'Hold a chat to read it without opening it. They will not see it as read.' },
-    { art: 'files', title: 'A tidier attach menu', text: 'Everything you can send, sorted into Share, Create and Fun. View once and Hidden now sit right next to your photos.' },
-    { art: 'moments', title: 'Photos into an album', text: 'Pick photos, tap Album and they go straight into a shared album with a card in the chat.' },
+    { art: 'chats', title: 'The Wolf bubble', text: 'A howling wolf pup on every message you send.' },
+    { art: 'quick', title: 'Dice and coin flips you can trust', text: 'Every roll and flip now comes from ZChat, so nobody can fake a result.' },
   ] },
-  { title: 'Stories', items: [
-    { art: 'songs', title: 'Music in sync', text: 'Your story waits for the song so both start at the same time.' },
-    { art: 'stickers', title: 'Move anything', text: 'Drag, pinch and turn text, stickers and the music sticker. Tap the music sticker to change its look.' },
-    { art: 'camera', title: 'New drawing tools', text: 'Pen, marker, neon, highlighter and an eraser for photos and stories.' },
-    { art: 'camera', title: 'Swipe for filters', text: 'Swipe across a photo to try each filter. The name pops up as you go.' },
-  ] },
-  { title: 'Draw together', items: [
-    { art: 'draw', title: 'Art tools', text: 'Eight brushes, shapes, stickers and backgrounds that sync for everyone.' },
-  ] },
-  { title: 'Coins and collection', items: [
-    { art: 'coins', title: 'Buy coins', text: 'Pick a coin pack and pay safely with Lemon Squeezy.' },
-    { art: 'medal', title: 'ZChat Verified', text: 'A monthly plan for the blue badge. Cancel any time.' },
-    { art: 'reminders', title: 'Drops', text: 'Limited releases with a countdown. Tap Remind me to get a heads up.' },
-    { art: 'fxsets', title: 'Twenty sets with profile effects', text: 'Wear the full set and its effect plays when someone opens your profile. Tap Play on any set to see it first.' },
-    { art: 'decor', title: 'A new Collection', text: 'Sets, profile effects, bubbles, charms and badges all live together in one cleaner Collection page.' },
-    { art: 'gift', title: 'Crystal phoenix', text: 'A crystal phoenix set. Wear it and the phoenix flies across your profile.' },
-    { art: 'gift', title: 'Gift from your collection', text: 'Send any set, charm or bubble to a friend straight from your Collection. Charms are in the gift sheet too.' },
-    { art: 'chats', title: 'Twenty new bubble animals', text: 'A turtle, a lion, a hippo in a puddle and more. Every bubble animal also got its own pose and spot on your messages.' },
+  { title: 'Safety', items: [
+    { art: 'shield', title: 'Face ID unlock', text: 'Open your locked app and hidden chats with Face ID or your fingerprint.' },
+    { art: 'coins', title: 'Spending lock', text: 'Ask for your PIN or Face ID before buying, gifting or sending coins.' },
+    { art: 'login', title: 'Login alerts', text: 'Know right away when your account signs in on a new phone.' },
+    { art: 'eye', title: 'Privacy and security checkup', text: 'A quick walk through the settings that keep you safe.' },
   ] },
   { title: 'Everywhere', items: [
-    { art: 'moments', title: 'Vibes', text: 'Moments has a new name. Posts, stories and clips live in Vibes.' },
-    { art: 'bell', title: 'Sounds that feel real', text: 'Taps, sends and message tones now use real recorded sounds.' },
-    { art: 'quick', title: 'Small fixes', text: 'Lots of small fixes, including verified badges that sometimes did not show.' },
+    { art: 'draw', title: 'Real previews instead of boxes', text: 'Pickers across the app now show what you get, with drawn icons and live previews.' },
+    { art: 'quick', title: 'Smoother and fixed', text: 'Lots of fixes and a faster, smoother app.' },
   ] },
 ];
 const WN_NEW_COUNT = WN_SECTIONS.reduce((n, sec) => n + sec.items.length, 0);
@@ -41845,6 +43141,7 @@ const WN_EARLIER = [
 function WnPic({ k, dark, thumb, me }) {
   if (k === 'decor') return <WnDecorArt me={me} thumb={thumb} />;
   if (k === 'fxsets') return <WnDecorArt me={me} thumb={thumb} keys={['jellyfish_glow', 'spirit_wolf', 'unicorn_dream']} />;
+  if (k === 'fxall') return <WnDecorArt me={me} thumb={thumb} keys={['sakura_shrine', 'koi_pond', 'space_explorer']} />;
   return <WnArt k={k} dark={dark} thumb={thumb} />;
 }
 
@@ -43639,9 +44936,10 @@ function AccentPickerSheet({ value, onPick, onClose }) {
         <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ width: '100%', maxWidth: 480, background: theme.panelBg, borderRadius: '22px 22px 0 0', padding: '10px 20px calc(18px + env(safe-area-inset-bottom))' }}>
           <div style={{ display: 'flex', justifyContent: 'center', paddingBottom: 10 }}><div style={{ width: 36, height: 4, borderRadius: 2, background: theme.soft2 }} /></div>
           <div style={{ textAlign: 'center', fontSize: 16.5, fontWeight: 700, color: theme.ink }}>Pick any color</div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '18px 0 14px' }}>
+          <div aria-hidden="true" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, padding: '18px 0 14px' }}>
             <div style={{ padding: '8px 14px', borderRadius: 18, borderBottomRightRadius: 6, background: theme.dark ? pal.meDark : pal.meLight, color: theme.ink, fontSize: 14.5, fontWeight: 600 }}>Looks good</div>
-            <div style={{ height: 34, padding: '0 16px', borderRadius: 17, background: pal.coral, color: '#FFFFFF', fontSize: 14, fontWeight: 700, display: 'flex', alignItems: 'center' }}>Button</div>
+            <div style={{ height: 36, padding: '0 16px', borderRadius: 10, background: pal.coral, color: '#FFFFFF', fontSize: 14, fontWeight: 700, display: 'flex', alignItems: 'center' }}>Send</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: pal.coral }}>See all</div>
           </div>
           <div ref={barRef} role="slider" aria-label="Color" aria-valuemin={0} aria-valuemax={360} aria-valuenow={hue}
             onPointerDown={(e) => { try { e.currentTarget.setPointerCapture(e.pointerId); } catch {} drag(e); }} onPointerMove={(e) => { if (e.buttons || e.pointerType !== 'mouse') drag(e); }}
@@ -43956,13 +45254,26 @@ function NearbySettingsRows({ uid }) {
     <>
       <IgRow inset={false} label="Friend nearby alerts" sub={sharing ? 'Hear when a friend who shares their location is close by, while ZChat is open' : 'Turn on location sharing in Friends map first'} right={<IgToggle on={cfg.on} onClick={() => set({ ...cfg, on: !cfg.on })} />} />
       {cfg.on && (
-        <div role="radiogroup" aria-label="How close" style={{ display: 'flex', gap: 8, padding: '0 2px 10px' }}>
-          {[[500, '500 m'], [1000, '1 km'], [2000, '2 km']].map(([r, l]) => (
-            <div key={r} role="radio" aria-checked={cfg.r === r} aria-label={`Within ${l}`} onClick={() => set({ ...cfg, r })} className="zchat-press" style={{ height: 34, padding: '0 14px', borderRadius: 17, display: 'flex', alignItems: 'center', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', background: cfg.r === r ? theme.coral : theme.soft, color: cfg.r === r ? '#FFFFFF' : theme.ink2 }}>Within {l}</div>
-          ))}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, minHeight: 48, padding: '0 0 8px' }}>
+          <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 500, color: theme.ink }}>Alert me within</span>
+          <NearbyRadiusPicker value={cfg.r} onChange={(r) => set({ ...cfg, r })} />
         </div>
       )}
     </>
+  );
+}
+function NearbyRadiusPicker({ value, onChange }) {
+  const { theme } = useTheme();
+  const opts = [[500, '500 m'], [1000, '1 km'], [2000, '2 km']];
+  const at = Math.max(0, opts.findIndex(([r]) => r === value));
+  return (
+    <div role="radiogroup" aria-label="How close" style={{ position: 'relative', display: 'flex', width: 172, height: 34, padding: 2, boxSizing: 'border-box', borderRadius: 10, background: theme.soft, flexShrink: 0 }}>
+      <div aria-hidden="true" style={{ position: 'absolute', top: 2, bottom: 2, left: 2, width: 'calc((100% - 4px) / 3)', borderRadius: 8, background: theme.dark ? '#34333B' : '#FFFFFF', boxShadow: '0 1px 3px rgba(0,0,0,0.16), 0 0 0 0.5px rgba(0,0,0,0.05)', transform: `translateX(${at * 100}%)`, transition: reducedMotion() ? 'none' : 'transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1)' }} />
+      {opts.map(([r, l]) => {
+        const on = r === value;
+        return <div key={r} role="radio" aria-checked={on} aria-label={`Within ${l}`} onClick={() => { if (!on) onChange(r); }} style={{ position: 'relative', flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13.5, fontWeight: on ? 700 : 600, color: on ? theme.ink : theme.muted, cursor: 'pointer', whiteSpace: 'nowrap', transition: 'color 160ms ease' }}>{l}</div>;
+      })}
+    </div>
   );
 }
 function NearbyToast({ hit, onOpen, onDone }) {
@@ -44090,10 +45401,12 @@ function ChatsPrefsSection() {
       )}
       <IgHeading>Quick reactions</IgHeading>
       <div style={{ padding: '4px 2px 10px', fontSize: 13, color: theme.muted, lineHeight: 1.5 }}>These six show when you hold a message. Tap one to swap it.</div>
-      <div style={{ display: 'flex', gap: 8, padding: '0 2px 12px' }}>
-        {quick.map((e, i) => (
-          <div key={i} role="button" aria-label={`Quick reaction ${i + 1}`} onClick={() => setEditAt(i)} className="zchat-press" style={{ width: 46, height: 46, borderRadius: 14, background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, cursor: 'pointer', border: `1px solid ${theme.border}` }}>{e}</div>
-        ))}
+      <div style={{ display: 'flex', justifyContent: 'center', padding: '6px 0 16px' }}>
+        <div role="group" aria-label="Quick reactions" style={{ display: 'inline-flex', alignItems: 'center', gap: 2, height: 54, padding: '0 7px', borderRadius: 27, background: theme.panelBg, boxShadow: theme.dark ? '0 0 0 1px rgba(255,255,255,0.08), 0 8px 24px rgba(0,0,0,0.45)' : '0 0 0 1px rgba(17,17,19,0.06), 0 8px 22px rgba(17,17,19,0.12)' }}>
+          {quick.map((e, i) => (
+            <div key={i} role="button" aria-label={`Quick reaction ${i + 1}`} onClick={() => setEditAt(i)} className="zchat-press" style={{ width: 42, height: 42, borderRadius: 21, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 27, lineHeight: 1, cursor: 'pointer', background: editAt === i ? theme.rowBg : 'transparent' }}>{e}</div>
+          ))}
+        </div>
       </div>
       <div role="button" aria-label="Reset quick reactions" onClick={() => { setQuickReactions(REACTION_EMOJIS); setQuick(REACTION_EMOJIS); hapticTap(); }} style={{ fontSize: 13.5, fontWeight: 700, color: theme.coral, padding: '0 2px 12px', cursor: 'pointer' }}>Reset to default</div>
       <IgHeading>Quick replies</IgHeading>
@@ -44130,7 +45443,7 @@ function ShortcutsSection() {
       {KEY_SHORTCUTS.map(([k, l]) => (
         <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 2px', borderBottom: `1px solid ${theme.border}` }}>
           <span style={{ flex: 1, fontSize: 15, color: theme.ink, fontWeight: 600 }}>{l}</span>
-          <span style={{ fontSize: 12.5, fontWeight: 800, color: theme.ink, padding: '5px 9px', borderRadius: 8, background: theme.rowBg, border: `1px solid ${theme.border}`, whiteSpace: 'nowrap' }}>{show(k)}</span>
+          <span style={{ fontSize: 14, fontWeight: 600, color: theme.muted, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{show(k)}</span>
         </div>
       ))}
     </div>
@@ -48752,54 +50065,42 @@ function ModeArt({ kind, theme }) {
   const darkMe = makeAccentPalette(theme.coral).meDark;
   const screen = (bg, bar, them, me, line) => (
     <>
-      <rect x="0" y="0" width="100" height="66" rx="10" fill={bg} />
-      <rect x="0" y="0" width="100" height="14" rx="10" fill={bar} />
-      <rect x="0" y="8" width="100" height="6" fill={bar} />
-      <circle cx="10" cy="7" r="3.4" fill={line} />
-      <rect x="17" y="5" width="26" height="4" rx="2" fill={line} />
-      <rect x="8" y="22" width="44" height="11" rx="5.5" fill={them} />
-      <rect x="44" y="37" width="48" height="11" rx="5.5" fill={me} />
-      <rect x="8" y="52" width="30" height="9" rx="4.5" fill={them} />
+      <rect x="0" y="0" width="64" height="64" fill={bg} />
+      <rect x="0" y="0" width="64" height="15" fill={bar} />
+      <circle cx="9.5" cy="7.5" r="3.6" fill={line} />
+      <rect x="16.5" y="5.6" width="19" height="3.8" rx="1.9" fill={line} />
+      <rect x="6" y="22" width="30" height="9" rx="4.5" fill={them} />
+      <rect x="25" y="35" width="33" height="9" rx="4.5" fill={me} />
+      <rect x="6" y="48" width="21" height="8" rx="4" fill={them} />
     </>
   );
+  const light = screen('#F3F3F6', '#FFFFFF', '#E1E1E8', lightMe, '#C9C9D2');
+  const dark = screen('#17171B', '#24242A', '#2E2E35', darkMe, '#4A4A54');
   return (
-    <svg viewBox="0 0 100 66" aria-hidden="true" style={{ display: 'block', width: '100%', borderRadius: 10 }}>
+    <svg viewBox="0 0 64 64" preserveAspectRatio="xMidYMid slice" aria-hidden="true" style={{ display: 'block', width: '100%', height: '100%' }}>
       {kind === 'schedule' ? (
         <>
-          <defs>
-            <clipPath id={`${cid}b`}><path d="M0 0H100V30H0Z" /></clipPath>
-          </defs>
-          {screen('#17171B', '#222228', '#2E2E35', darkMe, '#4A4A54')}
-          <g clipPath={`url(#${cid}b)`}>{screen('#F3F3F6', '#FFFFFF', '#E3E3E9', lightMe, '#C9C9D2')}</g>
-          <circle cx="86" cy="54" r="8" fill="none" stroke="#C9C9D2" strokeWidth="2" />
-          <path d="M86 49.5V54l3 2" fill="none" stroke="#C9C9D2" strokeWidth="2" strokeLinecap="round" />
+          <defs><clipPath id={`${cid}b`}><path d="M0 0H64V30H0Z" /></clipPath></defs>
+          {dark}
+          <g clipPath={`url(#${cid}b)`}>{light}</g>
+          <circle cx="51" cy="52.5" r="6" fill="#17171B" stroke="#C9C9D2" strokeWidth="1.6" />
+          <path d="M51 49.4v3.3l2.2 1.4" fill="none" stroke="#C9C9D2" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
         </>
       ) : kind === 'auto' ? (
         <>
-          <defs>
-            <clipPath id={`${cid}a`}><path d="M0 0H100L0 66Z" /></clipPath>
-          </defs>
-          {screen('#17171B', '#222228', '#2E2E35', darkMe, '#4A4A54')}
-          <g clipPath={`url(#${cid}a)`}>{screen('#F3F3F6', '#FFFFFF', '#E3E3E9', lightMe, '#C9C9D2')}</g>
+          <defs><clipPath id={`${cid}a`}><path d="M0 0H64L0 64Z" /></clipPath></defs>
+          {dark}
+          <g clipPath={`url(#${cid}a)`}>{light}</g>
         </>
-      ) : kind === 'dark'
-        ? screen('#17171B', '#222228', '#2E2E35', darkMe, '#4A4A54')
-        : screen('#F3F3F6', '#FFFFFF', '#E3E3E9', lightMe, '#C9C9D2')}
+      ) : kind === 'dark' ? dark : light}
     </svg>
   );
 }
 
-function ThemeCard({ title, sub, children, pad = true }) {
-  const { theme } = useTheme();
-  return (
-    <div style={{ marginTop: 14 }}>
-      {title && <div style={{ fontSize: 13, fontWeight: 700, color: theme.muted, padding: '0 4px 8px', letterSpacing: '0.01em' }}>{title}</div>}
-      <div style={{ borderRadius: 20, background: theme.dark ? 'rgba(255,255,255,0.045)' : '#F5F5F8', border: `1px solid ${theme.border}`, padding: pad ? 14 : 0, overflow: 'hidden' }}>
-        {children}
-      </div>
-      {sub && <div style={{ fontSize: 12.5, color: theme.muted, padding: '8px 6px 0', lineHeight: 1.45 }}>{sub}</div>}
-    </div>
-  );
+function ThemeBubbleArt({ k, me, ink }) {
+  const spec = CHAR_BUBBLES[k];
+  if (!spec) return <div style={{ padding: '7px 12px', borderRadius: 16, borderBottomRightRadius: 5, background: me, color: ink, fontSize: 13, fontWeight: 600, lineHeight: 1.2 }}>Hi</div>;
+  return <div style={{ display: 'flex', justifyContent: 'center', width: '100%', padding: '0 8px', boxSizing: 'border-box' }}><CharBubbleSample k={k} text="Hi" cw={30} fontSize={12} /></div>;
 }
 
 function AppearanceSection({ uid }) {
@@ -48810,6 +50111,7 @@ function AppearanceSection({ uid }) {
   const tap = () => { hapticTap(); playUiSound('tap'); };
   const mode = themeMode || (dark ? 'dark' : 'light');
   const artTheme = { ...theme, accentKey: accentName };
+  const page = igPalette(theme).bg;
   const sizeIdx = (() => {
     let best = 2;
     let gap = 9;
@@ -48830,104 +50132,77 @@ function AppearanceSection({ uid }) {
     setFontScale(1);
     setBgPatternOn(false);
   };
-  const ring = (on) => (on ? `0 0 0 2.5px ${theme.dark ? '#0C0C0E' : '#FFFFFF'}, 0 0 0 5px ${theme.coral}` : `inset 0 0 0 1px ${theme.dark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.1)'}`);
-  const dotSwatch = (key, color, on, onPick, label, size, hideLabel) => (
-    <div key={key} role="button" aria-label={label} aria-pressed={on} onClick={() => { tap(); onPick(); }} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 7, cursor: 'pointer', minWidth: 0, flex: 1, padding: hideLabel ? '3px 0' : 0 }}>
-      <div style={{ width: size, height: size, borderRadius: '50%', background: color, boxShadow: ring(on), display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'box-shadow 0.18s ease, transform 0.18s ease', transform: on ? 'scale(1.04)' : 'none' }}>
-        {on && <Check size={size > 40 ? 18 : 15} color={/^#F|^#E|^#D/i.test(String(color)) ? '#15151A' : 'white'} strokeWidth={3} />}
+  const ring = (on) => (on ? `0 0 0 2.5px ${page}, 0 0 0 4.5px ${theme.coral}` : `inset 0 0 0 1px ${theme.dark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.1)'}`);
+  const dotSwatch = (key, color, on, onPick, label, size) => (
+    <div key={key} role="button" aria-label={label} aria-pressed={on} onClick={() => { tap(); onPick(); }} className="zchat-press" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', minWidth: 0, flex: 1, padding: '5px 0' }}>
+      <div style={{ width: size, height: size, borderRadius: '50%', background: color, boxShadow: ring(on), display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'box-shadow 180ms ease-out' }}>
+        {on && <Check size={15} color={/^#F|^#E|^#D/i.test(String(color)) ? '#15151A' : '#FFFFFF'} strokeWidth={3} />}
       </div>
-      {!hideLabel && <span style={{ fontSize: 11, color: on ? theme.ink : theme.muted, fontWeight: on ? 800 : 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>{label}</span>}
     </div>
   );
   const colorKey = BUBBLE_COLORS[bubbleColor] ? bubbleColor : 'default';
   const colorLabel = colorKey === 'default' ? 'Same as app color' : BUBBLE_COLORS[colorKey].label;
+  const colorSpec = BUBBLE_COLORS[colorKey];
+  const meBg = (theme.dark ? colorSpec.meDark : colorSpec.me) || theme.bubbleMe;
+  const meInk = theme.dark ? '#FFFFFF' : (colorSpec.me ? '#15151A' : theme.ink);
+  const subHead = (title, value, right) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 28, marginBottom: 6 }}>
+      <div style={{ fontSize: 14.5, fontWeight: 600, color: theme.ink, flexShrink: 0 }}>{title}</div>
+      <div style={{ flex: 1, minWidth: 0, fontSize: 13, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{value}</div>
+      {right}
+    </div>
+  );
+  const switchRow = (aria, on, flip, title, sub, lead) => (
+    <div role="button" aria-label={aria} aria-pressed={!!on} onClick={() => { tap(); flip(); }} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', gap: 14, minHeight: 58, padding: '6px 0', cursor: 'pointer' }}>
+      {lead}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 15, fontWeight: 600, color: theme.ink }}>{title}</div>
+        <div style={{ fontSize: 12.5, color: theme.muted, marginTop: 2, lineHeight: 1.35 }}>{sub}</div>
+      </div>
+      <IgToggle on={!!on} />
+    </div>
+  );
+  const accentLabel = accentName === 'custom' ? 'Your own color' : (ACCENT_PALETTES[accentName] || ACCENT_PALETTES.coral).label;
   return (
     <div style={{ paddingBottom: 28 }}>
       <div style={{ paddingTop: 6 }}>
         <ChatLookPreview height={124} composer />
       </div>
 
-      <ThemeCard title="Mode" sub={mode === 'auto' ? 'Follows your phone. Light in the day and dark at night if your phone does that.' : mode === 'schedule' ? 'Dark at the times you pick, light the rest of the day.' : null}>
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
-          {[['light', 'Light', <Sun key="s" size={14} />], ['dark', 'Dark', <Moon key="m" size={14} />], ['auto', 'Auto', <Smartphone key="p" size={14} />], ['schedule', 'Timed', <Clock key="c" size={14} />]].map(([k, label, icon]) => {
-            const on = mode === k;
-            return (
-              <div key={k} role="button" aria-label={label} aria-pressed={on} onClick={() => { tap(); setThemeMode(k); }} style={{ flex: 1, minWidth: 0, maxWidth: 170, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 9 }}>
-                <div style={{ width: '100%', borderRadius: 13, padding: 3, boxSizing: 'border-box', background: on ? theme.coral : 'transparent', boxShadow: on ? 'none' : `inset 0 0 0 1px ${theme.border}`, transition: 'background 0.18s ease' }}>
-                  <ModeArt kind={k} theme={artTheme} />
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: on ? 800 : 600, color: on ? theme.ink : theme.muted }}>
-                  {icon}{label}
-                </div>
-              </div>
-            );
-          })}
-        </div>
+      <KitSection title="Mode" style={{ marginTop: 22 }}>
+        <PickTiles label="Mode" fit size={66} ringBg={page} value={mode} onChange={(k) => { playUiSound('tap'); setThemeMode(k); }}
+          options={[['light', 'Light'], ['dark', 'Dark'], ['auto', 'Auto'], ['schedule', 'Timed']].map(([k, label]) => ({ k, label, aria: label, bg: k === 'dark' ? '#17171B' : '#F3F3F6', art: <ModeArt kind={k} theme={artTheme} /> }))} />
+        {(mode === 'auto' || mode === 'schedule') && <div style={{ fontSize: 12.5, color: theme.muted, lineHeight: 1.45, padding: '8px 2px 0' }}>{mode === 'auto' ? 'Follows your phone. Light in the day and dark at night if your phone does that.' : 'Dark at the times you pick, light the rest of the day.'}</div>}
         {mode === 'schedule' && <ModeScheduleRows />}
-        <div role="button" aria-label="Pure black" aria-pressed={!!pureBlack} onClick={() => { tap(); setPureBlack(!pureBlack); }} style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 14, cursor: 'pointer' }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 14.5, fontWeight: 700, color: theme.ink }}>Pure black</div>
-            <div style={{ fontSize: 12, color: theme.muted, marginTop: 2, lineHeight: 1.35 }}>Dark mode uses true black. Easier on battery for phones with OLED screens.</div>
-          </div>
-          <IgToggle on={!!pureBlack} />
-        </div>
-      </ThemeCard>
+        <div style={{ marginTop: 6 }}>{switchRow('Pure black', pureBlack, () => setPureBlack(!pureBlack), 'Pure black', 'Dark mode uses true black. Easier on battery for phones with OLED screens.')}</div>
+      </KitSection>
 
-      <ThemeCard title="App color" sub={`${accentName === 'custom' ? 'Your own color' : ((ACCENT_PALETTES[accentName] || ACCENT_PALETTES.coral).label)}. Buttons, links and highlights across ZChat.`}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 4 }}>
-          {Object.entries(ACCENT_PALETTES).map(([key, spec]) => dotSwatch(key, spec.coral, accentName === key, () => setAccentName(key), `App color ${spec.label}`, 38, true))}
-          {dotSwatch('custom', accentName === 'custom' ? accentCustom : 'conic-gradient(#FF3B30, #FFCC00, #34C759, #00C7BE, #007AFF, #AF52DE, #FF2D55, #FF3B30)', accentName === 'custom', () => setPickAccent(true), 'Any color', 38, true)}
+      <KitSection title="App color" right={accentLabel} style={{ marginTop: 22 }}>
+        <div role="group" aria-label="App color" style={{ display: 'flex', justifyContent: 'space-between', gap: 4 }}>
+          {Object.entries(ACCENT_PALETTES).map(([key, spec]) => dotSwatch(key, spec.coral, accentName === key, () => setAccentName(key), `App color ${spec.label}`, 36))}
+          {dotSwatch('custom', accentName === 'custom' ? accentCustom : 'conic-gradient(#FF3B30, #FFCC00, #34C759, #00C7BE, #007AFF, #AF52DE, #FF2D55, #FF3B30)', accentName === 'custom', () => setPickAccent(true), 'Any color', 36)}
         </div>
-      </ThemeCard>
+        <div style={{ fontSize: 12.5, color: theme.muted, padding: '8px 2px 0', lineHeight: 1.45 }}>Buttons, links and highlights across ZChat.</div>
+      </KitSection>
 
-      <ThemeCard title="Your bubbles" pad={false}>
-        <div style={{ padding: '14px 14px 4px' }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 12 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: theme.ink }}>Color</div>
-            <div style={{ fontSize: 12, color: theme.muted, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{colorLabel}</div>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 2 }}>
-            {Object.entries(BUBBLE_COLORS).map(([key, spec]) => dotSwatch(key, spec.me || theme.bubbleMe, colorKey === key, () => setBubbleColor(key), key === 'default' ? 'Bubble color same as app' : `Bubble color ${spec.label}`, 36, true))}
-          </div>
+      <KitSection title="Your bubbles" style={{ marginTop: 26 }}>
+        {subHead('Color', colorLabel)}
+        <div role="group" aria-label="Bubble color" style={{ display: 'flex', justifyContent: 'space-between', gap: 4 }}>
+          {Object.entries(BUBBLE_COLORS).map(([key, spec]) => dotSwatch(key, spec.me || theme.bubbleMe, colorKey === key, () => setBubbleColor(key), key === 'default' ? 'Bubble color same as app' : `Bubble color ${spec.label}`, 34))}
         </div>
-        <div style={{ height: 1, background: theme.border, margin: '14px 0 0' }} />
-        <div style={{ padding: '14px 0 14px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', padding: '0 14px', marginBottom: 10 }}>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: theme.ink }}>Style</div>
-              <div style={{ fontSize: 12, color: theme.muted, marginTop: 2 }}>{styleLabel}. Everyone you chat with sees it.</div>
-            </div>
-            <div role="button" aria-label="All bubble styles" onClick={() => { tap(); setAllStyles(true); }} style={{ fontSize: 13, fontWeight: 800, color: theme.coral, cursor: 'pointer', padding: '6px 2px 6px 10px', whiteSpace: 'nowrap' }}>See all</div>
-          </div>
-          <div style={{ display: 'flex', gap: 8, overflowX: 'auto', padding: '6px 14px 4px', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
-            {quick.map((k) => {
-              const on = styleKey === k;
-              const label = k === 'classic' ? 'Classic' : CHAR_BUBBLES[k].label;
-              return (
-                <div key={k} role="button" aria-label={`Bubble style ${label}`} aria-pressed={on} onClick={() => { tap(); setBubbleStyle(k); }} style={{
-                  flexShrink: 0, width: 104, minHeight: 96, borderRadius: 16, cursor: 'pointer', position: 'relative', boxSizing: 'border-box',
-                  display: 'flex', flexDirection: 'column', alignItems: 'stretch', justifyContent: 'flex-end', gap: 7, padding: '0 8px 9px',
-                  background: theme.dark ? 'rgba(255,255,255,0.05)' : '#FFFFFF', boxShadow: on ? `inset 0 0 0 2px ${theme.coral}` : `inset 0 0 0 1px ${theme.border}`,
-                }}>
-                  <div style={{ display: 'flex', flexDirection: 'column' }}><CharBubbleSample k={k} text="Hi" cw={36} fontSize={12.5} /></div>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: on ? theme.ink : theme.muted, textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</div>
-                </div>
-              );
-            })}
-            <div role="button" aria-label="More bubble styles" onClick={() => { tap(); setAllStyles(true); }} style={{
-              flexShrink: 0, width: 96, height: 96, borderRadius: 16, cursor: 'pointer', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6,
-              boxShadow: `inset 0 0 0 1px ${theme.border}`, color: theme.ink, fontSize: 12, fontWeight: 700,
-            }}>
-              <BubblesIcon size={22} />
-              {`${CHAR_BUBBLE_KEYS.length} bubbles`}
-            </div>
-          </div>
-        </div>
-      </ThemeCard>
+        <div style={{ height: 18 }} />
+        {subHead('Style', `${styleLabel}. Everyone you chat with sees it.`, <div role="button" aria-label="All bubble styles" onClick={() => { tap(); setAllStyles(true); }} style={{ fontSize: 13.5, fontWeight: 700, color: kitOnInk(theme), cursor: 'pointer', padding: '6px 0 6px 10px', whiteSpace: 'nowrap', flexShrink: 0 }}>See all</div>)}
+        <PickTiles label="Bubble style" size={80} bleed={16} ringBg={page} value={styleKey}
+          onChange={(k) => { if (k === '__more') { tap(); setAllStyles(true); return; } playUiSound('tap'); setBubbleStyle(k); }}
+          options={[
+            ...quick.map((k) => ({ k, label: k === 'classic' ? 'Classic' : CHAR_BUBBLES[k].label, aria: `Bubble style ${k === 'classic' ? 'Classic' : CHAR_BUBBLES[k].label}`, art: <ThemeBubbleArt k={k} me={meBg} ink={meInk} /> })),
+            { k: '__more', label: `${CHAR_BUBBLE_KEYS.length} bubbles`, aria: 'More bubble styles', art: <BubblesIcon size={26} strokeWidth={1.8} /> },
+          ]} />
+      </KitSection>
 
-      <ThemeCard title="Text size">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span aria-hidden="true" style={{ fontSize: 13, fontWeight: 800, color: theme.muted, width: 14, textAlign: 'center' }}>A</span>
+      <KitSection title="Text size" right={THEME_TEXT_SIZES[sizeIdx][1]} style={{ marginTop: 26 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '2px 0' }}>
+          <span aria-hidden="true" style={{ fontSize: 13, fontWeight: 700, color: theme.muted, width: 14, textAlign: 'center' }}>A</span>
           <div style={{ position: 'relative', flex: 1, height: 34 }}>
             <div style={{ position: 'absolute', left: 9, right: 9, top: 15, height: 4, borderRadius: 2, background: theme.dark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.1)' }} />
             <div style={{ position: 'absolute', left: 9, top: 15, height: 4, borderRadius: 2, width: `calc((100% - 18px) * ${sizeIdx / (THEME_TEXT_SIZES.length - 1)})`, background: theme.coral, transition: 'width 0.18s ease' }} />
@@ -48938,32 +50213,26 @@ function AppearanceSection({ uid }) {
                   position: 'absolute', top: 0, left: `calc(9px + (100% - 18px) * ${i / (THEME_TEXT_SIZES.length - 1)} - 17px)`, width: 34, height: 34,
                   display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
                 }}>
-                  <div style={{ width: on ? 22 : 10, height: on ? 22 : 10, borderRadius: '50%', background: on ? '#FFFFFF' : (i < sizeIdx ? theme.coral : (theme.dark ? '#3A3A42' : '#D5D5DC')), boxShadow: on ? `0 2px 8px rgba(0,0,0,0.3), 0 0 0 3px ${theme.coral}` : 'none', transition: 'all 0.18s ease' }} />
+                  <div style={{ width: on ? 24 : 8, height: on ? 24 : 8, borderRadius: '50%', background: on ? '#FFFFFF' : (i < sizeIdx ? theme.coral : (theme.dark ? '#3A3A42' : '#D5D5DC')), boxShadow: on ? '0 1px 2px rgba(0,0,0,0.18), 0 3px 10px rgba(0,0,0,0.16), 0 0 0 0.5px rgba(0,0,0,0.06)' : 'none', transition: 'all 0.18s ease' }} />
                 </div>
               );
             })}
           </div>
-          <span aria-hidden="true" style={{ fontSize: 20, fontWeight: 800, color: theme.muted, width: 16, textAlign: 'center' }}>A</span>
+          <span aria-hidden="true" style={{ fontSize: 21, fontWeight: 700, color: theme.muted, width: 16, textAlign: 'center' }}>A</span>
         </div>
-        <div style={{ textAlign: 'center', fontSize: 12.5, fontWeight: 700, color: theme.muted, marginTop: 6 }}>{THEME_TEXT_SIZES[sizeIdx][1]}</div>
-      </ThemeCard>
+      </KitSection>
 
-      <ThemeCard title="Chat background" pad={false}>
-        <div role="button" aria-label="Dot pattern" aria-pressed={!!bgPatternOn} onClick={() => { tap(); setBgPatternOn(!bgPatternOn); }} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', cursor: 'pointer' }}>
-          <div style={{ width: 44, height: 44, borderRadius: 12, flexShrink: 0, background: theme.bgGradient, border: `1px solid ${theme.border}`, position: 'relative', overflow: 'hidden' }}>
+      <KitSection title="Chat background" style={{ marginTop: 26 }}>
+        {switchRow('Dot pattern', bgPatternOn, () => setBgPatternOn(!bgPatternOn), 'Dot pattern', 'A soft pattern behind chats with no wallpaper', (
+          <div aria-hidden="true" style={{ width: 44, height: 44, borderRadius: 12, flexShrink: 0, background: theme.bgGradient, boxShadow: `inset 0 0 0 1px ${theme.border}`, position: 'relative', overflow: 'hidden' }}>
             <div style={{ position: 'absolute', inset: 0, opacity: theme.dark ? 0.3 : 0.22, backgroundImage: 'radial-gradient(circle, currentColor 1px, transparent 1px)', backgroundSize: '8px 8px', color: theme.ink }} />
           </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 14.5, fontWeight: 700, color: theme.ink }}>Dot pattern</div>
-            <div style={{ fontSize: 12, color: theme.muted, marginTop: 2, lineHeight: 1.35 }}>A soft pattern behind chats with no wallpaper</div>
-          </div>
-          <IgToggle on={!!bgPatternOn} />
-        </div>
-      </ThemeCard>
+        ))}
+      </KitSection>
 
       {pickAccent && <AccentPickerSheet value={accentName === 'custom' ? accentCustom : theme.coral} onClose={() => setPickAccent(false)} onPick={(hex) => { setAccentCustom(hex); setAccentName('custom'); setPickAccent(false); hapticTap(); }} />}
       {!isDefault && (
-        <div role="button" aria-label="Reset theme" onClick={reset} style={{ marginTop: 22, textAlign: 'center', fontSize: 14, fontWeight: 800, color: theme.coral, cursor: 'pointer', padding: 10 }}>Reset to default</div>
+        <div role="button" aria-label="Reset theme" onClick={reset} style={{ marginTop: 22, textAlign: 'center', fontSize: 14.5, fontWeight: 700, color: kitOnInk(theme), cursor: 'pointer', padding: 10 }}>Reset to default</div>
       )}
       {allStyles && uid && <BubbleShopPage uid={uid} zIndex={700} onClose={() => setAllStyles(false)} />}
     </div>
@@ -49777,6 +51046,42 @@ function paintHex(h, s, v) {
   let rgb = [0, 0, 0];
   if (h < 60) rgb = [c, x, 0]; else if (h < 120) rgb = [x, c, 0]; else if (h < 180) rgb = [0, c, x]; else if (h < 240) rgb = [0, x, c]; else if (h < 300) rgb = [x, 0, c]; else rgb = [c, 0, x];
   return `#${rgb.map((u) => Math.round((u + m) * 255).toString(16).padStart(2, '0')).join('')}`.toUpperCase();
+}
+
+const paintThumbs = new Map();
+function paintTplThumb(k) {
+  if (paintThumbs.has(k)) return paintThumbs.get(k);
+  let url = '';
+  try {
+    const tpl = PAINT_TEMPLATES[k];
+    const cv = document.createElement('canvas');
+    cv.width = 192; cv.height = 192;
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, 192, 192);
+    const s = (192 / 1000) * 0.84;
+    ctx.translate((192 - 1000 * s) / 2, (192 - 1000 * s) / 2);
+    ctx.scale(s, s);
+    ctx.strokeStyle = '#1B1A22';
+    ctx.fillStyle = '#1B1A22';
+    ctx.lineWidth = 15;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    if (tpl) tpl.draw(ctx);
+    url = cv.toDataURL('image/png');
+  } catch {}
+  paintThumbs.set(k, url);
+  return url;
+}
+function paintBgArt(k, col) {
+  const base = { position: 'absolute', inset: 0, background: col };
+  if (k === 'grid') return <div style={{ ...base, backgroundImage: 'linear-gradient(rgba(80,90,130,0.24) 1px, transparent 1px), linear-gradient(90deg, rgba(80,90,130,0.24) 1px, transparent 1px)', backgroundSize: '10px 10px', backgroundPosition: '4px 4px' }} />;
+  if (k === 'dots') return <div style={{ ...base, backgroundImage: 'radial-gradient(rgba(80,90,130,0.42) 1.1px, transparent 1.4px)', backgroundSize: '10px 10px', backgroundPosition: '4px 4px' }} />;
+  if (k === 'lines') return <div style={{ ...base, backgroundImage: 'linear-gradient(90deg, transparent 13px, rgba(230,80,90,0.4) 13px, rgba(230,80,90,0.4) 14px, transparent 14px), linear-gradient(rgba(70,110,200,0.32) 1px, transparent 1px)', backgroundSize: '100% 100%, 100% 10px', backgroundPosition: '0 0, 0 6px' }} />;
+  if (k === 'paper') return <div style={{ ...base, backgroundImage: 'radial-gradient(120% 90% at 30% 20%, rgba(255,255,255,0.7), rgba(236,222,196,0.55))' }} />;
+  if (k === 'sky') return <div style={{ ...base, backgroundImage: 'linear-gradient(180deg, #CFE2FF 0%, #EEF5FF 100%)' }} />;
+  if (k === 'mint') return <div style={{ ...base, backgroundImage: 'linear-gradient(180deg, #CDEFE0 0%, #EEFAF4 100%)' }} />;
+  return <div style={base} />;
 }
 
 function PaintSheet({ title, onClose, children, z = 120 }) {
@@ -51675,27 +52980,30 @@ function PaintStudio({ onClose, onSend, recipientName, onAskBot, initial }) {
         <PaintSheet title="Options" onClose={() => setSheet(null)}>
           {rowLabel('Drawing help')}
           {optionRow('Magic shapes', 'Draw a rough circle, box or line and it snaps neat', <IgToggle on={magic} onClick={() => setMagic((v) => !v)} />)}
-          {optionRow('Steady hand', steady ? `Smoothing ${steady} of 10` : 'Smooths shaky lines', <input type="range" min={0} max={10} value={steady} aria-label="Steady hand" onChange={(e) => setSteady(Number(e.target.value))} style={{ width: 130, accentColor: theme.coral }} />)}
+          {optionRow('Steady hand', steady ? `Smoothing ${steady} of 10` : 'Smooths shaky lines', <KitSlider value={steady} min={0} max={10} label="Steady hand" onChange={setSteady} style={{ width: 132 }} />)}
           {optionRow('Need an idea?', idea || 'Get something fun to draw', <span style={{ fontSize: 13.5, fontWeight: 800, color: theme.coral }}>{idea ? 'Another' : 'Give me one'}</span>, () => { const pool = PAINT_IDEAS.filter((x) => x !== idea); setIdea(pool[Math.floor(Math.random() * pool.length)]); })}
           {idea && optionRow('Hide the idea', null, null, () => setIdea(''))}
-          {rowLabel('Mirror')}
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {[['off', 'Off'], ['mirror', 'Mirror'], ['quad', 'Four way'], ['radial', 'Kaleidoscope']].map(([k, label]) => chip(label, () => setSym(k), sym === k, `Mirror ${label}`))}
-          </div>
-          {rowLabel('Background')}
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {PAINT_BACKGROUNDS.map(([k, , label]) => chip(label, () => { setBgPhoto(null); setBgKey(k); if (k === 'black' && color === '#111111') setColor('#FFFFFF'); if (k !== 'black' && bgKey === 'black' && color === '#FFFFFF') setColor('#111111'); }, !bgPhoto && bgKey === k, `Background ${label}`))}
-            {chip(bgPhoto ? 'Photo on' : 'Draw on a photo', () => { if (photoInputRef.current) photoInputRef.current.click(); }, !!bgPhoto, 'Draw on a photo')}
-          </div>
-          {rowLabel('Colouring pages')}
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {chip('None', () => setTemplate(null), !template, 'No colouring page')}
-            {Object.entries(PAINT_TEMPLATES).map(([k, tpl]) => chip(tpl.label, () => { setTemplate(k); setTool('fill'); setSheet(null); say('Pick a colour and tap to fill'); }, template === k, `Colouring page ${tpl.label}`))}
-          </div>
-          {rowLabel('Canvas')}
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {Object.entries(PAINT_SIZES).map(([k, v]) => chip(v[2], () => changeSize(k), docKey === k, `Canvas ${v[2]}`))}
-          </div>
+          <KitSection title="Mirror">
+            <PickTiles label="Mirror" size={60} fit value={sym} onChange={(k) => setSym(k)}
+              options={[['off', 'Off', 'sym_off'], ['mirror', 'Mirror', 'sym_mirror'], ['quad', 'Four way', 'sym_quad'], ['radial', 'Kaleidoscope', 'sym_radial']].map(([k, label, g]) => ({ k, label, aria: `Mirror ${label}`, art: <KitGlyph k={g} size={34} /> }))} />
+          </KitSection>
+          <KitSection title="Background">
+            <PickTiles label="Background" size={60} bleed={18} value={bgPhoto ? 'photo' : bgKey}
+              onChange={(k) => {
+                if (k === 'photo') { if (photoInputRef.current) photoInputRef.current.click(); return; }
+                setBgPhoto(null); setBgKey(k); if (k === 'black' && color === '#111111') setColor('#FFFFFF'); if (k !== 'black' && bgKey === 'black' && color === '#FFFFFF') setColor('#111111');
+              }}
+              options={[...PAINT_BACKGROUNDS.map(([k, col, label]) => ({ k, label, aria: `Background ${label}`, art: paintBgArt(k, col) })), { k: 'photo', label: bgPhoto ? 'Your photo' : 'Photo', aria: 'Draw on a photo', art: <KitGlyph k="photo" size={32} /> }]} />
+          </KitSection>
+          <KitSection title="Colouring pages">
+            <PickTiles label="Colouring pages" size={68} bleed={18} value={template || 'none'}
+              onChange={(k) => { if (k === 'none') { setTemplate(null); return; } setTemplate(k); setTool('fill'); setSheet(null); say('Pick a colour and tap to fill'); }}
+              options={[{ k: 'none', label: 'Blank', aria: 'No colouring page', art: <KitGlyph k="none" size={30} /> }, ...Object.entries(PAINT_TEMPLATES).map(([k, tpl]) => ({ k, label: tpl.label, aria: `Colouring page ${tpl.label}`, bg: '#FFFFFF', art: <img src={paintTplThumb(k)} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} /> }))]} />
+          </KitSection>
+          <KitSection title="Canvas">
+            <PickTiles label="Canvas" size={60} fit value={docKey} onChange={(k) => changeSize(k)}
+              options={Object.entries(PAINT_SIZES).map(([k, v]) => ({ k, label: v[2], sub: k === 'square' ? '1:1' : k === 'portrait' ? '4:5' : '9:16', aria: `Canvas ${v[2]}`, art: <KitGlyph k={`size_${k}`} size={34} /> }))} />
+          </KitSection>
           <div style={{ height: 10 }} />
           {optionRow('Save to phone', 'Download as a picture', <Download size={18} color={theme.muted} />, saveToPhone)}
           {optionRow('Clear canvas', 'Start over', <Trash2 size={18} color={theme.danger} />, () => { if (st.current.ops.length) setConfirmClear(true); })}
@@ -55150,7 +56458,7 @@ function RestrictionNotice({ restriction, onClose }) {
         <div style={{ fontSize: 14, color: theme.muted, lineHeight: 1.55, marginTop: 8 }}>
           {`You can't ${copy.action} right now. This is paused until ${adminDate(restriction.until)}.`}
         </div>
-        <div style={{ display: 'inline-block', marginTop: 12, padding: '6px 14px', borderRadius: 14, background: theme.rowBg, border: `1px solid ${theme.border}`, fontSize: 13, fontWeight: 800, color: theme.ink }}>{`${restrictionTimeLeft(restriction.until)} left`}</div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 12, fontSize: 14, fontWeight: 700, color: theme.ink, fontVariantNumeric: 'tabular-nums' }}><Clock size={15} color={theme.muted} strokeWidth={2.2} />{`${restrictionTimeLeft(restriction.until)} left`}</div>
         {restriction.reason ? <div style={{ fontSize: 13, color: theme.muted, marginTop: 12, lineHeight: 1.5 }}>{`Reason: ${restriction.reason}`}</div> : null}
         <div style={{ fontSize: 12.5, color: theme.muted, marginTop: 12, lineHeight: 1.5 }}>Your account is fine otherwise. You can still read messages and look around.</div>
         <div role="button" onClick={onClose} style={{ margin: '18px -22px 0', padding: '15px 0', borderTop: `1px solid ${theme.border}`, fontWeight: 900, fontSize: 15, color: theme.coral, cursor: 'pointer' }}>OK</div>
@@ -55335,6 +56643,37 @@ function AdminSheet({ title, body, confirmLabel, danger, busy, onConfirm, onClos
   );
 }
 
+function AdminStatus({ tone = 'muted', children }) {
+  const { theme } = useTheme();
+  const color = tone === 'danger' ? theme.danger : tone === 'live' ? '#FF3B5C' : tone === 'accent' ? kitOnInk(theme) : tone === 'good' ? '#16A34A' : theme.muted;
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 700, color, whiteSpace: 'nowrap', flexShrink: 0 }}>
+      <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: '50%', background: color, flexShrink: 0 }} />
+      {children}
+    </span>
+  );
+}
+function AdminTextBtn({ label, onClick, tone, disabled, icon, ariaLabel }) {
+  const { theme } = useTheme();
+  const color = tone === 'danger' ? theme.danger : tone === 'main' ? kitOnInk(theme) : theme.ink2;
+  return (
+    <div role="button" aria-label={ariaLabel} aria-disabled={disabled || undefined} onClick={disabled ? undefined : onClick} className={disabled ? undefined : 'zchat-press'}
+      style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minHeight: 36, padding: '0 2px', fontSize: 14, fontWeight: 700, color, cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.45 : 1, whiteSpace: 'nowrap', flexShrink: 0, WebkitTapHighlightColor: 'transparent' }}>
+      {icon}{label}
+    </div>
+  );
+}
+function AdminNote({ text }) {
+  const { theme } = useTheme();
+  return <div role="status" className="zchat-fade" style={{ padding: '6px 2px 12px', fontSize: 13.5, fontWeight: 600, color: theme.ink, lineHeight: 1.45 }}>{text}</div>;
+}
+function adminHair(theme, on) {
+  return on ? `inset 0 -0.5px 0 ${theme.hair}` : 'none';
+}
+function adminWords(v) {
+  return String(v == null ? '' : v).replace(/_/g, ' ');
+}
+
 function AdminPeople({ onManage }) {
   const { theme } = useTheme();
   const [filter, setFilter] = useState('all');
@@ -55380,34 +56719,30 @@ function AdminPeople({ onManage }) {
 
   return (
     <>
-      <div style={{ position: 'relative', marginBottom: 10 }}>
+      <div style={{ position: 'relative', marginBottom: 4 }}>
         <Search size={16} color={theme.muted} style={{ position: 'absolute', left: 14, top: 15 }} />
-        <input style={{ ...inputStyle(theme), paddingLeft: 40, borderRadius: 16 }} placeholder="Search name or username" value={query} onChange={(e) => setQuery(e.target.value)} />
+        <input style={{ ...inputStyle(theme), paddingLeft: 40 }} placeholder="Search name or username" aria-label="Search people" value={query} onChange={(e) => setQuery(e.target.value)} />
       </div>
-      <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 10, scrollbarWidth: 'none' }}>
-        {FILTERS.map(([k, l]) => (
-          <div key={k} role="button" onClick={() => setFilter(k)} style={{ flexShrink: 0, padding: '7px 14px', borderRadius: 16, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', background: filter === k ? theme.coral : theme.rowBg, color: filter === k ? 'white' : theme.ink, border: `1px solid ${filter === k ? 'transparent' : theme.border}` }}>{l}</div>
-        ))}
-      </div>
-      {error && <div style={{ background: `${theme.danger}18`, color: theme.danger, borderRadius: 12, padding: '9px 12px', fontSize: 12.5, fontWeight: 700, marginBottom: 10 }}>{error}</div>}
+      <KitTabs label="Filter people" value={filter} onChange={setFilter} options={FILTERS} style={{ margin: '0 -16px 6px', padding: '0 8px' }} />
+      {error && <div style={{ background: `${theme.danger}18`, color: theme.danger, borderRadius: 12, padding: '9px 12px', fontSize: 12.5, fontWeight: 700, margin: '6px 0 10px' }}>{error}</div>}
       {rows === null ? <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><Spinner size={22} color={theme.ink} /></div>
         : rows.length === 0 ? <div style={{ textAlign: 'center', padding: '44px 20px', color: theme.muted, fontSize: 13.5 }}>Nobody matches this.</div>
-        : rows.map((p) => (
-          <div key={p.id} role="button" onClick={() => onManage(p)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 12px', marginBottom: 8, borderRadius: 18, background: theme.rowBg, border: `1px solid ${theme.border}`, cursor: 'pointer' }}>
+        : rows.map((p, i) => (
+          <div key={p.id} role="button" onClick={() => onManage(p)} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', gap: 12, minHeight: 64, padding: '8px 0', cursor: 'pointer', boxShadow: adminHair(theme, i < rows.length - 1) }}>
             <div style={{ position: 'relative', zIndex: 0, isolation: 'isolate', flexShrink: 0 }}><Avatar emoji={p.avatar} name={p.name} size={44} /></div>
             <div style={{ minWidth: 0, flex: 1 }}>
-              <div style={{ fontWeight: 800, fontSize: 14.5, color: theme.ink, display: 'flex', alignItems: 'center', minWidth: 0 }}>
+              <div style={{ fontWeight: 700, fontSize: 15, color: theme.ink, display: 'flex', alignItems: 'center', minWidth: 0 }}>
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
                 <VerifiedBadge tier={p.verified} custom={p.custom_badge} size={13} />
               </div>
-              <div style={{ fontSize: 12, color: theme.muted, marginTop: 1 }}>@{p.username} {p.created_at ? `joined ${adminDate(p.created_at).split(',')[0]}` : ''}</div>
+              <div style={{ fontSize: 12.5, color: theme.muted, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>@{p.username} {p.created_at ? `joined ${adminDate(p.created_at).split(',')[0]}` : ''}</div>
             </div>
-            {p.banned && <span style={{ fontSize: 10.5, fontWeight: 900, color: theme.danger, background: `${theme.danger}1F`, padding: '3px 8px', borderRadius: 8 }}>Banned</span>}
-            {p.is_bot && <span style={{ fontSize: 10.5, fontWeight: 900, color: theme.coral, background: `${theme.coral}1F`, padding: '3px 8px', borderRadius: 8 }}>BOT</span>}
-            <ChevronRight size={17} color={theme.muted} />
+            {p.banned && <AdminStatus tone="danger">Banned</AdminStatus>}
+            {p.is_bot && <AdminStatus tone="accent">Bot</AdminStatus>}
+            <ChevronRight size={17} color={theme.muted} style={{ flexShrink: 0 }} />
           </div>
         ))}
-      {!loading && more && <div role="button" onClick={() => fetchPage(rows.length)} style={{ textAlign: 'center', padding: 14, fontWeight: 800, color: theme.coral, cursor: 'pointer' }}>Load more</div>}
+      {!loading && more && <div role="button" onClick={() => fetchPage(rows.length)} style={{ textAlign: 'center', padding: 14, fontWeight: 700, color: kitOnInk(theme), cursor: 'pointer' }}>Load more</div>}
       {loading && rows && rows.length > 0 && <div style={{ display: 'flex', justifyContent: 'center', padding: 16 }}><Spinner size={18} color={theme.ink} /></div>}
     </>
   );
@@ -55469,48 +56804,44 @@ function AdminContent({ onOpenProfile }) {
   const media = (r) => {
     if (!r.media_url) return null;
     const isVideo = r.media_type === 'video' || /\.(mp4|mov|webm)(\?|$)/i.test(r.media_url);
-    const st = { width: '100%', maxHeight: 220, borderRadius: 12, objectFit: 'cover', background: '#000', display: 'block', marginTop: 8 };
+    const st = { width: '100%', maxHeight: 220, borderRadius: 12, objectFit: 'cover', background: '#000', display: 'block', marginTop: 10 };
     return isVideo ? <MediaVideo src={r.media_url} controls playsInline preload="metadata" style={st} /> : <MediaImg live src={r.media_url} style={st} loading="lazy" />;
   };
 
   return (
     <>
-      <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 10, scrollbarWidth: 'none' }}>
-        {Object.entries(ADMIN_CONTENT).map(([k, c]) => (
-          <div key={k} role="button" onClick={() => { setKind(k); setSearch(''); }} style={{ flexShrink: 0, padding: '7px 14px', borderRadius: 16, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', background: kind === k ? theme.coral : theme.rowBg, color: kind === k ? 'white' : theme.ink, border: `1px solid ${kind === k ? 'transparent' : theme.border}` }}>{c.label}</div>
-        ))}
-      </div>
-      <div style={{ position: 'relative', marginBottom: 12 }}>
+      <KitTabs label="Content type" value={kind} onChange={(k) => { setKind(k); setSearch(''); }} options={Object.entries(ADMIN_CONTENT).map(([k, c]) => [k, c.label])} style={{ margin: '0 -16px 12px', padding: '0 8px' }} />
+      <div style={{ position: 'relative', marginBottom: 6 }}>
         <Search size={16} color={theme.muted} style={{ position: 'absolute', left: 14, top: 15 }} />
-        <input style={{ ...inputStyle(theme), paddingLeft: 40, borderRadius: 16 }} placeholder={`Search ${cfg.label.toLowerCase()}`} value={search} onChange={(e) => setSearch(e.target.value)} />
+        <input style={{ ...inputStyle(theme), paddingLeft: 40 }} placeholder={`Search ${cfg.label.toLowerCase()}`} aria-label={`Search ${cfg.label.toLowerCase()}`} value={search} onChange={(e) => setSearch(e.target.value)} />
       </div>
-      {error && <div style={{ background: `${theme.danger}18`, color: theme.danger, borderRadius: 12, padding: '9px 12px', fontSize: 12.5, fontWeight: 700, marginBottom: 10 }}>{error}</div>}
+      {error && <div style={{ background: `${theme.danger}18`, color: theme.danger, borderRadius: 12, padding: '9px 12px', fontSize: 12.5, fontWeight: 700, margin: '6px 0 10px' }}>{error}</div>}
       {rows === null ? <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><Spinner size={22} color={theme.ink} /></div>
         : rows.length === 0 ? <div style={{ textAlign: 'center', padding: '44px 20px', color: theme.muted, fontSize: 13.5 }}>Nothing here.</div>
-        : rows.map((r) => {
+        : rows.map((r, i) => {
           const who = people[r[cfg.who]];
           const text = kind === 'groups' ? r.name : (r.caption || r.content || '');
           return (
-            <div key={r.id} style={{ padding: 12, marginBottom: 10, borderRadius: 18, background: theme.rowBg, border: `1px solid ${theme.border}` }}>
+            <div key={r.id} style={{ padding: '12px 0 14px', boxShadow: adminHair(theme, i < rows.length - 1) }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 {who ? (
-                  <div role="button" onClick={() => onOpenProfile(who)} style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, flex: 1, cursor: 'pointer' }}>
-                    <div style={{ position: 'relative', zIndex: 0, isolation: 'isolate', flexShrink: 0 }}><Avatar emoji={who.avatar} name={who.name} size={30} /></div>
+                  <div role="button" onClick={() => onOpenProfile(who)} style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flex: 1, cursor: 'pointer' }}>
+                    <div style={{ position: 'relative', zIndex: 0, isolation: 'isolate', flexShrink: 0 }}><Avatar emoji={who.avatar} name={who.name} size={34} /></div>
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ fontWeight: 800, fontSize: 13, color: theme.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{who.name}</div>
-                      <div style={{ fontSize: 11, color: theme.muted }}>{adminDate(r.created_at)}</div>
+                      <div style={{ fontWeight: 700, fontSize: 14, color: theme.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{who.name}</div>
+                      <div style={{ fontSize: 12, color: theme.muted }}>{adminDate(r.created_at)}</div>
                     </div>
                   </div>
-                ) : <div style={{ flex: 1, fontSize: 12, color: theme.muted }}>{adminDate(r.created_at)}</div>}
-                {kind === 'messages' && <span style={{ fontSize: 10.5, fontWeight: 800, color: theme.muted }}>{`${r.type || 'text'}${r.group_id ? ', group' : ''}`}</span>}
-                <div role="button" aria-label="Delete" onClick={() => setDelFor(r)} style={{ width: 34, height: 34, borderRadius: 17, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: `${theme.danger}1A`, color: theme.danger, flexShrink: 0 }}><Trash2 size={16} /></div>
+                ) : <div style={{ flex: 1, fontSize: 12.5, color: theme.muted }}>{adminDate(r.created_at)}</div>}
+                {kind === 'messages' && <span style={{ fontSize: 12, fontWeight: 600, color: theme.muted, flexShrink: 0 }}>{`${r.type || 'text'}${r.group_id ? ', group' : ''}`}</span>}
+                <div role="button" aria-label="Delete" onClick={() => setDelFor(r)} className="zchat-press" style={{ width: 38, height: 38, marginRight: -8, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: theme.danger, flexShrink: 0 }}><Trash2 size={18} strokeWidth={1.8} /></div>
               </div>
-              {text ? <div style={{ fontSize: 13.5, color: theme.ink, marginTop: 8, lineHeight: 1.45, wordBreak: 'break-word' }}>{r.deleted ? 'Deleted message' : String(text).slice(0, 400)}</div> : null}
+              {text ? <div style={{ fontSize: 14, color: theme.ink, marginTop: 8, lineHeight: 1.45, wordBreak: 'break-word' }}>{r.deleted ? 'Deleted message' : String(text).slice(0, 400)}</div> : null}
               {media(r)}
             </div>
           );
         })}
-      {!loading && more && <div role="button" onClick={() => fetchPage(rows.length)} style={{ textAlign: 'center', padding: 14, fontWeight: 800, color: theme.coral, cursor: 'pointer' }}>Load more</div>}
+      {!loading && more && <div role="button" onClick={() => fetchPage(rows.length)} style={{ textAlign: 'center', padding: 14, fontWeight: 700, color: kitOnInk(theme), cursor: 'pointer' }}>Load more</div>}
       {loading && rows && rows.length > 0 && <div style={{ display: 'flex', justifyContent: 'center', padding: 16 }}><Spinner size={18} color={theme.ink} /></div>}
       {delFor && <AdminSheet title={`Delete this ${cfg.label.toLowerCase().replace(/s$/, '')}?`} body="It is removed for everyone and cannot be brought back." confirmLabel="Delete it" danger busy={delBusy} onConfirm={doDelete} onClose={() => setDelFor(null)} />}
     </>
@@ -55576,50 +56907,43 @@ function AdminKnowledge() {
     setDelFor(null);
   };
 
-  const card = { background: theme.rowBg, border: `1px solid ${theme.border}`, borderRadius: 20, padding: 14, marginBottom: 12 };
-  const small = (label, onClick, danger) => (
-    <div role="button" onClick={onClick} style={{ padding: '7px 13px', borderRadius: 13, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', background: danger ? `${theme.danger}1F` : theme.panelBg, color: danger ? theme.danger : theme.ink, border: `1px solid ${danger ? `${theme.danger}55` : theme.border}` }}>{label}</div>
-  );
   const shown = (rows || []).filter((r) => (r.status || 'approved') === status);
+  const countOf = (k) => (rows || []).filter((r) => (r.status || 'approved') === k).length;
+  const cantTeach = busy || !topic.trim() || fact.trim().length < 8;
 
   return (
     <>
-      <div style={{ borderRadius: 22, padding: 16, marginBottom: 12, color: 'white', background: 'linear-gradient(135deg, #7C3AED, #06B6D4)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 900, fontSize: 16 }}>What ZChat Bot has learned</div>
-        <div style={{ fontSize: 12.5, opacity: 0.9, marginTop: 6, lineHeight: 1.5 }}>People teach it in chat. It shares what it learned with others who ask, without saying who taught it. Private details, links and anything unsafe are filtered out before they are saved.</div>
+      <div style={{ padding: '6px 0 2px' }}>
+        <div style={{ fontWeight: 800, fontSize: 19, color: theme.ink, letterSpacing: '-0.01em' }}>What ZChat Bot has learned</div>
+        <div style={{ fontSize: 13, color: theme.muted, marginTop: 6, lineHeight: 1.5 }}>People teach it in chat. It shares what it learned with others who ask, without saying who taught it. Private details, links and anything unsafe are filtered out before they are saved.</div>
       </div>
-      {note && <div style={{ ...card, padding: '10px 12px', fontSize: 13, fontWeight: 700, color: theme.ink }}>{note}</div>}
-      <div style={card}>
-        <div style={{ fontWeight: 900, fontSize: 14.5, color: theme.ink, marginBottom: 10 }}>Teach it something yourself</div>
-        <input style={inputStyle(theme)} placeholder="Topic, like Sri Lanka tea" maxLength={60} value={topic} onChange={(e) => setTopic(e.target.value)} />
+      {note && <div style={{ marginTop: 10 }}><AdminNote text={note} /></div>}
+      <KitSection title="Teach it something yourself" style={{ marginTop: 22 }}>
+        <input style={inputStyle(theme)} placeholder="Topic, like Sri Lanka tea" aria-label="Topic" maxLength={60} value={topic} onChange={(e) => setTopic(e.target.value)} />
         <div style={{ height: 10 }} />
-        <textarea style={{ ...inputStyle(theme), minHeight: 80, resize: 'vertical', fontFamily: FONT }} placeholder="One clear fact" maxLength={300} value={fact} onChange={(e) => setFact(e.target.value)} />
-        <button style={primaryBtn(theme, busy || !topic.trim() || fact.trim().length < 8)} disabled={busy || !topic.trim() || fact.trim().length < 8} onClick={teach}>{busy ? <Spinner /> : 'Teach the bot'}</button>
-      </div>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-        {[['approved', 'Learned'], ['rejected', 'Rejected']].map(([k, l]) => (
-          <div key={k} role="button" onClick={() => setStatus(k)} style={{ padding: '7px 14px', borderRadius: 16, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', background: status === k ? theme.coral : theme.rowBg, color: status === k ? 'white' : theme.ink, border: `1px solid ${status === k ? 'transparent' : theme.border}` }}>{l}</div>
-        ))}
-      </div>
-      <div style={{ position: 'relative', marginBottom: 12 }}>
+        <textarea style={{ ...inputStyle(theme), minHeight: 80, resize: 'vertical', fontFamily: FONT }} placeholder="One clear fact" aria-label="Fact" maxLength={300} value={fact} onChange={(e) => setFact(e.target.value)} />
+        <button style={{ ...primaryBtn(theme, cantTeach), marginTop: 10 }} disabled={cantTeach} onClick={teach}>{busy ? <Spinner /> : 'Teach the bot'}</button>
+      </KitSection>
+      <KitTabs key={`${countOf('approved')}:${countOf('rejected')}`} label="Facts" value={status} onChange={setStatus} options={[['approved', 'Learned', countOf('approved')], ['rejected', 'Rejected', countOf('rejected')]]} style={{ margin: '26px -16px 12px', padding: '0 8px' }} />
+      <div style={{ position: 'relative', marginBottom: 6 }}>
         <Search size={16} color={theme.muted} style={{ position: 'absolute', left: 14, top: 15 }} />
-        <input style={{ ...inputStyle(theme), paddingLeft: 40, borderRadius: 16 }} placeholder="Search what it knows" value={query} onChange={(e) => setQuery(e.target.value)} />
+        <input style={{ ...inputStyle(theme), paddingLeft: 40 }} placeholder="Search what it knows" aria-label="Search what it knows" value={query} onChange={(e) => setQuery(e.target.value)} />
       </div>
-      {error && <div style={{ background: `${theme.danger}18`, color: theme.danger, borderRadius: 12, padding: '9px 12px', fontSize: 12.5, fontWeight: 700, marginBottom: 10 }}>{error}</div>}
+      {error && <div style={{ background: `${theme.danger}18`, color: theme.danger, borderRadius: 12, padding: '9px 12px', fontSize: 12.5, fontWeight: 700, margin: '6px 0 10px' }}>{error}</div>}
       {rows === null ? <div style={{ display: 'flex', justifyContent: 'center', padding: 30 }}><Spinner size={20} color={theme.ink} /></div>
         : shown.length === 0 ? <div style={{ textAlign: 'center', color: theme.muted, fontSize: 13, padding: 28 }}>{status === 'approved' ? 'It has not learned anything yet.' : 'Nothing rejected.'}</div>
-        : shown.map((r) => (
-          <div key={r.id} style={{ ...card, marginBottom: 10 }}>
-            <div style={{ fontSize: 12.5, fontWeight: 800, color: theme.coral }}>{r.topic}</div>
-            <div style={{ fontSize: 14.5, color: theme.ink, lineHeight: 1.45, marginTop: 4, wordBreak: 'break-word' }}>{r.fact}</div>
-            <div style={{ fontSize: 11.5, color: theme.muted, marginTop: 8 }}>{`Taught by ${(r.taught_by && names[r.taught_by]) || 'unknown'}, ${adminDate(r.created_at)}`}</div>
-            <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-              {status === 'approved' ? small('Reject', () => setRowStatus(r, 'rejected')) : small('Restore', () => setRowStatus(r, 'approved'))}
-              {small('Delete', () => setDelFor(r), true)}
+        : shown.map((r, i) => (
+          <div key={r.id} style={{ padding: '12px 0 6px', boxShadow: adminHair(theme, i < shown.length - 1) }}>
+            <div style={{ fontSize: 12.5, fontWeight: 700, color: kitOnInk(theme) }}>{r.topic}</div>
+            <div style={{ fontSize: 14.5, color: theme.ink, lineHeight: 1.45, marginTop: 3, wordBreak: 'break-word' }}>{r.fact}</div>
+            <div style={{ fontSize: 12, color: theme.muted, marginTop: 6 }}>{`Taught by ${(r.taught_by && names[r.taught_by]) || 'unknown'}, ${adminDate(r.created_at)}`}</div>
+            <div style={{ display: 'flex', gap: 20, marginTop: 2 }}>
+              {status === 'approved' ? <AdminTextBtn label="Reject" onClick={() => setRowStatus(r, 'rejected')} /> : <AdminTextBtn label="Restore" tone="main" onClick={() => setRowStatus(r, 'approved')} />}
+              <AdminTextBtn label="Delete" tone="danger" onClick={() => setDelFor(r)} />
             </div>
           </div>
         ))}
-      {!loading && more && <div role="button" onClick={() => fetchPage(rows.length)} style={{ textAlign: 'center', padding: 14, fontWeight: 800, color: theme.coral, cursor: 'pointer' }}>Load more</div>}
+      {!loading && more && <div role="button" onClick={() => fetchPage(rows.length)} style={{ textAlign: 'center', padding: 14, fontWeight: 700, color: kitOnInk(theme), cursor: 'pointer' }}>Load more</div>}
       {delFor && <AdminSheet title="Delete this fact?" body="The bot forgets it for good." confirmLabel="Delete it" danger busy={busy} onConfirm={doDelete} onClose={() => setDelFor(null)} />}
     </>
   );
@@ -55633,23 +56957,23 @@ function AdminNewest({ onManage }) {
   }, []);
   if (!list || !list.length) return null;
   return (
-    <div style={{ background: theme.rowBg, border: `1px solid ${theme.border}`, borderRadius: 20, padding: '14px 0 12px', marginTop: 12 }}>
-      <div style={{ fontWeight: 900, fontSize: 14.5, color: theme.ink, padding: '0 14px 10px' }}>Newest people</div>
-      <div style={{ display: 'flex', gap: 14, overflowX: 'auto', padding: '0 14px', scrollbarWidth: 'none' }}>
+    <KitSection title="Newest people" style={{ marginTop: 26 }}>
+      <div style={{ display: 'flex', gap: 14, overflowX: 'auto', margin: '0 -16px', padding: '2px 16px 4px', scrollbarWidth: 'none' }}>
         {list.map((p) => (
-          <div key={p.id} role="button" onClick={() => onManage(p)} style={{ flexShrink: 0, width: 66, textAlign: 'center', cursor: 'pointer' }}>
+          <div key={p.id} role="button" aria-label={`Manage ${p.name}`} onClick={() => onManage(p)} className="zchat-press" style={{ flexShrink: 0, width: 64, textAlign: 'center', cursor: 'pointer' }}>
             <div style={{ position: 'relative', zIndex: 0, isolation: 'isolate', display: 'inline-block' }}><Avatar emoji={p.avatar} name={p.name} size={56} /></div>
-            <div style={{ fontSize: 11.5, fontWeight: 700, color: theme.ink, marginTop: 5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{(p.name || '').split(' ')[0]}</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: theme.ink2, marginTop: 5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{(p.name || '').split(' ')[0]}</div>
           </div>
         ))}
       </div>
-    </div>
+    </KitSection>
   );
 }
 
 function AdminPanel({ myId, onClose, onOpenProfile, onOpenReports }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
+  const c = igPalette(theme);
   const [tab, setTab] = useState('home');
   const [stats, setStats] = useState(null);
   const [statsError, setStatsError] = useState('');
@@ -55687,90 +57011,98 @@ function AdminPanel({ myId, onClose, onOpenProfile, onOpenReports }) {
     loadHome();
   };
 
-  const card = { background: theme.rowBg, border: `1px solid ${theme.border}`, borderRadius: 20, padding: 14 };
-  const tile = (Icon, label, value, onClick) => (
-    <div role={onClick ? 'button' : undefined} onClick={onClick} style={{ ...card, boxSizing: 'border-box', flex: '1 1 calc(50% - 5px)', minWidth: 140, maxWidth: 'calc(50% - 5px)', cursor: onClick ? 'pointer' : 'default' }}>
-      <div style={{ color: theme.muted, display: 'flex', marginBottom: 10 }}><Icon size={22} strokeWidth={1.6} /></div>
-      <div style={{ fontSize: 26, fontWeight: 900, color: theme.ink, letterSpacing: '-0.02em', lineHeight: 1 }}>{value == null ? '—' : formatCount(Number(value) || 0)}</div>
-      <div style={{ fontSize: 12, color: theme.muted, fontWeight: 700, marginTop: 5 }}>{label}</div>
-    </div>
-  );
+  const num = (v) => (v == null ? '—' : formatCount(Number(v) || 0));
+  const openReports = stats && Number(stats.open_reports) > 0 ? Number(stats.open_reports) : 0;
+  const tiles = [
+    [UserPlus, 'Joined this week', stats && stats.new_week],
+    [Clock, 'Active in 24 hours', stats && stats.active_day],
+    [Mail, 'All messages', stats && stats.messages],
+    [ImageIcon, 'Posts', stats && stats.posts],
+    [Camera, 'Live stories', stats && stats.stories_live],
+    [Users, 'Groups', stats && stats.groups],
+    [MessageSquare, 'Bot messages', stats && stats.bot_messages],
+    [FileText, 'Bot facts', knowCount, () => setTab('bot')],
+    [ShieldAlert, 'Open reports', stats && stats.open_reports, onOpenReports],
+    [Ban, 'Banned', stats && stats.banned, () => setTab('people')],
+    [Timer, 'Paused right now', stats && stats.paused, () => setTab('people')],
+  ];
+  const tools = [
+    [<ShieldAlert />, 'Reports', openReports ? String(openReports) : '', onOpenReports],
+    [<Activity />, 'Crash reports', '', () => setTab('errors')],
+    [<FileText />, 'App files', '', () => setTab('files')],
+    [<GiftBoxIcon />, 'Drops', '', () => setTab('drops')],
+    [<Megaphone />, 'Announce', '', () => setTab('announce')],
+    [<MessageSquare />, 'Teach the bot', '', () => setTab('bot')],
+    [<Database />, 'Browse data', '', () => setTab('data')],
+  ];
   const signups = (stats && stats.signups) || [];
   const maxN = Math.max(1, ...signups.map((d) => Number(d.n) || 0));
   const TABS = [['home', 'Home', LayoutDashboard], ['people', 'People', Users], ['content', 'Content', ImageIcon], ['bot', 'Bot', MessageSquare], ['announce', 'Announce', Megaphone], ['data', 'Data', Database]];
+  const cantSend = bBusy || !bTitle.trim() || !bBody.trim();
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 40, background: theme.panelBg, display: 'flex', flexDirection: 'column', fontFamily: FONT, isolation: 'isolate' }} className="zchat-panel-open">
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px 12px', paddingTop: 'calc(12px + env(safe-area-inset-top))' }}>
-        <div role="button" aria-label="Back" onClick={onClose} style={{ width: 38, height: 38, borderRadius: 19, background: theme.rowBg, border: `1px solid ${theme.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><ArrowLeft size={19} color={theme.ink} /></div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: 900, fontSize: 20, color: theme.ink, letterSpacing: '-0.02em' }}>Admin</div>
-          <div style={{ fontSize: 11.5, color: theme.muted, fontWeight: 700 }}>ZChat control room</div>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 40, background: c.bg, color: c.fg, display: 'flex', flexDirection: 'column', fontFamily: FONT, isolation: 'isolate' }} className="zchat-panel-open">
+      <IgTopBar title="Admin" subtitle="ZChat control room" onBack={onClose} right={(
+        <div role="button" aria-label="Report queue" onClick={onOpenReports} className="zchat-press" style={{ position: 'relative', width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: theme.ink }}>
+          <ShieldAlert size={22} strokeWidth={1.8} />
+          {openReports > 0 && <span style={{ position: 'absolute', top: 5, right: 3, minWidth: 18, height: 18, borderRadius: 9, background: theme.danger, color: '#FFFFFF', fontSize: 10.5, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 5px', boxSizing: 'border-box', boxShadow: `0 0 0 2px ${c.bg}` }}>{stats.open_reports}</span>}
         </div>
-        <div role="button" aria-label="Report queue" onClick={onOpenReports} style={{ position: 'relative', width: 40, height: 40, borderRadius: 20, background: theme.rowBg, border: `1px solid ${theme.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-          <ShieldAlert size={19} color={theme.coral} />
-          {stats && Number(stats.open_reports) > 0 && <span style={{ position: 'absolute', top: -3, right: -3, minWidth: 18, height: 18, borderRadius: 9, background: theme.danger, color: 'white', fontSize: 10.5, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px' }}>{stats.open_reports}</span>}
-        </div>
-      </div>
+      )} />
 
-      <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '4px 16px 24px' }}>
-        {note && <div style={{ ...card, padding: '10px 12px', marginBottom: 12, fontSize: 13, fontWeight: 700, color: theme.ink }}>{note}</div>}
+      <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain', padding: '4px 16px 28px' }}>
+        {note && <AdminNote text={note} />}
 
         {tab === 'home' && (
           <>
             {statsError && <div style={{ background: `${theme.danger}18`, color: theme.danger, borderRadius: 12, padding: '9px 12px', fontSize: 12.5, fontWeight: 700, marginBottom: 10 }}>{statsError}</div>}
-            <div style={{ borderRadius: 20, padding: '18px 18px 16px', marginBottom: 12, color: 'white', background: theme.coral }}>
-              <div style={{ fontSize: 12.5, fontWeight: 800, opacity: 0.85 }}>ZChat right now</div>
-              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 22, marginTop: 8 }}>
-                <div><div style={{ fontSize: 34, fontWeight: 900, letterSpacing: '-0.03em', lineHeight: 1 }}>{stats && stats.online_now != null ? formatCount(Number(stats.online_now) || 0) : '\u2014'}</div><div style={{ fontSize: 12, fontWeight: 700, opacity: 0.85, marginTop: 4 }}>online now</div></div>
-                <div><div style={{ fontSize: 34, fontWeight: 900, letterSpacing: '-0.03em', lineHeight: 1 }}>{stats && stats.users != null ? formatCount(Number(stats.users) || 0) : '\u2014'}</div><div style={{ fontSize: 12, fontWeight: 700, opacity: 0.85, marginTop: 4 }}>people</div></div>
-                <div><div style={{ fontSize: 34, fontWeight: 900, letterSpacing: '-0.03em', lineHeight: 1 }}>{stats && stats.messages_today != null ? formatCount(Number(stats.messages_today) || 0) : '\u2014'}</div><div style={{ fontSize: 12, fontWeight: 700, opacity: 0.85, marginTop: 4 }}>messages today</div></div>
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 12, scrollbarWidth: 'none' }}>
-              {[[ShieldAlert, `Reports${stats && Number(stats.open_reports) ? ` ${stats.open_reports}` : ''}`, onOpenReports], [Activity, 'Crash reports', () => setTab('errors')], [FileText, 'App files', () => setTab('files')], [GiftBoxIcon, 'Drops', () => setTab('drops')], [Megaphone, 'Announce', () => setTab('announce')], [MessageSquare, 'Teach the bot', () => setTab('bot')], [Database, 'Browse data', () => setTab('data')]].map(([Icon, label, go]) => (
-                <div key={label} role="button" onClick={go} style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 7, padding: '9px 14px', borderRadius: 16, background: theme.rowBg, border: `1px solid ${theme.border}`, color: theme.ink, fontSize: 13, fontWeight: 800, cursor: 'pointer' }}><Icon size={16} color={theme.coral} />{label}</div>
-              ))}
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-              {tile(UserPlus, 'Joined this week', stats && stats.new_week)}
-              {tile(Clock, 'Active in 24 hours', stats && stats.active_day)}
-              {tile(Mail, 'All messages', stats && stats.messages)}
-              {tile(ImageIcon, 'Posts', stats && stats.posts)}
-              {tile(Camera, 'Live stories', stats && stats.stories_live)}
-              {tile(Users, 'Groups', stats && stats.groups)}
-              {tile(MessageSquare, 'Bot messages', stats && stats.bot_messages)}
-              {tile(FileText, 'Facts the bot learned', knowCount, () => setTab('bot'))}
-              {tile(ShieldAlert, 'Open reports', stats && stats.open_reports, onOpenReports)}
-              {tile(Ban, 'Banned', stats && stats.banned, () => setTab('people'))}
-              {tile(Timer, 'Paused right now', stats && stats.paused, () => setTab('people'))}
-            </div>
-            <AdminNewest onManage={(p) => { setTab('people'); setManageFor(p); }} />
-            <div style={{ ...card, marginTop: 12 }}>
-              <div style={{ fontWeight: 900, fontSize: 14.5, color: theme.ink }}>New people, last 7 days</div>
-              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, height: 96, marginTop: 14 }}>
-                {signups.length === 0 ? <div style={{ color: theme.muted, fontSize: 12.5 }}>No data yet.</div> : signups.map((d, i) => (
-                  <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, height: '100%', justifyContent: 'flex-end' }}>
-                    <div style={{ fontSize: 10.5, fontWeight: 800, color: theme.muted }}>{d.n}</div>
-                    <div style={{ width: '100%', height: `${Math.max(6, Math.round(((Number(d.n) || 0) / maxN) * 62))}px`, borderRadius: 7, background: theme.coral, opacity: i === signups.length - 1 ? 1 : 0.55 }} />
-                    <div style={{ fontSize: 10, color: theme.muted, fontWeight: 700 }}>{fmtDate(new Date(`${d.day}T12:00:00`), { weekday: 'short' }).slice(0, 3)}</div>
+            <div style={{ display: 'flex', padding: '10px 0 4px' }}>
+              {[['online now', stats && stats.online_now, true], ['people', stats && stats.users], ['messages today', stats && stats.messages_today]].map(([label, v, live], i) => (
+                <div key={label} style={{ flex: 1, minWidth: 0, paddingLeft: i ? 14 : 0, boxShadow: i ? `inset 0.5px 0 0 ${theme.hair}` : 'none' }}>
+                  <div style={{ fontSize: 30, fontWeight: 800, letterSpacing: '-0.03em', color: theme.ink, lineHeight: 1.1, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{num(v)}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 600, color: theme.muted, marginTop: 5, whiteSpace: 'nowrap' }}>
+                    {live && <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: '50%', background: '#22C55E', flexShrink: 0 }} />}{label}
                   </div>
-                ))}
-              </div>
-            </div>
-            <div style={{ ...card, marginTop: 12 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                <Activity size={16} color={theme.coral} />
-                <div style={{ fontWeight: 900, fontSize: 14.5, color: theme.ink, flex: 1 }}>Recent admin activity</div>
-                <div role="button" onClick={loadHome} style={{ fontSize: 12.5, fontWeight: 800, color: theme.coral, cursor: 'pointer' }}>Refresh</div>
-              </div>
-              {log.length === 0 ? <div style={{ color: theme.muted, fontSize: 13, padding: '8px 0' }}>Nothing yet. Bans, gifts, pauses and deletes show up here.</div> : log.map((l) => (
-                <div key={l.id} style={{ padding: '9px 0', borderTop: `1px solid ${theme.border}` }}>
-                  <div style={{ fontSize: 13.5, fontWeight: 800, color: theme.ink }}>{l.action}{l.detail ? <span style={{ color: theme.muted, fontWeight: 600 }}>{`, ${l.detail}`}</span> : null}</div>
-                  <div style={{ fontSize: 11.5, color: theme.muted, marginTop: 2 }}>{`${l.admin_name || 'Admin'}, ${adminDate(l.created_at)}`}</div>
                 </div>
               ))}
             </div>
+            <KitSection title="Tools" style={{ marginTop: 24 }}>
+              {tools.map(([icon, label, value, go]) => <IgRow key={label} inset={false} icon={icon} label={label} value={value} onClick={go} />)}
+            </KitSection>
+            <KitSection title="Numbers" style={{ marginTop: 22 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
+                {tiles.map(([Icon, label, value, go], i) => (
+                  <div key={label} role={go ? 'button' : undefined} onClick={go} className={go ? 'zchat-press' : undefined}
+                    style={{ gridColumn: i === tiles.length - 1 && i % 2 === 0 ? '1 / -1' : undefined, minWidth: 0, padding: `12px ${i % 2 ? 0 : 14}px 12px ${i % 2 ? 14 : 0}px`, cursor: go ? 'pointer' : 'default', boxShadow: [i >= 2 ? `inset 0 0.5px 0 ${theme.hair}` : '', i % 2 ? `inset 0.5px 0 0 ${theme.hair}` : ''].filter(Boolean).join(', ') || 'none' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 600, color: theme.muted, minWidth: 0 }}>
+                      <Icon size={15} strokeWidth={1.8} style={{ flexShrink: 0 }} />
+                      <span style={{ minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
+                      {go && <ChevronRight size={14} style={{ flexShrink: 0, marginLeft: 'auto' }} />}
+                    </div>
+                    <div style={{ fontSize: 24, fontWeight: 800, color: theme.ink, letterSpacing: '-0.02em', marginTop: 5, fontVariantNumeric: 'tabular-nums' }}>{num(value)}</div>
+                  </div>
+                ))}
+              </div>
+            </KitSection>
+            <AdminNewest onManage={(p) => { setTab('people'); setManageFor(p); }} />
+            <KitSection title="New people, last 7 days" style={{ marginTop: 26 }}>
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, height: 104, paddingTop: 6 }}>
+                {signups.length === 0 ? <div style={{ color: theme.muted, fontSize: 12.5 }}>No data yet.</div> : signups.map((d, i) => (
+                  <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, height: '100%', justifyContent: 'flex-end' }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: i === signups.length - 1 ? theme.ink : theme.muted, fontVariantNumeric: 'tabular-nums' }}>{d.n}</div>
+                    <div style={{ width: '100%', maxWidth: 30, height: `${Math.max(6, Math.round(((Number(d.n) || 0) / maxN) * 62))}px`, borderRadius: 7, background: theme.coral, opacity: i === signups.length - 1 ? 1 : 0.45 }} />
+                    <div style={{ fontSize: 11, color: theme.muted, fontWeight: 600 }}>{fmtDate(new Date(`${d.day}T12:00:00`), { weekday: 'short' }).slice(0, 3)}</div>
+                  </div>
+                ))}
+              </div>
+            </KitSection>
+            <KitSection title="Recent admin activity" right={<span role="button" aria-label="Refresh admin activity" onClick={loadHome} style={{ fontSize: 13.5, fontWeight: 700, color: kitOnInk(theme), cursor: 'pointer' }}>Refresh</span>} style={{ marginTop: 26 }}>
+              {log.length === 0 ? <div style={{ color: theme.muted, fontSize: 13, padding: '4px 0' }}>Nothing yet. Bans, gifts, pauses and deletes show up here.</div> : log.map((l, i) => (
+                <div key={l.id} style={{ padding: '10px 0', boxShadow: adminHair(theme, i < log.length - 1) }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: theme.ink }}>{l.action}{l.detail ? <span style={{ color: theme.muted, fontWeight: 500 }}>{`, ${l.detail}`}</span> : null}</div>
+                  <div style={{ fontSize: 12, color: theme.muted, marginTop: 2 }}>{`${l.admin_name || 'Admin'}, ${adminDate(l.created_at)}`}</div>
+                </div>
+              ))}
+            </KitSection>
           </>
         )}
 
@@ -55783,22 +57115,21 @@ function AdminPanel({ myId, onClose, onOpenProfile, onOpenReports }) {
         {tab === 'drops' && <AdminDrops />}
 
         {tab === 'announce' && (
-          <div style={card}>
-            <div style={{ fontWeight: 900, fontSize: 16, color: theme.ink }}>Announcement to everyone</div>
-            <div style={{ fontSize: 12.5, color: theme.muted, margin: '4px 0 14px', lineHeight: 1.5 }}>It lands in every person's Mail, sent from you.</div>
-            <input style={inputStyle(theme)} placeholder="Title" maxLength={80} value={bTitle} onChange={(e) => setBTitle(e.target.value)} />
+          <KitSection title="Announcement to everyone" style={{ marginTop: 8 }}>
+            <div style={{ fontSize: 13, color: theme.muted, margin: '0 0 14px', lineHeight: 1.5 }}>It lands in every person's Mail, sent from you.</div>
+            <input style={inputStyle(theme)} placeholder="Title" aria-label="Announcement title" maxLength={80} value={bTitle} onChange={(e) => setBTitle(e.target.value)} />
             <div style={{ height: 10 }} />
-            <textarea style={{ ...inputStyle(theme), minHeight: 130, resize: 'vertical', fontFamily: FONT }} placeholder="Message" maxLength={1000} value={bBody} onChange={(e) => setBBody(e.target.value)} />
-            <button style={primaryBtn(theme, bBusy || !bTitle.trim() || !bBody.trim())} disabled={bBusy || !bTitle.trim() || !bBody.trim()} onClick={() => setBConfirm(true)}>{bBusy ? <Spinner /> : 'Send announcement'}</button>
-          </div>
+            <textarea style={{ ...inputStyle(theme), minHeight: 130, resize: 'vertical', fontFamily: FONT }} placeholder="Message" aria-label="Announcement message" maxLength={1000} value={bBody} onChange={(e) => setBBody(e.target.value)} />
+            <button style={primaryBtn(theme, cantSend)} disabled={cantSend} onClick={() => setBConfirm(true)}>{bBusy ? <Spinner /> : 'Send announcement'}</button>
+          </KitSection>
         )}
       </div>
 
-      <div style={{ display: 'flex', borderTop: `1px solid ${theme.border}`, background: theme.panelBg, paddingBottom: 'env(safe-area-inset-bottom)' }}>
+      <div style={{ display: 'flex', borderTop: `1px solid ${theme.border}`, background: c.bg, paddingBottom: 'env(safe-area-inset-bottom)' }}>
         {TABS.map(([k, label, Icon]) => (
-          <div key={k} role="button" onClick={() => { setTab(k); setNote(''); }} style={{ flex: 1, padding: '9px 0 8px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer', color: tab === k ? theme.coral : theme.muted }}>
-            <Icon size={21} />
-            <span style={{ fontSize: 10.5, fontWeight: 800 }}>{label}</span>
+          <div key={k} role="button" aria-current={tab === k ? 'page' : undefined} onClick={() => { setTab(k); setNote(''); }} style={{ flex: 1, padding: '9px 0 8px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, cursor: 'pointer', color: tab === k ? theme.coral : theme.muted }}>
+            <Icon size={21} strokeWidth={tab === k ? 2.1 : 1.8} />
+            <span style={{ fontSize: 10.5, fontWeight: tab === k ? 700 : 600 }}>{label}</span>
           </div>
         ))}
       </div>
@@ -55868,19 +57199,14 @@ function AdminDrops() {
     adminLog('Drop deleted', null, d.title);
     load();
   };
-  const card = { background: theme.rowBg, border: `1px solid ${theme.border}`, borderRadius: 20, padding: 14 };
+  const field = { display: 'block', fontSize: 12.5, fontWeight: 600, color: theme.muted };
   const items = edit && edit.kind === 'bubble' ? CHAR_BUBBLE_KEYS.map((k) => [k, CHAR_BUBBLES[k].label]) : DECOR_ALL.map((st) => [st.key, st.drop ? `${st.name}, drop only` : st.name]);
   return (
     <div>
       {err && <div style={{ background: `${theme.danger}18`, color: theme.danger, borderRadius: 12, padding: '9px 12px', fontSize: 12.5, fontWeight: 700, marginBottom: 10 }}>{err}</div>}
       {edit ? (
-        <div style={card}>
-          <div style={{ fontWeight: 900, fontSize: 16, color: theme.ink }}>{edit.id ? 'Change drop' : 'New drop'}</div>
-          <div style={{ display: 'flex', gap: 6, margin: '12px 0 10px' }}>
-            {[['set', 'Frame and nameplate'], ['bubble', 'Chat bubble']].map(([k, l]) => (
-              <div key={k} role="button" aria-pressed={edit.kind === k} onClick={() => setEdit((e) => ({ ...e, kind: k, item_key: k === 'bubble' ? CHAR_BUBBLE_KEYS[0] : (DECOR_DROPS[0] || DECOR_SETS[0]).key }))} style={{ flex: 1, textAlign: 'center', padding: '9px 6px', borderRadius: 12, fontSize: 13, fontWeight: 800, cursor: 'pointer', background: edit.kind === k ? theme.coral : theme.soft, color: edit.kind === k ? '#FFFFFF' : theme.ink }}>{l}</div>
-            ))}
-          </div>
+        <KitSection title={edit.id ? 'Change drop' : 'New drop'} style={{ marginTop: 8 }}>
+          <SegmentedControl value={edit.kind} onChange={(k) => setEdit((e) => ({ ...e, kind: k, item_key: k === 'bubble' ? CHAR_BUBBLE_KEYS[0] : (DECOR_DROPS[0] || DECOR_SETS[0]).key }))} options={[['set', 'Frame and nameplate'], ['bubble', 'Chat bubble']]} style={{ margin: '2px 0 12px' }} />
           <select aria-label="Item" value={edit.item_key} onChange={(e) => setEdit((x) => ({ ...x, item_key: e.target.value }))} style={inputStyle(theme)}>
             {items.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
           </select>
@@ -55888,34 +57214,34 @@ function AdminDrops() {
           <input aria-label="Title" style={inputStyle(theme)} placeholder="Title" maxLength={60} value={edit.title} onChange={(e) => setEdit((x) => ({ ...x, title: e.target.value }))} />
           <div style={{ height: 10 }} />
           <textarea aria-label="About" style={{ ...inputStyle(theme), minHeight: 70, resize: 'vertical', fontFamily: FONT }} placeholder="A short line about it" maxLength={200} value={edit.blurb} onChange={(e) => setEdit((x) => ({ ...x, blurb: e.target.value }))} />
-          <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
-            <label style={{ flex: 1, fontSize: 12, fontWeight: 700, color: theme.muted }}>Price in coins<input type="number" min={1} max={100000} value={edit.price} onChange={(e) => setEdit((x) => ({ ...x, price: e.target.value }))} style={{ ...inputStyle(theme), marginTop: 4 }} /></label>
-            <label style={{ flex: 1, fontSize: 12, fontWeight: 700, color: theme.muted }}>Days live<select value={edit.days} onChange={(e) => setEdit((x) => ({ ...x, days: Number(e.target.value) }))} style={{ ...inputStyle(theme), marginTop: 4 }}>{[1, 2, 3, 5, 7, 10, 14, 30].map((n) => <option key={n} value={n}>{n === 1 ? '1 day' : `${n} days`}</option>)}</select></label>
+          <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
+            <label style={{ ...field, flex: 1 }}>Price in coins<input type="number" min={1} max={100000} value={edit.price} onChange={(e) => setEdit((x) => ({ ...x, price: e.target.value }))} style={{ ...inputStyle(theme), marginTop: 5 }} /></label>
+            <label style={{ ...field, flex: 1 }}>Days live<select value={edit.days} onChange={(e) => setEdit((x) => ({ ...x, days: Number(e.target.value) }))} style={{ ...inputStyle(theme), marginTop: 5 }}>{[1, 2, 3, 5, 7, 10, 14, 30].map((n) => <option key={n} value={n}>{n === 1 ? '1 day' : `${n} days`}</option>)}</select></label>
           </div>
-          <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: theme.muted, marginTop: 10 }}>Opens at<input type="datetime-local" value={edit.start} onChange={(e) => setEdit((x) => ({ ...x, start: e.target.value }))} style={{ ...inputStyle(theme), marginTop: 4 }} /></label>
-          <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
+          <label style={{ ...field, marginTop: 12 }}>Opens at<input type="datetime-local" value={edit.start} onChange={(e) => setEdit((x) => ({ ...x, start: e.target.value }))} style={{ ...inputStyle(theme), marginTop: 5 }} /></label>
+          <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
             <button style={{ ...primaryBtn(theme, false), marginTop: 0, background: theme.soft, color: theme.ink }} onClick={() => setEdit(null)}>Cancel</button>
             <button style={{ ...primaryBtn(theme, busy), marginTop: 0 }} disabled={busy} onClick={save}>{busy ? <Spinner /> : 'Save drop'}</button>
           </div>
-          <div style={{ fontSize: 12, color: theme.muted, marginTop: 10, lineHeight: 1.5 }}>People who tapped Remind me get a notification when it opens. Anyone who already has one part pays half.</div>
-        </div>
+          <div style={{ fontSize: 12.5, color: theme.muted, marginTop: 12, lineHeight: 1.5 }}>People who tapped Remind me get a notification when it opens. Anyone who already has one part pays half.</div>
+        </KitSection>
       ) : (
-        <button style={{ ...primaryBtn(theme, false), marginTop: 0, marginBottom: 12 }} onClick={() => open(null)}>New drop</button>
+        <button style={{ ...primaryBtn(theme, false), marginTop: 4, marginBottom: 8 }} onClick={() => open(null)}>New drop</button>
       )}
-      {!edit && (list === null ? <div style={{ display: 'flex', justifyContent: 'center', padding: 20 }}><Spinner /></div> : list.length === 0 ? <div style={{ color: theme.muted, fontSize: 13, padding: '8px 2px' }}>No drops yet.</div> : list.map((d) => {
+      {!edit && (list === null ? <div style={{ display: 'flex', justifyContent: 'center', padding: 20 }}><Spinner /></div> : list.length === 0 ? <div style={{ color: theme.muted, fontSize: 13, padding: '8px 2px' }}>No drops yet.</div> : list.map((d, i) => {
         const ph = dropPhase(d);
         return (
-          <div key={d.id} style={{ ...card, marginBottom: 10 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div style={{ flex: 1, minWidth: 0, fontWeight: 900, fontSize: 14.5, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.title}</div>
-              <span style={{ fontSize: 11.5, fontWeight: 800, padding: '3px 8px', borderRadius: 8, background: ph === 'live' ? '#FF3B5C' : theme.soft, color: ph === 'live' ? '#FFFFFF' : theme.muted }}>{ph === 'live' ? 'Live' : ph === 'soon' ? 'Coming' : 'Ended'}</span>
+          <div key={d.id} style={{ padding: '12px 0 4px', boxShadow: adminHair(theme, i < list.length - 1) }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ flex: 1, minWidth: 0, fontWeight: 700, fontSize: 15, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.title}</div>
+              <AdminStatus tone={ph === 'live' ? 'live' : ph === 'soon' ? 'accent' : 'muted'}>{ph === 'live' ? 'Live' : ph === 'soon' ? 'Coming' : 'Ended'}</AdminStatus>
             </div>
             <div style={{ fontSize: 12.5, color: theme.muted, marginTop: 4, lineHeight: 1.45 }}>{`${d.price} coins, ${adminDate(d.starts_at)} to ${adminDate(d.ends_at)}`}</div>
             {d.kind === 'set' && artMissing[d.item_key] && <div style={{ fontSize: 12.5, fontWeight: 700, color: theme.danger, marginTop: 4, lineHeight: 1.45 }}>Hidden from people until its frame and nameplate files are on the site</div>}
-            <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-              <div role="button" onClick={() => open(d)} style={{ padding: '7px 12px', borderRadius: 10, background: theme.soft, color: theme.ink, fontSize: 12.5, fontWeight: 800, cursor: 'pointer' }}>Change</div>
-              {ph === 'live' && <div role="button" onClick={() => setAsk({ k: 'end', d })} style={{ padding: '7px 12px', borderRadius: 10, background: theme.soft, color: theme.ink, fontSize: 12.5, fontWeight: 800, cursor: 'pointer' }}>End now</div>}
-              <div role="button" onClick={() => setAsk({ k: 'del', d })} style={{ padding: '7px 12px', borderRadius: 10, background: `${theme.danger}18`, color: theme.danger, fontSize: 12.5, fontWeight: 800, cursor: 'pointer' }}>Delete</div>
+            <div style={{ display: 'flex', gap: 20, marginTop: 2 }}>
+              <AdminTextBtn label="Change" tone="main" onClick={() => open(d)} />
+              {ph === 'live' && <AdminTextBtn label="End now" onClick={() => setAsk({ k: 'end', d })} />}
+              <AdminTextBtn label="Delete" tone="danger" onClick={() => setAsk({ k: 'del', d })} />
             </div>
           </div>
         );
@@ -55936,9 +57262,12 @@ const ADMIN_RESTRICT_KINDS = [['chat', 'Chat'], ['status', 'Status'], ['post', '
 const ADMIN_RESTRICT_HOURS = [[1, '1 hour'], [24, '24 hours'], [72, '3 days'], [168, '7 days'], [720, '30 days']];
 const ADMIN_GRANT_DAYS = [[0, 'Forever'], [7, '7 days'], [30, '30 days'], [90, '90 days']];
 
+const ADMIN_ACTIVITY_KINDS = [['posts', 'Posts'], ['stories', 'Stories'], ['follows', 'Follows'], ['group_members', 'Groups'], ['highlights', 'Highlights'], ['user_devices', 'Devices'], ['calls', 'Calls'], ['blocks', 'Blocks'], ['message_reports', 'Reports'], ['saved_messages', 'Saved']];
+
 function AdminUserPanel({ person, myId, onClose, onChanged, onOpenProfile }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
+  const c = igPalette(theme);
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [note, setNote] = useState('');
@@ -55958,6 +57287,7 @@ function AdminUserPanel({ person, myId, onClose, onChanged, onOpenProfile }) {
   const [mBody, setMBody] = useState('');
   const [isAdminUser, setIsAdminUser] = useState(false);
   const [actKind, setActKind] = useState('posts');
+  const [actPick, setActPick] = useState(false);
   const [confirmDo, setConfirmDo] = useState(null);
   const [multi, setMulti] = useState(false);
   const [picked, setPicked] = useState(() => new Set());
@@ -56002,22 +57332,25 @@ function AdminUserPanel({ person, myId, onClose, onChanged, onOpenProfile }) {
   const fieldOf = (kind) => (kind === 'frame' ? 'avatar_frame' : kind === 'nameplate' ? 'nameplate' : 'custom_badge');
   const isSelf = person.id === myId;
 
-  const card = { background: theme.rowBg, border: `1px solid ${theme.border}`, borderRadius: 18, padding: 14, marginBottom: 10 };
-  const chip = (label, on, onClick) => (
-    <div key={label} role="button" onClick={onClick} style={{ padding: '7px 13px', borderRadius: 15, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', flexShrink: 0, background: on ? theme.coral : theme.panelBg, color: on ? 'white' : theme.ink, border: `1px solid ${on ? 'transparent' : theme.border}` }}>{label}</div>
-  );
-  const pill = (label, onClick, tone, disabled) => (
-    <div role="button" onClick={disabled ? undefined : onClick} style={{
-      padding: '8px 13px', borderRadius: 14, fontSize: 12.5, fontWeight: 800, cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.5 : 1, flexShrink: 0,
-      background: tone === 'danger' ? `${theme.danger}22` : tone === 'main' ? theme.coral : theme.panelBg,
-      color: tone === 'danger' ? theme.danger : tone === 'main' ? 'white' : theme.ink,
-      border: `1px solid ${tone === 'danger' ? `${theme.danger}55` : tone === 'main' ? 'transparent' : theme.border}`,
-    }}>{label}</div>
-  );
+  const code = { background: theme.rowBg, border: `1px solid ${theme.border}`, borderRadius: 14, padding: 12 };
   const line = (label, value) => (
-    <div key={label} style={{ display: 'flex', gap: 10, padding: '7px 0', borderTop: `1px solid ${theme.border}`, fontSize: 13 }}>
-      <div style={{ width: 118, flexShrink: 0, color: theme.muted, fontWeight: 700 }}>{label}</div>
+    <div key={label} style={{ display: 'flex', gap: 12, padding: '10px 0', boxShadow: `inset 0 0.5px 0 ${theme.hair}`, fontSize: 13.5 }}>
+      <div style={{ width: 118, flexShrink: 0, color: theme.muted, fontWeight: 600 }}>{label}</div>
       <div style={{ flex: 1, minWidth: 0, color: theme.ink, wordBreak: 'break-word' }}>{value == null || value === '' ? 'none' : String(value)}</div>
+    </div>
+  );
+  const pickMark = (on) => (
+    <span aria-hidden="true" style={{ width: 24, height: 24, borderRadius: 12, flexShrink: 0, boxSizing: 'border-box', border: on ? 'none' : `1.6px solid ${theme.muted2}`, background: on ? theme.coral : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 150ms ease' }}>
+      {on && <Check size={14} color="#FFFFFF" strokeWidth={3} />}
+    </span>
+  );
+  const switchRow = (label, sub, on, flip) => (
+    <div role="button" aria-label={label} aria-pressed={!!on} onClick={flip} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', gap: 12, minHeight: 54, padding: '4px 0', cursor: 'pointer' }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 15, fontWeight: 600, color: theme.ink }}>{label}</div>
+        {sub && <div style={{ fontSize: 12.5, color: theme.muted, marginTop: 1 }}>{sub}</div>}
+      </div>
+      <IgToggle on={!!on} />
     </div>
   );
   const rarityColor = (spec) => (RARITY_STYLE[spec.rarity] || RARITY_STYLE.epic).color;
@@ -56044,43 +57377,48 @@ function AdminUserPanel({ person, myId, onClose, onChanged, onOpenProfile }) {
   };
   const ban = () => act(() => supabase.rpc('admin_ban', { p_user_id: person.id, p_reason: 'Banned by admin panel' }), 'Account banned.', () => onChanged({ banned: true }));
   const unban = () => act(() => supabase.rpc('admin_unban', { p_user_id: person.id }), 'Account unbanned.', () => onChanged({ banned: false }));
+  const actions = [
+    profile.banned ? [ShieldCheck, 'Unban account', unban, 'main'] : [Ban, 'Ban account', ban, 'danger'],
+    [LogOut, 'Sign out everywhere', () => setConfirmDo({ title: 'Sign them out everywhere?', body: 'Every phone and browser they are logged in on is logged out.', label: 'Sign out', run: () => act(() => supabase.rpc('admin_sign_out_user', { p_user_id: person.id }), 'Signed out everywhere.') }), null],
+    [isAdminUser ? ShieldOff : ShieldAlert, isAdminUser ? 'Remove admin' : 'Make admin', () => setConfirmDo({ title: isAdminUser ? 'Remove admin access?' : 'Make them an admin?', body: isAdminUser ? 'They lose the admin panel.' : 'They get this whole panel, including private messages and data.', label: isAdminUser ? 'Remove' : 'Make admin', danger: !isAdminUser, run: () => act(() => supabase.rpc('admin_set_admin', { p_user_id: person.id, p_on: !isAdminUser }), isAdminUser ? 'Admin removed.' : 'Admin added.', () => setIsAdminUser(!isAdminUser)) }), null],
+    [Trash2, 'Delete account', () => setConfirmDo({ title: `Delete ${profile.name} for good?`, body: 'Their login and profile are removed. This cannot be undone.', label: 'Delete account', danger: true, run: () => act(() => supabase.rpc('admin_delete_user', { p_user_id: person.id }), 'Account deleted.', () => onClose()) }), 'danger'],
+  ];
+  const pauseBlocked = busy || isSelf || !!profile.is_bot;
 
   return (
-    <div style={{ position: 'absolute', inset: 0, zIndex: 20, background: theme.panelBg, display: 'flex', flexDirection: 'column', isolation: 'isolate' }} className="zchat-panel-open">
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px 10px', paddingTop: 'calc(14px + env(safe-area-inset-top))' }}>
-        <ArrowLeft size={20} style={{ cursor: 'pointer', color: theme.ink }} onClick={onClose} />
-        <Avatar emoji={profile.avatar} name={profile.name} size={34} />
+    <div style={{ position: 'absolute', inset: 0, zIndex: 20, background: c.bg, display: 'flex', flexDirection: 'column', isolation: 'isolate' }} className="zchat-panel-open">
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 12px 6px 4px', paddingTop: 'calc(4px + env(safe-area-inset-top))' }}>
+        <div role="button" aria-label="Back" onClick={onClose} className="zchat-press" style={{ width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: theme.ink, flexShrink: 0 }}><ArrowLeft size={24} strokeWidth={2} /></div>
+        <div style={{ position: 'relative', zIndex: 0, isolation: 'isolate', flexShrink: 0 }}><Avatar emoji={profile.avatar} name={profile.name} size={34} /></div>
         <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontWeight: 900, fontSize: 16, color: theme.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.name}</div>
-          <div style={{ fontSize: 12, color: theme.muted }}>@{profile.username}{profile.banned ? ', banned' : ''}</div>
+          <div style={{ fontWeight: 700, fontSize: 16, color: theme.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{profile.name}</div>
+          <div style={{ fontSize: 12.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>@{profile.username}{profile.banned ? ', banned' : ''}</div>
         </div>
-        {pill('Profile', () => onOpenProfile(profile))}
+        <AdminTextBtn label="Profile" tone="main" onClick={() => onOpenProfile(profile)} />
       </div>
-      <div style={{ display: 'flex', gap: 8, padding: '0 16px 10px', overflowX: 'auto' }}>
-        {[['info', 'Info'], ['gifts', 'Gifts'], ['restrict', 'Restrict'], ['activity', 'Activity'], ['edit', 'Edit'], ['messages', 'Messages'], ['raw', 'Raw']].map(([k, l]) => chip(l, section === k, () => { setSection(k); setNote(''); }))}
-      </div>
-      <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '0 16px', paddingBottom: 'calc(24px + env(safe-area-inset-bottom))' }}>
-        {note && <div style={{ ...card, padding: '10px 12px', fontSize: 13, fontWeight: 700, color: theme.ink }}>{note}</div>}
+      <KitTabs label="Account sections" value={section} onChange={(k) => { setSection(k); setNote(''); }} options={[['info', 'Info'], ['gifts', 'Gifts'], ['restrict', 'Restrict'], ['activity', 'Activity'], ['edit', 'Edit'], ['messages', 'Messages'], ['raw', 'Raw']]} style={{ padding: '0 8px', flexShrink: 0 }} />
+      <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain', padding: '8px 16px 0', paddingBottom: 'calc(28px + env(safe-area-inset-bottom))' }}>
+        {note && <AdminNote text={note} />}
         {error && <div style={{ background: `${theme.danger}18`, color: theme.danger, borderRadius: 12, padding: '9px 12px', fontSize: 12.5, fontWeight: 700, marginBottom: 10 }}>{error}</div>}
         {!data && !error && <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><Spinner size={22} color={theme.ink} /></div>}
 
         {data && (section === 'info' || section === 'gifts') && (
-          <div style={{ ...card, padding: '16px 14px', textAlign: 'center', overflow: 'hidden' }}>
+          <div style={{ padding: '6px 0 14px', textAlign: 'center', overflow: 'hidden' }}>
             {isDecorKey(profile.avatar_frame) || isDecorKey(profile.nameplate) ? (
-              <div style={{ position: 'relative', zIndex: 0, isolation: 'isolate' }}><ProfileDecorHero profile={profile} photo={profile.avatar} frameKey={isDecorKey(profile.avatar_frame) ? profile.avatar_frame : null} plateKey={isDecorKey(profile.nameplate) ? profile.nameplate : null} maxWidth={320} gapColor={theme.rowBg} /></div>
+              <div style={{ position: 'relative', zIndex: 0, isolation: 'isolate' }}><ProfileDecorHero profile={profile} photo={profile.avatar} frameKey={isDecorKey(profile.avatar_frame) ? profile.avatar_frame : null} plateKey={isDecorKey(profile.nameplate) ? profile.nameplate : null} maxWidth={320} gapColor={c.bg} /></div>
             ) : (
               <>
                 <div style={{ display: 'inline-block', position: 'relative', zIndex: 0, isolation: 'isolate' }}><Avatar emoji={profile.avatar} name={profile.name} size={104} /></div>
-                <div style={{ marginTop: 10, fontWeight: 900, fontSize: 19, color: theme.ink, display: 'flex', justifyContent: 'center' }}><NameBadge name={profile.name} verified={profile.verified} custom={profile.custom_badge} size={18} style={{ justifyContent: 'center' }} /></div>
+                <div style={{ marginTop: 10, fontWeight: 800, fontSize: 19, color: theme.ink, display: 'flex', justifyContent: 'center' }}><NameBadge name={profile.name} verified={profile.verified} custom={profile.custom_badge} size={18} style={{ justifyContent: 'center' }} /></div>
               </>
             )}
-            <div style={{ fontSize: 12, color: theme.muted, marginTop: 4 }}>This is exactly how they look in ZChat right now.</div>
+            <div style={{ fontSize: 12.5, color: theme.muted, marginTop: 6 }}>This is exactly how they look in ZChat right now.</div>
           </div>
         )}
 
         {data && section === 'info' && (
           <>
-            <div style={card}>
+            <div style={{ boxShadow: `inset 0 -0.5px 0 ${theme.hair}` }}>
               {line('Email', data.auth && data.auth.email)}
               {line('Phone', data.auth && data.auth.phone)}
               {line('User id', profile.id)}
@@ -56095,64 +57433,62 @@ function AdminUserPanel({ person, myId, onClose, onChanged, onOpenProfile }) {
               {line('Private account', profile.is_private ? 'yes' : 'no')}
             </div>
             {!isSelf && !profile.is_bot && (
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {profile.banned ? pill('Unban account', unban, 'main', busy) : pill('Ban account', ban, 'danger', busy)}
-                {pill('Sign out everywhere', () => setConfirmDo({ title: 'Sign them out everywhere?', body: 'Every phone and browser they are logged in on is logged out.', label: 'Sign out', run: () => act(() => supabase.rpc('admin_sign_out_user', { p_user_id: person.id }), 'Signed out everywhere.') }), null, busy)}
-                {pill(isAdminUser ? 'Remove admin' : 'Make admin', () => setConfirmDo({ title: isAdminUser ? 'Remove admin access?' : 'Make them an admin?', body: isAdminUser ? 'They lose the admin panel.' : 'They get this whole panel, including private messages and data.', label: isAdminUser ? 'Remove' : 'Make admin', danger: !isAdminUser, run: () => act(() => supabase.rpc('admin_set_admin', { p_user_id: person.id, p_on: !isAdminUser }), isAdminUser ? 'Admin removed.' : 'Admin added.', () => setIsAdminUser(!isAdminUser)) }), null, busy)}
-                {pill('Delete account', () => setConfirmDo({ title: `Delete ${profile.name} for good?`, body: 'Their login and profile are removed. This cannot be undone.', label: 'Delete account', danger: true, run: () => act(() => supabase.rpc('admin_delete_user', { p_user_id: person.id }), 'Account deleted.', () => onClose()) }), 'danger', busy)}
-              </div>
+              <KitSection title="Actions" style={{ marginTop: 24 }}>
+                {actions.map(([Icon, label, fn, tone], i) => (
+                  <div key={label} role="button" aria-disabled={busy || undefined} onClick={busy ? undefined : fn} className={busy ? undefined : 'zchat-row-press'}
+                    style={{ display: 'flex', alignItems: 'center', gap: 14, minHeight: 50, cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.5 : 1, color: tone === 'danger' ? theme.danger : tone === 'main' ? kitOnInk(theme) : theme.ink, boxShadow: adminHair(theme, i < actions.length - 1) }}>
+                    <Icon size={20} strokeWidth={1.8} style={{ flexShrink: 0 }} />
+                    <span style={{ fontSize: 15, fontWeight: 600 }}>{label}</span>
+                  </div>
+                ))}
+              </KitSection>
             )}
           </>
         )}
 
         {data && section === 'gifts' && (
           <>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 10, overflowX: 'auto' }}>
-              {[['frame', 'Frames'], ['nameplate', 'Nameplates'], ['charm', 'Charms'], ['badge', 'Badges']].map(([k, l]) => chip(l, giftKind === k, () => setGiftKind(k)))}
-            </div>
+            <SegmentedControl value={giftKind} onChange={setGiftKind} options={[['frame', 'Frames'], ['nameplate', 'Nameplates'], ['charm', 'Charms'], ['badge', 'Badges']]} style={{ margin: '2px 0 8px' }} />
             {giftKind !== 'badge' && (
-              <div style={{ display: 'flex', gap: 8, marginBottom: 10, overflowX: 'auto', alignItems: 'center' }}>
-                {chip(multi ? 'Pick one at a time' : 'Give several', multi, () => { setMulti((v) => !v); setPicked(new Set()); })}
-                {multi && chip('Select all here', false, () => setPicked((prev) => { const n = new Set(prev); Object.keys(catalog).forEach((key) => n.add(`${giftKind}:${key}`)); return n; }))}
-                {multi && picked.size > 0 && chip('Clear', false, () => setPicked(new Set()))}
-                {multi && <span style={{ fontSize: 12.5, color: theme.muted, fontWeight: 700, flexShrink: 0 }}>{picked.size} picked</span>}
-              </div>
-            )}
-            {giftKind !== 'badge' && (
-              <div style={{ ...card, padding: 12 }}>
-                <div style={{ fontSize: 12, color: theme.muted, fontWeight: 700, marginBottom: 8 }}>How long</div>
-                <div style={{ display: 'flex', gap: 8, overflowX: 'auto' }}>{ADMIN_GRANT_DAYS.map(([d, l]) => chip(l, giftDays === d, () => setGiftDays(d)))}</div>
-                <div role="button" onClick={() => setEquipNow((v) => !v)} style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12, cursor: 'pointer' }}>
-                  <span style={{ width: 20, height: 20, borderRadius: 6, border: `2px solid ${equipNow ? theme.coral : theme.border}`, background: equipNow ? theme.coral : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{equipNow && <Check size={13} color="white" />}</span>
-                  <span style={{ fontSize: 13.5, fontWeight: 700, color: theme.ink }}>Wear it right away</span>
-                </div>
-              </div>
+              <>
+                {switchRow('Give several', multi ? `${picked.size} picked` : 'Pick a few, then give them all at once', multi, () => { setMulti((v) => !v); setPicked(new Set()); })}
+                {multi && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 22, padding: '0 0 4px' }}>
+                    <AdminTextBtn label="Select all here" tone="main" onClick={() => setPicked((prev) => { const n = new Set(prev); Object.keys(catalog).forEach((key) => n.add(`${giftKind}:${key}`)); return n; })} />
+                    {picked.size > 0 && <AdminTextBtn label="Clear" onClick={() => setPicked(new Set())} />}
+                  </div>
+                )}
+                <KitSection title="How long" style={{ marginTop: 12 }}>
+                  <SegmentedControl value={giftDays} onChange={setGiftDays} options={ADMIN_GRANT_DAYS} />
+                </KitSection>
+                <div style={{ marginTop: 6 }}>{switchRow('Wear it right away', null, equipNow, () => setEquipNow((v) => !v))}</div>
+                <div style={{ height: 1, background: theme.hair, margin: '6px 0 0' }} />
+              </>
             )}
             {giftKind === 'badge' ? (
-              [['', 'No badge', theme.muted], ...Object.entries(VERIFIED_TIERS).map(([k, t]) => [k, t.label, t.color])].map(([k, label, color]) => (
-                <div key={k || 'none'} style={{ ...card, display: 'flex', alignItems: 'center', gap: 10, padding: '11px 12px' }}>
-                  <span style={{ flex: 1, fontWeight: 800, fontSize: 15, color: theme.ink, display: 'flex', alignItems: 'center', minWidth: 0 }}><NameBadge name={profile.name} verified={k || null} size={20} />{k ? <span style={{ fontSize: 11.5, color: theme.muted, fontWeight: 700, marginLeft: 8, flexShrink: 0 }}>{label}</span> : <span style={{ fontSize: 11.5, color: theme.muted, fontWeight: 700, marginLeft: 8 }}>No badge</span>}</span>
-                  {(profile.verified || '') === k ? <span style={{ fontSize: 12, fontWeight: 800, color: theme.coral }}>Active</span> : pill('Set', () => act(() => supabase.rpc('admin_set_verified', { p_user_id: person.id, p_tier: k || null }), 'Badge updated.', () => onChanged({ verified: k || null })), 'main', busy)}
+              [['', 'No badge', theme.muted], ...Object.entries(VERIFIED_TIERS).map(([k, t]) => [k, t.label, t.color])].map(([k, label], i, arr) => (
+                <div key={k || 'none'} style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 56, padding: '6px 0', boxShadow: adminHair(theme, i < arr.length - 1) }}>
+                  <span style={{ flex: 1, fontWeight: 700, fontSize: 15, color: theme.ink, display: 'flex', alignItems: 'center', minWidth: 0 }}><NameBadge name={profile.name} verified={k || null} size={20} /><span style={{ fontSize: 12.5, color: theme.muted, fontWeight: 600, marginLeft: 8, flexShrink: 0 }}>{label}</span></span>
+                  {(profile.verified || '') === k
+                    ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 13.5, fontWeight: 700, color: kitOnInk(theme), flexShrink: 0 }}><Check size={16} strokeWidth={2.8} />Active</span>
+                    : <AdminTextBtn label="Set" tone="main" disabled={busy} onClick={() => act(() => supabase.rpc('admin_set_verified', { p_user_id: person.id, p_tier: k || null }), 'Badge updated.', () => onChanged({ verified: k || null }))} />}
                 </div>
               ))
-            ) : Object.entries(catalog).map(([key, spec]) => {
+            ) : Object.entries(catalog).map(([key, spec], i, arr) => {
               const own = ownedKey(giftKind, key);
               const worn = equippedKey === key;
+              const sel = picked.has(`${giftKind}:${key}`);
+              const status = worn ? 'Worn now' : own ? (own.expires_at ? `Owned until ${adminDate(own.expires_at)}` : 'Owned forever') : 'Not owned';
               const preview = giftKind === 'frame'
-                ? <div style={{ position: 'relative', zIndex: 0, isolation: 'isolate', flexShrink: 0 }}><DecorFrameBadge setKey={key} size={86} photo={profile.avatar} name={profile.name} lazy /></div>
+                ? <div style={{ position: 'relative', zIndex: 0, isolation: 'isolate', flexShrink: 0 }}><DecorFrameBadge setKey={key} size={76} photo={profile.avatar} name={profile.name} lazy /></div>
                 : giftKind === 'charm'
-                  ? <div style={{ flex: 1, minWidth: 0, fontWeight: 800, fontSize: 15, color: theme.ink, display: 'flex', alignItems: 'center' }}><NameBadge name={profile.name} verified={profile.verified} custom={key} size={30} /></div>
+                  ? <div style={{ flex: 1, minWidth: 0, fontWeight: 700, fontSize: 15, color: theme.ink, display: 'flex', alignItems: 'center' }}><NameBadge name={profile.name} verified={profile.verified} custom={key} size={30} /></div>
                   : null;
               return (
-                <div key={key} role={multi ? 'button' : undefined} aria-label={multi ? `Pick ${spec.label}` : undefined} onClick={multi ? () => togglePick(`${giftKind}:${key}`) : undefined}
-                  style={{ ...card, padding: '12px', position: 'relative', cursor: multi ? 'pointer' : 'default', boxShadow: multi && picked.has(`${giftKind}:${key}`) ? `0 0 0 2px ${theme.coral}` : 'none' }}>
-                  {multi && (
-                    <span style={{ position: 'absolute', top: 10, right: 10, zIndex: 3, width: 24, height: 24, borderRadius: 12, background: picked.has(`${giftKind}:${key}`) ? theme.coral : theme.panelBg, border: `2px solid ${picked.has(`${giftKind}:${key}`) ? theme.coral : theme.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      {picked.has(`${giftKind}:${key}`) && <Check size={14} color="white" strokeWidth={3} />}
-                    </span>
-                  )}
+                <div key={key} role={multi ? 'button' : undefined} aria-label={multi ? `Pick ${spec.label}` : undefined} aria-pressed={multi ? sel : undefined} onClick={multi ? () => togglePick(`${giftKind}:${key}`) : undefined} className={multi ? 'zchat-row-press' : undefined}
+                  style={{ padding: '12px 0', cursor: multi ? 'pointer' : 'default', boxShadow: adminHair(theme, i < arr.length - 1) }}>
                   {giftKind === 'nameplate' && (
-                    <div style={{ display: 'flex', justifyContent: 'center', overflow: 'hidden', borderRadius: 12, marginBottom: 8, background: '#101119' }}>
+                    <div style={{ display: 'flex', justifyContent: 'center', overflow: 'hidden', borderRadius: 12, marginBottom: 10, background: '#101119' }}>
                       <DecorPlateOnly setKey={key} width={260} name={profile.name} username={profile.username} verified={profile.verified} custom={profile.custom_badge} lazy />
                     </div>
                   )}
@@ -56160,24 +57496,23 @@ function AdminUserPanel({ person, myId, onClose, onChanged, onOpenProfile }) {
                     {preview}
                     {giftKind !== 'charm' && (
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontWeight: 800, fontSize: 14, color: theme.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{spec.label}</div>
-                        <div style={{ fontSize: 11.5, color: rarityColor(spec), fontWeight: 800, textTransform: 'capitalize' }}>{spec.rarity || 'epic'}</div>
-                        <div style={{ fontSize: 11.5, color: theme.muted }}>{worn ? 'Worn now' : own ? (own.expires_at ? `Owned until ${adminDate(own.expires_at)}` : 'Owned forever') : 'Not owned'}</div>
+                        <div style={{ fontWeight: 700, fontSize: 14.5, color: theme.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{spec.label}</div>
+                        <div style={{ fontSize: 12.5, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><span style={{ color: rarityColor(spec), fontWeight: 700, textTransform: 'capitalize' }}>{spec.rarity || 'epic'}</span><span style={{ color: theme.muted }}>{`, ${status.toLowerCase()}`}</span></div>
+                      </div>
+                    )}
+                    {multi ? pickMark(sel) : (
+                      <div style={{ display: 'flex', gap: 16, flexShrink: 0 }}>
+                        {own && <AdminTextBtn label="Remove" tone="danger" disabled={busy} onClick={() => act(() => supabase.rpc('admin_revoke_reward', { p_user_id: person.id, p_kind: giftKind, p_key: key }), 'Removed.', () => { if (worn) onChanged({ [fieldOf(giftKind)]: null }); })} />}
+                        <AdminTextBtn label={own ? 'Renew' : 'Give'} tone="main" disabled={busy} onClick={() => act(() => supabase.rpc('admin_grant_reward', { p_user_id: person.id, p_kind: giftKind, p_key: key, p_days: giftDays, p_equip: equipNow }), 'Given.', () => { if (equipNow) onChanged({ [fieldOf(giftKind)]: key }); })} />
                       </div>
                     )}
                   </div>
-                  {giftKind === 'charm' && <div style={{ fontSize: 11.5, color: theme.muted, marginTop: 4 }}>{`${spec.label}, ${worn ? 'worn now' : own ? (own.expires_at ? `owned until ${adminDate(own.expires_at)}` : 'owned forever') : 'not owned'}`}</div>}
-                  {!multi && (
-                  <div style={{ display: 'flex', gap: 8, marginTop: 10, justifyContent: 'flex-end' }}>
-                    {own && pill('Remove', () => act(() => supabase.rpc('admin_revoke_reward', { p_user_id: person.id, p_kind: giftKind, p_key: key }), 'Removed.', () => { if (worn) onChanged({ [fieldOf(giftKind)]: null }); }), 'danger', busy)}
-                    {pill(own ? 'Renew' : 'Give', () => act(() => supabase.rpc('admin_grant_reward', { p_user_id: person.id, p_kind: giftKind, p_key: key, p_days: giftDays, p_equip: equipNow }), 'Given.', () => { if (equipNow) onChanged({ [fieldOf(giftKind)]: key }); }), 'main', busy)}
-                  </div>
-                  )}
+                  {giftKind === 'charm' && <div style={{ fontSize: 12.5, color: theme.muted, marginTop: 4 }}>{`${spec.label}, ${status.toLowerCase()}`}</div>}
                 </div>
               );
             })}
             {multi && picked.size > 0 && (
-              <div style={{ position: 'sticky', bottom: 0, padding: '10px 0 6px', background: theme.panelBg, zIndex: 4 }}>
+              <div style={{ position: 'sticky', bottom: 0, padding: '10px 0 6px', background: c.bg, zIndex: 4 }}>
                 <BigButton label={busy ? 'Giving' : `Give ${picked.size} ${picked.size === 1 ? 'item' : 'items'}`} disabled={busy} onClick={giveMany} />
               </div>
             )}
@@ -56186,73 +57521,74 @@ function AdminUserPanel({ person, myId, onClose, onChanged, onOpenProfile }) {
 
         {data && section === 'restrict' && (
           <>
-            <div style={card}>
-              <div style={{ fontWeight: 900, fontSize: 15, color: theme.ink, marginBottom: 4 }}>Pause something for a while</div>
-              <div style={{ fontSize: 12.5, color: theme.muted, lineHeight: 1.5, marginBottom: 12 }}>They get a Mail telling them when it ends. The database enforces it, so it cannot be skipped.</div>
-              <div style={{ display: 'flex', gap: 8, overflowX: 'auto', marginBottom: 10 }}>{ADMIN_RESTRICT_KINDS.map(([k, l]) => chip(l, rKind === k, () => setRKind(k)))}</div>
-              <div style={{ display: 'flex', gap: 8, overflowX: 'auto', marginBottom: 12 }}>{ADMIN_RESTRICT_HOURS.map(([h, l]) => chip(l, rHours === h, () => setRHours(h)))}</div>
-              <input style={inputStyle(theme)} placeholder="Reason, they will see it" value={rReason} onChange={(e) => setRReason(e.target.value)} />
-              <div style={{ marginTop: 12 }}>
-                {pill('Apply pause', () => act(() => supabase.rpc('admin_restrict', { p_user_id: person.id, p_kind: rKind, p_hours: rHours, p_reason: rReason }), 'Pause applied.', () => setRReason('')), 'danger', busy || isSelf || !!profile.is_bot)}
-              </div>
-            </div>
-            <div style={{ fontWeight: 900, fontSize: 14, color: theme.ink, margin: '14px 2px 8px' }}>Active pauses</div>
-            {restrictions.length === 0 ? <div style={{ color: theme.muted, fontSize: 13, padding: '6px 2px' }}>None right now.</div> : restrictions.map((r) => (
-              <div key={r.id} style={{ ...card, display: 'flex', alignItems: 'center', gap: 10, padding: '11px 12px' }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 800, fontSize: 14, color: theme.ink }}>{(ADMIN_RESTRICT_KINDS.find((x) => x[0] === r.kind) || [0, r.kind])[1]} paused</div>
-                  <div style={{ fontSize: 12, color: theme.muted }}>Until {adminDate(r.until)}{r.reason ? `, ${r.reason}` : ''}</div>
+            <KitSection title="Pause something for a while" style={{ marginTop: 6 }}>
+              <div style={{ fontSize: 13, color: theme.muted, lineHeight: 1.5, marginBottom: 12 }}>They get a Mail telling them when it ends. The database enforces it, so it cannot be skipped.</div>
+              <SegmentedControl value={rKind} onChange={setRKind} options={ADMIN_RESTRICT_KINDS} />
+            </KitSection>
+            <KitSection title="How long" style={{ marginTop: 20 }}>
+              <ChoiceList label="How long" value={rHours} onChange={setRHours} options={ADMIN_RESTRICT_HOURS.map(([h, l]) => ({ k: h, label: l }))} />
+            </KitSection>
+            <input style={{ ...inputStyle(theme), marginTop: 14 }} placeholder="Reason, they will see it" aria-label="Reason" value={rReason} onChange={(e) => setRReason(e.target.value)} />
+            <button style={primaryBtn(theme, pauseBlocked, theme.danger)} disabled={pauseBlocked} onClick={() => act(() => supabase.rpc('admin_restrict', { p_user_id: person.id, p_kind: rKind, p_hours: rHours, p_reason: rReason }), 'Pause applied.', () => setRReason(''))}>{busy ? <Spinner /> : 'Apply pause'}</button>
+            <KitSection title="Active pauses" style={{ marginTop: 28 }}>
+              {restrictions.length === 0 ? <div style={{ color: theme.muted, fontSize: 13.5, padding: '2px 0' }}>None right now.</div> : restrictions.map((r, i) => (
+                <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 56, padding: '6px 0', boxShadow: adminHair(theme, i < restrictions.length - 1) }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, fontSize: 14.5, color: theme.ink }}>{(ADMIN_RESTRICT_KINDS.find((x) => x[0] === r.kind) || [0, r.kind])[1]} paused</div>
+                    <div style={{ fontSize: 12.5, color: theme.muted, marginTop: 1 }}>Until {adminDate(r.until)}{r.reason ? `, ${r.reason}` : ''}</div>
+                  </div>
+                  <AdminTextBtn label="Lift" tone="main" disabled={busy} onClick={() => act(() => supabase.rpc('admin_lift_restriction', { p_id: r.id }), 'Pause lifted.')} />
                 </div>
-                {pill('Lift', () => act(() => supabase.rpc('admin_lift_restriction', { p_id: r.id }), 'Pause lifted.'), 'main', busy)}
-              </div>
-            ))}
+              ))}
+            </KitSection>
           </>
         )}
 
         {data && section === 'edit' && (
           <>
-            <div style={card}>
-              <div style={{ fontWeight: 900, fontSize: 15, color: theme.ink, marginBottom: 12 }}>Edit profile</div>
-              <input style={inputStyle(theme)} placeholder="Name" value={eName} onChange={(e) => setEName(e.target.value)} />
+            <KitSection title="Edit profile" style={{ marginTop: 6 }}>
+              <input style={inputStyle(theme)} placeholder="Name" aria-label="Name" value={eName} onChange={(e) => setEName(e.target.value)} />
               <div style={{ height: 10 }} />
-              <input style={inputStyle(theme)} placeholder="Username" value={eUser} onChange={(e) => setEUser(e.target.value.toLowerCase().replace(/[^a-z0-9._]/g, ''))} />
+              <input style={inputStyle(theme)} placeholder="Username" aria-label="Username" value={eUser} onChange={(e) => setEUser(e.target.value.toLowerCase().replace(/[^a-z0-9._]/g, ''))} />
               <div style={{ height: 10 }} />
-              <textarea style={{ ...inputStyle(theme), minHeight: 90, resize: 'vertical', fontFamily: FONT }} placeholder="Bio" value={eBio} onChange={(e) => setEBio(e.target.value)} />
-              <div style={{ marginTop: 12 }}>{pill('Save changes', () => act(() => supabase.rpc('admin_update_profile', { p_user_id: person.id, p_name: eName.trim(), p_username: eUser.trim(), p_bio: eBio }), 'Profile saved.', () => onChanged({ name: eName.trim() || person.name, username: eUser.trim() || person.username, bio: eBio })), 'main', busy)}</div>
-            </div>
-            <div style={card}>
-              <div style={{ fontWeight: 900, fontSize: 15, color: theme.ink, marginBottom: 4 }}>Send a Mail to this person</div>
-              <div style={{ fontSize: 12.5, color: theme.muted, marginBottom: 12 }}>Only they will see it.</div>
-              <input style={inputStyle(theme)} placeholder="Title" maxLength={80} value={mTitle} onChange={(e) => setMTitle(e.target.value)} />
+              <textarea style={{ ...inputStyle(theme), minHeight: 90, resize: 'vertical', fontFamily: FONT }} placeholder="Bio" aria-label="Bio" value={eBio} onChange={(e) => setEBio(e.target.value)} />
+              <button style={primaryBtn(theme, busy)} disabled={busy} onClick={() => act(() => supabase.rpc('admin_update_profile', { p_user_id: person.id, p_name: eName.trim(), p_username: eUser.trim(), p_bio: eBio }), 'Profile saved.', () => onChanged({ name: eName.trim() || person.name, username: eUser.trim() || person.username, bio: eBio }))}>{busy ? <Spinner /> : 'Save changes'}</button>
+            </KitSection>
+            <KitSection title="Send a Mail to this person" style={{ marginTop: 30 }}>
+              <div style={{ fontSize: 13, color: theme.muted, marginBottom: 12 }}>Only they will see it.</div>
+              <input style={inputStyle(theme)} placeholder="Title" aria-label="Mail title" maxLength={80} value={mTitle} onChange={(e) => setMTitle(e.target.value)} />
               <div style={{ height: 10 }} />
-              <textarea style={{ ...inputStyle(theme), minHeight: 90, resize: 'vertical', fontFamily: FONT }} placeholder="Message" maxLength={1000} value={mBody} onChange={(e) => setMBody(e.target.value)} />
-              <div style={{ marginTop: 12 }}>{pill('Send mail', () => act(() => supabase.rpc('admin_send_mail', { p_user_id: person.id, p_title: mTitle.trim(), p_body: mBody.trim() }), 'Mail sent.', () => { setMTitle(''); setMBody(''); }), 'main', busy || !mTitle.trim() || !mBody.trim())}</div>
-            </div>
+              <textarea style={{ ...inputStyle(theme), minHeight: 90, resize: 'vertical', fontFamily: FONT }} placeholder="Message" aria-label="Mail message" maxLength={1000} value={mBody} onChange={(e) => setMBody(e.target.value)} />
+              <button style={primaryBtn(theme, busy || !mTitle.trim() || !mBody.trim())} disabled={busy || !mTitle.trim() || !mBody.trim()} onClick={() => act(() => supabase.rpc('admin_send_mail', { p_user_id: person.id, p_title: mTitle.trim(), p_body: mBody.trim() }), 'Mail sent.', () => { setMTitle(''); setMBody(''); })}>{busy ? <Spinner /> : 'Send mail'}</button>
+            </KitSection>
           </>
         )}
 
         {section === 'activity' && (
           <>
-            <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 10, scrollbarWidth: 'none' }}>
-              {[['posts', 'Posts'], ['stories', 'Stories'], ['follows', 'Follows'], ['group_members', 'Groups'], ['highlights', 'Highlights'], ['user_devices', 'Devices'], ['calls', 'Calls'], ['blocks', 'Blocks'], ['message_reports', 'Reports'], ['saved_messages', 'Saved']].map(([k, l]) => chip(l, actKind === k, () => setActKind(k)))}
+            <div role="button" aria-label="Choose what to show" onClick={() => setActPick(true)} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 50, cursor: 'pointer', boxShadow: `inset 0 -0.5px 0 ${theme.hair}`, marginBottom: 4 }}>
+              <span style={{ flex: 1, fontSize: 15, fontWeight: 600, color: theme.ink }}>Show</span>
+              <span style={{ fontSize: 14.5, color: theme.muted }}>{(ADMIN_ACTIVITY_KINDS.find((x) => x[0] === actKind) || ADMIN_ACTIVITY_KINDS[0])[1]}</span>
+              <ChevronRight size={17} color={theme.muted} />
             </div>
             <AdminRowList key={actKind} table={actKind} search={person.id} empty="Nothing found for this person." />
+            {actPick && <ChoiceSheet title="Show activity" options={ADMIN_ACTIVITY_KINDS} value={actKind} onPick={(k) => { setActKind(k); setActPick(false); }} onClose={() => setActPick(false)} />}
           </>
         )}
 
         {section === 'messages' && (
           msgs === null ? <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><Spinner size={22} color={theme.ink} /></div>
           : msgs.length === 0 ? <div style={{ color: theme.muted, fontSize: 13, textAlign: 'center', padding: 30 }}>No messages found.</div>
-          : msgs.map((m) => (
-            <div key={m.id} style={card}>
-              <div style={{ fontSize: 11.5, color: theme.muted, fontWeight: 700 }}>{`${m.sender_id === person.id ? 'Sent' : 'Received'}, ${m.type}${m.group_id ? ', group' : ''}, ${adminDate(m.created_at)}`}</div>
-              <div style={{ fontSize: 13.5, color: theme.ink, marginTop: 5, wordBreak: 'break-word', lineHeight: 1.4 }}>{m.deleted ? 'Deleted message' : String(m.content || m.media_url || '').slice(0, 400)}</div>
+          : msgs.map((m, i) => (
+            <div key={m.id} style={{ padding: '11px 0', boxShadow: adminHair(theme, i < msgs.length - 1) }}>
+              <div style={{ fontSize: 12, color: theme.muted, fontWeight: 600 }}>{`${m.sender_id === person.id ? 'Sent' : 'Received'}, ${adminWords(m.type)}${m.group_id ? ', group' : ''}, ${adminDate(m.created_at)}`}</div>
+              <div style={{ fontSize: 14, color: theme.ink, marginTop: 4, wordBreak: 'break-word', lineHeight: 1.4 }}>{m.deleted ? 'Deleted message' : String(m.content || m.media_url || '').slice(0, 400)}</div>
             </div>
           ))
         )}
 
         {data && section === 'raw' && (
-          <pre style={{ ...card, fontSize: 11.5, color: theme.ink, whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: 0 }}>{JSON.stringify(data, null, 2)}</pre>
+          <pre style={{ ...code, fontSize: 11.5, color: theme.ink, whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: '4px 0 0' }}>{JSON.stringify(data, null, 2)}</pre>
         )}
       </div>
       {confirmDo && <AdminSheet title={confirmDo.title} body={confirmDo.body} confirmLabel={confirmDo.label} danger={confirmDo.danger} busy={busy} onConfirm={async () => { const run = confirmDo.run; setConfirmDo(null); await run(); }} onClose={() => setConfirmDo(null)} />}
@@ -56289,9 +57625,6 @@ function AdminRowCard({ table, row, names, onDeleted, onSaved }) {
     return typeof v === 'object' ? JSON.stringify(v) : String(v);
   };
   const isVideo = row.media_type === 'video' || /\.(mp4|mov|webm)(\?|$)/i.test(String(row.media_url || ''));
-  const small = (label, onClick, danger) => (
-    <div role="button" onClick={onClick} style={{ padding: '7px 13px', borderRadius: 13, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', background: danger ? `${theme.danger}1F` : theme.panelBg, color: danger ? theme.danger : theme.ink, border: `1px solid ${danger ? `${theme.danger}55` : theme.border}` }}>{label}</div>
-  );
   const save = async () => {
     let parsed;
     try { parsed = JSON.parse(text); } catch { setErr('That is not valid JSON.'); return; }
@@ -56314,33 +57647,33 @@ function AdminRowCard({ table, row, names, onDeleted, onSaved }) {
     if (onDeleted) onDeleted();
   };
   return (
-    <div style={{ background: theme.rowBg, border: `1px solid ${theme.border}`, borderRadius: 16, padding: 12, marginBottom: 10 }}>
-      <div role="button" onClick={() => setOpen((v) => !v)} style={{ cursor: 'pointer' }}>
+    <div style={{ padding: '12px 0 6px', boxShadow: `inset 0 -0.5px 0 ${theme.hair}` }}>
+      <div role="button" aria-expanded={open} onClick={() => setOpen((v) => !v)} style={{ cursor: 'pointer' }}>
         {shown.map((k) => (
-          <div key={k} style={{ display: 'flex', gap: 8, fontSize: 12.5, padding: '2px 0' }}>
-            <div style={{ width: 104, flexShrink: 0, color: theme.muted, fontWeight: 700, wordBreak: 'break-word' }}>{k}</div>
+          <div key={k} style={{ display: 'flex', gap: 10, fontSize: 13, padding: '2px 0' }}>
+            <div style={{ width: 104, flexShrink: 0, color: theme.muted, fontWeight: 600, wordBreak: 'break-word' }}>{adminWords(k)}</div>
             <div style={{ flex: 1, minWidth: 0, color: theme.ink, wordBreak: 'break-word' }}>{show(k, row[k]).slice(0, open ? 2000 : 90)}</div>
           </div>
         ))}
-        {!open && keys.length > 4 && <div style={{ fontSize: 11.5, color: theme.coral, fontWeight: 800, marginTop: 4 }}>{`Tap for all ${keys.length} fields`}</div>}
+        {!open && keys.length > 4 && <div style={{ fontSize: 12.5, color: kitOnInk(theme), fontWeight: 700, marginTop: 4 }}>{`Tap for all ${keys.length} fields`}</div>}
       </div>
       {row.media_url && typeof row.media_url === 'string' && (isVideo
         ? <MediaVideo src={row.media_url} controls playsInline preload="metadata" style={{ width: '100%', maxHeight: 220, borderRadius: 12, marginTop: 8, background: '#000' }} />
         : <MediaImg live src={row.media_url} loading="lazy" style={{ width: '100%', maxHeight: 220, objectFit: 'cover', borderRadius: 12, marginTop: 8 }} />)}
       {err && <div style={{ color: theme.danger, fontSize: 12.5, fontWeight: 700, marginTop: 8 }}>{err}</div>}
       {canAct && (
-        <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-          {small('Edit', () => { setText(JSON.stringify(row, null, 2)); setErr(''); setEditing(true); })}
-          {small('Delete', () => setConfirm(true), true)}
+        <div style={{ display: 'flex', gap: 20, marginTop: 2 }}>
+          <AdminTextBtn label="Edit" tone="main" onClick={() => { setText(JSON.stringify(row, null, 2)); setErr(''); setEditing(true); }} />
+          <AdminTextBtn label="Delete" tone="danger" onClick={() => setConfirm(true)} />
         </div>
       )}
       {editing && (
-        <AdminSheet title={`Edit row in ${table}`} body="Change the values you want. Only changed fields are saved." confirmLabel="Save changes" busy={busy} onConfirm={save} onClose={() => setEditing(false)}>
+        <AdminSheet title={`Edit row in ${adminWords(table)}`} body="Change the values you want. Only changed fields are saved." confirmLabel="Save changes" busy={busy} onConfirm={save} onClose={() => setEditing(false)}>
           <textarea value={text} onChange={(e) => setText(e.target.value)} spellCheck={false} style={{ ...inputStyle(theme), minHeight: 260, fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 12.5, resize: 'vertical' }} />
           {err && <div style={{ color: theme.danger, fontSize: 12.5, fontWeight: 700, marginTop: 8 }}>{err}</div>}
         </AdminSheet>
       )}
-      {confirm && <AdminSheet title="Delete this row?" body={`It is removed from ${table} for good.`} confirmLabel="Delete it" danger busy={busy} onConfirm={del} onClose={() => setConfirm(false)} />}
+      {confirm && <AdminSheet title="Delete this row?" body={`It is removed from ${adminWords(table)} for good.`} confirmLabel="Delete it" danger busy={busy} onConfirm={del} onClose={() => setConfirm(false)} />}
     </div>
   );
 }
@@ -56368,7 +57701,7 @@ function AdminRowList({ table, search, empty }) {
   useEffect(() => { setRows(null); fetchPage(0); }, [table, search]);
   return (
     <>
-      {error && <div style={{ background: `${theme.danger}18`, color: theme.danger, borderRadius: 12, padding: '9px 12px', fontSize: 12.5, fontWeight: 700, marginBottom: 10 }}>{error}</div>}
+      {error && <div style={{ background: `${theme.danger}18`, color: theme.danger, borderRadius: 12, padding: '9px 12px', fontSize: 12.5, fontWeight: 700, margin: '8px 0 10px' }}>{error}</div>}
       {rows === null ? <div style={{ display: 'flex', justifyContent: 'center', padding: 30 }}><Spinner size={20} color={theme.ink} /></div>
         : rows.length === 0 ? <div style={{ textAlign: 'center', color: theme.muted, fontSize: 13, padding: 28 }}>{empty || 'Nothing here.'}</div>
         : rows.map((r, i) => (
@@ -56376,7 +57709,7 @@ function AdminRowList({ table, search, empty }) {
             onDeleted={() => setRows((prev) => prev.filter((x) => x !== r))}
             onSaved={(nr) => setRows((prev) => prev.map((x) => (x === r ? nr : x)))} />
         ))}
-      {!loading && more && <div role="button" onClick={() => fetchPage(rows.length)} style={{ textAlign: 'center', padding: 14, fontWeight: 800, color: theme.coral, cursor: 'pointer' }}>Load more</div>}
+      {!loading && more && <div role="button" onClick={() => fetchPage(rows.length)} style={{ textAlign: 'center', padding: 14, fontWeight: 700, color: kitOnInk(theme), cursor: 'pointer' }}>Load more</div>}
     </>
   );
 }
@@ -56418,31 +57751,38 @@ function AdminDataBrowser() {
     return () => clearTimeout(t);
   }, [table, search]);
 
-  const card = { background: theme.rowBg, border: `1px solid ${theme.border}`, borderRadius: 16, padding: 12, marginBottom: 10 };
   const errBox = error ? <div style={{ background: `${theme.danger}18`, color: theme.danger, borderRadius: 12, padding: '9px 12px', fontSize: 12.5, fontWeight: 700, marginBottom: 10 }}>{error}</div> : null;
 
   if (!table) {
+    const list = tables || [];
     return (
       <>
         {errBox}
-        {tables === null && !error ? <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><Spinner size={22} color={theme.ink} /></div> : (tables || []).map((t) => (
-          <div key={t.name} role="button" onClick={() => { setTable(t.name); setSearch(''); setRows([]); }} style={{ ...card, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
-            <div style={{ flex: 1, fontWeight: 800, fontSize: 14, color: theme.ink }}>{t.name}</div>
-            <div style={{ fontSize: 12.5, color: theme.muted, fontWeight: 700 }}>{t.rows == null ? '' : formatCount(Number(t.rows) || 0)}</div>
-            <ChevronRight size={16} color={theme.muted} />
-          </div>
-        ))}
+        {tables === null && !error ? <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><Spinner size={22} color={theme.ink} /></div> : (
+          <KitSection title="Tables" right={list.length ? `${list.length}` : null} style={{ marginTop: 6 }}>
+            {list.map((t, i) => (
+              <div key={t.name} role="button" onClick={() => { setTable(t.name); setSearch(''); setRows([]); }} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', gap: 14, minHeight: 50, cursor: 'pointer', boxShadow: adminHair(theme, i < list.length - 1) }}>
+                <Database size={18} strokeWidth={1.8} color={theme.muted} style={{ flexShrink: 0 }} />
+                <div style={{ flex: 1, minWidth: 0, fontWeight: 600, fontSize: 15, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{adminWords(t.name)}</div>
+                <div style={{ fontSize: 13.5, color: theme.muted, fontVariantNumeric: 'tabular-nums' }}>{t.rows == null ? '' : formatCount(Number(t.rows) || 0)}</div>
+                <ChevronRight size={16} color={theme.muted} style={{ flexShrink: 0 }} />
+              </div>
+            ))}
+          </KitSection>
+        )}
       </>
     );
   }
   return (
     <>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-        <ArrowLeft size={19} style={{ cursor: 'pointer', color: theme.ink }} onClick={() => { setTable(null); setRows([]); setError(''); }} />
-        <div style={{ fontWeight: 900, fontSize: 16, color: theme.ink }}>{table}</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '0 0 10px -10px' }}>
+        <div role="button" aria-label="Back to tables" onClick={() => { setTable(null); setRows([]); setError(''); }} className="zchat-press" style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: theme.ink, flexShrink: 0 }}><ArrowLeft size={20} /></div>
+        <div style={{ fontWeight: 800, fontSize: 17, color: theme.ink, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{adminWords(table)}</div>
       </div>
-      <input style={inputStyle(theme)} placeholder="Search inside this table" value={search} onChange={(e) => setSearch(e.target.value)} />
-      <div style={{ height: 10 }} />
+      <div style={{ position: 'relative', marginBottom: 6 }}>
+        <Search size={16} color={theme.muted} style={{ position: 'absolute', left: 14, top: 15 }} />
+        <input style={{ ...inputStyle(theme), paddingLeft: 40 }} placeholder="Search inside this table" aria-label="Search inside this table" value={search} onChange={(e) => setSearch(e.target.value)} />
+      </div>
       {errBox}
       {rows.map((r, i) => (
         <AdminRowCard key={r.id !== undefined ? r.id : i} table={table} row={r} names={names}
@@ -56451,7 +57791,7 @@ function AdminDataBrowser() {
       ))}
       {loading && <div style={{ display: 'flex', justifyContent: 'center', padding: 20 }}><Spinner size={20} color={theme.ink} /></div>}
       {!loading && rows.length === 0 && !error && <div style={{ textAlign: 'center', color: theme.muted, fontSize: 13, padding: 30 }}>Nothing here.</div>}
-      {!loading && more && <div role="button" onClick={() => fetchRows(table, search, rows.length)} style={{ textAlign: 'center', padding: 14, fontWeight: 800, color: theme.coral, cursor: 'pointer' }}>Load more</div>}
+      {!loading && more && <div role="button" onClick={() => fetchRows(table, search, rows.length)} style={{ textAlign: 'center', padding: 14, fontWeight: 700, color: kitOnInk(theme), cursor: 'pointer' }}>Load more</div>}
     </>
   );
 }
@@ -56550,27 +57890,18 @@ function ReportQueuePanel({ onClose, onOpenProfile }) {
   const openCount = (items || []).filter((it) => !isHandled(it)).length;
   const doneCount = (items || []).length - openCount;
 
-  const pillBtn = (label, onClick, tone) => (
-    <div role="button" onClick={onClick} style={{
-      padding: '8px 13px', borderRadius: 14, fontSize: 12.5, fontWeight: 800, cursor: 'pointer',
-      background: tone === 'danger' ? `${theme.danger}22` : tone === 'main' ? theme.coral : theme.rowBg,
-      color: tone === 'danger' ? theme.danger : tone === 'main' ? 'white' : theme.ink,
-      border: `1px solid ${tone === 'danger' ? `${theme.danger}55` : tone === 'main' ? 'transparent' : theme.border}`,
-    }}>{label}</div>
-  );
-
   const person = (label, p) => (
     <div role="button" onClick={() => p && onOpenProfile(p)} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, cursor: p ? 'pointer' : 'default' }}>
-      <div style={{ fontSize: 11.5, color: theme.muted, width: 92, flexShrink: 0, fontWeight: 700 }}>{label}</div>
+      <div style={{ fontSize: 12.5, color: theme.muted, width: 92, flexShrink: 0, fontWeight: 600 }}>{label}</div>
       {p ? (
         <>
           <Avatar emoji={p.avatar} name={p.name} size={24} />
-          <div style={{ fontSize: 13, fontWeight: 800, color: theme.ink, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {p.name} <span style={{ color: theme.muted, fontWeight: 600 }}>@{p.username}</span>
+          <div style={{ fontSize: 13.5, fontWeight: 700, color: theme.ink, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {p.name} <span style={{ color: theme.muted, fontWeight: 500 }}>@{p.username}</span>
           </div>
-          {(p.banned || bannedIds.has(p.id)) && <span style={{ fontSize: 10.5, fontWeight: 900, color: theme.danger, flexShrink: 0 }}>Banned</span>}
+          {(p.banned || bannedIds.has(p.id)) && <AdminStatus tone="danger">Banned</AdminStatus>}
         </>
-      ) : <div style={{ fontSize: 13, color: theme.muted }}>Unknown account</div>}
+      ) : <div style={{ fontSize: 13.5, color: theme.muted }}>Unknown account</div>}
     </div>
   );
 
@@ -56578,49 +57909,42 @@ function ReportQueuePanel({ onClose, onOpenProfile }) {
     <>
     <WideDim onClose={onClose} z={40} />
     <div style={{ position: 'fixed', inset: 0, zIndex: 40, background: theme.bgGradient, display: 'flex', flexDirection: 'column', fontFamily: FONT }} className="zchat-panel-open zchat-wide-page">
-      <IgTopBar title="Report queue" onBack={onClose} right={<div role="button" aria-label="Refresh reports" onClick={load} style={{ fontSize: 14, fontWeight: 800, color: theme.coral, cursor: 'pointer', padding: '0 10px', height: 44, display: 'flex', alignItems: 'center' }}>Refresh</div>} />
-      <div style={{ display: 'flex', gap: 8, padding: '0 16px 10px' }}>
-        {[['open', `Open ${openCount}`], ['handled', `Handled ${doneCount}`]].map(([k, label]) => (
-          <div key={k} role="button" onClick={() => setTab(k)} style={{
-            padding: '7px 14px', borderRadius: 16, fontSize: 12.5, fontWeight: 800, cursor: 'pointer',
-            background: tab === k ? theme.coral : theme.rowBg, color: tab === k ? 'white' : theme.ink, border: `1px solid ${tab === k ? 'transparent' : theme.border}`,
-          }}>{label}</div>
-        ))}
-      </div>
-      <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '0 16px', paddingBottom: 'calc(20px + env(safe-area-inset-bottom))' }}>
+      <IgTopBar title="Report queue" onBack={onClose} right={<div role="button" aria-label="Refresh reports" onClick={load} style={{ fontSize: 14, fontWeight: 700, color: kitOnInk(theme), cursor: 'pointer', padding: '0 10px', height: 44, display: 'flex', alignItems: 'center' }}>Refresh</div>} />
+      <KitTabs key={`${openCount}:${doneCount}`} label="Reports" value={tab} onChange={setTab} options={[['open', 'Open', openCount], ['handled', 'Handled', doneCount]]} style={{ padding: '0 8px', flexShrink: 0 }} />
+      <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain', padding: '4px 16px 0', paddingBottom: 'calc(24px + env(safe-area-inset-bottom))' }}>
         {problems.map((p, i) => (
-          <div key={i} style={{ background: `${theme.danger}18`, color: theme.danger, borderRadius: 12, padding: '9px 12px', fontSize: 12.5, fontWeight: 700, marginBottom: 8 }}>{p}</div>
+          <div key={i} style={{ background: `${theme.danger}18`, color: theme.danger, borderRadius: 12, padding: '9px 12px', fontSize: 12.5, fontWeight: 700, margin: '8px 0' }}>{p}</div>
         ))}
         {items === null ? (
           <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><Spinner size={22} color={theme.ink} /></div>
         ) : list.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '50px 20px', color: theme.muted }}>
-            <div style={{ fontWeight: 800, fontSize: 15, color: theme.ink }}>{tab === 'open' ? 'No open reports' : 'Nothing handled yet'}</div>
-            <div style={{ fontSize: 12.5, marginTop: 6 }}>{tab === 'open' ? 'New abuse reports show up here.' : 'Reports you mark as handled move here.'}</div>
+            <div style={{ fontWeight: 700, fontSize: 15.5, color: theme.ink }}>{tab === 'open' ? 'No open reports' : 'Nothing handled yet'}</div>
+            <div style={{ fontSize: 13, marginTop: 6 }}>{tab === 'open' ? 'New abuse reports show up here.' : 'Reports you mark as handled move here.'}</div>
           </div>
-        ) : list.map((it) => {
+        ) : list.map((it, i) => {
           const reporter = people[it.reporterId];
           const target = people[it.targetId];
           const preview = it.message ? describeMessage(it.message).text : null;
           const targetBanned = !!target && (target.banned || bannedIds.has(target.id));
           return (
-            <div key={it.key} style={{ background: theme.rowBg, border: `1px solid ${theme.border}`, borderRadius: 18, padding: 14, marginBottom: 10 }}>
+            <div key={it.key} style={{ padding: '14px 0 6px', boxShadow: adminHair(theme, i < list.length - 1) }}>
               <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
-                <div style={{ fontWeight: 900, fontSize: 14.5, color: theme.ink }}>{it.reason}</div>
-                {it.createdAt && <div style={{ fontSize: 11, color: theme.muted, flexShrink: 0 }}>{timeAgoLong(it.createdAt)}</div>}
+                <div style={{ fontWeight: 800, fontSize: 15.5, color: theme.ink, minWidth: 0 }}>{it.reason}</div>
+                {it.createdAt && <div style={{ fontSize: 12, color: theme.muted, flexShrink: 0 }}>{timeAgoLong(it.createdAt)}</div>}
               </div>
               {person('Reported by', reporter)}
               {person('Account', target)}
               {(it.message || it.messageId) && (
-                <div style={{ marginTop: 10, padding: '9px 11px', borderRadius: 12, background: theme.dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', fontSize: 13, color: theme.ink, lineHeight: 1.4, wordBreak: 'break-word' }}>
+                <div style={{ marginTop: 10, padding: '9px 12px', borderRadius: 12, background: theme.dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', fontSize: 13.5, color: theme.ink, lineHeight: 1.4, wordBreak: 'break-word' }}>
                   {preview ? String(preview).slice(0, 220) : 'That message is no longer available.'}
                 </div>
               )}
-              {it.details && <div style={{ marginTop: 8, fontSize: 12.5, color: theme.muted, lineHeight: 1.4 }}>{String(it.details).slice(0, 300)}</div>}
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
-                {target && pillBtn('Open profile', () => onOpenProfile(target))}
-                {target && !targetBanned && pillBtn('Ban', () => { setBanFor({ item: it, target }); setBanError(''); }, 'danger')}
-                {isHandled(it) ? pillBtn('Reopen', () => setHandled(it, false)) : pillBtn('Mark handled', () => setHandled(it, true), 'main')}
+              {it.details && <div style={{ marginTop: 8, fontSize: 13, color: theme.muted, lineHeight: 1.45 }}>{String(it.details).slice(0, 300)}</div>}
+              <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginTop: 4 }}>
+                {target && <AdminTextBtn label="Open profile" onClick={() => onOpenProfile(target)} />}
+                {target && !targetBanned && <AdminTextBtn label="Ban" tone="danger" onClick={() => { setBanFor({ item: it, target }); setBanError(''); }} />}
+                {isHandled(it) ? <AdminTextBtn label="Reopen" onClick={() => setHandled(it, false)} /> : <AdminTextBtn label="Mark handled" tone="main" icon={<Check size={16} strokeWidth={2.6} />} onClick={() => setHandled(it, true)} />}
               </div>
             </div>
           );
@@ -56844,9 +58168,9 @@ function TwoFactorSection() {
       )}
       {phase === 'on' && (
         <>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: `${theme.teal}22`, border: `1px solid ${theme.teal}55`, borderRadius: 14, padding: '12px 14px', marginBottom: 14 }}>
-            <ShieldCheck size={20} color={theme.teal} />
-            <div style={{ fontWeight: 800, fontSize: 14, color: theme.ink }}>Two factor is on</div>
+          <div role="status" style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '8px 2px 14px' }}>
+            <ShieldCheck size={26} color={theme.teal} strokeWidth={1.8} style={{ flexShrink: 0 }} />
+            <div style={{ fontWeight: 700, fontSize: 15.5, color: theme.ink }}>Two factor is on</div>
           </div>
           <div style={{ fontSize: 12.5, color: theme.muted, lineHeight: 1.55, marginBottom: 14 }}>
             You need a code from your authenticator app to log in. To turn this off, enter a current code.
@@ -57872,10 +59196,16 @@ function PublicShell({ title, updated, intro, children, wide }) {
             <div style={{ flex: 1 }} />
             <a href="/" style={{ height: 34, padding: '0 14px', borderRadius: 17, display: 'inline-flex', alignItems: 'center', background: PUB_ACCENT, color: '#FFFFFF', fontSize: 13.5, fontWeight: 800, textDecoration: 'none', flexShrink: 0 }}>Open ZChat</a>
           </div>
-          <div role="navigation" aria-label="Pages" style={{ display: 'flex', gap: 6, marginTop: 10, overflowX: 'auto', scrollbarWidth: 'none' }}>
-            {nav.map(([href, label]) => (
-              <a key={href} href={href} aria-current={here === href ? 'page' : undefined} style={{ flexShrink: 0, padding: '7px 14px', borderRadius: 17, fontSize: 13.5, fontWeight: 700, textDecoration: 'none', whiteSpace: 'nowrap', color: here === href ? '#FFFFFF' : 'rgba(255, 255, 255, 0.72)', background: here === href ? 'rgba(139, 108, 255, 0.32)' : 'rgba(255, 255, 255, 0.06)', boxShadow: here === href ? `inset 0 0 0 1px ${PUB_ACCENT}` : 'none' }}>{label}</a>
-            ))}
+          <div role="navigation" aria-label="Pages" style={{ display: 'flex', gap: 2, margin: '6px -12px -10px', overflowX: 'auto', scrollbarWidth: 'none' }}>
+            {nav.map(([href, label]) => {
+              const on = here === href;
+              return (
+                <a key={href} href={href} aria-current={on ? 'page' : undefined} style={{ position: 'relative', flexShrink: 0, padding: '10px 12px 13px', fontSize: 14.5, fontWeight: on ? 700 : 600, textDecoration: 'none', whiteSpace: 'nowrap', color: on ? '#FFFFFF' : 'rgba(255, 255, 255, 0.58)' }}>
+                  {label}
+                  {on && <span aria-hidden="true" style={{ position: 'absolute', left: 12, right: 12, bottom: 0, height: 2.5, borderRadius: 2, background: PUB_ACCENT }} />}
+                </a>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -57883,7 +59213,7 @@ function PublicShell({ title, updated, intro, children, wide }) {
         {title && (
           <div style={{ padding: '30px 0 6px' }}>
             <h1 style={{ fontSize: 32, fontWeight: 800, margin: 0, color: 'white', letterSpacing: '-0.02em', lineHeight: 1.15 }}>{title}</h1>
-            {updated && <div style={{ display: 'inline-block', marginTop: 10, padding: '4px 10px', borderRadius: 10, background: 'rgba(255, 255, 255, 0.07)', fontSize: 12.5, fontWeight: 600, color: 'rgba(255, 255, 255, 0.66)' }}>Last updated {updated}</div>}
+            {updated && <div style={{ marginTop: 10, fontSize: 13.5, fontWeight: 500, color: 'rgba(255, 255, 255, 0.55)' }}>Last updated {updated}</div>}
             {intro && <p style={{ fontSize: 16.5, lineHeight: 1.6, color: 'rgba(255, 255, 255, 0.86)', margin: '16px 0 0' }}>{intro}</p>}
           </div>
         )}
@@ -57907,7 +59237,7 @@ function LegalSection({ n, title, children }) {
   return (
     <section style={{ marginTop: 26 }}>
       <h2 style={{ ...legalH, margin: '0 0 8px', display: 'flex', alignItems: 'center', gap: 10 }}>
-        {n != null && <span aria-hidden="true" style={{ width: 26, height: 26, borderRadius: 9, background: 'rgba(139, 108, 255, 0.22)', color: PUB_LINK, fontSize: 13.5, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{n}</span>}
+        {n != null && <span aria-hidden="true" style={{ minWidth: 20, color: PUB_LINK, fontWeight: 800, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>{n}</span>}
         {title}
       </h2>
       {children}
@@ -58000,7 +59330,7 @@ function PublicStorePage() {
     setSelected(key);
     if (topRef.current) topRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
-  const cta = !me ? { label: 'Sign in to get it', href: '/' } : own.frame && own.plate ? { label: 'Wear it in ZChat', href: `/?sets=${selected}` } : { label: 'Get it in ZChat', href: `/?sets=${selected}` };
+  const cta = !me ? { label: 'Sign in to get it', href: '/' } : own.full ? { label: 'Wear it in ZChat', href: `/?sets=${selected}` } : { label: 'Get it in ZChat', href: `/?sets=${selected}` };
   return (
     <PublicShell wide>
       <style>{`
@@ -58014,7 +59344,7 @@ function PublicStorePage() {
         <div style={{ position: 'relative', padding: '18px 18px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
           <div style={{ alignSelf: 'stretch', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.6)' }}>Frames and nameplates</div>
-            {me && own.frame && own.plate && <div style={{ fontSize: 11.5, fontWeight: 800, padding: '4px 10px', borderRadius: 10, background: 'rgba(52,211,153,0.16)', color: '#34d399' }}>Yours</div>}
+            {me && own.full ? <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12.5, fontWeight: 700, color: '#34d399' }}><Check size={14} strokeWidth={2.8} />Yours</div> : <RarityTag rarity={set.rarity} size={12.5} />}
           </div>
           <div key={selected} data-fx-hero="1" style={{ margin: '14px 0 2px', animation: 'zs-rise .35s ease' }}>
             <DecorHero frameKey={selected} plateKey={selected} width={W} photo={me ? me.avatar : ''} name={name} username={username} verified={me && me.verified} custom={me && me.custom_badge} gapColor="#0a0a12" />
@@ -58023,15 +59353,16 @@ function PublicStorePage() {
           <div style={{ fontSize: 14.5, color: 'rgba(255,255,255,0.7)', marginTop: 6, maxWidth: 420, lineHeight: 1.55 }}>{set.about}</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 16 }}>
             <CoinIcon size={28} />
-            <span style={{ fontSize: 32, fontWeight: 800, color: '#FFFFFF' }}>{decorPartPrice(selected) * 2}</span>
+            <span style={{ fontSize: 32, fontWeight: 800, color: '#FFFFFF' }}>{decorPartPrice(selected) * 3}</span>
             <span style={{ fontSize: 14, fontWeight: 700, color: 'rgba(255,255,255,0.6)' }}>coins for the set</span>
           </div>
-          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)', marginTop: 4 }}>or {decorPartPrice(selected)} coins for just the frame or the nameplate</div>
+          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)', marginTop: 4 }}>or {decorPartPrice(selected)} coins for one piece: the frame, the nameplate or the effect</div>
           <a href={cta.href} style={{ marginTop: 16, width: '100%', maxWidth: 360, padding: '16px 18px', borderRadius: 18, boxSizing: 'border-box', fontFamily: FONT, fontWeight: 800, fontSize: 17, textDecoration: 'none', textAlign: 'center', color: '#FFFFFF', background: PUB_ACCENT }}>{cta.label}</a>
           {!me && !viewer.loading && <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.5)', marginTop: 8 }}>Sign in to see every set on your own photo</div>}
-          <div style={{ display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap', justifyContent: 'center' }}>
-            {[[BoltIcon, 'Animated'], ...(set.fx ? [[ProfileFxIcon, 'Profile effect']] : []), [Lock, 'Yours to keep'], [Repeat, 'Mix and match']].map(([Ic, t]) => (
-              <span key={t} role={Ic === ProfileFxIcon ? 'button' : undefined} aria-label={Ic === ProfileFxIcon ? 'Play the profile effect' : undefined} onClick={Ic === ProfileFxIcon ? () => setFxRun(Date.now()) : undefined} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 800, padding: '6px 10px', borderRadius: 10, background: Ic === ProfileFxIcon ? 'rgba(139,108,255,0.24)' : 'rgba(255,255,255,0.06)', color: Ic === ProfileFxIcon ? '#FFFFFF' : 'rgba(255,255,255,0.75)', cursor: Ic === ProfileFxIcon ? 'pointer' : 'default' }}><Ic size={13} strokeWidth={2.4} />{t}</span>
+          <div role="button" aria-label="Play the profile effect" onClick={() => setFxRun(Date.now())} className="zs-card" style={{ marginTop: 14, display: 'inline-flex', alignItems: 'center', gap: 8, height: 40, padding: '0 16px 0 12px', borderRadius: 20, background: 'rgba(255,255,255,0.1)', color: '#FFFFFF', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}><ProfileFxIcon size={18} />Play the profile effect</div>
+          <div style={{ display: 'flex', gap: 18, marginTop: 16, flexWrap: 'wrap', justifyContent: 'center' }}>
+            {[[BoltIcon, 'Animated'], [Lock, 'Yours to keep'], [Repeat, 'Mix and match']].map(([Ic, t]) => (
+              <span key={t} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 650, color: 'rgba(255,255,255,0.7)' }}><Ic size={14} />{t}</span>
             ))}
           </div>
         </div>
@@ -58044,12 +59375,12 @@ function PublicStorePage() {
           const o = decorOwned(viewer.rewards, s.key);
           return (
             <div key={s.key} className="zs-card" role="button" aria-label={`${s.name} set`} onClick={() => pick(s.key)} style={{ position: 'relative', borderRadius: 20, padding: '8px 4px 11px', cursor: 'pointer', overflow: 'hidden', display: 'flex', flexDirection: 'column', alignItems: 'center', background: `radial-gradient(120% 85% at 50% 20%, ${s.accent}30 0%, rgba(13,14,20,0) 64%), linear-gradient(180deg, #161724 0%, #0b0c12 100%)`, border: `1.5px solid ${isSel ? PUB_ACCENT : 'rgba(255,255,255,0.08)'}` }}>
-              {o.frame && o.plate && <div style={{ position: 'absolute', top: 8, right: 8, zIndex: 6, padding: '2px 8px', borderRadius: 8, background: 'rgba(52,211,153,0.9)', color: '#052e1c', fontSize: 10.5, fontWeight: 900 }}>Yours</div>}
-              {s.fx && <div style={{ position: 'absolute', top: 8, left: 8, zIndex: 6, height: 20, padding: '0 7px 0 5px', borderRadius: 8, background: 'linear-gradient(135deg, #9B7DFF 0%, #6A45F5 100%)', color: '#FFFFFF', fontSize: 10.5, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 3 }}><ProfileFxIcon size={12} strokeWidth={2.6} />Effect</div>}
+              {o.full && <div aria-label="Yours" style={{ position: 'absolute', top: 8, right: 8, zIndex: 6, width: 22, height: 22, borderRadius: 11, background: '#34d399', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Check size={13} strokeWidth={3.2} color="#052e1c" /></div>}
               <LazyShow height={Math.round(cardW * 0.82)}>
                 <DecorHero frameKey={s.key} plateKey={s.key} width={cardW} photo={me ? me.avatar : ''} name={name} lazy compact gapColor="#12131b" />
               </LazyShow>
               <div style={{ fontWeight: 900, fontSize: 14, color: 'white', textAlign: 'center', marginTop: 4 }}>{s.name}</div>
+              <div style={{ marginTop: 3 }}><RarityTag rarity={s.rarity} size={11.5} /></div>
             </div>
           );
         })}
@@ -58059,8 +59390,8 @@ function PublicStorePage() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
         {[
           ['1', 'Pick a set', 'See every frame and nameplate on your own photo and name right here.'],
-          ['2', 'Use your coins', `${DECOR_PRICE * 2} coins for a set, or ${DECOR_FX_PRICE * 2} for a set with a profile effect. A frame or a nameplate on its own is half.`],
-          ['3', 'Wear it on your profile', 'Your frame and nameplate show big and animated on your profile page.'],
+          ['2', 'Use your coins', `Every set has a frame, a nameplate and a profile effect. Each piece is ${DECOR_PRICE} coins and a full set is ${DECOR_PRICE * 3}.`],
+          ['3', 'Wear it on your profile', 'Your frame and nameplate show big and animated, and with the full set its effect plays when someone opens your profile.'],
         ].map(([n, t, d]) => (
           <div key={n} style={{ borderRadius: 18, padding: 16, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}>
             <div style={{ width: 30, height: 30, borderRadius: 10, background: 'rgba(139, 108, 255, 0.24)', color: PUB_LINK, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{n}</div>
