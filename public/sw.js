@@ -4,11 +4,13 @@ const REMOTE = 'zchat-remote-v1';
 const SHARE = 'zchat-share';
 const FONTS = 'zchat-fonts-v1';
 const DECOR = 'zchat-decor-v1';
+const STICKERS = 'zchat-stickers-v1';
 const ASSET_LIMIT = 60;
 const STATIC_LIMIT = 500;
 const REMOTE_LIMIT = 700;
 const STATIC_EXT = /\.(png|jpe?g|webp|gif|svg|ico|woff2?|ttf|otf)$/i;
 const DECOR_PATH = /^\/set-[a-z0-9-]+\.webp$/i;
+const STICKER_PATH = /^\/as-[a-z0-9]+-[a-z0-9]+\.webp$/;
 
 function assetsIn(html) {
   const out = new Set();
@@ -91,7 +93,7 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil((async () => {
     const keys = await caches.keys();
-    await Promise.all(keys.filter((k) => k.startsWith('zchat-shell-') && k !== SHELL).map((k) => caches.delete(k)));
+    await Promise.all(keys.filter((k) => (k.startsWith('zchat-shell-') && k !== SHELL) || (k.startsWith('zchat-stickers-') && k !== STICKERS)).map((k) => caches.delete(k)));
     await tidyStatic();
     await self.clients.claim();
   })());
@@ -183,6 +185,20 @@ async function decorFile(event) {
   } catch {}
   const res = await fetch(request);
   if (store && realFile(res) && !request.headers.has('x-zc-save')) event.waitUntil(store.put(key, res.clone()).catch(() => {}));
+  return res;
+}
+
+async function stickerFile(event) {
+  const request = event.request;
+  const key = new URL(request.url).pathname;
+  let store = null;
+  try {
+    store = await caches.open(STICKERS);
+    const hit = await store.match(key);
+    if (hit) return hit;
+  } catch {}
+  const res = await fetch(request);
+  if (store && realFile(res)) event.waitUntil(store.put(key, res.clone()).catch(() => {}));
   return res;
 }
 
@@ -283,6 +299,10 @@ self.addEventListener('fetch', (event) => {
   }
   if (url.pathname.startsWith('/assets/')) {
     event.respondWith(assetFirst(request));
+    return;
+  }
+  if (STICKER_PATH.test(url.pathname) && !request.headers.has('range')) {
+    event.respondWith(stickerFile(event));
     return;
   }
   if (DECOR_PATH.test(url.pathname) && !request.headers.has('range')) {
