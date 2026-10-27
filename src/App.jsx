@@ -538,9 +538,9 @@ function useNavState(initial) {
   };
   return [value, set];
 }
-function Freeze({ frozen, children }) {
-  const last = useRef(children);
-  if (!frozen) last.current = children;
+function Freeze({ frozen, children, render }) {
+  const last = useRef(null);
+  if (!frozen || last.current === null) last.current = render ? render() : children;
   return last.current;
 }
 let rtSeq = 0;
@@ -2629,18 +2629,69 @@ function IgToggle({ on, onClick }) {
 }
 
 function UnderTabs({ tabs, value, onChange, style }) {
-  const { theme } = useTheme();
   return (
-    <div style={{ display: 'flex', borderBottom: `1px solid ${theme.border}`, ...(style || {}) }}>
-      {tabs.map(([k, label, aria]) => {
-        const on = value === k;
+    <LineTabs fill kind="button" h={42} fs={14.5} value={value} style={style}
+      onChange={(k) => { if (k !== value) onChange(k); }}
+      tabs={tabs.map(([k, label, aria]) => ({ k, label, aria: aria || label }))} />
+  );
+}
+
+const LINE_TABS_CSS = '.zlt-t{display:inline-flex;flex-direction:column;align-items:center;min-width:0;max-width:100%}.zlt-t>span{max-width:100%;overflow:hidden;text-overflow:ellipsis}.zlt-t::after{content:attr(data-t);height:0;overflow:hidden;visibility:hidden;font-weight:700;max-width:100%;pointer-events:none}';
+function LineTabs({ tabs, value, onChange, label, kind = 'tab', fill = false, inset = 0, h = 42, fs = 15, line = true, after = null, style }) {
+  const { theme } = useTheme();
+  const wrapRef = useRef(null);
+  const labs = useRef({});
+  const [bar, setBar] = useState(null);
+  const sig = tabs.map((t) => `${t.k}|${t.label}|${t.count || 0}|${t.meta == null ? '' : t.meta}|${t.end ? 1 : 0}|${t.mark ? 1 : 0}`).join(',');
+  const measure = (scroll) => {
+    const w = wrapRef.current;
+    const el = labs.current[String(value)];
+    if (!w || !el || !el.isConnected) { setBar(null); return; }
+    if (!el.offsetWidth) return;
+    const x = el.offsetLeft - 6;
+    const bw = el.offsetWidth + 12;
+    setBar((p) => (p && p.x === x && p.w === bw ? p : { x, w: bw, anim: !!p }));
+    if (!scroll || fill) return;
+    const left = x - 6;
+    const right = x + bw + 6;
+    if (left < w.scrollLeft || right > w.scrollLeft + w.clientWidth) {
+      const to = Math.max(0, left - 24);
+      try { w.scrollTo({ left: to, behavior: reducedMotion() ? 'auto' : 'smooth' }); } catch { w.scrollLeft = to; }
+    }
+  };
+  const lastValue = useRef(undefined);
+  useLayoutEffect(() => { const moved = lastValue.current !== value; lastValue.current = value; measure(moved); }, [value, sig]);
+  useEffect(() => {
+    const on = () => measure(false);
+    window.addEventListener('resize', on);
+    return () => window.removeEventListener('resize', on);
+  }, [value, sig]);
+  const still = reducedMotion();
+  return (
+    <div ref={wrapRef} role={kind === 'tab' ? 'tablist' : 'group'} aria-label={label}
+      style={{ position: 'relative', display: 'flex', alignItems: 'stretch', flexShrink: 0, overflowX: fill ? 'hidden' : 'auto', overflowY: 'hidden', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch', paddingLeft: fill ? 0 : inset, boxShadow: line ? `inset 0 -1px 0 ${theme.hair}` : 'none', ...(style || {}) }}>
+      <style>{LINE_TABS_CSS}</style>
+      {tabs.map((t) => {
+        const on = value === t.k;
+        const pick = kind === 'tab' ? { role: 'tab', 'aria-selected': on } : { role: 'button', 'aria-pressed': on };
+        const hot = on || t.hot;
         return (
-          <div key={k} role="button" aria-label={aria || label} aria-pressed={on} onClick={() => { if (!on) onChange(k); }} style={{
-            flex: 1, minWidth: 0, textAlign: 'center', padding: '11px 4px 9px', marginBottom: -1, fontSize: 14, fontWeight: on ? 700 : 600, cursor: 'pointer', whiteSpace: 'nowrap',
-            color: on ? theme.ink : theme.muted, borderBottom: `2px solid ${on ? theme.ink : 'transparent'}`, transition: 'color 0.15s ease, border-color 0.15s ease',
-          }}>{label}</div>
+          <div key={String(t.k)} {...pick} aria-label={t.aria || t.label} {...(t.props || {})} onClick={(e) => onChange(t.k, e)}
+            style={{ flex: fill ? '1 1 0' : '0 0 auto', minWidth: 0, height: h, padding: fill ? '0 6px' : '0 12px', boxSizing: 'border-box', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', WebkitTapHighlightColor: 'transparent', userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none' }}>
+            <span ref={(el) => { if (el) labs.current[String(t.k)] = el; }} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0, maxWidth: '100%', fontSize: fs, lineHeight: 1.2, fontWeight: on ? 700 : 600, color: on ? theme.ink : theme.muted, whiteSpace: 'nowrap', transition: still ? 'none' : 'color 160ms ease' }}>
+              {t.dot && <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: 4, background: t.dot, flexShrink: 0 }} />}
+              <span className="zlt-t" data-t={t.label}><span>{t.label}</span></span>
+              {t.meta != null && t.meta !== '' && <span aria-hidden="true" style={{ fontWeight: 600, color: theme.muted, fontVariantNumeric: 'tabular-nums' }}>{t.meta}</span>}
+              {t.count ? <span aria-hidden="true" style={{ minWidth: 18, height: 18, padding: '0 5px', boxSizing: 'border-box', borderRadius: 9, background: hot ? theme.coral : theme.soft2, color: hot ? '#FFFFFF' : theme.ink2, fontSize: 11, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>{t.count > 99 ? '99+' : t.count}</span> : null}
+              {t.mark && !on && <span aria-label="New messages" style={{ width: 7, height: 7, borderRadius: '50%', background: theme.coral, flexShrink: 0 }} />}
+              {t.end}
+            </span>
+          </div>
         );
       })}
+      {after}
+      {!fill && inset > 0 && <div aria-hidden="true" style={{ flex: '0 0 auto', width: inset }} />}
+      {bar && <div aria-hidden="true" style={{ position: 'absolute', left: 0, bottom: 0, height: 2.5, borderRadius: 2, width: bar.w, transform: `translateX(${bar.x}px)`, background: theme.coral, pointerEvents: 'none', transition: bar.anim && !still ? 'transform 240ms cubic-bezier(0.2, 0.8, 0.2, 1), width 240ms cubic-bezier(0.2, 0.8, 0.2, 1)' : 'none' }} />}
     </div>
   );
 }
@@ -3216,21 +3267,25 @@ function PillButton({ label, onClick, primary, danger, disabled, small, style, a
 
 function ReminderAlertsSection({ me, onSaved }) {
   const { theme } = useTheme();
-  const [busy, setBusy] = useState('');
+  const [local, setLocal] = useState({});
   const [err, setErr] = useState('');
   if (!me) return null;
+  const isOn = (key) => (key in local ? local[key] : me[key] !== false);
   const flip = async (key) => {
-    if (busy) return;
-    const next = me[key] === false;
-    setBusy(key);
+    const next = !isOn(key);
+    setLocal((l) => ({ ...l, [key]: next }));
     setErr('');
-    const { error } = await supabase.from('profiles').update({ [key]: next }).eq('id', me.id);
-    setBusy('');
-    if (error) { setErr(/alert|column|schema/i.test(String(error.message || '')) ? 'These switch on once the latest ZChat setup is finished.' : 'That could not be saved. Try again.'); return; }
-    if (onSaved) onSaved({ [key]: next });
+    const res = await latestSync(`alert:${key}`, next, (v) => supabase.from('profiles').update({ [key]: v }).eq('id', me.id), !next);
+    if (!res.ok) {
+      const back = res.state === undefined ? !next : res.state;
+      setLocal((l) => ({ ...l, [key]: back }));
+      setErr(/alert|column|schema/i.test(String((res.error && res.error.message) || '')) ? 'These switch on once the latest ZChat setup is finished.' : 'That could not be saved. Try again.');
+      return;
+    }
+    if (onSaved) onSaved({ [key]: res.state });
   };
   const row = (key, icon, label, sub) => {
-    const on = me[key] !== false;
+    const on = isOn(key);
     return <IgRow inset={false} icon={icon} label={label} sub={sub} right={<IgToggle on={on} onClick={() => flip(key)} />} />;
   };
   return (
@@ -3393,14 +3448,14 @@ function MessagePrivacyPage({ me, onClose, onSaved }) {
     try { localStorage.setItem('zchat-spam-filter', next ? 'on' : 'off'); } catch {}
     try { window.dispatchEvent(new Event('zchat-spam-pref')); } catch {}
   };
-  const save = async (patch, revert) => {
+  const save = async (col, v, before, revert) => {
     setErr('');
-    const { error } = await supabase.from('profiles').update(patch).eq('id', me.id);
-    if (error) { revert(); setErr('That could not be saved yet. Try again in a little while.'); return; }
-    onSaved(patch);
+    const res = await latestSync(`msgpriv:${col}`, v, (x) => supabase.from('profiles').update({ [col]: x }).eq('id', me.id), before);
+    if (!res.ok) { revert(res.state === undefined ? before : res.state); setErr('That could not be saved yet. Try again in a little while.'); return; }
+    onSaved({ [col]: res.state });
   };
-  const pick = (v) => { if (v === value) return; const before = value; setValue(v); hapticTap(); save({ privacy_messages: v }, () => setValue(before)); };
-  const toggleRead = () => { const next = !readOn; setReadOn(next); hapticTap(); save({ read_receipts: next }, () => setReadOn(!next)); };
+  const pick = (v) => { if (v === value) return; const before = value; setValue(v); hapticTap(); save('privacy_messages', v, before, setValue); };
+  const toggleRead = () => { const next = !readOn; setReadOn(next); hapticTap(); save('read_receipts', next, !next, setReadOn); };
   const choice = (v, title, sub) => (
     <div role="button" aria-label={title} onClick={() => pick(v)} className="zchat-row-press"
       style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 4px', cursor: 'pointer', borderBottom: `1px solid ${theme.border}` }}>
@@ -3441,14 +3496,19 @@ function MessagePrivacyPage({ me, onClose, onSaved }) {
   );
 }
 
+const peoplePickerMem = new Map();
 function PeoplePickerPage({ title, subtitle, note, table, ownerCol, otherCol, myId, onClose, onCount, zIndex = 70 }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
-  const [people, setPeople] = useState(null);
-  const [picked, setPicked] = useState(() => new Set());
+  const pickKey = `${table}:${myId}`;
+  const pickMem = peoplePickerMem.get(pickKey);
+  const [people, setPeople] = useState(() => (pickMem ? pickMem.people : null));
+  const [picked, setPicked] = useState(() => (pickMem ? new Set(pickMem.picked) : new Set()));
   const [q, setQ] = useState('');
   const [unavailable, setUnavailable] = useState(false);
   const busy = useRef(new Set());
+  const pickTouchRef = useRef(new Map());
+  useEffect(() => { if (people) peoplePickerMem.set(pickKey, { people, picked: [...picked] }); }, [people, picked]);
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -3460,7 +3520,8 @@ function PeoplePickerPage({ title, subtitle, note, table, ownerCol, otherCol, my
       if (!alive) return;
       if (error) setUnavailable(true);
       const chosen = new Set((cur || []).map((r) => r[otherCol]));
-      setPicked(chosen);
+      pickTouchRef.current.forEach((v, id) => { if (v) chosen.add(id); else chosen.delete(id); });
+      if (!error) setPicked(chosen);
       const ids = [...new Set([...(a || []).map((r) => r.following_id), ...(b || []).map((r) => r.follower_id), ...chosen])].filter((x) => x && x !== myId);
       if (!ids.length) { setPeople([]); return; }
       const { data: profs } = await supabase.from('profiles').select('id, name, username, avatar, avatar_frame, nameplate, verified, custom_badge, is_bot, is_deleted').in('id', ids);
@@ -3471,18 +3532,22 @@ function PeoplePickerPage({ title, subtitle, note, table, ownerCol, otherCol, my
   }, []);
   useEffect(() => { if (onCount) onCount(picked.size); }, [picked]);
   const toggle = async (id) => {
-    if (unavailable || busy.current.has(id)) return;
-    busy.current.add(id);
+    if (unavailable) return;
     const has = picked.has(id);
+    pickTouchRef.current.set(id, !has);
     setPicked((prev) => { const n = new Set(prev); if (has) n.delete(id); else n.add(id); return n; });
     hapticTap();
-    const res = has
-      ? await supabase.from(table).delete().eq(ownerCol, myId).eq(otherCol, id)
-      : await supabase.from(table).insert({ [ownerCol]: myId, [otherCol]: id });
-    busy.current.delete(id);
-    if (res && res.error) {
-      setPicked((prev) => { const n = new Set(prev); if (has) n.add(id); else n.delete(id); return n; });
-      setUnavailable(true);
+    const res = await latestSync(`pick:${table}:${id}`, !has, (on) => (on
+      ? supabase.from(table).insert({ [ownerCol]: myId, [otherCol]: id })
+      : supabase.from(table).delete().eq(ownerCol, myId).eq(otherCol, id)), has);
+    if (!res.ok) {
+      const dup = /duplicate|unique/i.test(String((res.error && res.error.message) || ''));
+      if (dup) return;
+      const back = res.state === undefined ? has : res.state;
+      pickTouchRef.current.set(id, back);
+      setPicked((prev) => { const n = new Set(prev); if (back) n.add(id); else n.delete(id); return n; });
+      if (/schema|relation|does not exist|PGRST20/i.test(String((res.error && (res.error.message || res.error.code)) || ''))) setUnavailable(true);
+      else appSnack(friendlyError(res.error, "That change didn't save. Try again."));
     }
   };
   const term = q.trim().toLowerCase();
@@ -3795,14 +3860,15 @@ function MediaAudio({ src, ...rest }) {
   return url ? <audio src={url} {...rest} /> : null;
 }
 let privateBucketOff = false;
-async function uploadChatMedia(file, userId) {
+async function uploadChatMedia(file, userId, dims) {
   if (!privateBucketOff && file && userId) {
     try {
       const fromName = (String(file.name || '').match(/\.([a-z0-9]{2,5})$/i) || [])[1];
       const fromType = String(file.type || '').split('/')[1] || '';
       const ext = String(fromName || fromType.replace(/[^a-z0-9]/gi, '').slice(0, 5) || 'bin').toLowerCase();
       const id = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
-      const path = `${userId}/${id}.${ext}`;
+      const size = dims && dims.w >= 1 && dims.h >= 1 && dims.w < 100000 && dims.h < 100000 ? `-${Math.round(dims.w)}x${Math.round(dims.h)}` : '';
+      const path = `${userId}/${id}${size}.${ext}`;
       const { error } = await supabase.storage.from('chat-private').upload(path, file, { contentType: file.type || 'application/octet-stream', cacheControl: '31536000' });
       if (!error) return { url: `zp:${path}`, error: null };
       const msg = `${error.statusCode || ''} ${error.message || ''} ${error.error || ''}`;
@@ -3862,6 +3928,7 @@ function appFileList() {
   DECOR_ALL.forEach((st) => { add(st.name, `/set-${st.file}-frame.webp`); add(st.name, `/set-${st.file}-plate.webp`); });
   add('Set pictures', DECOR_SPRITE);
   add('Profile effects', '/fx-pack.js');
+  add('Profile effects', '/fx-pack2.js');
   Object.values(FX_ART).forEach((u) => add('Profile effects', u));
   Object.values(SOUND_SPRITES).forEach((sp) => add('Sounds', sp.url));
   add('Sign in photo', WELCOME_PHOTO);
@@ -4128,13 +4195,18 @@ function TranslateSheet({ message, onClose, onCopied }) {
     return () => { alive = false; };
   }, [lang, message.id]);
   const name = (TRANSLATE_LANGS.find(([k]) => k === lang) || [0, 'English'])[1];
-  const pick = (k) => { setLang(k); try { localStorage.setItem('zchat-translate-to', k); } catch {} };
+  const [langOpen, setLangOpen] = useState(false);
+  const pick = (k) => { setLang(k); setLangOpen(false); try { localStorage.setItem('zchat-translate-to', k); } catch {} };
   const footer = (
-    <div style={{ display: 'flex', gap: 6, overflowX: 'auto', padding: '12px 0 4px', scrollbarWidth: 'none' }}>
-      {TRANSLATE_LANGS.map(([k, label]) => (
-        <div key={k} role="button" aria-label={`Translate to ${label}`} onClick={() => pick(k)} className="zchat-press"
-          style={{ flexShrink: 0, padding: '7px 12px', borderRadius: 14, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', background: k === lang ? theme.coral : theme.rowBg, color: k === lang ? '#FFFFFF' : theme.ink }}>{label}</div>
-      ))}
+    <div style={{ marginTop: 14, borderTop: `1px solid ${theme.border}` }}>
+      <div role="button" aria-label="Choose language" aria-expanded={langOpen} onClick={() => { hapticTap(); setLangOpen((v) => !v); }} className="zchat-row-press"
+        style={{ display: 'flex', alignItems: 'center', gap: 14, minHeight: 52, cursor: 'pointer' }}>
+        <span style={{ display: 'flex', width: 24, justifyContent: 'center', color: theme.muted, flexShrink: 0 }}><TranslateIcon size={20} /></span>
+        <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 600, color: theme.ink }}>Translate into</span>
+        <span style={{ fontSize: 15, color: theme.muted, flexShrink: 0 }}>{name}</span>
+        <ChevronRight size={18} color={theme.muted} style={{ flexShrink: 0, transform: langOpen ? 'rotate(90deg)' : 'none', transition: reducedMotion() ? 'none' : 'transform 200ms ease' }} />
+      </div>
+      {langOpen && <ChoiceList label="Translate into" value={lang} onChange={pick} options={langChoiceOptions((l) => `Translate to ${l}`)} style={{ borderTop: `1px solid ${theme.border}`, margin: '0 -4px' }} />}
     </div>
   );
   return <TextToolSheet title="Translation" subtitle={`Into ${name}`} text={state.text} busy={state.busy} error={state.error} footer={footer} onClose={onClose} onCopy={() => { copyTextToClipboard(state.text); if (onCopied) onCopied(); }} />;
@@ -4266,23 +4338,25 @@ function LimitsPage({ me, onClose, onSaved }) {
   const [err, setErr] = useState('');
   const active = !!until && new Date(until).getTime() > Date.now();
   const save = async (patch) => {
-    setBusy(true); setErr('');
+    setErr('');
     const { error } = await supabase.from('profiles').update(patch).eq('id', me.id);
-    setBusy(false);
-    if (error) { setErr('Limits switch on once the latest ZChat setup is finished.'); return false; }
+    if (error) { setErr(/limit|column|schema/i.test(String(error.message || '')) ? 'Limits switch on once the latest ZChat setup is finished.' : friendlyError(error, 'That could not be saved. Try again.')); return false; }
     onSaved(patch);
     return true;
   };
   const turnOn = async () => {
     if (!strangers && !recent) { setErr('Pick at least one group of accounts to limit.'); return; }
     const u = new Date(Date.now() + days * 86400000).toISOString();
-    if (await save({ limits_until: u, limit_strangers: strangers, limit_recent: recent })) { setUntil(u); hapticTap(); }
+    const before = until;
+    setUntil(u);
+    hapticTap();
+    if (!(await save({ limits_until: u, limit_strangers: strangers, limit_recent: recent }))) setUntil(before);
   };
-  const turnOff = async () => { if (await save({ limits_until: null })) setUntil(null); };
+  const turnOff = async () => { const before = until; setUntil(null); hapticTap(); if (!(await save({ limits_until: null }))) setUntil(before); };
   const toggle = async (which) => {
     const next = which === 'strangers' ? !strangers : !recent;
     if (which === 'strangers') setStrangers(next); else setRecent(next);
-    if (active) save(which === 'strangers' ? { limit_strangers: next } : { limit_recent: next });
+    if (active && !(await save(which === 'strangers' ? { limit_strangers: next } : { limit_recent: next }))) { if (which === 'strangers') setStrangers(!next); else setRecent(!next); }
   };
   const untilText = until ? new Date(until).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) : '';
   return (
@@ -4316,18 +4390,23 @@ function LimitsPage({ me, onClose, onSaved }) {
   );
 }
 
+const restrictedRowsMem = new Map();
 function RestrictedAccountsPage({ myId, ids, onClose, onUnrestrict, onOpenProfile }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
-  const [rows, setRows] = useState(null);
+  const [rowsRaw, setRows] = useState(() => restrictedRowsMem.get(myId) || null);
+  const rows = rowsRaw ? rowsRaw.filter((p) => ids.has(p.id)) : rowsRaw;
   const key = [...ids].sort().join(',');
   useEffect(() => {
     let alive = true;
     const list = [...ids];
     if (!list.length) { setRows([]); return undefined; }
-    supabase.from('profiles').select('id, name, username, avatar, avatar_frame, nameplate, verified, custom_badge, is_deleted').in('id', list).then(({ data }) => {
-      if (alive) setRows(sanitizeAvatarList(data || [], myId).filter((p) => !p.is_deleted));
-    }, () => { if (alive) setRows([]); });
+    supabase.from('profiles').select('id, name, username, avatar, avatar_frame, nameplate, verified, custom_badge, is_deleted').in('id', list).then(({ data, error }) => {
+      if (error && !data) { if (alive) setRows((prev) => prev || []); return; }
+      const next = sanitizeAvatarList(data || [], myId).filter((p) => !p.is_deleted);
+      restrictedRowsMem.set(myId, next);
+      if (alive) setRows(next);
+    }, () => { if (alive) setRows((prev) => prev || []); });
     return () => { alive = false; };
   }, [key]);
   return (
@@ -4861,11 +4940,13 @@ function SettingsPanel({ onOpenWallet, onClose, onOpenPrivacy, onLogout, hideAct
       { icon: <Mail />, label: 'Email address', value: currentEmail.length > 20 ? `${currentEmail.slice(0, 18)}\u2026` : currentEmail, onClick: () => setSubPage('email') },
     ] },
     { title: 'Login and security', rows: [
+      { icon: <SecGlyph k="checkup" />, label: 'Security checkup', value: checkupLabel(me && me.id), onClick: () => setSubPage('checkup') },
       { icon: <Lock />, label: 'Change password', onClick: () => setSection('password') },
       { icon: <ShieldCheck />, label: 'Two factor authentication', onClick: () => setSection('twofactor') },
       { icon: <Smartphone />, label: 'Login activity', onClick: () => setSection('sessions') },
       { icon: <LinkIcon />, label: 'Sign in methods', value: sessionForLinks && sessionForLinks.user && sessionForLinks.user.identities ? `${sessionForLinks.user.identities.length} linked` : undefined, onClick: () => setSection('linked') },
       { icon: <Lock />, label: 'App lock', value: appLockOn ? 'On' : 'Off', onClick: () => setSection('applock') },
+      { icon: <SecGlyph k="spend" />, label: 'Spending lock', value: appLockOn && spendLockActive() ? 'On' : 'Off', onClick: () => setSection('spendlock') },
     ] },
     { title: 'Who can see your content', rows: [
       { icon: <Eye />, label: 'Privacy', onClick: () => setSection('privacy') },
@@ -5003,6 +5084,7 @@ function SettingsPanel({ onOpenWallet, onClose, onOpenPrivacy, onLogout, hideAct
           <>
             <SectionHeader title="Privacy & Security" />
             <PageArt k="privacy" text="Choose who can see your profile and who can reach you." />
+            <SettingsRow icon={<SecGlyph k="checkup" />} label="Security checkup" sub="Go through the important settings one at a time" onClick={() => setSubPage('checkup')} />
             <SettingsRow icon={<Eye size={16} />} label="Who can see what" sub="Profile, bio, online, tags, groups, leaderboards" onClick={() => setSection('whocansee')} />
             <SettingsRow icon={<MessageSquare size={16} />} label="Messages and requests" sub="Who can message me, read receipts" onClick={() => setSubPage('messages')} />
             <SettingsRow icon={<CloseFriendsIcon size={16} />} label="Close friends" sub="Share stories with a smaller group" onClick={() => setSubPage('close')} />
@@ -5035,6 +5117,13 @@ function SettingsPanel({ onOpenWallet, onClose, onOpenPrivacy, onLogout, hideAct
           <>
             <SectionHeader title="App lock" />
             <AppLockSection />
+          </>
+        )}
+
+        {sec === 'spendlock' && (
+          <>
+            <SectionHeader title="Spending lock" />
+            <SpendLockSection uid={me && me.id} />
           </>
         )}
 
@@ -5093,6 +5182,10 @@ function SettingsPanel({ onOpenWallet, onClose, onOpenPrivacy, onLogout, hideAct
       {subPage === 'close' && me && <CloseFriendsPicker myId={me.id} onClose={() => setSubPage(null)} />}
       {subPage === 'hidden' && me && <StoryHiddenPicker myId={me.id} onClose={() => setSubPage(null)} />}
       {subPage === 'email' && <ChangeEmailPage email={currentEmail} onClose={() => setSubPage(null)} />}
+      {subPage === 'checkup' && me && (
+        <SecurityCheckupPage me={me} onClose={() => setSubPage(null)} onSaved={(patch) => { if (onPrivacySaved) onPrivacySaved(patch); }}
+          hideActivity={!!hideActivity} onToggleActivity={onToggleActivity} restrictedCount={restrictedCount} onOpenRestricted={onOpenRestricted} />
+      )}
       {section === 'whocansee' && me && (
         <WhoCanSeePanel me={me} onBack={() => setSection('privacy')} onSaved={onPrivacySaved} initialOpen={initialSection && String(initialSection).indexOf('whocansee:') === 0 ? String(initialSection).slice(10) : null} />
       )}
@@ -5184,6 +5277,7 @@ const PRIVACY_ITEMS = [
 const PRIVACY_EXTRA_CHOICES = { privacy_leaderboard: [['nobody', 'Nobody']] };
 function privacyChoicesFor(key) { return [...PRIVACY_CHOICES, ...(PRIVACY_EXTRA_CHOICES[key] || [])]; }
 
+const chosenPeopleMem = new Map();
 function WhoCanSeePanel({ me, onBack, onSaved, initialOpen }) {
   useBackClose(true, onBack);
   const { theme } = useTheme();
@@ -5204,6 +5298,7 @@ function WhoCanSeePanel({ me, onBack, onSaved, initialOpen }) {
   const [people, setPeople] = useState(null);
   const [allow, setAllow] = useState(() => new Set());
   const [busy, setBusy] = useState(false);
+  const allowTouchRef = useRef({});
   useBackClose(!!chosenFor, () => setChosenFor(null));
 
   const save = async (key, value) => {
@@ -5211,38 +5306,56 @@ function WhoCanSeePanel({ me, onBack, onSaved, initialOpen }) {
     setValues((prev) => ({ ...prev, [key]: value }));
     setOpenKey(null);
     setSaveErr('');
+    if (value === 'chosen') openChosen(key);
     const { error } = await supabase.from('profiles').update({ [key]: value }).eq('id', me.id);
     if (error) {
       setValues((prev) => ({ ...prev, [key]: before }));
+      if (value === 'chosen') setChosenFor(null);
       setSaveErr('That setting could not be saved yet. Try again in a little while.');
       return;
     }
     onSaved({ [key]: value });
-    if (value === 'chosen') openChosen(key);
   };
 
   const openChosen = async (key) => {
+    const memKey = `${me.id}:${key}`;
+    const cached = chosenPeopleMem.get(memKey);
     setChosenFor(key);
-    setPeople(null);
-    const [{ data: followers }, { data: allowRows }] = await Promise.all([
+    setPeople(cached ? cached.people : null);
+    if (cached) setAllow(new Set(cached.allow));
+    const [{ data: followers }, { data: allowRows, error: allowErr }] = await Promise.all([
       supabase.from('follows').select('follower_id').eq('following_id', me.id).eq('status', 'accepted'),
       supabase.from('privacy_allow').select('viewer_id').eq('user_id', me.id).eq('scope', key),
     ]);
-    setAllow(new Set((allowRows || []).map((r) => r.viewer_id)));
+    const withTouches = (base) => { const n = new Set(base); const t = allowTouchRef.current[key]; if (t) t.forEach((on, id) => { if (on) n.add(id); else n.delete(id); }); return n; };
+    const fresh = withTouches(allowErr && cached ? cached.allow : (allowRows || []).map((r) => r.viewer_id));
+    if (!allowErr) setAllow(fresh);
     const ids = [...new Set((followers || []).map((f) => f.follower_id))];
-    if (!ids.length) { setPeople([]); return; }
+    if (!ids.length) { chosenPeopleMem.set(memKey, { people: [], allow: [...fresh] }); setPeople([]); return; }
     const { data: profs } = await supabase.from('profiles').select('id, name, username, avatar, avatar_frame, nameplate, verified, custom_badge').in('id', ids);
-    setPeople(sanitizeAvatarList(profs, me.id).filter((x) => !x.is_deleted));
+    const list = sanitizeAvatarList(profs, me.id).filter((x) => !x.is_deleted);
+    chosenPeopleMem.set(memKey, { people: list, allow: [...withTouches(fresh)] });
+    setPeople(list);
   };
 
   const toggleAllow = async (viewerId) => {
     const key = chosenFor;
     const has = allow.has(viewerId);
-    setAllow((prev) => { const n = new Set(prev); if (has) n.delete(viewerId); else n.add(viewerId); return n; });
-    setBusy(true);
-    if (has) await supabase.from('privacy_allow').delete().eq('user_id', me.id).eq('scope', key).eq('viewer_id', viewerId);
-    else await supabase.from('privacy_allow').insert({ user_id: me.id, scope: key, viewer_id: viewerId });
-    setBusy(false);
+    const mark = (on) => {
+      (allowTouchRef.current[key] = allowTouchRef.current[key] || new Map()).set(viewerId, on);
+      setAllow((prev) => { const n = new Set(prev); if (on) n.add(viewerId); else n.delete(viewerId); return n; });
+      const cm = chosenPeopleMem.get(`${me.id}:${key}`);
+      if (cm) chosenPeopleMem.set(`${me.id}:${key}`, { ...cm, allow: on ? [...cm.allow.filter((x) => x !== viewerId), viewerId] : cm.allow.filter((x) => x !== viewerId) });
+    };
+    mark(!has);
+    hapticTap();
+    const res = await latestSync(`allow:${key}:${viewerId}`, !has, (on) => (on
+      ? supabase.from('privacy_allow').insert({ user_id: me.id, scope: key, viewer_id: viewerId })
+      : supabase.from('privacy_allow').delete().eq('user_id', me.id).eq('scope', key).eq('viewer_id', viewerId)), has);
+    if (!res.ok && !/duplicate|unique/i.test(String((res.error && res.error.message) || ''))) {
+      mark(res.state === undefined ? has : res.state);
+      setSaveErr('That change could not be saved. Try again.');
+    }
   };
 
   const label = (v, key) => (privacyChoicesFor(key).find(([k]) => k === v) || PRIVACY_CHOICES[0])[1];
@@ -5288,7 +5401,7 @@ function WhoCanSeePanel({ me, onBack, onSaved, initialOpen }) {
             ) : !people.length ? (
               <div style={{ textAlign: 'center', padding: 40, color: theme.muted, fontSize: 13.5 }}>Nobody follows you yet, so there is nobody to choose.</div>
             ) : people.map((u) => (
-              <div key={u.id} role="button" onClick={() => !busy && toggleAllow(u.id)}
+              <div key={u.id} role="button" onClick={() => toggleAllow(u.id)}
                 style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', cursor: 'pointer', borderBottom: `1px solid ${theme.border}` }}>
                 <Avatar emoji={u.avatar} name={u.name} size={40} />
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -5350,21 +5463,12 @@ function FollowStatusPill({ theirId, viewerId, viewerFollowsThem, theyFollowView
   const state = viewerFollowsThem ? 'accepted' : pending ? 'pending' : 'none';
 
   const toggle = async () => {
-    if (busy) return;
-    setBusy(true);
-    if (viewerFollowsThem || pending) {
-      await supabase.from('follows').delete().eq('follower_id', viewerId).eq('following_id', theirId);
-      setPending(false);
-      onChanged(theirId, false);
-    } else {
-      const status = theirIsPrivate ? 'pending' : 'accepted';
-      const { error } = await supabase.from('follows').insert({ follower_id: viewerId, following_id: theirId, status });
-      if (!error) {
-        if (status === 'pending') setPending(true);
-        onChanged(theirId, status === 'accepted');
-      }
-    }
-    setBusy(false);
+    const next = viewerFollowsThem || pending ? 'none' : (theirIsPrivate ? 'pending' : 'accepted');
+    const apply = (st) => { setPending(st === 'pending'); onChanged(theirId, st === 'accepted'); };
+    apply(next);
+    hapticTap();
+    const res = await followSync(viewerId, theirId, next, state);
+    if (!res.ok) { apply(res.state || state); appSnack(friendlyError(res.error, "That didn't work. Try again.")); }
   };
 
   return <FollowActionButton size="sm" state={state} theyFollowMe={theyFollowViewer} busy={busy} onClick={toggle} />;
@@ -5454,13 +5558,17 @@ function FollowListModal({ userId, viewerId, mode, onClose, onOpenProfile }) {
   const [list, setList] = useState(first ? first.list : null);
   const [iFollow, setIFollow] = useState(first ? first.iFollow : new Set());
   const [followsMe, setFollowsMe] = useState(first ? first.followsMe : new Set());
+  const followTouchRef = useRef(new Map());
 
   useEffect(() => {
     let alive = true;
     fetchFollowList(userId, viewerId, mode).then((res) => {
       if (!alive) return;
       if (!res) { setList((prev) => prev || []); return; }
-      setIFollow(res.iFollow);
+      const mine = new Set(res.iFollow);
+      followTouchRef.current.forEach((on, id) => { if (on) mine.add(id); else mine.delete(id); });
+      if (followTouchRef.current.size) { const hit = followListCache.get(cacheKey); if (hit) followListCache.set(cacheKey, { ...hit, iFollow: mine }); }
+      setIFollow(mine);
       setFollowsMe(res.followsMe);
       setList(res.list);
     });
@@ -5468,6 +5576,7 @@ function FollowListModal({ userId, viewerId, mode, onClose, onOpenProfile }) {
   }, [userId, mode]);
 
   const handleChanged = (theirId, nowFollowing) => {
+    followTouchRef.current.set(theirId, !!nowFollowing);
     setIFollow((prev) => {
       const n = new Set(prev);
       if (nowFollowing) n.add(theirId); else n.delete(theirId);
@@ -5608,12 +5717,36 @@ function shopPrice(kind, key) {
   if (!spec) return null;
   return SHOP_PRICES[spec.rarity] || SHOP_PRICES.epic;
 }
-const walletMem = { uid: null, data: null, at: 0, job: null };
+const walletMem = { uid: null, data: null, at: 0, job: null, mark: 0, pend: 0 };
 function announceWallet() { try { window.dispatchEvent(new Event('zchat-wallet')); } catch {} }
+function walletShow() { try { window.dispatchEvent(new Event('zchat-wallet-shown')); } catch {} }
+function walletKeep(uid, data) {
+  walletMem.uid = uid;
+  walletMem.data = data;
+  try { if (uid && data && data.ready) localStorage.setItem(`zchat-wallet-${uid}`, JSON.stringify(data)); } catch {}
+}
+function walletWarm(uid) {
+  if (!uid || (walletMem.uid === uid && walletMem.data)) return;
+  if (walletMem.uid !== uid) Object.assign(walletMem, { uid, data: null, at: 0, job: null, mark: 0, pend: 0 });
+  try {
+    const o = JSON.parse(localStorage.getItem(`zchat-wallet-${uid}`) || 'null');
+    if (o && typeof o === 'object' && o.ready && Number.isFinite(Number(o.coins))) { walletMem.data = o; walletMem.at = 0; }
+  } catch {}
+}
+function moneyForget(uid) {
+  if (!uid) return;
+  ['wallet', 'ledger', 'looks', 'milestones'].forEach((k) => { try { localStorage.removeItem(`zchat-${k}-${uid}`); } catch {} });
+  if (walletMem.uid === uid) Object.assign(walletMem, { uid: null, data: null, at: 0, job: null, mark: 0, pend: 0 });
+  if (ledgerMem.uid === uid) Object.assign(ledgerMem, { uid: null, rows: null });
+  if (looksMem.uid === uid) Object.assign(looksMem, { uid: null, list: null, job: null, mark: 0, off: false, fresh: false });
+  if (msMem.uid === uid) { Object.assign(msMem, { uid: null, data: null, job: null }); msMem.pend.clear(); }
+}
 async function loadWallet(uid, force) {
+  walletWarm(uid);
   if (!force && walletMem.uid === uid && walletMem.data && Date.now() - walletMem.at < 60000) return walletMem.data;
   if (walletMem.job && walletMem.uid === uid) return walletMem.job;
   walletMem.uid = uid;
+  const started = Date.now();
   walletMem.job = (async () => {
     let tz = 'UTC';
     try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch {}
@@ -5622,34 +5755,93 @@ async function loadWallet(uid, force) {
     const out = !error && row && typeof row === 'object'
       ? { ready: true, coins: Number(row.coins) || 0, streak: Number(row.streak) || 0, canClaim: !!row.can_claim, day: Math.min(7, Math.max(1, Number(row.day) || 1)), invites: Number(row.invites) || 0, canRedeem: !!row.can_redeem, freeSets: Math.max(0, Number(row.free_sets) || 0), freeBubbles: row.free_bubbles == null ? 0 : Math.max(0, Number(row.free_bubbles) || 0), verifiedUntil: row.verified_until || null }
       : { ready: false, coins: 0, streak: 0, canClaim: false, day: 1, invites: 0, canRedeem: false, freeSets: 0, freeBubbles: 0, verifiedUntil: null };
-    walletMem.data = out;
-    walletMem.at = Date.now();
+    if (walletMem.uid !== uid) return out;
     walletMem.job = null;
+    const cur = walletMem.data;
+    if (cur && cur.ready && (!out.ready || walletMem.pend > 0 || walletMem.mark > started)) return cur;
+    walletKeep(uid, out);
+    walletMem.at = Date.now();
     return out;
   })();
   return walletMem.job;
 }
 function useWallet(uid) {
-  const [w, setW] = useState(() => (walletMem.uid === uid ? walletMem.data : null));
+  const [w, setW] = useState(() => { walletWarm(uid); return walletMem.uid === uid ? walletMem.data : null; });
   useEffect(() => {
     let alive = true;
     const on = () => loadWallet(uid, true).then((d) => { if (alive) setW(d); });
+    const shown = () => { if (alive && walletMem.uid === uid && walletMem.data) setW(walletMem.data); };
     loadWallet(uid).then((d) => { if (alive) setW(d); });
     window.addEventListener('zchat-wallet', on);
-    return () => { alive = false; window.removeEventListener('zchat-wallet', on); };
+    window.addEventListener('zchat-wallet-shown', shown);
+    return () => { alive = false; window.removeEventListener('zchat-wallet', on); window.removeEventListener('zchat-wallet-shown', shown); };
   }, [uid]);
   return w;
 }
-async function claimDailyCoins() {
+const WALLET_COUNTS = ['coins', 'freeSets', 'freeBubbles'];
+function walletPatch(uid, change) {
+  const cur = walletMem.uid === uid ? walletMem.data : null;
+  if (!cur || !cur.ready) return;
+  const next = { ...cur, ...(change.set || {}) };
+  WALLET_COUNTS.forEach((k) => { if (change[k]) next[k] = Math.max(0, (Number(cur[k]) || 0) + change[k]); });
+  walletMem.mark = Date.now();
+  walletKeep(uid, next);
+  walletShow();
+}
+function walletSpend(uid, change) {
+  const cur = walletMem.uid === uid ? walletMem.data : null;
+  if (!uid || !cur || !cur.ready) return null;
+  const undo = {};
+  Object.keys(change.set || {}).forEach((k) => { undo[k] = cur[k]; });
+  walletMem.pend += 1;
+  walletPatch(uid, change);
+  return { uid, change, undo, open: true };
+}
+function walletSettle(tok, res) {
+  if (!tok || !tok.open) return;
+  tok.open = false;
+  if (walletMem.uid !== tok.uid) return;
+  walletMem.pend = Math.max(0, walletMem.pend - 1);
+  if (!walletMem.data) return;
+  if (!res || res.error) {
+    const back = { set: tok.undo };
+    WALLET_COUNTS.forEach((k) => { if (tok.change[k]) back[k] = -tok.change[k]; });
+    walletPatch(tok.uid, back);
+    return;
+  }
+  const fix = { ...(res.set || {}) };
+  if (res.coins != null && Number.isFinite(Number(res.coins)) && walletMem.pend === 0) fix.coins = Math.max(0, Math.floor(Number(res.coins)));
+  if (!Object.keys(fix).length) return;
+  walletKeep(tok.uid, { ...walletMem.data, ...fix });
+  walletMem.mark = Date.now();
+  walletMem.at = Date.now();
+  walletShow();
+}
+function walletAfter(uid, tok, res) {
+  if (tok) walletSettle(tok, res);
+  else if (res && !res.error) announceWallet();
+}
+function dailyNext(uid) {
+  const w = uid && walletMem.uid === uid ? walletMem.data : null;
+  if (!w || !w.ready || !w.canClaim) return null;
+  const day = Math.min(7, Math.max(1, Number(w.day) || 1));
+  return { added: DAILY_COINS[day - 1] || 5, day };
+}
+async function claimDailyCoins(uid) {
+  const next = dailyNext(uid);
+  const tok = next ? walletSpend(uid, { coins: next.added, set: { canClaim: false, streak: (Number(walletMem.data.streak) || 0) + 1 } }) : null;
   let tz = 'UTC';
   try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch {}
   const { data, error } = await supabase.rpc('zchat_daily_reward', { p_tz: tz });
   const row = Array.isArray(data) ? data[0] : data;
-  if (error) return { error: rpcFailText('Daily coins', error, 'Coins switch on once the latest ZChat setup is finished.') };
-  if (!row) return { error: 'Come back tomorrow for more coins.' };
-  walletMem.data = null;
-  announceWallet();
-  return { added: Number(row.added) || 0, day: Number(row.day) || 1, coins: Number(row.coins) || 0 };
+  if (error || !row) {
+    walletSettle(tok, { error: true });
+    if (error) return { error: rpcFailText('Daily coins', error, 'Coins switch on once the latest ZChat setup is finished.') };
+    return { error: 'Come back tomorrow for more coins.' };
+  }
+  const day = Math.min(7, Math.max(1, Number(row.day) || 1));
+  walletAfter(uid, tok, { coins: row.coins, set: { canClaim: false, day, ...(row.streak != null ? { streak: Number(row.streak) || 0 } : {}) } });
+  return { added: Number(row.added) || 0, day, coins: Number(row.coins) || 0 };
 }
 
 function CoinBurst({ amount }) {
@@ -5671,12 +5863,13 @@ function DailyRewardCard({ uid, onOpenWallet, style }) {
   if (!w || !w.ready || (!w.canClaim && !done)) return null;
   const claim = async () => {
     if (busy) return;
+    const next = dailyNext(uid);
     setBusy(true);
-    const r = await claimDailyCoins();
+    if (next) { hapticTap(); playUiSound('like'); setDone(next); }
+    const r = await claimDailyCoins(uid);
     setBusy(false);
     if (r.error) { setDone({ err: r.error }); return; }
-    hapticTap();
-    playUiSound('like');
+    if (!next) { hapticTap(); playUiSound('like'); }
     setDone(r);
     setTimeout(() => setDone(null), 2600);
   };
@@ -5801,6 +5994,14 @@ function DailyStreak({ day, claimed }) {
     </div>
   );
 }
+const ledgerMem = { uid: null, rows: null };
+function ledgerWarm(uid) {
+  if (!uid || ledgerMem.uid === uid) return;
+  try {
+    const o = JSON.parse(localStorage.getItem(`zchat-ledger-${uid}`) || 'null');
+    if (Array.isArray(o)) { ledgerMem.uid = uid; ledgerMem.rows = o.filter((r) => r && r.id != null && Number.isFinite(Number(r.delta))); }
+  } catch {}
+}
 function WalletPage({ uid, me, onClose, onOpenCollection }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
@@ -5827,14 +6028,22 @@ function WalletPage({ uid, me, onClose, onOpenCollection }) {
     if (!openCheckout(pk.url, uid)) return;
     setWaitPay(Date.now());
   };
-  const [ledger, setLedger] = useState(null);
+  const [ledger, setLedger] = useState(() => { ledgerWarm(uid); return ledgerMem.uid === uid ? ledgerMem.rows : null; });
+  const pendRows = useRef([]);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');
   const [code, setCode] = useState('');
   const [redeemBusy, setRedeemBusy] = useState(false);
   const loadLedger = async () => {
+    const t0 = Date.now();
     const { data, error } = await supabase.from('coin_ledger').select('*').eq('user_id', uid).order('created_at', { ascending: false }).limit(60);
-    setLedger(error ? [] : (data || []));
+    if (error) { setLedger((cur) => cur || []); return; }
+    const rows = data || [];
+    ledgerMem.uid = uid;
+    ledgerMem.rows = rows;
+    try { localStorage.setItem(`zchat-ledger-${uid}`, JSON.stringify(rows.slice(0, 30).map((r) => ({ id: r.id, delta: r.delta, reason: r.reason, note: r.note || null, created_at: r.created_at })))); } catch {}
+    pendRows.current = pendRows.current.filter((p) => !(p.done && p.done <= t0) && !rows.some((r) => r.reason === p.row.reason && Number(r.delta) === Number(p.row.delta) && (r.note || null) === p.row.note && Date.parse(r.created_at) > Date.parse(p.row.created_at) - 120000));
+    setLedger([...pendRows.current.map((p) => p.row), ...rows]);
   };
   useEffect(() => {
     loadLedger();
@@ -5842,16 +6051,30 @@ function WalletPage({ uid, me, onClose, onOpenCollection }) {
     window.addEventListener('zchat-wallet', on);
     return () => window.removeEventListener('zchat-wallet', on);
   }, [uid]);
-  const flash = (t) => { setNote(t); setTimeout(() => setNote(''), 2600); };
+  const noteTimer = useRef(0);
+  const flash = (t) => { setNote(t); clearTimeout(noteTimer.current); noteTimer.current = setTimeout(() => setNote(''), 2600); };
   const claim = async () => {
     if (busy) return;
+    const next = dailyNext(uid);
+    const p = next ? { row: { id: `local-daily-${Date.now()}`, user_id: uid, delta: next.added, reason: 'daily', note: `Day ${next.day}`, created_at: new Date().toISOString() }, done: 0 } : null;
+    if (p) {
+      hapticTap();
+      playUiSound('like');
+      flash(`${next.added} coins added`);
+      pendRows.current = [p, ...pendRows.current];
+      setLedger((cur) => [p.row, ...(cur || [])]);
+    }
     setBusy(true);
-    const r = await claimDailyCoins();
+    const r = await claimDailyCoins(uid);
     setBusy(false);
-    if (r.error) { flash(r.error); return; }
-    hapticTap();
-    playUiSound('like');
-    flash(`${r.added} coins added`);
+    if (r.error) {
+      if (p) { pendRows.current = pendRows.current.filter((x) => x !== p); setLedger((cur) => (cur || []).filter((x) => x !== p.row)); }
+      flash(r.error);
+      return;
+    }
+    if (p) p.done = Date.now();
+    else { hapticTap(); playUiSound('like'); flash(`${r.added} coins added`); }
+    loadLedger();
   };
   const link = `${siteOrigin()}/?ref=${encodeURIComponent((me && me.username) || '')}`;
   const shareInvite = async () => {
@@ -5905,7 +6128,7 @@ function WalletPage({ uid, me, onClose, onOpenCollection }) {
       <KitSection title="Daily reward" right={w && w.streak > 1 ? `${w.streak} days in a row` : 'Open ZChat every day'} style={{ marginTop: pay && pay.packs.length > 0 ? 26 : 4 }}>
         <DailyStreak day={day} claimed={!!claimed} />
         <div style={{ marginTop: 16 }}>
-          <BigButton label={busy ? 'Claiming' : claimed ? 'Come back tomorrow' : `Claim ${DAILY_COINS[day - 1] || 5} coins`} disabled={busy || !w || !w.ready || claimed} onClick={claim} />
+          <BigButton label={claimed ? 'Come back tomorrow' : busy ? 'Claiming' : `Claim ${DAILY_COINS[day - 1] || 5} coins`} disabled={busy || !w || !w.ready || claimed} onClick={claim} />
         </div>
       </KitSection>
       <KitSection title="Invite friends" style={{ marginTop: 26 }}>
@@ -5945,10 +6168,10 @@ function WalletPage({ uid, me, onClose, onOpenCollection }) {
             <div style={{ fontSize: 14.5, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.note || reasonLabel(r.reason)}</div>
             <div style={{ fontSize: 12, color: theme.muted, marginTop: 1 }}>{fmtDate(new Date(r.created_at), { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</div>
           </div>
-          <div style={{ fontSize: 15, fontWeight: 700, color: Number(r.delta) > 0 ? '#16A34A' : theme.ink, fontVariantNumeric: 'tabular-nums' }}>{Number(r.delta) > 0 ? `+${r.delta}` : r.delta}</div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: Number(r.delta) > 0 ? '#16A34A' : theme.ink, fontVariantNumeric: 'tabular-nums' }}>{Number(r.delta) > 0 ? `+${r.delta}` : `\u2212${Math.abs(Number(r.delta))}`}</div>
         </div>
       ))}
-      {note && <div className="zchat-pop" role="status" style={{ position: 'fixed', left: '50%', bottom: 'calc(30px + env(safe-area-inset-bottom))', transform: 'translateX(-50%)', zIndex: 900, padding: '9px 16px', borderRadius: 18, background: theme.dark ? '#2A2930' : '#111113', color: '#FFFFFF', fontSize: 13.5, fontWeight: 600, whiteSpace: 'nowrap', pointerEvents: 'none' }}>{note}</div>}
+      {note && <div className="zchat-pop" role="status" style={{ position: 'fixed', left: '50%', bottom: 'calc(30px + env(safe-area-inset-bottom))', transform: 'translateX(-50%)', zIndex: 900, padding: '9px 16px', borderRadius: 18, background: theme.dark ? '#2A2930' : '#111113', color: '#FFFFFF', fontSize: 13.5, fontWeight: 600, width: 'max-content', maxWidth: 'calc(100vw - 48px)', boxSizing: 'border-box', textAlign: 'center', pointerEvents: 'none' }}>{note}</div>}
     </FullPage>
   );
 }
@@ -5988,6 +6211,21 @@ function GiftAmountPicker({ value, onChange, max }) {
     </div>
   );
 }
+const giftTheirsMem = new Map();
+const giftTheirsPend = new Map();
+function giftTheirsMerge(uid, rows) {
+  const base = (rows || []).filter((r) => !r.local);
+  const pend = giftTheirsPend.get(uid) || [];
+  const extra = pend.filter(([kind, key]) => !base.some((r) => r.kind === kind && r.reward_key === key && !r.expires_at)).map(([kind, key]) => ({ kind, reward_key: key, expires_at: null, local: true }));
+  return extra.length ? [...base, ...extra] : base;
+}
+function giftTheirsMark(uid, pairs, on) {
+  if (!uid || !pairs || !pairs.length) return;
+  const same = (a, b) => a[0] === b[0] && a[1] === b[1];
+  const pend = (giftTheirsPend.get(uid) || []).filter((p) => !pairs.some((q) => same(p, q)));
+  giftTheirsPend.set(uid, on ? [...pend, ...pairs] : pend);
+  if (giftTheirsMem.has(uid)) giftTheirsMem.set(uid, giftTheirsMerge(uid, giftTheirsMem.get(uid)));
+}
 function GiftSheet({ uid, me, to, onClose, onSent, start, onAsk }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
@@ -6001,16 +6239,21 @@ function GiftSheet({ uid, me, to, onClose, onSent, start, onAsk }) {
   const [noteText, setNoteText] = useState('');
   const [pick, setPick] = useState(() => (firstTab === 'item' ? start.key : null));
   const [part, setPart] = useState('set');
-  const [theirs, setTheirs] = useState(null);
+  const [theirs, setTheirs] = useState(() => giftTheirsMem.get(to.id) || null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const gridRef = useRef(null);
   const gw = useWidthOf(gridRef, typeof window === 'undefined' ? 390 : Math.min(window.innerWidth, 480)) - 40;
   const wish = useWishlist(to.id);
   useEffect(() => {
-    if (theirs) return undefined;
     let alive = true;
-    supabase.from('user_rewards').select('kind, reward_key, expires_at').eq('user_id', to.id).then(({ data }) => { if (alive) setTheirs(data || []); }, () => { if (alive) setTheirs([]); });
+    supabase.from('user_rewards').select('kind, reward_key, expires_at').eq('user_id', to.id).then(({ data, error }) => {
+      if (!alive) return;
+      if (error) { setTheirs((cur) => cur || []); return; }
+      const rows = giftTheirsMerge(to.id, data || []);
+      giftTheirsMem.set(to.id, rows);
+      setTheirs(rows);
+    }, () => { if (alive) setTheirs((cur) => cur || []); });
     return () => { alive = false; };
   }, []);
   const forever = (r) => !r.expires_at;
@@ -6043,21 +6286,29 @@ function GiftSheet({ uid, me, to, onClose, onSent, start, onAsk }) {
   useDecorLoaded(tab === 'item' ? DECOR_SPRITE : null);
   const send = async () => {
     if (busy || !enough) return;
-    if (!(await spendGate(tab === 'coins' ? `Send ${amount} coins` : 'Send a gift'))) return;
-    setBusy(true); setErr('');
+    const isCoins = tab === 'coins';
+    if (!(await spendGate(isCoins ? `Send ${amount} coins to ${first}` : `Send a gift to ${first} for ${cost} coins`, isCoins ? { coins: amount, send: true } : { coins: cost }))) return;
+    setErr('');
     const note = noteText.trim().slice(0, 80) || null;
-    const args = tab === 'coins' ? { p_to: to.id, p_amount: amount, p_note: note } : tab === 'bubble' ? { p_to: to.id, p_kind: 'bubble', p_key: bub, p_note: note } : tab === 'charm' ? { p_to: to.id, p_kind: 'charm', p_key: charm, p_note: note } : { p_to: to.id, p_kind: part === 'set' ? 'set' : part, p_key: set.key, p_note: note };
-    const { data, error } = await supabase.rpc(tab === 'coins' ? 'zchat_send_gift' : 'zchat_gift_item', args);
-    setBusy(false);
-    const row = Array.isArray(data) ? data[0] : data;
-    if (error) { setErr(rpcFailText(tab === 'coins' ? 'Coin gift' : 'Item gift', error, 'Gifts switch on once the latest ZChat setup is finished.')); return; }
-    if (!row || !row.ok) { setErr((row && row.reason) || 'That gift could not be sent.'); return; }
-    walletMem.data = null;
-    announceWallet();
+    const args = isCoins ? { p_to: to.id, p_amount: amount, p_note: note } : tab === 'bubble' ? { p_to: to.id, p_kind: 'bubble', p_key: bub, p_note: note } : tab === 'charm' ? { p_to: to.id, p_kind: 'charm', p_key: charm, p_note: note } : { p_to: to.id, p_kind: part === 'set' ? 'set' : part, p_key: set.key, p_note: note };
+    const gifted = isCoins ? [] : tab === 'bubble' ? [['bubble', bub]] : tab === 'charm' ? [['charm', charm]] : ask.missing.map((k) => [k, set.key]);
+    const label = isCoins ? `You sent ${first} ${amount} coins` : tab === 'bubble' ? `You sent ${first} the ${CHAR_BUBBLES[bub].label} bubble` : tab === 'charm' ? `You sent ${first} the ${CUSTOM_BADGES[charm].label}` : `You sent ${first} the ${set.name} ${ask.what}`;
+    const sent = isCoins ? amount : 0;
+    const job = moneyRun(uid, { coins: cost, run: async () => {
+      const { data, error } = await supabase.rpc(isCoins ? 'zchat_send_gift' : 'zchat_gift_item', args);
+      const row = Array.isArray(data) ? data[0] : data;
+      if (error) return { error: rpcFailText(isCoins ? 'Coin gift' : 'Item gift', error, 'Gifts switch on once the latest ZChat setup is finished.') };
+      if (!row || !row.ok) return { error: (row && row.reason) || 'That gift could not be sent.' };
+      return { ok: true, coins: row.coins };
+    } }).then((r) => {
+      if (r.error) { if (sent) addSpendSent(-sent); giftTheirsMark(to.id, gifted, false); return r; }
+      sendPushNotification(to.id, 'ZChat', `${(me && me.name) || 'Someone'} sent you a gift`, '/?requests=1', me && me.avatar);
+      return r;
+    });
+    giftTheirsMark(to.id, gifted, true);
     hapticTap();
     playUiSound('like');
-    sendPushNotification(to.id, 'ZChat', `${(me && me.name) || 'Someone'} sent you a gift`, '/?requests=1', me && me.avatar);
-    onSent(tab === 'coins' ? `You sent ${first} ${amount} coins` : tab === 'bubble' ? `You sent ${first} the ${CHAR_BUBBLES[bub].label} bubble` : tab === 'charm' ? `You sent ${first} the ${CUSTOM_BADGES[charm].label}` : `You sent ${first} the ${set.name} ${ask.what}`);
+    onSent(label, job);
   };
   const choose = (k) => {
     setPick(k);
@@ -6203,9 +6454,7 @@ async function buyShopItem(kind, key) {
   const row = Array.isArray(data) ? data[0] : data;
   if (error) return { error: rpcFailText('Shop buy', error, 'The shop switches on once the latest ZChat setup is finished.') };
   if (!row || !row.ok) return { error: (row && row.reason) || 'That did not work. Try again.' };
-  walletMem.data = null;
-  announceWallet();
-  return { ok: true };
+  return { ok: true, coins: row.coins };
 }
 
 async function buyDecorSet(key) {
@@ -6213,9 +6462,7 @@ async function buyDecorSet(key) {
   const row = Array.isArray(data) ? data[0] : data;
   if (error) return { error: rpcFailText('Set buy', error, 'The shop switches on once the latest ZChat setup is finished.') };
   if (!row || !row.ok) return { error: (row && row.reason) || 'That did not work. Try again.' };
-  walletMem.data = null;
-  announceWallet();
-  return { ok: true };
+  return { ok: true, coins: row.coins };
 }
 
 async function claimFreeSet(key) {
@@ -6223,9 +6470,66 @@ async function claimFreeSet(key) {
   const row = Array.isArray(data) ? data[0] : data;
   if (error) return { error: rpcFailText('Free set pick', error, 'Free sets switch on once the latest ZChat setup is finished.') };
   if (!row || !row.ok) return { error: (row && row.reason) || 'That did not work. Try again.' };
-  walletMem.data = null;
-  announceWallet();
-  return { ok: true, left: Number(row.left) || 0 };
+  return { ok: true, left: Number(row.left) || 0, set: { freeSets: Math.max(0, Number(row.left) || 0) } };
+}
+
+const rewardOpt = { rows: [], set: null };
+function rewardOptMerge(list) {
+  const base = Array.isArray(list) ? list : [];
+  const extra = rewardOpt.rows.filter((p) => !base.some((r) => r.kind === p.kind && r.reward_key === p.reward_key && !r.expires_at));
+  return extra.length ? [...base, ...extra] : base;
+}
+function rewardOptLoaded(list, started) {
+  rewardOpt.rows = rewardOpt.rows.filter((r) => !(r.done && r.done <= started));
+  return rewardOptMerge(list);
+}
+function rewardOptAdd(uid, pairs) {
+  if (!pairs || !pairs.length) return null;
+  const tag = `opt${Date.now()}${Math.random().toString(36).slice(2, 7)}`;
+  const at = new Date().toISOString();
+  rewardOpt.rows = [...rewardOpt.rows, ...pairs.map(([kind, key]) => ({ id: null, user_id: uid, kind, reward_key: key, expires_at: null, seen: true, granted_at: at, created_at: at, opt: tag }))];
+  if (rewardOpt.set) rewardOpt.set((prev) => rewardOptMerge((prev || []).filter((r) => !r.opt)));
+  pairs.forEach(([kind, key]) => { if (kind === 'bubble') ownedBubblesMark(uid, key, true); });
+  return tag;
+}
+function rewardOptEnd(tag, ok) {
+  if (!tag) return;
+  const mine = rewardOpt.rows.filter((r) => r.opt === tag);
+  if (ok) { rewardOpt.rows = rewardOpt.rows.map((r) => (r.opt === tag ? { ...r, done: Date.now() } : r)); return; }
+  rewardOpt.rows = rewardOpt.rows.filter((r) => r.opt !== tag);
+  if (rewardOpt.set) rewardOpt.set((prev) => (prev || []).filter((r) => r.opt !== tag));
+  mine.forEach((r) => { if (r.kind === 'bubble') ownedBubblesMark(r.user_id, r.reward_key, false); });
+}
+function moneyRun(uid, { coins = 0, freeSets = 0, freeBubbles = 0, grants = [], run }) {
+  const change = {};
+  if (coins) change.coins = -coins;
+  if (freeSets) change.freeSets = -freeSets;
+  if (freeBubbles) change.freeBubbles = -freeBubbles;
+  const tok = Object.keys(change).length ? walletSpend(uid, change) : null;
+  const tag = rewardOptAdd(uid, grants);
+  const end = (r) => {
+    const res = r && (r.ok || r.error) ? r : { error: 'That did not work. Try again.' };
+    walletAfter(uid, tok, res.error ? { error: true } : { coins: res.coins, set: res.set });
+    rewardOptEnd(tag, !res.error);
+    if (!res.error && grants.some(([kind]) => kind === 'bubble')) loadOwnedBubbles(uid, true);
+    return res;
+  };
+  return Promise.resolve().then(run).then(end, () => end({ error: 'That did not work. Try again.' }));
+}
+const moneyToastSubs = new Set();
+function moneyToast(text) {
+  let hit = false;
+  moneyToastSubs.forEach((fn) => { try { if (fn(text)) hit = true; } catch {} });
+  return hit;
+}
+function useMoneyToast(say) {
+  const ref = useRef(say);
+  ref.current = say;
+  useEffect(() => {
+    const fn = (t) => { ref.current(t); return true; };
+    moneyToastSubs.add(fn);
+    return () => { moneyToastSubs.delete(fn); };
+  }, []);
 }
 
 const achToastMem = { ran: false };
@@ -6338,10 +6642,11 @@ async function makeAnswerCard(question, answer, me, accent) {
   return blob ? new File([blob], 'answer.jpg', { type: 'image/jpeg' }) : null;
 }
 
+const questionsMem = new Map();
 function QuestionsPage({ me, onClose, onShareStory, onSaved }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
-  const [rows, setRows] = useState(null);
+  const [rows, setRows] = useState(() => (me && questionsMem.get(me.id)) || null);
   const [open, setOpen] = useState(null);
   const [answer, setAnswer] = useState('');
   const [busy, setBusy] = useState(false);
@@ -6349,11 +6654,16 @@ function QuestionsPage({ me, onClose, onShareStory, onSaved }) {
   const [on, setOn] = useState(!(me && me.ama_on === false));
   const link = `${siteOrigin()}/?ask=${encodeURIComponent((me && me.username) || '')}`;
   useBackClose(!!open, () => setOpen(null));
+  const goneRef = useRef(new Set());
   const load = async () => {
     const { data, error } = await supabase.rpc('zchat_my_questions');
-    setRows(error || !Array.isArray(data) ? [] : data);
+    if (error || !Array.isArray(data)) { setRows((prev) => prev || []); return; }
+    const list = data.filter((x) => !goneRef.current.has(x.id));
+    if (me) questionsMem.set(me.id, list);
+    setRows(list);
   };
   useEffect(() => { load(); }, []);
+  useEffect(() => { if (rows && me) questionsMem.set(me.id, rows); }, [rows]);
   const flash = (t) => { setNote(t); setTimeout(() => setNote(''), 2200); };
   const toggle = async () => {
     const next = !on;
@@ -6387,9 +6697,11 @@ function QuestionsPage({ me, onClose, onShareStory, onSaved }) {
     load();
   };
   const remove = async (q) => {
+    goneRef.current.add(q.id);
     setRows((r) => (r || []).filter((x) => x.id !== q.id));
     setOpen(null);
-    await supabase.rpc('zchat_delete_question', { p_id: q.id });
+    const { error } = await supabase.rpc('zchat_delete_question', { p_id: q.id });
+    if (error) { goneRef.current.delete(q.id); flash(friendlyError(error, 'That question could not be deleted. Try again.')); load(); }
   };
   return (
     <FullPage title="Questions" onBack={onClose} zIndex={760}>
@@ -6411,7 +6723,7 @@ function QuestionsPage({ me, onClose, onShareStory, onSaved }) {
           {rows.map((q) => (
             <div key={q.id} role="listitem" aria-label={`Question ${q.body}`} onClick={() => { setOpen(q); setAnswer(q.answer || ''); }} className="zchat-row-press" style={{ padding: '12px 4px', boxShadow: `0 0.5px 0 ${theme.hair}`, cursor: 'pointer' }}>
               <div style={{ fontSize: 15, color: theme.ink, lineHeight: 1.4, wordBreak: 'break-word' }}>{q.body}</div>
-              <div style={{ fontSize: 12.5, color: q.answer ? theme.coral : theme.muted, marginTop: 4, fontWeight: q.answer ? 600 : 400 }}>{q.answer ? 'Answered' : shortAgo(q.created_at) === 'now' ? 'Just now' : `${shortAgo(q.created_at)} ago`}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12.5, color: q.answer ? kitOnInk(theme) : theme.muted, marginTop: 4, fontWeight: q.answer ? 600 : 400 }}>{q.answer && <LineGlyph k="check" size={14} sw={3.2} />}{q.answer ? 'Answered' : shortAgo(q.created_at) === 'now' ? 'Just now' : `${shortAgo(q.created_at)} ago`}</div>
             </div>
           ))}
         </div>
@@ -6512,16 +6824,28 @@ function NotifThumb({ thumb }) {
   );
 }
 
-function NotificationsPage({ myId, onClose, onOpenProfile, onOpenPost, onOpenStory, onOpenChat, onOpenSettings, onOpenAchievements, onOpenLogins, onOpenQuestions, onOpenCollection, onOpenWallet, onChanged }) {
+const notifPageMem = new Map();
+function NotificationsPage({ myId, onClose, onOpenProfile, onOpenPost, onOpenStory, onOpenChat, onOpenSettings, onOpenAchievements, onOpenLogins, onOpenQuestions, onOpenCollection, onOpenWallet, onChanged, onRequestDone }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
   const notifScrollRef = useRef(null);
-  const [items, setItems] = useState(null);
-  const [iFollow, setIFollow] = useState(() => new Set());
+  const mem = notifPageMem.get(myId);
+  const [items, setItems] = useState(() => (mem ? mem.items : null));
+  const [iFollow, setIFollow] = useState(() => (mem ? mem.iFollow : new Map()));
   const [busy, setBusy] = useState({});
   const [done, setDone] = useState({});
   const seenRef = useRef(notifSeenAt(myId));
+  const seenUpToRef = useRef(Date.now());
+  const touchedRef = useRef({ req: new Map(), fol: new Map() });
+  const patchMem = (fn) => { const cur = notifPageMem.get(myId); if (cur) notifPageMem.set(myId, fn(cur)); };
+  const withTouched = (list) => {
+    const t = touchedRef.current;
+    const seenFo = new Set((list || []).filter((r) => r.kind === 'follow').map((r) => r.actor));
+    return (list || []).filter((r) => !(r.kind === 'follow_request' && (t.req.get(r.actor) === 'deleted' || (t.req.get(r.actor) === 'accepted' && seenFo.has(r.actor)))))
+      .map((r) => (r.kind === 'follow_request' && t.req.get(r.actor) === 'accepted' ? { ...r, kind: 'follow', key: `fo${r.actor}` } : r));
+  };
   const load = async () => {
+    const startedAt = Date.now();
     const since = new Date(Date.now() - 30 * 86400000).toISOString();
     const [reqs, fols, mine, nots] = await Promise.all([
       supabase.from('follows').select('follower_id, created_at').eq('following_id', myId).eq('status', 'pending').limit(100),
@@ -6530,6 +6854,7 @@ function NotificationsPage({ myId, onClose, onOpenProfile, onOpenPost, onOpenSto
       supabase.from('notifications').select('*').eq('user_id', myId).gt('created_at', since).order('created_at', { ascending: false }).limit(250),
     ]);
     const followMap = new Map(((mine && mine.data) || []).map((r) => [r.following_id, r.status]));
+    touchedRef.current.fol.forEach((st, id) => { if (st) followMap.set(id, st); else followMap.delete(id); });
     setIFollow(followMap);
     const rows = [];
     ((reqs && reqs.data) || []).forEach((r) => rows.push({ key: `rq${r.follower_id}`, kind: 'follow_request', actor: r.follower_id, at: r.created_at || new Date().toISOString() }));
@@ -6567,36 +6892,59 @@ function NotificationsPage({ myId, onClose, onOpenProfile, onOpenPost, onOpenSto
       .map((r) => ({ ...r, profile: r.actor ? byId[r.actor] : null, post: r.post_id ? postById[r.post_id] : null }))
       .filter((r) => (r.actor ? !!r.profile : true) && (!r.post_id || !!r.post || r.kind === 'story_mention'))
       .sort((a, b) => new Date(b.at) - new Date(a.at));
-    setItems(out);
+    const shownList = withTouched(out);
+    notifPageMem.set(myId, { items: shownList, iFollow: followMap });
+    setItems(shownList);
+    seenUpToRef.current = Math.max(seenUpToRef.current, startedAt);
   };
   useEffect(() => {
     load();
-    const t = Date.now();
-    return () => { setNotifSeenAt(myId, t); if (onChanged) onChanged(); };
+    setNotifSeenAt(myId, seenUpToRef.current);
+    return () => { setNotifSeenAt(myId, seenUpToRef.current); if (onChanged) onChanged(); };
   }, []);
   const notifPull = usePullRefresh(notifScrollRef, () => load());
   const respond = async (r, accept) => {
-    setBusy((b) => ({ ...b, [r.key]: true }));
-    if (accept) await supabase.from('follows').update({ status: 'accepted' }).eq('follower_id', r.actor).eq('following_id', myId);
-    else await supabase.from('follows').delete().eq('follower_id', r.actor).eq('following_id', myId);
-    setBusy((b) => ({ ...b, [r.key]: false }));
-    setDone((d) => ({ ...d, [r.key]: accept ? 'accepted' : 'deleted' }));
+    const verdict = accept ? 'accepted' : 'deleted';
+    touchedRef.current.req.set(r.actor, verdict);
+    setDone((d) => ({ ...d, [r.key]: verdict }));
+    patchMem((m) => ({ ...m, items: withTouched(m.items) }));
     hapticTap();
+    if (onRequestDone) onRequestDone(1);
+    const { error } = accept
+      ? await supabase.from('follows').update({ status: 'accepted' }).eq('follower_id', r.actor).eq('following_id', myId)
+      : await supabase.from('follows').delete().eq('follower_id', r.actor).eq('following_id', myId);
+    if (error) {
+      touchedRef.current.req.delete(r.actor);
+      setDone((d) => { const n = { ...d }; delete n[r.key]; return n; });
+      notifPageMem.delete(myId);
+      if (onRequestDone) onRequestDone(-1);
+      appSnack(friendlyError(error, accept ? "Couldn't accept that request. Try again." : "Couldn't remove that request. Try again."));
+      return;
+    }
     if (onChanged) onChanged();
   };
   const followBack = async (r) => {
     const p = r.profile;
     const status = p.is_private ? 'pending' : 'accepted';
+    const before = iFollow.get(p.id) || 'none';
+    touchedRef.current.fol.set(p.id, status);
     setIFollow((m) => new Map(m).set(p.id, status));
-    const { error } = await supabase.from('follows').insert({ follower_id: myId, following_id: p.id, status });
-    if (error) { setIFollow((m) => { const n = new Map(m); n.delete(p.id); return n; }); return; }
+    patchMem((m) => ({ ...m, iFollow: new Map(m.iFollow).set(p.id, status) }));
     hapticTap();
+    const res = await followSync(myId, p.id, status, before);
+    if (!res.ok) {
+      const back = res.state && res.state !== 'none' ? res.state : null;
+      touchedRef.current.fol.set(p.id, back);
+      setIFollow((m) => { const n = new Map(m); if (back) n.set(p.id, back); else n.delete(p.id); return n; });
+      notifPageMem.delete(myId);
+      appSnack(friendlyError(res.error, "Couldn't follow right now. Try again."));
+    }
   };
   const thanks = async (r) => {
-    setBusy((b) => ({ ...b, [r.key]: true }));
+    setDone((d) => ({ ...d, [r.key]: 'thanked' }));
+    hapticTap();
     const { error } = await sendMessage(myId, r.actor, 'text', 'Thank you for the gift!', null);
-    setBusy((b) => ({ ...b, [r.key]: false }));
-    if (!error) setDone((d) => ({ ...d, [r.key]: 'thanked' }));
+    if (error) { setDone((d) => { const n = { ...d }; delete n[r.key]; return n; }); appSnack(friendlyError(error, "Couldn't send your thanks. Try again.")); }
   };
   const btn = (label, onClick, primary, aria) => (
     <div role="button" aria-label={aria || label} onClick={(e) => { e.stopPropagation(); onClick(); }} className="zchat-press" style={{ height: 32, padding: '0 14px', borderRadius: 9, background: primary ? theme.coral : theme.soft, color: primary ? '#FFFFFF' : theme.ink, fontSize: 13.5, fontWeight: 700, display: 'flex', alignItems: 'center', flexShrink: 0, cursor: 'pointer', whiteSpace: 'nowrap' }}>{label}</div>
@@ -6619,7 +6967,9 @@ function NotificationsPage({ myId, onClose, onOpenProfile, onOpenPost, onOpenSto
       case 'achievement': return <><b style={{ fontWeight: 700, color: theme.ink }}>New achievement</b> {snippet}</>;
       case 'question': return <><b style={{ fontWeight: 700, color: theme.ink }}>New question</b> {snippet}</>;
       case 'reward': return <><b style={{ fontWeight: 700, color: theme.ink }}>Reward</b> {snippet}</>;
-      case 'login': return <><b style={{ fontWeight: 700, color: theme.ink }}>New login</b> on {snippet || 'a new device'}. Not you? Tap to log it out.</>;
+      case 'login': return r.meta && r.meta.device_id && r.meta.device_id === getDeviceId()
+        ? <><b style={{ fontWeight: 700, color: theme.ink }}>New sign in</b> on this device{r.meta.place ? `, ${r.meta.place}` : ''}.</>
+        : <><b style={{ fontWeight: 700, color: theme.ink }}>New sign in</b> on {snippet || 'a new device'}. Not you? Tap to review your devices.</>;
       case 'drop': return <><b style={{ fontWeight: 700, color: theme.ink }}>New drop</b> {snippet}</>;
       default: return <>{who} {snippet}</>;
     }
@@ -6683,7 +7033,7 @@ function NotificationsPage({ myId, onClose, onOpenProfile, onOpenPost, onOpenSto
                 return (
                   <div key={r.key} role="listitem" aria-label={`Notification ${r.kind}`} onClick={() => open(r)} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', columnGap: 12, rowGap: 8, padding: '9px 20px', cursor: 'pointer', background: unread ? mixHex(theme.coral, theme.bgGradient, theme.dark ? 0.1 : 0.06) : 'transparent' }}>
                     {r.kind === 'login' ? (
-                      <div style={{ width: 46, height: 46, borderRadius: '50%', flexShrink: 0, background: theme.soft, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.ink }}><SessionDeviceIcon label={r.text} size={22} /></div>
+                      <div aria-hidden="true" style={{ width: 46, height: 46, borderRadius: '50%', flexShrink: 0, background: theme.accentSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', color: kitOnInk(theme) }}><SecGlyph k="alert" size={25} sw={2} /></div>
                     ) : r.kind === 'drop' ? (
                       <div style={{ width: 46, height: 46, borderRadius: '50%', flexShrink: 0, background: '#11131F', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>{r.meta && isDecorKey(r.meta.key) ? <DecorStill setKey={r.meta.key} part="frame" width={44} /> : <GiftBoxIcon size={22} color="#FFFFFF" />}</div>
                     ) : r.kind === 'question' ? (
@@ -6706,25 +7056,32 @@ function NotificationsPage({ myId, onClose, onOpenProfile, onOpenPost, onOpenSto
   );
 }
 
-function FollowRequestsPanel({ userId, onClose, onOpenProfile }) {
+const followRequestsMem = new Map();
+function FollowRequestsPanel({ userId, onClose, onOpenProfile, onRequestDone }) {
   const { theme } = useTheme();
-  const [requests, setRequests] = useState(null);
+  const reqMem = followRequestsMem.get(userId);
+  const [requests, setRequests] = useState(() => (reqMem ? reqMem.requests : null));
 
-  const [newFollowers, setNewFollowers] = useState([]);
+  const [newFollowers, setNewFollowers] = useState(() => (reqMem ? reqMem.newFollowers : []));
   const load = async () => {
-    const { data } = await supabase.from('follows').select('*').eq('following_id', userId).eq('status', 'pending');
+    const [{ data }, { data: accepted }, { data: mine }] = await Promise.all([
+      supabase.from('follows').select('*').eq('following_id', userId).eq('status', 'pending'),
+      supabase.from('follows').select('follower_id, created_at').eq('following_id', userId).eq('status', 'accepted').order('created_at', { ascending: false }).limit(60),
+      supabase.from('follows').select('following_id').eq('follower_id', userId).eq('status', 'accepted'),
+    ]);
     const ids = (data || []).map((r) => r.follower_id);
-    const { data: accepted } = await supabase.from('follows').select('follower_id, created_at').eq('following_id', userId).eq('status', 'accepted').order('created_at', { ascending: false }).limit(60);
-    const { data: mine } = await supabase.from('follows').select('following_id').eq('follower_id', userId).eq('status', 'accepted');
     const iFollow = new Set((mine || []).map((x) => x.following_id));
     const accIds = (accepted || []).map((r) => r.follower_id).filter((id) => !ids.includes(id));
     const allIds = [...new Set([...ids, ...accIds])];
-    if (!allIds.length) { setRequests([]); setNewFollowers([]); return; }
+    if (!allIds.length) { followRequestsMem.set(userId, { requests: [], newFollowers: [] }); setRequests([]); setNewFollowers([]); return; }
     const { data: profs } = await supabase.from('profiles').select('*').in('id', allIds);
     const byId = {};
     sanitizeAvatarList(profs, userId).forEach((p) => { byId[p.id] = p; });
-    setRequests(ids.map((id) => byId[id]).filter(Boolean).map((p) => ({ profile: p })));
-    setNewFollowers(accIds.map((id) => byId[id]).filter(Boolean).map((p) => ({ profile: p, followingBack: iFollow.has(p.id), when: (accepted || []).find((r) => r.follower_id === p.id)?.created_at })));
+    const reqList = ids.map((id) => byId[id]).filter(Boolean).map((p) => ({ profile: p }));
+    const newList = accIds.map((id) => byId[id]).filter(Boolean).map((p) => ({ profile: p, followingBack: iFollow.has(p.id), when: (accepted || []).find((r) => r.follower_id === p.id)?.created_at }));
+    followRequestsMem.set(userId, { requests: reqList, newFollowers: newList });
+    setRequests(reqList);
+    setNewFollowers(newList);
   };
   useEffect(() => {
     load();
@@ -6740,21 +7097,50 @@ function FollowRequestsPanel({ userId, onClose, onOpenProfile }) {
   const [handled, setHandled] = useState({});
   const [followingBack, setFollowingBack] = useState({});
   const respond = async (followerId, accept) => {
+    const prevHandled = handled[followerId];
+    setHandled((prev) => ({ ...prev, [followerId]: accept ? 'accepted' : 'declined' }));
+    hapticTap();
+    if (onRequestDone) onRequestDone(1);
+    const mem0 = followRequestsMem.get(userId);
+    const asFollower = (st) => (st === 'accepted' ? true : st === 'pending' ? 'pending' : false);
+    if (mem0) {
+      const row = mem0.requests.find((x) => x.profile.id === followerId);
+      const rest = mem0.requests.filter((x) => x.profile.id !== followerId);
+      followRequestsMem.set(userId, { requests: rest, newFollowers: accept && row ? [{ profile: row.profile, followingBack: asFollower(followingBack[followerId]), when: new Date().toISOString() }, ...mem0.newFollowers.filter((x) => x.profile.id !== followerId)] : mem0.newFollowers });
+    }
     if (accept) {
-      await supabase.from('follows').update({ status: 'accepted' }).eq('follower_id', followerId).eq('following_id', userId);
-      const { data: mine } = await supabase.from('follows').select('status').eq('follower_id', userId).eq('following_id', followerId).maybeSingle();
-      setFollowingBack((prev) => ({ ...prev, [followerId]: mine ? mine.status : 'none' }));
-      setHandled((prev) => ({ ...prev, [followerId]: 'accepted' }));
+      const [{ error }, { data: mine }] = await Promise.all([
+        supabase.from('follows').update({ status: 'accepted' }).eq('follower_id', followerId).eq('following_id', userId),
+        supabase.from('follows').select('status').eq('follower_id', userId).eq('following_id', followerId).maybeSingle(),
+      ]);
+      if (!error) {
+        setFollowingBack((prev) => (prev[followerId] && prev[followerId] !== 'none' ? prev : { ...prev, [followerId]: mine ? mine.status : 'none' }));
+        const m = followRequestsMem.get(userId);
+        if (m && mine) followRequestsMem.set(userId, { ...m, newFollowers: m.newFollowers.map((x) => (x.profile.id === followerId && !x.followingBack ? { ...x, followingBack: asFollower(mine.status) } : x)) });
+        return;
+      }
+      setHandled((prev) => ({ ...prev, [followerId]: prevHandled }));
+      if (mem0) followRequestsMem.set(userId, mem0);
+      if (onRequestDone) onRequestDone(-1);
+      appSnack(friendlyError(error, "Couldn't accept that request. Try again."));
     } else {
-      await supabase.from('follows').delete().eq('follower_id', followerId).eq('following_id', userId);
-      setHandled((prev) => ({ ...prev, [followerId]: 'declined' }));
+      const { error } = await supabase.from('follows').delete().eq('follower_id', followerId).eq('following_id', userId);
+      if (!error) return;
+      setHandled((prev) => ({ ...prev, [followerId]: prevHandled }));
+      if (mem0) followRequestsMem.set(userId, mem0);
+      if (onRequestDone) onRequestDone(-1);
+      appSnack(friendlyError(error, "Couldn't remove that request. Try again."));
     }
   };
   const followBack = async (p) => {
     const status = p.is_private ? 'pending' : 'accepted';
+    const before = followingBack[p.id] || 'none';
     setFollowingBack((prev) => ({ ...prev, [p.id]: status }));
-    const { error } = await supabase.from('follows').insert({ follower_id: userId, following_id: p.id, status });
-    if (error) { setFollowingBack((prev) => ({ ...prev, [p.id]: 'none' })); return; }
+    hapticTap();
+    const markMem = (st) => { const m = followRequestsMem.get(userId); if (m) followRequestsMem.set(userId, { ...m, newFollowers: m.newFollowers.map((x) => (x.profile.id === p.id ? { ...x, followingBack: st === 'accepted' ? true : st === 'pending' ? 'pending' : false } : x)) }); };
+    markMem(status);
+    const res = await followSync(userId, p.id, status, before);
+    if (!res.ok) { setFollowingBack((prev) => ({ ...prev, [p.id]: res.state || 'none' })); markMem(res.state || 'none'); appSnack(friendlyError(res.error, "Couldn't follow right now. Try again.")); return; }
     const { data: meRow } = await supabase.from('profiles').select('name, avatar').eq('id', userId).maybeSingle();
     sendPushNotification(p.id, 'ZChat', status === 'pending' ? `${meRow?.name || 'Someone'} requested to follow you` : `${meRow?.name || 'Someone'} started following you`, status === 'pending' ? '/?requests=1' : `/?profile=${userId}`, meRow?.avatar);
   };
@@ -6786,7 +7172,13 @@ function FollowRequestsPanel({ userId, onClose, onOpenProfile }) {
             <UserListRow key={p.id} profile={p} onClick={() => onOpenProfile && onOpenProfile(p)} sub={`Followed you ${when ? timeAgoLong(when) : 'recently'}`}
               rightContent={followingBack
                 ? <PillButton small disabled label={followingBack === 'pending' ? 'Requested' : 'Following'} />
-                : <PillButton small primary label={p.is_private ? 'Request' : 'Follow back'} onClick={async () => { playUiSound('tap'); setNewFollowers((prev) => prev.map((x) => (x.profile.id === p.id ? { ...x, followingBack: p.is_private ? 'pending' : true } : x))); await supabase.from('follows').upsert({ follower_id: userId, following_id: p.id, status: p.is_private ? 'pending' : 'accepted' }, { onConflict: 'follower_id,following_id' }); }} />} />
+                : <PillButton small primary label={p.is_private ? 'Request' : 'Follow back'} onClick={async () => {
+                  playUiSound('tap');
+                  const mark = (v) => setNewFollowers((prev) => { const next = prev.map((x) => (x.profile.id === p.id ? { ...x, followingBack: v } : x)); const m = followRequestsMem.get(userId); if (m) followRequestsMem.set(userId, { ...m, newFollowers: next }); return next; });
+                  mark(p.is_private ? 'pending' : true);
+                  const res = await followSync(userId, p.id, p.is_private ? 'pending' : 'accepted', 'none');
+                  if (!res.ok) { mark(res.state === 'pending' ? 'pending' : res.state === 'accepted' ? true : false); appSnack(friendlyError(res.error, "Couldn't follow right now. Try again.")); }
+                }} />} />
           ))}
         </>
       )}
@@ -6808,18 +7200,12 @@ function SuggestionCard({ p, sub, myId, following, onChanged, onOpen }) {
   const [busy, setBusy] = useState(false);
   const follow = async (e) => {
     e.stopPropagation();
-    if (busy) return;
-    setBusy(true);
     hapticTap();
-    if (following) {
-      await supabase.from('follows').delete().eq('follower_id', myId).eq('following_id', p.id);
-      onChanged(p.id, null);
-    } else {
-      const status = p.is_private ? 'pending' : 'accepted';
-      const { error } = await supabase.from('follows').insert({ follower_id: myId, following_id: p.id, status });
-      if (!error) onChanged(p.id, status);
-    }
-    setBusy(false);
+    const before = following === 'pending' ? 'pending' : following ? 'accepted' : 'none';
+    const next = following ? 'none' : (p.is_private ? 'pending' : 'accepted');
+    onChanged(p.id, next === 'none' ? null : next);
+    const res = await followSync(myId, p.id, next, before);
+    if (!res.ok) { onChanged(p.id, res.state && res.state !== 'none' ? res.state : null); appSnack(friendlyError(res.error, "That didn't work. Try again.")); }
   };
   return (
     <div role="button" aria-label={`Suggested ${p.name}`} onClick={() => onOpen(p)} className="zchat-press" style={{ flexShrink: 0, width: 132, padding: '14px 10px 12px', borderRadius: 16, background: theme.soft, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: 'pointer', boxSizing: 'border-box' }}>
@@ -6833,73 +7219,77 @@ function SuggestionCard({ p, sub, myId, following, onChanged, onOpen }) {
   );
 }
 
+const searchPageMem = new Map();
 function SearchPage({ myId, me, blockedIds, onClose, onOpenProfile, onOpenTag, onOpenTrending, onOpenChannels, onOpenPosts, onEditInterests }) {
   useBackClose(true, onClose);
   const edgeBack = useEdgeSwipeBack(true);
   const { theme } = useTheme();
+  const sMem = searchPageMem.get(myId);
   const [q, setQ] = useState('');
   const [focused, setFocused] = useState(false);
-  const [follows, setFollows] = useState(() => new Map());
-  const [suggested, setSuggested] = useState(null);
-  const [alike, setAlike] = useState(null);
-  const [popular, setPopular] = useState(null);
+  const [follows, setFollows] = useState(() => (sMem ? new Map(sMem.follows) : new Map()));
+  const [suggested, setSuggested] = useState(() => (sMem ? sMem.suggested : null));
+  const [alike, setAlike] = useState(() => (sMem ? sMem.alike : null));
+  const [popular, setPopular] = useState(() => (sMem ? sMem.popular : null));
   const [res, setRes] = useState(null);
   const [recent, setRecent] = useState(() => readRecentSearches());
   const trending = useTrendingTags();
   const myInterests = Array.isArray(me && me.interests) ? me.interests : [];
+  const followTouchRef = useRef(new Map());
   useEffect(() => {
     let alive = true;
     (async () => {
-      const { data: mine } = await supabase.from('follows').select('following_id, status').eq('follower_id', myId).limit(5000);
-      const fm = new Map((mine || []).map((r) => [r.following_id, r.status]));
+      const since = new Date(Date.now() - 7 * 86400000).toISOString();
+      const [{ data: mine }, moreRes, alikeRes, postsRes] = await Promise.all([
+        supabase.from('follows').select('following_id, status').eq('follower_id', myId).limit(5000),
+        supabase.from('profiles').select('*').eq('is_private', false).eq('is_deleted', false).neq('id', myId).limit(30),
+        myInterests.length ? supabase.from('profiles').select('*').overlaps('interests', myInterests).neq('id', myId).limit(30) : Promise.resolve({ data: [] }),
+        supabase.from('posts').select('*').gt('created_at', since).order('created_at', { ascending: false }).limit(80),
+      ]);
       if (!alive) return;
+      const fm = new Map((mine || []).map((r) => [r.following_id, r.status]));
+      followTouchRef.current.forEach((st, id) => { if (st) fm.set(id, st); else fm.delete(id); });
       setFollows(fm);
       const myFollowing = [...fm.entries()].filter(([, st]) => st === 'accepted').map(([id]) => id);
-      let ids = [];
+      const rows = ((postsRes && postsRes.data) || []).filter((p) => !(blockedIds && blockedIds.has(p.user_id)) && !notYetPosted(p));
+      const [fofRes, likesRes] = await Promise.all([
+        myFollowing.length ? supabase.from('follows').select('follower_id, following_id').in('follower_id', myFollowing.slice(0, 200)).eq('status', 'accepted').limit(2000) : Promise.resolve({ data: [] }),
+        rows.length ? supabase.from('post_likes').select('post_id').in('post_id', rows.map((p) => p.id)) : Promise.resolve({ data: [] }),
+      ]);
+      if (!alive) return;
       const why = {};
-      if (myFollowing.length) {
-        const { data: fof } = await supabase.from('follows').select('follower_id, following_id').in('follower_id', myFollowing.slice(0, 200)).eq('status', 'accepted').limit(2000);
-        const score = new Map();
-        (fof || []).forEach((r) => {
-          if (r.following_id === myId || fm.has(r.following_id) || (blockedIds && blockedIds.has(r.following_id))) return;
-          score.set(r.following_id, (score.get(r.following_id) || 0) + 1);
-          if (!why[r.following_id]) why[r.following_id] = r.follower_id;
-        });
-        ids = [...score.entries()].sort((a, b) => b[1] - a[1]).slice(0, 14).map(([id]) => id);
-      }
+      const score = new Map();
+      ((fofRes && fofRes.data) || []).forEach((r) => {
+        if (r.following_id === myId || fm.has(r.following_id) || (blockedIds && blockedIds.has(r.following_id))) return;
+        score.set(r.following_id, (score.get(r.following_id) || 0) + 1);
+        if (!why[r.following_id]) why[r.following_id] = r.follower_id;
+      });
+      const ids = [...score.entries()].sort((a, b) => b[1] - a[1]).slice(0, 14).map(([id]) => id);
       let list = [];
       if (ids.length) {
-        const { data } = await supabase.from('profiles').select('*').in('id', ids);
+        const viaWant = [...new Set(ids.map((id) => why[id]).filter(Boolean))];
+        const { data } = await supabase.from('profiles').select('*').in('id', [...new Set([...ids, ...viaWant])]);
+        if (!alive) return;
         const order = new Map(ids.map((id, i) => [id, i]));
-        list = sanitizeAvatarList(data || [], myId).filter((p) => !p.is_deleted && !p.is_bot).sort((a, b) => order.get(a.id) - order.get(b.id));
-        const viaIds = [...new Set(list.map((p) => why[p.id]).filter(Boolean))];
-        if (viaIds.length) {
-          const { data: via } = await supabase.from('profiles').select('id, username').in('id', viaIds);
-          const vm = new Map((via || []).map((v) => [v.id, v.username]));
-          list = list.map((p) => ({ ...p, __why: vm.get(why[p.id]) ? `Followed by ${vm.get(why[p.id])}` : null }));
-        }
+        const all = sanitizeAvatarList(data || [], myId);
+        const nameOf = new Map(all.map((p) => [p.id, p.username]));
+        list = all.filter((p) => order.has(p.id) && !p.is_deleted && !p.is_bot).sort((a, b) => order.get(a.id) - order.get(b.id))
+          .map((p) => ({ ...p, __why: nameOf.get(why[p.id]) ? `Followed by ${nameOf.get(why[p.id])}` : null }));
       }
       if (list.length < 6) {
-        const { data } = await supabase.from('profiles').select('*').eq('is_private', false).eq('is_deleted', false).neq('id', myId).limit(30);
-        const more = sanitizeAvatarList(data || [], myId).filter((p) => !p.is_bot && !fm.has(p.id) && !(blockedIds && blockedIds.has(p.id)) && !list.some((x) => x.id === p.id));
+        const more = sanitizeAvatarList((moreRes && moreRes.data) || [], myId).filter((p) => !p.is_bot && !fm.has(p.id) && !(blockedIds && blockedIds.has(p.id)) && !list.some((x) => x.id === p.id));
         list = [...list, ...more].slice(0, 14);
       }
-      if (alive) setSuggested(list);
-      if (myInterests.length) {
-        const { data, error } = await supabase.from('profiles').select('*').overlaps('interests', myInterests).neq('id', myId).limit(30);
-        const lk = error ? [] : sanitizeAvatarList(data || [], myId).filter((p) => !p.is_deleted && !p.is_bot && !fm.has(p.id) && !(blockedIds && blockedIds.has(p.id))).slice(0, 12);
-        if (alive) setAlike(lk.map((p) => ({ ...p, __why: (p.interests || []).filter((x) => myInterests.includes(x)).slice(0, 2).join(', ') })));
-      } else if (alive) setAlike([]);
-      const since = new Date(Date.now() - 7 * 86400000).toISOString();
-      const { data: posts } = await supabase.from('posts').select('*').gt('created_at', since).order('created_at', { ascending: false }).limit(80);
-      const rows = (posts || []).filter((p) => !(blockedIds && blockedIds.has(p.user_id)) && !notYetPosted(p));
-      if (rows.length) {
-        const { data: ls } = await supabase.from('post_likes').select('post_id').in('post_id', rows.map((p) => p.id));
-        const cnt = {};
-        (ls || []).forEach((l) => { cnt[l.post_id] = (cnt[l.post_id] || 0) + 1; });
-        rows.sort((a, b) => (cnt[b.id] || 0) - (cnt[a.id] || 0) || new Date(b.created_at) - new Date(a.created_at));
-      }
-      if (alive) setPopular(rows.slice(0, 18));
+      const lk = myInterests.length && !(alikeRes && alikeRes.error) ? sanitizeAvatarList((alikeRes && alikeRes.data) || [], myId).filter((p) => !p.is_deleted && !p.is_bot && !fm.has(p.id) && !(blockedIds && blockedIds.has(p.id))).slice(0, 12) : [];
+      const alikeList = lk.map((p) => ({ ...p, __why: (p.interests || []).filter((x) => myInterests.includes(x)).slice(0, 2).join(', ') }));
+      const cnt = {};
+      ((likesRes && likesRes.data) || []).forEach((l) => { cnt[l.post_id] = (cnt[l.post_id] || 0) + 1; });
+      rows.sort((a, b) => (cnt[b.id] || 0) - (cnt[a.id] || 0) || new Date(b.created_at) - new Date(a.created_at));
+      const pop = rows.slice(0, 18);
+      searchPageMem.set(myId, { follows: [...fm.entries()], suggested: list, alike: alikeList, popular: pop });
+      setSuggested(list);
+      setAlike(alikeList);
+      setPopular(pop);
     })();
     return () => { alive = false; };
   }, [myId]);
@@ -6923,7 +7313,10 @@ function SearchPage({ myId, me, blockedIds, onClose, onOpenProfile, onOpenTag, o
     }, 220);
     return () => { alive = false; clearTimeout(t); };
   }, [q]);
-  const onChanged = (id, st) => setFollows((m) => { const n = new Map(m); if (st) n.set(id, st); else n.delete(id); return n; });
+  const onChanged = (id, st) => {
+    followTouchRef.current.set(id, st || null);
+    setFollows((m) => { const n = new Map(m); if (st) n.set(id, st); else n.delete(id); const cur = searchPageMem.get(myId); if (cur) searchPageMem.set(myId, { ...cur, follows: [...n.entries()] }); return n; });
+  };
   const openPerson = (p) => { pushRecentSearch({ k: 'p', v: p.id, l: p.username, a: p.avatar || null, n: p.name }); setRecent(readRecentSearches()); onOpenProfile(p); };
   const openTag = (tag) => { pushRecentSearch({ k: 't', v: tag, l: `#${tag}` }); setRecent(readRecentSearches()); onOpenTag(tag); };
   const heading = (t, right) => <div style={{ display: 'flex', alignItems: 'center', padding: '16px 20px 8px' }}><div style={{ flex: 1, fontSize: 15, fontWeight: 800, color: theme.ink }}>{t}</div>{right}</div>;
@@ -6955,7 +7348,7 @@ function SearchPage({ myId, me, blockedIds, onClose, onOpenProfile, onOpenTag, o
             {heading('Recent', <span role="button" aria-label="Clear recent searches" onMouseDown={(e) => e.preventDefault()} onClick={() => { try { localStorage.removeItem('zchat-recent-search'); } catch {} setRecent([]); }} style={{ fontSize: 13.5, fontWeight: 700, color: theme.coral, cursor: 'pointer' }}>Clear all</span>)}
             {recent.map((r) => (
               <div key={`${r.k}${r.v}`} role="button" aria-label={`Recent ${r.l}`} onMouseDown={(e) => e.preventDefault()} onClick={() => (r.k === 'p' ? openPerson({ id: r.v, username: r.l, name: r.n, avatar: r.a }) : openTag(r.v))} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 20px', cursor: 'pointer' }}>
-                {r.k === 'p' ? <Avatar emoji={r.a} name={r.n || r.l} size={44} /> : <div style={{ width: 44, height: 44, borderRadius: '50%', border: `1px solid ${theme.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 700, color: theme.ink }}>#</div>}
+                {r.k === 'p' ? <Avatar emoji={r.a} name={r.n || r.l} size={44} /> : <div style={{ width: 44, height: 44, borderRadius: '50%', border: `1px solid ${theme.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.ink, flexShrink: 0 }}><LineGlyph k="hash" size={22} /></div>}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 15, fontWeight: 600, color: theme.ink }}>{r.k === 'p' ? r.l : r.l}</div>
                   {r.k === 'p' && r.n && <div style={{ fontSize: 13, color: theme.muted }}>{r.n}</div>}
@@ -6978,7 +7371,7 @@ function SearchPage({ myId, me, blockedIds, onClose, onOpenProfile, onOpenTag, o
             {res.tags.length > 0 && heading('Tags')}
             {res.tags.map((r) => (
               <div key={r.tag} role="button" aria-label={`Tag ${r.tag}`} onClick={() => openTag(r.tag)} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 20px', cursor: 'pointer' }}>
-                <div style={{ width: 48, height: 48, borderRadius: '50%', border: `1px solid ${theme.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 21, fontWeight: 700, color: theme.ink, flexShrink: 0 }}>#</div>
+                <div style={{ width: 48, height: 48, borderRadius: '50%', border: `1px solid ${theme.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.ink, flexShrink: 0 }}><LineGlyph k="hash" size={23} /></div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 15, fontWeight: 700, color: theme.ink }}>#{r.tag}</div>
                   <div style={{ fontSize: 13, color: theme.muted }}>{r.n ? `${formatCount(r.n)} posts this week` : 'See posts'}</div>
@@ -7008,6 +7401,7 @@ function SearchPage({ myId, me, blockedIds, onClose, onOpenProfile, onOpenTag, o
               </>
             ) : (myInterests.length === 0 && onEditInterests) ? (
               <div role="button" aria-label="Pick your interests" onClick={onEditInterests} className="zchat-press" style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '16px 20px 0', padding: '13px 14px', borderRadius: 16, background: theme.accentSoft, cursor: 'pointer' }}>
+                <span style={{ display: 'flex', color: kitOnInk(theme), flexShrink: 0 }}><LineGlyph k="heart" size={24} /></span>
                 <span style={{ flex: 1, minWidth: 0 }}>
                   <span style={{ display: 'block', fontSize: 15, fontWeight: 700, color: theme.ink }}>Find people like you</span>
                   <span style={{ display: 'block', fontSize: 13, color: theme.muted, marginTop: 1 }}>Pick a few things you love</span>
@@ -7025,14 +7419,18 @@ function SearchPage({ myId, me, blockedIds, onClose, onOpenProfile, onOpenTag, o
                       <div style={{ fontSize: 15.5, fontWeight: 700, color: theme.ink }}>#{r.tag}</div>
                       <div style={{ fontSize: 12.5, color: theme.muted }}>{formatCount(r.n)} {r.n === 1 ? 'post' : 'posts'}</div>
                     </div>
-                    {r.sample_url && <img src={r.sample_url} alt="" loading="lazy" style={{ width: 44, height: 44, borderRadius: 10, objectFit: 'cover', flexShrink: 0 }} />}
+                    {(r.sample || r.sample_url) && <img src={r.sample || r.sample_url} alt="" loading="lazy" style={{ width: 44, height: 44, borderRadius: 10, objectFit: 'cover', flexShrink: 0 }} />}
                   </div>
                 ))}
                 {rest.length > 0 && (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, padding: '8px 20px 0' }}>
-                    {rest.map((r) => (
-                      <div key={r.tag} role="button" aria-label={`Tag ${r.tag}`} onClick={() => openTag(r.tag)} className="zchat-press" style={{ height: 34, padding: '0 13px', borderRadius: 17, background: theme.soft, fontSize: 14, fontWeight: 600, color: theme.ink, display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer' }}>
-                        <b style={{ color: theme.coral, fontWeight: 800 }}>#</b>{r.tag}<span style={{ fontSize: 12, color: theme.muted }}>{formatCount(r.n)}</span>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', columnGap: 12, padding: '2px 20px 0' }}>
+                    {rest.map((r, i) => (
+                      <div key={r.tag} role="button" aria-label={`Tag ${r.tag}`} onClick={() => openTag(r.tag)} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, padding: '7px 0', cursor: 'pointer' }}>
+                        <div style={{ width: 22, fontSize: 15, fontWeight: 800, color: theme.muted, flexShrink: 0 }}>{i + 4}</div>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: 15, fontWeight: 700, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>#{r.tag}</div>
+                          <div style={{ fontSize: 12.5, color: theme.muted }}>{formatCount(r.n)} {r.n === 1 ? 'post' : 'posts'}</div>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -7064,13 +7462,14 @@ function SearchPage({ myId, me, blockedIds, onClose, onOpenProfile, onOpenTag, o
   );
 }
 
+const INTEREST_GLYPHS = { Music: 'note', Gaming: 'game', Movies: 'clap', Sports: 'sports', Football: 'football', Cricket: 'cricket', Travel: 'travel', Food: 'food', Art: 'art', Tech: 'tech', Coding: 'coding', Fashion: 'fashion', Photography: 'cam', Books: 'books', Fitness: 'gym', Anime: 'sakura', Study: 'study', Pets: 'pets', Nature: 'nature', Cars: 'drive', Dance: 'dance', Memes: 'memes', Science: 'science', Business: 'business' };
 function InterestsPage({ me, onClose, onSaved }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
   const [picked, setPicked] = useState(() => new Set(Array.isArray(me && me.interests) ? me.interests : []));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
-  const toggle = (x) => { hapticTap(); setPicked((s) => { const n = new Set(s); if (n.has(x)) n.delete(x); else if (n.size < 8) n.add(x); return n; }); };
+  const toggle = (x) => { setPicked((s) => { const n = new Set(s); if (n.has(x)) n.delete(x); else if (n.size < 8) n.add(x); return n; }); };
   const save = async () => {
     setBusy(true); setErr('');
     const list = [...picked];
@@ -7083,13 +7482,10 @@ function InterestsPage({ me, onClose, onSaved }) {
   return (
     <FullPage title="Your interests" subtitle={`${picked.size} of 8 picked`} onBack={onClose} zIndex={74}
       footer={<BigButton label={busy ? 'Saving' : 'Save'} disabled={busy} onClick={save} />}>
-      <div style={{ fontSize: 13.5, color: theme.muted, lineHeight: 1.5, padding: '6px 4px 14px' }}>Pick up to 8. They show on your profile and help ZChat suggest people like you.</div>
-      <div role="group" aria-label="Interests" style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-        {INTEREST_OPTIONS.map((x) => {
-          const on = picked.has(x);
-          return <div key={x} role="checkbox" aria-checked={on} aria-label={x} onClick={() => toggle(x)} className="zchat-press" style={{ height: 38, padding: '0 16px', borderRadius: 19, display: 'flex', alignItems: 'center', fontSize: 14.5, fontWeight: 600, cursor: 'pointer', background: on ? theme.coral : theme.soft, color: on ? '#FFFFFF' : theme.ink, transition: 'background 140ms' }}>{x}</div>;
-        })}
-      </div>
+      <div style={{ fontSize: 13.5, color: theme.muted, lineHeight: 1.5, padding: '6px 4px 10px' }}>Pick up to 8. They show on your profile and help ZChat suggest people like you.</div>
+      <PickTiles label="Interests" size={62} wrap value={[...picked]} onChange={toggle}
+        style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', justifyItems: 'center', rowGap: 16, columnGap: 4 }}
+        options={INTEREST_OPTIONS.map((x) => ({ k: x, label: x === 'Photography' ? 'Photos' : x, aria: x, art: <LineGlyph k={INTEREST_GLYPHS[x] || 'heart'} size={28} />, disabled: picked.size >= 8 && !picked.has(x) }))} />
       {err && <div role="alert" style={{ padding: '14px 4px', fontSize: 13, color: theme.danger, fontWeight: 700 }}>{err}</div>}
     </FullPage>
   );
@@ -7608,6 +8004,44 @@ function shadeHex(hex, amt) {
   const ch = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => Math.round(amt < 0 ? v * (1 + amt) : v + (255 - v) * amt));
   return `#${ch.map((v) => Math.max(0, Math.min(255, v)).toString(16).padStart(2, '0')).join('')}`;
 }
+function stickerFillHoles(cv, hex) {
+  const W = cv.width;
+  const H = cv.height;
+  const g = cv.getContext('2d');
+  let img;
+  try { img = g.getImageData(0, 0, W, H); } catch { return; }
+  const d = img.data;
+  const seen = new Uint8Array(W * H);
+  const st = [];
+  const push = (p) => { if (!seen[p] && d[p * 4 + 3] < 128) { seen[p] = 1; st.push(p); } };
+  for (let x = 0; x < W; x++) { push(x); push((H - 1) * W + x); }
+  for (let y = 0; y < H; y++) { push(y * W); push(y * W + W - 1); }
+  while (st.length) {
+    const p = st.pop();
+    const x = p % W;
+    if (x > 0) push(p - 1);
+    if (x < W - 1) push(p + 1);
+    if (p >= W) push(p - W);
+    if (p < W * (H - 1)) push(p + W);
+  }
+  const [r, gg, b] = hexRgb(hex);
+  const holes = [];
+  for (let p = 0; p < W * H; p++) if (!seen[p] && d[p * 4 + 3] < 128) holes.push(p);
+  if (!holes.length) return;
+  const paint = (q) => { const k = q * 4; if (d[k + 3] === 255) return; d[k] = r; d[k + 1] = gg; d[k + 2] = b; d[k + 3] = 255; };
+  holes.forEach((p) => {
+    const x = p % W;
+    const y = (p - x) / W;
+    for (let dy = -2; dy <= 2; dy++) {
+      for (let dx = -2; dx <= 2; dx++) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (nx >= 0 && ny >= 0 && nx < W && ny < H) paint(ny * W + nx);
+      }
+    }
+  });
+  g.putImageData(img, 0, 0);
+}
 function drawTextSticker(canvas, textIn, style, color) {
   const S = 512;
   canvas.width = S;
@@ -7715,19 +8149,52 @@ function drawTextSticker(canvas, textIn, style, color) {
     eachLine((l, x, y) => ctx.fillText(l, x, y));
     ctx.restore();
   } else {
+    const edge = white ? '#111114' : '#FFFFFF';
+    const cut = document.createElement('canvas');
+    cut.width = S;
+    cut.height = S;
+    const cx = cut.getContext('2d');
+    cx.font = ctx.font;
+    cx.textAlign = 'center';
+    cx.textBaseline = 'middle';
+    cx.lineJoin = 'round';
+    cx.miterLimit = 2;
+    cx.translate(S / 2, S / 2);
+    cx.rotate(tilt);
+    cx.strokeStyle = edge;
+    cx.lineWidth = size * 0.46;
+    eachLine((l, x, y) => cx.strokeText(l, x, y));
+    stickerFillHoles(cut, edge);
     ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.shadowColor = 'rgba(0,0,0,0.3)';
     ctx.shadowBlur = 16;
     ctx.shadowOffsetY = 6;
-    ctx.strokeStyle = white ? '#111114' : '#FFFFFF';
-    ctx.lineWidth = size * 0.46;
-    eachLine((l, x, y) => ctx.strokeText(l, x, y));
+    ctx.drawImage(cut, 0, 0);
     ctx.restore();
     ctx.fillStyle = color;
     eachLine((l, x, y) => ctx.fillText(l, x, y));
   }
   ctx.restore();
   return true;
+}
+const textStickerThumbs = new Map();
+function textStickerThumb(style, color) {
+  const key = `${style}|${color}`;
+  if (textStickerThumbs.has(key)) return textStickerThumbs.get(key);
+  let url = '';
+  try {
+    const big = document.createElement('canvas');
+    drawTextSticker(big, 'Aa', style, color);
+    const small = document.createElement('canvas');
+    small.width = 132;
+    small.height = 132;
+    const ctx = small.getContext('2d');
+    ctx.drawImage(big, 46, 46, 420, 420, 0, 0, 132, 132);
+    url = small.toDataURL('image/png');
+  } catch {}
+  textStickerThumbs.set(key, url);
+  return url;
 }
 function TextStickerMaker({ userId, onClose, onDone }) {
   useBackClose(true, onClose);
@@ -7760,7 +8227,6 @@ function TextStickerMaker({ userId, onClose, onDone }) {
       setBusy(false);
     }
   };
-  const chip = (on) => ({ height: 36, padding: '0 14px', borderRadius: 18, display: 'flex', alignItems: 'center', fontSize: 13.5, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0, background: on ? '#FFFFFF' : 'rgba(255,255,255,0.12)', color: on ? '#111114' : '#FFFFFF' });
   return (
     <Portal>
       <div className="zchat-fade" style={{ position: 'fixed', left: 0, right: 0, top: 'var(--zvp-top, 0px)', height: 'var(--zvp-h, 100%)', zIndex: 420, background: '#0E0C14', color: 'white', display: 'flex', flexDirection: 'column', fontFamily: FONT }}>
@@ -7774,13 +8240,14 @@ function TextStickerMaker({ userId, onClose, onDone }) {
         <div style={{ padding: '0 14px calc(14px + env(safe-area-inset-bottom))', display: 'flex', flexDirection: 'column', gap: 12 }}>
           <input value={text} onChange={(e) => setText(e.target.value.slice(0, 40))} placeholder="Type a word or two" aria-label="Sticker text" autoFocus maxLength={40}
             style={{ height: 48, borderRadius: 24, border: 'none', outline: 'none', padding: '0 18px', background: 'rgba(255,255,255,0.12)', color: 'white', fontFamily: FONT, fontSize: 16 }} />
-          <div style={{ display: 'flex', gap: 8, overflowX: 'auto', scrollbarWidth: 'none' }}>
-            {TEXT_STICKER_STYLES.map(([k, label]) => <div key={k} role="button" aria-label={`Style ${label}`} aria-pressed={style === k} onClick={() => { hapticTap(); setStyle(k); }} style={chip(style === k)}>{label}</div>)}
-          </div>
-          <div style={{ display: 'flex', gap: 10, justifyContent: 'space-between' }}>
+          <StudioDark>
+            <PickTiles label="Sticker style" size={58} fit ringBg="#0E0C14" value={style} onChange={(k) => setStyle(k)}
+              options={TEXT_STICKER_STYLES.map(([k, label]) => ({ k, label, aria: `Style ${label}`, art: <img src={textStickerThumb(k, color)} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }} /> }))} />
+          </StudioDark>
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'space-between', padding: '0 4px' }}>
             {TEXT_STICKER_COLORS.map((c) => (
               <div key={c} role="button" aria-label={`Colour ${c}`} aria-pressed={color === c} onClick={() => { hapticTap(); setColor(c); }}
-                style={{ width: 30, height: 30, borderRadius: '50%', background: c, cursor: 'pointer', boxSizing: 'border-box', border: color === c ? '3px solid #FFFFFF' : '2px solid rgba(255,255,255,0.3)', transform: color === c ? 'scale(1.12)' : 'none', transition: 'transform 0.15s ease' }} />
+                style={{ width: 28, height: 28, borderRadius: '50%', background: c, cursor: 'pointer', flexShrink: 0, boxShadow: color === c ? '0 0 0 2.5px #0E0C14, 0 0 0 4.5px #FFFFFF' : 'inset 0 0 0 1.5px rgba(255, 255, 255, 0.3)', transition: 'box-shadow 160ms ease' }} />
             ))}
           </div>
           {err && <div style={{ fontSize: 13, fontWeight: 700, color: '#FF8A8A', textAlign: 'center' }}>{err}</div>}
@@ -8085,11 +8552,15 @@ function MailIcon({ m, size }) {
   return <MailBadgeIcon type={m.type} size={size} badgeTier={badgeTierFromTitle(m.title)} />;
 }
 
-function MailPanel({ myId, onClose, initialMailId }) {
+const mailPanelMem = new Map();
+function MailPanel({ myId, onClose, initialMailId, onUnreadDelta }) {
   useBackClose(true, onClose);
   const edgeBack = useEdgeSwipeBack(true);
   const { theme } = useTheme();
-  const [mails, setMails] = useState(null);
+  const [mails, setMails] = useState(() => mailPanelMem.get(myId) || null);
+  const mailTouchRef = useRef(new Map());
+  useEffect(() => { if (mails) mailPanelMem.set(myId, mails); }, [mails]);
+  const bumpUnread = (d) => { if (d && onUnreadDelta) onUnreadDelta(d); };
   const [selected, setSelected] = useState(null);
   const [pinnedIds, setPinnedIds] = useState(() => {
     try { return new Set(JSON.parse(localStorage.getItem(`zchat-pinned-mails-${myId}`) || '[]')); } catch { return new Set(); }
@@ -8118,7 +8589,8 @@ function MailPanel({ myId, onClose, initialMailId }) {
   };
 
   const load = async () => {
-    const { data } = await supabase.from('mails').select('*').eq('recipient_id', myId).order('created_at', { ascending: false }).limit(100);
+    const { data, error } = await supabase.from('mails').select('*').eq('recipient_id', myId).order('created_at', { ascending: false }).limit(100);
+    if (error && !data) { setMails((prev) => prev || []); return; }
     const senderIds = [...new Set((data || []).map((m) => m.sender_id).filter(Boolean))];
     if (senderIds.length) {
       const { data: profs } = await supabase.from('profiles').select('*').in('id', senderIds);
@@ -8126,7 +8598,8 @@ function MailPanel({ myId, onClose, initialMailId }) {
       sanitizeAvatarList(profs, myId).forEach((p) => { byId[p.id] = p; });
       (data || []).forEach((m) => { if (m.sender_id && byId[m.sender_id]) m.sender = byId[m.sender_id]; });
     }
-    setMails(data || []);
+    const t = mailTouchRef.current;
+    setMails((data || []).filter((m) => t.get(m.id) !== 'gone').map((m) => (t.get(m.id) === 'read' ? { ...m, read: true } : m)));
   };
   useEffect(() => { load(); }, [myId]);
   useEffect(() => {
@@ -8145,8 +8618,11 @@ function MailPanel({ myId, onClose, initialMailId }) {
     if (longPressFiredRef.current) { longPressFiredRef.current = false; return; }
     setSelected(m);
     if (!m.read) {
-      await supabase.from('mails').update({ read: true }).eq('id', m.id);
-      setMails((prev) => prev.map((x) => (x.id === m.id ? { ...x, read: true } : x)));
+      mailTouchRef.current.set(m.id, 'read');
+      setMails((prev) => (prev || []).map((x) => (x.id === m.id ? { ...x, read: true } : x)));
+      bumpUnread(-1);
+      const { error } = await supabase.from('mails').update({ read: true }).eq('id', m.id);
+      if (error) { mailTouchRef.current.delete(m.id); setMails((prev) => (prev || []).map((x) => (x.id === m.id ? { ...x, read: false } : x))); bumpUnread(1); }
     }
   };
 
@@ -8158,11 +8634,15 @@ function MailPanel({ myId, onClose, initialMailId }) {
   const cancelPress = () => clearTimeout(pressTimerRef.current);
 
   const deleteMail = async (id) => {
+    const gone = (mails || []).find((x) => x.id === id);
+    mailTouchRef.current.set(id, 'gone');
     setMails((prev) => (prev || []).filter((x) => x.id !== id));
     const next = new Set(pinnedIds); next.delete(id); savePinned(next);
     setActionFor(null);
     if (selected?.id === id) setSelected(null);
-    await supabase.from('mails').delete().eq('id', id);
+    if (gone && !gone.read) bumpUnread(-1);
+    const { error } = await supabase.from('mails').delete().eq('id', id);
+    if (error) { mailTouchRef.current.delete(id); if (gone && !gone.read) bumpUnread(1); load(); }
   };
 
   const timeAgo = (iso) => {
@@ -8184,19 +8664,26 @@ function MailPanel({ myId, onClose, initialMailId }) {
   const markAllRead = async () => {
     const unread = (mails || []).filter((m) => !m.read).map((m) => m.id);
     if (!unread.length) return;
+    unread.forEach((id) => mailTouchRef.current.set(id, 'read'));
     setMails((prev) => prev.map((m) => ({ ...m, read: true })));
+    bumpUnread(-unread.length);
     playUiSound('tap');
-    await supabase.from('mails').update({ read: true }).in('id', unread);
+    const { error } = await supabase.from('mails').update({ read: true }).in('id', unread);
+    if (error) { unread.forEach((id) => mailTouchRef.current.delete(id)); bumpUnread(unread.length); load(); }
   };
   const deletePicked = async () => {
     const ids = [...picked];
     if (!ids.length) return;
+    const unreadGone = (mails || []).filter((m) => picked.has(m.id) && !m.read).length;
+    ids.forEach((id) => mailTouchRef.current.set(id, 'gone'));
     setMails((prev) => prev.filter((m) => !picked.has(m.id)));
     setPicked(new Set());
     setPicking(false);
     setConfirmBulk(null);
+    bumpUnread(-unreadGone);
     playUiSound('delete');
-    await supabase.from('mails').delete().in('id', ids);
+    const { error } = await supabase.from('mails').delete().in('id', ids);
+    if (error) { ids.forEach((id) => mailTouchRef.current.delete(id)); bumpUnread(unreadGone); load(); }
   };
 
   return (
@@ -8505,22 +8992,14 @@ function ChatThemePage({ value, onSelect, onClose, title, avatar, group, userId,
       <div style={{ flexShrink: 0, padding: '6px 16px 0' }}>
         <ChatLookPreview key={`${pick}-${dimTick}`} wallpaper={pick} title={title} avatar={avatar} height={172} />
         {isPhoto && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingTop: 10 }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: theme.muted, whiteSpace: 'nowrap' }}>Dim</span>
-            <input type="range" min={0} max={70} step={5} value={Math.round(dim * 100)} aria-label="Dim wallpaper" onChange={(e) => { setWallDim(pick, Number(e.target.value) / 100); setDimTick((t) => t + 1); }} style={{ flex: 1, accentColor: theme.coral }} />
-            <span style={{ fontSize: 13, fontWeight: 700, color: theme.ink, width: 40, textAlign: 'right' }}>{Math.round(dim * 100)}%</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, paddingTop: 8 }}>
+            <span aria-hidden="true" style={{ display: 'flex', color: theme.muted, flexShrink: 0 }}><Sun size={17} strokeWidth={2} /></span>
+            <KitSlider value={Math.round(dim * 100)} min={0} max={70} step={5} label="Dim wallpaper" onChange={(v) => { setWallDim(pick, v / 100); setDimTick((t) => t + 1); }} style={{ flex: 1, width: 'auto', minWidth: 0 }} />
+            <span style={{ fontSize: 13.5, fontWeight: 600, color: theme.muted, width: 38, textAlign: 'right', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>{Math.round(dim * 100)}%</span>
           </div>
         )}
-        <div role="tablist" aria-label="Theme kinds" style={{ display: 'flex', gap: 6, padding: '12px 0 10px', overflowX: 'auto', scrollbarWidth: 'none' }}>
-          {THEME_TABS.map(([k, l]) => {
-            const on = tab === k;
-            return (
-              <div key={k} role="tab" aria-selected={on} aria-label={`${l}, ${counts[k]}`} onClick={() => changeTab(k)} className="zchat-press" style={{ flex: '1 1 0', minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', height: 34, padding: '0 8px', borderRadius: 17, cursor: 'pointer', background: on ? theme.ink : theme.rowBg, color: on ? c.bg : theme.ink, fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap' }}>
-                {l}
-              </div>
-            );
-          })}
-        </div>
+        <LineTabs fill label="Theme kinds" value={tab} onChange={(k) => changeTab(k)} h={44} fs={14.5} style={{ margin: '6px -16px 0' }}
+          tabs={THEME_TABS.map(([k, l]) => ({ k, label: l, aria: `${l}, ${counts[k]}` }))} />
       </div>
       <input ref={photoRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={pickPhoto} />
       <div ref={gridRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain', padding: '4px 16px 18px' }}>
@@ -8537,7 +9016,7 @@ function ChatThemePage({ value, onSelect, onClose, title, avatar, group, userId,
             </div>
             {userId && (
               <div role="button" aria-label="Wallpaper create with AI" onClick={() => setAiOpen(true)} className="zchat-press" style={{ display: 'flex', flexDirection: 'column', gap: 6, cursor: 'pointer' }}>
-                <div style={{ aspectRatio: '3 / 4', borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.ink, boxShadow: `inset 0 0 0 1px ${theme.border}`, background: theme.rowBg }}><AiSparkIcon size={24} /></div>
+                <div style={{ aspectRatio: '3 / 4', borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.ink, boxShadow: `inset 0 0 0 1px ${theme.border}`, background: theme.rowBg }}><MakeImageGlyph size={28} /></div>
                 <span style={{ fontSize: 12, fontWeight: 500, color: theme.muted, textAlign: 'center' }}>Create with AI</span>
               </div>
             )}
@@ -8552,6 +9031,17 @@ function ChatThemePage({ value, onSelect, onClose, title, avatar, group, userId,
       </div>
       {aiOpen && <AiStudioPage myId={userId} mode="image" startKind="wallpaper" onClose={() => setAiOpen(false)} onUseWallpaper={(key) => { hapticTap(); setPick(key); setCustomKey(key); setTab('photo'); }} />}
     </FullPage>
+  );
+}
+function MakeImageGlyph({ size = 28 }) {
+  const p = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round' };
+  return (
+    <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true" style={{ display: 'block' }}>
+      <path d="M17 22.5H7a3.4 3.4 0 0 1-3.4-3.4V9.4A3.4 3.4 0 0 1 7 6h12.6A3.4 3.4 0 0 1 23 9.4V12" {...p} />
+      <circle cx="9.8" cy="11.4" r="1.7" {...p} />
+      <path d="M4.2 18.6l4.6-4.2 3.4 3 3.2-2.6" {...p} />
+      <path d="M25.4 14.6a2 2 0 0 1 2.8 2.8l-8.6 8.6-3.8 1 1-3.8z" {...p} />
+    </svg>
   );
 }
 
@@ -8636,13 +9126,13 @@ function PinPad({ value, onChange, length = 4 }) {
   );
 }
 
-function PinKeypad({ onDigit, onBackspace }) {
+function PinKeypad({ onDigit, onBackspace, corner }) {
   const { theme } = useTheme();
   const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', '\u232B'];
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
       {keys.map((k, i) => (
-        <div key={i} onClick={() => { if (k === '\u232B') onBackspace(); else if (k) onDigit(k); }} style={{
+        k === '' && corner ? <div key={i} style={{ height: 50, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{corner}</div> : <div key={i} onClick={() => { if (k === '\u232B') onBackspace(); else if (k) onDigit(k); }} style={{
           height: 50, borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: 18, fontWeight: 700, color: theme.ink, background: k ? theme.rowBg : 'transparent',
           cursor: k ? 'pointer' : 'default',
@@ -8699,11 +9189,24 @@ function ChatLockSetup({ onCancel, onConfirm }) {
   );
 }
 
-function ChatLockUnlock({ onCancel, onUnlock, correctHash }) {
+function ChatLockUnlock({ onCancel, onUnlock, correctHash, allowBio }) {
   useBackClose(true, onCancel);
   const { theme } = useTheme();
   const [pin, setPin] = useState('');
   const [err, setErr] = useState('');
+  const bioOk = useBioReady();
+  const hasBio = !!allowBio && !!bioCredId() && bioOk === true;
+  const [bioBusy, setBioBusy] = useState(false);
+  const [bioMissed, setBioMissed] = useState(false);
+  const tryBio = async () => {
+    if (bioBusy) return;
+    setBioBusy(true);
+    const t0 = Date.now();
+    if (await bioCheck()) { onUnlock(); return; }
+    setBioBusy(false);
+    if (Date.now() - t0 > 900) setBioMissed(true);
+  };
+  useEffect(() => { if (hasBio) { const t = setTimeout(tryBio, 300); return () => clearTimeout(t); } return undefined; }, [hasBio]);
 
   const handleDigit = async (d) => {
     if (pin.length >= 4) return;
@@ -8732,10 +9235,10 @@ function ChatLockUnlock({ onCancel, onUnlock, correctHash }) {
     }} className="zchat-fade">
       <Lock size={28} color={theme.coral} style={{ marginBottom: 10 }} />
       <div style={{ fontWeight: 800, fontSize: 16, color: theme.ink, marginBottom: 4 }}>Enter PIN</div>
-      <div style={{ fontSize: 12, color: err ? theme.danger : theme.muted, marginBottom: 18, minHeight: 16 }}>{err || 'This chat is locked'}</div>
+      <div style={{ fontSize: 12, color: err ? theme.danger : theme.muted, marginBottom: 18, minHeight: 16 }}>{err || (bioMissed ? 'Enter your PIN instead' : 'This chat is locked')}</div>
       <PinPad value={pin} />
       <div style={{ width: '100%', maxWidth: 220 }}>
-        <PinKeypad onDigit={handleDigit} onBackspace={() => setPin((p) => p.slice(0, -1))} />
+        <PinKeypad onDigit={handleDigit} onBackspace={() => setPin((p) => p.slice(0, -1))} corner={hasBio ? <BioKey size={50} busy={bioBusy} onClick={tryBio} /> : null} />
       </div>
       <span style={{ ...ghostBtn(theme), marginTop: 22 }} onClick={onCancel}>Back</span>
     </div>
@@ -8929,24 +9432,32 @@ function ChatSettingsPanel({ conv, myId, meAvatar, meName, isPinned, isLocked, w
   }, [conv.otherProfile.id]);
 
   const saveMyAlias = async (val) => {
-    if (val.trim()) {
-      await supabase.from('self_aliases').upsert({ user_id: myId, viewer_id: conv.otherProfile.id, alias: val.trim() }, { onConflict: 'user_id,viewer_id' });
-    } else {
-      await supabase.from('self_aliases').delete().eq('user_id', myId).eq('viewer_id', conv.otherProfile.id);
-    }
-    await sendMessage(myId, conv.otherProfile.id, 'system', val.trim() ? `Now appears as "${val.trim()}" to you` : 'Reverted to their real name', null);
-    setMyAlias(val.trim());
+    const next = val.trim();
+    const before = myAlias;
+    setMyAlias(next);
+    const undo = (error) => { setMyAlias(before); appAlert(friendlyError(error, "Couldn't save that name. Try again.")); };
+    (next
+      ? supabase.from('self_aliases').upsert({ user_id: myId, viewer_id: conv.otherProfile.id, alias: next }, { onConflict: 'user_id,viewer_id' })
+      : supabase.from('self_aliases').delete().eq('user_id', myId).eq('viewer_id', conv.otherProfile.id)
+    ).then(({ error }) => {
+      if (error) { undo(error); return; }
+      sendMessage(myId, conv.otherProfile.id, 'system', next ? `Now appears as "${next}" to you` : 'Reverted to their real name', null);
+    }, undo);
   };
   const saveNickname = async (val) => {
-    if (val.trim()) {
-      await supabase.from('contact_nicknames').upsert({ owner_id: myId, contact_id: conv.otherProfile.id, nickname: val.trim() }, { onConflict: 'owner_id,contact_id' });
-      await sendMessage(myId, conv.otherProfile.id, 'system', `Nickname updated to "${val.trim()}"`, null);
-    } else {
-      await supabase.from('contact_nicknames').delete().eq('owner_id', myId).eq('contact_id', conv.otherProfile.id);
-      await sendMessage(myId, conv.otherProfile.id, 'system', 'Nickname removed', null);
-    }
-    setNickname(val.trim());
-    onNicknameSaved(val.trim() || null, conv.otherProfile.id);
+    const next = val.trim();
+    const before = nickname;
+    const otherId = conv.otherProfile.id;
+    setNickname(next);
+    onNicknameSaved(next || null, otherId);
+    const undo = (error) => { setNickname(before); onNicknameSaved(before || null, otherId); appAlert(friendlyError(error, "Couldn't save that nickname. Try again.")); };
+    (next
+      ? supabase.from('contact_nicknames').upsert({ owner_id: myId, contact_id: otherId, nickname: next }, { onConflict: 'owner_id,contact_id' })
+      : supabase.from('contact_nicknames').delete().eq('owner_id', myId).eq('contact_id', otherId)
+    ).then(({ error }) => {
+      if (error) { undo(error); return; }
+      sendMessage(myId, otherId, 'system', next ? `Nickname updated to "${next}"` : 'Nickname removed', null);
+    }, undo);
   };
 
   const otherName = conv.realName || conv.otherProfile.name;
@@ -9166,32 +9677,31 @@ function CreateGroupPanel({ myId, onClose, onCreated }) {
     if (!name.trim() || creating) return;
     setCreating(true);
     setErr('');
-    let avatarUrl = null;
-    if (avatarFile) {
-      const { url } = await uploadMedia(avatarFile, myId);
-      avatarUrl = url || null;
-    }
-    const { data: group, error } = await supabase.from('groups').insert({ name: name.trim().slice(0, 50), bio: bio.trim() || null, avatar: avatarUrl, created_by: myId }).select().single();
+    const baseRow = { name: name.trim().slice(0, 50), bio: bio.trim() || null, avatar: null, created_by: myId };
+    const [upRes, firstIns] = await Promise.all([
+      avatarFile ? uploadMedia(avatarFile, myId).catch(() => ({ url: null })) : null,
+      supabase.from('groups').insert({ ...baseRow, accent }).select().single(),
+    ]);
+    let { data: group, error } = firstIns;
+    if (error && /accent/i.test(String(error.message || ''))) ({ data: group, error } = await supabase.from('groups').insert(baseRow).select().single());
     if (error || !group) { setCreating(false); setErr(friendlyError(error, "Couldn't create the group. Try again.")); return; }
     const { error: memberErr } = await supabase.from('group_members').insert({ group_id: group.id, user_id: myId, role: 'admin', added_by: myId });
     if (memberErr) { setCreating(false); setErr(friendlyError(memberErr, "Couldn't create the group. Try again.")); return; }
-    if (selected.length) {
-      const { error: inviteErr } = await supabase.from('group_members').insert(selected.slice(0, 49).map((p) => ({ group_id: group.id, user_id: p.id, role: 'member', added_by: myId })));
-      if (inviteErr) { setCreating(false); setErr(friendlyError(inviteErr, "Couldn't add those people. Try again.")); return; }
-      const { data: creator } = await getProfile(myId);
-      selected.slice(0, 49).forEach((p) => sendPushNotification(p.id, 'ZChat', `${creator?.name || 'Someone'} added you to ${group.name}`, `/?group=${group.id}`, creator?.avatar));
+    const people = selected.slice(0, 49);
+    const avatarUrl = (upRes && upRes.url) || null;
+    const [inviteRes, sysRes, avatarRes] = await Promise.all([
+      people.length ? supabase.from('group_members').insert(people.map((p) => ({ group_id: group.id, user_id: p.id, role: 'member', added_by: myId }))) : null,
+      supabase.from('messages').insert({ sender_id: myId, group_id: group.id, type: 'system', content: people.length ? `Group created and ${people.map((p) => p.name).join(', ')} added` : 'Group created' }).select().single(),
+      avatarUrl ? supabase.from('groups').update({ avatar: avatarUrl }).eq('id', group.id) : null,
+    ]);
+    if (inviteRes && inviteRes.error) { setCreating(false); setErr(friendlyError(inviteRes.error, "Couldn't add those people. Try again.")); return; }
+    if (people.length) {
+      getProfile(myId).then(({ data: creator }) => {
+        people.forEach((p) => sendPushNotification(p.id, 'ZChat', `${creator?.name || 'Someone'} added you to ${group.name}`, `/?group=${group.id}`, creator?.avatar));
+      }, () => {});
     }
-    await supabase.from('messages').insert({
-      sender_id: myId, group_id: group.id, type: 'system',
-      content: selected.length ? `Group created and ${selected.map((p) => p.name).join(', ')} added` : 'Group created',
-    });
-    let savedAccent = null;
-    try {
-      const { error: accentErr } = await supabase.from('groups').update({ accent }).eq('id', group.id);
-      if (!accentErr) savedAccent = accent;
-    } catch {}
     setCreating(false);
-    onCreated(savedAccent ? { ...group, accent: savedAccent } : group);
+    onCreated({ ...group, ...(avatarUrl && avatarRes && !avatarRes.error ? { avatar: avatarUrl } : {}) }, { sys: sysRes && !sysRes.error ? sysRes.data : null, people });
   };
 
   const isPicked = (id) => !!selected.find((s) => s.id === id);
@@ -9346,8 +9856,13 @@ function GroupInfoPanel({ group, members, myId, iFollowIds, privacyAllowed, myRo
   const ranked = members.filter((m) => m.profile).sort((a, b) => rank(a) - rank(b) || (a.profile.name || '').localeCompare(b.profile.name || ''));
   const preview = ranked.length > 6 ? ranked.slice(0, 5) : ranked;
   const media = messages.filter((m) => !m.deleted && (m.type === 'image' || m.type === 'video') && m.media_url && !parseOnce(m)).slice(-10).reverse();
-  const chip = (label) => (
-    <span style={{ flex: 'none', fontSize: 10.5, fontWeight: 800, padding: '1px 7px', borderRadius: 8, border: `1px solid ${c.line}`, color: c.dim }}>{label}</span>
+  const chip = (label, kind) => (
+    <span style={{ flex: 'none', display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 12, fontWeight: 600, color: c.dim }}>
+      {kind === 'owner' && <MemberCrownGlyph size={13} color={theme.dark ? '#F2C14E' : '#C98A00'} />}
+      {kind === 'admin' && <ShieldCheck size={12} strokeWidth={2.2} color={kitOnInk(theme)} />}
+      {kind === 'muted' && <BellOff size={12} strokeWidth={2.1} />}
+      {label}
+    </span>
   );
 
   const memberRow = (m) => {
@@ -9362,9 +9877,9 @@ function GroupInfoPanel({ group, members, myId, iFollowIds, privacyAllowed, myRo
               <NameBadge name={`${m.profile.name}${m.user_id === myId ? ' (you)' : ''}`} verified={m.profile.verified} custom={m.profile.custom_badge} size={13} />
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3, fontSize: 12, color: c.dim, minWidth: 0 }}>
-              {isOwnerRow ? chip('Owner') : m.role === 'admin' ? chip('Admin') : null}
+              {isOwnerRow ? chip('Owner', 'owner') : m.role === 'admin' ? chip('Admin', 'admin') : null}
               {m.title && chip(m.title)}
-              {m.muted && chip('Muted')}
+              {m.muted && chip('Muted', 'muted')}
               <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: on ? '#34d399' : c.dim, fontWeight: on ? 700 : 400 }}>{on ? 'Online now' : `@${m.profile.username}`}</span>
             </div>
           </div>
@@ -9562,38 +10077,15 @@ function TopicHashIcon({ size = 16, color = 'currentColor', style }) {
 }
 function GroupTopicBar({ topics, value, onChange, unread, canManage, onManage }) {
   const { theme } = useTheme();
-  const ref = useRef(null);
-  useEffect(() => {
-    const box = ref.current;
-    const el = box && box.querySelector('[aria-pressed="true"]');
-    if (!box || !el) return;
-    const l = el.offsetLeft - 12;
-    const r = el.offsetLeft + el.offsetWidth + 12;
-    if (l < box.scrollLeft) box.scrollTo({ left: l, behavior: 'smooth' });
-    else if (r > box.scrollLeft + box.clientWidth) box.scrollTo({ left: r - box.clientWidth, behavior: 'smooth' });
-  }, [value]);
-  const chip = (key, label, color) => {
-    const on = value === key;
-    return (
-      <div key={key} role="button" aria-label={`Topic ${label}`} aria-pressed={on} onClick={() => onChange(key)} className="zchat-press"
-        style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, height: 32, padding: '0 13px', borderRadius: 16, fontSize: 13.5, fontWeight: 700, cursor: 'pointer', background: on ? theme.coral : theme.rowBg, color: on ? '#FFFFFF' : theme.ink, transition: 'background 0.15s ease' }}>
-        {color && <span style={{ width: 8, height: 8, borderRadius: '50%', background: on ? '#FFFFFF' : color, flexShrink: 0 }} />}
-        <span style={{ whiteSpace: 'nowrap' }}>{label}</span>
-        {!on && unread && unread[key] && <span aria-label="New messages" style={{ width: 7, height: 7, borderRadius: '50%', background: theme.coral, flexShrink: 0 }} />}
-      </div>
-    );
-  };
+  const tabs = [{ k: 'all', label: 'All' }, { k: 'general', label: 'General' }, ...topics.map((t) => ({ k: t.id, label: t.n, dot: t.c }))]
+    .map((t) => ({ ...t, aria: `Topic ${t.label}`, mark: !!(unread && unread[t.k]) }));
   return (
-    <div ref={ref} role="group" aria-label="Chat topics" style={{ display: 'flex', gap: 7, overflowX: 'auto', padding: '6px 12px 8px', flexShrink: 0, scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
-      {chip('all', 'All')}
-      {chip('general', 'General')}
-      {topics.map((t) => chip(t.id, t.n, t.c))}
-      {canManage && (
-        <div role="button" aria-label="Manage topics" onClick={onManage} className="zchat-press" style={{ flexShrink: 0, width: 32, height: 32, borderRadius: 16, border: `1px solid ${theme.border}`, boxSizing: 'border-box', display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.muted, cursor: 'pointer' }}>
-          <Plus size={16} />
+    <LineTabs kind="button" label="Chat topics" value={value} onChange={(k) => onChange(k)} tabs={tabs} inset={6} h={40} fs={14.5} line={false}
+      after={canManage ? (
+        <div role="button" aria-label="Manage topics" onClick={onManage} className="zchat-press" style={{ flex: '0 0 auto', width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.muted, cursor: 'pointer', WebkitTapHighlightColor: 'transparent' }}>
+          <Plus size={18} strokeWidth={2} />
         </div>
-      )}
-    </div>
+      ) : null} />
   );
 }
 function GroupTopicsPage({ group, onClose, onSave }) {
@@ -9708,8 +10200,8 @@ function JoinRequestsPage({ group, onClose, onReview }) {
           </div>
           {busyId === r.user_id ? <Spinner size={16} color={theme.muted} /> : (
             <>
-              <div role="button" aria-label={`Decline ${r.profile.name}`} onClick={() => act(r, false)} className="zchat-press" style={{ width: 36, height: 36, borderRadius: '50%', border: `1px solid ${theme.border}`, boxSizing: 'border-box', display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.ink, cursor: 'pointer', flexShrink: 0 }}><X size={16} /></div>
-              <div role="button" aria-label={`Approve ${r.profile.name}`} onClick={() => act(r, true)} className="zchat-press" style={{ height: 36, padding: '0 15px', borderRadius: 18, background: theme.coral, color: '#FFFFFF', fontSize: 13.5, fontWeight: 700, display: 'flex', alignItems: 'center', cursor: 'pointer', flexShrink: 0 }}>Approve</div>
+              <div role="button" aria-label={`Decline ${r.profile.name}`} onClick={() => act(r, false)} className="zchat-press" style={{ width: 38, height: 38, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.muted, cursor: 'pointer', flexShrink: 0 }}><X size={20} strokeWidth={2} /></div>
+              <div role="button" aria-label={`Approve ${r.profile.name}`} onClick={() => act(r, true)} className="zchat-press" style={{ height: 34, padding: '0 16px', borderRadius: 10, background: theme.coral, color: '#FFFFFF', fontSize: 14, fontWeight: 700, display: 'flex', alignItems: 'center', cursor: 'pointer', flexShrink: 0 }}>Approve</div>
             </>
           )}
         </div>
@@ -9791,15 +10283,18 @@ function GroupSettingsPanel({ group, myId, isAdmin, isOwner, isMuted, onSetMute,
 
   const c = igPalette(theme);
   const segRow = (label, value, onPick) => (
-    <div style={{ padding: '12px 14px' }}>
-      <div style={{ fontSize: 15, fontWeight: 500, marginBottom: 9 }}>{label}</div>
-      <div style={{ display: 'flex', gap: 8 }}>
-        {[['everyone', 'Everyone'], ['admins', 'Admins only']].map(([val, lab]) => (
-          <div key={val} role="button" aria-label={`${label} ${lab}`} aria-pressed={value === val} onClick={() => onPick(val)} style={{
-            flex: 1, textAlign: 'center', padding: '9px 6px', borderRadius: 11, fontSize: 13.5, fontWeight: 700, cursor: 'pointer',
-            background: value === val ? theme.coral : c.field, color: value === val ? '#FFFFFF' : c.fg,
-          }}>{lab}</div>
-        ))}
+    <div style={{ padding: '13px 14px 14px' }}>
+      <div style={{ fontSize: 15, fontWeight: 500, marginBottom: 10 }}>{label}</div>
+      <div style={{ display: 'flex', height: 36, padding: 3, borderRadius: 10, boxSizing: 'border-box', background: theme.dark ? 'rgba(255,255,255,0.07)' : 'rgba(17,17,19,0.06)' }}>
+        {[['everyone', 'Everyone'], ['admins', 'Admins only']].map(([val, lab]) => {
+          const on = value === val;
+          return (
+            <div key={val} role="button" aria-label={`${label} ${lab}`} aria-pressed={on} onClick={() => { if (!on) hapticTap(); onPick(val); }} style={{
+              flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer', WebkitTapHighlightColor: 'transparent',
+              color: on ? theme.ink : theme.muted, background: on ? (theme.dark ? '#3A3941' : '#FFFFFF') : 'transparent', boxShadow: on ? '0 1px 4px rgba(0,0,0,0.14)' : 'none', transition: 'background 160ms ease, color 160ms ease',
+            }}>{lab}</div>
+          );
+        })}
       </div>
     </div>
   );
@@ -9838,13 +10333,19 @@ function GroupSettingsPanel({ group, myId, isAdmin, isOwner, isMuted, onSetMute,
             <DetailSection title="Invite link">
               <DetailRow icon={<LinkIcon />} label="Invite link" sub={inviteEnabled ? 'Anyone with the link can join' : 'Turned off'} onClick={toggleInvite} right={<IgToggle on={inviteEnabled} />} last={!inviteEnabled} />
               {inviteEnabled && (
-                <div style={{ padding: '2px 14px 14px 46px' }}>
-                  <div style={{ fontSize: 12.5, color: c.dim, marginBottom: 9, wordBreak: 'break-all' }}>{siteOrigin()}/?join={inviteCode}</div>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                  <div role="button" aria-label="Share invite link" onClick={copyInvite} style={{ flex: 1, textAlign: 'center', padding: '9px 6px', borderRadius: 10, fontSize: 13.5, fontWeight: 700, cursor: 'pointer', background: theme.coral, color: '#FFFFFF' }}>{copied ? 'Copied' : 'Share link'}</div>
-                  <div role="button" aria-label="Reset invite link" onClick={resetInvite} style={{ flex: 1, textAlign: 'center', padding: '9px 6px', borderRadius: 10, fontSize: 13.5, fontWeight: 700, cursor: 'pointer', background: c.field, color: c.fg }}>Reset link</div>
+                <>
+                  <div style={{ position: 'relative', padding: '0 14px 12px 46px' }}>
+                    <div style={{ fontSize: 13, color: c.dim, wordBreak: 'break-all', lineHeight: 1.4 }}>{siteOrigin()}/?join={inviteCode}</div>
+                    <div style={{ position: 'absolute', left: 46, right: 0, bottom: 0, height: 1, background: theme.border }} />
                   </div>
-                </div>
+                  {[['Share invite link', copied ? 'Copied' : 'Share link', copied ? <Check size={20} /> : <Share2 size={20} />, copyInvite, kitOnInk(theme), false], ['Reset invite link', 'Reset link', <Repeat size={20} />, resetInvite, theme.danger, true]].map(([aria, lab, icon, fn, tint, last]) => (
+                    <div key={aria} role="button" aria-label={aria} onClick={fn} className="zchat-row-press" style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 12, minHeight: 50, padding: '0 14px', cursor: 'pointer' }}>
+                      <span style={{ display: 'flex', color: tint, flexShrink: 0 }}>{icon}</span>
+                      <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 600, color: tint }}>{lab}</span>
+                      {!last && <div style={{ position: 'absolute', left: 46, right: 0, bottom: 0, height: 1, background: theme.border }} />}
+                    </div>
+                  ))}
+                </>
               )}
             </DetailSection>
             <DetailSection title="New members">
@@ -9871,17 +10372,22 @@ function GroupSettingsPanel({ group, myId, isAdmin, isOwner, isMuted, onSetMute,
         </DetailSection>
       </div>
 
-      {showMuteOptions && (
-        <div onClick={() => setShowMuteOptions(false)} style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end' }}>
-          <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ width: '100%', background: theme.panelBg, borderRadius: '22px 22px 0 0', padding: '18px 18px calc(18px + env(safe-area-inset-bottom))' }}>
-            <div style={{ fontWeight: 900, fontSize: 16, color: theme.ink, marginBottom: 12 }}>Mute notifications</div>
-            {[['Off', null], ['8 hours', 8 * 3600000], ['1 week', 7 * 86400000], ['Always', 'forever']].map(([label, ms]) => (
-              <div key={label} role="button" onClick={() => { onSetMute(ms === 'forever' ? new Date('2999-01-01').toISOString() : ms ? new Date(Date.now() + ms).toISOString() : null); setShowMuteOptions(false); }}
-                style={{ padding: '13px 6px', fontSize: 15, fontWeight: 700, color: theme.ink, cursor: 'pointer', borderBottom: `1px solid ${theme.border}` }}>{label}</div>
-            ))}
+      {showMuteOptions && (() => {
+        const forever = isMuted === true || (!!isMuted && new Date(isMuted).getFullYear() >= 2900);
+        const opts = [['Off', null, <Bell size={20} />], ['8 hours', 8 * 3600000, <Clock size={20} />], ['1 week', 7 * 86400000, <CalendarIcon size={20} />], ['Always', 'forever', <BellOff size={20} />]];
+        return (
+          <div onClick={() => setShowMuteOptions(false)} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+            <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ width: '100%', maxWidth: 460, background: theme.panelBg, borderRadius: '24px 24px 0 0', padding: '0 16px calc(12px + env(safe-area-inset-bottom))', boxSizing: 'border-box', boxShadow: '0 -10px 40px rgba(0,0,0,0.25)' }}>
+              <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 8px' }}><div style={{ width: 38, height: 4, borderRadius: 2, background: theme.border }} /></div>
+              <div style={{ fontWeight: 800, fontSize: 17, color: theme.ink, padding: '2px 4px 0' }}>Mute notifications</div>
+              <div style={{ fontSize: 13, color: theme.muted, padding: '3px 4px 6px' }}>{isMuted && !forever ? muteLabel : 'How long the group stays quiet for you'}</div>
+              <ChoiceList label="Mute for" value={!isMuted ? 'Off' : forever ? 'Always' : null}
+                onChange={(k) => { const ms = (opts.find((o) => o[0] === k) || [])[1]; onSetMute(ms === 'forever' ? new Date('2999-01-01').toISOString() : ms ? new Date(Date.now() + ms).toISOString() : null); setShowMuteOptions(false); }}
+                options={opts.map(([l, , icon]) => ({ k: l, label: l, icon }))} />
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {slowSheet && <SlowModeSheet value={slowSecs} onClose={() => setSlowSheet(false)} onPick={(v) => savePolicy('slow_secs', v, setSlowSecs)} />}
       {mentionSheet && <MentionAllSheet value={mentionAll} onClose={() => setMentionSheet(false)} onPick={(v) => savePolicy('mention_all', v, setMentionAll)} />}
@@ -9900,6 +10406,27 @@ function GroupSettingsPanel({ group, myId, isAdmin, isOwner, isMuted, onSetMute,
   );
 }
 
+function MemberCrownGlyph({ size = 16, color = 'currentColor' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0 }}>
+      <path d="M4.5 19h15" /><path d="M5 15.8 3.6 7.6l4.8 3.6L12 5.2l3.6 6 4.8-3.6L19 15.8z" />
+    </svg>
+  );
+}
+function MemberTagGlyph({ size = 20, color = 'currentColor' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M3.5 12.3V5.5a2 2 0 0 1 2-2h6.8l8.2 8.2a2 2 0 0 1 0 2.8l-6 6a2 2 0 0 1-2.8 0z" /><circle cx="8.3" cy="8.3" r="1.5" />
+    </svg>
+  );
+}
+function MemberRemoveGlyph({ size = 20, color = 'currentColor' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <circle cx="9.5" cy="8" r="3.8" /><path d="M2.5 20c.9-3.6 3.7-5.6 7-5.6s6.1 2 7 5.6" /><path d="M16.5 11h5" />
+    </svg>
+  );
+}
 function GroupMembersPanel({ group, members, myId, isAdmin, isOwner, onClose, onOpenProfile, onAddMembers, onPromote, onDemote, onKick, onMute, onUnmute, onTransferOwnership, onSetTitle }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
@@ -9933,67 +10460,79 @@ function GroupMembersPanel({ group, members, myId, isAdmin, isOwner, onClose, on
           <Search size={15} color={theme.muted} />
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search members" style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', color: theme.ink, fontSize: 14, fontFamily: FONT }} />
         </div>
-        <div style={{ display: 'flex', gap: 6, marginTop: 10, overflowX: 'auto', scrollbarWidth: 'none' }}>
-          {[['all', `All ${members.length}`], ['online', `Online ${onlineCount}`], ['admins', `Admins ${adminCount}`]].map(([k, label]) => {
-            const on = tab === k;
-            return (
-              <div key={k} role="button" onClick={() => setTab(k)} style={{ flexShrink: 0, padding: '8px 14px', borderRadius: 12, fontSize: 12.5, fontWeight: 800, cursor: 'pointer', background: on ? theme.coral : theme.rowBg, color: on ? 'white' : theme.ink, border: `1px solid ${on ? theme.coral : theme.border}` }}>{label}</div>
-            );
-          })}
-        </div>
       </div>
-      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '10px 18px', paddingBottom: 'calc(10px + env(safe-area-inset-bottom))' }}>
+      <LineTabs kind="button" label="Show members" value={tab} onChange={(k) => { if (k !== tab) { hapticTap(); setTab(k); } }} inset={6} h={42} fs={14.5} style={{ marginTop: 6 }}
+        tabs={[['all', 'All', members.length], ['online', 'Online', onlineCount], ['admins', 'Admins', adminCount]].map(([k, l, n]) => ({ k, label: l, meta: n, aria: `${l} ${n}` }))} />
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '6px 18px', paddingBottom: 'calc(10px + env(safe-area-inset-bottom))' }}>
         {filtered.length === 0 ? (
           <div style={{ textAlign: 'center', padding: 30, color: theme.muted, fontSize: 13.5 }}>No members match.</div>
-        ) : filtered.map((m) => (
-          <div key={m.user_id} role="button" onClick={() => (isAdmin && m.user_id !== myId && m.user_id !== group.created_by ? setSheetFor(m.user_id) : onOpenProfile(m.profile))}
-            style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 4px', cursor: 'pointer' }}>
-            <Avatar emoji={m.profile.avatar} name={m.profile.name} size={42} />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontWeight: 700, fontSize: 14, color: theme.ink, display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.profile.name}</span><VerifiedBadge tier={m.profile.verified} custom={m.profile.custom_badge} size={12} />
-                {m.title && <span style={{ flexShrink: 0, fontSize: 10, fontWeight: 800, padding: '1px 6px', borderRadius: 7, background: theme.rowBg, color: theme.muted }}>{m.title}</span>}
+        ) : filtered.map((m) => {
+          const owner = m.user_id === group.created_by;
+          const bits = [
+            m.title ? <span key="t" style={{ color: kitOnInk(theme), fontWeight: 600 }}>{m.title}</span> : null,
+            m.muted ? <span key="m"><MicOff size={12} strokeWidth={2.2} style={{ verticalAlign: '-1.5px', marginRight: 3 }} />Muted</span> : null,
+            isOnline(m) ? <span key="o" style={{ color: '#22c55e', fontWeight: 600 }}>Online</span> : (m.profile.last_seen ? <span key="o">{timeAgoLong(m.profile.last_seen)}</span> : null),
+          ].filter(Boolean);
+          return (
+            <div key={m.user_id} role="button" onClick={() => (isAdmin && m.user_id !== myId && m.user_id !== group.created_by ? setSheetFor(m.user_id) : onOpenProfile(m.profile))} className="zchat-row-press"
+              style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 4px', cursor: 'pointer', borderRadius: 14 }}>
+              <Avatar emoji={m.profile.avatar} name={m.profile.name} size={44} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: 15, color: theme.ink, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.profile.name}</span><VerifiedBadge tier={m.profile.verified} custom={m.profile.custom_badge} size={12} />
+                </div>
+                <div style={{ fontSize: 12.5, color: theme.muted, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {bits.map((b, i) => <React.Fragment key={i}>{i > 0 && <span aria-hidden="true" style={{ margin: '0 5px', opacity: 0.7 }}>{'·'}</span>}{b}</React.Fragment>)}
+                </div>
               </div>
-              <div style={{ fontSize: 11.5, color: theme.muted, display: 'flex', gap: 6, alignItems: 'center' }}>
-                {isOnline(m) ? <span style={{ color: '#22c55e', fontWeight: 700 }}>Online</span> : (m.profile.last_seen ? timeAgoLong(m.profile.last_seen) : '')}
-              </div>
+              {(owner || m.role === 'admin') && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, flexShrink: 0, fontSize: 13, fontWeight: 600, color: theme.muted }}>
+                  {owner ? <MemberCrownGlyph size={15} color={theme.dark ? '#F2C14E' : '#C98A00'} /> : <ShieldCheck size={14} strokeWidth={2.1} color={kitOnInk(theme)} />}
+                  {owner ? 'Owner' : 'Admin'}
+                </span>
+              )}
             </div>
-            {m.user_id === group.created_by ? (
-              <span style={{ fontSize: 9.5, fontWeight: 900, padding: '2px 7px', borderRadius: 8, background: 'rgba(251,191,36,0.15)', color: '#fbbf24' }}>Owner</span>
-            ) : m.role === 'admin' && <span style={{ fontSize: 9.5, fontWeight: 900, padding: '2px 7px', borderRadius: 8, background: 'rgba(96,165,250,0.15)', color: '#60a5fa' }}>Admin</span>}
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {titleFor && onSetTitle && <MemberTitleSheet member={titleFor} onClose={() => setTitleFor(null)} onSave={(t) => onSetTitle(titleFor.user_id, t)} />}
-      {sheetMember && (
-        <div onClick={() => setSheetFor(null)} style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end' }}>
-          <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ width: '100%', background: theme.panelBg, borderRadius: '22px 22px 0 0', padding: '18px 18px calc(18px + env(safe-area-inset-bottom))' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-              <Avatar emoji={sheetMember.profile.avatar} name={sheetMember.profile.name} size={42} />
-              <div>
-                <div style={{ fontWeight: 900, fontSize: 15, color: theme.ink }}>{sheetMember.profile.name}</div>
-                <div style={{ fontSize: 12, color: theme.muted }}>@{sheetMember.profile.username}</div>
+      {sheetMember && (() => {
+        const rows = [
+          { label: 'View profile', icon: <User size={20} />, run: () => { setSheetFor(null); onOpenProfile(sheetMember.profile); } },
+          isOwner ? (sheetMember.role === 'admin'
+            ? { label: 'Remove admin', icon: <ShieldOff size={20} />, run: () => { onDemote(sheetMember.user_id); setSheetFor(null); } }
+            : { label: 'Make admin', icon: <ShieldCheck size={20} />, run: () => { onPromote(sheetMember.user_id); setSheetFor(null); } }) : null,
+          sheetMember.muted
+            ? { label: 'Unmute in group', icon: <Mic size={20} />, run: () => { onUnmute(sheetMember.user_id); setSheetFor(null); } }
+            : { label: 'Mute in group', icon: <MicOff size={20} />, run: () => { onMute(sheetMember.user_id); setSheetFor(null); } },
+          onSetTitle ? { label: sheetMember.title ? 'Change title' : 'Give a title', aria: 'Give a title', icon: <MemberTagGlyph size={20} />, run: () => { setTitleFor(sheetMember); setSheetFor(null); } } : null,
+          { label: 'Remove', icon: <MemberRemoveGlyph size={20} />, danger: true, run: () => { onKick(sheetMember.user_id); setSheetFor(null); } },
+        ].filter(Boolean);
+        return (
+          <div onClick={() => setSheetFor(null)} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontFamily: FONT }}>
+            <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ width: '100%', maxWidth: 460, background: theme.panelBg, borderRadius: '24px 24px 0 0', overflow: 'hidden', paddingBottom: 'calc(8px + env(safe-area-inset-bottom))', boxShadow: '0 -10px 40px rgba(0,0,0,0.25)' }}>
+              <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 2px' }}><div style={{ width: 38, height: 4, borderRadius: 2, background: theme.border }} /></div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 20px 12px', borderBottom: `1px solid ${theme.border}` }}>
+                <Avatar emoji={sheetMember.profile.avatar} name={sheetMember.profile.name} size={40} />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 800, fontSize: 15, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sheetMember.profile.name}</div>
+                  <div style={{ fontSize: 12.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>@{sheetMember.profile.username}</div>
+                </div>
+              </div>
+              <div style={{ paddingTop: 4 }}>
+                {rows.map((r) => (
+                  <div key={r.label} role="button" aria-label={r.aria || r.label} onClick={r.run} className="zchat-row-press"
+                    style={{ display: 'flex', alignItems: 'center', gap: 14, minHeight: 52, padding: '0 20px', boxSizing: 'border-box', cursor: 'pointer', fontSize: 15.5, fontWeight: 600, color: r.danger ? theme.danger : theme.ink }}>
+                    <span style={{ display: 'flex', width: 24, justifyContent: 'center', color: r.danger ? theme.danger : theme.muted, flexShrink: 0 }}>{r.icon}</span>
+                    <span style={{ flex: 1, minWidth: 0 }}>{r.label}</span>
+                  </div>
+                ))}
               </div>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-              <div role="button" onClick={() => { setSheetFor(null); onOpenProfile(sheetMember.profile); }} style={{ padding: '12px 8px', borderRadius: 13, background: theme.rowBg, textAlign: 'center', fontSize: 13, fontWeight: 700, color: theme.ink, cursor: 'pointer' }}>View profile</div>
-              {isOwner && (sheetMember.role === 'admin' ? (
-                <div role="button" onClick={() => { onDemote(sheetMember.user_id); setSheetFor(null); }} style={{ padding: '12px 8px', borderRadius: 13, background: theme.rowBg, textAlign: 'center', fontSize: 13, fontWeight: 700, color: theme.ink, cursor: 'pointer' }}>Remove admin</div>
-              ) : (
-                <div role="button" onClick={() => { onPromote(sheetMember.user_id); setSheetFor(null); }} style={{ padding: '12px 8px', borderRadius: 13, background: theme.rowBg, textAlign: 'center', fontSize: 13, fontWeight: 700, color: theme.ink, cursor: 'pointer' }}>Make admin</div>
-              ))}
-              {sheetMember.muted ? (
-                <div role="button" onClick={() => { onUnmute(sheetMember.user_id); setSheetFor(null); }} style={{ padding: '12px 8px', borderRadius: 13, background: theme.rowBg, textAlign: 'center', fontSize: 13, fontWeight: 700, color: theme.ink, cursor: 'pointer' }}>Unmute in group</div>
-              ) : (
-                <div role="button" onClick={() => { onMute(sheetMember.user_id); setSheetFor(null); }} style={{ padding: '12px 8px', borderRadius: 13, background: theme.rowBg, textAlign: 'center', fontSize: 13, fontWeight: 700, color: theme.ink, cursor: 'pointer' }}>Mute in group</div>
-              )}
-              {onSetTitle && <div role="button" aria-label="Give a title" onClick={() => { setTitleFor(sheetMember); setSheetFor(null); }} style={{ padding: '12px 8px', borderRadius: 13, background: theme.rowBg, textAlign: 'center', fontSize: 13, fontWeight: 700, color: theme.ink, cursor: 'pointer' }}>{sheetMember.title ? 'Change title' : 'Give a title'}</div>}
-              <div role="button" onClick={() => { onKick(sheetMember.user_id); setSheetFor(null); }} style={{ padding: '12px 8px', borderRadius: 13, background: `${theme.danger}1A`, textAlign: 'center', fontSize: 13, fontWeight: 700, color: theme.danger, cursor: 'pointer' }}>Remove</div>
-            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
     </>
   );
@@ -10688,24 +11227,28 @@ function visitAgoText(iso) {
   const d = Math.round(h / 24);
   return d === 1 ? 'Yesterday' : `${d} days ago`;
 }
+const visitorsPageMem = new Map();
 function ProfileVisitorsPage({ myId, me, onClose, onOpenProfile, onToggle }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
   const on = !me || me.visitors_on !== false;
-  const [rows, setRows] = useState(null);
+  const [rows, setRows] = useState(() => visitorsPageMem.get(myId) || null);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     if (!on) { setRows([]); return undefined; }
     let alive = true;
     (async () => {
       const since = new Date(Date.now() - 30 * 86400000).toISOString();
-      const { data } = await supabase.from('profile_visits').select('viewer_id, viewed_at, n').eq('profile_id', myId).gt('viewed_at', since).order('viewed_at', { ascending: false }).limit(200);
+      const { data, error } = await supabase.from('profile_visits').select('viewer_id, viewed_at, n').eq('profile_id', myId).gt('viewed_at', since).order('viewed_at', { ascending: false }).limit(200);
+      if (error && !data) { if (alive) setRows((prev) => prev || []); return; }
       const list = data || [];
-      if (!list.length) { if (alive) setRows([]); return; }
+      if (!list.length) { visitorsPageMem.set(myId, []); if (alive) setRows([]); return; }
       const { data: profs } = await supabase.from('profiles').select('id, name, username, avatar, avatar_frame, nameplate, verified, custom_badge, is_deleted').in('id', list.map((r) => r.viewer_id));
       const byId = {};
       sanitizeAvatarList(profs || [], myId).forEach((pr) => { if (!pr.is_deleted) byId[pr.id] = pr; });
-      if (alive) setRows(list.map((r) => ({ ...r, profile: byId[r.viewer_id] })).filter((r) => r.profile));
+      const next = list.map((r) => ({ ...r, profile: byId[r.viewer_id] })).filter((r) => r.profile);
+      visitorsPageMem.set(myId, next);
+      if (alive) setRows(next);
     })();
     return () => { alive = false; };
   }, [on]);
@@ -10818,17 +11361,34 @@ function AchievementsLine({ userId, onOpen, center }) {
     return () => { alive = false; window.removeEventListener('zchat-achievements', on); };
   }, [userId]);
   if (!list || !list.length) return null;
+  const latest = ACH_BY_KEY[list[0].key];
   return (
-    <div role="button" aria-label={`${list.length} achievements`} onClick={onOpen} style={{ display: 'flex', alignItems: 'center', justifyContent: center ? 'center' : 'flex-start', gap: 6, padding: '10px 20px 0', cursor: 'pointer' }}>
-      {list.slice(0, 4).map((a) => <AchievementArt key={a.key} k={a.key} size={28} />)}
-      <span style={{ fontSize: 13, color: theme.muted, marginLeft: 4 }}>{list.length} {list.length === 1 ? 'achievement' : 'achievements'}</span>
+    <div role="button" aria-label={`${list.length} achievements`} onClick={onOpen} className="zchat-press" style={{ display: 'flex', alignItems: 'center', justifyContent: center ? 'center' : 'flex-start', gap: 8, padding: '8px 20px 0', cursor: 'pointer' }}>
+      <span style={{ display: 'flex', flexShrink: 0 }}>
+        {list.slice(0, 3).map((a, i) => <span key={a.key} style={{ marginLeft: i ? -7 : 0, borderRadius: '50%', boxShadow: `0 0 0 2px ${theme.bgGradient}`, display: 'flex' }}><AchievementArt k={a.key} size={22} /></span>)}
+      </span>
+      <span style={{ fontSize: 13, color: theme.muted, lineHeight: 1.35, minWidth: 0 }}>
+        Earned <b style={{ color: theme.ink, fontWeight: 700 }}>{latest ? latest.title : 'an achievement'}</b>{list.length > 1 ? ` and ${list.length - 1} more` : ''}
+      </span>
+    </div>
+  );
+}
+function ProfileInterestsLine({ list, center }) {
+  const { theme } = useTheme();
+  const n = list.length;
+  return (
+    <div role="list" aria-label="Interests" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: center ? 'center' : 'flex-start', gap: 7, padding: '8px 20px 0', fontSize: 13.5, lineHeight: 1.4, color: theme.muted, textAlign: center ? 'center' : 'left' }}>
+      <span style={{ display: 'flex', paddingTop: 1 }}><LineGlyph k="heart" size={16} color={theme.muted} /></span>
+      <span style={{ minWidth: 0 }}>
+        Into {list.map((x, i) => <React.Fragment key={x}>{i ? (i === n - 1 ? ' and ' : ', ') : ''}<span role="listitem" style={{ color: theme.ink, fontWeight: 600 }}>{x}</span></React.Fragment>)}
+      </span>
     </div>
   );
 }
 function AchievementsPage({ userId, isSelf, name, onClose }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
-  const [list, setList] = useState(null);
+  const [list, setList] = useState(() => { const hit = achMem.get(userId); return hit ? hit.list : null; });
   useEffect(() => { loadAchievements(userId, true).then(setList); }, [userId]);
   const earned = new Map((list || []).map((r) => [r.key, r.earned_at]));
   const items = isSelf ? ACHIEVEMENTS : ACHIEVEMENTS.filter((a) => earned.has(a.key));
@@ -10904,6 +11464,7 @@ async function pickCoverFile(file, userId) {
   } catch { return null; } finally { URL.revokeObjectURL(url); }
 }
 
+const ownedRewardsMem = new Map();
 function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, onSaved, onOpenSettings, onOpenProfile, onMessage, isBlocked, onBlock, onUnblock, shareConversations, shareGroups, onShareToChats, canCall, onCall, onOpenHighlight, meProfile, onOpenCollection, isZAdmin, iFollowIds, privacyAllowed, initialEdit = false, initialShare = false, inline = false, onCreate, onMenu, onOpenAchievements, onGift, onDiscover, storyRing = 'none', onOpenStory, onEditOverride, onShareOverride, selfExtra = null, onAsk }) {
   useBackClose(!inline, onClose);
   useEffect(() => { if (!isSelf && profile && profile.id && !profile.is_bot && !profile.is_deleted && !profile.hidden_account && !isBlocked) recordProfileVisit(profile.id); }, [profile && profile.id]);
@@ -10927,18 +11488,27 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
     const f = e.target.files && e.target.files[0];
     e.target.value = '';
     if (!f) return;
+    const before = coverUrl;
+    let preview = null;
+    try { preview = URL.createObjectURL(f); } catch {}
+    if (preview) setCoverUrl(preview);
     setCoverBusy(true);
     const url = await pickCoverFile(f, userId);
-    if (!url) { setCoverBusy(false); appAlert('That cover photo could not be used. Try another one.'); return; }
+    if (!url) { setCoverBusy(false); setCoverUrl(before); if (preview) URL.revokeObjectURL(preview); appAlert('That cover photo could not be used. Try another one.'); return; }
     const { error } = await supabase.from('profiles').update({ cover_url: url }).eq('id', userId);
     setCoverBusy(false);
-    if (error) { appAlert('Cover photos switch on once the latest ZChat setup is finished.'); return; }
+    if (error) { setCoverUrl(before); if (preview) URL.revokeObjectURL(preview); appAlert(/cover|column|schema/i.test(String(error.message || '')) ? 'Cover photos switch on once the latest ZChat setup is finished.' : friendlyError(error, 'That cover photo could not be saved. Try again.')); return; }
     setCoverUrl(url);
+    if (preview) setTimeout(() => URL.revokeObjectURL(preview), 4000);
     if (onSaved) onSaved({ ...profile, cover_url: url });
   };
   const removeCover = async () => {
+    const before = coverUrl;
+    setCoverUrl(null);
+    hapticTap();
     const { error } = await supabase.from('profiles').update({ cover_url: null }).eq('id', userId);
-    if (!error) { setCoverUrl(null); if (onSaved) onSaved({ ...profile, cover_url: null }); }
+    if (error) { setCoverUrl(before); appSnack(friendlyError(error, 'The cover could not be removed. Try again.')); return; }
+    if (onSaved) onSaved({ ...profile, cover_url: null });
   };
   const { theme } = useTheme();
   const [reportOpen, setReportOpen] = useState(false);
@@ -10950,17 +11520,22 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
   const [showCountryPicker, setShowCountryPicker] = useState(false);
   const [avatar, setAvatar] = useState(profile.avatar || '');
   const [avatarUploading, setAvatarUploading] = useState(false);
+  const [avatarPreview, setAvatarPreview] = useState(null);
+  const avatarJobRef = useRef(null);
   const [cropFile, setCropFile] = useState(null);
   const [saving, setSaving] = useState(false);
   const [showEmail, setShowEmail] = useState(false);
   const cachedStats = profileStatsCache.get(profile.id) || {};
-  const [followState, setFollowState] = useState(cachedStats.followState || 'none');
+  const [followState, setFollowState] = useState(() => (iFollowIds && iFollowIds.has(profile.id) ? 'accepted' : cachedStats.followState === 'pending' || !(iFollowIds && iFollowIds.size) ? (cachedStats.followState || 'none') : 'none'));
+  const followNowRef = useRef(followState);
+  followNowRef.current = followState;
+  const followTouchRef = useRef(0);
   const [theyFollowMe, setTheyFollowMe] = useState(!!cachedStats.theyFollowMe);
   const [followerCount, setFollowerCount] = useState(cachedStats.followers ?? null);
   const [followingCount, setFollowingCount] = useState(cachedStats.following ?? null);
   const [mutualCount, setMutualCount] = useState(cachedStats.mutual ?? null);
   const [postCount, setPostCount] = useState(cachedStats.posts ?? null);
-  const [ownedRewards, setOwnedRewards] = useState([]);
+  const [ownedRewards, setOwnedRewards] = useState(() => ownedRewardsMem.get(profile.id) || []);
   const [profileTab, setProfileTab] = useState('posts');
   const [statusOpen, setStatusOpen] = useState(false);
   const [bdayOpen, setBdayOpen] = useState(false);
@@ -10976,6 +11551,8 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
           if ((attempt || 0) < 4) { clearTimeout(retryTimer); retryTimer = setTimeout(() => load((attempt || 0) + 1), Math.min(1200 * ((attempt || 0) + 1), 6000)); }
           return;
         }
+        ownedRewardsMem.set(profile.id, data || []);
+        if (ownedRewardsMem.size > 40) ownedRewardsMem.delete(ownedRewardsMem.keys().next().value);
         setOwnedRewards(data || []);
       });
     };
@@ -11037,13 +11614,15 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
   useEffect(() => {
     let cancelled = false;
     const loadCounts = async () => {
+      const startedAt = Date.now();
+      const touched = () => followTouchRef.current >= startedAt || followSyncMem.has(`${userId}:${profile.id}`);
       const [frRes, fgRes] = await Promise.all([
         supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', profile.id).eq('status', 'accepted'),
         supabase.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', profile.id).eq('status', 'accepted'),
       ]);
       const followers = frRes ? frRes.count : null;
       const following = fgRes ? fgRes.count : null;
-      if (!cancelled && followers != null) { setFollowerCount((prev) => (prev === followers ? prev : followers)); saveProfileStats(profile.id, { followers }); }
+      if (!cancelled && followers != null && !touched()) { setFollowerCount((prev) => (prev === followers ? prev : followers)); saveProfileStats(profile.id, { followers }); }
       if (!cancelled && following != null) { setFollowingCount((prev) => (prev === following ? prev : following)); saveProfileStats(profile.id, { following }); }
       if (!cancelled && ((followers != null && followers <= 400) || (following != null && following <= 400))) {
         setTimeout(() => {
@@ -11059,7 +11638,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
         supabase.from('follows').select('following_id').eq('follower_id', userId).eq('status', 'accepted'),
       ]);
       const nextState = data ? data.status : 'none';
-      if (!cancelled) { setFollowState((prev) => (prev === nextState ? prev : nextState)); saveProfileStats(profile.id, { followState: nextState }); }
+      if (!cancelled && !touched()) { followNowRef.current = nextState; setFollowState((prev) => (prev === nextState ? prev : nextState)); saveProfileStats(profile.id, { followState: nextState }); }
       if (!cancelled) { setTheyFollowMe(!!back); saveProfileStats(profile.id, { theyFollowMe: !!back }); }
       const ids = (myFollowing || []).map((r) => r.following_id).filter((id) => id !== profile.id).slice(0, 300);
       if (!ids.length) { if (!cancelled) { setMutualCount(0); saveProfileStats(profile.id, { mutual: 0 }); } return; }
@@ -11080,22 +11659,31 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
     try { window.dispatchEvent(new Event('zchat-follows-stale')); } catch {}
   }, [followState, profile.id]);
 
+  const setFollowLocal = (next) => {
+    const cur = followNowRef.current;
+    if (cur === next) return;
+    followNowRef.current = next;
+    followTouchRef.current = Date.now();
+    if (cur === 'accepted') setFollowerCount((c) => Math.max(0, (c || 0) - 1));
+    if (next === 'accepted') setFollowerCount((c) => (c || 0) + 1);
+    setFollowState(next);
+    saveProfileStats(profile.id, { followState: next });
+  };
   const toggleFollow = async () => {
-    if (followBusy) return;
-    setFollowBusy(true);
-    if (followState === 'accepted' || followState === 'pending') {
-      await supabase.from('follows').delete().eq('follower_id', userId).eq('following_id', profile.id);
-      if (followState === 'accepted') setFollowerCount((c) => Math.max(0, (c || 0) - 1));
-      setFollowState('none');
-    } else {
-      const status = profile.is_private ? 'pending' : 'accepted';
-      await supabase.from('follows').insert({ follower_id: userId, following_id: profile.id, status });
-      if (status === 'accepted') setFollowerCount((c) => (c || 0) + 1);
-      setFollowState(status);
-      const viewerProfile = (await getProfile(userId)).data;
-      sendPushNotification(profile.id, 'ZChat', status === 'pending' ? `${viewerProfile?.name || 'Someone'} requested to follow you` : `${viewerProfile?.name || 'Someone'} started following you`, status === 'pending' ? '/?requests=1' : `/?profile=${userId}`, viewerProfile?.avatar);
+    const before = followNowRef.current;
+    const next = before === 'accepted' || before === 'pending' ? 'none' : (profile.is_private ? 'pending' : 'accepted');
+    setFollowLocal(next);
+    hapticTap();
+    const res = await followSync(userId, profile.id, next, before);
+    if (!res.ok) {
+      setFollowLocal(res.state || before);
+      appSnack(friendlyError(res.error, next === 'none' ? "Couldn't unfollow right now. Try again." : "Couldn't follow right now. Try again."));
+      return;
     }
-    setFollowBusy(false);
+    if (next !== 'none' && res.state === next) {
+      const viewerProfile = meProfile && meProfile.id === userId ? meProfile : (await getProfile(userId)).data;
+      sendPushNotification(profile.id, 'ZChat', next === 'pending' ? `${viewerProfile?.name || 'Someone'} requested to follow you` : `${viewerProfile?.name || 'Someone'} started following you`, next === 'pending' ? '/?requests=1' : `/?profile=${userId}`, viewerProfile?.avatar);
+    }
   };
 
   const startEditing = () => {
@@ -11110,6 +11698,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
     setWhatsapp(profile.whatsapp || '');
     setUsernameErr('');
     setBioMention(null);
+    dropAvatarJob();
     setEditing(true);
   };
   useEffect(() => {
@@ -11120,6 +11709,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
   const editOnly = initialEdit && isSelf && !inline;
   const cancelEditing = () => {
     if (editOnly && onClose) { onClose(); return; }
+    dropAvatarJob();
     setEditing(false);
     setUsername(profile.username || '');
     setUsernameErr('');
@@ -11132,12 +11722,22 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
     if (file) setCropFile(file);
   };
 
+  const dropAvatarJob = () => { avatarJobRef.current = null; setAvatarPreview(null); setAvatarUploading(false); };
   const uploadCropped = async (blob) => {
     setCropFile(null);
     setAvatarUploading(true);
+    let preview = null;
+    try { preview = URL.createObjectURL(blob); } catch {}
+    setAvatarPreview(preview);
     const namedFile = new File([blob], 'avatar.jpg', { type: 'image/jpeg' });
-    const { url, error } = await uploadMedia(namedFile, userId);
-    if (!error && url) setAvatar(url);
+    const job = uploadMedia(namedFile, userId).then(({ url, error }) => (!error && url ? url : null), () => null);
+    avatarJobRef.current = job;
+    const url = await job;
+    if (preview) setTimeout(() => URL.revokeObjectURL(preview), 4000);
+    if (avatarJobRef.current !== job) return;
+    avatarJobRef.current = null;
+    if (url) setAvatar(url); else appSnack('That photo could not be uploaded. Try another one.');
+    setAvatarPreview(null);
     setAvatarUploading(false);
   };
 
@@ -11159,10 +11759,17 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
       fields.username_changed_at = new Date().toISOString();
     }
     setUsernameErr('');
-    setSaving(true);
     const cleanLinks = readSocialLinks(socialLinks).map((l) => ({ url: l.url, title: l.title || null }));
     const phone = cleanWhatsappNumber(whatsapp);
-    let { data, error } = await updateProfile(profile.id, { ...fields, social_links: cleanLinks, whatsapp: phone || null, pronouns: pronouns.trim().slice(0, 40) || null });
+    const full = { ...fields, social_links: cleanLinks, whatsapp: phone || null, pronouns: pronouns.trim().slice(0, 40) || null };
+    const before = {};
+    Object.keys(full).forEach((k) => { before[k] = profile[k] === undefined ? null : profile[k]; });
+    const patchMe = (patch) => patchMyProfile(profile.id, patch);
+    const pendingAvatar = avatarJobRef.current;
+    onSaved({ ...profile, ...full });
+    if (editOnly && onClose) onClose(); else setEditing(false);
+    if (pendingAvatar) { const url = await pendingAvatar; if (url) { fields.avatar = url; full.avatar = url; } }
+    let { data, error } = await updateProfile(profile.id, full);
     if (error && /pronouns/i.test(error.message || '')) {
       appAlert('Pronouns could not be saved yet. Ask the ZChat team to run the pronouns update.');
       ({ data, error } = await updateProfile(profile.id, { ...fields, social_links: cleanLinks, whatsapp: phone || null }));
@@ -11170,13 +11777,13 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
     if (error && /social_links|whatsapp|column/i.test(error.message || '')) {
       ({ data, error } = await updateProfile(profile.id, fields));
     }
-    setSaving(false);
     if (error) {
       const msg = (error.message || '').toLowerCase();
-      setUsernameErr(msg.includes('duplicate') || msg.includes('unique') ? 'That username is already taken.' : friendlyError(error, "Couldn't save your profile. Try again."));
+      patchMe(before);
+      appSnack(msg.includes('duplicate') || msg.includes('unique') ? 'That username is already taken, so your profile was not changed.' : friendlyError(error, "Couldn't save your profile. Try again."));
       return;
     }
-    if (data) { notifyBioMentions(data, profile.bio, data.bio); onSaved(data); if (editOnly && onClose) onClose(); else setEditing(false); }
+    if (data) { notifyBioMentions(data, profile.bio, data.bio); const clean = { ...data }; delete clean.email; patchMe(clean); }
   };
 
   if (profile.is_deleted && !isSelf) {
@@ -11210,8 +11817,8 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
   const allowsLastSeen = privacyAllows(profile, 'privacy_lastseen', userId, followSet, privacyAllowed);
   const canSeeDetails = isSelf || ((!profile.is_private || followState === 'accepted') && allowsProfile);
   const hiddenByChoice = !isSelf && !allowsProfile && (!profile.is_private || followState === 'accepted');
-  const shownPhoto = editing ? avatar : ((isSelf || !profile.hide_photo) ? profile.avatar : '');
-  const hasPhoto = typeof shownPhoto === 'string' && shownPhoto.startsWith('http');
+  const shownPhoto = editing ? (avatarPreview || avatar) : ((isSelf || !profile.hide_photo) ? profile.avatar : '');
+  const hasPhoto = typeof shownPhoto === 'string' && (shownPhoto.startsWith('http') || (editing && shownPhoto === avatarPreview && shownPhoto.startsWith('blob:')));
   const initial = (profile.name || '?').trim().charAt(0).toUpperCase() || '?';
   const lastSeenText = !isSelf && !isOnline && !profile.hide_activity && allowsLastSeen ? formatLastSeen(profile.last_seen) : null;
   const statusText = isOnline ? 'Online now' : lastSeenText;
@@ -11227,6 +11834,8 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '0 10px',
     background: primary ? theme.coral : theme.soft, color: primary ? '#FFFFFF' : theme.ink, fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap',
   });
+  const heroTool = { flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, padding: '4px 2px', cursor: 'pointer', color: '#FFFFFF', fontSize: 12, fontWeight: 600, lineHeight: 1.2, textAlign: 'center', textShadow: '0 1px 3px rgba(0,0,0,0.6)' };
+  const heroGlyph = { height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.5))' };
 
   const decorFrame = isDecorKey(profile.avatar_frame) ? profile.avatar_frame : null;
   const decorPlate = isDecorKey(profile.nameplate) ? profile.nameplate : null;
@@ -11252,7 +11861,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
     <div {...(inline ? {} : edgeBack)} onClick={(e) => { if (!inline && e.target === e.currentTarget && !editing) onClose(); }} style={inline ? { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' } : { position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(5,8,16,0.6)', display: 'flex', justifyContent: 'center' }} className={inline ? undefined : 'zchat-panel-open'}>
     <div style={{ width: '100%', maxWidth: inline ? 'none' : 560, height: '100%', background: theme.bgGradient, display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden' }}>
       <div ref={fxScrollRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain', touchAction: 'pan-y', position: 'relative', ...(inline ? { paddingLeft: 'max(0px, calc((100% - 640px) / 2))', paddingRight: 'max(0px, calc((100% - 640px) / 2))' } : {}) }}>
-        {!editing && fxKey && fxViewH > 0 && <ProfileEffectLayer effectKey={fxKey} z={40} height={fxViewH} covered={fxCovered} repeat={10} watch />}
+        {!editing && fxKey && fxViewH > 0 && <ProfileEffectLayer effectKey={fxKey} z={40} height={fxViewH} covered={fxCovered} watch />}
         {editing ? (
         <div style={{ position: 'relative', height: 'min(42vh, 320px)', minHeight: 240, background: hasPhoto ? '#000' : colorForName(profile.name), overflow: 'hidden' }}>
           {hasPhoto ? (
@@ -11278,28 +11887,19 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
 
           <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, padding: '0 20px 18px', color: 'white', zIndex: 1 }}>
             {editing ? (
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <label style={{
-                display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 24, cursor: 'pointer',
-                background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', fontSize: 13.5, fontWeight: 700,
-              }}>
-                {avatarUploading ? <Spinner size={14} /> : <Camera size={16} />}
+              <div role="toolbar" aria-label="Photo and cover" style={{ display: 'flex', justifyContent: 'space-around', alignItems: 'flex-start', gap: 4, margin: '0 -8px' }}>
+              <label className="zchat-press" style={heroTool}>
+                <span style={heroGlyph}>{avatarUploading ? <Spinner size={18} /> : <LineGlyph k="cam" size={26} sw={1.9} />}</span>
                 Change photo
                 <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleAvatarChange} />
               </label>
-              <div role="button" aria-label="AI avatar" onClick={() => setAiAvatar(true)} style={{
-                display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 24, cursor: 'pointer',
-                background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', fontSize: 13.5, fontWeight: 700,
-              }}><AiSparkIcon size={16} />AI avatar</div>
-              <label style={{
-                display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 24, cursor: 'pointer',
-                background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', fontSize: 13.5, fontWeight: 700,
-              }}>
-                {coverBusy ? <Spinner size={14} /> : <ImageIcon size={16} />}
+              <div role="button" aria-label="AI avatar" onClick={() => setAiAvatar(true)} className="zchat-press" style={heroTool}><span style={heroGlyph}><LineGlyph k="portrait" size={26} sw={1.9} /></span>AI avatar</div>
+              <label className="zchat-press" style={heroTool}>
+                <span style={heroGlyph}>{coverBusy ? <Spinner size={18} /> : <LineGlyph k="image" size={26} sw={1.9} />}</span>
                 {coverUrl ? 'Change cover' : 'Add cover'}
                 <input type="file" accept="image/*" style={{ display: 'none' }} onChange={changeCover} />
               </label>
-              {coverUrl && <div role="button" aria-label="Remove cover" onClick={removeCover} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 24, cursor: 'pointer', background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', fontSize: 13.5, fontWeight: 700 }}><X size={16} />Remove cover</div>}
+              {coverUrl && <div role="button" aria-label="Remove cover" onClick={removeCover} className="zchat-press" style={heroTool}><span style={heroGlyph}><LineGlyph k="close" size={24} sw={2} /></span>Remove cover</div>}
               </div>
             ) : (
               <>
@@ -11461,8 +12061,8 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
               <div style={{ height: 18 }} />
               <div style={{ display: 'flex', gap: 8 }}>
                 <button onClick={cancelEditing} style={pillBtn(false)}>Cancel</button>
-                <button onClick={save} disabled={saving || avatarUploading} style={pillBtn(true)}>
-                  {(saving || avatarUploading) ? <Spinner size={14} /> : 'Save'}
+                <button onClick={save} disabled={saving} style={pillBtn(true)}>
+                  {saving ? <Spinner size={14} /> : 'Save'}
                 </button>
               </div>
             </div>
@@ -11474,12 +12074,10 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
                 </div>
               )}
               {canSeeDetails && !profile.is_bot && Array.isArray(profile.interests) && profile.interests.length > 0 && (
-                <div role="list" aria-label="Interests" style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '8px 20px 0', justifyContent: plateOn ? 'center' : 'flex-start' }}>
-                  {profile.interests.slice(0, 8).map((x) => <span key={x} role="listitem" style={{ height: 26, padding: '0 10px', borderRadius: 13, background: theme.soft, color: theme.ink2, fontSize: 12.5, fontWeight: 600, display: 'inline-flex', alignItems: 'center' }}>{x}</span>)}
-                </div>
+                <ProfileInterestsLine list={profile.interests.slice(0, 8)} center={plateOn} />
               )}
               {canSeeDetails && !profile.is_bot && (
-                <div className="zprof-chips" style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: plateOn ? '12px 14px 0' : '12px 20px 0', justifyContent: plateOn ? 'center' : 'flex-start' }}>
+                <div className="zprof-chips" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', columnGap: 18, rowGap: 0, padding: plateOn ? '8px 20px 0' : '6px 20px 0', justifyContent: plateOn ? 'center' : 'flex-start' }}>
                   <ProfileExtras profile={profile} isSelf={isSelf} onEditStatus={() => setStatusOpen(true)} onEditBirthday={() => setBdayOpen(true)} bare />
                   <ProfileSong profile={profile} isSelf={isSelf} bare center={plateOn} />
                 </div>
@@ -11512,11 +12110,13 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
               {canSeeDetails ? (
                 <>
                   {profile.is_bot && (
-                    <div style={{ margin: '16px 20px 0', padding: '14px 14px 12px', borderRadius: 20, background: theme.soft }}>
-                      <div style={{ fontSize: 13.5, fontWeight: 800, color: theme.ink, marginBottom: 10 }}>What I can do</div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
-                        {['Answer anything', 'Write and fix code', 'Translate', 'Look at photos and videos', 'Understand voice messages', 'Remember our chat', 'Help in groups with @zchatbot'].map((t) => (
-                          <span key={t} style={{ fontSize: 12.5, fontWeight: 600, color: theme.ink, padding: '6px 11px', borderRadius: 14, background: theme.panelBg }}>{t}</span>
+                    <div style={{ margin: '18px 20px 0' }}>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: theme.ink, letterSpacing: '-0.01em', marginBottom: 4 }}>What I can do</div>
+                      <div role="list" aria-label="What I can do">
+                        {[['chat', 'Answer anything'], ['coding', 'Write and fix code'], ['globe', 'Translate'], ['image', 'Look at photos and videos'], ['mic', 'Understand voice messages'], ['memory', 'Remember our chat'], ['friends', 'Help in groups with @zchatbot']].map(([g, t]) => (
+                          <div key={t} role="listitem" style={{ display: 'flex', alignItems: 'center', gap: 12, minHeight: 38, fontSize: 14.5, color: theme.ink }}>
+                            <span style={{ width: 24, display: 'flex', justifyContent: 'center', color: kitOnInk(theme), flexShrink: 0 }}><LineGlyph k={g} size={21} /></span>{t}
+                          </div>
                         ))}
                       </div>
                     </div>
@@ -11635,6 +12235,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
             const { url, error } = await uploadMedia(file, userId);
             setAvatarUploading(false);
             if (error || !url) return false;
+            dropAvatarJob();
             setAvatar(url);
             supabase.from('profiles').update({ avatar_cfg: null }).eq('id', userId).then(() => {}, () => {});
             return true;
@@ -11647,6 +12248,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
           const { url, error } = await uploadMedia(new File([blob], 'avatar.png', { type: 'image/png' }), userId);
           setAvatarUploading(false);
           if (error || !url) return false;
+          dropAvatarJob();
           setAvatar(url);
           supabase.from('profiles').update({ avatar_cfg: cfg }).eq('id', userId).then(() => {}, () => {});
           return true;
@@ -11667,12 +12269,66 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
   );
 }
 
-function StatusTicks({ status, ink }) {
+function tickRgb(c) {
+  const s = String(c || '').trim();
+  let m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(s);
+  if (m) {
+    const h = m[1].length === 3 ? m[1].split('').map((x) => x + x).join('') : m[1];
+    const n = parseInt(h, 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255, 1];
+  }
+  m = /^rgba?\(([^)]+)\)$/i.exec(s);
+  if (!m) return null;
+  const p = m[1].split(',').map((x) => parseFloat(x));
+  if (p.length < 3 || !p.slice(0, 3).every((v) => Number.isFinite(v))) return null;
+  return [p[0], p[1], p[2], p.length > 3 && Number.isFinite(p[3]) ? p[3] : 1];
+}
+function tickLum(c) {
+  const f = (v) => { const x = v / 255; return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; };
+  return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]);
+}
+const readTickMem = new Map();
+function readTickTone(coral, bgs, base, neutral, neutralAlpha) {
+  const list = (Array.isArray(bgs) ? bgs : [bgs]).filter(Boolean);
+  const key = `${coral}|${list.join(',')}|${base || ''}|${neutral || ''}|${neutralAlpha || 1}`;
+  const hit = readTickMem.get(key);
+  if (hit) return hit;
+  const under = tickRgb(base) || [128, 128, 128, 1];
+  const backs = list.map(tickRgb).filter(Boolean).map((c) => (c[3] < 1 ? [0, 1, 2].map((i) => c[i] * c[3] + under[i] * (1 - c[3])) : c));
+  if (!backs.length) backs.push(under);
+  const lums = backs.map(tickLum);
+  const ink = tickRgb(neutral) || [128, 128, 128, 1];
+  const na = neutralAlpha || 1;
+  const quiet = backs.map((b) => [0, 1, 2].map((i) => ink[i] * na + b[i] * (1 - na)));
+  const apart = (c, q) => { const rm = (c[0] + q[0]) / 2; const dr = c[0] - q[0]; const dg = c[1] - q[1]; const db = c[2] - q[2]; return Math.sqrt((2 + rm / 256) * dr * dr + 4 * dg * dg + (2 + (255 - rm) / 256) * db * db); };
+  const fits = (hex, need) => {
+    const c = tickRgb(hex);
+    const L = tickLum(c);
+    return lums.every((b) => (Math.max(L, b) + 0.05) / (Math.min(L, b) + 0.05) >= need) && quiet.every((q) => apart(c, q) >= 90);
+  };
+  const lighter = [0.8, 0.62, 0.45, 0.3].map((t) => mixHex(coral, '#FFFFFF', t));
+  const deeper = [0.8, 0.64, 0.5, 0.38].map((t) => mixHex(coral, '#000000', t));
+  const dark = Math.max(...lums) < 0.18;
+  const order = dark ? [coral, ...lighter] : [coral, deeper[0], deeper[1], deeper[2], deeper[3], lighter[0], lighter[1]];
+  let out = null;
+  for (const need of dark ? [4.5, 3] : [3]) {
+    const c = order.find((x) => fits(x, need));
+    if (c) { out = { color: c, glow: null }; break; }
+  }
+  if (!out) out = { color: '#FFFFFF', glow: mixHex(coral, '#000000', 0.55) };
+  if (readTickMem.size > 300) readTickMem.clear();
+  readTickMem.set(key, out);
+  return out;
+}
+function StatusTicks({ status, ink, bg }) {
   const { theme } = useTheme();
   const dim = ink ? { opacity: 0.72 } : undefined;
   if (status === 'queued') return <Clock size={13} color={ink || theme.muted} style={dim} />;
   if (status === 'sent') return <Check size={14} color={ink || theme.muted} style={dim} />;
-  if (status === 'read') return <CheckCheck size={14} color={ink || theme.coral} />;
+  if (status === 'read') {
+    const tone = readTickTone(theme.coral, bg || theme.bgGradient, theme.bgGradient, ink || theme.muted, ink ? 0.72 : 1);
+    return <CheckCheck size={14} color={tone.color} style={tone.glow ? { filter: `drop-shadow(0 0 1.5px ${tone.glow}) drop-shadow(0 0 1px ${tone.glow})` } : undefined} />;
+  }
   return <CheckCheck size={14} color={ink || theme.muted} style={dim} />;
 }
 
@@ -12447,6 +13103,10 @@ function MessageBubble({ onCard, translation, senderTitle, onOpenLive, onOpenOnc
   const themedThem = !isMe && chatTheme && !m.deleted ? chatThemeThem(chatTheme, theme.dark) : null;
   const skin = bubbleSpec || (gradOn ? { ink: chatTheme.ink, line: chatTheme.line } : null);
   const bubbleBg = m.deleted ? theme.rowBg : (isMe ? ((gradOn && chatTheme.mid) || (theme.dark ? bubbleColorSpec.meDark : bubbleColorSpec.me) || theme.bubbleMe) : (themedThem || bubbleColorSpec.them || theme.bubbleThem));
+  const tickBg = bubbleSpec ? bubbleSpec.fill : gradOn ? chatTheme.grad : bubbleBg;
+  const capShown = (m.type === 'image' || m.type === 'video') && !onceInfo && !round && !!mediaCaption && !String(mediaCaption).startsWith('/');
+  const timeOnPhoto = m.type === 'sticker' || round || ((m.type === 'image' || m.type === 'video') && !onceInfo && !capShown);
+  const wallBg = chatTheme ? (theme.dark ? chatTheme.bgD : chatTheme.bgL) : theme.bgGradient;
 
   return (
     <div
@@ -12520,7 +13180,7 @@ function MessageBubble({ onCard, translation, senderTitle, onOpenLive, onOpenOnc
           {senderLabel && !m.deleted && !tightAbove && (
             <div style={{ fontSize: 11.5, fontWeight: 700, color: theme.coralDeep, marginBottom: 3, padding: m.type !== 'text' ? '0 4px' : 0, display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
               <NameBadge name={senderLabel} verified={senderVerified} custom={senderCustomBadge} size={11} />
-              {senderTitle && <span style={{ flexShrink: 0, fontSize: 10, fontWeight: 800, padding: '1px 6px', borderRadius: 7, background: theme.dark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)', color: theme.muted }}>{senderTitle}</span>}
+              {senderTitle && <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 600, color: theme.muted }}>{senderTitle}</span>}
             </div>
           )}
           {topicTag && !m.deleted && (
@@ -12548,25 +13208,11 @@ function MessageBubble({ onCard, translation, senderTitle, onOpenLive, onOpenOnc
           ) : (
             <>
               {onceInfo && <OnceChip m={m} isMe={isMe} reactions={reactions} myId={myId} onOpen={onOpenOnce} ink={skin ? skin.ink : undefined} isGroup={!!senderLabel || !!hideReadStatus} noReads={!!noReceipts} />}
-              {m.type === 'image' && !onceInfo && <BlurGate on={!!blurInfo} id={m.id}><ChatImage src={m.media_url} caption={mediaCaption} hd={hdPhoto} /></BlurGate>}
+              {m.type === 'image' && !onceInfo && <BlurGate on={!!blurInfo} id={m.id}><ChatImage src={m.media_url} caption={mediaCaption} hd={hdPhoto} radius={mediaOnly ? 16 : 12} sending={!!m.sending} /></BlurGate>}
               {m.type === 'video' && !onceInfo && round && <RoundVideoBubble m={m} />}
               {m.type === 'video' && !onceInfo && !round && (<BlurGate on={!!blurInfo} id={m.id}>
-                <div onClick={(e) => { e.stopPropagation(); onOpenVideo({ url: m.media_url, trimStart: m.trim_start, trimEnd: m.trim_end, overlayUrl: m.overlay_url }); }} style={{ position: 'relative', width: 240, maxWidth: '100%', height: 240, borderRadius: 14, overflow: 'hidden', marginBottom: m.content ? 4 : 2, background: '#000', cursor: 'pointer' }}>
-                  <VideoThumb src={USE_VIDEO_THUMBS ? m.media_url : (cachedVideoSrc || m.media_url)} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none' }} />
-                  {m.overlay_url && <img src={m.overlay_url} alt="" draggable={false} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} />}
-                  <div style={{
-                    position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none',
-                    background: 'rgba(0,0,0,0.18)',
-                  }}>
-                    <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <Play size={20} color="white" style={{ marginLeft: 2 }} />
-                    </div>
-                  </div>
-                  <div onClick={(e) => { e.stopPropagation(); silentDownload(m.media_url, 'zchat-video.mp4'); }} style={{
-                    position: 'absolute', top: 6, right: 6, width: 26, height: 26, borderRadius: '50%',
-                    background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-                  }}><Download size={13} color="white" /></div>
-                </div>
+                <ChatVideoBox m={m} src={USE_VIDEO_THUMBS ? m.media_url : (cachedVideoSrc || m.media_url)} radius={mediaOnly ? 16 : 12} sending={!!m.sending}
+                  onOpen={() => onOpenVideo({ url: m.media_url, trimStart: m.trim_start, trimEnd: m.trim_end, overlayUrl: m.overlay_url })} />
               </BlurGate>)}
               {(m.type === 'image' || m.type === 'video') && !onceInfo && !round && mediaCaption && !String(mediaCaption).startsWith('/') && (
                 <div style={{ fontSize: 15 * fontScale, color: skin ? skin.ink : theme.ink, wordBreak: 'break-word', whiteSpace: 'pre-wrap', lineHeight: 1.32, padding: '2px 2px 16px', maxWidth: 250 }}>
@@ -12708,7 +13354,7 @@ function MessageBubble({ onCard, translation, senderTitle, onOpenLive, onOpenOnc
                     {m.edited && <span style={{ fontSize: 8, color: theme.muted, fontStyle: 'italic' }}>edited</span>}
                     {isSilentText(m.content) && <BellOff size={10} color={skin ? skin.ink : theme.muted} aria-label="Sent without sound" />}
                     <span style={{ fontSize: 10.5, color: skin ? skin.ink : theme.muted, opacity: skin ? 0.75 : 1 }}>{time}</span>
-                    {isMe && <StatusTicks ink={skin ? skin.ink : undefined} status={m.queued ? 'queued' : (!hideReadStatus && !noReceipts && m.read) ? 'read' : m.delivered ? 'delivered' : 'sent'} />}
+                    {isMe && <StatusTicks ink={skin ? skin.ink : undefined} bg={tickBg} status={m.queued ? 'queued' : (!hideReadStatus && !noReceipts && m.read) ? 'read' : m.delivered ? 'delivered' : 'sent'} />}
                   </span>
                 </div>
               )}
@@ -12717,12 +13363,12 @@ function MessageBubble({ onCard, translation, senderTitle, onOpenLive, onOpenOnc
           {!m.deleted && !inlineTime && (
             <div style={{
               position: 'absolute', bottom: bareCard ? 0 : 4, right: bareCard ? 12 : 8, display: 'flex', alignItems: 'center', gap: 3,
-              background: m.type === 'text' ? 'none' : 'rgba(0,0,0,0.4)', borderRadius: 8,
-              padding: m.type === 'text' ? 0 : '1px 5px',
+              background: timeOnPhoto ? 'rgba(0,0,0,0.45)' : 'none', borderRadius: 8,
+              padding: timeOnPhoto ? '1px 5px' : 0,
             }}>
-              {m.edited && <span style={{ fontSize: 8, color: m.type === 'text' ? theme.muted : 'rgba(255,255,255,0.85)', fontStyle: 'italic' }}>edited</span>}
-              <span style={{ fontSize: 10.5, color: m.type === 'text' ? theme.muted : 'rgba(255,255,255,0.85)' }}>{time}</span>
-              {isMe && <StatusTicks status={m.queued ? 'queued' : (!hideReadStatus && !noReceipts && m.read) ? 'read' : m.delivered ? 'delivered' : 'sent'} />}
+              {m.edited && <span style={{ fontSize: 8, color: timeOnPhoto ? 'rgba(255,255,255,0.85)' : theme.muted, fontStyle: 'italic' }}>edited</span>}
+              <span style={{ fontSize: 10.5, color: timeOnPhoto ? 'rgba(255,255,255,0.88)' : (skin && !bareCard ? skin.ink : theme.muted), opacity: skin && !bareCard && !timeOnPhoto ? 0.75 : 1 }}>{time}</span>
+              {isMe && <StatusTicks ink={timeOnPhoto ? '#FFFFFF' : (skin && !bareCard ? skin.ink : undefined)} bg={timeOnPhoto ? '#464646' : bareCard ? wallBg : tickBg} status={m.queued || (m.sending && timeOnPhoto) ? 'queued' : (!hideReadStatus && !noReceipts && m.read) ? 'read' : m.delivered ? 'delivered' : 'sent'} />}
             </div>
           )}
         </div>
@@ -12757,6 +13403,23 @@ function playPing(key) {
   if (quietNow()) return;
   playUiSound('receive', chatToneFor(key));
 }
+const inChatHeard = new Set();
+let inChatLastAt = 0;
+function playInChatSound(m) {
+  try {
+    if (!m || !m.id || inChatHeard.has(m.id)) return;
+    if (inChatHeard.size > 300) inChatHeard.clear();
+    inChatHeard.add(m.id);
+    if (m.type === 'system' || quietNow()) return;
+    const c = typeof m.content === 'string' ? m.content : '';
+    if (isSilentText(c) || c.indexOf('zsnd:') === 0 || c.indexOf('zbuzz:') === 0) return;
+    if (m.type === 'text' && hiddenWordsHit(c)) return;
+    const now = Date.now();
+    if (now - inChatLastAt < 400) return;
+    inChatLastAt = now;
+    playUiSound('incoming');
+  } catch {}
+}
 function playReactionPing() {
   if (quietNow()) return;
   try { if (localStorage.getItem('zchat-reaction-sound') === 'off') return; } catch {}
@@ -12764,6 +13427,18 @@ function playReactionPing() {
 }
 
 function pairKey(a, b) { return a < b ? [a, b] : [b, a]; }
+let cacheOwner = '';
+function claimUserCaches(uid) {
+  if (!uid || cacheOwner === uid) return;
+  if (cacheOwner) [adminWalletMem, blockedListMem, callsTabMem, chosenPeopleMem, feedCommentsMem, feedPanelMem, followRequestsMem, giftTheirsMem, hashtagPostsMem, highlightsMem, likersMem, mailPanelMem, notifPageMem, ownedRewardsMem, peoplePickerMem, postGoneIds, postLocalAdds, postStatsMem, giftTheirsPend, profilePostsMem, questionsMem, restrictedRowsMem, savedMessagesMem, savedPostsMem, searchPageMem, storyArchiveMem, storyGoneIds, storyViewersMem, visitorsPageMem].forEach((m) => { try { m.clear(); } catch {} });
+  if (cacheOwner) rewardOpt.rows = [];
+  cacheOwner = uid;
+}
+function withoutUiKeys(o) {
+  const out = {};
+  Object.keys(o || {}).forEach((k) => { if (!k.startsWith('__')) out[k] = o[k]; });
+  return out;
+}
 
 
 function ImageViewer({ url: rawUrl, onClose, onForward, onReport, once, caption, onEdit }) {
@@ -13963,6 +14638,23 @@ function DrawBrushIcon({ k, size = 24 }) {
   if (k === 'erase') return <PaintToolIcon k="eraser" size={size} />;
   return <svg {...p}><path d="M16.8 3.8l3.4 3.4L8.4 19 4 20l1-4.4z" /><path d="M14.4 6.2l3.4 3.4" /></svg>;
 }
+function DrawBrushSample({ k, color }) {
+  const gid = `dbs${React.useId().replace(/[^a-zA-Z0-9]/g, '')}`;
+  if (k === 'erase') return <PaintToolIcon k="eraser" size={25} />;
+  const d = 'M5 17.5C9 9.5 13.5 8 18 12.5S27.5 17 33 8';
+  const look = DRAW_LOOK[k] || DRAW_LOOK.pen;
+  const w = k === 'hl' ? 8 : k === 'marker' ? 5 : k === 'neon' ? 3.2 : 2.6;
+  const faint = hexLum(color) < 0.06;
+  return (
+    <svg width="38" height="24" viewBox="0 0 38 24" aria-hidden="true" style={{ display: 'block', overflow: 'visible' }}>
+      {k === 'neon' && <defs><filter id={gid} x="-30%" y="-90%" width="160%" height="280%"><feGaussianBlur stdDeviation="1.9" /></filter></defs>}
+      {faint && <path d={d} stroke="rgba(255, 255, 255, 0.42)" strokeWidth={w + 2.4} fill="none" strokeLinecap={look.cap} strokeLinejoin="round" />}
+      {k === 'neon' && <path d={d} stroke={color} strokeWidth={w * 2.2} fill="none" strokeLinecap="round" filter={`url(#${gid})`} />}
+      <path d={d} stroke={color} strokeOpacity={look.op} strokeWidth={w} fill="none" strokeLinecap={look.cap} strokeLinejoin="round" />
+      {k === 'neon' && <path d={d} stroke="#FFFFFF" strokeOpacity="0.92" strokeWidth={w * 0.4} fill="none" strokeLinecap="round" />}
+    </svg>
+  );
+}
 function drawStrokeEl(s, i, W, H, ids) {
   const look = DRAW_LOOK[s.b] || DRAW_LOOK.pen;
   const d = strokeToPath(s.points, W, H);
@@ -14305,9 +14997,47 @@ async function loadStickerImages(item) {
   return out;
 }
 
-async function prepareImageFile(file, url, hd) {
+function imageHasAlpha(img) {
+  try {
+    const c = document.createElement('canvas');
+    c.width = 32;
+    c.height = 32;
+    const x = c.getContext('2d', { willReadFrequently: true });
+    x.drawImage(img, 0, 0, 32, 32);
+    const d = x.getImageData(0, 0, 32, 32).data;
+    for (let i = 3; i < d.length; i += 4) if (d[i] < 250) return true;
+  } catch {}
+  return false;
+}
+async function shrinkChatPhoto(file, url, maxSide) {
+  const saver = dataSaverOn();
+  const cap = saver ? Math.min(maxSide, 1280) : maxSide;
+  try {
+    const img = await loadImageElement(url);
+    const long = Math.max(img.naturalWidth, img.naturalHeight);
+    if (!long) return file;
+    if (long <= cap && file.size <= (saver ? 350 : 700) * 1024 && /jpe?g|png|webp/i.test(file.type)) return file;
+    const scale = Math.min(1, cap / long);
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+    const ctx = canvas.getContext('2d');
+    const alpha = /png|webp/i.test(file.type) && imageHasAlpha(img);
+    if (!alpha) { ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 0, canvas.width, canvas.height); }
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    const type = alpha ? 'image/png' : 'image/jpeg';
+    const blob = await new Promise((res) => canvas.toBlob(res, type, alpha ? undefined : (saver ? 0.74 : 0.82)));
+    if (!blob || (blob.size >= file.size && long <= cap)) return file;
+    return new File([blob], alpha ? 'photo.png' : 'photo.jpg', { type });
+  } catch {
+    return file;
+  }
+}
+async function prepareImageFile(file, url, hd, maxSide) {
   if (/gif/i.test(file.type)) return file;
   if (hd && file.size <= 20 * 1024 * 1024 && /jpe?g|png|webp/i.test(file.type)) return file;
+  if (!hd && maxSide) return shrinkChatPhoto(file, url, maxSide);
   const saver = !hd && dataSaverOn();
   if (!hd && file.size < (saver ? 0.5 : 1.8) * 1024 * 1024 && /jpe?g|png|webp/i.test(file.type)) return file;
   try {
@@ -14324,9 +15054,9 @@ async function prepareImageFile(file, url, hd) {
   }
 }
 
-async function exportEditedImage(item, hd) {
+async function exportEditedImage(item, hd, maxSide) {
   const hasEdits = item.crop || item.texts.length || item.strokes.length || (item.stickers || []).length || (item.filter && item.filter !== 'none');
-  if (!hasEdits) return prepareImageFile(item.file, item.url, hd);
+  if (!hasEdits) return prepareImageFile(item.file, item.url, hd, maxSide);
   await loadTextLayerFonts(item.texts);
   const img = await loadImageElement(item.url);
   const W = img.naturalWidth;
@@ -14334,7 +15064,8 @@ async function exportEditedImage(item, hd) {
   const c = item.crop || { x: 0, y: 0, w: 1, h: 1 };
   const rw = c.w * W;
   const rh = c.h * H;
-  const scale = Math.min(1, (hd ? 4096 : dataSaverOn() ? 1600 : 2560) / Math.max(rw, rh));
+  const chatCap = !hd && maxSide ? (dataSaverOn() ? Math.min(maxSide, 1280) : maxSide) : 0;
+  const scale = Math.min(1, (hd ? 4096 : chatCap || (dataSaverOn() ? 1600 : 2560)) / Math.max(rw, rh));
   const canvas = document.createElement('canvas');
   canvas.width = Math.max(1, Math.round(rw * scale));
   canvas.height = Math.max(1, Math.round(rh * scale));
@@ -14342,7 +15073,7 @@ async function exportEditedImage(item, hd) {
   ctx.drawImage(img, c.x * W, c.y * H, rw, rh, 0, 0, canvas.width, canvas.height);
   if (item.filter && item.filter !== 'none') applyPhotoFilter(ctx, canvas.width, canvas.height, item.filter);
   paintEdits(ctx, item, W, H, c.x * W * scale, c.y * H * scale, scale, await loadStickerImages(item));
-  const blob = await new Promise((res) => canvas.toBlob(res, 'image/jpeg', hd ? 0.95 : dataSaverOn() ? 0.78 : 0.9));
+  const blob = await new Promise((res) => canvas.toBlob(res, 'image/jpeg', hd ? 0.95 : chatCap ? (dataSaverOn() ? 0.74 : 0.82) : dataSaverOn() ? 0.78 : 0.9));
   return blob ? new File([blob], 'photo.jpg', { type: 'image/jpeg' }) : item.file;
 }
 
@@ -14424,11 +15155,94 @@ function EditorSizeRail({ value, min, max, onChange, label = 'Text size' }) {
     </div>
   );
 }
+function StudioDark({ children }) {
+  const ctx = useTheme();
+  const value = useMemo(() => (ctx.theme.dark ? ctx : { ...ctx, dark: true, theme: { ...ctx.theme, ...THEMES.dark, dark: true, pureBlack: false } }), [ctx]);
+  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+}
+function StudioGlyph({ k, size = 26, color = 'currentColor', sw = 1.8 }) {
+  const p = { fill: 'none', stroke: color, strokeWidth: sw, strokeLinecap: 'round', strokeLinejoin: 'round' };
+  const dot = (cx, cy, r = 1.35) => <circle cx={cx} cy={cy} r={r} fill={color} stroke="none" />;
+  const body = (() => {
+    if (k === 'copy') return <><path d="M11.5 9.5V8.8a3.3 3.3 0 0 1 3.3-3.3h8.4a3.3 3.3 0 0 1 3.3 3.3v8.4a3.3 3.3 0 0 1-3.3 3.3h-.7" {...p} /><rect x="5.5" y="11.5" width="15" height="15" rx="3.3" {...p} /></>;
+    if (k === 'front') return <><path d="M16 5.6l10 5-10 5-10-5z" fill={color} stroke={color} strokeWidth={sw} strokeLinejoin="round" /><path d="M6.8 15.6l9.2 4.6 9.2-4.6" {...p} /><path d="M6.8 20.6l9.2 4.6 9.2-4.6" {...p} /></>;
+    if (k === 'edittext') return <><path d="M6.5 7.5h13M13 7.5v16" {...p} /><path d="M19.6 26.4l.9-3.4 5.7-5.7a1.65 1.65 0 0 1 2.4 2.4l-5.7 5.7z" {...p} /></>;
+    if (k === 'trash') return <><path d="M6.5 9.5h19" {...p} /><path d="M12.6 9.5V7.6a1.6 1.6 0 0 1 1.6-1.6h3.6a1.6 1.6 0 0 1 1.6 1.6v1.9" {...p} /><path d="M8.8 9.5l1.1 14.6a2.3 2.3 0 0 0 2.3 2.1h7.6a2.3 2.3 0 0 0 2.3-2.1l1.1-14.6" {...p} /><path d="M13.7 14v7.5M18.3 14v7.5" {...p} /></>;
+    if (k === 'selectall') return <><rect x="5.5" y="5.5" width="21" height="21" rx="4.5" {...p} strokeDasharray="3.2 3.4" /><path d="M11.4 16.3l3.2 3.2 6.2-6.6" {...p} /></>;
+    if (k === 'textoutline') return <><path d="M8.5 25L16 7l7.5 18M11.3 18.6h9.4" {...p} strokeWidth={5.4} opacity="0.3" /><path d="M8.5 25L16 7l7.5 18M11.3 18.6h9.4" {...p} /></>;
+    if (k === 'smaller') return <><path d="M6.5 23l4.5-11 4.5 11M8.2 19.4h5.6" {...p} /><path d="M19.5 17.5h7" {...p} /></>;
+    if (k === 'bigger') return <><path d="M4.5 25.5L11.5 7l7 18.5M7.2 19.4h8.6" {...p} /><path d="M20 15.5h7.5M23.75 11.75v7.5" {...p} /></>;
+    if (k === 'fix') return <><path d="M6 9h15M6 14h11M6 19h6" {...p} /><path d="M15.2 21.4l3.4 3.4 7.2-8.2" {...p} /></>;
+    if (k === 'shorter') return <><path d="M5 16h6.6M8.6 12.4l3.6 3.6-3.6 3.6" {...p} /><path d="M27 16h-6.6M23.4 12.4L19.8 16l3.6 3.6" {...p} /><path d="M16 8.5v15" {...p} /></>;
+    if (k === 'friendly') return <><circle cx="16" cy="16" r="10.5" {...p} />{dot(12.4, 13.6)}{dot(19.6, 13.6)}<path d="M11.6 18.6c1.1 2 2.7 3.1 4.4 3.1s3.3-1.1 4.4-3.1" {...p} /></>;
+    if (k === 'funny') return <><circle cx="16" cy="16" r="10.5" {...p} /><path d="M10.6 14.3l1.9-1.9 1.9 1.9M17.6 14.3l1.9-1.9 1.9 1.9" {...p} /><path d="M10.8 18h10.4a5.2 5.2 0 0 1-10.4 0z" {...p} /></>;
+    if (k === 'formal') return <><rect x="5" y="11" width="22" height="14.5" rx="3" {...p} /><path d="M12.5 11V8.6a1.6 1.6 0 0 1 1.6-1.6h3.8a1.6 1.6 0 0 1 1.6 1.6V11" {...p} /><path d="M5.5 17.5h21" {...p} /></>;
+    if (k === 'emoji') return <><circle cx="14" cy="17.5" r="9" {...p} />{dot(11, 15.6, 1.2)}{dot(17, 15.6, 1.2)}<path d="M10.6 19.4c.9 1.6 2.1 2.4 3.4 2.4s2.5-.8 3.4-2.4" {...p} /><path d="M25 4.5v6.5M21.75 7.75h6.5" {...p} /></>;
+    if (k === 'retry') return <><path d="M26.8 16a10.8 10.8 0 1 1-10.8-10.8c3.02 0 5.92 1.2 8.09 3.29L26.8 11.2" {...p} /><path d="M26.8 5.2v6h-6" {...p} /></>;
+    if (k === 'send') return <><path d="M28 4L14.8 17.2" {...p} /><path d="M28 4l-8.4 24-4.8-10.8L4 12.4z" {...p} /></>;
+    if (k === 'story') return <><circle cx="16" cy="16" r="10.6" {...p} /><path d="M16 11v10M11 16h10" {...p} /></>;
+    if (k === 'wallpaper') return <><rect x="9" y="4.5" width="14" height="23" rx="3.2" {...p} /><path d="M9.6 22.2l4.2-4.2 2.9 2.9 2.4-2.4 3.4 3.4" {...p} /><circle cx="18.6" cy="10.8" r="1.7" {...p} /></>;
+    if (k === 'save') return <><path d="M16 4.8v13.6M11.2 13.8l4.8 4.8 4.8-4.8" {...p} /><path d="M6.2 19.8v3.9a2.6 2.6 0 0 0 2.6 2.6h14.4a2.6 2.6 0 0 0 2.6-2.6v-3.9" {...p} /></>;
+    if (k === 'avatar') return <><circle cx="16" cy="16" r="11" {...p} /><circle cx="16" cy="13.2" r="3.9" {...p} /><path d="M9.4 24.1c1.5-3 3.8-4.6 6.6-4.6s5.1 1.6 6.6 4.6" {...p} /></>;
+    if (k === 'idea') return <><path d="M12.4 21.6c0-2.6-3.6-4.3-3.6-8.8a7.2 7.2 0 0 1 14.4 0c0 4.5-3.6 6.2-3.6 8.8z" {...p} /><path d="M12.8 24.8h6.4M14 28h4" {...p} /></>;
+    if (k === 'link') return <><path d="M13.4 18.6l5.2-5.2" {...p} /><path d="M15.3 10.6l2.1-2.1a4.7 4.7 0 0 1 6.7 6.7l-2.1 2.1" {...p} /><path d="M16.7 21.4l-2.1 2.1a4.7 4.7 0 0 1-6.7-6.7l2.1-2.1" {...p} /></>;
+    if (k === 'share') return <><path d="M11 12H9.5A2.5 2.5 0 0 0 7 14.5v9.5a2.5 2.5 0 0 0 2.5 2.5h13a2.5 2.5 0 0 0 2.5-2.5v-9.5a2.5 2.5 0 0 0-2.5-2.5H21" {...p} /><path d="M16 4.5v14M11.6 8.9L16 4.5l4.4 4.4" {...p} /></>;
+    if (k === 'chatphone') return <><path d="M16 5.2a10.8 10.8 0 0 0-9.3 16.3L5.2 26.8l5.5-1.4A10.8 10.8 0 1 0 16 5.2z" {...p} /><path d="M12.3 11.6c.2 4.6 3.5 7.9 8.1 8.1l1.3-2.1-2.7-1.3-1.1 1.1a6.2 6.2 0 0 1-3.3-3.3l1.1-1.1-1.3-2.7z" {...p} strokeWidth={sw * 0.85} /></>;
+    if (k === 'mail') return <><rect x="4.8" y="7.5" width="22.4" height="17" rx="3.2" {...p} /><path d="M6.2 9.6l9.8 7.4 9.8-7.4" {...p} /></>;
+    if (k === 'shuffle') return <><path d="M4.8 10.2h4.1c5.6 0 8.1 11.6 13.7 11.6h4.6" {...p} /><path d="M4.8 21.8h4.1c2 0 3.5-1.5 4.8-3.6M27.2 10.2h-4.6c-2 0-3.5 1.5-4.8 3.6" {...p} /><path d="M23.7 6.7l3.5 3.5-3.5 3.5M23.7 18.3l3.5 3.5-3.5 3.5" {...p} /></>;
+    if (k === 'crop_free') return <path d="M5.5 11.5v-6h6M20.5 5.5h6v6M26.5 20.5v6h-6M11.5 26.5h-6v-6" {...p} />;
+    if (k === 'size_wide') return <rect x="3.8" y="9.4" width="24.4" height="13.6" rx="2.6" {...p} />;
+    if (k === 'schedule') return <><circle cx="16" cy="16" r="10.6" {...p} /><path d="M16 10.4V16l3.8 2.6" {...p} /></>;
+    if (k === 'draft') return <><path d="M9 5.4h9.4l5.6 5.6v13.6a2.2 2.2 0 0 1-2.2 2.2H9a2.2 2.2 0 0 1-2.2-2.2V7.6A2.2 2.2 0 0 1 9 5.4z" {...p} /><path d="M18.4 5.4v5.6h5.6M11 17.2h9M11 21.4h5.6" {...p} /></>;
+    if (k === 'steady') return <><path d="M4.6 18.4c1.5-2.6 3-2.6 4.5 0s3 2.6 4.5 0" {...p} /><path d="M17.6 17.1h9.8" {...p} /></>;
+    if (k === 'insert') return <path d="M23 23L10 10M10 19.2V10h9.2" {...p} />;
+    return null;
+  })();
+  return <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true" style={{ display: 'block', flexShrink: 0 }}>{body}</svg>;
+}
+function StudioTool({ label, aria, glyph, onClick, on, pressed, danger, disabled, ink, sub, accent, width = 56, keepFocus }) {
+  const { theme } = useTheme();
+  const base = ink || theme.ink;
+  const fg = danger ? theme.danger : on ? (accent || kitOnInk(theme)) : base;
+  const lab = danger || on ? fg : (sub || theme.ink2);
+  return (
+    <button type="button" aria-label={aria || label} aria-pressed={pressed} disabled={disabled}
+      onPointerDown={keepFocus ? (e) => e.preventDefault() : undefined}
+      onClick={(e) => { if (disabled) return; hapticTap(); if (onClick) onClick(e); }} className="zchat-press"
+      style={{ width, minWidth: 0, flexShrink: 0, height: 50, padding: 0, border: 'none', background: 'transparent', color: fg, fontFamily: FONT, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.38 : 1, WebkitTapHighlightColor: 'transparent', transition: 'color 160ms ease, opacity 160ms ease' }}>
+      <span aria-hidden="true" style={{ height: 27, minWidth: 27, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{glyph}</span>
+      <span style={{ maxWidth: '100%', fontSize: 11.5, lineHeight: '14px', fontWeight: on ? 700 : 600, color: lab, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', transition: 'color 160ms ease' }}>{label}</span>
+    </button>
+  );
+}
+function StudioTileGrid({ options, value, onChange, label, cols = 4, ratio = 1, gap = 10, ringBg, radius = 14 }) {
+  const { theme } = useTheme();
+  const ring = ringBg || theme.panelBg;
+  const line = theme.dark ? 'rgba(255,255,255,0.13)' : 'rgba(17,17,19,0.09)';
+  return (
+    <div role="radiogroup" aria-label={label} style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, columnGap: gap, rowGap: 14, padding: '6px 2px 8px' }}>
+      {options.map((o) => {
+        const on = value === o.k;
+        return (
+          <div key={o.k} role="radio" aria-checked={on} aria-label={o.aria || o.label} onClick={() => { hapticTap(); onChange(o.k); }} className="zchat-press"
+            style={{ minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'pointer', WebkitTapHighlightColor: 'transparent' }}>
+            <div style={{ position: 'relative', width: '100%', aspectRatio: String(ratio), borderRadius: radius, background: o.bg || (theme.dark ? '#1F1E25' : '#F1F0F6'), boxShadow: on ? `0 0 0 2px ${ring}, 0 0 0 4px ${theme.coral}` : 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', color: on ? kitOnInk(theme) : theme.ink2, transition: 'box-shadow 160ms ease, color 160ms ease' }}>
+              {typeof o.art === 'function' ? o.art(on) : o.art}
+              {!on && <div aria-hidden="true" style={{ position: 'absolute', inset: 0, borderRadius: radius, boxShadow: `inset 0 0 0 1px ${line}`, pointerEvents: 'none' }} />}
+            </div>
+            {o.label && <div style={{ marginTop: 7, width: '100%', fontSize: 12.5, lineHeight: 1.2, fontWeight: on ? 700 : 600, color: on ? kitOnInk(theme) : theme.ink2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'center' }}>{o.label}</div>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 function TextLayerEditor({ draft, onChange, onLines, onDone, innerW, frameW, areaW }) {
   const taRef = useRef(null);
   const mirrorRef = useRef(null);
   const openedAt = useRef(Date.now());
   const kb = useVisualKeyboard(true);
+  const { theme } = useTheme();
   const [lines, setLines] = useState(() => textLayerLines(draft));
   const f = textLayerFontOf(draft);
   const iw = Math.max(1, innerW);
@@ -14466,10 +15280,10 @@ function TextLayerEditor({ draft, onChange, onLines, onDone, innerW, frameW, are
       <div onClick={(e) => e.stopPropagation()} style={{ position: 'absolute', left: 0, right: 0, top: kb.top, padding: 'calc(10px + env(safe-area-inset-top)) 12px 0', display: 'flex', alignItems: 'center', gap: 8 }}>
         {roundBtn(`Align text ${cycle(TEXT_LAYER_ALIGNS, look.align)}`, () => onChange({ align: cycle(TEXT_LAYER_ALIGNS, look.align) }), <AlignGlyph align={look.align} />)}
         {roundBtn(draft.bg === 'solid' ? 'Text background solid' : draft.bg === 'soft' ? 'Text background soft' : 'Text background off', () => onChange({ bg: cycle(TEXT_LAYER_BGS, TEXT_LAYER_BGS.includes(draft.bg) ? draft.bg : 'none') }), <TextBgGlyph mode={draft.bg} />, draft.bg === 'solid' || draft.bg === 'soft')}
-        <div style={{ flex: 1 }} />
-        <div role="button" aria-label="Done" onPointerDown={keep} onClick={onDone} className="zchat-press" style={{ height: 38, padding: '0 20px', borderRadius: 19, background: '#FFFFFF', color: '#111114', fontWeight: 800, fontSize: 15, display: 'flex', alignItems: 'center', cursor: 'pointer' }}>Done</div>
+        <div aria-live="polite" style={{ flex: 1, minWidth: 0, textAlign: 'center', fontSize: 13.5, fontWeight: 600, color: 'rgba(255, 255, 255, 0.72)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.label}</div>
+        <div role="button" aria-label="Done" onPointerDown={keep} onClick={onDone} className="zchat-press" style={{ height: 38, padding: '0 20px', borderRadius: 19, background: theme.coral, color: '#FFFFFF', fontWeight: 800, fontSize: 15, display: 'flex', alignItems: 'center', cursor: 'pointer', boxShadow: '0 4px 14px rgba(0, 0, 0, 0.28)' }}>Done</div>
       </div>
-      <div style={{ position: 'absolute', left: 0, right: 0, top: `calc(${kb.top + 62}px + env(safe-area-inset-top))`, bottom: kb.lift + 104, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+      <div style={{ position: 'absolute', left: 0, right: 0, top: `calc(${kb.top + 62}px + env(safe-area-inset-top))`, bottom: kb.lift + 118, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
         <EditorSizeRail value={sizeFrame} min={0.035} max={0.24} onChange={(v) => onChange({ size: (v * Math.max(1, frameW)) / iw })} />
         <div onClick={(e) => { e.stopPropagation(); if (taRef.current && document.activeElement !== taRef.current) taRef.current.focus({ preventScroll: true }); }} style={{ position: 'relative', width: W, maxHeight: '100%', overflowY: 'auto', overflowX: 'hidden' }}>
           <div aria-hidden="true" style={{ position: 'absolute', top: 0, pointerEvents: 'none', ...bodyPos }}><TextLayerBody t={{ ...draft, lines }} F={F} placeholder="Type something" /></div>
@@ -14480,18 +15294,18 @@ function TextLayerEditor({ draft, onChange, onLines, onDone, innerW, frameW, are
         </div>
       </div>
       <div onClick={(e) => e.stopPropagation()} style={{ position: 'absolute', left: 0, right: 0, bottom: kb.lift, paddingBottom: kb.lift ? 10 : 'calc(12px + env(safe-area-inset-bottom))' }}>
-        <div style={{ display: 'flex', gap: 10, overflowX: 'auto', padding: '4px 16px 12px', scrollbarWidth: 'none' }}>
+        <div style={{ display: 'flex', gap: 12, overflowX: 'auto', padding: '6px 16px 12px', scrollbarWidth: 'none' }}>
           {LAYER_COLORS.map((c) => {
             const on = String(draft.color).toUpperCase() === c;
-            return <div key={c} role="button" aria-label={`Text color ${c}`} aria-pressed={on} onPointerDown={keep} onClick={() => onChange({ color: c })} style={{ width: 28, height: 28, borderRadius: '50%', background: c, flexShrink: 0, boxSizing: 'border-box', border: on ? '3px solid #FFFFFF' : '2px solid rgba(255, 255, 255, 0.42)', transform: on ? 'scale(1.14)' : 'none', transition: 'transform 0.15s ease', cursor: 'pointer' }} />;
+            return <div key={c} role="button" aria-label={`Text color ${c}`} aria-pressed={on} onPointerDown={keep} onClick={() => onChange({ color: c })} style={{ width: 26, height: 26, borderRadius: '50%', background: c, flexShrink: 0, cursor: 'pointer', boxShadow: on ? '0 0 0 2.5px rgba(8, 8, 12, 0.9), 0 0 0 4.5px #FFFFFF' : 'inset 0 0 0 1.5px rgba(255, 255, 255, 0.34), 0 1px 3px rgba(0, 0, 0, 0.3)', transition: 'box-shadow 160ms ease' }} />;
           })}
         </div>
-        <div style={{ display: 'flex', gap: 8, overflowX: 'auto', padding: '0 16px', scrollbarWidth: 'none' }}>
+        <div role="radiogroup" aria-label="Font" style={{ display: 'flex', gap: 10, overflowX: 'auto', padding: '2px 16px 2px', scrollbarWidth: 'none' }}>
           {TEXT_LAYER_FONTS.map((ff) => {
             const on = ff.k === f.k;
             return (
               <div key={ff.k} role="button" aria-label={`Font ${ff.label}`} aria-pressed={on} onPointerDown={keep} onClick={() => onChange({ font: ff.k })} className="zchat-press"
-                style={{ flexShrink: 0, height: 38, padding: '0 16px', borderRadius: 19, display: 'flex', alignItems: 'center', background: on ? '#FFFFFF' : 'rgba(255, 255, 255, 0.14)', color: on ? '#111114' : '#FFFFFF', fontFamily: ff.family, fontWeight: ff.weight, fontStyle: ff.italic ? 'italic' : 'normal', fontSize: ff.k === 'strong' ? 19 : 15, textShadow: ff.neon && !on ? '0 0 8px rgba(190, 168, 255, 0.95)' : 'none', whiteSpace: 'nowrap', cursor: 'pointer' }}>{ff.label}</div>
+                style={{ flexShrink: 0, width: 46, height: 46, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: on ? '#FFFFFF' : 'rgba(255, 255, 255, 0.1)', boxShadow: on ? '0 2px 10px rgba(0, 0, 0, 0.35)' : 'inset 0 0 0 1px rgba(255, 255, 255, 0.2)', color: on ? '#111114' : '#FFFFFF', fontFamily: ff.family, fontWeight: ff.weight, fontStyle: ff.italic ? 'italic' : 'normal', fontSize: ff.k === 'strong' ? 23 : ff.k === 'script' ? 16 : 18, lineHeight: 1, textShadow: ff.neon ? (on ? '0 0 6px rgba(124, 92, 252, 0.75)' : '0 0 8px rgba(190, 168, 255, 0.95)') : 'none', whiteSpace: 'nowrap', cursor: 'pointer', transition: 'background 160ms ease, color 160ms ease' }}>Aa</div>
             );
           })}
         </div>
@@ -14547,7 +15361,7 @@ function MediaComposer({ files, recipientName, onCancel, onSend, onActivity, mod
   const [storySong, setStorySong] = useState(null);
   const [musicPick, setMusicPick] = useState(false);
   const songPlayingId = useSongPlaying();
-  useEffect(() => () => stopSong(), []);
+  useEffect(() => { if (isStory) prefetchMusic(country); return () => stopSong(); }, []);
   useEffect(() => {
     if (!storySong) return undefined;
     const el = songEl();
@@ -15158,7 +15972,7 @@ function MediaComposer({ files, recipientName, onCancel, onSend, onActivity, mod
       const outputs = [];
       for (const it of items) {
         if (it.kind === 'image') {
-          const file = await exportEditedImage(it, !isPost && !isStory && hd);
+          const file = await exportEditedImage(it, !isPost && !isStory && hd, !isPost && !isStory ? 1600 : 0);
           outputs.push({ kind: 'image', file, url: it.url });
         } else {
           const overlayFile = await exportVideoOverlay(it);
@@ -15184,13 +15998,20 @@ function MediaComposer({ files, recipientName, onCancel, onSend, onActivity, mod
     }}>{icon}</div>
   );
   const colorRow = (value, onPick) => (
-    <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
+    <div role="radiogroup" aria-label="Brush colour" style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
       {EDITOR_COLORS.map((c) => (
-        <div key={c} onClick={() => onPick(c)} style={{
-          width: 26, height: 26, borderRadius: '50%', background: c, cursor: 'pointer', boxSizing: 'border-box',
-          border: value === c ? '3px solid white' : '2px solid rgba(255,255,255,0.35)', transform: value === c ? 'scale(1.15)' : 'none',
+        <div key={c} role="radio" aria-checked={value === c} aria-label={`Brush colour ${c}`} onClick={() => { hapticTap(); onPick(c); }} style={{
+          width: 26, height: 26, borderRadius: '50%', background: c, cursor: 'pointer', flexShrink: 0,
+          boxShadow: value === c ? '0 0 0 2.5px #000000, 0 0 0 4.5px #FFFFFF' : 'inset 0 0 0 1.5px rgba(255, 255, 255, 0.3)', transition: 'box-shadow 160ms ease',
         }} />
       ))}
+    </div>
+  );
+  const optBtn = (o) => (
+    <div key={o.k} role="button" aria-label={o.aria} aria-pressed={o.toggle ? o.on : undefined} onClick={() => { hapticTap(); if (o.toggle) playUiSound('toggle'); o.tap(); }} className="zchat-press"
+      style={{ flexShrink: 0, minWidth: 64, maxWidth: o.wide ? 150 : 96, padding: '0 4px', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, cursor: 'pointer', color: '#FFFFFF', WebkitTapHighlightColor: 'transparent' }}>
+      <div style={{ width: 36, height: 36, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: o.on ? '#FFFFFF' : 'transparent', color: o.on ? '#000000' : '#FFFFFF', transition: 'background 160ms ease, color 160ms ease' }}>{o.icon}</div>
+      <div style={{ maxWidth: '100%', fontSize: 11.5, lineHeight: '14px', fontWeight: o.on ? 700 : 600, color: o.on ? '#FFFFFF' : 'rgba(255, 255, 255, 0.72)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{o.label}</div>
     </div>
   );
 
@@ -15210,7 +16031,14 @@ function MediaComposer({ files, recipientName, onCancel, onSend, onActivity, mod
           <>
             {toolBtn(<Undo2 size={18} />, 'Undo', () => updateItem(cur.id, (it) => ({ strokes: it.strokes.slice(0, -1) })))}
             <span style={{ fontSize: 15, fontWeight: 800 }}>Draw</span>
-            <span onClick={() => setMode('view')} style={{ fontSize: 15, fontWeight: 800, cursor: 'pointer', padding: '8px 10px' }}>Done</span>
+            <span role="button" aria-label="Done" onClick={() => setMode('view')} style={{ fontSize: 15, fontWeight: 800, cursor: 'pointer', padding: '8px 10px', color: theme.gold }}>Done</span>
+          </>
+        )}
+        {mode === 'filter' && (
+          <>
+            <span style={{ width: 60 }} />
+            <span style={{ fontSize: 15, fontWeight: 800 }}>Filters</span>
+            <span role="button" aria-label="Done" onClick={() => setMode('view')} style={{ width: 60, textAlign: 'right', boxSizing: 'border-box', fontSize: 15, fontWeight: 800, cursor: 'pointer', padding: '8px 10px', color: theme.gold }}>Done</span>
           </>
         )}
         {mode === 'crop' && (
@@ -15244,7 +16072,7 @@ function MediaComposer({ files, recipientName, onCancel, onSend, onActivity, mod
                   <img ref={fsImgRef} src={cur.url} alt="" aria-hidden="true" draggable={false} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'none', userSelect: 'none', pointerEvents: 'none', willChange: 'clip-path' }} />
                 </>
               ) : (
-                <video ref={videoRef} src={cur.url} playsInline preload="auto"
+                <video ref={videoRef} src={cur.url} data-zmix={isStory ? 'mix' : undefined} playsInline preload="auto"
                   onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onTimeUpdate={onVideoTime}
                   onLoadedMetadata={(e) => { if (cur.trimStart) e.currentTarget.currentTime = cur.trimStart; }}
                   style={{ width: '100%', height: '100%', display: 'block', objectFit: 'fill', pointerEvents: 'none' }} />
@@ -15357,27 +16185,31 @@ function MediaComposer({ files, recipientName, onCancel, onSend, onActivity, mod
       </div>
 
       {mode === 'crop' && (
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'center', padding: '14px 12px', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))', flexShrink: 0 }}>
-          {[{ l: 'Free', v: null }, { l: 'Square', v: 1 }, { l: '4:5', v: 0.8 }, { l: '16:9', v: 16 / 9 }].map((opt) => (
-            <div key={opt.l} onClick={() => applyAspect(opt.v)} style={{
-              padding: '8px 14px', borderRadius: 18, fontSize: 13, fontWeight: 700, cursor: 'pointer',
-              background: cropAspect === opt.v ? 'white' : 'rgba(255,255,255,0.14)', color: cropAspect === opt.v ? '#000' : 'white',
-            }}>{opt.l}</div>
-          ))}
+        <div style={{ padding: '6px 14px 0', paddingBottom: 'calc(10px + env(safe-area-inset-bottom))', flexShrink: 0 }}>
+          <StudioDark>
+            <PickTiles label="Crop shape" size={50} fit ringBg="#000000" value={cropAspect == null ? 'free' : String(cropAspect)}
+              onChange={(k) => applyAspect(k === 'free' ? null : Number(k))}
+              options={[['free', 'Free', null, 'crop_free'], ['1', 'Square', '1:1', 'size_square'], ['0.8', 'Portrait', '4:5', 'size_portrait'], [String(16 / 9), 'Wide', '16:9', 'size_wide']].map(([k, label, sub, g]) => ({ k, label, sub, aria: `Crop ${label}`, art: g === 'size_square' || g === 'size_portrait' ? <KitGlyph k={g} size={30} /> : <StudioGlyph k={g} size={30} /> }))} />
+          </StudioDark>
         </div>
       )}
 
       {mode === 'draw' && (
-        <div style={{ padding: '10px 14px', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))', display: 'flex', flexDirection: 'column', gap: 14, flexShrink: 0 }}>
-          <div role="radiogroup" aria-label="Brush" style={{ display: 'flex', justifyContent: 'center', gap: 6 }}>
-            {DRAW_BRUSHES.map(([k, label]) => (
-              <div key={k} role="radio" aria-checked={brushKind === k} aria-label={label} onClick={() => { hapticTap(); setBrushKind(k); }} className="zchat-press"
-                style={{ width: 52, height: 44, borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: brushKind === k ? '#111114' : '#FFFFFF', background: brushKind === k ? '#FFFFFF' : 'rgba(255, 255, 255, 0.12)', transition: 'background 0.15s ease, color 0.15s ease' }}>
-                <DrawBrushIcon k={k} size={22} />
-              </div>
-            ))}
+        <div style={{ padding: '4px 10px 0', paddingBottom: 'calc(12px + env(safe-area-inset-bottom))', display: 'flex', flexDirection: 'column', gap: 10, flexShrink: 0 }}>
+          <div role="radiogroup" aria-label="Brush" style={{ display: 'flex', justifyContent: 'space-around' }}>
+            {DRAW_BRUSHES.map(([k, label]) => {
+              const on = brushKind === k;
+              return (
+                <div key={k} role="radio" aria-checked={on} aria-label={label} onClick={() => { hapticTap(); setBrushKind(k); }} className="zchat-press"
+                  style={{ flex: '1 1 0', minWidth: 0, maxWidth: 80, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, padding: '4px 0', cursor: 'pointer', color: '#FFFFFF', opacity: on ? 1 : 0.55, transition: 'opacity 160ms ease', WebkitTapHighlightColor: 'transparent' }}>
+                  <div style={{ height: 26, display: 'flex', alignItems: 'center' }}><DrawBrushSample k={k} color={brushColor} /></div>
+                  <div style={{ fontSize: 11.5, lineHeight: '14px', fontWeight: on ? 700 : 600, whiteSpace: 'nowrap' }}>{label}</div>
+                  <div aria-hidden="true" style={{ width: 4, height: 4, borderRadius: 2, background: on ? theme.gold : 'transparent', transition: 'background 160ms ease' }} />
+                </div>
+              );
+            })}
           </div>
-          <div style={{ minHeight: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ minHeight: 34, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             {brushKind === 'erase'
               ? <div style={{ fontSize: 13, color: 'rgba(255, 255, 255, 0.7)' }}>Rub over your drawing to erase it</div>
               : colorRow(brushColor, setBrushColor)}
@@ -15386,12 +16218,9 @@ function MediaComposer({ files, recipientName, onCancel, onSend, onActivity, mod
       )}
 
       {mode === 'filter' && (
-        <div style={{ padding: '10px 0', paddingBottom: 'calc(12px + env(safe-area-inset-bottom))', flexShrink: 0 }}>
+        <div style={{ padding: '10px 0', paddingBottom: 'calc(16px + env(safe-area-inset-bottom))', flexShrink: 0 }}>
           <FilterStrip value={cur.filter} thumb={cur.url} big onPick={(k) => updateItem(cur.id, { filter: k })} />
-          <div style={{ fontSize: 12.5, color: 'rgba(255, 255, 255, 0.6)', textAlign: 'center', paddingTop: 10 }}>Swipe the photo to try them</div>
-          <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 10 }}>
-            <div role="button" aria-label="Done" onClick={() => setMode('view')} style={{ padding: '10px 30px', borderRadius: 20, background: 'white', color: '#000', fontWeight: 800, fontSize: 14.5, cursor: 'pointer' }}>Done</div>
-          </div>
+          <div style={{ fontSize: 12.5, color: 'rgba(255, 255, 255, 0.6)', textAlign: 'center', paddingTop: 12 }}>Swipe the photo to try them</div>
         </div>
       )}
 
@@ -15423,7 +16252,7 @@ function MediaComposer({ files, recipientName, onCancel, onSend, onActivity, mod
       )}
 
       {mode === 'view' && (
-        <div style={{ flexShrink: 0, paddingBottom: 'calc(10px + env(safe-area-inset-bottom))', opacity: dragKey ? 0 : 1, transition: 'opacity 0.16s ease', pointerEvents: dragKey ? 'none' : undefined }}>
+        <div style={{ flexShrink: 0, paddingBottom: 'calc(10px + env(safe-area-inset-bottom))', opacity: dragKey ? 0 : 1, visibility: textDraft ? 'hidden' : 'visible', transition: 'opacity 0.16s ease', pointerEvents: dragKey ? 'none' : undefined }}>
           {items.length > 1 && (
             <div style={{ display: 'flex', gap: 8, padding: '10px 12px 4px', overflowX: 'auto' }}>
               {items.map((it, i) => (
@@ -15444,32 +16273,27 @@ function MediaComposer({ files, recipientName, onCancel, onSend, onActivity, mod
             </div>
           )}
           {isStory && mentions.length > 0 && (
-            <div style={{ display: 'flex', gap: 6, padding: '8px 12px 0', overflowX: 'auto' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '8px 16px 0', overflowX: 'auto', scrollbarWidth: 'none' }}>
               {mentions.map((mn) => (
-                <div key={`${mn.kind}-${mn.id}`} onClick={() => setMentions((prev) => prev.filter((x) => !(x.id === mn.id && x.kind === mn.kind)))} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '5px 10px', borderRadius: 14, background: 'rgba(255,255,255,0.16)', fontSize: 12.5, fontWeight: 700, whiteSpace: 'nowrap', cursor: 'pointer' }}>
-                  {mn.kind === 'group' ? <Users size={12} /> : <AtSign size={12} />}{mn.label}<X size={12} />
+                <div key={`${mn.kind}-${mn.id}`} role="button" aria-label={`Remove mention ${mn.label}`} onClick={() => setMentions((prev) => prev.filter((x) => !(x.id === mn.id && x.kind === mn.kind)))} style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0, fontSize: 13, fontWeight: 600, color: '#FFFFFF', whiteSpace: 'nowrap', cursor: 'pointer' }}>
+                  {mn.kind === 'group' ? <Users size={14} /> : <AtSign size={14} />}{mn.label}<X size={14} style={{ opacity: 0.5, marginLeft: 1 }} />
                 </div>
               ))}
             </div>
           )}
           {isPost && collab && (
-            <div style={{ display: 'flex', padding: '8px 12px 0' }}>
-              <div role="button" aria-label="Remove collaborator" onClick={() => setCollab(null)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 14, background: 'rgba(255,255,255,0.16)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}><UserPlus size={12} />With {collab.name}<X size={12} /></div>
+            <div style={{ display: 'flex', padding: '8px 16px 0' }}>
+              <div role="button" aria-label="Remove collaborator" onClick={() => setCollab(null)} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: '#FFFFFF', cursor: 'pointer' }}><UserPlus size={14} />With {collab.name}<X size={14} style={{ opacity: 0.5, marginLeft: 1 }} /></div>
             </div>
           )}
           {(isPost || isStory) && <TagSuggestBar text={caption} onPick={(tag, typed) => setCaption(applyTagPick(caption, typed, tag).slice(0, MAX_CHARS))} />}
           {!isPost && !isStory && (
-            <div style={{ display: 'flex', gap: 8, padding: '8px 12px 0', overflowX: 'auto', scrollbarWidth: 'none' }}>
+            <div style={{ display: 'flex', gap: 2, padding: '6px 6px 0', overflowX: 'auto', scrollbarWidth: 'none' }}>
               {[
-                { k: 'once', on: once, label: 'View once', aria: once ? 'View once on' : 'View once off', icon: <OnceIcon size={17} color={once ? '#000' : 'white'} used={once} />, tap: () => { setOnce((v) => { if (!v) { setHideIt(false); setAlbum(null); } return !v; }); } },
-                { k: 'hidden', on: hideIt, label: 'Hidden', aria: hideIt ? 'Hidden photo on' : 'Hidden photo off', icon: <HiddenPhotoIcon size={16} color={hideIt ? '#000' : 'white'} />, tap: () => { setHideIt((v) => { if (!v) { setOnce(false); setAlbum(null); } return !v; }); } },
-                albumCtx ? { k: 'album', on: !!album, label: album ? String(album.title || 'Album').slice(0, 22) : 'Album', aria: album ? `Adding to the album ${album.title}` : 'Add to a shared album', icon: <AlbumIcon size={16} color={album ? '#000' : 'white'} />, tap: () => { if (album) setAlbum(null); else setAlbumPick(true); } } : null,
-              ].filter(Boolean).map((o) => (
-                <div key={o.k} role="button" aria-label={o.aria} aria-pressed={o.on} onClick={() => { hapticTap(); playUiSound('toggle'); o.tap(); }} className="zchat-press"
-                  style={{ display: 'flex', alignItems: 'center', gap: 6, height: 34, padding: '0 13px 0 11px', borderRadius: 17, background: o.on ? '#FFFFFF' : 'rgba(255,255,255,0.14)', color: o.on ? '#000' : '#FFFFFF', fontSize: 13.5, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0, transition: 'background 0.16s ease, color 0.16s ease' }}>
-                  {o.icon}{o.label}{o.k === 'album' && o.on && <X size={14} style={{ marginLeft: 1, opacity: 0.6 }} />}
-                </div>
-              ))}
+                { k: 'once', toggle: true, on: once, label: 'View once', aria: once ? 'View once on' : 'View once off', icon: <OnceIcon size={20} color="currentColor" used={once} />, tap: () => { setOnce((v) => { if (!v) { setHideIt(false); setAlbum(null); } return !v; }); } },
+                { k: 'hidden', toggle: true, on: hideIt, label: 'Hidden', aria: hideIt ? 'Hidden photo on' : 'Hidden photo off', icon: <HiddenPhotoIcon size={19} color="currentColor" />, tap: () => { setHideIt((v) => { if (!v) { setOnce(false); setAlbum(null); } return !v; }); } },
+                albumCtx ? { k: 'album', toggle: true, on: !!album, label: album ? String(album.title || 'Album').slice(0, 22) : 'Album', aria: album ? `Adding to the album ${album.title}` : 'Add to a shared album', icon: <AlbumIcon size={19} color="currentColor" />, tap: () => { if (album) setAlbum(null); else setAlbumPick(true); } } : null,
+              ].filter(Boolean).map(optBtn)}
             </div>
           )}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px 0' }}>
@@ -15494,15 +16318,11 @@ function MediaComposer({ files, recipientName, onCancel, onSend, onActivity, mod
             )}
           </div>
           {isPost && (
-            <div style={{ display: 'flex', gap: 8, padding: '10px 12px 0', overflowX: 'auto', scrollbarWidth: 'none' }}>
-              <div role="button" aria-label={scheduleAt ? `Scheduled for ${fmtSchedule(scheduleAt)}` : 'Schedule post'} onClick={() => setSchedOpen(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, height: 34, padding: '0 13px', borderRadius: 17, background: scheduleAt ? '#FFFFFF' : 'rgba(255,255,255,0.14)', color: scheduleAt ? '#000' : '#FFFFFF', fontSize: 13.5, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
-                <Clock size={15} />{scheduleAt ? fmtSchedule(scheduleAt).replace(/^./, (s) => s.toUpperCase()) : 'Schedule'}
-              </div>
-              {canDraft && (
-                <div role="button" aria-label="Save draft" onClick={async () => { hapticTap(); if (await keepDraft()) { setDraftNote('Draft saved'); setTimeout(() => setDraftNote(''), 1600); } }} style={{ display: 'flex', alignItems: 'center', gap: 6, height: 34, padding: '0 13px', borderRadius: 17, background: 'rgba(255,255,255,0.14)', color: '#FFFFFF', fontSize: 13.5, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
-                  <Download size={15} />Save draft
-                </div>
-              )}
+            <div style={{ display: 'flex', gap: 2, padding: '8px 6px 0', overflowX: 'auto', scrollbarWidth: 'none' }}>
+              {[
+                { k: 'schedule', on: !!scheduleAt, wide: !!scheduleAt, label: scheduleAt ? fmtSchedule(scheduleAt).replace(/^./, (s) => s.toUpperCase()) : 'Schedule', aria: scheduleAt ? `Scheduled for ${fmtSchedule(scheduleAt)}` : 'Schedule post', icon: <StudioGlyph k="schedule" size={22} />, tap: () => setSchedOpen(true) },
+                canDraft ? { k: 'draft', on: false, label: 'Save draft', aria: 'Save draft', icon: <StudioGlyph k="draft" size={22} />, tap: async () => { if (await keepDraft()) { setDraftNote('Draft saved'); setTimeout(() => setDraftNote(''), 1600); } } } : null,
+              ].filter(Boolean).map(optBtn)}
             </div>
           )}
           {isPost
@@ -15722,6 +16542,14 @@ function appAlert(msg) {
   const text = String(msg == null ? '' : msg).trim();
   if (!text) return;
   try { window.dispatchEvent(new CustomEvent('zchat-alert', { detail: { text } })); } catch {}
+}
+function appSnack(msg) {
+  const text = String(msg == null ? '' : msg).trim();
+  if (!text) return;
+  try { window.dispatchEvent(new CustomEvent('zchat-calm-snack', { detail: { text } })); } catch {}
+}
+function patchMyProfile(id, patch) {
+  try { window.dispatchEvent(new CustomEvent('zchat-me-patch', { detail: { id, patch } })); } catch {}
 }
 function AppAlertHost() {
   const { theme } = useTheme();
@@ -16335,31 +17163,30 @@ function AddToHighlightSheet({ userId, story, onClose, onDone }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
   const drag = useSheetDrag(onClose);
-  const [list, setList] = useState(null);
+  const [list, setList] = useState(() => { const m = highlightsMem.get(userId); return m ? [...m].reverse() : null; });
   const [busy, setBusy] = useState(null);
   const [creating, setCreating] = useState(false);
   const [title, setTitle] = useState('');
   useEffect(() => {
     let alive = true;
-    supabase.from('highlights').select('*').eq('user_id', userId).order('created_at', { ascending: false }).then(({ data }) => { if (alive) setList(data || []); });
+    supabase.from('highlights').select('*').eq('user_id', userId).order('created_at', { ascending: false }).then(({ data, error }) => { if (alive) setList((prev) => (error && !data ? prev || [] : data || [])); });
     return () => { alive = false; };
   }, [userId]);
   const item = (hid) => ({ highlight_id: hid, user_id: userId, media_url: story.media_url, media_type: story.media_type, overlay_url: story.overlay_url || null, caption: story.caption || null });
   const addTo = async (h) => {
     if (busy) return;
-    setBusy(h.id);
+    onDone(`Added to ${h.title}`);
     const { error } = await supabase.from('highlight_items').insert(item(h.id));
-    setBusy(null);
-    onDone(error ? "Couldn't add it. Try again." : `Added to ${h.title}`);
+    if (error) appSnack(friendlyError(error, "Couldn't add it. Try again."));
   };
   const createNew = async () => {
     if (busy) return;
-    setBusy('new');
-    const { data: h, error } = await supabase.from('highlights').insert({ user_id: userId, title: (title.trim() || 'Highlights').slice(0, 20), cover_url: story.media_url, cover_type: story.media_type }).select().single();
-    if (error || !h) { setBusy(null); onDone("Couldn't make the highlight. Try again."); return; }
+    const name = (title.trim() || 'Highlights').slice(0, 20);
+    onDone(`Added to ${name}`);
+    const { data: h, error } = await supabase.from('highlights').insert({ user_id: userId, title: name, cover_url: story.media_url, cover_type: story.media_type }).select().single();
+    if (error || !h) { appSnack(friendlyError(error, "Couldn't make the highlight. Try again.")); return; }
+    highlightsMem.set(userId, [...(highlightsMem.get(userId) || []).filter((x) => x.id !== h.id), h]);
     await supabase.from('highlight_items').insert(item(h.id));
-    setBusy(null);
-    onDone(`Added to ${h.title}`);
   };
   return (
     <Portal>
@@ -16395,13 +17222,19 @@ function AddToHighlightSheet({ userId, story, onClose, onDone }) {
   );
 }
 
+const storyArchiveMem = new Map();
 function StoryArchivePage({ userId, onClose, onOpen }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
-  const [rows, setRows] = useState(null);
+  const [rows, setRows] = useState(() => storyArchiveMem.get(userId) || null);
   useEffect(() => {
     let alive = true;
-    supabase.from('stories').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(300).then(({ data }) => { if (alive) setRows((data || []).filter((s) => !s.repost_of)); });
+    supabase.from('stories').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(300).then(({ data, error }) => {
+      if (error && !data) { if (alive) setRows((prev) => prev || []); return; }
+      const list = (data || []).filter((s) => !s.repost_of && !storyGoneIds.has(s.id));
+      storyArchiveMem.set(userId, list);
+      if (alive) setRows(list);
+    });
     return () => { alive = false; };
   }, [userId]);
   const groups = [];
@@ -16509,6 +17342,7 @@ function releaseVideo(v) {
   try { v.pause(); } catch {}
   try { v.removeAttribute('src'); v.load(); } catch {}
 }
+const storyPreVideos = [];
 
 const interactMem = new Map();
 function useCanInteract(kind, fromId, toId) {
@@ -16573,9 +17407,9 @@ function StoryViewer({ onAddYours, groupsList, startGroup = 0, startStoryId = nu
   const [wide, setWide] = useState(() => typeof window !== 'undefined' && window.innerWidth >= 760);
   const videoRef = useRef(null);
   const attachRef = useRef(null);
-  if (!attachRef.current) attachRef.current = (el) => { if (!el) return; const prev = videoRef.current; if (prev && prev !== el) releaseVideo(prev); videoRef.current = el; };
+  if (!attachRef.current) attachRef.current = (el) => { const prev = videoRef.current; if (prev && prev !== el) releaseVideo(prev); videoRef.current = el || null; };
   const attachVideo = attachRef.current;
-  useEffect(() => () => { releaseVideo(videoRef.current); videoRef.current = null; }, []);
+  useEffect(() => () => { releaseVideo(videoRef.current); videoRef.current = null; storyPreVideos.splice(0).forEach(releaseVideo); }, []);
   const elapsedRef = useRef(0);
   const lastTickRef = useRef(0);
   const durationRef = useRef(STORY_IMAGE_MS);
@@ -16672,9 +17506,10 @@ function StoryViewer({ onAddYours, groupsList, startGroup = 0, startStoryId = nu
     if (group.stories[si + 1]) pre.push(group.stories[si + 1]);
     const ng = groupsList[gi + 1];
     if (ng && ng.stories.length) pre.push(ng.stories[Math.max(0, ng.stories.findIndex((s) => !seen.has(s.id)))]);
+    storyPreVideos.splice(0).forEach(releaseVideo);
     pre.forEach((s) => {
       if (!s || !s.media_url) return;
-      if (s.media_type === 'video') { const v = document.createElement('video'); v.preload = 'auto'; v.muted = true; v.src = s.media_url; } else { const im = new Image(); im.decoding = 'async'; im.src = s.media_url; }
+      if (s.media_type === 'video') { const v = document.createElement('video'); v.preload = 'auto'; v.muted = true; v.src = s.media_url; storyPreVideos.push(v); } else { const im = new Image(); im.decoding = 'async'; im.src = s.media_url; }
       const ns = validSong(s.song);
       if (ns && !(muted || soundBlocked) && !dataSaverOn()) warmSong(ns);
     });
@@ -16727,7 +17562,7 @@ function StoryViewer({ onAddYours, groupsList, startGroup = 0, startStoryId = nu
   }, [gi, si, story && story.id, failed]);
   useEffect(() => {
     const v = videoRef.current;
-    if (!v) return;
+    if (!v || !v.isConnected || !story || story.media_type !== 'video') return;
     if (stopped && loaded) v.pause();
     else if (!stopped) v.play().catch((err) => {
       if (err && err.name === 'NotAllowedError' && !v.muted) { v.muted = true; setSoundBlocked(true); v.play().catch(() => {}); }
@@ -16777,7 +17612,7 @@ function StoryViewer({ onAddYours, groupsList, startGroup = 0, startStoryId = nu
   }, []);
   useEffect(() => {
     const sid = story && story.id;
-    if (!storySong) { setSongWait(false); if (songStoryRef.current) { songStoryRef.current = null; stopSong(); } return undefined; }
+    if (!storySong) { setSongWait(false); songStoryRef.current = null; if (songPlayer.id || songPlayer.cur || songPlayer.wait) stopSong(); return undefined; }
     if (songStoryRef.current !== sid) { songStoryRef.current = sid; songStartRef.current = null; songAlignRef.current = null; if (!soundOff) primeSong(storySong); }
     if (soundOff) { setSongWait(false); pauseSong(); return undefined; }
     if (stoppedBase || vidWait) { pauseSong(); return undefined; }
@@ -16790,7 +17625,7 @@ function StoryViewer({ onAddYours, groupsList, startGroup = 0, startStoryId = nu
     const pr = playSong(storySong, first);
     if (pr && pr.then) {
       pr.then(null, (err) => {
-        if (songStoryRef.current !== sid) return;
+        if (songStoryRef.current !== sid || (err && err.name === 'AbortError')) return;
         songGiveUpRef.current = sid;
         songAlignRef.current = sid;
         setSongWait(false);
@@ -16802,10 +17637,10 @@ function StoryViewer({ onAddYours, groupsList, startGroup = 0, startStoryId = nu
   useEffect(() => {
     if (!songWait || stoppedBase) return undefined;
     const sid = story && story.id;
-    const t = setTimeout(() => { if (sid) { songGiveUpRef.current = sid; songAlignRef.current = sid; } setSongWait(false); }, 8000);
+    const t = setTimeout(() => { if (sid) { songGiveUpRef.current = sid; songAlignRef.current = sid; } setSongWait(false); }, 2500);
     return () => clearTimeout(t);
   }, [songWait, stoppedBase, story && story.id]);
-  useEffect(() => () => stopSong(), []);
+  useEffect(() => { hushOtherMedia(null, true); return () => stopSong(); }, []);
   const kickSong = () => {
     if (!storySong || !story || stoppedBase) return;
     songAlignRef.current = story.id;
@@ -16893,15 +17728,13 @@ function StoryViewer({ onAddYours, groupsList, startGroup = 0, startStoryId = nu
   const doRepost = async () => {
     setConfirmRepost(false);
     playUiSound('repost');
-    setRepostBusy(true);
-    const result = await onRepost(story, group.profile);
-    setRepostBusy(false);
-    if (result === 'ok' || result === 'already') {
-      setRepostedIds((prev) => new Set(prev).add(story.id));
-      setRepostPop(true);
-      setTimeout(() => setRepostPop(false), 700);
-      showFlash(result === 'ok' ? 'Added to your story' : 'Already on your story', 1600);
-    }
+    const target = story;
+    setRepostedIds((prev) => new Set(prev).add(target.id));
+    setRepostPop(true);
+    setTimeout(() => setRepostPop(false), 700);
+    showFlash('Added to your story', 1600);
+    const result = await onRepost(target, group.profile);
+    if (result !== 'ok' && result !== 'already') setRepostedIds((prev) => { const n = new Set(prev); n.delete(target.id); return n; });
   };
   const sendReply = async () => {
     const text = reply.trim();
@@ -16937,6 +17770,8 @@ function StoryViewer({ onAddYours, groupsList, startGroup = 0, startStoryId = nu
     { k: 'report', label: 'Report', danger: true, on: () => onReport(group.profile) },
   ];
   const navBtn = { position: 'absolute', top: '50%', marginTop: -22, width: 44, height: 44, borderRadius: '50%', background: 'rgba(255,255,255,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', zIndex: 20, border: 'none' };
+  const storyTool = { flex: '0 0 auto', minWidth: 58, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '2px 6px', cursor: 'pointer', color: '#FFFFFF', fontSize: 11.5, fontWeight: 600, lineHeight: 1.2, textShadow: '0 1px 3px rgba(0,0,0,0.5)', whiteSpace: 'nowrap' };
+  const storyToolGlyph = { height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.4))' };
   const mediaFit = mediaDim && stageDim && stageDim.w > 0 && stageDim.h > 0 ? (() => { const k = Math.min(stageDim.w / mediaDim.w, stageDim.h / mediaDim.h); const w = mediaDim.w * k; const h = mediaDim.h * k; return { x: (stageDim.w - w) / 2, y: (stageDim.h - h) / 2, w, h }; })() : null;
   const stageAnim = slideIn === 'next' ? 'zchat-story-in-next 0.3s cubic-bezier(0.2, 0.9, 0.3, 1)' : slideIn === 'prev' ? 'zchat-story-in-prev 0.3s cubic-bezier(0.2, 0.9, 0.3, 1)' : undefined;
 
@@ -16949,7 +17784,7 @@ function StoryViewer({ onAddYours, groupsList, startGroup = 0, startStoryId = nu
           onDoubleClick={() => { if (!isMine && !readOnly) toggleLike(); }}
           style={{ position: 'absolute', inset: 0, touchAction: 'none', userSelect: 'none' }}>
           {story.media_type === 'video' ? (
-            <video key={story.id} ref={attachVideo} src={story.media_url} playsInline autoPlay muted={soundOff}
+            <video key={story.id} ref={attachVideo} data-zmix="story" src={story.media_url} playsInline autoPlay muted={soundOff}
               onLoadedMetadata={(e) => { const v = e.currentTarget; const d = v.duration; durationRef.current = Number.isFinite(d) && d > 0 ? Math.min(d, 60) * 1000 : 15000; if (v.videoWidth && v.videoHeight) setMediaDim({ w: v.videoWidth, h: v.videoHeight }); setLoaded(true); }}
               onWaiting={() => setVidWait(true)} onPlaying={() => setVidWait(false)}
               onError={() => { setFailed(true); setLoaded(true); }}
@@ -17016,13 +17851,13 @@ function StoryViewer({ onAddYours, groupsList, startGroup = 0, startStoryId = nu
         </div>
 
         {(story.caption || mentions.length > 0) && !replyFocus && (
-          <div data-story-control style={{ position: 'absolute', left: 14, right: 14, bottom: `calc(${readOnly && extraActions && extraActions.length ? 136 : 84}px + env(safe-area-inset-bottom))`, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, ...uiFade }}>
-            {story.caption && <div style={{ background: 'rgba(0,0,0,0.45)', padding: '8px 14px', borderRadius: 14, fontSize: 14.5, fontWeight: 600, textAlign: 'center', maxWidth: '100%', wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}><RichText text={story.caption} onMention={(p) => onOpenProfile(p)} /></div>}
+          <div data-story-control style={{ position: 'absolute', left: 14, right: 14, bottom: `calc(${readOnly && extraActions && extraActions.length ? 112 : isMine && !readOnly ? 120 : 84}px + env(safe-area-inset-bottom))`, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, ...uiFade }}>
+            {story.caption && <div style={{ padding: '2px 6px', fontSize: 15.5, fontWeight: 600, lineHeight: 1.35, textAlign: 'center', maxWidth: '100%', wordBreak: 'break-word', whiteSpace: 'pre-wrap', textShadow: '0 1px 2px rgba(0,0,0,0.75), 0 0 14px rgba(0,0,0,0.5)' }}><RichText text={story.caption} onMention={(p) => onOpenProfile(p)} /></div>}
             {mentions.length > 0 && (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, justifyContent: 'center' }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', columnGap: 14, rowGap: 2, color: '#FFFFFF', textShadow: '0 1px 4px rgba(0,0,0,0.65)' }}>
                 {mentions.map((mn) => (
-                  <div key={`${mn.kind}-${mn.id}`} onClick={() => onOpenMention(mn)} style={{ display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(255,255,255,0.92)', color: '#111', padding: '5px 11px', borderRadius: 14, fontSize: 12.5, fontWeight: 800, cursor: 'pointer' }}>
-                    {mn.kind === 'group' ? <Users size={13} /> : <AtSign size={13} />}{mn.label}
+                  <div key={`${mn.kind}-${mn.id}`} role="button" aria-label={`Open ${mn.label}`} onClick={() => onOpenMention(mn)} className="zchat-press" style={{ display: 'flex', alignItems: 'center', gap: 5, minHeight: 30, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+                    <span style={{ display: 'flex', filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.55))' }}>{mn.kind === 'group' ? <LineGlyph k="friends" size={17} /> : <AtSign size={15} strokeWidth={2.4} />}</span>{mn.label}
                   </div>
                 ))}
               </div>
@@ -17045,9 +17880,9 @@ function StoryViewer({ onAddYours, groupsList, startGroup = 0, startStoryId = nu
                 </div>
               </>
             ) : extraActions && extraActions.length ? (
-              <div style={{ display: 'flex', gap: 8, width: '100%', justifyContent: 'center', flexWrap: 'wrap' }}>
+              <div role="toolbar" aria-label="Story actions" style={{ display: 'flex', width: '100%', justifyContent: 'space-around', alignItems: 'flex-start' }}>
                 {extraActions.map((a) => (
-                  <div key={a.label} role="button" aria-label={a.label} onClick={() => a.on(story)} style={{ height: 42, padding: '0 16px', borderRadius: 21, background: 'rgba(255,255,255,0.16)', display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', fontWeight: 700, fontSize: 13.5 }}>{a.icon}{a.label}</div>
+                  <div key={a.label} role="button" aria-label={a.label} onClick={() => a.on(story)} className="zchat-press" style={storyTool}><span style={storyToolGlyph}>{React.isValidElement(a.icon) ? React.cloneElement(a.icon, { size: 23 }) : a.icon}</span>{a.label}</div>
                 ))}
               </div>
             ) : null
@@ -17057,19 +17892,17 @@ function StoryViewer({ onAddYours, groupsList, startGroup = 0, startStoryId = nu
                 <ChevronRight size={18} style={{ transform: 'rotate(-90deg)' }} />
                 <span style={{ fontSize: 11.5, fontWeight: 700 }}>Swipe up for activity</span>
               </div>
-              <div role="button" aria-label="Story viewers" onClick={() => setShowViewers(true)} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 14px', borderRadius: 22, background: 'rgba(255,255,255,0.14)', cursor: 'pointer', fontSize: 13.5, fontWeight: 700 }}>
-                <Eye size={17} /> {viewCount == null ? 'Viewers' : `${viewCount} ${viewCount === 1 ? 'viewer' : 'viewers'}`}
+              <div role="button" aria-label="Story viewers" onClick={() => setShowViewers(true)} className="zchat-press" style={{ ...storyTool, flex: '0 0 auto', alignItems: 'flex-start', minWidth: 64 }}>
+                <span style={storyToolGlyph}><LineGlyph k="eye" size={24} sw={2} /></span>{viewCount == null ? 'Viewers' : `${viewCount} ${viewCount === 1 ? 'viewer' : 'viewers'}`}
               </div>
               <div style={{ position: 'relative', zIndex: 12, flex: 1 }} />
               {onShare && (
-                <div role="button" aria-label="Share story" onClick={() => onShare(story, group.profile)} style={{ width: 42, height: 42, borderRadius: '50%', background: 'rgba(255,255,255,0.14)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><Share2 size={18} color="white" /></div>
+                <div role="button" aria-label="Share story" onClick={() => onShare(story, group.profile)} className="zchat-press" style={storyTool}><span style={storyToolGlyph}><LineGlyph k="send" size={23} sw={2} /></span>Share</div>
               )}
               {onAddStory && (
-                <div role="button" aria-label="Add to your story" onClick={onAddStory} style={{ height: 42, padding: '0 14px', borderRadius: 21, background: 'rgba(255,255,255,0.14)', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontWeight: 700, fontSize: 13.5 }}>
-                  <span style={{ fontSize: 20, lineHeight: 1 }}>+</span> Add
-                </div>
+                <div role="button" aria-label="Add to your story" onClick={onAddStory} className="zchat-press" style={storyTool}><span style={storyToolGlyph}><LineGlyph k="highlight" size={24} sw={2} /></span>Add</div>
               )}
-              <div role="button" aria-label="Delete story" onClick={() => setConfirmDelete(true)} style={{ width: 42, height: 42, borderRadius: '50%', background: 'rgba(255,255,255,0.14)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><Trash2 size={18} color="white" /></div>
+              <div role="button" aria-label="Delete story" onClick={() => setConfirmDelete(true)} className="zchat-press" style={storyTool}><span style={storyToolGlyph}><LineGlyph k="trash" size={23} sw={2} /></span>Delete</div>
             </>
           ) : (
             <>
@@ -17195,6 +18028,8 @@ function formatCallDuration(ms) {
 }
 
 function startCallTone(kind) {
+  hushOtherMedia(null);
+  pauseSong();
   try {
     const Ctx = window.AudioContext || window.webkitAudioContext;
     if (!Ctx) return () => {};
@@ -17884,15 +18719,16 @@ function CallAudio({ stream }) {
 function GroupCallBar({ row, onJoin }) {
   const { theme } = useTheme();
   return (
-    <div className="zchat-fade" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 14px', flexShrink: 0, background: `${theme.teal}1F` }}>
-      <div style={{ display: 'flex', flexShrink: 0, color: '#1FA855' }}>
-        {row.kind === 'video' ? <VideoIcon size={22} /> : <Phone size={22} />}
+    <div className="zchat-fade" style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '2px 12px 8px', padding: '8px 8px 8px 14px', borderRadius: 14, flexShrink: 0, background: theme.dark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.045)' }}>
+      <div style={{ position: 'relative', display: 'flex', flexShrink: 0, color: '#22B04B' }}>
+        {row.kind === 'video' ? <VideoIcon size={20} strokeWidth={2} /> : <Phone size={19} strokeWidth={2} />}
+        <span className={reducedMotion() ? undefined : 'zchat-live-dot'} style={{ position: 'absolute', top: -3, right: -4, width: 7, height: 7, borderRadius: '50%', background: '#22C55E', boxShadow: `0 0 0 2px ${theme.panelBg}` }} />
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 13, fontWeight: 800, color: theme.ink }}>{row.kind === 'video' ? 'Video call' : 'Voice call'} in progress</div>
-        <div style={{ fontSize: 11.5, color: theme.muted }}>Tap join to hop in</div>
+        <div style={{ fontSize: 14, fontWeight: 700, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.kind === 'video' ? 'Video call' : 'Voice call'} in progress</div>
+        <div style={{ fontSize: 12.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Tap join to hop in</div>
       </div>
-      <button onClick={onJoin} style={{ padding: '8px 18px', borderRadius: 18, border: 'none', background: '#34C759', color: 'white', fontWeight: 800, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>Join</button>
+      <button onClick={onJoin} className="zchat-press" style={{ height: 32, padding: '0 16px', borderRadius: 10, border: 'none', background: '#22B04B', color: 'white', fontWeight: 700, fontSize: 14, cursor: 'pointer', fontFamily: FONT, flexShrink: 0 }}>Join</button>
     </div>
   );
 }
@@ -17908,6 +18744,7 @@ function storyLongPress(store, key, onLong) {
   };
 }
 
+const storyGoneIds = new Set();
 function StoryTray({ me, myStories, trayUsers, seen, onAdd, onOpen, uploading = false, onLongPress }) {
   const { theme } = useTheme();
   const lp = useRef({});
@@ -17965,7 +18802,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-const APP_VERSION = '22.0V';
+const APP_VERSION = '22.1V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -18048,17 +18885,28 @@ function UnblockConfirmSheet({ profile, onCancel, onConfirm }) {
   );
 }
 
+const blockedListMem = new Map();
 function BlockedAccountsPanel({ myId, blockedIds, onClose, onUnblock, onOpenProfile }) {
   useBackClose(true, onClose);
   const edgeBack = useEdgeSwipeBack(true);
   const { theme } = useTheme();
-  const [rows, setRows] = useState(null);
+  const [rowsRaw, setRows] = useState(() => blockedListMem.get(myId) || null);
+  const prevBlockedRef = useRef(blockedIds);
+  const unblockedRef = useRef(new Set());
+  if (prevBlockedRef.current !== blockedIds) {
+    prevBlockedRef.current.forEach((id) => { if (!blockedIds.has(id)) unblockedRef.current.add(id); });
+    blockedIds.forEach((id) => unblockedRef.current.delete(id));
+    prevBlockedRef.current = blockedIds;
+  }
+  const rows = rowsRaw ? rowsRaw.filter((r) => !unblockedRef.current.has(r.profile.id)) : rowsRaw;
   const [q, setQ] = useState('');
   const idsKey = [...blockedIds].sort().join(',');
+  useEffect(() => { if (rowsRaw) blockedListMem.set(myId, rowsRaw); }, [rowsRaw]);
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const { data: blocks } = await supabase.from('blocks').select('*').eq('blocker_id', myId);
+      const { data: blocks, error } = await supabase.from('blocks').select('*').eq('blocker_id', myId);
+      if (error && !blocks) { if (!cancelled) setRows((prev) => prev || []); return; }
       const list = blocks || [];
       if (!list.length) { if (!cancelled) setRows([]); return; }
       const { data: profs } = await supabase.from('profiles').select('*').in('id', list.map((b) => b.blocked_id));
@@ -18123,10 +18971,10 @@ function StoryShareSheet({ story, owner, conversations, groups, onSend, onClose 
   const shown = items.filter((it) => !term || it.name.toLowerCase().includes(term) || it.sub.toLowerCase().includes(term));
   const toggle = (it) => setPicked((prev) => (prev.some((p) => p.key === it.key) ? prev.filter((p) => p.key !== it.key) : [...prev, it]));
   const say = (text) => { setFlash(text); setTimeout(() => setFlash(''), 1600); };
-  const action = (icon, label, onClick) => (
-    <div onClick={onClick} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: 'pointer', width: 76 }}>
-      <div style={{ height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.ink }}>{React.cloneElement(icon, { size: 24, strokeWidth: 1.6 })}</div>
-      <span style={{ fontSize: 11.5, fontWeight: 600, color: theme.ink, textAlign: 'center' }}>{label}</span>
+  const action = (glyph, label, onClick) => (
+    <div role="button" aria-label={label} onClick={() => { hapticTap(); onClick(); }} className="zchat-press" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 7, cursor: 'pointer', width: 80, WebkitTapHighlightColor: 'transparent' }}>
+      <div style={{ width: 52, height: 52, borderRadius: '50%', background: theme.soft, color: theme.ink, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><StudioGlyph k={glyph} size={26} /></div>
+      <span style={{ fontSize: 11.5, fontWeight: 600, color: theme.ink2, textAlign: 'center', whiteSpace: 'nowrap' }}>{label}</span>
     </div>
   );
   return (
@@ -18144,10 +18992,10 @@ function StoryShareSheet({ story, owner, conversations, groups, onSend, onClose 
             {shown.map((it) => {
               const on = picked.some((p) => p.key === it.key);
               return (
-                <div key={it.key} onClick={() => toggle(it)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '8px 2px', cursor: 'pointer' }}>
-                  <div style={{ position: 'relative' }}>
+                <div key={it.key} role="checkbox" aria-checked={on} aria-label={`Send to ${it.name}`} onClick={() => { hapticTap(); toggle(it); }} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '8px 2px', cursor: 'pointer', WebkitTapHighlightColor: 'transparent' }}>
+                  <div style={{ position: 'relative', borderRadius: '50%', boxShadow: on ? `0 0 0 2px ${theme.panelBg}, 0 0 0 4px ${theme.coral}` : 'none', transition: 'box-shadow 160ms ease' }}>
                     {it.kind === 'group' ? <GroupAvatar avatar={it.avatar} name={it.name} size={56} /> : <Avatar emoji={it.avatar} name={it.name} size={56} />}
-                    {on && <div style={{ position: 'absolute', right: -2, bottom: -2, width: 22, height: 22, borderRadius: '50%', background: theme.coral, border: `2.5px solid ${theme.panelBg}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Check size={12} color="white" /></div>}
+                    {on && <div style={{ position: 'absolute', right: -3, bottom: -3, width: 22, height: 22, borderRadius: '50%', background: theme.coral, border: `2.5px solid ${theme.panelBg}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Check size={12} color="white" strokeWidth={3} /></div>}
                   </div>
                   <div style={{ fontSize: 11.5, fontWeight: on ? 800 : 600, color: theme.ink, marginTop: 5, maxWidth: '100%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.name.split(' ')[0]}</div>
                 </div>
@@ -18164,12 +19012,12 @@ function StoryShareSheet({ story, owner, conversations, groups, onSend, onClose 
           </div>
         ) : (
           <div style={{ display: 'flex', justifyContent: 'space-around', padding: '14px 10px 16px', borderTop: `1px solid ${theme.border}` }}>
-            {action(<Copy size={20} />, 'Copy link', async () => { const ok = await copyTextToClipboard(link); say(ok ? 'Link copied' : "Couldn't copy the link"); })}
-            {action(<Share2 size={20} />, 'Share to apps', async () => {
+            {action('link', 'Copy link', async () => { const ok = await copyTextToClipboard(link); say(ok ? 'Link copied' : "Couldn't copy the link"); })}
+            {action('share', 'Share to apps', async () => {
               if (navigator.share) { try { await navigator.share({ title: `${owner.name} on ZChat`, text: `See ${owner.name}'s status on ZChat`, url: link }); } catch {} } else { const ok = await copyTextToClipboard(link); say(ok ? 'Link copied' : "Couldn't copy the link"); }
             })}
-            {action(<Send size={20} />, 'WhatsApp', () => window.open(`https://wa.me/?text=${encodeURIComponent(`See ${owner.name}'s status on ZChat ${link}`)}`, '_blank', 'noopener'))}
-            {action(<Mail size={20} />, 'Email', () => { window.location.href = `mailto:?subject=${encodeURIComponent(`${owner.name} on ZChat`)}&body=${encodeURIComponent(link)}`; })}
+            {action('chatphone', 'WhatsApp', () => window.open(`https://wa.me/?text=${encodeURIComponent(`See ${owner.name}'s status on ZChat ${link}`)}`, '_blank', 'noopener'))}
+            {action('mail', 'Email', () => { window.location.href = `mailto:?subject=${encodeURIComponent(`${owner.name} on ZChat`)}&body=${encodeURIComponent(link)}`; })}
           </div>
         )}
         {flash && <div className="zchat-pop" style={{ position: 'absolute', left: '50%', top: -48, transform: 'translateX(-50%)', background: theme.ink, color: theme.panelBg, padding: '9px 16px', borderRadius: 20, fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' }}>{flash}</div>}
@@ -18360,28 +19208,34 @@ function StoryRefCard({ m, isMe, onOpen }) {
   );
 }
 
+const storyViewersMem = new Map();
 function StoryViewersSheet({ story, myId, onClose, onOpenProfile }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
   const drag = useSheetDrag(onClose);
-  const [rows, setRows] = useState(null);
+  const [rows, setRows] = useState(() => storyViewersMem.get(story.id) || null);
   const [tab, setTab] = useState('views');
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const { data: views } = await supabase.from('story_views').select('*').eq('story_id', story.id);
-      const { data: likes } = await supabase.from('story_likes').select('*').eq('story_id', story.id);
-      const { data: reps } = await supabase.from('messages').select('sender_id, content, created_at').eq('story_id', story.id).eq('receiver_id', myId).order('created_at', { ascending: false }).limit(300);
+      const [{ data: views, error: ve }, { data: likes }, { data: reps }] = await Promise.all([
+        supabase.from('story_views').select('*').eq('story_id', story.id),
+        supabase.from('story_likes').select('*').eq('story_id', story.id),
+        supabase.from('messages').select('sender_id, content, created_at').eq('story_id', story.id).eq('receiver_id', myId).order('created_at', { ascending: false }).limit(300),
+      ]);
+      if (ve && !views) { if (!cancelled) setRows((prev) => prev || []); return; }
       const replyBy = {};
       (reps || []).forEach((r) => { if (r && r.sender_id && replyBy[r.sender_id] == null && typeof r.content === 'string') replyBy[r.sender_id] = r.content; });
       const ids = [...new Set([...(views || []).map((v) => v.viewer_id), ...(likes || []).map((l) => l.user_id), ...Object.keys(replyBy)])].filter((id) => id !== myId);
-      if (!ids.length) { if (!cancelled) setRows([]); return; }
+      if (!ids.length) { storyViewersMem.set(story.id, []); if (!cancelled) setRows([]); return; }
       const { data: profs } = await supabase.from('profiles').select('*').in('id', ids);
       const likedSet = new Set((likes || []).map((l) => l.user_id));
       const viewedAt = {};
       (views || []).forEach((v) => { viewedAt[v.viewer_id] = v.viewed_at; });
       const list = sanitizeAvatarList(profs, myId).map((p) => ({ profile: p, liked: likedSet.has(p.id), at: viewedAt[p.id], reply: replyBy[p.id] || null }))
         .sort((a, b) => (b.liked - a.liked) || (new Date(b.at || 0) - new Date(a.at || 0)));
+      storyViewersMem.set(story.id, list);
+      if (storyViewersMem.size > 40) storyViewersMem.delete(storyViewersMem.keys().next().value);
       if (!cancelled) setRows(list);
     })();
     return () => { cancelled = true; };
@@ -18442,8 +19296,9 @@ function CallTile({ tile, isVideo, muted, cameraOff, facing, onMenu, onFocus, fo
         </div>
       )}
       {!tile.local && tile.stream && !isVideo && <CallAudio stream={tile.stream} />}
-      <div style={{ position: 'absolute', left: 8, bottom: 8, display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 12, background: 'rgba(0,0,0,0.5)', fontSize: 12, fontWeight: 700, color: 'white' }}>
-        {muted && <MicOff size={12} color="#FF6B6B" />}{tile.name}
+      <div aria-hidden="true" style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 52, background: 'linear-gradient(to top, rgba(0,0,0,0.5), rgba(0,0,0,0))', pointerEvents: 'none' }} />
+      <div style={{ position: 'absolute', left: 10, right: 10, bottom: 8, display: 'flex', alignItems: 'center', gap: 5, minWidth: 0, fontSize: 12.5, fontWeight: 600, color: 'white', textShadow: '0 1px 4px rgba(0,0,0,0.45)' }}>
+        {muted && <MicOff size={13} color="#FF6B6B" style={{ flexShrink: 0 }} />}<span style={{ minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{tile.name}</span>
       </div>
     </div>
   );
@@ -18643,7 +19498,7 @@ function CallScreen({ call, me, nameFor, avatarFor, onAccept, onDecline, onHangu
           return (
             <div key={r.id} className="zchat-react-float" style={{ position: 'absolute', left: `${x}%`, bottom: 'calc(170px + env(safe-area-inset-bottom))', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
               <span style={{ fontSize: 46, lineHeight: 1, filter: 'drop-shadow(0 4px 10px rgba(0,0,0,0.35))' }}>{r.e}</span>
-              {who && <span style={{ fontSize: 11.5, fontWeight: 800, padding: '2px 7px', borderRadius: 9, background: 'rgba(0,0,0,0.5)' }}>{who}</span>}
+              {who && <span style={{ fontSize: 12, fontWeight: 700, textShadow: '0 1px 6px rgba(0,0,0,0.75)' }}>{who}</span>}
             </div>
           );
         })}
@@ -18662,7 +19517,7 @@ function CallScreen({ call, me, nameFor, avatarFor, onAccept, onDecline, onHangu
           </div>
           <div style={{ marginTop: 22, fontSize: String(title || '').length > 28 ? 21 : 29, fontWeight: 800, padding: '0 24px', textAlign: 'center', wordBreak: 'break-word', lineHeight: 1.15, textShadow: '0 2px 14px rgba(0,0,0,0.5)' }}>{title}{!isGroup && call.peer && <VerifiedBadge tier={call.peer.verified} custom={call.peer.custom_badge} size={22} />}</div>
           <div style={{ marginTop: 6, fontSize: 15, color: 'rgba(255,255,255,0.82)', fontVariantNumeric: 'tabular-nums' }}>{status}</div>
-          {!isGroup && peerId && remoteMuted[peerId] && !ringingIn && <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 14, background: 'rgba(0,0,0,0.4)', fontSize: 12.5, fontWeight: 700 }}><MicOff size={13} color="#FF6B6B" /> {title.split(' ')[0]} is muted</div>}
+          {!isGroup && peerId && remoteMuted[peerId] && !ringingIn && <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 6, fontSize: 13.5, fontWeight: 600, color: 'rgba(255,255,255,0.88)', textShadow: '0 1px 8px rgba(0,0,0,0.5)' }}><MicOff size={14} color="#FF6B6B" /> {title.split(' ')[0]} is muted</div>}
         </div>
       ) : (
         <div style={{ position: 'relative', zIndex: 2, textAlign: 'center', marginTop: 8 }}>
@@ -18688,8 +19543,11 @@ function CallScreen({ call, me, nameFor, avatarFor, onAccept, onDecline, onHangu
         <div style={{ position: 'relative', zIndex: 4, padding: '0 34px', paddingBottom: 'calc(46px + env(safe-area-inset-bottom))' }}>
           {isVideo && (
             <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 26 }}>
-              <div role="button" onClick={() => setJoinCameraOff((v) => !v)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 16px', borderRadius: 22, cursor: 'pointer', background: joinCameraOff ? 'white' : 'rgba(255,255,255,0.16)', color: joinCameraOff ? '#140E24' : 'white', fontSize: 13, fontWeight: 800 }}>
-                {joinCameraOff ? <VideoOff size={16} /> : <VideoIcon size={16} />}{joinCameraOff ? 'Camera off when you join' : 'Camera on when you join'}
+              <div role="button" aria-label={joinCameraOff ? 'Camera off when you join' : 'Camera on when you join'} aria-pressed={!joinCameraOff} onClick={() => { hapticTap(); setJoinCameraOff((v) => !v); }} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, cursor: 'pointer', WebkitTapHighlightColor: 'transparent' }}>
+                <div style={{ width: 54, height: 54, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: joinCameraOff ? 'white' : 'rgba(255,255,255,0.16)', color: joinCameraOff ? '#140E24' : 'white', backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)', transition: 'background 0.2s ease, color 0.2s ease' }}>
+                  {joinCameraOff ? <VideoOff size={22} /> : <VideoIcon size={22} />}
+                </div>
+                <span style={{ fontSize: 12.5, fontWeight: 600, color: 'rgba(255,255,255,0.85)' }}>{joinCameraOff ? 'Camera off' : 'Camera on'}</span>
               </div>
             </div>
           )}
@@ -18848,6 +19706,58 @@ function followLabel(state, theyFollowMe) {
   if (state === 'accepted') return 'Following';
   if (state === 'pending') return 'Requested';
   return theyFollowMe ? 'Follow back' : 'Follow';
+}
+const latestSyncMem = new Map();
+function latestSync(keyIn, want, run, base) {
+  const key = `${cacheOwner}|${keyIn}`;
+  let s = latestSyncMem.get(key);
+  if (!s) { s = { want, base, job: null }; latestSyncMem.set(key, s); }
+  s.want = want;
+  if (s.job) return s.job;
+  s.job = (async () => {
+    let sent;
+    let error = null;
+    while (sent !== s.want) {
+      const w = s.want;
+      let res;
+      try { res = await run(w); } catch (e) { res = { error: e }; }
+      if (res && res.error) { error = res.error; break; }
+      sent = w;
+    }
+    latestSyncMem.delete(key);
+    return { ok: !error, error, state: error && sent === undefined ? s.base : sent };
+  })();
+  return s.job;
+}
+const followSyncMem = new Map();
+function followSync(myId, theirId, want, from) {
+  const key = `${myId}:${theirId}`;
+  let s = followSyncMem.get(key);
+  if (!s) { s = { want, base: from || 'none', job: null }; followSyncMem.set(key, s); }
+  s.want = want;
+  try { window.dispatchEvent(new CustomEvent('zchat-follow-change', { detail: { id: theirId, state: want } })); } catch {}
+  if (s.job) return s.job;
+  s.job = (async () => {
+    let sent = null;
+    let error = null;
+    while (sent !== s.want) {
+      const w = s.want;
+      let res = null;
+      try {
+        res = w === 'none'
+          ? await supabase.from('follows').delete().eq('follower_id', myId).eq('following_id', theirId)
+          : await supabase.from('follows').insert({ follower_id: myId, following_id: theirId, status: w });
+      } catch (e) { res = { error: e }; }
+      if (res && res.error && !(w !== 'none' && /duplicate|unique/i.test(String(res.error.message || '')))) { error = res.error; break; }
+      sent = w;
+    }
+    followSyncMem.delete(key);
+    const state = error ? (sent || s.base) : sent;
+    if (error) { try { window.dispatchEvent(new CustomEvent('zchat-follow-change', { detail: { id: theirId, state } })); } catch {} }
+    else if (state !== 'none') { try { window.dispatchEvent(new Event('zchat-follows-stale')); } catch {} }
+    return { ok: !error, error, state };
+  })();
+  return s.job;
 }
 
 function FollowActionButton({ state, theyFollowMe, busy, onClick, size = 'md', onDark = false }) {
@@ -19030,18 +19940,24 @@ function formatCount(n) {
   return v.toLocaleString();
 }
 
+const highlightsMem = new Map();
 function ProfileHighlights({ profile, isSelf, userId, onOpenHighlight }) {
   const { theme } = useTheme();
-  const [items, setItems] = useState(null);
+  const [items, setItems] = useState(() => highlightsMem.get(profile.id) || null);
   const [creating, setCreating] = useState(false);
   const [menuFor, setMenuFor] = useState(null);
   const [renameFor, setRenameFor] = useState(null);
   const [renameText, setRenameText] = useState('');
   const [deleteFor, setDeleteFor] = useState(null);
   const pressRef = useRef({ timer: null, fired: false });
+  const hlGoneRef = useRef(new Set());
+  const hlTempRef = useRef([]);
+  useEffect(() => { if (items) { highlightsMem.set(profile.id, items.filter((h) => !h.__pending)); if (highlightsMem.size > 40) highlightsMem.delete(highlightsMem.keys().next().value); } }, [items]);
   const load = async () => {
-    const { data } = await supabase.from('highlights').select('*').eq('user_id', profile.id).order('created_at', { ascending: true });
-    setItems(data || []);
+    const { data, error } = await supabase.from('highlights').select('*').eq('user_id', profile.id).order('created_at', { ascending: true });
+    if (error && !data) { setItems((prev) => prev || []); return; }
+    const fresh = (data || []).filter((h) => !hlGoneRef.current.has(h.id));
+    setItems([...fresh, ...hlTempRef.current.filter((t) => !fresh.some((h) => h.id === t.realId))]);
   };
   useEffect(() => {
     load();
@@ -19050,6 +19966,26 @@ function ProfileHighlights({ profile, isSelf, userId, onOpenHighlight }) {
       .subscribe();
     return () => supabase.removeChannel(ch);
   }, [profile.id]);
+  const createHighlight = async ({ title, chosen }) => {
+    setCreating(false);
+    if (!chosen || !chosen.length) return;
+    const temp = { id: `temp-hl-${Date.now()}`, user_id: userId, title, cover_url: chosen[0].media_url, cover_type: chosen[0].media_type, created_at: new Date().toISOString(), __pending: true };
+    hlTempRef.current = [...hlTempRef.current, temp];
+    setItems((prev) => [...(prev || []), temp]);
+    hapticTap();
+    const { data: h, error } = await supabase.from('highlights').insert({ user_id: userId, title, cover_url: chosen[0].media_url, cover_type: chosen[0].media_type }).select().single();
+    if (error || !h) {
+      hlTempRef.current = hlTempRef.current.filter((t) => t !== temp);
+      setItems((prev) => (prev || []).filter((x) => x.id !== temp.id));
+      appSnack(friendlyError(error, "Couldn't make that highlight. Try again."));
+      return;
+    }
+    temp.realId = h.id;
+    highlightsMem.set(profile.id, [...(highlightsMem.get(profile.id) || []).filter((x) => x.id !== h.id), h]);
+    await supabase.from('highlight_items').insert(chosen.map((st) => ({ highlight_id: h.id, user_id: userId, media_url: st.media_url, media_type: st.media_type, overlay_url: st.overlay_url || null, caption: st.caption || null })));
+    hlTempRef.current = hlTempRef.current.filter((t) => t !== temp);
+    setItems((prev) => { const swapped = (prev || []).map((x) => (x.id === temp.id ? h : x)); return swapped.filter((x, i) => swapped.findIndex((y) => y.id === x.id) === i); });
+  };
   if (items === null || (!items.length && !isSelf)) return null;
   const startPress = (h) => {
     if (!isSelf) return;
@@ -19075,11 +20011,11 @@ function ProfileHighlights({ profile, isSelf, userId, onOpenHighlight }) {
           </div>
         )}
         {items.map((h) => (
-          <div key={h.id}
-            onPointerDown={() => startPress(h)} onPointerUp={endPress} onPointerLeave={endPress} onPointerCancel={endPress}
-            onContextMenu={(e) => { e.preventDefault(); if (isSelf) setMenuFor(h); }}
-            onClick={() => { if (pressRef.current.fired) { pressRef.current.fired = false; return; } onOpenHighlight(h); }}
-            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: 'pointer', flexShrink: 0, width: 74 }}>
+          <div key={h.id} aria-label={h.__pending ? `Saving ${h.title}` : undefined}
+            onPointerDown={() => { if (!h.__pending) startPress(h); }} onPointerUp={endPress} onPointerLeave={endPress} onPointerCancel={endPress}
+            onContextMenu={(e) => { e.preventDefault(); if (isSelf && !h.__pending) setMenuFor(h); }}
+            onClick={() => { if (h.__pending) return; if (pressRef.current.fired) { pressRef.current.fired = false; return; } onOpenHighlight(h); }}
+            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: h.__pending ? 'default' : 'pointer', flexShrink: 0, width: 74, opacity: h.__pending ? 0.6 : 1, transition: 'opacity 200ms ease-out' }}>
             {circle(h.cover_url
               ? (h.cover_type === 'video' ? <VideoThumb src={h.cover_url} style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} /> : <img src={h.cover_url} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />)
               : null)}
@@ -19087,7 +20023,7 @@ function ProfileHighlights({ profile, isSelf, userId, onOpenHighlight }) {
           </div>
         ))}
       </div>
-      {creating && <HighlightCreator userId={userId} onClose={() => setCreating(false)} onCreated={() => { setCreating(false); load(); }} />}
+      {creating && <HighlightCreator userId={userId} onClose={() => setCreating(false)} onCreated={createHighlight} />}
       {menuFor && (
         <ChatRowSheet title={menuFor.title} subtitle="Highlight" avatar={<div style={{ width: 44, height: 44, borderRadius: '50%', overflow: 'hidden', background: theme.rowBg }}>{menuFor.cover_url && menuFor.cover_type !== 'video' && <img src={menuFor.cover_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}</div>}
           onClose={() => setMenuFor(null)}
@@ -19109,7 +20045,8 @@ function ProfileHighlights({ profile, isSelf, userId, onOpenHighlight }) {
                 const target = renameFor;
                 setRenameFor(null);
                 setItems((prev) => (prev || []).map((x) => (x.id === target.id ? { ...x, title } : x)));
-                await supabase.from('highlights').update({ title }).eq('id', target.id).eq('user_id', userId);
+                const { error } = await supabase.from('highlights').update({ title }).eq('id', target.id).eq('user_id', userId);
+                if (error) { setItems((prev) => (prev || []).map((x) => (x.id === target.id ? { ...x, title: target.title } : x))); appSnack(friendlyError(error, "Couldn't rename that highlight. Try again.")); }
               }} style={{ flex: 1, padding: 11, borderRadius: 13, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontFamily: FONT, cursor: 'pointer' }}>Save</button>
             </div>
           </div>
@@ -19118,7 +20055,14 @@ function ProfileHighlights({ profile, isSelf, userId, onOpenHighlight }) {
       {deleteFor && (
         <ConfirmDialog title="Delete this highlight?" body="It will be removed from your profile. Your statuses stay in your archive."
           onCancel={() => setDeleteFor(null)}
-          onConfirm={async () => { const target = deleteFor; setDeleteFor(null); setItems((prev) => (prev || []).filter((x) => x.id !== target.id)); await supabase.from('highlights').delete().eq('id', target.id).eq('user_id', userId); }} />
+          onConfirm={async () => {
+            const target = deleteFor;
+            setDeleteFor(null);
+            hlGoneRef.current.add(target.id);
+            setItems((prev) => (prev || []).filter((x) => x.id !== target.id));
+            const { error } = await supabase.from('highlights').delete().eq('id', target.id).eq('user_id', userId);
+            if (error) { hlGoneRef.current.delete(target.id); load(); appSnack(friendlyError(error, "Couldn't delete that highlight. Try again.")); }
+          }} />
       )}
     </div>
   );
@@ -19134,15 +20078,11 @@ function HighlightCreator({ userId, onClose, onCreated }) {
   useEffect(() => {
     supabase.from('stories').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(90).then(({ data }) => setStories(data || []));
   }, [userId]);
-  const save = async () => {
+  const save = () => {
     if (!picked.length || saving) return;
     setSaving(true);
     const chosen = stories.filter((s) => picked.includes(s.id)).sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-    const { data: h, error } = await supabase.from('highlights').insert({ user_id: userId, title: (title.trim() || 'Highlights').slice(0, 20), cover_url: chosen[0].media_url, cover_type: chosen[0].media_type }).select().single();
-    if (error || !h) { setSaving(false); return; }
-    await supabase.from('highlight_items').insert(chosen.map((s) => ({ highlight_id: h.id, user_id: userId, media_url: s.media_url, media_type: s.media_type, overlay_url: s.overlay_url || null, caption: s.caption || null })));
-    setSaving(false);
-    onCreated();
+    onCreated({ title: (title.trim() || 'Highlights').slice(0, 20), chosen });
   };
   return (
     <div className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 90, background: theme.dark ? '#000' : '#fff', display: 'flex', flexDirection: 'column' }}>
@@ -19244,9 +20184,9 @@ async function loadTagFollows(uid) {
 async function setTagFollow(uid, tag, on) {
   const s = await loadTagFollows(uid);
   if (on) s.add(tag); else s.delete(tag);
-  const res = on ? await supabase.from('tag_follows').upsert({ user_id: uid, tag }, { onConflict: 'user_id,tag' }) : await supabase.from('tag_follows').delete().eq('user_id', uid).eq('tag', tag);
-  if (res.error) { if (on) s.delete(tag); else s.add(tag); return false; }
   try { window.dispatchEvent(new Event('zchat-tag-follow')); } catch {}
+  const res = on ? await supabase.from('tag_follows').upsert({ user_id: uid, tag }, { onConflict: 'user_id,tag' }) : await supabase.from('tag_follows').delete().eq('user_id', uid).eq('tag', tag);
+  if (res.error) { if (on) s.delete(tag); else s.add(tag); try { window.dispatchEvent(new Event('zchat-tag-follow')); } catch {} return false; }
   return true;
 }
 function useTagFollows(uid) {
@@ -19267,12 +20207,18 @@ function TagSuggestBar({ text, onPick, dark = true }) {
   const q = m[1].toLowerCase();
   const list = rows.filter((r) => r.tag.startsWith(q) && r.tag !== q).slice(0, 8);
   if (!list.length) return null;
+  const line = dark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.1)';
   return (
-    <div role="list" aria-label="Tag suggestions" style={{ display: 'flex', gap: 6, overflowX: 'auto', scrollbarWidth: 'none', padding: '8px 12px 0' }}>
-      {list.map((r) => (
-        <div key={r.tag} role="listitem" aria-label={`Use tag ${r.tag}`} onPointerDown={(e) => e.preventDefault()} onClick={() => onPick(r.tag, m[1])} className="zchat-press" style={{ flexShrink: 0, height: 30, padding: '0 11px', borderRadius: 15, background: dark ? 'rgba(255,255,255,0.16)' : 'rgba(0,0,0,0.06)', color: dark ? '#FFFFFF' : '#111113', fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer' }}>
-          #{r.tag}<span style={{ fontSize: 11.5, fontWeight: 600, opacity: 0.7 }}>{formatCount(r.n)}</span>
-        </div>
+    <div role="list" aria-label="Tag suggestions" style={{ display: 'flex', alignItems: 'center', overflowX: 'auto', scrollbarWidth: 'none', padding: '6px 4px 0', color: dark ? '#FFFFFF' : '#111113' }}>
+      {list.map((r, i) => (
+        <React.Fragment key={r.tag}>
+          {i > 0 && <span aria-hidden="true" style={{ width: 1, height: 18, flexShrink: 0, background: line }} />}
+          <div role="listitem" aria-label={`Use tag ${r.tag}`} onPointerDown={(e) => e.preventDefault()} onClick={() => onPick(r.tag, m[1])} className="zchat-press" style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, minHeight: 34, padding: '0 12px', cursor: 'pointer' }}>
+            <LineGlyph k="hash" size={15} sw={2.6} style={{ opacity: 0.7 }} />
+            <span style={{ fontSize: 14.5, fontWeight: 700, whiteSpace: 'nowrap' }}>{r.tag}</span>
+            <span style={{ fontSize: 12, fontWeight: 500, opacity: 0.6, whiteSpace: 'nowrap' }}>{formatCount(r.n)} {r.n === 1 ? 'post' : 'posts'}</span>
+          </div>
+        </React.Fragment>
       ))}
     </div>
   );
@@ -19306,10 +20252,10 @@ function TrendingPage({ me, userId, onClose, onOpenProfile }) {
   return (
     <FullPage title="Trending" subtitle="Most used tags this week" onBack={onClose} zIndex={90} pad={false}>
       {followed.length > 0 && (
-        <div style={{ padding: '10px 16px 4px' }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: theme.muted, paddingBottom: 8 }}>Tags you follow</div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            {followed.map((t) => <div key={t} role="button" aria-label={`Tag ${t}`} onClick={() => setOpen(t)} className="zchat-press" style={{ height: 34, padding: '0 13px', borderRadius: 17, background: theme.rowBg, color: theme.ink, fontSize: 14, fontWeight: 700, display: 'flex', alignItems: 'center', cursor: 'pointer' }}><span style={{ color: theme.coral, marginRight: 1 }}>#</span>{t}</div>)}
+        <div style={{ padding: '10px 0 6px' }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: theme.muted, padding: '0 16px 10px' }}>Tags you follow</div>
+          <div style={{ display: 'flex', gap: 10, overflowX: 'auto', scrollbarWidth: 'none', padding: '0 12px 4px' }}>
+            {followed.map((t) => { const r = (rows || []).find((x) => x.tag === t); return <TagThumb key={t} tag={t} sample={r && r.sample} sub={r ? `${formatCount(r.n)} ${r.n === 1 ? 'post' : 'posts'}` : 'Following'} onOpen={setOpen} size={58} />; })}
           </div>
         </div>
       )}
@@ -19336,42 +20282,52 @@ function TrendingStrip({ userId, onOpenTag, onSeeAll }) {
         <div style={{ flex: 1, fontSize: 15, fontWeight: 800, color: theme.ink, letterSpacing: '-0.01em' }}>Trending this week</div>
         <div role="button" aria-label="See all trending tags" onClick={onSeeAll} style={{ fontSize: 13.5, fontWeight: 700, color: theme.coral, cursor: 'pointer' }}>See all</div>
       </div>
-      <div style={{ display: 'flex', gap: 8, overflowX: 'auto', scrollbarWidth: 'none', margin: '0 -18px', padding: '0 18px' }}>
-        {rows.slice(0, 10).map((r) => (
-          <div key={r.tag} role="button" aria-label={`Tag ${r.tag}`} onClick={() => onOpenTag(r.tag)} className="zchat-press" style={{ flexShrink: 0, height: 36, padding: '0 13px', borderRadius: 18, background: theme.rowBg, color: theme.ink, fontSize: 14, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
-            <span style={{ color: theme.coral }}>#</span>{r.tag}<span style={{ fontSize: 12, fontWeight: 600, color: theme.muted }}>{formatCount(r.n)}</span>
-          </div>
-        ))}
+      <div style={{ display: 'flex', gap: 10, overflowX: 'auto', scrollbarWidth: 'none', margin: '0 -18px', padding: '0 14px' }}>
+        {rows.slice(0, 10).map((r) => <TagThumb key={r.tag} tag={r.tag} sample={r.sample} sub={`${formatCount(r.n)} ${r.n === 1 ? 'post' : 'posts'}`} onOpen={onOpenTag} size={64} />)}
       </div>
     </div>
   );
 }
+function TagThumb({ tag, sample, sub, onOpen, size = 64 }) {
+  const { theme } = useTheme();
+  return (
+    <div role="button" aria-label={`Tag ${tag}`} onClick={() => onOpen(tag)} className="zchat-press" style={{ width: size + 14, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'pointer' }}>
+      <div style={{ position: 'relative', width: size, height: size, borderRadius: Math.round(size * 0.28), overflow: 'hidden', background: theme.soft, color: theme.ink2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        {sample ? <img src={sample} alt="" loading="lazy" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} /> : <LineGlyph k="hash" size={Math.round(size * 0.42)} />}
+        <div aria-hidden="true" style={{ position: 'absolute', inset: 0, borderRadius: 'inherit', boxShadow: `inset 0 0 0 1px ${theme.hair}`, pointerEvents: 'none' }} />
+      </div>
+      <div style={{ marginTop: 7, maxWidth: '100%', fontSize: 12.5, fontWeight: 600, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>#{tag}</div>
+      {sub && <div style={{ maxWidth: '100%', fontSize: 11, color: theme.muted, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub}</div>}
+    </div>
+  );
+}
 
+const hashtagPostsMem = new Map();
 function HashtagPage({ tag, me, userId, onClose, onOpenProfile }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
-  const [posts, setPosts] = useState(null);
+  const [posts, setPosts] = useState(() => hashtagPostsMem.get(tag.toLowerCase()) || null);
   const [open, setOpen] = useState(null);
   const follows = useTagFollows(userId);
   const following = follows.has(tag.toLowerCase());
-  const [fBusy, setFBusy] = useState(false);
+  const [fBusy] = useState(false);
   const toggleFollow = async () => {
-    if (fBusy) return;
-    setFBusy(true);
     hapticTap();
     const ok = await setTagFollow(userId, tag.toLowerCase(), !following);
-    setFBusy(false);
     if (!ok) appAlert('Following tags switches on once the latest ZChat setup is finished.');
   };
   useEffect(() => {
     let alive = true;
-    setPosts(null);
+    setPosts(hashtagPostsMem.get(tag.toLowerCase()) || null);
     const safe = tag.replace(/[\\%_]/g, (c) => `\\${c}`);
     supabase.from('posts').select('*').ilike('caption', `%#${safe}%`).order('created_at', { ascending: false }).limit(120).then(({ data }) => {
       let re = null;
       try { re = new RegExp(`#${tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\p{L}\\p{N}_])`, 'iu'); } catch {}
-      if (alive) setPosts((data || []).filter((x) => (!re || re.test(x.caption || '')) && !notYetPosted(x)));
-    }, () => { if (alive) setPosts([]); });
+      const list = (data || []).filter((x) => (!re || re.test(x.caption || '')) && !notYetPosted(x) && !postGoneIds.has(x.id));
+      hashtagPostsMem.set(tag.toLowerCase(), list);
+      if (hashtagPostsMem.size > 20) hashtagPostsMem.delete(hashtagPostsMem.keys().next().value);
+      if (alive) setPosts(list);
+    }, () => { if (alive) setPosts((prev) => prev || []); });
     return () => { alive = false; };
   }, [tag]);
   return (
@@ -19389,17 +20345,75 @@ function HashtagPage({ tag, me, userId, onClose, onOpenProfile }) {
   );
 }
 
+const postGoneIds = new Set();
+const pendingPostStore = { list: [], subs: new Set() };
+function pendingPostsChanged() { pendingPostStore.subs.forEach((fn) => { try { fn(); } catch {} }); }
+function usePendingPosts(uid) {
+  const pick = () => (uid ? pendingPostStore.list.filter((p) => p.user_id === uid) : []);
+  const [list, setList] = useState(pick);
+  useEffect(() => {
+    if (!uid) return undefined;
+    const fn = () => setList(pick());
+    fn();
+    pendingPostStore.subs.add(fn);
+    return () => { pendingPostStore.subs.delete(fn); };
+  }, [uid]);
+  return list;
+}
+function announcePostsLocal(detail) { try { window.dispatchEvent(new CustomEvent('zchat-posts-local', { detail: detail || {} })); } catch {} }
+function forgetPostLocally(postId) {
+  postGoneIds.add(postId);
+  profilePostsMem.forEach((list, id) => { if (list.some((x) => x.id === postId)) profilePostsMem.set(id, list.filter((x) => x.id !== postId)); });
+  ['foryou', 'following'].forEach((k) => { if (Array.isArray(momentsCache[k])) momentsCache[k] = momentsCache[k].filter((x) => x.id !== postId); });
+  announcePostsLocal({ gone: postId });
+}
+function unforgetPostLocally(postId) {
+  postGoneIds.delete(postId);
+  announcePostsLocal({ reload: true });
+}
+const postLocalAdds = new Map();
+function keepLocalPosts(rows, startedAt, ownerId) {
+  const extra = [...postLocalAdds.values()].filter((x) => x.at >= startedAt && (!ownerId || x.post.user_id === ownerId) && !postGoneIds.has(x.post.id) && !(rows || []).some((r) => r.id === x.post.id)).map((x) => x.post);
+  return extra.length ? [...extra, ...(rows || [])] : rows;
+}
+function addPostLocally(post) {
+  if (!post || !post.id) return;
+  postLocalAdds.set(post.id, { post, at: Date.now() });
+  if (postLocalAdds.size > 20) postLocalAdds.delete(postLocalAdds.keys().next().value);
+  const list = profilePostsMem.get(post.user_id);
+  if (list && !list.some((x) => x.id === post.id)) profilePostsMem.set(post.user_id, [post, ...list]);
+  if (post.owner) ['foryou', 'following'].forEach((k) => { if (Array.isArray(momentsCache[k]) && !momentsCache[k].some((x) => x.id === post.id)) momentsCache[k] = [post, ...momentsCache[k]]; });
+  announcePostsLocal({ added: post });
+}
+function PostPostingVeil() {
+  return (
+    <div aria-hidden="true" style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.32)', display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+      <Spinner size={18} color="#FFFFFF" />
+    </div>
+  );
+}
+const profilePostsMem = new Map();
+function rememberProfilePosts(id, list) {
+  profilePostsMem.delete(id);
+  profilePostsMem.set(id, list);
+  if (profilePostsMem.size > 40) profilePostsMem.delete(profilePostsMem.keys().next().value);
+}
 function ProfilePosts({ profile, isSelf, userId, meProfile, bare = false, mode = 'all' }) {
   const { theme } = useTheme();
-  const [posts, setPosts] = useState(null);
+  const [posts, setPosts] = useState(() => profilePostsMem.get(profile.id) || null);
   const [composer, setComposer] = useState(null);
   const [openPost, setOpenPost] = useState(null);
   const [posting, setPosting] = useState(false);
   const inputRef = useRef(null);
+  const pendingPosts = usePendingPosts(isSelf ? userId : null);
   const load = async () => {
+    const startedAt = Date.now();
     let { data, error } = await supabase.from('posts').select('*').or(`user_id.eq.${profile.id},and(collab_id.eq.${profile.id},collab_status.eq.accepted)`).order('created_at', { ascending: false }).limit(120);
-    if (error) ({ data } = await supabase.from('posts').select('*').eq('user_id', profile.id).order('created_at', { ascending: false }).limit(120));
-    setPosts((data || []).filter((x) => isSelf || !notYetPosted(x)));
+    if (error) ({ data, error } = await supabase.from('posts').select('*').eq('user_id', profile.id).order('created_at', { ascending: false }).limit(120));
+    if (error && !data) { setPosts((prev) => prev || []); return; }
+    const list = keepLocalPosts((data || []).filter((x) => (isSelf || !notYetPosted(x)) && !postGoneIds.has(x.id)), startedAt, profile.id);
+    rememberProfilePosts(profile.id, list);
+    setPosts(list);
   };
   useEffect(() => {
     load();
@@ -19409,7 +20423,14 @@ function ProfilePosts({ profile, isSelf, userId, meProfile, bare = false, mode =
         if (!row || !row.user_id || row.user_id === profile.id) load();
       })
       .subscribe();
-    return () => supabase.removeChannel(ch);
+    const onLocal = (e) => {
+      const d = (e && e.detail) || {};
+      if (d.reload) { load(); return; }
+      if (d.gone) setPosts((prev) => (prev && prev.some((x) => x.id === d.gone) ? prev.filter((x) => x.id !== d.gone) : prev));
+      if (d.added && d.added.user_id === profile.id) setPosts((prev) => (prev && !prev.some((x) => x.id === d.added.id) ? [d.added, ...prev] : prev));
+    };
+    window.addEventListener('zchat-posts-local', onLocal);
+    return () => { supabase.removeChannel(ch); window.removeEventListener('zchat-posts-local', onLocal); };
   }, [profile.id]);
   const [postError, setPostError] = useState('');
   const [schedFor, setSchedFor] = useState(null);
@@ -19434,9 +20455,9 @@ function ProfilePosts({ profile, isSelf, userId, meProfile, bare = false, mode =
   const shownPosts = (posts || []).filter((p) => (isSelf || !isSched(p)) && (mode !== 'clips' || p.media_type === 'video' || (Array.isArray(p.media_urls) && p.media_urls.some((x) => x && x.t === 'video'))));
   const share = async (outputs, caption, mentionsIn, opts) => {
     setComposer(null);
-    setPosting(true);
+    setPosting(!!(opts && opts.scheduleAt));
     setPostError('');
-    const res = await createPostFromOutputs(userId, outputs, caption, opts);
+    const res = await createPostOptimistic(userId, meProfile && meProfile.id === userId ? meProfile : null, outputs, caption, opts);
     setPosting(false);
     if (res.done && opts && opts.draftId) { deleteDraft(opts.draftId).then(announceDrafts); }
     if (!res.done) setPostError('Could not post. Check your connection and try again.');
@@ -19465,6 +20486,12 @@ function ProfilePosts({ profile, isSelf, userId, meProfile, bare = false, mode =
             </div>
           </div>
         )}
+        {isSelf && pendingPosts.filter((p) => mode !== 'clips' || p.media_type === 'video').map((p) => (
+          <div key={p.id} role="img" aria-label="Posting" style={{ position: 'relative', aspectRatio: '3 / 4', overflow: 'hidden', background: theme.rowBg }}>
+            {p.media_type === 'video' ? <video src={p.media_url} muted playsInline preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} /> : <img src={p.media_url} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />}
+            <PostPostingVeil />
+          </div>
+        ))}
         {sortPinnedFirst(shownPosts).map((p) => (isSched(p)
           ? <div key={p.id} role="button" aria-label={`Scheduled post, goes up ${fmtSchedule(p.scheduled_for)}`} onClick={() => setSchedFor(p)} style={{ position: 'relative' }}><PostTile p={p} onOpen={() => setSchedFor(p)} /><ScheduledBadge /></div>
           : <PostTile key={p.id} p={p} onOpen={setOpenPost} pinned={!!p.pinned_at} />))}
@@ -19478,7 +20505,7 @@ function ProfilePosts({ profile, isSelf, userId, meProfile, bare = false, mode =
       )}
       {reschedule && <SchedulePostSheet value={reschedule.scheduled_for} onClose={() => setReschedule(null)} onPick={(iso) => { const p0 = reschedule; setReschedule(null); updateSched(p0, iso); }} />}
       {draftsOpen && <DraftsPage uid={userId} onClose={() => setDraftsOpen(false)} onOpen={(d) => { setDraftsOpen(false); setComposer({ key: Date.now(), files: d.items.map((x) => x.file), draft: d }); }} />}
-      {posts && !shownPosts.length && (
+      {posts && !shownPosts.length && !(isSelf && pendingPosts.length) && (
         <div style={{ textAlign: 'center', padding: '18px 20px 34px', color: theme.muted }}>
           <div style={{ maxWidth: 240, margin: '0 auto 14px' }}><SpotArt k={mode === 'clips' ? 'moments' : 'posts'} dark={theme.dark} /></div>
           <div style={{ fontWeight: 800, fontSize: 16, color: theme.ink }}>{mode === 'clips' ? (isSelf ? 'Share your first clip' : 'No clips yet') : isSelf ? 'Share your first post' : 'No posts yet'}</div>
@@ -19486,7 +20513,7 @@ function ProfilePosts({ profile, isSelf, userId, meProfile, bare = false, mode =
         </div>
       )}
       {composer && <Portal><MediaComposer key={composer.key} files={composer.files} draft={composer.draft || null} recipientName="your profile" mode="post" myId={userId} onCancel={() => setComposer(null)} onSend={share} /></Portal>}
-      {openPost && <Portal><FeedPanel me={meProfile} userId={userId} fixedIds={sortPinnedFirst(shownPosts).filter((x) => !isSched(x)).map((x) => x.id)} title="Posts" startPostId={openPost.id} seedPost={openPost} onClose={() => setOpenPost(null)} onOpenProfile={() => setOpenPost(null)} onPostDeleted={() => load()} /></Portal>}
+      {openPost && <Portal><FeedPanel me={meProfile} userId={userId} fixedIds={sortPinnedFirst(shownPosts).filter((x) => !isSched(x)).map((x) => x.id)} title="Posts" startPostId={openPost.id} seedPost={openPost} seedItems={shownPosts.map((x) => (x.owner ? x : x.user_id === profile.id ? { ...x, owner: { ...profile, email: undefined } } : x))} onClose={() => setOpenPost(null)} onOpenProfile={() => setOpenPost(null)} onPostDeleted={() => load()} /></Portal>}
     </div>
   );
 }
@@ -19631,8 +20658,101 @@ function PostLinkCard({ postId, onOpen }) {
 
 
 const imageAspectCache = new Map();
+const CHAT_MEDIA_W = 'min(270px, 66vw)';
+let mediaRatioStore = null;
+let mediaRatioTimer = 0;
+function mediaRatioMem() {
+  if (mediaRatioStore) return mediaRatioStore;
+  mediaRatioStore = new Map();
+  try {
+    const list = JSON.parse(localStorage.getItem('zchat-media-ratio') || '[]');
+    if (Array.isArray(list)) list.forEach((row) => { if (Array.isArray(row) && typeof row[0] === 'string' && Number.isFinite(row[1]) && row[1] > 0) mediaRatioStore.set(row[0], row[1]); });
+  } catch {}
+  return mediaRatioStore;
+}
+function mediaDimsFromUrl(raw) {
+  const m = /-(\d{2,5})x(\d{2,5})\.[a-z0-9]{2,5}(?:$|[?#])/i.exec(String(raw || ''));
+  if (!m) return null;
+  const w = Number(m[1]);
+  const h = Number(m[2]);
+  return w > 0 && h > 0 ? w / h : null;
+}
+function mediaAspectOf(raw) {
+  if (!raw) return null;
+  const named = mediaDimsFromUrl(raw);
+  if (named) return named;
+  if (imageAspectCache.has(raw)) return imageAspectCache.get(raw);
+  const k = mediaCacheKey(raw);
+  return (k && mediaRatioMem().get(k)) || null;
+}
+function rememberMediaAspect(raw, a) {
+  if (!raw || !Number.isFinite(a) || a <= 0) return;
+  imageAspectCache.set(raw, a);
+  if (/^(blob|data):/i.test(raw) || mediaDimsFromUrl(raw)) return;
+  const k = mediaCacheKey(raw);
+  if (!k) return;
+  const mem = mediaRatioMem();
+  const r = Math.round(a * 1000) / 1000;
+  if (mem.get(k) === r) return;
+  mem.delete(k);
+  mem.set(k, r);
+  while (mem.size > 400) mem.delete(mem.keys().next().value);
+  clearTimeout(mediaRatioTimer);
+  mediaRatioTimer = setTimeout(() => { try { localStorage.setItem('zchat-media-ratio', JSON.stringify([...mem])); } catch {} }, 800);
+}
+function localMediaDims(url, kind) {
+  return new Promise((resolve) => {
+    if (!url) { resolve(null); return; }
+    let done = false;
+    let el = null;
+    let timer = 0;
+    const finish = (d) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      if (el && kind === 'video') { try { el.removeAttribute('src'); el.load(); } catch {} }
+      resolve(d);
+    };
+    timer = setTimeout(() => finish(null), 2500);
+    try {
+      if (kind === 'video') {
+        el = document.createElement('video');
+        el.muted = true;
+        el.preload = 'metadata';
+        el.onloadedmetadata = () => finish(el.videoWidth && el.videoHeight ? { w: el.videoWidth, h: el.videoHeight } : null);
+        el.onerror = () => finish(null);
+        el.src = url;
+      } else {
+        el = new Image();
+        el.onload = () => finish(el.naturalWidth && el.naturalHeight ? { w: el.naturalWidth, h: el.naturalHeight } : null);
+        el.onerror = () => finish(null);
+        el.src = url;
+      }
+    } catch { finish(null); }
+  });
+}
+function chatMediaRatio(a) { return Math.max(0.75, Math.min(1.6, a > 0 ? a : 0.75)); }
+const mediaSeen = new Set();
+function chatMediaTint(theme) { return theme.dark ? '#1D1C22' : '#ECEAF1'; }
+function PhotoGlyph({ size = 26, color = 'currentColor' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3" y="4.5" width="18" height="15" rx="3.2" />
+      <circle cx="9" cy="10" r="1.7" />
+      <path d="M4.5 17.5l4.6-4.4a1.4 1.4 0 0 1 1.9 0l2.2 2 2.1-1.9a1.4 1.4 0 0 1 1.9 0l2.3 2.2" />
+    </svg>
+  );
+}
+function MediaSendingVeil() {
+  return (
+    <div aria-label="Sending" style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+      <div style={{ width: 42, height: 42, borderRadius: '50%', background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Spinner size={18} color="#FFFFFF" /></div>
+    </div>
+  );
+}
 
 function ChatImage(props) {
+  const { theme } = useTheme();
   const [load, setLoad] = useState(() => !dataSaverOn() || !props.src || mediaBlobCache.has(mediaCacheKey(props.src)));
   useEffect(() => {
     if (load || !props.src) return undefined;
@@ -19642,41 +20762,40 @@ function ChatImage(props) {
   }, [props.src, load]);
   if (load) return <ChatImageInner {...props} />;
   return (
-    <div role="button" aria-label="Load photo" onClick={(e) => { e.stopPropagation(); setLoad(true); }} style={{ width: 230, maxWidth: '100%', height: 170, borderRadius: 14, marginBottom: props.caption ? 4 : 2, background: 'rgba(127,127,127,0.18)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer' }}>
+    <div role="button" aria-label="Load photo" onClick={(e) => { e.stopPropagation(); setLoad(true); }} style={{ width: CHAT_MEDIA_W, maxWidth: '100%', aspectRatio: String(chatMediaRatio(mediaAspectOf(props.src))), borderRadius: props.radius || 12, marginBottom: props.caption ? 4 : 2, background: chatMediaTint(theme), color: theme.ink, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer' }}>
       <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Download size={20} color="white" /></div>
       <span style={{ fontSize: 12, fontWeight: 700, opacity: 0.8 }}>Tap to load</span>
     </div>
   );
 }
-function ChatImageInner({ src: rawSrc, onOpen, caption, hd }) {
+function ChatImageInner({ src: rawSrc, onOpen, caption, hd, radius = 12, sending }) {
+  const { theme } = useTheme();
   const shown = useCachedMedia(rawSrc);
-  const [aspect, setAspect] = useState(() => imageAspectCache.get(rawSrc) || null);
-  const maxW = 250;
-  const box = (() => {
-    if (!aspect) return { width: 230, height: 230 };
-    if (aspect >= 1) {
-      const width = maxW;
-      return { width, height: Math.max(130, Math.round(width / Math.min(aspect, 2.2))) };
-    }
-    const height = Math.min(330, Math.round(220 / aspect));
-    return { width: Math.max(160, Math.round(height * aspect)), height };
-  })();
+  const [aspect, setAspect] = useState(() => mediaAspectOf(rawSrc));
+  const [ready, setReady] = useState(() => !!shown && mediaSeen.has(shown));
+  const imgRef = useRef(null);
+  useEffect(() => { const a = mediaAspectOf(rawSrc); if (a) setAspect(a); }, [rawSrc]);
+  useLayoutEffect(() => { const im = imgRef.current; if (im && im.complete && im.naturalWidth > 0) setReady(true); }, [shown]);
   return (
-    <div style={{ position: 'relative', width: box.width, maxWidth: '100%', height: box.height, borderRadius: 14, overflow: 'hidden', marginBottom: caption ? 4 : 2, background: 'rgba(0,0,0,0.18)' }}>
-      <img src={shown || undefined} alt="" loading="lazy" draggable={false} onContextMenu={(e) => e.preventDefault()}
+    <div style={{ position: 'relative', width: CHAT_MEDIA_W, maxWidth: '100%', aspectRatio: String(chatMediaRatio(aspect)), borderRadius: radius, overflow: 'hidden', marginBottom: caption ? 4 : 2, background: chatMediaTint(theme) }}>
+      {!ready && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.5 }}><PhotoGlyph size={28} color={theme.muted} /></div>}
+      <img ref={imgRef} src={shown || undefined} alt="" loading={sending ? 'eager' : 'lazy'} decoding="async" draggable={false} onContextMenu={(e) => e.preventDefault()}
         onLoad={(e) => {
           const img = e.currentTarget;
           if (img.naturalWidth && img.naturalHeight) {
             const a = img.naturalWidth / img.naturalHeight;
-            imageAspectCache.set(rawSrc, a);
-            setAspect((prev) => (prev && Math.abs(prev - a) < 0.01 ? prev : a));
+            rememberMediaAspect(rawSrc, a);
+            setAspect((prev) => (prev && Math.abs(chatMediaRatio(prev) - chatMediaRatio(a)) < 0.01 ? prev : a));
           }
+          if (mediaSeen.size > 600) mediaSeen.clear();
+          mediaSeen.add(img.getAttribute('src'));
+          setReady(true);
         }}
-        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-      <div onClick={(e) => { e.stopPropagation(); silentDownload(rawSrc, 'zchat-photo.jpg'); }} style={{
+        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center', display: 'block', opacity: ready ? 1 : 0, transition: reducedMotion() ? 'none' : 'opacity 0.2s ease-out' }} />
+      {sending ? <MediaSendingVeil /> : <div onClick={(e) => { e.stopPropagation(); silentDownload(rawSrc, 'zchat-photo.jpg'); }} style={{
         position: 'absolute', top: 6, right: 6, width: 26, height: 26, borderRadius: '50%',
         background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-      }}><Download size={13} color="white" /></div>
+      }}><Download size={13} color="white" /></div>}
       {isPaintUrl(rawSrc) && (
         <div aria-hidden="true" style={{ position: 'absolute', left: 6, bottom: 6, height: 24, padding: '0 9px 0 7px', borderRadius: 12, background: 'rgba(0,0,0,0.5)', color: 'white', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11.5, fontWeight: 800, fontFamily: FONT, pointerEvents: 'none' }}>
           <PaintToolIcon k="brush" size={13} />Drawing
@@ -19688,21 +20807,49 @@ function ChatImageInner({ src: rawSrc, onOpen, caption, hd }) {
     </div>
   );
 }
+function ChatVideoBox({ m, src, radius = 12, sending, onOpen }) {
+  const [aspect, setAspect] = useState(() => mediaAspectOf(m.media_url));
+  const onAspect = (a) => { rememberMediaAspect(m.media_url, a); setAspect((prev) => (prev && Math.abs(chatMediaRatio(prev) - chatMediaRatio(a)) < 0.01 ? prev : a)); };
+  return (
+    <div onClick={(e) => { e.stopPropagation(); if (!sending && onOpen) onOpen(); }} style={{ position: 'relative', width: CHAT_MEDIA_W, maxWidth: '100%', aspectRatio: String(chatMediaRatio(aspect)), borderRadius: radius, overflow: 'hidden', marginBottom: m.content ? 4 : 2, background: '#000', cursor: 'pointer' }}>
+      <VideoThumb src={src} onAspect={onAspect} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none' }} />
+      {m.overlay_url && <img src={m.overlay_url} alt="" draggable={false} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} />}
+      {sending ? <MediaSendingVeil /> : (
+        <>
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none', background: 'rgba(0,0,0,0.18)' }}>
+            <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Play size={20} color="white" style={{ marginLeft: 2 }} />
+            </div>
+          </div>
+          <div onClick={(e) => { e.stopPropagation(); silentDownload(m.media_url, 'zchat-video.mp4'); }} style={{
+            position: 'absolute', top: 6, right: 6, width: 26, height: 26, borderRadius: '50%',
+            background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+          }}><Download size={13} color="white" /></div>
+        </>
+      )}
+    </div>
+  );
+}
 
 let uiAudioCtx = null;
 let lastTapSoundAt = 0;
-let uiAudioWarmQueued = false;
+let pendingTapSound = 0;
 const SOUND_SPRITES = {
-  ui: { url: '/sounds-ui.mp3', map: { tap: [0.05, 0.077], key: [0.267, 0.035], toggle: [0.442, 0.12], send: [0.702, 0.26], receive: [1.102, 0.71], tone_pop: [1.952, 0.32], tone_drop: [2.412, 0.3], tone_bell: [2.852, 1.2], tone_pulse: [4.192, 0.76], tone_harp: [5.092, 0.925], tone_marimba: [6.156, 0.9], tone_chirp: [7.196, 0.34], tone_glass: [7.676, 0.9], like: [8.716, 0.35], repost: [9.206, 0.44], cancel: [9.786, 0.12], delete: [10.046, 0.32], shutter: [10.506, 0.098], refresh: [10.744, 0.1], record_start: [10.984, 0.31], record_stop: [11.434, 0.31], point: [11.884, 0.3], win: [12.324, 0.655], lose: [13.119, 0.76], pad1: [14.019, 0.5], pad2: [14.659, 0.5], pad3: [15.299, 0.5], pad4: [15.939, 0.5] } },
-  board: { url: '/sounds-board.mp3', map: { applause: [0.05, 3.0], laugh: [3.19, 2.4], cheer: [5.73, 3.6], boo: [9.47, 1.6], crickets: [11.21, 2.6], drumroll: [13.95, 3.3], rimshot: [17.39, 1.66], sad: [19.19, 3.2], tada: [22.53, 1.52], whistle: [24.19, 1.2], boing: [25.53, 0.85], whoosh: [26.52, 0.428], ding: [27.088, 1.6], heart: [28.828, 1.44], pop: [30.408, 0.3], gong: [30.848, 1.424] } },
+  ui: { url: '/sounds-ui-v2.mp3', sync: 0.1001, map: { tap: [0.1, 0.045], key: [0.265, 0.055], toggle: [0.44, 0.0726], send: [0.6326, 0.2067], incoming: [0.9593, 0.11], receive: [1.1893, 1.144], tone_pop: [2.4533, 0.17], tone_drop: [2.7433, 0.1293], tone_bell: [2.9926, 1.3], tone_pulse: [4.4126, 0.86], tone_harp: [5.3926, 0.9573], tone_marimba: [6.4699, 0.7996], tone_chirp: [7.3895, 0.2073], tone_glass: [7.7168, 0.6887], like: [8.5256, 0.13], repost: [8.7756, 0.169], cancel: [9.0646, 0.12], delete: [9.3046, 0.299], shutter: [9.7236, 0.105], refresh: [9.9486, 0.1], record_start: [10.1686, 0.33], record_stop: [10.6186, 0.33], point: [11.0686, 0.3], win: [11.4886, 0.655], lose: [12.2636, 0.7596], pad1: [13.1432, 0.5], pad2: [13.7632, 0.4999], pad3: [14.3832, 0.5], pad4: [15.0032, 0.5] } },
+  board: { url: '/sounds-board-v2.mp3', sync: 0.1007, map: { pop: [0.1, 0.17], applause: [0.39, 2.9782], laugh: [3.4882, 2.2275], cheer: [5.8357, 3.5704], boo: [9.5261, 1.5815], crickets: [11.2276, 2.5625], drumroll: [13.9101, 3.396], rimshot: [17.4261, 1.62], sad: [19.1661, 3.2303], tada: [22.5164, 1.5084], whistle: [24.1448, 1.2483], boing: [25.5131, 1.199], whoosh: [26.8321, 0.3752], ding: [27.3273, 2.1], heart: [29.5473, 1.28], gong: [30.9473, 3.5999], airhorn: [34.6672, 1.4477] } },
 };
-const UI_SOUND_VOL = { tap: 0.08, key: 0.1, toggle: 0.1, send: 0.32, receive: 0.6, like: 0.14, repost: 0.4, cancel: 0.2, delete: 0.18, shutter: 0.3, refresh: 0.13, record_start: 0.5, record_stop: 0.5, point: 0.28, win: 0.45, lose: 0.7, pad1: 0.65, pad2: 0.65, pad3: 0.65, pad4: 0.65, tone_pop: 0.4, tone_drop: 0.8, tone_bell: 0.75, tone_pulse: 1, tone_harp: 0.9, tone_marimba: 0.95, tone_chirp: 0.95, tone_glass: 1 };
+const UI_SOUND_VOL = { tap: 0.232, key: 0.24, toggle: 0.209, send: 0.442, incoming: 0.473, receive: 0.447, tone_pop: 0.447, tone_drop: 1, tone_bell: 0.447, tone_pulse: 0.447, tone_harp: 0.447, tone_marimba: 0.447, tone_chirp: 0.447, tone_glass: 0.447, like: 0.269, repost: 0.234, cancel: 0.18, delete: 0.191, shutter: 0.457, refresh: 0.153, record_start: 0.251, record_stop: 0.251, point: 0.251, win: 0.316, lose: 0.316, pad1: 0.355, pad2: 0.355, pad3: 0.355, pad4: 0.355 };
 const SPRITE_TONES = new Set(['pop', 'drop', 'bell', 'pulse', 'harp', 'marimba', 'chirp', 'glass']);
 const spriteBufs = {};
 const spriteJobs = {};
 const spriteFailAt = {};
+const spriteShift = {};
+const spriteBytes = {};
 function soundsOff() {
   try { return localStorage.getItem('zchat-sound') === 'off'; } catch { return false; }
+}
+function appHidden() {
+  try { return typeof document !== 'undefined' && document.visibilityState === 'hidden'; } catch { return false; }
 }
 function ensureAudioCtx() {
   try {
@@ -19715,44 +20862,64 @@ function ensureAudioCtx() {
     return uiAudioCtx;
   } catch { return null; }
 }
+function fetchSpriteBytes(name) {
+  const sp = SOUND_SPRITES[name];
+  if (!sp || typeof fetch !== 'function') return Promise.resolve(null);
+  if (!spriteBytes[name]) spriteBytes[name] = fetch(sp.url, { cache: 'force-cache' }).then((r) => (r.ok ? r.arrayBuffer() : null)).catch(() => null);
+  return spriteBytes[name];
+}
+function spriteOffset(buf, sync) {
+  try {
+    if (!buf || !sync) return 0;
+    const d = buf.getChannelData(0);
+    const rate = buf.sampleRate;
+    const from = Math.max(0, Math.floor((sync - 0.08) * rate));
+    const to = Math.min(d.length, Math.ceil((sync + 0.08) * rate));
+    let peak = 0;
+    for (let i = from; i < to; i++) { const v = Math.abs(d[i]); if (v > peak) peak = v; }
+    if (peak < 0.02) return 0;
+    for (let i = from; i < to; i++) if (Math.abs(d[i]) > peak * 0.1) return Math.max(-0.06, Math.min(0.06, i / rate - sync));
+    return 0;
+  } catch { return 0; }
+}
 function loadSprite(name) {
   if (spriteBufs[name]) return Promise.resolve(spriteBufs[name]);
   if (spriteJobs[name]) return spriteJobs[name];
   if (spriteFailAt[name] && Date.now() - spriteFailAt[name] < 30000) return Promise.resolve(null);
-  const ctx = ensureAudioCtx();
+  const ctx = uiAudioCtx;
   const sp = SOUND_SPRITES[name];
-  if (!ctx || !sp || typeof fetch !== 'function') return Promise.resolve(null);
-  const fail = () => { spriteJobs[name] = null; spriteFailAt[name] = Date.now(); return null; };
-  spriteJobs[name] = fetch(sp.url, { cache: 'force-cache' })
-    .then((r) => (r.ok ? r.arrayBuffer() : null))
-    .then((ab) => (ab ? new Promise((res, rej) => { const pr = ctx.decodeAudioData(ab, res, rej); if (pr && pr.then) pr.then(res, rej); }) : null))
-    .then((buf) => { if (!buf) return fail(); spriteBufs[name] = buf; spriteJobs[name] = null; return buf; })
+  if (!ctx || !sp) return Promise.resolve(null);
+  const fail = () => { spriteJobs[name] = null; spriteBytes[name] = null; spriteFailAt[name] = Date.now(); return null; };
+  spriteJobs[name] = fetchSpriteBytes(name)
+    .then((ab) => (ab ? new Promise((res, rej) => { const pr = ctx.decodeAudioData(ab.slice(0), res, rej); if (pr && pr.then) pr.then(res, rej); }) : null))
+    .then((buf) => { if (!buf) return fail(); spriteBufs[name] = buf; spriteShift[name] = spriteOffset(buf, sp.sync); spriteJobs[name] = null; spriteBytes[name] = null; return buf; })
     .catch(fail);
   return spriteJobs[name];
 }
-function playSprite(name, key, vol = 1) {
+function playSprite(name, key, vol = 1, onVoice) {
   const sp = SOUND_SPRITES[name];
   const seg = sp && sp.map[key];
   const buf = spriteBufs[name];
   const ctx = uiAudioCtx;
-  if (!seg || !buf || !ctx) return 0;
-  try {
-    if (ctx.state !== 'running') ctx.resume().catch(() => {});
-    const src = ctx.createBufferSource();
-    src.buffer = buf;
-    const g = ctx.createGain();
-    g.gain.value = vol;
-    src.connect(g);
-    g.connect(ctx.destination);
-    src.start(0, seg[0], seg[1] + 0.03);
-    return Math.round(seg[1] * 1000);
-  } catch { return 0; }
-}
-function warmUiAudio() {
-  try {
-    if (soundsOff()) return;
-    if (ensureAudioCtx()) loadSprite('ui');
-  } catch {}
+  if (!seg || !buf || !ctx || ctx.state === 'closed') return 0;
+  const start = () => {
+    try {
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      const g = ctx.createGain();
+      g.gain.value = vol;
+      src.connect(g);
+      g.connect(ctx.destination);
+      src.start(0, Math.max(0, seg[0] + (spriteShift[name] || 0)), seg[1] + 0.02);
+      if (onVoice) onVoice({ src, g });
+    } catch {}
+  };
+  if (ctx.state === 'running') start();
+  else {
+    const asked = Date.now();
+    ctx.resume().then(() => { if (ctx.state === 'running' && Date.now() - asked < 250 && !appHidden()) start(); }, () => {});
+  }
+  return Math.round(seg[1] * 1000);
 }
 function unlockAudioNow() {
   const ctx = uiAudioCtx;
@@ -19770,103 +20937,55 @@ let audioUnlockOn = false;
 function installAudioUnlock() {
   if (audioUnlockOn || typeof document === 'undefined') return;
   audioUnlockOn = true;
-  const go = () => {
+  let later = false;
+  const run = () => {
     if (soundsOff()) return;
-    if (!uiAudioCtx) {
-      if (!ensureAudioCtx()) return;
-      setTimeout(() => loadSprite('ui'), 1200);
-    }
+    if (!uiAudioCtx && !ensureAudioCtx()) return;
     unlockAudioNow();
+    if (!spriteBufs.ui) loadSprite('ui');
   };
-  ['touchend', 'click', 'keydown'].forEach((ev) => document.addEventListener(ev, go, { passive: true }));
+  const go = () => {
+    if (uiAudioCtx || isAppleMobile()) { run(); return; }
+    if (later) return;
+    later = true;
+    setTimeout(() => { later = false; run(); }, 0);
+  };
+  ['touchend', 'click', 'keydown'].forEach((ev) => document.addEventListener(ev, go, { capture: true, passive: true }));
+  document.addEventListener('visibilitychange', () => {
+    const ctx = uiAudioCtx;
+    if (ctx && !appHidden() && ctx.state !== 'running' && ctx.state !== 'closed') ctx.resume().catch(() => {});
+  });
+  const warm = () => { try { if (!soundsOff() && !dataSaverOn()) fetchSpriteBytes('ui'); } catch {} };
+  if (window.requestIdleCallback) window.requestIdleCallback(warm, { timeout: 4000 }); else setTimeout(warm, 2500);
+}
+function cancelTapSound() {
+  if (pendingTapSound) { clearTimeout(pendingTapSound); pendingTapSound = 0; }
 }
 function playUiSound(kind, toneOverride) {
   try {
-    if (soundsOff()) return;
-    if (kind === 'tap') { const now = Date.now(); if (now - lastTapSoundAt < 90) return; lastTapSoundAt = now; }
+    if (soundsOff() || appHidden()) { cancelTapSound(); return; }
+    if ((kind === 'tap' || kind === 'toggle') && !prefOn('zchat-touch-sounds')) return;
+    if (kind === 'tap') {
+      if (pendingTapSound) return;
+      const now = Date.now();
+      if (now - lastTapSoundAt < 90) return;
+      lastTapSoundAt = now;
+    } else cancelTapSound();
+    const ctx = uiAudioCtx;
+    if (!ctx) return;
     let key = kind === 'record-start' ? 'record_start' : kind === 'record-stop' ? 'record_stop' : kind;
     if (kind === 'receive') {
       const tn0 = toneOverride || readTone();
       if (String(tn0).indexOf('c:') === 0 && playCustomTone(tn0)) return;
       key = SPRITE_TONES.has(tn0) ? `tone_${tn0}` : 'receive';
     }
-    if (uiAudioCtx) {
-      if (spriteBufs.ui) { if (playSprite('ui', key, UI_SOUND_VOL[key] || 0.4)) return; }
-      else loadSprite('ui');
-    }
-    const Ctx = window.AudioContext || window.webkitAudioContext;
-    if (!Ctx) return;
-    if (!uiAudioCtx) uiAudioCtx = new Ctx();
-    const ctx = uiAudioCtx;
-    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
-    const t = ctx.currentTime;
-    const tone = (freqFrom, freqTo, start, length, volume, type = 'sine') => {
-      const o = ctx.createOscillator();
-      const g = ctx.createGain();
-      o.type = type;
-      o.frequency.setValueAtTime(freqFrom, t + start);
-      o.frequency.exponentialRampToValueAtTime(Math.max(40, freqTo), t + start + length);
-      g.gain.setValueAtTime(0.0001, t + start);
-      g.gain.exponentialRampToValueAtTime(volume, t + start + Math.min(0.015, length / 3));
-      g.gain.exponentialRampToValueAtTime(0.0001, t + start + length);
-      o.connect(g);
-      g.connect(ctx.destination);
-      o.start(t + start);
-      o.stop(t + start + length + 0.03);
-    };
-    const swish = (start, length, volume, freq, q = 0.9, sweepTo = null) => {
-      const len = Math.max(1, Math.floor(ctx.sampleRate * length));
-      const buf = ctx.createBuffer(1, len, ctx.sampleRate);
-      const d = buf.getChannelData(0);
-      for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
-      const src = ctx.createBufferSource();
-      src.buffer = buf;
-      const f = ctx.createBiquadFilter();
-      f.type = 'bandpass';
-      f.Q.value = q;
-      f.frequency.setValueAtTime(freq, t + start);
-      if (sweepTo) f.frequency.exponentialRampToValueAtTime(sweepTo, t + start + length);
-      const g = ctx.createGain();
-      g.gain.setValueAtTime(0.0001, t + start);
-      g.gain.exponentialRampToValueAtTime(volume, t + start + 0.012);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + start + length);
-      src.connect(f); f.connect(g); g.connect(ctx.destination);
-      src.start(t + start);
-      src.stop(t + start + length + 0.02);
-    };
-    const bell = (freq, start, length, volume) => { tone(freq, freq, start, length, volume); tone(freq * 2, freq * 2, start, length * 0.55, volume * 0.22); };
-    if (kind === 'send') { swish(0, 0.16, 0.07, 1400, 0.7, 3600); tone(620, 920, 0.02, 0.09, 0.05); }
-    else if (kind === 'receive') {
-      const tn = toneOverride || readTone();
-      if (String(tn).indexOf('c:') === 0 && playCustomTone(tn)) return;
-      if (tn === 'pop') { tone(520, 980, 0, 0.08, 0.09); tone(980, 1400, 0.07, 0.1, 0.06); }
-      else if (tn === 'drop') { tone(1500, 500, 0, 0.18, 0.08); bell(740, 0.12, 0.2, 0.05); }
-      else if (tn === 'bell') { bell(1760, 0, 0.5, 0.07); bell(2217, 0.16, 0.5, 0.045); }
-      else if (tn === 'pulse') { tone(660, 660, 0, 0.07, 0.07, 'triangle'); tone(660, 660, 0.12, 0.07, 0.07, 'triangle'); tone(880, 880, 0.24, 0.12, 0.07, 'triangle'); }
-      else if (tn === 'harp') { bell(784, 0, 0.26, 0.06); bell(988, 0.07, 0.26, 0.055); bell(1175, 0.14, 0.3, 0.05); bell(1568, 0.21, 0.36, 0.045); }
-      else if (tn === 'marimba') { tone(523, 523, 0, 0.14, 0.09); tone(1046, 1046, 0, 0.05, 0.025); tone(784, 784, 0.12, 0.16, 0.08); tone(1568, 1568, 0.12, 0.05, 0.02); }
-      else if (tn === 'chirp') { tone(1800, 2700, 0, 0.06, 0.05); tone(2000, 3100, 0.09, 0.07, 0.05); }
-      else if (tn === 'glass') { bell(1568, 0, 0.7, 0.05); bell(2093, 0.03, 0.55, 0.03); bell(2637, 0.06, 0.4, 0.02); }
-      else { bell(988, 0, 0.22, 0.09); bell(1319, 0.09, 0.3, 0.075); }
-    }
-    else if (kind === 'pad1') { tone(392, 392, 0, 0.28, 0.08); }
-    else if (kind === 'pad2') { tone(494, 494, 0, 0.28, 0.08); }
-    else if (kind === 'pad3') { tone(587, 587, 0, 0.28, 0.08); }
-    else if (kind === 'pad4') { tone(784, 784, 0, 0.28, 0.08); }
-    else if (kind === 'win') { bell(784, 0, 0.12, 0.06); bell(988, 0.1, 0.12, 0.06); bell(1175, 0.2, 0.12, 0.06); bell(1568, 0.3, 0.3, 0.07); }
-    else if (kind === 'lose') { tone(520, 330, 0, 0.16, 0.06, 'triangle'); tone(330, 180, 0.15, 0.26, 0.06, 'triangle'); }
-    else if (kind === 'point') { tone(880, 1320, 0, 0.06, 0.05); }
-    else if (kind === 'key') { swish(0, 0.014, 0.02, 3200, 0.7); }
-    else if (kind === 'like') { tone(820, 1120, 0, 0.07, 0.06); bell(1319, 0.06, 0.16, 0.06); }
-    else if (kind === 'repost') { bell(660, 0, 0.1, 0.05); bell(880, 0.08, 0.1, 0.05); bell(1320, 0.16, 0.18, 0.06); }
-    else if (kind === 'record-start') { tone(420, 700, 0, 0.12, 0.06); }
-    else if (kind === 'record-stop') { tone(700, 420, 0, 0.12, 0.055); }
-    else if (kind === 'cancel') { tone(300, 160, 0, 0.16, 0.06, 'triangle'); }
-    else if (kind === 'shutter') { swish(0, 0.05, 0.1, 3200, 1.2); tone(900, 300, 0.04, 0.06, 0.04, 'triangle'); }
-    else if (kind === 'delete') { swish(0, 0.12, 0.05, 900, 0.8, 300); tone(380, 200, 0, 0.12, 0.05, 'triangle'); }
-    else if (kind === 'refresh') { tone(1200, 1500, 0, 0.05, 0.035); }
-    else if (kind === 'toggle') { tone(900, 1300, 0, 0.035, 0.03); }
-    else if (kind === 'tap') { swish(0, 0.018, 0.028, 2600, 0.6); }
+    if (!SOUND_SPRITES.ui.map[key]) return;
+    const vol = UI_SOUND_VOL[key] || 0.4;
+    if (spriteBufs.ui) { playSprite('ui', key, vol); return; }
+    const asked = Date.now();
+    const job = loadSprite('ui');
+    if (kind === 'tap' || kind === 'key') return;
+    job.then((b) => { if (b && Date.now() - asked < 350 && !appHidden()) playSprite('ui', key, vol); });
   } catch {}
 }
 
@@ -19884,9 +21003,10 @@ function voiceBars(seed, count = 30) {
   return out;
 }
 
-function AudioBubble({ url: rawUrl, isMe, ink, line, fx }) {
+function AudioBubble({ url: rawUrl, isMe: mine, ink, line, fx }) {
   const url = useLocalFirstMedia(rawUrl);
   const { theme } = useTheme();
+  const isMe = !!mine && theme.dark;
   const audioRef = useRef(null);
   const rootRef = useRef(null);
   const [playing, setPlaying] = useState(false);
@@ -20002,10 +21122,10 @@ async function cachedMediaLookup(raw) {
     return u;
   } catch { return null; }
 }
-async function primeSentMedia(raw, file) {
+async function primeSentMedia(raw, file, localUrl) {
   const key = mediaCacheKey(raw);
   if (!key || !file || mediaBlobCache.has(key)) return;
-  try { mediaBlobCache.set(key, URL.createObjectURL(file)); } catch { return; }
+  try { mediaBlobCache.set(key, localUrl || URL.createObjectURL(file)); } catch { return; }
   try {
     if (typeof caches === 'undefined' || /^(blob|data):/i.test(key)) return;
     const cache = await caches.open('zchat-media-v1');
@@ -20174,7 +21294,7 @@ function videoThumbUrl(url, key) {
   return p;
 }
 
-function VideoThumb({ src: rawSrc, style, fallback, imgStyle }) {
+function VideoThumb({ src: rawSrc, style, fallback, imgStyle, onAspect }) {
   const src = useMediaUrl(rawSrc);
   const tkey = rawSrc ? mediaCacheKey(rawSrc) : null;
   const { theme } = useTheme();
@@ -20200,9 +21320,9 @@ function VideoThumb({ src: rawSrc, style, fallback, imgStyle }) {
   if (!tkey) return <div style={{ ...style, background: fallback || theme.rowBg }} />;
   if (!USE_VIDEO_THUMBS) {
     if (!src) return <div style={{ ...style, background: fallback || theme.rowBg }} />;
-    return <video src={`${src}#t=0.1`} muted playsInline preload={dataSaverOn() ? 'none' : 'metadata'} onContextMenu={(e) => e.preventDefault()} style={{ ...style, ...(imgStyle || {}) }} />;
+    return <video src={`${src}#t=0.1`} muted playsInline preload={dataSaverOn() ? 'none' : 'metadata'} onContextMenu={(e) => e.preventDefault()} onLoadedMetadata={onAspect ? (e) => { const v = e.currentTarget; if (v.videoWidth && v.videoHeight) onAspect(v.videoWidth / v.videoHeight); } : undefined} style={{ ...style, ...(imgStyle || {}) }} />;
   }
-  if (thumb) return <img src={thumb} alt="" draggable={false} onContextMenu={(e) => e.preventDefault()} style={{ ...style, ...(imgStyle || {}), display: 'block' }} />;
+  if (thumb) return <img src={thumb} alt="" draggable={false} onContextMenu={(e) => e.preventDefault()} onLoad={onAspect ? (e) => { const im = e.currentTarget; if (im.naturalWidth && im.naturalHeight) onAspect(im.naturalWidth / im.naturalHeight); } : undefined} style={{ ...style, ...(imgStyle || {}), display: 'block' }} />;
   return <div ref={boxRef} style={{ ...style, background: fallback || (theme.dark ? '#1E1E22' : '#E9E9EE') }} />;
 }
 
@@ -20785,8 +21905,34 @@ function CameraCapture({ onClose, onCapture, onPickGallery, startMode = 'photo' 
   const [elapsed, setElapsed] = useState(0);
   const [flash, setFlash] = useState(false);
   const [filter, setFilter] = useState('none');
+  const [snap, setSnap] = useState('');
+  const { theme } = useTheme();
   const filterRafRef = useRef(null);
   const MAX_MS = 60000;
+  useEffect(() => {
+    if (!ready || error || recordingVideo || making) return undefined;
+    let alive = true;
+    const cv = document.createElement('canvas');
+    cv.width = 96;
+    cv.height = 96;
+    const grab = () => {
+      const v = videoRef.current;
+      if (!alive || !v || !v.videoWidth || document.hidden) return;
+      try {
+        const ctx = cv.getContext('2d');
+        const s = Math.max(96 / v.videoWidth, 96 / v.videoHeight);
+        const w = v.videoWidth * s;
+        const h = v.videoHeight * s;
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        if (facing === 'user') { ctx.translate(96, 0); ctx.scale(-1, 1); }
+        ctx.drawImage(v, (96 - w) / 2, (96 - h) / 2, w, h);
+        setSnap(cv.toDataURL('image/jpeg', 0.72));
+      } catch {}
+    };
+    const first = setTimeout(grab, 350);
+    const t = setInterval(grab, 1500);
+    return () => { alive = false; clearTimeout(first); clearInterval(t); };
+  }, [ready, error, recordingVideo, making, facing]);
 
   useEffect(() => {
     let cancelled = false;
@@ -21041,8 +22187,8 @@ function CameraCapture({ onClose, onCapture, onPickGallery, startMode = 'photo' 
       <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 'calc(14px + env(safe-area-inset-top)) 16px 0' }}>
         <ViewerButton label="Close" onClick={onClose}><X size={25} strokeWidth={2.6} /></ViewerButton>
         {recordingVideo && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '6px 12px', borderRadius: 16, background: 'rgba(0,0,0,0.45)', fontWeight: 800, fontSize: 14, fontVariantNumeric: 'tabular-nums' }}>
-            <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#FF3B30' }} />{Math.floor(secs / 60)}:{String(secs % 60).padStart(2, '0')}
+          <div role="timer" aria-label="Recording time" style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, fontSize: 15, fontVariantNumeric: 'tabular-nums', textShadow: '0 1px 6px rgba(0, 0, 0, 0.6)' }}>
+            <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#FF3B30', boxShadow: '0 0 0 3px rgba(255, 59, 48, 0.28)' }} />{Math.floor(secs / 60)}:{String(secs % 60).padStart(2, '0')}
           </div>
         )}
         <div style={{ width: 42 }} />
@@ -21054,13 +22200,19 @@ function CameraCapture({ onClose, onCapture, onPickGallery, startMode = 'photo' 
           {making !== 'Now smile' && making !== 'Hold still' && <Spinner size={16} color="white" />}{making}
         </div>
       )}
-      {!recordingVideo && !error && !making && <div style={{ position: 'relative', marginBottom: 12 }}><FilterStrip value={filter} onPick={setFilter} /></div>}
+      {!recordingVideo && !error && !making && <div style={{ position: 'relative', marginBottom: 10 }}><FilterStrip value={filter} onPick={setFilter} thumb={snap} lens /></div>}
       {!recordingVideo && !error && (
-        <div style={{ position: 'relative', display: 'flex', justifyContent: 'center', gap: 6, marginBottom: 12 }}>
-          {[['photo', 'Photo'], ['boomerang', 'Boomerang'], ['dual', 'Dual']].map(([k, label]) => (
-            <div key={k} role="button" aria-label={`${label} mode`} aria-pressed={mode === k} onClick={() => { if (making) return; hapticTap(); setMode(k); }}
-              style={{ padding: '7px 14px', borderRadius: 16, fontSize: 13.5, fontWeight: 800, cursor: 'pointer', background: mode === k ? '#FFFFFF' : 'rgba(0,0,0,0.4)', color: mode === k ? '#111' : '#FFFFFF' }}>{label}</div>
-          ))}
+        <div role="group" aria-label="Camera mode" style={{ position: 'relative', display: 'flex', justifyContent: 'center', gap: 26, marginBottom: 8 }}>
+          {[['photo', 'Photo'], ['boomerang', 'Boomerang'], ['dual', 'Dual']].map(([k, label]) => {
+            const on = mode === k;
+            return (
+              <div key={k} role="button" aria-label={`${label} mode`} aria-pressed={on} onClick={() => { if (making) return; hapticTap(); setMode(k); }}
+                style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, padding: '6px 2px 2px', cursor: 'pointer', fontSize: 14.5, fontWeight: on ? 800 : 600, color: on ? '#FFFFFF' : 'rgba(255, 255, 255, 0.66)', textShadow: '0 1px 6px rgba(0, 0, 0, 0.55)', transition: 'color 180ms ease', WebkitTapHighlightColor: 'transparent' }}>
+                {label}
+                <span aria-hidden="true" style={{ width: 5, height: 5, borderRadius: 3, background: on ? theme.gold : 'transparent', transition: 'background 180ms ease' }} />
+              </div>
+            );
+          })}
         </div>
       )}
       <div style={{ position: 'relative', textAlign: 'center', fontSize: 12.5, fontWeight: 600, opacity: 0.85, marginBottom: 14 }}>{recordingVideo ? 'Release to stop' : mode === 'boomerang' ? 'Tap to make a boomerang' : mode === 'dual' ? 'Tap to take both sides, front and back' : 'Tap for photo, hold for video'}</div>
@@ -21501,6 +22653,7 @@ function PronounsPicker({ value, onChange, labelStyle }) {
   const { theme } = useTheme();
   const selected = String(value || '').split(',').map((x) => x.trim()).filter(Boolean);
   const [full, setFull] = useState(false);
+  const [open, setOpen] = useState(false);
   const toggle = (p) => {
     if (selected.includes(p)) { onChange(selected.filter((x) => x !== p).join(', ')); setFull(false); return; }
     if (p === 'any pronouns') { onChange(p); setFull(false); return; }
@@ -21511,16 +22664,23 @@ function PronounsPicker({ value, onChange, labelStyle }) {
   };
   return (
     <div style={{ marginTop: 14 }}>
-      <div style={{ ...labelStyle, display: 'flex', justifyContent: 'space-between' }}><span>Pronouns</span><span style={{ fontWeight: 600, color: full ? theme.danger : undefined }}>{full ? 'remove one first' : 'up to 2'}</span></div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-        {PRONOUN_OPTIONS.map((p) => {
-          const on = selected.includes(p);
-          return (
-            <div key={p} role="button" onClick={() => toggle(p)} style={{ padding: '7px 13px', borderRadius: 16, fontSize: 12.5, cursor: 'pointer', fontWeight: 600, background: on ? theme.coral : theme.rowBg, color: on ? 'white' : theme.muted, border: `1px solid ${on ? theme.coral : theme.border}` }}>{p}</div>
-          );
-        })}
+      <div style={labelStyle}>Pronouns</div>
+      <div role="button" aria-label="Edit pronouns" onClick={() => setOpen(true)} style={{ ...inputStyle(theme), cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ flex: 1, minWidth: 0, color: selected.length ? theme.ink : theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{selected.length ? selected.join(', ') : 'Add pronouns'}</span>
+        <ChevronRight size={18} color={theme.muted} style={{ flexShrink: 0 }} />
       </div>
+      {open && <PronounsSheet selected={selected} full={full} onToggle={toggle} onClose={() => setOpen(false)} />}
     </div>
+  );
+}
+function PronounsSheet({ selected, full, onToggle, onClose }) {
+  useBackClose(true, onClose);
+  const { theme } = useTheme();
+  return (
+    <FullPage title="Pronouns" subtitle={full ? 'Remove one first' : 'Up to 2'} onBack={onClose} zIndex={70} footer={<BigButton label="Done" onClick={onClose} />}>
+      <div style={{ fontSize: 13.5, color: theme.muted, lineHeight: 1.5, padding: '8px 4px 6px' }}>They show next to your name on your profile.</div>
+      <ChoiceList label="Pronouns" value={selected} onChange={onToggle} options={PRONOUN_OPTIONS.map((p) => ({ k: p, label: p }))} />
+    </FullPage>
   );
 }
 
@@ -21723,11 +22883,12 @@ function daysLeft(r) {
 }
 
 const FX_PACK = '/fx-pack.js';
+const FX_PACK2 = '/fx-pack2.js';
+const fxPackOf = (key) => (DECOR_FX_KEYS.has(key) || key === 'crystal_phoenix' ? FX_PACK : FX_PACK2);
 const FX_ART = { crystal_phoenix: '/fx-crystal-phoenix.webp' };
-const FX_LEN = { crystal_phoenix: 8.8 };
 const fxFactories = new Map();
 const fxArtJobs = new Map();
-let fxPackJob = null;
+const fxPackJobs = new Map();
 let fxReported = false;
 function fxReport(msg) {
   if (fxReported) return;
@@ -21744,9 +22905,9 @@ function fxDrain() {
     }
   } catch {}
 }
-function fxPack() {
-  if (fxPackJob) return fxPackJob;
-  fxPackJob = fetch(FX_PACK)
+function fxPack(src) {
+  if (fxPackJobs.has(src)) return fxPackJobs.get(src);
+  const job = fetch(src)
     .then((res) => {
       const ct = (res.headers.get('content-type') || '').toLowerCase();
       if (!res.ok || ct.includes('text/html')) { fxReport(`Profile effects file did not load: ${res.status} ${ct}`); return false; }
@@ -21760,8 +22921,9 @@ function fxPack() {
       }));
     })
     .catch((e) => { fxReport(`Profile effects file did not load: ${(e && e.message) || 'network'}`); return false; })
-    .then((ok) => { if (!ok) setTimeout(() => { fxPackJob = null; }, 60000); return ok; });
-  return fxPackJob;
+    .then((ok) => { if (!ok) setTimeout(() => { fxPackJobs.delete(src); }, 60000); return ok; });
+  fxPackJobs.set(src, job);
+  return job;
 }
 function fxArtReady(key) {
   const src = FX_ART[key];
@@ -21780,7 +22942,7 @@ function fxArtReady(key) {
 function loadFx(key) {
   const s = DECOR_BY_KEY[key];
   if (!s || !s.fx || typeof window === 'undefined') return Promise.resolve(null);
-  return Promise.all([fxPack(), fxArtReady(key)]).then(([ok, art]) => (ok && art ? fxFactories.get(key) || null : null));
+  return Promise.all([fxPack(fxPackOf(key)), fxArtReady(key)]).then(([ok, art]) => (ok && art ? fxFactories.get(key) || null : null));
 }
 function fxAllowed() {
   return prefOn('zchat-profile-fx') && !prefOn('zchat-reduce-motion');
@@ -21802,12 +22964,12 @@ function wornFxKey(p) {
   const f = p && p.avatar_frame;
   return f && f === p.nameplate && DECOR_BY_KEY[f] && DECOR_BY_KEY[f].fx ? f : null;
 }
-function ProfileEffectLayer({ effectKey, runKey = 0, force = false, delay = 280, z = 30, height = 0, covered = false, repeat = 0, watch = false }) {
+function ProfileEffectLayer({ effectKey, runKey = 0, force = false, delay = 280, z = 30, height = 0, covered = false, watch = false }) {
   const ref = useRef(null);
   const [factory, setFactory] = useState(null);
   const [run, setRun] = useState(0);
-  const [playing, setPlaying] = useState(true);
-  const st = useRef({ away: false, pending: false, covered, timer: 0 });
+  const [shown, setShown] = useState(false);
+  const st = useRef({ away: false, covered, m: null, opts: null });
   const want = !!effectKey && (force || fxAllowed());
   useEffect(() => {
     let alive = true;
@@ -21816,27 +22978,16 @@ function ProfileEffectLayer({ effectKey, runKey = 0, force = false, delay = 280,
     loadFx(effectKey).then((f) => { if (alive && f) setFactory(() => f); });
     return () => { alive = false; };
   }, [effectKey, want]);
-  const replay = () => {
+  const sync = () => {
     const o = st.current;
-    clearTimeout(o.timer);
-    if (o.covered || o.away || (typeof document !== 'undefined' && document.hidden)) { o.pending = true; return; }
-    o.pending = false;
-    setPlaying(true);
-    setRun((n) => n + 1);
+    const hold = o.covered || o.away;
+    if (o.opts) o.opts.paused = hold || !!o.opts.dead;
+    if (!o.m || (o.opts && o.opts.dead)) return;
+    if (hold) o.m.stop();
+    else if (typeof document === 'undefined' || !document.hidden) o.m.start();
   };
-  useEffect(() => { setPlaying(true); setRun((n) => n + 1); }, [effectKey, runKey]);
-  useEffect(() => {
-    const o = st.current;
-    const was = o.covered;
-    o.covered = covered;
-    if (covered) { clearTimeout(o.timer); setPlaying(false); return; }
-    if (was) replay();
-  }, [covered]);
-  useEffect(() => {
-    const onVis = () => { if (!document.hidden && st.current.pending) replay(); };
-    document.addEventListener('visibilitychange', onVis);
-    return () => { document.removeEventListener('visibilitychange', onVis); clearTimeout(st.current.timer); };
-  }, []);
+  useEffect(() => { setRun((n) => n + 1); }, [effectKey, runKey]);
+  useEffect(() => { st.current.covered = covered; sync(); }, [covered]);
   useEffect(() => {
     if (!watch || !factory) return undefined;
     const cv = ref.current;
@@ -21845,56 +22996,59 @@ function ProfileEffectLayer({ effectKey, runKey = 0, force = false, delay = 280,
       const e = entries[entries.length - 1];
       const o = st.current;
       const ratio = e && e.isIntersecting ? e.intersectionRatio : 0;
-      if (ratio < 0.08) {
-        if (!o.away) { o.away = true; clearTimeout(o.timer); setPlaying(false); }
-      } else if (ratio > 0.3 && o.away) {
-        o.away = false;
-        replay();
-      }
+      if (ratio < 0.08 && !o.away) { o.away = true; sync(); }
+      else if (ratio > 0.3 && o.away) { o.away = false; sync(); }
     }, { threshold: [0, 0.08, 0.3, 0.6] });
     io.observe(cv);
-    return () => io.disconnect();
+    return () => { io.disconnect(); if (st.current.away) { st.current.away = false; sync(); } };
   }, [watch, factory]);
   useEffect(() => {
-    if (!factory || !playing) return undefined;
-    let m = null;
+    if (!factory) return undefined;
+    const o = st.current;
     let alive = true;
-    const timer = setTimeout(() => {
+    let tries = 0;
+    let timer = 0;
+    const boot = () => {
       const cv = ref.current;
       if (!alive || !cv || !window.ZFXK) return;
       const r = cv.getBoundingClientRect();
-      if (r.width < 40 || r.height < 40) { setPlaying(false); return; }
+      if (r.width < 40 || r.height < 40) { if (tries++ < 25) timer = setTimeout(boot, 400); return; }
       const holder = cv.parentElement && cv.parentElement.querySelector('[data-fx-hero]');
       const hb = holder && holder.firstElementChild ? holder.firstElementChild.getBoundingClientRect() : null;
       const sc = r.width / (cv.clientWidth || r.width) || 1;
       const hw = holder && holder.firstElementChild ? holder.firstElementChild.offsetWidth : 0;
       const place = hb && hw > 60 ? { top: (hb.top - r.top) / sc, heroW: hw, cx: (hb.left - r.left + hb.width / 2) / sc } : {};
-      const finish = () => {
-        if (!alive) return;
-        setPlaying(false);
-        if (repeat > 0) {
-          clearTimeout(st.current.timer);
-          st.current.timer = setTimeout(replay, repeat * 1000);
-        }
+      const opts = {
+        stopAfter: 0, endless: true, dprCap: fxDprCap(), maxFps: /Android/i.test(navigator.userAgent || '') ? 30 : 0, base: '/', ...place,
+        paused: o.covered || o.away || (typeof document !== 'undefined' && document.hidden),
+        onError: (e) => { opts.dead = true; opts.paused = true; if (alive) setShown(false); reportClientError(`Profile effect ${effectKey}: ${(e && e.message) || e}`, e && e.stack, { kind: 'fx' }); },
       };
       try {
-        m = window.ZFXK.mount(cv, factory, { stopAfter: FX_LEN[effectKey] || 7.2, dprCap: fxDprCap(), maxFps: /Android/i.test(navigator.userAgent || '') ? 30 : 0, base: '/', loop: 1e6, once: true, ...place, onDone: finish, onError: (e) => reportClientError(`Profile effect ${effectKey}: ${(e && e.message) || e}`, e && e.stack, { kind: 'fx' }) });
+        o.opts = opts;
+        o.m = window.ZFXK.mount(cv, factory, opts);
+        setShown(true);
       } catch (e) {
+        o.m = null;
+        o.opts = null;
+        setShown(false);
         reportClientError(`Profile effect ${effectKey}: ${(e && e.message) || e}`, e && e.stack, { kind: 'fx' });
-        setPlaying(false);
       }
-    }, delay);
+    };
+    timer = setTimeout(boot, delay);
     return () => {
       alive = false;
       clearTimeout(timer);
-      if (m) m.destroy();
+      if (o.m) o.m.destroy();
+      o.m = null;
+      o.opts = null;
+      setShown(false);
       const cv = ref.current;
       if (cv) { try { const g = cv.getContext('2d'); g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, cv.width, cv.height); } catch {} }
     };
-  }, [factory, run, playing]);
+  }, [factory, run]);
   if (!want || !factory) return null;
   const box = height > 0 ? { top: 0, left: 0, right: 0, width: '100%', height, WebkitMaskImage: 'linear-gradient(180deg, #000 0%, #000 78%, transparent 100%)', maskImage: 'linear-gradient(180deg, #000 0%, #000 78%, transparent 100%)' } : { inset: 0, width: '100%', height: '100%' };
-  return <canvas ref={ref} aria-hidden="true" data-fx-layer="true" style={{ position: 'absolute', ...box, pointerEvents: 'none', zIndex: z, visibility: playing ? 'visible' : 'hidden' }} />;
+  return <canvas ref={ref} aria-hidden="true" data-fx-layer="true" style={{ position: 'absolute', ...box, pointerEvents: 'none', zIndex: z, visibility: shown && !covered ? 'visible' : 'hidden' }} />;
 }
 function ProfileFxIcon({ size = 20, color = 'currentColor', strokeWidth = 1.9 }) {
   return (
@@ -22074,44 +23228,47 @@ function DropPage({ drop, me, rewards, wallet, onClose, onWear, onRefresh, onOpe
   const price = half ? Math.max(1, Math.ceil((drop.price * (3 - own.count)) / 3)) : drop.price;
   const coins = wallet && wallet.ready ? wallet.coins : 0;
   const wearing = set ? me.avatar_frame === set.key && me.nameplate === set.key : false;
-  const flash = (t) => { setNote(t); setTimeout(() => setNote(''), 2600); };
+  const noteTimer = useRef(0);
+  const flash = (t) => { setNote(t); clearTimeout(noteTimer.current); noteTimer.current = setTimeout(() => setNote(''), 2600); };
+  useMoneyToast(flash);
   const toggleRemind = async () => {
     if (busy) return;
     setBusy(true);
     const on = !reminded;
     setReminded(on);
+    hapticTap();
+    playUiSound(on ? 'like' : 'toggle');
+    flash(on ? 'We will tell you the moment it opens' : 'Reminder off');
     const { error } = on
       ? await supabase.from('drop_reminders').insert({ drop_id: drop.id, user_id: me.id })
       : await supabase.from('drop_reminders').delete().eq('drop_id', drop.id).eq('user_id', me.id);
     setBusy(false);
     if (error && !/duplicate|unique/i.test(String(error.message || ''))) { setReminded(!on); flash('That did not work. Try again.'); return; }
     if (on) dropsMem.mine.add(drop.id); else dropsMem.mine.delete(drop.id);
-    hapticTap();
-    playUiSound(on ? 'like' : 'toggle');
-    flash(on ? 'We will tell you the moment it opens' : 'Reminder off');
   };
   const buy = async () => {
     setAsk(false);
     if (busy) return;
-    if (!(await spendGate(`Get ${drop.title}`))) return;
-    setBusy(true);
-    const { data, error } = await supabase.rpc('zchat_buy_drop', { p_drop: drop.id });
-    const row = Array.isArray(data) ? data[0] : data;
-    if (error) { setBusy(false); flash(rpcFailText('Drop buy', error, 'Drops switch on once the latest ZChat setup is finished.')); return; }
-    if (!row || !row.ok) { setBusy(false); flash((row && row.reason) || 'That did not work. Try again.'); return; }
-    walletMem.data = null;
-    announceWallet();
-    if (onRefresh) await onRefresh();
-    setBusy(false);
+    if (!(await spendGate(`Get ${drop.title} for ${price} coins`, { coins: price }))) return;
+    const kinds = set ? DECOR_PIECES.filter((k) => !(k === 'frame' ? own.frame : k === 'nameplate' ? own.plate : own.effect)) : ['bubble'];
+    const job = moneyRun(me.id, { coins: price, grants: kinds.map((k) => [k, drop.item_key]), run: async () => {
+      const { data, error } = await supabase.rpc('zchat_buy_drop', { p_drop: drop.id });
+      const row = Array.isArray(data) ? data[0] : data;
+      if (error) return { error: rpcFailText('Drop buy', error, 'Drops switch on once the latest ZChat setup is finished.') };
+      if (!row || !row.ok) return { error: (row && row.reason) || 'That did not work. Try again.' };
+      return { ok: true, coins: row.coins };
+    } });
     hapticTap();
     playUiSound('win');
     setParty(Date.now());
+    job.then((r) => {
+      if (r.error) { setParty(0); flash(r.error); return; }
+      if (onRefresh) onRefresh();
+    });
   };
-  const wear = async () => {
+  const wear = () => {
     if (busy || !set) return;
-    setBusy(true);
-    await onWear({ avatar_frame: set.key, nameplate: set.key });
-    setBusy(false);
+    onWear({ avatar_frame: set.key, nameplate: set.key });
   };
   const btn = (primary) => ({ height: 54, borderRadius: 17, border: 'none', fontFamily: FONT, fontWeight: 800, fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '0 18px', width: '100%', background: primary ? '#FFFFFF' : 'rgba(255, 255, 255, 0.08)', color: primary ? '#0B0C12' : '#FFFFFF' });
   const when = (iso) => fmtDate(new Date(iso), { weekday: 'long', day: 'numeric', month: 'long', hour: 'numeric', minute: '2-digit' });
@@ -22221,55 +23378,51 @@ function SetShopPage({ me, setKey, rewards, wallet, onClose, onPick, onWear, onR
     return () => clearTimeout(t);
   }, [idx]);
   useEffect(() => { if (mode === 'effect') setFxRun(Date.now()); }, [mode]);
-  const flash = (t) => { setNote(t); setTimeout(() => setNote(''), 2600); };
-  const finish = async (kinds, label) => {
+  const noteTimer = useRef(0);
+  const flash = (t) => { setNote(t); clearTimeout(noteTimer.current); noteTimer.current = setTimeout(() => setNote(''), 2600); };
+  useMoneyToast(flash);
+  const finish = (kinds, label, job) => {
     hapticTap();
     playUiSound('like');
     setParty(Date.now());
-    if (onRefresh) await onRefresh();
     const patch = {};
     const after = { frame: own.frame || kinds.includes('frame'), plate: own.plate || kinds.includes('nameplate') };
     if (kinds.includes('frame') || (kinds.includes('effect') && after.frame && after.plate)) patch.avatar_frame = set.key;
     if (kinds.includes('nameplate') || (kinds.includes('effect') && after.frame && after.plate)) patch.nameplate = set.key;
-    if (Object.keys(patch).length) await onWear(patch);
+    if (Object.keys(patch).length) onWear(patch, job);
     if (kinds.includes('effect') && after.frame && after.plate) setFxRun(Date.now());
     flash(`${label} is yours`);
+    job.then((r) => {
+      if (r.error) { setParty(0); flash(r.error); return; }
+      if (onRefresh) onRefresh();
+    });
   };
   const runBuy = async () => {
     setAsk(null);
     if (busy) return;
-    if (!(await spendGate(`Get the ${set.name} ${what}`))) return;
-    setBusy(true);
-    const r = dealOn ? await buyDeal('set', set.key) : missing.length > 1 ? await buyDecorSet(set.key) : await buyShopItem(missing[0], set.key);
-    setBusy(false);
-    if (r.error) { flash(r.error); return; }
-    await finish(missing, missing.length === 3 ? `${set.name} set` : `${set.name} ${what}`);
+    if (!(await spendGate(`Get the ${set.name} ${what} for ${price} coins`, { coins: price }))) return;
+    const kinds = missing.slice();
+    const job = moneyRun(me.id, { coins: price, grants: kinds.map((k) => [k, set.key]), run: () => (dealOn ? buyDeal('set', set.key) : kinds.length > 1 ? buyDecorSet(set.key) : buyShopItem(kinds[0], set.key)) });
+    finish(kinds, kinds.length === 3 ? `${set.name} set` : `${set.name} ${what}`, job);
   };
   const runFree = async () => {
     setAsk(null);
     if (busy) return;
-    setBusy(true);
-    const r = await claimFreeSet(set.key);
-    setBusy(false);
-    if (r.error) { flash(r.error); return; }
-    await finish(DECOR_PIECES.filter((k) => !(k === 'frame' ? own.frame : k === 'nameplate' ? own.plate : own.effect)), `${set.name} set`);
+    const kinds = DECOR_PIECES.filter((k) => !(k === 'frame' ? own.frame : k === 'nameplate' ? own.plate : own.effect));
+    finish(kinds, `${set.name} set`, moneyRun(me.id, { freeSets: 1, grants: kinds.map((k) => [k, set.key]), run: () => claimFreeSet(set.key) }));
   };
-  const wear = async () => {
+  const wear = () => {
     if (busy) return;
-    setBusy(true);
     const patch = mode === 'frame' ? { avatar_frame: set.key } : mode === 'nameplate' ? { nameplate: set.key } : { avatar_frame: set.key, nameplate: set.key };
-    await onWear(patch);
-    setBusy(false);
+    onWear(patch);
     if (mode !== 'frame' && mode !== 'nameplate' && own.effect) setFxRun(Date.now());
   };
-  const takeOff = async () => {
+  const takeOff = () => {
     if (busy) return;
-    setBusy(true);
     const patch = {};
     if (mode !== 'nameplate' && wearF) patch.avatar_frame = null;
     if (mode !== 'frame' && wearP) patch.nameplate = null;
-    if (Object.keys(patch).length) await onWear(patch);
-    setBusy(false);
+    if (Object.keys(patch).length) onWear(patch);
   };
   const shopReady = () => {
     if (!wallet) return false;
@@ -22285,10 +23438,9 @@ function SetShopPage({ me, setKey, rewards, wallet, onClose, onPick, onWear, onR
     if (busy || !shopReady()) return;
     setAsk(coins >= price ? 'buy' : 'coins');
   };
-  const tapWish = async () => {
-    const r = await wish.toggle('set', set.key);
-    if (r.error) flash(r.error);
-    else flash(r.on ? 'Added to your wishlist' : 'Removed from your wishlist');
+  const tapWish = () => {
+    flash(wished ? 'Removed from your wishlist' : 'Added to your wishlist');
+    wish.toggle('set', set.key).then((r) => { if (r.error) flash(r.error); });
   };
   const onDown = (e) => { swipeRef.current = { x: e.clientX, y: e.clientY, id: e.pointerId }; };
   const onUp = (e) => {
@@ -22385,14 +23537,14 @@ function SetShopPage({ me, setKey, rewards, wallet, onClose, onPick, onWear, onR
           body={`This costs ${formatCount(price)} coins and you have ${formatCount(coins)}. Claim daily coins or invite friends to get more.`}
           onCancel={() => setAsk(null)} onConfirm={() => { setAsk(null); if (onOpenWallet) onOpenWallet(); }} />
       )}
-      {note && <div className="zchat-pop" role="status" style={{ position: 'absolute', left: '50%', top: 'calc(64px + env(safe-area-inset-top))', transform: 'translateX(-50%)', zIndex: 40, padding: '9px 16px', borderRadius: 18, background: 'rgba(255,255,255,0.95)', color: '#111', fontSize: 13.5, fontWeight: 700, whiteSpace: 'nowrap', maxWidth: 'calc(100% - 32px)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{note}</div>}
+      {note && <div className="zchat-pop" role="status" style={{ position: 'absolute', left: '50%', top: 'calc(64px + env(safe-area-inset-top))', transform: 'translateX(-50%)', zIndex: 40, padding: '9px 16px', borderRadius: 18, background: 'rgba(255,255,255,0.95)', color: '#111', fontSize: 13.5, fontWeight: 700, width: 'max-content', maxWidth: 'calc(100% - 32px)', boxSizing: 'border-box', textAlign: 'center' }}>{note}</div>}
     </div>
   );
 }
 
-function spendGate(reason) {
+function spendGate(reason, opts) {
   try {
-    if (typeof requireSpendAuth === 'function') return Promise.resolve(requireSpendAuth(reason)).then((v) => v !== false, () => false);
+    if (typeof requireSpendAuth === 'function') return Promise.resolve(requireSpendAuth(reason, opts)).then((v) => v !== false, () => false);
   } catch {}
   return Promise.resolve(true);
 }
@@ -22407,22 +23559,43 @@ function useShopTick() {
     return () => { shopSubs.delete(fn); };
   }, []);
 }
+function shopKnown(kind, key) {
+  return kind === 'set' ? isDecorKey(key) && !DECOR_BY_KEY[key].drop : kind === 'bubble' ? !!CHAR_BUBBLES[key] : kind === 'charm' ? !!CUSTOM_BADGES[key] && !!shopPrice('charm', key) : false;
+}
+function shopWarm() {
+  if (shopMem.warm) return;
+  shopMem.warm = true;
+  try {
+    const o = JSON.parse(localStorage.getItem('zchat-shop-cache') || 'null');
+    if (!o || typeof o !== 'object') return;
+    if (!shopMem.popular && Array.isArray(o.popular)) shopMem.popular = o.popular.filter((r) => r && shopKnown(r.kind, r.key));
+    const d = o.deal;
+    if (shopMem.deal === null && d && Date.parse(d.ends_at) > Date.now() && shopKnown(d.kind, d.key) && Number(d.price) > 0) shopMem.deal = d;
+  } catch {}
+}
+function shopSave() {
+  try { localStorage.setItem('zchat-shop-cache', JSON.stringify({ popular: shopMem.popular || [], deal: shopMem.deal || null })); } catch {}
+}
 function loadPopular(force) {
+  shopWarm();
   if (!force && shopMem.popular && Date.now() - shopMem.popularAt < 600000) return Promise.resolve(shopMem.popular);
   if (shopMem.popularJob) return shopMem.popularJob;
   shopMem.popularJob = supabase.rpc('zchat_shop_popular', { p_limit: 16 })
     .then(({ data, error }) => {
+      if (error && shopMem.popular) return shopMem.popular;
       const rows = !error && Array.isArray(data) ? data : [];
       shopMem.popular = rows
         .map((r) => ({ kind: r.kind, key: r.item_key, owners: Number(r.owners) || 0 }))
-        .filter((r) => (r.kind === 'set' ? isDecorKey(r.key) && !DECOR_BY_KEY[r.key].drop : r.kind === 'bubble' ? !!CHAR_BUBBLES[r.key] : r.kind === 'charm' ? !!CUSTOM_BADGES[r.key] && !!shopPrice('charm', r.key) : false));
+        .filter((r) => shopKnown(r.kind, r.key));
       shopMem.popularAt = Date.now();
+      shopSave();
       return shopMem.popular;
-    }, () => { shopMem.popular = []; shopMem.popularAt = Date.now(); return []; })
+    }, () => { if (!shopMem.popular) shopMem.popular = []; shopMem.popularAt = Date.now(); return shopMem.popular; })
     .then((v) => { shopMem.popularJob = null; shopPing(); return v; });
   return shopMem.popularJob;
 }
 function loadDeal(force) {
+  shopWarm();
   const d = shopMem.deal;
   if (!force && d !== null && Date.now() - shopMem.dealAt < 600000 && (!d || Date.parse(d.ends_at) > Date.now())) return Promise.resolve(d);
   if (shopMem.dealJob) return shopMem.dealJob;
@@ -22433,6 +23606,7 @@ function loadDeal(force) {
       const known = ok && (row.kind === 'set' ? isDecorKey(row.key) && !DECOR_BY_KEY[row.key].drop : row.kind === 'bubble' ? !!CHAR_BUBBLES[row.key] : row.kind === 'charm' ? !!CUSTOM_BADGES[row.key] : false);
       shopMem.deal = known ? { kind: row.kind, key: row.key, price: Number(row.price), was: Number(row.was), ends_at: row.ends_at } : false;
       shopMem.dealAt = Date.now();
+      shopSave();
       return shopMem.deal;
     }, () => { shopMem.deal = false; shopMem.dealAt = Date.now(); return false; })
     .then((v) => { shopMem.dealJob = null; shopPing(); return v; });
@@ -22440,11 +23614,13 @@ function loadDeal(force) {
 }
 function usePopular() {
   useShopTick();
+  shopWarm();
   useEffect(() => { loadPopular(); }, []);
   return shopMem.popular || [];
 }
 function useDeal() {
   useShopTick();
+  shopWarm();
   useEffect(() => { loadDeal(); }, []);
   const d = shopMem.deal;
   return d && Date.parse(d.ends_at) > Date.now() ? d : null;
@@ -22454,40 +23630,63 @@ async function buyDeal(kind, key) {
   const row = Array.isArray(data) ? data[0] : data;
   if (error) return { error: rpcFailText('Deal', error, 'Deals switch on once the latest ZChat setup is finished.') };
   if (!row || !row.ok) { loadDeal(true); return { error: (row && row.reason) || 'That did not work. Try again.' }; }
-  walletMem.data = null;
-  announceWallet();
-  return { ok: true, got: row.got || [] };
+  return { ok: true, got: row.got || [], coins: row.coins };
 }
 const MILESTONES = [[5, 25], [15, 50], [30, 100], [60, 200], [100, 400]];
-const msMem = { uid: null, data: null, job: null };
+const msMem = { uid: null, data: null, job: null, pend: new Set() };
+function msWarm(uid) {
+  if (!uid || (msMem.uid === uid && msMem.data)) return;
+  if (msMem.uid !== uid) { Object.assign(msMem, { uid, data: null, job: null }); msMem.pend.clear(); }
+  try {
+    const o = JSON.parse(localStorage.getItem(`zchat-milestones-${uid}`) || 'null');
+    if (o && typeof o === 'object' && Array.isArray(o.claimed)) msMem.data = { count: Number(o.count) || 0, claimed: o.claimed.map(Number) };
+  } catch {}
+}
 function loadMilestones(uid, force) {
   if (!uid) return Promise.resolve(null);
+  msWarm(uid);
   if (!force && msMem.uid === uid && msMem.data) return Promise.resolve(msMem.data);
   if (msMem.job && msMem.uid === uid) return msMem.job;
   msMem.uid = uid;
-  msMem.job = supabase.rpc('zchat_milestones')
+  const job = supabase.rpc('zchat_milestones')
     .then(({ data, error }) => {
+      if (msMem.uid !== uid) return null;
       const row = Array.isArray(data) ? data[0] : data;
-      msMem.data = !error && row && typeof row === 'object' ? { count: Number(row.count) || 0, claimed: Array.isArray(row.claimed) ? row.claimed.map(Number) : [] } : { count: 0, claimed: [], off: true };
+      if (error && msMem.data && !msMem.data.off) return msMem.data;
+      msMem.data = !error && row && typeof row === 'object' ? { count: Number(row.count) || 0, claimed: [...new Set([...(Array.isArray(row.claimed) ? row.claimed.map(Number) : []), ...msMem.pend])].sort((a, b) => a - b) } : { count: 0, claimed: [], off: true };
+      try { if (!msMem.data.off) localStorage.setItem(`zchat-milestones-${uid}`, JSON.stringify(msMem.data)); } catch {}
       return msMem.data;
-    }, () => { msMem.data = { count: 0, claimed: [], off: true }; return msMem.data; })
-    .then((v) => { msMem.job = null; shopPing(); return v; });
-  return msMem.job;
+    }, () => { if (msMem.uid !== uid) return null; if (!msMem.data) msMem.data = { count: 0, claimed: [], off: true }; return msMem.data; })
+    .then((v) => { if (msMem.job === job) msMem.job = null; shopPing(); return v; });
+  msMem.job = job;
+  return job;
 }
 function useMilestones(uid, rewardsSig) {
   useShopTick();
+  msWarm(uid);
   useEffect(() => { loadMilestones(uid, true); }, [uid, rewardsSig]);
   return msMem.uid === uid ? msMem.data : null;
 }
+function milestoneMark(uid, level, on) {
+  if (msMem.uid !== uid) return;
+  if (on) msMem.pend.add(level); else msMem.pend.delete(level);
+  const cur = msMem.data;
+  if (!cur || cur.off) return;
+  const claimed = cur.claimed.filter((x) => x !== level);
+  msMem.data = { ...cur, claimed: on ? [...claimed, level].sort((a, b) => a - b) : claimed };
+  shopPing();
+}
 async function claimMilestone(uid, level) {
+  const add = (MILESTONES.find(([lv]) => lv === level) || [0, 0])[1];
+  const tok = add ? walletSpend(uid, { coins: add }) : null;
+  milestoneMark(uid, level, true);
   const { data, error } = await supabase.rpc('zchat_claim_milestone', { p_level: level });
   const row = Array.isArray(data) ? data[0] : data;
-  if (error) return { error: rpcFailText('Reward', error, 'Rewards switch on once the latest ZChat setup is finished.') };
-  if (!row || !row.ok) return { error: (row && row.reason) || 'That did not work. Try again.' };
-  walletMem.data = null;
-  announceWallet();
-  await loadMilestones(uid, true);
-  return { ok: true, added: Number(row.added) || 0 };
+  const fail = error ? rpcFailText('Reward', error, 'Rewards switch on once the latest ZChat setup is finished.') : !row || !row.ok ? (row && row.reason) || 'That did not work. Try again.' : null;
+  if (fail) { walletSettle(tok, { error: true }); milestoneMark(uid, level, false); return { error: fail }; }
+  walletAfter(uid, tok, { coins: row.coins });
+  loadMilestones(uid, true);
+  return { ok: true, added: Number(row.added) || add };
 }
 const wishMem = new Map();
 function loadWishlist(uid, force) {
@@ -22495,8 +23694,11 @@ function loadWishlist(uid, force) {
   const cur = wishMem.get(uid);
   if (!force && cur && cur.list && Date.now() - cur.at < 120000) return Promise.resolve(cur.list);
   if (cur && cur.job) return cur.job;
+  const started = Date.now();
   const job = supabase.from('wishlist_items').select('kind, item_key, created_at').eq('user_id', uid).order('created_at', { ascending: false }).limit(60)
     .then(({ data, error }) => {
+      const now = wishMem.get(uid);
+      if (now && now.mark && now.mark > started) { wishMem.set(uid, { ...now, job: null }); return now.list; }
       const list = !error && Array.isArray(data) ? data.filter((r) => (r.kind === 'set' ? isDecorKey(r.item_key) : r.kind === 'bubble' ? !!CHAR_BUBBLES[r.item_key] : r.kind === 'charm' ? !!CUSTOM_BADGES[r.item_key] : false)) : [];
       wishMem.set(uid, { list, at: Date.now(), off: !!error });
       return list;
@@ -22514,47 +23716,90 @@ function useWishlist(uid) {
   const toggle = async (kind, key) => {
     const on = has(kind, key);
     const next = on ? list.filter((r) => !(r.kind === kind && r.item_key === key)) : [{ kind, item_key: key, created_at: new Date().toISOString() }, ...list];
-    wishMem.set(uid, { list: next, at: Date.now() });
+    wishMem.set(uid, { list: next, at: Date.now(), mark: Date.now() });
     shopPing();
     hapticTap();
     const { error } = on
       ? await supabase.from('wishlist_items').delete().eq('user_id', uid).eq('kind', kind).eq('item_key', key)
       : await supabase.from('wishlist_items').insert({ user_id: uid, kind, item_key: key });
-    if (error) { wishMem.set(uid, { list, at: Date.now() }); shopPing(); return { error: on ? 'Could not remove it. Try again.' : /full/i.test(error.message || '') ? 'Your wishlist is full.' : 'Wishlists switch on once the latest ZChat setup is finished.' }; }
+    if (error) {
+      const now = (wishMem.get(uid) || {}).list || next;
+      const back = on ? [...list.filter((r) => r.kind === kind && r.item_key === key), ...now.filter((r) => !(r.kind === kind && r.item_key === key))] : now.filter((r) => !(r.kind === kind && r.item_key === key));
+      wishMem.set(uid, { list: back, at: Date.now(), mark: Date.now() });
+      shopPing();
+      return { error: on ? 'Could not remove it. Try again.' : /full/i.test(error.message || '') ? 'Your wishlist is full.' : 'Wishlists switch on once the latest ZChat setup is finished.' };
+    }
     return { ok: true, on: !on };
   };
   return { list, has, toggle, off: !!(cur && cur.off) };
 }
-const looksMem = { uid: null, list: null, job: null };
+const looksMem = { uid: null, list: null, job: null, mark: 0 };
+function looksKeep(uid) {
+  try { if (looksMem.uid === uid && looksMem.list && !looksMem.off) localStorage.setItem(`zchat-looks-${uid}`, JSON.stringify(looksMem.list)); } catch {}
+}
+function looksWarm(uid) {
+  if (!uid || (looksMem.uid === uid && looksMem.list)) return;
+  if (looksMem.uid !== uid) Object.assign(looksMem, { uid, list: null, job: null, mark: 0, off: false, fresh: false });
+  try {
+    const o = JSON.parse(localStorage.getItem(`zchat-looks-${uid}`) || 'null');
+    if (Array.isArray(o)) { looksMem.list = o.filter((l) => l && l.slot >= 1 && l.slot <= 3); looksMem.off = false; }
+  } catch {}
+}
 function loadLooks(uid, force) {
   if (!uid) return Promise.resolve([]);
-  if (!force && looksMem.uid === uid && looksMem.list) return Promise.resolve(looksMem.list);
+  looksWarm(uid);
+  if (!force && looksMem.uid === uid && looksMem.list && looksMem.fresh) return Promise.resolve(looksMem.list);
   if (looksMem.job && looksMem.uid === uid) return looksMem.job;
   looksMem.uid = uid;
-  looksMem.job = supabase.from('saved_looks').select('slot, name, frame, nameplate, bubble, charm, updated_at').eq('user_id', uid).order('slot', { ascending: true })
-    .then(({ data, error }) => { looksMem.list = !error && Array.isArray(data) ? data : []; looksMem.off = !!error; return looksMem.list; }, () => { looksMem.list = []; looksMem.off = true; return []; })
-    .then((v) => { looksMem.job = null; shopPing(); return v; });
-  return looksMem.job;
+  const started = Date.now();
+  const job = supabase.from('saved_looks').select('slot, name, frame, nameplate, bubble, charm, updated_at').eq('user_id', uid).order('slot', { ascending: true })
+    .then(({ data, error }) => {
+      if (looksMem.uid !== uid) return !error && Array.isArray(data) ? data : [];
+      if (looksMem.mark > started && looksMem.list) return looksMem.list;
+      if (error && looksMem.list && !looksMem.off) return looksMem.list;
+      looksMem.list = !error && Array.isArray(data) ? data : [];
+      looksMem.off = !!error;
+      looksMem.fresh = !error;
+      looksKeep(uid);
+      return looksMem.list;
+    }, () => { if (looksMem.uid !== uid) return []; if (!looksMem.list) { looksMem.list = []; looksMem.off = true; } return looksMem.list; })
+    .then((v) => { if (looksMem.job === job) looksMem.job = null; shopPing(); return v; });
+  looksMem.job = job;
+  return job;
 }
 function useLooks(uid) {
   useShopTick();
+  looksWarm(uid);
   useEffect(() => { loadLooks(uid); }, [uid]);
   const list = looksMem.uid === uid ? looksMem.list || [] : [];
   const save = async (slot, look) => {
     const row = { user_id: uid, slot, name: String(look.name || '').slice(0, 24), frame: look.frame || null, nameplate: look.nameplate || null, bubble: look.bubble || null, charm: look.charm || null, updated_at: new Date().toISOString() };
-    const prev = list;
+    const prev = list.find((l) => l.slot === slot) || null;
     looksMem.list = [...list.filter((l) => l.slot !== slot), row].sort((a, b) => a.slot - b.slot);
+    looksMem.mark = Date.now();
+    looksKeep(uid);
     shopPing();
     const { error } = await supabase.from('saved_looks').upsert(row, { onConflict: 'user_id,slot' });
-    if (error) { looksMem.list = prev; shopPing(); return { error: 'Looks switch on once the latest ZChat setup is finished.' }; }
+    if (error) {
+      const now = (looksMem.list || []).filter((l) => l.slot !== slot);
+      looksMem.list = (prev ? [...now, prev] : now).sort((a, b) => a.slot - b.slot);
+      looksKeep(uid);
+      shopPing();
+      return { error: 'Looks switch on once the latest ZChat setup is finished.' };
+    }
     return { ok: true };
   };
   const remove = async (slot) => {
-    const prev = list;
+    const prev = list.find((l) => l.slot === slot) || null;
     looksMem.list = list.filter((l) => l.slot !== slot);
+    looksMem.mark = Date.now();
+    looksKeep(uid);
     shopPing();
     const { error } = await supabase.from('saved_looks').delete().eq('user_id', uid).eq('slot', slot);
-    if (error) { looksMem.list = prev; shopPing(); return { error: 'Could not remove it. Try again.' }; }
+    if (error) {
+      if (prev) { looksMem.list = [...(looksMem.list || []).filter((l) => l.slot !== slot), prev].sort((a, b) => a.slot - b.slot); looksKeep(uid); shopPing(); }
+      return { error: 'Could not remove it. Try again.' };
+    }
     return { ok: true };
   };
   return { list, save, remove, off: looksMem.uid === uid && !!looksMem.off };
@@ -22827,7 +24072,7 @@ function CollProgress({ stats, ms, onClaim, busy }) {
             <div style={{ fontSize: 13, color: CL.ink2 }}>{ready ? `You reached ${next[0]} items` : `Collect ${next[0]} items to get ${next[1]} coins`}</div>
             <div style={{ height: 5, borderRadius: 3, background: 'rgba(255,255,255,0.08)', marginTop: 7, overflow: 'hidden' }}><div style={{ height: '100%', width: `${frac * 100}%`, borderRadius: 3, background: ready ? CL.gold : CL.accent, transition: 'width 0.5s ease' }} /></div>
           </div>
-          {ready && onClaim && (
+          {ready && onClaim && ms && (
             <button type="button" disabled={busy} onClick={() => onClaim(next[0])} aria-label={`Claim ${next[1]} coins`} className="zchat-press"
               style={{ height: 36, padding: '0 14px', borderRadius: 18, border: 'none', background: CL.gold, color: '#2A1C00', fontFamily: FONT, fontSize: 14, fontWeight: 750, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5, flexShrink: 0, opacity: busy ? 0.6 : 1 }}><CoinIcon size={16} />Claim {next[1]}</button>
           )}
@@ -22839,7 +24084,7 @@ function CollProgress({ stats, ms, onClaim, busy }) {
 
 function ShopItemSheet({ me, item, rewards, wallet, onClose, onDone, onOpenWallet, onGift, onPreviewCharm }) {
   useBackClose(true, onClose);
-  const { setBubbleStyle } = useTheme();
+  const { bubbleStyle, setBubbleStyle } = useTheme();
   const wish = useWishlist(me.id);
   const deal = useDeal();
   const [busy, setBusy] = useState(false);
@@ -22856,29 +24101,27 @@ function ShopItemSheet({ me, item, rewards, wallet, onClose, onDone, onOpenWalle
   const coins = wallet && wallet.ready ? wallet.coins : 0;
   const wished = wish.has(item.kind, item.key);
   const rarity = shopItemRarity(item.kind, item.key);
-  const done = async (label) => {
+  const done = (label, job) => {
     hapticTap();
     playUiSound('like');
-    if (isBubble) { await loadOwnedBubbles(me.id, true); setBubbleStyle(item.key); }
-    if (onDone) await onDone(label);
+    if (isBubble) {
+      const was = bubbleStyle;
+      setBubbleStyle(item.key);
+      job.then((r) => { if (r.error) setBubbleStyle(was); });
+    }
+    if (onDone) onDone(label, job);
   };
   const buy = async () => {
     setAsk(false);
     if (busy) return;
-    if (!(await spendGate(`Get the ${name}`))) return;
-    setBusy(true); setErr('');
-    const r = dealOn ? await buyDeal(item.kind, item.key) : await buyShopItem(item.kind, item.key);
-    setBusy(false);
-    if (r.error) { setErr(r.error); return; }
-    await done(`${name} is yours`);
+    if (!(await spendGate(`Get the ${name} for ${price} coins`, { coins: price }))) return;
+    setErr('');
+    done(`${name} is yours`, moneyRun(me.id, { coins: price, grants: [[item.kind, item.key]], run: () => (dealOn ? buyDeal(item.kind, item.key) : buyShopItem(item.kind, item.key)) }));
   };
   const free = async () => {
     if (busy) return;
-    setBusy(true); setErr('');
-    const r = await claimFreeBubble(item.key);
-    setBusy(false);
-    if (r.error) { setErr(r.error); return; }
-    await done(`${name} is yours`);
+    setErr('');
+    done(`${name} is yours`, moneyRun(me.id, { freeBubbles: 1, grants: [[item.kind, item.key]], run: () => claimFreeBubble(item.key) }));
   };
   const tapGet = () => {
     if (busy) return;
@@ -22948,7 +24191,9 @@ function ShopPage({ me, rewards, onClose, onWear, onRewardsChanged, onOpenWallet
   const gridRef = useRef(null);
   const gw = useWidthOf(gridRef, typeof window === 'undefined' ? 390 : Math.min(window.innerWidth, 560)) - 32;
   useDecorLoaded(DECOR_SPRITE);
-  const say = (t) => { setToast(t); setTimeout(() => setToast(''), 2400); };
+  const toastTimer = useRef(0);
+  const say = (t) => { setToast(t); clearTimeout(toastTimer.current); toastTimer.current = setTimeout(() => setToast(''), 2400); };
+  useMoneyToast(say);
   const active = (rewards || []).filter(rewardActive);
   const ownedBubbles = new Set(active.filter((r) => r.kind === 'bubble' && !r.expires_at).map((r) => r.reward_key));
   const ownedCharms = new Set(active.filter((r) => r.kind === 'charm' && !r.expires_at).map((r) => r.reward_key));
@@ -23069,14 +24314,14 @@ function ShopPage({ me, rewards, onClose, onWear, onRewardsChanged, onOpenWallet
           <CollSection title="Charms" sub="A charm sits next to your name everywhere">{itemGrid('charm', shopCharms)}</CollSection>
         ) : empty('Every charm is yours', 'Use them from your Collection.'))}
       </div>
-      {openItem && <ShopItemSheet me={me} item={openItem} rewards={rewards} wallet={wallet} onClose={() => setOpenItem(null)} onOpenWallet={onOpenWallet} onGift={onGift ? (kind, k) => { setOpenItem(null); onGift(kind, k); } : undefined} onPreviewCharm={(k) => { setOpenItem(null); setCharmTry(k); }} onDone={async (t) => { setOpenItem(null); say(t); await refresh(); }} />}
+      {openItem && <ShopItemSheet me={me} item={openItem} rewards={rewards} wallet={wallet} onClose={() => setOpenItem(null)} onOpenWallet={onOpenWallet} onGift={onGift ? (kind, k) => { setOpenItem(null); onGift(kind, k); } : undefined} onPreviewCharm={(k) => { setOpenItem(null); setCharmTry(k); }} onDone={(t, job) => { setOpenItem(null); say(t); job.then((r) => { if (r.error) say(r.error); else refresh(); }); }} />}
       {charmTry && <CharmTryOnPage me={me} charmKey={charmTry} onClose={() => setCharmTry(null)} action={{ label: `Get it for ${formatCount(shopPrice('charm', charmTry) || 0)} coins`, onClick: () => { const k = charmTry; setCharmTry(null); setOpenItem({ kind: 'charm', key: k }); }, sub: 'Yours to keep' }} />}
       {openSet && (
         <SetShopPage me={me} setKey={openSet} rewards={rewards} wallet={wallet} list={listKeys.includes(openSet) ? listKeys : null} onClose={() => setOpenSet(null)} onPick={(k) => setOpenSet(k)}
           onWear={onWear} onRefresh={refresh} onOpenWallet={onOpenWallet} onGift={onGift ? (k) => onGift('set', k) : undefined} />
       )}
       {openDrop && <DropPage drop={openDrop} me={me} rewards={rewards} wallet={wallet} onClose={() => setDropOpen(null)} onWear={onWear} onRefresh={refresh} onOpenWallet={onOpenWallet} />}
-      {toast && <div className="zchat-pop" role="status" style={{ position: 'absolute', left: '50%', top: 'calc(70px + env(safe-area-inset-top))', transform: 'translateX(-50%)', zIndex: 40, padding: '9px 16px', borderRadius: 18, background: 'rgba(255,255,255,0.95)', color: '#111', fontSize: 13.5, fontWeight: 650, whiteSpace: 'nowrap', maxWidth: 'calc(100% - 32px)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{toast}</div>}
+      {toast && <div className="zchat-pop" role="status" style={{ position: 'absolute', left: '50%', top: 'calc(70px + env(safe-area-inset-top))', transform: 'translateX(-50%)', zIndex: 40, padding: '9px 16px', borderRadius: 18, background: 'rgba(255,255,255,0.95)', color: '#111', fontSize: 13.5, fontWeight: 650, width: 'max-content', maxWidth: 'calc(100% - 32px)', boxSizing: 'border-box', textAlign: 'center' }}>{toast}</div>}
     </div>
     </>
   );
@@ -23172,7 +24417,9 @@ function CollectionPanel({ me, rewards, onClose, onEquip, onWear, isAdmin, onRew
   const gw = useWidthOf(gridRef, typeof window === 'undefined' ? 390 : Math.min(window.innerWidth, 560)) - 32;
   useDecorLoaded(DECOR_SPRITE);
   useBackClose(!!selected, () => setSelected(null));
-  const say = (t) => { setToast(t); setTimeout(() => setToast(''), 2400); };
+  const toastTimer = useRef(0);
+  const say = (t) => { setToast(t); clearTimeout(toastTimer.current); toastTimer.current = setTimeout(() => setToast(''), 2400); };
+  useMoneyToast(say);
   const coins = wallet && wallet.ready ? wallet.coins : 0;
   const stats = collectionStats(rewards);
   const rewardsSig = `${(rewards || []).length}:${stats.owned}`;
@@ -23205,43 +24452,41 @@ function CollectionPanel({ me, rewards, onClose, onEquip, onWear, isAdmin, onRew
   const sorted = [...items].sort((x, y) => Number(y.equipped) - Number(x.equipped) || (STORE_RARITY_ORDER[x.spec.rarity] ?? 9) - (STORE_RARITY_ORDER[y.spec.rarity] ?? 9));
   const sel = selected ? items.find((it) => it.key === selected) : null;
   const refresh = async () => { if (onRewardsChanged) await onRewardsChanged(); loadMilestones(me.id, true); };
-  const equip = async (kind, key) => {
+  const equip = (kind, key) => {
     if (busy || (kind === 'badge' && !isAdmin)) return;
-    setBusy(true);
-    playUiSound('like');
-    await onEquip(kind, key);
-    setBusy(false);
+    onEquip(kind, key);
   };
   const openSetPage = (k, mode = 'set') => { setOpenMode(mode); setOpenSet(k); playUiSound('tap'); };
   const claim = async (level) => {
     if (msBusy) return;
+    const add = (MILESTONES.find(([lv]) => lv === level) || [0, 0])[1];
     setMsBusy(true);
-    const r = await claimMilestone(me.id, level);
-    setMsBusy(false);
-    if (r.error) { say(r.error); return; }
     hapticTap();
     playUiSound('win');
-    say(`${r.added} coins added`);
+    say(`${add} coins added`);
+    const r = await claimMilestone(me.id, level);
+    setMsBusy(false);
+    if (r.error) say(r.error);
   };
   const currentLook = { frame: wearF, nameplate: wearP, bubble: wearingBubble === 'classic' ? null : wearingBubble, charm: me.custom_badge || null };
   const sameLook = (l) => (l.frame || null) === currentLook.frame && (l.nameplate || null) === currentLook.nameplate && (l.bubble || null) === currentLook.bubble && (l.charm || null) === currentLook.charm;
-  const saveLook = async (slot, name) => {
-    const r = await looks.save(slot, { ...currentLook, name: name || `Look ${slot}` });
-    if (r.error) say(r.error); else { hapticTap(); say('Look saved'); }
+  const saveLook = (slot, name) => {
+    hapticTap();
+    say('Look saved');
+    looks.save(slot, { ...currentLook, name: name || `Look ${slot}` }).then((r) => { if (r.error) say(r.error); });
   };
-  const applyLook = async (l) => {
+  const applyLook = (l) => {
     if (busy) return;
-    setBusy(true);
     const ownsK = (kind, k) => !k || active.some((r) => r.kind === kind && r.reward_key === k);
     const patch = {};
     if (ownsK('frame', l.frame) && (l.frame || null) !== wearF) patch.avatar_frame = l.frame || null;
     if (ownsK('nameplate', l.nameplate) && (l.nameplate || null) !== wearP) patch.nameplate = l.nameplate || null;
-    if (Object.keys(patch).length) await onWear(patch);
+    const charmGo = (l.charm || null) !== (me.custom_badge || null) && (!l.charm || ownedCharms.has(l.charm));
+    if (Object.keys(patch).length) onWear(patch);
     if (!l.bubble || stats.bubbles.has(l.bubble)) setBubbleStyle(l.bubble || 'classic');
-    if ((l.charm || null) !== (me.custom_badge || null) && (!l.charm || ownedCharms.has(l.charm))) await onEquip('charm', l.charm || null);
-    setBusy(false);
+    if (charmGo) onEquip('charm', l.charm || null);
     hapticTap();
-    playUiSound('like');
+    if (!Object.keys(patch).length && !charmGo) playUiSound('like');
     say(`${l.name || 'Look'} is on`);
   };
   const covered = !!(openSet || openDrop || tryOn);
@@ -23359,7 +24604,7 @@ function CollectionPanel({ me, rewards, onClose, onEquip, onWear, isAdmin, onRew
           </div>
         </div>
       )}
-      {toast && <div className="zchat-pop" role="status" style={{ position: 'absolute', left: '50%', top: 'calc(70px + env(safe-area-inset-top))', transform: 'translateX(-50%)', zIndex: 40, padding: '9px 16px', borderRadius: 18, background: 'rgba(255,255,255,0.95)', color: '#111', fontSize: 13.5, fontWeight: 650, whiteSpace: 'nowrap', maxWidth: 'calc(100% - 32px)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{toast}</div>}
+      {toast && <div className="zchat-pop" role="status" style={{ position: 'absolute', left: '50%', top: 'calc(70px + env(safe-area-inset-top))', transform: 'translateX(-50%)', zIndex: 40, padding: '9px 16px', borderRadius: 18, background: 'rgba(255,255,255,0.95)', color: '#111', fontSize: 13.5, fontWeight: 650, width: 'max-content', maxWidth: 'calc(100% - 32px)', boxSizing: 'border-box', textAlign: 'center' }}>{toast}</div>}
       {tryOn && (() => {
         const rw = rewardFor('charm', tryOn);
         const isEq = me.custom_badge === tryOn;
@@ -23505,18 +24750,16 @@ function GiftUnwrapPage({ entry, me, onOpened, onClose, onThank, onWear, onUseBu
   };
   const thank = async () => {
     if (busy || thanked || !from) return;
-    setBusy(true);
-    await onThank(from, label);
-    setBusy(false);
+    hapticTap();
     setThanked(true);
+    const ok = await onThank(from, label);
+    if (ok === false) setThanked(false);
   };
-  const wear = async () => {
+  const wear = () => {
     if (busy) return;
-    setBusy(true);
     if (g.kind === 'bubble') onUseBubble(g.key);
-    else if (g.kind === 'charm') await onUseCharm(g.key);
-    else if (set) await onWear(g.kind === 'frame' ? { avatar_frame: set.key } : g.kind === 'nameplate' ? { nameplate: set.key } : { avatar_frame: set.key, nameplate: set.key });
-    setBusy(false);
+    else if (g.kind === 'charm') onUseCharm(g.key);
+    else if (set) onWear(g.kind === 'frame' ? { avatar_frame: set.key } : g.kind === 'nameplate' ? { nameplate: set.key } : { avatar_frame: set.key, nameplate: set.key });
     onClose();
   };
   const pieces = Array.from({ length: 34 }, (_, i) => i);
@@ -23602,13 +24845,25 @@ function CharmPreview({ charm, size }) {
   return <img src={url} alt="" draggable={false} style={{ height: size, width: Math.round(size * spec.ratio), objectFit: 'contain' }} />;
 }
 
-function FeedPanel({ me, userId, onClose, onOpenProfile, ownerFilter = null, startPostId = null, seedPost = null, onPostDeleted = null, initialTab = 'foryou', fixedIds = null, title = null, clipsOnly = false }) {
+const feedPanelMem = new Map();
+function FeedPanel({ me, userId, onClose, onOpenProfile, ownerFilter = null, startPostId = null, seedPost = null, seedItems = null, onPostDeleted = null, initialTab = 'foryou', fixedIds = null, title = null, clipsOnly = false }) {
   useBackClose(true, onClose);
   const feedEdgeBack = useEdgeSwipeBack(true, null, { edgeOnly: true });
   const [tab, setTab] = useState(initialTab || 'foryou');
-  const [items, setItems] = useState(null);
-  const [likes, setLikes] = useState({});
-  const [counts, setCounts] = useState({});
+  const feedKey = (t) => (fixedIds ? null : `${userId}:${ownerFilter ? `o${ownerFilter.id}` : clipsOnly ? 'clips' : t}`);
+  const seeded = useMemo(() => {
+    if (!fixedIds) { const hit = feedPanelMem.get(feedKey(initialTab || 'foryou')); return hit ? hit.filter((p) => !postGoneIds.has(p.id)) : null; }
+    if (!seedItems || !seedItems.length) return null;
+    const byId = new Map(seedItems.filter((p) => p && p.owner && !p.owner.is_deleted).map((p) => [p.id, p]));
+    const list = fixedIds.map((id) => byId.get(id)).filter(Boolean);
+    return list.length && list.length === fixedIds.length ? list : null;
+  }, []);
+  const [items, setItems] = useState(seeded);
+  const [likes, setLikes] = useState(() => cachedPostStats(seeded, (s) => (s.liked ? true : undefined)));
+  const [counts, setCounts] = useState(() => cachedPostStats(seeded, (s) => (s.likes != null ? { likes: s.likes, comments: s.comments || 0 } : undefined)));
+  const likeTouchRef = useRef(new Map());
+  const firstTabRef = useRef(true);
+  const tabNowRef = useRef(tab);
   const [commentsFor, setCommentsFor] = useState(null);
   const [burst, setBurst] = useState(null);
   const [saved, setSaved] = useState(() => { try { return new Set(JSON.parse(localStorage.getItem('zchat-saved-posts') || '[]')); } catch { return new Set(); } });
@@ -23682,6 +24937,8 @@ function FeedPanel({ me, userId, onClose, onOpenProfile, ownerFilter = null, sta
   };
 
   const load = async () => {
+    const owner = cacheOwner;
+    const want = tab;
     let followingIds = null;
     let tagFilters = [];
     if (!ownerFilter && !fixedIds && tab === 'following') {
@@ -23706,7 +24963,7 @@ function FeedPanel({ me, userId, onClose, onOpenProfile, ownerFilter = null, sta
       ({ data: posts, error: postsErr } = await q);
       if (postsErr && ownerFilter) ({ data: posts } = await supabase.from('posts').select('*').eq('user_id', ownerFilter.id).order('created_at', { ascending: false }).limit(60));
     }
-    let rows = (posts || []).filter((x) => x.user_id === userId || !notYetPosted(x));
+    let rows = (posts || []).filter((x) => (x.user_id === userId || !notYetPosted(x)) && !postGoneIds.has(x.id));
     if (seedPost && !fixedIds && !rows.some((p) => p.id === seedPost.id)) rows = [seedPost, ...rows].sort((x, y) => new Date(y.created_at) - new Date(x.created_at));
     const ids = [...new Set(rows.flatMap((p) => [p.user_id, p.collab_id || null]).filter(Boolean))];
     const byId = {};
@@ -23716,6 +24973,7 @@ function FeedPanel({ me, userId, onClose, onOpenProfile, ownerFilter = null, sta
     }
     const postIds = rows.map((p) => p.id);
     const likeMap = {}; const countMap = {};
+    const statsAt = Date.now();
     if (postIds.length) {
       const [{ data: ls }, { data: cs }] = await Promise.all([
         supabase.from('post_likes').select('post_id, user_id').in('post_id', postIds),
@@ -23731,11 +24989,26 @@ function FeedPanel({ me, userId, onClose, onOpenProfile, ownerFilter = null, sta
         countMap[c.post_id].comments += 1;
       });
     }
-    setLikes(likeMap);
-    setCounts(countMap);
-    setItems(rows.map((p) => ({ ...p, owner: byId[p.user_id], collab: p.collab_id && (p.collab_status === 'accepted' || p.collab_status === 'pending') ? byId[p.collab_id] || null : null })).filter((p) => p.owner && !p.owner.is_deleted));
+    const keepMine = (id) => (likeTouchRef.current.get(id) || 0) >= statsAt;
+    if (owner === cacheOwner) postIds.forEach((id) => { if (!keepMine(id)) rememberPostStats(id, { liked: !!likeMap[id], likes: (countMap[id] || { likes: 0 }).likes, comments: (countMap[id] || { comments: 0 }).comments }); });
+    setLikes((prev) => { const out = { ...likeMap }; postIds.forEach((id) => { if (keepMine(id)) out[id] = !!prev[id]; }); return out; });
+    setCounts((prev) => { const out = { ...countMap }; postIds.forEach((id) => { if (keepMine(id) && prev[id]) out[id] = prev[id]; }); return out; });
+    const built = rows.map((p) => ({ ...p, owner: byId[p.user_id], collab: p.collab_id && (p.collab_status === 'accepted' || p.collab_status === 'pending') ? byId[p.collab_id] || null : null })).filter((p) => p.owner && !p.owner.is_deleted && !postGoneIds.has(p.id));
+    const fk = feedKey(want);
+    if (fk) { feedPanelMem.set(fk, built); if (feedPanelMem.size > 12) feedPanelMem.delete(feedPanelMem.keys().next().value); }
+    if (tabNowRef.current !== want) return;
+    setItems(built);
   };
-  useEffect(() => { setItems(null); load(); }, [tab]);
+  useEffect(() => {
+    tabNowRef.current = tab;
+    if (!(firstTabRef.current && seeded)) {
+      const hit = feedPanelMem.get(feedKey(tab));
+      setItems(hit ? hit.filter((p) => !postGoneIds.has(p.id)) : null);
+      if (hit) { setLikes(cachedPostStats(hit, (st) => (st.liked ? true : undefined))); setCounts(cachedPostStats(hit, (st) => (st.likes != null ? { likes: st.likes, comments: st.comments || 0 } : undefined))); }
+    }
+    firstTabRef.current = false;
+    load();
+  }, [tab]);
   const respondCollab = async (post, accept) => {
     const { data, error } = await supabase.rpc('zchat_collab_respond', { p_post: post.id, p_accept: accept });
     if (error || data === false) return;
@@ -23752,20 +25025,32 @@ function FeedPanel({ me, userId, onClose, onOpenProfile, ownerFilter = null, sta
   useEffect(() => { if ((ownerFilter || fixedIds) && items && items.length === 0) onClose(); }, [items && items.length]);
 
   const countOf = (id) => counts[id] || { likes: 0, comments: 0 };
+  const applyLike = (post, on) => {
+    likeTouchRef.current.set(post.id, Date.now());
+    setLikes((p) => ({ ...p, [post.id]: on }));
+    setCounts((p) => { const c = p[post.id] || { likes: 0, comments: 0 }; const was = !!likes[post.id]; return was === on ? p : { ...p, [post.id]: { ...c, likes: Math.max(0, c.likes + (on ? 1 : -1)) } }; });
+    const c0 = countOf(post.id);
+    rememberPostStats(post.id, { liked: on, likes: Math.max(0, c0.likes + (!!likes[post.id] === on ? 0 : on ? 1 : -1)) });
+  };
   const toggleLike = async (post, force) => {
     const isLiked = !!likes[post.id];
     if (isLiked && force) return;
-    if (isLiked) {
-      setLikes((p) => ({ ...p, [post.id]: false }));
-      setCounts((p) => ({ ...p, [post.id]: { ...countOf(post.id), likes: Math.max(0, countOf(post.id).likes - 1) } }));
-      await supabase.from('post_likes').delete().eq('post_id', post.id).eq('user_id', userId);
+    if (!isLiked) playUiSound('like');
+    applyLike(post, !isLiked);
+    const res = await latestSync(`like:${post.id}`, !isLiked, (on) => (on
+      ? supabase.from('post_likes').upsert({ post_id: post.id, user_id: userId }, { onConflict: 'post_id,user_id' })
+      : supabase.from('post_likes').delete().eq('post_id', post.id).eq('user_id', userId)), isLiked);
+    if (!res.ok) {
+      const back = res.state === undefined ? isLiked : res.state;
+      likeTouchRef.current.set(post.id, Date.now());
+      setLikes((p) => ({ ...p, [post.id]: back }));
+      setCounts((p) => { const c = p[post.id] || { likes: 0, comments: 0 }; return !isLiked === back ? p : { ...p, [post.id]: { ...c, likes: Math.max(0, c.likes + (back ? 1 : -1)) } }; });
+      rememberPostStats(post.id, { liked: back });
+      setPinNote(friendlyError(res.error, 'That did not go through. Try again.'));
+      setTimeout(() => setPinNote(''), 2200);
       return;
     }
-    playUiSound('like');
-    setLikes((p) => ({ ...p, [post.id]: true }));
-    setCounts((p) => ({ ...p, [post.id]: { ...countOf(post.id), likes: countOf(post.id).likes + 1 } }));
-    await supabase.from('post_likes').upsert({ post_id: post.id, user_id: userId }, { onConflict: 'post_id,user_id' });
-    if (post.user_id !== userId) sendPushNotification(post.user_id, 'ZChat', `${(me && me.name) || 'Someone'} liked your post`, `/?post=${post.id}`, me && me.avatar);
+    if (!isLiked && res.state === true && post.user_id !== userId) sendPushNotification(post.user_id, 'ZChat', `${(me && me.name) || 'Someone'} liked your post`, `/?post=${post.id}`, me && me.avatar);
   };
   const onTapMedia = (post) => {
     const now = Date.now();
@@ -23890,14 +25175,16 @@ function FeedPanel({ me, userId, onClose, onOpenProfile, ownerFilter = null, sta
             const gone = confirmDeletePost;
             setConfirmDeletePost(null);
             setItems((prev) => (prev || []).filter((x) => x.id !== gone.id));
-            await supabase.from('posts').delete().eq('id', gone.id).eq('user_id', userId);
+            forgetPostLocally(gone.id);
+            const { error } = await supabase.from('posts').delete().eq('id', gone.id).eq('user_id', userId);
+            if (error) { unforgetPostLocally(gone.id); load(); setPinNote(friendlyError(error, 'That post could not be deleted. Try again.')); setTimeout(() => setPinNote(''), 2400); return; }
             if (onPostDeleted) onPostDeleted(gone);
           }} />
       )}
       {commentsFor && (
         <FeedComments post={commentsFor} me={me} userId={userId} onClose={() => setCommentsFor(null)}
-          onOpenProfile={onOpenProfile}
-          onCount={(n) => setCounts((p) => ({ ...p, [commentsFor.id]: { ...countOf(commentsFor.id), comments: n } }))} />
+          onOpenProfile={onOpenProfile} knownEmpty={!!counts[commentsFor.id] && counts[commentsFor.id].comments === 0}
+          onCount={(n) => { const pid = commentsFor.id; rememberPostStats(pid, { comments: n }); setCounts((p) => ({ ...p, [pid]: { ...(p[pid] || { likes: 0, comments: 0 }), comments: n } })); }} />
       )}
     </div>
     </>
@@ -24039,31 +25326,39 @@ function CommentRow({ c, small, isCreator, pinned, like, onLike, onReply, onMenu
   );
 }
 
-function FeedComments({ post, me, userId, onClose, onCount, onOpenProfile }) {
+const feedCommentsMem = new Map();
+function FeedComments({ post, me, userId, onClose, onCount, onOpenProfile, knownEmpty = false }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
   const commentOk = useCanInteract('comment', userId, post.user_id === userId ? null : post.user_id);
   const isOwner = post.user_id === userId;
-  const [rows, setRows] = useState(null);
+  const cmMem = feedCommentsMem.get(post.id);
+  const [rows, setRows] = useState(() => (cmMem ? cmMem.rows : knownEmpty ? [] : null));
   const [text, setText] = useState('');
   const [replyTo, setReplyTo] = useState(null);
   const [open, setOpen] = useState(() => new Set());
-  const [sending, setSending] = useState(false);
-  const [commentLikes, setCommentLikes] = useState({});
+  const [commentLikes, setCommentLikes] = useState(() => (cmMem ? cmMem.likes : {}));
   const [stickersOpen, setStickersOpen] = useState(false);
   const [menuFor, setMenuFor] = useState(null);
-  const [pinnedId, setPinnedId] = useState(post.pinned_comment_id || null);
+  const [pinnedId, setPinnedId] = useState(() => (cmMem && cmMem.pinned !== undefined ? cmMem.pinned : post.pinned_comment_id || null));
   const [note, setNote] = useState('');
   const lp = useRef({});
   const inputRef = useRef(null);
+  const goneRef = useRef(new Set());
+  const addedRef = useRef(new Set());
+  const likeTouchRef = useRef(new Map());
+  const rowsRef = useRef(rows);
+  rowsRef.current = rows;
   const drag = useSheetDrag(onClose);
   const off = !!post.comments_off && !isOwner;
   const canDelete = (c) => !!c && (c.user_id === userId || isOwner);
   const flash = (t) => { setNote(t); setTimeout(() => setNote(''), 1800); };
+  useEffect(() => { if (rows) feedCommentsMem.set(post.id, { rows: rows.filter((r) => !String(r.id).startsWith('temp-')), likes: commentLikes, pinned: pinnedId }); if (feedCommentsMem.size > 60) feedCommentsMem.delete(feedCommentsMem.keys().next().value); }, [rows, commentLikes, pinnedId]);
   const load = async () => {
+    const startedAt = Date.now();
     const { data, error } = await supabase.from('post_comments').select('*').eq('post_id', post.id).order('created_at', { ascending: true }).limit(800);
-    if (error) { if (rows === null) setRows([]); return; }
-    const list = data || [];
+    if (error) { setRows((prev) => prev || []); return; }
+    const list = (data || []).filter((c) => !goneRef.current.has(c.id));
     const ids = [...new Set(list.map((c) => c.user_id))];
     const cIds = list.map((c) => c.id);
     const [profRes, likeRes, postRes] = await Promise.all([
@@ -24073,8 +25368,12 @@ function FeedComments({ post, me, userId, onClose, onCount, onOpenProfile }) {
     ]);
     const byId = {};
     sanitizeAvatarList(profRes.data || [], userId).forEach((p) => { byId[p.id] = p; });
-    setRows(list.filter((c) => !(byId[c.user_id] && byId[c.user_id].is_deleted)).map((c) => ({ ...c, profile: byId[c.user_id] })));
-    onCount(list.length);
+    const fresh = list.filter((c) => !(byId[c.user_id] && byId[c.user_id].is_deleted)).map((c) => ({ ...c, profile: byId[c.user_id] }));
+    const temps = (rowsRef.current || []).filter((r) => String(r.id).startsWith('temp-') && !fresh.some((f) => f.user_id === r.user_id && f.content === r.content && f.parent_id == r.parent_id && new Date(f.created_at) >= new Date(new Date(r.created_at).getTime() - 120000)));
+    const mine = (rowsRef.current || []).filter((r) => addedRef.current.has(r.id) && !list.some((c) => c.id === r.id) && !goneRef.current.has(r.id));
+    const merged = [...fresh, ...mine, ...temps];
+    setRows(merged);
+    onCount(merged.length);
     if (postRes && postRes.data && 'pinned_comment_id' in postRes.data) setPinnedId(postRes.data.pinned_comment_id || null);
     const map = {};
     (likeRes.data || []).forEach((l) => {
@@ -24082,7 +25381,7 @@ function FeedComments({ post, me, userId, onClose, onCount, onOpenProfile }) {
       map[l.comment_id].count += 1;
       if (l.user_id === userId) map[l.comment_id].mine = true;
     });
-    setCommentLikes(map);
+    setCommentLikes((prev) => { const out = { ...map }; likeTouchRef.current.forEach((at, cid) => { if (at >= startedAt && prev[cid]) out[cid] = prev[cid]; }); return out; });
   };
   useEffect(() => {
     load();
@@ -24095,24 +25394,33 @@ function FeedComments({ post, me, userId, onClose, onCount, onOpenProfile }) {
   const toggleLike = async (comment) => {
     const cur = commentLikes[comment.id] || { count: 0, mine: false };
     const next = cur.mine ? { count: Math.max(0, cur.count - 1), mine: false } : { count: cur.count + 1, mine: true };
+    likeTouchRef.current.set(comment.id, Date.now());
     setCommentLikes((prev) => ({ ...prev, [comment.id]: next }));
     hapticTap();
     if (!cur.mine) playUiSound('like');
-    if (cur.mine) await supabase.from('post_comment_likes').delete().eq('comment_id', comment.id).eq('user_id', userId);
-    else {
-      await supabase.from('post_comment_likes').upsert({ comment_id: comment.id, user_id: userId }, { onConflict: 'comment_id,user_id' });
-      if (comment.user_id !== userId) sendPushNotification(comment.user_id, 'ZChat', `${(me && me.name) || 'Someone'} liked your comment`, `/?post=${post.id}`, me && me.avatar);
+    const res = await latestSync(`clike:${comment.id}`, next.mine, (on) => (on
+      ? supabase.from('post_comment_likes').upsert({ comment_id: comment.id, user_id: userId }, { onConflict: 'comment_id,user_id' })
+      : supabase.from('post_comment_likes').delete().eq('comment_id', comment.id).eq('user_id', userId)), cur.mine);
+    if (!res.ok) {
+      const back = res.state === undefined ? cur.mine : res.state;
+      likeTouchRef.current.set(comment.id, Date.now());
+      setCommentLikes((prev) => { const now = prev[comment.id] || { count: 0, mine: false }; if (now.mine === back) return prev; return { ...prev, [comment.id]: { count: Math.max(0, now.count + (back ? 1 : -1)), mine: back } }; });
+      flash('That did not go through. Try again.');
+      return;
     }
+    if (next.mine && res.state === true && comment.user_id !== userId) sendPushNotification(comment.user_id, 'ZChat', `${(me && me.name) || 'Someone'} liked your comment`, `/?post=${post.id}`, me && me.avatar);
   };
   const removeComment = async (c) => {
     setMenuFor(null);
     const gone = new Set([c.id, ...((rows || []).filter((r) => r.parent_id === c.id).map((r) => r.id))]);
-    setRows((prev) => (prev || []).filter((r) => !gone.has(r.id)));
-    onCount(Math.max(0, ((rows || []).length) - gone.size));
+    gone.forEach((id) => goneRef.current.add(id));
+    const kept = (rows || []).filter((r) => !gone.has(r.id));
+    setRows(kept);
+    onCount(kept.length);
     hapticTap();
     await supabase.from('post_comment_likes').delete().in('comment_id', [...gone]);
     const { error } = await supabase.from('post_comments').delete().eq('id', c.id);
-    if (error) { load(); appAlert(friendlyError(error, 'That comment could not be deleted. Try again.')); return; }
+    if (error) { gone.forEach((id) => goneRef.current.delete(id)); load(); flash(friendlyError(error, 'That comment could not be deleted. Try again.')); return; }
     if (pinnedId === c.id) setPinnedId(null);
   };
   const togglePinComment = async (c) => {
@@ -24142,29 +25450,45 @@ function FeedComments({ post, me, userId, onClose, onCount, onOpenProfile }) {
     }
     return res;
   };
+  const postComment = async (content, parent, restoreText) => {
+    const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const temp = { id: tempId, post_id: post.id, user_id: userId, content, created_at: new Date().toISOString(), parent_id: parent ? parent.id : null, profile: me };
+    const next = [...(rowsRef.current || []), temp];
+    rowsRef.current = next;
+    setRows(next);
+    onCount(next.length);
+    if (parent) setOpen((p) => { const n = new Set(p); n.add(parent.id); return n; });
+    const { data, error } = await insertRow(content, parent);
+    if (error || !data) {
+      const left = (rowsRef.current || []).filter((r) => r.id !== tempId);
+      rowsRef.current = left;
+      setRows(left);
+      onCount(left.length);
+      if (restoreText) setText((t) => t || restoreText);
+      flash(friendlyError(error, /comments_off|turned off/i.test(String((error && error.message) || '')) ? 'Comments are turned off for this post.' : "Couldn't post comment. Try again."));
+      return false;
+    }
+    addedRef.current.add(data.id);
+    const swapped = (rowsRef.current || []).map((r) => (r.id === tempId ? { ...data, profile: me } : r));
+    rowsRef.current = swapped;
+    setRows(swapped);
+    const cm = feedCommentsMem.get(post.id);
+    if (cm) feedCommentsMem.set(post.id, { ...cm, rows: [...cm.rows.filter((r) => r.id !== data.id), { ...data, profile: me }] });
+    return true;
+  };
   const send = async () => {
     const body = text.trim();
-    if (!body || sending || off) return;
-    setSending(true);
+    if (!body || off) return;
     setText('');
     const parent = replyTo ? (replyTo.parent_id && (rows || []).find((r) => r.id === replyTo.parent_id)) || replyTo : null;
     setReplyTo(null);
     playUiSound('send');
-    const tempId = `temp-${Date.now()}`;
-    setRows((prev) => [...(prev || []), { id: tempId, post_id: post.id, user_id: userId, content: body, created_at: new Date().toISOString(), parent_id: parent ? parent.id : null, profile: me }]);
-    if (parent) setOpen((p) => { const n = new Set(p); n.add(parent.id); return n; });
-    const { error } = await insertRow(body, parent);
-    if (error) {
-      setRows((prev) => (prev || []).filter((r) => r.id !== tempId));
-      setText(body);
-      appAlert(friendlyError(error, /comments_off|turned off/i.test(String(error.message || '')) ? 'Comments are turned off for this post.' : "Couldn't post comment. Try again."));
-    } else {
+    const ok = await postComment(body, parent, body);
+    if (ok) {
       const who = (me && me.name) || 'Someone';
       if (!isOwner) sendPushNotification(post.user_id, 'ZChat', `${who} commented on your post`, `/?post=${post.id}`, me && me.avatar);
       if (parent && parent.user_id !== userId && parent.user_id !== post.user_id) sendPushNotification(parent.user_id, 'ZChat', `${who} replied to your comment`, `/?post=${post.id}`, me && me.avatar);
     }
-    setSending(false);
-    load();
   };
   const sendSticker = async (file) => {
     setStickersOpen(false);
@@ -24173,9 +25497,8 @@ function FeedComments({ post, me, userId, onClose, onCount, onOpenProfile }) {
     playUiSound('send');
     const parent = replyTo ? (replyTo.parent_id && (rows || []).find((r) => r.id === replyTo.parent_id)) || replyTo : null;
     setReplyTo(null);
-    await insertRow(`sticker:${file}`, parent);
-    if (!isOwner) sendPushNotification(post.user_id, 'ZChat', `${(me && me.name) || 'Someone'} commented with a sticker`, `/?post=${post.id}`, me && me.avatar);
-    load();
+    const ok = await postComment(`sticker:${file}`, parent, null);
+    if (ok && !isOwner) sendPushNotification(post.user_id, 'ZChat', `${(me && me.name) || 'Someone'} commented with a sticker`, `/?post=${post.id}`, me && me.avatar);
   };
   const openMention = (p) => { if (p) onOpenProfile(p); };
   const { tops, replies } = rows ? commentThreads(rows, pinnedId) : { tops: [], replies: new Map() };
@@ -24228,7 +25551,7 @@ function FeedComments({ post, me, userId, onClose, onCount, onOpenProfile }) {
           {stickersOpen && !off && (
             <div style={{ maxHeight: 200, overflowY: 'auto', display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6, padding: '8px 12px', boxShadow: `0 -0.5px 0 ${theme.hair}`, flexShrink: 0 }}>
               {orderStickersForPick().map((stk) => (
-                <div key={stk.key} role="button" aria-label={`Comment with sticker ${stk.label}`} onClick={() => sendSticker(stk.file)} style={{ aspectRatio: '1 / 1', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', borderRadius: 12, background: theme.soft }}>
+                <div key={stk.key} role="button" aria-label={`Comment with sticker ${stk.label}`} onClick={() => sendSticker(stk.file)} className="zchat-press" style={{ aspectRatio: '1 / 1', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', borderRadius: 12 }}>
                   <img src={stk.file} alt="" loading="lazy" draggable={false} style={{ width: '80%', height: '80%', objectFit: 'contain' }} />
                 </div>
               ))}
@@ -24256,7 +25579,7 @@ function FeedComments({ post, me, userId, onClose, onCount, onOpenProfile }) {
                     placeholder={replyTo ? `Reply to ${(replyTo.profile && replyTo.profile.username) || 'user'}` : isOwner ? 'Add a comment' : `Add a comment for ${ownerName}`} aria-label="Write a comment"
                     style={{ flex: 1, minWidth: 0, height: 40, border: 'none', outline: 'none', background: 'transparent', color: theme.ink, fontSize: 15, fontFamily: FONT }} />
                   {text.trim() ? (
-                    <div role="button" aria-label="Post comment" onPointerDown={(e) => e.preventDefault()} onClick={send} style={{ padding: '0 8px', height: 36, display: 'flex', alignItems: 'center', fontSize: 15, fontWeight: 700, color: theme.coral, cursor: 'pointer' }}>{sending ? <Spinner size={15} color={theme.coral} /> : 'Post'}</div>
+                    <div role="button" aria-label="Post comment" onPointerDown={(e) => e.preventDefault()} onClick={send} style={{ padding: '0 8px', height: 36, display: 'flex', alignItems: 'center', fontSize: 15, fontWeight: 700, color: theme.coral, cursor: 'pointer' }}>Post</div>
                   ) : (
                     <div role="button" aria-label="Stickers" onClick={() => setStickersOpen((v) => !v)} style={{ width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: stickersOpen ? theme.coral : theme.ink2 }}><Smile size={22} strokeWidth={1.8} /></div>
                   )}
@@ -24590,10 +25913,11 @@ function CollectionCover({ posts, size }) {
   );
 }
 
+const savedPostsMem = new Map();
 function SavedPostsGrid({ me, myId }) {
   const { theme } = useTheme();
-  const [rows, setRows] = useState(null);
-  const [cols, setCols] = useState([]);
+  const [rows, setRows] = useState(() => { const m = savedPostsMem.get(myId); return m ? m.rows : null; });
+  const [cols, setCols] = useState(() => { const m = savedPostsMem.get(myId); return m ? m.cols : []; });
   const [view, setView] = useState(null);
   const [open, setOpen] = useState(null);
   const [menu, setMenu] = useState(null);
@@ -24613,8 +25937,10 @@ function SavedPostsGrid({ me, myId }) {
       saved.length ? supabase.from('posts').select('*').in('id', saved.map((r) => r.post_id).slice(0, 400)) : Promise.resolve({ data: [] }),
     ]);
     const byId = new Map(((postsRes && postsRes.data) || []).map((x) => [x.id, x]));
+    const nextRows = saved.map((r) => (byId.get(r.post_id) ? { ...byId.get(r.post_id), __col: r.collection_id } : null)).filter(Boolean);
+    savedPostsMem.set(myId, { rows: nextRows, cols: colList });
     setCols(colList);
-    setRows(saved.map((r) => (byId.get(r.post_id) ? { ...byId.get(r.post_id), __col: r.collection_id } : null)).filter(Boolean));
+    setRows(nextRows);
   };
   useEffect(() => {
     load();
@@ -25039,12 +26365,19 @@ async function loadOwnedBubbles(uid, force) {
     const { data, error } = await supabase.from('user_rewards').select('reward_key, expires_at').eq('user_id', uid).eq('kind', 'bubble');
     if (error) throw error;
     const keys = (data || []).filter((r) => !r.expires_at || new Date(r.expires_at).getTime() > Date.now()).map((r) => r.reward_key).filter((k) => CHAR_BUBBLES[k]);
+    rewardOpt.rows.forEach((r) => { if (r.kind === 'bubble' && r.user_id === uid && CHAR_BUBBLES[r.reward_key] && !keys.includes(r.reward_key)) keys.push(r.reward_key); });
     ownedBubblesMem = { uid, keys, at: Date.now() };
   } catch {
     if (ownedBubblesMem.uid !== uid) ownedBubblesMem = { uid, keys: [], at: Date.now() };
   }
   ownedBubblesSubs.forEach((fn) => { try { fn(); } catch {} });
   return ownedBubblesMem.keys || [];
+}
+function ownedBubblesMark(uid, key, on) {
+  if (!uid || ownedBubblesMem.uid !== uid || !ownedBubblesMem.keys) return;
+  const keys = ownedBubblesMem.keys.filter((k) => k !== key);
+  ownedBubblesMem = { ...ownedBubblesMem, keys: on ? [...keys, key] : keys };
+  ownedBubblesSubs.forEach((fn) => { try { fn(); } catch {} });
 }
 function useOwnedBubbles(uid) {
   const [, setTick] = useState(0);
@@ -25063,9 +26396,7 @@ async function claimFreeBubble(key) {
   const row = Array.isArray(data) ? data[0] : data;
   if (error) return { error: rpcFailText('Free bubble pick', error, 'Free bubbles switch on once the latest ZChat setup is finished.') };
   if (!row || !row.ok) return { error: (row && row.reason) || 'That did not work. Try again.' };
-  walletMem.data = null;
-  announceWallet();
-  return { ok: true, left: Number(row.left) || 0 };
+  return { ok: true, left: Number(row.left) || 0, set: { freeBubbles: Math.max(0, Number(row.left) || 0) } };
 }
 
 function GiftBoxIcon({ size = 20, color = 'currentColor', strokeWidth = 1.8, style }) {
@@ -25120,24 +26451,20 @@ function useBubbleShop(uid, startKey, onClose, onOpenWallet, inline = false) {
     return [String(BUBBLE_PRICE), 'coin'];
   };
   const wear = (k) => { setBubbleStyle(k); hapticTap(); playUiSound('like'); say(k === 'classic' ? 'Back to the classic bubble' : `${CHAR_BUBBLES[k].label} is on. Everyone sees it.`); };
+  const getNow = (k, job) => {
+    const was = bubbleStyle;
+    wear(k);
+    job.then((r) => { if (!r.error) return; setBubbleStyle(was); say(r.error); });
+  };
   const getFree = async (k) => {
     if (busy) return;
-    setBusy(true);
-    const r = await claimFreeBubble(k);
-    setBusy(false);
-    if (r.error) { say(r.error); return; }
-    await loadOwnedBubbles(uid, true);
-    wear(k);
+    getNow(k, moneyRun(uid, { freeBubbles: 1, grants: [['bubble', k]], run: () => claimFreeBubble(k) }));
   };
   const buy = async (k) => {
     setAsk(null);
     if (busy) return;
-    setBusy(true);
-    const r = await buyShopItem('bubble', k);
-    setBusy(false);
-    if (r.error) { say(r.error); return; }
-    await loadOwnedBubbles(uid, true);
-    wear(k);
+    if (!(await spendGate(`Get the ${CHAR_BUBBLES[k] ? CHAR_BUBBLES[k].label : ''} bubble for ${BUBBLE_PRICE} coins`, { coins: BUBBLE_PRICE }))) return;
+    getNow(k, moneyRun(uid, { coins: BUBBLE_PRICE, grants: [['bubble', k]], run: () => buyShopItem('bubble', k) }));
   };
   const spec = CHAR_BUBBLES[preview];
   let action = null;
@@ -25265,8 +26592,15 @@ function TextStylePanel({ draft, font, size, color, onFont, onSize, onColor, onD
   const spec = wearing ? CHAR_BUBBLES[wearing] : null;
   const reset = () => { onFont(null); onSize('m'); onColor(null); };
   const sample = draft.trim() ? draft.trim().slice(0, 90) : 'Your message looks like this';
-  const tile = { borderRadius: 14, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minWidth: 0 };
   const bubbleKeys = ['classic', ...(owned || []).filter((k) => CHAR_BUBBLES[k])];
+  const fontRowRef = useRef(null);
+  const tileLine = theme.dark ? 'rgba(255,255,255,0.13)' : 'rgba(17,17,19,0.09)';
+  useEffect(() => {
+    const wrap = fontRowRef.current;
+    const row = wrap && wrap.firstElementChild;
+    const el = row && row.querySelector('[aria-checked="true"]');
+    if (row && el && el.offsetLeft + el.offsetWidth > row.clientWidth) row.scrollLeft = el.offsetLeft - (row.clientWidth - el.offsetWidth) / 2;
+  }, [tab]);
   return (
     <div className="zchat-sheet-up" style={{ padding: '12px 14px 12px', background: theme.panelBg, borderTop: `1px solid ${theme.border}`, borderRadius: '22px 22px 0 0', display: 'flex', flexDirection: 'column', gap: 12, flexShrink: 0, boxShadow: '0 -8px 30px rgba(0,0,0,0.12)' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -25288,47 +26622,39 @@ function TextStylePanel({ draft, font, size, color, onFont, onSize, onColor, onD
           <div style={{ alignSelf: 'flex-end', maxWidth: '88%', background: theme.bubbleMe, borderRadius: 19, borderBottomRightRadius: 5, padding: '8px 13px', lineHeight: 1.3, wordBreak: 'break-word', ...fontStyleCss(font), color: color || theme.ink, fontSize: previewPx }}>{sample}</div>
         )}
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <span style={{ fontSize: 12, fontWeight: 700, color: theme.muted, width: 16, textAlign: 'center' }}>A</span>
-        <input type="range" min={0} max={TEXT_SIZES.length - 1} step={1} value={sizeIdx} onChange={(e) => onSize(TEXT_SIZES[parseInt(e.target.value, 10)][0])}
-          aria-label="Text size" style={{ flex: 1, accentColor: theme.coral, height: 28 }} />
-        <span style={{ fontSize: 21, fontWeight: 700, color: theme.ink, width: 22, textAlign: 'center' }}>A</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '0 2px' }}>
+        <span aria-hidden="true" style={{ fontSize: 12, fontWeight: 700, color: theme.muted, width: 16, textAlign: 'center' }}>A</span>
+        <KitSlider value={sizeIdx} min={0} max={TEXT_SIZES.length - 1} step={1} label="Text size" onChange={(v) => { const row = TEXT_SIZES[Math.round(v)]; if (row) onSize(row[0]); }} style={{ flex: 1, minWidth: 0 }} />
+        <span aria-hidden="true" style={{ fontSize: 21, fontWeight: 700, color: theme.ink, width: 22, textAlign: 'center' }}>A</span>
       </div>
       <UnderTabs value={tab} onChange={setTab} tabs={[['font', 'Font', 'Tab Font'], ['colour', 'Colour', 'Tab Colour'], ['bubble', 'Bubble', 'Tab Bubble']]} />
       {tab === 'bubble' ? (
-        <div data-testid="bubble-row" style={{ display: 'flex', gap: 8, overflowX: 'auto', padding: '2px 2px 6px', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
+        <div data-testid="bubble-row" style={{ display: 'flex', gap: 12, overflowX: 'auto', padding: '6px 6px 4px', margin: '0 -6px', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
           {bubbleKeys.map((k) => {
             const on = (wearing || 'classic') === k;
             const label = k === 'classic' ? 'Classic' : CHAR_BUBBLES[k].label;
             return (
               <div key={k} role="button" aria-label={`Bubble style ${label}`} aria-pressed={on} onClick={() => { hapticTap(); setBubbleStyle(k); }} className="zchat-press"
-                style={{ ...tile, flex: '0 0 auto', width: 112, minHeight: 104, justifyContent: 'flex-end', gap: 8, padding: '14px 8px 8px', boxSizing: 'border-box', background: theme.dark ? 'rgba(255,255,255,0.05)' : '#F4F4F7', boxShadow: on ? `inset 0 0 0 2px ${theme.coral}` : 'none' }}>
-                <div style={{ width: '100%', display: 'flex', flexDirection: 'column' }}><CharBubbleSample k={k} text="Hi" cw={38} fontSize={13} /></div>
-                <span style={{ fontSize: 11.5, fontWeight: 600, color: on ? theme.ink : theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>{label}</span>
+                style={{ flex: '0 0 auto', width: 108, display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'pointer' }}>
+                <div style={{ position: 'relative', width: '100%', height: 74, borderRadius: 16, boxSizing: 'border-box', padding: '0 8px', display: 'flex', flexDirection: 'column', justifyContent: 'center', background: theme.dark ? '#1F1E25' : '#F1F0F6', boxShadow: on ? `0 0 0 2px ${theme.panelBg}, 0 0 0 4px ${theme.coral}` : `inset 0 0 0 1px ${tileLine}`, transition: 'box-shadow 160ms ease' }}>
+                  <div style={{ width: '100%', display: 'flex', flexDirection: 'column' }}><CharBubbleSample k={k} text="Hi" cw={38} fontSize={13} /></div>
+                </div>
+                <span style={{ marginTop: 7, fontSize: 12, fontWeight: on ? 700 : 600, color: on ? kitOnInk(theme) : theme.ink2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>{label}</span>
               </div>
             );
           })}
           {onOpenBubbles && (
             <div role="button" aria-label="See every bubble" onClick={onOpenBubbles} className="zchat-press"
-              style={{ ...tile, flex: '0 0 auto', width: 104, minHeight: 104, gap: 6, background: 'transparent', boxShadow: `inset 0 0 0 1px ${theme.border}`, color: theme.ink }}>
-              <BubblesIcon size={24} />
-              <span style={{ fontSize: 12, fontWeight: 600 }}>{owned && owned.length ? 'Get more' : 'Get bubbles'}</span>
+              style={{ flex: '0 0 auto', width: 96, display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'pointer' }}>
+              <div style={{ width: '100%', height: 74, borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.ink2, boxShadow: `inset 0 0 0 1.5px ${tileLine}` }}><BubblesIcon size={26} /></div>
+              <span style={{ marginTop: 7, fontSize: 12, fontWeight: 600, color: theme.ink2, whiteSpace: 'nowrap' }}>{owned && owned.length ? 'Get more' : 'Get bubbles'}</span>
             </div>
           )}
         </div>
       ) : tab === 'font' ? (
-        <div data-testid="font-row" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 8, maxHeight: 150, overflowY: 'auto', WebkitOverflowScrolling: 'touch', paddingBottom: 2 }}>
-          {FONT_STYLES.map((f) => {
-            const on = (font || 'classic') === f.key;
-            return (
-              <div key={f.key} role="button" aria-label={`Font ${f.label}`} aria-pressed={on} onClick={() => { hapticTap(); onFont(f.key === 'classic' ? null : f.key); }} className="zchat-press" style={{
-                ...tile, height: 66, gap: 2, background: on ? (theme.dark ? 'rgba(255,255,255,0.12)' : '#ECE7FF') : (theme.dark ? 'rgba(255,255,255,0.05)' : '#F4F4F7'), color: theme.ink, boxShadow: on ? `inset 0 0 0 2px ${theme.coral}` : 'none',
-              }}>
-                <div style={{ fontSize: 23, lineHeight: '28px', ...(f.css || {}) }}>Aa</div>
-                <div style={{ fontSize: 10.5, fontWeight: 600, color: on ? theme.ink : theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '92%' }}>{f.label}</div>
-              </div>
-            );
-          })}
+        <div ref={fontRowRef} data-testid="font-row">
+          <PickTiles label="Font" size={58} bleed={14} value={font || 'classic'} onChange={(k) => onFont(k === 'classic' ? null : k)}
+            options={FONT_STYLES.map((f) => ({ k: f.key, label: f.label, aria: `Font ${f.label}`, art: <span style={{ fontSize: 24, lineHeight: 1, ...(f.css || {}) }}>Aa</span> }))} />
         </div>
       ) : (
         <div data-testid="color-row" style={{ display: 'grid', gridTemplateColumns: 'repeat(8, minmax(0, 1fr))', gap: 10, maxHeight: 150, overflowY: 'auto', padding: '4px 2px' }}>
@@ -25890,6 +27216,7 @@ function applyEmojiPick(draft, e) {
 }
 
 const WRITING_MODES = [['fix', 'Fix spelling'], ['short', 'Shorter'], ['friendly', 'Friendlier'], ['funny', 'Funnier'], ['formal', 'More formal'], ['emoji', 'Add emoji']];
+const WRITING_TOOL_LOOK = { fix: ['fix', 'Spelling'], short: ['shorter', 'Shorter'], friendly: ['friendly', 'Friendly'], funny: ['funny', 'Funny'], formal: ['formal', 'Formal'], emoji: ['emoji', 'Emoji'] };
 function WritingHelpBar({ draft, onUse, onClose }) {
   const { theme } = useTheme();
   const [mode, setMode] = useState(null);
@@ -25910,17 +27237,23 @@ function WritingHelpBar({ draft, onUse, onClose }) {
     setErr((r && r.error) || 'Writing help is busy right now. Try again soon.');
   };
   return (
-    <div className="zchat-fade" style={{ flexShrink: 0, padding: '8px 0 4px', borderTop: `1px solid ${theme.hair}`, background: theme.bgGradient }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 10px 0 14px' }}>
-        <div role="list" aria-label="Writing help" style={{ flex: 1, minWidth: 0, display: 'flex', gap: 6, overflowX: 'auto', scrollbarWidth: 'none' }}>
+    <div className="zchat-fade" style={{ flexShrink: 0, padding: '4px 0 4px', borderTop: `1px solid ${theme.hair}`, background: theme.bgGradient }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 0, padding: '0 2px 0 4px' }}>
+        <div role="list" aria-label="Writing help" style={{ flex: 1, minWidth: 0, display: 'flex', justifyContent: 'space-between', gap: 0, overflowX: 'auto', scrollbarWidth: 'none' }}>
           {WRITING_MODES.map(([k, l]) => {
             const on = mode === k;
+            const [g, short] = WRITING_TOOL_LOOK[k] || ['fix', l];
+            const ink = on ? kitOnInk(theme) : theme.ink;
             return (
-              <div key={k} role="listitem" aria-label={l} aria-pressed={on} onPointerDown={(e) => e.preventDefault()} onClick={() => run(k)} className="zchat-press" style={{ flexShrink: 0, height: 32, padding: '0 13px', borderRadius: 16, display: 'flex', alignItems: 'center', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap', background: on ? theme.coral : theme.soft, color: on ? '#FFFFFF' : theme.ink2 }}>{l}</div>
+              <div key={k} role="listitem" aria-label={l} aria-pressed={on} onPointerDown={(e) => e.preventDefault()} onClick={() => run(k)} className="zchat-press"
+                style={{ flex: '1 0 auto', minWidth: 46, height: 52, padding: '0 1px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, cursor: 'pointer', color: ink, WebkitTapHighlightColor: 'transparent', transition: 'color 160ms ease' }}>
+                <StudioGlyph k={g} size={25} />
+                <span style={{ fontSize: 11, lineHeight: '13px', fontWeight: on ? 700 : 600, color: on ? ink : theme.ink2, whiteSpace: 'nowrap' }}>{short}</span>
+              </div>
             );
           })}
         </div>
-        <div role="button" aria-label="Close writing help" onPointerDown={(e) => e.preventDefault()} onClick={onClose} style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: theme.muted, flexShrink: 0 }}><X size={18} /></div>
+        <div role="button" aria-label="Close writing help" onPointerDown={(e) => e.preventDefault()} onClick={onClose} className="zchat-press" style={{ width: 32, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: theme.muted, flexShrink: 0 }}><X size={18} /></div>
       </div>
       {(busy || out || err) && (
         <div style={{ margin: '8px 14px 2px', padding: '12px 14px', borderRadius: 16, background: theme.soft }}>
@@ -25933,7 +27266,7 @@ function WritingHelpBar({ draft, onUse, onClose }) {
               <div style={{ fontSize: 15, color: theme.ink, lineHeight: 1.4, whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 132, overflowY: 'auto' }}>{out}</div>
               <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
                 <div role="button" aria-label="Use this text" onPointerDown={(e) => e.preventDefault()} onClick={() => { hapticTap(); onUse(out); }} className="zchat-press" style={{ height: 34, padding: '0 16px', borderRadius: 17, background: theme.coral, color: '#FFFFFF', fontSize: 14, fontWeight: 700, display: 'flex', alignItems: 'center', cursor: 'pointer' }}>Use this</div>
-                <div role="button" aria-label="Try again" onPointerDown={(e) => e.preventDefault()} onClick={() => run(mode)} className="zchat-press" style={{ height: 34, padding: '0 14px', borderRadius: 17, background: theme.soft2, color: theme.ink, fontSize: 14, fontWeight: 600, display: 'flex', alignItems: 'center', cursor: 'pointer' }}>Try again</div>
+                <div role="button" aria-label="Try again" onPointerDown={(e) => e.preventDefault()} onClick={() => run(mode)} className="zchat-press" style={{ height: 34, padding: '0 8px', display: 'flex', alignItems: 'center', gap: 6, color: theme.ink2, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}><StudioGlyph k="retry" size={19} />Try again</div>
               </div>
             </>
           )}
@@ -25960,17 +27293,19 @@ let touchSoundsInstalled = false;
 function installTouchSounds() {
   if (touchSoundsInstalled) return;
   touchSoundsInstalled = true;
-  document.addEventListener('pointerdown', (e) => {
+  let downAt = 0;
+  document.addEventListener('pointerdown', () => { downAt = Date.now(); }, { capture: true, passive: true });
+  document.addEventListener('click', (e) => {
     try {
-      if (!prefOn('zchat-touch-sounds')) return;
-      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      if (!e.isTrusted || !e.detail || !prefOn('zchat-touch-sounds') || soundsOff()) return;
+      if (downAt && Date.now() - downAt > 650) return;
       const t = e.target;
       if (!t || !t.closest) return;
       if (t.closest('input, textarea, select, [contenteditable="true"], canvas, video, audio, [data-silent]')) return;
       const el = t.closest('button, a[href], [role="button"], [role="switch"], [role="tab"], [role="menuitem"], [role="option"], .zchat-row-press, .zchat-press');
       if (!el) return;
-      if (!uiAudioCtx) { if (!uiAudioWarmQueued) { uiAudioWarmQueued = true; setTimeout(() => { if (window.requestIdleCallback) window.requestIdleCallback(warmUiAudio, { timeout: 2500 }); else warmUiAudio(); }, 900); } return; }
-      playUiSound('tap');
+      cancelTapSound();
+      pendingTapSound = setTimeout(() => { pendingTapSound = 0; playUiSound('tap'); }, 0);
     } catch {}
   }, { capture: true, passive: true });
 }
@@ -26221,6 +27556,7 @@ function CardCarousel({ post, rootRef, muted, onToggleMute, onDoubleTap }) {
   const first = list[0];
   const aspect = (first && mediaAspectMem.get(first.u)) || 1;
   const onScroll = () => { const el = ref.current; if (!el) return; const i = Math.round(el.scrollLeft / Math.max(1, el.clientWidth)); if (i !== idx) setIdx(i); };
+  const peek = useCarouselPeek(idx);
   return (
     <div>
       <div style={{ position: 'relative', width: '100%', aspectRatio: String(aspect) }}>
@@ -26233,7 +27569,7 @@ function CardCarousel({ post, rootRef, muted, onToggleMute, onDoubleTap }) {
             </div>
           ))}
         </div>
-        <div style={{ position: 'absolute', top: 10, right: 10, padding: '3px 9px', borderRadius: 12, background: 'rgba(0,0,0,0.6)', color: '#FFFFFF', fontSize: 12, fontWeight: 700, pointerEvents: 'none' }}>{idx + 1}/{list.length}</div>
+        <CarouselCount n={idx + 1} total={list.length} show={peek} style={{ top: 10, right: 10 }} />
       </div>
       <div style={{ display: 'flex', justifyContent: 'center', gap: 4, paddingTop: 8, height: 6 }}>
         {list.map((_, i) => <span key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: i === idx ? theme.coral : theme.soft2, transition: 'background 160ms' }} />)}
@@ -26323,11 +27659,22 @@ function MoreDotsIcon({ size = 22, color = 'currentColor' }) {
   );
 }
 
+const postStatsMem = new Map();
+function rememberPostStats(id, patch) {
+  postStatsMem.set(id, { ...(postStatsMem.get(id) || {}), ...patch });
+  if (postStatsMem.size > 800) postStatsMem.delete(postStatsMem.keys().next().value);
+}
+function cachedPostStats(list, pick) {
+  const out = {};
+  (list || []).forEach((p) => { const s = postStatsMem.get(p.id); if (s) { const v = pick(s); if (v !== undefined) out[p.id] = v; } });
+  return out;
+}
 function MomentsFeed({ me, userId, items, rootRef, ringFor, onOpenProfile, onOpenStory, onSharePost, onRemoved, onInsights, onReport, onEditPost }) {
   const { theme } = useTheme();
-  const [likes, setLikes] = useState({});
-  const [counts, setCounts] = useState({});
-  const [likedBy, setLikedBy] = useState({});
+  const [likes, setLikes] = useState(() => cachedPostStats(items, (s) => (s.liked ? true : undefined)));
+  const [counts, setCounts] = useState(() => cachedPostStats(items, (s) => (s.likes != null ? { likes: s.likes, comments: s.comments || 0 } : undefined)));
+  const [likedBy, setLikedBy] = useState(() => cachedPostStats(items, (s) => (s.likedBy !== undefined ? s.likedBy : undefined)));
+  const likeTouchRef = useRef(new Map());
   const [saved, setSaved] = useState(() => readSavedPosts());
   const [muted, setMuted] = useState(() => { try { return localStorage.getItem('zchat-feed-sound') !== 'on'; } catch { return true; } });
   const [commentsFor, setCommentsFor] = useState(null);
@@ -26342,10 +27689,13 @@ function MomentsFeed({ me, userId, items, rootRef, ringFor, onOpenProfile, onOpe
     if (!want.length) return;
     want.forEach((id) => loadedRef.current.add(id));
     (async () => {
-      const [{ data: ls }, { data: cs }] = await Promise.all([
+      const startedAt = Date.now();
+      const owner = cacheOwner;
+      const [{ data: ls, error: le }, { data: cs, error: ce }] = await Promise.all([
         supabase.from('post_likes').select('post_id, user_id').in('post_id', want),
         supabase.from('post_comments').select('post_id').in('post_id', want),
       ]);
+      if (le || ce) { want.forEach((id) => loadedRef.current.delete(id)); return; }
       const lk = {}; const ct = {}; const by = {};
       want.forEach((id) => { ct[id] = { likes: 0, comments: 0 }; });
       (ls || []).forEach((l) => { ct[l.post_id].likes += 1; if (l.user_id === userId) lk[l.post_id] = true; else if (!by[l.post_id]) by[l.post_id] = l.user_id; });
@@ -26356,9 +27706,17 @@ function MomentsFeed({ me, userId, items, rootRef, ringFor, onOpenProfile, onOpe
         const { data: ps } = await supabase.from('profiles').select('id, username, name').in('id', ids.slice(0, 200));
         (ps || []).forEach((p) => { names[p.id] = p.username || p.name; });
       }
-      setLikes((x) => ({ ...x, ...lk }));
-      setCounts((x) => ({ ...x, ...ct }));
-      setLikedBy((x) => ({ ...x, ...Object.fromEntries(Object.entries(by).map(([pid, uid]) => [pid, names[uid] || null])) }));
+      const fresh = want.filter((id) => !((likeTouchRef.current.get(id) || 0) >= startedAt));
+      const likedNow = {}; const countNow = {}; const byNow = {};
+      fresh.forEach((id) => {
+        likedNow[id] = !!lk[id];
+        countNow[id] = ct[id];
+        byNow[id] = by[id] ? names[by[id]] || null : null;
+        if (owner === cacheOwner) rememberPostStats(id, { liked: !!lk[id], likes: ct[id].likes, comments: ct[id].comments, likedBy: byNow[id] });
+      });
+      setLikes((x) => ({ ...x, ...likedNow }));
+      setCounts((x) => ({ ...x, ...countNow }));
+      setLikedBy((x) => ({ ...x, ...byNow }));
     })();
   }, [items]);
   useEffect(() => {
@@ -26367,21 +27725,37 @@ function MomentsFeed({ me, userId, items, rootRef, ringFor, onOpenProfile, onOpe
     return () => window.removeEventListener('zchat-saved-posts', on);
   }, []);
   const countOf = (id) => counts[id] || { likes: 0, comments: 0 };
+  const setLikeLocal = (post, on) => {
+    likeTouchRef.current.set(post.id, Date.now());
+    setLikes((p) => ({ ...p, [post.id]: on }));
+    setCounts((p) => {
+      const c = p[post.id] || { likes: 0, comments: 0 };
+      if (!!likes[post.id] === on) return p;
+      return { ...p, [post.id]: { ...c, likes: Math.max(0, c.likes + (on ? 1 : -1)) } };
+    });
+    const c0 = countOf(post.id);
+    rememberPostStats(post.id, { liked: on, likes: Math.max(0, c0.likes + (on === !!likes[post.id] ? 0 : on ? 1 : -1)) });
+  };
   const toggleLike = async (post, force) => {
     const isLiked = !!likes[post.id];
     if (isLiked && force) return;
     hapticTap();
-    if (isLiked) {
-      setLikes((p) => ({ ...p, [post.id]: false }));
-      setCounts((p) => ({ ...p, [post.id]: { ...countOf(post.id), likes: Math.max(0, countOf(post.id).likes - 1) } }));
-      await supabase.from('post_likes').delete().eq('post_id', post.id).eq('user_id', userId);
+    if (!isLiked) playUiSound('like');
+    setLikeLocal(post, !isLiked);
+    const res = await latestSync(`like:${post.id}`, !isLiked, (on) => (on
+      ? supabase.from('post_likes').upsert({ post_id: post.id, user_id: userId }, { onConflict: 'post_id,user_id' })
+      : supabase.from('post_likes').delete().eq('post_id', post.id).eq('user_id', userId)), isLiked);
+    if (!res.ok) {
+      const back = res.state === undefined ? isLiked : res.state;
+      likeTouchRef.current.set(post.id, Date.now());
+      setLikes((p) => ({ ...p, [post.id]: back }));
+      setCounts((p) => { const c = p[post.id] || { likes: 0, comments: 0 }; const cur = !isLiked; return cur === back ? p : { ...p, [post.id]: { ...c, likes: Math.max(0, c.likes + (back ? 1 : -1)) } }; });
+      rememberPostStats(post.id, { liked: back });
+      setNote(friendlyError(res.error, 'That did not go through. Try again.'));
+      setTimeout(() => setNote(''), 2200);
       return;
     }
-    playUiSound('like');
-    setLikes((p) => ({ ...p, [post.id]: true }));
-    setCounts((p) => ({ ...p, [post.id]: { ...countOf(post.id), likes: countOf(post.id).likes + 1 } }));
-    await supabase.from('post_likes').upsert({ post_id: post.id, user_id: userId }, { onConflict: 'post_id,user_id' });
-    if (post.user_id !== userId) sendPushNotification(post.user_id, 'ZChat', `${(me && me.name) || 'Someone'} liked your post`, `/?post=${post.id}`, me && me.avatar);
+    if (!isLiked && res.state === true && post.user_id !== userId) sendPushNotification(post.user_id, 'ZChat', `${(me && me.name) || 'Someone'} liked your post`, `/?post=${post.id}`, me && me.avatar);
   };
   const toggleSave = (post) => {
     const on = !saved.has(post.id);
@@ -26432,25 +27806,32 @@ function MomentsFeed({ me, userId, items, rootRef, ringFor, onOpenProfile, onOpe
       )}
       {confirmDelete && (
         <ConfirmDialog layer={700} title="Delete this post?" body="It will be removed from your profile." onCancel={() => setConfirmDelete(null)}
-          onConfirm={async () => { const gone = confirmDelete; setConfirmDelete(null); removeLocal(gone); await supabase.from('posts').delete().eq('id', gone.id).eq('user_id', userId); }} />
+          onConfirm={async () => {
+            const gone = confirmDelete;
+            setConfirmDelete(null);
+            removeLocal(gone);
+            forgetPostLocally(gone.id);
+            const { error } = await supabase.from('posts').delete().eq('id', gone.id).eq('user_id', userId);
+            if (error) { setHidden((h) => { const n = new Set(h); n.delete(gone.id); return n; }); unforgetPostLocally(gone.id); setNote(friendlyError(error, 'That post could not be deleted. Try again.')); setTimeout(() => setNote(''), 2400); }
+          }} />
       )}
       {likersFor && <LikersSheet post={likersFor} meId={userId} onClose={() => setLikersFor(null)} onOpenProfile={(p) => { setLikersFor(null); onOpenProfile(p); }} />}
       {commentsFor && (
-        <FeedComments post={commentsFor} me={me} userId={userId} onClose={() => setCommentsFor(null)} onOpenProfile={onOpenProfile}
-          onCount={(n) => setCounts((p) => ({ ...p, [commentsFor.id]: { ...countOf(commentsFor.id), comments: n } }))} />
+        <FeedComments post={commentsFor} me={me} userId={userId} onClose={() => setCommentsFor(null)} onOpenProfile={onOpenProfile} knownEmpty={!!counts[commentsFor.id] && counts[commentsFor.id].comments === 0}
+          onCount={(n) => { const pid = commentsFor.id; rememberPostStats(pid, { comments: n }); setCounts((p) => ({ ...p, [pid]: { ...(p[pid] || { likes: 0, comments: 0 }), comments: n } })); }} />
       )}
     </div>
   );
 }
 
-function SegmentedControl({ value, onChange, options, style }) {
+function SegmentedControl({ value, onChange, options, style, dense }) {
   const { theme } = useTheme();
   return (
     <div role="tablist" style={{ display: 'flex', height: 36, borderRadius: 10, background: theme.soft, padding: 3, boxSizing: 'border-box', ...(style || {}) }}>
       {options.map(([k, l]) => {
         const on = value === k;
         return (
-          <div key={k} role="tab" aria-selected={on} aria-label={l} onClick={() => onChange(k)} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer', color: on ? theme.ink : theme.muted, background: on ? (theme.dark ? '#2A2930' : '#FFFFFF') : 'transparent', boxShadow: on ? '0 1px 4px rgba(0,0,0,0.12)' : 'none', transition: 'background 160ms, color 160ms' }}>{l}</div>
+          <div key={k} role="tab" aria-selected={on} aria-label={l} onClick={() => onChange(k)} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, fontSize: dense ? 13 : 14, fontWeight: 600, cursor: 'pointer', color: on ? theme.ink : theme.muted, background: on ? (theme.dark ? '#2A2930' : '#FFFFFF') : 'transparent', boxShadow: on ? '0 1px 4px rgba(0,0,0,0.12)' : 'none', transition: 'background 160ms, color 160ms', ...(dense ? { minWidth: 0, whiteSpace: 'nowrap', letterSpacing: '-0.01em' } : {}) }}>{l}</div>
         );
       })}
     </div>
@@ -26654,7 +28035,7 @@ function MomentsTab({ me, userId, myStories, trayUsers, seen, onAddStory, onOpen
       if (before) q2 = q2.lt('created_at', before);
       ({ data: posts } = await q2);
     }
-    const rows = (posts || []).filter((p) => !p.scheduled_for || new Date(p.scheduled_for) <= new Date());
+    const rows = (posts || []).filter((p) => (!p.scheduled_for || new Date(p.scheduled_for) <= new Date()) && !postGoneIds.has(p.id));
     const ids = [...new Set(rows.flatMap((p) => [p.user_id, p.collab_id || null]).filter(Boolean))];
     const byId = {};
     if (ids.length) {
@@ -26665,10 +28046,12 @@ function MomentsTab({ me, userId, myStories, trayUsers, seen, onAddStory, onOpen
   };
   const load = async (quiet) => {
     const want = tab;
+    const startedAt = Date.now();
     if (!quiet) setItems(momentsCache[want] || null);
-    const { rows, full } = await fetchPage(want, null);
+    const got = await fetchPage(want, null);
+    const rows = keepLocalPosts(got.rows, startedAt, null).filter((p) => p.owner);
     momentsCache[want] = rows;
-    if (tabRef.current === want) { setItems(rows); setMore(full); }
+    if (tabRef.current === want) { setItems(rows); setMore(got.full); }
   };
   const loadMore = async () => {
     if (loadingMore || !more || !items || !items.length) return;
@@ -26689,8 +28072,15 @@ function MomentsTab({ me, userId, myStories, trayUsers, seen, onAddStory, onOpen
   useEffect(() => {
     const on = () => { if (tabRef.current === 'following') load(true); };
     window.addEventListener('zchat-tag-follow', on);
-    return () => window.removeEventListener('zchat-tag-follow', on);
+    const onLocal = (e) => {
+      const d = (e && e.detail) || {};
+      if (d.reload) { load(true); return; }
+      if (d.gone || d.added) setItems(momentsCache[tabRef.current] || null);
+    };
+    window.addEventListener('zchat-posts-local', onLocal);
+    return () => { window.removeEventListener('zchat-tag-follow', on); window.removeEventListener('zchat-posts-local', onLocal); };
   }, []);
+  const pendingPosts = usePendingPosts(userId);
   const pull = usePullRefresh(scrollRef, () => load(true));
   const onScroll = (e) => {
     const el = e.currentTarget;
@@ -26710,6 +28100,19 @@ function MomentsTab({ me, userId, myStories, trayUsers, seen, onAddStory, onOpen
         </div>
         <SegmentedControl style={{ margin: '6px 20px 10px' }} value={tab} onChange={(k) => { if (k === 'clips') { playUiSound('tap'); if (onOpenClips) onOpenClips(); return; } if (k !== tab) { setTab(k); playUiSound('tap'); } }} options={[['foryou', 'For you'], ['following', 'Following'], ['clips', 'Clips']]} />
         {topExtra}
+        {pendingPosts.map((p) => (
+          <div key={p.id} role="status" aria-label="Posting" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '6px 16px 12px' }}>
+            <div style={{ width: 44, height: 44, borderRadius: 10, overflow: 'hidden', background: theme.soft, flexShrink: 0 }}>
+              {p.media_type === 'video' ? <video src={p.media_url} muted playsInline preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} /> : <img src={p.media_url} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 14.5, fontWeight: 600, color: theme.ink }}>Posting</div>
+              <div style={{ height: 3, borderRadius: 2, background: theme.soft, marginTop: 8, overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: '100%', borderRadius: 2, background: theme.coral, animation: reducedMotion() ? 'none' : 'zchat-skel 1.4s ease-in-out infinite' }} />
+              </div>
+            </div>
+          </div>
+        ))}
         {items === null ? (
           <div style={{ padding: '6px 0' }}>
             {[0, 1].map((i) => (
@@ -26956,10 +28359,26 @@ function CallJoinSheet({ link, host, onClose, onJoin }) {
   );
 }
 
+const callsTabMem = new Map();
+function readCallHides(uid) { try { const a = JSON.parse(localStorage.getItem(`zchat-call-hides-${uid}`) || '[]'); return new Set(Array.isArray(a) ? a.map(String) : []); } catch { return new Set(); } }
+function writeCallHides(uid, set) { try { localStorage.setItem(`zchat-call-hides-${uid}`, JSON.stringify([...set].slice(-500))); } catch {} }
 function CallsTab({ userId, me, groups, onCall, onGroupCall, onOpenProfile, onOpenGroup, version, onCreateLink, onOpenLink }) {
   const { theme } = useTheme();
-  const [rows, setRows] = useState(null);
-  const [links, setLinks] = useState([]);
+  const [rows, setRows] = useState(() => { const m = callsTabMem.get(userId); return m ? m.rows : null; });
+  const [links, setLinks] = useState(() => { const m = callsTabMem.get(userId); return m ? m.links : []; });
+  const [hidden, setHidden] = useState(() => readCallHides(userId));
+  const [callMenu, setCallMenu] = useState(null);
+  const callPress = useRef({});
+  const hideCall = async (c) => {
+    setCallMenu(null);
+    hapticTap();
+    playUiSound('delete');
+    const id = String(c.id);
+    setHidden((prev) => { const n = new Set(prev); n.add(id); writeCallHides(userId, n); return n; });
+    const m = callsTabMem.get(userId);
+    if (m) callsTabMem.set(userId, { ...m, rows: m.rows.filter((x) => String(x.id) !== id) });
+    try { await supabase.from('call_hides').upsert({ user_id: userId, call_id: id }, { onConflict: 'user_id,call_id' }); } catch {}
+  };
   const [newCall, setNewCall] = useState(false);
   const [filter, setFilter] = useState('all');
   const [q, setQ] = useState('');
@@ -26967,12 +28386,15 @@ function CallsTab({ userId, me, groups, onCall, onGroupCall, onOpenProfile, onOp
   const scrollRef = useRef(null);
   const groupIds = (groups || []).map((g) => g.id);
   const load = async () => {
-    const [{ data: a }, { data: b }, gc, lk] = await Promise.all([
+    const [{ data: a }, { data: b }, gc, lk, hs] = await Promise.all([
       supabase.from('calls').select('*').eq('caller_id', userId).order('created_at', { ascending: false }).limit(60),
       supabase.from('calls').select('*').eq('callee_id', userId).order('created_at', { ascending: false }).limit(60),
       groupIds.length ? supabase.from('calls').select('*').in('group_id', groupIds.slice(0, 100)).order('created_at', { ascending: false }).limit(40) : Promise.resolve({ data: [] }),
       supabase.from('calls').select('*').eq('caller_id', userId).not('link_code', 'is', null).gt('created_at', new Date(Date.now() - 24 * 3600000).toISOString()).order('created_at', { ascending: false }).limit(5),
+      supabase.from('call_hides').select('call_id').eq('user_id', userId).limit(500),
     ]);
+    const serverHides = hs && !hs.error && Array.isArray(hs.data) ? hs.data.map((r) => String(r.call_id)) : [];
+    if (serverHides.length) setHidden((prev) => { if (serverHides.every((x) => prev.has(x))) return prev; const n = new Set([...prev, ...serverHides]); writeCallHides(userId, n); return n; });
     const all = uniqueBy([...(a || []), ...(b || []), ...((gc && gc.data) || [])], (c) => c.id).filter((c) => !c.link_code).sort((x, y) => new Date(y.created_at) - new Date(x.created_at)).slice(0, 100);
     const peerIds = [...new Set(all.filter((c) => !c.group_id).map((c) => (c.caller_id === userId ? c.callee_id : c.caller_id)).filter(Boolean))];
     const byId = {};
@@ -26981,8 +28403,12 @@ function CallsTab({ userId, me, groups, onCall, onGroupCall, onOpenProfile, onOp
       sanitizeAvatarList(profs, userId).forEach((p) => { byId[p.id] = p; });
     }
     const gById = Object.fromEntries((groups || []).map((g) => [g.id, g]));
-    setRows(all.map((c) => (c.group_id ? { ...c, group: gById[c.group_id] } : { ...c, peer: byId[c.caller_id === userId ? c.callee_id : c.caller_id] })).filter((c) => c.peer || c.group));
-    setLinks(((lk && !lk.error && lk.data) || []));
+    const nextRows = all.map((c) => (c.group_id ? { ...c, group: gById[c.group_id] } : { ...c, peer: byId[c.caller_id === userId ? c.callee_id : c.caller_id] })).filter((c) => c.peer || c.group);
+    const nextLinks = ((lk && !lk.error && lk.data) || []);
+    if (!a && !b) { setRows((prev) => prev || []); return; }
+    callsTabMem.set(userId, { rows: nextRows, links: nextLinks });
+    setRows(nextRows);
+    setLinks(nextLinks);
   };
   useEffect(() => { load(); }, [version]);
   const pull = usePullRefresh(scrollRef, load);
@@ -26994,7 +28420,7 @@ function CallsTab({ userId, me, groups, onCall, onGroupCall, onOpenProfile, onOp
     const text = c.group_id ? `Group ${kind}${dur ? `, ${dur}` : ''}` : missed ? `Missed ${kind} call` : `${out ? 'Outgoing' : 'Incoming'} ${kind}${dur ? `, ${dur}` : ''}`;
     return { missed, out, text };
   };
-  const shown = (rows || []).filter((c) => (filter === 'missed' ? describe(c).missed : true) && (!q.trim() || String((c.peer && c.peer.name) || (c.group && c.group.name) || '').toLowerCase().includes(q.trim().toLowerCase())));
+  const shown = (rows || []).filter((c) => !hidden.has(String(c.id)) && (filter === 'missed' ? describe(c).missed : true) && (!q.trim() || String((c.peer && c.peer.name) || (c.group && c.group.name) || '').toLowerCase().includes(q.trim().toLowerCase())));
   const sections = [];
   shown.forEach((c) => { const l = callDayLabel(c.created_at); const last = sections[sections.length - 1]; if (last && last[0] === l) last[1].push(c); else sections.push([l, [c]]); });
   return (
@@ -27042,7 +28468,7 @@ function CallsTab({ userId, me, groups, onCall, onGroupCall, onOpenProfile, onOp
               const tone = d.missed ? theme.danger : d.out ? '#1DB954' : theme.muted;
               const name = c.group ? c.group.name : c.peer.name;
               return (
-                <div key={c.id} role="listitem" aria-label={`${d.text} ${name}`} onClick={() => (c.group ? onGroupCall(c.group, c.kind === 'video' ? 'video' : 'voice') : onCall(c.peer, c.kind === 'video' ? 'video' : 'voice'))} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '8px 12px 8px 20px', cursor: 'pointer' }}>
+                <div key={c.id} role="listitem" aria-label={`${d.text} ${name}`} {...storyLongPress(callPress.current, c.id, () => setCallMenu(c))} onClick={() => { if (callPress.current.fired === c.id) { callPress.current.fired = false; return; } if (c.group) onGroupCall(c.group, c.kind === 'video' ? 'video' : 'voice'); else onCall(c.peer, c.kind === 'video' ? 'video' : 'voice'); }} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '8px 12px 8px 20px', cursor: 'pointer', WebkitTouchCallout: 'none', userSelect: 'none' }}>
                   <div style={{ flexShrink: 0 }}>{c.group ? <GroupAvatar avatar={c.group.avatar} name={c.group.name} size={52} /> : <Avatar emoji={c.peer.avatar} name={c.peer.name} size={52} />}</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 600, fontSize: 16, letterSpacing: '-0.01em', color: d.missed ? theme.danger : theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.group ? name : <NameBadge name={c.peer.name} verified={c.peer.verified} custom={c.peer.custom_badge} size={13} />}</div>
@@ -27061,6 +28487,13 @@ function CallsTab({ userId, me, groups, onCall, onGroupCall, onOpenProfile, onOp
           </div>
         ))}
       </div>
+      {callMenu && (
+        <ActionSheet title={callMenu.group ? callMenu.group.name : callMenu.peer ? callMenu.peer.name : 'Call'} onClose={() => setCallMenu(null)} items={[
+          { k: 'call', label: callMenu.kind === 'video' ? 'Video call' : 'Voice call', icon: callMenu.kind === 'video' ? <VideoIcon /> : <Phone />, on: () => { const c = callMenu; setCallMenu(null); if (c.group) onGroupCall(c.group, c.kind === 'video' ? 'video' : 'voice'); else onCall(c.peer, c.kind === 'video' ? 'video' : 'voice'); } },
+          { k: 'about', label: callMenu.group ? 'Group info' : 'View profile', icon: <InfoCircleIcon />, on: () => { const c = callMenu; setCallMenu(null); if (c.group) onOpenGroup(c.group); else onOpenProfile(c.peer); } },
+          { k: 'delete', label: 'Delete from call history', icon: <Trash2 />, danger: true, on: () => hideCall(callMenu) },
+        ]} />
+      )}
     </div>
   );
 }
@@ -27109,8 +28542,8 @@ function MeTab({ asPage = false, covered = false, onCoins, onQuestions, onClose,
   const body = (
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', paddingBottom: 20, WebkitOverflowScrolling: 'touch' }}>
         {asPage && (
-          <div style={{ padding: '8px 16px 4px' }}>
-            <DetailSection flush>
+          <div style={{ paddingTop: 2 }}>
+            <DetailSection>
               <DetailRow icon={<SettingsIcon />} label="Settings" onClick={tapThen(onSettings)} last />
             </DetailSection>
           </div>
@@ -27141,7 +28574,7 @@ function MeTab({ asPage = false, covered = false, onCoins, onQuestions, onClose,
         {onStatus && (() => {
           const st = activeStatusOf(me);
           return (
-            <div style={{ padding: '4px 16px 0' }}>
+            <div style={{ padding: asPage ? '10px 16px 0' : '4px 16px 0' }}>
               <div role="button" aria-label="Set your status" onClick={tapThen(onStatus)} className="zchat-press" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 12, background: c.field, cursor: 'pointer' }}>
                 <span style={{ width: 22, display: 'flex', justifyContent: 'center', fontSize: 17, color: theme.muted }}>{st ? (st.e || '\u{1F4AC}') : <Plus size={17} />}</span>
                 <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, color: st ? theme.ink : theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{st ? st.t : 'Set a status'}</span>
@@ -27371,7 +28804,7 @@ function readChatLocal(uid, kind, id) {
 function keepableRows(rows) {
   const now = Date.now();
   return (rows || []).filter((m) => m && m.id && !String(m.id).startsWith('temp-') && !m.queued && !m.sending && !m.failed
-    && !(m.expires_at && new Date(m.expires_at).getTime() <= now)).slice(-CHAT_KEEP);
+    && !(m.expires_at && new Date(m.expires_at).getTime() <= now)).slice(-CHAT_KEEP).map((m) => { if (!m.ck) return m; const { ck, ...rest } = m; return rest; });
 }
 const CHAT_INDEX_MAX = 150;
 function touchChatIndex(uid, k) {
@@ -27593,12 +29026,22 @@ const SILENT_MARK = '\u2063';
 function isSilentText(c) { return typeof c === 'string' && c.charCodeAt(0) === 0x2063; }
 function stripSilent(c) { return isSilentText(c) ? c.slice(1) : c; }
 const EMOJI_PIC_RE = /\p{Extended_Pictographic}/u;
+let jumboSeg = null;
+const jumboMemo = new Map();
 function jumboEmojiCount(text) {
   if (typeof text !== 'string') return 0;
+  const hit = jumboMemo.get(text);
+  if (hit !== undefined) return hit;
+  const n = jumboEmojiCountRaw(text);
+  if (jumboMemo.size > 400) jumboMemo.clear();
+  jumboMemo.set(text, n);
+  return n;
+}
+function jumboEmojiCountRaw(text) {
   const t = stripSilent(text).trim();
   if (!t || t.length > 40) return 0;
   let parts;
-  try { parts = typeof Intl !== 'undefined' && Intl.Segmenter ? Array.from(new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(t), (x) => x.segment) : Array.from(t); } catch { parts = Array.from(t); }
+  try { parts = typeof Intl !== 'undefined' && Intl.Segmenter ? Array.from((jumboSeg || (jumboSeg = new Intl.Segmenter(undefined, { granularity: 'grapheme' }))).segment(t), (x) => x.segment) : Array.from(t); } catch { parts = Array.from(t); }
   parts = parts.filter((x) => x.trim());
   if (!parts.length || parts.length > 3) return 0;
   return parts.every((x) => EMOJI_PIC_RE.test(x)) ? parts.length : 0;
@@ -27694,193 +29137,39 @@ const SOUNDBOARD = [
   ['whoosh', 'Whoosh', '\u{1F4A8}'], ['ding', 'Ding', '\u{1F6CE}\uFE0F'], ['heart', 'Heartbeat', '\u{1F493}'], ['pop', 'Pop', '\u{1FAE7}'],
   ['airhorn', 'Air horn', '\u{1F4EF}', true],
 ];
-const SYNTH_BOARD = new Set(['applause', 'drumroll', 'rimshot', 'airhorn', 'tada', 'sad', 'crickets', 'boing', 'whoosh', 'ding', 'heart', 'pop']);
-const SOUNDBOARD_VOL = 0.9;
-function playSoundboard(k) {
+const SOUNDBOARD_VOL = 1;
+let boardVoice = null;
+function stopBoardVoice() {
+  const v = boardVoice;
+  boardVoice = null;
+  const ctx = uiAudioCtx;
+  if (!v || !ctx) return;
+  try {
+    const t = ctx.currentTime;
+    v.g.gain.cancelScheduledValues(t);
+    v.g.gain.setValueAtTime(v.g.gain.value, t);
+    v.g.gain.linearRampToValueAtTime(0, t + 0.06);
+    v.src.stop(t + 0.08);
+  } catch {}
+}
+function playSoundboard(k, auto) {
   const seg = SOUND_SPRITES.board.map[k];
-  if (!seg) return synthSoundboard(k);
-  if (!ensureAudioCtx()) return 0;
-  if (spriteBufs.board) return playSprite('board', k, SOUNDBOARD_VOL) || synthSoundboard(k);
+  cancelTapSound();
+  if (!seg || appHidden()) return 0;
+  if (auto ? !uiAudioCtx : !ensureAudioCtx()) return 0;
+  const go = () => {
+    stopBoardVoice();
+    return playSprite('board', k, SOUNDBOARD_VOL, (v) => {
+      boardVoice = v;
+      v.src.onended = () => { if (boardVoice === v) boardVoice = null; };
+    });
+  };
+  if (spriteBufs.board) return go();
   const asked = Date.now();
-  loadSprite('board').then((b) => {
-    if (b && Date.now() - asked < 2500) playSprite('board', k, SOUNDBOARD_VOL);
-    else if (!b && SYNTH_BOARD.has(k)) synthSoundboard(k);
-  });
+  loadSprite('board').then((b) => { if (b && Date.now() - asked < 2500 && !appHidden()) go(); });
   return Math.round(seg[1] * 1000) + 250;
 }
-let sbNoise = null;
-function synthSoundboard(k) {
-  try {
-    const ctx = ensureAudioCtx();
-    if (!ctx) return 0;
-    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
-    if (!sbNoise) {
-      sbNoise = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
-      const d = sbNoise.getChannelData(0);
-      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-    }
-    const t = ctx.currentTime + 0.03;
-    const out = ctx.createGain();
-    out.gain.value = 0.85;
-    out.connect(ctx.destination);
-    const env = (g, start, peak, attack, release) => {
-      g.gain.setValueAtTime(0.0001, t + start);
-      g.gain.exponentialRampToValueAtTime(peak, t + start + attack);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + start + release);
-    };
-    const noise = (start, dur, type, freq, q, peak, attack = 0.002) => {
-      const src = ctx.createBufferSource();
-      src.buffer = sbNoise;
-      src.loop = true;
-      const f = ctx.createBiquadFilter();
-      f.type = type;
-      f.frequency.setValueAtTime(freq, t + start);
-      f.Q.value = q;
-      const g = ctx.createGain();
-      env(g, start, peak, attack, dur);
-      src.connect(f); f.connect(g); g.connect(out);
-      src.start(t + start, Math.random() * 1.5);
-      src.stop(t + start + dur + 0.05);
-      return f;
-    };
-    const tone = (start, dur, freq, type, peak, attack = 0.01, to = null, release = dur) => {
-      const o = ctx.createOscillator();
-      o.type = type;
-      o.frequency.setValueAtTime(freq, t + start);
-      if (to) o.frequency.exponentialRampToValueAtTime(to, t + start + dur);
-      const g = ctx.createGain();
-      env(g, start, peak, attack, release);
-      o.connect(g); g.connect(out);
-      o.start(t + start);
-      o.stop(t + start + dur + 0.05);
-      return o;
-    };
-    const brass = (start, dur, freqs, peak) => {
-      const f = ctx.createBiquadFilter();
-      f.type = 'lowpass';
-      f.Q.value = 1.2;
-      f.frequency.setValueAtTime(500, t + start);
-      f.frequency.exponentialRampToValueAtTime(3200, t + start + 0.08);
-      f.frequency.exponentialRampToValueAtTime(1400, t + start + dur);
-      const g = ctx.createGain();
-      env(g, start, peak, 0.03, dur);
-      f.connect(g); g.connect(out);
-      freqs.forEach((fr, i) => {
-        const o = ctx.createOscillator();
-        o.type = 'sawtooth';
-        o.frequency.setValueAtTime(fr, t + start);
-        o.detune.value = i % 2 ? 6 : -6;
-        o.connect(f);
-        o.start(t + start);
-        o.stop(t + start + dur + 0.05);
-      });
-    };
-    if (k === 'applause') {
-      for (let i = 0; i < 80; i++) {
-        const at = Math.pow(Math.random(), 0.8) * 2.3;
-        noise(at, 0.05 + Math.random() * 0.05, 'bandpass', 900 + Math.random() * 1700, 0.9, 0.08 + Math.random() * 0.22, 0.001);
-      }
-      noise(0, 2.6, 'lowpass', 3000, 0.5, 0.05, 0.4);
-      return 2700;
-    }
-    if (k === 'drumroll') {
-      let at = 0;
-      let n = 0;
-      while (at < 1.8) {
-        const v = 0.05 + (at / 1.8) * 0.3;
-        noise(at, 0.06, 'bandpass', 1900, 0.8, v);
-        tone(at, 0.05, 190, 'triangle', v * 0.5, 0.002);
-        at += 0.048 - Math.min(0.014, n * 0.0003);
-        n += 1;
-      }
-      tone(1.85, 0.3, 70, 'sine', 0.8, 0.003, 45);
-      noise(1.85, 1.5, 'highpass', 5000, 0.6, 0.45, 0.003);
-      return 3400;
-    }
-    if (k === 'rimshot') {
-      tone(0, 0.16, 210, 'sine', 0.7, 0.003, 120); noise(0, 0.08, 'bandpass', 1500, 0.8, 0.25);
-      tone(0.19, 0.2, 150, 'sine', 0.75, 0.003, 85); noise(0.19, 0.08, 'bandpass', 1300, 0.8, 0.2);
-      noise(0.44, 0.09, 'bandpass', 2200, 0.8, 0.35); noise(0.44, 1.1, 'highpass', 7000, 0.5, 0.4, 0.003);
-      return 1600;
-    }
-    if (k === 'airhorn') {
-      [[0, 0.24], [0.3, 0.24], [0.6, 0.95]].forEach(([s, d]) => brass(s, d, [466, 587, 698, 932], 0.13));
-      return 1700;
-    }
-    if (k === 'tada') {
-      brass(0, 0.14, [392, 494, 587], 0.15);
-      brass(0.17, 1.3, [523, 659, 784, 1047], 0.15);
-      return 1600;
-    }
-    if (k === 'sad') {
-      const notes = [[0, 0.42, 293.7], [0.46, 0.42, 277.2], [0.92, 0.42, 261.6], [1.38, 1.25, 246.9]];
-      notes.forEach(([s, d, fr], i) => {
-        const f = ctx.createBiquadFilter();
-        f.type = 'lowpass';
-        f.Q.value = 3;
-        f.frequency.setValueAtTime(300, t + s);
-        f.frequency.exponentialRampToValueAtTime(1500, t + s + d * 0.4);
-        f.frequency.exponentialRampToValueAtTime(500, t + s + d);
-        const g = ctx.createGain();
-        env(g, s, 0.32, 0.04, d);
-        const o = ctx.createOscillator();
-        o.type = 'sawtooth';
-        o.frequency.setValueAtTime(fr, t + s);
-        if (i === notes.length - 1) {
-          const lfo = ctx.createOscillator();
-          const depth = ctx.createGain();
-          lfo.frequency.value = 6;
-          depth.gain.value = 7;
-          lfo.connect(depth); depth.connect(o.frequency);
-          lfo.start(t + s); lfo.stop(t + s + d + 0.05);
-        }
-        o.connect(f); f.connect(g); g.connect(out);
-        o.start(t + s); o.stop(t + s + d + 0.05);
-      });
-      return 2800;
-    }
-    if (k === 'crickets') {
-      [[0, 4400], [0.27, 4750], [0.55, 4400], [0.82, 4750], [1.1, 4400], [1.37, 4750], [1.65, 4400]].forEach(([s, fr]) => {
-        for (let i = 0; i < 4; i++) tone(s + i * 0.032, 0.018, fr, 'sine', 0.09, 0.004);
-      });
-      return 2000;
-    }
-    if (k === 'boing') {
-      const o = ctx.createOscillator();
-      o.type = 'triangle';
-      o.frequency.setValueAtTime(150, t);
-      o.frequency.exponentialRampToValueAtTime(420, t + 0.8);
-      const lfo = ctx.createOscillator();
-      const depth = ctx.createGain();
-      lfo.frequency.value = 13;
-      depth.gain.setValueAtTime(110, t);
-      depth.gain.exponentialRampToValueAtTime(4, t + 0.9);
-      lfo.connect(depth); depth.connect(o.frequency);
-      const g = ctx.createGain();
-      env(g, 0, 0.5, 0.005, 0.95);
-      o.connect(g); g.connect(out);
-      o.start(t); lfo.start(t); o.stop(t + 1); lfo.stop(t + 1);
-      return 1100;
-    }
-    if (k === 'whoosh') {
-      const f = noise(0, 0.85, 'bandpass', 300, 1.6, 0.5, 0.35);
-      f.frequency.exponentialRampToValueAtTime(3200, t + 0.4);
-      f.frequency.exponentialRampToValueAtTime(600, t + 0.85);
-      return 1000;
-    }
-    if (k === 'ding') {
-      [[1, 0.3, 1.9], [2.76, 0.12, 0.9], [5.4, 0.06, 0.5], [8.93, 0.03, 0.3]].forEach(([r, pk, d]) => tone(0, d, 880 * r, 'sine', pk, 0.002));
-      return 2000;
-    }
-    if (k === 'heart') {
-      [0, 0.85].forEach((s) => { tone(s, 0.14, 62, 'sine', 0.9, 0.006, 44); tone(s + 0.22, 0.12, 56, 'sine', 0.7, 0.006, 40); });
-      return 1600;
-    }
-    tone(0, 0.08, 900, 'sine', 0.5, 0.002, 150);
-    noise(0, 0.02, 'highpass', 4000, 0.5, 0.15, 0.001);
-    return 400;
-  } catch { return 0; }
-}
+const soundCardGate = { fn: null };
 const soundAutoPlayed = new Set();
 const BOMB_MAX = 50;
 const bombSeen = new Set();
@@ -27976,10 +29265,11 @@ function TextBombSheet({ initial, onClose, onSend }) {
             <div style={{ fontSize: 14.5, fontWeight: 600, color: theme.ink }}>How many times</div>
             <div style={{ fontSize: 26, fontWeight: 800, color: theme.ink, fontVariantNumeric: 'tabular-nums' }}>{n}</div>
           </div>
-          <input type="range" min={2} max={BOMB_MAX} step={1} value={n} onChange={(e) => setN(Number(e.target.value))} aria-label="How many times" style={{ width: '100%', accentColor: theme.coral, marginTop: 6 }} />
-          <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+          <KitSlider value={n} min={2} max={BOMB_MAX} step={1} onChange={(v) => setN(v)} label="How many times" style={{ marginTop: 8 }} />
+          <div style={{ position: 'relative', height: 26, marginTop: 2 }}>
             {[5, 10, 25, BOMB_MAX].map((v) => (
-              <div key={v} role="button" aria-pressed={n === v} onClick={() => { setN(v); hapticTap(); }} className="zchat-press" style={{ flex: 1, height: 36, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, cursor: 'pointer', background: n === v ? theme.ink : theme.soft, color: n === v ? theme.panelBg : theme.ink }}>{v}</div>
+              <div key={v} role="button" aria-pressed={n === v} aria-label={`${v} times`} onClick={() => { setN(v); hapticTap(); }}
+                style={{ position: 'absolute', top: 0, left: `calc(12px + (100% - 24px) * ${(v - 2) / (BOMB_MAX - 2)})`, transform: 'translateX(-50%)', padding: '3px 8px', fontSize: 12.5, fontWeight: n === v ? 700 : 600, color: n === v ? kitOnInk(theme) : theme.muted, cursor: 'pointer', fontVariantNumeric: 'tabular-nums', transition: 'color 160ms ease', WebkitTapHighlightColor: 'transparent' }}>{v}</div>
             ))}
           </div>
           <div style={{ marginTop: 16 }}><BigButton label={`Send ${n} times`} onClick={send} disabled={!ok} /></div>
@@ -28082,8 +29372,8 @@ function SoundCard({ d, id, fresh, isMe }) {
   const meta = SOUNDBOARD.find((s) => s[0] === d.k) || SOUNDBOARD[0];
   const [playing, setPlaying] = useState(false);
   const timer = useRef(0);
-  const play = () => {
-    const ms = playSoundboard(meta[0]);
+  const play = (auto) => {
+    const ms = playSoundboard(meta[0], auto);
     if (!ms) return;
     clearTimeout(timer.current);
     setPlaying(true);
@@ -28092,9 +29382,8 @@ function SoundCard({ d, id, fresh, isMe }) {
   useEffect(() => {
     if (fresh && !isMe && id && !soundAutoPlayed.has(id)) {
       soundAutoPlayed.add(id);
-      let on = true;
-      try { on = localStorage.getItem('zchat-sound') !== 'off'; } catch {}
-      if (on && !quietNow()) play();
+      const ok = soundCardGate.fn ? soundCardGate.fn() : !soundsOff() && !quietNow() && !appHidden();
+      if (ok) play(true);
     }
     return () => clearTimeout(timer.current);
   }, []);
@@ -28127,6 +29416,10 @@ function SoundboardSheet({ onClose, onTap, live, peerName, isGroup }) {
     if (taps.current.length >= 8) return;
     taps.current.push(now);
     setHit({ k, at: now });
+    if (liveOn && !spriteBufs.board && ensureAudioCtx()) {
+      loadSprite('board').then(() => { playSoundboard(k); onTap(k, label, true); });
+      return;
+    }
     playSoundboard(k);
     onTap(k, label, liveOn);
   };
@@ -28226,9 +29519,9 @@ function HiddenWordsPage({ onClose }) {
       <div style={{ padding: '12px 2px 6px', fontSize: 13, color: theme.muted, lineHeight: 1.5 }}>Messages with these words are covered in your chats. You can still tap to read them. People are not told.</div>
       <IgRow inset={false} icon={<EyeOff size={16} />} label="Hide offensive words" sub="Common swear words and insults" right={<IgToggle on={cfg.on} onClick={() => commit({ ...cfg, on: !cfg.on })} />} />
       <IgHeading>Your own words</IgHeading>
-      <div style={{ display: 'flex', gap: 8 }}>
-        <input value={draft} onChange={(e) => setDraft(e.target.value.slice(0, 120))} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } }} placeholder="Add words, split with commas" aria-label="Add hidden words" style={{ ...inputStyle(theme), flex: 1 }} />
-        <button type="button" onClick={add} disabled={!draft.trim()} style={{ height: 46, padding: '0 16px', borderRadius: 13, border: 'none', background: draft.trim() ? theme.coral : theme.rowBg, color: draft.trim() ? 'white' : theme.muted, fontFamily: FONT, fontWeight: 800, fontSize: 14, cursor: draft.trim() ? 'pointer' : 'default' }}>Add</button>
+      <div style={{ position: 'relative' }}>
+        <input value={draft} onChange={(e) => setDraft(e.target.value.slice(0, 120))} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } }} placeholder="Add words, split with commas" aria-label="Add hidden words" style={{ ...inputStyle(theme), paddingRight: 70 }} />
+        <button type="button" onClick={add} disabled={!draft.trim()} style={{ position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)', height: 38, padding: '0 14px', border: 'none', background: 'transparent', color: draft.trim() ? kitOnInk(theme) : theme.muted2, fontFamily: FONT, fontWeight: 700, fontSize: 15, cursor: draft.trim() ? 'pointer' : 'default', transition: 'color 160ms ease' }}>Add</button>
       </div>
       {cfg.words.length === 0 && <div style={{ fontSize: 13, color: theme.muted, padding: '14px 2px' }}>Words you add show up here.</div>}
       {cfg.words.length > 0 && (
@@ -29538,10 +30831,6 @@ function DrawTogetherPage({ id, me, onClose, onSendImage }) {
     <button type="button" aria-label={label} onClick={onClick} disabled={disabled} className="zchat-press"
       style={{ width: 42, height: 42, border: 'none', background: 'transparent', color: c.fg, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.35 : 1, padding: 0, flexShrink: 0 }}><PaintToolIcon k={k} size={23} /></button>
   );
-  const chip = (label, onClick, on, aria) => (
-    <button type="button" aria-label={aria || label} aria-pressed={on} onClick={onClick} className="zchat-press"
-      style={{ height: 34, padding: '0 12px', borderRadius: 17, border: 'none', background: on ? c.fg : c.field, color: on ? (theme.dark ? '#111114' : '#FFFFFF') : c.fg, fontWeight: 700, fontSize: 13.5, fontFamily: FONT, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>{label}</button>
-  );
   const pickTool = (k) => { hapticTap(); setTool(k); };
   return (
     <Portal>
@@ -29569,25 +30858,29 @@ function DrawTogetherPage({ id, me, onClose, onSendImage }) {
         </div>
         <div style={{ flexShrink: 0, background: c.bg, borderTop: `1px solid ${c.line}`, paddingBottom: 'calc(8px + env(safe-area-inset-bottom))' }}>
           <div style={{ maxWidth: 760, margin: '0 auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-around', padding: '6px 4px 2px' }}>
-              {DT_TOOLS.map(([k, label]) => (
-                <button key={k} type="button" aria-label={label} aria-pressed={tool === k} onClick={() => pickTool(k)} className="zchat-press"
-                  style={{ flex: '0 1 64px', height: 46, borderRadius: 14, border: 'none', background: tool === k ? (theme.dark ? '#2A2A30' : '#E8E8EE') : 'transparent', color: tool === k ? theme.coral : c.fg, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 }}>
-                  <PaintToolIcon k={k} />
-                </button>
-              ))}
+            <div role="toolbar" aria-label="Drawing tools" style={{ display: 'flex', justifyContent: 'space-around', padding: '6px 4px 0' }}>
+              {DT_TOOLS.map(([k, label]) => {
+                const on = tool === k;
+                return (
+                  <button key={k} type="button" aria-label={label} aria-pressed={on} onClick={() => pickTool(k)} className="zchat-press"
+                    style={{ flex: '0 1 64px', height: 46, border: 'none', background: 'transparent', color: on ? kitOnInk(theme) : c.fg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5, cursor: 'pointer', padding: 0, transition: 'color 160ms ease' }}>
+                    <PaintToolIcon k={k} />
+                    <span aria-hidden="true" style={{ width: 4, height: 4, borderRadius: 2, background: on ? theme.coral : 'transparent', transition: 'background 160ms ease' }} />
+                  </button>
+                );
+              })}
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 14px 4px', minHeight: 36 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '2px 14px 0', minHeight: 52 }}>
               {tool !== 'eraser' && tool !== 'stamp' && (
                 <button type="button" aria-label="Choose colour" onClick={() => setSheet('color')} className="zchat-press"
-                  style={{ width: 36, height: 36, borderRadius: '50%', border: 'none', padding: 0, cursor: 'pointer', flexShrink: 0, background: color, boxShadow: `0 0 0 2px ${theme.panelBg}, 0 0 0 3.5px ${c.line}`, opacity: Math.max(0.35, alpha) }} />
+                  style={{ width: 36, height: 36, marginRight: 4, borderRadius: '50%', border: 'none', padding: 0, cursor: 'pointer', flexShrink: 0, background: color, boxShadow: `0 0 0 2px ${c.bg}, 0 0 0 3.5px ${theme.dark ? 'rgba(255,255,255,0.32)' : 'rgba(17,17,19,0.2)'}`, opacity: Math.max(0.35, alpha) }} />
               )}
-              {tool === 'brush' && chip(brushLabel, () => setSheet('brush'), false, 'Choose brush')}
-              {tool === 'shapes' && chip(shapeLabel, () => setSheet('shapes'), false, 'Choose shape')}
-              {tool === 'shapes' && chip(fill ? 'Filled' : 'Outline', () => { hapticTap(); setFill((v) => !v); }, fill, 'Fill shape')}
-              {tool === 'stamp' && chip(stamp, () => setSheet('stamp'), false, 'Choose sticker')}
-              <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                <input type="range" min={1} max={40} value={size} aria-label="Size" onChange={(e) => setSize(Number(e.target.value))} style={{ flex: 1, minWidth: 0, accentColor: theme.coral }} />
+              {tool === 'brush' && <StudioTool label={brushLabel} aria="Choose brush" ink={c.fg} width={66} glyph={<PaintBrushChip k={brush} color={color} />} onClick={() => setSheet('brush')} />}
+              {tool === 'shapes' && <StudioTool label={shape === 'round' ? 'Rounded' : shape === 'bubble' ? 'Bubble' : shapeLabel} aria="Choose shape" ink={c.fg} width={60} glyph={<PaintShapeIcon k={shape} color="currentColor" fill={fill ? color : false} size={28} />} onClick={() => setSheet('shapes')} />}
+              {tool === 'shapes' && <StudioTool label={fill ? 'Filled' : 'Outline'} aria="Fill shape" on={fill} pressed={fill} ink={c.fg} width={54} glyph={<PaintFillGlyph on={fill} />} onClick={() => setFill((v) => !v)} />}
+              {tool === 'stamp' && <StudioTool label="Sticker" aria="Choose sticker" ink={c.fg} width={56} glyph={<span style={{ fontSize: 23, lineHeight: 1 }}>{stamp}</span>} onClick={() => setSheet('stamp')} />}
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, paddingLeft: 4 }}>
+                <KitSlider value={size} min={1} max={40} label="Size" onChange={setSize} style={{ flex: 1, minWidth: 0 }} />
                 <div style={{ width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                   {tool === 'stamp'
                     ? <span style={{ fontSize: Math.max(12, Math.min(26, 10 + size * 0.5)), lineHeight: 1 }}>{stamp}</span>
@@ -29604,10 +30897,10 @@ function DrawTogetherPage({ id, me, onClose, onSendImage }) {
               </div>
             )}
             {tool === 'stamp' && (
-              <div style={{ display: 'flex', gap: 6, overflowX: 'auto', padding: '4px 14px 2px', scrollbarWidth: 'none' }}>
+              <div style={{ display: 'flex', gap: 8, overflowX: 'auto', padding: '6px 14px 4px', scrollbarWidth: 'none' }}>
                 {PAINT_STAMPS.map((em) => (
-                  <div key={em} role="button" aria-label={`Sticker ${em}`} onClick={() => { hapticTap(); setStamp(em); }}
-                    style={{ width: 36, height: 34, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, cursor: 'pointer', flexShrink: 0, background: stamp === em ? c.field : 'transparent', boxShadow: stamp === em ? `inset 0 0 0 1.5px ${c.fg}` : 'none' }}>{em}</div>
+                  <div key={em} role="button" aria-label={`Sticker ${em}`} aria-pressed={stamp === em} onClick={() => { hapticTap(); setStamp(em); }}
+                    style={{ width: 34, height: 34, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, lineHeight: 1, cursor: 'pointer', flexShrink: 0, background: stamp === em ? c.field : 'transparent', boxShadow: stamp === em ? `0 0 0 2px ${c.bg}, 0 0 0 3.5px ${theme.coral}` : 'none', transition: 'box-shadow 160ms ease' }}>{em}</div>
                 ))}
               </div>
             )}
@@ -29622,51 +30915,28 @@ function DrawTogetherPage({ id, me, onClose, onSendImage }) {
       )}
       {sheet === 'brush' && (
         <PaintSheet title="Brushes" z={700} onClose={() => setSheet(null)}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10, paddingBottom: 8 }}>
-            {PAINT_BRUSHES.map((x) => (
-              <div key={x.k} role="button" aria-label={`Brush ${x.label}`} onClick={() => { hapticTap(); setBrush(x.k); setTool('brush'); setSheet(null); }} className="zchat-press"
-                style={{ borderRadius: 14, overflow: 'hidden', cursor: 'pointer', boxShadow: brush === x.k ? `0 0 0 2.5px ${theme.coral}` : `inset 0 0 0 1px ${theme.border}` }}>
-                {previews[x.k] && <img src={previews[x.k]} alt="" style={{ display: 'block', width: '100%', height: 54, objectFit: 'cover' }} />}
-                <div style={{ fontSize: 13.5, fontWeight: 700, color: theme.ink, padding: '7px 10px' }}>{x.label}</div>
-              </div>
-            ))}
-          </div>
+          <StudioTileGrid label="Brushes" cols={2} ratio={2.7} gap={14} value={brush} onChange={(k) => { setBrush(k); setTool('brush'); setSheet(null); }}
+            options={PAINT_BRUSHES.map((x) => ({ k: x.k, label: x.label, aria: `Brush ${x.label}`, bg: '#FFFFFF', art: previews[x.k] ? <img src={previews[x.k]} alt="" draggable={false} style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover' }} /> : null }))} />
         </PaintSheet>
       )}
       {sheet === 'shapes' && (
         <PaintSheet title="Shapes" z={700} onClose={() => setSheet(null)}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10, paddingBottom: 8 }}>
-            {PAINT_SHAPES.map((sp) => (
-              <div key={sp.k} role="button" aria-label={`Shape ${sp.label}`} onClick={() => { hapticTap(); setShape(sp.k); setTool('shapes'); setSheet(null); }} className="zchat-press"
-                style={{ height: 84, borderRadius: 14, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, boxShadow: shape === sp.k ? `0 0 0 2.5px ${theme.coral}` : `inset 0 0 0 1px ${theme.border}` }}>
-                <PaintShapeIcon k={sp.k} color={theme.ink} />
-                <div style={{ fontSize: 12.5, fontWeight: 700, color: theme.ink }}>{sp.label}</div>
-              </div>
-            ))}
-          </div>
+          <StudioTileGrid label="Shapes" cols={3} ratio={1.35} gap={12} value={shape} onChange={(k) => { setShape(k); setTool('shapes'); setSheet(null); }}
+            options={PAINT_SHAPES.map((sp) => ({ k: sp.k, label: sp.label, aria: `Shape ${sp.label}`, art: <PaintShapeIcon k={sp.k} color="currentColor" fill={fill} size={46} /> }))} />
         </PaintSheet>
       )}
       {sheet === 'stamp' && (
         <PaintSheet title="Stickers" z={700} onClose={() => setSheet(null)}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10, paddingBottom: 10 }}>
-            {PAINT_STAMPS.map((em) => (
-              <div key={em} role="button" aria-label={`Sticker ${em}`} onClick={() => { hapticTap(); setStamp(em); setTool('stamp'); setSheet(null); }} className="zchat-press"
-                style={{ height: 64, borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 34, cursor: 'pointer', boxShadow: stamp === em ? `0 0 0 2.5px ${theme.coral}` : `inset 0 0 0 1px ${theme.border}` }}>{em}</div>
-            ))}
-          </div>
+          <StudioTileGrid label="Stickers" cols={4} ratio={1} gap={12} value={stamp} onChange={(em) => { setStamp(em); setTool('stamp'); setSheet(null); }}
+            options={PAINT_STAMPS.map((em) => ({ k: em, aria: `Sticker ${em}`, art: <span style={{ fontSize: 34, lineHeight: 1 }}>{em}</span> }))} />
         </PaintSheet>
       )}
       {sheet === 'page' && (
         <PaintSheet title="Page" z={700} onClose={() => setSheet(null)}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: theme.muted, margin: '2px 0 10px' }}>Background for everyone</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10 }}>
-            {PAINT_BACKGROUNDS.map(([k, col, label]) => (
-              <div key={k} role="button" aria-label={`Background ${label}`} aria-pressed={bgKey === k} onClick={() => pickBg(k)} className="zchat-press" style={{ cursor: 'pointer', textAlign: 'center' }}>
-                <div style={{ height: 58, borderRadius: 12, background: col, backgroundImage: k === 'grid' ? 'linear-gradient(rgba(80,90,120,0.22) 1px, transparent 1px), linear-gradient(90deg, rgba(80,90,120,0.22) 1px, transparent 1px)' : k === 'dots' ? 'radial-gradient(rgba(80,90,120,0.35) 1.2px, transparent 1.4px)' : k === 'lines' ? 'linear-gradient(rgba(70,110,200,0.3) 1px, transparent 1px)' : 'none', backgroundSize: k === 'lines' ? '100% 9px' : '9px 9px', boxShadow: bgKey === k ? `0 0 0 2.5px ${theme.coral}` : `inset 0 0 0 1px ${theme.border}` }} />
-                <div style={{ fontSize: 12.5, fontWeight: 600, color: theme.ink, marginTop: 6 }}>{label}</div>
-              </div>
-            ))}
-          </div>
+          <KitSection title="Background for everyone" style={{ marginTop: 2 }}>
+            <PickTiles label="Background for everyone" size={60} bleed={18} value={bgKey} onChange={(k) => pickBg(k)}
+              options={PAINT_BACKGROUNDS.map(([k, col, label]) => ({ k, label, aria: `Background ${label}`, art: paintBgArt(k, col) }))} />
+          </KitSection>
           <div role="button" aria-label="Clear the page for everyone" onClick={() => { setSheet(null); if (count) setAskClear(true); }} className="zchat-row-press"
             style={{ display: 'flex', alignItems: 'center', gap: 12, minHeight: 52, marginTop: 14, cursor: count ? 'pointer' : 'default', opacity: count ? 1 : 0.4, color: theme.danger, fontSize: 15, fontWeight: 600 }}>
             <Trash2 size={19} />Clear the page for everyone
@@ -29931,6 +31201,19 @@ function VaultPinPage({ mode, uid, onDone, onClose, title }) {
   const [first, setFirst] = useState('');
   const [err, setErr] = useState(0);
   const [mismatch, setMismatch] = useState(false);
+  const bioOk = useBioReady();
+  const hasBio = step === 'check' && !!bioCredId() && bioOk === true;
+  const [bioBusy, setBioBusy] = useState(false);
+  const [bioMissed, setBioMissed] = useState(false);
+  const tryBio = async () => {
+    if (bioBusy) return;
+    setBioBusy(true);
+    const t0 = Date.now();
+    if (await bioCheck()) { playUiSound('toggle'); onDone(null); return; }
+    setBioBusy(false);
+    if (Date.now() - t0 > 900) setBioMissed(true);
+  };
+  useEffect(() => { if (hasBio) { const t = setTimeout(tryBio, 300); return () => clearTimeout(t); } return undefined; }, [hasBio]);
   const onPin = async (pin) => {
     const v = readVault(uid);
     if (step === 'check') {
@@ -29945,11 +31228,11 @@ function VaultPinPage({ mode, uid, onDone, onClose, title }) {
     playUiSound('like');
     onDone(pin);
   };
-  const sub = step === 'check' ? (err ? 'Wrong PIN, try again' : 'Enter your hidden chats PIN') : step === 'set' ? (mismatch ? 'The PINs did not match, start again' : 'Pick four digits for your hidden chats') : 'Type the same PIN again';
+  const sub = step === 'check' ? (err ? 'Wrong PIN, try again' : bioMissed ? 'Enter your PIN instead' : 'Enter your hidden chats PIN') : step === 'set' ? (mismatch ? 'The PINs did not match, start again' : 'Pick four digits for your hidden chats') : 'Type the same PIN again';
   return (
     <FullPage title={title || (step === 'check' ? 'Hidden chats' : 'Hidden chats PIN')} onBack={onClose} zIndex={90}>
       <div style={{ display: 'flex', justifyContent: 'center', padding: '18px 0 0', color: 'inherit' }}><EyeOff size={30} /></div>
-      <AppPinPad key={step} subtitle={sub} onComplete={onPin} error={err} />
+      <AppPinPad key={step} subtitle={sub} onComplete={onPin} error={err} corner={hasBio ? <BioKey busy={bioBusy} onClick={tryBio} /> : null} />
     </FullPage>
   );
 }
@@ -29969,7 +31252,7 @@ function HiddenChatsPage({ uid, conversations, archived, groups, onOpenDm, onOpe
     hapticTap();
   };
   const unhideBtn = (key, name) => (
-    <div role="button" aria-label={`Show ${name} in chats`} onClick={(e) => { e.stopPropagation(); setAskOff({ key, name }); }} className="zchat-press" style={{ padding: '7px 12px', borderRadius: 12, background: theme.rowBg, fontSize: 12.5, fontWeight: 800, color: theme.ink, cursor: 'pointer' }}>Unhide</div>
+    <div role="button" aria-label={`Show ${name} in chats`} onClick={(e) => { e.stopPropagation(); setAskOff({ key, name }); }} className="zchat-press" style={{ display: 'flex', alignItems: 'center', gap: 6, height: 40, padding: '0 4px 0 10px', fontSize: 15, fontWeight: 600, color: kitOnInk(theme), cursor: 'pointer', flexShrink: 0 }}><Eye size={17} strokeWidth={2} />Unhide</div>
   );
   return (
     <FullPage title="Hidden chats" subtitle="Only you can open these" onBack={onClose} zIndex={80}
@@ -29998,19 +31281,23 @@ function HiddenChatsPage({ uid, conversations, archived, groups, onOpenDm, onOpe
   );
 }
 
+const TRANSLATE_LANG_LOOK = { en: ['Aa', ''], si: ['අ', 'සිංහල'], ta: ['அ', 'தமிழ்'], hi: ['अ', 'हिन्दी'], ar: ['ع', 'العربية'], es: ['Ñ', 'Español'], fr: ['Ç', 'Français'], de: ['ß', 'Deutsch'], pt: ['Ã', 'Português'], ru: ['Я', 'Русский'], ja: ['あ', '日本語'], ko: ['한', '한국어'], zh: ['中', '中文'], id: ['Aa', 'Bahasa Indonesia'], ms: ['Aa', 'Bahasa Melayu'], th: ['ก', 'ไทย'], tr: ['Ş', 'Türkçe'], it: ['È', 'Italiano'], ur: ['ے', 'اردو'], bn: ['অ', 'বাংলা'] };
+function LangSample({ k }) {
+  const look = TRANSLATE_LANG_LOOK[k] || ['Aa', ''];
+  return <span aria-hidden="true" style={{ width: 28, textAlign: 'center', fontSize: look[0].length > 1 ? 15 : 18, fontWeight: 600, lineHeight: '24px', fontFamily: FONT }}>{look[0]}</span>;
+}
+function langChoiceOptions(ariaFor) {
+  return TRANSLATE_LANGS.map(([k, label]) => ({ k, label, aria: ariaFor(label), sub: (TRANSLATE_LANG_LOOK[k] || [])[1] || undefined, icon: <LangSample k={k} /> }));
+}
 function TranslateChatSheet({ chatKey, name, onClose }) {
   const { theme } = useTheme();
   const [cur, setCur] = useState(() => autoTrFor(chatKey));
-  const pick = (k) => { setAutoTr(chatKey, k); setCur(k); hapticTap(); onClose(); };
+  const pick = (k) => { setAutoTr(chatKey, k); setCur(k); onClose(); };
   const peek = (
-    <div style={{ padding: '10px 18px 6px' }}>
-      <div style={{ fontSize: 13, color: theme.muted, lineHeight: 1.5, marginBottom: 10 }}>New messages from {name} show up in the language you pick. Tap a message to see what they really wrote.</div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, paddingBottom: 8 }}>
-        <div role="button" aria-label="Translate off" onClick={() => pick(null)} className="zchat-press" style={{ padding: '8px 13px', borderRadius: 14, fontSize: 13, fontWeight: 800, cursor: 'pointer', background: !cur ? theme.coral : theme.rowBg, color: !cur ? '#FFFFFF' : theme.ink }}>Off</div>
-        {TRANSLATE_LANGS.map(([k, label]) => (
-          <div key={k} role="button" aria-label={`Translate into ${label}`} onClick={() => pick(k)} className="zchat-press" style={{ padding: '8px 13px', borderRadius: 14, fontSize: 13, fontWeight: 800, cursor: 'pointer', background: cur === k ? theme.coral : theme.rowBg, color: cur === k ? '#FFFFFF' : theme.ink }}>{label}</div>
-        ))}
-      </div>
+    <div style={{ padding: '10px 16px 6px' }}>
+      <div style={{ fontSize: 13, color: theme.muted, lineHeight: 1.5, padding: '0 4px 4px' }}>New messages from {name} show up in the language you pick. Tap a message to see what they really wrote.</div>
+      <ChoiceList label="Translate this chat" value={cur || 'off'} onChange={(k) => pick(k === 'off' ? null : k)}
+        options={[{ k: 'off', label: 'Off', aria: 'Translate off', sub: 'Show messages as they were written', icon: <KitGlyph k="none" size={24} /> }, ...langChoiceOptions((l) => `Translate into ${l}`)]} />
     </div>
   );
   return <ChatRowSheet title="Translate this chat" subtitle={cur ? `On, into ${(TRANSLATE_LANGS.find(([k]) => k === cur) || [0, 'English'])[1]}` : 'Off'} peek={peek} actions={[]} onClose={onClose} zIndex={96} />;
@@ -30024,21 +31311,52 @@ function FocusComposerSheet({ onSend, onClose }) {
   const [mins, setMins] = useState(25);
   const [label, setLabel] = useState('Study');
   const [busy, setBusy] = useState(false);
-  const chip = (on, text, fn, aria) => (
-    <div key={text} role="button" aria-label={aria || text} onClick={fn} className="zchat-press" style={{ padding: '9px 14px', borderRadius: 14, fontSize: 14, fontWeight: 800, cursor: 'pointer', background: on ? '#7C5CFF' : theme.rowBg, color: on ? '#FFFFFF' : theme.ink }}>{text}</div>
-  );
   return (
     <FullPage title="Focus together" onBack={onClose} zIndex={96}
       footer={<BigButton label={busy ? 'Starting' : `Start ${mins} minutes`} disabled={busy} onClick={async () => { setBusy(true); const ok = await onSend({ m: mins, t: label.trim().slice(0, 40) || 'Focus', at: new Date().toISOString() }); if (!ok) setBusy(false); }} />}>
-      <div style={{ display: 'flex', justifyContent: 'center', padding: '18px 0 8px', color: '#7C5CFF' }}><FocusIcon size={44} /></div>
-      <div style={{ textAlign: 'center', fontSize: 13.5, color: theme.muted, lineHeight: 1.5, padding: '0 10px 8px' }}>Start a timer and invite the chat to focus with you. While it runs, other chats stay quiet for everyone who joins.</div>
-      <IgHeading>How long</IgHeading>
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', padding: '0 2px' }}>{FOCUS_LENGTHS.map((m) => chip(mins === m, `${m} min`, () => setMins(m), `${m} minutes`))}</div>
-      <IgHeading>What for</IgHeading>
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', padding: '0 2px 10px' }}>{FOCUS_LABELS.map((l) => chip(label === l, l, () => setLabel(l)))}</div>
-      <input value={label} onChange={(e) => setLabel(e.target.value.slice(0, 40))} placeholder="Name it" aria-label="Focus session name" style={{ ...inputStyle(theme), marginTop: 4 }} />
+      <div style={{ display: 'flex', justifyContent: 'center', padding: '18px 0 8px', color: theme.coral }}><FocusIcon size={44} /></div>
+      <div style={{ textAlign: 'center', fontSize: 13.5, color: theme.muted, lineHeight: 1.5, padding: '0 10px 4px' }}>Start a timer and invite the chat to focus with you. While it runs, other chats stay quiet for everyone who joins.</div>
+      <KitSection title="How long" style={{ marginTop: 20 }}>
+        <PickTiles label="How long" size={62} fit value={mins} onChange={(m) => setMins(m)}
+          options={FOCUS_LENGTHS.map((m) => ({ k: m, label: `${m} min`, aria: `${m} minutes`, art: (on) => <FocusDialGlyph m={m} on={on} /> }))} />
+      </KitSection>
+      <KitSection title="What for" style={{ marginTop: 20 }}>
+        <PickTiles label="What for" size={62} fit value={FOCUS_LABELS.includes(label) ? label : null} onChange={(l) => setLabel(l)}
+          style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', rowGap: 16 }}
+          options={FOCUS_LABELS.map((l) => ({ k: l, label: l, aria: l, art: <FocusForGlyph k={l} /> }))} />
+      </KitSection>
+      <input value={label} onChange={(e) => setLabel(e.target.value.slice(0, 40))} placeholder="Or name it yourself" aria-label="Focus session name" style={{ ...inputStyle(theme), marginTop: 18 }} />
     </FullPage>
   );
+}
+function FocusDialGlyph({ m, on, size = 36 }) {
+  const a = (Math.min(60, Math.max(0, m)) / 60) * Math.PI * 2;
+  const r = 12;
+  const x = 16 + r * Math.sin(a);
+  const y = 16 - r * Math.cos(a);
+  const full = m >= 60;
+  const wedge = full ? null : `M16 16 L16 ${16 - r} A${r} ${r} 0 ${a > Math.PI ? 1 : 0} 1 ${x.toFixed(2)} ${y.toFixed(2)} Z`;
+  return (
+    <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true" style={{ display: 'block' }}>
+      {full ? <circle cx="16" cy="16" r={r} fill="currentColor" opacity={on ? 0.4 : 0.28} /> : <path d={wedge} fill="currentColor" opacity={on ? 0.4 : 0.28} />}
+      <circle cx="16" cy="16" r={r} fill="none" stroke="currentColor" strokeWidth="1.8" />
+      {!full && <path d={`M16 16 L16 ${16 - r} M16 16 L${x.toFixed(2)} ${y.toFixed(2)}`} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />}
+      <circle cx="16" cy="16" r="1.5" fill="currentColor" />
+    </svg>
+  );
+}
+function FocusForGlyph({ k, size = 32 }) {
+  const p = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round' };
+  const body = (() => {
+    if (k === 'Study') return <><path d="M3.5 12.6 16 7.2l12.5 5.4L16 18z" {...p} /><path d="M8.6 15v5.2c2 1.8 4.6 2.8 7.4 2.8s5.4-1 7.4-2.8V15" {...p} /><path d="M28.5 12.6v6.6" {...p} /></>;
+    if (k === 'Work') return <><rect x="4.5" y="10" width="23" height="15.5" rx="3" {...p} /><path d="M12 10V8.2a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2V10M4.5 16.6h23M14.4 16.6v2.2h3.2v-2.2" {...p} /></>;
+    if (k === 'Read') return <><path d="M16 9.6c-2.8-2-6.4-2.6-10.5-2v16c4.1-.6 7.7 0 10.5 2 2.8-2 6.4-2.6 10.5-2v-16c-4.1-.6-7.7 0-10.5 2z" {...p} /><path d="M16 9.6v16" {...p} /></>;
+    if (k === 'Workout') return <><path d="M10.6 16h10.8" {...p} /><rect x="6" y="10" width="4.6" height="12" rx="1.6" {...p} /><rect x="21.4" y="10" width="4.6" height="12" rx="1.6" {...p} /><path d="M6 13.4H3.8v5.2H6M26 13.4h2.2v5.2H26" {...p} /></>;
+    if (k === 'Clean up') return <><path d="M22.6 4.6 17.4 15" {...p} /><path d="M13.2 13.4l8 4-1.5 3.1c-.9 1.9-1.3 4.1-1.1 6.2l-12.4-6.2c1.9-.8 3.6-2.3 4.5-4.2z" {...p} /><path d="M10.2 23.6l2-3.3M13.8 25.4l1.5-3.5" {...p} /></>;
+    if (k === 'Create') return <><path d="M26.4 5.6 15 17" {...p} /><path d="M15 17c-2.6-.7-5.1.6-5.7 3.3-.4 1.9-1.5 3.3-3.6 4.1 3.3 1.6 7.6 1.2 9.9-1.2 1.5-1.6 1.5-3.7-.6-6.2z" {...p} /><path d="M23.4 8.6l2 2" {...p} /></>;
+    return <circle cx="16" cy="16" r="9" {...p} />;
+  })();
+  return <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true" style={{ display: 'block', flexShrink: 0 }}>{body}</svg>;
 }
 
 function BroadcastPage({ userId, me, blockedIds, onClose, onSend }) {
@@ -30205,44 +31523,44 @@ function StatusSheet({ me, onClose, onSaved }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [pickEmoji, setPickEmoji] = useState(false);
+  const listedEmoji = STATUS_EMOJIS.find((x) => x.replace(/\uFE0F/g, '') === String(emoji || '').replace(/\uFE0F/g, '')) || null;
   const save = async (clear) => {
     if (busy) return;
     const patch = clear ? { status_text: null, status_emoji: null, status_until: null } : { status_text: text.trim().slice(0, 60) || null, status_emoji: emoji || null, status_until: statusUntilFor(time) };
     if (!clear && !patch.status_text) { setErr('Write a few words'); return; }
-    setBusy(true);
+    const before = { status_text: me.status_text || null, status_emoji: me.status_emoji || null, status_until: me.status_until || null };
     setErr('');
-    const { error } = await supabase.from('profiles').update(patch).eq('id', me.id);
-    setBusy(false);
-    if (error) { setErr(/status|column|schema/i.test(String(error.message || '')) ? 'Status switches on once the latest ZChat setup is finished.' : 'That could not be saved. Try again.'); return; }
     hapticTap();
     onSaved(patch);
     onClose();
+    const { error } = await supabase.from('profiles').update(patch).eq('id', me.id);
+    if (error) {
+      patchMyProfile(me.id, before);
+      appSnack(/status|column|schema/i.test(String(error.message || '')) ? 'Status switches on once the latest ZChat setup is finished.' : friendlyError(error, 'Your status could not be saved. Try again.'));
+    }
   };
   return (
     <FullPage title="Your status" subtitle="Shows on your profile and in chats" onBack={onClose} zIndex={72}
       footer={<div style={{ display: 'flex', gap: 8 }}>{cur && <BigButton label="Clear" tone="plain" onClick={() => save(true)} style={{ flex: '0 0 110px' }} />}<BigButton label={busy ? 'Saving' : 'Set status'} disabled={busy} onClick={() => save(false)} /></div>}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 14 }}>
-        <div role="button" aria-label="Pick status emoji" onClick={() => setPickEmoji(true)} className="zchat-press" style={{ width: 50, height: 50, borderRadius: 16, background: theme.rowBg, border: `1px solid ${theme.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, cursor: 'pointer', flexShrink: 0 }}>{emoji || '\u{1F60A}'}</div>
-        <input value={text} onChange={(e) => setText(e.target.value.slice(0, 60))} placeholder="What are you up to?" aria-label="Status text" style={{ ...inputStyle(theme), flex: 1 }} />
+      <div style={{ position: 'relative', marginTop: 14 }}>
+        <span aria-hidden="true" style={{ position: 'absolute', left: 14, top: 0, bottom: 0, display: 'flex', alignItems: 'center', pointerEvents: 'none' }}><StatusMark e={emoji} size={22} /></span>
+        <input value={text} onChange={(e) => setText(e.target.value.slice(0, 60))} placeholder="What are you up to?" aria-label="Status text" style={{ ...inputStyle(theme), paddingLeft: 48 }} />
       </div>
-      <div style={{ display: 'flex', gap: 6, overflowX: 'auto', padding: '10px 0 2px', scrollbarWidth: 'none' }}>
-        {STATUS_EMOJIS.map((e) => (
-          <div key={e} role="button" aria-label={`Emoji ${e}`} onClick={() => setEmoji(e)} style={{ width: 38, height: 38, flexShrink: 0, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 21, cursor: 'pointer', background: emoji === e ? `${theme.coral}22` : 'transparent', border: `1px solid ${emoji === e ? theme.coral : 'transparent'}` }}>{e}</div>
-        ))}
-      </div>
-      <IgHeading>Ideas</IgHeading>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '0 2px' }}>
-        {STATUS_PRESETS.map(([e, t]) => (
-          <div key={t} role="button" aria-label={`Use status ${t}`} onClick={() => { setEmoji(e); setText(t); hapticTap(); }} className="zchat-press" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 14, background: theme.rowBg, fontSize: 13.5, fontWeight: 700, color: theme.ink, cursor: 'pointer' }}><span style={{ fontSize: 15 }}>{e}</span>{t}</div>
-        ))}
-      </div>
-      <IgHeading>Clear after</IgHeading>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '0 2px' }}>
-        {STATUS_TIMES.map(([l, v]) => (
-          <div key={l} role="button" aria-label={`Clear after ${l}`} onClick={() => setTime(v)} className="zchat-press" style={{ padding: '8px 13px', borderRadius: 14, fontSize: 13.5, fontWeight: 800, cursor: 'pointer', background: time === v ? theme.coral : theme.rowBg, color: time === v ? '#FFFFFF' : theme.ink }}>{l}</div>
-        ))}
-      </div>
-      {cur && <div style={{ padding: '14px 2px 0', fontSize: 12.5, color: theme.muted }}>Now: {statusLabel(cur)}, {statusLeftLabel(me.status_until)}</div>}
+      <KitSection title="Icon">
+        <PickTiles label="Status icon" size={54} bleed={16} value={listedEmoji || (emoji ? 'more' : null)} onChange={(k) => { if (k === 'more') setPickEmoji(true); else setEmoji(k); }}
+          options={[...STATUS_EMOJIS.map((e) => { const g = statusGlyphOf(e); return { k: e, label: g ? g[2] : e, aria: `Emoji ${e}`, art: g ? <LineGlyph k={g[0]} size={26} color={g[1]} /> : <span style={{ fontSize: 24 }}>{e}</span> }; }),
+            { k: 'more', label: emoji && !listedEmoji ? 'Yours' : 'More', aria: 'Pick status emoji', art: emoji && !listedEmoji ? <span style={{ fontSize: 25, lineHeight: 1 }}>{emoji}</span> : <LineGlyph k="emojiadd" size={26} /> }]} />
+      </KitSection>
+      <KitSection title="Ideas">
+        <ChoiceList label="Status ideas" value={STATUS_PRESETS.some(([, t]) => t === text.trim()) ? text.trim() : null}
+          onChange={(t) => { const p = STATUS_PRESETS.find(([, x]) => x === t); if (p) { setEmoji(p[0]); setText(p[1]); } }}
+          options={STATUS_PRESETS.map(([e, t]) => ({ k: t, label: t, aria: `Use status ${t}`, icon: <StatusMark e={e} size={22} /> }))} />
+      </KitSection>
+      <KitSection title="Clear after">
+        <ChoiceList label="Clear after" value={time === null ? 'keep' : time} onChange={(k) => setTime(k === 'keep' ? null : k)}
+          options={STATUS_TIMES.map(([l, v]) => ({ k: v === null ? 'keep' : v, label: l, aria: `Clear after ${l}` }))} />
+      </KitSection>
+      {cur && <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '16px 2px 0', fontSize: 12.5, color: theme.muted }}>Now showing<StatusMark e={cur.e} size={15} /><span style={{ minWidth: 0 }}>{cur.t ? `${cur.t}, ${statusLeftLabel(me.status_until).toLowerCase()}` : statusLeftLabel(me.status_until)}</span></div>}
       {err && <div role="alert" style={{ padding: '12px 2px 0', fontSize: 13, fontWeight: 700, color: theme.danger }}>{err}</div>}
       {pickEmoji && <FullEmojiPicker onClose={() => setPickEmoji(false)} onPick={(e) => { setEmoji(e); setPickEmoji(false); }} />}
     </FullPage>
@@ -30253,10 +31571,12 @@ const BIRTHDAY_SHOW = [['followers', 'My followers'], ['mutual', 'Friends who fo
 function BirthdaySheet({ userId, onClose }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
-  const [row, setRow] = useState(undefined);
-  const [month, setMonth] = useState(1);
-  const [day, setDay] = useState(1);
-  const [show, setShow] = useState('followers');
+  const bdMem = birthdayRowMem.has(userId) ? birthdayRowMem.get(userId) : undefined;
+  const bdParts = bdMem && bdMem.md ? bdMem.md.split('-').map((n) => parseInt(n, 10)) : null;
+  const [row, setRow] = useState(bdMem);
+  const [month, setMonth] = useState(bdParts && bdParts[0] ? bdParts[0] : 1);
+  const [day, setDay] = useState(bdParts && bdParts[1] ? bdParts[1] : 1);
+  const [show, setShow] = useState((bdMem && bdMem.show) || 'followers');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   useEffect(() => {
@@ -30271,21 +31591,23 @@ function BirthdaySheet({ userId, onClose }) {
   }, [userId]);
   const daysIn = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1];
   const md = `${String(month).padStart(2, '0')}-${String(Math.min(day, daysIn)).padStart(2, '0')}`;
+  const announce = (r) => { try { window.dispatchEvent(new CustomEvent('zchat-birthday-changed', { detail: { uid: userId, row: r } })); } catch {} };
   const save = async () => {
     if (busy) return;
-    setBusy(true);
+    const before = birthdayRowMem.has(userId) ? birthdayRowMem.get(userId) : (row || null);
     setErr('');
-    const { error } = await supabase.from('birthdays').upsert({ user_id: userId, md, show, updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
-    setBusy(false);
-    if (error) { setErr('That could not be saved. Try again.'); return; }
     hapticTap();
-    try { window.dispatchEvent(new Event('zchat-birthday-changed')); } catch {}
+    announce({ md, show });
     onClose();
+    const { error } = await supabase.from('birthdays').upsert({ user_id: userId, md, show, updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
+    if (error) { announce(before || null); appSnack(friendlyError(error, 'Your birthday could not be saved. Try again.')); }
   };
   const remove = async () => {
-    await supabase.from('birthdays').delete().eq('user_id', userId);
-    try { window.dispatchEvent(new Event('zchat-birthday-changed')); } catch {}
+    const before = birthdayRowMem.has(userId) ? birthdayRowMem.get(userId) : (row || null);
+    announce(null);
     onClose();
+    const { error } = await supabase.from('birthdays').delete().eq('user_id', userId);
+    if (error) { announce(before || null); appSnack(friendlyError(error, 'Your birthday could not be removed. Try again.')); }
   };
   const sel = { ...inputStyle(theme), appearance: 'none', WebkitAppearance: 'none', cursor: 'pointer' };
   return (
@@ -30326,16 +31648,21 @@ function AwayMessagePage({ me, onClose, onSaved }) {
     if (busy) return;
     const clean = text.trim().slice(0, 300);
     if (nextOn && !clean) { setErr('Write your away message first'); return; }
-    setBusy(true);
     setErr('');
     const patch = { away_on: !!nextOn, away_text: clean || null };
-    const { error } = await supabase.from('profiles').update(patch).eq('id', me.id);
-    setBusy(false);
-    if (error) { setErr(/away|column|schema/i.test(String(error.message || '')) ? 'Away messages switch on once the latest ZChat setup is finished.' : 'That could not be saved. Try again.'); return; }
+    const before = { away_on: !!(me && me.away_on), away_text: (me && me.away_text) || null };
+    const wasOn = on;
     setOn(!!nextOn);
     setSaved(true);
     setTimeout(() => setSaved(false), 1600);
     onSaved(patch);
+    const { error } = await supabase.from('profiles').update(patch).eq('id', me.id);
+    if (error) {
+      setOn(wasOn);
+      setSaved(false);
+      onSaved(before);
+      setErr(/away|column|schema/i.test(String(error.message || '')) ? 'Away messages switch on once the latest ZChat setup is finished.' : 'That could not be saved. Try again.');
+    }
   };
   return (
     <FullPage title="Away message" onBack={onClose} zIndex={72} footer={<BigButton label={busy ? 'Saving' : saved ? 'Saved' : 'Save message'} disabled={busy} onClick={() => save(on)} />}>
@@ -30357,9 +31684,13 @@ function NoteBubble({ text, muted, onClick, label, song }) {
   const { theme } = useTheme();
   const bg = theme.dark ? '#2A2A30' : '#FFFFFF';
   const extra = song ? (text && text !== song.t ? text : song.a) : '';
+  const rootRef = useRef(null);
+  useSongWarm(song, rootRef);
   return (
-    <div role="button" aria-label={label} onClick={(e) => { e.stopPropagation(); if (onClick) onClick(); }} style={{ position: 'relative', zIndex: 8, maxWidth: 82, minWidth: 34, boxSizing: 'border-box', padding: '5px 8px', borderRadius: 14, background: bg, boxShadow: '0 2px 8px rgba(0,0,0,0.16)', cursor: 'pointer', marginBottom: -8 }}>
-      {song ? (
+    <div ref={rootRef} role="button" aria-label={label} onClick={(e) => { e.stopPropagation(); if (onClick) onClick(); }} style={{ position: 'relative', zIndex: 8, maxWidth: 82, minWidth: 34, boxSizing: 'border-box', padding: '5px 9px', borderRadius: 15, background: bg, boxShadow: theme.dark ? '0 2px 8px rgba(0,0,0,0.35)' : '0 1px 2px rgba(0,0,0,0.06), 0 3px 10px rgba(0,0,0,0.1)', cursor: 'pointer', marginBottom: -8 }}>
+      {muted && text === '+ Note' ? (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3, fontSize: 10.5, fontWeight: 600, lineHeight: 1.25, color: theme.muted }}><LineGlyph k="plus" size={10} sw={3.6} />Note</div>
+      ) : song ? (
         <>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3, minWidth: 0 }}>
             <MusicNoteIcon size={9} color={theme.coral} style={{ flexShrink: 0 }} />
@@ -30368,7 +31699,8 @@ function NoteBubble({ text, muted, onClick, label, song }) {
           {extra && <div style={{ fontSize: 9.5, fontWeight: 600, lineHeight: 1.25, color: text && text !== song.t ? theme.ink : theme.muted, textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{extra}</div>}
         </>
       ) : <div style={{ fontSize: 10.5, fontWeight: 600, lineHeight: 1.25, color: muted ? theme.muted : theme.ink, textAlign: 'center', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', wordBreak: 'break-word' }}>{text}</div>}
-      <span aria-hidden="true" style={{ position: 'absolute', left: 14, bottom: -4, width: 7, height: 7, borderRadius: '50%', background: bg }} />
+      <span aria-hidden="true" style={{ position: 'absolute', left: 13, bottom: -5, width: 8, height: 8, borderRadius: '50%', background: bg }} />
+      <span aria-hidden="true" style={{ position: 'absolute', left: 9, bottom: -10, width: 4, height: 4, borderRadius: '50%', background: bg, boxShadow: theme.dark ? 'none' : '0 1px 2px rgba(0,0,0,0.12)' }} />
     </div>
   );
 }
@@ -30379,51 +31711,64 @@ function NoteComposerSheet({ userId, mine, onClose, onSaved, country }) {
   const [song, setSong] = useState(() => (mine ? validSong(mine.song) : null));
   const [text, setText] = useState(() => (mine && !(song && mine.text === song.t) ? mine.text : ''));
   const [picker, setPicker] = useState(false);
-  useEffect(() => () => stopSong(), []);
+  useEffect(() => { prefetchMusic(country); return () => stopSong(); }, []);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const meRow = useMemo(() => readMeCache(userId), [userId]);
+  const noteBg = theme.dark ? '#2A2A30' : '#FFFFFF';
   const share = async () => {
     const clean = (text.trim() || (song ? song.t : '')).slice(0, 60);
     if (!clean || busy) return;
-    setBusy(true);
     setErr('');
     stopSong();
     const now = new Date();
     const row = { user_id: userId, text: clean, created_at: now.toISOString(), expires_at: new Date(now.getTime() + 86400000).toISOString(), song: song || null };
+    const before = mine || null;
+    hapticTap();
+    onSaved({ ...row });
+    onClose();
     let { error } = await supabase.from('notes').upsert(row, { onConflict: 'user_id' });
     if (error && song && /song/i.test(String(error.message || ''))) {
       delete row.song;
       ({ error } = await supabase.from('notes').upsert(row, { onConflict: 'user_id' }));
+      if (!error) onSaved({ ...row });
     }
-    setBusy(false);
-    if (error) { setErr(/notes|schema|relation/i.test(String(error.message || '')) ? 'Notes switch on once the latest ZChat setup is finished.' : 'That could not be shared. Try again.'); return; }
-    hapticTap();
-    onSaved(row);
-    onClose();
+    if (error) { onSaved(before); appSnack(/notes|schema|relation/i.test(String(error.message || '')) ? 'Notes switch on once the latest ZChat setup is finished.' : friendlyError(error, 'Your note could not be shared. Try again.')); }
   };
   const remove = async () => {
-    await supabase.from('notes').delete().eq('user_id', userId);
+    const before = mine || null;
     onSaved(null);
     onClose();
+    const { error } = await supabase.from('notes').delete().eq('user_id', userId);
+    if (error) { onSaved(before); appSnack(friendlyError(error, 'Your note could not be deleted. Try again.')); }
   };
   return (
     <FullPage title="New note" subtitle="Mutual friends see it for 24 hours" onBack={onClose} zIndex={72}
       footer={<div style={{ display: 'flex', gap: 8 }}>{mine && <BigButton label="Delete" tone="plain" onClick={remove} style={{ flex: '0 0 110px' }} />}<BigButton label={busy ? 'Sharing' : 'Share note'} disabled={busy || (!text.trim() && !song)} onClick={share} /></div>}>
-      <div style={{ display: 'flex', justifyContent: 'center', padding: '30px 0 8px' }}>
-        <div style={{ padding: '12px 18px', borderRadius: 22, background: theme.rowBg, border: `1px solid ${theme.border}`, maxWidth: 260, textAlign: 'center', fontSize: 16, fontWeight: 700, color: text.trim() || song ? theme.ink : theme.muted, wordBreak: 'break-word' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '26px 0 2px' }}>
+        <div style={{ position: 'relative', zIndex: 1, maxWidth: 250, boxSizing: 'border-box', padding: '12px 18px', borderRadius: 22, marginBottom: 16, background: noteBg, boxShadow: theme.dark ? '0 4px 16px rgba(0,0,0,0.4)' : '0 1px 3px rgba(0,0,0,0.06), 0 6px 18px rgba(0,0,0,0.1)', textAlign: 'center', fontSize: 16, fontWeight: 700, color: text.trim() || song ? theme.ink : theme.muted, wordBreak: 'break-word' }}>
           {song && <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 13.5, fontWeight: 700, color: theme.ink, marginBottom: text.trim() ? 4 : 0, minWidth: 0 }}><MusicNoteIcon size={14} color={theme.coral} style={{ flexShrink: 0 }} /><span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{song.t}</span></div>}
           {(text.trim() || !song) && <div>{text.trim() || 'Share a thought'}</div>}
           {song && !text.trim() && <div style={{ fontSize: 12.5, fontWeight: 600, color: theme.muted, marginTop: 2 }}>{song.a}</div>}
+          <span aria-hidden="true" style={{ position: 'absolute', left: 28, bottom: -8, width: 15, height: 15, borderRadius: '50%', background: noteBg }} />
+          <span aria-hidden="true" style={{ position: 'absolute', left: 21, bottom: -17, width: 7, height: 7, borderRadius: '50%', background: noteBg, boxShadow: theme.dark ? 'none' : '0 1px 3px rgba(0,0,0,0.12)' }} />
         </div>
+        <Avatar emoji={meRow && meRow.avatar} name={(meRow && meRow.name) || ''} size={72} />
+        <div style={{ fontSize: 12.5, color: theme.muted, marginTop: 7 }}>How friends see it</div>
       </div>
       <input value={text} onChange={(e) => setText(e.target.value.slice(0, 60))} placeholder="What is on your mind?" aria-label="Note text" autoFocus style={{ ...inputStyle(theme), marginTop: 14, textAlign: 'center' }} />
       <div style={{ textAlign: 'center', fontSize: 12, color: theme.muted, padding: '6px 0 0' }}>{text.length}/60</div>
-      <div style={{ display: 'flex', justifyContent: 'center', marginTop: 18 }}>
+      <div style={{ display: 'flex', justifyContent: 'center', marginTop: 16 }}>
         {song ? (
           <SongPill song={song} style={{ width: '100%' }} right={<div role="button" aria-label="Remove music" onClick={(e) => { e.stopPropagation(); stopSong(); setSong(null); }} style={{ width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.muted, cursor: 'pointer', flexShrink: 0 }}><X size={16} /></div>} />
         ) : (
-          <div role="button" aria-label="Add music" onClick={() => setPicker(true)} className="zchat-press" style={{ display: 'flex', alignItems: 'center', gap: 8, height: 40, padding: '0 17px', borderRadius: 20, border: `1px solid ${theme.border}`, color: theme.ink, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
-            <MusicNoteIcon size={16} />Add music
+          <div role="button" aria-label="Add music" onClick={() => setPicker(true)} className="zchat-row-press" style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 14, minHeight: 58, padding: '6px 4px', borderRadius: 12, cursor: 'pointer' }}>
+            <span style={{ width: 28, display: 'flex', justifyContent: 'center', color: kitOnInk(theme), flexShrink: 0 }}><LineGlyph k="note" size={24} /></span>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ display: 'block', fontSize: 15.5, fontWeight: 600, color: theme.ink }}>Add music</span>
+              <span style={{ display: 'block', fontSize: 12.5, color: theme.muted, marginTop: 2 }}>Friends hear it when they open your note</span>
+            </span>
+            <ChevronRight size={18} color={theme.muted} style={{ flexShrink: 0 }} />
           </div>
         )}
       </div>
@@ -30442,6 +31787,7 @@ function NoteReplySheet({ note, profile, onClose, onSend }) {
   const [sent, setSent] = useState(false);
   const ns = validSong(note.song);
   const playing = useSongPlaying();
+  const songWaiting = useSongWait();
   useEffect(() => {
     if (ns && songPlayer.id !== ns.id) playSong(ns, true);
     return () => stopSong();
@@ -30471,7 +31817,7 @@ function NoteReplySheet({ note, profile, onClose, onSend }) {
                     <div style={{ fontSize: 13.5, fontWeight: 700, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ns.t}</div>
                     <div style={{ fontSize: 12, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ns.a}</div>
                   </div>
-                  <div style={{ width: 32, height: 32, borderRadius: '50%', background: theme.coral, color: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{playing === ns.id ? <SongBars /> : <Play size={15} fill="#FFFFFF" />}</div>
+                  <div style={{ width: 32, height: 32, borderRadius: '50%', background: theme.coral, color: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{playing === ns.id ? (songWaiting ? <Spinner size={13} color="#FFFFFF" /> : <SongBars color="#FFFFFF" size={13} />) : <Play size={15} fill="#FFFFFF" />}</div>
                 </div>
               )}
               <span aria-hidden="true" style={{ position: 'absolute', left: 22, bottom: -7, width: 14, height: 14, borderRadius: '50%', background: bubbleBg }} />
@@ -30500,7 +31846,7 @@ function NoteReplySheet({ note, profile, onClose, onSend }) {
   );
 }
 
-const songPlayer = { el: null, id: null, cur: null, hold: false, seq: 0 };
+const songPlayer = { el: null, id: null, cur: null, hold: false, seq: 0, wait: false, unlocked: false };
 function songPing() { try { window.dispatchEvent(new Event('zchat-song')); } catch {} }
 const SONG_LOOKS = ['pill', 'vinyl', 'card'];
 function validSong(s) {
@@ -30520,32 +31866,78 @@ function useSongPlaying() {
   }, []);
   return id;
 }
+function useSongWait() {
+  const [wait, setWait] = useState(songPlayer.wait);
+  useEffect(() => {
+    const on = () => setWait(songPlayer.wait);
+    window.addEventListener('zchat-song', on);
+    return () => window.removeEventListener('zchat-song', on);
+  }, []);
+  return wait;
+}
 function songEl() {
   if (!songPlayer.el) {
     const el = new Audio();
-    el.preload = 'none';
-    el.addEventListener('ended', () => { songPlayer.id = null; songPing(); });
-    el.addEventListener('pause', () => { if (songPlayer.hold) return; if (songPlayer.id && !el.ended && el.currentTime > 0) { songPlayer.id = null; songPing(); } });
+    el.preload = 'auto';
+    el.addEventListener('ended', () => { songPlayer.id = null; songPlayer.wait = false; songPing(); });
+    el.addEventListener('pause', () => { if (songPlayer.hold) return; if (songPlayer.id && !el.ended && el.currentTime > 0) { songPlayer.id = null; songPlayer.wait = false; songPing(); } });
+    el.addEventListener('playing', () => { songPlayer.unlocked = true; unparkSongs(); if (songPlayer.wait) { songPlayer.wait = false; songPing(); } });
+    el.addEventListener('waiting', () => { if (songPlayer.id && !songPlayer.wait) { songPlayer.wait = true; songPing(); } });
     songPlayer.el = el;
   }
   return songPlayer.el;
+}
+function startSongEl(el, want, token) {
+  const pr = el.play();
+  if (pr && pr.catch) {
+    pr.catch(() => { if (songPlayer.seq === token && songPlayer.id === want) { songPlayer.id = null; songPlayer.wait = false; songPing(); } });
+    return pr;
+  }
+  return null;
 }
 function playSong(song, restart) {
   if (!song) return null;
   try {
     const el = songEl();
-    songPlayer.hold = false;
     const want = song.id;
-    if (songPlayer.cur !== song.id || !el.getAttribute('src')) { songPlayer.cur = song.id; el.src = song.p; }
-    else if (restart) { try { el.currentTime = 0; } catch { el.src = song.p; } }
-    songPlayer.id = song.id;
-    songPing();
     const token = ++songPlayer.seq;
-    const pr = el.play();
-    if (pr && pr.catch) {
-      pr.catch(() => { if (songPlayer.seq === token && songPlayer.id === want) { songPlayer.id = null; songPing(); } });
-      return pr;
-    }
+    hushOtherMedia(null, true);
+    if (songPlayer.cur !== song.id || !el.getAttribute('src')) {
+      songPlayer.cur = song.id;
+      const st = songWarm.get(song.p);
+      const guess = songStreamGuess(st);
+      if (st && !st.url && st.job && songMayDefer() && songEta(st) <= guess) {
+        songPlayer.hold = true;
+        try { el.pause(); } catch {}
+        if (el.getAttribute('src')) { el.removeAttribute('src'); try { el.load(); } catch {} }
+        songPlayer.id = song.id;
+        songPlayer.wait = true;
+        songPing();
+        stopSongFetches(song.p);
+        return new Promise((resolve) => {
+          let done = false;
+          const go = (u) => {
+            if (done) return;
+            done = true;
+            clearTimeout(timer);
+            if (songPlayer.seq !== token || songPlayer.id !== want) { resolve(undefined); return; }
+            if (!u && st.ctrl) { try { st.ctrl.abort(); } catch {} }
+            songPlayer.hold = false;
+            if (!el.getAttribute('src')) el.src = u || song.p;
+            resolve(startSongEl(el, want, token));
+          };
+          const timer = setTimeout(() => go(null), Math.min(900, guess + 250));
+          st.job.then(go, () => go(null));
+        });
+      }
+      if (!(st && st.url)) { if (st && st.ctrl) { try { st.ctrl.abort(); } catch {} } stopSongFetches(song.p); }
+      el.src = st && st.url ? st.url : song.p;
+    } else if (restart) { try { el.currentTime = 0; } catch { el.src = songSrcOf(song); } }
+    songPlayer.hold = false;
+    songPlayer.id = song.id;
+    songPlayer.wait = el.paused || el.readyState < 3;
+    songPing();
+    return startSongEl(el, want, token);
   } catch {}
   return null;
 }
@@ -30558,28 +31950,206 @@ function primeSong(song) {
     try { el.pause(); } catch {}
     songPlayer.cur = song.id;
     el.preload = 'auto';
-    el.src = song.p;
-    try { el.load(); } catch {}
-    if (songPlayer.id) { songPlayer.id = null; songPing(); }
+    const st = songWarm.get(song.p);
+    if (st && !st.url && st.job && songEta(st) < 1500) { if (el.getAttribute('src')) { el.removeAttribute('src'); try { el.load(); } catch {} } }
+    else {
+      if (st && !st.url && st.ctrl) { try { st.ctrl.abort(); } catch {} }
+      el.src = st && st.url ? st.url : song.p;
+      try { el.load(); } catch {}
+    }
+    if (songPlayer.id) { songPlayer.id = null; songPlayer.wait = false; songPing(); }
   } catch {}
 }
 const songWarm = new Map();
-function warmSong(song) {
-  if (!song || songWarm.has(song.p) || songWarm.size > 6) return;
+const songWarmQ = [];
+let songWarmRun = 0;
+const songFetchFails = new Map();
+const songHosts = new Set();
+function songHost(p) { try { return new URL(p, window.location.href).origin; } catch { return ''; } }
+function songSrcOf(song) { const st = songWarm.get(song.p); return st && st.url ? st.url : song.p; }
+function preconnectSong(p) {
+  const h = songHost(p);
+  if (!h || songHosts.has(h) || h === window.location.origin) return;
+  songHosts.add(h);
   try {
-    const a = new Audio();
-    a.preload = 'auto';
-    a.muted = true;
-    a.src = song.p;
-    try { a.load(); } catch {}
-    songWarm.set(song.p, a);
-    setTimeout(() => { const x = songWarm.get(song.p); if (x) { try { x.removeAttribute('src'); x.load(); } catch {} songWarm.delete(song.p); } }, 60000);
+    [true, false].forEach((anon) => {
+      const l = document.createElement('link');
+      l.rel = 'preconnect';
+      l.href = h;
+      if (anon) l.crossOrigin = 'anonymous';
+      document.head.appendChild(l);
+    });
   } catch {}
 }
+function songMayFetch(p) {
+  if (typeof fetch !== 'function' || typeof Blob === 'undefined' || !URL.createObjectURL) return false;
+  if ((songFetchFails.get(songHost(p)) || 0) >= 2 || dataSaverOn()) return false;
+  try { const c = navigator.connection; if (c && (c.saveData || /2g$/.test(String(c.effectiveType || '')))) return false; } catch {}
+  return true;
+}
+function songEta(st) {
+  if (!st || st.url) return 0;
+  if (!st.job || !st.total || !st.got) return Infinity;
+  const rate = st.got / Math.max(1, performance.now() - st.t1);
+  return (st.total - st.got) / Math.max(rate, 0.001);
+}
+function songStreamGuess(st) {
+  if (!st || !st.got || !st.t1) return 250;
+  const rate = st.got / Math.max(1, performance.now() - st.t1);
+  return Math.max(250, (st.t1 - st.t0) + 150000 / Math.max(rate, 0.001));
+}
+function songMayDefer() {
+  if (songPlayer.unlocked) return true;
+  try {
+    const ua = navigator.userAgent || '';
+    if (/AppleWebKit/.test(ua) && !/Chrome|Chromium|CriOS|Android|EdgiOS|FxiOS/.test(ua)) return false;
+    return !!(navigator.userActivation && navigator.userActivation.hasBeenActive);
+  } catch { return false; }
+}
+async function fetchSongBlob(p, st) {
+  const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  st.ctrl = ctrl;
+  st.t0 = performance.now();
+  try {
+    const res = await fetch(p, { mode: 'cors', credentials: 'omit', cache: 'force-cache', signal: ctrl ? ctrl.signal : undefined });
+    if (!res.ok) throw new Error('song');
+    st.t1 = performance.now();
+    st.total = Number(res.headers.get('content-length')) || 0;
+    const parts = [];
+    if (res.body && res.body.getReader) {
+      const rd = res.body.getReader();
+      for (;;) {
+        const { done, value } = await rd.read();
+        if (done) break;
+        parts.push(value);
+        st.got += value.byteLength;
+      }
+    } else {
+      const buf = await res.arrayBuffer();
+      parts.push(new Uint8Array(buf));
+      st.got = buf.byteLength;
+    }
+    const blob = new Blob(parts, { type: res.headers.get('content-type') || 'audio/mp4' });
+    if (!blob.size) throw new Error('song');
+    st.url = URL.createObjectURL(blob);
+    st.job = null;
+    st.ctrl = null;
+    return st.url;
+  } catch (e) {
+    st.job = null;
+    st.ctrl = null;
+    if (!(e && e.name === 'AbortError')) { const h = songHost(p); songFetchFails.set(h, (songFetchFails.get(h) || 0) + 1); }
+    if (songWarm.get(p) === st) songWarm.delete(p);
+    return null;
+  }
+}
+function pumpSongWarm() {
+  while (songWarmRun < 1 && songWarmQ.length) {
+    const p = songWarmQ.shift();
+    const st = songWarm.get(p);
+    if (!st || st.job || st.url) continue;
+    songWarmRun += 1;
+    st.job = fetchSongBlob(p, st);
+    st.job.then(() => { songWarmRun -= 1; pumpSongWarm(); });
+  }
+}
+function trimSongWarm() {
+  for (const [p, st] of songWarm) {
+    if (songWarm.size <= 8) break;
+    if (st.url && songPlayer.el && songPlayer.el.getAttribute('src') === st.url) continue;
+    if (st.ctrl) { try { st.ctrl.abort(); } catch {} }
+    if (st.url) { try { URL.revokeObjectURL(st.url); } catch {} }
+    songWarm.delete(p);
+    const qi = songWarmQ.indexOf(p);
+    if (qi >= 0) songWarmQ.splice(qi, 1);
+  }
+}
+const songParked = [];
+function stopSongFetches(keep) {
+  const park = (p) => { if (p !== keep && !songParked.includes(p)) songParked.push(p); };
+  songWarmQ.splice(0).forEach((p) => { if (p !== keep) { songWarm.delete(p); park(p); } });
+  songWarm.forEach((st, p) => { if (p !== keep && !st.url && st.ctrl) { park(p); try { st.ctrl.abort(); } catch {} } });
+  if (songParked.length > 4) songParked.splice(0, songParked.length - 4);
+}
+function unparkSongs() {
+  if (!songParked.length) return;
+  const ps = songParked.splice(0);
+  setTimeout(() => ps.forEach((p) => { if (!songPlayer.el || songPlayer.el.getAttribute('src') !== p) warmSong({ p }); }), 400);
+}
+function warmSong(song, first) {
+  if (!song || !song.p) return;
+  preconnectSong(song.p);
+  if (songWarm.has(song.p)) {
+    const qi = first ? songWarmQ.indexOf(song.p) : -1;
+    if (qi > 0) { songWarmQ.splice(qi, 1); songWarmQ.unshift(song.p); }
+    return;
+  }
+  if (!songMayFetch(song.p)) return;
+  songWarm.set(song.p, { url: null, job: null, ctrl: null, got: 0, total: 0, t0: 0, t1: 0 });
+  if (first) songWarmQ.unshift(song.p); else songWarmQ.push(song.p);
+  trimSongWarm();
+  pumpSongWarm();
+}
+function useSongWarm(song, ref) {
+  const key = song && song.p;
+  useEffect(() => {
+    if (!key) return undefined;
+    preconnectSong(key);
+    const el = ref && ref.current;
+    let t = 0;
+    if (!el || typeof IntersectionObserver === 'undefined') { t = setTimeout(() => warmSong(song, true), 350); return () => clearTimeout(t); }
+    const io = new IntersectionObserver((es) => { clearTimeout(t); if (es.some((e) => e.isIntersecting)) t = setTimeout(() => warmSong(song, true), 350); }, { rootMargin: '60px' });
+    io.observe(el);
+    return () => { clearTimeout(t); io.disconnect(); };
+  }, [key]);
+}
+function mediaAudible(v) {
+  return !!v && !v.paused && !v.muted && v.volume > 0 && !v.srcObject && !v.hasAttribute('data-zchat-call-audio');
+}
+function hushOtherMedia(keep, spareMix) {
+  try {
+    document.querySelectorAll('audio, video').forEach((v) => {
+      if (v === keep || !mediaAudible(v)) return;
+      if ((spareMix || (keep && keep.hasAttribute('data-zmix'))) && v.hasAttribute('data-zmix')) return;
+      try { v.pause(); } catch {}
+    });
+  } catch {}
+}
+const mediaHushState = { on: false, held: [] };
+function installMediaHush() {
+  if (mediaHushState.on || typeof document === 'undefined') return;
+  mediaHushState.on = true;
+  const claim = (e) => {
+    const v = e.target;
+    if (!v || typeof HTMLMediaElement === 'undefined' || !(v instanceof HTMLMediaElement) || !mediaAudible(v)) return;
+    hushOtherMedia(v);
+    if (!v.hasAttribute('data-zmix') && songPlayer.id) pauseSong();
+  };
+  document.addEventListener('play', claim, true);
+  document.addEventListener('volumechange', claim, true);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+      const pip = document.pictureInPictureElement || null;
+      const held = [];
+      document.querySelectorAll('audio, video').forEach((v) => {
+        if (v === pip || v.webkitPresentationMode === 'picture-in-picture' || !mediaAudible(v) || v.getAttribute('data-zmix') === 'story') return;
+        try { v.pause(); if (v.loop) held.push(v); } catch {}
+      });
+      mediaHushState.held = held;
+      if (songPlayer.id && !songPlayer.hold) pauseSong();
+    } else {
+      const held = mediaHushState.held;
+      mediaHushState.held = [];
+      held.forEach((v) => { if (v.isConnected && v.paused) { const pr = v.play(); if (pr && pr.catch) pr.catch(() => {}); } });
+    }
+  });
+}
+installMediaHush();
 function pauseSong() {
   if (!songPlayer.el || !songPlayer.id) return;
   songPlayer.hold = true;
   songPlayer.id = null;
+  songPlayer.wait = false;
   try { songPlayer.el.pause(); } catch {}
   songPing();
 }
@@ -30652,9 +32222,12 @@ function StoryMusicSticker({ song, look, playing, waiting }) {
 }
 function stopSong() {
   songPlayer.hold = true;
-  const was = songPlayer.id;
+  const was = songPlayer.id || songPlayer.wait;
   songPlayer.id = null;
   songPlayer.cur = null;
+  songPlayer.wait = false;
+  songPlayer.seq += 1;
+  songParked.length = 0;
   try { if (songPlayer.el) songPlayer.el.pause(); } catch {}
   if (was) songPing();
 }
@@ -30675,14 +32248,17 @@ function SongBars({ color, size = 14 }) {
 function SongPill({ song, onDark, style, right }) {
   const { theme } = useTheme();
   const playing = useSongPlaying() === song.id;
+  const waiting = useSongWait() && playing;
+  const rootRef = useRef(null);
+  useSongWarm(song, rootRef);
   const ink = onDark ? '#FFFFFF' : theme.ink;
   const dim = onDark ? 'rgba(255,255,255,0.72)' : theme.muted;
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 7, paddingRight: 8, borderRadius: 16, background: onDark ? 'rgba(255,255,255,0.14)' : theme.rowBg, border: onDark ? 'none' : `1px solid ${theme.border}`, maxWidth: 320, boxSizing: 'border-box', ...(style || {}) }}>
+    <div ref={rootRef} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 7, paddingRight: 8, borderRadius: 16, background: onDark ? 'rgba(255,255,255,0.14)' : theme.rowBg, border: onDark ? 'none' : `1px solid ${theme.border}`, maxWidth: 320, boxSizing: 'border-box', ...(style || {}) }}>
       {song.art ? <img src={song.art} alt="" draggable={false} style={{ width: 42, height: 42, borderRadius: 10, objectFit: 'cover', flexShrink: 0 }} /> : <div style={{ width: 42, height: 42, borderRadius: 10, background: theme.coral, color: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><MusicNoteIcon size={18} /></div>}
       <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-          {playing && <SongBars color={theme.coral} size={12} />}
+          {playing && !waiting && <SongBars color={theme.coral} size={12} />}
           <div style={{ fontSize: 14, fontWeight: 700, color: ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{song.t}</div>
         </div>
         <div style={{ fontSize: 12.5, color: dim, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 1 }}>{song.a || 'Song'}</div>
@@ -30690,10 +32266,31 @@ function SongPill({ song, onDark, style, right }) {
       {right}
       <div role="button" aria-label={playing ? `Pause ${song.t}` : `Play ${song.t}`} onClick={(e) => { e.stopPropagation(); toggleSong(song); }} className="zchat-press"
         style={{ width: 36, height: 36, borderRadius: '50%', background: onDark ? '#FFFFFF' : theme.ink, color: onDark ? '#111111' : (theme.dark ? '#111111' : '#FFFFFF'), display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
-        {playing ? <Pause size={15} fill="currentColor" /> : <Play size={15} fill="currentColor" style={{ marginLeft: 2 }} />}
+        {waiting ? <Spinner size={14} color={onDark ? '#111111' : (theme.dark ? '#111111' : '#FFFFFF')} /> : playing ? <Pause size={15} fill="currentColor" /> : <Play size={15} fill="currentColor" style={{ marginLeft: 2 }} />}
       </div>
     </div>
   );
+}
+const musicMem = new Map();
+function musicKey(term, country) { return `${country || ''}|${String(term || '').trim().toLowerCase()}`; }
+function fetchMusic(term, country) {
+  const k = musicKey(term, country);
+  const hit = musicMem.get(k);
+  if (hit && hit.items && Date.now() - hit.at < 10 * 60000) return Promise.resolve({ data: { items: hit.items }, status: 200 });
+  if (hit && hit.job) return hit.job;
+  const job = zchatTools('music', { q: term, country: country || undefined }, 12000).then((r) => {
+    if (r && r.data && Array.isArray(r.data.items)) musicMem.set(k, { items: r.data.items, at: Date.now() });
+    else musicMem.delete(k);
+    return r;
+  });
+  musicMem.set(k, { job });
+  if (musicMem.size > 40) musicMem.delete(musicMem.keys().next().value);
+  return job;
+}
+function prefetchMusic(country) {
+  if (dataSaverOn()) return;
+  const hit = musicMem.get(musicKey('', country));
+  if (!hit || (!hit.job && Date.now() - (hit.at || 0) > 5 * 60000)) fetchMusic('', country);
 }
 function AppleMusicLink({ song }) {
   const { theme } = useTheme();
@@ -30704,15 +32301,16 @@ function MusicPicker({ onClose, onPick, country, title = 'Add music' }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
   const [q, setQ] = useState('');
-  const [items, setItems] = useState(null);
+  const [items, setItems] = useState(() => { const hit = musicMem.get(musicKey('', country)); return hit && hit.items ? hit.items.map(validSong).filter(Boolean) : null; });
   const [busy, setBusy] = useState(true);
   const [err, setErr] = useState('');
   const seq = useRef(0);
   const playingId = useSongPlaying();
+  const songWaiting = useSongWait();
   const search = async (term) => {
     const my = ++seq.current;
     setBusy(true);
-    const r = await zchatTools('music', { q: term, country: country || undefined }, 12000);
+    const r = await fetchMusic(term, country);
     if (my !== seq.current) return;
     setBusy(false);
     if (r.data && Array.isArray(r.data.items)) { setErr(''); setItems(r.data.items.map(validSong).filter(Boolean)); return; }
@@ -30721,9 +32319,14 @@ function MusicPicker({ onClose, onPick, country, title = 'Add music' }) {
   };
   useEffect(() => {
     const term = q.trim();
-    const t = setTimeout(() => search(term), term ? 380 : 0);
+    const t = setTimeout(() => search(term), term && !musicMem.has(musicKey(term, country)) ? 380 : 0);
     return () => clearTimeout(t);
   }, [q]);
+  useEffect(() => {
+    if (!items || !items.length) return undefined;
+    const t = setTimeout(() => items.slice(0, 3).forEach((s) => warmSong(s)), 250);
+    return () => clearTimeout(t);
+  }, [items]);
   useEffect(() => () => stopSong(), []);
   return (
     <FullPage title={title} onBack={onClose} zIndex={130}>
@@ -30745,14 +32348,14 @@ function MusicPicker({ onClose, onPick, country, title = 'Add music' }) {
                 {s.art ? <img src={s.art} alt="" loading="lazy" draggable={false} style={{ width: 50, height: 50, borderRadius: 10, objectFit: 'cover', flexShrink: 0 }} /> : <div style={{ width: 50, height: 50, borderRadius: 10, background: theme.rowBg, flexShrink: 0 }} />}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-                    {on && <SongBars color={theme.coral} size={12} />}
+                    {on && !songWaiting && <SongBars color={theme.coral} size={12} />}
                     <div style={{ fontSize: 15, fontWeight: 700, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.t}</div>
                   </div>
                   <div style={{ fontSize: 13, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 1 }}>{s.a}</div>
                 </div>
               </div>
               <div role="button" aria-label={on ? `Pause ${s.t}` : `Preview ${s.t}`} onClick={() => toggleSong(s)} className="zchat-press" style={{ width: 40, height: 40, borderRadius: '50%', border: `1.5px solid ${on ? theme.coral : theme.border}`, color: on ? theme.coral : theme.ink, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
-                {on ? <Pause size={16} fill="currentColor" /> : <Play size={16} fill="currentColor" style={{ marginLeft: 2 }} />}
+                {on && songWaiting ? <Spinner size={15} color={theme.coral} /> : on ? <Pause size={16} fill="currentColor" /> : <Play size={16} fill="currentColor" style={{ marginLeft: 2 }} />}
               </div>
             </div>
           );
@@ -30779,30 +32382,40 @@ function ProfileSong({ profile, isSelf, bare, center }) {
     });
     return () => { alive = false; };
   }, [profile.id]);
-  useEffect(() => () => stopSong(), []);
+  useEffect(() => { if (isSelf) prefetchMusic(profile.country); return () => stopSong(); }, []);
   const save = async (s) => {
     const prev = song;
     stopSong();
     setSong(s);
+    profileSongMem.set(profile.id, s);
     const { error } = await supabase.from('profiles').update({ song: s }).eq('id', profile.id);
     if (error) {
       setSong(prev);
+      profileSongMem.set(profile.id, prev);
       setNote(/song|column|schema/i.test(String(error.message || '')) ? 'Profile songs switch on once the latest ZChat setup is finished.' : 'That did not save. Try again.');
       setTimeout(() => setNote(''), 3200);
-      return;
     }
-    profileSongMem.set(profile.id, s);
   };
   if (!song && !isSelf) return null;
   if (bare && !song) {
     return (
       <>
-        <div role="button" aria-label="Add a song to your profile" onClick={() => setPicker(true)} className="zchat-press" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 10px', borderRadius: 16, background: theme.rowBg, border: `1px solid ${theme.border}`, fontSize: 12.5, fontWeight: 700, color: theme.ink, cursor: 'pointer', maxWidth: '100%' }}>
-          <MusicNoteIcon size={14} /><span style={{ whiteSpace: 'nowrap' }}>Add song</span>
+        <div role="button" aria-label="Add a song to your profile" onClick={() => setPicker(true)} className="zchat-press" style={{ display: 'inline-flex', alignItems: 'center', gap: 7, minHeight: 28, fontSize: 13.5, fontWeight: 600, letterSpacing: '-0.005em', color: kitOnInk(theme), cursor: 'pointer', maxWidth: '100%' }}>
+          <LineGlyph k="note" size={18} /><span style={{ whiteSpace: 'nowrap' }}>Add song</span>
         </div>
         {note && <div role="alert" style={{ flexBasis: '100%', fontSize: 12.5, color: theme.muted, textAlign: center ? 'center' : 'left' }}>{note}</div>}
         {picker && <MusicPicker country={profile.country} title="Profile song" onClose={() => setPicker(false)} onPick={(s) => { setPicker(false); save(s); }} />}
       </>
+    );
+  }
+  if (bare) {
+    return (
+      <div style={{ flexBasis: '100%', minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: center ? 'center' : 'flex-start' }}>
+        <ProfileSongLine song={song} isSelf={isSelf} onChange={() => setPicker(true)} onRemove={() => save(null)} />
+        {!isSelf && <AppleMusicLink song={song} />}
+        {note && <div role="alert" style={{ fontSize: 12.5, color: theme.muted, marginTop: 4, textAlign: center ? 'center' : 'left' }}>{note}</div>}
+        {picker && <MusicPicker country={profile.country} title="Profile song" onClose={() => setPicker(false)} onPick={(s) => { setPicker(false); save(s); }} />}
+      </div>
     );
   }
   return (
@@ -30810,8 +32423,8 @@ function ProfileSong({ profile, isSelf, bare, center }) {
       {song ? (
         <SongPill song={song} style={{ width: '100%', maxWidth: 300 }} right={isSelf ? <div role="button" aria-label="Remove profile song" onClick={(e) => { e.stopPropagation(); save(null); }} style={{ width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.muted, cursor: 'pointer', flexShrink: 0 }}><X size={16} /></div> : null} />
       ) : (
-        <div role="button" aria-label="Add a song to your profile" onClick={() => setPicker(true)} className="zchat-press" style={{ display: 'flex', alignItems: 'center', gap: 8, height: 36, padding: '0 15px', borderRadius: 18, border: `1px solid ${theme.border}`, color: theme.ink, fontSize: 13.5, fontWeight: 700, cursor: 'pointer' }}>
-          <MusicNoteIcon size={15} />Add a song
+        <div role="button" aria-label="Add a song to your profile" onClick={() => setPicker(true)} className="zchat-press" style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 36, color: kitOnInk(theme), fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+          <LineGlyph k="note" size={20} />Add a song
         </div>
       )}
       {song && (isSelf ? <div role="button" aria-label="Change profile song" onClick={() => setPicker(true)} style={{ fontSize: 12.5, fontWeight: 700, color: theme.coral, marginTop: 7, cursor: 'pointer' }}>Change song</div> : <AppleMusicLink song={song} />)}
@@ -30821,6 +32434,26 @@ function ProfileSong({ profile, isSelf, bare, center }) {
   );
 }
 
+function ProfileSongLine({ song, isSelf, onChange, onRemove }) {
+  const { theme } = useTheme();
+  const playing = useSongPlaying() === song.id;
+  const ctl = { width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.muted, cursor: 'pointer', flexShrink: 0 };
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', minWidth: 0, maxWidth: '100%', minHeight: 30 }}>
+      <div role="button" aria-label={playing ? `Pause ${song.t}` : `Play ${song.t}`} onClick={(e) => { e.stopPropagation(); toggleSong(song); }} className="zchat-press" style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, cursor: 'pointer' }}>
+        <span style={{ width: 22, height: 22, borderRadius: 6, overflow: 'hidden', flexShrink: 0, background: theme.soft2, color: theme.muted, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          {song.art ? <img src={song.art} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} /> : <LineGlyph k="note" size={14} />}
+        </span>
+        <span style={{ minWidth: 0, fontSize: 14, letterSpacing: '-0.005em', color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <span style={{ fontWeight: 600 }}>{song.t}</span>{song.a ? <span style={{ color: theme.muted }}>{` · ${song.a}`}</span> : null}
+        </span>
+        <span aria-hidden="true" style={{ width: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: theme.muted }}>{playing ? <SongBars color={kitOnInk(theme)} size={12} /> : <LineGlyph k="play" size={13} sw={3} />}</span>
+      </div>
+      {isSelf && <div role="button" aria-label="Change profile song" onClick={(e) => { e.stopPropagation(); onChange(); }} className="zchat-press" style={{ ...ctl, marginLeft: 6 }}><LineGlyph k="swap" size={17} /></div>}
+      {isSelf && <div role="button" aria-label="Remove profile song" onClick={(e) => { e.stopPropagation(); onRemove(); }} className="zchat-press" style={ctl}><LineGlyph k="close" size={15} /></div>}
+    </div>
+  );
+}
 const birthdayRowMem = new Map();
 function useBirthdayOf(userId) {
   const [row, setRow] = useState(() => (birthdayRowMem.has(userId) ? birthdayRowMem.get(userId) : undefined));
@@ -30833,8 +32466,9 @@ function useBirthdayOf(userId) {
       setRow(v);
     });
     load();
-    window.addEventListener('zchat-birthday-changed', load);
-    return () => { alive = false; window.removeEventListener('zchat-birthday-changed', load); };
+    const on = (e) => { const d = e && e.detail; if (d && d.uid === userId && 'row' in d) { birthdayRowMem.set(userId, d.row); setRow(d.row); return; } load(); };
+    window.addEventListener('zchat-birthday-changed', on);
+    return () => { alive = false; window.removeEventListener('zchat-birthday-changed', on); };
   }, [userId]);
   return row;
 }
@@ -30844,23 +32478,126 @@ function ProfileExtras({ profile, isSelf, onEditStatus, onEditBirthday, bare }) 
   const bd = useBirthdayOf(profile.id);
   const today = bd && birthdayMdsToday().includes(bd.md);
   if (!st && !bd && !isSelf) return null;
-  const chip = (key, icon, text, onClick, strong) => (
-    <div key={key} role={onClick ? 'button' : undefined} aria-label={onClick ? text : undefined} onClick={onClick} className={onClick ? 'zchat-press' : undefined} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '6px 10px', borderRadius: 16, background: strong ? `${theme.coral}22` : theme.rowBg, border: `1px solid ${strong ? `${theme.coral}55` : theme.border}`, fontSize: 12.5, fontWeight: 700, color: theme.ink, cursor: onClick ? 'pointer' : 'default', maxWidth: '100%' }}>
-      {icon}<span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{text}</span>
+  const accent = kitOnInk(theme);
+  const item = (key, mark, text, onClick, tone) => (
+    <div key={key} role={onClick ? 'button' : undefined} aria-label={onClick ? text : undefined} onClick={onClick} className={onClick ? 'zchat-press' : undefined}
+      style={{ display: 'inline-flex', alignItems: 'center', gap: 7, minHeight: 28, minWidth: 0, maxWidth: '100%', fontSize: tone === 'add' ? 13.5 : 14, fontWeight: tone === 'soft' ? 500 : 600, letterSpacing: '-0.005em', color: tone === 'add' ? accent : tone === 'party' ? BIRTHDAY_PINK : theme.ink, cursor: onClick ? 'pointer' : 'default' }}>
+      {mark}<span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{text}</span>
     </div>
   );
-  const chips = [
-    st ? chip('st', <span style={{ fontSize: 15 }}>{st.e || '\u{1F4AC}'}</span>, st.t || 'Status', isSelf ? onEditStatus : null)
-      : isSelf ? chip('st', <Plus size={14} />, 'Add status', onEditStatus) : null,
-    bd ? chip('bd', <CakeIcon size={15} />, today ? (isSelf ? 'Happy birthday!' : 'Birthday today') : `Birthday ${birthdayLabel(bd.md)}`, isSelf ? onEditBirthday : null, today)
-      : isSelf ? chip('bd', <CakeIcon size={15} />, 'Add birthday', onEditBirthday) : null,
+  const items = [
+    st ? item('st', <StatusMark e={st.e} size={18} />, st.t || 'Status', isSelf ? onEditStatus : null)
+      : isSelf ? item('st', <LineGlyph k="chat" size={18} />, 'Add status', onEditStatus, 'add') : null,
+    bd ? item('bd', <LineGlyph k="cake" size={18} color={BIRTHDAY_PINK} />, today ? (isSelf ? 'Happy birthday!' : 'Birthday today') : `Birthday ${birthdayLabel(bd.md)}`, isSelf ? onEditBirthday : null, today ? 'party' : 'soft')
+      : isSelf ? item('bd', <LineGlyph k="cake" size={18} />, 'Add birthday', onEditBirthday, 'add') : null,
   ];
-  if (bare) return <>{chips}</>;
+  if (bare) return <>{items}</>;
   return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center', marginTop: 14, padding: '0 6px' }}>
-      {chips}
+    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', columnGap: 16, rowGap: 2, justifyContent: 'center', marginTop: 14, padding: '0 6px' }}>
+      {items}
     </div>
   );
+}
+const BIRTHDAY_PINK = '#F0507A';
+const LINE_GLYPHS = {
+  smile: [['c', 16, 16, 10.5], ['cf', 12.3, 13.8, 1.35], ['cf', 19.7, 13.8, 1.35], ['p', 'M11.4 18.6c1.1 1.9 2.7 2.9 4.6 2.9s3.5-1 4.6-2.9']],
+  book: [['p', 'M16 9.6c-2.7-1.9-6.2-2.5-10-1.9v15.6c3.8-.6 7.3 0 10 1.9 2.7-1.9 6.2-2.5 10-1.9V7.7c-3.8-.6-7.3 0-10 1.9z'], ['p', 'M16 9.6v15.6']],
+  work: [['r', 5, 10.5, 22, 15, 3.2], ['p', 'M12.3 10.5V8.6c0-1.2 1-2.1 2.1-2.1h3.2c1.2 0 2.1.9 2.1 2.1v1.9'], ['p', 'M5 16.6h8.6M18.4 16.6H27'], ['r', 13.6, 15, 4.8, 3.4, 1]],
+  game: [['p', 'M11 9.8h10c3.2 0 5.8 2.3 6.2 5.5l.7 5.6c.3 2.6-1.7 4.9-4.3 4.9-1.5 0-2.8-.8-3.6-2l-1.3-2.1h-5.4L12 23.8c-.8 1.2-2.1 2-3.6 2-2.6 0-4.6-2.3-4.3-4.9l.7-5.6c.4-3.2 3-5.5 6.2-5.5z'], ['p', 'M10.4 14v4.6M8.1 16.3h4.6'], ['cf', 21.2, 14.9, 1.25], ['cf', 23.4, 17.6, 1.25]],
+  sleep: [['p', 'M22.5 20.6a8.6 8.6 0 0 1-10.9-10.9A8.6 8.6 0 1 0 22.5 20.6z'], ['p', 'M19.2 6.4h4.4l-4.4 4.8h4.4']],
+  gym: [['r', 8.2, 9.5, 3.4, 13, 1.5], ['r', 20.4, 9.5, 3.4, 13, 1.5], ['r', 4.6, 12.6, 3.6, 6.8, 1.4], ['r', 24, 12.6, 3.6, 6.8, 1.4], ['p', 'M11.6 16h8.8']],
+  travel: [['p', 'M16 4.6c1.1 0 1.9 1.2 1.9 2.7v5.3l8.3 4.9v2.6l-8.3-2.5v5.1l2.7 2.1v2.1L16 25.6l-4.6 1.3v-2.1l2.7-2.1v-5.1l-8.3 2.5v-2.6l8.3-4.9V7.3c0-1.5.8-2.7 1.9-2.7z', 'rotate(45 16 16)']],
+  movie: [['p', 'M8.6 13.4h14.8l-1.9 12.2c-.2 1-1 1.7-2 1.7h-7c-1 0-1.8-.7-2-1.7z'], ['p', 'M13.6 13.4l.6 13.9M18.4 13.4l-.6 13.9'], ['p', 'M9 13.4c-1.4-.5-2-2.1-1.3-3.4.6-1.1 1.9-1.6 3-1.2.3-1.6 1.6-2.8 3.2-2.8.9 0 1.6.3 2.1.9.6-.6 1.3-.9 2.2-.9 1.6 0 2.9 1.2 3.2 2.8 1.1-.4 2.4.1 3 1.2.7 1.3.1 2.9-1.3 3.4']],
+  music: [['p', 'M6.5 20.5V16c0-5.2 4.3-9.5 9.5-9.5s9.5 4.3 9.5 9.5v4.5'], ['r', 5.2, 18, 5.2, 8.6, 2.2], ['r', 21.6, 18, 5.2, 8.6, 2.2]],
+  drive: [['p', 'M6.5 21.5v-3.8c0-.9.4-1.7 1-2.3l1.8-4.6c.5-1.2 1.6-2 2.9-2h7.6c1.3 0 2.4.8 2.9 2l1.8 4.6c.6.6 1 1.4 1 2.3v3.8'], ['p', 'M6.5 21.5h19v2.8c0 .9-.7 1.7-1.7 1.7h-1.1c-.9 0-1.7-.8-1.7-1.7v-1H11v1c0 .9-.8 1.7-1.7 1.7H8.2c-1 0-1.7-.8-1.7-1.7z'], ['p', 'M9 15.4h14'], ['cf', 10.6, 18.6, 1.2], ['cf', 21.4, 18.6, 1.2]],
+  busy: [['p', 'M9.8 21.6v-6.2c0-3.6 2.8-6.5 6.2-6.5s6.2 2.9 6.2 6.5v6.2l1.7 2.2H8.1z'], ['p', 'M13.8 26.4c.5.9 1.3 1.4 2.2 1.4s1.7-.5 2.2-1.4'], ['p', 'M16 6.2v2.7'], ['p', 'M6.5 6.5l19 19']],
+  heart: [['p', 'M16 26c-6-3.7-10.2-7.6-10.2-12.1 0-3 2.4-5.4 5.4-5.4 2 0 3.8 1.1 4.8 2.8 1-1.7 2.8-2.8 4.8-2.8 3 0 5.4 2.4 5.4 5.4C26.2 18.4 22 22.3 16 26z']],
+  party: [['p', 'M6.5 25.5l5.6-13.9 8.3 8.3z'], ['p', 'M9.2 18.8l4 4M10.9 14.6l6.5 6.5'], ['p', 'M16.2 12.6c.7-2.6 2.6-4 4.5-3.4'], ['p', 'M19.4 6.6l.8-1.8M24.6 10.4l1.9-.7M23.6 15.6l2 .5'], ['cf', 24.3, 6.4, 1.1], ['cf', 26.3, 14, 1.1]],
+  coffee: [['p', 'M7.2 13.2h14.2v6.4c0 3.6-2.9 6.4-6.4 6.4h-1.4c-3.5 0-6.4-2.8-6.4-6.4z'], ['p', 'M21.4 15.4h1.5c1.6 0 2.9 1.3 2.9 2.9s-1.3 2.9-2.9 2.9h-1.8'], ['p', 'M11.6 9.8c-.9-1.1.9-2 0-3.3M15.8 9.8c-.9-1.1.9-2 0-3.3']],
+  sun: [['c', 16, 16, 5.2], ['p', 'M16 4.6v2.6M16 24.8v2.6M4.6 16h2.6M24.8 16h2.6M7.9 7.9l1.9 1.9M22.2 22.2l1.9 1.9M7.9 24.1l1.9-1.9M22.2 9.8l1.9-1.9']],
+  cool: [['c', 16, 16, 10.5], ['p', 'M7 13.2h18'], ['pf', 'M8.8 13.2h5.8l-.5 2.6c-.2 1.2-1.3 2.1-2.5 2.1s-2.2-.9-2.4-2.1zM17.4 13.2h5.8l-.4 2.4c-.2 1.2-1.3 2.1-2.5 2.1s-2.3-.9-2.5-2.1z'], ['p', 'M12.6 21.2c1 .8 2.2 1.2 3.4 1.2s2.4-.4 3.4-1.2']],
+  chat: [['p', 'M16 7c5.5 0 10 3.7 10 8.3s-4.5 8.3-10 8.3c-1 0-1.9-.1-2.8-.3L8 25.6l1.5-4.4C7.3 19.7 6 17.6 6 15.3 6 10.7 10.5 7 16 7z']],
+  cake: [['r', 6.5, 16, 19, 10, 2.6], ['p', 'M6.5 19.8c1.6 1.3 3.2 1.3 4.8 0s3.2-1.3 4.7 0 3.2 1.3 4.8 0 3.1-1.3 4.7 0'], ['p', 'M16 16v-4.4'], ['pf', 'M16 6.2c1.1 1.2 1.6 2.1 1.6 2.9a1.6 1.6 0 0 1-3.2 0c0-.8.5-1.7 1.6-2.9z']],
+  note: [['p', 'M12.5 23V9.4l11-2.4v13.4'], ['c', 9.9, 23, 2.6], ['c', 20.9, 20.4, 2.6], ['p', 'M12.5 13.2l11-2.4']],
+  swap: [['p', 'M8 11.5h15.5M19.8 7.8l3.7 3.7-3.7 3.7'], ['p', 'M24 20.5H8.5M12.2 16.8l-3.7 3.7 3.7 3.7']],
+  close: [['p', 'M10 10l12 12M22 10L10 22']],
+  plus: [['p', 'M16 8v16M8 16h16']],
+  check: [['p', 'M8 16.6l5.2 5.2L24.2 10.6']],
+  emojiadd: [['p', 'M26.3 14.6c.1.5.2 1 .2 1.4 0 5.8-4.7 10.5-10.5 10.5S5.5 21.8 5.5 16 10.2 5.5 16 5.5c.9 0 1.7.1 2.5.3'], ['cf', 12.2, 14.2, 1.3], ['cf', 19.4, 14.2, 1.3], ['p', 'M11.6 19c1.1 1.6 2.6 2.4 4.4 2.4s3.3-.8 4.4-2.4'], ['p', 'M24.5 4.5v7M21 8h7']],
+  cam: [['p', 'M5.5 12.4c0-1.5 1.2-2.7 2.7-2.7h2.7l1.9-2.7h6.4l1.9 2.7h2.7c1.5 0 2.7 1.2 2.7 2.7v10.4c0 1.5-1.2 2.7-2.7 2.7H8.2c-1.5 0-2.7-1.2-2.7-2.7z'], ['c', 16, 17.2, 4.4]],
+  portrait: [['r', 5.5, 5.5, 21, 21, 6], ['c', 16, 13.6, 3.8], ['p', 'M9.6 26.2c1-3.8 3.4-6 6.4-6s5.4 2.2 6.4 6']],
+  image: [['r', 5, 7, 22, 18, 3.4], ['c', 11.6, 12.8, 2.1], ['p', 'M5.6 22.4l6.2-5.6 4.4 3.8 3.4-2.8 6.6 5.2']],
+  globe: [['c', 16, 16, 10.5], ['p', 'M5.5 16h21M16 5.5c2.9 2.8 4.4 6.3 4.4 10.5S18.9 23.7 16 26.5c-2.9-2.8-4.4-6.3-4.4-10.5S13.1 8.3 16 5.5z']],
+  mic: [['r', 12, 5, 8, 14, 4], ['p', 'M7.6 15.2c0 4.6 3.8 8.3 8.4 8.3s8.4-3.7 8.4-8.3M16 23.5V27']],
+  memory: [['p', 'M9.5 5.5h13c.8 0 1.5.7 1.5 1.5v20l-8-5.2L8 27V7c0-.8.7-1.5 1.5-1.5z']],
+  friends: [['c', 12.4, 12, 3.8], ['p', 'M5.4 25.2c.7-4.3 3.4-6.9 7-6.9s6.3 2.6 7 6.9'], ['p', 'M19.8 8.6c.6-.3 1.2-.4 1.8-.4 2 0 3.5 1.6 3.5 3.6s-1.5 3.6-3.5 3.6c-.6 0-1.1-.1-1.6-.4'], ['p', 'M22.4 18.6c2.4.7 4 2.8 4.4 6']],
+  coding: [['p', 'M11.5 10l-6 6 6 6M20.5 10l6 6-6 6M18.2 7.6l-4.4 16.8']],
+  clap: [['r', 6, 13.4, 20, 12.6, 2.4], ['p', 'M6.6 13.2L24.4 8.4l-1-3.4L5.6 9.8z'], ['p', 'M10.4 8.6l2.8 3.6M15.6 7.2l2.8 3.6M20.8 5.8l2.6 3.4']],
+  sports: [['c', 16, 16, 10.5], ['p', 'M5.5 16h21M16 5.5v21'], ['p', 'M8.6 8.6c2.4 2 3.8 4.6 3.8 7.4s-1.4 5.4-3.8 7.4M23.4 8.6c-2.4 2-3.8 4.6-3.8 7.4s1.4 5.4 3.8 7.4']],
+  football: [['c', 16, 16, 10.5], ['p', 'M16 11.6l4.2 3-1.6 4.9h-5.2l-1.6-4.9z'], ['p', 'M16 11.6V5.6M20.2 14.6l5.6-1.8M18.6 19.5l3.4 4.9M13.4 19.5L10 24.4M11.8 14.6l-5.6-1.8']],
+  cricket: [['p', 'M12.6 11h6v12.2c0 1.6-1.3 2.9-3 2.9s-3-1.3-3-2.9z', 'rotate(40 15.6 16)'], ['p', 'M15.6 11V5', 'rotate(40 15.6 16)'], ['c', 24.6, 24, 2.4]],
+  food: [['p', 'M9.6 6v6.6c0 1.7 1.3 3 3 3s3-1.3 3-3V6M12.6 6v20'], ['p', 'M22.4 26V6c-2.3 1.2-3.7 4.1-3.7 7.6 0 2.2 1.3 3.4 3.7 3.4']],
+  art: [['p', 'M16 6c-5.6 0-10 4.2-10 9.5 0 4.6 3.6 8.5 8.4 8.5 1.3 0 2.1-.8 2.1-1.9 0-.6-.3-1-.6-1.4-.3-.4-.5-.8-.5-1.3 0-1.1.9-2 2-2h2.6c3.4 0 6-2.5 6-5.7C26 9.7 21.6 6 16 6z'], ['cf', 11.2, 15.2, 1.4], ['cf', 13.4, 10.9, 1.4], ['cf', 18.3, 10.2, 1.4], ['cf', 22, 13.4, 1.4]],
+  tech: [['r', 9, 9, 14, 14, 2.6], ['r', 12.6, 12.6, 6.8, 6.8, 1.2], ['p', 'M13 5.6V9M19 5.6V9M13 23v3.4M19 23v3.4M5.6 13H9M5.6 19H9M23 13h3.4M23 19h3.4']],
+  fashion: [['p', 'M12.2 6.5L6.2 9.6l2.1 5.2 2.6-1.1v12.1h10.2V13.7l2.6 1.1 2.1-5.2-6-3.1c-.8 1.9-2.3 3-3.8 3s-3-1.1-3.8-3z']],
+  books: [['p', 'M8.5 24.4V8.8c0-1.3 1-2.3 2.3-2.3h12.7v16.4H10.8c-1.3 0-2.3 1-2.3 2.3s1 2.3 2.3 2.3h12.7'], ['p', 'M15.2 6.5v7.6l2.2-1.6 2.2 1.6V6.5']],
+  sakura: [['p', 'M16 15.6c-2.6-1.9-3.8-4.4-3.3-6.6.3-1.5 1.4-2.4 2.5-2.3l.8 1.6.8-1.6c1.1-.1 2.2.8 2.5 2.3.5 2.2-.7 4.7-3.3 6.6z', 'rotate(0 16 16.6)'], ['p', 'M16 15.6c-2.6-1.9-3.8-4.4-3.3-6.6.3-1.5 1.4-2.4 2.5-2.3l.8 1.6.8-1.6c1.1-.1 2.2.8 2.5 2.3.5 2.2-.7 4.7-3.3 6.6z', 'rotate(72 16 16.6)'], ['p', 'M16 15.6c-2.6-1.9-3.8-4.4-3.3-6.6.3-1.5 1.4-2.4 2.5-2.3l.8 1.6.8-1.6c1.1-.1 2.2.8 2.5 2.3.5 2.2-.7 4.7-3.3 6.6z', 'rotate(144 16 16.6)'], ['p', 'M16 15.6c-2.6-1.9-3.8-4.4-3.3-6.6.3-1.5 1.4-2.4 2.5-2.3l.8 1.6.8-1.6c1.1-.1 2.2.8 2.5 2.3.5 2.2-.7 4.7-3.3 6.6z', 'rotate(216 16 16.6)'], ['p', 'M16 15.6c-2.6-1.9-3.8-4.4-3.3-6.6.3-1.5 1.4-2.4 2.5-2.3l.8 1.6.8-1.6c1.1-.1 2.2.8 2.5 2.3.5 2.2-.7 4.7-3.3 6.6z', 'rotate(288 16 16.6)'], ['cf', 16, 16.6, 1.3]],
+  study: [['p', 'M4.5 13L16 7.5 27.5 13 16 18.5z'], ['p', 'M9.5 15.4v5.4c0 1.9 2.9 3.5 6.5 3.5s6.5-1.6 6.5-3.5v-5.4'], ['p', 'M27.5 13v6.2']],
+  pets: [['p', 'M16 17c-3.3 0-6.2 2.8-6.2 5.7 0 1.6 1.2 2.7 2.8 2.7 1.3 0 2.1-.7 3.4-.7s2.1.7 3.4.7c1.6 0 2.8-1.1 2.8-2.7 0-2.9-2.9-5.7-6.2-5.7z'], ['e', 9.6, 13.2, 1.9, 2.4], ['e', 13.4, 9.2, 1.9, 2.4], ['e', 18.6, 9.2, 1.9, 2.4], ['e', 22.4, 13.2, 1.9, 2.4]],
+  nature: [['p', 'M7 25c0-10 6.3-16.4 18-17.5.3 11.3-6.3 17.5-14.8 17.5z'], ['p', 'M7 25c3.4-4.6 7.1-8.4 11.6-11.6']],
+  dance: [['c', 16, 18, 8.6], ['p', 'M16 9.4V4.6'], ['p', 'M7.6 16h16.8M8.6 21.4h14.8M12.4 10.2c-1.2 2.4-1.8 5-1.8 7.8s.6 5.4 1.8 7.8M19.6 10.2c1.2 2.4 1.8 5 1.8 7.8s-.6 5.4-1.8 7.8']],
+  memes: [['c', 16, 16, 10.5], ['p', 'M10.6 13.6c.8-1 2.3-1 3.1 0M18.3 13.6c.8-1 2.3-1 3.1 0'], ['p', 'M10.6 17.6h10.8c-.6 3.2-2.8 5.2-5.4 5.2s-4.8-2-5.4-5.2z']],
+  science: [['e', 16, 16, 11, 4.4], ['e', 16, 16, 11, 4.4, 'rotate(60 16 16)'], ['e', 16, 16, 11, 4.4, 'rotate(120 16 16)'], ['cf', 16, 16, 1.6]],
+  business: [['p', 'M6 6v20h20'], ['p', 'M10.5 20l5-5.2 3.8 3.4 6-6.6'], ['p', 'M21.4 11.6h3.9v3.9']],
+  eye: [['p', 'M4.6 16c2.6-4.8 6.4-7.2 11.4-7.2s8.8 2.4 11.4 7.2c-2.6 4.8-6.4 7.2-11.4 7.2S7.2 20.8 4.6 16z'], ['c', 16, 16, 3.8]],
+  send: [['p', 'M27 5L13.4 18.6M27 5l-8.6 22-5-8.4-8.4-5z']],
+  trash: [['p', 'M6.5 9.5h19M13 9.5V7.2c0-.9.7-1.6 1.6-1.6h2.8c.9 0 1.6.7 1.6 1.6v2.3'], ['p', 'M8.7 9.5l1.2 15.2c.1 1.2 1.1 2.1 2.3 2.1h7.6c1.2 0 2.2-.9 2.3-2.1l1.2-15.2'], ['p', 'M13.6 14v8M18.4 14v8']],
+  highlight: [['c', 16, 16, 10.5], ['p', 'M16 11v10M11 16h10']],
+  hash: [['p', 'M12.6 6.5l-2.2 19M21.6 6.5l-2.2 19M7.2 12.6h19M5.8 19.4h19']],
+  trophy: [['p', 'M10.5 6.5h11v6.3c0 3.1-2.5 5.7-5.5 5.7s-5.5-2.6-5.5-5.7z'], ['p', 'M10.5 9H6.6c0 3.4 1.9 5.6 4.7 6M21.5 9h3.9c0 3.4-1.9 5.6-4.7 6'], ['p', 'M16 18.5v4.3M11.4 26.5h9.2M12.6 26.5l.6-3.7h5.6l.6 3.7']],
+  arrowup: [['p', 'M16 25V8M9.5 14.5L16 8l6.5 6.5']],
+  arrowdown: [['p', 'M16 7v17M9.5 17.5L16 24l6.5-6.5']],
+  cheer: [['c', 16, 16, 10.5], ['p', 'M10.8 13.8c.6-.9 1.6-1.4 2.6-1.4s2 .5 2.6 1.4M16 13.8c.6-.9 1.6-1.4 2.6-1.4s2 .5 2.6 1.4'], ['p', 'M10.6 17.8c1.2 2.5 3.1 3.8 5.4 3.8s4.2-1.3 5.4-3.8']],
+  calm: [['e', 16, 24.2, 8.8, 3.2], ['e', 16, 17.8, 6.2, 2.7], ['e', 16, 12.2, 4, 2.2]],
+  shy: [['c', 16, 16, 10.5], ['p', 'M11.2 14.2h2.6M18.2 14.2h2.6'], ['e', 10.4, 18.4, 1.8, 1.1], ['e', 21.6, 18.4, 1.8, 1.1], ['p', 'M14.4 20.2c1 .7 2.2.7 3.2 0']],
+  smirk: [['c', 16, 16, 10.5], ['p', 'M10.4 12.8h3.4M18.2 12.2c1.1-1 2.5-1.2 3.6-.5'], ['cf', 12.2, 15.2, 1.25], ['cf', 19.8, 15.2, 1.25], ['p', 'M12.6 20.6c2.5.8 5 .5 7.2-1.1']],
+  gift: [['p', 'M7 14.5h18v10.8c0 .9-.7 1.7-1.7 1.7H8.7c-.9 0-1.7-.8-1.7-1.7z'], ['r', 5.2, 10.2, 21.6, 4.3, 1.2], ['p', 'M16 10.2V27'], ['p', 'M16 10.2c-1.9-3.7-6.6-4.7-6.6-1.6 0 1.6 3.1 1.6 6.6 1.6M16 10.2c1.9-3.7 6.6-4.7 6.6-1.6 0 1.6-3.1 1.6-6.6 1.6']],
+  play: [['p', 'M11 7.8c0-1.2 1.3-1.9 2.3-1.3l11.5 7.9c.9.6.9 1.9 0 2.5l-11.5 7.9c-1 .6-2.3-.1-2.3-1.3z']],
+  chevdown: [['p', 'M9 12.5l7 7 7-7']],
+};
+function LineGlyph({ k, size = 20, color = 'currentColor', sw, style }) {
+  const parts = LINE_GLYPHS[k];
+  if (!parts) return null;
+  const w = sw || (size <= 18 ? 2.5 : size <= 24 ? 2.1 : 1.8);
+  const st = { fill: 'none', stroke: color, strokeWidth: w, strokeLinecap: 'round', strokeLinejoin: 'round' };
+  return (
+    <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true" style={{ display: 'block', flexShrink: 0, ...(style || {}) }}>
+      {parts.map(([t, a, b, c, d, f], i) => {
+        if (t === 'p') return <path key={i} d={a} transform={b} {...st} />;
+        if (t === 'pf') return <path key={i} d={a} fill={color} />;
+        if (t === 'c') return <circle key={i} cx={a} cy={b} r={c} strokeDasharray={d} {...st} />;
+        if (t === 'cf') return <circle key={i} cx={a} cy={b} r={c} fill={color} />;
+        if (t === 'r') return <rect key={i} x={a} y={b} width={c} height={d} rx={f} {...st} />;
+        if (t === 'e') return <ellipse key={i} cx={a} cy={b} rx={c} ry={d} transform={f} {...st} />;
+        if (t === 'ef') return <ellipse key={i} cx={a} cy={b} rx={c} ry={d} fill={color} />;
+        return null;
+      })}
+    </svg>
+  );
+}
+const STATUS_GLYPHS = {
+  '\u{1F60A}': ['smile', '#E8930C', 'Happy'], '\u{1F4DA}': ['book', '#3B82F6', 'Class'], '\u{1F4BC}': ['work', '#0FA89A', 'Work'], '\u{1F3AE}': ['game', '#8B5CF6', 'Gaming'],
+  '\u{1F634}': ['sleep', '#6366F1', 'Sleep'], '\u{1F3C3}': ['gym', '#F97316', 'Gym'], '\u2708': ['travel', '#0EA5E9', 'Travel'], '\u{1F37F}': ['movie', '#EF4444', 'Movie'],
+  '\u{1F3A7}': ['music', '#EC4899', 'Music'], '\u{1F697}': ['drive', '#3B82F6', 'Driving'], '\u{1F515}': ['busy', '#8E8E99', 'Busy'], '\u2764': ['heart', '#F43F5E', 'Love'],
+  '\u{1F389}': ['party', '#D946EF', 'Party'], '\u2615': ['coffee', '#B7791F', 'Coffee'], '\u{1F334}': ['sun', '#F59E0B', 'Holiday'], '\u{1F60E}': ['cool', '#06B6D4', 'Chill'],
+};
+function statusGlyphOf(e) { return STATUS_GLYPHS[String(e || '').replace(/\uFE0F/g, '')] || null; }
+function StatusMark({ e, size = 18 }) {
+  const { theme } = useTheme();
+  const g = statusGlyphOf(e);
+  if (g) return <LineGlyph k={g[0]} size={size} color={g[1]} />;
+  if (e) return <span aria-hidden="true" style={{ width: size, flexShrink: 0, textAlign: 'center', fontSize: Math.round(size * 0.86), lineHeight: 1 }}>{e}</span>;
+  return <LineGlyph k="chat" size={size} color={theme.muted} />;
 }
 
 const SLOW_MODE_STEPS = [[0, 'Off'], [10, '10 seconds'], [30, '30 seconds'], [60, '1 minute'], [300, '5 minutes'], [900, '15 minutes'], [3600, '1 hour']];
@@ -30902,11 +32639,29 @@ function MemberTitleSheet({ member, onSave, onClose }) {
       footer={<div style={{ display: 'flex', gap: 8 }}>{member.title && <BigButton label="Remove" tone="plain" onClick={() => save('')} style={{ flex: '0 0 110px' }} />}<BigButton label={busy ? 'Saving' : 'Save title'} disabled={busy || !text.trim()} onClick={() => save(text.trim())} /></div>}>
       <div style={{ padding: '12px 2px 8px', fontSize: 13, color: theme.muted, lineHeight: 1.5 }}>Titles show next to their name in the group, so everyone knows who does what.</div>
       <input value={text} onChange={(e) => setText(e.target.value.slice(0, 24))} placeholder="Like Captain or Planner" aria-label="Title" autoFocus style={inputStyle(theme)} />
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '12px 0 0' }}>
-        {TITLE_IDEAS.map((t) => <div key={t} role="button" aria-label={`Use title ${t}`} onClick={() => setText(t)} className="zchat-press" style={{ padding: '8px 12px', borderRadius: 14, background: theme.rowBg, fontSize: 13.5, fontWeight: 700, color: theme.ink, cursor: 'pointer' }}>{t}</div>)}
-      </div>
+      <KitSection title="Ideas" style={{ marginTop: 22 }}>
+        <PickTiles label="Title ideas" size={60} fit value={TITLE_IDEAS.includes(text.trim()) ? text.trim() : null} onChange={(k) => setText(k)}
+          style={{ gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', columnGap: 0, rowGap: 16, margin: '0 -14px' }}
+          options={TITLE_IDEAS.map((t) => ({ k: t, label: t, aria: `Use title ${t}`, art: <TitleIdeaGlyph k={t} /> }))} />
+      </KitSection>
     </FullPage>
   );
+}
+function TitleIdeaGlyph({ k, size = 32 }) {
+  const p = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round' };
+  const dot = { fill: 'currentColor', stroke: 'none' };
+  const body = (() => {
+    if (k === 'Captain') return <><circle cx="16" cy="7.2" r="2.6" {...p} /><path d="M16 9.8V27M10.6 14h10.8" {...p} /><path d="M6.2 19.8c.9 4.3 4.8 7.2 9.8 7.2s8.9-2.9 9.8-7.2" {...p} /><path d="M4 22l2.2-2.4 2.6 1.4M28 22l-2.2-2.4-2.6 1.4" {...p} /></>;
+    if (k === 'Planner') return <><rect x="5.5" y="7.5" width="21" height="19" rx="3.6" {...p} /><path d="M5.5 13.2h21M11 5v5M21 5v5" {...p} /><path d="M12.2 19.7l2.7 2.6 5-5.2" {...p} /></>;
+    if (k === 'DJ') return <><path d="M6 20v-3.5a10 10 0 0 1 20 0V20" {...p} /><rect x="4.6" y="18.4" width="5.6" height="8.6" rx="2.3" {...p} /><rect x="21.8" y="18.4" width="5.6" height="8.6" rx="2.3" {...p} /></>;
+    if (k === 'Photographer') return <><path d="M4.8 12.2A3.2 3.2 0 0 1 8 9h2.4l1.9-2.8h7.4L21.6 9H24a3.2 3.2 0 0 1 3.2 3.2v10.6A3.2 3.2 0 0 1 24 26H8a3.2 3.2 0 0 1-3.2-3.2z" {...p} /><circle cx="16" cy="17.4" r="4.6" {...p} /><circle cx="23" cy="12.8" r="1.1" {...dot} /></>;
+    if (k === 'Gamer') return <><path d="M10.6 10.5h10.8a6.2 6.2 0 0 1 6.1 7.3l-.8 4.6a3.2 3.2 0 0 1-5.6 1.5l-2.6-2.9h-5l-2.6 2.9a3.2 3.2 0 0 1-5.6-1.5l-.8-4.6a6.2 6.2 0 0 1 6.1-7.3z" {...p} /><path d="M11 14.6v4.6M8.7 16.9h4.6" {...p} /><circle cx="21.2" cy="15.4" r="1.2" {...dot} /><circle cx="23.7" cy="18.3" r="1.2" {...dot} /></>;
+    if (k === 'Chef') return <><path d="M10 26.5v-6.7c-2.9-.6-4.8-3-4.8-5.8a6 6 0 0 1 7.9-5.7C14 6.6 15 6 16 6s2 .6 2.9 2.3a6 6 0 0 1 7.9 5.7c0 2.8-1.9 5.2-4.8 5.8v6.7z" {...p} /><path d="M10 22.8h12" {...p} /></>;
+    if (k === 'Helper') return <><circle cx="16" cy="16" r="10.6" {...p} /><circle cx="16" cy="16" r="4.4" {...p} /><path d="M8.5 8.5l4.4 4.4M19.1 19.1l4.4 4.4M23.5 8.5l-4.4 4.4M12.9 19.1l-4.4 4.4" {...p} /></>;
+    if (k === 'Legend') return <><path d="M5.5 25.5h21" {...p} /><path d="M6.6 21.6 4.8 10.6l6.4 4.8L16 7.4l4.8 8 6.4-4.8-1.8 11z" {...p} /></>;
+    return <circle cx="16" cy="16" r="9" {...p} />;
+  })();
+  return <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true" style={{ display: 'block', flexShrink: 0 }}>{body}</svg>;
 }
 
 async function loadAlbumsFor(chatKey) {
@@ -31468,11 +33223,8 @@ function GifGrid({ onPick }) {
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search GIPHY" aria-label="Search GIFs" style={{ ...inputStyle(theme), padding: '8px 12px 8px 32px', fontSize: 13 }} />
       </div>
       {!q.trim() && (
-        <div style={{ display: 'flex', gap: 6, marginBottom: 8, overflowX: 'auto', flexShrink: 0, scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
-          {GIF_TOPICS.map(([k, l]) => (
-            <div key={l} role="button" aria-label={`GIFs ${l}`} aria-pressed={topic === k} onClick={() => { hapticTap(); setTopic(k); }} style={{ flexShrink: 0, padding: '6px 12px', borderRadius: 14, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap', background: topic === k ? theme.ink : theme.rowBg, color: topic === k ? theme.panelBg : theme.ink }}>{l}</div>
-          ))}
-        </div>
+        <LineTabs kind="button" label="GIF topics" value={topic} onChange={(k) => { if (k !== topic) { hapticTap(); setTopic(k); } }} h={38} fs={14} style={{ margin: '0 -12px 8px' }}
+          tabs={GIF_TOPICS.map(([k, l]) => ({ k, label: l, aria: `GIFs ${l}` }))} />
       )}
       <div ref={scrollRef} onScroll={onScroll} data-sheet-scroll="true" style={{ overflowY: 'auto', overflowX: 'hidden', flex: 1, minHeight: 0, WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain', touchAction: 'pan-y' }}>
         {page === null && <div style={{ display: 'flex', justifyContent: 'center', padding: 20 }}><Spinner color={theme.muted} /></div>}
@@ -31574,8 +33326,32 @@ function CountdownDigits({ t, dark }) {
   );
 }
 const SLIDER_EMOJIS = ['\u{1F60D}', '\u{1F525}', '\u{1F602}', '\u{1F44F}', '\u{1F62E}', '\u{1F4AF}', '❤️', '\u{1F92F}'];
+const STORY_STICKER_KINDS = [['question', 'Question'], ['poll', 'Poll'], ['quiz', 'Quiz'], ['addyours', 'Add yours'], ['count', 'Countdown'], ['slider', 'Slider'], ['link', 'Link']];
+function StoryStickerKindArt({ k, emoji }) {
+  const gid = `ssk${React.useId().replace(/[^a-zA-Z0-9]/g, '')}`;
+  const grad = `url(#${gid})`;
+  const card = <rect x="5" y="7" width="30" height="26" rx="5.5" fill="#FFFFFF" />;
+  const band = <path d="M5 12.5A5.5 5.5 0 0 1 10.5 7h19A5.5 5.5 0 0 1 35 12.5V14H5z" fill={grad} />;
+  const body = (() => {
+    if (k === 'question') return <>{card}{band}<rect x="9.5" y="19.5" width="21" height="8" rx="4" fill="#ECEBF2" /><rect x="12.5" y="22.6" width="9" height="1.8" rx="0.9" fill="#B9B7C6" /></>;
+    if (k === 'poll') return <>{card}<rect x="10" y="11" width="14" height="2.6" rx="1.3" fill="#C9C7D4" /><rect x="9" y="17" width="22" height="5.4" rx="2.7" fill="#EEECF5" /><rect x="9" y="17" width="14.5" height="5.4" rx="2.7" fill={grad} /><rect x="9" y="25" width="22" height="5.4" rx="2.7" fill="#EEECF5" /><rect x="9" y="25" width="6.5" height="5.4" rx="2.7" fill="#C9BCFF" /></>;
+    if (k === 'quiz') return <>{card}<rect x="10" y="10.5" width="13" height="2.6" rx="1.3" fill="#C9C7D4" />{[16.5, 21.8, 27.1].map((y, i) => <g key={y}><circle cx="11.6" cy={y} r="2.2" fill={i === 1 ? '#22C55E' : 'none'} stroke={i === 1 ? '#22C55E' : '#C9C7D4'} strokeWidth="1.2" />{i === 1 && <path d={`M10.6 ${y}l.8.8 1.6-1.7`} stroke="#FFFFFF" strokeWidth="1" fill="none" strokeLinecap="round" strokeLinejoin="round" />}<rect x="15.5" y={y - 1.2} width={i === 1 ? 14 : 11} height="2.4" rx="1.2" fill="#DDDBE6" /></g>)}</>;
+    if (k === 'addyours') return <>{card}{band}<circle cx="20" cy="22.6" r="5.6" fill={grad} /><rect x="17.2" y="20.9" width="5.6" height="4" rx="1.1" fill="none" stroke="#FFFFFF" strokeWidth="1.1" /><circle cx="20" cy="22.9" r="1.1" fill="#FFFFFF" /></>;
+    if (k === 'count') return <>{card}{band}{[8.5, 16.5, 24.5].map((x) => <rect key={x} x={x} y="18.5" width="7" height="9.5" rx="2" fill="#2A2834" />)}<rect x="10.4" y="22.4" width="3.2" height="1.6" rx="0.8" fill="#FFFFFF" /><rect x="18.4" y="22.4" width="3.2" height="1.6" rx="0.8" fill="#FFFFFF" /><rect x="26.4" y="22.4" width="3.2" height="1.6" rx="0.8" fill="#FFFFFF" /></>;
+    if (k === 'slider') return <>{card}<rect x="10" y="11.5" width="14" height="2.6" rx="1.3" fill="#C9C7D4" /><rect x="9" y="23" width="22" height="3" rx="1.5" fill="#ECEBF2" /><rect x="9" y="23" width="13" height="3" rx="1.5" fill={grad} /><text x="22.5" y="28.6" textAnchor="middle" fontSize="10">{emoji}</text></>;
+    if (k === 'link') return <><rect x="3.5" y="13.5" width="33" height="13" rx="6.5" fill="#FFFFFF" /><g fill="none" stroke="#7C5CFC" strokeWidth="1.6" strokeLinecap="round"><path d="M10.2 21.4l3.4-3.4" /><path d="M11.6 16.9l1.2-1.2a2.6 2.6 0 0 1 3.7 3.7l-1.2 1.2" /><path d="M12.2 22.5l-1.2 1.2a2.6 2.6 0 0 1-3.7-3.7l1.2-1.2" /></g><rect x="19" y="18.8" width="13" height="2.6" rx="1.3" fill="#C9C7D4" /></>;
+    return null;
+  })();
+  return (
+    <svg width="46" height="46" viewBox="0 0 40 40" aria-hidden="true" style={{ display: 'block' }}>
+      <defs><linearGradient id={gid} x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#8B5CF6" /><stop offset="0.55" stopColor="#EC4899" /><stop offset="1" stopColor="#F59E0B" /></linearGradient></defs>
+      {body}
+    </svg>
+  );
+}
 function StoryStickerEditor({ onDone, onClose }) {
   useBackClose(true, onClose);
+  const { theme } = useTheme();
   const pad = (n) => String(n).padStart(2, '0');
   const soon = new Date(Date.now() + 26 * 3600 * 1000);
   const [kind, setKind] = useState('question');
@@ -31608,17 +33384,17 @@ function StoryStickerEditor({ onDone, onClose }) {
     else if (kind === 'addyours') onDone({ k: 'addyours', q: t, c: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}` });
     else onDone({ k: 'question', q: t });
   };
-  const tab = (k, label) => (
-    <div key={k} role="button" aria-label={`${label} sticker`} aria-pressed={kind === k} onClick={() => pickKind(k)} style={{ flexShrink: 0, padding: '9px 14px', borderRadius: 18, fontSize: 13.5, fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap', background: kind === k ? '#FFFFFF' : 'rgba(255,255,255,0.12)', color: kind === k ? '#111' : '#FFFFFF' }}>{label}</div>
-  );
-  const field = { width: '100%', boxSizing: 'border-box', padding: '12px 14px', borderRadius: 14, border: 'none', outline: 'none', background: 'rgba(255,255,255,0.12)', color: '#FFFFFF', fontFamily: FONT, fontSize: 15, colorScheme: 'dark' };
+  const field ={ width: '100%', boxSizing: 'border-box', padding: '12px 14px', borderRadius: 14, border: 'none', outline: 'none', background: 'rgba(255,255,255,0.12)', color: '#FFFFFF', fontFamily: FONT, fontSize: 15, colorScheme: 'dark' };
   const placeholder = { question: 'Your question', poll: 'Your question', quiz: 'Your question', slider: 'Your question', count: 'What are you counting down to?', link: 'Text on the sticker, optional', addyours: 'Your prompt' }[kind];
   return (
     <div onClick={onClose} className="zchat-fade" style={{ position: 'absolute', inset: 0, zIndex: 20, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'flex-end' }}>
       <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ width: '100%', maxHeight: '86%', overflowY: 'auto', boxSizing: 'border-box', background: '#15151B', borderRadius: '22px 22px 0 0', padding: '16px 16px calc(16px + env(safe-area-inset-bottom))', color: '#FFFFFF', fontFamily: FONT }}>
-        <div style={{ fontSize: 16, fontWeight: 800, textAlign: 'center', marginBottom: 12 }}>Add a sticker</div>
-        <div style={{ display: 'flex', gap: 6, marginBottom: 14, overflowX: 'auto', scrollbarWidth: 'none' }}>
-          {tab('question', 'Question')}{tab('poll', 'Poll')}{tab('quiz', 'Quiz')}{tab('addyours', 'Add yours')}{tab('count', 'Countdown')}{tab('slider', 'Slider')}{tab('link', 'Link')}
+        <div style={{ fontSize: 16, fontWeight: 800, textAlign: 'center', marginBottom: 8 }}>Add a sticker</div>
+        <div style={{ marginBottom: 12 }}>
+          <StudioDark>
+            <PickTiles label="Sticker type" size={62} bleed={16} ringBg="#15151B" value={kind} onChange={pickKind}
+              options={STORY_STICKER_KINDS.map(([k, label]) => ({ k, label, aria: `${label} sticker`, art: <StoryStickerKindArt k={k} emoji={emoji} /> }))} />
+          </StudioDark>
         </div>
         {kind === 'link' && <input value={url} onChange={(e) => setUrl(e.target.value.slice(0, 300))} placeholder="Paste a link" aria-label="Sticker link" inputMode="url" autoCapitalize="none" style={{ ...field, marginBottom: 10 }} />}
         <input value={q} onChange={(e) => setQ(e.target.value.slice(0, 80))} placeholder={placeholder} aria-label="Sticker question" style={field} />
@@ -31630,7 +33406,7 @@ function StoryStickerEditor({ onDone, onClose }) {
                   <div role="button" aria-label={right === i ? `Option ${i + 1} is right` : `Mark option ${i + 1} as right`} onClick={() => { hapticTap(); setRight(i); }} style={{ width: 30, height: 30, borderRadius: '50%', flexShrink: 0, boxSizing: 'border-box', border: `2px solid ${right === i ? '#22C55E' : 'rgba(255,255,255,0.3)'}`, background: right === i ? '#22C55E' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>{right === i && <Check size={15} color="#FFFFFF" strokeWidth={3.2} />}</div>
                 )}
                 <input value={o} onChange={(e) => { const v = e.target.value.slice(0, 30); setOpts((prev) => prev.map((x, j) => (j === i ? v : x))); }} placeholder={`Option ${i + 1}`} aria-label={`Poll option ${i + 1}`} style={{ ...field, flex: 1 }} />
-                {opts.length > 2 && <div role="button" aria-label={`Remove option ${i + 1}`} onClick={() => { setOpts((prev) => prev.filter((_, j) => j !== i)); setRight((r) => (r === i ? 0 : r > i ? r - 1 : r)); }} style={{ width: 44, height: 44, flexShrink: 0, borderRadius: 14, background: 'rgba(255,255,255,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={16} /></div>}
+                {opts.length > 2 && <div role="button" aria-label={`Remove option ${i + 1}`} onClick={() => { setOpts((prev) => prev.filter((_, j) => j !== i)); setRight((r) => (r === i ? 0 : r > i ? r - 1 : r)); }} className="zchat-press" style={{ width: 36, height: 44, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'rgba(255, 255, 255, 0.6)' }}><X size={19} /></div>}
               </div>
             ))}
             {opts.length < 4 && <div role="button" aria-label="Add poll option" onClick={() => setOpts((prev) => [...prev, ''])} style={{ fontSize: 14, fontWeight: 800, color: '#C9B8FF', cursor: 'pointer', padding: '4px 2px' }}>Add an option</div>}
@@ -31638,8 +33414,11 @@ function StoryStickerEditor({ onDone, onClose }) {
           </div>
         )}
         {kind === 'slider' && (
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 12 }}>
-            {SLIDER_EMOJIS.map((e) => <div key={e} role="button" aria-label={`Slider emoji ${e}`} onClick={() => setEmoji(e)} style={{ width: 44, height: 44, borderRadius: 14, fontSize: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: emoji === e ? 'rgba(255,255,255,0.28)' : 'rgba(255,255,255,0.1)' }}>{e}</div>)}
+          <div role="radiogroup" aria-label="Slider emoji" style={{ display: 'flex', justifyContent: 'space-between', gap: 4, padding: '14px 4px 2px' }}>
+            {SLIDER_EMOJIS.map((e) => {
+              const on = emoji === e;
+              return <div key={e} role="radio" aria-checked={on} aria-label={`Slider emoji ${e}`} onClick={() => { hapticTap(); setEmoji(e); }} className="zchat-press" style={{ width: 38, height: 38, flexShrink: 0, borderRadius: '50%', fontSize: 23, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: on ? 'rgba(255, 255, 255, 0.16)' : 'transparent', boxShadow: on ? `0 0 0 2px #15151B, 0 0 0 4px ${theme.coral}` : 'none', transition: 'box-shadow 160ms ease, background 160ms ease' }}>{e}</div>;
+            })}
           </div>
         )}
         {kind === 'count' && (
@@ -31649,7 +33428,7 @@ function StoryStickerEditor({ onDone, onClose }) {
           </div>
         )}
         {kind === 'addyours' && <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.6)', marginTop: 10, lineHeight: 1.45 }}>Friends tap Add yours to post their own story with the same prompt.</div>}
-        <div role="button" aria-label="Add sticker to story" onClick={done} style={{ marginTop: 16, height: 48, borderRadius: 14, background: ok ? '#FFFFFF' : 'rgba(255,255,255,0.2)', color: ok ? '#111' : 'rgba(255,255,255,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 15, cursor: ok ? 'pointer' : 'default' }}>Add to story</div>
+        <div role="button" aria-label="Add sticker to story" onClick={done} className={ok ? 'zchat-press' : undefined} style={{ marginTop: 16, height: 48, borderRadius: 14, background: ok ? theme.coral : 'rgba(255,255,255,0.12)', color: ok ? '#FFFFFF' : 'rgba(255,255,255,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 15, cursor: ok ? 'pointer' : 'default', transition: 'background 160ms ease, color 160ms ease' }}>Add to story</div>
       </div>
     </div>
   );
@@ -31683,8 +33462,8 @@ function StoryStickerPreview({ sticker }) {
 }
 function MomentBadge({ late }) {
   return (
-    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 16, background: 'rgba(0,0,0,0.55)', color: '#FFFFFF', fontSize: 12.5, fontWeight: 800, fontFamily: FONT }}>
-      <MomentIcon size={14} />{late ? 'Late daily moment' : 'Daily moment'}
+    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 2px', color: '#FFFFFF', fontSize: 13.5, fontWeight: 700, letterSpacing: '-0.005em', fontFamily: FONT, textShadow: '0 1px 4px rgba(0,0,0,0.6)' }}>
+      <span style={{ display: 'flex', color: late ? '#FDBA74' : '#FFFFFF', filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.5))' }}><MomentIcon size={17} /></span>{late ? 'Late daily moment' : 'Daily moment'}
     </div>
   );
 }
@@ -31954,6 +33733,7 @@ function PostMediaCarousel({ post, rootRef, onTap, onDoubleTap }) {
   const [idx, setIdx] = useState(0);
   const ref = useRef(null);
   const onScroll = () => { const el = ref.current; if (!el) return; const i = Math.round(el.scrollLeft / Math.max(1, el.clientWidth)); if (i !== idx) setIdx(i); };
+  const peek = useCarouselPeek(idx);
   return (
     <div style={{ position: 'absolute', inset: 0 }}>
       <div ref={ref} onScroll={onScroll} style={{ position: 'absolute', inset: 0, display: 'flex', overflowX: 'auto', scrollSnapType: 'x mandatory', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
@@ -31968,13 +33748,23 @@ function PostMediaCarousel({ post, rootRef, onTap, onDoubleTap }) {
       </div>
       {list.length > 1 && (
         <>
-          <div style={{ position: 'absolute', top: 'calc(64px + env(safe-area-inset-top))', right: 14, padding: '4px 10px', borderRadius: 12, background: 'rgba(0,0,0,0.55)', fontSize: 12, fontWeight: 800, pointerEvents: 'none' }}>{idx + 1}/{list.length}</div>
+          <CarouselCount n={idx + 1} total={list.length} show={peek} style={{ top: 'calc(64px + env(safe-area-inset-top))', right: 14 }} />
           <div style={{ position: 'absolute', left: 0, right: 0, bottom: 12, display: 'flex', justifyContent: 'center', gap: 5, pointerEvents: 'none' }}>
             {list.map((_, i) => <span key={i} style={{ width: 6, height: 6, borderRadius: '50%', background: i === idx ? '#FFFFFF' : 'rgba(255,255,255,0.45)' }} />)}
           </div>
         </>
       )}
     </div>
+  );
+}
+function useCarouselPeek(idx) {
+  const [peek, setPeek] = useState(true);
+  useEffect(() => { setPeek(true); const t = setTimeout(() => setPeek(false), 2400); return () => clearTimeout(t); }, [idx]);
+  return peek;
+}
+function CarouselCount({ n, total, show, style }) {
+  return (
+    <div aria-label={`${n} of ${total}`} style={{ position: 'absolute', minWidth: 34, height: 24, padding: '0 8px', boxSizing: 'border-box', borderRadius: 12, background: 'rgba(18,18,22,0.5)', backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)', color: '#FFFFFF', fontSize: 12, fontWeight: 700, fontVariantNumeric: 'tabular-nums', display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none', opacity: show ? 1 : 0, transition: 'opacity 260ms ease', ...(style || {}) }}>{n}/{total}</div>
   );
 }
 function isCarouselPost(p) { return !!p && Array.isArray(p.media_urls) && p.media_urls.filter((x) => x && x.u).length > 1; }
@@ -32016,6 +33806,26 @@ async function createPostFromOutputs(userId, outputs, caption, opts) {
     if (error) failed += 1; else { done += 1; if (!first) first = data; }
   }
   return { done, failed, fallback: single || !!collab, scheduled: at, schedLost, post: first };
+}
+let pendingPostSeq = 0;
+async function createPostOptimistic(userId, owner, outputs, caption, opts) {
+  const later = !!(opts && opts.scheduleAt && new Date(opts.scheduleAt).getTime() > Date.now() + 30000);
+  const urls = [];
+  const urlOf = (it) => { try { const u = URL.createObjectURL(it.file); urls.push(u); return u; } catch { return it.url || null; } };
+  const groups = later ? [] : (!(opts && opts.separate) && outputs.length > 1 ? [outputs] : outputs.map((o) => [o]));
+  const made = groups.map((g) => {
+    pendingPostSeq += 1;
+    const first = g[0];
+    const u = urlOf(first);
+    return { id: `temp-post-${Date.now()}-${pendingPostSeq}`, user_id: userId, media_url: u, media_type: first.kind === 'video' ? 'video' : 'image', overlay_url: null, caption: caption || null, created_at: new Date().toISOString(), owner: owner || null, collab: null, __pending: true, ...(g.length > 1 ? { media_urls: g.map((x, i) => ({ u: i === 0 ? u : urlOf(x), t: x.kind === 'video' ? 'video' : 'image' })) } : {}) };
+  });
+  if (made.length) { pendingPostStore.list = [...made, ...pendingPostStore.list]; pendingPostsChanged(); }
+  let res;
+  try { res = await createPostFromOutputs(userId, outputs, caption, opts); } catch { res = { done: 0, failed: outputs.length }; }
+  if (res.post && res.done && !res.scheduled) addPostLocally({ ...res.post, owner: owner || null, collab: res.collab ? { id: res.collab.id, name: res.collab.name } : null });
+  if (made.length) { pendingPostStore.list = pendingPostStore.list.filter((p) => !made.includes(p)); pendingPostsChanged(); }
+  if (urls.length) setTimeout(() => urls.forEach((u) => { try { URL.revokeObjectURL(u); } catch {} }), 8000);
+  return res;
 }
 
 const memoriesMem = { at: 0, rows: null };
@@ -32157,7 +33967,7 @@ function ChannelRow({ c, onOpen, onFollow, busy }) {
         <div style={{ fontSize: 12.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{formatCount(Number(c.followers) || 0)} {Number(c.followers) === 1 ? 'follower' : 'followers'}{c.bio ? `, ${c.bio}` : ''}</div>
       </div>
       {onFollow && (
-        <div role="button" aria-label={c.following ? `Following ${c.name}` : `Follow ${c.name}`} onClick={(e) => { e.stopPropagation(); onFollow(c); }} className="zchat-press" style={{ padding: '8px 14px', borderRadius: 12, background: c.following ? theme.rowBg : theme.coral, color: c.following ? theme.ink : '#FFFFFF', fontSize: 13, fontWeight: 800, cursor: 'pointer', flexShrink: 0 }}>{busy ? <Spinner size={13} color={c.following ? theme.ink : '#FFFFFF'} /> : c.following ? 'Following' : 'Follow'}</div>
+        <div role="button" aria-label={c.following ? `Following ${c.name}` : `Follow ${c.name}`} onClick={(e) => { e.stopPropagation(); onFollow(c); }} className="zchat-press" style={{ height: 32, minWidth: 92, padding: '0 14px', boxSizing: 'border-box', borderRadius: 9, background: c.following ? theme.soft2 : theme.coral, color: c.following ? theme.ink : '#FFFFFF', fontSize: 13.5, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>{busy ? <Spinner size={13} color={c.following ? theme.ink : '#FFFFFF'} /> : c.following ? 'Following' : 'Follow'}</div>
       )}
     </div>
   );
@@ -32793,21 +34603,15 @@ function AiStyleChips({ value, onChange }) {
   const { theme } = useTheme();
   const rowRef = useRef(null);
   useEffect(() => {
-    const row = rowRef.current;
+    const wrap = rowRef.current;
+    const row = wrap && wrap.firstElementChild;
     const el = row && row.querySelector('[aria-checked="true"]');
     if (row && el && el.offsetLeft > row.clientWidth - 70) row.scrollLeft = el.offsetLeft - 20;
   }, []);
   return (
-    <div ref={rowRef} role="radiogroup" aria-label="Style" style={{ display: 'flex', gap: 10, overflowX: 'auto', scrollbarWidth: 'none', marginLeft: -20, marginRight: -20, padding: '3px 20px 4px' }}>
-      {AI_STYLES.map(([k, l]) => {
-        const on = value === k;
-        return (
-          <div key={k} role="radio" aria-checked={on} aria-label={`Style ${l}`} onClick={() => { hapticTap(); onChange(k); }} className="zchat-press" style={{ flexShrink: 0, width: 70, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
-            <div style={{ width: 66, height: 66, borderRadius: 18, overflow: 'hidden', boxShadow: on ? `0 0 0 2.5px ${theme.panelBg}, 0 0 0 4.5px ${theme.coral}` : `inset 0 0 0 1px ${theme.border}`, transition: 'box-shadow 140ms' }}><AiStyleThumb k={k} /></div>
-            <span style={{ fontSize: 12, fontWeight: on ? 800 : 600, color: on ? theme.coral : theme.ink, whiteSpace: 'nowrap' }}>{l}</span>
-          </div>
-        );
-      })}
+    <div ref={rowRef}>
+      <PickTiles label="Style" size={66} bleed={20} ringBg={theme.bgGradient} value={value} onChange={onChange}
+        options={AI_STYLES.map(([k, l]) => ({ k, label: l, aria: `Style ${l}`, art: <AiStyleThumb k={k} /> }))} />
     </div>
   );
 }
@@ -32833,6 +34637,7 @@ function AiBusyCard({ ratio, round }) {
   );
 }
 
+const AI_USE_LOOK = { avatar: ['avatar', 'My photo'], wallpaper: ['wallpaper', 'Wallpaper'], chat: ['send', 'Send'], story: ['story', 'Story'], save: ['save', 'Save'] };
 function AiStudioPage({ myId, mode = 'image', startKind, chatTitle, onClose, onUseAvatar, onUseWallpaper, onShareStory, onSendInChat, onSnack, onLegacy, initialPrompt, avatarLabel }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
@@ -32956,16 +34761,16 @@ function AiStudioPage({ myId, mode = 'image', startKind, chatTitle, onClose, onU
       {stage === 'busy' && (
         <div style={{ padding: '0 20px' }}>
           <AiBusyCard ratio={kind === 'wallpaper' ? '9:16' : kind === 'picture' ? ratio : '1:1'} round={kind === 'avatar' || kind === 'profile'} />
-          <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 6 }}><PillButton label="Cancel" onClick={() => { aliveRef.current = false; onClose(); }} /></div>
+          <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 6 }}><div role="button" aria-label="Cancel" onClick={() => { aliveRef.current = false; onClose(); }} className="zchat-press" style={{ padding: '10px 18px', fontSize: 15, fontWeight: 600, color: theme.muted, cursor: 'pointer' }}>Cancel</div></div>
         </div>
       )}
       {stage === 'result' && result && (
         <div style={{ padding: '14px 20px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
           <img src={result.url} alt="Your creation" draggable={false} style={{ width: resultRound ? 220 : '100%', maxWidth: resultRound ? 220 : 340, maxHeight: '54vh', objectFit: 'cover', aspectRatio: resultRound ? '1 / 1' : undefined, borderRadius: resultRound ? '50%' : 22, boxShadow: '0 16px 40px rgba(0,0,0,0.22)', background: theme.rowBg }} />
           {result.prompt && !avatarMode && <div style={{ fontSize: 14, color: theme.muted, textAlign: 'center', lineHeight: 1.45, maxWidth: 340 }}>{result.prompt}</div>}
-          <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 8 }}>
-            <PillButton label="Try again" ariaLabel="Try again" onClick={again} disabled={!!saving || !result.fresh} style={!result.fresh ? { display: 'none' } : undefined} />
-            {secondary.map((a) => <PillButton key={a.how} label={saving === a.how ? 'Working' : a.label} ariaLabel={a.label} disabled={!!saving} onClick={() => useResult(a.how)} />)}
+          <div role="toolbar" aria-label="More ways to use it" style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 10 }}>
+            {result.fresh && <StudioTool label="Try again" glyph={<StudioGlyph k="retry" />} disabled={!!saving} onClick={again} width={74} />}
+            {secondary.map((a) => <StudioTool key={a.how} label={saving === a.how ? 'Working' : AI_USE_LOOK[a.how][1]} aria={a.label} glyph={<StudioGlyph k={AI_USE_LOOK[a.how][0]} />} disabled={!!saving} onClick={() => useResult(a.how)} width={74} />)}
           </div>
           {note && <div role="alert" style={{ fontSize: 13.5, color: theme.danger, textAlign: 'center' }}>{note}</div>}
         </div>
@@ -32992,36 +34797,38 @@ function AiStudioPage({ myId, mode = 'image', startKind, chatTitle, onClose, onU
               )}
               <div>
                 <textarea value={prompt} onChange={(e) => { setPrompt(e.target.value.slice(0, 300)); if (note) setNote(''); }} placeholder={kind === 'wallpaper' ? 'Soft violet clouds at dawn' : kind === 'profile' ? 'A smiling red panda with round glasses' : 'A tiny cat astronaut floating past Saturn'} aria-label="Describe your picture" rows={3} style={{ ...inputStyle(theme), resize: 'none', minHeight: 84, lineHeight: 1.4, marginTop: kinds.length > 1 && !startKind ? 0 : 6 }} />
-                <div role="list" aria-label="Ideas" style={{ display: 'flex', gap: 6, overflowX: 'auto', scrollbarWidth: 'none', paddingTop: 8, marginLeft: -20, marginRight: -20, paddingLeft: 20, paddingRight: 20 }}>
-                  {ideas.map((t) => <div key={t} role="listitem" aria-label={`Idea ${t}`} onClick={() => { hapticTap(); setPrompt(t); setNote(''); }} className="zchat-press" style={{ flexShrink: 0, height: 30, padding: '0 12px', borderRadius: 15, border: `1px solid ${theme.border}`, color: theme.ink, fontSize: 12.5, fontWeight: 600, display: 'flex', alignItems: 'center', cursor: 'pointer', whiteSpace: 'nowrap' }}>{t}</div>)}
+                <div role="list" aria-label="Ideas" style={{ display: 'flex', flexDirection: 'column', paddingTop: 6 }}>
+                  {ideas.map((t, i) => (
+                    <div key={t} role="listitem" aria-label={`Idea ${t}`} onClick={() => { hapticTap(); setPrompt(t); setNote(''); }} className="zchat-row-press"
+                      style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 12, minHeight: 44, padding: '2px 4px', borderRadius: 10, cursor: 'pointer', WebkitTapHighlightColor: 'transparent' }}>
+                      <span style={{ display: 'flex', color: theme.muted }}><StudioGlyph k="idea" size={21} /></span>
+                      <span style={{ flex: 1, minWidth: 0, fontSize: 14.5, color: theme.ink2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t}</span>
+                      <span style={{ display: 'flex', color: theme.muted2 }}><StudioGlyph k="insert" size={18} /></span>
+                      {i < ideas.length - 1 && <span aria-hidden="true" style={{ position: 'absolute', left: 37, right: 4, bottom: 0, height: 1, background: theme.hair }} />}
+                    </div>
+                  ))}
                 </div>
               </div>
             </>
           )}
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: theme.muted, paddingBottom: 9 }}>Style</div>
+          <KitSection title="Style" style={{ marginTop: 0 }}>
             <AiStyleChips value={style} onChange={setStyle} />
-          </div>
+          </KitSection>
           {kind === 'picture' && (
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: theme.muted, paddingBottom: 9 }}>Shape</div>
-              <div role="radiogroup" aria-label="Shape" style={{ display: 'flex', gap: 8 }}>
-                {[['1:1', 'Square'], ['4:5', 'Portrait'], ['16:9', 'Wide']].map(([k, l]) => (
-                  <div key={k} role="radio" aria-checked={ratio === k} aria-label={`Shape ${l}`} onClick={() => { hapticTap(); setRatio(k); }} className="zchat-press" style={{ height: 34, padding: '0 14px', borderRadius: 17, display: 'flex', alignItems: 'center', fontSize: 13.5, fontWeight: 700, cursor: 'pointer', background: ratio === k ? theme.coral : theme.rowBg, color: ratio === k ? '#FFFFFF' : theme.ink }}>{l}</div>
-                ))}
-              </div>
-            </div>
+            <KitSection title="Shape" style={{ marginTop: 0 }}>
+              <PickTiles label="Shape" size={58} fit ringBg={theme.bgGradient} value={ratio} onChange={setRatio}
+                options={[['1:1', 'Square', 'size_square'], ['4:5', 'Portrait', 'size_portrait'], ['16:9', 'Wide', 'size_wide']].map(([k, l, g]) => ({ k, label: l, sub: k, aria: `Shape ${l}`, art: g === 'size_wide' ? <StudioGlyph k="size_wide" size={34} /> : <KitGlyph k={g} size={34} /> }))} />
+            </KitSection>
           )}
           {avatarMode && (
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: theme.muted, paddingBottom: 9 }}>Anything extra</div>
+            <KitSection title="Anything extra" style={{ marginTop: 0 }}>
               <input value={prompt} onChange={(e) => setPrompt(e.target.value.slice(0, 160))} placeholder="Wearing sunglasses, a crown, a space suit" aria-label="Extra wishes" style={inputStyle(theme)} />
-            </div>
+            </KitSection>
           )}
           {note && <div role="alert" style={{ fontSize: 13.5, color: theme.danger, lineHeight: 1.45 }}>{note}</div>}
           {recent && recent.length > 0 && (
             <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: theme.muted, paddingBottom: 9 }}>Made before</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: theme.ink, letterSpacing: '-0.01em', paddingBottom: 8 }}>Made before</div>
               <div role="list" aria-label="Made before" style={{ display: 'flex', gap: 8, overflowX: 'auto', scrollbarWidth: 'none', marginLeft: -20, marginRight: -20, paddingLeft: 20, paddingRight: 20 }}>
                 {recent.map((r) => (
                   <div key={r.id} role="listitem" aria-label={`Open creation ${r.prompt || r.kind}`} onClick={() => openRecent(r)} className="zchat-press" style={{ flexShrink: 0, width: 92, height: 92, borderRadius: r.kind === 'avatar' || r.kind === 'profile' ? '50%' : 14, overflow: 'hidden', cursor: 'pointer', background: theme.rowBg }}>
@@ -33292,8 +35099,19 @@ function AiCharacterEditor({ myId, initial, onClose, onSaved, onDeleted }) {
         {field('Short line', tagline, setTagline, 120, 'Astronaut on a long trip home', 'Character short line')}
         <div>
           {field('Personality', personality, setPersonality, 1500, 'How they talk, what they love, how they act', 'Character personality', 5)}
-          <div style={{ display: 'flex', gap: 6, overflowX: 'auto', scrollbarWidth: 'none', paddingTop: 8, marginLeft: -20, marginRight: -20, paddingLeft: 20, paddingRight: 20 }}>
-            {AI_CHAR_PERSONALITY_IDEAS.map((t) => <div key={t} role="button" aria-label={`Personality idea ${t}`} onClick={() => { hapticTap(); setPersonality((p) => (p.trim() ? `${p.trim()} ${t}.` : `${t}.`).slice(0, 1500)); }} className="zchat-press" style={{ flexShrink: 0, height: 30, padding: '0 12px', borderRadius: 15, border: `1px solid ${theme.border}`, color: theme.ink, fontSize: 12.5, fontWeight: 600, display: 'flex', alignItems: 'center', cursor: 'pointer', whiteSpace: 'nowrap' }}>{t}</div>)}
+          <div style={{ paddingTop: 10 }}>
+            <div style={{ fontSize: 12.5, color: theme.muted, paddingBottom: 2 }}>Tap an idea to add it</div>
+            {AI_CHAR_PERSONALITY_IDEAS.map((t, i) => {
+              const used = personality.includes(t);
+              return (
+                <div key={t} role="button" aria-label={`Personality idea ${t}`} onClick={() => { hapticTap(); setPersonality((p) => (p.trim() ? `${p.trim()} ${t}.` : `${t}.`).slice(0, 1500)); }} className="zchat-row-press" style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 12, minHeight: 48, padding: '4px 2px', cursor: 'pointer' }}>
+                  {i > 0 && <span aria-hidden="true" style={{ position: 'absolute', left: 38, right: 2, top: 0, height: 1, background: theme.hair }} />}
+                  <span style={{ display: 'flex', color: used ? kitOnInk(theme) : theme.ink2, flexShrink: 0 }}><LineGlyph k={['cheer', 'calm', 'clap', 'shy', 'smirk'][i] || 'smile'} size={24} /></span>
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 14.5, lineHeight: 1.3, color: theme.ink }}>{t}</span>
+                  <span style={{ display: 'flex', color: used ? kitOnInk(theme) : theme.muted, flexShrink: 0 }}><LineGlyph k={used ? 'check' : 'plus'} size={18} sw={2.6} /></span>
+                </div>
+              );
+            })}
           </div>
         </div>
         {field('First message', greeting, setGreeting, 400, 'Hi! What is the weather like on Earth today?', 'Character first message', 2)}
@@ -33440,8 +35258,16 @@ function AiCharacterChat({ myId, character, onClose, onEdit, onSnack }) {
           )}
         </div>
         {msgs && msgs.length === 0 && !waiting && (
-          <div style={{ display: 'flex', gap: 8, overflowX: 'auto', scrollbarWidth: 'none', padding: '0 12px 8px', flexShrink: 0 }}>
-            {AI_CHAR_STARTERS.map((t) => <div key={t} role="button" aria-label={`Say ${t}`} onClick={() => send(t)} className="zchat-press" style={{ flexShrink: 0, height: 34, padding: '0 14px', borderRadius: 17, border: `1px solid ${theme.border}`, color: theme.ink, fontSize: 13.5, fontWeight: 600, display: 'flex', alignItems: 'center', cursor: 'pointer', whiteSpace: 'nowrap' }}>{t}</div>)}
+          <div style={{ padding: '2px 12px 6px', flexShrink: 0 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 600, color: theme.muted, padding: '0 6px 2px' }}>Start with</div>
+            {AI_CHAR_STARTERS.map((t, i) => (
+              <div key={t} role="button" aria-label={`Say ${t}`} onClick={() => send(t)} className="zchat-row-press" style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 12, minHeight: 46, padding: '0 6px', cursor: 'pointer' }}>
+                {i > 0 && <span aria-hidden="true" style={{ position: 'absolute', left: 39, right: 6, top: 0, height: 1, background: theme.hair }} />}
+                <span style={{ display: 'flex', color: kitOnInk(theme), flexShrink: 0 }}><LineGlyph k={['chat', 'gift', 'book'][i] || 'chat'} size={21} /></span>
+                <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 500, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t}</span>
+                <span style={{ display: 'flex', color: theme.muted, flexShrink: 0 }}><LineGlyph k="send" size={17} sw={2.4} /></span>
+              </div>
+            ))}
           </div>
         )}
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, padding: '8px 10px calc(8px + env(safe-area-inset-bottom))', borderTop: `1px solid ${theme.border}`, flexShrink: 0 }}>
@@ -33466,6 +35292,7 @@ function AiCharacterChat({ myId, character, onClose, onEdit, onSnack }) {
   );
 }
 
+const AV_NAMES = { short: 'Short', fringe: 'Fringe', long: 'Long', bun: 'Bun', curly: 'Curly', spiky: 'Spiky', side: 'Side part', pony: 'Ponytail', buzz: 'Buzz cut', dots: 'Dots', happy: 'Happy', big: 'Big', sleepy: 'Sleepy', wink: 'Wink', lashes: 'Lashes', smile: 'Smile', grin: 'Grin', small: 'Small', o: 'Surprised', tongue: 'Tongue', flat: 'Flat', round: 'Round', oval: 'Oval', soft: 'Soft', square: 'Square', shades: 'Shades', earrings: 'Earrings', headphones: 'Headphones', cap: 'Cap', flower: 'Flower', bow: 'Bow', freckles: 'Freckles', none: 'None' };
 function AvatarMakerPage({ initial, onClose, onSave }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
@@ -33480,22 +35307,19 @@ function AvatarMakerPage({ initial, onClose, onSave }) {
   };
   const tabs = [['skin', 'Skin'], ['face', 'Face'], ['hair', 'Hair'], ['hairColor', 'Hair colour'], ['eyes', 'Eyes'], ['mouth', 'Mouth'], ['glasses', 'Glasses'], ['extra', 'Extras'], ['shirt', 'Top'], ['bg', 'Background']];
   const swatches = (list, key) => (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-      {list.map((col, i) => <div key={col} role="button" aria-label={`${key} colour ${i + 1}`} onClick={() => set(key, i)} style={{ width: 44, height: 44, borderRadius: '50%', background: col, border: cfg[key] === i ? `3px solid ${theme.coral}` : `1px solid ${theme.border}`, boxSizing: 'border-box', cursor: 'pointer' }} />)}
+    <div role="radiogroup" aria-label={(tabs.find(([k]) => k === key) || [key, key])[1]} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(48px, 1fr))', gap: 14, justifyItems: 'center', padding: '6px 2px' }}>
+      {list.map((col, i) => {
+        const on = cfg[key] === i;
+        return <div key={col} role="radio" aria-checked={on} aria-label={`${key} colour ${i + 1}`} onClick={() => set(key, i)} className="zchat-press" style={{ width: 44, height: 44, borderRadius: '50%', background: col, cursor: 'pointer', boxShadow: on ? `0 0 0 2.5px ${theme.bgGradient}, 0 0 0 4.5px ${theme.coral}` : `inset 0 0 0 1px ${theme.dark ? 'rgba(255,255,255,0.16)' : 'rgba(17,17,19,0.12)'}`, transition: 'box-shadow 160ms ease' }} />;
+      })}
     </div>
   );
   const options = (list, key) => (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 8 }}>
-      {list.map((v, idx) => {
+    <StudioTileGrid label={(tabs.find(([k]) => k === key) || [key, key])[1]} cols={4} radius={18} ringBg={theme.bgGradient} value={cfg[key]} onChange={(val) => setCfg((c) => ({ ...c, [key]: val }))}
+      options={list.map((v, idx) => {
         const val = key === 'face' ? idx : v;
-        const on = cfg[key] === val;
-        return (
-          <div key={String(v)} role="button" aria-label={`${key} ${v}`} onClick={() => set(key, val)} style={{ aspectRatio: '1 / 1', borderRadius: 16, overflow: 'hidden', border: on ? `3px solid ${theme.coral}` : `1px solid ${theme.border}`, cursor: 'pointer', background: theme.rowBg }}>
-            <img src={avatarSvgUrl({ ...cfg, [key]: val })} alt="" draggable={false} style={{ width: '100%', height: '100%', display: 'block' }} />
-          </div>
-        );
-      })}
-    </div>
+        return { k: val, label: key === 'hair' && v === 'none' ? 'Bald' : (AV_NAMES[v] || String(v)), aria: `${key} ${v}`, art: <img src={avatarSvgUrl({ ...cfg, [key]: val })} alt="" draggable={false} style={{ width: '100%', height: '100%', display: 'block' }} /> };
+      })} />
   );
   const save = async () => {
     if (busy) return;
@@ -33513,10 +35337,8 @@ function AvatarMakerPage({ initial, onClose, onSave }) {
       <div style={{ display: 'flex', justifyContent: 'center', padding: '14px 0 10px' }}>
         <img src={avatarSvgUrl(cfg)} alt="Your avatar" draggable={false} style={{ width: 168, height: 168, borderRadius: '50%', boxShadow: '0 10px 30px rgba(0,0,0,0.18)' }} />
       </div>
-      <div style={{ display: 'flex', gap: 6, overflowX: 'auto', padding: '4px 16px 10px', scrollbarWidth: 'none' }}>
-        {tabs.map(([k, l]) => <div key={k} role="button" aria-label={l} onClick={() => setTab(k)} style={{ flexShrink: 0, padding: '8px 13px', borderRadius: 14, fontSize: 13, fontWeight: 800, cursor: 'pointer', background: tab === k ? theme.coral : theme.rowBg, color: tab === k ? '#FFFFFF' : theme.ink }}>{l}</div>)}
-      </div>
-      <div style={{ padding: '4px 16px 20px' }}>
+      <KitTabs label="Avatar parts" value={tab} onChange={setTab} options={tabs} style={{ margin: '4px 0 0', padding: '0 4px' }} />
+      <div style={{ padding: '12px 16px 20px' }}>
         {tab === 'skin' && swatches(AV_SKIN, 'skin')}
         {tab === 'hairColor' && swatches(AV_HAIRC, 'hairColor')}
         {tab === 'shirt' && swatches(AV_SHIRT, 'shirt')}
@@ -33650,6 +35472,7 @@ function ChannelsEntryRow({ onOpen }) {
 }
 
 function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAccount, onAddAccount, onRemoveAccount, switchingAccountId }) {
+  claimUserCaches(session && session.user && session.user.id);
   const { theme, bgPatternOn, bubbleStyle, setBubbleStyle, keepTextStyle, setDark } = useTheme();
   const assetProgress = useAssetPrefetch();
   const [notifPermission, setNotifPermission] = useState(typeof Notification !== 'undefined' ? Notification.permission : 'default');
@@ -33892,7 +35715,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const sharePost = async (outputs, caption, mentionsIn, opts) => {
     setPostComposer(null);
     setSnack(opts && opts.scheduleAt ? 'Scheduling' : 'Posting');
-    const res = await createPostFromOutputs(session.user.id, outputs, caption, opts);
+    const res = await createPostOptimistic(session.user.id, me, outputs, caption, opts);
     setPostsVersion((v) => v + 1);
     if (res.done && opts && opts.draftId) { deleteDraft(opts.draftId).then(announceDrafts); }
     if (!res.done) showSnack('Could not post. Check your connection and try again.');
@@ -33977,8 +35800,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     showSnack(on ? `Stories from ${(p.name || '').split(' ')[0]} are muted` : `Stories from ${(p.name || '').split(' ')[0]} are back`);
   };
   const reshareOwnStory = async (story) => {
-    const { error } = await supabase.from('stories').insert({ user_id: session.user.id, media_url: story.media_url, media_type: story.media_type, overlay_url: story.overlay_url || null, caption: story.caption || null, mentions: [] });
+    const { data: made, error } = await supabase.from('stories').insert({ user_id: session.user.id, media_url: story.media_url, media_type: story.media_type, overlay_url: story.overlay_url || null, caption: story.caption || null, mentions: [] }).select().single();
     if (error) { showSnack(friendlyError(error, "Couldn't share it again. Try again.")); return; }
+    if (made && made.id) setStoryData((prev) => { const list = prev.byUser[session.user.id] || []; if (list.some((x) => x.id === made.id)) return prev; const seen = new Set(prev.seen); seen.add(made.id); return { ...prev, byUser: { ...prev.byUser, [session.user.id]: [...list, made] }, seen }; });
     if (storyFeedRef.current) storyFeedRef.current.send({ type: 'broadcast', event: 'story', payload: { userId: session.user.id } });
     showSnack('Shared to your story');
     loadStories();
@@ -34202,6 +36026,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     reviewAudioRef.current = a;
     a.onended = () => { if (reviewAudioRef.current === a) { reviewAudioRef.current = null; setReviewPlaying(false); } };
     setReviewPlaying(true);
+    hushOtherMedia(null);
+    pauseSong();
     a.play().catch(() => setReviewPlaying(false));
   };
   const pickReviewFx = (fx) => { hapticTap(); stopReviewAudio(); setVoiceReview((rv) => (rv ? { ...rv, fx } : rv)); };
@@ -34342,7 +36168,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const pullStartYRef = useRef(null);
   const sidebarListRef = useRef(null);
   const sidebarScrollRef = useRef(0);
-  const [visibleCount, setVisibleCount] = useState(20);
+  const [visibleCount, setVisibleCount] = useState(8);
   const growRef = useRef(null);
   const growAtRef = useRef(0);
   const bubbleHoldersRef = useRef(new Map());
@@ -34749,7 +36575,12 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const cur = getArchivedChatIds();
     if (archive) cur.add(convId); else cur.delete(convId);
     try { localStorage.setItem(archivedChatsKey(), JSON.stringify([...cur])); } catch {}
-    loadConversations();
+    const row = conversationsRef.current.find((c) => c.id === convId) || archivedConversationsRef.current.find((c) => c.id === convId);
+    if (!row) { loadConversations(); return; }
+    const without = (prev) => (prev.some((c) => c.id === convId) ? prev.filter((c) => c.id !== convId) : prev);
+    const withRow = (prev) => (prev.some((c) => c.id === convId) ? prev : sortConvRows([row, ...prev]));
+    if (archive) { setConversations(without); setArchivedConversations(withRow); }
+    else { setArchivedConversations(without); setConversations(withRow); }
   };
 
   const hiddenMsgKey = () => `zchat-hidden-msgs-${session.user.id}`;
@@ -34814,25 +36645,44 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const isPinnedByMe = (conv) => (conv.user_a === session.user.id ? conv.pinned_by_a : conv.pinned_by_b);
   const togglePin = async (conv) => {
     const field = conv.user_a === session.user.id ? 'pinned_by_a' : 'pinned_by_b';
-    await supabase.from('conversations').update({ [field]: !isPinnedByMe(conv) }).eq('id', conv.id);
-    loadConversations();
+    const oid = conv.otherProfile && conv.otherProfile.id;
+    const cur = (oid && findConvRow(oid)) || conv;
+    const next = !isPinnedByMe(cur);
+    holdDmFields(oid, { [field]: next });
+    const { data, error } = await supabase.from('conversations').update({ [field]: next }).eq('id', conv.id).select('id');
+    if (error || !data || !data.length) {
+      dropFieldHold('dm', oid, [field]);
+      patchDmRow(oid, { [field]: !next });
+      showSnack(friendlyError(error, next ? "Couldn't pin that chat. Try again." : "Couldn't unpin that chat. Try again."));
+    }
   };
 
   const myWallpaperField = (conv) => (conv.user_a === session.user.id ? 'wallpaper_a' : 'wallpaper_b');
   const myWallpaper = (conv) => conv[myWallpaperField(conv)];
+  const saveConvField = async (conv, patch, failMsg) => {
+    const oid = conv.otherProfile && conv.otherProfile.id;
+    const cur = (oid && findConvRow(oid)) || conv;
+    const undo = {};
+    Object.keys(patch).forEach((k) => { undo[k] = cur[k] === undefined ? null : cur[k]; });
+    holdDmFields(oid, patch);
+    const { data, error } = await supabase.from('conversations').update(patch).eq('id', conv.id).select('id');
+    if (error || !data || !data.length) {
+      dropFieldHold('dm', oid, Object.keys(patch));
+      patchDmRow(oid, undo);
+      showSnack(friendlyError(error, failMsg));
+      return false;
+    }
+    return true;
+  };
   const setWallpaper = async (conv, key, scope) => {
     const personal = scope === 'me' || (typeof key === 'string' && key.indexOf(WALL_PHOTO_PREFIX) === 0);
     const patchRow = personal ? { [myWallpaperField(conv)]: key } : { wallpaper_a: key, wallpaper_b: key };
-    const { error } = await supabase.from('conversations').update(patchRow).eq('id', conv.id);
-    if (error) { appAlert(friendlyError(error, "Couldn't change the wallpaper. Try again.")); return; }
-    setConversations((prev) => prev.map((c) => (c.id === conv.id ? { ...c, ...patchRow } : c)));
+    if (!(await saveConvField(conv, patchRow, "Couldn't change the wallpaper. Try again."))) return;
     if (personal) return;
     const ct = chatThemeOf(key);
     const text = ct ? `${me.name} changed the chat theme to ${ct.label}` : key ? `${me.name} changed the wallpaper to ${WALLPAPER_PRESETS.find((p) => p.key === key)?.label || 'a new picture'}` : `${me.name} turned off the chat theme`;
-    const { data: sysRow } = await sendMessage(session.user.id, conv.otherProfile.id, 'system', text, null);
-    if (sysRow && activeProfileRefForCalls.current && activeProfileRefForCalls.current.id === conv.otherProfile.id) setMessages((prev) => (prev.some((x) => x.id === sysRow.id) ? prev : [...prev, sysRow]));
-    await upsertConversation(conv.otherProfile.id, text, 'system');
-    loadConversations();
+    const sysRow = await sendDmRow(conv.otherProfile, { type: 'system', content: text }, { fail: false });
+    if (sysRow) upsertConversation(conv.otherProfile.id, text, 'system');
   };
 
   const askToJoinGroup = async (g) => {
@@ -34882,53 +36732,45 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (target.kind === 'dm') {
       const conv = target.conv;
       if (!conv) return;
-      const { error } = await supabase.from('conversations').update({ disappear_secs: on ? Number(secs) : null }).eq('id', conv.id);
-      if (error) { appAlert(friendlyError(error, "Couldn't change disappearing messages. Try again.")); return; }
-      setConversations((prev) => prev.map((c) => (c.id === conv.id ? { ...c, disappear_secs: on ? Number(secs) : null } : c)));
+      if (!(await saveConvField(conv, { disappear_secs: on ? Number(secs) : null }, "Couldn't change disappearing messages. Try again."))) return;
       const text = on ? `${me.name} turned on disappearing messages. New messages vanish after ${disappearLabel(secs)}.` : `${me.name} turned off disappearing messages.`;
-      const { data } = await sendMessage(session.user.id, conv.otherProfile.id, 'system', text, null);
-      if (data && activeProfileRefForCalls.current && activeProfileRefForCalls.current.id === conv.otherProfile.id) {
-        setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
-      }
-      await upsertConversation(conv.otherProfile.id, text, 'system');
-      loadConversations();
+      const data = await sendDmRow(conv.otherProfile, { type: 'system', content: text }, { fail: false });
+      if (data) upsertConversation(conv.otherProfile.id, text, 'system');
       return;
     }
     if (!activeGroup || groupMembers.find((gm) => gm.user_id === session.user.id)?.role !== 'admin') return;
-    const { error } = await supabase.from('groups').update({ disappear_secs: on ? Number(secs) : null }).eq('id', activeGroup.id);
-    if (error) { appAlert(friendlyError(error, "Couldn't change disappearing messages. Try again.")); return; }
-    setActiveGroup((prev) => ({ ...prev, disappear_secs: on ? Number(secs) : null }));
+    if (!(await saveGroupField({ disappear_secs: on ? Number(secs) : null }, "Couldn't change disappearing messages. Try again."))) return;
     sendGroupMessage('system', on ? `${realName(session.user.id)} turned on disappearing messages. New messages vanish after ${disappearLabel(secs)}.` : `${realName(session.user.id)} turned off disappearing messages.`, null);
-    loadGroups();
   };
 
   const setGroupAccent = async (color) => {
     if (!activeGroup || groupMembers.find((gm) => gm.user_id === session.user.id)?.role !== 'admin') return;
-    const before = activeGroup.accent;
-    setActiveGroup((prev) => ({ ...prev, accent: color }));
-    const { error } = await supabase.from('groups').update({ accent: color }).eq('id', activeGroup.id);
-    if (error) { setActiveGroup((prev) => ({ ...prev, accent: before })); appAlert(friendlyError(error, "Couldn't change the group colour. Try again.")); return; }
-    loadGroups();
+    await saveGroupField({ accent: color }, "Couldn't change the group colour. Try again.");
   };
 
   const setGroupWallpaper = async (key) => {
     if (!activeGroup || groupMembers.find((gm) => gm.user_id === session.user.id)?.role !== 'admin') return;
-    const { error } = await supabase.from('groups').update({ wallpaper: key }).eq('id', activeGroup.id);
-    if (error) { appAlert(friendlyError(error, "Couldn't change the wallpaper. Try again.")); return; }
-    setActiveGroup((prev) => ({ ...prev, wallpaper: key }));
+    if (!(await saveGroupField({ wallpaper: key }, "Couldn't change the wallpaper. Try again."))) return;
     const gct = chatThemeOf(key);
     const label = key ? (WALLPAPER_PRESETS.find((p) => p.key === key)?.label || 'a new picture') : 'Default';
     sendGroupMessage('system', gct ? `${realName(session.user.id)} changed the chat theme to ${gct.label}` : key ? `${realName(session.user.id)} changed the wallpaper to ${label}` : `${realName(session.user.id)} turned off the chat theme`, null);
-    loadGroups();
   };
 
+  const lockHoldRef = useRef({});
   const loadMyLocks = async () => {
     const { data, error } = await supabase.from('chat_locks').select('*').eq('owner_id', session.user.id);
-    if (error || !data) return;
+    if (error || !data) return null;
     const map = {};
     (data || []).forEach((l) => { map[l.conversation_id] = true; });
+    const holds = lockHoldRef.current;
+    Object.keys(holds).forEach((id) => {
+      const h = holds[id];
+      if (Date.now() - h.at > 30000 || !!map[id] === h.on) { delete holds[id]; return; }
+      if (h.on) map[id] = true; else delete map[id];
+    });
     setMyLocks(map);
     if (!error && data) locksLoadedAtRef.current = Date.now();
+    return map;
   };
   useEffect(() => {
     const onShow = () => { if (document.visibilityState === 'visible') loadMyLocks(); };
@@ -34965,10 +36807,14 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const blockUser = async (target) => {
     const userId = typeof target === 'string' ? target : target.id;
     const myId = session.user.id;
+    const wasBlocked = myBlockedIds.has(userId);
+    setMyBlockedIds((prev) => new Set(prev).add(userId));
     const { error } = await supabase.from('blocks').insert({ blocker_id: myId, blocked_id: userId });
-    if (error && !String(error.message || '').toLowerCase().includes('duplicate')) { appAlert(friendlyError(error, "Couldn't block this account. Try again.")); return false; }
-    await supabase.from('follows').delete().eq('follower_id', myId).eq('following_id', userId);
-    await supabase.from('follows').delete().eq('follower_id', userId).eq('following_id', myId);
+    if (error && !String(error.message || '').toLowerCase().includes('duplicate')) { if (!wasBlocked) setMyBlockedIds((prev) => { const n = new Set(prev); n.delete(userId); return n; }); appAlert(friendlyError(error, "Couldn't block this account. Try again.")); return false; }
+    await Promise.all([
+      supabase.from('follows').delete().eq('follower_id', myId).eq('following_id', userId),
+      supabase.from('follows').delete().eq('follower_id', userId).eq('following_id', myId),
+    ]);
     setMyBlockedIds((prev) => new Set(prev).add(userId));
     if (activeProfile?.id === userId) { setActiveFollowState('none'); setActiveFollowerFollowsMe(false); setReplyingTo(null); setEditingMessage(null); setDraft(''); }
     setProfileOf(null);
@@ -34981,8 +36827,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   };
   const unblockUser = async (target) => {
     const userId = typeof target === 'string' ? target : target.id;
+    const wasBlocked = myBlockedIds.has(userId);
+    setMyBlockedIds((prev) => { if (!prev.has(userId)) return prev; const n = new Set(prev); n.delete(userId); return n; });
     const { error } = await supabase.from('blocks').delete().eq('blocker_id', session.user.id).eq('blocked_id', userId);
-    if (error) { appAlert(friendlyError(error, "Couldn't unblock this account. Try again.")); return false; }
+    if (error) { if (wasBlocked) setMyBlockedIds((prev) => new Set(prev).add(userId)); appAlert(friendlyError(error, "Couldn't unblock this account. Try again.")); return false; }
     setMyBlockedIds((prev) => { const n = new Set(prev); n.delete(userId); return n; });
     loadConversations();
     loadStories();
@@ -35010,13 +36858,27 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
   const enableChatLock = async (conv) => {
     if (!me?.chat_lock_hash) return;
-    await supabase.from('chat_locks').upsert({ conversation_id: conv.id, owner_id: session.user.id, pin_hash: 'master' }, { onConflict: 'conversation_id,owner_id' });
+    const hold = { on: true, at: Date.now() };
+    lockHoldRef.current[conv.id] = hold;
     setMyLocks((prev) => ({ ...prev, [conv.id]: true }));
     setUnlockedChats((prev) => { const n = new Set(prev); n.delete(conv.id); return n; });
+    const { error } = await supabase.from('chat_locks').upsert({ conversation_id: conv.id, owner_id: session.user.id, pin_hash: 'master' }, { onConflict: 'conversation_id,owner_id' });
+    if (error && lockHoldRef.current[conv.id] === hold) {
+      delete lockHoldRef.current[conv.id];
+      setMyLocks((prev) => { const n = { ...prev }; delete n[conv.id]; return n; });
+      showSnack(friendlyError(error, "Couldn't lock this chat. Try again."));
+    }
   };
   const disableChatLock = async (conv) => {
-    await supabase.from('chat_locks').delete().eq('conversation_id', conv.id).eq('owner_id', session.user.id);
+    const hold = { on: false, at: Date.now() };
+    lockHoldRef.current[conv.id] = hold;
     setMyLocks((prev) => { const n = { ...prev }; delete n[conv.id]; return n; });
+    const { error } = await supabase.from('chat_locks').delete().eq('conversation_id', conv.id).eq('owner_id', session.user.id);
+    if (error && lockHoldRef.current[conv.id] === hold) {
+      delete lockHoldRef.current[conv.id];
+      setMyLocks((prev) => ({ ...prev, [conv.id]: true }));
+      showSnack(friendlyError(error, "Couldn't unlock this chat. Try again."));
+    }
   };
   const setChatLockPassword = async (pin) => {
     const hash = await hashPin(pin);
@@ -35030,13 +36892,28 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     setMyLocks({});
   };
 
+  const readLocalRef = useRef(new Set());
+  const unreadRowsRef = useRef([]);
+  const unreadSeqRef = useRef(0);
   const loadUnreadCounts = async () => {
-    const { data, error } = await supabase.from('messages').select('sender_id')
+    const seq = ++unreadSeqRef.current;
+    const asked = new Set(readLocalRef.current);
+    const { data, error } = await supabase.from('messages').select('id, sender_id')
       .eq('receiver_id', session.user.id).eq('read', false).not('deleted', 'is', true);
     if (error || !data) return;
+    const back = new Set(data.map((m) => m.id));
+    asked.forEach((id) => { if (!back.has(id)) readLocalRef.current.delete(id); });
+    if (seq !== unreadSeqRef.current) return;
+    unreadRowsRef.current = data;
     const map = {};
-    (data || []).forEach((m) => { map[m.sender_id] = (map[m.sender_id] || 0) + 1; });
+    (data || []).forEach((m) => { if (!readLocalRef.current.has(m.id)) map[m.sender_id] = (map[m.sender_id] || 0) + 1; });
     setUnreadCounts(map);
+  };
+  const markLocalRead = (otherId, ids) => {
+    const set = readLocalRef.current;
+    (ids || []).forEach((id) => { if (id && !String(id).startsWith('temp-')) set.add(id); });
+    unreadRowsRef.current.forEach((m) => { if (m.sender_id === otherId) set.add(m.id); });
+    setUnreadCounts((prev) => (prev[otherId] ? { ...prev, [otherId]: 0 } : prev));
   };
 
   const convLoadSeqRef = useRef(0);
@@ -35045,7 +36922,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const seq = ++convLoadSeqRef.current;
     const hiddenMap = getHiddenChatMap();
     const hiddenMsgs = getHiddenMsgIds();
-    const archived = getArchivedChatIds();
     const [convRes, recentRes, nickRes, aliasRes] = await Promise.all([
       supabase.from('conversations').select('*').or(`user_a.eq.${myId},user_b.eq.${myId}`).order('last_message_at', { ascending: false }),
       supabase.from('messages')
@@ -35057,14 +36933,17 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     ]);
     if (convRes.error || !convRes.data) return;
     const data = convRes.data;
-    if (data.length === 0) { if (seq === convLoadSeqRef.current) { setConversations([]); setArchivedConversations([]); setListReady(true); } return; }
+    if (data.length === 0) { if (seq === convLoadSeqRef.current) { setConversations(applyDmHolds([])); setArchivedConversations([]); setListReady(true); } return; }
     const recentMsgs = recentRes.data;
     const nicks = nickRes.data;
     const aliasesForMe = aliasRes.data;
     const lastByOther = {};
+    const newestAny = {};
     const sentTo = new Set();
     (recentMsgs || []).forEach((m) => {
       if (m.sender_id === myId && m.receiver_id) sentTo.add(m.receiver_id);
+      const anyOther = m.sender_id === myId ? m.receiver_id : m.sender_id;
+      if (anyOther && !newestAny[anyOther]) newestAny[anyOther] = m;
       if (hiddenMsgs.has(m.id)) return;
       if (m.expires_at && new Date(m.expires_at).getTime() <= Date.now()) return;
       const otherId = m.sender_id === myId ? m.receiver_id : m.sender_id;
@@ -35099,17 +36978,20 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         const last = lastByOther[otherId];
         const convTime = c.last_message_at ? new Date(c.last_message_at).getTime() : 0;
         const msgTime = last ? new Date(last.created_at).getTime() : 0;
-        const useStored = !c.disappear_secs && (!last || (c.last_message && convTime - msgTime > 1500));
-        const preview = useStored ? { kind: 'text', text: c.last_message || '' } : describeMessage(last);
-        const lastFromMe = useStored ? c.last_sender_id === myId : last.sender_id === myId;
+        const top = newestAny[otherId];
+        const topHidden = !!top && top !== last && hiddenMsgs.has(top.id) && new Date(top.created_at).getTime() >= convTime - 1500;
+        const useStored = !topHidden && !c.disappear_secs && (!last || (c.last_message && convTime - msgTime > 1500));
+        const preview = useStored ? { kind: 'text', text: c.last_message || '' } : last ? describeMessage(last) : { kind: 'text', text: '' };
+        const lastFromMe = useStored ? c.last_sender_id === myId : !!last && last.sender_id === myId;
         return {
           ...c, otherProfile: profile.is_deleted ? hiddenAccountProfile(profile) : (nick && foundProfile ? { ...profile, name: nick.nickname } : { ...profile, name: baseName }), realName: profile.name,
-          preview, lastFromMe, sortTime: Math.max(convTime, msgTime), mineAny: sentTo.has(otherId),
+          preview, lastFromMe, lastId: last ? last.id : null, sortTime: Math.max(convTime, msgTime), mineAny: sentTo.has(otherId),
           lastMineRead: last && last.sender_id === myId ? !!last.read : false,
           lastMineDelivered: last && last.sender_id === myId ? !!last.delivered : false,
         };
       })
-      .filter(Boolean)
+      .filter(Boolean);
+    const heldAll = applyDmHolds(mergedAll)
       .sort((x, y) => {
         const px = isPinnedByMe(x) ? 1 : 0;
         const py = isPinnedByMe(y) ? 1 : 0;
@@ -35117,9 +36999,17 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         return y.sortTime - x.sortTime;
       });
     if (seq !== convLoadSeqRef.current) return;
+    const archivedNow = getArchivedChatIds();
+    const hiddenNow = getHiddenChatMap();
+    const shown = heldAll.filter((c) => {
+      const oid = c.otherProfile && c.otherProfile.id;
+      if (!oid || !(oid in hiddenNow) || oid in hiddenMap) return true;
+      const last = lastByOther[oid];
+      return !!last && last.sender_id !== myId && new Date(last.created_at).getTime() > Number(hiddenNow[oid] || 0);
+    });
     setListReady(true);
-    setConversations(uniqueBy(mergedAll.filter((c) => !archived.has(c.id)), (c) => c.id));
-    setArchivedConversations(uniqueBy(mergedAll.filter((c) => archived.has(c.id)), (c) => c.id));
+    setConversations(uniqueBy(shown.filter((c) => !archivedNow.has(c.id)), (c) => c.id));
+    setArchivedConversations(uniqueBy(shown.filter((c) => archivedNow.has(c.id)), (c) => c.id));
   };
 
   const upsertConversation = async (otherId, text, type) => {
@@ -35135,6 +37025,317 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       { user_a: a, user_b: b, last_message: preview, last_message_at: new Date().toISOString(), last_sender_id: session.user.id },
       { onConflict: 'user_a,user_b' }
     );
+  };
+
+  const listHoldRef = useRef({ dm: {}, dmf: {}, g: {}, gf: {}, gone: {} });
+  const LIST_HOLD_MS = 30000;
+  const msgTimeOf = (m) => { const t = m && m.created_at ? new Date(m.created_at).getTime() : 0; return Number.isFinite(t) ? t : 0; };
+  const previewSig = (p) => (p ? `${p.kind}|${p.text}` : '');
+  const sortConvRows = (list) => list.slice().sort((x, y) => {
+    const px = isPinnedByMe(x) ? 1 : 0;
+    const py = isPinnedByMe(y) ? 1 : 0;
+    if (px !== py) return py - px;
+    return (y.sortTime || 0) - (x.sortTime || 0);
+  });
+  const sortGroupRows = (list) => list.slice().sort((a, b) => new Date(b.last_message_at) - new Date(a.last_message_at));
+  const findConvRow = (otherId) => conversationsRef.current.find((c) => c.otherProfile && c.otherProfile.id === otherId) || archivedConversationsRef.current.find((c) => c.otherProfile && c.otherProfile.id === otherId) || null;
+  const dmFieldsFor = (m, keepTime, row) => {
+    const mine = !!m && m.sender_id === session.user.id;
+    const same = !!row && !!m && row.lastId === m.id;
+    const f = {
+      preview: m ? describeMessage(m) : { kind: 'text', text: '' },
+      lastFromMe: mine,
+      lastMineRead: mine && (!!m.read || (same && !!row.lastMineRead)),
+      lastMineDelivered: mine && (!!m.delivered || !!m.read || (same && !!row.lastMineDelivered)),
+      lastQueued: !!m && !!m.queued,
+      lastId: m ? m.id : null,
+    };
+    if (mine) f.mineAny = true;
+    if (m && !keepTime) { f.last_message_at = m.created_at; f.sortTime = msgTimeOf(m); f.last_sender_id = m.sender_id; }
+    return f;
+  };
+  const groupFieldsFor = (m, fallbackAt) => {
+    if (!m) return { preview: { kind: 'text', text: 'No messages yet' }, previewPrefix: '', last_message: null, last_message_type: null, lastId: null, ...(fallbackAt ? { last_message_at: fallbackAt } : {}) };
+    const mine = m.sender_id === session.user.id;
+    const who = mine ? '' : nameForQuick(m.sender_id);
+    return {
+      preview: describeMessage(m),
+      previewPrefix: m.type === 'system' ? '' : mine ? 'You: ' : `${String(who || 'Someone').split(' ')[0]}: `,
+      last_message: m.deleted ? 'This message was deleted' : m.content,
+      last_message_type: m.deleted ? 'text' : m.type,
+      last_message_at: m.created_at,
+      lastId: m.id,
+    };
+  };
+  const sameFields = (row, f) => Object.keys(f).every((k) => (k === 'preview' ? previewSig(row.preview) === previewSig(f.preview) : row[k] === f[k]));
+  const patchDmRow = (otherId, f) => {
+    const apply = (prev) => {
+      const i = prev.findIndex((c) => c.otherProfile && c.otherProfile.id === otherId);
+      if (i < 0 || sameFields(prev[i], f)) return prev;
+      const next = prev.slice();
+      next[i] = { ...prev[i], ...f };
+      return sortConvRows(next);
+    };
+    setConversations(apply);
+    setArchivedConversations(apply);
+  };
+  const patchGroupRow = (groupId, f) => {
+    setGroups((prev) => {
+      const i = prev.findIndex((g) => g.id === groupId);
+      if (i < 0 || sameFields(prev[i], f)) return prev;
+      const next = prev.slice();
+      next[i] = { ...prev[i], ...f };
+      return 'last_message_at' in f ? sortGroupRows(next) : next;
+    });
+  };
+  const holdDmFields = (otherId, f) => {
+    const hf = listHoldRef.current.dmf;
+    hf[otherId] = { at: Date.now(), f: { ...((hf[otherId] && hf[otherId].f) || {}), ...f } };
+    patchDmRow(otherId, f);
+  };
+  const holdGroupFields = (groupId, f) => {
+    const hf = listHoldRef.current.gf;
+    hf[groupId] = { at: Date.now(), f: { ...((hf[groupId] && hf[groupId].f) || {}), ...f } };
+    patchGroupRow(groupId, f);
+  };
+  const dropFieldHold = (kind, id, keys) => {
+    const hf = listHoldRef.current[kind === 'group' ? 'gf' : 'dmf'];
+    const h = hf[id];
+    if (!h) return;
+    keys.forEach((k) => { delete h.f[k]; });
+    if (!Object.keys(h.f).length) delete hf[id];
+  };
+  const localConvRow = (profile) => {
+    const [a, b] = pairKey(session.user.id, profile.id);
+    return { id: `local-${profile.id}`, user_a: a, user_b: b, otherProfile: profile, realName: profile.name, created_at: new Date().toISOString(), mineAny: true };
+  };
+  const putDmPreview = (otherId, f, t, profile) => {
+    const base = profile ? localConvRow(profile) : null;
+    listHoldRef.current.dm[otherId] = { at: Date.now(), t, f, row: base };
+    if (findConvRow(otherId)) { patchDmRow(otherId, f); return; }
+    if (!base) return;
+    setConversations((prev) => (prev.some((c) => c.otherProfile && c.otherProfile.id === otherId) ? prev : sortConvRows([{ ...base, ...f }, ...prev])));
+  };
+  const putGroupPreview = (groupId, f, t) => {
+    listHoldRef.current.g[groupId] = { at: Date.now(), t, f };
+    patchGroupRow(groupId, f);
+  };
+  const listNoteSent = (kind, id, m, profile) => {
+    if (!m || !id || m.failed) return;
+    const t = msgTimeOf(m);
+    if (kind === 'group') {
+      const g = groupsRef.current.find((x) => x.id === id);
+      if (!g || t < (g.last_message_at ? new Date(g.last_message_at).getTime() : 0) - 1500) return;
+      putGroupPreview(id, groupFieldsFor(m), t);
+      return;
+    }
+    const cur = findConvRow(id);
+    if (cur && t < (cur.sortTime || 0) - 1500) return;
+    putDmPreview(id, dmFieldsFor(m, false, cur), t, cur ? null : profile);
+  };
+  const holdCaught = (row, h, rowT) => {
+    const tempId = String(h.f.lastId || '').startsWith('temp-');
+    if (row.lastId === h.f.lastId && previewSig(row.preview) === previewSig(h.f.preview)) return true;
+    if (!tempId && row.lastId === h.f.lastId && Date.now() - h.at > 6000) return true;
+    if (tempId && previewSig(row.preview) === previewSig(h.f.preview) && rowT >= h.t - 15000) return true;
+    return row.lastId !== h.f.lastId && rowT > h.t + (tempId ? 1500 : 0);
+  };
+  const applyDmHolds = (rows) => {
+    const holds = listHoldRef.current.dm;
+    const fields = listHoldRef.current.dmf;
+    const now = Date.now();
+    const seen = new Set();
+    const out = rows.map((c) => {
+      const oid = c.otherProfile && c.otherProfile.id;
+      seen.add(oid);
+      let row = c;
+      const h = holds[oid];
+      if (h) {
+        if (now - h.at > LIST_HOLD_MS || holdCaught(row, h, row.sortTime || 0)) {
+          delete holds[oid];
+          if (row.lastId && row.lastId === h.f.lastId) row = { ...row, lastMineRead: row.lastMineRead || !!h.f.lastMineRead, lastMineDelivered: row.lastMineDelivered || !!h.f.lastMineDelivered };
+        } else row = { ...row, ...h.f };
+      }
+      const hf = fields[oid];
+      if (hf) {
+        if (now - hf.at > LIST_HOLD_MS || Object.keys(hf.f).every((k) => (row[k] ?? null) === (hf.f[k] ?? null))) delete fields[oid];
+        else row = { ...row, ...hf.f };
+      }
+      return row;
+    });
+    Object.keys(holds).forEach((oid) => {
+      const h = holds[oid];
+      if (seen.has(oid) || !h.row) return;
+      if (now - h.at > LIST_HOLD_MS) { delete holds[oid]; return; }
+      out.push({ ...h.row, ...h.f });
+    });
+    return out;
+  };
+  const applyGroupHolds = (rows) => {
+    const holds = listHoldRef.current.g;
+    const fields = listHoldRef.current.gf;
+    const gone = listHoldRef.current.gone;
+    const now = Date.now();
+    const out = [];
+    rows.forEach((g) => {
+      if (gone[g.id]) { if (now - gone[g.id] < LIST_HOLD_MS) return; delete gone[g.id]; }
+      let row = g;
+      const h = holds[g.id];
+      if (h) {
+        if (now - h.at > LIST_HOLD_MS || holdCaught(row, h, row.last_message_at ? new Date(row.last_message_at).getTime() : 0)) delete holds[g.id];
+        else row = { ...row, ...h.f };
+      }
+      const hf = fields[g.id];
+      if (hf) {
+        if (now - hf.at > LIST_HOLD_MS || Object.keys(hf.f).every((k) => (row[k] ?? null) === (hf.f[k] ?? null))) delete fields[g.id];
+        else row = { ...row, ...hf.f };
+      }
+      out.push(row);
+    });
+    return out;
+  };
+  const syncListFromChat = (kind, id, last, prev) => {
+    const lastT = msgTimeOf(last);
+    if (kind === 'g') {
+      const g = groupsRef.current.find((x) => x.id === id);
+      if (!g) return;
+      const rowT = g.last_message_at ? new Date(g.last_message_at).getTime() : 0;
+      const tracking = !!prev && !!prev.id && g.lastId === prev.id && previewSig(g.preview) === prev.pv;
+      let f = null;
+      if (last && tracking && prev.id === last.id) f = groupFieldsFor(last);
+      else if (last && (prev ? lastT >= rowT - 1500 : lastT > rowT + 1000)) f = groupFieldsFor(last);
+      else if (prev && prev.id && (tracking || prev.t >= rowT - 1500) && (!last || lastT < prev.t)) f = groupFieldsFor(last, g.created_at);
+      if (!f) { if (g.unread) patchGroupRow(id, { unread: 0 }); return; }
+      putGroupPreview(id, { ...f, unread: 0 }, last ? lastT : rowT);
+      if (last && last.type !== 'system' && last.sender_id !== session.user.id && nameForQuick(last.sender_id) == null) {
+        cachedProfile(last.sender_id).then((p) => {
+          if (!p || !p.name) return;
+          const pf = `${String(p.name).split(' ')[0]}: `;
+          const h = listHoldRef.current.g[id];
+          if (h && h.f.lastId === last.id) h.f.previewPrefix = pf;
+          setGroups((prev) => prev.map((x) => (x.id === id && x.lastId === last.id && x.previewPrefix !== pf ? { ...x, previewPrefix: pf } : x)));
+        }, () => {});
+      }
+      return;
+    }
+    const row = findConvRow(id);
+    if (!row) {
+      const p = activeProfileRef.current;
+      if (last && prev && p && p.id === id) putDmPreview(id, dmFieldsFor(last, false, null), lastT, p);
+      return;
+    }
+    const rowT = row.sortTime || (row.last_message_at ? new Date(row.last_message_at).getTime() : 0);
+    const tracking = !!prev && !!prev.id && row.lastId === prev.id && previewSig(row.preview) === prev.pv;
+    let f = null;
+    if (last && tracking && prev.id === last.id) f = dmFieldsFor(last, true, row);
+    else if (last && (prev ? lastT >= rowT - 1500 : lastT > rowT + 1000)) f = dmFieldsFor(last, false, row);
+    else if (prev && prev.id && (tracking || prev.t >= rowT - 1500) && (!last || lastT < prev.t)) f = dmFieldsFor(last, true, row);
+    if (!f) return;
+    putDmPreview(id, f, f.sortTime || rowT, null);
+  };
+  const lastListMessage = (rows) => {
+    const now = Date.now();
+    for (let i = rows.length - 1; i >= 0; i--) {
+      const m = rows[i];
+      if (!m || m.failed || (m.expires_at && new Date(m.expires_at).getTime() <= now)) continue;
+      return m;
+    }
+    return null;
+  };
+  const nameForQuick = (uid0) => {
+    const c = findConvRow(uid0);
+    if (c && c.otherProfile && !c.otherProfile.is_deleted) return c.realName || c.otherProfile.name;
+    const p = profileCacheRef.current.get(uid0);
+    if (p) return p.name;
+    const gm = groupMembersRef.current.find((x) => x.user_id === uid0);
+    return gm && gm.profile ? gm.profile.name : null;
+  };
+  const listNoteIncomingGroup = (row) => {
+    const g = groupsRef.current.find((x) => x.id === row.group_id);
+    if (!g || g.lastId === row.id) return;
+    const t = msgTimeOf(row);
+    if (t < (g.last_message_at ? new Date(g.last_message_at).getTime() : 0) - 1500) return;
+    const apply = (nm) => {
+      const f = groupFieldsFor(row);
+      if (row.type !== 'system') f.previewPrefix = `${String(nm || 'Someone').split(' ')[0]}: `;
+      putGroupPreview(row.group_id, f, t);
+      if (row.type !== 'system' && !row.deleted) setGroups((prev) => prev.map((x) => (x.id === row.group_id && activeGroupIdRef.current !== x.id ? { ...x, unread: (x.unread || 0) + 1 } : x)));
+    };
+    const known = row.type === 'system' ? '' : nameForQuick(row.sender_id);
+    if (known != null) apply(known);
+    else cachedProfile(row.sender_id).then((p) => apply(p ? p.name : null), () => apply(null));
+  };
+  const listNoteIncomingDm = (msg) => {
+    const row = findConvRow(msg.sender_id);
+    if (!row || row.lastId === msg.id) return;
+    const t = msgTimeOf(msg);
+    if (t < (row.sortTime || 0) - 1500) return;
+    putDmPreview(msg.sender_id, dmFieldsFor(msg, false, row), t, null);
+    setUnreadCounts((prev) => ({ ...prev, [msg.sender_id]: (prev[msg.sender_id] || 0) + 1 }));
+  };
+  const listForgetTemp = (kind, id, tempId) => {
+    if (!id || !tempId) return;
+    const holds = listHoldRef.current[kind === 'group' ? 'g' : 'dm'];
+    const h = holds[id];
+    if (h && h.f.lastId === tempId) delete holds[id];
+    const row = kind === 'group' ? groupsRef.current.find((x) => x.id === id) : findConvRow(id);
+    if (row && row.lastId === tempId && reloadListsRef.current) reloadListsRef.current();
+  };
+  const listNoteEdit = (row) => {
+    if (!row || !row.id) return;
+    if (row.group_id) {
+      const h = listHoldRef.current.g[row.group_id];
+      if (h && h.f.lastId === row.id) delete listHoldRef.current.g[row.group_id];
+      const g = groupsRef.current.find((x) => x.id === row.group_id);
+      if (!g || g.lastId !== row.id) return;
+      const f = groupFieldsFor(row);
+      patchGroupRow(row.group_id, { preview: f.preview, last_message: f.last_message, last_message_type: f.last_message_type });
+      return;
+    }
+    const other = row.sender_id === session.user.id ? row.receiver_id : row.sender_id;
+    if (!other) return;
+    const h = listHoldRef.current.dm[other];
+    if (h && h.f.lastId === row.id) delete listHoldRef.current.dm[other];
+    const c = findConvRow(other);
+    if (!c || c.lastId !== row.id) return;
+    const f = dmFieldsFor(row, true, c);
+    patchDmRow(other, { preview: f.preview, lastMineRead: f.lastMineRead, lastMineDelivered: f.lastMineDelivered });
+  };
+  const mergeOwnEcho = (prev, row) => {
+    if (!row || prev.some((x) => x.id === row.id)) return prev;
+    if (row.client_id) {
+      const at = prev.findIndex((x) => x.client_id === row.client_id && String(x.id).startsWith('temp-'));
+      if (at >= 0) { const out = prev.slice(); out[at] = { ...row, ck: prev[at].ck || prev[at].id }; return out; }
+    }
+    return [...prev, row];
+  };
+  const placeSentRow = (tempId, row) => setMessages((prev) => {
+    const out = prev.filter((x) => x.id !== row.id);
+    const at = out.findIndex((x) => x.id === tempId);
+    if (at < 0) return prev;
+    out[at] = { ...row, ck: tempId };
+    return out;
+  });
+  const sendDmRow = async (profile, rowIn, opts) => {
+    const o = opts || {};
+    const tempId = o.holdId || `temp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const held = o.holdId ? messagesRef.current.find((x) => x.id === o.holdId) : null;
+    const row = { sender_id: session.user.id, receiver_id: profile.id, group_id: null, client_id: (held && held.client_id) || newClientId(), ...rowIn };
+    const here = () => !activeGroupRef.current && !!activeProfileRef.current && activeProfileRef.current.id === profile.id;
+    const shown = o.holdId ? !!held : here();
+    if (shown && !o.holdId) setMessages((prev) => [...prev, { media_url: null, content: null, ...row, ...(o.temp || {}), id: tempId, created_at: new Date().toISOString(), read: false, delivered: false, deleted: false, sending: true }]);
+    const res = await insertMessageSafe(row);
+    const data = res && res.data;
+    if (!data) {
+      if (shown) setMessages((prev) => prev.filter((x) => x.id !== tempId));
+      listForgetTemp('dm', profile.id, tempId);
+      if (o.fail !== false) showSnack(friendlyError(res && res.error, o.fail || 'Could not send. Try again'));
+      return null;
+    }
+    if (shown) placeSentRow(tempId, data);
+    else if (here()) setMessages((prev) => mergeOwnEcho(prev, data));
+    if (!here()) listNoteSent('dm', profile.id, data, profile);
+    return data;
   };
 
   const refreshMeRef = useRef(null);
@@ -35605,6 +37806,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         const row = payload.new;
         if (!row || row.following_id !== me.id || row.follower_id === me.id) return;
         loadFollowRequestCount();
+        setNotifUnseen((n) => n + 1);
         const who = await cachedProfile(row.follower_id);
         if (!who) return;
         setInAppToast({ key: `follow-${row.follower_id}-${Date.now()}`, kind: 'notice', title: who.name, verified: who.verified, avatar: who.avatar, avatarName: who.name,
@@ -35659,6 +37861,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         if (blockedRef.current.has(msg.sender_id)) return;
         unhideChatLocally(msg.sender_id);
         if (msg.sender_id !== (current && current.id) || !mobileShowChatRef.current) {
+          listNoteIncomingDm(msg);
           supabase.from('messages').update({ delivered: true }).eq('id', msg.id).then(() => {}, () => {});
           const senderConv = conversationsRef.current.find((c) => c.otherProfile.id === msg.sender_id) || archivedConversationsRef.current.find((c) => c.otherProfile.id === msg.sender_id);
           const alertKey = chatPrefKey('dm', msg.sender_id);
@@ -35669,8 +37872,11 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             }
           }
         } else {
+          if (!requestIdsRef.current.has(msg.sender_id)) readLocalRef.current.add(msg.id);
           supabase.from('messages').update(requestIdsRef.current.has(msg.sender_id) ? { delivered: true } : { read: true, delivered: true }).eq('id', msg.id).then(() => {}, () => {});
           setActivityFrom(null);
+          const openConv = conversationsRef.current.find((c) => c.otherProfile.id === msg.sender_id) || archivedConversationsRef.current.find((c) => c.otherProfile.id === msg.sender_id);
+          if (!(openConv && isActiveUntil(openConv[openConv.user_a === me.id ? 'muted_until_a' : 'muted_until_b'])) && !restrictedRef.current.has(msg.sender_id)) playInChatSound(msg);
         }
         loadUnreadCounts();
         clearTimeout(listReloadTimerRef.current);
@@ -35683,7 +37889,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         const row = payload.new;
         if (!row || row.sender_id !== me.id || row.group_id) return;
         const current = activeProfileRefForCalls.current;
-        if (current && row.receiver_id === current.id) setMessages((prev) => (prev.some((x) => x.id === row.id) ? prev : [...prev, row]));
+        if (current && row.receiver_id === current.id) setMessages((prev) => mergeOwnEcho(prev, row));
+        else listNoteSent('dm', row.receiver_id, row, null);
         clearTimeout(listReloadTimerRef.current);
         listReloadTimerRef.current = setTimeout(() => { if (reloadListsRef.current) reloadListsRef.current(); }, 400);
       })
@@ -35715,10 +37922,11 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         const row = payload.new;
         if (!row || !row.id) return;
         const inGroup = !!row.group_id;
+        if (row.deleted || row.edited) listNoteEdit(row);
         if (row.deleted || row.edited || (!inGroup && (row.sender_id === me.id || row.receiver_id === me.id))) {
           clearTimeout(listReloadTimerRef.current);
           listReloadTimerRef.current = setTimeout(() => { if (reloadListsRef.current) reloadListsRef.current(); }, 500);
-          if (row.receiver_id === me.id && row.read) loadUnreadCounts();
+          if (row.receiver_id === me.id && (row.read || row.deleted)) loadUnreadCounts();
         }
         setMessages((prev) => {
           const i = prev.findIndex((m) => m.id === row.id);
@@ -35756,8 +37964,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           const open = activeProfileRefForCalls.current;
           const g = activeGroupResumeRef.current;
           const belongs = g ? row.group_id === g.id : (open && !row.group_id && row.receiver_id === open.id);
-          if (!belongs || prev.some((m) => m.id === row.id)) return prev;
-          return [...prev, row];
+          if (!belongs) return prev;
+          return mergeOwnEcho(prev, row);
         });
         clearTimeout(listReloadTimerRef.current);
         listReloadTimerRef.current = setTimeout(() => { if (reloadListsRef.current) reloadListsRef.current(); }, 500);
@@ -35852,6 +38060,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
   const myGroupIds = groups.map((g) => g.id);
   const myGroupIdsKey = myGroupIds.join(',');
+  const groupReloadTimerRef = useRef(0);
+  useEffect(() => () => clearTimeout(groupReloadTimerRef.current), []);
 
   useEffect(() => {
     if (!me || !myGroupIds.length) return;
@@ -35866,13 +38076,21 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           const gAlertKey = chatPrefKey('group', row.group_id);
           if ((!(mutedGroup && isActiveUntil(mutedGroup.mutedUntil)) || mentioned) && !vaultKeysRef.current.has(gAlertKey) && !(focusRef.current && focusRef.current.chat !== gAlertKey)) { if (!(row.type === 'text' && hiddenWordsHit(row.content))) { if (!isSilentText(row.content)) playPing(gAlertKey); showMessageToast(row); } }
         }
-        if (row.sender_id !== me.id && activeGroup && row.group_id === activeGroup.id) markGroupRead(activeGroup.id);
+        if (row.sender_id !== me.id && activeGroup && row.group_id === activeGroup.id) {
+          markGroupRead(activeGroup.id);
+          const liveGroup = groupsRef.current.find((x) => x.id === row.group_id);
+          if (!(liveGroup && isActiveUntil(liveGroup.mutedUntil))) playInChatSound(row);
+        }
         setMessages((prev) => {
           if (!activeGroup || row.group_id !== activeGroup.id) return prev;
-          if (prev.some((m) => m.id === row.id)) return prev;
-          return [...prev, row];
+          return row.sender_id === me.id ? mergeOwnEcho(prev, row) : (prev.some((m) => m.id === row.id) ? prev : [...prev, row]);
         });
-        loadGroups();
+        if (!activeGroup || row.group_id !== activeGroup.id) {
+          if (row.sender_id !== me.id) listNoteIncomingGroup(row);
+          else listNoteSent('group', row.group_id, row);
+        }
+        clearTimeout(groupReloadTimerRef.current);
+        groupReloadTimerRef.current = setTimeout(() => loadGroups(), 400);
       })
       .subscribe();
     return () => supabase.removeChannel(channel);
@@ -36021,6 +38239,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         if (!mobileShowChatRef.current || requestIdsRef.current.has(activeProfileIdForPoll)) return;
         const theirUnread = new Set(currentMessages.filter((m) => m.sender_id === activeProfileIdForPoll && !m.read).map((m) => m.id));
         if (theirUnread.size) {
+          markLocalRead(activeProfileIdForPoll, [...theirUnread]);
           await supabase.from('messages').update({ read: true, delivered: true }).in('id', [...theirUnread]);
           setMessages((prev) => prev.map((m) => (theirUnread.has(m.id) ? { ...m, read: true, delivered: true } : m)));
           loadUnreadCounts();
@@ -36050,6 +38269,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     });
   }, [conversations, groups]);
   const chatKey = activeGroup?.id || activeProfile?.id || null;
+  const voiceReviewRef = useRef(null);
+  voiceReviewRef.current = voiceReview;
+  useEffect(() => () => { if (reviewAudioRef.current || voiceReviewRef.current) clearReview(); }, [chatKey]);
   const activeProfileIdForSeen = activeGroup ? null : (activeProfile ? activeProfile.id : null);
   useEffect(() => {
     if (!activeProfileIdForSeen) return undefined;
@@ -36188,33 +38410,51 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       const unread = activeGroupIdRef.current === g.id ? 0 : groupMsgs.filter((m) => m.sender_id !== session.user.id && m.type !== 'system' && !m.deleted && new Date(m.created_at).getTime() > readTime).length;
       const preview = last ? describeMessage(last) : { kind: 'text', text: 'No messages yet' };
       const previewPrefix = !last || last.type === 'system' ? '' : last.sender_id === session.user.id ? 'You: ' : `${(senderNames[last.sender_id] || 'Someone').split(' ')[0]}: `;
-      return { ...g, myRole: mine?.role || 'member', pinned: mine?.pinned || false, archived: mine?.archived || false, last_message: last?.deleted ? 'This message was deleted' : last?.content, last_message_type: last?.deleted ? 'text' : last?.type, last_message_at: last?.created_at || g.created_at, unread, preview, previewPrefix, mutedUntil: mine?.notify_muted_until || null };
-    }).sort((a, b) => new Date(b.last_message_at) - new Date(a.last_message_at));
+      return { ...g, myRole: mine?.role || 'member', pinned: mine?.pinned || false, archived: mine?.archived || false, last_message: last?.deleted ? 'This message was deleted' : last?.content, last_message_type: last?.deleted ? 'text' : last?.type, last_message_at: last?.created_at || g.created_at, lastId: last ? last.id : null, unread, preview, previewPrefix, mutedUntil: mine?.notify_muted_until || null };
+    });
     if (seq !== groupLoadSeqRef.current) return;
-    setGroups(uniqueBy(merged, (g) => g.id));
+    setGroups(uniqueBy(sortGroupRows(applyGroupHolds(merged)), (g) => g.id));
   };
 
 
-  const toggleGroupPin = async (g) => {
-    await supabase.from('group_members').update({ pinned: !g.pinned }).eq('group_id', g.id).eq('user_id', session.user.id);
-    loadGroups();
+  const toggleGroupFlag = async (g, key) => {
+    const cur = groupsRef.current.find((x) => x.id === g.id) || g;
+    const next = !cur[key];
+    holdGroupFields(g.id, { [key]: next });
+    const { data, error } = await supabase.from('group_members').update({ [key]: next }).eq('group_id', g.id).eq('user_id', session.user.id).select('group_id');
+    if (error || !data || !data.length) {
+      dropFieldHold('group', g.id, [key]);
+      patchGroupRow(g.id, { [key]: !next });
+      showSnack(friendlyError(error, "Couldn't change that group. Try again."));
+    }
   };
-  const toggleGroupArchive = async (g) => {
-    await supabase.from('group_members').update({ archived: !g.archived }).eq('group_id', g.id).eq('user_id', session.user.id);
+  const toggleGroupPin = (g) => toggleGroupFlag(g, 'pinned');
+  const toggleGroupArchive = (g) => toggleGroupFlag(g, 'archived');
+  const dropGroupLocally = (gid) => {
+    listHoldRef.current.gone[gid] = Date.now();
+    delete listHoldRef.current.g[gid];
+    setGroups((prev) => (prev.some((x) => x.id === gid) ? prev.filter((x) => x.id !== gid) : prev));
+    if (activeGroupIdRef.current === gid) { setShowGroupInfo(false); setShowGroupSettings(false); setActiveGroup(null); setMobileShowChat(false); }
+  };
+  const restoreGroupLocally = (gid, msg) => {
+    delete listHoldRef.current.gone[gid];
     loadGroups();
+    showSnack(msg);
   };
   const leaveGroupById = async (g) => {
-    if (g.created_by === session.user.id) { await openGroup(g); setShowGroupInfo(true); return; }
+    if (g.created_by === session.user.id) { openGroup(g); setShowGroupInfo(true); return; }
     if (g.myRole === 'admin') {
-      const { count: adminCount } = await supabase.from('group_members').select('*', { count: 'exact', head: true }).eq('group_id', g.id).eq('role', 'admin');
-      const { count: memberCount } = await supabase.from('group_members').select('*', { count: 'exact', head: true }).eq('group_id', g.id);
-      if ((adminCount || 0) <= 1 && (memberCount || 0) > 1) { await openGroup(g); setShowGroupInfo(true); return; }
+      const [{ count: adminCount }, { count: memberCount }] = await Promise.all([
+        supabase.from('group_members').select('*', { count: 'exact', head: true }).eq('group_id', g.id).eq('role', 'admin'),
+        supabase.from('group_members').select('*', { count: 'exact', head: true }).eq('group_id', g.id),
+      ]);
+      if ((adminCount || 0) <= 1 && (memberCount || 0) > 1) { openGroup(g); setShowGroupInfo(true); return; }
     }
     const name = realName(session.user.id);
+    dropGroupLocally(g.id);
     await supabase.from('messages').insert({ sender_id: session.user.id, group_id: g.id, type: 'system', content: `${name} left the group` });
-    await supabase.from('group_members').delete().eq('group_id', g.id).eq('user_id', session.user.id);
-    if (activeGroup?.id === g.id) { setActiveGroup(null); setMobileShowChat(false); }
-    loadGroups();
+    const { error } = await supabase.from('group_members').delete().eq('group_id', g.id).eq('user_id', session.user.id);
+    if (error) restoreGroupLocally(g.id, friendlyError(error, "Couldn't leave that group. Try again."));
   };
 
   const loadGroupMembers = async (groupId) => {
@@ -36226,7 +38466,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (profErr || !profs) return;
     const sanitized = sanitizeAvatarList(profs, session.user.id);
     const list = mems.map((m) => ({ ...m, profile: sanitized.find((pr) => pr.id === m.user_id) })).filter((m) => m.profile);
-    setGroupMembers(list);
+    if (!activeGroupIdRef.current || activeGroupIdRef.current === groupId) setGroupMembers(list);
     saveChatLocal(session.user.id, 'g', groupId, { members: list.map((m) => ({ ...m, profile: slimProfile(m.profile) })) });
   };
 
@@ -36247,6 +38487,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     activeGroupIdRef.current = group.id;
     setGroups((prev) => prev.map((g) => (g.id === group.id ? { ...g, unread: 0 } : g)));
     setActiveGroup(group);
+    setGroupMembers((prev) => (prev.length && prev[0].group_id && prev[0].group_id !== group.id ? [] : prev));
     setGroupTopicSel(topicSelMemRef.current.get(group.id) || 'all');
     if (!topicSeenRef.current[group.id]) topicSeenRef.current[group.id] = { base: (prevGroupReadAt && new Date(prevGroupReadAt).getTime()) || Date.now() };
     setJoinPending(0);
@@ -36315,7 +38556,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     }
   };
 
-  const sendGroupMessage = async (type, content, mediaUrl, forwardedFromName, replyToId, textStyleRow) => {
+  const sendGroupMessage = async (type, content, mediaUrl, forwardedFromName, replyToId, textStyleRow, holdId) => {
     const row = {
       sender_id: session.user.id, group_id: activeGroup.id, type, content: content || null, media_url: mediaUrl || null,
       forwarded: !!forwardedFromName, forwarded_from_name: forwardedFromName || null,
@@ -36323,14 +38564,17 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (replyToId) row.reply_to_id = replyToId;
     if (textStyleRow) Object.assign(row, textStyleRow);
     if (type !== 'system' && groupTopicRef.current) row.topic = groupTopicRef.current;
+    const held = holdId ? messagesRef.current.find((x) => x.id === holdId) : null;
     if (type === 'text') {
-      row.client_id = newClientId();
+      row.client_id = (held && held.client_id) || newClientId();
       if (bubbleStyle && bubbleStyle !== 'classic') row.bubble_style = bubbleStyle;
     } else if (type !== 'system' && bubbleStyle && bubbleStyle !== 'classic') {
       row.bubble_style = bubbleStyle;
     }
-    const tempId = type === 'system' ? null : `temp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    if (tempId) {
+    const tempId = type === 'system' ? null : (holdId || `temp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`);
+    if (tempId && !row.client_id) row.client_id = (held && held.client_id) || newClientId();
+    const sendGid = activeGroup.id;
+    if (tempId && !holdId) {
       setMessages((prev) => [...prev, { ...row, id: tempId, created_at: new Date().toISOString(), read: false, delivered: false, deleted: false, sending: true }]);
     }
     if (tempId && type === 'text' && navigator.onLine === false) {
@@ -36345,11 +38589,12 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       setMessages((prev) => prev.map((x) => (x.id === tempId ? { ...x, sending: false, queued: true } : x)));
       return null;
     }
-    if (tempId) setMessages((prev) => prev.filter((x) => x.id !== tempId || (error ? true : false)).map((x) => (x.id === tempId && error ? { ...x, sending: false, failed: true } : x)));
+    if (tempId && data && !error) placeSentRow(tempId, data);
+    else if (tempId) { setMessages((prev) => prev.filter((x) => x.id !== tempId)); listForgetTemp('group', sendGid, tempId); }
     if (error && /slow mode/i.test(String(error.message || ''))) showSnack('Slow mode is on. Wait a little before sending again');
+    else if (tempId && (error || !data)) showSnack(friendlyError(error, "Couldn't send that. Try again."));
     if (!error && data) {
-      setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
-      loadGroups();
+      if (!tempId && activeGroupIdRef.current === sendGid) setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
       if (type !== 'system') {
         const preview = type === 'text' ? (specialPreview(content) || (parseProfileLink(content) ? 'Shared a profile' : content)) : type === 'image' ? 'Photo' : type === 'audio' ? 'Voice message' : type === 'sticker' ? 'Sticker' : 'Video';
         const mentioned = extractMentions(content || '');
@@ -36369,27 +38614,27 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         });
       }
     }
-    return data;
+    return data || (error ? false : data);
   };
 
-  const sendSpecial = async (content, notifyText) => {
+  const sendSpecial = async (content, notifyText, quiet) => {
     if (specialLockRef.current) return false;
     if (typeof navigator !== 'undefined' && navigator.onLine === false) { showSnack('No connection. Try again when you are back online'); return false; }
     specialLockRef.current = true;
     try {
       if (activeGroup) {
-        await sendGroupMessage('text', content);
-        playUiSound('send');
+        sendGroupMessage('text', content).catch(() => {});
+        if (!quiet) playUiSound('send');
         return true;
       }
       const profile = activeProfile;
       if (!profile) return false;
-      const { data } = await insertMessageSafe({ sender_id: session.user.id, receiver_id: profile.id, group_id: null, type: 'text', content, client_id: newClientId() });
-      if (!data) { showSnack('Could not send. Try again'); return false; }
-      if (activeProfileRef.current && activeProfileRef.current.id === profile.id) setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
-      upsertConversation(profile.id, specialPreview(content) || 'Message', 'text');
-      notifyUser(profile.id, me.name, notifyText, `/?dm=${session.user.id}`, me.avatar);
-      playUiSound('send');
+      sendDmRow(profile, { type: 'text', content }).then((data) => {
+        if (!data) return;
+        upsertConversation(profile.id, specialPreview(content) || 'Message', 'text');
+        notifyUser(profile.id, me.name, notifyText, `/?dm=${session.user.id}`, me.avatar);
+      }, () => showSnack('Could not send. Try again'));
+      if (!quiet) playUiSound('send');
       return true;
     } catch {
       showSnack('Could not send. Try again');
@@ -36400,13 +38645,12 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   };
   const sendDmTo = async (who, content, notifyText) => {
     if (!who || !who.id || who.id === session.user.id) return false;
+    playUiSound('send');
     try {
-      const { data } = await insertMessageSafe({ sender_id: session.user.id, receiver_id: who.id, group_id: null, type: 'text', content, client_id: newClientId() });
-      if (!data) { showSnack('Could not send. Try again'); return false; }
-      if (activeProfileRef.current && activeProfileRef.current.id === who.id) setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
+      const data = await sendDmRow(who, { type: 'text', content });
+      if (!data) return false;
       upsertConversation(who.id, specialPreview(content) || content, 'text');
       notifyUser(who.id, me.name, notifyText || content, `/?dm=${session.user.id}`, me.avatar);
-      playUiSound('send');
       return true;
     } catch {
       showSnack('Could not send. Try again');
@@ -36529,42 +38773,58 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const memberName = (userId) => (userId === session.user.id ? 'You' : (groupMembers.find((m) => m.user_id === userId)?.profile.name || 'Someone'));
   const realName = (userId) => (userId === session.user.id ? (me?.name || 'Someone') : (groupMembers.find((m) => m.user_id === userId)?.profile.name || 'Someone'));
 
+  const patchMemberNow = async (userId, patch, failMsg) => {
+    const gid = activeGroup.id;
+    const before = (groupMembersRef.current.find((m) => m.user_id === userId) || {});
+    const undo = {};
+    Object.keys(patch).forEach((k) => { undo[k] = before[k] === undefined ? null : before[k]; });
+    setGroupMembers((prev) => prev.map((m) => (m.user_id === userId ? { ...m, ...patch } : m)));
+    const { data, error } = await supabase.from('group_members').update(patch).eq('group_id', gid).eq('user_id', userId).select('user_id');
+    if (error || !data || !data.length) {
+      if (activeGroupIdRef.current === gid) setGroupMembers((prev) => prev.map((m) => (m.user_id === userId ? { ...m, ...undo } : m)));
+      showSnack(friendlyError(error, failMsg));
+      return false;
+    }
+    return true;
+  };
   const transferOwnership = async (userId) => {
     if (activeGroup.created_by !== session.user.id) return;
-    await supabase.from('group_members').update({ role: 'admin' }).eq('group_id', activeGroup.id).eq('user_id', userId);
-    const { error } = await supabase.from('groups').update({ created_by: userId }).eq('id', activeGroup.id);
-    if (!error) {
-      setActiveGroup((prev) => ({ ...prev, created_by: userId }));
-      loadGroupMembers(activeGroup.id);
-      loadGroups();
-      sendGroupMessage('system', `${realName(session.user.id)} made ${realName(userId)} the group owner`, null);
+    const gid = activeGroup.id;
+    const myId = session.user.id;
+    setActiveGroup((prev) => (prev && prev.id === gid ? { ...prev, created_by: userId } : prev));
+    holdGroupFields(gid, { created_by: userId });
+    const ok = await patchMemberNow(userId, { role: 'admin' }, "Couldn't change the owner. Try again.");
+    const { error } = ok ? await supabase.from('groups').update({ created_by: userId }).eq('id', gid) : { error: true };
+    if (!ok || error) {
+      setActiveGroup((prev) => (prev && prev.id === gid ? { ...prev, created_by: myId } : prev));
+      dropFieldHold('group', gid, ['created_by']);
+      patchGroupRow(gid, { created_by: myId });
+      if (ok) showSnack(friendlyError(error, "Couldn't change the owner. Try again."));
+      return;
     }
+    loadGroupMembers(gid);
+    sendGroupMessage('system', `${realName(session.user.id)} made ${realName(userId)} the group owner`, null);
   };
 
   const promoteMember = async (userId) => {
     if (activeGroup.created_by !== session.user.id) return;
-    await supabase.from('group_members').update({ role: 'admin' }).eq('group_id', activeGroup.id).eq('user_id', userId);
-    loadGroupMembers(activeGroup.id);
-    sendGroupMessage('system', `${realName(session.user.id)} made ${realName(userId)} an admin`, null);
+    if (await patchMemberNow(userId, { role: 'admin' }, "Couldn't make them an admin. Try again.")) sendGroupMessage('system', `${realName(session.user.id)} made ${realName(userId)} an admin`, null);
   };
   const demoteMember = async (userId) => {
     if (activeGroup.created_by !== session.user.id) return;
-    await supabase.from('group_members').update({ role: 'member' }).eq('group_id', activeGroup.id).eq('user_id', userId);
-    loadGroupMembers(activeGroup.id);
-    sendGroupMessage('system', `${realName(session.user.id)} removed ${realName(userId)} as admin`, null);
+    if (await patchMemberNow(userId, { role: 'member' }, "Couldn't change their role. Try again.")) sendGroupMessage('system', `${realName(session.user.id)} removed ${realName(userId)} as admin`, null);
   };
   const muteMember = async (userId) => {
-    await supabase.from('group_members').update({ muted: true }).eq('group_id', activeGroup.id).eq('user_id', userId);
-    loadGroupMembers(activeGroup.id);
+    await patchMemberNow(userId, { muted: true }, "Couldn't mute them. Try again.");
   };
   const unmuteMember = async (userId) => {
-    await supabase.from('group_members').update({ muted: false }).eq('group_id', activeGroup.id).eq('user_id', userId);
-    loadGroupMembers(activeGroup.id);
+    await patchMemberNow(userId, { muted: false }, "Couldn't unmute them. Try again.");
   };
   const toggleHideActivity = async () => {
     const next = !me.hide_activity;
     setMe((prev) => ({ ...prev, hide_activity: next }));
-    await supabase.from('profiles').update({ hide_activity: next }).eq('id', session.user.id);
+    const res = await latestSync('hide_activity', next, (v) => supabase.from('profiles').update({ hide_activity: v }).eq('id', session.user.id), !next);
+    if (!res.ok) { setMe((prev) => ({ ...prev, hide_activity: res.state === undefined ? !next : res.state })); showSnack(friendlyError(res.error, 'That setting did not save. Try again.')); }
   };
   const toggleVisitors = async (on) => {
     setMe((prev) => ({ ...prev, visitors_on: !!on }));
@@ -36572,83 +38832,112 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (error) { setMe((prev) => ({ ...prev, visitors_on: !on })); showSnack('Profile visitors switches on once the latest ZChat setup is finished.'); }
   };
   const [visitorsOpen, setVisitorsOpen] = useState(false);
+  const saveGroupField = async (patch, failMsg) => {
+    const gid = activeGroup.id;
+    const cur = activeGroupRef.current && activeGroupRef.current.id === gid ? activeGroupRef.current : activeGroup;
+    const undo = {};
+    Object.keys(patch).forEach((k) => { undo[k] = cur[k] === undefined ? null : cur[k]; });
+    setActiveGroup((prev) => (prev && prev.id === gid ? { ...prev, ...patch } : prev));
+    holdGroupFields(gid, patch);
+    const { data, error } = await supabase.from('groups').update(patch).eq('id', gid).select('id');
+    if (error || !data || !data.length) {
+      setActiveGroup((prev) => (prev && prev.id === gid ? { ...prev, ...undo } : prev));
+      dropFieldHold('group', gid, Object.keys(patch));
+      patchGroupRow(gid, undo);
+      showSnack(friendlyError(error, failMsg));
+      return false;
+    }
+    return true;
+  };
   const saveGroupBio = async (bio) => {
-    await supabase.from('groups').update({ bio: bio.trim() || null }).eq('id', activeGroup.id);
-    setActiveGroup((prev) => ({ ...prev, bio: bio.trim() || null }));
-    loadGroups();
+    await saveGroupField({ bio: bio.trim() || null }, "Couldn't save the group bio. Try again.");
   };
   const saveGroupName = async (name) => {
     if (!name.trim()) return;
     const oldName = activeGroup.name;
-    await supabase.from('groups').update({ name: name.trim() }).eq('id', activeGroup.id);
-    setActiveGroup((prev) => ({ ...prev, name: name.trim() }));
-    loadGroups();
-    sendGroupMessage('system', `${realName(session.user.id)} changed the group name from "${oldName}" to "${name.trim()}"`, null);
+    if (name.trim() === oldName) return;
+    if (await saveGroupField({ name: name.trim() }, "Couldn't rename the group. Try again.")) sendGroupMessage('system', `${realName(session.user.id)} changed the group name from "${oldName}" to "${name.trim()}"`, null);
   };
   const saveGroupAvatar = async (blob) => {
+    const gid = activeGroup.id;
+    const oldAvatar = activeGroup.avatar || null;
+    let local = null;
+    try { local = URL.createObjectURL(blob); } catch {}
+    if (local) { setActiveGroup((prev) => (prev && prev.id === gid ? { ...prev, avatar: local } : prev)); patchGroupRow(gid, { avatar: local }); }
     const file = new File([blob], 'group.jpg', { type: 'image/jpeg' });
     const { url, error } = await uploadMedia(file, session.user.id);
-    if (!error && url) {
-      await supabase.from('groups').update({ avatar: url }).eq('id', activeGroup.id);
-      setActiveGroup((prev) => ({ ...prev, avatar: url }));
-      loadGroups();
-      sendGroupMessage('system', `${realName(session.user.id)} changed the group photo`, null);
-    }
+    const ok = !error && url ? await saveGroupField({ avatar: url }, "Couldn't change the group photo. Try again.") : false;
+    if (!ok) {
+      setActiveGroup((prev) => (prev && prev.id === gid ? { ...prev, avatar: oldAvatar } : prev));
+      patchGroupRow(gid, { avatar: oldAvatar });
+      if (error || !url) showSnack("Couldn't change the group photo. Try again.");
+    } else sendGroupMessage('system', `${realName(session.user.id)} changed the group photo`, null);
+    if (local) setTimeout(() => { try { URL.revokeObjectURL(local); } catch {} }, 8000);
   };
   const addGroupMembers = async (people) => {
     if (!people.length) return;
-    await supabase.from('group_members').insert(people.map((p) => ({ group_id: activeGroup.id, user_id: p.id, role: 'member', added_by: session.user.id })));
-    people.forEach((p) => notifyUser(p.id, 'ZChat', `${me.name} added you to ${activeGroup.name}`, `/?group=${activeGroup.id}`, me.avatar));
-    loadGroupMembers(activeGroup.id);
-    sendGroupMessage('system', `${realName(session.user.id)} added ${people.map((p) => p.name).join(', ')}`, null);
+    const gid = activeGroup.id;
+    const gname = activeGroup.name;
+    const fresh = people.filter((p) => !groupMembersRef.current.some((m) => m.user_id === p.id));
+    if (!fresh.length) return;
+    setGroupMembers((prev) => [...prev, ...fresh.filter((p) => !prev.some((m) => m.user_id === p.id)).map((p) => ({ group_id: gid, user_id: p.id, role: 'member', added_by: session.user.id, profile: p }))]);
+    const { error } = await supabase.from('group_members').insert(fresh.map((p) => ({ group_id: gid, user_id: p.id, role: 'member', added_by: session.user.id })));
+    if (error) {
+      const ids = new Set(fresh.map((p) => p.id));
+      if (activeGroupIdRef.current === gid) setGroupMembers((prev) => prev.filter((m) => !ids.has(m.user_id)));
+      showSnack(friendlyError(error, "Couldn't add those people. Try again."));
+      return;
+    }
+    fresh.forEach((p) => notifyUser(p.id, 'ZChat', `${me.name} added you to ${gname}`, `/?group=${gid}`, me.avatar));
+    loadGroupMembers(gid);
+    sendGroupMessage('system', `${realName(session.user.id)} added ${fresh.map((p) => p.name).join(', ')}`, null);
   };
   const kickMember = async (userId) => {
     const name = realName(userId);
-    await supabase.from('group_members').delete().eq('group_id', activeGroup.id).eq('user_id', userId);
-    loadGroupMembers(activeGroup.id);
+    const gid = activeGroup.id;
+    const before = groupMembersRef.current.find((m) => m.user_id === userId);
+    setGroupMembers((prev) => prev.filter((m) => m.user_id !== userId));
+    const { data, error } = await supabase.from('group_members').delete().eq('group_id', gid).eq('user_id', userId).select('user_id');
+    if (error || !data || !data.length) {
+      if (before && activeGroupIdRef.current === gid) setGroupMembers((prev) => (prev.some((m) => m.user_id === userId) ? prev : [...prev, before]));
+      showSnack(friendlyError(error, "Couldn't remove them. Try again."));
+      return;
+    }
     sendGroupMessage('system', `${realName(session.user.id)} removed ${name}`, null);
   };
   const leaveGroup = async () => {
     const name = realName(session.user.id);
-    await supabase.from('messages').insert({ sender_id: session.user.id, group_id: activeGroup.id, type: 'system', content: `${name} left the group` });
-    await supabase.from('group_members').delete().eq('group_id', activeGroup.id).eq('user_id', session.user.id);
-    setShowGroupInfo(false);
-    setShowGroupSettings(false);
-    setActiveGroup(null);
-    setMobileShowChat(false);
-    loadGroups();
+    const gid = activeGroup.id;
+    dropGroupLocally(gid);
+    await supabase.from('messages').insert({ sender_id: session.user.id, group_id: gid, type: 'system', content: `${name} left the group` });
+    const { error } = await supabase.from('group_members').delete().eq('group_id', gid).eq('user_id', session.user.id);
+    if (error) restoreGroupLocally(gid, friendlyError(error, "Couldn't leave that group. Try again."));
   };
 
   const deleteGroup = async () => {
     const gid = activeGroup.id;
+    dropGroupLocally(gid);
     await supabase.from('messages').delete().eq('group_id', gid);
     await supabase.from('group_members').delete().eq('group_id', gid);
     const { error } = await supabase.from('groups').delete().eq('id', gid);
-    if (error) { appAlert(friendlyError(error, "Couldn't delete this group. Try again.")); return; }
-    setShowGroupInfo(false);
-    setShowGroupSettings(false);
-    setActiveGroup(null);
-    setMobileShowChat(false);
-    loadGroups();
+    if (error) restoreGroupLocally(gid, friendlyError(error, "Couldn't delete this group. Try again."));
   };
 
-  const openChat = async (profile, convId) => {
+  const openChat = async (profile, convIdIn) => {
+    const convId = convIdIn && String(convIdIn).startsWith('local-') ? null : convIdIn;
     if (profile && manualUnread.has(profile.id)) setManualUnreadFor(profile.id, false);
     if (activeConvForBar && activeConvForBar.otherProfile.id !== profile.id && myLocks[activeConvForBar.id]) {
       lastLeftChatAtRef.current[activeConvForBar.id] = Date.now();
     }
-    if (!convId && !(typeof navigator !== 'undefined' && navigator.onLine === false)) {
-      const { data: freshCheck } = await getProfile(profile.id);
-      if (freshCheck?.is_deleted) {
-        setDeletedAccountAlertFor(profile.name || 'This person');
-        return;
-      }
+    if (!convId && profile && profile.is_deleted) {
+      setDeletedAccountAlertFor(profile.name || 'This person');
+      return;
     }
     if (convId) {
       let isLocked = !!myLocks[convId];
       if (!isLocked && Date.now() - locksLoadedAtRef.current > 600000) {
-        const { data: lockRow } = await supabase.from('chat_locks').select('conversation_id').eq('conversation_id', convId).eq('owner_id', session.user.id).maybeSingle();
-        isLocked = !!lockRow;
+        const map = await loadMyLocks();
+        isLocked = !!(map && map[convId]);
       }
       if (isLocked) {
         const lastLeft = lastLeftChatAtRef.current[convId];
@@ -36688,7 +38977,14 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     setPinIndex(0);
     setActiveProfile(profile);
     getProfile(profile.id).then(({ data }) => {
-      if (data) setActiveProfile((prev) => (prev && prev.id === data.id ? { ...prev, ...sanitizeAvatar(data, session.user.id), name: prev.name } : prev));
+      if (!data) return;
+      if (data.is_deleted && !convId && openSeqRef.current === seq) {
+        setActiveProfile(null);
+        setMobileShowChat(false);
+        setDeletedAccountAlertFor(profile.name || 'This person');
+        return;
+      }
+      setActiveProfile((prev) => (prev && prev.id === data.id ? { ...prev, ...sanitizeAvatar(data, session.user.id), name: prev.name } : prev));
     });
     setActiveFollowState(null);
     setActiveGroup(null);
@@ -36711,12 +39007,20 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       fromCache = true;
       msgOwnerRef.current = dKey;
       if (entry.follow) { setActiveFollowState(entry.follow.s || 'none'); setActiveFollowerFollowsMe(!!entry.follow.b); }
+      if (!requestIdsRef.current.has(profile.id)) markLocalRead(profile.id, rows.filter((m) => m.sender_id === profile.id && !m.read).map((m) => m.id));
       setMessages([...rows, ...queuedMessagesFor('dm', profile.id)]);
       setMessageLikes(entry.likes || {});
       setLoadingConvo(false);
     };
     const cachedP = readChatLocal(myId, 'dm', profile.id);
-    cachedP.then(applyCached);
+    cachedP.then((entry) => {
+      if (entry) { applyCached(entry); return; }
+      if (convId || findConvRow(profile.id) || netSettled || fromCache || openSeqRef.current !== seq) return;
+      msgOwnerRef.current = dKey;
+      setMessages([...queuedMessagesFor('dm', profile.id)]);
+      setMessageLikes({});
+      setLoadingConvo(false);
+    });
     const [followRes, theyRes, msgRes] = await Promise.all([
       supabase.from('follows').select('status').eq('follower_id', myId).eq('following_id', profile.id).maybeSingle(),
       supabase.from('follows').select('status').eq('follower_id', profile.id).eq('following_id', myId).eq('status', 'accepted').maybeSingle(),
@@ -36763,6 +39067,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     setMessages([...visible, ...queuedMessagesFor('dm', profile.id)]);
     setLoadingConvo(false);
     const unreadIds = requestIdsRef.current.has(profile.id) ? [] : visible.filter((m) => m.sender_id === profile.id && !m.read).map((m) => m.id);
+    if (unreadIds.length) markLocalRead(profile.id, unreadIds);
     const [, likesRes] = await Promise.all([
       unreadIds.length ? supabase.from('messages').update({ read: true, delivered: true }).in('id', unreadIds) : null,
       visible.length ? supabase.from('message_likes').select('*').in('message_id', visible.map((m) => m.id)) : null,
@@ -36784,7 +39089,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   };
 
   const findMessageById = (id) => messages.find((m) => m.id === id);
-  const activeConvForBar = activeProfile ? (conversations.find((c) => c.otherProfile.id === activeProfile.id) || archivedConversations.find((c) => c.otherProfile.id === activeProfile.id)) : null;
+  const activeConvForBar = activeProfile ? (conversations.find((c) => c.otherProfile.id === activeProfile.id && !String(c.id).startsWith('local-')) || archivedConversations.find((c) => c.otherProfile.id === activeProfile.id)) : null;
   const chatTools = () => {
     if (!activeProfile && !activeGroup) return null;
     const groupRow = activeGroup ? (groups.find((x) => x.id === activeGroup.id) || activeGroup) : null;
@@ -36835,12 +39140,12 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         const sk = streaks[activeProfile.id];
         const bd = bdayIds.has(activeProfile.id);
         if (!st && !(sk && sk.days >= 2) && !bd) return null;
-        const chip = (k, body) => <span key={k} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 14, background: theme.rowBg, border: `1px solid ${theme.border}`, fontSize: 12.5, fontWeight: 700, color: theme.ink, maxWidth: '100%' }}>{body}</span>;
+        const chip = (k, body) => <span key={k} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0, maxWidth: '100%', fontSize: 13.5, fontWeight: 600, lineHeight: 1.35, color: theme.ink2 }}>{body}</span>;
         return (
-          <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 6, marginTop: 10, padding: '0 10px' }}>
-            {st && chip('st', <><span>{st.e || '\u{1F4AC}'}</span><span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{st.t}</span></>)}
-            {sk && sk.days >= 2 && chip('sk', <><FlameIcon size={14} />{sk.days} day streak</>)}
-            {bd && chip('bd', <><CakeIcon size={14} />Birthday today</>)}
+          <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center', columnGap: 16, rowGap: 4, marginTop: 9, padding: '0 12px' }}>
+            {st && chip('st', <>{st.e ? <span aria-hidden="true" style={{ fontSize: 14.5, lineHeight: 1 }}>{st.e}</span> : <MessageSquare size={14} strokeWidth={2} color={theme.muted} />}<span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{st.t}</span></>)}
+            {sk && sk.days >= 2 && chip('sk', <><FlameIcon size={15} />{sk.days} day streak</>)}
+            {bd && chip('bd', <><CakeIcon size={15} />Birthday today</>)}
           </div>
         );
       })() : null,
@@ -36982,10 +39287,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     try {
       const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
       if (activeGroup) {
-        const optimistic = { id: tempId, sender_id: session.user.id, group_id: activeGroup.id, type: 'text', content: suggestionText, media_url: null, created_at: new Date().toISOString(), read: false, delivered: false, deleted: false, sending: true };
+        const optimistic = { id: tempId, client_id: newClientId(), sender_id: session.user.id, group_id: activeGroup.id, type: 'text', content: suggestionText, media_url: null, created_at: new Date().toISOString(), read: false, delivered: false, deleted: false, sending: true };
+        messagesRef.current = [...(messagesRef.current || []), optimistic];
         setMessages((prev) => [...prev, optimistic]);
-        const inserted = await sendGroupMessage('text', suggestionText, null);
-        setMessages((prev) => (inserted ? prev.map((x) => (x.id === tempId ? inserted : x)) : prev.filter((x) => x.id !== tempId)));
+        const inserted = await sendGroupMessage('text', suggestionText, null, null, null, null, tempId);
         if (inserted) {
           startBotWait();
           callBotFn('/.netlify/functions/bot-reply-group', JSON.stringify({ userId: session.user.id, groupId: activeGroup.id, text: suggestionText }));
@@ -37093,11 +39398,13 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (sendingRef.current) return;
     if (blockedByRestriction('chat')) return;
     if (activeGroup) { const left = slowModeLeft(); if (left > 0) { showSnack(`Slow mode is on. Wait ${mmss(left)} before sending again`); return; } }
-    sendingRef.current = true;
+    const token = {};
+    sendingRef.current = token;
+    const release = () => { if (sendingRef.current === token) sendingRef.current = false; };
     try {
-      await sendInner();
+      await sendInner(release);
     } finally {
-      sendingRef.current = false;
+      release();
     }
   };
 
@@ -37105,6 +39412,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     setShowStickers(false);
     if (!activeProfile && !activeGroup) return;
     if (blockedByRestriction('chat')) return;
+    playUiSound('send');
     const filePath = sticker.file;
     pushRecentSticker(session.user.id, sticker);
     const replyId = replyingTo ? replyingTo.id : null;
@@ -37113,18 +39421,15 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       await sendGroupMessage('sticker', filePath, null, null, replyId);
       return;
     }
-    const { data } = replyId
-      ? await supabase.from('messages').insert({ sender_id: session.user.id, receiver_id: activeProfile.id, group_id: null, type: 'sticker', content: filePath, reply_to_id: replyId }).select().single()
-      : await sendStyled(session.user.id, activeProfile.id, 'sticker', filePath, null);
+    const data = await sendDmRow(activeProfile, { type: 'sticker', content: filePath, ...(replyId ? { reply_to_id: replyId } : {}), ...(bubbleStyle && bubbleStyle !== 'classic' ? { bubble_style: bubbleStyle } : {}) });
     if (data) {
-      setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
       upsertConversation(activeProfile.id, filePath, 'sticker');
       notifyUser(activeProfile.id, me.name, 'Sticker', `/?dm=${session.user.id}`, me.avatar);
       triggerBotDM(null, 'sticker', null);
     }
   };
 
-  const sendInner = async () => {
+  const sendInner = async (release) => {
     if (!activeProfile && !activeGroup) return;
     const silent = silentNextRef.current;
     silentNextRef.current = false;
@@ -37134,6 +39439,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       setPendingMedia([]);
       const caption = draft.trim().slice(0, MAX_CHARS);
       setDraft('');
+      if (release) release();
       setUploading(true);
       const failedItems = [];
       for (let i = 0; i < items.length; i++) {
@@ -37181,13 +39487,16 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       if (!draft.trim()) return;
       const text = bakeTextFont(draft.trim().slice(0, MAX_CHARS), textFont);
       setDraft('');
+      if (release) release();
       const soloForwardName = items.length === 1 && items[0].type === 'text' ? items[0].forwarded_from_name : null;
       const groupReplyId = replyingTo?.id || null;
       const groupBotUserId = (groupMembers.find((gm) => gm.profile && gm.profile.is_bot) || {}).user_id;
       const repliedToBot = !!(replyingTo && groupBotUserId && replyingTo.sender_id === groupBotUserId);
       const repliedToText = repliedToBot ? String(replyingTo.content || '').slice(0, 400) : '';
       setReplyingTo(null);
+      const sendGid = activeGroup.id;
       const gSent = await sendGroupMessage('text', silent ? SILENT_MARK + text : text, null, soloForwardName, groupReplyId, (textSize !== 'm' || textColor || textFont) ? { text_size: textSize === 'm' ? null : textSize, text_color: textColor, ...(textFont ? { text_font: textFont } : {}) } : null);
+      if (gSent === false && activeGroupIdRef.current === sendGid) setDraft((d) => (d && d.trim() ? d : text));
       applySendEffect(gSent);
       if (text.toLowerCase().includes(BOT_MENTION) || repliedToBot) {
         startBotWait();
@@ -37199,19 +39508,14 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (items.length) {
       setPendingForwardItems([]);
       for (const item of (items.length === 1 && items[0].type === 'text' ? [] : items)) {
-        const { data } = await sendMessage(session.user.id, activeProfile.id, item.type, item.content || null, item.media_url || null);
-        if (data) {
-          await supabase.from('messages').update({ forwarded: true, forwarded_from_name: item.forwarded_from_name || null }).eq('id', data.id);
-          data.forwarded = true;
-          data.forwarded_from_name = item.forwarded_from_name || null;
-          setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
-          upsertConversation(activeProfile.id, item.content, item.type);
-        }
+        const data = await sendDmRow(activeProfile, { type: item.type, content: item.content || null, media_url: item.media_url || null, forwarded: true, forwarded_from_name: item.forwarded_from_name || null });
+        if (data) upsertConversation(activeProfile.id, item.content, item.type);
       }
     }
     if (!draft.trim()) return;
     const text = bakeTextFont(draft.trim().slice(0, MAX_CHARS), textFont);
     setDraft('');
+    if (release) release();
     let dmContent = text;
     let dmNotify = parseProfileLink(text) ? 'Shared a profile' : text;
     const pr = privateReply && privateReply.sid === activeProfile.id ? privateReply : null;
@@ -37232,7 +39536,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     setReplyingTo(null);
     const wasForward = items.length === 1 && items[0].type === 'text';
     const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-    const dmRow = { sender_id: session.user.id, receiver_id: activeProfile.id, group_id: null, type: 'text', content: dmContent, reply_to_id: replyId || null, text_size: textSize === 'm' ? null : textSize, text_color: textColor, client_id: newClientId(), ...(bubbleStyle && bubbleStyle !== 'classic' ? { bubble_style: bubbleStyle } : {}), ...(textFont ? { text_font: textFont } : {}) };
+    const dmRow = { sender_id: session.user.id, receiver_id: activeProfile.id, group_id: null, type: 'text', content: dmContent, reply_to_id: replyId || null, text_size: textSize === 'm' ? null : textSize, text_color: textColor, client_id: newClientId(), ...(wasForward ? { forwarded: true, forwarded_from_name: items[0].forwarded_from_name || null } : {}), ...(bubbleStyle && bubbleStyle !== 'classic' ? { bubble_style: bubbleStyle } : {}), ...(textFont ? { text_font: textFont } : {}) };
     const optimistic = { ...dmRow, id: tempId, media_url: null, created_at: new Date().toISOString(), read: false, delivered: false, deleted: false, sending: true };
     const dmTarget = activeProfile.id;
     if (navigator.onLine === false) {
@@ -37249,17 +39553,15 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         setMessages((prev) => prev.map((x) => (x.id === tempId ? { ...x, sending: false, queued: true } : x)));
         return;
       }
-      setMessages((prev) => prev.map((x) => (x.id === tempId ? { ...x, sending: false, failed: true } : x)));
+      setMessages((prev) => prev.filter((x) => x.id !== tempId));
+      listForgetTemp('dm', dmTarget, tempId);
+      if (activeProfileRef.current && activeProfileRef.current.id === dmTarget) setDraft((d) => (d && d.trim() ? d : text));
+      showSnack(friendlyError(sendResult && sendResult.error, 'Could not send. Try again'));
     }
     if (data) {
-      setMessages((prev) => prev.filter((x) => x.id !== tempId));
+      placeSentRow(tempId, data);
+      if (!(activeProfileRef.current && activeProfileRef.current.id === dmTarget && !activeGroupRef.current)) listNoteSent('dm', dmTarget, data, activeProfile);
       applySendEffect(data);
-      if (wasForward) {
-        await supabase.from('messages').update({ forwarded: true, forwarded_from_name: items[0].forwarded_from_name || null }).eq('id', data.id);
-        data.forwarded = true;
-        data.forwarded_from_name = items[0].forwarded_from_name || null;
-      }
-      setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
       upsertConversation(activeProfile.id, dmContent, 'text');
       notifyUser(activeProfile.id, me.name, dmNotify, `/?dm=${session.user.id}`, me.avatar);
       triggerBotDM(text, null, null);
@@ -37287,10 +39589,16 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (!editingMessage || !draft.trim()) return;
     if (navigator.onLine === false) { showSnack('No connection. Edit this message once you are back online.'); return; }
     const newText = draft.trim().slice(0, MAX_CHARS);
-    await supabase.from('messages').update({ content: newText, edited: true }).eq('id', editingMessage.id);
-    setMessages((prev) => prev.map((m) => (m.id === editingMessage.id ? { ...m, content: newText, edited: true } : m)));
+    const target = editingMessage;
+    const before = messagesRef.current.find((m) => m.id === target.id) || target;
+    setMessages((prev) => prev.map((m) => (m.id === target.id ? { ...m, content: newText, edited: true } : m)));
     setEditingMessage(null);
     setDraft('');
+    const { data, error } = await supabase.from('messages').update({ content: newText, edited: true }).eq('id', target.id).select('id');
+    if (error || !data || !data.length) {
+      setMessages((prev) => prev.map((m) => (m.id === target.id && m.content === newText ? { ...m, content: before.content, edited: !!before.edited } : m)));
+      showSnack(friendlyError(error, "Couldn't save your edit. Try again."));
+    }
   };
 
   const MAX_PHOTOS_PER_SEND = 10;
@@ -37329,29 +39637,34 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const group = activeGroup;
     const replyId = replyingTo?.id || null;
     setReplyingTo(null);
+    const stamp = Date.now();
+    const items = list.map((f, i) => {
+      const name = String(f.name || 'File').slice(0, 120);
+      return { f, name, content: `zfile:${JSON.stringify({ n: name, s: f.size || 0, m: String(f.type || '').slice(0, 80) })}`, tempId: `temp-${stamp}-${i}-${Math.random().toString(36).slice(2, 7)}`, cid: newClientId(), reply: i === 0 ? replyId : null };
+    });
+    setMessages((prev) => [...prev, ...items.map((it, i) => ({ id: it.tempId, sender_id: session.user.id, receiver_id: group ? null : profile.id, group_id: group ? group.id : null, type: 'text', content: it.content, media_url: null, reply_to_id: it.reply, client_id: it.cid, created_at: new Date(stamp + i).toISOString(), read: false, delivered: false, deleted: false, sending: true }))]);
+    const dropTemp = (id) => { setMessages((prev) => prev.filter((x) => x.id !== id)); listForgetTemp(group ? 'group' : 'dm', group ? group.id : profile && profile.id, id); };
     setUploading(list.length);
     let failed = 0;
-    for (let i = 0; i < list.length; i++) {
-      const f = list[i];
-      const name = String(f.name || 'File').slice(0, 120);
-      const { url, error } = await uploadChatMedia(f, session.user.id);
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      const { url, error } = await uploadChatMedia(it.f, session.user.id);
+      setUploading((n) => Math.max(0, (typeof n === 'number' ? n : 1) - 1));
       if (error || !url) {
         failed += 1;
-      } else {
-        const content = `zfile:${JSON.stringify({ n: name, s: f.size || 0, m: String(f.type || '').slice(0, 80) })}`;
-        if (group) {
-          const row = await sendGroupMessage('text', content, url, null, i === 0 ? replyId : null);
-          if (!row) failed += 1;
-        } else if (profile) {
-          const { data } = await insertMessageSafe({ sender_id: session.user.id, receiver_id: profile.id, group_id: null, type: 'text', content, media_url: url, reply_to_id: i === 0 ? replyId : null, client_id: newClientId() });
-          if (!data) failed += 1;
-          else {
-            if (activeProfileRef.current && activeProfileRef.current.id === profile.id) setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
-            notifyUser(profile.id, me.name, `File: ${name.slice(0, 60)}`, `/?dm=${session.user.id}`, me.avatar);
-          }
+        dropTemp(it.tempId);
+      } else if (group) {
+        const row = await sendGroupMessage('text', it.content, url, null, it.reply, undefined, it.tempId);
+        if (!row) failed += 1;
+      } else if (profile) {
+        const { data } = await insertMessageSafe({ sender_id: session.user.id, receiver_id: profile.id, group_id: null, type: 'text', content: it.content, media_url: url, reply_to_id: it.reply, client_id: it.cid });
+        if (!data) { failed += 1; dropTemp(it.tempId); }
+        else {
+          placeSentRow(it.tempId, data);
+          if (!(activeProfileRef.current && activeProfileRef.current.id === profile.id && !activeGroupRef.current)) listNoteSent('dm', profile.id, data, profile);
+          notifyUser(profile.id, me.name, `File: ${it.name.slice(0, 60)}`, `/?dm=${session.user.id}`, me.avatar);
         }
       }
-      setUploading((n) => Math.max(0, (typeof n === 'number' ? n : 1) - 1));
     }
     if (profile && failed < list.length) upsertConversation(profile.id, `zfile:${JSON.stringify({ n: String(list[list.length - 1].name || 'File').slice(0, 120) })}`, 'text');
     setUploading(0);
@@ -37428,22 +39741,32 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       const sendVoiceFile = async (blob, mime, extIn, fx, onceVoice) => {
         playUiSound('send');
         let file = new File([blob], `voice.${extIn}`, { type: mime });
+        const vGroup = activeGroup;
+        const vProfile = activeProfile;
+        if (!vGroup && !vProfile) return;
+        const voiceBody = onceVoice ? `zonce:${JSON.stringify({ c: '', ...(fx ? { fx } : {}) })}` : fx ? `zvfx:${fx}` : null;
+        const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        let local = null;
+        try { local = URL.createObjectURL(blob); } catch {}
+        setMessages((prev) => [...prev, { id: tempId, sender_id: session.user.id, receiver_id: vGroup ? null : vProfile.id, group_id: vGroup ? vGroup.id : null, type: 'audio', content: voiceBody, media_url: local, client_id: newClientId(), created_at: new Date().toISOString(), read: false, delivered: false, deleted: false, sending: true }]);
         setUploading(true);
         if (fx) {
           const changed = await applyVoiceFx(blob, fx);
           if (changed) file = changed;
         }
         const { url, error } = await uploadChatMedia(file, session.user.id);
-        if (!error && url) {
-          const voiceBody = onceVoice ? `zonce:${JSON.stringify({ c: '', ...(fx ? { fx } : {}) })}` : fx ? `zvfx:${fx}` : null;
-          if (activeGroup) {
-            await sendGroupMessage('audio', voiceBody, url);
-          } else {
-            const { data } = await sendStyled(session.user.id, activeProfile.id, 'audio', voiceBody, url);
-            if (data) { setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data])); upsertConversation(activeProfile.id, null, 'audio'); triggerBotDM(null, 'audio', url); notifyUser(activeProfile.id, me.name, onceVoice ? 'Voice message, plays once' : 'Voice message', `/?dm=${session.user.id}`, me.avatar); }
-          }
-        }
         setUploading(false);
+        if (error || !url) {
+          setMessages((prev) => prev.filter((x) => x.id !== tempId));
+          listForgetTemp(vGroup ? 'group' : 'dm', vGroup ? vGroup.id : vProfile.id, tempId);
+          showSnack('Your voice message did not send. Try again.');
+        } else if (vGroup) {
+          await sendGroupMessage('audio', voiceBody, url, null, null, undefined, tempId);
+        } else {
+          const data = await sendDmRow(vProfile, { type: 'audio', content: voiceBody, media_url: url, ...(bubbleStyle && bubbleStyle !== 'classic' ? { bubble_style: bubbleStyle } : {}) }, { holdId: tempId });
+          if (data) { upsertConversation(vProfile.id, null, 'audio'); triggerBotDM(null, 'audio', url); notifyUser(vProfile.id, me.name, onceVoice ? 'Voice message, plays once' : 'Voice message', `/?dm=${session.user.id}`, me.avatar); }
+        }
+        if (local) setTimeout(() => { try { URL.revokeObjectURL(local); } catch {} }, 8000);
       };
       sendVoiceRef.current = sendVoiceFile;
       mediaRecorderRef.current = recorder;
@@ -37506,10 +39829,19 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       mediaRecorderRef.current?.stop();
     }
   };
-  const handleDelete = async (messageId) => {
-    const { data } = await deleteMessage(messageId);
-    if (data) setMessages((prev) => prev.map((m) => (m.id === messageId ? data : m)));
+  const unsendNow = async (ids) => {
+    const list = ids.filter((id) => id && !String(id).startsWith('temp-'));
+    if (!list.length) return;
+    const before = new Map(messagesRef.current.filter((m) => list.includes(m.id)).map((m) => [m.id, m]));
+    setMessages((prev) => prev.map((m) => (list.includes(m.id) ? { ...m, deleted: true } : m)));
+    const res = await Promise.all(list.map((id) => deleteMessage(id).catch((e) => ({ data: null, error: e }))));
+    const bad = list.filter((id, i) => !res[i] || res[i].error || !res[i].data);
+    if (bad.length) {
+      setMessages((prev) => prev.map((m) => (bad.includes(m.id) && before.has(m.id) ? before.get(m.id) : m)));
+      showSnack(friendlyError(res.find((r) => r && r.error) && res.find((r) => r && r.error).error, bad.length === 1 ? "Couldn't remove that message. Try again." : "Some messages couldn't be removed. Try again."));
+    }
   };
+  const handleDelete = async (messageId) => { await unsendNow([messageId]); };
 
   const handleReport = async (profile, reason) => {
     setReportThanks({ profile });
@@ -37548,9 +39880,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
   const doDeleteForEveryone = async () => {
     const ids = [...selectedIds];
-    for (const id of ids) { await deleteMessage(id); }
-    setMessages((prev) => prev.map((m) => (ids.includes(m.id) ? { ...m, deleted: true } : m)));
     cancelSelection();
+    await unsendNow(ids);
   };
 
   const openForward = () => {
@@ -37563,11 +39894,13 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     setForwardOpen(false);
     setViewerUrl(null);
     cancelSelection();
-    if (target && target.__group) await openGroup(target.__group); else await openChat(target, null);
-    setPendingForwardItems(forwardTargets);
-    if (forwardTargets.length === 1 && forwardTargets[0].type === 'text') {
-      setDraft(forwardTargets[0].content || '');
-    }
+    const items = forwardTargets;
+    const soloText = items.length === 1 && items[0].type === 'text';
+    const key = target && target.__group ? target.__group.id : target && target.id;
+    if (key && soloText) draftsRef.current[key] = items[0].content || '';
+    if (target && target.__group) openGroup(target.__group); else openChat(target, null);
+    setPendingForwardItems(items);
+    if (soloText && key === chatKey) setDraft(items[0].content || '');
   };
 
   const doCopySingle = (m) => { const t = messageTextFor(m); if (t) copyTextToClipboard(t).then((ok) => showSnack(ok ? 'Copied' : "Couldn't copy that")); setContextMenuFor(null); };
@@ -37581,7 +39914,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const doStartEditSingle = (m) => { setEditingMessage(m); setDraft(m.content || ''); setReplyingTo(null); setContextMenuFor(null); focusComposer(); };
   const doStartReplySingle = (m) => { setReplyingTo(m); setEditingMessage(null); setContextMenuFor(null); focusComposer(); };
   const doDeleteForMeSingle = (m) => { hideMessagesLocally([m.id]); setMessages((prev) => prev.filter((x) => x.id !== m.id)); setContextMenuFor(null); };
-  const doDeleteForEveryoneSingle = async (m) => { await deleteMessage(m.id); setMessages((prev) => prev.map((x) => (x.id === m.id ? { ...x, deleted: true } : x))); setContextMenuFor(null); };
+  const doDeleteForEveryoneSingle = async (m) => { setContextMenuFor(null); await unsendNow([m.id]); };
   const openForwardSingle = (m) => { setForwardTargets([{ ...m, ...(parseWrapped(m.content) ? { content: messageTextFor(m) } : {}), ...(m.type === 'text' && parseDice(m.content) ? { content: diceSummary(parseDice(m.content)) } : {}), forwarded_from_name: labelForSender(m.sender_id) }]); setForwardOpen(true); setContextMenuFor(null); };
   const doReportSingle = (m) => { setReportModalFor(m.id); setContextMenuFor(null); };
   const doSelectMultipleFrom = (m) => { setContextMenuFor(null); toggleSelect(m.id); };
@@ -37604,7 +39937,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
   const reactToMessage = async (messageId, emoji) => {
     const targetMessage = findMessageById(messageId);
-    const mine = (messageLikes[messageId] || []).find((r) => r.user_id === session.user.id);
+    const beforeLikes = messageLikes[messageId] || [];
+    const mine = beforeLikes.find((r) => r.user_id === session.user.id);
     setMessageLikes((prev) => {
       const next = { ...prev };
       const list = (next[messageId] || []).filter((r) => r.user_id !== session.user.id);
@@ -37612,8 +39946,21 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       next[messageId] = list;
       return next;
     });
+    const peer = activeGroup ? null : activeProfile;
+    const peerRow = peer ? findConvRow(peer.id) : null;
+    const rowBefore = peerRow ? { preview: peerRow.preview, lastFromMe: peerRow.lastFromMe, last_sender_id: peerRow.last_sender_id, last_message_at: peerRow.last_message_at, sortTime: peerRow.sortTime, lastId: peerRow.lastId } : null;
+    const undoReaction = (error) => {
+      setMessageLikes((prev) => ({ ...prev, [messageId]: beforeLikes }));
+      if (peer && rowBefore) { delete listHoldRef.current.dm[peer.id]; patchDmRow(peer.id, rowBefore); }
+      showSnack(friendlyError(error, "Couldn't save your reaction. Try again."));
+    };
     if (mine && mine.emoji === emoji) {
-      await supabase.from('message_likes').delete().eq('message_id', messageId).eq('user_id', session.user.id);
+      if (peer && peerRow && peerRow.lastFromMe && /^Reacted /.test((peerRow.preview && peerRow.preview.text) || '')) {
+        const lastLocal = lastListMessage(messagesRef.current);
+        if (lastLocal) putDmPreview(peer.id, dmFieldsFor(lastLocal, false, peerRow), msgTimeOf(lastLocal), null);
+      }
+      const { error: unlikeErr } = await supabase.from('message_likes').delete().eq('message_id', messageId).eq('user_id', session.user.id);
+      if (unlikeErr) { undoReaction(unlikeErr); return; }
       if (activeProfile) {
         const { data: lastReal } = await supabase.from('messages').select('*')
           .or(`and(sender_id.eq.${session.user.id},receiver_id.eq.${activeProfile.id}),and(sender_id.eq.${activeProfile.id},receiver_id.eq.${session.user.id})`)
@@ -37630,7 +39977,12 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         }
       }
     } else {
-      await supabase.from('message_likes').upsert({ message_id: messageId, user_id: session.user.id, emoji }, { onConflict: 'message_id,user_id' });
+      if (peer && peerRow) {
+        const nowMs = Date.now();
+        putDmPreview(peer.id, { preview: { kind: 'text', text: `Reacted ${emoji}` }, lastFromMe: true, lastQueued: false, last_sender_id: session.user.id, last_message_at: new Date(nowMs).toISOString(), sortTime: nowMs, lastId: peerRow.lastId }, nowMs, null);
+      }
+      const { error: likeErr } = await supabase.from('message_likes').upsert({ message_id: messageId, user_id: session.user.id, emoji }, { onConflict: 'message_id,user_id' });
+      if (likeErr) { undoReaction(likeErr); return; }
       if (targetMessage && targetMessage.sender_id !== session.user.id) {
         const destUrl = activeGroup ? `/?group=${activeGroup.id}` : `/?dm=${session.user.id}`;
         notifyUser(targetMessage.sender_id, me.name, `reacted ${emoji} to your message`, destUrl, me.avatar);
@@ -37643,11 +39995,16 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const target = deleteConvoTarget;
     setDeleteConvoTarget(null);
     if (!target) return;
-    hideChatLocally(target.otherProfile.id);
-    const { data: allMsgs } = await getConversation(session.user.id, target.otherProfile.id);
+    const oid = target.otherProfile.id;
+    hideChatLocally(oid);
+    delete listHoldRef.current.dm[oid];
+    const drop = (prev) => (prev.some((c) => c.otherProfile && c.otherProfile.id === oid) ? prev.filter((c) => !(c.otherProfile && c.otherProfile.id === oid)) : prev);
+    setConversations(drop);
+    setArchivedConversations(drop);
+    if (activeProfile?.id === oid) { setActiveProfile(null); setMobileShowChat(false); setMessages([]); }
+    const { data: allMsgs } = await getConversation(session.user.id, oid);
     const allIds = (allMsgs || []).map((m) => m.id);
     if (allIds.length) hideMessagesLocally(allIds);
-    if (activeProfile?.id === target.otherProfile.id) { setActiveProfile(null); setMobileShowChat(false); setMessages([]); }
     loadConversations();
   };
 
@@ -37799,12 +40156,14 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           const meta = (session.user && session.user.user_metadata) || {};
           if (meta.login_alerts !== false) {
             const text = `${deviceLabelNow()}${place ? `, ${place}` : ''}`;
-            supabase.from('notifications').insert({ user_id: uid0, actor_id: uid0, kind: 'login', text }).then(() => {}, () => {});
+            const { data: made } = await supabase.from('notifications').select('id, meta').eq('user_id', uid0).eq('kind', 'login').order('created_at', { ascending: false }).limit(6);
+            if (!(made || []).some((r) => r.meta && r.meta.device_id === dev)) await supabase.from('notifications').insert({ user_id: uid0, actor_id: uid0, kind: 'login', text }).then(() => {}, () => {});
             sendPushNotification(uid0, 'ZChat', `New login: ${text}. If this was not you, log it out in Settings.`, '/?requests=1', null);
           }
         } else if (!alerted && list && mineRow) {
           try { localStorage.setItem(`zchat-login-alerted-${uid0}`, dev); } catch {}
         }
+        try { window.dispatchEvent(new CustomEvent('zchat-device-beat', { detail: { isNew: !!(list && !mineRow) } })); } catch {}
       } catch {}
     };
     beat();
@@ -37874,23 +40233,23 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const sid = String(m.id);
     if (savedIds.has(sid)) {
       setSavedIds((prev) => { const n = new Set(prev); n.delete(sid); return n; });
-      const { error } = await supabase.from('saved_messages').delete().eq('user_id', session.user.id).eq('source_message_id', sid);
-      if (error) { setSavedIds((prev) => new Set(prev).add(sid)); showSnack(friendlyError(error, "Couldn't remove it from Saved.")); return; }
       showSnack('Removed from Saved');
+      const { error } = await supabase.from('saved_messages').delete().eq('user_id', session.user.id).eq('source_message_id', sid);
+      if (error) { setSavedIds((prev) => new Set(prev).add(sid)); showSnack(friendlyError(error, "Couldn't remove it from Saved.")); }
       return;
     }
     const fromName = m.sender_id === session.user.id ? 'You' : (activeGroup ? memberName(m.sender_id) : (activeProfile ? activeProfile.name : 'Someone'));
     const chatLabel = activeGroup ? activeGroup.name : (activeProfile ? activeProfile.name : '');
     const kind = ['image', 'video', 'audio', 'sticker'].includes(m.type) ? m.type : 'text';
     setSavedIds((prev) => new Set(prev).add(sid));
+    showSnack('Added to Saved');
     const { error } = await supabase.from('saved_messages').upsert({
       user_id: session.user.id, source_message_id: sid, kind, content: m.content || null, media_url: m.media_url || null,
       from_name: fromName, chat_label: chatLabel, message_created_at: m.created_at,
       dm_user_id: activeGroup ? null : (activeProfile ? activeProfile.id : null),
       group_id: activeGroup ? activeGroup.id : null,
     }, { onConflict: 'user_id,source_message_id' });
-    if (error) { setSavedIds((prev) => { const n = new Set(prev); n.delete(sid); return n; }); showSnack(friendlyError(error, "Couldn't save that message. Try again.")); return; }
-    showSnack('Added to Saved');
+    if (error) { setSavedIds((prev) => { const n = new Set(prev); n.delete(sid); return n; }); showSnack(friendlyError(error, "Couldn't save that message. Try again.")); }
   };
 
   const dividerAboveViewport = () => {
@@ -37981,7 +40340,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   groupsRef.current = groups;
   blockedRef.current = myBlockedIds;
   locksRef.current = myLocks;
-  reloadListsRef.current = () => { loadConversations(); loadGroups(); };
+  reloadListsRef.current = () => { loadConversations(); loadGroups(); if (Date.now() - locksLoadedAtRef.current > 600000) loadMyLocks(); };
   const activeChatKey = activeGroup ? `g:${activeGroup.id}` : activeProfile ? `dm:${activeProfile.id}` : null;
   const activeChatKeyRef = useRef(null);
   activeChatKeyRef.current = activeChatKey;
@@ -37994,6 +40353,18 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     Object.keys(messageLikes || {}).forEach((k) => { if (ids.has(String(k))) likes[k] = messageLikes[k]; });
     saveChatLocal(session.user.id, activeChatKey.slice(0, cut), activeChatKey.slice(cut + 1), { rows, likes });
   }, [messages, messageLikes, activeChatKey, loadingConvo]);
+  const listSeenRef = useRef({ key: null, id: null, sig: '', t: 0 });
+  useEffect(() => {
+    if (!activeChatKey || msgOwnerRef.current !== activeChatKey) { listSeenRef.current = { key: null, id: null, sig: '', t: 0 }; return; }
+    if (loadingConvo) return;
+    const cut = activeChatKey.indexOf(':');
+    const last = lastListMessage(messages);
+    const sig = last ? [last.id, last.deleted ? 1 : 0, last.content, last.media_url ? 1 : 0, last.read ? 1 : 0, last.delivered ? 1 : 0, last.queued ? 1 : 0].join('|') : '';
+    const seen = listSeenRef.current;
+    if (seen.key === activeChatKey && seen.sig === sig) return;
+    listSeenRef.current = { key: activeChatKey, id: last ? last.id : null, sig, t: msgTimeOf(last), pv: last ? previewSig(describeMessage(last)) : '' };
+    syncListFromChat(activeChatKey.slice(0, cut), activeChatKey.slice(cut + 1), last, seen.key === activeChatKey ? seen : null);
+  }, [messages, activeChatKey, loadingConvo]);
   useEffect(() => {
     if (!me) return;
     saveHomeSnap(session.user.id, {
@@ -38106,6 +40477,26 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     clearTimeout(snackTimerRef.current);
     snackTimerRef.current = setTimeout(() => setSnack(''), 2200);
   };
+  useEffect(() => {
+    const onSnack = (e) => { const t = e && e.detail && e.detail.text; if (t) { setSnack(t); clearTimeout(snackTimerRef.current); snackTimerRef.current = setTimeout(() => setSnack(''), 2600); } };
+    const onFollow = (e) => {
+      const d = e && e.detail;
+      if (!d || !d.id) return;
+      const want = d.state === 'accepted';
+      setIFollowIds((prev) => { if (prev.has(d.id) === want) return prev; const n = new Set(prev); if (want) n.add(d.id); else n.delete(d.id); return n; });
+      if (!want) setMutualIds((prev) => { if (!prev.has(d.id)) return prev; const n = new Set(prev); n.delete(d.id); return n; });
+    };
+    const onMePatch = (e) => {
+      const d = e && e.detail;
+      if (!d || !d.patch || d.id !== session.user.id) return;
+      setMe((prev) => (prev ? { ...prev, ...d.patch, email: prev.email } : prev));
+      setProfileOf((prev) => (prev && prev.id === d.id && !prev.__edit ? { ...prev, ...d.patch } : prev));
+    };
+    window.addEventListener('zchat-calm-snack', onSnack);
+    window.addEventListener('zchat-follow-change', onFollow);
+    window.addEventListener('zchat-me-patch', onMePatch);
+    return () => { window.removeEventListener('zchat-calm-snack', onSnack); window.removeEventListener('zchat-follow-change', onFollow); window.removeEventListener('zchat-me-patch', onMePatch); };
+  }, []);
 
   const loadStories = async () => {
     const myId = session.user.id;
@@ -38123,7 +40514,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const { data: rows, error } = await supabase.from('stories').select('*').in('user_id', ids).gt('expires_at', new Date().toISOString()).order('created_at', { ascending: true });
     if (error) { setStoryData((prev) => ({ ...prev, ready: true })); return; }
     const byUser = {};
-    (rows || []).forEach((s) => { (byUser[s.user_id] = byUser[s.user_id] || []).push(s); });
+    (rows || []).forEach((s) => { if (!storyGoneIds.has(s.id)) (byUser[s.user_id] = byUser[s.user_id] || []).push(s); });
     const storyIds = (rows || []).map((s) => s.id);
     let seen = new Set();
     let liked = new Set();
@@ -38171,6 +40562,12 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     return list.every((s) => storyData.seen.has(s.id)) ? 'seen' : 'unseen';
   };
   const storyCloseFor = (userId) => activeStoriesOf(userId).some((s) => s.audience === 'close' && !storyData.seen.has(s.id));
+  const traySongKey = trayUsers.filter((t) => !t.muted).slice(0, 1).map((t) => { const st = t.stories.find((s) => !storyData.seen.has(s.id)) || t.stories[0]; const sg = validSong(st && st.song); return sg ? sg.p : ''; }).filter(Boolean).join('\n');
+  useEffect(() => {
+    if (!traySongKey || !storySoundPref.on) return undefined;
+    const t = setTimeout(() => traySongKey.split('\n').forEach((p) => warmSong({ p })), 900);
+    return () => clearTimeout(t);
+  }, [traySongKey]);
 
   const openStoriesFor = (userId, dataOverride) => {
     const data = dataOverride || storyDataRef.current || storyData;
@@ -38205,13 +40602,13 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
   const likeStory = async (story, like) => {
     playUiSound('like');
-    setStoryData((prev) => { const liked = new Set(prev.liked); if (like) liked.add(story.id); else liked.delete(story.id); return { ...prev, liked }; });
-    if (like) {
-      await supabase.from('story_likes').upsert({ story_id: story.id, user_id: session.user.id }, { onConflict: 'story_id,user_id' });
-      notifyUser(story.user_id, me.name, 'liked your story', `/?story=${story.user_id}`, me.avatar);
-    } else {
-      await supabase.from('story_likes').delete().eq('story_id', story.id).eq('user_id', session.user.id);
-    }
+    const setLiked = (on) => setStoryData((prev) => { if (prev.liked.has(story.id) === on) return prev; const liked = new Set(prev.liked); if (on) liked.add(story.id); else liked.delete(story.id); return { ...prev, liked }; });
+    setLiked(like);
+    const res = await latestSync(`slike:${story.id}`, like, (on) => (on
+      ? supabase.from('story_likes').upsert({ story_id: story.id, user_id: session.user.id }, { onConflict: 'story_id,user_id' })
+      : supabase.from('story_likes').delete().eq('story_id', story.id).eq('user_id', session.user.id)), !like);
+    if (!res.ok) { setLiked(res.state === undefined ? !like : res.state); showSnack(friendlyError(res.error, 'That did not go through. Try again.')); return; }
+    if (like && res.state === true) notifyUser(story.user_id, me.name, 'liked your story', `/?story=${story.user_id}`, me.avatar);
   };
 
   const storyMessageFields = (story) => ({ story_id: story.id, story_media_url: story.media_url, story_media_type: story.media_type, story_owner_id: story.user_id });
@@ -38233,10 +40630,11 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const { data: existing } = await supabase.from('stories').select('id').eq('user_id', session.user.id).eq('repost_of', story.id).gt('expires_at', new Date().toISOString()).limit(1);
     if (existing && existing.length) return 'already';
     playUiSound('repost');
-    const { error } = await supabase.from('stories').insert({
+    const { data: made, error } = await supabase.from('stories').insert({
       user_id: session.user.id, media_url: story.media_url, media_type: story.media_type, overlay_url: story.overlay_url || null,
       caption: null, mentions: [], repost_of: story.id, repost_label: owner.username,
-    });
+    }).select().single();
+    if (!error && made && made.id) setStoryData((prev) => { const list = prev.byUser[session.user.id] || []; if (list.some((x) => x.id === made.id)) return prev; const seen = new Set(prev.seen); seen.add(made.id); return { ...prev, byUser: { ...prev.byUser, [session.user.id]: [...list, made] }, seen }; });
     if (error) {
       if (/duplicate|unique/i.test(error.message || '')) return 'already';
       showSnack(friendlyError(error, "Couldn't add it to your story. Try again."));
@@ -38250,8 +40648,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
   const deleteStory = async (story) => {
     playUiSound('delete');
+    storyGoneIds.add(story.id);
     setStoryData((prev) => ({ ...prev, byUser: { ...prev.byUser, [story.user_id]: (prev.byUser[story.user_id] || []).filter((s) => s.id !== story.id) } }));
-    await supabase.from('stories').delete().eq('id', story.id).eq('user_id', session.user.id);
+    const { error } = await supabase.from('stories').delete().eq('id', story.id).eq('user_id', session.user.id);
+    if (error) { storyGoneIds.delete(story.id); showSnack(friendlyError(error, "Couldn't delete that story. Try again.")); loadStories(); return; }
     if (storyFeedRef.current) storyFeedRef.current.send({ type: 'broadcast', event: 'story', payload: { userId: session.user.id } });
     setStoryData((prev) => ({ ...prev, byUser: { ...prev.byUser, [story.user_id]: (prev.byUser[story.user_id] || []).filter((s) => s.id !== story.id) } }));
     loadStories();
@@ -38319,6 +40719,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       }
       if (insertError) { showSnack(toClose && /audience|column|schema/i.test(String(insertError.message || '')) ? 'Close friends stories switch on once the latest ZChat setup is finished.' : friendlyError(insertError, "Couldn't share your story. Try again.")); return; }
       if (!firstStory) firstStory = data;
+      if (data && data.id) setStoryData((prev) => { const mine = prev.byUser[session.user.id] || []; if (mine.some((x) => x.id === data.id)) return prev; const seen = new Set(prev.seen); seen.add(data.id); return { ...prev, byUser: { ...prev.byUser, [session.user.id]: [...mine, data] }, seen, ready: true }; });
       if (item.url) { const doneUrl = item.url; setTimeout(() => URL.revokeObjectURL(doneUrl), 5000); }
     }
     if (!firstStory) { showSnack("Couldn't share your story. Try again."); return; }
@@ -38498,6 +40899,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     let retryTimer = null;
     let attempt = 0;
     const load = async () => {
+      const t0 = Date.now();
       const { data, error } = await supabase.from('user_rewards').select('*').eq('user_id', session.user.id).order('granted_at', { ascending: true });
       if (!alive) return;
       if (error) {
@@ -38509,7 +40911,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         return;
       }
       attempt = 0;
-      setMyRewards(data || []);
+      setMyRewards(rewardOptLoaded(data || [], t0));
     };
     load();
     const ch = supabase.channel(rtName('rewards-' + session.user.id))
@@ -38524,7 +40926,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     return () => { alive = false; clearTimeout(retryTimer); document.removeEventListener('visibilitychange', onVisible); supabase.removeChannel(ch); };
   }, [me && me.id]);
   useEffect(() => { try { window.dispatchEvent(new Event('zchat-rewards')); } catch {} }, [myRewards]);
-  const reloadMyRewards = async () => { const { data } = await supabase.from('user_rewards').select('*').eq('user_id', session.user.id).order('granted_at', { ascending: true }); if (data) setMyRewards(data); };
+  const reloadMyRewards = async () => { const t0 = Date.now(); const { data } = await supabase.from('user_rewards').select('*').eq('user_id', session.user.id).order('granted_at', { ascending: true }); if (data) setMyRewards(rewardOptLoaded(data, t0)); };
+  useEffect(() => { rewardOpt.set = setMyRewards; return () => { if (rewardOpt.set === setMyRewards) rewardOpt.set = null; }; }, []);
   const giftInbox = useGiftInbox(me ? session.user.id : null);
   const giftKeys = new Set(giftInbox.list.map((e) => e.gift && e.gift.key).filter(Boolean));
   const markGiftRewardsSeen = async (e) => {
@@ -38534,10 +40937,11 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const list = (myRewards || []).filter((r) => r.reward_key === k && kinds.includes(r.kind) && !r.seen);
     if (!list.length) return;
     setMyRewards((prev) => prev.map((r) => (list.includes(r) ? { ...r, seen: true } : r)));
-    for (const r of list) {
-      if (r.id) await supabase.from('user_rewards').update({ seen: true }).eq('id', r.id);
-      else await supabase.from('user_rewards').update({ seen: true }).eq('user_id', session.user.id).eq('kind', r.kind).eq('reward_key', r.reward_key);
-    }
+    const ids = list.map((r) => r.id).filter(Boolean);
+    await Promise.all([
+      ids.length ? supabase.from('user_rewards').update({ seen: true }).in('id', ids) : null,
+      ...list.filter((r) => !r.id).map((r) => supabase.from('user_rewards').update({ seen: true }).eq('user_id', session.user.id).eq('kind', r.kind).eq('reward_key', r.reward_key)),
+    ].filter(Boolean));
   };
   useEffect(() => {
     if (unwrapGift || !me || !giftInbox.list.length) return undefined;
@@ -38597,29 +41001,42 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const field = kind === 'frame' ? 'avatar_frame' : kind === 'nameplate' ? 'nameplate' : kind === 'badge' ? 'verified' : 'custom_badge';
     const prevValue = me[field];
     setMe((prev) => (prev ? { ...prev, [field]: key } : prev));
+    playUiSound('like');
     let error = null;
     if (kind === 'charm') {
       const rr = await supabase.rpc('zchat_equip_charm', { p_key: key || '' });
       if (rr.error && /function|schema|not find|does not exist/i.test(String(rr.error.message || ''))) ({ error } = await supabase.from('profiles').update({ [field]: key }).eq('id', session.user.id));
       else if (rr.error || rr.data === false) error = rr.error || new Error('not owned');
     } else ({ error } = await supabase.from('profiles').update({ [field]: key }).eq('id', session.user.id));
-    if (error) { setMe((prev) => (prev ? { ...prev, [field]: prevValue } : prev)); showSnack("Couldn't equip that. Try again."); return false; }
-    playUiSound('like');
+    if (error) { setMe((prev) => (prev && prev[field] === key ? { ...prev, [field]: prevValue } : prev)); if (!moneyToast("Couldn't equip that. Try again.")) showSnack("Couldn't equip that. Try again."); return false; }
     return true;
   };
-  const equipDecor = async (patch) => {
+  const equipDecor = async (patch, gate) => {
     if (!me || !patch) return false;
     const keys = Object.keys(patch).filter((k) => k === 'avatar_frame' || k === 'nameplate');
     if (!keys.length) return false;
     const clean = {};
     const prev = {};
     keys.forEach((k) => { clean[k] = patch[k] || null; prev[k] = me[k] || null; });
+    const undo = () => setMe((p) => (p && keys.every((k) => (p[k] || null) === clean[k]) ? { ...p, ...prev } : p));
     setMe((p) => (p ? { ...p, ...clean } : p));
+    if (!gate) playUiSound('like');
+    if (gate) {
+      const g = await gate;
+      if (g && g.error) { undo(); return false; }
+    }
     const { error } = await supabase.from('profiles').update(clean).eq('id', session.user.id);
-    if (error) { setMe((p) => (p ? { ...p, ...prev } : p)); showSnack("Couldn't wear that. Try again."); return false; }
-    playUiSound('like');
+    if (error) { undo(); if (!moneyToast("Couldn't wear that. Try again.")) showSnack("Couldn't wear that. Try again."); return false; }
     return true;
   };
+  useEffect(() => {
+    if (!me) return;
+    const look = { avatar_frame: me.avatar_frame || null, nameplate: me.nameplate || null, custom_badge: me.custom_badge || null };
+    const stale = (p) => !!(p && p.id === me.id && Object.keys(look).some((k) => (p[k] || null) !== look[k]));
+    setProfileOf((p) => (stale(p) ? { ...p, ...look } : p));
+    const cached = profileCacheRef.current && profileCacheRef.current.get(me.id);
+    if (stale(cached)) profileCacheRef.current.set(me.id, { ...cached, ...look });
+  }, [me && me.avatar_frame, me && me.nameplate, me && me.custom_badge]);
   useEffect(() => {
     if (!me) return undefined;
     let alive = true;
@@ -38938,18 +41355,32 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const setChatMute = async (target, until) => {
     if (!target) return;
     if (target.kind === 'group') {
+      const g0 = groupsRef.current.find((x) => x.id === target.id);
+      const prevUntil = g0 ? (g0.mutedUntil || null) : null;
+      const mineBefore = (groupMembersRef.current.find((gm) => gm.user_id === session.user.id) || {}).notify_muted_until || null;
+      holdGroupFields(target.id, { mutedUntil: until });
+      if (activeGroupIdRef.current === target.id) setGroupMembers((prev) => prev.map((gm) => (gm.user_id === session.user.id ? { ...gm, notify_muted_until: until } : gm)));
       const { error } = await supabase.from('group_members').update({ notify_muted_until: until }).eq('group_id', target.id).eq('user_id', session.user.id);
-      if (error) { appAlert(friendlyError(error, "Couldn't change notifications. Try again.")); return; }
-      setGroups((prev) => prev.map((g) => (g.id === target.id ? { ...g, mutedUntil: until } : g)));
-      setGroupMembers((prev) => prev.map((gm) => (gm.user_id === session.user.id ? { ...gm, notify_muted_until: until } : gm)));
+      if (error) {
+        dropFieldHold('group', target.id, ['mutedUntil']);
+        patchGroupRow(target.id, { mutedUntil: prevUntil });
+        if (activeGroupIdRef.current === target.id) setGroupMembers((prev) => prev.map((gm) => (gm.user_id === session.user.id ? { ...gm, notify_muted_until: mineBefore } : gm)));
+        showSnack(friendlyError(error, "Couldn't change notifications. Try again."));
+      }
       return;
     }
     const conv = target.conv;
     const field = myConvMuteField(conv);
+    const oid = conv.otherProfile && conv.otherProfile.id;
+    const cur = (oid && findConvRow(oid)) || conv;
+    const prevUntil = cur[field] || null;
+    holdDmFields(oid, { [field]: until });
     const { error } = await supabase.from('conversations').update({ [field]: until }).eq('id', conv.id);
-    if (error) { appAlert(friendlyError(error, "Couldn't change notifications. Try again.")); return; }
-    setConversations((prev) => prev.map((c) => (c.id === conv.id ? { ...c, [field]: until } : c)));
-    setArchivedConversations((prev) => prev.map((c) => (c.id === conv.id ? { ...c, [field]: until } : c)));
+    if (error) {
+      dropFieldHold('dm', oid, [field]);
+      patchDmRow(oid, { [field]: prevUntil });
+      showSnack(friendlyError(error, "Couldn't change notifications. Try again."));
+    }
   };
   const muteFor = (option) => (option === 'always' ? '2099-12-31T00:00:00.000Z' : new Date(Date.now() + (option === '8h' ? 8 * 3600000 : 7 * 86400000)).toISOString());
 
@@ -38957,17 +41388,28 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     .sort((a, b) => new Date(b.pinned_at || 0).getTime() - new Date(a.pinned_at || 0).getTime());
   const pinMessage = async (m, days) => {
     const others = pinnedMessages.filter((x) => x.id !== m.id);
-    if (others.length >= 3) {
-      const oldest = others[others.length - 1];
-      const clear = { pinned_until: null, pinned_by: null, pinned_at: null };
-      await supabase.from('messages').update(clear).eq('id', oldest.id);
-      setMessages((prev) => prev.map((x) => (x.id === oldest.id ? { ...x, ...clear } : x)));
-    }
+    const clear = { pinned_until: null, pinned_by: null, pinned_at: null };
+    const oldest = others.length >= 3 ? others[others.length - 1] : null;
+    const pick = (x) => ({ pinned_until: x.pinned_until || null, pinned_by: x.pinned_by || null, pinned_at: x.pinned_at || null });
+    const beforeM = pick(messagesRef.current.find((x) => x.id === m.id) || m);
+    const beforeOld = oldest ? pick(oldest) : null;
     const patch = { pinned_until: new Date(Date.now() + days * 86400000).toISOString(), pinned_by: session.user.id, pinned_at: new Date().toISOString() };
-    const { error } = await supabase.from('messages').update(patch).eq('id', m.id);
-    if (error) { appAlert(friendlyError(error, "Couldn't pin that message. Try again.")); return; }
-    setMessages((prev) => prev.map((x) => (x.id === m.id ? { ...x, ...patch } : x)));
+    setMessages((prev) => prev.map((x) => (x.id === m.id ? { ...x, ...patch } : oldest && x.id === oldest.id ? { ...x, ...clear } : x)));
     setPinIndex(0);
+    const [r1, r2] = await Promise.all([
+      supabase.from('messages').update(patch).eq('id', m.id).select('id'),
+      oldest ? supabase.from('messages').update(clear).eq('id', oldest.id) : null,
+    ]);
+    if ((r1 && r1.error) || !(r1 && r1.data && r1.data.length)) {
+      setMessages((prev) => prev.map((x) => (x.id === m.id ? { ...x, ...beforeM } : x)));
+      if (oldest) {
+        setMessages((prev) => prev.map((x) => (x.id === oldest.id ? { ...x, ...beforeOld } : x)));
+        if (!(r2 && r2.error)) supabase.from('messages').update(beforeOld).eq('id', oldest.id).then(() => {}, () => {});
+      }
+      showSnack(friendlyError(r1 && r1.error, "Couldn't pin that message. Try again."));
+      return;
+    }
+    if (oldest && r2 && r2.error) setMessages((prev) => prev.map((x) => (x.id === oldest.id ? { ...x, ...beforeOld } : x)));
     const note = `${me.name} pinned a message`;
     if (activeGroup) {
       await sendGroupMessage('system', note, null);
@@ -38978,10 +41420,15 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   };
   const unpinMessage = async (m) => {
     const clear = { pinned_until: null, pinned_by: null, pinned_at: null };
-    const { error } = await supabase.from('messages').update(clear).eq('id', m.id);
-    if (error) { appAlert(friendlyError(error, "Couldn't unpin that message. Try again.")); return; }
+    const cur = messagesRef.current.find((x) => x.id === m.id) || m;
+    const before = { pinned_until: cur.pinned_until || null, pinned_by: cur.pinned_by || null, pinned_at: cur.pinned_at || null };
     setMessages((prev) => prev.map((x) => (x.id === m.id ? { ...x, ...clear } : x)));
     setPinIndex(0);
+    const { data, error } = await supabase.from('messages').update(clear).eq('id', m.id).select('id');
+    if (error || !data || !data.length) {
+      setMessages((prev) => prev.map((x) => (x.id === m.id ? { ...x, ...before } : x)));
+      showSnack(friendlyError(error, "Couldn't unpin that message. Try again."));
+    }
   };
 
   const searchMatchesFor = (query) => {
@@ -39065,6 +41512,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   };
 
   const markChatRead = async (otherId) => {
+    markLocalRead(otherId, []);
     await supabase.from('messages').update({ read: true, delivered: true }).eq('sender_id', otherId).eq('receiver_id', session.user.id).eq('read', false);
     loadUnreadCounts();
   };
@@ -39188,24 +41636,42 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const targetGroup = activeGroup;
     const replyId = replyingTo?.id || null;
     setReplyingTo(null);
-    setUploading(outputs.length);
+    const stillHere = () => (targetGroup ? !!activeGroupRef.current && activeGroupRef.current.id === targetGroup.id : !activeGroupRef.current && !!activeProfileRef.current && activeProfileRef.current.id === targetProfile.id);
+    const locals = outputs.map((item) => { try { return item.file && (item.kind === 'image' || item.kind === 'video') ? URL.createObjectURL(item.file) : null; } catch { return null; } });
+    const dims = await Promise.all(outputs.map((item, i) => localMediaDims(locals[i], item.kind)));
+    const stamp = Date.now();
+    const temps = outputs.map((item, i) => {
+      if (!locals[i]) return null;
+      if (dims[i]) imageAspectCache.set(locals[i], dims[i].w / dims[i].h);
+      return { id: `temp-${stamp}-${i}-${Math.random().toString(36).slice(2, 7)}`, sender_id: session.user.id, receiver_id: targetGroup ? null : targetProfile.id, group_id: targetGroup ? targetGroup.id : null, type: item.kind, content: bodyFor(i === 0 ? (caption || null) : null), media_url: locals[i], reply_to_id: i === 0 ? replyId : null, created_at: new Date(stamp + i).toISOString(), read: false, delivered: false, deleted: false, sending: true };
+    });
+    const shownTemps = temps.filter(Boolean);
+    if (shownTemps.length && stillHere()) setMessages((prev) => [...prev, ...shownTemps]);
+    const dropTemp = (t) => { if (t) { setMessages((prev) => prev.filter((x) => x.id !== t.id)); listForgetTemp(targetGroup ? 'group' : 'dm', targetGroup ? targetGroup.id : targetProfile && targetProfile.id, t.id); } };
+    const placeSent = (t, row) => setMessages((prev) => { const out = prev.filter((x) => x.id !== row.id); const at = out.findIndex((x) => x.id === t.id); if (at < 0) return prev.some((x) => x.id === row.id) ? prev : [...prev, row]; out[at] = { ...row, ck: t.id }; return out; });
+    if (shownTemps.length < outputs.length) setUploading(outputs.length - shownTemps.length);
     for (let i = 0; i < outputs.length; i++) {
       const item = outputs[i];
-      const { url, error } = item.paint ? await uploadPaintFile(item.file, session.user.id) : await uploadChatMedia(item.file, session.user.id);
-      if (error || !url) { showSnack(`Upload failed: ${(error && error.message) || 'no file'}`); continue; }
+      const temp = temps[i];
+      const { url, error } = item.paint ? await uploadPaintFile(item.file, session.user.id) : await uploadChatMedia(item.file, session.user.id, dims[i]);
+      if (error || !url) { showSnack(friendlyError(error, 'That did not upload. Check your connection and try again.')); dropTemp(temp); continue; }
       if (!error && url) {
+        if (dims[i]) rememberMediaAspect(url, dims[i].w / dims[i].h);
+        if (temp) { primeSentMedia(url, item.file, locals[i]); locals[i] = null; }
         const captionForThis = i === 0 ? (caption || null) : null;
         let inserted = null;
         if (targetGroup) {
-          inserted = await sendGroupMessage(item.kind, bodyFor(captionForThis), url, null, i === 0 ? replyId : null);
+          const hold = temp && stillHere() ? temp.id : undefined;
+          if (temp && !hold) dropTemp(temp);
+          inserted = await sendGroupMessage(item.kind, bodyFor(captionForThis), url, null, i === 0 ? replyId : null, undefined, hold);
         } else {
           const { data, error: sendErr } = await supabase.from('messages').insert({ sender_id: session.user.id, receiver_id: targetProfile.id, group_id: null, type: item.kind, content: bodyFor(captionForThis), media_url: url, reply_to_id: i === 0 ? replyId : null }).select().single();
-          if (sendErr) showSnack(`Couldn't send: ${sendErr.message}`);
+          if (sendErr) showSnack(friendlyError(sendErr, "Couldn't send that. Try again."));
           inserted = data;
           if (data) {
-            setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
+            if (stillHere()) { if (temp) placeSent(temp, data); else setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data])); }
             notifyUser(targetProfile.id, me.name, once ? `Sent a view once ${item.kind === 'image' ? 'photo' : 'video'}` : blur ? `Sent a hidden ${item.kind === 'image' ? 'photo' : 'video'}` : (captionForThis || (item.kind === 'image' ? 'Photo' : 'Video')), `/?dm=${session.user.id}`, me.avatar);
-          }
+          } else dropTemp(temp);
         }
         if (inserted && hdOn && item.kind === 'image') {
           const hdId = inserted.id;
@@ -39228,7 +41694,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         }
       }
       if (item.url) { const doneUrl = item.url; setTimeout(() => URL.revokeObjectURL(doneUrl), 5000); }
-      setUploading((n) => Math.max(0, (typeof n === 'number' ? n : 1) - 1));
+      if (locals[i]) { const localUrl = locals[i]; setTimeout(() => URL.revokeObjectURL(localUrl), 20000); }
+      if (!temp) setUploading((n) => Math.max(0, (typeof n === 'number' ? n : 1) - 1));
     }
     if (targetProfile) await upsertConversation(targetProfile.id, once || blur ? null : (caption || null), outputs[outputs.length - 1].kind);
     setUploading(0);
@@ -39266,24 +41733,41 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (el && sidebarScrollRef.current) el.scrollTop = sidebarScrollRef.current;
   }, [mobileShowChat, isWide]);
 
-  useEffect(() => { setVisibleCount(20); }, [activeProfile && activeProfile.id, activeGroup && activeGroup.id]);
+  const visibleKey = activeProfile ? `p${activeProfile.id}` : activeGroup ? `g${activeGroup.id}` : '';
+  const visibleKeyRef = useRef(visibleKey);
+  const visibleFresh = visibleKeyRef.current !== visibleKey;
+  if (visibleFresh) {
+    visibleKeyRef.current = visibleKey;
+    if (visibleCount !== 8) setVisibleCount(8);
+  }
+  const visibleNow = visibleFresh ? 8 : visibleCount;
+  useEffect(() => {
+    if (visibleCount >= 20 || !chatKey) return undefined;
+    let t = 0;
+    const raf = requestAnimationFrame(() => { t = setTimeout(() => setVisibleCount((n) => Math.max(n, 20)), 0); });
+    return () => { cancelAnimationFrame(raf); clearTimeout(t); };
+  }, [visibleCount, chatKey]);
   useLayoutEffect(() => {
     const el = scrollRef.current;
-    if (!el || loadingConvo || messages.length <= visibleCount || el.clientHeight < 200) return;
+    if (!el || loadingConvo || visibleCount < 20 || messages.length <= visibleCount || el.clientHeight < 200) return;
     if (el.scrollHeight <= el.clientHeight + 60) setVisibleCount((n) => Math.min(messages.length, n + 20));
   }, [visibleCount, loadingConvo, chatKey, messages.length]);
   useEffect(() => {
     if (visibleCount >= 120 || loadingConvo || !messages.length || messages.length <= visibleCount) return undefined;
     let idle = 0;
+    let wait = 0;
+    const later = (ms) => { wait = setTimeout(() => { if (window.requestIdleCallback) idle = window.requestIdleCallback(grow, { timeout: 600 }); else grow(); }, ms); };
     const grow = () => {
       idle = 0;
+      const box = composerRef.current;
+      if (box && document.activeElement === box) { later(1500); return; }
       const el = scrollRef.current;
       if (el) growRef.current = { h: el.scrollHeight, top: el.scrollTop };
       growAtRef.current = Date.now();
       setVisibleCount((n) => Math.max(n, Math.min(120, n + 16)));
     };
-    const t = setTimeout(() => { if (window.requestIdleCallback) idle = window.requestIdleCallback(grow, { timeout: 600 }); else grow(); }, visibleCount <= 20 ? 520 : 140);
-    return () => { clearTimeout(t); if (idle && window.cancelIdleCallback) window.cancelIdleCallback(idle); };
+    later(visibleCount <= 20 ? 520 : 140);
+    return () => { clearTimeout(wait); if (idle && window.cancelIdleCallback) window.cancelIdleCallback(idle); };
   }, [visibleCount, loadingConvo, messages.length > 0, chatKey]);
   useLayoutEffect(() => {
     const g = growRef.current;
@@ -39402,7 +41886,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const sbRecount = () => {
     const now = Date.now();
     const peers = sbPeersRef.current;
-    Object.keys(peers).forEach((id) => { if (now - peers[id] > 32000) delete peers[id]; });
+    Object.keys(peers).forEach((id) => { if (now - peers[id] > 16000) delete peers[id]; });
     const n = Object.keys(peers).length;
     setSbLive((prev) => (prev === n ? prev : n));
   };
@@ -39415,7 +41899,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (activeGroup) { const g = groups.find((x) => x.id === activeGroup.id); return !!(g && isActiveUntil(g.mutedUntil)); }
     return !!(activeConvForBar && isActiveUntil(activeConvForBar[myConvMuteField(activeConvForBar)]));
   };
-  const sbCanHear = () => !soundsOff() && !quietNow() && document.visibilityState === 'visible' && !(me && me.hide_activity) && !sbMutedHere();
+  const sbCanHear = () => !soundsOff() && !quietNow() && document.visibilityState === 'visible' && !sbMutedHere();
+  const sbAnnounce = () => sbCanHear() && !(me && me.hide_activity);
+  soundCardGate.fn = sbCanHear;
   const sbSend = (event, extra) => {
     const ch = typingChannelRef.current;
     if (!ch || !me) return;
@@ -39433,24 +41919,37 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       if (fl.length >= 10) return;
       fl.push(now);
       sbFloodRef.current[p.from] = fl;
-      playSoundboard(p.k);
+      playSoundboard(p.k, true);
       setLiveSound({ k: p.k, who: String(p.n || '').slice(0, 24), at: now });
     },
     ping: (p) => {
       if (!p || p.from === session.user.id) return;
       if (p.h) sbMark(p.from);
-      if (sbCanHear()) sbSend('sbpong');
+      if (!sbCanHear()) return;
+      loadSprite('board');
+      if (sbAnnounce()) sbSend('sbpong', { h: true });
     },
     pong: (p) => { if (p && p.from !== session.user.id) sbMark(p.from); },
     bye: (p) => { if (p && p.from && sbPeersRef.current[p.from]) { delete sbPeersRef.current[p.from]; sbRecount(); } },
+    tick: () => { sbSend('sbping', { h: sbAnnounce() }); sbRecount(); },
+    vis: () => {
+      if (document.visibilityState === 'hidden') { stopBoardVoice(); if (sbTalkedRef.current) sbSend('sbbye'); return; }
+      if (soundsOpen) sbSend('sbping', { h: sbAnnounce() });
+    },
   };
   useEffect(() => {
     if (!soundsOpen) return undefined;
     loadSprite('board');
-    sbSend('sbping', { h: sbCanHear() });
-    const t = setInterval(() => { sbSend('sbping', { h: sbCanHear() }); sbRecount(); }, 10000);
+    sbSend('sbping', { h: sbAnnounce() });
+    const t = setInterval(() => { const h = sbHandlersRef.current; if (h && h.tick) h.tick(); }, 5000);
     return () => clearInterval(t);
   }, [soundsOpen, activeProfile && activeProfile.id, activeGroup && activeGroup.id]);
+  useEffect(() => {
+    if (!activeProfile && !activeGroup) return undefined;
+    const vis = () => { const h = sbHandlersRef.current; if (h && h.vis) h.vis(); };
+    document.addEventListener('visibilitychange', vis);
+    return () => { document.removeEventListener('visibilitychange', vis); stopBoardVoice(); };
+  }, [activeProfile && activeProfile.id, activeGroup && activeGroup.id]);
   useEffect(() => {
     if (!liveSound) return undefined;
     const t = setTimeout(() => setLiveSound(null), 2400);
@@ -39498,9 +41997,15 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     }
   };
 
+  const markSeenOnLeave = () => {
+    const p = activeProfileRef.current;
+    const g = activeGroupRef.current;
+    if (g) { markGroupRead(g.id); patchGroupRow(g.id, { unread: 0 }); return; }
+    if (p && !requestIdsRef.current.has(p.id)) markLocalRead(p.id, messagesRef.current.filter((m) => m.sender_id === p.id).map((m) => m.id));
+  };
   useBackClose(!isWide && mobileShowChat, () => {
     if (activeConvForBar && myLocks[activeConvForBar.id]) lastLeftChatAtRef.current[activeConvForBar.id] = Date.now();
-    if (activeGroup) markGroupRead(activeGroup.id);
+    markSeenOnLeave();
     if (reloadListsRef.current) reloadListsRef.current();
     loadUnreadCounts();
     setMobileShowChat(false); setActiveProfile(null); setActiveGroup(null);
@@ -39900,31 +42405,35 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (!activeProfile && !activeGroup) return false;
     if (typeof navigator !== 'undefined' && navigator.onLine === false) { showSnack('No connection. Try again when you are back online'); return false; }
     const content = `zround:${JSON.stringify({ d: Math.max(1, Math.round(secs || 1)) })}`;
-    setUploading(true);
-    const { url, error } = await uploadChatMedia(file, uid);
-    if (error || !url) { setUploading(false); showSnack('The video message did not send. Try again.'); return false; }
-    await primeSentMedia(url, file);
-    if (activeGroup) { const row = await sendGroupMessage('video', content, url); setUploading(false); if (row) playUiSound('send'); return !!row; }
+    const group = activeGroup;
     const target = activeProfile;
-    const { data } = await insertMessageSafe({ sender_id: uid, receiver_id: target.id, group_id: null, type: 'video', content, media_url: url, client_id: newClientId() });
-    setUploading(false);
-    if (!data) { showSnack('The video message did not send. Try again.'); return false; }
-    if (activeProfileRef.current && activeProfileRef.current.id === target.id) setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
-    upsertConversation(target.id, 'Video message', 'system');
-    notifyUser(target.id, me.name, 'Video message', `/?dm=${uid}`, me.avatar);
+    const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    let local = null;
+    try { local = URL.createObjectURL(file); } catch {}
+    setMessages((prev) => [...prev, { id: tempId, sender_id: uid, receiver_id: group ? null : target.id, group_id: group ? group.id : null, type: 'video', content, media_url: local, client_id: newClientId(), created_at: new Date().toISOString(), read: false, delivered: false, deleted: false, sending: true }]);
     playUiSound('send');
-    bumpStreaks();
+    (async () => {
+      const { url, error } = await uploadChatMedia(file, uid);
+      if (error || !url) { setMessages((prev) => prev.filter((x) => x.id !== tempId)); listForgetTemp(group ? 'group' : 'dm', group ? group.id : target.id, tempId); showSnack('The video message did not send. Try again.'); return; }
+      await primeSentMedia(url, file);
+      if (group) await sendGroupMessage('video', content, url, null, null, undefined, tempId);
+      else {
+        const data = await sendDmRow(target, { type: 'video', content, media_url: url }, { holdId: tempId, fail: 'The video message did not send. Try again.' });
+        if (data) { upsertConversation(target.id, 'Video message', 'system'); notifyUser(target.id, me.name, 'Video message', `/?dm=${uid}`, me.avatar); bumpStreaks(); }
+      }
+      if (local) setTimeout(() => { try { URL.revokeObjectURL(local); } catch {} }, 8000);
+    })().catch(() => { setMessages((prev) => prev.filter((x) => x.id !== tempId)); listForgetTemp(group ? 'group' : 'dm', group ? group.id : target.id, tempId); showSnack('The video message did not send. Try again.'); });
     return true;
   };
   const sendGif = async (g) => {
     setShowStickers(false);
     if (!g || !g.url || (!activeProfile && !activeGroup)) return;
+    if (g.w > 0 && g.h > 0) rememberMediaAspect(g.url, g.w / g.h);
     if (blockedByRestriction('chat')) return;
     if (activeGroup) { await sendGroupMessage('image', null, g.url); return; }
     const target = activeProfile;
-    const { data } = await insertMessageSafe({ sender_id: uid, receiver_id: target.id, group_id: null, type: 'image', content: null, media_url: g.url, client_id: newClientId() });
-    if (!data) { showSnack('That GIF did not send. Try again.'); return; }
-    setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data]));
+    const data = await sendDmRow(target, { type: 'image', content: null, media_url: g.url }, { fail: 'That GIF did not send. Try again.' });
+    if (!data) return;
     upsertConversation(target.id, 'GIF', 'system');
     notifyUser(target.id, me.name, 'GIF', `/?dm=${uid}`, me.avatar);
     playUiSound('send');
@@ -40161,8 +42670,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const topicIds = new Set(activeTopics.map((t) => t.id));
     const topicById = new Map(activeTopics.map((t) => [t.id, t]));
     const pool = topicSel === 'all' ? messages : messages.filter((x) => (topicSel === 'general' ? (!x.topic || !topicIds.has(x.topic)) : x.topic === topicSel));
-    let startAt = Math.max(0, pool.length - visibleCount);
-    if (unreadAnchor && unreadAnchor.chat === chatKey) {
+    let startAt = Math.max(0, pool.length - visibleNow);
+    if (unreadAnchor && unreadAnchor.chat === chatKey && visibleNow >= 20) {
       const anchorAt = pool.findIndex((x) => x.id === unreadAnchor.id);
       if (anchorAt >= 0) startAt = Math.min(startAt, Math.max(0, anchorAt - 15));
     }
@@ -40202,10 +42711,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                   const isPrivateBot = !activeGroup && !!m.bot_reply;
                   const isUnreadAnchor = !!unreadAnchor && unreadAnchor.chat === chatKey && unreadAnchor.id === m.id;
                   const bubble = (
-                    <MessageBubbleMemo holder={holderFor(m.id)} chatTheme={activeChatTheme} hwv={hwVersion} threadN={threadCounts.get(m.id) || 0} onOpenThread={(msg) => setThreadFor(msg)}
+                    <MessageBubbleMemo holder={holderFor(m.ck || m.id)} chatTheme={activeChatTheme} hwv={hwVersion} threadN={threadCounts.get(m.id) || 0} onOpenThread={(msg) => setThreadFor(msg)}
                       topicTag={topicSel === 'all' && m.topic && topicById.has(m.topic) && m.type !== 'system' && !(tightAbove && prevMsg && prevMsg.topic === m.topic) ? topicById.get(m.topic).n : null}
                       topicColor={topicSel === 'all' && m.topic && topicById.has(m.topic) ? topicById.get(m.topic).c : null}
-                      key={m.id} m={m} isMe={isMe} isBot={isBotAuthored(m)}
+                      key={m.ck || m.id} m={m} isMe={isMe} isBot={isBotAuthored(m)}
                       locPin={m.type === 'text' && parseLocationMessage(m.content) ? (isMe ? { avatar: me.avatar, name: me.name } : showSenderLabel ? (() => { const pr = (groupMembers.find((gm) => gm.user_id === m.sender_id) || {}).profile; return pr ? { avatar: pr.avatar, name: pr.name } : null; })() : activeProfile ? { avatar: activeProfile.avatar, name: activeProfile.name } : null) : null}
                       selectionMode={selectionMode} selected={selectedIds.has(m.id)} onToggleSelect={toggleSelect}
                       onLongPress={() => {
@@ -40263,7 +42772,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                   const newDay = !!m.created_at && !sameDay(prevMsg, m);
                   if (!isUnreadAnchor && !showBotActions && !newDay) return bubble;
                   return (
-                    <React.Fragment key={m.id}>
+                    <React.Fragment key={m.ck || m.id}>
                       {newDay && <DayDivider label={dayDividerLabel(m.created_at)} />}
                       {isUnreadAnchor && <UnreadDivider count={unreadAnchor.count} />}
                       {bubble}
@@ -40272,7 +42781,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                   );
                 })
     );
-  }, [messages, visibleCount, messageLikes, selectionMode, selectedIds, highlightedMsgId, activeGroup, activeProfile, groupMembers, me, mutualIds, myBlockedIds, blockedByIds, activeGroupCall, unreadAnchor, chatKey, savedIds, trMap, autoTrLang, activeChatTheme, theme.dark, hwVersion, activeTopics, topicSel]);
+  }, [messages, visibleNow, messageLikes, selectionMode, selectedIds, highlightedMsgId, activeGroup, activeProfile, groupMembers, me, mutualIds, myBlockedIds, blockedByIds, activeGroupCall, unreadAnchor, chatKey, savedIds, trMap, autoTrLang, activeChatTheme, theme.dark, hwVersion, activeTopics, topicSel]);
 
   const requestIds = (() => {
     const out = new Set();
@@ -40431,7 +42940,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             e.target.value = '';
             if (picked.length && !blockedByRestriction('post')) setPostComposer({ key: Date.now(), files: picked });
           }} />
-        <Freeze frozen={homeHidden}>{(<>
+        <Freeze frozen={homeHidden} render={() => (<>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
         {notifPermission === 'default' && pushSupported() && !notifBannerDismissed && (
           <EnableNotificationsBanner inline
@@ -40452,7 +42961,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         {homeTab === 'chats' && (<div key="tab-chats" className="zchat-tab-in" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         <HomeHeader title="Chats" right={<>
           <HeaderIconButton label="Mail" onClick={() => setShowMail(true)} badge={unreadMailCount}><Mail /></HeaderIconButton>
-          <HeaderIconButton label="Notifications" onClick={() => setNotifsOpen(true)} badge={followRequestCount + notifUnseen}><Bell /></HeaderIconButton>
+          <HeaderIconButton label="Notifications" onClick={() => setNotifsOpen(true)} badge={notifUnseen}><Bell /></HeaderIconButton>
           <HeaderIconButton label="New chat" onClick={() => { playUiSound('tap'); setShowNewChat(true); }}><Edit3 /></HeaderIconButton>
         </>} />
         <div style={{ padding: `2px ${lk(20)}px ${lk(10)}px`, flexShrink: 0 }}>
@@ -40525,7 +43034,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           );
         })() : (
           <>
-            <div style={{ display: 'flex', gap: lk(8), padding: `0 ${lk(20)}px ${lk(8)}px`, flexShrink: 0, overflowX: 'auto', scrollbarWidth: 'none' }}>
+            <div style={{ flexShrink: 0, marginTop: -lk(2) }}>
               {(() => {
                 const liveGroups = groups.filter((g) => !g.archived);
                 const unreadDms = primaryConversations.filter((c) => isUnread(c) && !vaultKeys.has(chatPrefKey('dm', c.otherProfile.id))).length;
@@ -40540,30 +43049,22 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                   chatTabs.groups ? { k: 'groups', l: 'Groups', n: 0 } : null,
                   ...folders.map((f) => ({ k: `f:${f.id}`, l: f.name, n: folderUnread(f), folder: f })),
                 ].filter(Boolean);
-                return [...chips.map((f) => {
-                  const on = listFilter === f.k;
-                  return (
-                    <div key={f.k} role="tab" aria-selected={on} aria-label={f.n > 0 ? `${f.l} ${f.n}` : f.l} onClick={() => { if (chipHoldRef.current.fired) { chipHoldRef.current.fired = false; return; } setListFilter(f.k); playUiSound('tap'); }}
-                      onPointerDown={() => { const h = chipHoldRef.current; clearTimeout(h.t); h.fired = false; if (f.folder || f.k !== 'all') h.t = setTimeout(() => { h.fired = true; hapticTap(); setFoldersOpen(true); }, 520); }}
-                      onPointerUp={() => clearTimeout(chipHoldRef.current.t)} onPointerLeave={() => clearTimeout(chipHoldRef.current.t)} onPointerCancel={() => clearTimeout(chipHoldRef.current.t)}
-                      onContextMenu={(e) => { e.preventDefault(); clearTimeout(chipHoldRef.current.t); setFoldersOpen(true); }} className="zchat-press" style={{
-                      display: 'flex', alignItems: 'center', gap: 6, height: lk(32), boxSizing: 'border-box',
-                      padding: `0 ${lk(13)}px`, borderRadius: 16, fontSize: lf(13.5), fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
-                      background: on ? theme.coral : theme.soft, color: on ? '#FFFFFF' : theme.ink2, transition: 'background 160ms, color 160ms',
-                    }}>
-                      {f.l}
-                      {f.folder && on && <span role="button" aria-label={`Edit folder ${f.l}`} onClick={(e) => { e.stopPropagation(); setFolderEdit(f.folder); }} style={{ display: 'inline-flex', marginLeft: 2, marginRight: -4 }}><Pencil size={12} /></span>}
-                      {f.n > 0 && (
-                        <span style={{
-                          minWidth: 18, height: 18, padding: '0 5px', boxSizing: 'border-box', borderRadius: 9, fontSize: 11.5, fontWeight: 700,
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          background: on ? 'rgba(255,255,255,0.25)' : (f.hot || f.folder ? theme.coral : theme.soft2),
-                          color: on ? '#FFFFFF' : (f.hot || f.folder ? '#FFFFFF' : theme.ink),
-                        }}>{f.n > 99 ? '99+' : f.n}</span>
-                      )}
-                    </div>
-                  );
-                }), <div key="newfolder" role="button" aria-label="New folder" onClick={() => { playUiSound('tap'); setFolderEdit({ __new: true }); }} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 30, borderRadius: 20, cursor: 'pointer', flexShrink: 0, background: theme.rowBg, color: theme.muted }}><Plus size={16} /></div>, <div key="spacer" style={{ width: 6, flexShrink: 0 }} />];
+                const hold = chipHoldRef.current;
+                const stopHold = () => clearTimeout(chipHoldRef.current.t);
+                return (
+                  <LineTabs label="Chat filters" value={listFilter} h={lk(42)} fs={lf(15)} inset={Math.max(4, lk(20) - 12)}
+                    onChange={(k) => { if (chipHoldRef.current.fired) { chipHoldRef.current.fired = false; return; } setListFilter(k); playUiSound('tap'); }}
+                    tabs={chips.map((f) => ({
+                      k: f.k, label: f.l, aria: f.n > 0 ? `${f.l} ${f.n}` : f.l, count: f.n, hot: !!(f.hot || f.folder),
+                      end: f.folder && listFilter === f.k ? <span role="button" aria-label={`Edit folder ${f.l}`} onClick={(e) => { e.stopPropagation(); setFolderEdit(f.folder); }} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 26, height: 26, margin: '-6px -8px -6px -3px', color: theme.muted, cursor: 'pointer' }}><Pencil size={13} strokeWidth={2.1} /></span> : null,
+                      props: {
+                        onPointerDown: () => { clearTimeout(hold.t); hold.fired = false; if (f.folder || f.k !== 'all') hold.t = setTimeout(() => { hold.fired = true; hapticTap(); setFoldersOpen(true); }, 520); },
+                        onPointerUp: stopHold, onPointerLeave: stopHold, onPointerCancel: stopHold,
+                        onContextMenu: (e) => { e.preventDefault(); stopHold(); setFoldersOpen(true); },
+                      },
+                    }))}
+                    after={<div role="button" aria-label="New folder" onClick={() => { playUiSound('tap'); setFolderEdit({ __new: true }); }} className="zchat-press" style={{ flex: '0 0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 40, height: lk(42), marginLeft: 2, cursor: 'pointer', color: theme.muted, WebkitTapHighlightColor: 'transparent' }}><Plus size={19} strokeWidth={2} /></div>} />
+                );
               })()}
             </div>
             <div
@@ -40724,7 +43225,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                           <div style={{ fontSize: lf(14.5), color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><span style={{ color: theme.danger, fontWeight: 600 }}>Draft: </span>{draftMap[c.otherProfile.id].trim()}</div>
                         ) : (
                           <>
-                            {c.lastFromMe && c.preview && c.preview.kind !== 'deleted' && c.preview.kind !== 'system' && <StatusTicks status={c.lastMineRead && me.read_receipts !== false && c.otherProfile.read_receipts !== false ? 'read' : c.lastMineDelivered ? 'delivered' : 'sent'} />}
+                            {c.lastFromMe && c.preview && c.preview.kind !== 'deleted' && c.preview.kind !== 'system' && <StatusTicks status={c.lastQueued ? 'queued' : c.lastMineRead && me.read_receipts !== false && c.otherProfile.read_receipts !== false ? 'read' : c.lastMineDelivered ? 'delivered' : 'sent'} />}
                             {hidePreviews && c.preview && c.preview.text
                               ? <PreviewLine preview={{ kind: 'text', text: unread ? 'New message' : 'Message hidden' }} color={unread ? theme.ink : theme.muted} weight={unread ? 600 : 400} size={lf(14.5)} />
                               : <PreviewLine preview={c.preview && c.preview.text ? c.preview : { kind: 'text', text: 'Say hi \u{1F44B}' }} color={unread ? theme.ink : theme.muted} weight={unread ? 600 : 400} size={lf(14.5)} />}
@@ -40766,7 +43267,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             unseenStories={trayUsers.filter((u) => !u.stories.every((st) => storyData.seen.has(st.id))).length}
             onAddStory={startStory} onOpenStory={(id) => openStoriesFor(id)} storyUploading={storyUploading} onStoryLongPress={(pr, isMuted) => setStoryPeek({ profile: pr, muted: isMuted })}
             onOpenPost={(p, tab) => openFeedAt(p, tab)} onOpenProfile={(p) => setProfileOf(sanitizeAvatar(p, session.user.id))} onDiscover={() => setShowDiscover(true)}
-            onSearch={() => setShowDiscover(true)} onNotifs={() => setNotifsOpen(true)} notifBadge={followRequestCount + notifUnseen} ringFor={storyRingFor}
+            onSearch={() => setShowDiscover(true)} onNotifs={() => setNotifsOpen(true)} notifBadge={notifUnseen} ringFor={storyRingFor}
             onSharePost={(post) => setShareCard({ content: `${siteOrigin()}/?post=${post.id}`, notify: 'Shared a post' })}
             onOpenClips={() => setClipsOpen(true)}
             onInsights={(post) => setPostInsights(post)} onEditPost={(post) => setEditPost(post)}
@@ -40783,7 +43284,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         )}
         {homeTab === 'me' && me && (
           <PageGuard key="tab-me" name="me" inline><ProfilePanel inline profile={{ ...me, email: session.user.email }} isSelf userId={session.user.id} isOnline={false} selfExtra={<DailyRewardCard uid={session.user.id} onOpenWallet={() => setWalletOpen(true)} />}
-            onClose={() => {}} onReport={handleReport} onSaved={(updated) => setMe((prev) => ({ ...prev, ...updated, email: prev.email }))}
+            onClose={() => {}} onReport={handleReport} onSaved={(updated) => setMe((prev) => ({ ...prev, ...withoutUiKeys(updated), email: prev.email }))}
             onOpenSettings={() => setShowSettings(true)} onOpenProfile={(pr) => setProfileOf(pr)} onMessage={(pr) => openChat(pr, null)}
             isZAdmin={isZAdmin} iFollowIds={iFollowIds} privacyAllowed={privacyAllowed}
             shareConversations={conversations} shareGroups={groups.filter((g) => !g.archived)} onShareToChats={shareProfileToChats}
@@ -40794,7 +43295,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         )}
         <BottomTabBar tab={homeTab} onChange={(k) => setHomeTab(k)} onCreate={() => setShowCreate(true)}
           badges={{ chats: primaryConversations.filter((c) => isUnread(c) && !vaultKeys.has(chatPrefKey('dm', c.otherProfile.id))).length + groups.filter((g) => !g.archived && g.unread > 0 && !vaultKeys.has(chatPrefKey('group', g.id))).length, moments: trayUsers.some((u) => !u.stories.every((st) => storyData.seen.has(st.id))), calls: 0, me: followRequestCount + unreadMailCount }} />
-        </>)}</Freeze>
+        </>)} />
       </div>
 
       <div {...chatEdgeBack} style={{
@@ -40817,7 +43318,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                 role="button" aria-label="Chat details"
                 onClick={() => (activeGroup ? setShowGroupInfo(true) : activeConvForBar ? setShowChatSettings(true) : setProfileOf(activeProfile))}>
               <div role="button" aria-label="Back" className="zchat-press" style={{ width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, position: 'relative', color: theme.ink }}
-                onClick={(e) => { e.stopPropagation(); if (activeConvForBar && myLocks[activeConvForBar.id]) lastLeftChatAtRef.current[activeConvForBar.id] = Date.now(); if (activeGroup) markGroupRead(activeGroup.id); if (reloadListsRef.current) reloadListsRef.current(); loadUnreadCounts(); runWithTransition(() => { setMobileShowChat(false); setActiveProfile(null); setActiveGroup(null); }); }}>
+                onClick={(e) => { e.stopPropagation(); if (activeConvForBar && myLocks[activeConvForBar.id]) lastLeftChatAtRef.current[activeConvForBar.id] = Date.now(); markSeenOnLeave(); if (reloadListsRef.current) reloadListsRef.current(); loadUnreadCounts(); runWithTransition(() => { setMobileShowChat(false); setActiveProfile(null); setActiveGroup(null); }); }}>
                 <ArrowLeft size={23} strokeWidth={2} />
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, position: 'relative' }}>
@@ -40949,12 +43450,14 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                 && Array.isArray(lastMsg.suggestions) && lastMsg.suggestions.length > 0;
               if (!showSuggestions) return null;
               return (
-                <div style={{ display: 'flex', gap: 8, padding: '0 16px 10px', overflowX: 'auto', flexShrink: 0, WebkitOverflowScrolling: 'touch' }}>
+                <div role="group" aria-label="Suggested replies" style={{ display: 'flex', alignItems: 'center', padding: '0 6px 4px', overflowX: 'auto', flexShrink: 0, scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
                   {lastMsg.suggestions.slice(0, 3).map((sgg, sggIdx) => (
-                    <div key={sggIdx} role="button" onClick={() => sendQuickReply(sgg)} style={{
-                      flex: '0 0 auto', padding: '9px 14px', borderRadius: 18, border: `1px solid ${theme.border}`,
-                      background: theme.rowBg, color: theme.ink, fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
-                    }}>{sgg}</div>
+                    <React.Fragment key={sggIdx}>
+                      {sggIdx > 0 && <span aria-hidden="true" style={{ flex: '0 0 auto', width: 1, height: 18, background: theme.hair }} />}
+                      <div role="button" aria-label={sgg} onClick={() => sendQuickReply(sgg)} className="zchat-press" style={{
+                        flex: '0 0 auto', display: 'flex', alignItems: 'center', height: 40, padding: '0 12px', color: kitOnInk(theme), fontSize: 14.5, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap', WebkitTapHighlightColor: 'transparent',
+                      }}>{sgg}</div>
+                    </React.Fragment>
                   ))}
                 </div>
               );
@@ -41115,11 +43618,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                 <DmClosedBar name={activeProfile.name} />
               ) : voiceReview ? (
                 <div className="zchat-fade" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <div role="list" aria-label="Voice effects" style={{ display: 'flex', gap: 6, overflowX: 'auto', scrollbarWidth: 'none', padding: '2px 2px 0', margin: '0 -2px' }}>
-                    {VOICE_FX.map(([k, l]) => (
-                      <div key={k} role="listitem" aria-label={`Voice effect ${l}`} aria-pressed={voiceReview.fx === k} onClick={() => pickReviewFx(k)} className="zchat-press" style={{ flexShrink: 0, height: 30, padding: '0 12px', borderRadius: 15, display: 'flex', alignItems: 'center', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', background: voiceReview.fx === k ? theme.coral : theme.rowBg, color: voiceReview.fx === k ? '#FFFFFF' : theme.ink, whiteSpace: 'nowrap' }}>{l}</div>
-                    ))}
-                  </div>
+                  <VoiceFxPicker value={voiceReview.fx} onPick={pickReviewFx} />
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <div role="button" aria-label="Delete recording" onClick={() => { hapticTap(); clearReview(); }} style={{ width: 38, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: theme.danger, flexShrink: 0 }}><Trash2 size={21} /></div>
                     <div style={{ flex: 1, minWidth: 0, height: 44, boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: 8, background: theme.inputBg, borderRadius: 22, padding: '0 12px 0 4px' }}>
@@ -41198,7 +43697,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                         if (pasted.length) openMediaComposer(pasted);
                       }}
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter' && !e.nativeEvent.isComposing && !isTouchDevice() && (prefOn('zchat-enter-send') ? !e.shiftKey : (e.ctrlKey || e.metaKey))) { e.preventDefault(); if (editingMessage) saveEdit(); else send(); return; }
+                        if (e.key === 'Enter' && !e.nativeEvent.isComposing && !isTouchDevice() && (prefOn('zchat-enter-send') ? !e.shiftKey : (e.ctrlKey || e.metaKey))) { e.preventDefault(); if (editingMessage) saveEdit(); else { if (draft.trim() || pendingMedia.length) playUiSound('send'); send(); } return; }
                         if (e.key === 'ArrowUp' && !isTouchDevice() && !draft && !editingMessage && !replyingTo) {
                           const mine = messages.slice().reverse().find((x) => x.sender_id === session.user.id && x.type === 'text' && !x.deleted && x.content && !parseGameMessage(x.content) && !parseLocationMessage(x.content));
                           if (mine) { e.preventDefault(); doStartEditSingle(mine); }
@@ -41346,7 +43845,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         <PageGuard name="profile" onClose={() => setProfileOf(null)}><ProfilePanel initialEdit={!!profileOf.__edit} initialShare={!!profileOf.__share} onAsk={(un) => setAskFor(un)}
           profile={profileOf} isSelf={profileOf.id === session.user.id} userId={session.user.id}
           isOnline={isUserOnline(profileOf) && !profileOf.hide_activity} onClose={() => setProfileOf(null)}
-          onReport={handleReport} onSaved={(updated) => { setProfileOf({ ...updated, email: me.email }); if (updated.id === me.id) setMe((prev) => ({ ...prev, ...updated, email: prev.email })); }}
+          onReport={handleReport} onSaved={(updated) => { setProfileOf({ ...updated, email: me.email }); if (updated.id === me.id) setMe((prev) => ({ ...prev, ...withoutUiKeys(updated), email: prev.email })); }}
           onOpenSettings={() => { setProfileOf(null); setShowSettings(true); }}
           onOpenProfile={(p) => setProfileOf(p)}
           onMessage={(p) => { if (profileOf.__top) { setLeaderboardFor(null); setShowGames(false); } openChat(p, null); setProfileOf(null); }}
@@ -41421,7 +43920,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       {questionsOpen && me && <QuestionsPage me={me} onClose={() => setQuestionsOpen(false)} onSaved={(patch) => setMe((m) => (m ? { ...m, ...patch } : m))} onShareStory={(file) => { setQuestionsOpen(false); setStoryComposer({ key: Date.now(), files: [file] }); }} />}
       {askFor && <AskPage username={askFor} userId={session.user.id} onClose={() => setAskFor(null)} onOwnLink={() => { setAskFor(null); setQuestionsOpen(true); }} />}
       {giftPick && <PickPeoplePage userId={session.user.id} title={giftPick.kind === 'bubble' ? 'Send a bubble' : giftPick.kind === 'set' ? 'Send a set' : giftPick.kind === 'charm' ? 'Send a charm' : 'Send a gift'} subtitle="Pick who gets it" multi={false} blockedIds={myBlockedIds} zIndex={790} onClose={() => setGiftPick(null)} onDone={(list) => { const p = Array.isArray(list) ? list[0] : list; const g = giftPick; setGiftPick(null); if (p) { setGiftStart(g); setGiftFor(p); } }} />}
-      {giftFor && <PageGuard name="gift" onClose={() => { setGiftFor(null); setGiftStart(null); }}><GiftSheet uid={session.user.id} me={me} to={giftFor} start={giftStart} onAsk={giftFor && !giftFor.is_bot && !(giftStart && giftStart.asked) ? async (n) => { const who = giftFor; setGiftFor(null); setGiftStart(null); const ok = await sendDmTo(who, `zask:${JSON.stringify({ n })}`, `Asked you for ${n} coins`); if (ok) showSnack(`Asked ${String(who.name || '').split(' ')[0] || 'them'} for ${n} coins`); } : undefined} onClose={() => { setGiftFor(null); setGiftStart(null); }} onSent={(t) => { setGiftFor(null); setGiftStart(null); showSnack(t); runAchievementCheck(session.user.id); }} /></PageGuard>}
+      {giftFor && <PageGuard name="gift" onClose={() => { setGiftFor(null); setGiftStart(null); }}><GiftSheet uid={session.user.id} me={me} to={giftFor} start={giftStart} onAsk={giftFor && !giftFor.is_bot && !(giftStart && giftStart.asked) ? (n) => { const who = giftFor; setGiftFor(null); setGiftStart(null); const t = `Asked ${String(who.name || '').split(' ')[0] || 'them'} for ${n} coins`; if (!moneyToast(t)) showSnack(t); sendDmTo(who, `zask:${JSON.stringify({ n })}`, `Asked you for ${n} coins`); } : undefined} onClose={() => { setGiftFor(null); setGiftStart(null); }} onSent={(t, job) => { setGiftFor(null); setGiftStart(null); if (!moneyToast(t)) showSnack(t); job.then((r) => { if (r.error) { if (!moneyToast(r.error)) showSnack(r.error); return; } runAchievementCheck(session.user.id); }); }} /></PageGuard>}
       {achToast && !toastBusy && <AchievementToast k={achToast} onDone={() => setAchToast(null)} onOpen={() => { setAchToast(null); setAchievementsFor(me); }} />}
       {achievementsFor && <AchievementsPage userId={achievementsFor.id} isSelf={achievementsFor.id === session.user.id} name={achievementsFor.name} onClose={() => setAchievementsFor(null)} />}
       {notifsOpen && (
@@ -41436,10 +43935,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           onOpenQuestions={() => setQuestionsOpen(true)}
           onOpenCollection={(k) => setCollectionOpen(k === '__drop' ? '__drop' : true)}
           onOpenWallet={() => setWalletOpen(true)}
-          onChanged={() => { loadFollowRequestCount(); setNotifUnseen(0); }} />
+          onChanged={() => { loadFollowRequestCount(); setNotifUnseen(0); }} onRequestDone={(n) => setFollowRequestCount((c) => Math.max(0, c - n))} />
       )}
       {showFollowRequests && (
-        <FollowRequestsPanel userId={session.user.id} onClose={() => { setShowFollowRequests(false); loadFollowRequestCount(); }} onOpenProfile={(p) => { setShowFollowRequests(false); setProfileOf(p); }} />
+        <FollowRequestsPanel userId={session.user.id} onClose={() => { setShowFollowRequests(false); loadFollowRequestCount(); }} onOpenProfile={(p) => { setShowFollowRequests(false); setProfileOf(p); }} onRequestDone={(n) => setFollowRequestCount((c) => Math.max(0, c - n))} />
       )}
       {showDiscover && (
         <SearchPage myId={session.user.id} me={me} blockedIds={myBlockedIds} onClose={() => setShowDiscover(false)} onOpenProfile={(p) => setProfileOf(sanitizeAvatar(p, session.user.id))} onOpenTag={(t) => setTagPage(t)} onOpenTrending={() => setTrendingOpen(true)}
@@ -41478,7 +43977,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             isSaved={savedIds.has(String(m.id))} onToggleSave={String(m.id).startsWith('temp-') ? null : () => toggleSaveMessage(m)}
             onSave={() => { silentDownload(m.media_url, m.type === 'video' ? 'zchat-video.mp4' : 'zchat-photo.jpg'); setContextMenuFor(null); }}
             onEditArt={m.type === 'image' && m.media_url && !String(m.id).startsWith('temp-') ? () => { setContextMenuFor(null); openPaintFor(m.media_url); } : null}
-            canEditText={isMine && m.type === 'text' && !m.deleted && !parseWrapped(m.content)}
+            canEditText={isMine && m.type === 'text' && !m.deleted && !parseWrapped(m.content) && !String(m.id).startsWith('temp-')}
             canModerate={activeGroup ? (groupMembers.find((gm) => gm.user_id === session.user.id)?.role === 'admin') : false}
             onClose={() => setContextMenuFor(null)}
             onReact={(emoji) => doReactSingle(m, emoji)}
@@ -41560,16 +44059,16 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           onCancel={() => setSpamWipe(false)}
           onConfirm={async () => {
             const list = spamRequests.slice();
+            const gone = new Set(list.map((c) => c.otherProfile.id));
             setSpamWipe(false);
-            for (const c of list) {
-              hideChatLocally(c.otherProfile.id);
-              const { data: allMsgs } = await getConversation(session.user.id, c.otherProfile.id);
-              const ids = (allMsgs || []).map((m) => m.id);
-              if (ids.length) hideMessagesLocally(ids);
-            }
+            list.forEach((c) => { hideChatLocally(c.otherProfile.id); delete listHoldRef.current.dm[c.otherProfile.id]; });
+            setConversations((prev) => prev.filter((c) => !(c.otherProfile && gone.has(c.otherProfile.id))));
             setSpamOpen(false);
-            loadConversations();
             showSnack('Spam chats deleted');
+            const all = await Promise.all(list.map((c) => getConversation(session.user.id, c.otherProfile.id).catch(() => ({ data: [] }))));
+            const ids = all.flatMap((r) => ((r && r.data) || []).map((m) => m.id));
+            if (ids.length) hideMessagesLocally(ids);
+            loadConversations();
           }} />
       )}
       {riskyLink && <RiskyLinkSheet href={riskyLink.href} why={riskyLink.why} onClose={() => setRiskyLink(null)} />}
@@ -41579,7 +44078,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           onUnarchive={(id) => toggleArchive(id, false)} />
       )}
       {showMail && (
-        <MailPanel myId={session.user.id} initialMailId={mailOpenId} onClose={() => { setShowMail(false); setMailOpenId(null); loadUnreadMailCount(); }} />
+        <MailPanel myId={session.user.id} initialMailId={mailOpenId} onClose={() => { setShowMail(false); setMailOpenId(null); loadUnreadMailCount(); }} onUnreadDelta={(d) => setUnreadMailCount((c) => Math.max(0, c + d))} />
       )}
       {showChatSettings && activeConvForBar && (
         <ChatSettingsPanel
@@ -41653,7 +44152,16 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       {addYoursCam && <CameraCapture onClose={() => setAddYoursCam(null)} onCapture={(file) => { const s = addYoursCam; setAddYoursCam(null); setStoryComposer({ key: Date.now(), files: [file], sticker: { k: 'addyours', q: s.q, c: s.c } }); }} />}
       {showCreateGroup && (
         <CreateGroupPanel myId={session.user.id} onClose={() => setShowCreateGroup(false)}
-          onCreated={(g) => { setShowCreateGroup(false); loadGroups(); openGroup({ ...g, myRole: 'admin' }); }} />
+          onCreated={(g, extra) => {
+            setShowCreateGroup(false);
+            const sys = extra && extra.sys;
+            const people = (extra && extra.people) || [];
+            const members = [{ group_id: g.id, user_id: session.user.id, role: 'admin', added_by: session.user.id, profile: slimProfile(me) }, ...people.map((p) => ({ group_id: g.id, user_id: p.id, role: 'member', added_by: session.user.id, profile: slimProfile(p) }))];
+            saveChatLocal(session.user.id, 'g', g.id, { rows: sys ? [sys] : [], members });
+            setGroups((prev) => (prev.some((x) => x.id === g.id) ? prev : sortGroupRows([{ ...g, myRole: 'admin', pinned: false, archived: false, unread: 0, mutedUntil: null, ...groupFieldsFor(sys, g.created_at), last_message_at: sys ? sys.created_at : g.created_at }, ...prev])));
+            loadGroups();
+            openGroup({ ...g, myRole: 'admin' });
+          }} />
       )}
       {showGroupInfo && activeGroup && (
         <GroupInfoPanel
@@ -41715,7 +44223,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         );
       })()}
       {lockPromptFor && (
-        <ChatLockUnlock correctHash={me.chat_lock_hash} onCancel={() => { setLockPromptFor(null); setMobileShowChat(false); }}
+        <ChatLockUnlock allowBio correctHash={me.chat_lock_hash} onCancel={() => { setLockPromptFor(null); setMobileShowChat(false); }}
           onUnlock={() => { const { profile, convId } = lockPromptFor; setUnlockedChats((prev) => new Set(prev).add(convId)); setLockPromptFor(null); actuallyOpenChat(profile, convId); }} />
       )}
       {deletedAccountAlertFor && (
@@ -41834,7 +44342,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               { icon: <FolderIcon size={18} />, label: 'Add to folder', onClick: () => setFolderPick({ key: `group-${g.id}`, name: g.name }) },
               { icon: <EyeOff size={18} />, label: 'Hide group', hint: 'Keep it behind your PIN', onClick: () => hideChat(chatPrefKey('group', g.id)) },
               { icon: isActiveUntil(g.mutedUntil) ? <Bell size={18} /> : <BellOff size={18} />, label: isActiveUntil(g.mutedUntil) ? 'Unmute notifications' : 'Mute notifications', onClick: () => (isActiveUntil(g.mutedUntil) ? setChatMute({ kind: 'group', id: g.id }, null) : setMuteSheet({ kind: 'group', id: g.id })) },
-              { icon: <Users size={18} />, label: 'Group info', onClick: async () => { await openGroup(g); setShowGroupInfo(true); } },
+              { icon: <Users size={18} />, label: 'Group info', onClick: () => { openGroup(g); setShowGroupInfo(true); } },
               { icon: <Phone size={18} />, label: 'Group voice call', onClick: async () => { await openGroup(g); startGroupCall(g, 'voice'); } },
               { icon: <VideoIcon size={18} />, label: 'Group video call', onClick: async () => { await openGroup(g); startGroupCall(g, 'video'); } },
               { icon: <LogOut size={18} />, label: 'Leave group', onClick: () => leaveGroupById(g), danger: true },
@@ -41848,12 +44356,12 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       )}
       {blockConfirmFor && (
         <BlockConfirmSheet profile={blockConfirmFor} onCancel={() => setBlockConfirmFor(null)}
-          onConfirm={async () => { const p = blockConfirmFor; const ok = await blockUser(p); setBlockConfirmFor(null); if (ok) showSnack(`You blocked ${p.name}`); }}
-          onBlockReport={async () => { const p = blockConfirmFor; try { await reportUser(session.user.id, p.id, 'Reported while blocking'); } catch {} const ok = await blockUser(p); setBlockConfirmFor(null); if (ok) showSnack(`You blocked and reported ${p.name}`); }} />
+          onConfirm={async () => { const p = blockConfirmFor; setBlockConfirmFor(null); if (profileOf && profileOf.id === p.id) setProfileOf(null); const ok = await blockUser(p); if (ok) showSnack(`You blocked ${p.name}`); }}
+          onBlockReport={async () => { const p = blockConfirmFor; setBlockConfirmFor(null); if (profileOf && profileOf.id === p.id) setProfileOf(null); const [, ok] = await Promise.all([Promise.resolve().then(() => reportUser(session.user.id, p.id, 'Reported while blocking')).catch(() => {}), blockUser(p)]); if (ok) showSnack(`You blocked and reported ${p.name}`); }} />
       )}
       {unblockConfirmFor && (
         <UnblockConfirmSheet profile={unblockConfirmFor} onCancel={() => setUnblockConfirmFor(null)}
-          onConfirm={async () => { const p = unblockConfirmFor; const ok = await unblockUser(p); setUnblockConfirmFor(null); if (ok) showSnack(`You unblocked ${p.name}`); }} />
+          onConfirm={async () => { const p = unblockConfirmFor; setUnblockConfirmFor(null); const ok = await unblockUser(p); if (ok) showSnack(`You unblocked ${p.name}`); }} />
       )}
       {showBlockedList && (
         <BlockedAccountsPanel myId={session.user.id} blockedIds={myBlockedIds} onClose={() => setShowBlockedList(false)}
@@ -41961,7 +44469,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       {unwrapGift && me && (
         <PageGuard name="gift box" onClose={() => setUnwrapGift(null)}><GiftUnwrapPage entry={unwrapGift} me={me} onClose={() => setUnwrapGift(null)}
           onOpened={(e) => { giftInbox.opened(e.id); markGiftRewardsSeen(e); }}
-          onThank={async (who, label) => { await sendDmTo(who, `Thank you for ${label}!`, 'Said thanks for your gift'); }}
+          onThank={(who, label) => sendDmTo(who, `Thank you for ${label}!`, 'Said thanks for your gift')}
           onWear={equipDecor} onUseBubble={(k) => setBubbleStyle(k)} onUseCharm={(k) => equipReward('charm', k)} /></PageGuard>
       )}
       {celebrateTier && (
@@ -42032,7 +44540,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         );
       })()}
       {snack && (
-        <div className="zchat-pop" style={{ position: 'fixed', left: '50%', bottom: 'calc(150px + env(safe-area-inset-bottom))', transform: 'translateX(-50%)', zIndex: 320, background: theme.ink, color: theme.panelBg, padding: '10px 16px', borderRadius: 22, fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', boxShadow: '0 8px 24px rgba(0,0,0,0.3)' }}>{snack}</div>
+        <div className="zchat-pop" style={{ position: 'fixed', left: '50%', bottom: 'calc(150px + env(safe-area-inset-bottom))', transform: 'translateX(-50%)', zIndex: 320, background: theme.ink, color: theme.panelBg, padding: '10px 16px', borderRadius: 22, fontSize: 13, fontWeight: 700, width: 'max-content', maxWidth: 'calc(100vw - 48px)', boxSizing: 'border-box', textAlign: 'center', lineHeight: 1.35, boxShadow: '0 8px 24px rgba(0,0,0,0.3)' }}>{snack}</div>
       )}
       {clearChatAsk && (activeProfile || activeGroup) && (
         <ConfirmSheet title="Clear this chat?" text="Every message here disappears from your phone. The other side keeps their copy." confirmLabel="Clear chat"
@@ -42101,9 +44609,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       {soundsOpen && (activeProfile || activeGroup) && (
         <SoundboardSheet onClose={() => setSoundsOpen(false)} live={sbLive} isGroup={!!activeGroup} peerName={activeGroup ? activeGroup.name : activeProfile && activeProfile.name}
           onTap={async (k, label, live) => {
-            if (live) { sbSend('sb', { k, h: sbCanHear() }); return; }
+            if (live) { sbSend('sb', { k, h: sbAnnounce() }); return; }
             setSoundsOpen(false);
-            const ok = await sendSpecial(`zsnd:${JSON.stringify({ k })}`, `Sent a sound: ${label}`);
+            const ok = await sendSpecial(`zsnd:${JSON.stringify({ k })}`, `Sent a sound: ${label}`, true);
             if (ok) scrollChatToBottom(true);
           }} />
       )}
@@ -42279,6 +44787,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       {screenEffect && <ScreenEffect key={screenEffect.key} kind={screenEffect.kind} onDone={() => setScreenEffect(null)} />}
       {infoFor && <MessageInfoSheet m={infoFor} isMine={infoFor.sender_id === session.user.id} peerName={activeGroup ? labelForSender(infoFor.sender_id) : (activeProfile ? activeProfile.name : '')} isGroup={!!activeGroup || !!(activeProfile && (me.read_receipts === false || activeProfile.read_receipts === false))} onClose={() => setInfoFor(null)} />}
       {appLocked && <AppLockScreen onUnlock={() => setAppLocked(false)} onForgot={() => { writeAppLock({}); setAppLocked(false); onLogout(); }} />}
+      <SpendAuthHost uid={uid} />
+      <LoginAlertHost uid={uid} onChangePassword={() => { setSettingsOpenTo('password'); setShowSettings(true); }} />
       {showChatMedia && (activeProfile || activeGroup) && (
         <ChatMediaPanel title={activeGroup ? activeGroup.name : activeProfile.name}
           myId={session.user.id} otherId={activeGroup ? null : activeProfile.id} groupId={activeGroup ? activeGroup.id : null}
@@ -42357,8 +44867,60 @@ function dayDividerLabel(value) {
 function DayDivider({ label }) {
   const { theme } = useTheme();
   return (
-    <div style={{ display: 'flex', justifyContent: 'center', margin: '10px 0 12px' }}>
-      <span style={{ fontSize: 11.5, fontWeight: 700, color: theme.muted, padding: '4px 11px', borderRadius: 12, background: theme.dark ? '#1C1C20' : '#FFFFFF', border: `1px solid ${theme.border}` }}>{label}</span>
+    <div style={{ display: 'flex', justifyContent: 'center', margin: '16px 0 12px' }}>
+      <span style={{ fontSize: 12.5, fontWeight: 600, lineHeight: 1.3, color: theme.muted, textShadow: theme.dark ? '0 1px 3px rgba(0,0,0,0.6)' : '0 1px 3px rgba(255,255,255,0.95)' }}>{label}</span>
+    </div>
+  );
+}
+
+function VoiceFxGlyph({ k, size = 26 }) {
+  const p = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round' };
+  const body = (() => {
+    if (k === 'chipmunk') return <><path d="M3 16q1.5-3.8 3 0t3 0 3 0 3 0 3 0 3 0" {...p} /><path d="M26 22.5V9.5M22.6 12.9 26 9.5l3.4 3.4" {...p} /></>;
+    if (k === 'helium') return <><path d="M16 4.6c3.6 0 6.2 2.8 6.2 6.5 0 4.2-3.4 7.9-6.2 7.9s-6.2-3.7-6.2-7.9c0-3.7 2.6-6.5 6.2-6.5z" {...p} /><path d="M14.9 19.3h2.2L16 20.7z" {...p} /><path d="M16 21c-1.5 1.6 1.5 2.7 0 4.3s1.3 2.4.4 3.2" {...p} /><path d="M12.7 9.6c.5-1.4 1.5-2.3 2.8-2.6" {...p} opacity="0.55" /></>;
+    if (k === 'deep') return <><path d="M3 16c3-7.4 6-7.4 9 0s6 7.4 9 0" {...p} /><path d="M26 9.5v13M22.6 19.1 26 22.5l3.4-3.4" {...p} /></>;
+    if (k === 'giant') return <path d="M4 16c2.4-11 5.6-11 8 0s5.6 11 8 0 5.6-11 8 0" {...p} />;
+    if (k === 'robot') return <path d="M4 20h4.5v-8h5v8h5v-8h5v8H28" {...p} />;
+    if (k === 'echo') return <><path d="M3 16q2.25-8.5 4.5 0t4.5 0" {...p} /><path d="M13.5 16q2.25-5.6 4.5 0t4.5 0" {...p} opacity="0.6" /><path d="M24 16q1.25-3.2 2.5 0t2.5 0" {...p} opacity="0.35" /></>;
+    if (k === 'underwater') return <><path d="M4 22.5c2-3.2 4-3.2 6 0s4 3.2 6 0 4-3.2 6 0 4 3.2 6 0" {...p} /><circle cx="11" cy="12.5" r="2.6" {...p} /><circle cx="18.6" cy="8.3" r="1.7" {...p} /><circle cx="20.4" cy="14.2" r="1.2" {...p} /></>;
+    if (k === 'slow') return <><path d="M4.5 23h17c2.8 0 5-2.2 5-5v-1.6" {...p} /><circle cx="14" cy="16.3" r="6.2" {...p} /><path d="M14 16.3c0-1.3 1-2.2 2.2-2 1.5.2 2.2 1.8 1.7 3.2-.6 1.8-2.6 2.6-4.4 2-2.2-.8-3.1-3.3-2.3-5.3" {...p} /><path d="M25.4 15.6l-1-3.4M27.6 15.6l1-3.4" {...p} /></>;
+    if (k === 'stadium') return <><ellipse cx="16" cy="12" rx="12" ry="4.4" {...p} /><path d="M4 12v7c0 2.5 5.4 4.5 12 4.5s12-2 12-4.5v-7" {...p} /><ellipse cx="16" cy="12" rx="5.4" ry="1.7" {...p} opacity="0.6" /></>;
+    if (k === 'radio') return <><rect x="4.5" y="12" width="23" height="14" rx="3.2" {...p} /><path d="M9.5 12 20 5.2" {...p} /><circle cx="20.4" cy="19" r="3.4" {...p} /><path d="M8.6 16.4h5M8.6 19.2h5M8.6 22h5" {...p} /></>;
+    return <path d="M4 16c2-5.6 4-5.6 6 0s4 5.6 6 0 4-5.6 6 0 4 5.6 6 0" {...p} />;
+  })();
+  return <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true" style={{ display: 'block', flexShrink: 0 }}>{body}</svg>;
+}
+function VoiceFxPicker({ value, onPick }) {
+  const { theme } = useTheme();
+  const line = theme.dark ? 'rgba(255,255,255,0.13)' : 'rgba(17,17,19,0.09)';
+  const ink = kitOnInk(theme);
+  const rowRef = useRef(null);
+  useLayoutEffect(() => {
+    const row = rowRef.current;
+    const el = row && row.querySelector('[aria-checked="true"]');
+    if (!row || !el) return;
+    const left = el.offsetLeft - 14;
+    const right = el.offsetLeft + el.offsetWidth + 14;
+    if (left < row.scrollLeft || right > row.scrollLeft + row.clientWidth) {
+      const to = Math.max(0, left < row.scrollLeft ? left : right - row.clientWidth);
+      try { row.scrollTo({ left: to, behavior: reducedMotion() ? 'auto' : 'smooth' }); } catch { row.scrollLeft = to; }
+    }
+  }, [value]);
+  return (
+    <div ref={rowRef} role="radiogroup" aria-label="Voice effects" style={{ position: 'relative', display: 'flex', gap: 10, overflowX: 'auto', overflowY: 'hidden', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch', padding: '6px 0 0 14px', margin: '0 -14px' }}>
+      {VOICE_FX.map(([k, l]) => {
+        const on = value === k;
+        return (
+          <div key={k} role="radio" aria-checked={on} aria-label={`Voice effect ${l}`} onClick={() => onPick(k)} className="zchat-press"
+            style={{ flex: '0 0 auto', minWidth: 48, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: 'pointer', WebkitTapHighlightColor: 'transparent' }}>
+            <div style={{ width: 46, height: 46, borderRadius: 14, background: theme.dark ? '#1F1E25' : '#F1F0F6', boxShadow: on ? `0 0 0 2px ${theme.bgGradient}, 0 0 0 4px ${theme.coral}` : `inset 0 0 0 1px ${line}`, color: on ? ink : theme.ink2, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'box-shadow 160ms ease, color 160ms ease' }}>
+              <VoiceFxGlyph k={k} size={28} />
+            </div>
+            <div style={{ fontSize: 11.5, lineHeight: 1.2, fontWeight: on ? 700 : 600, color: on ? ink : theme.ink2, whiteSpace: 'nowrap' }}>{l}</div>
+          </div>
+        );
+      })}
+      <div aria-hidden="true" style={{ flex: '0 0 auto', width: 4 }} />
     </div>
   );
 }
@@ -43053,46 +45615,25 @@ function WnSegments({ total, at, onArt, dark }) {
 }
 
 const WN_HIGHLIGHTS = [
-  { k: 'fxall', title: 'An effect for every set', text: 'Every set now has its own profile effect, the third piece next to the frame and the nameplate. Wear the full set and it plays when someone opens your profile.', cta: 'See your sets', go: 'sets' },
-  { k: 'coins', title: 'A brand new Shop', text: 'Only what you do not have yet, a deal every day and what everyone loves right now. What you buy moves to your Collection.', cta: 'Open the shop', go: 'shop' },
-  { k: 'gift', title: 'Gifts you unwrap', text: 'Gifts now arrive wrapped. Open them, wear them and say thanks in one tap. Send any number of coins, or ask a friend for some.' },
-  { k: 'chars', title: 'The Wolf bubble', text: 'A little wolf pup that howls on your messages. Find it in the Shop.', cta: 'Open the shop', go: 'shop' },
-  { k: 'shield', title: 'Face ID and a spending lock', text: 'Unlock with Face ID or your fingerprint, ask for your PIN before any coins leave, and get an alert when someone signs in.' },
+  { k: 'fxall', title: 'Effects that never stop', text: 'Profile effects now play the whole time someone looks at your profile, just like your frame and nameplate.', cta: 'See your sets', go: 'sets' },
+  { k: 'calls', title: 'Clean up your calls', text: 'Press and hold a call to call back, open the profile or remove it from your call history.' },
 ];
 const WN_SECTIONS = [
-  { title: 'Shop and Collection', items: [
-    { art: 'coins', title: 'The Shop', text: 'Everything you can get, minus what you already have. A Popular row shows what people pick the most.' },
-    { art: 'reminders', title: 'Deal of the day', text: 'One set, bubble or charm at a lower price every day.' },
-    { art: 'fxsets', title: 'Effects for every set', text: 'Every set has a frame, a nameplate and a profile effect, each 250 coins. Already had a full set? Its effect is yours.' },
-    { art: 'decor', title: 'A Collection of what you own', text: 'Epic, Legendary and Mythical labels, how much you have collected and rewards when you reach a goal.' },
-    { art: 'theme', title: 'Looks', text: 'Save what you wear, your set, bubble and charm, and switch in one tap.' },
-    { art: 'love', title: 'Wishlist', text: 'Tap the heart on anything in the Shop. Friends see it when they send you a gift.' },
+  { title: 'Your profile', items: [
+    { art: 'fxsets', title: 'Effects that never stop', text: 'Every set effect keeps playing while your profile is open and rests when nobody is looking.' },
   ] },
-  { title: 'Gifts', items: [
-    { art: 'gift', title: 'Wrapped gifts', text: 'Tap the box to open your gift, then wear it or say thanks.' },
-    { art: 'coins', title: 'Any amount of coins', text: 'Type how many coins to send, or slide to pick.' },
-    { art: 'chats', title: 'Ask for coins', text: 'Ask a friend for coins with a card they can pay in one tap.' },
-    { art: 'gift', title: 'Smarter gifting', text: 'The gift sheet hides what your friend already has.' },
-  ] },
-  { title: 'Chats', items: [
-    { art: 'chats', title: 'The Wolf bubble', text: 'A howling wolf pup on every message you send.' },
-    { art: 'quick', title: 'Dice and coin flips you can trust', text: 'Every roll and flip now comes from ZChat, so nobody can fake a result.' },
-  ] },
-  { title: 'Safety', items: [
-    { art: 'shield', title: 'Face ID unlock', text: 'Open your locked app and hidden chats with Face ID or your fingerprint.' },
-    { art: 'coins', title: 'Spending lock', text: 'Ask for your PIN or Face ID before buying, gifting or sending coins.' },
-    { art: 'login', title: 'Login alerts', text: 'Know right away when your account signs in on a new phone.' },
-    { art: 'eye', title: 'Privacy and security checkup', text: 'A quick walk through the settings that keep you safe.' },
-  ] },
-  { title: 'Everywhere', items: [
-    { art: 'draw', title: 'Real previews instead of boxes', text: 'Pickers across the app now show what you get, with drawn icons and live previews.' },
-    { art: 'quick', title: 'Smoother and fixed', text: 'Lots of fixes and a faster, smoother app.' },
+  { title: 'Calls', items: [
+    { art: 'calls', title: 'Clean up your calls', text: 'Press and hold a call to call back, open the profile or remove it from your call history.' },
   ] },
 ];
 const WN_NEW_COUNT = WN_SECTIONS.reduce((n, sec) => n + sec.items.length, 0);
 const WN_SUMMARY = `${WN_NEW_COUNT} new things to try.`;
 
 const WN_EARLIER = [
+  { title: 'A new Shop and Collection', text: 'Deal of the day, a Popular row, saved Looks, a Wishlist and an effect for every set.' },
+  { title: 'Gifts you unwrap', text: 'Wrapped gifts, any amount of coins, and asking a friend for coins.' },
+  { title: 'Face ID, spending lock and login alerts', text: 'Unlock with Face ID or your fingerprint, ask for your PIN before coins leave, and know when someone signs in.' },
+  { title: 'The Wolf bubble and real sounds', text: 'A howling wolf pup on your messages, and real recordings for taps and the soundboard.' },
   { title: 'Frames and nameplates that move', text: '21 animated sets to mix, match and gift, shown big on your profile.' },
   { title: 'Create with AI and AI characters', text: 'Make pictures and avatars from a few words, and chat with characters you or your friends made.' },
   { title: 'Coins and gifts', text: 'Daily coins, invite rewards and gifts for the people you love.' },
@@ -44249,9 +46790,13 @@ function FriendsMapPage({ myId, me, onClose, onOpenChat, ringFor, closeFor }) {
       <div style={{ position: 'absolute', left: 0, right: 0, top: 0, display: 'flex', alignItems: 'center', gap: 10, padding: 'calc(10px + env(safe-area-inset-top)) 14px 0', pointerEvents: 'none' }}>
         <MapGlassButton label="Back" onClick={onClose} style={{ pointerEvents: 'auto' }}><ArrowLeft size={21} /></MapGlassButton>
         <div style={{ flex: 1, display: 'flex', justifyContent: 'center', minWidth: 0 }}>
-          <div role="button" aria-label="Who can see me" onClick={() => setSheet('settings')} className="zchat-press zmap-glass" style={{ pointerEvents: 'auto', display: 'flex', alignItems: 'center', gap: 8, height: 40, padding: '0 16px', borderRadius: 20, color: ink, fontSize: 14.5, fontWeight: 700, cursor: 'pointer', minWidth: 0 }}>
-            {share === 'off' ? <GhostIcon size={16} /> : <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#22C55E', boxShadow: '0 0 0 3px rgba(34,197,94,0.18)', flexShrink: 0 }} />}
-            <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{share === 'off' ? 'Ghost mode' : share === 'close' ? 'Close friends see you' : 'Friends see you'}</span>
+          <div role="button" aria-label="Who can see me" onClick={() => setSheet('settings')} className="zchat-press" style={{ pointerEvents: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 0, padding: '2px 10px', cursor: 'pointer', color: ink, textShadow: dark ? '0 1px 6px rgba(0,0,0,0.55)' : '0 1px 6px rgba(255,255,255,0.8)' }}>
+            <span style={{ fontSize: 16.5, fontWeight: 800, letterSpacing: '-0.015em', lineHeight: 1.2 }}>Friends map</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2, fontSize: 12.5, fontWeight: 600, color: dark ? 'rgba(255,255,255,0.78)' : 'rgba(17,17,19,0.68)', minWidth: 0 }}>
+              {share === 'off' ? <GhostIcon size={13} /> : <span className={reducedMotion() ? undefined : 'zchat-live-dot'} style={{ width: 7, height: 7, borderRadius: '50%', background: '#22C55E', flexShrink: 0 }} />}
+              <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{share === 'off' ? 'Ghost mode' : share === 'close' ? 'Close friends see you' : 'Friends see you'}</span>
+              <LineGlyph k="chevdown" size={13} sw={3.4} style={{ opacity: 0.8 }} />
+            </span>
           </div>
         </div>
         <MapGlassButton label="Map settings" onClick={() => setSheet('settings')} style={{ pointerEvents: 'auto' }}><SettingsIcon size={20} /></MapGlassButton>
@@ -44316,21 +46861,8 @@ function FriendsMapPage({ myId, me, onClose, onOpenChat, ringFor, closeFor }) {
           <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ width: '100%', maxWidth: 560, margin: '0 auto', background: theme.panelBg, borderRadius: '24px 24px 0 0', padding: '22px 18px calc(18px + env(safe-area-inset-bottom))', boxSizing: 'border-box' }}>
             <div style={{ fontSize: 19, fontWeight: 800, color: ink, letterSpacing: '-0.01em' }}>{sheet === 'intro' ? 'See your friends on the map' : 'Who can see me'}</div>
             <div style={{ fontSize: 14, color: theme.muted, lineHeight: 1.5, marginTop: 6 }}>Only friends who follow you back can see you. Your spot updates while ZChat is open and disappears after 24 hours.</div>
-            <div role="radiogroup" aria-label="Who can see me" style={{ marginTop: 14 }}>
-              {[['friends', 'My friends', 'Everyone who follows you back'], ['close', 'Close friends', 'Only people on your close friends list'], ['off', 'Ghost mode', 'Nobody sees you on the map']].map(([k, t, d]) => {
-                const on = sheet !== 'intro' && share === k;
-                return (
-                  <div key={k} role="radio" aria-checked={on} aria-label={t} onClick={() => setMode(k)} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 4px', cursor: 'pointer', borderTop: `1px solid ${theme.border}` }}>
-                    <span style={{ width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', color: k === 'off' ? theme.muted : theme.coral, flexShrink: 0 }}>{k === 'off' ? <GhostIcon size={21} /> : k === 'close' ? <Heart size={20} /> : <Users size={20} />}</span>
-                    <span style={{ flex: 1, minWidth: 0 }}>
-                      <span style={{ display: 'block', fontSize: 15.5, fontWeight: 700, color: ink }}>{t}</span>
-                      <span style={{ display: 'block', fontSize: 12.5, color: theme.muted, marginTop: 1 }}>{d}</span>
-                    </span>
-                    <span style={{ width: 22, height: 22, borderRadius: '50%', border: `2px solid ${on ? theme.coral : theme.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{on && <span style={{ width: 11, height: 11, borderRadius: '50%', background: theme.coral }} />}</span>
-                  </div>
-                );
-              })}
-            </div>
+            <ChoiceList label="Who can see me" style={{ marginTop: 12 }} value={sheet !== 'intro' ? share : null} onChange={setMode}
+              options={[['friends', 'My friends', 'Everyone who follows you back', <LineGlyph k="friends" size={24} />], ['close', 'Close friends', 'Only people on your close friends list', <LineGlyph k="heart" size={23} />], ['off', 'Ghost mode', 'Nobody sees you on the map', <GhostIcon size={22} />]].map(([k, t, d, ic]) => ({ k, label: t, sub: d, icon: ic }))} />
           </div>
         </div>
       )}
@@ -45219,6 +47751,158 @@ function SessionsSection({ userId }) {
   );
 }
 
+async function signOutOtherDevices(userId) {
+  const { error } = await supabase.auth.signOut({ scope: 'others' });
+  if (error) return { error };
+  if (userId) {
+    const mine = getDeviceId();
+    const { error: e2 } = await supabase.from('user_devices').update({ revoked: true }).eq('user_id', userId).neq('device_id', mine);
+    if (e2) await supabase.from('user_devices').delete().eq('user_id', userId).neq('device_id', mine);
+  }
+  return { error: null };
+}
+function readLoginAck(uid) {
+  const v = readJsonLs(`zchat-login-ack-${uid}`, null);
+  return v && typeof v.t === 'string' ? { t: v.t, ids: Array.isArray(v.ids) ? v.ids : [] } : null;
+}
+function laterStamp(a, b) {
+  if (!a) return b;
+  if (!b) return a;
+  const da = Date.parse(a);
+  const db = Date.parse(b);
+  if (da !== db && Number.isFinite(da) && Number.isFinite(db)) return da > db ? a : b;
+  return a > b ? a : b;
+}
+function ackLoginAlerts(uid, rows) {
+  const cur = readLoginAck(uid) || { t: '1970-01-01T00:00:00.000Z', ids: [] };
+  let t = cur.t;
+  (rows || []).forEach((r) => { t = laterStamp(t, r.created_at); });
+  writeJsonLs(`zchat-login-ack-${uid}`, { t, ids: [...cur.ids, ...(rows || []).map((r) => r.id)].slice(-20) });
+}
+function loginAlertWhen(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  const day = new Date(d); day.setHours(0, 0, 0, 0);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const diff = Math.round((today.getTime() - day.getTime()) / 86400000);
+  if (diff === 0) return `today at ${time}`;
+  if (diff === 1) return `yesterday at ${time}`;
+  return `${d.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' })} at ${time}`;
+}
+function LoginAlertSheet({ row, uid, onDone, onChangePassword }) {
+  const { theme } = useTheme();
+  const [stage, setStage] = useState('ask');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const meta = row.meta || {};
+  const label = meta.label || String(row.text || '').split(',')[0] || 'a new device';
+  const place = meta.place || String(row.text || '').split(',').slice(1).join(',').trim();
+  const when = loginAlertWhen(row.created_at);
+  useBackClose(true, () => { if (!busy) onDone(stage === 'done' ? 'all' : 'later'); });
+  const notMe = async () => {
+    if (busy) return;
+    setBusy(true);
+    setErr('');
+    const { error } = await signOutOtherDevices(uid);
+    setBusy(false);
+    if (error) { setErr(friendlyError(error, 'That did not work. Check your connection and try again.')); return; }
+    playUiSound('toggle');
+    setStage('done');
+  };
+  const btn = (label2, onClick, primary, aria) => (
+    <button type="button" aria-label={aria || label2} onClick={onClick} disabled={busy} className="zchat-press"
+      style={{ width: '100%', height: 50, borderRadius: 16, border: 'none', background: primary ? theme.coral : theme.rowBg, color: primary ? '#FFFFFF' : theme.ink, fontFamily: FONT, fontSize: 15.5, fontWeight: 700, cursor: busy ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: 8 }}>{label2}</button>
+  );
+  return (
+    <Portal>
+      <div className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 960, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontFamily: FONT }}>
+        <div role="alertdialog" aria-modal="true" aria-label={stage === 'done' ? 'Other devices signed out' : 'New sign in'} className="zchat-sheet-up"
+          style={{ width: '100%', maxWidth: 460, maxHeight: 'calc(100% - 12px)', overflowY: 'auto', boxSizing: 'border-box', background: theme.panelBg, borderRadius: '24px 24px 0 0', padding: '10px 18px calc(14px + env(safe-area-inset-bottom))', boxShadow: '0 -10px 40px rgba(0,0,0,0.25)' }}>
+          <div style={{ display: 'flex', justifyContent: 'center', paddingBottom: 14 }}><div style={{ width: 38, height: 4, borderRadius: 2, background: theme.border }} /></div>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '0 6px' }}>
+            <div style={{ width: 60, height: 60, borderRadius: '50%', background: theme.accentSoft, color: kitOnInk(theme), display: 'flex', alignItems: 'center', justifyContent: 'center' }}><SecGlyph k={stage === 'done' ? 'checkup' : 'alert'} size={32} /></div>
+            {stage === 'ask' ? (
+              <>
+                <div style={{ fontSize: 19, fontWeight: 800, color: theme.ink, letterSpacing: '-0.01em', marginTop: 14, lineHeight: 1.3 }}>{`New sign in on ${label}`}</div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, fontSize: 14.5, color: theme.muted, marginTop: 6, lineHeight: 1.45 }}>
+                  <span style={{ display: 'flex', flexShrink: 0 }}><SessionDeviceIcon label={label} size={17} /></span>
+                  <span>{[place, when].filter(Boolean).join(', ')}</span>
+                </div>
+                <div style={{ fontSize: 13.5, color: theme.muted, lineHeight: 1.5, marginTop: 16, maxWidth: 330 }}>If this was not you, every other device gets signed out and only this one stays in.</div>
+              </>
+            ) : (
+              <>
+                <div style={{ fontSize: 19, fontWeight: 800, color: theme.ink, letterSpacing: '-0.01em', marginTop: 14 }}>Other devices signed out</div>
+                <div style={{ fontSize: 14.5, color: theme.muted, marginTop: 6, lineHeight: 1.5 }}>Only this device is still signed in. Change your password now so nobody can sign back in with the old one.</div>
+              </>
+            )}
+          </div>
+          {err && <div role="alert" style={{ fontSize: 13, color: theme.danger, fontWeight: 700, textAlign: 'center', padding: '12px 4px 0' }}>{err}</div>}
+          <div style={{ marginTop: 12 }}>
+            {stage === 'ask' ? (
+              <>
+                {btn('That was me', () => onDone(null), true)}
+                {btn(busy ? <Spinner size={16} color={theme.ink} /> : 'That was not me', notMe, false, 'That was not me')}
+              </>
+            ) : (
+              <>
+                {btn('Change password', () => { onDone('all'); if (onChangePassword) onChangePassword(); }, true)}
+                {btn('Not now', () => onDone('all'), false)}
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    </Portal>
+  );
+}
+function LoginAlertHost({ uid, onChangePassword }) {
+  const [queue, setQueue] = useState([]);
+  const lastRef = useRef(0);
+  const snoozedRef = useRef(new Set());
+  useEffect(() => {
+    setQueue([]);
+    if (!uid) return undefined;
+    let alive = true;
+    const run = async (isNew) => {
+      const now = Date.now();
+      if (!isNew && now - lastRef.current < 30000) return;
+      lastRef.current = now;
+      const ack = readLoginAck(uid);
+      if (!ack || isNew) {
+        const { data, error } = await supabase.from('notifications').select('id, created_at').eq('user_id', uid).eq('kind', 'login').order('created_at', { ascending: false }).limit(1);
+        if (!alive || error) return;
+        const top = data && data[0];
+        writeJsonLs(`zchat-login-ack-${uid}`, { t: (top && top.created_at) || '1970-01-01T00:00:00.000Z', ids: top ? [top.id] : [] });
+        return;
+      }
+      const weekAgo = new Date(now - 7 * 86400000).toISOString();
+      const since = laterStamp(ack.t, weekAgo);
+      const { data, error } = await supabase.from('notifications').select('id, text, meta, created_at').eq('user_id', uid).eq('kind', 'login').gt('created_at', since).order('created_at', { ascending: true }).limit(5);
+      if (!alive || error || !data) return;
+      const mine = getDeviceId();
+      const fresh = data.filter((r) => !ack.ids.includes(r.id) && !snoozedRef.current.has(r.id) && !(r.meta && r.meta.device_id === mine));
+      if (fresh.length) setQueue((q) => (q.length ? q : fresh));
+    };
+    const onBeat = (e) => { run(!!(e && e.detail && e.detail.isNew)); };
+    const onVis = () => { if (document.visibilityState === 'visible') run(false); };
+    window.addEventListener('zchat-device-beat', onBeat);
+    document.addEventListener('visibilitychange', onVis);
+    const t = setTimeout(() => run(false), 9000);
+    return () => { alive = false; clearTimeout(t); window.removeEventListener('zchat-device-beat', onBeat); document.removeEventListener('visibilitychange', onVis); };
+  }, [uid]);
+  const row = queue[0];
+  if (!row) return null;
+  const done = (what) => {
+    if (what === 'later') { queue.forEach((r) => snoozedRef.current.add(r.id)); setQueue([]); return; }
+    if (what === 'all') { ackLoginAlerts(uid, queue); setQueue([]); return; }
+    ackLoginAlerts(uid, [row]);
+    setQueue((q) => q.slice(1));
+  };
+  return <LoginAlertSheet key={row.id} row={row} uid={uid} onDone={done} onChangePassword={onChangePassword} />;
+}
+
 function haversineM(a, b) {
   const R = 6371000;
   const toRad = (x) => (x * Math.PI) / 180;
@@ -45451,8 +48135,9 @@ function ShortcutsSection() {
 }
 
 const PIN_LETTERS = { 2: 'ABC', 3: 'DEF', 4: 'GHI', 5: 'JKL', 6: 'MNO', 7: 'PQRS', 8: 'TUV', 9: 'WXYZ' };
-function AppPinPad({ subtitle, onComplete, error, length = 4, light }) {
+function AppPinPad({ subtitle, onComplete, error, length = 4, light, corner, compact }) {
   const { theme } = useTheme();
+  const keySize = compact ? 64 : 74;
   const [pin, setPin] = useState('');
   const [shake, setShake] = useState(false);
   const busyRef = useRef(false);
@@ -45489,18 +48174,18 @@ function AppPinPad({ subtitle, onComplete, error, length = 4, light }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', paddingTop: 10, userSelect: 'none' }}>
       {subtitle && <div style={{ fontSize: 14.5, color: light ? 'rgba(255,255,255,0.78)' : theme.muted, textAlign: 'center', minHeight: 20 }}>{subtitle}</div>}
-      <div className={shake ? 'zchat-shake' : ''} style={{ display: 'flex', gap: 16, margin: '22px 0 30px' }}>
+      <div className={shake ? 'zchat-shake' : ''} style={{ display: 'flex', gap: 16, margin: compact ? '16px 0 20px' : '22px 0 30px' }}>
         {Array.from({ length }).map((_, i) => (
           <div key={i} style={{ width: 14, height: 14, borderRadius: '50%', border: `1.5px solid ${ink}`, background: i < pin.length ? ink : 'transparent', transition: 'background 0.12s' }} />
         ))}
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 74px)', gap: 18 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(3, ${keySize}px)`, gap: compact ? 14 : 18 }}>
         {keys.map((k, i) => (
-          k === '' ? <div key={i} /> : (
-            <div key={i} role="button" aria-label={k === 'back' ? 'Delete digit' : `Digit ${k}`} onClick={() => (k === 'back' ? back() : push(k))} className="zchat-press" style={{ width: 74, height: 74, borderRadius: '50%', background: k === 'back' ? 'transparent' : keyBg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: ink }}>
+          k === '' ? <div key={i} style={{ width: keySize, height: keySize, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{corner || null}</div> : (
+            <div key={i} role="button" aria-label={k === 'back' ? 'Delete digit' : `Digit ${k}`} onClick={() => (k === 'back' ? back() : push(k))} className="zchat-press" style={{ width: keySize, height: keySize, borderRadius: '50%', background: k === 'back' ? 'transparent' : keyBg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: ink }}>
               {k === 'back' ? <ArrowLeft size={24} /> : (
                 <>
-                  <span style={{ fontSize: 28, fontWeight: 500, lineHeight: 1 }}>{k}</span>
+                  <span style={{ fontSize: compact ? 26 : 28, fontWeight: 500, lineHeight: 1 }}>{k}</span>
                   <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.12em', marginTop: 3, opacity: 0.75, minHeight: 11 }}>{PIN_LETTERS[k] || ''}</span>
                 </>
               )}
@@ -45517,14 +48202,18 @@ function AppLockScreen({ onUnlock, onForgot }) {
   const [tries, setTries] = useState(0);
   const [askForgot, setAskForgot] = useState(false);
   const bioId = readAppLock().b || null;
+  const bioOk = useBioReady();
   const [bioBusy, setBioBusy] = useState(false);
+  const [bioMissed, setBioMissed] = useState(false);
   const tryBio = async () => {
     if (!bioId || bioBusy) return;
     setBioBusy(true);
-    try { if (await bioVerify(bioId)) { playUiSound('toggle'); onUnlock(); return; } } catch {}
+    const t0 = Date.now();
+    if (await bioCheck()) { playUiSound('toggle'); onUnlock(); return; }
     setBioBusy(false);
+    if (Date.now() - t0 > 900) setBioMissed(true);
   };
-  useEffect(() => { if (bioId) { const t = setTimeout(tryBio, 350); return () => clearTimeout(t); } return undefined; }, []);
+  useEffect(() => { if (bioId && bioOk) { const t = setTimeout(tryBio, 350); return () => clearTimeout(t); } return undefined; }, [bioOk]);
   const check = async (pin) => {
     const ok = await verifyPin(pin);
     if (ok) { playUiSound('toggle'); onUnlock(); }
@@ -45537,12 +48226,8 @@ function AppLockScreen({ onUnlock, onForgot }) {
         <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px 16px calc(24px + env(safe-area-inset-bottom))', overflowY: 'auto' }}>
           <ZMark size={56} />
           <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.01em', marginTop: 16 }}>ZChat is locked</div>
-          <AppPinPad light subtitle={tries ? 'Wrong PIN, try again' : 'Enter your PIN'} onComplete={check} error={err} />
-          {bioId && (
-            <button type="button" onClick={tryBio} disabled={bioBusy} className="zchat-press" style={{ marginTop: 22, height: 44, padding: '0 18px', borderRadius: 22, border: '1px solid rgba(255,255,255,0.32)', background: 'rgba(3,4,11,0.35)', color: '#fff', fontWeight: 700, fontSize: 14.5, fontFamily: FONT, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
-              {bioBusy ? <Spinner size={14} /> : <ShieldCheck size={17} />}Use fingerprint or face
-            </button>
-          )}
+          <AppPinPad light subtitle={tries ? 'Wrong PIN, try again' : bioMissed ? 'Enter your PIN instead' : 'Enter your PIN'} onComplete={check} error={err}
+            corner={bioId && bioOk ? <BioKey light busy={bioBusy} onClick={tryBio} /> : null} />
           <div role="button" aria-label="Forgot PIN" onClick={() => setAskForgot(true)} style={{ marginTop: 22, fontSize: 14, fontWeight: 700, color: 'rgba(255,255,255,0.8)', cursor: 'pointer' }}>Forgot your PIN?</div>
         </div>
         {askForgot && (
@@ -45559,19 +48244,11 @@ function AppLockSection() {
   const [cfg, setCfg] = useState(readAppLock);
   const [flow, setFlow] = useState(null);
   const [err, setErr] = useState(0);
-  const [bioOk, setBioOk] = useState(false);
-  const [bioBusy, setBioBusy] = useState(false);
-  useEffect(() => { let alive = true; bioPlatformReady().then((v) => { if (alive) setBioOk(!!v); }); return () => { alive = false; }; }, []);
-  const toggleBio = async () => {
-    if (bioBusy) return;
-    if (cfg.b) { const next = { ...cfg }; delete next.b; writeAppLock(next); setCfg(next); return; }
-    setBioBusy(true);
-    try {
-      const id = await bioRegister();
-      if (id) { const next = { ...cfg, b: id }; writeAppLock(next); setCfg(next); playUiSound('like'); }
-    } catch {}
-    setBioBusy(false);
-  };
+  useEffect(() => {
+    const on = () => setCfg(readAppLock());
+    window.addEventListener('zchat-applock-changed', on);
+    return () => window.removeEventListener('zchat-applock-changed', on);
+  }, []);
   useBackClose(!!flow, () => setFlow(null));
   const save = (next) => { writeAppLock(next); setCfg(next); };
   const begin = (mode, next) => { setErr(0); setFlow({ mode, next }); };
@@ -45580,7 +48257,7 @@ function AppLockSection() {
     if (flow.mode === 'verify') {
       const ok = await verifyPin(pin);
       if (!ok) { setErr((e) => e + 1); return; }
-      if (flow.next === 'off') { save({ d: cfg.d || 0 }); setFlow(null); playUiSound('toggle'); }
+      if (flow.next === 'off') { appLockTurnOff(); setCfg(readAppLock()); setFlow(null); playUiSound('toggle'); }
       else { setErr(0); setFlow({ mode: 'set' }); }
       return;
     }
@@ -45589,6 +48266,7 @@ function AppLockSection() {
       if (pin !== flow.first) { setErr((e) => e + 1); setFlow({ mode: 'set', mismatch: true }); return; }
       const h = await hashAppPin(pin);
       save({ h, d: cfg.d || 0, ...(cfg.b ? { b: cfg.b } : {}) });
+      bioPinGate.at = Date.now();
       setFlow(null);
       playUiSound('like');
     }
@@ -45600,8 +48278,8 @@ function AppLockSection() {
   return (
     <div>
       <div style={{ padding: '12px 2px 6px', fontSize: 13, color: theme.muted, lineHeight: 1.5 }}>Ask for a PIN when you come back to ZChat. Your chats stay hidden until you enter it.</div>
-      <IgRow inset={false} icon={<Lock size={16} />} label="Require PIN" right={<IgToggle on={on} onClick={() => (on ? begin('verify', 'off') : begin('set'))} />} />
-      {on && bioOk && <IgRow inset={false} icon={<ShieldCheck size={16} />} label="Fingerprint or face" sub="Unlock without typing your PIN" right={bioBusy ? <Spinner size={16} color={theme.muted} /> : <IgToggle on={!!cfg.b} onClick={toggleBio} />} />}
+      <IgRow inset={false} icon={<Lock size={16} />} label="Require PIN" sub={on && spendLockActive() ? 'The spending lock uses this PIN too' : undefined} right={<IgToggle on={on} onClick={() => (on ? begin('verify', 'off') : begin('set'))} />} />
+      {on && <BioToggleRow sub="Also opens hidden chats and locked chats" />}
       {on && <IgRow inset={false} icon={<Pencil size={16} />} label="Change PIN" onClick={() => begin('verify', 'change')} />}
       {on && <IgRow inset={false} icon={<EyeOff size={16} />} label="Lock now" onClick={() => { try { window.dispatchEvent(new Event('zchat-lock-now')); } catch {} }} />}
       {on && (
@@ -45622,6 +48300,594 @@ function AppLockSection() {
         </FullPage>
       )}
     </div>
+  );
+}
+
+function SecGlyph({ k, size = 30, color = 'currentColor', sw, strokeWidth }) {
+  const w = sw != null ? sw : strokeWidth != null ? strokeWidth * 4 / 3 : (size <= 24 ? 2.5 : 1.8);
+  const p = { fill: 'none', stroke: color, strokeWidth: w, strokeLinecap: 'round', strokeLinejoin: 'round' };
+  const dot = (cx, cy, r) => <circle cx={cx} cy={cy} r={r} fill={color} stroke="none" />;
+  const shield = 'M16 4.6l9.4 3.5v7.2c0 6-4 10.5-9.4 12.4-5.4-1.9-9.4-6.4-9.4-12.4V8.1Z';
+  const body = (() => {
+    if (k === 'face') return <g {...p}><path d="M5 11V8.5A3.5 3.5 0 0 1 8.5 5H11" /><path d="M21 5h2.5A3.5 3.5 0 0 1 27 8.5V11" /><path d="M27 21v2.5a3.5 3.5 0 0 1-3.5 3.5H21" /><path d="M11 27H8.5A3.5 3.5 0 0 1 5 23.5V21" /><path d="M11.6 12.4v2.2" /><path d="M20.4 12.4v2.2" /><path d="M16.3 12.4v5.4h-1.5" /><path d="M12.3 21.3c2.1 1.6 5.3 1.6 7.4 0" /></g>;
+    if (k === 'finger') return <g {...p}><path d="M8.6 9.6a10.6 10.6 0 0 1 14.8 0" /><path d="M6.2 17.6c0-5.6 4.4-9.8 9.8-9.8s9.8 4.2 9.8 9.8" /><path d="M9.6 24.2c.6-1.8.9-3.9.9-6.3a5.5 5.5 0 0 1 11 0v1.4" /><path d="M13.3 27.2c.9-2.8 1.3-6 1.3-9.4a1.4 1.4 0 0 1 2.8 0c0 3.8-.5 7.3-1.6 10.4" /><path d="M21.4 22.8c-.3 2-.8 3.8-1.6 5.4" /><path d="M25.6 21.8c-.1 1.2-.3 2.3-.6 3.3" /></g>;
+    if (k === 'checkup') return <g {...p}><path d={shield} /><path d="M11.8 15.9l3 3 5.6-6" /></g>;
+    if (k === 'alert') return <g {...p}><path d={shield} /><circle cx="16" cy="14.4" r="2.4" /><path d="M16 16.8v4.4" /></g>;
+    if (k === 'tfa') return <><g {...p}><rect x="9" y="4.5" width="14" height="23" rx="3.2" /><path d="M14 24h4" /></g>{dot(12.8, 14.6, 1.05)}{dot(16, 14.6, 1.05)}{dot(19.2, 14.6, 1.05)}</>;
+    if (k === 'lock') return <g {...p}><rect x="7.5" y="14" width="17" height="13" rx="3.4" /><path d="M11.2 14v-3.4a4.8 4.8 0 0 1 9.6 0V14" /><path d="M16 19.2v3" /></g>;
+    if (k === 'spend') return <g {...p}><circle cx="12.5" cy="12.5" r="7.5" /><path d="M10 9.6h5l-5 5.8h5" /><rect x="18.2" y="19.2" width="9.6" height="7.8" rx="2" /><path d="M20.5 19.2v-1.6a2.5 2.5 0 0 1 5 0v1.6" /></g>;
+    if (k === 'msg') return <><g {...p}><path d="M6.5 15.2c0-5 4.3-8.7 9.5-8.7s9.5 3.7 9.5 8.7-4.3 8.7-9.5 8.7c-1.2 0-2.4-.2-3.5-.6L7.5 25.5l1.3-4.3c-1.4-1.6-2.3-3.6-2.3-6Z" /></g>{dot(12, 15.2, 0.9)}{dot(16, 15.2, 0.9)}{dot(20, 15.2, 0.9)}</>;
+    if (k === 'private') return <g {...p}><circle cx="13" cy="11" r="4.2" /><path d="M5.5 25.5c.6-4.6 3.6-7.4 7.5-7.4 1.5 0 2.8.4 3.9 1.1" /><rect x="18" y="19.5" width="9.5" height="7.5" rx="1.9" /><path d="M20.2 19.5v-1.6a2.55 2.55 0 0 1 5.1 0v1.6" /></g>;
+    if (k === 'seen') return <g {...p}><path d="M3.8 16s4.4-7.8 12.2-7.8S28.2 16 28.2 16s-4.4 7.8-12.2 7.8S3.8 16 3.8 16Z" /><circle cx="16" cy="16" r="3.6" /></g>;
+    if (k === 'devices') return <g {...p}><rect x="3.5" y="7" width="17" height="11.5" rx="2" /><path d="M2.5 22h15" /><rect x="20.5" y="11" width="8" height="15" rx="2" /><path d="M23.5 23h2" /></g>;
+    if (k === 'safety') return <g {...p}><path d="M5.5 7.5h21l-8 9.2v6.3l-5 2.5v-8.8Z" /></g>;
+    if (k === 'check') return <g {...p}><path d="M8 16.6l5.2 5.2L24 10.8" /></g>;
+    return null;
+  })();
+  return <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true" style={{ display: 'block', flexShrink: 0 }}>{body}</svg>;
+}
+function bioGlyphKind() {
+  const p = bioPlatform();
+  return p === 'iphone' || p === 'ipad' || p === 'windows' ? 'face' : 'finger';
+}
+function BioGlyph(props) {
+  return <SecGlyph {...props} k={bioGlyphKind()} />;
+}
+function BioKey({ onClick, busy, light, size = 74 }) {
+  const { theme } = useTheme();
+  return (
+    <div role="button" aria-label={`Use ${bioName()}`} onClick={busy ? undefined : onClick} className="zchat-press"
+      style={{ width: size, height: size, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: busy ? 'default' : 'pointer', color: light ? '#FFFFFF' : theme.ink, opacity: busy ? 0.5 : 1, transition: 'opacity 160ms ease' }}>
+      <BioGlyph size={Math.round(Math.min(32, size * 0.45))} />
+    </div>
+  );
+}
+const bioPinGate = { at: 0 };
+function BioToggleRow({ sub }) {
+  const { theme } = useTheme();
+  const ready = useBioReady();
+  const [on, setOn] = useState(() => !!bioCredId());
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState('');
+  const [verify, setVerify] = useState(false);
+  useEffect(() => {
+    const f = () => setOn(!!bioCredId());
+    window.addEventListener('zchat-applock-changed', f);
+    return () => window.removeEventListener('zchat-applock-changed', f);
+  }, []);
+  if (!ready) return null;
+  const enroll = async () => {
+    setBusy(true);
+    let id = null;
+    try { id = await bioRegister(); } catch { id = null; }
+    setBusy(false);
+    if (id) { bioPinGate.at = 0; writeAppLock({ ...readAppLock(), b: id }); playUiSound('like'); }
+    else setNote(`${bioNameTitle()} is not on yet. Tap the switch to try again.`);
+  };
+  const toggle = () => {
+    if (busy) return;
+    setNote('');
+    if (on) { const c = { ...readAppLock() }; delete c.b; writeAppLock(c); return; }
+    if (!readAppLock().h) { setNote('Turn on App lock first'); return; }
+    if (Date.now() - bioPinGate.at < 60000) { enroll(); return; }
+    setVerify(true);
+  };
+  return (
+    <>
+      <IgRow inset={false} icon={<BioGlyph />} label={`Unlock with ${bioName()}`} sub={note || sub} right={busy ? <Spinner size={16} color={theme.muted} /> : <IgToggle on={on} onClick={toggle} />} />
+      {verify && <AppPinVerifyPage sub={`Enter your PIN to turn on ${bioName()}`} onClose={() => setVerify(false)} onDone={() => { setVerify(false); bioPinGate.at = Date.now(); enroll(); }} />}
+    </>
+  );
+}
+
+function appLockTurnOff() {
+  const cur = readAppLock();
+  writeAppLock({ d: cur.d || 0 });
+  const s = readSpendCfg();
+  if (s.on) writeSpendCfg({ ...s, on: false });
+}
+function AppPinSetupPage({ title, note, onDone, onClose, zIndex = 90 }) {
+  useBackClose(true, onClose);
+  const { theme } = useTheme();
+  const [step, setStep] = useState('set');
+  const [first, setFirst] = useState('');
+  const [err, setErr] = useState(0);
+  const [mismatch, setMismatch] = useState(false);
+  const onPin = async (pin) => {
+    if (step === 'set') { setFirst(pin); setMismatch(false); setStep('confirm'); return; }
+    if (pin !== first) { setErr((e) => e + 1); setMismatch(true); setStep('set'); return; }
+    const h = await hashAppPin(pin);
+    const cur = readAppLock();
+    writeAppLock({ ...cur, h, d: cur.d || 0 });
+    bioPinGate.at = Date.now();
+    playUiSound('like');
+    onDone();
+  };
+  const sub = step === 'set' ? (mismatch ? 'The PINs did not match, start again' : 'Four digits you will remember') : 'Type the same PIN again';
+  return (
+    <FullPage title={step === 'set' ? (title || 'Choose a PIN') : 'Confirm your PIN'} onBack={onClose} zIndex={zIndex}>
+      {note && <div style={{ fontSize: 13.5, color: theme.muted, lineHeight: 1.5, textAlign: 'center', padding: '10px 14px 0', visibility: step === 'set' ? 'visible' : 'hidden' }}>{note}</div>}
+      <AppPinPad key={step} subtitle={sub} onComplete={onPin} error={err} />
+    </FullPage>
+  );
+}
+function AppPinVerifyPage({ title, sub, onDone, onClose, zIndex = 90 }) {
+  useBackClose(true, onClose);
+  const [err, setErr] = useState(0);
+  const onPin = async (pin) => {
+    if (await verifyPin(pin)) { playUiSound('toggle'); onDone(); return; }
+    setErr((e) => e + 1);
+    playUiSound('cancel');
+  };
+  return (
+    <FullPage title={title || 'Enter your PIN'} onBack={onClose} zIndex={zIndex}>
+      <AppPinPad subtitle={err ? 'Wrong PIN, try again' : (sub || 'Your current PIN')} onComplete={onPin} error={err} />
+    </FullPage>
+  );
+}
+
+function readSpendCfg() {
+  const o = readJsonLs('zchat-spendlock', null);
+  const n = (v) => (Number(v) > 0 ? Math.floor(Number(v)) : 0);
+  return { on: !!(o && o.on), lim: n(o && o.lim), g: n(o && o.g) };
+}
+function writeSpendCfg(c) {
+  const n = (v) => (Number(v) > 0 ? Math.floor(Number(v)) : 0);
+  writeJsonLs('zchat-spendlock', { on: !!c.on, lim: n(c.lim), g: n(c.g) });
+  try { window.dispatchEvent(new Event('zchat-spendlock-changed')); } catch {}
+}
+function spendLockActive(c) { return !!((c || readSpendCfg()).on && readAppLock().h); }
+const spendAuthBus = { show: null, uid: null, open: false, okAt: 0, fails: 0, waitUntil: 0 };
+function spendDay() { const d = new Date(); return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`; }
+function spendSentKey(uid) { return `zchat-spend-sent-${uid || spendAuthBus.uid || 'me'}`; }
+function spendSentToday(uid) {
+  const o = readJsonLs(spendSentKey(uid), null);
+  return o && o.d === spendDay() ? Math.max(0, Math.floor(Number(o.n) || 0)) : 0;
+}
+function addSpendSent(n) {
+  writeJsonLs(spendSentKey(), { d: spendDay(), n: Math.max(0, spendSentToday() + n) });
+  try { window.dispatchEvent(new Event('zchat-spendlock-changed')); } catch {}
+}
+async function requireSpendAuth(reasonText, opts) {
+  const o = opts || {};
+  const reason = String(reasonText || '').slice(0, 140);
+  const cfg = readSpendCfg();
+  const coins = Math.max(0, Math.floor(Number(o.coins) || 0));
+  const counted = !!o.send && coins > 0;
+  if (counted && cfg.lim > 0) {
+    const used = spendSentToday();
+    if (used + coins > cfg.lim) {
+      if (spendAuthBus.show && !spendAuthBus.open) {
+        spendAuthBus.open = true;
+        try { await spendAuthBus.show({ mode: 'limit', reason, lim: cfg.lim, left: Math.max(0, cfg.lim - used) }); } catch {} finally { spendAuthBus.open = false; }
+      }
+      return false;
+    }
+  }
+  const fresh = !o.force && cfg.g > 0 && spendAuthBus.okAt && Date.now() - spendAuthBus.okAt < cfg.g * 1000;
+  if (!spendLockActive(cfg) || fresh) {
+    if (counted) addSpendSent(coins);
+    return true;
+  }
+  if (!spendAuthBus.show || spendAuthBus.open) return false;
+  spendAuthBus.open = true;
+  let ok = false;
+  try { ok = !!(await spendAuthBus.show({ mode: 'pin', reason })); } catch { ok = false; } finally { spendAuthBus.open = false; }
+  if (ok) {
+    spendAuthBus.okAt = Date.now();
+    if (counted) addSpendSent(coins);
+  }
+  return ok;
+}
+function SpendAuthSheet({ req, onDone }) {
+  const { theme } = useTheme();
+  useBackClose(true, () => onDone(false));
+  const bioOk = useBioReady();
+  const limit = req.mode === 'limit';
+  const hasBio = !limit && !!bioCredId() && bioOk === true;
+  const [err, setErr] = useState(0);
+  const [bioBusy, setBioBusy] = useState(false);
+  const [missed, setMissed] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+  const waiting = spendAuthBus.waitUntil > now;
+  useEffect(() => {
+    if (!waiting) return undefined;
+    const t = setInterval(() => setNow(Date.now()), 500);
+    return () => clearInterval(t);
+  }, [waiting]);
+  const tryBio = async () => {
+    if (bioBusy) return;
+    setBioBusy(true);
+    const t0 = Date.now();
+    const ok = await bioCheck();
+    setBioBusy(false);
+    if (ok) { spendAuthBus.fails = 0; playUiSound('toggle'); onDone(true); return; }
+    if (Date.now() - t0 > 900) setMissed(true);
+  };
+  useEffect(() => { if (hasBio) { const t = setTimeout(tryBio, 260); return () => clearTimeout(t); } return undefined; }, [hasBio]);
+  const onPin = async (pin) => {
+    if (spendAuthBus.waitUntil > Date.now()) return;
+    if (await verifyPin(pin)) { spendAuthBus.fails = 0; playUiSound('toggle'); onDone(true); return; }
+    spendAuthBus.fails += 1;
+    setErr((e) => e + 1);
+    playUiSound('cancel');
+    if (spendAuthBus.fails >= 5) { spendAuthBus.fails = 0; spendAuthBus.waitUntil = Date.now() + 30000; setNow(Date.now()); }
+  };
+  const left = Math.max(0, Math.ceil((spendAuthBus.waitUntil - now) / 1000));
+  const fmt = (n) => Number(n || 0).toLocaleString('en-US');
+  const sub = waiting ? `Too many tries. Try again in ${left} seconds` : err ? 'Wrong PIN, try again' : missed ? 'Enter your PIN instead' : 'Enter your app lock PIN';
+  return (
+    <Portal>
+      <div onClick={() => onDone(false)} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 970, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontFamily: FONT }}>
+        <div role="dialog" aria-modal="true" aria-label={limit ? 'Daily limit reached' : 'Confirm spending'} onClick={(e) => e.stopPropagation()} className="zchat-sheet-up"
+          style={{ width: '100%', maxWidth: 460, maxHeight: 'calc(100% - 12px)', overflowY: 'auto', boxSizing: 'border-box', background: theme.panelBg, borderRadius: '24px 24px 0 0', padding: '10px 18px calc(12px + env(safe-area-inset-bottom))', boxShadow: '0 -10px 40px rgba(0,0,0,0.25)' }}>
+          <div style={{ display: 'flex', justifyContent: 'center', paddingBottom: 12 }}><div style={{ width: 38, height: 4, borderRadius: 2, background: theme.border }} /></div>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+            <div style={{ width: 52, height: 52, borderRadius: '50%', background: theme.accentSoft, color: kitOnInk(theme), display: 'flex', alignItems: 'center', justifyContent: 'center' }}><SecGlyph k="spend" size={28} /></div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: theme.ink, marginTop: 12, letterSpacing: '-0.01em' }}>{limit ? 'Daily limit reached' : "Confirm it's you"}</div>
+            {reasonLine(req.reason, theme)}
+          </div>
+          {limit ? (
+            <>
+              <div style={{ fontSize: 14, color: theme.ink2, textAlign: 'center', lineHeight: 1.5, margin: '14px 6px 18px' }}>
+                {`You can send up to ${fmt(req.lim)} coins a day from this phone, and ${req.left ? `${fmt(req.left)} are left today` : 'none are left today'}. You can change this in Settings, under Spending lock.`}
+              </div>
+              <BigButton label="OK" onClick={() => onDone(false)} />
+            </>
+          ) : (
+            <>
+              <AppPinPad compact subtitle={sub} onComplete={onPin} error={err} corner={hasBio ? <BioKey size={64} busy={bioBusy} onClick={tryBio} /> : null} />
+              <div role="button" aria-label="Cancel" onClick={() => onDone(false)} className="zchat-press" style={{ textAlign: 'center', padding: '14px 0 4px', fontSize: 15, fontWeight: 700, color: theme.muted, cursor: 'pointer' }}>Cancel</div>
+            </>
+          )}
+        </div>
+      </div>
+    </Portal>
+  );
+}
+function reasonLine(text, theme) {
+  if (!text) return null;
+  return <div style={{ fontSize: 14, color: theme.muted, lineHeight: 1.45, marginTop: 4, maxWidth: 320 }}>{text}</div>;
+}
+function SpendAuthHost({ uid }) {
+  const [req, setReq] = useState(null);
+  const reqRef = useRef(null);
+  useEffect(() => {
+    spendAuthBus.uid = uid || null;
+    const show = (r) => new Promise((resolve) => { const next = { ...r, resolve, at: Date.now() }; reqRef.current = next; setReq(next); });
+    spendAuthBus.show = show;
+    return () => {
+      if (spendAuthBus.show === show) spendAuthBus.show = null;
+      const r = reqRef.current;
+      reqRef.current = null;
+      if (r) r.resolve(false);
+    };
+  }, [uid]);
+  if (!req) return null;
+  const done = (ok) => {
+    const r = reqRef.current;
+    reqRef.current = null;
+    setReq(null);
+    if (r) r.resolve(!!ok);
+  };
+  return <SpendAuthSheet key={req.at} req={req} onDone={done} />;
+}
+function useSpendLockToggle() {
+  const [cfg, setCfg] = useState(readSpendCfg);
+  const [setup, setSetup] = useState(false);
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const f = () => { setCfg(readSpendCfg()); setTick((t) => t + 1); };
+    window.addEventListener('zchat-spendlock-changed', f);
+    window.addEventListener('zchat-applock-changed', f);
+    return () => { window.removeEventListener('zchat-spendlock-changed', f); window.removeEventListener('zchat-applock-changed', f); };
+  }, []);
+  const on = spendLockActive(cfg);
+  const turnOn = () => { writeSpendCfg({ ...readSpendCfg(), on: true }); playUiSound('like'); };
+  const toggle = async () => {
+    if (on) {
+      if (await requireSpendAuth('Turn off the spending lock', { force: true })) writeSpendCfg({ ...readSpendCfg(), on: false });
+      return;
+    }
+    if (!readAppLock().h) { setSetup(true); return; }
+    turnOn();
+  };
+  const node = setup ? (
+    <AppPinSetupPage title="Create a PIN" note="This PIN protects your coins. It also locks ZChat when you leave, which you can change in App lock."
+      onClose={() => setSetup(false)} onDone={() => { setSetup(false); turnOn(); }} />
+  ) : null;
+  return { on, cfg, toggle, node };
+}
+const SPEND_LIMITS = [0, 100, 250, 500, 1000];
+function SpendLockSection({ uid }) {
+  const { theme } = useTheme();
+  const t = useSpendLockToggle();
+  const cfg = t.cfg;
+  const [sent, setSent] = useState(() => spendSentToday(uid));
+  useEffect(() => {
+    const f = () => setSent(spendSentToday(uid));
+    window.addEventListener('zchat-spendlock-changed', f);
+    return () => window.removeEventListener('zchat-spendlock-changed', f);
+  }, [uid]);
+  const fmt = (n) => Number(n || 0).toLocaleString('en-US');
+  const pickLimit = async (lim) => {
+    const cur = readSpendCfg();
+    if (lim === cur.lim) return;
+    const looser = cur.lim > 0 && (lim === 0 || lim > cur.lim);
+    if (looser && spendLockActive(cur) && !(await requireSpendAuth(lim ? `Raise your daily limit to ${fmt(lim)} coins` : 'Remove your daily limit', { force: true }))) return;
+    writeSpendCfg({ ...readSpendCfg(), lim });
+  };
+  const pickAsk = async (g) => {
+    const cur = readSpendCfg();
+    if (g === cur.g) return;
+    if (g > cur.g && spendLockActive(cur) && !(await requireSpendAuth('Ask for your PIN less often', { force: true }))) return;
+    writeSpendCfg({ ...readSpendCfg(), g });
+  };
+  return (
+    <div>
+      <div style={{ padding: '12px 2px 6px', fontSize: 13, color: theme.muted, lineHeight: 1.5 }}>Ask for your PIN before any coins leave your account, so nobody else can spend them on your phone.</div>
+      <IgRow inset={false} icon={<SecGlyph k="spend" />} label="Spending lock" sub="Shop, gifts and sending coins" right={<IgToggle on={t.on} onClick={t.toggle} />} />
+      {t.on && <BioToggleRow sub="Confirm with a touch or a glance" />}
+      {t.on && (
+        <KitSection title="When to ask">
+          <ChoiceList label="When to ask" value={cfg.g >= 900 ? 900 : 0} onChange={pickAsk} options={[
+            { k: 0, label: 'Every time', sub: 'Before each purchase, gift or coin transfer' },
+            { k: 900, label: 'Once every 15 minutes', sub: 'Buy a few things in a row without asking again' },
+          ]} />
+        </KitSection>
+      )}
+      <KitSection title="Daily sending limit" right={sent ? `${fmt(sent)} sent today` : undefined}>
+        <ChoiceList label="Daily sending limit" value={SPEND_LIMITS.includes(cfg.lim) ? cfg.lim : 0} onChange={pickLimit}
+          options={SPEND_LIMITS.map((n) => ({ k: n, label: n ? `${fmt(n)} coins a day` : 'No limit', sub: n ? undefined : 'Send as many coins as you like' }))} />
+        <div style={{ padding: '10px 2px 0', fontSize: 12.5, color: theme.muted, lineHeight: 1.5 }}>Counts the coins you send to people from this phone. It starts again at midnight.</div>
+      </KitSection>
+      {t.node}
+    </div>
+  );
+}
+
+function checkupLabel(uid) {
+  const s = uid ? readJsonLs(`zchat-checkup-${uid}`, null) : null;
+  return s && s.t ? `${s.s} of ${s.t}` : undefined;
+}
+function CheckupProgress({ i, n }) {
+  const { theme } = useTheme();
+  const still = reducedMotion();
+  return (
+    <div style={{ padding: '8px 2px 0' }}>
+      <div style={{ fontSize: 12.5, fontWeight: 600, color: theme.muted, marginBottom: 8 }}>{`Step ${i + 1} of ${n}`}</div>
+      <div role="progressbar" aria-label="Checkup progress" aria-valuemin={1} aria-valuemax={n} aria-valuenow={i + 1} style={{ display: 'flex', gap: 4 }}>
+        {Array.from({ length: n }).map((_, k) => (
+          <div key={k} style={{ flex: 1, height: 4, borderRadius: 2, background: theme.rowBg, overflow: 'hidden' }}>
+            <div style={{ height: '100%', borderRadius: 2, background: theme.coral, transform: `scaleX(${k <= i ? 1 : 0})`, transformOrigin: 'left center', transition: still ? 'none' : 'transform 240ms cubic-bezier(0.2, 0.8, 0.2, 1)' }} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+function CheckupScore({ steps, onJump }) {
+  const { theme } = useTheme();
+  const n = steps.length;
+  const s = steps.filter((x) => x.good).length;
+  const frac = n ? s / n : 0;
+  const still = reducedMotion();
+  const [shown, setShown] = useState(still ? frac : 0);
+  useEffect(() => { const t = setTimeout(() => setShown(frac), 60); return () => clearTimeout(t); }, [frac]);
+  const R = 54;
+  const C = 2 * Math.PI * R;
+  const headline = frac >= 0.85 ? 'Your account is well protected' : frac >= 0.5 ? 'A few things are worth a look' : "Let's make your account safer";
+  return (
+    <div style={{ padding: '14px 0 6px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+        <div role="img" aria-label={`Score ${s} of ${n}`} style={{ position: 'relative', width: 128, height: 128 }}>
+          <svg width="128" height="128" viewBox="0 0 128 128" aria-hidden="true" style={{ display: 'block' }}>
+            <circle cx="64" cy="64" r={R} fill="none" stroke={theme.rowBg} strokeWidth="9" />
+            <circle cx="64" cy="64" r={R} fill="none" stroke={theme.coral} strokeWidth="9" strokeLinecap="round" strokeDasharray={`${C * shown} ${C}`} transform="rotate(-90 64 64)"
+              style={{ opacity: shown > 0 ? 1 : 0, transition: still ? 'none' : 'stroke-dasharray 300ms cubic-bezier(0.2, 0.8, 0.2, 1)' }} />
+          </svg>
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ fontSize: 38, fontWeight: 800, color: theme.ink, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{s}</div>
+            <div style={{ fontSize: 13, color: theme.muted, marginTop: 4 }}>{`of ${n}`}</div>
+          </div>
+        </div>
+        <div style={{ fontSize: 21, fontWeight: 800, color: theme.ink, letterSpacing: '-0.01em', marginTop: 18 }}>{headline}</div>
+        <div style={{ fontSize: 14.5, color: theme.muted, lineHeight: 1.5, marginTop: 6, maxWidth: 320 }}>{s === n ? 'Everything is on. Come back any time from Settings.' : 'Tap anything below to go back and change it.'}</div>
+      </div>
+      <div style={{ marginTop: 22, borderRadius: 18, background: detailsCardBg(theme), border: `1px solid ${theme.border}`, overflow: 'hidden' }}>
+        {steps.map((st, i) => (
+          <div key={st.k} role="button" aria-label={`${st.title}, ${st.good ? 'done' : 'review'}`} onClick={() => onJump(i)} className="zchat-row-press"
+            style={{ display: 'flex', alignItems: 'center', gap: 12, minHeight: 52, padding: '0 14px', position: 'relative', cursor: 'pointer' }}>
+            <span style={{ display: 'flex', color: theme.ink }}><SecGlyph k={st.g} size={22} sw={2.3} /></span>
+            <span style={{ flex: 1, minWidth: 0, fontSize: 15, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{st.title}</span>
+            {st.good
+              ? <span style={{ display: 'flex', color: kitOnInk(theme), flexShrink: 0 }}><SecGlyph k="check" size={20} sw={3} /></span>
+              : <span style={{ fontSize: 13.5, fontWeight: 700, color: kitOnInk(theme), flexShrink: 0 }}>Review</span>}
+            {i < steps.length - 1 && <div style={{ position: 'absolute', left: 48, right: 0, bottom: 0, height: 1, background: theme.border }} />}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+function SecurityCheckupPage({ me, onClose, onSaved, hideActivity, onToggleActivity, restrictedCount = 0, onOpenRestricted }) {
+  useBackClose(true, onClose);
+  const { theme } = useTheme();
+  const uid = me.id;
+  const bioReady = useBioReady();
+  const spend = useSpendLockToggle();
+  const [idx, setIdx] = useState(0);
+  const [finished, setFinished] = useState(false);
+  const [tfa, setTfa] = useState(null);
+  const [lock, setLock] = useState(readAppLock);
+  const [lockFlow, setLockFlow] = useState(null);
+  const [msg, setMsg] = useState(me.privacy_messages || 'everyone');
+  const [priv, setPriv] = useState(!!me.is_private);
+  const [online, setOnline] = useState(me.privacy_online || 'everyone');
+  const [lastSeen, setLastSeen] = useState(me.privacy_lastseen || 'everyone');
+  const [others, setOthers] = useState(null);
+  const [reviewed, setReviewed] = useState(() => { const v = readJsonLs(`zchat-checkup-dev-${uid}`, []); return Array.isArray(v) ? v : []; });
+  const [words, setWords] = useState(() => { const c = hiddenWordsCfg(); return { on: c.on, words: c.words }; });
+  const [wordsPage, setWordsPage] = useState(false);
+  const [err, setErr] = useState('');
+  useEffect(() => {
+    let alive = true;
+    const mfa = supabase.auth && supabase.auth.mfa;
+    if (!mfa || !mfa.listFactors) { setTfa(false); return undefined; }
+    mfa.listFactors().then(({ data }) => { if (alive) setTfa(!!((data && data.totp) || []).find((f) => f.status === 'verified')); }, () => { if (alive) setTfa(false); });
+    return () => { alive = false; };
+  }, []);
+  useEffect(() => {
+    let alive = true;
+    supabase.from('user_devices').select('device_id, revoked').eq('user_id', uid).limit(40).then(({ data, error }) => {
+      if (!alive) return;
+      const mine = getDeviceId();
+      setOthers(error ? [] : (data || []).filter((r) => !r.revoked && r.device_id !== mine).map((r) => r.device_id));
+    }, () => { if (alive) setOthers([]); });
+    const f = () => setLock(readAppLock());
+    window.addEventListener('zchat-applock-changed', f);
+    return () => { alive = false; window.removeEventListener('zchat-applock-changed', f); };
+  }, []);
+  const failed = () => setErr('That could not be saved yet. Try again in a little while.');
+  const saveCols = async (patch, revert) => {
+    setErr('');
+    const { error } = await supabase.from('profiles').update(patch).eq('id', uid);
+    if (error) { revert(); failed(); return; }
+    if (onSaved) onSaved(patch);
+  };
+  const pickMsg = (v) => { if (v === msg) return; const before = msg; setMsg(v); saveCols({ privacy_messages: v }, () => setMsg(before)); };
+  const pickSeen = (v) => {
+    if (v === online && v === lastSeen) return;
+    const b1 = online;
+    const b2 = lastSeen;
+    setOnline(v);
+    setLastSeen(v);
+    saveCols({ privacy_online: v, privacy_lastseen: v }, () => { setOnline(b1); setLastSeen(b2); });
+  };
+  const togglePrivate = async () => {
+    const next = !priv;
+    setPriv(next);
+    setErr('');
+    const { data, error } = await updateProfile(uid, { is_private: next });
+    if (error || !data) { setPriv(!next); failed(); return; }
+    if (onSaved) onSaved({ is_private: next });
+  };
+  const toggleWords = () => { const next = { ...words, on: !words.on }; setWords(next); saveHiddenWordsCfg(next); };
+  if (bioReady === null) return <FullPage title="Security checkup" onBack={onClose} zIndex={70}><div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><Spinner size={20} color={theme.muted} /></div></FullPage>;
+  const steps = [
+    { k: 'tfa', g: 'tfa', title: 'Two factor authentication', why: 'A code from an app on your phone stops anyone who only knows your password.', good: tfa === true },
+    { k: 'lock', g: 'lock', title: 'App lock', why: 'A PIN keeps your chats private when someone else picks up your phone.', good: !!lock.h },
+    bioReady ? { k: 'bio', g: bioGlyphKind(), title: bioNameTitle(), why: 'Unlock in a moment, without anyone watching you type your PIN.', good: !!lock.b } : null,
+    { k: 'spend', g: 'spend', title: 'Spending lock', why: 'Nobody can spend your coins or send gifts from your phone without your PIN.', good: spend.on },
+    { k: 'msg', g: 'msg', title: 'Who can message you', why: 'Fewer strangers in your chats means less spam and fewer scams.', good: msg === 'following' },
+    { k: 'private', g: 'private', title: 'Private account', why: 'Only followers you approve can see your posts and stories.', good: priv },
+    { k: 'seen', g: 'seen', title: 'Last seen and online', why: 'Choose who can tell when you are on ZChat.', good: !!hideActivity || (online !== 'everyone' && lastSeen !== 'everyone') },
+    { k: 'devices', g: 'devices', title: 'Signed in devices', why: 'A phone or browser you do not recognise could be someone else in your account.', good: others !== null && others.every((d) => reviewed.includes(d)) },
+    { k: 'safety', g: 'safety', title: 'Hidden words and restrict', why: 'Cover rude words before you read them, and quietly limit people who bother you.', good: words.on || words.words.length > 0 || restrictedCount > 0 },
+  ].filter(Boolean);
+  const total = steps.length;
+  const at = Math.min(idx, total - 1);
+  const cur = steps[at];
+  const score = steps.filter((x) => x.good).length;
+  const saveScore = () => writeJsonLs(`zchat-checkup-${uid}`, { s: score, t: total, at: Date.now() });
+  const next = () => {
+    if (cur.k === 'devices' && others) {
+      const seen = [...new Set([...reviewed, ...others])];
+      setReviewed(seen);
+      writeJsonLs(`zchat-checkup-dev-${uid}`, seen);
+    }
+    setErr('');
+    hapticTap();
+    if (at >= total - 1) { setFinished(true); return; }
+    setIdx(at + 1);
+  };
+  if (finished) saveScore();
+  const card = (children, pad = '4px 14px') => <div style={{ marginTop: 20, borderRadius: 18, background: detailsCardBg(theme), border: `1px solid ${theme.border}`, padding: pad }}>{children}</div>;
+  const seenValue = online === lastSeen ? online : null;
+  const control = (k) => {
+    if (k === 'tfa') {
+      if (tfa === null) return <div style={{ display: 'flex', justifyContent: 'center', padding: 28 }}><Spinner size={18} color={theme.muted} /></div>;
+      if (tfa) return card(<IgRow inset={false} icon={<SecGlyph k="tfa" />} label="Two factor is on" sub="You need a code from your authenticator app to log in" />);
+      return card(<TwoFactorSection onChange={(v) => setTfa(!!v)} />, '14px 14px 16px');
+    }
+    if (k === 'lock') return card(<IgRow inset={false} icon={<SecGlyph k="lock" />} label="Require PIN" sub={lock.h ? 'ZChat asks for it when you come back' : 'Ask for a PIN when you come back to ZChat'} right={<IgToggle on={!!lock.h} onClick={() => setLockFlow(lock.h ? 'off' : 'on')} />} />);
+    if (k === 'bio') return card(<BioToggleRow sub={lock.h ? 'Works for app lock, hidden chats and spending' : 'Turn on App lock first, one step back'} />);
+    if (k === 'spend') return card(<IgRow inset={false} icon={<SecGlyph k="spend" />} label="Spending lock" sub={lock.h ? 'Shop, gifts and sending coins' : 'You will create a PIN first'} right={<IgToggle on={spend.on} onClick={spend.toggle} />} />);
+    if (k === 'msg') {
+      return card(<ChoiceList label="Who can message you" value={msg} onChange={pickMsg} options={[
+        { k: 'everyone', label: 'Everyone', sub: 'People you do not follow go to Message requests first' },
+        { k: 'following', label: 'Only people I follow', sub: 'Anyone else cannot start a new chat with you' },
+      ]} />, '4px 10px');
+    }
+    if (k === 'private') return card(<IgRow inset={false} icon={<SecGlyph k="private" />} label="Private account" sub="New followers need your approval first" right={<IgToggle on={priv} onClick={togglePrivate} />} />);
+    if (k === 'seen') {
+      return (
+        <>
+          {card(<IgRow inset={false} icon={<EyeOff />} label="Hide activity status" sub="Nobody sees when you are online or last seen" right={<IgToggle on={!!hideActivity} onClick={() => { if (onToggleActivity) onToggleActivity(); }} />} />)}
+          {!hideActivity && card(
+            <>
+              <div style={{ fontSize: 13, fontWeight: 600, color: theme.muted, padding: '10px 4px 2px' }}>Who can see it</div>
+              <ChoiceList label="Who can see when you are online" value={seenValue} onChange={pickSeen} options={[
+                { k: 'everyone', label: 'Everyone' },
+                { k: 'followers', label: 'My followers' },
+                ...(online === 'chosen' || lastSeen === 'chosen' ? [{ k: 'chosen', label: 'Only chosen people', sub: 'Pick them in Who can see what' }] : []),
+              ]} />
+            </>,
+            '4px 10px',
+          )}
+        </>
+      );
+    }
+    if (k === 'devices') return card(<SessionsSection userId={uid} />, '6px 14px 14px');
+    if (k === 'safety') {
+      return card(
+        <>
+          <IgRow inset={false} icon={<EyeOff />} label="Hide offensive words" sub="Common swear words and insults are covered" right={<IgToggle on={words.on} onClick={toggleWords} />} />
+          <IgRow inset={false} icon={<SecGlyph k="safety" />} label="Your own words" value={words.words.length ? String(words.words.length) : 'None'} onClick={() => setWordsPage(true)} />
+          {onOpenRestricted && <IgRow inset={false} icon={<RestrictIcon />} label="Restricted accounts" sub="Restrict someone from their profile or chat" value={restrictedCount ? String(restrictedCount) : 'None'} onClick={onOpenRestricted} />}
+        </>,
+      );
+    }
+    return null;
+  };
+  const footer = finished
+    ? <BigButton label="Done" onClick={onClose} />
+    : (
+      <div style={{ display: 'flex', gap: 10 }}>
+        {at > 0 && <div style={{ flex: '0 0 36%' }}><BigButton label="Back" ariaLabel="Previous step" tone="plain" onClick={() => { setErr(''); setIdx(at - 1); }} /></div>}
+        <div style={{ flex: 1 }}><BigButton label={at >= total - 1 ? 'See my score' : 'Next'} ariaLabel={at >= total - 1 ? 'See my score' : 'Next step'} onClick={next} /></div>
+      </div>
+    );
+  return (
+    <FullPage title="Security checkup" onBack={onClose} zIndex={70} footer={footer}>
+      {finished ? (
+        <CheckupScore steps={steps} onJump={(i) => { setFinished(false); setIdx(i); }} />
+      ) : (
+        <>
+          <CheckupProgress i={at} n={total} />
+          <div key={cur.k} className={reducedMotion() ? undefined : 'zchat-tab-in'}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '24px 8px 0' }}>
+              <div style={{ width: 72, height: 72, borderRadius: '50%', background: theme.accentSoft, color: kitOnInk(theme), display: 'flex', alignItems: 'center', justifyContent: 'center' }}><SecGlyph k={cur.g} size={36} /></div>
+              <div style={{ fontSize: 21, fontWeight: 800, color: theme.ink, letterSpacing: '-0.01em', marginTop: 16 }}>{cur.title}</div>
+              <div style={{ fontSize: 14.5, color: theme.muted, lineHeight: 1.5, marginTop: 6, maxWidth: 330 }}>{cur.why}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 12, fontSize: 13.5, fontWeight: 700, color: cur.good ? kitOnInk(theme) : theme.muted }}>
+                {cur.good ? <SecGlyph k="check" size={16} sw={3} /> : <span style={{ width: 7, height: 7, borderRadius: '50%', background: theme.muted2 }} />}
+                {cur.good ? 'Looks good' : 'Recommended'}
+              </div>
+            </div>
+            {control(cur.k)}
+            {err && <div role="alert" style={{ padding: '12px 4px 0', fontSize: 13, color: theme.danger, fontWeight: 700 }}>{err}</div>}
+          </div>
+        </>
+      )}
+      {lockFlow === 'on' && <AppPinSetupPage onClose={() => setLockFlow(null)} onDone={() => setLockFlow(null)} />}
+      {lockFlow === 'off' && (
+        <AppPinVerifyPage sub={spendLockActive() ? 'Your current PIN. The spending lock turns off too.' : 'Your current PIN'}
+          onClose={() => setLockFlow(null)} onDone={() => { appLockTurnOff(); setLockFlow(null); }} />
+      )}
+      {spend.node}
+      {wordsPage && <HiddenWordsPage onClose={() => { setWordsPage(false); const c = hiddenWordsCfg(); setWords({ on: c.on, words: c.words }); }} />}
+    </FullPage>
   );
 }
 
@@ -45802,8 +49068,8 @@ function GameCardShell({ width, live, children, title, status, hot, icon, k }) {
         </div>
         <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 14.5, fontWeight: 900, color: 'white', letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textShadow: '0 1px 0 rgba(0,0,0,0.22)' }}>{title}</div>
-          <div className={hot ? 'zchat-turn-pulse' : undefined} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 3, padding: '2px 8px', borderRadius: 999, maxWidth: '100%', boxSizing: 'border-box', fontSize: 10.5, fontWeight: 900, background: hot ? 'linear-gradient(180deg, #FEF08A, #FACC15)' : 'rgba(0,0,0,0.26)', boxShadow: hot ? '0 2px 0 #A16207' : 'none', color: hot ? '#6B3A00' : 'rgba(255,255,255,0.95)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {hot && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#16A34A', flexShrink: 0 }} />}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2, maxWidth: '100%', fontSize: 12, fontWeight: 700, color: hot ? '#FFFFFF' : 'rgba(255,255,255,0.86)', textShadow: '0 1px 2px rgba(0,0,0,0.3)', whiteSpace: 'nowrap', overflow: 'hidden' }}>
+            <span style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: hot ? '#4ADE80' : 'rgba(255,255,255,0.55)', boxShadow: hot ? '0 0 0 2.5px rgba(74,222,128,0.3)' : 'none', animation: hot && !reducedMotion() ? 'zchat-live-dot 1.1s ease-in-out 4' : 'none' }} />
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{status}</span>
           </div>
         </div>
@@ -47428,8 +50694,13 @@ function HigherLowerGame({ seed, onDuelFinish } = {}) {
           <>
             <div style={{ fontSize: 14, fontWeight: 700, color: theme.muted }}>{reveal ? (reveal.ok ? 'Correct' : 'Not this time') : 'Next number is higher or lower?'}</div>
             <div key={shown} className="zchat-pop" style={{ width: 132, height: 160, borderRadius: 24, background: `linear-gradient(160deg, ${tint[0]}, ${tint[1]})`, boxShadow: '0 6px 0 rgba(0,0,0,0.28), 0 16px 30px rgba(0,0,0,0.25), inset 0 3px 0 rgba(255,255,255,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: 70, fontWeight: 900, textShadow: '0 3px 8px rgba(0,0,0,0.3)' }}>{shown}</div>
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'center', padding: '0 12px' }}>
-              {history.slice(0, -1).map((v, i) => <span key={i} style={{ padding: '3px 9px', borderRadius: 999, background: theme.rowBg, color: theme.muted, fontSize: 12, fontWeight: 800 }}>{v}</span>)}
+            <div role="group" aria-label="Earlier numbers" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3, minHeight: 34, padding: '0 12px' }}>
+              {history.slice(0, -1).map((v, i, arr) => (
+                <React.Fragment key={i}>
+                  {i > 0 && <LineGlyph k={v > arr[i - 1] ? 'arrowup' : 'arrowdown'} size={13} sw={3.4} color={v > arr[i - 1] ? '#22C55E' : '#F87171'} />}
+                  <span style={{ width: 27, height: 34, borderRadius: 8, flexShrink: 0, background: theme.dark ? 'linear-gradient(160deg, #3A3160, #2A2448)' : 'linear-gradient(160deg, #F1ECFF, #E3DAFF)', boxShadow: theme.dark ? '0 2px 0 rgba(0,0,0,0.35)' : '0 2px 0 #CFC3F5', color: theme.dark ? '#D9D0FF' : '#5B3FE0', fontSize: 12.5, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', fontVariantNumeric: 'tabular-nums' }}>{v}</span>
+                </React.Fragment>
+              ))}
             </div>
           </>
         ) : (
@@ -48164,27 +51435,31 @@ function PollCard({ poll, votes, myId, senderId, onVote, onShowVotes, onEnd }) {
   const hint = closed ? 'Voting ended' : quiz ? (answered ? (myPicks[0] === poll.a ? 'You got it right' : 'Not this time') : 'One try only') : ends || (answered ? (multi ? 'Tap to change' : 'Tap again to undo') : (multi ? 'Pick one or more' : 'Tap to vote'));
   return (
     <FeatureCardShell colors={[theme.coral]} icon={<PollIcon size={14} />} label={closed ? `${label}, final results` : label} title={poll.q}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+      <div style={{ display: 'flex', flexDirection: 'column' }}>
         {poll.o.map((opt, i) => {
           const pct = voters ? Math.round((counts[i] / voters) * 100) : 0;
           const picked = myPicks.includes(i);
           const isRight = quiz && showResults && i === poll.a;
           const isWrong = quiz && picked && i !== poll.a;
           const leading = voters > 0 && counts[i] === top;
-          const ring = isRight ? green : isWrong ? red : picked ? theme.coral : 'transparent';
-          const fill = isRight ? 'rgba(22,163,74,0.24)' : isWrong ? 'rgba(229,72,77,0.22)' : picked ? `${theme.coral}55` : (leading ? 'rgba(34,197,94,0.22)' : 'rgba(127,127,127,0.18)');
-          const markColor = isRight ? green : isWrong ? red : picked ? theme.coral : theme.muted;
+          const tone = isRight ? green : isWrong ? red : picked ? theme.coral : null;
+          const markColor = tone || theme.muted2;
+          const filled = picked || isRight;
           const locked = closed || (quiz && answered);
           return (
-            <div key={i} role="button" aria-label={`Vote ${opt}`} aria-pressed={picked} onClick={() => { if (!locked && onVote) onVote(i); }} className={locked ? undefined : 'zchat-press'} style={{ position: 'relative', overflow: 'hidden', borderRadius: 12, padding: '10px 12px', cursor: locked ? 'default' : 'pointer', background: theme.dark ? 'rgba(255,255,255,0.06)' : '#F4F2FB', border: `1.5px solid ${ring}` }}>
-              {showResults && <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${pct}%`, background: fill, transition: 'width 0.35s ease' }} />}
-              <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 9 }}>
-                <span style={{ width: 18, height: 18, borderRadius: multi ? 5 : '50%', flexShrink: 0, border: `2px solid ${markColor}`, background: picked || isRight ? markColor : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  {isWrong ? <X size={11} color="white" strokeWidth={3.4} /> : (picked || isRight) && <Check size={11} color="white" strokeWidth={3.4} />}
+            <div key={i} role="button" aria-label={`Vote ${opt}`} aria-pressed={picked} onClick={() => { if (!locked && onVote) onVote(i); }} className={locked ? undefined : 'zchat-row-press'} style={{ padding: showResults ? '8px 4px 9px' : '9px 4px', margin: '0 -4px', borderRadius: 10, cursor: locked ? 'default' : 'pointer' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ width: 20, height: 20, borderRadius: multi ? 6 : '50%', flexShrink: 0, boxSizing: 'border-box', border: filled ? 'none' : `1.6px solid ${markColor}`, background: filled ? markColor : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 160ms ease' }}>
+                  {isWrong ? <X size={12} color="white" strokeWidth={3.2} /> : filled && <Check size={12} color="white" strokeWidth={3.2} />}
                 </span>
-                <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 700, color: theme.ink, wordBreak: 'break-word' }}>{opt}</span>
-                {showResults && voters > 0 && <span style={{ fontSize: 12.5, fontWeight: 900, color: isRight ? green : isWrong ? red : picked ? theme.coral : theme.muted }}>{pct}%</span>}
+                <span style={{ flex: 1, minWidth: 0, fontSize: 14.5, fontWeight: 600, lineHeight: 1.3, color: theme.ink, wordBreak: 'break-word' }}>{opt}</span>
+                {showResults && voters > 0 && <span style={{ fontSize: 13, fontWeight: 700, color: tone || theme.muted, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>{pct}%</span>}
               </div>
+              {showResults && (
+                <div style={{ height: 4, borderRadius: 2, margin: '7px 0 0 30px', background: theme.dark ? 'rgba(255,255,255,0.08)' : 'rgba(17,17,19,0.07)', overflow: 'hidden' }}>
+                  <div style={{ width: `${pct}%`, height: '100%', borderRadius: 2, background: tone || (leading ? theme.ink2 : theme.muted2), opacity: tone ? 1 : 0.7, transition: 'width 0.35s ease' }} />
+                </div>
+              )}
             </div>
           );
         })}
@@ -49088,7 +52363,6 @@ function ChatPeekCard({ myId, otherId, groupId, title, subtitle, avatar, wallKey
             </div>
           </div>
           <div ref={listRef} style={{ ...wallStyle, flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '10px 12px 12px', display: 'flex', flexDirection: 'column', gap: 3 }}>
-            <div style={{ alignSelf: 'center', display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 700, color: theme.ink, padding: '4px 10px', borderRadius: 12, background: theme.dark ? 'rgba(26, 26, 32, 0.8)' : 'rgba(255, 255, 255, 0.86)', marginBottom: 6 }}><Eye size={12} />{groupId ? 'Peek. Nobody sees you read it.' : 'Peek. They will not see it as read.'}</div>
             {rows === null && <div style={{ display: 'flex', justifyContent: 'center', padding: 18 }}><Spinner size={18} color={theme.muted} /></div>}
             {rows && !rows.length && <div style={{ alignSelf: 'center', fontSize: 13, color: theme.muted, padding: 12 }}>No messages yet</div>}
             {rows && rows.map((m, i) => {
@@ -49105,6 +52379,9 @@ function ChatPeekCard({ myId, otherId, groupId, title, subtitle, avatar, wallKey
                 </div>
               );
             })}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '9px 14px 10px', flexShrink: 0, fontSize: 12.5, fontWeight: 600, color: theme.muted, boxShadow: `inset 0 0.5px 0 ${theme.border}` }}>
+            <Eye size={14} strokeWidth={2} />{groupId ? 'Peek. Nobody sees you read it.' : 'Peek. They will not see it as read.'}
           </div>
         </div>
         <div onClick={(e) => e.stopPropagation()} role="menu" className="zchat-peek-menu" style={{ width: 'min(100%, 300px)', alignSelf: 'center', marginTop: 12, borderRadius: 16, overflow: 'hidden', background: theme.dark ? 'rgba(38, 38, 44, 0.94)' : 'rgba(255, 255, 255, 0.94)', boxShadow: '0 16px 40px rgba(0, 0, 0, 0.22)', flexShrink: 0 }}>
@@ -49312,16 +52589,24 @@ function PollComposerPage({ onClose, onSend }) {
       <IgRow inset={false} label="Quiz" sub="One right answer, one try each" right={<IgToggle on={quiz} onClick={() => { setQuiz((v) => !v); setMulti(false); }} />} />
       {!quiz && <IgRow inset={false} label="Multiple answers" sub="People can pick more than one" right={<IgToggle on={multi} onClick={() => setMulti((v) => !v)} />} />}
       {quiz && <textarea value={why} onChange={(e) => setWhy(e.target.value)} placeholder="Explain the answer, optional" aria-label="Quiz explanation" maxLength={200} rows={2} style={{ ...field, resize: 'none', lineHeight: 1.4, marginTop: 6 }} />}
-      <div style={{ fontSize: 15, fontWeight: 500, color: theme.ink, padding: '16px 0 8px' }}>End voting</div>
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        {POLL_ENDS.map(([lab, secs]) => (
-          <div key={lab} role="button" aria-label={`End voting ${lab}`} aria-pressed={endIn === secs} onClick={() => { hapticTap(); setEndIn(secs); }} className="zchat-press"
-            style={{ height: 36, padding: '0 14px', borderRadius: 18, display: 'flex', alignItems: 'center', fontSize: 14, fontWeight: 700, cursor: 'pointer', background: endIn === secs ? theme.ink : theme.rowBg, color: endIn === secs ? theme.panelBg : theme.ink }}>{lab}</div>
-        ))}
-      </div>
+      <IgHeading>End voting</IgHeading>
+      <ChoiceList label="End voting" value={endIn} onChange={(secs) => setEndIn(secs)}
+        options={POLL_ENDS.map(([lab, secs]) => ({ k: secs, label: lab, aria: `End voting ${lab}`, icon: <PollEndGlyph secs={secs} /> }))} />
       <div style={{ fontSize: 12.5, color: theme.muted, lineHeight: 1.5, padding: '14px 2px 12px' }}>{note}</div>
     </FullPage>
   );
+}
+function PollEndGlyph({ secs, size = 24 }) {
+  const p = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round' };
+  const dot = (x, y) => <circle key={`${x}-${y}`} cx={x} cy={y} r="1.15" fill="currentColor" />;
+  let body;
+  if (!secs) body = <path d="M12 12c-1.6-2.2-3-3.4-4.6-3.4a3.4 3.4 0 0 0 0 6.8c1.6 0 3-1.2 4.6-3.4s3-3.4 4.6-3.4a3.4 3.4 0 0 1 0 6.8c-1.6 0-3-1.2-4.6-3.4z" {...p} />;
+  else if (secs < 86400) body = <><circle cx="12" cy="12" r="8.5" {...p} /><path d="M12 7.6V12l3 1.8" {...p} /></>;
+  else {
+    const dots = secs >= 604800 ? [[7.6, 13.4], [10.5, 13.4], [13.4, 13.4], [16.3, 13.4], [7.6, 16.8], [10.5, 16.8], [13.4, 16.8]] : secs >= 259200 ? [[8.4, 15], [12, 15], [15.6, 15]] : [[12, 15]];
+    body = <><rect x="4" y="5.5" width="16" height="14.5" rx="3" {...p} /><path d="M4 9.8h16M8.5 3.8v3.4M15.5 3.8v3.4" {...p} />{dots.map(([x, y]) => dot(x, y))}</>;
+  }
+  return <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" style={{ display: 'block' }}>{body}</svg>;
 }
 
 function EventComposerPage({ onClose, onSend }) {
@@ -50379,7 +53664,8 @@ function applyPhotoFilter(ctx, w, h, k) {
   }
   ctx.putImageData(img, 0, 0);
 }
-function FilterStrip({ value, onPick, thumb, dark = true, big = false }) {
+const FILTER_SAMPLE = `data:image/svg+xml;utf8,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><defs><linearGradient id="s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5AA2F2"/><stop offset="0.7" stop-color="#F6C48E"/></linearGradient></defs><rect width="64" height="64" fill="url(#s)"/><circle cx="42" cy="24" r="8" fill="#FFE29A"/><path d="M0 44l14-11 10 7 14-13 26 21v16H0z" fill="#4C9A68"/><path d="M0 53l18-8 16 6 14-6 16 7v12H0z" fill="#2E6E4A"/></svg>')}`;
+function FilterStrip({ value, onPick, thumb, dark = true, big = false, lens = false }) {
   const rowRef = useRef(null);
   const firstRef = useRef(true);
   useEffect(() => {
@@ -50393,20 +53679,35 @@ function FilterStrip({ value, onPick, thumb, dark = true, big = false }) {
   }, [value]);
   const tw = big ? 70 : 58;
   const th = big ? 92 : 58;
+  const pick = (k) => (e) => { e.stopPropagation(); hapticTap(); playUiSound('tap'); onPick(k); };
+  const still = reducedMotion();
+  if (lens || !thumb) {
+    return (
+      <div ref={rowRef} style={{ position: 'relative', display: 'flex', gap: 6, overflowX: 'auto', padding: '8px 14px 2px', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
+        {PHOTO_FILTERS.map((f) => {
+          const on = (value || 'none') === f.k;
+          return (
+            <div key={f.k} data-filter={f.k} role="button" aria-label={`Filter ${f.label}`} aria-pressed={on} onClick={pick(f.k)} style={{ width: 62, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 7, cursor: 'pointer', flexShrink: 0, WebkitTapHighlightColor: 'transparent' }}>
+              <div style={{ width: 52, height: 52, borderRadius: '50%', overflow: 'hidden', background: '#222', boxShadow: on ? '0 0 0 2.5px rgba(0, 0, 0, 0.3), 0 0 0 4.5px #FFFFFF' : '0 0 0 1.5px rgba(255, 255, 255, 0.6), 0 2px 8px rgba(0, 0, 0, 0.3)', transform: on && !still ? 'scale(1.06)' : 'none', transition: still ? 'none' : 'transform 180ms ease, box-shadow 180ms ease' }}>
+                <img src={thumb || FILTER_SAMPLE} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', filter: photoFilterCss(f.k) }} />
+              </div>
+              <span style={{ fontSize: 11.5, lineHeight: '14px', fontWeight: on ? 800 : 600, color: on ? '#FFFFFF' : 'rgba(255, 255, 255, 0.8)', textShadow: '0 1px 4px rgba(0, 0, 0, 0.65)', whiteSpace: 'nowrap' }}>{f.label}</span>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
   return (
-    <div ref={rowRef} style={{ position: 'relative', display: 'flex', gap: big ? 8 : 10, overflowX: 'auto', padding: '4px 14px', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
+    <div ref={rowRef} style={{ position: 'relative', display: 'flex', gap: big ? 8 : 10, overflowX: 'auto', padding: '6px 14px', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
       {PHOTO_FILTERS.map((f) => {
         const on = (value || 'none') === f.k;
         return (
-          <div key={f.k} data-filter={f.k} role="button" aria-label={`Filter ${f.label}`} aria-pressed={on} onClick={(e) => { e.stopPropagation(); hapticTap(); playUiSound('tap'); onPick(f.k); }} style={{ display: 'flex', flexDirection: big ? 'column-reverse' : 'column', alignItems: 'center', gap: big ? 7 : 5, cursor: 'pointer', flexShrink: 0 }}>
-            {thumb ? (
-              <div style={{ width: tw, height: th, borderRadius: big ? 14 : 12, overflow: 'hidden', boxShadow: on ? '0 0 0 2.5px white' : 'none', transform: big && on ? 'scale(1.04)' : 'none', transition: 'transform 0.18s ease, box-shadow 0.18s ease' }}>
-                <img src={thumb} alt="" draggable={false} loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', filter: photoFilterCss(f.k) }} />
-              </div>
-            ) : null}
-            <span style={thumb
-              ? { fontSize: 11.5, fontWeight: on ? 800 : 600, color: on ? 'white' : 'rgba(255,255,255,0.7)' }
-              : { fontSize: 13, fontWeight: 800, padding: '7px 13px', borderRadius: 16, background: on ? 'white' : 'rgba(0,0,0,0.45)', color: on ? '#000' : 'white', whiteSpace: 'nowrap' }}>{f.label}</span>
+          <div key={f.k} data-filter={f.k} role="button" aria-label={`Filter ${f.label}`} aria-pressed={on} onClick={pick(f.k)} style={{ display: 'flex', flexDirection: big ? 'column-reverse' : 'column', alignItems: 'center', gap: big ? 8 : 5, cursor: 'pointer', flexShrink: 0 }}>
+            <div style={{ width: tw, height: th, borderRadius: big ? 14 : 12, overflow: 'hidden', boxShadow: on ? '0 0 0 2px #000000, 0 0 0 4px #FFFFFF' : 'none', transform: big && on && !still ? 'scale(1.04)' : 'none', transition: still ? 'none' : 'transform 0.18s ease, box-shadow 0.18s ease' }}>
+              <img src={thumb} alt="" draggable={false} loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', filter: photoFilterCss(f.k) }} />
+            </div>
+            <span style={{ fontSize: 11.5, fontWeight: on ? 800 : 600, color: on ? 'white' : 'rgba(255,255,255,0.7)' }}>{f.label}</span>
           </div>
         );
       })}
@@ -51108,12 +54409,12 @@ function PaintColorPanel({ color, alpha, onColor, onAlpha, recent }) {
   const alphaRef = useRef(null);
   useEffect(() => { setHexText(color); }, [color]);
   const commit = (h, s, v) => { setHsv([h, s, v]); onColor(paintHex(h, s, v)); };
-  const dragOn = (ref, fn) => (e) => {
+  const dragOn = (ref, fn, pad = 0) => (e) => {
     const el = ref.current;
     if (!el) return;
     e.stopPropagation();
     try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
-    const go = (ev) => { const r = el.getBoundingClientRect(); fn(Math.max(0, Math.min(1, (ev.clientX - r.left) / r.width)), Math.max(0, Math.min(1, (ev.clientY - r.top) / r.height))); };
+    const go = (ev) => { const r = el.getBoundingClientRect(); fn(Math.max(0, Math.min(1, (ev.clientX - r.left - pad) / Math.max(1, r.width - pad * 2))), Math.max(0, Math.min(1, (ev.clientY - r.top) / r.height))); };
     go(e);
     const mv = (ev) => go(ev);
     const up = () => { window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up); };
@@ -51131,13 +54432,13 @@ function PaintColorPanel({ color, alpha, onColor, onAlpha, recent }) {
       <div ref={svRef} onPointerDown={dragOn(svRef, (x, y) => commit(h, x, 1 - y))} style={{ position: 'relative', height: 170, borderRadius: 14, cursor: 'crosshair', touchAction: 'none', background: `linear-gradient(to top, #000, rgba(0,0,0,0)), linear-gradient(to right, #fff, hsl(${Math.round(h)}, 100%, 50%))` }}>
         <div style={{ position: 'absolute', left: `${s * 100}%`, top: `${(1 - v) * 100}%`, width: 22, height: 22, marginLeft: -11, marginTop: -11, borderRadius: '50%', border: '3px solid #fff', boxShadow: '0 1px 4px rgba(0,0,0,0.5)', background: color, pointerEvents: 'none' }} />
       </div>
-      <div ref={hueRef} onPointerDown={dragOn(hueRef, (x) => commit(x * 359.9, s || 0.8, v || 0.8))} style={{ position: 'relative', height: 22, borderRadius: 11, marginTop: 14, cursor: 'pointer', touchAction: 'none', background: 'linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00)' }}>
-        <div style={{ position: 'absolute', left: `${(h / 360) * 100}%`, top: '50%', width: 24, height: 24, marginLeft: -12, marginTop: -12, borderRadius: '50%', border: '3px solid #fff', boxShadow: '0 1px 4px rgba(0,0,0,0.5)', background: `hsl(${Math.round(h)}, 100%, 50%)`, pointerEvents: 'none' }} />
+      <div ref={hueRef} role="slider" aria-label="Hue" aria-valuemin={0} aria-valuemax={360} aria-valuenow={Math.round(h)} onPointerDown={dragOn(hueRef, (x) => commit(x * 359.9, s || 0.8, v || 0.8), 12)} style={{ position: 'relative', height: 24, borderRadius: 12, marginTop: 16, cursor: 'pointer', touchAction: 'none', background: 'linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00)' }}>
+        <div style={{ position: 'absolute', left: `calc(12px + (100% - 24px) * ${h / 360})`, top: '50%', width: 24, height: 24, marginLeft: -12, marginTop: -12, borderRadius: '50%', border: '3px solid #fff', boxShadow: '0 1px 4px rgba(0,0,0,0.5)', background: `hsl(${Math.round(h)}, 100%, 50%)`, pointerEvents: 'none' }} />
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 14 }}>
-        <span style={{ fontSize: 13, fontWeight: 700, color: theme.muted, whiteSpace: 'nowrap' }}>See through</span>
-        <div ref={alphaRef} onPointerDown={dragOn(alphaRef, (x) => onAlpha(Math.max(0.05, Math.round(x * 100) / 100)))} style={{ position: 'relative', flex: 1, height: 22, borderRadius: 11, cursor: 'pointer', touchAction: 'none', backgroundColor: '#ccc', backgroundImage: `linear-gradient(to right, rgba(0,0,0,0), ${color}), linear-gradient(45deg, #999 25%, transparent 25%, transparent 75%, #999 75%), linear-gradient(45deg, #999 25%, transparent 25%, transparent 75%, #999 75%)`, backgroundSize: '100% 100%, 12px 12px, 12px 12px', backgroundPosition: '0 0, 0 0, 6px 6px' }}>
-          <div style={{ position: 'absolute', left: `${alpha * 100}%`, top: '50%', width: 24, height: 24, marginLeft: -12, marginTop: -12, borderRadius: '50%', border: '3px solid #fff', boxShadow: '0 1px 4px rgba(0,0,0,0.5)', background: color, opacity: Math.max(0.3, alpha), pointerEvents: 'none' }} />
+        <span style={{ fontSize: 13, fontWeight: 600, color: theme.ink2, whiteSpace: 'nowrap' }}>See through</span>
+        <div ref={alphaRef} role="slider" aria-label="See through" aria-valuemin={5} aria-valuemax={100} aria-valuenow={Math.round(alpha * 100)} onPointerDown={dragOn(alphaRef, (x) => onAlpha(Math.max(0.05, Math.round(x * 100) / 100)), 12)} style={{ position: 'relative', flex: 1, height: 24, borderRadius: 12, cursor: 'pointer', touchAction: 'none', backgroundColor: '#ccc', backgroundImage: `linear-gradient(to right, rgba(0,0,0,0), ${color}), linear-gradient(45deg, #999 25%, transparent 25%, transparent 75%, #999 75%), linear-gradient(45deg, #999 25%, transparent 25%, transparent 75%, #999 75%)`, backgroundSize: '100% 100%, 12px 12px, 12px 12px', backgroundPosition: '0 0, 0 0, 6px 6px' }}>
+          <div style={{ position: 'absolute', left: `calc(12px + (100% - 24px) * ${alpha})`, top: '50%', width: 24, height: 24, marginLeft: -12, marginTop: -12, borderRadius: '50%', border: '3px solid #fff', boxShadow: '0 1px 4px rgba(0,0,0,0.5)', background: color, opacity: Math.max(0.3, alpha), pointerEvents: 'none' }} />
         </div>
         <span style={{ fontSize: 13, fontWeight: 800, color: theme.ink, width: 40, textAlign: 'right' }}>{Math.round(alpha * 100)}%</span>
       </div>
@@ -51150,13 +54451,13 @@ function PaintColorPanel({ color, alpha, onColor, onAlpha, recent }) {
         }} style={{ ...inputStyle(theme), fontFamily: '"Courier New", monospace', fontWeight: 700, letterSpacing: 1 }} />
       </div>
       {recent && recent.length > 0 && (
-        <>
-          <div style={{ fontSize: 13, fontWeight: 700, color: theme.muted, margin: '16px 0 8px' }}>Recent</div>
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>{recent.map((c) => dot(c, `r${c}`))}</div>
-        </>
+        <KitSection title="Recent">
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', padding: '2px 2px 0' }}>{recent.map((c) => dot(c, `r${c}`))}</div>
+        </KitSection>
       )}
-      <div style={{ fontSize: 13, fontWeight: 700, color: theme.muted, margin: '16px 0 8px' }}>Colours</div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 34px)', gap: 10, justifyContent: 'space-between', paddingBottom: 6 }}>{PAINT_PALETTE.map((c) => dot(c, c))}</div>
+      <KitSection title="Colours">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 34px)', gap: 10, justifyContent: 'space-between', padding: '2px 2px 6px' }}>{PAINT_PALETTE.map((c) => dot(c, c))}</div>
+      </KitSection>
     </div>
   );
 }
@@ -51476,6 +54777,48 @@ function paintBrushPreview(k, color) {
   return c.toDataURL();
 }
 
+const paintBrushThumbs = new Map();
+function paintBrushThumb(k, color) {
+  const key = `${k}|${color}`;
+  if (!paintBrushThumbs.has(key)) {
+    let url = '';
+    try { url = paintBrushPreview(k, color); } catch {}
+    if (paintBrushThumbs.size > 60) paintBrushThumbs.clear();
+    paintBrushThumbs.set(key, url);
+  }
+  return paintBrushThumbs.get(key);
+}
+function paintInkFor(color) {
+  return /^#F[0-9A-F]F[0-9A-F]F[0-9A-F]$/i.test(color) || String(color).toUpperCase() === '#FFFFFF' ? '#111111' : color;
+}
+function PaintBrushChip({ k, color }) {
+  const src = paintBrushThumb(k, paintInkFor(color));
+  return <span style={{ display: 'block', width: 40, height: 22, borderRadius: 6, overflow: 'hidden', background: '#FFFFFF', boxShadow: 'inset 0 0 0 1px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.18)' }}>{src && <img src={src} alt="" draggable={false} style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover' }} />}</span>;
+}
+function PaintFillGlyph({ on }) {
+  const back = on ? { fill: 'none', stroke: 'currentColor', strokeWidth: 1.8 } : { fill: 'currentColor', fillOpacity: 0.32, stroke: 'none' };
+  const front = on ? { fill: 'currentColor', stroke: 'currentColor', strokeWidth: 1.8 } : { fill: 'none', stroke: 'currentColor', strokeWidth: 1.8 };
+  return (
+    <svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true" style={{ display: 'block' }}>
+      <rect x="6" y="6" width="14" height="14" rx="3.2" {...back} />
+      <rect x="12" y="12" width="14" height="14" rx="3.2" {...front} strokeLinejoin="round" />
+    </svg>
+  );
+}
+function PaintFontPicker({ value, onChange }) {
+  const { theme } = useTheme();
+  return (
+    <div role="radiogroup" aria-label="Font" style={{ display: 'flex', height: 40, borderRadius: 11, background: theme.soft, padding: 3, boxSizing: 'border-box', flexShrink: 0 }}>
+      {PAINT_FONTS.map(([k, label, spec]) => {
+        const on = value === k;
+        return (
+          <div key={k} role="radio" aria-checked={on} aria-label={`Font ${label}`} onPointerDown={(e) => e.preventDefault()} onClick={() => { if (!on) { hapticTap(); onChange(k); } }}
+            style={{ width: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8, cursor: 'pointer', background: on ? (theme.dark ? '#2E2D35' : '#FFFFFF') : 'transparent', boxShadow: on ? '0 1px 4px rgba(0, 0, 0, 0.16)' : 'none', color: on ? theme.ink : theme.muted, font: spec.replace('{s}', '17'), lineHeight: 1, transition: 'background 160ms ease, color 160ms ease' }}>Aa</div>
+        );
+      })}
+    </div>
+  );
+}
 function PaintStudio({ onClose, onSend, recipientName, onAskBot, initial }) {
   const { theme } = useTheme();
   const stageRef = useRef(null);
@@ -52763,9 +56106,11 @@ function PaintStudio({ onClose, onSend, recipientName, onAskBot, initial }) {
   const tools = [['brush', 'Brush'], ['eraser', 'Eraser'], ['fill', 'Fill'], ['shapes', 'Shapes'], ['text', 'Text'], ['stamp', 'Stickers'], ['move', 'Move'], ['picker', 'Pick colour']];
   const brushLabel = (PAINT_BRUSHES.find((b) => b.k === brush) || PAINT_BRUSHES[0]).label;
   const shapeLabel = (PAINT_SHAPES.find((b) => b.k === shape) || PAINT_SHAPES[0]).label;
-  const chip = (label, onClick, on, aria) => (
-    <button type="button" aria-label={aria || label} onClick={onClick} className="zchat-press"
-      style={{ height: 34, padding: '0 12px', borderRadius: 17, border: 'none', background: on ? c.fg : c.field, color: on ? c.bg : c.fg, fontWeight: 700, fontSize: 13.5, fontFamily: FONT, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6 }}>{label}</button>
+  const stageBg = theme.dark ? '#121214' : '#E7E7EC';
+  const stageNote = { display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12.5, fontWeight: 600, color: theme.dark ? 'rgba(242, 242, 244, 0.8)' : 'rgba(17, 17, 19, 0.66)', textShadow: `0 0 6px ${stageBg}, 0 0 2px ${stageBg}` };
+  const doneBtn = (aria, onClick) => (
+    <button type="button" aria-label={aria} onClick={onClick} className="zchat-press"
+      style={{ height: 36, padding: '0 18px', borderRadius: 18, border: 'none', background: theme.coral, color: '#FFFFFF', fontWeight: 800, fontSize: 14.5, fontFamily: FONT, cursor: 'pointer', flexShrink: 0 }}>Done</button>
   );
   const rowLabel = (t) => <div style={{ fontSize: 13, fontWeight: 700, color: theme.muted, margin: '16px 0 8px' }}>{t}</div>;
   const optionRow = (label, sub, right, onClick) => (
@@ -52807,10 +56152,10 @@ function PaintStudio({ onClose, onSend, recipientName, onAskBot, initial }) {
           <canvas ref={viewRef} aria-label="Drawing area" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp} onWheel={onWheel}
             style={{ position: 'absolute', left: 0, top: 0, touchAction: 'none', cursor: tool === 'picker' ? 'copy' : tool === 'text' ? 'text' : tool === 'move' ? 'move' : 'crosshair' }} />
           {(sym !== 'off' || magic || steady > 0 || template) && (
-            <div style={{ position: 'absolute', left: 10, top: 10, display: 'flex', gap: 6, flexWrap: 'wrap', pointerEvents: 'none' }}>
-              {sym !== 'off' && <span style={{ fontSize: 12, fontWeight: 800, padding: '4px 9px', borderRadius: 10, background: 'rgba(0,0,0,0.55)', color: '#fff' }}>{sym === 'mirror' ? 'Mirror' : sym === 'quad' ? 'Four way' : 'Kaleidoscope'}</span>}
-              {magic && <span style={{ fontSize: 12, fontWeight: 800, padding: '4px 9px', borderRadius: 10, background: 'rgba(0,0,0,0.55)', color: '#fff' }}>Magic shapes</span>}
-              {steady > 0 && <span style={{ fontSize: 12, fontWeight: 800, padding: '4px 9px', borderRadius: 10, background: 'rgba(0,0,0,0.55)', color: '#fff' }}>Steady {steady}</span>}
+            <div role="status" style={{ position: 'absolute', left: 14, top: 10, right: 14, display: 'flex', gap: 14, flexWrap: 'wrap', pointerEvents: 'none' }}>
+              {sym !== 'off' && <span style={stageNote}><KitGlyph k={sym === 'mirror' ? 'sym_mirror' : sym === 'quad' ? 'sym_quad' : 'sym_radial'} size={18} />{sym === 'mirror' ? 'Mirror' : sym === 'quad' ? 'Four way' : 'Kaleidoscope'}</span>}
+              {magic && <span style={stageNote}><PaintToolIcon k="shapes" size={15} />Magic shapes</span>}
+              {steady > 0 && <span style={stageNote}><StudioGlyph k="steady" size={18} />Steady {steady}</span>}
             </div>
           )}
           {toast && (
@@ -52833,65 +56178,72 @@ function PaintStudio({ onClose, onSend, recipientName, onAskBot, initial }) {
                 style={{ ...inputStyle(theme), flex: 1, resize: 'none', fontSize: 16, lineHeight: 1.35 }} />
               <button type="button" onClick={commitText} style={{ height: 44, padding: '0 16px', borderRadius: 12, border: 'none', background: theme.coral, color: '#fff', fontWeight: 800, fontSize: 14.5, fontFamily: FONT, cursor: 'pointer', flexShrink: 0 }}>Done</button>
             </div>
-            <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingTop: 10, scrollbarWidth: 'none' }}>
-              {PAINT_FONTS.map(([k, label]) => chip(label, () => setTextEdit((te) => ({ ...te, font: k })), textEdit.font === k, `Font ${label}`))}
-              {chip(textEdit.outline ? 'Outline on' : 'Outline', () => setTextEdit((te) => ({ ...te, outline: te.outline ? null : (te.color.toUpperCase() === '#FFFFFF' ? '#111111' : '#FFFFFF') })), !!textEdit.outline)}
-              {chip('Smaller', () => setTextEdit((te) => ({ ...te, size: Math.max(20, te.size - 10) })), false)}
-              {chip('Bigger', () => setTextEdit((te) => ({ ...te, size: Math.min(320, te.size + 10) })), false)}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, paddingTop: 8 }}>
+              <PaintFontPicker value={textEdit.font} onChange={(k) => setTextEdit((te) => ({ ...te, font: k }))} />
+              <div style={{ flex: 1, minWidth: 4 }} />
+              <StudioTool label="Outline" aria={textEdit.outline ? 'Outline on' : 'Outline'} on={!!textEdit.outline} pressed={!!textEdit.outline} width={52} ink={c.fg} keepFocus
+                glyph={<StudioGlyph k="textoutline" size={25} />} onClick={() => setTextEdit((te) => ({ ...te, outline: te.outline ? null : (te.color.toUpperCase() === '#FFFFFF' ? '#111111' : '#FFFFFF') }))} />
+              <StudioTool label="Smaller" width={52} ink={c.fg} keepFocus disabled={textEdit.size <= 20} glyph={<StudioGlyph k="smaller" size={25} />} onClick={() => setTextEdit((te) => ({ ...te, size: Math.max(20, te.size - 10) }))} />
+              <StudioTool label="Bigger" width={52} ink={c.fg} keepFocus disabled={textEdit.size >= 320} glyph={<StudioGlyph k="bigger" size={25} />} onClick={() => setTextEdit((te) => ({ ...te, size: Math.min(320, te.size + 10) }))} />
             </div>
-            <div style={{ fontSize: 12.5, color: c.dim, paddingTop: 8 }}>{textEdit.replaces != null ? 'Editing your text. Clear it all to delete it.' : 'Drag the text on the canvas to move it.'}</div>
+            <div style={{ fontSize: 12.5, color: c.dim, paddingTop: 6 }}>{textEdit.replaces != null ? 'Editing your text. Clear it all to delete it.' : 'Drag the text on the canvas to move it.'}</div>
             </div>
           </div>
         ) : (
           <div style={{ flexShrink: 0, background: c.bg, borderTop: `1px solid ${c.line}`, paddingBottom: 'calc(8px + env(safe-area-inset-bottom))' }}>
             <div style={{ maxWidth: 760, margin: '0 auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-around', padding: '6px 4px 2px' }}>
-              {tools.map(([k, label]) => (
-                <button key={k} type="button" aria-label={label} aria-pressed={tool === k} onClick={() => pickTool(k)} className="zchat-press"
-                  style={{ flex: '0 1 46px', minWidth: 34, height: 46, borderRadius: 14, border: 'none', background: tool === k ? (theme.dark ? '#2A2A30' : '#E8E8EE') : 'transparent', color: tool === k ? theme.coral : c.fg, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 }}>
-                  <PaintToolIcon k={k} />
-                </button>
-              ))}
+            <div role="toolbar" aria-label="Paint tools" style={{ display: 'flex', justifyContent: 'space-around', padding: '6px 4px 0' }}>
+              {tools.map(([k, label]) => {
+                const on = tool === k;
+                return (
+                  <button key={k} type="button" aria-label={label} aria-pressed={on} onClick={() => pickTool(k)} className="zchat-press"
+                    style={{ flex: '0 1 46px', minWidth: 34, height: 46, border: 'none', background: 'transparent', color: on ? kitOnInk(theme) : c.fg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5, cursor: 'pointer', padding: 0, transition: 'color 160ms ease' }}>
+                    <PaintToolIcon k={k} />
+                    <span aria-hidden="true" style={{ width: 4, height: 4, borderRadius: 2, background: on ? theme.coral : 'transparent', transition: 'background 160ms ease' }} />
+                  </button>
+                );
+              })}
             </div>
             {tool === 'move' ? (
               <>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 14px 4px', minHeight: 36, overflowX: 'auto', scrollbarWidth: 'none' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 2, padding: '2px 12px 0 8px', minHeight: 52 }}>
                   {selInfo ? (
                     <>
-                      {chip('Copy', copySel, false, 'Copy selection')}
-                      {chip('Bring to front', frontSel, false)}
-                      {selInfo.text && chip('Edit text', () => { const s = st.current; const one = s.sel && s.ops[s.idx.get(s.sel.ids[0])]; if (one) editText(one, 'move'); }, false)}
-                      {chip('Delete', deleteSel, false, 'Delete selection')}
-                      {chip('Done', () => { hapticTap(); if (st.current.mv) finishMove(); clearSel(); }, true, 'Done moving')}
+                      <StudioTool label="Copy" aria="Copy selection" ink={c.fg} glyph={<StudioGlyph k="copy" />} onClick={copySel} />
+                      <StudioTool label="To front" aria="Bring to front" ink={c.fg} glyph={<StudioGlyph k="front" />} onClick={frontSel} width={60} />
+                      {selInfo.text && <StudioTool label="Edit text" ink={c.fg} glyph={<StudioGlyph k="edittext" />} onClick={() => { const s = st.current; const one = s.sel && s.ops[s.idx.get(s.sel.ids[0])]; if (one) editText(one, 'move'); }} width={60} />}
+                      <StudioTool label="Delete" aria="Delete selection" danger glyph={<StudioGlyph k="trash" />} onClick={deleteSel} />
+                      <div style={{ flex: 1, minWidth: 6 }} />
+                      {doneBtn('Done moving', () => { hapticTap(); if (st.current.mv) finishMove(); clearSel(); })}
                     </>
                   ) : (
                     <>
-                      <span style={{ fontSize: 13, color: c.dim, fontWeight: 600, flex: 1, minWidth: 0 }}>Tap something you drew to move it</span>
-                      {chip('Select all', selectAll, false)}
+                      <span style={{ fontSize: 13, color: c.dim, fontWeight: 600, flex: 1, minWidth: 0, paddingLeft: 6 }}>Tap something you drew to move it</span>
+                      <StudioTool label="Select all" ink={c.fg} glyph={<StudioGlyph k="selectall" />} onClick={selectAll} width={64} />
                     </>
                   )}
                 </div>
-                <div style={{ height: 28, margin: '6px 14px 2px', display: 'flex', alignItems: 'center', fontSize: 12.5, color: c.dim, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <div style={{ height: 26, margin: '4px 14px 2px', display: 'flex', alignItems: 'center', fontSize: 12.5, color: c.dim, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {selInfo ? (selInfo.n === 1 ? 'Drag to move it. Corner dot resizes, top dot turns.' : `${selInfo.n} parts picked. Drag to move them together.`) : 'Or drag across a few parts to pick them together.'}
                 </div>
               </>
             ) : (
             <>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 14px 4px', minHeight: 36 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '2px 14px 0', minHeight: 52 }}>
               <button type="button" aria-label="Choose colour" onClick={() => setSheet('color')} className="zchat-press"
-                style={{ width: 36, height: 36, borderRadius: '50%', border: 'none', padding: 0, cursor: 'pointer', flexShrink: 0, background: color, boxShadow: `0 0 0 2px ${c.bg}, 0 0 0 3.5px ${c.line}`, opacity: Math.max(0.35, alpha) }} />
-              {tool === 'brush' && chip(`${brushLabel} ▾`, () => setSheet('brush'), false, 'Choose brush')}
-              {tool === 'shapes' && chip(`${shapeLabel} ▾`, () => setSheet('shapes'), false, 'Choose shape')}
-              {tool === 'shapes' && chip(shapeFill ? 'Filled' : 'Outline', () => setShapeFill((v) => !v), shapeFill, 'Fill shape')}
-              {tool === 'stamp' && chip(`${stamp} ▾`, () => setSheet('stamp'), false, 'Choose sticker')}
-              {tool === 'fill' && <span style={{ fontSize: 13, color: c.dim, fontWeight: 600, flex: 1 }}>Tap an area to fill it</span>}
-              {tool === 'picker' && <span style={{ fontSize: 13, color: c.dim, fontWeight: 600, flex: 1 }}>Tap the drawing to pick a colour</span>}
-              {tool === 'text' && <span style={{ fontSize: 13, color: c.dim, fontWeight: 600, flex: 1 }}>Tap where the text should go</span>}
+                style={{ width: 36, height: 36, marginRight: 4, borderRadius: '50%', border: 'none', padding: 0, cursor: 'pointer', flexShrink: 0, background: color, boxShadow: `0 0 0 2px ${c.bg}, 0 0 0 3.5px ${theme.dark ? 'rgba(255,255,255,0.32)' : 'rgba(17,17,19,0.2)'}`, opacity: Math.max(0.35, alpha) }} />
+              {tool === 'brush' && <StudioTool label={brushLabel} aria="Choose brush" ink={c.fg} width={66} glyph={<PaintBrushChip k={brush} color={color} />} onClick={() => setSheet('brush')} />}
+              {tool === 'shapes' && <StudioTool label={shape === 'round' ? 'Rounded' : shape === 'bubble' ? 'Bubble' : shapeLabel} aria="Choose shape" ink={c.fg} width={60} glyph={<PaintShapeIcon k={shape} color="currentColor" fill={shapeFill ? color : false} size={28} />} onClick={() => setSheet('shapes')} />}
+              {tool === 'shapes' && <StudioTool label={shapeFill ? 'Filled' : 'Outline'} aria="Fill shape" on={shapeFill} pressed={shapeFill} ink={c.fg} width={54} glyph={<PaintFillGlyph on={shapeFill} />} onClick={() => setShapeFill((v) => !v)} />}
+              {tool === 'stamp' && <StudioTool label="Sticker" aria="Choose sticker" ink={c.fg} width={56} glyph={<span style={{ fontSize: 23, lineHeight: 1 }}>{stamp}</span>} onClick={() => setSheet('stamp')} />}
+              {tool === 'fill' && <span style={{ fontSize: 13, color: c.dim, fontWeight: 600, flex: 1, paddingLeft: 4 }}>Tap an area to fill it</span>}
+              {tool === 'picker' && <span style={{ fontSize: 13, color: c.dim, fontWeight: 600, flex: 1, paddingLeft: 4 }}>Tap the drawing to pick a colour</span>}
+              {tool === 'text' && <span style={{ fontSize: 13, color: c.dim, fontWeight: 600, flex: 1, paddingLeft: 4 }}>Tap where the text should go</span>}
               {(tool === 'brush' || tool === 'eraser' || tool === 'shapes' || tool === 'stamp') && (
-                <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                  <input type="range" min={1} max={80} value={size} aria-label="Size" onChange={(e) => setSize(Number(e.target.value))} style={{ flex: 1, minWidth: 0, accentColor: theme.coral }} />
+                <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8, minWidth: 0, paddingLeft: 4 }}>
+                  <KitSlider value={size} min={1} max={80} label="Size" onChange={setSize} style={{ flex: 1, minWidth: 0 }} />
                   <div style={{ width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <div style={{ width: Math.max(3, Math.min(28, size * 0.45)), height: Math.max(3, Math.min(28, size * 0.45)), borderRadius: '50%', background: tool === 'eraser' ? 'transparent' : color, border: tool === 'eraser' ? `2px solid ${c.fg}` : 'none' }} />
+                    <div style={{ width: Math.max(3, Math.min(28, size * 0.45)), height: Math.max(3, Math.min(28, size * 0.45)), borderRadius: '50%', background: tool === 'eraser' ? 'transparent' : color, border: tool === 'eraser' ? `2px solid ${c.fg}` : 'none', boxShadow: tool === 'eraser' ? 'none' : `0 0 0 1px ${c.line}` }} />
                   </div>
                 </div>
               )}
@@ -52916,39 +56268,21 @@ function PaintStudio({ onClose, onSend, recipientName, onAskBot, initial }) {
       )}
       {sheet === 'brush' && (
         <PaintSheet title="Brushes" onClose={() => setSheet(null)}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10, paddingBottom: 8 }}>
-            {PAINT_BRUSHES.map((b) => (
-              <div key={b.k} role="button" aria-label={`Brush ${b.label}`} onClick={() => { hapticTap(); setBrush(b.k); setTool('brush'); setSheet(null); }} className="zchat-press"
-                style={{ borderRadius: 14, overflow: 'hidden', cursor: 'pointer', boxShadow: brush === b.k ? `0 0 0 2.5px ${theme.coral}` : `inset 0 0 0 1px ${theme.border}` }}>
-                {previews[b.k] && <img src={previews[b.k]} alt="" style={{ display: 'block', width: '100%', height: 54, objectFit: 'cover' }} />}
-                <div style={{ fontSize: 13.5, fontWeight: 700, color: theme.ink, padding: '7px 10px' }}>{b.label}</div>
-              </div>
-            ))}
-          </div>
+          <StudioTileGrid label="Brushes" cols={2} ratio={2.7} gap={14} value={brush} onChange={(k) => { setBrush(k); setTool('brush'); setSheet(null); }}
+            options={PAINT_BRUSHES.map((b) => ({ k: b.k, label: b.label, aria: `Brush ${b.label}`, bg: '#FFFFFF', art: previews[b.k] ? <img src={previews[b.k]} alt="" draggable={false} style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover' }} /> : null }))} />
         </PaintSheet>
       )}
       {sheet === 'shapes' && (
         <PaintSheet title="Shapes" onClose={() => setSheet(null)}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10, paddingBottom: 8 }}>
-            {PAINT_SHAPES.map((sp) => (
-              <div key={sp.k} role="button" aria-label={`Shape ${sp.label}`} onClick={() => { hapticTap(); setShape(sp.k); setTool('shapes'); setSheet(null); }} className="zchat-press"
-                style={{ height: 84, borderRadius: 14, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, boxShadow: shape === sp.k ? `0 0 0 2.5px ${theme.coral}` : `inset 0 0 0 1px ${theme.border}` }}>
-                <PaintShapeIcon k={sp.k} color={theme.ink} />
-                <div style={{ fontSize: 12.5, fontWeight: 700, color: theme.ink }}>{sp.label}</div>
-              </div>
-            ))}
-          </div>
+          <StudioTileGrid label="Shapes" cols={3} ratio={1.35} gap={12} value={shape} onChange={(k) => { setShape(k); setTool('shapes'); setSheet(null); }}
+            options={PAINT_SHAPES.map((sp) => ({ k: sp.k, label: sp.label, aria: `Shape ${sp.label}`, art: <PaintShapeIcon k={sp.k} color="currentColor" fill={shapeFill} size={46} /> }))} />
           {optionRow('Fill shapes', 'Solid shapes instead of outlines', <IgToggle on={shapeFill} onClick={() => setShapeFill((v) => !v)} />)}
         </PaintSheet>
       )}
       {sheet === 'stamp' && (
         <PaintSheet title="Stickers" onClose={() => setSheet(null)}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10, paddingBottom: 10 }}>
-            {PAINT_STAMPS.map((em) => (
-              <div key={em} role="button" aria-label={`Sticker ${em}`} onClick={() => { hapticTap(); setStamp(em); setTool('stamp'); setSheet(null); }} className="zchat-press"
-                style={{ height: 64, borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 34, cursor: 'pointer', boxShadow: stamp === em ? `0 0 0 2.5px ${theme.coral}` : `inset 0 0 0 1px ${theme.border}` }}>{em}</div>
-            ))}
-          </div>
+          <StudioTileGrid label="Stickers" cols={4} ratio={1} gap={12} value={stamp} onChange={(em) => { setStamp(em); setTool('stamp'); setSheet(null); }}
+            options={PAINT_STAMPS.map((em) => ({ k: em, aria: `Sticker ${em}`, art: <span style={{ fontSize: 34, lineHeight: 1 }}>{em}</span> }))} />
         </PaintSheet>
       )}
       {sheet === 'ask' && (
@@ -53021,7 +56355,7 @@ function PaintStudio({ onClose, onSend, recipientName, onAskBot, initial }) {
   );
 }
 
-function PaintShapeIcon({ k, color }) {
+function PaintShapeIcon({ k, color, fill, size = 44 }) {
   const d = (() => {
     if (k === 'line') return 'M6 34 L38 6';
     if (k === 'arrow') return 'M6 34 L38 6 M38 6 L26 8 M38 6 L36 18';
@@ -53034,7 +56368,8 @@ function PaintShapeIcon({ k, color }) {
     if (k === 'bubble') return 'M12 6 H32 Q39 6 39 13 V22 Q39 29 32 29 H18 L10 36 L12 29 Q5 29 5 22 V13 Q5 6 12 6 Z';
     return '';
   })();
-  return <svg width="44" height="40" viewBox="0 0 44 40" fill="none" stroke={color} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={d} /></svg>;
+  const solid = fill && k !== 'line' && k !== 'arrow';
+  return <svg width={size} height={(size * 40) / 44} viewBox="0 0 44 40" fill={solid ? (fill === true ? color : fill) : 'none'} stroke={color} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={d} /></svg>;
 }
 
 function FxIcon({ kind, size = 24, color = 'currentColor', strokeWidth = 2, style }) {
@@ -53307,6 +56642,31 @@ function drawCollage(ctx, W, H, imgs, layout, gap, round, bg) {
   });
 }
 
+const COLLAGE_LAYOUT_NAMES = { 2: ['Side by side', 'Stacked'], 3: ['Big left', 'Big top', 'Columns'], 4: ['Grid', 'Big top', 'Big left'], 5: ['Mosaic', 'Big corner'], 6: ['Grid', 'Tall grid'] };
+function CollageLayoutArt({ layout, imgs, tall, gap, round, dark, ink }) {
+  const fw = tall ? 46 : 54;
+  const fh = tall ? 57 : 54;
+  const g = gap ? 2.5 : 0.8;
+  return (
+    <div style={{ position: 'relative', width: fw, height: fh, borderRadius: 7, overflow: 'hidden', background: dark ? '#111113' : '#FFFFFF', boxShadow: '0 1px 4px rgba(0, 0, 0, 0.18)' }}>
+      {layout.map(([x, y, w, h], i) => {
+        const im = imgs[i % Math.max(1, imgs.length)];
+        return (
+          <div key={i} style={{ position: 'absolute', left: `calc(${x * 100}% + ${g}px)`, top: `calc(${y * 100}% + ${g}px)`, width: `calc(${w * 100}% - ${g * 2}px)`, height: `calc(${h * 100}% - ${g * 2}px)`, borderRadius: round ? 4 : 1, overflow: 'hidden', background: ink }}>
+            {im && <img src={im.src} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+function CollageStyleArt({ k, ink }) {
+  const cell = { fill: ink, fillOpacity: 0.55 };
+  if (k === 'gap') return <svg width="38" height="38" viewBox="0 0 32 32" aria-hidden="true"><rect x="4" y="5" width="24" height="22" rx="2.5" fill="none" stroke="currentColor" strokeWidth="1.6" /><rect x="7" y="8" width="8" height="16" rx="1" {...cell} /><rect x="17" y="8" width="8" height="7" rx="1" {...cell} /><rect x="17" y="17" width="8" height="7" rx="1" {...cell} /></svg>;
+  if (k === 'round') return <svg width="38" height="38" viewBox="0 0 32 32" aria-hidden="true"><rect x="4" y="5" width="24" height="22" rx="2.5" fill="none" stroke="currentColor" strokeWidth="1.6" /><rect x="6.5" y="7.5" width="9" height="17" rx="3.4" {...cell} /><rect x="16.5" y="7.5" width="9" height="8" rx="3.4" {...cell} /><rect x="16.5" y="16.5" width="9" height="8" rx="3.4" {...cell} /></svg>;
+  if (k === 'dark') return <svg width="38" height="38" viewBox="0 0 32 32" aria-hidden="true"><rect x="4" y="5" width="24" height="22" rx="2.5" fill="#111113" stroke="currentColor" strokeWidth="1.6" /><rect x="7" y="8" width="8" height="16" rx="1" fill="#FFFFFF" fillOpacity="0.85" /><rect x="17" y="8" width="8" height="7" rx="1" fill="#FFFFFF" fillOpacity="0.85" /><rect x="17" y="17" width="8" height="7" rx="1" fill="#FFFFFF" fillOpacity="0.85" /></svg>;
+  return <svg width="38" height="38" viewBox="0 0 32 32" aria-hidden="true"><rect x="7.5" y="3.5" width="17" height="25" rx="2.5" fill="none" stroke="currentColor" strokeWidth="1.6" /><rect x="10" y="6" width="5.5" height="20" rx="1" {...cell} /><rect x="17" y="6" width="5" height="9" rx="1" {...cell} /><rect x="17" y="17" width="5" height="9" rx="1" {...cell} /></svg>;
+}
 function CollagePage({ files, onClose, onSend }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
@@ -53355,32 +56715,28 @@ function CollagePage({ files, onClose, onSend }) {
     if (blob) await onSend(new File([blob], `collage-${Date.now()}.jpg`, { type: 'image/jpeg' }));
     setBusy(false);
   };
-  const chip = (label, on, onClick) => (
-    <button type="button" aria-label={label} onClick={() => { hapticTap(); onClick(); }} className="zchat-press" style={{ height: 36, padding: '0 14px', borderRadius: 18, border: 'none', background: on ? theme.ink : igPalette(theme).field, color: on ? igPalette(theme).bg : theme.ink, fontWeight: 700, fontSize: 13.5, fontFamily: FONT, cursor: 'pointer', flexShrink: 0 }}>{label}</button>
-  );
+  const names = COLLAGE_LAYOUT_NAMES[n] || [];
+  const styleOn = [gapOn && 'gap', roundOn && 'round', dark && 'dark', tall && 'tall'].filter(Boolean);
+  const shuffle = () => { hapticTap(); setImgs((list) => (list.length > 1 ? [...list.slice(1), list[0]] : list)); };
   return (
     <FullPage title="Collage" subtitle={`${imgs.length || files.length} photos`} onBack={onClose} zIndex={90}
       footer={<BigButton label={busy ? 'Sending' : 'Send collage'} disabled={busy || imgs.length < 2} onClick={send} />}>
-      <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 14px' }}>
+      <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 6px' }}>
         {imgs.length ? <canvas ref={cvRef} aria-label="Collage preview" style={{ width: '100%', maxWidth: 380, height: 'auto', borderRadius: 14, boxShadow: `0 0 0 1px ${theme.border}` }} /> : <div style={{ padding: 60 }}><Spinner color={theme.muted} /></div>}
       </div>
-      <IgHeading>Layout</IgHeading>
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-        {layouts.map((ly, i) => (
-          <div key={i} role="button" aria-label={`Layout ${i + 1}`} onClick={() => { hapticTap(); setLayoutIdx(i); }} className="zchat-press"
-            style={{ width: 58, height: tall ? 72 : 58, borderRadius: 10, position: 'relative', cursor: 'pointer', background: igPalette(theme).field, boxShadow: layoutIdx % layouts.length === i ? `0 0 0 2.5px ${theme.coral}` : 'none' }}>
-            {ly.map(([x, y, w, h], k) => <div key={k} style={{ position: 'absolute', left: `calc(${x * 100}% + 3px)`, top: `calc(${y * 100}% + 3px)`, width: `calc(${w * 100}% - 6px)`, height: `calc(${h * 100}% - 6px)`, borderRadius: 3, background: theme.muted, opacity: 0.55 }} />)}
-          </div>
-        ))}
-      </div>
-      <IgHeading>Style</IgHeading>
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', paddingBottom: 14 }}>
-        {chip('Spacing', gapOn, () => setGapOn((v) => !v))}
-        {chip('Round corners', roundOn, () => setRoundOn((v) => !v))}
-        {chip('Dark back', dark, () => setDark((v) => !v))}
-        {chip('Tall', tall, () => setTall((v) => !v))}
-        {chip('Shuffle', false, () => setImgs((list) => (list.length > 1 ? [...list.slice(1), list[0]] : list)))}
-      </div>
+      <KitSection title="Layout" right={(
+        <div role="button" aria-label="Shuffle" onClick={shuffle} className="zchat-press" style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '2px 0 2px 8px', color: kitOnInk(theme), fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+          <StudioGlyph k="shuffle" size={19} />Shuffle
+        </div>
+      )}>
+        <PickTiles label="Layout" size={66} bleed={16} ringBg={theme.bgGradient} value={layoutIdx % layouts.length} onChange={(i) => setLayoutIdx(i)}
+          options={layouts.map((ly, i) => ({ k: i, label: names[i] || `Layout ${i + 1}`, aria: `Layout ${i + 1}`, art: <CollageLayoutArt layout={ly} imgs={imgs} tall={tall} gap={gapOn} round={roundOn} dark={dark} ink={theme.muted2} /> }))} />
+      </KitSection>
+      <KitSection title="Style" style={{ paddingBottom: 14 }}>
+        <PickTiles label="Collage style" size={62} fit ringBg={theme.bgGradient} value={styleOn}
+          onChange={(k) => { if (k === 'gap') setGapOn((v) => !v); else if (k === 'round') setRoundOn((v) => !v); else if (k === 'dark') setDark((v) => !v); else setTall((v) => !v); }}
+          options={[['gap', 'Spacing', 'Spacing'], ['round', 'Rounded', 'Round corners'], ['dark', 'Dark back', 'Dark back'], ['tall', 'Tall', 'Tall']].map(([k, label, aria]) => ({ k, label, aria, art: <CollageStyleArt k={k} ink={theme.muted} /> }))} />
+      </KitSection>
     </FullPage>
   );
 }
@@ -53454,28 +56810,79 @@ function bioUnb64u(str) {
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
   return out;
 }
-async function bioPlatformReady() {
+function bioRpId() {
   try {
-    if (typeof window === 'undefined' || !window.PublicKeyCredential || !navigator.credentials) return false;
-    if (typeof window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable !== 'function') return false;
-    return await window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
-  } catch { return false; }
+    const h = String(window.location.hostname || '');
+    if (!h || /^[\d.]+$/.test(h) || h.indexOf(':') >= 0 || h.indexOf('[') >= 0) return null;
+    if (window.isSecureContext === false) return null;
+    return h;
+  } catch { return null; }
+}
+let bioReadyMemo = null;
+async function bioPlatformReady() {
+  if (bioReadyMemo) return bioReadyMemo;
+  bioReadyMemo = (async () => {
+    try {
+      if (typeof window === 'undefined' || !window.PublicKeyCredential || !navigator.credentials || !bioRpId()) return false;
+      if (typeof window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable !== 'function') return false;
+      return !!(await window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable());
+    } catch { return false; }
+  })();
+  return bioReadyMemo;
 }
 async function bioRegister() {
+  const rpId = bioRpId();
+  if (!rpId) return null;
   const challenge = crypto.getRandomValues(new Uint8Array(32));
-  const userId = crypto.getRandomValues(new Uint8Array(16));
+  let userId = null;
+  try { userId = new TextEncoder().encode(`zchat:${getDeviceId()}`).slice(0, 64); } catch { userId = crypto.getRandomValues(new Uint8Array(16)); }
   const cred = await navigator.credentials.create({ publicKey: {
-    challenge, rp: { name: 'ZChat' }, user: { id: userId, name: 'ZChat app lock', displayName: 'ZChat app lock' },
+    challenge, rp: { id: rpId, name: 'ZChat' }, user: { id: userId, name: 'ZChat unlock', displayName: 'Unlock ZChat on this device' },
     pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
-    authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'discouraged' },
+    authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'discouraged', requireResidentKey: false },
     timeout: 60000, attestation: 'none',
   } });
   return cred && cred.rawId ? bioB64u(cred.rawId) : null;
 }
 async function bioVerify(id) {
+  const rpId = bioRpId();
+  if (!rpId || !id) return false;
   const challenge = crypto.getRandomValues(new Uint8Array(32));
-  const res = await navigator.credentials.get({ publicKey: { challenge, allowCredentials: [{ type: 'public-key', id: bioUnb64u(id) }], userVerification: 'required', timeout: 60000 } });
-  return !!res;
+  const res = await navigator.credentials.get({ publicKey: { challenge, rpId, allowCredentials: [{ type: 'public-key', id: bioUnb64u(id), transports: ['internal'] }], userVerification: 'required', timeout: 60000 } });
+  if (!res || !res.rawId || bioB64u(res.rawId) !== id) return false;
+  try { const ad = new Uint8Array(res.response.authenticatorData); if (ad.length > 32 && !(ad[32] & 4)) return false; } catch {}
+  return true;
+}
+function bioCredId() { return readAppLock().b || null; }
+let bioFlight = null;
+function bioCheck() {
+  const id = bioCredId();
+  if (!id) return Promise.resolve(false);
+  if (!bioFlight) bioFlight = bioVerify(id).catch(() => false).then((ok) => { bioFlight = null; return !!ok; });
+  return bioFlight;
+}
+function bioPlatform() {
+  try {
+    const ua = navigator.userAgent || '';
+    if (/iPhone|iPod/.test(ua)) return 'iphone';
+    if (/iPad/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) return 'ipad';
+    if (/Android/.test(ua)) return 'android';
+    if (/Windows/.test(ua)) return 'windows';
+    if (/Mac OS X|Macintosh/.test(ua)) return 'mac';
+  } catch {}
+  return 'other';
+}
+function bioName() {
+  return { iphone: 'Face ID or Touch ID', ipad: 'Touch ID or Face ID', android: 'fingerprint or face', windows: 'Windows Hello', mac: 'Touch ID' }[bioPlatform()] || 'Face ID or fingerprint';
+}
+function bioNameTitle() {
+  const n = bioName();
+  return n.charAt(0).toUpperCase() + n.slice(1);
+}
+function useBioReady() {
+  const [ok, setOk] = useState(null);
+  useEffect(() => { let alive = true; bioPlatformReady().then((v) => { if (alive) setOk(!!v); }); return () => { alive = false; }; }, []);
+  return ok;
 }
 
 const WALL_PHOTO_PREFIX = 'photo:';
@@ -55113,14 +58520,12 @@ function g3Body(k, id) {
   return null;
 }
 
-function GameArt({ k: kIn, width = 160, height = 100, radius = 14, style }) {
-  const rawId = React.useId();
-  const id = `g3${rawId.replace(/[^a-zA-Z0-9]/g, '')}`;
+function gameArtTree(kIn, id, width, height, radius, style) {
   const duel = typeof kIn === 'string' && kIn.indexOf('sd:') === 0;
   const k = gameArtKey(kIn);
   const bg = GAME_ART_BG[k] || ['#7B5CFF', '#C13BDC'];
   return (
-    <svg width={width} height={height} viewBox="0 0 160 100" preserveAspectRatio="xMidYMid slice" style={{ display: 'block', borderRadius: radius, flexShrink: 0, ...style }} aria-hidden="true">
+    <svg xmlns="http://www.w3.org/2000/svg" width={width} height={height} viewBox="0 0 160 100" preserveAspectRatio="xMidYMid slice" style={style} aria-hidden="true">
       <defs>
         <linearGradient id={`${id}bg`} x1="0" y1="0" x2="0.6" y2="1"><stop offset="0" stopColor={bg[0]} /><stop offset="1" stopColor={bg[1]} /></linearGradient>
         <radialGradient id={`${id}lt`} cx="0.25" cy="0.05" r="0.9"><stop offset="0" stopColor="#FFFFFF" stopOpacity="0.32" /><stop offset="0.55" stopColor="#FFFFFF" stopOpacity="0" /></radialGradient>
@@ -55138,6 +58543,49 @@ function GameArt({ k: kIn, width = 160, height = 100, radius = 14, style }) {
       )}
     </svg>
   );
+}
+const SVG_ATTR_KEEP = new Set(['viewBox', 'preserveAspectRatio', 'gradientUnits', 'gradientTransform', 'patternUnits', 'patternContentUnits', 'patternTransform', 'spreadMethod', 'stdDeviation', 'markerWidth', 'markerHeight', 'refX', 'refY', 'textLength', 'lengthAdjust', 'clipPathUnits', 'maskUnits', 'maskContentUnits', 'filterUnits', 'primitiveUnits', 'baseFrequency', 'numOctaves', 'pathLength', 'startOffset']);
+function svgEsc(v) {
+  return String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+function svgMarkup(node) {
+  if (node == null || node === false || node === true) return '';
+  if (Array.isArray(node)) return node.map(svgMarkup).join('');
+  if (typeof node === 'string' || typeof node === 'number') return svgEsc(node);
+  if (typeof node !== 'object' || !node.props) return '';
+  if (typeof node.type === 'function') return svgMarkup(node.type(node.props));
+  if (node.type === React.Fragment) return svgMarkup(node.props.children);
+  if (typeof node.type !== 'string') return '';
+  let attrs = '';
+  Object.keys(node.props).forEach((name) => {
+    const v = node.props[name];
+    if (name === 'children' || v == null || v === false || typeof v === 'function' || typeof v === 'object') return;
+    const attr = SVG_ATTR_KEEP.has(name) ? name : name === 'xlinkHref' ? 'xlink:href' : name.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`);
+    attrs += ` ${attr}="${svgEsc(v)}"`;
+  });
+  return `<${node.type}${attrs}>${svgMarkup(node.props.children)}</${node.type}>`;
+}
+const gameArtSrcs = new Map();
+function gameArtSrc(kIn) {
+  const key = String(kIn == null ? '' : kIn);
+  if (gameArtSrcs.has(key)) return gameArtSrcs.get(key);
+  let src = null;
+  try {
+    const markup = svgMarkup(gameArtTree(kIn, 'g', 160, 100));
+    if (markup.length > 200) src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(markup)}`;
+  } catch { src = null; }
+  gameArtSrcs.set(key, src);
+  return src;
+}
+function GameArtSvg({ k: kIn, width, height, radius, style }) {
+  const rawId = React.useId();
+  const id = `g3${rawId.replace(/[^a-zA-Z0-9]/g, '')}`;
+  return gameArtTree(kIn, id, width, height, radius, { display: 'block', borderRadius: radius, flexShrink: 0, ...style });
+}
+function GameArt({ k: kIn, width = 160, height = 100, radius = 14, style }) {
+  const src = gameArtSrc(kIn);
+  if (!src) return <GameArtSvg k={kIn} width={width} height={height} radius={radius} style={style} />;
+  return <img src={src} alt="" aria-hidden="true" draggable={false} decoding="async" style={{ display: 'block', width, height, borderRadius: radius, flexShrink: 0, objectFit: 'cover', ...style }} />;
 }
 
 const LIVE_GAME_KEYS = ['tug', 'qrace', 'rrace'];
@@ -55365,7 +58813,7 @@ function LeaderboardPage({ initialGame, onClose, onOpenProfile, onOpenPrivacy, o
   useEffect(() => {
     const strip = stripRef.current;
     if (!strip) return;
-    const el = strip.querySelector('[data-selected="1"]');
+    const el = strip.querySelector('[aria-checked="true"]');
     if (el) { try { el.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' }); } catch {} }
   }, [game]);
   const open = (r) => { if (onOpenProfile && r && r.user_id) onOpenProfile(r.user_id); };
@@ -55385,19 +58833,9 @@ function LeaderboardPage({ initialGame, onClose, onOpenProfile, onOpenPrivacy, o
           <div style={{ fontSize: 15, fontWeight: 900, color: theme.coral }}>{boardValueText(game, me.value)}</div>
         </div>
       ) : null}>
-      <div ref={stripRef} style={{ display: 'flex', gap: 8, overflowX: 'auto', padding: '8px 16px 4px', scrollbarWidth: 'none' }}>
-        {keys.map((x) => {
-          const on = x.k === game;
-          return (
-            <div key={x.k} data-selected={on ? '1' : '0'} role="button" aria-label={`Leaderboard ${x.title}`} aria-pressed={on} onClick={() => { hapticTap(); setGame(x.k); }} className="zchat-press"
-              style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, padding: '5px 12px 5px 5px', borderRadius: 999, cursor: 'pointer', border: `1.5px solid ${on ? theme.coral : theme.border}`, background: on ? `${theme.coral}18` : 'transparent' }}>
-              {x.k === 'all'
-                ? <span style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><TrophyIcon size={20} color="#F59E0B" /></span>
-                : <GameArt k={x.k} width={28} height={28} radius={9} />}
-              <span style={{ fontSize: 13, fontWeight: 800, color: on ? theme.ink : theme.muted, whiteSpace: 'nowrap' }}>{x.title}</span>
-            </div>
-          );
-        })}
+      <div ref={stripRef} style={{ padding: '4px 16px 0' }}>
+        <PickTiles label="Game" size={62} bleed={16} value={game} onChange={setGame}
+          options={keys.map((x) => ({ k: x.k, label: x.title, aria: `Leaderboard ${x.title}`, art: x.k === 'all' ? <TrophyIcon size={30} color="#F59E0B" /> : <GameArt k={x.k} width={62} height={62} radius={0} /> }))} />
       </div>
       <div style={{ display: 'flex', gap: 8, padding: '8px 16px 2px' }}>
         <LbSegment label="Who to show" value={scope} onChange={setScope} options={[['friends', 'Friends'], ['everyone', 'Everyone']]} />
@@ -56132,17 +59570,20 @@ function GamesPage({ onClose, onChallenge, onShareScore, initialGame, friends, o
   };
   const dayIdx = Math.floor(Date.now() / 86400000);
   const featured = SOLO_GAMES[dayIdx % SOLO_GAMES.length];
-  const cover = (k, title, sub, foot, footHot, onClick, live) => (
+  const cover = (k, title, sub, foot, footHot, onClick, live, glyph) => (
     <div key={k} role="button" aria-label={title} onClick={() => { playUiSound('tap'); onClick(); }} className="zchat-g3card" style={{ borderRadius: 20, padding: 6, paddingBottom: 12, background: theme.dark ? '#1D1A2E' : '#FFFFFF', boxShadow: theme.dark ? '0 4px 0 #0E0C18, inset 0 1px 0 rgba(255,255,255,0.07)' : '0 4px 0 #E3DDF5, 0 0 0 1px rgba(60,40,140,0.07)', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 9, marginBottom: 4 }}>
       <div style={{ width: '100%', aspectRatio: '16 / 10', borderRadius: 15, overflow: 'hidden', position: 'relative' }}>
         <GameArt k={k} width="100%" height="100%" radius={15} />
-        {live && <span style={{ position: 'absolute', top: 7, left: 7, display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px 3px 6px', borderRadius: 999, background: '#EF4444', boxShadow: '0 2px 0 #991B1B', color: 'white', fontSize: 10.5, fontWeight: 900 }}><span className="zchat-live-dot" style={{ width: 6, height: 6, borderRadius: '50%', background: 'white' }} />Live</span>}
+        {live && <span style={{ position: 'absolute', top: 9, left: 10, display: 'inline-flex', alignItems: 'center', gap: 6, color: '#FFFFFF', fontSize: 12, fontWeight: 800, textShadow: '0 1px 3px rgba(0,0,0,0.6)' }}><span className={reducedMotion() ? undefined : 'zchat-live-dot'} style={{ width: 8, height: 8, borderRadius: '50%', background: '#EF4444', boxShadow: '0 0 0 2px rgba(255,255,255,0.92)' }} />Live</span>}
         <div style={{ position: 'absolute', top: 6, right: 6 }}><GameInfoButton k={k} onDark /></div>
       </div>
       <div style={{ minWidth: 0, padding: '0 6px' }}>
         <div style={{ fontSize: 15, fontWeight: 850, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', letterSpacing: '-0.01em' }}>{title}</div>
         <div style={{ fontSize: 12, color: theme.muted, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub}</div>
-        <div style={{ display: 'inline-flex', alignItems: 'center', maxWidth: '100%', boxSizing: 'border-box', marginTop: 7, padding: '4px 10px', borderRadius: 999, fontSize: 11.5, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', background: footHot ? (theme.dark ? 'rgba(124,92,252,0.22)' : '#EEE8FF') : (theme.dark ? 'rgba(255,255,255,0.06)' : '#F2F1F6'), color: footHot ? (theme.dark ? '#C4B5FD' : '#5B3FE0') : theme.muted }}>{foot}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0, marginTop: 7, fontSize: 12, fontWeight: footHot ? 700 : 600, color: footHot ? kitOnInk(theme) : theme.muted }}>
+          {glyph && <LineGlyph k={glyph} size={15} sw={2.6} />}
+          <span style={{ minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{foot}</span>
+        </div>
       </div>
     </div>
   );
@@ -56164,16 +59605,12 @@ function GamesPage({ onClose, onChallenge, onShareScore, initialGame, friends, o
         </div>
         {onPlayWith && <FriendsPlayRow friends={friends} onPick={onPlayWith} />}
         {onStartLive && <LiveGamesRow onStart={onStartLive} />}
-        <div role="tablist" style={{ display: 'flex', gap: 6, padding: 5, borderRadius: 16, background: theme.dark ? '#141221' : '#ECE9F6', boxShadow: theme.dark ? 'inset 0 2px 4px rgba(0,0,0,0.45)' : 'inset 0 2px 3px rgba(40,20,120,0.1)', margin: '14px 0 6px' }}>
-          {[['friends', 'With friends'], ['solo', 'Solo'], ['ranks', 'Ranks']].map(([kk, l]) => (
-            <div key={kk} role="tab" aria-selected={tab === kk} aria-label={l} onClick={() => { if (tab !== kk) { hapticTap(); setTab(kk); } }} style={{ flex: 1, textAlign: 'center', padding: '9px 0', borderRadius: 12, fontSize: 14, fontWeight: 850, cursor: 'pointer', background: tab === kk ? (theme.dark ? 'linear-gradient(180deg, #8B6CFF, #6D4DF5)' : 'linear-gradient(180deg, #8B6CFF, #6D4DF5)') : 'transparent', color: tab === kk ? '#FFFFFF' : theme.muted, boxShadow: tab === kk ? '0 3px 0 #4C2FC4, inset 0 1px 0 rgba(255,255,255,0.35)' : 'none', transform: tab === kk ? 'translateY(-1px)' : 'none', transition: 'background 0.18s ease, color 0.18s ease' }}>{l}</div>
-          ))}
-        </div>
+        <KitTabs label="Games" value={tab} onChange={setTab} options={[['friends', 'With friends'], ['solo', 'Solo'], ['ranks', 'Ranks']]} style={{ margin: '16px -16px 2px', padding: '0 4px' }} />
         {tab === 'friends' && FRIEND_GAME_GROUPS.filter(([group]) => !(onStartLive && group === 'Play live now')).map(([group, keys]) => (
           <div key={group}>
             <IgHeading>{group}</IgHeading>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10, paddingBottom: 6 }}>
-              {keys.map((k) => cover(k, gameKeyTitle(k), FRIEND_GAME_SUBS[k] || '', friendFoot(k), true, () => (LIVE_GAME_KEYS.includes(k) && onStartLive ? onStartLive(k) : onChallenge(k)), LIVE_GAME_KEYS.includes(k)))}
+              {keys.map((k) => cover(k, gameKeyTitle(k), FRIEND_GAME_SUBS[k] || '', friendFoot(k), true, () => (LIVE_GAME_KEYS.includes(k) && onStartLive ? onStartLive(k) : onChallenge(k)), LIVE_GAME_KEYS.includes(k), 'friends'))}
             </div>
           </div>
         ))}
@@ -56181,7 +59618,7 @@ function GamesPage({ onClose, onChallenge, onShareScore, initialGame, friends, o
           <>
             <IgHeading>Arcade</IgHeading>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10, paddingBottom: 8 }}>
-              {SOLO_GAMES.map((it) => cover(it.k, GAME_TITLES[it.k], it.sub, soloFoot(it.k), !!bestOf(it.k), () => openSolo(it.k)))}
+              {SOLO_GAMES.map((it) => cover(it.k, GAME_TITLES[it.k], it.sub, soloFoot(it.k), !!bestOf(it.k), () => openSolo(it.k), false, bestOf(it.k) ? 'trophy' : null))}
             </div>
             <div style={{ padding: '4px 2px 10px', fontSize: 12.5, color: theme.muted, lineHeight: 1.5 }}>Your best scores go on the leaderboards. Open a game and tap share to send one to a friend.</div>
           </>
@@ -56244,7 +59681,7 @@ function AttachSheet({ onAiImage, onDrawTogether, onSounds, onClose, onCamera, o
       onVoiceType ? { k: 'voicetype', label: 'Voice typing', short: 'Voice type', icon: <Mic />, on: onVoiceType } : null,
     ].filter(Boolean),
     create: [
-      onAiImage ? { k: 'ai', label: 'Create with AI', short: 'AI image', icon: <AiSparkIcon />, on: onAiImage } : null,
+      onAiImage ? { k: 'ai', label: 'Create with AI', short: 'AI image', icon: <MakeImageGlyph />, on: onAiImage } : null,
       onPoll ? { k: 'poll', label: 'Poll', icon: <PollIcon />, on: onPoll } : null,
       onEvent ? { k: 'event', label: 'Event', icon: <CalendarIcon />, on: onEvent } : null,
       onChecklist ? { k: 'list', label: 'Checklist', icon: <ChecklistIcon />, on: onChecklist } : null,
@@ -57264,6 +60701,123 @@ const ADMIN_GRANT_DAYS = [[0, 'Forever'], [7, '7 days'], [30, '30 days'], [90, '
 
 const ADMIN_ACTIVITY_KINDS = [['posts', 'Posts'], ['stories', 'Stories'], ['follows', 'Follows'], ['group_members', 'Groups'], ['highlights', 'Highlights'], ['user_devices', 'Devices'], ['calls', 'Calls'], ['blocks', 'Blocks'], ['message_reports', 'Reports'], ['saved_messages', 'Saved']];
 
+const ADMIN_COIN_QUICK = [100, 500, 1000, 5000];
+const ADMIN_COIN_MAX = 100000;
+const ADMIN_COIN_ASK = 10000;
+const adminWalletMem = new Map();
+function adminCoinLabel(r) {
+  if (r.note) return r.note;
+  return ({ daily: 'Daily reward', invite: 'A friend joined with their link', invited: 'Joined with an invite', gift_in: 'Gift received', gift_out: 'Gift sent', shop: 'Spent in the shop', gift_item: 'Gift sent', admin: 'From the ZChat team', achievement: 'Achievement reward', purchase: 'Coins bought', refund: 'Purchase refunded', drop: 'Drop', deal: 'Deal of the day', milestone: 'Collection reward' }[r.reason] || 'Coins');
+}
+function adminCoinNote(t) {
+  return String(t || '').replace(/[\u0000-\u001F\u007F-\u009F]+/g, ' ').replace(/[\u200B-\u200F\u202A-\u202E\u2060-\u2069\uFEFF]+/g, '').slice(0, 80).trim();
+}
+function AdminCoins({ person, onAsk }) {
+  const { theme } = useTheme();
+  const first = String(person.name || '').split(' ')[0] || 'them';
+  const [w, setW] = useState(() => adminWalletMem.get(person.id) || null);
+  const [err, setErr] = useState('');
+  const [done, setDone] = useState('');
+  const [amount, setAmount] = useState(500);
+  const [text, setText] = useState('500');
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const sayRef = useRef(null);
+  const num = (n) => Number(n || 0).toLocaleString('en-US');
+  const keep = (next) => { adminWalletMem.set(person.id, next); setW(next); };
+  useEffect(() => {
+    if (!(err || done) || !sayRef.current) return;
+    try { sayRef.current.scrollIntoView({ block: 'nearest', behavior: reducedMotion() ? 'auto' : 'smooth' }); } catch {}
+  }, [err, done]);
+  const load = async () => {
+    const { data, error } = await supabase.rpc('zchat_admin_wallet', { p_user: person.id });
+    const row = Array.isArray(data) ? data[0] : data;
+    if (error || !row || row.ok === false) {
+      setErr(error ? (rpcMissing(error) ? 'Coins for admins switch on once the latest ZChat setup is finished.' : friendlyError(error, 'Could not load their coins.')) : (row && row.reason) || 'Coins for admins switch on once the latest ZChat setup is finished.');
+      return;
+    }
+    keep({ coins: Math.max(0, Number(row.coins) || 0), history: Array.isArray(row.history) ? row.history : [] });
+  };
+  useEffect(() => { load(); }, [person.id]);
+  const valid = Number.isInteger(amount) && amount >= 1 && amount <= ADMIN_COIN_MAX;
+  const pick = (n) => { hapticTap(); setAmount(n); setText(String(n)); setDone(''); setErr(''); };
+  const type = (v) => { const digits = String(v).replace(/[^0-9]/g, '').slice(0, 6); setText(digits); setAmount(digits ? Number(digits) : 0); setDone(''); setErr(''); };
+  const give = async (n, msg) => {
+    if (busy) return;
+    setBusy(true);
+    setErr('');
+    setDone('');
+    const local = { id: `local-${Date.now()}`, delta: n, reason: 'admin', note: msg || null, created_at: new Date().toISOString() };
+    const before = adminWalletMem.get(person.id) || { coins: 0, history: [] };
+    keep({ coins: before.coins + n, history: [local, ...before.history].slice(0, 10) });
+    hapticTap();
+    playUiSound('like');
+    let res = null;
+    try { res = await supabase.rpc('zchat_admin_coins', { p_user: person.id, p_amount: n, p_note: msg || null }); } catch (e) { res = { error: e }; }
+    const row = res && !res.error ? (Array.isArray(res.data) ? res.data[0] : res.data) : null;
+    const cur = adminWalletMem.get(person.id) || { coins: 0, history: [] };
+    setBusy(false);
+    if (!row || !row.ok) {
+      keep({ coins: Math.max(0, cur.coins - n), history: cur.history.filter((x) => x.id !== local.id) });
+      setErr(res && res.error ? (rpcMissing(res.error) ? 'Giving coins switches on once the latest ZChat setup is finished.' : friendlyError(res.error, 'That did not work. Try again.')) : (row && row.reason) || 'That did not work. Try again.');
+      return;
+    }
+    keep({ coins: Math.max(0, Number(row.coins) || 0), history: cur.history });
+    if (walletMem.uid === person.id && walletMem.data && walletMem.data.ready) { walletKeep(person.id, { ...walletMem.data, coins: Math.max(0, Number(row.coins) || 0) }); walletMem.mark = Date.now(); walletShow(); }
+    setNote('');
+    setDone(`${num(n)} coins given. ${first} gets a notification.`);
+    adminLog(`Gave ${num(n)} coins`, person.id, person.name);
+    load();
+  };
+  const tapGive = () => {
+    if (!valid || busy) return;
+    const n = amount;
+    const msg = adminCoinNote(note);
+    if (n > ADMIN_COIN_ASK) {
+      onAsk({ title: `Give ${num(n)} coins to ${first}?`, body: 'That is a big gift. The coins land in their wallet right away.', label: `Give ${num(n)} coins`, run: () => give(n, msg) });
+      return;
+    }
+    give(n, msg);
+  };
+  const hist = (w && w.history) || [];
+  return (
+    <div style={{ paddingTop: 4 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0 6px' }}>
+        <CoinIcon size={40} />
+        <div style={{ minWidth: 0 }}>
+          <div aria-label="Their coins" style={{ fontSize: 30, fontWeight: 800, color: theme.ink, letterSpacing: '-0.02em', lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' }}>{w ? num(w.coins) : err ? <span style={{ fontSize: 17, fontWeight: 700, color: theme.muted, letterSpacing: 0 }}>Not available yet</span> : <Spinner size={18} color={theme.muted} />}</div>
+          <div style={{ fontSize: 13, color: theme.muted, marginTop: 2 }}>{`${first}'s coins right now`}</div>
+        </div>
+      </div>
+      <KitSection title="How many" style={{ marginTop: 14 }}>
+        <SegmentedControl value={ADMIN_COIN_QUICK.includes(amount) ? amount : null} onChange={pick} options={ADMIN_COIN_QUICK.map((n) => [n, num(n)])} />
+        <input value={text} onChange={(e) => type(e.target.value)} inputMode="numeric" pattern="[0-9]*" aria-label="Number of coins" placeholder="Or type any amount" style={{ ...inputStyle(theme), marginTop: 10, fontVariantNumeric: 'tabular-nums' }} />
+        <div style={{ fontSize: 12.5, color: text && !valid ? theme.danger : theme.muted, padding: '6px 2px 0' }}>{text && !valid ? `Pick an amount from 1 to ${num(ADMIN_COIN_MAX)}` : `Any amount from 1 to ${num(ADMIN_COIN_MAX)}. Amounts over ${num(ADMIN_COIN_ASK)} ask you to confirm.`}</div>
+      </KitSection>
+      <KitSection title="Note" right={`${note.length}/80`} style={{ marginTop: 18 }}>
+        <input value={note} onChange={(e) => { setNote(e.target.value.slice(0, 80)); setDone(''); }} maxLength={80} aria-label="Note for them" placeholder="Optional, they see it in their coin history" style={inputStyle(theme)} />
+      </KitSection>
+      <button type="button" disabled={!valid || busy} onClick={tapGive} aria-label={valid ? `Give ${num(amount)} coins` : 'Give coins'} className="zchat-press" style={{ ...primaryBtn(theme, !valid || busy), marginTop: 16 }}>{valid ? `Give ${num(amount)} coins` : 'Give coins'}</button>
+      <div ref={sayRef}>
+        {err && <div role="alert" style={{ fontSize: 13.5, fontWeight: 600, color: theme.danger, padding: '10px 2px 0', lineHeight: 1.45 }}>{err}</div>}
+        {done && !err && <div role="status" className="zchat-fade" style={{ fontSize: 13.5, fontWeight: 600, color: theme.ink, padding: '10px 2px 0', lineHeight: 1.45 }}>{done}</div>}
+      </div>
+      <div style={{ fontSize: 12.5, color: theme.muted, padding: '10px 2px 0', lineHeight: 1.5 }}>{`The coins go straight to ${first}'s wallet. Their coin history shows your note, or "From the ZChat team" when there is no note.`}</div>
+      <KitSection title="Recent coins" style={{ marginTop: 24 }}>
+        {!w ? null : hist.length === 0 ? <div style={{ fontSize: 13.5, color: theme.muted, padding: '2px 0 6px' }}>No coin history yet.</div> : hist.map((r, i) => (
+          <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', boxShadow: adminHair(theme, i < hist.length - 1) }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 14.5, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{adminCoinLabel(r)}</div>
+              <div style={{ fontSize: 12, color: theme.muted, marginTop: 1 }}>{adminDate(r.created_at)}</div>
+            </div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: Number(r.delta) > 0 ? '#16A34A' : theme.ink, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>{Number(r.delta) > 0 ? `+${num(r.delta)}` : `\u2212${num(Math.abs(Number(r.delta)))}`}</div>
+          </div>
+        ))}
+      </KitSection>
+    </div>
+  );
+}
+
 function AdminUserPanel({ person, myId, onClose, onChanged, onOpenProfile }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
@@ -57327,9 +60881,16 @@ function AdminUserPanel({ person, myId, onClose, onChanged, onOpenProfile }) {
   const rewards = ((data && data.rewards) || []).filter(rewardActive);
   const restrictions = ((data && data.restrictions) || []).filter((r) => !r.lifted && new Date(r.until).getTime() > Date.now());
   const ownedKey = (kind, key) => rewards.find((r) => r.kind === kind && r.reward_key === key);
-  const equippedKey = giftKind === 'frame' ? profile.avatar_frame : giftKind === 'nameplate' ? profile.nameplate : profile.custom_badge;
-  const catalog = giftKind === 'frame' ? DECOR_FRAME_CATALOG : giftKind === 'nameplate' ? DECOR_PLATE_CATALOG : CUSTOM_BADGES;
-  const fieldOf = (kind) => (kind === 'frame' ? 'avatar_frame' : kind === 'nameplate' ? 'nameplate' : 'custom_badge');
+  const equippedKey = giftKind === 'frame' ? profile.avatar_frame : giftKind === 'nameplate' ? profile.nameplate : giftKind === 'effect' ? null : profile.custom_badge;
+  const catalog = giftKind === 'frame' ? DECOR_FRAME_CATALOG : giftKind === 'nameplate' ? DECOR_PLATE_CATALOG : giftKind === 'effect' ? DECOR_EFFECT_CATALOG : CUSTOM_BADGES;
+  const fieldOf = (kind) => (kind === 'frame' ? 'avatar_frame' : kind === 'nameplate' ? 'nameplate' : kind === 'effect' ? null : 'custom_badge');
+  const rpcOk = (res) => (res && !res.error && res.data && res.data.ok === false ? { ...res, error: { message: res.data.reason || 'That did not work.' } } : res);
+  const adminGrant = (kind, key, equip) => (kind === 'effect'
+    ? supabase.rpc('zchat_admin_grant', { p_user: person.id, p_kind: kind, p_key: key, p_days: giftDays || null }).then(rpcOk)
+    : supabase.rpc('admin_grant_reward', { p_user_id: person.id, p_kind: kind, p_key: key, p_days: giftDays, p_equip: equip }));
+  const adminRevoke = (kind, key) => (kind === 'effect'
+    ? supabase.rpc('zchat_admin_revoke', { p_user: person.id, p_kind: kind, p_key: key }).then(rpcOk)
+    : supabase.rpc('admin_revoke_reward', { p_user_id: person.id, p_kind: kind, p_key: key }));
   const isSelf = person.id === myId;
 
   const code = { background: theme.rowBg, border: `1px solid ${theme.border}`, borderRadius: 14, padding: 12 };
@@ -57364,13 +60925,13 @@ function AdminUserPanel({ person, myId, onClose, onChanged, onOpenProfile }) {
     const lastOf = {};
     keys.forEach(([kind, key]) => { lastOf[kind] = key; });
     for (const [kind, key] of keys) {
-      const res = await supabase.rpc('admin_grant_reward', { p_user_id: person.id, p_kind: kind, p_key: key, p_days: giftDays, p_equip: equipNow && lastOf[kind] === key });
+      const res = await adminGrant(kind, key, equipNow && lastOf[kind] === key);
       if (res && res.error) fail = res.error; else ok += 1;
     }
     setBusy(false);
     setNote(fail ? `${ok} given. ${friendlyError(fail, 'Some did not go through.')}` : `${ok} ${ok === 1 ? 'item' : 'items'} given.`);
     if (ok) adminLog(`Gave ${ok} items`, person.id, profile.name);
-    if (equipNow && ok) { const patch = {}; Object.entries(lastOf).forEach(([kind, key]) => { patch[fieldOf(kind)] = key; }); onChanged(patch); }
+    if (equipNow && ok) { const patch = {}; Object.entries(lastOf).forEach(([kind, key]) => { if (fieldOf(kind)) patch[fieldOf(kind)] = key; }); if (Object.keys(patch).length) onChanged(patch); }
     setPicked(new Set());
     setMulti(false);
     load();
@@ -57448,8 +61009,9 @@ function AdminUserPanel({ person, myId, onClose, onChanged, onOpenProfile }) {
 
         {data && section === 'gifts' && (
           <>
-            <SegmentedControl value={giftKind} onChange={setGiftKind} options={[['frame', 'Frames'], ['nameplate', 'Nameplates'], ['charm', 'Charms'], ['badge', 'Badges']]} style={{ margin: '2px 0 8px' }} />
-            {giftKind !== 'badge' && (
+            <SegmentedControl value={giftKind} onChange={setGiftKind} options={[['frame', 'Frames'], ['nameplate', 'Plates'], ['effect', 'Effects'], ['charm', 'Charms'], ['badge', 'Badges'], ['coins', 'Coins']]} dense style={{ margin: '2px 0 8px' }} />
+            {giftKind === 'coins' && <AdminCoins person={profile} onAsk={setConfirmDo} />}
+            {giftKind !== 'badge' && giftKind !== 'coins' && (
               <>
                 {switchRow('Give several', multi ? `${picked.size} picked` : 'Pick a few, then give them all at once', multi, () => { setMulti((v) => !v); setPicked(new Set()); })}
                 {multi && (
@@ -57461,11 +61023,11 @@ function AdminUserPanel({ person, myId, onClose, onChanged, onOpenProfile }) {
                 <KitSection title="How long" style={{ marginTop: 12 }}>
                   <SegmentedControl value={giftDays} onChange={setGiftDays} options={ADMIN_GRANT_DAYS} />
                 </KitSection>
-                <div style={{ marginTop: 6 }}>{switchRow('Wear it right away', null, equipNow, () => setEquipNow((v) => !v))}</div>
+                {giftKind !== 'effect' && <div style={{ marginTop: 6 }}>{switchRow('Wear it right away', null, equipNow, () => setEquipNow((v) => !v))}</div>}
                 <div style={{ height: 1, background: theme.hair, margin: '6px 0 0' }} />
               </>
             )}
-            {giftKind === 'badge' ? (
+            {giftKind === 'coins' ? null : giftKind === 'badge' ? (
               [['', 'No badge', theme.muted], ...Object.entries(VERIFIED_TIERS).map(([k, t]) => [k, t.label, t.color])].map(([k, label], i, arr) => (
                 <div key={k || 'none'} style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 56, padding: '6px 0', boxShadow: adminHair(theme, i < arr.length - 1) }}>
                   <span style={{ flex: 1, fontWeight: 700, fontSize: 15, color: theme.ink, display: 'flex', alignItems: 'center', minWidth: 0 }}><NameBadge name={profile.name} verified={k || null} size={20} /><span style={{ fontSize: 12.5, color: theme.muted, fontWeight: 600, marginLeft: 8, flexShrink: 0 }}>{label}</span></span>
@@ -57479,7 +61041,7 @@ function AdminUserPanel({ person, myId, onClose, onChanged, onOpenProfile }) {
               const worn = equippedKey === key;
               const sel = picked.has(`${giftKind}:${key}`);
               const status = worn ? 'Worn now' : own ? (own.expires_at ? `Owned until ${adminDate(own.expires_at)}` : 'Owned forever') : 'Not owned';
-              const preview = giftKind === 'frame'
+              const preview = giftKind === 'frame' || giftKind === 'effect'
                 ? <div style={{ position: 'relative', zIndex: 0, isolation: 'isolate', flexShrink: 0 }}><DecorFrameBadge setKey={key} size={76} photo={profile.avatar} name={profile.name} lazy /></div>
                 : giftKind === 'charm'
                   ? <div style={{ flex: 1, minWidth: 0, fontWeight: 700, fontSize: 15, color: theme.ink, display: 'flex', alignItems: 'center' }}><NameBadge name={profile.name} verified={profile.verified} custom={key} size={30} /></div>
@@ -57502,8 +61064,8 @@ function AdminUserPanel({ person, myId, onClose, onChanged, onOpenProfile }) {
                     )}
                     {multi ? pickMark(sel) : (
                       <div style={{ display: 'flex', gap: 16, flexShrink: 0 }}>
-                        {own && <AdminTextBtn label="Remove" tone="danger" disabled={busy} onClick={() => act(() => supabase.rpc('admin_revoke_reward', { p_user_id: person.id, p_kind: giftKind, p_key: key }), 'Removed.', () => { if (worn) onChanged({ [fieldOf(giftKind)]: null }); })} />}
-                        <AdminTextBtn label={own ? 'Renew' : 'Give'} tone="main" disabled={busy} onClick={() => act(() => supabase.rpc('admin_grant_reward', { p_user_id: person.id, p_kind: giftKind, p_key: key, p_days: giftDays, p_equip: equipNow }), 'Given.', () => { if (equipNow) onChanged({ [fieldOf(giftKind)]: key }); })} />
+                        {own && <AdminTextBtn label="Remove" tone="danger" disabled={busy} onClick={() => act(() => adminRevoke(giftKind, key), 'Removed.', () => { if (worn && fieldOf(giftKind)) onChanged({ [fieldOf(giftKind)]: null }); })} />}
+                        <AdminTextBtn label={own ? 'Renew' : 'Give'} tone="main" disabled={busy} onClick={() => act(() => adminGrant(giftKind, key, equipNow), 'Given.', () => { if (equipNow && fieldOf(giftKind)) onChanged({ [fieldOf(giftKind)]: key }); })} />
                       </div>
                     )}
                   </div>
@@ -57511,7 +61073,7 @@ function AdminUserPanel({ person, myId, onClose, onChanged, onOpenProfile }) {
                 </div>
               );
             })}
-            {multi && picked.size > 0 && (
+            {multi && picked.size > 0 && giftKind !== 'coins' && (
               <div style={{ position: 'sticky', bottom: 0, padding: '10px 0 6px', background: c.bg, zIndex: 4 }}>
                 <BigButton label={busy ? 'Giving' : `Give ${picked.size} ${picked.size === 1 ? 'item' : 'items'}`} disabled={busy} onClick={giveMany} />
               </div>
@@ -58044,7 +61606,7 @@ function deviceLabelNow() {
   return standalone ? `ZChat app on ${os}` : `${browser} on ${os}`;
 }
 
-function TwoFactorSection() {
+function TwoFactorSection({ onChange }) {
   const { theme } = useTheme();
   const [phase, setPhase] = useState('loading');
   const [factor, setFactor] = useState(null);
@@ -58063,6 +61625,7 @@ function TwoFactorSection() {
       const verified = ((data && data.totp) || []).find((f) => f.status === 'verified') || null;
       setFactor(verified);
       setPhase(verified ? 'on' : 'off');
+      if (onChange) onChange(!!verified);
     } catch (e) {
       setErr(friendlyError(e, "Couldn't check two factor. Try again."));
       setPhase('off');
@@ -58225,38 +61788,61 @@ function MfaChallengeScreen({ onPassed, onCancel }) {
   );
 }
 
+const savedMessagesMem = new Map();
 function SavedMessagesPanel({ myId, me, onClose, onChanged, onOpenChat }) {
   useBackClose(true, onClose);
   const edgeBack = useEdgeSwipeBack(true);
   const { theme } = useTheme();
   const [savedTab, setSavedTab] = useState('messages');
-  const [rows, setRows] = useState(null);
+  const [rows, setRows] = useState(() => savedMessagesMem.get(myId) || null);
   const [q, setQ] = useState('');
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState('');
   const [lightbox, setLightbox] = useState(null);
+  const savedGoneRef = useRef(new Set());
+  const rowsNowRef = useRef(rows);
+  rowsNowRef.current = rows;
+  const savedAddedRef = useRef(new Set());
+  useEffect(() => { if (rows) savedMessagesMem.set(myId, rows.filter((r) => !String(r.id).startsWith('temp-'))); }, [rows]);
   const load = async () => {
     const { data, error } = await supabase.from('saved_messages').select('*').eq('user_id', myId).order('created_at', { ascending: false }).limit(300);
-    if (error) { setProblem(friendlyError(error, "Couldn't load saved messages.")); setRows([]); return; }
+    if (error) { setProblem(friendlyError(error, "Couldn't load saved messages.")); setRows((prev) => prev || []); return; }
     setProblem('');
-    setRows(data || []);
+    const fresh = (data || []).filter((r) => !savedGoneRef.current.has(r.id));
+    const temps = (rowsNowRef.current || []).filter((r) => String(r.id).startsWith('temp-'));
+    const mine = (rowsNowRef.current || []).filter((r) => savedAddedRef.current.has(r.id) && !fresh.some((f) => f.id === r.id) && !savedGoneRef.current.has(r.id));
+    setRows([...temps, ...mine, ...fresh]);
   };
   useEffect(() => { load(); }, []);
   const addNote = async () => {
     const text = note.trim();
-    if (!text || busy) return;
-    setBusy(true);
-    const { data, error } = await supabase.from('saved_messages').insert({ user_id: myId, kind: 'note', content: text.slice(0, 2000), from_name: 'You', chat_label: 'Note to self' }).select().single();
-    setBusy(false);
-    if (error || !data) { setProblem(friendlyError(error, "Couldn't save that note. Try again.")); return; }
+    if (!text) return;
+    const temp = { id: `temp-${Date.now()}`, user_id: myId, kind: 'note', content: text.slice(0, 2000), from_name: 'You', chat_label: 'Note to self', created_at: new Date().toISOString() };
     setProblem('');
     setNote('');
-    setRows((prev) => [data, ...(prev || [])]);
+    rowsNowRef.current = [temp, ...(rowsNowRef.current || [])];
+    setRows((prev) => [temp, ...(prev || [])]);
+    hapticTap();
+    const { data, error } = await supabase.from('saved_messages').insert({ user_id: myId, kind: 'note', content: text.slice(0, 2000), from_name: 'You', chat_label: 'Note to self' }).select().single();
+    if (error || !data) {
+      rowsNowRef.current = (rowsNowRef.current || []).filter((r) => r.id !== temp.id);
+      setRows((prev) => (prev || []).filter((r) => r.id !== temp.id));
+      setNote((cur) => cur || text);
+      setProblem(friendlyError(error, "Couldn't save that note. Try again."));
+      return;
+    }
+    savedAddedRef.current.add(data.id);
+    rowsNowRef.current = (rowsNowRef.current || []).map((r) => (r.id === temp.id ? data : r));
+    setRows((prev) => (prev || []).map((r) => (r.id === temp.id ? data : r)));
+    savedMessagesMem.set(myId, [data, ...(savedMessagesMem.get(myId) || []).filter((r) => r.id !== data.id)]);
   };
   const remove = async (row) => {
+    if (String(row.id).startsWith('temp-')) return;
+    savedGoneRef.current.add(row.id);
     setRows((prev) => (prev || []).filter((r) => r.id !== row.id));
-    await supabase.from('saved_messages').delete().eq('id', row.id).eq('user_id', myId);
+    const { error } = await supabase.from('saved_messages').delete().eq('id', row.id).eq('user_id', myId);
+    if (error) { savedGoneRef.current.delete(row.id); setProblem(friendlyError(error, "Couldn't remove that. Try again.")); load(); return; }
     if (onChanged && row.source_message_id) onChanged(row.source_message_id, false);
   };
   const term = q.trim().toLowerCase();
@@ -58266,12 +61852,8 @@ function SavedMessagesPanel({ myId, me, onClose, onChanged, onOpenChat }) {
     <WideDim onClose={onClose} z={40} />
     <div {...edgeBack} style={{ position: 'fixed', inset: 0, zIndex: 40, background: theme.bgGradient, display: 'flex', flexDirection: 'column', fontFamily: FONT }} className="zchat-panel-open zchat-wide-page">
       <IgTopBar title="Saved" onBack={onClose} />
-      <div style={{ display: 'flex', margin: '0 16px 10px', padding: 3, borderRadius: 12, background: theme.rowBg }}>
-        {[['messages', 'Messages'], ['posts', 'Posts']].map(([k, label]) => (
-          <div key={k} role="button" aria-label={`Saved ${label.toLowerCase()}`} aria-pressed={savedTab === k} onClick={() => { hapticTap(); setSavedTab(k); }}
-            style={{ flex: 1, height: 34, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, cursor: 'pointer', background: savedTab === k ? theme.panelBg : 'transparent', color: savedTab === k ? theme.ink : theme.muted, boxShadow: savedTab === k ? '0 1px 3px rgba(0,0,0,0.12)' : 'none' }}>{label}</div>
-        ))}
-      </div>
+      <LineTabs fill kind="button" value={savedTab} onChange={(k) => { if (k !== savedTab) { hapticTap(); setSavedTab(k); } }} h={44} fs={15} style={{ marginBottom: 10 }}
+        tabs={[['messages', 'Messages'], ['posts', 'Posts']].map(([k, label]) => ({ k, label, aria: `Saved ${label.toLowerCase()}` }))} />
       {savedTab === 'posts' ? (
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '0 16px calc(16px + env(safe-area-inset-bottom))' }}><SavedPostsGrid me={me} myId={myId} /></div>
       ) : (
@@ -58289,32 +61871,31 @@ function SavedMessagesPanel({ myId, me, onClose, onChanged, onOpenChat }) {
         ) : shown.length === 0 ? (
           <EmptyState art={term ? 'nothing' : 'saved'} title={term ? 'Nothing found' : 'Nothing saved yet'} text={term ? 'Try a different word.' : 'Press and hold any message in a chat and choose Add to Saved. You can also write a note to yourself below.'} />
         ) : shown.map((r) => (
-          <div key={r.id} style={{ background: theme.rowBg, border: `1px solid ${theme.border}`, borderRadius: 18, padding: 12, marginBottom: 10 }}>
-            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
+          <div key={r.id} style={{ padding: '14px 2px 8px', borderBottom: `1px solid ${theme.hair}` }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
               <div
                 role={(onOpenChat && (r.dm_user_id || r.group_id)) ? 'button' : undefined}
                 onClick={(onOpenChat && (r.dm_user_id || r.group_id)) ? () => onOpenChat(r) : undefined}
                 style={{
-                  fontSize: 12, fontWeight: 800, color: theme.coralDeep, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  fontSize: 13, fontWeight: 700, color: (onOpenChat && (r.dm_user_id || r.group_id)) ? kitOnInk(theme) : theme.ink2, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                   cursor: (onOpenChat && (r.dm_user_id || r.group_id)) ? 'pointer' : 'default',
-                  textDecoration: (onOpenChat && (r.dm_user_id || r.group_id)) ? 'underline' : 'none', textUnderlineOffset: 2,
                 }}>
                 {r.from_name || 'Someone'}{r.chat_label && r.kind !== 'note' ? ` in ${r.chat_label}` : ''}
               </div>
-              <div style={{ fontSize: 11, color: theme.muted, flexShrink: 0 }}>{timeAgoLong(r.message_created_at || r.created_at)}</div>
+              <div style={{ fontSize: 12, color: theme.muted, flexShrink: 0 }}>{timeAgoLong(r.message_created_at || r.created_at)}</div>
             </div>
             {r.kind === 'image' && r.media_url && <MediaImg src={r.media_url} onClick={() => setLightbox(r.media_url)} style={{ width: '100%', maxHeight: 280, objectFit: 'cover', borderRadius: 12, cursor: 'pointer', display: 'block' }} />}
             {r.kind === 'video' && r.media_url && <MediaVideo src={r.media_url} controls playsInline preload="metadata" style={{ width: '100%', maxHeight: 280, borderRadius: 12, background: '#000', display: 'block' }} />}
             {r.kind === 'audio' && r.media_url && <MediaAudio src={r.media_url} controls preload="none" style={{ width: '100%' }} />}
             {r.kind === 'sticker' && r.content && <img src={r.content} alt="" style={{ width: 110, height: 110, objectFit: 'contain' }} />}
             {(r.kind === 'text' || r.kind === 'note' || ((r.kind === 'image' || r.kind === 'video') && r.content)) && r.content && (
-              <div style={{ fontSize: 14, color: theme.ink, lineHeight: 1.45, wordBreak: 'break-word', marginTop: r.media_url ? 8 : 0 }}><RichText text={r.content} /></div>
+              <div style={{ fontSize: 15, color: theme.ink, lineHeight: 1.45, wordBreak: 'break-word', marginTop: r.media_url ? 8 : 0 }}><RichText text={r.content} /></div>
             )}
-            <div style={{ display: 'flex', gap: 14, justifyContent: 'flex-end', marginTop: 10 }}>
+            <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end', marginTop: 2, marginRight: -8 }}>
               {r.content && r.kind !== 'sticker' && (
-                <div role="button" aria-label="Copy" onClick={() => { try { navigator.clipboard.writeText(r.content); } catch {} }} style={{ cursor: 'pointer', color: theme.muted, display: 'flex' }}><Copy size={16} /></div>
+                <div role="button" aria-label="Copy" onClick={() => { try { navigator.clipboard.writeText(r.content); } catch {} }} className="zchat-press" style={{ cursor: 'pointer', color: theme.muted, display: 'flex', alignItems: 'center', justifyContent: 'center', width: 34, height: 34 }}><Copy size={17} /></div>
               )}
-              <div role="button" aria-label="Remove" onClick={() => remove(r)} style={{ cursor: 'pointer', color: theme.muted, display: 'flex' }}><Trash2 size={16} /></div>
+              <div role="button" aria-label="Remove" onClick={() => remove(r)} className="zchat-press" style={{ cursor: 'pointer', color: theme.muted, display: 'flex', alignItems: 'center', justifyContent: 'center', width: 34, height: 34 }}><Trash2 size={17} /></div>
             </div>
           </div>
         ))}
@@ -58763,20 +62344,25 @@ function JoinGroupSheet({ group, count, busy, onJoin, onClose, requested, onCanc
   return ReactDOM.createPortal(sheet, document.body);
 }
 
+const likersMem = new Map();
 function LikersSheet({ post, meId, onClose, onOpenProfile }) {
   useBackClose(true, onClose);
-  const [rows, setRows] = useState(null);
+  const [rows, setRows] = useState(() => likersMem.get(post.id) || null);
   useEffect(() => {
     let alive = true;
     (async () => {
-      const { data: likes } = await supabase.from('post_likes').select('user_id, created_at').eq('post_id', post.id).order('created_at', { ascending: false }).limit(200);
+      const { data: likes, error } = await supabase.from('post_likes').select('user_id, created_at').eq('post_id', post.id).order('created_at', { ascending: false }).limit(200);
+      if (error && !likes) { if (alive) setRows((prev) => prev || []); return; }
       const ids = [...new Set((likes || []).map((l) => l.user_id))];
       let byId = {};
       if (ids.length) {
         const { data: profs } = await supabase.from('profiles').select('*').in('id', ids);
         sanitizeAvatarList(profs, meId).forEach((p) => { byId[p.id] = p; });
       }
-      if (alive) setRows((likes || []).map((l) => byId[l.user_id]).filter(Boolean));
+      const list = (likes || []).map((l) => byId[l.user_id]).filter(Boolean);
+      likersMem.set(post.id, list);
+      if (likersMem.size > 40) likersMem.delete(likersMem.keys().next().value);
+      if (alive) setRows(list);
     })();
     return () => { alive = false; };
   }, [post.id]);
@@ -59043,10 +62629,12 @@ function AppInner() {
     removeAccountEntry(id);
     try { localStorage.removeItem(`zchat-session-${id}`); } catch {}
     forgetLocalUser(id);
+    moneyForget(id);
   };
 
   const handleLogout = async () => {
     if (session?.user) { try { localStorage.removeItem(`zchat-session-${session.user.id}`); } catch {} removeAccountEntry(session.user.id); forgetLocalUser(session.user.id); }
+    if (session?.user) moneyForget(session.user.id);
     await signOut();
     setSession(null);
     setScreen('login');
