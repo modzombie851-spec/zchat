@@ -300,8 +300,19 @@ async function verifyCaller(event, userId) {
     const token = auth.replace(/^Bearer\s+/i, '').trim();
     if (!token) return false;
     const { data, error } = await supabase.auth.getUser(token);
-    return !error && !!data && !!data.user && data.user.id === userId;
+    if (error || !data || !data.user || data.user.id !== userId) return false;
+    const { data: st, error: stErr } = await supabase.rpc('zchat_session_state_for', { p_user: data.user.id, p_session: tokenSessionId(token) });
+    if (stErr) return /PGRST202|42883|could not find the function|does not exist/i.test(`${stErr.code || ''} ${stErr.message || ''}`);
+    return st === 'ok';
   } catch { return false; }
+}
+
+function tokenSessionId(token) {
+  try {
+    const part = String(token || '').split('.')[1] || '';
+    const claims = JSON.parse(Buffer.from(part.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'));
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(claims.session_id || '')) ? claims.session_id : null;
+  } catch { return null; }
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
