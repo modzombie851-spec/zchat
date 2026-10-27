@@ -287,17 +287,21 @@ async function music(user, body) {
   return reply(200, { items });
 }
 
-async function readMedia(url) {
-  if (typeof url !== 'string') return null;
+async function readMedia(url, ownerId) {
+  if (typeof url !== 'string' || !ownerId) return null;
   if (url.startsWith('zp:')) {
-    const { data, error } = await supabase.storage.from('chat-private').download(url.slice(3));
+    const path = url.slice(3);
+    if (!path.startsWith(`${ownerId}/`) || path.includes('..')) return null;
+    const { data, error } = await supabase.storage.from('chat-private').download(path);
     if (error || !data) return null;
     const buf = Buffer.from(await data.arrayBuffer());
     return { mimeType: data.type || 'audio/webm', buf };
   }
-  const allowed = `${SUPABASE_URL}/storage/v1/object/public/`;
-  if (!url.startsWith(allowed)) return null;
-  const res = await fetch(url);
+  let parsed;
+  try { parsed = new URL(url); } catch { return null; }
+  const path = decodeURIComponent(parsed.pathname);
+  if (parsed.protocol !== 'https:' || parsed.host !== new URL(SUPABASE_URL).host || !path.startsWith(`/storage/v1/object/public/chat-media/${ownerId}/`) || path.includes('..')) return null;
+  const res = await fetch(parsed.toString());
   if (!res.ok) return null;
   const buf = Buffer.from(await res.arrayBuffer());
   return { mimeType: (res.headers.get('content-type') || 'audio/webm').split(';')[0], buf };
@@ -315,7 +319,7 @@ async function transcribe(user, body) {
   }
   if (!allowed) return reply(403, { error: 'That voice message is not available' });
   if ((await bumpUsage(user.id, 'transcribe')) > LIMITS.transcribe) return reply(429, { error: 'You have turned a lot of voice messages into text today. Try again tomorrow.' });
-  const media = await readMedia(m.media_url);
+  const media = await readMedia(m.media_url, m.sender_id);
   if (!media || !media.buf.length || media.buf.length > MAX_AUDIO_BYTES) return reply(404, { error: 'Could not open that voice message' });
   const mimeType = /^audio\//.test(media.mimeType) || /^video\//.test(media.mimeType) ? media.mimeType : 'audio/webm';
   const out = await geminiText([

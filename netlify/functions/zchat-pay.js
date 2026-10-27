@@ -57,7 +57,8 @@ async function onOrder(payload, refunded) {
     await rpc('zchat_refund_order', { p_order: orderId });
     return reply(200, { ok: true, refunded: true });
   }
-  if (attrs.status && attrs.status !== 'paid') return reply(200, { ok: true, skipped: attrs.status });
+  if (attrs.status !== 'paid') return reply(200, { ok: true, skipped: attrs.status || 'no status' });
+  if (!(Number(attrs.total) > 0) && process.env.ZCHAT_ALLOW_FREE_ORDERS !== '1') return reply(200, { ok: true, skipped: 'free order' });
   const custom = (payload.meta && payload.meta.custom_data) || {};
   const userId = String(custom.user_id || '');
   if (!UUID.test(userId)) return reply(200, { ok: true, skipped: 'no user' });
@@ -98,6 +99,10 @@ export const handler = async (event) => {
     let payload = null;
     try { payload = JSON.parse(raw); } catch { return reply(400, { error: 'Bad body' }); }
     const name = String((payload.meta && payload.meta.event_name) || h['x-event-name'] || h['X-Event-Name'] || '');
+    if (payload.meta && payload.meta.test_mode === true && process.env.ZCHAT_ALLOW_TEST_ORDERS !== '1') return reply(200, { ok: true, skipped: 'test mode' });
+    const storeWanted = String(process.env.ZCHAT_LS_STORE_ID || '');
+    const storeGot = String((payload.data && payload.data.attributes && payload.data.attributes.store_id) || '');
+    if (storeWanted && storeGot !== storeWanted) return reply(200, { ok: true, skipped: 'other store' });
     try {
       if (name === 'order_created') return await onOrder(payload, false);
       if (name === 'order_refunded') return await onOrder(payload, true);

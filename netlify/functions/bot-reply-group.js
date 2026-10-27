@@ -299,6 +299,32 @@ async function verifyCaller(event, userId) {
   } catch { return false; }
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function ownMediaUrl(url, userId) {
+  if (typeof url !== 'string' || !userId) return false;
+  if (url.startsWith('zp:')) {
+    const path = url.slice(3);
+    return path.startsWith(`${userId}/`) && !path.includes('..');
+  }
+  try {
+    const u = new URL(url);
+    const base = new URL(process.env.SUPABASE_URL);
+    const path = decodeURIComponent(u.pathname);
+    return u.protocol === 'https:' && u.host === base.host && path.startsWith(`/storage/v1/object/public/chat-media/${userId}/`) && !path.includes('..');
+  } catch { return false; }
+}
+
+async function isGroupMember(groupId, userId) {
+  const { data, error } = await supabase.from('group_members').select('user_id').eq('group_id', groupId).eq('user_id', userId).maybeSingle();
+  return !error && !!data;
+}
+
+function safeReplyText(text) {
+  const t = String(text || '');
+  return /^\s*z[a-z]{2,8}:/i.test(t) ? `\u200b${t}` : t;
+}
+
 const FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL || 'gemini-3.8-flash';
 const SECOND_FALLBACK_MODEL = 'gemini-3.5-flash';
 const geminiUrlFor = (model) => `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
@@ -459,9 +485,16 @@ const handlerCore = async (event) => {
   if (!userId || !groupId || (!text && !mediaType)) {
     return { statusCode: 400, body: 'Missing fields' };
   }
+  if (!UUID_RE.test(String(userId)) || !UUID_RE.test(String(groupId))) {
+    return { statusCode: 400, body: 'Bad request' };
+  }
   if (!(await verifyCaller(event, userId))) {
     return { statusCode: 401, body: 'Not signed in' };
   }
+  if (!(await isGroupMember(groupId, userId))) {
+    return { statusCode: 403, body: 'Not allowed' };
+  }
+  if (mediaUrl && !ownMediaUrl(mediaUrl, userId)) mediaUrl = null;
   text = (text || '').trim().slice(0, 4000);
 
   const { data: bot, error: botError } = await supabase
@@ -568,7 +601,7 @@ const handlerCore = async (event) => {
     sender_id: botId,
     group_id: groupId,
     type: 'text',
-    content: reply.slice(0, 12000),
+    content: safeReplyText(reply).slice(0, 12000),
     suggestions: suggestions.length ? suggestions : null,
   });
   if (error) {

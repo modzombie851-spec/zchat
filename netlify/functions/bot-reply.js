@@ -304,6 +304,47 @@ async function verifyCaller(event, userId) {
   } catch { return false; }
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function ownMediaUrl(url, userId) {
+  if (typeof url !== 'string' || !userId) return false;
+  if (url.startsWith('zp:')) {
+    const path = url.slice(3);
+    return path.startsWith(`${userId}/`) && !path.includes('..');
+  }
+  try {
+    const u = new URL(url);
+    const base = new URL(process.env.SUPABASE_URL);
+    const path = decodeURIComponent(u.pathname);
+    return u.protocol === 'https:' && u.host === base.host && path.startsWith(`/storage/v1/object/public/chat-media/${userId}/`) && !path.includes('..');
+  } catch { return false; }
+}
+
+async function isRealBot(botId) {
+  const { data } = await supabase.from('profiles').select('id, is_bot, is_deleted').eq('id', botId).maybeSingle();
+  return !!(data && data.is_bot && !data.is_deleted);
+}
+
+async function peerAllowed(userId, peerId, regenerate) {
+  const since = new Date(Date.now() - (regenerate ? 7 * 86400000 : 10 * 60000)).toISOString();
+  let recent = supabase.from('messages').select('id').eq('sender_id', userId).eq('receiver_id', peerId).is('group_id', null).gte('created_at', since).limit(1);
+  if (regenerate) recent = recent.eq('bot_reply', true);
+  const [peerRes, blockRes, recentRes] = await Promise.all([
+    supabase.from('profiles').select('id, is_deleted, banned').eq('id', peerId).maybeSingle(),
+    supabase.from('blocks').select('blocker_id').or(`and(blocker_id.eq.${userId},blocked_id.eq.${peerId}),and(blocker_id.eq.${peerId},blocked_id.eq.${userId})`).limit(1),
+    recent,
+  ]);
+  const peer = peerRes.data;
+  if (!peer || peer.is_deleted || peer.banned) return false;
+  if (blockRes.error || (blockRes.data && blockRes.data.length)) return false;
+  return !!(recentRes.data && recentRes.data.length);
+}
+
+function safeReplyText(text) {
+  const t = String(text || '');
+  return /^\s*z[a-z]{2,8}:/i.test(t) ? `\u200b${t}` : t;
+}
+
 const FALLBACK_MODEL = process.env.GEMINI_FALLBACK_MODEL || 'gemini-3.8-flash';
 const SECOND_FALLBACK_MODEL = 'gemini-3.5-flash';
 const geminiUrlFor = (model) => `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
@@ -464,10 +505,20 @@ const handlerCore = async (event) => {
   if (!userId || (!botId && !peerId) || (!text && !mediaType) || (peerId && peerId === userId)) {
     return { statusCode: 400, body: 'Missing fields' };
   }
+  if (!UUID_RE.test(String(userId)) || (botId && !UUID_RE.test(String(botId))) || (peerId && !UUID_RE.test(String(peerId)))) {
+    return { statusCode: 400, body: 'Bad request' };
+  }
   if (!(await verifyCaller(event, userId))) {
     return { statusCode: 401, body: 'Not signed in' };
   }
   const peerMode = !!peerId;
+  if (!peerMode && !(await isRealBot(botId))) {
+    return { statusCode: 403, body: 'Not allowed' };
+  }
+  if (peerMode && !(await peerAllowed(userId, peerId, !!regenerate))) {
+    return { statusCode: 403, body: 'Not allowed' };
+  }
+  if (mediaUrl && !ownMediaUrl(mediaUrl, userId)) mediaUrl = null;
   text = (text || '').trim().slice(0, 4000);
 
   if (!peerMode) {
@@ -576,8 +627,8 @@ const handlerCore = async (event) => {
   } catch {}
 
   const replyRow = peerMode
-    ? { sender_id: userId, receiver_id: peerId, group_id: null, type: 'text', content: reply.slice(0, 12000), bot_reply: true }
-    : { sender_id: botId, receiver_id: userId, type: 'text', content: reply.slice(0, 12000), suggestions: suggestions.length ? suggestions : null };
+    ? { sender_id: userId, receiver_id: peerId, group_id: null, type: 'text', content: safeReplyText(reply).slice(0, 12000), bot_reply: true }
+    : { sender_id: botId, receiver_id: userId, type: 'text', content: safeReplyText(reply).slice(0, 12000), suggestions: suggestions.length ? suggestions : null };
   const { error } = await supabase.from('messages').insert(replyRow);
   if (error) {
     console.error('Could not save the bot reply', error);
