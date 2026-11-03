@@ -1824,7 +1824,7 @@ function AvatarMotion({ src, url: direct = null, size = 0, fit = 'cover' }) {
   const [on, setOn] = useState(false);
   const [ready, setReady] = useState(false);
   const [, setBad] = useState(0);
-  const off = !url || avatarMotion.bad.has(url) || (!direct && (dataSaverOn() || reducedMotion()));
+  const off = !url || avatarMotion.bad.has(url) || (!direct && (prefOn('zchat-reduce-motion') || (dataSaverOn() && size < 72)));
   useEffect(() => {
     const el = boxRef.current;
     if (off || !el) return undefined;
@@ -10468,7 +10468,7 @@ function LiveWallCanvas({ k, dark, small = false, fps = 0, covered = false, styl
   const ref = useRef(null);
   const [ok, setOk] = useState(() => typeof window !== 'undefined' && !!window.ZWALL);
   const [shown, setShown] = useState(false);
-  const still = reducedMotion() || dataSaverOn();
+  const still = prefOn('zchat-reduce-motion');
   const st = useRef({ m: null, away: false, hidden: false, covered, still });
   st.current.covered = covered;
   st.current.still = still;
@@ -23848,7 +23848,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-const APP_VERSION = '24.0V';
+const APP_VERSION = '24.1V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -26789,6 +26789,27 @@ let decorKept = false;
 function decorCanStore() {
   try { return typeof caches !== 'undefined' && !!caches && typeof caches.open === 'function'; } catch { return false; }
 }
+const DECOR_RENEW_V = '24.1';
+const DECOR_RENEW = ['/set-crystal-phoenix-frame.webp', '/set-crystal-phoenix-plate.webp', '/fx-crystal-phoenix.webp'];
+let decorRenewJob = null;
+function decorRenew() {
+  if (!decorRenewJob) {
+    decorRenewJob = (async () => {
+      if (!decorCanStore()) return;
+      try { if (localStorage.getItem('zchat-decor-renew') === DECOR_RENEW_V) return; } catch { return; }
+      try {
+        const names = (await caches.keys()).filter((n) => n === DECOR_STORE || n.indexOf('zchat-static-') === 0);
+        for (const n of names) {
+          const c = await caches.open(n);
+          for (const p of DECOR_RENEW) await c.delete(p, { ignoreSearch: true }).catch(() => false);
+        }
+        localStorage.setItem('zchat-decor-renew', DECOR_RENEW_V);
+      } catch {}
+    })();
+  }
+  return decorRenewJob;
+}
+try { if (typeof window !== 'undefined') decorRenew(); } catch {}
 function decorFileOk(res) {
   if (!res || res.status !== 200) return false;
   const ct = (res.headers.get('content-type') || '').toLowerCase();
@@ -26798,6 +26819,7 @@ function decorScanStore() {
   if (!decorScan) {
     decorScan = (async () => {
       if (!decorCanStore()) return;
+      await decorRenew();
       try {
         const store = await caches.open(DECOR_STORE);
         const keys = await store.keys();
@@ -58887,6 +58909,21 @@ function WnStickerArt({ dark, thumb }) {
     </div>
   );
 }
+function WnLiveWallArt({ dark, thumb }) {
+  const spec = LIVE_WALL_BY.aurora;
+  const bar = (mine, w) => <div style={{ alignSelf: mine ? 'flex-end' : 'flex-start', width: w, height: thumb ? 7 : 30, borderRadius: thumb ? 4 : 15, background: mine ? '#7C5CFC' : (dark ? 'rgba(30,30,36,0.86)' : 'rgba(255,255,255,0.93)') }} />;
+  return (
+    <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden', background: liveWallBg(spec, dark) }}>
+      <LiveWallCanvas k={spec.k} dark={dark} small={thumb} fps={thumb ? 15 : 24} />
+      <div style={{ position: 'absolute', inset: 0, background: liveWallVeil(dark) }} />
+      <div style={{ position: 'absolute', left: thumb ? 7 : 24, right: thumb ? 7 : 24, bottom: thumb ? 7 : 56, display: 'flex', flexDirection: 'column', gap: thumb ? 3 : 10 }}>
+        {bar(false, '58%')}
+        {bar(true, '44%')}
+        {!thumb && bar(false, '34%')}
+      </div>
+    </div>
+  );
+}
 function WnPic({ k, dark, thumb, me }) {
   if (k === 'styles23') return <WnStylesArt me={me} dark={dark} thumb={thumb} />;
   if (k === 'stickers23') return <WnStickerArt dark={dark} thumb={thumb} />;
@@ -58894,6 +58931,7 @@ function WnPic({ k, dark, thumb, me }) {
   if (k === 'phoenix') return <WnDecorArt me={me} thumb={thumb} keys={['crystal_phoenix', 'fire_phoenix', 'sakura_shrine']} />;
   if (k === 'fxsets') return <WnDecorArt me={me} thumb={thumb} keys={['jellyfish_glow', 'spirit_wolf', 'unicorn_dream']} />;
   if (k === 'fxall') return <WnDecorArt me={me} thumb={thumb} keys={['sakura_shrine', 'koi_pond', 'space_explorer']} />;
+  if (k === 'walls') return <WnLiveWallArt dark={dark} thumb={thumb} />;
   return <WnArt k={k} dark={dark} thumb={thumb} />;
 }
 
@@ -62066,7 +62104,7 @@ function ChatsPrefsSection() {
       {row(<VibrateIcon size={16} />, 'Haptic feedback', 'A small buzz on taps and swipes', haptics, setHaptics)}
       {row(<Volume1 size={16} />, 'Touch sounds', 'A soft tick on every button, row and tile', touch_, setTouch_)}
       {row(<ProfileFxIcon size={16} />, 'Profile effects', 'Play the animation when you open a profile that wears a set with an effect', pfx, setPfx)}
-      {row(<Activity size={16} />, 'Reduce motion', 'Fade between pages instead of sliding', reduce, setReduce)}
+      {row(<Activity size={16} />, 'Reduce motion', 'Pages fade instead of sliding, and effects, live wallpapers and animated profile pictures stay still', reduce, setReduce)}
       {qrOpen && <QuickRepliesPage onClose={() => setQrOpen(false)} />}
       {editAt != null && <FullEmojiPicker onClose={() => setEditAt(null)} onPick={(e) => { const next = quick.slice(); next[editAt] = e; setQuickReactions(next); setQuick(next); setEditAt(null); hapticTap(); }} />}
     </div>
