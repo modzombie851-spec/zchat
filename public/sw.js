@@ -314,15 +314,25 @@ self.addEventListener('fetch', (event) => {
   }
 });
 
+const SW_CAPS = 1;
+const TAG_KEYS = ['dm', 'group', 'channel', 'post', 'story', 'live', 'call', 'profile'];
+const CLOSE_LATER_MS = 4000;
+
 function tagFor(url) {
   try {
     const u = new URL(url || '/', self.location.origin);
-    const dm = u.searchParams.get('dm');
-    if (dm) return `dm-${dm}`;
-    const group = u.searchParams.get('group');
-    if (group) return `group-${group}`;
+    for (const key of TAG_KEYS) {
+      const id = u.searchParams.get(key);
+      if (id && /^[A-Za-z0-9-]{1,80}$/.test(id)) return `${key}-${id}`;
+    }
+    if (u.searchParams.get('requests')) return 'requests';
+    if (u.searchParams.get('mail')) return 'mail';
   } catch {}
   return '';
+}
+
+function isChatTag(tag) {
+  return /^(dm|group|channel)-/.test(tag || '');
 }
 
 async function readPref(key) {
@@ -339,16 +349,74 @@ function accountOf(url) {
   try { return new URL(url || '/', self.location.origin).searchParams.get('acc') || ''; } catch { return ''; }
 }
 
+function noteAccount(n) {
+  const d = (n && n.data) || {};
+  return typeof d.acc === 'string' ? d.acc : accountOf(d.url);
+}
+
+function sameAccount(n, acc) {
+  const a = noteAccount(n);
+  return !acc || !a || a === acc;
+}
+
+function shownAt(n) {
+  const d = (n && n.data) || {};
+  return Number(d.at) || Number(n && n.timestamp) || 0;
+}
+
+async function windowVisible() {
+  try {
+    const list = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    return list.some((c) => c.visibilityState === 'visible');
+  } catch {
+    return false;
+  }
+}
+
+async function closeTag(tag, acc, before) {
+  try {
+    const list = await self.registration.getNotifications({ tag });
+    list.forEach((n) => { if (sameAccount(n, acc) && (!before || shownAt(n) <= before)) n.close(); });
+  } catch {}
+  await syncBadge();
+}
+
+async function clearPushed(data) {
+  const tag = typeof data.tag === 'string' ? data.tag : '';
+  const acc = typeof data.acc === 'string' ? data.acc : '';
+  if (!tag) return;
+  let mine = [];
+  let others = 0;
+  try {
+    const all = await self.registration.getNotifications();
+    all.forEach((n) => { if (n.tag === tag && sameAccount(n, acc)) mine.push(n); else others += 1; });
+  } catch {
+    return;
+  }
+  if (!mine.length) return;
+  if (others > 0 || await windowVisible()) {
+    mine.forEach((n) => n.close());
+    await syncBadge();
+    return;
+  }
+  const before = Date.now();
+  setTimeout(() => { closeTag(tag, acc, before); }, CLOSE_LATER_MS);
+}
+
 self.addEventListener('push', (event) => {
   let data = { title: 'ZChat', body: 'You have a new message', url: '/', icon: '/icon-192.png' };
   try { data = { ...data, ...event.data.json() }; } catch {}
+  if (data.type === 'clear') {
+    event.waitUntil(clearPushed(data));
+    return;
+  }
   const hush = typeof data.body === 'string' && data.body.charCodeAt(0) === 0x2063;
   if (hush) data.body = data.body.slice(1);
   event.waitUntil((async () => {
-    const tag = data.tag || tagFor(data.url);
+    const tag = (typeof data.tag === 'string' && data.tag) || tagFor(data.url);
+    const acc = accountOf(data.url);
     if (tag) {
       const hidden = await readPref('/__hidden');
-      const acc = accountOf(data.url);
       const keys = Array.isArray(hidden) ? hidden : (hidden && acc && Array.isArray(hidden[acc]) ? hidden[acc] : []);
       if (keys.includes(tag)) {
         await self.registration.showNotification('ZChat', {
@@ -357,7 +425,7 @@ self.addEventListener('push', (event) => {
           badge: '/badge-192.png',
           tag: 'zchat-private',
           renotify: true,
-          data: { url: acc ? `/?acc=${encodeURIComponent(acc)}` : '/' },
+          data: { url: acc ? `/?acc=${encodeURIComponent(acc)}` : '/', acc, at: Date.now() },
         });
         return;
       }
@@ -371,7 +439,7 @@ self.addEventListener('push', (event) => {
           tag: 'zchat-requests',
           silent: true,
           renotify: false,
-          data: { url: acc ? `/?acc=${encodeURIComponent(acc)}` : '/' },
+          data: { url: acc ? `/?acc=${encodeURIComponent(acc)}` : '/', acc, at: Date.now() },
         });
         return;
       }
@@ -379,30 +447,23 @@ self.addEventListener('push', (event) => {
     const focus = await readPref('/__focus');
     const quiet = hush || !!(focus && Number(focus.until) > Date.now() && tag !== focus.chat);
     let title = data.title;
-    let body = data.body;
-    let lines = [data.body];
     let count = 1;
-    if (tag) {
+    if (tag && isChatTag(tag)) {
       try {
         const open = await self.registration.getNotifications({ tag });
         const prev = open[open.length - 1];
-        if (prev) {
-          const pd = prev.data || {};
-          count = (pd.count || 1) + 1;
-          lines = (pd.lines || [prev.body]).concat([data.body]).slice(-4);
-          body = lines.join('\n');
-          title = `${pd.baseTitle || data.title} (${count} new)`;
-        }
+        if (prev && noteAccount(prev) === acc) count = (Number(prev.data && prev.data.count) || 1) + 1;
       } catch {}
+      if (count > 1) title = `${data.title} (${count} new messages)`;
     }
     const options = {
-      body,
+      body: data.body,
       icon: data.icon || '/icon-192.png',
       badge: '/badge-192.png',
-      data: { url: data.url, count, lines, baseTitle: data.title },
+      data: { url: data.url, count, baseTitle: data.title, acc, at: Date.now() },
     };
     if (quiet) options.silent = true;
-    if (tag) { options.tag = tag; options.renotify = !quiet; }
+    if (tag) { options.tag = tag; options.renotify = !quiet && data.renotify !== false; }
     await self.registration.showNotification(title, options);
     await syncBadge();
   })());
@@ -427,10 +488,14 @@ self.addEventListener('message', (event) => {
     event.waitUntil((async () => {
       try {
         const list = await self.registration.getNotifications(d.tag ? { tag: d.tag } : undefined);
-        list.forEach((x) => x.close());
+        list.forEach((x) => { if (sameAccount(x, typeof d.acc === 'string' ? d.acc : '')) x.close(); });
       } catch {}
       await syncBadge();
     })());
+    return;
+  }
+  if (d.type === 'zchat-sw-caps') {
+    try { if (event.ports && event.ports[0]) event.ports[0].postMessage({ caps: SW_CAPS }); } catch {}
   }
 });
 
