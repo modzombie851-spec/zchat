@@ -1,3 +1,4 @@
+import { createHash, randomBytes } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://etcmbghcmlgeezwgnwuz.supabase.co';
@@ -557,9 +558,6 @@ async function deleteAccount(user) {
   if (prof) optional.forEach((k) => { if (Object.prototype.hasOwnProperty.call(prof, k)) patch[k] = null; });
   const upd = await safe(() => supabase.from('profiles').update(patch).eq('id', uid));
   if (!upd || upd.error) await safe(() => supabase.from('profiles').update(blank).eq('id', uid));
-  const del = await safe(() => supabase.auth.admin.deleteUser(uid));
-  if (del && !del.error) return reply(200, { ok: true, mode: 'deleted' });
-  console.error('Auth delete failed, closing the login instead', del && del.error && del.error.message);
   const closed = await safe(() => supabase.auth.admin.updateUserById(uid, { ban_duration: '876000h', email: `closed${short}@users.getzchat.com`, email_confirm: true }));
   if (closed && !closed.error) return reply(200, { ok: true, mode: 'closed' });
   const banOnly = await safe(() => supabase.auth.admin.updateUserById(uid, { ban_duration: '876000h' }));
@@ -645,14 +643,150 @@ async function replyIdeas(user, body) {
   return reply(200, { replies });
 }
 
+const QR_ID = /^[A-Za-z0-9_-]{22}$/;
+const QR_SECRET = /^[A-Za-z0-9_-]{43}$/;
+const QR_CODE_CHARS = 'ACDEFGHJKMNPQRTUVWXY346789';
+
+function headerOf(event, name) {
+  const h = event.headers || {};
+  const want = name.toLowerCase();
+  const key = Object.keys(h).find((k) => k.toLowerCase() === want);
+  return key ? String(h[key] || '') : '';
+}
+
+function ipOf(event) {
+  const direct = headerOf(event, 'x-nf-client-connection-ip').trim();
+  if (direct) return direct.slice(0, 64);
+  return (headerOf(event, 'x-forwarded-for').split(',')[0].trim() || 'unknown').slice(0, 64);
+}
+
+function sha256Hex(text) {
+  return createHash('sha256').update(String(text), 'utf8').digest('hex');
+}
+
+function qrCode() {
+  const bytes = randomBytes(16);
+  let out = '';
+  for (let i = 0; i < bytes.length && out.length < 8; i++) if (bytes[i] < 234) out += QR_CODE_CHARS[bytes[i] % QR_CODE_CHARS.length];
+  return out.length === 8 ? out : null;
+}
+
+function computerLabel(ua) {
+  const s = String(ua || '');
+  let os = 'a computer';
+  if (/Windows/.test(s)) os = 'Windows';
+  else if (/CrOS/.test(s)) os = 'Chromebook';
+  else if (/iPad/.test(s)) os = 'iPad';
+  else if (/Android/.test(s)) os = 'Android';
+  else if (/Mac OS X|Macintosh/.test(s)) os = 'Mac';
+  else if (/Linux/.test(s)) os = 'Linux';
+  let browser = 'Browser';
+  if (/Edg\//.test(s)) browser = 'Edge';
+  else if (/OPR\/|Opera/.test(s)) browser = 'Opera';
+  else if (/Firefox|FxiOS/.test(s)) browser = 'Firefox';
+  else if (/CriOS|Chrome/.test(s)) browser = 'Chrome';
+  else if (/Safari/.test(s)) browser = 'Safari';
+  return `${browser} on ${os}`;
+}
+
+function placeOf(event) {
+  const g = geoFrom(event);
+  return [g.city, g.country].filter(Boolean).join(', ').slice(0, 80) || null;
+}
+
+async function qrRpc(name, args) {
+  const { data, error } = await supabase.rpc(name, args);
+  if (error) throw new Error(`${name}: ${error.message}`);
+  return data;
+}
+
+async function qrNew(event, body) {
+  const hash = String(body.hash || '');
+  if (!/^[0-9a-f]{64}$/.test(hash)) return reply(400, { error: 'Bad request' });
+  for (let i = 0; i < 4; i++) {
+    const id = randomBytes(16).toString('base64url');
+    const code = qrCode();
+    if (!code) continue;
+    const made = await qrRpc('zchat_qr_new', { p_id: id, p_code: code, p_secret_hash: hash, p_ip: ipOf(event), p_label: computerLabel(headerOf(event, 'user-agent')), p_place: placeOf(event) });
+    if (made && made.ok) return reply(200, { id, code, expires_at: made.expires_at });
+    if (made && made.reason === 'limited') return reply(429, { error: 'Too many codes for now. Wait a few minutes and try again.' });
+    if (!made || made.reason !== 'taken') break;
+  }
+  return reply(503, { error: 'Could not make a code right now. Try again.' });
+}
+
+async function qrPoll(event, body) {
+  const id = String(body.id || '');
+  const secret = String(body.secret || '');
+  if (!QR_ID.test(id) || !QR_SECRET.test(secret)) return reply(400, { error: 'Bad request' });
+  const hash = sha256Hex(secret);
+  const st = await qrRpc('zchat_qr_poll', { p_id: id, p_secret_hash: hash, p_ip: ipOf(event) });
+  const state = st && typeof st.state === 'string' ? st.state : 'bad';
+  if (state === 'limited') return reply(429, { error: 'Too many tries. Wait a few minutes and try again.' });
+  if (state === 'bad') return reply(404, { state: 'gone' });
+  if (state !== 'approved') return reply(200, { state, expires_at: st.expires_at || null });
+  const nonce = randomBytes(32).toString('base64url');
+  const taken = await qrRpc('zchat_qr_take', { p_id: id, p_secret_hash: hash, p_claim_hash: sha256Hex(nonce) });
+  if (!taken || !taken.ok || !taken.user_id) return reply(200, { state: 'expired' });
+  const { data: got, error: userErr } = await supabase.auth.admin.getUserById(taken.user_id);
+  const email = !userErr && got && got.user ? got.user.email : null;
+  if (!email) return reply(200, { state: 'failed' });
+  const { data: link, error: linkErr } = await supabase.auth.admin.generateLink({ type: 'magiclink', email });
+  const tokenHash = !linkErr && link && link.properties ? link.properties.hashed_token : null;
+  if (!tokenHash) return reply(503, { error: 'Could not log you in right now. Try again soon.' });
+  return reply(200, { state: 'approved', token_hash: tokenHash, nonce });
+}
+
+function sessionIdOf(event) {
+  const token = headerOf(event, 'authorization').replace(/^Bearer\s+/i, '').trim();
+  const sid = String(tokenClaims(token).session_id || '');
+  return UUID_RE.test(sid) ? sid : null;
+}
+
+async function qrPeek(event, user, body) {
+  const id = QR_ID.test(String(body.id || '')) ? String(body.id) : null;
+  const code = id ? null : String(body.code || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 8);
+  if (!id && !/^[A-Z0-9]{8}$/.test(code || '')) return reply(400, { error: 'That code does not look right. Check it and try again.' });
+  const r = await qrRpc('zchat_qr_peek', { p_user: user.id, p_session: sessionIdOf(event), p_id: id, p_code: code });
+  if (r && r.ok) return reply(200, { id: r.id, label: r.label || 'A computer', place: r.place || null, created_at: r.created_at, expires_at: r.expires_at });
+  const why = r && r.reason;
+  if (why === 'limited') return reply(429, { error: 'Too many tries. Wait a few minutes and try again.' });
+  if (why === 'approval') return reply(403, { error: 'Approve this phone first, then you can log in on a computer.' });
+  if (why === 'blocked') return reply(403, { error: 'This account cannot log in on other devices.' });
+  if (why === 'expired') return reply(410, { error: 'That code expired. Show a new code on the computer and scan again.' });
+  if (why === 'used') return reply(409, { error: 'That code was already used. Show a new code on the computer.' });
+  return reply(404, { error: id ? 'That code is not for ZChat, or it expired.' : 'No computer is showing that code. Check it and try again.' });
+}
+
+async function qrDecide(event, user, body) {
+  const id = String(body.id || '');
+  if (!QR_ID.test(id) || typeof body.approve !== 'boolean') return reply(400, { error: 'Bad request' });
+  const r = await qrRpc('zchat_qr_decide', { p_user: user.id, p_session: sessionIdOf(event), p_id: id, p_ok: body.approve });
+  if (r && r.ok) return reply(200, { state: r.state, label: r.label || null });
+  const why = r && r.reason;
+  if (why === 'approval') return reply(403, { error: 'Approve this phone first, then you can log in on a computer.' });
+  if (why === 'expired') return reply(410, { error: 'That code expired. Show a new code on the computer and scan again.' });
+  return reply(409, { error: 'That code was already used. Show a new code on the computer.' });
+}
+
 export const handler = async (event) => {
   if (event.httpMethod !== 'POST') return reply(405, { error: 'Method not allowed' });
   let body = {};
   try { body = JSON.parse(event.body || '{}'); } catch { return reply(400, { error: 'Bad request' }); }
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return reply(503, { error: 'Not set up yet' });
+  if (body && (body.action === 'qr_new' || body.action === 'qr_poll')) {
+    try {
+      return body.action === 'qr_new' ? await qrNew(event, body) : await qrPoll(event, body);
+    } catch (err) {
+      console.error('zchat tools failed', body.action, err && err.message);
+      return reply(500, { error: 'Something went wrong. Try again.' });
+    }
+  }
   const user = await callerFrom(event);
   if (!user) return reply(401, { error: 'Not signed in' });
   try {
+    if (body.action === 'qr_peek') return await qrPeek(event, user, body);
+    if (body.action === 'qr_decide') return await qrDecide(event, user, body);
     if (body.action === 'turn') return reply(200, await turnServers());
     if (body.action === 'translate') return await translate(user, body);
     if (body.action === 'transcribe') return await transcribe(user, body);

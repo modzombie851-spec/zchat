@@ -1,9 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.5-flash';
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 const DAILY_LIMIT_PER_GROUP = 50;
+const DAILY_CALLS_PER_USER = 90;
 const HISTORY_LIMIT = 30;
 const HISTORY_CHAR_CAP = 2000;
 const MAX_INLINE_BYTES = 15 * 1024 * 1024;
@@ -327,8 +328,22 @@ function ownMediaUrl(url, userId) {
 }
 
 async function isGroupMember(groupId, userId) {
-  const { data, error } = await supabase.from('group_members').select('user_id').eq('group_id', groupId).eq('user_id', userId).maybeSingle();
-  return !error && !!data;
+  const { data, error } = await supabase.from('group_members').select('user_id, muted').eq('group_id', groupId).eq('user_id', userId).maybeSingle();
+  return !error && !!data && data.muted !== true;
+}
+
+async function recentGroupPost(groupId, senderId, regenerate) {
+  const since = new Date(Date.now() - (regenerate ? 7 * 86400000 : 10 * 60000)).toISOString();
+  const { data, error } = await supabase.from('messages').select('id').eq('group_id', groupId).eq('sender_id', senderId).gte('created_at', since).limit(1);
+  return !error && !!(data && data.length);
+}
+
+async function callsLeft(userId, kind, cap) {
+  try {
+    const { data, error } = await supabase.rpc('zchat_ai_bump', { p_user: userId, p_kind: kind });
+    if (error) return true;
+    return (Number(data) || 0) <= cap;
+  } catch { return true; }
 }
 
 function safeReplyText(text) {
@@ -519,6 +534,9 @@ const handlerCore = async (event) => {
     return { statusCode: 500, body: 'Bot account not configured' };
   }
   const botId = bot.id;
+  if (!(await recentGroupPost(groupId, regenerate ? botId : userId, !!regenerate))) {
+    return { statusCode: 403, body: 'Not allowed' };
+  }
 
   const dayStart = new Date();
   dayStart.setUTCHours(0, 0, 0, 0);
@@ -531,6 +549,9 @@ const handlerCore = async (event) => {
 
   if (!countError && (count || 0) >= DAILY_LIMIT_PER_GROUP) {
     return { statusCode: 200, body: 'limit reached, staying quiet' };
+  }
+  if (!(await callsLeft(userId, 'bot_group', DAILY_CALLS_PER_USER))) {
+    return { statusCode: 429, body: 'Too many requests' };
   }
 
   const { data: existingMember } = await supabase

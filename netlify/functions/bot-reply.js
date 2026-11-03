@@ -1,9 +1,11 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.5-flash';
 const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 const DAILY_LIMIT_PER_USER = 50;
+const DAILY_CALLS_PER_USER = 90;
+const LIMIT_TEXT = "That's the most messages I can answer in one day. Try again tomorrow.";
 const HISTORY_LIMIT = 40;
 const HISTORY_CHAR_CAP = 2000;
 const MAX_INLINE_BYTES = 15 * 1024 * 1024;
@@ -331,6 +333,14 @@ function ownMediaUrl(url, userId) {
   } catch { return false; }
 }
 
+async function callsLeft(userId, kind, cap) {
+  try {
+    const { data, error } = await supabase.rpc('zchat_ai_bump', { p_user: userId, p_kind: kind });
+    if (error) return true;
+    return (Number(data) || 0) <= cap;
+  } catch { return true; }
+}
+
 async function isRealBot(botId) {
   const { data } = await supabase.from('profiles').select('id, is_bot, is_deleted').eq('id', botId).maybeSingle();
   return !!(data && data.is_bot && !data.is_deleted);
@@ -547,11 +557,18 @@ const handlerCore = async (event) => {
   const { count, error: countError } = await countQuery.gte('created_at', dayStart.toISOString());
 
   if (!countError && (count || 0) >= DAILY_LIMIT_PER_USER) {
-    const limitText = "That's the most messages I can answer in one day. Try again tomorrow.";
-    await supabase.from('messages').insert(peerMode
-      ? { sender_id: userId, receiver_id: peerId, group_id: null, type: 'text', bot_reply: true, content: limitText }
-      : { sender_id: botId, receiver_id: userId, type: 'text', content: limitText });
+    let told = supabase.from('messages').select('id', { count: 'exact', head: true }).eq('content', LIMIT_TEXT).gte('created_at', dayStart.toISOString());
+    told = peerMode ? told.eq('sender_id', userId).eq('receiver_id', peerId).eq('bot_reply', true) : told.eq('sender_id', botId).eq('receiver_id', userId);
+    const { count: toldCount, error: toldError } = await told;
+    if (!toldError && !(toldCount || 0)) {
+      await supabase.from('messages').insert(peerMode
+        ? { sender_id: userId, receiver_id: peerId, group_id: null, type: 'text', bot_reply: true, content: LIMIT_TEXT }
+        : { sender_id: botId, receiver_id: userId, type: 'text', content: LIMIT_TEXT });
+    }
     return { statusCode: 200, body: 'limit reached' };
+  }
+  if (!(await callsLeft(userId, 'bot', DAILY_CALLS_PER_USER))) {
+    return { statusCode: 429, body: 'Too many requests' };
   }
 
   const knowledgePromise = findKnowledge(text);
