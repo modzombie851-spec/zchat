@@ -345,6 +345,16 @@ async function readPref(key) {
   }
 }
 
+const VIBES = { short: [60], long: [480], double: [90, 110, 90], heartbeat: [70, 110, 150, 600, 70, 110, 150], off: [0] };
+
+function quietHoursNow(q) {
+  if (!q || !q.on) return false;
+  const from = Number.isInteger(q.from) ? q.from : 22;
+  const to = Number.isInteger(q.to) ? q.to : 7;
+  const h = new Date().getHours();
+  return from === to ? true : from < to ? h >= from && h < to : h >= from || h < to;
+}
+
 function accountOf(url) {
   try { return new URL(url || '/', self.location.origin).searchParams.get('acc') || ''; } catch { return ''; }
 }
@@ -444,8 +454,13 @@ self.addEventListener('push', (event) => {
         return;
       }
     }
-    const focus = await readPref('/__focus');
-    const quiet = hush || !!(focus && Number(focus.until) > Date.now() && tag !== focus.chat);
+    const [focus, quietPref, vipPref, vibePref] = await Promise.all([readPref('/__focus'), readPref('/__quiet'), readPref('/__vip'), readPref('/__vibe')]);
+    const from = typeof data.from === 'string' ? data.from : '';
+    const vips = vipPref && acc && Array.isArray(vipPref[acc]) ? vipPref[acc] : [];
+    const sleepy = quietHoursNow(quietPref) && !(from && vips.includes(from));
+    const quiet = hush || sleepy || !!(focus && Number(focus.until) > Date.now() && tag !== focus.chat);
+    const vibes = vibePref && acc && vibePref[acc] && typeof vibePref[acc] === 'object' ? vibePref[acc] : {};
+    const vibe = tag && typeof vibes[tag] === 'string' ? VIBES[vibes[tag]] : null;
     let title = data.title;
     let count = 1;
     if (tag && isChatTag(tag)) {
@@ -463,6 +478,7 @@ self.addEventListener('push', (event) => {
       data: { url: data.url, count, baseTitle: data.title, acc, at: Date.now() },
     };
     if (quiet) options.silent = true;
+    else if (vibe) options.vibrate = vibe;
     if (tag) { options.tag = tag; options.renotify = !quiet && data.renotify !== false; }
     await self.registration.showNotification(title, options);
     await syncBadge();
