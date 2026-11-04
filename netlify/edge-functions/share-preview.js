@@ -2,7 +2,8 @@ const SUPABASE_URL = 'https://etcmbghcmlgeezwgnwuz.supabase.co';
 const SITE = 'https://getzchat.com';
 const FALLBACK_IMAGE = `${SITE}/og-image.png`;
 
-const CRAWLER = /(facebookexternalhit|facebot|whatsapp|twitterbot|telegrambot|slackbot|discordbot|linkedinbot|pinterest|applebot|skypeuripreview|redditbot|viber|snapchat|googlebot|bingbot|duckduckbot|yandex|embedly|quora|outbrain|vkshare|w3c_validator|iframely|imessage|signal|threads|instagram|line\/|kakaotalk|mastodon|bluesky|bsky|preview)/i;
+const CRAWLER = /(facebookexternalhit|facebot|whatsapp|twitterbot|telegrambot|slackbot|discordbot|linkedinbot|pinterest|applebot|skypeuripreview|redditbot|viber|snapchat|googlebot|bingbot|duckduckbot|yandex|embedly|quora|outbrain|vkshare|w3c_validator|iframely|imessage|signal|threads|instagram|line\/|kakaotalk|mastodon|bluesky|bsky|preview|google-inspectiontool|baiduspider|slurp|sogou|exabot|seznambot|petalbot|yeti|qwantify|mojeekbot|ia_archiver)/i;
+const NOINDEX = 'noindex, nofollow, noarchive';
 
 const esc = (value) => String(value == null ? '' : value).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const isHttp = (u) => typeof u === 'string' && /^https?:\/\//i.test(u);
@@ -87,11 +88,12 @@ export function buildCard(kind, d) {
       image: isHttp(d.avatar) ? d.avatar : '',
       type: 'website',
       square: true,
+      noindex: false,
     };
   }
   if (kind === 'post') {
     const o = d.owner || {};
-    if (d.restricted) return { title: `${o.name} on ZChat`, description: 'This post is from a private account.', image: isHttp(o.avatar) ? o.avatar : '', type: 'article', square: true };
+    if (d.restricted) return { title: `${o.name} on ZChat`, description: 'This post is from a private account.', image: isHttp(o.avatar) ? o.avatar : '', type: 'article', square: true, noindex: d.noindex !== false };
     const image = d.media_type === 'image' && isHttp(d.media_url)
       ? d.media_url
       : (d.media_type === 'video' && isHttp(d.poster_url) ? d.poster_url : (isHttp(o.avatar) ? o.avatar : ''));
@@ -101,10 +103,11 @@ export function buildCard(kind, d) {
       image,
       type: 'article',
       square: image === o.avatar,
+      noindex: d.noindex === true,
     };
   }
   if (kind === 'story') {
-    return { title: `${d.name} shared a story on ZChat`, description: 'Open ZChat to watch it.', image: isHttp(d.avatar) ? d.avatar : '', type: 'article', square: true };
+    return { title: `${d.name} shared a story on ZChat`, description: 'Open ZChat to watch it.', image: isHttp(d.avatar) ? d.avatar : '', type: 'article', square: true, noindex: true };
   }
   const bits = [];
   if (d.posts_count) bits.push(`${d.posts_count} posts`);
@@ -118,6 +121,7 @@ export function buildCard(kind, d) {
     image: isHttp(d.avatar) ? d.avatar : '',
     type: 'profile',
     square: true,
+    noindex: d.noindex === true,
   };
 }
 
@@ -142,7 +146,8 @@ export function renderHtml(card, url) {
     tags.push(['property', 'og:image:height', '630']);
   }
   const meta = tags.map(([attr, name, value]) => `<meta ${attr}="${esc(name)}" content="${esc(value)}">`).join('\n');
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${esc(card.title)}</title>\n<meta name="description" content="${esc(card.description)}">\n${meta}\n</head><body style="font-family:sans-serif;background:#0E0A1A;color:#fff;padding:24px"><p><a href="${esc(url)}" style="color:#B79CFF">${esc(card.title)}</a></p><p>${esc(card.description)}</p>${card.image ? `<img src="${esc(image)}" alt="" style="max-width:320px;border-radius:12px">` : ''}</body></html>`;
+  const robots = card.noindex ? `<meta name="robots" content="${NOINDEX}">\n` : '';
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${esc(card.title)}</title>\n${robots}<meta name="description" content="${esc(card.description)}">\n${meta}\n</head><body style="font-family:sans-serif;background:#0E0A1A;color:#fff;padding:24px"><p><a href="${esc(url)}" style="color:#B79CFF">${esc(card.title)}</a></p><p>${esc(card.description)}</p>${card.image ? `<img src="${esc(image)}" alt="" style="max-width:320px;border-radius:12px">` : ''}</body></html>`;
 }
 
 export default async (request, context) => {
@@ -166,8 +171,11 @@ export default async (request, context) => {
   }
   q.delete('og');
   const cleanUrl = `${SITE}/?${q.toString()}`;
-  const html = renderHtml(buildCard(kind, data), cleanUrl);
-  return new Response(html, { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': forced ? 'no-store' : 'public, max-age=300' } });
+  const card = buildCard(kind, data);
+  const html = renderHtml(card, cleanUrl);
+  const headers = { 'content-type': 'text/html; charset=utf-8', 'cache-control': forced ? 'no-store' : 'public, max-age=300' };
+  if (card.noindex) headers['x-robots-tag'] = NOINDEX;
+  return new Response(html, { headers });
 };
 
 export const config = { path: '/' };
