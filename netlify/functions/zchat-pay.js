@@ -31,6 +31,15 @@ function verifiedPlan() {
   if (!url || !variant) return null;
   return { variant, url, price: String(v.price || '').slice(0, 32) };
 }
+function verifiedGift() {
+  const v = readJson('ZCHAT_VERIFIED_GIFT');
+  if (!v || Array.isArray(v)) return null;
+  const url = cleanUrl(v.url);
+  const variant = String(v.variant || v.variant_id || '');
+  if (!url || !variant) return null;
+  const plan = verifiedPlan();
+  return { variant, url, price: String(v.price || (plan && plan.price) || '').slice(0, 32) };
+}
 function rawBody(event) {
   const b = event.body || '';
   return event.isBase64Encoded ? Buffer.from(b, 'base64').toString('utf8') : b;
@@ -49,10 +58,30 @@ async function rpc(name, args) {
   return data;
 }
 
+async function onGiftOrder(payload, refunded, orderId, attrs) {
+  if (refunded || attrs.status === 'refunded') {
+    const out = await rpc('zchat_verified_gift_refund', { p_order: orderId });
+    return reply(200, { ok: true, refunded: true, result: out });
+  }
+  if (attrs.status !== 'paid') return reply(200, { ok: true, skipped: attrs.status || 'no status' });
+  if (!(Number(attrs.total) > 0) && process.env.ZCHAT_ALLOW_FREE_ORDERS !== '1') return reply(200, { ok: true, skipped: 'free order' });
+  const custom = (payload.meta && payload.meta.custom_data) || {};
+  const userId = String(custom.user_id || '');
+  const token = String(custom.gift || '');
+  if (!UUID.test(userId) || !UUID.test(token)) return reply(200, { ok: true, skipped: 'no gift' });
+  const tier = String(process.env.ZCHAT_VERIFIED_TIER || 'blue').toLowerCase();
+  const out = await rpc('zchat_verified_gift_paid', { p_token: token, p_buyer: userId, p_order: orderId, p_total: Number(attrs.total) || null, p_tier: tier });
+  return reply(200, { ok: true, result: out });
+}
+
 async function onOrder(payload, refunded) {
   const attrs = (payload.data && payload.data.attributes) || {};
   const orderId = String((payload.data && payload.data.id) || attrs.identifier || '');
   if (!orderId) return reply(200, { ok: true, skipped: 'no order id' });
+  const item = attrs.first_order_item || {};
+  const variant = String(item.variant_id || '');
+  const gift = verifiedGift();
+  if (gift && variant && variant === gift.variant) return onGiftOrder(payload, refunded, orderId, attrs);
   if (refunded || attrs.status === 'refunded') {
     await rpc('zchat_refund_order', { p_order: orderId });
     return reply(200, { ok: true, refunded: true });
@@ -62,8 +91,6 @@ async function onOrder(payload, refunded) {
   const custom = (payload.meta && payload.meta.custom_data) || {};
   const userId = String(custom.user_id || '');
   if (!UUID.test(userId)) return reply(200, { ok: true, skipped: 'no user' });
-  const item = attrs.first_order_item || {};
-  const variant = String(item.variant_id || '');
   const pack = coinPacks().find((p) => p.variant === variant);
   if (!pack) return reply(200, { ok: true, skipped: 'not a coin pack' });
   const out = await rpc('zchat_credit_order', { p_order: orderId, p_user: userId, p_coins: pack.coins, p_variant: variant, p_total: Number(attrs.total) || null });
@@ -117,9 +144,11 @@ export const handler = async (event) => {
   try { body = JSON.parse(raw || '{}'); } catch { return reply(400, { error: 'Bad request' }); }
   if (body.action === 'packs') {
     const plan = verifiedPlan();
+    const gift = verifiedGift();
     return reply(200, {
       packs: coinPacks().map((p) => ({ id: p.variant, coins: p.coins, price: p.price, url: p.url, tag: p.tag })),
       verified: plan ? { price: plan.price, url: plan.url } : null,
+      verified_gift: gift ? { price: gift.price, url: gift.url } : null,
     });
   }
   return reply(400, { error: 'Unknown action' });

@@ -7,7 +7,7 @@ const GEMINI_MODEL = process.env.GEMINI_TOOLS_MODEL || process.env.GEMINI_MODEL 
 const GEMINI_FALLBACK = process.env.GEMINI_FALLBACK_MODEL || 'gemini-3.8-flash';
 const OLLAMA_URL = (process.env.OLLAMA_URL || '').replace(/\/+$/, '');
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'qwen3:14b';
-const LIMITS = { translate: 150, transcribe: 40, summary: 40, translate_many: 150, gifs: 1000, music: 300, spamcheck: 80, character: 250, charcheck: 40, rewrite: 80, replies: 60 };
+const LIMITS = { translate: 150, translate_live: 600, transcribe: 40, summary: 40, translate_many: 150, gifs: 1000, music: 300, spamcheck: 80, character: 250, charcheck: 40, rewrite: 80, replies: 60 };
 const MAX_AUDIO_BYTES = 12 * 1024 * 1024;
 const LANGS = { en: 'English', si: 'Sinhala', ta: 'Tamil', hi: 'Hindi', ar: 'Arabic', es: 'Spanish', fr: 'French', de: 'German', pt: 'Portuguese', ru: 'Russian', ja: 'Japanese', ko: 'Korean', zh: 'Chinese', id: 'Indonesian', ms: 'Malay', th: 'Thai', tr: 'Turkish', it: 'Italian', ur: 'Urdu', bn: 'Bengali' };
 
@@ -140,6 +140,23 @@ async function translate(user, body) {
   const out = (await ollamaText(systemText, text)) || (await geminiText([{ text }], systemText));
   if (!out || out.limited || !out.text) return reply(503, { error: 'Translation is busy right now. Try again soon.' });
   return reply(200, { text: out.text.slice(0, 6000), to });
+}
+
+async function translateLive(user, body) {
+  const text = String(body.text || '').trim().slice(0, 3000);
+  const code = String(body.to || 'en').slice(0, 2).toLowerCase();
+  const to = LANGS[code] || 'English';
+  if (!text) return reply(400, { error: 'Nothing to translate' });
+  if ((await bumpUsage(user.id, 'translate_live')) > LIMITS.translate_live) return reply(429, { error: 'You have translated a lot today. Try again tomorrow.' });
+  const systemText = `You translate a chat message someone is writing into ${to}. Keep the meaning, tone, emojis, names, numbers, mentions like @name and links exactly. If it is already in ${to}, keep it as it is. Reply with only JSON like {"from":"en","text":"..."}, where "from" is the language it was written in, one of ${Object.keys(LANGS).join(', ')}, or "xx" when you are not sure, and "text" is the translation.`;
+  const out = (await ollamaText(systemText, text, 9000, true)) || (await geminiText([{ text }], systemText, 20000, true));
+  if (!out || out.limited || !out.text) return reply(503, { error: 'Translation is busy right now. Try again soon.' });
+  let parsed = null;
+  try { parsed = JSON.parse(String(out.text).replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim()); } catch { parsed = null; }
+  const done = parsed && typeof parsed.text === 'string' ? parsed.text.trim() : '';
+  if (!done) return reply(503, { error: 'Translation is busy right now. Try again soon.' });
+  const from = parsed && typeof parsed.from === 'string' && LANGS[parsed.from.toLowerCase()] ? parsed.from.toLowerCase() : 'xx';
+  return reply(200, { text: done.slice(0, 6000), from, to: code });
 }
 
 const REWRITE_MODES = {
@@ -789,6 +806,7 @@ export const handler = async (event) => {
     if (body.action === 'qr_decide') return await qrDecide(event, user, body);
     if (body.action === 'turn') return reply(200, await turnServers());
     if (body.action === 'translate') return await translate(user, body);
+    if (body.action === 'translate_live') return await translateLive(user, body);
     if (body.action === 'transcribe') return await transcribe(user, body);
     if (body.action === 'translate_many') return await translateMany(user, body);
     if (body.action === 'summary') return await summary(user, body);
