@@ -1,0 +1,24 @@
+name: Run SQL
+on:
+  workflow_dispatch:
+    inputs:
+      file:
+        description: SQL file name
+        required: true
+        default: zchat-27.0V-database.sql
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run the SQL file
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          FILE: ${{ inputs.file }}
+        run: |
+          case "$FILE" in ""|*[!A-Za-z0-9._-]*) echo "Use a plain file name"; exit 1;; esac
+          [ -f "$FILE" ] || { echo "No file called $FILE in the repo"; exit 1; }
+          [ -n "$DB_URL" ] || { echo "The SUPABASE_DB_URL secret is missing"; exit 1; }
+          command -v psql >/dev/null || { sudo apt-get update -q && sudo apt-get install -y -q postgresql-client; }
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -q -f "$FILE"
+          echo "Done: $FILE ran with no errors"
