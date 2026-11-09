@@ -2,6 +2,7 @@ import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 import { createClient } from '@supabase/supabase-js';
+import { checkPhotos, photoPathOk } from '../lib/zchat-photo.js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://etcmbghcmlgeezwgnwuz.supabase.co';
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -13,7 +14,7 @@ const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'qwen3:14b';
 const SITE = (process.env.ZCHAT_SITE || process.env.URL || 'https://getzchat.com').replace(/\/+$/, '');
 const MAIL_FROM = process.env.RESEND_FROM || 'ZChat <hello@getzchat.com>';
 const FEED_URL = process.env.SAFETY_FEED_URL === 'off' ? '' : (process.env.SAFETY_FEED_URL || 'https://openphish.com/feed.txt');
-const LIMITS = { kindcheck: 150, linkcheck: 400, export_link: 60 };
+const LIMITS = { kindcheck: 150, linkcheck: 400, export_link: 60, photocheck: 400 };
 const STORAGE_HOST = (() => { try { return new URL(SUPABASE_URL).host; } catch { return ''; } })();
 
 const reply = (status, body) => ({ statusCode: status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store' }, body: JSON.stringify(body) });
@@ -547,6 +548,74 @@ async function recCancel(event, body) {
   return soft(404, { error: 'This change was already stopped or is no longer active.' });
 }
 
+const PHOTO_KINDS = new Set(['post', 'story', 'avatar', 'group', 'message']);
+async function photocheck(user, body) {
+  const kind = PHOTO_KINDS.has(String(body.kind || '')) ? String(body.kind) : 'post';
+  const paths = Array.isArray(body.paths) ? body.paths.map(String).slice(0, 10) : [];
+  if (!paths.length) return reply(200, { results: [] });
+  if ((await bumpUsage(user.id, 'photocheck')) > LIMITS.photocheck) return reply(200, { results: paths.map((path) => ({ path, verdict: null, state: 'later' })) });
+  const results = await checkPhotos(supabase, user.id, paths, kind, 7500);
+  return reply(200, { results });
+}
+
+async function photoAdminUrls(user, body) {
+  const { data: adm } = await supabase.from('admins').select('user_id').eq('user_id', user.id).maybeSingle();
+  if (!adm) return reply(403, { error: 'Not allowed' });
+  const paths = (Array.isArray(body.paths) ? body.paths : []).map(String).filter((p) => p.indexOf('chat-private/') === 0 && photoPathOk(p)).slice(0, 40);
+  if (!paths.length) return reply(200, { urls: {} });
+  const { data } = await supabase.storage.from('chat-private').createSignedUrls(paths.map((p) => p.slice(13)), 600);
+  const urls = {};
+  (data || []).forEach((x, i) => { if (x && x.signedUrl) urls[paths[i]] = x.signedUrl; });
+  return reply(200, { urls });
+}
+
+const SIGNUP_TEXT = {
+  pass: 'Please finish the quick check so we know you are a person.',
+  bot: 'Something did not look right. Please try again.',
+  disposable: 'Use an email address you plan to keep. Temporary inboxes cannot be used on ZChat.',
+};
+const SIGNUP_TEMP = new Set(['mailinator.com', 'guerrillamail.com', 'sharklasers.com', 'grr.la', '10minutemail.com', 'temp-mail.org', 'tempmail.com', 'yopmail.com', 'trashmail.com', 'getnada.com', 'dispostable.com', 'maildrop.cc', 'mailnesia.com', 'throwawaymail.com', 'fakeinbox.com', 'mohmal.com', 'emailondeck.com', 'mail.tm', 'tempail.com', '1secmail.com']);
+async function turnstileOk(secret, token, ip) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 5000);
+  try {
+    const form = new URLSearchParams({ secret, response: token.slice(0, 2048) });
+    if (ip && ip !== 'unknown') form.set('remoteip', ip);
+    const res = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', { method: 'POST', body: form, signal: ctrl.signal });
+    const json = await res.json().catch(() => null);
+    if (!res.ok || !json) return null;
+    return json.success === true;
+  } catch { return null; } finally { clearTimeout(timer); }
+}
+
+async function signupCheck(event, body) {
+  const ip = ipOf(event);
+  const email = String(body.email || '').trim().toLowerCase().slice(0, 200);
+  const device = String(body.device || '').slice(0, 120);
+  const waited = Number(body.t);
+  const bot = !!String(body.hp || '').trim() || (Number.isFinite(waited) && waited > 0 && waited < 900);
+  const secret = process.env.TURNSTILE_SECRET_KEY || '';
+  let human = false;
+  if (secret && (process.env.VITE_TURNSTILE_SITE_KEY || process.env.TURNSTILE_SITE_KEY)) {
+    const token = String(body.token || '');
+    if (!token) return soft(400, { error: SIGNUP_TEXT.pass, reason: 'pass' });
+    const ok = await turnstileOk(secret, token, ip);
+    if (ok === false) return soft(400, { error: SIGNUP_TEXT.pass, reason: 'pass' });
+    human = ok === true;
+  }
+  const user = headerOf(event, 'authorization') ? await callerFrom(event) : null;
+  try {
+    const { data, error } = await supabase.rpc('zchat_signup_precheck', { p_email: email || null, p_ip: ip, p_device: device || null, p_user: user ? user.id : null, p_human: human, p_bot: bot });
+    if (error) throw error;
+    if (data && data.ok === false) return soft(400, { error: String(data.message || SIGNUP_TEXT.bot), reason: String(data.reason || '') });
+    return reply(200, { ok: true, human });
+  } catch {
+    if (bot) return soft(400, { error: SIGNUP_TEXT.bot, reason: 'bot' });
+    if (email && SIGNUP_TEMP.has(email.split('@')[1] || '')) return soft(400, { error: SIGNUP_TEXT.disposable, reason: 'disposable' });
+    return reply(200, { ok: true, human, unchecked: true });
+  }
+}
+
 export const handler = async (event) => {
   if (event.httpMethod !== 'POST') return reply(405, { error: 'Method not allowed' });
   let body = {};
@@ -560,8 +629,11 @@ export const handler = async (event) => {
     if (action === 'rec_email') return await recEmail(body);
     if (action === 'rec_finish') return await recFinish(body);
     if (action === 'rec_cancel') return await recCancel(event, body);
+    if (action === 'signup_check') return await signupCheck(event, body);
     const user = await callerFrom(event);
     if (!user) return reply(401, { error: 'Not signed in' });
+    if (action === 'photocheck') return await photocheck(user, body);
+    if (action === 'photo_admin_urls') return await photoAdminUrls(user, body);
     if (action === 'kindcheck') return await kindcheck(user, body);
     if (action === 'linkcheck') return await linkcheck(user, body);
     if (action === 'export_start') return await exportStart(event, user, body);

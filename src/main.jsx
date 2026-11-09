@@ -1,5 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { zlangBoot } from './i18n/index.js';
 import App from './App.jsx';
 
 let maxVH = window.innerHeight;
@@ -56,8 +57,10 @@ if ('serviceWorker' in navigator) {
   });
 }
 
-ReactDOM.createRoot(document.getElementById('root')).render(
+const zstart = () => ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <App />
   </React.StrictMode>
 );
+const zboot = zlangBoot();
+if (zboot) zboot.then(zstart, zstart); else zstart();

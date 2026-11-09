@@ -5,7 +5,7 @@ const SHARE = 'zchat-share';
 const FONTS = 'zchat-fonts-v1';
 const DECOR = 'zchat-decor-v1';
 const STICKERS = 'zchat-stickers-v1';
-const ASSET_LIMIT = 60;
+const ASSET_LIMIT = 240;
 const STATIC_LIMIT = 500;
 const REMOTE_LIMIT = 700;
 const STATIC_EXT = /\.(png|jpe?g|webp|gif|svg|ico|woff2?|ttf|otf)$/i;
@@ -129,9 +129,10 @@ async function navigation(event) {
 async function assetFirst(request) {
   const cache = await caches.open(SHELL);
   const hit = await cache.match(request, { ignoreSearch: true });
-  if (hit) return hit;
+  if (hit && realFile(hit)) return hit;
+  if (hit) cache.delete(request).catch(() => {});
   const res = await fetch(request);
-  if (res && res.ok && res.type === 'basic') cache.put(request, res.clone()).catch(() => {});
+  if (realFile(res)) cache.put(request, res.clone()).catch(() => {});
   return res;
 }
 
