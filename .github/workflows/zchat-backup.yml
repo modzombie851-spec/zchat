@@ -1,0 +1,109 @@
+name: ZChat backup
+
+on:
+  schedule:
+    - cron: '23 2 * * 0'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: zchat-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check the secrets
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          PASS: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          [ -n "$DB_URL" ] || { echo "The SUPABASE_DB_URL secret is missing"; exit 1; }
+          [ -n "$PASS" ] || { echo "Add a BACKUP_PASSPHRASE secret first. This repository is public, so backups are only saved encrypted."; exit 1; }
+          [ "${#PASS}" -ge 16 ] || { echo "Use a BACKUP_PASSPHRASE with at least 16 characters"; exit 1; }
+
+      - name: Install the Postgres 17 client
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q postgresql-common gnupg
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y -q postgresql-client-17
+
+      - name: Dump, compress and encrypt
+        id: dump
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          PASS: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          URL="$DB_URL"
+          case "$URL" in *pooler.supabase.com:6543*) URL="${URL/:6543/:5432}";; esac
+          echo "::add-mask::$URL"
+          BIN=/usr/lib/postgresql/17/bin
+          STAMP=$(date -u +%Y-%m-%d-%H%M)
+          NAME="zchat-backup-$STAMP"
+          WORK="$RUNNER_TEMP/$NAME"
+          mkdir -p "$WORK"
+          MANAGED=(information_schema 'pg_*' _analytics _realtime _supavisor auth extensions pgbouncer realtime storage supabase_functions supabase_migrations cron dbdev graphql graphql_public net pgmq pgsodium pgsodium_masks pgtle repack tiger tiger_data 'timescaledb_*' '_timescaledb_*' topology vault)
+          NO_DATA=(information_schema 'pg_*' _analytics _realtime _supavisor extensions pgbouncer realtime supabase_migrations cron dbdev graphql graphql_public net pgmq pgsodium pgsodium_masks pgtle repack tiger tiger_data 'timescaledb_*' '_timescaledb_*' topology vault)
+          SKIP_SCHEMA=(); for s in "${MANAGED[@]}"; do SKIP_SCHEMA+=(--exclude-schema="$s"); done
+          SKIP_DATA=(); for s in "${NO_DATA[@]}"; do SKIP_DATA+=(--exclude-schema="$s"); done
+          "$BIN/pg_dump" "$URL" --schema-only --quote-all-identifiers "${SKIP_SCHEMA[@]}" --file "$WORK/schema.sql"
+          sed -i -E -e 's/^CREATE PUBLICATION "supabase_realtime/-- &/' -e 's/^(CREATE|ALTER) EVENT TRIGGER /-- &/' -e 's/^COMMENT ON EXTENSION /-- &/' -e 's/^CREATE SCHEMA "/CREATE SCHEMA IF NOT EXISTS "/' "$WORK/schema.sql"
+          "$BIN/pg_dump" "$URL" --data-only --quote-all-identifiers "${SKIP_DATA[@]}" \
+            --exclude-table='"auth"."schema_migrations"' --exclude-table='"storage"."migrations"' --exclude-table='"supabase_functions"."migrations"' \
+            --file "$WORK/data.sql"
+          cat > "$WORK/README.txt" <<'TXT'
+          ZChat database backup
+
+          schema.sql  tables, functions, policies and grants of your own schemas
+          data.sql    rows, including accounts (auth) and file records (storage)
+
+          Photos and other files live in Supabase Storage and are not inside this backup.
+
+          To restore into an empty Supabase project:
+          1. gpg --decrypt FILE.tar.gz.gpg > backup.tar.gz   (it asks for BACKUP_PASSPHRASE)
+          2. tar xzf backup.tar.gz
+          3. psql --single-transaction --variable ON_ERROR_STOP=1 --file schema.sql --command 'SET session_replication_role = replica' --file data.sql --dbname "NEW_DATABASE_URL"
+          TXT
+          tar -C "$RUNNER_TEMP" -czf "$RUNNER_TEMP/$NAME.tar.gz" "$NAME"
+          umask 077
+          printf '%s' "$PASS" > "$RUNNER_TEMP/pass"
+          gpg --batch --yes --quiet --pinentry-mode loopback --passphrase-file "$RUNNER_TEMP/pass" \
+            --symmetric --cipher-algo AES256 --s2k-mode 3 --s2k-digest-algo SHA512 --s2k-count 65011712 --compress-algo none \
+            --output "$RUNNER_TEMP/$NAME.tar.gz.gpg" "$RUNNER_TEMP/$NAME.tar.gz"
+          rm -f "$RUNNER_TEMP/pass" "$RUNNER_TEMP/$NAME.tar.gz"
+          rm -rf "$WORK"
+          mkdir -p "$RUNNER_TEMP/out"
+          mv "$RUNNER_TEMP/$NAME.tar.gz.gpg" "$RUNNER_TEMP/out/"
+          SIZE=$(stat -c %s "$RUNNER_TEMP/out/$NAME.tar.gz.gpg")
+          echo "size=$SIZE" >> "$GITHUB_OUTPUT"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "Encrypted backup ready: $NAME.tar.gz.gpg ($SIZE bytes)"
+
+      - name: Keep the encrypted file for 30 days
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.dump.outputs.name }}
+          path: ${{ runner.temp }}/out/*.gpg
+          retention-days: 30
+          compression-level: 0
+          if-no-files-found: error
+
+      - name: Record the backup time
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SIZE: ${{ steps.dump.outputs.size }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          URL="$DB_URL"
+          case "$URL" in *pooler.supabase.com:6543*) URL="${URL/:6543/:5432}";; esac
+          echo "::add-mask::$URL"
+          case "$SIZE" in ''|*[!0-9]*) SIZE=0;; esac
+          psql "$URL" -v ON_ERROR_STOP=1 -q -v size="$SIZE" -v note="$RUN_URL" <<'SQL' || echo "::warning::The backup is saved, but its time was not recorded. Run sql/launch.sql so the health page can see backups."
+          select public.zchat_backup_done(:size, :'note');
+          SQL

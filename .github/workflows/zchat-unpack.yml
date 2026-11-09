@@ -1,0 +1,42 @@
+name: Unpack update
+on:
+  push:
+    paths:
+      - 'zchat-update*.zip'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: zchat-unpack
+  cancel-in-progress: false
+jobs:
+  unpack:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unpack the update zip into the repo
+        run: |
+          set -e
+          ZIP=$(ls zchat-update*.zip 2>/dev/null | head -1 || true)
+          if [ -z "$ZIP" ]; then echo "No update zip in the repo root"; exit 0; fi
+          rm -rf /tmp/zu && mkdir -p /tmp/zu
+          unzip -q -o "$ZIP" -d /tmp/zu
+          if find /tmp/zu -path '*/.git/*' -o -path '*/.git' | grep -q .; then echo "The zip must not contain a .git folder"; exit 1; fi
+          if [ -d /tmp/zu/.github/workflows ]; then echo "Workflow files are skipped. Upload them by hand."; rm -rf /tmp/zu/.github/workflows; fi
+          if [ -f /tmp/zu/zchat-remove.txt ]; then
+            while IFS= read -r f || [ -n "$f" ]; do
+              case "$f" in ''|/*|*..*|.git*|.github*) continue ;; esac
+              git rm -q -r --ignore-unmatch -- "$f"
+            done < /tmp/zu/zchat-remove.txt
+            rm -f /tmp/zu/zchat-remove.txt
+          fi
+          cp -a /tmp/zu/. .
+          git rm -q --cached --ignore-unmatch -- "$ZIP"
+          rm -f -- "$ZIP"
+          git config user.name "zchat update"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then echo "Nothing changed"; exit 0; fi
+          git commit -q -m "Unpack ${ZIP}"
+          git push
+          echo "Done: ${ZIP} unpacked"
