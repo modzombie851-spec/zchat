@@ -312,6 +312,7 @@ export const ZapTable = zLazy(() => import('./games/cards.jsx'), 'ZapTable', 'ca
 export const ZapCardGuide = zLazy(() => import('./games/cards.jsx'), 'ZapCardGuide', 'cards');
 export const BlobGame = zLazy(() => import('./games/blob.jsx'), 'BlobGame', 'blob');
 export const DuoGamePage = zLazy(() => import('./games/duo.jsx'), 'DuoGamePage', 'duo');
+export const GulpGamePage = zLazy(() => import('./games/gulp.jsx'), 'GulpGamePage', 'gulp');
 export const G1GolfPage = zLazy(() => import('./areas/games.jsx'), 'G1GolfPage', 'games');
 export const G1SudokuBoard = zLazy(() => import('./areas/games.jsx'), 'G1SudokuBoard', 'games');
 export const G1CrossPage = zLazy(() => import('./areas/games.jsx'), 'G1CrossPage', 'games');
@@ -2008,10 +2009,12 @@ function GlobalStyle() {
       @keyframes zchat-coin-flip { 0% { transform: translateY(0) scaleX(1); } 15% { transform: translateY(-8px) scaleX(0.06); } 30% { transform: translateY(-14px) scaleX(1); } 45% { transform: translateY(-16px) scaleX(0.06); } 60% { transform: translateY(-14px) scaleX(1); } 75% { transform: translateY(-8px) scaleX(0.06); } 100% { transform: translateY(0) scaleX(1); } }
       .zchat-coin-flip { animation: zchat-coin-flip 0.88s ease-in-out both; }
       @keyframes zchat-roll-land { 0% { transform: scale(1.14); } 60% { transform: scale(0.97); } 100% { transform: scale(1); } }
-      @keyframes zrps-pump { 0% { transform: translateY(0) rotate(0deg); } 45% { transform: translateY(-15px) rotate(-7deg); } 100% { transform: translateY(0) rotate(0deg); } }
+      @keyframes zrps-pump { 0% { transform: translateY(0) rotate(0deg); } 45% { transform: translateY(-14px) rotate(-9deg); } 100% { transform: translateY(0) rotate(0deg); } }
+      @keyframes zrps-pumpr { 0% { transform: translateY(0) rotate(0deg); } 45% { transform: translateY(-14px) rotate(9deg); } 100% { transform: translateY(0) rotate(0deg); } }
       @keyframes zrps-pop { 0% { transform: scale(0.82); } 55% { transform: scale(1.12); } 100% { transform: scale(1); } }
       @keyframes zrps-word { 0% { opacity: 0; transform: scale(0.7); } 30% { opacity: 1; transform: scale(1.08); } 100% { opacity: 1; transform: scale(1); } }
       .zrps-pump { animation: zrps-pump 0.38s cubic-bezier(.3,.7,.4,1) 3; }
+      .zrps-pumpr { animation: zrps-pumpr 0.38s cubic-bezier(.3,.7,.4,1) 3; }
       .zrps-pop { animation: zrps-pop 0.3s cubic-bezier(.2,.9,.3,1.2); }
       .zrps-word { animation: zrps-word 0.24s ease-out; }
       .zchat-roll-land { animation: zchat-roll-land 0.32s ease-out; }
@@ -18464,7 +18467,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-export const APP_VERSION = '32.0V';
+export const APP_VERSION = '33.0V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -18900,11 +18903,11 @@ function CallMiniBar({ call, remoteVideo, onOpen, onHangup }) {
   return (
     <>
       <div onClick={onOpen} className="zchat-fade" style={{
-        position: 'fixed', top: 0, left: 0, right: 0, zIndex: 480, cursor: 'pointer',
+        position: 'fixed', top: 'var(--zvp-top, 0px)', left: 0, right: 0, zIndex: 480, cursor: 'pointer',
         background: '#1FA855', color: 'white',
         paddingTop: 'env(safe-area-inset-top)', boxShadow: '0 4px 16px rgba(0,0,0,0.25)',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 14px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, height: 42, padding: '0 14px', boxSizing: 'border-box' }}>
           <div style={{ display: 'flex', flexShrink: 0 }}>
             {call.room ? <Volume2 size={17} /> : call.kind === 'video' ? <VideoIcon size={17} /> : <Phone size={16} />}
           </div>
@@ -25536,7 +25539,7 @@ function getPortalLayer() {
   if (!document.getElementById('zchat-layer-style')) {
     const st = document.createElement('style');
     st.id = 'zchat-layer-style';
-    st.textContent = '#zchat-layer{position:fixed;left:0;right:0;top:0;height:calc(var(--zvp-top, 0px) + var(--zvp-h, 100%));pointer-events:none}#zchat-layer>*{pointer-events:auto}html.zkb #zchat-layer{transform:translateZ(0)}@keyframes zchat-panel-back-in{0%{opacity:0;transform:translateX(-10%)}100%{opacity:1;transform:none}}';
+    st.textContent = '#zchat-layer{position:fixed;left:0;right:0;top:0;height:calc(var(--zvp-top, 0px) + var(--zvp-h, 100%));pointer-events:none}#zchat-layer>*{pointer-events:auto}html.zkb #zchat-layer{transform:translateZ(0)}html.zcb #zchat-layer{top:var(--zcb, 0px);height:calc(var(--zvp-top, 0px) + var(--zvp-hraw, 100%) - var(--zcb, 0px));transform:translateZ(0)}html.zcb.zkb #zchat-layer{--zvp-h:calc(var(--zvp-hraw, 100%) - var(--zcb, 0px))}@keyframes zchat-panel-back-in{0%{opacity:0;transform:translateX(-10%)}100%{opacity:1;transform:none}}';
     document.head.appendChild(st);
   }
   portalLayer = document.getElementById('zchat-layer');
@@ -25550,6 +25553,10 @@ function getPortalLayer() {
 export function Portal({ children }) {
   if (typeof document === 'undefined') return children;
   return ReactDOM.createPortal(children, getPortalLayer() || document.body);
+}
+function BodyPortal({ children }) {
+  if (typeof document === 'undefined' || !document.body) return children;
+  return ReactDOM.createPortal(children, document.body);
 }
 
 const EDGE_BACK_PX = 24;
@@ -35511,10 +35518,12 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           if (next.height) {
             de.style.setProperty('--zvp-top', `${next.offset || 0}px`);
             de.style.setProperty('--zvp-h', `${next.height}px`);
+            de.style.setProperty('--zvp-hraw', `${next.height}px`);
             if (root) { root.style.top = `${next.offset || 0}px`; root.style.height = `${next.height}px`; root.style.bottom = 'auto'; }
           } else {
             de.style.removeProperty('--zvp-top');
             de.style.removeProperty('--zvp-h');
+            de.style.removeProperty('--zvp-hraw');
             if (root) { root.style.top = '0px'; root.style.height = ''; root.style.bottom = '0px'; }
           }
         } catch {}
@@ -35551,9 +35560,11 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (viewportBox.height) {
       el.style.setProperty('--zvp-top', `${viewportBox.offset || 0}px`);
       el.style.setProperty('--zvp-h', `${viewportBox.height}px`);
+      el.style.setProperty('--zvp-hraw', `${viewportBox.height}px`);
     } else {
       el.style.removeProperty('--zvp-top');
       el.style.removeProperty('--zvp-h');
+      el.style.removeProperty('--zvp-hraw');
     }
   }, [viewportBox.height, viewportBox.offset]);
   const presizeForKeyboard = () => {
@@ -42569,6 +42580,12 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (callBarShown) meta.setAttribute('content', '#1FA855');
     return () => { if (callBarShown && previous) meta.setAttribute('content', previous); };
   }, [callBarShown]);
+  useEffect(() => {
+    const de = document.documentElement;
+    de.classList.toggle('zcb', callBarShown);
+    if (callBarShown) de.style.setProperty('--zcb', '42px'); else de.style.removeProperty('--zcb');
+    return () => { de.classList.remove('zcb'); de.style.removeProperty('--zcb'); };
+  }, [callBarShown]);
   const activeProfileRefForCalls = useRef(null);
   activeProfileRefForCalls.current = activeProfile;
   const activeGroupResumeRef = useRef(null);
@@ -47334,6 +47351,12 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             setGroups((prev) => (prev.some((x) => x.id === g.id) ? prev : sortGroupRows([{ ...g, myRole: 'admin', pinned: false, archived: false, unread: 0, mutedUntil: null, ...groupFieldsFor(sys, g.created_at), last_message_at: sys ? sys.created_at : g.created_at }, ...prev])));
             loadGroups();
             openGroup({ ...g, myRole: 'admin' });
+            const skipped = (extra && extra.skipped) || [];
+            if (skipped.length) {
+              const nm = skipped.map((p) => String(p.name || p.username || 'Someone').split(' ')[0]);
+              const who = nm.length === 1 ? nm[0] : `${nm.slice(0, -1).join(', ')} and ${nm[nm.length - 1]}`;
+              setTimeout(() => showSnack(`${who} could not be added. They only let certain people add them to groups, so send them the group link.`), 600);
+            }
           }} />
       )}
       {showGroupInfo && activeGroup && (
@@ -47601,7 +47624,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       )}
       {!callEngine.call && callEngine.away && <Portal><div style={{ position: 'relative', zIndex: 901 }}><CallMoveBar row={callEngine.away} onMove={callEngine.moveHere} /></div></Portal>}
       {callEngine.call && callEngine.call.minimized && callEngine.call.status !== 'ended' && (
-        <Portal><div style={{ position: 'relative', zIndex: 901 }}><CallMiniBar call={callEngine.call}
+        <BodyPortal><div style={{ position: 'relative', zIndex: 905 }}><CallMiniBar call={callEngine.call}
           remoteVideo={(() => {
             const c = callEngine.call;
             if (c.mode !== 'direct' || c.kind !== 'video' || !c.peer) return null;
@@ -47609,7 +47632,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             if (!stream || !stream.getVideoTracks().length || (c.remoteCameraOff || {})[c.peer.id]) return null;
             return stream;
           })()}
-          onOpen={() => callEngine.minimize(false)} onHangup={callEngine.hangup} /></div></Portal>
+          onOpen={() => callEngine.minimize(false)} onHangup={callEngine.hangup} /></div></BodyPortal>
       )}
       {newVersionAvailable && !updateLater && (
         <UpdateAvailableBanner
@@ -47983,7 +48006,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       {msgSearchOpen != null && (
         <SearchMessagesPage myId={session.user.id} groups={groups} hiddenIds={getHiddenMsgIds()} initialQuery={msgSearchOpen} onClose={() => setMsgSearchOpen(null)} onOpen={openSearchHit} />
       )}
-      {showWhatsNew && <PageGuard name="whats new" onClose={() => setShowWhatsNew(false)}><WhatsNewSheet me={me} onClose={() => setShowWhatsNew(false)} onTry={(g) => { if (g === 'sets') setCollectionOpen(true); else if (g === 'shop') setShopOpen(true); else if (g === 'rooms') setShowGames({ at: Date.now(), room: '' }); else if (g === 'map') setMapOpen(true); else if (g === 'song' && me) setProfileOf({ ...me, __song: true }); else if (g === 'ai') setAiStudio({ mode: 'image' }); else if (g === 'chars') setCharsOpen(true); else if (g === 'coins') setWalletOpen(true); else if (g === 'bubbles') setShowBubbleSheet(true); else if (g === 'drops') setCollectionOpen('__drop'); else if (g === 'folders') { setHomeTab('chats'); setFoldersOpen(true); } else if (g === 'styles') setShopOpen('tab:styles'); else if (g === 'communities') setCommunitiesOpen({}); }} /></PageGuard>}
+      {showWhatsNew && <PageGuard name="whats new" onClose={() => setShowWhatsNew(false)}><WhatsNewSheet me={me} onClose={() => setShowWhatsNew(false)} onTry={(g) => { if (g === 'sets') setCollectionOpen(true); else if (g === 'shop') setShopOpen(true); else if (g === 'rooms') setShowGames({ at: Date.now(), room: '' }); else if (g === 'games') setShowGames(true); else if (g === 'map') setMapOpen(true); else if (g === 'song' && me) setProfileOf({ ...me, __song: true }); else if (g === 'ai') setAiStudio({ mode: 'image' }); else if (g === 'chars') setCharsOpen(true); else if (g === 'coins') setWalletOpen(true); else if (g === 'bubbles') setShowBubbleSheet(true); else if (g === 'drops') setCollectionOpen('__drop'); else if (g === 'folders') { setHomeTab('chats'); setFoldersOpen(true); } else if (g === 'styles') setShopOpen('tab:styles'); else if (g === 'communities') setCommunitiesOpen({}); }} /></PageGuard>}
       {showGames && (
         <GamesPage key={showGames.at || 'games'} initialGame={showGames.game || null} onClose={() => setShowGames(false)}
           friends={gameFriends}
@@ -48028,7 +48051,14 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           onPeerAway={pingLivePeer}
           onRematch={() => { const pp = liveGame.peer; setLiveGame(null); setTimeout(() => startLiveGame(pp, 'duo'), 140); }} />
       )}
-      {liveGame && me && liveGame.state.g !== 'duo' && (
+      {liveGame && me && liveGame.state.g === 'gulp' && (
+        <GulpGamePage key={liveGame.state.id} initial={liveGame.state} me={me} peer={liveGame.peer} myId={session.user.id}
+          onClose={() => setLiveGame(null)}
+          onSaveState={(next) => saveLiveState(liveGame.messageId, next)}
+          onPeerAway={pingLivePeer}
+          onRematch={() => { const pp = liveGame.peer; setLiveGame(null); setTimeout(() => startLiveGame(pp, 'gulp'), 140); }} />
+      )}
+      {liveGame && me && liveGame.state.g !== 'duo' && liveGame.state.g !== 'gulp' && (
         <LiveGamePage key={liveGame.state.id} initial={liveGame.state} me={me} peer={liveGame.peer} myId={session.user.id}
           onClose={() => setLiveGame(null)}
           onSaveState={(next) => saveLiveState(liveGame.messageId, next)}
@@ -48426,6 +48456,8 @@ export const WN_SCENES = {
 };
 
 export const WN_THUMBS = {
+  gulp33: { bg: 'sky', draw: () => (<image href="/gulp-art.webp" x="16" y="-4" width="288" height="186" preserveAspectRatio="xMidYMid slice" />) },
+  duo33: { bg: 'night', draw: () => (<image href="/duo-art.webp" x="16" y="-4" width="288" height="186" preserveAspectRatio="xMidYMid slice" />) },
   duo32: { bg: 'night', draw: () => (<>
     <rect x="16" y="128" width="288" height="60" fill="#3A2E24" />
     <path d="M118 132 V60 Q160 14 202 60 V132 Z" fill="#1E1626" {...ak} />
@@ -48454,8 +48486,8 @@ export const WN_THUMBS = {
   </>) },
   rps32: { bg: 'lilac', draw: () => (<>
     <WnFloor />
-    <g transform="translate(118 92) rotate(90)"><image href="/rps/rock-me.webp" x="-34" y="-60" width="68" height="119" /></g>
-    <g transform="translate(202 92) scale(-1 1) rotate(90)"><image href="/rps/paper-them.webp" x="-34" y="-60" width="68" height="119" /></g>
+    <g transform="translate(112 94) rotate(90)"><image href="/rps/rock-me.webp" x="-31" y="-64" width="62" height="129" /></g>
+    <g transform="translate(208 94) scale(-1 1) rotate(90)"><image href="/rps/paper-them.webp" x="-31" y="-64" width="62" height="129" /></g>
     {[0, 1, 2].map((i) => <path key={i} d={`M${148 + i * 12} ${40 - i * 4} q4 -10 0 -18`} fill="none" stroke={ART_INK} strokeWidth="3" strokeLinecap="round" opacity="0.5" />)}
   </>) },
   quiet: { bg: 'night', draw: (b) => (<>
@@ -48980,6 +49012,10 @@ const WN_SCENES_23 = {
   </>) },
 };
 Object.assign(WN_SCENES, WN_SCENES_23);
+Object.assign(WN_SCENES, {
+  gulp33h: { bg: 'sky', draw: () => (<image href="/gulp-art.webp" x="-98" y="-112" width="474" height="296" preserveAspectRatio="xMidYMid slice" />) },
+  duo33h: { bg: 'night', draw: () => (<image href="/duo-art.webp" x="-77" y="-112" width="474" height="296" preserveAspectRatio="xMidYMid slice" />) },
+});
 
 function WnBoardPin({ x, y, color = ART_C.coral }) {
   return (
@@ -49576,7 +49612,7 @@ export function parseGameMessage(content) {
     if (st.g === 'bomb') return Array.isArray(st.op) ? st : null;
     if (st.g === 'gem') return Array.isArray(st.d) && st.d.length === 36 ? st : null;
     if (st.g === 'fade') return Array.isArray(st.b) && st.b.length === 9 ? st : null;
-    if (st.g === 'tug' || st.g === 'qrace' || st.g === 'rrace' || st.g === 'duo') return typeof st.x === 'string' && typeof st.o === 'string' ? st : null;
+    if (st.g === 'tug' || st.g === 'qrace' || st.g === 'rrace' || st.g === 'duo' || st.g === 'gulp') return typeof st.x === 'string' && typeof st.o === 'string' ? st : null;
     if (G1_KEYS.includes(st.g)) return g1Valid(st) ? st : null;
     return null;
   } catch { return null; }
@@ -51582,11 +51618,12 @@ function ConnectFourCard({ state, myId, live, peerName, onMove, onRematch, ink, 
 const RPS_NAME = { r: 'rock', p: 'paper', s: 'scissors' };
 const rpsPlayed = new Set();
 const RPS_PUMP = 380;
-function RpsHand({ h, who, side, anim, size = 48 }) {
+const RPS_AR = 2.074;
+function RpsHand({ h, who, side, anim, size = 50 }) {
   const src = `/rps/${RPS_NAME[h] || 'rock'}-${who}.webp`;
-  const w = size, ht = Math.round(size * 1.752);
+  const w = size, ht = Math.round(size * RPS_AR);
   return (
-    <div className={anim === 'pump' ? 'zrps-pump' : undefined} style={{ position: 'absolute', top: `calc(60% - ${w / 2}px)`, [side]: -12, width: ht, height: w, transformOrigin: side === 'left' ? '12% 50%' : '88% 50%', pointerEvents: 'none' }}>
+    <div className={anim === 'pump' ? (side === 'left' ? 'zrps-pump' : 'zrps-pumpr') : undefined} style={{ position: 'absolute', top: `calc(62% - ${w / 2}px)`, [side]: -16, width: ht, height: w, transformOrigin: side === 'left' ? '8% 50%' : '92% 50%', pointerEvents: 'none' }}>
       <div key={anim === 'pop' ? `p${h}` : 'i'} className={anim === 'pop' ? 'zrps-pop' : undefined} style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', transformOrigin: side === 'left' ? '20% 50%' : '80% 50%' }}>
         <img src={src} alt="" draggable={false} style={{ width: w, height: ht, flexShrink: 0, transform: side === 'left' ? 'rotate(90deg)' : 'scaleX(-1) rotate(90deg)', filter: 'drop-shadow(0 4px 5px rgba(0,0,0,0.22))' }} />
       </div>
@@ -51695,7 +51732,7 @@ function RpsCard({ state, myId, live, peerName, onMove, onRematch, ink, fresh })
         <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
           {['r', 'p', 's'].map((h) => (
             <div key={h} role="button" aria-label={RPS_HANDS[h].l} data-silent="1" onClick={() => pick(h)} className="zchat-gbtn" style={{ ...gameBtnStyle('white'), width: 62, height: 66, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', borderRadius: 18, gap: 1 }}>
-              <img src={`/rps/${RPS_NAME[h]}-me.webp`} alt="" draggable={false} style={{ width: 24, height: 42, display: 'block' }} />
+              <div style={{ width: 30, height: 44, overflow: 'hidden', display: 'flex', justifyContent: 'center' }}><img src={`/rps/${RPS_NAME[h]}-me.webp`} alt="" draggable={false} style={{ width: 27, height: 56, display: 'block', flexShrink: 0 }} /></div>
               <span style={{ fontSize: 10, fontWeight: 800, color: '#475569' }}>{RPS_HANDS[h].l}</span>
             </div>
           ))}
@@ -58556,8 +58593,10 @@ function svgMarkup(node) {
   return `<${node.type}${attrs}>${svgMarkup(node.props.children)}</${node.type}>`;
 }
 const gameArtSrcs = new Map();
+const GAME_ART_FILES = { duo: '/duo-art.webp', gulp: '/gulp-art.webp' };
 function gameArtSrc(kIn) {
   const key = String(kIn == null ? '' : kIn);
+  if (GAME_ART_FILES[key]) return GAME_ART_FILES[key];
   if (gameArtSrcs.has(key)) return gameArtSrcs.get(key);
   let src = null;
   try {
@@ -58578,12 +58617,13 @@ export function GameArt({ k: kIn, width = 160, height = 100, radius = 14, style 
   return <img src={src} alt="" aria-hidden="true" draggable={false} decoding="async" style={{ display: 'block', width, height, borderRadius: radius, flexShrink: 0, objectFit: 'cover', ...style }} />;
 }
 
-export const LIVE_GAME_KEYS = ['duo', 'tug', 'qrace', 'rrace'];
-Object.assign(GAME_TITLES, { duo: 'Two Torches', tug: 'Tug of war', qrace: 'Quiz race', rrace: 'Reaction race' });
-Object.assign(FRIEND_GAME_SUBS, { duo: 'Live, escape the temple together', tug: 'Live, tap faster than them', qrace: 'Live, fastest right answer', rrace: 'Live, first to tap on green' });
-Object.assign(GAME_ART_BG, { duo: ['#3B2A48', '#120C1C'], tug: ['#F97316', '#E11D48'], qrace: ['#7C3AED', '#2563EB'], rrace: ['#10B981', '#0EA5E9'] });
+export const LIVE_GAME_KEYS = ['duo', 'gulp', 'tug', 'qrace', 'rrace'];
+Object.assign(GAME_TITLES, { duo: 'Two Torches', gulp: 'Gulp', tug: 'Tug of war', qrace: 'Quiz race', rrace: 'Reaction race' });
+Object.assign(FRIEND_GAME_SUBS, { duo: 'Live, endless temples together', gulp: 'Live, eat smaller fish and grow', tug: 'Live, tap faster than them', qrace: 'Live, fastest right answer', rrace: 'Live, first to tap on green' });
+Object.assign(GAME_ART_BG, { duo: ['#3B2A48', '#120C1C'], gulp: ['#1C6FA8', '#082A4C'], tug: ['#F97316', '#E11D48'], qrace: ['#7C3AED', '#2563EB'], rrace: ['#10B981', '#0EA5E9'] });
 Object.assign(GAME_RULES, {
-  duo: { how: ['You carry the orange torch, your friend carries the blue one. Move with the joystick.', 'Orange walks through lava and burns vines. Blue wades through water, lights hidden stones and reads hidden codes.', 'Pull levers, hold doors open on the round plates and light both fires together.', 'You share three hearts. Flags save where you come back. Talk with the chat and mic buttons.'], win: 'Stand on your own glowing doors at the same time to finish a level. Grab every gem for more stars.' },
+  duo: { how: ['You carry the orange torch, your friend carries the blue one. Move with the joystick.', 'Orange walks through lava and fire. Blue wades through water, lights hidden stones and reads hidden codes.', 'Pull levers, hold doors on the plates, jump through glowing rings, cross spikes when they drop and keep moving on cracked floors.', 'Play the story or endless temples that are new every time. You share three hearts.', 'Talk with voice, quick messages and emojis. You can mute your friend any time.'], win: 'Stand on your own glowing doors at the same time to finish. Finish missions for stars.' },
+  gulp: { how: ['You are a small fish with the number 2. Swim with the joystick.', 'Eat fish with a number smaller than or equal to yours. Their number adds to yours and you grow.', 'Fish with bigger numbers can eat you. Big hunters chase you for a moment, then give up. Dash to get away.', 'Grab bubbles for a shield, double food, a magnet or speed.', 'If you are bigger than your friend you can eat them too. Each of you has three hearts.'], win: 'First to 1000 wins. You also win if your friend loses all three hearts, or if you are bigger when the time runs out.' },
   tug: { how: ['You both play at the same moment. Open the game and wait for your friend to join.', 'When the countdown ends, tap the big button as fast as you can.', 'Every tap pulls the rope toward you.'], win: 'After 15 seconds, whoever pulled the rope to their side wins.' },
   qrace: { how: ['You both play at the same moment and see the same question together.', 'Tap the right answer before your friend does.', 'A wrong answer locks you out of that question.'], win: 'Seven questions. Whoever scores more wins.' },
   rrace: { how: ['You both play at the same moment.', 'Wait for the pad to turn green, then tap it before your friend.', 'Tapping too early gives the point to them.'], win: 'First to win three rounds wins.' },

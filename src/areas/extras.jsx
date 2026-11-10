@@ -6564,28 +6564,22 @@ function WnSegments({ total, at, onArt, dark }) {
 }
 
 const WN_HIGHLIGHTS = [
-  { k: 'duo32', art: 'duo32', title: 'Two Torches', text: 'A new live game for two. You each carry a torch through a dark temple with a joystick, chat and voice. Five levels, shared hearts and secret rooms.' },
-  { k: 'pets32', art: 'pets32', title: 'Bubble pets', text: 'All 51 chat bubble animals are now soft 3D pets that hold on to your message with their paws.' },
-  { k: 'rps32', art: 'rps32', title: 'Rock paper scissors, for real', text: 'Real hands bounce three times, then you both show at the same moment and the score moves.' },
-  { k: 'squish32', art: 'cup27', title: 'Squish with water balloons', text: 'Throw water balloons into the tank, flick hard for a fast throw and merge them all the way up.' },
-  { k: 'party32', art: 'games27', title: 'Better group games', text: 'New pictures and new screens for Would you rather, Never have I ever and Most likely to.' },
+  { k: 'gulp33', art: 'gulp33h', go: 'games', title: 'Gulp', text: 'A new live game. You start as a small fish with the number 2. Eat smaller fish to grow, stay away from the big ones and race a friend to 1000.' },
+  { k: 'duo33', art: 'duo33h', go: 'games', title: 'Endless Two Torches', text: 'New temples every time you play, ten story levels, missions and new traps. Voice, mute, quick messages, emojis and a live ping are now in the game.' },
+  { k: 'rps33', art: 'rps32', title: 'New rock paper scissors hands', text: 'The hands were made again from the start and look real now.' },
 ];
 const WN_SECTIONS = [
-  { title: 'Chats', items: [
-    { art: 'pets32', title: 'Bubble pets', text: '51 soft 3D pets for your chat bubbles.' },
-    { art: 'files', title: 'Neater chat bubbles', text: 'Messages in a row sit closer, with a small tail on the last one.' },
-  ] },
   { title: 'Games', items: [
-    { art: 'duo32', title: 'Two Torches', text: 'Escape the temple together, live, with voice.' },
-    { art: 'rps32', title: 'Real rock paper scissors', text: 'Three bounces, then both hands at once.' },
-    { art: 'cup27', title: 'Squish remade', text: 'Water balloons, fast throws and bigger merges.' },
-    { art: 'games27', title: 'Group games look better', text: 'New pictures and clearer question cards.' },
+    { art: 'gulp33', title: 'Gulp', text: 'Eat smaller fish, grow and race a friend live.' },
+    { art: 'duo33', title: 'Endless temples', text: 'New temples every time, missions, voice and quick chat.' },
+    { art: 'rps32', title: 'New hands', text: 'Real looking hands in rock paper scissors.' },
   ] },
 ];
 const WN_NEW_COUNT = WN_SECTIONS.reduce((n, sec) => n + sec.items.length, 0);
 const WN_SUMMARY = `${WN_NEW_COUNT} new things to try.`;
 
 const WN_EARLIER = [
+  { title: 'Two Torches and bubble pets', text: 'A live temple game for two, 51 soft 3D bubble pets, real rock paper scissors, Squish with water balloons and better group games.' },
   { title: 'Saved Messages, a cleaner profile and new game pictures', text: 'Your own Saved Messages chat, profile visitors, 9 ball pool, chess clocks, Squish duels and a new attach menu.' },
   { title: 'A game shop, cues and zodiac signs', text: 'The Shop as a little game world with full sets, pool cues and carrom strikers, zodiac signs on profiles and fun on your chats page.' },
   { title: 'Play online, Zap Mayhem and new Mini golf', text: 'Game rooms with room IDs, harder bots, Zap Mayhem, a new Mini golf, boards and tables in the Shop, game faces and a quick account switch.' },

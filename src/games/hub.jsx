@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../supabaseClient.js';
 import {
-  useTheme, FONT, Avatar, GameArt, GAME_TITLES, FRIEND_GAME_GROUPS, FRIEND_GAME_SUBS, SOLO_GAMES, SOLO_HIDDEN, LIVE_GAME_KEYS, GAME_ART_BG, DuoGamePage,
+  useTheme, FONT, Avatar, GameArt, GAME_TITLES, FRIEND_GAME_GROUPS, FRIEND_GAME_SUBS, SOLO_GAMES, SOLO_HIDDEN, LIVE_GAME_KEYS, GAME_ART_BG, DuoGamePage, GulpGamePage,
   GameInfoButton, HowToPlaySheet, SoloGame, readBest, formatGameScore, loadMyGames, gameNet, gameNetMissing, isSoloGameKey,
   useBackClose, useSheetDrag, playUiSound, hapticTap, reducedMotion, FullPage, HeaderIconButton, TrophyIcon, CrownIcon, NameBadge,
   LoadFail, ghBotCan, ghBotLevel, GamepadIcon, GameButton, SegmentedControl, botPicUrl,
@@ -214,6 +214,7 @@ export function GamesPage({ onClose, onChallenge, onShareScore, initialGame, fri
   useBackClose(!!game, () => setGame(null));
   const [rulesFor, setRulesFor] = useState(null);
   const [duoSolo, setDuoSolo] = useState(false);
+  const [gulpSolo, setGulpSolo] = useState(false);
   const [recent] = useState(() => readRecent());
   const duos = useMemo(() => duoKeys(), []);
   const puzzles = useMemo(() => puzzleKeys(), []);
@@ -265,11 +266,25 @@ export function GamesPage({ onClose, onChallenge, onShareScore, initialGame, fri
             <div style={{ position: 'absolute', left: 14, right: 14, bottom: 12, display: 'flex', alignItems: 'flex-end', gap: 10 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 19, fontWeight: 900, color: '#FFFFFF' }}>Two Torches</div>
-                <div style={{ fontSize: 12.5, fontWeight: 600, color: 'rgba(255,255,255,0.8)', lineHeight: 1.35 }}>Escape the temple with a friend, live. Joystick, chat and voice.</div>
+                <div style={{ fontSize: 12.5, fontWeight: 600, color: 'rgba(255,255,255,0.8)', lineHeight: 1.35 }}>Endless temples with a friend, live. Voice, quick chat and emojis.</div>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
                 {onStartLive && <GameButton small color="gold" label="Play together" onClick={() => { tap(); noteRecent('duo'); onStartLive('duo'); }} />}
                 <GameButton small color="white" label="Practice" onClick={() => { tap(); setDuoSolo(true); }} />
+              </div>
+            </div>
+          </div>
+          <div style={{ position: 'relative', borderRadius: 22, overflow: 'hidden', margin: '10px 0 4px', boxShadow: '0 10px 24px rgba(0,0,0,0.22)' }}>
+            <GameArt k="gulp" width="100%" height={168} radius={0} style={{ width: '100%' }} />
+            <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(4,14,30,0) 30%, rgba(4,14,30,0.86) 100%)' }} />
+            <div style={{ position: 'absolute', left: 14, right: 14, bottom: 12, display: 'flex', alignItems: 'flex-end', gap: 10 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 19, fontWeight: 900, color: '#FFFFFF' }}>Gulp</div>
+                <div style={{ fontSize: 12.5, fontWeight: 600, color: 'rgba(255,255,255,0.8)', lineHeight: 1.35 }}>Eat smaller fish, grow to 1000 and race a friend live. Watch out for the big ones.</div>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
+                {onStartLive && <GameButton small color="gold" label="Play together" onClick={() => { tap(); noteRecent('gulp'); onStartLive('gulp'); }} />}
+                <GameButton small color="white" label="Practice" onClick={() => { tap(); setGulpSolo(true); }} />
               </div>
             </div>
           </div>
@@ -342,6 +357,7 @@ export function GamesPage({ onClose, onChallenge, onShareScore, initialGame, fri
       )}
       {rulesFor && <HowToPlaySheet k={rulesFor} onClose={() => setRulesFor(null)} />}
       {duoSolo && <DuoGamePage solo me={me} myId={myId} onClose={() => setDuoSolo(false)} />}
+      {gulpSolo && <GulpGamePage solo me={me} myId={myId} onClose={() => setGulpSolo(false)} />}
       {rooms && myId && onRoomHost && (
         <GameRoomsPage myId={myId} me={me} online={online} onKind={setLobbyKind} initialCode={rooms.code || ''} onClose={() => setRooms(null)}
           onHostStart={(p, k, gid) => onRoomHost(p, k, gid)} onGuestOpen={(p, k, gid) => onRoomGuest(p, k, gid)} />

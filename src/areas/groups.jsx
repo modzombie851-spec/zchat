@@ -165,35 +165,72 @@ export function CreateGroupPanel({ myId, onClose, onCreated }) {
     if (!name.trim() || creating) return;
     setCreating(true);
     setErr('');
-    const baseRow = { name: name.trim().slice(0, 50), bio: bio.trim() || null, avatar: null, created_by: myId };
-    const [upRes, firstIns] = await Promise.all([
-      avatarFile ? uploadMedia(avatarFile, myId).catch(() => ({ url: null })) : null,
-      supabase.from('groups').insert({ ...baseRow, accent }).select().single(),
-    ]);
-    let { data: group, error } = firstIns;
-    if (error && /accent/i.test(String(error.message || ''))) ({ data: group, error } = await supabase.from('groups').insert(baseRow).select().single());
-    if (error || !group) { setCreating(false); setErr(friendlyError(error, "Couldn't create the group. Try again.")); return; }
-    const { error: memberErr } = await supabase.from('group_members').insert({ group_id: group.id, user_id: myId, role: 'admin', added_by: myId });
-    if (memberErr) { setCreating(false); setErr(friendlyError(memberErr, "Couldn't create the group. Try again.")); return; }
     const people = selected.slice(0, 49);
+    const baseRow = { name: name.trim().slice(0, 50), bio: bio.trim() || null, avatar: null, created_by: myId };
+    const upJob = avatarFile ? uploadMedia(avatarFile, myId).catch(() => ({ url: null })) : null;
+    const authErr = (e) => !!e && /jwt|token|unauthorized|not authenticated/i.test(String(e.message || e));
+    const noFn = (e) => !!e && (e.code === 'PGRST202' || e.code === '42883' || /could not find the function|does not exist/i.test(String(e.message || '')));
+    const viaRpc = () => supabase.rpc('zchat_group_create', { p_name: baseRow.name, p_bio: baseRow.bio, p_accent: accent || null, p_members: people.map((p) => p.id) });
+    let group = null;
+    let sys = null;
+    let addedIds = null;
+    let skippedIds = [];
+    let { data: out, error } = await viaRpc();
+    if (error && authErr(error)) { try { await supabase.auth.refreshSession(); } catch {} ({ data: out, error } = await viaRpc()); }
+    if (!error && out && out.group) {
+      group = out.group;
+      sys = out.sys || null;
+      addedIds = Array.isArray(out.added) ? out.added : [];
+      skippedIds = Array.isArray(out.skipped) ? out.skipped : [];
+    } else if (error && !noFn(error)) {
+      setCreating(false);
+      setErr(friendlyError(error, "Couldn't create the group. Try again."));
+      return;
+    } else {
+      const gid = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : null;
+      const insertGroup = async (row) => (gid ? supabase.from('groups').insert({ ...row, id: gid }) : supabase.from('groups').insert(row).select().single());
+      let res = await insertGroup({ ...baseRow, accent });
+      if (res.error && /accent/i.test(String(res.error.message || ''))) res = await insertGroup(baseRow);
+      if (res.error && authErr(res.error)) { try { await supabase.auth.refreshSession(); } catch {} res = await insertGroup({ ...baseRow, accent }); }
+      if (res.error) { setCreating(false); setErr(friendlyError(res.error, "Couldn't create the group. Try again.")); return; }
+      const id = gid || (res.data && res.data.id);
+      if (!id) { setCreating(false); setErr("Couldn't create the group. Try again."); return; }
+      const { error: memberErr } = await supabase.from('group_members').insert({ group_id: id, user_id: myId, role: 'admin', added_by: myId });
+      if (memberErr) { setCreating(false); setErr(friendlyError(memberErr, "Couldn't create the group. Try again.")); return; }
+      const { data: row } = gid ? await supabase.from('groups').select('*').eq('id', id).maybeSingle() : { data: res.data };
+      group = row || { ...baseRow, accent, id, created_at: new Date().toISOString() };
+      addedIds = [];
+      if (people.length) {
+        const all = await supabase.from('group_members').insert(people.map((p) => ({ group_id: id, user_id: p.id, role: 'member', added_by: myId })));
+        if (!all.error) addedIds = people.map((p) => p.id);
+        else {
+          for (const p of people) {
+            const one = await supabase.from('group_members').insert({ group_id: id, user_id: p.id, role: 'member', added_by: myId });
+            if (one.error) skippedIds.push(p.id); else addedIds.push(p.id);
+          }
+        }
+      }
+      const addedNames = people.filter((p) => addedIds.includes(p.id)).map((p) => p.name);
+      const sysRes = await supabase.from('messages').insert({ sender_id: myId, group_id: id, type: 'system', content: addedNames.length ? `Group created and ${addedNames.join(', ')} added` : 'Group created' }).select().single();
+      sys = sysRes && !sysRes.error ? sysRes.data : null;
+    }
+    const added = people.filter((p) => addedIds.includes(p.id));
+    const skipped = people.filter((p) => skippedIds.includes(p.id));
+    const upRes = upJob ? await upJob : null;
     const avatarUrl = (upRes && upRes.url) || null;
-    const avatarJob = avatarUrl ? photoSafetyCheck([avatarUrl], 'group').then((g) => {
-      if (g.verdict === 'block' || g.verdict === 'sensitive') { appAlert(photoBlockText('group', g.reason)); return { error: true }; }
-      return supabase.from('groups').update({ avatar: avatarUrl }).eq('id', group.id);
-    }) : null;
-    const [inviteRes, sysRes, avatarRes] = await Promise.all([
-      people.length ? supabase.from('group_members').insert(people.map((p) => ({ group_id: group.id, user_id: p.id, role: 'member', added_by: myId }))) : null,
-      supabase.from('messages').insert({ sender_id: myId, group_id: group.id, type: 'system', content: people.length ? `Group created and ${people.map((p) => p.name).join(', ')} added` : 'Group created' }).select().single(),
-      avatarJob,
-    ]);
-    if (inviteRes && inviteRes.error) { setCreating(false); setErr(friendlyError(inviteRes.error, "Couldn't add those people. Try again.")); return; }
-    if (people.length) {
+    let avatarOk = false;
+    if (avatarUrl) {
+      const gate = await photoSafetyCheck([avatarUrl], 'group').catch(() => null);
+      if (gate && (gate.verdict === 'block' || gate.verdict === 'sensitive')) appAlert(photoBlockText('group', gate.reason));
+      else { const r = await supabase.from('groups').update({ avatar: avatarUrl }).eq('id', group.id); avatarOk = !r.error; }
+    }
+    if (added.length) {
       getProfile(myId).then(({ data: creator }) => {
-        people.forEach((p) => sendPushNotification(p.id, 'ZChat', `${creator?.name || 'Someone'} added you to ${group.name}`, `/?group=${group.id}`, creator?.avatar));
+        added.forEach((p) => sendPushNotification(p.id, 'ZChat', `${creator?.name || 'Someone'} added you to ${group.name}`, `/?group=${group.id}`, creator?.avatar));
       }, () => {});
     }
     setCreating(false);
-    onCreated({ ...group, ...(avatarUrl && avatarRes && !avatarRes.error ? { avatar: avatarUrl } : {}) }, { sys: sysRes && !sysRes.error ? sysRes.data : null, people });
+    onCreated({ ...group, ...(avatarOk ? { avatar: avatarUrl } : {}) }, { sys, people: added, skipped });
   };
 
   const isPicked = (id) => !!selected.find((s) => s.id === id);
