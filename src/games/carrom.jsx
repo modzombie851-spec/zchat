@@ -1,12 +1,15 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { GameRoom, RoomLayer, defineSfx, sfx, haptic, useGameKit } from './kit.jsx';
-import { clamp, lerp, makeCanvas, fitCanvas, dpr, grain, woodTexture, rrect, rgba, shade, tint, mix, perfMeter, noiseHit, tone, loopNoise, easeOut, rng, r2 } from './physics.jsx';
+import { clamp, lerp, makeCanvas, fitCanvas, dpr, grain, woodTexture, rrect, rgba, shade, tint, mix, perfMeter, noiseHit, tone, loopNoise, easeOut, rng, r2, gameCache, onGameCacheDrop, dropGameCaches, canvasBlank, guardCanvases } from './physics.jsx';
 import { CarromSim, BW, C, CR, SR, PR, POCK, BASE_HALF, QUEEN, isWhite, isBlack, baseY, strikerOk, judge, colorOfMark, findShot } from './carromsim.jsx';
 import { useShotLink, throttle } from './live.jsx';
+import { kitFor } from './kits.jsx';
 import { useBackClose, Avatar, appSnack, g1Send, g1Mem, g1First, g1Outcome, g1Test, ConfirmSheet, FONT, GameCardShell, GameButton, GameAgainButton, useTheme } from '../App.jsx';
 
 const FR = 70;
-const SURFACE = '#E9C99A';
+const SURF_BASE = ['#E9C99A', '#C9A06A', '#F7E2BE'];
+let SURF = SURF_BASE;
+let SURFACE = SURF[0];
 const FPS_REC = 120;
 
 defineSfx('crmStrike', (c, out, o) => {
@@ -40,7 +43,7 @@ function coinPalette(id) {
   return { base: '#2B1E16', dark: '#0F0906', ring: '#5C4434', accent: '#6E5544' };
 }
 
-const SPRITES = new Map();
+const SPRITES = gameCache();
 function coinSprite(kind, rp) {
   const key = `${kind}:${Math.round(rp * 4) / 4}`;
   if (SPRITES.has(key)) return SPRITES.get(key);
@@ -101,6 +104,7 @@ function coinSprite(kind, rp) {
 }
 
 let SHADOW = null;
+onGameCacheDrop(() => { SHADOW = null; });
 function shadowSprite() {
   if (SHADOW) return SHADOW;
   const S = 64;
@@ -124,7 +128,14 @@ export function carromLayout(W, H, pad) {
   return { W, H, s, fx, fy, fw: tot * s, ox: fx + FR * s, oy: fy + FR * s };
 }
 
-const ART = new Map();
+const ART = gameCache();
+export function crmSurface(arr) {
+  const next = Array.isArray(arr) && arr.length === 3 ? arr : SURF_BASE;
+  if (next.join() === SURF.join()) return;
+  SURF = next;
+  SURFACE = SURF[0];
+  ART.clear();
+}
 function boardArt(L) {
   const d = dpr(2.5);
   const key = `${L.W}x${L.H}@${d}`;
@@ -133,7 +144,8 @@ function boardArt(L) {
   const ctx = cv.getContext('2d');
   ctx.scale(d, d);
   drawBoard(ctx, L, d);
-  if (ART.size > 4) ART.clear();
+  if (canvasBlank(cv)) return cv;
+  if (ART.size > 2) ART.clear();
   ART.set(key, cv);
   return cv;
 }
@@ -175,7 +187,7 @@ function drawBoard(ctx, L, d) {
   ctx.lineWidth = lw(3);
   ctx.strokeRect(X(-12), Y(-12), (BW + 24) * s, (BW + 24) * s);
 
-  const ply = woodTexture(Math.ceil(BW * s * wd), Math.ceil(BW * s * wd), 'crm-ply', [SURFACE, '#C9A06A', '#F7E2BE'], { spacing: 2.4 * wd, wave: 1.6 * wd, thick: 1.1 * wd, knots: 0 });
+  const ply = woodTexture(Math.ceil(BW * s * wd), Math.ceil(BW * s * wd), `crm-ply-${SURF.join('')}`, [SURF[0], SURF[1], SURF[2]], { spacing: 2.4 * wd, wave: 1.6 * wd, thick: 1.1 * wd, knots: 0 });
   ctx.drawImage(ply, X(0), Y(0), BW * s, BW * s);
   const lamp = ctx.createRadialGradient(X(C), Y(C * 0.95), BW * s * 0.05, X(C), Y(C), BW * s * 0.78);
   lamp.addColorStop(0, 'rgba(255,248,230,0.32)');
@@ -331,6 +343,13 @@ export class CarromBoard {
     if (this.ro) this.ro.observe(host);
     this.resize();
     this.fixStriker();
+    this.unguard = guardCanvases([this.bg, this.fg], () => {
+      if (this.dead || !this.host.isConnected) return;
+      this.L = null;
+      this.resize();
+      this.dirty = true;
+      this.kick();
+    });
   }
 
   resize() {
@@ -696,6 +715,8 @@ export class CarromBoard {
   destroy() {
     this.dead = true;
     cancelAnimationFrame(this.raf);
+    if (this.unguard) this.unguard();
+    dropGameCaches();
     this.hum.stop();
     if (this.ro) this.ro.disconnect();
     this.fg.removeEventListener('pointerdown', this.down);
@@ -707,7 +728,7 @@ export class CarromBoard {
   }
 }
 
-const SCENE = new Map();
+const SCENE = gameCache();
 export function CarromScene() {
   const ref = useRef(null);
   useLayoutEffect(() => {
@@ -1094,6 +1115,8 @@ function CoinLine({ colour, got, queen, end }) {
 }
 
 export function CarromTable({ st, prevOf, myId, peerName, relay, onMove, onMeta, onBusy, onFlash }) {
+  const kit = kitFor('crm');
+  crmSurface(kit ? kit.surface : null);
   const P = useCarromPlay({ st, prevOf, myId, peer: peerName, relay, save: onMove, onBusy, onFlash });
   const { myMark, peerMark, myTurn, left } = P;
   const myC = colorOfMark(st, myMark);

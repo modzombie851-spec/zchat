@@ -695,7 +695,7 @@ export function CxGiftPicker({ to, first, chosen, owns, onPick, maxPrice }) {
   const rx = SUPER_KEYS.filter((k) => cxKnown('reaction', k) && !owns('reaction', k) && fits('reaction', k));
   const wl = LIVE_WALL_PAID.filter((k) => !owns('wallpaper', k) && fits('wallpaper', k));
   const isOn = (kind, k) => !!chosen && chosen.kind === kind && chosen.key === k;
-  const siLeft = [...(owns('namestyle', 'own') ? [] : [['namestyle', 'own']]), ...SI_KINDS.flatMap((kind) => (kind === 'stickerpack' ? SI_STICKER_PACKS : kind === 'soundpack' ? SI_SOUND_PACKS : SI_TYPING).map((x) => [kind, x.key])).filter(([kind, k]) => !owns(kind, k))].filter(([kind, k]) => fits(kind, k));
+  const siLeft = [...(owns('namestyle', 'own') ? [] : [['namestyle', 'own']]), ...SI_KINDS.filter((kind) => kind !== 'gamekit').flatMap((kind) => (kind === 'stickerpack' ? SI_STICKER_PACKS : kind === 'soundpack' ? SI_SOUND_PACKS : SI_TYPING).map((x) => [kind, x.key])).filter(([kind, k]) => !owns(kind, k))].filter(([kind, k]) => fits(kind, k));
   if (!ns.length && !th.length && !rx.length && !wl.length && !siLeft.length) return <div style={{ textAlign: 'center', fontSize: 14, color: theme.muted, padding: '28px 12px' }}>{first} already has every style.</div>;
   return (
     <div ref={siBox} role="radiogroup" aria-label="Pick a style" style={{ padding: '0 0 6px' }}>
@@ -788,7 +788,7 @@ async function makeAnswerCard(question, answer, me, accent) {
   x.beginPath(); x.moveTo(bx + r, by); x.arcTo(bx + bw, by, bx + bw, by + boxH, r); x.arcTo(bx + bw, by + boxH, bx, by + boxH, r); x.arcTo(bx, by + boxH, bx, by, r); x.arcTo(bx, by, bx + bw, by, r); x.closePath(); x.fill();
   x.fillStyle = accent; x.font = `700 36px ${font}`; x.textAlign = 'center';
   x.fillText('Someone asked', W / 2, by + 70);
-  x.fillStyle = '#111113'; x.font = `700 58px ${font}`;
+  x.fillStyle = '#17131F'; x.font = `700 58px ${font}`;
   qLines.forEach((l, i) => x.fillText(l, W / 2, by + 150 + i * 74));
   const aLines = wrap(answer, 64, 800, 860);
   x.fillStyle = '#FFFFFF'; x.font = `800 64px ${font}`;
@@ -901,7 +901,7 @@ export function QuestionsPage({ me, onClose, onShareStory, onSaved }) {
           </div>
         </Portal>
       )}
-      {note && <div className="zchat-pop" role="status" style={{ position: 'fixed', left: '50%', bottom: 'calc(30px + env(safe-area-inset-bottom))', transform: 'translateX(-50%)', zIndex: 900, padding: '9px 16px', borderRadius: 18, background: theme.dark ? '#2A2930' : '#111113', color: '#FFFFFF', fontSize: 13.5, fontWeight: 600, whiteSpace: 'nowrap', pointerEvents: 'none' }}>{note}</div>}
+      {note && <div className="zchat-pop" role="status" style={{ position: 'fixed', left: '50%', bottom: 'calc(30px + env(safe-area-inset-bottom))', transform: 'translateX(-50%)', zIndex: 900, padding: '9px 16px', borderRadius: 18, background: theme.dark ? '#2A2930' : '#17131F', color: '#FFFFFF', fontSize: 13.5, fontWeight: 600, whiteSpace: 'nowrap', pointerEvents: 'none' }}>{note}</div>}
     </FullPage>
   );
 }
@@ -2311,11 +2311,11 @@ export function CxItemSheet({ me, item, rewards, wallet, onClose, onDone, onOpen
   const canTap = owned ? kind !== 'reaction' && !!onEquip : true;
   const meName = (me && (me.name || me.username)) || 'You';
   const panel = (dark) => (
-    <div style={{ borderRadius: 16, background: dark ? '#0C0C0E' : '#FFFFFF', padding: '16px 14px 14px', boxShadow: dark ? `inset 0 0 0 1px ${CL.line}` : 'none', minWidth: 0 }}>
-      <div style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-0.02em', color: dark ? '#F4F4F6' : '#111113', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', ...NS_ROOM }}><StyledName name={meName} k={key} dark={dark} /></div>
+    <div style={{ borderRadius: 16, background: dark ? '#110D19' : '#FFFFFF', padding: '16px 14px 14px', boxShadow: dark ? `inset 0 0 0 1px ${CL.line}` : 'none', minWidth: 0 }}>
+      <div style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-0.02em', color: dark ? '#F4F4F6' : '#17131F', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', ...NS_ROOM }}><StyledName name={meName} k={key} dark={dark} /></div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 12 }}>
         <Avatar emoji={me.avatar} name={meName} size={28} />
-        <div style={{ minWidth: 0, fontSize: 15, fontWeight: 700, color: dark ? '#F4F4F6' : '#111113', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', ...NS_ROOM }}><StyledName name={meName} k={key} dark={dark} /></div>
+        <div style={{ minWidth: 0, fontSize: 15, fontWeight: 700, color: dark ? '#F4F4F6' : '#17131F', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', ...NS_ROOM }}><StyledName name={meName} k={key} dark={dark} /></div>
         <div style={{ flex: 1 }} />
         <div style={{ fontSize: 11.5, fontWeight: 700, color: dark ? '#B9A6FF' : '#5B3FD6', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '40%', ...NS_ROOM }}><StyledName name={meName} k={key} dark={dark} sub /></div>
       </div>
@@ -2336,12 +2336,12 @@ export function CxItemSheet({ me, item, rewards, wallet, onClose, onDone, onOpen
           <div style={{ marginTop: 14 }}>
             {kind === 'namestyle' && <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>{panel(true)}{panel(false)}</div>}
             {kind === 'theme' && (
-              <div role="button" aria-label="See the full preview" onClick={() => { hapticTap(); if (onPreviewTheme) onPreviewTheme(key); }} style={{ position: 'relative', borderRadius: 20, overflow: 'hidden', cursor: 'pointer', height: 250, background: '#0C0C0E' }}>
+              <div role="button" aria-label="See the full preview" onClick={() => { hapticTap(); if (onPreviewTheme) onPreviewTheme(key); }} style={{ position: 'relative', borderRadius: 20, overflow: 'hidden', cursor: 'pointer', height: 250, background: '#110D19' }}>
                 <div style={{ position: 'absolute', inset: 0, background: themeFallback(key, true), WebkitMaskImage: 'linear-gradient(180deg, #000 0%, #000 60%, transparent 100%)', maskImage: 'linear-gradient(180deg, #000 0%, #000 60%, transparent 100%)' }}>
                   <ThemeCanvas k={key} dark still={reducedMotion()} />
                 </div>
                 <div style={{ position: 'absolute', left: 16, right: 16, bottom: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <div style={{ borderRadius: '50%', boxShadow: '0 0 0 3px #0C0C0E', flexShrink: 0 }}><Avatar emoji={me.avatar} name={meName} size={56} /></div>
+                  <div style={{ borderRadius: '50%', boxShadow: '0 0 0 3px #110D19', flexShrink: 0 }}><Avatar emoji={me.avatar} name={meName} size={56} /></div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 17, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', ...(cxNs(me) ? NS_ROOM : null) }}>{cxNs(me) ? <StyledName name={meName} k={cxNs(me)} dark /> : meName}</div>
                     <div style={{ fontSize: 13, color: CL.ink2 }}>@{me.username || 'you'}</div>
@@ -2502,7 +2502,7 @@ function SiStickerStage({ k, dark, me }) {
   const T = THEMES[dark ? 'dark' : 'light'];
   const pack = SI_STICKER_BY[k];
   return (
-    <div style={{ borderRadius: 20, background: dark ? '#0C0C0E' : '#FFFFFF', boxShadow: dark ? `inset 0 0 0 1px ${CL.line}` : 'none', padding: 12, color: T.ink }}>
+    <div style={{ borderRadius: 20, background: dark ? '#110D19' : '#FFFFFF', boxShadow: dark ? `inset 0 0 0 1px ${CL.line}` : 'none', padding: 12, color: T.ink }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 8 }}>
         {pack.list.map(([id, label]) => (
           <div key={id} style={{ aspectRatio: '1 / 1', borderRadius: 14, background: dark ? 'rgba(255,255,255,0.05)' : '#F4F3F8', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
@@ -2515,7 +2515,7 @@ function SiStickerStage({ k, dark, me }) {
 }
 function SiTypingStage({ k, me, dark }) {
   const T = THEMES[dark ? 'dark' : 'light'];
-  const page = dark ? '#0C0C0E' : '#FFFFFF';
+  const page = dark ? '#110D19' : '#FFFFFF';
   const first = String((me && me.name) || 'You').split(' ')[0];
   const t = fmtHM(new Date());
   return (
@@ -2683,7 +2683,7 @@ export function OwnStylePage({ me, rewards, wallet, onClose, onOpenWallet, onEqu
           </div>
         )}
       </SiBuyFlow>
-      {note && <div className="zchat-pop" role="status" style={{ position: 'absolute', left: '50%', top: 'calc(64px + env(safe-area-inset-top))', transform: 'translateX(-50%)', zIndex: 40, padding: '10px 16px', borderRadius: 14, background: theme.dark ? '#2A2930' : '#111113', color: '#FFFFFF', fontSize: 13.5, fontWeight: 600, width: 'max-content', maxWidth: 'calc(100% - 32px)', boxSizing: 'border-box', textAlign: 'center', pointerEvents: 'none' }}>{note}</div>}
+      {note && <div className="zchat-pop" role="status" style={{ position: 'absolute', left: '50%', top: 'calc(64px + env(safe-area-inset-top))', transform: 'translateX(-50%)', zIndex: 40, padding: '10px 16px', borderRadius: 14, background: theme.dark ? '#2A2930' : '#17131F', color: '#FFFFFF', fontSize: 13.5, fontWeight: 600, width: 'max-content', maxWidth: 'calc(100% - 32px)', boxSizing: 'border-box', textAlign: 'center', pointerEvents: 'none' }}>{note}</div>}
     </div>
   );
 }
@@ -6553,7 +6553,7 @@ function WnArt({ k, dark = false, thumb = false, style }) {
 
 function WnSegments({ total, at, onArt, dark }) {
   const track = onArt ? (dark ? 'rgba(255,255,255,0.24)' : 'rgba(43,37,64,0.16)') : (dark ? 'rgba(255,255,255,0.16)' : 'rgba(0,0,0,0.1)');
-  const fill = onArt ? (dark ? '#FFFFFF' : '#2B2540') : (dark ? '#F2F2F4' : '#111113');
+  const fill = onArt ? (dark ? '#FFFFFF' : '#2B2540') : (dark ? '#F2F2F4' : '#17131F');
   return (
     <div style={{ display: 'flex', gap: 4 }}>
       {Array.from({ length: total }).map((_, i) => <div key={i} style={{ flex: 1, height: 3, borderRadius: 2, background: i <= at ? fill : track, transition: 'background 0.25s ease' }} />)}
@@ -6562,11 +6562,15 @@ function WnSegments({ total, at, onArt, dark }) {
 }
 
 const WN_HIGHLIGHTS = [
-  { k: 'rooms28', title: 'Game rooms', text: 'Pool, chess, checkers, Carrom and Zap open full screen with live moves, music, reactions and chat.' },
-  { k: 'squish28', title: 'Meet Squish', text: 'Drop squishy jelly blobs, match two the same and watch them merge. How high can you go?' },
-  { k: 'shop28', title: 'A brand new Shop', text: 'See every item on your own profile before you buy, with the price and your coins right there.' },
-  { k: 'reply28', title: 'Better replies', text: 'See exactly which message someone answered, photos and voice notes too. Tap it to jump there.' },
-  { k: 'lang28', title: 'සිංහල and தமிழ்', text: 'Use ZChat in Sinhala or Tamil. Pick yours in Settings, then Language.' },
+  { k: 'look29', icon: 'look', title: 'A fresh look', text: 'New colours across ZChat and a new profile that looks like yours, even without frames.' },
+  { k: 'rooms29', icon: 'rooms', title: 'Play online', text: 'Quick join a game with someone who is online, make a room, or join a friend with a room ID.', go: 'rooms', cta: 'Play online' },
+  { k: 'bot29', icon: 'bot', title: 'More games with the bot', text: 'Chess, checkers and Mini golf against ZChat Bot on Easy, Medium or Hard.' },
+  { k: 'mayhem29', icon: 'cards', title: 'Zap Mayhem', text: 'Draw six, draw ten, stacking, swaps and skip everyone. Reach 25 cards and you are out.' },
+  { k: 'golf29', icon: 'golf', title: 'New Mini golf', text: 'Nine new holes with hills, sand, water and bumpers, and a ball that rolls like the real thing.' },
+  { k: 'vip29', icon: 'crown', title: 'Boards and tables', text: 'Chess sets, checkers, pool tables and carrom boards in the Shop, with VIP styles.', go: 'shop', cta: 'Open the Shop' },
+  { k: 'faces29', icon: 'face', title: 'Game faces', text: 'Send faces to the other player while you play, and even to ZChat Bot.' },
+  { k: 'attach29', icon: 'clip', title: 'A tidier attach menu', text: 'Photo booth and Live typing are now in the attach menu.' },
+  { k: 'switch29', icon: 'switch', title: 'Quick account switch', text: 'Double tap Me to jump to your other account.' },
 ];
 const WN_SECTIONS = [
   { title: 'Games', items: [
@@ -6711,129 +6715,83 @@ function WnPic({ k, dark, thumb, me }) {
   return <WnArt k={k} dark={dark} thumb={thumb} />;
 }
 
+const WN_ICON_PATHS = {
+  rooms: <><rect x="2.5" y="7" width="19" height="11" rx="5.5" /><path d="M7 10.5v4M5 12.5h4" /><path d="M15.4 11.4h.2M17.6 13.8h.2" strokeWidth="2.6" /></>,
+  bot: <><rect x="4" y="7" width="16" height="12" rx="4" /><path d="M12 7V4" /><path d="M9 12.5v1M15 12.5v1" /></>,
+  cards: <><rect x="3.5" y="6" width="11" height="15" rx="2" /><path d="M9.5 3h9A2 2 0 0 1 20.5 5v12" /><path d="M10 10.5l-2 3h3l-2 3" /></>,
+  golf: <><path d="M7 21V4l9 3.5L7 11" /><path d="M3 21h18" /></>,
+  crown: <><path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5z" /></>,
+  face: <><circle cx="12" cy="12" r="9" /><path d="M8.5 14.5a4.5 4.5 0 0 0 7 0" /><path d="M9 9.5h.01M15 9.5h.01" strokeWidth="2.6" /></>,
+  look: <><path d="M12 3a9 9 0 1 0 0 18c1.2 0 1.8-.9 1.8-1.8 0-1.4-1.2-1.6-1.2-2.8 0-.9.8-1.6 1.8-1.6H17a4 4 0 0 0 4-4C21 6.5 17 3 12 3z" /><path d="M7.5 11h.01M10 7.5h.01M15 7.5h.01" strokeWidth="2.6" /></>,
+  clip: <><path d="M20 11.5l-8.2 8.2a5 5 0 0 1-7.1-7.1l8.6-8.6a3.4 3.4 0 0 1 4.8 4.8l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4l7.9-7.9" /></>,
+  switch: <><circle cx="8" cy="9" r="3.5" /><path d="M2.5 19.5a5.5 5.5 0 0 1 11 0" /><path d="M16 5h5v5" /><path d="M21 5l-4.5 4.5" /></>,
+  fix: <><path d="M14.7 6.3a4 4 0 0 0 5 5L21 13l-8 8-8-8 1.3-1.3a4 4 0 0 0 5-5z" /></>,
+};
+function WnRowIcon({ k, accent, bg }) {
+  return (
+    <span aria-hidden="true" style={{ width: 44, height: 44, borderRadius: 14, background: bg, color: accent, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+      <svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">{WN_ICON_PATHS[k] || WN_ICON_PATHS.look}</svg>
+    </span>
+  );
+}
+
 export function WhatsNewSheet({ onClose, onTry, me }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
-  const dark = !!theme.dark;
-  const hl = WN_HIGHLIGHTS;
-  const pages = hl.length + 1;
-  const [at, setAt] = useState(0);
-  const [drag, setDrag] = useState(0);
   const [earlier, setEarlier] = useState(false);
-  const wrapRef = useRef(null);
-  const dragRef = useRef(null);
-  const still = reducedMotion();
-  const go = (n) => {
-    const v = Math.max(0, Math.min(pages - 1, n));
-    if (v === at) return;
-    setAt(v);
-    hapticTap();
-  };
-  const onDown = (e) => {
-    if (e.pointerType === 'mouse' && e.button !== 0) return;
-    dragRef.current = { x: e.clientX, y: e.clientY, id: e.pointerId, lock: null, t: Date.now() };
-  };
-  const onMove = (e) => {
-    const d = dragRef.current;
-    if (!d || d.id !== e.pointerId) return;
-    const dx = e.clientX - d.x;
-    const dy = e.clientY - d.y;
-    if (!d.lock) {
-      if (Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy) * 1.2) { d.lock = 'x'; try { e.currentTarget.setPointerCapture(e.pointerId); } catch {} }
-      else if (Math.abs(dy) > 8) d.lock = 'y';
-    }
-    if (d.lock === 'x') {
-      const edge = (at === 0 && dx > 0) || (at === pages - 1 && dx < 0);
-      setDrag(edge ? dx * 0.28 : dx);
-    }
-  };
-  const onUp = (e) => {
-    const d = dragRef.current;
-    dragRef.current = null;
-    if (!d) return;
-    if (d.lock === 'x') {
-      const dx = e.clientX - d.x;
-      const w = wrapRef.current ? wrapRef.current.clientWidth : 360;
-      const fast = Math.abs(dx) / Math.max(1, Date.now() - d.t) > 0.45;
-      if (dx < -w * 0.2 || (fast && dx < -30)) go(at + 1);
-      else if (dx > w * 0.2 || (fast && dx > 30)) go(at - 1);
-    }
-    setDrag(0);
-  };
-  const tapArt = (e) => {
-    const r = e.currentTarget.getBoundingClientRect();
-    if (e.clientX - r.left < r.width * 0.3) go(at - 1); else go(at + 1);
-  };
+  const accent = theme.coral;
+  const soft = theme.dark ? 'rgba(124,92,252,0.18)' : 'rgba(107,72,240,0.1)';
   const tryIt = (item) => {
     onClose();
     if (onTry && item.go) setTimeout(() => onTry(item.go), 60);
   };
-  const artH = 'min(52%, 470px)';
-  const onArtInk = dark ? '#FFFFFF' : '#2B2540';
-  const lastPage = at === pages - 1;
   return (
     <Portal>
-      <div role="dialog" aria-label="What is new" className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 660, background: theme.panelBg, fontFamily: FONT, overflow: 'hidden' }}>
-        <div ref={wrapRef} data-no-swipe="true" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}
-          style={{ position: 'absolute', inset: 0, touchAction: 'pan-y', overflow: 'hidden' }}>
-          <div style={{ display: 'flex', height: '100%', width: `${pages * 100}%`, transform: `translateX(calc(${-at * (100 / pages)}% + ${drag}px))`, transition: drag ? 'none' : (still ? 'none' : 'transform 0.4s cubic-bezier(0.22, 1, 0.36, 1)'), willChange: 'transform' }}>
-            {hl.map((it, i) => (
-              <section key={it.k} aria-hidden={at !== i} style={{ position: 'relative', width: `${100 / pages}%`, height: '100%', flexShrink: 0, background: theme.panelBg }}>
-                <div onClick={tapArt} style={{ position: 'absolute', left: 0, right: 0, top: 0, height: artH, overflow: 'hidden', cursor: 'pointer' }}>
-                  <div className={at === i && !still ? 'zwn-pop' : undefined} style={{ position: 'absolute', inset: 0 }}><WnPic k={it.art || it.k} dark={dark} me={me} /></div>
-                </div>
-                <div style={{ position: 'absolute', left: 0, right: 0, top: `calc(${artH} - 30px)`, bottom: 0, background: theme.panelBg, borderRadius: '30px 30px 0 0', padding: '30px 24px calc(18px + env(safe-area-inset-bottom))', display: 'flex', flexDirection: 'column', boxSizing: 'border-box' }}>
-                  <div style={{ fontSize: 30, fontWeight: 800, letterSpacing: '-0.025em', color: theme.ink, lineHeight: 1.12, textWrap: 'balance' }}>{it.title}</div>
-                  <div style={{ fontSize: 16.5, lineHeight: 1.5, color: theme.muted, marginTop: 12, overflowY: 'auto', minHeight: 0, textWrap: 'pretty' }}>{it.text}</div>
-                  <div style={{ flex: 1, minHeight: 12 }} />
-                  {it.go && onTry && <BigButton label={it.cta || 'Try it'} onClick={() => tryIt(it)} style={{ height: 54, borderRadius: 16, fontSize: 17 }} />}
-                  <button type="button" onClick={() => go(i + 1)} className="zchat-press" style={{ height: 50, marginTop: 6, borderRadius: 16, border: 'none', background: 'transparent', color: theme.ink, fontFamily: FONT, fontSize: 16.5, fontWeight: 650, cursor: 'pointer' }}>{i === hl.length - 1 ? 'See everything new' : 'Next'}</button>
-                </div>
-              </section>
-            ))}
-            <section aria-hidden={!lastPage} style={{ position: 'relative', width: `${100 / pages}%`, height: '100%', flexShrink: 0, display: 'flex', flexDirection: 'column', background: theme.panelBg }}>
-              <div style={{ height: 'calc(env(safe-area-inset-top) + 66px)', flexShrink: 0 }} />
-              <div data-sheet-scroll="true" style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '18px 20px 16px' }}>
-                <div style={{ fontSize: 30, fontWeight: 800, letterSpacing: '-0.025em', color: theme.ink }}>Everything new</div>
-                <div style={{ fontSize: 15.5, lineHeight: 1.45, color: theme.muted, marginTop: 6 }}>{WN_SUMMARY}</div>
-                {WN_SECTIONS.map((sec) => (
-                  <div key={sec.title} style={{ marginTop: 22 }}>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: theme.muted, marginBottom: 2 }}>{sec.title}</div>
-                    {sec.items.map((row, j) => (
-                      <div key={row.title} style={{ display: 'flex', gap: 14, alignItems: 'center', padding: '10px 0', borderBottom: j < sec.items.length - 1 ? `1px solid ${theme.border}` : 'none' }}>
-                        <div style={{ width: 74, height: 54, borderRadius: 13, overflow: 'hidden', flexShrink: 0 }}><WnPic k={row.art} dark={dark} me={me} thumb /></div>
-                        <div style={{ minWidth: 0 }}>
-                          <div style={{ fontSize: 15.5, fontWeight: 700, color: theme.ink }}>{row.title}</div>
-                          <div style={{ fontSize: 13.5, color: theme.muted, lineHeight: 1.4, marginTop: 2, textWrap: 'pretty' }}>{row.text}</div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ))}
-                <div style={{ marginTop: 22, padding: '14px 0', borderTop: `1px solid ${theme.border}`, fontSize: 14.5, color: theme.muted, lineHeight: 1.45 }}>Plus lots of fixes that make ZChat faster and smoother on every phone.</div>
-                <div role="button" onClick={() => setEarlier((v) => !v)} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 0', cursor: 'pointer', borderTop: `1px solid ${theme.border}` }}>
-                  <span style={{ fontSize: 15.5, fontWeight: 700, color: theme.ink }}>Earlier updates</span>
-                  <ChevronRight size={18} color={theme.muted} style={{ transform: earlier ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s ease' }} />
-                </div>
-                {earlier && WN_EARLIER.map((it) => (
-                  <div key={it.title} style={{ padding: '9px 0' }}>
-                    <div style={{ fontSize: 14.5, fontWeight: 700, color: theme.ink }}>{it.title}</div>
-                    <div style={{ fontSize: 13.5, color: theme.muted, lineHeight: 1.45, marginTop: 1 }}>{it.text}</div>
-                  </div>
-                ))}
-              </div>
-              <div style={{ padding: '10px 20px calc(16px + env(safe-area-inset-bottom))', borderTop: `1px solid ${theme.border}`, flexShrink: 0 }}>
-                <BigButton label="Got it" onClick={onClose} style={{ height: 54, borderRadius: 16, fontSize: 17 }} />
-              </div>
-            </section>
-          </div>
+      <div role="dialog" aria-label="What is new" className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 660, background: theme.panelBg, fontFamily: FONT, display: 'flex', flexDirection: 'column' }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', padding: 'calc(8px + env(safe-area-inset-top)) 8px 0', flexShrink: 0 }}>
+          <button type="button" aria-label="Close" onClick={onClose} className="zchat-press" style={{ width: 44, height: 44, borderRadius: 22, border: 'none', background: 'transparent', color: theme.muted, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+          </button>
         </div>
-        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, padding: 'calc(env(safe-area-inset-top) + 10px) 16px 0', pointerEvents: 'none', zIndex: 3 }}>
-          <WnSegments total={pages} at={at} onArt={!lastPage} dark={dark} />
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 10 }}>
-            <span style={{ fontSize: 15, fontWeight: 700, color: lastPage ? theme.muted : onArtInk, opacity: lastPage ? 1 : 0.85 }}>ZChat {APP_VERSION}</span>
-            <div role="button" aria-label="Close" onClick={onClose} style={{ width: 40, height: 40, marginRight: -8, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', pointerEvents: 'auto', color: lastPage ? theme.ink : onArtInk }}><X size={24} /></div>
+        <div data-sheet-scroll="true" style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '0 24px 24px' }}>
+          <div style={{ display: 'flex', justifyContent: 'center' }}>
+            <img src="/icon-192.png" alt="" width="72" height="72" draggable={false} style={{ width: 72, height: 72, borderRadius: 18, display: 'block' }} />
           </div>
+          <h1 style={{ margin: '16px 0 0', fontSize: 28, fontWeight: 800, letterSpacing: '-0.02em', color: theme.ink, textAlign: 'center' }}>What is new</h1>
+          <div style={{ fontSize: 15, color: theme.muted, textAlign: 'center', marginTop: 4 }}>{`ZChat ${APP_VERSION}`}</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 22, marginTop: 30 }}>
+            {WN_HIGHLIGHTS.map((it) => (
+              <div key={it.k} style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+                <WnRowIcon k={it.icon} accent={accent} bg={soft} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 16.5, fontWeight: 700, color: theme.ink, lineHeight: 1.3 }}>{it.title}</div>
+                  <div style={{ fontSize: 14.5, color: theme.muted, lineHeight: 1.45, marginTop: 3 }}>{it.text}</div>
+                  {it.go && onTry && (
+                    <button type="button" onClick={() => tryIt(it)} style={{ marginTop: 6, padding: '6px 0', border: 'none', background: 'none', color: accent, fontFamily: FONT, fontSize: 14.5, fontWeight: 700, cursor: 'pointer' }}>{it.cta || 'Try it'}</button>
+                  )}
+                </div>
+              </div>
+            ))}
+            <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+              <WnRowIcon k="fix" accent={accent} bg={soft} />
+              <div style={{ fontSize: 16.5, fontWeight: 700, color: theme.ink }}>Bug fixes</div>
+            </div>
+          </div>
+          <button type="button" onClick={() => setEarlier((v) => !v)} style={{ marginTop: 30, padding: '8px 0', border: 'none', background: 'none', color: theme.muted, fontFamily: FONT, fontSize: 14.5, fontWeight: 700, cursor: 'pointer' }}>{earlier ? 'Hide earlier updates' : 'Earlier updates'}</button>
+          {earlier && WN_SECTIONS.map((sec) => (
+            <div key={sec.title} style={{ marginTop: 16 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: theme.muted, marginBottom: 4 }}>{sec.title}</div>
+              {sec.items.map((row) => (
+                <div key={row.title} style={{ padding: '8px 0' }}>
+                  <div style={{ fontSize: 15, fontWeight: 650, color: theme.ink }}>{row.title}</div>
+                  <div style={{ fontSize: 14, color: theme.muted, lineHeight: 1.45, marginTop: 2 }}>{row.text}</div>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+        <div style={{ flexShrink: 0, padding: '10px 20px calc(14px + env(safe-area-inset-bottom))' }}>
+          <BigButton label="Continue" onClick={onClose} style={{ height: 52, borderRadius: 14, fontSize: 17 }} />
         </div>
       </div>
     </Portal>
@@ -7201,7 +7159,7 @@ function CollageLayoutArt({ layout, imgs, tall, gap, round, dark, ink }) {
   const fh = tall ? 57 : 54;
   const g = gap ? 2.5 : 0.8;
   return (
-    <div style={{ position: 'relative', width: fw, height: fh, borderRadius: 7, overflow: 'hidden', background: dark ? '#111113' : '#FFFFFF', boxShadow: '0 1px 4px rgba(0, 0, 0, 0.18)' }}>
+    <div style={{ position: 'relative', width: fw, height: fh, borderRadius: 7, overflow: 'hidden', background: dark ? '#17131F' : '#FFFFFF', boxShadow: '0 1px 4px rgba(0, 0, 0, 0.18)' }}>
       {layout.map(([x, y, w, h], i) => {
         const im = imgs[i % Math.max(1, imgs.length)];
         return (
@@ -7217,7 +7175,7 @@ function CollageStyleArt({ k, ink }) {
   const cell = { fill: ink, fillOpacity: 0.55 };
   if (k === 'gap') return <svg width="38" height="38" viewBox="0 0 32 32" aria-hidden="true"><rect x="4" y="5" width="24" height="22" rx="2.5" fill="none" stroke="currentColor" strokeWidth="1.6" /><rect x="7" y="8" width="8" height="16" rx="1" {...cell} /><rect x="17" y="8" width="8" height="7" rx="1" {...cell} /><rect x="17" y="17" width="8" height="7" rx="1" {...cell} /></svg>;
   if (k === 'round') return <svg width="38" height="38" viewBox="0 0 32 32" aria-hidden="true"><rect x="4" y="5" width="24" height="22" rx="2.5" fill="none" stroke="currentColor" strokeWidth="1.6" /><rect x="6.5" y="7.5" width="9" height="17" rx="3.4" {...cell} /><rect x="16.5" y="7.5" width="9" height="8" rx="3.4" {...cell} /><rect x="16.5" y="16.5" width="9" height="8" rx="3.4" {...cell} /></svg>;
-  if (k === 'dark') return <svg width="38" height="38" viewBox="0 0 32 32" aria-hidden="true"><rect x="4" y="5" width="24" height="22" rx="2.5" fill="#111113" stroke="currentColor" strokeWidth="1.6" /><rect x="7" y="8" width="8" height="16" rx="1" fill="#FFFFFF" fillOpacity="0.85" /><rect x="17" y="8" width="8" height="7" rx="1" fill="#FFFFFF" fillOpacity="0.85" /><rect x="17" y="17" width="8" height="7" rx="1" fill="#FFFFFF" fillOpacity="0.85" /></svg>;
+  if (k === 'dark') return <svg width="38" height="38" viewBox="0 0 32 32" aria-hidden="true"><rect x="4" y="5" width="24" height="22" rx="2.5" fill="#17131F" stroke="currentColor" strokeWidth="1.6" /><rect x="7" y="8" width="8" height="16" rx="1" fill="#FFFFFF" fillOpacity="0.85" /><rect x="17" y="8" width="8" height="7" rx="1" fill="#FFFFFF" fillOpacity="0.85" /><rect x="17" y="17" width="8" height="7" rx="1" fill="#FFFFFF" fillOpacity="0.85" /></svg>;
   return <svg width="38" height="38" viewBox="0 0 32 32" aria-hidden="true"><rect x="7.5" y="3.5" width="17" height="25" rx="2.5" fill="none" stroke="currentColor" strokeWidth="1.6" /><rect x="10" y="6" width="5.5" height="20" rx="1" {...cell} /><rect x="17" y="6" width="5" height="9" rx="1" {...cell} /><rect x="17" y="17" width="5" height="9" rx="1" {...cell} /></svg>;
 }
 export function CollagePage({ files, onClose, onSend }) {
@@ -7245,7 +7203,7 @@ export function CollagePage({ files, onClose, onSend }) {
   const H = tall ? 1800 : 1440;
   const gap = gapOn ? 24 : 0;
   const round = roundOn ? 36 : 0;
-  const bg = dark ? '#111113' : '#FFFFFF';
+  const bg = dark ? '#17131F' : '#FFFFFF';
   useEffect(() => {
     const c = cvRef.current;
     if (!c || !imgs.length) return;

@@ -1,12 +1,14 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { GameRoom, RoomLayer, defineSfx, sfx, haptic, useGameKit } from './kit.jsx';
-import { clamp, lerp, makeCanvas, fitCanvas, dpr, grain, woodTexture, rrect, rgba, shade, tint, mix, hexRgb, perfMeter, noiseHit, tone, loopNoise, easeOut, rng } from './physics.jsx';
+import { clamp, lerp, makeCanvas, fitCanvas, dpr, grain, woodTexture, rrect, rgba, shade, tint, mix, hexRgb, perfMeter, noiseHit, tone, loopNoise, easeOut, rng, gameCache, onGameCacheDrop, dropGameCaches, canvasBlank, guardCanvases } from './physics.jsx';
 import { PoolSim, TW, TH, R, CW, RW, HEAD_Y, FOOT, POCKETS, MOUTH, ballColor, kindOf, canPlace, judge, aimRay, findPot, groupOf, CUE_START } from './poolsim.jsx';
 import { useShotLink, throttle } from './live.jsx';
+import { kitFor } from './kits.jsx';
 import { useBackClose, Avatar, appSnack, g1Send, g1Mem, g1First, g1PoolLeft, g1Outcome, g1Test, ConfirmSheet, FONT } from '../App.jsx';
 
 const FRAME = CW + RW;
-const CLOTH = '#1D7350';
+const CLOTH_BASE = '#1D7350';
+let CLOTH = CLOTH_BASE;
 const RAIL = ['#5A3420', '#2B160B', '#86563A'];
 const LAMPS = [[TW / 2, TH * 0.2], [TW / 2, TH * 0.5], [TW / 2, TH * 0.8]];
 const LAMP_H = 1150;
@@ -44,7 +46,7 @@ function ballRgb(id) {
   return hexRgb(ballColor(id));
 }
 
-const GLYPHS = new Map();
+const GLYPHS = gameCache();
 function glyph(id) {
   if (GLYPHS.has(id)) return GLYPHS.get(id);
   const S = 44;
@@ -64,7 +66,7 @@ function glyph(id) {
   return out;
 }
 
-const SPHERES = new Map();
+const SPHERES = gameCache();
 function sphere(rp) {
   const key = Math.round(rp * 4) / 4;
   if (SPHERES.has(key)) return SPHERES.get(key);
@@ -96,7 +98,15 @@ function sphere(rp) {
   return out;
 }
 
-const CLOTH_RGB = hexRgb(CLOTH);
+let CLOTH_RGB = hexRgb(CLOTH);
+export function poolCloth(hex) {
+  const next = hex || CLOTH_BASE;
+  if (next === CLOTH) return;
+  CLOTH = next;
+  CLOTH_RGB = hexRgb(CLOTH);
+  ART.clear();
+  SPHERES.clear();
+}
 function paintBall(id, q, sp, img) {
   const d = img.data;
   const qw = q[0]; const qx = q[1]; const qy = q[2]; const qz = q[3];
@@ -172,6 +182,7 @@ class BallSprites {
 }
 
 let SOFT = null;
+onGameCacheDrop(() => { SOFT = null; });
 function softSprites() {
   if (SOFT) return SOFT;
   const S = 64;
@@ -225,7 +236,7 @@ function cushionPolys() {
   ];
 }
 
-const ART = new Map();
+const ART = gameCache();
 function tableArt(L) {
   const d = dpr(2.5);
   const key = `${L.W}x${L.H}@${d}`;
@@ -234,7 +245,8 @@ function tableArt(L) {
   const ctx = cv.getContext('2d');
   ctx.scale(d, d);
   drawTable(ctx, L, d);
-  if (ART.size > 4) ART.clear();
+  if (canvasBlank(cv)) return cv;
+  if (ART.size > 2) ART.clear();
   ART.set(key, cv);
   return cv;
 }
@@ -575,6 +587,14 @@ export class PoolBoard {
     this.balls.forEach(([id]) => this.orient.set(id, (o && o.fresh) ? faceUp(id) : randQ(id, o && o.salt)));
     this.resize();
     this.prepTurn();
+    this.unguard = guardCanvases([this.bg, this.fg], () => {
+      if (this.dead || !this.host.isConnected) return;
+      this.sprites = new BallSprites();
+      this.L = null;
+      this.resize();
+      this.dirty = true;
+      this.kick();
+    });
   }
 
   resize() {
@@ -1099,6 +1119,8 @@ export class PoolBoard {
   destroy() {
     this.dead = true;
     cancelAnimationFrame(this.raf);
+    if (this.unguard) this.unguard();
+    dropGameCaches();
     this.roll.stop();
     if (this.ro) this.ro.disconnect(); else window.removeEventListener('resize', this.resize);
     this.fg.removeEventListener('pointerdown', this.down);
@@ -1110,7 +1132,7 @@ export class PoolBoard {
   }
 }
 
-const SCENE = new Map();
+const SCENE = gameCache();
 export function PoolScene() {
   const ref = useRef(null);
   useLayoutEffect(() => {
@@ -1593,6 +1615,8 @@ function GroupDots({ group, left, end }) {
 }
 
 export function PoolTable({ st, prevOf, myId, peerName, relay, onMove, onMeta, onBusy, onFlash }) {
+  const kit = kitFor('pool');
+  poolCloth(kit ? kit.cloth : null);
   const [pick, setPick] = useState(false);
   const P = usePoolPlay({ st, prevOf, myId, peer: peerName, relay, save: onMove, onBusy, onFlash });
   const { myMark, myTurn, spin, setSpin } = P;

@@ -151,6 +151,8 @@ import {
   useTheme,
 } from '../App.jsx';
 import { GameRoom, RoomButton, RoomSheet, sfx as kitSfx } from '../games/kit.jsx';
+import { withFaces } from '../games/faces.jsx';
+import { GOLF } from '../games/golf.jsx';
 import {
   KitTabs,
   LIVE_GAME_INFO,
@@ -883,7 +885,7 @@ export function WatchPartyPage({ msgId, d, me, onClose }) {
 }
 const GH_GROUP_KINDS = ['ttt', 'c4', 'gomoku', 'reversi', 'dots', 'ship', 'hang'];
 const GH_TOUR_KINDS = GH_GROUP_KINDS.filter((k) => k !== 'hang');
-const GH_LEVELS = [[1, 'Easy'], [2, 'Fair'], [3, 'Hard']];
+const GH_LEVELS = [[1, 'Easy'], [2, 'Medium'], [3, 'Hard']];
 function ghSetBotLevel(v) { try { localStorage.setItem('zchat-bot-level', String(v)); } catch {} }
 function ghStatus(p) {
   if (!p) return '';
@@ -1368,6 +1370,7 @@ function liveStickerList() {
   const by = new Map((ANIM_STICKERS || []).map((x) => [x.key, x]));
   liveStickers = [];
   LIVE_STICKER_IDS.forEach((id) => ['cat', 'tuk', 'ele'].forEach((p) => { const x = by.get(`as-${p}-${id}`); if (x) liveStickers.push(x); }));
+  liveStickers = withFaces(liveStickers);
   return liveStickers;
 }
 
@@ -1595,16 +1598,16 @@ function G1Who({ id, label, hot, children, end }) {
 function g1GolfSaved(id, n) {
   const k = `${id}:${n}`;
   if (g1Mem.golf.has(k)) return g1Mem.golf.get(k);
-  try { const v = JSON.parse(localStorage.getItem(`zchat-g1-golf-${k}`) || 'null'); if (v && Array.isArray(v)) return v; } catch {}
+  try { const v = JSON.parse(localStorage.getItem(`zchat-g2-golf-${k}`) || 'null'); if (v && Array.isArray(v)) return v; } catch {}
   return [];
 }
 function g1GolfSave(id, n, shots) {
   const k = `${id}:${n}`;
   g1Mem.golf.set(k, shots);
-  try { if (shots.length) localStorage.setItem(`zchat-g1-golf-${k}`, JSON.stringify(shots)); else localStorage.removeItem(`zchat-g1-golf-${k}`); } catch {}
+  try { if (shots.length) localStorage.setItem(`zchat-g2-golf-${k}`, JSON.stringify(shots)); else localStorage.removeItem(`zchat-g2-golf-${k}`); } catch {}
 }
 export function G1GolfPage({ st, myId, peerName, onClose }) {
-  const Z = useG1();
+  const Z = { golf: GOLF };
   const { theme } = useTheme();
   const hostRef = useRef(null);
   const ctl = useRef(null);
@@ -1662,12 +1665,12 @@ export function G1GolfPage({ st, myId, peerName, onClose }) {
     const saved = shotsRef.current;
     const ball = saved.length ? Z.golf.playHole(st.h - 1, saved).end : null;
     shown.current = st.n;
-    const c = Z.golf.mount(hostRef.current, { hole: st.h - 1, dark: theme.dark, canPutt: canPutt(), ball, onPutt: putt, onHit: (s) => { if (s > 0.1) playUiSound('tap'); }, onHoled: () => { playUiSound('point'); hapticTap(); } });
+    const c = Z.golf.mount(hostRef.current, { hole: st.h - 1, dark: theme.dark, canPutt: canPutt(), ball, onPutt: putt, onHit: (s) => { if (s > 0.1) playUiSound('tap'); }, onHoled: () => { playUiSound('point'); hapticTap(); }, onWater: () => { hapticTap(); } });
     if (ball) c.set({ ball });
     ctl.current = c;
-    if (g1Test()) window.__g1golf = { putt: (shot) => putt(shot), find: (k) => Z.golf.findPutt(stRef.current.h - 1, Z.golf.playHole(stRef.current.h - 1, shotsRef.current).end, k || 0), hole: () => stRef.current.h, busy: () => busy.current || c.busy(), stats: () => c.stats(), state: () => stRef.current };
+    if (g1Test()) window.__g1golf = { putt: (shot) => putt(shot), find: (k) => Z.golf.findPutt(stRef.current.h - 1, Z.golf.playHole(stRef.current.h - 1, shotsRef.current).end, k || 0), hole: () => stRef.current.h, busy: () => busy.current || c.busy(), state: () => stRef.current };
     return () => { c.destroy(); ctl.current = null; if (window.__g1golf) delete window.__g1golf; };
-  }, [Z]);
+  }, []);
   useEffect(() => { if (ctl.current) ctl.current.set({ dark: theme.dark }); }, [theme.dark]);
   const rest = (s) => { const sv = g1GolfSaved(s.id, s.n); return sv.length ? Z.golf.playHole(s.h - 1, sv).end : Z.golf.HOLES[s.h - 1].tee.slice(); };
   useEffect(() => {

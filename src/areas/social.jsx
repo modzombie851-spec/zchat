@@ -2940,7 +2940,7 @@ export function PostArchivePage({ me, userId, onClose }) {
       )}
       {ask && <ConfirmDialog layer={820} title="Delete this post?" body="It will be gone for good. This cannot be undone." onCancel={() => setAsk(null)} onConfirm={() => remove(ask)} />}
       {open && <Portal><FeedPanel me={me} userId={userId} fixedIds={(rows || []).map((x) => x.id)} title="Post archive" startPostId={open.id} seedPost={open} seedItems={(rows || []).map((x) => ({ ...x, owner: me }))} onClose={() => setOpen(null)} onOpenProfile={() => setOpen(null)} onPostDeleted={() => load()} /></Portal>}
-      {note && <div className="zchat-pop" role="status" style={{ position: 'fixed', left: '50%', bottom: 'calc(28px + env(safe-area-inset-bottom))', transform: 'translateX(-50%)', zIndex: 830, padding: '9px 16px', borderRadius: 20, background: theme.dark ? '#2A2930' : '#111113', color: '#FFFFFF', fontSize: 13.5, fontWeight: 600, whiteSpace: 'nowrap', pointerEvents: 'none' }}>{note}</div>}
+      {note && <div className="zchat-pop" role="status" style={{ position: 'fixed', left: '50%', bottom: 'calc(28px + env(safe-area-inset-bottom))', transform: 'translateX(-50%)', zIndex: 830, padding: '9px 16px', borderRadius: 20, background: theme.dark ? '#2A2930' : '#17131F', color: '#FFFFFF', fontSize: 13.5, fontWeight: 600, whiteSpace: 'nowrap', pointerEvents: 'none' }}>{note}</div>}
     </FullPage>
   );
 }

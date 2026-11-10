@@ -9,6 +9,7 @@ import {
 import { useMyLevels, useLevels, LEVEL_GAMES, readRecent, noteRecent } from './levels.jsx';
 import { sceneUrl, sceneKeyFor, preloadScene } from './scenes.jsx';
 import { unlockAudio } from './kit.jsx';
+import { GameRoomsPage, useLobbyPresence } from './rooms.jsx';
 
 const POPULAR = ['pool', 'chess', 'crm', 'zap', 'ckr', 'golf'];
 const RANK = ['pool', 'chess', 'crm', 'zap', 'ckr', 'golf', 'c4', 'ship', 'ttt', 'dots', 'reversi', 'gomoku', 'hang', 'wduel', 'rps'];
@@ -178,10 +179,35 @@ function useMyGameStats() {
   return mine || {};
 }
 
-export function GamesPage({ onClose, onChallenge, onShareScore, initialGame, friends, onPlayWith, onStartLive, onOpenLeaderboard, onPlayBot }) {
+function OnlineCard({ online, onOpen }) {
+  const { theme } = useTheme();
+  return (
+    <div role="button" aria-label="Play online" onClick={onOpen} className="zgh-tile"
+      style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 14px 14px 12px', marginTop: 4, borderRadius: 24, cursor: 'pointer', background: theme.dark ? 'linear-gradient(135deg, #2A2147 0%, #1A1530 100%)' : 'linear-gradient(135deg, #EEE8FF 0%, #F7F4FF 100%)', boxShadow: `inset 0 0 0 1px ${theme.border}` }}>
+      <div style={{ position: 'relative', width: 74, height: 58, flexShrink: 0 }}>
+        {['zap', 'pool', 'chess'].map((k, i) => (
+          <div key={k} style={{ position: 'absolute', left: i * 14, top: i % 2 ? 8 : 0, width: 44, height: 44, borderRadius: 13, overflow: 'hidden', boxShadow: `0 0 0 2px ${theme.dark ? '#221B3A' : '#FFFFFF'}, 0 6px 14px rgba(20,10,40,0.25)`, transform: `rotate(${(i - 1) * 6}deg)` }}><GameArt k={k} width={44} height={44} radius={0} /></div>
+        ))}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 17, fontWeight: 900, color: theme.ink, letterSpacing: '-0.015em' }}>Play online</div>
+        <div style={{ fontSize: 12.5, color: theme.muted, marginTop: 1, lineHeight: 1.35 }}>Quick join, open rooms and room IDs</div>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 6, fontSize: 12.5, fontWeight: 800, color: theme.ink }}>
+          <span className={reducedMotion() ? undefined : 'zchat-live-dot'} style={{ width: 7, height: 7, borderRadius: '50%', background: '#22C55E' }} />{`${Math.max(1, online || 0)} online now`}
+        </div>
+      </div>
+      <GameButton small color="green" label="Play" onClick={onOpen} />
+    </div>
+  );
+}
+
+export function GamesPage({ onClose, onChallenge, onShareScore, initialGame, friends, onPlayWith, onStartLive, onOpenLeaderboard, onPlayBot, myId, me, onRoomHost, onRoomGuest, initialRoom }) {
   injectHubCss();
   useBackClose(true, onClose);
   const { theme } = useTheme();
+  const [rooms, setRooms] = useState(() => (initialRoom != null ? { code: initialRoom } : null));
+  const [lobbyKind, setLobbyKind] = useState(null);
+  const online = useLobbyPresence(myId, lobbyKind || 'hub');
   const mine = useMyGameStats();
   const levels = useMyLevels();
   const [game, setGame] = useState(() => (initialGame && isSoloGameKey(initialGame) ? initialGame : null));
@@ -215,6 +241,7 @@ export function GamesPage({ onClose, onChallenge, onShareScore, initialGame, fri
       <FullPage title="Games" onBack={onClose} zIndex={60}
         right={onOpenLeaderboard ? <HeaderIconButton label="Leaderboard" onClick={() => { tap(); onOpenLeaderboard('all'); }}><TrophyIcon size={20} /></HeaderIconButton> : null}>
         <div className="zgh-in">
+          {myId && onRoomHost && <OnlineCard online={online} onOpen={() => { tap(); setRooms({}); }} />}
           {onPlayWith && friends && friends.length > 0 && (
             <>
               <SectionTitle>Play with a friend</SectionTitle>
@@ -281,7 +308,7 @@ export function GamesPage({ onClose, onChallenge, onShareScore, initialGame, fri
               <Avatar emoji="/bot-avatar.jpg" name="ZChat Bot" size={44} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 15.5, fontWeight: 800, color: theme.ink }}>Play ZChat Bot</div>
-                <div style={{ fontSize: 12.5, color: theme.muted, marginTop: 1 }}>Easy, Fair or Hard, any time</div>
+                <div style={{ fontSize: 12.5, color: theme.muted, marginTop: 1 }}>Easy, Medium or Hard, any time</div>
               </div>
               <GameButton small color="white" label="Play" onClick={() => { tap(); onPlayBot(); }} />
             </div>
@@ -299,6 +326,10 @@ export function GamesPage({ onClose, onChallenge, onShareScore, initialGame, fri
         </FullPage>
       )}
       {rulesFor && <HowToPlaySheet k={rulesFor} onClose={() => setRulesFor(null)} />}
+      {rooms && myId && onRoomHost && (
+        <GameRoomsPage myId={myId} me={me} online={online} onKind={setLobbyKind} initialCode={rooms.code || ''} onClose={() => setRooms(null)}
+          onHostStart={(p, k, gid) => onRoomHost(p, k, gid)} onGuestOpen={(p, k, gid) => onRoomGuest(p, k, gid)} />
+      )}
     </>
   );
 }
@@ -307,7 +338,7 @@ function ShareGlyph() {
   return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 15V3M7.5 7.5 12 3l4.5 4.5" /><path d="M5 12v6.5A2.5 2.5 0 0 0 7.5 21h9a2.5 2.5 0 0 0 2.5-2.5V12" /></svg>;
 }
 
-const BOT_LEVELS = [[1, 'Easy'], [2, 'Fair'], [3, 'Hard']];
+const BOT_LEVELS = [[1, 'Easy'], [2, 'Medium'], [3, 'Hard']];
 
 export function GamePickerSheet({ profile, onPick, onMore, onClose }) {
   injectHubCss();

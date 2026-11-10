@@ -162,6 +162,8 @@ defineSfx('cushion', (c, out, o) => { const v = Math.max(0.1, Math.min(1, o.v ==
 defineSfx('putt', (c, out, o) => { const v = Math.max(0.2, Math.min(1, o.v == null ? 0.6 : o.v)); clickSound(c, out, { freq: 2000, decay: 0.03, gain: 0.4 * v, q: 3 }); toneSound(c, out, { freq: 420, to: 300, dur: 0.06, gain: 0.12 * v }); });
 defineSfx('cup', (c, out) => { [0, 0.06, 0.11, 0.15].forEach((d, i) => clickSound(c, out, { freq: 1600 - i * 200, decay: 0.03, gain: 0.3 - i * 0.05, q: 5, delay: d })); toneSound(c, out, { freq: 1568, dur: 0.4, gain: 0.08, delay: 0.2, type: 'sine' }); });
 defineSfx('pop', (c, out) => toneSound(c, out, { freq: 520, to: 1040, dur: 0.09, gain: 0.14 }));
+defineSfx('splash', (c, out) => { [0, 0.05, 0.12].forEach((d, i) => clickSound(c, out, { freq: 900 - i * 180, decay: 0.12, gain: 0.22 - i * 0.05, q: 0.8, delay: d })); toneSound(c, out, { freq: 260, to: 120, dur: 0.22, gain: 0.08, delay: 0.04, type: 'sine' }); });
+defineSfx('bumper', (c, out, o) => { const v = Math.max(0.15, Math.min(1, o.v == null ? 0.6 : o.v)); toneSound(c, out, { freq: 300, to: 520, dur: 0.08, gain: 0.18 * v, type: 'triangle' }); clickSound(c, out, { freq: 1800, decay: 0.02, gain: 0.2 * v, q: 4 }); });
 defineSfx('bubble', (c, out) => { toneSound(c, out, { freq: 880, dur: 0.07, gain: 0.08 }); toneSound(c, out, { freq: 1320, dur: 0.09, gain: 0.07, delay: 0.06 }); });
 defineSfx('join', (c, out) => { toneSound(c, out, { freq: 660, dur: 0.12, gain: 0.1, type: 'triangle' }); toneSound(c, out, { freq: 990, dur: 0.16, gain: 0.1, type: 'triangle', delay: 0.09 }); });
 defineSfx('leave', (c, out) => { toneSound(c, out, { freq: 784, dur: 0.12, gain: 0.08, type: 'triangle' }); toneSound(c, out, { freq: 523, dur: 0.16, gain: 0.08, type: 'triangle', delay: 0.09 }); });
@@ -345,6 +347,11 @@ const ROOM_CSS = `
 @keyframes zgr-toast{0%{opacity:0;transform:translate(-50%,10px) scale(.9)}10%{opacity:1;transform:translate(-50%,0) scale(1)}80%{opacity:1}100%{opacity:0;transform:translate(-50%,-14px)}}
 .zgr-scroll{scrollbar-width:none}.zgr-scroll::-webkit-scrollbar{display:none}
 .zgr-still *,.zgr-still{animation-duration:.01s!important;animation-iteration-count:1!important;transition-duration:.01s!important}
+.zgr-still .zgr-float{animation:none!important;transform:translate(-50%,-60px)!important;opacity:1!important}
+.zgr-face{animation:zgr-face 1.1s cubic-bezier(.3,1.4,.5,1) both;transform-origin:50% 80%}
+@keyframes zgr-face{0%{transform:scale(.4) rotate(-14deg)}35%{transform:scale(1.18) rotate(9deg)}55%{transform:scale(.96) rotate(-6deg)}75%{transform:scale(1.04) rotate(3deg)}100%{transform:none}}
+.zgr-still .zgr-face{animation:none!important}
+.zgr-still .zgr-toast{animation:none!important;transform:translate(-50%,0)!important;opacity:1!important}
 @media (prefers-reduced-motion:reduce){.zgr-root *,.zgr-root{animation-duration:.01s!important;animation-iteration-count:1!important;transition-duration:.01s!important}}
 `;
 let cssDone = false;
@@ -482,13 +489,29 @@ function ChatTray({ phrases, onSay, onClose }) {
 }
 
 function ReactTray({ stickers, onPick }) {
+  const faces = stickers.filter((s) => s.face);
+  const rest = stickers.filter((s) => !s.face);
+  const [tab, setTab] = useState(() => { try { return (faces.length && localStorage.getItem('zchat-game-react-tab') !== 'stickers') || !rest.length ? 'faces' : 'stickers'; } catch { return 'faces'; } });
+  const pickTab = (t) => { setTab(t); try { localStorage.setItem('zchat-game-react-tab', t); } catch {} };
+  const list = tab === 'faces' && faces.length ? faces : rest;
+  const cols = tab === 'faces' && faces.length ? 4 : 6;
   return (
-    <div className="zgr-up zgr-scroll" onClick={(e) => e.stopPropagation()} style={{ position: 'absolute', left: 10, right: 10, bottom: 'calc(70px + env(safe-area-inset-bottom))', zIndex: 20, borderRadius: 22, padding: '10px 8px', background: 'rgba(16,14,24,0.92)', boxShadow: '0 16px 40px rgba(0,0,0,0.5), inset 0 0 0 1px rgba(255,255,255,0.1)', display: 'grid', gridTemplateColumns: 'repeat(6, minmax(0, 1fr))', gap: 4, maxHeight: 240, overflowY: 'auto' }}>
-      {stickers.map((s) => (
-        <button key={s.key} type="button" aria-label={`React ${s.label}`} onClick={() => onPick(s)} className="zgr-press" style={{ border: 'none', background: 'transparent', padding: 2, cursor: 'pointer', aspectRatio: '1 / 1' }}>
-          <img src={s.file} alt="" draggable={false} decoding="async" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-        </button>
-      ))}
+    <div className="zgr-up" onClick={(e) => e.stopPropagation()} style={{ position: 'absolute', left: 10, right: 10, bottom: 'calc(70px + env(safe-area-inset-bottom))', zIndex: 20, borderRadius: 22, padding: '8px 8px 10px', background: 'rgba(16,14,24,0.94)', boxShadow: '0 16px 40px rgba(0,0,0,0.5), inset 0 0 0 1px rgba(255,255,255,0.1)' }}>
+      {faces.length > 0 && rest.length > 0 && (
+        <div role="tablist" aria-label="Reactions" style={{ display: 'flex', gap: 6, padding: '2px 4px 8px' }}>
+          {[['faces', 'Faces'], ['stickers', 'Stickers']].map(([k, label]) => (
+            <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => pickTab(k)} className="zgr-press"
+              style={{ height: 32, padding: '0 14px', borderRadius: 16, border: 'none', cursor: 'pointer', fontFamily: KIT_FONT, fontSize: 13.5, fontWeight: 800, background: tab === k ? '#FFFFFF' : 'rgba(255,255,255,0.1)', color: tab === k ? '#16131F' : 'rgba(255,255,255,0.86)' }}>{label}</button>
+          ))}
+        </div>
+      )}
+      <div className="zgr-scroll" style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gap: 4, maxHeight: 236, overflowY: 'auto' }}>
+        {list.map((s) => (
+          <button key={s.key} type="button" aria-label={`React ${s.label}`} onClick={() => onPick(s)} className="zgr-press" style={{ border: 'none', background: 'transparent', padding: s.face ? 6 : 2, cursor: 'pointer', aspectRatio: '1 / 1' }}>
+            <img src={s.file} alt="" draggable={false} decoding="async" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -552,21 +575,21 @@ export function GameRoom({ title, scene, top, bottom, onClose, children, k, scen
     sfx('bubble');
     later(() => setBubbles((b) => (b[side] && b[side].id === id ? { ...b, [side]: null } : b)), 4200);
   };
-  const showFloat = (from, file) => {
+  const showFloat = (from, file, face) => {
     const side = sideOf(from);
     const id = `${Date.now()}${Math.random()}`;
-    setFlying((f) => [...f.slice(-6), { id, file, side, x: side === 'right' ? 66 + Math.random() * 16 : 18 + Math.random() * 16 }]);
+    setFlying((f) => [...f.slice(-6), { id, file, face: !!face, side, x: side === 'right' ? 66 + Math.random() * 16 : 18 + Math.random() * 16 }]);
     sfx('pop');
     later(() => setFlying((f) => f.filter((x) => x.id !== id)), 2500);
   };
   useEffect(() => {
     if (!social || !social.on) return undefined;
     const offA = social.on('say', (d) => { if (d && typeof d.text === 'string') showBubble(d.from, d.text.slice(0, 60)); });
-    const offB = social.on('rx', (d) => { const s = d && (social.stickers || []).find((x) => x.key === d.s); if (s) showFloat(d.from, s.file); });
+    const offB = social.on('rx', (d) => { const s = d && (social.stickers || []).find((x) => x.key === d.s); if (s) showFloat(d.from, s.file, s.face); });
     return () => { if (offA) offA(); if (offB) offB(); };
   }, [social && social.on]);
   const say = (text) => { if (!social) return; social.send('say', { text }); showBubble(social.me, text); };
-  const react = (s) => { if (!social) return; setTray(null); social.send('rx', { s: s.key }); showFloat(social.me, s.file); haptic(8); };
+  const react = (s) => { if (!social) return; setTray(null); social.send('rx', { s: s.key }); showFloat(social.me, s.file, s.face); haptic(8); };
   const close = () => { if (onClose) onClose(); };
   const menuItems = [...(rules ? [{ label: 'How to play', onClick: () => setShowRules(true) }] : []), ...(menu || [])];
   const body = (
@@ -614,7 +637,7 @@ export function GameRoom({ title, scene, top, bottom, onClose, children, k, scen
       <div aria-hidden="true" style={{ position: 'absolute', inset: 0, zIndex: 15, pointerEvents: 'none' }}>
         {flying.concat(floats || []).map((f) => (
           <div key={f.id} className="zgr-float" style={{ position: 'absolute', left: `${f.x}%`, bottom: 'calc(120px + env(safe-area-inset-bottom))', width: 96, height: 96 }}>
-            {f.file ? <img src={f.file} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain', filter: 'drop-shadow(0 6px 12px rgba(0,0,0,0.35))' }} /> : f.node}
+            {f.file ? <img src={f.file} alt="" className={f.face ? 'zgr-face' : undefined} style={{ width: '100%', height: '100%', objectFit: 'contain', filter: 'drop-shadow(0 6px 12px rgba(0,0,0,0.35))' }} /> : f.node}
           </div>
         ))}
       </div>

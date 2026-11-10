@@ -29,7 +29,7 @@ const SR_ONLY = { position: 'absolute', width: 1, height: 1, padding: 0, margin:
 const STATUS = { green: '#0CA30C', amber: '#FAB219' };
 const STATE_WORD = { green: 'Good', amber: 'Check', red: 'Problem', off: 'Off' };
 
-export function LaunchTermsSheet({ need, onDone, onLeave }) {
+export function LaunchTermsSheet({ need, onDone, onLeave, onLater }) {
   const { theme } = useTheme();
   const [dob, setDob] = useState({ d: '', m: '', y: '' });
   const [terms, setTerms] = useState(false);
@@ -78,7 +78,7 @@ export function LaunchTermsSheet({ need, onDone, onLeave }) {
               {err && <div role="alert" style={{ color: theme.danger, fontSize: 13.5, fontWeight: 600, marginTop: 12, lineHeight: 1.45 }}>{err}</div>}
               <button type="button" onClick={save} disabled={!ready} className="zchat-press" style={{ ...primaryBtn(theme, !ready), marginTop: 22, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{busy ? <Spinner /> : 'Continue'}</button>
               <div style={{ textAlign: 'center', marginTop: 14 }}>
-                <button type="button" onClick={onLeave} style={{ background: 'none', border: 'none', color: theme.muted, fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, padding: 6 }}>Log out</button>
+                <button type="button" onClick={onLater || onLeave} style={{ background: 'none', border: 'none', color: theme.muted, fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, padding: 6 }}>{onLater ? 'Not now' : 'Log out'}</button>
               </div>
             </>
           )}

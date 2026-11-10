@@ -31,6 +31,34 @@ export function makeCanvas(w, h) {
   return c;
 }
 
+const gameCaches = new Set();
+const gameResets = new Set();
+export function gameCache() { const m = new Map(); gameCaches.add(m); return m; }
+export function onGameCacheDrop(f) { gameResets.add(f); }
+export function dropGameCaches() {
+  gameCaches.forEach((m) => m.clear());
+  gameResets.forEach((f) => { try { f(); } catch {} });
+}
+export function canvasBlank(cv) {
+  try {
+    const g = cv.getContext('2d');
+    if (!g) return true;
+    if (g.isContextLost && g.isContextLost()) return true;
+    const p = g.getImageData(Math.floor(cv.width / 2), Math.floor(cv.height / 2), 1, 1).data;
+    return p[3] === 0;
+  } catch { return false; }
+}
+export function guardCanvases(cvs, redraw) {
+  const fire = () => { dropGameCaches(); try { redraw(); } catch {} };
+  const onVis = () => { if (document.visibilityState === 'visible') fire(); };
+  cvs.forEach((c) => { try { c.addEventListener('contextlost', fire); c.addEventListener('contextrestored', fire); } catch {} });
+  try { document.addEventListener('visibilitychange', onVis); } catch {}
+  return () => {
+    cvs.forEach((c) => { try { c.removeEventListener('contextlost', fire); c.removeEventListener('contextrestored', fire); } catch {} });
+    try { document.removeEventListener('visibilitychange', onVis); } catch {}
+  };
+}
+
 export function fitCanvas(cv, w, h, cap) {
   const d = dpr(cap);
   const pw = Math.max(1, Math.round(w * d));

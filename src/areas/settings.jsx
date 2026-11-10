@@ -2638,7 +2638,7 @@ export function ThemePreviewPage({ me, k, startDark = true, onClose, action }) {
   const [dark, setDark] = useState(!!startDark);
   if (!spec) return null;
   const r = RARITY_STYLE[spec.rarity] || RARITY_STYLE.epic;
-  const page = dark ? '#0C0C0E' : '#FFFFFF';
+  const page = dark ? '#110D19' : '#FFFFFF';
   const bg = dark ? '12,12,14' : '255,255,255';
   const mask = 'linear-gradient(180deg, #000 0px, #000 calc(100% - 190px), rgba(0,0,0,0.5) calc(100% - 90px), transparent 100%)';
   const scrim = `linear-gradient(180deg, rgba(${bg},0.3) 0px, rgba(${bg},0) 84px, rgba(${bg},0.06) 46%, rgba(${bg},${dark ? 0.4 : 0.5}) calc(100% - 150px), rgba(${bg},0.7) 100%)`;
@@ -2650,15 +2650,15 @@ export function ThemePreviewPage({ me, k, startDark = true, onClose, action }) {
           <div style={{ position: 'absolute', inset: 0, background: scrim }} />
         </div>
         <div style={{ position: 'relative', zIndex: 2, display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', paddingTop: 'calc(10px + env(safe-area-inset-top))' }}>
-          <div role="button" aria-label="Close preview" onClick={onClose} className="zchat-press" style={{ width: 38, height: 38, borderRadius: 19, background: dark ? 'rgba(0,0,0,0.35)' : 'rgba(255,255,255,0.7)', color: dark ? '#FFFFFF' : '#111113', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}><X size={19} /></div>
-          <div style={{ flex: 1, minWidth: 0, color: dark ? '#FFFFFF' : '#111113' }}>
+          <div role="button" aria-label="Close preview" onClick={onClose} className="zchat-press" style={{ width: 38, height: 38, borderRadius: 19, background: dark ? 'rgba(0,0,0,0.35)' : 'rgba(255,255,255,0.7)', color: dark ? '#FFFFFF' : '#17131F', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}><X size={19} /></div>
+          <div style={{ flex: 1, minWidth: 0, color: dark ? '#FFFFFF' : '#17131F' }}>
             <div style={{ fontSize: 16, fontWeight: 750, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{spec.label}</div>
             <div style={{ fontSize: 12.5, fontWeight: 650, color: dark ? r.color : mixHex(r.color, '#000000', 0.62) }}>{r.label} theme</div>
           </div>
           <div role="tablist" aria-label="Day or night" style={{ position: 'relative', display: 'flex', width: 132, height: 34, padding: 3, boxSizing: 'border-box', borderRadius: 17, flexShrink: 0, background: dark ? 'rgba(0,0,0,0.38)' : 'rgba(255,255,255,0.72)' }}>
             <div aria-hidden="true" style={{ position: 'absolute', top: 3, bottom: 3, left: 3, width: 'calc(50% - 3px)', borderRadius: 14, background: dark ? 'rgba(255,255,255,0.2)' : '#FFFFFF', boxShadow: dark ? 'none' : '0 1px 4px rgba(0,0,0,0.12)', transform: `translateX(${dark ? 100 : 0}%)`, transition: reducedMotion() ? 'none' : 'transform 0.25s cubic-bezier(0.25, 0.85, 0.3, 1)' }} />
             {[['day', 'Day', false], ['night', 'Night', true]].map(([v, l, d]) => (
-              <div key={v} role="tab" aria-selected={dark === d} aria-label={l} onClick={() => { if (dark !== d) { hapticTap(); setDark(d); } }} style={{ position: 'relative', zIndex: 1, flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13.5, fontWeight: 650, cursor: 'pointer', color: dark ? (dark === d ? '#FFFFFF' : 'rgba(255,255,255,0.7)') : (dark === d ? '#111113' : 'rgba(17,17,19,0.6)') }}>{l}</div>
+              <div key={v} role="tab" aria-selected={dark === d} aria-label={l} onClick={() => { if (dark !== d) { hapticTap(); setDark(d); } }} style={{ position: 'relative', zIndex: 1, flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13.5, fontWeight: 650, cursor: 'pointer', color: dark ? (dark === d ? '#FFFFFF' : 'rgba(255,255,255,0.7)') : (dark === d ? '#17131F' : 'rgba(17,17,19,0.6)') }}>{l}</div>
             ))}
           </div>
         </div>

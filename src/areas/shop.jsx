@@ -236,6 +236,7 @@ import {
   walletSpend,
   writeJsonLs,
 } from '../App.jsx';
+import { GAME_KITS, GAME_KIT_BY, KIT_GAME_NAMES, kitKeyFor, kitSet, gameKitSave, useKit, GameKitArt } from '../games/kits.jsx';
 import {
   BubbleTileDark,
   CharBubbleSample,
@@ -574,7 +575,7 @@ export function WalletPage({ uid, me, onClose, onOpenCollection, onOpenGift }) {
           <div style={{ fontSize: 15, fontWeight: 700, color: Number(r.delta) > 0 ? '#16A34A' : theme.ink, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>{Number(r.delta) > 0 ? `+${Number(r.delta).toLocaleString('en-US')}` : `\u2212${Math.abs(Number(r.delta)).toLocaleString('en-US')}`}</div>
         </div>
       ))}
-      {note && <div className="zchat-pop" role="status" style={{ position: 'fixed', left: '50%', bottom: 'calc(30px + env(safe-area-inset-bottom))', transform: 'translateX(-50%)', zIndex: 900, padding: '9px 16px', borderRadius: 18, background: theme.dark ? '#2A2930' : '#111113', color: '#FFFFFF', fontSize: 13.5, fontWeight: 600, width: 'max-content', maxWidth: 'calc(100vw - 48px)', boxSizing: 'border-box', textAlign: 'center', pointerEvents: 'none' }}>{note}</div>}
+      {note && <div className="zchat-pop" role="status" style={{ position: 'fixed', left: '50%', bottom: 'calc(30px + env(safe-area-inset-bottom))', transform: 'translateX(-50%)', zIndex: 900, padding: '9px 16px', borderRadius: 18, background: theme.dark ? '#2A2930' : '#17131F', color: '#FFFFFF', fontSize: 13.5, fontWeight: 600, width: 'max-content', maxWidth: 'calc(100vw - 48px)', boxSizing: 'border-box', textAlign: 'center', pointerEvents: 'none' }}>{note}</div>}
       {codeOpen && <RedeemCodeSheet uid={uid} me={me} onClose={() => setCodeOpen(false)} onOpenCollection={onOpenCollection ? () => { setCodeOpen(false); onOpenCollection(); } : null} />}
       {limitOpen && <MonthlyLimitPage uid={uid} onClose={() => setLimitOpen(false)} />}
     </FullPage>
@@ -1218,7 +1219,7 @@ function LiveWallStage({ k, me, dark }) {
   const spec = LIVE_WALL_BY[k];
   if (!spec) return null;
   const bub = (mine, text) => (
-    <div style={{ alignSelf: mine ? 'flex-end' : 'flex-start', maxWidth: '76%', padding: '8px 12px', borderRadius: 18, [mine ? 'borderBottomRightRadius' : 'borderBottomLeftRadius']: 6, background: mine ? '#7C5CFC' : (dark ? 'rgba(30,30,36,0.9)' : 'rgba(255,255,255,0.95)'), color: mine ? '#FFFFFF' : (dark ? '#F4F4F6' : '#111113'), fontSize: 14, lineHeight: 1.35 }}>{text}</div>
+    <div style={{ alignSelf: mine ? 'flex-end' : 'flex-start', maxWidth: '76%', padding: '8px 12px', borderRadius: 18, [mine ? 'borderBottomRightRadius' : 'borderBottomLeftRadius']: 6, background: mine ? '#7C5CFC' : (dark ? 'rgba(30,30,36,0.9)' : 'rgba(255,255,255,0.95)'), color: mine ? '#FFFFFF' : (dark ? '#F4F4F6' : '#17131F'), fontSize: 14, lineHeight: 1.35 }}>{text}</div>
   );
   return (
     <div style={{ position: 'relative', borderRadius: 22, overflow: 'hidden', height: 360, background: liveWallBg(spec, dark), boxShadow: `inset 0 0 0 1px ${dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}` }}>
@@ -1226,7 +1227,7 @@ function LiveWallStage({ k, me, dark }) {
       <div style={{ position: 'absolute', inset: 0, background: liveWallVeil(dark) }} />
       <div style={{ position: 'absolute', left: 0, right: 0, top: 0, display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: dark ? 'rgba(16,16,21,0.72)' : 'rgba(255,255,255,0.78)' }}>
         <Avatar emoji={me && me.avatar} name={(me && me.name) || 'You'} size={28} />
-        <div style={{ fontSize: 14, fontWeight: 700, color: dark ? '#F4F4F6' : '#111113' }}>Sam</div>
+        <div style={{ fontSize: 14, fontWeight: 700, color: dark ? '#F4F4F6' : '#17131F' }}>Sam</div>
       </div>
       <div style={{ position: 'absolute', left: 12, right: 12, bottom: 14, display: 'flex', flexDirection: 'column', gap: 6 }}>
         {bub(false, 'Are we still on for tonight?')}
@@ -1314,20 +1315,20 @@ function shopOwnersSeed(rows) {
   (rows || []).forEach((r) => { if (r && r.kind && r.key && Number.isFinite(Number(r.owners))) shopOwnersMem.set(`${r.kind}:${r.key}`, Number(r.owners)); });
 }
 const CX_NEW = [['namestyle', 'aurora'], ['reaction', 'rocket'], ['namestyle', 'lava'], ['reaction', 'trophy'], ['namestyle', 'rosegold'], ['reaction', 'diamond'], ['namestyle', 'midnight'], ['reaction', 'spotlight'], ['namestyle', 'storm'], ['reaction', 'drum_roll'], ['namestyle', 'jade'], ['reaction', 'mic_drop'], ['namestyle', 'glitch'], ['reaction', 'kiss'], ['namestyle', 'ocean'], ['reaction', 'cake'], ['namestyle', 'candy'], ['reaction', 'snowball'], ['namestyle', 'paper']];
-const SHOP_CATS = [['foryou', 'For you'], ['set', 'Sets'], ['frame', 'Frames'], ['nameplate', 'Nameplates'], ['effect', 'Effects'], ['bubble', 'Chat bubbles'], ['namestyle', 'Name styles'], ['theme', 'Themes'], ['reaction', 'Reactions'], ['charm', 'Charms'], ['stickerpack', 'Stickers'], ['soundpack', 'Sounds'], ['typing', 'Typing'], ['wallpaper', 'Wallpapers']];
+const SHOP_CATS = [['foryou', 'For you'], ['set', 'Sets'], ['frame', 'Frames'], ['nameplate', 'Nameplates'], ['effect', 'Effects'], ['bubble', 'Chat bubbles'], ['gamekit', 'Games'], ['namestyle', 'Name styles'], ['theme', 'Themes'], ['reaction', 'Reactions'], ['charm', 'Charms'], ['stickerpack', 'Stickers'], ['soundpack', 'Sounds'], ['typing', 'Typing'], ['wallpaper', 'Wallpapers']];
 const SHOP_VIEWS = { new: 'New', popular: 'Popular', wishlist: 'Your wishlist', finish: 'Finish your sets' };
 const SHOP_PIECES = ['frame', 'nameplate', 'effect'];
 const SHOP_CX = ['namestyle', 'theme', 'reaction'];
 const SHOP_INK ={ mythic: ['#FF6B86', '#C81E45'], legendary: ['#F5B829', '#9A6300'], epic: ['#C59BFF', '#8136D8'], rare: ['#6FB0FF', '#1D66D6'] };
-const SHOP_WHERE = { set: 'Your profile, chats and Vibes', frame: 'Around your photo everywhere', nameplate: 'Behind your name on your profile', effect: 'Over your profile when someone opens it', bubble: 'Every message you send', charm: 'Next to your name everywhere', namestyle: 'Your name on your profile, in chats and on Vibes', theme: 'Behind your profile for everyone who visits', reaction: 'Over any message you react to', wallpaper: 'Behind any chat you pick it for', stickerpack: 'Your sticker picker in every chat', soundpack: 'Message tones and ringtones', typing: 'Your typing bubble in chats' };
-const SHOP_SUBS = { set: 'Frame, nameplate and profile effect', frame: 'Around your photo everywhere', nameplate: 'Behind your name on your profile', effect: 'Plays when someone opens your profile', bubble: 'Shows on every message you send', namestyle: 'Your name, drawn your way', theme: 'A moving scene behind your profile', reaction: 'Big reactions that play over the chat', charm: 'Sits next to your name everywhere', stickerpack: 'Animated stickers, yours to keep', soundpack: 'Message tones and ringtones', typing: 'What friends see while you type', wallpaper: 'Moving backgrounds for your chats' };
+const SHOP_WHERE = { set: 'Your profile, chats and Vibes', frame: 'Around your photo everywhere', nameplate: 'Behind your name on your profile', effect: 'Over your profile when someone opens it', bubble: 'Every message you send', charm: 'Next to your name everywhere', namestyle: 'Your name on your profile, in chats and on Vibes', theme: 'Behind your profile for everyone who visits', reaction: 'Over any message you react to', wallpaper: 'Behind any chat you pick it for', stickerpack: 'Your sticker picker in every chat', soundpack: 'Message tones and ringtones', typing: 'Your typing bubble in chats', gamekit: 'Your board and pieces when you play' };
+const SHOP_SUBS = { set: 'Frame, nameplate and profile effect', frame: 'Around your photo everywhere', nameplate: 'Behind your name on your profile', effect: 'Plays when someone opens your profile', bubble: 'Shows on every message you send', namestyle: 'Your name, drawn your way', theme: 'A moving scene behind your profile', reaction: 'Big reactions that play over the chat', charm: 'Sits next to your name everywhere', stickerpack: 'Animated stickers, yours to keep', soundpack: 'Message tones and ringtones', typing: 'What friends see while you type', wallpaper: 'Moving backgrounds for your chats', gamekit: 'Boards, pieces and tables for your games' };
 const SHOP_BUY_REASONS = ['shop', 'deal', 'drop', 'gift_item', 'refund'];
 
 function shopPal(theme) {
   return { dark: !!theme.dark, bg: theme.bgGradient, stage: theme.soft, stage2: theme.soft2, field: theme.inputBg, line: theme.hair, border: theme.border, ink: theme.ink, ink2: theme.muted, ink3: theme.muted2, link: kitOnInk(theme), accent: theme.coral, accentSoft: theme.accentSoft, sheet: theme.panelBg, danger: theme.danger };
 }
 function shopKindLabel(kind) {
-  return { set: 'Set', frame: 'Frame', nameplate: 'Nameplate', effect: 'Profile effect', bubble: 'Chat bubble', charm: 'Charm', namestyle: 'Name style', theme: 'Profile theme', reaction: 'Super reaction', wallpaper: 'Live wallpaper', stickerpack: 'Sticker pack', soundpack: 'Sound pack', typing: 'Typing style', drop: 'Limited drop' }[kind] || 'Item';
+  return { set: 'Set', frame: 'Frame', nameplate: 'Nameplate', effect: 'Profile effect', bubble: 'Chat bubble', charm: 'Charm', namestyle: 'Name style', theme: 'Profile theme', reaction: 'Super reaction', wallpaper: 'Live wallpaper', stickerpack: 'Sticker pack', soundpack: 'Sound pack', typing: 'Typing style', gamekit: 'Game style', drop: 'Limited drop' }[kind] || 'Item';
 }
 function shopNameOf(kind, key) {
   if (SHOP_PIECES.includes(kind)) return shopItemName('set', key);
@@ -1353,6 +1354,7 @@ function shopKeys(kind, cxOn) {
   else if (kind === 'stickerpack') out = SI_STICKER_PACKS.map((p) => p.key);
   else if (kind === 'soundpack') out = SI_SOUND_PACKS.map((p) => p.key);
   else if (kind === 'typing') out = SI_TYPING.map((p) => p.key);
+  else if (kind === 'gamekit') out = GAME_KITS.map((p) => p.key);
   shopKeyMem.set(id, out);
   return out;
 }
@@ -1378,6 +1380,7 @@ function shopState(c, kind, k) {
   if (kind === 'reaction') return { owned: cxOwns(c.rewards, 'reaction', k, true), some: 0, equipped: false };
   if (kind === 'wallpaper') return { owned: c.keep('wallpaper', k), some: 0, equipped: false };
   if (kind === 'typing') { const owned = siOwns(c.rewards, 'typing', k); return { owned, some: 0, equipped: owned && c.typing === k }; }
+  if (kind === 'gamekit') { const owned = siOwns(c.rewards, 'gamekit', k); const g = GAME_KIT_BY[k]; return { owned, some: 0, equipped: owned && !!g && kitKeyFor(g.game) === k }; }
   if (SI_KINDS.includes(kind)) return { owned: siOwns(c.rewards, kind, k), some: 0, equipped: false };
   return { owned: false, some: 0, equipped: false };
 }
@@ -1489,7 +1492,18 @@ function ShopArt({ kind, k, me, size, pal, drop }) {
   if (kind === 'stickerpack') return <img src={`/ps-${k}-hi.webp`} alt="" loading="lazy" decoding="async" draggable={false} style={{ width: Math.round(s * 0.78), height: Math.round(s * 0.78), objectFit: 'contain', display: 'block' }} />;
   if (kind === 'soundpack') return <ShopWave k={k} w={Math.round(s * 0.62)} h={Math.round(s * 0.34)} />;
   if (kind === 'typing') return <TypingStyleBubble k={k} who={me} dark={dark} bg={pal.bg} scale={Math.max(0.8, Math.min(1.4, s / 110))} />;
+  if (kind === 'gamekit') return <GameKitArt k={k} size={Math.round(s * 0.84)} />;
   return null;
+}
+function ShopKitStage({ k, pal }) {
+  const kit = GAME_KIT_BY[k];
+  if (!kit) return null;
+  return (
+    <div style={{ borderRadius: 24, overflow: 'hidden', background: pal.stage, padding: '22px 16px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+      <div style={{ width: 'min(72vw, 300px)', maxWidth: '100%', aspectRatio: '1 / 1', filter: 'drop-shadow(0 18px 30px rgba(0,0,0,0.35))' }}><GameKitArt k={k} size="100%" /></div>
+      <div style={{ fontSize: 13.5, fontWeight: 700, color: pal.ink2 }}>{`For ${KIT_GAME_NAMES[kit.game] || 'your games'}`}</div>
+    </div>
+  );
 }
 const ShopTile = React.memo(function ShopTile({ kind, k, me, pal, w, meta, title, owned, equipped, price, was, flag, flagTone, onOpen, rail = false, drop = null }) {
   const name = title || shopNameOf(kind, k);
@@ -1597,13 +1611,13 @@ function ShopCoinPill({ coins, onOpenWallet, pal }) {
 }
 function ShopToast({ text, pal, top = 'calc(64px + env(safe-area-inset-top))' }) {
   if (!text) return null;
-  return <div className="zchat-pop" role="status" style={{ position: 'absolute', left: '50%', top, transform: 'translateX(-50%)', zIndex: 60, padding: '10px 16px', borderRadius: 14, background: pal.dark ? '#2A2930' : '#111113', color: '#FFFFFF', fontSize: 13.5, fontWeight: 600, width: 'max-content', maxWidth: 'calc(100% - 32px)', boxSizing: 'border-box', textAlign: 'center', pointerEvents: 'none', boxShadow: '0 6px 20px rgba(0,0,0,0.18)' }}>{text}</div>;
+  return <div className="zchat-pop" role="status" style={{ position: 'absolute', left: '50%', top, transform: 'translateX(-50%)', zIndex: 60, padding: '10px 16px', borderRadius: 14, background: pal.dark ? '#2A2930' : '#17131F', color: '#FFFFFF', fontSize: 13.5, fontWeight: 600, width: 'max-content', maxWidth: 'calc(100% - 32px)', boxSizing: 'border-box', textAlign: 'center', pointerEvents: 'none', boxShadow: '0 6px 20px rgba(0,0,0,0.18)' }}>{text}</div>;
 }
 function ShopThemeStage({ me, k, dark, pal, onFull }) {
   const spec = PROFILE_THEMES[k];
   if (!spec) return null;
-  const page = dark ? '#0C0C0E' : '#FFFFFF';
-  const ink = dark ? '#F4F4F6' : '#111113';
+  const page = dark ? '#110D19' : '#FFFFFF';
+  const ink = dark ? '#F4F4F6' : '#17131F';
   return (
     <div role="button" aria-label="See the full preview" onClick={() => { hapticTap(); if (onFull) onFull(k); }} style={{ position: 'relative', borderRadius: 18, overflow: 'hidden', cursor: onFull ? 'pointer' : 'default', height: 330, background: page, isolation: 'isolate', boxShadow: `0 0 0 1px ${pal.line}` }}>
       <div style={{ position: 'absolute', inset: 0, background: themeFallback(k, dark), WebkitMaskImage: 'linear-gradient(180deg, #000 0%, #000 58%, transparent 100%)', maskImage: 'linear-gradient(180deg, #000 0%, #000 58%, transparent 100%)' }}>
@@ -1618,7 +1632,7 @@ function ShopStickerGrid({ k, dark, pal }) {
   const pack = siSpec('stickerpack', k);
   if (!pack) return null;
   return (
-    <div style={{ borderRadius: 18, background: dark ? '#0C0C0E' : '#FFFFFF', boxShadow: `0 0 0 1px ${pal.line}`, padding: 10 }}>
+    <div style={{ borderRadius: 18, background: dark ? '#110D19' : '#FFFFFF', boxShadow: `0 0 0 1px ${pal.line}`, padding: 10 }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 6 }}>
         {pack.list.map(([id, label]) => (
           <div key={id} style={{ aspectRatio: '1 / 1', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
@@ -1634,7 +1648,7 @@ function ShopTypingStage({ k, me, dark, pal }) {
   const first = String((me && me.name) || 'You').split(' ')[0];
   const t = fmtDate(new Date(), { hour: 'numeric', minute: '2-digit' });
   return (
-    <div style={{ borderRadius: 18, background: dark ? '#0C0C0E' : '#FFFFFF', boxShadow: `0 0 0 1px ${pal.line}`, overflow: 'hidden', color: T.ink, fontFamily: FONT }}>
+    <div style={{ borderRadius: 18, background: dark ? '#110D19' : '#FFFFFF', boxShadow: `0 0 0 1px ${pal.line}`, overflow: 'hidden', color: T.ink, fontFamily: FONT }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderBottom: `1px solid ${T.hair}` }}>
         <ArrowLeft size={18} color={T.ink} style={{ flexShrink: 0 }} />
         <Avatar emoji={me.avatar} name={me.name} size={34} />
@@ -1945,6 +1959,7 @@ function shopDoneText(kind, mode) {
 function ShopProduct({ me, item, items = null, onPick, rewards, wallet, onClose, onOpenWallet, onGift, onEquip, onWear, onRefresh, onPreviewTheme, onOpenItem, startMode = null, zIndex = 645 }) {
   useBackClose(true, onClose);
   shopCss2();
+  useKit(item.kind === 'gamekit' && GAME_KIT_BY[item.key] ? GAME_KIT_BY[item.key].game : 'chess');
   const { theme, bubbleStyle, setBubbleStyle } = useTheme();
   const pal = shopPal(theme);
   const raw = item.kind;
@@ -2018,8 +2033,8 @@ function ShopProduct({ me, item, items = null, onPick, rewards, wallet, onClose,
   } else if (SI_KINDS.includes(kind)) {
     has = siOwns(rewards, kind, key);
     forever = has;
-    equipped = kind === 'typing' && typingMine === key;
-    canWear = has && kind === 'typing';
+    equipped = (kind === 'typing' && typingMine === key) || (kind === 'gamekit' && !!GAME_KIT_BY[key] && kitKeyFor(GAME_KIT_BY[key].game) === key);
+    canWear = has && (kind === 'typing' || kind === 'gamekit');
   } else {
     has = c.keep(kind, key);
     forever = has;
@@ -2053,7 +2068,7 @@ function ShopProduct({ me, item, items = null, onPick, rewards, wallet, onClose,
   const wishKind = kind === 'set' ? 'set' : kind;
   const canWish = !forever && !isFreeRx && (kind === 'set' ? !set.drop : ['bubble', 'charm', 'namestyle', 'theme', 'reaction'].includes(kind));
   const wished = canWish && wish.has(wishKind, key);
-  const canGift = !!onGift && kind !== 'drop' && !isFreeRx && !(set && set.drop);
+  const canGift = !!onGift && kind !== 'drop' && kind !== 'gamekit' && !isFreeRx && !(set && set.drop);
   const artKind = kind === 'set' ? mode : kind;
   const fullTitle = kind === 'set' ? `${set.name} ${mode === 'set' ? (missing.length === 3 || missing.length === 0 ? 'set' : what) : mode === 'effect' ? 'profile effect' : mode}` : kind === 'drop' ? drop.title : `${name} ${shopKindWord(kind)}`;
   const go = (d) => {
@@ -2123,6 +2138,7 @@ function ShopProduct({ me, item, items = null, onPick, rewards, wallet, onClose,
     }
     if (kind === 'bubble' || kind === 'drop') { setBubbleStyle(key); playUiSound('like'); flash(`${name} is on. Everyone sees it.`); return; }
     if (kind === 'typing') { setTypingStyleMine(me.id, key); setTypingMine(key); playUiSound('like'); flash(`${name} is on. Friends see it while you type.`); return; }
+    if (kind === 'gamekit') { const g = GAME_KIT_BY[key]; if (!g) return; kitSet(g.game, key); gameKitSave(g.game, key); playUiSound('like'); flash(`${name} is on for ${KIT_GAME_NAMES[g.game] || 'your games'}`); return; }
     if (!onEquip) return;
     onEquip(kind, key);
     flash(kind === 'theme' ? `${name} is on your profile` : kind === 'charm' ? `${name} is next to your name` : `${name} is on your name`);
@@ -2140,6 +2156,7 @@ function ShopProduct({ me, item, items = null, onPick, rewards, wallet, onClose,
     }
     if (kind === 'bubble' || kind === 'drop') { setBubbleStyle('classic'); flash('Back to the classic bubble'); return; }
     if (kind === 'typing') { setTypingStyleMine(me.id, null); setTypingMine(null); flash('Back to the plain dots'); return; }
+    if (kind === 'gamekit') { const g = GAME_KIT_BY[key]; if (!g) return; kitSet(g.game, null); gameKitSave(g.game, ''); flash('Back to the classic look'); return; }
     if (!onEquip) return;
     onEquip(kind, null);
     flash('Taken off');
@@ -2183,6 +2200,7 @@ function ShopProduct({ me, item, items = null, onPick, rewards, wallet, onClose,
   else if (kind === 'wallpaper') stage = <LiveWallStage k={key} me={me} dark={dark} />;
   else if (kind === 'stickerpack') stage = <ShopStickerGrid k={key} dark={dark} pal={pal} />;
   else if (kind === 'soundpack') stage = <ShopSoundList k={key} owned={has} pal={pal} onUsed={flash} />;
+  else if (kind === 'gamekit') stage = <ShopKitStage k={key} pal={pal} />;
   else stage = <ShopTypingStage k={key} me={me} dark={dark} pal={pal} />;
   const fxKey = showSet && showSet.fx && (dropSet || mode === 'set' || mode === 'effect' || fxRun) ? showSet.key : null;
   const about = kind === 'drop' ? (drop.blurb || (dropSet && dropSet.about) || '') : kind === 'set' && mode === 'effect' ? 'An animation that plays over your profile when someone opens it. It only plays while you wear the full set.' : shopItemAbout(kind, key);
@@ -2263,7 +2281,7 @@ function ShopProduct({ me, item, items = null, onPick, rewards, wallet, onClose,
             {fxKey && <ProfileEffectLayer effectKey={fxKey} runKey={fxRun} force={fxRun > 0} z={3} />}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, minHeight: 34 }}>
-            {kind !== 'soundpack' ? <ShopSeg label="Preview in light or dark" items={[[false, 'Light'], [true, 'Dark']]} value={dark} onChange={setDark} pal={pal} /> : <div style={{ fontSize: 13, color: pal.ink2 }}>Tap a sound to hear it</div>}
+            {kind === 'gamekit' ? <div style={{ fontSize: 13, color: pal.ink2 }}>You see your style when you play</div> : kind !== 'soundpack' ? <ShopSeg label="Preview in light or dark" items={[[false, 'Light'], [true, 'Dark']]} value={dark} onChange={setDark} pal={pal} /> : <div style={{ fontSize: 13, color: pal.ink2 }}>Tap a sound to hear it</div>}
             {(kind === 'charm' || kind === 'namestyle') && <ShopSeg label="Preview on your profile or in a chat" items={[['profile', 'Profile'], ['chat', 'Chat']]} value={view} onChange={setView} pal={pal} />}
             <div style={{ flex: 1 }} />
             {showSet && showSet.fx && <div role="button" aria-label="Play the profile effect" onClick={() => { hapticTap(); setFxRun(Date.now()); }} className="zchat-press" style={{ height: 34, padding: '0 13px 0 11px', borderRadius: 17, background: pal.stage, color: pal.ink, display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 650, cursor: 'pointer' }}><Play size={12} fill="currentColor" strokeWidth={0} />Effect</div>}
@@ -3478,7 +3496,7 @@ export function BubbleShopPage({ uid, onClose, onGift, onOpenWallet, startKey, z
         <div style={{ fontSize: 12.5, color: theme.muted, lineHeight: 1.5, padding: '14px 2px 0' }}>Bubbles are yours to keep. Your friends see your bubble on every message you send.</div>
       </div>
       {ask && <ConfirmSheet title={`Get the ${CHAR_BUBBLES[ask].label} bubble?`} text={`It costs ${BUBBLE_PRICE} coins and it is yours to keep.`} confirmLabel={`Pay ${BUBBLE_PRICE} coins`} danger={false} zIndex={zIndex + 10} onCancel={() => setAsk(null)} onConfirm={() => buy(ask)} />}
-      {note && <div className="zchat-pop" role="status" style={{ position: 'fixed', left: '50%', bottom: 'calc(96px + env(safe-area-inset-bottom))', transform: 'translateX(-50%)', zIndex: zIndex + 20, padding: '9px 16px', borderRadius: 18, background: theme.dark ? '#2A2930' : '#111113', color: '#FFFFFF', fontSize: 13.5, fontWeight: 600, width: 'max-content', maxWidth: 'calc(100vw - 40px)', boxSizing: 'border-box', textAlign: 'center', pointerEvents: 'none' }}>{note}</div>}
+      {note && <div className="zchat-pop" role="status" style={{ position: 'fixed', left: '50%', bottom: 'calc(96px + env(safe-area-inset-bottom))', transform: 'translateX(-50%)', zIndex: zIndex + 20, padding: '9px 16px', borderRadius: 18, background: theme.dark ? '#2A2930' : '#17131F', color: '#FFFFFF', fontSize: 13.5, fontWeight: 600, width: 'max-content', maxWidth: 'calc(100vw - 40px)', boxSizing: 'border-box', textAlign: 'center', pointerEvents: 'none' }}>{note}</div>}
     </FullPage>
   );
 }

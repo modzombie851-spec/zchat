@@ -21,7 +21,10 @@ function reloadOnce() {
   } catch {
     return false;
   }
-  const go = () => window.location.reload();
+  const go = () => {
+    const settle = typeof window !== 'undefined' && window.__zchatAuthSettle ? window.__zchatAuthSettle() : null;
+    Promise.resolve(settle).then(() => window.location.reload(), () => window.location.reload());
+  };
   try {
     if (typeof caches !== 'undefined') {
       caches.keys().then((keys) => Promise.all(keys.filter((k) => k.indexOf('zchat-shell-') === 0).map((k) => caches.open(k).then((c) => c.delete('/'))))).then(go, go);

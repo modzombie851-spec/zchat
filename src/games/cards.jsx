@@ -1,7 +1,7 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { supabase } from '../supabaseClient.js';
 import { GameRoom, RoomLayer, defineSfx, sfx, haptic, useGameKit } from './kit.jsx';
-import { makeCanvas, fitCanvas, grain, rng, noiseHit, tone, mix } from './physics.jsx';
+import { makeCanvas, fitCanvas, grain, rng, noiseHit, tone, mix, gameCache } from './physics.jsx';
 import { useBackClose, Avatar, appSnack, g1Mem, g1First, ga1Name, g1Test, ConfirmSheet, FONT, GameCardShell, GameButton, GameAgainButton, useTheme, countWord, parseGameMessage, rpcMissing, LoadFail } from '../App.jsx';
 
 export const ZAP_COLORS = { r: '#E2405F', y: '#F2B21B', g: '#2FAE66', b: '#2F86E8' };
@@ -21,17 +21,31 @@ defineSfx('zapCatch', (c, out) => { tone(c, out, { freq: 220, to: 140, gain: 0.1
 
 export const colOf = (c) => (c && c.length === 2 ? c[0] : null);
 export const valOf = (c) => (c && c.length === 2 ? c[1] : c);
-export function fits(c, top, col) {
+const WILDS = ['W', 'F', 'V', 'X', 'T', 'C'];
+export const isWild = (c) => !!c && c.length === 1 && WILDS.includes(c);
+export function drawVal(c) {
+  if (!c) return 0;
+  if (c === 'F' || c === 'V') return 4;
+  if (c === 'X') return 6;
+  if (c === 'T') return 10;
+  if (c.length === 2 && c[1] === 'D') return 2;
+  if (c.length === 2 && c[1] === 'P') return 4;
+  return 0;
+}
+export const isMayhem = (st) => !!st && st.md === 'mayhem';
+export function fits(c, top, col, st) {
   if (!c) return false;
-  if (c === 'W' || c === 'F') return true;
+  if (st && isMayhem(st) && (st.pd || 0) > 0) return drawVal(c) > 0 && drawVal(c) >= (st.pv || 0);
+  if (isWild(c)) return true;
   return c[0] === col || (!!top && top.length === 2 && c[1] === top[1]);
 }
+const VAL_NAMES = { S: 'skip', R: 'reverse', D: 'draw two', P: 'draw four', K: 'skip everyone', A: 'discard all' };
+const WILD_NAMES = { W: 'Wild', F: 'Wild draw four', V: 'Wild reverse draw four', X: 'Wild draw six', T: 'Wild draw ten', C: 'Colour roulette' };
 export function cardName(c) {
   if (!c) return '';
-  if (c === 'W') return 'Wild';
-  if (c === 'F') return 'Wild draw four';
+  if (c.length === 1) return WILD_NAMES[c] || 'Wild';
   const v = c[1];
-  return `${ZAP_NAMES[c[0]]} ${v === 'S' ? 'skip' : v === 'R' ? 'reverse' : v === 'D' ? 'draw two' : v}`;
+  return `${ZAP_NAMES[c[0]]} ${VAL_NAMES[v] || v}`;
 }
 
 function motif(col) {
@@ -65,12 +79,28 @@ function glyphSvg(v, col, big) {
     const c = big ? fill : '#FFFFFF';
     return `<g transform="translate(60 90) scale(${k})" fill="none" stroke="${c}" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"><path d="M-20 -6 A22 22 0 0 1 18 -14"/><path d="M8 -24 L19 -14 L6 -5"/><path d="M20 6 A22 22 0 0 1 -18 14"/><path d="M-8 24 L-19 14 L-6 5"/></g>`;
   }
-  if (v === 'D' || v === 'F') {
-    const n = v === 'D' ? '+2' : '+4';
-    if (!big) return `<text x="60" y="95" text-anchor="middle" font-family="-apple-system, 'Helvetica Neue', Arial, sans-serif" font-weight="900" font-size="15" fill="#FFFFFF">${n}</text>`;
-    const c = v === 'D' ? fill : '#241B3D';
-    const cards = v === 'D' ? `<rect x="-17" y="-24" width="20" height="30" rx="4" fill="${c}" opacity="0.35" transform="rotate(-12)"/><rect x="-6" y="-20" width="20" height="30" rx="4" fill="${c}" opacity="0.6" transform="rotate(8)"/>` : '';
-    return `<g transform="translate(60 90)">${cards}<text x="0" y="${v === 'D' ? 16 : 12}" text-anchor="middle" font-family="-apple-system, 'Helvetica Neue', Arial, sans-serif" font-weight="900" font-size="${v === 'D' ? 30 : 26}" fill="${v === 'D' ? ink : '#FFFFFF'}" stroke="${v === 'D' ? '#FFFFFF' : '#241B3D'}" stroke-width="${v === 'D' ? 0 : 1.5}" paint-order="stroke">${n}</text></g>`;
+  if (v === 'K') {
+    const c = big ? fill : '#FFFFFF';
+    const k = big ? 1 : 0.42;
+    return `<g transform="translate(60 90) scale(${k})" fill="none" stroke="${c}" stroke-width="7" stroke-linecap="round"><circle r="13" cx="-9" cy="-7"/><path d="M-18 2 L0 -16"/><circle r="13" cx="9" cy="9" opacity="0.6"/><path d="M0 18 L18 0" opacity="0.6"/></g>`;
+  }
+  if (v === 'A') {
+    const c = big ? fill : '#FFFFFF';
+    const k = big ? 1 : 0.42;
+    return `<g transform="translate(60 90) scale(${k})"><rect x="-17" y="-22" width="22" height="32" rx="4" fill="${c}" opacity="0.4" transform="rotate(-14)"/><rect x="-11" y="-18" width="22" height="32" rx="4" fill="${c}" opacity="0.7"/><rect x="-4" y="-14" width="22" height="32" rx="4" fill="${c}" transform="rotate(12)"/><path d="M-20 22 L22 22" stroke="${c}" stroke-width="6" stroke-linecap="round"/></g>`;
+  }
+  if (v === 'C') {
+    const k = big ? 1 : 0.42;
+    return `<g transform="translate(60 90) scale(${k})"><g transform="translate(-60 -90)">${quarters(24)}</g><circle r="24" fill="none" stroke="#FFFFFF" stroke-width="3"/><circle r="6" fill="#FFFFFF"/><path d="M0 -36 L-7 -24 L7 -24 Z" fill="#FFFFFF"/></g>`;
+  }
+  if (v === 'D' || v === 'F' || v === 'P' || v === 'V' || v === 'X' || v === 'T') {
+    const n = v === 'D' ? '+2' : v === 'X' ? '+6' : v === 'T' ? '+10' : '+4';
+    const colored = v === 'D' || v === 'P';
+    if (!big) return `<text x="60" y="95" text-anchor="middle" font-family="-apple-system, 'Helvetica Neue', Arial, sans-serif" font-weight="900" font-size="${n.length > 2 ? 12 : 15}" fill="#FFFFFF">${n}</text>`;
+    const c = colored ? fill : '#241B3D';
+    const cards = colored ? `<rect x="-17" y="-24" width="20" height="30" rx="4" fill="${c}" opacity="0.35" transform="rotate(-12)"/><rect x="-6" y="-20" width="20" height="30" rx="4" fill="${c}" opacity="0.6" transform="rotate(8)"/>` : '';
+    const arrows = v === 'V' ? '<g transform="scale(0.62) translate(0 -2)" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"><path d="M-30 -16 A34 34 0 0 1 26 -22"/><path d="M14 -34 L27 -22 L12 -12"/><path d="M30 16 A34 34 0 0 1 -26 22"/><path d="M-14 34 L-27 22 L-12 12"/></g>' : '';
+    return `<g transform="translate(60 90)">${cards}${arrows}<text x="0" y="${colored ? 16 : 12}" text-anchor="middle" font-family="-apple-system, 'Helvetica Neue', Arial, sans-serif" font-weight="900" font-size="${colored ? 30 : n.length > 2 ? 23 : 26}" fill="${colored ? ink : '#FFFFFF'}" stroke="${colored ? '#FFFFFF' : '#241B3D'}" stroke-width="${colored ? 0 : 1.5}" paint-order="stroke">${n}</text></g>`;
   }
   if (v === 'W') return '';
   return `<text x="60" y="${big ? 108 : 95}" text-anchor="middle" font-family="-apple-system, 'SF Pro Rounded', 'Helvetica Neue', Arial, sans-serif" font-weight="900" font-size="${big ? 52 : 15}" fill="${big ? ink : '#FFFFFF'}" ${big && (v === '6' || v === '9') ? 'text-decoration="underline"' : ''}>${v}</text>`;
@@ -82,14 +112,14 @@ function quarters(r) {
 }
 
 function faceSvg(code) {
-  const wild = code === 'W' || code === 'F';
+  const wild = code.length === 1;
   const col = wild ? null : code[0];
   const v = wild ? code : code[1];
-  const base = wild ? '#241B3D' : ZAP_COLORS[col];
+  const base = wild ? (v === 'X' || v === 'T' ? '#2B0F24' : v === 'C' ? '#14213D' : '#241B3D') : ZAP_COLORS[col];
   const corner = (inner) => `<g transform="translate(-41 -64) scale(0.9)">${inner}</g>`;
-  const cornerInner = wild ? (v === 'F' ? `<text x="60" y="95" text-anchor="middle" font-family="-apple-system, 'Helvetica Neue', Arial, sans-serif" font-weight="900" font-size="15" fill="#FFFFFF">+4</text>` : `<g transform="translate(60 90) scale(0.2) translate(-60 -90)">${quarters(30)}</g>`) : glyphSvg(v, col, false);
+  const cornerInner = wild ? (v !== 'W' && v !== 'C' ? glyphSvg(v, null, false) : v === 'C' ? glyphSvg('C', null, false) : `<g transform="translate(60 90) scale(0.2) translate(-60 -90)">${quarters(30)}</g>`) : glyphSvg(v, col, false);
   const center = wild
-    ? `<circle cx="60" cy="90" r="40" fill="#FFFFFF"/><circle cx="60" cy="90" r="34" fill="#241B3D"/>${quarters(30)}<circle cx="60" cy="90" r="30" fill="none" stroke="#FFFFFF" stroke-width="2.5"/>${v === 'F' ? glyphSvg('F', null, true) : ''}`
+    ? (v === 'C' ? `<circle cx="60" cy="90" r="40" fill="#FFFFFF"/><circle cx="60" cy="90" r="34" fill="${base}"/>${glyphSvg('C', null, true)}` : `<circle cx="60" cy="90" r="40" fill="#FFFFFF"/><circle cx="60" cy="90" r="34" fill="#241B3D"/>${quarters(30)}<circle cx="60" cy="90" r="30" fill="none" stroke="#FFFFFF" stroke-width="2.5"/>${v !== 'W' ? glyphSvg(v, null, true) : ''}`)
     : `<circle cx="60" cy="90" r="40" fill="#FFFFFF"/><circle cx="60" cy="90" r="36" fill="none" stroke="${mix(base, '#FFFFFF', 0.55)}" stroke-width="1.5"/>${glyphSvg(v, col, true)}`;
   const pat = wild ? `<g opacity="0.12" stroke="#FFFFFF" fill="none">${[0, 1, 2, 3, 4, 5].map((i) => `<circle cx="60" cy="90" r="${48 + i * 14}" stroke-width="1.6"/>`).join('')}</g>` : motif(col);
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 180" width="240" height="360"><defs><linearGradient id="s" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFFFFF" stop-opacity="0.22"/><stop offset="0.5" stop-color="#FFFFFF" stop-opacity="0"/><stop offset="1" stop-color="#000000" stop-opacity="0.18"/></linearGradient><clipPath id="c"><rect x="0" y="0" width="120" height="180" rx="12"/></clipPath></defs><rect x="0" y="0" width="120" height="180" rx="12" fill="#FFFFFF"/><rect x="5" y="5" width="110" height="170" rx="9" fill="${base}"/><g clip-path="url(#c)">${pat}</g>${center}${corner(cornerInner)}<g transform="rotate(180 60 90)">${corner(cornerInner)}</g><rect x="0" y="0" width="120" height="180" rx="12" fill="url(#s)"/><rect x="0.5" y="0.5" width="119" height="179" rx="11.5" fill="none" stroke="#000000" stroke-opacity="0.2"/></svg>`;
@@ -121,7 +151,7 @@ export function ZapCardFace({ code, w = 60, style, lift, dim, onClick, label, ba
   );
 }
 
-const SCENE = new Map();
+const SCENE = gameCache();
 export function ZapScene() {
   const ref = useRef(null);
   useLayoutEffect(() => {
@@ -204,6 +234,7 @@ export function ZapScene() {
 }
 
 const RPC = { join: 'zchat_zap_join', start: 'zchat_zap_start', hand: 'zchat_zap_hand', play: 'zchat_zap_play', draw: 'zchat_zap_draw', pass: 'zchat_zap_pass', call: 'zchat_zap_call', catch: 'zchat_zap_catch', nudge: 'zchat_zap_nudge', end: 'zchat_zap_end' };
+const MAYHEM_RPC = { play: 'zchat_zapm_play', draw: 'zchat_zapm_draw', pass: 'zchat_zapm_pass', catch: 'zchat_zapm_catch', nudge: 'zchat_zapm_nudge' };
 const busyKeys = new Set();
 function ctxOf() { return g1Mem.host && g1Mem.host.ctx ? g1Mem.host.ctx() : null; }
 function msgIdOf(st) {
@@ -222,7 +253,8 @@ export async function zapAct(st, a, args) {
   if (busyKeys.has(key)) return null;
   busyKeys.add(key);
   let res = null;
-  try { res = await supabase.rpc(RPC[a], { p_msg: mid, ...(args || {}) }); } catch (e) { res = { error: e }; }
+  const fn = isMayhem(st) && MAYHEM_RPC[a] ? MAYHEM_RPC[a] : RPC[a];
+  try { res = await supabase.rpc(fn, { p_msg: mid, ...(args || {}) }); } catch (e) { res = { error: e }; }
   busyKeys.delete(key);
   const data = res && res.data;
   if (!res || res.error || !data || data.ok === false) {
@@ -256,7 +288,7 @@ export function ZapCard({ state, myId, live }) {
   const status = st.st === 'lobby' ? `${countWord(players.length, 'player', 'players')} in` : st.st === 'play' ? (st.t === myId ? 'Your turn' : `${g1First(st.t)} to play`) : st.ended ? 'Game ended' : !st.w ? 'Game over' : st.w === myId ? 'You won' : `${g1First(st.w)} won`;
   const act = async (a) => { if (a === 'join') { setJoining(true); haptic(8); } const r = await zapAct(st, a); if (a === 'join' && !r) setJoining(false); if (r && a !== 'join') sfx('zapShuffle'); };
   return (
-    <GameCardShell k="zap" width={248} live={live} title="Zap" status={status} hot={live && ((st.st === 'play' && st.t === myId) || (st.st === 'lobby' && me < 0))}>
+    <GameCardShell k="zap" width={248} live={live} title={isMayhem(st) ? 'Zap Mayhem' : 'Zap'} status={status} hot={live && ((st.st === 'play' && st.t === myId) || (st.st === 'lobby' && me < 0))}>
       {st.st === 'play' && st.top && (
         <div role="button" aria-label="Open the table" onClick={() => g1Mem.host && g1Mem.host.open(st.id)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14, padding: '10px 0', marginBottom: 8, borderRadius: 14, cursor: 'pointer', background: 'radial-gradient(120% 120% at 50% 30%, #1F6B5E, #0C352D)' }}>
           <div style={{ position: 'relative', width: 44, height: 66 }}>{[2, 1, 0].map((k) => <ZapCardFace key={k} back w={44} style={{ position: 'absolute', left: k * 2, top: -k * 2, boxShadow: '0 2px 4px rgba(0,0,0,0.4)' }} />)}</div>
@@ -273,7 +305,7 @@ export function ZapCard({ state, myId, live }) {
           </div>
         ))}
       </div>
-      {st.st === 'lobby' && <div style={{ marginTop: 8, fontSize: 11.5, color: theme.muted, textAlign: 'center' }}>Seven cards each. Up to {st.mx} players.</div>}
+      {st.st === 'lobby' && <div style={{ marginTop: 8, fontSize: 11.5, color: theme.muted, textAlign: 'center' }}>{isMayhem(st) ? `Mayhem rules. Stack draw cards, out at 25. Up to ${st.mx} players.` : `Seven cards each. Up to ${st.mx} players.`}</div>}
       {live && st.st === 'lobby' && me < 0 && players.length < st.mx && <GameButton full small color="green" label="Join" onClick={() => act('join')} style={{ marginTop: 10 }} />}
       {live && st.st === 'lobby' && me === 0 && st.mx > 2 && <GameButton full small color="green" label={players.length < 2 ? 'Waiting for players' : 'Deal the cards'} disabled={players.length < 2} onClick={() => act('start')} style={{ marginTop: 10 }} />}
       {live && st.st === 'lobby' && me === 0 && st.mx === 2 && <div style={{ marginTop: 8, fontSize: 11.5, color: theme.muted, textAlign: 'center' }}>{(() => { const c = ctxOf(); const f = c && c.peer && !c.group ? String(c.peer.name || '').split(' ')[0] : ''; return f ? `The cards are dealt when ${f} joins` : 'The cards are dealt when your friend joins'; })()}</div>}
@@ -356,7 +388,8 @@ function ColorPicker({ onPick, onClose }) {
 
 function Seat({ u, i, st, myId, here, onCatch, seatRef, badge }) {
   const n = g1Mem.names[u] || {};
-  const cnt = (st.cnt || [])[i] || 0;
+  const out = Array.isArray(st.out) && st.out.includes(i);
+  const cnt = out ? 0 : (st.cnt || [])[i] || 0;
   const hot = st.st === 'play' && st.t === u;
   const catchable = st.open === i && u !== myId;
   return (
@@ -365,7 +398,7 @@ function Seat({ u, i, st, myId, here, onCatch, seatRef, badge }) {
         <Avatar emoji={n.avatar} name={n.name || ga1Name(u)} size={40} />
         {here && <span style={{ position: 'absolute', right: 1, bottom: 1, width: 10, height: 10, borderRadius: 5, background: '#3DDC84', boxShadow: '0 0 0 2px #16121C' }} />}
       </div>
-      <div style={{ fontSize: 12.5, fontWeight: 800, color: '#FFF', maxWidth: 96, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{g1First(u)}</div>
+      <div style={{ fontSize: 12.5, fontWeight: 800, color: out ? 'rgba(255,255,255,0.5)' : '#FFF', maxWidth: 96, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{out ? `${g1First(u)}, out` : g1First(u)}</div>
       <div style={{ display: 'flex', alignItems: 'center', height: 26 }}>
         {Array.from({ length: Math.min(cnt, 9) }).map((_, k) => <ZapCardFace key={k} back w={16} style={{ marginLeft: k ? -9 : 0, transform: `rotate(${(k - Math.min(cnt, 9) / 2) * 5}deg)`, boxShadow: '0 1px 2px rgba(0,0,0,0.5)' }} />)}
         <span style={{ marginLeft: 6, fontSize: 12, fontWeight: 900, color: cnt === 1 ? '#FF6B6B' : 'rgba(255,255,255,0.75)' }}>{cnt}</span>
@@ -377,9 +410,40 @@ function Seat({ u, i, st, myId, here, onCatch, seatRef, badge }) {
   );
 }
 
+function zapTurnLine(st, me, hand, long) {
+  if (st.dr === me) return 'Play the card you drew, or pass';
+  const pd = isMayhem(st) ? st.pd || 0 : 0;
+  const any = !!(hand && hand.some((c) => fits(c, st.top, st.col, st)));
+  if (pd > 0) return any ? `Stack a draw card or take ${pd}` : `Tap the deck to take ${pd}`;
+  if (hand && !any) return isMayhem(st) ? (long ? 'Nothing fits. Tap the deck to draw until one does' : 'Nothing fits, draw until one does') : (long ? 'Nothing fits. Tap the deck to draw' : 'Nothing fits, tap the deck');
+  return long ? 'Your turn. Tap a card that matches' : 'Your turn';
+}
+
+function WhoPicker({ st, myId, onPick, onClose }) {
+  useBackClose(true, onClose);
+  const outs = Array.isArray(st.out) ? st.out : [];
+  const list = (st.p || []).map((u, i) => [u, i]).filter(([u, i]) => u !== myId && !outs.includes(i));
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 40, background: 'rgba(5,4,8,0.62)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: FONT }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ width: 300, borderRadius: 26, padding: '20px 18px 18px', background: 'linear-gradient(180deg, #221A30, #15111C)', boxShadow: '0 20px 50px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.08)' }}>
+        <div style={{ fontSize: 17, fontWeight: 800, color: '#FFF', textAlign: 'center' }}>Swap hands with</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 14 }}>
+          {list.map(([u, i]) => (
+            <button key={u} type="button" onClick={() => onPick(i)} style={{ display: 'flex', alignItems: 'center', gap: 10, height: 56, padding: '0 12px', borderRadius: 16, border: 'none', cursor: 'pointer', background: 'rgba(255,255,255,0.08)', color: '#FFF', fontFamily: FONT, fontWeight: 800, fontSize: 15 }}>
+              <Avatar emoji={(g1Mem.names[u] || {}).avatar} name={ga1Name(u)} size={36} />
+              <span style={{ flex: 1, textAlign: 'left', minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{g1First(u)}</span>
+              <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>{countWord((st.cnt || [])[i] || 0, 'card', 'cards')}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function sortHand(h) {
   const order = { r: 0, y: 1, g: 2, b: 3 };
-  const v = (c) => (c === 'W' ? 100 : c === 'F' ? 101 : order[c[0]] * 20 + ('0123456789SRD'.indexOf(c[1])));
+  const v = (c) => (c.length === 1 ? 200 + 'WCFVXT'.indexOf(c) : order[c[0]] * 30 + ('0123456789SRDPKA'.indexOf(c[1])));
   return h.slice().sort((a, b) => v(a) - v(b));
 }
 
@@ -398,6 +462,7 @@ function useZapPlay({ st, myId, relay, intent }) {
   handRefVal.current = hand;
   const [drawn, setDrawn] = useState(null);
   const [pickFor, setPickFor] = useState(null);
+  const [whoFor, setWhoFor] = useState(null);
   const [called, setCalled] = useState(false);
   const [flights, setFlights] = useState([]);
   const [hidden, setHidden] = useState(() => new Set());
@@ -497,20 +562,32 @@ function useZapPlay({ st, myId, relay, intent }) {
     } else if (lt.a === 'play' && lt.p === me) {
       setShownTop(st.top);
     }
+    const mh = isMayhem(st);
+    if (mh && Array.isArray(lt.out) && lt.out.length) setTimeout(() => { sfx('zapCatch'); lt.out.forEach((i) => badge(i, i === me ? 'You are out' : 'Out at 25 cards')); }, 700);
+    if (mh && (lt.sw != null || lt.ps)) { setTimeout(loadHand, 260); setTimeout(() => { sfx('zapReverse'); if (lt.ps) players.forEach((u, i) => { if (!(st.out || []).includes(i)) badge(i, 'Hands passed'); }); else { badge(lt.p, 'Swapped hands'); badge(lt.sw, 'Swapped hands'); } }, 420); }
+    if (mh && lt.a === 'play' && lt.ds > 0) setTimeout(() => badge(lt.p, `Dropped ${lt.ds + 1}`), 380);
+    if (mh && lt.a === 'play' && lt.sk === -1) setTimeout(() => { sfx('zapSkip'); players.forEach((u, i) => { if (i !== lt.p && !(st.out || []).includes(i)) badge(i, 'Skipped'); }); }, 380);
+    if (mh && lt.a === 'take' && lt.k) {
+      setTimeout(() => { sfx('zapPlus', { n: Math.min(lt.k, 10) }); if (lt.p !== me) badge(lt.p, `Took ${lt.k}`); }, 120);
+      if (lt.p !== me) { const deckP = center(deckRef.current); for (let k = 0; k < Math.min(lt.k, 10); k++) fly({ code: null, w: 46, from: deckP, to: { ...seatPos(lt.p), s: 0.5 }, dur: 380, delay: 120 + k * 80, sound: 'zapSlide' }); }
+    }
+    const stacked = mh && lt.a === 'play' && drawVal(lt.c) > 0;
+    if (stacked && lt.v != null) setTimeout(() => { sfx('zapPlus', { n: Math.min(lt.pd || 2, 10) }); badge(lt.v, `Stack is ${lt.pd}`); }, 420);
     if (lt.a === 'play') {
       const v = valOf(lt.c);
       if (v === 'S' && lt.sk != null) { setTimeout(() => { sfx('zapSkip'); badge(lt.sk, 'Skipped'); }, 380); }
       if (v === 'R') { setTimeout(() => sfx('zapReverse'), 360); setSpin((x) => x + 1); if (lt.sk != null) setTimeout(() => badge(lt.sk, 'Skipped'), 380); }
-      if (lt.c === 'W' || lt.c === 'F') setTimeout(() => sfx('zapWild'), 360);
-      if (lt.v != null && lt.k) {
-        setTimeout(() => { sfx('zapPlus', { n: lt.k }); badge(lt.v, `Draws ${lt.k}`); }, 420);
+      if (isWild(lt.c)) setTimeout(() => sfx('zapWild'), 360);
+      if (lt.v != null && lt.k && !stacked) {
+        setTimeout(() => { sfx('zapPlus', { n: Math.min(lt.k, 10) }); badge(lt.v, lt.c === 'C' ? `Drew ${lt.k}` : `Draws ${lt.k}`); }, 420);
         const deckP = center(deckRef.current);
-        for (let k = 0; k < lt.k; k++) fly({ code: null, w: 46, from: deckP, to: { ...seatPos(lt.v), s: lt.v === me ? 1 : 0.5 }, dur: 380, delay: 480 + k * 90, sound: 'zapSlide' });
+        for (let k = 0; k < Math.min(lt.k, 10); k++) fly({ code: null, w: 46, from: deckP, to: { ...seatPos(lt.v), s: lt.v === me ? 1 : 0.5 }, dur: 380, delay: 480 + k * 90, sound: 'zapSlide' });
       }
       if (lt.cl && lt.p !== me) { sfx('zapCall'); badge(lt.p, 'Last card'); }
     }
     if ((lt.a === 'draw' || lt.a === 'late') && lt.p !== me && lt.k) {
-      fly({ code: null, w: 46, from: center(deckRef.current), to: { ...seatPos(lt.p), s: 0.5 }, dur: 380, sound: 'zapSlide' });
+      for (let k = 0; k < Math.min(lt.k, 8); k++) fly({ code: null, w: 46, from: center(deckRef.current), to: { ...seatPos(lt.p), s: 0.5 }, dur: 380, delay: k * 80, sound: 'zapSlide' });
+      if (lt.a === 'draw' && lt.k > 1) badge(lt.p, `Drew ${lt.k}`);
       if (lt.a === 'late') badge(lt.p, 'Too slow, draws one');
     }
     if (lt.a === 'pass' && lt.p !== me) badge(lt.p, 'Passed');
@@ -525,10 +602,13 @@ function useZapPlay({ st, myId, relay, intent }) {
     if (st.st === 'play') setShownTop((t) => (t && lt.a !== 'play' ? st.top : t));
   }, [st.n]);
   useEffect(() => { setCalled(false); }, [st.t]);
-  const playable = (c) => myTurn && fits(c, st.top, st.col) && (st.dr !== me || c === drawn);
-  const play = async (c, col) => {
+  const outs = Array.isArray(st.out) ? st.out : [];
+  const liveOthers = others.filter(([, i]) => !outs.includes(i));
+  const playable = (c) => myTurn && fits(c, st.top, st.col, st) && (st.dr !== me || c === drawn);
+  const play = async (c, col, who) => {
     if (!playable(c) || pend) return;
-    if ((c === 'W' || c === 'F') && !col) { setPickFor(c); return; }
+    if (isWild(c) && !col) { setPickFor(c); return; }
+    if (isMayhem(st) && valOf(c) === '7' && who == null && liveOthers.length > 1 && (handRefVal.current || []).length > 1) { setWhoFor({ c, col }); return; }
     const h = handRefVal.current || [];
     const idx = h.indexOf(c);
     const el = handRef.current && handRef.current.querySelector(`[data-ci="${idx}"]`);
@@ -540,7 +620,7 @@ function useZapPlay({ st, myId, relay, intent }) {
     haptic(10);
     const willCall = called;
     fly({ code: c, w: 64, from: { ...from, r: 0 }, to: { ...to, r: ((st.n * 37) % 16) - 8 }, dur: 360, arc: 40, sound: 'zapFlip' });
-    const r = await act('play', { p_card: c, p_color: col || null, p_call: willCall });
+    const r = await act('play', { p_card: c, p_color: col || null, p_call: willCall, ...(isMayhem(st) ? { p_who: who == null ? null : who } : {}) });
     setPend(false);
     setHidden((s) => { const n = new Set(s); n.delete(key); return n; });
     if (r && Array.isArray(r.hand)) { setHand(sortHand(r.hand)); setDrawn(null); if (willCall && r.hand.length === 1) { sfx('zapCall'); badge(me, 'Last card'); } } else loadHand();
@@ -553,8 +633,14 @@ function useZapPlay({ st, myId, relay, intent }) {
     if (r && Array.isArray(r.hand)) {
       const deckP = center(deckRef.current);
       const sorted = sortHand(r.hand);
-      fly({ code: r.drawn, w: 64, from: deckP, to: { ...center(handRef.current), r: 0 }, flip: true, dur: 460, sound: 'zapSlide', land: () => { setHand(sorted); setDrawn(r.drawn && fits(r.drawn, stRef.current.top, stRef.current.col) && stRef.current.dr === me ? r.drawn : null); } });
-      if (!(r.drawn && fits(r.drawn, st.top, st.col))) setTimeout(() => appSnack('No luck. Your turn passes'), 520);
+      const many = Number(r.k) || 1;
+      for (let k = 1; k < Math.min(many, 8); k++) fly({ code: null, w: 50, from: deckP, to: { ...center(handRef.current), r: 0 }, dur: 380, delay: k * 90, sound: 'zapSlide' });
+      fly({ code: r.drawn, w: 64, from: deckP, to: { ...center(handRef.current), r: 0 }, flip: true, dur: 460, delay: Math.min(many - 1, 7) * 90, sound: 'zapSlide', land: () => { setHand(sorted); setDrawn(r.drawn && stRef.current.dr === me ? r.drawn : null); } });
+      const took = isMayhem(st) && (st.pd || 0) > 0;
+      const keep = isMayhem(st) ? !!r.drawn : !!(r.drawn && fits(r.drawn, st.top, st.col, st));
+      if (took) setTimeout(() => { sfx('zapPlus', { n: Math.min(many, 10) }); badge(me, `Took ${many}`); }, 300);
+      else if (!keep) setTimeout(() => appSnack(many > 1 ? `Drew ${many}. Nothing fits, your turn passes` : 'No luck. Your turn passes'), 520);
+      else if (many > 1) setTimeout(() => appSnack(`Drew ${many} cards to find one that fits`), 520);
     }
   };
   const pass = async () => { setPend(true); await act('pass'); setPend(false); setDrawn(null); };
@@ -587,7 +673,7 @@ function useZapPlay({ st, myId, relay, intent }) {
   useEffect(() => {
     if (g1Test()) window.__gbzap = { state: () => stRef.current, hand: () => handRefVal.current, play: (c, col) => play(c, col), draw: () => draw(), pass: () => pass(), call: () => callLast(), catchIt: (i) => doCatch(i), flights: () => flights.length, apply: (content) => { const c = ctxOf(); const mid = msgIdOf(stRef.current); if (c && mid) c.patchMessage(mid, content); } };
   });
-  return { rootRef, pileRef, deckRef, handRef, seatRefs, hand, drawn, pickFor, setPickFor, called, flights, landed, hidden, shownTop, badges, pend, spin, dealing, joining, players, me, others, myTurn, W, handErr, loadHand, playable, play, draw, pass, callLast, doCatch, nudge, nudgeOk, end, join };
+  return { rootRef, pileRef, deckRef, handRef, seatRefs, hand, drawn, pickFor, setPickFor, whoFor, setWhoFor, called, flights, landed, hidden, shownTop, badges, pend, spin, dealing, joining, players, me, others, myTurn, W, handErr, loadHand, playable, play, draw, pass, callLast, doCatch, nudge, nudgeOk, end, join };
 }
 
 function ZapBody({ Z, st, myId, top, done, lobby }) {
@@ -611,10 +697,11 @@ function ZapBody({ Z, st, myId, top, done, lobby }) {
           </svg>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 26, position: 'relative' }}>
-          <div ref={Z.deckRef} role="button" aria-label={myTurn && st.dr !== me ? 'Draw a card' : 'Draw pile'} onClick={Z.draw} style={{ position: 'relative', width: 72, height: 108, cursor: myTurn && st.dr !== me ? 'pointer' : 'default' }}>
+          <div ref={Z.deckRef} role="button" aria-label={myTurn && st.dr !== me ? (isMayhem(st) && st.pd > 0 ? `Take ${st.pd} cards` : 'Draw a card') : 'Draw pile'} onClick={Z.draw} style={{ position: 'relative', width: 72, height: 108, cursor: myTurn && st.dr !== me ? 'pointer' : 'default' }}>
             {[3, 2, 1, 0].map((k) => <ZapCardFace key={k} back w={72} style={{ position: 'absolute', left: k * 1.5, top: -k * 1.5 }} />)}
             {myTurn && st.dr !== me && <div style={{ position: 'absolute', inset: -6, borderRadius: 12, boxShadow: '0 0 0 2px rgba(246,210,122,0.85)', animation: 'zgbPulse 1.4s ease-in-out infinite' }} />}
             <div style={{ position: 'absolute', bottom: -22, left: 0, right: 0, textAlign: 'center', fontSize: 11, fontWeight: 800, color: 'rgba(255,255,255,0.65)' }}>{st.pile != null ? `${st.pile} left` : ''}</div>
+            {isMayhem(st) && st.st === 'play' && st.pd > 0 && <div key={st.pd} className="zgr-pop" style={{ position: 'absolute', top: -14, left: '50%', transform: 'translateX(-50%)', padding: '4px 10px', borderRadius: 999, background: '#E2405F', color: '#FFFFFF', fontSize: 13, fontWeight: 900, whiteSpace: 'nowrap', boxShadow: '0 3px 0 #8E1631, 0 6px 14px rgba(0,0,0,0.45)' }}>{`+${st.pd}`}</div>}
           </div>
           {!lobby && (
             <div ref={Z.pileRef} style={{ position: 'relative', width: 80, height: 120 }}>
@@ -680,7 +767,7 @@ export function ZapPage({ st, myId, onClose }) {
   useBackClose(ask, () => setAsk(false));
   const Z = useZapPlay({ st, myId, relay: null, intent: null });
   const { me, others, myTurn, hand, seatRefs } = Z;
-  const note = st.st === 'lobby' ? 'Waiting for players to join from the chat' : st.st === 'done' ? (st.ended ? 'The game was ended' : st.w === myId ? `You won with ${countWord(st.pts || 0, 'point', 'points')}` : `${g1First(st.w)} won the game`) : myTurn ? (st.dr === me ? 'Play the card you drew, or pass' : hand && !hand.some((c) => fits(c, st.top, st.col)) ? 'Nothing fits. Tap the deck to draw' : 'Your turn. Tap a card that matches') : `${g1First(st.t)} is playing`;
+  const note = st.st === 'lobby' ? 'Waiting for players to join from the chat' : st.st === 'done' ? (st.ended ? 'The game was ended' : st.w === myId ? `You won with ${countWord(st.pts || 0, 'point', 'points')}` : `${g1First(st.w)} won the game`) : myTurn ? zapTurnLine(st, me, hand, true) : `${g1First(st.t)} is playing`;
   const done = st.st === 'done' ? (
     <div style={{ position: 'absolute', left: '50%', top: '34%', transform: 'translate(-50%, -50%)', width: 'min(86%, 320px)', borderRadius: 22, padding: '18px 18px 14px', background: 'rgba(16,12,22,0.92)', boxShadow: '0 20px 50px rgba(0,0,0,0.6), inset 0 0 0 1px rgba(255,255,255,0.08)', color: '#FFF', textAlign: 'center', zIndex: 25 }}>
       <div style={{ fontSize: 19, fontWeight: 900 }}>{st.ended ? 'Game ended' : st.w === myId ? 'You won' : `${g1First(st.w)} won`}</div>
@@ -689,7 +776,7 @@ export function ZapPage({ st, myId, onClose }) {
     </div>
   ) : null;
   return (
-    <GameRoom k="zap" title="Zap" scene={<ZapScene />} onClose={onClose}
+    <GameRoom k="zap" title={isMayhem(st) ? 'Zap Mayhem' : 'Zap'} scene={<ZapScene />} onClose={onClose}
       top={(
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-around', gap: 6, padding: '6px 10px 0', fontFamily: FONT }}>
           {others.map(([u, i]) => <Seat key={u} u={u} i={i} st={st} myId={myId} seatRef={(el) => { seatRefs.current[i] = el; }} badge={Z.badges[i]} onCatch={() => Z.doCatch(i)} />)}
@@ -705,6 +792,7 @@ export function ZapPage({ st, myId, onClose }) {
       <ZapBody Z={Z} st={st} myId={myId} done={done} />
       <RoomLayer>
         {Z.pickFor && <ColorPicker onClose={() => Z.setPickFor(null)} onPick={(c) => { const card = Z.pickFor; Z.setPickFor(null); Z.play(card, c); }} />}
+        {Z.whoFor && <WhoPicker st={st} myId={myId} onClose={() => Z.setWhoFor(null)} onPick={(i) => { const w = Z.whoFor; Z.setWhoFor(null); Z.play(w.c, w.col, i); }} />}
         {ask && <ConfirmSheet zIndex={60} title="End this game" text="Everyone at the table sees the game end now." confirmLabel="End game" onCancel={() => setAsk(false)} onConfirm={() => { setAsk(false); Z.end(); }} />}
       </RoomLayer>
     </GameRoom>
@@ -714,9 +802,11 @@ export function ZapPage({ st, myId, onClose }) {
 function OppHand({ u, i, st, myId, seatRef, badge, onCatch }) {
   const cnt = (st.cnt || [])[i] || 0;
   const catchable = st.open === i && u !== myId;
-  const shown = Math.min(cnt, 12);
+  const out = Array.isArray(st.out) && st.out.includes(i);
+  const shown = out ? 0 : Math.min(cnt, 12);
   return (
     <div ref={seatRef} style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', height: 58, minWidth: 120 }}>
+      {out && <span style={{ padding: '5px 12px', borderRadius: 999, background: 'rgba(10,8,14,0.7)', color: 'rgba(255,255,255,0.8)', fontSize: 12.5, fontWeight: 900 }}>Out</span>}
       {Array.from({ length: shown }).map((_, k) => <ZapCardFace key={k} back w={30} style={{ marginLeft: k ? -19 : 0, transform: `rotate(${180 + (k - (shown - 1) / 2) * 4}deg) translateY(${Math.abs(k - (shown - 1) / 2) * 0.9}px)`, boxShadow: '0 2px 4px rgba(0,0,0,0.45)' }} />)}
       {cnt === 1 && st.st === 'play' && !catchable && <span style={{ position: 'absolute', bottom: -8, padding: '2px 8px', borderRadius: 999, background: '#E2405F', color: '#FFF', fontSize: 10.5, fontWeight: 900, boxShadow: '0 2px 6px rgba(0,0,0,0.4)' }}>Last card</span>}
       {catchable && <button type="button" onClick={onCatch} style={{ position: 'absolute', bottom: -10, height: 28, padding: '0 12px', borderRadius: 14, border: 'none', cursor: 'pointer', background: '#F2B21B', color: '#2A1A00', fontWeight: 900, fontSize: 12, fontFamily: FONT, boxShadow: '0 3px 0 #8A5A00, 0 4px 10px rgba(0,0,0,0.4)' }}>Catch</button>}
@@ -735,7 +825,7 @@ export function ZapTable({ st, myId, peerName, relay, intent, onMeta }) {
   const myCnt = (st.cnt || [])[me];
   const cardLine = (n) => (n == null ? '' : n === 1 ? 'Last card' : countWord(n, 'card', 'cards'));
   const peerIdx = others[0] ? others[0][1] : -1;
-  const status = lobby ? (me >= 0 ? `Waiting for ${peer} to join` : Z.joining ? 'Dealing the cards' : `${peer} wants to play`) : st.st === 'done' ? '' : myTurn ? (st.dr === me ? 'Play the card you drew, or pass' : hand && !hand.some((c) => fits(c, st.top, st.col)) ? 'Nothing fits, tap the deck' : 'Your turn') : `${g1First(st.t)} is playing`;
+  const status = lobby ? (me >= 0 ? `Waiting for ${peer} to join` : Z.joining ? 'Dealing the cards' : `${peer} wants to play`) : st.st === 'done' ? '' : myTurn ? zapTurnLine(st, me, hand, false) : `${g1First(st.t)} is playing`;
   useEffect(() => {
     onMeta({
       status, hot: !lobby && myTurn, ready: true, center: null,
@@ -765,12 +855,13 @@ export function ZapTable({ st, myId, peerName, relay, intent, onMeta }) {
       <ZapBody Z={Z} st={st} myId={myId} top={top} lobby={lobbyNode} done={null} />
       <RoomLayer>
         {Z.pickFor && <ColorPicker onClose={() => Z.setPickFor(null)} onPick={(c) => { const card = Z.pickFor; Z.setPickFor(null); Z.play(card, c); }} />}
+        {Z.whoFor && <WhoPicker st={st} myId={myId} onClose={() => Z.setWhoFor(null)} onPick={(i) => { const w = Z.whoFor; Z.setWhoFor(null); Z.play(w.c, w.col, i); }} />}
         {ask && <ConfirmSheet zIndex={60} title="End this game" text={`${peer} sees the game end now.`} confirmLabel="End game" onCancel={() => setAsk(false)} onConfirm={() => { setAsk(false); Z.end(); }} />}
       </RoomLayer>
     </>
   );
 }
 
-export function zapLobby(id, myId, isGroup) {
-  return { g: 'zap', id, n: 0, st: 'lobby', p: [myId], by: myId, mx: isGroup ? 4 : 2, t: null, w: null };
+export function zapLobby(id, myId, isGroup, md) {
+  return { g: 'zap', id, n: 0, st: 'lobby', p: [myId], by: myId, mx: isGroup ? 4 : 2, t: null, w: null, ...(md === 'mayhem' ? { md: 'mayhem' } : {}) };
 }

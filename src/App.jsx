@@ -13,6 +13,7 @@ import {
   subscribeToMessages, reportUser, uploadMedia as uploadMediaRaw, deleteMessage,
 } from './supabaseClient.js';
 import { zLazy, zLazyPrefetch, zLazySetUi } from './lazy.jsx';
+import { GAME_KITS, GAME_KIT_BY, GameKitArt, kitUser, gameKitPull } from './games/kits.jsx';
 import { ZLANGS, setZLang, useZLang, zlangWanted, zlangOnPick, zlangDirty, zlangClean, zlangStored } from './i18n/index.js';
 export const TrustedFriendsPage = zLazy(() => import('./areas/safety.jsx'), 'TrustedFriendsPage', 'safety');
 export const RecoveryHelpPage = zLazy(() => import('./areas/safety.jsx'), 'RecoveryHelpPage', 'safety');
@@ -374,6 +375,43 @@ function netPump() {
   };
 })();
 
+const authLeft = { at: 0 };
+(function markSignOuts() {
+  try {
+    const a = supabase.auth;
+    if (!a || a.__zchatMarked) return;
+    a.__zchatMarked = true;
+    const orig = a.signOut.bind(a);
+    a.signOut = (opts) => {
+      authLeft.at = Date.now();
+      if (!opts || opts.scope !== 'others') { try { localStorage.removeItem('zchat-last-uid'); } catch {} }
+      return orig(opts);
+    };
+  } catch {}
+})();
+function authSettle() {
+  return Promise.race([Promise.resolve().then(() => supabase.auth.getSession()).catch(() => null), new Promise((r) => setTimeout(r, 3000))]);
+}
+if (typeof window !== 'undefined') window.__zchatAuthSettle = authSettle;
+export function safeReload() {
+  const go = () => { try { window.location.reload(); } catch {} };
+  authSettle().then(go, go);
+}
+function authLastUid() { try { return localStorage.getItem('zchat-last-uid') || null; } catch { return null; } }
+const authRescue = { at: 0 };
+async function rescueSession(uid) {
+  if (!uid || Date.now() - authLeft.at < 20000 || Date.now() - authRescue.at < 60000) return null;
+  authRescue.at = Date.now();
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(`zchat-session-${uid}`) || 'null'); } catch {}
+  if (!saved || !saved.access_token || !saved.refresh_token) return null;
+  try {
+    const r = await supabase.auth.setSession({ access_token: saved.access_token, refresh_token: saved.refresh_token });
+    const s = r && r.data && r.data.session;
+    return s && s.user && s.user.id === uid ? s : null;
+  } catch { return null; }
+}
+
 (function patchOlderBrowsers() {
   if (typeof window === 'undefined') return;
   try {
@@ -414,7 +452,7 @@ function netPump() {
 
 
 export const ACCENT_PALETTES = {
-  coral: { label: 'Violet', coral: '#7C5CFC', coralDeep: '#6B48F0', gold: '#B79CFF', teal: '#00C2A8', danger: '#ED4956', meDark: '#3D2F86', meLight: '#E4DCFF' },
+  coral: { label: 'Violet', coral: '#7C5CFC', coralDeep: '#6B48F0', gold: '#B79CFF', teal: '#00C2A8', danger: '#ED4956', meDark: '#6A48EE', meLight: '#E6DEFF' },
   ocean: { label: 'Ocean', coral: '#2F7CF6', coralDeep: '#1F5FD6', gold: '#8DB8FF', teal: '#00C2A8', danger: '#ED4956', meDark: '#1D4A8E', meLight: '#D9E8FF' },
   rose: { label: 'Rose', coral: '#F0507A', coralDeep: '#D63A64', gold: '#FF9FBB', teal: '#00C2A8', danger: '#ED4956', meDark: '#7C2445', meLight: '#FFDDE7' },
   emerald: { label: 'Emerald', coral: '#18A86B', coralDeep: '#128C58', gold: '#7FE0B5', teal: '#2F7CF6', danger: '#ED4956', meDark: '#0F5A3E', meLight: '#D5F3E4' },
@@ -425,38 +463,38 @@ const ACCENT = ACCENT_PALETTES.coral;
 
 export const THEMES = {
   light: {
-    bgGradient: '#FFFFFF',
-    glass: 'rgba(255,255,255,0.9)',
+    bgGradient: '#FBFAFF',
+    glass: 'rgba(251,250,255,0.92)',
     panelBg: '#FFFFFF',
-    border: 'rgba(0,0,0,0.09)',
-    ink: '#111113',
-    muted: '#6C6C72',
-    bubbleMe: '#E4DCFF',
-    bubbleThem: '#F1F0F5',
-    inputBg: '#F2F1F6',
-    rowBg: 'rgba(0,0,0,0.045)',
-    soft: '#F2F1F6',
-    soft2: '#E9E7EF',
-    ink2: '#3C3A44',
-    muted2: '#9A98A2',
-    hair: 'rgba(17,17,19,0.08)',
+    border: 'rgba(23,19,31,0.09)',
+    ink: '#17131F',
+    muted: '#6E6685',
+    bubbleMe: '#E6DEFF',
+    bubbleThem: '#F1EEF8',
+    inputBg: '#F2EFFA',
+    rowBg: 'rgba(23,19,31,0.045)',
+    soft: '#F2EFFA',
+    soft2: '#E8E3F4',
+    ink2: '#3C3650',
+    muted2: '#9A94AC',
+    hair: 'rgba(23,19,31,0.08)',
   },
   dark: {
-    bgGradient: '#0C0C0E',
-    glass: 'rgba(18,18,20,0.88)',
-    panelBg: '#17171A',
-    border: 'rgba(255,255,255,0.09)',
-    ink: '#F2F2F4',
-    muted: '#8E8E95',
-    bubbleMe: '#3D2F86',
-    bubbleThem: '#1F1F24',
-    inputBg: '#1D1C22',
+    bgGradient: '#110D19',
+    glass: 'rgba(20,16,30,0.9)',
+    panelBg: '#14101E',
+    border: 'rgba(255,255,255,0.08)',
+    ink: '#F5F2FC',
+    muted: '#9E97B3',
+    bubbleMe: '#6A48EE',
+    bubbleThem: '#231D33',
+    inputBg: '#211B30',
     rowBg: 'rgba(255,255,255,0.055)',
-    soft: '#1D1C22',
-    soft2: '#27262E',
-    ink2: '#D6D3E2',
-    muted2: '#67656F',
-    hair: 'rgba(255,255,255,0.09)',
+    soft: '#211B30',
+    soft2: '#2B2440',
+    ink2: '#D9D3EA',
+    muted2: '#6E6884',
+    hair: 'rgba(255,255,255,0.08)',
   },
 };
 
@@ -812,7 +850,7 @@ function ThemeProvider({ children }) {
   }, [dark, pureBlack]);
   const accent = accentName === 'custom' ? makeAccentPalette(accentCustom) : (ACCENT_PALETTES[accentName] || ACCENT_PALETTES.coral);
   const pure = dark && pureBlack ? { bgGradient: '#000000', panelBg: '#0E0E10', glass: 'rgba(0,0,0,0.9)', soft: '#141417', soft2: '#1E1E22', inputBg: '#141417', bubbleThem: '#16161A', rowBg: 'rgba(255,255,255,0.06)' } : null;
-  const theme = { ...THEMES[dark ? 'dark' : 'light'], ...(pure || {}), ...accent, bubbleMe: dark ? (accent.meDark || THEMES.dark.bubbleMe) : (accent.meLight || THEMES.light.bubbleMe), accentSoft: mixHex(accent.coral, dark ? (pure ? '#000000' : '#0C0C0E') : '#FFFFFF', dark ? 0.2 : 0.12), dark, pureBlack: !!pure };
+  const theme = { ...THEMES[dark ? 'dark' : 'light'], ...(pure || {}), ...accent, bubbleMe: dark ? (accent.meDark || THEMES.dark.bubbleMe) : (accent.meLight || THEMES.light.bubbleMe), accentSoft: mixHex(accent.coral, dark ? (pure ? '#000000' : '#110D19') : '#FFFFFF', dark ? 0.2 : 0.12), dark, pureBlack: !!pure };
   return (
     <ThemeContext.Provider value={{ theme, dark, setDark, themeMode, setThemeMode, themeSched, setThemeSched, pureBlack, setPureBlack, accentCustom, setAccentCustom, accentName, setAccentName, soundOn, setSoundOn, reactionSoundOn, setReactionSoundOn, bgPatternOn, setBgPatternOn, fontScale, setFontScale, bubbleColor, setBubbleColor, bubbleStyle, setBubbleStyle, keepTextStyle, setKeepTextStyle }}>
       {children}
@@ -1503,7 +1541,7 @@ const THEME_PATTERN_DATA = [
   ['zen', 'Zen', ['leaf', 'wave', 'moon'], 'matcha', ['#F3F8EE', '#5F8E3E', 0.3], ['#0C120A', '#A3CF84', 0.2]],
   ['arcade', 'Arcade', ['gamepad', 'star', 'lightning', 'dice'], 'electric', ['#F2F2FF', '#5D59E6', 0.3], ['#0A0A1E', '#A6A3FF', 0.24]],
   ['storm', 'Storm', ['lightning', 'cloud', 'raindrop'], 'steel', ['#F1F4F7', '#4F6378', 0.32], ['#0B0F14', '#98AFC6', 0.22]],
-  ['mono', 'Doodles', ['heart', 'star', 'music', 'camera', 'coffee', 'paw'], 'mono', ['#F5F5F6', '#3A3A40', 0.22], ['#0C0C0E', '#B8B8C2', 0.16]],
+  ['mono', 'Doodles', ['heart', 'star', 'music', 'camera', 'coffee', 'paw'], 'mono', ['#F5F5F6', '#3A3A40', 0.22], ['#110D19', '#B8B8C2', 0.16]],
   ['citrusfresh', 'Fresh', ['lemon', 'leaf', 'cherry'], 'lemonade', ['#FFFDF0', '#C9A215', 0.3], ['#141208', '#F2D35B', 0.2]],
   ['galaxyhearts', 'Cosmic love', ['heart', 'planet', 'star4'], 'plum', ['#F9F1FF', '#9D4ED0', 0.3], ['#120A1A', '#D7A0FF', 0.22]],
 ];
@@ -1975,7 +2013,7 @@ function GlobalStyle() {
       .zmap-in { animation: zmap-in 0.35s ease; }
       @keyframes zmap-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
       .zmap-shimmer { background: linear-gradient(90deg, rgba(124,92,252,0) 0%, rgba(124,92,252,0.1) 50%, rgba(124,92,252,0) 100%); background-size: 200% 100%; animation: zmap-shimmer 1.4s linear infinite; }
-      .zmap-glass { background: rgba(255,255,255,0.86); -webkit-backdrop-filter: blur(18px) saturate(1.6); backdrop-filter: blur(18px) saturate(1.6); box-shadow: 0 0 0 0.5px rgba(17,17,19,0.06), 0 6px 20px rgba(20,14,40,0.16); color: #111113; }
+      .zmap-glass { background: rgba(255,255,255,0.86); -webkit-backdrop-filter: blur(18px) saturate(1.6); backdrop-filter: blur(18px) saturate(1.6); box-shadow: 0 0 0 0.5px rgba(17,17,19,0.06), 0 6px 20px rgba(20,14,40,0.16); color: #17131F; }
       .zmap-dark .zmap-glass { background: rgba(32,30,40,0.8); box-shadow: 0 0 0 0.5px rgba(255,255,255,0.08), 0 6px 20px rgba(0,0,0,0.3); color: #F2F2F4; }
       .zmap-fade-light { background: linear-gradient(to bottom, rgba(244,242,248,0.92) 0%, rgba(244,242,248,0.5) 45%, rgba(244,242,248,0) 100%); }
       .zmap-fade-dark { background: linear-gradient(to bottom, rgba(22,20,31,0.92) 0%, rgba(22,20,31,0.5) 45%, rgba(22,20,31,0) 100%); }
@@ -1987,10 +2025,10 @@ function GlobalStyle() {
       .zmap-pin.close .zmap-head, .zmap-pin.close .zmap-tail { background: #1DB954; }
       .zmap-pin.unseen .zmap-head > div, .zmap-pin.close .zmap-head > div { box-shadow: 0 0 0 2px #FFFFFF; border-radius: 50%; }
       .zmap-pin.small .zmap-head { width: 44px; height: 44px; padding: 2.5px; }
-      .zmap-label { position: absolute; top: calc(100% + 2px); left: 50%; transform: translateX(-50%); white-space: nowrap; padding: 3px 9px; border-radius: 11px; background: #FFFFFF; color: #111113; box-shadow: 0 2px 8px rgba(20,14,40,0.18); font-size: 12px; font-weight: 700; letter-spacing: -0.01em; display: flex; gap: 5px; align-items: baseline; }
-      .zmap-label span { font-weight: 500; color: #6C6C72; }
-      .zmap-dark .zmap-label { background: #17171A; color: #F2F2F4; }
-      .zmap-dark .zmap-label span { color: #8E8E95; }
+      .zmap-label { position: absolute; top: calc(100% + 2px); left: 50%; transform: translateX(-50%); white-space: nowrap; padding: 3px 9px; border-radius: 11px; background: #FFFFFF; color: #17131F; box-shadow: 0 2px 8px rgba(20,14,40,0.18); font-size: 12px; font-weight: 700; letter-spacing: -0.01em; display: flex; gap: 5px; align-items: baseline; }
+      .zmap-label span { font-weight: 500; color: #6E6685; }
+      .zmap-dark .zmap-label { background: #14101E; color: #F2F2F4; }
+      .zmap-dark .zmap-label span { color: #9E97B3; }
       .zmap-pin.sel { transform: scale(1.14); z-index: 9; }
       .zmap-pin.sel .zmap-label { background: #7C5CFC; color: #FFFFFF; }
       .zmap-pin.sel .zmap-label span { color: rgba(255,255,255,0.8); }
@@ -2002,7 +2040,7 @@ function GlobalStyle() {
       .zmap-halo { position: absolute; left: 50%; top: 50%; width: 92px; height: 92px; margin: -46px 0 0 -46px; border-radius: 50%; background: radial-gradient(circle, rgba(124,92,252,0.26) 0%, rgba(124,92,252,0.12) 55%, rgba(124,92,252,0) 72%); }
       .zmap-ring { position: absolute; left: 50%; top: 50%; width: 46px; height: 46px; margin: -23px 0 0 -23px; border-radius: 50%; border: 1.5px solid rgba(124,92,252,0.45); }
       .zmap-dot { position: absolute; inset: 0; border-radius: 50%; background: #7C5CFC; border: 3.5px solid #FFFFFF; box-sizing: border-box; box-shadow: 0 2px 8px rgba(40,20,120,0.45); display: flex; align-items: center; justify-content: center; }
-      .zmap-me.ghost .zmap-dot { background: #8E8E95; width: 26px; height: 26px; margin: -2px; }
+      .zmap-me.ghost .zmap-dot { background: #9E97B3; width: 26px; height: 26px; margin: -2px; }
       @keyframes zchat-emote-up { 0% { transform: translateY(0) scale(0.6); opacity: 0; } 15% { opacity: 1; transform: translateY(-20px) scale(1.15); } 100% { transform: translateY(-260px) scale(1); opacity: 0; } }
       @keyframes zchat-emote-down { 0% { transform: translateY(0) scale(0.6); opacity: 0; } 15% { opacity: 1; transform: translateY(20px) scale(1.15); } 100% { transform: translateY(260px) scale(1); opacity: 0; } }
       .zchat-emote-up { animation: zchat-emote-up 2.1s ease-out forwards; }
@@ -9834,30 +9872,26 @@ function ProfileGuestbook({ profile, isSelf, userId, meProfile, onOpenProfile })
   const mine = page.notes.find((x) => x.status === 'pending' && x.writer_id === userId);
   const can = !!(page.can && page.can.ok);
   if (!isSelf && !shown.length && !can && !mine) return null;
-  const preview = [...(mine ? [mine] : []), ...shown].slice(0, 2);
+  const latest = mine || shown[0] || null;
   const total = shown.length + (isSelf ? page.pending : 0);
+  const line = isSelf && page.pending > 0
+    ? (page.pending === 1 ? '1 new note is waiting for you' : `${page.pending} new notes are waiting for you`)
+    : latest ? `${latest.writer_id === userId ? 'You' : gbFirst(latest.name || 'Someone')}: ${latest.body ? String(latest.body).replace(/\s+/g, ' ') : 'Sent a sticker'}`
+      : (isSelf ? 'Friends can leave you notes here' : `Be the first to leave ${gbFirst(profile.name)} a note`);
+  const soft = theme.dark ? 'rgba(124,92,252,0.18)' : 'rgba(107,72,240,0.1)';
   return (
-    <div style={{ margin: '18px 20px 0' }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
-        <div style={{ fontSize: 15, fontWeight: 700, color: theme.ink, letterSpacing: '-0.01em' }}>Guestbook</div>
-        {(total > 0 || isSelf || mine) && <div role="button" aria-label="Open guestbook" onClick={() => { hapticTap(); setOpen(true); }} style={{ fontSize: 13.5, fontWeight: 700, color: kitOnInk(theme), cursor: 'pointer', padding: '4px 0 4px 10px' }}>{total > 0 ? `See all ${total}` : 'Open'}</div>}
+    <div style={{ margin: '14px 16px 0', display: 'flex', alignItems: 'center', gap: 10, minHeight: 64, padding: '0 10px 0 12px', boxSizing: 'border-box', borderRadius: 16, background: theme.soft }}>
+      <div role="button" aria-label="Open guestbook" onClick={() => { hapticTap(); setOpen(true); }} style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', padding: '10px 0' }}>
+        <span style={{ width: 38, height: 38, borderRadius: '50%', background: soft, color: theme.coral, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><GuestbookIcon size={19} /></span>
+        <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <span style={{ fontSize: 15, fontWeight: 700, color: theme.ink, letterSpacing: '-0.01em' }}>Guestbook{total > 0 ? <span style={{ fontWeight: 500, color: theme.muted }}>{`  ${total}`}</span> : null}</span>
+          <span data-zuser="" style={{ fontSize: 13, color: isSelf && page.pending > 0 ? theme.coral : theme.muted, fontWeight: isSelf && page.pending > 0 ? 600 : 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{line}</span>
+        </span>
       </div>
-      {isSelf && page.pending > 0 && (
-        <div role="button" aria-label="Notes waiting for you" onClick={() => { hapticTap(); setOpen(true); }} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0 4px', cursor: 'pointer' }}>
-          <span style={{ width: 8, height: 8, borderRadius: '50%', background: theme.coral, flexShrink: 0 }} />
-          <span style={{ flex: 1, fontSize: 14, fontWeight: 600, color: theme.ink }}>{page.pending === 1 ? '1 new note is waiting for you' : `${page.pending} new notes are waiting for you`}</span>
-          <ChevronRight size={16} color={theme.muted} />
-        </div>
-      )}
-      {preview.length > 0 ? (
-        <div role="list" aria-label="Latest guestbook notes">{preview.map((x) => <GuestbookNote key={x.id} note={x} ownerId={profile.id} ownerName={profile.name} myId={userId} compact actions={null} onOpenProfile={onOpenProfile} />)}</div>
+      {!isSelf && can ? (
+        <button type="button" onClick={() => { hapticTap(); setWriting(true); }} className="zchat-press" style={{ height: 34, padding: '0 16px', borderRadius: 999, border: 'none', background: soft, color: theme.coral, fontFamily: FONT, fontSize: 14, fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>Sign</button>
       ) : (
-        <div style={{ fontSize: 13.5, color: theme.muted, lineHeight: 1.5, padding: '6px 0 2px' }}>{isSelf ? 'Friends can leave you notes here. You choose which ones show.' : `Be the first to leave ${gbFirst(profile.name)} a note.`}</div>
-      )}
-      {!isSelf && can && (
-        <button type="button" onClick={() => { hapticTap(); setWriting(true); }} className="zchat-press" style={{ marginTop: 8, width: '100%', height: 38, borderRadius: 10, border: 'none', background: theme.soft, color: theme.ink, fontFamily: FONT, fontSize: 14, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-          <GuestbookIcon size={17} />Write in guestbook
-        </button>
+        <ChevronRight size={18} color={theme.muted} style={{ flexShrink: 0 }} />
       )}
       {open && <GuestbookPage owner={profile} myId={userId} me={me} onClose={() => setOpen(false)} onOpenProfile={onOpenProfile ? (n) => { setOpen(false); onOpenProfile(n); } : undefined} />}
       {writing && <GuestbookWriteSheet owner={profile} onClose={() => setWriting(false)} onSend={(b, st) => { setWriting(false); write(b, st); }} />}
@@ -11077,35 +11111,37 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
               </>
             ) : (
               <>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 'clamp(8px, 4vw, 16px)', padding: '0 16px 0 20px', marginTop: coverUrl ? -40 : 8, position: 'relative' }}>
-              <div role="button" aria-label={storyRing !== 'none' ? `Story of ${profile.name}` : 'Profile photo'} onClick={() => { if (storyRing !== 'none' && onOpenStory) onOpenStory(profile.id); else openPhotos(); }} style={{ position: 'relative', flexShrink: 0, borderRadius: '50%', padding: coverUrl ? 4 : 0, background: coverUrl ? theme.bgGradient : 'transparent', cursor: storyRing !== 'none' || allPhotos.length ? 'pointer' : 'default' }}>
-                {storyRing !== 'none'
-                  ? <StoryAvatar profile={{ ...profile, avatar: shownPhoto }} size={90} ring={storyRing} anim={shownAnim} />
-                  : <Avatar emoji={shownPhoto} name={profile.name} size={88} anim={shownAnim} />}
-                {isOnline && <span style={{ position: 'absolute', right: coverUrl ? 9 : 5, bottom: coverUrl ? 9 : 5, width: 18, height: 18, borderRadius: '50%', background: '#22C55E', border: `3px solid ${theme.bgGradient}` }} />}
-                <StatusBubble p={profile} size={88} words onClick={isSelf ? () => setStatusOpen(true) : undefined} />
-                {allPhotos.length > 1 && !onBreak && (isSelf || !profile.hide_photo) && <PhotoCountBadge n={allPhotos.length} onClick={openPhotos} style={{ left: coverUrl ? 4 : 0, bottom: coverUrl ? 4 : 0 }} />}
-              </div>
-              {canSeeDetails && (
-                <div data-zread="1" style={{ flex: 1, minWidth: 0, display: 'flex', justifyContent: 'space-around', gap: 2, paddingTop: coverUrl ? 34 : 0 }}>
-                  {statCells.map((c) => (
-                    <div key={c.l} role={c.on ? 'button' : undefined} aria-label={`${c.v == null ? '' : c.v} ${c.l}`} onClick={c.on || undefined} style={{ textAlign: 'center', cursor: c.on ? 'pointer' : 'default', flex: '0 1 auto', minWidth: 0 }}>
-                      <div style={{ fontSize: 18, fontWeight: 800, color: theme.ink, letterSpacing: '-0.02em', minHeight: 22 }}>{c.v == null ? '' : formatCount(c.v)}</div>
-                      <div style={{ fontSize: 'clamp(11px, 3.7vw, 13px)', color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.l}</div>
-                    </div>
-                  ))}
+            <div style={{ position: 'relative', margin: `${coverUrl ? 14 : 64}px 16px 0`, borderRadius: 24, background: theme.soft, boxShadow: `inset 0 0 0 1px ${theme.border}`, padding: '64px 18px 18px', textAlign: 'center' }}>
+              <div role="button" aria-label={storyRing !== 'none' ? `Story of ${profile.name}` : 'Profile photo'} onClick={() => { if (storyRing !== 'none' && onOpenStory) onOpenStory(profile.id); else openPhotos(); }}
+                style={{ position: 'absolute', left: '50%', top: -56, transform: 'translateX(-50%)', borderRadius: '50%', background: pageBg, padding: 6, cursor: 'pointer' }}>
+                <div style={{ position: 'relative' }}>
+                  {storyRing !== 'none'
+                    ? <StoryAvatar profile={{ ...profile, avatar: shownPhoto }} size={100} ring={storyRing} anim={shownAnim} />
+                    : <Avatar emoji={shownPhoto} name={profile.name} size={100} anim={shownAnim} />}
+                  {isOnline && <span style={{ position: 'absolute', right: 6, bottom: 6, width: 18, height: 18, borderRadius: '50%', background: '#22C55E', border: `3px solid ${pageBg}` }} />}
+                  <StatusBubble p={profile} size={100} words onClick={isSelf ? () => setStatusOpen(true) : undefined} />
+                  {allPhotos.length > 1 && !onBreak && (isSelf || !profile.hide_photo) && <PhotoCountBadge n={allPhotos.length} onClick={openPhotos} style={{ left: 0, bottom: 0 }} />}
                 </div>
-              )}
-            </div>
-            <div data-zread="1" style={{ padding: '10px 20px 0' }}>
-              <div style={{ fontSize: 17, fontWeight: 800, color: theme.ink, letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
-                <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', ...(cxNs(profile) ? NS_ROOM : null) }}><NameBadge name={profile.name} verified={profile.verified} custom={profile.custom_badge} size={15} ns={cxNs(profile)} /></span>
               </div>
-              <div style={{ fontSize: 13.5, color: theme.muted, marginTop: 1 }}>
-                @{profile.username}{profile.pronouns ? `, ${profile.pronouns}` : ''}{infoBits.map((b) => `, ${b}`).join('')}
+              <div data-zread="1" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                <div style={{ fontSize: 23, fontWeight: 800, color: theme.ink, letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, minWidth: 0, maxWidth: '100%' }}>
+                  <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', ...(cxNs(profile) ? NS_ROOM : null) }}><NameBadge name={profile.name} verified={profile.verified} custom={profile.custom_badge} size={18} /></span>
+                </div>
+                <div style={{ fontSize: 14, color: theme.muted }}>
+                  @{profile.username}{profile.pronouns ? `, ${profile.pronouns}` : ''}{infoBits.map((b) => `, ${b}`).join('')}
+                </div>
+                {pfx && pfx.voice && !onBreak && <VoiceIntroChip voice={pfx.voice} name={profile.name} style={{ marginTop: 4 }} />}
+                {statusText && <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: isOnline ? '#1DB954' : theme.muted, fontWeight: 600, marginTop: 2 }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: isOnline ? '#22C55E' : theme.muted2 }} />{statusText}</div>}
+                {canSeeDetails && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', columnGap: 16, rowGap: 4, marginTop: 8, fontSize: 14, color: theme.muted }}>
+                    {statCells.map((c) => (
+                      <span key={c.l} role={c.on ? 'button' : undefined} aria-label={`${c.v == null ? '' : c.v} ${c.l}`} onClick={c.on || undefined} style={{ cursor: c.on ? 'pointer' : 'default', whiteSpace: 'nowrap' }}>
+                        <b style={{ color: theme.ink, fontWeight: 800 }}>{c.v == null ? '' : formatCount(c.v)}</b> {c.l}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
-              {pfx && pfx.voice && !onBreak && <VoiceIntroChip voice={pfx.voice} name={profile.name} style={{ marginTop: 7 }} />}
-              {statusText && <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: isOnline ? '#1DB954' : theme.muted, fontWeight: 600, marginTop: 3 }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: isOnline ? '#22C55E' : theme.muted2 }} />{statusText}</div>}
             </div>
               </>
             )}
@@ -12973,26 +13009,21 @@ function MessageBubble({ onCard, translation, senderTitle, onOpenLive, onOpenOnc
               )}
               {diceData && (
                 <div style={{ paddingTop: 2, paddingBottom: 18 }}>
-                  {(() => {
-                    const fr = (() => { if (peek || diceRolledOnce.has(m.id)) return false; diceRolledOnce.add(m.id); return !!m.created_at && Date.now() - new Date(m.created_at).getTime() < 9000; })();
-                    return diceData.k === 'pick'
-                      ? <PickCard d={diceData} ink={skin ? skin.ink : undefined} fresh={fr} />
-                      : <RollCard d={diceData} ink={skin ? skin.ink : undefined} fresh={fr} />;
-                  })()}
+                  <RetiredCard label={diceData.k === 'pick' ? 'Pick' : 'Dice roll'} />
                 </div>
               )}
               {eventData && (
                 <div style={{ paddingTop: 2, paddingBottom: 18 }}>
-                  <EventCard ev={eventData} votes={reactions} myId={myId} onVote={onVote ? (i) => onVote(m, i) : null} onShowVotes={onShowVotes ? () => onShowVotes(m) : null} />
+                  <RetiredCard label="Event" />
                 </div>
               )}
               {extraCard && (
                 <div style={{ paddingTop: 2, paddingBottom: 18 }}>
-                  {extraCard.k === 'list' && <ChecklistCard list={extraCard.d} votes={reactions} onToggle={onVote ? (i) => onVote(m, i) : null} />}
+                  {extraCard.k === 'list' && <RetiredCard label="Checklist" />}
                   {extraCard.k === 'bill' && <BillCard bill={extraCard.d} votes={reactions} myId={myId} senderId={m.sender_id} onToggle={onVote ? () => onVote(m, 0) : null} onShowVotes={onShowVotes ? () => onShowVotes(m) : null} />}
-                  {extraCard.k === 'count' && <CountdownCard cd={extraCard.d} />}
+                  {extraCard.k === 'count' && <RetiredCard label="Countdown" />}
                   {extraCard.k === 'live' && <LiveLocationCard live={extraCard.d} isMe={isMe} messageId={m.id} />}
-                  {extraCard.k === 'focus' && <FocusCard d={extraCard.d} reactions={reactions} myId={myId} senderId={m.sender_id} onJoin={onCard ? () => onCard('focus', extraCard.d, m) : null} />}
+                  {extraCard.k === 'focus' && <RetiredCard label="Focus session" />}
                   {extraCard.k === 'watch' && <WatchCard d={extraCard.d} onOpen={onCard ? () => onCard('watch', extraCard.d, m) : null} />}
                   {extraCard.k === 'listen' && <ListenCard d={extraCard.d} isMe={isMe} onOpen={onCard ? () => onCard('listen', extraCard.d, m) : null} />}
                   {extraCard.k === 'album' && <AlbumCard d={extraCard.d} onOpen={onCard ? () => onCard('album', extraCard.d, m) : null} />}
@@ -13004,14 +13035,14 @@ function MessageBubble({ onCard, translation, senderTitle, onOpenLive, onOpenOnc
                   {extraCard.k === 'file' && <FileCard d={extraCard.d} url={m.media_url} />}
                   {extraCard.k === 'draw' && <DrawCard d={extraCard.d} onOpen={onCard ? () => onCard('draw', extraCard.d, m) : null} />}
                   {extraCard.k === 'ask' && <AskCoinsCard d={extraCard.d} isMe={isMe} name={peerName ? String(peerName).split(' ')[0] : ''} onPay={onCard && !isMe ? (n) => onCard('ask', { n }, m) : null} />}
-                  {extraCard.k === 'trade' && <TradeCard id={extraCard.d.i} myId={myId} peerName={peerName} onCounter={onCard ? (t) => onCard('trade', { counter: t }, m) : null} />}
+                  {extraCard.k === 'trade' && <TradeCard id={extraCard.d.i} myId={myId} peerName={peerName} onCounter={null} />}
                   {extraCard.k === 'bag' && <BagCard d={extraCard.d} isMe={isMe} myId={myId} peerName={peerName} />}
                   {extraCard.k === 'chip' && <ChipCard d={extraCard.d} myId={myId} />}
                   {extraCard.k === 'santa' && <SantaCard d={extraCard.d} myId={myId} onPick={onCard ? (ev, to) => onCard('santa', { ev, to }, m) : null} />}
                   {extraCard.k === 'capsule' && <CapsuleCard d={extraCard.d} m={m} isMe={isMe} myId={myId} senderName={isMe ? '' : (senderLabel || peerName)} onOpenImage={onOpenImage} />}
-                  {extraCard.k === 'find' && <CtFindCard d={extraCard.d} m={m} myId={myId} onOpen={onCard ? () => onCard('find', extraCard.d, m) : null} />}
+                  {extraCard.k === 'find' && <RetiredCard label="Find a time" />}
                   {extraCard.k === 'wifi' && <WifiCard d={extraCard.d} />}
-                  {extraCard.k === 'callplan' && <CallPlanCard d={extraCard.d} m={m} isMe={isMe} myId={myId} peerName={peerName} onJoin={onCard ? (kind) => onCard('callplan', { ...extraCard.d, k: kind || extraCard.d.k }, m) : null} />}
+                  {extraCard.k === 'callplan' && <RetiredCard label="Call plan" />}
                   {extraCard.k === 'cards' && <FlashDeckCard d={extraCard.d} onOpen={onCard ? () => onCard('cards', extraCard.d, m) : null} />}
                   {extraCard.k === 'snd' && <SoundCard d={extraCard.d} id={m.id} isMe={isMe} fresh={!peek && !!m.created_at && Date.now() - new Date(m.created_at).getTime() < 15000} />}
                   {extraCard.k === 'ghm' && <GhMatchCard d={extraCard.d} m={m} myId={myId} />}
@@ -17966,7 +17997,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-export const APP_VERSION = '28.0V';
+export const APP_VERSION = '29.0V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -18900,7 +18931,7 @@ function VerifiedCelebration({ tier, name, onClose }) {
   const t = VERIFIED_TIERS[tier] || VERIFIED_TIERS.blue;
   const pieces = Array.from({ length: 36 }, (_, i) => i);
   return (
-    <div className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 700, background: 'radial-gradient(circle at 50% 38%, #2a1f4d 0%, #0C0C0E 70%)', color: 'white', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 28, overflow: 'hidden', fontFamily: FONT, textAlign: 'center' }}>
+    <div className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 700, background: 'radial-gradient(circle at 50% 38%, #2a1f4d 0%, #110D19 70%)', color: 'white', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 28, overflow: 'hidden', fontFamily: FONT, textAlign: 'center' }}>
       {pieces.map((i) => (
         <span key={i} style={{
           position: 'absolute', top: -20, left: `${(i * 97) % 100}%`, width: 8, height: 14, borderRadius: 2,
@@ -19784,7 +19815,7 @@ function localMediaDims(url, kind) {
 }
 function chatMediaRatio(a) { return Math.max(0.75, Math.min(1.6, a > 0 ? a : 0.75)); }
 const mediaSeen = new Set();
-function chatMediaTint(theme) { return theme.dark ? '#1D1C22' : '#ECEAF1'; }
+function chatMediaTint(theme) { return theme.dark ? '#211B30' : '#ECEAF1'; }
 function PhotoGlyph({ size = 26, color = 'currentColor' }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -21941,7 +21972,7 @@ function RewardCelebration({ kind, rewardKey, me, onClaim, count = 1, onClaimAll
   const pieces = Array.from({ length: 30 }, (_, i) => i);
   const claim = async (wear) => { setClaiming(true); await onClaim(wear); };
   return (
-    <div className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 701, color: 'white', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, overflow: 'hidden', fontFamily: FONT, textAlign: 'center', background: `radial-gradient(circle at 50% 44%, ${glow}38 0%, rgba(11,15,25,0) 55%), #0C0C0E` }}>
+    <div className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 701, color: 'white', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, overflow: 'hidden', fontFamily: FONT, textAlign: 'center', background: `radial-gradient(circle at 50% 44%, ${glow}38 0%, rgba(11,15,25,0) 55%), #110D19` }}>
       {pieces.map((i) => (
         <span key={i} style={{ position: 'absolute', top: -20, left: `${(i * 97) % 100}%`, width: 7, height: 13, borderRadius: 2, background: [glow, '#FFFFFF', '#7C5CFC', '#fbbf24'][i % 4], opacity: 0.85, animation: `zchat-confetti ${2.8 + (i % 5) * 0.4}s linear ${(i % 9) * 0.25}s infinite` }} />
       ))}
@@ -21956,7 +21987,7 @@ function RewardCelebration({ kind, rewardKey, me, onClaim, count = 1, onClaimAll
         </div>
       ) : set ? (
         <div className="zchat-pop" style={{ marginTop: 18, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <DecorHero frameKey={frameKey} plateKey={plateKey} width={W} photo={me.avatar} name={me.name} username={me.username} verified={me.verified} custom={me.custom_badge} gapColor="#0C0C0E" />
+          <DecorHero frameKey={frameKey} plateKey={plateKey} width={W} photo={me.avatar} name={me.name} username={me.username} verified={me.verified} custom={me.custom_badge} gapColor="#110D19" />
           {frameKey && !plateKey && (
             <div style={{ marginTop: 2 }}>
               <div style={{ fontSize: 22, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{me.name}<VerifiedBadge tier={me.verified} custom={me.custom_badge} size={18} /></div>
@@ -22660,7 +22691,7 @@ export function EditionTag({ n, size = 11.5, style }) {
   );
 }
 
-export const SI_KINDS = ['stickerpack', 'soundpack', 'typing'];
+export const SI_KINDS = ['stickerpack', 'soundpack', 'typing', 'gamekit'];
 export const SI_STICKER_PACKS = [
   { key: 'capy', label: 'Chill Capy', price: 250, rarity: 'epic', accent: '#C98B5B', about: 'A capybara who stays calm about everything, even the rain.', list: [['hi', 'Hi'], ['thanks', 'Thank you'], ['love', 'Love you'], ['haha', 'Haha'], ['cry', 'Crying'], ['sleepy', 'Sleepy'], ['yes', 'Yes'], ['no', 'No'], ['hug', 'Hug'], ['coffee', 'Coffee time'], ['chill', 'Chilling'], ['night', 'Good night']] },
   { key: 'bunny', label: 'Mochi Bunny', price: 250, rarity: 'epic', accent: '#F49AB8', about: 'A round little bunny, soft as mochi and full of feelings.', list: [['hi', 'Hi'], ['love', 'Love you'], ['kiss', 'Kiss'], ['shy', 'Shy'], ['haha', 'Haha'], ['cry', 'Crying'], ['angry', 'Angry'], ['sorry', 'Sorry'], ['yes', 'Yes'], ['party', 'Party'], ['miss', 'Miss you'], ['night', 'Good night']] },
@@ -22696,14 +22727,17 @@ export function siSpec(kind, k) {
   if (kind === 'stickerpack') return SI_STICKER_BY[k] || null;
   if (kind === 'soundpack') return SI_SOUND_BY[k] || null;
   if (kind === 'typing') return SI_TYPING_BY[k] || null;
+  if (kind === 'gamekit') return GAME_KIT_BY[k] || null;
   return null;
 }
-export function siTitle(kind) { return kind === 'stickerpack' ? 'Sticker packs' : kind === 'soundpack' ? 'Sound packs' : 'Typing styles'; }
+export function siTitle(kind) { return kind === 'stickerpack' ? 'Sticker packs' : kind === 'soundpack' ? 'Sound packs' : kind === 'gamekit' ? 'Game styles' : 'Typing styles'; }
+export function siList(kind) { return kind === 'stickerpack' ? SI_STICKER_PACKS : kind === 'soundpack' ? SI_SOUND_PACKS : kind === 'gamekit' ? GAME_KITS : SI_TYPING; }
 export function siOwns(rewards, kind, k) { return (rewards || []).some((r) => r.kind === kind && r.reward_key === k && rewardActive(r)); }
 export function SiItemArt({ kind, k, me, size, dark = true }) {
   if (kind === 'stickerpack') return <div style={{ width: size, height: size, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><img src={`/ps-${k}-hi.webp`} alt="" draggable={false} style={{ width: Math.round(size * 0.86), height: Math.round(size * 0.86), objectFit: 'contain', display: 'block' }} /></div>;
   if (kind === 'soundpack') return <SoundPackArt k={k} size={size} />;
   if (kind === 'typing') return <div style={{ width: size, height: size, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><TypingStyleBubble k={k} who={me} dark={dark} scale={Math.max(0.8, Math.min(1.4, size / 90))} /></div>;
+  if (kind === 'gamekit') return <div style={{ width: size, height: size, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><GameKitArt k={k} size={Math.round(size * 0.9)} /></div>;
   return null;
 }
 function bubbleThumb(k, size) {
@@ -22767,13 +22801,13 @@ export function NameStyleArt({ k, name, size = 18, dark = true, width }) {
   const shown = String(name || 'You').trim() || 'You';
   const fs = Math.max(11, Math.min(size, ((width || 140) * 1.45) / Math.max(4, shown.length)));
   const kk = k === 'own' ? (nsOwnSaved() || NS_OWN_SAMPLE) : k;
-  return <div style={{ maxWidth: '100%', fontSize: fs, fontWeight: 800, letterSpacing: '-0.015em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: dark ? '#F4F4F6' : '#111113', ...NS_ROOM }}><StyledName name={shown} k={kk} dark={dark} /></div>;
+  return <div style={{ maxWidth: '100%', fontSize: fs, fontWeight: 800, letterSpacing: '-0.015em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: dark ? '#F4F4F6' : '#17131F', ...NS_ROOM }}><StyledName name={shown} k={kk} dark={dark} /></div>;
 }
 export function ThemeArt({ k, me, w, h, dark = true, live = true, radius = 14, covered = false }) {
   const name = (me && (me.name || me.username)) || 'You';
   const inkBar = dark ? 'rgba(255,255,255,0.86)' : 'rgba(17,17,19,0.78)';
   const bar2 = dark ? 'rgba(255,255,255,0.42)' : 'rgba(17,17,19,0.34)';
-  const page = dark ? '#0C0C0E' : '#FFFFFF';
+  const page = dark ? '#110D19' : '#FFFFFF';
   const a = Math.round(Math.min(w, h) * 0.3);
   return (
     <div style={{ position: 'relative', width: w, height: h, borderRadius: radius, overflow: 'hidden', background: page, flexShrink: 0, isolation: 'isolate' }}>
@@ -24272,7 +24306,7 @@ export function FeedComments({ post, me, userId, onClose, onCount, onOpenProfile
               );
             })}
           </div>
-          {note && <div className="zchat-pop" style={{ position: 'absolute', left: '50%', bottom: 132, transform: 'translateX(-50%)', padding: '8px 14px', borderRadius: 16, background: theme.dark ? '#2A2930' : '#111113', color: '#FFFFFF', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', pointerEvents: 'none', zIndex: 3 }}>{note}</div>}
+          {note && <div className="zchat-pop" style={{ position: 'absolute', left: '50%', bottom: 132, transform: 'translateX(-50%)', padding: '8px 14px', borderRadius: 16, background: theme.dark ? '#2A2930' : '#17131F', color: '#FFFFFF', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', pointerEvents: 'none', zIndex: 3 }}>{note}</div>}
           {stickersOpen && !off && (
             <div style={{ maxHeight: 200, overflowY: 'auto', display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6, padding: '8px 12px', boxShadow: `0 -0.5px 0 ${theme.hair}`, flexShrink: 0 }}>
               {orderStickersForPick().map((stk) => (
@@ -25995,8 +26029,9 @@ function AxMeButton({ me, onOpen }) {
   return <HeaderIconButton label="Me" onClick={() => { hapticTap(); onOpen(); }}><AxAvatarGlyph me={me} /></HeaderIconButton>;
 }
 
-function BottomTabBar({ tab, onChange, onCreate, badges }) {
+function BottomTabBar({ tab, onChange, onCreate, badges, onMeDouble }) {
   const { theme } = useTheme();
+  const meTap = useRef(0);
   const ax = useAx();
   const [editTabs, setEditTabs] = useState(false);
   const hold = useAxHold(() => setEditTabs(true));
@@ -26030,23 +26065,31 @@ function BottomTabBar({ tab, onChange, onCreate, badges }) {
           if (it.k === 'create') {
             return (
               <div key="create" role="button" aria-label="Create" onClick={() => { hapticTap(); playUiSound('tap'); onCreate(); }} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-                <div className="zchat-press" style={{ width: 28, height: 28, borderRadius: 9, border: `2px solid ${theme.ink}`, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'transform 0.15s ease' }}>
-                  <Plus size={18} color={theme.ink} strokeWidth={2.4} />
+                <div className="zchat-press" style={{ width: 46, height: 32, borderRadius: 11, background: theme.coralDeep || theme.coral, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'transform 0.15s ease' }}>
+                  <Plus size={20} color="#FFFFFF" strokeWidth={2.6} />
                 </div>
               </div>
             );
           }
           const on = (press || tab) === it.k;
           return (
-            <div key={it.k} role="button" aria-label={it.label} aria-current={on ? 'page' : undefined} onClick={() => { if (!on) { hapticTap(); playUiSound('tap'); } pick(it.k); }}
+            <div key={it.k} role="button" aria-label={it.k === 'me' && onMeDouble ? 'Me. Double tap to switch accounts' : it.label} aria-current={on ? 'page' : undefined} onClick={() => {
+              if (it.k === 'me' && onMeDouble) {
+                const now = Date.now();
+                if (now - meTap.current < 340) { meTap.current = 0; hapticTap(); onMeDouble(); return; }
+                meTap.current = now;
+              }
+              if (!on) { hapticTap(); playUiSound('tap'); }
+              pick(it.k);
+            }}
               style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, cursor: 'pointer', position: 'relative', userSelect: 'none', WebkitTapHighlightColor: 'transparent' }}>
               <div style={{ position: 'relative', width: 52, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)', transform: on ? 'scale(1.04)' : 'scale(1)' }}>
                 {it.icon(on)}
                 {it.badge > 0 && (
-                  <span style={{ position: 'absolute', top: -2, right: 4, minWidth: 17, height: 17, padding: '0 5px', borderRadius: 9, background: theme.danger, color: 'white', fontSize: 10, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 0 0 2px ${theme.dark ? '#17171A' : '#fff'}` }}>{it.badge > 99 ? '99+' : it.badge}</span>
+                  <span style={{ position: 'absolute', top: -2, right: 4, minWidth: 17, height: 17, padding: '0 5px', borderRadius: 9, background: theme.coralDeep || theme.coral, color: 'white', fontSize: 10, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 0 0 2px ${theme.dark ? '#14101E' : '#fff'}` }}>{it.badge > 99 ? '99+' : it.badge}</span>
                 )}
                 {!it.badge && it.dot && (
-                  <span style={{ position: 'absolute', top: 2, right: 10, width: 8, height: 8, borderRadius: 4, background: theme.coral, boxShadow: `0 0 0 2px ${theme.dark ? '#17171A' : '#fff'}` }} />
+                  <span style={{ position: 'absolute', top: 2, right: 10, width: 8, height: 8, borderRadius: 4, background: theme.coral, boxShadow: `0 0 0 2px ${theme.dark ? '#14101E' : '#fff'}` }} />
                 )}
               </div>
               <span style={{ fontSize: 10.5, fontWeight: on ? 700 : 500, color: on ? theme.coral : theme.muted, letterSpacing: '0.01em', transition: 'color 0.2s ease' }}>{it.label}</span>
@@ -26957,7 +27000,7 @@ function MomentsFeed({ me, userId, items, rootRef, ringFor, onOpenProfile, onOpe
             onOpenProfile={(pr) => { if (pr && pr.id === post.user_id && post.user_id !== userId) recordPostEvent(post.id, 'profile'); onOpenProfile(pr); }} onOpenStory={onOpenStory} />
         );
       })}
-      {note && <div className="zchat-pop" style={{ position: 'fixed', left: '50%', bottom: 'calc(96px + env(safe-area-inset-bottom))', transform: 'translateX(-50%)', zIndex: 80, padding: '9px 16px', borderRadius: 20, background: theme.dark ? '#2A2930' : '#111113', color: '#FFFFFF', fontSize: 13.5, fontWeight: 600, whiteSpace: 'nowrap', pointerEvents: 'none' }}>{note}</div>}
+      {note && <div className="zchat-pop" style={{ position: 'fixed', left: '50%', bottom: 'calc(96px + env(safe-area-inset-bottom))', transform: 'translateX(-50%)', zIndex: 80, padding: '9px 16px', borderRadius: 20, background: theme.dark ? '#2A2930' : '#17131F', color: '#FFFFFF', fontSize: 13.5, fontWeight: 600, whiteSpace: 'nowrap', pointerEvents: 'none' }}>{note}</div>}
       {menu && (
         <ActionSheet onClose={() => setMenuFor(null)} items={[
           { k: 'save', label: saved.has(menu.id) ? 'Remove from saved' : 'Save', icon: <Bookmark />, on: () => { const p0 = menu; setMenuFor(null); toggleSave(p0); } },
@@ -30831,7 +30874,7 @@ function ctAttachProps(close) {
   const c = ctHub.ctx;
   if (!c || !c.on) return {};
   const go = (x) => () => { close(); ctOpen(x); };
-  return { onPlaylist: go('playlist'), onSharedNote: go('note'), onFindTime: go('findNew'), onBoard: go('board') };
+  return { onPlaylist: go('playlist'), onSharedNote: go('note'), onBoard: go('board') };
 }
 function ctCard(kind, d, m) {
   if (kind === 'play') { ctOpen('playlist'); return true; }
@@ -35643,6 +35686,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   activeProfileRef.current = activeProfile;
   safetyChatHint.peer = activeProfile && !activeGroup ? activeProfile : null;
   const [showGames, setShowGames] = useNavState(false);
+  useEffect(() => { kitUser(session.user.id); const t = setTimeout(() => gameKitPull(), 9000); return () => clearTimeout(t); }, [session.user.id]);
   const [gamePicker, setGamePicker] = useNavState(false);
   useEffect(() => {
     const on = (e) => { const d = e && e.detail; if (!d || !d.k || !d.s) return; setShowGames(false); setTimeout(() => setGamePicker({ kind: 'score', k: d.k, s: d.s }), 80); };
@@ -35769,7 +35813,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const startGameWith = async (profile, kindIn, extraIn) => {
     if (!profile) return;
     if (profile.is_bot) { ghBotStart(profile, kindIn, extraIn); return; }
-    if (G1_KEYS.includes(kindIn) && g1Mem.host) { g1Mem.host.begin(profile, kindIn); return; }
+    if (kindIn === 'zap' && !(extraIn && extraIn.md)) { zapModeAsk(profile, extraIn, (md) => startGameWith(profile, 'zap', { ...(extraIn || {}), md })); return; }
+    if (G1_KEYS.includes(kindIn) && g1Mem.host) return g1Mem.host.begin(profile, kindIn, extraIn && extraIn.gid, extraIn);
     let kind = kindIn;
     let extra = extraIn;
     if (typeof kind === 'string' && kind.indexOf('sd:') === 0) { extra = { ...(extra || {}), k: kind.slice(3) }; kind = 'sd'; }
@@ -35782,9 +35827,11 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     lastGameStartRef.current = Date.now();
     if (LIVE_GAME_KEYS.includes(kind)) { startLiveGame(profile, kind); return; }
     if (!activeProfileRef.current || activeProfileRef.current.id !== profile.id) await openChat(profile, null);
-    const st0 = newGameState(kind || 'ttt', profile, extra);
-    sendGameStateTo(profile, st0);
+    const made = newGameState(kind || 'ttt', profile, extra);
+    const st0 = extra && extra.gid ? { ...made, id: extra.gid } : made;
+    const sent = sendGameStateTo(profile, st0);
     if (ROOM_GAME_KEYS.includes(st0.g) && g1Mem.host && g1Mem.host.openWhenReady) g1Mem.host.openWhenReady(st0.id);
+    return sent;
   };
   const ghBotStart = async (bot, kindIn, extra) => {
     const kind = kindIn || 'ttt';
@@ -35803,6 +35850,15 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       const row = res.data;
       if (activeProfileRef.current && activeProfileRef.current.id === bot.id) setMessages((prev) => (prev.some((x) => x.id === row.id) ? prev : [...prev, row]));
       upsertConversation(bot.id, row.content, 'text');
+      return;
+    }
+    if (kind === 'chess' || kind === 'ckr' || kind === 'golf') {
+      const Z = await g1Load();
+      if (!Z) { showSnack('That game did not load. Check your connection and try again.'); return; }
+      const st = kind === 'golf' ? { ...g1Fresh(Z, kind, { g: kind, id: newClientId(), x: session.user.id, o: bot.id, n: 0, w: null }) } : g1Fresh(Z, kind, { g: kind, id: newClientId(), x: session.user.id, o: bot.id, n: 0, w: null }, { wh: session.user.id });
+      ghBotGameLevelSet(st.id, lv);
+      sendGameStateTo(bot, st);
+      if (g1Mem.host && g1Mem.host.openWhenReady) g1Mem.host.openWhenReady(st.id);
       return;
     }
     const base = newGameState(kind, bot, extra);
@@ -37161,6 +37217,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const callFlag = params.get('call');
     const storyItemFlag = params.get('s');
     if (storyItemFlag) { pendingStoryUserRef.current = null; setTimeout(() => { if (openStoryRefRef.current) openStoryRefRef.current({ story_id: storyItemFlag }); }, 700); }
+    const roomFlag = params.get('room');
+    if (roomFlag && /^[A-Za-z0-9]{6}$/.test(roomFlag)) { setTimeout(() => setShowGames({ at: Date.now(), room: roomFlag.toUpperCase() }), 500); window.history.replaceState(window.history.state, '', window.location.pathname); }
     const boothFlag = params.get('booth');
     if (boothFlag && /^[0-9a-f-]{36}$/i.test(boothFlag)) setTimeout(() => { supabase.rpc('zchat_booth_state', { p_booth: boothFlag }).then(({ data }) => { if (data && data.status === 'open' && boothLocal(data.join_until) > Date.now()) { boothNote(data); joinBooth(data); } else if (data) showSnack('That photo booth already closed'); }, () => {}); }, 900);
     const sharedFlag = params.get('shared');
@@ -38005,7 +38063,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       const typing = !!el && (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT' || el.isContentEditable);
       const inCall = !!(callEngineRef.current && callEngineRef.current.call && callEngineRef.current.call.status !== 'ended');
       const quiet = Date.now() - bootAtRef.current < 12000 && !mobileShowChatRef.current && !typing && !inCall;
-      if (quiet) { try { window.location.reload(); } catch {} return; }
+      if (quiet) { safeReload(); return; }
       setUpdateReady(true);
     };
     if (swUpdateReady) handle();
@@ -39439,15 +39497,11 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       blocked,
       onToggleBlock: activeProfile && !activeProfile.is_bot ? () => (blocked ? setUnblockConfirmFor(activeProfile) : setBlockConfirmFor(activeProfile)) : null,
       onSetTitle: activeGroup ? setMemberTitle : null,
-      composeSection: cmTypingSection,
       moreTiles: [
-        (activeGroup ? !groupCallBlocked : !!activeProfile && !activeProfile.is_bot && canCall(activeProfile)) ? { icon: <CallPlanGlyph />, label: 'Plan a call', aria: 'Plan a call', onClick: () => setPlanCallFor({ group: activeGroup || null, peer: activeGroup ? null : activeProfile, name: chatName }) } : null,
         chatAlbumKey && !(activeProfile && activeProfile.is_bot) ? { icon: <AlbumIcon />, label: 'Albums', aria: 'Shared albums', onClick: () => setAlbumsOpen({ key: chatAlbumKey, name: chatName }) } : null,
         chatAlbumKey && !(activeProfile && activeProfile.is_bot) ? { icon: <WatchIcon />, label: 'Watch list', aria: 'Watch list', onClick: () => setWatchListOpen({ key: chatAlbumKey, name: chatName }) } : null,
         activeProfile && !activeGroup && !activeProfile.is_bot && !activeProfile.on_break ? { icon: <ComplimentGlyph />, label: 'Compliment', aria: 'Send a compliment', onClick: () => pfOpenPage({ k: 'send', to: activeProfile }) } : null,
-        chatAlbumKey && !(activeProfile && activeProfile.is_bot) && !(activeProfile && (myBlockedIds.has(activeProfile.id) || blockedByIds.has(activeProfile.id))) ? { icon: <BoothIcon />, label: 'Photo booth', aria: 'Open the photo booth', onClick: startBooth } : null,
         messages.length >= 3 ? { icon: <CatchUpIcon />, label: 'Catch up', aria: 'Catch me up', onClick: () => { closeAll(); runCatchUp(); } } : null,
-        (activeGroup || (activeProfile && !activeProfile.is_bot)) ? { icon: <WaImportIcon />, label: 'Import', aria: 'Import from WhatsApp', onClick: () => setWaPage({ peer: activeGroup ? null : activeProfile, group: activeGroup || null }) } : null,
         activeGroup ? { icon: <SantaHatIcon />, label: 'Secret Santa', aria: 'Start Secret Santa', onClick: () => { closeAll(); setSantaStart(activeGroup); } } : null,
         activeProfile && !activeGroup && activeProfile.is_bot ? { icon: <AiPracticeGlyph />, label: 'Practice English', onClick: () => { closeAll(); setAiTool({ k: 'practice' }); } } : null,
         activeProfile && !activeGroup && activeProfile.is_bot ? { icon: <AiCardsGlyph />, label: 'Flashcards', onClick: () => { closeAll(); setAiTool({ k: 'decks' }); } } : null,
@@ -44411,7 +44465,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (kind === 'edits') { if (m && m.edited && !m.deleted) setEditsFor(m); return true; }
     if (kind === 'draw') { setDrawRoom({ id: d.i }); return true; }
     if (kind === 'ask') { const who = activeProfile; if (who && m && m.sender_id === who.id) { setGiftStart({ kind: 'coins', amount: d.n, asked: true }); setGiftFor(who); } return true; }
-    if (kind === 'trade') { const who = activeProfile; if (who && d && d.counter && !activeGroup) setTradeFor({ peer: who, base: d.counter }); return true; }
+    if (kind === 'trade') return true;
     if (kind === 'when') { if (m && d && d.at) setWhenFor({ m, at: d.at, phrase: d.phrase }); return true; }
     if (kind === 'callplan') { const k = d && d.k === 'video' ? 'video' : 'voice'; if (activeGroup) startGroupCall(activeGroup, k); else if (activeProfile) startDirectCall(activeProfile, k); return true; }
     if (kind === 'santa') { if (d && d.ev && d.to) { const my = d.ev.my || {}; setGiftStart({ santa: { id: d.ev.id, budget: d.ev.budget, price: Number(my.price) || 0, kind: my.kind || null, key: my.key || null } }); setGiftFor(d.to); } return true; }
@@ -45056,7 +45110,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         </div>
       )}
       {online && updateReady && !showBackOnline && (
-        <div role="button" aria-label="Update ZChat" onClick={() => { try { window.location.reload(); } catch {} }} style={{
+        <div role="button" aria-label="Update ZChat" onClick={() => safeReload()} style={{
           position: 'fixed', top: (mobileShowChat || isWide) && (activeProfile || activeGroup) ? `calc(env(safe-area-inset-top) + ${callBarShown ? 112 : 70}px)` : `calc(env(safe-area-inset-top) + ${callBarShown ? 50 : 8}px)`, left: '50%', transform: 'translateX(-50%)', zIndex: 300,
           padding: '8px 16px', borderRadius: 18, fontSize: 12.5, fontWeight: 800, fontFamily: FONT, color: 'white', whiteSpace: 'nowrap', cursor: 'pointer',
           background: theme.coral, boxShadow: '0 6px 20px rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', gap: 8,
@@ -45472,6 +45526,12 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         )}
         <AxPrefsSync uid={session.user.id} peers={conversations.map((c) => c.otherProfile && !c.otherProfile.is_bot ? c.otherProfile.id : null)} />
         <BottomTabBar tab={homeTab} onChange={(k) => setHomeTab(k)} onCreate={() => setShowCreate(true)}
+          onMeDouble={() => {
+            const others = getSavedAccounts().filter((a) => a && a.id && a.id !== session.user.id);
+            const next = others[others.length - 1];
+            if (next && onSwitchAccount) onSwitchAccount(next);
+            else appSnack('Add another account in Settings to switch with a double tap');
+          }}
           badges={{ chats: primaryConversations.filter((c) => isUnread(c) && !vaultKeys.has(chatPrefKey('dm', c.otherProfile.id)) && !snoozeHidden.has(chatPrefKey('dm', c.otherProfile.id))).length + groups.filter((g) => !g.archived && g.unread > 0 && !vaultKeys.has(chatPrefKey('group', g.id)) && !snoozeHidden.has(chatPrefKey('group', g.id))).length, moments: trayUsers.some((u) => !u.stories.every((st) => storyData.seen.has(st.id))), calls: 0, me: followRequestCount + unreadMailCount }} />
         </>)} />
       </div>
@@ -46023,8 +46083,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                 <ChatQuickRail
                   onBomb={bot ? null : () => setBombOpen(true)}
                   onStyle={() => setShowTextStyle(true)}
-                  onBuzz={bot ? null : sendBuzz}
-                  onCoin={bot ? null : () => sendRoll('coin')} />
+                  onBuzz={bot ? null : sendBuzz} />
               );
             })()}
 
@@ -46047,9 +46106,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                 onAiImage={activeProfile && activeProfile.is_bot ? null : () => { setShowAttach(false); setAiStudio({ mode: 'image', startKind: 'picture', chat: true }); }}
                 onCollage={() => { setShowAttach(false); if (collageInputRef.current) collageInputRef.current.click(); }}
                 onGifMaker={activeProfile && activeProfile.is_bot ? null : () => { setShowAttach(false); setGifMaker(true); }}
-                onMeme={activeProfile && activeProfile.is_bot ? null : () => { setShowAttach(false); setMemeStart(true); }}
                 onVoiceType={typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition) ? () => { setShowAttach(false); setVoiceTyping(true); } : null}
-                onDice={activeProfile && activeProfile.is_bot ? null : () => { setShowAttach(false); setDiceSheet(true); }}
                 onBuzz={activeProfile && activeProfile.is_bot ? null : () => { setShowAttach(false); sendBuzz(); }}
                 onSounds={activeProfile && activeProfile.is_bot ? null : () => { setShowAttach(false); setSoundsOpen(true); }}
                 onDrawTogether={activeProfile && activeProfile.is_bot ? null : async () => {
@@ -46062,20 +46119,16 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                 canGame={!!activeGroup || !!activeProfile}
                 onGame={() => { setShowAttach(false); if (activeGroup) ghEmit({ type: 'sheet' }); else setGameSheetFor(activeProfile); }}
                 onPoll={activeGroup || (activeProfile && !activeProfile.is_bot) ? () => { setShowAttach(false); setPollComposer(true); } : null}
-                onEvent={activeGroup || (activeProfile && !activeProfile.is_bot) ? () => { setShowAttach(false); setEventComposer(true); } : null}
-                onChecklist={activeGroup || (activeProfile && !activeProfile.is_bot) ? () => { setShowAttach(false); setChecklistComposer(true); } : null}
                 onBill={activeGroup || (activeProfile && !activeProfile.is_bot) ? () => { setShowAttach(false); setBillComposer(true); } : null}
-                onCountdown={activeGroup || (activeProfile && !activeProfile.is_bot) ? () => { setShowAttach(false); setCountdownComposer(true); } : null}
                 onContact={activeProfile && activeProfile.is_bot ? null : () => { setShowAttach(false); setContactPicker(true); }}
                 onWifi={activeProfile && activeProfile.is_bot ? null : () => { setShowAttach(false); setWifiOpen(true); }}
                 onRound={activeProfile && activeProfile.is_bot ? null : () => { setShowAttach(false); setRoundOpen(true); }}
                 onWatch={activeProfile && activeProfile.is_bot ? null : () => { setShowAttach(false); setWatchComposer(true); }}
                 onListen={activeProfile && activeProfile.is_bot ? null : () => { setShowAttach(false); prefetchMusic(me && me.country); setListenComposer(true); }}
                 {...ctAttachProps(() => setShowAttach(false))}
-                onFocus={activeProfile && activeProfile.is_bot ? null : () => { setShowAttach(false); setFocusSheetOpen(true); }}
-                onTrade={!activeGroup && activeProfile && !activeProfile.is_bot && !tradeMem.off ? () => { setShowAttach(false); setTradeFor({ peer: activeProfile }); } : null}
-                onCapsule={activeProfile && !activeGroup && activeProfile.is_bot ? null : () => { setShowAttach(false); setCapsuleOpen(true); }}
-                onBag={activeGroup || (activeProfile && !activeProfile.is_bot) ? () => { setShowAttach(false); setBagOpen(true); } : null} />
+                onBooth={chatAlbumKey && !(activeProfile && activeProfile.is_bot) && !(activeProfile && (myBlockedIds.has(activeProfile.id) || blockedByIds.has(activeProfile.id))) ? () => { setShowAttach(false); startBooth(); } : null}
+                onLiveType={cmLtConv ? () => { setShowAttach(false); toggleLiveTyping(); } : null}
+                liveTypeOn={!!cmLtMine} />
             )}
 
             {scanOpen && (activeProfile || activeGroup) && <DocScanner onClose={() => setScanOpen(false)} onSend={(file) => { setScanOpen(false); sendFiles([file]); }} />}
@@ -46083,7 +46136,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               <StickerPicker onPick={sendSticker} userId={session.user.id} onClose={() => setShowStickers(false)} onPickGif={sendGif} onSharePack={sharePack} groupId={activeGroup ? activeGroup.id : null} onPickEmoji={(n) => { hapticTap(); setDraft((d) => `${d}${d && !/\s$/.test(d) ? ' ' : ''}:${n}: `.slice(0, MAX_CHARS)); setShowStickers(false); }} />
             )}
             {gifMaker && <GifMakerPage onClose={() => setGifMaker(false)} onSend={(g) => { setGifMaker(false); sendMadeGif(g); }} />}
-            {memeStart && <MemeStartSheet onClose={() => setMemeStart(false)} onPick={(f) => { setMemeStart(false); setMediaComposer({ key: Date.now(), files: [f], once: false, hidden: false, meme: true }); }} />}
           </>
         ) : (
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 14, color: theme.muted }}>
@@ -46107,7 +46159,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           canCall={canCall(profileOf)} onCall={(kind) => { const target = profileOf; setProfileOf(null); startDirectCall(target, kind); }}
           onOpenHighlight={openHighlight} meProfile={me} onOpenCollection={(k) => setCollectionOpen(isDecorKey(k) ? k : true)}
           onOpenAchievements={(pr) => setAchievementsFor(pr)} onGift={(pr) => setGiftFor(pr)} onDiscover={() => setShowDiscover(true)}
-          onTrade={tradeMem.off ? null : (pr) => setTradeFor({ peer: pr })}
           storyRing={storyRingFor(profileOf.id)} onOpenStory={(id) => openStoriesFor(id)}
         /></PageGuard>
       ); return profileOf.__top ? <TopLayer>{panel}</TopLayer> : panel; })()}
@@ -46409,7 +46460,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       })()}
       {trSheet && <TranslateChatSheet chatKey={trSheet.key} name={trSheet.name} onClose={() => setTrSheet(null)} onWrite={trSheet.key === chatPref ? () => { setTrSheet(null); setCmTrSheet(true); } : undefined} />}
       {catchUp && <TextToolSheet title="Catch me up" subtitle={catchUp.n === 1 ? 'From the last message' : `From the last ${catchUp.n} messages`} text={catchUp.text} busy={catchUp.busy} error={catchUp.error} onClose={() => setCatchUp(null)} onCopy={() => { copyTextToClipboard(catchUp.text || ''); showSnack('Copied'); }} />}
-      {focusSheetOpen && <FocusComposerSheet onClose={() => setFocusSheetOpen(false)} onSend={sendFocus} />}
       {watchComposer && <WatchComposerSheet links={messages.filter((m) => m.type === 'text' && !m.deleted && youtubeIdOf(m.content)).slice(-10).reverse().map((m) => (String(m.content).match(/https?:\/\/\S+/) || [m.content])[0])} onClose={() => setWatchComposer(false)} onSend={sendWatch}
         initialTitle={watchComposer && watchComposer.title ? watchComposer.title : ''} onOpenList={chatAlbumKey && !(activeProfile && activeProfile.is_bot) ? () => { setWatchComposer(false); setWatchListOpen({ key: chatAlbumKey, name: chatName }); } : null} />}
       {watchParty && me && <WatchPartyPage msgId={watchParty.msgId} d={watchParty.d} me={me} onClose={() => setWatchParty(null)} />}
@@ -46790,7 +46840,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               if ('serviceWorker' in navigator) { const reg = await navigator.serviceWorker.getRegistration(); if (reg) await reg.update(); }
               if (window.caches && caches.keys) { const keys = await caches.keys(); await Promise.all(keys.map((k) => caches.delete(k))); }
             } catch {}
-            window.location.reload();
+            safeReload();
           }} />
       )}
       {reportThanks && (
@@ -46959,21 +47009,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         <PollComposerPage userId={session.user.id} onClose={() => setPollComposer(false)}
           onSend={async (p) => { const ok = await sendSpecial(`zpoll:${JSON.stringify(p)}`, `Sent a poll: ${p.q}`); if (ok) { setPollComposer(false); scrollChatToBottom(true); } }} />
       )}
-      {eventComposer && (activeProfile || activeGroup) && (
-        <EventComposerPage onClose={() => setEventComposer(false)}
-          onSend={async (ev) => { const ok = await sendSpecial(`zevent:${JSON.stringify(ev)}`, `Invited you to ${ev.t}`); if (ok) { setEventComposer(false); scrollChatToBottom(true); } }} />
-      )}
-      {checklistComposer && (activeProfile || activeGroup) && (
-        <ChecklistComposerPage onClose={() => setChecklistComposer(false)}
-          onSend={async (l) => { const ok = await sendSpecial(`zlist:${JSON.stringify(l)}`, `Shared a checklist: ${l.t}`); if (ok) { setChecklistComposer(false); scrollChatToBottom(true); } }} />
-      )}
       {billComposer && (activeProfile || activeGroup) && (
         <BillComposerPage people={activeGroup ? Math.max(2, groupMembers.length) : 2} isGroup={!!activeGroup} onClose={() => setBillComposer(false)}
           onSend={async (bl) => { const ok = await sendSpecial(`zbill:${JSON.stringify(bl)}`, `Split a bill: ${bl.t}`); if (ok) { setBillComposer(false); scrollChatToBottom(true); } }} />
-      )}
-      {countdownComposer && (activeProfile || activeGroup) && (
-        <CountdownComposerPage onClose={() => setCountdownComposer(false)}
-          onSend={async (cd) => { const ok = await sendSpecial(`zcount:${JSON.stringify(cd)}`, `Started a countdown: ${cd.t}`); if (ok) { setCountdownComposer(false); scrollChatToBottom(true); } }} />
       )}
       {pickComposer && (activeProfile || activeGroup) && (
         <PickComposerSheet onClose={() => setPickComposer(false)}
@@ -47083,11 +47121,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           onSend={async (file) => { setCollageFiles(null); await sendMediaItems([{ kind: 'image', file, url: null }], ''); }} />
       )}
       {liveSound && (activeProfile || activeGroup) && <LiveSoundPill sound={liveSound} />}
-      {bagOpen && (activeProfile || activeGroup) && <BagComposerSheet uid={session.user.id} group={activeGroup} peer={activeGroup ? null : activeProfile} members={activeGroup ? groupMembers.length : 2} onClose={() => setBagOpen(false)} onSend={sendBag} />}
       {santaStart && <SantaStartPage group={santaStart} onClose={() => setSantaStart(null)} onStart={startSanta} />}
-      {capsuleOpen && (activeProfile || activeGroup) && (
-        <CapsuleComposer peer={activeGroup ? null : activeProfile} group={activeGroup} myId={session.user.id} onClose={() => setCapsuleOpen(false)} onSend={(c) => { setCapsuleOpen(false); sendCapsule(c); }} />
-      )}
       {wifiOpen && (activeProfile || activeGroup) && (
         <WifiSheet onClose={() => setWifiOpen(false)} onSend={async (d) => { setWifiOpen(false); const ok = await sendSpecial(wifiContent(d), 'Shared a wifi network'); if (ok) scrollChatToBottom(true); }} />
       )}
@@ -47097,13 +47131,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           const ok = await sendSpecial(`zbomb:${JSON.stringify({ t, n })}`, `Text bomb, ${n} times`);
           if (ok && draft.trim() && draft.trim() === t) setDraft('');
           if (ok) setTimeout(() => scrollChatToBottom(true), 60);
-        }} />
-      )}
-      {diceSheet && (activeProfile || activeGroup) && (
-        <DiceSheet onClose={() => setDiceSheet(false)} onPick={(k) => {
-          setDiceSheet(false);
-          if (k === 'pick') { setTimeout(() => setPickComposer(true), 60); return; }
-          sendRoll(k === 'coin' ? 'coin' : k === 'd2' ? 'dice2' : 'dice');
         }} />
       )}
       {voiceTyping && (activeProfile || activeGroup) && (
@@ -47181,7 +47208,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       {msgSearchOpen != null && (
         <SearchMessagesPage myId={session.user.id} groups={groups} hiddenIds={getHiddenMsgIds()} initialQuery={msgSearchOpen} onClose={() => setMsgSearchOpen(null)} onOpen={openSearchHit} />
       )}
-      {showWhatsNew && <PageGuard name="whats new" onClose={() => setShowWhatsNew(false)}><WhatsNewSheet me={me} onClose={() => setShowWhatsNew(false)} onTry={(g) => { if (g === 'sets') setCollectionOpen(true); else if (g === 'shop') setShopOpen(true); else if (g === 'map') setMapOpen(true); else if (g === 'song' && me) setProfileOf({ ...me, __song: true }); else if (g === 'ai') setAiStudio({ mode: 'image' }); else if (g === 'chars') setCharsOpen(true); else if (g === 'coins') setWalletOpen(true); else if (g === 'bubbles') setShowBubbleSheet(true); else if (g === 'drops') setCollectionOpen('__drop'); else if (g === 'folders') { setHomeTab('chats'); setFoldersOpen(true); } else if (g === 'styles') setShopOpen('tab:styles'); else if (g === 'communities') setCommunitiesOpen({}); }} /></PageGuard>}
+      {showWhatsNew && <PageGuard name="whats new" onClose={() => setShowWhatsNew(false)}><WhatsNewSheet me={me} onClose={() => setShowWhatsNew(false)} onTry={(g) => { if (g === 'sets') setCollectionOpen(true); else if (g === 'shop') setShopOpen(true); else if (g === 'rooms') setShowGames({ at: Date.now(), room: '' }); else if (g === 'map') setMapOpen(true); else if (g === 'song' && me) setProfileOf({ ...me, __song: true }); else if (g === 'ai') setAiStudio({ mode: 'image' }); else if (g === 'chars') setCharsOpen(true); else if (g === 'coins') setWalletOpen(true); else if (g === 'bubbles') setShowBubbleSheet(true); else if (g === 'drops') setCollectionOpen('__drop'); else if (g === 'folders') { setHomeTab('chats'); setFoldersOpen(true); } else if (g === 'styles') setShopOpen('tab:styles'); else if (g === 'communities') setCommunitiesOpen({}); }} /></PageGuard>}
       {showGames && (
         <GamesPage key={showGames.at || 'games'} initialGame={showGames.game || null} onClose={() => setShowGames(false)}
           friends={gameFriends}
@@ -47190,7 +47217,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           onOpenLeaderboard={(k) => setLeaderboardFor({ game: k || 'all', at: Date.now() })}
           onChallenge={(kind) => { setShowGames(false); setTimeout(() => setGamePicker({ kind: kind || 'ttt' }), 80); }}
           onShareScore={(k, sc) => { if (!sc) { showSnack('Play a round first to get a score'); return; } setShowGames(false); setTimeout(() => setGamePicker({ kind: 'score', k, s: sc }), 80); }}
-          onPlayBot={ghOpenBotGames} />
+          onPlayBot={ghOpenBotGames}
+          myId={session.user.id} me={me} initialRoom={showGames && showGames.room != null ? showGames.room : null}
+          onRoomHost={(p, k, gid) => { setShowGames(false); setTimeout(async () => { const full = (await cachedProfile(p.id).catch(() => null)) || p; startGameWith(sanitizeAvatar(full, session.user.id), k === 'zapm' ? 'zap' : k, { gid, ...(k === 'zap' || k === 'zapm' ? { md: k === 'zapm' ? 'mayhem' : 'classic' } : {}) }); }, 140); }}
+          onRoomGuest={(p, k, gid) => { setShowGames(false); setTimeout(async () => { const full = (await cachedProfile(p.id).catch(() => null)) || p; await openChat(sanitizeAvatar(full, session.user.id), null); if (g1Mem.host && g1Mem.host.openWhenReady) g1Mem.host.openWhenReady(gid); }, 140); }} />
       )}
       {gamePicker && (
         <NewChatPage userId={session.user.id} blockedIds={myBlockedIds} onClose={() => setGamePicker(false)}
@@ -47201,6 +47231,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         <GamePickerSheet profile={gameSheetFor} onClose={() => setGameSheetFor(null)}
           onPick={(k) => startGameWith(gameSheetFor, k)} onMore={() => setShowGames({ at: Date.now() })} />
       )}
+      <ZapModeHost />
       <GameHubRoot uid={session.user.id} me={me} group={activeGroup} members={groupMembers} notify={notifyUser}
         onTemp={(row) => { if (activeGroupRef.current && activeGroupRef.current.id === row.group_id) { setMessages((prev) => [...prev, row]); setTimeout(() => scrollChatToBottom(true), 60); } }}
         onPlace={(tempId, row, gid) => { placeSentRow(tempId, row); listNoteSent('group', gid, row); }}
@@ -47241,7 +47272,6 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       {me && <G1Host me={me} myId={session.user.id} messages={messages} peer={activeProfile} group={activeGroup} members={groupMembers} sendDm={sendGameStateTo} sendGroup={(c) => sendGroupMessage('text', c)} openChat={openChat} notify={notifyUser} patchMessage={(id, c) => setMessages((prev) => prev.map((x) => (String(x.id) === String(id) ? { ...x, content: c } : x)))} onRematchGame={rematchGame} />}
       {screenEffect && <ScreenEffect key={screenEffect.key} kind={screenEffect.kind} onDone={() => setScreenEffect(null)} />}
       {editsFor && (() => { const em = messages.find((x) => x.id === editsFor.id) || editsFor; return <EditHistorySheet m={em} isMine={em.sender_id === session.user.id && !em.bot_reply} senderName={activeGroup ? labelForSender(em.sender_id) : (activeProfile ? activeProfile.name : '')} chatTheme={activeChatTheme} onClose={() => setEditsFor(null)} />; })()}
-      {waPage && <WaImportPage myId={session.user.id} me={me} peer={waPage.peer} group={waPage.group} members={waPage.group ? groupMembers : null} isAdmin={!!waPage.group && amGroupAdmin} onClose={() => setWaPage(null)} onView={(x) => setWaView(x)} />}
       {waView && <WaImportViewer imp={waView} myId={session.user.id} onClose={() => setWaView(null)} />}
       {infoFor && <MessageInfoSheet m={infoFor} isMine={infoFor.sender_id === session.user.id} peerName={activeGroup ? labelForSender(infoFor.sender_id) : (activeProfile ? activeProfile.name : '')} isGroup={!!activeGroup || !!(activeProfile && !dmReceiptsOn(activeConvForBar, me, activeProfile))} onClose={() => setInfoFor(null)} group={activeGroup} members={activeGroup ? groupMembers : null} myId={session.user.id} />}
       {appLocked && <AppLockScreen onUnlock={() => setAppLocked(false)} onForgot={() => { writeAppLock({}); setAppLocked(false); onLogout(); }} />}
@@ -49887,7 +49917,7 @@ export function makeAccentPalette(hex) {
   let coral = h;
   for (let i = 0; i < 14 && 1.05 / (relLuminance(coral) + 0.05) < 3.2; i++) coral = mixHex(coral, '#000000', 0.9);
   for (let i = 0; i < 14 && relLuminance(coral) < 0.045; i++) coral = mixHex(coral, '#FFFFFF', 0.9);
-  return { label: 'Your colour', coral, coralDeep: mixHex(coral, '#000000', 0.84), gold: mixHex(coral, '#FFFFFF', 0.55), teal: '#00C2A8', danger: '#ED4956', meDark: mixHex(coral, '#0C0C0E', 0.42), meLight: mixHex(coral, '#FFFFFF', 0.2) };
+  return { label: 'Your colour', coral, coralDeep: mixHex(coral, '#000000', 0.84), gold: mixHex(coral, '#FFFFFF', 0.55), teal: '#00C2A8', danger: '#ED4956', meDark: mixHex(coral, '#110D19', 0.42), meLight: mixHex(coral, '#FFFFFF', 0.2) };
 }
 
 export function SessionDeviceIcon({ label, size = 22 }) {
@@ -51251,6 +51281,11 @@ if (typeof window !== 'undefined' && window.__fakeDb) window.__ghGroupMore = ghG
 const GH_BOT = {};
 function ghBotRegister(kind, entry) { GH_BOT[kind] = entry || { pack: true }; }
 ['ttt', 'fade', 'c4', 'gomoku', 'reversi', 'dots', 'paint', 'ship', 'gem', 'bomb', 'pairs', 'rps', 'hang', 'num', 'wduel', 'qduel', 'math'].forEach((k) => ghBotRegister(k));
+const ghBoardDue = (st, id) => !!st && !st.w && !!id && ((st.a === 'offer' && !!st.dr && st.dr !== id) || st.t === id);
+['chess', 'ckr'].forEach((k) => ghBotRegister(k, { raw: true, due: ghBoardDue, load: async () => { const Z = await g1Load(); if (!Z) return null; const m = await import('./games/bots.jsx'); return k === 'chess' ? m.chessBot(Z) : m.ckrBot(Z); } }));
+ghBotRegister('golf', { raw: true, due: (st, id) => !!st && !st.w && !!id && st.t === id, load: async () => { const m = await import('./games/golf.jsx'); return (st, ctx) => (st && !st.w && st.t === ctx.me ? m.GOLF.finishHole(st, m.GOLF.botHole(st.h - 1, Number(ctx.lv) || 2, `${st.id}:${st.n}`), ctx.me) : null); } });
+function ghBotGameLevel(id) { try { const v = parseInt(localStorage.getItem(`zchat-bot-lv:${id}`) || '', 10); return v >= 1 && v <= 3 ? v : null; } catch { return null; } }
+function ghBotGameLevelSet(id, lv) { try { localStorage.setItem(`zchat-bot-lv:${id}`, String(lv)); } catch {} }
 SPECIAL_PREFIXES.push('zmatch:', 'ztour:');
 const ghBotIds = new Set();
 const ghBotTapAt = new Map();
@@ -51414,7 +51449,7 @@ function useGhBotDriver(bot, messages, uid, api) {
           return;
         }
         if (!dueFn(merged, bot.id)) { S.busy.delete(key); S.done.add(key); return; }
-        const lv = s0.lv || ghBotLevel();
+        const lv = s0.lv || ghBotGameLevel(s0.id) || ghBotLevel();
         apiRef.current.wait(true);
         const since = ghBotTapAt.get(key);
         ghBotTapAt.delete(key);
@@ -51426,7 +51461,7 @@ function useGhBotDriver(bot, messages, uid, api) {
           const fn = await ghBotEngine(s0.g);
           const next = fn ? fn(merged, { me: bot.id, lv, H: ghRules(), hist: e.hist }) : null;
           if (next) {
-            const res = await ghRpc('zchat_gh_bot_move', { p_bot: bot.id, p_after: e.m.id, p_content: encodeGameMessage({ ...next, lv }) });
+            const res = await ghRpc('zchat_gh_bot_move', { p_bot: bot.id, p_after: e.m.id, p_content: encodeGameMessage(entry && entry.raw ? next : { ...next, lv }) });
             row = res.data;
             err = res.error;
           }
@@ -53575,6 +53610,15 @@ function eventIcs(ev) {
   return ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:ZChat', 'BEGIN:VEVENT', `UID:${f(d)}${Math.random().toString(36).slice(2)}@zchat`, `DTSTAMP:${f(new Date())}`, `DTSTART:${f(d)}`, `DTEND:${f(end)}`, `SUMMARY:${esc(ev.t)}`, ev.p ? `LOCATION:${esc(ev.p)}` : '', ev.n ? `DESCRIPTION:${esc(ev.n)}` : '', 'END:VEVENT', 'END:VCALENDAR'].filter(Boolean).join('\r\n');
 }
 const RSVP_OPTIONS = [['Going', 'green'], ['Maybe', 'gold'], ["Can't go", 'white']];
+function RetiredCard({ label }) {
+  const { theme } = useTheme();
+  return (
+    <div style={{ minWidth: 200, maxWidth: 260, padding: '12px 14px', borderRadius: 16, background: theme.dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.045)', fontFamily: FONT, lineHeight: 1.4 }}>
+      <div style={{ fontWeight: 700, color: theme.ink, fontSize: 14 }}>{label}</div>
+      <div style={{ marginTop: 2, color: theme.muted, fontSize: 13.5 }}>This is no longer available in ZChat.</div>
+    </div>
+  );
+}
 function EventCard({ ev, votes, myId, onVote, onShowVotes }) {
   const { theme } = useTheme();
   const d = eventDate(ev);
@@ -57654,7 +57698,7 @@ Object.assign(GAME_RULES, {
   chess: { how: ['The friend you challenge plays white and moves first. Your pieces are always at the bottom.', 'Tap one of your pieces to see where it can go, then tap a square.', 'Castling, en passant and promotion all work. A pawn that reaches the far side picks a new piece.', 'You can offer a draw after your move, or resign at any time.'], win: 'Checkmate their king. Stalemate, three repeats of a position, fifty moves without a capture or pawn move, or too few pieces to mate end in a draw.' },
   ckr: { how: ['White moves first. Pieces move one square diagonally forward.', 'Taking is a must. Jump over a piece to take it, and keep jumping if you can. When there are choices you must take the most pieces.', 'Ordinary pieces can take backwards too.', 'A piece that ends its move on the far row becomes a king. Kings fly any distance along a diagonal.'], win: 'Take all their pieces or leave them with no move. Twenty five moves in a row of only kings moving, with nothing taken, is a draw.' },
   pool: { how: ['The friend you challenge breaks. Drag the white ball behind the line to place it.', 'Touch the table to aim. The dotted line shows where the white ball goes first.', 'Pull the power bar back and let go to shoot. Tap the small ball for spin.', 'The first ball you pot after the break makes your group, spots or stripes. Pot one of yours and you go again.'], win: 'Clear your group, then pot the black. Potting the white or hitting their ball first gives them the white ball anywhere. Potting the black too early loses.' },
-  golf: { how: ['Nine short holes. You both play each hole, one after the other.', 'Drag back from the ball like a slingshot and let go to putt. A longer pull hits harder.', 'Arrows show slopes, sand slows you down, pink bumpers bounce.', 'After six putts the ball is picked up and the hole counts seven.'], win: 'Fewest strokes after nine holes wins.' },
+  golf: { how: ['Nine holes. You both play each hole, one after the other.', 'Drag back from the ball like a slingshot and let go to putt. A longer pull hits harder.', 'Hills and slopes bend the roll, sand slows the ball down and red bumpers bounce it back. A ball in the water goes back to where you hit it from.', 'Roll in gently. A fast ball can skip over the cup. After six putts the ball is picked up and the hole counts seven.'], win: 'Fewest strokes after nine holes wins.' },
   sdk: { how: ['Fill the grid so every row, column and box has the numbers 1 to 9 once.', 'Tap a square, then a number. Turn on pencil to jot small notes.', 'Undo goes back one step. Turn on show mistakes if you want wrong numbers marked.', 'In a race you both get the same puzzle. Your time starts when you first open it.'], win: 'Solve the puzzle. In a race, the faster time wins. Times show only after you finish.' },
   jig: { how: ['Pick a photo and how many pieces. Your friend gets it as a jigsaw.', 'Drag pieces onto the board. A piece clicks into place when it is close to its spot.', 'Leave and come back any time. Your pieces stay where you put them.'], win: 'Place every piece to reveal the photo. You both see the time it took.' },
   xw: { how: ['You both solve the same crossword at the same time.', 'Tap a square, then type. Tap it again to switch between across and down.', 'Your letters and your friend’s letters show in your own colours, and so do your cursors.', 'Use check to test a letter or a whole word whenever you like.'], win: 'Fill every square with the right letter together.' },
@@ -57681,7 +57725,59 @@ Object.assign(GAME_RULES, {
   if (cg) { if (!cg[1].includes('zap')) cg[1].unshift('zap'); } else FRIEND_GAME_GROUPS.push(['Cards', ['zap']]);
   const old = GH_GROUP_MORE.findIndex((x) => x.k === 'ccard');
   if (old >= 0) GH_GROUP_MORE.splice(old, 1);
-  ghGroupMore({ k: 'zap', sub: 'Match the colour or number, 2 to 4 players', open: (g) => { if (g && g1Mem.host) g1Mem.host.begin({ __group: true, id: g.id, name: g.name, avatar: g.avatar }, 'zap'); } });
+  ghGroupMore({ k: 'zap', sub: 'Match the colour or number, 2 to 4 players', open: (g) => { if (g) zapModeAsk({ __group: true, id: g.id, name: g.name, avatar: g.avatar }, null, (md) => { if (g1Mem.host) g1Mem.host.begin({ __group: true, id: g.id, name: g.name, avatar: g.avatar }, 'zap', null, { md }); }); } });
+}
+GAME_RULES.zapMayhem = {
+  how: [
+    'Mayhem uses a bigger deck. Next to the usual cards there are colour draw fours, skip everyone and discard all, plus wild cards that reverse and draw four, draw six, draw ten or spin the colour roulette.',
+    'Draw cards stack. When one is played on you, answer with a draw card of the same or higher value and the total moves on. If you cannot, tap the deck and take it all.',
+    'Nothing to play? You keep drawing until a card fits. Then play it or pass.',
+    'Skip everyone gives you another turn. Discard all drops every card of that colour from your hand. Colour roulette makes the next player draw until they hit the colour you picked.',
+    'A seven swaps hands with another player. A zero passes every hand along in the direction of play.',
+    'Reach 25 cards and you are out.',
+  ],
+  win: 'Be the first to play every card, or the last one left at the table. You score the points left in the other hands.',
+};
+const zapModeBus = { set: null };
+export function zapModeAsk(profile, extra, go) { if (zapModeBus.set) zapModeBus.set({ profile, extra, go }); else go('classic'); }
+function ZapModeHost() {
+  const [ask, setAsk] = useState(null);
+  useEffect(() => { zapModeBus.set = setAsk; return () => { if (zapModeBus.set === setAsk) zapModeBus.set = null; }; }, []);
+  if (!ask) return null;
+  const pick = (md) => { const a = ask; setAsk(null); playUiSound('tap'); hapticTap(); a.go(md); };
+  return <ZapModeSheet onClose={() => setAsk(null)} onPick={pick} />;
+}
+function ZapModeSheet({ onClose, onPick }) {
+  const { theme } = useTheme();
+  useBackClose(true, onClose);
+  const row = (md, title, text, art) => (
+    <div role="button" aria-label={title} onClick={() => onPick(md)} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', gap: 14, padding: 12, borderRadius: 20, cursor: 'pointer', background: theme.soft || theme.rowBg }}>
+      <div style={{ width: 64, height: 64, borderRadius: 16, overflow: 'hidden', flexShrink: 0, position: 'relative' }}>{art}</div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 16, fontWeight: 850, color: theme.ink }}>{title}</div>
+        <div style={{ fontSize: 13, color: theme.muted, marginTop: 2, lineHeight: 1.4 }}>{text}</div>
+      </div>
+    </div>
+  );
+  return (
+    <Portal>
+      <div onClick={onClose} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 120, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontFamily: FONT, background: 'rgba(0,0,0,0.5)' }}>
+        <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ width: '100%', maxWidth: 480, background: theme.panelBg, borderRadius: '26px 26px 0 0', padding: '10px 16px calc(18px + env(safe-area-inset-bottom))' }}>
+          <div style={{ display: 'flex', justifyContent: 'center', paddingBottom: 8 }}><div style={{ width: 38, height: 4, borderRadius: 2, background: theme.border }} /></div>
+          <div style={{ fontSize: 20, fontWeight: 850, color: theme.ink, padding: '4px 4px 12px', letterSpacing: '-0.015em' }}>Pick how to play Zap</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {row('classic', 'Classic', 'The rules everyone knows. Match the colour or the number.', <GameArt k="zap" width={64} height={64} radius={0} />)}
+            {row('mayhem', 'Mayhem', 'Draw six and draw ten, stacking, swaps and skip everyone. Out at 25 cards.', <div style={{ position: 'relative', width: 64, height: 64, background: 'radial-gradient(circle at 30% 25%, #4A1D3F, #160A1A)' }}><img alt="" src={zapMiniCard('#E2405F')} style={{ position: 'absolute', left: 9, top: 10, width: 28, transform: 'rotate(-14deg)' }} /><img alt="" src={zapMiniCard('#241B3D', '+10')} style={{ position: 'absolute', left: 25, top: 8, width: 30, transform: 'rotate(10deg)' }} /></div>)}
+          </div>
+        </div>
+      </div>
+    </Portal>
+  );
+}
+function zapMiniCard(fill, label) {
+  const t = label || '+6';
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 90"><rect width="60" height="90" rx="7" fill="#FFFFFF"/><rect x="3" y="3" width="54" height="84" rx="5" fill="${fill}"/><ellipse cx="30" cy="45" rx="20" ry="26" fill="#FFFFFF"/><text x="30" y="52" text-anchor="middle" font-family="-apple-system, Arial, sans-serif" font-weight="900" font-size="${t.length > 2 ? 17 : 20}" fill="${fill === '#241B3D' ? '#241B3D' : '#8E1631'}">${t}</text></svg>`;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
 export const GB_ART = {
   squish: (id) => (
@@ -57751,8 +57847,8 @@ function gbCarromFresh(base) {
   }
   return { ...base, t: base.o, b: out, wc: 'o', qp: null, qc: null, ls: null, ev: null, w: null, why: null, pts: 0, lb: null };
 }
-function gbZapLobby(id, myId, isGroup) {
-  return { g: 'zap', id, n: 0, st: 'lobby', p: [myId], by: myId, mx: isGroup ? 4 : 2, t: null, w: null };
+function gbZapLobby(id, myId, isGroup, md) {
+  return { g: 'zap', id, n: 0, st: 'lobby', p: [myId], by: myId, mx: isGroup ? 4 : 2, t: null, w: null, ...(md === 'mayhem' ? { md: 'mayhem' } : {}) };
 }
 function gbFresh(kind, base) {
   if (kind === 'crm') return gbCarromFresh(base);
@@ -58267,29 +58363,34 @@ function G1SudokuCard({ state, myId, live, fresh, peerName }) {
 }
 
 function useG1Image(u, onFail) {
-  const url = useMediaUrl(u);
   const [img, setImg] = useState(null);
   const [round, setRound] = useState(0);
   const failRef = useRef(onFail);
   failRef.current = onFail;
   useEffect(() => {
-    if (!url) { setImg(null); return undefined; }
+    if (!u) { setImg(null); return undefined; }
     let alive = true;
-    const im = new Image();
-    im.decoding = 'async';
-    const t = setTimeout(() => { if (alive && failRef.current) failRef.current(() => setRound((n) => n + 1)); }, 20000);
-    im.onload = () => { clearTimeout(t); if (alive) setImg(im); };
-    im.onerror = () => { clearTimeout(t); if (alive) { setImg(null); if (failRef.current) failRef.current(() => setRound((n) => n + 1)); } };
-    im.src = round ? `${url}${url.indexOf('?') >= 0 ? '&' : '?'}r=${round}` : url;
+    const fail = () => { if (alive && failRef.current) failRef.current(() => setRound((n) => n + 1)); };
+    const t = setTimeout(fail, 22000);
+    Promise.race([resolveMedia(u), new Promise((r) => setTimeout(() => r(null), 15000))]).then((url) => {
+      if (!alive) return;
+      if (!url) { clearTimeout(t); setImg(null); fail(); return; }
+      const im = new Image();
+      im.decoding = 'async';
+      im.onload = () => { clearTimeout(t); if (alive) setImg(im); };
+      im.onerror = () => { clearTimeout(t); if (alive) { setImg(null); fail(); } };
+      im.src = round ? `${url}${url.indexOf('?') >= 0 ? '&' : '?'}r=${round}` : url;
+    }, () => { clearTimeout(t); fail(); });
     return () => { alive = false; clearTimeout(t); };
-  }, [url, round]);
+  }, [u, round]);
   return img;
 }
 function G1JigsawCard({ state, myId, live, fresh, peerName }) {
   const Z = useG1();
   const { theme } = useTheme();
   const st = g1Shown(state, live);
-  const img = useG1Image(st.u);
+  const [imgFail, setImgFail] = useState(null);
+  const img = useG1Image(st.u, (retry) => setImgFail(() => retry));
   const isSender = myId === st.x;
   const solver = st.o;
   const peer = peerName || g1First(isSender ? st.o : st.x, 'They');
@@ -58304,6 +58405,11 @@ function G1JigsawCard({ state, myId, live, fresh, peerName }) {
     <GameCardShell k="jig" width={240} live={live} title="Photo jigsaw" status={status} hot={live && !solved && !isSender}>
       <div role={!isSender && !solved ? 'button' : undefined} aria-label={!isSender && !solved ? 'Solve the jigsaw' : undefined} onClick={() => { if (!isSender && !solved && g1Mem.host) g1Mem.host.open(st.id); }} style={{ width: PW, height: H, margin: '0 auto', borderRadius: 12, overflow: 'hidden', background: theme.dark ? '#262036' : '#EEE9FB', cursor: !isSender && !solved ? 'pointer' : 'default' }}>
         {Z && img && <G1Canvas w={PW} h={H} deps={[Z, img, solved || isSender, theme.dark]} draw={(cv) => Z.jig.preview(cv, PW, H, img, { pieces: st.pc, seed: st.sd || st.id, solved: solved || isSender, dark: theme.dark })} label={solved || isSender ? 'The photo' : 'Scrambled pieces'} />}
+        {!img && imgFail && (
+          <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={(e) => e.stopPropagation()}>
+            <LoadFail small onRetry={() => { const r = imgFail; setImgFail(null); r(); }} />
+          </div>
+        )}
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, fontSize: 12, color: theme.muted, fontWeight: 700 }}>
         <span>{st.pc} pieces</span>
@@ -58382,8 +58488,8 @@ function RoomGameCard({ state, myId, live, peerName, onRematch }) {
   const { theme } = useTheme();
   useG1Names();
   const g = state.g;
-  const title = GAME_TITLES[g] || 'Game';
   const zap = g === 'zap';
+  const title = zap && state.md === 'mayhem' ? 'Zap Mayhem' : (GAME_TITLES[g] || 'Game');
   const seats = zap && Array.isArray(state.p) ? state.p : [];
   const hostCtx = zap && g1Mem.host && g1Mem.host.ctx ? g1Mem.host.ctx() : null;
   const player = zap ? seats.includes(myId) : state.x === myId || state.o === myId;
@@ -58399,7 +58505,7 @@ function RoomGameCard({ state, myId, live, peerName, onRematch }) {
   useEffect(() => { if (live) warmGameRoom(g); }, [live, g]);
   const myCards = zap && player ? (state.cnt || [])[seats.indexOf(myId)] : null;
   const status = done ? (out === 'win' ? 'You won' : out === 'draw' ? 'Draw' : out === 'none' ? 'Game ended' : `${first} won`) : !live ? 'Earlier move' : lobby ? (canJoin ? `${first} wants to play` : `Waiting for ${first}`) : state.t ? (state.t === myId ? 'Your turn' : `${first}'s turn`) : 'Your turn';
-  const sub = zap ? (done ? (state.ended ? (state.ended === myId ? 'You ended the game' : `${first} ended the game`) : `${countWord(state.pts || 0, 'point', 'points')}`) : lobby ? 'Seven cards each' : myCards != null ? `${countWord(myCards, 'card', 'cards')} in your hand` : `Move ${state.n || 0}`)
+  const sub = zap ? (done ? (state.ended ? (state.ended === myId ? 'You ended the game' : `${first} ended the game`) : `${countWord(state.pts || 0, 'point', 'points')}`) : lobby ? (state.md === 'mayhem' ? 'Stack draws, out at 25 cards' : 'Seven cards each') : myCards != null ? `${countWord(myCards, 'card', 'cards')} in your hand` : `Move ${state.n || 0}`)
     : done ? (state.why && ROOM_WHY[state.why] ? (state.why === 'resign' ? (out === 'win' ? `${first} resigned` : 'You resigned') : ROOM_WHY[state.why]) : 'Game over') : (state.n || 0) === 0 ? (state.x === myId ? `${first} starts` : 'New game') : `Move ${state.n}`;
   const open = () => { playUiSound('tap'); hapticTap(); if (g1Mem.host) g1Mem.host.open(state.id, canJoin ? { join: true } : null); };
   const names = g1Mem.names || {};
@@ -58483,7 +58589,7 @@ function g1Fresh(Z, kind, base, opt) {
   return null;
 }
 async function g1Rematch(c, st, setSetup) {
-  if (st.g === 'zap') { if (g1Mem.seen.get(`re:${st.id}`)) return; g1Mem.seen.set(`re:${st.id}`, 1); g1HostSend(c, gbZapLobby(stableUuid(`next|${st.id}`), c.myId, !!c.group)); return; }
+  if (st.g === 'zap') { if (g1Mem.seen.get(`re:${st.id}`)) return; g1Mem.seen.set(`re:${st.id}`, 1); g1HostSend(c, gbZapLobby(stableUuid(`next|${st.id}`), c.myId, !!c.group, st.md)); return; }
   const Z = GB_KINDS.includes(st.g) ? true : st.g === 'pool' ? await g1PoolKit() : await g1Load();
   if (!Z || g1Mem.seen.get(`re:${st.id}`)) return;
   if (st.g === 'jig') { const pid = st.x === c.myId ? st.o : st.x; setSetup({ profile: c.peer && c.peer.id === pid ? c.peer : { id: pid, name: ga1Name(pid) }, kind: 'jig' }); return; }
@@ -58529,10 +58635,15 @@ function G1Setup({ setup, onClose, onDone, c }) {
   const [busy, setBusy] = useState(false);
   const fileRef = useRef(null);
   useEffect(() => () => { if (photo && photo.url) URL.revokeObjectURL(photo.url); }, [photo]);
-  const pick = (e) => {
-    const f = e.target.files && e.target.files[0];
+  const pick = async (e) => {
+    const f0 = e.target.files && e.target.files[0];
     e.target.value = '';
-    if (!f || !/^image\//.test(f.type)) return;
+    if (!f0 || !(/^image\//.test(f0.type) || (!f0.type && /\.(heic|heif|jpe?g|png|webp|gif|avif)$/i.test(f0.name || '')))) return;
+    let f = f0;
+    try {
+      const buf = await f0.arrayBuffer();
+      if (buf && buf.byteLength) f = new File([buf], f0.name || 'photo', { type: f0.type || (/\.hei[cf]$/i.test(f0.name || '') ? 'image/heic' : 'image/jpeg') });
+    } catch {}
     const url = URL.createObjectURL(f);
     const im = new Image();
     im.onload = () => setPhoto({ file: f, url, ar: Math.max(0.5, Math.min(2, im.naturalWidth / Math.max(1, im.naturalHeight))) });
@@ -58545,6 +58656,7 @@ function G1Setup({ setup, onClose, onDone, c }) {
       if (!photo) { if (fileRef.current) fileRef.current.click(); return; }
       setBusy(true);
       const small = await shrinkChatPhoto(photo.file, photo.url, 1280);
+      if (!small || !small.size) { setBusy(false); appSnack('That photo could not be read. Try another photo.'); return; }
       const up = await uploadChatMedia(small, c.myId);
       if (!up || up.error || !up.url) { setBusy(false); appSnack('The photo did not upload. Check your connection and try again.'); return; }
       const st = g1Fresh(Z, 'jig', g1NewBase(c, 'jig', profile.id), { u: up.url, pc, ar: photo.ar });
@@ -58588,16 +58700,18 @@ async function g1StartIn(c, profile, st) {
   if (!c.peer || c.peer.id !== profile.id || c.group) { try { await c.openChat(profile, null); } catch {} }
   return g1HostSend({ ...c, peer: profile, group: null }, st);
 }
-async function g1Begin(c, profile, kind, setSetup) {
+async function g1Begin(c, profile, kind, setSetup, gid, opt) {
   const roomOpen = (st) => { if (st && !profile.__group && ROOM_GAME_KEYS.includes(st.g) && g1Mem.host && g1Mem.host.openWhenReady) g1Mem.host.openWhenReady(st.id); };
-  if (kind === 'zap') { const st = gbZapLobby(newClientId(), c.myId, !!profile.__group); g1StartIn(c, profile, st); roomOpen(st); return; }
-  if (GB_KINDS.includes(kind)) { const st = gbFresh(kind, g1NewBase(c, kind, profile.id)); g1StartIn(c, profile, st); roomOpen(st); return; }
-  if (['sdk', 'jig', 'xw'].includes(kind)) { g1Load(); setSetup({ profile, kind }); return; }
+  const baseOf = () => ({ ...g1NewBase(c, kind, profile.id), ...(gid ? { id: gid } : {}) });
+  if (kind === 'zap') { const st = gbZapLobby(gid || newClientId(), c.myId, !!profile.__group, opt && opt.md); const p = g1StartIn(c, profile, st); roomOpen(st); return p; }
+  if (GB_KINDS.includes(kind)) { const st = gbFresh(kind, baseOf()); const p = g1StartIn(c, profile, st); roomOpen(st); return p; }
+  if (['sdk', 'jig', 'xw'].includes(kind)) { g1Load(); setSetup({ profile, kind }); return false; }
   const Z = kind === 'pool' ? await g1PoolKit() : await g1Load();
-  if (!Z) { appSnack('The game did not load. Check your connection and try again.'); return; }
-  const st = g1Fresh(Z, kind, g1NewBase(c, kind, profile.id));
-  g1StartIn(c, profile, st);
+  if (!Z) { appSnack('The game did not load. Check your connection and try again.'); return false; }
+  const st = g1Fresh(Z, kind, baseOf());
+  const p = g1StartIn(c, profile, st);
   if (st && !profile.__group && ROOM_GAME_KEYS.includes(kind) && g1Mem.host && g1Mem.host.openWhenReady) g1Mem.host.openWhenReady(st.id);
+  return p;
 }
 
 function G1Host({ me, myId, messages, peer, group, members, sendDm, sendGroup, openChat, patchMessage, notify, onRematchGame }) {
@@ -58612,7 +58726,7 @@ function G1Host({ me, myId, messages, peer, group, members, sendDm, sendGroup, o
   ref.current = { me, myId, messages, peer, group, members, sendDm, sendGroup, openChat, patchMessage, notify, onRematchGame, openSolo: (lv) => setSolo({ lv, at: Date.now() }) };
   useEffect(() => {
     const api = {
-      begin: (profile, kind) => g1Begin(ref.current, profile, kind, setSetup),
+      begin: (profile, kind, gid, opt) => g1Begin(ref.current, profile, kind, setSetup, gid, opt),
       open: (id, how) => { g1LoadFor(ref.current.messages, id); g1Mem.seen.set(id, 1); setOpen({ id, next: null, join: !!(how && how.join) }); },
       openWhenReady: (id) => { want.current = { id, at: Date.now() }; setPing((x) => x + 1); },
       send: (next, opts) => g1HostSend(ref.current, next, opts),
@@ -58752,7 +58866,13 @@ function G1JigsawPage({ st, myId, peerName, onClose }) {
   const Z = useG1();
   const { theme } = useTheme();
   const [imgFail, setImgFail] = useState(null);
+  const [zFail, setZFail] = useState(false);
   const img = useG1Image(st.u, (retry) => setImgFail(() => retry));
+  useEffect(() => {
+    if (Z) { setZFail(false); return undefined; }
+    const t = setTimeout(() => setZFail(true), 12000);
+    return () => clearTimeout(t);
+  }, [Z, zFail]);
   const hostRef = useRef(null);
   const [placed, setPlaced] = useState(0);
   const [doneMs, setDoneMs] = useState(st.w === 'done' ? st.tm : null);
@@ -58790,7 +58910,16 @@ function G1JigsawPage({ st, myId, peerName, onClose }) {
   return (
     <FullPage title="Photo jigsaw" subtitle={doneMs != null ? `Solved in ${g1Clock(doneMs)}` : `From ${peer}, ${placed} of ${st.pc} placed`} onBack={onClose} zIndex={63} pad={false}
       bodyStyle={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', paddingBottom: 0 }}>
-      <div ref={hostRef} style={{ flex: 1, minHeight: 0, position: 'relative' }}>{!img && imgFail && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><LoadFail small onRetry={() => { const r = imgFail; setImgFail(null); r(); }} /></div>}{(!Z || !img) && !imgFail && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Spinner size={22} color={theme.muted} /></div>}</div>
+      <div ref={hostRef} style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+        {!img && imgFail && (
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '0 28px', textAlign: 'center' }}>
+            <LoadFail small onRetry={() => { const r = imgFail; setImgFail(null); r(); }} />
+            <div style={{ fontSize: 13.5, color: theme.muted, lineHeight: 1.45 }}>{`Still not loading? Ask ${peer} to send the photo again.`}</div>
+          </div>
+        )}
+        {img && !Z && zFail && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><LoadFail small onRetry={() => { setZFail(false); g1Load(); }} /></div>}
+        {(!Z || !img) && !imgFail && !(img && zFail) && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Spinner size={22} color={theme.muted} /></div>}
+      </div>
       <div style={{ flexShrink: 0, padding: '8px 16px calc(14px + env(safe-area-inset-bottom))', fontSize: 13.5, color: theme.muted, textAlign: 'center', fontWeight: doneMs != null ? 800 : 600 }}>
         {doneMs != null ? `${peer} sees your time now` : 'Drag a piece close to its spot and it clicks in'}
       </div>
@@ -58953,7 +59082,7 @@ export function ScanDocIcon({ size = 24, color = 'currentColor', strokeWidth = 2
   );
 }
 
-function AttachSheet({ onAiImage, onDrawTogether, onSounds, onClose, onCamera, onGallery, onFile, onScan, onLocation, onGame, canGame, locating, onPoll, onEvent, onDoodle, onBuzz, onDice, onCollage, onVoiceType, onChecklist, onBill, onCountdown, onContact, onWifi, onRound, onWatch, onListen, onFocus, onTrade, onCapsule, onPlaylist, onSharedNote, onFindTime, onBoard, onGifMaker, onMeme, onBag }) {
+function AttachSheet({ onAiImage, onDrawTogether, onSounds, onClose, onCamera, onGallery, onFile, onScan, onLocation, onGame, canGame, locating, onPoll, onDoodle, onBuzz, onCollage, onVoiceType, onBill, onContact, onWifi, onRound, onWatch, onListen, onPlaylist, onSharedNote, onBoard, onGifMaker, onBooth, onLiveType, liveTypeOn }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
   const drag = useSheetDrag(onClose);
@@ -58973,60 +59102,77 @@ function AttachSheet({ onAiImage, onDrawTogether, onSounds, onClose, onCamera, o
     create: [
       onAiImage ? { k: 'ai', label: 'Create with AI', short: 'AI image', icon: <MakeImageGlyph />, on: onAiImage } : null,
       onGifMaker ? { k: 'gifmaker', label: 'Make a GIF', short: 'GIF', icon: <MakeGifIcon />, on: onGifMaker } : null,
-      onMeme ? { k: 'meme', label: 'Meme', icon: <MemeIcon />, on: onMeme } : null,
       onPoll ? { k: 'poll', label: 'Poll', icon: <PollIcon />, on: onPoll } : null,
-      onEvent ? { k: 'event', label: 'Event', icon: <CalendarIcon />, on: onEvent } : null,
-      onFindTime ? { k: 'findtime', label: 'Find a time', icon: <FindTimeIcon />, on: onFindTime } : null,
-      onChecklist ? { k: 'list', label: 'Checklist', icon: <ChecklistIcon />, on: onChecklist } : null,
       onSharedNote ? { k: 'snote', label: 'Shared note', short: 'Note', icon: <NoteIcon />, on: onSharedNote } : null,
       onBoard ? { k: 'board', label: 'Board', icon: <BoardIcon />, on: onBoard } : null,
       onBill ? { k: 'bill', label: 'Split bill', icon: <BillIcon />, on: onBill } : null,
-      onCountdown ? { k: 'count', label: 'Countdown', icon: <CountdownIcon />, on: onCountdown } : null,
-      onCapsule ? { k: 'capsule', label: 'Time capsule', short: 'Capsule', icon: <CapsuleIcon />, on: onCapsule } : null,
-      onTrade ? { k: 'trade', label: 'Trade items', short: 'Trade', icon: <TradeIcon />, on: onTrade } : null,
-      onBag ? { k: 'bag', label: 'Coin gift bag', short: 'Gift bag', icon: <GiftBagIcon />, on: onBag } : null,
       onCollage ? { k: 'collage', label: 'Collage', icon: <LayoutDashboard />, on: onCollage } : null,
     ].filter(Boolean),
     fun: [
       canGame ? { k: 'game', label: 'Games', icon: <GamepadIcon />, on: onGame } : null,
-      onDice ? { k: 'dice', label: 'Dice and coin', short: 'Dice', icon: <DiceLineIcon />, on: onDice } : null,
+      onBooth ? { k: 'booth', label: 'Photo booth', short: 'Booth', icon: <BoothIcon />, on: onBooth } : null,
+      onLiveType ? { k: 'livetype', label: liveTypeOn ? 'Live typing on' : 'Live typing', short: 'Live typing', icon: <CmLiveTypingIcon />, on: onLiveType } : null,
       onWatch ? { k: 'watch', label: 'Watch together', short: 'Watch', icon: <WatchIcon />, on: onWatch } : null,
       onListen ? { k: 'listen', label: 'Listen together', short: 'Listen', icon: <ListenIcon />, on: onListen } : null,
       onPlaylist ? { k: 'playlist', label: 'Our playlist', short: 'Playlist', icon: <PlaylistIcon />, on: onPlaylist } : null,
-      onFocus ? { k: 'focus', label: 'Focus together', short: 'Focus', icon: <FocusIcon />, on: onFocus } : null,
       onDrawTogether ? { k: 'drawtogether', label: 'Draw together', short: 'Draw', icon: <DrawTogetherIcon />, on: onDrawTogether } : null,
       onDoodle ? { k: 'doodle', label: 'Paint', icon: <DoodleIcon />, on: onDoodle } : null,
       onSounds ? { k: 'sounds', label: 'Sounds', icon: <SoundsIcon />, on: onSounds } : null,
       onBuzz ? { k: 'buzz', label: 'Buzz', icon: <BuzzIcon />, on: onBuzz } : null,
     ].filter(Boolean),
   };
-  const tabs = [['share', 'Share'], ['create', 'Create'], ['fun', 'Fun']].filter(([k]) => groups[k].length);
-  const [tab, setTab] = useState(() => (tabs.some(([k]) => k === attachTabMem) ? attachTabMem : (tabs[0] ? tabs[0][0] : 'share')));
-  const pick = (k) => { attachTabMem = k; setTab(k); hapticTap(); };
-  const items = groups[tab] || [];
+  const primaryKeys = ['gallery', 'camera', 'file', 'location'];
+  const tint = { gallery: '#6B48F0', camera: '#C2416B', file: '#2F6FD6', location: '#17936A' };
+  const all = [...groups.share, ...groups.create, ...groups.fun];
+  const primary = primaryKeys.map((k) => all.find((x) => x.k === k)).filter(Boolean);
+  const more = groups.share.filter((x) => !primaryKeys.includes(x.k));
+  const [showMore, setShowMore] = useState(false);
+  const fresh = { booth: true, livetype: true };
+  const run = (it) => { if (it.busy) return; playUiSound('tap'); it.on(); };
+  const big = (it) => (
+    <div key={it.k} role="button" aria-label={it.label} onClick={() => run(it)} className="zchat-press"
+      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, cursor: it.busy ? 'default' : 'pointer', WebkitTapHighlightColor: 'transparent', minWidth: 0 }}>
+      <div style={{ width: 60, height: 60, borderRadius: 18, background: tint[it.k] || theme.coralDeep || theme.coral, color: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        {it.busy ? <Spinner size={20} color="#FFFFFF" /> : React.cloneElement(it.icon, { size: 26, strokeWidth: 1.8, color: '#FFFFFF' })}
+      </div>
+      <div style={{ fontSize: 12.5, fontWeight: 600, color: theme.ink, maxWidth: '100%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.short && it.k === 'gallery' ? 'Photos' : (it.short || it.label)}</div>
+    </div>
+  );
+  const small = (it) => (
+    <div key={it.k} role="button" aria-label={it.label} onClick={() => run(it)} className="zchat-press"
+      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, cursor: it.busy ? 'default' : 'pointer', WebkitTapHighlightColor: 'transparent', minWidth: 0 }}>
+      <div style={{ position: 'relative', width: 56, height: 56, borderRadius: 16, background: theme.soft, color: theme.ink, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        {it.busy ? <Spinner size={18} color={theme.muted} /> : React.cloneElement(it.icon, { size: 24, strokeWidth: 1.7, color: theme.ink })}
+        {fresh[it.k] && <span style={{ position: 'absolute', top: -6, right: -9, fontSize: 11, fontWeight: 700, lineHeight: 1, padding: '3px 6px', borderRadius: 7, background: theme.coralDeep || theme.coral, color: '#FFFFFF', boxShadow: `0 0 0 2px ${theme.panelBg}` }}>New</span>}
+      </div>
+      <div style={{ fontSize: 12, fontWeight: 500, color: theme.muted, maxWidth: '100%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.short || it.label}</div>
+    </div>
+  );
+  const grid = { display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', rowGap: 16, columnGap: 6 };
+  const section = (title, list) => (
+    <div style={{ marginTop: 18 }}>
+      <div style={{ fontSize: 13, fontWeight: 650, color: theme.muted, margin: '0 4px 12px' }}>{title}</div>
+      <div style={grid}>{list.map(small)}</div>
+    </div>
+  );
   return (
     <Portal>
-      <div onClick={onClose} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 94, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontFamily: FONT }}>
-        <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" {...drag.sheetProps} style={{ ...drag.sheetStyle, width: '100%', maxWidth: 480, maxHeight: 'calc(100% - 40px)', overflowY: 'auto', background: theme.panelBg, borderRadius: '22px 22px 0 0', paddingBottom: 'calc(10px + env(safe-area-inset-bottom))', boxSizing: 'border-box' }}>
-          <div data-sheet-handle="true" style={{ display: 'flex', justifyContent: 'center', padding: '8px 0 10px', touchAction: 'none' }}><div style={{ width: 36, height: 4, borderRadius: 2, background: theme.border }} /></div>
-          {tabs.length > 1 && (
-            <div role="tablist" aria-label="Attach" style={{ display: 'flex', gap: 4, margin: '0 14px 8px', padding: 3, borderRadius: 12, background: theme.dark ? 'rgba(255, 255, 255, 0.07)' : 'rgba(0, 0, 0, 0.05)' }}>
-              {tabs.map(([k, l]) => (
-                <div key={k} role="tab" aria-selected={tab === k} aria-label={l} onClick={() => pick(k)} style={{ flex: 1, height: 32, borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', color: tab === k ? theme.ink : theme.muted, background: tab === k ? (theme.dark ? '#2C2B33' : '#FFFFFF') : 'transparent', boxShadow: tab === k ? '0 1px 3px rgba(0, 0, 0, 0.12)' : 'none', transition: 'background 0.16s ease, color 0.16s ease' }}>{l}</div>
-              ))}
-            </div>
-          )}
-          <div key={tab} className="zchat-fade" style={{ display: 'grid', gridTemplateColumns: `repeat(${typeof window !== 'undefined' && window.innerWidth < 360 ? 4 : 5}, minmax(0, 1fr))`, rowGap: 2, columnGap: 2, padding: '2px 8px 4px' }}>
-            {items.map((it) => (
-              <div key={it.k} role="button" aria-label={it.label} onClick={() => { if (it.busy) return; playUiSound('tap'); it.on(); }} className="zchat-press zplain-tile"
-                style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 7, padding: '10px 2px 9px', borderRadius: 14, cursor: it.busy ? 'default' : 'pointer', WebkitTapHighlightColor: 'transparent', minWidth: 0 }}>
-                <div style={{ height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.ink, flexShrink: 0 }}>
-                  {it.busy ? <Spinner size={18} color={theme.muted} /> : React.cloneElement(it.icon, { size: 25, strokeWidth: 1.6, color: theme.ink })}
-                </div>
-                <div style={{ fontSize: 11.5, fontWeight: 600, color: theme.ink, textAlign: 'center', lineHeight: 1.2, maxWidth: '100%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.short || it.label}</div>
+      <div onClick={onClose} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 94, background: 'rgba(8,6,14,0.5)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontFamily: FONT }}>
+        <div role="dialog" aria-label="Attach" onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" {...drag.sheetProps} style={{ ...drag.sheetStyle, width: '100%', maxWidth: 480, maxHeight: 'calc(100% - 40px)', overflowY: 'auto', background: theme.panelBg, borderRadius: '26px 26px 0 0', padding: '0 16px calc(18px + env(safe-area-inset-bottom))', boxSizing: 'border-box' }}>
+          <div data-sheet-handle="true" style={{ display: 'flex', justifyContent: 'center', padding: '8px 0 14px', touchAction: 'none' }}><div style={{ width: 38, height: 5, borderRadius: 3, background: theme.border }} /></div>
+          {primary.length > 0 && <div style={grid}>{primary.map(big)}</div>}
+          {groups.fun.length > 0 && section('Do together', groups.fun)}
+          {groups.create.length > 0 && section('Make', groups.create)}
+          {more.length > 0 && (showMore ? section('More', more) : (
+            <div role="button" aria-label="Show more options" onClick={() => { hapticTap(); setShowMore(true); }} className="zchat-press"
+              style={{ marginTop: 18, display: 'flex', alignItems: 'center', gap: 12, minHeight: 56, padding: '8px 14px', boxSizing: 'border-box', borderRadius: 16, background: theme.soft, cursor: 'pointer' }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 15, fontWeight: 650, color: theme.ink }}>More</div>
+                <div style={{ fontSize: 12.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 1 }}>{more.map((x) => x.short || x.label).join(', ')}</div>
               </div>
-            ))}
-          </div>
+              <ChevronRight size={18} color={theme.muted} />
+            </div>
+          ))}
         </div>
       </div>
     </Portal>
@@ -60352,6 +60498,10 @@ function AppInner() {
           } catch {}
         }
       }
+      if (!found) {
+        const lastUid = authLastUid();
+        if (lastUid) found = await rescueSession(lastUid);
+      }
       setSession((prev) => (found || (prev === undefined ? null : prev)));
     })();
     const unstickTimer = setTimeout(() => {
@@ -60361,7 +60511,15 @@ function AppInner() {
       if (forgetting) return;
       if (sess && sess.user && switchToRef.current === sess.user.id && event !== 'SIGNED_OUT') return;
       if (event === 'PASSWORD_RECOVERY') setIsPasswordRecovery(true);
-      if (event === 'SIGNED_OUT') { setSession(null); return; }
+      if (event === 'SIGNED_OUT') {
+        const lastUid = authLastUid();
+        if (lastUid && !switchToRef.current && Date.now() - authLeft.at > 20000) {
+          rescueSession(lastUid).then((s) => { setSession(s || null); }, () => setSession(null));
+          return;
+        }
+        setSession(null);
+        return;
+      }
       if (!sess) {
         supabase.auth.refreshSession()
           .then(({ data }) => { if (data && data.session) setSession(data.session); })
@@ -60474,8 +60632,8 @@ function AppInner() {
   useEffect(() => {
     if (session?.user) {
       try {
-        if (localStorage.getItem('zchat-remember') === '0') localStorage.removeItem(`zchat-session-${session.user.id}`);
-        else localStorage.setItem(`zchat-session-${session.user.id}`, JSON.stringify({ access_token: session.access_token, refresh_token: session.refresh_token }));
+        if (localStorage.getItem('zchat-remember') === '0') { localStorage.removeItem(`zchat-session-${session.user.id}`); localStorage.removeItem('zchat-last-uid'); }
+        else { localStorage.setItem(`zchat-session-${session.user.id}`, JSON.stringify({ access_token: session.access_token, refresh_token: session.refresh_token })); localStorage.setItem('zchat-last-uid', session.user.id); }
       } catch {}
     }
   }, [session?.access_token]);
@@ -60637,19 +60795,22 @@ function AppInner() {
       onRemoveAccount={handleRemoveAccount}
       switchingAccountId={switchingAccountId}
     />
-    <LaunchTermsGate key={`terms-${session.user.id}`} uid={session.user.id} />
+    <LaunchTermsGate key={`terms-${session.user.id}`} uid={session.user.id} createdAt={session.user.created_at} />
     </>
   );
 }
 
-function LaunchTermsGate({ uid }) {
+const TERMS_GATE_FROM = Date.parse('2026-11-09T19:00:00Z');
+function LaunchTermsGate({ uid, createdAt }) {
   const [need, setNeed] = useState(null);
   useEffect(() => {
     if (!uid) return undefined;
+    if (!(Date.parse(createdAt || '') >= TERMS_GATE_FROM)) return undefined;
     const key = `zchat-terms-ok-${uid}`;
     try {
       const v = JSON.parse(localStorage.getItem(key) || 'null');
       if (v && v.v === TERMS_VERSION && Date.now() - Number(v.at || 0) < 7 * 86400000) return undefined;
+      if (Date.now() - Number(localStorage.getItem(`zchat-terms-later-${uid}`) || 0) < 3 * 86400000) return undefined;
     } catch {}
     let alive = true;
     const t = setTimeout(() => {
@@ -60665,7 +60826,8 @@ function LaunchTermsGate({ uid }) {
   if (!need) return null;
   return (
     <LaunchTermsSheet need={need} onDone={() => { try { localStorage.setItem(`zchat-terms-ok-${uid}`, JSON.stringify({ v: TERMS_VERSION, at: Date.now() })); } catch {} setNeed(null); }}
-      onLeave={async () => { try { await signOut(); } catch {} window.location.replace('/'); }} />
+      onLater={need.young ? null : () => { try { localStorage.setItem(`zchat-terms-later-${uid}`, String(Date.now())); } catch {} setNeed(null); }}
+      onLeave={async () => { try { await supabase.auth.signOut({ scope: 'local' }); } catch {} window.location.replace('/'); }} />
   );
 }
 

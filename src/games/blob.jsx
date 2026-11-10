@@ -1,6 +1,6 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { GameRoom, defineSfx, sfx, haptic, useGameKit, audioCtx, audioOut, musicOn } from './kit.jsx';
-import { clamp, makeCanvas, fitCanvas, grain, rrect, rng, noiseHit, tone, shade, tint, perfMeter } from './physics.jsx';
+import { clamp, makeCanvas, fitCanvas, grain, rrect, rng, noiseHit, tone, shade, tint, perfMeter, gameCache, onGameCacheDrop } from './physics.jsx';
 import { readBest, writeBest, noteSoloScore, g1Test, FONT, GAME_RULES } from '../App.jsx';
 
 export const BLOB_KEY = 'squish';
@@ -16,6 +16,7 @@ const COLS = ['#FF5A5F', '#FF9F1C', '#FFD23F', '#9BE15D', '#2EC4B6', '#3A86FF', 
 const OUTLINE = '#1E1430';
 const SHADES = COLS.map((c) => shade(c, 0.22));
 let SHINE_CV = null;
+onGameCacheDrop(() => { SHINE_CV = null; });
 function SHINE() {
   if (SHINE_CV) return SHINE_CV;
   const cv = makeCanvas(64, 44);
@@ -322,7 +323,7 @@ function blobPath(ctx, B, s, ox, oy, inset) {
   ctx.closePath();
 }
 
-const LABELS = new Map();
+const LABELS = gameCache();
 function label(v, px, d) {
   const size = Math.max(8, Math.round(px / 2) * 2);
   const key = `${v}:${size}:${d}`;
@@ -354,7 +355,7 @@ function jarLayout(Wc, Hc) {
   return { s, ox: (Wc - w) / 2, oy: Hc - h - pad, w, h, Wc, Hc };
 }
 
-const JARS = new Map();
+const JARS = gameCache();
 function jarArt(L, d) {
   const key = `${L.Wc}x${L.Hc}@${d}`;
   if (JARS.has(key)) return JARS.get(key);
@@ -474,7 +475,7 @@ class Music {
   }
 }
 
-const SCENE = new Map();
+const SCENE = gameCache();
 function BlobScene() {
   const ref = useRef(null);
   useLayoutEffect(() => {

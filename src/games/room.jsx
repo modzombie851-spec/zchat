@@ -3,6 +3,9 @@ import { GameRoom, RoomButton, RoomSheet, sfx, haptic } from './kit.jsx';
 import { useGameRelay } from './relay.jsx';
 import { useMyLevels, useLevels, recordFinish, xpSpan, LEVEL_GAMES, noteRecent } from './levels.jsx';
 import { preloadScene } from './scenes.jsx';
+import { withFaces } from './faces.jsx';
+import { GOLF } from './golf.jsx';
+import { useKit } from './kits.jsx';
 import {
   ThemeContext, THEMES, Avatar, GAME_TITLES, GAME_RULES, GameArt, g1Mem, g1Send,
   ANIM_STICKERS, useBackClose, reducedMotion, appSnack, ga1Name, GameBareCtx, gameBoardCard, chatGameLink, g1Load,
@@ -24,7 +27,7 @@ function roomStickers() {
   const by = new Map((ANIM_STICKERS || []).map((s) => [s.key, s]));
   const out = [];
   STICKER_ORDER.forEach((id) => ['cat', 'tuk', 'ele'].forEach((p) => { const s = by.get(`as-${p}-${id}`); if (s) out.push(s); }));
-  stickerList = out;
+  stickerList = withFaces(out);
   return out;
 }
 const PHRASES = {
@@ -35,6 +38,32 @@ const PHRASES = {
   zap: ['Good luck', 'Nice one', 'Oh no', 'Last card', 'Not again', 'Well played', 'Thanks', 'Rematch?'],
 };
 const firstName = (n) => String(n || '').trim().split(' ')[0] || 'Them';
+const BOT_FACE_BACK = { 'fc-lol': ['fc-lol', 'fc-grin'], 'fc-grin': ['fc-grin', 'fc-wink'], 'fc-wink': ['fc-smug', 'fc-wink'], 'fc-cool': ['fc-smug', 'fc-cool'], 'fc-love': ['fc-love', 'fc-grin'], 'fc-wow': ['fc-cool', 'fc-smug'], 'fc-smug': ['fc-think', 'fc-smug'], 'fc-think': ['fc-think', 'fc-phew'], 'fc-cry': ['fc-wink', 'fc-love'], 'fc-angry': ['fc-phew', 'fc-scared'], 'fc-phew': ['fc-smug', 'fc-lol'], 'fc-sleep': ['fc-wow', 'fc-angry'], 'fc-dizzy': ['fc-lol', 'fc-wink'], 'fc-scared': ['fc-devil', 'fc-smug'], 'fc-devil': ['fc-scared', 'fc-devil'], 'fc-party': ['fc-party', 'fc-cool'] };
+const BOT_LINES = ['Nice one', 'Hmm, let me think', 'You are good at this', 'Watch this', 'Not bad at all', 'Good game so far'];
+function useBotSocial(on, myId, botId, g) {
+  const subs = useRef(new Map());
+  const timers = useRef([]);
+  useEffect(() => () => timers.current.forEach(clearTimeout), []);
+  return useMemo(() => {
+    if (!on || !botId) return null;
+    const emit = (t, d) => { (subs.current.get(t) || new Set()).forEach((fn) => { try { fn(d); } catch {} }); };
+    const later = (fn, ms) => { timers.current.push(setTimeout(fn, ms)); };
+    const faces = roomStickers().filter((x) => x.face).map((x) => x.key);
+    return {
+      me: myId,
+      stickers: roomStickers(),
+      phrases: PHRASES[g] || PHRASES[g === 'ckr' ? 'chess' : ''],
+      on: (t, fn) => { const set = subs.current.get(t) || new Set(); set.add(fn); subs.current.set(t, set); return () => set.delete(fn); },
+      send: (t, d) => {
+        if (t === 'rx' && d && d.s && Math.random() < 0.85) {
+          const pool = BOT_FACE_BACK[d.s] || faces;
+          later(() => emit('rx', { from: botId, s: pool[Math.floor(Math.random() * pool.length)] }), 900 + Math.random() * 900);
+        }
+        if (t === 'say' && Math.random() < 0.7) later(() => emit('say', { from: botId, text: BOT_LINES[Math.floor(Math.random() * BOT_LINES.length)] }), 1200 + Math.random() * 1000);
+      },
+    };
+  }, [on, myId, botId, g]);
+}
 const pingG1 = () => g1Mem.subs.forEach((f) => { try { f(); } catch {} });
 const testing = () => typeof window !== 'undefined' && !!window.__zfake;
 
@@ -97,7 +126,7 @@ function sqAt(x, y, flip, cell) {
   return flip ? (7 - r) * 8 + (7 - c) : r * 8 + c;
 }
 
-const BoardSquares = React.memo(function BoardSquares({ size, flip, light, dark, ink, coords }) {
+const BoardSquares = React.memo(function BoardSquares({ size, flip, light, dark, ink, coords, veins }) {
   const c = size / 8;
   const rects = [];
   for (let r = 0; r < 8; r++) for (let f = 0; f < 8; f++) if ((r + f) % 2 === 1) rects.push(<rect key={r * 8 + f} x={f * c} y={r * c} width={c} height={c} fill={dark} />);
@@ -111,6 +140,7 @@ const BoardSquares = React.memo(function BoardSquares({ size, flip, light, dark,
       <rect width={size} height={size} fill={light} />
       {rects}
       <rect width={size} height={size} fill="url(#zgrGrain)" />
+      {veins && <path d={`M0 ${size * 0.3} Q${size * 0.3} ${size * 0.22} ${size * 0.5} ${size * 0.42} T${size} ${size * 0.36} M0 ${size * 0.74} Q${size * 0.4} ${size * 0.62} ${size * 0.62} ${size * 0.82} T${size} ${size * 0.7} M${size * 0.2} 0 Q${size * 0.28} ${size * 0.4} ${size * 0.12} ${size}`} fill="none" stroke="#FFFFFF" strokeOpacity="0.28" strokeWidth={Math.max(1, size / 260)} />}
       <rect width={size} height={size} fill="url(#zgrSheen)" />
       {coords && Array.from({ length: 8 }).map((_, i) => (
         <text key={`f${i}`} x={i * c + c - 3} y={size - 3} textAnchor="end" fontSize={Math.max(8, c * 0.2)} fontWeight="800" fontFamily="system-ui, sans-serif" fill={i % 2 ? ink[0] : ink[1]}>{files[i]}</text>
@@ -122,35 +152,40 @@ const BoardSquares = React.memo(function BoardSquares({ size, flip, light, dark,
   );
 });
 
-const ChessGlyph = React.memo(function ChessGlyph({ art, white, size, shadow = true }) {
+const ChessGlyph = React.memo(function ChessGlyph({ art, white, size, shadow = true, tone }) {
   if (!art) return null;
+  const t = tone || null;
   return (
     <svg width={size} height={size} viewBox="0 0 45 45" aria-hidden="true" style={{ display: 'block', overflow: 'visible' }}>
       {shadow && <ellipse cx="23.5" cy="40.5" rx="12.5" ry="3" fill="#000000" opacity="0.28" />}
-      <path d={art.body} fill={white ? 'url(#zgrPw)' : 'url(#zgrPb)'} stroke={white ? '#3A2A1C' : '#0B0806'} strokeWidth="1.4" strokeLinejoin="round" />
-      {art.lines && <path d={art.lines} fill="none" stroke={white ? 'rgba(58,42,28,0.7)' : 'rgba(255,236,200,0.42)'} strokeWidth="1.2" strokeLinecap="round" />}
-      {art.eye && <circle cx={art.eye[0]} cy={art.eye[1]} r={art.eye[2]} fill={white ? '#3A2A1C' : '#F4E6C8'} />}
+      <path d={art.body} fill={white ? 'url(#zgrPw)' : 'url(#zgrPb)'} stroke={white ? (t ? t.ws : '#3A2A1C') : (t ? t.bs : '#0B0806')} strokeWidth="1.4" strokeLinejoin="round" />
+      {art.lines && <path d={art.lines} fill="none" stroke={white ? (t ? t.wl : 'rgba(58,42,28,0.7)') : (t ? t.bl : 'rgba(255,236,200,0.42)')} strokeWidth="1.2" strokeLinecap="round" />}
+      {art.eye && <circle cx={art.eye[0]} cy={art.eye[1]} r={art.eye[2]} fill={white ? (t ? t.ws : '#3A2A1C') : (t ? t.bl : '#F4E6C8')} />}
     </svg>
   );
 });
 
-function PieceDefs() {
+function PieceDefs({ kit }) {
+  const pw = kit && kit.pieces ? kit.pieces.w : ['#FFFDF6', '#F1E6CF', '#D9C6A2'];
+  const pb = kit && kit.pieces ? kit.pieces.b : ['#5A4A40', '#2E2420', '#15100D'];
+  const dw = kit && kit.discs ? kit.discs.w : ['#FFFFFF', '#F1E7D4', '#C9B48E'];
+  const db = kit && kit.discs ? kit.discs.b : ['#6A4F44', '#3A2622', '#1C1210'];
   return (
     <svg width="0" height="0" aria-hidden="true" style={{ position: 'absolute' }}>
       <defs>
-        <linearGradient id="zgrPw" x1="0" y1="0" x2="0.4" y2="1"><stop offset="0" stopColor="#FFFDF6" /><stop offset="0.6" stopColor="#F1E6CF" /><stop offset="1" stopColor="#D9C6A2" /></linearGradient>
-        <linearGradient id="zgrPb" x1="0" y1="0" x2="0.4" y2="1"><stop offset="0" stopColor="#5A4A40" /><stop offset="0.5" stopColor="#2E2420" /><stop offset="1" stopColor="#15100D" /></linearGradient>
-        <radialGradient id="zgrDw" cx="0.38" cy="0.32" r="0.75"><stop offset="0" stopColor="#FFFFFF" /><stop offset="0.55" stopColor="#F1E7D4" /><stop offset="1" stopColor="#C9B48E" /></radialGradient>
-        <radialGradient id="zgrDb" cx="0.38" cy="0.32" r="0.75"><stop offset="0" stopColor="#6A4F44" /><stop offset="0.55" stopColor="#3A2622" /><stop offset="1" stopColor="#1C1210" /></radialGradient>
+        <linearGradient id="zgrPw" x1="0" y1="0" x2="0.4" y2="1"><stop offset="0" stopColor={pw[0]} /><stop offset="0.6" stopColor={pw[1]} /><stop offset="1" stopColor={pw[2]} /></linearGradient>
+        <linearGradient id="zgrPb" x1="0" y1="0" x2="0.4" y2="1"><stop offset="0" stopColor={pb[0]} /><stop offset="0.5" stopColor={pb[1]} /><stop offset="1" stopColor={pb[2]} /></linearGradient>
+        <radialGradient id="zgrDw" cx="0.38" cy="0.32" r="0.75"><stop offset="0" stopColor={dw[0]} /><stop offset="0.55" stopColor={dw[1]} /><stop offset="1" stopColor={dw[2]} /></radialGradient>
+        <radialGradient id="zgrDb" cx="0.38" cy="0.32" r="0.75"><stop offset="0" stopColor={db[0]} /><stop offset="0.55" stopColor={db[1]} /><stop offset="1" stopColor={db[2]} /></radialGradient>
       </defs>
     </svg>
   );
 }
 
-function BoardFrame({ size, children, wood = ['#5B3A22', '#3A2414'] }) {
+function BoardFrame({ size, children, wood = ['#5B3A22', '#3A2414'], gild, glow }) {
   return (
-    <div style={{ padding: 9, borderRadius: 14, background: `linear-gradient(160deg, ${wood[0]} 0%, ${wood[1]} 100%)`, boxShadow: '0 18px 40px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.18), inset 0 -2px 0 rgba(0,0,0,0.35)' }}>
-      <div style={{ position: 'relative', width: size, height: size, borderRadius: 4, overflow: 'hidden', boxShadow: '0 0 0 1px rgba(0,0,0,0.45)' }}>{children}</div>
+    <div style={{ padding: 9, borderRadius: 14, background: `linear-gradient(160deg, ${wood[0]} 0%, ${wood[1]} 100%)`, boxShadow: `0 18px 40px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.18), inset 0 -2px 0 rgba(0,0,0,0.35)${glow ? `, 0 0 26px ${glow}66, inset 0 0 0 1.5px ${glow}AA` : ''}${gild ? ', inset 0 0 0 2px rgba(255,241,194,0.75)' : ''}` }}>
+      <div style={{ position: 'relative', width: size, height: size, borderRadius: 4, overflow: 'hidden', boxShadow: gild ? '0 0 0 1.5px rgba(255,236,170,0.9)' : glow ? `0 0 0 1px ${glow}` : '0 0 0 1px rgba(0,0,0,0.45)' }}>{children}</div>
     </div>
   );
 }
@@ -196,6 +231,7 @@ function useBoardInput({ size, flip, enabled, canPick, onTap, onDrop }) {
 }
 
 function ChessView({ Z, st, myId, onMove, onMeta, peerSel, onSel, peerName, still }) {
+  const kit = useKit('chess');
   const wrap = useRef(null);
   const box = useBox(wrap);
   const size = Math.max(200, Math.floor(Math.min(box.w - 44, box.h - 34, 520) / 8) * 8);
@@ -275,9 +311,9 @@ function ChessView({ Z, st, myId, onMove, onMeta, peerSel, onSel, peerName, stil
   return (
     <div ref={wrap} style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       {box.w > 0 && (
-        <BoardFrame size={size}>
-          <PieceDefs />
-          <BoardSquares size={size} flip={flip} light="#ECD7B2" dark="#A26B45" ink={['#ECD7B2', '#8A5634']} coords />
+        <BoardFrame size={size} wood={kit ? kit.board.wood : undefined} gild={!!(kit && kit.board.gild)} glow={kit ? kit.board.glow : null}>
+          <PieceDefs kit={kit} />
+          <BoardSquares size={size} flip={flip} light={kit ? kit.board.light : '#ECD7B2'} dark={kit ? kit.board.dark : '#A26B45'} ink={kit ? kit.board.ink : ['#ECD7B2', '#8A5634']} veins={!!(kit && kit.board.veins)} coords />
           {last && hl(last[0], 'rgba(255,210,90,0.42)')}
           {last && hl(last[1], 'rgba(255,210,90,0.5)')}
           {sel != null && hl(sel, 'rgba(255,255,255,0.32)', { boxShadow: 'inset 0 0 0 3px rgba(255,255,255,0.85)' })}
@@ -290,7 +326,7 @@ function ChessView({ Z, st, myId, onMove, onMeta, peerSel, onSel, peerName, stil
             const ty = dragging ? input.drag.y - cell * 0.62 : y;
             return (
               <div key={pc.id} style={{ position: 'absolute', left: 0, top: 0, width: cell, height: cell, transform: `translate(${tx}px, ${ty}px)${dragging ? ' scale(1.14)' : ''}`, transition: dragging || still ? 'none' : 'transform 230ms cubic-bezier(.2,.8,.2,1), opacity 260ms ease', opacity: pc.gone ? 0 : 1, zIndex: dragging ? 5 : 2, pointerEvents: 'none', willChange: 'transform' }}>
-                <div style={{ padding: cell * 0.04 }}><ChessGlyph art={C && C.PIECES[pc.p.toLowerCase()]} white={pc.p === pc.p.toUpperCase()} size={cell * 0.92} /></div>
+                <div style={{ padding: cell * 0.04 }}><ChessGlyph art={C && C.PIECES[pc.p.toLowerCase()]} white={pc.p === pc.p.toUpperCase()} size={cell * 0.92} tone={kit && kit.pieces ? kit.pieces : null} /></div>
               </div>
             );
           })}
@@ -305,7 +341,7 @@ function ChessView({ Z, st, myId, onMove, onMeta, peerSel, onSel, peerName, stil
               <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', gap: 6, padding: 10, borderRadius: 16, background: '#2A1D14', boxShadow: '0 12px 30px rgba(0,0,0,0.5)' }}>
                 {['q', 'r', 'b', 'n'].map((q) => (
                   <button key={q} type="button" aria-label={`Promote to ${C.PIECE_NAMES[q]}`} onClick={() => doMove(promo.f, promo.t, q)} className="zgr-press" style={{ width: 54, height: 54, borderRadius: 12, border: 'none', background: '#ECD7B2', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-                    <ChessGlyph art={C.PIECES[q]} white={meWhite} size={46} shadow={false} />
+                    <ChessGlyph art={C.PIECES[q]} white={meWhite} size={46} shadow={false} tone={kit && kit.pieces ? kit.pieces : null} />
                   </button>
                 ))}
               </div>
@@ -317,13 +353,14 @@ function ChessView({ Z, st, myId, onMove, onMeta, peerSel, onSel, peerName, stil
   );
 }
 
-function Disc({ p, size }) {
+function Disc({ p, size, kit }) {
   const white = p === 'w' || p === 'W';
   const king = p === 'W' || p === 'B';
+  const D = kit && kit.discs ? kit.discs : null;
   return (
     <svg width={size} height={size} viewBox="0 0 40 40" aria-hidden="true" style={{ display: 'block', overflow: 'visible' }}>
       <ellipse cx="21" cy="24" rx="17" ry="15" fill="#000000" opacity="0.32" />
-      <circle cx="20" cy="22" r="16.5" fill={white ? '#B8A27C' : '#120B09'} />
+      <circle cx="20" cy="22" r="16.5" fill={white ? (D ? D.wb : '#B8A27C') : (D ? D.bb : '#120B09')} />
       <circle cx="20" cy="19.5" r="16.5" fill={white ? 'url(#zgrDw)' : 'url(#zgrDb)'} />
       <circle cx="20" cy="19.5" r="11.5" fill="none" stroke={white ? 'rgba(120,90,50,0.35)' : 'rgba(255,230,200,0.16)'} strokeWidth="1.6" />
       <circle cx="20" cy="19.5" r="7" fill="none" stroke={white ? 'rgba(120,90,50,0.22)' : 'rgba(255,230,200,0.1)'} strokeWidth="1.2" />
@@ -333,6 +370,7 @@ function Disc({ p, size }) {
 }
 
 function CheckersView({ Z, st, myId, onMove, onMeta, peerSel, onSel, peerName, still }) {
+  const kit = useKit('ckr');
   const wrap = useRef(null);
   const box = useBox(wrap);
   const size = Math.max(200, Math.floor(Math.min(box.w - 44, box.h - 34, 520) / 8) * 8);
@@ -403,9 +441,9 @@ function CheckersView({ Z, st, myId, onMove, onMeta, peerSel, onSel, peerName, s
   return (
     <div ref={wrap} style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       {box.w > 0 && (
-        <BoardFrame size={size} wood={['#6A4428', '#40281A']}>
-          <PieceDefs />
-          <BoardSquares size={size} flip={flip} light="#F0E0BE" dark="#5F7A4E" ink={['#F0E0BE', '#4C6640']} coords={false} />
+        <BoardFrame size={size} wood={kit ? kit.board.wood : ['#6A4428', '#40281A']} gild={!!(kit && kit.board.gild)}>
+          <PieceDefs kit={kit} />
+          <BoardSquares size={size} flip={flip} light={kit ? kit.board.light : '#F0E0BE'} dark={kit ? kit.board.dark : '#5F7A4E'} ink={['#F0E0BE', '#4C6640']} coords={false} />
           {lastPath.map((i) => hl(i, 'rgba(255,214,102,0.38)'))}
           {path.map((i) => hl(i, 'rgba(255,255,255,0.28)', { boxShadow: 'inset 0 0 0 3px rgba(255,255,255,0.85)' }))}
           {peerSel != null && !myTurn && hl(peerSel, 'transparent', { boxShadow: 'inset 0 0 0 3px rgba(125,211,252,0.9)' })}
@@ -419,7 +457,7 @@ function CheckersView({ Z, st, myId, onMove, onMeta, peerSel, onSel, peerName, s
             const ty = dragging ? input.drag.y - cell * 0.6 : y;
             return (
               <div key={pc.id} style={{ position: 'absolute', left: 0, top: 0, width: cell, height: cell, transform: `translate(${tx}px, ${ty}px)${dragging ? ' scale(1.12)' : ''}`, transition: dragging || still ? 'none' : 'transform 240ms cubic-bezier(.2,.8,.2,1), opacity 300ms ease', opacity: pc.gone ? 0 : pendingTaken.includes(pc.sq) ? 0.35 : 1, zIndex: dragging ? 5 : 2, pointerEvents: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', willChange: 'transform' }}>
-                <Disc p={pc.p} size={cell * 0.84} />
+                <Disc p={pc.p} size={cell * 0.84} kit={kit} />
               </div>
             );
           })}
@@ -434,16 +472,17 @@ function CheckersView({ Z, st, myId, onMove, onMeta, peerSel, onSel, peerName, s
 function golfSaved(id, n) {
   const k = `${id}:${n}`;
   if (g1Mem.golf.has(k)) return g1Mem.golf.get(k);
-  try { const v = JSON.parse(localStorage.getItem(`zchat-g1-golf-${k}`) || 'null'); if (v && Array.isArray(v)) return v; } catch {}
+  try { const v = JSON.parse(localStorage.getItem(`zchat-g2-golf-${k}`) || 'null'); if (v && Array.isArray(v)) return v; } catch {}
   return [];
 }
 function golfSave(id, n, shots) {
   const k = `${id}:${n}`;
   g1Mem.golf.set(k, shots);
-  try { if (shots.length) localStorage.setItem(`zchat-g1-golf-${k}`, JSON.stringify(shots)); else localStorage.removeItem(`zchat-g1-golf-${k}`); } catch {}
+  try { if (shots.length) localStorage.setItem(`zchat-g2-golf-${k}`, JSON.stringify(shots)); else localStorage.removeItem(`zchat-g2-golf-${k}`); } catch {}
 }
 
-function GolfView({ Z, st, myId, onMove, onMeta, peerName, onBusy, onFlash }) {
+function GolfView({ st, myId, onMove, onMeta, peerName, onBusy, onFlash }) {
+  const Z = { golf: GOLF };
   const hostRef = useRef(null);
   const ctl = useRef(null);
   const busy = useRef(false);
@@ -477,12 +516,14 @@ function GolfView({ Z, st, myId, onMove, onMeta, peerName, onBusy, onFlash }) {
         golfSave(s.id, s.n, []);
         setShots([]);
         const strokes = r.holed ? ns.length : Z.golf.MAXS + 1;
-        if (onFlash) onFlash(r.holed ? (strokes === 1 ? 'Hole in one' : `In ${strokes}`) : 'Picked up, that counts 7');
+        const par = Z.golf.HOLES[s.h - 1].par;
+        if (onFlash) onFlash(r.holed ? (strokes === 1 ? 'Hole in one' : strokes === par - 2 ? 'Eagle' : strokes === par - 1 ? 'Birdie' : strokes === par ? 'Par' : strokes === par + 1 ? 'Bogey' : `In ${strokes}`) : 'Picked up, that counts 7');
         if (r.holed && strokes <= 2) sfx('win');
         onMove(next);
       } else {
         golfSave(s.id, s.n, ns);
         setShots(ns);
+        if (r.water && onFlash) onFlash('In the water, play again from the same spot');
         c.set({ canPutt: canPutt() });
       }
       setTick((x) => x + 1);
@@ -494,12 +535,12 @@ function GolfView({ Z, st, myId, onMove, onMeta, peerName, onBusy, onFlash }) {
     const saved = shotsRef.current;
     const ball = saved.length ? Z.golf.playHole(st.h - 1, saved).end : null;
     shown.current = st.n;
-    const c = Z.golf.mount(hostRef.current, { hole: Math.max(0, Math.min(8, st.h - 1)), dark: true, canPutt: canPutt(), ball, onPutt: putt, onHit: (s) => { if (s > 0.1) sfx('cushion', { v: s }); }, onHoled: () => { sfx('cup'); haptic(14); } });
+    const c = Z.golf.mount(hostRef.current, { hole: Math.max(0, Math.min(8, st.h - 1)), dark: true, canPutt: canPutt(), ball, onPutt: putt, onHit: (s, bump) => { if (s > 0.08) sfx(bump ? 'bumper' : 'cushion', { v: s }); }, onHoled: () => { sfx('cup'); haptic(14); }, onWater: () => { sfx('splash'); haptic(10); } });
     if (ball) c.set({ ball });
     ctl.current = c;
     if (testing()) window.__zgrGolf = { putt: (shot) => putt(shot), find: (k) => Z.golf.findPutt(stRef.current.h - 1, Z.golf.playHole(stRef.current.h - 1, shotsRef.current).end, k || 0), busy: () => busy.current || c.busy(), state: () => stRef.current };
     return () => { c.destroy(); ctl.current = null; if (window.__zgrGolf) delete window.__zgrGolf; };
-  }, [Z]);
+  }, []);
   const rest = (s) => { const sv = golfSaved(s.id, s.n); return sv.length ? Z.golf.playHole(s.h - 1, sv).end : Z.golf.HOLES[s.h - 1].tee.slice(); };
   useEffect(() => {
     const c = ctl.current;
@@ -611,7 +652,7 @@ function ResultCard({ st, myId, peerName, g, xp, still, onRematch, onClose, canR
   );
 }
 
-const PACK_GAMES = ['chess', 'ckr', 'golf'];
+const PACK_GAMES = ['chess', 'ckr'];
 const LAZY_BOARDS = ['pool', 'crm', 'zap'];
 const RESIGN_GAMES = ['chess', 'ckr', 'pool', 'golf', 'crm'];
 function usePack(need) {
@@ -652,7 +693,11 @@ export function GameRoomPage({ st, prevOf, myId, me, peer, intent, onClose }) {
   const levelMap = useLevels(LEVEL_GAMES.includes(g) ? g : null, player && !isBot && other ? [other] : []);
   useBackClose(true, onClose);
   useEffect(() => { noteRecent(g); }, [g]);
-  const flash = (text) => { setToast({ id: `${Date.now()}`, text }); };
+  const flash = (text) => {
+    const id = `${Date.now()}${Math.random()}`;
+    setToast({ id, text });
+    setTimeout(() => setToast((t) => (t && t.id === id ? null : t)), 2600);
+  };
   useEffect(() => {
     const offMv = relay.on('mv', (d) => {
       const s = d && d.st;
@@ -755,22 +800,23 @@ export function GameRoomPage({ st, prevOf, myId, me, peer, intent, onClose }) {
     { id: myId, name: 'You', avatar: <Avatar emoji={me && me.avatar} name={(me && me.name) || 'You'} size={50} />, level: levelOfMe, turn: !fin && st.t === myId && !busy, line: meta.me },
     { id: other, name: peerName, avatar: <Avatar emoji={peer && peer.id === other ? peer.avatar : null} name={peerFull} size={50} />, level: peerLevel, turn: !fin && !!other && st.t === other && !busy, here: isBot ? null : relay.here, line: meta.peer },
   ];
-  const social = useMemo(() => (player && !isBot ? { me: myId, send: relay.send, on: relay.on, stickers: roomStickers(), phrases: PHRASES[g] || PHRASES[g === 'ckr' ? 'chess' : ''] } : null), [relay.send, relay.on, player, isBot, g]);
+  const botSocial = useBotSocial(player && isBot, myId, other, g);
+  const social = useMemo(() => (player && !isBot ? { me: myId, send: relay.send, on: relay.on, stickers: roomStickers(), phrases: PHRASES[g] || PHRASES[g === 'ckr' ? 'chess' : ''] } : botSocial), [relay.send, relay.on, player, isBot, g, botSocial]);
   const away = player && !isBot && relay.here === false && !fin;
   const status = fin ? null : away && !meta.hot ? `Waiting for ${peerName}` : (meta.status || null);
   const ready = PACK_GAMES.includes(g) ? !!Z : LAZY_BOARDS.includes(g) ? !!meta.ready : true;
-  const title = GAME_TITLES[g] || 'Game';
+  const title = zap && st.md === 'mayhem' ? 'Zap Mayhem' : (GAME_TITLES[g] || 'Game');
   const crmWhy = g === 'crm' && st.w && st.why !== 'resign' ? `${st.pts || 0} points` : null;
   const board = g === 'chess' ? <ChessView Z={Z} st={st} myId={myId} onMove={move} onMeta={setMeta} peerSel={peerSel} onSel={sendSel} peerName={peerName} still={still} />
     : g === 'ckr' ? <CheckersView Z={Z} st={st} myId={myId} onMove={move} onMeta={setMeta} peerSel={peerSel} onSel={sendSel} peerName={peerName} still={still} />
       : g === 'pool' ? <PoolTable st={st} prevOf={prevOf} myId={myId} peerName={peerName} relay={relay} onMove={move} onMeta={setMeta} onBusy={setBusy} onFlash={flash} />
         : g === 'crm' ? <CarromTable st={st} prevOf={prevOf} myId={myId} peerName={peerName} relay={relay} onMove={move} onMeta={setMeta} onBusy={setBusy} onFlash={flash} />
           : zap ? <ZapTable st={st} myId={myId} peerName={peerName} relay={relay} intent={intent} onMeta={setMeta} />
-            : g === 'golf' ? (Z ? <GolfView Z={Z} st={st} myId={myId} onMove={move} onMeta={setMeta} peerName={peerName} onBusy={setBusy} onFlash={flash} /> : null)
+            : g === 'golf' ? <GolfView st={st} myId={myId} onMove={move} onMeta={setMeta} peerName={peerName} onBusy={setBusy} onFlash={flash} />
               : <ClassicView st={st} myId={myId} onMove={move} peerName={peerName} onMeta={setMeta} />;
   return (
     <GameRoom k={g} title={title} sub={meta.sub || (isBot ? 'With ZChat Bot' : relay.here ? `${peerName} is here` : `With ${peerName}`)} players={players} center={meta.center} status={status} statusHot={meta.hot}
-      menu={menu} rules={GAME_RULES[g]} social={social} toast={toast} still={still} ready={ready} bottom={meta.bottom || null}
+      menu={menu} rules={zap && st.md === 'mayhem' ? (GAME_RULES.zapMayhem || GAME_RULES[g]) : GAME_RULES[g]} social={social} toast={toast} still={still} ready={ready} bottom={meta.bottom || null}
       splash={{ title, sub: `You vs ${peerName}`, art: <GameArt k={g} width={236} height={148} radius={30} />, players: [players[0], players[1]] }}
       onClose={onClose}
       top={drawOffer ? (
