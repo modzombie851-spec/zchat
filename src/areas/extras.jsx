@@ -6564,31 +6564,29 @@ function WnSegments({ total, at, onArt, dark }) {
 }
 
 const WN_HIGHLIGHTS = [
-  { k: 'saved31', art: 'saved', title: 'Saved Messages', text: 'Your own private chat for notes, links, photos and anything you want to keep. It sits at the top of your chats and has search.' },
-  { k: 'profile31', art: 'profile26', title: 'A cleaner profile', text: 'Your birthday shows just the day, zodiac signs have real icons, tabs have names and editing your profile is simpler.' },
-  { k: 'versions31', art: 'rooms28', title: '9 ball pool and chess clocks', text: 'Pick 8 ball or 9 ball when you start pool, and play chess with a 3, 5 or 10 minute clock.' },
-  { k: 'games31', art: 'games27', title: 'Games look brand new', text: 'New pictures for every board game, a fresh Zap card look, a smooth new Snake and Squish duels with friends.' },
-  { k: 'visitors31', art: 'friends', title: 'Profile visitors', text: 'See who visited your profile right in Notifications. You can turn it off any time.' },
+  { k: 'duo32', art: 'duo32', title: 'Two Torches', text: 'A new live game for two. You each carry a torch through a dark temple with a joystick, chat and voice. Five levels, shared hearts and secret rooms.' },
+  { k: 'pets32', art: 'pets32', title: 'Bubble pets', text: 'All 51 chat bubble animals are now soft 3D pets that hold on to your message with their paws.' },
+  { k: 'rps32', art: 'rps32', title: 'Rock paper scissors, for real', text: 'Real hands bounce three times, then you both show at the same moment and the score moves.' },
+  { k: 'squish32', art: 'cup27', title: 'Squish with water balloons', text: 'Throw water balloons into the tank, flick hard for a fast throw and merge them all the way up.' },
+  { k: 'party32', art: 'games27', title: 'Better group games', text: 'New pictures and new screens for Would you rather, Never have I ever and Most likely to.' },
 ];
 const WN_SECTIONS = [
   { title: 'Chats', items: [
-    { art: 'saved', title: 'Saved Messages', text: 'A private chat just for you, with search.' },
-    { art: 'files', title: 'A new attach menu', text: 'Colourful buttons with the important ones first and More for the rest.' },
-  ] },
-  { title: 'Profiles', items: [
-    { art: 'profile26', title: 'A cleaner profile', text: 'Birthday without the year, real zodiac icons and named tabs.' },
-    { art: 'friends', title: 'Profile visitors', text: 'See who visited you in Notifications.' },
+    { art: 'pets32', title: 'Bubble pets', text: '51 soft 3D pets for your chat bubbles.' },
+    { art: 'files', title: 'Neater chat bubbles', text: 'Messages in a row sit closer, with a small tail on the last one.' },
   ] },
   { title: 'Games', items: [
-    { art: 'rooms28', title: '9 ball pool and chess clocks', text: 'New ways to play pool and chess with friends.' },
-    { art: 'games27', title: 'New game pictures', text: 'Every board game has a fresh picture, and Connect four is now Four in a row.' },
-    { art: 'cup27', title: 'Squish duels', text: 'Same blobs for both of you. The higher score wins.' },
+    { art: 'duo32', title: 'Two Torches', text: 'Escape the temple together, live, with voice.' },
+    { art: 'rps32', title: 'Real rock paper scissors', text: 'Three bounces, then both hands at once.' },
+    { art: 'cup27', title: 'Squish remade', text: 'Water balloons, fast throws and bigger merges.' },
+    { art: 'games27', title: 'Group games look better', text: 'New pictures and clearer question cards.' },
   ] },
 ];
 const WN_NEW_COUNT = WN_SECTIONS.reduce((n, sec) => n + sec.items.length, 0);
 const WN_SUMMARY = `${WN_NEW_COUNT} new things to try.`;
 
 const WN_EARLIER = [
+  { title: 'Saved Messages, a cleaner profile and new game pictures', text: 'Your own Saved Messages chat, profile visitors, 9 ball pool, chess clocks, Squish duels and a new attach menu.' },
   { title: 'A game shop, cues and zodiac signs', text: 'The Shop as a little game world with full sets, pool cues and carrom strikers, zodiac signs on profiles and fun on your chats page.' },
   { title: 'Play online, Zap Mayhem and new Mini golf', text: 'Game rooms with room IDs, harder bots, Zap Mayhem, a new Mini golf, boards and tables in the Shop, game faces and a quick account switch.' },
   { title: 'Game rooms, a new Shop and Sinhala and Tamil', text: 'Games full screen with live moves, Carrom, Zap and Squish, a brand new Shop with real previews, better replies, and ZChat in සිංහල and தமிழ்.' },

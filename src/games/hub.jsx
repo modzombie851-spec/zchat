@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../supabaseClient.js';
 import {
-  useTheme, FONT, Avatar, GameArt, GAME_TITLES, FRIEND_GAME_GROUPS, FRIEND_GAME_SUBS, SOLO_GAMES, SOLO_HIDDEN, LIVE_GAME_KEYS, GAME_ART_BG,
+  useTheme, FONT, Avatar, GameArt, GAME_TITLES, FRIEND_GAME_GROUPS, FRIEND_GAME_SUBS, SOLO_GAMES, SOLO_HIDDEN, LIVE_GAME_KEYS, GAME_ART_BG, DuoGamePage,
   GameInfoButton, HowToPlaySheet, SoloGame, readBest, formatGameScore, loadMyGames, gameNet, gameNetMissing, isSoloGameKey,
   useBackClose, useSheetDrag, playUiSound, hapticTap, reducedMotion, FullPage, HeaderIconButton, TrophyIcon, CrownIcon, NameBadge,
   LoadFail, ghBotCan, ghBotLevel, GamepadIcon, GameButton, SegmentedControl, botPicUrl,
@@ -21,7 +21,7 @@ const SUBS = {
   c4: 'Line up four discs', ship: 'Find and sink their fleet', ttt: 'Three in a row', dots: 'Close the most boxes', reversi: 'Flip discs, own the board',
   gomoku: 'Five stones in a line', hang: 'Pick a word, they guess', wduel: 'Same word, fewer tries wins', rps: 'Best of three',
   tug: 'Tap faster to pull the rope', qrace: 'Same questions, fastest wins', rrace: 'First to tap on green',
-  crm: 'Flick the striker, pot your coins', zap: 'Match colour or number, go out first', squish: 'Drop, squish and merge up to 4096',
+  crm: 'Flick the striker, pot your coins', zap: 'Match colour or number, go out first', squish: 'Throw water balloons, merge to 4096',
 };
 
 function duoKeys() {
@@ -213,6 +213,7 @@ export function GamesPage({ onClose, onChallenge, onShareScore, initialGame, fri
   const [game, setGame] = useState(() => (initialGame && isSoloGameKey(initialGame) ? initialGame : null));
   useBackClose(!!game, () => setGame(null));
   const [rulesFor, setRulesFor] = useState(null);
+  const [duoSolo, setDuoSolo] = useState(false);
   const [recent] = useState(() => readRecent());
   const duos = useMemo(() => duoKeys(), []);
   const puzzles = useMemo(() => puzzleKeys(), []);
@@ -258,6 +259,20 @@ export function GamesPage({ onClose, onChallenge, onShareScore, initialGame, fri
               </div>
             </>
           )}
+          <div style={{ position: 'relative', borderRadius: 22, overflow: 'hidden', margin: '6px 0 4px', boxShadow: '0 10px 24px rgba(0,0,0,0.22)' }}>
+            <GameArt k="duo" width="100%" height={168} radius={0} style={{ width: '100%' }} />
+            <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(10,8,16,0) 30%, rgba(10,8,16,0.86) 100%)' }} />
+            <div style={{ position: 'absolute', left: 14, right: 14, bottom: 12, display: 'flex', alignItems: 'flex-end', gap: 10 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 19, fontWeight: 900, color: '#FFFFFF' }}>Two Torches</div>
+                <div style={{ fontSize: 12.5, fontWeight: 600, color: 'rgba(255,255,255,0.8)', lineHeight: 1.35 }}>Escape the temple with a friend, live. Joystick, chat and voice.</div>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
+                {onStartLive && <GameButton small color="gold" label="Play together" onClick={() => { tap(); noteRecent('duo'); onStartLive('duo'); }} />}
+                <GameButton small color="white" label="Practice" onClick={() => { tap(); setDuoSolo(true); }} />
+              </div>
+            </div>
+          </div>
           <SectionTitle>Popular</SectionTitle>
           <div className="zgh-row" style={{ display: 'flex', gap: 12, overflowX: 'auto', margin: '0 -16px', padding: '2px 16px 8px' }}>
             {POPULAR.filter((k) => duos.includes(k)).map((k) => <Banner key={k} k={k} sub={subFor(k)} level={lv(k)} label="Play" onPlay={() => openAny(k)} />)}
@@ -326,6 +341,7 @@ export function GamesPage({ onClose, onChallenge, onShareScore, initialGame, fri
         </FullPage>
       )}
       {rulesFor && <HowToPlaySheet k={rulesFor} onClose={() => setRulesFor(null)} />}
+      {duoSolo && <DuoGamePage solo me={me} myId={myId} onClose={() => setDuoSolo(false)} />}
       {rooms && myId && onRoomHost && (
         <GameRoomsPage myId={myId} me={me} online={online} onKind={setLobbyKind} initialCode={rooms.code || ''} onClose={() => setRooms(null)}
           onHostStart={(p, k, gid) => onRoomHost(p, k, gid)} onGuestOpen={(p, k, gid) => onRoomGuest(p, k, gid)} />
