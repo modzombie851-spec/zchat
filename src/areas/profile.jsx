@@ -474,7 +474,7 @@ export function ProfilePhotosViewer({ list, start = 0, name, onClose }) {
           <div ref={ref} onScroll={(e) => { const el = e.currentTarget; const n = Math.round(el.scrollLeft / Math.max(1, el.clientWidth)); if (n !== i) setI(n); }}
             style={{ position: 'absolute', inset: 0, display: 'flex', overflowX: 'auto', overflowY: 'hidden', scrollSnapType: 'x mandatory', overscrollBehavior: 'contain', touchAction: 'pan-x' }}>
             {list.map((u, k) => (
-              <div key={`${k}:${u}`} style={{ flex: '0 0 100%', width: '100%', height: '100%', scrollSnapAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div key={`${k}:${u}`} style={{ flex: '0 0 100%', width: '100%', height: '100%', scrollSnapAlign: 'center', scrollSnapStop: 'always', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <img src={u} alt={`Photo ${k + 1}`} draggable={false} onContextMenu={(e) => e.preventDefault()} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', display: 'block' }} />
               </div>
             ))}

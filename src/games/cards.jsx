@@ -152,6 +152,49 @@ export function ZapCardFace({ code, w = 60, style, lift, dim, onClick, label, ba
 }
 
 const SCENE = gameCache();
+const ZAP_GUIDE = [
+  ['Every game', [
+    ['r7', 'Number cards', 'Play one that matches the colour or the number on top. They come in four colours, from 0 to 9.'],
+    ['yS', 'Skip', 'The next player misses their turn.'],
+    ['gR', 'Reverse', 'Turns the order of play around. With two players it works like a skip.'],
+    ['bD', 'Draw two', 'The next player takes two cards and misses their turn.'],
+    ['W', 'Wild', 'Goes on any card. You pick the next colour.'],
+    ['F', 'Wild draw four', 'Goes on any card. You pick the colour, and the next player takes four cards and misses their turn.'],
+  ]],
+  ['Mayhem only', [
+    ['rP', 'Draw four', 'A colour card that makes the next player take four. Draw cards stack in Mayhem.'],
+    ['yK', 'Skip everyone', 'Everyone else misses a turn, so you go again.'],
+    ['gA', 'Discard all', 'Drop every card of that colour from your hand at once.'],
+    ['V', 'Wild reverse draw four', 'Turns the order around and the player before you takes four cards.'],
+    ['X', 'Wild draw six', 'You pick the colour and the next player takes six cards.'],
+    ['T', 'Wild draw ten', 'You pick the colour and the next player takes ten cards.'],
+    ['C', 'Colour roulette', 'You pick a colour and the next player keeps drawing until they hit it.'],
+    ['b7', 'Seven in Mayhem', 'Swap your whole hand with another player.'],
+    ['r0', 'Zero in Mayhem', 'Every hand moves along to the next player in the direction of play.'],
+  ]],
+];
+export function ZapCardGuide({ mayhem = false, ink = '#FFFFFF', muted = 'rgba(255,255,255,0.78)', card = 'rgba(255,255,255,0.06)', head = 'rgba(255,255,255,0.6)' }) {
+  return (
+    <div style={{ marginTop: 14 }}>
+      {ZAP_GUIDE.filter(([head]) => mayhem || head === 'Every game').map(([head, list]) => (
+        <div key={head} style={{ marginTop: 12 }}>
+          <div style={{ fontSize: 13, fontWeight: 900, color: head, marginBottom: 8 }}>{head === 'Every game' ? 'The cards' : 'Mayhem cards'}</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {list.map(([code, name, text]) => (
+              <div key={code + name} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: 10, borderRadius: 16, background: card }}>
+                <ZapCardFace code={code} w={46} label={name} />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 15, fontWeight: 900, color: ink }}>{name}</div>
+                  <div style={{ fontSize: 13.5, lineHeight: 1.4, color: muted, marginTop: 2 }}>{text}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 export function ZapScene() {
   const ref = useRef(null);
   useLayoutEffect(() => {

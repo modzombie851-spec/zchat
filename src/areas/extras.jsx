@@ -5872,7 +5872,7 @@ export function SellerShopTab({ profile, isSelf, userId }) {
       {isSelf && list.length === 0 && items !== undefined && (
         <EmptyState art="saved" title="Your shop" text="Show things you sell, like clothes, art or cakes. People can ask you about them in a chat. You arrange payment yourselves." action={<PillButton primary label="Add an item" onClick={() => crOpen('edit', { item: null, me })} />} />
       )}
-      {items === undefined && crErr('shop', profile.id) !== null && <LoadFail small code={crErr('shop', profile.id)} onRetry={() => crFresh('shop', profile.id)} />}
+      {items === undefined && crErr('shop', profile.id) !== null && <LoadFail small where="Shop tab" code={crErr('shop', profile.id)} onRetry={() => crFresh('shop', profile.id)} />}
       {items === undefined && crErr('shop', profile.id) === null && <div style={{ padding: 30, display: 'flex', justifyContent: 'center' }}><Spinner size={20} color={theme.muted} /></div>}
       {list.length > 0 && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 10 }}>
@@ -6043,7 +6043,7 @@ export function SellerItemPage({ id, ownerId, item: seed, me, onClose, onAsk, on
           <div style={{ position: 'relative' }}>
             <div onScroll={(e) => { const el = e.currentTarget; const n = Math.round(el.scrollLeft / Math.max(1, el.clientWidth)); if (n !== idx) setIdx(n); }} style={{ display: 'flex', overflowX: 'auto', scrollSnapType: 'x mandatory', scrollbarWidth: 'none', background: theme.rowBg }}>
               {photos.map((u, i) => (
-                <div key={u + i} style={{ flex: '0 0 100%', scrollSnapAlign: 'start', aspectRatio: '1 / 1', maxHeight: '62vh', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                <div key={u + i} style={{ flex: '0 0 100%', scrollSnapAlign: 'start', scrollSnapStop: 'always', aspectRatio: '1 / 1', maxHeight: '62vh', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
                   <img src={u} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
                 </div>
               ))}
@@ -6562,53 +6562,31 @@ function WnSegments({ total, at, onArt, dark }) {
 }
 
 const WN_HIGHLIGHTS = [
-  { k: 'home291', icon: 'spark', title: 'Fun on your chats page', text: 'Games, Play online, Draw together, Photo booth, Watch together, ZChat Bot and AI images are one tap away on your chats page.' },
-  { k: 'banner291', icon: 'banner', title: 'Profile banners', text: 'Add a banner to your profile. Until you do, your profile takes a colour from your photo.' },
-  { k: 'about291', icon: 'card', title: 'About me', text: 'Your bio and the day you joined ZChat now sit together on your profile.' },
-  { k: 'react291', icon: 'face', title: 'Game reactions by the player', text: 'Faces and stickers you send in a game pop up right next to your name, just like messages.' },
+  { k: 'shop30', art: 'shop28', title: 'A game shop', text: 'The Shop is now a little game world. Every set comes complete with its frame, nameplate and effect, and if you had part of a set, the rest is yours now.', go: 'shop', cta: 'Open the Shop' },
+  { k: 'gear30', art: 'rooms28', title: 'Cues and strikers', text: 'Get a pool cue or a carrom striker and the other player sees it on every shot.', go: 'shop', cta: 'See them in the Shop' },
+  { k: 'zodiac30', art: 'profile26', title: 'Zodiac signs', text: 'Add your birthday and your sign shows on your profile. Tap anyone’s sign to see how you match, and on their birthday a cake shows next to their name.' },
+  { k: 'home30', art: 'together25', title: 'Fun on your chats page', text: 'Games, Play online, Draw together, Photo booth, Watch together, ZChat Bot and AI images, one tap from your chats.' },
+  { k: 'react30', art: 'games27', title: 'Reactions by the player', text: 'Faces and stickers you send in a game pop up right next to your name, just like messages.' },
 ];
 const WN_SECTIONS = [
-  { title: 'Last update', items: [
-    { art: 'rooms28', title: 'Play online', text: 'Quick join a game with someone who is online, make a room, or join a friend with a room ID.' },
-    { art: 'games27', title: 'More games with the bot', text: 'Chess, checkers and Mini golf against ZChat Bot on Easy, Medium or Hard.' },
-    { art: 'theme', title: 'Zap Mayhem', text: 'Draw six, draw ten, stacking, swaps and skip everyone. Reach 25 cards and you are out.' },
-    { art: 'games27', title: 'New Mini golf', text: 'Nine new holes with hills, sand, water and bumpers.' },
-    { art: 'shop28', title: 'Boards and tables', text: 'Chess sets, checkers, pool tables and carrom boards in the Shop, with VIP styles.' },
-    { art: 'chats', title: 'Game faces', text: 'Send faces to the other player while you play, and even to ZChat Bot.' },
-    { art: 'profile26', title: 'Quick account switch', text: 'Double tap Me to jump to your other account.' },
+  { title: 'Shop', items: [
+    { art: 'shop28', title: 'A game shop', text: 'A bright new Shop with coins, chunky buttons and a sky that changes with light and dark.' },
+    { art: 'coins', title: 'Full sets only', text: 'Every set comes with its frame, nameplate and profile effect. If you had one piece, you now have the whole set.' },
+    { art: 'rooms28', title: 'Cues and strikers', text: 'Five pool cues and four carrom strikers that the other player sees on every shot.' },
+  ] },
+  { title: 'Profiles', items: [
+    { art: 'profile26', title: 'Banners', text: 'Add a banner to your profile. Until you do, it takes a colour from your photo.' },
+    { art: 'chars', title: 'About me', text: 'Your bio and the day you joined ZChat sit together on your profile.' },
+    { art: 'theme', title: 'Zodiac signs', text: 'See your sign and how well you match with friends.' },
+    { art: 'gift', title: 'Birthday cakes', text: 'A cake shows next to someone’s name on their birthday.' },
   ] },
   { title: 'Games', items: [
-    { art: 'rooms28', title: 'Game rooms', text: 'Games with a friend open full screen with their own scene, music and sounds.' },
-    { art: 'games27', title: 'Live moves', text: 'See each move the moment your friend makes it, and see when they are in the game.' },
-    { art: 'chats', title: 'Reactions and chat', text: 'Send ZChat stickers and quick messages without leaving the game.' },
-    { art: 'rooms28', title: 'Real pool', text: 'Balls roll, spin and bounce like the real thing. Add top, back or side spin.' },
-    { art: 'games27', title: 'Carrom', text: 'Flick the striker, pocket your coins and cover the queen.' },
-    { art: 'theme', title: 'Zap', text: 'A fast card game for two to four. Match the colour or the number, then call last card.' },
-    { art: 'squish28', title: 'Squish', text: 'A jelly merge game to play on your own, with its own music.' },
-    { art: 'cup27', title: 'Levels', text: 'Finish and win games to level up in each one.' },
-    { art: 'cup27', title: 'New leaderboard', text: 'Pick a game, see the top three and find your spot.' },
-    { art: 'games27', title: 'New games page', text: 'Big tiles, recently played, and Play with a friend right from a chat.' },
+    { art: 'games27', title: 'Reactions by the player', text: 'Faces and stickers pop up next to the player who sent them.' },
+    { art: 'cup27', title: 'Learn every Zap card', text: 'How to play in Zap shows every card with its name and what it does.' },
   ] },
-  { title: 'Shop', items: [
-    { art: 'shop28', title: 'The new Shop', text: 'Browse by category, search, and see a real preview of every item.' },
-    { art: 'eye', title: 'Try before you buy', text: 'See an item on your profile and in a chat, in light and dark.' },
-    { art: 'coins', title: 'Purchase history', text: 'Everything you bought in the Shop, month by month.' },
-  ] },
-  { title: 'Profiles and chats', items: [
-    { art: 'profile26', title: 'Profiles that scroll', text: 'Scroll a profile and the name, photo and Follow stay at the top, with posts in a tall grid.' },
-    { art: 'eye', title: 'Views on posts', text: 'Post tiles show how many people watched.' },
-    { art: 'profile26', title: 'Just watched', text: 'Jump straight back to the post you just watched.' },
-    { art: 'reply28', title: 'Better replies', text: 'Replies show the message they answer, with photos, voice notes and more.' },
-    { art: 'chars', title: 'ZChat Bot in mentions', text: 'Type @ in any chat and ZChat Bot is first in the list.' },
-    { art: 'folders', title: 'App shortcuts', text: 'On Android, press and hold the ZChat icon to start a chat or open Games, Moments or the Shop.' },
-  ] },
-  { title: 'Language and text', items: [
-    { art: 'lang28', title: 'Sinhala and Tamil', text: 'Use ZChat in සිංහල or தமிழ். Change it any time in Settings.' },
-    { art: 'files', title: 'Text size', text: 'Drag to make text bigger or smaller everywhere, with a live preview.' },
-  ] },
-  { title: 'Safety', items: [
-    { art: 'safety26', title: 'Photo checks', text: 'Photos are checked before they go public, and sensitive ones stay blurred until you tap.' },
-    { art: 'shield', title: 'Safer sign up', text: 'New accounts confirm their birthday and agree to the terms.' },
+  { title: 'Chats', items: [
+    { art: 'together25', title: 'Fun on your chats page', text: 'Start a game, a drawing, a photo booth or a watch party right from your chats.' },
+    { art: 'friends', title: 'Get started', text: 'New to ZChat? A few quick steps help you find friends and play your first game.' },
   ] },
   { title: 'Faster and steadier', items: [
     { art: 'shield', title: 'Bug fixes', text: 'Bug fixes and a faster app.' },
@@ -6618,6 +6596,8 @@ const WN_NEW_COUNT = WN_SECTIONS.reduce((n, sec) => n + sec.items.length, 0);
 const WN_SUMMARY = `${WN_NEW_COUNT} new things to try.`;
 
 const WN_EARLIER = [
+  { title: 'Play online, Zap Mayhem and new Mini golf', text: 'Game rooms with room IDs, harder bots, Zap Mayhem, a new Mini golf, boards and tables in the Shop, game faces and a quick account switch.' },
+  { title: 'Game rooms, a new Shop and Sinhala and Tamil', text: 'Games full screen with live moves, Carrom, Zap and Squish, a brand new Shop with real previews, better replies, and ZChat in සිංහල and தமிழ்.' },
   { title: 'Games, photo magic and gift bags', text: 'Chess, pool, mini golf, party games, coin gift bags, AI stickers and matching sets.' },
   { title: 'Better calls and safety', text: 'Background blur, captions and voice effects in calls, the photo booth, places, drafts, shared stories, a safety timer, trusted friends, voice intros and compliment cards.' },
   { title: 'Together tools and better groups', text: 'A board, a playlist and a shared note in every chat, Story of us, bubble effects, group admin tools, moving stickers and a GIF maker.' },
@@ -6719,86 +6699,129 @@ function WnPic({ k, dark, thumb, me }) {
   return <WnArt k={k} dark={dark} thumb={thumb} />;
 }
 
-const WN_ICON_PATHS = {
-  rooms: <><rect x="2.5" y="7" width="19" height="11" rx="5.5" /><path d="M7 10.5v4M5 12.5h4" /><path d="M15.4 11.4h.2M17.6 13.8h.2" strokeWidth="2.6" /></>,
-  bot: <><rect x="4" y="7" width="16" height="12" rx="4" /><path d="M12 7V4" /><path d="M9 12.5v1M15 12.5v1" /></>,
-  cards: <><rect x="3.5" y="6" width="11" height="15" rx="2" /><path d="M9.5 3h9A2 2 0 0 1 20.5 5v12" /><path d="M10 10.5l-2 3h3l-2 3" /></>,
-  golf: <><path d="M7 21V4l9 3.5L7 11" /><path d="M3 21h18" /></>,
-  crown: <><path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5z" /></>,
-  face: <><circle cx="12" cy="12" r="9" /><path d="M8.5 14.5a4.5 4.5 0 0 0 7 0" /><path d="M9 9.5h.01M15 9.5h.01" strokeWidth="2.6" /></>,
-  look: <><path d="M12 3a9 9 0 1 0 0 18c1.2 0 1.8-.9 1.8-1.8 0-1.4-1.2-1.6-1.2-2.8 0-.9.8-1.6 1.8-1.6H17a4 4 0 0 0 4-4C21 6.5 17 3 12 3z" /><path d="M7.5 11h.01M10 7.5h.01M15 7.5h.01" strokeWidth="2.6" /></>,
-  clip: <><path d="M20 11.5l-8.2 8.2a5 5 0 0 1-7.1-7.1l8.6-8.6a3.4 3.4 0 0 1 4.8 4.8l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4l7.9-7.9" /></>,
-  switch: <><circle cx="8" cy="9" r="3.5" /><path d="M2.5 19.5a5.5 5.5 0 0 1 11 0" /><path d="M16 5h5v5" /><path d="M21 5l-4.5 4.5" /></>,
-  fix: <><path d="M14.7 6.3a4 4 0 0 0 5 5L21 13l-8 8-8-8 1.3-1.3a4 4 0 0 0 5-5z" /></>,
-  spark: <><path d="M11 3.5c.7 4.6 1.9 5.8 6.5 6.5-4.6.7-5.8 1.9-6.5 6.5-.7-4.6-1.9-5.8-6.5-6.5 4.6-.7 5.8-1.9 6.5-6.5z" /><path d="M18.5 15c.3 2 .8 2.5 2.8 2.8-2 .3-2.5.8-2.8 2.8-.3-2-.8-2.5-2.8-2.8 2-.3 2.5-.8 2.8-2.8z" /></>,
-  banner: <><rect x="3" y="4" width="18" height="16" rx="3" /><path d="M3 10.5h18" /><circle cx="8.5" cy="13.5" r="3" /></>,
-  card: <><rect x="3.5" y="5" width="17" height="14" rx="3" /><path d="M7.5 10h9M7.5 14h6" /></>,
-};
-function WnRowIcon({ k, accent, bg }) {
-  return (
-    <span aria-hidden="true" style={{ width: 44, height: 44, borderRadius: 14, background: bg, color: accent, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-      <svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">{WN_ICON_PATHS[k] || WN_ICON_PATHS.look}</svg>
-    </span>
-  );
-}
-
 export function WhatsNewSheet({ onClose, onTry, me }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
+  const dark = !!theme.dark;
+  const hl = WN_HIGHLIGHTS;
+  const pages = hl.length + 1;
+  const [at, setAt] = useState(0);
+  const [drag, setDrag] = useState(0);
   const [earlier, setEarlier] = useState(false);
-  const accent = theme.coral;
-  const soft = theme.dark ? 'rgba(124,92,252,0.18)' : 'rgba(107,72,240,0.1)';
+  const wrapRef = useRef(null);
+  const dragRef = useRef(null);
+  const still = reducedMotion();
+  const go = (n) => {
+    const v = Math.max(0, Math.min(pages - 1, n));
+    if (v === at) return;
+    setAt(v);
+    hapticTap();
+  };
+  const onDown = (e) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    dragRef.current = { x: e.clientX, y: e.clientY, id: e.pointerId, lock: null, t: Date.now() };
+  };
+  const onMove = (e) => {
+    const d = dragRef.current;
+    if (!d || d.id !== e.pointerId) return;
+    const dx = e.clientX - d.x;
+    const dy = e.clientY - d.y;
+    if (!d.lock) {
+      if (Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy) * 1.2) { d.lock = 'x'; try { e.currentTarget.setPointerCapture(e.pointerId); } catch {} }
+      else if (Math.abs(dy) > 8) d.lock = 'y';
+    }
+    if (d.lock === 'x') {
+      const edge = (at === 0 && dx > 0) || (at === pages - 1 && dx < 0);
+      setDrag(edge ? dx * 0.28 : dx);
+    }
+  };
+  const onUp = (e) => {
+    const d = dragRef.current;
+    dragRef.current = null;
+    if (!d) return;
+    if (d.lock === 'x') {
+      const dx = e.clientX - d.x;
+      const w = wrapRef.current ? wrapRef.current.clientWidth : 360;
+      const fast = Math.abs(dx) / Math.max(1, Date.now() - d.t) > 0.45;
+      if (dx < -w * 0.2 || (fast && dx < -30)) go(at + 1);
+      else if (dx > w * 0.2 || (fast && dx > 30)) go(at - 1);
+    }
+    setDrag(0);
+  };
+  const tapArt = (e) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    if (e.clientX - r.left < r.width * 0.3) go(at - 1); else go(at + 1);
+  };
   const tryIt = (item) => {
     onClose();
     if (onTry && item.go) setTimeout(() => onTry(item.go), 60);
   };
+  const artH = 'min(52%, 470px)';
+  const onArtInk = dark ? '#FFFFFF' : '#2B2540';
+  const lastPage = at === pages - 1;
   return (
     <Portal>
-      <div role="dialog" aria-label="What is new" className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 660, background: theme.panelBg, fontFamily: FONT, display: 'flex', flexDirection: 'column' }}>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', padding: 'calc(8px + env(safe-area-inset-top)) 8px 0', flexShrink: 0 }}>
-          <button type="button" aria-label="Close" onClick={onClose} className="zchat-press" style={{ width: 44, height: 44, borderRadius: 22, border: 'none', background: 'transparent', color: theme.muted, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
-          </button>
-        </div>
-        <div data-sheet-scroll="true" style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '0 24px 24px' }}>
-          <div style={{ display: 'flex', justifyContent: 'center' }}>
-            <img src="/icon-192.png" alt="" width="72" height="72" draggable={false} style={{ width: 72, height: 72, borderRadius: 18, display: 'block' }} />
-          </div>
-          <h1 style={{ margin: '16px 0 0', fontSize: 28, fontWeight: 800, letterSpacing: '-0.02em', color: theme.ink, textAlign: 'center' }}>What is new</h1>
-          <div style={{ fontSize: 15, color: theme.muted, textAlign: 'center', marginTop: 4 }}>{`ZChat ${APP_VERSION}`}</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 22, marginTop: 30 }}>
-            {WN_HIGHLIGHTS.map((it) => (
-              <div key={it.k} style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
-                <WnRowIcon k={it.icon} accent={accent} bg={soft} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 16.5, fontWeight: 700, color: theme.ink, lineHeight: 1.3 }}>{it.title}</div>
-                  <div style={{ fontSize: 14.5, color: theme.muted, lineHeight: 1.45, marginTop: 3 }}>{it.text}</div>
-                  {it.go && onTry && (
-                    <button type="button" onClick={() => tryIt(it)} style={{ marginTop: 6, padding: '6px 0', border: 'none', background: 'none', color: accent, fontFamily: FONT, fontSize: 14.5, fontWeight: 700, cursor: 'pointer' }}>{it.cta || 'Try it'}</button>
-                  )}
+      <div role="dialog" aria-label="What is new" className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 660, background: theme.panelBg, fontFamily: FONT, overflow: 'hidden' }}>
+        <div ref={wrapRef} data-no-swipe="true" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}
+          style={{ position: 'absolute', inset: 0, touchAction: 'pan-y', overflow: 'hidden' }}>
+          <div style={{ display: 'flex', height: '100%', width: `${pages * 100}%`, transform: `translateX(calc(${-at * (100 / pages)}% + ${drag}px))`, transition: drag ? 'none' : (still ? 'none' : 'transform 0.4s cubic-bezier(0.22, 1, 0.36, 1)'), willChange: 'transform' }}>
+            {hl.map((it, i) => (
+              <section key={it.k} aria-hidden={at !== i} style={{ position: 'relative', width: `${100 / pages}%`, height: '100%', flexShrink: 0, background: theme.panelBg }}>
+                <div onClick={tapArt} style={{ position: 'absolute', left: 0, right: 0, top: 0, height: artH, overflow: 'hidden', cursor: 'pointer' }}>
+                  <div className={at === i && !still ? 'zwn-pop' : undefined} style={{ position: 'absolute', inset: 0 }}><WnPic k={it.art || it.k} dark={dark} me={me} /></div>
                 </div>
-              </div>
+                <div style={{ position: 'absolute', left: 0, right: 0, top: `calc(${artH} - 30px)`, bottom: 0, background: theme.panelBg, borderRadius: '30px 30px 0 0', padding: '30px 24px calc(18px + env(safe-area-inset-bottom))', display: 'flex', flexDirection: 'column', boxSizing: 'border-box' }}>
+                  <div style={{ fontSize: 30, fontWeight: 800, letterSpacing: '-0.025em', color: theme.ink, lineHeight: 1.12, textWrap: 'balance' }}>{it.title}</div>
+                  <div style={{ fontSize: 16.5, lineHeight: 1.5, color: theme.muted, marginTop: 12, overflowY: 'auto', minHeight: 0, textWrap: 'pretty' }}>{it.text}</div>
+                  <div style={{ flex: 1, minHeight: 12 }} />
+                  {it.go && onTry && <BigButton label={it.cta || 'Try it'} onClick={() => tryIt(it)} style={{ height: 54, borderRadius: 16, fontSize: 17 }} />}
+                  <button type="button" onClick={() => go(i + 1)} className="zchat-press" style={{ height: 50, marginTop: 6, borderRadius: 16, border: 'none', background: 'transparent', color: theme.ink, fontFamily: FONT, fontSize: 16.5, fontWeight: 650, cursor: 'pointer' }}>{i === hl.length - 1 ? 'See everything new' : 'Next'}</button>
+                </div>
+              </section>
             ))}
-            <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-              <WnRowIcon k="fix" accent={accent} bg={soft} />
-              <div style={{ fontSize: 16.5, fontWeight: 700, color: theme.ink }}>Bug fixes</div>
-            </div>
-          </div>
-          <button type="button" onClick={() => setEarlier((v) => !v)} style={{ marginTop: 30, padding: '8px 0', border: 'none', background: 'none', color: theme.muted, fontFamily: FONT, fontSize: 14.5, fontWeight: 700, cursor: 'pointer' }}>{earlier ? 'Hide earlier updates' : 'Earlier updates'}</button>
-          {earlier && WN_SECTIONS.map((sec) => (
-            <div key={sec.title} style={{ marginTop: 16 }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: theme.muted, marginBottom: 4 }}>{sec.title}</div>
-              {sec.items.map((row) => (
-                <div key={row.title} style={{ padding: '8px 0' }}>
-                  <div style={{ fontSize: 15, fontWeight: 650, color: theme.ink }}>{row.title}</div>
-                  <div style={{ fontSize: 14, color: theme.muted, lineHeight: 1.45, marginTop: 2 }}>{row.text}</div>
+            <section aria-hidden={!lastPage} style={{ position: 'relative', width: `${100 / pages}%`, height: '100%', flexShrink: 0, display: 'flex', flexDirection: 'column', background: theme.panelBg }}>
+              <div style={{ height: 'calc(env(safe-area-inset-top) + 66px)', flexShrink: 0 }} />
+              <div data-sheet-scroll="true" style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '18px 20px 16px' }}>
+                <div style={{ fontSize: 30, fontWeight: 800, letterSpacing: '-0.025em', color: theme.ink }}>Everything new</div>
+                <div style={{ fontSize: 15.5, lineHeight: 1.45, color: theme.muted, marginTop: 6 }}>{WN_SUMMARY}</div>
+                {WN_SECTIONS.map((sec) => (
+                  <div key={sec.title} style={{ marginTop: 22 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: theme.muted, marginBottom: 2 }}>{sec.title}</div>
+                    {sec.items.map((row, j) => (
+                      <div key={row.title} style={{ display: 'flex', gap: 14, alignItems: 'center', padding: '10px 0', borderBottom: j < sec.items.length - 1 ? `1px solid ${theme.border}` : 'none' }}>
+                        <div style={{ width: 74, height: 54, borderRadius: 13, overflow: 'hidden', flexShrink: 0 }}><WnPic k={row.art} dark={dark} me={me} thumb /></div>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: 15.5, fontWeight: 700, color: theme.ink }}>{row.title}</div>
+                          <div style={{ fontSize: 13.5, color: theme.muted, lineHeight: 1.4, marginTop: 2, textWrap: 'pretty' }}>{row.text}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+                <div style={{ marginTop: 22, padding: '14px 0', borderTop: `1px solid ${theme.border}`, fontSize: 14.5, color: theme.muted, lineHeight: 1.45 }}>Plus lots of fixes that make ZChat faster and smoother on every phone.</div>
+                <div role="button" onClick={() => setEarlier((v) => !v)} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 0', cursor: 'pointer', borderTop: `1px solid ${theme.border}` }}>
+                  <span style={{ fontSize: 15.5, fontWeight: 700, color: theme.ink }}>Earlier updates</span>
+                  <ChevronRight size={18} color={theme.muted} style={{ transform: earlier ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s ease' }} />
                 </div>
-              ))}
-            </div>
-          ))}
+                {earlier && WN_EARLIER.map((it) => (
+                  <div key={it.title} style={{ padding: '9px 0' }}>
+                    <div style={{ fontSize: 14.5, fontWeight: 700, color: theme.ink }}>{it.title}</div>
+                    <div style={{ fontSize: 13.5, color: theme.muted, lineHeight: 1.45, marginTop: 1 }}>{it.text}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ padding: '10px 20px calc(16px + env(safe-area-inset-bottom))', borderTop: `1px solid ${theme.border}`, flexShrink: 0 }}>
+                <BigButton label="Got it" onClick={onClose} style={{ height: 54, borderRadius: 16, fontSize: 17 }} />
+              </div>
+            </section>
+          </div>
         </div>
-        <div style={{ flexShrink: 0, padding: '10px 20px calc(14px + env(safe-area-inset-bottom))' }}>
-          <BigButton label="Continue" onClick={onClose} style={{ height: 52, borderRadius: 14, fontSize: 17 }} />
+        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, padding: 'calc(env(safe-area-inset-top) + 10px) 16px 0', pointerEvents: 'none', zIndex: 3 }}>
+          <WnSegments total={pages} at={at} onArt={!lastPage} dark={dark} />
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 10 }}>
+            <span style={{ fontSize: 15, fontWeight: 700, color: lastPage ? theme.muted : onArtInk, opacity: lastPage ? 1 : 0.85 }}>ZChat {APP_VERSION}</span>
+            <div role="button" aria-label="Close" onClick={onClose} style={{ width: 40, height: 40, marginRight: -8, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', pointerEvents: 'auto', color: lastPage ? theme.ink : onArtInk }}><X size={24} /></div>
+          </div>
         </div>
       </div>
     </Portal>

@@ -16,10 +16,44 @@ export const GAME_KITS = [
   { key: 'pool-midnight', game: 'pool', label: 'Midnight', price: 900, rarity: 'legendary', vip: true, about: 'Near black cloth that makes every ball glow. A table for the best.', cloth: '#1A2030' },
   { key: 'crm-walnut', game: 'crm', label: 'Dark walnut', price: 350, rarity: 'epic', about: 'A dark walnut board with a warm, polished finish.', surface: ['#B88452', '#8C5C33', '#D2A271'] },
   { key: 'crm-ice', game: 'crm', label: 'Ice maple', price: 700, rarity: 'legendary', vip: true, about: 'Pale maple that is almost white, smooth and fast like a champion board.', surface: ['#F2ECE0', '#D6CCBB', '#FFFFFF'] },
+  { key: 'cue-ember', game: 'cue', label: 'Ember cue', price: 250, rarity: 'rare', about: 'A maple cue with a flame red forearm. The other player sees it every time you shoot.', cue: { joint: ['#B88A2E', '#F5D78A', '#7A5A18'], fore: ['#C2410C', '#FB923C', '#7C2D12'], wrap: ['#1C1917', '#44403C', '#0C0A09'], butt: ['#991B1B', '#EF4444', '#450A0A'] } },
+  { key: 'cue-ocean', game: 'cue', label: 'Deep sea cue', price: 250, rarity: 'rare', about: 'Ocean blue inlays on light maple. The other player sees it every time you shoot.', cue: { joint: ['#C0C7D6', '#FFFFFF', '#7D8799'], fore: ['#0E7490', '#22D3EE', '#164E63'], wrap: ['#0F172A', '#334155', '#020617'], butt: ['#1E3A8A', '#3B82F6', '#172554'] } },
+  { key: 'cue-neon', game: 'cue', label: 'Neon cue', price: 450, rarity: 'epic', about: 'Hot pink and cyan like an arcade at night. The other player sees it every time you shoot.', cue: { shaft: ['#D9C29A', '#F5E9D2', '#B39668'], joint: ['#E5E7EB', '#FFFFFF', '#9CA3AF'], fore: ['#C026D3', '#F0ABFC', '#701A75'], wrap: ['#111827', '#374151', '#030712'], butt: ['#0891B2', '#67E8F9', '#164E63'] } },
+  { key: 'cue-dragon', game: 'cue', label: 'Dragon gold cue', price: 900, rarity: 'legendary', vip: true, about: 'Gold and dragon red with a black wrap. A cue the other player will notice.', cue: { joint: ['#D4A017', '#FFF1B8', '#8A6508'], fore: ['#B45309', '#FCD34D', '#78350F'], wrap: ['#0B0B0B', '#3F3F46', '#000000'], butt: ['#7F1D1D', '#DC2626', '#450A0A'] } },
+  { key: 'cue-galaxy', game: 'cue', label: 'Galaxy cue', price: 1400, rarity: 'mythic', vip: true, about: 'Deep space purple with a silver joint. The rarest cue on the table.', cue: { shaft: ['#CDB98F', '#EFE3C8', '#A88F62'], joint: ['#C0C7D6', '#FFFFFF', '#7D8799'], fore: ['#4C1D95', '#8B5CF6', '#1E1B4B'], wrap: ['#0B1026', '#1E293B', '#020617'], butt: ['#1E1B4B', '#6366F1', '#0F0A2E'] } },
+  { key: 'striker-ruby', game: 'striker', label: 'Ruby striker', price: 200, rarity: 'rare', about: 'A deep red striker with a gold star. The other player sees it on every shot.', striker: { base: '#C8102E', dark: '#6E0A19', ring: '#FFD36E', accent: '#FFFFFF' } },
+  { key: 'striker-ocean', game: 'striker', label: 'Ocean striker', price: 200, rarity: 'rare', about: 'Sea blue with a white star. The other player sees it on every shot.', striker: { base: '#1D6FB8', dark: '#0B3463', ring: '#FFFFFF', accent: '#7FE3FF' } },
+  { key: 'striker-galaxy', game: 'striker', label: 'Galaxy striker', price: 450, rarity: 'epic', about: 'Purple space swirls with a silver star. The other player sees it on every shot.', striker: { base: '#4C1D95', dark: '#1E1048', ring: '#E5E7EB', accent: '#A78BFA' } },
+  { key: 'striker-gold', game: 'striker', label: 'Royal gold striker', price: 900, rarity: 'legendary', vip: true, about: 'Polished gold with a black star. A champion striker everyone notices.', striker: { base: '#E8B931', dark: '#8A6508', ring: '#1B1B1F', accent: '#FFF1B8' } },
 ];
 export const GAME_KIT_BY = Object.fromEntries(GAME_KITS.map((k) => [k.key, k]));
-export const KIT_GAMES = ['chess', 'ckr', 'pool', 'crm'];
-export const KIT_GAME_NAMES = { chess: 'Chess', ckr: 'Checkers', pool: '8 ball pool', crm: 'Carrom' };
+export const KIT_GAMES = ['chess', 'ckr', 'pool', 'crm', 'cue', 'striker'];
+export const KIT_GAME_NAMES = { chess: 'Chess', ckr: 'Checkers', pool: '8 ball pool', crm: 'Carrom', cue: '8 ball pool', striker: 'Carrom' };
+const gear = { cue: { me: null, peer: null }, striker: { me: null, peer: null } };
+export function setGear(slot, me, peer) { if (gear[slot]) gear[slot] = { me: me || null, peer: peer || null }; }
+export function gearLook(slot, side) {
+  const g = gear[slot];
+  const k = g ? g[side === 'peer' ? 'peer' : 'me'] : null;
+  const kit = k ? GAME_KIT_BY[k] : null;
+  return kit && kit.game === slot ? kit[slot] || null : null;
+}
+const peerKits = new Map();
+export function usePeerKit(uid) {
+  const [v, setV] = useState(() => (uid && peerKits.has(uid) ? peerKits.get(uid) : null));
+  useEffect(() => {
+    if (!uid) return undefined;
+    let alive = true;
+    try {
+      supabase.rpc('zchat_game_kit_of', { p_user: uid }).then(({ data, error }) => {
+        if (!alive || error || !data || typeof data !== 'object') return;
+        peerKits.set(uid, data);
+        setV(data);
+      }, () => {});
+    } catch {}
+    return () => { alive = false; };
+  }, [uid]);
+  return v;
+}
 
 const kitMem = { uid: null, map: null, subs: new Set() };
 function store() { return `zchat-gamekits-${kitMem.uid || 'x'}`; }
@@ -77,6 +111,46 @@ export function GameKitArt({ k, size = 120 }) {
   const kit = GAME_KIT_BY[k];
   if (!kit) return null;
   const id = `gk${k.replace(/[^a-z0-9]/gi, '')}`;
+  if (kit.game === 'cue') {
+    const c = kit.cue;
+    const seg = (x0, x1, h0, h1, col, key) => <path key={key} d={`M${x0} ${60 - h0}L${x1} ${60 - h1}L${x1} ${60 + h1}L${x0} ${60 + h0}z`} fill={`url(#${id}${key})`} />;
+    const grads = [['t', ['#2F5C9E', '#5C8AD0', '#244A82']], ['s', c.shaft || ['#C99A62', '#F1D9AE', '#A87A47']], ['j', c.joint], ['f', c.fore], ['w', c.wrap], ['b', c.butt]];
+    return (
+      <svg width={size} height={size} viewBox="0 0 120 120" aria-hidden="true" style={{ display: 'block' }}>
+        <defs>
+          <radialGradient id={`${id}bg`} cx="0.5" cy="0.4" r="0.8"><stop offset="0" stopColor="#2E7D4F" /><stop offset="1" stopColor="#123D27" /></radialGradient>
+          {grads.map(([n, col]) => <linearGradient key={n} id={`${id}${n}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor={col[2]} /><stop offset="0.4" stopColor={col[1]} /><stop offset="0.65" stopColor={col[0]} /><stop offset="1" stopColor={col[2]} /></linearGradient>)}
+        </defs>
+        <rect width="120" height="120" rx="20" fill={`url(#${id}bg)`} />
+        <circle cx="26" cy="86" r="9" fill="#FFFFFF" />
+        <circle cx="23" cy="83" r="3" fill="rgba(255,255,255,0.9)" />
+        <g transform="rotate(-32 60 60)">
+          {seg(-6, -2, 1.6, 1.7, null, 't')}{seg(-2, 40, 1.7, 2.6, null, 's')}{seg(40, 44, 2.6, 2.7, null, 'j')}{seg(44, 76, 2.7, 3.4, null, 'f')}{seg(76, 100, 3.4, 3.8, null, 'w')}{seg(100, 128, 3.8, 4.1, null, 'b')}
+        </g>
+      </svg>
+    );
+  }
+  if (kit.game === 'striker') {
+    const p = kit.striker;
+    const star = [];
+    for (let i = 0; i < 10; i++) { const a = (i / 10) * Math.PI * 2 - Math.PI / 2; const r = i % 2 ? 9 : 21; star.push(`${(60 + Math.cos(a) * r).toFixed(1)},${(60 + Math.sin(a) * r).toFixed(1)}`); }
+    return (
+      <svg width={size} height={size} viewBox="0 0 120 120" aria-hidden="true" style={{ display: 'block' }}>
+        <defs>
+          <radialGradient id={`${id}bd`} cx="0.5" cy="0.45" r="0.8"><stop offset="0" stopColor="#E9C58F" /><stop offset="1" stopColor="#B07F45" /></radialGradient>
+          <radialGradient id={`${id}st`} cx="0.35" cy="0.3" r="0.9"><stop offset="0" stopColor={p.accent} stopOpacity="0.5" /><stop offset="0.45" stopColor={p.base} /><stop offset="1" stopColor={p.dark} /></radialGradient>
+        </defs>
+        <rect width="120" height="120" rx="20" fill={`url(#${id}bd)`} />
+        <ellipse cx="62" cy="66" rx="36" ry="34" fill="rgba(0,0,0,0.25)" />
+        <circle cx="60" cy="60" r="36" fill={`url(#${id}st)`} />
+        <circle cx="60" cy="60" r="31" fill="none" stroke={p.ring} strokeWidth="3" opacity="0.9" />
+        <circle cx="60" cy="60" r="23" fill="none" stroke={p.accent} strokeWidth="1.6" opacity="0.8" />
+        <polygon points={star.join(' ')} fill={p.ring} />
+        <circle cx="60" cy="60" r="35" fill="none" stroke="rgba(0,0,0,0.35)" strokeWidth="2" />
+        <ellipse cx="48" cy="44" rx="14" ry="7" fill="rgba(255,255,255,0.28)" transform="rotate(-30 48 44)" />
+      </svg>
+    );
+  }
   if (kit.game === 'chess' || kit.game === 'ckr') {
     const b = kit.board;
     const cells = [];

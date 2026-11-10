@@ -677,9 +677,10 @@ export function GameRoom({ title, scene, top, bottom, onClose, children, k, scen
       )}
       {showRules && rules && (
         <RoomSheet title="How to play" onClose={() => setShowRules(false)}>
-          <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8, maxHeight: '50vh', overflowY: 'auto' }}>
+          <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8, maxHeight: '64vh', overflowY: 'auto' }}>
             {(rules.how || []).map((line, i) => <div key={i} style={{ display: 'flex', gap: 10, fontSize: 14.5, lineHeight: 1.45, color: 'rgba(255,255,255,0.88)' }}><span style={{ flexShrink: 0, width: 22, height: 22, borderRadius: 11, background: 'rgba(255,255,255,0.12)', fontSize: 12, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{i + 1}</span><span>{line}</span></div>)}
             {rules.win && <div style={{ marginTop: 6, padding: 12, borderRadius: 14, background: 'rgba(255,255,255,0.08)', fontSize: 14, lineHeight: 1.45 }}>{rules.win}</div>}
+            {rules.guide || null}
           </div>
         </RoomSheet>
       )}

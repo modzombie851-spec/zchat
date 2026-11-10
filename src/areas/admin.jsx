@@ -227,7 +227,7 @@ function AdminErrors() {
       <div style={{ ...card, display: 'flex', alignItems: 'center', gap: 10 }}>
         <Activity size={18} color={theme.coral} />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: 900, fontSize: 15, color: theme.ink }}>Crash reports</div>
+          <div style={{ fontWeight: 900, fontSize: 15, color: theme.ink }}>Problems</div>
           <div style={{ fontSize: 12, color: theme.muted, marginTop: 2 }}>{rows === null ? 'Loading' : `${rows.length} in the last 30 days`}</div>
         </div>
         <div role="button" aria-label="Refresh crash reports" onClick={load} style={{ fontSize: 12.5, fontWeight: 800, color: theme.coral, cursor: 'pointer' }}>Refresh</div>
@@ -235,7 +235,13 @@ function AdminErrors() {
       </div>
       {err && <div style={{ ...card, fontSize: 13, color: theme.muted }}>{err}</div>}
       {rows && !rows.length && !err && <div style={{ ...card, fontSize: 13, color: theme.muted }}>No crashes reported. Nice.</div>}
-      {groupsList.map((g) => (
+      {[['Pages that did not load', groupsList.filter((g) => /^Did not load/.test(String(g.message || '')))], ['Crashes', groupsList.filter((g) => !/^Did not load/.test(String(g.message || '')))]].filter(([, list]) => list.length > 0).map(([head, list]) => (
+        <div key={head}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '16px 0 4px' }}>
+            <span style={{ fontSize: 13, fontWeight: 800, color: theme.muted }}>{head}</span>
+            <span style={{ minWidth: 20, height: 20, padding: '0 6px', borderRadius: 10, background: head === 'Crashes' ? theme.soft : theme.danger, color: head === 'Crashes' ? theme.ink : '#FFFFFF', fontSize: 11.5, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box' }}>{list.reduce((n, g) => n + g.count, 0)}</span>
+          </div>
+          {list.map((g) => (
         <div key={g.key} style={card}>
           <div role="button" onClick={() => setOpen(open === g.key ? null : g.key)} style={{ cursor: 'pointer' }}>
             <div style={{ fontSize: 13.5, fontWeight: 800, color: theme.ink, wordBreak: 'break-word', lineHeight: 1.4 }}>{g.message}</div>
@@ -246,6 +252,8 @@ function AdminErrors() {
               {`${g.sample.url || ''}\n${g.sample.ua || ''}\n\n${g.sample.stack || 'No stack'}`}
             </div>
           )}
+        </div>
+      ))}
         </div>
       ))}
     </div>

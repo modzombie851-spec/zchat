@@ -3,7 +3,7 @@ import { GameRoom, RoomLayer, defineSfx, sfx, haptic, useGameKit } from './kit.j
 import { clamp, lerp, makeCanvas, fitCanvas, dpr, grain, woodTexture, rrect, rgba, shade, tint, mix, perfMeter, noiseHit, tone, loopNoise, easeOut, rng, r2, gameCache, onGameCacheDrop, dropGameCaches, canvasBlank, guardCanvases } from './physics.jsx';
 import { CarromSim, BW, C, CR, SR, PR, POCK, BASE_HALF, QUEEN, isWhite, isBlack, baseY, strikerOk, judge, colorOfMark, findShot } from './carromsim.jsx';
 import { useShotLink, throttle } from './live.jsx';
-import { kitFor } from './kits.jsx';
+import { kitFor, gearLook } from './kits.jsx';
 import { useBackClose, Avatar, appSnack, g1Send, g1Mem, g1First, g1Outcome, g1Test, ConfirmSheet, FONT, GameCardShell, GameButton, GameAgainButton, useTheme } from '../App.jsx';
 
 const FR = 70;
@@ -44,15 +44,15 @@ function coinPalette(id) {
 }
 
 const SPRITES = gameCache();
-function coinSprite(kind, rp) {
-  const key = `${kind}:${Math.round(rp * 4) / 4}`;
+function coinSprite(kind, rp, look) {
+  const key = `${kind}:${Math.round(rp * 4) / 4}:${look ? `${look.base}${look.ring}` : ''}`;
   if (SPRITES.has(key)) return SPRITES.get(key);
   const S = Math.ceil(rp * 2) + 4;
   const cv = makeCanvas(S, S);
   const g = cv.getContext('2d');
   const c = S / 2;
   const id = kind === 'striker' ? 0 : kind === 'q' ? QUEEN : kind === 'w' ? 1 : 10;
-  const p = coinPalette(id);
+  const p = id === 0 && look ? look : coinPalette(id);
   const body = g.createRadialGradient(c - rp * 0.3, c - rp * 0.35, rp * 0.1, c, c, rp);
   body.addColorStop(0, tint(p.base, 0.18));
   body.addColorStop(0.7, p.base);
@@ -491,7 +491,7 @@ export class CarromBoard {
     this.aim = null;
     this.remote = null;
     const l = Math.hypot(shot.dx, shot.dy) || 1;
-    this.anim = { sim, shot, mark, cb: cb || {}, phase: 'flick', at: performance.now(), dur: 110, ev: 0, sent: false, t0: 0, pt: 0, start, ux: shot.dx / l, uy: shot.dy / l };
+    this.anim = { who: mark === this.o.mark ? 'me' : 'peer', sim, shot, mark, cb: cb || {}, phase: 'flick', at: performance.now(), dur: 110, ev: 0, sent: false, t0: 0, pt: 0, start, ux: shot.dx / l, uy: shot.dy / l };
     this.dirty = true;
     this.kick();
     return sim;
@@ -608,7 +608,7 @@ export class CarromBoard {
     ctx.globalAlpha = 1;
     items.forEach((b) => {
       const r = (b.id === 0 ? SR : CR) * s;
-      const sp = coinSprite(b.id === 0 ? 'striker' : b.id === QUEEN ? 'q' : isWhite(b.id) ? 'w' : 'k', r * this.d);
+      const sp = coinSprite(b.id === 0 ? 'striker' : b.id === QUEEN ? 'q' : isWhite(b.id) ? 'w' : 'k', r * this.d, b.id === 0 ? gearLook('striker', b.me ? 'me' : !a ? (this.o.canShoot ? 'me' : 'peer') : (a.who || 'me')) : null);
       const sw = (sp.S / this.d) * b.sc;
       const cx = this.X(b.x, b.y); const cy = this.Y(b.x, b.y);
       if (b.pocket != null) {

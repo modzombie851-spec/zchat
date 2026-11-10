@@ -307,6 +307,7 @@ export const CarromTable = zLazy(() => import('./games/carrom.jsx'), 'CarromTabl
 export const ZapPage = zLazy(() => import('./games/cards.jsx'), 'ZapPage', 'cards');
 export const ZapCard = zLazy(() => import('./games/cards.jsx'), 'ZapCard', 'cards');
 export const ZapTable = zLazy(() => import('./games/cards.jsx'), 'ZapTable', 'cards');
+export const ZapCardGuide = zLazy(() => import('./games/cards.jsx'), 'ZapCardGuide', 'cards');
 export const BlobGame = zLazy(() => import('./games/blob.jsx'), 'BlobGame', 'blob');
 export const G1GolfPage = zLazy(() => import('./areas/games.jsx'), 'G1GolfPage', 'games');
 export const G1SudokuBoard = zLazy(() => import('./areas/games.jsx'), 'G1SudokuBoard', 'games');
@@ -2175,6 +2176,7 @@ export function Avatar({ emoji, name = '', online, size = 40, ring = false, anim
   const { theme } = useTheme();
   const [failedSrc, setFailedSrc] = useState(null);
   const isImage = typeof emoji === 'string' && emoji.startsWith('http') && failedSrc !== emoji;
+  const motion = useAvatarAnimFor(isImage ? emoji : null, anim);
   const initial = (name || '?').trim().charAt(0).toUpperCase() || '?';
   const ringColor = theme.coral;
   return (
@@ -2191,7 +2193,7 @@ export function Avatar({ emoji, name = '', online, size = 40, ring = false, anim
         {isImage
           ? <img src={emoji} alt="" onError={() => setFailedSrc(emoji)} onContextMenu={(e) => e.preventDefault()} draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           : initial}
-        {isImage && anim && <AvatarMotion src={anim} size={size} />}
+        {isImage && motion && <AvatarMotion src={motion} size={size} />}
       </div>
       {online != null && (
         <div style={{
@@ -2203,13 +2205,53 @@ export function Avatar({ emoji, name = '', online, size = 40, ring = false, anim
   );
 }
 
-const avatarMotion = { subs: new Map(), raf: 0, max: 3, seq: 0, bad: new Set() };
+const avatarMotion = { subs: new Map(), raf: 0, max: 0, seq: 0, bad: new Map(), vids: new Set(), hooked: false, io: null, seen: null };
+function avatarMotionMax() {
+  if (avatarMotion.max) return avatarMotion.max;
+  let m = 10;
+  try {
+    const ua = navigator.userAgent || '';
+    if (/Android/i.test(ua)) m = 7;
+    else if (/iPhone|iPad|iPod/.test(ua)) m = 8;
+  } catch {}
+  avatarMotion.max = m;
+  return m;
+}
+function avatarMotionBad(url) {
+  const b = avatarMotion.bad.get(url);
+  return !!b && (b.n >= 3 || Date.now() - b.at < 12000 * b.n);
+}
+function avatarMotionWatch(el, cb) {
+  if (!el) return undefined;
+  if (typeof IntersectionObserver === 'undefined') { cb(true); return undefined; }
+  if (!avatarMotion.io) {
+    avatarMotion.io = new IntersectionObserver((list) => {
+      list.forEach((e) => { const f = avatarMotion.seen.get(e.target); if (f) f(e.isIntersecting); });
+    }, { rootMargin: '80px' });
+    avatarMotion.seen = new Map();
+  }
+  avatarMotion.seen.set(el, cb);
+  avatarMotion.io.observe(el);
+  return () => { avatarMotion.seen.delete(el); try { avatarMotion.io.unobserve(el); } catch {} };
+}
+function avatarMotionKick() {
+  avatarMotion.vids.forEach((v) => { try { if (v.paused && v.getAttribute('src')) { const p = v.play(); if (p && p.catch) p.catch(() => {}); } } catch {} });
+}
+function avatarMotionHook() {
+  if (avatarMotion.hooked || typeof document === 'undefined') return;
+  avatarMotion.hooked = true;
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') setTimeout(avatarMotionKick, 120); });
+  document.addEventListener('pointerdown', avatarMotionKick, { passive: true, capture: true });
+  window.addEventListener('pageshow', avatarMotionKick);
+  window.addEventListener('online', () => { avatarMotion.bad.forEach((b, k) => { if (b.n < 3) avatarMotion.bad.delete(k); }); avatarMotionQueue(); });
+}
 function avatarMotionPlan() {
   avatarMotion.raf = 0;
   const live = [];
   avatarMotion.subs.forEach((s) => { if (s.live) live.push(s); else if (s.on) { s.on = false; s.cb(false); } });
   live.sort((a, b) => b.w - a.w || b.n - a.n);
-  live.forEach((s, i) => { const on = i < avatarMotion.max; if (s.on !== on) { s.on = on; s.cb(on); } });
+  const max = avatarMotionMax();
+  live.forEach((s, i) => { const on = i < max; if (s.on !== on) { s.on = on; s.cb(on); } });
 }
 function avatarMotionQueue() {
   if (avatarMotion.raf || typeof requestAnimationFrame === 'undefined') return;
@@ -2222,13 +2264,13 @@ function AvatarMotion({ src, url: direct = null, size = 0, fit = 'cover' }) {
   const [on, setOn] = useState(false);
   const [ready, setReady] = useState(false);
   const [, setBad] = useState(0);
-  const off = !url || avatarMotion.bad.has(url) || (!direct && (prefOn('zchat-reduce-motion') || (dataSaverOn() && size < 72)));
+  const off = !url || avatarMotionBad(url) || (!direct && (prefOn('zchat-reduce-motion') || (dataSaverOn() && size < 72)));
   useEffect(() => {
     const el = boxRef.current;
     if (off || !el) return undefined;
     const s = { cb: setOn, live: false, on: false, w: size || 9999, n: avatarMotion.seq++ };
     avatarMotion.subs.set(el, s);
-    const stop = decorBudgetWatch(el, (v) => { s.live = !!v; avatarMotionQueue(); }, 1);
+    const stop = avatarMotionWatch(el, (v) => { s.live = !!v; avatarMotionQueue(); });
     return () => { if (stop) stop(); avatarMotion.subs.delete(el); avatarMotionQueue(); setOn(false); };
   }, [off, url, size]);
   useEffect(() => { if (!on) setReady(false); }, [on]);
@@ -2241,15 +2283,18 @@ function AvatarMotion({ src, url: direct = null, size = 0, fit = 'cover' }) {
     v.setAttribute('playsinline', '');
     v.setAttribute('webkit-playsinline', '');
     v.setAttribute('src', url);
+    avatarMotionHook();
+    avatarMotion.vids.add(v);
     const p = v.play();
     if (p && p.catch) p.catch(() => {});
-    return () => { try { v.pause(); v.removeAttribute('src'); v.load(); } catch {} };
+    const t = setTimeout(() => { try { if (v.paused) { const q = v.play(); if (q && q.catch) q.catch(() => {}); } } catch {} }, 1500);
+    return () => { clearTimeout(t); avatarMotion.vids.delete(v); try { v.pause(); v.removeAttribute('src'); v.load(); } catch {} };
   }, [on, url]);
   if (off) return null;
   return (
     <div ref={boxRef} aria-hidden="true" data-zanim={on ? (ready ? 'on' : 'wait') : 'off'} style={{ position: 'absolute', inset: 0, pointerEvents: 'none', borderRadius: 'inherit', overflow: 'hidden' }}>
       {on && <video ref={vidRef} loop muted playsInline preload="auto" disablePictureInPicture disableRemotePlayback tabIndex={-1}
-        onPlaying={() => setReady(true)} onError={() => { avatarMotion.bad.add(url); setOn(false); setBad((n) => n + 1); }}
+        onPlaying={() => { setReady(true); avatarMotion.bad.delete(url); }} onError={() => { const b = avatarMotion.bad.get(url); avatarMotion.bad.set(url, { n: (b ? b.n : 0) + 1, at: Date.now() }); setOn(false); setBad((n) => n + 1); setTimeout(() => setBad((n) => n + 1), 12500 * ((b ? b.n : 0) + 1)); }}
         style={{ width: '100%', height: '100%', objectFit: fit, display: 'block', opacity: ready ? 1 : 0, transition: 'opacity 0.28s ease' }} />}
     </div>
   );
@@ -4141,6 +4186,7 @@ function removeAccountEntry(id) {
 export function sanitizeAvatar(profile, myId) {
   if (!profile) return profile;
   if (profile.hide_photo && profile.id !== myId) return { ...profile, avatar: '', avatar_anim: null };
+  noteAvatarAnim(profile);
   return profile;
 }
 export function sanitizeAvatarList(list, myId) {
@@ -4159,6 +4205,37 @@ function avatarAnimSrc(v) {
     avatarAnimUrls.set(v, u);
   }
   return avatarAnimUrls.get(v);
+}
+const avatarAnimByPic = new Map();
+const avatarAnimWait = new Map();
+let avatarAnimSaveT = 0;
+try {
+  const raw = typeof localStorage !== 'undefined' ? JSON.parse(localStorage.getItem('zchat-avatar-anims') || '[]') : [];
+  if (Array.isArray(raw)) raw.slice(-300).forEach((x) => { if (Array.isArray(x) && typeof x[0] === 'string' && typeof x[1] === 'string') avatarAnimByPic.set(x[0], x[1]); });
+} catch {}
+export function noteAvatarAnim(p) {
+  if (!p || typeof p !== 'object' || typeof p.avatar !== 'string' || p.avatar.indexOf('http') !== 0 || !Object.prototype.hasOwnProperty.call(p, 'avatar_anim')) return;
+  const next = typeof p.avatar_anim === 'string' && AVATAR_ANIM_PATH.test(p.avatar_anim) ? p.avatar_anim : null;
+  const prev = avatarAnimByPic.get(p.avatar) || null;
+  if (prev === next) return;
+  if (next) avatarAnimByPic.set(p.avatar, next); else avatarAnimByPic.delete(p.avatar);
+  const w = avatarAnimWait.get(p.avatar);
+  if (w) w.forEach((f) => { try { f(); } catch {} });
+  clearTimeout(avatarAnimSaveT);
+  avatarAnimSaveT = setTimeout(() => { try { localStorage.setItem('zchat-avatar-anims', JSON.stringify([...avatarAnimByPic].slice(-300))); } catch {} }, 1500);
+}
+function useAvatarAnimFor(pic, given) {
+  const ok = !given && typeof pic === 'string' && pic.indexOf('http') === 0;
+  const [, bump] = useState(0);
+  useEffect(() => {
+    if (!ok) return undefined;
+    let set = avatarAnimWait.get(pic);
+    if (!set) { set = new Set(); avatarAnimWait.set(pic, set); }
+    const f = () => bump((n) => n + 1);
+    set.add(f);
+    return () => { set.delete(f); if (!set.size) avatarAnimWait.delete(pic); };
+  }, [ok, pic]);
+  return given || (ok ? avatarAnimByPic.get(pic) || null : null);
 }
 function avatarAnimPathOf(url, uid) {
   const s = String(url || '');
@@ -4192,6 +4269,7 @@ export async function fetchProfilesView(ids, opts) {
   if (res.error && profileFnMissing(res.error)) res = await supabase.from('profiles').select('*').in('id', list);
   if (res.error) return { data: null, error: res.error };
   const rows = Array.isArray(res.data) ? res.data : [];
+  rows.forEach(noteAvatarAnim);
   return { data: opts && opts.live ? rows.filter((r) => r && !r.is_deleted) : rows, error: null };
 }
 async function fetchProfileView(id) {
@@ -5009,11 +5087,18 @@ export function SpotArt({ k, dark = false, radius = 22, style }) {
     </ArtCtx.Provider>
   );
 }
-export function LoadFail({ code, onRetry, small }) {
+export function LoadFail({ code, onRetry, small, where }) {
   const { theme } = useTheme();
   const c = code ? String(code) : '';
+  const boxRef = useRef(null);
+  useEffect(() => {
+    if (!c) return;
+    let w = where || '';
+    try { if (!w && boxRef.current) { const host = boxRef.current.closest('[data-zwhere]'); if (host) w = host.getAttribute('data-zwhere') || ''; } } catch {}
+    reportClientError(`Did not load: ${w || 'a page'} (code ${c})`, '', { kind: 'load', code: c, where: w || null });
+  }, [c, where]);
   return (
-    <div role="alert" style={{ textAlign: 'center', padding: small ? '18px 16px' : '56px 24px 40px', color: theme.muted }}>
+    <div ref={boxRef} role="alert" style={{ textAlign: 'center', padding: small ? '18px 16px' : '56px 24px 40px', color: theme.muted }}>
       <div style={{ fontSize: small ? 15 : 17, fontWeight: 800, color: theme.ink, letterSpacing: '-0.01em' }}>This did not load</div>
       <div style={{ fontSize: small ? 13 : 14, lineHeight: 1.5, marginTop: 6, maxWidth: 320, marginLeft: 'auto', marginRight: 'auto', textWrap: 'balance' }}>{c ? 'ZChat could not load this right now. Try again in a moment.' : 'Check your connection, then try again.'}</div>
       {onRetry && <div style={{ marginTop: 16, display: 'flex', justifyContent: 'center' }}><PillButton primary label="Try again" onClick={onRetry} /></div>}
@@ -5242,6 +5327,40 @@ function HomeFeatureRow({ onPick }) {
   );
 }
 
+function HomeStartCard({ steps, onDismiss }) {
+  const { theme } = useTheme();
+  const done = steps.filter((x) => x.done).length;
+  const accent = kitOnInk(theme);
+  return (
+    <div role="region" aria-label="Get started" style={{ margin: '0 16px 14px', padding: '14px 14px 6px', borderRadius: 20, background: theme.soft }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 16.5, fontWeight: 800, color: theme.ink, letterSpacing: '-0.01em' }}>Get started</div>
+          <div style={{ fontSize: 13, color: theme.muted, marginTop: 1 }}>{`${done} of ${steps.length} done`}</div>
+        </div>
+        <div role="button" aria-label="Hide get started" onClick={onDismiss} className="zchat-press" style={{ width: 32, height: 32, borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.muted, cursor: 'pointer' }}><X size={18} /></div>
+      </div>
+      <div style={{ height: 6, borderRadius: 3, background: theme.soft2, marginTop: 10, overflow: 'hidden' }}>
+        <div style={{ width: `${Math.round((done / steps.length) * 100)}%`, height: '100%', borderRadius: 3, background: accent, transition: 'width 0.4s ease' }} />
+      </div>
+      <div style={{ marginTop: 6 }}>
+        {steps.map((x) => (
+          <div key={x.k} role="button" aria-label={x.done ? `${x.label}, done` : x.label} onClick={x.done ? undefined : () => { hapticTap(); playUiSound('tap'); x.on(); }} className={x.done ? undefined : 'zchat-row-press'}
+            style={{ display: 'flex', alignItems: 'center', gap: 12, minHeight: 48, cursor: x.done ? 'default' : 'pointer' }}>
+            <span aria-hidden="true" style={{ width: 24, height: 24, borderRadius: 12, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: x.done ? '#22C55E' : 'transparent', boxShadow: x.done ? 'none' : `inset 0 0 0 2px ${theme.border}` }}>
+              {x.done && <Check size={14} color="#FFFFFF" strokeWidth={3} />}
+            </span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 15, fontWeight: 650, color: x.done ? theme.muted : theme.ink, textDecoration: x.done ? 'line-through' : 'none' }}>{x.label}</div>
+              {!x.done && <div style={{ fontSize: 12.5, color: theme.muted, marginTop: 1 }}>{x.sub}</div>}
+            </div>
+            {!x.done && <ChevronRight size={18} color={theme.muted} />}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 function RequestsRow({ count, unread, onClick }) {
   const { theme } = useTheme();
   return (
@@ -10525,6 +10644,18 @@ function BdayCardRow({ profile, center }) {
   );
 }
 
+function PfLater({ children, ms = 160 }) {
+  const [on, setOn] = useState(false);
+  useEffect(() => {
+    let t = 0;
+    let id = 0;
+    const go = () => setOn(true);
+    if (typeof requestIdleCallback === 'function') id = requestIdleCallback(go, { timeout: ms });
+    else t = setTimeout(go, ms);
+    return () => { if (id && typeof cancelIdleCallback === 'function') cancelIdleCallback(id); clearTimeout(t); };
+  }, []);
+  return on ? children : null;
+}
 const pfToneMem = new Map();
 function usePhotoTone(url) {
   const ok = typeof url === 'string' && /^https?:/i.test(url) && !dataSaverOn();
@@ -11397,6 +11528,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0, maxWidth: '100%', marginTop: 6, fontSize: 24, fontWeight: 800, color: theme.ink, letterSpacing: '-0.02em' }}>
                 <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', ...(cxNs(profile) ? NS_ROOM : null) }}><NameBadge name={profile.name} verified={profile.verified} custom={profile.custom_badge} size={19} /></span>
+                {!profile.is_bot && <PfCake id={profile.id} />}
               </div>
               <div style={{ fontSize: 14.5, color: theme.muted, marginTop: 2, wordBreak: 'break-word' }}>
                 @{profile.username}{profile.pronouns ? `, ${profile.pronouns}` : ''}{infoBits.map((b) => `, ${b}`).join('')}
@@ -11488,7 +11620,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
               )}
               {canSeeDetails && !profile.is_bot && (
                 <div className="zprof-chips" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', columnGap: 18, rowGap: 0, padding: plateOn ? '8px 20px 0' : '6px 20px 0', justifyContent: plateOn ? 'center' : 'flex-start' }}>
-                  <ProfileExtras profile={profile} isSelf={isSelf} onEditStatus={() => setStatusOpen(true)} onEditBirthday={() => setBdayOpen(true)} onBirthdayGift={onGift && !isSelf && !profile.is_bot && !isBlocked ? () => onGift({ ...profile, __bday: true }) : null} bare />
+                  <ProfileExtras profile={profile} isSelf={isSelf} myId={userId} onEditStatus={() => setStatusOpen(true)} onEditBirthday={() => setBdayOpen(true)} onBirthdayGift={onGift && !isSelf && !profile.is_bot && !isBlocked ? () => onGift({ ...profile, __bday: true }) : null} bare />
                   <ProfileSong profile={profile} isSelf={isSelf} bare center={plateOn} />
                 </div>
               )}
@@ -11516,8 +11648,8 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
                 )}
               </div>
               <div ref={pinSentRef} aria-hidden="true" style={{ height: 1, marginTop: -1 }} />
-              {!profile.is_bot && <LiveNowStrip profile={profile} isSelf={isSelf} />}
-              {!profile.is_bot && <CreatorStrip profile={profile} isSelf={isSelf} userId={userId} />}
+              {!profile.is_bot && <PfLater><LiveNowStrip profile={profile} isSelf={isSelf} /></PfLater>}
+              {!profile.is_bot && <PfLater><CreatorStrip profile={profile} isSelf={isSelf} userId={userId} /></PfLater>}
               {isSelf && selfExtra}
               {reportSent && (
                 <div style={{ marginTop: 12, fontSize: 12.5, color: theme.teal, fontWeight: 700, textAlign: 'center' }} className="zchat-fade">Report sent. Thanks for flagging this.</div>
@@ -11536,9 +11668,9 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
                       </div>
                     </div>
                   )}
-                  {!profile.is_bot && <div style={{ padding: '2px 20px 0' }}><ProfileHighlights profile={profile} isSelf={isSelf} userId={userId} onOpenHighlight={(h) => onOpenHighlight && onOpenHighlight(h, profile)} /></div>}
-                  {!profile.is_bot && <ProfileShelves profile={profile} isSelf={isSelf} pfx={pfx} />}
-                  {!profile.is_bot && <ProfileGuestbook profile={profile} isSelf={isSelf} userId={userId} meProfile={meProfile} onOpenProfile={onOpenProfile ? (n) => onOpenProfile({ id: n.writer_id, name: n.name, username: n.username, avatar: n.avatar }) : undefined} />}
+                  {!profile.is_bot && <PfLater><div style={{ padding: '2px 20px 0' }}><ProfileHighlights profile={profile} isSelf={isSelf} userId={userId} onOpenHighlight={(h) => onOpenHighlight && onOpenHighlight(h, profile)} /></div></PfLater>}
+                  {!profile.is_bot && <PfLater><ProfileShelves profile={profile} isSelf={isSelf} pfx={pfx} /></PfLater>}
+                  {!profile.is_bot && <PfLater ms={320}><ProfileGuestbook profile={profile} isSelf={isSelf} userId={userId} meProfile={meProfile} onOpenProfile={onOpenProfile ? (n) => onOpenProfile({ id: n.writer_id, name: n.name, username: n.username, avatar: n.avatar }) : undefined} /></PfLater>}
                   {!profile.is_bot && (
                     <>
                       <div ref={tabsAnchorRef} aria-hidden="true" style={{ height: 0 }} />
@@ -15709,7 +15841,7 @@ export function StoryAvatar({ profile, size = 64, ring = 'none', onClick, badgeP
   return (
     <div onClick={onClick} style={{ position: 'relative', width: size, height: size, flexShrink: 0, cursor: onClick ? 'pointer' : 'default', opacity: dim ? 0.5 : 1 }}>
       <div style={{ width: size, height: size, borderRadius: '50%', padding: pad, boxSizing: 'border-box' }}>
-        <Avatar emoji={profile?.avatar} name={profile?.name || '?'} size={size - (hasRing ? 8 : 0)} anim={anim} />
+        <Avatar emoji={profile?.avatar} name={profile?.name || '?'} size={size - (hasRing ? 8 : 0)} anim={anim || (profile && profile.avatar_anim) || null} />
       </div>
       {uploading ? (
         <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="zchat-story-upload" style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }} aria-hidden="true">
@@ -18261,7 +18393,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-export const APP_VERSION = '29.1V';
+export const APP_VERSION = '30.0V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -18560,7 +18692,7 @@ function AvatarPeek({ profile, online, lastSeen, hasStory, storySeen, canCall, o
         <div onClick={() => { onClose(); if (hasStory) onStory(); else onProfile(); }} style={{ position: 'relative', aspectRatio: '1 / 1', background: photo ? '#000' : colorForName(profile.name), cursor: 'pointer' }}>
           {peekPhotos.length > 1
             ? <div onScroll={(e) => { const el = e.currentTarget; const n = Math.round(el.scrollLeft / Math.max(1, el.clientWidth)); if (n !== peekI) setPeekI(n); }} onClick={(e) => e.stopPropagation()} aria-label="Swipe to see more photos" style={{ position: 'absolute', inset: 0, display: 'flex', overflowX: 'auto', overflowY: 'hidden', scrollSnapType: 'x mandatory', overscrollBehavior: 'contain' }}>
-                {peekPhotos.map((u, k) => <img key={`${k}:${u}`} src={u} alt="" draggable={false} style={{ flex: '0 0 100%', width: '100%', height: '100%', objectFit: 'cover', display: 'block', scrollSnapAlign: 'center' }} />)}
+                {peekPhotos.map((u, k) => <img key={`${k}:${u}`} src={u} alt="" draggable={false} style={{ flex: '0 0 100%', width: '100%', height: '100%', objectFit: 'cover', display: 'block', scrollSnapAlign: 'center', scrollSnapStop: 'always' }} />)}
               </div>
             : photo
             ? <img src={photo} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
@@ -26509,7 +26641,7 @@ function CardCarousel({ post, rootRef, muted, onToggleMute, onDoubleTap }) {
       <div style={{ position: 'relative', width: '100%', aspectRatio: String(aspect) }}>
         <div ref={ref} onScroll={onScroll} data-pcar="1" style={{ position: 'absolute', inset: 0, display: 'flex', overflowX: 'auto', scrollSnapType: 'x mandatory', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch', overscrollBehaviorX: 'contain' }}>
           {list.map((it, i) => (
-            <div key={i} style={{ flex: '0 0 100%', height: '100%', scrollSnapAlign: 'start', position: 'relative' }}>
+            <div key={i} style={{ flex: '0 0 100%', height: '100%', scrollSnapAlign: 'start', scrollSnapStop: 'always', position: 'relative' }}>
               {it.t === 'video'
                 ? <CardVideo src={it.u} overlay={it.o} rootRef={rootRef} muted={muted} onToggleMute={onToggleMute} onDoubleTap={onDoubleTap} fill cc={psCcTrack(post, it.u)} />
                 : <CardImage src={it.u} overlay={it.o} eager={i < 2} onDoubleTap={onDoubleTap} fill alt={psAltOf(post, i)} />}
@@ -30678,6 +30810,7 @@ export const birthdayRowMem = new Map();
 export function useBirthdayOf(userId) {
   const [row, setRow] = useState(() => (birthdayRowMem.has(userId) ? birthdayRowMem.get(userId) : undefined));
   useEffect(() => {
+    if (!userId) return undefined;
     let alive = true;
     const load = () => supabase.from('birthdays').select('md, show').eq('user_id', userId).maybeSingle().then(({ data, error }) => {
       if (!alive) return;
@@ -30692,13 +30825,99 @@ export function useBirthdayOf(userId) {
   }, [userId]);
   return row;
 }
-function ProfileExtras({ profile, isSelf, onEditStatus, onEditBirthday, onBirthdayGift, bare }) {
+const ZODIAC = [
+  { k: 'capricorn', n: 'Capricorn', el: 'earth', a: 1222, b: 119, t: ['Patient', 'Driven', 'Loyal'], g: 'M4 6l3 10 3-10v8c0 3 2 5 4.5 5s3.5-2 3.5-3.5-1.5-2.5-3-2.5-2.5 1.2-2.5 3' },
+  { k: 'aquarius', n: 'Aquarius', el: 'air', a: 120, b: 218, t: ['Original', 'Curious', 'Kind'], g: 'M3 10.5l3-3 3 3 3-3 3 3 3-3 3 3M3 16.5l3-3 3 3 3-3 3 3 3-3 3 3' },
+  { k: 'pisces', n: 'Pisces', el: 'water', a: 219, b: 320, t: ['Dreamy', 'Gentle', 'Creative'], g: 'M6.5 4c3 3.5 3 12.5 0 16M17.5 4c-3 3.5-3 12.5 0 16M7.5 12h9' },
+  { k: 'aries', n: 'Aries', el: 'fire', a: 321, b: 419, t: ['Bold', 'Brave', 'Full of energy'], g: 'M12 20V10.5M12 10.5C12 6 9.5 4 7.5 4.5S4.5 7.5 5.5 9.5M12 10.5C12 6 14.5 4 16.5 4.5s3 3 2 5' },
+  { k: 'taurus', n: 'Taurus', el: 'earth', a: 420, b: 520, t: ['Calm', 'Steady', 'Warm'], g: 'M5 4.5c1.2 3 3.8 4.8 7 4.8s5.8-1.8 7-4.8M12 9.3a5.2 5.2 0 1 0 0.01 0' },
+  { k: 'gemini', n: 'Gemini', el: 'air', a: 521, b: 620, t: ['Funny', 'Quick', 'Social'], g: 'M5.5 4.5c4 1.5 9 1.5 13 0M5.5 19.5c4-1.5 9-1.5 13 0M9.5 5.5v13M14.5 5.5v13' },
+  { k: 'cancer', n: 'Cancer', el: 'water', a: 621, b: 722, t: ['Caring', 'Protective', 'Deep'], g: 'M5.5 9a2.5 2.5 0 1 0 5 0 2.5 2.5 0 1 0-5 0M8 6.5c4-2.2 9-1.3 11.2 2.3M18.5 15a2.5 2.5 0 1 0-5 0 2.5 2.5 0 1 0 5 0M16 17.5c-4 2.2-9 1.3-11.2-2.3' },
+  { k: 'leo', n: 'Leo', el: 'fire', a: 723, b: 822, t: ['Confident', 'Generous', 'Big hearted'], g: 'M8 15.5a2.6 2.6 0 1 0 0.01 0M10.6 15.8C10 11.5 9 8.5 11.5 6s6.8-.6 6.6 3.3c-.2 3.3-3.6 5-3.1 9.2.2 1.6 1.5 2 2.8 1.3' },
+  { k: 'virgo', n: 'Virgo', el: 'earth', a: 823, b: 922, t: ['Careful', 'Helpful', 'Smart'], g: 'M4 7c1.4 0 2 .9 2 2.4V18M6 9.4C6 8 7 7 8.4 7s2.4 1 2.4 2.4V18M10.8 9.4c0-1.4 1-2.4 2.4-2.4s2.4 1 2.4 2.4v6.2c0 2.2 1.4 3.4 3.4 3.4M15.6 12.5c1.8-1 4.4-.3 4.4 2.2s-2 4.4-5.6 5.3' },
+  { k: 'libra', n: 'Libra', el: 'air', a: 923, b: 1022, t: ['Fair', 'Charming', 'Easygoing'], g: 'M4 19.5h16M4 15.5h5.1a3.6 3.6 0 1 1 5.8 0H20' },
+  { k: 'scorpio', n: 'Scorpio', el: 'water', a: 1023, b: 1121, t: ['Intense', 'Loyal', 'Mysterious'], g: 'M4 7c1.4 0 2 .9 2 2.4V18M6 9.4C6 8 7 7 8.4 7s2.4 1 2.4 2.4V18M10.8 9.4c0-1.4 1-2.4 2.4-2.4s2.4 1 2.4 2.4V17c0 1.4.9 2 2.2 2H20M18 16.8l2.2 2.2-2.2 2.2' },
+  { k: 'sagittarius', n: 'Sagittarius', el: 'fire', a: 1122, b: 1221, t: ['Free', 'Honest', 'Adventurous'], g: 'M5 19L19 5M12 5h7v7M8 11.5l4.5 4.5' },
+];
+const ZODIAC_EL = {
+  fire: { name: 'Fire', c: ['#FF8A3D', '#E5383B'] },
+  earth: { name: 'Earth', c: ['#7BC67E', '#2F7D57'] },
+  air: { name: 'Air', c: ['#8EC5FF', '#7C5CFC'] },
+  water: { name: 'Water', c: ['#4FD1C5', '#2563EB'] },
+};
+export function zodiacOf(md) {
+  const [m, d] = String(md || '').split('-').map((x) => parseInt(x, 10));
+  if (!m || !d) return null;
+  const v = m * 100 + d;
+  return ZODIAC.find((z) => (z.a > z.b ? v >= z.a || v <= z.b : v >= z.a && v <= z.b)) || null;
+}
+function zodiacRange(z) {
+  const f = (v) => `${MONTH_NAMES[Math.floor(v / 100) - 1]} ${v % 100}`;
+  return `${f(z.a)} to ${f(z.b)}`;
+}
+export function ZodiacGlyph({ k, size = 18, color = 'currentColor', sw = 2 }) {
+  const z = ZODIAC.find((x) => x.k === k);
+  if (!z) return null;
+  return <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" style={{ display: 'block', flexShrink: 0 }}><path d={z.g} fill="none" stroke={color} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" /></svg>;
+}
+function zodiacMatch(a, b) {
+  if (!a || !b) return null;
+  if (a.el === b.el) return { t: 'Easy match', s: 'You think alike and get each other fast.' };
+  const pair = [a.el, b.el].sort().join(' ');
+  if (pair === 'air fire' || pair === 'earth water') return { t: 'Great match', s: 'You bring out the best in each other.' };
+  return { t: 'Opposites attract', s: 'Different energy, which keeps things interesting.' };
+}
+function ZodiacSheet({ md, name, isSelf, myId, onClose }) {
+  const { theme } = useTheme();
+  const z = zodiacOf(md);
+  const mine = useBirthdayOf(isSelf ? null : myId);
+  const myZ = mine && mine.md ? zodiacOf(mine.md) : null;
+  if (!z) return null;
+  const el = ZODIAC_EL[z.el];
+  const match = !isSelf ? zodiacMatch(z, myZ) : null;
+  const first = String(name || '').trim().split(' ')[0] || 'Them';
+  return (
+    <CrSheet title={isSelf ? 'Your zodiac sign' : `${first}'s zodiac sign`} sub={zodiacRange(z)} onClose={onClose}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '8px 0 22px' }}>
+        <div style={{ width: 112, height: 112, borderRadius: '50%', background: `radial-gradient(circle at 30% 25%, ${el.c[0]}, ${el.c[1]})`, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 14px 34px ${el.c[1]}55` }}>
+          <ZodiacGlyph k={z.k} size={58} color="#FFFFFF" sw={1.8} />
+        </div>
+        <div style={{ fontSize: 26, fontWeight: 800, color: theme.ink, letterSpacing: '-0.02em', marginTop: 14 }}>{z.n}</div>
+        <div style={{ fontSize: 14, color: theme.muted, marginTop: 2 }}>{`${el.name} sign`}</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 8, marginTop: 14 }}>
+          {z.t.map((x) => <span key={x} style={{ padding: '7px 13px', borderRadius: 999, background: theme.soft, color: theme.ink, fontSize: 13.5, fontWeight: 650 }}>{x}</span>)}
+        </div>
+        {match && (
+          <div style={{ alignSelf: 'stretch', marginTop: 20, padding: '14px 16px', borderRadius: 18, background: theme.soft, display: 'flex', alignItems: 'center', gap: 14, textAlign: 'left' }}>
+            <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+              <span style={{ width: 38, height: 38, borderRadius: '50%', background: `linear-gradient(135deg, ${el.c[0]}, ${el.c[1]})`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><ZodiacGlyph k={z.k} size={20} color="#FFFFFF" /></span>
+              <span style={{ width: 38, height: 38, marginLeft: -8, borderRadius: '50%', boxShadow: `0 0 0 3px ${theme.soft}`, background: `linear-gradient(135deg, ${ZODIAC_EL[myZ.el].c[0]}, ${ZODIAC_EL[myZ.el].c[1]})`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><ZodiacGlyph k={myZ.k} size={20} color="#FFFFFF" /></span>
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 15, fontWeight: 800, color: theme.ink }}>{`${z.n} and ${myZ.n}: ${match.t}`}</div>
+              <div style={{ fontSize: 13.5, color: theme.muted, marginTop: 2, lineHeight: 1.4 }}>{match.s}</div>
+            </div>
+          </div>
+        )}
+        {!isSelf && !myZ && <div style={{ fontSize: 13.5, color: theme.muted, marginTop: 18 }}>Add your birthday on your profile to see how your signs match.</div>}
+      </div>
+    </CrSheet>
+  );
+}
+function PfCake({ id }) {
+  const bd = useBirthdayOf(id);
+  if (!bd || !birthdayMdsToday().includes(bd.md)) return null;
+  return <span role="img" aria-label="Birthday today" style={{ display: 'inline-flex', marginLeft: 2 }}><CakeIcon size={20} /></span>;
+}
+function ProfileExtras({ profile, isSelf, myId, onEditStatus, onEditBirthday, onBirthdayGift, bare }) {
   const { theme } = useTheme();
   useStatusTick(profile.id);
   const st = activeStatusOf(profile);
   useStatusEnd(st);
   const bd = useBirthdayOf(profile.id);
   const today = bd && birthdayMdsToday().includes(bd.md);
+  const zod = bd && bd.md ? zodiacOf(bd.md) : null;
+  const [zodOpen, setZodOpen] = useState(false);
   if (!st && !bd && !isSelf) return null;
   const accent = kitOnInk(theme);
   const item = (key, mark, text, onClick, tone) => (
@@ -30709,13 +30928,16 @@ function ProfileExtras({ profile, isSelf, onEditStatus, onEditBirthday, onBirthd
   );
   const items = [
     !st && isSelf ? item('st', <LineGlyph k="chat" size={18} />, 'Add status', onEditStatus, 'add') : null,
-    bd ? item('bd', <LineGlyph k="cake" size={18} color={BIRTHDAY_PINK} />, today ? (isSelf ? 'Happy birthday!' : 'Birthday today') : `Birthday ${birthdayLabel(bd.md)}`, isSelf ? onEditBirthday : onBirthdayGift || null, today ? 'party' : 'soft')
-      : isSelf ? item('bd', <LineGlyph k="cake" size={18} />, 'Add birthday', onEditBirthday, 'add') : null,
+    bd && today ? item('bd', <LineGlyph k="cake" size={18} color={BIRTHDAY_PINK} />, isSelf ? 'Happy birthday!' : 'Birthday today', isSelf ? onEditBirthday : onBirthdayGift || null, 'party') : null,
+    bd && zod ? item('zd', <ZodiacGlyph k={zod.k} size={18} color={accent} />, zod.n, () => { hapticTap(); setZodOpen(true); }, 'soft')
+      : isSelf ? item('bd', <ZodiacGlyph k="leo" size={18} />, 'Add your sign', onEditBirthday, 'add') : null,
   ];
-  if (bare) return <>{items}</>;
+  const sheet = zodOpen && bd ? <ZodiacSheet key="zs" md={bd.md} name={profile.name} isSelf={isSelf} myId={myId} onClose={() => setZodOpen(false)} /> : null;
+  if (bare) return <>{items}{sheet}</>;
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', columnGap: 16, rowGap: 2, justifyContent: 'center', marginTop: 14, padding: '0 6px' }}>
       {items}
+      {sheet}
     </div>
   );
 }
@@ -32942,7 +33164,11 @@ const crLoaders = {
   me: () => crCall('zchat_cr_me').then((r) => (r.missing ? { off: true } : r.ok === false && r.reason ? null : r)),
   mem: (id) => crList('zchat_cr_member_ids', { p_creator: id }).then((l) => (l ? new Set(l.map(String)) : null)),
   chat: (k) => crCall('zchat_cr_chat_state', { p_other: k.split('|')[0] }).then((r) => { if (r.missing) return { off: true }; if (r.ok === false && r.reason) return null; (r.holds || []).forEach(crHoldPut); crChatKeep(k, r); return r; }),
-  shop: (id) => supabase.from('shop_listings').select('*').eq('owner_id', id).order('created_at', { ascending: false }).limit(50).then(({ data, error }) => (error ? (crMissing(error) ? [] : { crFail: loadFailCode(error) }) : data || []), () => null),
+  shop: (id) => Promise.resolve(supabase.rpc('zchat_shop_list', { p_owner: id })).then(({ data, error }) => {
+    if (!error) return Array.isArray(data) ? data : [];
+    if (!rpcMissing(error)) return { crFail: loadFailCode(error) };
+    return supabase.from('shop_listings').select('*').eq('owner_id', id).order('created_at', { ascending: false }).limit(50).then((r) => (r.error ? (crMissing(r.error) ? [] : { crFail: loadFailCode(r.error) }) : r.data || []), () => null);
+  }, () => null),
   orders: (k) => { const [side, uid, other] = k.split('|'); let q = supabase.from('creator_shoutouts').select('*').eq(side === 'in' ? 'creator_id' : 'fan_id', uid); if (other) q = q.eq(side === 'in' ? 'fan_id' : 'creator_id', other); return q.order('created_at', { ascending: false }).limit(60).then(({ data, error }) => (error ? (crMissing(error) ? [] : null) : data || []), () => null); },
   paid: (gid) => supabase.from('group_entry_payments').select('user_id, status').eq('group_id', gid).in('status', ['held', 'paid']).limit(2000).then(({ data, error }) => (error ? (crMissing(error) ? new Set() : null) : new Set((data || []).map((r) => r.user_id))), () => null),
   bought: () => crList('zchat_cr_packs_bought'),
@@ -35177,6 +35403,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     setDeferredInstallPrompt(null);
   };
   const [me, setMe] = useState(() => readMeCache(session.user.id, session.user.email));
+  useEffect(() => { noteAvatarAnim(me); }, [me && me.avatar, me && me.avatar_anim]);
   const [isZAdmin, setIsZAdmin] = useState(false);
   const [profileCheckFailed, setProfileCheckFailed] = useState(false);
   const [results, setResults] = useState([]);
@@ -44034,6 +44261,22 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   }, [openNoteTags]);
   const chatAlbumKey = activeGroup ? albumChatKey(uid, null, activeGroup.id) : activeProfile ? albumChatKey(uid, activeProfile.id) : null;
   const chatName = activeGroup ? activeGroup.name : activeProfile ? activeProfile.name : '';
+  const [startHidden, setStartHidden] = useState(() => { try { return localStorage.getItem(`zchat-start-hide-${uid}`) === '1'; } catch { return false; } });
+  const startSteps = (() => {
+    if (startHidden || !me) return null;
+    const born = me.created_at ? Date.parse(me.created_at) : 0;
+    const people = conversations.filter((c) => c.otherProfile && !c.otherProfile.is_bot).length;
+    if (!(born && Date.now() - born < 14 * 86400000) && people >= 3) return null;
+    let played = false;
+    try { const v = JSON.parse(localStorage.getItem('zchat-games-recent') || '[]'); played = Array.isArray(v) && v.length > 0; } catch {}
+    const list = [
+      { k: 'photo', label: 'Add a profile photo', sub: 'So friends know it is you', done: typeof me.avatar === 'string' && me.avatar.indexOf('http') === 0, on: () => setHomeTab('me') },
+      { k: 'bot', label: 'Say hi to ZChat Bot', sub: 'Ask it anything, or play a game with it', done: conversations.some((c) => c.otherProfile && c.otherProfile.is_bot), on: () => homeFeat('bot') },
+      { k: 'follow', label: 'Follow 3 people', sub: 'See their posts and stories', done: iFollowIds.size >= 3, on: () => setShowDiscover(true) },
+      { k: 'game', label: 'Play your first game', sub: 'Pool, chess, Zap and more', done: played, on: () => setShowGames({ at: Date.now() }) },
+    ];
+    return list.every((x) => x.done) ? null : list;
+  })();
   const [featPick, setFeatPick] = useState(null);
   const [featGo, setFeatGo] = useState(null);
   const homeFeat = (k) => {
@@ -45588,6 +45831,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
               )}
               {listFilter === 'all' && <ActiveStrip items={activeStripItems} />}
               {listFilter === 'all' && <HomeFeatureRow onPick={homeFeat} />}
+              {listFilter === 'all' && startSteps && <HomeStartCard steps={startSteps} onDismiss={() => { setStartHidden(true); try { localStorage.setItem(`zchat-start-hide-${uid}`, '1'); } catch {} }} />}
               {listFilter === 'all' && <ComingUpRow />}
               {focusState && <FocusBanner focus={focusState} onEnd={endFocus} />}
               {listFilter === 'all' && <SafetyListBanner />}
@@ -51535,6 +51779,7 @@ export function HowToPlaySheet({ k, onClose }) {
                   <div style={{ fontSize: 14.5, color: theme.ink, lineHeight: 1.45 }}>{t}</div>
                 </div>
               ))}
+              {k === 'zap' && <ZapCardGuide mayhem ink={theme.ink} muted={theme.muted} card={theme.soft} head={theme.muted} />}
             </div>
             {rules.win && (
               <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', marginTop: 14, padding: '12px 14px', borderRadius: 14, background: theme.dark ? 'rgba(245,158,11,0.12)' : 'rgba(245,158,11,0.14)' }}>

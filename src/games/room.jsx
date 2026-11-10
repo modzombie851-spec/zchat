@@ -5,11 +5,11 @@ import { useMyLevels, useLevels, recordFinish, xpSpan, LEVEL_GAMES, noteRecent }
 import { preloadScene } from './scenes.jsx';
 import { withFaces } from './faces.jsx';
 import { GOLF } from './golf.jsx';
-import { useKit } from './kits.jsx';
+import { useKit, usePeerKit, setGear } from './kits.jsx';
 import {
   ThemeContext, THEMES, Avatar, GAME_TITLES, GAME_RULES, GameArt, g1Mem, g1Send,
   ANIM_STICKERS, useBackClose, reducedMotion, appSnack, ga1Name, GameBareCtx, gameBoardCard, chatGameLink, g1Load,
-  PoolTable, CarromTable, ZapTable,
+  PoolTable, CarromTable, ZapTable, ZapCardGuide,
 } from '../App.jsx';
 
 export function warmRoom(g) {
@@ -801,6 +801,11 @@ export function GameRoomPage({ st, prevOf, myId, me, peer, intent, onClose }) {
     { id: other, name: peerName, avatar: <Avatar emoji={peer && peer.id === other ? peer.avatar : null} name={peerFull} size={50} />, level: peerLevel, turn: !fin && !!other && st.t === other && !busy, here: isBot ? null : relay.here, line: meta.peer },
   ];
   const botSocial = useBotSocial(player && isBot, myId, other, g);
+  const peerKit = usePeerKit(player && !isBot && (g === 'pool' || g === 'crm') ? other : null);
+  const myCue = useKit('cue');
+  const myStriker = useKit('striker');
+  setGear('cue', myCue ? myCue.key : null, peerKit && typeof peerKit.cue === 'string' ? peerKit.cue : null);
+  setGear('striker', myStriker ? myStriker.key : null, peerKit && typeof peerKit.striker === 'string' ? peerKit.striker : null);
   const social = useMemo(() => (player && !isBot ? { me: myId, send: relay.send, on: relay.on, stickers: roomStickers(), phrases: PHRASES[g] || PHRASES[g === 'ckr' ? 'chess' : ''] } : botSocial), [relay.send, relay.on, player, isBot, g, botSocial]);
   const away = player && !isBot && relay.here === false && !fin;
   const status = fin ? null : away && !meta.hot ? `Waiting for ${peerName}` : (meta.status || null);
@@ -816,7 +821,7 @@ export function GameRoomPage({ st, prevOf, myId, me, peer, intent, onClose }) {
               : <ClassicView st={st} myId={myId} onMove={move} peerName={peerName} onMeta={setMeta} />;
   return (
     <GameRoom k={g} title={title} sub={meta.sub || (isBot ? 'With ZChat Bot' : relay.here ? `${peerName} is here` : `With ${peerName}`)} players={players} center={meta.center} status={status} statusHot={meta.hot}
-      menu={menu} rules={zap && st.md === 'mayhem' ? (GAME_RULES.zapMayhem || GAME_RULES[g]) : GAME_RULES[g]} social={social} toast={toast} still={still} ready={ready} bottom={meta.bottom || null}
+      menu={menu} rules={zap ? { ...(st.md === 'mayhem' ? (GAME_RULES.zapMayhem || GAME_RULES[g]) : GAME_RULES[g]), guide: <ZapCardGuide mayhem={st.md === 'mayhem'} /> } : GAME_RULES[g]} social={social} toast={toast} still={still} ready={ready} bottom={meta.bottom || null}
       splash={{ title, sub: `You vs ${peerName}`, art: <GameArt k={g} width={236} height={148} radius={30} />, players: [players[0], players[1]] }}
       onClose={onClose}
       top={drawOffer ? (

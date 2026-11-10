@@ -224,7 +224,7 @@ export function FullPage({ title, subtitle, onBack, right, zIndex = 60, children
   const body = (
     <>
     {!gone && <WideDim onClose={onBack} z={zIndex} />}
-    <div {...edgeBack} ref={pageRef} className="zchat-panel-open zchat-wide-page" style={{ position: 'fixed', left: 0, right: 0, top: 'var(--zvp-top, 0px)', height: 'var(--zvp-h, 100%)', zIndex, background: c.bg, color: c.fg, fontFamily: FONT, display: gone ? 'none' : 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+    <div {...edgeBack} ref={pageRef} data-zwhere={typeof title === 'string' ? title : undefined} className="zchat-panel-open zchat-wide-page" style={{ position: 'fixed', left: 0, right: 0, top: 'var(--zvp-top, 0px)', height: 'var(--zvp-h, 100%)', zIndex, background: c.bg, color: c.fg, fontFamily: FONT, display: gone ? 'none' : 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <IgTopBar title={title} subtitle={subtitle} onBack={onBack} right={right} />
       <div ref={setScroll} {...(scrollProps || {})} style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain', padding: pad ? '4px 16px' : 0, paddingBottom: footer ? 16 : 'calc(28px + env(safe-area-inset-bottom))', ...(bodyStyle || {}) }}>{children}</div>
       {footer && <div style={{ flexShrink: 0, padding: '10px 16px', paddingBottom: 'calc(12px + env(safe-area-inset-bottom))', background: c.bg, borderTop: `1px solid ${c.line}` }}>{footer}</div>}

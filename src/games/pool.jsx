@@ -3,7 +3,7 @@ import { GameRoom, RoomLayer, defineSfx, sfx, haptic, useGameKit } from './kit.j
 import { clamp, lerp, makeCanvas, fitCanvas, dpr, grain, woodTexture, rrect, rgba, shade, tint, mix, hexRgb, perfMeter, noiseHit, tone, loopNoise, easeOut, rng, gameCache, onGameCacheDrop, dropGameCaches, canvasBlank, guardCanvases } from './physics.jsx';
 import { PoolSim, TW, TH, R, CW, RW, HEAD_Y, FOOT, POCKETS, MOUTH, ballColor, kindOf, canPlace, judge, aimRay, findPot, groupOf, CUE_START } from './poolsim.jsx';
 import { useShotLink, throttle } from './live.jsx';
-import { kitFor } from './kits.jsx';
+import { kitFor, gearLook } from './kits.jsx';
 import { useBackClose, Avatar, appSnack, g1Send, g1Mem, g1First, g1PoolLeft, g1Outcome, g1Test, ConfirmSheet, FONT } from '../App.jsx';
 
 const FRAME = CW + RW;
@@ -768,7 +768,7 @@ export class PoolBoard {
     this.remote = null;
     this.pull = 0;
     const dl = Math.hypot(shot.dx, shot.dy) || 1;
-    this.anim = { sim, shot, cb: cb || {}, phase: 'cue', at: performance.now(), cueDur: 150 + (1 - p) * 120, back: 30 + p * 210, ux: shot.dx / dl, uy: shot.dy / dl, cx: shot.cx != null ? shot.cx : null, cy: shot.cy, ev: 0, sent: false, t0: 0, pt: 0, start };
+    this.anim = { who: this.shooter || 'peer', sim, shot, cb: cb || {}, phase: 'cue', at: performance.now(), cueDur: 150 + (1 - p) * 120, back: 30 + p * 210, ux: shot.dx / dl, uy: shot.dy / dl, cx: shot.cx != null ? shot.cx : null, cy: shot.cy, ev: 0, sent: false, t0: 0, pt: 0, start };
     this.dirty = true;
     this.kick();
     return sim;
@@ -986,13 +986,13 @@ export class PoolBoard {
     if (a && a.phase === 'cue') {
       const k = clamp((now - a.at) / a.cueDur, 0, 1);
       const c = a.cx != null ? [a.cx, a.cy] : (() => { const cb = a.start.find((b) => b[0] === 0); return cb ? [cb[1], cb[2]] : null; })();
-      if (c) this.drawCue(ctx, X, Y, s, c, a.ux, a.uy, a.back * (1 - k * k * k), 1);
+      if (c) this.drawCue(ctx, X, Y, s, c, a.ux, a.uy, a.back * (1 - k * k * k), 1, a.who);
     } else if (a && a.phase === 'roll' && a.pt < 0.35) {
       const c = a.cx != null ? [a.cx, a.cy] : (() => { const cb = a.start.find((b) => b[0] === 0); return cb ? [cb[1], cb[2]] : null; })();
-      if (c) this.drawCue(ctx, X, Y, s, c, a.ux, a.uy, 4 + a.pt * 120, 1 - a.pt / 0.35);
+      if (c) this.drawCue(ctx, X, Y, s, c, a.ux, a.uy, 4 + a.pt * 120, 1 - a.pt / 0.35, a.who);
     } else if (!a && this.o.canShoot && this.aim) {
       const c = this.cue();
-      if (c) this.drawCue(ctx, X, Y, s, c, this.aim[0], this.aim[1], 10 + this.pull * 230, 1);
+      if (c) this.drawCue(ctx, X, Y, s, c, this.aim[0], this.aim[1], 10 + this.pull * 230, 1, 'me');
     } else if (!a && this.remote && this.remote.ux != null) {
       const rm = this.remote;
       const c = rm.bih ? [rm.cx, rm.cy] : this.cue();
@@ -1009,7 +1009,7 @@ export class PoolBoard {
         ctx.lineWidth = 1.2;
         ctx.beginPath(); ctx.moveTo(X(c[0]), Y(c[1])); ctx.lineTo(X(c[0] + rm.ux * 420), Y(c[1] + rm.uy * 420)); ctx.stroke();
         ctx.restore();
-        this.drawCue(ctx, X, Y, s, c, rm.ux, rm.uy, 10 + (rm.p || 0) * 230, 0.9);
+        this.drawCue(ctx, X, Y, s, c, rm.ux, rm.uy, 10 + (rm.p || 0) * 230, 0.9, 'peer');
       }
     }
   }
@@ -1069,12 +1069,21 @@ export class PoolBoard {
     ctx.restore();
   }
 
-  drawCue(ctx, X, Y, s, c, ux, uy, back, alpha) {
+  drawCue(ctx, X, Y, s, c, ux, uy, back, alpha, side = 'me') {
     const tipD = R + Math.max(0, back);
     const len = 1460;
     const px = -uy; const py = ux;
     const at = (d, w) => [X(c[0] - ux * (tipD + d) + px * w), Y(c[1] - uy * (tipD + d) + py * w)];
-    const segs = [
+    const lk = gearLook('cue', side) || {};
+    const segs = lk.fore ? [
+      [0, 9, 6.2, 6.3, ['#2F5C9E', '#5C8AD0', '#244A82']],
+      [9, 34, 6.3, 6.5, ['#E9E4D6', '#FFFFFF', '#C9C2B0']],
+      [34, 300, 6.5, 8.6, lk.shaft || ['#C99A62', '#F1D9AE', '#A87A47']],
+      [300, 318, 8.6, 8.9, lk.joint || ['#9AA3AE', '#F4F6F8', '#6E7782']],
+      [318, 760, 8.9, 11.8, lk.fore],
+      [760, 1100, 11.8, 13.6, lk.wrap || ['#17171B', '#3A3A42', '#0C0C0F']],
+      [1100, len, 13.6, 15, lk.butt || ['#4A1F12', '#8A4A2A', '#2E120A']],
+    ] : [
       [0, 9, 6.2, 6.3, ['#2F5C9E', '#5C8AD0', '#244A82']],
       [9, 34, 6.3, 6.5, ['#E9E4D6', '#FFFFFF', '#C9C2B0']],
       [34, 720, 6.5, 10.5, ['#C99A62', '#F1D9AE', '#A87A47']],
@@ -1104,7 +1113,7 @@ export class PoolBoard {
     });
     ctx.strokeStyle = 'rgba(233,220,192,0.75)';
     ctx.lineWidth = Math.max(0.6, 1.6 * s * 3);
-    [[760, 980], [800, 1020]].forEach(([d0, d1], i) => {
+    (lk.fore ? [[340, 560], [380, 600]] : [[760, 980], [800, 1020]]).forEach(([d0, d1], i) => {
       const q0 = at(d0, (i ? 1 : -1) * 4); const q1 = at(d1, 0);
       ctx.beginPath(); ctx.moveTo(q0[0], q0[1]); ctx.lineTo(q1[0], q1[1]); ctx.stroke();
     });
@@ -1434,6 +1443,7 @@ function usePoolPlay({ st, prevOf, myId, peer, relay, save, onBusy, onFlash }) {
     setBusy(true);
     b.setRemote(null);
     b.set({ canShoot: false });
+    b.shooter = 'peer';
     b.play(from, ls, { onDone: (fin) => { setBusy(false); after(fin); } });
   };
   const live = useShotLink(`zpool-${st.id}`, myId, relay, (p) => {
@@ -1485,6 +1495,7 @@ function usePoolPlay({ st, prevOf, myId, peer, relay, save, onBusy, onFlash }) {
     b.set({ canShoot: false });
     liveRef.current.send({ k: 'shot', n: s.n || 0, ls: shot });
     let next = null;
+    b.shooter = 'me';
     b.play(s.b, shot, {
       onResult: (res, sim) => {
         next = judge(s, shot, res, myId);

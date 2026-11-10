@@ -763,16 +763,33 @@ export function FeedPanel({ me, userId, onClose, onOpenProfile, ownerFilter = nu
     if (onPostDeleted) onPostDeleted(null);
   };
   const download = async (post) => {
+    let src = post.media_url;
+    let kind = post.media_type;
     try {
-      const res = await fetch(post.media_url);
+      const list = (post.media_urls || []).filter((x) => x && x.u);
+      if (list.length > 1) {
+        const car = document.querySelector(`[data-post-view="${post.id}"] [data-pcar]`);
+        const i = car ? Math.max(0, Math.min(list.length - 1, Math.round(car.scrollLeft / Math.max(1, car.clientWidth)))) : 0;
+        src = list[i].u;
+        kind = list[i].t === 'video' ? 'video' : 'image';
+      }
+    } catch {}
+    try {
+      const res = await fetch(src);
       const blob = await res.blob();
+      const name = `zchat-post.${kind === 'video' ? 'mp4' : 'jpg'}`;
+      const file = typeof File !== 'undefined' ? new File([blob], name, { type: blob.type || (kind === 'video' ? 'video/mp4' : 'image/jpeg') }) : null;
+      const ios = /iPhone|iPad|iPod/.test(navigator.userAgent || '') || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      if (ios && file && navigator.canShare && navigator.canShare({ files: [file] })) {
+        try { await navigator.share({ files: [file] }); playUiSound('tap'); return; } catch (e) { if (e && e.name === 'AbortError') return; }
+      }
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = `zchat-post.${post.media_type === 'video' ? 'mp4' : 'jpg'}`;
+      a.download = name;
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(a.href), 4000);
       playUiSound('tap');
-    } catch { const u = safeLinkUrl(post.media_url); if (u) window.open(u, '_blank', 'noopener'); }
+    } catch { const u = safeLinkUrl(src); if (u) window.open(u, '_blank', 'noopener'); }
   };
   const tabSwipe = {
     onTouchStart: (e) => { const t = e.touches && e.touches[0]; tabSwipeRef.current = t ? { x: t.clientX, y: t.clientY } : null; holdRef.current = setTimeout(() => setHideUi(true), 450); },
@@ -2665,7 +2682,7 @@ function PostMediaCarousel({ post, rootRef, onTap, onDoubleTap }) {
     <div style={{ position: 'absolute', inset: 0 }}>
       <div ref={ref} onScroll={onScroll} data-pcar="1" style={{ position: 'absolute', inset: 0, display: 'flex', overflowX: 'auto', scrollSnapType: 'x mandatory', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
         {list.map((it, i) => (
-          <div key={i} onClick={() => { if (it.t !== 'video' && onTap) onTap(); }} style={{ position: 'relative', flex: '0 0 100%', height: '100%', scrollSnapAlign: 'start', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#05060a' }}>
+          <div key={i} onClick={() => { if (it.t !== 'video' && onTap) onTap(); }} style={{ position: 'relative', flex: '0 0 100%', height: '100%', scrollSnapAlign: 'start', scrollSnapStop: 'always', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#05060a' }}>
             {it.t === 'video'
               ? <ReelVideo post={{ ...post, media_url: it.u, media_type: 'video', overlay_url: it.o || null }} rootRef={rootRef} onDoubleTap={onDoubleTap} />
               : <img src={it.u} alt={psAltOf(post, i)} loading={i < 2 ? 'eager' : 'lazy'} draggable={false} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />}
