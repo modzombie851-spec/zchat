@@ -159,7 +159,7 @@ function ScoreToast({ k }) {
   }, [k]);
   if (!msg) return null;
   return (
-    <div key={msg.key} className="zchat-fade" role="status" style={{ position: 'fixed', left: '50%', top: 'calc(70px + env(safe-area-inset-top))', transform: 'translateX(-50%)', zIndex: 120, width: 'max-content', maxWidth: 'calc(100vw - 32px)', boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px 10px 12px', borderRadius: 18, background: theme.dark ? '#221B3A' : '#FFFFFF', boxShadow: '0 12px 30px rgba(0,0,0,0.28)', pointerEvents: 'none' }}>
+    <div key={msg.key} className="zchat-fade" role="status" style={{ position: 'fixed', left: '50%', top: 'calc(70px + env(safe-area-inset-top))', transform: 'translateX(-50%)', zIndex: 120, width: 'max-content', maxWidth: 'calc(100vw - 32px)', boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px 10px 12px', borderRadius: 18, background: theme.dark ? '#1F1F24' : '#FFFFFF', boxShadow: '0 12px 30px rgba(0,0,0,0.28)', pointerEvents: 'none' }}>
       <span style={{ display: 'flex', flexShrink: 0 }}><TrophyIcon size={24} color="#F59E0B" /></span>
       <span style={{ minWidth: 0 }}>
         <span style={{ display: 'block', fontSize: 14, fontWeight: 900, color: theme.ink, whiteSpace: 'nowrap' }}>{msg.text}</span>
@@ -183,10 +183,10 @@ function OnlineCard({ online, onOpen }) {
   const { theme } = useTheme();
   return (
     <div role="button" aria-label="Play online" onClick={onOpen} className="zgh-tile"
-      style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 14px 14px 12px', marginTop: 4, borderRadius: 24, cursor: 'pointer', background: theme.dark ? 'linear-gradient(135deg, #2A2147 0%, #1A1530 100%)' : 'linear-gradient(135deg, #EEE8FF 0%, #F7F4FF 100%)', boxShadow: `inset 0 0 0 1px ${theme.border}` }}>
+      style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 14px 14px 12px', marginTop: 4, borderRadius: 24, cursor: 'pointer', background: theme.dark ? 'linear-gradient(135deg, #1F1F24 0%, #17171A 100%)' : 'linear-gradient(135deg, #F2F1F6 0%, #FFFFFF 100%)', boxShadow: `inset 0 0 0 1px ${theme.border}` }}>
       <div style={{ position: 'relative', width: 74, height: 58, flexShrink: 0 }}>
         {['zap', 'pool', 'chess'].map((k, i) => (
-          <div key={k} style={{ position: 'absolute', left: i * 14, top: i % 2 ? 8 : 0, width: 44, height: 44, borderRadius: 13, overflow: 'hidden', boxShadow: `0 0 0 2px ${theme.dark ? '#221B3A' : '#FFFFFF'}, 0 6px 14px rgba(20,10,40,0.25)`, transform: `rotate(${(i - 1) * 6}deg)` }}><GameArt k={k} width={44} height={44} radius={0} /></div>
+          <div key={k} style={{ position: 'absolute', left: i * 14, top: i % 2 ? 8 : 0, width: 44, height: 44, borderRadius: 13, overflow: 'hidden', boxShadow: `0 0 0 2px ${theme.dark ? '#1F1F24' : '#FFFFFF'}, 0 6px 14px rgba(0,0,0,0.25)`, transform: `rotate(${(i - 1) * 6}deg)` }}><GameArt k={k} width={44} height={44} radius={0} /></div>
         ))}
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>

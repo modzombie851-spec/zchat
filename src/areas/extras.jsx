@@ -788,7 +788,7 @@ async function makeAnswerCard(question, answer, me, accent) {
   x.beginPath(); x.moveTo(bx + r, by); x.arcTo(bx + bw, by, bx + bw, by + boxH, r); x.arcTo(bx + bw, by + boxH, bx, by + boxH, r); x.arcTo(bx, by + boxH, bx, by, r); x.arcTo(bx, by, bx + bw, by, r); x.closePath(); x.fill();
   x.fillStyle = accent; x.font = `700 36px ${font}`; x.textAlign = 'center';
   x.fillText('Someone asked', W / 2, by + 70);
-  x.fillStyle = '#17131F'; x.font = `700 58px ${font}`;
+  x.fillStyle = '#111113'; x.font = `700 58px ${font}`;
   qLines.forEach((l, i) => x.fillText(l, W / 2, by + 150 + i * 74));
   const aLines = wrap(answer, 64, 800, 860);
   x.fillStyle = '#FFFFFF'; x.font = `800 64px ${font}`;
@@ -901,7 +901,7 @@ export function QuestionsPage({ me, onClose, onShareStory, onSaved }) {
           </div>
         </Portal>
       )}
-      {note && <div className="zchat-pop" role="status" style={{ position: 'fixed', left: '50%', bottom: 'calc(30px + env(safe-area-inset-bottom))', transform: 'translateX(-50%)', zIndex: 900, padding: '9px 16px', borderRadius: 18, background: theme.dark ? '#2A2930' : '#17131F', color: '#FFFFFF', fontSize: 13.5, fontWeight: 600, whiteSpace: 'nowrap', pointerEvents: 'none' }}>{note}</div>}
+      {note && <div className="zchat-pop" role="status" style={{ position: 'fixed', left: '50%', bottom: 'calc(30px + env(safe-area-inset-bottom))', transform: 'translateX(-50%)', zIndex: 900, padding: '9px 16px', borderRadius: 18, background: theme.dark ? '#2A2930' : '#111113', color: '#FFFFFF', fontSize: 13.5, fontWeight: 600, whiteSpace: 'nowrap', pointerEvents: 'none' }}>{note}</div>}
     </FullPage>
   );
 }
@@ -2311,11 +2311,11 @@ export function CxItemSheet({ me, item, rewards, wallet, onClose, onDone, onOpen
   const canTap = owned ? kind !== 'reaction' && !!onEquip : true;
   const meName = (me && (me.name || me.username)) || 'You';
   const panel = (dark) => (
-    <div style={{ borderRadius: 16, background: dark ? '#110D19' : '#FFFFFF', padding: '16px 14px 14px', boxShadow: dark ? `inset 0 0 0 1px ${CL.line}` : 'none', minWidth: 0 }}>
-      <div style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-0.02em', color: dark ? '#F4F4F6' : '#17131F', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', ...NS_ROOM }}><StyledName name={meName} k={key} dark={dark} /></div>
+    <div style={{ borderRadius: 16, background: dark ? '#0C0C0E' : '#FFFFFF', padding: '16px 14px 14px', boxShadow: dark ? `inset 0 0 0 1px ${CL.line}` : 'none', minWidth: 0 }}>
+      <div style={{ fontSize: 24, fontWeight: 800, letterSpacing: '-0.02em', color: dark ? '#F4F4F6' : '#111113', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', ...NS_ROOM }}><StyledName name={meName} k={key} dark={dark} /></div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 12 }}>
         <Avatar emoji={me.avatar} name={meName} size={28} />
-        <div style={{ minWidth: 0, fontSize: 15, fontWeight: 700, color: dark ? '#F4F4F6' : '#17131F', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', ...NS_ROOM }}><StyledName name={meName} k={key} dark={dark} /></div>
+        <div style={{ minWidth: 0, fontSize: 15, fontWeight: 700, color: dark ? '#F4F4F6' : '#111113', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', ...NS_ROOM }}><StyledName name={meName} k={key} dark={dark} /></div>
         <div style={{ flex: 1 }} />
         <div style={{ fontSize: 11.5, fontWeight: 700, color: dark ? '#B9A6FF' : '#5B3FD6', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '40%', ...NS_ROOM }}><StyledName name={meName} k={key} dark={dark} sub /></div>
       </div>
@@ -2336,12 +2336,12 @@ export function CxItemSheet({ me, item, rewards, wallet, onClose, onDone, onOpen
           <div style={{ marginTop: 14 }}>
             {kind === 'namestyle' && <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>{panel(true)}{panel(false)}</div>}
             {kind === 'theme' && (
-              <div role="button" aria-label="See the full preview" onClick={() => { hapticTap(); if (onPreviewTheme) onPreviewTheme(key); }} style={{ position: 'relative', borderRadius: 20, overflow: 'hidden', cursor: 'pointer', height: 250, background: '#110D19' }}>
+              <div role="button" aria-label="See the full preview" onClick={() => { hapticTap(); if (onPreviewTheme) onPreviewTheme(key); }} style={{ position: 'relative', borderRadius: 20, overflow: 'hidden', cursor: 'pointer', height: 250, background: '#0C0C0E' }}>
                 <div style={{ position: 'absolute', inset: 0, background: themeFallback(key, true), WebkitMaskImage: 'linear-gradient(180deg, #000 0%, #000 60%, transparent 100%)', maskImage: 'linear-gradient(180deg, #000 0%, #000 60%, transparent 100%)' }}>
                   <ThemeCanvas k={key} dark still={reducedMotion()} />
                 </div>
                 <div style={{ position: 'absolute', left: 16, right: 16, bottom: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <div style={{ borderRadius: '50%', boxShadow: '0 0 0 3px #110D19', flexShrink: 0 }}><Avatar emoji={me.avatar} name={meName} size={56} /></div>
+                  <div style={{ borderRadius: '50%', boxShadow: '0 0 0 3px #0C0C0E', flexShrink: 0 }}><Avatar emoji={me.avatar} name={meName} size={56} /></div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 17, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', ...(cxNs(me) ? NS_ROOM : null) }}>{cxNs(me) ? <StyledName name={meName} k={cxNs(me)} dark /> : meName}</div>
                     <div style={{ fontSize: 13, color: CL.ink2 }}>@{me.username || 'you'}</div>
@@ -2502,7 +2502,7 @@ function SiStickerStage({ k, dark, me }) {
   const T = THEMES[dark ? 'dark' : 'light'];
   const pack = SI_STICKER_BY[k];
   return (
-    <div style={{ borderRadius: 20, background: dark ? '#110D19' : '#FFFFFF', boxShadow: dark ? `inset 0 0 0 1px ${CL.line}` : 'none', padding: 12, color: T.ink }}>
+    <div style={{ borderRadius: 20, background: dark ? '#0C0C0E' : '#FFFFFF', boxShadow: dark ? `inset 0 0 0 1px ${CL.line}` : 'none', padding: 12, color: T.ink }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 8 }}>
         {pack.list.map(([id, label]) => (
           <div key={id} style={{ aspectRatio: '1 / 1', borderRadius: 14, background: dark ? 'rgba(255,255,255,0.05)' : '#F4F3F8', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
@@ -2515,7 +2515,7 @@ function SiStickerStage({ k, dark, me }) {
 }
 function SiTypingStage({ k, me, dark }) {
   const T = THEMES[dark ? 'dark' : 'light'];
-  const page = dark ? '#110D19' : '#FFFFFF';
+  const page = dark ? '#0C0C0E' : '#FFFFFF';
   const first = String((me && me.name) || 'You').split(' ')[0];
   const t = fmtHM(new Date());
   return (
@@ -2683,7 +2683,7 @@ export function OwnStylePage({ me, rewards, wallet, onClose, onOpenWallet, onEqu
           </div>
         )}
       </SiBuyFlow>
-      {note && <div className="zchat-pop" role="status" style={{ position: 'absolute', left: '50%', top: 'calc(64px + env(safe-area-inset-top))', transform: 'translateX(-50%)', zIndex: 40, padding: '10px 16px', borderRadius: 14, background: theme.dark ? '#2A2930' : '#17131F', color: '#FFFFFF', fontSize: 13.5, fontWeight: 600, width: 'max-content', maxWidth: 'calc(100% - 32px)', boxSizing: 'border-box', textAlign: 'center', pointerEvents: 'none' }}>{note}</div>}
+      {note && <div className="zchat-pop" role="status" style={{ position: 'absolute', left: '50%', top: 'calc(64px + env(safe-area-inset-top))', transform: 'translateX(-50%)', zIndex: 40, padding: '10px 16px', borderRadius: 14, background: theme.dark ? '#2A2930' : '#111113', color: '#FFFFFF', fontSize: 13.5, fontWeight: 600, width: 'max-content', maxWidth: 'calc(100% - 32px)', boxSizing: 'border-box', textAlign: 'center', pointerEvents: 'none' }}>{note}</div>}
     </div>
   );
 }
@@ -6553,7 +6553,7 @@ function WnArt({ k, dark = false, thumb = false, style }) {
 
 function WnSegments({ total, at, onArt, dark }) {
   const track = onArt ? (dark ? 'rgba(255,255,255,0.24)' : 'rgba(43,37,64,0.16)') : (dark ? 'rgba(255,255,255,0.16)' : 'rgba(0,0,0,0.1)');
-  const fill = onArt ? (dark ? '#FFFFFF' : '#2B2540') : (dark ? '#F2F2F4' : '#17131F');
+  const fill = onArt ? (dark ? '#FFFFFF' : '#2B2540') : (dark ? '#F2F2F4' : '#111113');
   return (
     <div style={{ display: 'flex', gap: 4 }}>
       {Array.from({ length: total }).map((_, i) => <div key={i} style={{ flex: 1, height: 3, borderRadius: 2, background: i <= at ? fill : track, transition: 'background 0.25s ease' }} />)}
@@ -6562,17 +6562,21 @@ function WnSegments({ total, at, onArt, dark }) {
 }
 
 const WN_HIGHLIGHTS = [
-  { k: 'look29', icon: 'look', title: 'A fresh look', text: 'New colours across ZChat and a new profile that looks like yours, even without frames.' },
-  { k: 'rooms29', icon: 'rooms', title: 'Play online', text: 'Quick join a game with someone who is online, make a room, or join a friend with a room ID.', go: 'rooms', cta: 'Play online' },
-  { k: 'bot29', icon: 'bot', title: 'More games with the bot', text: 'Chess, checkers and Mini golf against ZChat Bot on Easy, Medium or Hard.' },
-  { k: 'mayhem29', icon: 'cards', title: 'Zap Mayhem', text: 'Draw six, draw ten, stacking, swaps and skip everyone. Reach 25 cards and you are out.' },
-  { k: 'golf29', icon: 'golf', title: 'New Mini golf', text: 'Nine new holes with hills, sand, water and bumpers, and a ball that rolls like the real thing.' },
-  { k: 'vip29', icon: 'crown', title: 'Boards and tables', text: 'Chess sets, checkers, pool tables and carrom boards in the Shop, with VIP styles.', go: 'shop', cta: 'Open the Shop' },
-  { k: 'faces29', icon: 'face', title: 'Game faces', text: 'Send faces to the other player while you play, and even to ZChat Bot.' },
-  { k: 'attach29', icon: 'clip', title: 'A tidier attach menu', text: 'Photo booth and Live typing are now in the attach menu.' },
-  { k: 'switch29', icon: 'switch', title: 'Quick account switch', text: 'Double tap Me to jump to your other account.' },
+  { k: 'home291', icon: 'spark', title: 'Fun on your chats page', text: 'Games, Play online, Draw together, Photo booth, Watch together, ZChat Bot and AI images are one tap away on your chats page.' },
+  { k: 'banner291', icon: 'banner', title: 'Profile banners', text: 'Add a banner to your profile. Until you do, your profile takes a colour from your photo.' },
+  { k: 'about291', icon: 'card', title: 'About me', text: 'Your bio and the day you joined ZChat now sit together on your profile.' },
+  { k: 'react291', icon: 'face', title: 'Game reactions by the player', text: 'Faces and stickers you send in a game pop up right next to your name, just like messages.' },
 ];
 const WN_SECTIONS = [
+  { title: 'Last update', items: [
+    { art: 'rooms28', title: 'Play online', text: 'Quick join a game with someone who is online, make a room, or join a friend with a room ID.' },
+    { art: 'games27', title: 'More games with the bot', text: 'Chess, checkers and Mini golf against ZChat Bot on Easy, Medium or Hard.' },
+    { art: 'theme', title: 'Zap Mayhem', text: 'Draw six, draw ten, stacking, swaps and skip everyone. Reach 25 cards and you are out.' },
+    { art: 'games27', title: 'New Mini golf', text: 'Nine new holes with hills, sand, water and bumpers.' },
+    { art: 'shop28', title: 'Boards and tables', text: 'Chess sets, checkers, pool tables and carrom boards in the Shop, with VIP styles.' },
+    { art: 'chats', title: 'Game faces', text: 'Send faces to the other player while you play, and even to ZChat Bot.' },
+    { art: 'profile26', title: 'Quick account switch', text: 'Double tap Me to jump to your other account.' },
+  ] },
   { title: 'Games', items: [
     { art: 'rooms28', title: 'Game rooms', text: 'Games with a friend open full screen with their own scene, music and sounds.' },
     { art: 'games27', title: 'Live moves', text: 'See each move the moment your friend makes it, and see when they are in the game.' },
@@ -6726,6 +6730,9 @@ const WN_ICON_PATHS = {
   clip: <><path d="M20 11.5l-8.2 8.2a5 5 0 0 1-7.1-7.1l8.6-8.6a3.4 3.4 0 0 1 4.8 4.8l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4l7.9-7.9" /></>,
   switch: <><circle cx="8" cy="9" r="3.5" /><path d="M2.5 19.5a5.5 5.5 0 0 1 11 0" /><path d="M16 5h5v5" /><path d="M21 5l-4.5 4.5" /></>,
   fix: <><path d="M14.7 6.3a4 4 0 0 0 5 5L21 13l-8 8-8-8 1.3-1.3a4 4 0 0 0 5-5z" /></>,
+  spark: <><path d="M11 3.5c.7 4.6 1.9 5.8 6.5 6.5-4.6.7-5.8 1.9-6.5 6.5-.7-4.6-1.9-5.8-6.5-6.5 4.6-.7 5.8-1.9 6.5-6.5z" /><path d="M18.5 15c.3 2 .8 2.5 2.8 2.8-2 .3-2.5.8-2.8 2.8-.3-2-.8-2.5-2.8-2.8 2-.3 2.5-.8 2.8-2.8z" /></>,
+  banner: <><rect x="3" y="4" width="18" height="16" rx="3" /><path d="M3 10.5h18" /><circle cx="8.5" cy="13.5" r="3" /></>,
+  card: <><rect x="3.5" y="5" width="17" height="14" rx="3" /><path d="M7.5 10h9M7.5 14h6" /></>,
 };
 function WnRowIcon({ k, accent, bg }) {
   return (
@@ -7159,7 +7166,7 @@ function CollageLayoutArt({ layout, imgs, tall, gap, round, dark, ink }) {
   const fh = tall ? 57 : 54;
   const g = gap ? 2.5 : 0.8;
   return (
-    <div style={{ position: 'relative', width: fw, height: fh, borderRadius: 7, overflow: 'hidden', background: dark ? '#17131F' : '#FFFFFF', boxShadow: '0 1px 4px rgba(0, 0, 0, 0.18)' }}>
+    <div style={{ position: 'relative', width: fw, height: fh, borderRadius: 7, overflow: 'hidden', background: dark ? '#111113' : '#FFFFFF', boxShadow: '0 1px 4px rgba(0, 0, 0, 0.18)' }}>
       {layout.map(([x, y, w, h], i) => {
         const im = imgs[i % Math.max(1, imgs.length)];
         return (
@@ -7175,7 +7182,7 @@ function CollageStyleArt({ k, ink }) {
   const cell = { fill: ink, fillOpacity: 0.55 };
   if (k === 'gap') return <svg width="38" height="38" viewBox="0 0 32 32" aria-hidden="true"><rect x="4" y="5" width="24" height="22" rx="2.5" fill="none" stroke="currentColor" strokeWidth="1.6" /><rect x="7" y="8" width="8" height="16" rx="1" {...cell} /><rect x="17" y="8" width="8" height="7" rx="1" {...cell} /><rect x="17" y="17" width="8" height="7" rx="1" {...cell} /></svg>;
   if (k === 'round') return <svg width="38" height="38" viewBox="0 0 32 32" aria-hidden="true"><rect x="4" y="5" width="24" height="22" rx="2.5" fill="none" stroke="currentColor" strokeWidth="1.6" /><rect x="6.5" y="7.5" width="9" height="17" rx="3.4" {...cell} /><rect x="16.5" y="7.5" width="9" height="8" rx="3.4" {...cell} /><rect x="16.5" y="16.5" width="9" height="8" rx="3.4" {...cell} /></svg>;
-  if (k === 'dark') return <svg width="38" height="38" viewBox="0 0 32 32" aria-hidden="true"><rect x="4" y="5" width="24" height="22" rx="2.5" fill="#17131F" stroke="currentColor" strokeWidth="1.6" /><rect x="7" y="8" width="8" height="16" rx="1" fill="#FFFFFF" fillOpacity="0.85" /><rect x="17" y="8" width="8" height="7" rx="1" fill="#FFFFFF" fillOpacity="0.85" /><rect x="17" y="17" width="8" height="7" rx="1" fill="#FFFFFF" fillOpacity="0.85" /></svg>;
+  if (k === 'dark') return <svg width="38" height="38" viewBox="0 0 32 32" aria-hidden="true"><rect x="4" y="5" width="24" height="22" rx="2.5" fill="#111113" stroke="currentColor" strokeWidth="1.6" /><rect x="7" y="8" width="8" height="16" rx="1" fill="#FFFFFF" fillOpacity="0.85" /><rect x="17" y="8" width="8" height="7" rx="1" fill="#FFFFFF" fillOpacity="0.85" /><rect x="17" y="17" width="8" height="7" rx="1" fill="#FFFFFF" fillOpacity="0.85" /></svg>;
   return <svg width="38" height="38" viewBox="0 0 32 32" aria-hidden="true"><rect x="7.5" y="3.5" width="17" height="25" rx="2.5" fill="none" stroke="currentColor" strokeWidth="1.6" /><rect x="10" y="6" width="5.5" height="20" rx="1" {...cell} /><rect x="17" y="6" width="5" height="9" rx="1" {...cell} /><rect x="17" y="17" width="5" height="9" rx="1" {...cell} /></svg>;
 }
 export function CollagePage({ files, onClose, onSend }) {
@@ -7203,7 +7210,7 @@ export function CollagePage({ files, onClose, onSend }) {
   const H = tall ? 1800 : 1440;
   const gap = gapOn ? 24 : 0;
   const round = roundOn ? 36 : 0;
-  const bg = dark ? '#17131F' : '#FFFFFF';
+  const bg = dark ? '#111113' : '#FFFFFF';
   useEffect(() => {
     const c = cvRef.current;
     if (!c || !imgs.length) return;

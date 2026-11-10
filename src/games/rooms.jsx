@@ -202,7 +202,7 @@ function WaitView({ wait, myId, onCancel }) {
   };
   return (
     <Portal>
-      <div className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 97, background: theme.dark ? '#0E0B16' : '#FAF9FF', fontFamily: FONT, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px max(20px, env(safe-area-inset-right)) calc(24px + env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left))' }}>
+      <div className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 97, background: theme.dark ? '#0C0C0E' : '#FFFFFF', fontFamily: FONT, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '24px max(20px, env(safe-area-inset-right)) calc(24px + env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left))' }}>
         <div className="zrm-in" style={{ width: '100%', maxWidth: 380, display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
           <div style={{ borderRadius: 26, overflow: 'hidden', boxShadow: '0 16px 40px rgba(0,0,0,0.3)' }}><GameArt k={artOf(r.kind)} width={150} height={104} radius={0} /></div>
           <div style={{ fontSize: 15, fontWeight: 800, color: theme.muted, marginTop: 18 }}>{titleOf(r.kind)}</div>

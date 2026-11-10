@@ -117,7 +117,7 @@ function MapMeDot({ ghost }) {
 function MapCompassIcon({ bearing, dark }) {
   return (
     <svg width="26" height="26" viewBox="0 0 26 26" style={{ transform: `rotate(${-bearing}deg)`, transition: 'transform 0.2s ease' }} aria-hidden="true">
-      <path d="M13 2.5 16.6 13H9.4z" fill="#F0484E" /><path d="M13 23.5 9.4 13h7.2z" fill={dark ? '#9E97B3' : '#B9B8C2'} /><circle cx="13" cy="13" r="1.6" fill={dark ? '#14101E' : '#FFFFFF'} />
+      <path d="M13 2.5 16.6 13H9.4z" fill="#F0484E" /><path d="M13 23.5 9.4 13h7.2z" fill={dark ? '#8E8E95' : '#B9B8C2'} /><circle cx="13" cy="13" r="1.6" fill={dark ? '#17171A' : '#FFFFFF'} />
     </svg>
   );
 }

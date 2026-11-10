@@ -766,8 +766,8 @@ export function VoiceRoomScreen({ call, me, nameFor, avatarFor, onHangup, onMini
   const menuPerson = menuFor ? byId.get(menuFor) : null;
   const first = (p) => String((p && p.n) || 'Someone').split(' ')[0];
   return (
-    <div className="zchat-fade" aria-hidden={call.minimized ? 'true' : undefined} style={{ position: 'fixed', inset: 0, zIndex: call.minimized ? -1 : 500, background: '#110D19', color: 'white', display: 'flex', flexDirection: 'column', visibility: call.minimized ? 'hidden' : 'visible', pointerEvents: call.minimized ? 'none' : 'auto', overflow: 'hidden', fontFamily: FONT }}>
-      <div aria-hidden="true" style={{ position: 'absolute', inset: 0, background: `radial-gradient(circle at 50% 22%, ${colorForName(title)}55, #110D19 70%)`, pointerEvents: 'none' }} />
+    <div className="zchat-fade" aria-hidden={call.minimized ? 'true' : undefined} style={{ position: 'fixed', inset: 0, zIndex: call.minimized ? -1 : 500, background: '#0C0C0E', color: 'white', display: 'flex', flexDirection: 'column', visibility: call.minimized ? 'hidden' : 'visible', pointerEvents: call.minimized ? 'none' : 'auto', overflow: 'hidden', fontFamily: FONT }}>
+      <div aria-hidden="true" style={{ position: 'absolute', inset: 0, background: `radial-gradient(circle at 50% 22%, ${colorForName(title)}55, #0C0C0E 70%)`, pointerEvents: 'none' }} />
       {remotes.map(([id, stream]) => <VoiceRoomAudio key={id} stream={stream} muted={ctl.modMuted.has(id)} />)}
       <div style={{ position: 'relative', zIndex: 3, display: 'flex', alignItems: 'center', gap: 8, padding: 'calc(10px + env(safe-area-inset-top)) 14px 0' }}>
         <div role="button" aria-label="Back to the chat" onClick={onMinimize} className="zchat-press" style={{ width: 42, height: 42, borderRadius: '50%', background: 'rgba(255,255,255,0.14)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
@@ -793,8 +793,8 @@ export function VoiceRoomScreen({ call, me, nameFor, avatarFor, onHangup, onMini
                 style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 9, cursor: canMod ? 'pointer' : 'default', minWidth: 0, WebkitTapHighlightColor: 'transparent' }}>
                 <div style={{ position: 'relative', width: face, height: face, borderRadius: '50%', boxShadow: talk ? '0 0 0 3px #2EDB6B, 0 0 22px rgba(46,219,107,0.45)' : '0 0 0 3px rgba(255,255,255,0)', transition: still ? 'none' : 'box-shadow 150ms ease-out' }}>
                   <Avatar emoji={isMe ? me.avatar : p.a} name={(isMe ? me.name : p.n) || 'Someone'} size={face} />
-                  {muted && <span aria-label="Muted" style={{ position: 'absolute', right: face > 80 ? 4 : 0, bottom: face > 80 ? 4 : 0, width: 26, height: 26, borderRadius: '50%', background: '#2A2A30', border: '2px solid #110D19', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><MicOff size={13} color="#FF6B6B" /></span>}
-                  {p.h && <span aria-label="Hand raised" style={{ position: 'absolute', right: face > 80 ? 4 : 0, top: face > 80 ? 2 : -2, width: 28, height: 28, borderRadius: '50%', background: '#F2A516', border: '2px solid #110D19', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#1A1203' }}><HandGlyph size={15} strokeWidth={2.2} /></span>}
+                  {muted && <span aria-label="Muted" style={{ position: 'absolute', right: face > 80 ? 4 : 0, bottom: face > 80 ? 4 : 0, width: 26, height: 26, borderRadius: '50%', background: '#2A2A30', border: '2px solid #0C0C0E', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><MicOff size={13} color="#FF6B6B" /></span>}
+                  {p.h && <span aria-label="Hand raised" style={{ position: 'absolute', right: face > 80 ? 4 : 0, top: face > 80 ? 2 : -2, width: 28, height: 28, borderRadius: '50%', background: '#F2A516', border: '2px solid #0C0C0E', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#1A1203' }}><HandGlyph size={15} strokeWidth={2.2} /></span>}
                 </div>
                 <div style={{ fontSize: 13.5, fontWeight: 700, maxWidth: '100%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: talk ? '#7CF2A6' : 'white', transition: still ? 'none' : 'color 150ms ease-out' }}>{isMe ? 'You' : first(p)}</div>
               </div>
@@ -1197,10 +1197,10 @@ export function CallScreen({ call, me, nameFor, avatarFor, onAccept, onDecline, 
   if (ended) {
     const d = call.summaryDuration || 0;
     return (
-      <div className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 500, background: '#110D19', color: 'white', display: 'flex', flexDirection: 'column', alignItems: 'center', fontFamily: FONT, overflow: 'hidden' }}>
+      <div className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 500, background: '#0C0C0E', color: 'white', display: 'flex', flexDirection: 'column', alignItems: 'center', fontFamily: FONT, overflow: 'hidden' }}>
         {photo
           ? <img src={photo} alt="" draggable={false} style={{ position: 'absolute', inset: -40, width: 'calc(100% + 80px)', height: 'calc(100% + 80px)', objectFit: 'cover', filter: 'blur(40px) brightness(0.35)' }} />
-          : <div style={{ position: 'absolute', inset: 0, background: `radial-gradient(circle at 50% 30%, ${colorForName(title)}55, #110D19 70%)` }} />}
+          : <div style={{ position: 'absolute', inset: 0, background: `radial-gradient(circle at 50% 30%, ${colorForName(title)}55, #0C0C0E 70%)` }} />}
         <div style={{ position: 'relative', width: '100%', display: 'flex', justifyContent: 'flex-end', padding: 'calc(14px + env(safe-area-inset-top)) 16px 0', boxSizing: 'border-box' }}>
           <div role="button" aria-label="Close" onClick={onCloseSummary} style={{ width: 40, height: 40, borderRadius: '50%', background: 'rgba(255,255,255,0.14)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={20} /></div>
         </div>
@@ -1312,11 +1312,11 @@ export function CallScreen({ call, me, nameFor, avatarFor, onAccept, onDecline, 
   );
 
   return (
-    <div ref={rootRef} className="zchat-fade" aria-hidden={call.minimized ? 'true' : undefined} style={{ position: 'fixed', inset: 0, zIndex: call.minimized ? -1 : 500, background: '#110D19', color: 'white', display: 'flex', visibility: call.minimized ? 'hidden' : 'visible', pointerEvents: call.minimized ? 'none' : 'auto', flexDirection: 'column', overflow: 'hidden', fontFamily: FONT }}>
+    <div ref={rootRef} className="zchat-fade" aria-hidden={call.minimized ? 'true' : undefined} style={{ position: 'fixed', inset: 0, zIndex: call.minimized ? -1 : 500, background: '#0C0C0E', color: 'white', display: 'flex', visibility: call.minimized ? 'hidden' : 'visible', pointerEvents: call.minimized ? 'none' : 'auto', flexDirection: 'column', overflow: 'hidden', fontFamily: FONT }}>
       <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
         {photo
           ? <img src={photo} alt="" draggable={false} style={{ position: 'absolute', inset: -40, width: 'calc(100% + 80px)', height: 'calc(100% + 80px)', objectFit: 'cover', filter: 'blur(40px) brightness(0.42)' }} />
-          : <div style={{ position: 'absolute', inset: 0, background: `radial-gradient(circle at 50% 28%, ${colorForName(title)}66, #110D19 72%)` }} />}
+          : <div style={{ position: 'absolute', inset: 0, background: `radial-gradient(circle at 50% 28%, ${colorForName(title)}66, #0C0C0E 72%)` }} />}
       </div>
       {!isGroup && (
         <>

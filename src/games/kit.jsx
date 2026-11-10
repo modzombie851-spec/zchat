@@ -2,6 +2,7 @@ import React, { useContext, useEffect, useRef, useState } from 'react';
 import ReactDOM from 'react-dom';
 import { TRACKS, makeVoices, makeIR } from './music.jsx';
 import { sceneUrl, sceneTone, sceneMusic, sceneKeyFor } from './scenes.jsx';
+import { gameFaces } from './faces.jsx';
 
 const SOUND_KEY = 'zchat-game-sound';
 const MUSIC_KEY = 'zchat-game-music';
@@ -459,6 +460,14 @@ function Splash({ splash, sceneSrc, tone, done, still }) {
 function Bubble({ b, side }) {
   if (!b) return null;
   const right = side === 'right';
+  if (b.file) {
+    return (
+      <div key={b.id} className="zgr-pop" role="status" aria-label="Reaction" style={{ position: 'absolute', top: 62, [right ? 'right' : 'left']: 8, zIndex: 12, padding: b.face ? 6 : 4, borderRadius: 22, background: '#FFFFFF', boxShadow: '0 8px 22px rgba(0,0,0,0.3)' }}>
+        <span aria-hidden="true" style={{ position: 'absolute', top: -6, [right ? 'right' : 'left']: 20, width: 12, height: 12, background: '#FFFFFF', transform: 'rotate(45deg)', borderRadius: 2 }} />
+        <img src={b.file} alt="" draggable={false} decoding="async" className={b.face ? 'zgr-face' : undefined} style={{ position: 'relative', display: 'block', width: b.face ? 62 : 72, height: b.face ? 62 : 72, objectFit: 'contain' }} />
+      </div>
+    );
+  }
   return (
     <div key={b.id} className="zgr-pop" role="status" style={{ position: 'absolute', top: 66, [right ? 'right' : 'left']: 8, zIndex: 12, maxWidth: 210, padding: '8px 12px', borderRadius: 16, background: '#FFFFFF', color: '#16131F', fontSize: 14, fontWeight: 700, lineHeight: 1.3, boxShadow: '0 8px 22px rgba(0,0,0,0.35)', transformOrigin: right ? '85% 0' : '15% 0', wordBreak: 'break-word' }}>
       <span aria-hidden="true" style={{ position: 'absolute', top: -6, [right ? 'right' : 'left']: 20, width: 12, height: 12, background: '#FFFFFF', transform: 'rotate(45deg)', borderRadius: 2 }} />
@@ -563,9 +572,12 @@ export function GameRoom({ title, scene, top, bottom, onClose, children, k, scen
   }, []);
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
   const later = (fn, ms) => { const t = setTimeout(fn, ms); timers.current.push(t); };
+  const playersRef = useRef(players);
+  playersRef.current = players;
   const sideOf = (from) => {
-    if (!players) return 'left';
-    const i = players.findIndex((p) => p && p.id === from);
+    const pl = playersRef.current;
+    if (!pl) return 'left';
+    const i = pl.findIndex((p) => p && p.id === from);
     return i === 1 ? 'right' : 'left';
   };
   const showBubble = (from, text) => {
@@ -575,9 +587,21 @@ export function GameRoom({ title, scene, top, bottom, onClose, children, k, scen
     sfx('bubble');
     later(() => setBubbles((b) => (b[side] && b[side].id === id ? { ...b, [side]: null } : b)), 4200);
   };
+  const socialRef = useRef(social);
+  socialRef.current = social;
+  const findSticker = (key) => {
+    const list = (socialRef.current && socialRef.current.stickers) || [];
+    return list.find((x) => x.key === key) || gameFaces().find((x) => x.key === key) || null;
+  };
   const showFloat = (from, file, face) => {
     const side = sideOf(from);
     const id = `${Date.now()}${Math.random()}`;
+    if (playersRef.current) {
+      setBubbles((b) => ({ ...b, [side]: { id, file, face: !!face } }));
+      sfx('pop');
+      later(() => setBubbles((b) => (b[side] && b[side].id === id ? { ...b, [side]: null } : b)), 3400);
+      return;
+    }
     setFlying((f) => [...f.slice(-6), { id, file, face: !!face, side, x: side === 'right' ? 66 + Math.random() * 16 : 18 + Math.random() * 16 }]);
     sfx('pop');
     later(() => setFlying((f) => f.filter((x) => x.id !== id)), 2500);
@@ -585,7 +609,7 @@ export function GameRoom({ title, scene, top, bottom, onClose, children, k, scen
   useEffect(() => {
     if (!social || !social.on) return undefined;
     const offA = social.on('say', (d) => { if (d && typeof d.text === 'string') showBubble(d.from, d.text.slice(0, 60)); });
-    const offB = social.on('rx', (d) => { const s = d && (social.stickers || []).find((x) => x.key === d.s); if (s) showFloat(d.from, s.file, s.face); });
+    const offB = social.on('rx', (d) => { const s = d && typeof d.s === 'string' ? findSticker(d.s) : null; if (s) showFloat(d.from, s.file, s.face); });
     return () => { if (offA) offA(); if (offB) offB(); };
   }, [social && social.on]);
   const say = (text) => { if (!social) return; social.send('say', { text }); showBubble(social.me, text); };

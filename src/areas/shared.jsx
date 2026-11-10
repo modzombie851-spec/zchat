@@ -883,7 +883,7 @@ export function TagSuggestBar({ text, onPick, dark = true }) {
   if (!list.length) return null;
   const line = dark ? 'rgba(255,255,255,0.18)' : 'rgba(0,0,0,0.1)';
   return (
-    <div role="list" aria-label="Tag suggestions" style={{ display: 'flex', alignItems: 'center', overflowX: 'auto', scrollbarWidth: 'none', padding: '6px 4px 0', color: dark ? '#FFFFFF' : '#17131F' }}>
+    <div role="list" aria-label="Tag suggestions" style={{ display: 'flex', alignItems: 'center', overflowX: 'auto', scrollbarWidth: 'none', padding: '6px 4px 0', color: dark ? '#FFFFFF' : '#111113' }}>
       {list.map((r, i) => (
         <React.Fragment key={r.tag}>
           {i > 0 && <span aria-hidden="true" style={{ width: 1, height: 18, flexShrink: 0, background: line }} />}
@@ -919,13 +919,13 @@ export const DECOR_PIECES = ['frame', 'nameplate', 'effect'];
 export const FX_PACK_SI = '/fx-pack-si.js';
 export const FX_ART = { crystal_phoenix: '/fx-crystal-phoenix.webp', fire_phoenix: '/fx-fire-phoenix.webp' };
 export function ThemeMockProfile({ me, dark, nsKey }) {
-  const ink = dark ? '#F4F4F6' : '#17131F';
+  const ink = dark ? '#F4F4F6' : '#111113';
   const muted = dark ? 'rgba(235,235,245,0.62)' : 'rgba(17,17,19,0.58)';
   const name = (me && (me.name || me.username)) || 'You';
   return (
     <div style={{ position: 'relative', padding: '64px 18px 0', color: ink, ...ptTextFx(dark) }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-        <div style={{ borderRadius: '50%', boxShadow: `0 0 0 3px ${dark ? '#110D19' : '#FFFFFF'}` }}><Avatar emoji={me && me.avatar} name={name} size={84} /></div>
+        <div style={{ borderRadius: '50%', boxShadow: `0 0 0 3px ${dark ? '#0C0C0E' : '#FFFFFF'}` }}><Avatar emoji={me && me.avatar} name={name} size={84} /></div>
         <div style={{ flex: 1, minWidth: 0, display: 'flex', justifyContent: 'space-around' }}>
           {[['posts', 12], ['followers', 248], ['following', 180]].map(([l, v]) => (
             <div key={l} style={{ textAlign: 'center', minWidth: 0 }}>
@@ -1250,7 +1250,7 @@ export function ShopChatMock({ me, dark = true, bubble = null, nsKey = null, cha
     return () => { clearTimeout(t); try { if (window.ZSRX && cv.current) { window.ZSRX.stop(cv.current); if (window.ZSRX.drop) window.ZSRX.drop(cv.current); } } catch {} };
   }, [reaction, dark]);
   const T = THEMES[dark ? 'dark' : 'light'];
-  const page = dark ? '#110D19' : '#FFFFFF';
+  const page = dark ? '#0C0C0E' : '#FFFFFF';
   const meName = (me && (me.name || me.username)) || 'You';
   const t = fmtHM(new Date());
   const them = [{ name: 'Nethmi', color: '#29C7B3' }, { name: 'Kasun', color: '#E9A23B' }];
@@ -1326,7 +1326,7 @@ export function ShopChatMock({ me, dark = true, bubble = null, nsKey = null, cha
 }
 export function ShopProfileMock({ me, frameKey = null, plateKey = null, charm, nsKey, width, dark = true }) {
   const T = THEMES[dark ? 'dark' : 'light'];
-  const page = dark ? '#110D19' : '#FFFFFF';
+  const page = dark ? '#0C0C0E' : '#FFFFFF';
   const name = (me && (me.name || me.username)) || 'You';
   const F = isDecorKey(frameKey) ? frameKey : null;
   const P = isDecorKey(plateKey) ? plateKey : null;

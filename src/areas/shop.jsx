@@ -575,7 +575,7 @@ export function WalletPage({ uid, me, onClose, onOpenCollection, onOpenGift }) {
           <div style={{ fontSize: 15, fontWeight: 700, color: Number(r.delta) > 0 ? '#16A34A' : theme.ink, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>{Number(r.delta) > 0 ? `+${Number(r.delta).toLocaleString('en-US')}` : `\u2212${Math.abs(Number(r.delta)).toLocaleString('en-US')}`}</div>
         </div>
       ))}
-      {note && <div className="zchat-pop" role="status" style={{ position: 'fixed', left: '50%', bottom: 'calc(30px + env(safe-area-inset-bottom))', transform: 'translateX(-50%)', zIndex: 900, padding: '9px 16px', borderRadius: 18, background: theme.dark ? '#2A2930' : '#17131F', color: '#FFFFFF', fontSize: 13.5, fontWeight: 600, width: 'max-content', maxWidth: 'calc(100vw - 48px)', boxSizing: 'border-box', textAlign: 'center', pointerEvents: 'none' }}>{note}</div>}
+      {note && <div className="zchat-pop" role="status" style={{ position: 'fixed', left: '50%', bottom: 'calc(30px + env(safe-area-inset-bottom))', transform: 'translateX(-50%)', zIndex: 900, padding: '9px 16px', borderRadius: 18, background: theme.dark ? '#2A2930' : '#111113', color: '#FFFFFF', fontSize: 13.5, fontWeight: 600, width: 'max-content', maxWidth: 'calc(100vw - 48px)', boxSizing: 'border-box', textAlign: 'center', pointerEvents: 'none' }}>{note}</div>}
       {codeOpen && <RedeemCodeSheet uid={uid} me={me} onClose={() => setCodeOpen(false)} onOpenCollection={onOpenCollection ? () => { setCodeOpen(false); onOpenCollection(); } : null} />}
       {limitOpen && <MonthlyLimitPage uid={uid} onClose={() => setLimitOpen(false)} />}
     </FullPage>
@@ -1219,7 +1219,7 @@ function LiveWallStage({ k, me, dark }) {
   const spec = LIVE_WALL_BY[k];
   if (!spec) return null;
   const bub = (mine, text) => (
-    <div style={{ alignSelf: mine ? 'flex-end' : 'flex-start', maxWidth: '76%', padding: '8px 12px', borderRadius: 18, [mine ? 'borderBottomRightRadius' : 'borderBottomLeftRadius']: 6, background: mine ? '#7C5CFC' : (dark ? 'rgba(30,30,36,0.9)' : 'rgba(255,255,255,0.95)'), color: mine ? '#FFFFFF' : (dark ? '#F4F4F6' : '#17131F'), fontSize: 14, lineHeight: 1.35 }}>{text}</div>
+    <div style={{ alignSelf: mine ? 'flex-end' : 'flex-start', maxWidth: '76%', padding: '8px 12px', borderRadius: 18, [mine ? 'borderBottomRightRadius' : 'borderBottomLeftRadius']: 6, background: mine ? '#7C5CFC' : (dark ? 'rgba(30,30,36,0.9)' : 'rgba(255,255,255,0.95)'), color: mine ? '#FFFFFF' : (dark ? '#F4F4F6' : '#111113'), fontSize: 14, lineHeight: 1.35 }}>{text}</div>
   );
   return (
     <div style={{ position: 'relative', borderRadius: 22, overflow: 'hidden', height: 360, background: liveWallBg(spec, dark), boxShadow: `inset 0 0 0 1px ${dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}` }}>
@@ -1227,7 +1227,7 @@ function LiveWallStage({ k, me, dark }) {
       <div style={{ position: 'absolute', inset: 0, background: liveWallVeil(dark) }} />
       <div style={{ position: 'absolute', left: 0, right: 0, top: 0, display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', background: dark ? 'rgba(16,16,21,0.72)' : 'rgba(255,255,255,0.78)' }}>
         <Avatar emoji={me && me.avatar} name={(me && me.name) || 'You'} size={28} />
-        <div style={{ fontSize: 14, fontWeight: 700, color: dark ? '#F4F4F6' : '#17131F' }}>Sam</div>
+        <div style={{ fontSize: 14, fontWeight: 700, color: dark ? '#F4F4F6' : '#111113' }}>Sam</div>
       </div>
       <div style={{ position: 'absolute', left: 12, right: 12, bottom: 14, display: 'flex', flexDirection: 'column', gap: 6 }}>
         {bub(false, 'Are we still on for tonight?')}
@@ -1611,13 +1611,13 @@ function ShopCoinPill({ coins, onOpenWallet, pal }) {
 }
 function ShopToast({ text, pal, top = 'calc(64px + env(safe-area-inset-top))' }) {
   if (!text) return null;
-  return <div className="zchat-pop" role="status" style={{ position: 'absolute', left: '50%', top, transform: 'translateX(-50%)', zIndex: 60, padding: '10px 16px', borderRadius: 14, background: pal.dark ? '#2A2930' : '#17131F', color: '#FFFFFF', fontSize: 13.5, fontWeight: 600, width: 'max-content', maxWidth: 'calc(100% - 32px)', boxSizing: 'border-box', textAlign: 'center', pointerEvents: 'none', boxShadow: '0 6px 20px rgba(0,0,0,0.18)' }}>{text}</div>;
+  return <div className="zchat-pop" role="status" style={{ position: 'absolute', left: '50%', top, transform: 'translateX(-50%)', zIndex: 60, padding: '10px 16px', borderRadius: 14, background: pal.dark ? '#2A2930' : '#111113', color: '#FFFFFF', fontSize: 13.5, fontWeight: 600, width: 'max-content', maxWidth: 'calc(100% - 32px)', boxSizing: 'border-box', textAlign: 'center', pointerEvents: 'none', boxShadow: '0 6px 20px rgba(0,0,0,0.18)' }}>{text}</div>;
 }
 function ShopThemeStage({ me, k, dark, pal, onFull }) {
   const spec = PROFILE_THEMES[k];
   if (!spec) return null;
-  const page = dark ? '#110D19' : '#FFFFFF';
-  const ink = dark ? '#F4F4F6' : '#17131F';
+  const page = dark ? '#0C0C0E' : '#FFFFFF';
+  const ink = dark ? '#F4F4F6' : '#111113';
   return (
     <div role="button" aria-label="See the full preview" onClick={() => { hapticTap(); if (onFull) onFull(k); }} style={{ position: 'relative', borderRadius: 18, overflow: 'hidden', cursor: onFull ? 'pointer' : 'default', height: 330, background: page, isolation: 'isolate', boxShadow: `0 0 0 1px ${pal.line}` }}>
       <div style={{ position: 'absolute', inset: 0, background: themeFallback(k, dark), WebkitMaskImage: 'linear-gradient(180deg, #000 0%, #000 58%, transparent 100%)', maskImage: 'linear-gradient(180deg, #000 0%, #000 58%, transparent 100%)' }}>
@@ -1632,7 +1632,7 @@ function ShopStickerGrid({ k, dark, pal }) {
   const pack = siSpec('stickerpack', k);
   if (!pack) return null;
   return (
-    <div style={{ borderRadius: 18, background: dark ? '#110D19' : '#FFFFFF', boxShadow: `0 0 0 1px ${pal.line}`, padding: 10 }}>
+    <div style={{ borderRadius: 18, background: dark ? '#0C0C0E' : '#FFFFFF', boxShadow: `0 0 0 1px ${pal.line}`, padding: 10 }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 6 }}>
         {pack.list.map(([id, label]) => (
           <div key={id} style={{ aspectRatio: '1 / 1', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
@@ -1648,7 +1648,7 @@ function ShopTypingStage({ k, me, dark, pal }) {
   const first = String((me && me.name) || 'You').split(' ')[0];
   const t = fmtDate(new Date(), { hour: 'numeric', minute: '2-digit' });
   return (
-    <div style={{ borderRadius: 18, background: dark ? '#110D19' : '#FFFFFF', boxShadow: `0 0 0 1px ${pal.line}`, overflow: 'hidden', color: T.ink, fontFamily: FONT }}>
+    <div style={{ borderRadius: 18, background: dark ? '#0C0C0E' : '#FFFFFF', boxShadow: `0 0 0 1px ${pal.line}`, overflow: 'hidden', color: T.ink, fontFamily: FONT }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderBottom: `1px solid ${T.hair}` }}>
         <ArrowLeft size={18} color={T.ink} style={{ flexShrink: 0 }} />
         <Avatar emoji={me.avatar} name={me.name} size={34} />
@@ -3496,7 +3496,7 @@ export function BubbleShopPage({ uid, onClose, onGift, onOpenWallet, startKey, z
         <div style={{ fontSize: 12.5, color: theme.muted, lineHeight: 1.5, padding: '14px 2px 0' }}>Bubbles are yours to keep. Your friends see your bubble on every message you send.</div>
       </div>
       {ask && <ConfirmSheet title={`Get the ${CHAR_BUBBLES[ask].label} bubble?`} text={`It costs ${BUBBLE_PRICE} coins and it is yours to keep.`} confirmLabel={`Pay ${BUBBLE_PRICE} coins`} danger={false} zIndex={zIndex + 10} onCancel={() => setAsk(null)} onConfirm={() => buy(ask)} />}
-      {note && <div className="zchat-pop" role="status" style={{ position: 'fixed', left: '50%', bottom: 'calc(96px + env(safe-area-inset-bottom))', transform: 'translateX(-50%)', zIndex: zIndex + 20, padding: '9px 16px', borderRadius: 18, background: theme.dark ? '#2A2930' : '#17131F', color: '#FFFFFF', fontSize: 13.5, fontWeight: 600, width: 'max-content', maxWidth: 'calc(100vw - 40px)', boxSizing: 'border-box', textAlign: 'center', pointerEvents: 'none' }}>{note}</div>}
+      {note && <div className="zchat-pop" role="status" style={{ position: 'fixed', left: '50%', bottom: 'calc(96px + env(safe-area-inset-bottom))', transform: 'translateX(-50%)', zIndex: zIndex + 20, padding: '9px 16px', borderRadius: 18, background: theme.dark ? '#2A2930' : '#111113', color: '#FFFFFF', fontSize: 13.5, fontWeight: 600, width: 'max-content', maxWidth: 'calc(100vw - 40px)', boxSizing: 'border-box', textAlign: 'center', pointerEvents: 'none' }}>{note}</div>}
     </FullPage>
   );
 }

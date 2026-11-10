@@ -28,7 +28,7 @@ function roomStickers() {
   const out = [];
   STICKER_ORDER.forEach((id) => ['cat', 'tuk', 'ele'].forEach((p) => { const s = by.get(`as-${p}-${id}`); if (s) out.push(s); }));
   stickerList = withFaces(out);
-  return out;
+  return stickerList;
 }
 const PHRASES = {
   pool: ['Good luck', 'Nice shot', 'Well played', 'Unlucky', 'Oops', 'Wow', 'Thanks', 'Rematch?'],
