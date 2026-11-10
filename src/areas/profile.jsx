@@ -14,6 +14,9 @@ import {
 } from '../supabaseClient.js';
 import {
   Avatar,
+  AvatarMotion,
+  IgToggle,
+  avatarAnimSrc,
   BigButton,
   DECOR_BY_KEY,
   DECOR_FX_KEYS,
@@ -287,6 +290,13 @@ export function ProfileVisitorsPage({ myId, me, onClose, onOpenProfile, onToggle
         <EmptyState art="insights" title="No visitors yet" text="When someone opens your profile, they show up here for 30 days." />
       ) : (
         <>
+          <div role="button" aria-label="Turn off profile visitors" onClick={toggle} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px 4px', cursor: 'pointer' }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 15, fontWeight: 650, color: theme.ink }}>Show profile visitors</div>
+              <div style={{ fontSize: 12.5, color: theme.muted, marginTop: 1 }}>Turn off to hide your visits too</div>
+            </div>
+            <IgToggle on={on} />
+          </div>
           <div style={{ display: 'flex', gap: 10, padding: '12px 16px 6px' }}>
             {[[rows.length, 'last 30 days'], [week, 'this week'], [rows.reduce((a, r) => a + (Number(r.n) || 1), 0), 'visits']].map(([n, l]) => (
               <div key={l} style={{ flex: 1, padding: '12px 10px', borderRadius: 14, background: theme.rowBg, textAlign: 'center' }}>
@@ -307,7 +317,7 @@ export function ProfileVisitorsPage({ myId, me, onClose, onOpenProfile, onToggle
               </div>
             ))}
           </div>
-          <div style={{ fontSize: 12.5, color: theme.muted, lineHeight: 1.5, padding: '4px 16px 20px' }}>People who turned off Profile visitors do not show here, and they cannot see their own visitors either. Change this in Settings.</div>
+          <div style={{ fontSize: 12.5, color: theme.muted, lineHeight: 1.5, padding: '4px 16px 20px' }}>People who turned off Profile visitors do not show here, and they cannot see their own visitors either.</div>
         </>
       )}
     </FullPage>
@@ -450,10 +460,11 @@ export function GuestbookPage({ owner, myId, me, onClose, onOpenProfile, zIndex 
     </FullPage>
   );
 }
-export function ProfilePhotosViewer({ list, start = 0, name, onClose }) {
+export function ProfilePhotosViewer({ list, start = 0, name, anim = null, onClose }) {
   useBackClose(true, onClose);
   const ref = useRef(null);
   const [i, setI] = useState(start);
+  const animUrl = anim ? avatarAnimSrc(anim) : null;
   useLayoutEffect(() => { const el = ref.current; if (el && start) el.scrollLeft = start * el.clientWidth; }, []);
   const go = (d) => { const el = ref.current; if (!el) return; const n = Math.max(0, Math.min(list.length - 1, i + d)); el.scrollTo({ left: n * el.clientWidth, behavior: reducedMotion() ? 'auto' : 'smooth' }); };
   useEffect(() => {
@@ -475,7 +486,12 @@ export function ProfilePhotosViewer({ list, start = 0, name, onClose }) {
             style={{ position: 'absolute', inset: 0, display: 'flex', overflowX: 'auto', overflowY: 'hidden', scrollSnapType: 'x mandatory', overscrollBehavior: 'contain', touchAction: 'pan-x' }}>
             {list.map((u, k) => (
               <div key={`${k}:${u}`} style={{ flex: '0 0 100%', width: '100%', height: '100%', scrollSnapAlign: 'center', scrollSnapStop: 'always', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <img src={u} alt={`Photo ${k + 1}`} draggable={false} onContextMenu={(e) => e.preventDefault()} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', display: 'block' }} />
+                {k === 0 && animUrl ? (
+                  <div style={{ position: 'relative', width: '100%', maxWidth: 'min(100vw, calc(100dvh - 150px))', aspectRatio: '1 / 1', overflow: 'hidden' }}>
+                    <img src={u} alt={`Photo ${k + 1}`} draggable={false} onContextMenu={(e) => e.preventDefault()} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                    <AvatarMotion url={animUrl} size={640} />
+                  </div>
+                ) : <img src={u} alt={`Photo ${k + 1}`} draggable={false} onContextMenu={(e) => e.preventDefault()} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', display: 'block' }} />}
               </div>
             ))}
           </div>

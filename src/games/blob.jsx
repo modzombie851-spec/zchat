@@ -7,9 +7,9 @@ export const BLOB_KEY = 'squish';
 const W0 = 360;
 const H0 = 640;
 const LINE = 104;
-const G = 1750;
+const G = 2050;
 const H = 1 / 120;
-const DAMP = 0.992;
+const DAMP = 0.995;
 const TIERS = 13;
 const RAD = Array.from({ length: TIERS }, (_, k) => 16.5 * 1.2 ** k);
 const COLS = ['#FF5A5F', '#FF9F1C', '#FFD23F', '#9BE15D', '#2EC4B6', '#3A86FF', '#8A4DFF', '#FF2E88', '#FB6A1B', '#14D3A0', '#1C9BD6', '#F45BB8', '#FFC93C'];
@@ -59,7 +59,8 @@ class Blob {
     this.id = id;
     this.k = k;
     this.r = RAD[k];
-    this.n = clamp(Math.round((Math.PI * 2 * this.r) / 8.2), 12, 34);
+    this.n = clamp(Math.round((Math.PI * 2 * this.r) / 7), 16, 36);
+    this.firm = k <= 1 ? 1.7 : k <= 3 ? 1.3 : 1;
     const n = this.n;
     this.px = new Float64Array(n); this.py = new Float64Array(n);
     this.ox = new Float64Array(n); this.oy = new Float64Array(n);
@@ -77,6 +78,8 @@ class Blob {
     this.age = 0;
     this.gone = false;
     this.flash = 0;
+    this.cool = 0;
+    this.join = null;
   }
 
   centre() {
@@ -192,6 +195,7 @@ export class BlobWorld {
     this.rnd = rng(seed || `squish${Date.now()}`);
     this.queue = [this.pick(), this.pick(), this.pick(), this.pick()];
     this.best = 0;
+    this.joins = [];
   }
 
   pick() {
@@ -201,13 +205,13 @@ export class BlobWorld {
 
   current() { return this.queue[0]; }
 
-  drop(x) {
+  drop(x, vy) {
     if (this.over) return null;
     const k = this.queue.shift();
     this.queue.push(this.pick());
     const r = RAD[k];
     const b = new Blob(k, clamp(x, r + 2, W0 - r - 2), LINE - r - 10, this.nextId++);
-    b.kick(0, 60);
+    b.kick(0, clamp(vy || 420, 300, 1250));
     this.blobs.push(b);
     this.events.push({ k: 'drop', x: b.cx });
     return b;
@@ -226,10 +230,11 @@ export class BlobWorld {
       this.events.push({ k: 'merge', tier: k, x });
       return;
     }
-    const nb = new Blob(k, x, y, this.nextId++, 0.72);
-    nb.kick((vax * ma + vbx * mb) / (ma + mb) * 0.6, (vay * ma + vby * mb) / (ma + mb) * 0.6 - 60);
+    const nb = new Blob(k, x, y, this.nextId++, 0.8);
+    nb.kick((vax * ma + vbx * mb) / (ma + mb) * 0.5, (vay * ma + vby * mb) / (ma + mb) * 0.5 - 90);
     nb.flash = 1;
     nb.age = 2;
+    nb.cool = 0.17;
     this.blobs.push(nb);
     this.score += val(k);
     this.rings.push({ x, y, r: RAD[k], col: COLS[k], t: 0 });
@@ -241,8 +246,10 @@ export class BlobWorld {
     const n = bl.length;
     for (let b = 0; b < n; b++) {
       const B = bl[b];
-      if (B.sc < 1) B.sc = Math.min(1, B.sc + H * 1.6);
+      if (B.join) B.sc = Math.max(0.78, B.sc - H * 1.4);
+      else if (B.sc < 1) B.sc = Math.min(1, B.sc + H * 1.7);
       B.age += H;
+      if (B.cool > 0) B.cool -= H;
       if (B.flash > 0) B.flash = Math.max(0, B.flash - H * 3);
       for (let i = 0; i < B.n; i++) {
         const vx = (B.px[i] - B.ox[i]) * DAMP; const vy = (B.py[i] - B.oy[i]) * DAMP;
@@ -253,13 +260,13 @@ export class BlobWorld {
     const merges = [];
     const hits = [];
     for (let it = 0; it < 3; it++) {
-      for (let b = 0; b < n; b++) bl[b].shape(it === 0 ? 0.075 : 0.035, 0.95);
+      for (let b = 0; b < n; b++) bl[b].shape((it === 0 ? 0.055 : 0.025) * bl[b].firm, 0.95);
       for (let a = 0; a < n; a++) {
         const A = bl[a];
         if (A.gone) continue;
         for (let b = a + 1; b < n; b++) {
           const B = bl[b];
-          if (B.gone) continue;
+          if (B.gone || (A.join && A.join === B.join)) continue;
           const dx = B.cx - A.cx; const dy = B.cy - A.cy;
           const rr = (A.r * A.sc + B.r * B.sc) * 1.12;
           const dd2 = dx * dx + dy * dy;
@@ -278,7 +285,7 @@ export class BlobWorld {
           const before = hits.length;
           const h1 = pushInto(A, B, it === 0 ? hits : null);
           const h2 = pushInto(B, A, it === 0 ? hits : null);
-          if (A.k === B.k && (h1 > 0.6 || h2 > 0.6) && !A.gone && !B.gone && !merges.some(([x, y]) => x === A || y === A || x === B || y === B)) merges.push([A, B]);
+          if (A.k === B.k && !A.join && !B.join && A.cool <= 0 && B.cool <= 0 && (h1 > 0.05 || h2 > 0.05 || dd2 < ((A.r * A.sc + B.r * B.sc) * 1.03) ** 2) && !A.gone && !B.gone && !merges.some(([x, y]) => x === A || y === A || x === B || y === B)) merges.push([A, B]);
           if (it === 0 && hits.length > before) { const [vax, vay] = A.vel(); const [vbx, vby] = B.vel(); const rv = Math.hypot(vax - vbx, vay - vby); if (rv > 140 && (A.age < 2 || B.age < 2)) this.events.push({ k: 'bump', v: rv, x: (A.cx + B.cx) / 2, small: 12 - Math.max(A.k, B.k) }); }
         }
       }
@@ -295,8 +302,19 @@ export class BlobWorld {
         }
       }
     }
-    merges.forEach(([a, b]) => this.merge(a, b));
-    if (merges.length) this.blobs = this.blobs.filter((b) => !b.gone);
+    merges.forEach(([a, b]) => { const j = { a, b, t: 0 }; a.join = j; b.join = j; this.joins.push(j); });
+    let joined = false;
+    this.joins.forEach((j) => {
+      j.t += H;
+      const { a, b } = j;
+      a.centre(); b.centre();
+      const ma = a.r * a.r; const mb = b.r * b.r;
+      const x = (a.cx * ma + b.cx * mb) / (ma + mb); const y = (a.cy * ma + b.cy * mb) / (ma + mb);
+      const f = Math.min(0.5, 0.08 + j.t * 2.6);
+      [a, b].forEach((B) => { const dx = (x - B.cx) * f; const dy = (y - B.cy) * f; for (let i = 0; i < B.n; i++) { B.px[i] += dx; B.py[i] += dy; } });
+      if (j.t >= 0.1 || Math.hypot(a.cx - b.cx, a.cy - b.cy) < Math.max(a.r, b.r) * 0.35) { j.done = true; this.merge(a, b); if (!a.gone) a.join = null; if (!b.gone) b.join = null; joined = true; }
+    });
+    if (joined) { this.joins = this.joins.filter((j) => !j.done); this.blobs = this.blobs.filter((b) => !b.gone); }
     this.rings.forEach((r) => { r.t += H; });
     this.rings = this.rings.filter((r) => r.t < 0.5);
     this.t += H;
@@ -572,6 +590,12 @@ function draw(ctx, L, world, aimX, ready, now, d) {
     blobPath(ctx, B, s, ox, oy, 0);
     ctx.fillStyle = col;
     ctx.fill();
+    const gr0 = B.r * s * B.sc;
+    const gcx = ox + B.cx * s; const gcy = oy + B.cy * s;
+    const gl = ctx.createRadialGradient(gcx - gr0 * 0.35, gcy - gr0 * 0.45, gr0 * 0.08, gcx, gcy, gr0 * 1.15);
+    gl.addColorStop(0, 'rgba(255,255,255,0.34)'); gl.addColorStop(0.5, 'rgba(255,255,255,0.05)'); gl.addColorStop(1, 'rgba(20,0,40,0.18)');
+    ctx.fillStyle = gl;
+    ctx.fill();
     ctx.lineJoin = 'round';
     ctx.strokeStyle = SHADES[B.k];
     ctx.lineWidth = Math.max(3, 5.5 * s * B.sc);
@@ -640,7 +664,8 @@ function IconBtn({ label, onClick, children, on }) {
   );
 }
 
-export function BlobGame() {
+export function BlobGame({ seed, onDuelFinish, onClose, duelTitle }) {
+  const duel = !!(seed && onDuelFinish);
   const kit = useGameKit();
   const hostRef = useRef(null);
   const bgRef = useRef(null);
@@ -657,8 +682,10 @@ export function BlobGame() {
   const [round, setRound] = useState(0);
   const [newBest, setNewBest] = useState(false);
   const perf = useRef(perfMeter());
+  const flick = useRef([]);
+  const [sent, setSent] = useState(false);
   useEffect(() => {
-    const w = new BlobWorld();
+    const w = new BlobWorld(duel ? `duel:${seed}` : undefined);
     worldRef.current = w;
     aim.current = W0 / 2;
     ready.current = true;
@@ -723,8 +750,8 @@ export function BlobGame() {
         w.reported = true;
         sfx('blobOver');
         const b0 = readBest(BLOB_KEY);
-        if (w.score > b0) { writeBest(BLOB_KEY, w.score); setBest(w.score); setNewBest(true); }
-        if (w.score > 0) noteSoloScore(BLOB_KEY, w.score);
+        if (!duel && w.score > b0) { writeBest(BLOB_KEY, w.score); setBest(w.score); setNewBest(true); }
+        if (!duel && w.score > 0) noteSoloScore(BLOB_KEY, w.score);
         setOver(true);
       }
       draw(L.ctx, L, w, aim.current, ready.current, t, L.d);
@@ -738,53 +765,75 @@ export function BlobGame() {
     const r = fgRef.current.getBoundingClientRect();
     return (e.clientX - r.left - L.ox) / L.s;
   };
-  const dropNow = () => {
+  const dropNow = (vy) => {
     const w = worldRef.current;
     if (!w || w.over || !ready.current) return;
     if (music.current && kit.musicOn) music.current.start();
-    w.drop(aim.current);
+    w.drop(aim.current, vy);
     setQueue(w.queue.slice(1, 4));
     ready.current = false;
-    setTimeout(() => { ready.current = true; }, 420);
+    setTimeout(() => { ready.current = true; }, 320);
+  };
+  const note = (e) => { const list = flick.current; list.push([e.clientY, performance.now()]); if (list.length > 6) list.shift(); };
+  const throwSpeed = () => {
+    const list = flick.current;
+    const L = layRef.current;
+    if (!L || list.length < 2) return 420;
+    const [y1, t1] = list[list.length - 1];
+    let k = list.length - 2;
+    while (k > 0 && t1 - list[k][1] < 90) k -= 1;
+    const [y0, t0] = list[k];
+    const dt = Math.max(16, t1 - t0);
+    const v = ((y1 - y0) / dt) * 1000 / L.s;
+    return v > 380 ? Math.min(1250, 420 + (v - 380) * 0.85) : 420;
   };
   const down = useRef(false);
   useEffect(() => {
     if (g1Test()) window.__gbblob = { world: () => worldRef.current, drop: (x) => { aim.current = x; ready.current = true; dropNow(); }, stats: () => perf.current.report(), resetStats: () => perf.current.reset(), fill: (n, mk) => { const w = worldRef.current; for (let i = 0; i < n; i++) { const k = (i * 3) % ((mk || 4) + 1); const b = new Blob(k, 36 + ((i * 61) % 290), 600 - Math.floor(i / 7) * 52, w.nextId++); w.blobs.push(b); } }, noMerge: () => { worldRef.current.merge = () => {}; }, noOver: () => { const w = worldRef.current; w.step0 = w.step; w.step = function () { w.step0(); w.danger = 0; }; } };
   });
   const share = () => { if (!best) return; try { window.dispatchEvent(new CustomEvent('zchat-share-score', { detail: { k: BLOB_KEY, s: best } })); } catch {} };
-  const close = () => { try { window.history.back(); } catch {} };
+  const challenge = () => { try { window.dispatchEvent(new CustomEvent('zchat-challenge', { detail: { kind: `sd:${BLOB_KEY}` } })); } catch {} };
+  const close = () => { if (onClose) { onClose(); return; } try { window.history.back(); } catch {} };
+  const sendScore = () => { if (sent || !onDuelFinish) return; setSent(true); onDuelFinish(worldRef.current ? worldRef.current.score : score); };
   const top = (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 14px 6px', fontFamily: FONT, color: '#FFFFFF' }}>
       <div style={{ minWidth: 0 }}>
         <div style={{ fontSize: 26, fontWeight: 900, lineHeight: 1, letterSpacing: '-0.02em' }}>{score}</div>
-        <div style={{ fontSize: 11.5, fontWeight: 700, color: 'rgba(255,255,255,0.6)', marginTop: 3 }}>Best {Math.max(best, score)}</div>
+        <div style={{ fontSize: 11.5, fontWeight: 700, color: 'rgba(255,255,255,0.6)', marginTop: 3 }}>{duel ? 'Same blobs as your friend' : `Best ${Math.max(best, score)}`}</div>
       </div>
       <div style={{ flex: 1 }} />
       <div aria-label="Next blobs" style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 18, background: 'rgba(0,0,0,0.28)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.08)' }}>
         <span style={{ fontSize: 11, fontWeight: 800, color: 'rgba(255,255,255,0.55)', marginRight: 2 }}>Next</span>
         {queue.map((k, i) => <MiniBlob key={`${i}${k}`} k={k} size={i === 0 ? 30 : 24} />)}
       </div>
-      <IconBtn label="Share your best" onClick={share}><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7" /><path d="M16 6l-4-4-4 4" /><path d="M12 2v14" /></svg></IconBtn>
+      {!duel && <IconBtn label="Share your best" onClick={share}><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7" /><path d="M16 6l-4-4-4 4" /><path d="M12 2v14" /></svg></IconBtn>}
     </div>
   );
   return (
-    <GameRoom title="Squish" scene={<BlobScene />} music={false} rules={GAME_RULES.squish} onClose={close} top={top}>
+    <GameRoom title={duelTitle || 'Squish'} scene={<BlobScene />} music={false} rules={GAME_RULES.squish} onClose={close} top={top}>
       <div ref={hostRef} style={{ position: 'relative', width: '100%', height: '100%', alignSelf: 'stretch', touchAction: 'none' }}
-        onPointerDown={(e) => { if (over) return; try { e.currentTarget.setPointerCapture(e.pointerId); } catch {} down.current = true; aim.current = toWorld(e); }}
-        onPointerMove={(e) => { if (over) return; aim.current = toWorld(e); }}
-        onPointerUp={(e) => { if (!down.current) return; down.current = false; aim.current = toWorld(e); dropNow(); }}
+        onPointerDown={(e) => { if (over) return; try { e.currentTarget.setPointerCapture(e.pointerId); } catch {} down.current = true; flick.current = []; note(e); aim.current = toWorld(e); }}
+        onPointerMove={(e) => { if (over) return; if (down.current) note(e); aim.current = toWorld(e); }}
+        onPointerUp={(e) => { if (!down.current) return; down.current = false; note(e); aim.current = toWorld(e); dropNow(throwSpeed()); }}
         onPointerCancel={() => { down.current = false; }}>
         <canvas ref={bgRef} style={{ position: 'absolute', left: 0, top: 0, display: 'block' }} />
         <canvas ref={fgRef} style={{ position: 'absolute', left: 0, top: 0, display: 'block' }} />
         {over && (
           <div onPointerDown={(e) => e.stopPropagation()} style={{ position: 'absolute', left: '50%', top: '42%', transform: 'translate(-50%, -50%)', width: 'min(84%, 300px)', borderRadius: 24, padding: '20px 18px 16px', background: 'rgba(22,16,36,0.94)', boxShadow: '0 20px 50px rgba(0,0,0,0.6), inset 0 0 0 1px rgba(255,255,255,0.08)', color: '#FFFFFF', textAlign: 'center', fontFamily: FONT }}>
-            <div style={{ fontSize: 14, fontWeight: 800, color: 'rgba(255,255,255,0.65)' }}>{newBest ? 'New best' : 'The jar is full'}</div>
+            <div style={{ fontSize: 14, fontWeight: 800, color: 'rgba(255,255,255,0.65)' }}>{duel ? 'Your score' : newBest ? 'New best' : 'The jar is full'}</div>
             <div style={{ fontSize: 44, fontWeight: 900, letterSpacing: '-0.03em', marginTop: 2 }}>{score}</div>
-            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)' }}>Best {Math.max(best, score)}</div>
-            <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
-              <button type="button" onClick={share} style={{ flex: 1, height: 46, borderRadius: 16, border: 'none', cursor: 'pointer', fontFamily: FONT, fontWeight: 800, fontSize: 15, color: '#FFFFFF', background: 'rgba(255,255,255,0.12)' }}>Share</button>
-              <button type="button" onClick={() => setRound((x) => x + 1)} style={{ flex: 1.3, height: 46, borderRadius: 16, border: 'none', cursor: 'pointer', fontFamily: FONT, fontWeight: 900, fontSize: 15, color: '#1E1430', background: 'linear-gradient(180deg, #FFE08A, #FFC93C)', boxShadow: '0 3px 0 #B8860B' }}>Play again</button>
-            </div>
+            {!duel && <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)' }}>Best {Math.max(best, score)}</div>}
+            {duel ? (
+              <button type="button" onClick={sendScore} disabled={sent} style={{ width: '100%', marginTop: 16, height: 48, borderRadius: 16, border: 'none', cursor: sent ? 'default' : 'pointer', fontFamily: FONT, fontWeight: 900, fontSize: 15.5, color: '#1E1430', background: 'linear-gradient(180deg, #FFE08A, #FFC93C)', boxShadow: '0 3px 0 #B8860B', opacity: sent ? 0.6 : 1 }}>{sent ? 'Sending' : 'Send my score'}</button>
+            ) : (
+              <>
+                <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+                  <button type="button" onClick={share} style={{ flex: 1, height: 46, borderRadius: 16, border: 'none', cursor: 'pointer', fontFamily: FONT, fontWeight: 800, fontSize: 15, color: '#FFFFFF', background: 'rgba(255,255,255,0.12)' }}>Share</button>
+                  <button type="button" onClick={() => setRound((x) => x + 1)} style={{ flex: 1.3, height: 46, borderRadius: 16, border: 'none', cursor: 'pointer', fontFamily: FONT, fontWeight: 900, fontSize: 15, color: '#1E1430', background: 'linear-gradient(180deg, #FFE08A, #FFC93C)', boxShadow: '0 3px 0 #B8860B' }}>Play again</button>
+                </div>
+                <button type="button" onClick={challenge} style={{ width: '100%', marginTop: 10, height: 44, borderRadius: 16, border: 'none', cursor: 'pointer', fontFamily: FONT, fontWeight: 800, fontSize: 14.5, color: '#FFFFFF', background: 'rgba(138,77,255,0.55)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.14)' }}>Play with a friend</button>
+              </>
+            )}
           </div>
         )}
       </div>

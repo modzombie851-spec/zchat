@@ -13,6 +13,8 @@ import {
   subscribeToMessages, reportUser, uploadMedia as uploadMediaRaw, deleteMessage,
 } from '../supabaseClient.js';
 import {
+  openPermHelp,
+  permDenied,
   Avatar,
   BigButton,
   CALL_SR,
@@ -207,7 +209,7 @@ export function VoiceIntroSheet({ uid, voice, onClose }) {
       playUiSound('record-start');
       tRef.current = setInterval(() => { const s = (Date.now() - t0) / 1000; setSecs(Math.min(VOICE_INTRO_MAX, Math.floor(s))); if (s >= VOICE_INTRO_MAX) { try { rec.stop(); } catch {} } }, 100);
       hapticTap();
-    } catch { stopAll(); setErr('ZChat needs the microphone to record your hello. Allow it in your phone settings.'); setPhase('idle'); }
+    } catch (e) { stopAll(); setPhase('idle'); if (permDenied(e)) { setErr(''); openPermHelp('mic'); } else setErr('Your microphone could not start. Try again.'); }
   };
   const stop = () => { playUiSound('record-stop'); try { if (recRef.current && recRef.current.state !== 'inactive') recRef.current.stop(); } catch {} };
   const pickFile = (e) => {
@@ -1069,7 +1071,7 @@ function CallVoiceNote({ name, onSend, onCancel }) {
     };
     (async () => {
       let stream = null;
-      try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); } catch { if (alive) onCancel('mic'); return; }
+      try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); } catch (e) { if (permDenied(e)) openPermHelp('mic'); if (alive) onCancel('mic'); return; }
       if (!alive) { stream.getTracks().forEach((t) => t.stop()); return; }
       st.stream = stream;
       const mime = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/aac', 'audio/ogg'].find((t) => typeof MediaRecorder !== 'undefined' && typeof MediaRecorder.isTypeSupported === 'function' && MediaRecorder.isTypeSupported(t));

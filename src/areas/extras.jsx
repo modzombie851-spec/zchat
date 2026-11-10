@@ -13,6 +13,8 @@ import {
   subscribeToMessages, reportUser, uploadMedia as uploadMediaRaw, deleteMessage,
 } from '../supabaseClient.js';
 import {
+  openPermHelp,
+  permDenied,
   APP_VERSION,
   ART_BG,
   ActionSheet,
@@ -6562,40 +6564,32 @@ function WnSegments({ total, at, onArt, dark }) {
 }
 
 const WN_HIGHLIGHTS = [
-  { k: 'shop30', art: 'shop28', title: 'A game shop', text: 'The Shop is now a little game world. Every set comes complete with its frame, nameplate and effect, and if you had part of a set, the rest is yours now.', go: 'shop', cta: 'Open the Shop' },
-  { k: 'gear30', art: 'rooms28', title: 'Cues and strikers', text: 'Get a pool cue or a carrom striker and the other player sees it on every shot.', go: 'shop', cta: 'See them in the Shop' },
-  { k: 'zodiac30', art: 'profile26', title: 'Zodiac signs', text: 'Add your birthday and your sign shows on your profile. Tap anyone’s sign to see how you match, and on their birthday a cake shows next to their name.' },
-  { k: 'home30', art: 'together25', title: 'Fun on your chats page', text: 'Games, Play online, Draw together, Photo booth, Watch together, ZChat Bot and AI images, one tap from your chats.' },
-  { k: 'react30', art: 'games27', title: 'Reactions by the player', text: 'Faces and stickers you send in a game pop up right next to your name, just like messages.' },
+  { k: 'saved31', art: 'saved', title: 'Saved Messages', text: 'Your own private chat for notes, links, photos and anything you want to keep. It sits at the top of your chats and has search.' },
+  { k: 'profile31', art: 'profile26', title: 'A cleaner profile', text: 'Your birthday shows just the day, zodiac signs have real icons, tabs have names and editing your profile is simpler.' },
+  { k: 'versions31', art: 'rooms28', title: '9 ball pool and chess clocks', text: 'Pick 8 ball or 9 ball when you start pool, and play chess with a 3, 5 or 10 minute clock.' },
+  { k: 'games31', art: 'games27', title: 'Games look brand new', text: 'New pictures for every board game, a fresh Zap card look, a smooth new Snake and Squish duels with friends.' },
+  { k: 'visitors31', art: 'friends', title: 'Profile visitors', text: 'See who visited your profile right in Notifications. You can turn it off any time.' },
 ];
 const WN_SECTIONS = [
-  { title: 'Shop', items: [
-    { art: 'shop28', title: 'A game shop', text: 'A bright new Shop with coins, chunky buttons and a sky that changes with light and dark.' },
-    { art: 'coins', title: 'Full sets only', text: 'Every set comes with its frame, nameplate and profile effect. If you had one piece, you now have the whole set.' },
-    { art: 'rooms28', title: 'Cues and strikers', text: 'Five pool cues and four carrom strikers that the other player sees on every shot.' },
+  { title: 'Chats', items: [
+    { art: 'saved', title: 'Saved Messages', text: 'A private chat just for you, with search.' },
+    { art: 'files', title: 'A new attach menu', text: 'Colourful buttons with the important ones first and More for the rest.' },
   ] },
   { title: 'Profiles', items: [
-    { art: 'profile26', title: 'Banners', text: 'Add a banner to your profile. Until you do, it takes a colour from your photo.' },
-    { art: 'chars', title: 'About me', text: 'Your bio and the day you joined ZChat sit together on your profile.' },
-    { art: 'theme', title: 'Zodiac signs', text: 'See your sign and how well you match with friends.' },
-    { art: 'gift', title: 'Birthday cakes', text: 'A cake shows next to someone’s name on their birthday.' },
+    { art: 'profile26', title: 'A cleaner profile', text: 'Birthday without the year, real zodiac icons and named tabs.' },
+    { art: 'friends', title: 'Profile visitors', text: 'See who visited you in Notifications.' },
   ] },
   { title: 'Games', items: [
-    { art: 'games27', title: 'Reactions by the player', text: 'Faces and stickers pop up next to the player who sent them.' },
-    { art: 'cup27', title: 'Learn every Zap card', text: 'How to play in Zap shows every card with its name and what it does.' },
-  ] },
-  { title: 'Chats', items: [
-    { art: 'together25', title: 'Fun on your chats page', text: 'Start a game, a drawing, a photo booth or a watch party right from your chats.' },
-    { art: 'friends', title: 'Get started', text: 'New to ZChat? A few quick steps help you find friends and play your first game.' },
-  ] },
-  { title: 'Faster and steadier', items: [
-    { art: 'shield', title: 'Bug fixes', text: 'Bug fixes and a faster app.' },
+    { art: 'rooms28', title: '9 ball pool and chess clocks', text: 'New ways to play pool and chess with friends.' },
+    { art: 'games27', title: 'New game pictures', text: 'Every board game has a fresh picture, and Connect four is now Four in a row.' },
+    { art: 'cup27', title: 'Squish duels', text: 'Same blobs for both of you. The higher score wins.' },
   ] },
 ];
 const WN_NEW_COUNT = WN_SECTIONS.reduce((n, sec) => n + sec.items.length, 0);
 const WN_SUMMARY = `${WN_NEW_COUNT} new things to try.`;
 
 const WN_EARLIER = [
+  { title: 'A game shop, cues and zodiac signs', text: 'The Shop as a little game world with full sets, pool cues and carrom strikers, zodiac signs on profiles and fun on your chats page.' },
   { title: 'Play online, Zap Mayhem and new Mini golf', text: 'Game rooms with room IDs, harder bots, Zap Mayhem, a new Mini golf, boards and tables in the Shop, game faces and a quick account switch.' },
   { title: 'Game rooms, a new Shop and Sinhala and Tamil', text: 'Games full screen with live moves, Carrom, Zap and Squish, a brand new Shop with real previews, better replies, and ZChat in සිංහල and தமிழ்.' },
   { title: 'Games, photo magic and gift bags', text: 'Chess, pool, mini golf, party games, coin gift bags, AI stickers and matching sets.' },
@@ -6798,7 +6792,7 @@ export function WhatsNewSheet({ onClose, onTry, me }) {
                     ))}
                   </div>
                 ))}
-                <div style={{ marginTop: 22, padding: '14px 0', borderTop: `1px solid ${theme.border}`, fontSize: 14.5, color: theme.muted, lineHeight: 1.45 }}>Plus lots of fixes that make ZChat faster and smoother on every phone.</div>
+                <div style={{ marginTop: 22, padding: '14px 0', borderTop: `1px solid ${theme.border}`, fontSize: 14.5, color: theme.muted, lineHeight: 1.45 }}>Bug fixes and improvements.</div>
                 <div role="button" onClick={() => setEarlier((v) => !v)} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 0', cursor: 'pointer', borderTop: `1px solid ${theme.border}` }}>
                   <span style={{ fontSize: 15.5, fontWeight: 700, color: theme.ink }}>Earlier updates</span>
                   <ChevronRight size={18} color={theme.muted} style={{ transform: earlier ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s ease' }} />
@@ -7058,7 +7052,7 @@ export function CapsuleComposer({ peer, group, myId, onClose, onSend }) {
       r.start();
       setRec({ s: 0 });
       hapticTap();
-    } catch { setErr('ZChat needs the microphone to record. Allow it in your settings.'); }
+    } catch (e) { if (permDenied(e)) { setErr(''); openPermHelp('mic'); } else setErr('Your microphone could not start. Try again.'); }
   };
   const stopRec = () => { const r = recRef.current; if (r) { try { if (r.rec.state !== 'inactive') r.rec.stop(); } catch {} } };
   const removeFile = () => { hapticTap(); setFile(null); setKind(null); setPlaying(false); };

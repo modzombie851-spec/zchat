@@ -13,6 +13,11 @@ import {
   subscribeToMessages, reportUser, uploadMedia as uploadMediaRaw, deleteMessage,
 } from '../supabaseClient.js';
 import {
+  SAVED_BLUE,
+  jsonAfter,
+  uploadMedia,
+  openPermHelp,
+  permDenied,
   AX_TABS_DEFAULT,
   AX_TAB_KEYS,
   ActionSheet,
@@ -3168,102 +3173,109 @@ export function DraftsPage({ uid, onClose, onOpen, kind = null }) {
     </FullPage>
   );
 }
-const TEXT_COLORS = [
-  '#000000', '#ffffff', '#9ca3af', '#ff4d6d', '#ff7a45', '#ffb703', '#fde047', '#a3e635',
-  '#3ddc84', '#14b8a6', '#22d3ee', '#4dabff', '#3b82f6', '#6366f1', '#8b5cf6', '#c77dff',
-  '#e879f9', '#f472b6', '#fb7185', '#b45309', '#78350f', '#166534', '#1e3a8a', '#7f1d1d',
-];
 
-export function TextStylePanel({ draft, font, size, color, onFont, onSize, onColor, onDone, uid, onOpenBubbles, fancy, onFancy, fancySample }) {
+export function TextStylePanel({ draft, font, size, onFont, onSize, onDone, uid, onOpenBubbles, fancy, onFancy, fancySample }) {
   const { theme, keepTextStyle, setKeepTextStyle, bubbleStyle, setBubbleStyle } = useTheme();
   const [tab, setTab] = useState('font');
   const owned = useOwnedBubbles(uid);
   useEffect(() => { ensureTextFonts(); }, []);
-  const sizeIdx = Math.max(0, TEXT_SIZES.findIndex(([k]) => k === size));
   const previewPx = Math.min(26, Math.max(11, textSizePx(size)));
   const wearing = bubbleKeyOf(bubbleStyle);
   const spec = wearing ? CHAR_BUBBLES[wearing] : null;
-  const reset = () => { onFont(null); onSize('m'); onColor(null); };
-  const sample = draft.trim() ? draft.trim().slice(0, 90) : 'Your message looks like this';
+  const changed = !!font || size !== 'm' || !!fancy;
+  const reset = () => { hapticTap(); onFont(null); onSize('m'); if (onFancy && fancy) onFancy(null); };
+  const raw = draft.trim() ? draft.trim().slice(0, 90) : 'Your message looks like this';
+  const sample = fancy && onFancy ? cmFancyText(raw, fancy) : raw;
   const bubbleKeys = ['classic', ...(owned || []).filter((k) => CHAR_BUBBLES[k])];
-  const fontRowRef = useRef(null);
   const tileLine = theme.dark ? 'rgba(255,255,255,0.13)' : 'rgba(17,17,19,0.09)';
-  useEffect(() => {
-    const wrap = fontRowRef.current;
-    const row = wrap && wrap.firstElementChild;
-    const el = row && row.querySelector('[aria-checked="true"]');
-    if (row && el && el.offsetLeft + el.offsetWidth > row.clientWidth) row.scrollLeft = el.offsetLeft - (row.clientWidth - el.offsetWidth) / 2;
-  }, [tab]);
+  const tabs = [['font', 'Font'], ...(onFancy ? [['fancy', 'Fancy']] : []), ['bubble', 'Bubble']];
+  const sizes = [['s', 'Small'], ['m', 'Normal'], ['l', 'Big'], ['xl', 'Huge']];
+  const sizeNow = size === 'xxs' || size === 'xs' ? 's' : size || 'm';
+  const tile = (on) => ({ position: 'relative', borderRadius: 16, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, height: 72, boxSizing: 'border-box', background: on ? theme.accentSoft || theme.soft : theme.soft, boxShadow: on ? `inset 0 0 0 2px ${theme.coral}` : 'none', color: theme.ink });
   return (
-    <div className="zchat-sheet-up" style={{ padding: '12px 14px 12px', background: theme.panelBg, borderTop: `1px solid ${theme.border}`, borderRadius: '22px 22px 0 0', display: 'flex', flexDirection: 'column', gap: 12, flexShrink: 0, boxShadow: '0 -8px 30px rgba(0,0,0,0.12)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span style={{ fontSize: 16, fontWeight: 700, color: theme.ink }}>Text style</span>
-        <div style={{ display: 'flex', gap: 6 }}>
-          <div role="button" onClick={reset} className="zchat-press" style={{ height: 32, padding: '0 12px', borderRadius: 16, display: 'flex', alignItems: 'center', fontSize: 13.5, fontWeight: 600, color: theme.muted, cursor: 'pointer' }}>Reset</div>
-          <div role="button" onClick={onDone} className="zchat-press" style={{ height: 32, padding: '0 16px', borderRadius: 16, display: 'flex', alignItems: 'center', fontSize: 13.5, fontWeight: 700, color: '#FFFFFF', background: theme.coral, cursor: 'pointer' }}>Done</div>
-        </div>
+    <div className="zchat-sheet-up" style={{ padding: '10px 14px 12px', background: theme.panelBg, borderTop: `0.5px solid ${theme.border}`, borderRadius: '22px 22px 0 0', display: 'flex', flexDirection: 'column', gap: 12, flexShrink: 0, boxShadow: '0 -10px 30px rgba(0,0,0,0.18)' }}>
+      <div style={{ display: 'flex', justifyContent: 'center' }}><span style={{ width: 36, height: 4, borderRadius: 2, background: theme.soft2 }} /></div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ flex: 1, fontSize: 17, fontWeight: 800, color: theme.ink, letterSpacing: '-0.01em' }}>Text style</span>
+        {changed && <div role="button" onClick={reset} className="zchat-press" style={{ height: 34, padding: '0 12px', borderRadius: 17, display: 'flex', alignItems: 'center', fontSize: 14, fontWeight: 600, color: theme.muted, cursor: 'pointer' }}>Reset</div>}
+        <div role="button" onClick={onDone} className="zchat-press" style={{ height: 34, padding: '0 18px', borderRadius: 17, display: 'flex', alignItems: 'center', fontSize: 14, fontWeight: 800, color: '#FFFFFF', background: theme.coral, cursor: 'pointer' }}>Done</div>
       </div>
-      <div style={{ borderRadius: 18, padding: '18px 14px 14px', background: theme.dark ? '#0E0E12' : '#F4F4F7', display: 'flex', flexDirection: 'column', minHeight: 70, justifyContent: 'flex-end', maxHeight: 132, overflow: 'hidden' }}>
+      <div style={{ borderRadius: 18, padding: '12px 12px 12px', background: theme.dark ? '#0E0E12' : '#F2F2F6', display: 'flex', flexDirection: 'column', gap: 6, minHeight: 92, maxHeight: 150, overflow: 'hidden', justifyContent: 'flex-end' }}>
+        <div style={{ alignSelf: 'flex-start', maxWidth: '70%', background: theme.bubbleThem, color: theme.ink, borderRadius: 18, borderBottomLeftRadius: 5, padding: '7px 12px', fontSize: 14.5, lineHeight: 1.3 }}>How does this look?</div>
         {spec ? (
           <div style={{ position: 'relative', alignSelf: 'flex-end', maxWidth: `calc(100% - ${bubbleLayout(spec, true, BUBBLE_CW, previewPx).side}px)`, ...bubbleWrapCss(spec, true, BUBBLE_CW, previewPx) }}>
-            <div style={{ ...charBubbleCss(spec, true), lineHeight: 1.3, wordBreak: 'break-word', ...fontStyleCss(font), color: color || spec.ink, fontSize: previewPx }}>
+            <div style={{ ...charBubbleCss(spec, true), lineHeight: 1.3, wordBreak: 'break-word', ...fontStyleCss(font), color: spec.ink, fontSize: previewPx }}>
               <span style={{ position: 'relative' }}>{sample}</span>
               <CharBubbleDecor k={wearing} isMe fontSize={previewPx} />
             </div>
           </div>
         ) : (
-          <div style={{ alignSelf: 'flex-end', maxWidth: '88%', background: theme.bubbleMe, borderRadius: 19, borderBottomRightRadius: 5, padding: '8px 13px', lineHeight: 1.3, wordBreak: 'break-word', ...fontStyleCss(font), color: color || theme.ink, fontSize: previewPx }}>{sample}</div>
+          <div style={{ alignSelf: 'flex-end', maxWidth: '86%', background: theme.bubbleMe, borderRadius: 19, borderBottomRightRadius: 5, padding: '8px 13px', lineHeight: 1.3, wordBreak: 'break-word', ...fontStyleCss(font), color: theme.ink, fontSize: previewPx }}>{sample}</div>
         )}
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '0 2px' }}>
-        <span aria-hidden="true" style={{ fontSize: 12, fontWeight: 700, color: theme.muted, width: 16, textAlign: 'center' }}>A</span>
-        <KitSlider value={sizeIdx} min={0} max={TEXT_SIZES.length - 1} step={1} label="Text size" onChange={(v) => { const row = TEXT_SIZES[Math.round(v)]; if (row) onSize(row[0]); }} style={{ flex: 1, minWidth: 0 }} />
-        <span aria-hidden="true" style={{ fontSize: 21, fontWeight: 700, color: theme.ink, width: 22, textAlign: 'center' }}>A</span>
+      <div role="radiogroup" aria-label="Text size" style={{ display: 'flex', gap: 6, padding: 3, borderRadius: 14, background: theme.soft }}>
+        {sizes.map(([k, l]) => {
+          const on = sizeNow === k;
+          return (
+            <div key={k} role="radio" aria-checked={on} aria-label={`Text size ${l}`} onClick={() => { if (!on) { hapticTap(); onSize(k); } }} className="zchat-press"
+              style={{ flex: 1, height: 38, borderRadius: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, cursor: 'pointer', background: on ? theme.panelBg : 'transparent', boxShadow: on ? '0 1px 4px rgba(0,0,0,0.12)' : 'none', color: on ? theme.ink : theme.muted }}>
+              <span aria-hidden="true" style={{ fontWeight: 800, fontSize: { s: 12, m: 14.5, l: 17, xl: 20 }[k] || 14 }}>A</span>
+              <span style={{ fontSize: 12.5, fontWeight: on ? 750 : 600 }}>{l}</span>
+            </div>
+          );
+        })}
       </div>
-      <UnderTabs value={tab} onChange={setTab} tabs={[['font', 'Font', 'Tab Font'], ['fancy', 'Fancy', 'Tab Fancy'], ['colour', 'Colour', 'Tab Colour'], ['bubble', 'Bubble', 'Tab Bubble']].filter((t) => t[0] !== 'fancy' || onFancy)} />
+      <div role="tablist" aria-label="Style" style={{ display: 'flex', gap: 18, padding: '0 2px', boxShadow: `inset 0 -0.5px 0 ${theme.hair}` }}>
+        {tabs.map(([k, l]) => {
+          const on = tab === k;
+          return (
+            <div key={k} role="tab" aria-selected={on} onClick={() => { if (!on) { hapticTap(); setTab(k); } }} style={{ position: 'relative', padding: '6px 2px 9px', fontSize: 14.5, fontWeight: on ? 800 : 600, color: on ? theme.ink : theme.muted, cursor: 'pointer' }}>
+              {l}
+              {on && <span style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 2, borderRadius: 2, background: theme.ink }} />}
+            </div>
+          );
+        })}
+      </div>
       {tab === 'fancy' && onFancy ? (
-        <CmFancyList value={fancy} sample={fancySample} onPick={onFancy} />
+        <CmFancyList value={fancy} sample={raw} onPick={onFancy} />
       ) : tab === 'bubble' ? (
-        <div data-testid="bubble-row" style={{ display: 'flex', gap: 12, overflowX: 'auto', padding: '6px 6px 4px', margin: '0 -6px', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
+        <div data-testid="bubble-row" style={{ display: 'flex', gap: 10, overflowX: 'auto', padding: '2px 4px 4px', margin: '0 -4px', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
           {bubbleKeys.map((k) => {
             const on = (wearing || 'classic') === k;
             const label = k === 'classic' ? 'Classic' : CHAR_BUBBLES[k].label;
             return (
               <div key={k} role="button" aria-label={`Bubble style ${label}`} aria-pressed={on} onClick={() => { hapticTap(); setBubbleStyle(k); }} className="zchat-press"
-                style={{ flex: '0 0 auto', width: 108, display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'pointer' }}>
-                <div style={{ position: 'relative', width: '100%', height: 74, borderRadius: 16, boxSizing: 'border-box', padding: '0 8px', display: 'flex', flexDirection: 'column', justifyContent: 'center', background: theme.dark ? '#1F1E25' : '#F1F0F6', boxShadow: on ? `0 0 0 2px ${theme.panelBg}, 0 0 0 4px ${theme.coral}` : `inset 0 0 0 1px ${tileLine}`, transition: 'box-shadow 160ms ease' }}>
+                style={{ flex: '0 0 auto', width: 104, display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'pointer' }}>
+                <div style={{ position: 'relative', width: '100%', height: 72, borderRadius: 16, boxSizing: 'border-box', padding: '0 8px', display: 'flex', flexDirection: 'column', justifyContent: 'center', background: theme.soft, boxShadow: on ? `inset 0 0 0 2px ${theme.coral}` : 'none' }}>
                   <div style={{ width: '100%', display: 'flex', flexDirection: 'column' }}><CharBubbleSample k={k} text="Hi" cw={38} fontSize={13} /></div>
                 </div>
-                <span style={{ marginTop: 7, fontSize: 12, fontWeight: on ? 700 : 600, color: on ? kitOnInk(theme) : theme.ink2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>{label}</span>
+                <span style={{ marginTop: 6, fontSize: 12, fontWeight: on ? 750 : 600, color: on ? theme.ink : theme.ink2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>{label}</span>
               </div>
             );
           })}
           {onOpenBubbles && (
             <div role="button" aria-label="See every bubble" onClick={onOpenBubbles} className="zchat-press"
               style={{ flex: '0 0 auto', width: 96, display: 'flex', flexDirection: 'column', alignItems: 'center', cursor: 'pointer' }}>
-              <div style={{ width: '100%', height: 74, borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.ink2, boxShadow: `inset 0 0 0 1.5px ${tileLine}` }}><BubblesIcon size={26} /></div>
-              <span style={{ marginTop: 7, fontSize: 12, fontWeight: 600, color: theme.ink2, whiteSpace: 'nowrap' }}>{owned && owned.length ? 'Get more' : 'Get bubbles'}</span>
+              <div style={{ width: '100%', height: 72, borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.ink2, boxShadow: `inset 0 0 0 1.5px ${tileLine}` }}><BubblesIcon size={26} /></div>
+              <span style={{ marginTop: 6, fontSize: 12, fontWeight: 600, color: theme.ink2, whiteSpace: 'nowrap' }}>{owned && owned.length ? 'Get more' : 'Get bubbles'}</span>
             </div>
           )}
         </div>
-      ) : tab === 'font' ? (
-        <div ref={fontRowRef} data-testid="font-row">
-          <PickTiles label="Font" size={58} bleed={14} value={font || 'classic'} onChange={(k) => onFont(k === 'classic' ? null : k)}
-            options={FONT_STYLES.map((f) => ({ k: f.key, label: f.label, aria: `Font ${f.label}`, art: <span style={{ fontSize: 24, lineHeight: 1, ...(f.css || {}) }}>Aa</span> }))} />
-        </div>
       ) : (
-        <div data-testid="color-row" style={{ display: 'grid', gridTemplateColumns: 'repeat(8, minmax(0, 1fr))', gap: 10, maxHeight: 150, overflowY: 'auto', padding: '4px 2px' }}>
-          <div role="button" aria-label="Default colour" aria-pressed={!color} onClick={() => onColor(null)} style={{ aspectRatio: '1', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, color: theme.ink, background: theme.dark ? 'rgba(255,255,255,0.08)' : '#EFEFF3', boxShadow: !color ? `0 0 0 2px ${theme.panelBg}, 0 0 0 4px ${theme.coral}` : 'none' }}>Aa</div>
-          {TEXT_COLORS.map((col) => {
-            const on = color === col;
+        <div data-testid="font-row" role="radiogroup" aria-label="Font" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 8, maxHeight: 168, overflowY: 'auto', padding: 2, margin: -2 }}>
+          {FONT_STYLES.map((f) => {
+            const on = (font || 'classic') === f.key;
             return (
-              <div key={col} role="button" aria-label={`Colour ${col}`} aria-pressed={on} onClick={() => { hapticTap(); onColor(col); }} style={{ aspectRatio: '1', borderRadius: '50%', background: col, cursor: 'pointer', boxShadow: on ? `0 0 0 2px ${theme.panelBg}, 0 0 0 4px ${theme.coral}` : `inset 0 0 0 1px ${theme.dark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.1)'}` }} />
+              <div key={f.key} role="radio" aria-checked={on} aria-label={`Font ${f.label}`} onClick={() => { hapticTap(); onFont(f.key === 'classic' ? null : f.key); }} className="zchat-press" style={tile(on)}>
+                <span aria-hidden="true" style={{ fontSize: 24, lineHeight: 1, ...(f.css || {}) }}>Aa</span>
+                <span style={{ fontSize: 11.5, fontWeight: on ? 750 : 600, color: on ? theme.ink : theme.muted, maxWidth: '92%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.label}</span>
+              </div>
             );
           })}
         </div>
       )}
       <div role="switch" aria-checked={keepTextStyle} aria-label="Keep this style for next time" onClick={() => setKeepTextStyle(!keepTextStyle)} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', padding: '2px 0' }}>
-        <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, color: theme.ink }}>Keep this style for next time</span>
+        <span style={{ flex: 1, minWidth: 0, fontSize: 14, color: theme.ink }}>Keep this style for next time</span>
         <IgToggle on={!!keepTextStyle} />
       </div>
     </div>
@@ -5161,7 +5173,7 @@ export function ToneRecorderSheet({ onClose, onSaved }) {
       const t0 = Date.now();
       tRef.current = setInterval(() => { const s = Math.floor((Date.now() - t0) / 1000); setSecs(s); if (s >= 10) { try { rec.stop(); } catch {} } }, 200);
       hapticTap();
-    } catch { setErr('ZChat needs the microphone to record a tone. Allow it in your phone settings.'); setPhase('idle'); }
+    } catch (e) { setPhase('idle'); if (permDenied(e)) { setErr(''); openPermHelp('mic'); } else setErr('Your microphone could not start. Try again.'); }
   };
   const stop = () => { try { if (recRef.current && recRef.current.state !== 'inactive') recRef.current.stop(); } catch {} };
   const pickFile = (e) => {
@@ -5390,7 +5402,7 @@ export function EditHistorySheet({ m, isMine, senderName, chatTheme, onClose }) 
     fontSize: (m.text_size ? textSizePx(m.text_size) : 15) * fontScale,
     fontWeight: m.text_size === 'l' || m.text_size === 'xl' ? 800 : 400,
     ...fontStyleCss(m.text_font),
-    color: m.text_color || ink,
+    color: ink,
     lineHeight: m.text_size === 'xl' ? 1.12 : m.text_size === 'l' ? 1.2 : 1.32,
   };
   const list = rows || [];
@@ -6917,6 +6929,66 @@ export function SaveToSheet({ uid, current, title, onPick, onClose }) {
       ]} />
   );
 }
+export function savedPing(uid) { try { window.dispatchEvent(new CustomEvent('zchat-saved-changed', { detail: uid })); } catch {} }
+function savedTimeline(list) {
+  const asc = list.slice().sort((x, y) => String(x.created_at || '').localeCompare(String(y.created_at || '')));
+  const out = [];
+  let last = '';
+  const now = new Date();
+  const yest = new Date(now);
+  yest.setDate(now.getDate() - 1);
+  asc.forEach((r) => {
+    const d = new Date(r.created_at || Date.now());
+    const k = d.toDateString();
+    if (k !== last) {
+      last = k;
+      const day = k === now.toDateString() ? 'Today' : k === yest.toDateString() ? 'Yesterday' : fmtDate(d, d.getFullYear() === now.getFullYear() ? { weekday: 'short', day: 'numeric', month: 'short' } : { day: 'numeric', month: 'short', year: 'numeric' });
+      out.push({ day, key: `d${k}` });
+    }
+    out.push({ r });
+  });
+  return out;
+}
+function SavedBubble({ r, onOpenMedia, onMenu, onOpenChat }) {
+  const { theme } = useTheme();
+  const hold = useRef({ t: 0 });
+  const stop = () => clearTimeout(hold.current.t);
+  const fwd = r.kind !== 'note' && r.kind !== 'file' && r.from_name && !(r.chat_label === 'Note to self');
+  const file = (r.kind === 'file' || (r.content && String(r.content).indexOf('zfile:') === 0)) ? (jsonAfter(r.content, 'zfile:') || {}) : null;
+  const pending = String(r.id).startsWith('temp-');
+  const media = r.media_url && (r.kind === 'image' || r.kind === 'video' || r.kind === 'sticker' || r.kind === 'audio');
+  const text = !file && r.kind !== 'sticker' && r.content ? r.content : '';
+  const when = r.created_at ? fmtHM(new Date(r.created_at)) : '';
+  return (
+    <div style={{ alignSelf: 'flex-end', maxWidth: '84%', margin: '3px 0', WebkitTouchCallout: 'none' }}
+      onPointerDown={(e) => { if (e.target.closest && e.target.closest('a, video, audio')) return; stop(); hold.current.t = setTimeout(() => { hapticTap(); onMenu(); }, 460); }}
+      onPointerUp={stop} onPointerLeave={stop} onPointerCancel={stop} onPointerMove={(e) => { if (Math.abs(e.movementY || 0) > 3) stop(); }}
+      onContextMenu={(e) => { if (e.target.closest && e.target.closest('a, video, audio')) return; e.preventDefault(); stop(); onMenu(); }}>
+      <div style={{ borderRadius: 18, borderBottomRightRadius: 6, background: r.kind === 'sticker' ? 'transparent' : theme.bubbleMe, color: theme.ink, padding: r.kind === 'sticker' ? 0 : media && !text ? 4 : '8px 12px 6px', overflow: 'hidden', opacity: pending ? 0.7 : 1 }}>
+        {fwd && (
+          <div role={onOpenChat ? 'button' : undefined} onClick={onOpenChat || undefined} style={{ fontSize: 12.5, fontWeight: 700, color: kitOnInk(theme), padding: media && !text ? '4px 8px 6px' : '0 0 4px', cursor: onOpenChat ? 'pointer' : 'default', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {`From ${r.from_name}${r.chat_label && r.chat_label !== r.from_name ? `, ${r.chat_label}` : ''}`}
+          </div>
+        )}
+        {r.kind === 'image' && r.media_url && <MediaImg src={r.media_url} onClick={() => onOpenMedia(r.media_url)} style={{ width: '100%', maxWidth: 280, maxHeight: 320, objectFit: 'cover', borderRadius: 14, cursor: 'pointer', display: 'block' }} />}
+        {r.kind === 'video' && r.media_url && <MediaVideo src={r.media_url} controls playsInline preload="metadata" style={{ width: '100%', maxWidth: 280, maxHeight: 320, borderRadius: 14, background: '#000', display: 'block' }} />}
+        {r.kind === 'audio' && r.media_url && <MediaAudio src={r.media_url} controls preload="none" style={{ width: 240, maxWidth: '100%' }} />}
+        {r.kind === 'sticker' && r.content && <img src={r.content} alt="" style={{ width: 120, height: 120, objectFit: 'contain', display: 'block' }} />}
+        {file && (
+          <a href={r.media_url || undefined} target="_blank" rel="noopener noreferrer" onClick={(e) => { if (!r.media_url) e.preventDefault(); }} style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none', color: theme.ink, minWidth: 180 }}>
+            <span style={{ width: 40, height: 40, borderRadius: 12, background: SAVED_BLUE, color: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><FileText size={20} /></span>
+            <span style={{ minWidth: 0 }}>
+              <span style={{ display: 'block', fontSize: 14.5, fontWeight: 650, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{file.n || 'File'}</span>
+              {file.s ? <span style={{ display: 'block', fontSize: 12, color: theme.muted }}>{formatBytes(file.s)}</span> : null}
+            </span>
+          </a>
+        )}
+        {text && <div style={{ fontSize: 15.5, lineHeight: 1.4, wordBreak: 'break-word', whiteSpace: 'pre-wrap', padding: media ? '6px 8px 0' : 0 }}><RichText text={text} /></div>}
+        {r.kind !== 'sticker' && <div style={{ fontSize: 11, color: theme.muted, textAlign: 'right', marginTop: 2, padding: media && !text ? '0 6px 2px' : 0 }}>{pending ? 'Saving' : when}</div>}
+      </div>
+    </div>
+  );
+}
 export function SavedMessagesPanel({ myId, me, onClose, onChanged, onOpenChat }) {
   useBackClose(true, onClose);
   const edgeBack = useEdgeSwipeBack(true);
@@ -6939,7 +7011,15 @@ export function SavedMessagesPanel({ myId, me, onClose, onChanged, onOpenChat })
   const [folderMenu, setFolderMenu] = useState(null);
   const [naming, setNaming] = useState(null);
   const [delAsk, setDelAsk] = useState(null);
+  const [searchOn, setSearchOn] = useState(false);
+  const savedScrollRef = useRef(null);
   const holdRef = useRef({ t: 0, fired: false });
+  const toBottom = (smooth) => requestAnimationFrame(() => { const el = savedScrollRef.current; if (el) el.scrollTo({ top: el.scrollHeight + 999, behavior: smooth ? 'smooth' : 'auto' }); });
+  const lastCount = useRef(-1);
+  useLayoutEffect(() => {
+    const n = rows ? rows.length : -1;
+    if (n !== lastCount.current) { const first = lastCount.current < 1; lastCount.current = n; toBottom(!first); }
+  }, [rows, savedTab, folder]);
   useEffect(() => { if (folder !== 'all' && !folders.some((f) => f.id === folder)) setFolder('all'); }, [folders, folder]);
   useEffect(() => {
     const on = (e) => {
@@ -7024,6 +7104,43 @@ export function SavedMessagesPanel({ myId, me, onClose, onChanged, onOpenChat })
     rowsNowRef.current = (rowsNowRef.current || []).map((r) => (r.id === temp.id ? data : r));
     setRows((prev) => (prev || []).map((r) => (r.id === temp.id ? data : r)));
     savedMessagesMem.set(myId, [data, ...(savedMessagesMem.get(myId) || []).filter((r) => r.id !== data.id)]);
+    savedPing(myId);
+  };
+  const addFiles = async (files) => {
+    const into = folder !== 'all' ? folder : null;
+    const list = files.filter((f) => f && f.size <= 50 * 1024 * 1024).slice(0, 10);
+    if (list.length < files.length) appSnack('Files over 50 MB were skipped');
+    const realInto = into ? await realFolderId(into) : null;
+    for (let i = 0; i < list.length; i++) {
+      const f = list[i];
+      const t = String(f.type || '').toLowerCase();
+      const kind = t.indexOf('image/') === 0 && !/svg/.test(t) ? 'image' : t.indexOf('video/') === 0 ? 'video' : t.indexOf('audio/') === 0 ? 'audio' : 'file';
+      const content = kind === 'file' ? `zfile:${JSON.stringify({ n: String(f.name || 'File').slice(0, 120), s: f.size || 0, m: t.slice(0, 80) })}` : null;
+      let local = null;
+      try { local = URL.createObjectURL(f); } catch {}
+      const temp = { id: `temp-${Date.now()}-${i}`, user_id: myId, kind, content, media_url: kind === 'file' ? null : local, from_name: 'You', chat_label: 'Note to self', created_at: new Date().toISOString(), folder_id: into };
+      rowsNowRef.current = [temp, ...(rowsNowRef.current || [])];
+      setRows((prev) => [temp, ...(prev || [])]);
+      const up = await uploadMedia(f, myId);
+      if (!up || up.error || !up.url) {
+        rowsNowRef.current = (rowsNowRef.current || []).filter((r) => r.id !== temp.id);
+        setRows((prev) => (prev || []).filter((r) => r.id !== temp.id));
+        setProblem(friendlyError(up && up.error, `${String(f.name || 'That file').slice(0, 40)} could not be uploaded. Try again.`));
+        continue;
+      }
+      const { data, error } = await supabase.from('saved_messages').insert({ user_id: myId, kind, content, media_url: up.url, from_name: 'You', chat_label: 'Note to self', ...(realInto ? { folder_id: realInto } : {}) }).select().single();
+      if (error || !data) {
+        rowsNowRef.current = (rowsNowRef.current || []).filter((r) => r.id !== temp.id);
+        setRows((prev) => (prev || []).filter((r) => r.id !== temp.id));
+        setProblem(friendlyError(error, "Couldn't save that. Try again."));
+        continue;
+      }
+      savedAddedRef.current.add(data.id);
+      rowsNowRef.current = (rowsNowRef.current || []).map((r) => (r.id === temp.id ? data : r));
+      setRows((prev) => (prev || []).map((r) => (r.id === temp.id ? data : r)));
+      if (local) setTimeout(() => { try { URL.revokeObjectURL(local); } catch {} }, 8000);
+      savedPing(myId);
+    }
   };
   const remove = async (row) => {
     if (String(row.id).startsWith('temp-')) return;
@@ -7032,6 +7149,7 @@ export function SavedMessagesPanel({ myId, me, onClose, onChanged, onOpenChat })
     const { error } = await supabase.from('saved_messages').delete().eq('id', row.id).eq('user_id', myId);
     if (error) { savedGoneRef.current.delete(row.id); setProblem(friendlyError(error, "Couldn't remove that. Try again.")); load(); return; }
     if (onChanged && row.source_message_id) onChanged(row.source_message_id, false);
+    savedPing(myId);
   };
   const term = q.trim().toLowerCase();
   const inFolder = (r) => folder === 'all' || r.folder_id === folder;
@@ -7042,19 +7160,21 @@ export function SavedMessagesPanel({ myId, me, onClose, onChanged, onOpenChat })
     <>
     <WideDim onClose={onClose} z={40} />
     <div {...edgeBack} style={{ position: 'fixed', inset: 0, zIndex: 40, background: theme.bgGradient, display: 'flex', flexDirection: 'column', fontFamily: FONT }} className="zchat-panel-open zchat-wide-page">
-      <IgTopBar title="Saved" onBack={onClose} />
+      <IgTopBar title="Saved Messages" onBack={onClose} right={savedTab === 'messages' ? <div role="button" aria-label={searchOn ? 'Close search' : 'Search saved messages'} onClick={() => { hapticTap(); setSearchOn((v) => !v); if (searchOn) setQ(''); }} className="zchat-press" style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: theme.ink }}>{searchOn ? <X size={21} /> : <Search size={21} />}</div> : null} />
       <LineTabs fill kind="button" value={savedTab} onChange={(k) => { if (k !== savedTab) { hapticTap(); setSavedTab(k); } }} h={44} fs={15} style={{ marginBottom: 10 }}
         tabs={[['messages', 'Messages'], ['posts', 'Posts']].map(([k, label]) => ({ k, label, aria: `Saved ${label.toLowerCase()}` }))} />
       {savedTab === 'posts' ? (
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '0 16px calc(16px + env(safe-area-inset-bottom))' }}><SavedPostsGrid me={me} myId={myId} /></div>
       ) : (
       <>
-      <div style={{ padding: '0 16px 10px' }}>
-        <div style={{ position: 'relative' }}>
-          <Search size={15} color={theme.muted} style={{ position: 'absolute', left: 12, top: 12 }} />
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search saved messages" style={{ ...inputStyle(theme), padding: '9px 12px 9px 34px', fontSize: 13.5 }} />
+      {searchOn && (
+        <div style={{ padding: '0 16px 8px' }}>
+          <div style={{ position: 'relative' }}>
+            <Search size={15} color={theme.muted} style={{ position: 'absolute', left: 12, top: 12 }} />
+            <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search saved messages" aria-label="Search saved messages" style={{ ...inputStyle(theme), padding: '9px 12px 9px 34px', fontSize: 13.5 }} />
+          </div>
         </div>
-      </div>
+      )}
       <LineTabs kind="button" label="Saved folders" value={folder} h={40} fs={14.5} inset={6} style={{ marginBottom: 6 }}
         onChange={(k) => { if (k !== folder) { playUiSound('tap'); setFolder(k); } }}
         tabs={[{ k: 'all', label: 'All' }, ...folders.map((f) => {
@@ -7062,54 +7182,32 @@ export function SavedMessagesPanel({ myId, me, onClose, onChanged, onOpenChat })
           return { k: f.id, label: f.name, meta: n || '', end: folder === f.id ? <span role="button" aria-label={`Edit folder ${f.name}`} onClick={(e) => { e.stopPropagation(); setFolderMenu(f); }} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 26, height: 26, margin: '-6px -8px -6px -3px', color: theme.muted, cursor: 'pointer' }}><Pencil size={13} strokeWidth={2.1} /></span> : null };
         })]}
         after={folders.length < 50 ? <div role="button" aria-label="New folder" onClick={() => { playUiSound('tap'); setNaming({ mode: 'new' }); }} className="zchat-press" style={{ flex: '0 0 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 40, height: 40, marginLeft: 2, cursor: 'pointer', color: theme.muted, WebkitTapHighlightColor: 'transparent' }}><Plus size={19} strokeWidth={2} /></div> : null} />
-      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '0 16px' }}>
+      <div ref={savedScrollRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '4px 12px 8px', display: 'flex', flexDirection: 'column' }}>
         {problem && <div style={{ background: `${theme.danger}18`, color: theme.danger, borderRadius: 12, padding: '9px 12px', fontSize: 12.5, fontWeight: 700, marginBottom: 8 }}>{problem}</div>}
         {rows === null ? (
           <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><Spinner size={22} color={theme.ink} /></div>
         ) : shown.length === 0 ? (
-          <EmptyState art={term ? 'nothing' : 'saved'} title={term ? 'Nothing found' : curFolder ? `Nothing in ${curFolder.name} yet` : 'Nothing saved yet'} text={term ? 'Try a different word.' : curFolder ? 'Press and hold a saved message and pick Move to folder. Notes you write here land in this folder too.' : 'Press and hold any message in a chat and choose Add to Saved. You can also write a note to yourself below.'} />
-        ) : shown.map((r) => (
-          <div key={r.id} onPointerDown={(e) => { if (e.target.closest && e.target.closest('[role="button"], a, video, audio, img')) return; stopHold(); holdRef.current.fired = false; holdRef.current.t = setTimeout(() => { holdRef.current.fired = true; hapticTap(); setRowMenu(r); }, 480); }}
-            onPointerUp={stopHold} onPointerLeave={stopHold} onPointerCancel={stopHold} onPointerMove={(e) => { if (Math.abs(e.movementY || 0) > 3) stopHold(); }}
-            onContextMenu={(e) => { if (e.target.closest && e.target.closest('a, video, audio')) return; e.preventDefault(); stopHold(); setRowMenu(r); }}
-            style={{ padding: '14px 2px 8px', borderBottom: `1px solid ${theme.hair}`, WebkitTouchCallout: 'none' }}>
-            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
-              <div
-                role={(onOpenChat && (r.dm_user_id || r.group_id)) ? 'button' : undefined}
-                onClick={(onOpenChat && (r.dm_user_id || r.group_id)) ? () => onOpenChat(r) : undefined}
-                style={{
-                  fontSize: 13, fontWeight: 700, color: (onOpenChat && (r.dm_user_id || r.group_id)) ? kitOnInk(theme) : theme.ink2, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                  cursor: (onOpenChat && (r.dm_user_id || r.group_id)) ? 'pointer' : 'default',
-                }}>
-                {r.from_name || 'Someone'}{r.chat_label && r.kind !== 'note' ? ` in ${r.chat_label}` : ''}
-              </div>
-              <div style={{ fontSize: 12, color: theme.muted, flexShrink: 0 }}>{timeAgoLong(r.message_created_at || r.created_at)}</div>
-            </div>
-            {r.kind === 'image' && r.media_url && <MediaImg src={r.media_url} onClick={() => setLightbox(r.media_url)} style={{ width: '100%', maxHeight: 280, objectFit: 'cover', borderRadius: 12, cursor: 'pointer', display: 'block' }} />}
-            {r.kind === 'video' && r.media_url && <MediaVideo src={r.media_url} controls playsInline preload="metadata" style={{ width: '100%', maxHeight: 280, borderRadius: 12, background: '#000', display: 'block' }} />}
-            {r.kind === 'audio' && r.media_url && <MediaAudio src={r.media_url} controls preload="none" style={{ width: '100%' }} />}
-            {r.kind === 'sticker' && r.content && <img src={r.content} alt="" style={{ width: 110, height: 110, objectFit: 'contain' }} />}
-            {(r.kind === 'text' || r.kind === 'note' || ((r.kind === 'image' || r.kind === 'video') && r.content)) && r.content && (
-              <div style={{ fontSize: 15, color: theme.ink, lineHeight: 1.45, wordBreak: 'break-word', marginTop: r.media_url ? 8 : 0 }}><RichText text={r.content} /></div>
-            )}
-            <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end', marginTop: 2, marginRight: -8 }}>
-              {(r.kind === 'note' || r.kind === 'text') && r.content && r.content.trim().length >= 160 && !isSpecialContent(r.content) && (
-                <div role="button" aria-label="Make flashcards" onClick={() => { hapticTap(); aiToolOpen('make', { text: r.content, source: r.kind === 'note' ? 'note' : 'message' }); }} className="zchat-press" style={{ cursor: 'pointer', color: theme.muted, display: 'flex', alignItems: 'center', justifyContent: 'center', width: 34, height: 34 }}><AiCardsGlyph size={18} /></div>
-              )}
-              {r.content && r.kind !== 'sticker' && (
-                <div role="button" aria-label="Copy" onClick={() => { try { navigator.clipboard.writeText(r.content); } catch {} }} className="zchat-press" style={{ cursor: 'pointer', color: theme.muted, display: 'flex', alignItems: 'center', justifyContent: 'center', width: 34, height: 34 }}><Copy size={17} /></div>
-              )}
-              {!String(r.id).startsWith('temp-') && <div role="button" aria-label="Move to folder" onClick={() => setMoveFor(r)} className="zchat-press" style={{ cursor: 'pointer', color: r.folder_id ? kitOnInk(theme) : theme.muted, display: 'flex', alignItems: 'center', justifyContent: 'center', width: 34, height: 34 }}><FolderIcon size={17} /></div>}
-              <div role="button" aria-label="Remove" onClick={() => remove(r)} className="zchat-press" style={{ cursor: 'pointer', color: theme.muted, display: 'flex', alignItems: 'center', justifyContent: 'center', width: 34, height: 34 }}><Trash2 size={17} /></div>
-            </div>
+          <div style={{ margin: 'auto 0', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '24px 18px' }}>
+            <span style={{ width: 76, height: 76, borderRadius: '50%', background: SAVED_BLUE, color: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Bookmark size={34} fill="#FFFFFF" /></span>
+            <div style={{ fontSize: 17, fontWeight: 800, color: theme.ink, marginTop: 14 }}>{term ? 'Nothing found' : curFolder ? `Nothing in ${curFolder.name} yet` : 'Your Saved Messages'}</div>
+            <div style={{ fontSize: 14, color: theme.muted, marginTop: 6, lineHeight: 1.5, maxWidth: 300 }}>{term ? 'Try a different word.' : 'Send yourself notes, photos, videos and files. Press and hold any message in a chat and tap Save to keep it here.'}</div>
           </div>
+        ) : savedTimeline(shown).map((it) => it.day ? (
+          <div key={it.key} style={{ alignSelf: 'center', margin: '10px 0 6px', padding: '4px 11px', borderRadius: 999, background: theme.soft, color: theme.muted, fontSize: 12, fontWeight: 700 }}>{it.day}</div>
+        ) : (
+          <SavedBubble key={it.r.id} r={it.r} onOpenMedia={(u) => setLightbox(u)} onMenu={() => setRowMenu(it.r)} onOpenChat={onOpenChat && (it.r.dm_user_id || it.r.group_id) ? () => onOpenChat(it.r) : null} />
         ))}
       </div>
-      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', padding: '10px 14px', paddingBottom: 'calc(10px + env(safe-area-inset-bottom))', borderTop: `1px solid ${theme.border}` }}>
-        <textarea value={note} onChange={(e) => setNote(e.target.value.slice(0, 2000))} rows={1} placeholder="Write a note to yourself"
-          style={{ ...inputStyle(theme), flex: 1, resize: 'none', maxHeight: 96, padding: '11px 14px', fontSize: 14 }} />
-        <div role="button" aria-label="Save note" onClick={addNote} style={{ width: 42, height: 42, borderRadius: '50%', background: note.trim() ? theme.coral : theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: note.trim() ? 'pointer' : 'default', flexShrink: 0 }}>
-          {busy ? <Spinner size={16} /> : <Bookmark size={18} color={note.trim() ? 'white' : theme.muted} />}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', padding: '8px 10px', paddingBottom: 'calc(8px + env(safe-area-inset-bottom))', borderTop: `0.5px solid ${theme.hair}` }}>
+        <label aria-label="Add a photo, video or file" className="zchat-press" style={{ width: 42, height: 42, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.ink, cursor: 'pointer', flexShrink: 0 }}>
+          <Paperclip size={21} />
+          <input type="file" multiple accept="image/*,video/*,audio/*,application/pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip" style={{ display: 'none' }} onChange={(e) => { const fs = [...(e.target.files || [])]; e.target.value = ''; if (fs.length) addFiles(fs); }} />
+        </label>
+        <textarea value={note} onChange={(e) => setNote(e.target.value.slice(0, 2000))} rows={1} placeholder="Message" aria-label="Write a note to yourself"
+          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey && !isTouchDevice()) { e.preventDefault(); addNote(); } }}
+          style={{ ...inputStyle(theme), flex: 1, resize: 'none', maxHeight: 110, padding: '11px 14px', fontSize: 15, borderRadius: 21 }} />
+        <div role="button" aria-label="Send to Saved Messages" onClick={addNote} className="zchat-press" style={{ width: 42, height: 42, borderRadius: '50%', background: note.trim() ? theme.coral : theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: note.trim() ? 'pointer' : 'default', flexShrink: 0 }}>
+          {busy ? <Spinner size={16} /> : <Send size={18} color={note.trim() ? '#FFFFFF' : theme.muted} />}
         </div>
       </div>
       </>

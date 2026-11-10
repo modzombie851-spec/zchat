@@ -1,7 +1,7 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { GameRoom, RoomLayer, defineSfx, sfx, haptic, useGameKit } from './kit.jsx';
 import { clamp, lerp, makeCanvas, fitCanvas, dpr, grain, woodTexture, rrect, rgba, shade, tint, mix, hexRgb, perfMeter, noiseHit, tone, loopNoise, easeOut, rng, gameCache, onGameCacheDrop, dropGameCaches, canvasBlank, guardCanvases } from './physics.jsx';
-import { PoolSim, TW, TH, R, CW, RW, HEAD_Y, FOOT, POCKETS, MOUTH, ballColor, kindOf, canPlace, judge, aimRay, findPot, groupOf, CUE_START } from './poolsim.jsx';
+import { PoolSim, TW, TH, R, CW, RW, HEAD_Y, FOOT, POCKETS, MOUTH, ballColor, kindOf, canPlace, judge, aimRay, findPot, groupOf, CUE_START, lowBall } from './poolsim.jsx';
 import { useShotLink, throttle } from './live.jsx';
 import { kitFor, gearLook } from './kits.jsx';
 import { useBackClose, Avatar, appSnack, g1Send, g1Mem, g1First, g1PoolLeft, g1Outcome, g1Test, ConfirmSheet, FONT } from '../App.jsx';
@@ -1419,6 +1419,7 @@ function usePoolPlay({ st, prevOf, myId, peer, relay, save, onBusy, onFlash }) {
   const other = st.x === myId ? st.o : st.x;
   const myMark = st.x === myId ? 'x' : 'o';
   const legalFor = (s) => {
+    if (s.v === 9) { const lo = lowBall(s.b); return (id) => id === lo; }
     const g = groupOf(s, myMark);
     if ((s.n || 0) === 0) return null;
     const mine = g ? s.b.filter(([id]) => (g === 's' ? id >= 1 && id <= 7 : id >= 9 && id <= 15)).length : 1;
@@ -1477,7 +1478,7 @@ function usePoolPlay({ st, prevOf, myId, peer, relay, save, onBusy, onFlash }) {
     else if (next.ev.fl === 'scratch') t = `${who} potted the white`;
     else if (next.ev.fl === 'miss') t = `${who} missed every ball`;
     else if (next.ev.fl === 'wrong') t = `${who} hit the wrong ball first`;
-    else if (next.ev.r8) t = 'The black went down on the break and came back';
+    else if (next.ev.r8) t = next.v === 9 ? 'The 9 went down on a foul and came back' : 'The black went down on the break and came back';
     else if (next.t === (mine ? myId : other) && (next.ev.pt || []).some((id) => id !== 0)) t = mine ? 'Nice shot, go again' : `${peer} goes again`;
     if (!t) return;
     if (flashRef.current) { if (!next.w) flashRef.current(t); return; }
@@ -1589,7 +1590,7 @@ export function PoolPage({ st, prevOf, myId, peerName, onClose }) {
   const myG = groupOf(st, myMark);
   const thG = groupOf(st, myMark === 'x' ? 'o' : 'x');
   const out = g1Outcome(st, myId);
-  const note = P.busy.current ? '' : st.w ? (out === 'win' ? (st.why === 'resign' ? `${peer} gave up. You won` : 'You potted the black. You won') : st.why === 'resign' ? 'You gave up' : `${peer} won this one`) : myTurn ? (st.bih ? ((st.n || 0) === 0 ? 'Your break. Place the white ball behind the line' : 'Ball in hand. Drag the white ball anywhere') : 'Your shot. Touch the table to aim, pull the power down') : (live.here ? `${peer} is at the table` : `${peer} is up next`);
+  const note = P.busy.current ? '' : st.w ? (out === 'win' ? (st.why === 'resign' ? `${peer} gave up. You won` : (st.v === 9 ? 'You potted the 9. You won' : 'You potted the black. You won')) : st.why === 'resign' ? 'You gave up' : `${peer} won this one`) : myTurn ? (st.bih ? ((st.n || 0) === 0 ? 'Your break. Place the white ball behind the line' : 'Ball in hand. Drag the white ball anywhere') : 'Your shot. Touch the table to aim, pull the power down') : (live.here ? `${peer} is at the table` : `${peer} is up next`);
   return (
     <GameRoom k="pool" title="Pool" scene={<PoolScene />} onClose={onClose}
       top={(
@@ -1615,6 +1616,23 @@ export function PoolPage({ st, prevOf, myId, peerName, onClose }) {
   );
 }
 
+function NineLine({ b, next, end }) {
+  const on = (b || []).map(([id]) => id);
+  const lo = lowBall(b);
+  if (next) {
+    return (
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, flexDirection: end ? 'row-reverse' : 'row' }}>
+        <span>{lo ? 'Next' : 'Table clear'}</span>{lo ? <BallDot id={lo} size={11} /> : null}
+      </span>
+    );
+  }
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 1.5, flexDirection: end ? 'row-reverse' : 'row' }}>
+      {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((id) => <BallDot key={id} id={id} size={9} faded={!on.includes(id)} />)}
+    </span>
+  );
+}
+
 function GroupDots({ group, left, end }) {
   const all = group === 's' ? [1, 2, 3, 4, 5, 6, 7] : group === 't' ? [9, 10, 11, 12, 13, 14, 15] : null;
   if (!all) return <span>Open table</span>;
@@ -1636,13 +1654,15 @@ export function PoolTable({ st, prevOf, myId, peerName, relay, onMove, onMeta, o
   const myG = groupOf(st, myMark);
   const thG = groupOf(st, myMark === 'x' ? 'o' : 'x');
   const brk = (st.n || 0) === 0;
+  const nine = st.v === 9;
+  const lo = nine ? lowBall(st.b) : null;
   const status = P.busy.current || st.w ? '' : myTurn ? (st.bih ? (brk ? 'Your break, place the white ball' : 'Ball in hand, place the white ball') : brk ? 'Your break' : 'Your shot') : `${peerName} is shooting`;
-  const hint = myTurn ? (st.bih ? 'Drag the white ball, then touch to aim' : 'Touch to aim, pull the power down') : '';
+  const hint = myTurn ? (nine && lo && !st.bih ? `Hit the ${lo} ball first` : st.bih ? 'Drag the white ball, then touch to aim' : 'Touch to aim, pull the power down') : '';
   useEffect(() => {
     onMeta({
       status, hot: myTurn, center: null, ready: true,
-      me: <GroupDots group={myG} left={mine} />,
-      peer: <GroupDots group={thG} left={theirs} end />,
+      me: nine ? <NineLine b={st.b} /> : <GroupDots group={myG} left={mine} />,
+      peer: nine ? <NineLine b={st.b} next end /> : <GroupDots group={thG} left={theirs} end />,
       bottom: st.w ? null : (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
           <SpinBall spin={spin} size={42} disabled={!myTurn} onClick={() => { if (myTurn) setPick(true); }} />
@@ -1650,7 +1670,7 @@ export function PoolTable({ st, prevOf, myId, peerName, relay, onMove, onMeta, o
         </div>
       ),
     });
-  }, [status, myTurn, hint, mine.join(','), theirs.join(','), myG, thG, spin.s, spin.e, !!st.w]);
+  }, [status, myTurn, hint, mine.join(','), theirs.join(','), myG, thG, spin.s, spin.e, !!st.w, nine ? st.b.map((x) => x[0]).join(',') : '']);
   return (
     <>
       <PoolTableArea P={P} myTurn={myTurn} flash={P.flash} />

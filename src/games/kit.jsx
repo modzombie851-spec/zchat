@@ -427,7 +427,7 @@ function Plate({ p, side, tone }) {
           <span style={{ fontSize: 14.5, fontWeight: 800, color: '#FFFFFF', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 92, textShadow: '0 1px 2px rgba(0,0,0,0.45)' }}>{p.name}</span>
           {p.level ? <span style={{ flexShrink: 0, fontSize: 10.5, fontWeight: 900, color: tone.ink || '#1A1408', background: tone.accent, borderRadius: 7, padding: '2px 5px', lineHeight: '12px' }}>{`Lv ${p.level}`}</span> : null}
         </div>
-        {p.line != null && <div style={{ marginTop: 3, fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.82)', display: 'flex', justifyContent: right ? 'flex-end' : 'flex-start', minHeight: 14 }}>{p.line}</div>}
+        {(p.line != null || p.clock) && <div style={{ marginTop: 3, fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.82)', display: 'flex', alignItems: 'center', gap: 6, flexDirection: right ? 'row-reverse' : 'row', justifyContent: 'flex-start', minHeight: 14 }}>{p.clock || null}{p.line}</div>}
       </div>
     </div>
   );

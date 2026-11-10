@@ -4,7 +4,7 @@ import {
   useTheme, FONT, Avatar, GameArt, GAME_TITLES, FRIEND_GAME_GROUPS, FRIEND_GAME_SUBS, SOLO_GAMES, SOLO_HIDDEN, LIVE_GAME_KEYS, GAME_ART_BG,
   GameInfoButton, HowToPlaySheet, SoloGame, readBest, formatGameScore, loadMyGames, gameNet, gameNetMissing, isSoloGameKey,
   useBackClose, useSheetDrag, playUiSound, hapticTap, reducedMotion, FullPage, HeaderIconButton, TrophyIcon, CrownIcon, NameBadge,
-  LoadFail, ghBotCan, ghBotLevel, GamepadIcon, GameButton, SegmentedControl,
+  LoadFail, ghBotCan, ghBotLevel, GamepadIcon, GameButton, SegmentedControl, botPicUrl,
 } from '../App.jsx';
 import { useMyLevels, useLevels, LEVEL_GAMES, readRecent, noteRecent } from './levels.jsx';
 import { sceneUrl, sceneKeyFor, preloadScene } from './scenes.jsx';
@@ -88,7 +88,7 @@ function Tile({ k, title, sub, badge, onClick, ratio = '4 / 3', titleSize = 16, 
       <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(0,0,0,0) 38%, rgba(0,0,0,0.5) 70%, rgba(0,0,0,0.74) 100%)' }} />
       <div style={{ position: 'absolute', left: small ? 9 : 12, right: small ? 8 : 10, bottom: small ? 8 : 10 }}>
         <div style={{ fontSize: small ? 12.5 : (String(title).length > 15 ? titleSize - 2 : titleSize), lineHeight: small ? '15px' : 1.2, fontWeight: 900, letterSpacing: '-0.01em', color: '#FFFFFF', textShadow: '0 1px 4px rgba(0,0,0,0.55)', ...(small ? { display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' } : { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }) }}>{title}</div>
-        {sub && <div style={{ fontSize: 12, fontWeight: 600, color: 'rgba(255,255,255,0.86)', marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub}</div>}
+        {sub && <div style={{ fontSize: small ? 11 : 12, fontWeight: small ? 700 : 600, color: 'rgba(255,255,255,0.86)', marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub}</div>}
       </div>
       {badge && <div style={{ position: 'absolute', top: 9, left: 9 }}>{badge}</div>}
     </div>
@@ -305,7 +305,7 @@ export function GamesPage({ onClose, onChallenge, onShareScore, initialGame, fri
           {onPlayBot && (
             <div role="button" aria-label="Play ZChat Bot" onClick={() => { tap(); onPlayBot(); }} className="zchat-row-press"
               style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 12px', marginTop: 20, borderRadius: 18, cursor: 'pointer', background: theme.rowBg }}>
-              <Avatar emoji="/bot-avatar.jpg" name="ZChat Bot" size={44} />
+              <Avatar emoji={botPicUrl()} name="ZChat Bot" size={44} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 15.5, fontWeight: 800, color: theme.ink }}>Play ZChat Bot</div>
                 <div style={{ fontSize: 12.5, color: theme.muted, marginTop: 1 }}>Easy, Medium or Hard, any time</div>
@@ -340,6 +340,23 @@ function ShareGlyph() {
 
 const BOT_LEVELS = [[1, 'Easy'], [2, 'Medium'], [3, 'Hard']];
 
+const pairMem = new Map();
+function usePairCounts(peerId) {
+  const [map, setMap] = useState(() => (peerId && pairMem.get(peerId)) || null);
+  useEffect(() => {
+    if (!peerId) return undefined;
+    let alive = true;
+    supabase.rpc('zchat_game_pair_counts', { p_peer: peerId }).then(({ data, error }) => {
+      if (!alive || error || !data || typeof data !== 'object' || Array.isArray(data)) return;
+      pairMem.set(peerId, data);
+      setMap(data);
+    }, () => {});
+    return () => { alive = false; };
+  }, [peerId]);
+  return map || {};
+}
+function pairLine(n) { return n ? `Played ${n}` : null; }
+
 export function GamePickerSheet({ profile, onPick, onMore, onClose }) {
   injectHubCss();
   useBackClose(true, onClose);
@@ -348,8 +365,10 @@ export function GamePickerSheet({ profile, onPick, onMore, onClose }) {
   const bot = !!(profile && profile.is_bot);
   const [lv, setLv] = useState(() => ghBotLevel());
   const levels = useMyLevels();
+  const pairs = usePairCounts(profile && profile.id);
   const [recent] = useState(() => readRecent());
   const first = String((profile && profile.name) || 'your friend').split(' ')[0];
+  const together = Object.keys(pairs).reduce((a, k) => a + ((pairs[k] && pairs[k].n) || 0), 0);
   const all = useMemo(() => duoKeys().filter((k) => !bot || ghBotCan(k)), [bot]);
   const live = bot ? [] : LIVE_GAME_KEYS.slice();
   const puzzles = bot ? [] : puzzleKeys();
@@ -359,7 +378,7 @@ export function GamePickerSheet({ profile, onPick, onMore, onClose }) {
   const lvOf = (k) => (levels && levels[k] && levels[k].level > 1 ? levels[k].level : null);
   const square = (k, badge) => (
     <div key={k} style={{ minWidth: 0 }}>
-      <Tile k={k} title={GAME_TITLES[k]} ratio="1 / 1" small badge={badge || (lvOf(k) ? <LevelBadge level={lvOf(k)} /> : null)} onClick={() => pick(k)} />
+      <Tile k={k} title={GAME_TITLES[k]} sub={pairLine(pairs[k] && pairs[k].n)} ratio="1 / 1" small badge={badge || (lvOf(k) ? <LevelBadge level={lvOf(k)} /> : null)} onClick={() => pick(k)} />
     </div>
   );
   return (
@@ -371,7 +390,7 @@ export function GamePickerSheet({ profile, onPick, onMore, onClose }) {
             <Avatar emoji={profile.avatar} name={profile.name} size={44} />
             <div style={{ minWidth: 0, flex: 1 }}>
               <div style={{ fontWeight: 850, fontSize: 18, letterSpacing: '-0.01em', color: theme.ink }}>{bot ? 'Play ZChat Bot' : `Play with ${first}`}</div>
-              <div style={{ fontSize: 12.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{bot ? 'Pick how hard, then a game' : 'You both play in a full screen game room'}</div>
+              <div style={{ fontSize: 12.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{bot ? 'Pick how hard, then a game' : together ? `You played ${together} ${together === 1 ? 'game' : 'games'} together` : 'You both play in a full screen game room'}</div>
             </div>
           </div>
           {bot && <div style={{ padding: '0 16px 10px' }}><SegmentedControl value={lv} onChange={(v) => { if (v === lv) return; hapticTap(); setLv(v); try { localStorage.setItem('zchat-bot-level', String(v)); } catch {} }} options={BOT_LEVELS} /></div>}
@@ -395,6 +414,14 @@ export function GamePickerSheet({ profile, onPick, onMore, onClose }) {
             <>
               <SectionTitle>Puzzles</SectionTitle>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10 }}>{puzzles.map((k) => square(k))}</div>
+            </>
+          )}
+          {!bot && (
+            <>
+              <SectionTitle>Score battle</SectionTitle>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10 }}>
+                <div style={{ minWidth: 0 }}><Tile k="sd:squish" title="Squish duel" sub={pairLine(pairs['sd:squish'] && pairs['sd:squish'].n) || 'Same blobs'} ratio="1 / 1" small onClick={() => pick('sd:squish')} /></div>
+              </div>
             </>
           )}
           {onMore && (

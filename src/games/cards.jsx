@@ -111,18 +111,30 @@ function quarters(r) {
   return p(-Math.PI, -Math.PI / 2, ZAP_COLORS.r) + p(-Math.PI / 2, 0, ZAP_COLORS.y) + p(0, Math.PI / 2, ZAP_COLORS.g) + p(Math.PI / 2, Math.PI, ZAP_COLORS.b);
 }
 
+const ZF = "-apple-system, 'SF Pro Rounded', 'Arial Rounded MT Bold', 'Helvetica Neue', Arial, sans-serif";
+function diamond(attrs) { return `<rect x="-34" y="-34" width="68" height="68" rx="14" ${attrs} transform="translate(60 90) rotate(45)"/>`; }
+function diamondIn(attrs) { return `<rect x="-29" y="-29" width="58" height="58" rx="10" ${attrs} transform="translate(60 90) rotate(45)"/>`; }
 function faceSvg(code) {
   const wild = code.length === 1;
   const col = wild ? null : code[0];
   const v = wild ? code : code[1];
   const base = wild ? (v === 'X' || v === 'T' ? '#2B0F24' : v === 'C' ? '#14213D' : '#241B3D') : ZAP_COLORS[col];
+  const ink = wild ? '#14102A' : INK[col];
+  const num = !wild && /^[0-9]$/.test(v);
   const corner = (inner) => `<g transform="translate(-41 -64) scale(0.9)">${inner}</g>`;
-  const cornerInner = wild ? (v !== 'W' && v !== 'C' ? glyphSvg(v, null, false) : v === 'C' ? glyphSvg('C', null, false) : `<g transform="translate(60 90) scale(0.2) translate(-60 -90)">${quarters(30)}</g>`) : glyphSvg(v, col, false);
+  const cornerNum = `<text x="17" y="30" text-anchor="middle" font-family="${ZF}" font-weight="900" font-size="22" fill="#FFFFFF" stroke="${ink}" stroke-width="2.6" stroke-linejoin="round" paint-order="stroke">${v}</text>`;
+  const cornerInner = num ? null : wild ? (v !== 'W' && v !== 'C' ? glyphSvg(v, null, false) : v === 'C' ? glyphSvg('C', null, false) : `<g transform="translate(60 90) scale(0.2) translate(-60 -90)">${quarters(30)}</g>`) : glyphSvg(v, col, false);
+  const corners = num ? `${cornerNum}<g transform="rotate(180 60 90)">${cornerNum}</g>` : `${corner(cornerInner)}<g transform="rotate(180 60 90)">${corner(cornerInner)}</g>`;
+  const quads = `<g clip-path="url(#d)"><path d="M60 90 L60 30 L120 90 Z" fill="${ZAP_COLORS.r}"/><path d="M60 90 L120 90 L60 150 Z" fill="${ZAP_COLORS.y}"/><path d="M60 90 L60 150 L0 90 Z" fill="${ZAP_COLORS.g}"/><path d="M60 90 L0 90 L60 30 Z" fill="${ZAP_COLORS.b}"/></g>`;
+  const bolt = '<path d="M66 60 L47 95 H60 L53 121 L75 84 H62 L70 60 Z" fill="#FFFFFF" stroke="#14102A" stroke-width="3" stroke-linejoin="round" paint-order="stroke"/>';
+  const numText = num ? `<text x="62" y="112" text-anchor="middle" font-family="${ZF}" font-weight="900" font-size="60" fill="${ink}" opacity="0.3">${v}</text><text x="60" y="109" text-anchor="middle" font-family="${ZF}" font-weight="900" font-size="60" fill="${base}" stroke="${ink}" stroke-width="3.4" stroke-linejoin="round" paint-order="stroke">${v}</text>${v === '6' || v === '9' ? `<rect x="48" y="115" width="24" height="4.4" rx="2.2" fill="${ink}"/>` : ''}` : '';
   const center = wild
-    ? (v === 'C' ? `<circle cx="60" cy="90" r="40" fill="#FFFFFF"/><circle cx="60" cy="90" r="34" fill="${base}"/>${glyphSvg('C', null, true)}` : `<circle cx="60" cy="90" r="40" fill="#FFFFFF"/><circle cx="60" cy="90" r="34" fill="#241B3D"/>${quarters(30)}<circle cx="60" cy="90" r="30" fill="none" stroke="#FFFFFF" stroke-width="2.5"/>${v !== 'W' ? glyphSvg(v, null, true) : ''}`)
-    : `<circle cx="60" cy="90" r="40" fill="#FFFFFF"/><circle cx="60" cy="90" r="36" fill="none" stroke="${mix(base, '#FFFFFF', 0.55)}" stroke-width="1.5"/>${glyphSvg(v, col, true)}`;
+    ? (v === 'C'
+      ? `${diamond('fill="#FFFFFF"')}${diamondIn(`fill="${base}"`)}${glyphSvg('C', null, true)}`
+      : `${diamond('fill="#FFFFFF"')}${quads}${diamondIn('fill="none" stroke="#FFFFFF" stroke-opacity="0.85" stroke-width="2"')}${v !== 'W' ? glyphSvg(v, null, true) : bolt}`)
+    : `${diamond('fill="#FFFFFF"')}${diamondIn(`fill="none" stroke="${base}" stroke-opacity="0.4" stroke-width="2"`)}${num ? numText : glyphSvg(v, col, true)}`;
   const pat = wild ? `<g opacity="0.12" stroke="#FFFFFF" fill="none">${[0, 1, 2, 3, 4, 5].map((i) => `<circle cx="60" cy="90" r="${48 + i * 14}" stroke-width="1.6"/>`).join('')}</g>` : motif(col);
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 180" width="240" height="360"><defs><linearGradient id="s" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFFFFF" stop-opacity="0.22"/><stop offset="0.5" stop-color="#FFFFFF" stop-opacity="0"/><stop offset="1" stop-color="#000000" stop-opacity="0.18"/></linearGradient><clipPath id="c"><rect x="0" y="0" width="120" height="180" rx="12"/></clipPath></defs><rect x="0" y="0" width="120" height="180" rx="12" fill="#FFFFFF"/><rect x="5" y="5" width="110" height="170" rx="9" fill="${base}"/><g clip-path="url(#c)">${pat}</g>${center}${corner(cornerInner)}<g transform="rotate(180 60 90)">${corner(cornerInner)}</g><rect x="0" y="0" width="120" height="180" rx="12" fill="url(#s)"/><rect x="0.5" y="0.5" width="119" height="179" rx="11.5" fill="none" stroke="#000000" stroke-opacity="0.2"/></svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 180" width="240" height="360"><defs><linearGradient id="s" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFFFFF" stop-opacity="0.24"/><stop offset="0.5" stop-color="#FFFFFF" stop-opacity="0"/><stop offset="1" stop-color="#000000" stop-opacity="0.16"/></linearGradient><linearGradient id="p" x1="0" y1="0" x2="0.7" y2="1"><stop offset="0" stop-color="${mix(base, '#FFFFFF', 0.16)}"/><stop offset="0.55" stop-color="${base}"/><stop offset="1" stop-color="${mix(base, '#000000', 0.14)}"/></linearGradient><clipPath id="c"><rect x="6" y="6" width="108" height="168" rx="8"/></clipPath><clipPath id="d"><rect x="-30" y="-30" width="60" height="60" rx="11" transform="translate(60 90) rotate(45)"/></clipPath></defs><rect x="0" y="0" width="120" height="180" rx="12" fill="#FFFFFF"/><rect x="6" y="6" width="108" height="168" rx="8" fill="url(#p)"/><g clip-path="url(#c)">${pat}</g><g transform="translate(2.2 3.4)" opacity="0.22">${diamond('fill="#000000"')}</g>${center}${corners}<rect x="0" y="0" width="120" height="180" rx="12" fill="url(#s)"/><rect x="0.5" y="0.5" width="119" height="179" rx="11.5" fill="none" stroke="#000000" stroke-opacity="0.2"/></svg>`;
 }
 
 function backSvg() {
@@ -724,7 +736,7 @@ function ZapBody({ Z, st, myId, top, done, lobby }) {
   const { hand, me, myTurn, W, handErr, playable, called, hidden, dealing, shownTop, spin } = Z;
   const handW = Math.min(W - 56, 420);
   const n = hand ? hand.length : 0;
-  const cw = n > 12 ? 52 : n > 8 ? 58 : 64;
+  const cw = n > 12 ? 52 : n > 8 ? 58 : n > 5 ? 66 : 74;
   const step = n > 1 ? Math.min(cw * 0.78, (handW - cw) / (n - 1)) : 0;
   const total = n > 1 ? step * (n - 1) + cw : cw;
   const lastCallShow = st.st === 'play' && me >= 0 && ((myTurn && n === 2 && !called) || st.open === me);

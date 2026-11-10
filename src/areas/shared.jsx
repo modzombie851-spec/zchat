@@ -16,6 +16,7 @@ import {
   APP_VERSION,
   AppPinPad,
   Avatar,
+  avatarAnimSrc,
   AxTabGlyph,
   BoardIcon,
   CHAR_BUBBLES,
@@ -719,7 +720,184 @@ export function animCanvas(n, m) {
 export function animBlobOf(canvas, type, q) {
   return new Promise((res) => { try { canvas.toBlob((b) => res(b || null), type, q); } catch { res(null); } });
 }
-export function animRecord({ paint, len, signal, onTick, w, h, bps }) {
+const MP4_MATRIX = [0x00010000, 0, 0, 0, 0x00010000, 0, 0, 0, 0x40000000];
+function mpU32(n) { return [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255]; }
+function mpU16(n) { return [(n >> 8) & 255, n & 255]; }
+function mpTag(s) { return [s.charCodeAt(0), s.charCodeAt(1), s.charCodeAt(2), s.charCodeAt(3)]; }
+function mpBox(type, parts) {
+  let len = 8;
+  parts.forEach((x) => { len += x.length; });
+  const out = new Uint8Array(len);
+  out.set(mpU32(len), 0);
+  out.set(mpTag(type), 4);
+  let o = 8;
+  parts.forEach((x) => { out.set(x, o); o += x.length; });
+  return out;
+}
+function mpFull(type, version, flags, parts) { return mpBox(type, [[version, (flags >> 16) & 255, (flags >> 8) & 255, flags & 255], ...parts]); }
+function mpWords(list) { const out = []; list.forEach((n) => out.push(...mpU32(n))); return out; }
+export const ZCHAT_MP4_BRAND = 'zcht';
+export function mp4Mux({ w, h, desc, samples }) {
+  const TS = 90000;
+  const list = samples.slice().sort((a, b) => a.ts - b.ts);
+  const t0 = list[0].ts;
+  const ticks = list.map((x) => Math.round(((x.ts - t0) * TS) / 1e6));
+  const deltas = ticks.map((t, i) => (i + 1 < ticks.length ? Math.max(1, ticks[i + 1] - t) : 0));
+  const avg = deltas.length > 1 ? Math.max(1, Math.round((ticks[ticks.length - 1] - ticks[0]) / (ticks.length - 1))) : 3000;
+  deltas[deltas.length - 1] = avg;
+  const total = deltas.reduce((a, b) => a + b, 0);
+  const durMs = Math.max(1, Math.round((total * 1000) / TS));
+  const stts = [];
+  deltas.forEach((d) => { const last = stts[stts.length - 1]; if (last && last[1] === d) last[0] += 1; else stts.push([1, d]); });
+  const keys = [];
+  list.forEach((x, i) => { if (x.key) keys.push(i + 1); });
+  if (!keys.length || keys[0] !== 1) keys.unshift(1);
+  const ftyp = mpBox('ftyp', [mpTag('isom'), mpU32(512), mpTag('isom'), mpTag('iso2'), mpTag('avc1'), mpTag('mp41'), mpTag(ZCHAT_MP4_BRAND)]);
+  const avc1 = mpBox('avc1', [
+    [0, 0, 0, 0, 0, 0], mpU16(1), mpU16(0), mpU16(0), mpWords([0, 0, 0]), mpU16(w), mpU16(h),
+    mpU32(0x00480000), mpU32(0x00480000), mpU32(0), mpU16(1), new Array(32).fill(0), mpU16(0x18), mpU16(0xFFFF),
+    mpBox('avcC', [desc]),
+  ]);
+  const stbl = (offset) => mpBox('stbl', [
+    mpFull('stsd', 0, 0, [mpU32(1), avc1]),
+    mpFull('stts', 0, 0, [mpU32(stts.length), mpWords(stts.flat())]),
+    mpFull('stss', 0, 0, [mpU32(keys.length), mpWords(keys)]),
+    mpFull('stsc', 0, 0, [mpU32(1), mpWords([1, list.length, 1])]),
+    mpFull('stsz', 0, 0, [mpU32(0), mpU32(list.length), mpWords(list.map((x) => x.data.length))]),
+    mpFull('stco', 0, 0, [mpU32(1), mpU32(offset)]),
+  ]);
+  const moov = (offset) => mpBox('moov', [
+    mpFull('mvhd', 0, 0, [mpWords([0, 0, 1000, durMs, 0x00010000]), mpU16(0x0100), mpU16(0), mpWords([0, 0]), mpWords(MP4_MATRIX), mpWords([0, 0, 0, 0, 0, 0]), mpU32(2)]),
+    mpBox('trak', [
+      mpFull('tkhd', 0, 3, [mpWords([0, 0, 1, 0, durMs, 0, 0]), mpU16(0), mpU16(0), mpU16(0), mpU16(0), mpWords(MP4_MATRIX), mpU32(w * 65536), mpU32(h * 65536)]),
+      mpBox('mdia', [
+        mpFull('mdhd', 0, 0, [mpWords([0, 0, TS, total]), mpU16(0x55C4), mpU16(0)]),
+        mpFull('hdlr', 0, 0, [mpU32(0), mpTag('vide'), mpWords([0, 0, 0]), [86, 105, 100, 101, 111, 0]]),
+        mpBox('minf', [
+          mpFull('vmhd', 0, 1, [mpU16(0), mpU16(0), mpU16(0), mpU16(0)]),
+          mpBox('dinf', [mpFull('dref', 0, 0, [mpU32(1), mpFull('url ', 0, 1, [])])]),
+          stbl(offset),
+        ]),
+      ]),
+    ]),
+  ]);
+  const size = list.reduce((a, x) => a + x.data.length, 0);
+  const head = moov(0).length;
+  const offset = ftyp.length + head + 8;
+  const mv = moov(offset);
+  const out = new Uint8Array(ftyp.length + mv.length + 8 + size);
+  out.set(ftyp, 0);
+  out.set(mv, ftyp.length);
+  let o = ftyp.length + mv.length;
+  out.set(mpU32(8 + size), o);
+  out.set(mpTag('mdat'), o + 4);
+  o += 8;
+  list.forEach((x) => { out.set(x.data, o); o += x.data.length; });
+  return out;
+}
+export function mp4IsOurs(buf) {
+  try {
+    const b = new Uint8Array(buf, 0, Math.min(64, buf.byteLength));
+    if (b.length < 16 || String.fromCharCode(b[4], b[5], b[6], b[7]) !== 'ftyp') return false;
+    const n = Math.min(b.length, (b[0] << 24) | (b[1] << 16) | (b[2] << 8) | b[3]);
+    for (let i = 16; i + 4 <= n; i += 4) if (String.fromCharCode(b[i], b[i + 1], b[i + 2], b[i + 3]) === ZCHAT_MP4_BRAND) return true;
+  } catch {}
+  return false;
+}
+const animCodec = { broken: false, memo: new Map() };
+export function animCodecConfig(w, h, bps) {
+  const key = `${w}x${h}x${bps}`;
+  if (animCodec.memo.has(key)) return animCodec.memo.get(key);
+  const job = (async () => {
+    if (animCodec.broken || typeof VideoEncoder === 'undefined' || typeof VideoFrame === 'undefined' || typeof VideoEncoder.isConfigSupported !== 'function') return null;
+    if (w % 2 || h % 2) return null;
+    const codecs = ['avc1.42E01F', 'avc1.42E01E', 'avc1.42001F', 'avc1.42001E'];
+    for (let i = 0; i < codecs.length; i++) {
+      const cfg = { codec: codecs[i], width: w, height: h, bitrate: bps, framerate: 30, avc: { format: 'avc' } };
+      try { const r = await VideoEncoder.isConfigSupported(cfg); if (r && r.supported) return cfg; } catch {}
+    }
+    return null;
+  })();
+  animCodec.memo.set(key, job);
+  return job;
+}
+function animRecordCodec({ paint, len, signal, onTick, w, h, cfg }) {
+  return new Promise((resolve, reject) => {
+    const cv = animCanvas(w, h);
+    const ctx = cv.getContext('2d');
+    const samples = [];
+    let desc = null;
+    let bad = null;
+    let enc = null;
+    try {
+      enc = new VideoEncoder({
+        output: (chunk, meta) => {
+          const d = meta && meta.decoderConfig && meta.decoderConfig.description;
+          if (d && !desc) desc = d instanceof ArrayBuffer ? new Uint8Array(d.slice(0)) : new Uint8Array(d.buffer.slice(d.byteOffset, d.byteOffset + d.byteLength));
+          const data = new Uint8Array(chunk.byteLength);
+          chunk.copyTo(data);
+          samples.push({ ts: chunk.timestamp, key: chunk.type === 'key', data });
+        },
+        error: (e) => { bad = e || new Error('encoder'); },
+      });
+      enc.configure(cfg);
+      paint(ctx, 0);
+    } catch (e) { animCodec.broken = true; try { if (enc) enc.close(); } catch {} reject(e); return; }
+    let n = 0;
+    let lastAt = -1;
+    let over = false;
+    const push = (t) => {
+      if (enc.encodeQueueSize > 6) return;
+      let f = null;
+      try {
+        f = new VideoFrame(cv, { timestamp: Math.round(t * 1000), duration: 33333 });
+        enc.encode(f, { keyFrame: n % 30 === 0 });
+        n += 1;
+        lastAt = t;
+      } catch (e) { bad = bad || e; }
+      try { if (f) f.close(); } catch {}
+    };
+    const end = async () => {
+      if (over) return;
+      over = true;
+      clearTimeout(guard);
+      try {
+        if (signal.stopped) throw new Error('stopped');
+        if (bad) throw bad;
+        await enc.flush();
+        try { enc.close(); } catch {}
+        if (bad || !desc || !samples.length) throw bad || new Error('empty');
+        resolve(new Blob([mp4Mux({ w, h, desc, samples })], { type: 'video/mp4' }));
+      } catch (e) {
+        try { enc.close(); } catch {}
+        if (!signal.stopped && e && e.message !== 'stopped') animCodec.broken = true;
+        reject(e);
+      }
+    };
+    const guard = setTimeout(() => { signal.late = true; end(); }, len + 6000);
+    push(0);
+    const t0 = performance.now();
+    let shown = 0;
+    const tick = () => {
+      if (over) return;
+      if (signal.stopped || bad) { end(); return; }
+      const t = performance.now() - t0;
+      if (paint(ctx, t) === false) { if (onTick) onTick(1); end(); return; }
+      if (t - lastAt >= 31) push(t);
+      if (onTick && t - shown > 90) { shown = t; onTick(Math.min(1, t / len)); }
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+}
+export async function animRecord(opts) {
+  const w = opts.w || ANIM_PX;
+  const h = opts.h || w;
+  const cfg = await animCodecConfig(w, h, opts.bps || 650000);
+  if (cfg && !opts.signal.stopped) return animRecordCodec({ ...opts, w, h, cfg });
+  return animRecordMr(opts);
+}
+function animRecordMr({ paint, len, signal, onTick, w, h, bps }) {
   return new Promise((resolve, reject) => {
     const mime = animRecordMime();
     const cv = animCanvas(w || ANIM_PX, h);
@@ -770,6 +948,92 @@ export function animRecord({ paint, len, signal, onTick, w, h, bps }) {
     try { rec.start(200); } catch (e) { clearTimeout(guard); reject(e); return; }
     requestAnimationFrame(tick);
   });
+}
+const ANIM_FIX_KEY = 'zchat-anim-fixed';
+function animFixRead() { try { const v = JSON.parse(localStorage.getItem(ANIM_FIX_KEY) || '{}'); return v && typeof v === 'object' ? v : {}; } catch { return {}; } }
+function animFixNote(path, val) {
+  const m = animFixRead();
+  m[path] = val;
+  const keys = Object.keys(m);
+  if (keys.length > 24) keys.slice(0, keys.length - 24).forEach((k) => { delete m[k]; });
+  try { localStorage.setItem(ANIM_FIX_KEY, JSON.stringify(m)); } catch {}
+}
+export function animNeedsCheck(path) {
+  if (!path || typeof VideoEncoder === 'undefined') return false;
+  const v = animFixRead()[path];
+  return !(v === 'ok' || (typeof v === 'number' && v >= 2));
+}
+async function animFixOne(uid, job, alive) {
+  const { col, path, w, h, bps, max } = job;
+  const url = avatarAnimSrc(path);
+  if (!url || !alive()) return null;
+  let buf = null;
+  try { const r = await fetch(url, { cache: 'force-cache' }); if (!r.ok) return null; buf = await r.arrayBuffer(); } catch { return null; }
+  if (!alive()) return null;
+  if (mp4IsOurs(buf)) { animFixNote(path, 'ok'); return null; }
+  const cfg = await animCodecConfig(w, h, bps);
+  if (!cfg || !alive()) return null;
+  const tries = (typeof animFixRead()[path] === 'number' ? animFixRead()[path] : 0) + 1;
+  animFixNote(path, tries);
+  const src = URL.createObjectURL(new Blob([buf], { type: /\.webm$/i.test(path) ? 'video/webm' : 'video/mp4' }));
+  const v = document.createElement('video');
+  v.muted = true;
+  v.defaultMuted = true;
+  v.playsInline = true;
+  v.setAttribute('playsinline', '');
+  v.preload = 'auto';
+  try {
+    const okLoad = await new Promise((res) => {
+      const done = (x) => { clearTimeout(tm); v.onloadeddata = null; v.onerror = null; res(x); };
+      const tm = setTimeout(() => done(false), 8000);
+      v.onloadeddata = () => done(true);
+      v.onerror = () => done(false);
+      v.src = src;
+    });
+    if (!okLoad || !v.videoWidth || !alive() || document.visibilityState !== 'visible') return null;
+    await v.play();
+    const signal = { stopped: false };
+    const watch = setInterval(() => { if (!alive() || document.visibilityState !== 'visible') signal.stopped = true; }, 250);
+    let clip = null;
+    try {
+      clip = await animRecordCodec({
+        len: max, signal, w, h, cfg,
+        paint: (ctx, t) => {
+          if (t > 0 && (v.ended || t > max)) return false;
+          ctx.drawImage(v, 0, 0, w, h);
+          return true;
+        },
+      });
+    } finally { clearInterval(watch); }
+    if (!clip || clip.size < 2000 || !alive()) return null;
+    const up = await uploadMediaRaw(new File([clip], `${col === 'cover_anim' ? 'cover' : 'avatar'}.mp4`, { type: 'video/mp4' }), uid);
+    if (!up || up.error || !up.url || !alive()) return null;
+    const s0 = String(up.url);
+    const i = s0.lastIndexOf(`${uid}/`);
+    let next = i < 0 ? '' : s0.slice(i).split(/[?#]/)[0];
+    try { next = decodeURIComponent(next); } catch {}
+    if (!avatarAnimSrc(next)) return null;
+    const { error } = await supabase.from('profiles').update({ [col]: next }).eq('id', uid);
+    if (error) return null;
+    animFixNote(path, 'ok');
+    animFixNote(next, 'ok');
+    return { [col]: next };
+  } catch { return null; } finally {
+    try { v.pause(); v.removeAttribute('src'); v.load(); } catch {}
+    setTimeout(() => URL.revokeObjectURL(src), 1000);
+  }
+}
+export async function animRepairRun(me, alive, onPatch) {
+  const uid = me && me.id;
+  if (!uid) return;
+  const jobs = [];
+  if (animNeedsCheck(me.avatar_anim)) jobs.push({ col: 'avatar_anim', path: me.avatar_anim, w: ANIM_PX, h: ANIM_PX, bps: 650000, max: 3150 });
+  if (animNeedsCheck(me.cover_anim)) jobs.push({ col: 'cover_anim', path: me.cover_anim, w: 780, h: 300, bps: 1500000, max: 8200 });
+  for (let k = 0; k < jobs.length; k++) {
+    if (!alive()) return;
+    const patch = await animFixOne(uid, jobs[k], alive);
+    if (patch && alive() && onPatch) onPatch(patch);
+  }
 }
 export function animSeek(v, t) {
   return new Promise((res) => {

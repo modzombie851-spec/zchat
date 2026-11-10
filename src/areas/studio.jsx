@@ -173,6 +173,8 @@ import {
   useSongPlaying,
   useTheme,
   validPlace,
+  EfGroup,
+  LinkThumb,
   validSong,
 } from '../App.jsx';
 import {
@@ -1726,16 +1728,19 @@ export function PhotoCropEditor({ file, onCancel, onConfirm }) {
   const [zoom, setZoom] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [saving, setSaving] = useState(false);
+  const [grid, setGrid] = useState(false);
   const pointersRef = useRef(new Map());
   const pinchRef = useRef(null);
   const imgRef = useRef(null);
-  const size = Math.max(220, Math.min((typeof window !== 'undefined' ? window.innerWidth : 360) - 48, 340));
+  const size = Math.max(220, Math.min((typeof window !== 'undefined' ? window.innerWidth : 360) - 24, (typeof window !== 'undefined' ? window.innerHeight : 700) - 220, 480));
+  const touchUi = typeof window !== 'undefined' && !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
 
   useEffect(() => {
+    let alive = true;
     const u = URL.createObjectURL(file);
     setUrl(u);
-    loadImageElement(u).then((img) => { imgRef.current = img; setNatural({ w: img.naturalWidth, h: img.naturalHeight }); }).catch(() => onCancel());
-    return () => URL.revokeObjectURL(u);
+    loadImageElement(u).then((img) => { if (!alive) return; imgRef.current = img; setNatural({ w: img.naturalWidth, h: img.naturalHeight }); }).catch(() => { if (alive) onCancel(); });
+    return () => { alive = false; setTimeout(() => URL.revokeObjectURL(u), 1000); };
   }, [file]);
 
   const base = natural ? Math.max(size / natural.w, size / natural.h) : 1;
@@ -1758,6 +1763,7 @@ export function PhotoCropEditor({ file, onCancel, onConfirm }) {
   const onDown = (e) => {
     e.currentTarget.setPointerCapture?.(e.pointerId);
     pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    setGrid(true);
     if (pointersRef.current.size === 2) {
       const [a, b] = [...pointersRef.current.values()];
       pinchRef.current = { dist: Math.hypot(a.x - b.x, a.y - b.y), zoom };
@@ -1780,6 +1786,7 @@ export function PhotoCropEditor({ file, onCancel, onConfirm }) {
   const onUp = (e) => {
     pointersRef.current.delete(e.pointerId);
     if (pointersRef.current.size < 2) pinchRef.current = null;
+    if (!pointersRef.current.size) setGrid(false);
   };
 
   const confirm = () => {
@@ -1806,7 +1813,7 @@ export function PhotoCropEditor({ file, onCancel, onConfirm }) {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px' }}>
         <span onClick={onCancel} style={{ fontSize: 15, fontWeight: 600, cursor: 'pointer', padding: 6 }}>Cancel</span>
         <span style={{ fontSize: 15, fontWeight: 800 }}>Move and scale</span>
-        <span onClick={confirm} style={{ fontSize: 15, fontWeight: 800, cursor: 'pointer', padding: 6, color: theme.gold }}>{saving ? <Spinner size={15} /> : 'Done'}</span>
+        <span onClick={confirm} style={{ fontSize: 15, fontWeight: 800, cursor: 'pointer', padding: 6, color: '#8DB4FF' }}>{saving ? <Spinner size={15} /> : 'Done'}</span>
       </div>
       <div style={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', position: 'relative' }}
         onWheel={(e) => setZoomSafe(zoom * (1 - e.deltaY * 0.0015))}>
@@ -1821,14 +1828,22 @@ export function PhotoCropEditor({ file, onCancel, onConfirm }) {
           ) : (
             <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Spinner size={24} /></div>
           )}
-          <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', boxShadow: '0 0 0 2000px rgba(0,0,0,0.6)', border: '2px solid rgba(255,255,255,0.85)', pointerEvents: 'none' }} />
+          <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', boxShadow: '0 0 0 2000px rgba(0,0,0,0.62)', border: '1.5px solid rgba(255,255,255,0.9)', pointerEvents: 'none' }} />
+          <div aria-hidden="true" style={{ position: 'absolute', inset: 0, borderRadius: '50%', overflow: 'hidden', pointerEvents: 'none', opacity: grid ? 1 : 0, transition: 'opacity 0.2s ease' }}>
+            {[1, 2].map((k) => <span key={`v${k}`} style={{ position: 'absolute', top: 0, bottom: 0, left: `${(k * 100) / 3}%`, width: 1, background: 'rgba(255,255,255,0.35)' }} />)}
+            {[1, 2].map((k) => <span key={`h${k}`} style={{ position: 'absolute', left: 0, right: 0, top: `${(k * 100) / 3}%`, height: 1, background: 'rgba(255,255,255,0.35)' }} />)}
+          </div>
         </div>
       </div>
-      <div style={{ padding: '14px 28px 22px', display: 'flex', alignItems: 'center', gap: 14 }}>
-        <ImageIcon size={14} color="rgba(255,255,255,0.7)" />
-        <input type="range" min="1" max="5" step="0.01" value={zoom} onChange={(e) => setZoomSafe(parseFloat(e.target.value))} style={{ flex: 1, accentColor: theme.coral }} />
-        <ImageIcon size={20} color="rgba(255,255,255,0.9)" />
-      </div>
+      {touchUi ? (
+        <div style={{ padding: '14px 28px 24px', textAlign: 'center', fontSize: 13.5, color: 'rgba(255,255,255,0.7)' }}>Drag to move, pinch to zoom</div>
+      ) : (
+        <div style={{ padding: '14px 28px 22px', display: 'flex', alignItems: 'center', gap: 14 }}>
+          <ImageIcon size={14} color="rgba(255,255,255,0.7)" />
+          <input type="range" min="1" max="5" step="0.01" value={zoom} aria-label="Zoom" onChange={(e) => setZoomSafe(parseFloat(e.target.value))} style={{ flex: 1, accentColor: '#FFFFFF' }} />
+          <ImageIcon size={20} color="rgba(255,255,255,0.9)" />
+        </div>
+      )}
     </div>
   );
 }
@@ -3966,7 +3981,7 @@ export function HighlightCoverEditor({ userId, highlight, onClose, onSaved }) {
   );
 }
 
-export function SocialLinksEditor({ links, onChange, whatsapp, onWhatsappChange, labelStyle }) {
+export function SocialLinksEditor({ links, onChange, whatsapp, onWhatsappChange, labelStyle, compact }) {
   const { theme } = useTheme();
   const [adding, setAdding] = useState(false);
   const [draftUrl, setDraftUrl] = useState('');
@@ -3982,6 +3997,57 @@ export function SocialLinksEditor({ links, onChange, whatsapp, onWhatsappChange,
     onChange([...list.map((l) => ({ url: l.url, title: l.title })), { url, title: draftTitle.trim().slice(0, 30) }]);
     setDraftUrl(''); setDraftTitle(''); setErr(''); setAdding(false);
   };
+  const addForm = adding && (
+    <div style={{ padding: 12, boxShadow: compact ? `inset 0 -0.5px 0 ${theme.hair}` : 'none' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <SocialIcon platform={previewPlatform || 'website'} size={34} round />
+        <input autoFocus value={draftUrl} inputMode="url" autoCapitalize="none" autoCorrect="off" placeholder="Paste your link, like instagram.com/you"
+          onChange={(e) => { setDraftUrl(e.target.value); setErr(''); }} onKeyDown={(e) => { if (e.key === 'Enter') add(); }}
+          style={{ ...inputStyle(theme), flex: 1, ...(compact ? { background: theme.panelBg } : null) }} />
+      </div>
+      <input value={draftTitle} maxLength={30} placeholder="Title (optional)" onChange={(e) => setDraftTitle(e.target.value)} style={{ ...inputStyle(theme), marginTop: 8, ...(compact ? { background: theme.panelBg } : null) }} />
+      {previewPlatform && <div style={{ fontSize: 11.5, color: theme.muted, marginTop: 6 }}>Detected: <b style={{ color: theme.ink }}>{SOCIAL_PLATFORMS.find((p) => p.key === previewPlatform).label}</b></div>}
+      {err && <div style={{ fontSize: 12, color: theme.danger, marginTop: 6, fontWeight: 600 }}>{err}</div>}
+      <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+        <button onClick={() => { setAdding(false); setDraftUrl(''); setDraftTitle(''); setErr(''); }} style={{ flex: 1, padding: 10, borderRadius: 12, border: `1px solid ${theme.border}`, background: 'transparent', color: theme.ink, fontWeight: 700, fontFamily: FONT, cursor: 'pointer' }}>Cancel</button>
+        <button onClick={add} style={{ flex: 1, padding: 10, borderRadius: 12, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontFamily: FONT, cursor: 'pointer' }}>Add</button>
+      </div>
+    </div>
+  );
+  if (compact) {
+    const hair = `inset 0 -0.5px 0 ${theme.hair}`;
+    return (
+      <>
+        <EfGroup title={list.length ? `Links, ${list.length} of ${SOCIAL_MAX}` : 'Links'}>
+          {list.map((l, i) => (
+            <div key={l.url} style={{ display: 'flex', alignItems: 'center', gap: 12, minHeight: 58, padding: '0 6px 0 14px', boxShadow: hair }}>
+              <LinkThumb url={l.url} platform={l.platform} size={36} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14.5, fontWeight: 700, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.title || socialLinkLabel(l.url, l.platform)}</div>
+                <div style={{ fontSize: 12, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.url.replace(/^https?:\/\//, '')}</div>
+              </div>
+              <div role="button" aria-label="Remove link" onClick={() => onChange(list.filter((_, idx) => idx !== i).map((x) => ({ url: x.url, title: x.title })))} className="zchat-press" style={{ width: 38, height: 38, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.muted, cursor: 'pointer', flexShrink: 0 }}><X size={18} /></div>
+            </div>
+          ))}
+          {!adding && list.length < SOCIAL_MAX && (
+            <div role="button" onClick={() => setAdding(true)} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', gap: 12, minHeight: 54, padding: '0 14px', cursor: 'pointer', boxShadow: hair }}>
+              <span style={{ width: 36, height: 36, borderRadius: '50%', background: theme.soft2, color: theme.ink, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1.2 1.2" /><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1.2-1.2" /></svg>
+              </span>
+              <span style={{ fontSize: 15, fontWeight: 650, color: theme.ink }}>Add link</span>
+            </div>
+          )}
+          {addForm}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, minHeight: 58, padding: '0 14px' }}>
+            <SocialIcon platform="whatsapp" size={36} round />
+            <input value={whatsapp} inputMode="tel" placeholder="WhatsApp number with country code" aria-label="WhatsApp number" onChange={(e) => onWhatsappChange(cleanWhatsappNumber(e.target.value))}
+              style={{ flex: 1, minWidth: 0, height: 48, border: 0, outline: 0, background: 'transparent', color: theme.ink, fontFamily: FONT, fontSize: 15.5, padding: 0 }} />
+          </div>
+        </EfGroup>
+        {whatsapp ? <div style={{ fontSize: 12, color: theme.muted, padding: '6px 4px 0', lineHeight: 1.4 }}>Everyone who can see your profile can see this number.</div> : null}
+      </>
+    );
+  }
   return (
     <div style={{ marginTop: 14 }}>
       <div style={{ ...labelStyle, display: 'flex', justifyContent: 'space-between' }}><span>Links</span><span style={{ fontWeight: 600 }}>{list.length}/{SOCIAL_MAX}</span></div>
@@ -4002,23 +4068,7 @@ export function SocialLinksEditor({ links, onChange, whatsapp, onWhatsappChange,
             <span style={{ fontSize: 14, fontWeight: 700, color: theme.ink }}>Add link</span>
           </div>
         )}
-        {adding && (
-          <div style={{ padding: 12 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <SocialIcon platform={previewPlatform || 'website'} size={36} round />
-              <input autoFocus value={draftUrl} inputMode="url" autoCapitalize="none" autoCorrect="off" placeholder="Paste your link, like instagram.com/you"
-                onChange={(e) => { setDraftUrl(e.target.value); setErr(''); }} onKeyDown={(e) => { if (e.key === 'Enter') add(); }}
-                style={{ ...inputStyle(theme), flex: 1 }} />
-            </div>
-            <input value={draftTitle} maxLength={30} placeholder="Title (optional)" onChange={(e) => setDraftTitle(e.target.value)} style={{ ...inputStyle(theme), marginTop: 8 }} />
-            {previewPlatform && <div style={{ fontSize: 11.5, color: theme.muted, marginTop: 6 }}>Detected: <b style={{ color: theme.ink }}>{SOCIAL_PLATFORMS.find((p) => p.key === previewPlatform).label}</b></div>}
-            {err && <div style={{ fontSize: 12, color: theme.danger, marginTop: 6, fontWeight: 600 }}>{err}</div>}
-            <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-              <button onClick={() => { setAdding(false); setDraftUrl(''); setDraftTitle(''); setErr(''); }} style={{ flex: 1, padding: 10, borderRadius: 12, border: `1px solid ${theme.border}`, background: 'transparent', color: theme.ink, fontWeight: 700, fontFamily: FONT, cursor: 'pointer' }}>Cancel</button>
-              <button onClick={add} style={{ flex: 1, padding: 10, borderRadius: 12, border: 'none', background: theme.coral, color: 'white', fontWeight: 800, fontFamily: FONT, cursor: 'pointer' }}>Add</button>
-            </div>
-          </div>
-        )}
+        {addForm}
       </div>
       <div style={{ ...labelStyle, marginTop: 14 }}>WhatsApp number</div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

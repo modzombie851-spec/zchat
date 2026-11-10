@@ -1298,7 +1298,7 @@ export default {
   "Bomb box": "வெடிகுண்டுப் பெட்டி",
   "Gem hunt": "ரத்தின வேட்டை",
   "Number guess": "எண் யூகம்",
-  "Connect four": "நான்கை இணை",
+  "Four in a row": "வரிசையில் நான்கு",
   "Rock paper scissors": "கல் காகிதம் கத்தரிக்கோல்",
   "Dots and boxes": "புள்ளிகளும் பெட்டிகளும்",
   "Five in a row": "வரிசையில் ஐந்து",

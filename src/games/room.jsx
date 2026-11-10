@@ -7,7 +7,7 @@ import { withFaces } from './faces.jsx';
 import { GOLF } from './golf.jsx';
 import { useKit, usePeerKit, setGear } from './kits.jsx';
 import {
-  ThemeContext, THEMES, Avatar, GAME_TITLES, GAME_RULES, GameArt, g1Mem, g1Send,
+  ThemeContext, THEMES, Avatar, GAME_TITLES, GAME_RULES, GameArt, g1Mem, g1Send, gameVariantTitle, gameRulesFor, listenNow, listenSyncClock,
   ANIM_STICKERS, useBackClose, reducedMotion, appSnack, ga1Name, GameBareCtx, gameBoardCard, chatGameLink, g1Load,
   PoolTable, CarromTable, ZapTable, ZapCardGuide,
 } from '../App.jsx';
@@ -218,7 +218,10 @@ function useBoardInput({ size, flip, enabled, canPick, onTap, onDrop }) {
       st.current = null;
       if (!s || s.id !== e.pointerId) return;
       if (s.moved) {
-        const [x, y] = pos(e);
+        const [x0, y0] = pos(e);
+        const tol = cell * 0.6;
+        const x = x0 < 0 && x0 > -tol ? 1 : x0 >= size && x0 < size + tol ? size - 1 : x0;
+        const y = y0 < 0 && y0 > -tol ? 1 : y0 >= size && y0 < size + tol ? size - 1 : y0;
         setDrag(null);
         onDrop(s.sq, sqAt(x, y, flip, cell));
         return;
@@ -230,7 +233,7 @@ function useBoardInput({ size, flip, enabled, canPick, onTap, onDrop }) {
   return { ref, handlers, drag };
 }
 
-function ChessView({ Z, st, myId, onMove, onMeta, peerSel, onSel, peerName, still }) {
+function ChessView({ Z, st, myId, onMove, onMeta, peerSel, onSel, peerName, still, frozen }) {
   const kit = useKit('chess');
   const wrap = useRef(null);
   const box = useBox(wrap);
@@ -241,7 +244,7 @@ function ChessView({ Z, st, myId, onMove, onMeta, peerSel, onSel, peerName, stil
   const meWhite = myId === st.wh || !player;
   const flip = !meWhite;
   const finished = !!st.w;
-  const myTurn = !!C && !finished && player && st.t === myId;
+  const myTurn = !!C && !finished && player && st.t === myId && !frozen;
   const pos = { b: st.b, c: st.c || '', e: st.e == null ? -1 : st.e, h: st.h || 0 };
   const legal = useMemo(() => (C && myTurn ? C.legalMoves(pos, st.t === st.wh) : []), [C, myTurn, st.b, st.c, st.e, st.t]);
   const inCheck = C ? C.inCheck(st.b, st.t === st.wh) : false;
@@ -262,7 +265,7 @@ function ChessView({ Z, st, myId, onMove, onMeta, peerSel, onSel, peerName, stil
   }, [st.n]);
   const mineSq = (i) => { const p = st.b[i]; return p !== '.' && (meWhite ? p === p.toUpperCase() : p === p.toLowerCase()); };
   const movable = (i) => myTurn && mineSq(i) && legal.some((m) => m[0] === i);
-  const targetsOf = (from) => (from == null ? [] : legal.filter((m) => m[0] === from).map((m) => m[1]));
+  const targetsOf = (from) => (from == null ? [] : [...new Set(legal.filter((m) => m[0] === from).map((m) => m[1]))]);
   const doMove = (f, t, q) => {
     const next = C.play(st, f, t, q || '', myId);
     if (!next) return;
@@ -618,7 +621,7 @@ function roomOutcome(st, myId) {
 function ResultCard({ st, myId, peerName, g, xp, still, onRematch, onClose, canRematch, player, whyText, extra }) {
   const out = roomOutcome(st, myId);
   const title = !player ? (out === 'draw' ? 'Draw' : 'Game over') : out === 'win' ? 'You won' : out === 'draw' ? 'Draw' : out === 'none' ? 'Game ended' : `${peerName} won`;
-  const why = whyText || (st.why && WHY[st.why] ? (st.why === 'resign' ? (out === 'win' ? `${peerName} resigned` : 'You resigned') : WHY[st.why]) : null);
+  const why = whyText || (st.why === 'time' ? (out === 'win' ? `${peerName} ran out of time` : 'You ran out of time') : st.why && WHY[st.why] ? (st.why === 'resign' ? (out === 'win' ? `${peerName} resigned` : 'You resigned') : WHY[st.why]) : null);
   const span = xp && xp.xp != null ? xpSpan(xp.xp) : null;
   const up = xp && xp.level && xp.prev_level && xp.level > xp.prev_level;
   const [fill, setFill] = useState(0);
@@ -655,6 +658,32 @@ function ResultCard({ st, myId, peerName, g, xp, still, onRematch, onClose, canR
 const PACK_GAMES = ['chess', 'ckr'];
 const LAZY_BOARDS = ['pool', 'crm', 'zap'];
 const RESIGN_GAMES = ['chess', 'ckr', 'pool', 'golf', 'crm'];
+function clockLeft(st, mark, now) {
+  if (!st.tc || !Array.isArray(st.ck)) return null;
+  let v = Number(st.ck[mark === 'x' ? 0 : 1]) || 0;
+  if (!st.w && st.tt != null && (st.t === st.x ? 'x' : 'o') === mark) v -= now - st.tt;
+  return Math.max(0, v);
+}
+function clockText(ms) {
+  if (ms < 10000) return `0:0${(Math.floor(ms / 100) / 10).toFixed(1)}`;
+  const s = Math.ceil(ms / 1000);
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+function ClockChip({ ms, run }) {
+  const low = ms < 20000;
+  return (
+    <span style={{ flexShrink: 0, fontSize: 12, fontWeight: 900, fontVariantNumeric: 'tabular-nums', lineHeight: '14px', padding: '2px 6px', borderRadius: 7, color: run ? (low ? '#FFFFFF' : '#14110C') : '#FFFFFF', background: run ? (low ? '#E5484D' : '#FFFFFF') : 'rgba(255,255,255,0.16)', boxShadow: run ? '0 2px 8px rgba(0,0,0,0.3)' : 'none' }}>{clockText(ms)}</span>
+  );
+}
+function stampClock(cur, next) {
+  if (!cur.tc || !next || next.a !== 'mv') return next;
+  const now = Math.round(listenNow());
+  const i = cur.t === cur.x ? 0 : 1;
+  const ck = Array.isArray(cur.ck) && cur.ck.length === 2 ? cur.ck.map((v) => Math.round(Number(v) || 0)) : [cur.tc * 1000, cur.tc * 1000];
+  if (cur.tt != null) ck[i] = Math.max(0, Math.min(ck[i], ck[i] - (now - cur.tt)));
+  return { ...next, ck, tt: now };
+}
+
 function usePack(need) {
   const [, setT] = useState(0);
   useEffect(() => {
@@ -758,9 +787,10 @@ export function GameRoomPage({ st, prevOf, myId, me, peer, intent, onClose }) {
     }
     return () => clearTimeout(t);
   }, [st.id, fin]);
-  const move = (next) => {
-    if (!next || !player) return false;
+  const move = (next0) => {
+    if (!next0 || !player) return false;
     const cur = latest.current;
+    const next = g === 'chess' ? stampClock(cur, next0) : next0;
     if ((next.n || 0) <= (cur.n || 0)) return false;
     relay.send('mv', { st: next });
     Promise.resolve(g1Send(next, { quiet: relay.here === true })).then((ok) => { if (!ok) { relay.send('nv', { id: next.id, n: next.n }); sfx('error'); } });
@@ -794,11 +824,38 @@ export function GameRoomPage({ st, prevOf, myId, me, peer, intent, onClose }) {
     sfx('tap');
     if (g1Mem.host && g1Mem.host.rematch) g1Mem.host.rematch(st);
   };
+  const timed = g === 'chess' && !!st.tc;
+  const nowMs = timed ? listenNow() : 0;
+  const myClock = timed ? clockLeft(st, mark, nowMs) : null;
+  const peerClock = timed ? clockLeft(st, theirMark, nowMs) : null;
+  const outOfTime = timed && !fin && st.tt != null && ((st.t === myId && myClock <= 0) || (st.t === other && peerClock <= 0));
+  const [, setClockTick] = useState(0);
+  useEffect(() => { if (timed) listenSyncClock(); }, [timed]);
+  useEffect(() => {
+    if (!timed || fin || st.tt == null) return undefined;
+    const iv = setInterval(() => setClockTick((x) => x + 1), 250);
+    return () => clearInterval(iv);
+  }, [timed, fin, st.tt, st.n]);
+  useEffect(() => {
+    if (!timed || fin || !player || st.tt == null) return undefined;
+    const mover = st.t === st.x ? 'x' : 'o';
+    let tries = 0;
+    let t = 0;
+    const go = () => {
+      const cur = latest.current;
+      if (cur.n !== st.n || cur.w || tries > 6) return;
+      tries += 1;
+      move({ ...cur, n: (cur.n || 0) + 1, w: mover === 'x' ? 'o' : 'x', why: 'time', a: 'flag', dr: null });
+      t = setTimeout(go, 4000);
+    };
+    t = setTimeout(go, Math.max(0, clockLeft(st, mover, listenNow())) + 1200);
+    return () => clearTimeout(t);
+  }, [timed, fin, player, st.n, st.tt]);
   const levelOfMe = myLevels && myLevels[g] ? myLevels[g].level : (LEVEL_GAMES.includes(g) && myLevels ? 1 : null);
   const peerLevel = levelMap && levelMap.get(other) ? levelMap.get(other) : (LEVEL_GAMES.includes(g) && levelMap && !isBot ? 1 : null);
   const players = [
-    { id: myId, name: 'You', avatar: <Avatar emoji={me && me.avatar} name={(me && me.name) || 'You'} size={50} />, level: levelOfMe, turn: !fin && st.t === myId && !busy, line: meta.me },
-    { id: other, name: peerName, avatar: <Avatar emoji={peer && peer.id === other ? peer.avatar : null} name={peerFull} size={50} />, level: peerLevel, turn: !fin && !!other && st.t === other && !busy, here: isBot ? null : relay.here, line: meta.peer },
+    { id: myId, name: 'You', avatar: <Avatar emoji={me && me.avatar} name={(me && me.name) || 'You'} size={50} />, level: levelOfMe, turn: !fin && st.t === myId && !busy, line: meta.me, clock: timed ? <ClockChip ms={myClock} run={!fin && st.tt != null && st.t === myId} /> : null },
+    { id: other, name: peerName, avatar: <Avatar emoji={peer && peer.id === other ? peer.avatar : null} name={peerFull} size={50} />, level: peerLevel, turn: !fin && !!other && st.t === other && !busy, here: isBot ? null : relay.here, line: meta.peer, clock: timed ? <ClockChip ms={peerClock} run={!fin && st.tt != null && st.t === other} /> : null },
   ];
   const botSocial = useBotSocial(player && isBot, myId, other, g);
   const peerKit = usePeerKit(player && !isBot && (g === 'pool' || g === 'crm') ? other : null);
@@ -808,11 +865,11 @@ export function GameRoomPage({ st, prevOf, myId, me, peer, intent, onClose }) {
   setGear('striker', myStriker ? myStriker.key : null, peerKit && typeof peerKit.striker === 'string' ? peerKit.striker : null);
   const social = useMemo(() => (player && !isBot ? { me: myId, send: relay.send, on: relay.on, stickers: roomStickers(), phrases: PHRASES[g] || PHRASES[g === 'ckr' ? 'chess' : ''] } : botSocial), [relay.send, relay.on, player, isBot, g, botSocial]);
   const away = player && !isBot && relay.here === false && !fin;
-  const status = fin ? null : away && !meta.hot ? `Waiting for ${peerName}` : (meta.status || null);
+  const status = fin ? null : outOfTime ? (st.t === myId ? 'Your time is up' : `${peerName} ran out of time`) : away && !meta.hot ? `Waiting for ${peerName}` : (meta.status || null);
   const ready = PACK_GAMES.includes(g) ? !!Z : LAZY_BOARDS.includes(g) ? !!meta.ready : true;
-  const title = zap && st.md === 'mayhem' ? 'Zap Mayhem' : (GAME_TITLES[g] || 'Game');
+  const title = gameVariantTitle(st);
   const crmWhy = g === 'crm' && st.w && st.why !== 'resign' ? `${st.pts || 0} points` : null;
-  const board = g === 'chess' ? <ChessView Z={Z} st={st} myId={myId} onMove={move} onMeta={setMeta} peerSel={peerSel} onSel={sendSel} peerName={peerName} still={still} />
+  const board = g === 'chess' ? <ChessView Z={Z} st={st} myId={myId} onMove={move} onMeta={setMeta} peerSel={peerSel} onSel={sendSel} peerName={peerName} still={still} frozen={outOfTime} />
     : g === 'ckr' ? <CheckersView Z={Z} st={st} myId={myId} onMove={move} onMeta={setMeta} peerSel={peerSel} onSel={sendSel} peerName={peerName} still={still} />
       : g === 'pool' ? <PoolTable st={st} prevOf={prevOf} myId={myId} peerName={peerName} relay={relay} onMove={move} onMeta={setMeta} onBusy={setBusy} onFlash={flash} />
         : g === 'crm' ? <CarromTable st={st} prevOf={prevOf} myId={myId} peerName={peerName} relay={relay} onMove={move} onMeta={setMeta} onBusy={setBusy} onFlash={flash} />
@@ -821,8 +878,8 @@ export function GameRoomPage({ st, prevOf, myId, me, peer, intent, onClose }) {
               : <ClassicView st={st} myId={myId} onMove={move} peerName={peerName} onMeta={setMeta} />;
   return (
     <GameRoom k={g} title={title} sub={meta.sub || (isBot ? 'With ZChat Bot' : relay.here ? `${peerName} is here` : `With ${peerName}`)} players={players} center={meta.center} status={status} statusHot={meta.hot}
-      menu={menu} rules={zap ? { ...(st.md === 'mayhem' ? (GAME_RULES.zapMayhem || GAME_RULES[g]) : GAME_RULES[g]), guide: <ZapCardGuide mayhem={st.md === 'mayhem'} /> } : GAME_RULES[g]} social={social} toast={toast} still={still} ready={ready} bottom={meta.bottom || null}
-      splash={{ title, sub: `You vs ${peerName}`, art: <GameArt k={g} width={236} height={148} radius={30} />, players: [players[0], players[1]] }}
+      menu={menu} rules={zap ? { ...gameRulesFor(st), guide: <ZapCardGuide mayhem={st.md === 'mayhem'} /> } : gameRulesFor(st)} social={social} toast={toast} still={still} ready={ready} bottom={meta.bottom || null}
+      splash={{ title, sub: `You vs ${peerName}`, art: <GameArt k={g === 'pool' && st.v === 9 ? 'pool9' : g} width={236} height={148} radius={30} />, players: [players[0], players[1]] }}
       onClose={onClose}
       top={drawOffer ? (
         <div className="zgr-pop" style={{ margin: '10px 14px 0', padding: '10px 12px', borderRadius: 18, background: 'rgba(16,13,24,0.88)', display: 'flex', alignItems: 'center', gap: 10 }}>

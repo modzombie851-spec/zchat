@@ -254,7 +254,7 @@ export function pickChess(st, lv) {
     const round = [];
     for (const e of scored) {
       const u = make(P, e.m);
-      const v = -search(P, d - 1, -MATE * 2, MATE * 2, 1, clock);
+      const v = -search(P, d - 1, -MATE * 2, MATE * 2, 1, clock) + (e.m.pr === 5 ? 90 : 0);
       unmake(P, u);
       if (clock.out) break;
       round.push({ m: e.m, v });

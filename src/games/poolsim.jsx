@@ -84,8 +84,29 @@ export function rack(seed) {
   return [[0, CUE_START[0], CUE_START[1]]].concat(out);
 }
 
-export function initial(base, seed) {
+export function rack9(seed) {
+  const rnd = rng(`pool9:${seed}`);
+  const mid = shuffle([2, 3, 4, 5, 6, 7, 8], rnd);
+  const out = [];
+  let k = 0;
+  [1, 2, 3, 2, 1].forEach((n, row) => {
+    for (let c = 0; c < n; c++) {
+      const id = row === 0 ? 1 : row === 2 && c === 1 ? 9 : mid[k++];
+      out.push([id, r2(FOOT[0] + (c - (n - 1) / 2) * (2 * R + 0.2)), r2(FOOT[1] - row * (R + 0.1) * Math.sqrt(3))]);
+    }
+  });
+  return [[0, CUE_START[0], CUE_START[1]]].concat(out);
+}
+
+export function initial(base, seed, v) {
+  if (v === 9) return { ...base, v: 9, b: rack9(seed), gx: null, bih: true, ls: null, ev: null, w: null, why: null };
   return { ...base, b: rack(seed), gx: null, bih: true, ls: null, ev: null, w: null, why: null };
+}
+
+export function lowBall(balls) {
+  let lo = null;
+  (balls || []).forEach(([id]) => { if (id > 0 && (lo === null || id < lo)) lo = id; });
+  return lo;
 }
 
 export function canPlace(balls, x, y, brk) {
@@ -413,7 +434,35 @@ export class PoolSim {
   }
 }
 
+function judge9(st, shot, res, me) {
+  const mark = me === st.x ? 'x' : 'o';
+  const other = me === st.x ? st.o : st.x;
+  const pt = res.ev.pt;
+  const lo = lowBall(st.b);
+  let foul = null;
+  if (pt.includes(0)) foul = 'scratch';
+  else if (res.ev.f === null) foul = 'miss';
+  else if (res.ev.f !== lo) foul = 'wrong';
+  let b = res.final.slice();
+  let w = null;
+  let why = null;
+  let back = false;
+  if (pt.includes(9)) {
+    if (foul) {
+      back = true;
+      const [sx, sy] = spotFree(b, FOOT[0], FOOT[1], -1);
+      b.push([9, r2(sx), r2(sy)]);
+    } else { w = mark; why = 'nine'; }
+  }
+  const again = !foul && pt.some((id) => id !== 0);
+  if (foul) b = b.filter(([id]) => id !== 0);
+  const t = w ? st.t : again ? me : other;
+  const ls = { dx: shot.dx, dy: shot.dy, p: shot.p, s: shot.s || 0, ...(shot.e ? { e: shot.e } : {}), ...(shot.cx != null ? { cx: shot.cx, cy: shot.cy } : {}) };
+  return { ...st, b, gx: null, bih: !!foul && !w, t, n: (st.n || 0) + 1, w, why, lb: me, ls, ev: { f: res.ev.f, pt, fl: foul, r8: back } };
+}
+
 export function judge(st, shot, res, me) {
+  if (st.v === 9) return judge9(st, shot, res, me);
   const mark = me === st.x ? 'x' : 'o';
   const other = me === st.x ? st.o : st.x;
   const brk = (st.n || 0) === 0;
@@ -489,7 +538,8 @@ export function findPot(st, me) {
   const cleared = g ? leftOf(st.b, g) === 0 : false;
   const cue = st.b.find((b) => b[0] === 0) || [0, CUE_START[0], CUE_START[1]];
   const place = st.bih ? { cx: cue[1], cy: cue[2] } : {};
-  const targets = st.b.filter(([id]) => id !== 0 && (cleared ? id === 8 : g ? kindOf(id) === g : id !== 8));
+  const lo = st.v === 9 ? lowBall(st.b) : null;
+  const targets = st.b.filter(([id]) => id !== 0 && (st.v === 9 ? id === lo : cleared ? id === 8 : g ? kindOf(id) === g : id !== 8));
   const holes = POCKETS.map((p) => [clamp(p[0], 0, TW), clamp(p[1], 0, TH)]);
   const cands = [];
   for (const [, bx, by] of targets) {

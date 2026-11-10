@@ -13,6 +13,7 @@ import {
   subscribeToMessages, reportUser, uploadMedia as uploadMediaRaw, deleteMessage,
 } from '../supabaseClient.js';
 import {
+  openPermHelp,
   ACCENT_PALETTES,
   APP_VERSION,
   AUTO_DL_CHOICES,
@@ -933,6 +934,13 @@ function TwoFactorGlyph({ size = 22, color = 'currentColor', strokeWidth = 2 }) 
   );
 }
 
+function CreatorToolsGlyph({ size = 20 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 20h16" /><path d="M7 16.5V11" /><path d="M12 16.5V6.5" /><path d="M17 16.5v-3.5" /><path d="M15.5 6.5l1.5-2.5 1.5 2.5" />
+    </svg>
+  );
+}
 export function SettingsPanel({ onOpenWallet, onClose, onOpenPrivacy, onLogout, hideActivity, onToggleActivity, visitorsOn = true, onToggleVisitors, restrictedCount = 0, onOpenRestricted, onOpenAccounts, onOpenDelete, onOpenBlocked, blockedCount = 0, chatLockSet, chatLockHash, onSetChatLockPassword, onTurnOffChatLock, autoOpenLockSetup, onConsumedAutoOpen, me, onEditProfile, onPrivacySaved, isZAdmin, onOpenReports, onOpenAdmin, hasPasswordLogin, sessionForLinks, onOpenWhatsNew, onOpenUsage, initialSection }) {
   useBackClose(true, onClose);
   const [permText, setPermText] = useState('Checking…');
@@ -956,13 +964,14 @@ export function SettingsPanel({ onOpenWallet, onClose, onOpenPrivacy, onLogout, 
       setPermText('Allowed');
     } catch {
       try { const a = await navigator.mediaDevices.getUserMedia({ audio: true }); a.getTracks().forEach((t) => t.stop()); } catch {}
-      setPermText('Blocked. Turn it on in phone Settings');
-      appAlert('Camera or microphone is blocked. Open your phone settings, find ZChat or your browser, and allow the camera and microphone.');
+      setPermText('Blocked, tap to fix');
+      openPermHelp('camera');
     }
     checkPerms();
   };
   const { theme, themeMode, soundOn, setSoundOn, reactionSoundOn, setReactionSoundOn } = useTheme();
   const [dataSaver, setDataSaver] = usePref('zchat-data-saver');
+  const [creatorOn, setCreatorOn] = usePref('zchat-creator-tools');
   const [lockFlow, setLockFlow] = useState(null);
   const [igQuery, setIgQuery] = useState('');
   const [section, setSection] = useState(() => (initialSection && String(initialSection).indexOf('sub:') !== 0 ? String(initialSection).split(':')[0] : 'main'));
@@ -1002,6 +1011,7 @@ export function SettingsPanel({ onOpenWallet, onClose, onOpenPrivacy, onLogout, 
       { icon: <UserPlus />, label: 'Switch account', onClick: onOpenAccounts },
       { icon: <Mail />, label: 'Email address', value: currentEmail.length > 20 ? `${currentEmail.slice(0, 18)}\u2026` : currentEmail, onClick: () => setSubPage('email') },
       me ? { icon: <Moon />, label: 'Take a break', onClick: () => setSubPage('break') } : null,
+      me ? { icon: <CreatorToolsGlyph />, label: 'Creator tools', toggle: !!creatorOn, onClick: () => { setCreatorOn(!creatorOn); appSnack(creatorOn ? 'Creator tools are off. Turn them on here any time.' : 'Creator tools are on. Find them on your profile.'); } } : null,
     ] },
     { title: 'Login and security', rows: [
       { icon: <SecGlyph k="checkup" />, label: 'Security checkup', value: checkupLabel(me && me.id), onClick: () => setSubPage('checkup') },
@@ -1449,7 +1459,49 @@ function NotifNewPill({ onClick }) {
     </div>
   );
 }
-export function NotificationsPage({ myId, onClose, onOpenProfile, onOpenPost, onOpenStory, onOpenChat, onOpenSettings, onOpenAchievements, onOpenLogins, onOpenQuestions, onOpenCollection, onOpenWallet, onOpenLive, onOpenGift, onChanged, onRequestDone, covered = false, onOpenGroup }) {
+const notifVisitMem = new Map();
+function NotifVisitorsRow({ myId, onOpen }) {
+  const { theme } = useTheme();
+  const [v, setV] = useState(() => notifVisitMem.get(myId) || null);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const since = new Date(Date.now() - 7 * 86400000).toISOString();
+      const { data, error } = await supabase.from('profile_visits').select('viewer_id, viewed_at').eq('profile_id', myId).gt('viewed_at', since).order('viewed_at', { ascending: false }).limit(60);
+      if (error || !alive) return;
+      const list = data || [];
+      const ids = list.slice(0, 3).map((r) => r.viewer_id);
+      let faces = [];
+      if (ids.length) {
+        const { data: profs } = await supabase.from('profiles').select('id, name, avatar, is_deleted').in('id', ids);
+        const by = {};
+        (profs || []).forEach((pr) => { if (!pr.is_deleted) by[pr.id] = pr; });
+        faces = ids.map((id) => by[id]).filter(Boolean);
+      }
+      const next = { n: list.length, faces };
+      notifVisitMem.set(myId, next);
+      if (alive) setV(next);
+    })();
+    return () => { alive = false; };
+  }, [myId]);
+  if (!v || !v.n) return null;
+  return (
+    <div role="button" aria-label="Profile visitors" onClick={() => { hapticTap(); onOpen(); }} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 20px', cursor: 'pointer' }}>
+      <div style={{ position: 'relative', width: 46, height: 46, flexShrink: 0 }}>
+        {v.faces.slice(0, 2).map((f, i) => (
+          <div key={f.id} style={{ position: 'absolute', left: i ? 14 : 0, top: i ? 14 : 0, borderRadius: '50%', boxShadow: i ? `0 0 0 2px ${theme.panelBg}` : 'none' }}><Avatar emoji={f.avatar} name={f.name} size={i || v.faces.length === 1 ? (v.faces.length === 1 ? 46 : 32) : 32} /></div>
+        ))}
+        {!v.faces.length && <div style={{ width: 46, height: 46, borderRadius: '50%', background: theme.soft, color: theme.ink, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Eye size={22} /></div>}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: theme.ink }}>Profile visitors</div>
+        <div style={{ fontSize: 13.5, color: theme.muted, marginTop: 1 }}>{v.n === 1 ? '1 person viewed your profile this week' : `${v.n} people viewed your profile this week`}</div>
+      </div>
+      <ChevronRight size={18} color={theme.muted} style={{ flexShrink: 0 }} />
+    </div>
+  );
+}
+export function NotificationsPage({ visitorsOn = false, onOpenVisitors = null, myId, onClose, onOpenProfile, onOpenPost, onOpenStory, onOpenChat, onOpenSettings, onOpenAchievements, onOpenLogins, onOpenQuestions, onOpenCollection, onOpenWallet, onOpenLive, onOpenGift, onChanged, onRequestDone, covered = false, onOpenGroup }) {
   useBackClose(true, onClose);
   const { theme } = useTheme();
   const notifScrollRef = useRef(null);
@@ -1817,6 +1869,7 @@ export function NotificationsPage({ myId, onClose, onOpenProfile, onOpenPost, on
       right={onOpenSettings ? <HeaderIconButton label="Notification settings" onClick={onOpenSettings}><SettingsIcon /></HeaderIconButton> : null}>
       {notifPull.indicator}
       {fresh > 0 && <NotifNewPill onClick={goTop} />}
+      {visitorsOn && onOpenVisitors && <NotifVisitorsRow myId={myId} onOpen={onOpenVisitors} />}
       {items === null ? (
         <div style={{ padding: '8px 0' }}>{[0, 1, 2, 3, 4, 5].map((i) => <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 20px' }}><div style={{ width: 46, height: 46, borderRadius: '50%', background: theme.soft }} /><div style={{ flex: 1 }}><div style={{ height: 12, width: '70%', borderRadius: 6, background: theme.soft }} /><div style={{ height: 10, width: '40%', borderRadius: 5, background: theme.soft, marginTop: 8 }} /></div></div>)}</div>
       ) : !items.length ? (

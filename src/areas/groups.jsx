@@ -417,6 +417,9 @@ export function GroupInfoPanel({ group, members, myId, iFollowIds, privacyAllowe
   const [showDisappear, setShowDisappear] = useState(false);
   const [showColour, setShowColour] = useState(false);
   useBackClose(showColour, () => setShowColour(false));
+  const [folder, setFolder] = useState(null);
+  useBackClose(!!folder, () => setFolder(null));
+  const openFolder = (k) => { hapticTap(); setFolder(k); };
   const soleAdmin = isAdmin && !announce && members.filter((m) => groupRankOf(group, m) >= 2).length === 1 && members.length > 1;
   const online = members.filter(isMemberOnline);
   const dayAgo = Date.now() - 86400000;
@@ -541,45 +544,6 @@ export function GroupInfoPanel({ group, members, myId, iFollowIds, privacyAllowe
         </DetailSection>
 
         {tools && <MediaStrip media={media} onOpen={onOpenMedia} onSeeAll={tools.onMedia} />}
-        {tools && <ChatToolsSection chatKey={albumChatKey(myId, null, group.id)} />}
-
-        {tools && (
-          <DetailSection title="In this chat" flush>
-            <DetailTiles items={[
-              tools.onPinned ? { icon: <Pin_ color="currentColor" />, label: 'Pinned', aria: 'Pinned messages', badge: tools.pinnedCount, onClick: tools.onPinned } : null,
-              tools.onJumpDate ? { icon: <CalendarIcon />, label: 'Jump to date', aria: 'Jump to a date', onClick: tools.onJumpDate } : null,
-              tools.onScheduled ? { icon: <Clock />, label: 'Scheduled', aria: 'Scheduled messages', badge: tools.scheduledCount, onClick: tools.onScheduled } : null,
-              ...(tools.moreTiles || []),
-              { icon: <Activity />, label: 'Insights', aria: 'Chat insights', onClick: tools.onInsights },
-              { icon: <Download />, label: 'Export', aria: 'Export chat', onClick: tools.onExport },
-              tools.onExportPdf ? { icon: <PdfGlyph />, label: 'Export as PDF', aria: 'Export as PDF', onClick: tools.onExportPdf } : null,
-            ]} />
-          </DetailSection>
-        )}
-
-        <DetailSection title="Customize" flush>
-          <DetailTiles items={[
-            ...((tools && tools.moreCustomize) || []),
-            isAdmin ? { icon: <ThemeIcon />, label: 'Theme', aria: 'Chat theme', onClick: () => setShowTheme(true) } : null,
-            tools ? { icon: <BubblesIcon />, label: 'Bubbles', aria: 'Chat bubbles', onClick: tools.onBubbles } : null,
-            isAdmin ? { icon: <SwatchIcon />, label: 'Colour', aria: 'Group colour', dot: accent, onClick: () => setShowColour(true) } : null,
-          ]} />
-        </DetailSection>
-
-        <DetailSection title="Group">
-          {detailRows([
-            community && onOpenCommunity ? <DetailRow icon={<CommunityGlyph />} label={announce ? 'Community home' : 'Community'} value={community.name} onClick={() => onOpenCommunity({})} /> : null,
-            <DetailRow icon={<Timer />} label="Disappearing messages" value={disappearLabel(disappearSecs)} onClick={() => setShowDisappear(true)} />,
-            onOpenSettings ? <DetailRow icon={<SettingsIcon />} label="Group settings" sub={isAdmin ? 'Who can send, add people, invite link' : 'Notifications, pin and more'} onClick={onOpenSettings} /> : null,
-            ...((tools && tools.morePrivacy) || []),
-          ])}
-        </DetailSection>
-        <G1InfoBlock group={group} members={members} myId={myId} myRank={myRank} />
-
-        {!announce && <G2GroupInfoRows group={group} members={members} myId={myId} isAdmin={isAdmin} />}
-
-        {tools && tools.msgopsRows && tools.msgopsRows.some(Boolean) && <DetailSection title="Notifications">{detailRows(tools.msgopsRows)}</DetailSection>}
-
         <DetailSection title={`${members.length} ${members.length === 1 ? 'member' : 'members'}`} right={ranked.length > preview.length ? <div role="button" aria-label="See all members" onClick={() => (onOpenMembers ? onOpenMembers() : null)} style={{ fontSize: 13, fontWeight: 800, color: theme.coral, cursor: 'pointer', padding: '2px 0 2px 10px' }}>See all</div> : null}>
           {canEdit && (
             <div role="button" aria-label="Add people" onClick={() => setShowAddMembers(true)} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', cursor: 'pointer', borderBottom: `1px solid ${theme.border}` }}>
@@ -595,6 +559,16 @@ export function GroupInfoPanel({ group, members, myId, iFollowIds, privacyAllowe
           )}
         </DetailSection>
 
+        <DetailSection title="More">
+          {detailRows([
+            tools ? <DetailRow icon={<Users />} label="Together" sub="Playlist, board, notes and inside jokes" onClick={() => openFolder('together')} /> : null,
+            tools ? <DetailRow icon={<Pin />} label="Chat tools" sub="Pinned, jump to a date, albums, export" onClick={() => openFolder('tools')} /> : null,
+            <DetailRow icon={<Palette />} label="Customize" sub="Theme, bubbles, colour, tone" onClick={() => openFolder('look')} />,
+            <DetailRow icon={<SettingsIcon />} label="Group" sub={`Disappearing messages${onOpenSettings ? ', group settings' : ''}`} onClick={() => openFolder('group')} />,
+            <DetailRow icon={<Bell />} label="Notifications and you" sub="Alerts, hidden members, emoji, vibration" onClick={() => openFolder('you')} />,
+          ])}
+        </DetailSection>
+
         <DetailSection>
           {detailRows([
             tools && tools.onClear ? <DetailRow icon={<Trash2 />} label="Clear chat" danger onClick={tools.onClear} /> : null,
@@ -606,6 +580,77 @@ export function GroupInfoPanel({ group, members, myId, iFollowIds, privacyAllowe
         </DetailSection>
       </div>
 
+      {folder && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 41, background: c.bg, color: c.fg, display: 'flex', flexDirection: 'column', fontFamily: FONT }} className="zchat-panel-open">
+          <div style={{ paddingTop: 'env(safe-area-inset-top)', flexShrink: 0 }}>
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center', height: 52, padding: '0 8px' }}>
+              <div role="button" aria-label="Back" onClick={() => setFolder(null)} style={{ width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><ArrowLeft size={24} strokeWidth={2} /></div>
+              <div style={{ position: 'absolute', left: 0, right: 0, textAlign: 'center', fontSize: 16, fontWeight: 700, pointerEvents: 'none' }}>{{ together: 'Together', tools: 'Chat tools', look: 'Customize', group: 'Group', you: 'Notifications and you' }[folder]}</div>
+            </div>
+          </div>
+          <div style={{ overflowY: 'auto', flex: 1, minHeight: 0, WebkitOverflowScrolling: 'touch', paddingBottom: 'calc(24px + env(safe-area-inset-bottom))' }}>
+            {folder === 'together' && (
+              <>
+        {tools && <ChatToolsSection chatKey={albumChatKey(myId, null, group.id)} />}
+
+              </>
+            )}
+            {folder === 'tools' && (
+              <>
+        {tools && (
+          <DetailSection title="In this chat" flush>
+            <DetailTiles items={[
+              tools.onPinned ? { icon: <Pin_ color="currentColor" />, label: 'Pinned', aria: 'Pinned messages', badge: tools.pinnedCount, onClick: tools.onPinned } : null,
+              tools.onJumpDate ? { icon: <CalendarIcon />, label: 'Jump to date', aria: 'Jump to a date', onClick: tools.onJumpDate } : null,
+              tools.onScheduled ? { icon: <Clock />, label: 'Scheduled', aria: 'Scheduled messages', badge: tools.scheduledCount, onClick: tools.onScheduled } : null,
+              ...(tools.moreTiles || []),
+              { icon: <Activity />, label: 'Insights', aria: 'Chat insights', onClick: tools.onInsights },
+              { icon: <Download />, label: 'Export', aria: 'Export chat', onClick: tools.onExport },
+              tools.onExportPdf ? { icon: <PdfGlyph />, label: 'Export as PDF', aria: 'Export as PDF', onClick: tools.onExportPdf } : null,
+            ]} />
+          </DetailSection>
+        )}
+
+              </>
+            )}
+            {folder === 'look' && (
+              <>
+        <DetailSection title="Customize" flush>
+          <DetailTiles items={[
+            ...((tools && tools.moreCustomize) || []),
+            isAdmin ? { icon: <ThemeIcon />, label: 'Theme', aria: 'Chat theme', onClick: () => setShowTheme(true) } : null,
+            tools ? { icon: <BubblesIcon />, label: 'Bubbles', aria: 'Chat bubbles', onClick: tools.onBubbles } : null,
+            isAdmin ? { icon: <SwatchIcon />, label: 'Colour', aria: 'Group colour', dot: accent, onClick: () => setShowColour(true) } : null,
+          ]} />
+        </DetailSection>
+
+              </>
+            )}
+            {folder === 'group' && (
+              <>
+        <DetailSection title="Group">
+          {detailRows([
+            community && onOpenCommunity ? <DetailRow icon={<CommunityGlyph />} label={announce ? 'Community home' : 'Community'} value={community.name} onClick={() => onOpenCommunity({})} /> : null,
+            <DetailRow icon={<Timer />} label="Disappearing messages" value={disappearLabel(disappearSecs)} onClick={() => setShowDisappear(true)} />,
+            onOpenSettings ? <DetailRow icon={<SettingsIcon />} label="Group settings" sub={isAdmin ? 'Who can send, add people, invite link' : 'Notifications, pin and more'} onClick={onOpenSettings} /> : null,
+            ...((tools && tools.morePrivacy) || []),
+          ])}
+        </DetailSection>
+        <G1InfoBlock group={group} members={members} myId={myId} myRank={myRank} />
+
+              </>
+            )}
+            {folder === 'you' && (
+              <>
+        {!announce && <G2GroupInfoRows group={group} members={members} myId={myId} isAdmin={isAdmin} />}
+
+        {tools && tools.msgopsRows && tools.msgopsRows.some(Boolean) && <DetailSection title="Notifications">{detailRows(tools.msgopsRows)}</DetailSection>}
+
+              </>
+            )}
+          </div>
+        </div>
+      )}
       {sheetFor && (() => {
         const mm = members.find((x) => x.user_id === sheetFor);
         if (!mm || !mm.profile) return null;

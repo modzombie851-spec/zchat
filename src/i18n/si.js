@@ -1298,7 +1298,7 @@ export default {
   "Bomb box": "බෝම්බ පෙට්ටිය",
   "Gem hunt": "මැණික් දඩයම",
   "Number guess": "අංකය අනුමාන කරන්න",
-  "Connect four": "හතරක් එකට",
+  "Four in a row": "පේළියට හතරක්",
   "Rock paper scissors": "ගල් කතුරු කොළ",
   "Dots and boxes": "තිත් සහ කොටු",
   "Five in a row": "පේළියට පහක්",

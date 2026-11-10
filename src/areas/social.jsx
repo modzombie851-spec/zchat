@@ -13,6 +13,8 @@ import {
   subscribeToMessages, reportUser, uploadMedia as uploadMediaRaw, deleteMessage,
 } from '../supabaseClient.js';
 import {
+  openPermHelp,
+  permDenied,
   ActionSheet,
   AddMembersPanel,
   Avatar,
@@ -2783,7 +2785,7 @@ export function VoicePostComposer({ me, userId, onClose }) {
     if (st === 'rec') { stop(); return; }
     setErr('');
     let stream;
-    try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); } catch { setErr('ZChat needs your microphone to record. Allow it in your browser settings and try again.'); return; }
+    try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); } catch (e) { if (permDenied(e)) openPermHelp('mic'); else setErr('Your microphone could not start. Try again.'); return; }
     const mimes = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/aac', 'audio/ogg'];
     const mime = mimes.find((t) => typeof MediaRecorder.isTypeSupported === 'function' && MediaRecorder.isTypeSupported(t));
     let mr;
