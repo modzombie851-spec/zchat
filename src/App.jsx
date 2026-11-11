@@ -18549,7 +18549,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-export const APP_VERSION = '41.1V';
+export const APP_VERSION = '42.0V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -49284,8 +49284,9 @@ export const WN_THUMBS = {
   attach39: { bg: 'mint', draw: () => <WnAttachArt /> },
   join39: { bg: 'sky', draw: () => <WnChatsJoinArt /> },
   skills39: { bg: 'sky', draw: () => <WnSkillsArt /> },
-  race41: { bg: 'sky', draw: () => <WnBg src="/race-art.webp" /> },
-  grid41: { bg: 'sky', draw: () => <WnBg src="/race-grid.webp" /> },
+  attack42: { bg: 'sky', draw: () => <WnBg src="/race-attack.webp" /> },
+  maps42: { bg: 'sky', draw: () => <WnBg src="/race-maps.webp" /> },
+  cars42: { bg: 'sky', draw: () => <WnBg src="/race-cars.webp" /> },
   duo32: { bg: 'night', draw: () => (<>
     <rect x="16" y="128" width="288" height="60" fill="#3A2E24" />
     <path d="M118 132 V60 Q160 14 202 60 V132 Z" fill="#1E1626" {...ak} />
@@ -49864,8 +49865,9 @@ Object.assign(WN_SCENES, {
   gulp38h: { bg: 'sky', draw: () => <WnGulpBigArt tall /> },
   talk39h: { bg: 'sky', draw: () => <WnTalkArt tall /> },
   wood39h: { bg: 'night', draw: () => <WnWoodArt tall /> },
-  race41h: { bg: 'sky', draw: () => <WnBg tall src="/race-art.webp" x0="-77" /> },
-  grid41h: { bg: 'sky', draw: () => <WnBg tall src="/race-grid.webp" x0="-60" /> },
+  attack42h: { bg: 'sky', draw: () => <WnBg tall src="/race-attack.webp" x0="-70" /> },
+  maps42h: { bg: 'sky', draw: () => <WnBg tall src="/race-maps.webp" x0="-60" /> },
+  cars42h: { bg: 'sky', draw: () => <WnBg tall src="/race-cars.webp" x0="-62" /> },
 });
 
 function WnBoardPin({ x, y, color = ART_C.coral }) {
@@ -59603,13 +59605,13 @@ export function GameArt({ k: kIn, width = 160, height = 100, radius = 14, style 
 
 export const LIVE_GAME_KEYS = ['race', 'roll', 'gulpco', 'duo', 'gulp', 'tug', 'qrace', 'rrace'];
 Object.assign(GAME_TITLES, { race: 'Island Rally', roll: 'Roll Squad', gulpco: 'Gulp room', duo: 'Two Torches', gulp: 'Gulp', tug: 'Tug of war', qrace: 'Quiz race', rrace: 'Reaction race' });
-Object.assign(FRIEND_GAME_SUBS, { race: 'Live, up to six friends race in 3D', roll: 'Live, up to four friends roll together', gulpco: 'Live, up to ten friends, join any time', duo: 'Live, endless temples together', gulp: 'Live, eat smaller fish and grow', tug: 'Live, tap faster than them', qrace: 'Live, fastest right answer', rrace: 'Live, first to tap on green' });
+Object.assign(FRIEND_GAME_SUBS, { race: 'Live, up to six friends, four maps', roll: 'Live, up to four friends roll together', gulpco: 'Live, up to ten friends, join any time', duo: 'Live, endless temples together', gulp: 'Live, eat smaller fish and grow', tug: 'Live, tap faster than them', qrace: 'Live, fastest right answer', rrace: 'Live, first to tap on green' });
 Object.assign(GAME_ART_BG, { race: ['#7FB4E0', '#3A4B63'], roll: ['#6EC6FF', '#4FA83A'], duo: ['#3B2A48', '#120C1C'], gulp: ['#1C6FA8', '#082A4C'], gulpco: ['#1C6FA8', '#082A4C'], tug: ['#F97316', '#E11D48'], qrace: ['#7C3AED', '#2563EB'], rrace: ['#10B981', '#0EA5E9'] });
 Object.assign(GAME_RULES, {
   duo: { how: ['You carry the orange torch, your friend carries the blue one. Move with the joystick.', 'Orange walks through lava and fire. Blue wades through water, lights hidden stones and reads hidden codes.', 'Pull levers, hold doors on the plates, jump through glowing rings, cross spikes when they drop and keep moving on cracked floors.', 'Play the story or endless temples that are new every time. You share three hearts.', 'Talk with voice, quick messages and emojis. You can mute your friend any time.'], win: 'Stand on your own glowing doors at the same time to finish. Finish missions for stars.' },
   gulp: { how: ['You are a small fish with the number 2. Swim with the joystick.', 'Touch fish with a number the same as yours or smaller to eat them and grow. Any part of you works, even your tail. Small fish swim away when you get close.', 'Fish with bigger numbers can eat you. Hunters chase you for a moment, then give up. Dash to get away.', 'Suck pulls the fish in front of you into your mouth. Grow bigger to unlock a shield, a shock wave and frenzy.', 'Grab bubbles for a shield, double food, a magnet or speed. If you are bigger than your friend you can eat them too.'], win: 'Grow as big as you can, there is no top size. Each of you has five lives and gets one back when you grow into a new fish. Whoever keeps their lives longer wins the round.' },
   gulpco: { how: ['A fish room for up to ten friends. Anyone you invite can join or leave any time.', 'Swim with the joystick and eat fish with a number the same as yours or smaller.', 'Nobody eats anyone in the room. If a big fish gets you, you come back a bit smaller.', 'Turn your mic on to talk. Tap the people button to mute anyone.'], win: 'Grow together and see who gets the biggest.' },
-  race: { how: ['Pick a ride: sports car, hatchback, jeep or tuk tuk. Your colour comes from your spot on the grid.', 'Your car speeds up by itself. Hold the left and right arrows to steer, or turn on tilt to steer with your phone.', 'Hold Drift while you turn to slide round corners. Drifting fills the ring around Boost. Tap Boost for a burst of speed.', 'Grass and sand slow you down. Bump other cars to push past them.', 'Talk with your mic and send emojis while you race. Empty spots can be filled with bots.'], win: 'Finish the laps first. Your best lap is saved.' },
+  race: { how: ['Pick a ride: sports car, hatchback, jeep or tuk tuk, and one of four maps: Palm coast, Tea hills, City lights or Lion rock.', 'Your car speeds up by itself. Hold the left and right pads to steer, or turn on tilt to steer with your phone.', 'Hold Brake to slow down. Hold it while you turn to drift round corners. Drifting fills Nitro, tap Nitro for a burst of speed.', 'In Attack race, drive through energy bottles, then fire a rocket at the car ahead, drop oil behind you, shock the cars around you or put up a shield.', 'Talk with your mic and send emojis while you race. Empty spots can be filled with bots.'], win: 'Finish the laps first. Your best lap is saved for each map.' },
   roll: { how: ['Hold the arrows to roll your ball. Tap jump, hold it to jump higher.', 'Land on top of enemies to bop them. Spiky ones hurt from every side.', 'Springs throw you high. Flags save where you come back after a pop.', 'Some gates need two buttons pressed at the same time. Team up.', 'Grab coins and find the three stars hidden in every level.'], win: 'Everyone has to reach the portal to clear the level. There are five worlds with six levels each.' },
   tug: { how: ['You both play at the same moment. Open the game and wait for your friend to join.', 'When the countdown ends, tap the big button as fast as you can.', 'Every tap pulls the rope toward you.'], win: 'After 15 seconds, whoever pulled the rope to their side wins.' },
   qrace: { how: ['You both play at the same moment and see the same question together.', 'Tap the right answer before your friend does.', 'A wrong answer locks you out of that question.'], win: 'Seven questions. Whoever scores more wins.' },

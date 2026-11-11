@@ -66,6 +66,13 @@ export class MeshBuilder {
     if (!T) return p;
     return [T[0] * p[0] + T[4] * p[1] + T[8] * p[2] + T[12], T[1] * p[0] + T[5] * p[1] + T[9] * p[2] + T[13], T[2] * p[0] + T[6] * p[1] + T[10] * p[2] + T[14]];
   }
+  tn(n) {
+    const T = this.T;
+    if (!T) return n;
+    const x = T[0] * n[0] + T[4] * n[1] + T[8] * n[2], y = T[1] * n[0] + T[5] * n[1] + T[9] * n[2], z = T[2] * n[0] + T[6] * n[1] + T[10] * n[2];
+    const l = Math.hypot(x, y, z) || 1;
+    return [x / l, y / l, z / l];
+  }
   tri(a, b, c, col, mat = 0) {
     a = this.tp(a); b = this.tp(b); c = this.tp(c);
     const ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2], vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2];
@@ -75,7 +82,62 @@ export class MeshBuilder {
     this.v.push(a[0], a[1], a[2], nx, ny, nz, k[0], k[1], k[2], mat, b[0], b[1], b[2], nx, ny, nz, k[0], k[1], k[2], mat, c[0], c[1], c[2], nx, ny, nz, k[0], k[1], k[2], mat);
     return this;
   }
+  triN(a, b, c, na, nb, nc, col, mat = 0) {
+    const k = typeof col === 'string' ? hexRgb(col) : col;
+    this.v.push(a[0], a[1], a[2], na[0], na[1], na[2], k[0], k[1], k[2], mat, b[0], b[1], b[2], nb[0], nb[1], nb[2], k[0], k[1], k[2], mat, c[0], c[1], c[2], nc[0], nc[1], nc[2], k[0], k[1], k[2], mat);
+    return this;
+  }
   quad(a, b, c, d, col, mat = 0) { this.tri(a, b, c, col, mat); this.tri(a, c, d, col, mat); return this; }
+  surface(P, col, mat = 0, o = {}) {
+    const R = P.length, C = P[0].length, wrap = !!o.wrap;
+    const Q = P.map((row) => row.map((p) => this.tp(p)));
+    const N = Q.map((row) => row.map(() => [0, 0, 0]));
+    const cols = wrap ? C : C - 1;
+    const add = (n, x, y, z) => { n[0] += x; n[1] += y; n[2] += z; };
+    for (let i = 0; i < R - 1; i++) for (let j = 0; j < cols; j++) {
+      const j1 = (j + 1) % C;
+      const a = Q[i][j], b = Q[i + 1][j], c = Q[i + 1][j1], d = Q[i][j1];
+      const ex = c[0] - a[0], ey = c[1] - a[1], ez = c[2] - a[2], fx = d[0] - b[0], fy = d[1] - b[1], fz = d[2] - b[2];
+      const nx = ey * fz - ez * fy, ny = ez * fx - ex * fz, nz = ex * fy - ey * fx;
+      add(N[i][j], nx, ny, nz); add(N[i + 1][j], nx, ny, nz); add(N[i + 1][j1], nx, ny, nz); add(N[i][j1], nx, ny, nz);
+    }
+    const sg = o.flip ? -1 : 1;
+    for (const row of N) for (const n of row) { const l = (Math.hypot(n[0], n[1], n[2]) || 1) * sg; n[0] /= l; n[1] /= l; n[2] /= l; }
+    for (let i = 0; i < R - 1; i++) for (let j = 0; j < cols; j++) {
+      const j1 = (j + 1) % C;
+      let cc = col, mm = mat;
+      if (o.at) { const r = o.at(i, j); if (!r) continue; cc = r[0]; mm = r[1]; }
+      const a = Q[i][j], b = Q[i + 1][j], c = Q[i + 1][j1], d = Q[i][j1];
+      if (o.flip) { this.triN(a, c, b, N[i][j], N[i + 1][j1], N[i + 1][j], cc, mm); this.triN(a, d, c, N[i][j], N[i][j1], N[i + 1][j1], cc, mm); }
+      else { this.triN(a, b, c, N[i][j], N[i + 1][j], N[i + 1][j1], cc, mm); this.triN(a, c, d, N[i][j], N[i + 1][j1], N[i][j1], cc, mm); }
+    }
+    return this;
+  }
+  lathe(cx, cy, cz, prof, seg, col, mat = 0, o = {}) {
+    const P = prof.map(([r, ax]) => {
+      const row = [];
+      for (let j = 0; j < seg; j++) { const th = (j / seg) * Math.PI * 2 + (o.rot || 0); row.push([cx + ax, cy + Math.sin(th) * r, cz + Math.cos(th) * r]); }
+      return row;
+    });
+    return this.surface(P, col, mat, { wrap: true, at: o.at, flip: o.flip });
+  }
+  revolve(cx, cy, cz, prof, seg, col, mat = 0, o = {}) {
+    const P = prof.map(([r, y]) => {
+      const row = [];
+      for (let j = 0; j <= seg; j++) { const th = (j / seg) * Math.PI * 2; row.push([cx + Math.cos(th) * r, cy + y, cz + Math.sin(th) * r]); }
+      return row;
+    });
+    return this.surface(P, col, mat, { at: o.at, flip: o.flip });
+  }
+  mark() { return this.v.length; }
+  mirrorX(from) {
+    const v = this.v, end = v.length;
+    for (let k = from; k < end; k += 30) for (const idx of [0, 2, 1]) {
+      const b = k + idx * 10;
+      v.push(-v[b], v[b + 1], v[b + 2], -v[b + 3], v[b + 4], v[b + 5], v[b + 6], v[b + 7], v[b + 8], v[b + 9]);
+    }
+    return this;
+  }
   box(x, y, z, sx, sy, sz, col, mat = 0, o = {}) {
     const hx = sx / 2, hz = sz / 2, top = o.top || col, bot = o.noBottom;
     const p = (dx, dy, dz) => [x + dx, y + dy, z + dz];
@@ -101,6 +163,13 @@ export class MeshBuilder {
     }
     return this;
   }
+  smoothCyl(x, y, z, r, h, seg, col, mat = 0, o = {}) {
+    const r2 = o.r2 != null ? o.r2 : r;
+    const ring = (rr, yy) => { const row = []; for (let j = 0; j <= seg; j++) { const a = (j / seg) * Math.PI * 2; row.push([x + Math.cos(a) * rr, yy, z + Math.sin(a) * rr]); } return row; };
+    this.surface([ring(r, y), ring(r2, y + h)], col, mat);
+    if (o.cap !== false && r2 > 0.001) for (let j = 0; j < seg; j++) { const a0 = (j / seg) * Math.PI * 2, a1 = ((j + 1) / seg) * Math.PI * 2; this.tri([x, y + h, z], [x + Math.cos(a1) * r2, y + h, z + Math.sin(a1) * r2], [x + Math.cos(a0) * r2, y + h, z + Math.sin(a0) * r2], o.capCol || col, mat); }
+    return this;
+  }
   wheel(x, y, z, r, w, seg, tire, rim) {
     const hw = w / 2;
     for (let i = 0; i < seg; i++) {
@@ -108,16 +177,16 @@ export class MeshBuilder {
       const c0 = Math.cos(a0) * r, s0 = Math.sin(a0) * r, c1 = Math.cos(a1) * r, s1 = Math.sin(a1) * r;
       this.quad([x - hw, y + s0, z + c0], [x - hw, y + s1, z + c1], [x + hw, y + s1, z + c1], [x + hw, y + s0, z + c0], tire, 0);
       const k = 0.62;
-      this.tri([x + hw + 0.005, y, z], [x + hw + 0.005, y + s0 * k, z + c0 * k], [x + hw + 0.005, y + s1 * k, z + c1 * k], rim, 0.5);
+      this.tri([x + hw + 0.005, y, z], [x + hw + 0.005, y + s0 * k, z + c0 * k], [x + hw + 0.005, y + s1 * k, z + c1 * k], rim, 0.72);
       this.tri([x + hw, y + s0 * k, z + c0 * k], [x + hw, y + s0, z + c0], [x + hw, y + s1, z + c1], tire, 0);
       this.tri([x + hw, y + s0 * k, z + c0 * k], [x + hw, y + s1, z + c1], [x + hw, y + s1 * k, z + c1 * k], tire, 0);
-      this.tri([x - hw - 0.005, y, z], [x - hw - 0.005, y + s1 * k, z + c1 * k], [x - hw - 0.005, y + s0 * k, z + c0 * k], rim, 0.5);
+      this.tri([x - hw - 0.005, y, z], [x - hw - 0.005, y + s1 * k, z + c1 * k], [x - hw - 0.005, y + s0 * k, z + c0 * k], rim, 0.72);
       this.tri([x - hw, y + s0 * k, z + c0 * k], [x - hw, y + s1, z + c1], [x - hw, y + s0, z + c0], tire, 0);
       this.tri([x - hw, y + s0 * k, z + c0 * k], [x - hw, y + s1 * k, z + c1 * k], [x - hw, y + s1, z + c1], tire, 0);
     }
     return this;
   }
-  blob(x, y, z, rx, ry, rz, col, mat = 0, rnd = null, seg = 7) {
+  blob(x, y, z, rx, ry, rz, col, mat = 0, rnd = null, seg = 7, smooth = false) {
     const rows = Math.max(3, Math.round(seg * 0.6));
     const P = [];
     for (let i = 0; i <= rows; i++) {
@@ -130,6 +199,7 @@ export class MeshBuilder {
       }
       P.push(ring);
     }
+    if (smooth) return this.surface(P, col, mat, { wrap: true, flip: true });
     for (let i = 0; i < rows; i++) for (let j = 0; j < seg; j++) {
       const a = P[i][j], b = P[i][(j + 1) % seg], c = P[i + 1][(j + 1) % seg], d = P[i + 1][j];
       if (i === 0) this.tri(a, c, d, col, mat); else if (i === rows - 1) this.tri(a, b, d, col, mat); else this.quad(a, b, c, d, col, mat);
@@ -158,8 +228,8 @@ const FS = `#version 300 es
 precision highp float;
 precision highp sampler2DShadow;
 in vec3 vPos; in vec3 vNor; in vec4 vCol; in vec4 vLight;
-uniform vec3 uSunDir, uSunCol, uSkyCol, uGndCol, uFogCol, uFogSun, uCam;
-uniform float uFogDen, uShadowOn, uExposure;
+uniform vec3 uSunDir, uSunCol, uSkyCol, uGndCol, uFogCol, uFogSun, uCam, uHor, uZen, uTint;
+uniform float uFogDen, uShadowOn, uExposure, uMode, uAlpha;
 uniform sampler2DShadow uShadow;
 out vec4 o;
 float shadowAt(vec4 lp, float nl) {
@@ -172,35 +242,72 @@ float shadowAt(vec4 lp, float nl) {
   return s / 9.0;
 }
 vec3 aces(vec3 x) { return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
+vec3 envAt(vec3 r) {
+  float y = r.y;
+  vec3 sky = mix(uHor, uZen, pow(clamp(y, 0.0, 1.0), 0.55));
+  vec3 gnd = mix(uHor * 0.6, uGndCol * 0.8, clamp(-y * 4.0, 0.0, 1.0));
+  vec3 e = y >= 0.0 ? sky : gnd;
+  float sd = max(dot(r, uSunDir), 0.0);
+  return e + uFogSun * pow(sd, 10.0) * 0.4;
+}
 void main() {
   vec3 n = normalize(vNor);
   if (!gl_FrontFacing) n = -n;
   vec3 base = pow(vCol.rgb, vec3(2.2));
+  if (uMode > 2.5) base = pow(uTint, vec3(2.2));
   float mat = vCol.a;
   vec3 v = normalize(uCam - vPos);
   float d = length(uCam - vPos);
+  float nv = max(dot(n, v), 0.0);
   vec3 col;
-  if (mat > 0.95) {
+  if (mat >= 0.95) {
     col = base * 3.2;
+  } else if (mat >= 0.8) {
+    col = base * (0.5 + (mat - 0.8) * 24.0);
   } else {
     float nl = max(dot(n, uSunDir), 0.0);
     float sh = uShadowOn > 0.5 ? shadowAt(vLight, nl) : 1.0;
     vec3 amb = mix(uGndCol, uSkyCol, n.y * 0.5 + 0.5);
-    col = base * (amb + uSunCol * nl * sh);
-    if (mat > 0.05) {
-      vec3 h = normalize(v + uSunDir);
-      float sp = pow(max(dot(n, h), 0.0), 40.0 + 120.0 * mat) * sh;
-      float fr = pow(1.0 - max(dot(n, v), 0.0), 4.0);
-      col = mix(col, uSkyCol * 1.1 + uFogSun * 0.25, fr * 0.55 * mat);
-      col += uSunCol * sp * mat * 1.6;
+    vec3 h = normalize(v + uSunDir);
+    float nh = max(dot(n, h), 0.0);
+    vec3 r = reflect(-v, n);
+    if (mat < 0.05) {
+      col = base * (amb + uSunCol * nl * sh);
+    } else if (mat < 0.5) {
+      float g = (mat - 0.05) / 0.45;
+      col = base * (amb + uSunCol * nl * sh);
+      float fr = pow(1.0 - nv, 4.0);
+      col = mix(col, envAt(r), fr * 0.5 * g);
+      col += uSunCol * pow(nh, 30.0 + 160.0 * g) * sh * g * 1.2;
+    } else if (mat < 0.6) {
+      float flake = (mat - 0.5) * 10.0;
+      vec3 dif = base * (amb * 0.85 + uSunCol * nl * sh);
+      float fr = 0.04 + 0.96 * pow(1.0 - nv, 5.0);
+      col = dif * (1.0 - fr * 0.5) + envAt(r) * fr * 0.9;
+      col += uSunCol * (pow(nh, 500.0) * 7.0 + pow(nh, 60.0) * 0.3 + pow(nh, 14.0) * flake * 0.18 * base) * sh;
+    } else if (mat < 0.7) {
+      float refl = (mat - 0.6) * 10.0;
+      float fr = 0.06 + 0.94 * pow(1.0 - nv, 4.0);
+      vec3 dif = base * (amb * 0.7 + uSunCol * nl * sh * 0.5);
+      col = mix(dif, envAt(r), clamp(fr * (0.45 + refl * 0.55) + 0.12 * refl, 0.0, 1.0));
+      col += uSunCol * pow(nh, 700.0) * 9.0 * sh;
+    } else {
+      float rough = (mat - 0.7) * 10.0;
+      vec3 env = mix(envAt(r), amb * 1.4, rough);
+      col = base * (env * 1.15 + uSunCol * nl * sh * 0.3);
+      col += uSunCol * pow(nh, mix(600.0, 40.0, rough)) * mix(6.0, 0.9, rough) * sh;
     }
   }
   float f = 1.0 - exp(-pow(d * uFogDen, 1.35));
   float sunAmt = pow(max(dot(-v, uSunDir), 0.0), 6.0);
   vec3 fogc = mix(uFogCol, uFogSun, sunAmt);
   col = mix(col, fogc, clamp(f, 0.0, 1.0));
-  col = aces(col * uExposure);
-  o = vec4(pow(col, vec3(1.0 / 2.2)), 1.0);
+  col = pow(aces(col * uExposure), vec3(1.0 / 2.2));
+  if (uMode > 0.5) {
+    float fr = pow(1.0 - nv, 2.2);
+    float a = (uMode < 1.5 ? clamp(0.06 + fr * 0.9, 0.0, 1.0) : 1.0) * uAlpha;
+    o = vec4(col * a, uMode < 1.5 ? a : uMode < 2.5 ? 0.0 : a);
+  } else o = vec4(col, 1.0);
 }`;
 const SVS = `#version 300 es
 layout(location=0) in vec3 aPos;
@@ -217,8 +324,8 @@ const SKYFS = `#version 300 es
 precision highp float;
 in vec2 vP;
 uniform mat4 uInvVP;
-uniform vec3 uSunDir, uZenith, uHorizon, uSunCol, uFogSun, uCam;
-uniform float uExposure, uTime;
+uniform vec3 uSunDir, uZenith, uHorizon, uSunCol, uFogSun, uCam, uCloud;
+uniform float uExposure, uTime, uClouds, uStars;
 out vec4 o;
 float h21(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
 float vn(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f); return mix(mix(h21(i), h21(i + vec2(1, 0)), f.x), mix(h21(i + vec2(0, 1)), h21(i + vec2(1, 1)), f.x), f.y); }
@@ -233,41 +340,57 @@ void main() {
   sky += pow(uFogSun, vec3(2.2)) * pow(sd, 8.0) * 0.9;
   sky += uSunCol * pow(sd, 900.0) * 18.0;
   sky += uSunCol * pow(sd, 60.0) * 0.6;
-  if (dir.y > 0.01) {
+  if (uStars > 0.0 && dir.y > 0.05) {
+    vec2 sp = dir.xz / (dir.y + 0.3) * 180.0;
+    float st = step(0.9965, h21(floor(sp))) * smoothstep(0.05, 0.4, dir.y);
+    sky += vec3(st) * uStars * 1.4;
+  }
+  if (dir.y > 0.01 && uClouds > 0.0) {
     vec2 uv = dir.xz / (dir.y + 0.12) * 1.6 + vec2(uTime * 0.01, 0.0);
-    float c = smoothstep(0.52, 0.78, fbm(uv));
-    vec3 cc = mix(pow(vec3(1.0, 0.86, 0.78), vec3(2.2)), pow(uFogSun, vec3(2.2)) * 1.3, pow(sd, 3.0));
-    sky = mix(sky, cc * (0.75 + 0.5 * fbm(uv * 2.0)), c * 0.85 * smoothstep(0.01, 0.12, dir.y));
+    float c = smoothstep(0.52 - uClouds * 0.12, 0.78, fbm(uv));
+    vec3 cc = mix(pow(uCloud, vec3(2.2)), pow(uFogSun, vec3(2.2)) * 1.3, pow(sd, 3.0));
+    sky = mix(sky, cc * (0.75 + 0.5 * fbm(uv * 2.0)), c * 0.85 * smoothstep(0.01, 0.12, dir.y) * min(1.0, uClouds * 1.2));
   }
   if (dir.y < 0.0) sky = mix(sky, pow(uHorizon, vec3(2.2)) * 0.9, smoothstep(0.0, -0.08, dir.y));
   o = vec4(pow(aces(sky * uExposure), vec3(1.0 / 2.2)), 1.0);
 }`;
 const PVS = `#version 300 es
-layout(location=0) in vec3 aCenter;
-layout(location=1) in vec2 aCorner;
-layout(location=2) in vec4 aInfo;
+layout(location=0) in vec2 aCorner;
+layout(location=1) in vec4 aCenter;
+layout(location=2) in vec3 aInfo;
 uniform mat4 uVP; uniform vec3 uRight, uUp;
-out vec2 vUv; out vec4 vInfo; out vec3 vPos;
+out vec2 vUv; out vec3 vInfo; out vec3 vPos;
 void main() {
-  vec3 p = aCenter + (uRight * aCorner.x + uUp * aCorner.y) * aInfo.x;
+  vec3 p = aCenter.xyz + (uRight * aCorner.x + uUp * aCorner.y) * aCenter.w;
   vUv = aCorner; vInfo = aInfo; vPos = p;
   gl_Position = uVP * vec4(p, 1.0);
 }`;
 const PFS = `#version 300 es
 precision highp float;
-in vec2 vUv; in vec4 vInfo; in vec3 vPos;
+in vec2 vUv; in vec3 vInfo; in vec3 vPos;
 uniform vec3 uCam, uFogCol; uniform float uFogDen;
 out vec4 o;
 void main() {
   float r = length(vUv);
   if (r > 1.0) discard;
-  float a = (1.0 - smoothstep(0.2, 1.0, r)) * vInfo.y;
-  vec3 c = vInfo.z > 0.5 ? mix(vec3(1.0, 0.95, 0.6), vec3(1.0, 0.45, 0.1), r) * 1.4 : vec3(0.9, 0.9, 0.92);
-  if (vInfo.w > 0.5) c = vec3(0.75, 0.62, 0.45);
+  float t = vInfo.y;
+  float a = (1.0 - smoothstep(0.15, 1.0, r)) * vInfo.x;
+  vec3 c; float add = 0.0;
+  if (t < 0.5) c = vec3(0.88, 0.88, 0.9);
+  else if (t < 1.5) { c = mix(vec3(1.0, 0.95, 0.62), vec3(1.0, 0.42, 0.08), r) * 1.5; add = 0.6; }
+  else if (t < 2.5) c = vec3(0.74, 0.6, 0.44);
+  else if (t < 3.5) { c = mix(vec3(0.8, 1.0, 0.95), vec3(0.15, 0.95, 0.7), r) * 1.6; add = 1.0; }
+  else if (t < 4.5) { c = vec3(1.0, 0.9, 0.55) * 2.0; add = 1.0; a *= (1.0 - smoothstep(0.0, 0.7, r)) * 1.5; }
+  else if (t < 5.5) c = vec3(0.17, 0.16, 0.16);
+  else if (t < 6.5) { c = mix(vec3(0.9, 0.97, 1.0), vec3(0.3, 0.6, 1.0), r) * 1.8; add = 1.0; }
+  else if (t < 7.5) { c = vec3(1.0, 0.82, 0.5) * 1.4; add = 1.0; a *= 0.75 * (1.0 - smoothstep(0.0, 1.0, r)); }
+  else if (t < 8.5) { c = vec3(1.0, 0.16, 0.12) * 1.7; add = 1.0; a *= 1.0 - smoothstep(0.0, 1.0, r); }
+  else if (t < 9.5) { c = vec3(0.9, 0.95, 1.0) * 1.5; add = 1.0; a *= 1.0 - smoothstep(0.0, 1.0, r); }
+  else { c = mix(vec3(1.0, 0.7, 1.0), vec3(0.7, 0.3, 1.0), r) * 1.6; add = 1.0; }
   float d = length(uCam - vPos);
   float f = 1.0 - exp(-pow(d * uFogDen, 1.35));
-  c = mix(c, pow(uFogCol, vec3(1.0 / 2.2)), f);
-  o = vec4(c * a, a);
+  c = mix(c, pow(uFogCol, vec3(1.0 / 2.2)), f * (1.0 - add * 0.6));
+  o = vec4(c * a, a * (1.0 - add));
 }`;
 
 function compile(gl, vs, fs) {
@@ -285,9 +408,10 @@ function compile(gl, vs, fs) {
   for (let i = 0; i < n; i++) { const info = gl.getActiveUniform(p, i); u[info.name] = gl.getUniformLocation(p, info.name); }
   return { p, u };
 }
+const toLin = (c) => [c[0] ** 2.2, c[1] ** 2.2, c[2] ** 2.2];
 
 export function createRenderer(canvas, opts = {}) {
-  const gl = canvas.getContext('webgl2', { antialias: true, alpha: false, powerPreference: 'high-performance', preserveDrawingBuffer: !!opts.keep });
+  const gl = canvas.getContext('webgl2', { antialias: opts.aa !== false, alpha: false, powerPreference: 'high-performance', preserveDrawingBuffer: !!opts.keep });
   if (!gl) return null;
   const P = compile(gl, VS, FS), S = compile(gl, SVS, SFS), K = compile(gl, SKYVS, SKYFS), Q = compile(gl, PVS, PFS);
   const SM = opts.shadowSize || 2048;
@@ -312,13 +436,17 @@ export function createRenderer(canvas, opts = {}) {
   gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
   gl.bindVertexArray(null);
   const partVao = gl.createVertexArray();
+  const cornerBuf = gl.createBuffer();
   const partBuf = gl.createBuffer();
   gl.bindVertexArray(partVao);
+  gl.bindBuffer(gl.ARRAY_BUFFER, cornerBuf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, 1, 1, -1, -1, 1, 1, -1, 1]), gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
   gl.bindBuffer(gl.ARRAY_BUFFER, partBuf);
-  gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 36, 0);
-  gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 36, 12);
-  gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2, 4, gl.FLOAT, false, 36, 20);
+  gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 4, gl.FLOAT, false, 28, 0); gl.vertexAttribDivisor(1, 1);
+  gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2, 3, gl.FLOAT, false, 28, 16); gl.vertexAttribDivisor(2, 1);
   gl.bindVertexArray(null);
+  let partData = new Float32Array(7 * 256);
 
   const owned = [];
   function mesh(data) {
@@ -342,7 +470,7 @@ export function createRenderer(canvas, opts = {}) {
   }
   function dispose() {
     for (const m of owned.slice()) drop(m);
-    try { gl.deleteTexture(shadowTex); gl.deleteFramebuffer(shadowFb); gl.deleteBuffer(skyBuf); gl.deleteBuffer(partBuf); } catch {}
+    try { gl.deleteTexture(shadowTex); gl.deleteFramebuffer(shadowFb); gl.deleteBuffer(skyBuf); gl.deleteBuffer(partBuf); gl.deleteBuffer(cornerBuf); } catch {}
   }
   function lose() { try { const ext = gl.getExtension('WEBGL_lose_context'); if (ext) ext.loseContext(); } catch {} }
 
@@ -352,25 +480,39 @@ export function createRenderer(canvas, opts = {}) {
     return m4.mul(m4.ortho(-R, R, -R, R, 20, 600), m4.look(eye, center, [0, 1, 0]));
   }
 
+  const planes = new Float32Array(24);
+  function frustum(m) {
+    const rows = [0, 1, 2].map((r) => [m[r], m[4 + r], m[8 + r], m[12 + r]]);
+    const r3 = [m[3], m[7], m[11], m[15]];
+    const P = [[0, 1], [0, -1], [1, 1], [1, -1], [2, 1], [2, -1]];
+    P.forEach(([r, sg], i) => { const a = r3[0] + sg * rows[r][0], b = r3[1] + sg * rows[r][1], c = r3[2] + sg * rows[r][2], d = r3[3] + sg * rows[r][3]; const l = Math.hypot(a, b, c) || 1; planes[i * 4] = a / l; planes[i * 4 + 1] = b / l; planes[i * 4 + 2] = c / l; planes[i * 4 + 3] = d / l; });
+  }
+  function visible(bs) {
+    for (let i = 0; i < 24; i += 4) if (planes[i] * bs[0] + planes[i + 1] * bs[1] + planes[i + 2] * bs[2] + planes[i + 3] < -bs[3]) return false;
+    return true;
+  }
+  let lastDrawn = 0;
   function render(scene) {
     const { env, cam, items, parts } = scene;
     const W = canvas.width, H = canvas.height;
     const view = m4.look(cam.pos, cam.at, [0, 1, 0]);
-    const proj = m4.persp(cam.fov, W / H, cam.near || 0.3, cam.far || 1400);
+    const proj = m4.persp(cam.fov, W / H, cam.near || 0.3, cam.far || 1600);
     const VP = m4.mul(proj, view);
+    frustum(VP);
     const LVP = lightVP(env, cam.shadowAt || cam.at);
     const useShadow = env.shadows !== false;
+    const sc = cam.shadowAt || cam.at, sr = (env.shadowRange || 70) * 1.25;
     if (useShadow) {
       gl.bindFramebuffer(gl.FRAMEBUFFER, shadowFb);
       gl.viewport(0, 0, SM, SM);
       gl.clear(gl.DEPTH_BUFFER_BIT);
       gl.enable(gl.DEPTH_TEST);
-      gl.enable(gl.CULL_FACE); gl.cullFace(gl.BACK);
       gl.disable(gl.CULL_FACE);
       gl.useProgram(S.p);
       gl.uniformMatrix4fv(S.u.uLightVP, false, LVP);
       for (const it of items) {
-        if (!it.cast) continue;
+        if (!it.cast || it.blend) continue;
+        if (it.bs && Math.hypot(it.bs[0] - sc[0], it.bs[2] - sc[2]) > sr + it.bs[3]) continue;
         gl.uniformMatrix4fv(S.u.uModel, false, it.model || IDENT);
         gl.bindVertexArray(it.mesh.vao);
         gl.drawArrays(gl.TRIANGLES, 0, it.mesh.n);
@@ -388,6 +530,9 @@ export function createRenderer(canvas, opts = {}) {
     gl.uniform3fv(K.u.uHorizon, env.horizon);
     gl.uniform3fv(K.u.uSunCol, env.sunCol);
     gl.uniform3fv(K.u.uFogSun, env.fogSun);
+    gl.uniform3fv(K.u.uCloud, env.cloud || [1, 0.86, 0.78]);
+    gl.uniform1f(K.u.uClouds, env.clouds == null ? 1 : env.clouds);
+    gl.uniform1f(K.u.uStars, env.stars || 0);
     gl.uniform1f(K.u.uExposure, env.exposure || 1);
     gl.uniform1f(K.u.uTime, env.time || 0);
     gl.bindVertexArray(skyVao);
@@ -404,23 +549,49 @@ export function createRenderer(canvas, opts = {}) {
     gl.uniform3fv(P.u.uGndCol, env.gndCol);
     gl.uniform3fv(P.u.uFogCol, env.fogCol);
     gl.uniform3fv(P.u.uFogSun, env.fogSunLin || env.fogSun);
+    if (!env.horLin) { env.horLin = toLin(env.reflHor || env.horizon); env.zenLin = toLin(env.reflZen || env.zenith); }
+    gl.uniform3fv(P.u.uHor, env.horLin);
+    gl.uniform3fv(P.u.uZen, env.zenLin);
     gl.uniform3fv(P.u.uCam, cam.pos);
     gl.uniform1f(P.u.uFogDen, env.fogDen);
     gl.uniform1f(P.u.uShadowOn, useShadow ? 1 : 0);
     gl.uniform1f(P.u.uExposure, env.exposure || 1);
+    gl.uniform1f(P.u.uMode, 0);
+    gl.uniform1f(P.u.uAlpha, 1);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, shadowTex);
     gl.uniform1i(P.u.uShadow, 0);
+    let blends = null;
+    lastDrawn = 0;
     for (const it of items) {
+      if (it.blend) { (blends || (blends = [])).push(it); continue; }
+      if (it.bs && !visible(it.bs)) continue;
+      lastDrawn += it.mesh.n;
       gl.uniformMatrix4fv(P.u.uModel, false, it.model || IDENT);
       gl.bindVertexArray(it.mesh.vao);
       gl.drawArrays(gl.TRIANGLES, 0, it.mesh.n);
     }
+    if (blends) {
+      gl.enable(gl.BLEND);
+      gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+      gl.depthMask(false);
+      for (const it of blends) {
+        gl.uniform1f(P.u.uMode, it.blend);
+        gl.uniform1f(P.u.uAlpha, it.alpha == null ? 1 : it.alpha);
+        if (it.tint) gl.uniform3fv(P.u.uTint, it.tint);
+        gl.uniformMatrix4fv(P.u.uModel, false, it.model || IDENT);
+        gl.bindVertexArray(it.mesh.vao);
+        gl.drawArrays(gl.TRIANGLES, 0, it.mesh.n);
+      }
+      gl.depthMask(true);
+      gl.disable(gl.BLEND);
+      gl.uniform1f(P.u.uMode, 0);
+    }
     if (parts && parts.length) {
-      const fl = new Float32Array(parts.length * 6 * 9);
-      const corners = [[-1, -1], [1, -1], [1, 1], [-1, -1], [1, 1], [-1, 1]];
+      const n = parts.length;
+      if (partData.length < n * 7) partData = new Float32Array(Math.max(n, partData.length / 7 * 2) * 7);
       let k = 0;
-      for (const p of parts) for (const c of corners) { fl[k++] = p.x; fl[k++] = p.y; fl[k++] = p.z; fl[k++] = c[0]; fl[k++] = c[1]; fl[k++] = p.size; fl[k++] = p.alpha; fl[k++] = p.fire ? 1 : 0; fl[k++] = p.dust ? 1 : 0; }
+      for (const p of parts) { partData[k++] = p.x; partData[k++] = p.y; partData[k++] = p.z; partData[k++] = p.size; partData[k++] = p.alpha; partData[k++] = p.type || 0; partData[k++] = 0; }
       gl.useProgram(Q.p);
       gl.uniformMatrix4fv(Q.u.uVP, false, VP);
       gl.uniform3f(Q.u.uRight, view[0], view[4], view[8]);
@@ -430,17 +601,17 @@ export function createRenderer(canvas, opts = {}) {
       gl.uniform1f(Q.u.uFogDen, env.fogDen);
       gl.bindVertexArray(partVao);
       gl.bindBuffer(gl.ARRAY_BUFFER, partBuf);
-      gl.bufferData(gl.ARRAY_BUFFER, fl, gl.DYNAMIC_DRAW);
+      gl.bufferData(gl.ARRAY_BUFFER, partData.subarray(0, n * 7), gl.DYNAMIC_DRAW);
       gl.enable(gl.BLEND);
       gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
       gl.depthMask(false);
-      gl.drawArrays(gl.TRIANGLES, 0, parts.length * 6);
+      gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, n);
       gl.depthMask(true);
       gl.disable(gl.BLEND);
     }
     gl.bindVertexArray(null);
     return VP;
   }
-  return { gl, mesh, drop, render, dispose, lose };
+  return { gl, mesh, drop, render, dispose, lose, drawn: () => lastDrawn };
 }
 const IDENT = m4.ident();

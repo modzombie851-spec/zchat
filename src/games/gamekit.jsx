@@ -49,6 +49,8 @@ export function kitTap(kind) {
 
 const ICON = {
   close: 'M7 7l10 10M17 7L7 17',
+  rocket: 'M12 2.2c2.9 2.3 4.4 5.6 4.4 9.6v4.4H7.6v-4.4C7.6 7.8 9.1 4.5 12 2.2zM7.6 12.6L4.4 16.4v2.8h3.2M16.4 12.6l3.2 3.8v2.8h-3.2M10.2 17.6h3.6L12 21.8z',
+  drop: 'M12 2.8c3.2 4.4 6.2 7.9 6.2 11.4a6.2 6.2 0 0 1-12.4 0c0-3.5 3-7 6.2-11.4z',
   dash: 'M3 7h6M2 12h8M3 17h6M11 5l8 7-8 7z',
   suck: 'M3.5 3.5L8.5 8.5M8.5 4.8V8.5H4.8M20.5 3.5L15.5 8.5M15.5 4.8V8.5H19.2M3.5 20.5L8.5 15.5M8.5 19.2V15.5H4.8M20.5 20.5L15.5 15.5M15.5 19.2V15.5H19.2M12 9.7a2.3 2.3 0 1 0 0 4.6a2.3 2.3 0 1 0 0-4.6z',
   shield: 'M12 3l7 3v6c0 4.4-3 7.6-7 9-4-1.4-7-4.6-7-9V6z',
@@ -91,7 +93,7 @@ const ICON = {
   door: 'M10 4H5v16h5M14 8l4 4-4 4M18 12H9',
   enter: 'M14 4h5v16h-5M9 8l4 4-4 4M13 12H4',
 };
-const FILLED = new Set(['dash', 'shield', 'bolt', 'flame', 'up', 'left', 'right', 'play', 'star', 'heart', 'crown', 'bomb', 'sword']);
+const FILLED = new Set(['rocket', 'drop', 'dash', 'shield', 'bolt', 'flame', 'up', 'left', 'right', 'play', 'star', 'heart', 'crown', 'bomb', 'sword']);
 
 export function GIcon({ k, size = 26, color = '#FFFFFF', ink = 'rgba(0,0,0,0.34)', stroke, line = false, halo = true }) {
   const d = ICON[k] || ICON.star;

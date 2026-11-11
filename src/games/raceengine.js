@@ -10,6 +10,22 @@ export const CARS = {
 };
 export const COLORS = ['#FFC23D', '#FF5146', '#3D8BFF', '#3FC67E', '#A979FF', '#FF7EB9'];
 export const BOT_NAMES = ['Kasun', 'Ishara', 'Amaya', 'Ravi', 'Dulani', 'Tharaka'];
+export const SKILLS = {
+  rocket: { name: 'Rocket', cost: 35, cd: 6, icon: 'rocket', key: '1' },
+  shield: { name: 'Shield', cost: 25, cd: 9, icon: 'shield', key: '2' },
+  oil: { name: 'Oil', cost: 20, cd: 5, icon: 'drop', key: '3' },
+  shock: { name: 'Shock', cost: 40, cd: 10, icon: 'bolt', key: '4' },
+};
+export const SKILL_KEYS = ['rocket', 'shield', 'oil', 'shock'];
+export const EN_START = 40;
+export const EN_MAX = 100;
+export const BOTTLE_EN = 34;
+export const BOTTLE_BACK = 6;
+export const ROCKET_V = 96;
+export const SPIN_ROCKET = 1.35;
+export const SPIN_OIL = 0.95;
+export const SLOW_SHOCK = 1.8;
+export const SHIELD_T = 4;
 
 export function gridSpot(slot) {
   const row = Math.floor(slot / 2);
@@ -17,7 +33,7 @@ export function gridSpot(slot) {
 }
 export function mkCar(id, slot, type) {
   const g = gridSpot(slot);
-  return { id, slot, type: CARS[type] ? type : 'sport', s: g.s, x: g.x, v: 0, yaw: 0, steer: 0, drift: 0, meter: 0, boostT: 0, bump: 0, fin: 0, lapAt: 0, lapBest: 0, lap: 0, wall: 0 };
+  return { id, slot, type: CARS[type] ? type : 'sport', s: g.s, x: g.x, v: 0, yaw: 0, steer: 0, drift: 0, meter: 0, boostT: 0, bump: 0, fin: 0, lapAt: 0, lapBest: 0, lap: 0, wall: 0, en: EN_START, cd: { rocket: 0, shield: 0, oil: 0, shock: 0 }, shield: 0, spin: 0, spinMax: 1, slow: 0, wheel: 0, brake: 0 };
 }
 
 export function lapOf(c, T, laps) { return clamp(Math.floor(Math.max(0, c.s) / T.total) + 1, 1, laps); }
@@ -28,24 +44,37 @@ export function stepCar(c, T, inp, dt, o = {}) {
   if (!(c.v >= 0)) c.v = 0;
   const p = T.at(c.s);
   const curv = T.S[p.i].curv;
-  const want = clamp(inp.steer || 0, -1, 1);
+  const spinning = c.spin > 0;
+  const want = spinning ? 0 : clamp(inp.steer || 0, -1, 1);
   c.steer += (want - c.steer) * Math.min(1, dt * 6.5);
-  const drifting = !!inp.drift && c.v > 15 && Math.abs(c.steer) > 0.18;
+  const pedal = !spinning && !!(inp.drift || inp.brake);
+  const drifting = pedal && c.v > 15 && Math.abs(c.steer) > 0.18;
+  const braking = pedal && !drifting && !!inp.brake;
+  c.brake = braking ? 1 : 0;
   c.drift += ((drifting ? 1 : 0) - c.drift) * Math.min(1, dt * (drifting ? 5 : 2.6));
-  if (inp.boost && c.meter >= 0.3 && c.boostT <= 0) {
+  if (!spinning && inp.boost && c.meter >= 0.3 && c.boostT <= 0) {
     c.boostT = 1.1 + c.meter * 1.7;
     c.meter = 0;
     if (fx) fx.push({ k: 'boost', id: c.id });
   }
   if (c.boostT > 0) c.boostT = Math.max(0, c.boostT - dt);
+  if (c.shield > 0) c.shield = Math.max(0, c.shield - dt);
+  if (c.slow > 0) c.slow = Math.max(0, c.slow - dt);
+  if (c.cd) for (const k of SKILL_KEYS) if (c.cd[k] > 0) c.cd[k] = Math.max(0, c.cd[k] - dt);
   const w = T.w;
   const off = Math.abs(c.x) > w + 1.4;
   let vmax = spec.vmax * (o.mul || 1);
   if (c.boostT > 0) vmax += 15;
   if (off) vmax *= 0.56;
+  if (c.slow > 0) vmax *= 0.55;
   vmax *= 1 - c.drift * 0.07;
   vmax *= 1 - clamp(p.slope * 0.9, -0.04, 0.08);
-  if (c.v < vmax) c.v += spec.acc * (c.boostT > 0 ? 1.7 : 1) * (1 - (c.v / (vmax + 2)) * 0.55) * dt;
+  if (spinning) {
+    c.spin = Math.max(0, c.spin - dt);
+    c.v = Math.max(0, c.v - 34 * dt);
+    c.yaw *= Math.exp(-dt * 3);
+  } else if (braking) c.v = Math.max(0, c.v - 26 * dt);
+  else if (c.v < vmax) c.v += spec.acc * (c.boostT > 0 ? 1.7 : 1) * (1 - (c.v / (vmax + 2)) * 0.55) * dt;
   else c.v = Math.max(vmax, c.v - (off ? 22 : 7) * dt);
   if (c.bump > 0) c.bump = Math.max(0, c.bump - dt);
   const grip = Math.min(1, c.v / 16);
@@ -57,6 +86,7 @@ export function stepCar(c, T, inp, dt, o = {}) {
   c.yaw = clamp(c.yaw, -0.85, 0.85);
   c.s += ds;
   c.x += c.v * Math.sin(c.yaw) * dt;
+  c.wheel = (c.wheel + (c.v * dt) / 0.34) % (Math.PI * 2);
   const lim = w + 6.5;
   if (Math.abs(c.x) > lim) {
     const side = Math.sign(c.x);
@@ -101,13 +131,14 @@ export function collide(a, b, both) {
   return Math.min(1, Math.abs(closing) / 12 + pen * 0.5);
 }
 
-export function botInput(c, T, all, t, skill = 1) {
+export function botInput(c, T, all, t, skill = 1, seek = null) {
   const spec = CARS[c.type] || CARS.sport;
   const near = T.S[T.at(c.s).i].curv;
   const ahead = T.at(c.s + 16 + c.v * 0.45);
   const ca = T.S[ahead.i].curv;
   let tx = clamp(Math.sign(ca) * Math.min(4.6, Math.abs(ca) * 330), -4.6, 4.6);
   tx += Math.sin(t * 0.37 + c.slot * 1.7) * 0.8;
+  if (seek != null && Math.abs(ca) < 0.02) tx = seek;
   for (const o of all) {
     if (o === c || o.fin) continue;
     const ds = o.s - c.s;
@@ -122,7 +153,41 @@ export function botInput(c, T, all, t, skill = 1) {
   return { steer, drift, boost };
 }
 
-export function standings(cars, T, laps) {
+export function botSkill(c, all, rockets, rnd, dt) {
+  if (c.fin || c.spin > 0) return null;
+  const can = (k) => c.en >= SKILLS[k].cost && c.cd[k] <= 0;
+  if (can('shield') && c.shield <= 0 && rockets.some((r) => r.tg === c.id && r.s < c.s && c.s - r.s < 50) && rnd() < 0.65) return { k: 'shield' };
+  if (rnd() > dt * 1.1) return null;
+  let ahead = null, best = 1e9, behind = 0, close = 0;
+  for (const o of all) {
+    if (o === c || o.fin) continue;
+    const ds = o.s - c.s;
+    if (ds > 8 && ds < 110 && ds < best) { best = ds; ahead = o; }
+    if (ds < -3 && ds > -24 && Math.abs(o.x - c.x) < 4.5) behind++;
+    if (Math.abs(ds) < 17 && Math.abs(o.x - c.x) < 9) close++;
+  }
+  if (can('rocket') && ahead) return { k: 'rocket', tg: ahead.id };
+  if (can('shock') && close >= 2) return { k: 'shock' };
+  if (can('oil') && behind > 0) return { k: 'oil' };
+  return null;
+}
+
+export function rocketStep(r, cars, dt) {
+  r.life -= dt;
+  r.age = (r.age || 0) + dt;
+  const tgt = r.tg ? cars[r.tg] : null;
+  r.s += r.v * dt;
+  if (tgt && !tgt.fin) { const dx = tgt.x - r.x; r.x += Math.sign(dx) * Math.min(Math.abs(dx), (10 + r.age * 8) * dt); }
+  for (const id of Object.keys(cars)) {
+    if (id === r.by) continue;
+    const c = cars[id];
+    if (c.fin) continue;
+    if (Math.abs(c.s - r.s) < 2.1 && Math.abs(c.x - r.x) < 1.6) return c;
+  }
+  return null;
+}
+
+export function standings(cars) {
   return cars.slice().sort((a, b) => {
     if (a.fin && b.fin) return a.fin - b.fin;
     if (a.fin) return -1;

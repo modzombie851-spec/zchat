@@ -6575,19 +6575,22 @@ function WnSegments({ total, at, onArt, dark }) {
 }
 
 const WN_HIGHLIGHTS = [
-  { k: 'race41', art: 'race41h', go: 'race', cta: 'Play now', title: 'Island Rally', text: 'Real 3D racing for up to six friends. Drift round corners to fill your boost, bump past your friends and talk on mic the whole way.' },
-  { k: 'grid41', art: 'grid41h', go: 'race', cta: 'Play now', title: 'Pick a ride and race', text: 'Sports car, hatchback, jeep or tuk tuk, in your own colour. No friends online? Race five bots any time.' },
+  { k: 'attack42', art: 'attack42h', go: 'race', cta: 'Play now', title: 'Attack race', text: 'A new Island Rally mode. Grab energy bottles on the road, then fire rockets, drop oil, shock the cars around you or shield yourself.' },
+  { k: 'maps42', art: 'maps42h', go: 'race', cta: 'Play now', title: 'Three new maps', text: 'Tea hills with an old rail bridge, City lights at night and Lion rock on red dirt roads, plus the Palm coast you know.' },
+  { k: 'cars42', art: 'cars42h', go: 'race', cta: 'Play now', title: 'New cars and controls', text: 'Every car is rebuilt with real wheels that spin and steer. Steering pads, a brake you hold to drift and a Nitro button, like a real racing game.' },
 ];
 const WN_SECTIONS = [
-  { title: 'Games', items: [
-    { art: 'race41', title: 'Island Rally', text: 'Real 3D races for up to six friends, with mic.' },
-    { art: 'grid41', title: 'Race the bots', text: 'Pick a ride and race five bots any time.' },
+  { title: 'Island Rally', items: [
+    { art: 'attack42', title: 'Attack race', text: 'Rockets, oil, shock and shields with energy bottles.' },
+    { art: 'maps42', title: 'Three new maps', text: 'Tea hills, City lights and Lion rock.' },
+    { art: 'cars42', title: 'New cars and controls', text: 'Spinning wheels, steering pads, Brake and Nitro.' },
   ] },
 ];
 const WN_NEW_COUNT = WN_SECTIONS.reduce((n, sec) => n + sec.items.length, 0);
 const WN_SUMMARY = `${WN_NEW_COUNT} new things to try.`;
 
 const WN_EARLIER = [
+  { title: 'Island Rally', text: 'Real 3D racing for up to six friends with mic, four rides and bots any time.' },
   { title: 'A Snap style camera', text: 'Face lenses, background blur and beauty, a timer, night mode, hands free video and picking a sound before you record.' },
   { title: 'Talk while you play and lots of new filters', text: 'A mic and reactions in Roll Squad, wooden gates and new enemies in Two Torches, new Gulp skills, filters in groups, a lighter profile menu and Join buttons in your chats.' },
   { title: 'A cleaner look and better games', text: 'Calm greys with a blue accent, easy Roll Squad touch controls with a double jump, and no top size in Gulp.' },
