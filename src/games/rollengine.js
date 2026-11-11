@@ -10,6 +10,8 @@ export const WORLDS = [
   { id: 'night', name: 'Star night', n: 6 },
   { id: 'candy', name: 'Candy hills', n: 6 },
   { id: 'lava', name: 'Lava caves', n: 6 },
+  { id: 'beach', name: 'Coral beach', n: 6 },
+  { id: 'cloud', name: 'Cloud kingdom', n: 6 },
 ];
 export const LEVEL_N = WORLDS.reduce((a, w) => a + w.n, 0);
 export const BALLS = [

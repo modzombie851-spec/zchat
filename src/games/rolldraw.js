@@ -9,6 +9,8 @@ export const SKY = {
   night: { top: '#1E1B4A', bot: '#5B4A9A', far: '#3B3570', mid: '#2C2858', dirt: ['#6B5AA0', '#54478A', '#3E3470'], grass: ['#5FE3C0', '#2FB894'], brick: ['#8A7AD0', '#5C4CA6'], plank: ['#8C7CC4', '#5E4E96'], cloud: false, stars: true },
   candy: { top: '#FF9FD0', bot: '#FFE6F3', far: '#FFC6E3', mid: '#F49ACA', dirt: ['#E98DBD', '#C96A9C', '#A24D7B'], grass: ['#8FF0C8', '#4CCB9C'], brick: ['#FFB4DA', '#E07AB2'], plank: ['#F2C59B', '#C8955B'], cloud: true },
   lava: { top: '#3B1515', bot: '#96351A', far: '#5C221A', mid: '#431612', dirt: ['#6E3D32', '#572B21', '#3C1C15'], grass: ['#FF8A3D', '#E0561B'], brick: ['#AA573C', '#7C3B27'], plank: ['#8E5C46', '#603C2C'], cloud: false, hazard: true },
+  beach: { top: '#3FB6E8', bot: '#C9F1FF', far: '#5FD0C9', mid: '#2FB3A6', dirt: ['#F2D29A', '#E0B877', '#C49758'], grass: ['#5FD08A', '#2FA866'], brick: ['#F7B26B', '#D9853E'], plank: ['#D9A86B', '#A8763C'], cloud: true },
+  cloud: { top: '#8FA8FF', bot: '#F2E9FF', far: '#D9D2FF', mid: '#BDB4F5', dirt: ['#FFFFFF', '#E6E4FA', '#C9C4EE'], grass: ['#FFD86B', '#F2B53A'], brick: ['#C7B8FF', '#9A86E6'], plank: ['#E8DFFF', '#B9A9EE'], cloud: true },
 };
 function rr(c, x, y, w, h, r) { r = Math.max(0, Math.min(r, w / 2, h / 2)); c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); }
 
@@ -339,14 +341,29 @@ export function render(ctx, W, V) {
   c.globalAlpha = 1;
   for (const it of balls) {
     const b = it.b;
-    if (!b || b.home || b.dead > 0 || !names || !names[it.k]) continue;
+    if (!b || b.dead > 0) continue;
     const X = b.x * s, Y = (b.y - R) * s - 12;
-    c.font = "800 12px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"; c.textAlign = 'center';
-    const tw = c.measureText(names[it.k]).width + 14;
-    c.fillStyle = 'rgba(27,20,48,0.78)'; rr(c, X - tw / 2, Y - 15, tw, 19, 9.5); c.fill();
-    c.fillStyle = BALLS[it.ci % BALLS.length].light; c.fillText(names[it.k], X, Y - 1);
+    const named = !b.home && names && names[it.k];
+    c.textAlign = 'center'; c.textBaseline = 'alphabetic';
+    if (named) {
+      c.font = "800 12px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+      const tw = c.measureText(names[it.k]).width + 14;
+      c.fillStyle = 'rgba(27,20,48,0.78)'; rr(c, X - tw / 2, Y - 15, tw, 19, 9.5); c.fill();
+      c.fillStyle = BALLS[it.ci % BALLS.length].light; c.fillText(names[it.k], X, Y - 1);
+    }
     const bb = bubbles && bubbles[it.k];
-    if (bb) { c.font = '28px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif'; c.globalAlpha = Math.min(1, (bb.life - bb.t) / 0.3); c.fillText(bb.text, X, Y - 24 - bb.t * 14); c.globalAlpha = 1; }
+    if (bb) {
+      const pop = Math.min(1, bb.t / 0.16), k = pop < 1 ? 0.55 + pop * 0.6 : 1.15 - Math.min(0.15, (bb.t - 0.16) * 0.9);
+      const fade = Math.min(1, (bb.life - bb.t) / 0.35);
+      const by = (named ? Y - 22 : Y - 4) - Math.min(10, bb.t * 8), rad = 21 * k;
+      c.globalAlpha = fade;
+      c.fillStyle = 'rgba(255,255,255,0.95)'; c.beginPath(); c.arc(X, by - rad, rad, 0, TAU); c.fill();
+      c.beginPath(); c.moveTo(X - 6 * k, by - 3 * k); c.lineTo(X, by + 6 * k); c.lineTo(X + 6 * k, by - 3 * k); c.closePath(); c.fill();
+      c.strokeStyle = 'rgba(27,20,48,0.85)'; c.lineWidth = 2; c.beginPath(); c.arc(X, by - rad, rad, 0, TAU); c.stroke();
+      c.font = `${Math.round(25 * k)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`; c.textBaseline = 'middle';
+      c.fillText(bb.text, X, by - rad + 1);
+      c.textBaseline = 'alphabetic'; c.globalAlpha = 1;
+    }
   }
   c.restore();
 }

@@ -419,9 +419,18 @@ function steerFish(G, f, dt) {
     for (const p of live) {
       const pull = p.fx.magnet > 0 || p.fx.frenzy > 0;
       if (p.fx.suck > 0 && p.n >= f.n) {
-        const hx = p.x + Math.cos(p.a) * rOf(p.n), hy = p.y + Math.sin(p.a) * rOf(p.n);
+        const pr = rOf(p.n);
+        const hx = p.x + Math.cos(p.a) * pr, hy = p.y + Math.sin(p.a) * pr;
         const d = Math.hypot(hx - f.x, hy - f.y), RR = suckR(p);
-        if (d < RR) { const k2 = 1 - d / RR; f.x += (hx - f.x) / (d || 1) * dt * (6 + 14 * k2) * (1 + rOf(p.n) * 0.4); f.y += (hy - f.y) / (d || 1) * dt * (6 + 14 * k2) * (1 + rOf(p.n) * 0.4); f.a = Math.atan2(hy - f.y, hx - f.x) + Math.PI; f.sucked = 0.2; continue; }
+        if (d < RR) {
+          let da = Math.abs(Math.atan2(f.y - p.y, f.x - p.x) - p.a) % TAU;
+          if (da > Math.PI) da = TAU - da;
+          if (da < 1.05 || d < pr * 1.3) {
+            const k2 = 1 - d / RR, v = dt * (7 + 18 * k2 * k2) * (1 + pr * 0.4), mv = Math.min(d, v);
+            f.x += (hx - f.x) / (d || 1) * mv; f.y += (hy - f.y) / (d || 1) * mv;
+            f.a = Math.atan2(hy - f.y, hx - f.x) + Math.PI; f.sucked = 0.2; continue;
+          }
+        }
       }
       if (pull && p.n >= f.n) { const dx = p.x - f.x, dy = p.y - f.y, d = Math.hypot(dx, dy); if (d < rOf(p.n) * 5 + 3) { want = Math.atan2(dy, dx); sp = Math.max(sp, 2.2); f.pulled = 0.3; } }
     }

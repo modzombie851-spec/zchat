@@ -3,9 +3,9 @@ import { Avatar, Portal, useBackClose, hapticTap, FONT, Spinner } from '../App.j
 import { useGameLink, useRoomRelay, useWatchChannel } from './relay.jsx';
 import { watchAllowed, setWatchAllowed, useLiveBeacon } from './live.js';
 import { EMOTES, SignalBars, PingChip, SpeakerIcon, SmileIcon, Check, Heart, MicIcon, ChatIcon, SwapIcon, HandIcon, btnBase, Btn, RoundBtn, Sheet, Stars, injectCss, useVoice, setKitTap } from './livekit.jsx';
-import { LIVES, GLYPHS, GLYPH_NAMES, STORY_N, ENDLESS, ATK_CD, levelDef, makeWorld, stepWorld, buddyInput, applyEvent, snapshot, mergeSnapshot, sameLevel, syncClock, setNet, nearDial, nearMirror, turnMirror, foeRows, setFoes, tryCode, hintFor, clamp, missionsFor, parTime, spikeAmt, crumbleState } from './duoengine.js';
+import { LIVES, GLYPHS, GLYPH_NAMES, STORY_N, ENDLESS, ATK_CD, levelDef, makeWorld, stepWorld, buddyInput, applyEvent, snapshot, mergeSnapshot, sameLevel, syncClock, setNet, nearDial, nearMirror, turnMirror, foeRows, setFoes, tryCode, hintFor, aimTarget, clamp, missionsFor, parTime, spikeAmt, crumbleState } from './duoengine.js';
 import { Snd, THEMES, buildStatic, buildMini, drawDuoMini, render, updateParts, dust, puffs, embers, glints, part, ring, glyph, drawExplorer } from './duodraw.js';
-import { GC, GBtn, GPill, GPanel, GChip, GTitle, GJoy, GIcon, GHudBtn, GHudPanel, GHudSkill, GHint, GStat, injectKitCss, kitTap, pressProps, INK, useCtlLook, useGameStage, stagePoint, GControlsPanel } from './gamekit.jsx';
+import { GC, GBtn, GPill, GPanel, GChip, GTitle, GJoy, GIcon, GHudBtn, GHudPanel, GHudSkill, GHint, GStat, GNotices, useNotices, useWatchNotices, injectKitCss, kitTap, pressProps, INK, useCtlLook, useGameStage, stagePoint, GControlsPanel } from './gamekit.jsx';
 import { Sfx } from './sfx.js';
 
 const PHRASES = ['Wait for me', 'Go ahead', 'Over here', 'Hold the plate', 'Come closer, I need light', 'On three', 'Nice one', 'Sorry', 'I will get the lever', 'Follow me'];
@@ -94,6 +94,7 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
   const [allowWatch, setAllowWatch] = useState(watchAllowed());
   const myFirstName = String((me && me.name) || 'You').split(' ')[0];
   const watchers = useWatchChannel({ room: solo ? null : `duo-${gameId}`, myId, enabled: !solo, role: watch ? 'watcher' : 'player', meta: { n: myFirstName, a: me && me.avatar }, allow: allowWatch, onDenied: () => { setToast({ text: 'The players turned off watching.', at: Date.now() }); setTimeout(() => onClose(), 1600); } });
+  useWatchNotices(watchers, (t, kd) => pushNoteRef.current(t, kd), !solo && !watch);
   useEffect(() => { if (relay0.watch) relay0.watch(watchers.length > 0); }, [watchers.length]);
   useLiveBeacon({ game: 'duo', room: `duo-${gameId}`, info: { g: gameId, h: initial && initial.x, o: initial && initial.o }, active: !solo && !watch && !!initial, allow: allowWatch });
   const [phase, setPhase] = useState(solo ? 'pick' : 'lobby');
@@ -101,6 +102,9 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
   const [rs, setRs] = useState(null);
   const [hud, setHud] = useState({ lives: LIVES, gems: { sun: [0, 0], moon: [0, 0] }, key: null, chest: false });
   const [toast, setToast] = useState(null);
+  const [notes, pushNote] = useNotices();
+  const pushNoteRef = useRef(pushNote);
+  pushNoteRef.current = pushNote;
   const [sheet, setSheet] = useState(null);
   const [active, setActive] = useState(myKind);
   const [result, setResult] = useState(null);
@@ -231,7 +235,7 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
       relay.on('hi', () => { heard(); if (host) sendSync(); }),
       relay.on('hey', heard),
       relay.on('back', heard),
-      relay.on('bye', () => { say(`${peerFirst} left the game`, 4); }),
+      relay.on('bye', () => { pushNote(`${peerFirst} left the game`, 'leave', 4.2); }),
     ];
     return () => offs.forEach((f) => f && f());
   }, [relay.on, host]);
@@ -420,7 +424,8 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
         if (sk && sk.isConnected && sk.offsetWidth) { const q = lookNow.current.size || 1; const x1 = sk.offsetLeft + sk.offsetWidth, y1 = sk.offsetTop + sk.offsetHeight; KR.list.push([x1 - sk.offsetWidth * q * 0.8, y1 - sk.offsetHeight * q * 0.8, x1, y1]); }
         if (!watch && playing) { const jr = joyRRef.current + 12, jx = cw > ch ? 112 : 92, jy = ch - (cw > ch ? 96 : 120); KR.list.push([jx - jr, jy - jr, jx + jr, jy + jr]); }
       }
-      render(ctx, W, { cw, ch, dpr, s, ox, oy, me: myP, names, bubbles: bubbles.current, stat: statRef.current.cv, them: act === 'sun' ? 'moon' : 'sun', safeTop: 30, safeBottom: 30, keep: KR.list });
+      const aimF = !watch && playing && myP && myP.dead <= 0 && W.foes.length ? aimTarget(W, myP, myP.ax, myP.ay) : null;
+      render(ctx, W, { cw, ch, dpr, s, ox, oy, me: myP, names, bubbles: bubbles.current, stat: statRef.current.cv, them: act === 'sun' ? 'moon' : 'sun', safeTop: 30, safeBottom: 30, keep: KR.list, aim: aimF, aimCol: myP && myP.kind === 'sun' ? '#FFB347' : '#8CC8FF' });
       const mc = miniRef.current;
       if (mc && mc.isConnected) {
         const MB = miniBase.current;
@@ -456,6 +461,8 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
       case 'gate': setTimeout(() => Snd.fx.gate(), 250); say('The gate opens.'); break;
       case 'gem': Snd.fx.gem(); glints(W, f.x + 0.5, f.y + 0.35, f.kk === 'sun' ? '#FFD27A' : '#9FD0FF'); break;
       case 'burn': Snd.fx.burn(); break;
+      case 'wood': Snd.fx.burn(); break;
+      case 'wooddone': { const g = W.woods && W.woods[f.g]; if (g) for (const [wx, wy] of g.tiles) puffs(W, wx, wy + 0.2, 1, 5, 'rgba(90,80,70,0.45)'); say('The wooden gate burned down.', 2.2); break; }
       case 'vinesdone': { const [vx, vy] = W.vines.tiles[0] || [0, 0]; puffs(W, vx, vy + 0.2, 1, 8, 'rgba(90,90,90,0.4)'); say('A secret room behind the vines.'); break; }
       case 'key': Snd.fx.key(); if (W.key) glints(W, W.key.x, W.key.y - 0.3, '#CFE3FF'); say(f.who === mineK ? 'You found a secret key. Find the chest it opens.' : 'Your partner found a secret key.'); break;
       case 'chest': Snd.fx.chest(); if (W.chest) for (let i = 0; i < 26; i++) part(W, W.chest.x + 0.5 + (Math.random() - 0.5) * 0.6, W.chest.y + 0.2, (Math.random() - 0.5) * 2.4, -1.2 - Math.random() * 1.8, 1.1, i % 2 ? '#FFE08A' : '#BFE0FF', 0.05, 'ember'); say('The secret chest is open!'); break;
@@ -473,7 +480,7 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
       case 'thaw': puffs(W, f.x - 0.3, f.y - 0.5, 0.6, 5, 'rgba(220,245,255,0.4)'); break;
       case 'foedie': {
         Sfx.play(f.ice ? 'break' : 'poof', { vol: 0.85 });
-        const col = f.ice ? '#DFF4FF' : f.kk === 'slime' ? '#7FE04A' : f.kk === 'bat' ? '#8A62B0' : '#ECE4D2';
+        const col = f.ice ? '#DFF4FF' : f.kk === 'slime' ? '#7FE04A' : f.kk === 'bat' ? '#8A62B0' : f.kk === 'spider' ? '#6B4A86' : f.kk === 'ghost' ? '#E8EEFF' : '#ECE4D2';
         for (let i = 0; i < 22; i++) part(W, f.x + (Math.random() - 0.5) * 0.3, f.y - 0.45, (Math.random() - 0.5) * 3.4, -0.6 - Math.random() * 2.2, 0.8, i % 3 ? col : '#FFFFFF', 0.05, 'ember');
         puffs(W, f.x - 0.3, f.y - 0.6, 0.6, 6, 'rgba(255,255,255,0.35)');
         W.shake = Math.max(W.shake, 0.2);
@@ -907,9 +914,9 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
             </div>
           </Sheet>
         )}
-        {!side && chatSheet}
+        <GNotices items={notes} style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', ...(phase === 'pick' ? { top: top(64) } : land ? (intro ? { bottom: bottom(64) } : { top: top(46) }) : { bottom: bottom(armB + 14) }), width: land ? 'min(52%, 420px)' : 'calc(100% - 40px)', zIndex: 30 }} />
+        {chatSheet}
       </div>
-      {side && chatSheet}
       </div>
     </Portal>
   );

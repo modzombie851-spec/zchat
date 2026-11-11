@@ -3,7 +3,7 @@ import { Avatar, Portal, useBackClose, hapticTap, FONT, Spinner } from '../App.j
 import { useGameLink, useRoomRelay, useWatchChannel, useMeshRoom } from './relay.jsx';
 import { watchAllowed, setWatchAllowed, useLiveBeacon } from './live.js';
 import { EMOTES, PingChip, Sheet, injectCss, useVoice } from './livekit.jsx';
-import { GC, GBtn, GPill, GPanel, GChip, GTitle, GJoy, GIcon, GControlsPanel, GHudBtn, GHudPanel, GHudSkill, GFeed, GRibbon, GHint, GIconCap, GStat, useCtlLook, useGameStage, useJoystick, injectKitCss, kitTap, pressProps, maxDpr, INK } from './gamekit.jsx';
+import { GC, GBtn, GPill, GPanel, GChip, GTitle, GJoy, GIcon, GControlsPanel, GHudBtn, GHudPanel, GHudSkill, GFeed, GRibbon, GHint, GIconCap, GStat, GNotices, useNotices, useWatchNotices, GSkillArt, useCtlLook, useGameStage, useJoystick, injectKitCss, kitTap, pressProps, maxDpr, INK } from './gamekit.jsx';
 import { Sfx } from './sfx.js';
 import { WW, WH, LIVES, MAXN, STAGES, SKILLS, SKILL_KEYS, SPECIES, rOf, viewOf, stageOf, clamp, makeGame, spawnFish, hostStep, applyGuestEvent, snap, applySnap, guestFollow, setNet, followNet, movePlayer, tickPlayer, canEat, canTake, canOpen, chestGain, eatGain, botInput, useSkill, addPlayer, dropPlayer, adoptHost } from './gulpengine.js';
 import { render, makeDeco, updateParts, bubbles, floatText, burst, bits, ring, drawRadar, placeName, drawBadge, fmtN, PLAYER_PAL, SLOT_KEYS, warmSprites } from './gulpdraw.js';
@@ -83,6 +83,7 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
   const [followK, setFollowK] = useState('sun');
   const followRef = useRef('sun'); followRef.current = followK;
   const watchers = useWatchChannel({ room: isDuel || isWatch ? `gulp-${gameId}` : null, myId, enabled: isDuel || isWatch, role: isWatch ? 'watcher' : 'player', meta: { n: myFirst, a: myAva }, allow: allowWatch, onDenied: () => { setHint({ text: 'The players turned off watching.', at: Date.now(), life: 2 }); setTimeout(() => onClose(), 1600); } });
+  useWatchNotices(watchers, (t, kd) => pushNoteRef.current(t, kd), isDuel);
   const watchersRef = useRef(watchers); watchersRef.current = watchers;
   useEffect(() => { if (relay0.watch) relay0.watch(watchers.length > 0); }, [watchers.length]);
   const [phase, setPhase] = useState(isSolo ? 'menu' : isRoom ? 'join' : 'lobby');
@@ -106,6 +107,9 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
   const [roster, setRoster] = useState({ ids: [], nm: {}, col: {} });
   useLiveBeacon({ game: 'gulp', room: isRoom ? `gulpco-${gameId}` : `gulp-${gameId}`, info: isRoom ? { co: 1, rm: gameId, n: Math.max(1, roster.ids.length) } : { g: gameId, h: initial && initial.x, o: initial && initial.o }, active: isRoom || (isDuel && !!initial), allow: allowWatch });
   const [feed, setFeed] = useState([]);
+  const [notes, pushNote] = useNotices();
+  const pushNoteRef = useRef(pushNote);
+  pushNoteRef.current = pushNote;
   const [full, setFull] = useState(false);
   const best = useRef(readBest(myId));
   const GS = useGameStage(look);
@@ -259,8 +263,8 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
     rosterRef.current = next;
     setRoster(next);
     if (prev.ids.length) {
-      for (const id of next.ids) if (!prev.ids.includes(id) && id !== myId) { pushFeed(`${next.nm[id] || 'A friend'} joined`, 'in'); Sfx.play('pop', { vol: 0.5 }); }
-      for (const id of prev.ids) if (!next.ids.includes(id) && id !== myId) pushFeed(`${prev.nm[id] || 'A friend'} left`, 'out');
+      for (const id of next.ids) if (!prev.ids.includes(id) && id !== myId) pushNote(`${next.nm[id] || 'A friend'} joined`, 'join');
+      for (const id of prev.ids) if (!next.ids.includes(id) && id !== myId) pushNote(`${prev.nm[id] || 'A friend'} left the room`, 'leave');
     }
     if (GR.current) paintRoster(GR.current);
   };
@@ -431,7 +435,7 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
       relay.on('hey', heard),
       relay.on('back', heard),
       relay.on('bye', () => {
-        say(`${peerFirst} left the game`, 4);
+        pushNote(`${peerFirst} left the game`, 'leave', 4.2);
         const G = GR.current;
         if (!G || G.over || phaseRef.current !== 'play') return;
         G.over = { w: mine, why: 'left' };
@@ -683,11 +687,11 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
     let acc = 0;
     const loop = (ts) => {
       raf = requestAnimationFrame(loop);
-      const rawDt = (ts - last) / 1000;
-      if (rawDt < 0.0155 && acc < 0.0155) { acc += Math.max(0, rawDt); last = ts; if (acc < 0.0155) return; }
-      const dt = Math.min(0.05, Math.max(0, rawDt + acc));
-      acc = 0;
+      acc += Math.max(0, (ts - last) / 1000);
       last = ts;
+      if (acc < 0.0105) return;
+      const dt = Math.min(0.05, acc);
+      acc = 0;
       const t0 = performance.now();
       const ph = phaseRef.current;
       const demo = ph !== 'play' && ph !== 'over';
@@ -1068,7 +1072,7 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
                     const [x, y] = skillAt(k);
                     return (
                       <div key={k} style={{ position: 'absolute', left: x, top: y, pointerEvents: 'auto', animation: 'zgk-pop 0.35s ease-out' }}>
-                        <GHudSkill icon={SKILL_ICON[k]} main={main} size={main ? 72 : 52} label={SKILLS[k].name} cool={hud.cd[k] || 0} coolMax={SKILLS[k].cd} sound={main ? 'click' : 'pop'} onPress={() => { skillReq.current = k; }} />
+                        <GHudSkill icon={SKILL_ICON[k]} art={k} main={main} size={main ? 72 : 52} label={SKILLS[k].name} cool={hud.cd[k] || 0} coolMax={SKILLS[k].cd} sound={main ? 'click' : 'pop'} onPress={() => { skillReq.current = k; }} />
                       </div>
                     );
                   })}
@@ -1234,7 +1238,15 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
 
           {sheet && sheet.k === 'how' && (
             <Sheet title="How to play Gulp" onClose={() => setSheet(null)}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 12 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 6, marginTop: 14 }}>
+                {SKILL_KEYS.map((k) => (
+                  <div key={k} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, minWidth: 0 }}>
+                    <span style={{ width: 46, height: 46, borderRadius: 23, background: 'rgba(0,0,0,0.3)', boxShadow: 'inset 0 0 0 1.5px rgba(255,255,255,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><GSkillArt k={k} size={26} /></span>
+                    <span style={{ fontSize: 11, fontWeight: 800, textAlign: 'center', lineHeight: 1.2 }}>{SKILLS[k].name}</span>
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 14 }}>
                 {[
                   ['#C8FFB0', 'Green numbers are food', 'Touch any fish with a number the same or smaller than yours to eat it and grow. Even your tail works. Small fish swim away when you get close, so use Suck or Dash.'],
                   ['#FF9A9A', 'Red numbers eat you', 'Hunters show a red mark, then chase you for a moment and give up. Dash away or hide.'],
@@ -1314,9 +1326,9 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
             </Sheet>
           )}
 
-          {!side && chatSheet}
+          <GNotices items={notes} style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', ...(phase !== 'play' ? { top: top(64) } : land ? { top: top(100) } : { bottom: bottom(armB + 40) }), width: land ? 'min(52%, 420px)' : 'calc(100% - 40px)', zIndex: 30 }} />
+          {chatSheet}
         </div>
-        {side && chatSheet}
       </div>
     </Portal>
   );

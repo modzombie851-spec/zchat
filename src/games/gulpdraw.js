@@ -44,6 +44,18 @@ function mouthIn(c, shape, L, H, pal, open, teeth) {
   const md = (shape === 'whale' ? 0.42 : longish ? 0.36 : 0.4) * L;
   const full = (longish ? 1.15 : shape === 'whale' ? 0.75 : 0.66) * H;
   const lip = shade(pal[1], -0.28);
+  if (open > 1.2) {
+    const mh = Math.min(H * 0.86, full * 1.3), mw = md * 0.78, cx = fx + md * 0.05;
+    c.fillStyle = lip;
+    c.beginPath(); c.ellipse(cx, my, mw * 1.16, mh * 0.56, 0, 0, TAU); c.fill();
+    c.fillStyle = '#2A0912';
+    c.beginPath(); c.ellipse(cx, my, mw, mh * 0.48, 0, 0, TAU); c.fill();
+    c.fillStyle = '#12030A';
+    c.beginPath(); c.ellipse(cx - mw * 0.12, my, mw * 0.55, mh * 0.28, 0, 0, TAU); c.fill();
+    c.fillStyle = 'rgba(255,255,255,0.22)';
+    c.beginPath(); c.ellipse(cx + mw * 0.2, my - mh * 0.3, mw * 0.4, mh * 0.08, -0.3, 0, TAU); c.fill();
+    return;
+  }
   if (open > 0.05) {
     const mh = full * open;
     c.fillStyle = '#3A0E1A';
@@ -228,7 +240,7 @@ function paintFish(c, shape, pal, o) {
 
 const spriteCache = new Map();
 function spriteFor(key, shape, pal, S, frame, open, puff) {
-  const lv = open === true ? 1 : open ? Math.round(Math.min(1, open) * 2) / 2 : 0;
+  const lv = open === 'suck' ? 1.5 : open === true ? 1 : open ? Math.round(Math.min(1, open) * 2) / 2 : 0;
   const ck = `${key}|${frame}|${lv}|${puff ? 1 : 0}`;
   let cv = spriteCache.get(ck);
   if (cv) return cv;
@@ -727,27 +739,40 @@ export function render(ctx, G, V) {
       if (p.fx.frenzy > 0) { c.save(); c.globalCompositeOperation = 'lighter'; for (let i = 0; i < 8; i++) { const a = t * 3 + i * 0.785; const fr = r * (1.3 + Math.sin(t * 9 + i) * 0.15); c.fillStyle = i % 2 ? 'rgba(255,120,40,0.35)' : 'rgba(255,210,80,0.35)'; c.beginPath(); c.arc(x + Math.cos(a) * fr, y + Math.sin(a) * fr, r * 0.35, 0, TAU); c.fill(); } c.restore(); }
       if (p.dashT > 0 || p.fx.speed > 0) { c.strokeStyle = 'rgba(230,250,255,0.6)'; c.lineWidth = Math.max(2, r * 0.08); c.lineCap = 'round'; for (let i = 0; i < 5; i++) { const off = (i - 2) * r * 0.32; const bx = x - Math.cos(p.a) * r * 1.4 - Math.sin(p.a) * off, by = y - Math.sin(p.a) * r * 1.4 + Math.cos(p.a) * off; c.beginPath(); c.moveTo(bx, by); c.lineTo(bx - Math.cos(p.a) * r * (0.8 + (i % 2) * 0.5), by - Math.sin(p.a) * r * (0.8 + (i % 2) * 0.5)); c.stroke(); } }
       if (p.fx.suck > 0) {
-        const k0 = Math.min(1, p.fx.suck / 0.25, (1 - p.fx.suck) / 0.12 + 0.2);
-        const hx = x + Math.cos(p.a) * r * 0.9, hy = y + Math.sin(p.a) * r * 0.9, RR = suckR(p) * s;
+        const k0 = Math.min(1, p.fx.suck / 0.22, (1 - p.fx.suck) / 0.1 + 0.25);
+        const hx = x + Math.cos(p.a) * r * 1.02, hy = y + Math.sin(p.a) * r * 1.02, RR = suckR(p) * s, SPAN = 1.0;
         c.save();
         const sg = c.createRadialGradient(hx, hy, 0, hx, hy, RR);
-        sg.addColorStop(0, `rgba(205,242,255,${0.38 * k0})`); sg.addColorStop(0.6, `rgba(205,242,255,${0.12 * k0})`); sg.addColorStop(1, 'rgba(205,242,255,0)');
-        c.fillStyle = sg; c.beginPath(); c.moveTo(hx, hy); c.arc(hx, hy, RR, p.a - 0.8, p.a + 0.8); c.closePath(); c.fill();
-        c.strokeStyle = 'rgba(238,251,255,0.9)'; c.lineCap = 'round';
-        for (let i = 0; i < 12; i++) {
-          const ph = (t * 1.9 + i * 0.137) % 1;
-          const ang = p.a + (((i * 0.618) % 1) - 0.5) * 1.4 * (1 - ph * 0.55);
-          const d0 = RR * (1 - ph) + r * 0.2, d1 = d0 * 0.72;
-          c.globalAlpha = Math.sin(ph * Math.PI) * k0;
-          c.lineWidth = Math.max(1.2, r * 0.06 * (1 - ph * 0.5));
+        sg.addColorStop(0, `rgba(214,244,255,${0.5 * k0})`); sg.addColorStop(0.45, `rgba(190,236,255,${0.2 * k0})`); sg.addColorStop(1, 'rgba(190,236,255,0)');
+        c.fillStyle = sg; c.beginPath(); c.moveTo(hx, hy); c.arc(hx, hy, RR, p.a - SPAN, p.a + SPAN); c.closePath(); c.fill();
+        c.globalAlpha = 0.35 * k0; c.strokeStyle = 'rgba(230,250,255,0.9)'; c.lineWidth = Math.max(1.5, r * 0.04); c.setLineDash([Math.max(4, r * 0.18), Math.max(5, r * 0.2)]); c.lineDashOffset = t * 60;
+        c.beginPath(); c.arc(hx, hy, RR * 0.96, p.a - SPAN * 0.92, p.a + SPAN * 0.92); c.stroke(); c.setLineDash([]);
+        c.lineCap = 'round';
+        for (let i = 0; i < 16; i++) {
+          const ph = (t * 2.3 + i * 0.1237) % 1;
+          const side = ((i * 0.618) % 1) - 0.5;
+          const ang = p.a + side * 2 * SPAN * (1 - ph * 0.7);
+          const d0 = RR * (1 - ph) + r * 0.15, d1 = Math.max(r * 0.12, d0 * 0.68);
+          const sw = side * 0.5 * (1 - ph);
+          c.globalAlpha = Math.sin(ph * Math.PI) * k0 * 0.95;
+          c.strokeStyle = i % 3 ? 'rgba(240,252,255,0.95)' : 'rgba(170,228,255,0.95)';
+          c.lineWidth = Math.max(1.6, r * 0.075 * (1 - ph * 0.5));
           const mx = (d0 + d1) / 2;
-          c.beginPath(); c.moveTo(hx + Math.cos(ang) * d0, hy + Math.sin(ang) * d0); c.quadraticCurveTo(hx + Math.cos(ang + 0.18) * mx, hy + Math.sin(ang + 0.18) * mx, hx + Math.cos(ang) * d1, hy + Math.sin(ang) * d1); c.stroke();
+          c.beginPath(); c.moveTo(hx + Math.cos(ang) * d0, hy + Math.sin(ang) * d0); c.quadraticCurveTo(hx + Math.cos(ang + sw) * mx, hy + Math.sin(ang + sw) * mx, hx + Math.cos(ang * 0.5 + p.a * 0.5) * d1, hy + Math.sin(ang * 0.5 + p.a * 0.5) * d1); c.stroke();
+        }
+        c.fillStyle = 'rgba(235,250,255,0.9)';
+        for (let i = 0; i < 10; i++) {
+          const ph = (t * 1.7 + i * 0.173) % 1;
+          const ang = p.a + (((i * 0.382) % 1) - 0.5) * 2 * SPAN * (1 - ph);
+          const dd = RR * (1 - ph * ph) * 0.9 + r * 0.1;
+          c.globalAlpha = Math.sin(ph * Math.PI) * k0 * 0.8;
+          c.beginPath(); c.arc(hx + Math.cos(ang) * dd, hy + Math.sin(ang) * dd, Math.max(1.4, r * 0.05 * (1 - ph * 0.6)), 0, TAU); c.fill();
         }
         c.restore();
       }
       const frame = Math.floor((p.wob * 1.4) % 4);
       const near = G.fish.some((f) => f.n <= p.n && Math.hypot(f.x - p.x - Math.cos(p.a) * it.r, f.y - p.y - Math.sin(p.a) * it.r) < it.r * 1.9 + rOf(f.n));
-      const open = p.eat > 0.17 ? 0 : near || p.fx.suck > 0 ? 1 : p.eat > 0 ? 0.5 : 0;
+      const open = p.fx.suck > 0 ? 'suck' : p.eat > 0.17 ? 0 : near ? 1 : p.eat > 0 ? 0.5 : 0;
       const spr = spriteFor(`p${spIdx}.${key}`, S.shape, pal, { ...S, hunter: false, teeth: S.teeth }, frame, open, false);
       c.save(); c.translate(x, y); c.rotate(p.a); if (Math.cos(p.a) < 0) c.scale(1, -1);
       if (p.dead > 0) c.rotate(Math.PI * (1 - deadA));

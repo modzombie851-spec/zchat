@@ -1,8 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Avatar, Portal, useBackClose, hapticTap, FONT, Spinner } from '../App.jsx';
 import { useRoomLink } from './relay.jsx';
 import { EMOTES, Sheet, injectCss } from './livekit.jsx';
-import { GBtn, GHold, GPill, GPanel, GChip, GTitle, GIcon, GHudBtn, GHudPanel, GHint, GStat, stagePoint, injectKitCss, kitTap, pressProps, maxDpr, INK, useCtlLook, useGameStage, GControlsPanel } from './gamekit.jsx';
+import { GBtn, GHold, GPill, GPanel, GChip, GTitle, GIcon, GHudBtn, GHudPanel, GHint, GStat, GNotices, useNotices, useWatchNotices, stagePoint, injectKitCss, kitTap, pressProps, maxDpr, INK, useCtlLook, useGameStage, GControlsPanel } from './gamekit.jsx';
 import { Sfx } from './sfx.js';
 import { watchAllowed, setWatchAllowed, useLiveBeacon } from './live.js';
 import { WORLDS, LEVEL_N, BALLS, R, levelOf, levelName, makeWorld, mkBall, stepBall, interact, applyEvent, pressedButtons, gatesToOpen, foePos, clamp } from './rollengine.js';
@@ -20,7 +20,7 @@ function saveBest(uid, i, r) {
   } catch {}
 }
 const fmtT = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
-const WORLD_BTN = ['green', 'orange', 'teal', 'blue', 'purple', 'pink', 'red'];
+const WORLD_BTN = ['green', 'orange', 'teal', 'blue', 'purple', 'pink', 'red', 'teal', 'purple'];
 
 function BallBadge({ ci, size = 44, happy }) {
   const ref = useRef(null);
@@ -43,7 +43,7 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
   const isHost = solo || (room && room.host === myId);
   const myFirst = String((me && me.name) || 'You').split(' ')[0];
   const meta = { n: myFirst, a: me && me.avatar, w: watch ? 1 : 0 };
-  const relay = useRoomLink({ id: solo || !room ? null : `roll-${room.rm}`, myId, enabled: !solo && !!room, meta, fast: ['pl'] });
+  const relay = useRoomLink({ id: solo || !room ? null : `roll-${room.rm}`, myId, enabled: !solo && !!room, meta, fast: ['pl'], audio: !watch });
   const [phase, setPhase] = useState('menu');
   const [roster, setRoster] = useState(solo ? ['me'] : [room && room.host].filter(Boolean));
   const [names, setNames] = useState({});
@@ -54,6 +54,8 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
   const [paused, setPaused] = useState(false);
   const [leaveAsk, setLeaveAsk] = useState(false);
   const [quick, setQuick] = useState(false);
+  const [people, setPeople] = useState(false);
+  const [notes, pushNote] = useNotices();
   const [best, setBest] = useState(() => readBest(uid));
   const [lvl, setLvl] = useState(0);
   const [follow, setFollow] = useState(null);
@@ -128,6 +130,7 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
   const metaRef = useRef({});
   const joinOrder = useRef([]);
   const watchRef = useRef(watch);
+  const rosterSeen = useRef({ list: null, at: Date.now(), bye: new Set() });
   if (typeof window !== 'undefined' && window.__zfake) window.__zroll = { world: () => WR.current, balls: () => balls.current, roster: () => rosterRef.current };
 
   const say = (text, sec) => { setToast({ text, at: Date.now(), life: sec || 2.4 }); clearTimeout(toastTimer.current); toastTimer.current = setTimeout(() => setToast(null), (sec || 2.4) * 1000); };
@@ -191,7 +194,7 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
       }),
       relay.on('ev', (m) => { const W = WR.current; if (!W || m.i !== W.L.index || !m.e) return; applyEvent(W, m.e); if (m.e.k === 'home' && balls.current[m.e.who]) balls.current[m.e.who].home = true; }),
       relay.on('emo', (m) => { const e = String(m.e || ''); if (!EMOTES.includes(e)) return; bubblesRef.current[m.from] = { text: e, t: 0, life: 1.8 }; Sfx.play('pop', { vol: 0.5 }); }),
-      relay.on('bye', (m) => { const n = namesRef.current[m.from] || 'A friend'; if (rosterRef.current.includes(m.from)) say(`${n} left the game`, 3); }),
+      relay.on('bye', (m) => { const n = namesRef.current[m.from] || 'A friend'; if (rosterRef.current.includes(m.from) && !rosterSeen.current.bye.has(m.from)) { rosterSeen.current.bye.add(m.from); pushNote(`${n} left the game`, 'leave'); } }),
     ];
     return () => offs.forEach((f) => f && f());
   }, [relay.on]);
@@ -221,9 +224,22 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
     return undefined;
   }, [relay.peers]);
 
+  useEffect(() => {
+    if (solo) return;
+    const R0 = rosterSeen.current;
+    const prev = R0.list;
+    R0.list = roster;
+    if (!prev || Date.now() - R0.at < 2500) return;
+    const me0 = kindOf();
+    for (const k of roster) if (!prev.includes(k) && k !== me0) { R0.bye.delete(k); pushNote(`${namesRef.current[k] || 'A friend'} joined`, 'join'); }
+    for (const k of prev) if (!roster.includes(k) && k !== me0 && !R0.bye.has(k)) { R0.bye.add(k); pushNote(`${namesRef.current[k] || 'A friend'} left the game`, 'leave'); }
+  }, [roster]);
+  const watchList = useMemo(() => watchers.map((id) => ({ id, n: names[id] || 'Friend' })), [watchers, names]);
+  useWatchNotices(watchList, pushNote, !solo && !watch);
+
   const leave = () => { if (phase === 'play' && !solo && !watch) { setLeaveAsk(true); return; } finish(); };
   const finish = () => { Sfx.stopAll(); onClose(); };
-  useBackClose(true, () => { if (ctl) setCtl(false); else if (quick) setQuick(false); else if (leaveAsk) setLeaveAsk(false); else if (paused) setPaused(false); else if (phase === 'play' && solo) setPaused(true); else if (phase !== 'menu') { if (solo || isHost) toMenu(); else leave(); } else leave(); });
+  useBackClose(true, () => { if (ctl) setCtl(false); else if (people) setPeople(false); else if (quick) setQuick(false); else if (leaveAsk) setLeaveAsk(false); else if (paused) setPaused(false); else if (phase === 'play' && solo) setPaused(true); else if (phase !== 'menu') { if (solo || isHost) toMenu(); else leave(); } else leave(); });
   const toMenu = () => { setPhase('menu'); Sfx.music(null, false); WR.current = null; if (!solo && isHost) relay.send('menu', {}); };
 
   useEffect(() => {
@@ -244,7 +260,7 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
       const raw = (ts - last) / 1000;
       last = ts;
       acc += raw;
-      if (acc < 0.0155) return;
+      if (acc < 0.0105) return;
       const dt = Math.min(0.04, acc);
       acc = 0;
       const W = WR.current, cv = cvRef.current;
@@ -373,8 +389,11 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
   const ROW = 96;
   const { top, right, bottom, left } = GS.at;
   const hb = land ? 38 : 40;
+  const talkOn = !solo && playing();
   const rowBtns = [
-    !solo && playing() && <GHudBtn key="emo" icon="smile" on={quick} tone="#F5AE1E" size={hb} label="Emojis" onPress={() => setQuick((v) => !v)} />,
+    talkOn && <GHudBtn key="mic" icon={relay.mic.on ? 'mic' : 'micoff'} on={relay.mic.on} size={hb} label={relay.mic.on ? 'Turn your mic off' : 'Turn your mic on'} onPress={relay.toggleMic} />,
+    talkOn && <GHudBtn key="ppl" icon="people" on={people} size={hb} label="Players and voice" badge={roster.length > 1 ? roster.length : null} onPress={() => { setQuick(false); setPeople(true); }} />,
+    talkOn && <GHudBtn key="emo" icon="smile" on={quick} tone="#F5AE1E" size={hb} label="Emojis" onPress={() => setQuick((v) => !v)} />,
     playing() && <GHudBtn key="gear" icon="gear" size={hb} label="Controls" onPress={() => { setQuick(false); if (solo) setPaused(true); setCtl(true); }} />,
     <GHudBtn key="x" icon={solo ? 'pause' : 'close'} size={hb} label={solo ? 'Pause' : 'Leave the game'} onPress={() => (solo ? setPaused(true) : leave())} />,
   ].filter(Boolean);
@@ -400,7 +419,7 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
         return (
           <div key={wd.id}>
             <GPanel style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ width: 30, height: 30, borderRadius: 10, background: ['#7BD25A', '#FF9E6B', '#BFE6FF', '#9AA3AD', '#8A7AD0', '#FF9FD0', '#FF8A3D'][wi], boxShadow: `0 0 0 2.5px ${INK}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, color: INK }}>{wi + 1}</span>
+              <span style={{ width: 30, height: 30, borderRadius: 10, background: ['#7BD25A', '#FF9E6B', '#BFE6FF', '#9AA3AD', '#8A7AD0', '#FF9FD0', '#FF8A3D', '#5FD0C9', '#C7B8FF'][wi], boxShadow: `0 0 0 2.5px ${INK}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, color: INK }}>{wi + 1}</span>
               <span style={{ fontSize: 17, fontWeight: 900, flex: 1 }}>{wd.name}</span>
               <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontWeight: 900, fontSize: 13.5 }}><GIcon k="star" size={16} color="#FFD23F" />{`${got}/${wd.n * 3}`}</span>
             </GPanel>
@@ -447,6 +466,7 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
                 <GHudPanel key={k} style={{ height: 24, padding: '0 9px', display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 800, whiteSpace: 'nowrap', opacity: hud.dead.includes(k) ? 0.6 : 1 }}>
                   <span style={{ width: 10, height: 10, borderRadius: 5, background: BALLS[i % 4].body, boxShadow: `0 0 0 1.5px ${INK}` }} />
                   <span>{nameOf(k)}</span>
+                  {(k === kindOf() ? relay.mic.on : !!relay.mics[k]) && <GIcon k={relay.muted[k] ? 'mute' : 'mic'} size={12} color={relay.muted[k] ? '#FF8C8C' : '#7BE05A'} ink="rgba(0,0,0,0.3)" />}
                   {hud.home.includes(k) && <GIcon k="check" size={12} color="#5BE37D" ink="rgba(0,0,0,0.3)" />}
                 </GHudPanel>
               ))}
@@ -462,6 +482,7 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
                 <GHint text={toast.text} life={toast.life || 2.4} />
               </div>
             )}
+            {relay.mic.err && <div style={{ position: 'absolute', left: '50%', top: '24%', transform: 'translateX(-50%)', pointerEvents: 'none', zIndex: 5 }}><GChip style={{ background: 'rgba(217,75,75,0.95)' }}>{relay.mic.err}</GChip></div>}
             {playing() && (
               <>
                 <div role="group" aria-label="Touch the left side to roll and the right side to jump" onPointerDown={zoneDown} onPointerMove={zoneMove} onPointerUp={zoneUp} onPointerCancel={zoneUp} onLostPointerCapture={zoneUp} onContextMenu={(e) => e.preventDefault()}
@@ -513,12 +534,21 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
                     <span style={{ fontSize: 15, fontWeight: 900, flex: 1 }}>{watch ? 'Watching' : `Players ${roster.length} of 4`}</span>
                     {isHost && onInvite && roster.length < 4 && <GPill small text="Invite" icon="plus" color="green" height={40} onPress={onInvite} />}
                   </div>
-                  {roster.map((k, i) => (
-                    <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <BallBadge ci={i} size={38} />
-                      <span style={{ fontSize: 14.5, fontWeight: 800, flex: 1 }}>{nameOf(k)}{k === (room && room.host) ? ', host' : ''}</span>
-                    </div>
-                  ))}
+                  {roster.map((k, i) => {
+                    const isMe = k === kindOf();
+                    const talk = isMe ? relay.mic.on : !!relay.mics[k];
+                    const off = !!relay.muted[k];
+                    return (
+                      <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <BallBadge ci={i} size={38} />
+                        <span style={{ fontSize: 14.5, fontWeight: 800, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nameOf(k)}{k === (room && room.host) ? ', host' : ''}</span>
+                        {talk && <GIcon k="mic" size={16} color="#7BE05A" />}
+                        {!isMe && !watch && <GBtn icon={off ? 'mute' : 'sound'} color={off ? 'red' : 'dark'} size={34} fast={false} label={off ? `Unmute ${nameOf(k)}` : `Mute ${nameOf(k)}`} onPress={() => relay.toggleMute(k)} />}
+                      </div>
+                    );
+                  })}
+                  {!watch && <GPill text={relay.mic.on ? 'Mic off' : 'Talk with mic'} icon={relay.mic.on ? 'micoff' : 'mic'} color={relay.mic.on ? 'white' : 'blue'} small wide onPress={relay.toggleMic} />}
+                  {!watch && relay.mic.err && <div style={{ fontSize: 12.5, fontWeight: 800, color: '#FF9C9C' }}>{relay.mic.err}</div>}
                   {roster.length < 2 && <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,0.75)' }}><Spinner size={16} color="#FFFFFF" />Waiting for friends to join</div>}
                   {watchers.length > 0 && <div style={{ fontSize: 12.5, fontWeight: 800, color: 'rgba(255,255,255,0.75)', display: 'flex', alignItems: 'center', gap: 6 }}><GIcon k="eye" size={14} color="#CFE6FF" />{`Watching: ${watchers.map((w) => names[w] || 'Friend').join(', ')}`}</div>}
                   {isHost && (
@@ -584,6 +614,34 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
           <div onPointerDown={(e) => e.stopPropagation()} style={{ position: 'absolute', inset: 0, zIndex: 45, background: 'rgba(10,8,24,0.55)', display: 'flex', padding: 12, overflowY: 'auto', touchAction: 'pan-y' }}>
             <div style={{ margin: 'auto', width: '100%', display: 'flex', justifyContent: 'center' }}><GControlsPanel sideways wide={land} onClose={() => setCtl(false)} /></div>
           </div>
+        )}
+        <GNotices items={notes} style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', ...(phase !== 'play' ? { top: top(64) } : land ? { top: top(46) } : { bottom: bottom(112) }), width: land ? 'min(52%, 420px)' : 'calc(100% - 40px)', zIndex: 30 }} />
+        {people && !solo && (
+          <Sheet title="Players and voice" text={relay.mic.on ? 'Your mic is on. Everyone in the game can hear you.' : 'Turn your mic on to talk while you play.'} onClose={() => setPeople(false)}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 12 }}>
+              {roster.map((k, i) => {
+                const isMe = k === kindOf();
+                const nm = nameOf(k);
+                const talk = isMe ? relay.mic.on : !!relay.mics[k];
+                const off = !!relay.muted[k];
+                return (
+                  <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 8px', borderRadius: 14, background: 'rgba(255,255,255,0.06)' }}>
+                    <BallBadge ci={i} size={36} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14.5, fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nm}{k === (room && room.host) ? ', host' : ''}</div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: talk ? '#7BE05A' : 'rgba(255,255,255,0.55)', display: 'flex', alignItems: 'center', gap: 4 }}><GIcon k={talk ? 'mic' : 'micoff'} size={12} color={talk ? '#7BE05A' : 'rgba(255,255,255,0.55)'} />{talk ? 'Mic on' : 'Mic off'}{off ? ', muted by you' : ''}</div>
+                    </div>
+                    {!isMe && <GBtn icon={off ? 'mute' : 'sound'} color={off ? 'red' : 'dark'} size={40} fast={false} label={off ? `Unmute ${nm}` : `Mute ${nm}`} onPress={() => relay.toggleMute(k)} />}
+                  </div>
+                );
+              })}
+            </div>
+            {watchers.length > 0 && <div style={{ fontSize: 12.5, fontWeight: 800, color: 'rgba(255,255,255,0.7)', display: 'flex', alignItems: 'center', gap: 6, marginTop: 12 }}><GIcon k="eye" size={14} color="#CFE6FF" />{`Watching: ${watchers.map((w) => names[w] || 'Friend').join(', ')}. They cannot hear you.`}</div>}
+            <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+              <GPill text={relay.mic.on ? 'Mic off' : 'Mic on'} icon={relay.mic.on ? 'micoff' : 'mic'} color={relay.mic.on ? 'white' : 'blue'} small wide onPress={relay.toggleMic} style={{ flex: 1 }} />
+              <GPill text="Done" color="dark" small wide onPress={() => setPeople(false)} style={{ flex: 1 }} />
+            </div>
+          </Sheet>
         )}
         {leaveAsk && (
           <Sheet title="Leave the game?" text="Your friends can keep playing without you." onClose={() => setLeaveAsk(false)}>

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { FONT, hapticTap } from '../App.jsx';
 import { Sfx } from './sfx.js';
 
@@ -35,6 +35,7 @@ export function injectKitCss() {
     '@keyframes zgk-feedl{0%{opacity:0;transform:translateX(-10px)}7%{opacity:1;transform:none}82%{opacity:1}100%{opacity:0}}',
     '@keyframes zgk-rib{0%{opacity:0;transform:scaleX(.6)}10%{opacity:1;transform:none}80%{opacity:1}100%{opacity:0}}',
     '@keyframes zgk-hint{0%{opacity:0}10%{opacity:1}85%{opacity:1}100%{opacity:0}}',
+    '@keyframes zgk-note{0%{opacity:0;transform:translateY(-10px) scale(.96)}7%{opacity:1;transform:none}86%{opacity:1;transform:none}100%{opacity:0;transform:translateY(-4px)}}',
   ].join('');
   document.head.appendChild(st);
 }
@@ -85,6 +86,9 @@ const ICON = {
   bomb: 'M10 8a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM14 9l3-3M17 3v2M19.5 4.5L18 6M21 7h-2',
   magnet: 'M5.5 4v8a6.5 6.5 0 0 0 13 0V4h-4v8a2.5 2.5 0 0 1-5 0V4zM5.5 8h4M14.5 8h4',
   help: 'M12 3.5a8.5 8.5 0 1 0 0 17 8.5 8.5 0 0 0 0-17zM9.6 9.6a2.5 2.5 0 1 1 3.6 2.2c-.7.4-1.2.9-1.2 1.7v.4M12 16.8v.2',
+  eyeoff: 'M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM4 4l16 16',
+  door: 'M10 4H5v16h5M14 8l4 4-4 4M18 12H9',
+  enter: 'M14 4h5v16h-5M9 8l4 4-4 4M13 12H4',
 };
 const FILLED = new Set(['dash', 'shield', 'bolt', 'flame', 'up', 'left', 'right', 'play', 'star', 'heart', 'crown', 'bomb', 'sword']);
 
@@ -431,10 +435,22 @@ export function useStageBox(ref) {
   return box;
 }
 const envIn = (n) => `env(safe-area-inset-${n}, 0px)`;
+const lockable = () => typeof window !== 'undefined' && window.screen && window.screen.orientation && typeof window.screen.orientation.lock === 'function';
 export function useGameStage(look) {
   const rootRef = useRef(null);
   const box = useStageBox(rootRef);
-  const side = !!(look && look.side) && TOUCHY && box.h > box.w * 1.08;
+  const want = !!(look && look.side) && TOUCHY;
+  useEffect(() => {
+    if (!want || !lockable()) return undefined;
+    const so = window.screen.orientation;
+    let tried = false;
+    try { const r = so.lock('landscape'); tried = true; if (r && r.catch) r.catch(() => {}); } catch {}
+    return () => { if (tried) { try { so.unlock(); } catch {} } };
+  }, [want]);
+  const sideRef = useRef(false);
+  const tall = box.h > box.w * 1.08, wide = box.w > box.h * 1.08;
+  const side = want && (sideRef.current ? !wide : tall);
+  sideRef.current = side;
   const W = side ? box.h : box.w, H = side ? box.w : box.h;
   const ins = side ? { t: envIn('right'), r: envIn('bottom'), b: envIn('left'), l: envIn('top') } : { t: envIn('top'), r: envIn('right'), b: envIn('bottom'), l: envIn('left') };
   const at = { top: (px) => `calc(${px}px + ${ins.t})`, right: (px) => `calc(${px}px + ${ins.r})`, bottom: (px) => `calc(${px}px + ${ins.b})`, left: (px) => `calc(${px}px + ${ins.l})` };
@@ -489,12 +505,89 @@ export function GRibbon({ title, sub, col = '#FFFFFF', life = 2.4 }) {
   );
 }
 
+const NOTE_KIND = {
+  watch: { icon: 'eye', bg: '#2F7BF5', snd: 'click' },
+  unwatch: { icon: 'eyeoff', bg: '#5B6474', snd: 'click' },
+  leave: { icon: 'door', bg: '#E5484D', snd: 'bump' },
+  join: { icon: 'enter', bg: '#22A55B', snd: 'pop' },
+  info: { icon: 'chat', bg: '#5B6474', snd: 'click' },
+};
+export function useNotices() {
+  const [items, setItems] = useState([]);
+  const timers = useRef(new Set());
+  useEffect(() => () => { timers.current.forEach((t) => clearTimeout(t)); timers.current.clear(); }, []);
+  const push = useCallback((text, kind, life) => {
+    const L = life || 3.6;
+    const K = NOTE_KIND[kind] || NOTE_KIND.info;
+    const it = { id: `${Date.now()}${Math.random()}`, text, kind: NOTE_KIND[kind] ? kind : 'info', life: L };
+    setItems((v) => [...v.filter((x) => x.text !== text).slice(-2), it]);
+    const t = setTimeout(() => { timers.current.delete(t); setItems((v) => v.filter((x) => x !== it)); }, L * 1000 + 80);
+    timers.current.add(t);
+    try { Sfx.play(K.snd, { vol: 0.45 }); } catch {}
+  }, []);
+  return [items, push];
+}
+export function useWatchNotices(list, push, on = true) {
+  const S = useRef({ seen: new Map(), gone: new Map() });
+  const pushRef = useRef(push);
+  pushRef.current = push;
+  useEffect(() => {
+    if (!on) return;
+    const st = S.current;
+    const now = new Map();
+    for (const w of list || []) if (w && w.id) now.set(w.id, w.n || 'Friend');
+    for (const [id, n] of now) {
+      const g = st.gone.get(id);
+      if (g) { clearTimeout(g); st.gone.delete(id); } else if (!st.seen.has(id)) pushRef.current(`${n} is watching`, 'watch');
+      st.seen.set(id, n);
+    }
+    for (const [id, n] of st.seen) {
+      if (now.has(id) || st.gone.has(id)) continue;
+      st.gone.set(id, setTimeout(() => { st.gone.delete(id); st.seen.delete(id); pushRef.current(`${n} stopped watching`, 'unwatch'); }, 2500));
+    }
+  }, [list, on]);
+  useEffect(() => () => { for (const t of S.current.gone.values()) clearTimeout(t); }, []);
+}
+export function GNotices({ items, style }) {
+  injectKitCss();
+  if (!items || !items.length) return null;
+  return (
+    <div aria-live="polite" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, pointerEvents: 'none', fontFamily: FONT, ...style }}>
+      {items.map((it) => {
+        const K = NOTE_KIND[it.kind] || NOTE_KIND.info;
+        return (
+          <div key={it.id} style={{ display: 'flex', alignItems: 'center', gap: 8, maxWidth: '100%', height: 34, padding: '0 14px 0 5px', borderRadius: 17, background: 'rgba(10,12,18,0.82)', boxShadow: '0 4px 16px rgba(0,0,0,0.32), inset 0 0 0 1px rgba(255,255,255,0.08)', color: '#FFFFFF', fontSize: 13.5, fontWeight: 800, whiteSpace: 'nowrap', boxSizing: 'border-box', animation: `zgk-note ${it.life}s ease-out forwards` }}>
+            <span style={{ width: 24, height: 24, borderRadius: 12, background: K.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><GIcon k={K.icon} size={14} color="#FFFFFF" line halo={false} stroke={2.3} /></span>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{it.text}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export function GHint({ text, life = 4 }) {
   injectKitCss();
   return <div style={{ maxWidth: '100%', textAlign: 'center', fontFamily: FONT, fontSize: 12.5, fontWeight: 700, lineHeight: 1.4, color: 'rgba(255,255,255,0.9)', textShadow: '0 1px 3px rgba(0,0,0,0.85), 0 0 8px rgba(0,0,0,0.35)', pointerEvents: 'none', animation: `zgk-hint ${life}s ease-out forwards` }}>{text}</div>;
 }
 
-export function GHudSkill({ icon, label, onPress, size = 52, cool = 0, coolMax = 0, main = false, sound = 'pop' }) {
+const SKILL_ART = {
+  dash: (g) => <><defs><linearGradient id={g} x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#8CF3FF" /><stop offset="1" stopColor="#1A93D4" /></linearGradient></defs><path d="M1.6 9.6h4.2M.8 12.4h4.6M1.8 15.2h3.8" stroke="#C8F8FF" strokeWidth="1.6" strokeLinecap="round" /><path d="M8.6 12.4c2.3-3.7 6.4-5.2 9.9-3.7 1.4.6 2.5 1.7 3.5 3.7-1 2-2.1 3.1-3.5 3.7-3.5 1.5-7.6 0-9.9-3.7z" fill={`url(#${g})`} /><path d="M9.2 12.4L5.9 8.8v7.2z" fill={`url(#${g})`} /><path d="M13.2 9.2c.9 1 1.3 2 1.3 3.2s-.4 2.2-1.3 3.2" stroke="#0E5E8C" strokeWidth="1" fill="none" strokeLinecap="round" opacity=".55" /><circle cx="18.4" cy="11.3" r="1.15" fill="#062A3E" /><circle cx="18.7" cy="11" r=".38" fill="#FFFFFF" /></>,
+  suck: (g) => <><defs><linearGradient id={g} x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#E2C6FF" /><stop offset="1" stopColor="#7B47E6" /></linearGradient></defs><path d="M10.8 12a1.2 1.2 0 0 1 2.4 0 2.4 2.4 0 0 1-4.8 0 3.6 3.6 0 0 1 7.2 0 4.8 4.8 0 0 1-9.6 0 6 6 0 0 1 12 0" fill="none" stroke={`url(#${g})`} strokeWidth="1.9" strokeLinecap="round" /><circle cx="20.6" cy="5.4" r="1.4" fill="#E9D8FF" /><circle cx="3.6" cy="18.8" r="1.2" fill="#E9D8FF" /><circle cx="20.8" cy="18.2" r=".9" fill="#E9D8FF" opacity=".8" /><circle cx="4" cy="5.8" r=".8" fill="#E9D8FF" opacity=".7" /></>,
+  shield: (g) => <><defs><linearGradient id={g} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#A8E2FF" /><stop offset="1" stopColor="#2771E0" /></linearGradient></defs><path d="M12 2.6l7.8 3.1v5.9c0 4.7-3.2 8.2-7.8 9.8-4.6-1.6-7.8-5.1-7.8-9.8V5.7z" fill={`url(#${g})`} /><path d="M12 4.6l6 2.4v4.6c0 3.7-2.5 6.5-6 7.8z" fill="#FFFFFF" opacity=".16" /><circle cx="9.4" cy="10" r="2.3" fill="none" stroke="#FFFFFF" strokeWidth="1.1" opacity=".9" /><circle cx="13.6" cy="14.2" r="1.4" fill="none" stroke="#FFFFFF" strokeWidth="1" opacity=".8" /><circle cx="14.6" cy="9" r=".9" fill="#FFFFFF" opacity=".85" /></>,
+  shock: (g) => <><defs><linearGradient id={g} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#FFF58A" /><stop offset="1" stopColor="#F59E0B" /></linearGradient></defs><circle cx="12" cy="12" r="9.6" fill="none" stroke="#FFE45A" strokeWidth="1.3" strokeDasharray="2.6 2.2" opacity=".9" /><path d="M13.6 3.4L6.6 13.4h4.8l-1.3 7.2 7.2-10.4h-4.9z" fill={`url(#${g})`} /><path d="M13.6 3.4L6.6 13.4h2.2l4.8-7.4z" fill="#FFFFFF" opacity=".35" /></>,
+  frenzy: (g) => <><defs><linearGradient id={g} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#FF9F6E" /><stop offset="1" stopColor="#E0303A" /></linearGradient></defs><path d="M2.6 12c2.6-5.4 16.2-5.4 18.8 0-2.6 5.4-16.2 5.4-18.8 0z" fill="#3B0B10" /><path d="M4.4 10.2l1.5 2.3 1.4-2.9 1.6 3.1 1.5-3.3 1.6 3.3 1.6-3.3 1.5 3.3 1.6-3.1 1.4 2.9 1.5-2.3" fill="#FFFFFF" /><path d="M4.6 13.9l1.5-1.8 1.4 2.4 1.6-2.6 1.5 2.8 1.4-2.8 1.5 2.8 1.6-2.6 1.4 2.4 1.5-1.8" fill="#FFFFFF" opacity=".92" /><path d="M2.6 12c2.6-5.4 16.2-5.4 18.8 0-2.6 5.4-16.2 5.4-18.8 0z" fill="none" stroke={`url(#${g})`} strokeWidth="2.4" strokeLinejoin="round" /><path d="M5 5.6l1.2 1.8M12 3.4v2.2M19 5.6l-1.2 1.8" stroke="#FFB27A" strokeWidth="1.4" strokeLinecap="round" /></>,
+};
+let skillSeq = 0;
+export function GSkillArt({ k, size = 28 }) {
+  const id = useRef(null);
+  if (!id.current) { skillSeq += 1; id.current = `zsk${skillSeq}`; }
+  const f = SKILL_ART[k];
+  if (!f) return null;
+  return <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" style={{ display: 'block', overflow: 'visible', filter: 'drop-shadow(0 1px 1.5px rgba(0,0,0,0.45))' }}>{f(id.current)}</svg>;
+}
+
+export function GHudSkill({ icon, art, label, onPress, size = 52, cool = 0, coolMax = 0, main = false, sound = 'pop' }) {
   injectKitCss();
   const [down, setDown] = useState(false);
   const busy = cool > 0;
@@ -511,7 +604,7 @@ export function GHudSkill({ icon, label, onPress, size = 52, cool = 0, coolMax =
       style={{ position: 'relative', width: size, height: size, padding: 0, border: 'none', borderRadius: '50%', background: 'transparent', cursor: busy ? 'default' : 'pointer', flexShrink: 0, transform: down ? 'scale(0.94)' : 'none', transition: 'transform 0.06s ease-out' }}>
       <span aria-hidden="true" style={{ position: 'absolute', inset: 0, borderRadius: '50%', overflow: 'hidden', background: down ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.3)', boxShadow: `inset 0 0 0 ${main ? 2 : 1.5}px rgba(255,255,255,${busy ? 0.32 : main ? 0.82 : 0.62})`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         {frac > 0 && <span style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: `conic-gradient(rgba(0,0,0,0.5) ${frac * 360}deg, rgba(0,0,0,0) 0deg)` }} />}
-        <span style={{ position: 'relative', opacity: busy ? 0.45 : 1 }}><GIcon k={icon} size={Math.round(size * 0.44)} color="#FFFFFF" line stroke={main ? 2.3 : 2.1} /></span>
+        <span style={{ position: 'relative', opacity: busy ? 0.45 : 1, filter: busy ? 'grayscale(0.6)' : 'none' }}>{art ? <GSkillArt k={art} size={Math.round(size * 0.56)} /> : <GIcon k={icon} size={Math.round(size * 0.44)} color="#FFFFFF" line stroke={main ? 2.3 : 2.1} />}</span>
         {busy && coolMax > 1.5 && <span style={{ position: 'absolute', left: 0, right: 0, top: '50%', transform: 'translateY(-50%)', textAlign: 'center', fontFamily: FONT, fontWeight: 800, fontSize: Math.round(size * 0.3), color: '#FFFFFF', textShadow: '0 1px 3px rgba(0,0,0,0.9)' }}>{Math.ceil(cool)}</span>}
       </span>
     </button>

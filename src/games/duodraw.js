@@ -488,6 +488,7 @@ export function buildStatic(W, s) {
       if (!busy) floorDecal(c, x * s, y * s, s, r, T, glows, x, y);
     }
   }
+  if (W.rails) for (const k of Object.keys(W.rails)) { const [rx, ry] = k.split(',').map(Number); railArt(c, rx * s, ry * s, s, W.rails[k]); }
   for (const [x, y] of C.spikes) spikeBase(c, x * s, y * s, s, W.map[y][x]);
   for (const [x, y] of C.pads) padBase(c, x * s, y * s, s);
   for (const [x, y] of C.tplates) tplateBase(c, x * s, y * s, s);
@@ -689,6 +690,47 @@ function drawMural(c, s, W) {
   c.restore();
 }
 
+function railArt(c, X, Y, s, sides) {
+  const wood = '#8A5A2E', hi = '#B57F48', dk = '#4A2D16';
+  c.save();
+  for (const sd of sides) {
+    if (sd === 'b' || sd === 't') {
+      const by = sd === 'b' ? Y + s * 0.97 : Y + s * 0.3, h = s * 0.34;
+      for (const ry of [0.78, 0.38]) { c.fillStyle = dk; c.fillRect(X, by - h * ry - s * 0.04, s, s * 0.08); c.fillStyle = wood; c.fillRect(X, by - h * ry - s * 0.03, s, s * 0.05); c.fillStyle = hi; c.fillRect(X, by - h * ry - s * 0.03, s, s * 0.018); }
+      for (const px of [0.1, 0.9]) { c.fillStyle = dk; c.fillRect(X + s * px - s * 0.05, by - h - s * 0.02, s * 0.1, h + s * 0.02); c.fillStyle = wood; c.fillRect(X + s * px - s * 0.035, by - h, s * 0.07, h - s * 0.02); c.fillStyle = hi; c.fillRect(X + s * px - s * 0.035, by - h, s * 0.07, s * 0.03); }
+    } else {
+      const bx = sd === 'r' ? X + s * 0.93 : X + s * 0.07;
+      c.fillStyle = dk; c.fillRect(bx - s * 0.05, Y, s * 0.1, s);
+      c.fillStyle = wood; c.fillRect(bx - s * 0.035, Y, s * 0.07, s);
+      c.fillStyle = hi; c.fillRect(bx - s * 0.035, Y, s * 0.022, s);
+      for (const py of [0.12, 0.88]) { c.fillStyle = dk; c.fillRect(bx - s * 0.075, Y + s * py - s * 0.075, s * 0.15, s * 0.15); c.fillStyle = wood; c.fillRect(bx - s * 0.058, Y + s * py - s * 0.058, s * 0.116, s * 0.116); c.fillStyle = hi; c.fillRect(bx - s * 0.058, Y + s * py - s * 0.058, s * 0.116, s * 0.03); }
+    }
+  }
+  c.restore();
+}
+function drawWood(c, s, t, W) {
+  if (!W.woods || !W.woods.length) return;
+  for (const g of W.woods) {
+    const b = g.done ? 1 : clamp(g.burn / 1.1, 0, 1);
+    for (const [x, y] of g.tiles) {
+      const X = x * s, Y = y * s;
+      if (g.done) { c.fillStyle = 'rgba(28,22,18,0.55)'; c.beginPath(); c.ellipse(X + s * 0.5, Y + s * 0.72, s * 0.4, s * 0.16, 0, 0, TAU); c.fill(); c.fillStyle = 'rgba(70,50,35,0.6)'; for (let i = 0; i < 3; i++) c.fillRect(X + s * (0.2 + i * 0.25), Y + s * 0.66, s * 0.12, s * 0.05); continue; }
+      const dark = (v, k) => { const n = parseInt(v.slice(1), 16), r0 = n >> 16, g0 = (n >> 8) & 255, b0 = n & 255; return `rgb(${Math.round(r0 * (1 - k))},${Math.round(g0 * (1 - k * 1.1))},${Math.round(b0 * (1 - k * 1.2))})`; };
+      const k = b * 0.85;
+      c.fillStyle = dark('#3E2614', k); c.fillRect(X, Y, s, s);
+      for (let i = 0; i < 4; i++) {
+        const px = X + s * (0.03 + i * 0.24);
+        c.fillStyle = dark(i % 2 ? '#9A6534' : '#A8713D', k); c.fillRect(px, Y + s * 0.04, s * 0.22, s * 0.94);
+        c.fillStyle = dark('#C48A52', k); c.fillRect(px, Y + s * 0.04, s * 0.22, s * 0.05);
+        c.fillStyle = 'rgba(60,35,15,0.35)'; c.fillRect(px + s * 0.09, Y + s * 0.25, s * 0.02, s * 0.5);
+      }
+      for (const by of [0.26, 0.7]) { c.fillStyle = dark('#3A3A44', k * 0.5); c.fillRect(X, Y + s * by, s, s * 0.09); c.fillStyle = '#6B6B78'; for (let i = 0; i < 4; i++) { c.beginPath(); c.arc(X + s * (0.14 + i * 0.24), Y + s * (by + 0.045), s * 0.022, 0, TAU); c.fill(); } }
+      if (b > 0) {
+        for (let i = 0; i < 3; i++) flame(c, X + s * (0.22 + i * 0.28), Y + s * (0.98 - b * 0.5), s * (0.32 + Math.sin(t * 9 + i + x) * 0.06), LOOK.sun.flame, t, i * 2 + x);
+      }
+    }
+  }
+}
 function drawVines(c, s, t, W) {
   for (const [x, y] of prepare(W).V) {
     const X = x * s, Y = y * s;
@@ -827,6 +869,48 @@ function drawFoe(c, s, t, f) {
     c.fillStyle = '#FFFFFF'; c.beginPath(); c.ellipse(-s * 0.08 + fx2, -s * 0.2, s * 0.055, s * 0.065, 0, 0, TAU); c.ellipse(s * 0.08 + fx2, -s * 0.2, s * 0.055, s * 0.065, 0, 0, TAU); c.fill();
     c.fillStyle = '#1E2A14'; c.beginPath(); c.arc(-s * 0.07 + fx2 * 1.5, -s * 0.19, s * 0.026, 0, TAU); c.arc(s * 0.09 + fx2 * 1.5, -s * 0.19, s * 0.026, 0, TAU); c.fill();
     c.strokeStyle = '#1E2A14'; c.lineWidth = Math.max(1, s * 0.018); c.beginPath(); c.arc(fx2, -s * 0.1, s * 0.05, 0.2, Math.PI - 0.2); c.stroke();
+  } else if (f.k === 'spider') {
+    const hop = f.hop || 0;
+    c.fillStyle = 'rgba(0,0,0,0.3)'; c.beginPath(); c.ellipse(X, Y, s * 0.24 * (1 - hop * 0.3), s * 0.08, 0, 0, TAU); c.fill();
+    c.translate(X, Y - s * 0.16 - hop * s * 0.5); c.scale((f.face || 1) * (0.6 + k * 0.4), 0.6 + k * 0.4);
+    const crouch = f.mode === 3 ? 0.06 : 0;
+    const wk = Math.sin((f.walk || 0) * 3);
+    c.strokeStyle = flash ? '#FFFFFF' : '#24152E'; c.lineWidth = Math.max(1.2, s * 0.04); c.lineCap = 'round'; c.lineJoin = 'round';
+    for (let i = 0; i < 4; i++) {
+      const a = (i - 1.5) * 0.34, sw = (i % 2 ? wk : -wk) * 0.04 * s;
+      for (const side of [-1, 1]) {
+        c.beginPath(); c.moveTo(side * s * 0.06, -s * 0.02);
+        c.lineTo(side * s * (0.2 + Math.abs(a) * 0.05), -s * (0.15 - crouch) + a * s * 0.12 + sw);
+        c.lineTo(side * s * (0.33 + Math.abs(a) * 0.04), s * (0.08 + a * 0.18) + sw);
+        c.stroke();
+      }
+    }
+    const g = c.createRadialGradient(-s * 0.05, -s * 0.09, s * 0.02, 0, -s * 0.02, s * 0.2);
+    g.addColorStop(0, flash ? '#FFFFFF' : '#74508F'); g.addColorStop(1, flash ? '#FFFFFF' : '#2A1838');
+    c.fillStyle = g; c.beginPath(); c.ellipse(-s * 0.03, -s * 0.03, s * 0.16, s * 0.13, 0, 0, TAU); c.fill();
+    c.fillStyle = flash ? '#FFFFFF' : '#3A2650'; c.beginPath(); c.ellipse(s * 0.11, -s * 0.04, s * 0.085, s * 0.075, 0, 0, TAU); c.fill();
+    c.fillStyle = 'rgba(255,190,70,0.75)'; c.beginPath(); c.ellipse(-s * 0.07, -s * 0.08, s * 0.06, s * 0.022, -0.35, 0, TAU); c.ellipse(-s * 0.03, -s * 0.015, s * 0.05, s * 0.018, -0.2, 0, TAU); c.fill();
+    c.fillStyle = f.mode === 3 || f.mode === 1 ? '#FF3B3B' : '#FF7A5C';
+    for (const [ex, ey, er] of [[0.14, -0.075, 0.024], [0.18, -0.05, 0.02], [0.12, -0.035, 0.017], [0.165, -0.02, 0.015]]) { c.beginPath(); c.arc(s * ex, s * ey, s * er, 0, TAU); c.fill(); }
+  } else if (f.k === 'ghost') {
+    const fl = f.hop || 0.35;
+    const pulse = 0.74 + Math.sin(t * 3 + f.id) * 0.12;
+    c.fillStyle = 'rgba(0,0,0,0.16)'; c.beginPath(); c.ellipse(X, Y, s * 0.2, s * 0.06, 0, 0, TAU); c.fill();
+    c.translate(X, Y - fl * s); c.scale((f.face || 1) * (0.6 + k * 0.4), 0.6 + k * 0.4);
+    c.globalCompositeOperation = 'lighter'; c.globalAlpha = 0.16 * k; c.fillStyle = '#9FB7FF'; c.beginPath(); c.arc(0, -s * 0.22, s * 0.38, 0, TAU); c.fill();
+    c.globalCompositeOperation = 'source-over'; c.globalAlpha = k * pulse;
+    const g = c.createLinearGradient(0, -s * 0.5, 0, s * 0.12);
+    g.addColorStop(0, flash ? '#FFFFFF' : '#F6F8FF'); g.addColorStop(1, flash ? '#FFFFFF' : 'rgba(184,200,255,0.5)');
+    c.fillStyle = g;
+    const wv = Math.sin(t * 6 + f.id) * s * 0.03;
+    c.beginPath(); c.moveTo(-s * 0.22, s * 0.05);
+    c.bezierCurveTo(-s * 0.26, -s * 0.3, -s * 0.14, -s * 0.48, 0, -s * 0.48);
+    c.bezierCurveTo(s * 0.14, -s * 0.48, s * 0.26, -s * 0.3, s * 0.22, s * 0.05);
+    c.quadraticCurveTo(s * 0.15, s * 0.13 + wv, s * 0.08, s * 0.04); c.quadraticCurveTo(0, s * 0.13 - wv, -s * 0.08, s * 0.04); c.quadraticCurveTo(-s * 0.15, s * 0.13 + wv, -s * 0.22, s * 0.05);
+    c.fill();
+    c.globalAlpha = k;
+    c.fillStyle = '#1C1A2E'; c.beginPath(); c.ellipse(-s * 0.075, -s * 0.27, s * 0.042, s * 0.06, 0, 0, TAU); c.ellipse(s * 0.075, -s * 0.27, s * 0.042, s * 0.06, 0, 0, TAU); c.fill();
+    c.beginPath(); c.ellipse(0, -s * 0.14, s * 0.045, s * (f.mode === 1 ? 0.055 : 0.03), 0, 0, TAU); c.fill();
   } else {
     const wk = Math.sin((f.walk || 0) * 2.4);
     c.fillStyle = 'rgba(0,0,0,0.3)'; c.beginPath(); c.ellipse(X, Y, s * 0.24, s * 0.08, 0, 0, TAU); c.fill();
@@ -849,7 +933,7 @@ function drawFoe(c, s, t, f) {
   }
   c.restore();
   if (f.frz > 0 && f.dead <= 0) {
-    const lift = f.k === 'bat' ? 0.72 : 0;
+    const lift = f.k === 'bat' ? 0.72 : f.k === 'ghost' ? 0.35 : 0;
     const a = Math.min(1, f.frz / 0.4);
     c.save(); c.globalAlpha = 0.8 * a;
     const bx = X - s * 0.3, by = Y - s * (0.78 + lift), bw = s * 0.6, bh = s * 0.82;
@@ -1228,6 +1312,7 @@ export function render(ctx, W, V) {
   const sc = T.sconce === 'frost' ? ['#F2FBFF', '#9FE0FF', '#4AA8FF'] : T.sconce === 'jade' ? ['#F0FFF4', '#8CFFBE', '#22C46E'] : LOOK.sun.flame;
   if (T.sconce !== 'crystal') for (const [x, y] of prepare(W).sconces) flame(c, (x + 0.5) * s, (y + 0.67) * s, s * 0.3, sc, t, x * 3 + y);
   drawVines(c, s, t, W);
+  drawWood(c, s, t, W);
   for (const g of W.gems) drawGem(c, s, t, g);
   const ents = [];
   if (W.braz) { ents.push({ y: W.braz.F.y + 0.82, f: () => drawBrazier(c, s, t, W, 'F') }); ents.push({ y: W.braz.N.y + 0.82, f: () => drawBrazier(c, s, t, W, 'N') }); }
@@ -1235,8 +1320,17 @@ export function render(ctx, W, V) {
   if (W.chest) ents.push({ y: W.chest.y + 0.85, f: () => drawChest(c, s, t, W) });
   for (const k of ['sun', 'moon']) { const p = W.p[k]; ents.push({ y: p.y, f: () => drawPlayer(c, s, t, p) }); }
   if (W.mirrors) for (const k in W.mirrors) { const m = W.mirrors[k]; ents.push({ y: m.y + 0.8, f: () => drawMirror(c, s, t, m) }); }
-  if (W.foes) for (const f of W.foes) { if (f.dead > 0.5) continue; ents.push({ y: f.y + (f.k === 'bat' ? 0.4 : 0), f: () => drawFoe(c, s, t, f) }); }
+  if (W.foes) for (const f of W.foes) { if (f.dead > 0.5) continue; ents.push({ y: f.y + (f.k === 'bat' ? 0.4 : f.k === 'ghost' ? 0.3 : 0), f: () => drawFoe(c, s, t, f) }); }
   ents.sort((a, b) => a.y - b.y).forEach((e) => e.f());
+  if (V.aim && V.aim.dead <= 0) {
+    const f = V.aim, lift = f.k === 'bat' ? 0.72 : f.k === 'ghost' ? 0.35 : 0.2;
+    const X = f.x * s, Y = (f.y - lift - 0.1) * s, R = s * (0.38 + Math.sin(t * 6) * 0.03);
+    c.save(); c.strokeStyle = V.aimCol || '#FFD36B'; c.lineWidth = Math.max(1.6, s * 0.045); c.globalAlpha = 0.9;
+    c.beginPath(); c.arc(X, Y, R, 0, TAU); c.stroke();
+    c.lineCap = 'round';
+    for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2 + t * 1.2; c.beginPath(); c.moveTo(X + Math.cos(a) * R * 0.72, Y + Math.sin(a) * R * 0.72); c.lineTo(X + Math.cos(a) * R * 1.28, Y + Math.sin(a) * R * 1.28); c.stroke(); }
+    c.restore();
+  }
   if (W.beam) drawBeamParts(c, s, t, W);
   if (W.shots) for (const q of W.shots) drawShot(c, s, t, q);
   drawCurtains(c, s, t, W);

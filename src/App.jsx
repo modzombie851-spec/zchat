@@ -11278,6 +11278,14 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
     if (initialEdit && isSelf) startEditing();
     else if (initialShare) setShowShare(true);
   }, []);
+  const pfMenuRef = useRef(null);
+  pfMenuRef.current = (k) => { if (k === 'status') setStatusOpen(true); else if (k === 'birthday') setBdayOpen(true); else if (k === 'voice') setVoiceSheet(true); else if (k === 'edit') (onEditOverride || startEditing)(); };
+  useEffect(() => {
+    if (!inline || !isSelf) return undefined;
+    const on = (e) => { const k = e && e.detail; if (k && k !== 'song' && pfMenuRef.current) pfMenuRef.current(k); };
+    window.addEventListener('zchat-pf-open', on);
+    return () => window.removeEventListener('zchat-pf-open', on);
+  }, [inline, isSelf]);
 
   const editOnly = initialEdit && isSelf && !inline;
   const cancelEditing = () => {
@@ -11508,7 +11516,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
           ? <button onClick={pinCanMsg ? () => onMessage(profile) : pinToTop} style={pinPill(false)}>{pinCanMsg ? 'Message' : 'Following'}</button>
           : <button onClick={toggleFollow} style={pinPill(followState !== 'pending')}>{followLabel(followState, theyFollowMe)}</button>;
   const pinRight = isSelf
-    ? (inline ? (onMenu ? <div role="button" aria-label="Settings and more" onClick={onMenu} style={pinIcon}><SettingsIcon size={22} /></div> : null) : <div role="button" aria-label="Settings" onClick={onOpenSettings} style={pinIcon}><SettingsIcon size={22} /></div>)
+    ? (inline ? (onMenu ? <div role="button" aria-label="Settings and more" onClick={onMenu} style={pinIcon}><MenuLinesIcon size={24} /></div> : null) : <div role="button" aria-label="Settings" onClick={onOpenSettings} style={pinIcon}><SettingsIcon size={22} /></div>)
     : <div role="button" aria-label="Share profile" onClick={() => setShowShare(true)} style={pinIcon}><Share2 size={21} /></div>;
 
   const sheetRow = (icon, label, onClick, danger) => (
@@ -11559,7 +11567,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
                   </>
                 )}
                 {inline && onCreate && <HeaderIconButton label="Create" onClick={onCreate}><Plus /></HeaderIconButton>}
-                {inline && onMenu && <HeaderIconButton label="Settings and more" onClick={onMenu}><SettingsIcon /></HeaderIconButton>}
+                {inline && onMenu && <HeaderIconButton label="Settings and more" onClick={onMenu}><MenuLinesIcon /></HeaderIconButton>}
                 {!inline && isSelf && <HeaderIconButton label="Share profile" onClick={() => setShowShare(true)}><Share2 /></HeaderIconButton>}
                 {!inline && isSelf && <HeaderIconButton label="Settings" onClick={onOpenSettings}><SettingsIcon /></HeaderIconButton>}
                 {!inline && !isSelf && <HeaderIconButton label="More" onClick={() => setShowMore(true)}><MoreDotsIcon /></HeaderIconButton>}
@@ -11583,7 +11591,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
                 )}
               </div>
             )}
-            {!plateOn && (
+            {!plateOn && !(inline && !coverUrl) && (
               <PfBanner inline={inline} isSelf={isSelf} url={coverUrl} clip={coverClip} anim={coverAnim} paused={onBreak} busy={coverBusy} accept={animOn ? 'image/*,video/*' : 'image/*'} onPick={changeCover}
                 photo={shownPhoto} name={profile.name} onClose={onClose} onShare={() => setShowShare(true)} onSettings={onOpenSettings} onMore={() => setShowMore(true)} />
             )}
@@ -11614,7 +11622,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
             ) : (
               <>
             <div data-zread="1" style={{ position: 'relative', padding: '0 16px' }}>
-              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, marginTop: -54 }}>
+              <div style={{ display: 'flex', alignItems: inline && !coverUrl ? 'center' : 'flex-end', gap: 10, marginTop: inline && !coverUrl ? 4 : -54 }}>
                 <div role="button" aria-label={storyRing !== 'none' ? `Story of ${profile.name}` : 'Profile photo'} onClick={() => { if (storyRing !== 'none' && onOpenStory) onOpenStory(profile.id); else openPhotos(); }}
                   style={{ position: 'relative', flexShrink: 0, borderRadius: '50%', background: pageBg, padding: 6, cursor: 'pointer' }}>
                   <div style={{ position: 'relative' }}>
@@ -11744,7 +11752,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
                   <ProfileExtras profile={profile} isSelf={isSelf} myId={userId} onEditStatus={() => setStatusOpen(true)} onEditBirthday={() => setBdayOpen(true)} onBirthdayGift={onGift && !isSelf && !profile.is_bot && !isBlocked ? () => onGift({ ...profile, __bday: true }) : null} />
                   <PfLater ms={320}><ProfileGuestbook profile={profile} isSelf={isSelf} userId={userId} meProfile={meProfile} onOpenProfile={onOpenProfile ? (n) => onOpenProfile({ id: n.writer_id, name: n.name, username: n.username, avatar: n.avatar }) : undefined} /></PfLater>
                   <AchievementsPill userId={profile.id} onOpen={() => onOpenAchievements && onOpenAchievements(profile)} />
-                  <ProfileSong profile={profile} isSelf={isSelf} bare center={plateOn} />
+                  <ProfileSong profile={profile} isSelf={isSelf} bare center={plateOn} hook={inline} />
                 </div>
               )}
               {canSeeDetails && !isSelf && !profile.is_bot && <BdayCardRow profile={profile} center={plateOn} />}
@@ -11754,7 +11762,6 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
                   <>
                     <button onClick={onEditOverride || startEditing} style={pillBtn(false)}>Edit profile</button>
                     <button onClick={onShareOverride || (() => setShowShare(true))} style={pillBtn(false)}>Share profile</button>
-                    <GoLiveButton style={{ ...pillBtn(false), flex: '0 0 40px', padding: 0 }} />
                     {onDiscover && <button onClick={onDiscover} aria-label="Discover people" style={{ ...pillBtn(false), flex: '0 0 40px', padding: 0 }}><UserPlus size={18} /></button>}
                   </>
                 ) : (
@@ -11795,7 +11802,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
                   {!profile.is_bot && (
                     <>
                       <div ref={tabsAnchorRef} aria-hidden="true" style={{ height: 0 }} />
-                      <ProfileIconTabs value={profileTab} onChange={pickTab} top={pinH} menuKey="posts" onMenu={() => setSortOpen(true)} tabs={[['posts', 'Posts', ProfileGridIcon], ['clips', 'Clips', ProfileClipsIcon], ...psProfileTabs(profile, isSelf, psKinds), ['collection', 'Collection', ProfileGemIcon], ...(readSocialLinks(profile.social_links).length || profile.whatsapp ? [['links', 'Links', ProfileLinkTabIcon]] : []), ...crProfileTabs(profile, isSelf)]} />
+                      <ProfileIconTabs value={profileTab} onChange={pickTab} top={pinH} menuKey="posts" onMenu={() => setSortOpen(true)} tabs={[['posts', 'Posts', ProfileGridIcon], ['clips', 'Clips', ProfileClipsIcon], ...psProfileTabs(profile, isSelf, psKinds), ...(isSelf ? [] : [['collection', 'Collection', ProfileGemIcon]]), ...(readSocialLinks(profile.social_links).length || profile.whatsapp ? [['links', 'Links', ProfileLinkTabIcon]] : []), ...crProfileTabs(profile, isSelf)]} />
                       <div style={{ minHeight: 220 }}>
                       {(profileTab === 'posts' || profileTab === 'highlights') && <ProfilePosts profile={profile} isSelf={isSelf} userId={userId} meProfile={meProfile} bare pinTop={pinH + PF_TABS_H} inline={inline} sort={postSort} />}
                       {profileTab === 'clips' && <ProfilePosts profile={profile} isSelf={isSelf} userId={userId} meProfile={meProfile} bare mode="clips" pinTop={pinH + PF_TABS_H} inline={inline} />}
@@ -18539,7 +18546,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-export const APP_VERSION = '38.0V';
+export const APP_VERSION = '39.0V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -19571,7 +19578,7 @@ function ProfileHighlights({ profile, isSelf, userId, onOpenHighlight }) {
   };
   const endPress = () => clearTimeout(pressRef.current.timer);
   const circle = (content, dashed) => (
-    <div style={{ width: 70, height: 70, borderRadius: '50%', padding: 3, boxSizing: 'border-box', background: dashed ? 'transparent' : theme.border, border: dashed ? `1.5px dashed ${theme.border}` : 'none' }}>
+    <div style={{ width: 70, height: 70, borderRadius: '50%', padding: 3, boxSizing: 'border-box', background: dashed ? 'transparent' : theme.border, border: dashed ? `1px solid ${theme.border}` : 'none' }}>
       <div style={{ width: '100%', height: '100%', borderRadius: '50%', overflow: 'hidden', background: theme.dark ? '#000' : '#fff', padding: 2, boxSizing: 'border-box' }}>
         <div style={{ width: '100%', height: '100%', borderRadius: '50%', overflow: 'hidden', background: theme.rowBg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{content}</div>
       </div>
@@ -19582,7 +19589,7 @@ function ProfileHighlights({ profile, isSelf, userId, onOpenHighlight }) {
       <div style={{ display: 'flex', gap: 14, overflowX: 'auto', paddingBottom: 4 }}>
         {isSelf && (
           <div onClick={() => setCreating(true)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: 'pointer', flexShrink: 0, width: 74 }}>
-            {circle(<span style={{ fontSize: 30, fontWeight: 300, color: theme.ink, lineHeight: 1 }}>+</span>, true)}
+            {circle(<Plus size={26} strokeWidth={1.6} color={theme.ink} />, true)}
             <span style={{ fontSize: 12.5, color: theme.ink }}>New</span>
           </div>
         )}
@@ -21939,34 +21946,9 @@ function CameraCapture({ onClose, onCapture, onPickGallery, startMode = 'photo' 
   const [elapsed, setElapsed] = useState(0);
   const [flash, setFlash] = useState(false);
   const [filter, setFilter] = useState('none');
-  const [snap, setSnap] = useState('');
   const { theme } = useTheme();
   const filterRafRef = useRef(null);
   const MAX_MS = 60000;
-  useEffect(() => {
-    if (!ready || error || recordingVideo || making) return undefined;
-    let alive = true;
-    const cv = document.createElement('canvas');
-    cv.width = 96;
-    cv.height = 96;
-    const grab = () => {
-      const v = videoRef.current;
-      if (!alive || !v || !v.videoWidth || document.hidden) return;
-      try {
-        const ctx = cv.getContext('2d');
-        const s = Math.max(96 / v.videoWidth, 96 / v.videoHeight);
-        const w = v.videoWidth * s;
-        const h = v.videoHeight * s;
-        ctx.setTransform(1, 0, 0, 1, 0, 0);
-        if (facing === 'user') { ctx.translate(96, 0); ctx.scale(-1, 1); }
-        ctx.drawImage(v, (96 - w) / 2, (96 - h) / 2, w, h);
-        setSnap(cv.toDataURL('image/jpeg', 0.72));
-      } catch {}
-    };
-    const first = setTimeout(grab, 350);
-    const t = setInterval(grab, 1500);
-    return () => { alive = false; clearTimeout(first); clearInterval(t); };
-  }, [ready, error, recordingVideo, making, facing]);
 
   useEffect(() => {
     let cancelled = false;
@@ -22037,7 +22019,8 @@ function CameraCapture({ onClose, onCapture, onPickGallery, startMode = 'photo' 
         const cx = cv.getContext('2d');
         cx.filter = css;
         if (cx.filter && cx.filter !== 'none' && typeof cv.captureStream === 'function') {
-          const draw = () => { cx.drawImage(vEl, 0, 0, cv.width, cv.height); filterRafRef.current = requestAnimationFrame(draw); };
+          const fxk = filter;
+          const draw = () => { cx.drawImage(vEl, 0, 0, cv.width, cv.height); paintFilterFx(cx, cv.width, cv.height, fxk); filterRafRef.current = requestAnimationFrame(draw); };
           draw();
           stream = cv.captureStream(30);
           raw.getAudioTracks().forEach((t) => stream.addTrack(t));
@@ -22217,6 +22200,7 @@ function CameraCapture({ onClose, onCapture, onPickGallery, startMode = 'photo' 
   return (
     <div className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 520, background: '#000', color: 'white', display: 'flex', flexDirection: 'column', fontFamily: FONT }}>
       <video ref={videoRef} playsInline muted style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', transform: facing === 'user' ? 'scaleX(-1)' : 'none', filter: photoFilterCss(filter) }} />
+      <FilterFx k={filter} />
       {flash && <div style={{ position: 'absolute', inset: 0, background: 'white', opacity: 0.85 }} />}
       <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 'calc(14px + env(safe-area-inset-top)) 16px 0' }}>
         <ViewerButton label="Close" onClick={onClose}><X size={25} strokeWidth={2.6} /></ViewerButton>
@@ -22234,7 +22218,7 @@ function CameraCapture({ onClose, onCapture, onPickGallery, startMode = 'photo' 
           {making !== 'Now smile' && making !== 'Hold still' && <Spinner size={16} color="white" />}{making}
         </div>
       )}
-      {!recordingVideo && !error && !making && <div style={{ position: 'relative', marginBottom: 10 }}><FilterStrip value={filter} onPick={setFilter} thumb={snap} lens /></div>}
+      {!recordingVideo && !error && !making && <div style={{ position: 'relative', marginBottom: 10 }}><FilterStrip value={filter} onPick={setFilter} lens /></div>}
       {!recordingVideo && !error && (
         <div role="group" aria-label="Camera mode" style={{ position: 'relative', display: 'flex', justifyContent: 'center', gap: 26, marginBottom: 8 }}>
           {[['photo', 'Photo'], ['boomerang', 'Boomerang'], ['dual', 'Dual']].map(([k, label]) => {
@@ -31020,7 +31004,7 @@ function AppleMusicLink({ song }) {
   return <a href={song.u} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} style={{ fontSize: 12, fontWeight: 600, color: theme.muted, textDecoration: 'none', marginTop: 6 }}>Listen on Apple Music</a>;
 }
 const profileSongMem = new Map();
-function ProfileSong({ profile, isSelf, bare, center }) {
+function ProfileSong({ profile, isSelf, bare, center, hook }) {
   const { theme } = useTheme();
   const [song, setSong] = useState(() => (profileSongMem.has(profile.id) ? profileSongMem.get(profile.id) : validSong(profile.song)));
   const [picker, setPicker] = useState(() => !!(isSelf && profile.__song));
@@ -31037,6 +31021,12 @@ function ProfileSong({ profile, isSelf, bare, center }) {
     return () => { alive = false; };
   }, [profile.id]);
   useEffect(() => { if (isSelf) prefetchMusic(profile.country); return () => stopSong(); }, []);
+  useEffect(() => {
+    if (!hook || !isSelf) return undefined;
+    const on = (e) => { if (e && e.detail === 'song') setPicker(true); };
+    window.addEventListener('zchat-pf-open', on);
+    return () => window.removeEventListener('zchat-pf-open', on);
+  }, [hook, isSelf]);
   const save = async (s) => {
     const prev = song;
     stopSong();
@@ -31054,7 +31044,6 @@ function ProfileSong({ profile, isSelf, bare, center }) {
   if (bare && !song) {
     return (
       <>
-        <PfPill icon={<LineGlyph k="plus" size={14} sw={2.8} />} label="Add a song to your profile" onClick={() => setPicker(true)} tone="add">Song</PfPill>
         {note && <div role="alert" style={{ flexBasis: '100%', fontSize: 12.5, color: theme.muted, textAlign: center ? 'center' : 'left' }}>{note}</div>}
         {picker && <MusicPicker country={profile.country} title="Profile song" onClose={() => setPicker(false)} onPick={(s) => { setPicker(false); save(s); }} />}
       </>
@@ -31243,6 +31232,13 @@ function PfPill({ icon, children, onClick, label, tone, extra }) {
     </div>
   );
 }
+export function MenuLinesIcon({ size = 24, color = 'currentColor', strokeWidth = 2 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" aria-hidden="true">
+      <path d="M3.5 6.5h17M3.5 12h17M3.5 17.5h17" />
+    </svg>
+  );
+}
 function ProfileExtras({ profile, isSelf, myId, onEditStatus, onEditBirthday, onBirthdayGift }) {
   useStatusTick(profile.id);
   const st = activeStatusOf(profile);
@@ -31251,13 +31247,13 @@ function ProfileExtras({ profile, isSelf, myId, onEditStatus, onEditBirthday, on
   const today = bd && birthdayMdsToday().includes(bd.md);
   const zod = bd && bd.md ? zodiacOf(bd.md) : null;
   const [zodOpen, setZodOpen] = useState(false);
-  if (!st && !bd && !isSelf) return null;
+  if (!st && !bd) return null;
   const mdParts = bd && bd.md ? String(bd.md).split('-').map((n) => parseInt(n, 10)) : null;
   const mdText = mdParts && mdParts[0] >= 1 && mdParts[0] <= 12 && mdParts[1] ? `${MONTH_NAMES[mdParts[0] - 1].slice(0, 3)} ${mdParts[1]}` : '';
   const pills = [
-    !st && isSelf ? <PfPill key="st" icon={<LineGlyph k="plus" size={14} sw={2.8} />} label="Add status" onClick={onEditStatus} tone="add">Status</PfPill> : null,
+    null,
     mdText ? <PfPill key="bd" icon={<LineGlyph k="cake" size={16} color={today ? BIRTHDAY_PINK : undefined} />} label={isSelf ? 'Change birthday' : today ? 'Send a birthday gift' : mdText} onClick={isSelf ? onEditBirthday : (today ? onBirthdayGift || null : null)} tone={today ? 'party' : null}>{mdText}</PfPill>
-      : isSelf ? <PfPill key="bd" icon={<LineGlyph k="plus" size={14} sw={2.8} />} label="Add birthday" onClick={onEditBirthday} tone="add">Birthday</PfPill> : null,
+      : null,
     zod ? <PfPill key="zd" icon={<ZodiacTile k={zod.k} size={18} radius={5} />} label={`${zod.n}, zodiac sign`} onClick={() => { hapticTap(); setZodOpen(true); }}>{zod.n}</PfPill> : null,
   ];
   return <>{pills}{zodOpen && bd ? <ZodiacSheet key="zs" md={bd.md} name={profile.name} isSelf={isSelf} myId={myId} onClose={() => setZodOpen(false)} /> : null}</>;
@@ -36710,13 +36706,38 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [rollPick, setRollPick] = useState(null);
   const [gulpRoom, setGulpRoom] = useState(null);
   const [gulpPick, setGulpPick] = useState(null);
-  if (typeof window !== 'undefined' && window.__zfake) { window.__zopenGulpRoom = (rm) => setGulpRoom({ rm }); window.__zopenRoll = (rm, host) => setRollGame({ rm, host }); }
+  if (typeof window !== 'undefined' && window.__zfake) { window.__zopenGulpRoom = (rm) => setGulpRoom({ rm }); window.__zopenRoll = (rm, host, watch) => setRollGame({ rm, host, watch: !!watch }); }
   const joinLivePlay = (r) => {
     const info = (r && r.info) || {};
     if (!r) return;
     if (r.game === 'roll') { setRollGame({ rm: r.room, host: info.h || r.user_id }); return; }
     if (r.game === 'gulp' && info.co && typeof info.rm === 'string') { setGulpRoom({ rm: info.rm }); return; }
     openWatch(r);
+  };
+  const [liveByUser, setLiveByUser] = useState(() => new Map());
+  const liveUid = session && session.user ? session.user.id : null;
+  useEffect(() => {
+    if (!liveUid) return undefined;
+    let alive = true;
+    const sig = (m) => [...m.entries()].map(([k, v]) => `${k}:${v.game}:${v.room}:${JSON.stringify(v.info || {})}`).join('|');
+    const pull = () => livePlayRows(false).then((rows) => {
+      if (!alive) return;
+      const m = new Map();
+      for (const r of rows || []) if (r && r.user_id && !m.has(r.user_id)) m.set(r.user_id, r);
+      setLiveByUser((prev) => (sig(prev) === sig(m) ? prev : m));
+    });
+    pull();
+    const iv = setInterval(() => { if (document.visibilityState === 'visible') pull(); }, 40000);
+    const vis = () => { if (document.visibilityState === 'visible') pull(); };
+    document.addEventListener('visibilitychange', vis);
+    return () => { alive = false; clearInterval(iv); document.removeEventListener('visibilitychange', vis); };
+  }, [liveUid]);
+  const liveRowAct = (row, first) => {
+    const L = livePlayOf(row);
+    if (L.join && L.full) return null;
+    const act = L.join ? 'Join' : 'Watch';
+    const game = L.k === 'gulpco' ? 'their Gulp room' : GAME_TITLES[L.k] || 'their game';
+    return { act, game, label: `${act} ${first} in ${game}`, line: L.k === 'gulpco' ? 'In a Gulp room now' : `Playing ${GAME_TITLES[L.k] || 'a game'} now`, go: () => { livePlayCache.at = 0; hapticTap(); if (act === 'Join') joinLivePlay(row); else openWatch(row); } };
   };
   const startGulpRoomWith = async (profiles, rmIn) => {
     const rm = rmIn || newClientId();
@@ -45468,9 +45489,21 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       requestAnimationFrame(() => { const el = composerRef.current; if (el) { try { el.focus(); el.setSelectionRange(a, a + mid.length); } catch {} } });
       return;
     }
+    const whole = draft.trim() ? (k ? cmFancyText(draft, k) : cmPlainText(draft)) : null;
+    if (whole != null && whole.length <= MAX_CHARS && whole !== draft) setDraft(whole);
     setCmFancyOn(k || null);
     setShowTextStyle(false);
-    if (k) showSnack(`What you type next is in ${(CM_FANCY.find((x) => x.k === k) || {}).label || 'that style'}`);
+    if (k) showSnack(`${draft.trim() ? 'Your message is' : 'What you type next is'} in ${(CM_FANCY.find((x) => x.k === k) || {}).label || 'that style'}`);
+    focusComposer();
+  };
+  const cmClearStyle = () => {
+    hapticTap();
+    setTextFont(null);
+    setCmFancyOn(null);
+    if (textSize !== 'm') setTextSize('m');
+    if (textColor) setTextColor(null);
+    const plain = cmPlainText(draft);
+    if (plain !== draft) setDraft(plain);
     focusComposer();
   };
 
@@ -46539,6 +46572,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                 const c = item;
                 const isActive = activeProfile?.id === c.otherProfile.id;
                 const unread = isUnread(c);
+                const liveRow = !c.otherProfile.is_bot && liveByUser.get(c.otherProfile.id);
+                const liveAct = liveRow ? liveRowAct(liveRow, String(c.otherProfile.name || 'your friend').split(' ')[0]) : null;
                 return (
                   <SwipeRow key={'c-' + c.id} disabled={isWide} bg={isActive ? theme.inputBg : undefined} {...(() => {
                     const nm = c.otherProfile.name;
@@ -46585,10 +46620,12 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                           <div style={{ fontSize: lf(14.5), color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}><span style={{ color: theme.danger, fontWeight: 600 }}>Draft: </span><span data-zuser="">{draftMap[c.otherProfile.id].trim()}</span></div>
                         ) : (
                           <>
+                            {!unread && liveAct ? <span style={{ fontSize: lf(14.5), color: '#22A55B', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>{liveAct.line}</span> : <>
                             {c.lastFromMe && c.preview && c.preview.kind !== 'deleted' && c.preview.kind !== 'system' && <StatusTicks status={c.lastQueued ? 'queued' : c.lastMineRead && dmReceiptsOn(c, me, c.otherProfile) ? 'read' : c.lastMineDelivered ? 'delivered' : 'sent'} />}
                             {hidePreviews && c.preview && c.preview.text
                               ? <PreviewLine preview={{ kind: 'text', text: unread ? 'New message' : 'Message hidden' }} color={unread ? theme.ink : theme.muted} weight={unread ? 600 : 400} size={lf(14.5)} />
                               : <PreviewLine preview={c.preview && c.preview.text ? c.preview : { kind: 'text', text: 'Say hi \u{1F44B}' }} color={unread ? theme.ink : theme.muted} weight={unread ? 600 : 400} size={lf(14.5)} />}
+                            </>}
                           </>
                         )}
                       </div>
@@ -46596,6 +46633,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flexShrink: 0, alignSelf: 'stretch', justifyContent: 'center' }}>
                       {(c.sortTime || c.last_message_at) && <span style={{ fontSize: lf(12.5), color: unread && !isConvMutedForMe(c) ? theme.coral : theme.muted, fontWeight: unread ? 600 : 400 }}>{formatListTime(c.sortTime || c.last_message_at)}</span>}
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, minHeight: 20 }}>
+                      {liveAct && <button type="button" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); liveAct.go(); }} aria-label={liveAct.label} className="zchat-press" style={{ height: 26, padding: '0 12px', borderRadius: 13, border: 'none', background: liveAct.act === 'Join' ? '#22A55B' : theme.coral, color: '#FFFFFF', fontWeight: 700, fontSize: 13, fontFamily: FONT, cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 5 }}>{liveAct.act === 'Watch' ? <Eye size={14} strokeWidth={2.4} /> : <Play size={12} strokeWidth={0} fill="currentColor" />}{liveAct.act}</button>}
                       {snoozeBackKeys.has(chatPrefKey('dm', c.otherProfile.id)) && <SnoozeMark />}
                       {markAtKeys && markAtKeys.has(chatPrefKey('dm', c.otherProfile.id)) && <MentionMark />}
                       {isConvMutedForMe(c) && <BellOff size={14} color={theme.muted} style={{ flexShrink: 0 }} />}
@@ -47166,8 +47204,15 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                       {draft.trim() && !editingMessage && prefOn('zchat-writing-help') && draft.trim().length >= 4 && !(activeProfile && activeProfile.is_bot) && (
                         <ComposerIconButton label="Writing help" on={writeHelp} onClick={() => { setShowTextStyle(false); setWriteHelp((v) => !v); }}><WriteHelpIcon /></ComposerIconButton>
                       )}
+                      {!showTextStyle && !editingMessage && (textFont || cmFancyOn) && (
+                        <div role="button" aria-label="Back to normal text" onClick={cmClearStyle} className="zchat-press"
+                          style={{ alignSelf: 'center', display: 'flex', alignItems: 'center', gap: 4, height: 26, padding: '0 8px 0 9px', margin: '0 2px 8px', borderRadius: 13, background: theme.accentSoft || theme.soft2, color: kitOnInk(theme), fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', cursor: 'pointer', flexShrink: 0 }}>
+                          {(FONT_STYLES.find((f) => f.key === textFont) || CM_FANCY.find((f) => f.k === cmFancyOn) || {}).label || 'Style'}
+                          <X size={13} strokeWidth={2.4} />
+                        </div>
+                      )}
                       {draft.trim() && !editingMessage ? (
-                        <ComposerIconButton label="Text style" on={showTextStyle} onClick={() => { setWriteHelp(false); setShowTextStyle((v) => !v); }}><span style={{ fontWeight: 800, fontSize: 16, letterSpacing: '-0.04em', color: showTextStyle || cmFancyOn ? theme.coral : (textColor || theme.ink2) }}>Aa</span></ComposerIconButton>
+                        <ComposerIconButton label="Text style" on={showTextStyle} onClick={() => { setWriteHelp(false); setShowTextStyle((v) => !v); }}><span style={{ fontWeight: 800, fontSize: 16, letterSpacing: '-0.04em', color: showTextStyle || cmFancyOn || textFont ? theme.coral : (textColor || theme.ink2) }}>Aa</span></ComposerIconButton>
                       ) : (
                         <>
                           <ComposerIconButton label="Photos and videos" onClick={() => { onceNextRef.current = false; hiddenNextRef.current = false; if (cameraGalleryRef.current) cameraGalleryRef.current.click(); }}><ImageIcon /></ComposerIconButton>
@@ -49342,6 +49387,193 @@ function WnGulpBigArt({ tall = false }) {
   );
 }
 
+function WnBg({ tall, src, x0, dim }) {
+  return (
+    <>
+      {tall ? <image href={src} x={x0} y="-112" width="474" height="296" preserveAspectRatio="xMidYMid slice" /> : <image href={src} x="16" y="-4" width="288" height="186" preserveAspectRatio="xMidYMid slice" />}
+      {dim && <rect x={tall ? 30 : 16} y={tall ? -112 : -4} width={tall ? 260 : 288} height={tall ? 296 : 186} fill={dim} />}
+    </>
+  );
+}
+function WnTalkArt({ tall = false }) {
+  const bx = tall ? 150 : 162, by = tall ? 44 : 74;
+  const mx = tall ? 238 : 254, my = tall ? 112 : 140;
+  return (
+    <>
+      <WnBg tall={tall} src="/roll-art.webp" x0="-14" />
+      <g transform={`translate(${tall ? 84 : 92} ${tall ? -26 : 8})`}>
+        <rect x="0" y="0" width="150" height="30" rx="15" fill="rgba(10,12,18,0.86)" />
+        <circle cx="16" cy="15" r="11" fill="#2F7BF5" />
+        <path d="M9.4 15s2.6-4.6 6.6-4.6 6.6 4.6 6.6 4.6-2.6 4.6-6.6 4.6-6.6-4.6-6.6-4.6z" fill="none" stroke="#FFFFFF" strokeWidth="1.6" />
+        <circle cx="16" cy="15" r="2" fill="#FFFFFF" />
+        <text x="34" y="19.6" fontFamily={WN_FONT} fontWeight="800" fontSize="12" fill="#FFFFFF">Maya is watching</text>
+      </g>
+      <g transform={`translate(${bx} ${by})`}>
+        <circle cx="0" cy="0" r="18" fill="#FFFFFF" stroke="rgba(27,20,48,0.85)" strokeWidth="2" />
+        <path d="M-6 16 L0 25 L6 16 Z" fill="#FFFFFF" />
+        <text x="0" y="7" textAnchor="middle" fontSize="20">{'\u{1F602}'}</text>
+      </g>
+      <g transform={`translate(${mx} ${my})`}>
+        <circle cx="0" cy="0" r="19" fill="rgba(0,0,0,0.32)" stroke="#7CF2A0" strokeWidth="2.4" />
+        <rect x="-4.6" y="-11" width="9.2" height="13.5" rx="4.6" fill="none" stroke="#7CF2A0" strokeWidth="2.1" />
+        <path d="M-8.4 0a8.4 8.4 0 0 0 16.8 0M0 8.4v3.6" fill="none" stroke="#7CF2A0" strokeWidth="2.1" strokeLinecap="round" />
+      </g>
+    </>
+  );
+}
+function WnWoodArt({ tall = false }) {
+  const gx = tall ? 96 : 106, gy = tall ? 6 : 34;
+  const flameAt = (x) => (
+    <g key={x}>
+      <path d={`M${x} 64c-9-6-7-18 0-27 2 9 10 11 8 20-1 5-4 7-8 7z`} fill="#FF9F2E" />
+      <path d={`M${x} 64c-4.5-3-3.5-10 0-14.5 1 4.5 5.5 6.5 4.5 11-.8 2.4-2.2 3.5-4.5 3.5z`} fill="#FFE07A" />
+    </g>
+  );
+  return (
+    <>
+      <WnBg tall={tall} src="/duo-art.webp" x0="-77" dim="rgba(8,6,16,0.32)" />
+      <g transform={`translate(${gx} ${gy})`}>
+        <rect x="0" y="0" width="104" height="62" fill="#3E2614" stroke={ART_INK} strokeWidth="2.6" />
+        {[0, 1, 2, 3].map((i) => <rect key={i} x={3 + i * 25} y="3" width="23" height="56" fill={i % 2 ? '#9A6534' : '#A8713D'} />)}
+        {[14, 40].map((y) => <rect key={y} x="0" y={y} width="104" height="8" fill="#3A3A44" />)}
+        {[14, 40].map((y) => [12, 38, 64, 90].map((x) => <circle key={`${x}.${y}`} cx={x} cy={y + 4} r="2" fill="#8A8A96" />))}
+        {[20, 52, 84].map(flameAt)}
+      </g>
+      <g transform={`translate(${tall ? 236 : 258} ${tall ? 104 : 122})`}>
+        <path d="M-15 11C-17-9-10-21 0-21S17-9 15 11Q10 16 5 11Q0 16-5 11Q-10 16-15 11Z" fill="#F6F8FF" opacity="0.94" />
+        <ellipse cx="-5.2" cy="-6.5" rx="2.8" ry="4" fill="#1C1A2E" /><ellipse cx="5.2" cy="-6.5" rx="2.8" ry="4" fill="#1C1A2E" />
+        <circle cx="0" cy="-3" r="25" fill="none" stroke="#FFB347" strokeWidth="2.4" />
+        <path d="M0-34v8M0 20v8M-31-3h8M23-3h8" stroke="#FFB347" strokeWidth="2.4" strokeLinecap="round" />
+      </g>
+      <g transform={`translate(${tall ? 70 : 62} ${tall ? 128 : 146})`} stroke="#24152E" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" fill="none">
+        {[-1, 1].map((sd) => [-6, -2, 2, 6].map((dy) => <path key={`${sd}${dy}`} d={`M${sd * 4} ${dy * 0.5} L${sd * 13} ${dy - 6} L${sd * 20} ${dy + 5}`} />))}
+        <ellipse cx="0" cy="0" rx="10" ry="8" fill="#5A3A78" stroke="none" />
+        <circle cx="7" cy="-2" r="1.8" fill="#FF3B3B" stroke="none" /><circle cx="3" cy="-3" r="1.6" fill="#FF3B3B" stroke="none" />
+      </g>
+    </>
+  );
+}
+function WnFilterArt({ tall = false }) {
+  const rid = React.useId().replace(/[^a-zA-Z0-9]/g, '');
+  const y0 = tall ? -30 : 4;
+  const H = tall ? 206 : 172;
+  const thumbs = [['beach', 'Warm', null], ['coffee', 'Film', null], ['city', 'Mono', `url(#gm${rid})`], ['flowers', 'Peach', null]];
+  return (
+    <>
+      <defs>
+        <filter id={`gm${rid}`}><feColorMatrix type="saturate" values="0" /></filter>
+        <clipPath id={`ph${rid}`}><rect x="8" y="8" width="112" height={H - 74} rx="10" /></clipPath>
+      </defs>
+      <g transform={`translate(96 ${y0})`}>
+        <rect x="0" y="0" width="128" height={H} rx="18" fill="#0F0F10" {...ak} strokeWidth="2.6" />
+        <image href={filterSceneUrl('beach')} x="8" y="8" width="112" height={H - 74} preserveAspectRatio="xMidYMid slice" clipPath={`url(#ph${rid})`} />
+        <rect x="8" y="8" width="112" height={H - 74} rx="10" fill="#FFB347" opacity="0.18" />
+        <text x="10" y={H - 54} fontFamily={WN_FONT} fontWeight="800" fontSize="8" fill="#FFFFFF">Portrait</text>
+        <text x="46" y={H - 54} fontFamily={WN_FONT} fontWeight="700" fontSize="8" fill="rgba(255,255,255,0.55)">Warm</text>
+        <text x="74" y={H - 54} fontFamily={WN_FONT} fontWeight="700" fontSize="8" fill="rgba(255,255,255,0.55)">Film</text>
+        {thumbs.map(([sc, label, flt], i) => (
+          <g key={sc} transform={`translate(${8 + i * 29} ${H - 46})`}>
+            <defs><clipPath id={`t${rid}${i}`}><rect x="0" y="0" width="25" height="30" rx="5" /></clipPath></defs>
+            <image href={filterSceneUrl(sc)} x="0" y="0" width="25" height="30" preserveAspectRatio="xMidYMid slice" clipPath={`url(#t${rid}${i})`} filter={flt || undefined} />
+            {i === 0 && <rect x="-1.5" y="-1.5" width="28" height="33" rx="6.5" fill="none" stroke="#FFFFFF" strokeWidth="1.6" />}
+            <text x="12.5" y="40" textAnchor="middle" fontFamily={WN_FONT} fontWeight="700" fontSize="7" fill="#FFFFFF">{label}</text>
+          </g>
+        ))}
+      </g>
+    </>
+  );
+}
+function WnMenuArt({ tall = false }) {
+  const y0 = tall ? -30 : 6;
+  const H = tall ? 206 : 170;
+  const rows = [['Birthday', '#F0507A'], ['Profile song', '#1D7BF0'], ['Voice intro', '#22A55B']];
+  return (
+    <g transform={`translate(96 ${y0})`}>
+      <rect x="0" y="0" width="128" height={H} rx="18" fill="#FFFFFF" {...ak} strokeWidth="2.6" />
+      <rect x="12" y="14" width="48" height="7" rx="3.5" fill="#0F0F10" />
+      <path d="M100 13.5h16M100 18h16M100 22.5h16" stroke="#0F0F10" strokeWidth="2" strokeLinecap="round" />
+      <circle cx="30" cy="48" r="16" fill="#F6C9A8" />
+      {[62, 86, 110].map((x) => <g key={x}><rect x={x - 7} y="40" width="14" height="6" rx="3" fill="#0F0F10" /><rect x={x - 9} y="50" width="18" height="4" rx="2" fill="#A0A0A5" /></g>)}
+      <rect x="12" y="72" width="49" height="15" rx="5" fill="#EFEFEF" /><rect x="66" y="72" width="49" height="15" rx="5" fill="#EFEFEF" />
+      <g transform={`translate(6 ${H - 82})`}>
+        <rect x="0" y="0" width="116" height="76" rx="12" fill="#FFFFFF" stroke="rgba(0,0,0,0.12)" strokeWidth="1.2" />
+        {rows.map(([t, c], i) => (
+          <g key={t} transform={`translate(10 ${9 + i * 22})`}>
+            <circle cx="6" cy="6" r="6" fill={c} />
+            <text x="18" y="9.5" fontFamily={WN_FONT} fontWeight="700" fontSize="9" fill="#0F0F10">{t}</text>
+            <path d="M92 3l3 3-3 3" fill="none" stroke="#A0A0A5" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+          </g>
+        ))}
+      </g>
+    </g>
+  );
+}
+function WnAttachArt({ tall = false }) {
+  const y0 = tall ? 6 : 34;
+  return (
+    <g transform={`translate(40 ${y0})`}>
+      <rect x="0" y="0" width="240" height="150" rx="20" fill="#FFFFFF" {...ak} strokeWidth="2.6" />
+      <rect x="104" y="8" width="32" height="4" rx="2" fill="#DADADF" />
+      {[0, 1].map((i) => (
+        <g key={i} transform={`translate(${14 + i * 110} 22)`}>
+          <rect x="0" y="0" width="102" height="34" rx="10" fill="#EFEFEF" />
+          <rect x="10" y="10" width="14" height="14" rx="3" fill="none" stroke="#0F0F10" strokeWidth="1.8" />
+          <text x="32" y="16" fontFamily={WN_FONT} fontWeight="800" fontSize="9.5" fill="#0F0F10">{i ? 'Camera' : 'Gallery'}</text>
+          <text x="32" y="27" fontFamily={WN_FONT} fontWeight="600" fontSize="7.5" fill="#8E8E93">{i ? 'Photo or video' : 'From your phone'}</text>
+        </g>
+      ))}
+      {Array.from({ length: 8 }, (_, i) => (
+        <g key={i} transform={`translate(${36 + (i % 4) * 56} ${78 + Math.floor(i / 4) * 36})`}>
+          <circle cx="0" cy="0" r="12" fill="#EFEFEF" />
+          <circle cx="0" cy="0" r="4.5" fill="none" stroke="#0F0F10" strokeWidth="1.6" />
+        </g>
+      ))}
+    </g>
+  );
+}
+function WnChatsJoinArt({ tall = false }) {
+  const y0 = tall ? -26 : 18;
+  const row = (y, name, line, act, col, av) => (
+    <g transform={`translate(0 ${y})`}>
+      <circle cx="22" cy="22" r="15" fill={av} />
+      <text x="44" y="18" fontFamily={WN_FONT} fontWeight="800" fontSize="11.5" fill={ART_INK}>{name}</text>
+      <text x="44" y="33" fontFamily={WN_FONT} fontWeight="700" fontSize="10" fill="#22A55B">{line}</text>
+      <rect x="190" y="10" width="50" height="24" rx="12" fill={col} />
+      <text x="215" y="26" textAnchor="middle" fontFamily={WN_FONT} fontWeight="800" fontSize="11" fill="#FFFFFF">{act}</text>
+    </g>
+  );
+  return (
+    <g transform={`translate(36 ${y0})`}>
+      <rect x="-6" y="-6" width="260" height="112" rx="16" fill={ART_C.card} {...ak} strokeWidth="2.6" />
+      {row(4, 'Ana', 'Playing Roll Squad now', 'Join', '#22A55B', '#F6C9A8')}
+      <rect x="10" y="51" width="228" height="1" fill="rgba(0,0,0,0.08)" />
+      {row(54, 'Leo', 'Playing Two Torches now', 'Watch', '#1D7BF0', '#C9DFFF')}
+    </g>
+  );
+}
+function WnSkillsArt({ tall = false }) {
+  const cy = tall ? 118 : 140;
+  const xs = tall ? [70, 120, 170, 220, 262] : [64, 118, 172, 226, 276];
+  const icons = [
+    <g key="d"><path d="M-12 -3h6M-13 0h6M-12 3h6" stroke="#C8F8FF" strokeWidth="1.6" strokeLinecap="round" /><path d="M-5 0c2.4-3.8 6.6-5.4 10.2-3.8 1.4.6 2.6 1.8 3.6 3.8-1 2-2.2 3.2-3.6 3.8C1.6 5.4-2.6 3.8-5 0z" fill="#3BB8EA" /><path d="M-4.4 0L-8 -3.6v7.2z" fill="#3BB8EA" /><circle cx="5" cy="-1" r="1.1" fill="#062A3E" /></g>,
+    <path key="s" d="M-1.2 0a1.2 1.2 0 0 1 2.4 0 2.4 2.4 0 0 1-4.8 0 3.6 3.6 0 0 1 7.2 0 4.8 4.8 0 0 1-9.6 0 6 6 0 0 1 12 0" fill="none" stroke="#B48CFF" strokeWidth="1.9" strokeLinecap="round" />,
+    <path key="h" d="M0-9.4l7.8 3.1v5.9c0 4.7-3.2 8.2-7.8 9.8-4.6-1.6-7.8-5.1-7.8-9.8v-5.9z" fill="#5AA2F2" />,
+    <path key="b" d="M1.6-8.6L-5.4 1.4h4.8l-1.3 7.2 7.2-10.4H.4z" fill="#FFCF3A" />,
+    <g key="f"><path d="M-9.4 0c2.6-5.4 16.2-5.4 18.8 0-2.6 5.4-16.2 5.4-18.8 0z" fill="#3B0B10" stroke="#F0623E" strokeWidth="2.2" /><path d="M-7.6-1.8l1.5 2.3 1.4-2.9 1.6 3.1 1.5-3.3 1.6 3.3 1.6-3.3 1.5 3.3 1.6-3.1 1.4 2.9 1.5-2.3" fill="#FFFFFF" /></g>,
+  ];
+  return (
+    <>
+      <WnBg tall={tall} src="/gulp-art.webp" x0="-140" dim="rgba(4,14,30,0.3)" />
+      {xs.map((x, i) => (
+        <g key={i} transform={`translate(${x} ${cy}) scale(${i === 0 ? 1.25 : 1})`}>
+          <circle cx="0" cy="0" r="17" fill="rgba(0,0,0,0.34)" stroke="rgba(255,255,255,0.8)" strokeWidth="1.8" />
+          <g transform="scale(1.2)">{icons[i]}</g>
+        </g>
+      ))}
+    </>
+  );
+}
+
 export const WN_THUMBS = {
   gulp33: { bg: 'sky', draw: () => (<image href="/gulp-art.webp" x="16" y="-4" width="288" height="186" preserveAspectRatio="xMidYMid slice" />) },
   duo33: { bg: 'night', draw: () => (<image href="/duo-art.webp" x="16" y="-4" width="288" height="186" preserveAspectRatio="xMidYMid slice" />) },
@@ -49364,6 +49596,13 @@ export const WN_THUMBS = {
   look38: { bg: 'sky', draw: () => <WnLookArt /> },
   roll38: { bg: 'sky', draw: () => <WnRollPadArt /> },
   gulp38: { bg: 'sky', draw: () => <WnGulpBigArt /> },
+  talk39: { bg: 'sky', draw: () => <WnTalkArt /> },
+  wood39: { bg: 'night', draw: () => <WnWoodArt /> },
+  filter39: { bg: 'peach', draw: () => <WnFilterArt /> },
+  menu39: { bg: 'lilac', draw: () => <WnMenuArt /> },
+  attach39: { bg: 'mint', draw: () => <WnAttachArt /> },
+  join39: { bg: 'sky', draw: () => <WnChatsJoinArt /> },
+  skills39: { bg: 'sky', draw: () => <WnSkillsArt /> },
   duo32: { bg: 'night', draw: () => (<>
     <rect x="16" y="128" width="288" height="60" fill="#3A2E24" />
     <path d="M118 132 V60 Q160 14 202 60 V132 Z" fill="#1E1626" {...ak} />
@@ -49940,6 +50179,9 @@ Object.assign(WN_SCENES, {
   look38h: { bg: 'sky', draw: () => <WnLookArt tall /> },
   roll38h: { bg: 'sky', draw: () => <WnRollPadArt tall /> },
   gulp38h: { bg: 'sky', draw: () => <WnGulpBigArt tall /> },
+  talk39h: { bg: 'sky', draw: () => <WnTalkArt tall /> },
+  wood39h: { bg: 'night', draw: () => <WnWoodArt tall /> },
+  filter39h: { bg: 'peach', draw: () => <WnFilterArt tall /> },
 });
 
 function WnBoardPin({ x, y, color = ART_C.coral }) {
@@ -57304,18 +57546,91 @@ export function ViewerTopBar({ onClose, title, right }) {
   );
 }
 
+export const PHOTO_FILTER_GROUPS = [['portrait', 'Portrait'], ['bright', 'Bright'], ['warm', 'Warm'], ['cool', 'Cool'], ['film', 'Film'], ['bw', 'Black and white'], ['mood', 'Mood']];
 export const PHOTO_FILTERS = [
-  { k: 'none', label: 'Normal', ops: [] },
-  { k: 'warm', label: 'Warm', ops: [['sepia', 0.22], ['saturate', 1.25], ['brightness', 1.04]] },
-  { k: 'cool', label: 'Cool', ops: [['hue', 12], ['saturate', 1.1], ['brightness', 1.03]] },
-  { k: 'vivid', label: 'Vivid', ops: [['contrast', 1.15], ['saturate', 1.5]] },
-  { k: 'mono', label: 'Mono', ops: [['grayscale', 1], ['contrast', 1.1]] },
-  { k: 'noir', label: 'Noir', ops: [['grayscale', 1], ['contrast', 1.45], ['brightness', 0.92]] },
-  { k: 'vintage', label: 'Vintage', ops: [['sepia', 0.55], ['contrast', 0.9], ['brightness', 1.06], ['saturate', 0.85]] },
-  { k: 'fade', label: 'Fade', ops: [['contrast', 0.82], ['brightness', 1.1], ['saturate', 0.8]] },
-  { k: 'rose', label: 'Rose', ops: [['sepia', 0.2], ['hue', -18], ['saturate', 1.35]] },
-  { k: 'dream', label: 'Dream', ops: [['brightness', 1.12], ['saturate', 1.3], ['contrast', 0.92], ['hue', -6]] },
+  { k: 'none', label: 'Normal', g: 'portrait', s: 'beach', ops: [] },
+  { k: 'natural', label: 'Natural', g: 'portrait', s: 'coffee', ops: [['brightness', 1.04], ['contrast', 1.04], ['saturate', 1.06]] },
+  { k: 'soft', label: 'Soft', g: 'portrait', s: 'sky', ops: [['brightness', 1.07], ['contrast', 0.9], ['saturate', 0.95]], fx: { tint: '#FFE3D3', ta: 0.3, tb: 'soft-light' } },
+  { k: 'peach', label: 'Peach', g: 'portrait', s: 'flowers', ops: [['sepia', 0.18], ['hue', -10], ['saturate', 1.18], ['brightness', 1.06]], fx: { tint: '#FFB59A', ta: 0.24, tb: 'soft-light' } },
+  { k: 'rose', label: 'Rosy', g: 'portrait', s: 'beach', ops: [['sepia', 0.2], ['hue', -18], ['saturate', 1.35]], fx: { tint: '#FF9EC4', ta: 0.16, tb: 'soft-light' } },
+  { k: 'cream', label: 'Cream', g: 'portrait', s: 'coffee', ops: [['sepia', 0.16], ['brightness', 1.08], ['contrast', 0.92], ['saturate', 0.92]], fx: { tint: '#FFF1D6', ta: 0.32, tb: 'soft-light' } },
+  { k: 'glow', label: 'Glow', g: 'portrait', s: 'forest', ops: [['brightness', 1.1], ['contrast', 0.94], ['saturate', 1.12]], fx: { glow: 0.32 } },
+  { k: 'fair', label: 'Fair', g: 'portrait', s: 'flowers', ops: [['brightness', 1.12], ['saturate', 0.9], ['contrast', 0.96]] },
+  { k: 'vivid', label: 'Vivid', g: 'bright', s: 'food', ops: [['contrast', 1.15], ['saturate', 1.5]] },
+  { k: 'fresh', label: 'Fresh', g: 'bright', s: 'forest', ops: [['brightness', 1.06], ['saturate', 1.25], ['hue', 6]], fx: { tint: '#B8F2E6', ta: 0.2, tb: 'soft-light' } },
+  { k: 'clear', label: 'Clear', g: 'bright', s: 'mountain', ops: [['contrast', 1.12], ['brightness', 1.04], ['saturate', 1.1]] },
+  { k: 'sunny', label: 'Sunny', g: 'bright', s: 'beach', ops: [['brightness', 1.1], ['saturate', 1.3], ['sepia', 0.08]], fx: { tint: '#FFE08A', ta: 0.22, tb: 'soft-light' } },
+  { k: 'pop', label: 'Pop', g: 'bright', s: 'flowers', ops: [['contrast', 1.25], ['saturate', 1.7], ['brightness', 1.02]] },
+  { k: 'warm', label: 'Warm', g: 'warm', s: 'coffee', ops: [['sepia', 0.22], ['saturate', 1.25], ['brightness', 1.04]] },
+  { k: 'golden', label: 'Golden', g: 'warm', s: 'beach', ops: [['sepia', 0.3], ['saturate', 1.35], ['brightness', 1.05], ['hue', -6]], fx: { tint: '#FFB347', ta: 0.26, tb: 'soft-light' } },
+  { k: 'sunset', label: 'Sunset', g: 'warm', s: 'city', ops: [['sepia', 0.25], ['hue', -20], ['saturate', 1.45], ['contrast', 1.05]], fx: { tint: '#FF7A59', ta: 0.24, tb: 'soft-light', vig: 0.28 } },
+  { k: 'honey', label: 'Honey', g: 'warm', s: 'food', ops: [['sepia', 0.4], ['saturate', 1.2], ['contrast', 1.02], ['brightness', 1.03]] },
+  { k: 'autumn', label: 'Autumn', g: 'warm', s: 'forest', ops: [['sepia', 0.35], ['hue', -12], ['saturate', 1.3], ['contrast', 1.1]], fx: { vig: 0.22 } },
+  { k: 'cool', label: 'Cool', g: 'cool', s: 'mountain', ops: [['hue', 12], ['saturate', 1.1], ['brightness', 1.03]] },
+  { k: 'ocean', label: 'Ocean', g: 'cool', s: 'beach', ops: [['hue', 18], ['saturate', 1.25], ['contrast', 1.06]], fx: { tint: '#3FA9F5', ta: 0.22, tb: 'soft-light' } },
+  { k: 'ice', label: 'Ice', g: 'cool', s: 'mountain', ops: [['saturate', 0.75], ['brightness', 1.1], ['hue', 10]], fx: { tint: '#CDEBFF', ta: 0.34, tb: 'soft-light' } },
+  { k: 'mint', label: 'Mint', g: 'cool', s: 'food', ops: [['saturate', 1.1], ['brightness', 1.05], ['hue', -8]], fx: { tint: '#9FF3D1', ta: 0.26, tb: 'soft-light' } },
+  { k: 'night', label: 'Night', g: 'cool', s: 'city', ops: [['brightness', 0.88], ['contrast', 1.15], ['saturate', 0.85], ['hue', 14]], fx: { tint: '#2E4A8C', ta: 0.32, tb: 'soft-light', vig: 0.36 } },
+  { k: 'film', label: 'Film', g: 'film', s: 'city', ops: [['contrast', 1.08], ['saturate', 0.85], ['sepia', 0.12]], fx: { tint: '#2F6F6A', ta: 0.14, tb: 'soft-light', vig: 0.22 } },
+  { k: 'retro', label: 'Retro', g: 'film', s: 'coffee', ops: [['sepia', 0.35], ['contrast', 1.1], ['hue', -10], ['saturate', 1.1]], fx: { vig: 0.32 } },
+  { k: 'vintage', label: 'Vintage', g: 'film', s: 'mountain', ops: [['sepia', 0.55], ['contrast', 0.9], ['brightness', 1.06], ['saturate', 0.85]] },
+  { k: 'fade', label: 'Faded', g: 'film', s: 'sky', ops: [['contrast', 0.82], ['brightness', 1.1], ['saturate', 0.8]] },
+  { k: 'polaroid', label: 'Polaroid', g: 'film', s: 'beach', ops: [['contrast', 1.05], ['brightness', 1.08], ['saturate', 1.2], ['sepia', 0.15], ['hue', -6]], fx: { tint: '#7FD3C4', ta: 0.14, tb: 'soft-light' } },
+  { k: 'cinema', label: 'Cinema', g: 'film', s: 'forest', ops: [['contrast', 1.2], ['saturate', 0.9], ['brightness', 0.95]], fx: { tint: '#13867F', ta: 0.2, tb: 'soft-light', vig: 0.36 } },
+  { k: 'mono', label: 'Mono', g: 'bw', s: 'city', ops: [['grayscale', 1], ['contrast', 1.1]] },
+  { k: 'noir', label: 'Noir', g: 'bw', s: 'coffee', ops: [['grayscale', 1], ['contrast', 1.45], ['brightness', 0.92]], fx: { vig: 0.3 } },
+  { k: 'silver', label: 'Silver', g: 'bw', s: 'mountain', ops: [['grayscale', 1], ['brightness', 1.12], ['contrast', 0.9]] },
+  { k: 'sepia', label: 'Sepia', g: 'bw', s: 'forest', ops: [['sepia', 0.9], ['contrast', 1.05]] },
+  { k: 'dream', label: 'Dream', g: 'mood', s: 'sky', ops: [['brightness', 1.12], ['saturate', 1.3], ['contrast', 0.92], ['hue', -6]], fx: { glow: 0.24 } },
+  { k: 'moody', label: 'Moody', g: 'mood', s: 'forest', ops: [['contrast', 1.15], ['saturate', 0.7], ['brightness', 0.92]], fx: { vig: 0.42 } },
+  { k: 'lilac', label: 'Lilac', g: 'mood', s: 'flowers', ops: [['hue', -25], ['saturate', 1.1], ['brightness', 1.05]], fx: { tint: '#C8A2F8', ta: 0.26, tb: 'soft-light' } },
+  { k: 'neon', label: 'Neon', g: 'mood', s: 'city', ops: [['contrast', 1.3], ['saturate', 1.9], ['hue', -15]], fx: { tint: '#FF3DB8', ta: 0.2, tb: 'soft-light' } },
+  { k: 'dusk', label: 'Dusk', g: 'mood', s: 'sky', ops: [['brightness', 0.95], ['saturate', 1.2], ['hue', -30]], fx: { tint: '#7B5CFA', ta: 0.24, tb: 'soft-light', vig: 0.3 } },
 ];
+const filterOf = (k) => PHOTO_FILTERS.find((x) => x.k === k) || null;
+export function photoFilterFx(k) {
+  const f = filterOf(k);
+  return f && f.fx ? f.fx : null;
+}
+export function photoFilterLayers(k) {
+  const fx = photoFilterFx(k);
+  if (!fx) return [];
+  const out = [];
+  if (fx.tint) out.push({ background: fx.tint, mixBlendMode: fx.tb || 'soft-light', opacity: fx.ta == null ? 0.25 : fx.ta });
+  if (fx.glow) out.push({ background: `radial-gradient(ellipse at 50% 42%, rgba(255,244,236,${fx.glow}) 0%, rgba(255,244,236,0) 68%)`, mixBlendMode: 'screen' });
+  if (fx.vig) out.push({ background: `radial-gradient(ellipse at center, rgba(0,0,0,0) 52%, rgba(0,0,0,${fx.vig}) 100%)` });
+  return out;
+}
+export function FilterFx({ k, radius }) {
+  const layers = photoFilterLayers(k);
+  if (!layers.length) return null;
+  return layers.map((st, i) => <div key={i} aria-hidden="true" style={{ position: 'absolute', inset: 0, pointerEvents: 'none', borderRadius: radius, ...st }} />);
+}
+export function paintFilterFx(ctx, w, h, k) {
+  const fx = photoFilterFx(k);
+  if (!fx) return;
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  try { ctx.filter = 'none'; } catch {}
+  try {
+    if (fx.tint) { ctx.globalCompositeOperation = fx.tb || 'soft-light'; ctx.globalAlpha = fx.ta == null ? 0.25 : fx.ta; ctx.fillStyle = fx.tint; ctx.fillRect(0, 0, w, h); }
+    if (fx.glow) {
+      ctx.globalCompositeOperation = 'screen'; ctx.globalAlpha = 1;
+      const r = Math.max(w, h) * 0.68;
+      const g = ctx.createRadialGradient(w / 2, h * 0.42, 0, w / 2, h * 0.42, r);
+      g.addColorStop(0, `rgba(255,244,236,${fx.glow})`); g.addColorStop(1, 'rgba(255,244,236,0)');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+    }
+    if (fx.vig) {
+      ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+      ctx.translate(w / 2, h / 2); ctx.scale((w / 2) * Math.SQRT2, (h / 2) * Math.SQRT2);
+      const g = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
+      g.addColorStop(0.52, 'rgba(0,0,0,0)'); g.addColorStop(1, `rgba(0,0,0,${fx.vig})`);
+      ctx.fillStyle = g; ctx.fillRect(-1, -1, 2, 2);
+    }
+  } catch {}
+  ctx.restore();
+}
 export function photoFilterCss(k) {
   const f = PHOTO_FILTERS.find((x) => x.k === k);
   if (!f || !f.ops.length) return 'none';
@@ -57354,7 +57669,8 @@ function photoFilterMatrix(ops) {
 }
 export function applyPhotoFilter(ctx, w, h, k) {
   const f = PHOTO_FILTERS.find((x) => x.k === k);
-  if (!f || !f.ops.length) return;
+  if (!f) return;
+  if (!f.ops.length) { paintFilterFx(ctx, w, h, k); return; }
   const M = photoFilterMatrix(f.ops);
   let img;
   try { img = ctx.getImageData(0, 0, w, h); } catch { return; }
@@ -57371,54 +57687,95 @@ export function applyPhotoFilter(ctx, w, h, k) {
     d[i + 2] = c[0] * r + c[1] * g + c[2] * bl + c[3];
   }
   ctx.putImageData(img, 0, 0);
+  paintFilterFx(ctx, w, h, k);
 }
-const FILTER_SAMPLE = `data:image/svg+xml;utf8,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><defs><linearGradient id="s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5AA2F2"/><stop offset="0.7" stop-color="#F6C48E"/></linearGradient></defs><rect width="64" height="64" fill="url(#s)"/><circle cx="42" cy="24" r="8" fill="#FFE29A"/><path d="M0 44l14-11 10 7 14-13 26 21v16H0z" fill="#4C9A68"/><path d="M0 53l18-8 16 6 14-6 16 7v12H0z" fill="#2E6E4A"/></svg>')}`;
-export function FilterStrip({ value, onPick, thumb, dark = true, big = false, lens = false }) {
+const FILTER_SCENES = {
+  beach: "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 60 80\" preserveAspectRatio=\"xMidYMid slice\"><defs><linearGradient id=\"a\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\"><stop offset=\"0\" stop-color=\"#5FA8E0\"/><stop offset=\".75\" stop-color=\"#F7CF9C\"/><stop offset=\"1\" stop-color=\"#F9B97F\"/></linearGradient><linearGradient id=\"b\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\"><stop offset=\"0\" stop-color=\"#2479B3\"/><stop offset=\"1\" stop-color=\"#49B4D6\"/></linearGradient></defs><rect width=\"60\" height=\"48\" fill=\"url(#a)\"/><circle cx=\"41\" cy=\"38\" r=\"8\" fill=\"#FFE6A6\"/><circle cx=\"41\" cy=\"38\" r=\"12\" fill=\"#FFE6A6\" opacity=\".25\"/><rect y=\"46\" width=\"60\" height=\"16\" fill=\"url(#b)\"/><path d=\"M3 49h16M27 50h24M8 54h14M34 55h18M1 58h12\" stroke=\"#BDE7F6\" stroke-width=\".9\" stroke-linecap=\"round\" opacity=\".75\"/><path d=\"M0 62q16-4 32-1t28 0v19H0z\" fill=\"#EFCF98\"/><path d=\"M0 68q20-3 60 2v10H0z\" fill=\"#E5BE83\"/><path d=\"M15 44.5l5-8.5v8.5z\" fill=\"#FFFFFF\"/><path d=\"M12.5 45h10l-1.6 1.8h-6.8z\" fill=\"#D9482B\"/><path d=\"M48 80c-1-9 1-17 5-24\" stroke=\"#6B4A2B\" stroke-width=\"1.6\" fill=\"none\"/><path d=\"M53 56c-6-3-10-1-12 2 4-1 8-1 12-2zm0 0c3-5 8-6 11-4-4 0-8 2-11 4zm0 0c-2-5-6-7-10-6 4 2 7 4 10 6zm0 0c5-1 9 2 10 6-4-3-7-4-10-6z\" fill=\"#2F7A45\"/></svg>",
+  city: "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 60 80\" preserveAspectRatio=\"xMidYMid slice\"><defs><linearGradient id=\"a\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\"><stop offset=\"0\" stop-color=\"#25305A\"/><stop offset=\".55\" stop-color=\"#B55A7C\"/><stop offset=\"1\" stop-color=\"#F3A167\"/></linearGradient></defs><rect width=\"60\" height=\"80\" fill=\"url(#a)\"/><circle cx=\"16\" cy=\"18\" r=\"3.4\" fill=\"#FFF1D2\" opacity=\".9\"/><circle cx=\"44\" cy=\"10\" r=\".6\" fill=\"#FFFFFF\"/><circle cx=\"52\" cy=\"22\" r=\".5\" fill=\"#FFFFFF\"/><circle cx=\"30\" cy=\"7\" r=\".5\" fill=\"#FFFFFF\"/><path d=\"M0 80V52h7v-9h7v13h4V36h10v18h4V44h6v-7h7v19h4V47h11v33z\" fill=\"#1C2140\"/><path d=\"M0 80V62h10v-6h8v10h6v-4h9v6h7V58h8v8h12v14z\" fill=\"#141831\"/><g fill=\"#FFD27A\"><rect x=\"20\" y=\"40\" width=\"1.6\" height=\"1.6\"/><rect x=\"24\" y=\"40\" width=\"1.6\" height=\"1.6\"/><rect x=\"20\" y=\"45\" width=\"1.6\" height=\"1.6\"/><rect x=\"24\" y=\"49\" width=\"1.6\" height=\"1.6\"/><rect x=\"40\" y=\"41\" width=\"1.6\" height=\"1.6\"/><rect x=\"40\" y=\"46\" width=\"1.6\" height=\"1.6\"/><rect x=\"51\" y=\"50\" width=\"1.6\" height=\"1.6\"/><rect x=\"55\" y=\"50\" width=\"1.6\" height=\"1.6\"/><rect x=\"51\" y=\"55\" width=\"1.6\" height=\"1.6\"/><rect x=\"2\" y=\"56\" width=\"1.6\" height=\"1.6\"/><rect x=\"9\" y=\"47\" width=\"1.6\" height=\"1.6\"/></g><g fill=\"#FFB86B\" opacity=\".9\"><rect x=\"13\" y=\"66\" width=\"2\" height=\"2\"/><rect x=\"28\" y=\"68\" width=\"2\" height=\"2\"/><rect x=\"44\" y=\"62\" width=\"2\" height=\"2\"/><rect x=\"50\" y=\"70\" width=\"2\" height=\"2\"/></g></svg>",
+  flowers: "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 60 80\" preserveAspectRatio=\"xMidYMid slice\"><defs><linearGradient id=\"a\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\"><stop offset=\"0\" stop-color=\"#9ACD72\"/><stop offset=\"1\" stop-color=\"#3F7A35\"/></linearGradient><g id=\"p\"><ellipse cx=\"0\" cy=\"-4\" rx=\"3\" ry=\"4.2\"/><ellipse cx=\"0\" cy=\"-4\" rx=\"3\" ry=\"4.2\" transform=\"rotate(72)\"/><ellipse cx=\"0\" cy=\"-4\" rx=\"3\" ry=\"4.2\" transform=\"rotate(144)\"/><ellipse cx=\"0\" cy=\"-4\" rx=\"3\" ry=\"4.2\" transform=\"rotate(216)\"/><ellipse cx=\"0\" cy=\"-4\" rx=\"3\" ry=\"4.2\" transform=\"rotate(288)\"/></g></defs><rect width=\"60\" height=\"80\" fill=\"url(#a)\"/><g fill=\"#2F6A2C\"><ellipse cx=\"10\" cy=\"44\" rx=\"7\" ry=\"2.6\" transform=\"rotate(-30 10 44)\"/><ellipse cx=\"46\" cy=\"30\" rx=\"7\" ry=\"2.6\" transform=\"rotate(25 46 30)\"/><ellipse cx=\"34\" cy=\"66\" rx=\"8\" ry=\"2.8\" transform=\"rotate(-18 34 66)\"/><ellipse cx=\"52\" cy=\"58\" rx=\"6\" ry=\"2.4\" transform=\"rotate(40 52 58)\"/></g><use href=\"#p\" transform=\"translate(18 26) scale(1.25)\" fill=\"#F47BA6\"/><circle cx=\"18\" cy=\"26\" r=\"2.6\" fill=\"#FFD54F\"/><use href=\"#p\" transform=\"translate(42 46) scale(1.35)\" fill=\"#FFFFFF\"/><circle cx=\"42\" cy=\"46\" r=\"2.8\" fill=\"#F2B705\"/><use href=\"#p\" transform=\"translate(16 60) scale(1.1)\" fill=\"#E5484D\"/><circle cx=\"16\" cy=\"60\" r=\"2.3\" fill=\"#FFE08A\"/><use href=\"#p\" transform=\"translate(48 14) scale(.95)\" fill=\"#F7A7C6\"/><circle cx=\"48\" cy=\"14\" r=\"2\" fill=\"#FFD54F\"/><use href=\"#p\" transform=\"translate(30 38) scale(.8)\" fill=\"#FFB3C8\"/><circle cx=\"30\" cy=\"38\" r=\"1.7\" fill=\"#FFE08A\"/><use href=\"#p\" transform=\"translate(54 74) scale(1)\" fill=\"#FFFFFF\"/><circle cx=\"54\" cy=\"74\" r=\"2\" fill=\"#F2B705\"/></svg>",
+  mountain: "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 60 80\" preserveAspectRatio=\"xMidYMid slice\"><defs><linearGradient id=\"a\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\"><stop offset=\"0\" stop-color=\"#7DBBEB\"/><stop offset=\"1\" stop-color=\"#E4F3FF\"/></linearGradient><linearGradient id=\"b\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\"><stop offset=\"0\" stop-color=\"#5DA6DA\"/><stop offset=\"1\" stop-color=\"#2E78B0\"/></linearGradient></defs><rect width=\"60\" height=\"80\" fill=\"url(#a)\"/><path d=\"M-4 58L18 22l10 14 8-10 28 32z\" fill=\"#8A9FC0\"/><path d=\"M18 22l-6 10 4-1 3 3 3-4 3 3z\" fill=\"#FFFFFF\"/><path d=\"M36 26l-4 5 3-.5 2 2 2-2.6z\" fill=\"#FFFFFF\"/><path d=\"M-4 62l20-18 12 10 10-8 26 16z\" fill=\"#5E7499\"/><rect y=\"60\" width=\"60\" height=\"20\" fill=\"url(#b)\"/><path d=\"M6 66h14M30 68h20M12 73h18\" stroke=\"#A9D6F5\" stroke-width=\".9\" stroke-linecap=\"round\" opacity=\".7\"/><g fill=\"#2D5B43\"><path d=\"M4 62l3.5-9 3.5 9z\"/><path d=\"M10 62l3-7.5 3 7.5z\"/><path d=\"M47 62l3.5-10 3.5 10z\"/><path d=\"M53 62l3-8 3 8z\"/></g><path d=\"M8 13q3-3 7-1 2-3 6-1 3 0 3 3H8z\" fill=\"#FFFFFF\" opacity=\".9\"/></svg>",
+  food: "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 60 80\" preserveAspectRatio=\"xMidYMid slice\"><rect width=\"60\" height=\"80\" fill=\"#C98A55\"/><path d=\"M0 18h60M0 38h60M0 58h60\" stroke=\"#A86F40\" stroke-width=\"1.2\"/><circle cx=\"30\" cy=\"40\" r=\"21\" fill=\"#F3EEE8\"/><circle cx=\"30\" cy=\"40\" r=\"16.5\" fill=\"#FFFFFF\"/><g transform=\"translate(24 36)\"><circle r=\"7\" fill=\"#FF9F2E\"/><circle r=\"5.8\" fill=\"#FFC062\"/><path d=\"M0 0L0-5.8M0 0L5 -2.9M0 0L5 2.9M0 0L0 5.8M0 0L-5 2.9M0 0L-5-2.9\" stroke=\"#FFE3B0\" stroke-width=\".8\"/></g><g fill=\"#D72638\"><path d=\"M37 41c-3-2-3-6 0-6 1 0 2 .6 2.6 1.6.6-1 1.6-1.6 2.6-1.6 3 0 3 4 0 6l-2.6 3z\"/><path d=\"M33 49c-2.6-1.7-2.6-5 0-5 .9 0 1.7.5 2.2 1.3.5-.8 1.3-1.3 2.2-1.3 2.6 0 2.6 3.3 0 5l-2.2 2.6z\"/></g><g fill=\"#3E9B4F\"><ellipse cx=\"39.6\" cy=\"35\" rx=\"2.2\" ry=\".9\"/><ellipse cx=\"35.2\" cy=\"44\" rx=\"1.8\" ry=\".8\"/><ellipse cx=\"22\" cy=\"48\" rx=\"3.6\" ry=\"1.4\" transform=\"rotate(-25 22 48)\"/></g><g fill=\"#4A2D7A\"><circle cx=\"27\" cy=\"50\" r=\"1.6\"/><circle cx=\"29.6\" cy=\"51.4\" r=\"1.6\"/><circle cx=\"26.4\" cy=\"52.8\" r=\"1.6\"/></g></svg>",
+  coffee: "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 60 80\" preserveAspectRatio=\"xMidYMid slice\"><defs><radialGradient id=\"a\" cx=\".5\" cy=\".45\" r=\".7\"><stop offset=\"0\" stop-color=\"#9C6A45\"/><stop offset=\"1\" stop-color=\"#5E3A24\"/></radialGradient></defs><rect width=\"60\" height=\"80\" fill=\"url(#a)\"/><ellipse cx=\"31\" cy=\"44\" rx=\"20\" ry=\"18\" fill=\"#EFE7DD\"/><ellipse cx=\"31\" cy=\"44\" rx=\"15\" ry=\"13.6\" fill=\"#FFFFFF\"/><circle cx=\"31\" cy=\"43\" r=\"11\" fill=\"#8A5634\"/><circle cx=\"31\" cy=\"43\" r=\"9.4\" fill=\"#A9703F\"/><path d=\"M31 47.5c-4.6-3-6-5.6-4-7.5 1.6-1.4 3.2-.4 4 1 .8-1.4 2.4-2.4 4-1 2 1.9.6 4.5-4 7.5z\" fill=\"#F1DCC0\"/><path d=\"M45 40q6-1 6 3t-6 3\" fill=\"none\" stroke=\"#FFFFFF\" stroke-width=\"2.4\"/><circle cx=\"13\" cy=\"69\" r=\"7\" fill=\"#D69A55\"/><circle cx=\"13\" cy=\"69\" r=\"5.6\" fill=\"#E3AE6B\"/><g fill=\"#5A3420\"><circle cx=\"11\" cy=\"67\" r=\"1\"/><circle cx=\"15.4\" cy=\"68.2\" r=\"1.1\"/><circle cx=\"12.4\" cy=\"71.6\" r=\"1\"/><circle cx=\"16\" cy=\"71.4\" r=\".8\"/></g><path d=\"M47 18l8 10\" stroke=\"#C9C3BA\" stroke-width=\"2.2\" stroke-linecap=\"round\"/><ellipse cx=\"45.5\" cy=\"16\" rx=\"2.4\" ry=\"3.4\" transform=\"rotate(-38 45.5 16)\" fill=\"#D8D2C9\"/></svg>",
+  forest: "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 60 80\" preserveAspectRatio=\"xMidYMid slice\"><defs><linearGradient id=\"a\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\"><stop offset=\"0\" stop-color=\"#F6E7C1\"/><stop offset=\".5\" stop-color=\"#BFDDB9\"/><stop offset=\"1\" stop-color=\"#5E9A68\"/></linearGradient></defs><rect width=\"60\" height=\"80\" fill=\"url(#a)\"/><circle cx=\"38\" cy=\"22\" r=\"10\" fill=\"#FFF6D8\" opacity=\".85\"/><g fill=\"#A5C9A3\"><path d=\"M2 50l6-20 6 20z\"/><path d=\"M16 48l5-16 5 16z\"/><path d=\"M40 50l6-22 6 22z\"/><path d=\"M50 48l5-15 5 15z\"/></g><g fill=\"#5B9467\"><path d=\"M-2 62l8-26 8 26z\"/><path d=\"M12 62l7-22 7 22z\"/><path d=\"M30 62l8-28 8 28z\"/><path d=\"M46 62l7-20 7 20z\"/></g><path d=\"M0 62h60v18H0z\" fill=\"#3E6F48\"/><path d=\"M26 80q2-9 8-18\" fill=\"none\" stroke=\"#D9C38E\" stroke-width=\"3.6\" stroke-linecap=\"round\"/><g fill=\"#2C5236\"><path d=\"M-4 80l7-24 7 24z\"/><path d=\"M50 80l7-26 7 26z\"/></g></svg>",
+  sky: "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 60 80\" preserveAspectRatio=\"xMidYMid slice\"><defs><linearGradient id=\"a\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\"><stop offset=\"0\" stop-color=\"#9DB8EE\"/><stop offset=\".55\" stop-color=\"#E6B9E2\"/><stop offset=\"1\" stop-color=\"#FFD3B5\"/></linearGradient></defs><rect width=\"60\" height=\"80\" fill=\"url(#a)\"/><circle cx=\"44\" cy=\"54\" r=\"7\" fill=\"#FFF0C2\"/><circle cx=\"44\" cy=\"54\" r=\"11\" fill=\"#FFF0C2\" opacity=\".3\"/><g fill=\"#FFFFFF\"><path d=\"M4 30q0-5 5-5 2-5 8-4 4-3 8 1 5 0 5 5 0 3-3 3H7q-3 0-3 0z\" opacity=\".95\"/><path d=\"M30 14q1-4 5-4 3-4 8-2 5 0 5 4 3 1 2 4H31q-2 0-1-2z\" opacity=\".9\"/><path d=\"M-2 66q1-4 6-4 3-4 9-2 5-1 6 3 4 1 3 5H0z\" opacity=\".95\"/><path d=\"M36 72q1-3 5-3 3-4 8-2 5-1 6 3 3 1 3 4H36z\" opacity=\".9\"/></g><path d=\"M18 44l2-1.2 2 1.2M24 40l1.6-1 1.6 1\" stroke=\"#6E5A8F\" stroke-width=\".8\" fill=\"none\" stroke-linecap=\"round\"/></svg>",
+};
+const sceneUrlCache = {};
+export function filterSceneUrl(k) {
+  if (!sceneUrlCache[k]) sceneUrlCache[k] = `data:image/svg+xml;utf8,${encodeURIComponent(FILTER_SCENES[k] || FILTER_SCENES.beach)}`;
+  return sceneUrlCache[k];
+}
+export function FilterStrip({ value, onPick, big = false, lens = false }) {
   const rowRef = useRef(null);
   const firstRef = useRef(true);
+  const cur = value || 'none';
+  const curF = PHOTO_FILTERS.find((f) => f.k === cur) || PHOTO_FILTERS[0];
+  const [tab, setTab] = useState(curF.g);
+  const tabLock = useRef(0);
+  const tabsRef = useRef(null);
   useEffect(() => {
     const row = rowRef.current;
     if (!row) return;
-    const el = row.querySelector(`[data-filter="${value || 'none'}"]`);
+    const el = row.querySelector(`[data-filter="${cur}"]`);
     if (!el) return;
     const target = el.offsetLeft - (row.clientWidth - el.offsetWidth) / 2;
     try { row.scrollTo({ left: Math.max(0, target), behavior: firstRef.current ? 'auto' : 'smooth' }); } catch { row.scrollLeft = Math.max(0, target); }
     firstRef.current = false;
-  }, [value]);
-  const tw = big ? 70 : 58;
-  const th = big ? 92 : 58;
+    setTab(curF.g);
+  }, [cur]);
+  useEffect(() => {
+    const bar = tabsRef.current;
+    const el = bar && bar.querySelector(`[data-tab="${tab}"]`);
+    if (!el) return;
+    const target = el.offsetLeft - (bar.clientWidth - el.offsetWidth) / 2;
+    try { bar.scrollTo({ left: Math.max(0, target), behavior: 'smooth' }); } catch { bar.scrollLeft = Math.max(0, target); }
+  }, [tab]);
+  const onScroll = () => {
+    if (Date.now() < tabLock.current) return;
+    const row = rowRef.current;
+    if (!row) return;
+    const mid = row.scrollLeft + row.clientWidth / 2;
+    let best = null, bd = 1e9;
+    for (const el of row.querySelectorAll('[data-filter]')) { const d = Math.abs(el.offsetLeft + el.offsetWidth / 2 - mid); if (d < bd) { bd = d; best = el; } }
+    const g = best && best.getAttribute('data-grp');
+    if (g && g !== tab) setTab(g);
+  };
+  const goTab = (g) => {
+    hapticTap();
+    setTab(g);
+    tabLock.current = Date.now() + 600;
+    const row = rowRef.current;
+    const el = row && row.querySelector(`[data-gs="${g}"]`);
+    if (!el) return;
+    try { row.scrollTo({ left: Math.max(0, el.offsetLeft - 14), behavior: 'smooth' }); } catch { row.scrollLeft = Math.max(0, el.offsetLeft - 14); }
+  };
   const pick = (k) => (e) => { e.stopPropagation(); hapticTap(); playUiSound('tap'); onPick(k); };
   const still = reducedMotion();
-  if (lens || !thumb) {
-    return (
-      <div ref={rowRef} style={{ position: 'relative', display: 'flex', gap: 6, overflowX: 'auto', padding: '8px 14px 2px', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
-        {PHOTO_FILTERS.map((f) => {
-          const on = (value || 'none') === f.k;
+  const tw = lens ? 56 : big ? 62 : 56;
+  const th = lens ? 56 : big ? 80 : 56;
+  const rad = lens ? '50%' : 12;
+  return (
+    <div onClick={(e) => e.stopPropagation()} style={{ position: 'relative' }}>
+      <div ref={tabsRef} role="tablist" aria-label="Filter groups" style={{ display: 'flex', gap: 18, overflowX: 'auto', padding: '0 16px 6px', scrollbarWidth: 'none' }}>
+        {PHOTO_FILTER_GROUPS.map(([g, label]) => {
+          const on = tab === g;
+          return <div key={g} data-tab={g} role="tab" aria-selected={on} onClick={() => goTab(g)} style={{ flexShrink: 0, fontSize: 13, fontWeight: on ? 800 : 600, color: on ? '#FFFFFF' : 'rgba(255, 255, 255, 0.58)', textShadow: '0 1px 4px rgba(0, 0, 0, 0.6)', padding: '4px 0', cursor: 'pointer', whiteSpace: 'nowrap', boxShadow: on ? 'inset 0 -2px 0 #FFFFFF' : 'none', WebkitTapHighlightColor: 'transparent' }}>{label}</div>;
+        })}
+      </div>
+      <div ref={rowRef} onScroll={onScroll} style={{ position: 'relative', display: 'flex', gap: lens ? 8 : 10, overflowX: 'auto', padding: '8px 14px 4px', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
+        {PHOTO_FILTERS.map((f, i) => {
+          const on = cur === f.k;
+          const gap = i > 0 && PHOTO_FILTERS[i - 1].g !== f.g;
           return (
-            <div key={f.k} data-filter={f.k} role="button" aria-label={`Filter ${f.label}`} aria-pressed={on} onClick={pick(f.k)} style={{ width: 62, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 7, cursor: 'pointer', flexShrink: 0, WebkitTapHighlightColor: 'transparent' }}>
-              <div style={{ width: 52, height: 52, borderRadius: '50%', overflow: 'hidden', background: '#222', boxShadow: on ? '0 0 0 2.5px rgba(0, 0, 0, 0.3), 0 0 0 4.5px #FFFFFF' : '0 0 0 1.5px rgba(255, 255, 255, 0.6), 0 2px 8px rgba(0, 0, 0, 0.3)', transform: on && !still ? 'scale(1.06)' : 'none', transition: still ? 'none' : 'transform 180ms ease, box-shadow 180ms ease' }}>
-                <img src={thumb || FILTER_SAMPLE} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', filter: photoFilterCss(f.k) }} />
+            <div key={f.k} data-filter={f.k} data-grp={f.g} data-gs={gap || i === 0 ? f.g : undefined} role="button" aria-label={`Filter ${f.label}`} aria-pressed={on} onClick={pick(f.k)} style={{ width: tw + 6, marginLeft: gap ? 8 : 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, cursor: 'pointer', flexShrink: 0, WebkitTapHighlightColor: 'transparent' }}>
+              <div style={{ position: 'relative', width: tw, height: th, borderRadius: rad, overflow: 'hidden', background: '#222', boxShadow: on ? '0 0 0 2px rgba(0, 0, 0, 0.55), 0 0 0 4px #FFFFFF' : '0 2px 8px rgba(0, 0, 0, 0.3)', transform: on && !still ? 'scale(1.05)' : 'none', transition: still ? 'none' : 'transform 180ms ease, box-shadow 180ms ease' }}>
+                <img src={filterSceneUrl(f.s)} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', filter: photoFilterCss(f.k) }} />
+                <FilterFx k={f.k} />
               </div>
               <span style={{ fontSize: 11.5, lineHeight: '14px', fontWeight: on ? 800 : 600, color: on ? '#FFFFFF' : 'rgba(255, 255, 255, 0.8)', textShadow: '0 1px 4px rgba(0, 0, 0, 0.65)', whiteSpace: 'nowrap' }}>{f.label}</span>
             </div>
           );
         })}
       </div>
-    );
-  }
-  return (
-    <div ref={rowRef} style={{ position: 'relative', display: 'flex', gap: big ? 8 : 10, overflowX: 'auto', padding: '6px 14px', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
-      {PHOTO_FILTERS.map((f) => {
-        const on = (value || 'none') === f.k;
-        return (
-          <div key={f.k} data-filter={f.k} role="button" aria-label={`Filter ${f.label}`} aria-pressed={on} onClick={pick(f.k)} style={{ display: 'flex', flexDirection: big ? 'column-reverse' : 'column', alignItems: 'center', gap: big ? 8 : 5, cursor: 'pointer', flexShrink: 0 }}>
-            <div style={{ width: tw, height: th, borderRadius: big ? 14 : 12, overflow: 'hidden', boxShadow: on ? '0 0 0 2px #000000, 0 0 0 4px #FFFFFF' : 'none', transform: big && on && !still ? 'scale(1.04)' : 'none', transition: still ? 'none' : 'transform 0.18s ease, box-shadow 0.18s ease' }}>
-              <img src={thumb} alt="" draggable={false} loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', filter: photoFilterCss(f.k) }} />
-            </div>
-            <span style={{ fontSize: 11.5, fontWeight: on ? 800 : 600, color: on ? 'white' : 'rgba(255,255,255,0.7)' }}>{f.label}</span>
-          </div>
-        );
-      })}
     </div>
   );
 }
@@ -61583,42 +61940,63 @@ function AttachSheet({ onAiImage, onDrawTogether, onSounds, onClose, onCamera, o
   ].filter(Boolean);
   const main = all.filter((x) => x.main).sort((x, y) => x.main - y.main);
   const rest = all.filter((x) => !x.main);
+  const top = main.filter((x) => x.k === 'gallery' || x.k === 'camera');
+  const small = main.filter((x) => x.k !== 'gallery' && x.k !== 'camera');
   const cols = typeof window !== 'undefined' && window.innerWidth < 340 ? 3 : 4;
-  const head = main.slice(0, cols * 2 - 1);
-  const spill = main.slice(cols * 2 - 1);
-  const groupsMore = [['share', 'Share'], ['create', 'Create'], ['fun', 'Fun']].map(([g, l]) => [l, [...(g === 'share' ? spill : []), ...rest.filter((x) => x.g === g)]]).filter(([, list]) => list.length);
+  const prefer = ['contact', 'gifmaker', 'round', 'snote'];
+  const fill = [...small, ...rest.filter((x) => prefer.includes(x.k)).sort((x, y) => prefer.indexOf(x.k) - prefer.indexOf(y.k))];
+  const head = fill.slice(0, cols * 2 - 1);
+  const used = new Set(head.map((x) => x.k));
+  const spill = small.filter((x) => !used.has(x.k));
+  const groupsMore = [['share', 'Share'], ['create', 'Create'], ['fun', 'Fun']].map(([g, l]) => [l, [...(g === 'share' ? spill : []), ...rest.filter((x) => x.g === g && !used.has(x.k))]]).filter(([, list]) => list.length);
+  const well = theme.dark ? '#262626' : '#EFEFEF';
+  const run = (it) => { if (it.busy) return; playUiSound('tap'); it.on(); };
+  const glyph = (it, sz) => (it.busy ? <Spinner size={18} color={theme.ink} /> : React.cloneElement(it.icon, { size: sz, strokeWidth: 1.8, color: theme.ink }));
   const tile = (it) => (
-    <div key={it.k} role="button" aria-label={it.label} onClick={() => { if (it.busy) return; playUiSound('tap'); it.on(); }} className="zchat-press zplain-tile"
-      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 7, padding: '8px 2px 8px', borderRadius: 14, cursor: it.busy ? 'default' : 'pointer', WebkitTapHighlightColor: 'transparent', minWidth: 0 }}>
-      <div style={{ position: 'relative', width: 54, height: 54, borderRadius: '50%', background: it.c, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FFFFFF', flexShrink: 0, boxShadow: theme.dark ? 'none' : `0 4px 12px ${it.c}40` }}>
-        {it.busy ? <Spinner size={18} color="#FFFFFF" /> : React.cloneElement(it.icon, { size: 25, strokeWidth: 1.9, color: '#FFFFFF' })}
-      </div>
-      <div style={{ fontSize: 12, fontWeight: 600, color: theme.ink, textAlign: 'center', lineHeight: 1.2, maxWidth: '100%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.short || it.label}</div>
+    <div key={it.k} role="button" aria-label={it.label} onClick={() => run(it)} className="zchat-press zplain-tile"
+      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 7, padding: '6px 2px 8px', borderRadius: 14, cursor: it.busy ? 'default' : 'pointer', WebkitTapHighlightColor: 'transparent', minWidth: 0 }}>
+      <div style={{ width: 56, height: 56, borderRadius: '50%', background: well, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{glyph(it, 24)}</div>
+      <div style={{ fontSize: 12, fontWeight: 500, color: theme.ink, textAlign: 'center', lineHeight: 1.2, maxWidth: '100%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.short || it.label}</div>
     </div>
   );
-  const grid = { display: 'grid', gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, rowGap: 6, columnGap: 4, padding: '2px 10px 4px' };
+  const SUB = { gallery: 'From your phone', camera: 'Photo or video' };
+  const grid = { display: 'grid', gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, rowGap: 4, columnGap: 4, padding: '0 10px 2px' };
   return (
     <Portal>
       <div onClick={onClose} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 94, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontFamily: FONT }}>
-        <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" {...drag.sheetProps} style={{ ...drag.sheetStyle, width: '100%', maxWidth: 480, maxHeight: more ? 'calc(100% - 24px)' : 'calc(100% - 40px)', overflowY: 'auto', overscrollBehavior: 'contain', background: theme.panelBg, borderRadius: '22px 22px 0 0', paddingBottom: 'calc(12px + env(safe-area-inset-bottom))', boxSizing: 'border-box', transition: 'max-height 0.3s ease' }}>
-          <div data-sheet-handle="true" style={{ display: 'flex', justifyContent: 'center', padding: '8px 0 12px', touchAction: 'none' }}><div style={{ width: 36, height: 4, borderRadius: 2, background: theme.border }} /></div>
+        <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" {...drag.sheetProps} style={{ ...drag.sheetStyle, width: '100%', maxWidth: 480, maxHeight: more ? 'calc(100% - 24px)' : 'calc(100% - 40px)', overflowY: 'auto', overscrollBehavior: 'contain', background: theme.panelBg, borderRadius: '20px 20px 0 0', paddingBottom: 'calc(12px + env(safe-area-inset-bottom))', boxSizing: 'border-box', transition: 'max-height 0.3s ease' }}>
+          <div data-sheet-handle="true" style={{ display: 'flex', justifyContent: 'center', padding: '8px 0 14px', touchAction: 'none' }}><div style={{ width: 36, height: 4, borderRadius: 2, background: theme.border }} /></div>
+          {top.length > 0 && (
+            <div style={{ display: 'flex', gap: 10, padding: '0 16px 14px' }}>
+              {top.map((it) => (
+                <div key={it.k} role="button" aria-label={it.label} onClick={() => run(it)} className="zchat-press"
+                  style={{ flex: 1, minWidth: 0, height: 64, borderRadius: 16, background: well, display: 'flex', alignItems: 'center', gap: 12, padding: '0 14px', boxSizing: 'border-box', cursor: 'pointer', WebkitTapHighlightColor: 'transparent' }}>
+                  <span style={{ display: 'flex', flexShrink: 0 }}>{glyph(it, 26)}</span>
+                  <span style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
+                    <span style={{ fontSize: 15, fontWeight: 700, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.short || it.label}</span>
+                    <span style={{ fontSize: 12.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{SUB[it.k]}</span>
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
           <div style={grid}>
             {head.map(tile)}
             {(groupsMore.length > 0) && (
               <div role="button" aria-label={more ? 'Show less' : 'More'} aria-expanded={more} onClick={() => { playUiSound('tap'); hapticTap(); setMore((v) => !v); }} className="zchat-press zplain-tile"
-                style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 7, padding: '8px 2px 8px', borderRadius: 14, cursor: 'pointer', minWidth: 0 }}>
-                <div style={{ width: 54, height: 54, borderRadius: '50%', background: theme.soft, color: theme.ink, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `inset 0 0 0 1px ${theme.border}` }}>
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ transform: more ? 'rotate(180deg)' : 'none', transition: 'transform 0.25s ease' }}>
+                style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 7, padding: '6px 2px 8px', borderRadius: 14, cursor: 'pointer', minWidth: 0 }}>
+                <div style={{ width: 56, height: 56, borderRadius: '50%', background: well, color: theme.ink, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ transform: more ? 'rotate(180deg)' : 'none', transition: 'transform 0.25s ease' }}>
                     <path d="M6 9.5l6 6 6-6" />
                   </svg>
                 </div>
-                <div style={{ fontSize: 12, fontWeight: 600, color: theme.ink }}>{more ? 'Less' : 'More'}</div>
+                <div style={{ fontSize: 12, fontWeight: 500, color: theme.ink }}>{more ? 'Less' : 'More'}</div>
               </div>
             )}
           </div>
           {more && groupsMore.map(([l, list]) => (
             <div key={l} className="zchat-fade">
-              <div style={{ fontSize: 13, fontWeight: 700, color: theme.muted, padding: '12px 22px 4px' }}>{l}</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: theme.muted, padding: '14px 22px 6px' }}>{l}</div>
               <div style={grid}>{list.map(tile)}</div>
             </div>
           ))}

@@ -36,6 +36,7 @@ import {
   EmptyState,
   FONT,
   FilterStrip,
+  FilterFx,
   FullPage,
   GLASS_OK,
   GroupAvatar,
@@ -3453,6 +3454,7 @@ export function MediaComposer({ files, recipientName, onCancel, onSend: onSendBa
               {cur.kind === 'image' ? (
                 <>
                   <img src={cur.url} alt="" draggable={false} style={{ width: '100%', height: '100%', display: 'block', userSelect: 'none', pointerEvents: 'none', filter: photoFilterCss(cur.filter) }} />
+                  <FilterFx k={cur.filter} />
                   <img ref={fsImgRef} src={cur.url} alt="" aria-hidden="true" draggable={false} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'none', userSelect: 'none', pointerEvents: 'none', willChange: 'clip-path' }} />
                   <canvas ref={blurCanvasRef} aria-label={mode === 'blur' ? 'Paint to blur' : undefined} aria-hidden={mode === 'blur' ? undefined : 'true'} onPointerDown={blurDown} onPointerMove={blurMove} onPointerUp={blurUp} onPointerCancel={blurUp}
                     style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: blurCount || mode === 'blur' ? 'block' : 'none', pointerEvents: mode === 'blur' ? 'auto' : 'none', touchAction: 'none', cursor: mode === 'blur' ? 'crosshair' : 'default' }} />
@@ -3595,7 +3597,7 @@ export function MediaComposer({ files, recipientName, onCancel, onSend: onSendBa
         {filterFlash && (mode === 'view' || mode === 'filter') && PHOTO_FILTERS[filterFlash.i] && (
           <div key={filterFlash.n} className="zchat-filter-flash" role="status" style={{ position: 'absolute', left: 0, right: 0, top: 'calc(50% - 34px)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, pointerEvents: 'none', zIndex: 14 }}>
             <div style={{ fontSize: 32, fontWeight: 800, color: '#FFFFFF', letterSpacing: '-0.01em', textShadow: '0 2px 18px rgba(0, 0, 0, 0.5)' }}>{PHOTO_FILTERS[filterFlash.i].label}</div>
-            <div style={{ display: 'flex', gap: 5 }}>{PHOTO_FILTERS.map((f, i) => <span key={f.k} style={{ width: i === filterFlash.i ? 14 : 5, height: 5, borderRadius: 3, background: i === filterFlash.i ? '#FFFFFF' : 'rgba(255, 255, 255, 0.45)', boxShadow: '0 1px 4px rgba(0, 0, 0, 0.3)' }} />)}</div>
+            <div style={{ display: 'flex', gap: 5 }}>{PHOTO_FILTERS.map((f, i) => (f.g === PHOTO_FILTERS[filterFlash.i].g ? <span key={f.k} style={{ width: i === filterFlash.i ? 14 : 5, height: 5, borderRadius: 3, background: i === filterFlash.i ? '#FFFFFF' : 'rgba(255, 255, 255, 0.45)', boxShadow: '0 1px 4px rgba(0, 0, 0, 0.3)' }} /> : null))}</div>
           </div>
         )}
         {layerHint && mode === 'view' && !dragKey && <div className="zchat-pop" role="status" style={{ position: 'absolute', left: '50%', bottom: 26, transform: 'translateX(-50%)', zIndex: 13, padding: '9px 15px', borderRadius: 18, background: 'rgba(18, 18, 24, 0.72)', color: '#FFFFFF', fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', pointerEvents: 'none', maxWidth: 'calc(100% - 32px)', overflow: 'hidden', textOverflow: 'ellipsis' }}>{layerHint}</div>}
@@ -3656,7 +3658,7 @@ export function MediaComposer({ files, recipientName, onCancel, onSend: onSendBa
       )}
       {mode === 'filter' && (
         <div style={{ padding: '10px 0', paddingBottom: 'calc(16px + env(safe-area-inset-bottom))', flexShrink: 0 }}>
-          <FilterStrip value={cur.filter} thumb={cur.url} big onPick={(k) => updateItem(cur.id, { filter: k })} />
+          <FilterStrip value={cur.filter} big onPick={(k) => updateItem(cur.id, { filter: k })} />
           <div style={{ fontSize: 12.5, color: 'rgba(255, 255, 255, 0.6)', textAlign: 'center', paddingTop: 12 }}>Swipe the photo to try them</div>
         </div>
       )}

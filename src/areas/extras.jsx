@@ -3549,6 +3549,7 @@ export function MeTab({ asPage = false, covered = false, onCoins, onQuestions, o
   }, [me.id]);
   const badge = (n) => (n > 0 ? <span style={{ minWidth: 20, height: 20, padding: '0 6px', borderRadius: 10, background: theme.danger, color: 'white', fontSize: 11, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{n > 99 ? '99+' : n}</span> : undefined);
   const tapThen = (fn) => () => { playUiSound('tap'); if (fn) fn(); };
+  const pfOpen = (k) => () => { playUiSound('tap'); if (onClose) onClose(); setTimeout(() => { try { window.dispatchEvent(new CustomEvent('zchat-pf-open', { detail: k })); } catch {} }, 80); };
   const btn = (label, icon, onClick, ariaLabel) => (
     <div role="button" aria-label={ariaLabel || label} onClick={() => { playUiSound('tap'); onClick(); }} className="zchat-press" style={{ flex: 1, height: 38, borderRadius: 10, background: c.field, color: c.fg, fontWeight: 700, fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, cursor: 'pointer' }}>{icon}{label}</div>
   );
@@ -3598,6 +3599,16 @@ export function MeTab({ asPage = false, covered = false, onCoins, onQuestions, o
             </div>
           );
         })()}
+        {asPage && (
+          <DetailSection title="Your profile">
+            {detailRows([
+              <DetailRow icon={<LineGlyph k="cake" size={22} />} label="Birthday" onClick={pfOpen('birthday')} />,
+              <DetailRow icon={<LineGlyph k="note" size={22} />} label="Profile song" onClick={pfOpen('song')} />,
+              <DetailRow icon={<Mic />} label="Voice intro" onClick={pfOpen('voice')} />,
+              <DetailRow icon={<LineGlyph k="image" size={22} />} label="Banner and photos" onClick={pfOpen('edit')} />,
+            ])}
+          </DetailSection>
+        )}
         <DetailSection title="Your stuff" flush>
           <DetailTiles items={[
             { icon: <Bookmark />, label: 'Saved', aria: 'Saved messages and posts', onClick: tapThen(onSaved) },
@@ -6564,23 +6575,29 @@ function WnSegments({ total, at, onArt, dark }) {
 }
 
 const WN_HIGHLIGHTS = [
-  { k: 'look38', art: 'look38h', title: 'A cleaner look', text: 'ZChat now uses calm greys with a blue accent, and the photo editor keeps its tools in a small column. Tap the arrow under them for more.' },
-  { k: 'roll38', art: 'roll38h', go: 'games', title: 'Roll Squad plays better', text: 'Touch anywhere on the left to roll and anywhere on the right to jump. You can jump again in the air, and the ball stops and turns much faster.' },
-  { k: 'gulp38', art: 'gulp38h', go: 'games', title: 'No top size in Gulp', text: 'Grow past the whale into an orca, a megalodon, a kraken and a leviathan. Growing takes longer now and more hunters come for you.' },
+  { k: 'talk39', art: 'talk39h', go: 'games', title: 'Talk while you play', text: 'Roll Squad has a mic and emoji reactions now. You also see a clear note when a friend starts watching, stops watching or leaves.' },
+  { k: 'wood39', art: 'wood39h', go: 'games', title: 'Wooden gates and new enemies', text: 'Burn wooden gates in Two Torches, fight spiders and ghosts, and your shots now find the closest enemy. Fences keep you from falling by accident.' },
+  { k: 'filter39', art: 'filter39h', title: 'Lots of new filters', text: 'Photo filters now come in groups like Portrait, Warm and Film, and each one shows its own picture so you can pick fast.' },
 ];
 const WN_SECTIONS = [
   { title: 'App', items: [
-    { art: 'look38', title: 'A cleaner look', text: 'Calm greys, a blue accent and a tidier photo editor.' },
+    { art: 'menu39', title: 'A lighter profile', text: 'The three lines menu now holds your birthday, song and voice intro.' },
+    { art: 'attach39', title: 'A cleaner attach menu', text: 'Gallery and Camera up top, everything else below.' },
+    { art: 'filter39', title: 'Lots of new filters', text: 'Many more filters, each with its own picture.' },
+    { art: 'join39', title: 'Join from your chats', text: 'Tap Join or Watch when a friend is playing.' },
   ] },
   { title: 'Games', items: [
-    { art: 'roll38', title: 'Roll Squad plays better', text: 'Easy touch controls and a double jump.' },
-    { art: 'gulp38', title: 'No top size in Gulp', text: 'Four new fish to grow into, and a harder sea.' },
+    { art: 'talk39', title: 'Talk while you play', text: 'A mic and reactions in Roll Squad, and clear watch notes.' },
+    { art: 'wood39', title: 'Wooden gates and new enemies', text: 'Spiders, ghosts and ten new Two Torches temples.' },
+    { art: 'skills39', title: 'New Gulp skills look', text: 'Real skill icons, a stronger suck and smoother swimming.' },
+    { art: 'glv35', title: 'More levels', text: 'Two Roll Squad worlds and eight new Gulp levels.' },
   ] },
 ];
 const WN_NEW_COUNT = WN_SECTIONS.reduce((n, sec) => n + sec.items.length, 0);
 const WN_SUMMARY = `${WN_NEW_COUNT} new things to try.`;
 
 const WN_EARLIER = [
+  { title: 'A cleaner look and better games', text: 'Calm greys with a blue accent, easy Roll Squad touch controls with a double jump, and no top size in Gulp.' },
   { title: 'Music on posts and tag controls', text: 'Songs on photo posts, hiding or removing tags from the post menu, sharing posts to your story and new game buttons.' },
   { title: 'A bigger Gulp sea and joining from chat', text: 'A bigger Gulp sea with chests and golden fish, endless missions, clear game screens and a Join button in chats.' },
   { title: 'Gulp rooms and levels', text: 'Gulp rooms for up to ten friends, twenty Gulp levels, sideways play, button size controls, ten new Two Torches temples and two new Roll Squad worlds.' },

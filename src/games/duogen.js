@@ -33,6 +33,7 @@ const GOALS = {
   timed: 'Buttons open the door for a few seconds',
   hall: 'Find the way through',
   foes: 'Fire burns enemies, frost freezes them',
+  wood: 'Burn the wooden gate with fire',
   beam: 'Turn the mirrors so the light hits the crystal',
 };
 
@@ -446,7 +447,7 @@ function bFoes(ctx) {
   }
   pillars(g, T, T.ri(1, 3));
   const n = Math.min(5, 2 + Math.floor(depth / 2) + (T.chance(0.3) ? 1 : 0));
-  const kinds = depth >= 3 ? ['v', 'g', 'x', 'x'] : ['v', 'g', 'g'];
+  const kinds = depth >= 4 ? ['v', 'g', 'x', 'y', 'u', 'u'] : depth >= 3 ? ['v', 'g', 'x', 'x', 'y'] : depth >= 2 ? ['v', 'g', 'g', 'y'] : ['v', 'g', 'g'];
   const placed = [];
   for (let i = 0; i < n * 10 && placed.length < n; i++) {
     const x = T.ri(2, w - 3), y = T.ri(1, h - 3);
@@ -459,6 +460,34 @@ function bFoes(ctx) {
   const exits = openRow0(g, ox, ow);
   const [ea, eb] = exitPair(exits);
   return { g, plan: [{ sun: [ea, -1], moon: [eb, -1] }], gems, exits, kind: 'foes' };
+}
+
+function bWood(ctx) {
+  const { w, T, depth } = ctx;
+  const h = T.ri(5, 6);
+  const g = grid(w, h);
+  const gems = [];
+  const wy = T.ri(2, 3);
+  fill(g, 1, wy, w - 2, wy, '#');
+  const gw = T.ri(2, 3), gx = T.ri(2, w - 2 - gw);
+  fill(g, gx, wy, gx + gw - 1, wy, 'w');
+  if (T.chance(0.55) && h - wy >= 3) {
+    const left = T.chance(0.5), nx = left ? 1 : w - 3, ny = wy + 1;
+    fill(g, nx, ny, nx + 1, ny, '.');
+    put(g, left ? nx + 2 : nx - 1, ny, '#');
+    put(g, left ? nx + 2 : nx - 1, ny + 1, 'w');
+    put(g, nx, ny + 1, '#'); put(g, nx + 1, ny + 1, '#');
+    gems.push([nx + (left ? 0 : 1), ny, T.chance(0.5) ? 'sun' : 'moon']);
+  }
+  pillars(g, T, T.ri(1, 2), (x, y) => Math.abs(y - wy) <= 2 || y <= 1);
+  if ((depth || 0) >= 3 && T.chance(0.6)) {
+    for (let i = 0; i < 20; i++) { const x = T.ri(2, w - 3), y = T.ri(1, wy - 1); if (y >= 1 && get(g, x, y) === '.') { put(g, x, y, T.pick(depth >= 4 ? ['y', 'u'] : ['y'])); break; } }
+  }
+  for (const k of ['sun', 'moon']) if (!gems.some((q) => q[2] === k)) { for (let i = 0; i < 30; i++) { const x = T.ri(1, w - 2), y = T.ri(1, h - 1); if (get(g, x, y) === '.' && y !== wy) { gems.push([x, y, k]); break; } } }
+  const ow = T.ri(2, 3), ox = T.ri(3, w - 3 - ow);
+  const exits = openRow0(g, ox, ow);
+  const [ea, eb] = exitPair(exits);
+  return { g, plan: [{ sun: [gx, wy + 1], moon: [Math.min(w - 2, gx + 1), wy + 1], until: 'wood' }, { sun: [ea, -1], moon: [eb, -1] }], gems, exits, kind: 'wood' };
 }
 
 function bBeam(ctx) {
@@ -514,11 +543,11 @@ function bHall(ctx) {
   return { g, plan, gems, exits, kind: 'hall' };
 }
 
-const BUILD = { gate: bGate, plate: bPlate, bridge: bBridge, code: bCode, fires: bFires, spikes: bSpikes, crumble: bCrumble, split: bSplit, portal: bPortal, ice: bIce, timed: bTimed, hall: bHall, foes: bFoes, beam: bBeam };
+const BUILD = { gate: bGate, plate: bPlate, bridge: bBridge, code: bCode, fires: bFires, spikes: bSpikes, crumble: bCrumble, split: bSplit, portal: bPortal, ice: bIce, timed: bTimed, hall: bHall, foes: bFoes, beam: bBeam, wood: bWood };
 const UNIQUE = new Set(['plate', 'code', 'fires', 'timed', 'beam']);
 const TIERS = [
   ['gate', 'plate', 'bridge', 'split', 'hall', 'foes'],
-  ['portal', 'spikes', 'code', 'crumble', 'beam', 'foes'],
+  ['portal', 'spikes', 'code', 'crumble', 'beam', 'foes', 'wood'],
   ['fires', 'timed', 'ice', 'foes'],
 ];
 

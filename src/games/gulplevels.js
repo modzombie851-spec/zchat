@@ -21,6 +21,14 @@ export const GULP_LEVELS = [
   { name: 'King of the sea', goal: { k: 'size', v: 100000 }, n: 12000, par: 420 },
   { name: 'Treasure hunter', goal: { k: 'chest', v: 2 }, start: [760, 250], n: 300, par: 120 },
   { name: 'Golden catch', goal: { k: 'gold', v: 1 }, start: [700, 120], n: 600, par: 120 },
+  { name: 'Reef patrol', goal: { k: 'eat', v: 400 }, n: 900, par: 320 },
+  { name: 'Chest diver', goal: { k: 'chest', v: 3 }, start: [900, 300], n: 1000, par: 200 },
+  { name: 'Combo storm', goal: { k: 'combo', v: 30 }, n: 1500, par: 180 },
+  { name: 'Survivor', goal: { k: 'time', v: 150 }, n: 2000, cfg: { hunt: 3 }, lives: 2 },
+  { name: 'Golden rush', goal: { k: 'gold', v: 2 }, start: [700, 150], n: 3000, par: 240 },
+  { name: 'Bubble master', goal: { k: 'pick', v: 14 }, n: 2500, cfg: { pk: 2 }, par: 240 },
+  { name: 'Abyss walker', goal: { k: 'size', v: 300000 }, start: [1220, 360], n: 60000, par: 520 },
+  { name: 'Legend of the deep', goal: { k: 'size', v: 1000000 }, n: 300000, lives: 3, par: 600 },
 ];
 
 const fmtNum = (v) => (v >= 1e9 ? `${Math.round(v / 1e8) / 10}b`.replace('.0b', 'b') : v >= 1e6 ? `${Math.round(v / 1e5) / 10}m`.replace('.0m', 'm') : v >= 10000 ? `${Math.round(v / 100) / 10}k`.replace('.0k', 'k') : String(Math.floor(v)).replace(/\B(?=(\d{3})+(?!\d))/g, ','));

@@ -339,7 +339,7 @@ export function useMeshRoom({ id, myId, enabled = true, meta, fast, audio = fals
       dispatch(m);
     };
     for (const dc of [c.dcU, c.dcR]) { dc.onopen = opened; dc.onclose = closed; dc.onmessage = got; }
-    if (audio) {
+    if (audio && !(st.metas[p] && st.metas[p].w)) {
       if (myId < p) { c.tr = pc.addTransceiver('audio', { direction: 'sendrecv' }); if (st.track) c.tr.sender.replaceTrack(st.track).catch(() => {}); }
       pc.ontrack = (e) => { if (!c.dead) attachAudio(p, c, e); };
     }
@@ -378,7 +378,7 @@ export function useMeshRoom({ id, myId, enabled = true, meta, fast, audio = fals
       try {
         c = mkConn(p, m.sid, old ? old.tries : 0);
         await c.pc.setRemoteDescription({ type: 'offer', sdp: m.d.sdp });
-        if (audio) {
+        if (audio && !(st.metas[p] && st.metas[p].w)) {
           c.tr = c.pc.getTransceivers().find((x) => x.receiver && x.receiver.track && x.receiver.track.kind === 'audio') || null;
           if (c.tr) { try { c.tr.direction = 'sendrecv'; } catch {} if (st.track) { try { await c.tr.sender.replaceTrack(st.track); } catch {} } }
         }
@@ -622,7 +622,9 @@ export function useGameLink({ id, myId, peerId, enabled = true, g, fast }) {
   return useMemo(() => ({ here, send, on, me: myId, watch }), [here, on, myId]);
 }
 
-export function useRoomLink({ id, myId, enabled = true, meta, fast }) {
-  const mesh = useMeshRoom({ id, myId, enabled, meta, fast });
-  return useMemo(() => ({ peers: mesh.peers, send: (t, d) => mesh.send(t, d), on: mesh.on, me: myId, here: mesh.peers.length > 0, links: mesh.links }), [mesh.peers, mesh.on, mesh.links, myId]);
+export function useRoomLink({ id, myId, enabled = true, meta, fast, audio = false }) {
+  const mesh = useMeshRoom({ id, myId, enabled, meta, fast, audio });
+  const meshRef = useRef(mesh);
+  meshRef.current = mesh;
+  return useMemo(() => ({ peers: mesh.peers, send: (t, d) => mesh.send(t, d), on: mesh.on, me: myId, here: mesh.peers.length > 0, links: mesh.links, mic: mesh.mic, mics: mesh.mics, muted: mesh.muted, toggleMic: () => meshRef.current.toggleMic(), toggleMute: (p) => meshRef.current.toggleMute(p) }), [mesh.peers, mesh.on, mesh.links, mesh.mic, mesh.mics, mesh.muted, myId]);
 }
