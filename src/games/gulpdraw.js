@@ -13,6 +13,15 @@ export const PLAYER_PAL = {
   b4: ['#FFD84D', '#D9A300', '#FFF0A8', '#FFFBEA'],
 };
 export const RING = { sun: '#FFCB7A', moon: '#A9DCFF', b1: '#BFF29E', b2: '#FFB3D4', b3: '#D8C2FF', b4: '#FFE98A' };
+Object.assign(PLAYER_PAL, {
+  c6: ['#3FE0C8', '#14A892', '#A6F5E8', '#EFFFFC'],
+  c7: ['#FF6A5E', '#D8392E', '#FFB3AC', '#FFF0EE'],
+  c8: ['#DCE3EE', '#9AA6B8', '#F4F7FB', '#FFFFFF'],
+  c9: ['#C98B5A', '#94592F', '#E8C3A2', '#FFF5EC'],
+});
+Object.assign(RING, { c6: '#A6F5E8', c7: '#FFB3AC', c8: '#FFFFFF', c9: '#F0CFA8' });
+['sun', 'moon', 'b1', 'b2', 'b3', 'b4'].forEach((k, i) => { PLAYER_PAL[`c${i}`] = PLAYER_PAL[k]; RING[`c${i}`] = RING[k]; });
+export const SLOT_KEYS = ['c0', 'c1', 'c2', 'c3', 'c4', 'c5', 'c6', 'c7', 'c8', 'c9'];
 
 function shade(hex, k) {
   const n = parseInt(hex.slice(1), 16);
@@ -427,12 +436,21 @@ function drawPickup(c, x, y, R, k, t) {
   c.restore();
 }
 
-function nameTag(c, x, y, text, col) {
+function nameTag(c, x, y, text, col, mic) {
+  if (!text) return;
   c.save(); c.font = `800 12px ${FF}`;
-  const w = c.measureText(text).width + 16;
+  const tw = c.measureText(text).width;
+  const w = tw + 16 + (mic ? 13 : 0);
   c.fillStyle = 'rgba(10,14,30,0.7)'; c.beginPath(); c.roundRect(x - w / 2, y - 20, w, 19, 9.5); c.fill();
   c.strokeStyle = 'rgba(0,0,0,0.5)'; c.lineWidth = 1.5; c.stroke();
-  c.fillStyle = col; c.textBaseline = 'middle'; c.textAlign = 'center'; c.fillText(text, x, y - 10.2);
+  const tx = x + (mic ? 6.5 : 0);
+  c.fillStyle = col; c.textBaseline = 'middle'; c.textAlign = 'center'; c.fillText(text, tx, y - 10.2);
+  if (mic) {
+    const mx = x - w / 2 + 11, my = y - 10.5;
+    c.fillStyle = '#7BE05A'; c.beginPath(); c.roundRect(mx - 2.5, my - 5.5, 5, 8, 2.5); c.fill();
+    c.strokeStyle = '#7BE05A'; c.lineWidth = 1.4; c.beginPath(); c.arc(mx, my - 0.5, 4.2, 0.15 * Math.PI, 0.85 * Math.PI); c.stroke();
+    c.beginPath(); c.moveTo(mx, my + 3.8); c.lineTo(mx, my + 5.6); c.stroke();
+  }
   c.restore();
 }
 function drawBubbleText(c, x, y, text, a, cw) {
@@ -506,7 +524,7 @@ export function render(ctx, G, V) {
         const lb = label(fmtN(f.n), col);
         if (lb) { const lh = clamp(r * 0.62, 9, 46); const lw = lb.width / lb.height * lh; const lx = x - Math.cos(f.a) * r * 0.3, ly = y - (S.shape === 'jelly' ? r * 0.35 : 0); c.drawImage(lb, lx - lw / 2, ly - lh / 2, lw, lh); }
       }
-      if (f.hunter && f.chase && f.n > myN) { c.save(); c.font = `900 ${Math.max(16, r * 0.8)}px ${FF}`; c.textAlign = 'center'; c.lineWidth = 4; c.strokeStyle = '#1B1430'; c.strokeText('!', x, y - r * 1.5); c.fillStyle = '#FF4F4F'; c.fillText('!', x, y - r * 1.5); c.restore(); }
+      if (f.hunter && (f.chase || f.warn > 0) && f.n > myN) { c.save(); c.font = `900 ${Math.max(16, r * 0.8)}px ${FF}`; c.textAlign = 'center'; c.lineWidth = 4; c.strokeStyle = '#1B1430'; c.strokeText('!', x, y - r * 1.5); c.fillStyle = '#FF4F4F'; c.fillText('!', x, y - r * 1.5); c.restore(); }
       else if (f.hunter && f.n > myN && me && Math.hypot(me.x - f.x, me.y - f.y) < viewOf(myN) * 0.8) { c.save(); c.globalAlpha = 0.35; c.strokeStyle = '#FF5A5A'; c.lineWidth = 2; c.setLineDash([6, 6]); c.beginPath(); c.arc(x, y, r * 1.5, 0, TAU); c.stroke(); c.restore(); }
     } else {
       const p = it.p, x = ox + p.x * s, y = oy + p.y * s, r = it.r * s;
@@ -555,7 +573,7 @@ export function render(ctx, G, V) {
       if (p.dead <= 0) {
         const lb = label(fmtN(p.n), '#FFFFFF');
         if (lb) { const lh = clamp(r * 0.62, 11, 54); const lw = lb.width / lb.height * lh; c.drawImage(lb, x - Math.cos(p.a) * r * 0.3 - lw / 2, y - lh / 2, lw, lh); }
-        nameTag(c, x, y - r * 1.25, (names && names[p.kind]) || p.name || '', ringCol);
+        nameTag(c, x, y - r * 1.25, (names && names[p.kind]) || p.name || '', ringCol, !!(V.mics && V.mics[p.kind]));
         const b = bb && bb[p.kind];
         if (b) {
           const k = b.t / b.life;

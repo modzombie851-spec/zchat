@@ -56,6 +56,7 @@ import {
   adminDate,
   adminWalletMem,
   adminWords,
+  appSnack,
   copyTextToClipboard,
   countWord,
   cxFlag,
@@ -185,6 +186,76 @@ function AdminFiles() {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+const DB_PARTS = [
+  ['functions', 'Missing functions', 'The app calls these, but they are not in the database.'],
+  ['locked', 'Functions people cannot use', 'These are in the database, but signed in people are not allowed to run them.'],
+  ['tables', 'Missing tables', 'The app reads or saves these, but they are not in the database.'],
+  ['columns', 'Missing columns', 'These tables are there, but a column the app needs is not.'],
+  ['buckets', 'Missing storage folders', 'Files the app saves go into these folders.'],
+  ['storage', 'Missing upload rules', 'Without these rules, uploads into the folder fail.'],
+];
+const DB_STORAGE_WORDS = { 'chat-media insert': 'Uploading photos into chat media', 'chat-private insert': 'Uploading photos into private chat media', 'chat-private select': 'Opening private chat photos', 'chat-private delete': 'Deleting private chat photos' };
+function dbShow(name) { return DB_STORAGE_WORDS[name] || String(name || '').replace(/\./, ': ').replace(/[_-]+/g, ' '); }
+function AdminDbCheck() {
+  const { theme } = useTheme();
+  const [state, setState] = useState({ busy: true, res: null, err: '' });
+  const run = async () => {
+    setState({ busy: true, res: null, err: '' });
+    const { data, error } = await supabase.rpc('zchat_admin_db_check');
+    if (error) { setState({ busy: false, res: null, err: rpcMissing(error) ? 'This check switches on once the latest ZChat setup is finished. Run the newest database file first.' : friendlyError(error, 'The check did not run. Try again in a moment.') }); return; }
+    if (!data || !data.ok) { setState({ busy: false, res: null, err: (data && data.reason) || 'The check did not run. Try again in a moment.' }); return; }
+    setState({ busy: false, res: data, err: '' });
+  };
+  useEffect(() => { run(); }, []);
+  const res = state.res;
+  const parts = res ? DB_PARTS.map(([k, title, text]) => ({ k, title, text, list: Array.isArray(res[k]) ? res[k] : [] })).filter((x) => x.list.length) : [];
+  const total = parts.reduce((n, x) => n + x.list.length, 0);
+  const copy = async () => {
+    const text = parts.map((x) => `${x.k}: ${x.list.join(', ')}`).join('\n');
+    const ok = await copyTextToClipboard(text);
+    hapticTap();
+    appSnack(ok ? 'Copied the list' : 'Could not copy. Take a screenshot instead.');
+  };
+  const card = { padding: '13px 0', boxShadow: `inset 0 -0.5px 0 ${theme.hair}` };
+  const checked = res && res.checked ? res.checked : null;
+  return (
+    <div>
+      <div style={{ ...card, display: 'flex', alignItems: 'center', gap: 10 }}>
+        <Database size={18} color={theme.coral} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontWeight: 900, fontSize: 15, color: theme.ink }}>Database check</div>
+          <div style={{ fontSize: 12, color: theme.muted, marginTop: 2 }}>{state.busy ? 'Checking' : checked ? `Checked ${checked.functions} functions, ${checked.tables} tables and ${checked.columns} columns` : 'Compares the database with what the app needs'}</div>
+        </div>
+        {!state.busy && <div role="button" onClick={run} style={{ fontSize: 12.5, fontWeight: 800, color: theme.coral, cursor: 'pointer' }}>Check again</div>}
+      </div>
+      {state.busy && <div style={{ ...card, display: 'flex', justifyContent: 'center' }}><Spinner color={theme.muted} /></div>}
+      {state.err && <div style={{ ...card, fontSize: 13.5, color: theme.danger, lineHeight: 1.5 }}>{state.err}</div>}
+      {res && total === 0 && (
+        <div style={{ ...card, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <CheckCheck size={20} color={theme.teal} />
+          <div style={{ fontSize: 13.5, fontWeight: 700, color: theme.ink }}>Everything the app needs is in the database.</div>
+        </div>
+      )}
+      {res && res.storage_error && <div style={{ ...card, fontSize: 13, color: theme.muted, lineHeight: 1.5 }}>Storage could not be checked from here.</div>}
+      {total > 0 && (
+        <div style={{ ...card, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ flex: 1, minWidth: 0, fontWeight: 900, fontSize: 14.5, color: theme.danger }}>{total === 1 ? '1 thing is missing' : `${total} things are missing`}</div>
+          <AdminTextBtn label="Copy list" tone="main" onClick={copy} />
+        </div>
+      )}
+      {parts.map((x) => (
+        <div key={x.k} style={card}>
+          <div style={{ fontWeight: 800, fontSize: 14, color: theme.ink }}>{`${x.title}, ${x.list.length}`}</div>
+          <div style={{ fontSize: 12.5, color: theme.muted, marginTop: 3, lineHeight: 1.5 }}>{x.text}</div>
+          <div style={{ marginTop: 8 }}>
+            {x.list.map((name) => <div key={name} style={{ fontSize: 13.5, fontWeight: 700, color: theme.ink, padding: '4px 0', wordBreak: 'break-word', userSelect: 'text', WebkitUserSelect: 'text' }}>{dbShow(name)}</div>)}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -655,6 +726,7 @@ export function AdminPanel({ myId, onClose, onOpenProfile, onOpenReports }) {
     [<ImageIcon />, 'Flagged photos', '', () => setTab('photos')],
     [<Activity />, 'Crash reports', '', () => setTab('errors')],
     [<FileText />, 'App files', '', () => setTab('files')],
+    [<Database />, 'Database check', '', () => setTab('dbcheck')],
     [<GiftBoxIcon />, 'Drops', '', () => setTab('drops')],
     [<GiftCodeIcon />, 'Gift codes', '', () => setTab('codes')],
     [<Megaphone />, 'Announce', '', () => setTab('announce')],
@@ -740,6 +812,7 @@ export function AdminPanel({ myId, onClose, onOpenProfile, onOpenReports }) {
         {tab === 'health' && <AdminHealth onOpenPhotos={() => setTab('photos')} />}
         {tab === 'photos' && <AdminPhotoFlags onOpenProfile={(p) => { supabase.from('profiles').select(PROFILE_COLS).eq('id', p.id).maybeSingle().then(({ data }) => { setTab('people'); setManageFor(data ? sanitizeAvatarList([data], '')[0] : p); }, () => {}); }} />}
         {tab === 'files' && <AdminFiles />}
+        {tab === 'dbcheck' && <AdminDbCheck />}
         {tab === 'drops' && <AdminDrops />}
         {tab === 'codes' && <AdminGiftCodes />}
 

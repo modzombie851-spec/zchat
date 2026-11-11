@@ -202,7 +202,7 @@ function OnlineCard({ online, onOpen }) {
   );
 }
 
-export function GamesPage({ onClose, onChallenge, onShareScore, initialGame, friends, onPlayWith, onStartLive, onRollInvite, onWatch, onOpenLeaderboard, onPlayBot, myId, me, onRoomHost, onRoomGuest, initialRoom }) {
+export function GamesPage({ onClose, onChallenge, onShareScore, initialGame, friends, onPlayWith, onStartLive, onRollInvite, onGulpRoom, onWatch, onOpenLeaderboard, onPlayBot, myId, me, onRoomHost, onRoomGuest, initialRoom }) {
   injectHubCss();
   useBackClose(true, onClose);
   const { theme } = useTheme();
@@ -287,10 +287,10 @@ export function GamesPage({ onClose, onChallenge, onShareScore, initialGame, fri
                         <Avatar emoji={p.avatar} name={p.name} size={26} />
                         <div style={{ minWidth: 0 }}>
                           <div style={{ fontSize: 12.5, fontWeight: 800, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{String(p.name || '').split(' ')[0]}</div>
-                          <div style={{ fontSize: 11, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{GAME_TITLES[r.game] || 'Game'}</div>
+                          <div style={{ fontSize: 11, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{GAME_TITLES[r.info && r.info.co ? 'gulpco' : r.game] || 'Game'}</div>
                         </div>
                       </div>
-                      <GameButton small color="gold" label="Watch" onClick={() => { tap(); onWatch(r, p); }} />
+                      <GameButton small color={r.info && r.info.co ? 'green' : 'gold'} label={r.info && r.info.co ? 'Join' : 'Watch'} onClick={() => { tap(); onWatch(r, p); }} />
                     </div>
                   </div>
                 ))}
@@ -303,7 +303,7 @@ export function GamesPage({ onClose, onChallenge, onShareScore, initialGame, fri
             <div style={{ position: 'absolute', left: 14, right: 14, bottom: 12, display: 'flex', alignItems: 'flex-end', gap: 10 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 19, fontWeight: 900, color: '#FFFFFF' }}>Roll Squad</div>
-                <div style={{ fontSize: 12.5, fontWeight: 600, color: 'rgba(255,255,255,0.85)', lineHeight: 1.35 }}>Up to four friends roll, jump and bop through 30 levels. No group needed.</div>
+                <div style={{ fontSize: 12.5, fontWeight: 600, color: 'rgba(255,255,255,0.85)', lineHeight: 1.35 }}>Up to four friends roll, jump and bop through 42 levels. No group needed.</div>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
                 {onRollInvite && <GameButton small color="gold" label="Invite friends" onClick={() => { tap(); noteRecent('roll'); onRollInvite(); }} />}
@@ -331,11 +331,11 @@ export function GamesPage({ onClose, onChallenge, onShareScore, initialGame, fri
             <div style={{ position: 'absolute', left: 14, right: 14, bottom: 12, display: 'flex', alignItems: 'flex-end', gap: 10 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 19, fontWeight: 900, color: '#FFFFFF' }}>Gulp</div>
-                <div style={{ fontSize: 12.5, fontWeight: 600, color: 'rgba(255,255,255,0.8)', lineHeight: 1.35 }}>Eat smaller fish and grow forever. Play a friend live or practice with bots.</div>
+                <div style={{ fontSize: 12.5, fontWeight: 600, color: 'rgba(255,255,255,0.8)', lineHeight: 1.35 }}>Eat smaller fish and grow forever. Twenty levels, endless mode and rooms for up to ten friends.</div>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
-                {onStartLive && <GameButton small color="gold" label="Play together" onClick={() => { tap(); noteRecent('gulp'); onStartLive('gulp'); }} />}
-                <GameButton small color="white" label="Practice" onClick={() => { tap(); setGulpSolo(true); }} />
+                {onGulpRoom ? <GameButton small color="gold" label="Gulp room" onClick={() => { tap(); noteRecent('gulpco'); onGulpRoom(); }} /> : onStartLive && <GameButton small color="gold" label="Play together" onClick={() => { tap(); noteRecent('gulp'); onStartLive('gulp'); }} />}
+                <GameButton small color="white" label="Play" onClick={() => { tap(); setGulpSolo(true); }} />
               </div>
             </div>
           </div>

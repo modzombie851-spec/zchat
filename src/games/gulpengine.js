@@ -94,7 +94,8 @@ export function makeGame(seed, opts) {
   const R = rngOf(seed);
   const G = {
     seed: String(seed), rng: R, t: 0, fish: [], pk: [], nextId: 1, seq: 0, events: [], log: [], over: null, acks: [],
-    pl: {}, order: [], spawnT: 0, pkT: 6, deco: null, solo: !!o.solo, botMem: {}, demo: !!o.demo,
+    pl: {}, order: [], spawnT: 0, pkT: 6, deco: null, solo: !!o.solo, botMem: {}, demo: !!o.demo, coop: !!o.coop,
+    cfg: { hunt: 1, pk: 1, ...(o.cfg || {}) },
   };
   const spots = [[30, 34], [52, 40], [70, 30], [40, 52], [86, 46]];
   (o.players || [{ kind: 'sun' }]).forEach((pp, i) => {
@@ -113,7 +114,58 @@ export function makeGame(seed, opts) {
 
 export function livePlayers(G) { return G.order.map((k) => G.pl[k]).filter((p) => p && !p.out); }
 
-function ev(G, e) { G.seq += 1; const x = { ...e, s: G.seq }; G.events.push(x); G.log.push(x); if (G.log.length > 30) G.log.shift(); }
+export function addPlayer(G, kind, name, color, near) {
+  if (G.pl[kind]) { G.pl[kind].name = name || G.pl[kind].name; if (color) G.pl[kind].color = color; return G.pl[kind]; }
+  const R = G.rng;
+  const others = G.order.map((k) => G.pl[k]).filter((q) => q && !q.out && !q.bot && q.kind !== 'demo');
+  let ref = near && G.pl[near] && !G.pl[near].out ? G.pl[near] : null;
+  if (!ref && others.length) ref = others.reduce((a, b) => (b.n < a.n ? b : a));
+  const p = mkPl(kind, name, 40 + R() * 30, 34 + R() * 12);
+  p.color = color || null;
+  if (ref) {
+    p.n = Math.max(2, Math.floor(ref.n * 0.3));
+    p.best = p.n;
+    p.stage = stageOf(p.n);
+    const V = viewOf(ref.n);
+    p.x = clamp(ref.x + (R() - 0.5) * V * 0.8, 4, WW - 4);
+    p.y = clamp(ref.y + (R() - 0.5) * V * 0.5, 4, floorAt(p.x) - 4);
+  }
+  p.prot = 3.5;
+  p.a = R() < 0.5 ? 0 : Math.PI;
+  G.pl[kind] = p;
+  if (!G.order.includes(kind)) G.order.push(kind);
+  ev(G, { k: 'spawn', who: kind });
+  return p;
+}
+export function dropPlayer(G, kind) {
+  if (!G.pl[kind]) return;
+  delete G.pl[kind];
+  G.order = G.order.filter((k) => k !== kind);
+  delete G.botMem[kind];
+  for (const f of G.fish) if (f.ch === kind) { f.ch = null; f.chase = 0; f.warn = 0; }
+}
+const SHAPE_V = (S) => (S.shape === 'long' || S.shape === 'shark' ? 1.25 : S.shape === 'jelly' ? 0.35 : S.shape === 'whale' ? 0.7 : 1);
+export function adoptHost(G, seed) {
+  G.rng = rngOf(`${seed}:${Date.now()}`);
+  const R = G.rng;
+  let top = G.nextId || 1;
+  for (const f of G.fish) {
+    if (f.id >= top) top = f.id + 1;
+    const S = SPECIES[f.sp] || SPECIES[0];
+    if (f.v == null) f.v = SHAPE_V(S) * (0.55 + R() * 0.35);
+    f.tt = 0.5 + R(); f.va = 0; f.cool = 1 + R() * 2; f.ch = null; f.warn = 0; f.chase = 0; f.stun = 0;
+    if (f.born == null) f.born = G.t - 1;
+    f.tx = null; f.ty = null; f.vx = 0; f.vy = 0;
+  }
+  G.nextId = top + 50000;
+  G.acks = []; G.events = []; G.log = [];
+  G.seq = (G.seq || 0) + 100000;
+  G.spawnT = 0; G.pkT = 4;
+  for (const k of G.order) { const p = G.pl[k]; if (p && p.hostN != null) { p.n = Math.max(p.n, p.hostN); p.hostN = null; } }
+  G.over = null;
+}
+
+function ev(G, e) { G.seq += 1; const x = { ...e, s: G.seq }; G.events.push(x); G.log.push(x); if (G.log.length > 40) G.log.shift(); }
 
 function anchorPlayers(G) {
   const ps = G.order.map((k) => G.pl[k]).filter((p) => p && !p.bot && (!p.out || p.kind === 'demo'));
@@ -163,11 +215,12 @@ export function spawnFish(G, initial, anchor) {
   const n = P.n;
   const roll = R();
   const nearHunters = G.fish.filter((f) => f.hunter && f.n > n && Math.hypot(f.x - P.x, f.y - P.y) < V * 2).length;
-  const maxH = n > 5000 ? 3 : n > 100 ? 2 : 1;
+  const hk = G.cfg ? G.cfg.hunt : 1;
+  const maxH = (n > 20000 ? 2 : 1) + (hk > 1.5 ? 1 : 0);
   const q = (a, b) => Math.max(1, Math.round(n * (a + R() * (b - a))));
   const qs = 1 / (1 + 0.8 * stageOf(n));
   const qf = (a, b) => q(a * qs, b * qs);
-  if (!initial && roll < 0.05 && nearHunters < maxH && G.t > 6) {
+  if (!initial && roll < 0.035 * hk && nearHunters < maxH && G.t > (hk > 1.5 ? 6 : 20)) {
     const sp = pickSpecies(G, zone, 'hunter');
     return addFish(G, sp, Math.max(n + 3, q(1.5, 4.5)), x, y, R() * TAU);
   }
@@ -290,7 +343,7 @@ function steerFish(G, f, dt) {
   want = f.a + f.va * 0.9;
   if (f.school != null) {
     let cx = 0, cy = 0, ax = 0, ay = 0, c = 0;
-    for (const o of G.fish) {
+    for (const o of (G.schools && G.schools.get(f.school)) || G.fish) {
       if (o.school !== f.school || o === f) continue;
       const d = Math.hypot(o.x - f.x, o.y - f.y);
       if (d > r * 14) continue;
@@ -306,16 +359,21 @@ function steerFish(G, f, dt) {
   const live = G.order.map((k) => G.pl[k]).filter((p) => p && !p.out && p.dead <= 0);
   if (f.hunter) {
     if (f.cool > 0) f.cool -= dt;
-    if (f.chase > 0) {
+    if (f.warn > 0) {
+      f.warn -= dt;
+      const p = G.pl[f.ch];
+      if (!p || p.dead > 0 || p.out || safe(p) || p.n >= f.n) { f.warn = 0; f.cool = 4; }
+      else { want = Math.atan2(p.y - f.y, p.x - f.x); sp *= 0.35; if (f.warn <= 0) f.chase = 1.2; }
+    } else if (f.chase > 0) {
       f.chase -= dt;
       const p = G.pl[f.ch];
       if (!p || p.dead > 0 || p.out || safe(p) || p.n >= f.n) f.chase = 0;
-      else { want = Math.atan2(p.y - f.y, p.x - f.x); sp = Math.min(speedOf(p.n) * 0.76, speedOf(f.n) * 0.75); }
-      if (f.chase <= 0) { f.cool = 6; f.va = (R() < 0.5 ? -1 : 1) * 1.2; f.tt = 1.2; }
+      else { want = Math.atan2(p.y - f.y, p.x - f.x); sp = Math.min(speedOf(p.n) * 0.64, speedOf(f.n) * 0.66); }
+      if (f.chase <= 0) { f.cool = 8.5; f.va = (R() < 0.5 ? -1 : 1) * 1.2; f.tt = 1.4; }
     } else if (f.cool <= 0) {
-      let best = null, bd = 4 + r * 3;
+      let best = null, bd = 3 + r * 2.2;
       for (const p of live) { if (p.n >= f.n || safe(p)) continue; const d = Math.hypot(p.x - f.x, p.y - f.y) - rOf(p.n); if (d < bd) { bd = d; best = p; } }
-      if (best) { f.chase = 1.7; f.ch = best.kind; ev(G, { k: 'hunt', id: f.id, who: best.kind }); }
+      if (best) { f.warn = 0.75; f.ch = best.kind; ev(G, { k: 'hunt', id: f.id, who: best.kind }); }
     }
   } else {
     for (const p of live) {
@@ -345,7 +403,7 @@ function steerFish(G, f, dt) {
 
 function killPlayer(G, p, by, killer) {
   if (p.dead > 0 || p.out) return;
-  p.dead = 2.2; p.lives -= 1; p.sto = 0; p.hurt = 0.8; p.combo = 0;
+  p.dead = 2.2; if (!G.coop) p.lives -= 1; p.sto = 0; p.hurt = 0.8; p.combo = 0; p.deaths = (p.deaths || 0) + 1;
   p.by = killer ? { sp: killer.sp != null ? killer.sp : -1, n: killer.n, who: killer.kind || null } : null;
   ev(G, { k: 'die', who: p.kind, by, x: p.x, y: p.y, n: p.n, kn: killer ? killer.n : 0, ksp: killer && killer.sp != null ? killer.sp : -1, kwho: killer && killer.kind ? killer.kind : null });
   if (p.lives <= 0) { p.out = true; ev(G, { k: 'out', who: p.kind, n: p.best }); }
@@ -366,13 +424,14 @@ function respawn(G, p) {
   if (p.nb) p.nb.buf.length = 0;
   ev(G, { k: 'spawn', who: p.kind });
 }
-function gainFor(p, n) {
+const STAGE_GAIN = [1, 1, 0.85, 0.7, 0.6, 0.55];
+export function gainFor(p, n) {
   const mult = (p.fx.double > 0 ? 2 : 1) * (p.fx.frenzy > 0 ? 2 : 1) * (p.bot ? 0.6 : 1);
   const bonus = p.combo >= 3 ? 1 + Math.min(0.3, (p.combo - 2) * 0.05) : 1;
-  return Math.max(1, Math.floor(n * mult * bonus));
+  const g = Math.max(1, Math.floor(n * mult * bonus * STAGE_GAIN[Math.min(5, p.stage || 0)]));
+  return Math.min(g, Math.max(24, Math.floor(p.n * 0.9)));
 }
-function feed(p, gain) { p.sto = Math.min(p.sto + gain, Math.max(24, p.n * 1.2)); }
-const DIG = [0.07, 0.066, 0.034, 0.026, 0.02, 0.016];
+function feed(G, p, gain) { p.sto = 0; grow(G, p, gain); }
 function grow(G, p, gain) {
   if (p.bot) { const hum = G.pl[G.order.find((k) => G.pl[k] && !G.pl[k].bot && k !== 'demo')]; if (hum) gain = Math.max(0, Math.min(gain, Math.floor(hum.best * 0.85) - p.n)); }
   p.n += gain;
@@ -392,7 +451,7 @@ export function eatFish(G, p, f) {
   p.comboT = 1.6;
   const gain = gainFor(p, f.n);
   p.eat = 0.3; p.eaten += 1;
-  feed(p, gain);
+  feed(G, p, gain);
   ev(G, { k: 'eat', who: p.kind, id: f.id, gain, x: f.x, y: f.y, sp: f.sp, c: p.combo, big: f.n > p.n * 0.35 ? 1 : 0 });
   return true;
 }
@@ -418,7 +477,6 @@ export function hostStep(G, dt, ctl) {
       movePlayer(G, p, inp, dt);
     }
     tickPlayer(p, dt);
-    if (p.sto > 0 && p.dead <= 0) { const d = Math.min(p.sto, Math.max(4, p.n * DIG[Math.min(5, p.stage)]) * dt); p.sto -= d; grow(G, p, d); }
     if (p.dead > 0 && !p.out) { p.dead -= dt; if (p.dead <= 0) respawn(G, p); }
     if (p.bot && p.out) {
       p.reviveT = (p.reviveT == null ? 5 : p.reviveT) - dt;
@@ -434,7 +492,11 @@ export function hostStep(G, dt, ctl) {
     }
   }
   if (G.demo) { const d = G.pl.demo; d.x = 62 + Math.sin(G.t * 0.04) * 38; d.y = 60 + Math.sin(G.t * 0.07) * 3; }
+  const schools = new Map();
+  for (const f of G.fish) if (f.school != null) { let arr = schools.get(f.school); if (!arr) { arr = []; schools.set(f.school, arr); } arr.push(f); }
+  G.schools = schools;
   for (const f of G.fish) steerFish(G, f, dt);
+  G.schools = null;
   const anchors = anchorPlayers(G);
   const keep = [];
   for (const f of G.fish) {
@@ -456,7 +518,7 @@ export function hostStep(G, dt, ctl) {
     }
   }
   G.pkT -= dt;
-  if (G.pkT <= 0) { G.pkT = 7 + G.rng() * 6; if (G.pk.length < Math.max(2, anchors.length + 1)) spawnPk(G); }
+  if (G.pkT <= 0) { G.pkT = (7 + G.rng() * 6) / Math.max(0.3, G.cfg ? G.cfg.pk : 1); if (G.pk.length < Math.max(2, anchors.length + 1)) spawnPk(G); }
   for (const pk of G.pk) pk.life -= dt;
   G.pk = G.pk.filter((pk) => pk.life > 0);
   for (const k of G.order) {
@@ -473,7 +535,7 @@ export function hostStep(G, dt, ctl) {
       const p = G.pl[k];
       if (!p || p.dead > 0 || p.out || safe(p) || p.n >= f.n || k === 'demo' || (!f.hunter && f.n < p.n * 1.3)) continue;
       const lk = ctl.local.has(k) ? 1 : 0.85;
-      if (segDist(hx, hy, bodySeg(p)) < (hr * 0.45 + rOf(p.n) * 0.45) * lk) { f.eat = 0.4; killPlayer(G, p, 'fish', f); }
+      if (segDist(hx, hy, bodySeg(p)) < (hr * (f.hunter ? 0.36 : 0.45) + rOf(p.n) * (f.hunter ? 0.36 : 0.45)) * lk) { f.eat = 0.4; killPlayer(G, p, 'fish', f); }
     }
     if (f.hunter && G.rng() < dt * 2) {
       for (const o of G.fish) {
@@ -483,7 +545,7 @@ export function hostStep(G, dt, ctl) {
     }
   }
   if (G.fish.some((f) => f.gone)) G.fish = G.fish.filter((f) => !f.gone);
-  const ps = G.order.map((k) => G.pl[k]).filter((p) => p && !p.out && p.dead <= 0 && p.kind !== 'demo');
+  const ps = G.coop ? [] : G.order.map((k) => G.pl[k]).filter((p) => p && !p.out && p.dead <= 0 && p.kind !== 'demo');
   for (let i = 0; i < ps.length; i++) for (let j = i + 1; j < ps.length; j++) {
     const a = ps[i], b = ps[j];
     if (a.n === b.n || a.dead > 0 || b.dead > 0) continue;
@@ -494,11 +556,11 @@ export function hostStep(G, dt, ctl) {
       const gain = gainFor(big, small.n);
       killPlayer(G, small, 'player', big);
       big.eat = 0.4; big.eaten += 1;
-      feed(big, gain);
+      feed(G, big, gain);
       ev(G, { k: 'eatp', who: big.kind, vic: small.kind, gain, x: small.x, y: small.y });
     }
   }
-  if (!G.over && !G.solo && G.order.length > 1) {
+  if (!G.over && !G.solo && !G.coop && G.order.length > 1) {
     const alive = G.order.filter((k) => k !== 'demo' && G.pl[k] && !G.pl[k].out);
     if (alive.length <= 1) { G.over = { w: alive[0] || null, why: 'lives' }; ev(G, { k: 'over', w: G.over.w }); }
   }
@@ -523,17 +585,18 @@ export function applyGuestEvent(G, kind, e) {
 }
 
 const q10 = (v) => Math.round(v * 10);
-export function snap(G, views) {
+export function snap(G, views, forKey) {
   G.acks = G.acks.filter(([, t]) => G.t - t < 1.6);
   const inView = (f) => !views || views.some((v) => Math.hypot(f.x - v.x, f.y - v.y) < v.R + rOf(f.n));
+  const evOk = (e) => !forKey || !views || e.who === forKey || e.vic === forKey || e.k === 'over' || e.k === 'out' || e.k === 'evolve' || e.x == null || views.some((v) => Math.hypot(e.x - v.x, e.y - v.y) < v.R);
   const P = (p) => [Math.floor(p.n), p.lives, p.dead > 0 ? Math.round(p.dead * 10) : 0, q10(p.prot), q10(p.fx.shield), q10(p.fx.double), q10(p.fx.magnet), q10(p.fx.speed), p.tp, q10(p.x), q10(p.y), p.out ? 1 : 0, p.stage, Math.floor(p.best), p.eaten, q10(p.fx.frenzy), q10(p.fx.suck)];
   const pl = {};
   for (const k of G.order) if (G.pl[k] && k !== 'demo') pl[k] = P(G.pl[k]);
   return {
     gt: Math.round(G.t * 100), seq: G.seq,
-    f: G.fish.filter(inView).map((f) => [f.id, f.sp * 10 + f.pv, f.n, q10(f.x), q10(f.y), Math.round(f.a * 100), (f.hunter ? 1 : 0) + (f.chase > 0 ? 2 : 0) + (f.stun > 0 ? 4 : 0), f.school != null ? f.school : 0, Math.round(f.puff * 10)]),
+    f: G.fish.filter(inView).map((f) => [f.id, f.sp * 10 + f.pv, f.n, q10(f.x), q10(f.y), Math.round(f.a * 100), (f.hunter ? 1 : 0) + (f.chase > 0 ? 2 : 0) + (f.stun > 0 ? 4 : 0) + (f.warn > 0 ? 8 : 0), f.school != null ? f.school : 0, Math.round(f.puff * 10)]),
     pk: G.pk.map((k) => [k.id, PK_KINDS.indexOf(k.k), q10(k.x), q10(k.y), q10(k.r)]),
-    pl, ack: G.acks.map(([id]) => id), ev: G.log.slice(-14), over: G.over,
+    pl, ack: G.acks.map(([id]) => id), ev: (forKey ? G.log.filter(evOk) : G.log).slice(-14), over: G.over,
   };
 }
 export function applySnap(G, s, mine) {
@@ -551,11 +614,12 @@ export function applySnap(G, s, mine) {
     if (!f) { f = { id, sp, pv, n, x: nx, y: ny, a: a / 100, tx: nx, ty: ny, ta: a / 100, vx: 0, vy: 0, ext: 0, hunter: !!(fl & 1), chase: 0, stun: 0, school: sch || null, puff: 0, born: G.t }; G.fish.push(f); }
     else if (dts > 0.02 && f.sx != null) { f.vx = (nx - f.sx) / dts; f.vy = (ny - f.sy) / dts; const v = Math.hypot(f.vx, f.vy); const cap = 3 + rOf(n) * 3; if (v > cap) { f.vx *= cap / v; f.vy *= cap / v; } }
     f.sx = nx; f.sy = ny; f.ext = 0;
-    f.sp = sp; f.pv = pv; f.n = n; f.hunter = !!(fl & 1); f.chase = fl & 2 ? 1 : 0; f.stun = fl & 4 ? 1 : 0; f.tx = nx; f.ty = ny; f.ta = a / 100; f.puff = (puff || 0) / 10;
+    f.sp = sp; f.pv = pv; f.n = n; f.hunter = !!(fl & 1); f.chase = fl & 2 ? 1 : 0; f.stun = fl & 4 ? 1 : 0; f.warn = fl & 8 ? 1 : 0; f.tx = nx; f.ty = ny; f.ta = a / 100; f.puff = (puff || 0) / 10;
     if (Math.hypot(f.x - f.tx, f.y - f.ty) > 4 + rOf(n) * 2) { f.x = f.tx; f.y = f.ty; }
   }
   G.fish = G.fish.filter((f) => seen.has(f.id));
   G.pk = s.pk.map(([id, k, x, y, r]) => ({ id, k: PK_KINDS[k], x: x / 10, y: y / 10, r: r / 10, life: 9 }));
+  if (s.all) for (const k of G.order.slice()) if (k !== 'demo' && !s.pl[k]) { delete G.pl[k]; G.order = G.order.filter((x) => x !== k); }
   for (const k of Object.keys(s.pl)) {
     let p = G.pl[k];
     if (!p) { p = mkPl(k, '', s.pl[k][9] / 10, s.pl[k][10] / 10); G.pl[k] = p; if (!G.order.includes(k)) G.order.push(k); }

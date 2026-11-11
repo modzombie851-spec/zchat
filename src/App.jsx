@@ -313,6 +313,7 @@ export const ZapCardGuide = zLazy(() => import('./games/cards.jsx'), 'ZapCardGui
 export const BlobGame = zLazy(() => import('./games/blob.jsx'), 'BlobGame', 'blob');
 export const DuoGamePage = zLazy(() => import('./games/duo.jsx'), 'DuoGamePage', 'duo');
 export const GulpGamePage = zLazy(() => import('./games/gulp.jsx'), 'GulpGamePage', 'gulp');
+export const GulpInviteSheet = zLazy(() => import('./games/gulp.jsx'), 'GulpInviteSheet', 'gulp');
 export const RollGamePage = zLazy(() => import('./games/roll.jsx'), 'RollGamePage', 'roll');
 export const RollInviteSheet = zLazy(() => import('./games/roll.jsx'), 'RollInviteSheet', 'roll');
 export const G1GolfPage = zLazy(() => import('./areas/games.jsx'), 'G1GolfPage', 'games');
@@ -5246,12 +5247,12 @@ const HOME_FEATS = [
 ];
 const HOME_FEAT_BG = { draw: ['#22D3EE', '#2563EB'], booth: ['#F472B6', '#F97316'], watch: ['#FB7185', '#9F1239'], bot: ['#34D399', '#0E7490'], ai: ['#FBBF24', '#DB2777'] };
 function hfSpark(x, y, r) { return `M${x} ${y - r}Q${x} ${y} ${x + r} ${y}Q${x} ${y} ${x} ${y + r}Q${x} ${y} ${x - r} ${y}Q${x} ${y} ${x} ${y - r}Z`; }
-function HomeFeatArt({ k }) {
+function HomeFeatArt({ k, w = 120, h = 84 }) {
   const rawId = React.useId();
   const id = `hf${rawId.replace(/[^a-zA-Z0-9]/g, '')}`;
   const bg = HOME_FEAT_BG[k] || ['#7B5CFF', '#C13BDC'];
   return (
-    <svg viewBox="0 0 112 84" width="120" height="84" preserveAspectRatio="xMidYMid slice" aria-hidden="true" style={{ display: 'block' }}>
+    <svg viewBox="0 0 112 84" width={w} height={h} preserveAspectRatio="xMidYMid slice" aria-hidden="true" style={{ display: 'block' }}>
       <defs>
         <linearGradient id={`${id}b`} x1="0" y1="0" x2="0.7" y2="1"><stop offset="0" stopColor={bg[0]} /><stop offset="1" stopColor={bg[1]} /></linearGradient>
         <radialGradient id={`${id}l`} cx="0.2" cy="0" r="0.9"><stop offset="0" stopColor="#FFFFFF" stopOpacity="0.35" /><stop offset="0.6" stopColor="#FFFFFF" stopOpacity="0" /></radialGradient>
@@ -18487,7 +18488,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-export const APP_VERSION = '34.0V';
+export const APP_VERSION = '35.0V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -30165,13 +30166,8 @@ function DrawCard({ d, onOpen }) {
   const { theme } = useTheme();
   return (
     <FeatureCardShell colors={['#7C5CFC']} icon={<DoodleIcon size={14} />} label="Live drawing" title="Draw together">
-      <div role="button" aria-label="Open the drawing" onClick={(e) => { e.stopPropagation(); if (onOpen) onOpen(); }} style={{ position: 'relative', width: '100%', aspectRatio: '16 / 9', borderRadius: 12, overflow: 'hidden', background: '#FFFFFF', cursor: 'pointer', boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.08)' }}>
-        <svg viewBox="0 0 160 90" width="100%" height="100%" aria-hidden="true" style={{ display: 'block' }}>
-          <path d="M18 62 C 30 30, 46 30, 52 50 S 72 78, 84 44" fill="none" stroke="#7C5CFC" strokeWidth="4.5" strokeLinecap="round" />
-          <path d="M96 28 l 10 22 l 14 -18 l 10 26" fill="none" stroke="#FF2D92" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-          <circle cx="130" cy="66" r="9" fill="none" stroke="#2E7CF6" strokeWidth="4" />
-          <path d="M28 76 h 40" stroke="#FFCC00" strokeWidth="5" strokeLinecap="round" />
-        </svg>
+      <div role="button" aria-label="Open the drawing" onClick={(e) => { e.stopPropagation(); if (onOpen) onOpen(); }} style={{ position: 'relative', width: '100%', aspectRatio: '3 / 2', borderRadius: 12, overflow: 'hidden', cursor: 'pointer' }}>
+        <HomeFeatArt k="draw" w="100%" h="100%" />
       </div>
       <div role="button" aria-label="Join the drawing" onClick={(e) => { e.stopPropagation(); if (onOpen) onOpen(); }} className="zchat-press" style={{ marginTop: 10, height: 40, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 14, fontWeight: 800, cursor: 'pointer', background: theme.dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)', color: theme.ink }}>
         <DoodleIcon size={16} />Draw with everyone
@@ -36472,7 +36468,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const title = gameTitle(state);
     const low = title.toLowerCase();
     upsertConversation(profile.id, state.g === 'score' ? `High score in ${title}` : title, 'text');
-    const text = state.g === 'score' ? `Scored ${formatGameScore(state.k, state.s)} in ${title}` : LIVE_GAME_KEYS.includes(state.g) ? `Wants to play ${low} with you right now` : state.n === 0 ? `Challenged you to ${low}` : (state.w ? `Finished your ${low} game` : `Made a move in ${low}`);
+    const text = state.g === 'score' ? `Scored ${formatGameScore(state.k, state.s)} in ${title}` : state.g === 'gulpco' ? 'Invited you to a Gulp room' : LIVE_GAME_KEYS.includes(state.g) ? `Wants to play ${low} with you right now` : state.n === 0 ? `Challenged you to ${low}` : (state.w ? `Finished your ${low} game` : `Made a move in ${low}`);
     if (!profile.is_bot && !(opts && opts.quiet)) notifyUser(profile.id, me.name, text, `/?dm=${session.user.id}`, me.avatar);
     if (!(opts && opts.quiet)) playUiSound('send');
     return data;
@@ -36510,12 +36506,25 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const info = (r && r.info) || {};
     if (!r) return;
     if (r.game === 'roll') { setShowGames(false); setRollGame({ rm: r.room, host: info.h || r.user_id, watch: true }); return; }
+    if (r.game === 'gulp' && info.co && typeof info.rm === 'string') { setShowGames(false); setGulpRoom({ rm: info.rm }); return; }
     if (!info.h || !info.o || !info.g) { showSnack('That game just ended'); return; }
     const [hp, gp] = await Promise.all([cachedProfile(info.h).catch(() => null), cachedProfile(info.o).catch(() => null)]);
     setShowGames(false);
     setWatchGame({ game: r.game, gameId: info.g, host: info.h, names: { sun: (hp && hp.name) || 'Friend', moon: (gp && gp.name) || 'Friend' } });
   };
   const [rollPick, setRollPick] = useState(null);
+  const [gulpRoom, setGulpRoom] = useState(null);
+  const [gulpPick, setGulpPick] = useState(null);
+  if (typeof window !== 'undefined' && window.__zfake) { window.__zopenGulpRoom = (rm) => setGulpRoom({ rm }); window.__zopenRoll = (rm, host) => setRollGame({ rm, host }); }
+  const startGulpRoomWith = async (profiles, rmIn) => {
+    const rm = rmIn || newClientId();
+    if (!rmIn) setGulpRoom({ rm });
+    for (const p of profiles || []) {
+      if (!p || p.is_bot) continue;
+      const st = { g: 'gulpco', id: newClientId(), x: session.user.id, o: p.id, w: null, n: 0, st: 'wait', exp: Date.now() + 6 * 3600 * 1000, sx: 0, so: 0, rm };
+      try { await sendGameStateTo(p, st, { quiet: false }); } catch {}
+    }
+  };
   const startRollWith = async (profiles, rmIn) => {
     const rm = rmIn || newClientId();
     if (!rmIn) setRollGame({ rm, host: session.user.id });
@@ -36528,6 +36537,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const startLiveGame = async (profile, kind) => {
     if (!profile || profile.is_bot) return;
     if (kind === 'roll') { startRollWith([profile]); return; }
+    if (kind === 'gulpco') { startGulpRoomWith([profile]); return; }
     if (!activeProfileRef.current || activeProfileRef.current.id !== profile.id) await openChat(profile, null);
     const state = newGameState(kind, profile);
     const row = await sendGameStateTo(profile, state);
@@ -36539,6 +36549,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (!peer || !msg || String(msg.id).startsWith('temp-')) return;
     if (st.x !== session.user.id && st.o !== session.user.id) return;
     if (st.g === 'roll') { setRollGame({ rm: st.rm || st.id, host: st.x }); return; }
+    if (st.g === 'gulpco') { if (typeof st.rm === 'string') setGulpRoom({ rm: st.rm }); return; }
     setLiveGame({ state: st, messageId: msg.id, peer });
   };
   const saveLiveState = async (messageId, next) => {
@@ -36957,7 +36968,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
 
   const myWallpaperField = (conv) => (conv.user_a === session.user.id ? 'wallpaper_a' : 'wallpaper_b');
   const myWallpaper = (conv) => conv[myWallpaperField(conv)];
-  const saveConvField = async (conv, patch, failMsg, before) => {
+  const saveConvField = async (conv, patch, failMsg, before, via) => {
     const oid = conv.otherProfile && conv.otherProfile.id;
     const cur = (oid && findConvRow(oid)) || conv;
     const undo = {};
@@ -36965,11 +36976,31 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     holdDmFields(oid, patch);
     const pre = before ? await before : null;
     const stop = !!(pre && pre.error);
-    const { data, error } = stop ? { data: null, error: null } : await supabase.from('conversations').update(patch).eq('id', conv.id).select('id');
-    if (error || !data || !data.length) {
+    let error = null;
+    let reason = '';
+    let ok = false;
+    let done = stop;
+    if (!stop && via) {
+      const r = await supabase.rpc(via.fn, via.args);
+      if (!rpcMissing(r.error) && (r.error || r.data)) {
+        done = true;
+        if (r.error) error = r.error;
+        else if (r.data && r.data.ok) ok = true;
+        else reason = (r.data && r.data.reason) || '';
+      }
+    }
+    if (!done) {
+      const r = await supabase.from('conversations').update(patch).eq('id', conv.id).select('id');
+      error = r.error;
+      ok = !r.error && !!r.data && r.data.length > 0;
+    }
+    if (!ok) {
       dropFieldHold('dm', oid, Object.keys(patch));
       patchDmRow(oid, undo);
-      if (!stop) showSnack(friendlyError(error, failMsg));
+      if (!stop) {
+        showSnack(reason || friendlyError(error, failMsg));
+        if (!reason) reportClientError(`Chat setting did not save: ${Object.keys(patch).join(', ')} ${error ? [error.code, error.message].filter(Boolean).join(' ') : 'no row changed'}`, error ? [error.details, error.hint].filter(Boolean).join('\n') : '', { kind: 'save', table: 'conversations' });
+      }
       return false;
     }
     return true;
@@ -36977,7 +37008,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const setWallpaper = async (conv, key, scope, before) => {
     const personal = scope === 'me' || (typeof key === 'string' && key.indexOf(WALL_PHOTO_PREFIX) === 0);
     const patchRow = personal ? { [myWallpaperField(conv)]: key } : { wallpaper_a: key, wallpaper_b: key };
-    if (!(await saveConvField(conv, patchRow, "Couldn't change the wallpaper. Try again.", before))) return;
+    if (!(await saveConvField(conv, patchRow, "Couldn't change the wallpaper. Try again.", before, { fn: 'zchat_chat_wallpaper', args: { p_conv: String(conv.id), p_key: key || null, p_both: !personal } }))) return;
     if (personal) return;
     const ct = chatThemeOf(key);
     const text = ct ? `${me.name} changed the chat theme to ${ct.label}` : key ? `${me.name} changed the wallpaper to ${(WALLPAPER_PRESETS.find((p) => p.key === key) || liveWallOf(key) || {}).label || 'a new picture'}` : `${me.name} turned off the chat theme`;
@@ -39868,7 +39899,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       setActiveGroup((prev) => (prev && prev.id === gid ? { ...prev, ...undo } : prev));
       dropFieldHold('group', gid, Object.keys(patch));
       patchGroupRow(gid, undo);
-      if (!stop) showSnack(res.reason || friendlyError(res.error, failMsg));
+      if (!stop) {
+        showSnack(res.reason || friendlyError(res.error, failMsg));
+        if (res.error) reportClientError(`Group setting did not save: ${Object.keys(patch).join(', ')} ${[res.error.code, res.error.message].filter(Boolean).join(' ')}`, [res.error.details, res.error.hint].filter(Boolean).join('\n'), { kind: 'save', table: 'groups' });
+      }
       return false;
     }
     return true;
@@ -48127,6 +48161,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           onPlayWith={(pp) => { setShowGames(false); setTimeout(() => setGameSheetFor(pp), 120); }}
           onStartLive={(kind) => { setShowGames(false); setTimeout(() => setGamePicker({ kind }), 80); }}
           onRollInvite={() => setRollPick({ rm: null })}
+          onGulpRoom={() => setGulpPick({ rm: null, n: 1 })}
           onWatch={(r, p) => openWatch(r, p)}
           onOpenLeaderboard={(k) => setLeaderboardFor({ game: k || 'all', at: Date.now() })}
           onChallenge={(kind) => { setShowGames(false); setTimeout(() => setGamePicker({ kind: kind || 'ttt' }), 80); }}
@@ -48181,11 +48216,21 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           onClose={() => { const back = !!rollGame.watch; setRollGame(null); if (back) setShowGames(true); }}
           onInvite={rollGame.host === session.user.id ? () => setRollPick({ rm: rollGame.rm }) : null} />
       )}
+      {gulpRoom && me && (
+        <GulpGamePage key={`gr${gulpRoom.rm}`} room={gulpRoom} me={me} myId={session.user.id}
+          onClose={() => setGulpRoom(null)}
+          onInvite={(n, side) => setGulpPick({ rm: gulpRoom.rm, n, side: !!side })} />
+      )}
+      {gulpPick && (
+        <GulpInviteSheet friends={gameFriends} already={gulpPick.n} side={!!gulpPick.side} onClose={() => setGulpPick(null)}
+          onSolo={gulpPick.rm ? null : () => { setGulpPick(null); setShowGames(false); setGulpRoom({ rm: newClientId() }); }}
+          onInvite={(ps) => { const rm = gulpPick.rm; setGulpPick(null); setShowGames(false); startGulpRoomWith(ps, rm); }} />
+      )}
       {rollPick && (
         <RollInviteSheet friends={gameFriends} onClose={() => setRollPick(null)}
           onInvite={(ps) => { const rm = rollPick.rm; setRollPick(null); setShowGames(false); startRollWith(ps, rm); }} />
       )}
-      {liveGame && me && liveGame.state.g !== 'duo' && liveGame.state.g !== 'gulp' && liveGame.state.g !== 'roll' && (
+      {liveGame && me && liveGame.state.g !== 'duo' && liveGame.state.g !== 'gulp' && liveGame.state.g !== 'roll' && liveGame.state.g !== 'gulpco' && (
         <LiveGamePage key={liveGame.state.id} initial={liveGame.state} me={me} peer={liveGame.peer} myId={session.user.id}
           onClose={() => setLiveGame(null)}
           onSaveState={(next) => saveLiveState(liveGame.messageId, next)}
@@ -48645,12 +48690,120 @@ function WnClockArt({ tall = false }) {
     </>
   );
 }
+function WnFeedChip({ x, y, text, dot, w }) {
+  const width = w || Math.round(text.length * 6.3 + 30);
+  return (
+    <g transform={`translate(${x} ${y})`}>
+      <rect x="0" y="0" width={width} height="22" rx="11" fill="rgba(12,18,40,0.84)" stroke={ART_INK} strokeWidth="2" />
+      {dot && <circle cx="12" cy="11" r="4" fill={dot} />}
+      <text x={dot ? 22 : 11} y="15.2" fontFamily="-apple-system, BlinkMacSystemFont, sans-serif" fontWeight="800" fontSize="11.5" fill="#FFFFFF">{text}</text>
+    </g>
+  );
+}
+function WnRoomArt({ tall = false }) {
+  const top = tall ? -50 : 8;
+  return (
+    <>
+      {tall ? <image href="/gulp-art.webp" x="-98" y="-112" width="474" height="296" preserveAspectRatio="xMidYMid slice" /> : <image href="/gulp-art.webp" x="16" y="-4" width="288" height="186" preserveAspectRatio="xMidYMid slice" />}
+      <WnFeedChip x={tall ? 40 : 26} y={top} text="Ana joined" dot="#5BE37D" />
+      <WnFeedChip x={tall ? 40 : 26} y={top + 27} text="Leo joined" dot="#5BE37D" />
+      <g transform={`translate(${tall ? 214 : 226} ${top})`}>
+        <rect x="0" y="0" width="64" height="22" rx="11" fill="rgba(12,18,40,0.84)" stroke={ART_INK} strokeWidth="2" />
+        <path d="M13 8.5a2.6 2.6 0 1 0 0.01 0M8.5 16.5c0-2.6 2-4 4.5-4s4.5 1.4 4.5 4" fill="none" stroke="#CFE6FF" strokeWidth="1.8" strokeLinecap="round" />
+        <text x="24" y="15.2" fontFamily="-apple-system, BlinkMacSystemFont, sans-serif" fontWeight="800" fontSize="11.5" fill="#FFFFFF">4 of 10</text>
+      </g>
+      <g transform={`translate(${tall ? 214 : 226} ${top + 27})`}>
+        <rect x="0" y="0" width="64" height="22" rx="11" fill="#36B23A" stroke={ART_INK} strokeWidth="2" />
+        <rect x="10" y="5" width="6" height="9" rx="3" fill="#FFFFFF" />
+        <path d="M8 11.5a5 5 0 0 0 10 0M13 16.5v2" fill="none" stroke="#FFFFFF" strokeWidth="1.6" strokeLinecap="round" />
+        <text x="24" y="15.2" fontFamily="-apple-system, BlinkMacSystemFont, sans-serif" fontWeight="800" fontSize="11.5" fill="#FFFFFF">Mic on</text>
+      </g>
+    </>
+  );
+}
+function WnSideArt({ tall = false }) {
+  const fish = (x, y, s, body, tail) => (
+    <g transform={`translate(${x} ${y}) scale(${s})`}>
+      <path d="M-14 0 L-24 -8 L-22 0 L-24 8 Z" fill={tail} stroke={ART_INK} strokeWidth="2" strokeLinejoin="round" />
+      <ellipse cx="0" cy="0" rx="15" ry="11" fill={body} stroke={ART_INK} strokeWidth="2" />
+      <circle cx="7" cy="-3" r="3.2" fill="#FFFFFF" stroke={ART_INK} strokeWidth="1.2" />
+      <circle cx="8" cy="-3" r="1.5" fill={ART_INK} />
+    </g>
+  );
+  const btn = (x, y, r, c0, c1, op, icon) => (
+    <g transform={`translate(${x} ${y})`} opacity={op}>
+      <circle cx="0" cy={r * 0.12} r={r} fill={c1} stroke={ART_INK} strokeWidth="2.4" />
+      <circle cx="0" cy="0" r={r} fill={c0} stroke={ART_INK} strokeWidth="2.4" />
+      <ellipse cx="0" cy={-r * 0.45} rx={r * 0.62} ry={r * 0.26} fill="#FFFFFF" opacity="0.45" />
+      {icon}
+    </g>
+  );
+  return (
+    <>
+      <WnFloor />
+      {tall && <WnCloud x={44} y={-86} s={0.8} o={0.9} />}
+      {tall && <WnCloud x={220} y={-60} s={0.6} o={0.8} />}
+      <g transform="rotate(-6 160 70)">
+        <rect x="40" y="2" width="240" height="132" rx="22" fill={ART_INK} />
+        <rect x="52" y="12" width="216" height="112" rx="13" fill="#3FA9E8" />
+        <path d="M52 104 Q110 96 160 104 T268 102 V111 a13 13 0 0 1 -13 13 H65 a13 13 0 0 1 -13 -13 Z" fill="#E9CF97" />
+        {fish(150, 58, 1.3, '#FFB347', '#E57A12')}
+        {fish(212, 36, 0.7, '#5BB8FF', '#2479E8')}
+        {fish(110, 32, 0.55, '#7BE05A', '#36B23A')}
+        <circle cx="86" cy="94" r="20" fill="rgba(255,255,255,0.22)" stroke="rgba(255,255,255,0.7)" strokeWidth="2.4" />
+        <circle cx="90" cy="91" r="10" fill="#FFB347" stroke={ART_INK} strokeWidth="2" />
+        {btn(236, 96, 15, '#FFE15A', '#A9680A', 1, <path d="M-6 -4 h6 M-7 0 h7 M-6 4 h6 M2 -6 l6 6 -6 6 z" fill={ART_INK} stroke={ART_INK} strokeWidth="1.6" strokeLinejoin="round" />)}
+        {btn(206, 106, 10, '#5EE6D2', '#0B6B60', 0.55, <circle cx="0" cy="0" r="3" fill={ART_INK} />)}
+      </g>
+      <path d={tall ? 'M228 -40 A44 44 0 0 1 272 -2' : 'M236 -2 A30 30 0 0 1 268 12'} fill="none" stroke={ART_C.violet} strokeWidth="4" strokeLinecap="round" />
+      <path d={tall ? 'M262 -6 L273 0 L276 -12' : 'M258 8 L269 13 L272 2'} fill="none" stroke={ART_C.violet} strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+    </>
+  );
+}
+function WnLevelsArt({ tall = false }) {
+  const star = (x, y, r, on) => <path transform={`translate(${x} ${y}) scale(${r / 12})`} d="M0 -11.2l3.3 6.8 7.4 1-5.4 5.2 1.3 7.4L0 5.6l-6.6 3.6 1.3-7.4-5.4-5.2 7.4-1z" fill={on ? '#FFD23F' : '#5A5470'} stroke={ART_INK} strokeWidth={2.6 * 12 / r} strokeLinejoin="round" />;
+  const cy = tall ? -34 : 24;
+  return (
+    <>
+      {tall ? <image href="/gulp-art.webp" x="-180" y="-112" width="474" height="296" preserveAspectRatio="xMidYMid slice" /> : <image href="/gulp-art.webp" x="-40" y="-4" width="288" height="186" preserveAspectRatio="xMidYMid slice" />}
+      <g transform={`translate(${tall ? 160 : 160} ${cy})`}>
+        <rect x="-74" y="-30" width="148" height="70" rx="18" fill="rgba(28,20,52,0.92)" stroke={ART_INK} strokeWidth="3" />
+        {star(-34, -6, 13, true)}
+        {star(0, -11, 16, true)}
+        {star(34, -6, 13, true)}
+        <text x="0" y="28" textAnchor="middle" fontFamily="-apple-system, BlinkMacSystemFont, sans-serif" fontWeight="900" fontSize="13.5" fill="#FFE15A">Level 12 clear</text>
+      </g>
+    </>
+  );
+}
+function WnTwoGamesArt({ tall = false }) {
+  const rid = React.useId().replace(/[^a-zA-Z0-9]/g, '');
+  const x0 = tall ? -98 : 16, y0 = tall ? -112 : -4, w = tall ? 474 : 288, h = tall ? 296 : 186;
+  const midT = tall ? 190 : 186, midB = tall ? 130 : 134;
+  return (
+    <>
+      <defs>
+        <clipPath id={`wl${rid}`}><path d={`M${x0} ${y0} H${midT} L${midB} ${y0 + h} H${x0} Z`} /></clipPath>
+        <clipPath id={`wr${rid}`}><path d={`M${midT} ${y0} H${x0 + w} V${y0 + h} H${midB} Z`} /></clipPath>
+      </defs>
+      <image href="/roll-art.webp" x={tall ? -150 : -40} y={y0} width={w} height={h} preserveAspectRatio="xMidYMid slice" clipPath={`url(#wl${rid})`} />
+      <image href="/duo-art.webp" x={tall ? 20 : 90} y={y0} width={w} height={h} preserveAspectRatio="xMidYMid slice" clipPath={`url(#wr${rid})`} />
+      <path d={`M${midT} ${y0} L${midB} ${y0 + h}`} stroke="#FFFFFF" strokeWidth="6" />
+      <path d={`M${midT} ${y0} L${midB} ${y0 + h}`} stroke={ART_INK} strokeWidth="2" />
+    </>
+  );
+}
+
 export const WN_THUMBS = {
   gulp33: { bg: 'sky', draw: () => (<image href="/gulp-art.webp" x="16" y="-4" width="288" height="186" preserveAspectRatio="xMidYMid slice" />) },
   duo33: { bg: 'night', draw: () => (<image href="/duo-art.webp" x="16" y="-4" width="288" height="186" preserveAspectRatio="xMidYMid slice" />) },
   roll34: { bg: 'sky', draw: () => (<image href="/roll-art.webp" x="16" y="-4" width="288" height="186" preserveAspectRatio="xMidYMid slice" />) },
   watch34: { bg: 'sky', draw: () => <WnWatchArt /> },
   clock34: { bg: 'butter', draw: () => <WnClockArt /> },
+  room35: { bg: 'sky', draw: () => <WnRoomArt /> },
+  glv35: { bg: 'sky', draw: () => <WnLevelsArt /> },
+  side35: { bg: 'sky', draw: () => <WnSideArt /> },
+  more35: { bg: 'sky', draw: () => <WnTwoGamesArt /> },
   duo32: { bg: 'night', draw: () => (<>
     <rect x="16" y="128" width="288" height="60" fill="#3A2E24" />
     <path d="M118 132 V60 Q160 14 202 60 V132 Z" fill="#1E1626" {...ak} />
@@ -49211,6 +49364,10 @@ Object.assign(WN_SCENES, {
   roll34h: { bg: 'sky', draw: () => (<image href="/roll-art.webp" x="-14" y="-112" width="474" height="296" preserveAspectRatio="xMidYMid slice" />) },
   watch34h: { bg: 'sky', draw: () => <WnWatchArt tall /> },
   clock34h: { bg: 'butter', draw: () => <WnClockArt tall /> },
+  room35h: { bg: 'sky', draw: () => <WnRoomArt tall /> },
+  glv35h: { bg: 'sky', draw: () => <WnLevelsArt tall /> },
+  side35h: { bg: 'sky', draw: () => <WnSideArt tall /> },
+  more35h: { bg: 'sky', draw: () => <WnTwoGamesArt tall /> },
 });
 
 function WnBoardPin({ x, y, color = ART_C.coral }) {
@@ -49809,7 +49966,7 @@ export function parseGameMessage(content) {
     if (st.g === 'gem') return Array.isArray(st.d) && st.d.length === 36 ? st : null;
     if (st.g === 'fade') return Array.isArray(st.b) && st.b.length === 9 ? st : null;
     if (st.g === 'tug' || st.g === 'qrace' || st.g === 'rrace' || st.g === 'duo' || st.g === 'gulp') return typeof st.x === 'string' && typeof st.o === 'string' ? st : null;
-    if (st.g === 'roll') return typeof st.x === 'string' && typeof st.o === 'string' && typeof st.rm === 'string' && st.rm.length <= 64 ? st : null;
+    if (st.g === 'roll' || st.g === 'gulpco') return typeof st.x === 'string' && typeof st.o === 'string' && typeof st.rm === 'string' && st.rm.length <= 64 ? st : null;
     if (G1_KEYS.includes(st.g)) return g1Valid(st) ? st : null;
     return null;
   } catch { return null; }
@@ -58790,7 +58947,7 @@ function svgMarkup(node) {
   return `<${node.type}${attrs}>${svgMarkup(node.props.children)}</${node.type}>`;
 }
 const gameArtSrcs = new Map();
-const GAME_ART_FILES = { duo: '/duo-art.webp', gulp: '/gulp-art.webp', roll: '/roll-art.webp' };
+const GAME_ART_FILES = { duo: '/duo-art.webp', gulp: '/gulp-art.webp', gulpco: '/gulp-art.webp', roll: '/roll-art.webp' };
 function gameArtSrc(kIn) {
   const key = String(kIn == null ? '' : kIn);
   if (GAME_ART_FILES[key]) return GAME_ART_FILES[key];
@@ -58814,13 +58971,14 @@ export function GameArt({ k: kIn, width = 160, height = 100, radius = 14, style 
   return <img src={src} alt="" aria-hidden="true" draggable={false} decoding="async" style={{ display: 'block', width, height, borderRadius: radius, flexShrink: 0, objectFit: 'cover', ...style }} />;
 }
 
-export const LIVE_GAME_KEYS = ['roll', 'duo', 'gulp', 'tug', 'qrace', 'rrace'];
-Object.assign(GAME_TITLES, { roll: 'Roll Squad', duo: 'Two Torches', gulp: 'Gulp', tug: 'Tug of war', qrace: 'Quiz race', rrace: 'Reaction race' });
-Object.assign(FRIEND_GAME_SUBS, { roll: 'Live, up to four friends roll together', duo: 'Live, endless temples together', gulp: 'Live, eat smaller fish and grow', tug: 'Live, tap faster than them', qrace: 'Live, fastest right answer', rrace: 'Live, first to tap on green' });
-Object.assign(GAME_ART_BG, { roll: ['#6EC6FF', '#4FA83A'], duo: ['#3B2A48', '#120C1C'], gulp: ['#1C6FA8', '#082A4C'], tug: ['#F97316', '#E11D48'], qrace: ['#7C3AED', '#2563EB'], rrace: ['#10B981', '#0EA5E9'] });
+export const LIVE_GAME_KEYS = ['roll', 'gulpco', 'duo', 'gulp', 'tug', 'qrace', 'rrace'];
+Object.assign(GAME_TITLES, { roll: 'Roll Squad', gulpco: 'Gulp room', duo: 'Two Torches', gulp: 'Gulp', tug: 'Tug of war', qrace: 'Quiz race', rrace: 'Reaction race' });
+Object.assign(FRIEND_GAME_SUBS, { roll: 'Live, up to four friends roll together', gulpco: 'Live, up to ten friends, join any time', duo: 'Live, endless temples together', gulp: 'Live, eat smaller fish and grow', tug: 'Live, tap faster than them', qrace: 'Live, fastest right answer', rrace: 'Live, first to tap on green' });
+Object.assign(GAME_ART_BG, { roll: ['#6EC6FF', '#4FA83A'], duo: ['#3B2A48', '#120C1C'], gulp: ['#1C6FA8', '#082A4C'], gulpco: ['#1C6FA8', '#082A4C'], tug: ['#F97316', '#E11D48'], qrace: ['#7C3AED', '#2563EB'], rrace: ['#10B981', '#0EA5E9'] });
 Object.assign(GAME_RULES, {
   duo: { how: ['You carry the orange torch, your friend carries the blue one. Move with the joystick.', 'Orange walks through lava and fire. Blue wades through water, lights hidden stones and reads hidden codes.', 'Pull levers, hold doors on the plates, jump through glowing rings, cross spikes when they drop and keep moving on cracked floors.', 'Play the story or endless temples that are new every time. You share three hearts.', 'Talk with voice, quick messages and emojis. You can mute your friend any time.'], win: 'Stand on your own glowing doors at the same time to finish. Finish missions for stars.' },
   gulp: { how: ['You are a small fish with the number 2. Swim with the joystick.', 'Touch fish with a number the same as yours or smaller to eat them. Any part of you works, even your tail. Their number adds to yours.', 'Fish with bigger numbers can eat you. Hunters chase you for a moment, then give up. Dash to get away.', 'Suck pulls the fish in front of you into your mouth. Grow bigger to unlock a shield, a shock wave and frenzy.', 'Grab bubbles for a shield, double food, a magnet or speed. If you are bigger than your friend you can eat them too.'], win: 'There is no size limit. Each of you has three lives and gets one back when you grow into a new fish. Whoever keeps their lives longer wins the round.' },
+  gulpco: { how: ['A fish room for up to ten friends. Anyone you invite can join or leave any time.', 'Swim with the joystick and eat fish with a number the same as yours or smaller.', 'Nobody eats anyone in the room. If a big fish gets you, you come back a bit smaller.', 'Turn your mic on to talk. Tap the people button to mute anyone.'], win: 'There is no end. Grow together and see who gets biggest.' },
   roll: { how: ['Hold the arrows to roll your ball. Tap jump, hold it to jump higher.', 'Land on top of enemies to bop them. Spiky ones hurt from every side.', 'Springs throw you high. Flags save where you come back after a pop.', 'Some gates need two buttons pressed at the same time. Team up.', 'Grab coins and find the three stars hidden in every level.'], win: 'Everyone has to reach the portal to clear the level. There are five worlds with six levels each.' },
   tug: { how: ['You both play at the same moment. Open the game and wait for your friend to join.', 'When the countdown ends, tap the big button as fast as you can.', 'Every tap pulls the rope toward you.'], win: 'After 15 seconds, whoever pulled the rope to their side wins.' },
   qrace: { how: ['You both play at the same moment and see the same question together.', 'Tap the right answer before your friend does.', 'A wrong answer locks you out of that question.'], win: 'Seven questions. Whoever scores more wins.' },
@@ -59251,6 +59409,7 @@ function liveStatusFor(state, myId, peerName) {
   if (state.st === 'gone') return 'Game stopped';
   if (state.st === 'live') return 'Playing now';
   if (state.exp && Date.now() > state.exp) return 'Invite ended';
+  if (state.g === 'gulpco') return host ? 'Your room is open' : 'Join any time';
   return host ? `Waiting for ${first}` : 'Wants to play now';
 }
 
@@ -59270,6 +59429,8 @@ function LiveGameCard({ state, myId, peerName, onOpen, onRematch }) {
     <GameCardShell k={state.g} width={236} live title={GAME_TITLES[state.g]} status={status} hot={hot}>
       {state.g === 'roll' ? (
         <div style={{ textAlign: 'center', fontSize: 13, fontWeight: 800, color: theme.ink, padding: '2px 0 4px' }}>Roll together, up to four friends</div>
+      ) : state.g === 'gulpco' ? (
+        <div style={{ textAlign: 'center', fontSize: 13, fontWeight: 800, color: theme.ink, padding: '2px 0 4px' }}>Swim together, up to ten friends</div>
       ) : state.g === 'duo' ? (
         <div style={{ textAlign: 'center', fontSize: 13, fontWeight: 800, color: theme.ink, padding: '2px 0 4px' }}>{state.sx ? `${state.sx} ${state.sx === 1 ? 'level' : 'levels'} cleared together` : 'Escape the temple together'}</div>
       ) : (
@@ -59279,14 +59440,14 @@ function LiveGameCard({ state, myId, peerName, onOpen, onRematch }) {
         <span style={{ fontSize: 12.5, fontWeight: 800, color: theme.muted, maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{first}</span>
       </div>
       )}
-      {waiting && (
+      {waiting && state.g !== 'gulpco' && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: theme.muted, marginTop: 2 }}>
           <span className="zchat-live-dot" style={{ width: 7, height: 7, borderRadius: '50%', background: '#EF4444' }} />
           {`Open for ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`}
         </div>
       )}
       {state.st === 'live' && <div style={{ textAlign: 'center', fontSize: 12, fontWeight: 700, color: theme.muted }}>A round is happening right now</div>}
-      {!ended && <GameAgainButton onClick={onOpen} label={host ? 'Open the game' : 'Join now'} color={host ? 'gold' : 'green'} />}
+      {!ended && <GameAgainButton onClick={onOpen} label={state.g === 'gulpco' ? (host ? 'Open the room' : 'Join the room') : host ? 'Open the game' : 'Join now'} color={host ? 'gold' : 'green'} />}
       {ended && onRematch && <GameAgainButton onClick={onRematch} label={state.st === 'done' && state.g !== 'duo' ? 'Rematch' : 'Play again'} color="green" />}
     </GameCardShell>
   );

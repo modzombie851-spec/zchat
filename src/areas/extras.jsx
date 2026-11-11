@@ -6564,25 +6564,24 @@ function WnSegments({ total, at, onArt, dark }) {
 }
 
 const WN_HIGHLIGHTS = [
-  { k: 'roll34', art: 'roll34h', go: 'games', title: 'Roll Squad', text: 'A new live game for up to four friends. Roll, jump and bop through 30 levels together. Invite anyone you chat with, no group needed.' },
-  { k: 'gulp34', art: 'gulp33h', go: 'games', title: 'Gulp, made new', text: 'A big endless sea that zooms out as you grow. Eat with your whole body, pull fish in with Suck and unlock new skills the longer you last.' },
-  { k: 'duo34', art: 'duo33h', go: 'games', title: 'Two Torches fights back', text: 'Bats, slimes and skeletons, fire and ice shots, light beam puzzles with mirrors, ten new story levels and brighter temples.' },
-  { k: 'watch34', art: 'watch34h', go: 'games', title: 'Watch friends play', text: 'See which friends are in a game and watch them live. Players see who is watching and can turn watching off.' },
-  { k: 'clock34', art: 'clock34h', title: 'Clocks for chess and checkers', text: 'Bullet, blitz and rapid, with added seconds like 3+2. The classic way with no clock is still there.' },
+  { k: 'room35', art: 'room35h', go: 'games', title: 'Gulp rooms', text: 'Swim with up to ten friends. Anyone can join or leave any time and you see who comes and goes. Talk with your mic and mute anyone you like.' },
+  { k: 'glv35', art: 'glv35h', go: 'games', title: 'Gulp levels', text: 'Twenty levels with their own goals, plus endless mode. Real eating sounds, your number goes up the moment you eat, and sharks are fairer.' },
+  { k: 'side35', art: 'side35h', go: 'games', title: 'Play your way', text: 'Gulp turns sideways by itself, no need to rotate your phone. Make game buttons smaller or see through in Controls.' },
+  { k: 'more35', art: 'more35h', go: 'games', title: 'More levels', text: 'Ten new Two Torches temples and two new Roll Squad worlds, Candy hills and Lava caves.' },
 ];
 const WN_SECTIONS = [
   { title: 'Games', items: [
-    { art: 'roll34', title: 'Roll Squad', text: 'Up to four friends, 30 levels, invite anyone.' },
-    { art: 'gulp33', title: 'Gulp', text: 'An endless sea, Suck and new skills as you grow.' },
-    { art: 'duo33', title: 'Two Torches', text: 'Enemies, mirror puzzles and ten new levels.' },
-    { art: 'watch34', title: 'Watch friends play', text: 'Watch live, and turn watching on or off.' },
-    { art: 'clock34', title: 'Chess and checkers clocks', text: 'Bullet, blitz and rapid, or no clock at all.' },
+    { art: 'room35', title: 'Gulp rooms', text: 'Up to ten friends, join or leave any time, voice.' },
+    { art: 'glv35', title: 'Gulp levels', text: 'Twenty levels plus endless mode.' },
+    { art: 'side35', title: 'Play your way', text: 'Sideways play, smaller or see through buttons.' },
+    { art: 'more35', title: 'More levels', text: 'New temples in Two Torches, new worlds in Roll Squad.' },
   ] },
 ];
 const WN_NEW_COUNT = WN_SECTIONS.reduce((n, sec) => n + sec.items.length, 0);
 const WN_SUMMARY = `${WN_NEW_COUNT} new things to try.`;
 
 const WN_EARLIER = [
+  { title: 'Roll Squad, watching friends and game clocks', text: 'A live ball game for up to four friends, a new Gulp, Two Torches enemies and mirror puzzles, watching friends play live, and clocks for chess and checkers.' },
   { title: 'Gulp and endless Two Torches', text: 'A live fish game, new temples every time you play, missions, voice and quick chat in Two Torches, and new rock paper scissors hands.' },
   { title: 'Two Torches and bubble pets', text: 'A live temple game for two, 51 soft 3D bubble pets, real rock paper scissors, Squish with water balloons and better group games.' },
   { title: 'Saved Messages, a cleaner profile and new game pictures', text: 'Your own Saved Messages chat, profile visitors, 9 ball pool, chess clocks, Squish duels and a new attach menu.' },

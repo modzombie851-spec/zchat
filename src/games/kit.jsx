@@ -383,7 +383,7 @@ export function KitIcon({ name, size = 22, color = '#FFFFFF', on = true }) {
 
 function GlassBtn({ label, onClick, children, size = 40, tone, style }) {
   return (
-    <button type="button" aria-label={label} onClick={(e) => { e.stopPropagation(); if (onClick) onClick(e); }} className="zgr-press"
+    <button type="button" aria-label={label} onPointerDown={(e) => { e.stopPropagation(); if (e.button > 0 || !onClick) return; e.currentTarget.dataset.pd = String(Date.now()); onClick(e); }} onClick={(e) => { e.stopPropagation(); if (!onClick || Date.now() - Number(e.currentTarget.dataset.pd || 0) < 800) return; onClick(e); }} className="zgr-press"
       style={{ width: size, height: size, borderRadius: size / 2, border: 'none', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', background: tone || 'rgba(0,0,0,0.38)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.14)', color: '#FFFFFF', flexShrink: 0, ...style }}>
       {children}
     </button>

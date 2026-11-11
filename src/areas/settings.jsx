@@ -2049,9 +2049,13 @@ export function ChatThemePage({ value, onSelect, onClose, title, avatar, group, 
     e.target.value = '';
     if (!f) return;
     setPhotoBusy(true);
-    const key = await makeWallPhoto(f, userId);
+    let failed = false;
+    const key = await makeWallPhoto(f, userId, () => { failed = true; });
     setPhotoBusy(false);
-    if (key) { hapticTap(); setPick(key); setCustomKey(key); } else appAlert('That photo could not be used. Try a different one.');
+    if (!key) { appAlert('That photo could not be used. Try a different one.'); return; }
+    if (failed && group) { appAlert('Your photo did not upload, so the group would not see it. Check your connection and try again.'); return; }
+    if (failed) { setScope('me'); appSnack('Your photo did not upload, so only this phone shows it.'); }
+    hapticTap(); setPick(key); setCustomKey(key);
   };
   const counts = { color: 0, pattern: 0, scene: 0, live: LIVE_WALLS.length, photo: WALLPAPER_PRESETS.length };
   CHAT_THEMES.forEach((t) => { counts[t.cat] += 1; });

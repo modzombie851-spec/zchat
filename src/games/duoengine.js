@@ -176,6 +176,16 @@ const CURATED = [
   { seed: 'story18', theme: 'sky', rooms: ['beam', 'fires', 'foes', 'gate'], name: 'Sun prism', goal: 'Light, fire and a long climb', depth: 4 },
   { seed: 'story19', theme: 'forge', rooms: ['foes', 'timed', 'beam', 'crumble'], name: 'Deep forge', goal: 'Every trick you know, in one hot temple', depth: 5 },
   { seed: 'story20', theme: 'crystal', rooms: ['split', 'beam', 'foes', 'fires', 'gate'], name: 'The last torch', goal: 'The longest temple. Stay together', depth: 6 },
+  { seed: 'story21', theme: 'jungle', rooms: ['bridge', 'spikes', 'gate'], name: 'Vine bridge', goal: 'Blue light shows the bridge, then time the spikes', depth: 3 },
+  { seed: 'story22', theme: 'sand', rooms: ['code', 'timed', 'portal'], name: 'Sun dial', goal: 'Read the code, then race the door', depth: 3 },
+  { seed: 'story23', theme: 'ice', rooms: ['ice', 'crumble', 'fires'], name: 'Thin ice', goal: 'Slide fast, the floor will not wait', depth: 4 },
+  { seed: 'story24', theme: 'tomb', rooms: ['split', 'beam', 'gate'], name: 'Two halls', goal: 'Take your own road, then aim the light together', depth: 4 },
+  { seed: 'story25', theme: 'forge', rooms: ['plate', 'foes', 'spikes'], name: 'Iron guard', goal: 'Hold the doors while the forge wakes up', depth: 4 },
+  { seed: 'story26', theme: 'crystal', rooms: ['portal', 'code', 'foes'], name: 'Glow maze', goal: 'Rings, codes and bats in the dark', depth: 5 },
+  { seed: 'story27', theme: 'sky', rooms: ['timed', 'bridge', 'crumble'], name: 'Cloud run', goal: 'Race the timed door over falling floors', depth: 5 },
+  { seed: 'story28', theme: 'jungle', rooms: ['beam', 'foes', 'split', 'gate'], name: 'Deep roots', goal: 'Light, slimes and two roads', depth: 5 },
+  { seed: 'story29', theme: 'tomb', rooms: ['fires', 'ice', 'foes', 'code'], name: 'Frozen crypt', goal: 'Light both fires in the cold crypt', depth: 6 },
+  { seed: 'story30', theme: 'sky', rooms: ['portal', 'plate', 'beam', 'foes', 'timed'], name: 'Crown of the sky', goal: 'The final temple. Every trick, together', depth: 6 },
 ];
 export const STORY_N = LEVELS.length + CURATED.length;
 
@@ -606,6 +616,7 @@ export function setNet(W, kind, m) {
   const j = lag - N.off;
   N.jit = Math.max(j, N.jit * 0.97);
   const t = sent + N.off;
+  if ((m.tp || 0) < N.tp) return;
   if ((m.tp || 0) !== N.tp) { N.tp = m.tp || 0; N.buf.length = 0; N.snap = true; }
   if (N.buf.length && t <= N.buf[N.buf.length - 1].t) return;
   N.buf.push({ t, x: m.x, y: m.y, vx: m.vx || 0, vy: m.vy || 0, d: m.d, m: m.m });

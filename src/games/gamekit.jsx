@@ -193,13 +193,19 @@ export function useJoystick(wrapRef, opts) {
   const joy = useRef({ x: 0, y: 0, id: null, cx: 0, cy: 0, mag: 0 });
   const [view, setView] = useState(null);
   const knob = useRef(null);
-  const R = o.radius || 52;
+  const R = typeof o.radius === 'function' ? o.radius() : o.radius || 52;
+  const local = (e) => {
+    const el = wrapRef.current;
+    const r = el.getBoundingClientRect();
+    if (o.rot && o.rot()) return { x: e.clientY - r.top, y: r.right - e.clientX };
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
+  };
   const onDown = (e) => {
     if (o.enabled && !o.enabled()) return;
     if (joy.current.id != null) return;
-    const r = wrapRef.current.getBoundingClientRect();
-    const x = e.clientX - r.left, y = e.clientY - r.top;
-    if (o.zone && !o.zone(x, y, r)) return;
+    const el = wrapRef.current;
+    const { x, y } = local(e);
+    if (o.zone && !o.zone(x, y, { width: el.clientWidth, height: el.clientHeight })) return;
     Sfx.init();
     joy.current = { x: 0, y: 0, id: e.pointerId, cx: x, cy: y, mag: 0 };
     setView({ x, y });
@@ -208,8 +214,8 @@ export function useJoystick(wrapRef, opts) {
   const onMove = (e) => {
     const J = joy.current;
     if (J.id !== e.pointerId) return;
-    const r = wrapRef.current.getBoundingClientRect();
-    let dx = e.clientX - r.left - J.cx, dy = e.clientY - r.top - J.cy;
+    const q = local(e);
+    let dx = q.x - J.cx, dy = q.y - J.cy;
     const d = Math.hypot(dx, dy);
     if (d > R * 1.6) { const k = (d - R * 1.6) / d; J.cx += dx * k; J.cy += dy * k; dx -= dx * k; dy -= dy * k; setView({ x: J.cx, y: J.cy }); }
     const dd = Math.hypot(dx, dy);
@@ -224,11 +230,11 @@ export function useJoystick(wrapRef, opts) {
   return { joy, view, knob, handlers: { onPointerDown: onDown, onPointerMove: onMove, onPointerUp: onUp, onPointerCancel: onUp }, reset, R };
 }
 
-export function GJoy({ view, knobRef, color = 'blue', idle, R = 52 }) {
+export function GJoy({ view, knobRef, color = 'blue', idle, R = 52, alpha = 1 }) {
   const c = GC[color] || GC.blue;
   const base = (x, y, op) => (
-    <div style={{ position: 'absolute', left: x - R - 14, top: y - R - 14, width: (R + 14) * 2, height: (R + 14) * 2, borderRadius: '50%', background: 'radial-gradient(circle at 50% 40%, rgba(255,255,255,0.18), rgba(255,255,255,0.06) 70%)', boxShadow: `0 0 0 3px ${INK}, inset 0 0 0 4px rgba(255,255,255,0.22), 0 6px 14px rgba(0,0,0,0.3)`, pointerEvents: 'none', opacity: op }}>
-      <div ref={op === 1 ? knobRef : null} style={{ position: 'absolute', left: R + 14 - 30, top: R + 14 - 30, width: 60, height: 60, borderRadius: '50%', background: `radial-gradient(circle at 38% 30%, ${c[0]} 0%, ${c[1]} 62%, ${c[2]} 100%)`, boxShadow: `0 0 0 3px ${INK}, 0 6px 0 rgba(0,0,0,0.3)` }}>
+    <div style={{ position: 'absolute', left: x - R - 14, top: y - R - 14, width: (R + 14) * 2, height: (R + 14) * 2, borderRadius: '50%', background: 'radial-gradient(circle at 50% 40%, rgba(255,255,255,0.18), rgba(255,255,255,0.06) 70%)', boxShadow: `0 0 0 3px ${INK}, inset 0 0 0 4px rgba(255,255,255,0.22), 0 6px 14px rgba(0,0,0,0.3)`, pointerEvents: 'none', opacity: op * alpha }}>
+      <div ref={op === 1 ? knobRef : null} style={{ position: 'absolute', left: R + 14 - Math.round(R * 0.575), top: R + 14 - Math.round(R * 0.575), width: Math.round(R * 1.15), height: Math.round(R * 1.15), borderRadius: '50%', background: `radial-gradient(circle at 38% 30%, ${c[0]} 0%, ${c[1]} 62%, ${c[2]} 100%)`, boxShadow: `0 0 0 3px ${INK}, 0 6px 0 rgba(0,0,0,0.3)` }}>
         <div style={{ position: 'absolute', left: 12, top: 8, width: 24, height: 14, borderRadius: '50%', background: 'rgba(255,255,255,0.65)' }} />
       </div>
     </div>
@@ -239,7 +245,98 @@ export function GJoy({ view, knobRef, color = 'blue', idle, R = 52 }) {
 }
 
 export function GToggle({ on, onPress, label, iconOn, iconOff }) {
-  return <GBtn icon={on ? iconOn : iconOff} label={label} onPress={onPress} color={on ? 'green' : 'dark'} size={46} fast={false} />;
+  return <GBtn icon={on ? iconOn : iconOff} label={label} onPress={onPress} color={on ? 'green' : 'dark'} size={46} />;
+}
+
+const CTL_KEY = 'zchat-game-controls';
+const ctlSubs = new Set();
+let ctlNow = null;
+function ctlRead() {
+  try {
+    const v = JSON.parse(localStorage.getItem(CTL_KEY) || 'null');
+    if (v && typeof v === 'object') return { size: Math.min(1.25, Math.max(0.6, Number(v.size) || 1)), see: Math.min(0.7, Math.max(0, Number(v.see) || 0)), side: v.side !== false };
+  } catch {}
+  return { size: 1, see: 0, side: true };
+}
+export function ctlLook() { if (!ctlNow) ctlNow = ctlRead(); return ctlNow; }
+export function setCtlLook(patch) {
+  ctlNow = { ...ctlLook(), ...patch };
+  try { localStorage.setItem(CTL_KEY, JSON.stringify(ctlNow)); } catch {}
+  ctlSubs.forEach((f) => { try { f(ctlNow); } catch {} });
+}
+export function useCtlLook() {
+  const [v, setV] = useState(ctlLook);
+  useEffect(() => { const f = (n) => setV(n); ctlSubs.add(f); return () => { ctlSubs.delete(f); }; }, []);
+  return v;
+}
+const SIZES = [[0.7, 'Small'], [0.85, 'Medium'], [1, 'Normal'], [1.15, 'Big']];
+const SEES = [[0, 'Solid'], [0.25, 'Light'], [0.45, 'Half'], [0.65, 'Clear']];
+function GSteps({ label, value, opts, onPick }) {
+  const near = opts.reduce((a, b) => (Math.abs(b[0] - value) < Math.abs(a[0] - value) ? b : a))[0];
+  return (
+    <div style={{ width: '100%' }}>
+      <div style={{ fontSize: 14, fontWeight: 900, color: '#FFFFFF', marginBottom: 7 }}>{label}</div>
+      <div role="radiogroup" aria-label={label} style={{ display: 'grid', gridTemplateColumns: `repeat(${opts.length}, minmax(0, 1fr))`, gap: 5, padding: 4, borderRadius: 16, background: 'rgba(0,0,0,0.28)' }}>
+        {opts.map(([v, t]) => {
+          const on = v === near;
+          return (
+            <button key={t} type="button" role="radio" aria-checked={on} className="zgk-btn" {...pressProps(() => { kitTap(); onPick(v); })}
+              style={{ height: 36, borderRadius: 12, border: 'none', background: on ? '#FFE15A' : 'transparent', color: on ? INK : 'rgba(255,255,255,0.82)', fontFamily: FONT, fontWeight: 900, fontSize: 13, cursor: 'pointer', boxShadow: on ? `0 0 0 2px ${INK}` : 'none' }}>{t}</button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+export function GControlsPanel({ onClose, sideways, wide }) {
+  const v = useCtlLook();
+  const samples = (
+    <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: 14, height: wide ? 96 : 84 }}>
+      <div style={{ opacity: 1 - v.see, transform: `scale(${v.size})`, transformOrigin: 'bottom center', transition: 'transform .15s ease, opacity .15s ease' }}><GBtn icon="dash" color="gold" size={66} label="Sample button" onPress={() => {}} /></div>
+      <div style={{ opacity: 1 - v.see, transform: `scale(${v.size})`, transformOrigin: 'bottom center', transition: 'transform .15s ease, opacity .15s ease' }}><GBtn icon="suck" color="teal" size={50} label="Sample button" onPress={() => {}} /></div>
+    </div>
+  );
+  const opts = (
+    <>
+      <GSteps label="Button size" value={v.size} opts={SIZES} onPick={(x) => setCtlLook({ size: x })} />
+      <GSteps label="See through" value={v.see} opts={SEES} onPick={(x) => setCtlLook({ see: x })} />
+      {sideways && (
+        <div role="switch" aria-checked={v.side} tabIndex={0} {...pressProps(() => { setCtlLook({ side: !v.side }); kitTap(); })} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', cursor: 'pointer', fontSize: 14, fontWeight: 900, color: '#FFFFFF' }}>
+          <span style={{ flex: 1 }}>Play sideways<span style={{ display: 'block', fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.65)' }}>No need to turn your phone setting</span></span>
+          <span aria-hidden="true" style={{ width: 46, height: 28, borderRadius: 14, background: v.side ? '#36B23A' : 'rgba(255,255,255,0.18)', position: 'relative', transition: 'background .15s ease', flexShrink: 0 }}><span style={{ position: 'absolute', top: 3, left: v.side ? 21 : 3, width: 22, height: 22, borderRadius: 11, background: '#FFFFFF', transition: 'left .15s ease' }} /></span>
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 10, width: '100%' }}>
+        <GPill text="Reset" color="white" small onPress={() => setCtlLook({ size: 1, see: 0 })} style={{ flex: 1 }} wide />
+        <GPill text="Done" color="green" small onPress={onClose} style={{ flex: 1 }} wide />
+      </div>
+    </>
+  );
+  if (wide) {
+    return (
+      <GPanel style={{ width: '100%', maxWidth: 640, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 18, animation: 'zgk-pop 0.25s ease-out', boxSizing: 'border-box' }}>
+        <div style={{ width: 170, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+          <GTitle text="Controls" size={28} />
+          {samples}
+        </div>
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 11 }}>{opts}</div>
+      </GPanel>
+    );
+  }
+  return (
+    <GPanel style={{ width: '100%', maxWidth: 360, padding: '16px 16px 14px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 13, animation: 'zgk-pop 0.25s ease-out', boxSizing: 'border-box' }}>
+      <GTitle text="Controls" size={28} />
+      {samples}
+      {opts}
+    </GPanel>
+  );
+}
+
+export function pressProps(fn) {
+  return {
+    onPointerDown: (e) => { e.stopPropagation(); if (e.button > 0) return; e.currentTarget.dataset.pd = String(Date.now()); fn(e); },
+    onClick: (e) => { e.stopPropagation(); if (Date.now() - Number(e.currentTarget.dataset.pd || 0) < 800) return; fn(e); },
+  };
 }
 
 export function useFrameBudget() {

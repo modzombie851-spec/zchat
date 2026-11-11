@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Avatar, Portal, useBackClose, hapticTap, FONT, Spinner } from '../App.jsx';
-import { useGameRelay, useRoomRelay, useWatchChannel } from './relay.jsx';
+import { useGameLink, useRoomRelay, useWatchChannel } from './relay.jsx';
 import { watchAllowed, setWatchAllowed, useLiveBeacon } from './live.js';
 import { EMOTES, SignalBars, PingChip, SpeakerIcon, SmileIcon, Check, Heart, MicIcon, ChatIcon, SwapIcon, HandIcon, btnBase, Btn, RoundBtn, Sheet, Stars, injectCss, useVoice, setKitTap } from './livekit.jsx';
 import { LIVES, GLYPHS, GLYPH_NAMES, STORY_N, ENDLESS, ATK_CD, levelDef, makeWorld, stepWorld, buddyInput, applyEvent, snapshot, mergeSnapshot, sameLevel, syncClock, setNet, nearDial, nearMirror, turnMirror, foeRows, setFoes, tryCode, hintFor, clamp, missionsFor, parTime, spikeAmt, crumbleState } from './duoengine.js';
 import { Snd, THEMES, buildStatic, render, updateParts, dust, puffs, embers, glints, part, ring, glyph, drawExplorer } from './duodraw.js';
-import { GBtn, GPill, GPanel, GChip, GTitle, GJoy, GIcon, injectKitCss, kitTap, INK } from './gamekit.jsx';
+import { GBtn, GPill, GPanel, GChip, GTitle, GJoy, GIcon, injectKitCss, kitTap, pressProps, INK, useCtlLook, GControlsPanel } from './gamekit.jsx';
 import { Sfx } from './sfx.js';
 
 const PHRASES = ['Wait for me', 'Go ahead', 'Over here', 'Hold the plate', 'Come closer, I need light', 'On three', 'Nice one', 'Sorry', 'I will get the lever', 'Follow me'];
@@ -86,7 +86,7 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
   const theirKind = myKind === 'sun' ? 'moon' : 'sun';
   const peerFirst = solo ? 'Partner' : watch ? String((watch.names && watch.names.moon) || 'Friend').split(' ')[0] : String((peer && peer.name) || 'Friend').split(' ')[0];
   const hostFirst = watch ? String((watch.names && watch.names.sun) || 'Friend').split(' ')[0] : '';
-  const relay0 = useGameRelay({ id: solo || watch ? null : `duo-${gameId}`, myId, peerId: peer && peer.id, enabled: !solo && !watch, g: 'duo' });
+  const relay0 = useGameLink({ id: solo || watch ? null : `duo-${gameId}`, myId, peerId: peer && peer.id, enabled: !solo && !watch, g: 'duo', fast: ['p', 'fo'] });
   const wrelay = useRoomRelay({ id: watch ? `duo-${gameId}` : null, myId, enabled: !!watch, passive: true });
   const relay = watch ? wrelay : relay0;
   const here = solo ? true : relay.here;
@@ -94,6 +94,7 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
   const [allowWatch, setAllowWatch] = useState(watchAllowed());
   const myFirstName = String((me && me.name) || 'You').split(' ')[0];
   const watchers = useWatchChannel({ room: solo ? null : `duo-${gameId}`, myId, enabled: !solo, role: watch ? 'watcher' : 'player', meta: { n: myFirstName, a: me && me.avatar }, allow: allowWatch, onDenied: () => { setToast({ text: 'The players turned off watching.', at: Date.now() }); setTimeout(() => onClose(), 1600); } });
+  useEffect(() => { if (relay0.watch) relay0.watch(watchers.length > 0); }, [watchers.length]);
   useLiveBeacon({ game: 'duo', room: `duo-${gameId}`, info: { g: gameId, h: initial && initial.x, o: initial && initial.o }, active: !solo && !watch && !!initial, allow: allowWatch });
   const [phase, setPhase] = useState(solo ? 'pick' : 'lobby');
   const [li, setLi] = useState(0);
@@ -136,6 +137,10 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
   const rsRef = useRef(rs);
   rsRef.current = rs;
   const [joyView, setJoyView] = useState(null);
+  const look = useCtlLook();
+  const joyR = Math.round(50 * Math.max(0.7, look.size));
+  const joyRRef = useRef(joyR); joyRRef.current = joyR;
+  const [ctl, setCtl] = useState(false);
   const knobRef = useRef(null);
   const toastTimer = useRef(0);
   const hudKey = useRef('');
@@ -187,7 +192,7 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
       relay.on('lv', (m) => { heard(); if (watch && m.from !== watch.host) return; if (!host) startLevel(m.li, m.a, true, m.rs); }),
       relay.on('pick', (m) => { heard(); if (watch && m.from !== watch.host) return; if (!host) { WR.current = null; setPhase((p) => (p === 'lobby' || p === 'won' || p === 'out' || p === 'play' ? 'pick' : p)); } }),
       relay.on('ev', (m) => { heard(); const W = WR.current; if (W && m.li === W.li && m.a === W.attempt && (m.rs || null) === (W.rs || null)) applyEvent(W, m.e, true); }),
-      relay.on('fo', (m) => { heard(); const W = WR.current; if (!host && W && m.li === W.li && m.a === W.attempt) setFoes(W, m.f); }),
+      relay.on('fo', (m) => { heard(); const W = WR.current; if (!host && W && m.li === W.li && m.a === W.attempt) { if (typeof m.at === 'number') { if (m.at <= (W.foAt || 0)) return; W.foAt = m.at; } setFoes(W, m.f); } }),
       relay.on('p', (m) => { heard(); const W = WR.current; if (W && m.li === W.li && m.a === W.attempt && (watch ? (m.k === 'sun' || m.k === 'moon') : m.k === theirKind)) setNet(W, m.k, m); }),
       relay.on('sync', (m) => {
         heard();
@@ -267,7 +272,7 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
     Snd.music(false);
     onClose();
   };
-  useBackClose(true, () => { if (quick) setQuick(false); else if (sheet) setSheet(null); else if (leaveAsk) setLeaveAsk(false); else leave(); });
+  useBackClose(true, () => { if (ctl) setCtl(false); else if (quick) setQuick(false); else if (sheet) setSheet(null); else if (leaveAsk) setLeaveAsk(false); else leave(); });
 
   useEffect(() => {
     const kd = (e) => {
@@ -413,7 +418,7 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
   const nearRef = useRef(null);
   const atkRef = useRef(0);
   const sheetOpen = useRef(false);
-  sheetOpen.current = !!sheet || leaveAsk;
+  sheetOpen.current = !!sheet || leaveAsk || ctl;
 
   const handleFx = (W, f) => {
     const mineK = activeRef.current;
@@ -525,7 +530,7 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
     const J = joy.current;
     if (J.id !== e.pointerId) return;
     const r = wrapRef.current.getBoundingClientRect();
-    const dx = e.clientX - r.left - J.cx, dy = e.clientY - r.top - J.cy, d = Math.hypot(dx, dy), R = 50;
+    const dx = e.clientX - r.left - J.cx, dy = e.clientY - r.top - J.cy, d = Math.hypot(dx, dy), R = joyRRef.current;
     const k = d > R ? R / d : 1;
     if (knobRef.current) knobRef.current.style.transform = `translate(${dx * k}px,${dy * k}px)`;
     const m = Math.min(1, d / R);
@@ -558,7 +563,7 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
 
         {(phase === 'play' || phase === 'won' || phase === 'out') && (
           <div style={{ position: 'absolute', left: 0, right: 0, top: 0, padding: 'calc(10px + env(safe-area-inset-top)) 12px 10px', display: 'flex', alignItems: 'flex-start', gap: 8, pointerEvents: 'none' }}>
-            <div style={{ pointerEvents: 'auto' }}><GBtn icon="close" color="white" size={44} fast={false} label="Leave the game" onPress={leave} /></div>
+            <div style={{ pointerEvents: 'auto', display: 'flex', gap: 8 }}><GBtn icon="close" color="white" size={44} label="Leave the game" onPress={leave} />{!watch && <GBtn icon="gear" color="dark" size={44} label="Controls" onPress={() => { setQuick(false); setCtl(true); }} />}</div>
             <GPanel style={{ flex: 1, minWidth: 0, padding: '6px 12px 7px' }}>
               <div style={{ fontSize: 14.5, fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</div>
               <div style={{ fontSize: 11.5, fontWeight: 800, color: 'rgba(255,255,255,0.72)', display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
@@ -614,36 +619,41 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
             <GPill small text={peerFirst} color={active === 'moon' ? 'blue' : 'white'} height={42} onPress={() => { setActive('moon'); cam.current.init = false; }} />
           </div>
         )}
-        {phase === 'play' && !watch && <GJoy view={joyView} knobRef={knobRef} color={actKind === 'sun' ? 'orange' : 'blue'} idle={{ x: 82, y: wrapH - 96 }} R={50} />}
+        {phase === 'play' && !watch && <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', opacity: 1 - look.see }}><GJoy view={joyView} knobRef={knobRef} color={actKind === 'sun' ? 'orange' : 'blue'} idle={{ x: 82, y: wrapH - 96 }} R={joyR} /></div>}
         {phase === 'play' && quick && !solo && (
           <div onPointerDown={(e) => e.stopPropagation()} style={{ position: 'absolute', right: 12, bottom: 'calc(250px + env(safe-area-inset-bottom))', width: 'min(300px, calc(100% - 24px))', animation: 'zgk-pop 0.2s ease-out', zIndex: 5 }}>
             <GPanel style={{ padding: 10 }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 6 }}>
-                {EMOTES.map((e) => <button key={e} type="button" className="zgk-btn" aria-label={`Send ${e}`} onClick={(ev) => { ev.stopPropagation(); sendEmote(e); }} style={{ ...btnBase, height: 46, borderRadius: 14, background: 'rgba(255,255,255,0.1)', fontSize: 26, lineHeight: 1 }}>{e}</button>)}
+                {EMOTES.map((e) => <button key={e} type="button" className="zgk-btn" aria-label={`Send ${e}`} {...pressProps(() => sendEmote(e))} style={{ ...btnBase, height: 46, borderRadius: 14, background: 'rgba(255,255,255,0.1)', fontSize: 26, lineHeight: 1 }}>{e}</button>)}
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
-                {QUICK.map((p) => <button key={p} type="button" className="zgk-btn" onClick={(ev) => { ev.stopPropagation(); tap(); sendChat(p); }} style={{ ...btnBase, height: 34, padding: '0 12px', borderRadius: 17, background: 'rgba(255,255,255,0.12)', color: '#FFFFFF', fontSize: 12.5, fontWeight: 800 }}>{p}</button>)}
-                <button type="button" className="zgk-btn" onClick={(ev) => { ev.stopPropagation(); tap(); setQuick(false); setSheet({ k: 'chat' }); }} style={{ ...btnBase, height: 34, padding: '0 12px', borderRadius: 17, background: 'rgba(255,255,255,0.22)', color: '#FFFFFF', fontSize: 12.5, fontWeight: 900 }}>Type a message</button>
+                {QUICK.map((p) => <button key={p} type="button" className="zgk-btn" {...pressProps(() => { tap(); sendChat(p); })} style={{ ...btnBase, height: 34, padding: '0 12px', borderRadius: 17, background: 'rgba(255,255,255,0.12)', color: '#FFFFFF', fontSize: 12.5, fontWeight: 800 }}>{p}</button>)}
+                <button type="button" className="zgk-btn" {...pressProps(() => { tap(); setQuick(false); setSheet({ k: 'chat' }); })} style={{ ...btnBase, height: 34, padding: '0 12px', borderRadius: 17, background: 'rgba(255,255,255,0.22)', color: '#FFFFFF', fontSize: 12.5, fontWeight: 900 }}>Type a message</button>
               </div>
             </GPanel>
           </div>
         )}
         {phase === 'play' && !watch && (
-          <div style={{ position: 'absolute', right: 14, bottom: 'calc(22px + env(safe-area-inset-bottom))', display: 'flex', alignItems: 'flex-end', gap: 12 }}>
+          <div style={{ position: 'absolute', right: 14, bottom: 'calc(22px + env(safe-area-inset-bottom))', display: 'flex', alignItems: 'flex-end', gap: 12, transform: `scale(${look.size})`, transformOrigin: '100% 100%', opacity: 1 - look.see }}>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
               {nearUse && <div style={{ animation: 'zgk-pop 0.25s ease-out' }}><GBtn icon="hand" color="gold" size={64} label={nearUse === 'mirror' ? 'Turn the mirror' : 'Use the dial'} onPress={useAction} /></div>}
               {solo
                 ? <GBtn icon="swap" color={actKind === 'sun' ? 'blue' : 'orange'} size={56} label={actKind === 'sun' ? 'Switch to the blue torch' : 'Switch to the orange torch'} onPress={() => { swapAt.current = Date.now(); setActive((a) => (a === 'sun' ? 'moon' : 'sun')); cam.current.init = true; }} />
                 : (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 46px)', gap: 8 }}>
-                    <GBtn icon={voice.peerMuted ? 'mute' : 'sound'} color={voice.peerMuted ? 'red' : 'dark'} size={46} fast={false} label={voice.peerMuted ? `Unmute ${peerFirst}` : `Mute ${peerFirst}`} onPress={voice.togglePeer} />
-                    <GBtn icon={voice.micOn ? 'mic' : 'micoff'} color={voice.micOn ? 'green' : 'dark'} size={46} fast={false} label={voice.micOn ? 'Turn your mic off' : 'Turn your mic on'} onPress={voice.toggle} />
-                    <GBtn icon="smile" color={quick ? 'gold' : 'dark'} size={46} fast={false} label="Quick messages and emojis" onPress={() => setQuick((v) => !v)} />
-                    <GBtn icon="chat" color="dark" size={46} fast={false} label="Chat" onPress={() => { setQuick(false); setSheet({ k: 'chat' }); }} />
+                    <GBtn icon={voice.peerMuted ? 'mute' : 'sound'} color={voice.peerMuted ? 'red' : 'dark'} size={46} label={voice.peerMuted ? `Unmute ${peerFirst}` : `Mute ${peerFirst}`} onPress={voice.togglePeer} />
+                    <GBtn icon={voice.micOn ? 'mic' : 'micoff'} color={voice.micOn ? 'green' : 'dark'} size={46} label={voice.micOn ? 'Turn your mic off' : 'Turn your mic on'} onPress={voice.toggle} />
+                    <GBtn icon="smile" color={quick ? 'gold' : 'dark'} size={46} label="Quick messages and emojis" onPress={() => setQuick((v) => !v)} />
+                    <GBtn icon="chat" color="dark" size={46} label="Chat" onPress={() => { setQuick(false); setSheet({ k: 'chat' }); }} />
                   </div>
                 )}
             </div>
             <GBtn icon={actKind === 'sun' ? 'flame' : 'snow'} color={atkCol} size={80} label={actKind === 'sun' ? 'Throw a fireball' : 'Throw frost'} sound="none" onPress={() => { atkReq.current = Date.now(); }} />
+          </div>
+        )}
+        {ctl && (
+          <div onPointerDown={(e) => e.stopPropagation()} style={{ position: 'absolute', inset: 0, zIndex: 45, background: 'rgba(8,6,14,0.6)', display: 'flex', padding: 12, overflowY: 'auto', touchAction: 'pan-y' }}>
+            <div style={{ margin: 'auto', width: '100%', display: 'flex', justifyContent: 'center' }}><GControlsPanel onClose={() => setCtl(false)} /></div>
           </div>
         )}
         {voice.err && phase === 'play' && <div style={{ position: 'absolute', right: 14, bottom: 'calc(250px + env(safe-area-inset-bottom))' }}><GChip style={{ background: 'rgba(217,75,75,0.95)' }}>{voice.err}</GChip></div>}

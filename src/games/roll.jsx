@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Avatar, Portal, useBackClose, hapticTap, FONT, Spinner } from '../App.jsx';
-import { useRoomRelay } from './relay.jsx';
+import { useRoomLink } from './relay.jsx';
 import { EMOTES, Sheet, injectCss } from './livekit.jsx';
-import { GBtn, GHold, GPill, GPanel, GChip, GTitle, GIcon, injectKitCss, kitTap, maxDpr, INK } from './gamekit.jsx';
+import { GBtn, GHold, GPill, GPanel, GChip, GTitle, GIcon, injectKitCss, kitTap, pressProps, maxDpr, INK, useCtlLook, GControlsPanel } from './gamekit.jsx';
 import { Sfx } from './sfx.js';
 import { watchAllowed, setWatchAllowed, useLiveBeacon } from './live.js';
 import { WORLDS, LEVEL_N, BALLS, R, levelOf, levelName, makeWorld, mkBall, stepBall, interact, applyEvent, pressedButtons, gatesToOpen, foePos, clamp } from './rollengine.js';
@@ -19,7 +19,7 @@ function saveBest(uid, i, r) {
   } catch {}
 }
 const fmtT = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
-const WORLD_BTN = ['green', 'orange', 'teal', 'blue', 'purple'];
+const WORLD_BTN = ['green', 'orange', 'teal', 'blue', 'purple', 'pink', 'red'];
 
 function BallBadge({ ci, size = 44, happy }) {
   const ref = useRef(null);
@@ -42,7 +42,7 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
   const isHost = solo || (room && room.host === myId);
   const myFirst = String((me && me.name) || 'You').split(' ')[0];
   const meta = { n: myFirst, a: me && me.avatar, w: watch ? 1 : 0 };
-  const relay = useRoomRelay({ id: solo || !room ? null : `roll-${room.rm}`, myId, enabled: !solo && !!room, meta });
+  const relay = useRoomLink({ id: solo || !room ? null : `roll-${room.rm}`, myId, enabled: !solo && !!room, meta, fast: ['pl'] });
   const [phase, setPhase] = useState('menu');
   const [roster, setRoster] = useState(solo ? ['me'] : [room && room.host].filter(Boolean));
   const [names, setNames] = useState({});
@@ -57,6 +57,8 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
   const [lvl, setLvl] = useState(0);
   const [follow, setFollow] = useState(null);
   const [allowWatch, setAllowWatch] = useState(watchAllowed());
+  const look = useCtlLook();
+  const [ctl, setCtl] = useState(false);
   useLiveBeacon({ game: 'roll', room: room ? room.rm : null, info: { h: room && room.host }, active: !solo && !watch && !!room, allow: allowWatch });
   const cvRef = useRef(null);
   const wrapRef = useRef(null);
@@ -133,6 +135,7 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
         if (!W || m.i !== W.L.index) return;
         let b = balls.current[m.from];
         if (!b) { if (!rosterRef.current.includes(m.from)) return; b = mkBall(m.from, m.x, m.y); balls.current[m.from] = b; }
+        if (typeof m.at === 'number') { if (m.at < (b.netAt || 0)) return; b.netAt = m.at; }
         if (m.d && !(b.dead > 0)) { burst(partsRef.current, b.x, b.y, BALLS[rosterRef.current.indexOf(m.from) % 4].body, 16, 6, 'shard'); }
         b.dead = m.d ? 1 : 0; b.home = !!m.h; b.look = m.lk || 1;
         b.nt = { x: m.x, y: m.y, vx: m.vx || 0, vy: m.vy || 0, at: performance.now() };
@@ -172,7 +175,7 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
 
   const leave = () => { if (phase === 'play' && !solo && !watch) { setLeaveAsk(true); return; } finish(); };
   const finish = () => { Sfx.stopAll(); onClose(); };
-  useBackClose(true, () => { if (quick) setQuick(false); else if (leaveAsk) setLeaveAsk(false); else if (paused) setPaused(false); else if (phase === 'play' && solo) setPaused(true); else if (phase !== 'menu') { if (solo || isHost) toMenu(); else leave(); } else leave(); });
+  useBackClose(true, () => { if (ctl) setCtl(false); else if (quick) setQuick(false); else if (leaveAsk) setLeaveAsk(false); else if (paused) setPaused(false); else if (phase === 'play' && solo) setPaused(true); else if (phase !== 'menu') { if (solo || isHost) toMenu(); else leave(); } else leave(); });
   const toMenu = () => { setPhase('menu'); Sfx.music(null, false); WR.current = null; if (!solo && isHost) relay.send('menu', {}); };
 
   useEffect(() => {
@@ -320,7 +323,7 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
         return (
           <div key={wd.id}>
             <GPanel style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ width: 30, height: 30, borderRadius: 10, background: ['#7BD25A', '#FF9E6B', '#BFE6FF', '#9AA3AD', '#8A7AD0'][wi], boxShadow: `0 0 0 2.5px ${INK}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, color: INK }}>{wi + 1}</span>
+              <span style={{ width: 30, height: 30, borderRadius: 10, background: ['#7BD25A', '#FF9E6B', '#BFE6FF', '#9AA3AD', '#8A7AD0', '#FF9FD0', '#FF8A3D'][wi], boxShadow: `0 0 0 2.5px ${INK}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, color: INK }}>{wi + 1}</span>
               <span style={{ fontSize: 17, fontWeight: 900, flex: 1 }}>{wd.name}</span>
               <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontWeight: 900, fontSize: 13.5 }}><GIcon k="star" size={16} color="#FFD23F" />{`${got}/${wd.n * 3}`}</span>
             </GPanel>
@@ -357,7 +360,7 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
         {phase === 'play' && (
           <>
             <div style={{ position: 'absolute', left: 12, right: 12, top: 'calc(10px + env(safe-area-inset-top))', display: 'flex', alignItems: 'flex-start', gap: 8, pointerEvents: 'none' }}>
-              <div style={{ pointerEvents: 'auto' }}><GBtn icon={solo ? 'pause' : 'close'} color="white" size={44} fast={false} label={solo ? 'Pause' : 'Leave the game'} onPress={() => (solo ? setPaused(true) : leave())} /></div>
+              <div style={{ pointerEvents: 'auto', display: 'flex', gap: 8 }}><GBtn icon={solo ? 'pause' : 'close'} color="white" size={44} label={solo ? 'Pause' : 'Leave the game'} onPress={() => (solo ? setPaused(true) : leave())} />{playing() && <GBtn icon="gear" color="dark" size={44} label="Controls" onPress={() => { setQuick(false); if (solo) setPaused(true); setCtl(true); }} />}</div>
               <GChip style={{ height: 34, fontSize: 14 }}><span style={{ color: '#FFD23F' }}>{levelName(lvl)}</span><span style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtT(hud.time)}</span></GChip>
               <div style={{ flex: 1 }} />
               <GChip style={{ height: 34, fontSize: 14, gap: 5 }}><span style={{ width: 14, height: 14, borderRadius: 7, background: '#FFD23F', boxShadow: `0 0 0 2px ${INK}` }} /><span style={{ fontVariantNumeric: 'tabular-nums' }}>{hud.coins}</span></GChip>
@@ -382,12 +385,12 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
             )}
             {playing() && (
               <>
-                <div style={{ position: 'absolute', left: 14, bottom: 'calc(20px + env(safe-area-inset-bottom))', display: 'flex', gap: 14 }}>
+                <div style={{ position: 'absolute', left: 14, bottom: 'calc(20px + env(safe-area-inset-bottom))', display: 'flex', gap: 14, transform: `scale(${look.size})`, transformOrigin: '0 100%', opacity: 1 - look.see }}>
                   <GHold icon="left" color="white" size={74} label="Roll left" onDown={() => { hold.current.l = true; }} onUp={() => { hold.current.l = false; }} />
                   <GHold icon="right" color="white" size={74} label="Roll right" onDown={() => { hold.current.r = true; }} onUp={() => { hold.current.r = false; }} />
                 </div>
-                <div style={{ position: 'absolute', right: 14, bottom: 'calc(20px + env(safe-area-inset-bottom))', display: 'flex', alignItems: 'flex-end', gap: 10 }}>
-                  {!solo && <GBtn icon="smile" color={quick ? 'gold' : 'dark'} size={46} fast={false} label="Emojis" onPress={() => setQuick((v) => !v)} />}
+                <div style={{ position: 'absolute', right: 14, bottom: 'calc(20px + env(safe-area-inset-bottom))', display: 'flex', alignItems: 'flex-end', gap: 10, transform: `scale(${look.size})`, transformOrigin: '100% 100%', opacity: 1 - look.see }}>
+                  {!solo && <GBtn icon="smile" color={quick ? 'gold' : 'dark'} size={46} label="Emojis" onPress={() => setQuick((v) => !v)} />}
                   <GHold icon="up" color={BALLS[Math.max(0, myIdx) % 4].id === 'skye' ? 'blue' : ['gold', 'green', 'blue', 'purple'][Math.max(0, myIdx) % 4]} size={86} label="Jump" onDown={() => { hold.current.j = true; }} onUp={() => { hold.current.j = false; }} />
                 </div>
               </>
@@ -401,7 +404,7 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
             {quick && (
               <div onPointerDown={(e) => e.stopPropagation()} style={{ position: 'absolute', right: 14, bottom: 'calc(130px + env(safe-area-inset-bottom))', width: 'min(260px, calc(100% - 28px))', animation: 'zgk-pop 0.2s ease-out' }}>
                 <GPanel style={{ padding: 10, display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 6 }}>
-                  {EMOTES.map((e) => <button key={e} type="button" className="zgk-btn" aria-label={`Send ${e}`} onClick={() => sendEmote(e)} style={{ height: 44, borderRadius: 14, border: 'none', background: 'rgba(255,255,255,0.1)', fontSize: 25, cursor: 'pointer' }}>{e}</button>)}
+                  {EMOTES.map((e) => <button key={e} type="button" className="zgk-btn" aria-label={`Send ${e}`} {...pressProps(() => sendEmote(e))} style={{ height: 44, borderRadius: 14, border: 'none', background: 'rgba(255,255,255,0.1)', fontSize: 25, cursor: 'pointer' }}>{e}</button>)}
                 </GPanel>
               </div>
             )}
@@ -492,6 +495,11 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
           </div>
         )}
 
+        {ctl && (
+          <div onPointerDown={(e) => e.stopPropagation()} style={{ position: 'absolute', inset: 0, zIndex: 45, background: 'rgba(10,8,24,0.55)', display: 'flex', padding: 12, overflowY: 'auto', touchAction: 'pan-y' }}>
+            <div style={{ margin: 'auto', width: '100%', display: 'flex', justifyContent: 'center' }}><GControlsPanel onClose={() => setCtl(false)} /></div>
+          </div>
+        )}
         {leaveAsk && (
           <Sheet title="Leave the game?" text="Your friends can keep playing without you." onClose={() => setLeaveAsk(false)}>
             <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>

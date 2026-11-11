@@ -7,6 +7,8 @@ export const SKY = {
   frost: { top: '#8CC8F5', bot: '#EEF8FF', far: '#C9DFF2', mid: '#A9C8E6', dirt: ['#8FA8C4', '#7590AE', '#5C7593'], grass: ['#FFFFFF', '#D3E6F7'], brick: ['#BFD8F0', '#8DB0D6'], plank: ['#A9B9C9', '#76889C'], cloud: true },
   works: { top: '#3F6FA0', bot: '#A8D2EA', far: '#6E93B5', mid: '#4F7697', dirt: ['#8E9BAA', '#73808F', '#5A6574'], grass: ['#FFD23F', '#E0A800'], brick: ['#F2A93B', '#B9741C'], plank: ['#A9B4C0', '#76828F'], cloud: true, hazard: true },
   night: { top: '#1E1B4A', bot: '#5B4A9A', far: '#3B3570', mid: '#2C2858', dirt: ['#6B5AA0', '#54478A', '#3E3470'], grass: ['#5FE3C0', '#2FB894'], brick: ['#8A7AD0', '#5C4CA6'], plank: ['#8C7CC4', '#5E4E96'], cloud: false, stars: true },
+  candy: { top: '#FF9FD0', bot: '#FFE6F3', far: '#FFC6E3', mid: '#F49ACA', dirt: ['#E98DBD', '#C96A9C', '#A24D7B'], grass: ['#8FF0C8', '#4CCB9C'], brick: ['#FFB4DA', '#E07AB2'], plank: ['#F2C59B', '#C8955B'], cloud: true },
+  lava: { top: '#3B1515', bot: '#96351A', far: '#5C221A', mid: '#431612', dirt: ['#6E3D32', '#572B21', '#3C1C15'], grass: ['#FF8A3D', '#E0561B'], brick: ['#AA573C', '#7C3B27'], plank: ['#8E5C46', '#603C2C'], cloud: false, hazard: true },
 };
 function rr(c, x, y, w, h, r) { r = Math.max(0, Math.min(r, w / 2, h / 2)); c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); }
 

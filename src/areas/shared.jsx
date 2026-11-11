@@ -136,6 +136,7 @@ import {
   reducedMotion,
   resolveMedia,
   rpcFailText,
+  reportClientError,
   rpcMissing,
   sensReveal,
   sensStore,
@@ -2431,7 +2432,7 @@ export function PaintSheet({ title, onClose, children, z = 120 }) {
     </div>
   );
 }
-export async function makeWallPhoto(file, userId) {
+export async function makeWallPhoto(file, userId, onUploadFail) {
   const url = URL.createObjectURL(file);
   try {
     const img = await new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = url; });
@@ -2448,8 +2449,14 @@ export async function makeWallPhoto(file, userId) {
         if (blob) {
           const up = await uploadMedia(new File([blob], 'wallpaper.jpg', { type: 'image/jpeg' }), userId);
           if (up && up.url) { const k = `url:${up.url}`; wallPhotoCache.set(k, data); return k; }
+          const er = (up && up.error) || {};
+          reportClientError(`Wallpaper photo did not upload: ${[er.statusCode, er.code, er.message || er.error].filter(Boolean).join(' ') || 'no link came back'}`, '', { kind: 'wallpaper' });
+          if (onUploadFail) onUploadFail(er);
         }
-      } catch {}
+      } catch (e) {
+        reportClientError(`Wallpaper photo did not upload: ${(e && e.message) || e}`, e && e.stack, { kind: 'wallpaper' });
+        if (onUploadFail) onUploadFail(e);
+      }
     }
     const key = `${WALL_PHOTO_PREFIX}${Date.now().toString(36)}`;
     try { localStorage.setItem(`zchat-wall-${key}`, data); } catch {

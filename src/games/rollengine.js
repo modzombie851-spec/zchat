@@ -8,6 +8,8 @@ export const WORLDS = [
   { id: 'frost', name: 'Frost peaks', n: 6 },
   { id: 'works', name: 'Clockwork works', n: 6 },
   { id: 'night', name: 'Star night', n: 6 },
+  { id: 'candy', name: 'Candy hills', n: 6 },
+  { id: 'lava', name: 'Lava caves', n: 6 },
 ];
 export const LEVEL_N = WORLDS.reduce((a, w) => a + w.n, 0);
 export const BALLS = [
@@ -207,7 +209,10 @@ export function buildLevel(index, nPlayers) {
   const pool = ['gap', 'hill', 'steps', 'spikes', 'walkers', 'spring', 'mover', 'tunnel'];
   if (w >= 1 || l >= 2) pool.push('hopper', 'flyers', 'tower');
   if (w >= 1 || l >= 3) pool.push('lift', 'gate');
-  if (w >= 3) pool.push('lava', 'lava');
+  const wid = WORLDS[w].id;
+  if (w >= 3 && wid !== 'candy') pool.push('lava', 'lava');
+  if (wid === 'lava') pool.push('lava', 'hopper');
+  if (wid === 'candy') pool.push('spring', 'spring', 'tower', 'flyers');
   if (w === 2) pool.push('ice', 'ice');
   if (l === 0 && w === 0) pool.splice(pool.indexOf('mover'), 1);
   start();
