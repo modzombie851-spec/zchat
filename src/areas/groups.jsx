@@ -91,6 +91,7 @@ import {
   useG2Hide,
   useG2Kw,
   useTheme,
+  groupWrite,
 } from '../App.jsx';
 import {
   BubblesIcon,
@@ -175,6 +176,7 @@ export function CreateGroupPanel({ myId, onClose, onCreated }) {
     let sys = null;
     let addedIds = null;
     let skippedIds = [];
+    let setup = false;
     let { data: out, error } = await viaRpc();
     if (error && authErr(error)) { try { await supabase.auth.refreshSession(); } catch {} ({ data: out, error } = await viaRpc()); }
     if (!error && out && out.group) {
@@ -206,7 +208,7 @@ export function CreateGroupPanel({ myId, onClose, onCreated }) {
         else {
           for (const p of people) {
             const one = await supabase.from('group_members').insert({ group_id: id, user_id: p.id, role: 'member', added_by: myId });
-            if (one.error) skippedIds.push(p.id); else addedIds.push(p.id);
+            if (one.error) { skippedIds.push(p.id); if (String(one.error.code || '') === '42501' || /row.level security|permission/i.test(String(one.error.message || ''))) setup = true; } else addedIds.push(p.id);
           }
         }
       }
@@ -222,7 +224,7 @@ export function CreateGroupPanel({ myId, onClose, onCreated }) {
     if (avatarUrl) {
       const gate = await photoSafetyCheck([avatarUrl], 'group').catch(() => null);
       if (gate && (gate.verdict === 'block' || gate.verdict === 'sensitive')) appAlert(photoBlockText('group', gate.reason));
-      else { const r = await supabase.from('groups').update({ avatar: avatarUrl }).eq('id', group.id); avatarOk = !r.error; }
+      else { const r = await groupWrite(group.id, { avatar: avatarUrl }); avatarOk = r.ok; }
     }
     if (added.length) {
       getProfile(myId).then(({ data: creator }) => {
@@ -230,7 +232,7 @@ export function CreateGroupPanel({ myId, onClose, onCreated }) {
       }, () => {});
     }
     setCreating(false);
-    onCreated({ ...group, ...(avatarOk ? { avatar: avatarUrl } : {}) }, { sys, people: added, skipped });
+    onCreated({ ...group, ...(avatarOk ? { avatar: avatarUrl } : {}) }, { sys, people: added, skipped, setup });
   };
 
   const isPicked = (id) => !!selected.find((s) => s.id === id);
@@ -440,6 +442,7 @@ export function GroupInfoPanel({ group, members, myId, iFollowIds, privacyAllowe
   const announce = !!(community && community.announce_id === group.id);
   const isAdmin = myRank >= 2;
   const canEdit = isAdmin && !announce;
+  const canAdd = !announce && (isAdmin || (myRank >= 0 && (group.add_members_policy || 'everyone') !== 'admins'));
   const accent = groupAccent(group);
   const [bioOpen, setBioOpen] = useState(false);
   const [sheetFor, setSheetFor] = useState(null);
@@ -561,7 +564,7 @@ export function GroupInfoPanel({ group, members, myId, iFollowIds, privacyAllowe
             tools.onMute ? [tools.muted ? <BellOff size={21} strokeWidth={1.7} /> : <Bell size={21} strokeWidth={1.7} />, tools.muted ? 'Muted' : 'Mute', tools.onMute, !!tools.muted] : null,
             tools.onCall ? [<Phone size={21} strokeWidth={1.7} />, tools.inCall ? 'Join' : 'Call', () => tools.onCall('voice'), !!tools.inCall] : null,
             tools.onCall ? [<VideoIcon size={21} strokeWidth={1.7} />, 'Video', () => tools.onCall('video')] : null,
-            canEdit ? [<UserPlus size={21} strokeWidth={1.7} />, 'Add', () => setShowAddMembers(true)] : null,
+            canAdd ? [<UserPlus size={21} strokeWidth={1.7} />, 'Add', () => setShowAddMembers(true)] : null,
           ]} />
         )}
 
@@ -582,7 +585,7 @@ export function GroupInfoPanel({ group, members, myId, iFollowIds, privacyAllowe
 
         {tools && <MediaStrip media={media} onOpen={onOpenMedia} onSeeAll={tools.onMedia} />}
         <DetailSection title={`${members.length} ${members.length === 1 ? 'member' : 'members'}`} right={ranked.length > preview.length ? <div role="button" aria-label="See all members" onClick={() => (onOpenMembers ? onOpenMembers() : null)} style={{ fontSize: 13, fontWeight: 800, color: theme.coral, cursor: 'pointer', padding: '2px 0 2px 10px' }}>See all</div> : null}>
-          {canEdit && (
+          {canAdd && (
             <div role="button" aria-label="Add people" onClick={() => setShowAddMembers(true)} className="zchat-row-press" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', cursor: 'pointer', borderBottom: `1px solid ${theme.border}` }}>
               <div style={{ width: 48, height: 48, color: theme.coral, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><UserPlus size={24} strokeWidth={1.8} /></div>
               <div style={{ fontSize: 15, fontWeight: 700, color: theme.ink }}>Add people</div>
@@ -962,7 +965,7 @@ export function GroupMembersPanel({ group, members, myId, isAdmin, isOwner, onCl
     <>
     <WideDim onClose={onClose} z={35} />
     <div style={{ position: 'fixed', inset: 0, background: theme.bgGradient, zIndex: 35, display: 'flex', flexDirection: 'column', overflow: 'hidden' }} className="zchat-panel-open zchat-wide-page">
-      <IgTopBar title="Members" onBack={onClose} right={myRank >= 2 && !announce ? <div role="button" aria-label="Add members" onClick={onAddMembers} style={{ fontSize: 14, fontWeight: 800, color: theme.coral, cursor: 'pointer', padding: '0 10px', height: 44, display: 'flex', alignItems: 'center' }}>Add</div> : null} />
+      <IgTopBar title="Members" onBack={onClose} right={!announce && (myRank >= 2 || (myRank >= 0 && (group.add_members_policy || 'everyone') !== 'admins')) ? <div role="button" aria-label="Add members" onClick={onAddMembers} style={{ fontSize: 14, fontWeight: 800, color: theme.coral, cursor: 'pointer', padding: '0 10px', height: 44, display: 'flex', alignItems: 'center' }}>Add</div> : null} />
       <div style={{ padding: '12px 18px 0', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, height: 40, borderRadius: 13, background: theme.rowBg, border: `1px solid ${theme.border}`, padding: '0 12px' }}>
           <Search size={15} color={theme.muted} />

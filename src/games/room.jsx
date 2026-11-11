@@ -1,5 +1,5 @@
 import React, { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { GameRoom, RoomButton, RoomSheet, sfx, haptic } from './kit.jsx';
+import { GameRoom, RoomButton, RoomSheet, sfx, haptic, defineSfx, clickSound } from './kit.jsx';
 import { useGameRelay } from './relay.jsx';
 import { useMyLevels, useLevels, recordFinish, xpSpan, LEVEL_GAMES, noteRecent } from './levels.jsx';
 import { preloadScene } from './scenes.jsx';
@@ -372,7 +372,7 @@ function Disc({ p, size, kit }) {
   );
 }
 
-function CheckersView({ Z, st, myId, onMove, onMeta, peerSel, onSel, peerName, still }) {
+function CheckersView({ Z, st, myId, onMove, onMeta, peerSel, onSel, peerName, still, frozen }) {
   const kit = useKit('ckr');
   const wrap = useRef(null);
   const box = useBox(wrap);
@@ -383,7 +383,7 @@ function CheckersView({ Z, st, myId, onMove, onMeta, peerSel, onSel, peerName, s
   const meWhite = myId === st.wh || !player;
   const flip = !meWhite;
   const finished = !!st.w;
-  const myTurn = !!K && !finished && player && st.t === myId;
+  const myTurn = !!K && !finished && player && st.t === myId && !frozen;
   const legal = useMemo(() => (K && myTurn ? K.legalMoves(st.b, st.t === st.wh) : []), [K, myTurn, st.b, st.t]);
   const [path, setPath] = useState([]);
   useEffect(() => { setPath([]); }, [st.n]);
@@ -675,12 +675,14 @@ function ClockChip({ ms, run }) {
     <span style={{ flexShrink: 0, fontSize: 12, fontWeight: 900, fontVariantNumeric: 'tabular-nums', lineHeight: '14px', padding: '2px 6px', borderRadius: 7, color: run ? (low ? '#FFFFFF' : '#14110C') : '#FFFFFF', background: run ? (low ? '#E5484D' : '#FFFFFF') : 'rgba(255,255,255,0.16)', boxShadow: run ? '0 2px 8px rgba(0,0,0,0.3)' : 'none' }}>{clockText(ms)}</span>
   );
 }
+defineSfx('clockTick', (c, out) => { clickSound(c, out, { freq: 3400, decay: 0.022, gain: 0.2, q: 7 }); clickSound(c, out, { freq: 1700, decay: 0.03, gain: 0.08, q: 3, delay: 0.012 }); });
+const CLOCK_GAMES = ['chess', 'ckr'];
 function stampClock(cur, next) {
   if (!cur.tc || !next || next.a !== 'mv') return next;
   const now = Math.round(listenNow());
   const i = cur.t === cur.x ? 0 : 1;
   const ck = Array.isArray(cur.ck) && cur.ck.length === 2 ? cur.ck.map((v) => Math.round(Number(v) || 0)) : [cur.tc * 1000, cur.tc * 1000];
-  if (cur.tt != null) ck[i] = Math.max(0, Math.min(ck[i], ck[i] - (now - cur.tt)));
+  if (cur.tt != null) ck[i] = Math.max(0, Math.min(ck[i], ck[i] - (now - cur.tt))) + Math.max(0, Math.round(Number(cur.ti) || 0)) * 1000;
   return { ...next, ck, tt: now };
 }
 
@@ -790,7 +792,7 @@ export function GameRoomPage({ st, prevOf, myId, me, peer, intent, onClose }) {
   const move = (next0) => {
     if (!next0 || !player) return false;
     const cur = latest.current;
-    const next = g === 'chess' ? stampClock(cur, next0) : next0;
+    const next = CLOCK_GAMES.includes(g) ? stampClock(cur, next0) : next0;
     if ((next.n || 0) <= (cur.n || 0)) return false;
     relay.send('mv', { st: next });
     Promise.resolve(g1Send(next, { quiet: relay.here === true })).then((ok) => { if (!ok) { relay.send('nv', { id: next.id, n: next.n }); sfx('error'); } });
@@ -824,16 +826,24 @@ export function GameRoomPage({ st, prevOf, myId, me, peer, intent, onClose }) {
     sfx('tap');
     if (g1Mem.host && g1Mem.host.rematch) g1Mem.host.rematch(st);
   };
-  const timed = g === 'chess' && !!st.tc;
+  const timed = CLOCK_GAMES.includes(g) && !!st.tc;
   const nowMs = timed ? listenNow() : 0;
   const myClock = timed ? clockLeft(st, mark, nowMs) : null;
   const peerClock = timed ? clockLeft(st, theirMark, nowMs) : null;
   const outOfTime = timed && !fin && st.tt != null && ((st.t === myId && myClock <= 0) || (st.t === other && peerClock <= 0));
   const [, setClockTick] = useState(0);
+  const tickSec = useRef(-1);
   useEffect(() => { if (timed) listenSyncClock(); }, [timed]);
   useEffect(() => {
     if (!timed || fin || st.tt == null) return undefined;
-    const iv = setInterval(() => setClockTick((x) => x + 1), 250);
+    const iv = setInterval(() => {
+      setClockTick((x) => x + 1);
+      const cur = latest.current;
+      if (!player || cur.w || cur.t !== myId || cur.tt == null) return;
+      const left = clockLeft(cur, mark, listenNow());
+      const sec = Math.ceil(left / 1000);
+      if (left > 0 && sec <= 10 && sec !== tickSec.current) { tickSec.current = sec; sfx('clockTick'); if (sec <= 3) haptic(8); }
+    }, 250);
     return () => clearInterval(iv);
   }, [timed, fin, st.tt, st.n]);
   useEffect(() => {
@@ -870,7 +880,7 @@ export function GameRoomPage({ st, prevOf, myId, me, peer, intent, onClose }) {
   const title = gameVariantTitle(st);
   const crmWhy = g === 'crm' && st.w && st.why !== 'resign' ? `${st.pts || 0} points` : null;
   const board = g === 'chess' ? <ChessView Z={Z} st={st} myId={myId} onMove={move} onMeta={setMeta} peerSel={peerSel} onSel={sendSel} peerName={peerName} still={still} frozen={outOfTime} />
-    : g === 'ckr' ? <CheckersView Z={Z} st={st} myId={myId} onMove={move} onMeta={setMeta} peerSel={peerSel} onSel={sendSel} peerName={peerName} still={still} />
+    : g === 'ckr' ? <CheckersView Z={Z} st={st} myId={myId} onMove={move} onMeta={setMeta} peerSel={peerSel} onSel={sendSel} peerName={peerName} still={still} frozen={outOfTime} />
       : g === 'pool' ? <PoolTable st={st} prevOf={prevOf} myId={myId} peerName={peerName} relay={relay} onMove={move} onMeta={setMeta} onBusy={setBusy} onFlash={flash} />
         : g === 'crm' ? <CarromTable st={st} prevOf={prevOf} myId={myId} peerName={peerName} relay={relay} onMove={move} onMeta={setMeta} onBusy={setBusy} onFlash={flash} />
           : zap ? <ZapTable st={st} myId={myId} peerName={peerName} relay={relay} intent={intent} onMeta={setMeta} />

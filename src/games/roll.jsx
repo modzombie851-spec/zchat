@@ -1,0 +1,549 @@
+import React, { useEffect, useRef, useState } from 'react';
+import { Avatar, Portal, useBackClose, hapticTap, FONT, Spinner } from '../App.jsx';
+import { useRoomRelay } from './relay.jsx';
+import { EMOTES, Sheet, injectCss } from './livekit.jsx';
+import { GBtn, GHold, GPill, GPanel, GChip, GTitle, GIcon, injectKitCss, kitTap, maxDpr, INK } from './gamekit.jsx';
+import { Sfx } from './sfx.js';
+import { watchAllowed, setWatchAllowed, useLiveBeacon } from './live.js';
+import { WORLDS, LEVEL_N, BALLS, R, levelOf, levelName, makeWorld, mkBall, stepBall, interact, applyEvent, pressedButtons, gatesToOpen, foePos, clamp } from './rollengine.js';
+import { render, drawBall, updateParts, burst, dust, popText, clearChunks } from './rolldraw.js';
+
+const BEST_KEY = (uid) => `zchat-roll-best-${uid || 'me'}`;
+function readBest(uid) { try { return JSON.parse(localStorage.getItem(BEST_KEY(uid)) || '{}') || {}; } catch { return {}; } }
+function saveBest(uid, i, r) {
+  try {
+    const all = readBest(uid);
+    const o = all[i] || {};
+    all[i] = { stars: Math.max(o.stars || 0, r.stars), time: o.time ? Math.min(o.time, r.time) : r.time, coins: Math.max(o.coins || 0, r.coins) };
+    localStorage.setItem(BEST_KEY(uid), JSON.stringify(all));
+  } catch {}
+}
+const fmtT = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+const WORLD_BTN = ['green', 'orange', 'teal', 'blue', 'purple'];
+
+function BallBadge({ ci, size = 44, happy }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const cv = ref.current;
+    if (!cv) return;
+    const d = Math.min(2, window.devicePixelRatio || 1);
+    cv.width = size * d; cv.height = size * d;
+    const c = cv.getContext('2d');
+    c.setTransform(d, 0, 0, d, 0, 0);
+    c.clearRect(0, 0, size, size);
+    drawBall(c, size / 2, size / 2, size / (R * 2 + 0.25), { a: 0.4, vy: happy ? -4 : 0, look: 1, blink: 1, sq: 0 }, ci, 0, { happy });
+  }, [ci, size, happy]);
+  return <canvas ref={ref} aria-hidden="true" style={{ width: size, height: size, display: 'block', flexShrink: 0 }} />;
+}
+
+export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, watch = false }) {
+  injectCss(); injectKitCss();
+  const uid = solo ? 'me' : myId;
+  const isHost = solo || (room && room.host === myId);
+  const myFirst = String((me && me.name) || 'You').split(' ')[0];
+  const meta = { n: myFirst, a: me && me.avatar, w: watch ? 1 : 0 };
+  const relay = useRoomRelay({ id: solo || !room ? null : `roll-${room.rm}`, myId, enabled: !solo && !!room, meta });
+  const [phase, setPhase] = useState('menu');
+  const [roster, setRoster] = useState(solo ? ['me'] : [room && room.host].filter(Boolean));
+  const [names, setNames] = useState({});
+  const [watchers, setWatchers] = useState([]);
+  const [hud, setHud] = useState({ coins: 0, stars: 0, time: 0, deaths: 0, home: [], dead: [] });
+  const [result, setResult] = useState(null);
+  const [toast, setToast] = useState(null);
+  const [paused, setPaused] = useState(false);
+  const [leaveAsk, setLeaveAsk] = useState(false);
+  const [quick, setQuick] = useState(false);
+  const [best, setBest] = useState(() => readBest(uid));
+  const [lvl, setLvl] = useState(0);
+  const [follow, setFollow] = useState(null);
+  const [allowWatch, setAllowWatch] = useState(watchAllowed());
+  useLiveBeacon({ game: 'roll', room: room ? room.rm : null, info: { h: room && room.host }, active: !solo && !watch && !!room, allow: allowWatch });
+  const cvRef = useRef(null);
+  const wrapRef = useRef(null);
+  const WR = useRef(null);
+  const balls = useRef({});
+  const partsRef = useRef([]);
+  const cam = useRef({ x: 5, y: 10, init: false });
+  const hold = useRef({ l: false, r: false, j: false });
+  const keys = useRef(new Set());
+  const phaseRef = useRef(phase); phaseRef.current = phase;
+  const pausedRef = useRef(paused); pausedRef.current = paused;
+  const rosterRef = useRef(roster); rosterRef.current = roster;
+  const followRef = useRef(follow); followRef.current = follow;
+  const namesRef = useRef(names); namesRef.current = names;
+  const hudKey = useRef('');
+  const sendT = useRef(0);
+  const doneRef = useRef(false);
+  const toastTimer = useRef(0);
+  const bubblesRef = useRef({});
+  const flagBy = useRef({});
+  const metaRef = useRef({});
+  const joinOrder = useRef([]);
+  const watchRef = useRef(watch);
+  if (typeof window !== 'undefined' && window.__zfake) window.__zroll = { world: () => WR.current, balls: () => balls.current, roster: () => rosterRef.current };
+
+  const say = (text, sec) => { setToast({ text, at: Date.now() }); clearTimeout(toastTimer.current); toastTimer.current = setTimeout(() => setToast(null), (sec || 2.4) * 1000); };
+  const kindOf = () => (solo ? 'me' : myId);
+  const playing = () => !watchRef.current && rosterRef.current.includes(kindOf());
+
+  const freshRoster = () => {
+    if (solo) return ['me'];
+    const present = relay.peers.filter((p) => !(metaRef.current[p] && metaRef.current[p].w));
+    const order = joinOrder.current.filter((p) => present.includes(p));
+    present.forEach((p) => { if (!order.includes(p)) order.push(p); });
+    return [myId, ...order.filter((p) => p !== myId)].slice(0, 4);
+  };
+  const startLevel = (i, ids, quiet) => {
+    const list = ids || (isHost && !solo ? freshRoster() : rosterRef.current);
+    if (!solo) { setRoster(list); rosterRef.current = list; }
+    const W = makeWorld(i, list.length);
+    WR.current = W;
+    balls.current = {};
+    list.forEach((k, n) => { const b = mkBall(k, W.L.start.x + n * 0.95, W.L.start.y); balls.current[k] = b; });
+    partsRef.current = [];
+    flagBy.current = {};
+    cam.current.init = false;
+    doneRef.current = false;
+    hold.current = { l: false, r: false, j: false };
+    clearChunks();
+    setLvl(i); setResult(null); setPaused(false); setQuick(false);
+    setPhase('play');
+    Sfx.init();
+    Sfx.music('roll', true);
+    if (!solo && isHost && !quiet) relay.send('lv', { i, ids: list });
+    const { w } = levelOf(i);
+    say(`${WORLDS[w].name}, level ${levelName(i)}`, 2.2);
+  };
+  const emit = (e) => {
+    const W = WR.current;
+    if (!W) return;
+    if (applyEvent(W, e) && !solo) relay.send('ev', { e, i: W.L.index });
+    if (e.k === 'home' && balls.current[e.who]) balls.current[e.who].home = true;
+  };
+
+  useEffect(() => {
+    if (solo || !room) return undefined;
+    const offs = [
+      relay.on('*', (m) => { if (m.m) { metaRef.current[m.from] = m.m; setNames((prev) => (prev[m.from] === m.m.n ? prev : { ...prev, [m.from]: m.m.n })); } if (!joinOrder.current.includes(m.from)) joinOrder.current.push(m.from); }),
+      relay.on('roster', (m) => { if (isHost) return; if (Array.isArray(m.ids)) { setRoster(m.ids.slice(0, 4)); if (m.nm) setNames((prev) => ({ ...prev, ...m.nm })); if (m.cur != null && !WR.current) startLevel(m.cur, m.ids.slice(0, 4), true); } if (m.nw && watchRef.current) { say('The players turned off watching.', 3); setTimeout(() => onClose(), 1500); } }),
+      relay.on('lv', (m) => { if (isHost) return; if (Array.isArray(m.ids)) setRoster(m.ids); startLevel(m.i, m.ids, true); }),
+      relay.on('menu', () => { if (!isHost) { setPhase('menu'); Sfx.music(null, false); } }),
+      relay.on('pl', (m) => {
+        const W = WR.current;
+        if (!W || m.i !== W.L.index) return;
+        let b = balls.current[m.from];
+        if (!b) { if (!rosterRef.current.includes(m.from)) return; b = mkBall(m.from, m.x, m.y); balls.current[m.from] = b; }
+        if (m.d && !(b.dead > 0)) { burst(partsRef.current, b.x, b.y, BALLS[rosterRef.current.indexOf(m.from) % 4].body, 16, 6, 'shard'); }
+        b.dead = m.d ? 1 : 0; b.home = !!m.h; b.look = m.lk || 1;
+        b.nt = { x: m.x, y: m.y, vx: m.vx || 0, vy: m.vy || 0, at: performance.now() };
+        if (m.ht != null && !isHost && m.from === room.host) { const target = m.ht - W.t; if (Math.abs(target - W.clk) > 0.5) W.clk = target; else W.clk += (target - W.clk) * 0.2; }
+      }),
+      relay.on('ev', (m) => { const W = WR.current; if (!W || m.i !== W.L.index || !m.e) return; applyEvent(W, m.e); if (m.e.k === 'home' && balls.current[m.e.who]) balls.current[m.e.who].home = true; }),
+      relay.on('emo', (m) => { const e = String(m.e || ''); if (!EMOTES.includes(e)) return; bubblesRef.current[m.from] = { text: e, t: 0, life: 1.8 }; Sfx.play('pop', { vol: 0.5 }); }),
+      relay.on('bye', (m) => { const n = namesRef.current[m.from] || 'A friend'; if (rosterRef.current.includes(m.from)) say(`${n} left the game`, 3); }),
+    ];
+    return () => offs.forEach((f) => f && f());
+  }, [relay.on]);
+
+  useEffect(() => {
+    if (solo || !room || !isHost) return undefined;
+    const tick = () => {
+      const present = relay.peers.filter((p) => !(metaRef.current[p] && metaRef.current[p].w));
+      const cur = rosterRef.current;
+      const inGame = phaseRef.current === 'play' || phaseRef.current === 'done';
+      const next = inGame ? cur.filter((p) => p === myId || present.includes(p)) : freshRoster();
+      const w = relay.peers.filter((p) => metaRef.current[p] && metaRef.current[p].w);
+      setWatchers((prev) => (prev.join('|') === w.join('|') ? prev : w));
+      if (next.join('|') !== cur.join('|')) setRoster(next);
+      const nm = {}; next.concat(w).forEach((p) => { nm[p] = p === myId ? myFirst : (metaRef.current[p] && metaRef.current[p].n) || 'Friend'; });
+      relay.send('roster', { ids: next, nm, nw: !allowWatch && w.length ? 1 : 0, cur: phaseRef.current === 'play' && WR.current ? WR.current.L.index : null });
+    };
+    tick();
+    const iv = setInterval(tick, 1500);
+    return () => clearInterval(iv);
+  }, [relay.peers, allowWatch]);
+
+  useEffect(() => {
+    if (solo || !room || isHost) return undefined;
+    const w = relay.peers.filter((p) => metaRef.current[p] && metaRef.current[p].w);
+    setWatchers((prev) => (prev.join('|') === w.join('|') ? prev : w));
+    return undefined;
+  }, [relay.peers]);
+
+  const leave = () => { if (phase === 'play' && !solo && !watch) { setLeaveAsk(true); return; } finish(); };
+  const finish = () => { Sfx.stopAll(); onClose(); };
+  useBackClose(true, () => { if (quick) setQuick(false); else if (leaveAsk) setLeaveAsk(false); else if (paused) setPaused(false); else if (phase === 'play' && solo) setPaused(true); else if (phase !== 'menu') { if (solo || isHost) toMenu(); else leave(); } else leave(); });
+  const toMenu = () => { setPhase('menu'); Sfx.music(null, false); WR.current = null; if (!solo && isHost) relay.send('menu', {}); };
+
+  useEffect(() => {
+    const kd = (e) => {
+      if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+      const k = e.key.toLowerCase();
+      if (['arrowleft', 'arrowright', 'arrowup', 'a', 'd', 'w', ' '].includes(k)) { keys.current.add(k); e.preventDefault(); }
+    };
+    const ku = (e) => keys.current.delete(e.key.toLowerCase());
+    window.addEventListener('keydown', kd); window.addEventListener('keyup', ku);
+    return () => { window.removeEventListener('keydown', kd); window.removeEventListener('keyup', ku); };
+  }, []);
+
+  useEffect(() => {
+    let raf = 0, last = performance.now(), acc = 0;
+    const loop = (ts) => {
+      raf = requestAnimationFrame(loop);
+      const raw = (ts - last) / 1000;
+      last = ts;
+      acc += raw;
+      if (acc < 0.0155) return;
+      const dt = Math.min(0.04, acc);
+      acc = 0;
+      const W = WR.current, cv = cvRef.current;
+      if (!W || !cv || (phaseRef.current !== 'play' && phaseRef.current !== 'done')) return;
+      const wrap = wrapRef.current;
+      const cw = wrap ? wrap.clientWidth : window.innerWidth, ch = wrap ? wrap.clientHeight : window.innerHeight;
+      const dpr = maxDpr(false);
+      if (cv.width !== Math.round(cw * dpr) || cv.height !== Math.round(ch * dpr)) { cv.width = Math.round(cw * dpr); cv.height = Math.round(ch * dpr); clearChunks(); }
+      const step = pausedRef.current ? 0 : dt;
+      const myK = kindOf();
+      const mine = balls.current[myK];
+      const K = keys.current, Hd = hold.current;
+      const ix = ((K.has('arrowright') || K.has('d') || Hd.r) ? 1 : 0) - ((K.has('arrowleft') || K.has('a') || Hd.l) ? 1 : 0);
+      const jump = K.has('arrowup') || K.has('w') || K.has(' ') || Hd.j;
+      if (step > 0) {
+        W.t += step;
+        if (!doneRef.current) W.time += step;
+        const all = Object.keys(balls.current).map((k) => balls.current[k]);
+        if (mine && playing()) {
+          const others = all.filter((b) => b !== mine);
+          stepBall(W, mine, { x: ix, jump }, step, others);
+          interact(W, mine, emit);
+        }
+        for (const b of all) {
+          if (b === mine || !b.nt) continue;
+          const T = b.nt;
+          const age = Math.min(0.2, (performance.now() - T.at) / 1000);
+          const tx = T.x + T.vx * age, ty = T.y + T.vy * age;
+          if (Math.hypot(tx - b.x, ty - b.y) > 3) { b.x = tx; b.y = ty; } else { const k = 1 - Math.exp(-step * 16); b.x += (tx - b.x) * k; b.y += (ty - b.y) * k; }
+          b.vx = T.vx; b.vy = T.vy; b.a += b.vx * step / R;
+          b.blink -= step; if (b.blink < -0.12) b.blink = 2 + Math.random() * 3;
+        }
+        const pressed = pressedButtons(W, all);
+        W.pressed = pressed;
+        for (const g of gatesToOpen(W, pressed)) emit({ k: 'door', g });
+        W.doorAmt = W.doorAmt || {};
+        for (const d of W.L.doors) W.doorAmt[d.g] = clamp((W.doorAmt[d.g] || 0) + (W.opened.has(d.g) ? step * 1.8 : -step * 2), 0, 1);
+        W.killT = W.killT || {};
+        for (const id of W.kills) W.killT[id] = (W.killT[id] || 0) + step;
+        for (const k of Object.keys(W.springT)) { W.springT[k] -= step; if (W.springT[k] <= 0) delete W.springT[k]; }
+        for (const k of Object.keys(bubblesRef.current)) { const bb = bubblesRef.current[k]; if (bb) { bb.t += step; if (bb.t > bb.life) bubblesRef.current[k] = null; } }
+      }
+      const P = partsRef.current;
+      while (W.fx.length) {
+        const f = W.fx.shift();
+        const local = f.who === myK;
+        const ci = Math.max(0, rosterRef.current.indexOf(f.who));
+        switch (f.k) {
+          case 'jump': if (local) Sfx.play('jump', { vol: 0.5, rate: 0.95 + Math.random() * 0.1 }); break;
+          case 'land': if (local) { Sfx.play('land', { vol: Math.min(0.8, f.v / 22) }); dust(P, f.x, f.y, 5); } break;
+          case 'bonk': if (local) Sfx.play('bump', { vol: 0.5 }); break;
+          case 'spring': Sfx.play('spring', { vol: local ? 0.8 : 0.4 }); break;
+          case 'coin': { const cn = W.L.coins[f.id]; if (cn) { burst(P, cn.x, cn.y, '#FFD23F', 6, 3, 'spark'); popText(P, cn.x, cn.y - 0.3, '+1', '#FFE15A'); } Sfx.play('coin', { vol: local ? 0.6 : 0.35, rate: 1 + (W.coins.size % 5) * 0.04 }); break; }
+          case 'star': { const st = W.L.stars[f.id]; if (st) { burst(P, st.x, st.y, '#FFE15A', 20, 6, 'spark'); } Sfx.play('star', { vol: 0.9 }); say(local ? 'You found a star!' : `${namesRef.current[f.who] || 'A friend'} found a star!`, 2); break; }
+          case 'stomp': { const fo = W.L.foes.find((q) => q.id === f.id); if (fo) { const p = foePos(W, fo); burst(P, p.x, p.y, '#FFFFFF', 10, 4, 'spark'); popText(P, p.x, p.y - 0.6, 'Bop', '#FFFFFF'); } Sfx.play('stomp', { vol: 0.8 }); W.shake = 0.15; break; }
+          case 'die': { if (local) W.deaths += 1; burst(P, f.x, f.y, BALLS[ci % 4].body, 18, 6.5, 'shard'); burst(P, f.x, f.y, '#FFFFFF', 8, 4); Sfx.play('ballpop', { vol: local ? 0.9 : 0.5 }); if (local) { W.shake = 0.35; try { hapticTap(); } catch {} } break; }
+          case 'spawn': if (local) Sfx.play('pop', { vol: 0.5 }); break;
+          case 'cp': { flagBy.current[f.id] = ci; const fl = W.L.flags[f.id]; if (fl) burst(P, fl.x, fl.y - 1.5, BALLS[ci % 4].light, 12, 4, 'spark'); if (local) { Sfx.play('cp', { vol: 0.8 }); say('Checkpoint', 1.4); } break; }
+          case 'door': Sfx.play('door', { vol: 0.8 }); say('The gate opens', 1.8); W.shake = 0.2; break;
+          case 'home': { burst(P, W.L.goal.x, W.L.goal.y - 0.5, BALLS[ci % 4].light, 22, 5, 'spark'); Sfx.play('key', { vol: 0.8 }); if (!local) say(`${namesRef.current[f.who] || 'A friend'} made it to the portal`, 2); break; }
+          default: break;
+        }
+      }
+      updateParts(P, step);
+      if (!doneRef.current) {
+        const need = rosterRef.current.filter((k) => balls.current[k]);
+        if (need.length && need.every((k) => W.home.has(k))) {
+          doneRef.current = true;
+          W.won = true;
+          setTimeout(() => {
+            if (WR.current !== W) return;
+            const r = { i: W.L.index, time: W.time, coins: W.coins.size, coinsAll: W.L.coins.length, stars: W.stars.size, deaths: W.deaths };
+            saveBest(uid, W.L.index, r); setBest(readBest(uid)); setResult(r); setPhase('done');
+            Sfx.music(null, false); Sfx.play('win', { vol: 0.8 });
+            try { window.dispatchEvent(new CustomEvent('zchat-screen-fx', { detail: 'confetti' })); } catch {}
+          }, 900);
+        }
+      }
+      if (!solo && mine && playing()) {
+        const now = performance.now();
+        if (now - sendT.current > 80) { sendT.current = now; relay.send('pl', { i: W.L.index, x: +mine.x.toFixed(2), y: +mine.y.toFixed(2), vx: +mine.vx.toFixed(2), vy: +mine.vy.toFixed(2), d: mine.dead > 0 ? 1 : 0, h: mine.home ? 1 : 0, lk: mine.look, ht: isHost ? +W.t.toFixed(2) : undefined }); }
+      }
+      const s = Math.round(clamp((cw > ch ? ch / 10 : cw / 10.5), 30, 58));
+      let fb = mine && playing() && !mine.home ? mine : null;
+      if (!fb) { const fk = followRef.current && balls.current[followRef.current] && !balls.current[followRef.current].home ? followRef.current : rosterRef.current.find((k) => balls.current[k] && !balls.current[k].home && !(balls.current[k].dead > 0)); fb = fk ? balls.current[fk] : mine; }
+      const C = cam.current;
+      if (fb) {
+        const lead = clamp(fb.vx * 0.32, -2.2, 2.2);
+        const tx = fb.x + lead, ty = fb.y - 1.2;
+        if (!C.init) { C.x = tx; C.y = ty; C.init = true; }
+        const k1 = 1 - Math.exp(-dt * 5), k2 = 1 - Math.exp(-dt * 3.5);
+        C.x += (tx - C.x) * k1; C.y += (ty - C.y) * k2;
+      }
+      const halfW = cw / s / 2, halfH = ch / s / 2;
+      let cx = clamp(C.x, halfW, Math.max(halfW, W.L.MW - halfW));
+      let cy = Math.min(C.y, W.L.MH - halfH + 2.5);
+      cy = Math.max(cy, Math.min(W.L.MH - halfH + 2.5, halfH - 6));
+      if (W.shake > 0) { W.shake = Math.max(0, W.shake - dt); cx += (Math.random() - 0.5) * W.shake * 0.5; cy += (Math.random() - 0.5) * W.shake * 0.5; }
+      const ox = Math.round(cw / 2 - cx * s), oy = Math.round(ch * 0.5 - cy * s);
+      const list = rosterRef.current.map((k, i) => ({ k, b: balls.current[k], ci: i }));
+      const nm = {};
+      if (!solo) rosterRef.current.forEach((k) => { nm[k] = k === myK ? '' : namesRef.current[k] || 'Friend'; });
+      render(cv.getContext('2d'), W, { cw, ch, dpr, s, ox, oy, camX: cx, camY: cy, balls: list, me: mine, names: nm, bubbles: bubblesRef.current, parts: P, pressed: W.pressed, flagBy: flagBy.current });
+      const hk = `${W.coins.size}|${W.stars.size}|${Math.floor(W.time)}|${W.deaths}|${[...W.home].join(',')}|${rosterRef.current.map((k) => (balls.current[k] && balls.current[k].dead > 0 ? 1 : 0)).join('')}`;
+      if (hk !== hudKey.current) { hudKey.current = hk; setHud({ coins: W.coins.size, stars: W.stars.size, time: W.time, deaths: W.deaths, home: [...W.home], dead: rosterRef.current.filter((k) => balls.current[k] && balls.current[k].dead > 0) }); }
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  const sendEmote = (e) => { bubblesRef.current[kindOf()] = { text: e, t: 0, life: 1.8 }; if (!solo) relay.send('emo', { e }); setQuick(false); Sfx.play('pop', { vol: 0.5 }); };
+  const pick = (i) => { if (!isHost) return; Sfx.init(); startLevel(i); };
+  const myIdx = roster.indexOf(kindOf());
+  const totalStars = Object.values(best).reduce((a, b) => a + (b.stars || 0), 0);
+  const nameOf = (k) => (k === kindOf() ? 'You' : names[k] || 'Friend');
+  const ROW = 96;
+
+  const levelMap = (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {WORLDS.map((wd, wi) => {
+        const first = WORLDS.slice(0, wi).reduce((a, x) => a + x.n, 0);
+        const ids = Array.from({ length: wd.n }, (_, k) => first + k);
+        const got = ids.reduce((a, i) => a + ((best[i] && best[i].stars) || 0), 0);
+        return (
+          <div key={wd.id}>
+            <GPanel style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ width: 30, height: 30, borderRadius: 10, background: ['#7BD25A', '#FF9E6B', '#BFE6FF', '#9AA3AD', '#8A7AD0'][wi], boxShadow: `0 0 0 2.5px ${INK}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, color: INK }}>{wi + 1}</span>
+              <span style={{ fontSize: 17, fontWeight: 900, flex: 1 }}>{wd.name}</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontWeight: 900, fontSize: 13.5 }}><GIcon k="star" size={16} color="#FFD23F" />{`${got}/${wd.n * 3}`}</span>
+            </GPanel>
+            <div style={{ position: 'relative', height: ids.length * ROW / 2 + ROW / 2 + 6, marginTop: 6 }}>
+              <svg width="100%" height="100%" viewBox={`0 0 100 ${ids.length * ROW / 2 + ROW / 2 + 6}`} preserveAspectRatio="none" aria-hidden="true" style={{ position: 'absolute', inset: 0 }}>
+                <polyline points={ids.map((_, k) => `${12 + (k / (ids.length - 1)) * 76},${k % 2 ? ROW * 0.5 + (k * ROW) / 2 - ROW / 4 + 20 : (k * ROW) / 2 + 30}`).join(' ')} fill="none" stroke={INK} strokeWidth="8" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+                <polyline points={ids.map((_, k) => `${12 + (k / (ids.length - 1)) * 76},${k % 2 ? ROW * 0.5 + (k * ROW) / 2 - ROW / 4 + 20 : (k * ROW) / 2 + 30}`).join(' ')} fill="none" stroke="#FFF2C8" strokeWidth="3.5" strokeDasharray="2 9" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+              </svg>
+              {ids.map((i, k) => {
+                const b = best[i];
+                const left = `calc(${12 + (k / (ids.length - 1)) * 76}% - 30px)`;
+                const top = (k % 2 ? ROW * 0.5 + (k * ROW) / 2 - ROW / 4 + 20 : (k * ROW) / 2 + 30) - 30;
+                return (
+                  <div key={i} style={{ position: 'absolute', left, top, width: 60, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                    <GBtn color={WORLD_BTN[wi]} size={56} fast={false} label={isHost ? `Play level ${levelName(i)}` : `Level ${levelName(i)}`} onPress={() => pick(i)}>
+                      <span style={{ fontSize: 17, fontWeight: 900, color: '#FFFFFF', textShadow: `0 2px 0 ${INK}` }}>{levelName(i)}</span>
+                    </GBtn>
+                    <span style={{ display: 'flex', gap: 1 }}>{[0, 1, 2].map((q) => <GIcon key={q} k="star" size={12} color={b && b.stars > q ? '#FFD23F' : 'rgba(27,20,48,0.45)'} />)}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  return (
+    <Portal>
+      <div ref={wrapRef} style={{ position: 'fixed', left: 0, right: 0, top: 'var(--zvp-top, 0px)', height: 'var(--zvp-h, 100%)', zIndex: 90, background: '#6EC6FF', overflow: 'hidden', touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none', fontFamily: FONT, color: '#FFFFFF' }}>
+        <canvas ref={cvRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block' }} />
+
+        {phase === 'play' && (
+          <>
+            <div style={{ position: 'absolute', left: 12, right: 12, top: 'calc(10px + env(safe-area-inset-top))', display: 'flex', alignItems: 'flex-start', gap: 8, pointerEvents: 'none' }}>
+              <div style={{ pointerEvents: 'auto' }}><GBtn icon={solo ? 'pause' : 'close'} color="white" size={44} fast={false} label={solo ? 'Pause' : 'Leave the game'} onPress={() => (solo ? setPaused(true) : leave())} /></div>
+              <GChip style={{ height: 34, fontSize: 14 }}><span style={{ color: '#FFD23F' }}>{levelName(lvl)}</span><span style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtT(hud.time)}</span></GChip>
+              <div style={{ flex: 1 }} />
+              <GChip style={{ height: 34, fontSize: 14, gap: 5 }}><span style={{ width: 14, height: 14, borderRadius: 7, background: '#FFD23F', boxShadow: `0 0 0 2px ${INK}` }} /><span style={{ fontVariantNumeric: 'tabular-nums' }}>{hud.coins}</span></GChip>
+              <GChip style={{ height: 34, gap: 2 }}>{[0, 1, 2].map((q) => <GIcon key={q} k="star" size={17} color={hud.stars > q ? '#FFD23F' : '#5A5470'} />)}</GChip>
+            </div>
+            {!solo && (
+              <div style={{ position: 'absolute', left: 12, top: 'calc(64px + env(safe-area-inset-top))', display: 'flex', flexDirection: 'column', gap: 5, pointerEvents: 'none' }}>
+                {roster.map((k, i) => (
+                  <GChip key={k} style={{ height: 28, fontSize: 12.5, gap: 6, opacity: hud.dead.includes(k) ? 0.6 : 1 }}>
+                    <span style={{ width: 12, height: 12, borderRadius: 6, background: BALLS[i % 4].body, boxShadow: `0 0 0 2px ${INK}` }} />
+                    <span>{nameOf(k)}</span>
+                    {hud.home.includes(k) && <GIcon k="check" size={13} color="#5BE37D" />}
+                  </GChip>
+                ))}
+                {watchers.length > 0 && <GChip style={{ height: 26, fontSize: 12, gap: 5 }}><GIcon k="eye" size={14} color="#CFE6FF" />{`${watchers.length} watching`}</GChip>}
+              </div>
+            )}
+            {toast && (
+              <div key={toast.at} style={{ position: 'absolute', left: '50%', top: solo ? 'calc(70px + env(safe-area-inset-top))' : '28%', transform: 'translateX(-50%)', pointerEvents: 'none', animation: 'zgk-pop 0.25s ease-out', maxWidth: '80%' }}>
+                <GPanel style={{ padding: '8px 14px', fontSize: 14, fontWeight: 900, textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{toast.text}</GPanel>
+              </div>
+            )}
+            {playing() && (
+              <>
+                <div style={{ position: 'absolute', left: 14, bottom: 'calc(20px + env(safe-area-inset-bottom))', display: 'flex', gap: 14 }}>
+                  <GHold icon="left" color="white" size={74} label="Roll left" onDown={() => { hold.current.l = true; }} onUp={() => { hold.current.l = false; }} />
+                  <GHold icon="right" color="white" size={74} label="Roll right" onDown={() => { hold.current.r = true; }} onUp={() => { hold.current.r = false; }} />
+                </div>
+                <div style={{ position: 'absolute', right: 14, bottom: 'calc(20px + env(safe-area-inset-bottom))', display: 'flex', alignItems: 'flex-end', gap: 10 }}>
+                  {!solo && <GBtn icon="smile" color={quick ? 'gold' : 'dark'} size={46} fast={false} label="Emojis" onPress={() => setQuick((v) => !v)} />}
+                  <GHold icon="up" color={BALLS[Math.max(0, myIdx) % 4].id === 'skye' ? 'blue' : ['gold', 'green', 'blue', 'purple'][Math.max(0, myIdx) % 4]} size={86} label="Jump" onDown={() => { hold.current.j = true; }} onUp={() => { hold.current.j = false; }} />
+                </div>
+              </>
+            )}
+            {!playing() && (
+              <div style={{ position: 'absolute', left: 0, right: 0, bottom: 'calc(22px + env(safe-area-inset-bottom))', display: 'flex', justifyContent: 'center', gap: 8, flexWrap: 'wrap', padding: '0 14px' }}>
+                <GChip style={{ height: 32 }}><GIcon k="eye" size={15} color="#CFE6FF" />Watching</GChip>
+                {roster.map((k, i) => <GPill key={k} small text={nameOf(k)} color={['gold', 'green', 'blue', 'purple'][i % 4]} onPress={() => setFollow(k)} height={40} />)}
+              </div>
+            )}
+            {quick && (
+              <div onPointerDown={(e) => e.stopPropagation()} style={{ position: 'absolute', right: 14, bottom: 'calc(130px + env(safe-area-inset-bottom))', width: 'min(260px, calc(100% - 28px))', animation: 'zgk-pop 0.2s ease-out' }}>
+                <GPanel style={{ padding: 10, display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 6 }}>
+                  {EMOTES.map((e) => <button key={e} type="button" className="zgk-btn" aria-label={`Send ${e}`} onClick={() => sendEmote(e)} style={{ height: 44, borderRadius: 14, border: 'none', background: 'rgba(255,255,255,0.1)', fontSize: 25, cursor: 'pointer' }}>{e}</button>)}
+                </GPanel>
+              </div>
+            )}
+          </>
+        )}
+
+        {phase === 'menu' && (
+          <div style={{ position: 'absolute', inset: 0, overflowY: 'auto', padding: 'calc(12px + env(safe-area-inset-top)) 16px calc(28px + env(safe-area-inset-bottom))', boxSizing: 'border-box', background: 'linear-gradient(180deg, #6EC6FF 0%, #BDE8FF 40%, #9ED89A 75%, #6BC26A 100%)' }}>
+            <div style={{ maxWidth: 460, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <GBtn icon="close" color="white" size={44} fast={false} label={solo ? 'Leave' : 'Back to chat'} onPress={finish} />
+                <GChip style={{ gap: 5 }}><GIcon k="star" size={16} color="#FFD23F" />{`${totalStars}/${LEVEL_N * 3}`}</GChip>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                <div style={{ display: 'flex', gap: 2, alignItems: 'flex-end' }}>{BALLS.map((b, i) => <div key={b.id} style={{ animation: `zgk-bob ${1.6 + i * 0.25}s ease-in-out infinite` }}><BallBadge ci={i} size={i === 0 ? 70 : 58} happy={i % 2 === 0} /></div>)}</div>
+                <GTitle text="Roll Squad" size={50} color="#FFE15A" />
+                <GChip>{solo ? 'Roll, jump and bop your way to the portal' : 'Up to four friends roll together'}</GChip>
+              </div>
+              {!solo && (
+                <GPanel style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 15, fontWeight: 900, flex: 1 }}>{watch ? 'Watching' : `Players ${roster.length} of 4`}</span>
+                    {isHost && onInvite && roster.length < 4 && <GPill small text="Invite" icon="plus" color="green" height={40} onPress={onInvite} />}
+                  </div>
+                  {roster.map((k, i) => (
+                    <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <BallBadge ci={i} size={38} />
+                      <span style={{ fontSize: 14.5, fontWeight: 800, flex: 1 }}>{nameOf(k)}{k === (room && room.host) ? ', host' : ''}</span>
+                    </div>
+                  ))}
+                  {roster.length < 2 && <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,0.75)' }}><Spinner size={16} color="#FFFFFF" />Waiting for friends to join</div>}
+                  {watchers.length > 0 && <div style={{ fontSize: 12.5, fontWeight: 800, color: 'rgba(255,255,255,0.75)', display: 'flex', alignItems: 'center', gap: 6 }}><GIcon k="eye" size={14} color="#CFE6FF" />{`Watching: ${watchers.map((w) => names[w] || 'Friend').join(', ')}`}</div>}
+                  {isHost && (
+                    <div role="button" tabIndex={0} onClick={() => { const v = !allowWatch; setAllowWatch(v); setWatchAllowed(v); kitTap(); }} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', paddingTop: 4 }}>
+                      <span style={{ flex: 1, fontSize: 13.5, fontWeight: 800 }}>Let friends watch</span>
+                      <span aria-hidden="true" style={{ width: 46, height: 28, borderRadius: 14, background: allowWatch ? '#5BE37D' : '#5A5470', boxShadow: `0 0 0 2.5px ${INK}`, position: 'relative', transition: 'background 0.2s' }}><span style={{ position: 'absolute', top: 3, left: allowWatch ? 21 : 3, width: 22, height: 22, borderRadius: 11, background: '#FFFFFF', boxShadow: `0 0 0 2px ${INK}`, transition: 'left 0.2s' }} /></span>
+                    </div>
+                  )}
+                  {!isHost && <div style={{ fontSize: 13, fontWeight: 800, color: 'rgba(255,255,255,0.75)' }}>{`${names[room && room.host] || 'The host'} picks the level`}</div>}
+                </GPanel>
+              )}
+              {solo && (
+                <GPanel style={{ padding: 12, display: 'flex', gap: 10, alignItems: 'center' }}>
+                  <div style={{ flex: 1, fontSize: 13, fontWeight: 800, lineHeight: 1.45, color: 'rgba(255,255,255,0.85)' }}>Hold the arrows to roll. Tap jump, hold it to jump higher. Land on enemies to bop them, but spiky ones hurt.</div>
+                </GPanel>
+              )}
+              {levelMap}
+            </div>
+          </div>
+        )}
+
+        {paused && phase === 'play' && (
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(10,8,24,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+            <GPanel style={{ width: '100%', maxWidth: 320, padding: '22px 18px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, animation: 'zgk-pop 0.3s ease-out' }}>
+              <GTitle text="Paused" size={34} />
+              <GPill text="Resume" icon="play" color="green" wide onPress={() => setPaused(false)} />
+              <GPill text="Restart level" icon="replay" color="white" small wide onPress={() => startLevel(lvl)} />
+              <GPill text="Levels" icon="map" color="white" small wide onPress={toMenu} />
+              <GPill text="Leave" color="red" small wide onPress={finish} />
+            </GPanel>
+          </div>
+        )}
+
+        {phase === 'done' && result && (
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(10,8,24,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 18 }}>
+            <GPanel style={{ width: '100%', maxWidth: 350, padding: '20px 18px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, textAlign: 'center', animation: 'zgk-pop 0.35s ease-out' }}>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'flex-end' }}>{[0, 1, 2].map((q) => <div key={q} style={{ transform: q === 1 ? 'translateY(-8px)' : 'none' }}><GIcon k="star" size={q === 1 ? 52 : 42} color={result.stars > q ? '#FFD23F' : '#5A5470'} /></div>)}</div>
+              <GTitle text={`Level ${levelName(result.i)} clear`} size={28} color="#FFE15A" />
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8, width: '100%' }}>
+                {[['Time', fmtT(result.time)], ['Coins', `${result.coins}/${result.coinsAll}`], ['Pops', String(result.deaths)]].map(([a, v]) => (
+                  <div key={a} style={{ padding: '10px 4px', borderRadius: 14, background: 'rgba(255,255,255,0.08)' }}>
+                    <div style={{ fontSize: 17, fontWeight: 900, color: '#FFE15A', fontVariantNumeric: 'tabular-nums' }}>{v}</div>
+                    <div style={{ fontSize: 11.5, fontWeight: 800, color: 'rgba(255,255,255,0.65)' }}>{a}</div>
+                  </div>
+                ))}
+              </div>
+              {isHost ? (
+                <>
+                  {result.i < LEVEL_N - 1 && <GPill text="Next level" icon="play" color="green" wide onPress={() => startLevel(result.i + 1)} />}
+                  <div style={{ display: 'flex', gap: 8, width: '100%' }}>
+                    <GPill text="Replay" icon="replay" color="white" small wide onPress={() => startLevel(result.i)} style={{ flex: 1 }} />
+                    <GPill text="Levels" icon="map" color="white" small wide onPress={toMenu} style={{ flex: 1 }} />
+                  </div>
+                </>
+              ) : <div style={{ fontSize: 13.5, fontWeight: 800, color: 'rgba(255,255,255,0.75)' }}>{`${names[room && room.host] || 'The host'} picks what is next`}</div>}
+              <GPill text={solo ? 'Leave' : 'Back to chat'} color="dark" small wide onPress={finish} />
+            </GPanel>
+          </div>
+        )}
+
+        {leaveAsk && (
+          <Sheet title="Leave the game?" text="Your friends can keep playing without you." onClose={() => setLeaveAsk(false)}>
+            <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+              <GPill text="Stay" color="white" small onPress={() => setLeaveAsk(false)} style={{ flex: 1 }} wide />
+              <GPill text="Leave" color="red" small onPress={() => { setLeaveAsk(false); finish(); }} style={{ flex: 1 }} wide />
+            </div>
+          </Sheet>
+        )}
+      </div>
+    </Portal>
+  );
+}
+
+export function RollInviteSheet({ friends, onClose, onInvite, already }) {
+  injectKitCss();
+  useBackClose(true, onClose);
+  const [sel, setSel] = useState([]);
+  const left = 3 - (already || 0);
+  const list = (friends || []).filter((p) => p && p.id && !p.is_bot);
+  const toggle = (id) => { kitTap(); setSel((v) => (v.includes(id) ? v.filter((x) => x !== id) : v.length >= left ? v : [...v, id])); };
+  return (
+    <Portal>
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 96, background: 'rgba(10,8,24,0.55)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontFamily: FONT, color: '#FFFFFF' }}>
+        <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 480, maxHeight: 'min(86vh, 640px)', display: 'flex', flexDirection: 'column', padding: '14px 14px calc(14px + env(safe-area-inset-bottom))', boxSizing: 'border-box', animation: 'zgk-in 0.25s ease-out' }}>
+          <GPanel style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10, minHeight: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ display: 'flex' }}>{[0, 1, 2].map((i) => <div key={i} style={{ marginLeft: i ? -12 : 0 }}><BallBadge ci={i + 1} size={36} /></div>)}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 17, fontWeight: 900 }}>Invite friends</div>
+                <div style={{ fontSize: 12.5, fontWeight: 700, color: 'rgba(255,255,255,0.72)' }}>{`Pick up to ${left}. Each one gets an invite in your chat.`}</div>
+              </div>
+              <GBtn icon="close" color="white" size={38} fast={false} label="Close" onPress={onClose} />
+            </div>
+            <div style={{ overflowY: 'auto', minHeight: 0, display: 'flex', flexDirection: 'column', gap: 6, maxHeight: '52vh', WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}>
+              {list.length === 0 && <div style={{ fontSize: 13.5, fontWeight: 700, color: 'rgba(255,255,255,0.75)', padding: '12px 4px' }}>Chat with someone first, then you can invite them here.</div>}
+              {list.map((p) => {
+                const on = sel.includes(p.id);
+                return (
+                  <div key={p.id} role="button" tabIndex={0} aria-pressed={on} onClick={() => toggle(p.id)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 16, background: on ? 'rgba(91,227,125,0.18)' : 'rgba(255,255,255,0.06)', boxShadow: on ? 'inset 0 0 0 2px #5BE37D' : 'none', cursor: 'pointer' }}>
+                    <Avatar emoji={p.avatar} name={p.name} size={40} />
+                    <span style={{ flex: 1, minWidth: 0, fontSize: 14.5, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</span>
+                    <span aria-hidden="true" style={{ width: 26, height: 26, borderRadius: 13, background: on ? '#5BE37D' : 'transparent', boxShadow: `0 0 0 2.5px ${on ? INK : 'rgba(255,255,255,0.4)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{on && <GIcon k="check" size={16} color="#FFFFFF" />}</span>
+                  </div>
+                );
+              })}
+            </div>
+            <GPill text={sel.length ? `Invite ${sel.length} and play` : 'Pick friends'} icon="play" color="green" wide disabled={!sel.length} onPress={() => onInvite(list.filter((p) => sel.includes(p.id)))} />
+          </GPanel>
+        </div>
+      </div>
+    </Portal>
+  );
+}
+
+export default RollGamePage;

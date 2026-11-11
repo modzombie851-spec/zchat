@@ -294,6 +294,7 @@ import {
   writeJsonLs,
   writeWorkerPref,
   zchatSafety,
+  groupWrite,
 } from '../App.jsx';
 import {
   AppPinSetupPage,
@@ -2182,9 +2183,9 @@ function ChatLockSetup({ onCancel, onConfirm }) {
   );
 }
 async function g1SaveGroup(gid, patch) {
-  const { data, error } = await supabase.from('groups').update(patch).eq('id', gid).select('id, approve_posts, admin_links, read_only, welcome_text, welcome_name, group_rules, rules_version, join_questions');
-  if (error || !data || !data.length) return { ok: false, error };
-  return { ok: true, row: data[0] };
+  const r = await groupWrite(gid, patch);
+  if (!r.ok) return { ok: false, error: r.error || (r.reason ? { message: r.reason } : null), reason: r.reason };
+  return { ok: true, row: r.row || {} };
 }
 
 function G1SettingsBlock({ group, isOwner, onPatchGroup }) {
@@ -2323,24 +2324,24 @@ export function GroupSettingsPanel({ group, myId, isAdmin, isOwner, isMuted, onS
   const announce = !!(community && community.announce_id === group.id);
   const savePolicy = async (field, value, setter, before) => {
     setter(value);
-    const { data, error } = await supabase.from('groups').update({ [field]: value }).eq('id', group.id).select('id');
-    if (error || !data || !data.length) { setter(before); appSnack(friendlyError(error, "Couldn't save that. Try again.")); return; }
+    const r = await groupWrite(group.id, { [field]: value });
+    if (!r.ok) { setter(before); appSnack(r.reason || friendlyError(r.error, "Couldn't save that. Try again.")); return; }
     if (onPatchGroup) onPatchGroup({ [field]: value });
   };
   const resetInvite = async (quiet) => {
     const before = inviteCode;
     const fresh = Array.from(crypto.getRandomValues(new Uint8Array(10)), (b) => b.toString(16).padStart(2, '0')).join('');
     setInviteCode(fresh);
-    const { data, error } = await supabase.from('groups').update({ invite_code: fresh }).eq('id', group.id).select('id');
-    if (error || !data || !data.length) { setInviteCode(before); if (!quiet) appSnack(friendlyError(error, "Couldn't reset the link. Try again.")); return; }
+    const r = await groupWrite(group.id, { invite_code: fresh });
+    if (!r.ok) { setInviteCode(before); if (!quiet) appSnack(r.reason || friendlyError(r.error, "Couldn't reset the link. Try again.")); return; }
     if (onPatchGroup) onPatchGroup({ invite_code: fresh });
     if (!quiet) { hapticTap(); appSnack('New link ready. The old one stops working.'); }
   };
   const toggleInvite = async () => {
     const next = !inviteEnabled;
     setInviteEnabled(next);
-    const { data, error } = await supabase.from('groups').update({ invite_enabled: next }).eq('id', group.id).select('id');
-    if (error || !data || !data.length) { setInviteEnabled(!next); appSnack(friendlyError(error, "Couldn't change the link. Try again.")); return; }
+    const r = await groupWrite(group.id, { invite_enabled: next });
+    if (!r.ok) { setInviteEnabled(!next); appSnack(r.reason || friendlyError(r.error, "Couldn't change the link. Try again.")); return; }
     if (onPatchGroup) onPatchGroup({ invite_enabled: next });
   };
   useEffect(() => { if (isAdmin && !announce && !inviteCode) resetInvite(true); }, []);

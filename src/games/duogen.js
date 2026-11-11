@@ -9,13 +9,15 @@ function hashStr(s) {
   return h >>> 0;
 }
 
-export const THEME_IDS = ['sand', 'jungle', 'ice', 'forge', 'crystal'];
+export const THEME_IDS = ['sand', 'jungle', 'ice', 'forge', 'crystal', 'tomb', 'sky'];
 const NAMES = {
   sand: [['Sun', 'Dust', 'Golden', 'Old', 'Silent', 'Amber'], ['shrine', 'vault', 'steps', 'court', 'tomb']],
   jungle: [['Moss', 'Root', 'Green', 'Rain', 'Fern', 'Hidden'], ['ruins', 'garden', 'temple', 'well', 'grove']],
   ice: [['Frost', 'Snow', 'Glass', 'Cold', 'Pale', 'Winter'], ['hall', 'cave', 'keep', 'stair', 'crypt']],
   forge: [['Ember', 'Iron', 'Ash', 'Coal', 'Red', 'Cinder'], ['forge', 'works', 'furnace', 'pit', 'foundry']],
   crystal: [['Amethyst', 'Prism', 'Glow', 'Deep', 'Violet', 'Quartz'], ['mine', 'grotto', 'vein', 'hollow', 'chamber']],
+  tomb: [['Bone', 'Quiet', 'Jade', 'Ghost', 'Sleeping', 'Grey'], ['tomb', 'crypt', 'barrow', 'vault', 'catacomb']],
+  sky: [['Cloud', 'High', 'Bright', 'Wind', 'Morning', 'Gold'], ['palace', 'terrace', 'spire', 'garden', 'bridge']],
 };
 const GOALS = {
   gate: 'Pull every lever to lift the gate',
@@ -30,6 +32,8 @@ const GOALS = {
   ice: 'Slide across the ice with care',
   timed: 'Buttons open the door for a few seconds',
   hall: 'Find the way through',
+  foes: 'Fire burns enemies, frost freezes them',
+  beam: 'Turn the mirrors so the light hits the crystal',
 };
 
 function grid(w, h) {
@@ -429,6 +433,61 @@ function bTimed(ctx) {
   return { g, plan, gems, exits, kind: 'timed' };
 }
 
+function bFoes(ctx) {
+  const { w, T, depth } = ctx;
+  const h = T.ri(6, 7);
+  const g = grid(w, h);
+  const gems = [];
+  if (T.chance(0.55)) {
+    const left = T.chance(0.5), pw = 2, py = T.ri(2, h - 4), px = left ? 1 : w - 1 - pw;
+    const ch = T.chance(0.5) ? 'L' : 'W';
+    fill(g, px, py, px + pw - 1, py + 1, ch);
+    gems.push([px + T.ri(0, 1), py, ch === 'L' ? 'sun' : 'moon']);
+  }
+  pillars(g, T, T.ri(1, 3));
+  const n = Math.min(5, 2 + Math.floor(depth / 2) + (T.chance(0.3) ? 1 : 0));
+  const kinds = depth >= 3 ? ['v', 'g', 'x', 'x'] : ['v', 'g', 'g'];
+  const placed = [];
+  for (let i = 0; i < n * 10 && placed.length < n; i++) {
+    const x = T.ri(2, w - 3), y = T.ri(1, h - 3);
+    if (get(g, x, y) !== '.') continue;
+    if (placed.some(([a, b]) => Math.abs(a - x) + Math.abs(b - y) < 3)) continue;
+    put(g, x, y, T.pick(kinds)); placed.push([x, y]);
+  }
+  for (const k of ['sun', 'moon']) if (!gems.some((q) => q[2] === k)) { for (let i = 0; i < 20; i++) { const x = T.ri(1, w - 2), y = T.ri(1, h - 2); if (get(g, x, y) === '.') { gems.push([x, y, k]); break; } } }
+  const ow = T.ri(2, 3), ox = T.ri(3, w - 3 - ow);
+  const exits = openRow0(g, ox, ow);
+  const [ea, eb] = exitPair(exits);
+  return { g, plan: [{ sun: [ea, -1], moon: [eb, -1] }], gems, exits, kind: 'foes' };
+}
+
+function bBeam(ctx) {
+  const { w, T } = ctx;
+  const h = 7;
+  const g = grid(w, h);
+  const fromLeft = T.chance(0.5);
+  const ye = T.ri(4, 5), yr = T.ri(1, 2);
+  const ex = fromLeft ? 0 : w - 1, rx = fromLeft ? w - 1 : 0;
+  g[ye][ex] = 'U'; g[yr][rx] = 'R';
+  const mx = fromLeft ? T.ri(4, w - 6) : T.ri(5, w - 5);
+  const o1 = fromLeft ? 0 : 1, o2 = fromLeft ? 0 : 1;
+  let i1 = T.chance(0.5) ? o1 : 1 - o1, i2 = T.chance(0.5) ? o2 : 1 - o2;
+  if (i1 === o1 && i2 === o2) { if (T.chance(0.5)) i1 = 1 - o1; else i2 = 1 - o2; }
+  const mch = (o) => (o === 0 ? 'm' : 'n');
+  put(g, mx, ye, mch(i1)); put(g, mx, yr, mch(i2));
+  const cand = [];
+  for (let x = 2; x < w - 2; x++) if (Math.abs(x - mx) >= 3) cand.push(x);
+  if (cand.length) put(g, T.pick(cand), 3, T.chance(0.5) ? 'm' : 'n');
+  const gems = [];
+  for (const k of ['sun', 'moon']) for (let i = 0; i < 30; i++) { const x = T.ri(1, w - 2), y = T.ri(1, h - 1); if (get(g, x, y) === '.' && y !== ye && y !== yr && x !== mx) { gems.push([x, y, k]); break; } }
+  const gw = T.ri(2, 3), gx0 = T.ri(3, w - 3 - gw);
+  for (let i = 0; i < gw; i++) g[0][gx0 + i] = 'G';
+  const exits = Array.from({ length: gw }, (_, i) => gx0 + i);
+  const [ea, eb] = exitPair(exits);
+  const side = (x, y) => [get(g, x - 1, y) === '.' ? x - 1 : x + 1, y];
+  return { g, plan: [{ sun: side(mx, ye), moon: side(mx, yr), until: 'beam' }, { sun: [ea, -1], moon: [eb, -1] }], gems, exits, kind: 'beam' };
+}
+
 function bHall(ctx) {
   const { w, T } = ctx;
   const h = T.ri(5, 6);
@@ -447,6 +506,7 @@ function bHall(ctx) {
     if (ch !== 'P' && T.chance(0.7)) gems.push([x + T.ri(0, bw - 1), y, ch === 'L' ? 'sun' : 'moon']);
   }
   pillars(g, T, 3, (x) => Math.abs(x - lane) <= 1);
+  if ((ctx.depth || 0) >= 2 && T.chance(0.5)) { for (let i = 0; i < 12; i++) { const x = T.ri(2, w - 3), y = T.ri(1, h - 3); if (get(g, x, y) === '.' && Math.abs(x - lane) > 1) { put(g, x, y, T.pick(['v', 'g'])); break; } } }
   const ow = T.ri(2, 3);
   const ox = Math.max(1, Math.min(w - 1 - ow, lane - 1));
   const exits = openRow0(g, ox, ow);
@@ -454,16 +514,16 @@ function bHall(ctx) {
   return { g, plan, gems, exits, kind: 'hall' };
 }
 
-const BUILD = { gate: bGate, plate: bPlate, bridge: bBridge, code: bCode, fires: bFires, spikes: bSpikes, crumble: bCrumble, split: bSplit, portal: bPortal, ice: bIce, timed: bTimed, hall: bHall };
-const UNIQUE = new Set(['plate', 'code', 'fires', 'timed']);
+const BUILD = { gate: bGate, plate: bPlate, bridge: bBridge, code: bCode, fires: bFires, spikes: bSpikes, crumble: bCrumble, split: bSplit, portal: bPortal, ice: bIce, timed: bTimed, hall: bHall, foes: bFoes, beam: bBeam };
+const UNIQUE = new Set(['plate', 'code', 'fires', 'timed', 'beam']);
 const TIERS = [
-  ['gate', 'plate', 'bridge', 'split', 'hall'],
-  ['portal', 'spikes', 'code', 'crumble'],
-  ['fires', 'timed', 'ice'],
+  ['gate', 'plate', 'bridge', 'split', 'hall', 'foes'],
+  ['portal', 'spikes', 'code', 'crumble', 'beam', 'foes'],
+  ['fires', 'timed', 'ice', 'foes'],
 ];
 
 function chooseRooms(T, depth, theme) {
-  const n = Math.min(6, 1 + Math.ceil(depth / 2) + (depth > 2 && T.chance(0.4) ? 1 : 0));
+  const n = Math.min(7, 2 + Math.ceil(depth / 2) + (depth > 2 && T.chance(0.4) ? 1 : 0));
   const pool = [...TIERS[0], ...(depth >= 2 ? TIERS[1] : []), ...(depth >= 3 ? TIERS[2] : [])];
   const out = [];
   let gates = 0;

@@ -11,6 +11,9 @@ export const CRACK_T = 0.6;
 export const FALLEN_T = 3.4;
 export const ENDLESS = 100;
 export const GLYPHS = ['sun', 'moon', 'leaf', 'wave', 'star'];
+export const FOES = { bat: { hp: 1, r: 0.28, sp: 1.5, name: 'bat' }, slime: { hp: 2, r: 0.32, sp: 1.25, name: 'slime' }, skel: { hp: 3, r: 0.3, sp: 1.25, name: 'bone knight' } };
+const FOE_CH = { v: 'bat', g: 'slime', x: 'skel' };
+export const SHOT_SP = 8.5, SHOT_LIFE = 0.72, ATK_CD = 0.42, FREEZE_T = 3.4;
 export const GLYPH_NAMES = { sun: 'Sun', moon: 'Moon', leaf: 'Leaf', wave: 'Wave', star: 'Star' };
 export const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 export function mulberry(a) {
@@ -163,6 +166,16 @@ const CURATED = [
   { seed: 'story8', theme: 'ice', rooms: ['ice', 'plate'], name: 'Slippery keep', goal: 'Slide across the ice and hold the door for each other' },
   { seed: 'story9', theme: 'crystal', rooms: ['crumble', 'code', 'bridge'], name: 'Falling floors', goal: 'Cracked floor falls away, keep moving' },
   { seed: 'story10', theme: 'forge', rooms: ['timed', 'gate', 'fires'], name: 'The furnace', goal: 'Race the timed door, then light both fires' },
+  { seed: 'story11', theme: 'crystal', rooms: ['foes', 'gate'], name: 'Bat cave', goal: 'Fire burns the bats. Frost freezes them, then one more hit breaks them', depth: 2 },
+  { seed: 'story12', theme: 'sand', rooms: ['beam', 'plate'], name: 'Mirror hall', goal: 'Turn the mirrors so the light reaches the crystal', depth: 2 },
+  { seed: 'story13', theme: 'jungle', rooms: ['split', 'foes', 'bridge'], name: 'Slime garden', goal: 'Slimes hop at you. Freeze them and break them together', depth: 3 },
+  { seed: 'story14', theme: 'ice', rooms: ['beam', 'ice', 'foes'], name: 'Cold light', goal: 'Bend the light across the frozen hall', depth: 3 },
+  { seed: 'story15', theme: 'tomb', rooms: ['foes', 'spikes', 'gate'], name: 'Bone keep', goal: 'Bone knights take three fireballs. Frost them first', depth: 3 },
+  { seed: 'story16', theme: 'sky', rooms: ['portal', 'beam', 'crumble'], name: 'Sky steps', goal: 'Rings, mirrors and falling floors high above the clouds', depth: 4 },
+  { seed: 'story17', theme: 'tomb', rooms: ['foes', 'code', 'hall', 'foes'], name: 'Old guard', goal: 'Get past the guards and read the hidden code', depth: 4 },
+  { seed: 'story18', theme: 'sky', rooms: ['beam', 'fires', 'foes', 'gate'], name: 'Sun prism', goal: 'Light, fire and a long climb', depth: 4 },
+  { seed: 'story19', theme: 'forge', rooms: ['foes', 'timed', 'beam', 'crumble'], name: 'Deep forge', goal: 'Every trick you know, in one hot temple', depth: 5 },
+  { seed: 'story20', theme: 'crystal', rooms: ['split', 'beam', 'foes', 'fires', 'gate'], name: 'The last torch', goal: 'The longest temple. Stay together', depth: 6 },
 ];
 export const STORY_N = LEVELS.length + CURATED.length;
 
@@ -175,7 +188,7 @@ export function levelDef(li, rs) {
   else if (li < LEVELS.length) L = LEVELS[li] || LEVELS[0];
   else {
     const c = CURATED[li - LEVELS.length] || CURATED[0];
-    L = makeChecked(c.seed, 3, { theme: c.theme, rooms: c.rooms, chest: true });
+    L = makeChecked(c.seed, c.depth || 3, { theme: c.theme, rooms: c.rooms, chest: true });
     L = { ...L, name: c.name, goal: c.goal };
   }
   defCache.set(key, L);
@@ -189,7 +202,7 @@ function makeChecked(rs, depth, opts) {
   return LEVELS[0];
 }
 
-const WALLISH = new Set(['#', 'M', 'q']);
+const WALLISH = new Set(['#', 'M', 'q', 'U', 'R']);
 export const isWallCh = (ch) => WALLISH.has(ch);
 const PADS = '1234';
 export const isPad = (ch) => PADS.includes(ch);
@@ -201,7 +214,7 @@ function findAll(map, ch) {
 }
 
 export function mkPlayer(kind, x, y) {
-  return { kind, x: x + 0.5, y: y + 0.55, vx: 0, vy: 0, r: 0.27, dir: 'down', phase: 0, moving: false, cp: { x: x + 0.5, y: y + 0.55 }, dead: 0, die: null, fallT: 0, stepT: 0, blinkT: 2 + Math.random() * 3, blink: 0, spawnT: 0.6, deaths: 0, tp: 0, tpLock: null, onT: false, nb: null };
+  return { kind, x: x + 0.5, y: y + 0.55, vx: 0, vy: 0, r: 0.27, dir: 'down', phase: 0, moving: false, cp: { x: x + 0.5, y: y + 0.55 }, ax: 0, ay: 1, atkCd: 0, shots: 0, atkT: 0, dead: 0, die: null, fallT: 0, stepT: 0, blinkT: 2 + Math.random() * 3, blink: 0, spawnT: 0.6, deaths: 0, tp: 0, tpLock: null, onT: false, nb: null };
 }
 
 export function makeWorld(li, seed, attempt, rs) {
@@ -246,6 +259,19 @@ export function worldFrom(L, li, seed, attempt, rs) {
   const F = one('F'), N = one('N');
   if (F && N) W.braz = { F: { x: F.x, y: F.y, lit: 0, perm: false }, N: { x: N.x, y: N.y, lit: 0, perm: false } };
   W.lava = findAll(map, 'L');
+  W.foes = [];
+  let fid = 1;
+  for (const ch of Object.keys(FOE_CH)) findAll(map, ch).forEach(([x, y]) => { const k = FOE_CH[ch]; W.foes.push({ id: fid++, k, x: x + 0.5, y: y + 0.55, hx: x + 0.5, hy: y + 0.55, hp: FOES[k].hp, frz: 0, dead: 0, vx: 0, vy: 0, t: rnd() * 6, mode: 0, mt: rnd() * 1.2, cool: 1 + rnd() * 2, dir: rnd() < 0.5 ? -1 : 1, hit: 0, face: 1, r: FOES[k].r, kind: 'foe', tx: null, ty: null, hop: 0 }); });
+  W.shots = [];
+  W.mirrors = {};
+  findAll(map, 'm').forEach(([x, y]) => { W.mirrors[`${x},${y}`] = { x, y, o: 0, spin: 0 }; });
+  findAll(map, 'n').forEach(([x, y]) => { W.mirrors[`${x},${y}`] = { x, y, o: 1, spin: 0 }; });
+  const U = one('U'), R = one('R');
+  if (U && R) {
+    const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    const d = dirs.find(([dx, dy]) => { const c = (map[U.y + dy] || '')[U.x + dx]; return c && !isWallCh(c); }) || [1, 0];
+    W.beam = { src: U, dst: R, dir: d, path: [], hit: false, amt: 0, open: false };
+  } else W.beam = null;
   return W;
 }
 
@@ -274,17 +300,20 @@ export function crumbleState(W, x, y) {
   return { s: 0, k: 0 };
 }
 
+const MIRROR = [0.12, 0.18, 0.88, 0.9];
 const FULL = [0, 0, 1, 1], BRAZ = [0.16, 0.22, 0.84, 0.86], LEVER = [0.18, 0.3, 0.82, 0.82], CHEST = [0.08, 0.3, 0.92, 0.9];
 export function box(W, tx, ty, kind) {
   const ch = at(W, tx, ty);
   switch (ch) {
-    case '#': case 'M': case 'q': return FULL;
+    case '#': case 'M': case 'q': case 'U': case 'R': return FULL;
     case 'H': return W.gateAmt.H > 0.82 ? null : FULL;
     case 'J': return W.gateAmt.J > 0.82 ? null : FULL;
     case 'O': return W.pdoor > 0.82 ? null : FULL;
     case 'Q': return W.qdoor > 0.82 ? null : FULL;
     case 'D': return W.codeAmt > 0.82 ? null : FULL;
     case 'E': return W.great.amt > 0.82 ? null : FULL;
+    case 'G': return W.beam && W.beam.amt > 0.82 ? null : FULL;
+    case 'm': case 'n': return MIRROR;
     case 'V': return W.vines.done ? null : FULL;
     case 'Z': return kind === 'sun' ? null : FULL;
     case 'z': return kind === 'moon' ? null : FULL;
@@ -337,6 +366,8 @@ export function passFor(W, kind, x, y, opts) {
   if (ch === 'Q') return !!(o.Q || W.qdoor > 0.82);
   if (ch === 'D') return !!(o.D || W.codeAmt > 0.82);
   if (ch === 'E') return !!(o.E || W.great.amt > 0.82);
+  if (ch === 'G') return !!(o.G || (W.beam && W.beam.amt > 0.82));
+  if (ch === 'm' || ch === 'n') return false;
   if (ch === 'V') return !!(o.V || W.vines.done);
   if (ch === 'Z') return kind === 'sun';
   if (ch === 'z') return kind === 'moon';
@@ -416,6 +447,24 @@ export function applyEvent(W, ev, remote) {
     }
     case 'flag': { const f = W.flags[ev.i]; if (!f) return; f.by = ev.who; f.wave = 1; break; }
     case 'win': if (W.won || W.out) return; W.won = true; W.winAt = W.t; fx(W, 'win'); break;
+    case 'shot': {
+      if (!W.shots || W.shots.some((q) => q.id === ev.id)) return;
+      W.shots.push({ id: ev.id, who: ev.who, k: ev.who === 'sun' ? 'fire' : 'ice', x: ev.x, y: ev.y, dx: ev.dx, dy: ev.dy, life: SHOT_LIFE, age: 0 });
+      const sp = W.p[ev.who]; if (sp && remote) sp.atkT = 0.2;
+      fx(W, 'shot', { who: ev.who, x: ev.x, y: ev.y });
+      break;
+    }
+    case 'foe': {
+      const f = W.foes && W.foes.find((q) => q.id === ev.id);
+      if (!f || f.dead > 0) return;
+      f.hp = ev.hp;
+      if (ev.frz != null) f.frz = ev.frz;
+      if (ev.dead) { f.dead = 0.001; f.frz = 0; fx(W, 'foedie', { x: f.x, y: f.y, kk: f.k, by: ev.by, ice: ev.hit === 'ice' || ev.shatter }); }
+      else if (ev.hit) { f.hit = 0.25; fx(W, ev.hit === 'ice' ? 'freeze' : 'foehit', { x: f.x, y: f.y, kk: f.k }); }
+      break;
+    }
+    case 'mir': { const m = W.mirrors && W.mirrors[ev.id]; if (!m || m.o === ev.o) return; m.o = ev.o; m.spin = 0.25; if (!remote) m.at = W.t; fx(W, 'mirror', { x: m.x, y: m.y, who: ev.who }); break; }
+    case 'beam': if (!W.beam || W.beam.open) return; W.beam.open = true; fx(W, 'beam'); break;
     default: break;
   }
 }
@@ -432,6 +481,9 @@ export function snapshot(W) {
     gr: W.great.open ? 1 : 0,
     de: [...W.deaths],
     wn: W.won ? 1 : 0,
+    fo: (W.foes || []).map((f) => [f.id, f.hp, f.dead > 0 ? 1 : 0]),
+    mr: Object.keys(W.mirrors || {}).map((k) => W.mirrors[k].o).join(''),
+    bm: W.beam && W.beam.open ? 1 : 0,
   };
 }
 export function sameLevel(W, s) { return !!s && s.li === W.li && s.a === W.attempt && (s.rs || null) === (W.rs || null); }
@@ -450,6 +502,18 @@ export function mergeSnapshot(W, s, fromHost) {
   if (s.gr && fromHost) applyEvent(W, { k: 'great' }, true);
   (s.de || []).forEach((id) => { if (!W.deaths.has(id)) { const who = String(id).split(':')[0]; applyEvent(W, { k: 'die', id, who, why: 'fall' }, true); } });
   if (s.wn && fromHost) applyEvent(W, { k: 'win' }, true);
+  if (fromHost && s.fo && W.foes) s.fo.forEach(([id, hp, dd]) => { const f = W.foes.find((q) => q.id === id); if (!f || f.dead > 0) return; if (dd) applyEvent(W, { k: 'foe', id, hp: 0, dead: 1 }, true); else f.hp = hp; });
+  if (fromHost && s.mr && W.mirrors) Object.keys(W.mirrors).forEach((k, i) => { const m = W.mirrors[k]; const o = Number(s.mr[i]); if ((o === 0 || o === 1) && m.o !== o && !(m.at != null && W.t - m.at < 3.5)) applyEvent(W, { k: 'mir', id: k, o }, true); });
+  if (s.bm && fromHost) applyEvent(W, { k: 'beam' }, true);
+}
+export function foeRows(W) { return (W.foes || []).filter((f) => f.dead <= 0).map((f) => [f.id, Math.round(f.x * 100), Math.round(f.y * 100), Math.round(f.frz * 10), f.mode, Math.round((f.hop || 0) * 100)]); }
+export function setFoes(W, rows) {
+  for (const [id, x, y, frz, mode, hop] of rows || []) {
+    const f = W.foes.find((q) => q.id === id);
+    if (!f || f.dead > 0) continue;
+    if (f.tx == null || Math.hypot(x / 100 - f.x, y / 100 - f.y) > 3) { f.x = x / 100; f.y = y / 100; }
+    f.tx = x / 100; f.ty = y / 100; f.frz = frz / 10; f.mode = mode; f.thop = hop / 100; f.seen = Date.now();
+  }
 }
 export function syncClock(W, hostT, rttMs) {
   const target = hostT + Math.min(0.6, (rttMs || 0) / 2000) - W.t;
@@ -476,6 +540,7 @@ function drive(W, p, tx, ty, dt) {
   moveEnt(W, p, p.vx * dt, p.vy * dt);
   const sp = Math.hypot(p.vx, p.vy);
   p.moving = sp > 0.3 && p.dead <= 0;
+  if (sp > 0.6 && Math.hypot(tx, ty) > 0.3) { const tl = Math.hypot(tx, ty); p.ax = tx / tl; p.ay = ty / tl; }
   p.ice = ice;
   animate(p, dt, sp);
 }
@@ -587,6 +652,14 @@ export function stepWorld(W, dt, ctl) {
     const ch = at(W, tx, ty);
     const why = inside ? deadly(W, kind, tx, ty) : null;
     if (why) { die(W, p, why); continue; }
+    if (p.atkCd > 0) p.atkCd -= dt;
+    if (p.atkT > 0) p.atkT -= dt;
+    const inp2 = ctl.inputs[kind];
+    if (inp2 && inp2.atk && p.atkCd <= 0) shoot(W, p, inp2.aim);
+    if (p.spawnT <= 0 && W.foes.length) {
+      const foe = W.foes.find((f) => f.dead <= 0 && f.frz <= 0 && Math.hypot(f.x - p.x, f.y - p.y) < p.r + f.r - 0.06);
+      if (foe) { die(W, p, 'foe'); continue; }
+    }
     if (ch === 'b' && inside) {
       if (litAt(W, tx, ty) < 0.5) { p.fallT += dt; if (p.fallT > 0.35) { die(W, p, 'fall'); continue; } } else p.fallT = 0;
     } else p.fallT = 0;
@@ -645,6 +718,158 @@ export function stepWorld(W, dt, ctl) {
   W.doorOn = { sun: !!sunOk, moon: !!moonOk };
   if (sunOk && moonOk && !W.won && !W.out) { W.exitT += dt; if (W.exitT > 0.9 && W.host) emit(W, { k: 'win' }); } else W.exitT = 0;
   if (W.shake > 0) W.shake -= dt;
+  for (const kind of kinds) { const p = W.p[kind]; if (!ctl.local.has(kind) && p.atkT > 0) p.atkT -= dt; }
+  if (W.foes.length) {
+    if (ctl.host) { if (ctl.playing && !W.won) stepFoes(W, dt); }
+    else for (const f of W.foes) {
+      if (f.dead > 0) { f.dead += dt; continue; }
+      if (f.hit > 0) f.hit -= dt;
+      if (f.frz > 0) f.frz = Math.max(0, f.frz - dt);
+      if (f.tx == null) continue;
+      const k = 1 - Math.exp(-dt * 10);
+      const ddx = f.tx - f.x;
+      if (Math.abs(ddx) > 0.01) f.face = ddx < 0 ? -1 : 1;
+      f.walk = (f.walk || 0) + Math.hypot(f.tx - f.x, f.ty - f.y) * 6;
+      f.x += (f.tx - f.x) * k; f.y += (f.ty - f.y) * k; f.hop += ((f.thop || 0) - (f.hop || 0)) * k; f.t += dt;
+    }
+  }
+  if (W.shots.length) stepShots(W, dt, ctl);
+  for (const k in W.mirrors) { const m = W.mirrors[k]; if (m.spin > 0) m.spin = Math.max(0, m.spin - dt); }
+  if (W.beam) {
+    computeBeam(W);
+    if (W.beam.hit && !W.beam.open && ctl.host) emit(W, { k: 'beam' });
+    W.beam.amt = clamp(W.beam.amt + (W.beam.open ? dt * 1.6 : -dt * 2), 0, 1);
+  }
+}
+
+function shoot(W, p, aim) {
+  let dx = aim && (aim.x || aim.y) ? aim.x : p.ax, dy = aim && (aim.x || aim.y) ? aim.y : p.ay;
+  const l0 = Math.hypot(dx, dy) || 1; dx /= l0; dy /= l0;
+  let best = null, bs = 0.8;
+  for (const f of W.foes) { if (f.dead > 0) continue; const vx = f.x - p.x, vy = f.y - p.y, d = Math.hypot(vx, vy); if (d > 6.8 || d < 0.05) continue; const c = (vx * dx + vy * dy) / d + (f.frz > 0 && p.kind === 'sun' ? 0.05 : 0); if (c > bs) { bs = c; best = [vx / d, vy / d]; } }
+  if (best) { dx = best[0]; dy = best[1]; }
+  p.atkCd = ATK_CD; p.atkT = 0.22; p.shots += 1;
+  if (Math.abs(dx) > Math.abs(dy) * 1.15) p.dir = dx < 0 ? 'left' : 'right'; else if (Math.abs(dy) > Math.abs(dx) * 1.15) p.dir = dy < 0 ? 'up' : 'down';
+  emit(W, { k: 'shot', who: p.kind, id: `${p.kind}:${W.attempt}:${p.shots}`, x: +(p.x + dx * 0.3).toFixed(2), y: +(p.y + dy * 0.3).toFixed(2), dx: +dx.toFixed(3), dy: +dy.toFixed(3) });
+}
+function foeSolid(W, f, tx, ty) {
+  if (box(W, tx, ty, 'foe')) return true;
+  if (f.k === 'bat') return false;
+  return 'LWPCSsKb1234'.includes(at(W, tx, ty));
+}
+function foeMove(W, f, vx, vy, dt) {
+  const nx = f.x + vx * dt, ny = f.y + vy * dt;
+  let blocked = false;
+  if (vx) { const cx = Math.floor(nx + Math.sign(vx) * 0.32); if (foeSolid(W, f, cx, Math.floor(f.y))) blocked = true; else f.x = nx; }
+  if (vy) { const cy = Math.floor(ny + Math.sign(vy) * 0.32); if (foeSolid(W, f, Math.floor(f.x), cy)) blocked = true; else f.y = ny; }
+  resolve(W, f);
+  f.mvx = vx; f.mvy = vy;
+  if (Math.abs(vx) > 0.05) f.face = vx < 0 ? -1 : 1;
+  return blocked;
+}
+function stepFoes(W, dt) {
+  const ps = ['sun', 'moon'].map((k) => W.p[k]).filter((p) => alive(p) && p.spawnT <= 0);
+  for (const f of W.foes) {
+    if (f.dead > 0) { f.dead += dt; continue; }
+    if (f.hit > 0) f.hit -= dt;
+    if (f.frz > 0) { f.frz -= dt; if (f.frz <= 0) { f.frz = 0; fx(W, 'thaw', { x: f.x, y: f.y }); } continue; }
+    f.t += dt;
+    let near = null, nd = 1e9;
+    for (const p of ps) { const d = Math.hypot(p.x - f.x, p.y - f.y); if (d < nd) { nd = d; near = p; } }
+    const S = FOES[f.k];
+    if (f.k === 'bat') {
+      f.cool -= dt;
+      if (f.mode === 1) {
+        f.mt -= dt;
+        const dx = f.ax - f.x, dy = f.ay - f.y, d = Math.hypot(dx, dy) || 1;
+        const bl = foeMove(W, f, dx / d * 2.5, dy / d * 2.5, dt);
+        if (f.mt <= 0 || d < 0.15 || bl) { f.mode = 2; f.cool = 2.4; }
+      } else {
+        const gx = f.mode === 2 ? f.hx : f.hx + Math.sin(f.t * 1.25) * 1.1, gy = f.hy + Math.sin(f.t * 2.2) * 0.45;
+        const dx = gx - f.x, dy = gy - f.y, d = Math.hypot(dx, dy);
+        const sp = f.mode === 2 ? 1.7 : 1.3;
+        if (d > 0.02) foeMove(W, f, dx / Math.max(d, 0.4) * sp, dy / Math.max(d, 0.4) * sp, dt);
+        if (f.mode === 2 && d < 0.35) f.mode = 0;
+        if (f.mode === 0 && near && nd < 3.4 && f.cool <= 0) { f.mode = 1; f.mt = 1.25; f.ax = near.x + (near.x - f.x) * 0.25; f.ay = near.y + (near.y - f.y) * 0.25; fx(W, 'swoop', { x: f.x, y: f.y }); }
+      }
+    } else if (f.k === 'slime') {
+      f.mt -= dt;
+      if (f.mt <= 0) {
+        f.mt = 1.1;
+        let dx, dy;
+        if (near && nd < 4.6) { dx = near.x - f.x; dy = near.y - f.y; } else { const a = Math.random() * TAU; dx = Math.cos(a); dy = Math.sin(a); }
+        const d = Math.hypot(dx, dy) || 1;
+        f.vx = dx / d; f.vy = dy / d;
+        if (near && nd < 6) fx(W, 'hop', { x: f.x, y: f.y });
+      }
+      const ph = 1.1 - f.mt;
+      if (ph < 0.5) { f.hop = Math.sin(ph / 0.5 * Math.PI); if (foeMove(W, f, f.vx * S.sp * 1.9, f.vy * S.sp * 1.9, dt)) { f.vx = -f.vx; f.vy = -f.vy; } }
+      else f.hop = 0;
+    } else {
+      let vx, vy;
+      if (near && nd < 3.6) { const dx = near.x - f.x, dy = near.y - f.y, d = Math.hypot(dx, dy) || 1; vx = dx / d * S.sp; vy = dy / d * S.sp; if (f.mode !== 1) fx(W, 'rattle', { x: f.x, y: f.y }); f.mode = 1; }
+      else { vx = f.dir * S.sp * 0.7; vy = clamp((f.hy - f.y) * 1.5, -0.8, 0.8); f.mode = 0; }
+      if (foeMove(W, f, vx, vy, dt) && f.mode === 0) f.dir = -f.dir;
+      if (f.mode === 0 && Math.abs(f.x - f.hx) > 3.5) f.dir = f.x > f.hx ? -1 : 1;
+      f.walk = (f.walk || 0) + dt * Math.hypot(vx, vy) * 3;
+    }
+  }
+}
+function hitFoe(W, f, q) {
+  let hp = f.hp, frz = f.frz, dead = 0;
+  const shatter = frz > 0;
+  if (shatter) { dead = 1; hp = 0; } else if (q.k === 'fire') { hp -= 1; if (hp <= 0) dead = 1; } else frz = FREEZE_T;
+  if (!dead && q.k === 'fire') { f.x += q.dx * 0.25; f.y += q.dy * 0.25; resolve(W, f); }
+  emit(W, { k: 'foe', id: f.id, hp, frz, dead, hit: q.k, by: q.who, shatter });
+}
+function stepShots(W, dt, ctl) {
+  for (const q of W.shots) {
+    q.life -= dt; q.age += dt;
+    for (let i = 0; i < 3 && q.life > 0; i++) {
+      q.x += q.dx * SHOT_SP * dt / 3; q.y += q.dy * SHOT_SP * dt / 3;
+      const tx = Math.floor(q.x), ty = Math.floor(q.y);
+      const ch = at(W, tx, ty);
+      if (q.k === 'fire' && ch === 'V' && !W.vines.done && W.vines.burn <= 0) { if (ctl.local.has(q.who)) emit(W, { k: 'burn' }); q.life = 0; break; }
+      if (box(W, tx, ty, 'shot') && !(ch === 'Z' && q.k === 'fire') && !(ch === 'z' && q.k === 'ice')) { q.life = 0; q.wall = true; break; }
+      for (const f of W.foes) {
+        if (f.dead > 0 || Math.hypot(f.x - q.x, f.y - q.y) > f.r + 0.24) continue;
+        q.life = 0;
+        if (ctl.host) hitFoe(W, f, q);
+        break;
+      }
+    }
+    if (q.life <= 0) fx(W, 'shotend', { x: q.x, y: q.y, sk: q.k, wall: !!q.wall });
+  }
+  W.shots = W.shots.filter((q) => q.life > 0);
+}
+function computeBeam(W) {
+  const B = W.beam;
+  let x = B.src.x, y = B.src.y, dx = B.dir[0], dy = B.dir[1];
+  const path = [[x + 0.5 + dx * 0.45, y + 0.5 + dy * 0.45]];
+  let hit = false;
+  for (let i = 0; i < 90; i++) {
+    x += dx; y += dy;
+    if (x === B.dst.x && y === B.dst.y) { hit = true; path.push([x + 0.5 - dx * 0.4, y + 0.5 - dy * 0.4]); break; }
+    const m = W.mirrors[`${x},${y}`];
+    if (m) { path.push([x + 0.5, y + 0.5]); if (m.o === 0) { const t = dx; dx = -dy; dy = -t; } else { const t = dx; dx = dy; dy = t; } continue; }
+    if (box(W, x, y, 'beam')) { path.push([x + 0.5 - dx * 0.5, y + 0.5 - dy * 0.5]); break; }
+  }
+  B.path = path; B.hit = hit;
+}
+export function nearMirror(W, p) {
+  if (!W.mirrors || !alive(p)) return null;
+  let best = null, bd = 1.1;
+  for (const k in W.mirrors) { const m = W.mirrors[k]; const d = dist(p, m.x + 0.5, m.y + 0.62); if (d < bd) { bd = d; best = k; } }
+  return best;
+}
+export function turnMirror(W, p) {
+  const k = nearMirror(W, p);
+  if (!k) return false;
+  const m = W.mirrors[k];
+  if (m.spin > 0) return false;
+  m.at = W.t;
+  emit(W, { k: 'mir', id: k, o: 1 - m.o, who: p.kind });
+  return true;
 }
 
 export function nearDial(W, p) { return !!(W.dialAt && !W.codeSolved && alive(p) && dist(p, W.dialAt.x + 0.5, W.dialAt.y + 1.45) < 1.05); }
@@ -655,7 +880,10 @@ export function tryCode(W, picks) {
 }
 
 export function hintFor(W, p) {
-  if (!alive(p) || !p.moving) return null;
+  if (!alive(p)) return null;
+  if (W.foes && W.foes.some((f) => f.dead <= 0 && Math.hypot(f.x - p.x, f.y - p.y) < 4.5)) return ['foe', p.kind === 'sun' ? 'Tap the fire button to throw fireballs. Frozen enemies break with one hit.' : 'Tap the frost button to freeze an enemy. Hit it again to break it.'];
+  if (nearMirror(W, p) && !(W.beam && W.beam.open)) return ['mirror', 'Tap the hand button next to a mirror to turn it. Point the light at the crystal.'];
+  if (!p.moving) return null;
   const ax = p.x + (p.dir === 'left' ? -0.6 : p.dir === 'right' ? 0.6 : 0), ay = p.y + (p.dir === 'up' ? -0.6 : p.dir === 'down' ? 0.6 : 0);
   const tx = Math.floor(ax), ty = Math.floor(ay);
   const ch = at(W, tx, ty);
@@ -669,6 +897,7 @@ export function hintFor(W, p) {
   if (ch === 'Q' && W.qdoor < 0.3) return ['timed', 'Press a clock button and this door opens for a few seconds.'];
   if (ch === 'D' && W.codeAmt < 0.3) return ['code', 'A code door. The code is painted where only blue light shows it.'];
   if (ch === 'E' && W.great.amt < 0.3) return ['great', 'Light both fires at the same time to open this door.'];
+  if (ch === 'G' && W.beam && W.beam.amt < 0.3) return ['beamdoor', 'This crystal door opens when the light beam reaches the crystal. Turn the mirrors.'];
   if (ch === 'V' && !W.vines.done) return ['vines', p.kind === 'sun' ? 'Walk into the vines to burn them.' : 'Thick vines. The orange torch can burn them.'];
   if (ch === 'Z' && p.kind === 'moon') return ['fire', 'A wall of fire. Only the orange torch can walk through it.'];
   if (ch === 'z' && p.kind === 'sun') return ['falls', 'A curtain of water. Only the blue torch can walk through it.'];
@@ -683,7 +912,7 @@ export function hintFor(W, p) {
 export function checkDef(L) { return checkWorld(worldFrom(L, 0, 'check', 0, null)); }
 export function checkLevel(li, rs) { return checkWorld(makeWorld(li, 'check', 0, rs)); }
 function checkWorld(W) {
-  const flags = { H: false, J: false, O: false, Q: false, D: false, E: false, V: false, key: false, chest: false };
+  const flags = { H: false, J: false, O: false, Q: false, D: false, E: false, V: false, G: false, key: false, chest: false };
   const lit = new Set();
   const map = W.map;
   const reach = (kind) => {
@@ -701,7 +930,7 @@ function checkWorld(W) {
         const key = `${nx},${ny}`;
         if (seen.has(key)) continue;
         const ch = at(W, nx, ny);
-        if ('hjFNTqV'.includes(ch) || ch === 'M') touch.add(`${ch}:${key}`);
+        if ('hjFNTqVmn'.includes(ch) || ch === 'M') touch.add(`${ch}:${key}`);
         if (!passFor(W, kind, nx, ny, opts)) continue;
         seen.add(key); q.push([nx, ny]);
       }
@@ -728,6 +957,7 @@ function checkWorld(W) {
     if (!flags.D && W.dialAt && W.muralAt && [...rm.seen].some((k) => { const [x, y] = k.split(',').map(Number); return Math.hypot(x + 0.5 - (W.muralAt.x + 0.5), y + 0.5 - (W.muralAt.y + 1.3)) < 2.3; }) && (rs.seen.has(`${W.dialAt.x},${W.dialAt.y + 1}`) || rm.seen.has(`${W.dialAt.x},${W.dialAt.y + 1}`))) { flags.D = true; changed = true; }
     if (!flags.V && W.vines.tiles.length && [...rs.touch].some((t) => t.startsWith('V:'))) { flags.V = true; changed = true; }
     if (!flags.E && W.braz && rs.touch.has(`F:${W.braz.F.x},${W.braz.F.y}`) && rm.touch.has(`N:${W.braz.N.x},${W.braz.N.y}`)) { flags.E = true; changed = true; }
+    if (!flags.G && W.beam && Object.keys(W.mirrors).length && Object.values(W.mirrors).every((m) => both.has(`m:${m.x},${m.y}`) || both.has(`n:${m.x},${m.y}`))) { flags.G = true; changed = true; }
     if (!changed) break;
   }
   const problems = [];
@@ -749,7 +979,7 @@ export function missionsFor(W) {
   out.push({ k: 'time', t: `Escape in under ${fmtPar(parTime(W))}` });
   return out;
 }
-const PAR_ADJ = { bridge: -2.31, code: 0, crumble: -3.41, fires: -2.91, gate: -3.27, hall: -5.76, ice: -7.19, plate: 0.26, portal: -6.71, spikes: -5.22, split: -4.82, timed: 1.3 };
+const PAR_ADJ = { bridge: -2.31, code: 0, crumble: -3.41, fires: -2.91, gate: -3.27, hall: -5.76, ice: -7.19, plate: 0.26, portal: -6.71, spikes: -5.22, split: -4.82, timed: 1.3, foes: 2.5, beam: 4 };
 export function parTime(W) {
   const L = W.L || {};
   let est = 30;
@@ -758,3 +988,69 @@ export function parTime(W) {
   return Math.ceil((est * 2.4 + 20) / 5) * 5;
 }
 export const fmtPar = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+
+export function buddyInput(W, me, lead, mem, dt) {
+  const zero = { x: 0, y: 0 };
+  if (!me || !lead || !alive(me) || W.won || W.out) return zero;
+  if (W.foes && W.foes.length) {
+    const los = (bx, by) => { const n = Math.ceil(Math.hypot(bx - me.x, by - me.y) / 0.3); for (let i = 1; i < n; i++) { const x = me.x + (bx - me.x) * i / n, y = me.y + (by - me.y) * i / n; if (box(W, Math.floor(x), Math.floor(y), 'shot')) return false; } return true; };
+    mem.ign = mem.ign || {};
+    let tgt = null, td = 3.4;
+    for (const f of W.foes) { if (f.dead > 0 || (mem.ign[f.id] || 0) > W.t) continue; const d = Math.hypot(f.x - me.x, f.y - me.y); if (d < td && los(f.x, f.y)) { td = d; tgt = f; } }
+    if (tgt) {
+      const dx = tgt.x - me.x, dy = tgt.y - me.y, d = Math.hypot(dx, dy) || 1;
+      if (mem.eid !== tgt.id) { mem.eid = tgt.id; mem.eng = 0; }
+      mem.eng += dt;
+      if (mem.eng > 5) { mem.ign[tgt.id] = W.t + 3; mem.eid = null; }
+      mem.atkT = (mem.atkT || 0) - dt;
+      let atk = false;
+      if (mem.atkT <= 0) { mem.atkT = 0.6; atk = true; }
+      if (tgt.frz <= 0 && d < 1.5) return { x: -dx / d * 0.92, y: -dy / d * 0.92, atk, aim: { x: dx / d, y: dy / d } };
+      return { x: 0, y: 0, atk, aim: { x: dx / d, y: dy / d } };
+    }
+  }
+  const tx = Math.floor(me.x), ty = Math.floor(me.y);
+  const lx = Math.floor(lead.x), ly = Math.floor(lead.y);
+  const tr = mem.trail || (mem.trail = []);
+  const last = tr[tr.length - 1];
+  if (alive(lead) && (!last || last.x !== lx || last.y !== ly)) { tr.push({ x: lx, y: ly }); if (tr.length > 60) tr.shift(); }
+  const ex = W.exits[lead.kind], mine = W.exits[me.kind];
+  const leadHome = ex && Math.hypot(lead.x - (ex.x + 0.5), lead.y - (ex.y + 0.5)) < 1.3;
+  let goal = null;
+  if (leadHome && mine) goal = { x: mine.x, y: mine.y, home: true };
+  else if (alive(lead)) {
+    if (Math.hypot(me.x - lead.x, me.y - lead.y) < 1.6) { mem.path = null; return zero; }
+    goal = { x: lx, y: ly };
+  }
+  if (!goal) return zero;
+  mem.t = (mem.t || 0) - dt;
+  const key = `${goal.x},${goal.y}`;
+  if (!mem.path || mem.key !== key || mem.t <= 0) {
+    mem.t = 0.35;
+    mem.key = key;
+    let path = bfs(W, tx, ty, goal.x, goal.y, me.kind);
+    if (!path && !goal.home) {
+      for (let i = tr.length - 1; i >= Math.max(0, tr.length - 30) && !path; i--) {
+        const c = tr[i];
+        if (c.x === tx && c.y === ty) break;
+        path = bfs(W, tx, ty, c.x, c.y, me.kind);
+      }
+    }
+    mem.path = path;
+    mem.i = 1;
+  }
+  const path = mem.path;
+  if (!path || path.length < 2) return zero;
+  while (mem.i < path.length - 1 && path[mem.i].x === tx && path[mem.i].y === ty) mem.i++;
+  const nx = path[Math.min(mem.i, path.length - 1)];
+  if (!nx) return zero;
+  const ch = at(W, nx.x, nx.y);
+  if ((ch === 'S' || ch === 's') && (spikeAmt(W, spikeOff(ch)) > 0.05 || spikeWarn(W, spikeOff(ch)) > 0)) return zero;
+  if (deadly(W, me.kind, nx.x, nx.y)) return zero;
+  const gx = nx.x + 0.5, gy = nx.y + 0.5;
+  const dx = gx - me.x, dy = gy - me.y, d = Math.hypot(dx, dy);
+  if (d < 0.08) return zero;
+  const end = mem.i >= path.length - 1;
+  const k = end ? Math.min(1, d * 1.6) : 1;
+  return { x: dx / d * k * 0.92, y: dy / d * k * 0.92 };
+}

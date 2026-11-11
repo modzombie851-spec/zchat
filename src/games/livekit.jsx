@@ -84,10 +84,14 @@ export function Btn({ label, onClick, kind = 'glass', disabled, style, ariaLabel
   );
 }
 
-export function RoundBtn({ onClick, label, children, size = 54, bg = 'rgba(14,12,22,0.62)', style }) {
+export function RoundBtn({ onClick, label, children, size = 54, bg = 'rgba(14,12,22,0.62)', style, fast }) {
+  const fire = () => { tap(); if (onClick) onClick(); };
   return (
-    <button type="button" aria-label={label} onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); tap(); onClick && onClick(); }}
-      style={{ ...btnBase, width: size, height: size, borderRadius: '50%', background: bg, boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.16), 0 6px 16px rgba(0,0,0,0.35)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', ...style }}>
+    <button type="button" aria-label={label}
+      onPointerDown={(e) => { e.stopPropagation(); if (fast) { if (e.cancelable) e.preventDefault(); fire(); } }}
+      onClick={(e) => { e.stopPropagation(); if (!fast) fire(); }}
+      onKeyDown={fast ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fire(); } } : undefined}
+      style={{ ...btnBase, width: size, height: size, borderRadius: '50%', background: bg, boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.16), 0 6px 16px rgba(0,0,0,0.35)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', touchAction: 'none', ...style }}>
       {children}
     </button>
   );

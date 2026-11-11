@@ -313,6 +313,8 @@ export const ZapCardGuide = zLazy(() => import('./games/cards.jsx'), 'ZapCardGui
 export const BlobGame = zLazy(() => import('./games/blob.jsx'), 'BlobGame', 'blob');
 export const DuoGamePage = zLazy(() => import('./games/duo.jsx'), 'DuoGamePage', 'duo');
 export const GulpGamePage = zLazy(() => import('./games/gulp.jsx'), 'GulpGamePage', 'gulp');
+export const RollGamePage = zLazy(() => import('./games/roll.jsx'), 'RollGamePage', 'roll');
+export const RollInviteSheet = zLazy(() => import('./games/roll.jsx'), 'RollInviteSheet', 'roll');
 export const G1GolfPage = zLazy(() => import('./areas/games.jsx'), 'G1GolfPage', 'games');
 export const G1SudokuBoard = zLazy(() => import('./areas/games.jsx'), 'G1SudokuBoard', 'games');
 export const G1CrossPage = zLazy(() => import('./areas/games.jsx'), 'G1CrossPage', 'games');
@@ -5681,6 +5683,24 @@ export function rpcMissing(error) {
   return code === 'PGRST202' || code === '42883' || code === '42P01' || /could not find the function|in the schema cache/i.test(String(error.message || ''));
 }
 export function loadMissing(error) { return rpcMissing(error) || String((error && error.code) || '') === 'PGRST205'; }
+export async function groupWrite(gid, patch) {
+  const res = await supabase.rpc('zchat_group_update', { p_group: gid, p_patch: patch });
+  if (!rpcMissing(res.error)) {
+    const out = res.error ? null : res.data;
+    if (out && out.ok) return { ok: true, row: out.group || null };
+    return { ok: false, error: res.error || null, reason: (out && out.reason) || '' };
+  }
+  const { data, error } = await supabase.from('groups').update(patch).eq('id', gid).select('*');
+  if (error || !data || !data.length) return { ok: false, error, reason: '' };
+  return { ok: true, row: data[0] };
+}
+export async function groupCall(fn, args) {
+  const res = await supabase.rpc(fn, args);
+  if (rpcMissing(res.error)) return { missing: true };
+  const out = res.error ? null : res.data;
+  if (out && out.ok) return { ok: true, out };
+  return { ok: false, error: res.error || null, reason: (out && out.reason) || '' };
+}
 export function loadFailCode(error) { const c = String((error && error.code) || ''); return /^[A-Z0-9]{3,10}$/.test(c) ? c : ''; }
 export function rpcFailText(name, error, setupText) {
   if (rpcMissing(error)) return setupText;
@@ -18467,7 +18487,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-export const APP_VERSION = '33.0V';
+export const APP_VERSION = '34.0V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -36484,8 +36504,30 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [liveGame, setLiveGame] = useState(null);
   const [leaderboardFor, setLeaderboardFor] = useState(null);
   const [settingsOpenTo, setSettingsOpenTo] = useState(null);
+  const [rollGame, setRollGame] = useState(null);
+  const [watchGame, setWatchGame] = useState(null);
+  const openWatch = async (r) => {
+    const info = (r && r.info) || {};
+    if (!r) return;
+    if (r.game === 'roll') { setShowGames(false); setRollGame({ rm: r.room, host: info.h || r.user_id, watch: true }); return; }
+    if (!info.h || !info.o || !info.g) { showSnack('That game just ended'); return; }
+    const [hp, gp] = await Promise.all([cachedProfile(info.h).catch(() => null), cachedProfile(info.o).catch(() => null)]);
+    setShowGames(false);
+    setWatchGame({ game: r.game, gameId: info.g, host: info.h, names: { sun: (hp && hp.name) || 'Friend', moon: (gp && gp.name) || 'Friend' } });
+  };
+  const [rollPick, setRollPick] = useState(null);
+  const startRollWith = async (profiles, rmIn) => {
+    const rm = rmIn || newClientId();
+    if (!rmIn) setRollGame({ rm, host: session.user.id });
+    for (const p of profiles || []) {
+      if (!p || p.is_bot) continue;
+      const st = { g: 'roll', id: newClientId(), x: session.user.id, o: p.id, w: null, n: 0, st: 'wait', exp: Date.now() + LIVE_INVITE_MS, sx: 0, so: 0, rm };
+      try { await sendGameStateTo(p, st, { quiet: false }); } catch {}
+    }
+  };
   const startLiveGame = async (profile, kind) => {
     if (!profile || profile.is_bot) return;
+    if (kind === 'roll') { startRollWith([profile]); return; }
     if (!activeProfileRef.current || activeProfileRef.current.id !== profile.id) await openChat(profile, null);
     const state = newGameState(kind, profile);
     const row = await sendGameStateTo(profile, state);
@@ -36496,6 +36538,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const peer = activeProfileRef.current;
     if (!peer || !msg || String(msg.id).startsWith('temp-')) return;
     if (st.x !== session.user.id && st.o !== session.user.id) return;
+    if (st.g === 'roll') { setRollGame({ rm: st.rm || st.id, host: st.x }); return; }
     setLiveGame({ state: st, messageId: msg.id, peer });
   };
   const saveLiveState = async (messageId, next) => {
@@ -36517,7 +36560,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (!profile) return;
     if (profile.is_bot) { ghBotStart(profile, kindIn, extraIn); return; }
     if (kindIn === 'zap' && !(extraIn && extraIn.md)) { zapModeAsk(profile, extraIn, (md) => startGameWith(profile, 'zap', { ...(extraIn || {}), md })); return; }
-    if ((kindIn === 'pool' || kindIn === 'chess') && !(extraIn && (extraIn.md || extraIn.gid))) { gameModeAsk(kindIn, profile, extraIn, (md) => startGameWith(profile, kindIn, { ...(extraIn || {}), md })); return; }
+    if ((kindIn === 'pool' || kindIn === 'chess' || kindIn === 'ckr') && !(extraIn && (extraIn.md || extraIn.gid))) { gameModeAsk(kindIn, profile, extraIn, (md) => startGameWith(profile, kindIn, { ...(extraIn || {}), md })); return; }
     if (G1_KEYS.includes(kindIn) && g1Mem.host) return g1Mem.host.begin(profile, kindIn, extraIn && extraIn.gid, extraIn);
     let kind = kindIn;
     let extra = extraIn;
@@ -39689,6 +39732,20 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const myId = session.user.id;
     setActiveGroup((prev) => (prev && prev.id === gid ? { ...prev, created_by: userId } : prev));
     holdGroupFields(gid, { created_by: userId });
+    const viaRpc = await groupCall('zchat_group_transfer', { p_group: gid, p_user: userId });
+    if (!viaRpc.missing) {
+      if (!viaRpc.ok) {
+        setActiveGroup((prev) => (prev && prev.id === gid ? { ...prev, created_by: myId } : prev));
+        dropFieldHold('group', gid, ['created_by']);
+        patchGroupRow(gid, { created_by: myId });
+        showSnack(viaRpc.reason || friendlyError(viaRpc.error, "Couldn't change the owner. Try again."));
+        return;
+      }
+      patchGroupRow(gid, { created_by: userId });
+      loadGroupMembers(gid);
+      placeGroupLine(gid, viaRpc.out.line);
+      return;
+    }
     const ok = await patchMemberNow(userId, { role: 'admin' }, "Couldn't change the owner. Try again.");
     const { error } = ok ? await supabase.from('groups').update({ created_by: userId }).eq('id', gid) : { error: true };
     if (!ok || error) {
@@ -39710,11 +39767,23 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (activeGroup.created_by !== session.user.id) return;
     if (await patchMemberNow(userId, { role: 'member' }, "Couldn't change their role. Try again.")) sendGroupMessage('system', `${realName(session.user.id)} removed ${realName(userId)} as admin`, null);
   };
+  const muteViaRpc = async (userId, on) => {
+    const gid = activeGroup.id;
+    setGroupMembers((prev) => prev.map((m) => (m.user_id === userId ? { ...m, muted: on } : m)));
+    const r = await groupCall('zchat_group_member_mute', { p_group: gid, p_user: userId, p_on: on });
+    if (r.missing) return patchMemberNow(userId, { muted: on }, on ? "Couldn't mute them. Try again." : "Couldn't unmute them. Try again.");
+    if (!r.ok) {
+      if (activeGroupIdRef.current === gid) setGroupMembers((prev) => prev.map((m) => (m.user_id === userId ? { ...m, muted: !on } : m)));
+      showSnack(r.reason || friendlyError(r.error, on ? "Couldn't mute them. Try again." : "Couldn't unmute them. Try again."));
+      return false;
+    }
+    return true;
+  };
   const muteMember = async (userId) => {
-    await patchMemberNow(userId, { muted: true }, "Couldn't mute them. Try again.");
+    await muteViaRpc(userId, true);
   };
   const unmuteMember = async (userId) => {
-    await patchMemberNow(userId, { muted: false }, "Couldn't unmute them. Try again.");
+    await muteViaRpc(userId, false);
   };
   const myRankIn = (g) => {
     if (!g) return -1;
@@ -39794,12 +39863,12 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     holdGroupFields(gid, patch);
     const pre = before ? await before : null;
     const stop = !!(pre && pre.error);
-    const { data, error } = stop ? { data: null, error: null } : await supabase.from('groups').update(patch).eq('id', gid).select('id');
-    if (error || !data || !data.length) {
+    const res = stop ? { ok: false, error: null, reason: '' } : await groupWrite(gid, patch);
+    if (!res.ok) {
       setActiveGroup((prev) => (prev && prev.id === gid ? { ...prev, ...undo } : prev));
       dropFieldHold('group', gid, Object.keys(patch));
       patchGroupRow(gid, undo);
-      if (!stop) showSnack(friendlyError(error, failMsg));
+      if (!stop) showSnack(res.reason || friendlyError(res.error, failMsg));
       return false;
     }
     return true;
@@ -39839,11 +39908,33 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const fresh = people.filter((p) => !groupMembersRef.current.some((m) => m.user_id === p.id));
     if (!fresh.length) return;
     setGroupMembers((prev) => [...prev, ...fresh.filter((p) => !prev.some((m) => m.user_id === p.id)).map((p) => ({ group_id: gid, user_id: p.id, role: 'member', added_by: session.user.id, profile: p }))]);
+    const viaRpc = await groupCall('zchat_group_add_members', { p_group: gid, p_members: fresh.map((p) => p.id) });
+    if (!viaRpc.missing) {
+      const ids = new Set(fresh.map((p) => p.id));
+      if (!viaRpc.ok) {
+        if (activeGroupIdRef.current === gid) setGroupMembers((prev) => prev.filter((m) => !ids.has(m.user_id)));
+        showSnack(viaRpc.reason || friendlyError(viaRpc.error, "Couldn't add those people. Try again."));
+        return;
+      }
+      const added = new Set((viaRpc.out.added || []).map(String));
+      const skipped = fresh.filter((p) => !added.has(String(p.id)) && (viaRpc.out.skipped || []).map(String).includes(String(p.id)));
+      if (skipped.length && activeGroupIdRef.current === gid) setGroupMembers((prev) => prev.filter((m) => !skipped.some((p) => p.id === m.user_id)));
+      fresh.filter((p) => added.has(String(p.id))).forEach((p) => notifyUser(p.id, 'ZChat', `${me.name} added you to ${gname}`, `/?group=${gid}`, me.avatar));
+      placeGroupLine(gid, viaRpc.out.line);
+      loadGroupMembers(gid);
+      if (skipped.length) {
+        const who = skipped.length === 1 ? String(skipped[0].name || 'They').split(' ')[0] : `${skipped.length} people`;
+        const why = viaRpc.out.why || {};
+        const blocked = skipped.every((p) => why[p.id] === 'blocked' || why[p.id] === 'gone');
+        showSnack(blocked ? `${who} could not be added.` : `${who} could not be added. They only let certain people add them to groups, so send them the group link.`);
+      }
+      return;
+    }
     const { error } = await supabase.from('group_members').insert(fresh.map((p) => ({ group_id: gid, user_id: p.id, role: 'member', added_by: session.user.id })));
     if (error) {
       const ids = new Set(fresh.map((p) => p.id));
       if (activeGroupIdRef.current === gid) setGroupMembers((prev) => prev.filter((m) => !ids.has(m.user_id)));
-      showSnack(friendlyError(error, "Couldn't add those people. Try again."));
+      showSnack(String(error.code || '') === '42501' || /row.level security|permission/i.test(String(error.message || '')) ? 'Adding people switches on once the latest ZChat setup is finished.' : friendlyError(error, "Couldn't add those people. Try again."));
       return;
     }
     fresh.forEach((p) => notifyUser(p.id, 'ZChat', `${me.name} added you to ${gname}`, `/?group=${gid}`, me.avatar));
@@ -39856,6 +39947,17 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const before = groupMembersRef.current.find((m) => m.user_id === userId);
     holdMember(gid, userId, { gone: true });
     setGroupMembers((prev) => prev.filter((m) => m.user_id !== userId));
+    const viaRpc = await groupCall('zchat_group_kick', { p_group: gid, p_user: userId });
+    if (!viaRpc.missing) {
+      if (!viaRpc.ok) {
+        dropMemberHold(gid, userId);
+        if (before && activeGroupIdRef.current === gid) setGroupMembers((prev) => (prev.some((m) => m.user_id === userId) ? prev : [...prev, before]));
+        showSnack(viaRpc.reason || friendlyError(viaRpc.error, "Couldn't remove them. Try again."));
+        return;
+      }
+      placeGroupLine(gid, viaRpc.out.line);
+      return;
+    }
     const { data, error } = await supabase.from('group_members').delete().eq('group_id', gid).eq('user_id', userId).select('user_id');
     if (error || !data || !data.length) {
       dropMemberHold(gid, userId);
@@ -39869,6 +39971,11 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     const name = realName(session.user.id);
     const gid = activeGroup.id;
     dropGroupLocally(gid);
+    const viaRpc = await groupCall('zchat_group_leave', { p_group: gid });
+    if (!viaRpc.missing) {
+      if (!viaRpc.ok) restoreGroupLocally(gid, viaRpc.reason || friendlyError(viaRpc.error, "Couldn't leave that group. Try again."));
+      return;
+    }
     await supabase.from('messages').insert({ sender_id: session.user.id, group_id: gid, type: 'system', content: `${name} left the group` });
     const { error } = await supabase.from('group_members').delete().eq('group_id', gid).eq('user_id', session.user.id);
     if (error) restoreGroupLocally(gid, friendlyError(error, "Couldn't leave that group. Try again."));
@@ -39877,6 +39984,11 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const deleteGroup = async () => {
     const gid = activeGroup.id;
     dropGroupLocally(gid);
+    const viaRpc = await groupCall('zchat_group_delete', { p_group: gid });
+    if (!viaRpc.missing) {
+      if (!viaRpc.ok) restoreGroupLocally(gid, viaRpc.reason || friendlyError(viaRpc.error, "Couldn't delete this group. Try again."));
+      return;
+    }
     const { data, error } = await supabase.from('groups').delete().eq('id', gid).select('id');
     if (error || !data || !data.length) restoreGroupLocally(gid, friendlyError(error, "Couldn't delete this group. Try again."));
   };
@@ -45609,8 +45721,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const saveGroupTopics = async (next, added) => {
     const g = activeGroup;
     if (!g) return 'Open the group again and try once more.';
-    const { error } = await supabase.from('groups').update({ topics: next.length ? next : null }).eq('id', g.id);
-    if (error) return /topics|column|schema/i.test(String(error.message || '')) ? 'Topics switch on once the latest ZChat setup is finished.' : friendlyError(error, 'That did not save. Try again.');
+    const tw = await groupWrite(g.id, { topics: next.length ? next : null });
+    const error = tw.ok ? null : (tw.error || { message: tw.reason || '' });
+    if (error) return tw.reason || (/topics|column|schema/i.test(String(error.message || '')) ? 'Topics switch on once the latest ZChat setup is finished.' : friendlyError(error, 'That did not save. Try again.'));
     setActiveGroup((cur) => (cur && cur.id === g.id ? { ...cur, topics: next } : cur));
     setGroups((prev) => prev.map((x) => (x.id === g.id ? { ...x, topics: next } : x)));
     if (added) sendGroupMessage('system', `${realName(session.user.id)} added the topic ${added}`, null);
@@ -45628,8 +45741,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const setJoinApproval = async (on) => {
     const g = activeGroup;
     if (!g) return false;
-    const { error } = await supabase.from('groups').update({ join_approval: on }).eq('id', g.id);
-    if (error) { showSnack(/join_approval|column|schema/i.test(String(error.message || '')) ? 'Join approval switches on once the latest ZChat setup is finished.' : friendlyError(error, "Couldn't save that. Try again.")); return false; }
+    const jw = await groupWrite(g.id, { join_approval: on });
+    const error = jw.ok ? null : (jw.error || { message: jw.reason || '' });
+    if (error) { showSnack(jw.reason || (/join_approval|column|schema/i.test(String(error.message || '')) ? 'Join approval switches on once the latest ZChat setup is finished.' : friendlyError(error, "Couldn't save that. Try again."))); return false; }
     setActiveGroup((cur) => (cur && cur.id === g.id ? { ...cur, join_approval: on } : cur));
     setGroups((prev) => prev.map((x) => (x.id === g.id ? { ...x, join_approval: on } : x)));
     if (on) refreshJoinPending();
@@ -47355,7 +47469,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
             if (skipped.length) {
               const nm = skipped.map((p) => String(p.name || p.username || 'Someone').split(' ')[0]);
               const who = nm.length === 1 ? nm[0] : `${nm.slice(0, -1).join(', ')} and ${nm[nm.length - 1]}`;
-              setTimeout(() => showSnack(`${who} could not be added. They only let certain people add them to groups, so send them the group link.`), 600);
+              setTimeout(() => showSnack(extra.setup ? 'The group is ready. Adding people switches on once the latest ZChat setup is finished.' : `${who} could not be added. They only let certain people add them to groups, so send them the group link.`), 600);
             }
           }} />
       )}
@@ -48012,6 +48126,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           friends={gameFriends}
           onPlayWith={(pp) => { setShowGames(false); setTimeout(() => setGameSheetFor(pp), 120); }}
           onStartLive={(kind) => { setShowGames(false); setTimeout(() => setGamePicker({ kind }), 80); }}
+          onRollInvite={() => setRollPick({ rm: null })}
+          onWatch={(r, p) => openWatch(r, p)}
           onOpenLeaderboard={(k) => setLeaderboardFor({ game: k || 'all', at: Date.now() })}
           onChallenge={(kind) => { setShowGames(false); setTimeout(() => setGamePicker({ kind: kind || 'ttt' }), 80); }}
           onShareScore={(k, sc) => { if (!sc) { showSnack('Play a round first to get a score'); return; } setShowGames(false); setTimeout(() => setGamePicker({ kind: 'score', k, s: sc }), 80); }}
@@ -48058,7 +48174,18 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           onPeerAway={pingLivePeer}
           onRematch={() => { const pp = liveGame.peer; setLiveGame(null); setTimeout(() => startLiveGame(pp, 'gulp'), 140); }} />
       )}
-      {liveGame && me && liveGame.state.g !== 'duo' && liveGame.state.g !== 'gulp' && (
+      {watchGame && me && watchGame.game === 'duo' && <DuoGamePage key={`w${watchGame.gameId}`} watch={watchGame} me={me} myId={session.user.id} onClose={() => { setWatchGame(null); setShowGames(true); }} />}
+      {watchGame && me && watchGame.game === 'gulp' && <GulpGamePage key={`w${watchGame.gameId}`} watch={watchGame} me={me} myId={session.user.id} onClose={() => { setWatchGame(null); setShowGames(true); }} />}
+      {rollGame && me && (
+        <RollGamePage key={rollGame.rm} room={rollGame} me={me} myId={session.user.id} watch={!!rollGame.watch}
+          onClose={() => { const back = !!rollGame.watch; setRollGame(null); if (back) setShowGames(true); }}
+          onInvite={rollGame.host === session.user.id ? () => setRollPick({ rm: rollGame.rm }) : null} />
+      )}
+      {rollPick && (
+        <RollInviteSheet friends={gameFriends} onClose={() => setRollPick(null)}
+          onInvite={(ps) => { const rm = rollPick.rm; setRollPick(null); setShowGames(false); startRollWith(ps, rm); }} />
+      )}
+      {liveGame && me && liveGame.state.g !== 'duo' && liveGame.state.g !== 'gulp' && liveGame.state.g !== 'roll' && (
         <LiveGamePage key={liveGame.state.id} initial={liveGame.state} me={me} peer={liveGame.peer} myId={session.user.id}
           onClose={() => setLiveGame(null)}
           onSaveState={(next) => saveLiveState(liveGame.messageId, next)}
@@ -48455,9 +48582,75 @@ export const WN_SCENES = {
   </>) },
 };
 
+function WnWatchArt({ tall = false }) {
+  return (
+    <>
+      <WnFloor />
+      {tall && <WnCloud x={44} y={-84} s={0.8} o={0.9} />}
+      {tall && <WnCloud x={214} y={-58} s={0.6} o={0.8} />}
+      <rect x="88" y="0" width="184" height="122" rx="18" fill={ART_INK} />
+      <rect x="97" y="9" width="166" height="104" rx="11" fill="#8FD3FF" />
+      <path d="M97 84 H263 V102 a11 11 0 0 1 -11 11 H108 a11 11 0 0 1 -11 -11 Z" fill="#7BCB5A" />
+      <path d="M97 84 H263" stroke={ART_INK} strokeWidth="2.4" />
+      <path d="M196 84 L220 60 H242 L263 80 V84 Z" fill="#7BCB5A" stroke={ART_INK} strokeWidth="2.4" strokeLinejoin="round" />
+      {[[128, 72, '#5AB8FF'], [162, 46, '#5FD38D'], [231, 49, '#B07CFF']].map(([x, y, col]) => (
+        <g key={x}>
+          <circle cx={x} cy={y} r="11" fill={col} {...ak} strokeWidth="2.4" />
+          <circle cx={x - 2} cy={y - 2} r="1.8" fill={ART_INK} />
+          <circle cx={x + 4} cy={y - 2} r="1.8" fill={ART_INK} />
+        </g>
+      ))}
+      {[[184, 36], [198, 30], [212, 36]].map(([x, y]) => <circle key={x} cx={x} cy={y} r="4.5" fill={ART_C.yellow} {...ak} strokeWidth="2" />)}
+      <g transform="translate(106 16)">
+        <rect x="0" y="0" width="54" height="22" rx="11" fill={ART_C.card} {...ak} strokeWidth="2.4" />
+        <path d="M8 11 C12 5 16 3.5 20 3.5 C24 3.5 28 5 32 11 C28 17 24 18.5 20 18.5 C16 18.5 12 17 8 11 Z" fill={ART_C.violet} stroke={ART_INK} strokeWidth="2" />
+        <circle cx="20" cy="11" r="2.8" fill={ART_INK} />
+        <text x="43" y="15.5" textAnchor="middle" fontFamily="-apple-system, BlinkMacSystemFont, sans-serif" fontWeight="900" fontSize="12.5" fill={ART_INK}>3</text>
+      </g>
+      <ArtCat x={70} y={158} s={0.78} eyes="open" look={[3, -3]} />
+      <ArtCat x={252} y={158} s={0.78} eyes="happy" flip />
+    </>
+  );
+}
+function WnClockArt({ tall = false }) {
+  return (
+    <>
+      <WnFloor />
+      {tall && <WnCloud x={50} y={-82} s={0.7} o={0.9} />}
+      {tall && <WnCloud x={220} y={-52} s={0.55} o={0.8} />}
+      <path d="M84 136 L96 52 H224 L236 136 Z" fill="#B9773F" {...ak} />
+      <path d="M96 52 H224 L226 64 H94 Z" fill="#D69457" />
+      <rect x="108" y="38" width="34" height="14" rx="5" fill={ART_C.coral} {...ak} strokeWidth="2.6" />
+      <rect x="178" y="46" width="34" height="8" rx="4" fill={ART_C.coralDeep} {...ak} strokeWidth="2.6" />
+      {[[126, 0.9, false], [194, 4.4, true]].map(([cx, a, flag]) => (
+        <g key={cx}>
+          <circle cx={cx} cy="98" r="27" fill={ART_C.card} {...ak} />
+          {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((i) => <path key={i} d={`M${cx} 75 V${i % 3 ? 79 : 81}`} stroke={ART_INK} strokeWidth={i % 3 ? 1.6 : 2.4} strokeLinecap="round" transform={`rotate(${i * 30} ${cx} 98)`} opacity="0.7" />)}
+          <path d={`M${cx} 98 L${(cx + 18 * Math.sin(a)).toFixed(1)} ${(98 - 18 * Math.cos(a)).toFixed(1)}`} stroke={ART_INK} strokeWidth="3" strokeLinecap="round" />
+          <circle cx={cx} cy="98" r="3" fill={ART_C.coralDeep} />
+          {flag && <path d={`M${cx + 2} 72 L${cx + 14} 66 L${cx + 4} 62 Z`} fill={ART_C.coralDeep} stroke={ART_INK} strokeWidth="2" strokeLinejoin="round" />}
+        </g>
+      ))}
+      <g transform="translate(58 96)">
+        <circle cx="0" cy="0" r="11" fill={ART_C.card} {...ak} />
+        <path d="M-8 10 Q0 6 8 10 L13 40 H-13 Z" fill={ART_C.card} {...ak} />
+        <rect x="-19" y="40" width="38" height="10" rx="4" fill={ART_C.card} {...ak} />
+      </g>
+      <g>
+        <path d="M240 136 V146 A22 8 0 0 0 284 146 V136" fill={ART_C.coralDeep} {...ak} />
+        <ellipse cx="262" cy="136" rx="22" ry="8" fill={ART_C.coral} {...ak} />
+        <path d="M240 122 V132 A22 8 0 0 0 284 132 V122" fill="#3A3150" {...ak} />
+        <ellipse cx="262" cy="122" rx="22" ry="8" fill="#55497A" {...ak} />
+      </g>
+    </>
+  );
+}
 export const WN_THUMBS = {
   gulp33: { bg: 'sky', draw: () => (<image href="/gulp-art.webp" x="16" y="-4" width="288" height="186" preserveAspectRatio="xMidYMid slice" />) },
   duo33: { bg: 'night', draw: () => (<image href="/duo-art.webp" x="16" y="-4" width="288" height="186" preserveAspectRatio="xMidYMid slice" />) },
+  roll34: { bg: 'sky', draw: () => (<image href="/roll-art.webp" x="16" y="-4" width="288" height="186" preserveAspectRatio="xMidYMid slice" />) },
+  watch34: { bg: 'sky', draw: () => <WnWatchArt /> },
+  clock34: { bg: 'butter', draw: () => <WnClockArt /> },
   duo32: { bg: 'night', draw: () => (<>
     <rect x="16" y="128" width="288" height="60" fill="#3A2E24" />
     <path d="M118 132 V60 Q160 14 202 60 V132 Z" fill="#1E1626" {...ak} />
@@ -49015,6 +49208,9 @@ Object.assign(WN_SCENES, WN_SCENES_23);
 Object.assign(WN_SCENES, {
   gulp33h: { bg: 'sky', draw: () => (<image href="/gulp-art.webp" x="-98" y="-112" width="474" height="296" preserveAspectRatio="xMidYMid slice" />) },
   duo33h: { bg: 'night', draw: () => (<image href="/duo-art.webp" x="-77" y="-112" width="474" height="296" preserveAspectRatio="xMidYMid slice" />) },
+  roll34h: { bg: 'sky', draw: () => (<image href="/roll-art.webp" x="-14" y="-112" width="474" height="296" preserveAspectRatio="xMidYMid slice" />) },
+  watch34h: { bg: 'sky', draw: () => <WnWatchArt tall /> },
+  clock34h: { bg: 'butter', draw: () => <WnClockArt tall /> },
 });
 
 function WnBoardPin({ x, y, color = ART_C.coral }) {
@@ -49613,6 +49809,7 @@ export function parseGameMessage(content) {
     if (st.g === 'gem') return Array.isArray(st.d) && st.d.length === 36 ? st : null;
     if (st.g === 'fade') return Array.isArray(st.b) && st.b.length === 9 ? st : null;
     if (st.g === 'tug' || st.g === 'qrace' || st.g === 'rrace' || st.g === 'duo' || st.g === 'gulp') return typeof st.x === 'string' && typeof st.o === 'string' ? st : null;
+    if (st.g === 'roll') return typeof st.x === 'string' && typeof st.o === 'string' && typeof st.rm === 'string' && st.rm.length <= 64 ? st : null;
     if (G1_KEYS.includes(st.g)) return g1Valid(st) ? st : null;
     return null;
   } catch { return null; }
@@ -58593,7 +58790,7 @@ function svgMarkup(node) {
   return `<${node.type}${attrs}>${svgMarkup(node.props.children)}</${node.type}>`;
 }
 const gameArtSrcs = new Map();
-const GAME_ART_FILES = { duo: '/duo-art.webp', gulp: '/gulp-art.webp' };
+const GAME_ART_FILES = { duo: '/duo-art.webp', gulp: '/gulp-art.webp', roll: '/roll-art.webp' };
 function gameArtSrc(kIn) {
   const key = String(kIn == null ? '' : kIn);
   if (GAME_ART_FILES[key]) return GAME_ART_FILES[key];
@@ -58617,13 +58814,14 @@ export function GameArt({ k: kIn, width = 160, height = 100, radius = 14, style 
   return <img src={src} alt="" aria-hidden="true" draggable={false} decoding="async" style={{ display: 'block', width, height, borderRadius: radius, flexShrink: 0, objectFit: 'cover', ...style }} />;
 }
 
-export const LIVE_GAME_KEYS = ['duo', 'gulp', 'tug', 'qrace', 'rrace'];
-Object.assign(GAME_TITLES, { duo: 'Two Torches', gulp: 'Gulp', tug: 'Tug of war', qrace: 'Quiz race', rrace: 'Reaction race' });
-Object.assign(FRIEND_GAME_SUBS, { duo: 'Live, endless temples together', gulp: 'Live, eat smaller fish and grow', tug: 'Live, tap faster than them', qrace: 'Live, fastest right answer', rrace: 'Live, first to tap on green' });
-Object.assign(GAME_ART_BG, { duo: ['#3B2A48', '#120C1C'], gulp: ['#1C6FA8', '#082A4C'], tug: ['#F97316', '#E11D48'], qrace: ['#7C3AED', '#2563EB'], rrace: ['#10B981', '#0EA5E9'] });
+export const LIVE_GAME_KEYS = ['roll', 'duo', 'gulp', 'tug', 'qrace', 'rrace'];
+Object.assign(GAME_TITLES, { roll: 'Roll Squad', duo: 'Two Torches', gulp: 'Gulp', tug: 'Tug of war', qrace: 'Quiz race', rrace: 'Reaction race' });
+Object.assign(FRIEND_GAME_SUBS, { roll: 'Live, up to four friends roll together', duo: 'Live, endless temples together', gulp: 'Live, eat smaller fish and grow', tug: 'Live, tap faster than them', qrace: 'Live, fastest right answer', rrace: 'Live, first to tap on green' });
+Object.assign(GAME_ART_BG, { roll: ['#6EC6FF', '#4FA83A'], duo: ['#3B2A48', '#120C1C'], gulp: ['#1C6FA8', '#082A4C'], tug: ['#F97316', '#E11D48'], qrace: ['#7C3AED', '#2563EB'], rrace: ['#10B981', '#0EA5E9'] });
 Object.assign(GAME_RULES, {
   duo: { how: ['You carry the orange torch, your friend carries the blue one. Move with the joystick.', 'Orange walks through lava and fire. Blue wades through water, lights hidden stones and reads hidden codes.', 'Pull levers, hold doors on the plates, jump through glowing rings, cross spikes when they drop and keep moving on cracked floors.', 'Play the story or endless temples that are new every time. You share three hearts.', 'Talk with voice, quick messages and emojis. You can mute your friend any time.'], win: 'Stand on your own glowing doors at the same time to finish. Finish missions for stars.' },
-  gulp: { how: ['You are a small fish with the number 2. Swim with the joystick.', 'Eat fish with a number smaller than or equal to yours. Their number adds to yours and you grow.', 'Fish with bigger numbers can eat you. Big hunters chase you for a moment, then give up. Dash to get away.', 'Grab bubbles for a shield, double food, a magnet or speed.', 'If you are bigger than your friend you can eat them too. Each of you has three hearts.'], win: 'First to 1000 wins. You also win if your friend loses all three hearts, or if you are bigger when the time runs out.' },
+  gulp: { how: ['You are a small fish with the number 2. Swim with the joystick.', 'Touch fish with a number the same as yours or smaller to eat them. Any part of you works, even your tail. Their number adds to yours.', 'Fish with bigger numbers can eat you. Hunters chase you for a moment, then give up. Dash to get away.', 'Suck pulls the fish in front of you into your mouth. Grow bigger to unlock a shield, a shock wave and frenzy.', 'Grab bubbles for a shield, double food, a magnet or speed. If you are bigger than your friend you can eat them too.'], win: 'There is no size limit. Each of you has three lives and gets one back when you grow into a new fish. Whoever keeps their lives longer wins the round.' },
+  roll: { how: ['Hold the arrows to roll your ball. Tap jump, hold it to jump higher.', 'Land on top of enemies to bop them. Spiky ones hurt from every side.', 'Springs throw you high. Flags save where you come back after a pop.', 'Some gates need two buttons pressed at the same time. Team up.', 'Grab coins and find the three stars hidden in every level.'], win: 'Everyone has to reach the portal to clear the level. There are five worlds with six levels each.' },
   tug: { how: ['You both play at the same moment. Open the game and wait for your friend to join.', 'When the countdown ends, tap the big button as fast as you can.', 'Every tap pulls the rope toward you.'], win: 'After 15 seconds, whoever pulled the rope to their side wins.' },
   qrace: { how: ['You both play at the same moment and see the same question together.', 'Tap the right answer before your friend does.', 'A wrong answer locks you out of that question.'], win: 'Seven questions. Whoever scores more wins.' },
   rrace: { how: ['You both play at the same moment.', 'Wait for the pad to turn green, then tap it before your friend.', 'Tapping too early gives the point to them.'], win: 'First to win three rounds wins.' },
@@ -59070,7 +59268,9 @@ function LiveGameCard({ state, myId, peerName, onOpen, onRematch }) {
   const ended = state.st === 'done' || state.st === 'gone' || (state.st === 'wait' && !waiting);
   return (
     <GameCardShell k={state.g} width={236} live title={GAME_TITLES[state.g]} status={status} hot={hot}>
-      {state.g === 'duo' ? (
+      {state.g === 'roll' ? (
+        <div style={{ textAlign: 'center', fontSize: 13, fontWeight: 800, color: theme.ink, padding: '2px 0 4px' }}>Roll together, up to four friends</div>
+      ) : state.g === 'duo' ? (
         <div style={{ textAlign: 'center', fontSize: 13, fontWeight: 800, color: theme.ink, padding: '2px 0 4px' }}>{state.sx ? `${state.sx} ${state.sx === 1 ? 'level' : 'levels'} cleared together` : 'Escape the temple together'}</div>
       ) : (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '2px 0 4px' }}>
@@ -59167,28 +59367,46 @@ GAME_RULES.zapMayhem = {
   win: 'Be the first to play every card, or the last one left at the table. You score the points left in the other hands.',
 };
 const zapModeBus = { set: null };
-const MODE_FIRST = { zap: 'classic', pool: '8', chess: 'free' };
+const MODE_FIRST = { zap: 'classic', pool: '8', chess: 'free', ckr: 'free' };
+const CLOCK_TC = [60, 180, 300, 600];
+const CLOCK_TI = [0, 2, 5];
+const CLOCK_PICKS = [['60', 'Bullet'], ['180', 'Blitz'], ['180+2', 'Blitz'], ['300', 'Blitz'], ['600', 'Rapid'], ['600+5', 'Rapid']];
+function clockOpt(md) {
+  const m = /^(\d+)(?:\+(\d+))?$/.exec(String(md || ''));
+  if (!m) return null;
+  const tc = Number(m[1]);
+  const ti = m[2] ? Number(m[2]) : 0;
+  if (!CLOCK_TC.includes(tc) || !CLOCK_TI.includes(ti)) return null;
+  return ti ? { tc, ti } : { tc };
+}
+export function clockLabel(tc, ti) {
+  const m = Math.round((Number(tc) || 0) / 60);
+  return ti ? `${m}+${ti}` : `${m} min`;
+}
 export function gameModeAsk(kind, profile, extra, go) { if (zapModeBus.set) zapModeBus.set({ kind, profile, extra, go }); else go(MODE_FIRST[kind] || 'classic'); }
 export function zapModeAsk(profile, extra, go) { gameModeAsk('zap', profile, extra, go); }
 export function gameModeOpt(kind, md) {
   if (kind === 'pool' && md === '9') return { v: 9 };
-  if (kind === 'chess' && ['180', '300', '600'].includes(String(md))) return { tc: Number(md) };
+  if (kind === 'chess' || kind === 'ckr') return clockOpt(md) || {};
   return {};
 }
 export function gameVariantTitle(st) {
   if (!st) return 'Game';
   if (st.g === 'zap' && st.md === 'mayhem') return 'Zap Mayhem';
   if (st.g === 'pool' && st.v === 9) return '9 ball pool';
-  if (st.g === 'chess' && st.tc) return `Chess ${Math.round(st.tc / 60)} min`;
+  if ((st.g === 'chess' || st.g === 'ckr') && st.tc) return `${GAME_TITLES[st.g]} ${clockLabel(st.tc, st.ti)}`;
   return GAME_TITLES[st.g] || 'Game';
 }
 export function gameRulesFor(st) {
   if (!st) return null;
   if (st.g === 'zap') return st.md === 'mayhem' ? (GAME_RULES.zapMayhem || GAME_RULES.zap) : GAME_RULES.zap;
   if (st.g === 'pool' && st.v === 9) return GAME_RULES.pool9 || GAME_RULES.pool;
-  if (st.g === 'chess' && st.tc && GAME_RULES.chess) {
+  if ((st.g === 'chess' || st.g === 'ckr') && st.tc && GAME_RULES[st.g]) {
+    const base = GAME_RULES[st.g];
     const m = Math.round(st.tc / 60);
-    return { ...GAME_RULES.chess, how: GAME_RULES.chess.how.concat([`You each get ${m} minutes for the whole game. Your clock only runs on your turn, and it starts after the first move.`]), win: `${GAME_RULES.chess.win} If your clock reaches zero, you lose.` };
+    const lines = [`You each get ${m} ${m === 1 ? 'minute' : 'minutes'} for the whole game. Your clock only runs on your turn, and it starts after the first move.`];
+    if (st.ti) lines.push(`Every move you make adds ${st.ti} seconds back to your clock.`);
+    return { ...base, how: base.how.concat(lines), win: `${base.win} If your clock reaches zero, you lose.` };
   }
   return GAME_RULES[st.g] || null;
 }
@@ -59199,18 +59417,27 @@ function GameModeHost() {
   const pick = (md) => { const a = ask; setAsk(null); playUiSound('tap'); hapticTap(); a.go(md); };
   return <ZapModeSheet kind={ask.kind || 'zap'} onClose={() => setAsk(null)} onPick={pick} />;
 }
-function ModeClockArt({ min }) {
-  const a = (min * 6 * Math.PI) / 180;
+const CLOCK_ART_BG = { Bullet: '#3A1712', Blitz: '#2B2118', Rapid: '#13261F' };
+function ModeClockArt({ min, inc = 0, size = 64, bare = false, cat = 'Blitz' }) {
+  const a = (Math.min(60, min) * 6 * Math.PI) / 180;
+  const cy = bare ? 35 : 34;
+  const big = a > Math.PI ? 1 : 0;
   return (
-    <svg width="64" height="64" viewBox="0 0 64 64" aria-hidden="true" style={{ display: 'block' }}>
-      <rect width="64" height="64" fill="#2B2118" />
-      <rect x="28" y="6" width="8" height="6" rx="2" fill="#E9D3A8" />
-      <circle cx="32" cy="34" r="20" fill="#F7EEDC" stroke="#E9D3A8" strokeWidth="3" />
-      <path d={`M32 34 L32 17.5 A16.5 16.5 0 0 1 ${(32 + 16.5 * Math.sin(a)).toFixed(2)} ${(34 - 16.5 * Math.cos(a)).toFixed(2)} Z`} fill="#F59E0B" opacity="0.6" />
-      {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((i) => <path key={i} d="M32 17.5 V20.5" stroke="#8A6A48" strokeWidth={i % 3 ? 1.2 : 2} strokeLinecap="round" transform={`rotate(${i * 30} 32 34)`} />)}
-      <path d={`M32 34 L${(32 + 13 * Math.sin(a)).toFixed(2)} ${(34 - 13 * Math.cos(a)).toFixed(2)}`} stroke="#2B2118" strokeWidth="2.4" strokeLinecap="round" />
-      <circle cx="32" cy="34" r="2.2" fill="#C2410C" />
-      <text x="32" y="60.5" textAnchor="middle" fontFamily={FONT} fontWeight="900" fontSize="8.5" fill="#F7EEDC">{`${min} min`}</text>
+    <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden="true" style={{ display: 'block' }}>
+      <rect width="64" height="64" fill={CLOCK_ART_BG[cat] || '#2B2118'} />
+      <rect x="28" y={cy - 28} width="8" height="6" rx="2" fill="#E9D3A8" />
+      <circle cx="32" cy={cy} r="20" fill="#F7EEDC" stroke="#E9D3A8" strokeWidth="3" />
+      <path d={`M32 ${cy} L32 ${cy - 16.5} A16.5 16.5 0 ${big} 1 ${(32 + 16.5 * Math.sin(a)).toFixed(2)} ${(cy - 16.5 * Math.cos(a)).toFixed(2)} Z`} fill={cat === 'Bullet' ? '#EF4444' : cat === 'Rapid' ? '#22A06B' : '#F59E0B'} opacity="0.6" />
+      {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((i) => <path key={i} d={`M32 ${cy - 16.5} V${cy - 13.5}`} stroke="#8A6A48" strokeWidth={i % 3 ? 1.2 : 2} strokeLinecap="round" transform={`rotate(${i * 30} 32 ${cy})`} />)}
+      <path d={`M32 ${cy} L${(32 + 13 * Math.sin(a)).toFixed(2)} ${(cy - 13 * Math.cos(a)).toFixed(2)}`} stroke="#2B2118" strokeWidth="2.4" strokeLinecap="round" />
+      <circle cx="32" cy={cy} r="2.2" fill="#C2410C" />
+      {inc > 0 && (
+        <g>
+          <rect x="40" y="3" width="21" height="13" rx="6.5" fill="#FDE68A" stroke="#2B2118" strokeWidth="1.5" />
+          <text x="50.5" y="13" textAnchor="middle" fontFamily={FONT} fontWeight="900" fontSize="9" fill="#2B2118">{`+${inc}`}</text>
+        </g>
+      )}
+      {!bare && <text x="32" y="60.5" textAnchor="middle" fontFamily={FONT} fontWeight="900" fontSize="8.5" fill="#F7EEDC">{`${min} min`}</text>}
     </svg>
   );
 }
@@ -59231,19 +59458,31 @@ function ZapModeSheet({ kind = 'zap', onClose, onPick }) {
       <div onClick={onClose} className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 120, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontFamily: FONT, background: 'rgba(0,0,0,0.5)' }}>
         <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" style={{ width: '100%', maxWidth: 480, background: theme.panelBg, borderRadius: '26px 26px 0 0', padding: '10px 16px calc(18px + env(safe-area-inset-bottom))' }}>
           <div style={{ display: 'flex', justifyContent: 'center', paddingBottom: 8 }}><div style={{ width: 38, height: 4, borderRadius: 2, background: theme.border }} /></div>
-          <div style={{ fontSize: 20, fontWeight: 850, color: theme.ink, padding: '4px 4px 12px', letterSpacing: '-0.015em' }}>{kind === 'pool' ? 'Pick a pool game' : kind === 'chess' ? 'Pick a chess clock' : 'Pick how to play Zap'}</div>
+          <div style={{ fontSize: 20, fontWeight: 850, color: theme.ink, padding: '4px 4px 12px', letterSpacing: '-0.015em' }}>{kind === 'pool' ? 'Pick a pool game' : kind === 'chess' ? 'Pick a chess clock' : kind === 'ckr' ? 'Pick a checkers clock' : 'Pick how to play Zap'}</div>
           {kind === 'pool' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {row('8', '8 ball', 'Pot all your solids or stripes, then sink the black to win.', <GameArt k="pool" width={64} height={64} radius={0} />)}
               {row('9', '9 ball', 'Always hit the lowest ball first. Whoever pots the 9 wins.', <GameArt k="pool9" width={64} height={64} radius={0} />)}
             </div>
           )}
-          {kind === 'chess' && (
+          {(kind === 'chess' || kind === 'ckr') && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {row('free', 'No clock', 'Move whenever you like, even hours later.', <GameArt k="chess" width={64} height={64} radius={0} />)}
-              {row('600', '10 minutes', 'Rapid. Each of you gets 10 minutes for the whole game.', <ModeClockArt min={10} />)}
-              {row('300', '5 minutes', 'Blitz. Think fast, your clock runs on your turn.', <ModeClockArt min={5} />)}
-              {row('180', '3 minutes', 'Blitz for quick hands. Run out of time and you lose.', <ModeClockArt min={3} />)}
+              {row('free', 'Classic, no clock', 'Move whenever you like, even hours later.', <GameArt k={kind} width={64} height={64} radius={0} />)}
+              <div style={{ fontSize: 13.5, fontWeight: 850, color: theme.ink, padding: '6px 4px 0' }}>Play with a clock</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8 }}>
+                {CLOCK_PICKS.map(([md, cat]) => {
+                  const o = clockOpt(md);
+                  const label = clockLabel(o.tc, o.ti);
+                  return (
+                    <div key={md} role="button" aria-label={`${cat} ${label}`} data-clock={md} onClick={() => onPick(md)} className="zchat-row-press" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, padding: '12px 4px 10px', borderRadius: 18, cursor: 'pointer', background: theme.soft || theme.rowBg, minWidth: 0 }}>
+                      <div style={{ width: 52, height: 52, borderRadius: 14, overflow: 'hidden' }}><ModeClockArt min={Math.round(o.tc / 60)} inc={o.ti || 0} size={52} bare cat={cat} /></div>
+                      <div style={{ fontSize: 17, fontWeight: 900, color: theme.ink, fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.01em', marginTop: 2 }}>{label}</div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: theme.muted }}>{cat}</div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{ fontSize: 12.5, color: theme.muted, lineHeight: 1.45, padding: '2px 4px 0' }}>Your clock only runs on your turn. In 3+2, every move you make gives you 2 seconds back.</div>
             </div>
           )}
           {kind === 'zap' && <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -60073,8 +60312,9 @@ function g1NewBase(c, kind, peerId) { return { g: kind, id: newClientId(), x: c.
 function g1Fresh(Z, kind, base, opt) {
   const o = opt || {};
   if (GB_KINDS.includes(kind)) return gbFresh(kind, base);
-  if (kind === 'chess') return Z.chess.initial({ ...base, ...(o.tc ? { tc: o.tc, ck: [o.tc * 1000, o.tc * 1000], tt: null } : {}), wh: o.wh || base.o, t: o.wh || base.o });
-  if (kind === 'ckr') return Z.ckr.initial({ ...base, wh: o.wh || base.o, t: o.wh || base.o });
+  const clk = o.tc ? { tc: o.tc, ck: [o.tc * 1000, o.tc * 1000], tt: null, ...(o.ti ? { ti: o.ti } : {}) } : {};
+  if (kind === 'chess') return Z.chess.initial({ ...base, ...clk, wh: o.wh || base.o, t: o.wh || base.o });
+  if (kind === 'ckr') return Z.ckr.initial({ ...base, ...clk, wh: o.wh || base.o, t: o.wh || base.o });
   if (kind === 'pool') return { ...Z.pool.initial({ ...base, t: base.o }, base.id, o.v === 9 ? 9 : undefined), lb: null };
   if (kind === 'golf') return Z.golf.initial({ ...base, t: base.o });
   if (kind === 'sdk') { const lv = o.lv || 2; return { ...base, lv, gv: Z.sudoku.make(base.id, lv).givens, fx: null, fo: null }; }
@@ -60091,7 +60331,7 @@ async function g1Rematch(c, st, setSetup) {
   const peerId = st.x === c.myId ? st.o : st.x;
   const base = { ...g1NewBase(c, st.g, peerId), id: stableUuid(`next|${st.id}`) };
   const wh = st.wh ? (st.wh === st.x ? st.o : st.x) : null;
-  const next = g1Fresh(Z, st.g, base, { wh, lv: st.lv, size: st.pz ? Math.max(st.pz.w, st.pz.h) : 7, v: st.v, tc: st.tc });
+  const next = g1Fresh(Z, st.g, base, { wh, lv: st.lv, size: st.pz ? Math.max(st.pz.w, st.pz.h) : 7, v: st.v, tc: st.tc, ti: st.ti });
   if (next) g1HostSend(c, next);
 }
 function Ga1Sheet({ title, sub, onClose, children }) {

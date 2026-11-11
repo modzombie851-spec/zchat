@@ -6564,21 +6564,26 @@ function WnSegments({ total, at, onArt, dark }) {
 }
 
 const WN_HIGHLIGHTS = [
-  { k: 'gulp33', art: 'gulp33h', go: 'games', title: 'Gulp', text: 'A new live game. You start as a small fish with the number 2. Eat smaller fish to grow, stay away from the big ones and race a friend to 1000.' },
-  { k: 'duo33', art: 'duo33h', go: 'games', title: 'Endless Two Torches', text: 'New temples every time you play, ten story levels, missions and new traps. Voice, mute, quick messages, emojis and a live ping are now in the game.' },
-  { k: 'rps33', art: 'rps32', title: 'New rock paper scissors hands', text: 'The hands were made again from the start and look real now.' },
+  { k: 'roll34', art: 'roll34h', go: 'games', title: 'Roll Squad', text: 'A new live game for up to four friends. Roll, jump and bop through 30 levels together. Invite anyone you chat with, no group needed.' },
+  { k: 'gulp34', art: 'gulp33h', go: 'games', title: 'Gulp, made new', text: 'A big endless sea that zooms out as you grow. Eat with your whole body, pull fish in with Suck and unlock new skills the longer you last.' },
+  { k: 'duo34', art: 'duo33h', go: 'games', title: 'Two Torches fights back', text: 'Bats, slimes and skeletons, fire and ice shots, light beam puzzles with mirrors, ten new story levels and brighter temples.' },
+  { k: 'watch34', art: 'watch34h', go: 'games', title: 'Watch friends play', text: 'See which friends are in a game and watch them live. Players see who is watching and can turn watching off.' },
+  { k: 'clock34', art: 'clock34h', title: 'Clocks for chess and checkers', text: 'Bullet, blitz and rapid, with added seconds like 3+2. The classic way with no clock is still there.' },
 ];
 const WN_SECTIONS = [
   { title: 'Games', items: [
-    { art: 'gulp33', title: 'Gulp', text: 'Eat smaller fish, grow and race a friend live.' },
-    { art: 'duo33', title: 'Endless temples', text: 'New temples every time, missions, voice and quick chat.' },
-    { art: 'rps32', title: 'New hands', text: 'Real looking hands in rock paper scissors.' },
+    { art: 'roll34', title: 'Roll Squad', text: 'Up to four friends, 30 levels, invite anyone.' },
+    { art: 'gulp33', title: 'Gulp', text: 'An endless sea, Suck and new skills as you grow.' },
+    { art: 'duo33', title: 'Two Torches', text: 'Enemies, mirror puzzles and ten new levels.' },
+    { art: 'watch34', title: 'Watch friends play', text: 'Watch live, and turn watching on or off.' },
+    { art: 'clock34', title: 'Chess and checkers clocks', text: 'Bullet, blitz and rapid, or no clock at all.' },
   ] },
 ];
 const WN_NEW_COUNT = WN_SECTIONS.reduce((n, sec) => n + sec.items.length, 0);
 const WN_SUMMARY = `${WN_NEW_COUNT} new things to try.`;
 
 const WN_EARLIER = [
+  { title: 'Gulp and endless Two Torches', text: 'A live fish game, new temples every time you play, missions, voice and quick chat in Two Torches, and new rock paper scissors hands.' },
   { title: 'Two Torches and bubble pets', text: 'A live temple game for two, 51 soft 3D bubble pets, real rock paper scissors, Squish with water balloons and better group games.' },
   { title: 'Saved Messages, a cleaner profile and new game pictures', text: 'Your own Saved Messages chat, profile visitors, 9 ball pool, chess clocks, Squish duels and a new attach menu.' },
   { title: 'A game shop, cues and zodiac signs', text: 'The Shop as a little game world with full sets, pool cues and carrom strikers, zodiac signs on profiles and fun on your chats page.' },
