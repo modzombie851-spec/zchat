@@ -6575,28 +6575,23 @@ function WnSegments({ total, at, onArt, dark }) {
 }
 
 const WN_HIGHLIGHTS = [
-  { k: 'talk39', art: 'talk39h', go: 'games', title: 'Talk while you play', text: 'Roll Squad has a mic and emoji reactions now. You also see a clear note when a friend starts watching, stops watching or leaves.' },
-  { k: 'wood39', art: 'wood39h', go: 'games', title: 'Wooden gates and new enemies', text: 'Burn wooden gates in Two Torches, fight spiders and ghosts, and your shots now find the closest enemy. Fences keep you from falling by accident.' },
-  { k: 'filter39', art: 'filter39h', title: 'Lots of new filters', text: 'Photo filters now come in groups like Portrait, Warm and Film, and each one shows its own picture so you can pick fast.' },
+  { k: 'lens40', art: 'lens40h', go: 'camera', title: 'Face lenses in the camera', text: 'Puppy ears, heart eyes, crowns, big eyes and more follow your face live. Some of them move when you open your mouth.' },
+  { k: 'bg40', art: 'bg40h', go: 'camera', title: 'Change what is behind you', text: 'Blur your background, stand on a beach or in the city, or use your own photo. Turn on beauty for softer skin.' },
+  { k: 'sound40', art: 'sound40h', go: 'camera', title: 'Pick a sound, then record', text: 'In the story camera, add a song first and record to it. Hold to record, slide left to keep going hands free and slide up to zoom.' },
 ];
 const WN_SECTIONS = [
-  { title: 'App', items: [
-    { art: 'menu39', title: 'A lighter profile', text: 'The three lines menu now holds your birthday, song and voice intro.' },
-    { art: 'attach39', title: 'A cleaner attach menu', text: 'Gallery and Camera up top, everything else below.' },
-    { art: 'filter39', title: 'Lots of new filters', text: 'Many more filters, each with its own picture.' },
-    { art: 'join39', title: 'Join from your chats', text: 'Tap Join or Watch when a friend is playing.' },
-  ] },
-  { title: 'Games', items: [
-    { art: 'talk39', title: 'Talk while you play', text: 'A mic and reactions in Roll Squad, and clear watch notes.' },
-    { art: 'wood39', title: 'Wooden gates and new enemies', text: 'Spiders, ghosts and ten new Two Torches temples.' },
-    { art: 'skills39', title: 'New Gulp skills look', text: 'Real skill icons, a stronger suck and smoother swimming.' },
-    { art: 'glv35', title: 'More levels', text: 'Two Roll Squad worlds and eight new Gulp levels.' },
+  { title: 'Camera', items: [
+    { art: 'lens40', title: 'Face lenses', text: '17 lenses that follow your face live.' },
+    { art: 'bg40', title: 'Backgrounds and beauty', text: 'Blur, a scene or your own photo behind you.' },
+    { art: 'sound40', title: 'Pick a sound first', text: 'Record your story to a song.' },
+    { art: 'tools40', title: 'Camera tools', text: 'Flash, timer, night mode, grid, zoom and hands free video.' },
   ] },
 ];
 const WN_NEW_COUNT = WN_SECTIONS.reduce((n, sec) => n + sec.items.length, 0);
 const WN_SUMMARY = `${WN_NEW_COUNT} new things to try.`;
 
 const WN_EARLIER = [
+  { title: 'Talk while you play and lots of new filters', text: 'A mic and reactions in Roll Squad, wooden gates and new enemies in Two Torches, new Gulp skills, filters in groups, a lighter profile menu and Join buttons in your chats.' },
   { title: 'A cleaner look and better games', text: 'Calm greys with a blue accent, easy Roll Squad touch controls with a double jump, and no top size in Gulp.' },
   { title: 'Music on posts and tag controls', text: 'Songs on photo posts, hiding or removing tags from the post menu, sharing posts to your story and new game buttons.' },
   { title: 'A bigger Gulp sea and joining from chat', text: 'A bigger Gulp sea with chests and golden fish, endless missions, clear game screens and a Join button in chats.' },

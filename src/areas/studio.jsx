@@ -2522,7 +2522,7 @@ export function TextLayerEditor({ draft, onChange, onLines, onDone, innerW, fram
   );
 }
 
-export function MediaComposer({ files, recipientName, onCancel, onSend: onSendBase, onActivity, mode: composerMode = 'chat', mentionGroups = [], myId, privacyCtx, onceDefault, hiddenDefault, initialSticker, country, draft = null, albumCtx = null, startMeme = false, sharedTo = null }) {
+export function MediaComposer({ files, recipientName, onCancel, onSend: onSendBase, onActivity, mode: composerMode = 'chat', mentionGroups = [], myId, privacyCtx, onceDefault, hiddenDefault, initialSticker, country, draft = null, albumCtx = null, startMeme = false, sharedTo = null, initialSong = null }) {
   const requestCloseRef = useRef(onCancel);
   useBackClose(true, () => requestCloseRef.current());
   const { theme } = useTheme();
@@ -2590,7 +2590,7 @@ export function MediaComposer({ files, recipientName, onCancel, onSend: onSendBa
   }, []);
   const [storySticker, setStorySticker] = useState(() => { const s0 = validStorySticker(initialSticker || (draft && draft.sticker)); return s0 ? stickerWithPos(s0) : null; });
   const [stickerEdit, setStickerEdit] = useState(false);
-  const [storySong, setStorySong] = useState(() => (draft && draft.song && validSong(draft.song) ? draft.song : null));
+  const [storySong, setStorySong] = useState(() => (draft && draft.song && validSong(draft.song) ? draft.song : (composerMode === 'story' && initialSong && validSong(initialSong)) || null));
   const [musicPick, setMusicPick] = useState(false);
   const [railMore, setRailMore] = useState(false);
   const songPlayingId = useSongPlaying();

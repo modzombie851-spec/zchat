@@ -4,7 +4,7 @@ import {
   Send, Paperclip, Search, Mail, ShieldCheck, ShieldOff, AtSign, LogOut, Eye, EyeOff, Lock,
   Flag, X, Trash2, User, Phone, MoreVertical, Image as ImageIcon, Video as VideoIcon, Pin,
   Smile, ArrowLeft, Check, CheckCheck, Settings as SettingsIcon, Moon, Sun, UserPlus,
-  FileText, HelpCircle, ChevronRight, ChevronLeft, Compass, Bell, Volume2, Volume1, VolumeX, Palette, Mic, Play, Pause, Download, Users, Camera, Reply, Forward, Ban, Edit3, Archive, Bookmark, Share2, Copy, Crop, Type, Pencil, Undo2, Scissors, BellOff, Link as LinkIcon, ShieldAlert, Heart, Repeat, PhoneOff, MicOff, VideoOff, SwitchCamera, Clock, Timer, Smartphone, Plus, ThumbsUp, ThumbsDown, LayoutDashboard, Megaphone, Database, Activity, MessageSquare,
+  FileText, HelpCircle, ChevronRight, ChevronLeft, Compass, Bell, Volume2, Volume1, VolumeX, Palette, Mic, Play, Pause, Download, Users, Camera, Reply, Forward, Ban, Edit3, Archive, Bookmark, Share2, Copy, Crop, Type, Pencil, Undo2, Scissors, BellOff, Link as LinkIcon, ShieldAlert, Heart, Repeat, PhoneOff, MicOff, VideoOff, Clock, Timer, Smartphone, Plus, ThumbsUp, ThumbsDown, LayoutDashboard, Megaphone, Database, Activity, MessageSquare,
 } from 'lucide-react';
 import {
   supabase, registerWithEmail, verifyOtp, setPassword, signInWithPassword,
@@ -183,6 +183,7 @@ export const BirthdaySheet = zLazy(() => import('./areas/extras.jsx'), 'Birthday
 export const NoteComposerSheet = zLazy(() => import('./areas/extras.jsx'), 'NoteComposerSheet', 'extras');
 export const NoteReplySheet = zLazy(() => import('./areas/extras.jsx'), 'NoteReplySheet', 'extras');
 export const MusicPicker = zLazy(() => import('./areas/extras.jsx'), 'MusicPicker', 'extras');
+export const SnapCamera = zLazy(() => import('./areas/snapcam.jsx'), 'SnapCamera', 'snapcam');
 export const MemberTitleSheet = zLazy(() => import('./areas/more.jsx'), 'MemberTitleSheet', 'more');
 export const AlbumsPage = zLazy(() => import('./areas/chattools.jsx'), 'AlbumsPage', 'chattools');
 export const AlbumPage = zLazy(() => import('./areas/chattools.jsx'), 'AlbumPage', 'chattools');
@@ -18546,7 +18547,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-export const APP_VERSION = '39.0V';
+export const APP_VERSION = '40.0V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -21928,327 +21929,10 @@ function ReportThanksSheet({ profile, isBlocked, onBlock, onClose }) {
   );
 }
 
-function CameraCapture({ onClose, onCapture, onPickGallery, startMode = 'photo' }) {
-  useBackClose(true, onClose);
-  const [mode, setMode] = useState(startMode);
-  const [making, setMaking] = useState('');
-  const streamNoRef = useRef(0);
-  const videoRef = useRef(null);
-  const streamRef = useRef(null);
-  const recorderRef = useRef(null);
-  const chunksRef = useRef([]);
-  const holdTimerRef = useRef(null);
-  const startedAtRef = useRef(0);
-  const [facing, setFacing] = useState('environment');
-  const [ready, setReady] = useState(false);
-  const [error, setError] = useState('');
-  const [recordingVideo, setRecordingVideo] = useState(false);
-  const [elapsed, setElapsed] = useState(0);
-  const [flash, setFlash] = useState(false);
-  const [filter, setFilter] = useState('none');
-  const { theme } = useTheme();
-  const filterRafRef = useRef(null);
-  const MAX_MS = 60000;
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        if (streamRef.current) streamRef.current.getTracks().forEach((t) => t.stop());
-        const md = navigator.mediaDevices;
-        if (!md || !md.getUserMedia) { setError('This browser cannot open the camera. Pick from your gallery instead.'); return; }
-        const video = { facingMode: facing, width: { ideal: 1920 }, height: { ideal: 1080 } };
-        let stream = null;
-        try { stream = await md.getUserMedia({ video, audio: true }); } catch { stream = await md.getUserMedia({ video, audio: false }); }
-        if (cancelled) { stream.getTracks().forEach((t) => t.stop()); return; }
-        streamRef.current = stream;
-        const v = videoRef.current;
-        if (v) { v.srcObject = stream; v.play().catch(() => {}); }
-        streamNoRef.current += 1;
-        setReady(true);
-        setError('');
-      } catch {
-        setError('Allow camera access to take photos and videos.');
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [facing]);
-
-  useEffect(() => () => {
-    clearTimeout(holdTimerRef.current);
-    if (streamRef.current) streamRef.current.getTracks().forEach((t) => t.stop());
-  }, []);
-
-  useEffect(() => {
-    if (!recordingVideo) return undefined;
-    const t = setInterval(() => {
-      const ms = Date.now() - startedAtRef.current;
-      setElapsed(ms);
-      if (ms >= MAX_MS) stopVideo();
-    }, 100);
-    return () => clearInterval(t);
-  }, [recordingVideo]);
-
-  const takePhoto = () => {
-    const v = videoRef.current;
-    if (!v || !v.videoWidth) return;
-    const c = document.createElement('canvas');
-    c.width = v.videoWidth;
-    c.height = v.videoHeight;
-    const ctx = c.getContext('2d');
-    if (facing === 'user') { ctx.translate(c.width, 0); ctx.scale(-1, 1); }
-    ctx.drawImage(v, 0, 0, c.width, c.height);
-    applyPhotoFilter(ctx, c.width, c.height, filter);
-    playUiSound('shutter');
-    setFlash(true);
-    setTimeout(() => setFlash(false), 160);
-    c.toBlob((blob) => { if (blob) onCapture(new File([blob], `photo-${Date.now()}.jpg`, { type: 'image/jpeg' })); }, 'image/jpeg', 0.92);
-  };
-
-  const startVideo = () => {
-    const raw = streamRef.current;
-    if (!raw || typeof MediaRecorder === 'undefined') return;
-    let stream = raw;
-    const css = photoFilterCss(filter);
-    const vEl = videoRef.current;
-    if (css !== 'none' && vEl && vEl.videoWidth) {
-      try {
-        const cv = document.createElement('canvas');
-        cv.width = vEl.videoWidth;
-        cv.height = vEl.videoHeight;
-        const cx = cv.getContext('2d');
-        cx.filter = css;
-        if (cx.filter && cx.filter !== 'none' && typeof cv.captureStream === 'function') {
-          const fxk = filter;
-          const draw = () => { cx.drawImage(vEl, 0, 0, cv.width, cv.height); paintFilterFx(cx, cv.width, cv.height, fxk); filterRafRef.current = requestAnimationFrame(draw); };
-          draw();
-          stream = cv.captureStream(30);
-          raw.getAudioTracks().forEach((t) => stream.addTrack(t));
-        }
-      } catch { stream = raw; }
-    }
-    const types = ['video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
-    const mime = types.find((t) => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t));
-    let rec;
-    try { rec = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream); } catch { return; }
-    chunksRef.current = [];
-    rec.ondataavailable = (e) => { if (e.data && e.data.size) chunksRef.current.push(e.data); };
-    rec.onstop = () => {
-      const type = rec.mimeType || mime || 'video/webm';
-      const blob = new Blob(chunksRef.current, { type });
-      if (blob.size > 2000) onCapture(new File([blob], `video-${Date.now()}.${type.includes('mp4') ? 'mp4' : 'webm'}`, { type }));
-    };
-    recorderRef.current = rec;
-    rec.start(250);
-    startedAtRef.current = Date.now();
-    setElapsed(0);
-    setRecordingVideo(true);
-    playUiSound('record-start');
-  };
-
-  function stopVideo() {
-    cancelAnimationFrame(filterRafRef.current);
-    const rec = recorderRef.current;
-    recorderRef.current = null;
-    setRecordingVideo(false);
-    if (rec && rec.state !== 'inactive') { playUiSound('record-stop'); rec.stop(); }
-  }
-
-  const grabFrame = (maxSide, mirror) => {
-    const v = videoRef.current;
-    if (!v || !v.videoWidth) return null;
-    const s = Math.min(1, maxSide / Math.max(v.videoWidth, v.videoHeight));
-    const c = document.createElement('canvas');
-    c.width = Math.round(v.videoWidth * s);
-    c.height = Math.round(v.videoHeight * s);
-    const ctx = c.getContext('2d');
-    if (mirror) { ctx.translate(c.width, 0); ctx.scale(-1, 1); }
-    ctx.drawImage(v, 0, 0, c.width, c.height);
-    applyPhotoFilter(ctx, c.width, c.height, filter);
-    return c;
-  };
-  const makeBoomerang = async () => {
-    if (making || typeof MediaRecorder === 'undefined') { if (typeof MediaRecorder === 'undefined') setError('Boomerang does not work in this browser.'); return; }
-    setMaking('Hold still');
-    playUiSound('record-start');
-    const frames = [];
-    for (let i = 0; i < 18; i++) {
-      const f = grabFrame(720, facing === 'user');
-      if (f) frames.push(f);
-      await new Promise((r) => setTimeout(r, 62));
-    }
-    if (frames.length < 4) { setMaking(''); return; }
-    setMaking('Making your boomerang');
-    try {
-      const cv = document.createElement('canvas');
-      cv.width = frames[0].width;
-      cv.height = frames[0].height;
-      const cx = cv.getContext('2d');
-      cx.drawImage(frames[0], 0, 0);
-      if (typeof cv.captureStream !== 'function') throw new Error('nocapture');
-      const stream = cv.captureStream(30);
-      const types = ['video/mp4', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
-      const mime = types.find((t) => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t));
-      const rec = mime ? new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 4000000 }) : new MediaRecorder(stream);
-      const chunks = [];
-      rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
-      const stopped = new Promise((r) => { rec.onstop = r; });
-      rec.start(200);
-      const seq = [...frames, ...frames.slice(1, -1).reverse()];
-      for (let loop = 0; loop < 3; loop++) {
-        for (const f of seq) {
-          cx.drawImage(f, 0, 0);
-          await new Promise((r) => setTimeout(r, 1000 / 30));
-        }
-      }
-      cx.drawImage(frames[0], 0, 0);
-      await new Promise((r) => setTimeout(r, 80));
-      rec.stop();
-      await stopped;
-      stream.getTracks().forEach((t) => t.stop());
-      const type = rec.mimeType || mime || 'video/webm';
-      const blob = new Blob(chunks, { type });
-      setMaking('');
-      if (blob.size > 2000) onCapture(new File([blob], `boomerang-${Date.now()}.${type.includes('mp4') ? 'mp4' : 'webm'}`, { type }));
-    } catch {
-      setMaking('');
-      setError('That boomerang did not work. Try again.');
-    }
-  };
-  const makeDual = async () => {
-    if (making) return;
-    const first = grabFrame(1600, facing === 'user');
-    if (!first) return;
-    playUiSound('shutter');
-    setFlash(true);
-    setTimeout(() => setFlash(false), 160);
-    setMaking('Now smile');
-    const before = streamNoRef.current;
-    setFacing((f) => (f === 'user' ? 'environment' : 'user'));
-    const t0 = Date.now();
-    while (Date.now() - t0 < 5000) {
-      await new Promise((r) => setTimeout(r, 120));
-      const v = videoRef.current;
-      if (streamNoRef.current !== before && v && v.videoWidth) break;
-    }
-    await new Promise((r) => setTimeout(r, 650));
-    const second = streamNoRef.current !== before ? grabFrame(900, facing !== 'user') : null;
-    playUiSound('shutter');
-    setFlash(true);
-    setTimeout(() => setFlash(false), 160);
-    const W = 1200;
-    const H = 1600;
-    const out = document.createElement('canvas');
-    out.width = W;
-    out.height = H;
-    const ctx = out.getContext('2d');
-    const cover = (img, x, y, w, h) => {
-      const r = Math.max(w / img.width, h / img.height);
-      const sw = w / r;
-      const sh = h / r;
-      ctx.drawImage(img, (img.width - sw) / 2, (img.height - sh) / 2, sw, sh, x, y, w, h);
-    };
-    ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, W, H);
-    cover(first, 0, 0, W, H);
-    if (second) {
-      const iw = Math.round(W * 0.31);
-      const ih = Math.round(iw * 4 / 3);
-      const ix = 36;
-      const iy = 36;
-      const rr = 34;
-      const path = () => { ctx.beginPath(); ctx.moveTo(ix + rr, iy); ctx.arcTo(ix + iw, iy, ix + iw, iy + ih, rr); ctx.arcTo(ix + iw, iy + ih, ix, iy + ih, rr); ctx.arcTo(ix, iy + ih, ix, iy, rr); ctx.arcTo(ix, iy, ix + iw, iy, rr); ctx.closePath(); };
-      ctx.save();
-      ctx.shadowColor = 'rgba(0,0,0,0.45)';
-      ctx.shadowBlur = 24;
-      path();
-      ctx.fillStyle = '#000';
-      ctx.fill();
-      ctx.restore();
-      ctx.save();
-      path();
-      ctx.clip();
-      cover(second, ix, iy, iw, ih);
-      ctx.restore();
-      path();
-      ctx.lineWidth = 7;
-      ctx.strokeStyle = '#000';
-      ctx.stroke();
-    }
-    setMaking('');
-    out.toBlob((blob) => { if (blob) onCapture(new File([blob], `moment-${Date.now()}.jpg`, { type: 'image/jpeg' })); }, 'image/jpeg', 0.92);
-  };
-  const onShutterDown = (e) => {
-    e.preventDefault();
-    if (!ready || making) return;
-    if (mode !== 'photo') return;
-    clearTimeout(holdTimerRef.current);
-    holdTimerRef.current = setTimeout(() => { holdTimerRef.current = null; startVideo(); }, 350);
-  };
-  const onShutterUp = (e) => {
-    e.preventDefault();
-    if (!ready || making) return;
-    if (mode === 'boomerang') { makeBoomerang(); return; }
-    if (mode === 'dual') { makeDual(); return; }
-    if (holdTimerRef.current) { clearTimeout(holdTimerRef.current); holdTimerRef.current = null; takePhoto(); return; }
-    if (recorderRef.current) stopVideo();
-  };
-
-  const ring = recordingVideo ? Math.min(1, elapsed / MAX_MS) : 0;
-  const secs = Math.floor(elapsed / 1000);
-
-  return (
-    <div className="zchat-fade" style={{ position: 'fixed', inset: 0, zIndex: 520, background: '#000', color: 'white', display: 'flex', flexDirection: 'column', fontFamily: FONT }}>
-      <video ref={videoRef} playsInline muted style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', transform: facing === 'user' ? 'scaleX(-1)' : 'none', filter: photoFilterCss(filter) }} />
-      <FilterFx k={filter} />
-      {flash && <div style={{ position: 'absolute', inset: 0, background: 'white', opacity: 0.85 }} />}
-      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 'calc(14px + env(safe-area-inset-top)) 16px 0' }}>
-        <ViewerButton label="Close" onClick={onClose}><X size={25} strokeWidth={2.6} /></ViewerButton>
-        {recordingVideo && (
-          <div role="timer" aria-label="Recording time" style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, fontSize: 15, fontVariantNumeric: 'tabular-nums', textShadow: '0 1px 6px rgba(0, 0, 0, 0.6)' }}>
-            <span style={{ width: 9, height: 9, borderRadius: '50%', background: '#FF3B30', boxShadow: '0 0 0 3px rgba(255, 59, 48, 0.28)' }} />{Math.floor(secs / 60)}:{String(secs % 60).padStart(2, '0')}
-          </div>
-        )}
-        <div style={{ width: 42 }} />
-      </div>
-      {error && <div style={{ position: 'relative', margin: 'auto', textAlign: 'center', padding: 24, fontSize: 15, fontWeight: 600 }}>{error}</div>}
-      <div style={{ flex: 1 }} />
-      {making && (
-        <div className="zchat-pop" style={{ position: 'absolute', left: '50%', top: '42%', transform: 'translate(-50%, -50%)', padding: '12px 20px', borderRadius: 22, background: 'rgba(0,0,0,0.6)', fontSize: 15, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 10, whiteSpace: 'nowrap' }}>
-          {making !== 'Now smile' && making !== 'Hold still' && <Spinner size={16} color="white" />}{making}
-        </div>
-      )}
-      {!recordingVideo && !error && !making && <div style={{ position: 'relative', marginBottom: 10 }}><FilterStrip value={filter} onPick={setFilter} lens /></div>}
-      {!recordingVideo && !error && (
-        <div role="group" aria-label="Camera mode" style={{ position: 'relative', display: 'flex', justifyContent: 'center', gap: 26, marginBottom: 8 }}>
-          {[['photo', 'Photo'], ['boomerang', 'Boomerang'], ['dual', 'Dual']].map(([k, label]) => {
-            const on = mode === k;
-            return (
-              <div key={k} role="button" aria-label={`${label} mode`} aria-pressed={on} onClick={() => { if (making) return; hapticTap(); setMode(k); }}
-                style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, padding: '6px 2px 2px', cursor: 'pointer', fontSize: 14.5, fontWeight: on ? 800 : 600, color: on ? '#FFFFFF' : 'rgba(255, 255, 255, 0.66)', textShadow: '0 1px 6px rgba(0, 0, 0, 0.55)', transition: 'color 180ms ease', WebkitTapHighlightColor: 'transparent' }}>
-                {label}
-                <span aria-hidden="true" style={{ width: 5, height: 5, borderRadius: 3, background: on ? theme.gold : 'transparent', transition: 'background 180ms ease' }} />
-              </div>
-            );
-          })}
-        </div>
-      )}
-      <div style={{ position: 'relative', textAlign: 'center', fontSize: 12.5, fontWeight: 600, opacity: 0.85, marginBottom: 14 }}>{recordingVideo ? 'Release to stop' : mode === 'boomerang' ? 'Tap to make a boomerang' : mode === 'dual' ? 'Tap to take both sides, front and back' : 'Tap for photo, hold for video'}</div>
-      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-around', padding: '0 24px', paddingBottom: 'calc(30px + env(safe-area-inset-bottom))' }}>
-        {onPickGallery ? <div role="button" aria-label="Gallery" onClick={onPickGallery} style={{ width: 48, height: 48, borderRadius: 14, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', visibility: recordingVideo ? 'hidden' : 'visible' }}><ImageIcon size={22} /></div> : <div style={{ width: 48, height: 48 }} />}
-        <div role="button" aria-label="Shutter" onPointerDown={onShutterDown} onPointerUp={onShutterUp} onPointerCancel={onShutterUp} onContextMenu={(e) => e.preventDefault()}
-          style={{ position: 'relative', width: 84, height: 84, cursor: 'pointer', touchAction: 'none', userSelect: 'none' }}>
-          <svg width="84" height="84" viewBox="0 0 84 84" style={{ position: 'absolute', inset: 0, transform: 'rotate(-90deg)' }}>
-            <circle cx="42" cy="42" r="38" fill="none" stroke="white" strokeWidth="5" opacity={recordingVideo ? 0.35 : 1} />
-            {recordingVideo && <circle cx="42" cy="42" r="38" fill="none" stroke="#FF3B30" strokeWidth="5" strokeDasharray={`${2 * Math.PI * 38 * ring} ${2 * Math.PI * 38}`} strokeLinecap="round" />}
-          </svg>
-          <div style={{ position: 'absolute', inset: recordingVideo ? 22 : 11, borderRadius: recordingVideo ? 10 : '50%', background: recordingVideo ? '#FF3B30' : 'white', transition: 'all 0.2s ease' }} />
-        </div>
-        <div role="button" aria-label="Flip camera" onClick={() => !recordingVideo && setFacing((f) => (f === 'user' ? 'environment' : 'user'))} style={{ width: 48, height: 48, borderRadius: '50%', background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', visibility: recordingVideo ? 'hidden' : 'visible' }}><SwitchCamera size={22} /></div>
-      </div>
-    </div>
-  );
+function CameraCapture(props) {
+  return <SnapCamera {...props} />;
 }
+
 
 export const SOCIAL_PLATFORMS = [
   { key: 'instagram', label: 'Instagram', bg: 'radial-gradient(circle at 30% 107%, #fdf497 0%, #fdf497 5%, #fd5949 45%, #d6249f 60%, #285AEB 90%)', hosts: ['instagram.com', 'instagr.am'] },
@@ -47720,8 +47404,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
         <ForwardPicker title="Share to" subtitle="Pick a chat" conversations={conversations.filter((c) => !myBlockedIds.has(c.otherProfile.id))} groups={groups.filter((g) => !g.archived)} myId={uid} onCancel={() => setShareCard(null)}
           onPick={async (target) => { const sc = shareCard; setShareCard(null); if (!target) return; const t = target.__group ? { kind: 'group', id: target.__group.id } : { kind: 'dm', id: target.id }; const ok = await sendContentTo(t, sc.content, sc.notify); showSnack(ok ? 'Sent' : 'That did not send. Try again.'); }} />
       )}
-      {momentCam && <CameraCapture startMode="dual" onClose={() => setMomentCam(null)} onCapture={(file) => { const late = !!momentCam.late; setMomentCam(null); setStoryComposer({ key: Date.now(), files: [file], sticker: { k: 'moment', late, d: momentDayNumber() } }); }} />}
-      {addYoursCam && <CameraCapture onClose={() => setAddYoursCam(null)} onCapture={(file) => { const s = addYoursCam; setAddYoursCam(null); setStoryComposer({ key: Date.now(), files: [file], sticker: { k: 'addyours', q: s.q, c: s.c } }); }} />}
+      {momentCam && <CameraCapture startMode="dual" songs country={me && me.country} onClose={() => setMomentCam(null)} onCapture={(file, meta) => { const late = !!momentCam.late; setMomentCam(null); setStoryComposer({ key: Date.now(), files: [file], sticker: { k: 'moment', late, d: momentDayNumber() }, song: (meta && meta.song) || null }); }} />}
+      {addYoursCam && <CameraCapture songs country={me && me.country} onClose={() => setAddYoursCam(null)} onCapture={(file, meta) => { const s = addYoursCam; setAddYoursCam(null); setStoryComposer({ key: Date.now(), files: [file], sticker: { k: 'addyours', q: s.q, c: s.c }, song: (meta && meta.song) || null }); }} />}
       {communitiesOpen && (
         <CommunitiesPage list={communities} ready={commOn !== null} onClose={() => setCommunitiesOpen(null)}
           covered={!!chatKeyNow && (mobileShowChat || isWide) && chatKeyNow !== communitiesOpen.chatAt}
@@ -48135,9 +47819,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       {textStory && <TextStoryComposer myId={session.user.id} onClose={() => setTextStory(false)} onShare={(file, opts) => { setTextStory(false); postStories([{ file, kind: 'image', url: null }], '', [], opts); }} />}
       {storyPaint && <PaintStudio recipientName="Your story" onClose={() => setStoryPaint(false)} onSend={(file) => { setStoryPaint(false); setStoryComposer({ key: Date.now(), files: [file] }); }} onAskBot={askBotAboutImage} />}
       {storyCamera && (
-        <CameraCapture onClose={() => setStoryCamera(false)}
+        <CameraCapture songs country={me && me.country} onClose={() => setStoryCamera(false)}
           onPickGallery={() => { setStoryCamera(false); if (storyInputRef.current) storyInputRef.current.click(); }}
-          onCapture={(file) => { setStoryCamera(false); setStoryComposer({ key: Date.now(), files: [file] }); }} />
+          onCapture={(file, meta) => { setStoryCamera(false); setStoryComposer({ key: Date.now(), files: [file], song: (meta && meta.song) || null }); }} />
       )}
       {storyArchive && (
         <StoryArchivePage userId={session.user.id} onClose={() => setStoryArchive(false)}
@@ -48152,7 +47836,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       )}
       {storyComposer && (() => {
         const sc = (
-          <MediaComposer key={storyComposer.key} files={storyComposer.files} mode="story" myId={session.user.id} country={me && me.country} initialSticker={storyComposer.sticker || null} privacyCtx={{ iFollow: iFollowIds, allowed: privacyAllowed }} draft={storyComposer.draft || null} sharedTo={storyComposer.shared || null}
+          <MediaComposer key={storyComposer.key} files={storyComposer.files} mode="story" myId={session.user.id} country={me && me.country} initialSticker={storyComposer.sticker || null} privacyCtx={{ iFollow: iFollowIds, allowed: privacyAllowed }} draft={storyComposer.draft || null} initialSong={storyComposer.song || null} sharedTo={storyComposer.shared || null}
             mentionGroups={groups} onCancel={() => setStoryComposer(null)} onSend={storyComposer.membersOnly ? (o, c, mn, op) => postStories(o, c, mn, { ...(op || {}), membersOnly: true }) : postStories} />
         );
         return storyComposer.top ? <Portal><div style={{ position: 'fixed', inset: 0, zIndex: 900 }}>{sc}</div></Portal> : sc;
@@ -48185,9 +47869,9 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           onOpenClip={(c, list, row) => { const live = (sharedStore.list || []).find((x) => x.s.id === row.id); const g = sharedViewerGroup({ s: row, clips: list, member: !!(live && live.member) || row.owner_id === session.user.id }, me); setStoryViewer({ key: Date.now(), groupsList: [g], startGroup: 0, startStoryId: c.id, readOnly: Date.parse(row.expires_at) <= Date.now() }); }} />
       )}
       {sharedAdd && (
-        <CameraCapture onClose={() => setSharedAdd(null)}
+        <CameraCapture songs country={me && me.country} onClose={() => setSharedAdd(null)}
           onPickGallery={() => { if (sharedInputRef.current) sharedInputRef.current.click(); }}
-          onCapture={(file) => { const t = sharedAdd; setSharedAdd(null); setSharedPage(null); setSharedList(false); setStoryComposer({ key: Date.now(), files: [file], shared: t }); }} />
+          onCapture={(file, meta) => { const t = sharedAdd; setSharedAdd(null); setSharedPage(null); setSharedList(false); setStoryComposer({ key: Date.now(), files: [file], shared: t, song: (meta && meta.song) || null }); }} />
       )}
       <input ref={sharedInputRef} type="file" accept="image/*,video/*" multiple style={{ display: 'none' }} onChange={(e) => { const fs = Array.from(e.target.files || []).slice(0, 10); e.target.value = ''; const t = sharedAdd; if (!fs.length || !t) return; setSharedAdd(null); setSharedPage(null); setSharedList(false); setStoryComposer({ key: Date.now(), files: fs, shared: t }); }} />
       {boothScreen && me && (
@@ -48413,7 +48097,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       {msgSearchOpen != null && (
         <SearchMessagesPage myId={session.user.id} groups={groups} hiddenIds={getHiddenMsgIds()} initialQuery={msgSearchOpen} onClose={() => setMsgSearchOpen(null)} onOpen={openSearchHit} />
       )}
-      {showWhatsNew && <PageGuard name="whats new" onClose={() => setShowWhatsNew(false)}><WhatsNewSheet me={me} onClose={() => setShowWhatsNew(false)} onTry={(g) => { if (g === 'sets') setCollectionOpen(true); else if (g === 'shop') setShopOpen(true); else if (g === 'rooms') setShowGames({ at: Date.now(), room: '' }); else if (g === 'games') setShowGames(true); else if (g === 'vibes') setHomeTab('moments'); else if (g === 'map') setMapOpen(true); else if (g === 'song' && me) setProfileOf({ ...me, __song: true }); else if (g === 'ai') setAiStudio({ mode: 'image' }); else if (g === 'chars') setCharsOpen(true); else if (g === 'coins') setWalletOpen(true); else if (g === 'bubbles') setShowBubbleSheet(true); else if (g === 'drops') setCollectionOpen('__drop'); else if (g === 'folders') { setHomeTab('chats'); setFoldersOpen(true); } else if (g === 'styles') setShopOpen('tab:styles'); else if (g === 'communities') setCommunitiesOpen({}); }} /></PageGuard>}
+      {showWhatsNew && <PageGuard name="whats new" onClose={() => setShowWhatsNew(false)}><WhatsNewSheet me={me} onClose={() => setShowWhatsNew(false)} onTry={(g) => { if (g === 'sets') setCollectionOpen(true); else if (g === 'shop') setShopOpen(true); else if (g === 'rooms') setShowGames({ at: Date.now(), room: '' }); else if (g === 'games') setShowGames(true); else if (g === 'camera') setStoryCamera(true); else if (g === 'vibes') setHomeTab('moments'); else if (g === 'map') setMapOpen(true); else if (g === 'song' && me) setProfileOf({ ...me, __song: true }); else if (g === 'ai') setAiStudio({ mode: 'image' }); else if (g === 'chars') setCharsOpen(true); else if (g === 'coins') setWalletOpen(true); else if (g === 'bubbles') setShowBubbleSheet(true); else if (g === 'drops') setCollectionOpen('__drop'); else if (g === 'folders') { setHomeTab('chats'); setFoldersOpen(true); } else if (g === 'styles') setShopOpen('tab:styles'); else if (g === 'communities') setCommunitiesOpen({}); }} /></PageGuard>}
       {showGames && (
         <GamesPage key={showGames.at || 'games'} initialGame={showGames.game || null} onClose={() => setShowGames(false)}
           friends={gameFriends}
@@ -49483,6 +49167,167 @@ function WnFilterArt({ tall = false }) {
     </>
   );
 }
+function WnCamPhone({ tall, rid, children, bgFill }) {
+  const y0 = tall ? -30 : 4;
+  const H = tall ? 206 : 172;
+  return (
+    <>
+      <defs><clipPath id={`cp${rid}`}><rect x="8" y="8" width="112" height={H - 16} rx="12" /></clipPath></defs>
+      <g transform={`translate(96 ${y0})`}>
+        <rect x="0" y="0" width="128" height={H} rx="18" fill="#0F0F10" {...ak} strokeWidth="2.6" />
+        <g clipPath={`url(#cp${rid})`}>
+          <rect x="8" y="8" width="112" height={H - 16} fill={bgFill} />
+          {children(H)}
+        </g>
+      </g>
+    </>
+  );
+}
+function WnCamFace({ cx, cy, s = 1, shirt = '#3A6FD8', skin = '#B9825D', hair = '#2B1D16' }) {
+  return (
+    <g transform={`translate(${cx} ${cy}) scale(${s})`}>
+      <path d="M-40 70c4-30 20-40 40-40s36 10 40 40z" fill={shirt} />
+      <rect x="-8" y="18" width="16" height="16" rx="4" fill={skin} />
+      <ellipse cx="0" cy="0" rx="23" ry="27" fill={skin} />
+      <path d="M-23 -4a23 25 0 0 1 46 0c-7-11-15-14-23-14s-16 3-23 14z" fill={hair} />
+      <path d="M-12 2q4-4 8 0M4 2q4-4 8 0" fill="none" stroke={hair} strokeWidth="2.4" strokeLinecap="round" />
+      <path d="M-7 12q7 6 14 0" fill="none" stroke="#7A3B2E" strokeWidth="2.2" strokeLinecap="round" />
+    </g>
+  );
+}
+function WnCamCarousel({ H, items, ring = 2 }) {
+  const y = H - 30;
+  return (
+    <g>
+      {items.map((it, i) => (
+        <g key={i} transform={`translate(${22 + i * 21} ${y})`}>
+          {i === ring ? <circle cx="0" cy="0" r="12.5" fill="none" stroke="#FFFFFF" strokeWidth="2.6" /> : <circle cx="0" cy="0" r="8.6" fill="rgba(255,255,255,0.22)" stroke="rgba(255,255,255,0.8)" strokeWidth="1.2" />}
+          <g transform={`scale(${i === ring ? 1.25 : 1})`}>{it}</g>
+        </g>
+      ))}
+    </g>
+  );
+}
+const wnMiniFace = (extra) => (<g><circle cx="0" cy="0.6" r="5.6" fill="#F4D2B8" /><path d="M-5.6 -0.4a5.6 4.6 0 0 1 11.2 0z" fill="#3A2A24" />{extra}</g>);
+function WnLensArt({ tall = false }) {
+  const rid = React.useId().replace(/[^a-zA-Z0-9]/g, '');
+  return (
+    <>
+      <defs><linearGradient id={`lb${rid}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#FFD9C2" /><stop offset="1" stopColor="#F2A88C" /></linearGradient></defs>
+      <WnCamPhone tall={tall} rid={rid} bgFill={`url(#lb${rid})`}>
+        {(H) => {
+          const fy = (H - 44) * 0.5;
+          return (
+            <>
+              <circle cx="26" cy="26" r="18" fill="#FFFFFF" opacity="0.35" />
+              <WnCamFace cx={64} cy={fy} />
+              <path d={`M42 ${fy - 26}c-12-4-18 8-16 22 1 9 6 15 12 13 5-10 6-24 4-35z`} fill="#8B5A2B" stroke="#5E3A1A" strokeWidth="1.4" />
+              <path d={`M86 ${fy - 26}c12-4 18 8 16 22-1 9-6 15-12 13-5-10-6-24-4-35z`} fill="#8B5A2B" stroke="#5E3A1A" strokeWidth="1.4" />
+              <ellipse cx="64" cy={fy + 7} rx="6.5" ry="4.6" fill="#1F1A17" />
+              <circle cx="62" cy={fy + 5.6} r="1.6" fill="#FFFFFF" opacity="0.7" />
+              <path d={`M58.5 ${fy + 15}q5.5 15 11 0z`} fill="#F07A9A" stroke="#C9506E" strokeWidth="1.2" />
+              <path d={`M100 ${fy - 36}l1.6 3.4 3.6.6-2.6 2.6.6 3.6-3.2-1.7-3.2 1.7.6-3.6-2.6-2.6 3.6-.6z`} fill="#FFFFFF" />
+              <path d={`M26 ${fy - 12}l1.2 2.5 2.7.4-2 1.9.5 2.7-2.4-1.3-2.4 1.3.5-2.7-2-1.9 2.7-.4z`} fill="#FFFFFF" />
+              <rect x="44" y={H - 62} width="40" height="13" rx="6.5" fill="rgba(0,0,0,0.38)" />
+              <text x="64" y={H - 52.6} textAnchor="middle" fontFamily={WN_FONT} fontWeight="800" fontSize="7.6" fill="#FFFFFF">Puppy</text>
+              <WnCamCarousel H={H} items={[
+                wnMiniFace(<path d="M-4 3.2h8" stroke="#3A2A24" strokeWidth="1" />),
+                wnMiniFace(<><path d="M-3 4.2l-1.6-3 3 .6zM3 4.2l1.6-3-3 .6z" fill="#E5484D" /></>),
+                wnMiniFace(<><path d="M-6.4 -2.6c-3-1-4.4 2-4 5.4.3 2 1.6 3 2.8 2.8 1.2-2.6 1.6-5.6 1.2-8.2zM6.4 -2.6c3-1 4.4 2 4 5.4-.3 2-1.6 3-2.8 2.8-1.2-2.6-1.6-5.6-1.2-8.2z" fill="#8B5A2B" /><ellipse cx="0" cy="2.4" rx="1.6" ry="1.1" fill="#1F1A17" /></>),
+                wnMiniFace(<path d="M-5 -4.6l2-3.4 3 2.4 3-2.4 2 3.4z" fill="#FFC23D" stroke="#C88A12" strokeWidth="0.6" />),
+                wnMiniFace(<><path d="M-4.8 -6.4l1.4 2.4h-2.8zM4.8 -6.4l1.4 2.4h-2.8z" fill="#F3A6C8" /><circle cx="-2.4" cy="1.4" r="1.6" fill="#FFFFFF" /><circle cx="2.4" cy="1.4" r="1.6" fill="#FFFFFF" /></>),
+              ]} />
+            </>
+          );
+        }}
+      </WnCamPhone>
+    </>
+  );
+}
+function WnBgSwapArt({ tall = false }) {
+  const rid = React.useId().replace(/[^a-zA-Z0-9]/g, '');
+  return (
+    <WnCamPhone tall={tall} rid={rid} bgFill="#5FA8E0">
+      {(H) => {
+        const fy = (H - 44) * 0.52;
+        return (
+          <>
+            <image href={filterSceneUrl('beach')} x="8" y="8" width="112" height={H - 16} preserveAspectRatio="xMidYMid slice" />
+            <WnCamFace cx={64} cy={fy} shirt="#F2B632" skin="#C68B5E" />
+            <path d={`M41 ${fy - 4}a23 27 0 0 1 46 0`} fill="none" stroke="#FFFFFF" strokeWidth="1.4" strokeDasharray="3 3" opacity="0.9" />
+            <WnCamCarousel H={H} items={[
+              <circle key="n" cx="0" cy="0" r="5" fill="none" stroke="#FFFFFF" strokeWidth="1.4" />,
+              <g key="b">{[[-3, -2], [2, -3], [3, 2], [-2, 3], [0, 0]].map(([x, y], i) => <circle key={i} cx={x} cy={y} r="1.3" fill="#FFFFFF" />)}</g>,
+              <g key="s"><circle cx="0" cy="0" r="7.6" fill="#7EC8F0" /><path d="M-7.6 2.4h15.2v3a7.6 7.6 0 0 1-15.2 0z" fill="#F2D29B" /><circle cx="2.4" cy="-2.4" r="2" fill="#FFF3B0" /></g>,
+              <g key="c"><circle cx="0" cy="0" r="7.6" fill="#3B3A7A" /><path d="M-6 6v-6h3v-3h3v4h2v-6h3v11z" fill="#1E1D45" /><circle cx="3" cy="-4" r="1" fill="#FFE07A" /></g>,
+              <g key="p"><rect x="-6" y="-5" width="12" height="10" rx="2" fill="none" stroke="#FFFFFF" strokeWidth="1.4" /><path d="M-6 3l3.4-3.2 2.6 2.4 2-1.8 4 3.4" fill="none" stroke="#FFFFFF" strokeWidth="1.2" /></g>,
+            ]} />
+          </>
+        );
+      }}
+    </WnCamPhone>
+  );
+}
+function WnSoundCamArt({ tall = false }) {
+  const rid = React.useId().replace(/[^a-zA-Z0-9]/g, '');
+  return (
+    <>
+      <defs><linearGradient id={`sb${rid}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#B9A7F5" /><stop offset="1" stopColor="#F2A3C4" /></linearGradient></defs>
+      <WnCamPhone tall={tall} rid={rid} bgFill={`url(#sb${rid})`}>
+        {(H) => {
+          const fy = (H - 44) * 0.55;
+          const r = 15, cyc = H - 30, len = 2 * Math.PI * r;
+          return (
+            <>
+              <WnCamFace cx={64} cy={fy} shirt="#22A55B" skin="#9C6644" />
+              <rect x="26" y="17" width="76" height="16" rx="8" fill="rgba(0,0,0,0.42)" />
+              <path d="M34 29v-7l6-1.2v6.4" fill="none" stroke="#FFFFFF" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+              <circle cx="32.6" cy="29" r="1.8" fill="#FFFFFF" /><circle cx="38.6" cy="27.8" r="1.8" fill="#FFFFFF" />
+              <text x="45" y="28.4" fontFamily={WN_FONT} fontWeight="800" fontSize="7.8" fill="#FFFFFF">Morning train</text>
+              <rect x="50" y="38" width="28" height="12" rx="6" fill="rgba(0,0,0,0.42)" />
+              <circle cx="56" cy="44" r="2.2" fill="#FF3B30" />
+              <text x="60.5" y="47" fontFamily={WN_FONT} fontWeight="800" fontSize="7" fill="#FFFFFF">0:07</text>
+              <circle cx="64" cy={cyc} r={r} fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="3.6" />
+              <circle cx="64" cy={cyc} r={r} fill="none" stroke="#FF3B30" strokeWidth="3.6" strokeLinecap="round" strokeDasharray={`${len * 0.38} ${len}`} transform={`rotate(-90 64 ${cyc})`} />
+              <rect x="57" y={cyc - 7} width="14" height="14" rx="3.4" fill="#FF3B30" />
+              <circle cx="30" cy={cyc} r="9" fill="rgba(0,0,0,0.38)" />
+              <path d={`M26.6 ${cyc - 0.6}h6.8v5.2h-6.8zM28 ${cyc - 0.6}v-2.2a2 2 0 0 1 4 0v2.2`} fill="none" stroke="#FFFFFF" strokeWidth="1.3" strokeLinejoin="round" />
+            </>
+          );
+        }}
+      </WnCamPhone>
+    </>
+  );
+}
+function WnCamToolsArt({ tall = false }) {
+  const rid = React.useId().replace(/[^a-zA-Z0-9]/g, '');
+  const btn = (y, inner, on, badge) => (
+    <g transform={`translate(104 ${y})`}>
+      <circle cx="0" cy="0" r="9" fill={on ? '#FFFFFF' : 'rgba(0,0,0,0.4)'} />
+      <g fill="none" stroke={on ? '#111114' : '#FFFFFF'} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">{inner}</g>
+      {badge && <g><circle cx="6.6" cy="6.6" r="4" fill="#FFFFFF" stroke="#111114" strokeWidth="0.8" /><text x="6.6" y="8.6" textAnchor="middle" fontFamily={WN_FONT} fontWeight="800" fontSize="5.6" fill="#111114">{badge}</text></g>}
+    </g>
+  );
+  return (
+    <WnCamPhone tall={tall} rid={rid} bgFill="#2D3A55">
+      {(H) => (
+        <>
+          <image href={filterSceneUrl('city')} x="8" y="8" width="112" height={H - 16} preserveAspectRatio="xMidYMid slice" opacity="0.9" />
+          {[1, 2].map((i) => <path key={`v${i}`} d={`M${8 + (112 * i) / 3} 8v${H - 16}`} stroke="rgba(255,255,255,0.45)" strokeWidth="0.8" />)}
+          {[1, 2].map((i) => <path key={`h${i}`} d={`M8 ${8 + ((H - 16) * i) / 3}h112`} stroke="rgba(255,255,255,0.45)" strokeWidth="0.8" />)}
+          {btn(24, <path d="M-4.6 -2h6.6l-1.8-1.8M4.6 2h-6.6l1.8 1.8" />)}
+          {btn(46, <path d="M0.8 -5l-4.4 6.2h3.2l-.8 4.6 4.6-6.4h-3.2z" />, true)}
+          {btn(68, <g><circle cx="0" cy="0.8" r="4.4" /><path d="M0 -1v2l1.6 1M-1.6 -5.4h3.2" /></g>, true, '3')}
+          {btn(90, <path d="M3.6 1.6A4.6 4.6 0 1 1 -1.6 -3.6a3.6 3.6 0 0 0 5.2 5.2z" />, true)}
+          {btn(112, <path d="M-4.4 -4.4h8.8v8.8h-8.8zM-1.5 -4.4v8.8M1.5 -4.4v8.8M-4.4 -1.5h8.8M-4.4 1.5h8.8" />)}
+          <circle cx="64" cy={H - 30} r="14" fill="none" stroke="#FFFFFF" strokeWidth="3.2" />
+          <rect x="22" y={H - 62} width="34" height="13" rx="6.5" fill="rgba(0,0,0,0.4)" />
+          <text x="39" y={H - 52.6} textAnchor="middle" fontFamily={WN_FONT} fontWeight="800" fontSize="7.6" fill="#FFFFFF">2.0x</text>
+        </>
+      )}
+    </WnCamPhone>
+  );
+}
 function WnMenuArt({ tall = false }) {
   const y0 = tall ? -30 : 6;
   const H = tall ? 206 : 170;
@@ -49603,6 +49448,10 @@ export const WN_THUMBS = {
   attach39: { bg: 'mint', draw: () => <WnAttachArt /> },
   join39: { bg: 'sky', draw: () => <WnChatsJoinArt /> },
   skills39: { bg: 'sky', draw: () => <WnSkillsArt /> },
+  lens40: { bg: 'peach', draw: () => <WnLensArt /> },
+  bg40: { bg: 'sky', draw: () => <WnBgSwapArt /> },
+  sound40: { bg: 'pink', draw: () => <WnSoundCamArt /> },
+  tools40: { bg: 'night', draw: () => <WnCamToolsArt /> },
   duo32: { bg: 'night', draw: () => (<>
     <rect x="16" y="128" width="288" height="60" fill="#3A2E24" />
     <path d="M118 132 V60 Q160 14 202 60 V132 Z" fill="#1E1626" {...ak} />
@@ -50182,6 +50031,9 @@ Object.assign(WN_SCENES, {
   talk39h: { bg: 'sky', draw: () => <WnTalkArt tall /> },
   wood39h: { bg: 'night', draw: () => <WnWoodArt tall /> },
   filter39h: { bg: 'peach', draw: () => <WnFilterArt tall /> },
+  lens40h: { bg: 'peach', draw: () => <WnLensArt tall /> },
+  bg40h: { bg: 'sky', draw: () => <WnBgSwapArt tall /> },
+  sound40h: { bg: 'pink', draw: () => <WnSoundCamArt tall /> },
 });
 
 function WnBoardPin({ x, y, color = ART_C.coral }) {
