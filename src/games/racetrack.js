@@ -105,7 +105,29 @@ export function buildTrack(def, step = 2) {
   let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
   S.forEach((p) => { minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x); minZ = Math.min(minZ, p.z); maxZ = Math.max(maxZ, p.z); });
   T.bounds = { minX, maxX, minZ, maxZ };
+  trackFeatures(T);
   return T;
+}
+
+function trackFeatures(T) {
+  const { S, N, total, def } = T;
+  const want = def.ramps != null ? def.ramps : 2;
+  const pads = def.pads != null ? def.pads : 3;
+  const straight = [];
+  for (let i = 0; i < N; i++) {
+    let m = 0, sl = 0;
+    for (let k = -14; k <= 26; k++) { const q = S[(i + k + N) % N]; m = Math.max(m, Math.abs(q.curv)); sl = Math.max(sl, Math.abs(q.slope)); }
+    const u = S[i].s / total;
+    if (u > 0.1 && u < 0.93) straight.push({ i, m: m + sl * 0.02, u });
+  }
+  straight.sort((a, b) => a.m - b.m);
+  const far = (L, u, gap) => L.every((p) => { const d = Math.abs(p.u - u); return Math.min(d, 1 - d) > gap; });
+  const rp = [];
+  for (const c of straight) { if (c.m > 0.016) break; if (far(rp, c.u, 0.22)) rp.push(c); if (rp.length >= want) break; }
+  T.ramps = rp.map((c) => ({ s0: S[c.i].s, len: def.rampLen || 10, h: def.rampH || 1.8 })).sort((a, b) => a.s0 - b.s0);
+  const pp = [];
+  for (const c of straight) { if (c.m > 0.02) break; if (far(rp, c.u, 0.07) && far(pp, c.u, 0.14)) pp.push(c); if (pp.length >= pads) break; }
+  T.pads = pp.map((c, k) => ({ s0: S[c.i].s, len: 4.5, x: (k % 2 ? -1 : 1) * Math.min(3.2, def.w * 0.42), hw: 1.7 })).sort((a, b) => a.s0 - b.s0);
 }
 
 export function splitTiles(data, size = 150) {
@@ -451,6 +473,55 @@ export function buildWorld(T, opts = {}) {
         road.quad(T.edge(i, sgn * w), T.edge(i + 1, sgn * w), T.edge(i + 1, sgn * (w + 2.4)), T.edge(i, sgn * (w + 2.4)), shoulder, 0);
       }
     }
+  }
+  const at3 = (s, x, h) => { const q = T.at(s, x); return [q.x, q.y + h, q.z]; };
+  const both = (M, a, b, c, d, col, mat) => { M.quad(a, b, c, d, col, mat); M.quad(d, c, b, a, col, mat); };
+  const bar = (M, s0, x0, s1, x1, wd, col, mat, h) => {
+    const A = T.at(s0, x0), B = T.at(s1, x1);
+    let dx = B.x - A.x, dz = B.z - A.z;
+    const l = Math.hypot(dx, dz) || 1; dx /= l; dz /= l;
+    const nx = -dz * wd * 0.5, nz = dx * wd * 0.5;
+    M.quad([A.x - nx, A.y + h, A.z - nz], [B.x - nx, B.y + h, B.z - nz], [B.x + nx, B.y + h, B.z + nz], [A.x + nx, A.y + h, A.z + nz], col, mat);
+  };
+  for (const r of T.ramps || []) {
+    const n = Math.max(6, Math.ceil(r.len / 0.85));
+    const rh = (d) => r.h * Math.pow(Math.max(0, Math.min(1, d / r.len)), 1.15);
+    for (let k = 0; k < n; k++) {
+      const d0 = (k / n) * r.len, d1 = ((k + 1) / n) * r.len;
+      const h0 = rh(d0) + 0.03, h1 = rh(d1) + 0.03;
+      for (let j = 0; j < 6; j++) {
+        const x0 = -w + (j * 2 * w) / 6, x1 = -w + ((j + 1) * 2 * w) / 6;
+        const band = j < 3 ? 2 - j : j - 3;
+        road.quad(at3(r.s0 + d0, x0, h0), at3(r.s0 + d1, x0, h1), at3(r.s0 + d1, x1, h1), at3(r.s0 + d0, x1, h0), (k + band) % 3 === 0 ? '#23262D' : '#FFC23D', 0.14);
+      }
+      for (const sg of [-1, 1]) both(road, at3(r.s0 + d0, sg * w, 0), at3(r.s0 + d1, sg * w, 0), at3(r.s0 + d1, sg * w, h1), at3(r.s0 + d0, sg * w, h0), k % 2 ? '#3A3F48' : '#454B55', 0.35);
+    }
+    const e = r.s0 + r.len;
+    both(road, at3(e, -w, r.h + 0.03), at3(e, w, r.h + 0.03), at3(e, w, 0), at3(e, -w, 0), '#2B2F37', 0.25);
+    road.quad(at3(e - 0.45, -w, rh(r.len - 0.45) + 0.05), at3(e, -w, r.h + 0.05), at3(e, w, r.h + 0.05), at3(e - 0.45, w, rh(r.len - 0.45) + 0.05), '#F4F1EA', 0.2);
+    for (let a = 0; a < 3; a++) {
+      const s0 = r.s0 - 15 + a * 4.2;
+      bar(road, s0, -2.2, s0 + 2, 0, 0.55, '#F2EFE6', 0.12, 0.035);
+      bar(road, s0, 2.2, s0 + 2, 0, 0.55, '#F2EFE6', 0.12, 0.035);
+    }
+    for (let a = 0; a < 4; a++) { const s0 = e + 20 + a * 2.4; road.quad(at3(s0, -w + 0.6, 0.035), at3(s0 + 0.7, -w + 0.6, 0.035), at3(s0 + 0.7, w - 0.6, 0.035), at3(s0, w - 0.6, 0.035), a % 2 ? '#F2EFE6' : '#E5484D', 0.1); }
+    for (const sg of [-1, 1]) {
+      const q = T.at(e, sg * (w + 0.9));
+      props.setT(rotT(q.heading, q.x, q.y, q.z));
+      props.box(0, 0, 0, 0.16, 3.4, 0.16, '#E9EDF2', 0.4);
+      props.box(sg * 0.55, 2.75, 0, 1.0, 0.62, 0.05, sg < 0 ? '#E5484D' : '#FFC23D', 0.2);
+      props.box(0, 0, 0, 0.5, 0.18, 0.5, '#2B2F37', 0.3);
+      props.setT(null);
+    }
+  }
+  for (const pd of T.pads || []) {
+    road.quad(at3(pd.s0, pd.x - pd.hw, 0.03), at3(pd.s0 + pd.len, pd.x - pd.hw, 0.03), at3(pd.s0 + pd.len, pd.x + pd.hw, 0.03), at3(pd.s0, pd.x + pd.hw, 0.03), '#0D2F4A', 0.3);
+    for (let a = 0; a < 3; a++) {
+      const s0 = pd.s0 + 0.5 + a * 1.25;
+      bar(road, s0, pd.x - pd.hw + 0.35, s0 + 0.9, pd.x, 0.42, '#3FD8FF', 0.97, 0.05);
+      bar(road, s0, pd.x + pd.hw - 0.35, s0 + 0.9, pd.x, 0.42, '#3FD8FF', 0.97, 0.05);
+    }
+    for (const sg of [-1, 1]) road.quad(at3(pd.s0, pd.x + sg * pd.hw - 0.12, 0.045), at3(pd.s0 + pd.len, pd.x + sg * pd.hw - 0.12, 0.045), at3(pd.s0 + pd.len, pd.x + sg * pd.hw, 0.045), at3(pd.s0, pd.x + sg * pd.hw, 0.045), '#8BE9FF', 0.96);
   }
   for (let i = 0; i < 2; i++) {
     for (let k = -Math.round(w); k < Math.round(w); k++) {

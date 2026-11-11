@@ -14,7 +14,7 @@ import {
 } from './supabaseClient.js';
 import { zLazy, zLazyPrefetch, zLazySetUi } from './lazy.jsx';
 import { GAME_KITS, GAME_KIT_BY, GameKitArt, kitUser, gameKitPull } from './games/kits.jsx';
-import { loadLiveFriends } from './games/live.js';
+import { loadLiveFriends, castMe, liveKind } from './games/live.js';
 import { ZLANGS, setZLang, useZLang, zlangWanted, zlangOnPick, zlangDirty, zlangClean, zlangStored } from './i18n/index.js';
 export const TrustedFriendsPage = zLazy(() => import('./areas/safety.jsx'), 'TrustedFriendsPage', 'safety');
 export const RecoveryHelpPage = zLazy(() => import('./areas/safety.jsx'), 'RecoveryHelpPage', 'safety');
@@ -319,6 +319,8 @@ export const GulpInviteSheet = zLazy(() => import('./games/gulp.jsx'), 'GulpInvi
 export const RollGamePage = zLazy(() => import('./games/roll.jsx'), 'RollGamePage', 'roll');
 export const RollInviteSheet = zLazy(() => import('./games/roll.jsx'), 'RollInviteSheet', 'roll');
 export const RaceGamePage = zLazy(() => import('./games/race.jsx'), 'RaceGamePage', 'race');
+export const LiveWatchPage = zLazy(() => import('./games/livecast.jsx'), 'LiveWatchPage', 'livecast');
+export const PageCast = zLazy(() => import('./games/livecast.jsx'), 'PageCast', 'livecast');
 export const RaceInviteSheet = zLazy(() => import('./games/race.jsx'), 'RaceInviteSheet', 'race');
 export const G1GolfPage = zLazy(() => import('./areas/games.jsx'), 'G1GolfPage', 'games');
 export const G1SudokuBoard = zLazy(() => import('./areas/games.jsx'), 'G1SudokuBoard', 'games');
@@ -10920,14 +10922,15 @@ function AccountAboutSheet({ profile, onClose }) {
     </CrSheet>
   );
 }
-function PfAboutCard({ bio, isSelf, onAddBio, onMention }) {
+function PfAboutCard({ bio, isSelf, onAddBio, onMention, joined }) {
   const { theme } = useTheme();
-  if (!bio && !isSelf) return null;
+  if (!bio && !isSelf && !joined) return null;
   return (
     <div data-zread="1" style={{ margin: '10px 20px 0' }}>
       {bio
         ? <div style={{ fontSize: 14.5, color: theme.ink, lineHeight: 1.45, wordBreak: 'break-word' }}><RichText text={bio} onMention={onMention} /></div>
-        : <div role="button" onClick={onAddBio} className="zchat-press" style={{ display: 'inline-flex', fontSize: 14.5, fontWeight: 650, color: kitOnInk(theme), cursor: 'pointer' }}>Add bio</div>}
+        : isSelf ? <div role="button" onClick={onAddBio} className="zchat-press" style={{ display: 'inline-flex', fontSize: 14.5, fontWeight: 650, color: kitOnInk(theme), cursor: 'pointer' }}>Add bio</div> : null}
+      {joined && <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: bio || isSelf ? 6 : 0, fontSize: 13, color: theme.muted }}><CalendarIcon size={14} />{`Joined ZChat in ${fmtDate(new Date(joined), { month: 'long', year: 'numeric' })}`}</div>}
     </div>
   );
 }
@@ -11740,7 +11743,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
             <div style={{ margin: '0 -14px' }}>
               {!isSelf && <ImpostorBanner profile={profile} myId={userId} flush />}
               {canSeeDetails && !plateOn && (
-                <PfAboutCard bio={showBio ? profile.bio : null} isSelf={isSelf} onAddBio={onEditOverride || startEditing} onMention={(p) => onOpenProfile(sanitizeAvatar(p, userId))} />
+                <PfAboutCard bio={showBio ? profile.bio : null} isSelf={isSelf} joined={canSeeDetails && !profile.is_bot && profile.created_at ? profile.created_at : null} onAddBio={onEditOverride || startEditing} onMention={(p) => onOpenProfile(sanitizeAvatar(p, userId))} />
               )}
               {canSeeDetails && showBio && plateOn && (
                 <div style={{ fontSize: 14.5, color: theme.ink, lineHeight: 1.45, padding: plateOn ? '10px 24px 0' : '6px 20px 0', textAlign: plateOn ? 'center' : 'left', wordBreak: 'break-word' }}>
@@ -11781,6 +11784,7 @@ function ProfilePanel({ profile, isSelf, userId, isOnline, onClose, onReport, on
               </div>
               <div ref={pinSentRef} aria-hidden="true" style={{ height: 1, marginTop: -1 }} />
               {!profile.is_bot && <PfLater><LiveNowStrip profile={profile} isSelf={isSelf} /></PfLater>}
+              {!profile.is_bot && !isSelf && <PlayingNowStrip profile={profile} onLeave={onClose} />}
               {!profile.is_bot && <PfLater><CreatorStrip profile={profile} isSelf={isSelf} userId={userId} /></PfLater>}
               {isSelf && selfExtra}
               {reportSent && (
@@ -17588,13 +17592,18 @@ function livePlayRows(force) {
   livePlayCache.job = loadLiveFriends().then((rows) => { livePlayCache.rows = rows || []; livePlayCache.at = Date.now(); livePlayCache.job = null; return livePlayCache.rows; }).catch(() => { livePlayCache.job = null; return livePlayCache.rows; });
   return livePlayCache.job;
 }
-const LIVE_ROOM_MAX = { gulpco: 10, roll: 4, race: 6 };
-function livePlayOf(r) {
-  const info = (r && r.info) || {};
-  const k = r.game === 'gulp' && info.co ? 'gulpco' : r.game;
-  const n = Math.max(1, Number(info.n) || 1);
-  const max = LIVE_ROOM_MAX[k] || 0;
-  return { k, n, max, join: !!max, full: !!max && n >= max };
+function liveLine(row, first) {
+  const info = (row && row.info) || {};
+  const L = liveKind(row);
+  const game = GAME_TITLES[L.k] || 'a game';
+  const title = L.k === 'gulpco' ? `${first} is in a Gulp room` : info.lob ? `${first} is waiting for a ${game} player` : `${first} is playing ${game}`;
+  const sub = L.max ? (L.join ? `${L.n} of ${L.max} playing. You can join now.` : L.full ? (L.watch && !info.lob ? 'The room is full. You can watch.' : 'The room is full right now') : (L.watch ? 'Joining is off. You can watch.' : 'Joining is off'))
+    : info.so ? (L.watch && L.play ? 'Watch live or play the same game' : L.watch ? 'Watch the game live' : L.play ? 'Play the same game together' : 'Playing now')
+      : L.watch ? 'Watch the game live' : 'Playing now';
+  const acts = [];
+  if (L.act) acts.push(L.act);
+  if (info.so && L.watch && L.play) acts.push('Play too');
+  return { L, title, sub, acts, line: L.k === 'gulpco' ? 'In a Gulp room now' : info.lob ? `Waiting for a ${game} player` : `Playing ${game} now` };
 }
 function LivePlayBar({ profile, onJoin, onWatch }) {
   const { theme } = useTheme();
@@ -17609,11 +17618,9 @@ function LivePlayBar({ profile, onJoin, onWatch }) {
     return () => { alive = false; clearInterval(iv); };
   }, [pid]);
   if (!row) return null;
-  const L = livePlayOf(row);
   const first = String(profile.name || 'Your friend').split(' ')[0];
-  const title = L.k === 'gulpco' ? `${first} is in a Gulp room` : `${first} is playing ${GAME_TITLES[L.k] || 'a game'}`;
-  const sub = L.join ? (L.full ? 'The room is full right now' : `${L.n} of ${L.max} playing. You can join now.`) : 'Watch the game live';
-  const act = L.join ? (L.full ? null : 'Join') : 'Watch';
+  const { L, title, sub, acts } = liveLine(row, first);
+  const act = acts[0] || null;
   return (
     <div className="zchat-fade" style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '2px 12px 8px', padding: 8, paddingRight: act ? 8 : 14, borderRadius: 14, flexShrink: 0, background: theme.dark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.045)' }}>
       <GameArt k={L.k} width={44} height={44} radius={10} />
@@ -17621,7 +17628,37 @@ function LivePlayBar({ profile, onJoin, onWatch }) {
         <div style={{ fontSize: 14, fontWeight: 700, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</div>
         <div style={{ fontSize: 12.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub}</div>
       </div>
-      {act && <button onClick={() => { livePlayCache.at = 0; if (act === 'Join') onJoin(row); else onWatch(row); }} className="zchat-press" aria-label={act === 'Join' ? `Join ${first}` : `Watch ${first}`} style={{ height: 32, padding: '0 16px', borderRadius: 10, border: 'none', background: act === 'Join' ? '#22B04B' : theme.coral, color: 'white', fontWeight: 700, fontSize: 14, cursor: 'pointer', fontFamily: FONT, flexShrink: 0 }}>{act}</button>}
+      {acts.map((a, i) => <button key={a} onClick={() => { livePlayCache.at = 0; if (a === 'Watch') onWatch(row); else onJoin(row); }} className="zchat-press" aria-label={a === 'Watch' ? `Watch ${first}` : a === 'Join' ? `Join ${first}` : `Play ${GAME_TITLES[L.k] || 'it'} too`} style={{ height: 32, padding: '0 14px', borderRadius: 10, border: 'none', background: a === 'Watch' ? theme.coral : a === 'Join' ? '#22B04B' : (theme.dark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.08)'), color: a === 'Play too' ? theme.ink : 'white', fontWeight: 700, fontSize: 14, cursor: 'pointer', fontFamily: FONT, flexShrink: 0, marginLeft: i ? -4 : 0 }}>{a}</button>)}
+    </div>
+  );
+}
+
+const livePlayGo = { watch: null, join: null };
+function PlayingNowStrip({ profile, onLeave }) {
+  const { theme } = useTheme();
+  const [row, setRow] = useState(null);
+  const pid = profile && profile.id;
+  useEffect(() => {
+    if (!pid) return undefined;
+    let alive = true;
+    livePlayRows(false).then((rows) => { if (alive) setRow((rows || []).find((r) => r && r.user_id === pid) || null); });
+    return () => { alive = false; };
+  }, [pid]);
+  if (!row) return null;
+  const first = String(profile.name || 'Your friend').split(' ')[0];
+  const { L, title, sub, acts } = liveLine(row, first);
+  const go = (a) => { livePlayCache.at = 0; if (a === 'Watch') { if (livePlayGo.watch) livePlayGo.watch(row); } else { if (onLeave) onLeave(); if (livePlayGo.join) setTimeout(() => livePlayGo.join(row), 60); } };
+  return (
+    <div className="zchat-fade" style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '14px 16px 0', padding: 10, borderRadius: 16, background: theme.dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' }}>
+      <div style={{ position: 'relative', flexShrink: 0 }}>
+        <GameArt k={L.k} width={46} height={46} radius={12} />
+        <span className={reducedMotion() ? undefined : 'zchat-live-dot'} style={{ position: 'absolute', right: -3, top: -3, width: 11, height: 11, borderRadius: '50%', background: '#22C55E', boxShadow: `0 0 0 2.5px ${theme.panelBg}` }} />
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</div>
+        <div style={{ fontSize: 12.5, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub}</div>
+      </div>
+      {acts.slice(0, 2).map((a) => <button key={a} type="button" onClick={() => go(a)} className="zchat-press" style={{ height: 32, padding: '0 14px', borderRadius: 10, border: 'none', background: a === 'Watch' ? theme.coral : a === 'Join' ? '#22B04B' : (theme.dark ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.08)'), color: a === 'Play too' ? theme.ink : 'white', fontWeight: 700, fontSize: 14, cursor: 'pointer', fontFamily: FONT, flexShrink: 0 }}>{a}</button>)}
     </div>
   );
 }
@@ -18549,7 +18586,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-export const APP_VERSION = '42.0V';
+export const APP_VERSION = '43.0V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -27111,7 +27148,7 @@ function MomentPostCard({ post, userId, liked, likeCount, commentCount, saved, l
             <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0, ...(cxNs(owner) ? NS_ROOM : null) }}><NameBadge name={owner.name} verified={owner.verified} custom={owner.custom_badge} size={13} ns={cxNs(owner)} /></span>
             {post.collab && post.collab_status === 'accepted' && <span style={{ fontWeight: 600, color: theme.ink, whiteSpace: 'nowrap' }}>and {(post.collab.name || '').split(' ')[0]}</span>}
           </div>
-          <div style={{ fontSize: 12, color: theme.muted, marginTop: 1 }}>{post.location ? (validPlace(post.place) ? <><span role="button" aria-label={`Open place ${post.location}`} onClick={(e) => { e.stopPropagation(); openPlace(post.place); }} style={{ cursor: 'pointer', color: theme.ink, fontWeight: 600 }}>{post.location}</span>, </> : `${post.location}, `) : ''}{shortAgo(post.created_at)}{post.pinned_at && post.user_id === userId ? ', pinned' : ''}{post.members_only ? ', members only' : ''}</div>
+          <div style={{ fontSize: 12, color: theme.muted, marginTop: 1 }}>{post.location ? (validPlace(post.place) ? <><span role="button" aria-label={`Open place ${post.location}`} onClick={(e) => { e.stopPropagation(); openPlace(post.place); }} style={{ cursor: 'pointer', color: theme.ink, fontWeight: 600 }}>{post.location}</span>, </> : `${post.location}, `) : ''}<PostWhen at={post.created_at} />{post.pinned_at && post.user_id === userId ? ', pinned' : ''}{post.members_only ? ', members only' : ''}</div>
           {post.song && <PostSongLine post={post} color={theme.ink} auto={!muted} style={{ marginTop: 3 }} />}
         </div>
         <div role="button" aria-label="Post options" onClick={onMore} style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: theme.ink, flexShrink: 0 }}><MoreDotsIcon size={22} /></div>
@@ -27696,6 +27733,82 @@ function callDuration(c) {
   if (m < 60) return `${m} min`;
   return `${Math.floor(m / 60)} h ${m % 60} min`;
 }
+function callSecs(c) { return c.ended_at && c.answered_at ? Math.max(0, Math.round((new Date(c.ended_at) - new Date(c.answered_at)) / 1000)) : 0; }
+function talkTime(secs) {
+  if (!secs) return '0 min';
+  if (secs < 60) return `${secs} sec`;
+  const m = Math.round(secs / 60);
+  return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`;
+}
+function CallDetailPage({ call, rows, userId, describe, onClose, onCall, onGroupCall, onOpenProfile, onOpenGroup }) {
+  useBackClose(true, onClose);
+  const { theme } = useTheme();
+  const isGroup = !!call.group;
+  const name = isGroup ? call.group.name : call.peer.name;
+  const same = (rows || []).filter((c) => (isGroup ? c.group && c.group.id === call.group.id : c.peer && c.peer.id === call.peer.id && !c.group));
+  const answered = same.filter((c) => callSecs(c) > 0);
+  const total = answered.reduce((a, c) => a + callSecs(c), 0);
+  const missed = same.filter((c) => describe(c).missed).length;
+  const longest = answered.reduce((a, c) => Math.max(a, callSecs(c)), 0);
+  const d = describe(call);
+  const when = new Date(call.created_at);
+  const secs = callSecs(call);
+  const stat = (label, value) => (
+    <div style={{ flex: '1 1 0', minWidth: 0, padding: '12px 8px', textAlign: 'center' }}>
+      <div style={{ fontSize: 17, fontWeight: 800, color: theme.ink, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{value}</div>
+      <div style={{ fontSize: 11.5, color: theme.muted, marginTop: 2 }}>{label}</div>
+    </div>
+  );
+  const tone = (x) => (x.missed ? theme.danger : x.out ? '#1DB954' : theme.muted);
+  return (
+    <FullPage title="Call details" onBack={onClose} zIndex={66}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '14px 0 6px' }}>
+        {isGroup ? <GroupAvatar avatar={call.group.avatar} name={name} size={76} /> : <Avatar emoji={call.peer.avatar} name={name} size={76} />}
+        <div style={{ fontSize: 19, fontWeight: 800, color: theme.ink, textAlign: 'center' }}>{name}</div>
+        <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+          <button type="button" onClick={() => { onClose(); if (isGroup) onGroupCall(call.group, 'voice'); else onCall(call.peer, 'voice'); }} className="zchat-press" style={{ height: 40, padding: '0 16px', borderRadius: 12, border: 'none', background: theme.coral, color: '#FFFFFF', fontWeight: 700, fontSize: 14.5, fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer' }}><Phone size={17} />Voice</button>
+          <button type="button" onClick={() => { onClose(); if (isGroup) onGroupCall(call.group, 'video'); else onCall(call.peer, 'video'); }} className="zchat-press" style={{ height: 40, padding: '0 16px', borderRadius: 12, border: 'none', background: theme.dark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)', color: theme.ink, fontWeight: 700, fontSize: 14.5, fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer' }}><VideoIcon size={17} />Video</button>
+          <button type="button" aria-label={isGroup ? 'Group info' : 'View profile'} onClick={() => { onClose(); if (isGroup) onOpenGroup(call.group); else onOpenProfile(call.peer); }} className="zchat-press" style={{ width: 40, height: 40, borderRadius: 12, border: 'none', background: theme.dark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)', color: theme.ink, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><InfoCircleIcon size={19} /></button>
+        </div>
+      </div>
+      <div style={{ marginTop: 14, borderRadius: 18, border: `1px solid ${theme.border}`, padding: '12px 14px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 15, fontWeight: 700, color: d.missed ? theme.danger : theme.ink }}><CallArrow out={d.out} color={tone(d)} />{d.missed ? `Missed ${call.kind === 'video' ? 'video' : 'voice'} call` : `${isGroup ? 'Group' : d.out ? 'Outgoing' : 'Incoming'} ${call.kind === 'video' ? 'video' : 'voice'} call`}</div>
+        <div style={{ fontSize: 13.5, color: theme.muted, marginTop: 6 }}>{`${when.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}, ${when.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`}</div>
+        <div style={{ fontSize: 13.5, color: theme.muted, marginTop: 2 }}>{secs ? `Lasted ${talkTime(secs)}` : d.missed ? 'Not answered' : 'Did not connect'}</div>
+      </div>
+      {same.length > 1 && (
+        <>
+          <div style={{ fontSize: 13, fontWeight: 700, color: theme.muted, padding: '18px 4px 8px' }}>{`All calls with ${isGroup ? 'this group' : String(name || '').split(' ')[0]}`}</div>
+          <div style={{ display: 'flex', borderRadius: 18, border: `1px solid ${theme.border}` }}>
+            {stat('Calls', String(same.length))}
+            {stat('Talk time', talkTime(total))}
+            {stat('Longest', talkTime(longest))}
+            {stat('Missed', String(missed))}
+          </div>
+          <div role="list" aria-label="Recent calls" style={{ marginTop: 10 }}>
+            {same.slice(0, 12).map((c) => {
+              const x = describe(c);
+              const t = new Date(c.created_at);
+              return (
+                <div key={c.id} role="listitem" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 4px', borderBottom: `1px solid ${theme.border}` }}>
+                  <CallArrow out={x.out} color={tone(x)} />
+                  <div style={{ flex: 1, minWidth: 0, fontSize: 14, color: x.missed ? theme.danger : theme.ink }}>{x.text}</div>
+                  <div style={{ fontSize: 12.5, color: theme.muted, flexShrink: 0 }}>{`${t.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}, ${t.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`}</div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </FullPage>
+  );
+}
+function PostWhen({ at }) {
+  const [full, setFull] = useState(false);
+  const d = new Date(at);
+  const long = Number.isNaN(d.getTime()) ? '' : `${d.toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}, ${d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`;
+  return <span role="button" aria-label={long ? `Posted ${long}` : undefined} onClick={(e) => { e.stopPropagation(); setFull((v) => !v); }} style={{ cursor: 'pointer' }}>{full && long ? long : shortAgo(at)}</span>;
+}
 function CallLinkIcon({ size = 22, color = 'currentColor', strokeWidth = 1.9 }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -27798,6 +27911,7 @@ function CallsTab({ userId, me, groups, onCall, onGroupCall, onOpenProfile, onOp
   }, [callsSnap]);
   const [hidden, setHidden] = useState(() => readCallHides(userId));
   const [callMenu, setCallMenu] = useState(null);
+  const [callInfo, setCallInfo] = useState(null);
   const callPress = useRef({});
   const hideCall = async (c) => {
     setCallMenu(null);
@@ -27909,7 +28023,7 @@ function CallsTab({ userId, me, groups, onCall, onGroupCall, onOpenProfile, onOp
                     </div>
                   </div>
                   <span style={{ fontSize: 12.5, color: theme.muted, flexShrink: 0 }}>{new Date(c.created_at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}</span>
-                  <div role="button" aria-label={`About ${name}`} onClick={(e) => { e.stopPropagation(); if (c.group) onOpenGroup(c.group); else onOpenProfile(c.peer); }} style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.muted, cursor: 'pointer', flexShrink: 0 }}>
+                  <div role="button" aria-label={`Call details, ${name}`} onClick={(e) => { e.stopPropagation(); setCallInfo(c); }} style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.muted, cursor: 'pointer', flexShrink: 0 }}>
                     <InfoCircleIcon size={21} />
                   </div>
                 </div>
@@ -27921,10 +28035,12 @@ function CallsTab({ userId, me, groups, onCall, onGroupCall, onOpenProfile, onOp
       {callMenu && (
         <ActionSheet title={callMenu.group ? callMenu.group.name : callMenu.peer ? callMenu.peer.name : 'Call'} onClose={() => setCallMenu(null)} items={[
           { k: 'call', label: callMenu.kind === 'video' ? 'Video call' : 'Voice call', icon: callMenu.kind === 'video' ? <VideoIcon /> : <Phone />, on: () => { const c = callMenu; setCallMenu(null); if (c.group) onGroupCall(c.group, c.kind === 'video' ? 'video' : 'voice'); else onCall(c.peer, c.kind === 'video' ? 'video' : 'voice'); } },
-          { k: 'about', label: callMenu.group ? 'Group info' : 'View profile', icon: <InfoCircleIcon />, on: () => { const c = callMenu; setCallMenu(null); if (c.group) onOpenGroup(c.group); else onOpenProfile(c.peer); } },
+          { k: 'info', label: 'Call details', icon: <InfoCircleIcon />, on: () => { const c = callMenu; setCallMenu(null); setCallInfo(c); } },
+          { k: 'about', label: callMenu.group ? 'Group info' : 'View profile', icon: <User size={20} />, on: () => { const c = callMenu; setCallMenu(null); if (c.group) onOpenGroup(c.group); else onOpenProfile(c.peer); } },
           { k: 'delete', label: 'Delete from call history', icon: <Trash2 />, danger: true, on: () => hideCall(callMenu) },
         ]} />
       )}
+      {callInfo && <CallDetailPage call={callInfo} rows={rows} userId={userId} describe={describe} onClose={() => setCallInfo(null)} onCall={onCall} onGroupCall={onGroupCall} onOpenProfile={onOpenProfile} onOpenGroup={onOpenGroup} />}
     </div>
   );
 }
@@ -36381,9 +36497,16 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [raceGame, setRaceGame] = useState(null);
   const [racePick, setRacePick] = useState(null);
   const [watchGame, setWatchGame] = useState(null);
+  const [castWatch, setCastWatch] = useState(null);
   const openWatch = async (r) => {
     const info = (r && r.info) || {};
     if (!r) return;
+    if (info.c) {
+      if (info.w === false) { showSnack('Watching is off for this game'); return; }
+      const p = await cachedProfile(r.user_id).catch(() => null);
+      setCastWatch({ row: r, profile: p || { id: r.user_id, name: 'Friend' }, at: Date.now() });
+      return;
+    }
     if (r.game === 'roll') { setShowGames(false); setRollGame({ rm: r.room, host: info.h || r.user_id, watch: true }); return; }
     if (r.game === 'race') { setShowGames(false); setRaceGame({ rm: r.room, host: info.h || r.user_id, watch: true }); return; }
     if (r.game === 'gulp' && info.co && typeof info.rm === 'string') { setShowGames(false); setGulpRoom({ rm: info.rm }); return; }
@@ -36396,16 +36519,29 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [gulpRoom, setGulpRoom] = useState(null);
   const [gulpPick, setGulpPick] = useState(null);
   if (typeof window !== 'undefined' && window.__zfake) { window.__zopenGulpRoom = (rm) => setGulpRoom({ rm }); window.__zopenRoll = (rm, host, watch) => setRollGame({ rm, host, watch: !!watch }); window.__zopenRace = (rm, host, watch) => setRaceGame({ rm, host, watch: !!watch }); window.__zraceSolo = () => setRaceGame({ solo: true, rm: 'solo' }); }
-  const joinLivePlay = (r) => {
+  const joinLivePlay = async (r) => {
     const info = (r && r.info) || {};
     if (!r) return;
+    if (info.j === false) { showSnack('Joining is off for this game'); return; }
+    if (typeof info.lob === 'string' && info.lob) { setCastWatch(null); setShowGames({ at: Date.now(), room: info.lob }); return; }
+    if (info.so) {
+      const p = await cachedProfile(r.user_id).catch(() => null);
+      setCastWatch(null);
+      setShowGames({ at: Date.now(), game: r.game, playToo: { row: r, profile: p || { id: r.user_id, name: 'Friend' } } });
+      return;
+    }
     if (r.game === 'roll') { setRollGame({ rm: r.room, host: info.h || r.user_id }); return; }
     if (r.game === 'race') { setRaceGame({ rm: r.room, host: info.h || r.user_id }); return; }
     if (r.game === 'gulp' && info.co && typeof info.rm === 'string') { setGulpRoom({ rm: info.rm }); return; }
     openWatch(r);
   };
+  if (typeof window !== 'undefined' && window.__zfake) { window.__zwatch = (r) => openWatch(r); window.__zjoinLive = (r) => joinLivePlay(r); window.__zgames = (o) => setShowGames({ at: Date.now(), ...(o || {}) }); window.__zstartGame = async (uid, k, extra) => { const p = await cachedProfile(uid); if (p) startGameWith(p, k, extra); }; window.__zduelPlay = (st) => setDuelPlay(st); }
   const [liveByUser, setLiveByUser] = useState(() => new Map());
   const liveUid = session && session.user ? session.user.id : null;
+  castMe.id = liveUid;
+  castMe.me = me;
+  livePlayGo.watch = (r) => openWatch(r);
+  livePlayGo.join = (r) => joinLivePlay(r);
   useEffect(() => {
     if (!liveUid) return undefined;
     let alive = true;
@@ -36423,11 +36559,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     return () => { alive = false; clearInterval(iv); document.removeEventListener('visibilitychange', vis); };
   }, [liveUid]);
   const liveRowAct = (row, first) => {
-    const L = livePlayOf(row);
-    if (L.join && L.full) return null;
-    const act = L.join ? 'Join' : 'Watch';
+    const { L, acts, line } = liveLine(row, first);
+    const act = acts[0] || null;
     const game = L.k === 'gulpco' ? 'their Gulp room' : GAME_TITLES[L.k] || 'their game';
-    return { act, game, label: `${act} ${first} in ${game}`, line: L.k === 'gulpco' ? 'In a Gulp room now' : `Playing ${GAME_TITLES[L.k] || 'a game'} now`, go: () => { livePlayCache.at = 0; hapticTap(); if (act === 'Join') joinLivePlay(row); else openWatch(row); } };
+    return { act, game, label: act ? `${act === 'Play too' ? 'Play' : act} ${first} in ${game}` : line, line, go: () => { livePlayCache.at = 0; hapticTap(); if (act === 'Watch') openWatch(row); else joinLivePlay(row); } };
   };
   const startGulpRoomWith = async (profiles, rmIn) => {
     const rm = rmIn || newClientId();
@@ -46334,7 +46469,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flexShrink: 0, alignSelf: 'stretch', justifyContent: 'center' }}>
                       {(c.sortTime || c.last_message_at) && <span style={{ fontSize: lf(12.5), color: unread && !isConvMutedForMe(c) ? theme.coral : theme.muted, fontWeight: unread ? 600 : 400 }}>{formatListTime(c.sortTime || c.last_message_at)}</span>}
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, minHeight: 20 }}>
-                      {liveAct && <button type="button" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); liveAct.go(); }} aria-label={liveAct.label} className="zchat-press" style={{ height: 26, padding: '0 12px', borderRadius: 13, border: 'none', background: liveAct.act === 'Join' ? '#22A55B' : theme.coral, color: '#FFFFFF', fontWeight: 700, fontSize: 13, fontFamily: FONT, cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 5 }}>{liveAct.act === 'Watch' ? <Eye size={14} strokeWidth={2.4} /> : <Play size={12} strokeWidth={0} fill="currentColor" />}{liveAct.act}</button>}
+                      {liveAct && liveAct.act && <button type="button" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); liveAct.go(); }} aria-label={liveAct.label} className="zchat-press" style={{ height: 26, padding: '0 12px', borderRadius: 13, border: 'none', background: liveAct.act === 'Join' ? '#22A55B' : theme.coral, color: '#FFFFFF', fontWeight: 700, fontSize: 13, fontFamily: FONT, cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 5 }}>{liveAct.act === 'Watch' ? <Eye size={14} strokeWidth={2.4} /> : <Play size={12} strokeWidth={0} fill="currentColor" />}{liveAct.act}</button>}
                       {snoozeBackKeys.has(chatPrefKey('dm', c.otherProfile.id)) && <SnoozeMark />}
                       {markAtKeys && markAtKeys.has(chatPrefKey('dm', c.otherProfile.id)) && <MentionMark />}
                       {isConvMutedForMe(c) && <BellOff size={14} color={theme.muted} style={{ flexShrink: 0 }} />}
@@ -48125,6 +48260,8 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           onRaceSolo={() => { setShowGames(false); setRaceGame({ solo: true, rm: 'solo' }); }}
           onGulpRoom={() => setGulpPick({ rm: null, n: 1 })}
           onWatch={(r, p) => openWatch(r, p)}
+          onJoinLive={(r) => joinLivePlay(r)}
+          playToo={showGames.playToo || null}
           onOpenLeaderboard={(k) => setLeaderboardFor({ game: k || 'all', at: Date.now() })}
           onChallenge={(kind) => { setShowGames(false); setTimeout(() => setGamePicker({ kind: kind || 'ttt' }), 80); }}
           onShareScore={(k, sc) => { if (!sc) { showSnack('Play a round first to get a score'); return; } setShowGames(false); setTimeout(() => setGamePicker({ kind: 'score', k, s: sc }), 80); }}
@@ -48170,6 +48307,11 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           onSaveState={(next) => saveLiveState(liveGame.messageId, next)}
           onPeerAway={pingLivePeer}
           onRematch={() => { const pp = liveGame.peer; setLiveGame(null); setTimeout(() => startLiveGame(pp, 'gulp'), 140); }} />
+      )}
+      {castWatch && me && (
+        <LiveWatchPage key={castWatch.at} row={castWatch.row} profile={castWatch.profile} me={me} myId={session.user.id} onClose={() => setCastWatch(null)}
+          onJoin={(r) => joinLivePlay(r)} onPlayToo={(r) => joinLivePlay(r)}
+          onChallenge={(r) => { const p = castWatch.profile; setCastWatch(null); setShowGames(false); const k = r.info && r.info.sd && SOLO_GAMES.some((x) => x.k === r.game) ? `sd:${r.game}` : r.game; setTimeout(() => startGameWith(p, k), 120); }} />
       )}
       {watchGame && me && watchGame.game === 'duo' && <DuoGamePage key={`w${watchGame.gameId}`} watch={watchGame} me={me} myId={session.user.id} onClose={() => { setWatchGame(null); setShowGames(true); }} />}
       {watchGame && me && watchGame.game === 'gulp' && <GulpGamePage key={`w${watchGame.gameId}`} watch={watchGame} me={me} myId={session.user.id} onClose={() => { setWatchGame(null); setShowGames(true); }} />}
@@ -48219,12 +48361,14 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       )}
       {duelPlay && activeProfile && !(duelPlay.g === 'sd' && duelPlay.k === 'squish') && (
         <DuelRoomPage st={duelPlay} title={gameTitle(duelPlay)} me={me} peer={activeProfile} myId={session.user.id} rules={getRules(duelPlay.g === 'sd' ? `sd:${duelPlay.k}` : duelPlay.g)} onClose={() => setDuelPlay(null)}>
+          <SoloFit room>
           {duelPlay.g === 'wduel' && <WordGame key={duelPlay.id} duelWord={duelPlay.sw} onDuelFinish={(v) => finishDuel(duelPlay, v)} />}
           {duelPlay.g === 'rduel' && <ReflexGame key={duelPlay.id} duel onDuelFinish={(v) => finishDuel(duelPlay, v)} />}
           {duelPlay.g === 'qduel' && <QuizGame key={duelPlay.id} seed={duelPlay.id} count={5} onDuelFinish={(v) => finishDuel(duelPlay, v)} />}
           {duelPlay.g === 'math' && <MathSprint key={duelPlay.id} seed={duelPlay.id} onDuelFinish={(v) => finishDuel(duelPlay, v)} />}
           {duelPlay.g === 'taps' && <TapSprint key={duelPlay.id} onDuelFinish={(v) => finishDuel(duelPlay, v)} />}
           {duelPlay.g === 'sd' && <SoloGame key={duelPlay.id} k={duelPlay.k} seed={duelPlay.id} onDuelFinish={(v) => finishDuel(duelPlay, v)} />}
+          </SoloFit>
         </DuelRoomPage>
       )}
       {me && <G1Host me={me} myId={session.user.id} messages={messages} peer={activeProfile} group={activeGroup} members={groupMembers} sendDm={sendGameStateTo} sendGroup={(c) => sendGroupMessage('text', c)} openChat={openChat} notify={notifyUser} patchMessage={(id, c) => setMessages((prev) => prev.map((x) => (String(x.id) === String(id) ? { ...x, content: c } : x)))} onRematchGame={rematchGame} />}
@@ -49284,6 +49428,10 @@ export const WN_THUMBS = {
   attach39: { bg: 'mint', draw: () => <WnAttachArt /> },
   join39: { bg: 'sky', draw: () => <WnChatsJoinArt /> },
   skills39: { bg: 'sky', draw: () => <WnSkillsArt /> },
+  watch43: { bg: 'sky', draw: () => <WnBg src="/games-watch.webp" /> },
+  rally43: { bg: 'sky', draw: () => <WnBg src="/race-jumps.webp" /> },
+  roll43: { bg: 'sky', draw: () => <WnBg src="/roll-team.webp" /> },
+  lobby43: { bg: 'sky', draw: () => <WnBg src="/games-lobby.webp" /> },
   attack42: { bg: 'sky', draw: () => <WnBg src="/race-attack.webp" /> },
   maps42: { bg: 'sky', draw: () => <WnBg src="/race-maps.webp" /> },
   cars42: { bg: 'sky', draw: () => <WnBg src="/race-cars.webp" /> },
@@ -49865,6 +50013,10 @@ Object.assign(WN_SCENES, {
   gulp38h: { bg: 'sky', draw: () => <WnGulpBigArt tall /> },
   talk39h: { bg: 'sky', draw: () => <WnTalkArt tall /> },
   wood39h: { bg: 'night', draw: () => <WnWoodArt tall /> },
+  watch43h: { bg: 'sky', draw: () => <WnBg tall src="/games-watch.webp" x0="-77" /> },
+  rally43h: { bg: 'sky', draw: () => <WnBg tall src="/race-jumps.webp" x0="-60" /> },
+  roll43h: { bg: 'sky', draw: () => <WnBg tall src="/roll-team.webp" x0="-60" /> },
+  lobby43h: { bg: 'sky', draw: () => <WnBg tall src="/games-lobby.webp" x0="-170" /> },
   attack42h: { bg: 'sky', draw: () => <WnBg tall src="/race-attack.webp" x0="-70" /> },
   maps42h: { bg: 'sky', draw: () => <WnBg tall src="/race-maps.webp" x0="-60" /> },
   cars42h: { bg: 'sky', draw: () => <WnBg tall src="/race-cars.webp" x0="-62" /> },
@@ -54141,7 +54293,7 @@ function DashGame({ seed, onDuelFinish } = {}) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, paddingTop: 8 }}>
       <GameStats items={[['Metres', score], ['Best', best]]} />
-      <div onPointerDown={(e) => { e.preventDefault(); jump(); }} style={{ position: 'relative', width: 'min(94vw, 520px)', aspectRatio: '320 / 300', borderRadius: 18, overflow: 'hidden', touchAction: 'none', userSelect: 'none', border: `1px solid ${theme.border}`, cursor: 'pointer', boxShadow: '0 12px 30px rgba(0,0,0,0.3)' }}>
+      <div onPointerDown={(e) => { e.preventDefault(); jump(); }} style={{ position: 'relative', width: 'var(--zgdw, min(94vw, 520px))', aspectRatio: '320 / 300', borderRadius: 18, overflow: 'hidden', touchAction: 'none', userSelect: 'none', border: `1px solid ${theme.border}`, cursor: 'pointer', boxShadow: '0 12px 30px rgba(0,0,0,0.3)' }}>
         <canvas ref={canvasRef} width={Math.round(W * GDPR)} height={Math.round(H * GDPR)} style={{ width: '100%', height: '100%', display: 'block' }} />
         {phase !== 'playing' && <GameOverlay {...ov} />}
       </div>
@@ -55159,9 +55311,43 @@ export function EditHistoryIcon({ size = 18, color = 'currentColor' }) {
   );
 }
 
-const GAME_SQUARE = 'min(94vw, calc(var(--zvp-h, 100vh) - 300px), 520px)';
-const GAME_TALL_W = 'min(94vw, calc((var(--zvp-h, 100vh) - 236px) * 320 / 440), 420px)';
-const GAME_BRICKS_W = 'min(94vw, calc((var(--zvp-h, 100vh) - 236px) * 320 / 420), 420px)';
+const GAME_SQUARE = 'var(--zgsq, min(94vw, calc(var(--zvp-h, 100vh) - 300px), 520px))';
+const GAME_TALL_W = 'var(--zgtw, min(94vw, calc((var(--zvp-h, 100vh) - 236px) * 320 / 440), 420px))';
+const GAME_BRICKS_W = 'var(--zgbw, min(94vw, calc((var(--zvp-h, 100vh) - 236px) * 320 / 420), 420px))';
+const SOLO_FIT_CSS = `@media (orientation: landscape) and (max-height: 560px) {
+.zsolo{--zgsq:min(calc(var(--zvp-h,100vh) - 92px),46vw,520px);--zgtw:min(calc((var(--zvp-h,100vh) - 92px) * 320 / 480),46vw,420px);--zgbw:min(calc((var(--zvp-h,100vh) - 92px) * 320 / 420),46vw,420px);--zgdw:min(calc((var(--zvp-h,100vh) - 92px) * 320 / 300),50vw,520px);--zgeo:min(calc(var(--zvp-h,100vh) - 96px),44vw,440px);--zwc:min(50px,calc((var(--zvp-h,100vh) - 140px) / 6.6))}
+.zsolo.zsolo-room{--zgsq:min(calc(var(--zvp-h,100vh) - 120px),38vw,520px);--zgtw:min(calc((var(--zvp-h,100vh) - 120px) * 320 / 480),38vw,420px);--zgbw:min(calc((var(--zvp-h,100vh) - 120px) * 320 / 420),38vw,420px);--zgdw:min(calc((var(--zvp-h,100vh) - 120px) * 320 / 300),40vw,520px);--zgeo:min(calc(var(--zvp-h,100vh) - 124px),36vw,440px);--zwc:min(44px,calc((var(--zvp-h,100vh) - 170px) / 6.6))}
+.zsolo>.zsolo-grid{display:grid!important;grid-template-columns:auto minmax(190px,330px);grid-template-rows:repeat(7,auto) 1fr;column-gap:18px;row-gap:0!important;align-content:start;justify-content:center;align-items:start}
+.zsolo>.zsolo-grid>*{grid-column:2;margin-bottom:10px;max-width:100%}
+.zsolo>.zsolo-grid>[data-zboard]{grid-column:1;grid-row:1 / -1;margin-bottom:0}
+}`;
+let soloFitCss = false;
+export function SoloFit({ room, children }) {
+  const ref = useRef(null);
+  if (!soloFitCss && typeof document !== 'undefined') { soloFitCss = true; const el = document.createElement('style'); el.textContent = SOLO_FIT_CSS; document.head.appendChild(el); }
+  useLayoutEffect(() => {
+    const host = ref.current;
+    if (!host) return undefined;
+    let root = null;
+    let mo = null;
+    const mark = () => {
+      const r = host.firstElementChild;
+      if (!r) return;
+      if (r !== root) { if (mo) mo.disconnect(); root = r; mo = new MutationObserver(mark); mo.observe(r, { childList: true }); }
+      let best = null;
+      let area = 0;
+      for (const c of r.children) { const b = c.getBoundingClientRect(); const a = b.width * b.height; if (a > area) { area = a; best = c; } }
+      for (const c of r.children) { if (c === best) { if (!c.hasAttribute('data-zboard')) c.setAttribute('data-zboard', '1'); } else if (c.hasAttribute('data-zboard')) c.removeAttribute('data-zboard'); }
+      const grid = !!best && r.children.length > 1 && getComputedStyle(r).display !== 'block';
+      if (r.classList.contains('zsolo-grid') !== grid) r.classList.toggle('zsolo-grid', grid);
+    };
+    mark();
+    const hostMo = new MutationObserver(mark);
+    hostMo.observe(host, { childList: true });
+    return () => { hostMo.disconnect(); if (mo) mo.disconnect(); };
+  }, []);
+  return <div ref={ref} className={room ? 'zsolo zsolo-room' : 'zsolo'}>{children}</div>;
+}
 const sentGameMoveKeys = new Set();
 function stableUuid(str) {
   const r = seededRandom(String(str));
@@ -58069,8 +58255,12 @@ export const QRD_LOG = new Uint8Array(256);
   for (let i = 255; i < 512; i++) QRD_EXP[i] = QRD_EXP[i - 255];
 })();
 
+export const LiveStatCtx = React.createContext(null);
 function GameStats({ items, right }) {
   const { theme } = useTheme();
+  const liveStat = useContext(LiveStatCtx);
+  const statKey = liveStat ? JSON.stringify(items) : '';
+  useEffect(() => { if (liveStat) liveStat(items); }, [statKey]);
   return (
     <div style={{ display: 'flex', gap: 10, width: '100%', maxWidth: 520 }}>
       {items.map(([l, v]) => (
@@ -58381,9 +58571,9 @@ function WordGame({ duelWord, onDuelFinish }) {
           const typing = !row && r === rows.length;
           const letters = row ? row.word : (typing ? cur.padEnd(5, ' ') : '     ');
           return (
-            <div key={r} className={typing && shake ? 'zchat-shake' : ''} style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 50px)', gap: 6 }}>
+            <div key={r} className={typing && shake ? 'zchat-shake' : ''} style={{ display: 'grid', gridTemplateColumns: 'repeat(5, var(--zwc, 50px))', gap: 6 }}>
               {letters.split('').map((ch, i) => (
-                <div key={i} style={{ width: 50, height: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, fontWeight: 900, textTransform: 'uppercase', color: row ? 'white' : theme.ink, textShadow: row ? '0 1px 0 rgba(0,0,0,0.25)' : 'none', ...(row ? g3TileStyle(colors[row.marks[i]], 10, 4) : ch.trim() ? g3TileStyle(theme.dark ? '#3B3561' : '#FFFFFF', 10, 4) : { borderRadius: 10, ...g3Hole(theme.dark) }), transition: 'background 0.25s', boxSizing: 'border-box', marginBottom: 4 }}>{ch.trim()}</div>
+                <div key={i} style={{ width: 'var(--zwc, 50px)', height: 'var(--zwc, 50px)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, fontWeight: 900, textTransform: 'uppercase', color: row ? 'white' : theme.ink, textShadow: row ? '0 1px 0 rgba(0,0,0,0.25)' : 'none', ...(row ? g3TileStyle(colors[row.marks[i]], 10, 4) : ch.trim() ? g3TileStyle(theme.dark ? '#3B3561' : '#FFFFFF', 10, 4) : { borderRadius: 10, ...g3Hole(theme.dark) }), transition: 'background 0.25s', boxSizing: 'border-box', marginBottom: 4 }}>{ch.trim()}</div>
               ))}
             </div>
           );
@@ -58607,7 +58797,7 @@ function EchoGame({ seed, onDuelFinish } = {}) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, paddingTop: 8 }}>
       <GameStats items={[['Level', phase === 'idle' ? 0 : level], ['Best', best]]} />
-      <div style={{ position: 'relative', width: 'min(88vw, calc(var(--zvp-h, 100vh) - 320px), 440px)', aspectRatio: '1', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, userSelect: 'none' }}>
+      <div style={{ position: 'relative', width: 'var(--zgeo, min(88vw, calc(var(--zvp-h, 100vh) - 320px), 440px))', aspectRatio: '1', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, userSelect: 'none' }}>
         {PADS.map((pd, i) => (
           <div key={pd.k} role="button" aria-label={`Pad ${i + 1}`} data-silent="1" onPointerDown={(e) => { e.preventDefault(); tap(i); }} style={{ borderRadius: 26, background: `linear-gradient(180deg, ${g3lt(pd.c, lit === i ? 0.45 : 0.14)} 0%, ${lit === i ? g3lt(pd.c, 0.18) : pd.c} 100%)`, opacity: lit === i ? 1 : 0.72, transform: lit === i ? 'translateY(4px)' : 'none', transition: 'opacity 0.12s, transform 0.12s, box-shadow 0.12s', cursor: 'pointer', touchAction: 'none', boxShadow: lit === i ? `0 2px 0 ${g3dk(pd.c, 0.4)}, 0 0 30px ${pd.c}, inset 0 2px 0 rgba(255,255,255,0.5)` : `0 7px 0 ${g3dk(pd.c, 0.42)}, inset 0 2px 0 rgba(255,255,255,0.35)`, marginBottom: 7 }} />
         ))}
@@ -59611,8 +59801,8 @@ Object.assign(GAME_RULES, {
   duo: { how: ['You carry the orange torch, your friend carries the blue one. Move with the joystick.', 'Orange walks through lava and fire. Blue wades through water, lights hidden stones and reads hidden codes.', 'Pull levers, hold doors on the plates, jump through glowing rings, cross spikes when they drop and keep moving on cracked floors.', 'Play the story or endless temples that are new every time. You share three hearts.', 'Talk with voice, quick messages and emojis. You can mute your friend any time.'], win: 'Stand on your own glowing doors at the same time to finish. Finish missions for stars.' },
   gulp: { how: ['You are a small fish with the number 2. Swim with the joystick.', 'Touch fish with a number the same as yours or smaller to eat them and grow. Any part of you works, even your tail. Small fish swim away when you get close.', 'Fish with bigger numbers can eat you. Hunters chase you for a moment, then give up. Dash to get away.', 'Suck pulls the fish in front of you into your mouth. Grow bigger to unlock a shield, a shock wave and frenzy.', 'Grab bubbles for a shield, double food, a magnet or speed. If you are bigger than your friend you can eat them too.'], win: 'Grow as big as you can, there is no top size. Each of you has five lives and gets one back when you grow into a new fish. Whoever keeps their lives longer wins the round.' },
   gulpco: { how: ['A fish room for up to ten friends. Anyone you invite can join or leave any time.', 'Swim with the joystick and eat fish with a number the same as yours or smaller.', 'Nobody eats anyone in the room. If a big fish gets you, you come back a bit smaller.', 'Turn your mic on to talk. Tap the people button to mute anyone.'], win: 'Grow together and see who gets the biggest.' },
-  race: { how: ['Pick a ride: sports car, hatchback, jeep or tuk tuk, and one of four maps: Palm coast, Tea hills, City lights or Lion rock.', 'Your car speeds up by itself. Hold the left and right pads to steer, or turn on tilt to steer with your phone.', 'Hold Brake to slow down. Hold it while you turn to drift round corners. Drifting fills Nitro, tap Nitro for a burst of speed.', 'In Attack race, drive through energy bottles, then fire a rocket at the car ahead, drop oil behind you, shock the cars around you or put up a shield.', 'Talk with your mic and send emojis while you race. Empty spots can be filled with bots.'], win: 'Finish the laps first. Your best lap is saved for each map.' },
-  roll: { how: ['Hold the arrows to roll your ball. Tap jump, hold it to jump higher.', 'Land on top of enemies to bop them. Spiky ones hurt from every side.', 'Springs throw you high. Flags save where you come back after a pop.', 'Some gates need two buttons pressed at the same time. Team up.', 'Grab coins and find the three stars hidden in every level.'], win: 'Everyone has to reach the portal to clear the level. There are five worlds with six levels each.' },
+  race: { how: ['Pick a ride: sports car, hatchback, jeep or tuk tuk, and one of four maps: Palm coast, Tea hills, City lights or Lion rock.', 'Your car speeds up by itself. Hold the left and right pads to steer, or turn on tilt to steer with your phone.', 'Hold Brake to slow down. Hold it while you turn to drift round corners. Drifting fills Nitro, tap Nitro for a burst of speed.', 'Hit the ramps fast for big jumps, and drive over blue boost pads for a free burst of speed.', 'In Attack race, drive through energy bottles, then fire a rocket at the car ahead, drop oil behind you, shock the cars around you or put up a shield. Rockets throw cars into the air, oil sends them spinning.', 'Talk with your mic and send emojis while you race. Empty spots can be filled with bots.'], win: 'Finish the laps first. Your best lap is saved for each map.' },
+  roll: { how: ['Hold the arrows to roll your ball. Tap jump, hold it to jump higher.', 'Land on top of enemies to bop them. Spiky ones hurt from every side.', 'Springs throw you high. Flags save where you come back after a pop.', 'Blue plates hold bridges and doors open. Stand on one so your friends can cross, then they hold the far plate for you. Alone, a plate stays on for a few seconds.', 'Team gates need a button for every player, pressed at the same time.', 'Grab coins and find the three stars hidden in every level.'], win: 'Everyone has to reach the portal to clear the level. There are nine worlds with six levels each.' },
   tug: { how: ['You both play at the same moment. Open the game and wait for your friend to join.', 'When the countdown ends, tap the big button as fast as you can.', 'Every tap pulls the rope toward you.'], win: 'After 15 seconds, whoever pulled the rope to their side wins.' },
   qrace: { how: ['You both play at the same moment and see the same question together.', 'Tap the right answer before your friend does.', 'A wrong answer locks you out of that question.'], win: 'Seven questions. Whoever scores more wins.' },
   rrace: { how: ['You both play at the same moment.', 'Wait for the pad to turn green, then tap it before your friend.', 'Tapping too early gives the point to them.'], win: 'First to win three rounds wins.' },
@@ -61321,7 +61511,7 @@ function G1Host({ me, myId, messages, peer, group, members, sendDm, sendGroup, o
       {latest && latest.g === 'sdk' && <G1SudokuPage key={latest.id} st={latest} myId={myId} peerName={peerName} onClose={close} />}
       {latest && latest.g === 'jig' && <G1JigsawPage key={latest.id} st={latest} myId={myId} peerName={peerName} onClose={close} />}
       {latest && latest.g === 'xw' && <G1CrossPage key={latest.id} st={latest} myId={myId} peerName={peerName} onClose={close} />}
-      {solo && <FullPage title="Sudoku" subtitle={G1_LEVELS[solo.lv]} onBack={() => setSolo(null)} zIndex={63}><G1SudokuBoard key={solo.at} level={solo.lv} /></FullPage>}
+      {solo && <FullPage title="Sudoku" subtitle={G1_LEVELS[solo.lv]} onBack={() => setSolo(null)} zIndex={63} right={<PageCast game="sudoku" room={`sudoku-${String(myId).slice(0, 8)}-${solo.at}`} solo />}><G1SudokuBoard key={solo.at} level={solo.lv} /></FullPage>}
     </>
   );
 }
@@ -61361,7 +61551,7 @@ function G1SudokuPage({ st, myId, peerName, onClose }) {
   };
   return (
     <FullPage title="Sudoku race" subtitle={`${G1_LEVELS[st.lv] || ''} with ${peer}`} onBack={onClose} zIndex={63}
-      right={mine == null && !st.w ? <HeaderIconButton label="Give up" onClick={() => setAsk(true)}><Flag size={19} /></HeaderIconButton> : null}>
+      right={<><PageCast game="sdk" room={`sdk-${st.id}-${String(myId).slice(0, 8)}`} />{mine == null && !st.w ? <HeaderIconButton label="Give up" onClick={() => setAsk(true)}><Flag size={19} /></HeaderIconButton> : null}</>}>
       {mine != null ? (
         <div style={{ textAlign: 'center', padding: '40px 10px' }}>
           <div style={{ fontSize: 22, fontWeight: 900, color: theme.ink }}>{mine < 0 ? 'You gave up' : `You finished in ${g1Clock(mine)}`}</div>
@@ -61439,6 +61629,7 @@ function G1JigsawPage({ st, myId, peerName, onClose }) {
   const peer = peerName || g1First(st.x, 'your friend');
   return (
     <FullPage title="Photo jigsaw" subtitle={doneMs != null ? `Solved in ${g1Clock(doneMs)}` : `From ${peer}, ${placed} of ${st.pc} placed`} onBack={onClose} zIndex={63} pad={false}
+      right={<PageCast game="jig" room={`jig-${st.id}-${String(myId).slice(0, 8)}`} />}
       bodyStyle={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', paddingBottom: 0 }}>
       <div ref={hostRef} style={{ flex: 1, minHeight: 0, position: 'relative' }}>
         {!img && imgFail && (

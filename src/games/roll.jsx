@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Avatar, Portal, useBackClose, hapticTap, FONT, Spinner } from '../App.jsx';
 import { useRoomLink } from './relay.jsx';
-import { EMOTES, Sheet, injectCss } from './livekit.jsx';
-import { GBtn, GHold, GPill, GPanel, GChip, GTitle, GIcon, GHudBtn, GHudPanel, GHint, GStat, GNotices, useNotices, useWatchNotices, stagePoint, injectKitCss, kitTap, pressProps, maxDpr, INK, useCtlLook, useGameStage, GControlsPanel } from './gamekit.jsx';
+import { EMOTES, Sheet, injectCss, useGameChat, ChatSheet } from './livekit.jsx';
+import { GBtn, GHold, GPill, GPanel, GChip, GTitle, GIcon, GHudBtn, GHudPanel, GHint, GStat, GNotices, useNotices, useWatchNotices, stagePoint, injectKitCss, kitTap, pressProps, maxDpr, INK, useCtlLook, useGameStage, GControlsPanel, GVolBars, GLobby, GSlot, GLobbySheet } from './gamekit.jsx';
 import { Sfx } from './sfx.js';
-import { watchAllowed, setWatchAllowed, useLiveBeacon } from './live.js';
-import { WORLDS, LEVEL_N, BALLS, R, levelOf, levelName, makeWorld, mkBall, stepBall, interact, applyEvent, pressedButtons, gatesToOpen, foePos, clamp } from './rollengine.js';
+import { setWatchAllowed, useLiveBeacon, useGamePrivacy } from './live.js';
+import { WORLDS, LEVEL_N, BALLS, R, levelOf, levelName, makeWorld, mkBall, stepBall, interact, applyEvent, pressedButtons, gatesToOpen, stepPlates, foePos, clamp, demoSetup, demoStep, demoStarts, clipStart, clipRun, DEMO_DT } from './rollengine.js';
 import { render, drawBall, updateParts, burst, dust, popText, clearChunks, buildRollMini, drawRollMini } from './rolldraw.js';
 
 const BEST_KEY = (uid) => `zchat-roll-best-${uid || 'me'}`;
@@ -21,6 +21,31 @@ function saveBest(uid, i, r) {
 }
 const fmtT = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 const WORLD_BTN = ['green', 'orange', 'teal', 'blue', 'purple', 'pink', 'red', 'teal', 'purple'];
+const WORLD_TINT = ['#7BD25A', '#FF9E6B', '#BFE6FF', '#9AA3AD', '#8A7AD0', '#FF9FD0', '#FF8A3D', '#5FD0C9', '#C7B8FF'];
+const DEMO_N = 3;
+const clipCache = new Map();
+function planClips(li, ms) {
+  let c = clipCache.get(li);
+  if (!c) { c = { lens: [], si: 0, P: null, total: 0, done: false }; clipCache.set(li, c); }
+  for (const [k, v] of clipCache) if (k !== li && v.P) v.P = null;
+  const t0 = performance.now();
+  while (!c.done && performance.now() - t0 < ms) {
+    if (!c.P) { c.P = clipStart(li, c.si, DEMO_N, 16); if (!c.total) c.total = demoStarts(c.P.S.W.L).length; }
+    const len = clipRun(c.P, 30);
+    if (len != null) { c.lens[c.si] = len; c.P = null; c.si += 1; if (c.si >= c.total) c.done = true; }
+  }
+  return c;
+}
+function nextClip(li, cur) {
+  const c = clipCache.get(li);
+  if (!c) return [0, null];
+  const good = c.lens.map((l, i) => [i, l]).filter(([, l]) => l >= 5);
+  if (good.length) return good.find(([i]) => i > cur) || good[0];
+  if (!c.done) return [0, c.lens[0] != null ? Math.max(3, c.lens[0]) : null];
+  const best = c.lens.map((l, i) => [i, l]).sort((a, b) => b[1] - a[1])[0];
+  return best ? [best[0], Math.max(4, best[1])] : [0, 6];
+}
+const firstOpen = (best) => { for (let i = 0; i < LEVEL_N; i++) if (!best[i] || !best[i].stars) return i; return LEVEL_N - 1; };
 
 function BallBadge({ ci, size = 44, happy }) {
   const ref = useRef(null);
@@ -58,8 +83,13 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
   const [notes, pushNote] = useNotices();
   const [best, setBest] = useState(() => readBest(uid));
   const [lvl, setLvl] = useState(0);
+  const [sel, setSel] = useState(() => firstOpen(readBest(uid)));
+  const [lvSheet, setLvSheet] = useState(false);
+  const [sheetW, setSheetW] = useState(0);
   const [follow, setFollow] = useState(null);
-  const [allowWatch, setAllowWatch] = useState(watchAllowed());
+  const gamePriv = useGamePrivacy();
+  const allowWatch = gamePriv.show && gamePriv.watch;
+  const setAllowWatch = () => {};
   const look = useCtlLook();
   const GS = useGameStage(look);
   const side = GS.side, land = GS.land;
@@ -83,7 +113,6 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
     const T = touch.current;
     try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
     if (p.x < GS.W * 0.5) {
-      if (T.mv != null) return;
       T.mv = e.pointerId; T.cx = padCenter();
       setDir(p.x < T.cx - 3 ? -1 : 1);
     } else {
@@ -102,6 +131,16 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
     if (e.pointerId === T.mv) { T.mv = null; setDir(0); }
     if (T.jp.delete(e.pointerId) && !T.jp.size) { hold.current.j = false; setJumpOn(false); }
   };
+  useEffect(() => {
+    const clear = () => { const T = touch.current; T.mv = null; T.jp = new Set(); hold.current.l = false; hold.current.r = false; hold.current.j = false; setPadDir(0); setJumpOn(false); };
+    const ends = (e) => { if (e.touches && e.touches.length === 0) clear(); };
+    const vis = () => { if (document.visibilityState === 'hidden') clear(); };
+    window.addEventListener('touchend', ends, true);
+    window.addEventListener('touchcancel', ends, true);
+    window.addEventListener('blur', clear);
+    document.addEventListener('visibilitychange', vis);
+    return () => { window.removeEventListener('touchend', ends, true); window.removeEventListener('touchcancel', ends, true); window.removeEventListener('blur', clear); document.removeEventListener('visibilitychange', vis); };
+  }, []);
   const miniRef = useRef(null);
   const miniBase = useRef({ L: null, cv: null });
   const hudRefs = useRef({});
@@ -117,6 +156,8 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
   const hold = useRef({ l: false, r: false, j: false });
   const keys = useRef(new Set());
   const phaseRef = useRef(phase); phaseRef.current = phase;
+  const selRef = useRef(sel); selRef.current = sel;
+  const demoRef = useRef(null);
   const pausedRef = useRef(paused); pausedRef.current = paused;
   const rosterRef = useRef(roster); rosterRef.current = roster;
   const followRef = useRef(follow); followRef.current = follow;
@@ -131,7 +172,7 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
   const joinOrder = useRef([]);
   const watchRef = useRef(watch);
   const rosterSeen = useRef({ list: null, at: Date.now(), bye: new Set() });
-  if (typeof window !== 'undefined' && window.__zfake) window.__zroll = { world: () => WR.current, balls: () => balls.current, roster: () => rosterRef.current };
+  if (typeof window !== 'undefined' && window.__zfake) window.__zroll = { world: () => WR.current, balls: () => balls.current, roster: () => rosterRef.current, start: (i) => startLevelRef.current && startLevelRef.current(i) };
 
   const say = (text, sec) => { setToast({ text, at: Date.now(), life: sec || 2.4 }); clearTimeout(toastTimer.current); toastTimer.current = setTimeout(() => setToast(null), (sec || 2.4) * 1000); };
   const kindOf = () => (solo ? 'me' : myId);
@@ -144,6 +185,7 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
     present.forEach((p) => { if (!order.includes(p)) order.push(p); });
     return [myId, ...order.filter((p) => p !== myId)].slice(0, 4);
   };
+  const startLevelRef = useRef(null);
   const startLevel = (i, ids, quiet) => {
     const list = ids || (isHost && !solo ? freshRoster() : rosterRef.current);
     if (!solo) { setRoster(list); rosterRef.current = list; }
@@ -167,6 +209,7 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
     const { w } = levelOf(i);
     say(`${WORLDS[w].name}, level ${levelName(i)}`, 2.2);
   };
+  startLevelRef.current = startLevel;
   const emit = (e) => {
     const W = WR.current;
     if (!W) return;
@@ -178,9 +221,10 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
     if (solo || !room) return undefined;
     const offs = [
       relay.on('*', (m) => { if (m.m) { metaRef.current[m.from] = m.m; setNames((prev) => (prev[m.from] === m.m.n ? prev : { ...prev, [m.from]: m.m.n })); } if (!joinOrder.current.includes(m.from)) joinOrder.current.push(m.from); }),
-      relay.on('roster', (m) => { if (isHost) return; if (Array.isArray(m.ids)) { setRoster(m.ids.slice(0, 4)); if (m.nm) setNames((prev) => ({ ...prev, ...m.nm })); if (m.cur != null && !WR.current) startLevel(m.cur, m.ids.slice(0, 4), true); } if (m.nw && watchRef.current) { say('The players turned off watching.', 3); setTimeout(() => onClose(), 1500); } }),
+      relay.on('roster', (m) => { if (isHost) return; if (Array.isArray(m.ids)) { setRoster(m.ids.slice(0, 4)); if (m.nm) setNames((prev) => ({ ...prev, ...m.nm })); if (m.cur != null && !WR.current) startLevel(m.cur, m.ids.slice(0, 4), true); } if (typeof m.sl === 'number' && m.sl >= 0 && m.sl < LEVEL_N) setSel(m.sl); if (m.nw && watchRef.current) { say('The players turned off watching.', 3); setTimeout(() => onClose(), 1500); } }),
       relay.on('lv', (m) => { if (isHost) return; if (Array.isArray(m.ids)) setRoster(m.ids); startLevel(m.i, m.ids, true); }),
       relay.on('menu', () => { if (!isHost) { setPhase('menu'); Sfx.music(null, false); } }),
+      relay.on('sel', (m) => { if (isHost) return; const i = Number(m.i); if (i >= 0 && i < LEVEL_N) setSel(i); }),
       relay.on('pl', (m) => {
         const W = WR.current;
         if (!W || m.i !== W.L.index) return;
@@ -210,7 +254,7 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
       setWatchers((prev) => (prev.join('|') === w.join('|') ? prev : w));
       if (next.join('|') !== cur.join('|')) setRoster(next);
       const nm = {}; next.concat(w).forEach((p) => { nm[p] = p === myId ? myFirst : (metaRef.current[p] && metaRef.current[p].n) || 'Friend'; });
-      relay.send('roster', { ids: next, nm, nw: !allowWatch && w.length ? 1 : 0, cur: phaseRef.current === 'play' && WR.current ? WR.current.L.index : null });
+      relay.send('roster', { ids: next, nm, nw: !allowWatch && w.length ? 1 : 0, cur: phaseRef.current === 'play' && WR.current ? WR.current.L.index : null, sl: selRef.current });
     };
     tick();
     const iv = setInterval(tick, 1500);
@@ -239,7 +283,7 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
 
   const leave = () => { if (phase === 'play' && !solo && !watch) { setLeaveAsk(true); return; } finish(); };
   const finish = () => { Sfx.stopAll(); onClose(); };
-  useBackClose(true, () => { if (ctl) setCtl(false); else if (people) setPeople(false); else if (quick) setQuick(false); else if (leaveAsk) setLeaveAsk(false); else if (paused) setPaused(false); else if (phase === 'play' && solo) setPaused(true); else if (phase !== 'menu') { if (solo || isHost) toMenu(); else leave(); } else leave(); });
+  useBackClose(true, () => { if (chatOpen) setChatOpen(false); else if (lvSheet) setLvSheet(false); else if (ctl) setCtl(false); else if (people) setPeople(false); else if (quick) setQuick(false); else if (leaveAsk) setLeaveAsk(false); else if (paused) setPaused(false); else if (phase === 'play' && solo) setPaused(true); else if (phase !== 'menu') { if (solo || isHost) toMenu(); else leave(); } else leave(); });
   const toMenu = () => { setPhase('menu'); Sfx.music(null, false); WR.current = null; if (!solo && isHost) relay.send('menu', {}); };
 
   useEffect(() => {
@@ -253,6 +297,63 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
     return () => { window.removeEventListener('keydown', kd); window.removeEventListener('keyup', ku); };
   }, []);
 
+  const drawDemo = (cv, raw) => {
+    const li = selRef.current;
+    let D = demoRef.current;
+    const fresh = (si, len) => { D.si = si; D.len = len; D.S = demoSetup(li, si, DEMO_N); D.parts = []; D.cam = { x: 0, y: 0, init: false }; D.acc = 0; };
+    if (!D || D.li !== li) { D = { li, fade: 1, fin: false }; demoRef.current = D; planClips(li, 6); const [si, len] = nextClip(li, -1); fresh(si, len); }
+    planClips(li, 2.5);
+    const S = D.S, W = S.W, P = D.parts;
+    D.acc += Math.min(0.1, raw);
+    let n = 0;
+    while (D.acc >= DEMO_DT && n < 5) {
+      D.acc -= DEMO_DT; n += 1;
+      demoStep(S);
+      W.killT = W.killT || {};
+      for (const id of W.kills) W.killT[id] = (W.killT[id] || 0) + DEMO_DT;
+      for (const k of Object.keys(W.springT)) { W.springT[k] -= DEMO_DT; if (W.springT[k] <= 0) delete W.springT[k]; }
+      while (W.fx.length) {
+        const f = W.fx.shift();
+        const ci = Math.max(0, S.balls.findIndex((b) => b.kind === f.who));
+        if (f.k === 'coin') { const cn = W.L.coins[f.id]; if (cn) { burst(P, cn.x, cn.y, '#FFD23F', 6, 3, 'spark'); popText(P, cn.x, cn.y - 0.3, '+1', '#FFE15A'); } }
+        else if (f.k === 'star') { const st = W.L.stars[f.id]; if (st) burst(P, st.x, st.y, '#FFE15A', 20, 6, 'spark'); }
+        else if (f.k === 'stomp') { const fo = W.L.foes.find((q) => q.id === f.id); if (fo) { const p = foePos(W, fo); burst(P, p.x, p.y, '#FFFFFF', 10, 4, 'spark'); popText(P, p.x, p.y - 0.6, 'Bop', '#FFFFFF'); } }
+        else if (f.k === 'jump2') { dust(P, f.x, f.y, 7); burst(P, f.x, f.y, '#FFFFFF', 6, 3, 'dot'); }
+        else if (f.k === 'land') dust(P, f.x, f.y, 5);
+        else if (f.k === 'die') { burst(P, f.x, f.y, BALLS[ci % 4].body, 18, 6.5, 'shard'); burst(P, f.x, f.y, '#FFFFFF', 8, 4); }
+        else if (f.k === 'home') burst(P, W.L.goal.x, W.L.goal.y - 0.5, BALLS[ci % 4].light, 22, 5, 'spark');
+      }
+      updateParts(P, DEMO_DT);
+    }
+    if (n >= 5) D.acc = 0;
+    const end = D.len != null ? S.t >= D.len : (S.dead > 2 || S.t - S.leadAt > 1.1 || S.home || S.t > 16);
+    if (end) D.fin = true;
+    D.fade = clamp(D.fade + (D.fin ? raw / 0.35 : -raw / 0.5), 0, 1);
+    if (D.fin && D.fade >= 1) { const [si, len] = nextClip(li, D.si); fresh(si, len); D.fin = false; }
+    const wrap = wrapRef.current;
+    const cw = wrap ? wrap.clientWidth : window.innerWidth, ch = wrap ? wrap.clientHeight : window.innerHeight;
+    const dpr = maxDpr(false);
+    if (cv.width !== Math.round(cw * dpr) || cv.height !== Math.round(ch * dpr)) { cv.width = Math.round(cw * dpr); cv.height = Math.round(ch * dpr); clearChunks(); }
+    const s = Math.round(clamp((cw > ch ? ch / 10 : cw / 10.5), 30, 58));
+    const live = D.S.balls.filter((b) => !(b.dead > 0) && !b.home);
+    const fb = live.length ? live.reduce((a, b) => (b.x > a.x ? b : a)) : D.S.balls[0];
+    const C = D.cam;
+    const tx = fb.x + clamp(fb.vx * 0.32, -2.2, 2.2) - (cw > ch ? 1.2 : 0), ty = fb.y - 1.2;
+    if (!C.init) { C.x = tx; C.y = ty; C.init = true; }
+    const k1 = 1 - Math.exp(-raw * 4), k2 = 1 - Math.exp(-raw * 3);
+    C.x += (tx - C.x) * k1; C.y += (ty - C.y) * k2;
+    const W2 = D.S.W;
+    const halfW = cw / s / 2, halfH = ch / s / 2;
+    const cx = clamp(C.x, halfW, Math.max(halfW, W2.L.MW - halfW));
+    let cy = Math.min(C.y, W2.L.MH - halfH + 2.5);
+    cy = Math.max(cy, Math.min(W2.L.MH - halfH + 2.5, halfH - 6));
+    const ox = Math.round(cw / 2 - cx * s), oy = Math.round(ch * (cw > ch ? 0.47 : 0.36) - cy * s);
+    const list = D.S.balls.map((b, i) => ({ k: b.kind, b, ci: i }));
+    const ctx = cv.getContext('2d');
+    render(ctx, W2, { cw, ch, dpr, s, ox, oy, camX: cx, camY: cy, balls: list, me: null, names: {}, bubbles: {}, parts: D.parts, pressed: new Set(), flagBy: {} });
+    if (D.fade > 0.001) { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = `rgba(14,20,40,${D.fade.toFixed(3)})`; ctx.fillRect(0, 0, cv.width, cv.height); }
+  };
+
   useEffect(() => {
     let raf = 0, last = performance.now(), acc = 0;
     const loop = (ts) => {
@@ -264,6 +365,7 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
       const dt = Math.min(0.04, acc);
       acc = 0;
       const W = WR.current, cv = cvRef.current;
+      if (cv && phaseRef.current === 'menu') { drawDemo(cv, dt); return; }
       if (!W || !cv || (phaseRef.current !== 'play' && phaseRef.current !== 'done')) return;
       const wrap = wrapRef.current;
       const cw = wrap ? wrap.clientWidth : window.innerWidth, ch = wrap ? wrap.clientHeight : window.innerHeight;
@@ -293,11 +395,19 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
           b.vx = T.vx; b.vy = T.vy; b.a += b.vx * step / R;
           b.blink -= step; if (b.blink < -0.12) b.blink = 2 + Math.random() * 3;
         }
+        stepPlates(W, all, step);
         const pressed = pressedButtons(W, all);
         W.pressed = pressed;
         for (const g of gatesToOpen(W, pressed)) emit({ k: 'door', g });
         W.doorAmt = W.doorAmt || {};
-        for (const d of W.L.doors) W.doorAmt[d.g] = clamp((W.doorAmt[d.g] || 0) + (W.opened.has(d.g) ? step * 1.8 : -step * 2), 0, 1);
+        for (const d of W.L.doors) W.doorAmt[d.g] = clamp((W.doorAmt[d.g] || 0) + (W.opened.has(d.g) || (d.hold && W.live && W.live.has(d.g)) ? step * (d.hold ? 4 : 1.8) : -step * (d.hold ? 4 : 2)), 0, 1);
+        W.bridgeAmt = W.bridgeAmt || {};
+        for (const g of W.L.plateGroups || []) W.bridgeAmt[g] = clamp((W.bridgeAmt[g] || 0) + (W.live && W.live.has(g) ? step * 6 : -step * 5), 0, 1);
+        if (mine && !mine.dead && !W.tipped) {
+          const near = (list) => list.some((q) => Math.abs(mine.x - (q.x + 0.5)) < 4 && Math.abs(mine.y - q.y) < 4);
+          if ((W.L.plates || []).length && near(W.L.plates)) { W.tipped = 1; say(W.active > 1 ? 'Stand on the blue plate to hold it for your friends' : 'Step on the blue plate, then hurry across', 3.2); }
+          else if (Object.keys(W.L.needOf || {}).length && near(W.L.buttons.filter((q) => W.L.needOf[q.g]))) { W.tipped = 1; say(W.active > 1 ? 'Team gate: press the buttons together' : 'Press a button to open the gate', 3.2); }
+        }
         W.killT = W.killT || {};
         for (const id of W.kills) W.killT[id] = (W.killT[id] || 0) + step;
         for (const k of Object.keys(W.springT)) { W.springT[k] -= step; if (W.springT[k] <= 0) delete W.springT[k]; }
@@ -386,15 +496,18 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
   const myIdx = roster.indexOf(kindOf());
   const totalStars = Object.values(best).reduce((a, b) => a + (b.stars || 0), 0);
   const nameOf = (k) => (k === kindOf() ? 'You' : names[k] || 'Friend');
-  const ROW = 96;
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatNew, setChatNew] = useState(0);
+  const chat = useGameChat(solo || watch ? null : relay, nameOf, (s) => { pushNote(s, 'chat'); setChatNew((n) => n + 1); });
   const { top, right, bottom, left } = GS.at;
   const hb = land ? 38 : 40;
   const talkOn = !solo && playing();
   const rowBtns = [
     talkOn && <GHudBtn key="mic" icon={relay.mic.on ? 'mic' : 'micoff'} on={relay.mic.on} size={hb} label={relay.mic.on ? 'Turn your mic off' : 'Turn your mic on'} onPress={relay.toggleMic} />,
     talkOn && <GHudBtn key="ppl" icon="people" on={people} size={hb} label="Players and voice" badge={roster.length > 1 ? roster.length : null} onPress={() => { setQuick(false); setPeople(true); }} />,
+    talkOn && <GHudBtn key="chat" icon="chat" size={hb} label="Chat" badge={chatNew || null} onPress={() => { setQuick(false); setChatNew(0); setChatOpen(true); }} />,
     talkOn && <GHudBtn key="emo" icon="smile" on={quick} tone="#F5AE1E" size={hb} label="Emojis" onPress={() => setQuick((v) => !v)} />,
-    playing() && <GHudBtn key="gear" icon="gear" size={hb} label="Controls" onPress={() => { setQuick(false); if (solo) setPaused(true); setCtl(true); }} />,
+    playing() && <GHudBtn key="gear" icon="gear" size={hb} label="Settings" onPress={() => { setQuick(false); if (solo) setPaused(true); setCtl(true); }} />,
     <GHudBtn key="x" icon={solo ? 'pause' : 'close'} size={hb} label={solo ? 'Pause' : 'Leave the game'} onPress={() => (solo ? setPaused(true) : leave())} />,
   ].filter(Boolean);
   const capW = 150;
@@ -410,42 +523,111 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
     </GHudPanel>
   );
 
-  const levelMap = (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {WORLDS.map((wd, wi) => {
-        const first = WORLDS.slice(0, wi).reduce((a, x) => a + x.n, 0);
-        const ids = Array.from({ length: wd.n }, (_, k) => first + k);
+  const pickSel = (i) => { if (!isHost || watch) return; const v = clamp(i, 0, LEVEL_N - 1); setSel(v); if (!solo) relay.send('sel', { i: v }); };
+  const openLevels = () => { setSheetW(levelOf(sel).w); setLvSheet(true); };
+  const toggleWatch = () => { setWatchAllowed(!allowWatch); kitTap(); };
+  const hostName = names[room && room.host] || 'The host';
+  const selW = levelOf(sel).w;
+  const selBest = best[sel];
+  const canPick = isHost && !watch;
+  const lobby = phase !== 'menu' ? null : (
+    <GLobby GS={GS} title="Roll Squad" onClose={finish} closeLabel={solo ? 'Leave' : 'Back to chat'}
+      sub={solo ? 'Roll, jump and bop your way to the portal' : watch ? `Watching ${hostName} and friends` : 'Up to four friends roll together'}
+      badge={<GChip style={{ gap: 5, height: 34 }}><GIcon k="star" size={15} color="#FFD23F" />{`${totalStars}/${LEVEL_N * 3}`}</GChip>}
+      tools={(
+        <>
+          {!solo && !watch && <GBtn icon="chat" color="dark" size={42} fast={false} label="Chat" badge={chatNew || null} onPress={() => { setChatNew(0); setChatOpen(true); }} />}
+          {!solo && isHost && !watch && <GBtn icon={allowWatch ? 'eye' : 'eyeoff'} color={allowWatch ? 'blue' : 'dark'} size={42} fast={false} label={allowWatch ? 'Friends can watch. Tap to stop' : 'Let friends watch'} badge={watchers.length || null} onPress={toggleWatch} />}
+          <GBtn icon="gear" color="dark" size={42} fast={false} label="Settings" onPress={() => setCtl(true)} />
+        </>
+      )}
+      side={solo ? (
+        <GPanel style={{ padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ display: 'flex', flexShrink: 0 }}>{BALLS.map((b, i) => <div key={b.id} style={{ marginLeft: i ? -12 : 0 }}><BallBadge ci={i} size={32} /></div>)}</div>
+          <div style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 800, lineHeight: 1.4, color: 'rgba(255,255,255,0.86)' }}>Hold the arrows to roll. Tap jump, hold it to jump higher. Land on enemies to bop them.</div>
+        </GPanel>
+      ) : (
+        <GPanel style={{ padding: '10px 12px 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 14.5, fontWeight: 900, flex: 1 }}>{watch ? 'The squad' : `Squad ${roster.length} of 4`}</span>
+            {watchers.length > 0 && <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 800, color: '#CFE6FF' }}><GIcon k="eye" size={14} color="#CFE6FF" />{`${watchers.length} watching`}</span>}
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 4 }}>
+            {[0, 1, 2, 3].map((i) => {
+              const k = roster[i];
+              if (!k) return <GSlot key={`e${i}`} empty name={isHost && onInvite && !watch ? 'Invite' : 'Open'} label="Invite a friend" onPress={isHost && onInvite && !watch ? onInvite : null} />;
+              const isMe = k === kindOf();
+              return <GSlot key={k} art={<BallBadge ci={i} size={42} />} name={isMe ? 'You' : nameOf(k)} ring={BALLS[i % 4].body} talk={isMe ? relay.mic.on : !!relay.mics[k]} muted={!!relay.muted[k]} label={isMe ? 'You' : `${nameOf(k)}, voice and volume`} onPress={!isMe && !watch ? () => setPeople(true) : null} />;
+            })}
+          </div>
+          {!watch && (
+            <div style={{ display: 'flex', gap: 8 }}>
+              <GPill text={relay.mic.on ? 'Mic off' : 'Talk with mic'} icon={relay.mic.on ? 'micoff' : 'mic'} color={relay.mic.on ? 'white' : 'blue'} small onPress={relay.toggleMic} style={{ flex: 1 }} wide />
+              <GPill text="Voice" icon="people" color="white" small onPress={() => setPeople(true)} />
+            </div>
+          )}
+          {!watch && relay.mic.err && <div style={{ fontSize: 12, fontWeight: 800, color: '#FF9C9C' }}>{relay.mic.err}</div>}
+        </GPanel>
+      )}
+      main={(
+        <GPanel style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {canPick && <GBtn icon="chevl" color="dark" size={38} fast={false} label="Previous level" disabled={sel <= 0} onPress={() => pickSel(sel - 1)} />}
+            <button type="button" className="zgk-btn" aria-label={canPick ? `Level ${levelName(sel)}, ${WORLDS[selW].name}. See all levels` : `Level ${levelName(sel)}, ${WORLDS[selW].name}`} {...pressProps(() => { if (canPick) { kitTap(); openLevels(); } })}
+              style={{ flex: 1, minWidth: 0, border: 'none', background: 'transparent', padding: 0, color: '#FFFFFF', fontFamily: FONT, cursor: canPick ? 'pointer' : 'default', textAlign: 'center' }}>
+              <div style={{ fontSize: 12, fontWeight: 900, color: WORLD_TINT[selW], whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{WORLDS[selW].name}</div>
+              <div style={{ fontSize: 23, fontWeight: 900, lineHeight: 1.15, letterSpacing: '-0.01em' }}>{`Level ${levelName(sel)}`}</div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2, marginTop: 2 }}>
+                {[0, 1, 2].map((q) => <GIcon key={q} k="star" size={14} color={selBest && selBest.stars > q ? '#FFD23F' : 'rgba(255,255,255,0.22)'} />)}
+                {selBest && selBest.time ? <span style={{ fontSize: 11.5, fontWeight: 800, color: 'rgba(255,255,255,0.7)', marginLeft: 6, fontVariantNumeric: 'tabular-nums' }}>{`Best ${fmtT(selBest.time)}`}</span> : null}
+              </div>
+            </button>
+            {canPick && <GBtn icon="chevr" color="dark" size={38} fast={false} label="Next level" disabled={sel >= LEVEL_N - 1} onPress={() => pickSel(sel + 1)} />}
+          </div>
+          {canPick ? (
+            <div style={{ display: 'flex', gap: 8 }}>
+              <GPill text="Levels" icon="map" color="white" onPress={openLevels} />
+              <GPill text={solo ? 'Play' : roster.length > 1 ? `Play with ${roster.length}` : 'Play'} icon="play" color="gold" onPress={() => pick(sel)} style={{ flex: 1 }} wide />
+            </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 44, fontSize: 13.5, fontWeight: 800, color: 'rgba(255,255,255,0.85)' }}><Spinner size={16} color="#FFFFFF" />{watch ? `${hostName} starts the level soon` : `${hostName} picks the level`}</div>
+          )}
+        </GPanel>
+      )}>
+      {lvSheet && (() => {
+        const first = WORLDS.slice(0, sheetW).reduce((a, x) => a + x.n, 0);
+        const ids = Array.from({ length: WORLDS[sheetW].n }, (_, k) => first + k);
         const got = ids.reduce((a, i) => a + ((best[i] && best[i].stars) || 0), 0);
         return (
-          <div key={wd.id}>
-            <GPanel style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ width: 30, height: 30, borderRadius: 10, background: ['#7BD25A', '#FF9E6B', '#BFE6FF', '#9AA3AD', '#8A7AD0', '#FF9FD0', '#FF8A3D', '#5FD0C9', '#C7B8FF'][wi], boxShadow: `0 0 0 2.5px ${INK}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 900, color: INK }}>{wi + 1}</span>
-              <span style={{ fontSize: 17, fontWeight: 900, flex: 1 }}>{wd.name}</span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontWeight: 900, fontSize: 13.5 }}><GIcon k="star" size={16} color="#FFD23F" />{`${got}/${wd.n * 3}`}</span>
-            </GPanel>
-            <div style={{ position: 'relative', height: ids.length * ROW / 2 + ROW / 2 + 6, marginTop: 6 }}>
-              <svg width="100%" height="100%" viewBox={`0 0 100 ${ids.length * ROW / 2 + ROW / 2 + 6}`} preserveAspectRatio="none" aria-hidden="true" style={{ position: 'absolute', inset: 0 }}>
-                <polyline points={ids.map((_, k) => `${12 + (k / (ids.length - 1)) * 76},${k % 2 ? ROW * 0.5 + (k * ROW) / 2 - ROW / 4 + 20 : (k * ROW) / 2 + 30}`).join(' ')} fill="none" stroke={INK} strokeWidth="8" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-                <polyline points={ids.map((_, k) => `${12 + (k / (ids.length - 1)) * 76},${k % 2 ? ROW * 0.5 + (k * ROW) / 2 - ROW / 4 + 20 : (k * ROW) / 2 + 30}`).join(' ')} fill="none" stroke="#FFF2C8" strokeWidth="3.5" strokeDasharray="2 9" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
-              </svg>
-              {ids.map((i, k) => {
+          <GLobbySheet GS={GS} title="Levels" width={640} onClose={() => setLvSheet(false)}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <GBtn icon="chevl" color="dark" size={36} fast={false} label="Previous world" disabled={sheetW <= 0} onPress={() => setSheetW((w) => Math.max(0, w - 1))} />
+              <div style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>
+                <div style={{ fontSize: 17, fontWeight: 900, color: WORLD_TINT[sheetW] }}>{WORLDS[sheetW].name}</div>
+                <div style={{ fontSize: 12, fontWeight: 800, color: 'rgba(255,255,255,0.7)' }}>{`World ${sheetW + 1} of ${WORLDS.length}, ${got} of ${ids.length * 3} stars`}</div>
+              </div>
+              <GBtn icon="chevr" color="dark" size={36} fast={false} label="Next world" disabled={sheetW >= WORLDS.length - 1} onPress={() => setSheetW((w) => Math.min(WORLDS.length - 1, w + 1))} />
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: `repeat(${land ? ids.length : 3}, minmax(0, 1fr))`, gap: 8, marginTop: 14 }}>
+              {ids.map((i) => {
                 const b = best[i];
-                const left = `calc(${12 + (k / (ids.length - 1)) * 76}% - 30px)`;
-                const top = (k % 2 ? ROW * 0.5 + (k * ROW) / 2 - ROW / 4 + 20 : (k * ROW) / 2 + 30) - 30;
                 return (
-                  <div key={i} style={{ position: 'absolute', left, top, width: 60, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                    <GBtn color={WORLD_BTN[wi]} size={56} fast={false} label={isHost ? `Play level ${levelName(i)}` : `Level ${levelName(i)}`} onPress={() => pick(i)}>
-                      <span style={{ fontSize: 17, fontWeight: 900, color: '#FFFFFF', textShadow: '0 1px 3px rgba(0,0,0,0.6)' }}>{levelName(i)}</span>
+                  <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                    <GBtn color={WORLD_BTN[sheetW]} size={54} fast={false} active={i === sel} label={`Level ${levelName(i)}`} onPress={() => { pickSel(i); setLvSheet(false); }}>
+                      <span style={{ fontSize: 18, fontWeight: 900, color: '#FFFFFF', textShadow: '0 1px 3px rgba(0,0,0,0.6)' }}>{levelName(i)}</span>
                     </GBtn>
-                    <span style={{ display: 'flex', gap: 1 }}>{[0, 1, 2].map((q) => <GIcon key={q} k="star" size={12} color={b && b.stars > q ? '#FFD23F' : 'rgba(27,20,48,0.45)'} />)}</span>
+                    <span style={{ display: 'flex', gap: 1 }}>{[0, 1, 2].map((q) => <GIcon key={q} k="star" size={12} color={b && b.stars > q ? '#FFD23F' : 'rgba(255,255,255,0.2)'} />)}</span>
                   </div>
                 );
               })}
             </div>
-          </div>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginTop: 14 }}>
+              {WORLDS.map((wd, wi) => <button key={wd.id} type="button" className="zgk-btn" aria-label={wd.name} aria-pressed={wi === sheetW} {...pressProps(() => setSheetW(wi))} style={{ width: wi === sheetW ? 22 : 10, height: 10, borderRadius: 5, border: 'none', padding: 0, cursor: 'pointer', background: wi === sheetW ? WORLD_TINT[wi] : 'rgba(255,255,255,0.25)', transition: 'width .15s ease' }} />)}
+            </div>
+          </GLobbySheet>
         );
-      })}
-    </div>
+      })()}
+    </GLobby>
   );
 
   return (
@@ -516,59 +698,7 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
           </>
         )}
 
-        {phase === 'menu' && (
-          <div style={{ position: 'absolute', inset: 0, overflowY: 'auto', touchAction: 'pan-x pan-y', padding: `${top(12)} ${right(16)} ${bottom(28)} ${left(16)}`, boxSizing: 'border-box', background: 'linear-gradient(180deg, #6EC6FF 0%, #BDE8FF 40%, #9ED89A 75%, #6BC26A 100%)' }}>
-            <div style={{ maxWidth: 460, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <GBtn icon="close" color="white" size={44} fast={false} label={solo ? 'Leave' : 'Back to chat'} onPress={finish} />
-                <GChip style={{ gap: 5 }}><GIcon k="star" size={16} color="#FFD23F" />{`${totalStars}/${LEVEL_N * 3}`}</GChip>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-                <div style={{ display: 'flex', gap: 2, alignItems: 'flex-end' }}>{BALLS.map((b, i) => <div key={b.id} style={{ animation: `zgk-bob ${1.6 + i * 0.25}s ease-in-out infinite` }}><BallBadge ci={i} size={i === 0 ? 70 : 58} happy={i % 2 === 0} /></div>)}</div>
-                <GTitle text="Roll Squad" size={50} color="#FFE15A" />
-                <GChip>{solo ? 'Roll, jump and bop your way to the portal' : 'Up to four friends roll together'}</GChip>
-              </div>
-              {!solo && (
-                <GPanel style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontSize: 15, fontWeight: 900, flex: 1 }}>{watch ? 'Watching' : `Players ${roster.length} of 4`}</span>
-                    {isHost && onInvite && roster.length < 4 && <GPill small text="Invite" icon="plus" color="green" height={40} onPress={onInvite} />}
-                  </div>
-                  {roster.map((k, i) => {
-                    const isMe = k === kindOf();
-                    const talk = isMe ? relay.mic.on : !!relay.mics[k];
-                    const off = !!relay.muted[k];
-                    return (
-                      <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <BallBadge ci={i} size={38} />
-                        <span style={{ fontSize: 14.5, fontWeight: 800, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nameOf(k)}{k === (room && room.host) ? ', host' : ''}</span>
-                        {talk && <GIcon k="mic" size={16} color="#7BE05A" />}
-                        {!isMe && !watch && <GBtn icon={off ? 'mute' : 'sound'} color={off ? 'red' : 'dark'} size={34} fast={false} label={off ? `Unmute ${nameOf(k)}` : `Mute ${nameOf(k)}`} onPress={() => relay.toggleMute(k)} />}
-                      </div>
-                    );
-                  })}
-                  {!watch && <GPill text={relay.mic.on ? 'Mic off' : 'Talk with mic'} icon={relay.mic.on ? 'micoff' : 'mic'} color={relay.mic.on ? 'white' : 'blue'} small wide onPress={relay.toggleMic} />}
-                  {!watch && relay.mic.err && <div style={{ fontSize: 12.5, fontWeight: 800, color: '#FF9C9C' }}>{relay.mic.err}</div>}
-                  {roster.length < 2 && <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,0.75)' }}><Spinner size={16} color="#FFFFFF" />Waiting for friends to join</div>}
-                  {watchers.length > 0 && <div style={{ fontSize: 12.5, fontWeight: 800, color: 'rgba(255,255,255,0.75)', display: 'flex', alignItems: 'center', gap: 6 }}><GIcon k="eye" size={14} color="#CFE6FF" />{`Watching: ${watchers.map((w) => names[w] || 'Friend').join(', ')}`}</div>}
-                  {isHost && (
-                    <div role="button" tabIndex={0} onClick={() => { const v = !allowWatch; setAllowWatch(v); setWatchAllowed(v); kitTap(); }} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', paddingTop: 4 }}>
-                      <span style={{ flex: 1, fontSize: 13.5, fontWeight: 800 }}>Let friends watch</span>
-                      <span aria-hidden="true" style={{ width: 46, height: 28, borderRadius: 14, background: allowWatch ? '#F7C53A' : 'rgba(255,255,255,0.18)', position: 'relative', transition: 'background 0.2s' }}><span style={{ position: 'absolute', top: 3, left: allowWatch ? 21 : 3, width: 22, height: 22, borderRadius: 11, background: '#FFFFFF', boxShadow: '0 1px 3px rgba(0,0,0,0.3)', transition: 'left 0.2s' }} /></span>
-                    </div>
-                  )}
-                  {!isHost && <div style={{ fontSize: 13, fontWeight: 800, color: 'rgba(255,255,255,0.75)' }}>{`${names[room && room.host] || 'The host'} picks the level`}</div>}
-                </GPanel>
-              )}
-              {solo && (
-                <GPanel style={{ padding: 12, display: 'flex', gap: 10, alignItems: 'center' }}>
-                  <div style={{ flex: 1, fontSize: 13, fontWeight: 800, lineHeight: 1.45, color: 'rgba(255,255,255,0.85)' }}>Hold the arrows to roll. Tap jump, hold it to jump higher. Land on enemies to bop them, but spiky ones hurt.</div>
-                </GPanel>
-              )}
-              {levelMap}
-            </div>
-          </div>
-        )}
+        {lobby}
 
         {paused && phase === 'play' && (
           <div style={{ position: 'absolute', inset: 0, zIndex: 20, background: 'rgba(10,8,24,0.5)', display: 'flex', padding: 12, overflowY: 'auto', touchAction: 'pan-x pan-y' }}>
@@ -580,7 +710,7 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
               <GPill text="Resume" icon="play" color="green" wide onPress={() => setPaused(false)} />
               <div style={{ display: 'flex', gap: 8 }}>
                 <GPill text="Restart" icon="replay" color="white" small wide onPress={() => startLevel(lvl)} style={{ flex: 1 }} />
-                <GPill text="Controls" icon="gear" color="white" small wide onPress={() => setCtl(true)} style={{ flex: 1 }} />
+                <GPill text="Settings" icon="gear" color="white" small wide onPress={() => setCtl(true)} style={{ flex: 1 }} />
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <GPill text="Levels" icon="map" color="white" small wide onPress={toMenu} style={{ flex: 1 }} />
@@ -631,6 +761,7 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
                       <div style={{ fontSize: 14.5, fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nm}{k === (room && room.host) ? ', host' : ''}</div>
                       <div style={{ fontSize: 12, fontWeight: 700, color: talk ? '#7BE05A' : 'rgba(255,255,255,0.55)', display: 'flex', alignItems: 'center', gap: 4 }}><GIcon k={talk ? 'mic' : 'micoff'} size={12} color={talk ? '#7BE05A' : 'rgba(255,255,255,0.55)'} />{talk ? 'Mic on' : 'Mic off'}{off ? ', muted by you' : ''}</div>
                     </div>
+                    {!isMe && relay.setVol && <GVolBars name={nm} vol={relay.vols && relay.vols[k] != null ? relay.vols[k] : 1} muted={off} onVol={(v) => { if (off) relay.toggleMute(k); relay.setVol(k, v); }} />}
                     {!isMe && <GBtn icon={off ? 'mute' : 'sound'} color={off ? 'red' : 'dark'} size={40} fast={false} label={off ? `Unmute ${nm}` : `Mute ${nm}`} onPress={() => relay.toggleMute(k)} />}
                   </div>
                 );
@@ -643,6 +774,7 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
             </div>
           </Sheet>
         )}
+        {chatOpen && <ChatSheet title="Talk to the room" chat={chat} onClose={() => setChatOpen(false)} />}
         {leaveAsk && (
           <Sheet title="Leave the game?" text="Your friends can keep playing without you." onClose={() => setLeaveAsk(false)}>
             <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>

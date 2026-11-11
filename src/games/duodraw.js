@@ -1110,6 +1110,7 @@ export function drawBubble(c, x, y, text, a, cw) {
 }
 
 function nameTag(c, x, y, text, col) {
+  if (!text) return;
   c.save(); c.font = '700 11px ' + FF;
   const w = c.measureText(text).width + 14;
   c.fillStyle = 'rgba(10,8,16,0.6)'; rr(c, x - w / 2, y - 17, w, 17, 8.5); c.fill();

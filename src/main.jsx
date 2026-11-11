@@ -3,6 +3,13 @@ import ReactDOM from 'react-dom/client';
 import { zlangBoot } from './i18n/index.js';
 import App from './App.jsx';
 
+if (typeof Node === 'function' && Node.prototype) {
+  const rc = Node.prototype.removeChild;
+  const ib = Node.prototype.insertBefore;
+  Node.prototype.removeChild = function (child) { if (child && child.parentNode !== this) return child; return rc.apply(this, arguments); };
+  Node.prototype.insertBefore = function (node, ref) { if (ref && ref.parentNode !== this) return node; return ib.apply(this, arguments); };
+}
+
 let maxVH = window.innerHeight;
 window.addEventListener('resize', () => {
   maxVH = Math.max(maxVH, window.innerHeight);

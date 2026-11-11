@@ -262,6 +262,7 @@ export function useMeshRoom({ id, myId, enabled = true, meta, fast, audio = fals
   const [mic, setMic] = useState({ on: false, err: '' });
   const [mics, setMics] = useState({});
   const [muted, setMuted] = useState({});
+  const [vols, setVols] = useState({});
   const [ready, setReady] = useState(false);
   const S = useRef(null);
   if (!S.current) S.current = { sid: meshSid(), conns: new Map(), metas: {}, pres: [], seen: new Map(), peers: [], ch: null, ok: false, subs: new Map(), track: null, muted: {}, cloudAt: new Map(), alive: false, ice: null, linkKey: '', needPlay: false, fast: new Set(fast || MESH_FAST) };
@@ -317,6 +318,7 @@ export function useMeshRoom({ id, myId, enabled = true, meta, fast, audio = fals
     if (!c.audio) { const a = new Audio(); a.autoplay = true; a.playsInline = true; c.audio = a; }
     c.audio.srcObject = stream;
     c.audio.muted = !!st.muted[p];
+    try { c.audio.volume = st.vols && st.vols[p] != null ? st.vols[p] : 1; } catch {}
     const r = c.audio.play();
     if (r && r.catch) r.catch(() => { st.needPlay = true; });
   };
@@ -504,8 +506,9 @@ export function useMeshRoom({ id, myId, enabled = true, meta, fast, audio = fals
     testHooks.add(hook);
     gameIceConfig().then((cfg) => { st.ice = cfg; }, () => { st.ice = {}; });
     const iv = setInterval(tick, 2000);
-    const replay = () => { if (!st.needPlay) return; st.needPlay = false; for (const c of st.conns.values()) if (c.audio) { const r = c.audio.play(); if (r && r.catch) r.catch(() => { st.needPlay = true; }); } };
-    if (audio) document.addEventListener('pointerdown', replay, true);
+    const replay = () => { if (!st.needPlay) return; st.needPlay = false; for (const c of st.conns.values()) if (c.audio) { try { if (c.audio.srcObject) c.audio.srcObject = c.audio.srcObject; } catch {} const r = c.audio.play(); if (r && r.catch) r.catch(() => { st.needPlay = true; }); } };
+    const wakeVoice = () => { if (document.visibilityState === 'hidden') return; st.needPlay = true; replay(); };
+    if (audio) { document.addEventListener('pointerdown', replay, true); document.addEventListener('touchend', replay, true); document.addEventListener('visibilitychange', wakeVoice); window.addEventListener('pageshow', wakeVoice); }
     rtReady(topic).then(() => {
       if (!st.alive) return;
       keep = rtKeep(() => {
@@ -531,7 +534,7 @@ export function useMeshRoom({ id, myId, enabled = true, meta, fast, audio = fals
       st.alive = false;
       clearInterval(iv);
       testHooks.delete(hook);
-      if (audio) document.removeEventListener('pointerdown', replay, true);
+      if (audio) { document.removeEventListener('pointerdown', replay, true); document.removeEventListener('touchend', replay, true); document.removeEventListener('visibilitychange', wakeVoice); window.removeEventListener('pageshow', wakeVoice); }
       cloud(env('bye', {}));
       for (const p of [...st.conns.keys()]) closeConn(p);
       if (st.track) { try { st.track.stop(); } catch {} st.track = null; }
@@ -583,7 +586,15 @@ export function useMeshRoom({ id, myId, enabled = true, meta, fast, audio = fals
     if (c && c.audio) c.audio.muted = !!st.muted[p];
     setMuted(st.muted);
   };
-  return useMemo(() => ({ peers, links, metas, send, sendTo, on, me: myId, here: peers.length > 0, ready, mic, mics, muted, toggleMic, toggleMute }), [peers, links, metas, mic, mics, muted, myId, ready]);
+  const setVol = (p, v) => {
+    const st = S.current;
+    const val = Math.max(0, Math.min(1, Number(v) || 0));
+    st.vols = { ...(st.vols || {}), [p]: val };
+    const c = st.conns.get(p);
+    if (c && c.audio) { try { c.audio.volume = val; } catch {} c.audio.muted = !!st.muted[p] || val === 0; }
+    setVols(st.vols);
+  };
+  return useMemo(() => ({ peers, links, metas, send, sendTo, on, me: myId, here: peers.length > 0, ready, mic, mics, muted, vols, toggleMic, toggleMute, setVol }), [peers, links, metas, mic, mics, muted, vols, myId, ready]);
 }
 
 export function useGameLink({ id, myId, peerId, enabled = true, g, fast }) {
@@ -626,5 +637,5 @@ export function useRoomLink({ id, myId, enabled = true, meta, fast, audio = fals
   const mesh = useMeshRoom({ id, myId, enabled, meta, fast, audio });
   const meshRef = useRef(mesh);
   meshRef.current = mesh;
-  return useMemo(() => ({ peers: mesh.peers, send: (t, d) => mesh.send(t, d), on: mesh.on, me: myId, here: mesh.peers.length > 0, links: mesh.links, mic: mesh.mic, mics: mesh.mics, muted: mesh.muted, toggleMic: () => meshRef.current.toggleMic(), toggleMute: (p) => meshRef.current.toggleMute(p) }), [mesh.peers, mesh.on, mesh.links, mesh.mic, mesh.mics, mesh.muted, myId]);
+  return useMemo(() => ({ peers: mesh.peers, send: (t, d) => mesh.send(t, d), on: mesh.on, me: myId, here: mesh.peers.length > 0, links: mesh.links, mic: mesh.mic, mics: mesh.mics, muted: mesh.muted, vols: mesh.vols, toggleMic: () => meshRef.current.toggleMic(), toggleMute: (p) => meshRef.current.toggleMute(p), setVol: (p, v) => meshRef.current.setVol(p, v) }), [mesh.peers, mesh.on, mesh.links, mesh.mic, mesh.mics, mesh.muted, mesh.vols, myId]);
 }

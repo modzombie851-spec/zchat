@@ -307,7 +307,7 @@ const city = {
 };
 
 const rock = {
-  key: 'rock', name: 'Lion rock', blurb: 'Red dirt roads, elephants by the lake and a giant rock', seed: 51, w: 7, laps: 3,
+  key: 'rock', name: 'Lion rock', blurb: 'Red dirt roads, big jumps, elephants by the lake and a giant rock', seed: 51, w: 7, laps: 3, ramps: 3, rampH: 2.1,
   pts: [[0, 0, 0], [130, -10, 1], [240, 20, 3], [300, 100, 5], [280, 200, 7], [200, 260, 6], [100, 250, 4], [40, 190, 3], [-30, 170, 2], [-110, 210, 3], [-200, 190, 4], [-250, 110, 3], [-230, 20, 2], [-160, -40, 1], [-80, -40, 0]],
   zones: { lake: [[0.6, 0.72]], village: [[0.93, 1], [0, 0.05]] },
   bank: 5,

@@ -1,15 +1,16 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Avatar, Portal, useBackClose, FONT, Spinner } from '../App.jsx';
 import { useRoomLink } from './relay.jsx';
-import { EMOTES, Sheet, injectCss } from './livekit.jsx';
-import { GBtn, GPill, GPanel, GChip, GTitle, GIcon, GHudBtn, GHudPanel, GNotices, useNotices, useWatchNotices, injectKitCss, kitTap, pressProps, maxDpr, INK, useCtlLook, useGameStage, GControlsPanel } from './gamekit.jsx';
+import { EMOTES, Sheet, injectCss, useGameChat, ChatSheet } from './livekit.jsx';
+import { GBtn, GPill, GPanel, GChip, GTitle, GIcon, GHudBtn, GHudPanel, GNotices, useNotices, useWatchNotices, injectKitCss, kitTap, pressProps, maxDpr, INK, useCtlLook, useGameStage, GControlsPanel, GVolBars, GLobby, GSlot, GLobbySheet, GSwitchRow } from './gamekit.jsx';
 import { Sfx } from './sfx.js';
-import { watchAllowed, setWatchAllowed, useLiveBeacon } from './live.js';
+import { setWatchAllowed, useLiveBeacon, useGamePrivacy } from './live.js';
 import { createRenderer, m4, MeshBuilder } from './race3d.js';
 import { buildTrack, buildWorld } from './racetrack.js';
 import { MAPS, MAP_KEYS, bottleSpots } from './racemaps.js';
 import { carMesh, wheelMesh, WHEELS, fxMeshes } from './racecars.js';
-import { CARS, CAR_KEYS, COLORS, BOT_NAMES, MAX_RACERS, LAPS, SKILLS, SKILL_KEYS, EN_MAX, BOTTLE_EN, BOTTLE_BACK, ROCKET_V, SPIN_ROCKET, SPIN_OIL, SLOW_SHOCK, SHIELD_T, mkCar, stepCar, collide, botInput, botSkill, rocketStep, standings, lapOf, fmtRace, clamp } from './raceengine.js';
+import { SkillIcon, NitroIcon, SteerArrow, PedalArt, skillFace, MapSelect } from './raceui.jsx';
+import { CARS, CAR_KEYS, COLORS, BOT_NAMES, MAX_RACERS, LAPS, SKILLS, SKILL_KEYS, EN_MAX, BOTTLE_EN, BOTTLE_BACK, ROCKET_V, SPIN_ROCKET, SPIN_OIL, SLOW_SHOCK, SHIELD_T, mkCar, stepCar, airStep, launchCar, groundSlope, collide, botInput, botSkill, rocketStep, standings, lapOf, fmtRace, clamp } from './raceengine.js';
 
 const CAR_PREF = 'zchat-race-car';
 const TILT_PREF = 'zchat-race-tilt';
@@ -112,22 +113,22 @@ function engineSound() {
   } catch { return null; }
 }
 
-function CarPick({ k, on, img, color, onPress }) {
+function CarPick({ k, on, img, color, onPress, mini }) {
+  if (mini) {
+    return (
+      <button type="button" className="zgk-btn" aria-label={`Drive the ${CARS[k].name.toLowerCase()}`} aria-pressed={on} onClick={(e) => { e.stopPropagation(); onPress(); }}
+        style={{ flex: '1 1 0', minWidth: 0, border: 'none', padding: '4px 4px 5px', borderRadius: 12, cursor: 'pointer', background: on ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.08)', boxShadow: on ? `0 0 0 2.5px ${color}` : 'inset 0 0 0 1px rgba(255,255,255,0.12)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, fontFamily: FONT }}>
+        {img ? <img src={img} alt="" draggable={false} style={{ width: '100%', maxWidth: 96, aspectRatio: '1.7', objectFit: 'cover', borderRadius: 8, display: 'block' }} /> : <div style={{ width: '100%', aspectRatio: '1.7', borderRadius: 8, background: 'rgba(255,255,255,0.12)' }} />}
+        <span style={{ fontSize: 11.5, fontWeight: 900, color: on ? INK : '#FFFFFF', whiteSpace: 'nowrap' }}>{CARS[k].name}</span>
+      </button>
+    );
+  }
   return (
     <button type="button" className="zgk-btn" aria-label={`Drive the ${CARS[k].name.toLowerCase()}`} aria-pressed={on} onClick={(e) => { e.stopPropagation(); onPress(); }}
       style={{ flex: '1 1 0', minWidth: 0, border: 'none', padding: '6px 4px 8px', borderRadius: 16, cursor: 'pointer', background: on ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.1)', boxShadow: on ? `0 0 0 3px ${color}` : 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, fontFamily: FONT }}>
       {img ? <img src={img} alt="" draggable={false} style={{ width: '100%', maxWidth: 120, aspectRatio: '1.6', objectFit: 'cover', borderRadius: 10, display: 'block' }} /> : <div style={{ width: '100%', aspectRatio: '1.6', borderRadius: 10, background: 'rgba(255,255,255,0.12)' }} />}
       <span style={{ fontSize: 12.5, fontWeight: 900, color: on ? INK : '#FFFFFF' }}>{CARS[k].name}</span>
     </button>
-  );
-}
-
-function Toggle({ on, label, onPress }) {
-  return (
-    <div role="switch" aria-checked={on} tabIndex={0} onClick={onPress} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPress(); } }} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
-      <span style={{ flex: 1, fontSize: 13.5, fontWeight: 800 }}>{label}</span>
-      <span aria-hidden="true" style={{ width: 46, height: 28, borderRadius: 14, background: on ? '#F7C53A' : 'rgba(255,255,255,0.18)', position: 'relative', transition: 'background 0.2s', flexShrink: 0 }}><span style={{ position: 'absolute', top: 3, left: on ? 21 : 3, width: 22, height: 22, borderRadius: 11, background: '#FFFFFF', transition: 'left 0.2s' }} /></span>
-    </div>
   );
 }
 
@@ -141,18 +142,6 @@ function Seg({ value, items, onPick, disabled }) {
         </button>
       ))}
     </div>
-  );
-}
-
-function MapCard({ k, on, onPress, small }) {
-  const M = MAPS[k];
-  return (
-    <button type="button" className="zgk-btn" aria-pressed={on} aria-label={`Map ${M.name}`} onClick={(e) => { e.stopPropagation(); if (onPress) onPress(); }}
-      style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: 6, border: 'none', borderRadius: 14, textAlign: 'left', fontFamily: FONT, color: '#FFFFFF', cursor: onPress ? 'pointer' : 'default', background: on ? 'rgba(255,225,90,0.16)' : 'rgba(255,255,255,0.07)', boxShadow: on ? '0 0 0 2.5px #FFD84E' : 'none', minWidth: 0, width: '100%' }}>
-      <img src={`/race-map-${k}.webp`} alt="" draggable={false} style={{ width: '100%', aspectRatio: '16 / 9', objectFit: 'cover', borderRadius: 10, display: 'block', background: '#2A3040' }} />
-      <span style={{ fontSize: small ? 13 : 14, fontWeight: 900, padding: '0 2px' }}>{M.name}</span>
-      {!small && <span style={{ fontSize: 11.5, fontWeight: 700, color: 'rgba(255,255,255,0.7)', padding: '0 2px', lineHeight: 1.35 }}>{M.blurb}</span>}
-    </button>
   );
 }
 
@@ -192,8 +181,11 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
   const [people, setPeople] = useState(false);
   const [ctl, setCtl] = useState(false);
   const [mapSheet, setMapSheet] = useState(false);
+  const [optSheet, setOptSheet] = useState(false);
   const [follow, setFollow] = useState(null);
-  const [allowWatch, setAllowWatch] = useState(watchAllowed());
+  const gamePriv = useGamePrivacy();
+  const allowWatch = gamePriv.show && gamePriv.watch;
+  const setAllowWatch = () => {};
   const [tilt, setTilt] = useState(() => readPref(TILT_PREF, '0') === '1');
   const [thumbs, setThumbs] = useState({});
   const [bubbles, setBubbles] = useState({});
@@ -203,7 +195,6 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
   const GS = useGameStage(useMemo(() => ({ ...look, side: true }), [look]));
   const { top, right, bottom, left } = GS.at;
   const land = GS.land;
-  const pinStart = land && GS.W >= 700;
   useLiveBeacon({ game: 'race', room: room ? room.rm : null, info: { h: room && room.host, n: Math.max(1, roster.length) }, active: !solo && !watch && !!room, allow: allowWatch });
 
   const cvRef = useRef(null);
@@ -236,10 +227,13 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
   const rosterSeen = useRef({ list: null, at: Date.now(), bye: new Set() });
   const kindOf = () => (solo ? 'me' : myId);
   const inRace = () => G.current.ids.includes(kindOf()) && !watch;
-  if (typeof window !== 'undefined' && window.__zfake) window.__zrace = { G: () => G.current, phase: () => phaseRef.current, hold: () => hold.current, roster: () => rosterRef.current, total: () => (RR.current && RR.current.T ? RR.current.T.total : 0), skill: (k) => G.current.skillQ.push(k), map: () => (RR.current ? RR.current.key : null), mode: () => G.current.mode, drawn: () => (RR.current ? RR.current.R.drawn() : 0), tier: () => G.current.budget.tier };
+  if (typeof window !== 'undefined' && window.__zfake) window.__zrace = { T: () => (RR.current ? RR.current.T : null), hitMe: (k) => { const c = G.current.cars[kindOf()]; if (c) applyHitRef.current(c, k, 'bot1', true); }, G: () => G.current, phase: () => phaseRef.current, hold: () => hold.current, roster: () => rosterRef.current, total: () => (RR.current && RR.current.T ? RR.current.T.total : 0), skill: (k) => G.current.skillQ.push(k), map: () => (RR.current ? RR.current.key : null), mode: () => G.current.mode, drawn: () => (RR.current ? RR.current.R.drawn() : 0), tier: () => G.current.budget.tier };
 
   const say = (text, sec = 2.2) => { setToast({ text, at: Date.now() }); clearTimeout(toastT.current); toastT.current = setTimeout(() => setToast(null), sec * 1000); };
   const nameOf = (k) => (k === kindOf() ? 'You' : G.current.botMeta[k] ? G.current.botMeta[k].n : names[k] || 'Friend');
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatNew, setChatNew] = useState(0);
+  const chat = useGameChat(solo || watch ? null : relay, nameOf, (s) => { pushNote(s, 'chat'); setChatNew((n) => n + 1); });
   const nameRef = (k) => (k === kindOf() ? 'You' : G.current.botMeta[k] ? G.current.botMeta[k].n : namesRef.current[k] || 'Friend');
   const slotColor = (k) => { const i = G.current.ids.indexOf(k); return COLORS[(i >= 0 ? i : Math.max(0, rosterRef.current.indexOf(k))) % COLORS.length]; };
   const myColor = COLORS[Math.max(0, roster.indexOf(kindOf())) % COLORS.length];
@@ -418,18 +412,24 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
     spawnBurst(p.x, p.y + 1.1, p.z, big ? 10 : 5, 5, 3, 1.2, 1.4);
     spawnBurst(p.x, p.y + 0.8, p.z, big ? 10 : 6, 4, 11, 0.6, 0.35);
   };
+  const crashCar = (c, k, by) => {
+    const side = (String(by || '').charCodeAt(0) + Math.floor(c.s)) % 2 ? 1 : -1;
+    if (k === 'rocket') { c.spin = SPIN_ROCKET; c.spinMax = SPIN_ROCKET; c.spinTurns = 2; c.v *= 0.5; c.boostT = 0; c.smokeT = 2.6; launchCar(c, 9.2, side, side * 3.6); }
+    else if (k === 'oil') { c.spin = SPIN_OIL * 1.3; c.spinMax = SPIN_OIL * 1.3; c.spinTurns = 4; c.v *= 0.78; c.slide = side * 5.2; }
+    else if (k === 'shock') { c.slow = SLOW_SHOCK; c.zapT = 1.1; launchCar(c, 3.4, 0, 0); }
+  };
+  const applyHitRef = useRef(null);
   const applyHit = (c, k, by, local) => {
     const g = G.current;
     if (!c || c.fin) return false;
     let blocked = false;
     if (c.shield > 0) { c.shield = 0; blocked = true; }
-    else if (k === 'rocket') { c.spin = SPIN_ROCKET; c.spinMax = SPIN_ROCKET; c.v *= 0.55; c.boostT = 0; }
-    else if (k === 'oil') { c.spin = SPIN_OIL; c.spinMax = SPIN_OIL; c.v *= 0.75; }
-    else if (k === 'shock') c.slow = SLOW_SHOCK;
+    else crashCar(c, k, by);
     if (local && !solo) relay.send('hit', { r: g.rid, id: c.id, k, b: blocked ? 1 : 0, by });
     hitFx(c, k, by, blocked);
     return !blocked;
   };
+  applyHitRef.current = applyHit;
   const hitFx = (c, k, by, blocked) => {
     const g = G.current;
     const myK = kindOf();
@@ -550,8 +550,7 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
         const k = m.k === 'oil' || m.k === 'shock' ? m.k : 'rocket';
         const blocked = !!m.b;
         if (blocked) c.shield = 0;
-        else if (k === 'rocket') { c.spin = SPIN_ROCKET; c.spinMax = SPIN_ROCKET; }
-        else if (k === 'oil') { c.spin = SPIN_OIL; c.spinMax = SPIN_OIL; }
+        else crashCar(c, k, typeof m.by === 'string' ? m.by : '');
         if (k === 'rocket') g.rockets = g.rockets.filter((r) => !(r.tg === m.id && Math.abs(r.s - c.s) < 30));
         hitFx(c, k, typeof m.by === 'string' ? m.by : '', blocked);
       }),
@@ -688,8 +687,21 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
         if (g.menuKey !== want) {
           g.menuKey = want;
           g.menuCars = want.split('#')[1].split('|').map((e, i) => { const [k, t] = e.split(':'); return mkCar(k, i, t); });
+          g.menuT = 0; g.tv = null;
         }
         all = g.menuCars || [];
+        if (step > 0) {
+          g.menuT = (g.menuT || 0) + step;
+          if (g.menuT > 1.6) {
+            for (let sub = 0; sub < subs; sub++) {
+              for (const c of all) {
+                const sk = 0.84 + (c.slot % 4) * 0.04;
+                stepCar(c, T, botInput(c, T, all, g.menuT, sk), sdt, { mul: sk });
+                for (const o of all) if (o !== c) collide(c, o, true);
+              }
+            }
+          }
+        }
       }
       const fx = g.fx;
       const total = T.total;
@@ -780,7 +792,7 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
           }
         }
         if (g.oils.length) g.oils = g.oils.filter((o) => now < o.until);
-        for (const c of all) if (c.id !== myK && !(isHost && g.bots.includes(c.id))) { if (c.spin > 0) c.spin = Math.max(0, c.spin - step); if (c.shield > 0) c.shield = Math.max(0, c.shield - step); }
+        for (const c of all) if (c.id !== myK && !(isHost && g.bots.includes(c.id))) { if (c.spin > 0) c.spin = Math.max(0, c.spin - step); if (c.shield > 0) c.shield = Math.max(0, c.shield - step); if (step > 0) airStep(c, T, step, fx); }
         for (const k of Object.keys(g.net)) {
           const c = g.cars[k], N = g.net[k];
           if (!c || k === myK) continue;
@@ -824,6 +836,12 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
         if (f.k === 'boost') { if (local) { Sfx.play('dash', { vol: 0.75 }); try { navigator.vibrate && navigator.vibrate(18); } catch {} } }
         else if (f.k === 'ready') { if (local) Sfx.play('pick', { vol: 0.5 }); }
         else if (f.k === 'wall' || f.k === 'bump') { if (local) { Sfx.play('bump', { vol: 0.35 + f.f * 0.5, gap: 0.2 }); g.shake = Math.max(g.shake || 0, 0.18 + f.f * 0.25); } }
+        else if (f.k === 'land') {
+          const lc = g.cars[f.id];
+          if (lc) { const lp = T.at(lc.s, lc.x); spawnBurst(lp.x, lp.y + (lc.air || 0) + 0.2, lp.z, 5 + Math.round(f.f * 10), 2, 3 + f.f * 5, 1.2, 0.9); }
+          if (local) { Sfx.play('bump', { vol: 0.35 + f.f * 0.55, gap: 0.12 }); g.shake = Math.max(g.shake || 0, 0.16 + f.f * 0.45); try { if (navigator.vibrate) navigator.vibrate(Math.round(10 + f.f * 30)); } catch {} }
+        } else if (f.k === 'jump') { if (local) Sfx.play('dash', { vol: 0.4 }); }
+        else if (f.k === 'pad') { if (local) { Sfx.play('dash', { vol: 0.85 }); try { if (navigator.vibrate) navigator.vibrate(16); } catch {} } }
       }
       const mineC = g.cars[myK];
       if (g.eng) g.eng.set(mineC ? mineC.v : 0, mineC && mineC.boostT > 0, mineC ? mineC.drift : 0, racing && !!mineC && !pausedRef.current);
@@ -835,15 +853,19 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
       const tagPos = {};
       for (const c of all) {
         const p = T.at(c.s, c.x);
-        const spinA = c.spin > 0 ? (1 - c.spin / Math.max(0.5, c.spinMax || 1)) * Math.PI * 3 : 0;
+        const spinA = c.spin > 0 ? (1 - c.spin / Math.max(0.5, c.spinMax || 1)) * Math.PI * 2 * (c.spinTurns || 1.5) : 0;
         const vis = c.drift * c.steer * 0.34 + (c.bump > 0 ? Math.sin(now / 30) * 0.03 : 0) + spinA;
         const hd = p.heading + c.yaw + vis;
-        c.wx = p.x; c.wy = p.y; c.wz = p.z; c.hd = hd; c.hdCam = p.heading + c.yaw + c.drift * c.steer * 0.2;
+        const air = c.air || 0;
+        const fl = c.flip || 0;
+        c.wx = p.x; c.wy = p.y + air; c.wz = p.z; c.hd = hd; c.hdCam = p.heading + c.yaw + c.drift * c.steer * 0.2;
         const color = ph === 'menu' ? COLORS[c.slot % COLORS.length] : slotColor(c.id);
         const mesh = meshFor(c.type, color);
         const roll = -c.steer * clamp(c.v / 45, 0, 1) * 0.035 + p.bank;
-        const pitch = -p.slope + (c.brake ? 0.018 : c.boostT > 0 ? -0.012 : 0);
-        const model = m4.pose(p.x, p.y, p.z, hd, pitch, roll);
+        const rampP = c.inAir ? Math.atan2(c.vy || 0, Math.max(10, c.v)) * 0.55 : Math.atan(groundSlope(T, c.s));
+        const pitch = -p.slope - rampP + (c.brake ? 0.018 : c.boostT > 0 ? -0.012 : 0);
+        const ox = Math.sin(fl) * 0.62, oy = (1 - Math.cos(fl)) * 0.62;
+        const model = m4.pose(p.x + Math.cos(hd) * ox, p.y + air + oy, p.z - Math.sin(hd) * ox, hd, pitch, roll + fl);
         if (mesh) items.push({ mesh, cast: true, model });
         const wm = wheelsFor(c.type);
         if (wm) {
@@ -863,6 +885,9 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
           for (const sg of [-1, 1]) P.push({ x: p.x - fxv * (back - 0.5) + rxv * sg * 0.85, y: p.y + 0.25, z: p.z - fzv * (back - 0.5) + rzv * sg * 0.85, vx: -fxv * 2 + (Math.random() - 0.5), vy: 0.6 + Math.random() * 0.5, vz: -fzv * 2 + (Math.random() - 0.5), life: 0, max: 0.9 + Math.random() * 0.4, s0: 0.35, s1: 1.6, a0: dust ? 0.4 : 0.3, type: dust ? 2 : 0 });
         }
         if (step > 0 && st.key === 'rock' && c.v > 20 && P.length < cap * 0.7 && Math.random() < 0.45) P.push({ x: p.x - fxv * back, y: p.y + 0.3, z: p.z - fzv * back, vx: -fxv * 3, vy: 0.8, vz: -fzv * 3, life: 0, max: 1.1, s0: 0.5, s1: 2.2, a0: 0.22, type: 2 });
+        if (step > 0 && c.inAir && c.flipV && P.length < cap) P.push({ x: p.x, y: p.y + air + 0.7, z: p.z, vx: (Math.random() - 0.5) * 1.6, vy: 0.5 + Math.random() * 0.6, vz: (Math.random() - 0.5) * 1.6, life: 0, max: 0.9, s0: 0.6, s1: 2.2, a0: 0.55, type: 5 });
+        if (step > 0 && c.smokeT > 0) { c.smokeT = Math.max(0, c.smokeT - step); if (P.length < cap && Math.random() < 0.55) P.push({ x: p.x + fxv * 0.9, y: p.y + air + 0.9, z: p.z + fzv * 0.9, vx: -fxv * 1.5 + (Math.random() - 0.5), vy: 1.1 + Math.random() * 0.6, vz: -fzv * 1.5 + (Math.random() - 0.5), life: 0, max: 1.2, s0: 0.5, s1: 2, a0: 0.5 * Math.min(1, c.smokeT), type: 5 }); }
+        if (step > 0 && c.zapT > 0) { c.zapT = Math.max(0, c.zapT - step); if (P.length < cap && Math.random() < 0.7) { const a = Math.random() * Math.PI * 2; P.push({ x: p.x + Math.cos(a) * 1.1, y: p.y + air + 0.4 + Math.random() * 0.9, z: p.z + Math.sin(a) * 1.1, vx: Math.cos(a) * 3, vy: 1 + Math.random() * 2, vz: Math.sin(a) * 3, life: 0, max: 0.28, s0: 0.35, s1: 0.1, a0: 1, type: 4 }); } }
         if (step > 0 && c.boostT > 0 && P.length < cap) {
           for (const sg of [-1, 1]) P.push({ x: p.x - fxv * (back + 0.1) + rxv * sg * 0.38, y: p.y + 0.4, z: p.z - fzv * (back + 0.1) + rzv * sg * 0.38, vx: -fxv * 9, vy: 0, vz: -fzv * 9, life: 0, max: 0.16, s0: 0.3, s1: 0.08, a0: 0.95, type: 1 });
         }
@@ -909,7 +934,33 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
         parts.push({ x: q.x, y: q.y, z: q.z, size: q.s0 + (q.s1 - q.s0) * u, alpha: q.a0 * (1 - u), type: q.type || 0 });
       }
       let camPos, camAt, fov = 1.0;
-      if (ph === 'menu' || !g.ids.length) {
+      const tvCars = ph === 'menu' && (g.menuT || 0) > 1.6 ? all.filter((c) => c.wx != null) : [];
+      if (tvCars.length) {
+        const lead = tvCars.reduce((m, c) => (c.s > m.s ? c : m), tvCars[0]);
+        const tv = g.tv;
+        if (!tv || g.menuT - tv.at > 8 || (tv.k === 'side' && (tvCars.find((c) => c.id === tv.id) || lead).s > tv.s + 4)) {
+          const k = !tv || tv.k === 'chase' ? 'side' : 'chase';
+          const pickC = k === 'chase' ? tvCars[Math.floor(Math.random() * tvCars.length)] : lead;
+          g.tv = { k, at: g.menuT, s: pickC.s + 26 + Math.random() * 10, side: tv && tv.side ? -tv.side : 1, id: pickC.id, cam: null };
+        }
+        const tv2 = g.tv;
+        const car = tvCars.find((c) => c.id === tv2.id) || lead;
+        if (tv2.k === 'side') {
+          const e = T.at(tv2.s, tv2.side * (T.w + 1.6));
+          camPos = [e.x, e.y + 2.4, e.z];
+          camAt = [car.wx, car.wy + 0.7, car.wz];
+          fov = 0.78;
+        } else {
+          const h = car.hdCam || 0, fxv = Math.sin(h), fzv = Math.cos(h), rxv = Math.cos(h), rzv = -Math.sin(h);
+          const want = [car.wx - fxv * 8.5 + rxv * tv2.side * 4.2, car.wy + 3.6, car.wz - fzv * 8.5 + rzv * tv2.side * 4.2];
+          if (!tv2.cam) tv2.cam = want.slice();
+          const kq = Math.min(1, dt * 3.2);
+          for (let q = 0; q < 3; q++) tv2.cam[q] += (want[q] - tv2.cam[q]) * kq;
+          camPos = tv2.cam.slice();
+          camAt = [car.wx + fxv * 7, car.wy + 0.9, car.wz + fzv * 7];
+          fov = 0.95;
+        }
+      } else if (ph === 'menu' || !g.ids.length) {
         g.orbit = (g.orbit || 0) + dt;
         const sw = Math.sin(g.orbit * 0.16) * 2.2;
         const eye = T.at(7 + sw, 4.6), look0 = T.at(-16, -1.8);
@@ -1008,7 +1059,7 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
 
   const finish = () => { const g = G.current; if (g.eng) { g.eng.stop(); g.eng = null; } Sfx.stopAll(); onClose(); };
   const leave = () => { if ((phase === 'race' || phase === 'count') && !solo && !watch) { setLeaveAsk(true); return; } finish(); };
-  useBackClose(true, () => { if (ctl) setCtl(false); else if (mapSheet) setMapSheet(false); else if (people) setPeople(false); else if (quick) setQuick(false); else if (leaveAsk) setLeaveAsk(false); else if (paused) setPaused(false); else if (phase === 'race' && solo) setPaused(true); else leave(); });
+  useBackClose(true, () => { if (chatOpen) setChatOpen(false); else if (ctl) setCtl(false); else if (optSheet) setOptSheet(false); else if (mapSheet) setMapSheet(false); else if (people) setPeople(false); else if (quick) setQuick(false); else if (leaveAsk) setLeaveAsk(false); else if (paused) setPaused(false); else if (phase === 'race' && solo) setPaused(true); else leave(); });
   const sendEmote = (e) => { setBubbles((p) => ({ ...p, [kindOf()]: { e, at: Date.now() } })); if (!solo) relay.send('emo', { e }); setQuick(false); Sfx.play('pop', { vol: 0.5 }); };
   useEffect(() => {
     const keysB = Object.keys(bubbles);
@@ -1039,8 +1090,9 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
   const rowBtns = [
     talkOn && <GHudBtn key="mic" icon={relay.mic.on ? 'mic' : 'micoff'} on={relay.mic.on} size={hb} label={relay.mic.on ? 'Turn your mic off' : 'Turn your mic on'} onPress={relay.toggleMic} />,
     !solo && <GHudBtn key="ppl" icon="people" on={people} size={hb} label="Players and voice" badge={roster.length > 1 ? roster.length : null} onPress={() => { setQuick(false); setPeople(true); }} />,
+    talkOn && <GHudBtn key="chat" icon="chat" size={hb} label="Chat" badge={chatNew || null} onPress={() => { setQuick(false); setChatNew(0); setChatOpen(true); }} />,
     talkOn && <GHudBtn key="emo" icon="smile" on={quick} tone="#F5AE1E" size={hb} label="Emojis" onPress={() => setQuick((v) => !v)} />,
-    playingNow && <GHudBtn key="gear" icon="gear" size={hb} label="Controls" onPress={() => { setQuick(false); if (solo) setPaused(true); setCtl(true); }} />,
+    playingNow && <GHudBtn key="gear" icon="gear" size={hb} label="Settings" onPress={() => { setQuick(false); if (solo) setPaused(true); setCtl(true); }} />,
     <GHudBtn key="x" icon={solo && phase === 'race' ? 'pause' : 'close'} size={hb} label={solo && phase === 'race' ? 'Pause' : 'Leave the race'} onPress={() => (solo && phase === 'race' ? setPaused(true) : leave())} />,
   ].filter(Boolean);
   const g0 = G.current;
@@ -1051,14 +1103,90 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
   const bestLap = Number(readPref(BEST_KEY(uid, mapKey), '0'));
   const hostName = names[room && room.host] || 'The host';
 
-  const startPanel = (
-    <GPanel style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 9 }}>
-      <Seg value={mode} items={Object.entries(MODES)} onPick={pickMode} disabled={!isHost} />
-      <div style={{ fontSize: 11.5, fontWeight: 700, color: 'rgba(255,255,255,0.72)', lineHeight: 1.35, padding: '0 2px' }}>{mode === 'attack' ? 'Grab energy bottles, fire rockets, drop oil and shield yourself.' : 'Pure racing. Drift to fill nitro and pass on the corners.'}</div>
-      <MapCard k={mapKey} on={false} small onPress={isHost ? () => setMapSheet(true) : null} />
-      {isHost ? <GPill text={ready ? 'Start the race' : 'Building the map'} icon="play" color="green" wide disabled={!ready || failed} onPress={startRace} />
-        : <div style={{ fontSize: 13, fontWeight: 800, color: 'rgba(255,255,255,0.8)', padding: '2px 2px 4px' }}>{`${hostName} picks the map and starts`}</div>}
-    </GPanel>
+  const toggleWatchR = () => { const v = !allowWatch; setAllowWatch(v); setWatchAllowed(v); kitTap(); };
+  const lobbyUi = phase !== 'menu' ? null : (
+    <GLobby GS={GS} title="Island Rally" onClose={finish} closeLabel={solo ? 'Leave' : 'Back to chat'} tint="rgba(8,12,24,0.6)"
+      sub={solo ? 'Race five bots on four maps' : watch ? `Watching ${hostName} and friends` : 'Up to six friends race in 3D'}
+      badge={bestLap ? <GChip style={{ height: 34, gap: 6 }}><GIcon k="flag" size={14} color="#FFD84E" />{`Best lap ${fmtRace(bestLap)}`}</GChip> : null}
+      tools={(
+        <>
+          {!solo && !watch && <GBtn icon="chat" color="dark" size={42} fast={false} label="Chat" badge={chatNew || null} onPress={() => { setChatNew(0); setChatOpen(true); }} />}
+          {!solo && isHost && !watch && <GBtn icon={allowWatch ? 'eye' : 'eyeoff'} color={allowWatch ? 'blue' : 'dark'} size={42} fast={false} label={allowWatch ? 'Friends can watch. Tap to stop' : 'Let friends watch'} badge={watchers.length || null} onPress={toggleWatchR} />}
+          {!watch && <GBtn icon="gear" color="dark" size={42} fast={false} label="Race settings" onPress={() => setOptSheet(true)} />}
+        </>
+      )}
+      side={(
+        <>
+          {!watch && (
+            <GPanel style={{ padding: '8px 10px 10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 900 }}>Your ride</div>
+              <div style={{ display: 'flex', gap: 6 }}>{CAR_KEYS.map((k) => <CarPick key={k} mini k={k} on={myCar === k} img={thumbs[k]} color={myColor} onPress={() => pickCar(k)} />)}</div>
+              {solo && <div style={{ fontSize: 11.5, fontWeight: 700, color: 'rgba(255,255,255,0.75)', lineHeight: 1.35 }}>Steer with the arrows. Hold Brake while you turn to drift. Drifting fills Nitro.</div>}
+            </GPanel>
+          )}
+          {!solo && (
+            <GPanel style={{ padding: '8px 10px 10px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 13.5, fontWeight: 900, flex: 1 }}>{watch ? 'Racers' : `Racers ${roster.length} of ${MAX_RACERS}`}</span>
+                {watchers.length > 0 && <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 800, color: '#CFE6FF' }}><GIcon k="eye" size={14} color="#CFE6FF" />{`${watchers.length} watching`}</span>}
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                {Array.from({ length: MAX_RACERS }, (_, i) => {
+                  const k = roster[i];
+                  if (!k) return <GSlot key={`e${i}`} size={36} empty name={isHost && onInvite && !watch ? 'Invite' : fill && isHost ? 'Bot' : 'Open'} label="Invite a friend" onPress={isHost && onInvite && !watch ? () => onInvite(roster.length, GS.side) : null} />;
+                  const isMe = k === kindOf();
+                  return <GSlot key={k} size={36} art={<span style={{ width: 26, height: 26, borderRadius: 13, background: COLORS[i % COLORS.length], boxShadow: '0 0 0 2px #FFFFFF', display: 'block' }} />} name={isMe ? 'You' : nameOf(k)} ring={COLORS[i % COLORS.length]} talk={micOf(k)} muted={!!relay.muted[k]} label={isMe ? 'You' : `${nameOf(k)}, voice and volume`} onPress={!isMe && !watch ? () => setPeople(true) : null} />;
+                })}
+              </div>
+              {!watch && (
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <GPill text={relay.mic.on ? 'Mic off' : 'Talk with mic'} icon={relay.mic.on ? 'micoff' : 'mic'} color={relay.mic.on ? 'white' : 'blue'} small wide onPress={relay.toggleMic} style={{ flex: 1 }} />
+                  <GPill text="Voice" icon="people" color="white" small onPress={() => setPeople(true)} />
+                </div>
+              )}
+              {!watch && relay.mic.err && <div style={{ fontSize: 12, fontWeight: 800, color: '#FF9C9C' }}>{relay.mic.err}</div>}
+            </GPanel>
+          )}
+        </>
+      )}
+      main={(
+        <GPanel style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 9 }}>
+          <Seg value={mode} items={Object.entries(MODES)} onPick={pickMode} disabled={!isHost || watch} />
+          <button type="button" className="zgk-btn" aria-label={isHost && !watch ? `Map ${MAPS[mapKey].name}. Change map` : `Map ${MAPS[mapKey].name}`} onClick={(e) => { e.stopPropagation(); kitTap(); setMapSheet(true); }}
+            style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 5, border: 'none', borderRadius: 12, background: 'rgba(255,255,255,0.07)', cursor: 'pointer', color: '#FFFFFF', fontFamily: FONT, textAlign: 'left' }}>
+            <img src={`/race-map-${mapKey}.webp`} alt="" draggable={false} style={{ width: 92, aspectRatio: '16 / 9', objectFit: 'cover', borderRadius: 8, display: 'block', background: '#2A3040', flexShrink: 0 }} />
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ display: 'block', fontSize: 15, fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{MAPS[mapKey].name}</span>
+              <span style={{ display: 'block', fontSize: 11.5, fontWeight: 700, color: 'rgba(255,255,255,0.7)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{mode === 'attack' ? 'Rockets, oil and shields' : `${laps} laps`}</span>
+            </span>
+            <span style={{ height: 26, padding: '0 10px', borderRadius: 13, background: isHost && !watch ? 'linear-gradient(180deg, #FFE27A, #F5B321)' : 'rgba(10,14,26,0.7)', color: isHost && !watch ? '#2A1D05' : '#FFFFFF', fontSize: 11.5, fontWeight: 900, display: 'flex', alignItems: 'center', flexShrink: 0 }}>{isHost && !watch ? 'Change' : 'See maps'}</span>
+          </button>
+          {failed ? <div style={{ fontSize: 12.5, fontWeight: 800, lineHeight: 1.4, color: '#FFB4B4' }}>This phone could not start the 3D race. Try closing other apps, then open it again.</div>
+            : watch ? <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 44, fontSize: 13.5, fontWeight: 800 }}><Spinner size={16} color="#FFFFFF" />{`${hostName} starts the race soon`}</div>
+            : isHost ? <GPill text={ready ? 'Start the race' : `Building ${MAPS[mapKey].name}`} icon="play" color="gold" wide disabled={!ready} onPress={startRace} />
+            : <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 44, fontSize: 13.5, fontWeight: 800 }}><Spinner size={16} color="#FFFFFF" />{`${hostName} picks the map and starts`}</div>}
+        </GPanel>
+      )}>
+      {optSheet && (
+        <GLobbySheet GS={GS} title="Race settings" width={520} onClose={() => setOptSheet(false)}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {isHost && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 14.5, fontWeight: 900, flex: 1 }}>Laps</span>
+                {[2, 3, 5].map((n) => <GPill key={n} small text={String(n)} color={laps === n ? 'gold' : 'white'} height={36} onPress={() => setLaps(n)} style={{ minWidth: 52 }} />)}
+              </div>
+            )}
+            {isHost && !solo && <GSwitchRow label="Fill empty spots with bots" on={fill} onToggle={() => setFill((v) => !v)} />}
+            <GSwitchRow label="Tilt your phone to steer" on={tilt} onToggle={toggleTilt} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: 14.5, fontWeight: 900, flex: 1 }}>Graphics</span>
+              <div style={{ width: 200 }}><Seg value={gfx} items={GFX} onPick={pickGfx} /></div>
+            </div>
+            <GPill text="Buttons and sound" icon="gear" color="white" small wide onPress={() => { setOptSheet(false); setCtl(true); }} />
+          </div>
+        </GLobbySheet>
+      )}
+    </GLobby>
   );
 
   return (
@@ -1131,26 +1259,26 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
               )}
               {inRace() && phase !== 'done' && !hud.fin && (
                 <>
-                  {!tilt && zone('l', 'Steer left', { left: left(16), bottom: bottom(16), width: 86, height: 86, borderRadius: 24, background: pressed.l ? 'rgba(255,255,255,0.32)' : 'rgba(12,16,26,0.42)', boxShadow: 'inset 0 0 0 2px rgba(255,255,255,0.6), 0 6px 16px rgba(0,0,0,0.28)', transformOrigin: '0 100%' }, <Chevron dir="l" />)}
-                  {!tilt && zone('r', 'Steer right', { left: left(114), bottom: bottom(16), width: 86, height: 86, borderRadius: 24, background: pressed.r ? 'rgba(255,255,255,0.32)' : 'rgba(12,16,26,0.42)', boxShadow: 'inset 0 0 0 2px rgba(255,255,255,0.6), 0 6px 16px rgba(0,0,0,0.28)', transformOrigin: '0 100%' }, <Chevron dir="r" />)}
-                  {zone('d', 'Brake, hold while steering to drift', { right: right(116), bottom: bottom(14), width: 68, height: 100, borderRadius: 16, background: pressed.d ? 'linear-gradient(180deg, #59606C 0%, #3A4049 100%)' : 'linear-gradient(180deg, #454B56 0%, #262A31 100%)', boxShadow: `inset 0 0 0 2px ${hud.drift ? '#FFB020' : 'rgba(255,255,255,0.45)'}, 0 6px 16px rgba(0,0,0,0.35)`, flexDirection: 'column', gap: 6, transformOrigin: '100% 100%' }, (
+                  {!tilt && zone('l', 'Steer left', { left: left(16), bottom: bottom(16), width: 88, height: 88, borderRadius: 26, background: pressed.l ? 'linear-gradient(180deg, #FFFFFF 0%, #D9DEE6 100%)' : 'linear-gradient(180deg, rgba(46,52,64,0.78) 0%, rgba(16,19,26,0.78) 100%)', boxShadow: pressed.l ? '0 0 0 3px rgba(255,255,255,0.5), 0 4px 10px rgba(0,0,0,0.3)' : 'inset 0 1.5px 0 rgba(255,255,255,0.22), inset 0 0 0 2px rgba(255,255,255,0.32), 0 8px 18px rgba(0,0,0,0.35)', transformOrigin: '0 100%' }, <SteerArrow dir="l" on={!!pressed.l} />)}
+                  {!tilt && zone('r', 'Steer right', { left: left(116), bottom: bottom(16), width: 88, height: 88, borderRadius: 26, background: pressed.r ? 'linear-gradient(180deg, #FFFFFF 0%, #D9DEE6 100%)' : 'linear-gradient(180deg, rgba(46,52,64,0.78) 0%, rgba(16,19,26,0.78) 100%)', boxShadow: pressed.r ? '0 0 0 3px rgba(255,255,255,0.5), 0 4px 10px rgba(0,0,0,0.3)' : 'inset 0 1.5px 0 rgba(255,255,255,0.22), inset 0 0 0 2px rgba(255,255,255,0.32), 0 8px 18px rgba(0,0,0,0.35)', transformOrigin: '0 100%' }, <SteerArrow dir="r" on={!!pressed.r} />)}
+                  {zone('d', 'Brake, hold while steering to drift', { right: right(122), bottom: bottom(14), width: 70, height: 104, borderRadius: 18, background: pressed.d ? 'linear-gradient(180deg, #3D434E 0%, #23272E 100%)' : 'linear-gradient(180deg, rgba(46,52,64,0.82) 0%, rgba(16,19,26,0.82) 100%)', boxShadow: `inset 0 0 0 2px ${hud.drift ? '#FFB020' : 'rgba(255,255,255,0.3)'}, ${hud.drift ? '0 0 18px rgba(255,170,40,0.55), ' : ''}0 8px 18px rgba(0,0,0,0.35)`, flexDirection: 'column', gap: 4, transformOrigin: '100% 100%' }, (
                     <>
-                      <svg width="44" height="54" viewBox="0 0 44 54" aria-hidden="true">{Array.from({ length: 6 }, (_, i) => <rect key={i} x="4" y={4 + i * 8.6} width="36" height="4.2" rx="2.1" fill={i % 2 ? 'rgba(255,255,255,0.32)' : 'rgba(255,255,255,0.5)'} />)}</svg>
-                      <span style={{ fontSize: 11.5, fontWeight: 900, color: hud.drift ? '#FFD84E' : '#FFFFFF' }}>{hud.drift ? 'Drift' : 'Brake'}</span>
+                      <PedalArt drift={!!hud.drift} />
+                      <span style={{ fontSize: 11.5, fontWeight: 900, color: hud.drift ? '#FFD84E' : '#FFFFFF', letterSpacing: '0.02em' }}>{hud.drift ? 'Drift' : 'Brake'}</span>
                     </>
                   ))}
-                  {zone('b', 'Nitro', { right: right(16), bottom: bottom(14), width: 90, height: 90, borderRadius: '50%', transformOrigin: '100% 100%' }, (
+                  {zone('b', 'Nitro', { right: right(16), bottom: bottom(14), width: 96, height: 96, borderRadius: '50%', transformOrigin: '100% 100%' }, (
                     <>
-                      <svg width="90" height="90" viewBox="0 0 90 90" style={{ position: 'absolute', inset: 0, transform: 'rotate(-90deg)' }} aria-hidden="true"><circle cx="45" cy="45" r="40" fill="rgba(12,16,26,0.5)" /><circle cx="45" cy="45" r="34" fill="none" stroke="rgba(255,255,255,0.18)" strokeWidth="6" /><circle ref={meterRef} cx="45" cy="45" r="34" fill="none" stroke="#FFB020" strokeWidth="6" strokeLinecap="round" strokeDasharray="0 400" /></svg>
-                      <span style={{ position: 'absolute', inset: 17, borderRadius: '50%', background: pressed.b ? 'linear-gradient(#FFB347, #E5641E)' : 'linear-gradient(#FF9F1C, #D9531A)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1, boxShadow: '0 2px 10px rgba(255,140,30,0.45), inset 0 1px 0 rgba(255,255,255,0.35)' }}>
-                        <GIcon k="dash" size={22} color="#FFFFFF" ink="rgba(0,0,0,0.25)" />
-                        <span style={{ fontSize: 10.5, fontWeight: 900 }}>Nitro</span>
+                      <svg width="96" height="96" viewBox="0 0 96 96" style={{ position: 'absolute', inset: 0, transform: 'rotate(-90deg)' }} aria-hidden="true"><circle cx="48" cy="48" r="45" fill="rgba(10,13,20,0.62)" /><circle cx="48" cy="48" r="38" fill="none" stroke="rgba(255,255,255,0.14)" strokeWidth="6" /><circle ref={meterRef} cx="48" cy="48" r="34" fill="none" stroke="#FFB020" strokeWidth="6" strokeLinecap="round" strokeDasharray="0 400" /></svg>
+                      <span style={{ position: 'absolute', inset: 19, borderRadius: '50%', background: pressed.b ? 'radial-gradient(circle at 50% 30%, #6FC2FF 0%, #1D5FD6 85%)' : 'radial-gradient(circle at 50% 28%, #4A92F0 0%, #183C8C 85%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', boxShadow: '0 3px 12px rgba(30,110,255,0.45), inset 0 1.5px 0 rgba(255,255,255,0.4), inset 0 0 0 2px rgba(255,255,255,0.22)' }}>
+                        <NitroIcon size={34} lit={!!pressed.b} />
                       </span>
+                      <span style={{ position: 'absolute', bottom: -4, left: '50%', transform: 'translateX(-50%)', padding: '1px 8px', borderRadius: 8, background: 'rgba(10,13,20,0.82)', fontSize: 10.5, fontWeight: 900, letterSpacing: '0.03em' }}>Nitro</span>
                     </>
                   ))}
                   {attackNow && (
                     <>
-                      <div style={{ position: 'absolute', right: right(16), bottom: bottom(186), width: 248, display: 'flex', alignItems: 'center', gap: 8, zIndex: 4, pointerEvents: 'none', opacity: 1 - look.see * 0.6, transform: `scale(${look.size})`, transformOrigin: '100% 100%' }}>
+                      <div style={{ position: 'absolute', right: right(16), bottom: bottom(216), width: 270, display: 'flex', alignItems: 'center', gap: 8, zIndex: 4, pointerEvents: 'none', opacity: 1 - look.see * 0.6, transform: `scale(${look.size})`, transformOrigin: '100% 100%' }}>
                         <GIcon k="bolt" size={15} color="#5BF0C2" ink="rgba(0,0,0,0.3)" />
                         <div style={{ flex: 1, height: 11, borderRadius: 6, background: 'rgba(10,14,26,0.6)', boxShadow: 'inset 0 0 0 1.5px rgba(255,255,255,0.35)', overflow: 'hidden', position: 'relative' }}>
                           <div ref={enRef} style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '40%', borderRadius: 6, background: 'linear-gradient(90deg, #1FBF8F, #5BF0C2)' }} />
@@ -1158,18 +1286,19 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
                         </div>
                         <span ref={enTxtRef} style={{ width: 26, fontSize: 12.5, fontWeight: 900, fontVariantNumeric: 'tabular-nums', textAlign: 'right', textShadow: '0 1px 4px rgba(0,0,0,0.5)' }}>0</span>
                       </div>
-                      <div style={{ position: 'absolute', right: right(16), bottom: bottom(124), display: 'flex', gap: 10, zIndex: 4, transform: `scale(${look.size})`, transformOrigin: '100% 100%', opacity: 1 - look.see * 0.6 }}>
-                        {SKILL_KEYS.map((k) => {
+                      <div style={{ position: 'absolute', right: right(16), bottom: bottom(126), display: 'flex', alignItems: 'flex-end', gap: 10, zIndex: 4, transform: `scale(${look.size})`, transformOrigin: '100% 100%', opacity: 1 - look.see * 0.6 }}>
+                        {SKILL_KEYS.map((k, i) => {
                           const S0 = SKILLS[k];
                           const cd = hud.cd[k] || 0;
                           const okEn = hud.en >= S0.cost;
                           const ok = okEn && cd <= 0;
                           return (
                             <button key={k} type="button" className="zgk-btn" aria-label={`${S0.name}, uses ${S0.cost} energy`} onPointerDown={skillPress(k)} onClick={(e) => e.stopPropagation()}
-                              style={{ position: 'relative', width: 54, height: 54, borderRadius: '50%', border: 'none', padding: 0, cursor: 'pointer', background: ok ? 'radial-gradient(circle at 50% 30%, #3B4352, #1C2029)' : 'rgba(12,16,26,0.55)', boxShadow: `inset 0 0 0 2px ${ok ? '#5BF0C2' : 'rgba(255,255,255,0.3)'}, 0 4px 12px rgba(0,0,0,0.3)`, display: 'flex', alignItems: 'center', justifyContent: 'center', touchAction: 'none' }}>
-                              <span style={{ opacity: ok ? 1 : 0.45, display: 'flex' }}><GIcon k={S0.icon} size={24} color={ok ? '#FFFFFF' : '#C9CED6'} ink="rgba(0,0,0,0.3)" /></span>
-                              {cd > 0 && <span style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: `conic-gradient(rgba(5,8,14,0.62) ${(cd / S0.cd) * 360}deg, rgba(0,0,0,0) 0deg)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 900 }}>{Math.ceil(cd)}</span>}
-                              <span style={{ position: 'absolute', right: -4, bottom: -4, minWidth: 22, height: 18, borderRadius: 9, padding: '0 4px', background: okEn ? '#1FBF8F' : '#4A4F5A', fontSize: 10.5, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 0 1.5px rgba(10,14,26,0.8)' }}>{S0.cost}</span>
+                              style={{ position: 'relative', width: 62, height: 62, borderRadius: '50%', border: 'none', padding: 0, cursor: 'pointer', marginBottom: [0, 10, 16, 18][i] || 0, background: 'linear-gradient(180deg, #E8ECF2 0%, #8A94A5 55%, #4B5262 100%)', boxShadow: ok ? `0 0 16px ${k === 'rocket' ? 'rgba(255,110,60,0.55)' : k === 'shield' ? 'rgba(80,190,255,0.55)' : k === 'oil' ? 'rgba(150,110,240,0.55)' : 'rgba(255,210,60,0.55)'}, 0 6px 14px rgba(0,0,0,0.4)` : '0 6px 14px rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              <span style={{ position: 'absolute', inset: 3.5, borderRadius: '50%', background: skillFace(k, okEn), boxShadow: 'inset 0 2px 0 rgba(255,255,255,0.3), inset 0 -3px 6px rgba(0,0,0,0.35)' }} />
+                              <span style={{ position: 'relative', display: 'flex', filter: ok ? 'drop-shadow(0 2px 2px rgba(0,0,0,0.45))' : 'grayscale(0.9) brightness(0.8)', opacity: okEn ? 1 : 0.6 }}><SkillIcon k={k} size={36} /></span>
+                              {cd > 0 && <span style={{ position: 'absolute', inset: 3.5, borderRadius: '50%', background: `conic-gradient(rgba(5,8,14,0.7) ${(cd / S0.cd) * 360}deg, rgba(0,0,0,0) 0deg)`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, fontWeight: 900, textShadow: '0 1px 4px rgba(0,0,0,0.8)' }}>{Math.ceil(cd)}</span>}
+                              <span style={{ position: 'absolute', right: -5, top: -4, minWidth: 24, height: 19, borderRadius: 10, padding: '0 5px', background: okEn ? 'linear-gradient(180deg, #3FE0A8, #13996E)' : '#4A4F5A', fontSize: 10.5, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1, boxShadow: '0 0 0 1.5px rgba(10,14,26,0.85)' }}>{S0.cost}</span>
                             </button>
                           );
                         })}
@@ -1194,90 +1323,11 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
             </>
           )}
 
-          {phase === 'menu' && (
-            <div style={{ position: 'absolute', inset: 0, overflowY: 'auto', touchAction: 'pan-x pan-y', padding: `${top(12)} ${right(16)} ${bottom(22)} ${left(16)}`, boxSizing: 'border-box', background: 'linear-gradient(90deg, rgba(10,14,26,0.74) 0%, rgba(10,14,26,0.46) 46%, rgba(10,14,26,0) 70%)', zIndex: 5 }}>
-              <div style={{ maxWidth: 440, display: 'flex', flexDirection: 'column', gap: 12 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <GBtn icon="close" color="white" size={42} fast={false} label={solo ? 'Leave' : 'Back to chat'} onPress={finish} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <GTitle text="Island Rally" size={34} color="#FFE15A" />
-                    <div style={{ fontSize: 13, fontWeight: 800, color: 'rgba(255,255,255,0.85)' }}>{solo ? 'Race five bots on four maps' : 'Up to six friends race in 3D'}</div>
-                  </div>
-                </div>
-                {failed && <GPanel style={{ padding: 12, fontSize: 13.5, fontWeight: 800, lineHeight: 1.45 }}>This phone could not start the 3D race. Try closing other apps, then open it again.</GPanel>}
-                {!ready && !failed && <GChip style={{ gap: 8 }}><Spinner size={15} color="#FFFFFF" />{`Building ${MAPS[mapKey].name}`}</GChip>}
-                {!watch && (
-                  <GPanel style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    <div style={{ fontSize: 14, fontWeight: 900 }}>Your ride</div>
-                    <div style={{ display: 'flex', gap: 6 }}>{CAR_KEYS.map((k) => <CarPick key={k} k={k} on={myCar === k} img={thumbs[k]} color={myColor} onPress={() => pickCar(k)} />)}</div>
-                  </GPanel>
-                )}
-                {!pinStart && startPanel}
-                {!solo && (
-                  <GPanel style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontSize: 15, fontWeight: 900, flex: 1 }}>{watch ? 'Watching' : `Racers ${roster.length} of 6`}</span>
-                      {isHost && onInvite && roster.length < MAX_RACERS && <GPill small text="Invite" icon="plus" color="green" height={40} onPress={() => onInvite(roster.length, GS.side)} />}
-                    </div>
-                    {roster.map((k, i) => {
-                      const isMe = k === kindOf();
-                      const off = !!relay.muted[k];
-                      return (
-                        <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <span style={{ width: 14, height: 14, borderRadius: 7, background: COLORS[i % COLORS.length], boxShadow: '0 0 0 2px #FFFFFF', flexShrink: 0 }} />
-                          <span style={{ fontSize: 14.5, fontWeight: 800, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nameOf(k)}{k === (room && room.host) ? ', host' : ''}</span>
-                          <span style={{ fontSize: 12, fontWeight: 800, color: 'rgba(255,255,255,0.7)' }}>{CARS[isMe ? myCar : carsOf[k] || 'sport'].name}</span>
-                          {micOf(k) && <GIcon k="mic" size={16} color="#7BE05A" />}
-                          {!isMe && !watch && <GBtn icon={off ? 'mute' : 'sound'} color={off ? 'red' : 'dark'} size={34} fast={false} label={off ? `Unmute ${nameOf(k)}` : `Mute ${nameOf(k)}`} onPress={() => relay.toggleMute(k)} />}
-                        </div>
-                      );
-                    })}
-                    {!watch && <GPill text={relay.mic.on ? 'Mic off' : 'Talk with mic'} icon={relay.mic.on ? 'micoff' : 'mic'} color={relay.mic.on ? 'white' : 'blue'} small wide onPress={relay.toggleMic} />}
-                    {!watch && relay.mic.err && <div style={{ fontSize: 12.5, fontWeight: 800, color: '#FF9C9C' }}>{relay.mic.err}</div>}
-                    {roster.length < 2 && <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,0.75)' }}><Spinner size={16} color="#FFFFFF" />Waiting for friends to join</div>}
-                    {watchers.length > 0 && <div style={{ fontSize: 12.5, fontWeight: 800, color: 'rgba(255,255,255,0.75)', display: 'flex', alignItems: 'center', gap: 6 }}><GIcon k="eye" size={14} color="#CFE6FF" />{`Watching: ${watchers.map((w) => names[w] || 'Friend').join(', ')}`}</div>}
-                    {isHost && <div style={{ paddingTop: 4 }}><Toggle on={allowWatch} label="Let friends watch" onPress={() => { const v = !allowWatch; setAllowWatch(v); setWatchAllowed(v); kitTap(); }} /></div>}
-                  </GPanel>
-                )}
-                {!watch && (
-                  <GPanel style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {isHost && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ fontSize: 14, fontWeight: 900, flex: 1 }}>Laps</span>
-                        {[2, 3, 5].map((n) => <GPill key={n} small text={String(n)} color={laps === n ? 'gold' : 'white'} height={36} onPress={() => setLaps(n)} style={{ minWidth: 48 }} />)}
-                      </div>
-                    )}
-                    {isHost && !solo && <Toggle on={fill} label="Fill empty spots with bots" onPress={() => { setFill((v) => !v); kitTap(); }} />}
-                    <Toggle on={tilt} label="Tilt your phone to steer" onPress={toggleTilt} />
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <span style={{ fontSize: 13.5, fontWeight: 800, flex: 1 }}>Graphics</span>
-                      <div style={{ width: 190 }}><Seg value={gfx} items={GFX} onPick={pickGfx} /></div>
-                    </div>
-                  </GPanel>
-                )}
-                {!watch && (
-                  <div style={{ fontSize: 12.5, fontWeight: 700, color: 'rgba(255,255,255,0.8)', lineHeight: 1.5, textShadow: '0 1px 4px rgba(0,0,0,0.5)' }}>{`Steer with the arrows. Hold Brake while you turn to drift, drifting fills Nitro. Best lap on ${MAPS[mapKey].name}: ${bestLap ? fmtRace(bestLap) : 'none yet'}`}</div>
-                )}
-              </div>
-            </div>
-          )}
-          {phase === 'menu' && pinStart && (
-            <div style={{ position: 'absolute', right: right(16), bottom: bottom(14), width: 252, zIndex: 6 }}>{startPanel}</div>
-          )}
+          {lobbyUi}
           {phase === 'menu' && mapSheet && (
-            <div onClick={() => setMapSheet(false)} style={{ position: 'absolute', inset: 0, zIndex: 40, background: 'rgba(8,10,20,0.6)', display: 'flex', padding: `${top(12)} ${right(14)} ${bottom(12)} ${left(14)}`, overflowY: 'auto', touchAction: 'pan-x pan-y', boxSizing: 'border-box' }}>
-              <div onClick={(e) => e.stopPropagation()} style={{ margin: 'auto', width: '100%', maxWidth: 640, animation: 'zgk-pop 0.22s ease-out' }}>
-                <GPanel style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <span style={{ flex: 1, fontSize: 17, fontWeight: 900 }}>Pick a map</span>
-                    <GBtn icon="close" color="white" size={38} fast={false} label="Close" onPress={() => setMapSheet(false)} />
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: land ? 'repeat(4, minmax(0, 1fr))' : 'repeat(2, minmax(0, 1fr))', gap: 8 }}>
-                    {MAP_KEYS.map((k) => <MapCard key={k} k={k} on={mapKey === k} onPress={() => pickMap(k)} />)}
-                  </div>
-                </GPanel>
-              </div>
-            </div>
+            <MapSelect value={mapKey} canPick={isHost} mode={mode} land={land} pad={`${top(10)} ${right(14)} ${bottom(10)} ${left(14)}`}
+              bestOf={(k) => Number(readPref(BEST_KEY(uid, k), '0')) || 0}
+              onPick={(k) => pickMap(k)} onClose={() => setMapSheet(false)} />
           )}
 
           {paused && phase === 'race' && (
@@ -1287,7 +1337,7 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
                 <GPill text="Resume" icon="play" color="green" wide onPress={() => setPaused(false)} />
                 <div style={{ display: 'flex', gap: 8 }}>
                   <GPill text="Restart" icon="replay" color="white" small wide onPress={() => { setPaused(false); toMenu(true); setTimeout(startRace, 50); }} style={{ flex: 1 }} />
-                  <GPill text="Controls" icon="gear" color="white" small wide onPress={() => setCtl(true)} style={{ flex: 1 }} />
+                  <GPill text="Settings" icon="gear" color="white" small wide onPress={() => setCtl(true)} style={{ flex: 1 }} />
                 </div>
                 <GPill text="Leave" color="red" small wide onPress={finish} />
               </GPanel>
@@ -1342,6 +1392,7 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
                         <div style={{ fontSize: 14.5, fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{nm}{k === (room && room.host) ? ', host' : ''}</div>
                         <div style={{ fontSize: 12, fontWeight: 700, color: talk ? '#7BE05A' : 'rgba(255,255,255,0.55)' }}>{talk ? 'Mic on' : 'Mic off'}</div>
                       </div>
+                      {!isMe && relay.setVol && <GVolBars name={nm} vol={relay.vols && relay.vols[k] != null ? relay.vols[k] : 1} muted={off} onVol={(v) => { if (off) relay.toggleMute(k); relay.setVol(k, v); }} />}
                       {!isMe && <GBtn icon={off ? 'mute' : 'sound'} color={off ? 'red' : 'dark'} size={40} fast={false} label={off ? `Unmute ${nm}` : `Mute ${nm}`} onPress={() => relay.toggleMute(k)} />}
                     </div>
                   );
@@ -1353,6 +1404,7 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
               </div>
             </Sheet>
           )}
+          {chatOpen && <ChatSheet title="Talk to the room" chat={chat} onClose={() => setChatOpen(false)} />}
           {leaveAsk && (
             <Sheet title="Leave the race?" text="Your friends can keep racing without you." onClose={() => setLeaveAsk(false)}>
               <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { FONT, hapticTap } from '../App.jsx';
 import { Sfx } from './sfx.js';
 
@@ -82,6 +82,8 @@ const ICON = {
   flag: 'M6 21V4M6 4h11l-2.5 4L17 12H6',
   heart: 'M12 21s-9.5-6.2-9.5-12.6C2.5 4.9 5 2.5 8 2.5c1.8 0 3.2.9 4 2.3.8-1.4 2.2-2.3 4-2.3 3 0 5.5 2.4 5.5 5.9C21.5 14.8 12 21 12 21z',
   plus: 'M12 5v14M5 12h14',
+  chevl: 'M15 5l-7 7 7 7',
+  chevr: 'M9 5l7 7-7 7',
   check: 'M5 12.5l4.5 4.5L19 7.5',
   bubble: 'M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16zM8.5 8.5a4 4 0 0 1 3-1.5',
   lock: 'M6 11h12v9H6zM8.5 11V8a3.5 3.5 0 0 1 7 0v3',
@@ -236,7 +238,6 @@ export function useJoystick(wrapRef, opts) {
   };
   const onDown = (e) => {
     if (o.enabled && !o.enabled()) return;
-    if (joy.current.id != null) return;
     const el = wrapRef.current;
     const { x, y } = local(e);
     if (o.zone && !o.zone(x, y, { width: el.clientWidth, height: el.clientHeight })) return;
@@ -261,7 +262,16 @@ export function useJoystick(wrapRef, opts) {
   };
   const onUp = (e) => { if (joy.current.id !== e.pointerId) return; joy.current = { x: 0, y: 0, id: null, cx: 0, cy: 0, mag: 0 }; setView(null); };
   const reset = () => { joy.current = { x: 0, y: 0, id: null, cx: 0, cy: 0, mag: 0 }; setView(null); };
-  return { joy, view, knob, handlers: { onPointerDown: onDown, onPointerMove: onMove, onPointerUp: onUp, onPointerCancel: onUp }, reset, R };
+  useEffect(() => {
+    const ends = (e) => { if (e.touches && e.touches.length === 0 && joy.current.id != null) reset(); };
+    const vis = () => { if (document.visibilityState === 'hidden') reset(); };
+    window.addEventListener('touchend', ends, true);
+    window.addEventListener('touchcancel', ends, true);
+    window.addEventListener('blur', reset);
+    document.addEventListener('visibilitychange', vis);
+    return () => { window.removeEventListener('touchend', ends, true); window.removeEventListener('touchcancel', ends, true); window.removeEventListener('blur', reset); document.removeEventListener('visibilitychange', vis); };
+  }, []);
+  return { joy, view, knob, handlers: { onPointerDown: onDown, onPointerMove: onMove, onPointerUp: onUp, onPointerCancel: onUp, onLostPointerCapture: onUp }, reset, R };
 }
 
 export function GJoy({ view, knobRef, color = 'blue', idle, R = 52, alpha = 1, flat = false }) {
@@ -354,8 +364,56 @@ function GSteps({ label, value, opts, onPick }) {
     </div>
   );
 }
+export function GSwitchRow({ label, sub, on, onToggle }) {
+  return (
+    <div role="switch" aria-checked={!!on} aria-label={label} tabIndex={0} {...pressProps(() => { onToggle(); kitTap(); })} style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', cursor: 'pointer', fontSize: 14.5, fontWeight: 900 }}>
+      <span style={{ flex: 1 }}>{label}{sub && <span style={{ display: 'block', fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.65)' }}>{sub}</span>}</span>
+      <span aria-hidden="true" style={{ width: 46, height: 28, borderRadius: 14, background: on ? '#F7C53A' : 'rgba(255,255,255,0.18)', position: 'relative', flexShrink: 0 }}>
+        <span style={{ position: 'absolute', top: 3, left: on ? 21 : 3, width: 22, height: 22, borderRadius: 11, background: '#FFFFFF', transition: 'left .15s' }} />
+      </span>
+    </div>
+  );
+}
+export function GVolBars({ name, vol = 1, muted, onVol }) {
+  const steps = [0.25, 0.5, 0.75, 1];
+  const v = muted ? 0 : vol;
+  return (
+    <div role="group" aria-label={`Voice volume for ${name}`} style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 30, flexShrink: 0 }}>
+      {steps.map((s) => (
+        <button key={s} type="button" className="zgk-btn" aria-label={`${name} at ${Math.round(s * 100)} percent`} aria-pressed={!muted && Math.abs(vol - s) < 0.01} onClick={(e) => { e.stopPropagation(); kitTap(); onVol(s); }}
+          style={{ width: 11, height: 9 + s * 20, borderRadius: 4, border: 'none', padding: 0, cursor: 'pointer', background: v >= s - 0.01 ? '#7BE05A' : 'rgba(255,255,255,0.22)' }} />
+      ))}
+    </div>
+  );
+}
+export function GVoiceRow({ name, avatar, muted, vol = 1, onMute, onVol, me }) {
+  const steps = [0.25, 0.5, 0.75, 1];
+  const v = muted ? 0 : vol;
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%' }}>
+      {avatar}
+      <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</span>
+      {!me && (
+        <>
+          <GBtn icon={muted ? 'mute' : 'sound'} color={muted ? 'red' : 'dark'} size={34} fast={false} label={muted ? `Unmute ${name}` : `Mute ${name}`} onPress={onMute} />
+          {onVol && (
+            <div role="group" aria-label={`Voice volume for ${name}`} style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+              {steps.map((s) => (
+                <button key={s} type="button" className="zgk-btn" aria-label={`Volume ${Math.round(s * 100)} percent`} aria-pressed={!muted && Math.abs(vol - s) < 0.01} onClick={(e) => { e.stopPropagation(); kitTap(); onVol(s); }}
+                  style={{ width: 12, height: 10 + s * 18, borderRadius: 4, border: 'none', padding: 0, cursor: 'pointer', background: v >= s - 0.01 ? '#7BE05A' : 'rgba(255,255,255,0.22)' }} />
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 export function GControlsPanel({ onClose, sideways, wide }) {
   const v = useCtlLook();
+  const [snd, setSnd] = useState(() => !!Sfx.sfxOn);
+  const [mus, setMus] = useState(() => !!Sfx.musicOn);
   const samples = (
     <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: 14, height: wide ? 96 : 84 }}>
       <div style={{ opacity: 1 - v.see, transform: `scale(${v.size})`, transformOrigin: 'bottom center', transition: 'transform .15s ease, opacity .15s ease' }}><GHudSkill icon="dash" main size={66} label="Sample button" onPress={() => {}} /></div>
@@ -366,6 +424,10 @@ export function GControlsPanel({ onClose, sideways, wide }) {
     <>
       <GSteps label="Button size" value={v.size} opts={SIZES} onPick={(x) => setCtlLook({ size: x })} />
       <GSteps label="See through" value={v.see} opts={SEES} onPick={(x) => setCtlLook({ see: x })} />
+      <div style={{ display: 'flex', gap: 14, width: '100%' }}>
+        <div style={{ flex: 1, minWidth: 0 }}><GSwitchRow label="Sound" on={snd} onToggle={() => { const n = !snd; setSnd(n); Sfx.init(); Sfx.setSfx(n); }} /></div>
+        <div style={{ flex: 1, minWidth: 0 }}><GSwitchRow label="Music" on={mus} onToggle={() => { const n = !mus; setMus(n); Sfx.init(); Sfx.setMusic(n); }} /></div>
+      </div>
       {sideways && (
         <div role="switch" aria-checked={v.side} tabIndex={0} {...pressProps(() => { setCtlLook({ side: !v.side }); kitTap(); })} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', cursor: 'pointer', fontSize: 14, fontWeight: 900, color: '#FFFFFF' }}>
           <span style={{ flex: 1 }}>Play sideways<span style={{ display: 'block', fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.65)' }}>No need to turn your phone setting</span></span>
@@ -382,7 +444,7 @@ export function GControlsPanel({ onClose, sideways, wide }) {
     return (
       <GPanel style={{ width: '100%', maxWidth: 640, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 18, animation: 'zgk-pop 0.25s ease-out', boxSizing: 'border-box' }}>
         <div style={{ width: 170, flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-          <GTitle text="Controls" size={28} />
+          <GTitle text="Settings" size={28} />
           {samples}
         </div>
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 11 }}>{opts}</div>
@@ -391,10 +453,113 @@ export function GControlsPanel({ onClose, sideways, wide }) {
   }
   return (
     <GPanel style={{ width: '100%', maxWidth: 360, padding: '16px 16px 14px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 13, animation: 'zgk-pop 0.25s ease-out', boxSizing: 'border-box' }}>
-      <GTitle text="Controls" size={28} />
+      <GTitle text="Settings" size={28} />
       {samples}
       {opts}
     </GPanel>
+  );
+}
+
+export function useFitScale(ref, W, H, cap = 1) {
+  const [k, setK] = useState(cap);
+  const key = useRef('');
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el || !W || !H) return;
+    const sz = `${Math.round(W)}x${Math.round(H)}x${cap}`;
+    if (key.current !== sz) { key.current = sz; if (k !== cap) { setK(cap); return; } }
+    const sp = el.querySelector('[data-zfill]');
+    const natural = Math.max(el.scrollHeight, el.clientHeight) - (sp ? sp.offsetHeight : 0);
+    if (natural <= 0) return;
+    const want = Math.max(0.6, Math.min(cap, H / natural));
+    if (want < k - 0.005 || (want > k + 0.04 && natural * k < H - 20)) setK(Math.round(want * 1000) / 1000);
+  });
+  return k;
+}
+
+export function GLobby({ GS, title, sub, onClose, closeLabel = 'Leave', tools, badge, side, main, children, tint = 'rgba(6,8,18,0.6)' }) {
+  injectKitCss();
+  const fitRef = useRef(null);
+  const land = GS.land;
+  const cap = Math.round(Math.min(1, GS.W / (land ? 680 : 360)) * 1000) / 1000;
+  const k = useFitScale(fitRef, GS.W, GS.H, cap);
+  const { top, right, bottom, left } = GS.at;
+  return (
+    <div style={{ position: 'absolute', inset: 0, zIndex: 5, overflow: 'hidden', fontFamily: FONT, color: '#FFFFFF' }}>
+      <div aria-hidden="true" style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: land ? `linear-gradient(180deg, ${tint} 0%, rgba(6,8,18,0) 30%, rgba(6,8,18,0) 46%, ${tint} 100%)` : `linear-gradient(180deg, ${tint} 0%, rgba(6,8,18,0) 20%, rgba(6,8,18,0) 38%, ${tint} 72%)` }} />
+      <div ref={fitRef} style={{ position: 'absolute', left: 0, top: 0, width: GS.W / k, height: GS.H / k, transform: k === 1 ? 'none' : `scale(${k})`, transformOrigin: '0 0', boxSizing: 'border-box', padding: `${top(10)} ${right(14)} ${bottom(12)} ${left(14)}`, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        {land ? (
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, flexShrink: 0 }}>
+            <GBtn icon="close" color="white" size={42} fast={false} label={closeLabel} onPress={onClose} />
+            <div style={{ flex: 1, minWidth: 0, paddingTop: 1, animation: 'zgk-in 0.35s ease-out' }}>
+              <GTitle text={title} size={34} color="#FFE15A" />
+              {sub && <div style={{ fontSize: 13, fontWeight: 800, color: 'rgba(255,255,255,0.9)', marginTop: 2, textShadow: '0 1px 4px rgba(0,0,0,0.55)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub}</div>}
+            </div>
+            {(badge || tools) && <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>{badge}{tools}</div>}
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, flexShrink: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <GBtn icon="close" color="white" size={42} fast={false} label={closeLabel} onPress={onClose} />
+              <div style={{ flex: 1 }} />
+              {tools}
+            </div>
+            <div style={{ animation: 'zgk-in 0.35s ease-out', paddingLeft: 2, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8 }}>
+              <div>
+                <GTitle text={title} size={40} color="#FFE15A" />
+                {sub && <div style={{ fontSize: 13.5, fontWeight: 800, color: 'rgba(255,255,255,0.9)', marginTop: 3, textShadow: '0 1px 4px rgba(0,0,0,0.55)', lineHeight: 1.35 }}>{sub}</div>}
+              </div>
+              {badge}
+            </div>
+          </div>
+        )}
+        <div data-zfill="1" style={{ flex: '1 1 auto', minHeight: land ? 8 : 24 }} />
+        {land ? (
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexShrink: 0 }}>
+            <div style={{ flex: '0 1 400px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 10, animation: 'zgk-in 0.4s ease-out' }}>{side}</div>
+            <div style={{ flex: '1 1 0', minWidth: 0 }} />
+            <div style={{ flex: '0 1 330px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 10, animation: 'zgk-in 0.45s ease-out' }}>{main}</div>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, flexShrink: 0, width: '100%', maxWidth: 460, margin: '0 auto', animation: 'zgk-in 0.4s ease-out' }}>{side}{main}</div>
+        )}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+export function GSlot({ art, name, ring = 'rgba(255,255,255,0.3)', talk, muted, empty, onPress, label, size = 46 }) {
+  const box = (
+    <>
+      <span style={{ position: 'relative', width: size, height: size, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box', background: empty ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.1)', border: empty ? '2px dashed rgba(255,255,255,0.3)' : 'none', boxShadow: empty ? 'none' : `0 0 0 2.5px ${talk && !muted ? '#7BE05A' : ring}` }}>
+        {empty ? (onPress ? <GIcon k="plus" size={Math.round(size * 0.42)} color="rgba(255,255,255,0.75)" line halo={false} stroke={2.4} /> : null) : art}
+        {!empty && (talk || muted) && (
+          <span style={{ position: 'absolute', right: -4, bottom: -4, width: 19, height: 19, borderRadius: 10, background: muted ? '#C93C3C' : '#2E9E44', boxShadow: `0 0 0 2px ${INK}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <GIcon k={muted ? 'mute' : 'mic'} size={11} color="#FFFFFF" line halo={false} stroke={2.4} />
+          </span>
+        )}
+      </span>
+      <span style={{ fontSize: 11.5, fontWeight: 800, maxWidth: size + 18, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: empty ? 'rgba(255,255,255,0.55)' : '#FFFFFF', textShadow: '0 1px 3px rgba(0,0,0,0.5)' }}>{name}</span>
+    </>
+  );
+  const st = { width: size + 18, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, padding: 0, border: 'none', background: 'transparent', color: '#FFFFFF', fontFamily: FONT, flexShrink: 0 };
+  if (!onPress) return <div style={st} aria-label={label}>{box}</div>;
+  return <button type="button" className="zgk-btn" aria-label={label} {...pressProps(() => { kitTap(); onPress(); })} style={{ ...st, cursor: 'pointer' }}>{box}</button>;
+}
+
+export function GLobbySheet({ title, onClose, children, width = 560, GS }) {
+  const at = GS ? GS.at : null;
+  return (
+    <div onPointerDown={(e) => { if (e.target === e.currentTarget) { e.stopPropagation(); onClose(); } }} style={{ position: 'absolute', inset: 0, zIndex: 40, background: 'rgba(4,6,14,0.58)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box', padding: at ? `${at.top(10)} ${at.right(12)} ${at.bottom(10)} ${at.left(12)}` : 12, fontFamily: FONT, color: '#FFFFFF' }}>
+      <GPanel style={{ width: '100%', maxWidth: width, maxHeight: '100%', display: 'flex', flexDirection: 'column', padding: '12px 14px 14px', boxSizing: 'border-box', animation: 'zgk-pop 0.25s ease-out' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexShrink: 0 }}>
+          <div style={{ flex: 1, minWidth: 0 }}><GTitle text={title} size={24} /></div>
+          <GBtn icon="close" color="white" size={36} fast={false} label="Close" onPress={onClose} />
+        </div>
+        <div style={{ minHeight: 0, overflowY: 'auto', touchAction: 'pan-y' }}>{children}</div>
+      </GPanel>
+    </div>
   );
 }
 

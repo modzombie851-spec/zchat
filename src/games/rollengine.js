@@ -30,7 +30,7 @@ export function rngOf(seed) {
 export const levelOf = (i) => { let k = i; for (let w = 0; w < WORLDS.length; w++) { if (k < WORLDS[w].n) return { w, l: k }; k -= WORLDS[w].n; } return { w: WORLDS.length - 1, l: 0 }; };
 export const levelName = (i) => String(i + 1);
 
-const SOLID = new Set(['#', '=', 'D', '/', '\\', 'I']);
+const SOLID = new Set(['#', '=', 'D', '/', '\\', 'I', 'H']);
 export const solidCh = (ch) => SOLID.has(ch);
 
 export function buildLevel(index, nPlayers) {
@@ -39,7 +39,7 @@ export function buildLevel(index, nPlayers) {
   const ri = (a, b) => a + Math.floor(rnd() * (b - a + 1));
   const pick = (arr) => arr[Math.floor(rnd() * arr.length)];
   const diff = w * 0.55 + l * 0.18;
-  const segs = 7 + Math.min(7, Math.floor(w * 1.2 + l * 0.6));
+  const segs = 10 + Math.min(10, Math.floor(w * 1.3 + l * 0.7));
   const cols = [];
   const ents = [];
   const coins = [];
@@ -48,6 +48,11 @@ export function buildLevel(index, nPlayers) {
   const buttons = [];
   const doors = [];
   const springs = [];
+  const plates = [];
+  const bridges = [];
+  const plateGroups = [];
+  const needOf = {};
+  const team = Math.min(4, Math.max(1, nPlayers || 1));
   let gid = 0;
   let base = 12;
   const col = (top, opts) => {
@@ -63,6 +68,8 @@ export function buildLevel(index, nPlayers) {
   const ice = WORLDS[w].id === 'frost';
   const flat = (n, coinsOn) => { const s = x0(); for (let i = 0; i < n; i++) col(base); if (coinsOn) coinArc(s + n / 2 - 0.5, base - 1.6, Math.min(n - 1, 5), 0); };
   const start = () => { flat(8); ents.push({ k: 'start', x: 3, y: base - 1 }); flags.push({ x: 3, y: base - 1, start: true }); };
+  const plate = (x, y, g) => { cols[x][y] = 'P'; plates.push({ x, y, g }); };
+  const button = (x, y, g) => { cols[x][y] = 'B'; buttons.push({ x, y, g }); };
   const SEG = {
     gap() {
       flat(ri(2, 3));
@@ -207,23 +214,108 @@ export function buildLevel(index, nPlayers) {
       flat(2);
     },
     ice() { flat(1); const s = x0(); for (let i = 0; i < 7; i++) { const c = cols[col(base)]; c[base] = 'I'; } coinArc(s + 3, base - 1.6, 5, 0); flat(1); },
+    bridge() {
+      flat(2);
+      gid += 1;
+      const g = gid;
+      plateGroups.push(g);
+      const s = x0();
+      flat(3);
+      plate(s + 1, base - 1, g);
+      const gs = x0();
+      const n = 6 + Math.min(2, Math.floor(diff * 0.5)) + ri(0, 1);
+      for (let i = 0; i < n; i++) col(null);
+      for (let i = 0; i < n; i++) { cols[gs + i][base] = 'H'; bridges.push({ x: gs + i, y: base, g }); }
+      if (wid === 'lava') for (let i = 0; i < n; i++) { cols[gs + i][base + 3] = 'L'; for (let y = base + 4; y < H; y++) cols[gs + i][y] = '#'; }
+      coinArc(gs + n / 2 - 0.5, base - 2.2, n - 1, 0.9);
+      const e = x0();
+      flat(4);
+      plate(e + 2, base - 1, g);
+      if (stars.length < 3 && rnd() < 0.5) stars.push({ x: gs + n / 2, y: base - 4.6 });
+    },
+    relay() {
+      flat(1);
+      gid += 1;
+      const g = gid;
+      plateGroups.push(g);
+      const s = x0();
+      for (let i = 0; i < 10; i++) col(base);
+      plate(s + 2, base - 1, g);
+      const dx = s + 5;
+      for (let y = base - 4; y < base; y++) cols[dx][y] = 'D';
+      for (let y = 0; y < base - 4; y++) cols[dx][y] = '#';
+      doors.push({ x: dx, y0: base - 4, y1: base - 1, g, hold: true });
+      plate(s + 8, base - 1, g);
+      coinArc(s + 7.5, base - 1.6, 3, 0);
+      flat(1);
+    },
+    team() {
+      flat(1);
+      gid += 1;
+      const g = gid;
+      needOf[g] = team;
+      const s = x0();
+      for (let i = 0; i < 14; i++) col(base);
+      for (let i = 3; i <= 5; i++) cols[s + i][base - 1] = '#';
+      for (let i = 4; i <= 5; i++) cols[s + i][base - 2] = '#';
+      button(s + 1, base - 1, g);
+      button(s + 5, base - 3, g);
+      cols[s + 7][base - 1] = 'S'; springs.push({ x: s + 7, y: base - 1 });
+      for (let i = 8; i <= 9; i++) cols[s + i][base - 5] = '-';
+      button(s + 9, base - 6, g);
+      button(s + 11, base - 1, g);
+      const dx = s + 13;
+      for (let y = base - 5; y < base; y++) cols[dx][y] = 'D';
+      for (let y = 0; y < base - 5; y++) cols[dx][y] = '#';
+      doors.push({ x: dx, y0: base - 5, y1: base - 1, g });
+      coins.push({ x: s + 9, y: base - 7.6 }, { x: s + 5.5, y: base - 4.4 });
+      flat(2);
+    },
+    climb() {
+      flat(2);
+      const s = x0();
+      for (let i = 0; i < 6; i++) col(base);
+      const steps = Math.min(4, Math.max(3, Math.floor((base - 4) / 2)));
+      for (let k = 1; k <= steps; k++) {
+        const y = base - k * 2;
+        const xa = k % 2 ? s + 1 : s + 3;
+        cols[xa][y] = '-'; cols[xa + 1][y] = '-';
+        coins.push({ x: xa + 1, y: y - 0.9 });
+      }
+      const top = base - steps * 2;
+      const nb = Math.max(5, top + 1);
+      const t = x0();
+      for (let i = 0; i < 5; i++) col(nb);
+      if (stars.length < 3) stars.push({ x: t + 2.5, y: nb - 2.4 });
+      coinArc(t + 2, nb - 1.6, 4, 0);
+      base = nb;
+      while (base < 12) { const c = cols[col(base + 1)]; c[base] = '\\'; base += 1; }
+      flat(2);
+    },
   };
-  const pool = ['gap', 'hill', 'steps', 'spikes', 'walkers', 'spring', 'mover', 'tunnel'];
-  if (w >= 1 || l >= 2) pool.push('hopper', 'flyers', 'tower');
-  if (w >= 1 || l >= 3) pool.push('lift', 'gate');
   const wid = WORLDS[w].id;
-  if (w >= 3 && wid !== 'candy') pool.push('lava', 'lava');
-  if (wid === 'lava') pool.push('lava', 'hopper');
-  if (wid === 'candy') pool.push('spring', 'spring', 'tower', 'flyers');
-  if (w === 2) pool.push('ice', 'ice');
-  if (l === 0 && w === 0) pool.splice(pool.indexOf('mover'), 1);
+  const SIG = {
+    meadow: ['walkers', 'hill', 'steps', 'spring', 'gap', 'spikes', 'tunnel', 'mover', 'bridge', 'team'],
+    canyon: ['gap', 'gap', 'bridge', 'bridge', 'hill', 'climb', 'mover', 'spikes', 'hopper', 'team'],
+    frost: ['ice', 'ice', 'steps', 'relay', 'flyers', 'spikes', 'gap', 'bridge', 'climb', 'walkers'],
+    works: ['mover', 'mover', 'lift', 'lift', 'relay', 'relay', 'gate', 'team', 'tunnel', 'spikes'],
+    night: ['flyers', 'flyers', 'tower', 'climb', 'bridge', 'tunnel', 'walkers', 'hopper', 'relay', 'gap'],
+    candy: ['spring', 'spring', 'tower', 'tower', 'hopper', 'climb', 'team', 'walkers', 'flyers', 'hill'],
+    lava: ['lava', 'lava', 'hopper', 'mover', 'bridge', 'relay', 'lift', 'spikes', 'flyers', 'team'],
+    beach: ['gap', 'walkers', 'spring', 'hill', 'bridge', 'team', 'hopper', 'mover', 'steps', 'climb'],
+    cloud: ['flyers', 'mover', 'mover', 'lift', 'climb', 'climb', 'bridge', 'bridge', 'relay', 'team'],
+  };
+  const pool = (SIG[wid] || SIG.meadow).slice();
+  if (w === 0 && l < 2) { for (const k of ['bridge', 'team', 'mover']) { const i = pool.indexOf(k); if (i >= 0) pool.splice(i, 1); } }
+  if (w === 0 && l >= 2 && l < 4) { const i = pool.indexOf('team'); if (i >= 0) pool.splice(i, 1); }
   start();
   let last = '';
   const order = [];
   for (let i = 0; i < segs; i++) {
     let k = pick(pool);
-    for (let tries = 0; tries < 5 && (k === last || (k === 'gate' && order.includes('gate'))); tries++) k = pick(pool);
-    if (i === 1 && !order.includes('gate') && (w >= 1 || l >= 3) && rnd() < 0.5) k = 'gate';
+    for (let tries = 0; tries < 6 && (k === last || ((k === 'gate' || k === 'team') && (order.includes('gate') || order.includes('team'))) || (k === 'climb' && base < 9)); tries++) k = pick(pool);
+    if (k === 'climb' && base < 9) k = 'gap';
+    if (i === 1 && !order.includes('gate') && !order.includes('team') && (w >= 1 || l >= 3) && rnd() < 0.5) k = pool.includes('team') ? 'team' : 'gate';
     order.push(k);
     SEG[k]();
     last = k;
@@ -245,6 +337,7 @@ export function buildLevel(index, nPlayers) {
     start: { x: st.x + 0.5, y: st.y + 1 - R - 0.02 }, goal: { x: goal.x + 0.5, y: goal.y + 0.5 },
     coins: coins.map((c, i) => ({ id: i, x: c.x, y: c.y })), stars: stars.slice(0, 3).map((c, i) => ({ id: i, x: c.x, y: c.y })),
     flags: flags.map((f, i) => ({ id: i, x: f.x + 0.5, y: f.y + 1, start: !!f.start })), buttons, doors, springs, foes, movers, order,
+    plates, plateGroups, needOf, bridgeG: Object.fromEntries(bridges.map((q) => [`${q.x},${q.y}`, q.g])),
     need: Math.min(2, Math.max(1, nPlayers || 1)),
   };
 }
@@ -271,7 +364,8 @@ export function foePos(W, f) {
   if (f.k === 'jelly') { const k = ((t / f.per + f.ph) % 1); const hop = k < 0.55 ? Math.sin(k / 0.55 * Math.PI) : 0; return { x: f.x, y: f.y - 0.4 - hop * f.hh, dir: 1, r: 0.4, hop, sq: k >= 0.55 && k < 0.7 ? 1 - (k - 0.55) / 0.15 : 0 }; }
   return { x: f.x + Math.sin(t * 0.9 * f.sp + f.ph) * f.rx, y: f.y + Math.sin(t * 2.1 + f.ph) * f.ry, dir: Math.cos(t * 0.9 * f.sp + f.ph) >= 0 ? 1 : -1, r: 0.36 };
 }
-export const doorOpen = (W, g) => W.opened.has(g);
+export const doorOpen = (W, g) => W.opened.has(g) || (!!W.live && W.live.has(g));
+export const bridgeOn = (W, x, y) => { const g = W.L.bridgeG ? W.L.bridgeG[`${x},${y}`] : null; return g != null && !!W.live && W.live.has(g); };
 
 function closestOnPoly(px, py, pts) {
   let inside = true, best = null, bd = Infinity;
@@ -344,11 +438,12 @@ export function stepBall(W, b, input, dt, others) {
         continue;
       }
       if (ch === 'D') { const d = L.doors.find((q) => q.x === tx); if (d && doorOpen(W, d.g)) continue; }
+      if (ch === 'H') { if (!bridgeOn(W, tx, ty)) continue; if (b.vy < -0.5 && b.y > ty + 0.5) continue; }
       if (!solidCh(ch)) continue;
       const c = closestOnPoly(b.x, b.y, tilePoly(ch, tx, ty));
       if (!c.inside && c.d >= R) continue;
       if (!c.inside) {
-        if (ch === '#' || ch === 'I' || ch === '=' || ch === 'D') {
+        if (ch === '#' || ch === 'I' || ch === '=' || ch === 'D' || ch === 'H') {
           if (c.y === ty && atL(L, tx, ty - 1) === '/' && b.x < tx + 1) continue;
           if (c.y === ty && atL(L, tx, ty - 1) === '\\' && b.x > tx) continue;
         }
@@ -426,8 +521,37 @@ export function gatesToOpen(W, pressed) {
   const L = W.L;
   const out = [];
   const groups = new Set(L.buttons.map((b) => b.g));
-  for (const g of groups) { if (W.opened.has(g)) continue; const n = L.buttons.filter((b) => b.g === g && pressed.has(`${b.x},${b.y}`)).length; if (n >= L.need) out.push(g); }
+  for (const g of groups) { if (W.opened.has(g)) continue; const n = L.buttons.filter((b) => b.g === g && pressed.has(`${b.x},${b.y}`)).length; const need = L.needOf && L.needOf[g] ? Math.min(L.needOf[g], Math.max(1, W.active || L.needOf[g])) : L.need; if (n >= need) out.push(g); }
   return out;
+}
+
+export function stepPlates(W, balls, dt) {
+  const L = W.L;
+  W.moved = W.moved || {};
+  let act = 0;
+  for (const b of balls) {
+    if (!b || b.home) continue;
+    const m = W.moved[b.kind];
+    if (!m || Math.hypot(b.x - m.x, b.y - m.y) > 0.4) W.moved[b.kind] = { x: b.x, y: b.y, t: W.t };
+    if (W.t - W.moved[b.kind].t < 15) act += 1;
+  }
+  W.active = Math.max(1, act);
+  if (!L.plates || !L.plates.length) { W.live = null; return; }
+  W.holdT = W.holdT || {};
+  const on = new Set();
+  for (const p of L.plates) for (const b of balls) {
+    if (!b || b.dead > 0 || b.home) continue;
+    if (Math.abs(b.x - (p.x + 0.5)) < 0.66 && Math.abs(b.y + R - (p.y + 0.85)) < 0.42) on.add(p.g);
+  }
+  W.plateOn = on;
+  const keep = W.active > 1 ? 0.45 : 2.8;
+  const live = new Set();
+  for (const g of L.plateGroups) {
+    if (on.has(g)) W.holdT[g] = keep;
+    else W.holdT[g] = Math.max(0, (W.holdT[g] || 0) - dt);
+    if (W.holdT[g] > 0) live.add(g);
+  }
+  W.live = live;
 }
 
 export function applyEvent(W, e) {
@@ -441,3 +565,114 @@ export function applyEvent(W, e) {
     default: return false;
   }
 }
+
+export function demoWorld(index, n) {
+  const W = makeWorld(index, n);
+  W.demo = true;
+  W.live = new Set(W.L.plateGroups || []);
+  for (const d of W.L.doors) W.opened.add(d.g);
+  W.doorAmt = {}; for (const d of W.L.doors) W.doorAmt[d.g] = 1;
+  W.bridgeAmt = {}; for (const g of W.L.plateGroups || []) W.bridgeAmt[g] = 1;
+  return W;
+}
+export function botInput(W, b, mem, dt, others) {
+  const L = W.L;
+  if (b.dead > 0 || b.home) { mem.hold = 0; mem.prev = false; return { x: 0, jump: false }; }
+  if (mem.bx == null || b.x > mem.bx + 0.35) { mem.bx = b.x; mem.stuck = 0; } else mem.stuck = (mem.stuck || 0) + dt;
+  const sol = (x, y) => { const ch = atL(L, Math.floor(x), Math.floor(y)); if (ch === 'D') return !W.opened.has((L.doors.find((q) => q.x === Math.floor(x)) || {}).g); if (ch === 'H') return !bridgeOn(W, Math.floor(x), Math.floor(y)); return solidCh(ch) && ch !== '/'; };
+  const feet = b.y + R;
+  const support = (x) => { for (let y = Math.floor(feet + 0.05); y < Math.min(L.MH, Math.floor(feet) + 5); y++) { const ch = atL(L, Math.floor(x), y); if (ch === '^' || ch === 'L') return false; if (solidCh(ch) || ch === '-' || (ch === 'H' && bridgeOn(W, Math.floor(x), y))) return true; } for (const m of L.movers) { const p = moverPos(W, m); if (x > p.x - 0.1 && x < p.x + p.w + 0.1 && p.y > feet - 0.6 && p.y < feet + 4) return true; } return false; };
+  const hazard = (x) => { const a = atL(L, Math.floor(x), Math.floor(feet - 0.3)), c = atL(L, Math.floor(x), Math.floor(feet + 0.3)); return a === '^' || c === '^' || a === 'L' || c === 'L'; };
+  const hold = (x) => { mem.prev = false; mem.hold = 0; return { x, jump: false }; };
+  const os = (others || []).filter((o) => o && !(o.dead > 0) && !o.home);
+  const lift = L.movers.find((m) => m.k === 'lift' && m.x > b.x - 2.2 && m.x < b.x + 4.6);
+  if (lift) {
+    const p = moverPos(W, lift);
+    const vy = moverVel(W, lift).vy;
+    if (b.carry === lift.id) { if (p.y > lift.y1 + 0.2) return hold(0); }
+    else if (b.x > lift.x - 0.1 && b.x < lift.x + lift.w + 0.1 && feet > lift.y0 + 0.4) { mem.prev = !mem.prev; return { x: -1, jump: mem.prev }; }
+    else if (b.ground && b.x < lift.x + 0.2) {
+      const riders = os.filter((o) => o.carry === lift.id || (o.x > lift.x - 0.6 && o.x < lift.x + lift.w + 0.2 && o.y < feet)).length;
+      const soon = (vy > 0.2 && p.y > feet - 1.1) || Math.abs(p.y - feet) < 0.25;
+      if (!soon || riders >= 2) return hold(b.x < lift.x - 0.8 - riders * 0.2 ? 0.4 : 0);
+      if (b.x > lift.x - 0.75 && !mem.prev) { mem.prev = true; return { x: 1, jump: true }; }
+      mem.prev = false;
+      return { x: 1, jump: false };
+    }
+  }
+  if (b.ground) for (const o of os) { const dx = o.x - b.x; if (dx > 0.2 && dx < 1.15 && Math.abs(o.y - b.y) < 0.7 && o.vx < 2.5 && o.ground) return hold(0); }
+  const wallAt = (x) => sol(x, feet - 0.5) && sol(x, feet - 2.4) && sol(x, feet - 3.4);
+  let tall = false;
+  for (let dx = R + 0.3; dx < R + 4.6; dx += 0.5) { if (sol(b.x + dx, feet - 0.5)) { tall = wallAt(b.x + dx); break; } if (!b.ground && !b.carry) break; }
+  if (tall) {
+    let best = null;
+    for (let y = Math.floor(feet - (b.ground || b.carry ? 3.4 : 4.4)); y <= Math.floor(feet - (b.ground || b.carry ? 1 : -0.6)); y++) for (let x = Math.floor(b.x - 5); x <= Math.floor(b.x + 1.2); x++) { if (atL(L, x, y) !== '-' || y > feet - 0.5) continue; const d = Math.abs(x + 0.5 - b.x) * 0.4 + (y - (feet - 3.4)) * 0.3; if (!best || d < best.d) best = { x: x + 0.5, y, d }; }
+    if (best) {
+      const dx = best.x - b.x;
+      if (b.ground || b.carry) {
+        if (Math.abs(dx) > 0.5) return hold(Math.sign(dx) * Math.min(1, Math.abs(dx)));
+        if (!mem.prev) mem.hold = 0.34;
+        const j = mem.hold > 0; mem.hold -= dt; mem.prev = j;
+        return { x: 0, jump: j };
+      }
+      const j = (mem.hold || 0) > 0; mem.hold = (mem.hold || 0) - dt; mem.prev = j;
+      return { x: Math.abs(dx) > 0.25 ? Math.sign(dx) : 0, jump: j };
+    }
+  }
+  let want = false;
+  if (b.ground) {
+    if (sol(b.x + R + 0.3, b.y) || sol(b.x + R + 0.3, b.y - 0.6)) want = true;
+    for (let dx = 0.5; dx <= 1.7 && !want; dx += 0.4) if (hazard(b.x + dx)) want = true;
+    if (!want && !support(b.x + 0.75 + Math.max(0, b.vx) * 0.06)) want = true;
+    if (!want) for (const f of L.foes) { if (W.kills.has(f.id)) continue; const p = foePos(W, f); if (p.x > b.x - 0.2 && p.x - b.x < 2.1 + Math.max(0, b.vx) * 0.12 && Math.abs(p.y - b.y) < 1.6) { want = true; break; } }
+    if (mem.stuck > 0.45) want = true;
+  }
+  if (want && (mem.hold || 0) <= 0 && !mem.prev) mem.hold = 0.3 + (mem.seed || 0) * 0.06;
+  let jump = (mem.hold || 0) > 0;
+  mem.hold = (mem.hold || 0) - dt;
+  if (!b.ground && !jump && b.air2 && b.vy > 0.5 && !support(b.x + 0.4) && !support(b.x + 1.4) && !mem.prev) jump = true;
+  if (!b.ground && b.air2 && mem.stuck > 0.45 && b.vy > -2 && !mem.prev) jump = true;
+  mem.prev = jump;
+  const back = b.x > L.goal.x + 0.2 && b.ground;
+  return { x: back ? -1 : mem.stuck > 0.2 && mem.stuck < 0.32 ? -1 : 1, jump: back ? false : jump };
+}
+export function demoStarts(L) {
+  return [{ x: L.start.x, y: L.start.y }].concat(L.flags.filter((f) => !f.start).map((f) => ({ x: f.x, y: f.y - R - 0.05 })));
+}
+export function demoSetup(index, si, n) {
+  const W = demoWorld(index, n);
+  const st = demoStarts(W.L)[si] || demoStarts(W.L)[0];
+  const balls = [], mems = [];
+  for (let i = 0; i < n; i++) { const b = mkBall(`d${i}`, st.x - i * 0.95, st.y); b.cp = { x: st.x - i * 0.95, y: st.y }; balls.push(b); mems.push({ seed: i / n }); }
+  return { W, balls, mems, si, t: 0, lead: st.x, leadAt: 0, dead: 0, home: false };
+}
+export const DEMO_DT = 1 / 60;
+export function demoStep(S) {
+  const W = S.W, dt = DEMO_DT;
+  S.t += dt; W.t += dt;
+  for (let i = 0; i < S.balls.length; i++) {
+    const b = S.balls[i];
+    const was = b.dead > 0;
+    const os = S.balls.filter((o) => o !== b);
+    stepBall(W, b, botInput(W, b, S.mems[i], dt, os), dt, os);
+    interact(W, b, (e) => { applyEvent(W, e); if (e.k === 'home') { b.home = true; S.home = true; } });
+    if (!was && b.dead > 0) S.dead += 1;
+  }
+  let mx = -1e9;
+  for (const b of S.balls) if (b.x > mx) mx = b.x;
+  if (mx > S.lead + 0.5) { S.lead = mx; S.leadAt = S.t; }
+}
+export function clipStart(index, si, n, cap) { return { S: demoSetup(index, si, n), cap: cap || 16, len: null }; }
+export function clipRun(P, steps) {
+  const S = P.S;
+  for (let k = 0; k < steps && P.len == null; k++) {
+    demoStep(S);
+    S.W.fx.length = 0;
+    if (S.dead > 2) P.len = Math.max(0, S.t - 0.35);
+    else if (S.t - S.leadAt > 1.1) P.len = Math.max(0, S.leadAt + 0.5);
+    else if (S.home) P.len = S.t + 1.2;
+    else if (S.t >= P.cap) P.len = P.cap;
+  }
+  return P.len;
+}
+export function demoClip(index, si, n, maxT) { const P = clipStart(index, si, n, maxT); while (clipRun(P, 600) == null); return P.len; }

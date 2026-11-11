@@ -4,10 +4,11 @@ import {
   useTheme, FONT, Avatar, GameArt, GAME_TITLES, FRIEND_GAME_GROUPS, FRIEND_GAME_SUBS, SOLO_GAMES, SOLO_HIDDEN, LIVE_GAME_KEYS, GAME_ART_BG, DuoGamePage, GulpGamePage, RollGamePage,
   GameInfoButton, HowToPlaySheet, SoloGame, readBest, formatGameScore, loadMyGames, gameNet, gameNetMissing, isSoloGameKey,
   useBackClose, useSheetDrag, playUiSound, hapticTap, reducedMotion, FullPage, HeaderIconButton, TrophyIcon, CrownIcon, NameBadge,
-  LoadFail, ghBotCan, ghBotLevel, GamepadIcon, GameButton, SegmentedControl, botPicUrl,
+  LoadFail, ghBotCan, ghBotLevel, GamepadIcon, GameButton, SegmentedControl, botPicUrl, LiveStatCtx, SoloFit,
 } from '../App.jsx';
+import { useLiveCast, useRaceLink, CastEye, CastLayer, CastSheet, injectCastCss } from './livecast.jsx';
 import { useMyLevels, useLevels, LEVEL_GAMES, readRecent, noteRecent } from './levels.jsx';
-import { loadLiveFriends } from './live.js';
+import { loadLiveFriends, liveKind } from './live.js';
 import { sceneUrl, sceneKeyFor, preloadScene } from './scenes.jsx';
 import { unlockAudio } from './kit.jsx';
 import { GameRoomsPage, useLobbyPresence } from './rooms.jsx';
@@ -202,8 +203,9 @@ function OnlineCard({ online, onOpen }) {
   );
 }
 
-export function GamesPage({ onClose, onChallenge, onShareScore, initialGame, friends, onPlayWith, onStartLive, onRollInvite, onRaceInvite, onRaceSolo, onGulpRoom, onWatch, onOpenLeaderboard, onPlayBot, myId, me, onRoomHost, onRoomGuest, initialRoom }) {
+export function GamesPage({ onClose, onChallenge, onShareScore, initialGame, friends, onPlayWith, onStartLive, onRollInvite, onRaceInvite, onRaceSolo, onGulpRoom, onWatch, onJoinLive, onOpenLeaderboard, onPlayBot, myId, me, onRoomHost, onRoomGuest, initialRoom, playToo }) {
   injectHubCss();
+  injectCastCss();
   useBackClose(true, onClose);
   const { theme } = useTheme();
   const [rooms, setRooms] = useState(() => (initialRoom != null ? { code: initialRoom } : null));
@@ -213,6 +215,16 @@ export function GamesPage({ onClose, onChallenge, onShareScore, initialGame, fri
   const levels = useMyLevels();
   const [game, setGame] = useState(() => (initialGame && isSoloGameKey(initialGame) ? initialGame : null));
   useBackClose(!!game, () => setGame(null));
+  const soloRoot = useRef(null);
+  const soloRoom = useMemo(() => (game ? `${game}-${String(myId || '').slice(0, 8)}-${Date.now().toString(36)}` : null), [game]);
+  const soloCast = useLiveCast({ game, room: soloRoom, myId, me, active: !!game && game !== 'squish', rootRef: soloRoot, solo: true });
+  const linkRow = playToo && playToo.row && playToo.row.game === game ? playToo.row : null;
+  const raceLink = useRaceLink({ row: linkRow, myId, me, active: !!game && !!linkRow });
+  const soloStat = useMemo(() => (items) => { soloCast.setStat(items); raceLink.setStat(items); }, [soloCast.setStat, raceLink.setStat]);
+  const [castOpen, setCastOpen] = useState(false);
+  const linkName = linkRow ? String((playToo.profile && playToo.profile.name) || 'Friend').split(' ')[0] : '';
+  const raceLine = linkRow ? (raceLink.them ? `${linkName}: ${raceLink.them.l} ${raceLink.them.v}` : `Playing with ${linkName}`)
+    : soloCast.racers.length ? soloCast.racers.slice(0, 2).map((r) => { const s = soloCast.scores[r.id]; return s ? `${r.n}: ${s.l} ${s.v}` : `${r.n} joined`; }).join(', ') : null;
   const [rulesFor, setRulesFor] = useState(null);
   const [duoSolo, setDuoSolo] = useState(false);
   const [gulpSolo, setGulpSolo] = useState(false);
@@ -276,7 +288,7 @@ export function GamesPage({ onClose, onChallenge, onShareScore, initialGame, fri
             <>
               <SectionTitle>Friends playing now</SectionTitle>
               <div className="zgh-row" style={{ display: 'flex', gap: 10, overflowX: 'auto', margin: '0 -16px', padding: '2px 16px 8px' }}>
-                {liveCards.map(({ r, p }) => (
+                {liveCards.map(({ r, p }) => { const L = liveKind(r); const two = !!(r.info && r.info.so && L.watch && L.play); return (
                   <div key={r.user_id} style={{ width: 150, flexShrink: 0, borderRadius: 18, overflow: 'hidden', background: theme.rowBg, boxShadow: '0 6px 16px rgba(0,0,0,0.14)' }}>
                     <div style={{ position: 'relative' }}>
                       <GameArt k={r.game} width="100%" height={78} radius={0} style={{ width: '100%' }} />
@@ -287,13 +299,14 @@ export function GamesPage({ onClose, onChallenge, onShareScore, initialGame, fri
                         <Avatar emoji={p.avatar} name={p.name} size={26} />
                         <div style={{ minWidth: 0 }}>
                           <div style={{ fontSize: 12.5, fontWeight: 800, color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{String(p.name || '').split(' ')[0]}</div>
-                          <div style={{ fontSize: 11, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{GAME_TITLES[r.info && r.info.co ? 'gulpco' : r.game] || 'Game'}</div>
+                          <div style={{ fontSize: 11, color: theme.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.info && r.info.lob ? 'Waiting for a player' : GAME_TITLES[L.k] || 'Game'}</div>
                         </div>
                       </div>
-                      <GameButton small color={r.info && r.info.co ? 'green' : 'gold'} label={r.info && r.info.co ? 'Join' : 'Watch'} onClick={() => { tap(); onWatch(r, p); }} />
+                      {L.act ? <GameButton small full color={L.act === 'Watch' ? 'gold' : 'green'} label={L.act} ariaLabel={`${L.act} ${String(p.name || '').split(' ')[0]}`} onClick={() => { tap(); if (L.act === 'Watch') onWatch(r, p); else if (onJoinLive) onJoinLive(r, p); }} /> : <div style={{ height: 36, display: 'flex', alignItems: 'center', fontSize: 12.5, fontWeight: 700, color: theme.muted }}>Playing now</div>}
+                      {two && onJoinLive && <GameButton small full color="white" label="Play too" ariaLabel={`Play ${GAME_TITLES[L.k] || 'it'} with ${String(p.name || '').split(' ')[0]}`} onClick={() => { tap(); onJoinLive(r, p); }} />}
                     </div>
                   </div>
-                ))}
+                ); })}
               </div>
             </>
           )}
@@ -317,7 +330,7 @@ export function GamesPage({ onClose, onChallenge, onShareScore, initialGame, fri
             <div style={{ position: 'absolute', left: 14, right: 14, bottom: 12, display: 'flex', alignItems: 'flex-end', gap: 10 }}>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 19, fontWeight: 900, color: '#FFFFFF' }}>Roll Squad</div>
-                <div style={{ fontSize: 12.5, fontWeight: 600, color: 'rgba(255,255,255,0.85)', lineHeight: 1.35 }}>Up to four friends roll, jump and bop through 42 levels. No group needed.</div>
+                <div style={{ fontSize: 12.5, fontWeight: 600, color: 'rgba(255,255,255,0.85)', lineHeight: 1.35 }}>Up to four friends roll and team up through 54 longer levels with plates, bridges and team gates.</div>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
                 {onRollInvite && <GameButton small color="gold" label="Invite friends" onClick={() => { tap(); noteRecent('roll'); onRollInvite(); }} />}
@@ -412,12 +425,17 @@ export function GamesPage({ onClose, onChallenge, onShareScore, initialGame, fri
         </div>
       </FullPage>
       {game && (
-        <FullPage title={GAME_TITLES[game]} subtitle={game === 'sudoku' ? 'Easy to expert' : bestOf(game) ? `Best ${formatGameScore(game, bestOf(game))}` : 'No score yet'} onBack={() => setGame(null)} zIndex={61}
+        <FullPage title={GAME_TITLES[game]} subtitle={raceLine || (game === 'sudoku' ? 'Easy to expert' : bestOf(game) ? `Best ${formatGameScore(game, bestOf(game))}` : 'No score yet')} onBack={() => setGame(null)} zIndex={61}
           bodyStyle={{ background: `linear-gradient(170deg, ${(GAME_ART_BG[game] || ['#3B2F63', '#1B1530'])[0]}${theme.dark ? '55' : '33'} 0%, ${(GAME_ART_BG[game] || ['#3B2F63', '#1B1530'])[1]}${theme.dark ? '33' : '1F'} 45%, transparent 85%)` }}
-          right={<><GameInfoButton k={game} header />{onOpenLeaderboard && !NO_BOARD.includes(game) && <HeaderIconButton label="Leaderboard" onClick={() => onOpenLeaderboard(game)}><TrophyIcon size={19} /></HeaderIconButton>}{onShareScore && !NO_BOARD.includes(game) && <HeaderIconButton label="Share score" onClick={() => onShareScore(game, bestOf(game))}><ShareGlyph /></HeaderIconButton>}</>}>
+          right={<>{game !== 'squish' && <CastEye cast={soloCast} glass={false} size={36} onOpen={() => setCastOpen(true)} />}<GameInfoButton k={game} header />{onOpenLeaderboard && !NO_BOARD.includes(game) && <HeaderIconButton label="Leaderboard" onClick={() => onOpenLeaderboard(game)}><TrophyIcon size={19} /></HeaderIconButton>}{onShareScore && !NO_BOARD.includes(game) && <HeaderIconButton label="Share score" onClick={() => onShareScore(game, bestOf(game))}><ShareGlyph /></HeaderIconButton>}</>}>
+          <div aria-hidden="true" ref={(n) => { soloRoot.current = n ? (n.closest('.zchat-wide-page') || n.parentElement) : null; }} style={{ display: 'none' }} />
           <SoloSplash k={game} />
-          <SoloGame k={game} />
+          <LiveStatCtx.Provider value={soloStat}>
+            <SoloFit><SoloGame k={game} /></SoloFit>
+          </LiveStatCtx.Provider>
           <ScoreToast k={game} />
+          {game !== 'squish' && <CastLayer cast={soloCast} z={66} />}
+          {castOpen && <CastSheet cast={soloCast} z={68} onClose={() => setCastOpen(false)} />}
         </FullPage>
       )}
       {rulesFor && <HowToPlaySheet k={rulesFor} onClose={() => setRulesFor(null)} />}

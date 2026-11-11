@@ -1,5 +1,5 @@
 import React, { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { GameRoom, RoomButton, RoomSheet, sfx, haptic, defineSfx, clickSound } from './kit.jsx';
+import { GameRoom, RoomButton, RoomSheet, sfx, haptic, defineSfx, clickSound, useLandPhone } from './kit.jsx';
 import { useGameRelay } from './relay.jsx';
 import { useMyLevels, useLevels, recordFinish, xpSpan, LEVEL_GAMES, noteRecent } from './levels.jsx';
 import { preloadScene } from './scenes.jsx';
@@ -888,6 +888,7 @@ export function GameRoomPage({ st, prevOf, myId, me, peer, intent, onClose }) {
               : <ClassicView st={st} myId={myId} onMove={move} peerName={peerName} onMeta={setMeta} />;
   return (
     <GameRoom k={g} title={title} sub={meta.sub || (isBot ? 'With ZChat Bot' : relay.here ? `${peerName} is here` : `With ${peerName}`)} players={players} center={meta.center} status={status} statusHot={meta.hot}
+      cast={player ? { game: g, room: `${g}-${st.id}-${String(myId).slice(0, 8)}`, myId, me, info: { bot: isBot ? 1 : 0 } } : null}
       menu={menu} rules={zap ? { ...gameRulesFor(st), guide: <ZapCardGuide mayhem={st.md === 'mayhem'} /> } : gameRulesFor(st)} social={social} toast={toast} still={still} ready={ready} bottom={meta.bottom || null}
       splash={{ title, sub: `You vs ${peerName}`, art: <GameArt k={g === 'pool' && st.v === 9 ? 'pool9' : g} width={236} height={148} radius={30} />, players: [players[0], players[1]] }}
       onClose={onClose}
@@ -920,6 +921,7 @@ export function DuelRoomPage({ st, title, me, peer, myId, rules, onClose, childr
   const outer = useContext(ThemeContext);
   const value = useMemo(() => ({ ...outer, theme: { ...outer.theme, ...THEMES.dark, coral: outer.theme.coral, accentSoft: outer.theme.accentSoft }, dark: true }), [outer]);
   const still = reducedMotion();
+  const land = useLandPhone();
   const k = st.g === 'sd' ? st.k : st.g;
   const peerName = firstName(peer && peer.name);
   const mineDone = (st.x === myId ? st.rx : st.ro) != null;
@@ -931,9 +933,10 @@ export function DuelRoomPage({ st, title, me, peer, myId, rules, onClose, childr
   ];
   return (
     <GameRoom k={k} sceneKey={st.g === 'sd' ? 'arena' : undefined} title={title} sub={`Your round against ${peerName}`} players={players} rules={rules} still={still} onClose={onClose}
+      cast={{ game: k, room: `d-${st.id}-${String(myId).slice(0, 8)}`, myId, me, info: { sd: 1 } }}
       splash={{ title, sub: `You vs ${peerName}`, art: <GameArt k={st.g === 'sd' ? `sd:${st.k}` : st.g} width={236} height={148} radius={0} />, players }}>
       <ThemeContext.Provider value={value}>
-        <div style={{ width: '100%', height: '100%', maxWidth: 480, overflowY: 'auto', padding: '6px 14px 10px', boxSizing: 'border-box' }}>
+        <div style={{ width: '100%', height: '100%', maxWidth: land ? 820 : 480, overflowY: 'auto', padding: land ? '4px 6px 6px' : '6px 14px 10px', boxSizing: 'border-box' }}>
           <div style={{ borderRadius: 24, background: 'rgba(12,10,22,0.62)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.1)', padding: '12px 10px', minHeight: '100%', boxSizing: 'border-box' }}>{children}</div>
         </div>
       </ThemeContext.Provider>

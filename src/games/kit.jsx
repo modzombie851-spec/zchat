@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom';
 import { TRACKS, makeVoices, makeIR } from './music.jsx';
 import { sceneUrl, sceneTone, sceneMusic, sceneKeyFor } from './scenes.jsx';
 import { gameFaces } from './faces.jsx';
+import { useLiveCast, CastEye, CastLayer, CastSheet, injectCastCss } from './livecast.jsx';
 
 const SOUND_KEY = 'zchat-game-sound';
 const MUSIC_KEY = 'zchat-game-music';
@@ -15,6 +16,7 @@ let mainGain = null;
 let musicBus = null;
 let musicDuck = null;
 let duckT = 0;
+let visHooked = false;
 
 function readFlag(key) {
   try { return localStorage.getItem(key) !== '0'; } catch { return true; }
@@ -49,11 +51,11 @@ export function audioCtx() {
       musicBus = ctx.createGain();
       musicBus.gain.value = 0.3;
       musicBus.connect(musicDuck);
-      ctx.addEventListener && ctx.addEventListener('statechange', () => syncMusic());
-      if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisible);
+      ctx.addEventListener && ctx.addEventListener('statechange', () => { syncMusic(); if (ctx && ctx.state !== 'running' && !pageHidden()) armUnlock(); });
+      if (typeof document !== 'undefined' && !visHooked) { visHooked = true; document.addEventListener('visibilitychange', onVisible); window.addEventListener('pageshow', onVisible); window.addEventListener('focus', onVisible); }
     } catch { ctx = null; return null; }
   }
-  if (ctx.state === 'suspended' && !pageHidden()) ctx.resume().catch(() => {});
+  if (ctx.state !== 'running' && !pageHidden()) ctx.resume().catch(() => {});
   return ctx;
 }
 
@@ -259,8 +261,16 @@ function onVisible() {
     setTimeout(() => { if (pageHidden() && ctx && ctx.state === 'running') ctx.suspend().catch(() => {}); }, 500);
     return;
   }
-  if (ctx.state === 'suspended') ctx.resume().then(() => syncMusic(), () => {});
+  if (ctx.state !== 'running') { ctx.resume().then(() => syncMusic(), () => {}); armUnlock(); setTimeout(() => { if (ctx && ctx.state !== 'running' && !pageHidden()) armUnlock(); }, 400); }
   else syncMusic();
+}
+function rebuildCtx() {
+  try { fadeOutMusic(); } catch {}
+  try { if (ctx) ctx.close(); } catch {}
+  ctx = null; master = null; mainGain = null; musicBus = null; musicDuck = null;
+  mus.key = null; mus.timer = 0; mus.out = null; mus.voices = null; mus.rev = null;
+  audioCtx();
+  syncMusic();
 }
 
 let armed = false;
@@ -285,8 +295,10 @@ export function unlockAudio() {
     s.connect(c.destination);
     s.start(0);
   } catch {}
-  if (c.state !== 'running') c.resume().then(() => syncMusic(), () => {});
-  else syncMusic();
+  if (c.state !== 'running') {
+    c.resume().then(() => syncMusic(), () => {});
+    setTimeout(() => { if (ctx === c && c.state !== 'running' && !pageHidden()) rebuildCtx(); }, 700);
+  } else syncMusic();
 }
 
 export function playMusic(key) {
@@ -374,6 +386,7 @@ const Ico = {
   react: (c) => <g fill="none" stroke={c} strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="8.6" /><path d="M8.3 14.2a4.6 4.6 0 0 0 7.4 0" /><circle cx="9" cy="10" r="0.9" fill={c} /><circle cx="15" cy="10" r="0.9" fill={c} /></g>,
   send: (c) => <path d="M4 12l15-7-5 15-2.5-6z" fill={c} />,
   close: (c) => <path d="M6 6l12 12M18 6L6 18" stroke={c} strokeWidth="2.4" strokeLinecap="round" />,
+  eye: (c, on) => <g fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2.6 12c2-3.9 5.3-6.2 9.4-6.2s7.4 2.3 9.4 6.2c-2 3.9-5.3 6.2-9.4 6.2S4.6 15.9 2.6 12z" /><circle cx="12" cy="12" r="2.9" />{!on && <path d="M4.5 4.5l15 15" />}</g>,
 };
 export function KitIcon({ name, size = 22, color = '#FFFFFF', on = true }) {
   const draw = Ico[name];
@@ -416,12 +429,12 @@ function Face({ p, size, ring, turn }) {
   );
 }
 
-function Plate({ p, side, tone }) {
+function Plate({ p, side, tone, small }) {
   if (!p) return <div style={{ flex: 1 }} />;
   const right = side === 'right';
   return (
-    <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 10, flexDirection: right ? 'row-reverse' : 'row' }}>
-      <Face p={p} size={50} ring={tone.ring} turn={!!p.turn} />
+    <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: small ? 8 : 10, flexDirection: right ? 'row-reverse' : 'row' }}>
+      <Face p={p} size={small ? 38 : 50} ring={tone.ring} turn={!!p.turn} />
       <div style={{ minWidth: 0, textAlign: right ? 'right' : 'left' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexDirection: right ? 'row-reverse' : 'row' }}>
           <span style={{ fontSize: 14.5, fontWeight: 800, color: '#FFFFFF', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 92, textShadow: '0 1px 2px rgba(0,0,0,0.45)' }}>{p.name}</span>
@@ -545,8 +558,29 @@ export function RoomSheet({ title, text, onClose, children }) {
   );
 }
 
-export function GameRoom({ title, scene, top, bottom, onClose, children, k, sceneKey, sub, music, players, center, status, statusHot, controls, menu, rules, splash, ready = true, social, floats, toast, still, zIndex = 80, onMenu, overlay }) {
+const LAND_Q = '(orientation: landscape) and (max-height: 560px)';
+export function useLandPhone() {
+  const get = () => typeof window !== 'undefined' && !!window.matchMedia && window.matchMedia(LAND_Q).matches;
+  const [v, setV] = useState(get);
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return undefined;
+    const m = window.matchMedia(LAND_Q);
+    const f = () => setV(m.matches);
+    if (m.addEventListener) m.addEventListener('change', f); else if (m.addListener) m.addListener(f);
+    window.addEventListener('resize', f);
+    f();
+    return () => { if (m.removeEventListener) m.removeEventListener('change', f); else if (m.removeListener) m.removeListener(f); window.removeEventListener('resize', f); };
+  }, []);
+  return v;
+}
+
+export function GameRoom({ title, scene, top, bottom, onClose, children, k, sceneKey, sub, music, players, center, status, statusHot, controls, menu, rules, splash, ready = true, social, floats, toast, still, zIndex = 80, onMenu, overlay, cast }) {
   injectRoomCss();
+  injectCastCss();
+  const castRoot = useRef(null);
+  const live = useLiveCast({ ...(cast || {}), active: !!cast && cast.active !== false, rootRef: castRoot });
+  const land = useLandPhone();
+  const [castOpen, setCastOpen] = useState(false);
   const skey = sceneKeyFor(sceneKey || k || 'lounge');
   const tone = sceneTone(skey);
   const src = typeof scene === 'string' ? scene : sceneUrl(skey);
@@ -618,20 +652,49 @@ export function GameRoom({ title, scene, top, bottom, onClose, children, k, scen
   const menuItems = [...(rules ? [{ label: 'How to play', onClick: () => setShowRules(true) }] : []), ...(menu || [])];
   const body = (
     <LayerCtx.Provider value={layer}>
-    <div className={`zgr-root zgr-in${still ? ' zgr-still' : ''}`} onClick={() => { if (tray) setTray(null); }}
+    <div ref={castRoot} className={`zgr-root zgr-in${still ? ' zgr-still' : ''}`} onClick={() => { if (tray) setTray(null); }}
       style={{ position: 'fixed', inset: 0, zIndex, background: '#0A0A10', color: '#FFFFFF', fontFamily: KIT_FONT, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
       {scene && typeof scene !== 'string' ? <div aria-hidden="true" style={{ position: 'absolute', inset: 0, zIndex: 0 }}>{scene}</div> : <div aria-hidden="true" style={{ position: 'absolute', inset: 0, zIndex: 0, backgroundImage: `url("${src}")`, backgroundSize: 'cover', backgroundPosition: 'center' }} />}
       <div aria-hidden="true" style={{ position: 'absolute', inset: 0, zIndex: 0, background: 'linear-gradient(180deg, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0) 22%, rgba(0,0,0,0) 74%, rgba(0,0,0,0.55) 100%)' }} />
-      <div style={{ position: 'relative', zIndex: 2, display: 'flex', alignItems: 'center', gap: 8, padding: 'calc(8px + env(safe-area-inset-top)) 12px 6px' }}>
+      <div style={{ position: 'relative', zIndex: 2, display: 'flex', alignItems: 'center', gap: 8, padding: land ? 'calc(4px + env(safe-area-inset-top)) calc(12px + env(safe-area-inset-right)) 4px calc(12px + env(safe-area-inset-left))' : 'calc(8px + env(safe-area-inset-top)) 12px 6px' }}>
         <GlassBtn label="Back" onClick={close}><KitIcon name="back" size={22} /></GlassBtn>
         <div style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>
           <div style={{ fontSize: 16, fontWeight: 900, letterSpacing: '-0.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textShadow: '0 1px 3px rgba(0,0,0,0.5)' }}>{title}</div>
           {sub && <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.78)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub}</div>}
         </div>
+        {cast && <CastEye cast={live} size={36} onOpen={() => setCastOpen(true)} />}
         <GlassBtn label={kit.soundOn ? 'Turn sound off' : 'Turn sound on'} onClick={() => { setSoundOn(!kit.soundOn); unlockAudio(); }} size={36}><KitIcon name="sound" size={19} on={kit.soundOn} /></GlassBtn>
         <GlassBtn label={kit.musicOn ? 'Turn music off' : 'Turn music on'} onClick={() => { setMusicOn(!kit.musicOn); unlockAudio(); }} size={36}><KitIcon name="music" size={19} on={kit.musicOn} /></GlassBtn>
         {(menuItems.length > 0 || onMenu) && <GlassBtn label="More" onClick={() => (onMenu ? onMenu() : setShowMenu(true))} size={36}><KitIcon name="more" size={19} /></GlassBtn>}
       </div>
+      {land ? (
+        <div style={{ position: 'relative', zIndex: 2, flex: 1, minHeight: 0, display: 'flex', gap: 10, padding: '0 calc(10px + env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) calc(10px + env(safe-area-inset-left))' }}>
+          <div className="zgr-side" style={{ width: 'clamp(190px, 29vw, 270px)', flexShrink: 0, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8, paddingBottom: 2 }}>
+            {players && (
+              <div style={{ position: 'relative', zIndex: 3, padding: '8px 10px', borderRadius: 18, background: tone.glass, boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.1), 0 8px 22px rgba(0,0,0,0.22)', display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0 }}>
+                <Plate p={players[0]} side="left" tone={tone} small />
+                <div style={{ textAlign: 'center', fontSize: 15, fontWeight: 900, fontVariantNumeric: 'tabular-nums', color: center != null ? '#FFFFFF' : tone.accent, lineHeight: '18px' }}>{center != null ? center : 'vs'}</div>
+                <Plate p={players[1]} side="left" tone={tone} small />
+                <Bubble b={bubbles.left} side="left" />
+                <Bubble b={bubbles.right} side="right" />
+              </div>
+            )}
+            {status ? <div key={status} className="zgr-pop" role="status" style={{ alignSelf: 'center', padding: '6px 12px', borderRadius: 999, fontSize: 13, fontWeight: 800, textAlign: 'center', color: statusHot ? (tone.ink || '#1A1408') : '#FFFFFF', background: statusHot ? tone.accent : 'rgba(0,0,0,0.42)', flexShrink: 0 }}>{status}</div> : null}
+            {top && <div style={{ position: 'relative', zIndex: 2, flexShrink: 0 }}>{top}</div>}
+            {controls && <div style={{ position: 'relative', zIndex: 2, flexShrink: 0 }}>{controls}</div>}
+            <div style={{ flex: 1 }} />
+            {(bottom || social) && (
+              <div style={{ position: 'relative', zIndex: 3, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'center', flexShrink: 0 }}>
+                {social && <GlassBtn label="Chat" size={42} onClick={() => setTray(tray === 'chat' ? null : 'chat')} tone={tray === 'chat' ? 'rgba(255,255,255,0.28)' : undefined}><KitIcon name="chat" size={20} /></GlassBtn>}
+                {bottom && <div style={{ minWidth: 0, display: 'flex', justifyContent: 'center' }}>{bottom}</div>}
+                {social && <GlassBtn label="React" size={42} onClick={() => setTray(tray === 'react' ? null : 'react')} tone={tray === 'react' ? 'rgba(255,255,255,0.28)' : undefined}><KitIcon name="react" size={21} /></GlassBtn>}
+              </div>
+            )}
+          </div>
+          <div style={{ position: 'relative', zIndex: 1, flex: 1, minWidth: 0, minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{children}</div>
+        </div>
+      ) : (
+        <>
       {players && (
         <div style={{ position: 'relative', zIndex: 3, margin: '4px 10px 0', padding: '10px 12px', borderRadius: 22, background: tone.glass, boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.1), 0 10px 30px rgba(0,0,0,0.25)', display: 'flex', alignItems: 'center', gap: 6 }}>
           <Plate p={players[0]} side="left" tone={tone} />
@@ -655,6 +718,8 @@ export function GameRoom({ title, scene, top, bottom, onClose, children, k, scen
           <div style={{ flex: 1, minWidth: 0, display: 'flex', justifyContent: 'center' }}>{bottom}</div>
           {social && <GlassBtn label="React" size={46} onClick={() => setTray(tray === 'react' ? null : 'react')} tone={tray === 'react' ? 'rgba(255,255,255,0.28)' : undefined}><KitIcon name="react" size={23} /></GlassBtn>}
         </div>
+      )}
+        </>
       )}
       {tray === 'chat' && social && <ChatTray phrases={social.phrases} onSay={say} onClose={() => setTray(null)} />}
       {tray === 'react' && social && <ReactTray stickers={social.stickers || []} onPick={react} />}
@@ -685,6 +750,8 @@ export function GameRoom({ title, scene, top, bottom, onClose, children, k, scen
         </RoomSheet>
       )}
       {splash && <Splash splash={splash} sceneSrc={src} tone={tone} done={splashDone} still={still} />}
+      {cast && <CastLayer cast={live} z={zIndex + 6} mine={cast.mine} />}
+      {cast && castOpen && <CastSheet cast={live} z={zIndex + 8} onClose={() => setCastOpen(false)} />}
     </div>
     </LayerCtx.Provider>
   );

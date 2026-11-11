@@ -1593,6 +1593,7 @@ export function PoolPage({ st, prevOf, myId, peerName, onClose }) {
   const note = P.busy.current ? '' : st.w ? (out === 'win' ? (st.why === 'resign' ? `${peer} gave up. You won` : (st.v === 9 ? 'You potted the 9. You won' : 'You potted the black. You won')) : st.why === 'resign' ? 'You gave up' : `${peer} won this one`) : myTurn ? (st.bih ? ((st.n || 0) === 0 ? 'Your break. Place the white ball behind the line' : 'Ball in hand. Drag the white ball anywhere') : 'Your shot. Touch the table to aim, pull the power down') : (live.here ? `${peer} is at the table` : `${peer} is up next`);
   return (
     <GameRoom k="pool" title="Pool" scene={<PoolScene />} onClose={onClose}
+      cast={{ game: 'pool', room: `pool-${st.id}-${String(myId).slice(0, 8)}`, myId, info: {} }}
       top={(
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '0 10px 6px', padding: '8px 12px', borderRadius: 20, background: 'linear-gradient(180deg, rgba(20,13,8,0.82), rgba(20,13,8,0.62))', boxShadow: 'inset 0 0 0 1px rgba(255,220,170,0.1), 0 6px 18px rgba(0,0,0,0.35)', fontFamily: FONT }}>
           <Seat id={myId} label="You" hot={!st.w && st.t === myId} group={myG} left={mine} />

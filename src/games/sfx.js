@@ -38,8 +38,9 @@ export const Sfx = {
       master.connect(comp); comp.connect(ac.destination);
       sfxBus = ac.createGain(); sfxBus.gain.value = this.sfxOn ? 1 : 0; sfxBus.connect(master);
       musBus = ac.createGain(); musBus.gain.value = this.musicOn ? 0.55 : 0; musBus.connect(master);
+      try { ac.addEventListener('statechange', () => { if (ac && ac.state !== 'running' && typeof document !== 'undefined' && document.visibilityState !== 'hidden') armWake(); }); } catch {}
     }
-    if (ac.state === 'suspended') { const r = ac.resume(); if (r && r.catch) r.catch(() => {}); }
+    if (ac.state !== 'running') { try { const r = ac.resume(); if (r && r.catch) r.catch(() => {}); } catch {} }
     this.load();
   },
   load() {
@@ -145,6 +146,31 @@ export const Sfx = {
   bus() { return ac && sfxBus ? { ac, out: sfxBus } : null; },
 };
 
+let wakeArmed = false;
+function rebuildSfx() {
+  const keep = musicNow ? musicNow.name : null;
+  try { if (ac) ac.close(); } catch {}
+  ac = null; master = null; sfxBus = null; musBus = null; musicNow = null;
+  Sfx.init();
+  if (keep) Sfx.music(keep, true);
+}
+function armWake() {
+  if (wakeArmed || typeof document === 'undefined') return;
+  wakeArmed = true;
+  const evs = ['pointerdown', 'touchend', 'keydown', 'click'];
+  const go = () => {
+    evs.forEach((e) => document.removeEventListener(e, go, true));
+    wakeArmed = false;
+    if (!ac || document.visibilityState === 'hidden') return;
+    try { const b = ac.createBuffer(1, 1, 22050); const s = ac.createBufferSource(); s.buffer = b; s.connect(ac.destination); s.start(0); } catch {}
+    try { const r = ac.resume(); if (r && r.catch) r.catch(() => {}); } catch {}
+    setTimeout(() => { if (ac && ac.state !== 'running' && document.visibilityState !== 'hidden') rebuildSfx(); }, 650);
+  };
+  evs.forEach((e) => document.addEventListener(e, go, true));
+}
 if (typeof document !== 'undefined') {
-  document.addEventListener('visibilitychange', () => { if (ac) Sfx.pause(document.visibilityState === 'hidden'); });
+  const back = () => { if (!ac || document.visibilityState === 'hidden') return; Sfx.pause(false); if (ac.state !== 'running') armWake(); else setTimeout(() => { if (ac && ac.state !== 'running') armWake(); }, 400); };
+  document.addEventListener('visibilitychange', () => { if (!ac) return; if (document.visibilityState === 'hidden') Sfx.pause(true); else back(); });
+  window.addEventListener('pageshow', back);
+  window.addEventListener('focus', back);
 }

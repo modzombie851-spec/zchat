@@ -832,6 +832,7 @@ export function ZapPage({ st, myId, onClose }) {
   ) : null;
   return (
     <GameRoom k="zap" title={isMayhem(st) ? 'Zap Mayhem' : 'Zap'} scene={<ZapScene />} onClose={onClose}
+      cast={{ game: 'zap', room: `zap-${st.id}-${String(myId).slice(0, 8)}`, myId, info: {} }}
       top={(
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-around', gap: 6, padding: '6px 10px 0', fontFamily: FONT }}>
           {others.map(([u, i]) => <Seat key={u} u={u} i={i} st={st} myId={myId} seatRef={(el) => { seatRefs.current[i] = el; }} badge={Z.badges[i]} onCatch={() => Z.doCatch(i)} />)}

@@ -1747,6 +1747,65 @@ function NicknamesModal({ conv, myAvatar, myName, currentNickname, currentAlias,
   );
 }
 
+const chatSumMem = new Map();
+function ChatSummary({ myId, peer }) {
+  const { theme } = useTheme();
+  const key = `${myId}:${peer.id}`;
+  const [st, setSt] = useState(() => { const m = chatSumMem.get(key); return m && Date.now() - m.at < 600000 ? m.v : null; });
+  useEffect(() => {
+    if (st || !myId || !peer.id) return undefined;
+    let alive = true;
+    const pair = `and(sender_id.eq.${myId},receiver_id.eq.${peer.id}),and(sender_id.eq.${peer.id},receiver_id.eq.${myId})`;
+    const count = (f) => Promise.resolve(f(supabase.from('messages').select('id', { count: 'exact', head: true }).is('group_id', null).or(pair))).then((r) => (r && !r.error ? r.count || 0 : null), () => null);
+    Promise.all([
+      count((q) => q),
+      count((q) => q.eq('sender_id', myId)),
+      count((q) => q.eq('type', 'image')),
+      count((q) => q.eq('type', 'video')),
+      count((q) => q.in('type', ['audio', 'voice'])),
+      Promise.resolve(supabase.from('messages').select('created_at').is('group_id', null).or(pair).order('created_at', { ascending: true }).limit(1)).then((r) => (r && !r.error && r.data && r.data[0] ? r.data[0].created_at : null), () => null),
+    ]).then(([all, mine, photos, videos, voice, first]) => {
+      if (!alive || all == null) return;
+      const v = { all, mine: mine || 0, photos: photos || 0, videos: videos || 0, voice: voice || 0, first };
+      chatSumMem.set(key, { at: Date.now(), v });
+      setSt(v);
+    });
+    return () => { alive = false; };
+  }, [key]);
+  if (!st || !st.all) return null;
+  const first = String(peer.name || 'them').split(' ')[0];
+  const n = (x) => Number(x || 0).toLocaleString();
+  const cell = (label, value) => (
+    <div style={{ flex: '1 1 0', minWidth: 0, padding: '10px 8px', textAlign: 'center' }}>
+      <div style={{ fontSize: 17, fontWeight: 800, color: theme.ink, fontVariantNumeric: 'tabular-nums' }}>{value}</div>
+      <div style={{ fontSize: 11.5, color: theme.muted, marginTop: 1, whiteSpace: 'nowrap' }}>{label}</div>
+    </div>
+  );
+  const share = st.all ? Math.round((st.mine / st.all) * 100) : 0;
+  return (
+    <DetailSection title="Your chat so far">
+      <div style={{ borderRadius: 18, border: `1px solid ${theme.border}`, overflow: 'hidden' }}>
+        <div style={{ display: 'flex' }}>
+          {cell('Messages', n(st.all))}
+          {cell('Photos', n(st.photos))}
+          {cell('Videos', n(st.videos))}
+          {cell('Voice', n(st.voice))}
+        </div>
+        <div style={{ padding: '10px 14px 12px', borderTop: `1px solid ${theme.border}` }}>
+          <div style={{ display: 'flex', height: 6, borderRadius: 3, overflow: 'hidden', background: theme.border }} aria-hidden="true">
+            <span style={{ width: `${share}%`, background: theme.coral }} />
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 12, color: theme.muted }}>
+            <span>{`You sent ${share}%`}</span>
+            <span>{`${first} sent ${100 - share}%`}</span>
+          </div>
+          {st.first && <div style={{ fontSize: 12.5, color: theme.muted, marginTop: 8 }}>{`Chatting since ${fmtDate(new Date(st.first), { day: 'numeric', month: 'long', year: 'numeric' })}`}</div>}
+        </div>
+      </div>
+    </DetailSection>
+  );
+}
+
 export function ChatSettingsPanel({ conv, myId, meAvatar, meName, isPinned, isLocked, wallpaper, chatLockAvailable, onClose, onTogglePin, onToggleArchive, onSetWallpaper, onEnableLock, onDisableLock, onDeleteChat, onReportUser, onNicknameSaved, onNeedChatLockSetup, onOpenProfile, isMuted, onSetMute, onCall, disappearSecs, onSetDisappear, tools, messages = [], onOpenMedia }) {
   const [showDisappear, setShowDisappear] = useState(false);
   useBackClose(true, onClose);
@@ -1868,6 +1927,7 @@ export function ChatSettingsPanel({ conv, myId, meAvatar, meName, isPinned, isLo
         ]} />
 
         {tools && <MediaStrip media={dmMedia} onOpen={onOpenMedia} onSeeAll={tools.onMedia} />}
+        {tools && !p.is_bot && <ChatSummary myId={myId} peer={p} />}
         {tools && !tools.isBot && !p.is_deleted && <ChatToolsSection chatKey={albumChatKey(myId, p.id)} peer={p} />}
 
         {tools && (

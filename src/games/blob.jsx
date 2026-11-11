@@ -589,6 +589,7 @@ function IconBtn({ label: aria, onClick, children, on }) {
 
 export function BlobGame({ seed, onDuelFinish, onClose, duelTitle }) {
   const duel = !!(seed && onDuelFinish);
+  const castId = useRef(`sq-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`);
   const kit = useGameKit();
   const hostRef = useRef(null);
   const bgRef = useRef(null);
@@ -773,7 +774,8 @@ export function BlobGame({ seed, onDuelFinish, onClose, duelTitle }) {
     </div>
   );
   return (
-    <GameRoom title={duelTitle || 'Squish'} scene={<PoolScene />} music={false} rules={GAME_RULES.squish} onClose={close} top={top}>
+    <GameRoom title={duelTitle || 'Squish'} scene={<PoolScene />} music={false} rules={GAME_RULES.squish} onClose={close} top={top}
+      cast={{ game: 'squish', room: castId.current, info: duel ? { sd: 1 } : {}, solo: !duel }}>
       <div ref={hostRef} style={{ position: 'relative', width: '100%', height: '100%', alignSelf: 'stretch', touchAction: 'none' }}
         onPointerDown={(e) => { if (over) return; try { e.currentTarget.setPointerCapture(e.pointerId); } catch {} down.current = true; flick.current = []; note(e); aim.current = toWorld(e); }}
         onPointerMove={(e) => { if (over) return; if (down.current) note(e); aim.current = toWorld(e); }}

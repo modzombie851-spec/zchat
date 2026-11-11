@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Avatar, Portal, useBackClose, hapticTap, FONT, Spinner } from '../App.jsx';
 import { useGameLink, useRoomRelay, useWatchChannel } from './relay.jsx';
-import { watchAllowed, setWatchAllowed, useLiveBeacon } from './live.js';
+import { setWatchAllowed, useLiveBeacon, useGamePrivacy } from './live.js';
 import { EMOTES, SignalBars, PingChip, SpeakerIcon, SmileIcon, Check, Heart, MicIcon, ChatIcon, SwapIcon, HandIcon, btnBase, Btn, RoundBtn, Sheet, Stars, injectCss, useVoice, setKitTap } from './livekit.jsx';
-import { LIVES, GLYPHS, GLYPH_NAMES, STORY_N, ENDLESS, ATK_CD, levelDef, makeWorld, stepWorld, buddyInput, applyEvent, snapshot, mergeSnapshot, sameLevel, syncClock, setNet, nearDial, nearMirror, turnMirror, foeRows, setFoes, tryCode, hintFor, aimTarget, clamp, missionsFor, parTime, spikeAmt, crumbleState } from './duoengine.js';
+import { LIVES, GLYPHS, GLYPH_NAMES, STORY_N, ENDLESS, ATK_CD, levelDef, makeWorld, stepWorld, buddyInput, applyEvent, snapshot, mergeSnapshot, sameLevel, syncClock, setNet, nearDial, nearMirror, turnMirror, foeRows, setFoes, tryCode, hintFor, aimTarget, clamp, missionsFor, parTime, spikeAmt, crumbleState, demoInputs, demoDuoWorld } from './duoengine.js';
 import { Snd, THEMES, buildStatic, buildMini, drawDuoMini, render, updateParts, dust, puffs, embers, glints, part, ring, glyph, drawExplorer } from './duodraw.js';
-import { GC, GBtn, GPill, GPanel, GChip, GTitle, GJoy, GIcon, GHudBtn, GHudPanel, GHudSkill, GHint, GStat, GNotices, useNotices, useWatchNotices, injectKitCss, kitTap, pressProps, INK, useCtlLook, useGameStage, stagePoint, GControlsPanel } from './gamekit.jsx';
+import { GC, GBtn, GPill, GPanel, GChip, GTitle, GJoy, GIcon, GHudBtn, GHudPanel, GHudSkill, GHint, GStat, GNotices, useNotices, useWatchNotices, injectKitCss, kitTap, pressProps, INK, useCtlLook, useGameStage, stagePoint, GControlsPanel, GLobby, GSlot, GLobbySheet, GVolBars } from './gamekit.jsx';
 import { Sfx } from './sfx.js';
 
 const PHRASES = ['Wait for me', 'Go ahead', 'Over here', 'Hold the plate', 'Come closer, I need light', 'On three', 'Nice one', 'Sorry', 'I will get the lever', 'Follow me'];
@@ -65,6 +65,9 @@ function TorchHero({ kind, size = 64, dir = 'down' }) {
   return <canvas ref={ref} aria-hidden="true" style={{ width: size, height: size, display: 'block', flexShrink: 0 }} />;
 }
 const THEME_BTN = { sand: 'gold', jungle: 'green', ice: 'teal', forge: 'orange', crystal: 'purple', tomb: 'teal', sky: 'blue' };
+const DEMO_LOCAL = new Set(['sun', 'moon']);
+const STORY_PAGE = 10;
+const firstStory = (best) => { for (let i = 0; i < STORY_N; i++) if (!best[i] || !best[i].stars) return i; return STORY_N - 1; };
 function GemIcon({ k, size = 16 }) {
   const c1 = k === 'sun' ? '#FFB020' : '#2F7BFF', c2 = k === 'sun' ? '#FFE08A' : '#A8CCFF';
   return (
@@ -91,7 +94,9 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
   const relay = watch ? wrelay : relay0;
   const here = solo ? true : relay.here;
   const voice = useVoice(solo || watch ? null : relay, !solo && !watch, host && !solo);
-  const [allowWatch, setAllowWatch] = useState(watchAllowed());
+  const gamePriv = useGamePrivacy();
+  const allowWatch = gamePriv.show && gamePriv.watch;
+  const setAllowWatch = () => {};
   const myFirstName = String((me && me.name) || 'You').split(' ')[0];
   const watchers = useWatchChannel({ room: solo ? null : `duo-${gameId}`, myId, enabled: !solo, role: watch ? 'watcher' : 'player', meta: { n: myFirstName, a: me && me.avatar }, allow: allowWatch, onDenied: () => { setToast({ text: 'The players turned off watching.', at: Date.now() }); setTimeout(() => onClose(), 1600); } });
   useWatchNotices(watchers, (t, kd) => pushNoteRef.current(t, kd), !solo && !watch);
@@ -100,6 +105,9 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
   const [phase, setPhase] = useState(solo ? 'pick' : 'lobby');
   const [li, setLi] = useState(0);
   const [rs, setRs] = useState(null);
+  const [paused, setPaused] = useState(false);
+  const pausedRef = useRef(false);
+  pausedRef.current = paused;
   const [hud, setHud] = useState({ lives: LIVES, gems: { sun: [0, 0], moon: [0, 0] }, key: null, chest: false });
   const [toast, setToast] = useState(null);
   const [notes, pushNote] = useNotices();
@@ -120,6 +128,13 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
   const [intro, setIntro] = useState(null);
   const [quick, setQuick] = useState(false);
   const [net, setNetView] = useState({ ping: null, weak: false, lost: false });
+  const [mode, setMode] = useState(() => (firstStory(readBest(myId)) > 0 ? 'endless' : 'story'));
+  const [storySel, setStorySel] = useState(() => firstStory(readBest(myId)));
+  const [storySheet, setStorySheet] = useState(false);
+  const [storyPage, setStoryPage] = useState(0);
+  const demoRef = useRef(null);
+  const demoKey = useRef('e');
+  demoKey.current = mode === 'endless' ? 'e' : `s:${storySel}`;
   if (typeof window !== 'undefined' && window.__zfake) window.__zduo = { world: () => WR.current, net: () => netRef.current };
   const cvRef = useRef(null);
   const wrapRef = useRef(null);
@@ -234,6 +249,7 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
       relay.on('emo', (m) => { heard(); const e = String(m.e || ''); if (!EMOTES.includes(e)) return; bubble(watch ? (m.from === watch.host ? 'sun' : 'moon') : theirKind, e, true); Snd.fx.emote(); }),
       relay.on('hi', () => { heard(); if (host) sendSync(); }),
       relay.on('hey', heard),
+      relay.on('psel', (m) => { heard(); if (host) return; if (watch && m.from !== watch.host) return; if (m.m === 'endless' || m.m === 'story') setMode(m.m); const i = Number(m.i); if (i >= 0 && i < STORY_N) setStorySel(i); }),
       relay.on('back', heard),
       relay.on('bye', () => { pushNote(`${peerFirst} left the game`, 'leave', 4.2); }),
     ];
@@ -285,7 +301,7 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
     Snd.music(false);
     onClose();
   };
-  useBackClose(true, () => { if (ctl) setCtl(false); else if (quick) setQuick(false); else if (sheet) setSheet(null); else if (leaveAsk) setLeaveAsk(false); else leave(); });
+  useBackClose(true, () => { if (ctl) setCtl(false); else if (storySheet) setStorySheet(false); else if (quick) setQuick(false); else if (sheet) setSheet(null); else if (leaveAsk) setLeaveAsk(false); else leave(); });
 
   useEffect(() => {
     const kd = (e) => {
@@ -332,15 +348,59 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
     if (onIce && Math.random() < 0.04) Snd.fx.slide();
   };
 
+  const drawDemo = (cv, dt) => {
+    const want = demoKey.current;
+    let D = demoRef.current;
+    const make = () => {
+      const isE = want === 'e';
+      const W0 = demoDuoWorld(isE ? ENDLESS : Number(want.slice(2)), isE ? newRunSeed() : null);
+      D = { key: want, W: W0, mem: {}, t: 0, fade: 1, fin: false, stat: null, cam: { x: 0, y: 0, init: false }, last: D ? D.last : 0 };
+      demoRef.current = D;
+    };
+    if (!D) make();
+    if (D.key !== want) D.fin = true;
+    const W = D.W;
+    if (dt > 0) {
+      D.t += dt;
+      const inputs = demoInputs(W, D.mem, dt);
+      stepWorld(W, dt, { local: DEMO_LOCAL, host: true, playing: true, inputs });
+      W.fx.length = 0; W.outbox.length = 0;
+      updateParts(W, dt, { x: W.p.sun.x, y: W.p.sun.y });
+      if (W.out || W.won || D.t > 42) D.fin = true;
+      D.fade = clamp(D.fade + (D.fin ? dt / 0.4 : -dt / 0.6), 0, 1);
+      if (D.fin && D.fade >= 1) { make(); return; }
+    }
+    const wrap = wrapRef.current;
+    const cw = wrap ? wrap.clientWidth : window.innerWidth, ch = wrap ? wrap.clientHeight : window.innerHeight;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    if (cv.width !== Math.round(cw * dpr) || cv.height !== Math.round(ch * dpr)) { cv.width = Math.round(cw * dpr); cv.height = Math.round(ch * dpr); }
+    const s = Math.round(cw > ch ? clamp(ch / 9.5, 36, 66) : clamp(cw / 7.4, 44, 66));
+    if (!D.stat || D.stat.s !== s || D.stat.d !== dpr) D.stat = { cv: buildStatic(W, s * dpr), s, d: dpr };
+    const A = W.p.sun, B = W.p.moon;
+    const C = D.cam;
+    const tx = (A.x + B.x) / 2, ty = (A.y + B.y) / 2 - 0.6;
+    if (!C.init) { C.x = tx; C.y = ty; C.init = true; }
+    const kk = 1 - Math.exp(-dt * 2.4);
+    C.x += (tx - C.x) * kk; C.y += (ty - C.y) * kk;
+    const halfW = cw / s / 2, halfH = ch / s / 2;
+    const cx = W.MW <= halfW * 2 ? W.MW / 2 : clamp(C.x, halfW - 0.4, W.MW - halfW + 0.4);
+    const cy = W.MH <= halfH * 2 ? W.MH / 2 : clamp(C.y, halfH - 1.4, W.MH - halfH + 1.2);
+    const ox = Math.round(cw / 2 - cx * s), oy = Math.round(ch * (cw > ch ? 0.44 : 0.36) - cy * s);
+    const ctx = cv.getContext('2d');
+    render(ctx, W, { cw, ch, dpr, s, ox, oy, me: A, names: {}, bubbles: {}, stat: D.stat.cv, them: null, safeTop: 30, safeBottom: 30, keep: [] });
+    if (D.fade > 0.001) { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = `rgba(11,9,16,${D.fade.toFixed(3)})`; ctx.fillRect(0, 0, cv.width, cv.height); }
+  };
+
   useEffect(() => {
     let raf = 0;
     let last = performance.now();
     const loop = (ts) => {
       raf = requestAnimationFrame(loop);
-      const dt = Math.min(0.05, Math.max(0, (ts - last) / 1000));
+      const dt = pausedRef.current ? 0 : Math.min(0.05, Math.max(0, (ts - last) / 1000));
       last = ts;
       const W = WR.current;
       const cv = cvRef.current;
+      if (!W && cv && (phaseRef.current === 'pick' || phaseRef.current === 'lobby')) { drawDemo(cv, Math.min(0.05, Math.max(0, (ts - (demoRef.current ? demoRef.current.last : ts)) / 1000))); if (demoRef.current) demoRef.current.last = ts; return; }
       if (!W || !cv) return;
       const wrap = wrapRef.current;
       const cw = wrap ? wrap.clientWidth : window.innerWidth, ch = wrap ? wrap.clientHeight : window.innerHeight;
@@ -552,7 +612,6 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
 
   const onJoyDown = (e) => {
     if (phaseRef.current !== 'play' || sheetOpen.current) return;
-    if (joy.current.id != null) return;
     const el = wrapRef.current;
     const { x, y } = stagePoint(el, e, sideRef.current);
     const w = el.clientWidth, h = el.clientHeight;
@@ -578,6 +637,16 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
     joy.current = { x: 0, y: 0, id: null, cx: 0, cy: 0, show: false };
     setJoyView(null);
   };
+  useEffect(() => {
+    const clear = () => { if (joy.current.id == null) return; joy.current = { x: 0, y: 0, id: null, cx: 0, cy: 0, show: false }; setJoyView(null); };
+    const ends = (e) => { if (e.touches && e.touches.length === 0) clear(); };
+    const vis = () => { if (document.visibilityState === 'hidden') clear(); };
+    window.addEventListener('touchend', ends, true);
+    window.addEventListener('touchcancel', ends, true);
+    window.addEventListener('blur', clear);
+    document.addEventListener('visibilitychange', vis);
+    return () => { window.removeEventListener('touchend', ends, true); window.removeEventListener('touchcancel', ends, true); window.removeEventListener('blur', clear); document.removeEventListener('visibilitychange', vis); };
+  }, []);
 
   const startEndless = (depth) => { const seed = newRunSeed(); rsRef.current = seed; startLevel(ENDLESS + Math.max(1, depth) - 1, undefined, false, seed); };
   const toPick = () => { setPhase('pick'); if (!solo) relay.send('pick', {}); WR.current = null; };
@@ -586,23 +655,20 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
   const title = phase === 'play' || phase === 'won' || phase === 'out' ? levelTitle(li, rs) : 'Two Torches';
   const partnerLine = watch ? `Watching ${hostFirst} and ${peerFirst}` : solo ? (active === 'sun' ? 'Practice, orange torch' : 'Practice, blue torch') : here ? (phase === 'play' ? `With ${peerFirst}` : `${peerFirst} is here`) : here === false ? `${peerFirst} is away` : 'Connecting';
   const endlessBest = best.endless || 0;
-  const storyList = Array.from({ length: STORY_N }, (_, i) => i);
   const actKind = active;
   const atkCol = actKind === 'sun' ? 'orange' : 'blue';
-  const ROW = 104;
-  const nodeX = (i) => (i % 2 === 0 ? 22 : 78);
   const { top, right, bottom, left } = GS.at;
   const hb = land ? 38 : 40;
   const SW = GS.W, SH = GS.H;
   const socialBtns = !solo && !watch ? [
     <GHudBtn key="mic" icon={voice.micOn ? 'mic' : 'micoff'} on={voice.micOn} size={hb} label={voice.micOn ? 'Turn your mic off' : 'Turn your mic on'} onPress={voice.toggle} />,
-    <GHudBtn key="peer" icon={voice.peerMuted ? 'mute' : 'sound'} on={voice.peerMuted} tone="#E53A2A" size={hb} label={voice.peerMuted ? `Unmute ${peerFirst}` : `Mute ${peerFirst}`} onPress={voice.togglePeer} />,
+    <GHudBtn key="peer" icon={voice.peerMuted ? 'mute' : 'people'} on={voice.peerMuted || !!(sheet && sheet.k === 'voice')} tone={voice.peerMuted ? '#E53A2A' : '#7CF2A0'} size={hb} label="Voice and volume" onPress={() => { setQuick(false); setSheet({ k: 'voice' }); }} />,
     <GHudBtn key="emo" icon="smile" on={quick} tone="#F5AE1E" size={hb} label="Quick messages and emojis" onPress={() => setQuick((v) => !v)} />,
     <GHudBtn key="chat" icon="chat" size={hb} label="Chat" onPress={() => { setQuick(false); setSheet({ k: 'chat' }); }} />,
   ] : [];
   const sysBtns = [
-    !watch && <GHudBtn key="gear" icon="gear" size={hb} label="Controls" onPress={() => { setQuick(false); setCtl(true); }} />,
-    <GHudBtn key="x" icon="close" size={hb} label="Leave the game" onPress={leave} />,
+    !watch && <GHudBtn key="gear" icon="gear" size={hb} label="Settings" onPress={() => { setQuick(false); setCtl(true); }} />,
+    <GHudBtn key="x" icon={solo && phase === 'play' ? 'pause' : 'close'} size={hb} label={solo && phase === 'play' ? 'Pause' : 'Leave the game'} onPress={() => (solo && phase === 'play' ? setPaused(true) : leave())} />,
   ].filter(Boolean);
   const rowBtns = land ? [...(phase === 'play' ? socialBtns : []), ...sysBtns] : sysBtns;
   const rowW = (n) => n * hb + Math.max(0, n - 1) * 6;
@@ -634,10 +700,144 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
       </form>
     </Sheet>
   );
+  const pickMode = (m) => { if (!host || watch) return; setMode(m); if (!solo) relay.send('psel', { m, i: storySel }); };
+  const pickStory = (i) => { if (!host || watch) return; const v = clamp(i, 0, STORY_N - 1); setStorySel(v); setMode('story'); if (!solo) relay.send('psel', { m: 'story', i: v }); };
+  const toggleWatch = () => { setWatchAllowed(!allowWatch); kitTap(); };
+  const storyStars = Array.from({ length: STORY_N }, (_, i) => (best[i] && best[i].stars) || 0).reduce((a, b) => a + b, 0);
+  const selDef = levelDef(storySel, null);
+  const selB = best[storySel];
+  const canPick = host && !watch;
+  const waiting = phase === 'lobby';
+  const torchArt = (k) => <TorchHero kind={k} size={42} dir={k === 'sun' ? 'right' : 'left'} />;
+  const lobbyUi = phase !== 'pick' && phase !== 'lobby' ? null : (
+    <GLobby GS={GS} title="Two Torches" onClose={finish} closeLabel={solo ? 'Leave' : 'Back to chat'}
+      sub={solo ? 'Practice alone. The other torch follows you.' : watch ? `Watching ${hostFirst} and ${peerFirst}` : waiting ? `Waiting for ${peerFirst} to open the game` : host ? `Pick where to go with ${peerFirst}` : `${peerFirst} picks where to go`}
+      badge={<GChip style={{ gap: 5, height: 34 }}><GIcon k="star" size={15} color="#FFD23F" />{`${storyStars}/${STORY_N * 3}`}</GChip>}
+      tools={(
+        <>
+          {!solo && !watch && <GBtn icon="chat" color="dark" size={42} fast={false} label="Chat" onPress={() => setSheet({ k: 'chat' })} />}
+          {!solo && !watch && <GBtn icon={allowWatch ? 'eye' : 'eyeoff'} color={allowWatch ? 'blue' : 'dark'} size={42} fast={false} label={allowWatch ? 'Friends can watch. Tap to stop' : 'Let friends watch'} badge={watchers.length || null} onPress={toggleWatch} />}
+          {!watch && <GBtn icon="gear" color="dark" size={42} fast={false} label="Settings" onPress={() => setCtl(true)} />}
+        </>
+      )}
+      side={solo ? (
+        <GPanel style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {[['sun', '#FFB347', 'Orange torch', 'Walks through lava and fire, burns vines, throws fireballs.'], ['moon', '#8CC0FF', 'Blue torch', 'Wades through water, shows hidden stones, freezes enemies.']].map(([k, c, t1, t2]) => (
+            <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <TorchHero kind={k} size={40} dir={k === 'sun' ? 'right' : 'left'} />
+              <div style={{ flex: 1, minWidth: 0, lineHeight: 1.3 }}>
+                <span style={{ fontSize: 13.5, fontWeight: 900, color: c }}>{t1}</span>
+                <span style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.8)' }}>{` ${t2}`}</span>
+              </div>
+            </div>
+          ))}
+        </GPanel>
+      ) : (
+        <GPanel style={{ padding: '10px 12px 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 14.5, fontWeight: 900, flex: 1 }}>{watch ? 'Players' : here ? 'Both torches are here' : here === false ? `${peerFirst} is away` : 'Connecting'}</span>
+            {watchers.length > 0 && <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 800, color: '#CFE6FF' }}><GIcon k="eye" size={14} color="#CFE6FF" />{`${watchers.length} watching`}</span>}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <GSlot art={torchArt(myKind === 'sun' || watch ? 'sun' : 'moon')} name={watch ? hostFirst : 'You'} ring={myKind === 'sun' || watch ? '#FFB347' : '#8CC0FF'} talk={!watch && voice.micOn} label={watch ? hostFirst : 'You'} />
+            <GSlot art={torchArt(myKind === 'sun' || watch ? 'moon' : 'sun')} name={peerFirst} ring={myKind === 'sun' || watch ? '#8CC0FF' : '#FFB347'} talk={!watch && voice.peerMic} muted={!watch && voice.peerMuted} empty={!watch && here === false} label={peerFirst} />
+            {!watch && (
+              <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
+                <GVolBars name={peerFirst} vol={voice.peerVol} muted={voice.peerMuted} onVol={(v) => { if (voice.peerMuted) voice.togglePeer(); voice.setPeerVol(v); }} />
+                <GBtn icon={voice.peerMuted ? 'mute' : 'sound'} color={voice.peerMuted ? 'red' : 'dark'} size={38} fast={false} label={voice.peerMuted ? `Unmute ${peerFirst}` : `Mute ${peerFirst}`} onPress={voice.togglePeer} />
+              </div>
+            )}
+          </div>
+          {!watch && <GPill text={voice.micOn ? 'Mic off' : 'Talk with mic'} icon={voice.micOn ? 'micoff' : 'mic'} color={voice.micOn ? 'white' : 'blue'} small wide onPress={voice.toggle} />}
+          {!watch && voice.err && <div style={{ fontSize: 12, fontWeight: 800, color: '#FF9C9C' }}>{voice.err}</div>}
+        </GPanel>
+      )}
+      main={(
+        <GPanel style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div role="radiogroup" aria-label="Mode" style={{ display: 'flex', gap: 4, padding: 3, borderRadius: 11, background: 'rgba(0,0,0,0.3)' }}>
+            {[['endless', 'Endless'], ['story', 'Story']].map(([k, t]) => (
+              <button key={k} type="button" role="radio" aria-checked={mode === k} className="zgk-btn" disabled={!canPick && mode !== k} {...pressProps(() => { if (canPick) { kitTap(); pickMode(k); } })}
+                style={{ flex: 1, height: 32, border: 'none', borderRadius: 8, fontFamily: FONT, fontSize: 13, fontWeight: 900, cursor: canPick ? 'pointer' : 'default', background: mode === k ? 'linear-gradient(180deg, #FFD84E 0%, #F2B11F 100%)' : 'transparent', color: mode === k ? '#1F1702' : 'rgba(255,255,255,0.75)' }}>{t}</button>
+            ))}
+          </div>
+          {mode === 'endless' ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 50 }}>
+              <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>{['sand', 'jungle', 'ice', 'forge', 'crystal', 'tomb', 'sky'].map((k) => <span key={k} title={THEMES[k].name} style={{ width: 8, height: 24, borderRadius: 3, background: THEMES[k].floor[0], boxShadow: `inset 0 -5px 0 ${THEMES[k].faceB}` }} />)}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 15.5, fontWeight: 900 }}>A new temple every time</div>
+                <div style={{ fontSize: 12, fontWeight: 800, color: 'rgba(255,255,255,0.7)' }}>{endlessBest > 0 ? `Your best is temple ${endlessBest}` : 'Each one is longer and harder'}</div>
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {canPick && <GBtn icon="chevl" color="dark" size={38} fast={false} label="Previous level" disabled={storySel <= 0} onPress={() => pickStory(storySel - 1)} />}
+              <button type="button" className="zgk-btn" aria-label={`Level ${storySel + 1}, ${selDef.name}${canPick ? '. See all levels' : ''}`} {...pressProps(() => { if (canPick) { kitTap(); setStoryPage(Math.floor(storySel / STORY_PAGE)); setStorySheet(true); } })}
+                style={{ flex: 1, minWidth: 0, border: 'none', background: 'transparent', padding: 0, color: '#FFFFFF', fontFamily: FONT, textAlign: 'center', cursor: canPick ? 'pointer' : 'default' }}>
+                <div style={{ fontSize: 12, fontWeight: 900, color: '#FFD36B' }}>{`Level ${storySel + 1}, ${(THEMES[selDef.theme] || THEMES.sand).name}`}</div>
+                <div style={{ fontSize: 19, fontWeight: 900, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{selDef.name}</div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2, marginTop: 2 }}>
+                  {[0, 1, 2].map((q) => <GIcon key={q} k="star" size={13} color={selB && selB.stars > q ? '#FFD23F' : 'rgba(255,255,255,0.22)'} />)}
+                  {selB && selB.time ? <span style={{ fontSize: 11.5, fontWeight: 800, color: 'rgba(255,255,255,0.7)', marginLeft: 6, fontVariantNumeric: 'tabular-nums' }}>{`Best ${fmtTime(selB.time)}`}</span> : null}
+                </div>
+              </button>
+              {canPick && <GBtn icon="chevr" color="dark" size={38} fast={false} label="Next level" disabled={storySel >= STORY_N - 1} onPress={() => pickStory(storySel + 1)} />}
+            </div>
+          )}
+          {watch ? (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 44, fontSize: 13.5, fontWeight: 800, color: 'rgba(255,255,255,0.85)' }}><GIcon k="eye" size={17} color="#CFE6FF" />{`${hostFirst} starts soon`}</div>
+          ) : waiting ? (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 44, fontSize: 13.5, fontWeight: 800, color: 'rgba(255,255,255,0.85)' }}><Spinner size={16} color="#FFFFFF" />{`The game starts when ${peerFirst} opens it`}</div>
+          ) : canPick ? (
+            mode === 'endless' ? (
+              <div style={{ display: 'flex', gap: 8 }}>
+                {endlessBest >= 2 && <GPill text={`Temple ${endlessBest}`} color="white" onPress={() => startEndless(endlessBest)} />}
+                <GPill text="Start" icon="play" color="gold" wide onPress={() => startEndless(1)} style={{ flex: 1 }} />
+              </div>
+            ) : (
+              <div style={{ display: 'flex', gap: 8 }}>
+                <GPill text="Levels" icon="map" color="white" onPress={() => { setStoryPage(Math.floor(storySel / STORY_PAGE)); setStorySheet(true); }} />
+                <GPill text="Play" icon="play" color="gold" wide onPress={() => startLevel(storySel)} style={{ flex: 1 }} />
+              </div>
+            )
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 44, fontSize: 13.5, fontWeight: 800, color: 'rgba(255,255,255,0.85)' }}><Spinner size={16} color="#FFFFFF" />{watch ? `${hostFirst} starts soon` : `${peerFirst} picks and starts`}</div>
+          )}
+        </GPanel>
+      )}>
+      {storySheet && (() => {
+        const pages = Math.ceil(STORY_N / STORY_PAGE);
+        const ids = Array.from({ length: STORY_PAGE }, (_, k) => storyPage * STORY_PAGE + k).filter((i) => i < STORY_N);
+        return (
+          <GLobbySheet GS={GS} title="Story" width={640} onClose={() => setStorySheet(false)}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <GBtn icon="chevl" color="dark" size={36} fast={false} label="Previous page" disabled={storyPage <= 0} onPress={() => setStoryPage((v) => Math.max(0, v - 1))} />
+              <div style={{ flex: 1, textAlign: 'center', fontSize: 14, fontWeight: 900, color: 'rgba(255,255,255,0.85)' }}>{`Levels ${ids[0] + 1} to ${ids[ids.length - 1] + 1}`}</div>
+              <GBtn icon="chevr" color="dark" size={36} fast={false} label="Next page" disabled={storyPage >= pages - 1} onPress={() => setStoryPage((v) => Math.min(pages - 1, v + 1))} />
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: `repeat(${land ? 5 : 3}, minmax(0, 1fr))`, gap: 8, marginTop: 12 }}>
+              {ids.map((i) => {
+                const L = levelDef(i, null);
+                const b = best[i];
+                return (
+                  <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, minWidth: 0 }}>
+                    <GBtn color={THEME_BTN[L.theme] || 'gold'} size={48} fast={false} active={i === storySel} label={`Level ${i + 1}, ${L.name}`} onPress={() => { pickStory(i); setStorySheet(false); }}>
+                      <span style={{ fontSize: 17, fontWeight: 900, color: '#FFFFFF', textShadow: '0 1px 3px rgba(0,0,0,0.6)' }}>{i + 1}</span>
+                    </GBtn>
+                    <span style={{ fontSize: 11, fontWeight: 800, color: 'rgba(255,255,255,0.8)', maxWidth: '100%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{L.name}</span>
+                    <span style={{ display: 'flex', gap: 1 }}>{[0, 1, 2].map((q) => <GIcon key={q} k="star" size={11} color={b && b.stars > q ? '#FFD23F' : 'rgba(255,255,255,0.2)'} />)}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </GLobbySheet>
+        );
+      })()}
+    </GLobby>
+  );
   return (
     <Portal>
       <div ref={GS.rootRef} style={{ position: 'fixed', left: 0, right: 0, top: 'var(--zvp-top, 0px)', height: 'var(--zvp-h, 100%)', zIndex: 90, background: '#0B0910', overflow: 'hidden', touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none', fontFamily: FONT, color: '#FFFFFF' }}>
-      <div ref={wrapRef} data-side={side ? '1' : '0'} onPointerDown={onJoyDown} onPointerMove={onJoyMove} onPointerUp={onJoyUp} onPointerCancel={onJoyUp} style={GS.wrapStyle}>
+      <div ref={wrapRef} data-side={side ? '1' : '0'} onPointerDown={onJoyDown} onPointerMove={onJoyMove} onPointerUp={onJoyUp} onPointerCancel={onJoyUp} onLostPointerCapture={onJoyUp} style={GS.wrapStyle}>
         <canvas ref={cvRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block' }} />
 
         {(phase === 'play' || phase === 'won' || phase === 'out') && (
@@ -692,11 +892,6 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
             </GPanel>
           </div>
         )}
-        {!watch && watchers.length > 0 && phase === 'pick' && (
-          <div style={{ position: 'absolute', left: left(12), top: top(66), pointerEvents: 'none', zIndex: 3 }}>
-            <GChip style={{ height: 28, fontSize: 12.5, gap: 6 }}><GIcon k="eye" size={15} color="#CFE6FF" />{watchers.length === 1 ? `${watchers[0].n} is watching` : `${watchers.length} watching`}</GChip>
-          </div>
-        )}
         {phase === 'play' && watch && (
           <div style={{ position: 'absolute', left: 0, right: 0, bottom: bottom(18), display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, padding: '0 14px', flexWrap: 'wrap' }}>
             <GHudPanel style={{ height: 32, padding: '0 11px', display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 800 }}><GIcon k="eye" size={14} color="#CFE6FF" ink="rgba(0,0,0,0.35)" />Follow</GHudPanel>
@@ -734,105 +929,7 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
         )}
         {voice.err && phase === 'play' && <div style={{ position: 'absolute', left: '50%', top: '22%', transform: 'translateX(-50%)', pointerEvents: 'none', zIndex: 4 }}><GChip style={{ background: 'rgba(217,75,75,0.95)' }}>{voice.err}</GChip></div>}
 
-        {phase === 'lobby' && (
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, background: 'radial-gradient(circle at 50% 30%, #4A3420 0%, #17121C 70%)' }}>
-            <GPanel style={{ width: '100%', maxWidth: 360, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, textAlign: 'center', padding: '24px 20px', animation: 'zgk-pop 0.35s ease-out' }}>
-              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6 }}><TorchHero kind="sun" size={78} dir="right" /><TorchHero kind="moon" size={78} dir="left" /></div>
-              <GTitle text={here === false || here == null ? `Waiting for ${peerFirst}` : 'Joining'} size={26} />
-              <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.78)', lineHeight: 1.5, fontWeight: 700 }}>{`You carry the orange torch, ${peerFirst} carries the blue one. The game starts when ${peerFirst} opens it.`}</div>
-              <Spinner size={22} color="#FFFFFF" />
-              <GPill text="Leave" color="white" small wide onPress={finish} />
-            </GPanel>
-          </div>
-        )}
-
-        {phase === 'pick' && (
-          <div style={{ position: 'absolute', inset: 0, overflowY: 'auto', touchAction: 'pan-x pan-y', padding: `${top(12)} ${right(16)} ${bottom(28)} ${left(16)}`, boxSizing: 'border-box', background: 'linear-gradient(180deg, #2C5A8C 0%, #3E7BB8 26%, #E9B66B 62%, #B5703A 100%)' }}>
-            <div style={{ maxWidth: 460, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <GBtn icon="close" color="white" size={44} fast={false} label={solo ? 'Leave' : 'Back to chat'} onPress={finish} />
-                <GChip>{solo ? 'Practice' : partnerLine}</GChip>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, marginTop: 4 }}>
-                <div style={{ display: 'flex', alignItems: 'flex-end', gap: 2 }}><TorchHero kind="sun" size={86} dir="right" /><TorchHero kind="moon" size={86} dir="left" /></div>
-                <div style={{ animation: 'zgk-bob 3.2s ease-in-out infinite' }}><GTitle text="Two Torches" size={46} color="#FFE15A" /></div>
-                <GChip style={{ fontSize: 13 }}>{solo ? 'Practice alone. The other torch follows you.' : watch ? `${hostFirst} and ${peerFirst} are picking a level` : host ? `Pick where to go with ${peerFirst}` : `${peerFirst} picks where to go`}</GChip>
-              </div>
-              <GPanel style={{ padding: '14px 14px 14px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <GIcon k="map" size={26} color="#FFD36B" />
-                  <div style={{ fontSize: 19, fontWeight: 900, flex: 1 }}>Endless temples</div>
-                  {endlessBest > 0 && <GChip style={{ height: 26, fontSize: 12, color: '#FFD36B' }}>{`Best ${endlessBest}`}</GChip>}
-                </div>
-                <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)', lineHeight: 1.45, marginTop: 6, fontWeight: 700 }}>A brand new temple every time, with enemies, mirrors and traps. Each one is longer and harder.</div>
-                <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
-                  {['sand', 'jungle', 'ice', 'forge', 'crystal', 'tomb', 'sky'].map((k) => <span key={k} title={THEMES[k].name} style={{ flex: 1, height: 16, borderRadius: 6, background: THEMES[k].floor[0], boxShadow: `inset 0 -4px 0 ${THEMES[k].faceB}, 0 0 0 2px ${INK}` }} />)}
-                </div>
-                {host && (
-                  <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                    <GPill text="Start" icon="play" color="gold" onPress={() => startEndless(1)} style={{ flex: 1 }} wide />
-                    {endlessBest >= 2 && <GPill text={`Temple ${endlessBest}`} color="white" onPress={() => startEndless(endlessBest)} style={{ flex: 1 }} wide />}
-                  </div>
-                )}
-              </GPanel>
-              <GPanel style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {[['sun', '#FFB347', 'Orange torch', 'Walks through lava and fire, burns vines, throws fireballs.'], ['moon', '#8CC0FF', 'Blue torch', 'Wades through water, shows hidden stones, freezes enemies.']].map(([k, c, t1, t2]) => (
-                  <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <TorchHero kind={k} size={56} />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 15, fontWeight: 900, color: c }}>{t1}{!solo ? (k === myKind ? ', you' : `, ${peerFirst}`) : ''}</div>
-                      <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.78)', lineHeight: 1.4, fontWeight: 700 }}>{t2}</div>
-                    </div>
-                  </div>
-                ))}
-                <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.7)', lineHeight: 1.45, fontWeight: 700 }}>You share three hearts. Flags save where you come back. Frozen enemies break with one more hit.</div>
-              </GPanel>
-              {!solo && !watch && (
-                <GPanel style={{ padding: '10px 14px' }}>
-                  <div role="button" tabIndex={0} onClick={() => { const v = !allowWatch; setAllowWatch(v); setWatchAllowed(v); kitTap(); }} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
-                    <GIcon k="eye" size={20} color="#CFE6FF" />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 14, fontWeight: 900 }}>Let friends watch</div>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.7)' }}>{watchers.length ? `Watching now: ${watchers.map((w) => w.n).join(', ')}` : 'Friends can see your game in Games and watch it live'}</div>
-                    </div>
-                    <span aria-hidden="true" style={{ width: 46, height: 28, borderRadius: 14, background: allowWatch ? '#F7C53A' : 'rgba(255,255,255,0.18)', position: 'relative', flexShrink: 0 }}><span style={{ position: 'absolute', top: 3, left: allowWatch ? 21 : 3, width: 22, height: 22, borderRadius: 11, background: '#FFFFFF', boxShadow: '0 1px 3px rgba(0,0,0,0.3)', transition: 'left 0.2s' }} /></span>
-                  </div>
-                </GPanel>
-              )}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
-                <GTitle text="Story" size={26} color="#FFFFFF" />
-                <GChip style={{ height: 26, fontSize: 12 }}>{`${storyList.filter((i) => best[i] && best[i].stars).length} of ${STORY_N} cleared`}</GChip>
-              </div>
-              <div style={{ position: 'relative', height: storyList.length * ROW + 10 }}>
-                <svg width="100%" height="100%" viewBox={`0 0 100 ${storyList.length * ROW + 10}`} preserveAspectRatio="none" aria-hidden="true" style={{ position: 'absolute', inset: 0 }}>
-                  <polyline points={storyList.map((i) => `${nodeX(i)},${i * ROW + 42}`).join(' ')} fill="none" stroke={INK} strokeWidth="9" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-                  <polyline points={storyList.map((i) => `${nodeX(i)},${i * ROW + 42}`).join(' ')} fill="none" stroke="#FFF2C8" strokeWidth="4" strokeDasharray="2 9" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-                </svg>
-                {storyList.map((i) => {
-                  const L = levelDef(i, null);
-                  const b = best[i];
-                  const left = i % 2 === 0;
-                  return (
-                    <div key={i} style={{ position: 'absolute', left: 0, right: 0, top: i * ROW, height: ROW, display: 'flex', alignItems: 'flex-start', flexDirection: left ? 'row' : 'row-reverse', gap: 8 }}>
-                      <div style={{ width: '44%', display: 'flex', justifyContent: 'center', paddingTop: 10 }}>
-                        <GBtn color={THEME_BTN[L.theme] || 'gold'} size={64} fast={false} label={host ? `Play level ${i + 1}, ${L.name}` : `Level ${i + 1}, ${L.name}`} onPress={() => { if (host) startLevel(i); }}>
-                          <span style={{ fontSize: 24, fontWeight: 900, color: '#FFFFFF', textShadow: '0 1px 3px rgba(0,0,0,0.6)' }}>{i + 1}</span>
-                        </GBtn>
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0, paddingTop: 12, textAlign: left ? 'left' : 'right' }}>
-                        <GPanel style={{ display: 'inline-block', maxWidth: '100%', padding: '7px 11px', textAlign: left ? 'left' : 'right' }}>
-                          <div style={{ fontSize: 14, fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{L.name}</div>
-                          <div style={{ display: 'flex', gap: 2, justifyContent: left ? 'flex-start' : 'flex-end', marginTop: 3 }}>{[0, 1, 2].map((k) => <GIcon key={k} k="star" size={14} color={b && b.stars > k ? '#FFD23F' : '#5A5470'} />)}{b && b.time ? <span style={{ fontSize: 11, fontWeight: 800, color: 'rgba(255,255,255,0.7)', marginLeft: 4, fontVariantNumeric: 'tabular-nums' }}>{fmtTime(b.time)}</span> : null}</div>
-                        </GPanel>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-              {!host && <div style={{ display: 'flex', justifyContent: 'center', padding: 8 }}><Spinner size={20} color="#FFFFFF" /></div>}
-            </div>
-          </div>
-        )}
+        {lobbyUi}
 
         {phase === 'won' && result && (
           <div style={{ position: 'absolute', inset: 0, zIndex: 20, background: 'rgba(5,4,10,0.5)', display: 'flex', padding: 12, overflowY: 'auto', touchAction: 'pan-x pan-y' }}>
@@ -916,6 +1013,36 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
         )}
         <GNotices items={notes} style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', ...(phase === 'pick' ? { top: top(64) } : land ? (intro ? { bottom: bottom(64) } : { top: top(46) }) : { bottom: bottom(armB + 14) }), width: land ? 'min(52%, 420px)' : 'calc(100% - 40px)', zIndex: 30 }} />
         {chatSheet}
+        {sheet && sheet.k === 'voice' && !solo && !watch && (
+          <Sheet title="Voice" text={voice.micOn ? `Your mic is on. ${peerFirst} can hear you.` : 'Turn your mic on to talk while you play.'} onClose={() => setSheet(null)}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 14, background: 'rgba(255,255,255,0.06)', marginTop: 12 }}>
+              <TorchHero kind={theirKind} size={38} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14.5, fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{peerFirst}</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: voice.peerMic ? '#7BE05A' : 'rgba(255,255,255,0.55)' }}>{voice.peerMic ? 'Mic on' : 'Mic off'}</div>
+              </div>
+              <GVolBars name={peerFirst} vol={voice.peerVol} muted={voice.peerMuted} onVol={(v) => { if (voice.peerMuted) voice.togglePeer(); voice.setPeerVol(v); }} />
+              <GBtn icon={voice.peerMuted ? 'mute' : 'sound'} color={voice.peerMuted ? 'red' : 'dark'} size={40} fast={false} label={voice.peerMuted ? `Unmute ${peerFirst}` : `Mute ${peerFirst}`} onPress={voice.togglePeer} />
+            </div>
+            <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+              <GPill text={voice.micOn ? 'Mic off' : 'Mic on'} icon={voice.micOn ? 'micoff' : 'mic'} color={voice.micOn ? 'white' : 'blue'} small wide onPress={voice.toggle} style={{ flex: 1 }} />
+              <GPill text="Done" color="dark" small wide onPress={() => setSheet(null)} style={{ flex: 1 }} />
+            </div>
+          </Sheet>
+        )}
+        {paused && solo && phase === 'play' && (
+          <div onPointerDown={(e) => e.stopPropagation()} style={{ position: 'absolute', inset: 0, zIndex: 35, background: 'rgba(10,8,24,0.5)', display: 'flex', padding: 12, overflowY: 'auto' }}>
+            <GPanel style={{ margin: 'auto', width: '100%', maxWidth: 320, padding: 16, display: 'flex', flexDirection: 'column', gap: 10, animation: 'zgk-pop 0.3s ease-out', boxSizing: 'border-box' }}>
+              <GTitle text="Paused" size={28} />
+              <GPill text="Resume" icon="play" color="green" wide onPress={() => setPaused(false)} />
+              <div style={{ display: 'flex', gap: 8 }}>
+                <GPill text="Restart" icon="replay" color="white" small wide onPress={() => { setPaused(false); startLevel(li, undefined, false, rs); }} style={{ flex: 1 }} />
+                <GPill text="Settings" icon="gear" color="white" small wide onPress={() => setCtl(true)} style={{ flex: 1 }} />
+              </div>
+              <GPill text="Leave" color="red" small wide onPress={() => { setPaused(false); finish(); }} />
+            </GPanel>
+          </div>
+        )}
       </div>
       </div>
     </Portal>

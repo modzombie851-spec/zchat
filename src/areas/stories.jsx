@@ -1578,7 +1578,7 @@ export function StoryViewersSheet({ story, myId, onClose, onOpenProfile }) {
       const { data: profs } = await fetchProfilesView(ids);
       const likedSet = new Set((likes || []).map((l) => l.user_id));
       const viewedAt = {};
-      (views || []).forEach((v) => { viewedAt[v.viewer_id] = v.viewed_at; });
+      (views || []).forEach((v) => { viewedAt[v.viewer_id] = v.viewed_at || v.created_at; });
       const list = sanitizeAvatarList(profs, myId).map((p) => ({ profile: p, liked: likedSet.has(p.id), at: viewedAt[p.id], reply: replyBy[p.id] || null }))
         .sort((a, b) => (b.liked - a.liked) || (new Date(b.at || 0) - new Date(a.at || 0)));
       storyViewersMem.set(story.id, list);
@@ -1588,21 +1588,35 @@ export function StoryViewersSheet({ story, myId, onClose, onOpenProfile }) {
     return () => { cancelled = true; };
   }, [story.id]);
   const likedRows = (rows || []).filter((r) => r.liked);
-  const shown = tab === 'likes' ? likedRows : (rows || []);
+  const replyRows = (rows || []).filter((r) => r.reply);
+  const shown = tab === 'likes' ? likedRows : tab === 'replies' ? replyRows : (rows || []);
+  const born = story.created_at ? new Date(story.created_at).getTime() : 0;
+  const early = born && rows ? rows.filter((r) => r.at && new Date(r.at).getTime() - born < 3600000).length : 0;
+  const leftH = born ? Math.max(0, Math.ceil((born + 86400000 - Date.now()) / 3600000)) : 0;
   return (
     <div onClick={onClose} style={{ position: 'absolute', inset: 0, zIndex: 9, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'flex-end' }}>
       <div onClick={(e) => e.stopPropagation()} className="zchat-sheet-up" {...drag.sheetProps} style={{ ...drag.sheetStyle, width: '100%', height: '62%', background: theme.panelBg, borderRadius: '24px 24px 0 0', display: 'flex', flexDirection: 'column', paddingBottom: 'env(safe-area-inset-bottom)' }}>
         <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 2px' }}><div style={{ width: 38, height: 4, borderRadius: 2, background: theme.border }} /></div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px 0', borderBottom: `1px solid ${theme.border}` }}>
-          {[{ k: 'views', icon: <Eye size={16} />, n: rows ? rows.length : null, l: 'Viewers' }, { k: 'likes', icon: <Heart size={16} />, n: rows ? likedRows.length : null, l: 'Likes' }].map((t) => (
+          {[{ k: 'views', icon: <Eye size={16} />, n: rows ? rows.length : null, l: 'Viewers', one: 'viewer' }, { k: 'likes', icon: <Heart size={16} />, n: rows ? likedRows.length : null, l: 'Likes', one: 'like' }, { k: 'replies', icon: <MessageSquare size={16} />, n: rows ? replyRows.length : null, l: 'Replies', one: 'reply' }].map((t) => (
             <div key={t.k} onClick={() => setTab(t.k)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 12px', cursor: 'pointer', fontSize: 13.5, fontWeight: 800, color: tab === t.k ? theme.ink : theme.muted, borderBottom: tab === t.k ? `2.5px solid ${theme.coral}` : '2.5px solid transparent' }}>
-              {t.icon}{t.n == null ? t.l : `${t.n} ${t.n === 1 ? t.l.toLowerCase().replace(/s$/, '') : t.l.toLowerCase()}`}
+              {t.icon}{t.n == null ? t.l : `${t.n} ${t.n === 1 ? t.one : t.l.toLowerCase()}`}
             </div>
           ))}
           <div style={{ flex: 1 }} />
           <X size={20} color={theme.muted} style={{ cursor: 'pointer' }} onClick={onClose} />
         </div>
         <div data-sheet-scroll style={{ flex: 1, overflowY: 'auto', padding: '4px 10px 14px', touchAction: 'pan-y' }}>
+          {rows && rows.length > 0 && tab === 'views' && born > 0 && (
+            <div style={{ display: 'flex', gap: 8, padding: '10px 6px 4px' }}>
+              {[[String(early), 'In the first hour'], [rows.length ? `${Math.round((likedRows.length / rows.length) * 100)}%` : '0%', 'Liked it'], [leftH ? `${leftH} h` : 'Ended', leftH ? 'Left to view' : 'Story time']].map(([v, l]) => (
+                <div key={l} style={{ flex: '1 1 0', minWidth: 0, padding: '8px 6px', borderRadius: 12, background: theme.dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', textAlign: 'center' }}>
+                  <div style={{ fontSize: 16, fontWeight: 800, color: theme.ink, fontVariantNumeric: 'tabular-nums' }}>{v}</div>
+                  <div style={{ fontSize: 11, color: theme.muted, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l}</div>
+                </div>
+              ))}
+            </div>
+          )}
           {rows === null && <div style={{ display: 'flex', justifyContent: 'center', padding: 24 }}><Spinner color={theme.ink} /></div>}
           {rows && !shown.length && <div style={{ textAlign: 'center', padding: '18px 24px 26px', fontSize: 13.5, color: theme.muted }}><div style={{ maxWidth: 220, margin: '0 auto 12px' }}><SpotArt k={tab === 'likes' ? 'love' : 'insights'} dark={theme.dark} radius={18} /></div>{tab === 'likes' ? 'No likes yet' : 'No views yet'}</div>}
           {shown.map((r) => (

@@ -58,6 +58,7 @@ import {
   FullPage,
   G1ListEditor,
   G1WelcomePage,
+  GamepadIcon,
   G1_ME,
   G2KeywordsPage,
   G2LinksSection,
@@ -329,6 +330,7 @@ import {
   zipEntryBlob,
 } from './shared.jsx';
 import { ZLANGS, setZLang, useZLang, zlangWanted, zt } from '../i18n/index.js';
+import { useGamePrivacy, setGamePrivacy } from '../games/live.js';
 
 function useUiTextScale() {
   return React.useSyncExternalStore(uiZoomSub, () => uiZoom.v, () => 1);
@@ -390,6 +392,32 @@ function ToggleSwitch({ on, onClick }) {
         transform: on ? 'translateX(18px)' : 'none', transition: 'transform 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
       }} />
     </div>
+  );
+}
+
+function GamePrivacyPage({ onClose }) {
+  useBackClose(true, onClose);
+  const { theme } = useTheme();
+  const P = useGamePrivacy();
+  const row = (label, sub, on, dim, flip) => (
+    <div role="switch" aria-checked={!!on} aria-label={label} onClick={() => { if (dim) return; hapticTap(); flip(); }} className="zchat-row-press"
+      style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 4px', cursor: dim ? 'default' : 'pointer', opacity: dim ? 0.5 : 1 }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: theme.ink }}>{label}</div>
+        <div style={{ fontSize: 12.5, color: theme.muted, marginTop: 2, lineHeight: 1.4 }}>{sub}</div>
+      </div>
+      <IgToggle on={!!on} />
+    </div>
+  );
+  return (
+    <FullPage title="Games" onBack={onClose} zIndex={70}>
+      <IgHeading>What friends see</IgHeading>
+      {row('Show friends what I play', 'Friends see the game you are in on Games, in your chat and on your profile.', P.show, false, () => setGamePrivacy({ show: !P.show }))}
+      <IgHeading>While you play</IgHeading>
+      {row('Let friends watch', 'They see your game live and can send reactions. They cannot touch anything.', P.show && P.watch, !P.show, () => setGamePrivacy({ watch: !P.watch }))}
+      {row('Let friends join', 'They can take a free seat in your room, or play the same game and see your score.', P.show && P.join, !P.show, () => setGamePrivacy({ join: !P.join }))}
+      <div style={{ fontSize: 12.5, color: theme.muted, lineHeight: 1.5, padding: '12px 4px' }}>Only friends and people you chat with see this. You can also change it from the eye button in any game.</div>
+    </FullPage>
   );
 }
 
@@ -1212,6 +1240,7 @@ export function SettingsPanel({ onOpenWallet, onClose, onOpenPrivacy, onLogout, 
             <PageArt k="privacy" text="Choose who can see your profile and who can reach you." />
             <SettingsRow icon={<SecGlyph k="checkup" />} label="Security checkup" sub="Go through the important settings one at a time" onClick={() => setSubPage('checkup')} />
             <SettingsRow icon={<Eye size={16} />} label="Who can see what" sub="Profile, bio, online, tags, groups, leaderboards" onClick={() => setSection('whocansee')} />
+            <SettingsRow icon={<GamepadIcon size={16} />} label="Games" sub="What you play, watching and joining" onClick={() => setSubPage('games')} />
             <SettingsRow icon={<MessageSquare size={16} />} label="Messages and requests" sub="Who can message me, read receipts" onClick={() => setSubPage('messages')} />
             {me && <GuestbookPrivacyRow uid={me.id} />}
             <ChatPrivacyRows me={me} />
@@ -1317,6 +1346,7 @@ export function SettingsPanel({ onOpenWallet, onClose, onOpenPrivacy, onLogout, 
       {subPage === 'limits' && me && <LimitsPage me={me} onClose={() => setSubPage(null)} onSaved={(patch) => { if (onPrivacySaved) onPrivacySaved(patch); }} />}
       {subPage === 'away' && me && <AwayMessagePage me={me} onClose={() => setSubPage(null)} onSaved={(patch) => { if (onPrivacySaved) onPrivacySaved(patch); }} />}
       {subPage === 'close' && me && <CloseFriendsPicker myId={me.id} onClose={() => setSubPage(null)} />}
+      {subPage === 'games' && <GamePrivacyPage onClose={() => setSubPage(null)} />}
       {subPage === 'hidden' && me && <StoryHiddenPicker myId={me.id} onClose={() => setSubPage(null)} />}
       {subPage === 'email' && <ChangeEmailPage email={currentEmail} onClose={() => setSubPage(null)} />}
       {subPage === 'report' && <ReportProblemPage me={me} onClose={() => setSubPage(null)} />}

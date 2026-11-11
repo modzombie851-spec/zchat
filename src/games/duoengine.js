@@ -1184,3 +1184,54 @@ export function buddyInput(W, me, lead, mem, dt) {
   const k = end ? Math.min(1, d * 1.6) : 1;
   return { x: dx / d * k * 0.92, y: dy / d * k * 0.92 };
 }
+
+function demoPick(W, p, mem) {
+  const MW = W.MW, MH = W.MH;
+  const sx = Math.floor(p.x), sy = Math.floor(p.y);
+  const dist = new Int16Array(MW * MH).fill(-1);
+  const q = [sy * MW + sx];
+  dist[q[0]] = 0;
+  const cands = [];
+  for (let h = 0; h < q.length; h++) {
+    const k = q[h], x = k % MW, y = (k / MW) | 0, d = dist[k];
+    if (d >= 4 && d <= 13) cands.push(k);
+    if (d >= 13) continue;
+    for (const [nx, ny] of [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]]) {
+      if (nx < 0 || ny < 0 || nx >= MW || ny >= MH) continue;
+      const nk = ny * MW + nx;
+      if (dist[nk] >= 0) continue;
+      const ch = at(W, nx, ny);
+      if (ch === 'S' || ch === 's' || ch === 'K' || ch === 'b' || isPad(ch)) continue;
+      if (!passFor(W, 'sun', nx, ny) || !passFor(W, 'moon', nx, ny) || deadly(W, 'sun', nx, ny) || deadly(W, 'moon', nx, ny)) continue;
+      dist[nk] = d + 1;
+      q.push(nk);
+    }
+  }
+  if (!cands.length) return null;
+  let best = null, bs = Infinity;
+  for (const k of cands) {
+    const x = k % MW, y = (k / MW) | 0;
+    const sc = (mem.seen.get(k) || 0) * 4 + mem.rnd() * 3 - dist[k] * 0.06;
+    if (sc < bs) { bs = sc; best = { x, y }; }
+  }
+  return best;
+}
+export function demoInputs(W, mem, dt) {
+  const A = W.p.sun, B = W.p.moon;
+  if (!mem.seen) { mem.seen = new Map(); mem.a = {}; mem.b = {}; mem.tt = 0; mem.rnd = mulberry(hashSeed(`${W.li}:${W.rs || ''}:demo`)); }
+  mem.tt += dt;
+  const k = Math.floor(A.y) * W.MW + Math.floor(A.x);
+  mem.seen.set(k, (mem.seen.get(k) || 0) + dt);
+  const far = mem.tgt ? Math.hypot(A.x - mem.tgt.x - 0.5, A.y - mem.tgt.y - 0.5) : 0;
+  if (mem.wait > 0) { mem.wait -= dt; return { sun: { x: 0, y: 0 }, moon: alive(B) ? buddyInput(W, B, A, mem.b, dt) : { x: 0, y: 0 } }; }
+  if (mem.tgt && far < 1.75 && !mem.rest) { mem.rest = true; mem.wait = 0.4 + mem.rnd() * 0.9; }
+  if (!mem.tgt || mem.tt > 7 || far < 1.75) { mem.tgt = demoPick(W, A, mem); mem.tt = 0; mem.a = {}; mem.rest = false; }
+  const goal = mem.tgt ? { kind: 'demo', x: mem.tgt.x + 0.5, y: mem.tgt.y + 0.5, dead: 0 } : A;
+  return { sun: alive(A) ? buddyInput(W, A, goal, mem.a, dt) : { x: 0, y: 0 }, moon: alive(B) ? buddyInput(W, B, A, mem.b, dt) : { x: 0, y: 0 } };
+}
+export function demoDuoWorld(li, rs) {
+  const W = makeWorld(li, 'demo', 0, rs || null);
+  W.foes = [];
+  W.lives = 99;
+  return W;
+}

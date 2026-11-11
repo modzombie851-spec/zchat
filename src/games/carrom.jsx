@@ -1083,6 +1083,7 @@ export function CarromPage({ st, prevOf, myId, peerName, onClose }) {
   const note = P.busy.current ? '' : st.w ? (st.why === 'resign' ? (out === 'win' ? `${peer} gave up. You won` : 'You gave up') : out === 'win' ? `You won the board, ${st.pts || 0} points` : `${peer} won the board`) : myTurn ? (st.qp === myMark ? 'Cover the queen. Pot one of your coins now' : (st.n || 0) === 0 ? 'Your break. Slide the striker, then pull back and let go' : 'Your shot. Slide the striker, then pull back and let go') : (live.here ? `${peer} is at the board` : `${peer} is up next`);
   return (
     <GameRoom k="crm" title="Carrom" scene={<CarromScene />} onClose={onClose}
+      cast={{ game: 'crm', room: `crm-${st.id}-${String(myId).slice(0, 8)}`, myId, info: {} }}
       top={(
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '0 10px 6px', padding: '8px 12px', borderRadius: 20, background: 'linear-gradient(180deg, rgba(30,16,6,0.84), rgba(30,16,6,0.66))', boxShadow: 'inset 0 0 0 1px rgba(255,220,170,0.12), 0 6px 18px rgba(0,0,0,0.35)', fontFamily: FONT }}>
           <Seat id={myId} label="You" hot={!st.w && st.t === myId} colour={myC} left={left(myC)} queen={st.qc === myMark} />

@@ -11,7 +11,7 @@ export const ZLANGS = [
 const LOAD = { si: () => import('./si.js'), ta: () => import('./ta.js') };
 const FONT_FAMILY = { si: 'Noto+Sans+Sinhala', ta: 'Noto+Sans+Tamil' };
 const ATTRS = ['placeholder', 'aria-label', 'title'];
-const SKIP_SEL = '[data-zuser],[translate="no"],script,style,textarea,noscript,code,[contenteditable]:not([contenteditable="false"])';
+const SKIP_SEL = '[data-zuser],[translate="no"]:not(html),script,style,textarea,noscript,code,[contenteditable]:not([contenteditable="false"])';
 const SKIP_TAG = { SCRIPT: 1, STYLE: 1, TEXTAREA: 1, NOSCRIPT: 1, CODE: 1 };
 const NUM_SRC = '\\d+(?:[.,:]\\d+)*(?:[KM](?![A-Za-z]))?';
 const NUM_G = new RegExp(NUM_SRC, 'g');
@@ -277,7 +277,7 @@ function onRecs(recs) {
   const free = (e) => { let v = ok.get(e); if (v === undefined) { v = e.isConnected && !e.closest(SKIP_SEL); ok.set(e, v); } return v; };
   if (adds) for (let i = 0; i < adds.length; i++) { const n = adds[i]; const p = n.parentElement; if (p && free(p)) deep(n); }
   if (els) els.forEach((e) => { if (free(e)) kids(e); });
-  if (atts) for (let i = 0; i < atts.length; i++) { const r = atts[i]; const e = r.target; if (e.isConnected && !userEl(e) && !e.closest('[data-zuser],[translate="no"]')) attr(e, r.attributeName); }
+  if (atts) for (let i = 0; i < atts.length; i++) { const r = atts[i]; const e = r.target; if (e.isConnected && !userEl(e) && !e.closest('[data-zuser],[translate="no"]:not(html)')) attr(e, r.attributeName); }
   Z.mo.takeRecords();
 }
 

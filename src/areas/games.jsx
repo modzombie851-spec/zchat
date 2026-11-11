@@ -150,6 +150,7 @@ import {
   useSheetDrag,
   useTheme,
 } from '../App.jsx';
+import { PageCast } from '../games/livecast.jsx';
 import { GameRoom, RoomButton, RoomSheet, sfx as kitSfx } from '../games/kit.jsx';
 import { withFaces } from '../games/faces.jsx';
 import { GOLF } from '../games/golf.jsx';
@@ -1516,6 +1517,7 @@ export function LiveGamePage({ initial, me, peer, myId, onClose, onSaveState, on
     <GameRoom k={kind} title={GAME_TITLES[kind]} sub={phase === 'end' ? 'Game over' : phase === 'gone' ? 'Game stopped' : peerHere ? `${first} is here` : `With ${firstOf(peer, 'your friend')}`}
       players={players} center={phase === 'play' || phase === 'end' ? `${mineScore} : ${theirScore}` : null} status={statusText} statusHot={phase === 'play' || (phase === 'lobby' && peerHere)}
       social={social} still={reducedMotion()} onClose={leave} rules={GAME_RULES[kind]}
+      cast={{ game: kind, room: `lg-${st.id}-${String(myId).slice(0, 8)}`, myId, me, info: {} }}
       splash={{ title: GAME_TITLES[kind], sub: `You vs ${first}`, art: <GameArt k={kind} width={236} height={148} radius={0} />, players }}
       overlay={leaveAsk ? (
         <RoomSheet title="Leave the game?" text={`${first} will see that you left and nobody gets a win.`} onClose={() => setLeaveAsk(false)}>
@@ -1699,7 +1701,7 @@ export function G1GolfPage({ st, myId, peerName, onClose }) {
   const note = flash || (watch ? `Watching ${peer} on hole ${watch.h}` : st.w ? (out === 'draw' ? `Tied on ${sum(mine)}` : out === 'win' ? `You won, ${sum(mine)} to ${sum(theirs)}` : `${peer} won, ${sum(theirs)} to ${sum(mine)}`) : st.t === myId ? (shots.length ? `Putt ${shots.length + 1}. Drag back from the ball` : 'Drag back from the ball and let go') : `Waiting for ${peer} on hole ${st.h}`);
   return (
     <FullPage title={H ? `Hole ${hole}, ${H.n}` : 'Mini golf'} subtitle={H ? `Par ${H.par}` : ''} onBack={onClose} zIndex={63} pad={false}
-      right={!st.w ? <HeaderIconButton label="Give up" onClick={() => setAsk(true)}><Flag size={19} /></HeaderIconButton> : null}
+      right={<><PageCast game="golf" room={`golf-${st.id}-${String(myId).slice(0, 8)}`} />{!st.w ? <HeaderIconButton label="Give up" onClick={() => setAsk(true)}><Flag size={19} /></HeaderIconButton> : null}</>}
       bodyStyle={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', paddingBottom: 0, background: theme.dark ? '#0F0C1A' : '#EEF6EF' }}>
       <G1Bar left={<G1Who id={myId} label={`You, ${sum(mine)}`} hot={!st.w && st.t === myId} />} right={<G1Who id={other} label={`${peer}, ${sum(theirs)}`} hot={!st.w && st.t === other} end />}
         mid={<div style={{ fontSize: 12, fontWeight: 800, color: theme.muted }}>{st.w ? 'Final' : `${Math.min(9, st.h)} of 9`}</div>} />
@@ -2044,6 +2046,7 @@ export function G1CrossPage({ st, myId, peerName, onClose }) {
   const keyBg = theme.dark ? 'rgba(255,255,255,0.1)' : '#FFFFFF';
   return (
     <FullPage title="Crossword" subtitle={solved ? 'Solved together' : here ? `${peer} is solving with you` : `${peer} is not here right now`} onBack={onClose} zIndex={63} pad={false}
+      right={<PageCast game="xw" room={`xw-${st.id}-${String(myId).slice(0, 8)}`} />}
       bodyStyle={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', paddingBottom: 0 }}>
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '10px 0' }}>
         <div style={{ display: 'grid', gridTemplateColumns: `repeat(${pz.w}, ${cell}px)`, padding: 2, borderRadius: 8, background: theme.dark ? '#0B0914' : '#2B2540' }}>

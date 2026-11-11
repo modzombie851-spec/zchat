@@ -6575,21 +6575,24 @@ function WnSegments({ total, at, onArt, dark }) {
 }
 
 const WN_HIGHLIGHTS = [
-  { k: 'attack42', art: 'attack42h', go: 'race', cta: 'Play now', title: 'Attack race', text: 'A new Island Rally mode. Grab energy bottles on the road, then fire rockets, drop oil, shock the cars around you or shield yourself.' },
-  { k: 'maps42', art: 'maps42h', go: 'race', cta: 'Play now', title: 'Three new maps', text: 'Tea hills with an old rail bridge, City lights at night and Lion rock on red dirt roads, plus the Palm coast you know.' },
-  { k: 'cars42', art: 'cars42h', go: 'race', cta: 'Play now', title: 'New cars and controls', text: 'Every car is rebuilt with real wheels that spin and steer. Steering pads, a brake you hold to drift and a Nitro button, like a real racing game.' },
+  { k: 'watch43', art: 'watch43h', go: 'games', cta: 'Open Games', title: 'Watch and join any game', text: 'See what friends are playing in Games, in your chats and on profiles. Watch them live and send reactions, take a free seat or play the same game. You choose who can see, watch and join.' },
+  { k: 'rally43', art: 'rally43h', go: 'race', cta: 'Play now', title: 'Jumps, crashes and a map screen', text: 'Ramps and blue boost pads on every Island Rally map. Rockets throw cars into the air and oil sends them spinning. New skill icons, new buttons and a full screen map picker.' },
+  { k: 'roll43', art: 'roll43h', go: 'games', cta: 'Open Games', title: 'Roll Squad team levels', text: 'Longer levels made for each world, with blue plates, bridges and team gates where friends have to help each other across.' },
+  { k: 'lobby43', art: 'lobby43h', go: 'games', cta: 'Open Games', title: 'New game lobbies', text: 'Island Rally, Roll Squad, Two Torches and Gulp now open on one screen with the game playing behind it. Talk, chat, turn each friend\'s voice up or down and change settings right there.' },
 ];
 const WN_SECTIONS = [
-  { title: 'Island Rally', items: [
-    { art: 'attack42', title: 'Attack race', text: 'Rockets, oil, shock and shields with energy bottles.' },
-    { art: 'maps42', title: 'Three new maps', text: 'Tea hills, City lights and Lion rock.' },
-    { art: 'cars42', title: 'New cars and controls', text: 'Spinning wheels, steering pads, Brake and Nitro.' },
+  { title: 'Games', items: [
+    { art: 'watch43', title: 'Watch and join any game', text: 'Live view, reactions, join or play the same game.' },
+    { art: 'rally43', title: 'Jumps, crashes and a map screen', text: 'Ramps, boost pads, flips and new buttons.' },
+    { art: 'roll43', title: 'Roll Squad team levels', text: 'Plates, bridges and team gates.' },
+    { art: 'lobby43', title: 'New game lobbies', text: 'One screen, the game moving behind, voice volume for each friend.' },
   ] },
 ];
 const WN_NEW_COUNT = WN_SECTIONS.reduce((n, sec) => n + sec.items.length, 0);
 const WN_SUMMARY = `${WN_NEW_COUNT} new things to try.`;
 
 const WN_EARLIER = [
+  { title: 'Attack race and three new maps', text: 'Rockets, oil, shock and shields in Island Rally, plus Tea hills, City lights and Lion rock and rebuilt cars.' },
   { title: 'Island Rally', text: 'Real 3D racing for up to six friends with mic, four rides and bots any time.' },
   { title: 'A Snap style camera', text: 'Face lenses, background blur and beauty, a timer, night mode, hands free video and picking a sound before you record.' },
   { title: 'Talk while you play and lots of new filters', text: 'A mic and reactions in Roll Squad, wooden gates and new enemies in Two Torches, new Gulp skills, filters in groups, a lighter profile menu and Join buttons in your chats.' },

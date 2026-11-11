@@ -26,6 +26,63 @@ export const SPIN_ROCKET = 1.35;
 export const SPIN_OIL = 0.95;
 export const SLOW_SHOCK = 1.8;
 export const SHIELD_T = 4;
+export const GRAV = 27;
+
+export function groundAt(T, s) {
+  const R = T && T.ramps;
+  if (!R || !R.length) return 0;
+  const tot = T.total;
+  const u = ((s % tot) + tot) % tot;
+  for (let i = 0; i < R.length; i++) { const r = R[i]; const d = u - r.s0; if (d >= 0 && d <= r.len) return r.h * Math.pow(d / r.len, 1.15); }
+  return 0;
+}
+export function groundSlope(T, s) { return (groundAt(T, s + 0.6) - groundAt(T, s - 0.6)) / 1.2; }
+export function padAt(T, s, x) {
+  const P = T && T.pads;
+  if (!P || !P.length) return null;
+  const tot = T.total;
+  const u = ((s % tot) + tot) % tot;
+  for (let i = 0; i < P.length; i++) { const p = P[i]; const d = u - p.s0; if (d >= 0 && d <= p.len && Math.abs(x - p.x) < p.hw + 0.6) return p; }
+  return null;
+}
+export function launchCar(c, vy, dir, slide) {
+  c.inAir = 1;
+  c.vy = Math.max(c.vy || 0, vy);
+  c.air = Math.max(c.air || 0, 0.04);
+  const t = (2 * c.vy) / GRAV;
+  c.flipV = dir ? (dir * Math.PI * 2) / Math.max(0.35, t) : 0;
+  c.flip = 0;
+  if (slide) c.slide = slide;
+}
+export function airStep(c, T, dt, fx) {
+  if (c.air == null) { c.air = 0; c.vy = 0; c.flip = 0; c.flipV = 0; c.slide = 0; c.inAir = 0; c.prevG = 0; c.lift = 0; }
+  const g = groundAt(T, c.s);
+  if (!c.inAir && c.prevG > 0.35 && g < c.prevG - 0.01) {
+    c.inAir = 1;
+    c.vy = c.lift * 0.96;
+    c.air = c.prevG;
+    c.flip = 0;
+    c.flipV = 0;
+    if (fx) fx.push({ k: 'jump', id: c.id });
+  }
+  if (c.inAir) {
+    c.vy -= GRAV * dt;
+    c.air += c.vy * dt;
+    if (c.flipV) c.flip += c.flipV * dt;
+    if (c.air <= g) {
+      const hit = -c.vy;
+      c.air = g;
+      if (hit > 6.5) { c.vy = hit * 0.28; c.flipV = 0; c.flip = 0; }
+      else { c.vy = 0; c.inAir = 0; c.flip = 0; c.flipV = 0; }
+      if (fx && hit > 2.5) fx.push({ k: 'land', id: c.id, f: Math.min(1, hit / 15) });
+    }
+  } else {
+    c.air = g;
+    c.lift = g > 0 ? c.v * groundSlope(T, c.s) : 0;
+  }
+  c.prevG = g;
+  if (c.slide) { c.x += c.slide * dt; c.slide *= Math.exp(-dt * 2.4); if (Math.abs(c.slide) < 0.05) c.slide = 0; }
+}
 
 export function gridSpot(slot) {
   const row = Math.floor(slot / 2);
@@ -45,6 +102,7 @@ export function stepCar(c, T, inp, dt, o = {}) {
   const p = T.at(c.s);
   const curv = T.S[p.i].curv;
   const spinning = c.spin > 0;
+  const flying = !!c.inAir;
   const want = spinning ? 0 : clamp(inp.steer || 0, -1, 1);
   c.steer += (want - c.steer) * Math.min(1, dt * 6.5);
   const pedal = !spinning && !!(inp.drift || inp.brake);
@@ -71,13 +129,14 @@ export function stepCar(c, T, inp, dt, o = {}) {
   vmax *= 1 - clamp(p.slope * 0.9, -0.04, 0.08);
   if (spinning) {
     c.spin = Math.max(0, c.spin - dt);
-    c.v = Math.max(0, c.v - 34 * dt);
+    c.v = Math.max(0, c.v - (flying ? 8 : 34) * dt);
     c.yaw *= Math.exp(-dt * 3);
-  } else if (braking) c.v = Math.max(0, c.v - 26 * dt);
+  } else if (flying) c.v = Math.max(0, c.v - 1.2 * dt);
+  else if (braking) c.v = Math.max(0, c.v - 26 * dt);
   else if (c.v < vmax) c.v += spec.acc * (c.boostT > 0 ? 1.7 : 1) * (1 - (c.v / (vmax + 2)) * 0.55) * dt;
   else c.v = Math.max(vmax, c.v - (off ? 22 : 7) * dt);
   if (c.bump > 0) c.bump = Math.max(0, c.bump - dt);
-  const grip = Math.min(1, c.v / 16);
+  const grip = Math.min(1, c.v / 16) * (flying ? 0.18 : 1);
   const rate = c.steer * spec.turn * grip * (1 + c.drift * 0.55);
   c.yaw += rate * dt;
   const ds = c.v * Math.cos(c.yaw) * dt;
@@ -100,6 +159,16 @@ export function stepCar(c, T, inp, dt, o = {}) {
     }
   }
   if (c.wall > 0) c.wall -= dt;
+  airStep(c, T, dt, fx);
+  if (!c.inAir && T.pads) {
+    const pad = padAt(T, c.s, c.x);
+    if (pad && c.padAt !== pad.s0) {
+      c.padAt = pad.s0;
+      c.boostT = Math.max(c.boostT, 0.85);
+      c.v = Math.max(c.v, Math.min(vmax + 10, c.v + 6));
+      if (fx) fx.push({ k: 'pad', id: c.id });
+    } else if (!pad && c.padAt != null && Math.abs(((c.s - c.padAt) % T.total + T.total) % T.total) > 30) c.padAt = null;
+  }
   if (c.drift > 0.55) {
     const before = c.meter;
     c.meter = Math.min(1, c.meter + dt * 0.36 * spec.boost * clamp(c.v / 38, 0.4, 1.2));
@@ -109,6 +178,7 @@ export function stepCar(c, T, inp, dt, o = {}) {
 }
 
 export function collide(a, b, both) {
+  if (Math.abs((a.air || 0) - (b.air || 0)) > 1.3) return 0;
   const ds = b.s - a.s, dx = b.x - a.x;
   const LA = (CARS[a.type] || CARS.sport).len, LB = (CARS[b.type] || CARS.sport).len;
   const ls = LA + LB, lx = 1.95;
@@ -182,7 +252,7 @@ export function rocketStep(r, cars, dt) {
     if (id === r.by) continue;
     const c = cars[id];
     if (c.fin) continue;
-    if (Math.abs(c.s - r.s) < 2.1 && Math.abs(c.x - r.x) < 1.6) return c;
+    if (Math.abs(c.s - r.s) < 2.1 && Math.abs(c.x - r.x) < 1.6 && (c.air || 0) < 2.2) return c;
   }
   return null;
 }

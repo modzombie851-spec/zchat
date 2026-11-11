@@ -1,9 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Avatar, Portal, useBackClose, hapticTap, FONT, Spinner } from '../App.jsx';
 import { useGameLink, useRoomRelay, useWatchChannel, useMeshRoom } from './relay.jsx';
-import { watchAllowed, setWatchAllowed, useLiveBeacon } from './live.js';
+import { setWatchAllowed, useLiveBeacon, useGamePrivacy } from './live.js';
 import { EMOTES, PingChip, Sheet, injectCss, useVoice } from './livekit.jsx';
-import { GC, GBtn, GPill, GPanel, GChip, GTitle, GJoy, GIcon, GControlsPanel, GHudBtn, GHudPanel, GHudSkill, GFeed, GRibbon, GHint, GIconCap, GStat, GNotices, useNotices, useWatchNotices, GSkillArt, useCtlLook, useGameStage, useJoystick, injectKitCss, kitTap, pressProps, maxDpr, INK } from './gamekit.jsx';
+import { GC, GBtn, GPill, GPanel, GChip, GTitle, GJoy, GIcon, GControlsPanel, GHudBtn, GHudPanel, GHudSkill, GFeed, GRibbon, GHint, GIconCap, GStat, GNotices, useNotices, useWatchNotices, GSkillArt, useCtlLook, useGameStage, useJoystick, injectKitCss, kitTap, pressProps, maxDpr, INK, GVolBars, GLobby, GSlot } from './gamekit.jsx';
 import { Sfx } from './sfx.js';
 import { WW, WH, LIVES, MAXN, STAGES, SKILLS, SKILL_KEYS, SPECIES, rOf, viewOf, stageOf, clamp, makeGame, spawnFish, hostStep, applyGuestEvent, snap, applySnap, guestFollow, setNet, followNet, movePlayer, tickPlayer, canEat, canTake, canOpen, chestGain, eatGain, botInput, useSkill, addPlayer, dropPlayer, adoptHost } from './gulpengine.js';
 import { render, makeDeco, updateParts, bubbles, floatText, burst, bits, ring, drawRadar, placeName, drawBadge, fmtN, PLAYER_PAL, SLOT_KEYS, warmSprites } from './gulpdraw.js';
@@ -79,7 +79,9 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
   const relay = isRoom ? mesh : isWatch ? wrelay : relay0;
   const here = isSolo ? true : relay.here;
   const voice = useVoice(isDuel ? relay0 : null, isDuel, host && isDuel);
-  const [allowWatch, setAllowWatch] = useState(watchAllowed());
+  const gamePriv = useGamePrivacy();
+  const allowWatch = gamePriv.show && gamePriv.watch;
+  const setAllowWatch = () => {};
   const [followK, setFollowK] = useState('sun');
   const followRef = useRef('sun'); followRef.current = followK;
   const watchers = useWatchChannel({ room: isDuel || isWatch ? `gulp-${gameId}` : null, myId, enabled: isDuel || isWatch, role: isWatch ? 'watcher' : 'player', meta: { n: myFirst, a: myAva }, allow: allowWatch, onDenied: () => { setHint({ text: 'The players turned off watching.', at: Date.now(), life: 2 }); setTimeout(() => onClose(), 1600); } });
@@ -914,12 +916,12 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
     isRoom ? <GHudBtn key="mic" icon={mesh.mic.on ? 'mic' : 'micoff'} on={mesh.mic.on} size={hb} label={mesh.mic.on ? 'Turn your mic off' : 'Turn your mic on'} onPress={mesh.toggleMic} />
       : <GHudBtn key="mic" icon={voice.micOn ? 'mic' : 'micoff'} on={voice.micOn} size={hb} label={voice.micOn ? 'Turn your mic off' : 'Turn your mic on'} onPress={voice.toggle} />,
     isRoom ? <GHudBtn key="ppl" icon="people" on={!!(sheet && sheet.k === 'room')} size={hb} label="Players and voice" badge={roomCount > 1 ? roomCount : null} onPress={() => { setQuick(false); setSheet({ k: 'room' }); }} />
-      : <GHudBtn key="ppl" icon={voice.peerMuted ? 'mute' : 'sound'} on={voice.peerMuted} tone="#FF8C8C" size={hb} label={voice.peerMuted ? `Unmute ${peerFirst}` : `Mute ${peerFirst}`} onPress={voice.togglePeer} />,
+      : <GHudBtn key="ppl" icon={voice.peerMuted ? 'mute' : 'people'} on={voice.peerMuted || !!(sheet && sheet.k === 'voice')} tone={voice.peerMuted ? '#FF8C8C' : '#7CF2A0'} size={hb} label="Voice and volume" onPress={() => { setQuick(false); setSheet({ k: 'voice' }); }} />,
     <GHudBtn key="emo" icon="smile" on={quick} size={hb} label="Quick messages and emojis" onPress={() => setQuick((v) => !v)} />,
     <GHudBtn key="chat" icon="chat" size={hb} label="Chat" onPress={() => { setQuick(false); setSheet({ k: 'chat' }); }} />,
   ] : [];
   const sysBtns = [
-    !isWatch && <GHudBtn key="gear" icon="gear" size={hb} label="Controls" onPress={() => { setQuick(false); if (isSolo) setPaused(true); setCtl(true); }} />,
+    !isWatch && <GHudBtn key="gear" icon="gear" size={hb} label="Settings" onPress={() => { setQuick(false); if (isSolo) setPaused(true); setCtl(true); }} />,
     <GHudBtn key="x" icon={isSolo ? 'pause' : 'close'} size={hb} label={isSolo ? 'Pause' : 'Leave the game'} onPress={() => (isSolo ? setPaused(true) : leave())} />,
   ].filter(Boolean);
   const rowBtns = land ? [...socialBtns, ...sysBtns] : sysBtns;
@@ -972,6 +974,70 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
         <GPill text="Send" color="green" small onPress={() => sendChat(chatText)} disabled={!chatText.trim()} />
       </form>
     </Sheet>
+  );
+
+  const waitingPeer = phase === 'lobby' || !here;
+  const lobbyUi = phase !== 'menu' && phase !== 'lobby' ? null : (
+    <GLobby GS={GS} title="Gulp" onClose={finish} closeLabel={isSolo ? 'Leave' : 'Back to chat'} tint="rgba(2,14,32,0.62)"
+      sub={isWatch ? `Watching ${hostFirst} and ${peerFirst}` : isDuel ? (waitingPeer ? `Waiting for ${peerFirst} to open the game` : `Round ${score.x + score.o + 1} with ${peerFirst}`) : 'Eat smaller fish. Grow into a whale.'}
+      badge={isSolo ? <GChip style={{ gap: 5, height: 34 }}><GIcon k="star" size={15} color="#FFD23F" />{`${totalStars}/${GULP_LEVELS.length * 3}`}</GChip> : !isWatch ? <GChip style={{ height: 34, gap: 6 }}>{`You ${mySc} : ${theirSc} ${peerFirst}`}</GChip> : <GChip style={{ height: 34 }}>{`${hostFirst} ${score.x} : ${score.o} ${peerFirst}`}</GChip>}
+      tools={(
+        <>
+          {isDuel && <GBtn icon="chat" color="dark" size={42} fast={false} label="Chat" onPress={() => setSheet({ k: 'chat' })} />}
+          {isDuel && <GBtn icon={allowWatch ? 'eye' : 'eyeoff'} color={allowWatch ? 'blue' : 'dark'} size={42} fast={false} label={allowWatch ? 'Friends can watch. Tap to stop' : 'Let friends watch'} badge={watchers.length || null} onPress={toggleAllow} />}
+          <GBtn icon={snd.mus ? 'music' : 'mute'} color={snd.mus ? 'purple' : 'dark'} size={42} fast={false} label={snd.mus ? 'Turn music off' : 'Turn music on'} onPress={toggleMus} />
+          {!isWatch && <GBtn icon="gear" color="dark" size={42} fast={false} label="Settings" onPress={() => setCtl(true)} />}
+        </>
+      )}
+      side={(
+        <GPanel style={{ padding: isDuel ? '10px 12px 12px' : 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {isDuel ? (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <GSlot art={<Avatar emoji={me && me.avatar} name={(me && me.name) || 'You'} size={44} />} name="You" ring="#FFB347" talk={voice.micOn} label="You" />
+                <GSlot art={<Avatar emoji={peer && peer.avatar} name={(peer && peer.name) || 'Friend'} size={44} />} name={peerFirst} ring="#8CC0FF" talk={voice.peerMic} muted={voice.peerMuted} empty={!here} label={peerFirst} />
+                <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8 }}>
+                  <GVolBars name={peerFirst} vol={voice.peerVol} muted={voice.peerMuted} onVol={(v) => { if (voice.peerMuted) voice.togglePeer(); voice.setPeerVol(v); }} />
+                  <GBtn icon={voice.peerMuted ? 'mute' : 'sound'} color={voice.peerMuted ? 'red' : 'dark'} size={38} fast={false} label={voice.peerMuted ? `Unmute ${peerFirst}` : `Mute ${peerFirst}`} onPress={voice.togglePeer} />
+                </div>
+              </div>
+              <GPill text={voice.micOn ? 'Mic off' : 'Talk with mic'} icon={voice.micOn ? 'micoff' : 'mic'} color={voice.micOn ? 'white' : 'blue'} small wide onPress={voice.toggle} />
+              {voice.err && <div style={{ fontSize: 12, fontWeight: 800, color: '#FF9C9C' }}>{voice.err}</div>}
+            </>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <FishBadge color={mine === 'none' ? 'sun' : mine} stage={B.top ? stageOf(B.top) : 0} size={60} />
+              <div style={{ flex: 1, minWidth: 0, display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8, textAlign: 'center' }}>
+                {[['Biggest', B.top ? fmtN(B.top) : 'None yet'], ['Longest', B.time ? fmtT(B.time) : 'None'], ['Fish eaten', B.eaten ? fmtN(B.eaten) : '0']].map(([a, v]) => (
+                  <div key={a} style={{ minWidth: 0 }}><div style={{ fontSize: 17, fontWeight: 900, color: '#FFE15A', fontVariantNumeric: 'tabular-nums', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v}</div><div style={{ fontSize: 11, fontWeight: 800, color: 'rgba(255,255,255,0.7)' }}>{a}</div></div>
+                ))}
+              </div>
+            </div>
+          )}
+        </GPanel>
+      )}
+      main={(
+        <GPanel style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {isWatch ? <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 50, fontSize: 13.5, fontWeight: 800 }}><GIcon k="eye" size={18} color="#CFE6FF" />The round starts soon</div>
+            : isSolo ? (
+              <>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <GPill text="Levels" icon="map" color="white" onPress={() => setSheet({ k: 'levels' })} style={{ flex: 1 }} wide />
+                  <GPill text="Endless" icon="play" color="gold" onPress={play} style={{ flex: 1 }} wide />
+                </div>
+                <GPill text="How to play" icon="help" color="dark" small wide onPress={() => setSheet({ k: 'how' })} />
+              </>
+            )
+            : waitingPeer ? <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 50, fontSize: 13.5, fontWeight: 800 }}><Spinner size={16} color="#FFFFFF" />{`${peerFirst} has not opened it yet`}</div>
+            : host ? (
+              <>
+                <GPill text="Start the round" icon="play" color="gold" wide onPress={play} />
+                <GPill text="How to play" icon="help" color="dark" small wide onPress={() => setSheet({ k: 'how' })} />
+              </>
+            )
+            : <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 50, fontSize: 13.5, fontWeight: 800 }}><Spinner size={16} color="#FFFFFF" />{`${peerFirst} starts the round`}</div>}
+        </GPanel>
+      )} />
   );
 
   return (
@@ -1103,68 +1169,7 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
             </div>
           )}
 
-          {(phase === 'menu' || phase === 'lobby') && (
-            <div style={{ position: 'absolute', inset: 0, overflowY: 'auto', touchAction: 'pan-y', padding: `${top(14)} ${right(16)} ${bottom(22)} ${left(16)}`, boxSizing: 'border-box', background: 'linear-gradient(180deg, rgba(4,30,60,0.15) 0%, rgba(4,30,60,0) 30%, rgba(4,20,44,0.55) 100%)' }}>
-              <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                <div style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <GBtn icon="close" color="white" size={44} fast={false} label={isSolo ? 'Leave' : 'Back to chat'} onPress={finish} />
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <GBtn icon="gear" color="dark" size={44} fast={false} label="Controls" onPress={() => setCtl(true)} />
-                    <GBtn icon={snd.mus ? 'music' : 'mute'} color={snd.mus ? 'purple' : 'dark'} size={44} fast={false} label={snd.mus ? 'Turn music off' : 'Turn music on'} onPress={toggleMus} />
-                    <GBtn icon={snd.sfx ? 'sound' : 'mute'} color={snd.sfx ? 'blue' : 'dark'} size={44} fast={false} label={snd.sfx ? 'Turn sounds off' : 'Turn sounds on'} onPress={toggleSfx} />
-                  </div>
-                </div>
-                <div style={{ flex: 1, width: '100%', display: 'flex', flexDirection: land ? 'row' : 'column', alignItems: 'center', justifyContent: land ? 'center' : 'flex-start', gap: land ? 28 : 0 }}>
-                  <div style={{ marginTop: land ? 0 : '8vh', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, animation: 'zgk-pop 0.5s ease-out' }}>
-                    <div style={{ animation: 'zgk-bob 3s ease-in-out infinite' }}><GTitle text="Gulp" size={land ? 64 : 78} color="#FFE15A" /></div>
-                    <GChip style={{ fontSize: 14 }}>Eat smaller fish. Grow into a whale.</GChip>
-                  </div>
-                  {!land && <div style={{ flex: 1, minHeight: 24 }} />}
-                  <div style={{ width: '100%', maxWidth: 420, display: 'flex', flexDirection: 'column', gap: 12, animation: 'zgk-in 0.45s ease-out', paddingTop: land ? 10 : 0 }}>
-                    <GPanel style={{ padding: 14, display: 'flex', alignItems: 'center', gap: 12 }}>
-                      <FishBadge color={mine === 'none' ? 'sun' : mine} stage={B.top ? stageOf(B.top) : 0} size={66} />
-                      <div style={{ flex: 1, minWidth: 0, display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8, textAlign: 'center' }}>
-                        {[['Biggest', B.top ? fmtN(B.top) : 'None yet'], isSolo ? ['Stars', `${totalStars} of ${GULP_LEVELS.length * 3}`] : ['Longest', B.time ? fmtT(B.time) : 'None'], ['Fish eaten', B.eaten ? fmtN(B.eaten) : '0']].map(([a, v]) => (
-                          <div key={a} style={{ minWidth: 0 }}><div style={{ fontSize: 17, fontWeight: 900, color: '#FFE15A', fontVariantNumeric: 'tabular-nums', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v}</div><div style={{ fontSize: 11, fontWeight: 800, color: 'rgba(255,255,255,0.7)' }}>{a}</div></div>
-                        ))}
-                      </div>
-                    </GPanel>
-                    {isDuel && (
-                      <GPanel style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <Avatar emoji={me && me.avatar} name={(me && me.name) || 'You'} size={40} />
-                        <div style={{ fontSize: 14, fontWeight: 900, flex: 1, minWidth: 0 }}>{`You ${mySc} : ${theirSc} ${peerFirst}`}</div>
-                        <Avatar emoji={peer && peer.avatar} name={(peer && peer.name) || 'Friend'} size={40} />
-                        <span style={{ width: 10, height: 10, borderRadius: 5, background: here ? '#3DDC84' : '#8E8A9E', boxShadow: `0 0 0 2px ${INK}` }} />
-                      </GPanel>
-                    )}
-                    {isDuel && (
-                      <GPanel style={{ padding: '10px 14px' }}>
-                        <div role="switch" aria-checked={allowWatch} tabIndex={0} onClick={toggleAllow} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
-                          <GIcon k="eye" size={20} color="#CFE6FF" />
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 14, fontWeight: 900 }}>Let friends watch</div>
-                            <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.7)' }}>{watchers.length ? `Watching now: ${watchers.map((w) => w.n).join(', ')}` : 'Friends can watch your rounds live'}</div>
-                          </div>
-                          <Toggle on={allowWatch} />
-                        </div>
-                      </GPanel>
-                    )}
-                    {isWatch ? <GPanel style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}><GIcon k="eye" size={20} color="#CFE6FF" /><span style={{ fontSize: 14.5, fontWeight: 800 }}>{`Watching ${hostFirst} and ${peerFirst}. The round starts soon.`}</span></GPanel>
-                      : isSolo ? (
-                        <div style={{ display: 'flex', gap: 10 }}>
-                          <GPill text="Levels" icon="map" color="blue" height={58} onPress={() => setSheet({ k: 'levels' })} style={{ flex: 1 }} wide />
-                          <GPill text="Endless" icon="play" color="green" height={58} onPress={play} style={{ flex: 1 }} wide />
-                        </div>
-                      )
-                      : phase === 'lobby' || !here ? <GPanel style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}><Spinner size={18} color="#FFFFFF" /><span style={{ fontSize: 14.5, fontWeight: 800 }}>{`Waiting for ${peerFirst} to open the game`}</span></GPanel>
-                      : host ? <GPill text="Start" icon="play" color="green" wide height={62} onPress={play} />
-                      : <GPanel style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}><Spinner size={18} color="#FFFFFF" /><span style={{ fontSize: 14.5, fontWeight: 800 }}>{`${peerFirst} starts the round`}</span></GPanel>}
-                    <GPill text="How to play" color="white" small onPress={() => setSheet({ k: 'how' })} wide />
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
+          {lobbyUi}
 
           {pauseOn && (
             <div style={{ position: 'absolute', inset: 0, zIndex: 20, background: 'rgba(2,10,22,0.55)', display: 'flex', padding: 12, overflowY: 'auto', touchAction: 'pan-y' }}>
@@ -1175,7 +1180,7 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
                 </div>
                 <GPill text="Resume" icon="play" color="green" wide onPress={() => setPaused(false)} />
                 <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
-                  <GIconCap icon="gear" text="Controls" onPress={() => setCtl(true)} />
+                  <GIconCap icon="gear" text="Settings" onPress={() => setCtl(true)} />
                   <GIconCap icon={snd.mus ? 'music' : 'mute'} text={snd.mus ? 'Music on' : 'Music off'} label={snd.mus ? 'Turn music off' : 'Turn music on'} onPress={toggleMus} />
                   <GIconCap icon={snd.sfx ? 'sound' : 'mute'} text={snd.sfx ? 'Sounds on' : 'Sounds off'} label={snd.sfx ? 'Turn sounds off' : 'Turn sounds on'} onPress={toggleSfx} />
                   <GIconCap icon="help" text="How to play" onPress={() => setSheet({ k: 'how' })} />
@@ -1267,6 +1272,23 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
             </Sheet>
           )}
 
+          {sheet && sheet.k === 'voice' && isDuel && (
+            <Sheet title="Voice" text={voice.micOn ? `Your mic is on. ${peerFirst} can hear you.` : 'Turn your mic on to talk while you play.'} onClose={() => setSheet(null)}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 14, background: 'rgba(255,255,255,0.06)', marginTop: 12 }}>
+                <Avatar emoji={peer && peer.avatar} name={(peer && peer.name) || 'Friend'} size={38} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 14.5, fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{peerFirst}</div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: voice.peerMic ? '#7BE05A' : 'rgba(255,255,255,0.55)' }}>{voice.peerMic ? 'Mic on' : 'Mic off'}</div>
+                </div>
+                <GVolBars name={peerFirst} vol={voice.peerVol} muted={voice.peerMuted} onVol={(v) => { if (voice.peerMuted) voice.togglePeer(); voice.setPeerVol(v); }} />
+                <GBtn icon={voice.peerMuted ? 'mute' : 'sound'} color={voice.peerMuted ? 'red' : 'dark'} size={40} fast={false} label={voice.peerMuted ? `Unmute ${peerFirst}` : `Mute ${peerFirst}`} onPress={voice.togglePeer} />
+              </div>
+              <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+                <GPill text={voice.micOn ? 'Mic off' : 'Mic on'} icon={voice.micOn ? 'micoff' : 'mic'} color={voice.micOn ? 'white' : 'blue'} small wide onPress={voice.toggle} style={{ flex: 1 }} />
+                <GPill text="Done" color="dark" small wide onPress={() => setSheet(null)} style={{ flex: 1 }} />
+              </div>
+            </Sheet>
+          )}
           {sheet && sheet.k === 'room' && (
             <Sheet title="Players" text={`${roomCount} of ${ROOM_MAX}. Friends can join or leave any time.`} onClose={() => setSheet(null)}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 12 }}>
@@ -1286,6 +1308,7 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
                           {talk && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: '#7BE05A' }}><GIcon k="mic" size={12} color="#7BE05A" />Mic on</span>}
                         </div>
                       </div>
+                      {!isMe && mesh.setVol && <GVolBars name={nm} vol={mesh.vols && mesh.vols[id] != null ? mesh.vols[id] : 1} muted={off} onVol={(v) => { if (off) mesh.toggleMute(id); mesh.setVol(id, v); }} />}
                       {!isMe && <GBtn icon={off ? 'mute' : 'sound'} color={off ? 'red' : 'dark'} size={40} fast={false} label={off ? `Unmute ${nm}` : `Mute ${nm}`} onPress={() => mesh.toggleMute(id)} />}
                     </div>
                   );

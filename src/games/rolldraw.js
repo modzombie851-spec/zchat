@@ -180,6 +180,32 @@ function drawButton(c, x, y, s, down) {
   c.fillStyle = INK; rr(c, x + s * 0.2, y + s * 0.78 - h, s * 0.6, h + s * 0.06, s * 0.06); c.fill();
   c.fillStyle = down ? '#5BE37D' : '#FF7A3D'; rr(c, x + s * 0.24, y + s * 0.8 - h, s * 0.52, h, s * 0.05); c.fill();
 }
+function drawPlate(c, x, y, s, down, hold, t) {
+  const glow = hold > 0 ? Math.min(1, hold / 0.45) : 0;
+  if (glow > 0) { c.save(); c.globalAlpha = 0.35 * glow; c.fillStyle = '#5CC8FF'; c.beginPath(); c.ellipse(x + s * 0.5, y + s * 0.86, s * 0.62, s * 0.2, 0, 0, TAU); c.fill(); c.restore(); }
+  c.fillStyle = INK; rr(c, x + s * 0.02, y + s * 0.78, s * 0.96, s * 0.22, s * 0.08); c.fill();
+  c.fillStyle = '#5A6678'; rr(c, x + s * 0.06, y + s * 0.82, s * 0.88, s * 0.16, s * 0.06); c.fill();
+  const h = down ? s * 0.05 : s * 0.13;
+  c.fillStyle = INK; rr(c, x + s * 0.1, y + s * 0.82 - h, s * 0.8, h + s * 0.05, s * 0.06); c.fill();
+  c.fillStyle = down ? '#7FE0FF' : '#3E9BFF'; rr(c, x + s * 0.14, y + s * 0.84 - h, s * 0.72, h, s * 0.05); c.fill();
+  c.fillStyle = 'rgba(255,255,255,0.55)'; c.fillRect(x + s * 0.2, y + s * 0.85 - h, s * 0.6, s * 0.03);
+  if (!down) { c.fillStyle = 'rgba(255,255,255,0.85)'; const cx = x + s * 0.5, cy = y + s * 0.42 + Math.sin(t * 3) * s * 0.05; c.beginPath(); c.moveTo(cx - s * 0.12, cy - s * 0.06); c.lineTo(cx, cy + s * 0.08); c.lineTo(cx + s * 0.12, cy - s * 0.06); c.lineWidth = s * 0.06; c.strokeStyle = 'rgba(255,255,255,0.8)'; c.stroke(); }
+}
+function drawBridge(c, x, y, s, amt, world) {
+  const P = SKY[world] || SKY.meadow;
+  if (amt <= 0.02) {
+    c.save(); c.globalAlpha = 0.32; c.setLineDash([s * 0.12, s * 0.1]); c.strokeStyle = '#FFFFFF'; c.lineWidth = Math.max(1, s * 0.05);
+    c.strokeRect(x + s * 0.06, y + s * 0.06, s * 0.88, s * 0.34); c.restore();
+    return;
+  }
+  const hh = s * 0.4 * amt;
+  c.save(); c.globalAlpha = 0.5 + amt * 0.5;
+  c.fillStyle = INK; rr(c, x - 0.5, y, s + 1, hh + s * 0.04, s * 0.06); c.fill();
+  c.fillStyle = P.plank ? P.plank[0] : '#C98B4E'; rr(c, x + s * 0.04, y + s * 0.03, s * 0.92, hh - s * 0.03, s * 0.05); c.fill();
+  c.fillStyle = 'rgba(255,255,255,0.3)'; c.fillRect(x + s * 0.08, y + s * 0.06, s * 0.84, s * 0.05 * amt);
+  c.fillStyle = '#7FE0FF'; c.fillRect(x, y + hh - s * 0.03, s, s * 0.03);
+  c.restore();
+}
 function drawDoor(c, d, s, amt) {
   const X = d.x * s, Y0 = d.y0 * s, Hh = (d.y1 - d.y0 + 1) * s;
   const lift = amt * Hh;
@@ -308,6 +334,8 @@ export function render(ctx, W, V) {
   const pressed = V.pressed || new Set();
   for (const bt of L.buttons) if (bt.x >= tx0 - 1 && bt.x <= tx1) drawButton(c, bt.x * s, bt.y * s, s, pressed.has(`${bt.x},${bt.y}`) || W.opened.has(bt.g));
   for (const d of L.doors) if (d.x >= tx0 - 1 && d.x <= tx1) drawDoor(c, d, s, W.doorAmt ? W.doorAmt[d.g] || 0 : 0);
+  if (L.bridgeG) for (const key of Object.keys(L.bridgeG)) { const i = key.indexOf(','); const bx = +key.slice(0, i), by = +key.slice(i + 1); if (bx >= tx0 - 1 && bx <= tx1) drawBridge(c, bx * s, by * s, s, W.bridgeAmt ? W.bridgeAmt[L.bridgeG[key]] || 0 : 0, L.world); }
+  for (const pl of L.plates || []) if (pl.x >= tx0 - 1 && pl.x <= tx1) drawPlate(c, pl.x * s, pl.y * s, s, !!(W.plateOn && W.plateOn.has(pl.g)), W.holdT ? W.holdT[pl.g] || 0 : 0, t);
   for (const m of L.movers) { const p = moverPos(W, m); if (p.x + p.w >= tx0 && p.x <= tx1 + 1) drawMover(c, p, s, L.world); }
   for (const f of L.flags) if (!f.start && f.x >= tx0 - 1 && f.x <= tx1 + 1) drawFlag(c, f.x * s, f.y * s, s, t, V.flagBy ? V.flagBy[f.id] : null);
   if (L.goal.x >= tx0 - 3 && L.goal.x <= tx1 + 3) drawGoal(c, L.goal.x * s, (L.goal.y + 0.5) * s, s, t, true);
@@ -382,6 +410,8 @@ export function buildRollMini(L) {
       if (top) { c.fillStyle = P.dirt[1]; c.fillRect(x * 2, y * 2 + 1, 2, 1); }
     } else if (ch === '-') { c.fillStyle = P.plank[0]; c.fillRect(x * 2, y * 2, 2, 1); }
     else if (ch === 'D') { c.fillStyle = P.brick[1]; c.fillRect(x * 2, y * 2, 2, 2); }
+    else if (ch === 'H') { c.fillStyle = 'rgba(127,224,255,0.7)'; c.fillRect(x * 2, y * 2, 2, 1); }
+    else if (ch === 'P') { c.fillStyle = '#3E9BFF'; c.fillRect(x * 2, y * 2 + 1, 2, 1); }
     else if (ch === '^') { c.fillStyle = '#E5484D'; c.fillRect(x * 2, y * 2 + 1, 2, 1); }
   }
   return cv;

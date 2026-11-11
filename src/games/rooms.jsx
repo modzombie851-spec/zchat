@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../supabaseClient.js';
+import { useLiveBeacon } from './live.js';
 import {
   useTheme, FONT, Avatar, GameArt, GAME_TITLES, FullPage, useBackClose, playUiSound, hapticTap, appSnack, GameButton, LoadFail,
   SegmentedControl, reducedMotion, rtKeep, rtDrop, copyTextToClipboard, Portal,
@@ -190,6 +191,7 @@ function WaitView({ wait, myId, onCancel }) {
   const host = r.host === myId;
   const other = host ? r.guest_p : r.host_p;
   const matched = !!(r.guest && other);
+  useLiveBeacon({ game: r.kind === 'zapm' ? 'zap' : r.kind, room: `rm-${r.id}`, info: { lob: r.code, n: 1 }, active: host && !matched && !!r.code && typeof r.kind === 'string' });
   const [copied, setCopied] = useState(false);
   const copy = async () => { hapticTap(); const ok = await copyTextToClipboard(r.code); if (ok) { setCopied(true); setTimeout(() => setCopied(false), 1600); } };
   const share = async () => {
