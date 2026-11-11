@@ -18549,7 +18549,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-export const APP_VERSION = '41.0V';
+export const APP_VERSION = '41.1V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -48195,10 +48195,10 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       {raceGame && me && (
         <RaceGamePage key={raceGame.rm} solo={!!raceGame.solo} room={raceGame.solo ? null : raceGame} me={me} myId={session.user.id} watch={!!raceGame.watch}
           onClose={() => { const back = !!raceGame.watch || !!raceGame.solo; setRaceGame(null); if (back) setShowGames(true); }}
-          onInvite={!raceGame.solo && raceGame.host === session.user.id ? () => setRacePick({ rm: raceGame.rm }) : null} />
+          onInvite={!raceGame.solo && raceGame.host === session.user.id ? (n, side) => setRacePick({ rm: raceGame.rm, n, side: !!side }) : null} />
       )}
       {racePick && (
-        <RaceInviteSheet friends={gameFriends} onClose={() => setRacePick(null)}
+        <RaceInviteSheet friends={gameFriends} already={racePick.n} side={!!racePick.side} onClose={() => setRacePick(null)}
           onInvite={(ps) => { const rm = racePick.rm; setRacePick(null); setShowGames(false); startRaceWith(ps, rm); }} />
       )}
       {liveGame && me && liveGame.state.g !== 'duo' && liveGame.state.g !== 'gulp' && liveGame.state.g !== 'roll' && liveGame.state.g !== 'gulpco' && liveGame.state.g !== 'race' && (

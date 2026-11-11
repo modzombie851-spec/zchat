@@ -31,6 +31,7 @@ export function injectKitCss() {
     '.zgk-btn{-webkit-tap-highlight-color:transparent;touch-action:none;user-select:none;-webkit-user-select:none;outline:none}',
     '.zgk-btn:focus-visible{box-shadow:0 0 0 3px #fff,0 0 0 6px #2479E8!important}',
     '[data-side="1"] [style*="overflow-y: auto"]{overflow-x:auto!important;touch-action:pan-x pan-y!important}',
+    '[style*="overflow-y: auto"] .zgk-btn{touch-action:pan-x pan-y}',
     '@keyframes zgk-feed{0%{opacity:0;transform:translateX(10px)}7%{opacity:1;transform:none}82%{opacity:1}100%{opacity:0}}',
     '@keyframes zgk-feedl{0%{opacity:0;transform:translateX(-10px)}7%{opacity:1;transform:none}82%{opacity:1}100%{opacity:0}}',
     '@keyframes zgk-rib{0%{opacity:0;transform:scaleX(.6)}10%{opacity:1;transform:none}80%{opacity:1}100%{opacity:0}}',

@@ -92,7 +92,7 @@ function engineSound() {
 
 function CarPick({ k, on, img, color, onPress }) {
   return (
-    <button type="button" className="zgk-btn" aria-label={`Drive the ${CARS[k].name.toLowerCase()}`} aria-pressed={on} {...pressProps(onPress)}
+    <button type="button" className="zgk-btn" aria-label={`Drive the ${CARS[k].name.toLowerCase()}`} aria-pressed={on} onClick={(e) => { e.stopPropagation(); onPress(); }}
       style={{ flex: '1 1 0', minWidth: 0, border: 'none', padding: '6px 4px 8px', borderRadius: 16, cursor: 'pointer', background: on ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.1)', boxShadow: on ? `0 0 0 3px ${color}` : 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, fontFamily: FONT }}>
       {img ? <img src={img} alt="" draggable={false} style={{ width: '100%', maxWidth: 120, aspectRatio: '1.6', objectFit: 'cover', borderRadius: 10, display: 'block' }} /> : <div style={{ width: '100%', aspectRatio: '1.6', borderRadius: 10, background: 'rgba(255,255,255,0.12)' }} />}
       <span style={{ fontSize: 12.5, fontWeight: 900, color: on ? INK : '#FFFFFF' }}>{CARS[k].name}</span>
@@ -136,6 +136,7 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
   const GS = useGameStage(useMemo(() => ({ ...look, side: true }), [look]));
   const { top, right, bottom, left } = GS.at;
   const land = GS.land;
+  const pinStart = land && GS.W >= 700;
   useLiveBeacon({ game: 'race', room: room ? room.rm : null, info: { h: room && room.host, n: Math.max(1, roster.length) }, active: !solo && !watch && !!room, allow: allowWatch });
 
   const cvRef = useRef(null);
@@ -683,7 +684,7 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
   return (
     <Portal>
       <div ref={GS.rootRef} style={{ position: 'fixed', left: 0, right: 0, top: 'var(--zvp-top, 0px)', height: 'var(--zvp-h, 100%)', zIndex: 90, background: '#9FC4E4', overflow: 'hidden', touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none', fontFamily: FONT, color: '#FFFFFF' }}>
-        <div ref={wrapRef} style={GS.wrapStyle}>
+        <div ref={wrapRef} data-side={GS.side ? '1' : '0'} style={GS.wrapStyle}>
           <canvas ref={cvRef} aria-label="Race" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block' }} />
           <div aria-hidden="true" style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 2 }}>
             {(phase === 'menu' ? [] : raceIds).map((k) => (
@@ -791,7 +792,7 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
                   <GPanel style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <span style={{ fontSize: 15, fontWeight: 900, flex: 1 }}>{watch ? 'Watching' : `Racers ${roster.length} of 6`}</span>
-                      {isHost && onInvite && roster.length < MAX_RACERS && <GPill small text="Invite" icon="plus" color="green" height={40} onPress={onInvite} />}
+                      {isHost && onInvite && roster.length < MAX_RACERS && <GPill small text="Invite" icon="plus" color="green" height={40} onPress={() => onInvite(roster.length, GS.side)} />}
                     </div>
                     {roster.map((k, i) => {
                       const isMe = k === kindOf();
@@ -834,7 +835,7 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
                       <span style={{ flex: 1, fontSize: 13.5, fontWeight: 800 }}>Tilt your phone to steer</span>
                       <span aria-hidden="true" style={{ width: 46, height: 28, borderRadius: 14, background: tilt ? '#F7C53A' : 'rgba(255,255,255,0.18)', position: 'relative', transition: 'background 0.2s' }}><span style={{ position: 'absolute', top: 3, left: tilt ? 21 : 3, width: 22, height: 22, borderRadius: 11, background: '#FFFFFF', transition: 'left 0.2s' }} /></span>
                     </div>
-                    <GPill text={ready ? 'Start the race' : 'Getting ready'} icon="play" color="green" wide disabled={!ready || failed} onPress={startRace} />
+                    {!pinStart && <GPill text={ready ? 'Start the race' : 'Getting ready'} icon="play" color="green" wide disabled={!ready || failed} onPress={startRace} />}
                   </GPanel>
                 )}
                 {!isHost && !watch && (
@@ -850,6 +851,11 @@ export function RaceGamePage({ solo = false, room, me, myId, onClose, onInvite, 
                   <div style={{ fontSize: 12.5, fontWeight: 700, color: 'rgba(255,255,255,0.78)', lineHeight: 1.5, textShadow: '0 1px 4px rgba(0,0,0,0.5)' }}>Steer with the arrows, hold Drift round corners to fill your boost, then tap Boost. Best lap so far: {Number(readPref(BEST_KEY(uid), '0')) ? fmtRace(Number(readPref(BEST_KEY(uid), '0'))) : 'none yet'}</div>
                 )}
               </div>
+            </div>
+          )}
+          {phase === 'menu' && pinStart && isHost && !watch && (
+            <div style={{ position: 'absolute', right: right(16), bottom: bottom(16), width: 210, zIndex: 6 }}>
+              <GPill text={ready ? 'Start the race' : 'Getting ready'} icon="play" color="green" wide disabled={!ready || failed} onPress={startRace} />
             </div>
           )}
 
@@ -970,17 +976,17 @@ function drawMini(mc, T, cars, myK, colorOf) {
   }
 }
 
-export function RaceInviteSheet({ friends, onClose, onInvite, already }) {
+export function RaceInviteSheet({ friends, onClose, onInvite, already, side = false }) {
   injectKitCss();
   useBackClose(true, onClose);
   const [sel, setSel] = useState([]);
-  const left = MAX_RACERS - 1 - (already || 0);
+  const left = Math.max(0, MAX_RACERS - Math.max(1, already || 1));
   const list = (friends || []).filter((p) => p && p.id && !p.is_bot);
   const toggle = (id) => { kitTap(); setSel((v) => (v.includes(id) ? v.filter((x) => x !== id) : v.length >= left ? v : [...v, id])); };
   return (
     <Portal>
-      <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 96, background: 'rgba(10,8,24,0.55)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontFamily: FONT, color: '#FFFFFF' }}>
-        <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 480, maxHeight: 'min(86vh, 640px)', display: 'flex', flexDirection: 'column', padding: '14px 14px calc(14px + env(safe-area-inset-bottom))', boxSizing: 'border-box', animation: 'zgk-pop 0.25s ease-out' }}>
+      <div onClick={onClose} data-side={side ? '1' : '0'} style={{ position: 'fixed', ...(side && typeof window !== 'undefined' ? { left: 0, top: 0, width: window.innerHeight, height: window.innerWidth, transformOrigin: '0 0', transform: `translateX(${window.innerWidth}px) rotate(90deg)` } : { inset: 0 }), zIndex: 96, background: 'rgba(10,8,24,0.55)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', fontFamily: FONT, color: '#FFFFFF' }}>
+        <div onClick={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 480, maxHeight: side ? '100%' : 'min(86vh, 640px)', display: 'flex', flexDirection: 'column', padding: side ? '10px 14px' : '14px 14px calc(14px + env(safe-area-inset-bottom))', boxSizing: 'border-box', animation: 'zgk-pop 0.25s ease-out' }}>
           <GPanel style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 10, minHeight: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <div style={{ display: 'flex' }}>{COLORS.slice(0, 3).map((c, i) => <span key={c} style={{ width: 22, height: 22, borderRadius: 11, background: c, boxShadow: '0 0 0 2.5px #FFFFFF', marginLeft: i ? -7 : 0 }} />)}</div>
@@ -990,7 +996,7 @@ export function RaceInviteSheet({ friends, onClose, onInvite, already }) {
               </div>
               <GBtn icon="close" color="white" size={38} fast={false} label="Close" onPress={onClose} />
             </div>
-            <div style={{ overflowY: 'auto', minHeight: 0, display: 'flex', flexDirection: 'column', gap: 6, maxHeight: '52vh', WebkitOverflowScrolling: 'touch', touchAction: 'pan-x pan-y' }}>
+            <div style={{ overflowY: 'auto', minHeight: 0, display: 'flex', flexDirection: 'column', gap: 6, maxHeight: side ? 'none' : '52vh', WebkitOverflowScrolling: 'touch', touchAction: 'pan-x pan-y' }}>
               {list.length === 0 && <div style={{ fontSize: 13.5, fontWeight: 700, color: 'rgba(255,255,255,0.75)', padding: '12px 4px' }}>Chat with someone first, then you can invite them here.</div>}
               {list.map((p) => {
                 const on = sel.includes(p.id);
