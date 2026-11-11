@@ -1020,7 +1020,7 @@ export function CallMoreSheet({ call, engine, onClose }) {
               const on = fx === k;
               return (
                 <div key={k} role="radio" aria-checked={on} aria-label={k === 'off' ? 'No voice effect' : `${label} voice`} onClick={() => { hapticTap(); engine.setVoiceFx(k); }} className="zchat-press"
-                  style={{ flex: '1 0 58px', minWidth: 58, height: 70, borderRadius: 14, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5, cursor: 'pointer', background: on ? 'rgba(124,92,252,0.2)' : 'rgba(255,255,255,0.06)', boxShadow: on ? `inset 0 0 0 1.5px ${theme.coral}` : 'none', color: on ? 'white' : 'rgba(255,255,255,0.78)', transition: 'background 0.2s ease' }}>
+                  style={{ flex: '1 0 58px', minWidth: 58, height: 70, borderRadius: 14, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5, cursor: 'pointer', background: on ? 'rgba(29,123,240,0.2)' : 'rgba(255,255,255,0.06)', boxShadow: on ? `inset 0 0 0 1.5px ${theme.coral}` : 'none', color: on ? 'white' : 'rgba(255,255,255,0.78)', transition: 'background 0.2s ease' }}>
                   <VoiceFxGlyph k={k === 'off' ? 'normal' : k} size={24} />
                   <span style={{ fontSize: 11.5, fontWeight: 700 }}>{label}</span>
                 </div>

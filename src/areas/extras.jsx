@@ -1777,7 +1777,7 @@ export function CharmTryOnPage({ me, charmKey, onClose, action }) {
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
                 <div style={{ fontSize: 11.5, color: row.unread ? '#B79CFF' : 'rgba(255,255,255,0.45)', fontWeight: 700 }}>{row.time}</div>
-                {row.unread && <div style={{ minWidth: 20, height: 20, borderRadius: 10, background: '#7C5CFC', fontSize: 11, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 6px' }}>{row.unread}</div>}
+                {row.unread && <div style={{ minWidth: 20, height: 20, borderRadius: 10, background: '#1D7BF0', fontSize: 11, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 6px' }}>{row.unread}</div>}
               </div>
             </div>
           ))}
@@ -2259,7 +2259,7 @@ function CxSampleChat({ k, me, auto = true }) {
     <div ref={stage} role="button" aria-label={`Play ${spec ? spec.label : 'the super reaction'}`} onClick={() => { hapticTap(); play(); }}
       style={{ position: 'relative', height: 236, borderRadius: 20, overflow: 'hidden', background: '#0F0F13', boxShadow: `inset 0 0 0 1px ${CL.line}`, cursor: 'pointer', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', padding: '0 14px 30px' }}>
       <div style={{ alignSelf: 'flex-start', maxWidth: '74%', background: '#26262E', color: CL.ink, borderRadius: 18, borderBottomLeftRadius: 5, padding: '8px 13px', fontSize: 14.5, lineHeight: 1.3 }}>I passed my driving test</div>
-      <div ref={bub} style={{ position: 'relative', alignSelf: 'flex-end', marginTop: 6, maxWidth: '74%', background: '#7C5CFC', color: '#FFFFFF', borderRadius: 18, borderBottomRightRadius: 5, padding: '8px 13px', fontSize: 14.5, lineHeight: 1.3 }}>
+      <div ref={bub} style={{ position: 'relative', alignSelf: 'flex-end', marginTop: 6, maxWidth: '74%', background: '#1D7BF0', color: '#FFFFFF', borderRadius: 18, borderBottomRightRadius: 5, padding: '8px 13px', fontSize: 14.5, lineHeight: 1.3 }}>
         No way, well done
         <span style={{ position: 'absolute', bottom: -12, left: 8, padding: '1px 6px', borderRadius: 10, background: '#1E1E25', boxShadow: '0 1px 4px rgba(0,0,0,0.3)', fontSize: 10.5 }}>{spec && <SuperMark k={k} emoji={spec.base} count={1} />}</span>
       </div>
@@ -2319,7 +2319,7 @@ export function CxItemSheet({ me, item, rewards, wallet, onClose, onDone, onOpen
         <Avatar emoji={me.avatar} name={meName} size={28} />
         <div style={{ minWidth: 0, fontSize: 15, fontWeight: 700, color: dark ? '#F4F4F6' : '#111113', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', ...NS_ROOM }}><StyledName name={meName} k={key} dark={dark} /></div>
         <div style={{ flex: 1 }} />
-        <div style={{ fontSize: 11.5, fontWeight: 700, color: dark ? '#B9A6FF' : '#5B3FD6', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '40%', ...NS_ROOM }}><StyledName name={meName} k={key} dark={dark} sub /></div>
+        <div style={{ fontSize: 11.5, fontWeight: 700, color: dark ? '#6FB0F7' : '#1564C9', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '40%', ...NS_ROOM }}><StyledName name={meName} k={key} dark={dark} sub /></div>
       </div>
     </div>
   );
@@ -2527,7 +2527,7 @@ function SiTypingStage({ k, me, dark }) {
         <Avatar emoji={me.avatar} name={me.name} size={34} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 15, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{me.name || 'You'}</div>
-          <div style={{ fontSize: 12, color: dark ? '#9D86FF' : '#6A4DE0', fontWeight: 600 }}>typing</div>
+          <div style={{ fontSize: 12, color: dark ? '#6FB0F7' : '#1564C9', fontWeight: 600 }}>typing</div>
         </div>
         <Phone size={18} color={T.ink} style={{ flexShrink: 0 }} />
       </div>
@@ -2540,7 +2540,7 @@ function SiTypingStage({ k, me, dark }) {
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px 12px' }}>
         <div style={{ flex: 1, height: 38, borderRadius: 19, background: T.inputBg, display: 'flex', alignItems: 'center', padding: '0 14px', fontSize: 14, color: T.muted }}>Message</div>
-        <div style={{ width: 38, height: 38, borderRadius: 19, background: '#7C5CFC', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Send size={16} color="#FFFFFF" /></div>
+        <div style={{ width: 38, height: 38, borderRadius: 19, background: '#1D7BF0', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Send size={16} color="#FFFFFF" /></div>
       </div>
     </div>
   );
@@ -2705,7 +2705,7 @@ function LookSlot({ look, slot, me, current, onApply, onSave, onMenu }) {
     <div role="button" aria-label={`Wear ${look.name || `look ${slot}`}`} onClick={onApply} className="zchat-press"
       style={{ position: 'relative', minWidth: 0, height: 128, borderRadius: 18, background: CL.card, boxShadow: `inset 0 0 0 ${current ? 2 : 1}px ${current ? CL.accent : CL.line}`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, cursor: 'pointer', padding: '8px 6px' }}>
       {frameKey ? <DecorFrameBadge setKey={frameKey} size={62} photo={me.avatar} name={me.name} lazy /> : <Avatar emoji={me.avatar} name={me.name} size={50} />}
-      <div style={{ maxWidth: '100%', fontSize: 12.5, fontWeight: 650, color: current ? '#B9A6FF' : CL.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', padding: '0 4px' }}>{current ? 'Wearing' : look.name || `Look ${slot}`}</div>
+      <div style={{ maxWidth: '100%', fontSize: 12.5, fontWeight: 650, color: current ? '#6FB0F7' : CL.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', padding: '0 4px' }}>{current ? 'Wearing' : look.name || `Look ${slot}`}</div>
       <div role="button" aria-label={`Options for ${look.name || `look ${slot}`}`} onClick={(e) => { e.stopPropagation(); onMenu(); }} style={{ position: 'absolute', top: 4, right: 4, width: 30, height: 30, borderRadius: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', color: CL.ink2, cursor: 'pointer' }}><MoreVertical size={16} /></div>
     </div>
   );
@@ -2745,7 +2745,7 @@ function EffectRow({ set, me, own, wearing, onOpen, edition = null }) {
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 15.5, fontWeight: 650, color: CL.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{set.name}</div>
         <div style={{ marginTop: 3, display: 'flex', alignItems: 'center', gap: 8 }}><RarityTag rarity={set.rarity} size={11.5} />{edition ? <EditionTag n={edition} size={11} /> : null}</div>
-        <div style={{ fontSize: 12.5, color: wearing ? '#B9A6FF' : CL.ink2, marginTop: 4, lineHeight: 1.35 }}>{wearing ? 'Playing on your profile' : can ? 'Wear the full set to play it' : 'Get the frame and nameplate to play it'}</div>
+        <div style={{ fontSize: 12.5, color: wearing ? '#6FB0F7' : CL.ink2, marginTop: 4, lineHeight: 1.35 }}>{wearing ? 'Playing on your profile' : can ? 'Wear the full set to play it' : 'Get the frame and nameplate to play it'}</div>
       </div>
       <div style={{ width: 36, height: 36, borderRadius: 18, background: 'rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Play size={14} fill="#FFFFFF" strokeWidth={0} style={{ marginLeft: 2 }} /></div>
     </div>
@@ -2798,12 +2798,12 @@ function CollNsTile({ k, me, owned, wearing, status, tone, edition, onTap }) {
       <div style={{ minHeight: 40, display: 'flex', alignItems: 'center', minWidth: 0, opacity: owned ? 1 : 0.6, transition: 'opacity 0.2s ease' }}><NameStyleArt k={k} name={me && me.name} size={19} width={150} /></div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, marginTop: 10 }}>
         <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, color: owned ? CL.ink : CL.ink2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{spec.label}</span>
-        {tone === 'coin' ? <CollPrice price={Number(status)} size={13} /> : <span style={{ fontSize: 12.5, fontWeight: 600, color: tone === 'use' ? '#B9A6FF' : CL.own, flexShrink: 0 }}>{status}</span>}
+        {tone === 'coin' ? <CollPrice price={Number(status)} size={13} /> : <span style={{ fontSize: 12.5, fontWeight: 600, color: tone === 'use' ? '#6FB0F7' : CL.own, flexShrink: 0 }}>{status}</span>}
       </div>
     </div>
   );
 }
-function CollFavMark({ size = 12, color = '#B9A6FF' }) {
+function CollFavMark({ size = 12, color = '#6FB0F7' }) {
   return (
     <svg width={size} height={size} viewBox="0 0 12 12" aria-hidden="true" style={{ display: 'block', flexShrink: 0 }}>
       <path d="M6 1.1l1.45 2.95 3.25.47-2.35 2.3.56 3.24L6 8.53 3.09 10.06l.56-3.24-2.35-2.3 3.25-.47z" fill={color} />
@@ -2852,7 +2852,7 @@ function CollRxTile({ k, owned, fav, status, tone, edition, onTap }) {
         <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, color: owned ? CL.ink : CL.ink2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{spec.label}</span>
         {tone === 'coin'
           ? <CollPrice price={Number(status)} size={13} />
-          : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12.5, fontWeight: 600, color: tone === 'fav' ? '#B9A6FF' : tone === 'free' ? CL.gold : CL.own, flexShrink: 0 }}>{tone === 'fav' && <CollFavMark size={12} />}{status}</span>}
+          : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12.5, fontWeight: 600, color: tone === 'fav' ? '#6FB0F7' : tone === 'free' ? CL.gold : CL.own, flexShrink: 0 }}>{tone === 'fav' && <CollFavMark size={12} />}{status}</span>}
       </div>
     </div>
   );
@@ -2941,7 +2941,7 @@ function SiCollTile({ kind, k, me, status, tone, on, onTap }) {
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
         <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 600, color: CL.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{kind === 'namestyle' ? 'Your own' : name}</span>
-        {tone === 'coin' ? <CollPrice price={Number(status)} size={12.5} /> : status ? <span style={{ fontSize: 12.5, fontWeight: 600, color: tone === 'use' ? '#B9A6FF' : CL.own, flexShrink: 0 }}>{status}</span> : null}
+        {tone === 'coin' ? <CollPrice price={Number(status)} size={12.5} /> : status ? <span style={{ fontSize: 12.5, fontWeight: 600, color: tone === 'use' ? '#6FB0F7' : CL.own, flexShrink: 0 }}>{status}</span> : null}
       </div>
     </div>
   );
@@ -3171,7 +3171,7 @@ export function CollectionPanel({ me, rewards, onClose, onEquip, onWear, isAdmin
                     <div style={{ fontSize: 14, fontWeight: 600, color: CL.ink, marginTop: 8, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.spec.label.replace(/ (charm|badge)$/i, '')}</div>
                     <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
                       <RarityTag rarity={it.spec.rarity} size={11.5} />
-                      <span style={{ fontSize: 12, fontWeight: 600, color: it.equipped ? '#B9A6FF' : CL.own, flexShrink: 0 }}>{it.equipped ? 'In use' : left != null ? `${left} ${left === 1 ? 'day' : 'days'} left` : 'Yours'}</span>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: it.equipped ? '#6FB0F7' : CL.own, flexShrink: 0 }}>{it.equipped ? 'In use' : left != null ? `${left} ${left === 1 ? 'day' : 'days'} left` : 'Yours'}</span>
                     </div>
                   </div>
                 );
@@ -4585,7 +4585,7 @@ export function CtJokePickSheet({ c, m, onClose }) {
   words.forEach((w, i) => {
     if (w.at > last) pieces.push(<span key={`s${i}`}>{text.slice(last, w.at)}</span>);
     const on = sel && i >= sel.a && i <= sel.b;
-    pieces.push(<span key={`w${i}`} role="button" aria-label={`Pick ${w.w}`} aria-pressed={!!on} onClick={() => tap(i)} style={{ cursor: 'pointer', borderRadius: 6, padding: '1px 0', background: on ? (theme.dark ? 'rgba(168,149,255,0.32)' : 'rgba(124,92,252,0.18)') : 'transparent', boxShadow: on ? `0 0 0 2px ${theme.dark ? 'rgba(168,149,255,0.32)' : 'rgba(124,92,252,0.18)'}` : 'none', transition: 'background 140ms ease' }}>{w.w}</span>);
+    pieces.push(<span key={`w${i}`} role="button" aria-label={`Pick ${w.w}`} aria-pressed={!!on} onClick={() => tap(i)} style={{ cursor: 'pointer', borderRadius: 6, padding: '1px 0', background: on ? (theme.dark ? 'rgba(168,149,255,0.32)' : 'rgba(29,123,240,0.18)') : 'transparent', boxShadow: on ? `0 0 0 2px ${theme.dark ? 'rgba(168,149,255,0.32)' : 'rgba(29,123,240,0.18)'}` : 'none', transition: 'background 140ms ease' }}>{w.w}</span>);
     last = w.at + w.w.length;
   });
   if (last < text.length) pieces.push(<span key="end">{text.slice(last)}</span>);
@@ -6564,27 +6564,24 @@ function WnSegments({ total, at, onArt, dark }) {
 }
 
 const WN_HIGHLIGHTS = [
-  { k: 'song37', art: 'song37h', go: 'vibes', title: 'Music on posts', text: 'Add a song to your photo posts, just like stories. It plays when friends scroll to your post.' },
-  { k: 'tag37', art: 'tag37h', go: 'vibes', title: 'Control your tags', text: 'Tagged in a photo? Open the post menu to hide it from your profile or remove yourself. You can leave collab posts the same way.' },
-  { k: 'pstory37', art: 'pstory37h', go: 'vibes', title: 'Share posts to your story', text: 'Add a post to your story with a See post link, so friends open it in one tap.' },
-  { k: 'gulp37', art: 'gulp37h', go: 'games', title: 'A fairer Gulp', text: 'Every fish shows its number, small fish swim away, hunters give up sooner and you can grow all the way to 100k in a more real sea.' },
-  { k: 'ui37', art: 'ui37h', go: 'games', title: 'New game buttons', text: 'Gulp, Two Torches and Roll Squad now share see through buttons, quiet notices at the side and new pause menus.' },
+  { k: 'look38', art: 'look38h', title: 'A cleaner look', text: 'ZChat now uses calm greys with a blue accent, and the photo editor keeps its tools in a small column. Tap the arrow under them for more.' },
+  { k: 'roll38', art: 'roll38h', go: 'games', title: 'Roll Squad plays better', text: 'Touch anywhere on the left to roll and anywhere on the right to jump. You can jump again in the air, and the ball stops and turns much faster.' },
+  { k: 'gulp38', art: 'gulp38h', go: 'games', title: 'No top size in Gulp', text: 'Grow past the whale into an orca, a megalodon, a kraken and a leviathan. Growing takes longer now and more hunters come for you.' },
 ];
 const WN_SECTIONS = [
-  { title: 'Posts', items: [
-    { art: 'song37', title: 'Music on posts', text: 'Pick a song for your photo posts.' },
-    { art: 'tag37', title: 'Control your tags', text: 'Hide or remove a tag from the post menu.' },
-    { art: 'pstory37', title: 'Share posts to your story', text: 'With a link back to the post.' },
+  { title: 'App', items: [
+    { art: 'look38', title: 'A cleaner look', text: 'Calm greys, a blue accent and a tidier photo editor.' },
   ] },
   { title: 'Games', items: [
-    { art: 'gulp37', title: 'A fairer Gulp', text: 'Numbers on every fish and a top size of 100k.' },
-    { art: 'ui37', title: 'New game buttons', text: 'Matching buttons, quiet notices and pause menus.' },
+    { art: 'roll38', title: 'Roll Squad plays better', text: 'Easy touch controls and a double jump.' },
+    { art: 'gulp38', title: 'No top size in Gulp', text: 'Four new fish to grow into, and a harder sea.' },
   ] },
 ];
 const WN_NEW_COUNT = WN_SECTIONS.reduce((n, sec) => n + sec.items.length, 0);
 const WN_SUMMARY = `${WN_NEW_COUNT} new things to try.`;
 
 const WN_EARLIER = [
+  { title: 'Music on posts and tag controls', text: 'Songs on photo posts, hiding or removing tags from the post menu, sharing posts to your story and new game buttons.' },
   { title: 'A bigger Gulp sea and joining from chat', text: 'A bigger Gulp sea with chests and golden fish, endless missions, clear game screens and a Join button in chats.' },
   { title: 'Gulp rooms and levels', text: 'Gulp rooms for up to ten friends, twenty Gulp levels, sideways play, button size controls, ten new Two Torches temples and two new Roll Squad worlds.' },
   { title: 'Roll Squad, watching friends and game clocks', text: 'A live ball game for up to four friends, a new Gulp, Two Torches enemies and mirror puzzles, watching friends play live, and clocks for chess and checkers.' },

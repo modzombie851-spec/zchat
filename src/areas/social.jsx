@@ -2880,7 +2880,7 @@ export function VoicePostComposer({ me, userId, onClose }) {
         <div style={{ position: 'relative', width: '100%', maxWidth: 360, aspectRatio: '4 / 5', borderRadius: 20, overflow: 'hidden', background: coverUrl ? '#000000' : (theme.dark ? '#1B1730' : '#ECE8F7'), display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 18 }}>
           {coverUrl && <img src={coverUrl} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: 0.72 }} />}
           <div style={{ position: 'relative', minHeight: 44, display: 'flex', alignItems: 'center' }}>
-            {rec ? <PsWave peaks={rec.peaks} pct={st === 'play' && rec.dur ? secs / rec.dur : 0} color={coverUrl || theme.dark ? '#FFFFFF' : theme.coral} dim={coverUrl || theme.dark ? 'rgba(255,255,255,0.4)' : 'rgba(124,92,252,0.3)'} width={240} /> : <PsLevelBars levels={levels} color={coverUrl || theme.dark ? '#FFFFFF' : theme.coral} />}
+            {rec ? <PsWave peaks={rec.peaks} pct={st === 'play' && rec.dur ? secs / rec.dur : 0} color={coverUrl || theme.dark ? '#FFFFFF' : theme.coral} dim={coverUrl || theme.dark ? 'rgba(255,255,255,0.4)' : 'rgba(29,123,240,0.3)'} width={240} /> : <PsLevelBars levels={levels} color={coverUrl || theme.dark ? '#FFFFFF' : theme.coral} />}
           </div>
           <div style={{ position: 'relative', fontSize: 15, fontWeight: 700, color: coverUrl || theme.dark ? '#FFFFFF' : theme.ink, fontVariantNumeric: 'tabular-nums' }} aria-live="polite">
             {recording ? `${psClock(secs)}, ${left} ${left === 1 ? 'second' : 'seconds'} left` : rec ? psClock(st === 'play' ? secs : rec.dur) : st === 'busy' ? 'Getting it ready' : 'Up to 1 minute'}

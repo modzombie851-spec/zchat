@@ -2726,7 +2726,7 @@ export function ThemePreviewPage({ me, k, startDark = true, onClose, action }) {
         </div>
         {action && (
           <div style={{ position: 'relative', zIndex: 2, padding: '12px 16px', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))' }}>
-            <button type="button" disabled={!!action.disabled} onClick={action.onClick} className="zchat-press" style={{ width: '100%', height: 52, borderRadius: 15, border: 'none', background: action.disabled ? (dark ? 'rgba(255,255,255,0.1)' : 'rgba(17,17,19,0.07)') : '#7C5CFC', color: action.disabled ? (dark ? 'rgba(235,235,245,0.62)' : 'rgba(17,17,19,0.55)') : '#FFFFFF', fontFamily: FONT, fontSize: 16, fontWeight: 650, cursor: action.disabled ? 'default' : 'pointer' }}>{action.label}</button>
+            <button type="button" disabled={!!action.disabled} onClick={action.onClick} className="zchat-press" style={{ width: '100%', height: 52, borderRadius: 15, border: 'none', background: action.disabled ? (dark ? 'rgba(255,255,255,0.1)' : 'rgba(17,17,19,0.07)') : '#1D7BF0', color: action.disabled ? (dark ? 'rgba(235,235,245,0.62)' : 'rgba(17,17,19,0.55)') : '#FFFFFF', fontFamily: FONT, fontSize: 16, fontWeight: 650, cursor: action.disabled ? 'default' : 'pointer' }}>{action.label}</button>
           </div>
         )}
       </div>
@@ -4583,7 +4583,7 @@ export function AppearanceSection({ uid }) {
       <IgToggle on={!!on} />
     </div>
   );
-  const accentLabel = accentName === 'custom' ? 'Your own colour' : (ACCENT_PALETTES[accentName] || ACCENT_PALETTES.coral).label;
+  const accentLabel = accentName === 'custom' ? 'Your own colour' : (ACCENT_PALETTES[accentName] || ACCENT_PALETTES.blue).label;
   return (
     <div style={{ paddingBottom: 28 }}>
       <div style={{ paddingTop: 6 }}>

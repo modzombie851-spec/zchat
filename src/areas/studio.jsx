@@ -2418,7 +2418,7 @@ function EditorSizeRail({ value, min, max, onChange, label = 'Text size' }) {
       <svg width="40" height={H} viewBox={`0 0 40 ${H}`} aria-hidden="true" style={{ position: 'absolute', inset: 0 }}>
         <path d={`M15.5 10 Q20 6 24.5 10 L21.2 ${H - 10} Q20 ${H - 8} 18.8 ${H - 10} Z`} fill="rgba(255, 255, 255, 0.38)" />
       </svg>
-      <div style={{ position: 'absolute', left: 8, top: 10 + (1 - t) * (H - 20) - 12, width: 24, height: 24, borderRadius: '50%', background: '#FFFFFF', boxShadow: on ? '0 0 0 7px rgba(124, 92, 252, 0.38), 0 2px 8px rgba(0, 0, 0, 0.3)' : '0 2px 8px rgba(0, 0, 0, 0.32)', transition: 'box-shadow 0.15s ease' }} />
+      <div style={{ position: 'absolute', left: 8, top: 10 + (1 - t) * (H - 20) - 12, width: 24, height: 24, borderRadius: '50%', background: '#FFFFFF', boxShadow: on ? '0 0 0 7px rgba(29,123,240,0.38), 0 2px 8px rgba(0, 0, 0, 0.3)' : '0 2px 8px rgba(0, 0, 0, 0.32)', transition: 'box-shadow 0.15s ease' }} />
     </div>
   );
 }
@@ -2478,7 +2478,7 @@ export function TextLayerEditor({ draft, onChange, onLines, onDone, innerW, fram
   const sizeFrame = (draft.size * iw) / Math.max(1, frameW);
   const roundBtn = (label, onClick, child, active) => (
     <div role="button" aria-label={label} aria-pressed={active ? true : undefined} onPointerDown={keep} onClick={onClick} className="zchat-press"
-      style={{ width: 40, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#FFFFFF', background: active ? 'rgba(124, 92, 252, 0.9)' : 'rgba(255, 255, 255, 0.14)', flexShrink: 0 }}>{child}</div>
+      style={{ width: 40, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#FFFFFF', background: active ? 'rgba(29,123,240,0.9)' : 'rgba(255, 255, 255, 0.14)', flexShrink: 0 }}>{child}</div>
   );
   const bodyPos = look.align === 'left' ? { left: 0 } : look.align === 'right' ? { right: 0 } : { left: '50%', transform: 'translateX(-50%)' };
   return (
@@ -2512,7 +2512,7 @@ export function TextLayerEditor({ draft, onChange, onLines, onDone, innerW, fram
             const on = ff.k === f.k;
             return (
               <div key={ff.k} role="button" aria-label={`Font ${ff.label}`} aria-pressed={on} onPointerDown={keep} onClick={() => onChange({ font: ff.k })} className="zchat-press"
-                style={{ flexShrink: 0, width: 46, height: 46, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: on ? '#FFFFFF' : 'rgba(255, 255, 255, 0.1)', boxShadow: on ? '0 2px 10px rgba(0, 0, 0, 0.35)' : 'inset 0 0 0 1px rgba(255, 255, 255, 0.2)', color: on ? '#111114' : '#FFFFFF', fontFamily: ff.family, fontWeight: ff.weight, fontStyle: ff.italic ? 'italic' : 'normal', fontSize: ff.k === 'strong' ? 23 : ff.k === 'script' ? 16 : 18, lineHeight: 1, textShadow: ff.neon ? (on ? '0 0 6px rgba(124, 92, 252, 0.75)' : '0 0 8px rgba(190, 168, 255, 0.95)') : 'none', whiteSpace: 'nowrap', cursor: 'pointer', transition: 'background 160ms ease, color 160ms ease' }}>Aa</div>
+                style={{ flexShrink: 0, width: 46, height: 46, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: on ? '#FFFFFF' : 'rgba(255, 255, 255, 0.1)', boxShadow: on ? '0 2px 10px rgba(0, 0, 0, 0.35)' : 'inset 0 0 0 1px rgba(255, 255, 255, 0.2)', color: on ? '#111114' : '#FFFFFF', fontFamily: ff.family, fontWeight: ff.weight, fontStyle: ff.italic ? 'italic' : 'normal', fontSize: ff.k === 'strong' ? 23 : ff.k === 'script' ? 16 : 18, lineHeight: 1, textShadow: ff.neon ? (on ? '0 0 6px rgba(29,123,240,0.75)' : '0 0 8px rgba(190, 168, 255, 0.95)') : 'none', whiteSpace: 'nowrap', cursor: 'pointer', transition: 'background 160ms ease, color 160ms ease' }}>Aa</div>
             );
           })}
         </div>
@@ -2591,6 +2591,7 @@ export function MediaComposer({ files, recipientName, onCancel, onSend: onSendBa
   const [stickerEdit, setStickerEdit] = useState(false);
   const [storySong, setStorySong] = useState(() => (draft && draft.song && validSong(draft.song) ? draft.song : null));
   const [musicPick, setMusicPick] = useState(false);
+  const [railMore, setRailMore] = useState(false);
   const songPlayingId = useSongPlaying();
   useEffect(() => { if (isStory || isPost) prefetchMusic(country); return () => stopSong(); }, []);
   const postSongOk = isPost && items.length > 0 && items.every((x) => x.kind === 'image');
@@ -3537,8 +3538,8 @@ export function MediaComposer({ files, recipientName, onCancel, onSend: onSendBa
             )}
             {mode === 'view' && (
               <>
-                <div ref={guideXRef} aria-hidden="true" style={{ position: 'absolute', left: '50%', top: 0, bottom: 0, width: 1, marginLeft: -0.5, background: '#C4B5FF', boxShadow: '0 0 6px rgba(124, 92, 252, 0.9)', opacity: 0, transition: 'opacity 0.12s ease', pointerEvents: 'none', zIndex: 9 }} />
-                <div ref={guideYRef} aria-hidden="true" style={{ position: 'absolute', top: '50%', left: 0, right: 0, height: 1, marginTop: -0.5, background: '#C4B5FF', boxShadow: '0 0 6px rgba(124, 92, 252, 0.9)', opacity: 0, transition: 'opacity 0.12s ease', pointerEvents: 'none', zIndex: 9 }} />
+                <div ref={guideXRef} aria-hidden="true" style={{ position: 'absolute', left: '50%', top: 0, bottom: 0, width: 1, marginLeft: -0.5, background: '#8EC5FF', boxShadow: '0 0 6px rgba(29,123,240,0.9)', opacity: 0, transition: 'opacity 0.12s ease', pointerEvents: 'none', zIndex: 9 }} />
+                <div ref={guideYRef} aria-hidden="true" style={{ position: 'absolute', top: '50%', left: 0, right: 0, height: 1, marginTop: -0.5, background: '#8EC5FF', boxShadow: '0 0 6px rgba(29,123,240,0.9)', opacity: 0, transition: 'opacity 0.12s ease', pointerEvents: 'none', zIndex: 9 }} />
               </>
             )}
             {postX && mode === 'view' && postX.stage}
@@ -3547,22 +3548,47 @@ export function MediaComposer({ files, recipientName, onCancel, onSend: onSendBa
           <Spinner size={26} />
         )}
         {mode === 'view' && !textDraft && !showStickerPicker && !musicPick && !stickerEdit && !showMentionPicker && !pickCollab && (
-          <div data-tool="rail" style={{ position: 'absolute', right: 10, top: 6, display: 'flex', flexDirection: 'column', gap: 10, zIndex: 12, opacity: dragKey ? 0 : 1, transform: dragKey ? 'translateX(12px)' : 'none', transition: 'opacity 0.16s ease, transform 0.2s ease', pointerEvents: dragKey ? 'none' : undefined }}>
-            {toolBtn(<Type size={18} />, 'Add text', () => openTextEditor(null))}
-            {toolBtn(<Smile size={18} />, 'Stickers', () => { setShowStickerPicker(true); if (videoRef.current) videoRef.current.pause(); })}
-            {(isStory || postSongOk) && toolBtn(<MusicNoteIcon size={18} />, storySong ? 'Change music' : 'Add music', () => { setMusicPick(true); if (videoRef.current) videoRef.current.pause(); }, !!storySong)}
-            {isStory && !(storySticker && storySticker.k === 'moment') && toolBtn(<StickerQIcon size={18} />, 'Story sticker', () => { setStickerEdit(true); if (videoRef.current) videoRef.current.pause(); }, !!storySticker)}
-            {isStory && toolBtn(<AtSign size={18} />, 'Mention', () => setShowMentionPicker(true))}
-            {(isStory || isPost) && myId && toolBtn(<MapPinIcon size={18} />, place ? 'Change place' : 'Add a place', () => { setPlacePick(true); if (videoRef.current) videoRef.current.pause(); }, !!place)}
-            {toolBtn(<Pencil size={18} />, 'Draw', () => { setMode('draw'); if (videoRef.current) videoRef.current.pause(); })}
-            {cur.kind === 'image' && toolBtn(<FilterIcon size={18} />, 'Filters', () => setMode('filter'), cur.filter && cur.filter !== 'none')}
-            {cur.kind === 'image' && toolBtn(<PaintToolIcon k="brush" size={18} />, 'Restyle', () => { hapticTap(); setRestyle(true); })}
-            {cur.kind === 'image' && toolBtn(<Crop size={18} />, 'Crop', startCrop)}
-            {cur.kind === 'image' && toolBtn(<BlurFaceIcon size={18} />, 'Blur faces', startBlur, blurCount > 0)}
-            {cur.kind === 'image' && toolBtn(<MemeIcon size={18} strokeWidth={1.9} />, 'Meme', openMeme, cur.texts.some((t) => t.id === 'mtop' || t.id === 'mbot'))}
-            {cur.kind === 'video' && cur.duration > 1 && toolBtn(<Scissors size={18} />, 'Trim', () => { setMode('trim'); if (videoRef.current) videoRef.current.pause(); })}
-            {isPost && myId && toolBtn(<UserPlus size={18} />, 'Invite a collaborator', () => setPickCollab(true), !!collab)}
-          </div>
+          (() => {
+            const pv = () => { if (videoRef.current) videoRef.current.pause(); };
+            const img = cur.kind === 'image';
+            const all = [
+              { k: 'text', icon: <Type size={21} />, label: 'Text', aria: 'Add text', on: () => openTextEditor(null), pri: true },
+              (isStory || postSongOk) ? { k: 'music', icon: <MusicNoteIcon size={21} />, label: 'Music', aria: storySong ? 'Change music' : 'Add music', on: () => { setMusicPick(true); pv(); }, act: !!storySong, pri: true } : null,
+              { k: 'stickers', icon: <Smile size={21} />, label: 'Stickers', aria: 'Stickers', on: () => { setShowStickerPicker(true); pv(); }, pri: true },
+              isStory && !(storySticker && storySticker.k === 'moment') ? { k: 'sticker', icon: <StickerQIcon size={21} />, label: 'Poll and more', aria: 'Story sticker', on: () => { setStickerEdit(true); pv(); }, act: !!storySticker, pri: true } : null,
+              img ? { k: 'filters', icon: <FilterIcon size={21} />, label: 'Filters', aria: 'Filters', on: () => setMode('filter'), act: !!(cur.filter && cur.filter !== 'none'), pri: !isStory } : null,
+              { k: 'draw', icon: <Pencil size={21} />, label: 'Draw', aria: 'Draw', on: () => { setMode('draw'); pv(); }, pri: isStory || !isPost },
+              img ? { k: 'crop', icon: <Crop size={21} />, label: 'Crop', aria: 'Crop', on: startCrop, pri: isPost } : null,
+              isStory ? { k: 'mention', icon: <AtSign size={21} />, label: 'Mention', aria: 'Mention', on: () => setShowMentionPicker(true) } : null,
+              (isStory || isPost) && myId ? { k: 'place', icon: <MapPinIcon size={21} />, label: 'Place', aria: place ? 'Change place' : 'Add a place', on: () => { setPlacePick(true); pv(); }, act: !!place } : null,
+              isPost && myId ? { k: 'collab', icon: <UserPlus size={21} />, label: 'Collaborator', aria: 'Invite a collaborator', on: () => setPickCollab(true), act: !!collab } : null,
+              img ? { k: 'restyle', icon: <PaintToolIcon k="brush" size={21} />, label: 'Restyle', aria: 'Restyle', on: () => { hapticTap(); setRestyle(true); } } : null,
+              img ? { k: 'blur', icon: <BlurFaceIcon size={21} />, label: 'Blur faces', aria: 'Blur faces', on: startBlur, act: blurCount > 0 } : null,
+              img ? { k: 'meme', icon: <MemeIcon size={21} strokeWidth={1.9} />, label: 'Meme', aria: 'Meme', on: openMeme, act: cur.texts.some((t) => t.id === 'mtop' || t.id === 'mbot') } : null,
+              cur.kind === 'video' && cur.duration > 1 ? { k: 'trim', icon: <Scissors size={21} />, label: 'Trim', aria: 'Trim', on: () => { setMode('trim'); pv(); }, pri: true } : null,
+            ].filter(Boolean);
+            const pri = all.filter((x) => x.pri);
+            const rest = all.filter((x) => !x.pri);
+            const shown = railMore ? [...pri, ...rest] : pri;
+            const one = (x) => (
+              <div key={x.k} role="button" aria-label={x.aria} aria-pressed={x.act || undefined} onClick={() => { x.on(); setRailMore(false); }} className="zchat-press"
+                style={{ height: 40, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10, cursor: 'pointer', color: '#FFFFFF' }}>
+                {railMore && <span style={{ fontSize: 13.5, fontWeight: 700, whiteSpace: 'nowrap', textShadow: '0 1px 4px rgba(0,0,0,0.75)' }}>{x.label}</span>}
+                <span style={{ width: 40, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: x.act ? '#FFFFFF' : 'transparent', color: x.act ? '#000000' : '#FFFFFF', filter: x.act ? 'none' : 'drop-shadow(0 1px 2px rgba(0,0,0,0.7))' }}>{x.icon}</span>
+              </div>
+            );
+            return (
+              <div data-tool="rail" style={{ position: 'absolute', right: 8, top: 4, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2, zIndex: 12, opacity: dragKey ? 0 : 1, transform: dragKey ? 'translateX(12px)' : 'none', transition: 'opacity 0.16s ease, transform 0.2s ease', pointerEvents: dragKey ? 'none' : undefined, ...(railMore ? { padding: '4px 4px 4px 14px', borderRadius: 18, background: 'linear-gradient(270deg, rgba(0,0,0,0.5), rgba(0,0,0,0))' } : null) }}>
+                {shown.map(one)}
+                {rest.length > 0 && (
+                  <div role="button" aria-label={railMore ? 'Fewer tools' : 'More tools'} aria-expanded={railMore} onClick={() => { hapticTap(); setRailMore((v) => !v); }} className="zchat-press"
+                    style={{ width: 40, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#FFFFFF', filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.7))' }}>
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ transform: railMore ? 'rotate(180deg)' : 'none', transition: 'transform 0.18s ease' }}><path d="M6 9l6 6 6-6" /></svg>
+                  </div>
+                )}
+              </div>
+            );
+          })()
         )}
         {mode === 'draw' && <EditorSizeRail label="Brush size" value={brushSize} min={2} max={40} onChange={setBrushSize} />}
         {mode === 'blur' && <EditorSizeRail label="Blur brush size" value={blurSize} min={14} max={96} onChange={setBlurSize} />}
@@ -8499,20 +8525,20 @@ function ScanCorners({ shot, onChange }) {
           <img src={shot.url} alt="Your photo of the page" draggable={false} style={{ position: 'absolute', left: x0, top: y0, width: W * s, height: H * s, display: 'block', pointerEvents: 'none' }} />
           <svg width={box.w} height={box.h} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }} aria-hidden="true">
             <path d={`M0 0H${box.w}V${box.h}H0Z M${pts.map((p) => p.join(' ')).join(' L')} Z`} fill="rgba(0, 0, 0, 0.45)" fillRule="evenodd" />
-            <polygon points={pts.map((p) => p.join(',')).join(' ')} fill="rgba(124, 92, 252, 0.12)" stroke="#A895FF" strokeWidth="2" strokeLinejoin="round" />
+            <polygon points={pts.map((p) => p.join(',')).join(' ')} fill="rgba(29,123,240,0.12)" stroke="#6FB0F7" strokeWidth="2" strokeLinejoin="round" />
           </svg>
           {pts.map(([x, y], i) => (
             <div key={i} role="slider" aria-label={['Top left corner', 'Top right corner', 'Bottom right corner', 'Bottom left corner'][i]} aria-valuenow={Math.round(q[i][0])} tabIndex={0}
               onPointerDown={down(i)} onPointerMove={move(i)} onPointerUp={up} onPointerCancel={up}
               style={{ position: 'absolute', left: x - 24, top: y - 24, width: 48, height: 48, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'grab', touchAction: 'none' }}>
-              <div style={{ width: drag === i ? 26 : 22, height: drag === i ? 26 : 22, borderRadius: '50%', background: 'rgba(124, 92, 252, 0.28)', border: '2.5px solid #FFFFFF', boxShadow: '0 2px 8px rgba(0, 0, 0, 0.45)', transition: 'width 120ms ease, height 120ms ease' }} />
+              <div style={{ width: drag === i ? 26 : 22, height: drag === i ? 26 : 22, borderRadius: '50%', background: 'rgba(29,123,240,0.28)', border: '2.5px solid #FFFFFF', boxShadow: '0 2px 8px rgba(0, 0, 0, 0.45)', transition: 'width 120ms ease, height 120ms ease' }} />
             </div>
           ))}
           {loupe && (
             <div aria-hidden="true" style={{ position: 'absolute', left: Math.max(4, Math.min(box.w - L - 4, loupe[0] - L / 2)), top: loupe[1] - L - 40 < 4 ? loupe[1] + 40 : loupe[1] - L - 40, width: L, height: L, borderRadius: '50%', overflow: 'hidden', border: '2.5px solid #FFFFFF', boxShadow: '0 6px 18px rgba(0, 0, 0, 0.5)', pointerEvents: 'none',
               backgroundImage: `url(${shot.url})`, backgroundRepeat: 'no-repeat', backgroundSize: `${W * s * zoom}px ${H * s * zoom}px`, backgroundPosition: `${L / 2 - (loupe[0] - x0) * zoom}px ${L / 2 - (loupe[1] - y0) * zoom}px`, backgroundColor: '#000' }}>
-              <div style={{ position: 'absolute', left: L / 2 - 8, top: L / 2 - 0.75, width: 16, height: 1.5, background: '#A895FF' }} />
-              <div style={{ position: 'absolute', left: L / 2 - 0.75, top: L / 2 - 8, width: 1.5, height: 16, background: '#A895FF' }} />
+              <div style={{ position: 'absolute', left: L / 2 - 8, top: L / 2 - 0.75, width: 16, height: 1.5, background: '#6FB0F7' }} />
+              <div style={{ position: 'absolute', left: L / 2 - 0.75, top: L / 2 - 8, width: 1.5, height: 16, background: '#6FB0F7' }} />
             </div>
           )}
         </>
@@ -8727,7 +8753,7 @@ export function DocScanner({ onClose, onSend }) {
             <video ref={videoRef} playsInline muted style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', display: camErr ? 'none' : 'block' }} />
             {live && !camErr && (
               <svg viewBox={`0 0 ${vw} ${vh}`} preserveAspectRatio="xMidYMid slice" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} aria-hidden="true">
-                <polygon points={live.quad.map((p) => p.join(',')).join(' ')} fill="rgba(124, 92, 252, 0.16)" stroke="#A895FF" strokeWidth={Math.max(vw, vh) / 260} strokeLinejoin="round" style={{ transition: 'all 260ms ease-out' }} />
+                <polygon points={live.quad.map((p) => p.join(',')).join(' ')} fill="rgba(29,123,240,0.16)" stroke="#6FB0F7" strokeWidth={Math.max(vw, vh) / 260} strokeLinejoin="round" style={{ transition: 'all 260ms ease-out' }} />
               </svg>
             )}
             {flash && <div style={{ position: 'absolute', inset: 0, background: '#FFFFFF', opacity: 0.8 }} />}
@@ -8756,7 +8782,7 @@ export function DocScanner({ onClose, onSend }) {
                   {n ? (
                     <div role="button" aria-label={`Done, ${n === 1 ? '1 page' : `${n} pages`}`} onClick={() => setStage('review')} style={{ position: 'relative', width: 48, height: 48, borderRadius: 10, overflow: 'hidden', cursor: 'pointer', boxShadow: '0 0 0 2px #FFFFFF' }}>
                       <img src={pages[n - 1].thumb} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-                      <span style={{ position: 'absolute', right: 2, bottom: 2, minWidth: 18, height: 18, borderRadius: 9, background: '#7C5CFC', fontSize: 11, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px', boxSizing: 'border-box' }}>{n}</span>
+                      <span style={{ position: 'absolute', right: 2, bottom: 2, minWidth: 18, height: 18, borderRadius: 9, background: '#1D7BF0', fontSize: 11, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px', boxSizing: 'border-box' }}>{n}</span>
                     </div>
                   ) : <div style={{ width: 48, height: 48 }} />}
                 </div>

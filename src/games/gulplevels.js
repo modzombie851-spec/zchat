@@ -23,7 +23,7 @@ export const GULP_LEVELS = [
   { name: 'Golden catch', goal: { k: 'gold', v: 1 }, start: [700, 120], n: 600, par: 120 },
 ];
 
-const fmtNum = (v) => (v >= 10000 ? `${Math.round(v / 100) / 10}k`.replace('.0k', 'k') : String(Math.floor(v)).replace(/\B(?=(\d{3})+(?!\d))/g, ','));
+const fmtNum = (v) => (v >= 1e9 ? `${Math.round(v / 1e8) / 10}b`.replace('.0b', 'b') : v >= 1e6 ? `${Math.round(v / 1e5) / 10}m`.replace('.0m', 'm') : v >= 10000 ? `${Math.round(v / 100) / 10}k`.replace('.0k', 'k') : String(Math.floor(v)).replace(/\B(?=(\d{3})+(?!\d))/g, ','));
 const fmtTime = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 
 export function goalText(L) {
@@ -86,7 +86,7 @@ const MISSION_KINDS = ['eat', 'size', 'combo', 'pick', 'gold', 'chest', 'calm'];
 export function newMission(kind, p, st, rnd) {
   const r = rnd || Math.random;
   if (kind === 'eat') { const v = [20, 30, 40, 60][Math.floor(r() * 4)]; return { k: kind, v, base: p.eaten || 0, text: `Eat ${v} fish` }; }
-  if (kind === 'size') { const v = Math.min(100000, niceAbove(p.n * 2.2 + 20)); return { k: kind, v, base: 0, text: `Grow to ${fmtNum(v)}` }; }
+  if (kind === 'size') { const v = niceAbove(p.n * (p.n < 5000 ? 2.2 : 1.6) + 20); return { k: kind, v, base: 0, text: `Grow to ${fmtNum(v)}` }; }
   if (kind === 'combo') { const v = 6 + Math.floor(r() * 7); return { k: kind, v, base: 0, best: 0, text: `Make a combo of ${v}` }; }
   if (kind === 'pick') return { k: kind, v: 2, base: st.picks || 0, text: 'Grab 2 power bubbles' };
   if (kind === 'gold') return { k: kind, v: 1, base: p.golds || 0, text: 'Catch a golden fish' };
@@ -96,7 +96,7 @@ export function newMission(kind, p, st, rnd) {
 export function pickMission(list, p, st, rnd) {
   const r = rnd || Math.random;
   const used = new Set(list.map((m) => m.k));
-  const pool = MISSION_KINDS.filter((k) => !used.has(k) && !(k === 'size' && p.n * 2.2 + 20 > 100000));
+  const pool = MISSION_KINDS.filter((k) => !used.has(k));
   return newMission(pool[Math.floor(r() * pool.length)] || 'eat', p, st, r);
 }
 export function missionProgress(m, p, st) {

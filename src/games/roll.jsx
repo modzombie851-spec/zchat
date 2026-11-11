@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Avatar, Portal, useBackClose, hapticTap, FONT, Spinner } from '../App.jsx';
 import { useRoomLink } from './relay.jsx';
 import { EMOTES, Sheet, injectCss } from './livekit.jsx';
-import { GBtn, GHold, GPill, GPanel, GChip, GTitle, GIcon, GHudBtn, GHudPanel, GHint, GStat, injectKitCss, kitTap, pressProps, maxDpr, INK, useCtlLook, useGameStage, GControlsPanel } from './gamekit.jsx';
+import { GBtn, GHold, GPill, GPanel, GChip, GTitle, GIcon, GHudBtn, GHudPanel, GHint, GStat, stagePoint, injectKitCss, kitTap, pressProps, maxDpr, INK, useCtlLook, useGameStage, GControlsPanel } from './gamekit.jsx';
 import { Sfx } from './sfx.js';
 import { watchAllowed, setWatchAllowed, useLiveBeacon } from './live.js';
 import { WORLDS, LEVEL_N, BALLS, R, levelOf, levelName, makeWorld, mkBall, stepBall, interact, applyEvent, pressedButtons, gatesToOpen, foePos, clamp } from './rollengine.js';
@@ -61,6 +61,45 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
   const look = useCtlLook();
   const GS = useGameStage(look);
   const side = GS.side, land = GS.land;
+  const padRef = useRef(null);
+  const touch = useRef({ mv: null, cx: 0, jp: new Set() });
+  const [padDir, setPadDir] = useState(0);
+  const [jumpOn, setJumpOn] = useState(false);
+  const padCenter = () => {
+    const el = padRef.current, wrap = wrapRef.current;
+    if (!el || !wrap) return 90;
+    const r = el.getBoundingClientRect();
+    return stagePoint(wrap, { clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 }, side).x;
+  };
+  const setDir = (d) => { hold.current.l = d < 0; hold.current.r = d > 0; setPadDir((v) => (v === d ? v : d)); };
+  useEffect(() => { if (!paused && phase === 'play') return; touch.current = { mv: null, cx: 0, jp: new Set() }; hold.current = { l: false, r: false, j: false }; setPadDir(0); setJumpOn(false); }, [paused, phase]);
+  const zoneDown = (e) => {
+    const wrap = wrapRef.current;
+    if (!wrap) return;
+    if (e.cancelable) e.preventDefault();
+    const p = stagePoint(wrap, e, side);
+    const T = touch.current;
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
+    if (p.x < GS.W * 0.5) {
+      if (T.mv != null) return;
+      T.mv = e.pointerId; T.cx = padCenter();
+      setDir(p.x < T.cx - 3 ? -1 : 1);
+    } else {
+      T.jp.add(e.pointerId);
+      hold.current.j = true; setJumpOn(true);
+    }
+  };
+  const zoneMove = (e) => {
+    const T = touch.current;
+    if (e.pointerId !== T.mv || !wrapRef.current) return;
+    const x = stagePoint(wrapRef.current, e, side).x;
+    if (x < T.cx - 6) setDir(-1); else if (x > T.cx + 6) setDir(1);
+  };
+  const zoneUp = (e) => {
+    const T = touch.current;
+    if (e.pointerId === T.mv) { T.mv = null; setDir(0); }
+    if (T.jp.delete(e.pointerId) && !T.jp.size) { hold.current.j = false; setJumpOn(false); }
+  };
   const miniRef = useRef(null);
   const miniBase = useRef({ L: null, cv: null });
   const hudRefs = useRef({});
@@ -114,6 +153,8 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
     cam.current.init = false;
     doneRef.current = false;
     hold.current = { l: false, r: false, j: false };
+    touch.current = { mv: null, cx: 0, jp: new Set() };
+    setPadDir(0); setJumpOn(false);
     clearChunks();
     setLvl(i); setResult(null); setPaused(false); setQuick(false);
     setPhase('play');
@@ -253,6 +294,7 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
         const ci = Math.max(0, rosterRef.current.indexOf(f.who));
         switch (f.k) {
           case 'jump': if (local) Sfx.play('jump', { vol: 0.5, rate: 0.95 + Math.random() * 0.1 }); break;
+          case 'jump2': { if (local) Sfx.play('jump', { vol: 0.55, rate: 1.25 + Math.random() * 0.08 }); dust(P, f.x, f.y, 7); burst(P, f.x, f.y, '#FFFFFF', 6, 3, 'dot'); break; }
           case 'land': if (local) { Sfx.play('land', { vol: Math.min(0.8, f.v / 22) }); dust(P, f.x, f.y, 5); } break;
           case 'bonk': if (local) Sfx.play('bump', { vol: 0.5 }); break;
           case 'spring': Sfx.play('spring', { vol: local ? 0.8 : 0.4 }); break;
@@ -422,12 +464,18 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
             )}
             {playing() && (
               <>
-                <div style={{ position: 'absolute', left: left(16), bottom: bottom(14), display: 'flex', gap: 12, transform: `scale(${look.size})`, transformOrigin: '0 100%', opacity: 1 - look.see, zIndex: 2 }}>
-                  <GHold flat icon="left" size={66} label="Roll left" onDown={() => { hold.current.l = true; }} onUp={() => { hold.current.l = false; }} />
-                  <GHold flat icon="right" size={66} label="Roll right" onDown={() => { hold.current.r = true; }} onUp={() => { hold.current.r = false; }} />
+                <div role="group" aria-label="Touch the left side to roll and the right side to jump" onPointerDown={zoneDown} onPointerMove={zoneMove} onPointerUp={zoneUp} onPointerCancel={zoneUp} onLostPointerCapture={zoneUp} onContextMenu={(e) => e.preventDefault()}
+                  style={{ position: 'absolute', inset: 0, zIndex: 1, touchAction: 'none' }} />
+                <div ref={padRef} aria-hidden="true" style={{ position: 'absolute', left: left(16), bottom: bottom(16), width: 156, height: 70, transform: `scale(${look.size})`, transformOrigin: '0 100%', opacity: 1 - look.see, zIndex: 2, pointerEvents: 'none', borderRadius: 35, background: 'rgba(0,0,0,0.26)', boxShadow: 'inset 0 0 0 1.5px rgba(255,255,255,0.6)', display: 'flex', overflow: 'hidden' }}>
+                  {[-1, 1].map((d) => (
+                    <div key={d} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: padDir === d ? 'rgba(255,255,255,0.26)' : 'transparent', transition: 'background 0.06s' }}>
+                      <GIcon k={d < 0 ? 'left' : 'right'} size={28} color="#FFFFFF" line stroke={2.2} />
+                    </div>
+                  ))}
+                  <div style={{ position: 'absolute', left: '50%', top: 14, bottom: 14, width: 1.5, marginLeft: -0.75, background: 'rgba(255,255,255,0.4)' }} />
                 </div>
-                <div style={{ position: 'absolute', right: right(16), bottom: bottom(14), transform: `scale(${look.size})`, transformOrigin: '100% 100%', opacity: 1 - look.see, zIndex: 2 }}>
-                  <GHold flat main icon="up" color={['gold', 'green', 'blue', 'purple'][Math.max(0, myIdx) % 4]} size={80} label="Jump" onDown={() => { hold.current.j = true; }} onUp={() => { hold.current.j = false; }} />
+                <div aria-hidden="true" style={{ position: 'absolute', right: right(16), bottom: bottom(14), width: 80, height: 80, transform: `scale(${look.size}) ${jumpOn ? 'scale(0.93)' : ''}`, transformOrigin: '100% 100%', opacity: 1 - look.see, zIndex: 2, pointerEvents: 'none', borderRadius: '50%', background: jumpOn ? 'rgba(255,255,255,0.24)' : 'rgba(0,0,0,0.3)', boxShadow: 'inset 0 0 0 2px rgba(255,255,255,0.82)', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'transform 0.05s' }}>
+                  <GIcon k="up" size={34} color="#FFFFFF" line stroke={2.3} />
                 </div>
               </>
             )}

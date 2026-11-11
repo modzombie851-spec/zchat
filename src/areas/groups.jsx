@@ -615,7 +615,7 @@ export function GroupInfoPanel({ group, members, myId, iFollowIds, privacyAllowe
             announce && onOpenCommunity
               ? <DetailRow icon={<LogOut />} danger onClick={() => onOpenCommunity({ leave: true })} label="Leave community" />
               : <DetailRow icon={<LogOut />} danger onClick={() => { if (!soleAdmin && !isOwner) onLeave(); else if (onOpenMembers) onOpenMembers(); }}
-                label={isOwner ? 'Hand the group to someone before leaving' : soleAdmin ? 'Make someone an admin before leaving' : 'Leave group'} />,
+                label="Leave group" sub={isOwner ? 'Hand the group to someone first' : soleAdmin ? 'Make someone an admin first' : undefined} />,
           ])}
         </DetailSection>
       </div>

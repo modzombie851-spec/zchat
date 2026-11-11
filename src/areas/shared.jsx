@@ -1459,7 +1459,7 @@ export function BubbleTileDark({ k, on, status, tone, onPick, edition = null }) 
         <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, color: CL.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
         {tone === 'coin'
           ? <CollPrice price={Number(status)} size={13} />
-          : status ? <span style={{ fontSize: 12.5, fontWeight: 600, color: tone === 'use' ? '#B9A6FF' : tone === 'own' ? CL.own : CL.gold, flexShrink: 0 }}>{status}</span> : null}
+          : status ? <span style={{ fontSize: 12.5, fontWeight: 600, color: tone === 'use' ? '#6FB0F7' : tone === 'own' ? CL.own : CL.gold, flexShrink: 0 }}>{status}</span> : null}
       </div>
     </div>
   );
@@ -1584,7 +1584,7 @@ export function ShopChatMock({ me, dark = true, bubble = null, nsKey = null, cha
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px 12px' }}>
         <div style={{ flex: 1, height: 38, borderRadius: 19, background: T.inputBg, display: 'flex', alignItems: 'center', padding: '0 14px', fontSize: 14, color: T.muted }}>Message</div>
-        <div style={{ width: 38, height: 38, borderRadius: 19, background: '#7C5CFC', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Send size={16} color="#FFFFFF" /></div>
+        <div style={{ width: 38, height: 38, borderRadius: 19, background: '#1D7BF0', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Send size={16} color="#FFFFFF" /></div>
       </div>
     </div>
   );
@@ -1820,7 +1820,7 @@ export function SongArt({ song, size, radius }) {
 }
 export function StoryMusicSticker({ song, look, playing, waiting }) {
   const kind = SONG_LOOKS.includes(look) ? look : 'pill';
-  const pulse = waiting ? <Spinner size={12} color={kind === 'card' ? '#7C5CFC' : '#FFFFFF'} /> : playing ? <SongBars color={kind === 'card' ? '#7C5CFC' : '#FFFFFF'} size={12} /> : <MusicNoteIcon size={13} color={kind === 'card' ? '#7C5CFC' : '#FFFFFF'} />;
+  const pulse = waiting ? <Spinner size={12} color={kind === 'card' ? '#1D7BF0' : '#FFFFFF'} /> : playing ? <SongBars color={kind === 'card' ? '#1D7BF0' : '#FFFFFF'} size={12} /> : <MusicNoteIcon size={13} color={kind === 'card' ? '#7C5CFC' : '#FFFFFF'} />;
   const one = { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' };
   const glass = { background: 'rgba(22, 22, 28, 0.5)', backdropFilter: 'blur(14px) saturate(160%)', WebkitBackdropFilter: 'blur(14px) saturate(160%)', boxShadow: 'inset 0 0 0 0.5px rgba(255, 255, 255, 0.22), 0 8px 22px rgba(0, 0, 0, 0.22)' };
   if (kind === 'vinyl') {
@@ -2172,7 +2172,7 @@ export function LinkStickerPill({ sticker, onOpen }) {
 export function AddYoursCard({ sticker, count, people, onAdd, isMine }) {
   return (
     <div data-story-control onPointerDown={(e) => e.stopPropagation()} style={{ width: 270, maxWidth: '86%', borderRadius: 22, overflow: 'hidden', background: '#FFFFFF', color: '#111', boxShadow: '0 12px 34px rgba(0,0,0,0.35)', fontFamily: FONT, padding: '14px 16px 14px', textAlign: 'center', pointerEvents: 'auto' }}>
-      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 800, color: '#7C5CFC' }}><StatusIcon size={14} color="#7C5CFC" />Add yours</div>
+      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 800, color: '#1D7BF0' }}><StatusIcon size={14} color="#1D7BF0" />Add yours</div>
       <div data-zuser="" style={{ fontSize: 18, fontWeight: 900, lineHeight: 1.25, marginTop: 6, wordBreak: 'break-word' }}>{sticker.q}</div>
       {count > 0 && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 10, fontSize: 12.5, fontWeight: 700, color: '#6B6B76' }}>

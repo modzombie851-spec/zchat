@@ -1676,7 +1676,7 @@ function primeSong(song) {
 function StorySongTag({ song, playing, waiting, style }) {
   return (
     <div data-story-control style={{ display: 'inline-flex', alignItems: 'center', gap: 9, padding: '6px 12px 6px 6px', borderRadius: 16, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)', color: '#FFFFFF', maxWidth: 240, boxSizing: 'border-box', ...(style || {}) }}>
-      {song.art ? <img src={song.art} alt="" draggable={false} style={{ width: 34, height: 34, borderRadius: 9, objectFit: 'cover', flexShrink: 0 }} /> : <span style={{ width: 34, height: 34, borderRadius: 9, background: '#7C5CFC', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><MusicNoteIcon size={16} color="#FFFFFF" /></span>}
+      {song.art ? <img src={song.art} alt="" draggable={false} style={{ width: 34, height: 34, borderRadius: 9, objectFit: 'cover', flexShrink: 0 }} /> : <span style={{ width: 34, height: 34, borderRadius: 9, background: '#1D7BF0', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><MusicNoteIcon size={16} color="#FFFFFF" /></span>}
       <span style={{ minWidth: 0 }}>
         <span style={{ display: 'flex', alignItems: 'center', gap: 5, minWidth: 0 }}>{waiting ? <Spinner size={11} color="#FFFFFF" /> : playing && <SongBars color="#FFFFFF" size={11} />}<span style={{ fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{song.t}</span></span>
         <span style={{ display: 'block', fontSize: 11.5, opacity: 0.8, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{song.a || 'Song'}</span>

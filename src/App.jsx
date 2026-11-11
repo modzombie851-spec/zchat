@@ -461,6 +461,7 @@ async function rescueSession(uid) {
 
 
 export const ACCENT_PALETTES = {
+  blue: { label: 'Blue', coral: '#1D7BF0', coralDeep: '#1564C9', gold: '#8CC4FF', teal: '#00B89C', danger: '#ED4956', meDark: '#1C4C87', meLight: '#D8EAFF' },
   coral: { label: 'Violet', coral: '#7C5CFC', coralDeep: '#6B48F0', gold: '#B79CFF', teal: '#00C2A8', danger: '#ED4956', meDark: '#3D2F86', meLight: '#E4DCFF' },
   ocean: { label: 'Ocean', coral: '#2F7CF6', coralDeep: '#1F5FD6', gold: '#8DB8FF', teal: '#00C2A8', danger: '#ED4956', meDark: '#1D4A8E', meLight: '#D9E8FF' },
   rose: { label: 'Rose', coral: '#F0507A', coralDeep: '#D63A64', gold: '#FF9FBB', teal: '#00C2A8', danger: '#ED4956', meDark: '#7C2445', meLight: '#FFDDE7' },
@@ -468,42 +469,42 @@ export const ACCENT_PALETTES = {
   amber: { label: 'Amber', coral: '#E98A1B', coralDeep: '#C87211', gold: '#FFC56E', teal: '#00C2A8', danger: '#ED4956', meDark: '#6B420F', meLight: '#FFE8C8' },
   graphite: { label: 'Graphite', coral: '#5B6478', coralDeep: '#48506A', gold: '#A3ADC2', teal: '#00C2A8', danger: '#ED4956', meDark: '#363A45', meLight: '#E4E6EC' },
 };
-const ACCENT = ACCENT_PALETTES.coral;
+const ACCENT = ACCENT_PALETTES.blue;
 
 export const THEMES = {
   light: {
     bgGradient: '#FFFFFF',
-    glass: 'rgba(255,255,255,0.9)',
+    glass: 'rgba(255,255,255,0.92)',
     panelBg: '#FFFFFF',
-    border: 'rgba(0,0,0,0.09)',
-    ink: '#111113',
-    muted: '#6C6C72',
-    bubbleMe: '#E4DCFF',
-    bubbleThem: '#F1F0F5',
-    inputBg: '#F2F1F6',
+    border: 'rgba(0,0,0,0.1)',
+    ink: '#0F0F10',
+    muted: '#6E6E73',
+    bubbleMe: '#D8EAFF',
+    bubbleThem: '#EFEFEF',
+    inputBg: '#EFEFEF',
     rowBg: 'rgba(0,0,0,0.045)',
-    soft: '#F2F1F6',
-    soft2: '#E9E7EF',
-    ink2: '#3C3A44',
-    muted2: '#9A98A2',
-    hair: 'rgba(17,17,19,0.08)',
+    soft: '#EFEFEF',
+    soft2: '#E3E3E3',
+    ink2: '#363636',
+    muted2: '#A0A0A5',
+    hair: 'rgba(0,0,0,0.09)',
   },
   dark: {
-    bgGradient: '#0C0C0E',
-    glass: 'rgba(18,18,20,0.88)',
-    panelBg: '#17171A',
-    border: 'rgba(255,255,255,0.09)',
-    ink: '#F2F2F4',
-    muted: '#8E8E95',
-    bubbleMe: '#3D2F86',
-    bubbleThem: '#1F1F24',
-    inputBg: '#1D1C22',
-    rowBg: 'rgba(255,255,255,0.055)',
-    soft: '#1D1C22',
-    soft2: '#27262E',
-    ink2: '#D6D3E2',
-    muted2: '#67656F',
-    hair: 'rgba(255,255,255,0.09)',
+    bgGradient: '#000000',
+    glass: 'rgba(0,0,0,0.88)',
+    panelBg: '#141414',
+    border: 'rgba(255,255,255,0.1)',
+    ink: '#F5F5F5',
+    muted: '#A2A2A7',
+    bubbleMe: '#1C4C87',
+    bubbleThem: '#262626',
+    inputBg: '#1F1F1F',
+    rowBg: 'rgba(255,255,255,0.06)',
+    soft: '#1F1F1F',
+    soft2: '#2B2B2B',
+    ink2: '#DCDCDC',
+    muted2: '#6E6E73',
+    hair: 'rgba(255,255,255,0.1)',
   },
 };
 
@@ -742,13 +743,17 @@ function ThemeProvider({ children }) {
   }, [themeMode]);
   const [pureBlack, setPureBlackRaw] = useState(() => { try { return localStorage.getItem('zchat-pure-black') === '1'; } catch { return false; } });
   const setPureBlack = (v) => { setPureBlackRaw(!!v); try { localStorage.setItem('zchat-pure-black', v ? '1' : '0'); } catch {} };
-  const [accentCustom, setAccentCustomRaw] = useState(() => { try { const v = localStorage.getItem('zchat-accent-custom'); return /^#[0-9a-f]{6}$/i.test(v || '') ? v : '#7C5CFC'; } catch { return '#7C5CFC'; } });
+  const [accentCustom, setAccentCustomRaw] = useState(() => { try { const v = localStorage.getItem('zchat-accent-custom'); return /^#[0-9a-f]{6}$/i.test(v || '') ? v : '#1D7BF0'; } catch { return '#1D7BF0'; } });
   const setAccentCustom = (v) => { setAccentCustomRaw(v); try { localStorage.setItem('zchat-accent-custom', v); } catch {} };
   const dark = themeMode === 'auto' ? sysDark : themeMode === 'schedule' ? themeSchedDark(themeSched, clockTick) : themeMode === 'dark';
   const setThemeMode = (m) => { setThemeModeRaw(m); try { localStorage.setItem('zchat-theme-mode', m); } catch {} };
   const setDark = (v) => { const next = typeof v === 'function' ? v(dark) : v; setThemeMode(next ? 'dark' : 'light'); };
   const [accentName, setAccentName] = useState(() => {
-    try { return localStorage.getItem('zchat-accent') || 'coral'; } catch { return 'coral'; }
+    try {
+      const v = localStorage.getItem('zchat-accent');
+      if (localStorage.getItem('zchat-accent-v38') !== '1') { localStorage.setItem('zchat-accent-v38', '1'); if (!v || v === 'coral') return 'blue'; }
+      return v || 'blue';
+    } catch { return 'blue'; }
   });
   const [soundOn, setSoundOn] = useState(() => {
     try { return localStorage.getItem('zchat-sound') !== 'off'; } catch { return true; }
@@ -857,9 +862,9 @@ function ThemeProvider({ children }) {
       meta.setAttribute('content', bg);
     } catch {}
   }, [dark, pureBlack]);
-  const accent = accentName === 'custom' ? makeAccentPalette(accentCustom) : (ACCENT_PALETTES[accentName] || ACCENT_PALETTES.coral);
-  const pure = dark && pureBlack ? { bgGradient: '#000000', panelBg: '#0E0E10', glass: 'rgba(0,0,0,0.9)', soft: '#141417', soft2: '#1E1E22', inputBg: '#141417', bubbleThem: '#16161A', rowBg: 'rgba(255,255,255,0.06)' } : null;
-  const theme = { ...THEMES[dark ? 'dark' : 'light'], ...(pure || {}), ...accent, bubbleMe: dark ? (accent.meDark || THEMES.dark.bubbleMe) : (accent.meLight || THEMES.light.bubbleMe), accentSoft: mixHex(accent.coral, dark ? (pure ? '#000000' : '#0C0C0E') : '#FFFFFF', dark ? 0.2 : 0.12), dark, pureBlack: !!pure };
+  const accent = accentName === 'custom' ? makeAccentPalette(accentCustom) : (ACCENT_PALETTES[accentName] || ACCENT_PALETTES.blue);
+  const pure = dark && pureBlack ? { bgGradient: '#000000', panelBg: '#0E0E0E', glass: 'rgba(0,0,0,0.9)', soft: '#161616', soft2: '#202020', inputBg: '#161616', bubbleThem: '#1A1A1A', rowBg: 'rgba(255,255,255,0.06)' } : null;
+  const theme = { ...THEMES[dark ? 'dark' : 'light'], ...(pure || {}), ...accent, bubbleMe: dark ? (accent.meDark || THEMES.dark.bubbleMe) : (accent.meLight || THEMES.light.bubbleMe), accentSoft: mixHex(accent.coral, dark ? '#000000' : '#FFFFFF', dark ? 0.2 : 0.12), dark, pureBlack: !!pure };
   return (
     <ThemeContext.Provider value={{ theme, dark, setDark, themeMode, setThemeMode, themeSched, setThemeSched, pureBlack, setPureBlack, accentCustom, setAccentCustom, accentName, setAccentName, soundOn, setSoundOn, reactionSoundOn, setReactionSoundOn, bgPatternOn, setBgPatternOn, fontScale, setFontScale, bubbleColor, setBubbleColor, bubbleStyle, setBubbleStyle, keepTextStyle, setKeepTextStyle }}>
       {children}
@@ -1973,7 +1978,7 @@ function GlobalStyle() {
       @supports (height: 100dvh) { :root { --zfull: 100dvh; } }
       @keyframes zchat-float-up { 0% { transform: translateY(0) translateX(0); opacity: 0; } 10% { opacity: 1; } 100% { transform: translateY(-620px) translateX(18px); opacity: 0; } }
       .zchat-gbtn { transition: transform 0.07s ease, box-shadow 0.07s ease, filter 0.12s ease; -webkit-tap-highlight-color: transparent; }
-      .zchat-gbtn:active:not(:disabled) { transform: translateY(3px); box-shadow: 0 1px 0 var(--gb-edge, #C77800), 0 3px 6px rgba(0,0,0,0.18), inset 0 2px 0 rgba(255,255,255,0.4) !important; }
+      .zchat-gbtn:active:not(:disabled) { transform: scale(0.97); filter: brightness(0.94); }
       .zchat-gbtn:disabled { filter: grayscale(0.7) opacity(0.55); cursor: default !important; }
       @keyframes zchat-turn-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.07); } }
       .zchat-turn-pulse { animation: zchat-turn-pulse 1.4s ease-in-out 3; }
@@ -2029,7 +2034,7 @@ function GlobalStyle() {
       @keyframes zmap-in { from { opacity: 0; } to { opacity: 1; } }
       .zmap-in { animation: zmap-in 0.35s ease; }
       @keyframes zmap-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
-      .zmap-shimmer { background: linear-gradient(90deg, rgba(124,92,252,0) 0%, rgba(124,92,252,0.1) 50%, rgba(124,92,252,0) 100%); background-size: 200% 100%; animation: zmap-shimmer 1.4s linear infinite; }
+      .zmap-shimmer { background: linear-gradient(90deg, rgba(29,123,240,0) 0%, rgba(29,123,240,0.1) 50%, rgba(29,123,240,0) 100%); background-size: 200% 100%; animation: zmap-shimmer 1.4s linear infinite; }
       .zmap-glass { background: rgba(255,255,255,0.86); -webkit-backdrop-filter: blur(18px) saturate(1.6); backdrop-filter: blur(18px) saturate(1.6); box-shadow: 0 0 0 0.5px rgba(17,17,19,0.06), 0 6px 20px rgba(20,14,40,0.16); color: #111113; }
       .zmap-dark .zmap-glass { background: rgba(32,30,40,0.8); box-shadow: 0 0 0 0.5px rgba(255,255,255,0.08), 0 6px 20px rgba(0,0,0,0.3); color: #F2F2F4; }
       .zmap-fade-light { background: linear-gradient(to bottom, rgba(244,242,248,0.92) 0%, rgba(244,242,248,0.5) 45%, rgba(244,242,248,0) 100%); }
@@ -2038,7 +2043,7 @@ function GlobalStyle() {
       .zmap-pin { position: relative; display: flex; flex-direction: column; align-items: center; transform-origin: 50% 100%; transition: transform 0.18s ease; }
       .zmap-head { position: relative; width: 58px; height: 58px; border-radius: 50%; background: #FFFFFF; padding: 3px; box-sizing: border-box; box-shadow: 0 6px 16px rgba(20,14,40,0.28); }
       .zmap-tail { width: 16px; height: 9px; margin-top: -1px; background: #FFFFFF; clip-path: path('M0 0 H16 L9.4 7.6 Q8 9 6.6 7.6 Z'); filter: drop-shadow(0 2px 2px rgba(0,0,0,0.12)); }
-      .zmap-pin.unseen .zmap-head, .zmap-pin.unseen .zmap-tail { background: #7C5CFC; }
+      .zmap-pin.unseen .zmap-head, .zmap-pin.unseen .zmap-tail { background: #1D7BF0; }
       .zmap-pin.close .zmap-head, .zmap-pin.close .zmap-tail { background: #1DB954; }
       .zmap-pin.unseen .zmap-head > div, .zmap-pin.close .zmap-head > div { box-shadow: 0 0 0 2px #FFFFFF; border-radius: 50%; }
       .zmap-pin.small .zmap-head { width: 44px; height: 44px; padding: 2.5px; }
@@ -2047,16 +2052,16 @@ function GlobalStyle() {
       .zmap-dark .zmap-label { background: #17171A; color: #F2F2F4; }
       .zmap-dark .zmap-label span { color: #8E8E95; }
       .zmap-pin.sel { transform: scale(1.14); z-index: 9; }
-      .zmap-pin.sel .zmap-label { background: #7C5CFC; color: #FFFFFF; }
+      .zmap-pin.sel .zmap-label { background: #1D7BF0; color: #FFFFFF; }
       .zmap-pin.sel .zmap-label span { color: rgba(255,255,255,0.8); }
       .zmap-cap { display: flex; align-items: center; padding: 3px; border-radius: 30px; background: #FFFFFF; box-shadow: 0 6px 16px rgba(20,14,40,0.28); }
       .zmap-face { display: flex; border-radius: 50%; box-shadow: 0 0 0 2.5px #FFFFFF; }
       .zmap-face + .zmap-face { margin-left: -14px; }
-      .zmap-cnt { min-width: 26px; height: 26px; border-radius: 13px; background: #7C5CFC; color: #FFFFFF; font-size: 13px; font-weight: 800; display: flex; align-items: center; justify-content: center; margin: 0 4px 0 6px; padding: 0 7px; box-sizing: border-box; }
+      .zmap-cnt { min-width: 26px; height: 26px; border-radius: 13px; background: #1D7BF0; color: #FFFFFF; font-size: 13px; font-weight: 800; display: flex; align-items: center; justify-content: center; margin: 0 4px 0 6px; padding: 0 7px; box-sizing: border-box; }
       .zmap-me { position: relative; width: 22px; height: 22px; }
-      .zmap-halo { position: absolute; left: 50%; top: 50%; width: 92px; height: 92px; margin: -46px 0 0 -46px; border-radius: 50%; background: radial-gradient(circle, rgba(124,92,252,0.26) 0%, rgba(124,92,252,0.12) 55%, rgba(124,92,252,0) 72%); }
-      .zmap-ring { position: absolute; left: 50%; top: 50%; width: 46px; height: 46px; margin: -23px 0 0 -23px; border-radius: 50%; border: 1.5px solid rgba(124,92,252,0.45); }
-      .zmap-dot { position: absolute; inset: 0; border-radius: 50%; background: #7C5CFC; border: 3.5px solid #FFFFFF; box-sizing: border-box; box-shadow: 0 2px 8px rgba(40,20,120,0.45); display: flex; align-items: center; justify-content: center; }
+      .zmap-halo { position: absolute; left: 50%; top: 50%; width: 92px; height: 92px; margin: -46px 0 0 -46px; border-radius: 50%; background: radial-gradient(circle, rgba(29,123,240,0.26) 0%, rgba(29,123,240,0.12) 55%, rgba(29,123,240,0) 72%); }
+      .zmap-ring { position: absolute; left: 50%; top: 50%; width: 46px; height: 46px; margin: -23px 0 0 -23px; border-radius: 50%; border: 1.5px solid rgba(29,123,240,0.45); }
+      .zmap-dot { position: absolute; inset: 0; border-radius: 50%; background: #1D7BF0; border: 3.5px solid #FFFFFF; box-sizing: border-box; box-shadow: 0 2px 8px rgba(40,20,120,0.45); display: flex; align-items: center; justify-content: center; }
       .zmap-me.ghost .zmap-dot { background: #8E8E95; width: 26px; height: 26px; margin: -2px; }
       @keyframes zchat-emote-up { 0% { transform: translateY(0) scale(0.6); opacity: 0; } 15% { opacity: 1; transform: translateY(-20px) scale(1.15); } 100% { transform: translateY(-260px) scale(1); opacity: 0; } }
       @keyframes zchat-emote-down { 0% { transform: translateY(0) scale(0.6); opacity: 0; } 15% { opacity: 1; transform: translateY(20px) scale(1.15); } 100% { transform: translateY(260px) scale(1); opacity: 0; } }
@@ -2090,9 +2095,9 @@ function GlobalStyle() {
       @keyframes zchat-twinkle { 0%, 100% { opacity: 0.25; transform: scale(0.7); } 50% { opacity: 1; transform: scale(1.1); } }
       @keyframes zchat-gift-wobble { 0%, 100% { transform: rotate(0deg) translateY(0); } 20% { transform: rotate(-3deg) translateY(-3px); } 40% { transform: rotate(3deg) translateY(0); } 55% { transform: rotate(-2deg); } 70% { transform: rotate(0deg); } }
       .zchat-range { -webkit-appearance: none; appearance: none; width: 100%; height: 28px; margin: 0; background: transparent; cursor: pointer; touch-action: pan-y; }
-      .zchat-range::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(90deg, var(--zacc, #7C5CFC) var(--zfill, 0%), rgba(140,138,160,0.32) var(--zfill, 0%)); }
+      .zchat-range::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(90deg, var(--zacc, #1D7BF0) var(--zfill, 0%), rgba(140,138,160,0.32) var(--zfill, 0%)); }
       .zchat-range::-moz-range-track { height: 4px; border-radius: 2px; background: rgba(140,138,160,0.32); }
-      .zchat-range::-moz-range-progress { height: 4px; border-radius: 2px; background: var(--zacc, #7C5CFC); }
+      .zchat-range::-moz-range-progress { height: 4px; border-radius: 2px; background: var(--zacc, #1D7BF0); }
       .zchat-range::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 24px; height: 24px; margin-top: -10px; border-radius: 50%; background: #FFFFFF; border: none; box-shadow: 0 1px 2px rgba(0,0,0,0.18), 0 3px 10px rgba(0,0,0,0.16), 0 0 0 0.5px rgba(0,0,0,0.06); }
       .zchat-range::-moz-range-thumb { width: 24px; height: 24px; border-radius: 50%; background: #FFFFFF; border: none; box-shadow: 0 1px 2px rgba(0,0,0,0.18), 0 3px 10px rgba(0,0,0,0.16); }
       .zchat-range:active::-webkit-slider-thumb { transform: scale(1.08); }
@@ -12803,7 +12808,7 @@ function whenSplit(str, ctx, key) {
     const phrase = str.slice(w.s, w.e);
     out.push(
       <span key={`${key}-w${i}`} role="button" aria-label={`Set a reminder for ${phrase}`} onClick={(e) => { if (Date.now() - bubblePress.at < 900) return; e.stopPropagation(); hapticTap(); ctx.on({ at: w.at, phrase }); }}
-        style={{ textDecorationLine: 'underline', textDecorationStyle: 'solid', textDecorationThickness: '1.5px', textDecorationColor: 'rgba(124, 92, 252, 0.55)', textUnderlineOffset: '3px', cursor: 'pointer' }}>{phrase}</span>
+        style={{ textDecorationLine: 'underline', textDecorationStyle: 'solid', textDecorationThickness: '1.5px', textDecorationColor: 'rgba(29,123,240,0.55)', textUnderlineOffset: '3px', cursor: 'pointer' }}>{phrase}</span>
     );
     last = w.e;
   });
@@ -18534,7 +18539,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-export const APP_VERSION = '37.0V';
+export const APP_VERSION = '38.0V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -19193,7 +19198,7 @@ export const NAME_STYLES = {
   frost: { label: 'Frost', rarity: 'epic', price: 350, about: 'Icy blue with a cold glint passing over it.', solid: ['#0B6E9C', '#BFEFFF'] },
   gold: { label: 'Gold leaf', rarity: 'legendary', price: 600, about: 'Pressed gold with light sliding across it.', solid: ['#8A5E0B', '#FFD36B'] },
   chrome: { label: 'Chrome', rarity: 'legendary', price: 600, about: 'Polished metal with a bright reflection.', solid: ['#4E5666', '#E6EAF0'] },
-  holo: { label: 'Holo', rarity: 'legendary', price: 600, about: 'Holographic foil that shifts colour as it moves.', solid: ['#5B3FD6', '#D6C8FF'] },
+  holo: { label: 'Holo', rarity: 'legendary', price: 600, about: 'Holographic foil that shifts colour as it moves.', solid: ['#1564C9', '#D6C8FF'] },
   ocean: { label: 'Ocean', rarity: 'rare', price: 200, about: 'Deep sea blue with sunlight rippling through it.', solid: ['#0B4E96', '#6CC2FF'] },
   candy: { label: 'Candy', rarity: 'rare', price: 200, about: 'Sugar stripes that slide slowly along your name.', solid: ['#C8246A', '#FF9CC8'] },
   paper: { label: 'Paper', rarity: 'rare', price: 200, about: 'Printed ink with the soft grain of good paper.', solid: ['#2B2F45', '#F1E6CF'] },
@@ -22456,10 +22461,10 @@ function ProfileCollectionShowcase({ profile, rewards, isSelf, onOpenSet, onOpen
           <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.58)', fontWeight: 500 }}>{stats.pct}% collected, {formatCount(stats.owned)} {stats.owned === 1 ? 'item' : 'items'}</div>
         </div>
         {isSelf && onOpenCollection && (
-          <div role="button" onClick={() => onOpenCollection()} className="zchat-press" style={{ display: 'flex', alignItems: 'center', gap: 2, fontSize: 13.5, fontWeight: 650, color: '#B9A6FF', cursor: 'pointer', padding: '6px 4px' }}>Open<ChevronRight size={16} /></div>
+          <div role="button" onClick={() => onOpenCollection()} className="zchat-press" style={{ display: 'flex', alignItems: 'center', gap: 2, fontSize: 13.5, fontWeight: 650, color: '#6FB0F7', cursor: 'pointer', padding: '6px 4px' }}>Open<ChevronRight size={16} /></div>
         )}
         {!isSelf && onTrade && (
-          <div role="button" aria-label={`Trade items with ${first}`} onClick={() => { hapticTap(); onTrade(); }} className="zchat-press" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13.5, fontWeight: 650, color: '#B9A6FF', cursor: 'pointer', padding: '6px 4px' }}><TradeIcon size={16} strokeWidth={2} />Trade</div>
+          <div role="button" aria-label={`Trade items with ${first}`} onClick={() => { hapticTap(); onTrade(); }} className="zchat-press" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13.5, fontWeight: 650, color: '#6FB0F7', cursor: 'pointer', padding: '6px 4px' }}><TradeIcon size={16} strokeWidth={2} />Trade</div>
         )}
       </div>
       <div style={{ display: 'flex', gap: 10, overflowX: 'auto', padding: '0 14px 14px', WebkitOverflowScrolling: 'touch' }}>
@@ -23237,7 +23242,7 @@ export function PieceDots({ own, size = 13 }) {
 }
 
 export function CollPrice({ full, wearing, price, was, free, size = 14 }) {
-  if (wearing) return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: size - 1, fontWeight: 600, color: '#B9A6FF' }}><span style={{ width: 6, height: 6, borderRadius: 3, background: '#B9A6FF' }} />Wearing</span>;
+  if (wearing) return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: size - 1, fontWeight: 600, color: '#6FB0F7' }}><span style={{ width: 6, height: 6, borderRadius: 3, background: '#6FB0F7' }} />Wearing</span>;
   if (full) return <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: size - 1, fontWeight: 600, color: CL.own }}><Check size={size} strokeWidth={2.6} />Owned</span>;
   if (free) return <span style={{ fontSize: size - 1, fontWeight: 650, color: CL.gold }}>Free</span>;
   return (
@@ -23304,7 +23309,7 @@ export const SI_TYPING = [
   { key: 'shimmer', label: 'Name shimmer', price: 250, rarity: 'epic', about: 'Your name style shimmers in the bubble while you type.' },
 ];
 export const SI_TYPING_BY = Object.fromEntries(SI_TYPING.map((t) => [t.key, t]));
-export const NS_OWN_ITEM = { label: 'Custom', rarity: 'legendary', price: 600, about: 'Pick two or three colours, a motion and a weight for your name. It is yours to keep and changing it later is free.', solid: ['#5B3FD6', '#D6C8FF'], own: true };
+export const NS_OWN_ITEM = { label: 'Custom', rarity: 'legendary', price: 600, about: 'Pick two or three colours, a motion and a weight for your name. It is yours to keep and changing it later is free.', solid: ['#1564C9', '#D6C8FF'], own: true };
 export const NS_OWN_SAMPLE = 'own:7c5cfc.ff6fae.ffd36b.shimmer.8';
 export function nsOwnSaved() { try { const v = localStorage.getItem('zchat-own-style'); return nsOwn(v) ? v : null; } catch { return null; } }
 export function siSpec(kind, k) {
@@ -23425,7 +23430,7 @@ export function CxTile({ kind, k, me, status, tone, on, onOpen, cols = 2, covere
         <span style={{ flex: kind === 'namestyle' ? 1 : 'none', minWidth: 0, maxWidth: '100%', fontSize: kind === 'reaction' ? 13 : 14, fontWeight: 600, color: CL.ink, overflow: 'hidden', textAlign: kind === 'reaction' ? 'center' : 'left', ...(kind === 'reaction' ? { lineHeight: 1.25, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' } : { whiteSpace: 'nowrap', textOverflow: 'ellipsis' }) }}>{label}</span>
         {tone === 'coin'
           ? <CollPrice price={Number(status)} size={kind === 'reaction' ? 12.5 : 13} />
-          : status ? <span style={{ fontSize: 12.5, fontWeight: 600, color: tone === 'use' ? '#B9A6FF' : tone === 'own' ? CL.own : CL.gold, flexShrink: 0 }}>{status}</span> : null}
+          : status ? <span style={{ fontSize: 12.5, fontWeight: 600, color: tone === 'use' ? '#6FB0F7' : tone === 'own' ? CL.own : CL.gold, flexShrink: 0 }}>{status}</span> : null}
       </div>
     </div>
   );
@@ -23858,7 +23863,7 @@ function BagCard({ d, isMe, myId, peerName }) {
     : sender ? `${gfLeftText(b.expires_at).replace(/ left$/, '')} left to open it` : null;
   return (
     <GfCardShell>
-      <div style={{ position: 'relative', height: 104, display: 'flex', alignItems: 'center', justifyContent: 'center', background: theme.dark ? 'radial-gradient(120% 90% at 50% 30%, rgba(124,92,252,0.32), rgba(28,26,36,0) 70%)' : 'radial-gradient(120% 90% at 50% 30%, rgba(124,92,252,0.16), rgba(255,255,255,0) 70%)' }}>
+      <div style={{ position: 'relative', height: 104, display: 'flex', alignItems: 'center', justifyContent: 'center', background: theme.dark ? 'radial-gradient(120% 90% at 50% 30%, rgba(29,123,240,0.32), rgba(28,26,36,0) 70%)' : 'radial-gradient(120% 90% at 50% 30%, rgba(29,123,240,0.16), rgba(255,255,255,0) 70%)' }}>
         <div className={burst ? 'zchat-pop' : undefined}><CoinPouchArt size={92} open={!!mine || !!burst} /></div>
         {burst > 0 && <CoinBurst amount={burst} />}
       </div>
@@ -26222,7 +26227,7 @@ function WaTopCard({ imp, onOpen }) {
     <div style={{ display: 'flex', justifyContent: 'center', margin: '12px 0 14px' }}>
       <div role="button" aria-label={`Messages from WhatsApp, ${waCountText(imp.count)}`} onClick={onOpen} className="zchat-press"
         style={{ display: 'flex', alignItems: 'center', gap: 11, maxWidth: 'min(320px, 100%)', padding: '10px 12px 10px 10px', borderRadius: 18, background: theme.dark ? 'rgba(36,35,42,0.92)' : 'rgba(255,255,255,0.94)', boxShadow: theme.dark ? '0 0 0 1px rgba(255,255,255,0.07)' : '0 1px 3px rgba(20,16,40,0.12)', cursor: 'pointer' }}>
-        <span style={{ width: 36, height: 36, borderRadius: 18, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.coral, background: theme.dark ? 'rgba(124,92,252,0.18)' : 'rgba(124,92,252,0.1)' }}><WaImportIcon size={19} /></span>
+        <span style={{ width: 36, height: 36, borderRadius: 18, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.coral, background: theme.dark ? 'rgba(29,123,240,0.18)' : 'rgba(29,123,240,0.1)' }}><WaImportIcon size={19} /></span>
         <span style={{ minWidth: 0, flex: 1 }}>
           <span style={{ display: 'block', fontSize: 14, fontWeight: 700, color: theme.ink, lineHeight: 1.3 }}>Messages from WhatsApp</span>
           <span style={{ display: 'block', fontSize: 12, color: theme.muted, lineHeight: 1.35, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{waCountText(imp.count)}{range ? `, ${range}` : ''}</span>
@@ -27672,7 +27677,7 @@ export function SegmentedControl({ value, onChange, options, style, dense }) {
 }
 
 export function kitOnInk(theme) {
-  return theme.dark ? '#A895FF' : theme.coral;
+  return theme.dark ? mixHex(theme.coral, '#FFFFFF', 0.68) : theme.coral;
 }
 export function PickTiles({ options, value, onChange, label, size = 64, wrap = false, fit = false, bleed = 6, ringBg, style }) {
   const { theme } = useTheme();
@@ -31096,7 +31101,7 @@ function ProfileSongLine({ song, isSelf, onChange, onRemove }) {
           <span style={{ display: 'block', fontSize: 14, fontWeight: 700, letterSpacing: '-0.01em', color: theme.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{song.t}</span>
           <span style={{ display: 'block', fontSize: 12.5, color: theme.muted, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{song.a || 'Profile song'}</span>
         </span>
-        <span aria-hidden="true" style={{ width: 34, height: 34, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: playing ? accent : (theme.dark ? 'rgba(255,255,255,0.12)' : 'rgba(30,20,60,0.08)'), color: playing ? '#FFFFFF' : theme.ink, transition: 'background 0.2s' }}>
+        <span aria-hidden="true" style={{ width: 34, height: 34, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: playing ? accent : (theme.dark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)'), color: playing ? '#FFFFFF' : theme.ink, transition: 'background 0.2s' }}>
           {playing ? <SongBars color="#FFFFFF" size={13} /> : <span style={{ display: 'flex', marginLeft: 2 }}><LineGlyph k="play" size={14} sw={3} /></span>}
         </span>
       </div>
@@ -31223,7 +31228,7 @@ function PfCake({ id }) {
   if (!bd || !birthdayMdsToday().includes(bd.md)) return null;
   return <span role="img" aria-label="Birthday today" style={{ display: 'inline-flex', marginLeft: 2 }}><CakeIcon size={20} /></span>;
 }
-export function pfPillBg(theme) { return theme.dark ? 'rgba(255,255,255,0.075)' : 'rgba(30,20,60,0.055)'; }
+export function pfPillBg(theme) { return theme.dark ? 'rgba(255,255,255,0.075)' : 'rgba(0,0,0,0.055)'; }
 function PfPill({ icon, children, onClick, label, tone, extra }) {
   const { theme } = useTheme();
   const add = tone === 'add';
@@ -31901,7 +31906,7 @@ function CtMomentSheet({ c, m, onClose }) {
 }
 export function ctAlpha(hex, a) {
   const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || ''));
-  if (!m) return `rgba(124,92,252,${a})`;
+  if (!m) return `rgba(29,123,240,${a})`;
   const n = parseInt(m[1], 16);
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
 }
@@ -49278,6 +49283,65 @@ function WnGameUiArt({ tall = false }) {
   );
 }
 
+function WnLookArt({ tall = false }) {
+  const y0 = tall ? -30 : 6;
+  const H = tall ? 206 : 170;
+  return (
+    <>
+      <g transform={`translate(96 ${y0})`}>
+        <rect x="0" y="0" width="128" height={H} rx="18" fill="#FFFFFF" {...ak} strokeWidth="2.6" />
+        <rect x="12" y="14" width="44" height="7" rx="3.5" fill="#0F0F10" />
+        <circle cx="104" cy="17.5" r="5" fill="none" stroke="#0F0F10" strokeWidth="1.8" />
+        <rect x="12" y="30" width="104" height="14" rx="7" fill="#EFEFEF" />
+        {[0, 1, 2].map((i) => (
+          <g key={i} transform={`translate(12 ${54 + i * 26})`}>
+            <circle cx="9" cy="9" r="9" fill={['#F6C9A8', '#C9DFFF', '#D5F3E4'][i]} />
+            <rect x="24" y="3" width={[52, 40, 60][i]} height="5" rx="2.5" fill="#0F0F10" />
+            <rect x="24" y="12" width={[70, 56, 46][i]} height="4" rx="2" fill="#A0A0A5" />
+            {i === 0 && <circle cx="98" cy="9" r="4.5" fill="#1D7BF0" />}
+          </g>
+        ))}
+        <rect x="58" y={H - 52} width="58" height="18" rx="9" fill="#D8EAFF" />
+        <rect x="12" y={H - 30} width="50" height="18" rx="9" fill="#EFEFEF" />
+        <rect x="0" y={H - 4} width="128" height="1" fill="rgba(0,0,0,0.08)" />
+      </g>
+      <circle cx={tall ? 252 : 262} cy={tall ? 22 : 40} r="14" fill="#1D7BF0" stroke={ART_INK} strokeWidth="2.4" />
+      <path d={`M${tall ? 246 : 256} ${tall ? 22 : 40} l4 4 8 -8`} fill="none" stroke="#FFFFFF" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+    </>
+  );
+}
+function WnRollPadArt({ tall = false }) {
+  const pad = (x, y) => (
+    <g transform={`translate(${x} ${y})`}>
+      <rect x="0" y="0" width="74" height="34" rx="17" fill="rgba(0,0,0,0.3)" stroke="rgba(255,255,255,0.85)" strokeWidth="1.6" />
+      <rect x="37" y="1" width="36" height="32" rx="16" fill="rgba(255,255,255,0.28)" />
+      <path d="M22 17 h-9 m4 -5 l-5 5 5 5" fill="none" stroke="#FFFFFF" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M52 17 h9 m-4 -5 l5 5 -5 5" fill="none" stroke="#FFFFFF" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+    </g>
+  );
+  return (
+    <>
+      {tall ? <image href="/roll-art.webp" x="-14" y="-112" width="474" height="296" preserveAspectRatio="xMidYMid slice" /> : <image href="/roll-art.webp" x="16" y="-4" width="288" height="186" preserveAspectRatio="xMidYMid slice" />}
+      {pad(tall ? 40 : 28, tall ? 100 : 138)}
+      <circle cx={tall ? 262 : 280} cy={tall ? 117 : 154} r="19" fill="rgba(0,0,0,0.3)" stroke="rgba(255,255,255,0.9)" strokeWidth="2" />
+      <path d={`M${tall ? 262 : 280} ${tall ? 126 : 163} v-16 m-6 6 l6 -6 6 6`} fill="none" stroke="#FFFFFF" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+      {[[0, 0, 7], [-9, 4, 5], [9, 4, 5], [-4, 9, 4], [5, 9, 4]].map(([dx, dy, r], i) => <circle key={i} cx={(tall ? 150 : 160) + dx} cy={(tall ? 50 : 78) + dy} r={r} fill="rgba(255,255,255,0.85)" />)}
+    </>
+  );
+}
+function WnGulpBigArt({ tall = false }) {
+  return (
+    <>
+      {tall ? <image href="/gulp-art.webp" x="-140" y="-112" width="474" height="296" preserveAspectRatio="xMidYMid slice" /> : <image href="/gulp-art.webp" x="16" y="-4" width="288" height="186" preserveAspectRatio="xMidYMid slice" />}
+      <rect x={tall ? 30 : 16} y={tall ? -112 : -4} width={tall ? 260 : 288} height={tall ? 296 : 186} fill="rgba(6,30,60,0.22)" />
+      <g transform={`translate(160 ${tall ? -24 : 10})`}>
+        <rect x="-70" y="0" width="140" height="28" rx="14" fill="rgba(0,0,0,0.55)" />
+        <text x="0" y="18.5" textAnchor="middle" fontFamily={WN_FONT} fontWeight="900" fontSize="12.5" fill="#FFB347">1.2m <tspan fill="#FFFFFF" fontWeight="700" fontSize="10.5">Orca</tspan></text>
+      </g>
+    </>
+  );
+}
+
 export const WN_THUMBS = {
   gulp33: { bg: 'sky', draw: () => (<image href="/gulp-art.webp" x="16" y="-4" width="288" height="186" preserveAspectRatio="xMidYMid slice" />) },
   duo33: { bg: 'night', draw: () => (<image href="/duo-art.webp" x="16" y="-4" width="288" height="186" preserveAspectRatio="xMidYMid slice" />) },
@@ -49297,6 +49361,9 @@ export const WN_THUMBS = {
   pstory37: { bg: 'peach', draw: () => <WnPostStoryArt /> },
   gulp37: { bg: 'sky', draw: () => <WnGulpFairArt /> },
   ui37: { bg: 'night', draw: () => <WnGameUiArt /> },
+  look38: { bg: 'sky', draw: () => <WnLookArt /> },
+  roll38: { bg: 'sky', draw: () => <WnRollPadArt /> },
+  gulp38: { bg: 'sky', draw: () => <WnGulpBigArt /> },
   duo32: { bg: 'night', draw: () => (<>
     <rect x="16" y="128" width="288" height="60" fill="#3A2E24" />
     <path d="M118 132 V60 Q160 14 202 60 V132 Z" fill="#1E1626" {...ak} />
@@ -49870,6 +49937,9 @@ Object.assign(WN_SCENES, {
   pstory37h: { bg: 'peach', draw: () => <WnPostStoryArt tall /> },
   gulp37h: { bg: 'sky', draw: () => <WnGulpFairArt tall /> },
   ui37h: { bg: 'night', draw: () => <WnGameUiArt tall /> },
+  look38h: { bg: 'sky', draw: () => <WnLookArt tall /> },
+  roll38h: { bg: 'sky', draw: () => <WnRollPadArt tall /> },
+  gulp38h: { bg: 'sky', draw: () => <WnGulpBigArt tall /> },
 });
 
 function WnBoardPin({ x, y, color = ART_C.coral }) {
@@ -51744,7 +51814,7 @@ export function relLuminance(hex) {
   return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2];
 }
 export function makeAccentPalette(hex) {
-  const h = /^#[0-9a-f]{6}$/i.test(String(hex || '')) ? hex : '#7C5CFC';
+  const h = /^#[0-9a-f]{6}$/i.test(String(hex || '')) ? hex : '#1D7BF0';
   let coral = h;
   for (let i = 0; i < 14 && 1.05 / (relLuminance(coral) + 0.05) < 3.2; i++) coral = mixHex(coral, '#000000', 0.9);
   for (let i = 0; i < 14 && relLuminance(coral) < 0.045; i++) coral = mixHex(coral, '#FFFFFF', 0.9);
@@ -52720,7 +52790,7 @@ function DotsCard({ state, myId, live, peerName, onMove, onRematch, fresh }) {
   };
   const S = 196;
   const p = (i) => 14 + i * 56;
-  const edgeFill = (m) => (m ? colors[m] : (theme.dark ? 'rgba(255,255,255,0.13)' : 'rgba(30,20,60,0.13)'));
+  const edgeFill = (m) => (m ? colors[m] : (theme.dark ? 'rgba(255,255,255,0.13)' : 'rgba(0,0,0,0.13)'));
   const edges = [];
   for (let r = 0; r < 4; r++) for (let c = 0; c < 3; c++) { const i = r * 3 + c; edges.push(<rect key={`h${i}`} x={p(c) + 7} y={p(r) - 4} width="42" height="8" rx="4" fill={edgeFill(state.h[i])} role={myTurn && !state.h[i] ? 'button' : undefined} aria-label={myTurn && !state.h[i] ? `Line ${i + 1}` : undefined} data-silent="1" onClick={() => play('h', i)} style={{ cursor: myTurn && !state.h[i] ? 'pointer' : 'default' }} />); }
   for (let r = 0; r < 3; r++) for (let c = 0; c < 4; c++) { const i = r * 4 + c; edges.push(<rect key={`v${i}`} x={p(c) - 4} y={p(r) + 7} width="8" height="42" rx="4" fill={edgeFill(state.v[i])} role={myTurn && !state.v[i] ? 'button' : undefined} aria-label={myTurn && !state.v[i] ? `Line ${i + 13}` : undefined} data-silent="1" onClick={() => play('v', i)} style={{ cursor: myTurn && !state.v[i] ? 'pointer' : 'default' }} />); }
@@ -52816,7 +52886,7 @@ function HangCard({ state, myId, live, peerName, onMove, onRematch, fresh }) {
                 const used = guessed.includes(l);
                 const hit = used && word.includes(l);
                 return (
-                  <div key={l} role={used ? undefined : 'button'} aria-label={used ? undefined : `Guess ${l}`} data-silent="1" onClick={() => guess(l)} style={{ width: 22, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 900, textTransform: 'uppercase', cursor: used ? 'default' : 'pointer', marginBottom: 2, ...(used && !hit ? { borderRadius: 6, background: theme.dark ? 'rgba(255,255,255,0.05)' : 'rgba(30,20,60,0.06)' } : g3TileStyle(hit ? '#22C55E' : (theme.dark ? '#3B3561' : '#FFFFFF'), 6, 2)), color: hit ? 'white' : used ? theme.muted : theme.ink, opacity: used && !hit ? 0.5 : 1 }}>{l}</div>
+                  <div key={l} role={used ? undefined : 'button'} aria-label={used ? undefined : `Guess ${l}`} data-silent="1" onClick={() => guess(l)} style={{ width: 22, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 900, textTransform: 'uppercase', cursor: used ? 'default' : 'pointer', marginBottom: 2, ...(used && !hit ? { borderRadius: 6, background: theme.dark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.06)' } : g3TileStyle(hit ? '#22C55E' : (theme.dark ? '#3B3561' : '#FFFFFF'), 6, 2)), color: hit ? 'white' : used ? theme.muted : theme.ink, opacity: used && !hit ? 0.5 : 1 }}>{l}</div>
                 );
               })}
             </div>
@@ -53864,7 +53934,7 @@ function NumberGuessCard({ state, myId, live, peerName, onMove, onRematch, fresh
           const inRange = v >= lo && v <= hi;
           const isSecret = v === sv && showSecret;
           const can = canGuess && inRange && !guessed;
-          const bg = guessed ? (v === sv ? '#22C55E' : v < sv ? '#3B82F6' : '#F97316') : isSecret ? '#FBBF24' : inRange ? (theme.dark ? 'rgba(255,255,255,0.14)' : '#FFFFFF') : (theme.dark ? 'rgba(255,255,255,0.04)' : 'rgba(30,20,60,0.05)');
+          const bg = guessed ? (v === sv ? '#22C55E' : v < sv ? '#3B82F6' : '#F97316') : isSecret ? '#FBBF24' : inRange ? (theme.dark ? 'rgba(255,255,255,0.14)' : '#FFFFFF') : (theme.dark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.05)');
           return (
             <div key={v} role={can ? 'button' : undefined} aria-label={can ? `Guess ${v}` : undefined} data-silent="1" onClick={() => guess(v)} style={{ width: 20, height: 20, borderRadius: 5, background: bg, color: guessed || isSecret ? 'white' : inRange ? theme.ink : theme.muted, opacity: inRange || guessed || isSecret ? 1 : 0.45, fontSize: 9, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: can ? 'pointer' : 'default' }}>{v}</div>
           );
@@ -54617,7 +54687,7 @@ function BombCard({ state, myId, live, peerName, onMove, onRematch, fresh }) {
           return (
             <div key={i} role={can ? 'button' : undefined} aria-label={can ? `Box ${i + 1}` : undefined} data-silent="1" onClick={() => open(i)} className={can ? 'zchat-gbtn' : undefined} style={{
               width: 38, height: 38, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: can ? 'pointer' : 'default', '--gb-edge': '#B45309',
-              background: showBomb ? 'linear-gradient(180deg, #FCA5A5, #DC2626)' : opened ? (theme.dark ? 'rgba(255,255,255,0.06)' : 'rgba(30,20,60,0.06)') : 'linear-gradient(180deg, #FFE477, #F59E0B)',
+              background: showBomb ? 'linear-gradient(180deg, #FCA5A5, #DC2626)' : opened ? (theme.dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)') : 'linear-gradient(180deg, #FFE477, #F59E0B)',
               boxShadow: opened || showBomb ? 'inset 0 2px 4px rgba(0,0,0,0.25)' : '0 3px 0 #B45309, inset 0 2px 0 rgba(255,255,255,0.5)',
             }}>
               {showBomb ? <BombIcon size={22} /> : opened ? <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="#22C55E" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" /></svg> : <span style={{ fontSize: 16, fontWeight: 900, color: '#92400E' }}>?</span>}
@@ -55172,20 +55242,20 @@ function stableUuid(str) {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-${'89ab'[Math.floor(r() * 4)]}${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
 }
 const GAME_BTN_COLORS = {
-  gold: ['#FFE477', '#FFB700', '#C27400', '#5A3000'],
-  green: ['#7BEBA5', '#22C55E', '#15803D', '#FFFFFF'],
-  blue: ['#8CD5FF', '#3B82F6', '#1E40AF', '#FFFFFF'],
-  red: ['#FFA3AE', '#EF4444', '#A31B1B', '#FFFFFF'],
-  white: ['#FFFFFF', '#E8EAF0', '#A3A9B8', '#1F2433'],
-  purple: ['#A78BFA', '#7C5CFC', '#4C2FC4', '#FFFFFF'],
+  gold: ['#FFD54A', '#F7C53A', '#C99A12', '#1F1702'],
+  green: ['#2FC167', '#22B35A', '#15803D', '#FFFFFF'],
+  blue: ['#3B8DF5', '#1D7BF0', '#1E40AF', '#FFFFFF'],
+  red: ['#F25C5C', '#E5484D', '#A31B1B', '#FFFFFF'],
+  white: ['#FFFFFF', '#FFFFFF', '#A3A9B8', '#141414'],
+  purple: ['#3B8DF5', '#1D7BF0', '#1E40AF', '#FFFFFF'],
 };
 function gameBtnStyle(color = 'gold') {
   const c = GAME_BTN_COLORS[color] || GAME_BTN_COLORS.gold;
   return {
-    background: `linear-gradient(180deg, ${c[0]} 0%, ${c[1]} 100%)`, color: c[3], border: 'none', borderRadius: 14,
-    boxShadow: `0 4px 0 ${c[2]}, 0 8px 16px rgba(0,0,0,0.22), inset 0 2px 0 rgba(255,255,255,0.5)`, '--gb-edge': c[2],
-    fontWeight: 900, letterSpacing: '0.01em', textShadow: c[3] === '#FFFFFF' ? '0 1px 1px rgba(0,0,0,0.28)' : '0 1px 0 rgba(255,255,255,0.5)',
-    cursor: 'pointer', fontFamily: FONT, marginBottom: 4,
+    background: c[1], color: c[3], border: 'none', borderRadius: 12,
+    boxShadow: color === 'white' ? '0 1px 6px rgba(0,0,0,0.16), inset 0 0 0 1px rgba(0,0,0,0.06)' : '0 2px 8px rgba(0,0,0,0.16)', '--gb-edge': c[2],
+    fontWeight: 800, letterSpacing: '0.005em', textShadow: 'none',
+    cursor: 'pointer', fontFamily: FONT, marginBottom: 0,
   };
 }
 export function GameButton({ label, onClick, color = 'gold', full, small, disabled, style, ariaLabel, icon }) {
@@ -55948,7 +56018,7 @@ function CapsuleCard({ d, m, isMe, myId, senderName, onOpenImage }) {
             {peek ? <EyeOff size={15} /> : <Eye size={15} />}{peek ? 'Hide' : 'Peek'}
           </div>
           {peek && (
-            <div className="zchat-fade" style={{ marginTop: 8, padding: '10px 11px', borderRadius: 12, background: theme.dark ? 'rgba(124,92,252,0.13)' : 'rgba(124,92,252,0.07)' }}>
+            <div className="zchat-fade" style={{ marginTop: 8, padding: '10px 11px', borderRadius: 12, background: theme.dark ? 'rgba(29,123,240,0.13)' : 'rgba(29,123,240,0.07)' }}>
               {row ? (
                 <>
                   {row.body && <div style={{ fontSize: 14, lineHeight: 1.45, color: theme.ink, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}><RichText text={row.body} /></div>}
@@ -55971,7 +56041,7 @@ function CapsuleCard({ d, m, isMe, myId, senderName, onOpenImage }) {
   const sameDay = Number.isFinite(sentAt) && new Date(sentAt).toDateString() === new Date(openAt).toDateString();
   const sealedLine = !Number.isFinite(sentAt) ? `Opened ${shortDay(openAt)}` : sameDay ? `Sealed at ${fmtHM(new Date(sentAt))}, opened at ${fmtHM(new Date(openAt))}` : `Sealed ${shortDay(sentAt)}, opened ${shortDay(openAt)}`;
   const letter = (
-    <div className="zcap-letter" style={{ padding: '13px 13px 12px', background: theme.dark ? 'linear-gradient(180deg, rgba(124,92,252,0.10), rgba(124,92,252,0) 42%)' : 'linear-gradient(180deg, #FBF6EC, #FFFFFF 46%)' }}>
+    <div className="zcap-letter" style={{ padding: '13px 13px 12px', background: theme.dark ? 'linear-gradient(180deg, rgba(29,123,240,0.10), rgba(29,123,240,0) 42%)' : 'linear-gradient(180deg, #FBF6EC, #FFFFFF 46%)' }}>
       {label(isMe ? 'Your time capsule' : `Time capsule from ${fromName}`)}
       <div style={{ fontSize: 12, color: theme.muted, marginTop: 2 }}>{sealedLine}</div>
       {photo && (
@@ -57996,7 +58066,7 @@ function SkyHopGame({ seed, onDuelFinish } = {}) {
       roundRectFill(ctx, p.x - 4, p.top - 14, 54, 14, 5); roundRectFill(ctx, p.x - 4, p.top + GAP, 54, 14, 5);
       ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.fillRect(p.x + 6, -8, 4, p.top - 6); ctx.fillRect(p.x + 6, p.top + GAP + 14, 4, Math.max(0, H - p.top - GAP - 42));
     });
-    ctx.fillStyle = theme.dark ? '#2A2150' : '#D8B37A'; ctx.fillRect(0, H - 28, W, 28);
+    ctx.fillStyle = theme.dark ? '#10335C' : '#D8B37A'; ctx.fillRect(0, H - 28, W, 28);
     ctx.fillStyle = theme.dark ? '#3B2F6E' : '#8BD36B'; ctx.fillRect(0, H - 28, W, 5);
     ctx.save();
     ctx.translate(80, s.y);
@@ -58309,7 +58379,7 @@ function ReflexGame({ duel, onDuelFinish }) {
     }
   };
   const avg = runs.length ? Math.round(runs.reduce((a, b) => a + b, 0) / runs.length) : null;
-  const bg = phase === 'go' ? '#22C55E' : phase === 'wait' ? '#EF4444' : phase === 'early' ? '#F59E0B' : (theme.dark ? '#2A2150' : '#7C5CFC');
+  const bg = phase === 'go' ? '#22C55E' : phase === 'wait' ? '#EF4444' : phase === 'early' ? '#F59E0B' : (theme.dark ? '#10335C' : '#1D7BF0');
   const title = phase === 'idle' ? 'Tap to start' : phase === 'wait' ? 'Wait for green' : phase === 'go' ? 'Tap!' : phase === 'early' ? 'Too soon' : `${ms} ms`;
   const text = phase === 'idle' ? 'When the box turns green, tap as fast as you can.' : phase === 'wait' ? 'Hold on' : phase === 'go' ? '' : phase === 'early' ? 'Tap to try again' : (ms < 200 ? 'Lightning fast. Tap to go again' : ms < 300 ? 'Quick. Tap to go again' : 'Tap to go again');
   return (
@@ -59479,8 +59549,8 @@ Object.assign(FRIEND_GAME_SUBS, { roll: 'Live, up to four friends roll together'
 Object.assign(GAME_ART_BG, { roll: ['#6EC6FF', '#4FA83A'], duo: ['#3B2A48', '#120C1C'], gulp: ['#1C6FA8', '#082A4C'], gulpco: ['#1C6FA8', '#082A4C'], tug: ['#F97316', '#E11D48'], qrace: ['#7C3AED', '#2563EB'], rrace: ['#10B981', '#0EA5E9'] });
 Object.assign(GAME_RULES, {
   duo: { how: ['You carry the orange torch, your friend carries the blue one. Move with the joystick.', 'Orange walks through lava and fire. Blue wades through water, lights hidden stones and reads hidden codes.', 'Pull levers, hold doors on the plates, jump through glowing rings, cross spikes when they drop and keep moving on cracked floors.', 'Play the story or endless temples that are new every time. You share three hearts.', 'Talk with voice, quick messages and emojis. You can mute your friend any time.'], win: 'Stand on your own glowing doors at the same time to finish. Finish missions for stars.' },
-  gulp: { how: ['You are a small fish with the number 2. Swim with the joystick.', 'Touch fish with a number the same as yours or smaller to eat them and grow. Any part of you works, even your tail. Small fish swim away when you get close.', 'Fish with bigger numbers can eat you. Hunters chase you for a moment, then give up. Dash to get away.', 'Suck pulls the fish in front of you into your mouth. Grow bigger to unlock a shield, a shock wave and frenzy.', 'Grab bubbles for a shield, double food, a magnet or speed. If you are bigger than your friend you can eat them too.'], win: 'Grow up to 100k. Each of you has five lives and gets one back when you grow into a new fish. Whoever keeps their lives longer wins the round.' },
-  gulpco: { how: ['A fish room for up to ten friends. Anyone you invite can join or leave any time.', 'Swim with the joystick and eat fish with a number the same as yours or smaller.', 'Nobody eats anyone in the room. If a big fish gets you, you come back a bit smaller.', 'Turn your mic on to talk. Tap the people button to mute anyone.'], win: 'Grow together up to 100k and see who gets there first.' },
+  gulp: { how: ['You are a small fish with the number 2. Swim with the joystick.', 'Touch fish with a number the same as yours or smaller to eat them and grow. Any part of you works, even your tail. Small fish swim away when you get close.', 'Fish with bigger numbers can eat you. Hunters chase you for a moment, then give up. Dash to get away.', 'Suck pulls the fish in front of you into your mouth. Grow bigger to unlock a shield, a shock wave and frenzy.', 'Grab bubbles for a shield, double food, a magnet or speed. If you are bigger than your friend you can eat them too.'], win: 'Grow as big as you can, there is no top size. Each of you has five lives and gets one back when you grow into a new fish. Whoever keeps their lives longer wins the round.' },
+  gulpco: { how: ['A fish room for up to ten friends. Anyone you invite can join or leave any time.', 'Swim with the joystick and eat fish with a number the same as yours or smaller.', 'Nobody eats anyone in the room. If a big fish gets you, you come back a bit smaller.', 'Turn your mic on to talk. Tap the people button to mute anyone.'], win: 'Grow together and see who gets the biggest.' },
   roll: { how: ['Hold the arrows to roll your ball. Tap jump, hold it to jump higher.', 'Land on top of enemies to bop them. Spiky ones hurt from every side.', 'Springs throw you high. Flags save where you come back after a pop.', 'Some gates need two buttons pressed at the same time. Team up.', 'Grab coins and find the three stars hidden in every level.'], win: 'Everyone has to reach the portal to clear the level. There are five worlds with six levels each.' },
   tug: { how: ['You both play at the same moment. Open the game and wait for your friend to join.', 'When the countdown ends, tap the big button as fast as you can.', 'Every tap pulls the rope toward you.'], win: 'After 15 seconds, whoever pulled the rope to their side wins.' },
   qrace: { how: ['You both play at the same moment and see the same question together.', 'Tap the right answer before your friend does.', 'A wrong answer locks you out of that question.'], win: 'Seven questions. Whoever scores more wins.' },
@@ -61417,7 +61487,7 @@ function g1Art(k, id) {
         {grid.map((row, r) => row.split('').map((ch, c) => (ch === '#' ? null : (
           <g key={`${r}${c}`}>
             <rect x={49 + c * 12.4} y={15 + r * 12.4} width="11.6" height="11.6" fill={r === 0 ? '#FDE68A' : '#FFFFFF'} />
-            <text x={49 + c * 12.4 + 5.8} y={15 + r * 12.4 + 9} textAnchor="middle" fontFamily={FONT} fontWeight="900" fontSize="8" fill={c % 2 ? '#EA7317' : '#5B3FD6'}>{ch}</text>
+            <text x={49 + c * 12.4 + 5.8} y={15 + r * 12.4 + 9} textAnchor="middle" fontFamily={FONT} fontWeight="900" fontSize="8" fill={c % 2 ? '#EA7317' : '#1564C9'}>{ch}</text>
           </g>
         ))))}
       </g>
@@ -61787,14 +61857,14 @@ export function TypingStyleBubble({ k, who, dark, scale = 1, bg }) {
   const dot = (c, i, anim, size = 7) => <span key={i} style={{ width: size, height: size, borderRadius: '50%', background: c, display: 'block', animation: anim, animationDelay: `${i * 0.16}s` }} />;
   let inner = null;
   if (k === 'setdots') {
-    const a = set ? set.accent : '#9D86FF';
+    const a = set ? set.accent : '#6FB0F7';
     const b = set ? mixHex(set.accent, set.tint, 0.55) : '#7C5CFC';
     const c = set ? mixHex(set.accent, '#FFFFFF', 0.6) : '#C9BCFF';
     inner = <div style={{ display: 'flex', gap: 5 }}>{[a, b, c].map((col, i) => dot(col, i, 'zts-hop 1.2s ease-in-out infinite', 7.5))}</div>;
   } else if (k === 'pencil') {
     inner = (
       <svg width="40" height="18" viewBox="0 0 40 18" aria-hidden="true" style={{ display: 'block', overflow: 'visible' }}>
-        <path d="M4 12c3-5 5 3 8-1s5-4 7 0 5 3 7-1 4-3 6 0" fill="none" stroke={dark ? '#9D86FF' : '#7C5CFC'} strokeWidth="1.8" strokeLinecap="round" strokeDasharray="34" style={{ animation: 'zts-scribble 2.4s ease-in-out infinite' }} />
+        <path d="M4 12c3-5 5 3 8-1s5-4 7 0 5 3 7-1 4-3 6 0" fill="none" stroke={dark ? '#6FB0F7' : '#7C5CFC'} strokeWidth="1.8" strokeLinecap="round" strokeDasharray="34" style={{ animation: 'zts-scribble 2.4s ease-in-out infinite' }} />
         <g style={{ animation: 'zts-pen 2.4s ease-in-out infinite', transformOrigin: '20px 9px' }}>
           <g transform="translate(20 1) rotate(35)">
             <rect x="-2.2" y="0" width="4.4" height="11" rx="1" fill="#FFC94D" stroke={dark ? '#1C1730' : '#3B2A10'} strokeWidth="0.9" />
@@ -61819,7 +61889,7 @@ export function TypingStyleBubble({ k, who, dark, scale = 1, bg }) {
     const cs = dark ? ['#5BC0EB', '#6FCBEF', '#86D6F2', '#9EE0F5', '#B6EAF8'] : ['#1E88C8', '#2E96D2', '#40A4DB', '#53B1E3', '#67BEEA'];
     inner = <div style={{ display: 'flex', gap: 3.5 }}>{cs.map((c, i) => <span key={i} style={{ width: 5.5, height: 5.5, borderRadius: '50%', background: c, display: 'block', animation: 'zts-roll 1.1s ease-in-out infinite', animationDelay: `${i * 0.12}s` }} />)}</div>;
   } else if (k === 'pulse') {
-    const c = dark ? '#B9A6FF' : '#7C5CFC';
+    const c = dark ? '#6FB0F7' : '#7C5CFC';
     inner = (
       <div style={{ position: 'relative', width: 26, height: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <span style={{ position: 'absolute', width: 12, height: 12, borderRadius: '50%', border: `1.5px solid ${c}`, animation: 'zts-ring 1.8s ease-out infinite' }} />
@@ -62179,7 +62249,7 @@ function SharePreviewScreen({ landing: initialLanding, onAuth }) {
   const CARD = '#12141c';
   const LINE = 'rgba(255,255,255,0.09)';
   const MUTED = 'rgba(232,234,240,0.62)';
-  const BRAND = 'linear-gradient(135deg, #7C5CFC, #A78BFA)';
+  const BRAND = '#1D7BF0';
 
   useEffect(() => {
     const onPrompt = (e) => { e.preventDefault(); setDeferred(e); };
@@ -63251,7 +63321,7 @@ function PublicShell({ title, updated, intro, children, wide }) {
   };
   const maxW = wide ? 960 : 760;
   return (
-    <div style={{ position: 'fixed', inset: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain', background: 'radial-gradient(120% 60% at 50% -10%, rgba(124, 92, 252, 0.28) 0%, rgba(11, 10, 18, 0) 60%), #0B0A12', color: '#ECEAF4', fontFamily: FONT }}>
+    <div style={{ position: 'fixed', inset: 0, overflowY: 'auto', overflowX: 'hidden', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain', background: 'radial-gradient(120% 60% at 50% -10%, rgba(29,123,240,0.28) 0%, rgba(11, 10, 18, 0) 60%), #0B0A12', color: '#ECEAF4', fontFamily: FONT }}>
       <div style={{ position: 'sticky', top: 0, zIndex: 20, background: 'rgba(11, 10, 18, 0.78)', backdropFilter: 'blur(16px) saturate(160%)', WebkitBackdropFilter: 'blur(16px) saturate(160%)', boxShadow: 'inset 0 -0.5px 0 rgba(255, 255, 255, 0.08)' }}>
         <div style={{ maxWidth: maxW, margin: '0 auto', padding: '10px 14px 10px', paddingTop: 'calc(10px + env(safe-area-inset-top))' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -63676,7 +63746,7 @@ class ZChatErrorBoundary extends React.Component {
         <ZMark size={56} />
         <div style={{ fontSize: 18, fontWeight: 900 }}>ZChat had to stop</div>
         <div style={{ fontSize: 13.5, color: 'rgba(255,255,255,0.6)', maxWidth: 280, lineHeight: 1.5 }}>Nothing was lost. Your messages and account are safe.</div>
-        <button onClick={() => { try { window.location.reload(); } catch {} }} style={{ padding: '13px 26px', borderRadius: 14, border: 'none', background: '#7C5CFC', color: '#FFFFFF', fontWeight: 800, fontSize: 14.5, fontFamily: FONT, cursor: 'pointer' }}>Reopen ZChat</button>
+        <button onClick={() => { try { window.location.reload(); } catch {} }} style={{ padding: '13px 26px', borderRadius: 14, border: 'none', background: '#1D7BF0', color: '#FFFFFF', fontWeight: 800, fontSize: 14.5, fontFamily: FONT, cursor: 'pointer' }}>Reopen ZChat</button>
         <CrashDetails rec={this.state.rec} />
       </div>
     );

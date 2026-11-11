@@ -629,7 +629,7 @@ function backupHtml(data) {
   }).join('');
   const list = chats.map((c, ci) => `<a href="#c${ci}">${backupEsc(c.title)} <span>${c.messages.length}</span></a>`).join('');
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ZChat backup</title><style>
-body{margin:0;font:15px/1.4 system-ui,sans-serif;background:#f4f3f8;color:#16151c}header{padding:20px 16px;background:#7C5CFC;color:#fff}header h1{margin:0;font-size:22px}header p{margin:4px 0 0;opacity:.85}
+body{margin:0;font:15px/1.4 system-ui,sans-serif;background:#f4f3f8;color:#16151c}header{padding:20px 16px;background:#1D7BF0;color:#fff}header h1{margin:0;font-size:22px}header p{margin:4px 0 0;opacity:.85}
 nav{display:flex;flex-direction:column;gap:2px;padding:12px}nav a{display:flex;justify-content:space-between;padding:12px 14px;border-radius:12px;background:#fff;color:inherit;text-decoration:none;font-weight:600}nav a span{color:#8a8794;font-weight:500}
 section{max-width:720px;margin:0 auto;padding:12px}section h2{position:sticky;top:0;background:#f4f3f8;padding:10px 4px;margin:0;font-size:17px}
 .m{max-width:78%;margin:6px 0;padding:8px 12px;border-radius:16px;background:#fff;word-wrap:break-word}.m.me{margin-left:auto;background:#E4DCFF}.m p{margin:0;white-space:pre-wrap}.m b{display:block;font-size:12px;color:#6B48F0}.m s{display:block;text-decoration:none;font-size:11px;color:#8a8794;margin-top:3px}.m img,.m video{display:block;max-width:100%;border-radius:10px;margin:2px 0 4px}.m audio{width:240px;max-width:100%}
@@ -3431,7 +3431,7 @@ export function ReplyIdeasPanel({ ideas, onUse }) {
     document.addEventListener('pointerdown', away, true);
     return () => document.removeEventListener('pointerdown', away, true);
   }, []);
-  const soft = theme.dark ? 'rgba(124, 92, 252, 0.22)' : 'rgba(124, 92, 252, 0.12)';
+  const soft = theme.dark ? 'rgba(29,123,240,0.22)' : 'rgba(29,123,240,0.12)';
   const bubble = { alignSelf: 'flex-end', maxWidth: '86%', boxSizing: 'border-box', padding: '8px 13px', borderRadius: 18, borderBottomRightRadius: 5, background: soft, color: theme.ink, fontSize: 15, lineHeight: 1.32, wordBreak: 'break-word', whiteSpace: 'pre-wrap', boxShadow: `inset 0 0 0 1px ${theme.coral}33` };
   return (
     <div ref={boxRef} className="zchat-fade" role="dialog" aria-label="Reply ideas from ZChat Bot" style={{ flexShrink: 0, padding: '8px 14px 6px', background: theme.bgGradient, borderTop: `1px solid ${theme.hair || theme.border}` }}>
@@ -3781,7 +3781,7 @@ export function WaImportPage({ myId, me, peer, group, members, isAdmin, onClose,
           <IgHeading>How to export the chat</IgHeading>
           {WA_STEPS.map((t, i) => (
             <div key={t} style={{ display: 'flex', alignItems: 'flex-start', gap: 14, padding: '8px 0' }}>
-              <span style={{ width: 24, height: 24, borderRadius: 12, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12.5, fontWeight: 800, color: theme.coral, background: theme.dark ? 'rgba(124,92,252,0.18)' : 'rgba(124,92,252,0.1)' }}>{i + 1}</span>
+              <span style={{ width: 24, height: 24, borderRadius: 12, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12.5, fontWeight: 800, color: theme.coral, background: theme.dark ? 'rgba(29,123,240,0.18)' : 'rgba(29,123,240,0.1)' }}>{i + 1}</span>
               <span style={{ fontSize: 14.5, lineHeight: 1.45, color: theme.ink, paddingTop: 2 }}>{t}</span>
             </div>
           ))}
@@ -3836,7 +3836,7 @@ export function WaImportPage({ myId, me, peer, group, members, isAdmin, onClose,
       )}
       {step === 'done' && result && (
         <div style={{ padding: '34px 6px 10px', textAlign: 'center' }}>
-          <div style={{ width: 64, height: 64, borderRadius: 32, margin: '0 auto 14px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.coral, background: theme.dark ? 'rgba(124,92,252,0.18)' : 'rgba(124,92,252,0.1)' }}><Check size={30} strokeWidth={2.4} /></div>
+          <div style={{ width: 64, height: 64, borderRadius: 32, margin: '0 auto 14px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: theme.coral, background: theme.dark ? 'rgba(29,123,240,0.18)' : 'rgba(29,123,240,0.1)' }}><Check size={30} strokeWidth={2.4} /></div>
           <div style={{ fontSize: 17, fontWeight: 800, color: theme.ink }}>{waCountText(result.count)} brought over</div>
           <div style={{ fontSize: 13.5, color: theme.muted, lineHeight: 1.5, margin: '6px 8px 22px' }}>They are at the top of this chat now, under Messages from WhatsApp.</div>
           <BigButton label="View them" onClick={() => onView(result)} />
@@ -4027,7 +4027,7 @@ export function WaImportViewer({ imp, myId, onClose }) {
               return (
                 <React.Fragment key={r.seq}>
                   {day && <DayDivider label={dayDividerLabel(r.sent_at)} />}
-                  <div data-wa-seq={r.seq} style={{ alignSelf: 'center', maxWidth: '86%', fontSize: 12.5, color: theme.muted, textAlign: 'center', lineHeight: 1.45, padding: '4px 10px', margin: '4px 0', borderRadius: 10, background: mark === r.seq ? (theme.dark ? 'rgba(124,92,252,0.25)' : 'rgba(124,92,252,0.14)') : 'transparent', wordBreak: 'break-word' }}>{r.body}</div>
+                  <div data-wa-seq={r.seq} style={{ alignSelf: 'center', maxWidth: '86%', fontSize: 12.5, color: theme.muted, textAlign: 'center', lineHeight: 1.45, padding: '4px 10px', margin: '4px 0', borderRadius: 10, background: mark === r.seq ? (theme.dark ? 'rgba(29,123,240,0.25)' : 'rgba(29,123,240,0.14)') : 'transparent', wordBreak: 'break-word' }}>{r.body}</div>
                 </React.Fragment>
               );
             }

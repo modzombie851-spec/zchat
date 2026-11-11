@@ -394,7 +394,7 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
       case 'pick': if (remote && e.who === mine) break; Sfx.play('pick', { vol: 0.7 }); burst(P, e.x, e.y, '#BFEFFF', 12); if (e.who === mine) { if (levelRef.current) levelRef.current.picks += 1; if (missRef.current) missRef.current.picks += 1; note({ shield: 'Shield', double: 'Double food', magnet: 'Magnet', speed: 'Speed boost', life: 'Extra life' }[e.kind] || 'Power up', '#9BE7FF'); } break;
       case 'hunt': if (e.who === mine) { Sfx.play('alert', { vol: 0.7, gap: 1.5 }); try { hapticTap(); } catch {} } break;
       case 'spawn': if (e.who === mine) { Sfx.play('pop', { vol: 0.6 }); cam.current.init = false; } break;
-      case 'evolve': if (e.who === mine) { Sfx.play('evolve', { vol: 0.9, force: true }); const st = STAGES[e.st]; const sk = SKILL_KEYS.find((k) => SKILLS[k].stage === e.st); showBanner({ title: `You are now a ${st.name}`, sub: sk ? `New skill: ${SKILLS[sk].name}` : 'Your skills got stronger', col: '#FFE15A' }, 2.8); const p = G.pl[mine]; if (p) { ring(P, p.x, p.y, rOf(p.n) * 4, '#FFE15A'); burst(P, p.x, p.y, '#FFE15A', 30, 2); } } break;
+      case 'evolve': if (e.who === mine) { Sfx.play('evolve', { vol: 0.9, force: true }); const st = STAGES[e.st]; const sk = SKILL_KEYS.find((k) => SKILLS[k].stage === e.st); showBanner({ title: `You are now ${/^[AEIOU]/i.test(st.name) ? 'an' : 'a'} ${st.name}`, sub: sk ? `New skill: ${SKILLS[sk].name}` : 'Your skills got stronger', col: '#FFE15A' }, 2.8); const p = G.pl[mine]; if (p) { ring(P, p.x, p.y, rOf(p.n) * 4, '#FFE15A'); burst(P, p.x, p.y, '#FFE15A', 30, 2); } } break;
       case 'feast': if (near(e.x, e.y)) { bits(P, e.x, e.y, '#FF9A9A', 6, 0.5); Sfx.play('chomp', { vol: 0.25, gap: 0.3 }); } break;
       default: break;
     }
@@ -847,7 +847,6 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
       render(cv.getContext('2d'), G, { cw, ch, dpr, s, ox, oy, mine: isWatch ? followRef.current : mine, names: names(), bubbles: bubblesRef.current, parts: partsRef.current, hidden: H ? null : hiddenRef.current, safeTop: 28, safeBottom: 28, keep: KR.list, mics: micsRef.current });
       const mc = miniRef.current;
       if (mc && mc.isConnected) { const md = Math.min(2, window.devicePixelRatio || 1); const rw2 = mc.clientWidth || 100; if (mc.width !== Math.round(rw2 * md)) { mc.width = Math.round(rw2 * md); mc.height = Math.round(rw2 * md); } const x2 = mc.getContext('2d'); x2.setTransform(md, 0, 0, md, 0, 0); drawRadar(x2, G, isWatch ? followRef.current : mine, rw2, rw2, { x: cx, y: cy, hw: halfW, hh: halfH }); }
-      if (!isWatch && meP.n >= MAXN && !topRef.current) { topRef.current = true; showBanner({ title: 'Top size reached', sub: 'You are the biggest fish in the sea', col: '#FFE15A' }, 3); Sfx.play('star', { vol: 0.8 }); }
       const place = placeName(meP.x, meP.y);
       const otherK = isWatch ? (followRef.current === 'sun' ? 'moon' : 'sun') : isDuel ? theirs : null;
       const other = otherK ? G.pl[otherK] : null;
@@ -929,14 +928,13 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
   const barW = Math.max(150, W - barL - barR);
   const barX = land ? clamp(W / 2 - 150, barL, Math.max(barL, W - barR - 300)) : barL;
   const hearts = (n, max, size) => Array.from({ length: max }, (_, i) => <GIcon key={i} k="heart" size={size} color={i < n ? '#FF5A6E' : 'rgba(255,255,255,0.22)'} ink="rgba(0,0,0,0.35)" />);
-  const topSize = hud.n >= MAXN;
   const topBar = (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14, padding: '4px 34px 6px', background: 'linear-gradient(90deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.5) 18%, rgba(0,0,0,0.5) 82%, rgba(0,0,0,0) 100%)', color: '#FFFFFF', fontFamily: FONT, textShadow: shadow, whiteSpace: 'nowrap' }}>
       {!isRoom && <span style={{ display: 'flex', gap: 1.5 }}>{hearts(hud.lives, heartsMax, 11)}</span>}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, minWidth: 96 }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
           <span style={{ fontSize: 17, fontWeight: 900, color: myCol, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{fmtN(hud.n)}</span>
-          <span style={{ fontSize: 10.5, fontWeight: 700, color: 'rgba(255,255,255,0.78)' }}>{topSize ? 'Top size' : stage.name}</span>
+          <span style={{ fontSize: 10.5, fontWeight: 700, color: 'rgba(255,255,255,0.78)' }}>{stage.name}</span>
         </div>
         <span style={{ width: 100, height: 3, borderRadius: 2, background: 'rgba(255,255,255,0.2)', overflow: 'hidden' }}><span style={{ display: 'block', width: `${prog * 100}%`, height: '100%', background: myCol, transition: 'width 0.3s' }} /></span>
       </div>
@@ -1241,7 +1239,7 @@ export function GulpGamePage({ solo = false, initial, me, peer, myId, onClose, o
                   ['#C8FFB0', 'Green numbers are food', 'Touch any fish with a number the same or smaller than yours to eat it and grow. Even your tail works. Small fish swim away when you get close, so use Suck or Dash.'],
                   ['#FF9A9A', 'Red numbers eat you', 'Hunters show a red mark, then chase you for a moment and give up. Dash away or hide.'],
                   ['#C08BFF', 'Suck', 'Pulls every fish you can eat near your mouth straight in.'],
-                  ['#FFE15A', 'Grow into a whale', 'Grow from a tiny guppy into a whale and unlock a shield, a shock wave and frenzy. 100k is the top size.'],
+                  ['#FFE15A', 'No top size', 'Grow from a tiny guppy into a whale, an orca and beyond, and unlock a shield, a shock wave and frenzy. The bigger you get, the slower you grow and the more hunters come for you.'],
                   ['#7FD4FF', 'Levels', 'Each level has its own goal, like growing to a size or eating a number of fish. Finish fast for three stars.'],
                   ['#FFD23F', 'Treasure and gold', 'Chests sit on the sea floor. Swim into one for food and a power up. A golden fish shows up now and then. Catch it for a huge boost.'],
                   ['#9BE7FF', 'Currents', 'Streaks in the water push you along. Ride them to cross the sea fast.'],

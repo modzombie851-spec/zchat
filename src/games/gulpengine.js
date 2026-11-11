@@ -1,7 +1,7 @@
 export const WW = 1600;
 export const WH = 420;
 export const LIVES = 5;
-export const MAXN = 100000;
+export const MAXN = 1e15;
 export const TAU = Math.PI * 2;
 export const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 export const PK_KINDS = ['shield', 'double', 'magnet', 'speed', 'life'];
@@ -14,6 +14,10 @@ export const STAGES = [
   { n: 1500, name: 'Barracuda', sp: 'barra' },
   { n: 12000, name: 'Shark', sp: 'shark' },
   { n: 60000, name: 'Whale', sp: 'whale' },
+  { n: 300000, name: 'Orca', sp: 'orca' },
+  { n: 2000000, name: 'Megalodon', sp: 'shark' },
+  { n: 15000000, name: 'Kraken', sp: 'squid' },
+  { n: 100000000, name: 'Leviathan', sp: 'whale' },
 ];
 export const SKILLS = {
   dash: { cd: 2.4, stage: 0, name: 'Dash' },
@@ -46,12 +50,13 @@ export const SPECIES = [
 export const SP_INDEX = Object.fromEntries(SPECIES.map((s, i) => [s.id, i]));
 const PREY_IDS = ['minnow', 'guppy', 'clown', 'tang', 'angel', 'puffer', 'snapper', 'tuna', 'lantern', 'squid', 'jelly', 'whale'];
 const HUNTER_IDS = ['barra', 'shark', 'angler', 'orca'];
-export const PLAYER_SP = ['guppy', 'clown', 'snapper', 'barra', 'shark', 'whale'];
+export const PLAYER_SP = ['guppy', 'clown', 'snapper', 'barra', 'shark', 'whale', 'orca', 'shark', 'squid', 'whale'];
 
 export function rOf(n) {
   const v = Math.max(1, n);
   if (v <= 10000) return 0.17 * Math.pow(v, 0.45);
-  return 0.17 * Math.pow(10000, 0.45) * Math.pow(v / 10000, 0.2);
+  if (v <= 1e6) return 0.17 * Math.pow(10000, 0.45) * Math.pow(v / 10000, 0.2);
+  return 0.17 * Math.pow(10000, 0.45) * Math.pow(100, 0.2) * Math.pow(v / 1e6, 0.08);
 }
 export function viewOf(n) { const r = rOf(n); return Math.min(230, r <= 6 ? 3.4 + 10 * r : 63.4 + 6.5 * (r - 6)); }
 export function speedOf(n) { return viewOf(n) * (0.6 - 0.045 * Math.log10(Math.max(1, n))); }
@@ -104,7 +109,7 @@ export function currentAt(x, y) {
 }
 export const CHEST_X = [120, 395, 772, 834, 1190, 1310, 1540];
 export const canOpen = (p, ch) => !p.out && p.dead <= 0 && ch.cool <= 0 && Math.hypot(p.x - ch.x, p.y - ch.y) < rOf(p.n) * 1.1 + 2;
-export const chestGain = (p) => Math.max(0, Math.min(MAXN - p.n, Math.max(8, Math.floor(p.n * 0.08))));
+export const chestGain = (p) => Math.max(0, Math.min(MAXN - p.n, Math.max(6, Math.floor(p.n * 0.05))));
 
 export function mkPl(kind, name, x, y) {
   return {
@@ -245,11 +250,11 @@ export function spawnFish(G, initial, anchor) {
   const hk = G.cfg ? G.cfg.hunt : 1;
   let bigNear = 0, huntNear = 0;
   for (const f of G.fish) { if (f.n <= n * 1.08) continue; if (Math.hypot(f.x - P.x, f.y - P.y) < V * 1.7) { bigNear++; if (f.hunter) huntNear++; } }
-  const maxH = (P.stage >= 4 ? 2 : 1) + (hk > 1.5 ? 1 : 0);
-  const maxBig = 2 + (hk > 1.5 ? 1 : 0);
+  const maxH = (P.stage >= 3 ? 2 : 1) + (P.stage >= 6 ? 1 : 0) + (hk > 1.5 ? 1 : 0);
+  const maxBig = 2 + (P.stage >= 5 ? 1 : 0) + (hk > 1.5 ? 1 : 0);
   const q = (a, b) => Math.max(1, Math.round(n * (a + R() * (b - a))));
   const top = preyTop(n), low = top / 7;
-  if (!initial && roll < 0.05 * hk && huntNear < maxH && bigNear < maxBig + 1 && G.t > (hk > 1.5 ? 6 : 15)) {
+  if (!initial && roll < 0.065 * hk && huntNear < maxH && bigNear < maxBig + 1 && G.t > (hk > 1.5 ? 6 : 12)) {
     const sp = pickSpecies(G, zone, 'hunter');
     return addFish(G, sp, Math.max(n + 3, q(1.4, 2.2)), x, y, R() * TAU);
   }
@@ -471,12 +476,12 @@ function respawn(G, p) {
   if (p.nb) p.nb.buf.length = 0;
   ev(G, { k: 'spawn', who: p.kind });
 }
-const STAGE_GAIN = [1, 0.75, 0.5, 0.36, 0.27, 0.22];
+const STAGE_GAIN = [0.6, 0.42, 0.28, 0.2, 0.15, 0.11, 0.085, 0.07, 0.055, 0.045];
 export function gainFor(p, n) {
   const mult = (p.fx.double > 0 ? 2 : 1) * (p.fx.frenzy > 0 ? 1.5 : 1) * (p.bot ? 0.6 : 1);
   const bonus = p.combo >= 3 ? 1 + Math.min(0.25, (p.combo - 2) * 0.04) : 1;
-  const g = Math.max(1, Math.floor(n * mult * bonus * STAGE_GAIN[Math.min(5, p.stage || 0)]));
-  return Math.max(0, Math.min(g, Math.max(3, Math.ceil(p.n * 0.1)), MAXN - p.n));
+  const g = Math.max(1, Math.floor(n * mult * bonus * STAGE_GAIN[Math.min(STAGE_GAIN.length - 1, p.stage || 0)]));
+  return Math.max(0, Math.min(g, Math.max(2, Math.ceil(p.n * 0.045)), MAXN - p.n));
 }
 function feed(G, p, gain) { p.sto = 0; grow(G, p, gain); }
 function grow(G, p, gain) {
@@ -490,7 +495,7 @@ function grow(G, p, gain) {
     ev(G, { k: 'evolve', who: p.kind, st });
   }
 }
-export function eatGain(p, f) { const g = gainFor(p, f.n); return f.gold ? Math.min(MAXN - p.n, Math.max(g, Math.floor(p.n * 0.15), 12)) : g; }
+export function eatGain(p, f) { const g = gainFor(p, f.n); return f.gold ? Math.min(MAXN - p.n, Math.max(g, Math.floor(p.n * 0.1), 10)) : g; }
 export function eatFish(G, p, f) {
   const i = G.fish.indexOf(f);
   if (i < 0) return false;

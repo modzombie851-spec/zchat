@@ -1136,7 +1136,7 @@ export function GiftSheet({ uid, me, to, onClose, onSent, start, onAsk }) {
                       const p = k === 'set' ? decorPartPrice(set.key) * 3 : decorPartPrice(set.key);
                       return (
                         <div key={k} role="radio" aria-checked={on} aria-label={`${l}, ${p} coins`} onClick={() => { setPart(k); hapticTap(); }} className="zchat-press"
-                          style={{ minWidth: 0, borderRadius: 14, padding: '9px 4px 8px', cursor: 'pointer', background: on ? (theme.dark ? 'rgba(124,92,252,0.22)' : '#EEE9FF') : theme.soft, boxShadow: on ? `inset 0 0 0 1.5px ${theme.coral}` : 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                          style={{ minWidth: 0, borderRadius: 14, padding: '9px 4px 8px', cursor: 'pointer', background: on ? (theme.dark ? 'rgba(29,123,240,0.22)' : '#E3EFFF') : theme.soft, boxShadow: on ? `inset 0 0 0 1.5px ${theme.coral}` : 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
                           {k === 'set' ? <span style={{ display: 'inline-flex', gap: 2 }}><PieceGlyph k="frame" size={14} color={on ? theme.coral : theme.ink2} /><PieceGlyph k="nameplate" size={14} color={on ? theme.coral : theme.ink2} /><PieceGlyph k="effect" size={14} color={on ? theme.coral : theme.ink2} /></span> : <PieceGlyph k={k} size={18} color={on ? theme.coral : theme.ink2} />}
                           <div style={{ fontSize: 12.5, fontWeight: 700, color: theme.ink, whiteSpace: 'nowrap' }}>{l}</div>
                           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11.5, fontWeight: 600, color: theme.muted }}><CoinIcon size={11} />{p}</div>
@@ -1219,7 +1219,7 @@ function LiveWallStage({ k, me, dark }) {
   const spec = LIVE_WALL_BY[k];
   if (!spec) return null;
   const bub = (mine, text) => (
-    <div style={{ alignSelf: mine ? 'flex-end' : 'flex-start', maxWidth: '76%', padding: '8px 12px', borderRadius: 18, [mine ? 'borderBottomRightRadius' : 'borderBottomLeftRadius']: 6, background: mine ? '#7C5CFC' : (dark ? 'rgba(30,30,36,0.9)' : 'rgba(255,255,255,0.95)'), color: mine ? '#FFFFFF' : (dark ? '#F4F4F6' : '#111113'), fontSize: 14, lineHeight: 1.35 }}>{text}</div>
+    <div style={{ alignSelf: mine ? 'flex-end' : 'flex-start', maxWidth: '76%', padding: '8px 12px', borderRadius: 18, [mine ? 'borderBottomRightRadius' : 'borderBottomLeftRadius']: 6, background: mine ? '#1D7BF0' : (dark ? 'rgba(30,30,36,0.9)' : 'rgba(255,255,255,0.95)'), color: mine ? '#FFFFFF' : (dark ? '#F4F4F6' : '#111113'), fontSize: 14, lineHeight: 1.35 }}>{text}</div>
   );
   return (
     <div style={{ position: 'relative', borderRadius: 22, overflow: 'hidden', height: 360, background: liveWallBg(spec, dark), boxShadow: `inset 0 0 0 1px ${dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}` }}>
@@ -3088,7 +3088,7 @@ export function GiftUnwrapPage({ entry, me, onOpened, onClose, onThank, onWear, 
             <div style={{ fontSize: 23, fontWeight: 800, marginTop: 14, letterSpacing: '-0.01em' }}>{isV ? 'ZChat Verified' : g.kind === 'coins' ? (names.length > 1 ? 'Coins from your friends' : 'Coins from a friend') : shopItemName(g.kind === 'set' || g.kind === 'frame' || g.kind === 'nameplate' || g.kind === 'effect' ? 'set' : g.kind, g.key)}</div>
             <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.62)', marginTop: 4, lineHeight: 1.45, maxWidth: 320 }}>{isV ? (g.until ? `Your badge is on until ${fmtDate(new Date(g.until), { month: 'long', day: 'numeric' })}. If you pay for Verified yourself, you can stop your plan and keep the badge until then.` : 'Your badge is on for a month.') : g.kind === 'coins' ? 'Spend them in the Shop or send them on.' : g.kind === 'reaction' ? 'It is yours to keep. Hold any message to send it.' : `It is yours to keep${g.kind === 'set' ? ', with its profile effect' : ''}.`}</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%', marginTop: 22 }}>
-              {canWear && <button type="button" disabled={busy} onClick={wear} className="zchat-press" style={{ height: 52, borderRadius: 15, border: 'none', background: '#7C5CFC', color: '#FFFFFF', fontFamily: FONT, fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>{g.kind === 'bubble' || g.kind === 'charm' || cxg ? 'Use it now' : 'Wear it now'}</button>}
+              {canWear && <button type="button" disabled={busy} onClick={wear} className="zchat-press" style={{ height: 52, borderRadius: 15, border: 'none', background: '#1D7BF0', color: '#FFFFFF', fontFamily: FONT, fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>{g.kind === 'bubble' || g.kind === 'charm' || cxg ? 'Use it now' : 'Wear it now'}</button>}
               {from && <button type="button" disabled={busy || thanked} onClick={thank} className="zchat-press" style={{ height: 50, borderRadius: 15, border: 'none', background: 'rgba(255,255,255,0.12)', color: '#FFFFFF', fontFamily: FONT, fontSize: 15.5, fontWeight: 650, cursor: thanked ? 'default' : 'pointer' }}>{thanked ? `Thanks sent to ${first}` : `Say thanks to ${first}`}</button>}
               <button type="button" onClick={onClose} className="zchat-press" style={{ height: 44, borderRadius: 14, border: 'none', background: 'transparent', color: 'rgba(255,255,255,0.7)', fontFamily: FONT, fontSize: 15, fontWeight: 600, cursor: 'pointer' }}>Done</button>
             </div>
@@ -3440,7 +3440,7 @@ function BubbleCard({ k, on, status, statusTone, onPick }) {
   return (
     <div role="button" aria-label={`Bubble ${label}${spec && spec.fresh ? ', new' : ''}${status ? `, ${status}` : ''}`} aria-pressed={on} onClick={onPick} className="zchat-press"
       style={{ position: 'relative', borderRadius: 18, padding: '18px 12px 11px', cursor: 'pointer', background: theme.dark ? 'rgba(255,255,255,0.045)' : '#F5F5F7', boxShadow: on ? `inset 0 0 0 2px ${theme.coral}` : 'none', display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
-      {spec && spec.fresh && statusTone !== 'own' && <div style={{ position: 'absolute', top: 8, right: 8, zIndex: 2, padding: '2px 7px', borderRadius: 8, background: '#7C5CFC', color: '#FFFFFF', fontSize: 10.5, fontWeight: 800 }}>New</div>}
+      {spec && spec.fresh && statusTone !== 'own' && <div style={{ position: 'absolute', top: 8, right: 8, zIndex: 2, padding: '2px 7px', borderRadius: 8, background: '#1D7BF0', color: '#FFFFFF', fontSize: 10.5, fontWeight: 800 }}>New</div>}
       <div style={{ display: 'flex', flexDirection: 'column', minHeight: 58, justifyContent: 'flex-end', paddingRight: 2 }}>
         <CharBubbleSample k={k} text="Hi there" cw={44} fontSize={13.5} />
       </div>

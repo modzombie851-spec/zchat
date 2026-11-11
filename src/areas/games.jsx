@@ -2039,7 +2039,7 @@ export function G1CrossPage({ st, myId, peerName, onClose }) {
   const cell = Math.floor((size - 4) / Math.max(pz.w, pz.h));
   const nums = {};
   pz.clues.forEach((cl) => { nums[cl.r * W + cl.c] = cl.n; });
-  const mineCol = theme.dark ? '#B5A3FF' : '#5B3FD6';
+  const mineCol = theme.dark ? '#6FB0F7' : '#1564C9';
   const theirCol = '#EA7317';
   const keyBg = theme.dark ? 'rgba(255,255,255,0.1)' : '#FFFFFF';
   return (
@@ -2076,7 +2076,7 @@ export function G1CrossPage({ st, myId, peerName, onClose }) {
         </div>
       ) : (
       <div style={{ flexShrink: 0, padding: '6px 6px calc(10px + env(safe-area-inset-bottom))', background: theme.dark ? 'rgba(255,255,255,0.03)' : 'rgba(40,20,90,0.04)', borderTop: `1px solid ${theme.hair}` }}>
-        <div role="button" aria-label="Switch direction" onClick={() => { if (clueOf(cur.i, cur.d === 'a' ? 'd' : 'a')) setCur({ i: cur.i, d: cur.d === 'a' ? 'd' : 'a' }); }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 12, background: theme.dark ? 'rgba(124,92,252,0.18)' : '#EDE7FF', margin: '0 4px 8px', cursor: 'pointer' }}>
+        <div role="button" aria-label="Switch direction" onClick={() => { if (clueOf(cur.i, cur.d === 'a' ? 'd' : 'a')) setCur({ i: cur.i, d: cur.d === 'a' ? 'd' : 'a' }); }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 12, background: theme.dark ? 'rgba(29,123,240,0.18)' : '#EDE7FF', margin: '0 4px 8px', cursor: 'pointer' }}>
           <div style={{ fontSize: 13, fontWeight: 900, color: theme.coral, flexShrink: 0 }}>{curClue ? `${curClue.n} ${curClue.d === 'a' ? 'across' : 'down'}` : ''}</div>
           <div style={{ fontSize: 14, color: theme.ink, flex: 1, minWidth: 0, lineHeight: 1.3 }}>{curClue ? curClue.q : 'Tap a square to start'}</div>
         </div>

@@ -300,9 +300,9 @@ function pushOut(b, cx, cy, inside, d, r) {
   return { nx, ny };
 }
 
-export function mkBall(kind, x, y) { return { kind, x, y, vx: 0, vy: 0, a: 0, ground: false, coy: 0, buf: 0, jumpHeld: false, dead: 0, home: false, cp: { x, y }, sq: 0, look: 1, blink: 2, onIce: false, carry: null, landV: 0, jumped: false, bonk: false }; }
+export function mkBall(kind, x, y) { return { kind, x, y, vx: 0, vy: 0, a: 0, ground: false, coy: 0, buf: 0, jumpHeld: false, dead: 0, home: false, cp: { x, y }, sq: 0, look: 1, blink: 2, onIce: false, carry: null, landV: 0, jumped: false, bonk: false, air2: true }; }
 
-export const PHYS = { acc: 26, air: 15, max: 7.2, fric: 14, airFric: 1.8, g: 34, jump: 15, spring: 22, term: 19 };
+export const PHYS = { acc: 38, air: 27, max: 7.4, fric: 32, airFric: 7, g: 34, jump: 15, jump2: 12.6, spring: 22, term: 19 };
 
 export function stepBall(W, b, input, dt, others) {
   const L = W.L;
@@ -313,7 +313,7 @@ export function stepBall(W, b, input, dt, others) {
   const ix = input ? input.x || 0 : 0;
   const onIce = b.ground && b.onIce;
   const acc = b.ground ? (onIce ? 9 : P.acc) : P.air;
-  if (ix) { b.vx += ix * acc * dt; if (Math.sign(ix) !== Math.sign(b.vx) && b.ground && !onIce) b.vx += ix * acc * 0.6 * dt; b.look = ix > 0 ? 1 : -1; }
+  if (ix) { b.vx += ix * acc * dt; if (Math.sign(ix) !== Math.sign(b.vx) && !onIce) b.vx += ix * acc * 0.9 * dt; b.look = ix > 0 ? 1 : -1; }
   else { const slope = b.ground && b.gny != null && b.gny > -0.97; const f = (b.ground ? (onIce || slope ? 1.2 : P.fric) : P.airFric) * dt; if (Math.abs(b.vx) <= f) b.vx = 0; else b.vx -= Math.sign(b.vx) * f; }
   b.vx = clamp(b.vx, -P.max * (onIce ? 1.15 : 1), P.max * (onIce ? 1.15 : 1));
   if (input && input.jump && !b.jumpHeld) b.buf = 0.13;
@@ -321,6 +321,7 @@ export function stepBall(W, b, input, dt, others) {
   if (b.buf > 0) b.buf -= dt;
   if (b.ground) b.coy = 0.1; else if (b.coy > 0) b.coy -= dt;
   if (b.buf > 0 && b.coy > 0) { b.vy = -P.jump; b.buf = 0; b.coy = 0; b.jumped = true; b.carry = null; W.fx.push({ k: 'jump', who: b.kind, x: b.x, y: b.y }); }
+  else if (b.buf > 0 && b.coy <= 0 && !b.ground && b.air2 && b.vy > -P.jump * 0.55) { b.vy = -P.jump2; b.buf = 0; b.air2 = false; b.jumped = true; b.sq = 0.5; W.fx.push({ k: 'jump2', who: b.kind, x: b.x, y: b.y + R }); }
   if (!b.jumpHeld && b.vy < -5 && b.jumped) b.vy *= Math.pow(0.0005, dt);
   const uphill = b.ground && b.gny != null && b.gny > -0.97 && ix * -b.gnx > 0;
   b.vy = Math.min(P.term, b.vy + P.g * (uphill ? 0.3 : 1) * dt);
@@ -368,6 +369,7 @@ export function stepBall(W, b, input, dt, others) {
       pushOut(b, o.x + dx / d * R, o.y + dy / d * R, false, R, R);
     }
   }
+  if (b.ground) b.air2 = true;
   if (b.ground && !wasGround) { b.jumped = false; b.landV = vyBefore; if (vyBefore > 6) { b.sq = Math.min(1, vyBefore / 20); W.fx.push({ k: 'land', who: b.kind, x: b.x, y: b.y + R, v: vyBefore }); } }
   if (b.bonk) W.fx.push({ k: 'bonk', who: b.kind, x: b.x, y: b.y - R });
   if (b.sq > 0) b.sq = Math.max(0, b.sq - dt * 5);
@@ -375,7 +377,7 @@ export function stepBall(W, b, input, dt, others) {
   b.blink -= dt;
   if (b.blink < -0.12) b.blink = 2 + Math.random() * 3;
   const tx = Math.floor(b.x), ty = Math.floor(b.y + R + 0.05);
-  for (const sp of L.springs) { if (Math.abs(b.x - (sp.x + 0.5)) < 0.6 && b.y + R > sp.y + 0.3 && b.y + R < sp.y + 1.08 && b.vy >= -1) { b.vy = -PHYS.spring; b.jumped = false; W.springT[`${sp.x},${sp.y}`] = 0.35; W.fx.push({ k: 'spring', who: b.kind, x: sp.x + 0.5, y: sp.y + 0.6 }); } }
+  for (const sp of L.springs) { if (Math.abs(b.x - (sp.x + 0.5)) < 0.6 && b.y + R > sp.y + 0.3 && b.y + R < sp.y + 1.08 && b.vy >= -1) { b.vy = -PHYS.spring; b.jumped = false; b.air2 = true; W.springT[`${sp.x},${sp.y}`] = 0.35; W.fx.push({ k: 'spring', who: b.kind, x: sp.x + 0.5, y: sp.y + 0.6 }); } }
   void tx; void ty;
   const hit = (x, y) => atL(L, Math.floor(x), Math.floor(y));
   if (b.y > L.MH + 2) return die(W, b, 'fall');
