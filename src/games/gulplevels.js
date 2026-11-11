@@ -17,13 +17,13 @@ export const GULP_LEVELS = [
   { name: 'One life', goal: { k: 'size', v: 8000 }, n: 800, lives: 1, par: 240 },
   { name: 'Bubble collector', goal: { k: 'pick', v: 8 }, n: 200, cfg: { pk: 2.2 }, par: 160 },
   { name: 'Ocean feast', goal: { k: 'eat', v: 300 }, n: 500, par: 300 },
-  { name: 'Become a shark', goal: { k: 'size', v: 50000 }, n: 5000, par: 420 },
-  { name: 'King of the sea', goal: { k: 'size', v: 500000 }, n: 60000, par: 600 },
+  { name: 'Become a shark', goal: { k: 'size', v: 12000 }, n: 1500, par: 300 },
+  { name: 'King of the sea', goal: { k: 'size', v: 100000 }, n: 12000, par: 420 },
   { name: 'Treasure hunter', goal: { k: 'chest', v: 2 }, start: [760, 250], n: 300, par: 120 },
   { name: 'Golden catch', goal: { k: 'gold', v: 1 }, start: [700, 120], n: 600, par: 120 },
 ];
 
-const fmtNum = (v) => (v >= 1000000 ? `${Math.round(v / 100000) / 10}M` : v >= 10000 ? `${Math.round(v / 1000)}K` : String(Math.floor(v)).replace(/\B(?=(\d{3})+(?!\d))/g, ','));
+const fmtNum = (v) => (v >= 10000 ? `${Math.round(v / 100) / 10}k`.replace('.0k', 'k') : String(Math.floor(v)).replace(/\B(?=(\d{3})+(?!\d))/g, ','));
 const fmtTime = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 
 export function goalText(L) {
@@ -86,7 +86,7 @@ const MISSION_KINDS = ['eat', 'size', 'combo', 'pick', 'gold', 'chest', 'calm'];
 export function newMission(kind, p, st, rnd) {
   const r = rnd || Math.random;
   if (kind === 'eat') { const v = [20, 30, 40, 60][Math.floor(r() * 4)]; return { k: kind, v, base: p.eaten || 0, text: `Eat ${v} fish` }; }
-  if (kind === 'size') { const v = niceAbove(p.n * 2.2 + 20); return { k: kind, v, base: 0, text: `Grow to ${fmtNum(v)}` }; }
+  if (kind === 'size') { const v = Math.min(100000, niceAbove(p.n * 2.2 + 20)); return { k: kind, v, base: 0, text: `Grow to ${fmtNum(v)}` }; }
   if (kind === 'combo') { const v = 6 + Math.floor(r() * 7); return { k: kind, v, base: 0, best: 0, text: `Make a combo of ${v}` }; }
   if (kind === 'pick') return { k: kind, v: 2, base: st.picks || 0, text: 'Grab 2 power bubbles' };
   if (kind === 'gold') return { k: kind, v: 1, base: p.golds || 0, text: 'Catch a golden fish' };
@@ -96,7 +96,7 @@ export function newMission(kind, p, st, rnd) {
 export function pickMission(list, p, st, rnd) {
   const r = rnd || Math.random;
   const used = new Set(list.map((m) => m.k));
-  const pool = MISSION_KINDS.filter((k) => !used.has(k));
+  const pool = MISSION_KINDS.filter((k) => !used.has(k) && !(k === 'size' && p.n * 2.2 + 20 > 100000));
   return newMission(pool[Math.floor(r() * pool.length)] || 'eat', p, st, r);
 }
 export function missionProgress(m, p, st) {
@@ -108,6 +108,12 @@ export function missionProgress(m, p, st) {
   if (m.k === 'chest') return (p.chests || 0) - m.base;
   if ((p.deaths || 0) !== m.d0) { m.d0 = p.deaths || 0; m.base = st.t || 0; }
   return (st.t || 0) - m.base;
+}
+export function missionShort(m, cur) {
+  const c = Math.max(0, Math.min(cur, m.v));
+  if (m.k === 'size') return `${fmtNum(c)}/${fmtNum(m.v)}`;
+  if (m.k === 'calm') return `${fmtTime(c)}/${fmtTime(m.v)}`;
+  return `${Math.floor(c)}/${m.v}`;
 }
 export function missionLabel(m, cur) {
   if (m.k === 'size') return `${fmtNum(Math.min(cur, m.v))} of ${fmtNum(m.v)}`;

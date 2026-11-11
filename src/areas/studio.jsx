@@ -2592,7 +2592,9 @@ export function MediaComposer({ files, recipientName, onCancel, onSend: onSendBa
   const [storySong, setStorySong] = useState(() => (draft && draft.song && validSong(draft.song) ? draft.song : null));
   const [musicPick, setMusicPick] = useState(false);
   const songPlayingId = useSongPlaying();
-  useEffect(() => { if (isStory) prefetchMusic(country); return () => stopSong(); }, []);
+  useEffect(() => { if (isStory || isPost) prefetchMusic(country); return () => stopSong(); }, []);
+  const postSongOk = isPost && items.length > 0 && items.every((x) => x.kind === 'image');
+  useEffect(() => { if (isPost && storySong && !postSongOk) { setStorySong(null); stopSong(); } }, [postSongOk]);
   useEffect(() => {
     if (!storySong) return undefined;
     const el = songEl();
@@ -2646,6 +2648,7 @@ export function MediaComposer({ files, recipientName, onCancel, onSend: onSendBa
     if (markSens) rec.sensitive = true;
     if (place) rec.place = place;
     if (isStory) { if (storySticker) rec.sticker = storySticker; if (storySong) rec.song = storySong; if (mentions.length) rec.mentions = mentions; if (sharedTo) rec.shared = sharedTo; }
+    if (isPost && storySong) rec.song = storySong;
     let ok = await saveDraft(rec);
     if (!ok) ok = await saveDraft({ ...rec, items: rec.items.map((x) => ({ kind: x.kind, file: x.file })) });
     if (!ok) { setDraftNote('This phone could not keep the draft'); setTimeout(() => setDraftNote(''), 2200); return false; }
@@ -3347,7 +3350,7 @@ export function MediaComposer({ files, recipientName, onCancel, onSend: onSendBa
       }
       if (isPost && markSens) outputs.forEach((o) => { o.sensitive = true; });
       sentRef.current = true;
-      onSend(outputs, caption.trim(), mentions, { hd: !isPost && !isStory && hd, once: !isPost && !isStory && once, blur: !isPost && !isStory && !once && hideIt, album: !isPost && !isStory && !once && !hideIt && album ? album : undefined, audience: isStory && closeShareRef.current ? 'close' : undefined, sticker: isStory && storySticker ? (storySticker.k === 'moment' ? storySticker : { ...storySticker, pos: roundLayerPos(storySticker.pos) }) : undefined, song: isStory && storySong ? validSong({ ...storySong, pos: roundLayerPos(storySong.pos) }) || undefined : undefined, collab: isPost && collab ? { id: collab.id, name: collab.name } : undefined, scheduleAt: isPost && scheduleAt ? scheduleAt : undefined, draftId: isPost ? draftIdRef.current || undefined : undefined });
+      onSend(outputs, caption.trim(), mentions, { hd: !isPost && !isStory && hd, once: !isPost && !isStory && once, blur: !isPost && !isStory && !once && hideIt, album: !isPost && !isStory && !once && !hideIt && album ? album : undefined, audience: isStory && closeShareRef.current ? 'close' : undefined, sticker: isStory && storySticker ? (storySticker.k === 'moment' ? storySticker : { ...storySticker, pos: roundLayerPos(storySticker.pos) }) : undefined, song: isStory && storySong ? validSong({ ...storySong, pos: roundLayerPos(storySong.pos) }) || undefined : isPost && postSongOk && storySong ? validSong({ ...storySong, pos: undefined, look: undefined }) || undefined : undefined, collab: isPost && collab ? { id: collab.id, name: collab.name } : undefined, scheduleAt: isPost && scheduleAt ? scheduleAt : undefined, draftId: isPost ? draftIdRef.current || undefined : undefined });
     } catch {
       closeShareRef.current = false;
       setSending(false);
@@ -3388,7 +3391,7 @@ export function MediaComposer({ files, recipientName, onCancel, onSend: onSendBa
           <>
             {toolBtn(<X size={20} />, 'Close', () => requestCloseRef.current())}
             <div style={{ display: 'flex', gap: 8, opacity: dragKey ? 0 : 1, transition: 'opacity 0.16s ease', pointerEvents: dragKey ? 'none' : undefined }}>
-              {isStory && storySong && toolBtn(songPlayingId === storySong.id ? <Volume2 size={18} /> : <VolumeX size={18} />, songPlayingId === storySong.id ? 'Pause music' : 'Play music', () => toggleSong(storySong))}
+              {(isStory || isPost) && storySong && toolBtn(songPlayingId === storySong.id ? <Volume2 size={18} /> : <VolumeX size={18} />, songPlayingId === storySong.id ? 'Pause music' : 'Play music', () => toggleSong(storySong))}
               {!isPost && !isStory && items.some((x) => x.kind === 'image') && toolBtn(<span style={{ fontSize: 12.5, fontWeight: 900, letterSpacing: '-0.02em', fontFamily: FONT }}>HD</span>, hd ? 'HD photo on' : 'HD photo off', () => { hapticTap(); playUiSound('toggle'); setHd((v) => !v); }, hd)}
             </div>
           </>
@@ -3547,7 +3550,7 @@ export function MediaComposer({ files, recipientName, onCancel, onSend: onSendBa
           <div data-tool="rail" style={{ position: 'absolute', right: 10, top: 6, display: 'flex', flexDirection: 'column', gap: 10, zIndex: 12, opacity: dragKey ? 0 : 1, transform: dragKey ? 'translateX(12px)' : 'none', transition: 'opacity 0.16s ease, transform 0.2s ease', pointerEvents: dragKey ? 'none' : undefined }}>
             {toolBtn(<Type size={18} />, 'Add text', () => openTextEditor(null))}
             {toolBtn(<Smile size={18} />, 'Stickers', () => { setShowStickerPicker(true); if (videoRef.current) videoRef.current.pause(); })}
-            {isStory && toolBtn(<MusicNoteIcon size={18} />, storySong ? 'Change music' : 'Add music', () => { setMusicPick(true); if (videoRef.current) videoRef.current.pause(); }, !!storySong)}
+            {(isStory || postSongOk) && toolBtn(<MusicNoteIcon size={18} />, storySong ? 'Change music' : 'Add music', () => { setMusicPick(true); if (videoRef.current) videoRef.current.pause(); }, !!storySong)}
             {isStory && !(storySticker && storySticker.k === 'moment') && toolBtn(<StickerQIcon size={18} />, 'Story sticker', () => { setStickerEdit(true); if (videoRef.current) videoRef.current.pause(); }, !!storySticker)}
             {isStory && toolBtn(<AtSign size={18} />, 'Mention', () => setShowMentionPicker(true))}
             {(isStory || isPost) && myId && toolBtn(<MapPinIcon size={18} />, place ? 'Change place' : 'Add a place', () => { setPlacePick(true); if (videoRef.current) videoRef.current.pause(); }, !!place)}
@@ -3694,6 +3697,11 @@ export function MediaComposer({ files, recipientName, onCancel, onSend: onSendBa
               <div role="button" aria-label={`Remove place ${place.n}`} onClick={() => setPlace(null)} style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, fontSize: 13, fontWeight: 600, color: '#FFFFFF', cursor: 'pointer' }}><MapPinIcon size={14} /><span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{place.n}</span><X size={14} style={{ opacity: 0.5, marginLeft: 1, flexShrink: 0 }} /></div>
             </div>
           )}
+          {isPost && storySong && (
+            <div style={{ display: 'flex', padding: '8px 16px 0' }}>
+              <div role="button" aria-label={`Remove music ${storySong.t}`} onClick={() => { setStorySong(null); stopSong(); }} style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, fontSize: 13, fontWeight: 600, color: '#FFFFFF', cursor: 'pointer' }}><MusicNoteIcon size={14} /><span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{storySong.a ? `${storySong.t}, ${storySong.a}` : storySong.t}</span><X size={14} style={{ opacity: 0.5, marginLeft: 1, flexShrink: 0 }} /></div>
+            </div>
+          )}
           {isPost && collab && (
             <div style={{ display: 'flex', padding: '8px 16px 0' }}>
               <div role="button" aria-label="Remove collaborator" onClick={() => setCollab(null)} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: '#FFFFFF', cursor: 'pointer' }}><UserPlus size={14} />With {collab.name}<X size={14} style={{ opacity: 0.5, marginLeft: 1 }} /></div>
@@ -3768,14 +3776,15 @@ export function MediaComposer({ files, recipientName, onCancel, onSend: onSendBa
           <StoryStickerPreview sticker={storySticker} />
         </div>
       )}
-      {musicPick && <MusicPicker country={country} title="Music for your story" onClose={() => setMusicPick(false)} onPick={(sg) => {
+      {musicPick && <MusicPicker country={country} title={isPost ? 'Music for your post' : 'Music for your story'} onClose={() => setMusicPick(false)} onPick={(sg) => {
         setMusicPick(false);
         const had = !!storySong;
-        setStorySong({ ...sg, pos: storySong && storySong.pos ? storySong.pos : { x: 0.5, y: 0.2, s: 1, r: 0 }, look: storySong && storySong.look ? storySong.look : 'pill' });
+        if (isPost) setStorySong({ ...sg });
+        else setStorySong({ ...sg, pos: storySong && storySong.pos ? storySong.pos : { x: 0.5, y: 0.2, s: 1, r: 0 }, look: storySong && storySong.look ? storySong.look : 'pill' });
         stopSong();
         playSong(sg, true);
         songAutoRef.current = sg.id;
-        if (!had) showLayerHint('song', 'Tap the music to change its look');
+        if (!had && !isPost) showLayerHint('song', 'Tap the music to change its look');
       }} />}
       {stickerEdit && <StoryStickerEditor onClose={() => setStickerEdit(false)} onDone={(sk) => { const had = !!storySticker; setStorySticker(stickerWithPos({ ...sk, pos: storySticker && storySticker.pos ? storySticker.pos : undefined })); setStickerEdit(false); if (!had) showLayerHint('card', 'Drag it anywhere. Drop it on the bin to remove it.'); }} />}
       {pickCollab && myId && <PickPeoplePage userId={myId} title="Invite a collaborator" subtitle="They accept to show it on their profile too" multi={false} onClose={() => setPickCollab(false)} onDone={(list) => { setCollab(list[0] || null); setPickCollab(false); }} zIndex={760} />}

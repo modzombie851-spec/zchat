@@ -5,7 +5,7 @@ import { watchAllowed, setWatchAllowed, useLiveBeacon } from './live.js';
 import { EMOTES, SignalBars, PingChip, SpeakerIcon, SmileIcon, Check, Heart, MicIcon, ChatIcon, SwapIcon, HandIcon, btnBase, Btn, RoundBtn, Sheet, Stars, injectCss, useVoice, setKitTap } from './livekit.jsx';
 import { LIVES, GLYPHS, GLYPH_NAMES, STORY_N, ENDLESS, ATK_CD, levelDef, makeWorld, stepWorld, buddyInput, applyEvent, snapshot, mergeSnapshot, sameLevel, syncClock, setNet, nearDial, nearMirror, turnMirror, foeRows, setFoes, tryCode, hintFor, clamp, missionsFor, parTime, spikeAmt, crumbleState } from './duoengine.js';
 import { Snd, THEMES, buildStatic, buildMini, drawDuoMini, render, updateParts, dust, puffs, embers, glints, part, ring, glyph, drawExplorer } from './duodraw.js';
-import { GC, GBtn, GPill, GPanel, GChip, GTitle, GJoy, GIcon, GHudBtn, GHudPanel, GHudSkill, injectKitCss, kitTap, pressProps, INK, useCtlLook, useGameStage, stagePoint, GControlsPanel } from './gamekit.jsx';
+import { GC, GBtn, GPill, GPanel, GChip, GTitle, GJoy, GIcon, GHudBtn, GHudPanel, GHudSkill, GHint, GStat, injectKitCss, kitTap, pressProps, INK, useCtlLook, useGameStage, stagePoint, GControlsPanel } from './gamekit.jsx';
 import { Sfx } from './sfx.js';
 
 const PHRASES = ['Wait for me', 'Go ahead', 'Over here', 'Hold the plate', 'Come closer, I need light', 'On three', 'Nice one', 'Sorry', 'I will get the lever', 'Follow me'];
@@ -159,7 +159,7 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
   const sfxRef = useRef({ spikes: [0, 0], crumble: {}, tick: 0 });
 
   const say = (text, sec) => {
-    setToast({ text, at: Date.now() });
+    setToast({ text, at: Date.now(), life: sec || 3 });
     clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(null), (sec || 3) * 1000);
   };
@@ -661,8 +661,8 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
           </>
         )}
         {toast && phase === 'play' && !intro && (
-          <div key={toast.at} style={{ position: 'absolute', left: '50%', ...(land ? { bottom: bottom(16) } : { top: tlBottom ? tlBottom + 10 : top(150) }), transform: 'translateX(-50%)', width: 'max-content', maxWidth: land ? 'min(44%, 380px)' : 'min(88%, 380px)', pointerEvents: 'none', animation: 'zduo-toast 0.25s ease-out', zIndex: 4 }}>
-            <GHudPanel style={{ padding: '8px 12px', fontSize: 12.5, fontWeight: 800, lineHeight: 1.4, textAlign: 'center' }}>{toast.text}</GHudPanel>
+          <div key={toast.at} style={{ position: 'absolute', left: '50%', ...(land ? { bottom: bottom(16) } : { top: tlBottom ? tlBottom + 10 : top(150) }), transform: 'translateX(-50%)', width: land ? 'min(48%, 400px)' : 'min(86%, 380px)', display: 'flex', justifyContent: 'center', pointerEvents: 'none', zIndex: 4 }}>
+            <GHint text={toast.text} life={toast.life || 3} />
           </div>
         )}
         {intro && phase === 'play' && (
@@ -788,7 +788,7 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
                       <div style={{ fontSize: 14, fontWeight: 900 }}>Let friends watch</div>
                       <div style={{ fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.7)' }}>{watchers.length ? `Watching now: ${watchers.map((w) => w.n).join(', ')}` : 'Friends can see your game in Games and watch it live'}</div>
                     </div>
-                    <span aria-hidden="true" style={{ width: 46, height: 28, borderRadius: 14, background: allowWatch ? '#5BE37D' : '#5A5470', boxShadow: `0 0 0 2.5px ${INK}`, position: 'relative', flexShrink: 0 }}><span style={{ position: 'absolute', top: 3, left: allowWatch ? 21 : 3, width: 22, height: 22, borderRadius: 11, background: '#FFFFFF', boxShadow: `0 0 0 2px ${INK}`, transition: 'left 0.2s' }} /></span>
+                    <span aria-hidden="true" style={{ width: 46, height: 28, borderRadius: 14, background: allowWatch ? '#F7C53A' : 'rgba(255,255,255,0.18)', position: 'relative', flexShrink: 0 }}><span style={{ position: 'absolute', top: 3, left: allowWatch ? 21 : 3, width: 22, height: 22, borderRadius: 11, background: '#FFFFFF', boxShadow: '0 1px 3px rgba(0,0,0,0.3)', transition: 'left 0.2s' }} /></span>
                   </div>
                 </GPanel>
               )}
@@ -809,7 +809,7 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
                     <div key={i} style={{ position: 'absolute', left: 0, right: 0, top: i * ROW, height: ROW, display: 'flex', alignItems: 'flex-start', flexDirection: left ? 'row' : 'row-reverse', gap: 8 }}>
                       <div style={{ width: '44%', display: 'flex', justifyContent: 'center', paddingTop: 10 }}>
                         <GBtn color={THEME_BTN[L.theme] || 'gold'} size={64} fast={false} label={host ? `Play level ${i + 1}, ${L.name}` : `Level ${i + 1}, ${L.name}`} onPress={() => { if (host) startLevel(i); }}>
-                          <span style={{ fontSize: 24, fontWeight: 900, color: '#FFFFFF', textShadow: `0 2px 0 ${INK}` }}>{i + 1}</span>
+                          <span style={{ fontSize: 24, fontWeight: 900, color: '#FFFFFF', textShadow: '0 1px 3px rgba(0,0,0,0.6)' }}>{i + 1}</span>
                         </GBtn>
                       </div>
                       <div style={{ flex: 1, minWidth: 0, paddingTop: 12, textAlign: left ? 'left' : 'right' }}>
@@ -831,21 +831,14 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
           <div style={{ position: 'absolute', inset: 0, zIndex: 20, background: 'rgba(5,4,10,0.5)', display: 'flex', padding: 12, overflowY: 'auto', touchAction: 'pan-x pan-y' }}>
             <GPanel style={{ margin: 'auto', width: '100%', maxWidth: land ? 640 : 360, display: 'flex', flexDirection: land ? 'row' : 'column', alignItems: land ? 'stretch' : 'center', gap: land ? 16 : 12, textAlign: 'center', padding: land ? '14px 16px' : '20px 18px', animation: 'zgk-pop 0.35s ease-out', boxSizing: 'border-box' }}>
               <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: land ? 10 : 12 }}>
-                <div style={{ display: 'flex', gap: 6, alignItems: 'flex-end' }}>{[0, 1, 2].map((i) => <div key={i} style={{ transform: i === 1 ? 'translateY(-8px)' : 'none', animation: `zgk-pop ${0.3 + i * 0.15}s ease-out` }}><GIcon k="star" size={i === 1 ? (land ? 44 : 50) : (land ? 36 : 40)} color={result.stars > i ? '#FFD23F' : '#5A5470'} /></div>)}</div>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'flex-end' }}>{[0, 1, 2].map((i) => <div key={i} style={{ transform: i === 1 ? 'translateY(-6px)' : 'none', animation: `zgk-pop ${0.3 + i * 0.15}s ease-out` }}><GIcon k="star" size={i === 1 ? (land ? 38 : 42) : (land ? 30 : 34)} color={result.stars > i ? '#FFD23F' : 'rgba(255,255,255,0.16)'} /></div>)}</div>
                 <GTitle text={result.watch ? `${hostFirst} and ${peerFirst} made it` : result.depth ? `Temple ${result.depth} cleared` : solo ? 'Both torches made it' : 'You made it together'} size={land ? 23 : 26} color="#FFE15A" />
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8, width: '100%' }}>
-                  {[['Time', fmtTime(result.time)], ['Gems', `${result.gems} of ${result.gemsTotal}`], ['Hearts lost', String(result.deaths)]].map(([a, b2]) => (
-                    <div key={a} style={{ padding: land ? '8px 4px' : '10px 6px', borderRadius: 14, background: 'rgba(255,255,255,0.08)', boxShadow: 'inset 0 0 0 1.5px rgba(255,255,255,0.08)' }}>
-                      <div style={{ fontSize: 16, fontWeight: 900, fontVariantNumeric: 'tabular-nums', color: '#FFE15A' }}>{b2}</div>
-                      <div style={{ fontSize: 11.5, fontWeight: 800, color: 'rgba(255,255,255,0.65)', marginTop: 2 }}>{a}</div>
-                    </div>
-                  ))}
-                </div>
+                <GStat items={[['Time', fmtTime(result.time)], ['Gems', `${result.gems} of ${result.gemsTotal}`], ['Hearts lost', String(result.deaths)]]} />
               </div>
               <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: land ? 8 : 12, width: '100%' }}>
-                {!result.watch && <div style={{ width: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: land ? 5 : 7, padding: '10px 12px', borderRadius: 16, background: 'rgba(255,255,255,0.06)', textAlign: 'left' }}>
-                  <div style={{ fontSize: 12, fontWeight: 900, color: 'rgba(255,255,255,0.65)' }}>{`Missions, ${result.done} of ${result.missions.length}`}</div>
-                  {result.missions.map((m) => <div key={m.k} style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: land ? 12.5 : 13.5, fontWeight: 800, color: m.on ? '#FFFFFF' : 'rgba(255,255,255,0.55)' }}><GIcon k={m.on ? 'check' : 'star'} size={16} color={m.on ? '#5BE37D' : '#5A5470'} />{m.t}</div>)}
+                {!result.watch && <div style={{ width: '100%', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: land ? 5 : 7, padding: '10px 12px', borderRadius: 10, background: 'rgba(255,255,255,0.05)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.08)', textAlign: 'left' }}>
+                  <div style={{ fontSize: 12, fontWeight: 800, color: 'rgba(255,255,255,0.62)' }}>{`Missions, ${result.done} of ${result.missions.length}`}</div>
+                  {result.missions.map((m) => <div key={m.k} style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: land ? 12.5 : 13.5, fontWeight: 700, color: m.on ? '#FFFFFF' : 'rgba(255,255,255,0.5)' }}><GIcon k={m.on ? 'check' : 'star'} size={15} color={m.on ? '#7CF2A0' : 'rgba(255,255,255,0.3)'} line={m.on} halo={false} stroke={2.6} />{m.t}</div>)}
                 </div>}
                 {watch ? <div style={{ fontSize: 13.5, fontWeight: 800, color: 'rgba(255,255,255,0.75)' }}>The players pick what is next</div> : host ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
@@ -867,7 +860,7 @@ export function DuoGamePage({ solo = false, initial, me, peer, myId, onClose, on
         {phase === 'out' && (
           <div style={{ position: 'absolute', inset: 0, zIndex: 20, background: 'rgba(5,4,10,0.55)', display: 'flex', padding: 12, overflowY: 'auto', touchAction: 'pan-x pan-y' }}>
             <GPanel style={{ margin: 'auto', width: '100%', maxWidth: 340, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: land ? 9 : 12, textAlign: 'center', padding: land ? '14px 16px' : '22px 18px', animation: 'zgk-pop 0.35s ease-out' }}>
-              <div style={{ display: 'flex', gap: 4 }}>{[0, 1, 2].map((i) => <GIcon key={i} k="heart" size={30} color="#5A5470" />)}</div>
+              <div style={{ display: 'flex', gap: 4 }}>{[0, 1, 2].map((i) => <GIcon key={i} k="heart" size={24} color="rgba(255,255,255,0.16)" />)}</div>
               <GTitle text="Out of hearts" size={28} color="#FF8F8F" />
               <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.78)', lineHeight: 1.5, fontWeight: 700 }}>{isEndless(li) ? 'This temple starts over with three new hearts. Talk it through first.' : 'The level starts over with three new hearts. Talk it through first.'}</div>
               {host ? <GPill text="Try again" icon="replay" color="green" wide onPress={() => startLevel(li, undefined, false, rs)} /> : <div style={{ fontSize: 13.5, fontWeight: 800, color: 'rgba(255,255,255,0.75)' }}>{`Waiting for ${peerFirst} to start again`}</div>}

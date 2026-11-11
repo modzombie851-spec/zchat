@@ -1749,7 +1749,14 @@ function StoryStickerView({ story, frame, isMine, myId, onBusy, onOpenResponses,
   };
   if (sticker.k === 'moment') return wrap(<MomentBadge late={!!sticker.late} />);
   if (sticker.k === 'link') {
-    return wrap(<LinkStickerPill sticker={sticker} onOpen={() => { try { window.open(sticker.u, '_blank', 'noopener,noreferrer'); } catch {} }} />);
+    return wrap(<LinkStickerPill sticker={sticker} onOpen={() => {
+      try {
+        const u = new URL(sticker.u);
+        const ours = /(^|\.)getzchat\.com$/i.test(u.hostname) || u.host === window.location.host;
+        if (ours && (u.searchParams.get('post') || u.searchParams.get('profile'))) { window.dispatchEvent(new CustomEvent('zchat-open-deep', { detail: u.search })); return; }
+      } catch {}
+      try { window.open(sticker.u, '_blank', 'noopener,noreferrer'); } catch {}
+    }} />);
   }
   if (sticker.k === 'addyours') {
     return wrap(<AddYoursCard sticker={sticker} count={ay ? ay.n : 0} people={ay ? ay.people : []} isMine={isMine} onAdd={onAddYours ? () => onAddYours(sticker) : null} />);

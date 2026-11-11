@@ -18534,7 +18534,7 @@ function useBotFollowerCount(botId) {
   return BOT_FOLLOWER_BASE + real;
 }
 
-export const APP_VERSION = '36.0V';
+export const APP_VERSION = '37.0V';
 const STORY_SHARE_TEXT = 'Shared a story';
 const accountsThatBlockedMe = new Set();
 
@@ -19778,6 +19778,18 @@ export function unforgetPostLocally(postId) {
   announcePostsLocal({ reload: true });
 }
 const postLocalAdds = new Map();
+export function uniqPosts(list) {
+  const seen = new Set();
+  return (list || []).filter((p) => {
+    if (!p || !p.id || seen.has(p.id)) return false;
+    const f = psFirstMedia(p);
+    const k = f && f.u && !String(f.u).startsWith('blob:') ? `u:${f.u}` : null;
+    if (k && seen.has(k)) return false;
+    seen.add(p.id);
+    if (k) seen.add(k);
+    return true;
+  });
+}
 function keepLocalPosts(rows, startedAt, ownerId) {
   const extra = [...postLocalAdds.values()].filter((x) => x.at >= startedAt && (!ownerId || x.post.user_id === ownerId) && !postGoneIds.has(x.post.id) && !(rows || []).some((r) => r.id === x.post.id)).map((x) => x.post);
   return extra.length ? [...extra, ...(rows || [])] : rows;
@@ -19865,7 +19877,7 @@ function ProfilePosts({ profile, isSelf, userId, meProfile, bare = false, mode =
     let { data, error } = await supabase.from('posts').select('*').or(`user_id.eq.${profile.id},and(collab_id.eq.${profile.id},collab_status.eq.accepted)`).order('created_at', { ascending: false }).limit(120);
     if (error) ({ data, error } = await supabase.from('posts').select('*').eq('user_id', profile.id).order('created_at', { ascending: false }).limit(120));
     if (error && !data) { setPosts((prev) => prev || []); return; }
-    const list = keepLocalPosts((data || []).filter((x) => (isSelf || !notYetPosted(x)) && !postGoneIds.has(x.id) && !x.archived_at), startedAt, profile.id);
+    const list = uniqPosts(keepLocalPosts((data || []).filter((x) => (isSelf || !notYetPosted(x)) && !postGoneIds.has(x.id) && !x.archived_at), startedAt, profile.id));
     rememberProfilePosts(profile.id, list);
     setPosts(list);
   };
@@ -19928,6 +19940,7 @@ function ProfilePosts({ profile, isSelf, userId, meProfile, bare = false, mode =
     if (!res.done && res.blocked) appAlert(photoBlockText('post', res.reason, outputs.length > 1));
     else if (!res.done) setPostError(res.sensMissing ? 'Not posted. Sensitive posts switch on once the latest ZChat setup is finished.' : 'Could not post. Check your connection and try again.');
     else if (res.failed) setPostError(`${res.failed} of ${outputs.length} did not post.`);
+    else if (res.songLost) setPostError('Posted without music. Music on posts switches on once the latest ZChat setup is finished.');
     if (res.post && res.collab) sendPushNotification(res.collab.id, 'ZChat', `${(meProfile && meProfile.name) || 'Someone'} invited you to share a post`, `/?post=${res.post.id}`, meProfile && meProfile.avatar);
     load();
   };
@@ -20045,7 +20058,7 @@ function PsPhotosOf({ profile, isSelf, userId, meProfile }) {
     const ids = [...new Set(rows.map((p) => p.user_id))];
     const byId = {};
     if (ids.length) { const { data: ps } = await fetchProfilesView(ids); sanitizeAvatarList(ps || [], userId).forEach((p) => { if (!p.is_deleted) byId[p.id] = p; }); }
-    const list = rows.filter((p) => byId[p.user_id]).map((p) => ({ ...p, owner: byId[p.user_id] }));
+    const list = uniqPosts(rows.filter((p) => byId[p.user_id] && p.user_id !== profile.id && !(p.collab_id === profile.id && p.collab_status === 'accepted'))).map((p) => ({ ...p, owner: byId[p.user_id] }));
     psPhotosMem.set(profile.id, list);
     if (psPhotosMem.size > 30) psPhotosMem.delete(psPhotosMem.keys().next().value);
     setPosts(list);
@@ -27067,10 +27080,11 @@ export function PostMediaOverlay({ post, myId, full = false, onOpenProfile }) {
   const doTag = async (t, action) => {
     setMenu(null);
     hapticTap();
-    const undo = psTagDrop(post.id, t.id, action === 'approve' ? { status: 'approved' } : null);
+    const undo = psTagDrop(post.id, t.id, action === 'approve' ? { status: 'approved' } : action === 'hide' ? { status: 'hidden' } : null);
     const ok = await psTagAction(t, myId, action);
     if (!ok) { if (undo) undo(); appSnack('That did not work. Try again.'); return; }
-    appSnack(action === 'approve' ? 'It shows on your profile now' : t.user_id === myId ? 'You were removed from this photo' : 'Tag removed');
+    try { window.dispatchEvent(new Event('zchat-ps-tags')); } catch {}
+    appSnack(action === 'approve' ? 'It shows on your profile now' : action === 'hide' ? 'Hidden from your profile. You are still tagged.' : t.user_id === myId ? 'You were removed from this photo' : 'Tag removed');
   };
   if (!isVoice && !(post.remix_of && first && first.t === 'video') && !cur.length && !anyAlt) return <span ref={ref} hidden />;
   return (
@@ -27101,6 +27115,7 @@ export function PostMediaOverlay({ post, myId, full = false, onOpenProfile }) {
         <ActionSheet title={menu.user_id === myId ? (menu.status === 'approved' ? 'You are tagged' : 'You were tagged') : `Tagged: ${menu.user.name}`} onClose={() => setMenu(null)} zIndex={720} items={[
           { k: 'profile', label: menu.user_id === myId ? 'See your profile' : `See ${String(menu.user.name || '').split(' ')[0] || 'their'} profile`, icon: <User />, on: () => { const u = menu.user; setMenu(null); if (onOpenProfile) onOpenProfile(u); } },
           menu.user_id === myId && menu.status !== 'approved' ? { k: 'approve', label: 'Show on my profile', icon: <Check />, on: () => doTag(menu, 'approve') } : null,
+          menu.user_id === myId && menu.status === 'approved' ? { k: 'hide', label: 'Hide from my profile', icon: <EyeOff />, on: () => doTag(menu, 'hide') } : null,
           { k: 'remove', label: menu.user_id === myId ? 'Remove me from this photo' : 'Remove tag', icon: <X />, danger: true, on: () => doTag(menu, 'remove') },
         ]} />
       )}
@@ -27343,15 +27358,47 @@ export function PostAfterMedia({ post, myId, dark = false }) {
 }
 export function psFeedItems(post, myId, h) {
   if (!post || String(post.id).startsWith('temp') || !('archived_at' in post)) return [];
+  const toStory = psCanStory(post, myId) ? { k: 'psstory', label: 'Add to your story', icon: <StatusIcon />, on: () => { const p0 = post; h.close(); psToStory(p0); } } : null;
   if (post.user_id === myId) {
     return [
+      toStory,
       post.archived_at
         ? { k: 'psunarchive', label: 'Show on profile again', icon: <Eye />, on: async () => { const p0 = post; h.close(); const err = await psSetArchived(p0, false); h.say(err || 'Back on your profile'); } }
         : { k: 'psarchive', label: 'Archive', icon: <Archive />, on: async () => { const p0 = post; h.close(); h.gone(p0); hapticTap(); const err = await psSetArchived(p0, true); if (err) { if (h.back) h.back(p0); h.say(err); } else h.say('Archived. Only you can see it now.'); } },
       post.kind !== 'voice' && 'remix_ok' in post ? { k: 'psremixok', label: post.remix_ok === false ? 'Allow remixes' : 'Turn off remixes', icon: <PsRemixGlyph />, on: async () => { const p0 = post; const next = p0.remix_ok === false; h.close(); p0.remix_ok = next; const ok = await psSetRemixOk(p0, next); if (!ok) { p0.remix_ok = !next; h.say('That did not save. Try again.'); } else h.say(next ? 'People can remix this post again' : 'Remixes are off for this post'); } } : null,
     ].filter(Boolean);
   }
-  return psCanRemix(post, myId) ? [{ k: 'psremix', label: 'Remix', icon: <PsRemixGlyph />, on: () => { const p0 = post; h.close(); psStartRemix(p0); } }] : [];
+  const out = toStory ? [toStory] : [];
+  const mineTags = (((psTagsMem.get(post.id)) || {}).list || []).filter((t) => t.user_id === myId && t.status !== 'removed');
+  if (mineTags.length) {
+    const shown = mineTags.some((t) => t.status === 'approved');
+    out.push(shown
+      ? { k: 'pstaghide', label: 'Hide from my profile', icon: <EyeOff />, on: async () => { h.close(); hapticTap(); const ok = await psTagsMine(post, myId, 'hide'); h.say(ok ? 'Hidden from your profile. You are still tagged.' : 'That did not work. Try again.'); } }
+      : { k: 'pstagshow', label: 'Show on my profile', icon: <Eye />, on: async () => { h.close(); hapticTap(); const ok = await psTagsMine(post, myId, 'approve'); h.say(ok ? 'It shows on your profile now' : 'That did not work. Try again.'); } });
+    out.push({ k: 'pstagoff', label: 'Remove me from this post', icon: <X />, danger: true, on: async () => { h.close(); hapticTap(); const ok = await psTagsMine(post, myId, 'remove'); h.say(ok ? 'You were removed from this post' : 'That did not work. Try again.'); } });
+  }
+  if (post.collab_id === myId && post.collab_status === 'accepted') {
+    out.push({ k: 'pscollaboff', label: 'Remove me as collaborator', icon: <X />, danger: true, on: async () => {
+      const p0 = post; h.close(); hapticTap();
+      const { data, error } = await supabase.rpc('zchat_collab_leave', { p_post: p0.id }).then((r) => r, (e) => ({ error: e || {} }));
+      if (error || data === false) { h.say(rpcMissing(error) ? 'This switches on once the latest ZChat setup is finished.' : 'That did not work. Try again.'); return; }
+      p0.collab_status = 'declined';
+      announcePostsLocal({ reload: true });
+      h.say('It is off your profile now');
+    } });
+  }
+  if (psCanRemix(post, myId)) out.push({ k: 'psremix', label: 'Remix', icon: <PsRemixGlyph />, on: () => { const p0 = post; h.close(); psStartRemix(p0); } });
+  return out;
+}
+async function psTagsMine(post, myId, action) {
+  const mine = (((psTagsMem.get(post.id)) || {}).list || []).filter((t) => t.user_id === myId && t.status !== 'removed');
+  if (!mine.length) return false;
+  const status = action === 'approve' ? 'approved' : action === 'hide' ? 'hidden' : null;
+  const undo = mine.map((t) => psTagDrop(post.id, t.id, status ? { status } : null)).filter(Boolean);
+  const res = await Promise.all(mine.map((t) => psTagAction(t, myId, action)));
+  if (res.some((x) => !x)) { undo.reverse().forEach((u) => u()); return false; }
+  try { window.dispatchEvent(new Event('zchat-ps-tags')); } catch {}
+  return true;
 }
 
 function MomentPostCard({ post, userId, liked, likeCount, commentCount, saved, likedBy, muted, onToggleMute, rootRef, ring, onLike, onSave, onComments, onShare, onMore, onLikers, onOpenProfile, onOpenStory, eager, tip = 0, onTip }) {
@@ -27390,6 +27437,7 @@ function MomentPostCard({ post, userId, liked, likeCount, commentCount, saved, l
             {post.collab && post.collab_status === 'accepted' && <span style={{ fontWeight: 600, color: theme.ink, whiteSpace: 'nowrap' }}>and {(post.collab.name || '').split(' ')[0]}</span>}
           </div>
           <div style={{ fontSize: 12, color: theme.muted, marginTop: 1 }}>{post.location ? (validPlace(post.place) ? <><span role="button" aria-label={`Open place ${post.location}`} onClick={(e) => { e.stopPropagation(); openPlace(post.place); }} style={{ cursor: 'pointer', color: theme.ink, fontWeight: 600 }}>{post.location}</span>, </> : `${post.location}, `) : ''}{shortAgo(post.created_at)}{post.pinned_at && post.user_id === userId ? ', pinned' : ''}{post.members_only ? ', members only' : ''}</div>
+          {post.song && <PostSongLine post={post} color={theme.ink} auto={!muted} style={{ marginTop: 3 }} />}
         </div>
         <div role="button" aria-label="Post options" onClick={onMore} style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: theme.ink, flexShrink: 0 }}><MoreDotsIcon size={22} /></div>
       </div>
@@ -30881,6 +30929,37 @@ export function SongBars({ color, size = 14 }) {
     <span aria-hidden="true" style={{ display: 'inline-flex', alignItems: 'flex-end', gap: 2, height: size, width: size, flexShrink: 0 }}>
       {[0, 1, 2].map((i) => <span key={i} style={{ width: 3, height: '100%', borderRadius: 2, background: color, transformOrigin: 'bottom', animation: `zchat-sb-bar ${0.7 + i * 0.18}s ease-in-out ${i * 0.12}s infinite alternate` }} />)}
     </span>
+  );
+}
+export function PostSongLine({ post, color = '#FFFFFF', auto = true, rootRef = null, style }) {
+  const song = useMemo(() => { const v = validSong(post && post.song); if (v) { delete v.pos; delete v.look; } return v; }, [post && post.id, post && post.song && post.song.id]);
+  const playingId = useSongPlaying();
+  const ref = useRef(null);
+  const offRef = useRef(false);
+  useSongWarm(song, ref);
+  useEffect(() => {
+    if (!song) return undefined;
+    const el = ref.current;
+    const target = el && (el.closest('[data-post-view]') || el.closest('article') || el);
+    if (!target || typeof IntersectionObserver === 'undefined') return undefined;
+    const io = new IntersectionObserver((list) => {
+      const en = list[list.length - 1];
+      if (!en) return;
+      if (en.isIntersecting && en.intersectionRatio >= 0.6) { if (auto && !offRef.current && songPlayer.id !== song.id) playSong(song, songPlayer.cur !== song.id); }
+      else if (songPlayer.id === song.id) pauseSong();
+    }, { root: rootRef && rootRef.current ? rootRef.current : null, threshold: [0, 0.6] });
+    io.observe(target);
+    return () => { io.disconnect(); if (songPlayer.id === song.id) pauseSong(); };
+  }, [song && song.id, auto]);
+  if (!song) return null;
+  const on = playingId === song.id;
+  const tap = (e) => { e.stopPropagation(); hapticTap(); if (on) { offRef.current = true; pauseSong(); } else { offRef.current = false; playSong(song, songPlayer.cur !== song.id); } };
+  return (
+    <div ref={ref} role="button" aria-label={on ? `Pause ${song.t}` : `Play ${song.t}${song.a ? ` by ${song.a}` : ''}`} aria-pressed={on} onClick={tap} onPointerDown={(e) => e.stopPropagation()}
+      style={{ display: 'inline-flex', alignItems: 'center', gap: 6, maxWidth: '100%', minWidth: 0, color, fontSize: 12.5, cursor: 'pointer', ...(style || {}) }}>
+      {on ? <SongBars color={color} size={11} /> : <MusicNoteIcon size={13} color={color} />}
+      <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}><span style={{ fontWeight: 700 }}>{song.t}</span>{song.a ? <span style={{ opacity: 0.78 }}>{`, ${song.a}`}</span> : null}</span>
+    </div>
   );
 }
 export function SongPill({ song, onDark, style, right }) {
@@ -34567,6 +34646,7 @@ function CarouselMark({ size = 15 }) {
   );
 }
 export const postSensCol = { ok: null, job: null };
+export const postSongCol = { ok: null };
 function sensColumnMissing(sens, error) {
   if (!sens || !error || !/sensitive/i.test(String(error.message || ''))) return false;
   postSensCol.ok = false;
@@ -34707,16 +34787,21 @@ async function createPostFromOutputs(userId, outputs, caption, opts) {
   const autoSens = gate.verdict === 'sensitive' && !gate.saved;
   const collab = opts && opts.collab ? opts.collab : null;
   let at = opts && opts.scheduleAt && new Date(opts.scheduleAt).getTime() > Date.now() + 30000 ? new Date(opts.scheduleAt).toISOString() : null;
-  const base = (it) => ({ user_id: userId, media_url: it.u, media_type: it.t, overlay_url: it.o, caption: caption || null, ...(at ? { scheduled_for: at, created_at: at } : {}), ...(sens || autoSens ? { sensitive: true } : {}), ...(opts && opts.membersOnly ? { members_only: true } : {}) });
+  let song = opts && opts.song && postSongCol.ok !== false ? validSong(opts.song) : null;
+  if (song) { delete song.pos; delete song.look; }
+  let songLost = !!(opts && opts.song) && !song;
+  const base = (it) => ({ user_id: userId, media_url: it.u, media_type: it.t, overlay_url: it.o, caption: caption || null, ...(at ? { scheduled_for: at, created_at: at } : {}), ...(sens || autoSens ? { sensitive: true } : {}), ...(opts && opts.membersOnly ? { members_only: true } : {}), ...(song ? { song } : {}) });
+  const songGone = (error) => { if (!error || !song || !/song/i.test(String(error.message || ''))) return false; song = null; songLost = true; postSongCol.ok = false; return true; };
   const single = !(opts && opts.separate) && uploaded.length > 1;
   let schedLost = false;
   if (single || collab) {
     const row = () => ({ ...base(uploaded[0]), ...(single ? { media_urls: uploaded } : {}), ...(collab ? { collab_id: collab.id } : {}), ...psRow(single ? uploaded : [uploaded[0]], opts) });
     let { data, error } = await supabase.from('posts').insert(row()).select().single();
+    if (songGone(error)) ({ data, error } = await supabase.from('posts').insert(row()).select().single());
     if (photoBlockedError(error)) return { done: 0, failed: 0, blocked: true, reason: null };
     if (sensColumnMissing(sens, error)) return { done: 0, failed: uploaded.length + failed, sensMissing: true };
     if (error && at && /scheduled_for|column|schema/i.test(String(error.message || ''))) { at = null; schedLost = true; ({ data, error } = await supabase.from('posts').insert(row()).select().single()); }
-    if (!error && data) return { done: 1, failed, post: data, collab, scheduled: at, schedLost };
+    if (!error && data) return { done: 1, failed, post: data, collab, scheduled: at, schedLost, songLost };
     if (!/media_urls|collab|column|schema/i.test(String((error && error.message) || ''))) return { done: 0, failed: failed + uploaded.length };
   }
   let done = 0;
@@ -34724,12 +34809,13 @@ async function createPostFromOutputs(userId, outputs, caption, opts) {
   let stopped = false;
   for (const it of uploaded) {
     let { data, error } = await supabase.from('posts').insert({ ...base(it), ...psRow([it], opts) }).select().single();
+    if (songGone(error)) ({ data, error } = await supabase.from('posts').insert({ ...base(it), ...psRow([it], opts) }).select().single());
     if (sensColumnMissing(sens, error)) return { done, failed: failed + uploaded.length - done, sensMissing: true, post: first };
     if (error && at && /scheduled_for|column|schema/i.test(String(error.message || ''))) { at = null; schedLost = true; ({ data, error } = await supabase.from('posts').insert({ ...base(it), ...psRow([it], opts) }).select().single()); }
     if (error) { failed += 1; if (photoBlockedError(error)) stopped = true; } else { done += 1; if (!first) first = data; }
   }
   if (stopped && !done) return { done: 0, failed: 0, blocked: true, reason: null };
-  return { done, failed, fallback: single || !!collab, scheduled: at, schedLost, post: first };
+  return { done, failed, fallback: single || !!collab, scheduled: at, schedLost, songLost, post: first };
 }
 let pendingPostSeq = 0;
 async function createPostOptimistic(userId, owner, outputs, caption, opts) {
@@ -34755,6 +34841,48 @@ async function createPostOptimistic(userId, owner, outputs, caption, opts) {
 }
 
 export function psOpen(detail) { try { window.dispatchEvent(new CustomEvent('zchat-ps', { detail })); } catch {} }
+export function psCanStory(post, myId) {
+  if (!post || !post.id || String(post.id).startsWith('temp') || post.kind === 'voice' || post.archived_at || post.sensitive || post.members_only || !psFirstMedia(post)) return false;
+  if (post.user_id === myId) return true;
+  const o = post.owner;
+  return !!o && !o.is_private && !(o.privacy_profile && o.privacy_profile !== 'everyone');
+}
+export function psToStory(post) { try { window.dispatchEvent(new CustomEvent('zchat-post-story', { detail: { post } })); } catch {} }
+export async function psStoryCard(post) {
+  const first = psFirstMedia(post);
+  if (!first) return null;
+  const src = first.t === 'video' ? await psVideoFrame(first.u) : await loadImageEl(first.u);
+  const sw = src.videoWidth || src.naturalWidth || src.width;
+  const sh = src.videoHeight || src.naturalHeight || src.height;
+  if (!sw || !sh) return null;
+  const W = 1080; const H = 1920;
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const g = c.getContext('2d');
+  const sm = document.createElement('canvas');
+  sm.width = 27; sm.height = 48;
+  psDrawCover(sm.getContext('2d'), src, 0, 0, 27, 48);
+  g.imageSmoothingEnabled = true;
+  g.drawImage(sm, 0, 0, W, H);
+  g.fillStyle = 'rgba(0,0,0,0.28)';
+  g.fillRect(0, 0, W, H);
+  const cw = 840;
+  const ch = Math.max(560, Math.min(1120, Math.round((cw * sh) / sw)));
+  const head = 104;
+  const x = (W - cw) / 2;
+  const y = Math.round((H - ch - head) / 2) + head - 40;
+  const rr = (px, py, pw, ph, r) => { g.beginPath(); if (g.roundRect) g.roundRect(px, py, pw, ph, r); else g.rect(px, py, pw, ph); };
+  g.save(); g.shadowColor = 'rgba(0,0,0,0.38)'; g.shadowBlur = 48; g.shadowOffsetY = 14; g.fillStyle = '#FFFFFF'; rr(x, y - head, cw, ch + head, 34); g.fill(); g.restore();
+  const o = post.owner || {};
+  const who = String(o.username ? o.username : o.name || 'ZChat').slice(0, 40);
+  g.fillStyle = '#111111';
+  g.textBaseline = 'middle';
+  g.font = `700 38px ${FONT}`;
+  g.fillText(who, x + 34, y - head / 2, cw - 68);
+  g.save(); rr(x, y, cw, ch, [0, 0, 34, 34]); g.clip(); psDrawCover(g, src, x, y, cw, ch); g.restore();
+  const blob = await new Promise((r) => { try { c.toBlob(r, 'image/jpeg', 0.9); } catch { r(null); } });
+  return blob ? new File([blob], 'post-story.jpg', { type: 'image/jpeg' }) : null;
+}
 export function psCanRemix(post, myId) {
   return !!post && !!post.id && !String(post.id).startsWith('temp') && 'remix_ok' in post && post.remix_ok !== false && post.user_id !== myId && post.kind !== 'voice' && !post.archived_at
     && !!post.owner && !post.owner.is_private && !(post.owner.privacy_profile && post.owner.privacy_profile !== 'everyone') && !!psFirstMedia(post);
@@ -35791,6 +35919,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     else if (!res.done) showSnack(res.sensMissing ? 'Not posted. Sensitive posts switch on once the latest ZChat setup is finished.' : 'Could not post. Check your connection and try again.');
     else if (res.scheduled) showSnack(`Scheduled for ${fmtSchedule(res.scheduled)}`);
     else if (res.schedLost) showSnack('Posted now. Scheduling switches on once the latest ZChat setup is finished.');
+    else if (res.songLost) showSnack('Posted without music. Music on posts switches on once the latest ZChat setup is finished.');
     else if (res.failed) showSnack(`Posted, but ${res.failed} did not upload`);
     else if (res.fallback && outputs.length > 1) showSnack(`Posted ${countWord(res.done, 'item', 'items')}`);
     else showSnack(res.collab ? `Posted. ${String(res.collab.name || '').split(' ')[0]} was invited` : 'Posted to your profile');
@@ -35865,6 +35994,21 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
   const [storyPeek, setStoryPeek] = useState(null);
   const [storyMutes, setStoryMutes] = useState(() => readStoryMutes(session.user.id));
   const startStory = () => { if (blockedByRestriction('status')) return; setStoryCreate(true); };
+  useEffect(() => {
+    let busy = false;
+    const on = async (e) => {
+      const post = e && e.detail && e.detail.post;
+      if (!post || busy || blockedByRestriction('status')) return;
+      busy = true;
+      let file = null;
+      try { file = await psStoryCard(post); } catch {}
+      busy = false;
+      if (!file) { showSnack('That post could not be added. Try again.'); return; }
+      setStoryComposer({ key: Date.now(), files: [file], top: true, sticker: { k: 'link', u: `${siteOrigin()}/?post=${post.id}`, l: 'See post', pos: { x: 0.5, y: 0.88, s: 1, r: 0 } } });
+    };
+    window.addEventListener('zchat-post-story', on);
+    return () => window.removeEventListener('zchat-post-story', on);
+  }, []);
   const toggleStoryMute = (p, on) => {
     setStoryMutes((prev) => { const next = new Set(prev); if (on) next.add(p.id); else next.delete(p.id); writeStoryMutes(session.user.id, next); return next; });
     showSnack(on ? `Stories from ${(p.name || '').split(' ')[0]} are muted` : `Stories from ${(p.name || '').split(' ')[0]} are back`);
@@ -38199,7 +38343,14 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       if (mid && openMessageLinkRef.current) { hapticTap(); openMessageLinkRef.current(mid, 'tap'); }
     };
     window.addEventListener('zchat-open-link', onLink);
-    return () => window.removeEventListener('zchat-open-link', onLink);
+    const onDeep = (e) => {
+      const q = e && typeof e.detail === 'string' ? e.detail : '';
+      if (!q || !openDeepLinkRef.current) return;
+      setStoryViewer(null);
+      openDeepLinkRef.current(new URLSearchParams(q));
+    };
+    window.addEventListener('zchat-open-deep', onDeep);
+    return () => { window.removeEventListener('zchat-open-link', onLink); window.removeEventListener('zchat-open-deep', onDeep); };
   }, []);
   useEffect(() => {
     if (!me || typeof navigator === 'undefined' || !navigator.serviceWorker) return undefined;
@@ -41656,6 +41807,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
     if (textSize !== 'm') setTextSize('m');
     if (textColor) setTextColor(null);
     if (textFont) setTextFont(null);
+    if (!draft) setCmFancyOn(null);
   }, [draft]);
   useEffect(() => {
     if (!keepTextStyle) return;
@@ -47948,10 +48100,13 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
           { k: 'profile', label: 'View profile', icon: <User />, on: () => { const pr = storyPeek.profile; setStoryPeek(null); setProfileOf(pr); } },
         ]} />
       )}
-      {storyComposer && (
-        <MediaComposer key={storyComposer.key} files={storyComposer.files} mode="story" myId={session.user.id} country={me && me.country} initialSticker={storyComposer.sticker || null} privacyCtx={{ iFollow: iFollowIds, allowed: privacyAllowed }} draft={storyComposer.draft || null} sharedTo={storyComposer.shared || null}
-          mentionGroups={groups} onCancel={() => setStoryComposer(null)} onSend={storyComposer.membersOnly ? (o, c, mn, op) => postStories(o, c, mn, { ...(op || {}), membersOnly: true }) : postStories} />
-      )}
+      {storyComposer && (() => {
+        const sc = (
+          <MediaComposer key={storyComposer.key} files={storyComposer.files} mode="story" myId={session.user.id} country={me && me.country} initialSticker={storyComposer.sticker || null} privacyCtx={{ iFollow: iFollowIds, allowed: privacyAllowed }} draft={storyComposer.draft || null} sharedTo={storyComposer.shared || null}
+            mentionGroups={groups} onCancel={() => setStoryComposer(null)} onSend={storyComposer.membersOnly ? (o, c, mn, op) => postStories(o, c, mn, { ...(op || {}), membersOnly: true }) : postStories} />
+        );
+        return storyComposer.top ? <Portal><div style={{ position: 'fixed', inset: 0, zIndex: 900 }}>{sc}</div></Portal> : sc;
+      })()}
       {storyViewer && (
         <StoryViewer key={storyViewer.key} groupsList={storyViewer.groupsList} startGroup={storyViewer.startGroup} startStoryId={storyViewer.startStoryId} readOnly={!!storyViewer.readOnly}
           highlightLike={storyViewer.highlight ? { liked: storyViewer.highlight.liked, count: storyViewer.highlight.count, onToggle: toggleHighlightLike } : null}
@@ -48208,7 +48363,7 @@ function ChatApp({ session, onLogout, onNeedsProfile, savedAccounts, onSwitchAcc
       {msgSearchOpen != null && (
         <SearchMessagesPage myId={session.user.id} groups={groups} hiddenIds={getHiddenMsgIds()} initialQuery={msgSearchOpen} onClose={() => setMsgSearchOpen(null)} onOpen={openSearchHit} />
       )}
-      {showWhatsNew && <PageGuard name="whats new" onClose={() => setShowWhatsNew(false)}><WhatsNewSheet me={me} onClose={() => setShowWhatsNew(false)} onTry={(g) => { if (g === 'sets') setCollectionOpen(true); else if (g === 'shop') setShopOpen(true); else if (g === 'rooms') setShowGames({ at: Date.now(), room: '' }); else if (g === 'games') setShowGames(true); else if (g === 'map') setMapOpen(true); else if (g === 'song' && me) setProfileOf({ ...me, __song: true }); else if (g === 'ai') setAiStudio({ mode: 'image' }); else if (g === 'chars') setCharsOpen(true); else if (g === 'coins') setWalletOpen(true); else if (g === 'bubbles') setShowBubbleSheet(true); else if (g === 'drops') setCollectionOpen('__drop'); else if (g === 'folders') { setHomeTab('chats'); setFoldersOpen(true); } else if (g === 'styles') setShopOpen('tab:styles'); else if (g === 'communities') setCommunitiesOpen({}); }} /></PageGuard>}
+      {showWhatsNew && <PageGuard name="whats new" onClose={() => setShowWhatsNew(false)}><WhatsNewSheet me={me} onClose={() => setShowWhatsNew(false)} onTry={(g) => { if (g === 'sets') setCollectionOpen(true); else if (g === 'shop') setShopOpen(true); else if (g === 'rooms') setShowGames({ at: Date.now(), room: '' }); else if (g === 'games') setShowGames(true); else if (g === 'vibes') setHomeTab('moments'); else if (g === 'map') setMapOpen(true); else if (g === 'song' && me) setProfileOf({ ...me, __song: true }); else if (g === 'ai') setAiStudio({ mode: 'image' }); else if (g === 'chars') setCharsOpen(true); else if (g === 'coins') setWalletOpen(true); else if (g === 'bubbles') setShowBubbleSheet(true); else if (g === 'drops') setCollectionOpen('__drop'); else if (g === 'folders') { setHomeTab('chats'); setFoldersOpen(true); } else if (g === 'styles') setShopOpen('tab:styles'); else if (g === 'communities') setCommunitiesOpen({}); }} /></PageGuard>}
       {showGames && (
         <GamesPage key={showGames.at || 'games'} initialGame={showGames.game || null} onClose={() => setShowGames(false)}
           friends={gameFriends}
@@ -48987,6 +49142,142 @@ function WnJoinArt({ tall = false }) {
   );
 }
 
+const WN_FONT = '-apple-system, BlinkMacSystemFont, sans-serif';
+function WnPhoto({ x, y, w, h, rid, sun = '#FFD24D' }) {
+  return (
+    <g>
+      <defs><clipPath id={`ph${rid}`}><rect x={x} y={y} width={w} height={h} /></clipPath></defs>
+      <g clipPath={`url(#ph${rid})`}>
+        <rect x={x} y={y} width={w} height={h} fill="#8EC5FF" />
+        <circle cx={x + w * 0.72} cy={y + h * 0.3} r={h * 0.13} fill={sun} />
+        <path d={`M${x} ${y + h * 0.78} Q${x + w * 0.28} ${y + h * 0.5} ${x + w * 0.55} ${y + h * 0.72} T${x + w} ${y + h * 0.62} V${y + h} H${x} Z`} fill="#46CFA0" />
+        <path d={`M${x} ${y + h * 0.9} Q${x + w * 0.4} ${y + h * 0.74} ${x + w} ${y + h * 0.88} V${y + h} H${x} Z`} fill="#2FA57D" />
+      </g>
+    </g>
+  );
+}
+function WnNote({ x, y, s = 1, c = ART_C.violet }) {
+  return (
+    <g transform={`translate(${x} ${y}) scale(${s})`}>
+      <path d="M0 12 V-6 L14 -9 V9" fill="none" stroke={c} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+      <ellipse cx="-3" cy="12" rx="4.4" ry="3.4" fill={c} /><ellipse cx="11" cy="9" rx="4.4" ry="3.4" fill={c} />
+    </g>
+  );
+}
+function WnPostSongArt({ tall = false }) {
+  const rid = React.useId().replace(/[^a-zA-Z0-9]/g, '');
+  const y0 = tall ? -26 : 6;
+  const ph = tall ? 124 : 108;
+  return (
+    <>
+      <g transform={`translate(92 ${y0})`}>
+        <rect x="0" y="0" width="136" height={ph + 62} rx="16" fill={ART_C.card} {...ak} strokeWidth="2.6" />
+        <circle cx="17" cy="16" r="8" fill={ART_C.pink} stroke={ART_INK} strokeWidth="2" />
+        <rect x="31" y="9" width="46" height="6" rx="3" fill={ART_INK} />
+        <g transform="translate(31 19)"><path d="M0 6 V-1 L6 -2 V5" fill="none" stroke={ART_C.violet} strokeWidth="1.6" strokeLinecap="round" /><circle cx="-1" cy="6" r="1.8" fill={ART_C.violet} /><circle cx="5" cy="5" r="1.8" fill={ART_C.violet} /></g>
+        <text x="41" y="26" fontFamily={WN_FONT} fontWeight="800" fontSize="8.5" fill={ART_C.violet}>Morning train</text>
+        <WnPhoto x={0} y={32} w={136} h={ph} rid={rid} />
+        <rect x="0" y="32" width="136" height={ph} fill="none" stroke={ART_INK} strokeWidth="2" />
+        {[12, 34, 56].map((x, i) => <circle key={x} cx={x} cy={ph + 46} r="5.5" fill="none" stroke={ART_INK} strokeWidth="2" opacity={i === 0 ? 1 : 0.85} />)}
+      </g>
+      <WnNote x={62} y={tall ? 6 : 40} s={1.2} />
+      <WnNote x={250} y={tall ? -14 : 26} s={0.9} c={ART_C.coral} />
+      <WnNote x={256} y={tall ? 92 : 118} s={1.05} c={ART_C.mint} />
+    </>
+  );
+}
+function WnTagArt({ tall = false }) {
+  const rid = React.useId().replace(/[^a-zA-Z0-9]/g, '');
+  const y0 = tall ? -28 : 2;
+  const ph = tall ? 150 : 120;
+  return (
+    <>
+      <g transform={`translate(60 ${y0})`}>
+        <rect x="0" y="0" width="150" height={ph} rx="14" fill="#8EC5FF" {...ak} strokeWidth="2.6" />
+        <WnPhoto x={2} y={2} w={146} h={ph - 4} rid={rid} sun="#FFE9A8" />
+        <rect x="0" y="0" width="150" height={ph} rx="14" fill="none" {...ak} strokeWidth="2.6" />
+        <g transform={`translate(70 ${ph * 0.42})`}>
+          <circle cx="0" cy="-10" r="11" fill="#F6C9A8" stroke={ART_INK} strokeWidth="2.2" />
+          <path d="M-20 26 Q-18 4 0 4 Q18 4 20 26 Z" fill={ART_C.coral} stroke={ART_INK} strokeWidth="2.2" />
+          <path d="M-6 30 L0 24 L6 30 Z" fill={ART_INK} />
+          <rect x="-20" y="30" width="40" height="18" rx="6" fill={ART_INK} />
+          <text x="0" y="43" textAnchor="middle" fontFamily={WN_FONT} fontWeight="800" fontSize="10" fill="#FFFFFF">you</text>
+        </g>
+      </g>
+      <g transform={`translate(${tall ? 160 : 168} ${tall ? 82 : 78})`}>
+        <rect x="0" y="0" width="118" height="70" rx="12" fill={ART_C.card} {...ak} strokeWidth="2.4" />
+        <text x="12" y="27" fontFamily={WN_FONT} fontWeight="700" fontSize="10" fill={ART_INK}>Hide from profile</text>
+        <rect x="10" y="35" width="98" height="1.5" fill={ART_C.steel} />
+        <text x="12" y="55" fontFamily={WN_FONT} fontWeight="700" fontSize="10" fill={ART_C.coralDeep}>Remove me</text>
+      </g>
+    </>
+  );
+}
+function WnPostStoryArt({ tall = false }) {
+  const rid = React.useId().replace(/[^a-zA-Z0-9]/g, '');
+  const H = tall ? 210 : 176;
+  const y0 = tall ? -32 : 2;
+  const fw = tall ? 120 : 100;
+  const x0 = 160 - fw / 2;
+  return (
+    <>
+      <defs>
+        <linearGradient id={`sb${rid}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#6FA8E8" /><stop offset="1" stopColor="#3C8E74" /></linearGradient>
+        <clipPath id={`sc${rid}`}><rect x={x0} y={y0} width={fw} height={H} rx="16" /></clipPath>
+      </defs>
+      <rect x={x0} y={y0} width={fw} height={H} rx="16" fill={`url(#sb${rid})`} />
+      <g clipPath={`url(#sc${rid})`}>
+        {[0, 1, 2, 3].map((i) => <rect key={i} x={x0 + 6 + i * (fw / 4)} y={y0 + 6} width={fw / 5} height="3" rx="1.5" fill="rgba(255,255,255,0.75)" />)}
+        <g transform={`translate(${x0 + fw * 0.12} ${y0 + H * 0.2})`}>
+          <rect x="0" y="0" width={fw * 0.76} height={H * 0.52} rx="9" fill={ART_C.card} />
+          <rect x="7" y="6" width={fw * 0.3} height="5" rx="2.5" fill={ART_INK} />
+          <WnPhoto x={0} y={16} w={fw * 0.76} h={H * 0.52 - 16} rid={`${rid}p`} />
+        </g>
+        <rect x={x0 + fw * 0.24} y={y0 + H * 0.8} width={fw * 0.52} height={tall ? 26 : 18} rx={tall ? 9 : 7} fill={ART_C.card} />
+        <text x={160} y={y0 + H * 0.8 + (tall ? 17 : 12.5)} textAnchor="middle" fontFamily={WN_FONT} fontWeight="800" fontSize={tall ? 11 : 8.5} fill="#2563EB">See post</text>
+      </g>
+      <rect x={x0} y={y0} width={fw} height={H} rx="16" fill="none" {...ak} strokeWidth="2.6" />
+    </>
+  );
+}
+function WnGulpFairArt({ tall = false }) {
+  return (
+    <>
+      {tall ? <image href="/gulp-art.webp" x="-140" y="-112" width="474" height="296" preserveAspectRatio="xMidYMid slice" /> : <image href="/gulp-art.webp" x="16" y="-4" width="288" height="186" preserveAspectRatio="xMidYMid slice" />}
+      <rect x={tall ? 30 : 16} y={tall ? -112 : -4} width={tall ? 260 : 288} height={tall ? 296 : 186} fill="rgba(6,30,60,0.28)" />
+      <g transform={`translate(160 ${tall ? -24 : 10})`}>
+        <rect x="-62" y="0" width="124" height="26" rx="13" fill="rgba(0,0,0,0.5)" />
+        <text x="0" y="17.5" textAnchor="middle" fontFamily={WN_FONT} fontWeight="900" fontSize="12" fill="#FFB347">1,250 <tspan fill="#FFFFFF" fontWeight="700" fontSize="10">of 100k</tspan></text>
+      </g>
+    </>
+  );
+}
+function WnGameUiArt({ tall = false }) {
+  const y0 = tall ? -30 : 8;
+  const ring = 'rgba(255,255,255,0.8)';
+  return (
+    <>
+      {tall ? <image href="/gulp-art.webp" x="-140" y="-112" width="474" height="296" preserveAspectRatio="xMidYMid slice" /> : <image href="/gulp-art.webp" x="16" y="-4" width="288" height="186" preserveAspectRatio="xMidYMid slice" />}
+      <rect x={tall ? 30 : 16} y={tall ? -112 : -4} width={tall ? 260 : 288} height={tall ? 296 : 186} fill="rgba(4,10,20,0.45)" />
+      <g transform={`translate(88 ${y0})`}>
+        <rect x="0" y="0" width="144" height="146" rx="14" fill="rgba(12,16,24,0.92)" stroke="rgba(255,255,255,0.16)" strokeWidth="1.2" />
+        <text x="14" y="26" fontFamily={WN_FONT} fontWeight="900" fontSize="15" fill="#FFFFFF">Paused</text>
+        <rect x="12" y="38" width="120" height="28" rx="7" fill="#F7C53A" />
+        <path d="M60 46 l9 6 -9 6 Z" fill="none" stroke="#1F1702" strokeWidth="1.8" strokeLinejoin="round" />
+        <text x="73" y="56.5" fontFamily={WN_FONT} fontWeight="800" fontSize="11" fill="#1F1702">Resume</text>
+        {[30, 58, 86, 114].map((x) => <circle key={x} cx={x} cy="88" r="10" fill="rgba(0,0,0,0.4)" stroke={ring} strokeWidth="1.4" />)}
+        <rect x="12" y="112" width="57" height="22" rx="6" fill="rgba(255,255,255,0.08)" stroke="rgba(255,255,255,0.4)" strokeWidth="1.2" />
+        <rect x="75" y="112" width="57" height="22" rx="6" fill="rgba(214,52,52,0.22)" stroke="rgba(255,118,118,0.75)" strokeWidth="1.2" />
+        <text x="40.5" y="126.5" textAnchor="middle" fontFamily={WN_FONT} fontWeight="800" fontSize="9" fill="#FFFFFF">Menu</text>
+        <text x="103.5" y="126.5" textAnchor="middle" fontFamily={WN_FONT} fontWeight="800" fontSize="9" fill="#FFB4B4">Leave</text>
+      </g>
+      <circle cx={tall ? 262 : 276} cy={tall ? 152 : 150} r="18" fill="rgba(0,0,0,0.3)" stroke={ring} strokeWidth="2" />
+      <circle cx={tall ? 58 : 44} cy={tall ? 148 : 146} r="20" fill="rgba(0,0,0,0.2)" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5" />
+      <circle cx={tall ? 58 : 44} cy={tall ? 148 : 146} r="8" fill="rgba(255,255,255,0.45)" stroke={ring} strokeWidth="1.4" />
+    </>
+  );
+}
+
 export const WN_THUMBS = {
   gulp33: { bg: 'sky', draw: () => (<image href="/gulp-art.webp" x="16" y="-4" width="288" height="186" preserveAspectRatio="xMidYMid slice" />) },
   duo33: { bg: 'night', draw: () => (<image href="/duo-art.webp" x="16" y="-4" width="288" height="186" preserveAspectRatio="xMidYMid slice" />) },
@@ -49001,6 +49292,11 @@ export const WN_THUMBS = {
   miss36: { bg: 'sky', draw: () => <WnMissArt /> },
   hud36: { bg: 'sky', draw: () => <WnHudArt /> },
   join36: { bg: 'lilac', draw: () => <WnJoinArt /> },
+  song37: { bg: 'lilac', draw: () => <WnPostSongArt /> },
+  tag37: { bg: 'mint', draw: () => <WnTagArt /> },
+  pstory37: { bg: 'peach', draw: () => <WnPostStoryArt /> },
+  gulp37: { bg: 'sky', draw: () => <WnGulpFairArt /> },
+  ui37: { bg: 'night', draw: () => <WnGameUiArt /> },
   duo32: { bg: 'night', draw: () => (<>
     <rect x="16" y="128" width="288" height="60" fill="#3A2E24" />
     <path d="M118 132 V60 Q160 14 202 60 V132 Z" fill="#1E1626" {...ak} />
@@ -49569,6 +49865,11 @@ Object.assign(WN_SCENES, {
   miss36h: { bg: 'sky', draw: () => <WnMissArt tall /> },
   hud36h: { bg: 'sky', draw: () => <WnHudArt tall /> },
   join36h: { bg: 'lilac', draw: () => <WnJoinArt tall /> },
+  song37h: { bg: 'lilac', draw: () => <WnPostSongArt tall /> },
+  tag37h: { bg: 'mint', draw: () => <WnTagArt tall /> },
+  pstory37h: { bg: 'peach', draw: () => <WnPostStoryArt tall /> },
+  gulp37h: { bg: 'sky', draw: () => <WnGulpFairArt tall /> },
+  ui37h: { bg: 'night', draw: () => <WnGameUiArt tall /> },
 });
 
 function WnBoardPin({ x, y, color = ART_C.coral }) {
@@ -59178,8 +59479,8 @@ Object.assign(FRIEND_GAME_SUBS, { roll: 'Live, up to four friends roll together'
 Object.assign(GAME_ART_BG, { roll: ['#6EC6FF', '#4FA83A'], duo: ['#3B2A48', '#120C1C'], gulp: ['#1C6FA8', '#082A4C'], gulpco: ['#1C6FA8', '#082A4C'], tug: ['#F97316', '#E11D48'], qrace: ['#7C3AED', '#2563EB'], rrace: ['#10B981', '#0EA5E9'] });
 Object.assign(GAME_RULES, {
   duo: { how: ['You carry the orange torch, your friend carries the blue one. Move with the joystick.', 'Orange walks through lava and fire. Blue wades through water, lights hidden stones and reads hidden codes.', 'Pull levers, hold doors on the plates, jump through glowing rings, cross spikes when they drop and keep moving on cracked floors.', 'Play the story or endless temples that are new every time. You share three hearts.', 'Talk with voice, quick messages and emojis. You can mute your friend any time.'], win: 'Stand on your own glowing doors at the same time to finish. Finish missions for stars.' },
-  gulp: { how: ['You are a small fish with the number 2. Swim with the joystick.', 'Touch fish with a number the same as yours or smaller to eat them. Any part of you works, even your tail. Their number adds to yours.', 'Fish with bigger numbers can eat you. Hunters chase you for a moment, then give up. Dash to get away.', 'Suck pulls the fish in front of you into your mouth. Grow bigger to unlock a shield, a shock wave and frenzy.', 'Grab bubbles for a shield, double food, a magnet or speed. If you are bigger than your friend you can eat them too.'], win: 'There is no size limit. Each of you has five lives and gets one back when you grow into a new fish. Whoever keeps their lives longer wins the round.' },
-  gulpco: { how: ['A fish room for up to ten friends. Anyone you invite can join or leave any time.', 'Swim with the joystick and eat fish with a number the same as yours or smaller.', 'Nobody eats anyone in the room. If a big fish gets you, you come back a bit smaller.', 'Turn your mic on to talk. Tap the people button to mute anyone.'], win: 'There is no end. Grow together and see who gets biggest.' },
+  gulp: { how: ['You are a small fish with the number 2. Swim with the joystick.', 'Touch fish with a number the same as yours or smaller to eat them and grow. Any part of you works, even your tail. Small fish swim away when you get close.', 'Fish with bigger numbers can eat you. Hunters chase you for a moment, then give up. Dash to get away.', 'Suck pulls the fish in front of you into your mouth. Grow bigger to unlock a shield, a shock wave and frenzy.', 'Grab bubbles for a shield, double food, a magnet or speed. If you are bigger than your friend you can eat them too.'], win: 'Grow up to 100k. Each of you has five lives and gets one back when you grow into a new fish. Whoever keeps their lives longer wins the round.' },
+  gulpco: { how: ['A fish room for up to ten friends. Anyone you invite can join or leave any time.', 'Swim with the joystick and eat fish with a number the same as yours or smaller.', 'Nobody eats anyone in the room. If a big fish gets you, you come back a bit smaller.', 'Turn your mic on to talk. Tap the people button to mute anyone.'], win: 'Grow together up to 100k and see who gets there first.' },
   roll: { how: ['Hold the arrows to roll your ball. Tap jump, hold it to jump higher.', 'Land on top of enemies to bop them. Spiky ones hurt from every side.', 'Springs throw you high. Flags save where you come back after a pop.', 'Some gates need two buttons pressed at the same time. Team up.', 'Grab coins and find the three stars hidden in every level.'], win: 'Everyone has to reach the portal to clear the level. There are five worlds with six levels each.' },
   tug: { how: ['You both play at the same moment. Open the game and wait for your friend to join.', 'When the countdown ends, tap the big button as fast as you can.', 'Every tap pulls the rope toward you.'], win: 'After 15 seconds, whoever pulled the rope to their side wins.' },
   qrace: { how: ['You both play at the same moment and see the same question together.', 'Tap the right answer before your friend does.', 'A wrong answer locks you out of that question.'], win: 'Seven questions. Whoever scores more wins.' },

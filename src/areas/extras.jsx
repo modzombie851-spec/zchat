@@ -6564,25 +6564,28 @@ function WnSegments({ total, at, onArt, dark }) {
 }
 
 const WN_HIGHLIGHTS = [
-  { k: 'sea36', art: 'sea36h', go: 'games', title: 'A bigger Gulp sea', text: 'A much bigger sea with a kelp forest, a shipwreck, currents, treasure chests and golden fish. Fish open their mouths and gulp for real, and you get five lives.' },
-  { k: 'miss36', art: 'miss36h', go: 'games', title: 'Endless missions', text: 'Endless Gulp always gives you three missions. Finish one for an extra life or a power up, then a new one appears.' },
-  { k: 'hud36', art: 'hud36h', go: 'games', title: 'Clear game screens', text: 'Gulp, Two Torches and Roll Squad now play sideways with small see through buttons at the edges and a map in the corner, so you can see the whole game.' },
-  { k: 'join36', art: 'join36h', title: 'Join from chat', text: 'When a friend is in a game you can join, a Join button shows at the top of your chat with them. For two player games you can watch.' },
+  { k: 'song37', art: 'song37h', go: 'vibes', title: 'Music on posts', text: 'Add a song to your photo posts, just like stories. It plays when friends scroll to your post.' },
+  { k: 'tag37', art: 'tag37h', go: 'vibes', title: 'Control your tags', text: 'Tagged in a photo? Open the post menu to hide it from your profile or remove yourself. You can leave collab posts the same way.' },
+  { k: 'pstory37', art: 'pstory37h', go: 'vibes', title: 'Share posts to your story', text: 'Add a post to your story with a See post link, so friends open it in one tap.' },
+  { k: 'gulp37', art: 'gulp37h', go: 'games', title: 'A fairer Gulp', text: 'Every fish shows its number, small fish swim away, hunters give up sooner and you can grow all the way to 100k in a more real sea.' },
+  { k: 'ui37', art: 'ui37h', go: 'games', title: 'New game buttons', text: 'Gulp, Two Torches and Roll Squad now share see through buttons, quiet notices at the side and new pause menus.' },
 ];
 const WN_SECTIONS = [
-  { title: 'Games', items: [
-    { art: 'sea36', title: 'A bigger Gulp sea', text: 'Chests, golden fish, currents and five lives.' },
-    { art: 'miss36', title: 'Endless missions', text: 'Three missions at a time with rewards.' },
-    { art: 'hud36', title: 'Clear game screens', text: 'Small buttons at the edges and a map in the corner.' },
+  { title: 'Posts', items: [
+    { art: 'song37', title: 'Music on posts', text: 'Pick a song for your photo posts.' },
+    { art: 'tag37', title: 'Control your tags', text: 'Hide or remove a tag from the post menu.' },
+    { art: 'pstory37', title: 'Share posts to your story', text: 'With a link back to the post.' },
   ] },
-  { title: 'Chats', items: [
-    { art: 'join36', title: 'Join from chat', text: 'Jump into a friend’s game right from your chat.' },
+  { title: 'Games', items: [
+    { art: 'gulp37', title: 'A fairer Gulp', text: 'Numbers on every fish and a top size of 100k.' },
+    { art: 'ui37', title: 'New game buttons', text: 'Matching buttons, quiet notices and pause menus.' },
   ] },
 ];
 const WN_NEW_COUNT = WN_SECTIONS.reduce((n, sec) => n + sec.items.length, 0);
 const WN_SUMMARY = `${WN_NEW_COUNT} new things to try.`;
 
 const WN_EARLIER = [
+  { title: 'A bigger Gulp sea and joining from chat', text: 'A bigger Gulp sea with chests and golden fish, endless missions, clear game screens and a Join button in chats.' },
   { title: 'Gulp rooms and levels', text: 'Gulp rooms for up to ten friends, twenty Gulp levels, sideways play, button size controls, ten new Two Torches temples and two new Roll Squad worlds.' },
   { title: 'Roll Squad, watching friends and game clocks', text: 'A live ball game for up to four friends, a new Gulp, Two Torches enemies and mirror puzzles, watching friends play live, and clocks for chess and checkers.' },
   { title: 'Gulp and endless Two Torches', text: 'A live fish game, new temples every time you play, missions, voice and quick chat in Two Torches, and new rock paper scissors hands.' },

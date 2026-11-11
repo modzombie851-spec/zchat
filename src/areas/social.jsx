@@ -85,6 +85,7 @@ import {
   cachedPostStats,
   coinsText,
   copyTextToClipboard,
+  PostSongLine,
   countWord,
   cxNs,
   detailsCardBg,
@@ -708,8 +709,9 @@ export function FeedPanel({ me, userId, onClose, onOpenProfile, ownerFilter = nu
     if (!fixedIds) { const hit = feedPanelMem.get(feedKey(initialTab || 'foryou')); return hit ? hit.filter((p) => !postGoneIds.has(p.id)) : null; }
     if (!seedItems || !seedItems.length) return null;
     const byId = new Map(seedItems.filter((p) => p && p.owner && !p.owner.is_deleted).map((p) => [p.id, p]));
-    const list = fixedIds.map((id) => byId.get(id)).filter(Boolean);
-    return list.length && list.length === fixedIds.length ? list : null;
+    const ids0 = [...new Set(fixedIds)];
+    const list = ids0.map((id) => byId.get(id)).filter(Boolean);
+    return list.length && list.length === ids0.length ? list : null;
   }, []);
   const [items, setItems] = useState(seeded);
   const [likes, setLikes] = useState(() => cachedPostStats(seeded, (s) => (s.liked ? true : undefined)));
@@ -745,6 +747,7 @@ export function FeedPanel({ me, userId, onClose, onOpenProfile, ownerFilter = nu
     if (on) announcePostSaved(post);
   };
   const [ownMenu, setOwnMenu] = useState(null);
+  const [otherMenu, setOtherMenu] = useState(null);
   const [feedInsights, setFeedInsights] = useState(null);
   const [feedEdit, setFeedEdit] = useState(null);
   const [pinNote, setPinNote] = useState('');
@@ -822,9 +825,10 @@ export function FeedPanel({ me, userId, onClose, onOpenProfile, ownerFilter = nu
     let posts = null;
     let postsErr = null;
     if (fixedIds) {
-      const { data: fx } = fixedIds.length ? await supabase.from('posts').select('*').in('id', fixedIds.slice(0, 300)) : { data: [] };
+      const ids0 = [...new Set(fixedIds)];
+      const { data: fx } = ids0.length ? await supabase.from('posts').select('*').in('id', ids0.slice(0, 300)) : { data: [] };
       const fxMap = new Map((fx || []).map((x) => [x.id, x]));
-      posts = fixedIds.map((id) => fxMap.get(id)).filter(Boolean);
+      posts = ids0.map((id) => fxMap.get(id)).filter(Boolean);
     } else {
       let q = supabase.from('posts').select('*').order('created_at', { ascending: false }).limit(60);
       if (clipsOnly) q = q.eq('media_type', 'video');
@@ -1012,7 +1016,7 @@ export function FeedPanel({ me, userId, onClose, onOpenProfile, ownerFilter = nu
                   {railBtn(<Download size={25} />, 'Save file', () => download(post))}
                   {feedTips.canTip(post) && railBtn(feedTips.tipOf(post.id) ? <CoinIcon size={27} /> : <TipCoinIcon size={27} color="white" />, feedTips.tipOf(post.id) ? 'Tipped' : 'Tip', () => feedTips.open(post), null, feedTips.tipOf(post.id) ? `You tipped ${coinsText(feedTips.tipOf(post.id))}. Tip again` : 'Tip coins')}
                   {psCanRemix(post, userId) && railBtn(<PsRemixGlyph size={27} color="white" />, 'Remix', () => psStartRemix(post), null, 'Remix this post')}
-                  {mineP && railBtn(<MoreDotsIcon size={26} color="white" />, 'More', () => setOwnMenu(post), null, 'More options')}
+                  {railBtn(<MoreDotsIcon size={26} color="white" />, 'More', () => (mineP ? setOwnMenu(post) : setOtherMenu(post)), null, 'More options')}
                 </div>
 
                 <div style={{ position: 'absolute', left: 14, right: 80, bottom: 26, zIndex: 3, opacity: hideUi ? 0 : 1, transition: 'opacity 0.2s' }}>
@@ -1020,6 +1024,7 @@ export function FeedPanel({ me, userId, onClose, onOpenProfile, ownerFilter = nu
                     <Avatar emoji={post.owner.avatar} name={post.owner.name} size={30} />
                     <span style={{ display: 'flex', alignItems: 'center', minWidth: 0, flex: 1, flexWrap: 'wrap', gap: 4 }}><NameBadge name={post.owner.name} verified={post.owner.verified} custom={post.owner.custom_badge} size={15} ns={cxNs(post.owner)} nsPlate />{post.collab && post.collab_status === 'accepted' && <span style={{ fontWeight: 800 }}>and {post.collab.name}</span>}</span>
                   </div>
+                  {post.song && <div style={{ marginTop: 7, display: 'flex', minWidth: 0, textShadow: '0 1px 6px rgba(0,0,0,0.6)' }}><PostSongLine post={post} rootRef={scrollerRef} /></div>}
                   {post.collab_id === userId && post.collab_status === 'pending' && (
                     <div style={{ marginTop: 10, padding: 10, borderRadius: 14, background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}>
                       <div style={{ fontSize: 13, fontWeight: 700, lineHeight: 1.4 }}>{(post.owner.name || '').split(' ')[0]} invited you to share this post. It shows on your profile too if you accept.</div>
@@ -1050,6 +1055,20 @@ export function FeedPanel({ me, userId, onClose, onOpenProfile, ownerFilter = nu
           { k: 'delete', label: 'Delete', icon: <Trash2 />, danger: true, on: () => { const p0 = ownMenu; setOwnMenu(null); setConfirmDeletePost(p0); } },
         ]} />
       )}
+      {otherMenu && (() => {
+        const say = (t) => { setPinNote(t); setTimeout(() => setPinNote((c) => (c === t ? '' : c)), 2400); };
+        const p0 = otherMenu;
+        const shut = () => setOtherMenu(null);
+        return (
+          <ActionSheet onClose={shut} zIndex={680} items={[
+            { k: 'link', label: 'Copy link', icon: <LinkIcon />, on: async () => { shut(); let ok = false; try { ok = await copyTextToClipboard(`${siteOrigin()}/?post=${p0.id}`); } catch {} say(ok ? 'Link copied' : 'That did not copy. Try again.'); } },
+            ...psFeedItems(p0, userId, { close: shut, gone: (p) => setItems((prev) => (prev || []).filter((x) => x.id !== p.id)), back: () => load(), say }),
+            p0.owner ? { k: 'profile', label: 'About this account', icon: <User />, on: () => { shut(); onOpenProfile(p0.owner); } } : null,
+            !fixedIds && !ownerFilter ? { k: 'hide', label: 'Not interested', icon: <EyeOff />, on: () => { shut(); setItems((prev) => (prev || []).filter((x) => x.id !== p0.id)); say('You will see fewer posts like this'); } } : null,
+            { k: 'report', label: 'Report', icon: <Flag />, danger: true, on: async () => { shut(); try { await reportUser(userId, p0.user_id, `Post ${p0.id}`); } catch {} say('Thanks. We will take a look.'); } },
+          ]} />
+        );
+      })()}
       {feedInsights && <PostInsightsPage post={feedInsights} onClose={() => setFeedInsights(null)} />}
       {feedTips.sheet}
       {feedEdit && <EditPostPage post={feedEdit} onClose={() => setFeedEdit(null)} onSaved={(np) => { setFeedEdit(null); setItems((prev) => (prev || []).map((x) => (x.id === np.id ? { ...x, ...np } : x))); setPinNote('Post updated'); setTimeout(() => setPinNote(''), 1800); }} />}

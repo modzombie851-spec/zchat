@@ -31,6 +31,10 @@ export function injectKitCss() {
     '.zgk-btn{-webkit-tap-highlight-color:transparent;touch-action:none;user-select:none;-webkit-user-select:none;outline:none}',
     '.zgk-btn:focus-visible{box-shadow:0 0 0 3px #fff,0 0 0 6px #2479E8!important}',
     '[data-side="1"] [style*="overflow-y: auto"]{overflow-x:auto!important;touch-action:pan-x pan-y!important}',
+    '@keyframes zgk-feed{0%{opacity:0;transform:translateX(10px)}7%{opacity:1;transform:none}82%{opacity:1}100%{opacity:0}}',
+    '@keyframes zgk-feedl{0%{opacity:0;transform:translateX(-10px)}7%{opacity:1;transform:none}82%{opacity:1}100%{opacity:0}}',
+    '@keyframes zgk-rib{0%{opacity:0;transform:scaleX(.6)}10%{opacity:1;transform:none}80%{opacity:1}100%{opacity:0}}',
+    '@keyframes zgk-hint{0%{opacity:0}10%{opacity:1}85%{opacity:1}100%{opacity:0}}',
   ].join('');
   document.head.appendChild(st);
 }
@@ -79,29 +83,42 @@ const ICON = {
   lock: 'M6 11h12v9H6zM8.5 11V8a3.5 3.5 0 0 1 7 0v3',
   crown: 'M3 8.5L7.5 12 12 5l4.5 7L21 8.5 19.2 18H4.8z',
   bomb: 'M10 8a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM14 9l3-3M17 3v2M19.5 4.5L18 6M21 7h-2',
+  magnet: 'M5.5 4v8a6.5 6.5 0 0 0 13 0V4h-4v8a2.5 2.5 0 0 1-5 0V4zM5.5 8h4M14.5 8h4',
+  help: 'M12 3.5a8.5 8.5 0 1 0 0 17 8.5 8.5 0 0 0 0-17zM9.6 9.6a2.5 2.5 0 1 1 3.6 2.2c-.7.4-1.2.9-1.2 1.7v.4M12 16.8v.2',
 };
 const FILLED = new Set(['dash', 'shield', 'bolt', 'flame', 'up', 'left', 'right', 'play', 'star', 'heart', 'crown', 'bomb', 'sword']);
 
-export function GIcon({ k, size = 26, color = '#FFFFFF', ink = INK, stroke }) {
+export function GIcon({ k, size = 26, color = '#FFFFFF', ink = 'rgba(0,0,0,0.34)', stroke, line = false, halo = true }) {
   const d = ICON[k] || ICON.star;
   const filled = FILLED.has(k);
   const sw = stroke || 2.4;
+  if (line) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" style={{ display: 'block', overflow: 'visible' }}>
+        {halo && <path d={d} fill="none" stroke="rgba(0,0,0,0.28)" strokeWidth={sw + 1.6} strokeLinecap="round" strokeLinejoin="round" />}
+        <path d={d} fill="none" stroke={color} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    );
+  }
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" style={{ display: 'block', overflow: 'visible' }}>
-      <path d={d} fill={filled ? ink : 'none'} stroke={ink} strokeWidth={sw + 3.2} strokeLinecap="round" strokeLinejoin="round" />
+      <path d={d} fill={filled ? ink : 'none'} stroke={ink} strokeWidth={sw + 2} strokeLinecap="round" strokeLinejoin="round" />
       <path d={d} fill={filled ? color : 'none'} stroke={color} strokeWidth={filled ? 1.2 : sw} strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
 
+function hexA(h, a) { const n = parseInt(String(h).slice(1, 7), 16) || 0; return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`; }
+
 export function GBtn({ icon, label, onPress, color = 'blue', size = 64, cool = 0, coolMax = 0, badge, disabled, fast = true, sound = 'pop', iconSize, style, children, active }) {
   injectKitCss();
   const [down, setDown] = useState(false);
-  const c = GC[color] || GC.blue;
-  const edge = Math.max(4, Math.round(size * 0.075));
+  const plain = color === 'white' || color === 'dark' || !GC[color];
+  const c = GC[color] || GC.white;
   const busy = cool > 0 || disabled;
   const fire = () => { if (busy) return; kitTap(sound); if (onPress) onPress(); };
   const frac = coolMax > 0 ? Math.max(0, Math.min(1, cool / coolMax)) : 0;
+  const ring = busy ? 'rgba(255,255,255,0.3)' : active ? '#FFFFFF' : plain ? 'rgba(255,255,255,0.62)' : c[0];
   return (
     <button type="button" className="zgk-btn" aria-label={label} disabled={!!disabled}
       onPointerDown={(e) => { e.stopPropagation(); if (e.cancelable) e.preventDefault(); setDown(true); if (fast) fire(); }}
@@ -110,18 +127,15 @@ export function GBtn({ icon, label, onPress, color = 'blue', size = 64, cool = 0
       onPointerLeave={() => setDown(false)}
       onClick={(e) => { e.stopPropagation(); if (!fast) fire(); }}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fire(); } }}
-      style={{ position: 'relative', width: size, height: size + edge, padding: 0, border: 'none', background: 'transparent', cursor: busy ? 'default' : 'pointer', flexShrink: 0, ...style }}>
-      <span aria-hidden="true" style={{ position: 'absolute', left: 0, top: edge, width: size, height: size, borderRadius: '50%', background: c[2], boxShadow: `0 0 0 3px ${INK}, 0 ${edge + 4}px 10px rgba(0,0,0,0.35)` }} />
-      <span aria-hidden="true" style={{ position: 'absolute', left: 0, top: down ? edge - 1 : 0, width: size, height: size, borderRadius: '50%', overflow: 'hidden', background: busy ? `linear-gradient(180deg, ${GC.dark[0]} 0%, ${GC.dark[1]} 100%)` : `linear-gradient(180deg, ${c[0]} 0%, ${c[1]} 70%)`, boxShadow: `0 0 0 3px ${INK}, inset 0 -${Math.round(size * 0.06)}px 0 rgba(0,0,0,0.18)`, transition: 'top 0.06s ease-out', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <span style={{ position: 'absolute', left: '14%', right: '14%', top: '6%', height: '34%', borderRadius: '50%', background: 'linear-gradient(180deg, rgba(255,255,255,0.75), rgba(255,255,255,0.08))' }} />
-        {active && <span style={{ position: 'absolute', inset: 0, borderRadius: '50%', boxShadow: 'inset 0 0 0 4px rgba(255,255,255,0.85)' }} />}
-        {frac > 0 && <span style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: `conic-gradient(rgba(10,6,24,0.62) ${frac * 360}deg, rgba(10,6,24,0) 0deg)` }} />}
-        <span style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: busy ? 0.75 : 1 }}>
-          {children || <GIcon k={icon} size={iconSize || Math.round(size * 0.46)} color={color === 'white' ? '#3A3352' : '#FFFFFF'} ink={INK} />}
+      style={{ position: 'relative', width: size, height: size, padding: 0, border: 'none', borderRadius: '50%', background: 'transparent', cursor: busy ? 'default' : 'pointer', flexShrink: 0, transform: down ? 'scale(0.94)' : 'none', transition: 'transform 0.06s ease-out', ...style }}>
+      <span aria-hidden="true" style={{ position: 'absolute', inset: 0, borderRadius: '50%', overflow: 'hidden', background: down ? 'rgba(255,255,255,0.22)' : plain ? 'rgba(6,10,18,0.5)' : hexA(c[2], 0.62), boxShadow: `inset 0 0 0 ${size >= 56 ? 2 : 1.5}px ${ring}, 0 2px 8px rgba(0,0,0,0.22)`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        {frac > 0 && <span style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: `conic-gradient(rgba(0,0,0,0.5) ${frac * 360}deg, rgba(0,0,0,0) 0deg)` }} />}
+        <span style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: busy ? 0.5 : 1 }}>
+          {children || <GIcon k={icon} size={iconSize || Math.round(size * 0.44)} color="#FFFFFF" line stroke={2.1} />}
         </span>
-        {cool > 0 && <span style={{ position: 'absolute', right: '50%', bottom: '8%', transform: 'translateX(50%)', fontFamily: FONT, fontWeight: 900, fontSize: Math.round(size * 0.24), color: '#FFFFFF', textShadow: `0 2px 0 ${INK}, 0 0 4px ${INK}` }}>{Math.ceil(cool)}</span>}
+        {cool > 0 && coolMax > 1.5 && <span style={{ position: 'absolute', left: 0, right: 0, top: '50%', transform: 'translateY(-50%)', textAlign: 'center', fontFamily: FONT, fontWeight: 800, fontSize: Math.round(size * 0.3), color: '#FFFFFF', textShadow: '0 1px 3px rgba(0,0,0,0.9)' }}>{Math.ceil(cool)}</span>}
       </span>
-      {badge != null && <span aria-hidden="true" style={{ position: 'absolute', right: -4, top: -4, minWidth: 22, height: 22, padding: '0 5px', borderRadius: 11, background: GC.red[1], color: '#FFFFFF', fontFamily: FONT, fontWeight: 900, fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 0 0 2.5px ${INK}` }}>{badge}</span>}
+      {badge != null && <span aria-hidden="true" style={{ position: 'absolute', right: -3, top: -3, minWidth: 18, height: 18, padding: '0 5px', borderRadius: 9, background: '#E5484D', color: '#FFFFFF', fontFamily: FONT, fontWeight: 800, fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box' }}>{badge}</span>}
     </button>
   );
 }
@@ -141,8 +155,8 @@ export function GHold({ icon, label, color = 'blue', size = 72, onDown, onUp, st
         onKeyDown={(e) => { if ((e.key === 'Enter' || e.key === ' ') && !down) { e.preventDefault(); setDown(true); if (onDown) onDown(); } }}
         onKeyUp={(e) => { if (e.key === 'Enter' || e.key === ' ') { setDown(false); if (onUp) onUp(); } }}
         style={{ position: 'relative', width: size, height: size, padding: 0, border: 'none', borderRadius: '50%', background: 'transparent', cursor: 'pointer', flexShrink: 0, touchAction: 'none', transform: down ? 'scale(0.93)' : 'none', transition: 'transform 0.05s ease-out', ...style }}>
-        <span aria-hidden="true" style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: main ? `radial-gradient(circle at 50% 38%, ${c[0]}dd 0%, ${c[1]}bb 62%, ${c[1]}88 100%)` : down ? 'rgba(255,255,255,0.3)' : 'rgba(8,14,30,0.42)', boxShadow: `inset 0 0 0 ${main ? 3 : 2.5}px ${main ? c[0] : 'rgba(255,255,255,0.72)'}, 0 2px 10px rgba(0,0,0,0.28)`, display: 'flex', alignItems: 'center', justifyContent: 'center', filter: down && main ? 'brightness(1.12)' : 'none' }}>
-          <GIcon k={icon} size={Math.round(size * 0.44)} color="#FFFFFF" ink="rgba(0,0,0,0.35)" stroke={2.2} />
+        <span aria-hidden="true" style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: down ? 'rgba(255,255,255,0.24)' : 'rgba(0,0,0,0.3)', boxShadow: `inset 0 0 0 ${main ? 2 : 1.5}px rgba(255,255,255,${main ? 0.82 : 0.62})`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <GIcon k={icon} size={Math.round(size * 0.42)} color="#FFFFFF" line stroke={main ? 2.3 : 2.1} />
         </span>
       </button>
     );
@@ -165,40 +179,39 @@ export function GHold({ icon, label, color = 'blue', size = 72, onDown, onUp, st
 export function GPill({ text, icon, onPress, color = 'green', height = 56, wide, disabled, style, sound = 'pop', fast = false, small }) {
   injectKitCss();
   const [down, setDown] = useState(false);
-  const c = GC[color] || GC.green;
-  const edge = small ? 4 : 6;
-  const h = small ? Math.min(height, 44) : height;
-  const ink = color === 'gold' || color === 'white' ? '#3A2508' : '#FFFFFF';
+  const h = small ? Math.min(height, 40) : Math.min(height, 50);
+  const kind = color === 'green' || color === 'gold' ? 'main' : color === 'red' ? 'warn' : color === 'white' || color === 'dark' || !GC[color] ? 'plain' : 'tone';
+  const c = GC[color] || GC.white;
+  const bg = kind === 'main' ? 'linear-gradient(180deg, #FFD84E 0%, #F2B11F 100%)' : kind === 'warn' ? 'rgba(214,52,52,0.22)' : kind === 'tone' ? hexA(c[2], 0.66) : 'rgba(255,255,255,0.09)';
+  const ring = kind === 'main' ? 'inset 0 -2px 0 rgba(120,70,0,0.35), inset 0 1px 0 rgba(255,255,255,0.45)' : `inset 0 0 0 1.5px ${kind === 'warn' ? 'rgba(255,118,118,0.75)' : kind === 'tone' ? c[0] : 'rgba(255,255,255,0.4)'}`;
+  const ink = kind === 'main' ? '#1F1702' : kind === 'warn' ? '#FFB4B4' : '#FFFFFF';
   const fire = () => { if (disabled) return; kitTap(sound); if (onPress) onPress(); };
   return (
     <button type="button" className="zgk-btn" aria-label={text} disabled={!!disabled}
       onPointerDown={(e) => { e.stopPropagation(); setDown(true); if (fast) { if (e.cancelable) e.preventDefault(); fire(); } }}
       onPointerUp={() => setDown(false)} onPointerCancel={() => setDown(false)} onPointerLeave={() => setDown(false)}
       onClick={(e) => { e.stopPropagation(); if (!fast) fire(); }}
-      style={{ position: 'relative', width: wide ? '100%' : undefined, height: h + edge, padding: 0, border: 'none', background: 'transparent', cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.55 : 1, ...style }}>
-      <span aria-hidden="true" style={{ position: 'absolute', left: 0, right: 0, top: edge, height: h, borderRadius: h / 2, background: c[2], boxShadow: `0 0 0 3px ${INK}, 0 ${edge + 4}px 12px rgba(0,0,0,0.3)` }} />
-      <span style={{ position: 'relative', top: down ? edge - 1 : 0, height: h, minWidth: h * 2, padding: `0 ${small ? 16 : 24}px`, borderRadius: h / 2, overflow: 'hidden', background: `linear-gradient(180deg, ${c[0]} 0%, ${c[1]} 72%)`, boxShadow: `0 0 0 3px ${INK}, inset 0 -5px 0 rgba(0,0,0,0.16)`, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, transition: 'top 0.06s ease-out', boxSizing: 'border-box' }}>
-        <span style={{ position: 'absolute', left: 14, right: 14, top: 4, height: h * 0.32, borderRadius: h, background: 'linear-gradient(180deg, rgba(255,255,255,0.7), rgba(255,255,255,0.05))' }} />
-        {icon && <span style={{ position: 'relative' }}><GIcon k={icon} size={small ? 18 : 22} color={ink === '#FFFFFF' ? '#FFFFFF' : '#3A2508'} ink={INK} /></span>}
-        <span style={{ position: 'relative', fontFamily: FONT, fontWeight: 900, fontSize: small ? 15 : 19, color: ink, letterSpacing: '0.01em', whiteSpace: 'nowrap', textShadow: ink === '#FFFFFF' ? `0 2px 0 ${INK}, 1px 0 0 ${INK}, -1px 0 0 ${INK}, 0 -1px 0 ${INK}` : 'none' }}>{text}</span>
-      </span>
+      style={{ position: 'relative', width: wide ? '100%' : undefined, height: h, minWidth: Math.round(h * 2.2), padding: `0 ${small ? 16 : 22}px`, border: 'none', borderRadius: 10, background: bg, boxShadow: `${ring}, 0 3px 10px rgba(0,0,0,0.22)`, color: ink, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontFamily: FONT, fontWeight: 800, fontSize: small ? 14.5 : 16.5, letterSpacing: '0.005em', whiteSpace: 'nowrap', cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.45 : 1, transform: down ? 'scale(0.97)' : 'none', filter: down ? 'brightness(1.1)' : 'none', transition: 'transform 0.06s ease-out', boxSizing: 'border-box', ...style }}>
+      {icon && <GIcon k={icon} size={small ? 16 : 18} color={ink} line halo={false} stroke={2.3} />}
+      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{text}</span>
     </button>
   );
 }
 
-export function GPanel({ children, style, color = 'rgba(28,20,52,0.92)', edge = '#0E0A1E' }) {
+export function GPanel({ children, style, color }) {
   return (
-    <div style={{ borderRadius: 22, background: color, boxShadow: `0 0 0 3px ${INK}, inset 0 2px 0 rgba(255,255,255,0.14), 0 6px 0 ${edge}, 0 14px 30px rgba(0,0,0,0.35)`, ...style }}>{children}</div>
+    <div style={{ borderRadius: 14, background: color || 'rgba(12,16,24,0.86)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.11), inset 0 1px 0 rgba(255,255,255,0.08), 0 12px 32px rgba(0,0,0,0.38)', ...style }}>{children}</div>
   );
 }
 
-export function GChip({ children, style, color = 'rgba(20,14,40,0.82)' }) {
-  return <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 34, padding: '0 12px', borderRadius: 17, background: color, boxShadow: `0 0 0 2.5px ${INK}, 0 3px 0 rgba(0,0,0,0.35)`, color: '#FFFFFF', fontFamily: FONT, fontWeight: 900, fontSize: 15, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', ...style }}>{children}</div>;
+export function GChip({ children, style, color = 'rgba(8,12,20,0.6)' }) {
+  return <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 30, padding: '0 11px', borderRadius: 8, background: color, boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.16)', color: '#FFFFFF', fontFamily: FONT, fontWeight: 800, fontSize: 13.5, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', ...style }}>{children}</div>;
 }
 
-export function GTitle({ text, size = 44, color = '#FFE15A', style }) {
+export function GTitle({ text, size = 44, color = '#FFFFFF', style }) {
+  const big = size >= 40;
   return (
-    <div style={{ fontFamily: FONT, fontWeight: 900, fontSize: size, lineHeight: 1, color, letterSpacing: '-0.01em', textShadow: `0 4px 0 ${INK}, 3px 0 0 ${INK}, -3px 0 0 ${INK}, 0 -3px 0 ${INK}, 3px 3px 0 ${INK}, -3px 3px 0 ${INK}, 3px -3px 0 ${INK}, -3px -3px 0 ${INK}, 0 10px 18px rgba(0,0,0,0.35)`, ...style }}>{text}</div>
+    <div style={{ fontFamily: FONT, fontWeight: 900, fontSize: Math.round(size * (big ? 0.92 : 0.82)), lineHeight: 1.08, color, letterSpacing: big ? '-0.02em' : '-0.01em', textShadow: big ? '0 3px 0 rgba(0,0,0,0.28), 0 8px 24px rgba(0,0,0,0.35)' : '0 2px 10px rgba(0,0,0,0.4)', textWrap: 'balance', ...style }}>{text}</div>
   );
 }
 
@@ -247,8 +260,8 @@ export function useJoystick(wrapRef, opts) {
 export function GJoy({ view, knobRef, color = 'blue', idle, R = 52, alpha = 1, flat = false }) {
   const c = GC[color] || GC.blue;
   const flatBase = (x, y, op) => (
-    <div style={{ position: 'absolute', left: x - R - 10, top: y - R - 10, width: (R + 10) * 2, height: (R + 10) * 2, borderRadius: '50%', background: 'rgba(8,14,30,0.32)', boxShadow: 'inset 0 0 0 2px rgba(255,255,255,0.42), 0 2px 10px rgba(0,0,0,0.25)', pointerEvents: 'none', opacity: op * alpha }}>
-      <div ref={op === 1 ? knobRef : null} style={{ position: 'absolute', left: R + 10 - Math.round(R * 0.48), top: R + 10 - Math.round(R * 0.48), width: Math.round(R * 0.96), height: Math.round(R * 0.96), borderRadius: '50%', background: 'rgba(255,255,255,0.78)', boxShadow: `inset 0 0 0 ${Math.max(5, Math.round(R * 0.14))}px ${c[0]}, 0 3px 8px rgba(0,0,0,0.3)` }} />
+    <div style={{ position: 'absolute', left: x - R - 10, top: y - R - 10, width: (R + 10) * 2, height: (R + 10) * 2, borderRadius: '50%', background: 'radial-gradient(circle, rgba(0,0,0,0.08) 0%, rgba(0,0,0,0.22) 100%)', boxShadow: 'inset 0 0 0 1.5px rgba(255,255,255,0.5)', pointerEvents: 'none', opacity: op * alpha }}>
+      <div ref={op === 1 ? knobRef : null} style={{ position: 'absolute', left: R + 10 - Math.round(R * 0.42), top: R + 10 - Math.round(R * 0.42), width: Math.round(R * 0.84), height: Math.round(R * 0.84), borderRadius: '50%', background: 'rgba(255,255,255,0.42)', boxShadow: 'inset 0 0 0 1.5px rgba(255,255,255,0.9), 0 2px 6px rgba(0,0,0,0.25)' }} />
     </div>
   );
   if (flat) {
@@ -266,6 +279,28 @@ export function GJoy({ view, knobRef, color = 'blue', idle, R = 52, alpha = 1, f
   if (view) return base(view.x, view.y, 1);
   if (idle) return base(idle.x, idle.y, 0.55);
   return null;
+}
+
+export function GIconCap({ icon, text, label, onPress, on = false }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, minWidth: 60 }}>
+      <GBtn icon={icon} color="dark" active={on} size={46} fast={false} label={label || text} onPress={onPress} />
+      <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.72)', whiteSpace: 'nowrap' }}>{text}</span>
+    </div>
+  );
+}
+
+export function GStat({ items, accent = '#FFD84E' }) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))`, gap: 1, width: '100%', borderRadius: 10, overflow: 'hidden', background: 'rgba(255,255,255,0.08)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.08)' }}>
+      {items.map(([a, v]) => (
+        <div key={a} style={{ padding: '9px 4px 8px', background: 'rgba(10,14,22,0.72)', textAlign: 'center', fontFamily: FONT }}>
+          <div style={{ fontSize: 18, fontWeight: 900, color: accent, fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 }}>{v}</div>
+          <div style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.6)', marginTop: 3 }}>{a}</div>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export function GToggle({ on, onPress, label, iconOn, iconOff }) {
@@ -299,13 +334,13 @@ function GSteps({ label, value, opts, onPick }) {
   const near = opts.reduce((a, b) => (Math.abs(b[0] - value) < Math.abs(a[0] - value) ? b : a))[0];
   return (
     <div style={{ width: '100%' }}>
-      <div style={{ fontSize: 14, fontWeight: 900, color: '#FFFFFF', marginBottom: 7 }}>{label}</div>
-      <div role="radiogroup" aria-label={label} style={{ display: 'grid', gridTemplateColumns: `repeat(${opts.length}, minmax(0, 1fr))`, gap: 5, padding: 4, borderRadius: 16, background: 'rgba(0,0,0,0.28)' }}>
+      <div style={{ fontSize: 13.5, fontWeight: 800, color: 'rgba(255,255,255,0.9)', marginBottom: 6 }}>{label}</div>
+      <div role="radiogroup" aria-label={label} style={{ display: 'grid', gridTemplateColumns: `repeat(${opts.length}, minmax(0, 1fr))`, gap: 4, padding: 3, borderRadius: 10, background: 'rgba(255,255,255,0.06)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.1)' }}>
         {opts.map(([v, t]) => {
           const on = v === near;
           return (
             <button key={t} type="button" role="radio" aria-checked={on} className="zgk-btn" {...pressProps(() => { kitTap(); onPick(v); })}
-              style={{ height: 36, borderRadius: 12, border: 'none', background: on ? '#FFE15A' : 'transparent', color: on ? INK : 'rgba(255,255,255,0.82)', fontFamily: FONT, fontWeight: 900, fontSize: 13, cursor: 'pointer', boxShadow: on ? `0 0 0 2px ${INK}` : 'none' }}>{t}</button>
+              style={{ height: 34, borderRadius: 7, border: 'none', background: on ? '#F7C53A' : 'transparent', color: on ? '#1F1702' : 'rgba(255,255,255,0.8)', fontFamily: FONT, fontWeight: 800, fontSize: 13, cursor: 'pointer' }}>{t}</button>
           );
         })}
       </div>
@@ -316,8 +351,8 @@ export function GControlsPanel({ onClose, sideways, wide }) {
   const v = useCtlLook();
   const samples = (
     <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: 14, height: wide ? 96 : 84 }}>
-      <div style={{ opacity: 1 - v.see, transform: `scale(${v.size})`, transformOrigin: 'bottom center', transition: 'transform .15s ease, opacity .15s ease' }}><GBtn icon="dash" color="gold" size={66} label="Sample button" onPress={() => {}} /></div>
-      <div style={{ opacity: 1 - v.see, transform: `scale(${v.size})`, transformOrigin: 'bottom center', transition: 'transform .15s ease, opacity .15s ease' }}><GBtn icon="suck" color="teal" size={50} label="Sample button" onPress={() => {}} /></div>
+      <div style={{ opacity: 1 - v.see, transform: `scale(${v.size})`, transformOrigin: 'bottom center', transition: 'transform .15s ease, opacity .15s ease' }}><GHudSkill icon="dash" main size={66} label="Sample button" onPress={() => {}} /></div>
+      <div style={{ opacity: 1 - v.see, transform: `scale(${v.size})`, transformOrigin: 'bottom center', transition: 'transform .15s ease, opacity .15s ease' }}><GHudSkill icon="suck" size={50} label="Sample button" onPress={() => {}} /></div>
     </div>
   );
   const opts = (
@@ -327,7 +362,7 @@ export function GControlsPanel({ onClose, sideways, wide }) {
       {sideways && (
         <div role="switch" aria-checked={v.side} tabIndex={0} {...pressProps(() => { setCtlLook({ side: !v.side }); kitTap(); })} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', cursor: 'pointer', fontSize: 14, fontWeight: 900, color: '#FFFFFF' }}>
           <span style={{ flex: 1 }}>Play sideways<span style={{ display: 'block', fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.65)' }}>No need to turn your phone setting</span></span>
-          <span aria-hidden="true" style={{ width: 46, height: 28, borderRadius: 14, background: v.side ? '#36B23A' : 'rgba(255,255,255,0.18)', position: 'relative', transition: 'background .15s ease', flexShrink: 0 }}><span style={{ position: 'absolute', top: 3, left: v.side ? 21 : 3, width: 22, height: 22, borderRadius: 11, background: '#FFFFFF', transition: 'left .15s ease' }} /></span>
+          <span aria-hidden="true" style={{ width: 46, height: 28, borderRadius: 14, background: v.side ? '#F7C53A' : 'rgba(255,255,255,0.18)', position: 'relative', transition: 'background .15s ease', flexShrink: 0 }}><span style={{ position: 'absolute', top: 3, left: v.side ? 21 : 3, width: 22, height: 22, borderRadius: 11, background: '#FFFFFF', transition: 'left .15s ease' }} /></span>
         </div>
       )}
       <div style={{ display: 'flex', gap: 10, width: '100%' }}>
@@ -413,28 +448,57 @@ export function stagePoint(el, e, side) {
   return side ? { x: e.clientY - r.top, y: r.right - e.clientX } : { x: e.clientX - r.left, y: e.clientY - r.top };
 }
 
-export function GHudBtn({ icon, label, onPress, on = false, tone = '#3FB950', size = 40, badge, children }) {
+export function GHudBtn({ icon, label, onPress, on = false, tone = '#7CF2A0', size = 36, badge, children }) {
   injectKitCss();
-  const ic = Math.round(size * 0.5);
+  const ic = Math.round(size * 0.48);
   return (
     <button type="button" className="zgk-btn" aria-label={label} aria-pressed={on || undefined} {...pressProps(() => { kitTap('click'); if (onPress) onPress(); })}
-      style={{ position: 'relative', width: size, height: size, borderRadius: '50%', border: 'none', padding: 0, flexShrink: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: on ? tone : 'rgba(8,14,30,0.62)', boxShadow: on ? '0 0 0 1.5px rgba(255,255,255,0.85), 0 2px 8px rgba(0,0,0,0.3)' : 'inset 0 0 0 1.5px rgba(255,255,255,0.38), 0 2px 8px rgba(0,0,0,0.28)' }}>
-      {children || <GIcon k={icon} size={ic} color="#FFFFFF" ink="rgba(0,0,0,0.3)" stroke={2.2} />}
-      {badge != null && <span aria-hidden="true" style={{ position: 'absolute', right: -3, top: -3, minWidth: 18, height: 18, padding: '0 4px', borderRadius: 9, background: '#E53A2A', color: '#FFFFFF', fontFamily: FONT, fontWeight: 900, fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 0 2px rgba(8,14,30,0.9)', boxSizing: 'border-box' }}>{badge}</span>}
+      style={{ position: 'relative', width: size, height: size, borderRadius: '50%', border: 'none', padding: 0, flexShrink: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.3)', boxShadow: `inset 0 0 0 1.5px ${on ? tone : 'rgba(255,255,255,0.58)'}` }}>
+      {children || <GIcon k={icon} size={ic} color={on ? tone : '#FFFFFF'} line stroke={2} />}
+      {badge != null && <span aria-hidden="true" style={{ position: 'absolute', right: -2, top: -2, minWidth: 16, height: 16, padding: '0 4px', borderRadius: 8, background: '#E5484D', color: '#FFFFFF', fontFamily: FONT, fontWeight: 800, fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box' }}>{badge}</span>}
     </button>
   );
 }
 
 export function GHudPanel({ children, style }) {
-  return <div style={{ borderRadius: 12, background: 'rgba(8,14,30,0.66)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.22)', color: '#FFFFFF', fontFamily: FONT, ...style }}>{children}</div>;
+  return <div style={{ borderRadius: 8, background: 'linear-gradient(90deg, rgba(0,0,0,0.46), rgba(0,0,0,0.26))', color: '#FFFFFF', fontFamily: FONT, textShadow: '0 1px 2px rgba(0,0,0,0.55)', ...style }}>{children}</div>;
 }
 
-export function GHudSkill({ icon, label, onPress, tone = '#FFD23F', size = 54, cool = 0, coolMax = 0, main = false, sound = 'pop' }) {
+export function GFeed({ items, align = 'right', style }) {
+  injectKitCss();
+  const right = align === 'right';
+  return (
+    <div aria-live="polite" style={{ display: 'flex', flexDirection: 'column', alignItems: right ? 'flex-end' : 'flex-start', gap: 3, pointerEvents: 'none', fontFamily: FONT, ...style }}>
+      {items.map((it) => (
+        <div key={it.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: right ? '3px 9px 3px 22px' : '3px 22px 3px 9px', background: `linear-gradient(${right ? 270 : 90}deg, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0.32) 65%, rgba(0,0,0,0) 100%)`, color: it.col || '#FFFFFF', fontSize: 12, fontWeight: 700, lineHeight: 1.25, whiteSpace: 'nowrap', textShadow: '0 1px 2px rgba(0,0,0,0.7)', animation: `${right ? 'zgk-feed' : 'zgk-feedl'} ${it.life || 3.6}s ease-out forwards` }}>
+          {it.dot && <span style={{ width: 6, height: 6, borderRadius: 3, background: it.dot, flexShrink: 0 }} />}
+          <span>{it.text}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function GRibbon({ title, sub, col = '#FFFFFF', life = 2.4 }) {
+  injectKitCss();
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', pointerEvents: 'none', fontFamily: FONT, animation: `zgk-rib ${life}s ease-out forwards` }}>
+      <div style={{ padding: '5px 46px 6px', background: 'linear-gradient(90deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.55) 22%, rgba(0,0,0,0.55) 78%, rgba(0,0,0,0) 100%)', color: col, fontSize: 16, fontWeight: 800, whiteSpace: 'nowrap', textShadow: '0 1px 3px rgba(0,0,0,0.6)' }}>{title}</div>
+      {sub && <div style={{ marginTop: 2, fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.86)', whiteSpace: 'nowrap', textShadow: '0 1px 3px rgba(0,0,0,0.8)' }}>{sub}</div>}
+    </div>
+  );
+}
+
+export function GHint({ text, life = 4 }) {
+  injectKitCss();
+  return <div style={{ maxWidth: '100%', textAlign: 'center', fontFamily: FONT, fontSize: 12.5, fontWeight: 700, lineHeight: 1.4, color: 'rgba(255,255,255,0.9)', textShadow: '0 1px 3px rgba(0,0,0,0.85), 0 0 8px rgba(0,0,0,0.35)', pointerEvents: 'none', animation: `zgk-hint ${life}s ease-out forwards` }}>{text}</div>;
+}
+
+export function GHudSkill({ icon, label, onPress, size = 52, cool = 0, coolMax = 0, main = false, sound = 'pop' }) {
   injectKitCss();
   const [down, setDown] = useState(false);
   const busy = cool > 0;
   const frac = coolMax > 0 ? Math.max(0, Math.min(1, cool / coolMax)) : 0;
-  const ring = main ? 3 : 2.5;
   const fire = () => { if (busy) return; kitTap(sound); if (onPress) onPress(); };
   return (
     <button type="button" className="zgk-btn" aria-label={label}
@@ -444,11 +508,11 @@ export function GHudSkill({ icon, label, onPress, tone = '#FFD23F', size = 54, c
       onPointerLeave={() => setDown(false)}
       onClick={(e) => e.stopPropagation()}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fire(); } }}
-      style={{ position: 'relative', width: size, height: size, padding: 0, border: 'none', borderRadius: '50%', background: 'transparent', cursor: busy ? 'default' : 'pointer', flexShrink: 0, transform: down ? 'scale(0.93)' : 'none', transition: 'transform 0.06s ease-out' }}>
-      <span aria-hidden="true" style={{ position: 'absolute', inset: 0, borderRadius: '50%', overflow: 'hidden', background: busy ? 'rgba(8,14,30,0.62)' : main ? `radial-gradient(circle at 50% 38%, ${tone}cc 0%, ${tone}99 58%, ${tone}66 100%)` : 'rgba(8,14,30,0.55)', boxShadow: `inset 0 0 0 ${ring}px ${busy ? 'rgba(255,255,255,0.3)' : tone}, 0 2px 10px rgba(0,0,0,0.3)`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        {frac > 0 && <span style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: `conic-gradient(rgba(6,10,24,0.6) ${frac * 360}deg, rgba(6,10,24,0) 0deg)` }} />}
-        <span style={{ position: 'relative', opacity: busy ? 0.55 : 1 }}><GIcon k={icon} size={Math.round(size * (main ? 0.46 : 0.44))} color={main || busy ? '#FFFFFF' : tone} ink="rgba(0,0,0,0.35)" stroke={2.2} /></span>
-        {busy && coolMax > 1.5 && <span style={{ position: 'absolute', left: 0, right: 0, bottom: Math.round(size * 0.1), textAlign: 'center', fontFamily: FONT, fontWeight: 900, fontSize: Math.round(size * 0.26), color: '#FFFFFF', textShadow: '0 1px 2px rgba(0,0,0,0.8)' }}>{Math.ceil(cool)}</span>}
+      style={{ position: 'relative', width: size, height: size, padding: 0, border: 'none', borderRadius: '50%', background: 'transparent', cursor: busy ? 'default' : 'pointer', flexShrink: 0, transform: down ? 'scale(0.94)' : 'none', transition: 'transform 0.06s ease-out' }}>
+      <span aria-hidden="true" style={{ position: 'absolute', inset: 0, borderRadius: '50%', overflow: 'hidden', background: down ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.3)', boxShadow: `inset 0 0 0 ${main ? 2 : 1.5}px rgba(255,255,255,${busy ? 0.32 : main ? 0.82 : 0.62})`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        {frac > 0 && <span style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: `conic-gradient(rgba(0,0,0,0.5) ${frac * 360}deg, rgba(0,0,0,0) 0deg)` }} />}
+        <span style={{ position: 'relative', opacity: busy ? 0.45 : 1 }}><GIcon k={icon} size={Math.round(size * 0.44)} color="#FFFFFF" line stroke={main ? 2.3 : 2.1} /></span>
+        {busy && coolMax > 1.5 && <span style={{ position: 'absolute', left: 0, right: 0, top: '50%', transform: 'translateY(-50%)', textAlign: 'center', fontFamily: FONT, fontWeight: 800, fontSize: Math.round(size * 0.3), color: '#FFFFFF', textShadow: '0 1px 3px rgba(0,0,0,0.9)' }}>{Math.ceil(cool)}</span>}
       </span>
     </button>
   );

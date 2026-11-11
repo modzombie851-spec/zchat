@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Avatar, Portal, useBackClose, hapticTap, FONT, Spinner } from '../App.jsx';
 import { useRoomLink } from './relay.jsx';
 import { EMOTES, Sheet, injectCss } from './livekit.jsx';
-import { GBtn, GHold, GPill, GPanel, GChip, GTitle, GIcon, GHudBtn, GHudPanel, injectKitCss, kitTap, pressProps, maxDpr, INK, useCtlLook, useGameStage, GControlsPanel } from './gamekit.jsx';
+import { GBtn, GHold, GPill, GPanel, GChip, GTitle, GIcon, GHudBtn, GHudPanel, GHint, GStat, injectKitCss, kitTap, pressProps, maxDpr, INK, useCtlLook, useGameStage, GControlsPanel } from './gamekit.jsx';
 import { Sfx } from './sfx.js';
 import { watchAllowed, setWatchAllowed, useLiveBeacon } from './live.js';
 import { WORLDS, LEVEL_N, BALLS, R, levelOf, levelName, makeWorld, mkBall, stepBall, interact, applyEvent, pressedButtons, gatesToOpen, foePos, clamp } from './rollengine.js';
@@ -91,7 +91,7 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
   const watchRef = useRef(watch);
   if (typeof window !== 'undefined' && window.__zfake) window.__zroll = { world: () => WR.current, balls: () => balls.current, roster: () => rosterRef.current };
 
-  const say = (text, sec) => { setToast({ text, at: Date.now() }); clearTimeout(toastTimer.current); toastTimer.current = setTimeout(() => setToast(null), (sec || 2.4) * 1000); };
+  const say = (text, sec) => { setToast({ text, at: Date.now(), life: sec || 2.4 }); clearTimeout(toastTimer.current); toastTimer.current = setTimeout(() => setToast(null), (sec || 2.4) * 1000); };
   const kindOf = () => (solo ? 'me' : myId);
   const playing = () => !watchRef.current && rosterRef.current.includes(kindOf());
 
@@ -374,7 +374,7 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
                 return (
                   <div key={i} style={{ position: 'absolute', left, top, width: 60, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
                     <GBtn color={WORLD_BTN[wi]} size={56} fast={false} label={isHost ? `Play level ${levelName(i)}` : `Level ${levelName(i)}`} onPress={() => pick(i)}>
-                      <span style={{ fontSize: 17, fontWeight: 900, color: '#FFFFFF', textShadow: `0 2px 0 ${INK}` }}>{levelName(i)}</span>
+                      <span style={{ fontSize: 17, fontWeight: 900, color: '#FFFFFF', textShadow: '0 1px 3px rgba(0,0,0,0.6)' }}>{levelName(i)}</span>
                     </GBtn>
                     <span style={{ display: 'flex', gap: 1 }}>{[0, 1, 2].map((q) => <GIcon key={q} k="star" size={12} color={b && b.stars > q ? '#FFD23F' : 'rgba(27,20,48,0.45)'} />)}</span>
                   </div>
@@ -416,8 +416,8 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
             </div>
             {land && <div style={{ position: 'absolute', left: capX, top: top(8), width: capW, display: 'flex', justifyContent: 'center', zIndex: 2, pointerEvents: 'none' }}>{capsule}</div>}
             {toast && (
-              <div key={toast.at} style={{ position: 'absolute', left: '50%', ...(land ? { bottom: bottom(18) } : { top: tlBottom ? tlBottom + 10 : top(150) }), transform: 'translateX(-50%)', pointerEvents: 'none', animation: 'zgk-pop 0.25s ease-out', maxWidth: land ? 'min(40%, 340px)' : '80%', zIndex: 4 }}>
-                <GHudPanel style={{ padding: '7px 13px', fontSize: 13, fontWeight: 900, textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{toast.text}</GHudPanel>
+              <div key={toast.at} style={{ position: 'absolute', left: '50%', ...(land ? { bottom: bottom(18) } : { top: tlBottom ? tlBottom + 10 : top(150) }), transform: 'translateX(-50%)', width: land ? 'min(44%, 360px)' : '80%', display: 'flex', justifyContent: 'center', pointerEvents: 'none', zIndex: 4 }}>
+                <GHint text={toast.text} life={toast.life || 2.4} />
               </div>
             )}
             {playing() && (
@@ -476,7 +476,7 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
                   {isHost && (
                     <div role="button" tabIndex={0} onClick={() => { const v = !allowWatch; setAllowWatch(v); setWatchAllowed(v); kitTap(); }} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', paddingTop: 4 }}>
                       <span style={{ flex: 1, fontSize: 13.5, fontWeight: 800 }}>Let friends watch</span>
-                      <span aria-hidden="true" style={{ width: 46, height: 28, borderRadius: 14, background: allowWatch ? '#5BE37D' : '#5A5470', boxShadow: `0 0 0 2.5px ${INK}`, position: 'relative', transition: 'background 0.2s' }}><span style={{ position: 'absolute', top: 3, left: allowWatch ? 21 : 3, width: 22, height: 22, borderRadius: 11, background: '#FFFFFF', boxShadow: `0 0 0 2px ${INK}`, transition: 'left 0.2s' }} /></span>
+                      <span aria-hidden="true" style={{ width: 46, height: 28, borderRadius: 14, background: allowWatch ? '#F7C53A' : 'rgba(255,255,255,0.18)', position: 'relative', transition: 'background 0.2s' }}><span style={{ position: 'absolute', top: 3, left: allowWatch ? 21 : 3, width: 22, height: 22, borderRadius: 11, background: '#FFFFFF', boxShadow: '0 1px 3px rgba(0,0,0,0.3)', transition: 'left 0.2s' }} /></span>
                     </div>
                   )}
                   {!isHost && <div style={{ fontSize: 13, fontWeight: 800, color: 'rgba(255,255,255,0.75)' }}>{`${names[room && room.host] || 'The host'} picks the level`}</div>}
@@ -494,12 +494,20 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
 
         {paused && phase === 'play' && (
           <div style={{ position: 'absolute', inset: 0, zIndex: 20, background: 'rgba(10,8,24,0.5)', display: 'flex', padding: 12, overflowY: 'auto', touchAction: 'pan-x pan-y' }}>
-            <GPanel style={{ margin: 'auto', width: '100%', maxWidth: 320, padding: land ? '14px 16px' : '22px 18px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: land ? 9 : 12, animation: 'zgk-pop 0.3s ease-out' }}>
-              <GTitle text="Paused" size={34} />
+            <GPanel style={{ margin: 'auto', width: '100%', maxWidth: 330, padding: land ? '14px 16px' : '18px 18px', display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: land ? 10 : 12, animation: 'zgk-pop 0.3s ease-out', boxSizing: 'border-box' }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10 }}>
+                <GTitle text="Paused" size={28} />
+                <span style={{ fontSize: 12.5, fontWeight: 700, color: 'rgba(255,255,255,0.62)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{`Level ${levelName(lvl)}, ${fmtT(hud.time)}`}</span>
+              </div>
               <GPill text="Resume" icon="play" color="green" wide onPress={() => setPaused(false)} />
-              <GPill text="Restart level" icon="replay" color="white" small wide onPress={() => startLevel(lvl)} />
-              <GPill text="Levels" icon="map" color="white" small wide onPress={toMenu} />
-              <GPill text="Leave" color="red" small wide onPress={finish} />
+              <div style={{ display: 'flex', gap: 8 }}>
+                <GPill text="Restart" icon="replay" color="white" small wide onPress={() => startLevel(lvl)} style={{ flex: 1 }} />
+                <GPill text="Controls" icon="gear" color="white" small wide onPress={() => setCtl(true)} style={{ flex: 1 }} />
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <GPill text="Levels" icon="map" color="white" small wide onPress={toMenu} style={{ flex: 1 }} />
+                <GPill text="Leave" color="red" small wide onPress={finish} style={{ flex: 1 }} />
+              </div>
             </GPanel>
           </div>
         )}
@@ -507,16 +515,9 @@ export function RollGamePage({ solo = false, room, me, myId, onClose, onInvite, 
         {phase === 'done' && result && (
           <div style={{ position: 'absolute', inset: 0, zIndex: 20, background: 'rgba(10,8,24,0.45)', display: 'flex', padding: 12, overflowY: 'auto', touchAction: 'pan-x pan-y' }}>
             <GPanel style={{ margin: 'auto', width: '100%', maxWidth: 350, padding: land ? '14px 16px' : '20px 18px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: land ? 9 : 12, textAlign: 'center', animation: 'zgk-pop 0.35s ease-out' }}>
-              <div style={{ display: 'flex', gap: 6, alignItems: 'flex-end' }}>{[0, 1, 2].map((q) => <div key={q} style={{ transform: q === 1 ? 'translateY(-8px)' : 'none' }}><GIcon k="star" size={q === 1 ? 52 : 42} color={result.stars > q ? '#FFD23F' : '#5A5470'} /></div>)}</div>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'flex-end' }}>{[0, 1, 2].map((q) => <div key={q} style={{ transform: q === 1 ? 'translateY(-6px)' : 'none' }}><GIcon k="star" size={q === 1 ? 42 : 34} color={result.stars > q ? '#FFD23F' : 'rgba(255,255,255,0.16)'} /></div>)}</div>
               <GTitle text={`Level ${levelName(result.i)} clear`} size={28} color="#FFE15A" />
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8, width: '100%' }}>
-                {[['Time', fmtT(result.time)], ['Coins', `${result.coins}/${result.coinsAll}`], ['Pops', String(result.deaths)]].map(([a, v]) => (
-                  <div key={a} style={{ padding: '10px 4px', borderRadius: 14, background: 'rgba(255,255,255,0.08)' }}>
-                    <div style={{ fontSize: 17, fontWeight: 900, color: '#FFE15A', fontVariantNumeric: 'tabular-nums' }}>{v}</div>
-                    <div style={{ fontSize: 11.5, fontWeight: 800, color: 'rgba(255,255,255,0.65)' }}>{a}</div>
-                  </div>
-                ))}
-              </div>
+              <GStat items={[['Time', fmtT(result.time)], ['Coins', `${result.coins}/${result.coinsAll}`], ['Pops', String(result.deaths)]]} />
               {isHost ? (
                 <>
                   {result.i < LEVEL_N - 1 && <GPill text="Next level" icon="play" color="green" wide onPress={() => startLevel(result.i + 1)} />}
@@ -578,7 +579,7 @@ export function RollInviteSheet({ friends, onClose, onInvite, already }) {
                   <div key={p.id} role="button" tabIndex={0} aria-pressed={on} onClick={() => toggle(p.id)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 16, background: on ? 'rgba(91,227,125,0.18)' : 'rgba(255,255,255,0.06)', boxShadow: on ? 'inset 0 0 0 2px #5BE37D' : 'none', cursor: 'pointer' }}>
                     <Avatar emoji={p.avatar} name={p.name} size={40} />
                     <span style={{ flex: 1, minWidth: 0, fontSize: 14.5, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</span>
-                    <span aria-hidden="true" style={{ width: 26, height: 26, borderRadius: 13, background: on ? '#5BE37D' : 'transparent', boxShadow: `0 0 0 2.5px ${on ? INK : 'rgba(255,255,255,0.4)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{on && <GIcon k="check" size={16} color="#FFFFFF" />}</span>
+                    <span aria-hidden="true" style={{ width: 26, height: 26, borderRadius: 13, background: on ? '#F7C53A' : 'transparent', boxShadow: on ? 'none' : 'inset 0 0 0 2px rgba(255,255,255,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{on && <GIcon k="check" size={16} color="#1F1702" line halo={false} stroke={2.6} />}</span>
                   </div>
                 );
               })}

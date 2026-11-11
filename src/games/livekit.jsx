@@ -100,9 +100,9 @@ export function RoundBtn({ onClick, label, children, size = 54, bg = 'rgba(14,12
 export function Sheet({ title, text, onClose, children }) {
   return (
     <div onClick={onClose} style={{ position: 'absolute', inset: 0, zIndex: 40, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
-      <div onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 480, maxHeight: '86%', overflowY: 'auto', borderRadius: '26px 26px 0 0', background: '#17141F', padding: '18px 18px calc(18px + env(safe-area-inset-bottom))', boxShadow: '0 -12px 40px rgba(0,0,0,0.5)', color: '#FFFFFF', fontFamily: FONT, boxSizing: 'border-box', animation: 'zduo-up 0.26s cubic-bezier(.2,.8,.2,1)' }}>
+      <div onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()} style={{ width: '100%', maxWidth: 480, maxHeight: '86%', overflowY: 'auto', borderRadius: '16px 16px 0 0', background: '#10151D', padding: '18px 18px calc(18px + env(safe-area-inset-bottom))', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.1), inset 0 0 0 1px rgba(255,255,255,0.06), 0 -12px 40px rgba(0,0,0,0.5)', color: '#FFFFFF', fontFamily: FONT, boxSizing: 'border-box', animation: 'zduo-up 0.26s cubic-bezier(.2,.8,.2,1)' }}>
         <div style={{ width: 38, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.2)', margin: '-6px auto 12px' }} />
-        {title && <div style={{ fontSize: 19, fontWeight: 900 }}>{title}</div>}
+        {title && <div style={{ fontSize: 18.5, fontWeight: 900 }}>{title}</div>}
         {text && <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.72)', marginTop: 6, lineHeight: 1.5 }}>{text}</div>}
         {children}
       </div>

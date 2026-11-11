@@ -63,6 +63,7 @@ import {
   crSpend,
   formatCount,
   friendlyError,
+  rpcMissing,
   getFavoriteStickerKeys,
   hapticTap,
   igPalette,
@@ -562,16 +563,17 @@ export function TagRequestsPage({ userId, me, onClose }) {
   const decide = async (r, action) => {
     hapticTap();
     const before = rows || [];
-    touched.current.set(r.id, { at: Date.now(), status: action === 'approve' ? 'approved' : 'removed' });
-    const next = action === 'approve' ? before.map((x) => (x.id === r.id ? { ...x, status: 'approved' } : x)) : before.filter((x) => x.id !== r.id);
+    const st = action === 'approve' ? 'approved' : action === 'hide' ? 'hidden' : 'removed';
+    touched.current.set(r.id, { at: Date.now(), status: st });
+    const next = st !== 'removed' ? before.map((x) => (x.id === r.id ? { ...x, status: st } : x)) : before.filter((x) => x.id !== r.id);
     setRows(next); psTagReqMem.set(userId, next);
-    const undo = psTagDrop(r.post_id, r.id, action === 'approve' ? { status: 'approved' } : null);
+    const undo = psTagDrop(r.post_id, r.id, st !== 'removed' ? { status: st } : null);
     const { data, error } = await supabase.rpc('zchat_tag_decide', { p_tag: r.id, p_action: action });
     if (error || data === false) {
       touched.current.delete(r.id);
       setRows(before); psTagReqMem.set(userId, before);
       if (undo) undo();
-      appSnack(friendlyError(error, 'That did not work. Try again.'));
+      appSnack(rpcMissing(error) || (action === 'hide' && data === false) ? 'Hiding tags switches on once the latest ZChat setup is finished.' : friendlyError(error, 'That did not work. Try again.'));
       return;
     }
     psPendingMem.n = Math.max(0, next.filter((x) => x.status === 'pending').length);
@@ -590,6 +592,7 @@ export function TagRequestsPage({ userId, me, onClose }) {
   const whoLabel = who === 'followers' ? 'Your followers' : who === 'chosen' ? 'Only people you chose' : 'Everyone';
   const waiting = (rows || []).filter((r) => r.status === 'pending');
   const shown = (rows || []).filter((r) => r.status === 'approved');
+  const hiddenRows = (rows || []).filter((r) => r.status === 'hidden');
   const row = (r) => {
     const thumb = postThumbOf(r.post);
     return (
@@ -604,7 +607,14 @@ export function TagRequestsPage({ userId, me, onClose }) {
             <PillButton small primary label="Approve" ariaLabel={`Approve the tag from ${r.by.name}`} onClick={() => decide(r, 'approve')} />
             <PillButton small label="Remove" ariaLabel={`Remove the tag from ${r.by.name}`} onClick={() => decide(r, 'remove')} />
           </div>
-        ) : <PillButton small label="Remove" ariaLabel={`Remove the tag from ${r.by.name}`} onClick={() => decide(r, 'remove')} />}
+        ) : (
+          <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+            {r.status === 'hidden'
+              ? <PillButton small label="Show" ariaLabel={`Show the photo from ${r.by.name} on your profile`} onClick={() => decide(r, 'approve')} />
+              : <PillButton small label="Hide" ariaLabel={`Hide the photo from ${r.by.name} from your profile`} onClick={() => decide(r, 'hide')} />}
+            <PillButton small label="Remove" ariaLabel={`Remove the tag from ${r.by.name}`} onClick={() => decide(r, 'remove')} />
+          </div>
+        )}
       </div>
     );
   };
@@ -618,6 +628,7 @@ export function TagRequestsPage({ userId, me, onClose }) {
       {rows && !rows.length && <EmptyState art="posts" title="No tags yet" text="When someone tags you in a photo, it shows up here first. Nothing goes on your profile until you say so." />}
       {waiting.length > 0 && <><IgHeading>Waiting for you</IgHeading><div role="list" aria-label="Waiting for you">{waiting.map(row)}</div></>}
       {shown.length > 0 && <><IgHeading>On your profile</IgHeading><div role="list" aria-label="On your profile">{shown.map(row)}</div></>}
+      {hiddenRows.length > 0 && <><IgHeading>Hidden from your profile</IgHeading><div role="list" aria-label="Hidden from your profile">{hiddenRows.map(row)}</div></>}
       {open && <Portal><FeedPanel me={me} userId={userId} fixedIds={[open.id]} title="Photo" startPostId={open.id} seedPost={open} seedItems={[open]} onClose={() => setOpen(null)} onOpenProfile={() => setOpen(null)} /></Portal>}
     </FullPage>
   );
